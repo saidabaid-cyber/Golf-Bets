@@ -11,19 +11,30 @@ export type Hole = {
   number: number;
   par: number;
   strokeIndex: number;
+  yards?: number;
 };
 
+// Internally each Course entry represents one tee. The UI groups entries by name,
+// so one course can expose multiple tees without duplicating the course to the user.
 export type Course = {
   id: string;
   name: string;
   teeName: string;
   rating?: number;
   slope?: number;
+  totalYards?: number;
   holes: Hole[];
 };
 
 export type ParticipantConfig = {
   participantIds: string[];
+};
+
+export type MedalPollaConfig = ParticipantConfig & {
+  enabled: boolean;
+  value: number;
+  hcpPct: number;
+  decimals: DecimalMode;
 };
 
 export type BetConfig = {
@@ -61,6 +72,17 @@ export type BetConfig = {
     decimals: DecimalMode;
     maxScore: number;
   };
+  polla: {
+    first9: MedalPollaConfig;
+    second9: MedalPollaConfig;
+    total18: MedalPollaConfig;
+  };
+  miniPolla: ParticipantConfig & {
+    enabled: boolean;
+    value: number;
+    hcpPct: number;
+    decimals: DecimalMode;
+  };
 };
 
 export type HoleScore = Record<string, number | null>;
@@ -70,6 +92,7 @@ export type UnitEvent = {
   hole: number;
   playerId: string;
   amount: number;
+  label?: string;
 };
 
 export type FoursomeSegment = {
@@ -93,22 +116,46 @@ export type PersonalBetComponents = {
   medal18: boolean;
 };
 
+export type SavedPersonalRival = {
+  id: string;
+  name: string;
+};
+
 export type PersonalBet = {
   id: string;
-  rivalPlayerId: string;
+  rivalMode: "group" | "external";
+  rivalPlayerId?: string;
+  externalRivalId?: string;
+  rivalName: string;
+  externalScores: Record<number, number | null>;
   baseValue: number;
-  advantageReceiverId?: string;
+  // `none` remains accepted only to migrate old drafts. New UI never offers Scratch.
+  advantageReceiver: "none" | "owner" | "rival";
   advantageStrokes: number;
   back9Multiplier: number;
   components: PersonalBetComponents;
 };
 
+export type ManualBet = {
+  id: string;
+  name: string;
+  amounts: Record<string, number>;
+};
+
 export type Expense = {
   caddie: number;
-  breakfast: number;
-  lunch: number;
+  food: number;
   drinks: number;
+  greenFee: number;
+  cartRental: number;
   other: number;
+};
+
+export type PersonalHistoryResult = {
+  rivalKey: string;
+  rivalName: string;
+  totalMoney: number;
+  componentMoney: Record<string, number>;
 };
 
 export type RoundSnapshot = {
@@ -117,11 +164,14 @@ export type RoundSnapshot = {
   courseName: string;
   teeName: string;
   ownerName: string;
+  roundHoles?: 9 | 18;
+  startHole?: 1 | 10;
   betResult: number;
   expenses: Expense;
   expenseTotal: number;
   netResult: number;
   categoryResults: Record<string, number>;
+  personalResults?: PersonalHistoryResult[];
 };
 
 export type Transfer = {

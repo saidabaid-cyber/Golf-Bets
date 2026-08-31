@@ -6,6 +6,7 @@ import {
   Expense,
   FoursomeSegment,
   HoleScore,
+  ManualBet,
   PersonalBet,
   Player,
   Transfer,
@@ -36,6 +37,11 @@ export function playingHandicap(base: number, pct: number, mode: DecimalMode) {
   return mode === "round" ? Math.round(raw) : raw;
 }
 
+/**
+ * Distributes handicap by stroke index. Supports >18 handicaps and, in partial
+ * mode, gives the decimal on the next stroke-index hole exactly as the Excel
+ * model does for tie-breaking.
+ */
 export function strokeAllowanceForHole(playingHcp: number, strokeIndex: number, mode: DecimalMode) {
   const safe = Math.max(0, playingHcp);
   const full = Math.floor(safe);
@@ -113,6 +119,9 @@ export function calculateRabbits(
   const events: RabbitEvent[] = [];
   if (!cfg.enabled || participants.length < 2) return { events, won, pending: 0 };
 
+  // Excel state machine: every rabbit has Hoyo 1, 2 and (if needed) 3.
+  // If it is won on Hoyo 2, a new rabbit starts immediately on the next real hole.
+  // If it reaches Hoyo 3 without a winner, the next rabbit starts and one rabbit accumulates.
   let rabbitHole: 1 | 2 | 3 = 1;
   let holder: string | null = null;
   let pending = 1;
@@ -140,11 +149,12 @@ export function calculateRabbits(
       if (holder) {
         if (winners.includes(holder)) {
           if (uniqueWinner === holder) {
-            rabbitWonBy = holder;
+            rabbitWonBy = holder; // two outright wins in a row
           } else {
             events.push({ hole, type: "hold", playerId: holder });
           }
         } else {
+          // Whoever beats the holder only makes it free; they do not grab it on this same hole.
           events.push({ hole, type: "lose", playerId: holder });
           holder = null;
         }
@@ -167,6 +177,8 @@ export function calculateRabbits(
       continue;
     }
 
+    // Hoyo 3: nobody "grabs" here. A holder that ties/wins the best score cashes it.
+    // If it arrived free, the unique winner of Hoyo 3 cashes it directly.
     if (holder) {
       if (winners.includes(holder)) rabbitWonBy = holder;
       else events.push({ hole, type: "lose", playerId: holder });
@@ -244,24 +256,70 @@ export function payoutWinnerTakesFromAll(
   return balances;
 }
 
+function automaticUnitsForScore(gross: number, par: number) {
+  // HIO has priority and is never added on top of eagle/albatross.
+  if (gross === 1) return 3;
+  const underPar = par - gross;
+  if (underPar >= 3) return 3; // albatross or better
+  if (underPar === 2) return 2; // eagle
+  if (underPar === 1) return 1; // birdie
+  return 0;
+}
+
 export function calculateUnits(
   allPlayers: Player[],
   unitEvents: UnitEvent[],
   cfg: BetConfig["units"],
+  course?: Course,
+  scores: Record<number, HoleScore> = {},
+  order: number[] = [],
 ) {
   const participants = playersByIds(allPlayers, cfg.participantIds);
   const positive = Object.fromEntries(participants.map((p) => [p.id, 0])) as Record<string, number>;
   const negative = Object.fromEntries(participants.map((p) => [p.id, 0])) as Record<string, number>;
+  const manualNet = Object.fromEntries(participants.map((p) => [p.id, 0])) as Record<string, number>;
+  const autoNet = Object.fromEntries(participants.map((p) => [p.id, 0])) as Record<string, number>;
+  const autoByHole: Record<number, Record<string, number>> = {};
   const net = Object.fromEntries(participants.map((p) => [p.id, 0])) as Record<string, number>;
   const allowed = new Set(cfg.participantIds);
+
+  if (!cfg.enabled || participants.length < 2) {
+    return { positive, negative, manualNet, autoNet, autoByHole, net, registeredTotal: 0, balances: zeroBalances(participants) };
+  }
 
   for (const e of unitEvents) {
     if (!allowed.has(e.playerId)) continue;
     if (e.amount >= 0) positive[e.playerId] += e.amount;
     else negative[e.playerId] += Math.abs(e.amount);
-    net[e.playerId] += e.amount;
+    manualNet[e.playerId] += e.amount;
   }
 
+  if (course) {
+    for (const hole of order) {
+      const hd = course.holes.find((h) => h.number === hole);
+      if (!hd) continue;
+      const row = scores[hole];
+      if (!row) continue;
+      for (const p of participants) {
+        const gross = row[p.id];
+        if (typeof gross !== "number") continue;
+        const amount = automaticUnitsForScore(gross, hd.par);
+        if (!amount) continue;
+        autoByHole[hole] ??= {};
+        autoByHole[hole][p.id] = amount;
+        autoNet[p.id] += amount;
+        positive[p.id] += amount;
+      }
+    }
+  }
+
+  for (const p of participants) net[p.id] = manualNet[p.id] + autoNet[p.id];
+  const registeredTotal = participants.reduce(
+    (total, p) => total + positive[p.id] + negative[p.id],
+    0,
+  );
+
+  // Everyone pays/charges everyone. Pairwise net is the difference between net units.
   const balances = zeroBalances(participants);
   for (let i = 0; i < participants.length; i++) {
     for (let j = i + 1; j < participants.length; j++) {
@@ -272,7 +330,7 @@ export function calculateUnits(
       balances[b] -= delta;
     }
   }
-  return { positive, negative, net, balances };
+  return { positive, negative, manualNet, autoNet, autoByHole, net, registeredTotal, balances };
 }
 
 export function segmentDefinitions(order: number[], size: 3 | 6 | 9 | 18): FoursomeSegment[] {
@@ -450,9 +508,10 @@ export function calculateBallFriend(
     const birdieOrBetterA = teamA.some((id) => (row[id] as number) < hd.par);
     const birdieOrBetterB = teamB.some((id) => (row[id] as number) < hd.par);
 
+    // Excel rule: birdie or better by one team flips the two-digit score of the OTHER team.
     const numberA = buildBallFriendNumber(adjusted[teamA[0]] as number, adjusted[teamA[1]] as number, birdieOrBetterB);
     const numberB = buildBallFriendNumber(adjusted[teamB[0]] as number, adjusted[teamB[1]] as number, birdieOrBetterA);
-    const diff = numberB - numberA;
+    const diff = numberB - numberA; // positive = Team A wins points
 
     for (const id of teamA) points[id] = (points[id] ?? 0) + diff;
     for (const id of teamB) points[id] = (points[id] ?? 0) - diff;
@@ -484,16 +543,21 @@ function directAllowance(strokes: number, strokeIndex: number) {
 
 function personalAdjustedScore(
   gross: number,
-  playerId: string,
+  role: "owner" | "rival",
   holeStrokeIndex: number,
   bet: PersonalBet,
 ) {
-  if (!bet.advantageReceiverId || bet.advantageStrokes <= 0) return gross;
-  return playerId === bet.advantageReceiverId ? gross - directAllowance(bet.advantageStrokes, holeStrokeIndex) : gross;
+  if (bet.advantageReceiver === "none" || bet.advantageStrokes <= 0) return gross;
+  return role === bet.advantageReceiver ? gross - directAllowance(bet.advantageStrokes, holeStrokeIndex) : gross;
 }
 
 function signMoney(value: number, stake: number) {
   return value > 0 ? stake : value < 0 ? -stake : 0;
+}
+
+export function personalRivalKey(bet: PersonalBet) {
+  if (bet.rivalMode === "group" && bet.rivalPlayerId) return bet.rivalPlayerId;
+  return `personal:${bet.externalRivalId || bet.id}`;
 }
 
 export function calculatePersonalBet(
@@ -503,7 +567,7 @@ export function calculatePersonalBet(
   scores: Record<number, HoleScore>,
   order: number[],
 ) {
-  const rivalId = bet.rivalPlayerId;
+  const rivalId = personalRivalKey(bet);
   const componentMoney = {
     match1: 0,
     medal1: 0,
@@ -513,24 +577,36 @@ export function calculatePersonalBet(
     medal18: 0,
   };
 
+  const rivalGross = (hole: number) => {
+    if (bet.rivalMode === "group" && bet.rivalPlayerId) return scores[hole]?.[bet.rivalPlayerId] ?? null;
+    return bet.externalScores?.[hole] ?? null;
+  };
+
   const segment = (holes: number[], multiplier = 1) => {
     let match = 0;
     let medal = 0;
-    let complete = true;
+    let complete = holes.length > 0;
     for (const hole of holes) {
-      if (!completedHole(hole, scores, [ownerId, rivalId])) {
+      const ownerGross = scores[hole]?.[ownerId];
+      const rivalRaw = rivalGross(hole);
+      if (typeof ownerGross !== "number" || typeof rivalRaw !== "number") {
         complete = false;
         continue;
       }
       const hd = course.holes.find((x) => x.number === hole);
       if (!hd) continue;
-      const row = scores[hole];
-      const owner = personalAdjustedScore(row[ownerId] as number, ownerId, hd.strokeIndex, bet);
-      const rival = personalAdjustedScore(row[rivalId] as number, rivalId, hd.strokeIndex, bet);
+      const owner = personalAdjustedScore(ownerGross, "owner", hd.strokeIndex, bet);
+      const rival = personalAdjustedScore(rivalRaw, "rival", hd.strokeIndex, bet);
       match += owner < rival ? 1 : owner > rival ? -1 : 0;
-      medal += rival - owner;
+      medal += rival - owner; // positive = owner lower total
     }
-    return { complete, match, medal, matchMoney: signMoney(match, bet.baseValue * multiplier), medalMoney: signMoney(medal, bet.baseValue * multiplier) };
+    return {
+      complete,
+      match,
+      medal,
+      matchMoney: signMoney(match, bet.baseValue * multiplier),
+      medalMoney: signMoney(medal, bet.baseValue * multiplier),
+    };
   };
 
   const first = segment(order.slice(0, 9), 1);
@@ -539,15 +615,16 @@ export function calculatePersonalBet(
 
   if (bet.components.match1 && first.complete) componentMoney.match1 = first.matchMoney;
   if (bet.components.medal1 && first.complete) componentMoney.medal1 = first.medalMoney;
-  if (bet.components.match2 && second.complete) componentMoney.match2 = second.matchMoney;
-  if (bet.components.medal2 && second.complete) componentMoney.medal2 = second.medalMoney;
-  if (bet.components.match18 && total.complete) componentMoney.match18 = total.matchMoney;
-  if (bet.components.medal18 && total.complete) componentMoney.medal18 = total.medalMoney;
+  if (order.length >= 18 && bet.components.match2 && second.complete) componentMoney.match2 = second.matchMoney;
+  if (order.length >= 18 && bet.components.medal2 && second.complete) componentMoney.medal2 = second.medalMoney;
+  if (order.length >= 18 && bet.components.match18 && total.complete) componentMoney.match18 = total.matchMoney;
+  if (order.length >= 18 && bet.components.medal18 && total.complete) componentMoney.medal18 = total.medalMoney;
 
   const totalMoney = Object.values(componentMoney).reduce((a, b) => a + b, 0);
   return {
     betId: bet.id,
     rivalId,
+    rivalName: bet.rivalMode === "group" ? "" : bet.rivalName,
     componentMoney,
     totalMoney,
     matchPoints: { first: first.match, second: second.match, total: total.match },
@@ -570,6 +647,138 @@ export function calculatePersonalBets(
     balances[r.rivalId] = (balances[r.rivalId] ?? 0) - r.totalMoney;
   }
   return { results, balances };
+}
+
+
+export type MedalPollaDetail = {
+  key: "first9" | "second9" | "total18" | "mini";
+  label: string;
+  holes: number[];
+  value: number;
+  complete: boolean;
+  totals: Record<string, number>;
+  winnerIds: string[];
+  grossPrizePerWinner: number;
+};
+
+function calculateMedalComponent(
+  key: MedalPollaDetail["key"],
+  label: string,
+  holes: number[],
+  value: number,
+  course: Course,
+  scores: Record<number, HoleScore>,
+  participants: Player[],
+  hcpPct: number,
+  decimals: DecimalMode,
+) {
+  const totals = Object.fromEntries(participants.map((p) => [p.id, 0])) as Record<string, number>;
+  const ids = participants.map((p) => p.id);
+  const complete = value > 0 && holes.length > 0 && holes.every((hole) => completedHole(hole, scores, ids));
+
+  if (!complete) {
+    return {
+      detail: { key, label, holes, value, complete: false, totals, winnerIds: [], grossPrizePerWinner: 0 } as MedalPollaDetail,
+      balances: zeroBalances(participants),
+    };
+  }
+
+  for (const hole of holes) {
+    const hd = course.holes.find((x) => x.number === hole);
+    if (!hd) continue;
+    const row = scores[hole];
+    for (const p of participants) {
+      totals[p.id] += netScore(row[p.id] as number, p.id, hd.strokeIndex, participants, hcpPct, decimals);
+    }
+  }
+
+  const best = Math.min(...Object.values(totals));
+  const winnerIds = participants.filter((p) => Math.abs(totals[p.id] - best) < EPS).map((p) => p.id);
+  const grossPot = participants.length * value;
+  const grossPrizePerWinner = winnerIds.length ? grossPot / winnerIds.length : 0;
+  const balances = zeroBalances(participants);
+
+  // Each participant contributes `value` to the pot. If there is a tie, the pot is split.
+  // Net balance therefore remains zero-sum and matches "se divide el premio".
+  for (const p of participants) balances[p.id] -= value;
+  for (const id of winnerIds) balances[id] += grossPrizePerWinner;
+
+  return {
+    detail: { key, label, holes, value, complete: true, totals, winnerIds, grossPrizePerWinner } as MedalPollaDetail,
+    balances,
+  };
+}
+
+export function calculatePolla(
+  course: Course,
+  scores: Record<number, HoleScore>,
+  allPlayers: Player[],
+  cfg: BetConfig["polla"],
+  order: number[],
+) {
+  const balances = zeroBalances(allPlayers);
+  const details: MedalPollaDetail[] = [];
+  const components = [
+    ["first9", "Polla 1ª vuelta", order.slice(0, 9), cfg.first9],
+    ...(order.length >= 18
+      ? ([
+          ["second9", "Polla 2ª vuelta", order.slice(9, 18), cfg.second9],
+          ["total18", "Polla 18 hoyos", order.slice(0, 18), cfg.total18],
+        ] as const)
+      : []),
+  ] as const;
+
+  for (const [key, label, holes, componentCfg] of components) {
+    if (!componentCfg.enabled) continue;
+    const participants = playersByIds(allPlayers, componentCfg.participantIds);
+    if (participants.length < 2) continue;
+    const result = calculateMedalComponent(
+      key,
+      label,
+      holes,
+      componentCfg.value,
+      course,
+      scores,
+      participants,
+      componentCfg.hcpPct,
+      componentCfg.decimals,
+    );
+    details.push(result.detail);
+    for (const [id, amount] of Object.entries(result.balances)) balances[id] = (balances[id] ?? 0) + amount;
+  }
+  return { balances, details };
+}
+
+export function calculateMiniPolla(
+  course: Course,
+  scores: Record<number, HoleScore>,
+  allPlayers: Player[],
+  cfg: BetConfig["miniPolla"],
+  order: number[],
+) {
+  const participants = playersByIds(allPlayers, cfg.participantIds);
+  const balances = zeroBalances(participants);
+  const details: MedalPollaDetail[] = [];
+  if (!cfg.enabled || participants.length < 2) return { balances, details };
+
+  // Always the last three holes actually PLAYED. If starting on 10, these are 7-8-9.
+  const result = calculateMedalComponent("mini", "Mini Polla · últimos 3", order.slice(-3), cfg.value, course, scores, participants, cfg.hcpPct, cfg.decimals);
+  details.push(result.detail);
+  for (const [id, amount] of Object.entries(result.balances)) balances[id] = (balances[id] ?? 0) + amount;
+  return { balances, details };
+}
+
+export function calculateManualBets(allPlayers: Player[], bets: ManualBet[]) {
+  const balances = zeroBalances(allPlayers);
+  const details = bets.map((bet) => {
+    const total = allPlayers.reduce((sum, p) => sum + Number(bet.amounts[p.id] ?? 0), 0);
+    const valid = Math.abs(total) < EPS;
+    if (valid) {
+      for (const p of allPlayers) balances[p.id] = (balances[p.id] ?? 0) + Number(bet.amounts[p.id] ?? 0);
+    }
+    return { ...bet, total, valid };
+  });
+  return { balances, details };
 }
 
 export function mergeBalances(players: Player[], ...groups: Record<string, number>[]) {
@@ -605,5 +814,5 @@ export function settleBalances(balances: Record<string, number>): Transfer[] {
 }
 
 export function expenseTotal(expenses: Expense) {
-  return expenses.caddie + expenses.breakfast + expenses.lunch + expenses.drinks + expenses.other;
+  return expenses.caddie + expenses.food + expenses.drinks + expenses.greenFee + expenses.cartRental + expenses.other;
 }
