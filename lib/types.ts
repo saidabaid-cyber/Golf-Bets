@@ -1,10 +1,12 @@
 export type DecimalMode = "partial" | "round";
+// `partial` and `round` remain valid so drafts saved before V2.4 keep loading.
+export type HandicapMode = DecimalMode | "decimal" | "half_up" | "half_down" | "six_up" | "four_down";
 export type FoursomeMode = "fixed" | "fixed_points" | "points";
 
 export type Player = {
   id: string;
   name: string;
-  handicap: number;
+  handicap: number | null;
 };
 
 export type Hole = {
@@ -42,14 +44,14 @@ export type BetConfig = {
     enabled: boolean;
     value: number;
     hcpPct: number;
-    decimals: DecimalMode;
+    decimals: HandicapMode;
     accumulate: boolean;
   };
   skins: ParticipantConfig & {
     enabled: boolean;
     value: number;
     hcpPct: number;
-    decimals: DecimalMode;
+    decimals: HandicapMode;
     accumulate: boolean;
   };
   units: ParticipantConfig & {
@@ -64,6 +66,7 @@ export type BetConfig = {
     mode: FoursomeMode;
     fixedValue: number;
     pointValue: number;
+    pressSecond9: boolean;
   };
   ballFriend: ParticipantConfig & {
     enabled: boolean;

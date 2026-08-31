@@ -5,6 +5,7 @@ import {
   DecimalMode,
   Expense,
   FoursomeSegment,
+  HandicapMode,
   HoleScore,
   ManualBet,
   PersonalBet,
@@ -28,13 +29,34 @@ export function playersByIds(players: Player[], ids: string[]) {
 
 export function baseHandicaps(players: Player[]) {
   if (!players.length) return {} as Record<string, number>;
-  const best = Math.min(...players.map((p) => p.handicap));
-  return Object.fromEntries(players.map((p) => [p.id, p.handicap - best])) as Record<string, number>;
+  const handicap = (player: Player) => Number(player.handicap ?? 0);
+  const best = Math.min(...players.map(handicap));
+  return Object.fromEntries(players.map((p) => [p.id, handicap(p) - best])) as Record<string, number>;
 }
 
-export function playingHandicap(base: number, pct: number, mode: DecimalMode) {
+export function normalizeHandicapMode(mode: HandicapMode | string | null | undefined): Exclude<HandicapMode, DecimalMode> {
+  if (mode === "partial") return "decimal";
+  if (mode === "round") return "half_up";
+  if (mode === "decimal" || mode === "half_up" || mode === "half_down" || mode === "six_up" || mode === "four_down") return mode;
+  return "decimal";
+}
+
+function roundAtFraction(raw: number, threshold: number, includeThreshold: boolean) {
+  const whole = Math.floor(raw);
+  const fraction = raw - whole;
+  const roundsUp = includeThreshold ? fraction >= threshold - EPS : fraction > threshold + EPS;
+  return whole + (roundsUp ? 1 : 0);
+}
+
+export function playingHandicap(base: number, pct: number, mode: HandicapMode) {
   const raw = (base * pct) / 100;
-  return mode === "round" ? Math.round(raw) : raw;
+  switch (normalizeHandicapMode(mode)) {
+    case "decimal": return raw;
+    case "half_up": return roundAtFraction(raw, 0.5, true);
+    case "half_down": return roundAtFraction(raw, 0.5, false);
+    case "six_up": return roundAtFraction(raw, 0.6, true);
+    case "four_down": return roundAtFraction(raw, 0.4, false);
+  }
 }
 
 /**
@@ -42,7 +64,7 @@ export function playingHandicap(base: number, pct: number, mode: DecimalMode) {
  * mode, gives the decimal on the next stroke-index hole exactly as the Excel
  * model does for tie-breaking.
  */
-export function strokeAllowanceForHole(playingHcp: number, strokeIndex: number, mode: DecimalMode) {
+export function strokeAllowanceForHole(playingHcp: number, strokeIndex: number, mode: HandicapMode) {
   const safe = Math.max(0, playingHcp);
   const full = Math.floor(safe);
   const fraction = safe - full;
@@ -50,7 +72,7 @@ export function strokeAllowanceForHole(playingHcp: number, strokeIndex: number, 
   const remainder = full % 18;
   let allowance = cycles + (strokeIndex <= remainder ? 1 : 0);
 
-  if (mode === "partial" && fraction > EPS) {
+  if (normalizeHandicapMode(mode) === "decimal" && fraction > EPS) {
     const nextIndex = remainder + 1;
     if (strokeIndex === nextIndex) allowance += fraction;
   }
@@ -63,7 +85,7 @@ export function netScore(
   holeStrokeIndex: number,
   comparisonPlayers: Player[],
   pct: number,
-  decimals: DecimalMode,
+  decimals: HandicapMode,
 ) {
   const bases = baseHandicaps(comparisonPlayers);
   const ph = playingHandicap(bases[playerId] ?? 0, pct, decimals);
@@ -85,7 +107,7 @@ export function winnerIdsForHole(
   scores: Record<number, HoleScore>,
   comparisonPlayers: Player[],
   pct: number,
-  decimals: DecimalMode,
+  decimals: HandicapMode,
 ) {
   const ids = comparisonPlayers.map((p) => p.id);
   if (!completedHole(hole, scores, ids)) return [] as string[];
@@ -364,6 +386,9 @@ export type FoursomeMatchResult = {
   basePair: [string, string];
   opponentPair: [string, string];
   pointDiff: number;
+  first9PointDiff: number;
+  second9PointDiff: number;
+  second9Pressed: boolean;
   fixedMoney: number;
   pointMoney: number;
   totalMoney: number;
@@ -423,9 +448,20 @@ export function calculateFoursomes(
         holePoints.push({ hole, points });
       }
 
-      const sign = pointDiff > 0 ? 1 : pointDiff < 0 ? -1 : 0;
-      const fixedMoney = complete && (cfg.mode === "fixed" || cfg.mode === "fixed_points") ? sign * cfg.fixedValue : 0;
-      const pointMoney = complete && (cfg.mode === "points" || cfg.mode === "fixed_points") ? pointDiff * cfg.pointValue : 0;
+      const first9PointDiff = holePoints.filter(({ hole }) => hole <= 9).reduce((total, item) => total + item.points, 0);
+      const second9PointDiff = holePoints.filter(({ hole }) => hole >= 10).reduce((total, item) => total + item.points, 0);
+      const second9Pressed = Boolean(cfg.pressSecond9 && order.length === 18 && holes.length === 18);
+      const sign = (value: number) => value > 0 ? 1 : value < 0 ? -1 : 0;
+      const fixedMoney = complete && (cfg.mode === "fixed" || cfg.mode === "fixed_points")
+        ? second9Pressed
+          ? sign(first9PointDiff) * cfg.fixedValue + sign(second9PointDiff) * cfg.fixedValue * 2
+          : sign(pointDiff) * cfg.fixedValue
+        : 0;
+      const pointMoney = complete && (cfg.mode === "points" || cfg.mode === "fixed_points")
+        ? second9Pressed
+          ? first9PointDiff * cfg.pointValue + second9PointDiff * cfg.pointValue * 2
+          : pointDiff * cfg.pointValue
+        : 0;
       const totalMoney = fixedMoney + pointMoney;
 
       if (complete) {
@@ -440,6 +476,9 @@ export function calculateFoursomes(
         basePair: segment.basePair as [string, string],
         opponentPair: opponent,
         pointDiff,
+        first9PointDiff,
+        second9PointDiff,
+        second9Pressed,
         fixedMoney,
         pointMoney,
         totalMoney,
@@ -585,7 +624,15 @@ export function calculatePersonalBet(
   const segment = (holes: number[], multiplier = 1) => {
     let match = 0;
     let medal = 0;
+    let ownerNetTotal = 0;
+    let rivalNetTotal = 0;
     let complete = holes.length > 0;
+    const holeResults: Array<{
+      hole: number;
+      ownerScore: number;
+      rivalScore: number;
+      winner: "owner" | "rival" | "tie";
+    }> = [];
     for (const hole of holes) {
       const ownerGross = scores[hole]?.[ownerId];
       const rivalRaw = rivalGross(hole);
@@ -594,16 +641,30 @@ export function calculatePersonalBet(
         continue;
       }
       const hd = course.holes.find((x) => x.number === hole);
-      if (!hd) continue;
+      if (!hd) {
+        complete = false;
+        continue;
+      }
       const owner = personalAdjustedScore(ownerGross, "owner", hd.strokeIndex, bet);
       const rival = personalAdjustedScore(rivalRaw, "rival", hd.strokeIndex, bet);
+      ownerNetTotal += owner;
+      rivalNetTotal += rival;
       match += owner < rival ? 1 : owner > rival ? -1 : 0;
       medal += rival - owner; // positive = owner lower total
+      holeResults.push({
+        hole,
+        ownerScore: owner,
+        rivalScore: rival,
+        winner: owner < rival ? "owner" : owner > rival ? "rival" : "tie",
+      });
     }
     return {
       complete,
       match,
       medal,
+      ownerNetTotal,
+      rivalNetTotal,
+      holeResults,
       matchMoney: signMoney(match, bet.baseValue * multiplier),
       medalMoney: signMoney(medal, bet.baseValue * multiplier),
     };
@@ -620,6 +681,41 @@ export function calculatePersonalBet(
   if (order.length >= 18 && bet.components.match18 && total.complete) componentMoney.match18 = total.matchMoney;
   if (order.length >= 18 && bet.components.medal18 && total.complete) componentMoney.medal18 = total.medalMoney;
 
+  const componentDefinitions = order.length >= 18
+    ? [
+        { key: "match1", label: "Match 1ª vuelta", kind: "match", data: first, multiplier: 1 },
+        { key: "medal1", label: "Medal 1ª vuelta", kind: "medal", data: first, multiplier: 1 },
+        { key: "match2", label: "Match 2ª vuelta", kind: "match", data: second, multiplier: Math.max(1, bet.back9Multiplier) },
+        { key: "medal2", label: "Medal 2ª vuelta", kind: "medal", data: second, multiplier: Math.max(1, bet.back9Multiplier) },
+        { key: "match18", label: "Match 18 hoyos", kind: "match", data: total, multiplier: 1 },
+        { key: "medal18", label: "Medal 18 hoyos", kind: "medal", data: total, multiplier: 1 },
+      ] as const
+    : [
+        { key: "match1", label: "Match 9 hoyos", kind: "match", data: first, multiplier: 1 },
+        { key: "medal1", label: "Medal 9 hoyos", kind: "medal", data: first, multiplier: 1 },
+      ] as const;
+
+  const liveComponents = componentDefinitions
+    .filter(({ key }) => bet.components[key])
+    .map(({ key, label, kind, data, multiplier }) => {
+      const difference = kind === "match" ? data.match : data.medal;
+      return {
+        key,
+        label,
+        kind,
+        complete: data.complete,
+        playedHoles: data.holeResults.length,
+        leader: difference > 0 ? "owner" as const : difference < 0 ? "rival" as const : "tie" as const,
+        stake: bet.baseValue * multiplier,
+        ownerMoney: signMoney(difference, bet.baseValue * multiplier),
+        matchState: data.match,
+        medalDiff: data.medal,
+        ownerNetTotal: data.ownerNetTotal,
+        rivalNetTotal: data.rivalNetTotal,
+        holeResults: data.holeResults,
+      };
+    });
+
   const totalMoney = Object.values(componentMoney).reduce((a, b) => a + b, 0);
   return {
     betId: bet.id,
@@ -629,6 +725,7 @@ export function calculatePersonalBet(
     totalMoney,
     matchPoints: { first: first.match, second: second.match, total: total.match },
     medalDiff: { first: first.medal, second: second.medal, total: total.medal },
+    liveComponents,
   };
 }
 

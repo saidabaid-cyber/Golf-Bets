@@ -7,6 +7,7 @@ import {
   Course,
   Expense,
   FoursomeSegment,
+  HandicapMode,
   HoleScore,
   ManualBet,
   MedalPollaConfig,
@@ -28,6 +29,7 @@ import {
   calculateUnits,
   expenseTotal,
   mergeBalances,
+  normalizeHandicapMode,
   opponentPairs,
   payoutWinnerTakesFromAll,
   playOrder,
@@ -41,14 +43,6 @@ const money = (n: number) => `${n < 0 ? "-" : ""}$${Math.abs(Math.round(n)).toLo
 const signedMoney = (n: number) => `${n > 0 ? "+" : ""}${money(n)}`;
 const quantityAndMoney = (quantity: number, amount: number, signedQuantity = false) =>
   `${signedQuantity && quantity > 0 ? "+" : ""}${quantity.toLocaleString("es-MX")} · ${signedMoney(amount)}`;
-
-const samplePlayers: Player[] = [
-  { id: "said", name: "Said", handicap: 0 },
-  { id: "cuau", name: "Cuau", handicap: 11 },
-  { id: "armando", name: "Armando", handicap: 7 },
-  { id: "jesus", name: "Jesús", handicap: 2 },
-  { id: "raul", name: "Raúl", handicap: 11 },
-];
 
 const laVistaPars = [4,3,4,5,4,4,3,4,5,5,4,3,4,4,5,4,3,4];
 const laVistaStroke = [5,17,7,1,9,13,15,3,11,12,8,18,14,2,4,10,16,6];
@@ -141,6 +135,12 @@ function localDateMexico() {
   return `${values.year}-${values.month}-${values.day}`;
 }
 
+function mexicoDateLabel(date: string) {
+  const months = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+  const [year, month, day] = date.split("-").map(Number);
+  return `${day} de ${months[month - 1]} de ${year}`;
+}
+
 function mergeDefaultCourses(saved: Course[] | null | undefined) {
   const source = Array.isArray(saved) ? saved : [];
   const byId = new Map(source.map((c) => [c.id, c]));
@@ -150,12 +150,12 @@ function mergeDefaultCourses(saved: Course[] | null | undefined) {
 
 function initialBets(ids: string[]): BetConfig {
   return {
-    rabbits: { enabled: true, value: 100, hcpPct: 100, decimals: "partial", accumulate: true, participantIds: ids },
-    skins: { enabled: true, value: 50, hcpPct: 100, decimals: "partial", accumulate: true, participantIds: ids },
+    rabbits: { enabled: true, value: 100, hcpPct: 100, decimals: "decimal", accumulate: true, participantIds: ids },
+    skins: { enabled: true, value: 50, hcpPct: 100, decimals: "decimal", accumulate: true, participantIds: ids },
     units: { enabled: true, value: 100, participantIds: ids },
     foursome: {
       enabled: true, hcpPct: 100, decimals: "round", segmentSize: 6,
-      mode: "fixed", fixedValue: 200, pointValue: 100, participantIds: ids,
+      mode: "fixed", fixedValue: 200, pointValue: 100, pressSecond9: false, participantIds: ids,
     },
     ballFriend: { enabled: false, value: 20, hcpPct: 100, decimals: "round", maxScore: 9, participantIds: ids },
     polla: {
@@ -209,8 +209,8 @@ function normalizeExpenses(raw: any): Expense {
   };
 }
 
-function Toggle({ on, onClick }: { on: boolean; onClick: () => void }) {
-  return <button className={`switch ${on ? "on" : ""}`} onClick={onClick} aria-label="activar"><span /></button>;
+function Toggle({ on, onClick, label = "activar" }: { on: boolean; onClick: () => void; label?: string }) {
+  return <button className={`switch ${on ? "on" : ""}`} onClick={onClick} aria-label={label}><span /></button>;
 }
 
 function ParticipantChips({
@@ -220,7 +220,7 @@ function ParticipantChips({
     const on = selected.includes(p.id);
     return <button key={p.id} className={`chipButton ${on ? "selected" : ""}`} onClick={() => {
       onChange(on ? selected.filter((id) => id !== p.id) : [...selected, p.id]);
-    }}>{on ? `✓ ${p.name}` : p.name}</button>;
+    }}>{on ? `✓ ${p.name.trim() || "Sin nombre"}` : p.name.trim() || "Sin nombre"}</button>;
   })}</div>;
 }
 
@@ -230,6 +230,16 @@ function NumberField({ label, value, onChange, step = 1 }: { label: string; valu
 
 function HcpPercentInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   return <div><label>% HCP</label><input type="number" inputMode="numeric" min={0} max={100} step={5} placeholder="0" value={value === 0 ? "" : value} onChange={(e) => onChange(e.target.value === "" ? 0 : Math.min(100, Math.max(0, Number(e.target.value) || 0)))} /></div>;
+}
+
+function HandicapModeSelect({ value, onChange }: { value: HandicapMode; onChange: (mode: HandicapMode) => void }) {
+  return <div><label>Modo HCP</label><select value={normalizeHandicapMode(value)} onChange={(e) => onChange(e.target.value as HandicapMode)}>
+    <option value="decimal">Décimas / sin redondear</option>
+    <option value="half_up">.5 sube</option>
+    <option value="half_down">.5 baja</option>
+    <option value="six_up">.6 sube</option>
+    <option value="four_down">.4 baja</option>
+  </select></div>;
 }
 
 function PollaBetEditor({
@@ -265,15 +275,15 @@ function OptionalNumberField({ label, value, onChange, step = 1 }: { label: stri
 }
 
 export default function Page() {
-  const [tab, setTab] = useState<"setup" | "round" | "personals" | "results" | "history" | "courses">("setup");
+  const [tab, setTab] = useState<"welcome" | "setup" | "round" | "personals" | "results" | "history" | "courses">("welcome");
   const [courses, setCourses] = useState<Course[]>(defaultCourses);
   const [course, setCourse] = useState<Course>(laVista);
   const [courseDraft, setCourseDraft] = useState<Course>(laVista);
   const [startHole, setStartHole] = useState<1 | 10>(1);
   const [roundHoles, setRoundHoles] = useState<9 | 18>(18);
-  const [players, setPlayers] = useState<Player[]>(samplePlayers);
-  const [ownerId, setOwnerId] = useState("said");
-  const [bets, setBets] = useState<BetConfig>(() => initialBets(samplePlayers.map((p) => p.id)));
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [ownerId, setOwnerId] = useState("");
+  const [bets, setBets] = useState<BetConfig>(() => initialBets([]));
   const [segments, setSegments] = useState<FoursomeSegment[]>(() => segmentDefinitions(playOrder(1), 6));
   const [personalBets, setPersonalBets] = useState<PersonalBet[]>([]);
   const [savedPersonalRivals, setSavedPersonalRivals] = useState<SavedPersonalRival[]>([]);
@@ -287,6 +297,7 @@ export default function Page() {
   const [history, setHistory] = useState<RoundSnapshot[]>([]);
   const [roundId, setRoundId] = useState(makeId());
   const [roundDate, setRoundDate] = useState(localDateMexico());
+  const [todayMexico] = useState(localDateMexico);
   const [quickPars, setQuickPars] = useState("");
   const [quickStroke, setQuickStroke] = useState("");
   const [hydrated, setHydrated] = useState(false);
@@ -315,11 +326,14 @@ export default function Page() {
         if (draft.players) setPlayers(draft.players);
         if (draft.ownerId) setOwnerId(draft.ownerId);
         if (draft.bets) {
-          const draftPlayerIds = (draft.players || samplePlayers).map((p: Player) => p.id);
+          const draftPlayerIds = (draft.players || []).map((p: Player) => p.id);
           const defaults = initialBets(draftPlayerIds);
           setBets({
             ...defaults,
             ...draft.bets,
+            rabbits: { ...defaults.rabbits, ...(draft.bets.rabbits || {}), decimals: normalizeHandicapMode(draft.bets.rabbits?.decimals) },
+            skins: { ...defaults.skins, ...(draft.bets.skins || {}), decimals: normalizeHandicapMode(draft.bets.skins?.decimals) },
+            foursome: { ...defaults.foursome, ...(draft.bets.foursome || {}) },
             polla: normalizePolla(draft.bets.polla, draftPlayerIds),
             miniPolla: { ...defaults.miniPolla, ...(draft.bets.miniPolla || {}) },
           });
@@ -330,7 +344,7 @@ export default function Page() {
           rivalMode: b.rivalMode || "group",
           rivalPlayerId: b.rivalPlayerId,
           externalRivalId: b.externalRivalId,
-          rivalName: b.rivalName || (draft.players || samplePlayers).find((p: Player) => p.id === b.rivalPlayerId)?.name || "Rival",
+          rivalName: b.rivalName || (draft.players || []).find((p: Player) => p.id === b.rivalPlayerId)?.name || "Rival",
           externalScores: b.externalScores || {},
           baseValue: b.baseValue ?? 100,
           advantageReceiver: (b.advantageReceiver === "owner" || b.advantageReceiver === "rival") ? b.advantageReceiver : (b.advantageReceiverId ? (b.advantageReceiverId === (draft.ownerId || ownerId) ? "owner" : "rival") : "rival"),
@@ -383,7 +397,7 @@ export default function Page() {
       },
       miniPolla: { ...(b.miniPolla ?? initialBets(players.map((p) => p.id)).miniPolla), participantIds: sanitize((b.miniPolla ?? initialBets(players.map((p) => p.id)).miniPolla).participantIds) },
     }));
-    if (!valid.has(ownerId) && players[0]) setOwnerId(players[0].id);
+    if (!valid.has(ownerId)) setOwnerId(players[0]?.id ?? "");
   }, [players.length]);
 
   // When a hole opens, every group player gets Par as a REAL score by default.
@@ -441,8 +455,8 @@ export default function Page() {
   }), [rabbitBalances, skinBalances, units.balances, foursomes.balances, ballFriend.balances, polla.balances, miniPolla.balances, personals.balances, manual.balances, ownerId]);
 
   const playerName = (id?: string) => {
-    const group = players.find((p) => p.id === id)?.name;
-    if (group) return group;
+    const group = players.find((p) => p.id === id);
+    if (group) return group.name.trim() || "Sin nombre";
     const external = personalBets.find((b) => personalRivalKey(b) === id);
     return external?.rivalName || "—";
   };
@@ -453,8 +467,9 @@ export default function Page() {
 
   function addPlayer() {
     const id = makeId();
-    const p = { id, name: `Jugador ${players.length + 1}`, handicap: 0 };
+    const p: Player = { id, name: "", handicap: null };
     setPlayers((ps) => [...ps, p]);
+    if (!players.length) setOwnerId(id);
     setBets((b) => ({
       ...b,
       rabbits: { ...b.rabbits, participantIds: [...b.rabbits.participantIds, id] },
@@ -585,9 +600,9 @@ export default function Page() {
   }
 
   function resetRound() {
-    const ids = players.map((p) => p.id);
+    setPlayers([]); setOwnerId("");
     setScores({}); setUnitEvents([]); setBallFriendSetup({}); setPersonalBets([]); setManualBets([]); setShowFullScorecard(false); setExpenses(emptyExpenses);
-    setBets(initialBets(ids)); setSegments(segmentDefinitions(playOrder(startHole).slice(0, roundHoles), 6));
+    setBets(initialBets([])); setSegments(segmentDefinitions(playOrder(startHole).slice(0, roundHoles), 6));
     setCurrentIndex(0); setRoundId(makeId()); setRoundDate(localDateMexico()); setTab("setup");
   }
 
@@ -672,6 +687,48 @@ export default function Page() {
     </section>;
   }
 
+  function renderPersonalLive(title = "Apuestas personales · en vivo") {
+    if (!personalBets.length) return null;
+    const ownerLabel = owner?.name.trim() || "Jugador principal";
+    return <section className="card personalLive">
+      <div className="sectionTitle"><div><h2>{title}</h2><p>Estado por componente con dinero, scores netos y detalle hoyo por hoyo.</p></div></div>
+      {personals.results.map((result) => {
+        const rivalLabel = playerName(result.rivalId);
+        return <div className="personalLiveBet" key={result.betId}>
+          <div className="row between personalLiveHead"><b>{ownerLabel} vs {rivalLabel}</b><span>Liquidado: <strong className={result.totalMoney > 0 ? "good" : result.totalMoney < 0 ? "bad" : ""}>{signedMoney(result.totalMoney)}</strong></span></div>
+          {!result.liveComponents.length && <div className="empty">No hay componentes activos.</div>}
+          {result.liveComponents.map((component) => {
+            const leaderName = component.leader === "owner" ? ownerLabel : component.leader === "rival" ? rivalLabel : "";
+            const loserName = component.leader === "owner" ? rivalLabel : component.leader === "rival" ? ownerLabel : "";
+            const status = component.playedHoles === 0
+              ? "Aún sin resultado"
+              : component.leader === "tie"
+                ? (component.complete ? "Empataron" : "Van empatados")
+                : `${leaderName} ${component.complete ? "ganó" : "va ganando"} · ${loserName} ${component.complete ? "perdió" : "va perdiendo"}`;
+            const matchState = component.matchState === 0
+              ? "AS"
+              : `${component.matchState > 0 ? ownerLabel : rivalLabel} ${Math.abs(component.matchState)} UP`;
+            const medalDifference = component.medalDiff === 0
+              ? "AS · 0 golpes"
+              : `${component.medalDiff > 0 ? ownerLabel : rivalLabel} por ${Math.abs(component.medalDiff)} golpe${Math.abs(component.medalDiff) === 1 ? "" : "s"}`;
+            return <div className="personalLiveComponent" key={component.key}>
+              <div className="row between"><div><b>{component.label}</b><small>{component.playedHoles} hoyo{component.playedHoles === 1 ? "" : "s"} registrado{component.playedHoles === 1 ? "" : "s"}</small></div><strong className={component.complete ? "settled" : "liveNow"}>{component.complete ? "Final" : "En vivo"}</strong></div>
+              <div className="liveStatus">{status}</div>
+              <div className="personalMoney">En juego <b>{money(component.stake)}</b> · {ownerLabel} <b className={component.ownerMoney > 0 ? "good" : component.ownerMoney < 0 ? "bad" : ""}>{signedMoney(component.ownerMoney)}</b> · {rivalLabel} <b className={component.ownerMoney < 0 ? "good" : component.ownerMoney > 0 ? "bad" : ""}>{signedMoney(-component.ownerMoney)}</b></div>
+              {component.kind === "match" ? <>
+                <div className="auditLine"><span>Estado Match</span><b>{matchState}</b></div>
+                <div className="holeAudit">{component.holeResults.length ? component.holeResults.map((holeResult) => <span key={holeResult.hole}>H{holeResult.hole}: {holeResult.winner === "tie" ? "Empate" : holeResult.winner === "owner" ? ownerLabel : rivalLabel} ({holeResult.ownerScore}–{holeResult.rivalScore})</span>) : <span>Sin hoyos completos</span>}</div>
+              </> : <>
+                <div className="auditLine"><span>Neto acumulado</span><b>{ownerLabel} {component.ownerNetTotal} · {rivalLabel} {component.rivalNetTotal}</b></div>
+                <div className="auditLine"><span>Diferencia Medal</span><b>{medalDifference}</b></div>
+              </>}
+            </div>;
+          })}
+        </div>;
+      })}
+    </section>;
+  }
+
   const currentRabbitEvents = rabbits.events.filter((e) => e.hole === holeNumber);
   const currentSkin = skins.events.find((e) => e.hole === holeNumber);
   const unitHoleManual = (id: string) => unitEvents.filter((e) => e.hole === holeNumber && e.playerId === id).reduce((a, e) => a + e.amount, 0);
@@ -714,6 +771,14 @@ export default function Page() {
       <span className="version">V2.4</span>
     </header>
 
+    {tab === "welcome" && <section className="welcomeScreen">
+      <div className="eyebrow">HOY EN MÉXICO</div>
+      <time dateTime={todayMexico}>{mexicoDateLabel(todayMexico)}</time>
+      <h1>¿Listos para jugar?</h1>
+      <p>Inicia una ronda nueva y configura jugadores, campo y apuestas.</p>
+      <button className="primary big" onClick={resetRound}>Nueva ronda</button>
+    </section>}
+
     {tab === "setup" && <>
       <section className="hero">
         <div><div className="eyebrow">NUEVA JUGADA</div><h1>Configura y juega.</h1><p>La app calcula lo automático; tú solo capturas score y eventos especiales.</p></div>
@@ -737,11 +802,12 @@ export default function Page() {
 
       <section className="card">
         <div className="sectionTitle"><div><h2>2. Jugadores</h2><p>HCP de la ronda. La base se recalcula según cada apuesta.</p></div><button className="textButton" onClick={addPlayer}>+ Jugador</button></div>
+        {!players.length && <div className="empty">Agrega los jugadores de esta ronda.</div>}
         {players.map((p) => <div className="playerEdit" key={p.id}>
-          <input value={p.name} onChange={(e) => updatePlayer(p.id, { name: e.target.value })} />
-          <input className="hcpInput" type="number" inputMode="decimal" step="0.1" min={-15} max={54} value={p.handicap} onChange={(e) => updatePlayer(p.id, { handicap: e.target.value === "" ? 0 : Number(e.target.value) })} onBlur={(e) => updatePlayer(p.id, { handicap: Number(e.target.value) || 0 })} />
+          <input placeholder="Nombre" value={p.name} onChange={(e) => updatePlayer(p.id, { name: e.target.value })} />
+          <input className="hcpInput" type="number" inputMode="decimal" step="0.1" min={-15} max={54} placeholder="HCP" value={p.handicap ?? ""} onChange={(e) => updatePlayer(p.id, { handicap: e.target.value === "" ? null : Number(e.target.value) })} />
           <button className={`ownerDot ${ownerId === p.id ? "active" : ""}`} onClick={() => setOwnerId(p.id)} title="Jugador principal">★</button>
-          <button className="remove" disabled={players.length <= 2} onClick={() => setPlayers((ps) => ps.filter((x) => x.id !== p.id))}>×</button>
+          <button className="remove" onClick={() => setPlayers((ps) => ps.filter((x) => x.id !== p.id))}>×</button>
         </div>)}
         <div className="hint">★ marca al jugador principal para estadísticas y gastos.</div>
       </section>
@@ -751,12 +817,12 @@ export default function Page() {
 
         <div className="betCard">
           <div className="betHead"><div><b>🐇 Conejos</b><span>Agarra · mantiene · gana · acumula</span></div><Toggle on={bets.rabbits.enabled} onClick={() => setBets({ ...bets, rabbits: { ...bets.rabbits, enabled: !bets.rabbits.enabled } })} /></div>
-          {bets.rabbits.enabled && <><div className="grid3"><NumberField label="Valor" value={bets.rabbits.value} onChange={(v) => setBets({ ...bets, rabbits: { ...bets.rabbits, value: v } })} /><HcpPercentInput value={bets.rabbits.hcpPct} onChange={(v) => setBets({ ...bets, rabbits: { ...bets.rabbits, hcpPct: v } })} /><div><label>Decimales</label><select value={bets.rabbits.decimals} onChange={(e) => setBets({ ...bets, rabbits: { ...bets.rabbits, decimals: e.target.value as "partial" | "round" } })}><option value="partial">Cuentan</option><option value="round">Redondear</option></select></div></div><label className="miniLabel">Participan</label><ParticipantChips players={players} selected={bets.rabbits.participantIds} onChange={(ids) => setBets({ ...bets, rabbits: { ...bets.rabbits, participantIds: ids } })} /></>}
+          {bets.rabbits.enabled && <><div className="grid3"><NumberField label="Valor" value={bets.rabbits.value} onChange={(v) => setBets({ ...bets, rabbits: { ...bets.rabbits, value: v } })} /><HcpPercentInput value={bets.rabbits.hcpPct} onChange={(v) => setBets({ ...bets, rabbits: { ...bets.rabbits, hcpPct: v } })} /><HandicapModeSelect value={bets.rabbits.decimals} onChange={(decimals) => setBets({ ...bets, rabbits: { ...bets.rabbits, decimals } })} /></div><label className="miniLabel">Participan</label><ParticipantChips players={players} selected={bets.rabbits.participantIds} onChange={(ids) => setBets({ ...bets, rabbits: { ...bets.rabbits, participantIds: ids } })} /></>}
         </div>
 
         <div className="betCard">
           <div className="betHead"><div><b>⛳ Skins</b><span>Empates acumulan</span></div><Toggle on={bets.skins.enabled} onClick={() => setBets({ ...bets, skins: { ...bets.skins, enabled: !bets.skins.enabled } })} /></div>
-          {bets.skins.enabled && <><div className="grid3"><NumberField label="Valor" value={bets.skins.value} onChange={(v) => setBets({ ...bets, skins: { ...bets.skins, value: v } })} /><HcpPercentInput value={bets.skins.hcpPct} onChange={(v) => setBets({ ...bets, skins: { ...bets.skins, hcpPct: v } })} /><div><label>Decimales</label><select value={bets.skins.decimals} onChange={(e) => setBets({ ...bets, skins: { ...bets.skins, decimals: e.target.value as "partial" | "round" } })}><option value="partial">Cuentan</option><option value="round">Redondear</option></select></div></div><label className="miniLabel">Participan</label><ParticipantChips players={players} selected={bets.skins.participantIds} onChange={(ids) => setBets({ ...bets, skins: { ...bets.skins, participantIds: ids } })} /></>}
+          {bets.skins.enabled && <><div className="grid3"><NumberField label="Valor" value={bets.skins.value} onChange={(v) => setBets({ ...bets, skins: { ...bets.skins, value: v } })} /><HcpPercentInput value={bets.skins.hcpPct} onChange={(v) => setBets({ ...bets, skins: { ...bets.skins, hcpPct: v } })} /><HandicapModeSelect value={bets.skins.decimals} onChange={(decimals) => setBets({ ...bets, skins: { ...bets.skins, decimals } })} /></div><label className="miniLabel">Participan</label><ParticipantChips players={players} selected={bets.skins.participantIds} onChange={(ids) => setBets({ ...bets, skins: { ...bets.skins, participantIds: ids } })} /></>}
         </div>
 
         <div className="betCard">
@@ -775,6 +841,10 @@ export default function Page() {
               {(bets.foursome.mode === "points" || bets.foursome.mode === "fixed_points") && <NumberField label="Valor punto / patada" value={bets.foursome.pointValue} onChange={(v) => setBets({ ...bets, foursome: { ...bets.foursome, pointValue: v } })} />}
               <div><label>Decimales</label><select value={bets.foursome.decimals} onChange={(e) => setBets({ ...bets, foursome: { ...bets.foursome, decimals: e.target.value as "partial" | "round" } })}><option value="round">Redondear</option><option value="partial">Cuentan</option></select></div>
             </div>
+            {roundHoles === 18 && bets.foursome.segmentSize === 18 && <div className="pressureOption">
+              <div><b>Presionar segunda vuelta x2</b><span>Hoyos 1–9 al valor normal; hoyos 10–18 al doble, incluido fijo y/o punto.</span></div>
+              <Toggle label="Presionar segunda vuelta x2" on={bets.foursome.pressSecond9} onClick={() => setBets({ ...bets, foursome: { ...bets.foursome, pressSecond9: !bets.foursome.pressSecond9 } })} />
+            </div>}
             <label className="miniLabel">Jugadores de Foursome</label><ParticipantChips players={players} selected={bets.foursome.participantIds} onChange={(ids) => setBets({ ...bets, foursome: { ...bets.foursome, participantIds: ids } })} />
             <div className="segments">{segments.map((s) => {
               const holes = order.slice(s.startIndex, s.endIndex + 1);
@@ -909,7 +979,7 @@ export default function Page() {
 
       {showFullScorecard && <section className="card fullScorecard">
         <div className="sectionTitle"><div><h2>Tarjeta completa</h2><p>Scores de todos los jugadores en el orden real de juego. Desliza horizontalmente.</p></div></div>
-        <div className="tableWrap scorecardTable"><table><thead><tr><th>Jugador</th>{order.map((h) => <th key={h}>{h}</th>)}{roundHoles === 18 && <><th>V1</th><th>V2</th></>}<th>TOT</th><th>+/−</th></tr></thead><tbody>{players.map((p) => {
+        <div className="tableWrap scorecardTable"><table><thead><tr><th>Jugador</th>{order.map((h) => <th key={h}><span>H{h}</span><small>Ventaja {course.holes.find((x) => x.number === h)?.strokeIndex ?? "—"}</small></th>)}{roundHoles === 18 && <><th>V1</th><th>V2</th></>}<th>TOT</th><th>+/−</th></tr></thead><tbody>{players.map((p) => {
           const scoreAt = (h: number) => scores[h]?.[p.id];
           const first9 = order.slice(0, 9).filter((h) => typeof scoreAt(h) === "number").reduce((a, h) => a + Number(scoreAt(h)), 0);
           const second9 = order.slice(9, 18).filter((h) => typeof scoreAt(h) === "number").reduce((a, h) => a + Number(scoreAt(h)), 0);
@@ -917,13 +987,13 @@ export default function Page() {
           const total = entered.reduce((a, h) => a + Number(scoreAt(h)), 0);
           const parEntered = entered.reduce((a, h) => a + (course.holes.find((x) => x.number === h)?.par || 0), 0);
           const rel = total - parEntered;
-          return <tr key={p.id}><td><b>{p.name}</b></td>{order.map((h) => <td key={h}>{typeof scoreAt(h) === "number" ? scoreAt(h) : "—"}</td>)}{roundHoles === 18 && <><td><b>{first9 || "—"}</b></td><td><b>{second9 || "—"}</b></td></>}<td><b>{total || "—"}</b></td><td className={rel <= 0 ? "good" : "bad"}>{entered.length ? `${rel > 0 ? "+" : ""}${rel}` : "—"}</td></tr>;
+          return <tr key={p.id}><td><b>{p.name.trim() || "Sin nombre"} · HCP {p.handicap ?? "—"}</b></td>{order.map((h) => <td key={h}>{typeof scoreAt(h) === "number" ? scoreAt(h) : "—"}</td>)}{roundHoles === 18 && <><td><b>{first9 || "—"}</b></td><td><b>{second9 || "—"}</b></td></>}<td><b>{total || "—"}</b></td><td className={rel <= 0 ? "good" : "bad"}>{entered.length ? `${rel > 0 ? "+" : ""}${rel}` : "—"}</td></tr>;
         })}</tbody></table></div>
       </section>}
 
       <section className="card scoreCard">
         {players.map((p) => <div className="scoreRow" key={p.id}>
-          <div><b>{p.name}</b><span>HCP {p.handicap}</span></div>
+          <div><b>{p.name.trim() || "Sin nombre"}</b><span>HCP {p.handicap ?? "—"}</span></div>
           <div className="stepper"><button onClick={() => changeScore(p.id, -1)}>−</button><input type="number" value={scoreFor(p.id) ?? ""} placeholder={String(hole.par)} onChange={(e) => setScore(p.id, Number(e.target.value) || hole.par)} /><button onClick={() => changeScore(p.id, 1)}>+</button></div>
         </div>)}
         <div className="liveBadges">
@@ -931,6 +1001,8 @@ export default function Page() {
           {currentSkin?.winnerId && <span className="badge">⛳ {playerName(currentSkin.winnerId)} gana {currentSkin.count} skin{currentSkin.count !== 1 ? "s" : ""}</span>}
         </div>
       </section>
+
+      {renderPersonalLive()}
 
       {bets.units.enabled && <section className="card">
         <div className="sectionTitle"><div><h2>Unidades / Copas</h2><p>Birdie/Águila/Albatros/HIO se detectan solos. Marca aquí solo las especiales.</p></div></div>
@@ -1006,17 +1078,14 @@ export default function Page() {
 
       {bets.foursome.enabled && <section className="card">
         <h2>Detalle Foursome</h2>
-        {foursomes.matches.map((m, i) => <div className="matchLine" key={i}><div><b>H{m.startHole}–{m.endHole}: {playerName(m.basePair[0])}/{playerName(m.basePair[1])}</b><span>vs {playerName(m.opponentPair[0])}/{playerName(m.opponentPair[1])}</span></div><div className="matchNums"><span>{m.pointDiff > 0 ? "+" : ""}{m.pointDiff} pts</span><b className={m.totalMoney >= 0 ? "good" : "bad"}>{m.complete ? money(m.totalMoney) : "Pendiente"}</b></div></div>)}
+        {foursomes.matches.map((m, i) => <div className="matchLine" key={i}><div><b>H{m.startHole}–{m.endHole}: {playerName(m.basePair[0])}/{playerName(m.basePair[1])}</b><span>vs {playerName(m.opponentPair[0])}/{playerName(m.opponentPair[1])}</span></div><div className="matchNums"><span>{m.pointDiff > 0 ? "+" : ""}{m.pointDiff} pts{m.second9Pressed ? ` · V1 ${m.first9PointDiff >= 0 ? "+" : ""}${m.first9PointDiff} · V2 ${m.second9PointDiff >= 0 ? "+" : ""}${m.second9PointDiff} x2` : ""}</span><b className={m.totalMoney >= 0 ? "good" : "bad"}>{m.complete ? money(m.totalMoney) : "Pendiente"}</b></div></div>)}
       </section>}
 
       {(pollaEnabled || bets.miniPolla.enabled) && <section className="card"><h2>Polla / Mini Polla</h2>
         {[...polla.details, ...miniPolla.details].map((d) => <div className="pollaResult" key={d.key}><div className="row between"><div><b>{d.label}</b><div className="muted">Hoyos {d.holes.join(", ")} · valor {money(d.value)} por jugador</div></div><strong>{d.complete ? (d.winnerIds.length ? d.winnerIds.map(playerName).join(" / ") : "—") : "Pendiente"}</strong></div>{d.complete && <div className="componentResults"><span>Ganador{d.winnerIds.length !== 1 ? "es" : ""}: <b>{d.winnerIds.map(playerName).join(" / ")}</b></span><span>Premio bruto c/u: <b>{money(d.grossPrizePerWinner)}</b></span>{d.winnerIds.length > 1 && <span>Empate: <b>premio dividido</b></span>}</div>}</div>)}
       </section>}
 
-      {personalBets.length > 0 && <section className="card"><h2>Personales</h2>{personals.results.map((r) => <div className="personalResult" key={r.betId}><div className="row between"><b>{owner?.name} vs {playerName(r.rivalId)}</b><strong className={r.totalMoney >= 0 ? "good" : "bad"}>{money(r.totalMoney)}</strong></div><div className="componentResults">{(roundHoles === 9
-        ? ([['match1', 'Match 9'], ['medal1', 'Medal 9']] as const)
-        : ([['match1', 'Match 1'], ['medal1', 'Medal 1'], ['match2', 'Match 2'], ['medal2', 'Medal 2'], ['match18', 'Match N'], ['medal18', 'Medal N']] as const)
-      ).map(([key, label]) => <span key={key}>{label}: <b>{money(r.componentMoney[key])}</b></span>)}</div></div>)}</section>}
+      {renderPersonalLive("Personales")}
 
       {renderManualBetsEditor()}
 
@@ -1057,6 +1126,6 @@ export default function Page() {
       <div className="roundActions"><button className="secondary big" onClick={() => setTab("setup")}>Cancelar</button><button className="primary big" onClick={saveCourseDraft}>Guardar tee</button></div>
     </>}
 
-    <nav className="bottomNav"><button className={tab === "setup" ? "active" : ""} onClick={() => setTab("setup")}><span>⌂</span>Inicio</button><button className={tab === "round" ? "active" : ""} onClick={() => setTab("round")}><span>{roundHoles}</span>Tarjeta</button><button className={tab === "personals" ? "active" : ""} onClick={() => setTab("personals")}><span>↔</span>Personales</button><button className={tab === "results" ? "active" : ""} onClick={() => setTab("results")}><span>$</span>Resultados</button><button className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}><span>↗</span>Histórico</button></nav>
+    {tab !== "welcome" && <nav className="bottomNav"><button className={tab === "setup" ? "active" : ""} onClick={() => setTab("setup")}><span>⌂</span>Inicio</button><button className={tab === "round" ? "active" : ""} onClick={() => setTab("round")}><span>{roundHoles}</span>Tarjeta</button><button className={tab === "personals" ? "active" : ""} onClick={() => setTab("personals")}><span>↔</span>Personales</button><button className={tab === "results" ? "active" : ""} onClick={() => setTab("results")}><span>$</span>Resultados</button><button className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}><span>↗</span>Histórico</button></nav>}
   </main>;
 }

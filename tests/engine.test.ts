@@ -13,7 +13,9 @@ import {
   calculateUnits,
   expenseTotal,
   mergeBalances,
+  normalizeHandicapMode,
   playOrder,
+  playingHandicap,
   segmentDefinitions,
 } from "../lib/engine";
 import type { BetConfig, Course, HoleScore, PersonalBet, Player } from "../lib/types";
@@ -46,7 +48,7 @@ function betConfig(ids = players.map((player) => player.id)): BetConfig {
     rabbits: { enabled: true, value: 100, hcpPct: 80, decimals: "partial", accumulate: true, participantIds: ids },
     skins: { enabled: true, value: 50, hcpPct: 80, decimals: "partial", accumulate: true, participantIds: ids },
     units: { enabled: true, value: 100, participantIds: ids },
-    foursome: { enabled: true, hcpPct: 100, decimals: "round", segmentSize: 9, mode: "fixed_points", fixedValue: 100, pointValue: 10, participantIds: ids },
+    foursome: { enabled: true, hcpPct: 100, decimals: "round", segmentSize: 9, mode: "fixed_points", fixedValue: 100, pointValue: 10, pressSecond9: false, participantIds: ids },
     ballFriend: { enabled: true, value: 10, hcpPct: 100, decimals: "round", maxScore: 9, participantIds: ids },
     polla: {
       first9: { enabled: true, value: 100, hcpPct: 100, decimals: "round", participantIds: ids },
@@ -61,6 +63,22 @@ test("playOrder supports 9 and 18 holes from hole 1 or 10", () => {
   assert.deepEqual(playOrder(1).slice(0, 9), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
   assert.deepEqual(playOrder(10).slice(0, 9), [10, 11, 12, 13, 14, 15, 16, 17, 18]);
   assert.deepEqual(playOrder(10), [10, 11, 12, 13, 14, 15, 16, 17, 18, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+});
+
+test("Explicit HCP modes are deterministic at .4, .5 and .6", () => {
+  const values = [7.4, 7.5, 7.6];
+  assert.deepEqual(values.map((value) => playingHandicap(value, 100, "decimal")), [7.4, 7.5, 7.6]);
+  assert.deepEqual(values.map((value) => playingHandicap(value, 100, "half_up")), [7, 8, 8]);
+  assert.deepEqual(values.map((value) => playingHandicap(value, 100, "half_down")), [7, 7, 8]);
+  assert.deepEqual(values.map((value) => playingHandicap(value, 100, "six_up")), [7, 7, 8]);
+  assert.deepEqual(values.map((value) => playingHandicap(value, 100, "four_down")), [7, 8, 8]);
+});
+
+test("Saved legacy HCP modes retain their previous behavior", () => {
+  assert.equal(normalizeHandicapMode("partial"), "decimal");
+  assert.equal(normalizeHandicapMode("round"), "half_up");
+  assert.equal(playingHandicap(7.5, 100, "partial"), 7.5);
+  assert.equal(playingHandicap(7.5, 100, "round"), 8);
 });
 
 test("Conejos detects Said grabbing from the first hole with the documented score", () => {
@@ -111,6 +129,28 @@ test("Foursome uses low ball plus high ball and exposes live hole points", () =>
   assert.equal(result.matches[0].pointDiff, 2);
   assert.equal(result.matches[0].totalMoney, 120);
   assert.deepEqual(result.balances, { said: 120, cuau: 120, armando: -120, jesus: -120 });
+});
+
+test("Foursome 18 doubles fixed and point economics only on holes 10–18 when pressed", () => {
+  const four = zeroHcpPlayers.slice(0, 4);
+  const order = playOrder(1);
+  const scores = scoresFor(order, { said: 3, cuau: 5, armando: 4, jesus: 6 });
+  const segment = [{ ...segmentDefinitions(order, 18)[0], basePair: ["said", "cuau"] }];
+  const normalCfg = { ...betConfig(four.map((player) => player.id)).foursome, segmentSize: 18 as const };
+  const pressedCfg = { ...normalCfg, pressSecond9: true };
+
+  const normal = calculateFoursomes(makeCourse(), scores, four, normalCfg, segment, order);
+  const pressed = calculateFoursomes(makeCourse(), scores, four, pressedCfg, segment, order);
+
+  assert.equal(normal.matches[0].fixedMoney, 100);
+  assert.equal(normal.matches[0].pointMoney, 360);
+  assert.equal(normal.matches[0].totalMoney, 460);
+  assert.equal(pressed.matches[0].first9PointDiff, 18);
+  assert.equal(pressed.matches[0].second9PointDiff, 18);
+  assert.equal(pressed.matches[0].fixedMoney, 300);
+  assert.equal(pressed.matches[0].pointMoney, 540);
+  assert.equal(pressed.matches[0].totalMoney, 840);
+  assert.deepEqual(pressed.balances, { said: 840, cuau: 840, armando: -840, jesus: -840 });
 });
 
 test("Bola Amiga flips the opposing two-digit score on birdie or better", () => {
@@ -241,6 +281,46 @@ test("Personales on nine holes pays only Match 9 and Medal 9", () => {
   const result = calculatePersonalBet(bet, "said", makeCourse(), scores, order);
   assert.equal(result.totalMoney, 200);
   assert.deepEqual(result.componentMoney, { match1: 100, medal1: 100, match2: 0, medal2: 0, match18: 0, medal18: 0 });
+  assert.equal(result.liveComponents.find((component) => component.key === "match1")?.complete, true);
+  assert.equal(result.liveComponents.find((component) => component.key === "match1")?.matchState, 9);
+  assert.equal(result.liveComponents.find((component) => component.key === "medal1")?.ownerNetTotal, 27);
+  assert.equal(result.liveComponents.find((component) => component.key === "medal1")?.rivalNetTotal, 36);
+});
+
+test("Personales exposes auditable live Match and Medal state without settling early", () => {
+  const order = playOrder(1).slice(0, 9);
+  const bet: PersonalBet = {
+    id: "personal-live",
+    rivalMode: "group",
+    rivalPlayerId: "cuau",
+    rivalName: "Cuau",
+    externalScores: {},
+    baseValue: 100,
+    advantageReceiver: "rival",
+    advantageStrokes: 0,
+    back9Multiplier: 1,
+    components: { match1: true, medal1: true, match2: false, medal2: false, match18: false, medal18: false },
+  };
+  const result = calculatePersonalBet(bet, "said", makeCourse(), {
+    1: { said: 3, cuau: 4 },
+    2: { said: 4, cuau: 4 },
+  }, order);
+  const match = result.liveComponents.find((component) => component.key === "match1")!;
+  const medal = result.liveComponents.find((component) => component.key === "medal1")!;
+
+  assert.equal(result.totalMoney, 0);
+  assert.equal(match.complete, false);
+  assert.equal(match.matchState, 1);
+  assert.equal(match.leader, "owner");
+  assert.equal(match.ownerMoney, 100);
+  assert.deepEqual(match.holeResults.map(({ hole, winner }) => ({ hole, winner })), [
+    { hole: 1, winner: "owner" },
+    { hole: 2, winner: "tie" },
+  ]);
+  assert.equal(medal.medalDiff, 1);
+  assert.equal(medal.ownerNetTotal, 7);
+  assert.equal(medal.rivalNetTotal, 8);
+  assert.equal(medal.ownerMoney, 100);
 });
 
 test("Personales keeps a stable key for a saved external rival", () => {
