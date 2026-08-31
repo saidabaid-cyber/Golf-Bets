@@ -167,7 +167,8 @@ export default function Page() {
       ...b,
       rabbits: { ...b.rabbits, participantIds: sanitize(b.rabbits.participantIds) },
       skins: { ...b.skins, participantIds: sanitize(b.skins.participantIds) },
-      units: { ...b.units, participantIds: sanitize(      foursome: { ...b.foursome, participantIds: sanitize(b.foursome.participantIds) },
+      units: { ...b.units, participantIds: sanitize(b.units.participantIds) },
+      foursome: { ...b.foursome, participantIds: sanitize(b.foursome.participantIds) },
       ballFriend: { ...b.ballFriend, participantIds: sanitize(b.ballFriend.participantIds) },
     }));
     if (!valid.has(ownerId) && players[0]) setOwnerId(players[0].id);
@@ -454,6 +455,7 @@ export default function Page() {
 
       <div className="roundActions"><button className="secondary big" disabled={currentIndex === 0} onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}>← Anterior</button><button className="primary big" onClick={() => currentIndex < 17 ? setCurrentIndex((i) => i + 1) : setTab("results")}>{currentIndex < 17 ? "Guardar y siguiente →" : "Ver resultados →"}</button></div>
     </>}
+
     {tab === "results" && <>
       <section className="hero resultHero"><div><div className="eyebrow">RESULTADO DEL DÍA</div><h1 className={ownerNet >= 0 ? "good" : "bad"}>{money(ownerNet)}</h1><p>{owner?.name}: apuestas {money(ownerBetResult)} · gastos {money(-ownerExpenseTotal)}</p></div><button className="secondary" onClick={() => setTab("round")}>Editar tarjeta</button></section>
 
