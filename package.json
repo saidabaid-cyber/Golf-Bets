@@ -6,17 +6,33 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "tsc -p tsconfig.test.json && node --test .test-dist/tests/engine.test.js"
+    "test": "tsc -p tsconfig.test.json && node --test .test-dist/tests/*.test.js",
+    "lint": "eslint .",
+    "rules:index": "node --env-file=.env.local scripts/index-rules-pdf.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.57.4",
+    "jspdf": "^3.0.3",
     "next": "^16.0.0",
+    "openai": "^7.8.0",
+    "qrcode": "^1.5.4",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "server-only": "^0.0.1"
   },
   "devDependencies": {
     "@types/node": "22.10.2",
     "@types/react": "19.0.3",
+    "@types/qrcode": "^1.5.5",
     "@types/react-dom": "19.0.2",
+    "eslint": "^9.35.0",
+    "eslint-config-next": "^16.0.0",
     "typescript": "5.7.2"
+  },
+  "pnpm": {
+    "ignoredBuiltDependencies": [
+      "core-js",
+      "unrs-resolver"
+    ]
   }
 }

@@ -2,6 +2,8 @@ export type DecimalMode = "partial" | "round";
 // `partial` and `round` remain valid so drafts saved before V2.4 keep loading.
 export type HandicapMode = DecimalMode | "decimal" | "half_up" | "half_down" | "six_up" | "four_down";
 export type FoursomeMode = "fixed" | "fixed_points" | "points";
+export type PhysicalNine = "holes_1_9" | "holes_10_18";
+export type PressureMultiplier = 1 | 2 | 3 | 4 | 5;
 
 export type Player = {
   id: string;
@@ -16,16 +18,32 @@ export type Hole = {
   yards?: number;
 };
 
-// Internally each Course entry represents one tee. The UI groups entries by name,
-// so one course can expose multiple tees without duplicating the course to the user.
+export type LocalRule = {
+  id: string;
+  title: string;
+  text: string;
+  enabled: boolean;
+  hole: number | null;
+};
+
+// Legacy tee metadata is retained only to open V2.x drafts; V3 treats each entry
+// as one field definition driven by per-hole Par and stroke index.
 export type Course = {
   id: string;
   name: string;
+  /** @deprecated Kept only so V2.x saved rounds can still be opened. */
   teeName: string;
+  /** @deprecated Kept only so V2.x saved rounds can still be opened. */
   rating?: number;
+  /** @deprecated Kept only so V2.x saved rounds can still be opened. */
   slope?: number;
+  /** @deprecated Kept only so V2.x saved rounds can still be opened. */
   totalYards?: number;
   holes: Hole[];
+  builtIn?: boolean;
+  updatedAt?: string;
+  localRules?: LocalRule[];
+  localRulesUpdatedAt?: string;
 };
 
 export type ParticipantConfig = {
@@ -66,7 +84,10 @@ export type BetConfig = {
     mode: FoursomeMode;
     fixedValue: number;
     pointValue: number;
-    pressSecond9: boolean;
+    /** @deprecated V2.5 compatibility. New rounds use pressureMultiplier/pressureNine. */
+    pressSecond9?: boolean;
+    pressureMultiplier?: PressureMultiplier;
+    pressureNine?: PhysicalNine;
   };
   ballFriend: ParticipantConfig & {
     enabled: boolean;
@@ -122,6 +143,13 @@ export type PersonalBetComponents = {
 export type SavedPersonalRival = {
   id: string;
   name: string;
+  handicap?: number | null;
+  baseValue?: number;
+  advantageReceiver?: "owner" | "rival";
+  advantageStrokes?: number;
+  pressureMultiplier?: PressureMultiplier;
+  pressureNine?: PhysicalNine;
+  updatedAt?: string;
 };
 
 export type PersonalBet = {
@@ -135,7 +163,10 @@ export type PersonalBet = {
   // `none` remains accepted only to migrate old drafts. New UI never offers Scratch.
   advantageReceiver: "none" | "owner" | "rival";
   advantageStrokes: number;
+  /** @deprecated V2.5 compatibility. New rounds use pressureMultiplier/pressureNine. */
   back9Multiplier: number;
+  pressureMultiplier?: PressureMultiplier;
+  pressureNine?: PhysicalNine;
   components: PersonalBetComponents;
 };
 
@@ -175,6 +206,28 @@ export type RoundSnapshot = {
   netResult: number;
   categoryResults: Record<string, number>;
   personalResults?: PersonalHistoryResult[];
+  players?: Player[];
+  scores?: Record<number, HoleScore>;
+  courseSnapshot?: Course;
+  order?: number[];
+  completedAt?: string;
+  photoId?: string;
+};
+
+export type FrequentPlayer = {
+  id: string;
+  name: string;
+  handicap: number | null;
+  uses: number;
+  updatedAt: string;
+};
+
+export type FrequentGroup = {
+  id: string;
+  name: string;
+  players: Array<Pick<Player, "name" | "handicap">>;
+  uses: number;
+  updatedAt: string;
 };
 
 export type Transfer = {

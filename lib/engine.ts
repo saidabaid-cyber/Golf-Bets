@@ -372,12 +372,15 @@ export function opponentPairs(participantIds: string[], basePair: string[]) {
   if (basePair.length !== 2) return [] as [string, string][];
   const base = new Set(basePair);
   const rest = participantIds.filter((id) => !base.has(id));
+  if (participantIds.length === 3 && rest.length === 1) return [[rest[0], FOURSOME_GHOST_ID] as [string, string]];
   const pairs: [string, string][] = [];
   for (let i = 0; i < rest.length; i++) {
     for (let j = i + 1; j < rest.length; j++) pairs.push([rest[i], rest[j]]);
   }
   return pairs;
 }
+
+export const FOURSOME_GHOST_ID = "__foursome_ghost__";
 
 export type FoursomeMatchResult = {
   segmentId: string;
@@ -389,6 +392,9 @@ export type FoursomeMatchResult = {
   first9PointDiff: number;
   second9PointDiff: number;
   second9Pressed: boolean;
+  pressureMultiplier: number;
+  pressureNine: "holes_1_9" | "holes_10_18";
+  ghostPlayerId?: string;
   fixedMoney: number;
   pointMoney: number;
   totalMoney: number;
@@ -415,7 +421,12 @@ export function calculateFoursomes(
   const participants = playersByIds(allPlayers, cfg.participantIds);
   const balances = zeroBalances(participants);
   const matches: FoursomeMatchResult[] = [];
-  if (!cfg.enabled || participants.length < 4) return { balances, matches };
+  if (!cfg.enabled || participants.length < 3) return { balances, matches };
+
+  const pressureMultiplier = Math.min(5, Math.max(1, cfg.pressureMultiplier ?? (cfg.pressSecond9 ? 2 : 1)));
+  const pressureNine = cfg.pressureNine ?? "holes_10_18";
+  const isPressedHole = (hole: number) => pressureMultiplier > 1 &&
+    (pressureNine === "holes_1_9" ? hole <= 9 : hole >= 10);
 
   for (const segment of segments) {
     if (segment.basePair.length !== 2) continue;
@@ -424,13 +435,21 @@ export function calculateFoursomes(
 
     for (const opponent of opponents) {
       const ids = [...segment.basePair, ...opponent];
-      const matchPlayers = playersByIds(allPlayers, ids);
+      const ghostPlayerId = opponent.includes(FOURSOME_GHOST_ID)
+        ? opponent.find((id) => id !== FOURSOME_GHOST_ID)
+        : undefined;
+      const realIds = ids.filter((id) => id !== FOURSOME_GHOST_ID);
+      const matchPlayers = playersByIds(allPlayers, realIds);
+      if (ghostPlayerId) {
+        const source = matchPlayers.find((player) => player.id === ghostPlayerId);
+        if (source) matchPlayers.push({ ...source, id: FOURSOME_GHOST_ID, name: "Fantasma" });
+      }
       const holePoints: { hole: number; points: number }[] = [];
       let complete = true;
       let pointDiff = 0;
 
       for (const hole of holes) {
-        if (!completedHole(hole, scores, ids)) {
+        if (!completedHole(hole, scores, realIds)) {
           complete = false;
           continue;
         }
@@ -440,8 +459,10 @@ export function calculateFoursomes(
         const aScores = (segment.basePair as [string, string]).map((id) =>
           netScore(row[id] as number, id, hd.strokeIndex, matchPlayers, cfg.hcpPct, cfg.decimals),
         );
-        const bScores = opponent.map((id) =>
-          netScore(row[id] as number, id, hd.strokeIndex, matchPlayers, cfg.hcpPct, cfg.decimals),
+        const bScores = opponent.map((id) => {
+          const scoreId = id === FOURSOME_GHOST_ID ? ghostPlayerId as string : id;
+          return netScore(row[scoreId] as number, id, hd.strokeIndex, matchPlayers, cfg.hcpPct, cfg.decimals);
+        },
         );
         const points = teamHolePoints(aScores, bScores);
         pointDiff += points;
@@ -450,23 +471,27 @@ export function calculateFoursomes(
 
       const first9PointDiff = holePoints.filter(({ hole }) => hole <= 9).reduce((total, item) => total + item.points, 0);
       const second9PointDiff = holePoints.filter(({ hole }) => hole >= 10).reduce((total, item) => total + item.points, 0);
-      const second9Pressed = Boolean(cfg.pressSecond9 && order.length === 18 && holes.length === 18);
+      const second9Pressed = pressureMultiplier > 1 && pressureNine === "holes_10_18";
       const sign = (value: number) => value > 0 ? 1 : value < 0 ? -1 : 0;
+      const physicalGroups = [
+        { holes: holePoints.filter(({ hole }) => hole <= 9), multiplier: pressureNine === "holes_1_9" ? pressureMultiplier : 1 },
+        { holes: holePoints.filter(({ hole }) => hole >= 10), multiplier: pressureNine === "holes_10_18" ? pressureMultiplier : 1 },
+      ].filter((group) => group.holes.length > 0);
       const fixedMoney = complete && (cfg.mode === "fixed" || cfg.mode === "fixed_points")
-        ? second9Pressed
-          ? sign(first9PointDiff) * cfg.fixedValue + sign(second9PointDiff) * cfg.fixedValue * 2
-          : sign(pointDiff) * cfg.fixedValue
+        ? pressureMultiplier > 1 && physicalGroups.length > 1
+          ? physicalGroups.reduce((money, group) => money + sign(group.holes.reduce((sum, item) => sum + item.points, 0)) * cfg.fixedValue * group.multiplier, 0)
+          : sign(pointDiff) * cfg.fixedValue * (holes.every(isPressedHole) ? pressureMultiplier : 1)
         : 0;
       const pointMoney = complete && (cfg.mode === "points" || cfg.mode === "fixed_points")
-        ? second9Pressed
-          ? first9PointDiff * cfg.pointValue + second9PointDiff * cfg.pointValue * 2
-          : pointDiff * cfg.pointValue
+        ? holePoints.reduce((money, item) => money + item.points * cfg.pointValue * (isPressedHole(item.hole) ? pressureMultiplier : 1), 0)
         : 0;
       const totalMoney = fixedMoney + pointMoney;
 
       if (complete) {
         for (const id of segment.basePair as [string, string]) balances[id] = (balances[id] ?? 0) + totalMoney;
-        for (const id of opponent) balances[id] = (balances[id] ?? 0) - totalMoney;
+        const realOpponents = opponent.filter((id) => id !== FOURSOME_GHOST_ID);
+        const opponentShare = realOpponents.length ? totalMoney * 2 / realOpponents.length : 0;
+        for (const id of realOpponents) balances[id] = (balances[id] ?? 0) - opponentShare;
       }
 
       matches.push({
@@ -479,6 +504,9 @@ export function calculateFoursomes(
         first9PointDiff,
         second9PointDiff,
         second9Pressed,
+        pressureMultiplier,
+        pressureNine,
+        ghostPlayerId,
         fixedMoney,
         pointMoney,
         totalMoney,
@@ -670,8 +698,17 @@ export function calculatePersonalBet(
     };
   };
 
-  const first = segment(order.slice(0, 9), 1);
-  const second = segment(order.slice(9, 18), Math.max(1, bet.back9Multiplier));
+  const holes1To9 = order.length >= 18 ? order.filter((hole) => hole <= 9) : order;
+  const holes10To18 = order.length >= 18 ? order.filter((hole) => hole >= 10) : [];
+  const explicitPressure = typeof bet.pressureMultiplier === "number";
+  const pressureMultiplier = Math.min(5, Math.max(1, bet.pressureMultiplier ?? bet.back9Multiplier ?? 1));
+  const legacyPressedNine = order.slice(9, 18)[0] && order.slice(9, 18)[0] <= 9 ? "holes_1_9" : "holes_10_18";
+  const pressureNine = bet.pressureNine ?? legacyPressedNine;
+  const firstMultiplier = pressureNine === "holes_1_9" ? pressureMultiplier : 1;
+  const secondMultiplier = pressureNine === "holes_10_18" ? pressureMultiplier : 1;
+  const singleNineMultiplier = explicitPressure && (order[0] >= 10 ? pressureNine === "holes_10_18" : pressureNine === "holes_1_9") ? pressureMultiplier : 1;
+  const first = segment(holes1To9, order.length >= 18 ? firstMultiplier : singleNineMultiplier);
+  const second = segment(holes10To18, secondMultiplier);
   const total = segment(order.slice(0, 18), 1);
 
   if (bet.components.match1 && first.complete) componentMoney.match1 = first.matchMoney;
@@ -683,16 +720,16 @@ export function calculatePersonalBet(
 
   const componentDefinitions = order.length >= 18
     ? [
-        { key: "match1", label: "Match 1ª vuelta", kind: "match", data: first, multiplier: 1 },
-        { key: "medal1", label: "Medal 1ª vuelta", kind: "medal", data: first, multiplier: 1 },
-        { key: "match2", label: "Match 2ª vuelta", kind: "match", data: second, multiplier: Math.max(1, bet.back9Multiplier) },
-        { key: "medal2", label: "Medal 2ª vuelta", kind: "medal", data: second, multiplier: Math.max(1, bet.back9Multiplier) },
+        { key: "match1", label: "Match H1–9", kind: "match", data: first, multiplier: firstMultiplier },
+        { key: "medal1", label: "Medal H1–9", kind: "medal", data: first, multiplier: firstMultiplier },
+        { key: "match2", label: "Match H10–18", kind: "match", data: second, multiplier: secondMultiplier },
+        { key: "medal2", label: "Medal H10–18", kind: "medal", data: second, multiplier: secondMultiplier },
         { key: "match18", label: "Match 18 hoyos", kind: "match", data: total, multiplier: 1 },
         { key: "medal18", label: "Medal 18 hoyos", kind: "medal", data: total, multiplier: 1 },
       ] as const
     : [
-        { key: "match1", label: "Match 9 hoyos", kind: "match", data: first, multiplier: 1 },
-        { key: "medal1", label: "Medal 9 hoyos", kind: "medal", data: first, multiplier: 1 },
+        { key: "match1", label: `Match ${order[0] >= 10 ? "H10–18" : "H1–9"}`, kind: "match", data: first, multiplier: singleNineMultiplier },
+        { key: "medal1", label: `Medal ${order[0] >= 10 ? "H10–18" : "H1–9"}`, kind: "medal", data: first, multiplier: singleNineMultiplier },
       ] as const;
 
   const liveComponents = componentDefinitions
@@ -725,6 +762,9 @@ export function calculatePersonalBet(
     totalMoney,
     matchPoints: { first: first.match, second: second.match, total: total.match },
     medalDiff: { first: first.medal, second: second.medal, total: total.medal },
+    pressureMultiplier,
+    pressureNine,
+    migratedLegacyPressure: !explicitPressure,
     liveComponents,
   };
 }
@@ -815,11 +855,13 @@ export function calculatePolla(
 ) {
   const balances = zeroBalances(allPlayers);
   const details: MedalPollaDetail[] = [];
+  const holes1To9 = order.filter((hole) => hole <= 9);
+  const holes10To18 = order.filter((hole) => hole >= 10);
   const components = [
-    ["first9", "Polla 1ª vuelta", order.slice(0, 9), cfg.first9],
+    ["first9", "Polla H1–9", order.length >= 18 ? holes1To9 : order.slice(0, 9), cfg.first9],
     ...(order.length >= 18
       ? ([
-          ["second9", "Polla 2ª vuelta", order.slice(9, 18), cfg.second9],
+          ["second9", "Polla H10–18", holes10To18, cfg.second9],
           ["total18", "Polla 18 hoyos", order.slice(0, 18), cfg.total18],
         ] as const)
       : []),

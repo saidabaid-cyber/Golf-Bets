@@ -153,6 +153,50 @@ test("Foursome 18 doubles fixed and point economics only on holes 10–18 when p
   assert.deepEqual(pressed.balances, { said: 840, cuau: 840, armando: -840, jesus: -840 });
 });
 
+test("Foursome Fantasma duplicates the third player and settles zero-sum among three", () => {
+  const three = zeroHcpPlayers.slice(0, 3);
+  const cfg = { ...betConfig(three.map((player) => player.id)).foursome, mode: "fixed_points" as const };
+  const segments = [{ ...segmentDefinitions([1], 9)[0], basePair: ["said", "cuau"] }];
+  const result = calculateFoursomes(
+    makeCourse(),
+    { 1: { said: 3, cuau: 4, armando: 5 } },
+    three,
+    cfg,
+    segments,
+    [1],
+  );
+
+  assert.deepEqual(result.matches[0].opponentPair, ["armando", "__foursome_ghost__"]);
+  assert.equal(result.matches[0].ghostPlayerId, "armando");
+  assert.equal(result.matches[0].holePoints[0].points, 2);
+  assert.equal(result.matches[0].totalMoney, 120);
+  assert.deepEqual(result.balances, { said: 120, cuau: 120, armando: -240 });
+  assert.equal(Object.values(result.balances).reduce((sum, amount) => sum + amount, 0), 0);
+});
+
+test("Foursome pressure uses the selected physical nine even when starting on H10", () => {
+  const four = zeroHcpPlayers.slice(0, 4);
+  const order = playOrder(10);
+  const scores = scoresFor(order, { said: 3, cuau: 5, armando: 4, jesus: 6 });
+  const segment = [{ ...segmentDefinitions(order, 18)[0], basePair: ["said", "cuau"] }];
+  const base = { ...betConfig(four.map((player) => player.id)).foursome, segmentSize: 18 as const, pressSecond9: false };
+  const holes1Pressed = calculateFoursomes(makeCourse(), scores, four, {
+    ...base,
+    pressureMultiplier: 3,
+    pressureNine: "holes_1_9",
+  }, segment, order);
+  const holes10Pressed = calculateFoursomes(makeCourse(), scores, four, {
+    ...base,
+    pressureMultiplier: 2,
+    pressureNine: "holes_10_18",
+  }, segment, order);
+
+  assert.equal(holes1Pressed.matches[0].fixedMoney, 400);
+  assert.equal(holes1Pressed.matches[0].pointMoney, 720);
+  assert.equal(holes10Pressed.matches[0].fixedMoney, 300);
+  assert.equal(holes10Pressed.matches[0].pointMoney, 540);
+});
+
 test("Bola Amiga flips the opposing two-digit score on birdie or better", () => {
   const four = zeroHcpPlayers.slice(0, 4);
   const cfg = betConfig(four.map((player) => player.id)).ballFriend;
@@ -230,6 +274,19 @@ test("Polla Nassau 18 pays all three independent components", () => {
   const result = calculatePolla(makeCourse(), scores, zeroHcpPlayers, betConfig().polla, order);
   assert.equal(result.details.length, 3);
   assert.deepEqual(result.balances, { said: 2400, cuau: -600, armando: -600, jesus: -600, raul: -600 });
+});
+
+test("Polla components always use physical H1–9 and H10–18", () => {
+  const order = playOrder(10);
+  const scores = scoresFor(order, { said: 4, cuau: 4, armando: 4, jesus: 4, raul: 4 });
+  for (const hole of Array.from({ length: 9 }, (_, index) => index + 1)) scores[hole].said = 3;
+  const result = calculatePolla(makeCourse(), scores, zeroHcpPlayers, betConfig().polla, order);
+  const first = result.details.find((detail) => detail.key === "first9")!;
+  const second = result.details.find((detail) => detail.key === "second9")!;
+  assert.deepEqual(first.holes, [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  assert.deepEqual(second.holes, [10, 11, 12, 13, 14, 15, 16, 17, 18]);
+  assert.deepEqual(first.winnerIds, ["said"]);
+  assert.equal(second.winnerIds.length, 5);
 });
 
 test("Each Polla component honors its own switch, value and participants", () => {
@@ -321,6 +378,32 @@ test("Personales exposes auditable live Match and Medal state without settling e
   assert.equal(medal.ownerNetTotal, 7);
   assert.equal(medal.rivalNetTotal, 8);
   assert.equal(medal.ownerMoney, 100);
+});
+
+test("Personales pressure applies to the selected physical nine, not chronological order", () => {
+  const order = playOrder(10);
+  const bet: PersonalBet = {
+    id: "physical-pressure",
+    rivalMode: "group",
+    rivalPlayerId: "cuau",
+    rivalName: "Cuau",
+    externalScores: {},
+    baseValue: 100,
+    advantageReceiver: "rival",
+    advantageStrokes: 0,
+    back9Multiplier: 1,
+    pressureMultiplier: 3,
+    pressureNine: "holes_1_9",
+    components: { match1: true, medal1: true, match2: true, medal2: true, match18: false, medal18: false },
+  };
+  const scores = scoresFor(order, { said: 3, cuau: 4 });
+  const result = calculatePersonalBet(bet, "said", makeCourse(), scores, order);
+  assert.equal(result.componentMoney.match1, 300);
+  assert.equal(result.componentMoney.medal1, 300);
+  assert.equal(result.componentMoney.match2, 100);
+  assert.equal(result.componentMoney.medal2, 100);
+  assert.equal(result.totalMoney, 800);
+  assert.equal(result.pressureNine, "holes_1_9");
 });
 
 test("Personales keeps a stable key for a saved external rival", () => {

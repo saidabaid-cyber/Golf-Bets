@@ -3,3 +3,7 @@ node_modules/
 .next/
 out/
 .test-dist/
+.env*
+!.env.example
+rules-source/
+rules-sources/
