@@ -197,6 +197,25 @@ test("Foursome pressure uses the selected physical nine even when starting on H1
   assert.equal(holes10Pressed.matches[0].pointMoney, 540);
 });
 
+test("Foursome ignores residual pressure settings in a standalone nine-hole round", () => {
+  const four = zeroHcpPlayers.slice(0, 4);
+  const order = playOrder(1).slice(0, 9);
+  const scores = scoresFor(order, { said: 3, cuau: 5, armando: 4, jesus: 6 });
+  const segment = [{ ...segmentDefinitions(order, 9)[0], basePair: ["said", "cuau"] }];
+  const base = { ...betConfig(four.map((player) => player.id)).foursome, segmentSize: 9 as const };
+  const normal = calculateFoursomes(makeCourse(), scores, four, base, segment, order);
+  const residual = calculateFoursomes(makeCourse(), scores, four, {
+    ...base,
+    pressSecond9: true,
+    pressureMultiplier: 3,
+    pressureNine: "holes_1_9",
+  }, segment, order);
+
+  assert.equal(normal.matches[0].totalMoney, 280);
+  assert.equal(residual.matches[0].pressureMultiplier, 1);
+  assert.deepEqual(residual.balances, normal.balances);
+});
+
 test("Bola Amiga flips the opposing two-digit score on birdie or better", () => {
   const four = zeroHcpPlayers.slice(0, 4);
   const cfg = betConfig(four.map((player) => player.id)).ballFriend;
@@ -287,6 +306,16 @@ test("Polla components always use physical H1–9 and H10–18", () => {
   assert.deepEqual(second.holes, [10, 11, 12, 13, 14, 15, 16, 17, 18]);
   assert.deepEqual(first.winnerIds, ["said"]);
   assert.equal(second.winnerIds.length, 5);
+});
+
+test("Polla de nueve hoyos saliendo por H10 liquida únicamente H10–18", () => {
+  const order = playOrder(10).slice(0, 9);
+  const scores = scoresFor(order, { said: 3, cuau: 4, armando: 4, jesus: 4, raul: 4 });
+  const result = calculatePolla(makeCourse(), scores, zeroHcpPlayers, betConfig().polla, order);
+
+  assert.deepEqual(result.details.map((detail) => detail.key), ["second9"]);
+  assert.deepEqual(result.details[0].holes, [10, 11, 12, 13, 14, 15, 16, 17, 18]);
+  assert.deepEqual(result.balances, { said: 800, cuau: -200, armando: -200, jesus: -200, raul: -200 });
 });
 
 test("Each Polla component honors its own switch, value and participants", () => {

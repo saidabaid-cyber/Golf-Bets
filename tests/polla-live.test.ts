@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { autoGroupPollaPlayers, normalizeOyesDistance, parsePollaPlayersCsv, rankPollaLeaderboard } from "../lib/polla-live";
+import { autoGroupPollaPlayers, initializePollaHoleScores, nextPollaHole, normalizeOyesDistance, parsePollaPlayersCsv, pollaHoleOrder, rankPollaLeaderboard } from "../lib/polla-live";
 
 test("Polla Live validates and imports its documented CSV format", () => {
   const valid = parsePollaPlayersCsv("name,handicap,group,startHole,teeTime\nSaid,7,Grupo 1,10,08:30\nCuau,9,Grupo 1,10,08:30");
@@ -20,10 +20,10 @@ test("Polla Live auto-groups 60 players efficiently into 15 foursomes", () => {
   assert.ok(groups.every((group) => group.length === 4));
 });
 
-test("Polla Live avoids groups smaller than three", () => {
+test("Polla Live respects the preferred size without groups smaller than three", () => {
   const players = Array.from({ length: 10 }, (_, index) => ({ id: String(index), name: `J${index}`, handicap: 0 }));
-  const groups = autoGroupPollaPlayers(players, 4);
-  assert.deepEqual(groups.map((group) => group.length), [5, 5]);
+  assert.deepEqual(autoGroupPollaPlayers(players, 4).map((group) => group.length), [4, 3, 3]);
+  assert.deepEqual(autoGroupPollaPlayers(players, 5).map((group) => group.length), [5, 5]);
 });
 
 test("Oyes normalize meters, centimeters and feet/inches", () => {
@@ -40,4 +40,13 @@ test("Leaderboard never marks unequal progress as finished", () => {
   assert.equal(rows[0].playerId, "b");
   assert.equal(rows[1].finished, false);
   assert.equal(rows[1].thru, 14);
+});
+
+test("Polla Live respeta salida H10, par real y final de nueve hoyos", () => {
+  const order = pollaHoleOrder(10, 9);
+  assert.deepEqual(order, [10, 11, 12, 13, 14, 15, 16, 17, 18]);
+  const initialized = initializePollaHoleScores({}, ["a", "b"], 10, [{ number: 10, par: 5 }]);
+  assert.deepEqual(initialized, { "a:10": 5, "b:10": 5 });
+  assert.equal(nextPollaHole(10, 10, 9), 11);
+  assert.equal(nextPollaHole(18, 10, 9), null);
 });

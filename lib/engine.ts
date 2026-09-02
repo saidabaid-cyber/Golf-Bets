@@ -423,7 +423,11 @@ export function calculateFoursomes(
   const matches: FoursomeMatchResult[] = [];
   if (!cfg.enabled || participants.length < 3) return { balances, matches };
 
-  const pressureMultiplier = Math.min(5, Math.max(1, cfg.pressureMultiplier ?? (cfg.pressSecond9 ? 2 : 1)));
+  // Pressure is a two-nine option. A residual saved setting must never double a
+  // standalone nine-hole round after the user changes the round length.
+  const pressureMultiplier = order.length >= 18
+    ? Math.min(5, Math.max(1, cfg.pressureMultiplier ?? (cfg.pressSecond9 ? 2 : 1)))
+    : 1;
   const pressureNine = cfg.pressureNine ?? "holes_10_18";
   const isPressedHole = (hole: number) => pressureMultiplier > 1 &&
     (pressureNine === "holes_1_9" ? hole <= 9 : hole >= 10);
@@ -858,12 +862,14 @@ export function calculatePolla(
   const holes1To9 = order.filter((hole) => hole <= 9);
   const holes10To18 = order.filter((hole) => hole >= 10);
   const components = [
-    ["first9", "Polla H1–9", order.length >= 18 ? holes1To9 : order.slice(0, 9), cfg.first9],
+    ...(holes1To9.length === 9
+      ? ([["first9", "Polla H1–9", holes1To9, cfg.first9]] as const)
+      : []),
+    ...(holes10To18.length === 9
+      ? ([["second9", "Polla H10–18", holes10To18, cfg.second9]] as const)
+      : []),
     ...(order.length >= 18
-      ? ([
-          ["second9", "Polla H10–18", holes10To18, cfg.second9],
-          ["total18", "Polla 18 hoyos", order.slice(0, 18), cfg.total18],
-        ] as const)
+      ? ([["total18", "Polla 18 hoyos", order.slice(0, 18), cfg.total18]] as const)
       : []),
   ] as const;
 

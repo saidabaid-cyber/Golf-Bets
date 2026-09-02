@@ -1,0 +1,117 @@
+import { LEGAL_DOCUMENT_VERSIONS } from "./legal-config";
+
+export type AccountMode = "undecided" | "guest" | "authenticated";
+export type ConsentType = keyof typeof LEGAL_DOCUMENT_VERSIONS;
+
+export type LegalAcceptance = {
+  userId: string;
+  type: ConsentType;
+  documentVersion: string;
+  acceptedAt: string;
+  locale: string;
+};
+
+export type BackyardProfile = {
+  userId: string;
+  displayName: string;
+  email: string;
+  avatarUrl: string;
+  defaultHandicap: number | null;
+};
+
+export function normalizeBackyardProfileCache(value: unknown, fallback: BackyardProfile): BackyardProfile {
+  if (!value || typeof value !== "object") return fallback;
+  const candidate = value as Partial<BackyardProfile>;
+  return {
+    userId: fallback.userId,
+    email: fallback.email,
+    displayName: typeof candidate.displayName === "string" && candidate.displayName.trim() ? candidate.displayName.trim() : fallback.displayName,
+    avatarUrl: typeof candidate.avatarUrl === "string" ? candidate.avatarUrl : fallback.avatarUrl,
+    defaultHandicap: candidate.defaultHandicap === null || (typeof candidate.defaultHandicap === "number" && Number.isFinite(candidate.defaultHandicap)) ? candidate.defaultHandicap : fallback.defaultHandicap,
+  };
+}
+
+export function mergeBackyardProfile<T extends BackyardProfile>(current: T, patch: Pick<BackyardProfile, "displayName" | "defaultHandicap" | "avatarUrl">): T {
+  return { ...current, ...patch, displayName: patch.displayName.trim() };
+}
+
+export const ACCOUNT_STORAGE_KEYS = {
+  mode: "backyard-account-mode-v1",
+  acceptances: "backyard-legal-acceptances-v1",
+  guestProfile: "backyard-guest-profile-v1",
+  migrationDecision: "backyard-local-migration-decision-v1",
+} as const;
+
+export function migrationDecisionStorageKey(userId: string) {
+  return `${ACCOUNT_STORAGE_KEYS.migrationDecision}:${userId}`;
+}
+
+export const REQUIRED_CONSENTS = Object.keys(LEGAL_DOCUMENT_VERSIONS) as ConsentType[];
+
+export function buildLegalAcceptances(userId: string, acceptedAt: string, locale = "es-MX"): LegalAcceptance[] {
+  return REQUIRED_CONSENTS.map((type) => ({
+    userId,
+    type,
+    documentVersion: LEGAL_DOCUMENT_VERSIONS[type],
+    acceptedAt,
+    locale,
+  }));
+}
+
+export function parseLegalAcceptances(raw: string | null): LegalAcceptance[] {
+  if (!raw) return [];
+  try {
+    const value = JSON.parse(raw);
+    return Array.isArray(value)
+      ? value.filter((item): item is LegalAcceptance => Boolean(
+        item && typeof item.userId === "string" && REQUIRED_CONSENTS.includes(item.type)
+          && typeof item.documentVersion === "string" && typeof item.acceptedAt === "string",
+      ))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+export function hasCurrentLegalConsent(acceptances: LegalAcceptance[], userId: string) {
+  return REQUIRED_CONSENTS.every((type) => acceptances.some((acceptance) => (
+    acceptance.userId === userId
+    && acceptance.type === type
+    && acceptance.documentVersion === LEGAL_DOCUMENT_VERSIONS[type]
+  )));
+}
+
+export function mergeLegalAcceptances(current: LegalAcceptance[], next: LegalAcceptance[]) {
+  const replacements = new Set(next.map((item) => `${item.userId}:${item.type}:${item.documentVersion}`));
+  return [...current.filter((item) => !replacements.has(`${item.userId}:${item.type}:${item.documentVersion}`)), ...next];
+}
+
+export function isValidEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
+export function normalizeOtp(value: string) {
+  return value.replace(/\D/g, "").slice(0, 6);
+}
+
+export function authErrorMessage(error: unknown, context: "google" | "apple" | "email" | "otp" | "logout" = "email") {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error || "").toLowerCase();
+  if (message.includes("provider") && (message.includes("disabled") || message.includes("not enabled") || message.includes("unsupported"))) return `Acceso con ${context === "google" ? "Google" : context === "apple" ? "Apple" : "correo"} pendiente de configuración.`;
+  if (message.includes("rate") || message.includes("too many")) return "Demasiados intentos. Espera un momento antes de intentarlo nuevamente.";
+  if (message.includes("expired")) return "El código expiró. Solicita uno nuevo.";
+  if (message.includes("invalid") || message.includes("token")) return context === "otp" ? "El código no es correcto. Revísalo o solicita uno nuevo." : "Revisa la información e intenta nuevamente.";
+  if (message.includes("network") || message.includes("fetch") || message.includes("connection")) return "No hay conexión. Intenta nuevamente.";
+  if (context === "google") return "No pudimos iniciar sesión con Google.";
+  if (context === "apple") return "No pudimos iniciar sesión con Apple.";
+  if (context === "otp") return "No pudimos verificar el código.";
+  if (context === "logout") return "No pudimos cerrar la sesión. Intenta nuevamente.";
+  return "No pudimos enviar el código. Intenta nuevamente.";
+}
+
+export function hasLocalGolfData(storage: Pick<Storage, "getItem">) {
+  const keys = ["golfbets-history", "golfbets-draft-v1", "golfbets-frequent-players-v1", "golfbets-frequent-groups-v1"];
+  return keys.some((key) => {
+    const value = storage.getItem(key);
+    return Boolean(value && value !== "[]" && value !== "{}" && value !== "null");
+  });
+}

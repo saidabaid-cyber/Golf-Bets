@@ -12,8 +12,58 @@ export const STORAGE_KEYS = {
   contrast: "golfbets-high-contrast-v1",
 } as const;
 
+export function readStoredJson<T>(
+  storage: Pick<Storage, "getItem">,
+  key: string,
+  fallback: T,
+): T {
+  try {
+    const raw = storage.getItem(key);
+    return raw === null ? fallback : JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 export function clearActiveRoundStorage(storage: Pick<Storage, "removeItem">) {
   storage.removeItem(STORAGE_KEYS.draft);
+}
+
+export type DeletionDecision = "cancel" | "delete";
+
+export function resolveHistoricalRoundDeletion(rounds: RoundSnapshot[], roundId: string, decision: DeletionDecision) {
+  if (decision === "cancel") return rounds;
+  return rounds.filter((round) => round.id !== roundId);
+}
+
+export function resolvePersonalHistoryDeletion(
+  rounds: RoundSnapshot[],
+  roundId: string,
+  resultIndex: number,
+  decision: DeletionDecision,
+) {
+  if (decision === "cancel") return rounds;
+  return rounds.map((round) => {
+    if (round.id !== roundId) return round;
+    const personalResults = round.personalResults || [];
+    const removed = personalResults[resultIndex];
+    if (!removed) return round;
+    const normalizeZero = (value: number) => Math.abs(value) < 0.001 ? 0 : value;
+    return {
+      ...round,
+      personalResults: personalResults.filter((_, index) => index !== resultIndex),
+      categoryResults: {
+        ...round.categoryResults,
+        Personales: normalizeZero((round.categoryResults.Personales || 0) - removed.totalMoney),
+      },
+      betResult: normalizeZero(round.betResult - removed.totalMoney),
+      netResult: normalizeZero(round.netResult - removed.totalMoney),
+    };
+  });
+}
+
+export function persistRoundHistory(storage: Pick<Storage, "setItem">, rounds: RoundSnapshot[]) {
+  storage.setItem(STORAGE_KEYS.history, JSON.stringify(rounds));
 }
 
 export function mergeCoursesPreservingEdits(defaults: Course[], saved: Course[] | null | undefined) {

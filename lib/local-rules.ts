@@ -30,11 +30,11 @@ export function isLaVistaCourse(name: string | null | undefined) {
 }
 
 export function withDefaultLaVistaRules(course: Course): Course {
-  if (!isLaVistaCourse(course.name) || Array.isArray(course.localRules)) return course;
+  if (!isLaVistaCourse(course.name)) return course;
   return {
     ...course,
     localRules: cloneLaVistaLocalRules(),
-    localRulesUpdatedAt: course.localRulesUpdatedAt || LA_VISTA_LOCAL_RULES_UPDATED_AT,
+    localRulesUpdatedAt: LA_VISTA_LOCAL_RULES_UPDATED_AT,
   };
 }
 

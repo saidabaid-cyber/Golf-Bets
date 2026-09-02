@@ -64,7 +64,7 @@ test("La Vista rules include the documented per-hole cases and stay snapshot-saf
   assert.equal(activeLocalRules(configured.localRules).length, LA_VISTA_LOCAL_RULES.length - 1);
 });
 
-test("an intentionally empty La Vista local-rules list is preserved", () => {
+test("La Vista local rules are restored from the code-controlled source", () => {
   const empty = withDefaultLaVistaRules({
     id: "vista-empty",
     name: "La Vista",
@@ -73,7 +73,7 @@ test("an intentionally empty La Vista local-rules list is preserved", () => {
     holes: [],
     localRules: [],
   });
-  assert.deepEqual(empty.localRules, []);
+  assert.deepEqual(empty.localRules, LA_VISTA_LOCAL_RULES);
 });
 
 test("La Vista local rules apply only to La Vista and La Vista Temporal", () => {
@@ -92,12 +92,57 @@ test("the three indexed official documents are visible through safe local ids", 
     "Additional Clarifications of the 2023 Rules of Golf - 1 July 2026 - 2.pdf",
   ]);
   assert.ok(OFFICIAL_RULES_DOCUMENTS.every((document) => document.usedByAi && document.localUrl.startsWith("/api/rules/documents/") && !document.localUrl.includes(".pdf")));
+  assert.ok(OFFICIAL_RULES_DOCUMENTS.every((document) => document.officialUrl.startsWith("https://") && document.officialUrl.toLowerCase().endsWith(".pdf")));
+  assert.equal(OFFICIAL_RULES_DOCUMENTS[0].officialUrl, "https://www.usga.org/content/dam/usga/pdf/2023/rules/2023%20Guia%20Oficial%20Golf%20pt1.pdf");
+  assert.equal(OFFICIAL_RULES_DOCUMENTS[1].officialUrl, "https://www.usga.org/content/dam/usga/pdf/2023/rules/2023%20Guia%20Oficial%20Golf%20pt2.pdf");
+  assert.match(OFFICIAL_RULES_DOCUMENTS[2].officialUrl, /assets\.randa\.org\/.*1%20July%202026_RA\.pdf$/);
+});
+
+test("document buttons use official production sources and never show a localhost-only dead end", () => {
+  const panel = readFileSync("app/components/rules-panel.tsx", "utf8");
+  const route = readFileSync("app/api/rules/documents/[id]/route.ts", "utf8");
+  assert.match(panel, /setSelectedDocument\(document\)/);
+  assert.match(panel, /<iframe src=\{selectedDocument\.localUrl\}/);
+  assert.match(panel, />Abrir documento<\/button>/);
+  assert.match(route, /fetch\(document\.officialUrl/);
+  assert.match(route, /Content-Disposition/);
+  assert.match(route, /X-Frame-Options.*SAMEORIGIN/);
+  assert.doesNotMatch(`${panel}\n${route}`, /únicamente en localhost/i);
+});
+
+test("document navigation leaves The Backyard available for a safe return", () => {
+  const panel = readFileSync("app/components/rules-panel.tsx", "utf8");
+  assert.match(panel, /← Volver a Reglas/);
+  assert.match(panel, /href=\{selectedDocument\.officialUrl\} target="_blank" rel="noreferrer">Abrir en navegador/);
+  assert.match(panel, /Si Safari no muestra el PDF dentro de la app/);
+});
+
+test("the setup date uses a centered responsive wrapper for mobile and desktop", () => {
+  const page = readFileSync("app/page.tsx", "utf8");
+  const css = readFileSync("app/globals.css", "utf8");
+  assert.match(page, /className="hero setupHero"/);
+  assert.match(page, /className="heroDate"/);
+  assert.match(css, /\.heroDate\{[^}]*justify-content:center/);
+  assert.match(css, /\.setupHero \.dateInput\{[^}]*margin:0 auto[^}]*text-align:center/);
+  assert.match(css, /@media\(max-width:430px\)[\s\S]*\.setupHero \.heroDate\{[^}]*align-self:center/);
+});
+
+test("capture inputs use the empty-safe numeric control without zero placeholders", () => {
+  const page = readFileSync("app/page.tsx", "utf8");
+  const polla = readFileSync("app/components/polla-live-panel.tsx", "utf8");
+  const input = readFileSync("app/components/numeric-capture-input.tsx", "utf8");
+  assert.match(page, /NumberField label="Golpes que recibe"/);
+  assert.match(page, /NumericCaptureInput inputMode="decimal" step=\{50\}/);
+  assert.match(polla, /NumericCaptureInput placeholder="HCP"/);
+  assert.match(input, /setRawValue\(event\.target\.value\)/);
+  assert.doesNotMatch(`${page}\n${polla}`, /placeholder="0"/);
 });
 
 test("private rule-source folders remain ignored by Git", () => {
   const gitignore = readFileSync(".gitignore", "utf8");
   assert.match(gitignore, /^rules-source\/$/m);
   assert.match(gitignore, /^rules-sources\/$/m);
+  assert.match(gitignore, /^brand-source\/$/m);
 });
 
 test("Código de Caballeros is complete and explicitly cannot create sports penalties", () => {

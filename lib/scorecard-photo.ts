@@ -44,3 +44,14 @@ export async function readScorecardPhoto(roundId: string) {
   db.close();
   return blob;
 }
+
+export async function deleteScorecardPhoto(roundId: string) {
+  const db = await database();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(STORE, "readwrite");
+    transaction.objectStore(STORE).delete(roundId);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  });
+  db.close();
+}

@@ -5,7 +5,7 @@ const signed = (value: number) => `${value > 0 ? "+" : value < 0 ? "−" : ""}$$
 
 export function roundShareText(round: RoundSnapshot) {
   const categories = Object.entries(round.categoryResults).filter(([, value]) => value !== 0).map(([name, value]) => `${name}: ${signed(value)}`).join(" · ");
-  return `Golf Bets\n${round.courseName} · ${round.date}\n${round.ownerName}: ${signed(round.betResult)} en apuestas\nGastos: $${round.expenseTotal.toLocaleString("es-MX")}\nNeto: ${signed(round.netResult)}${categories ? `\n${categories}` : ""}`;
+  return `THE BACKYARD\nPlay. Compete. Bet. Settle.\n${round.courseName} · ${round.date}\n${round.ownerName}: ${signed(round.betResult)} en apuestas\nGastos: $${round.expenseTotal.toLocaleString("es-MX")}\nNeto: ${signed(round.netResult)}${categories ? `\n${categories}` : ""}`;
 }
 
 function download(blob: Blob, filename: string) {
@@ -18,7 +18,7 @@ function download(blob: Blob, filename: string) {
 }
 
 export function downloadRoundCsv(round: RoundSnapshot) {
-  download(new Blob(["\uFEFF", roundSnapshotToCsv(round)], { type: "text/csv;charset=utf-8" }), `golf-bets-${round.date}.csv`);
+  download(new Blob(["\uFEFF", roundSnapshotToCsv(round)], { type: "text/csv;charset=utf-8" }), `the-backyard-${round.date}.csv`);
 }
 
 export async function roundCardBlob(round: RoundSnapshot) {
@@ -34,7 +34,7 @@ export async function roundCardBlob(round: RoundSnapshot) {
   context.fillRect(0, 0, 1080, 1350);
   context.fillStyle = "#e8c66a";
   context.font = "700 38px system-ui";
-  context.fillText("GOLF BETS", 80, 110);
+  context.fillText("THE BACKYARD", 80, 110);
   context.fillStyle = "#ffffff";
   context.font = "700 72px system-ui";
   context.fillText(round.courseName.slice(0, 24), 80, 220);
@@ -59,16 +59,16 @@ export async function roundCardBlob(round: RoundSnapshot) {
   }
   context.fillStyle = "rgba(255,255,255,.65)";
   context.font = "400 25px system-ui";
-  context.fillText("Resultado registrado con Golf Bets", 80, 1280);
+  context.fillText("Play. Compete. Bet. Settle.", 80, 1280);
   return new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("No se generó la imagen")), "image/png"));
 }
 
 export async function shareRound(round: RoundSnapshot) {
   const text = roundShareText(round);
   const image = await roundCardBlob(round);
-  const file = new File([image], `golf-bets-${round.date}.png`, { type: "image/png" });
+  const file = new File([image], `the-backyard-${round.date}.png`, { type: "image/png" });
   if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
-    await navigator.share({ title: `Golf Bets · ${round.courseName}`, text, files: [file] });
+    await navigator.share({ title: `THE BACKYARD · ${round.courseName}`, text, files: [file] });
     return "shared";
   }
   if (navigator.clipboard) {
@@ -80,7 +80,7 @@ export async function shareRound(round: RoundSnapshot) {
 }
 
 export async function downloadRoundImage(round: RoundSnapshot) {
-  download(await roundCardBlob(round), `golf-bets-${round.date}.png`);
+  download(await roundCardBlob(round), `the-backyard-${round.date}.png`);
 }
 
 export async function downloadRoundPdf(round: RoundSnapshot) {
@@ -92,5 +92,5 @@ export async function downloadRoundPdf(round: RoundSnapshot) {
   });
   const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   pdf.addImage(dataUrl, "PNG", 15, 15, 180, 225);
-  pdf.save(`golf-bets-${round.date}.pdf`);
+  pdf.save(`the-backyard-${round.date}.pdf`);
 }

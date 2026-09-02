@@ -1,9 +1,9 @@
 {
-  "name": "Golf Bets",
-  "short_name": "Golf Bets",
+  "name": "THE BACKYARD",
+  "short_name": "THE BACKYARD",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f2f5f1",
   "theme_color": "#173f2a",
-  "description": "Apuestas de golf, resultados, liquidación e histórico"
+  "description": "Built for the games we play."
 }

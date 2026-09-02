@@ -17,7 +17,7 @@ export const OFFICIAL_RULES_DOCUMENTS: OfficialRulesDocument[] = [
     edition: "Edición efectiva enero de 2023",
     sourceFileName: "2023 Guia Oficial Golf pt1.pdf",
     localUrl: "/api/rules/documents/official-guide-part-1",
-    officialUrl: "https://publications.randa.org/official-guide-to-the-rules-of-golf",
+    officialUrl: "https://www.usga.org/content/dam/usga/pdf/2023/rules/2023%20Guia%20Oficial%20Golf%20pt1.pdf",
     usedByAi: true,
   },
   {
@@ -27,7 +27,7 @@ export const OFFICIAL_RULES_DOCUMENTS: OfficialRulesDocument[] = [
     edition: "Edición efectiva enero de 2023",
     sourceFileName: "2023 Guia Oficial Golf pt2.pdf",
     localUrl: "/api/rules/documents/committee-procedures-part-2",
-    officialUrl: "https://publications.randa.org/official-guide-to-the-rules-of-golf",
+    officialUrl: "https://www.usga.org/content/dam/usga/pdf/2023/rules/2023%20Guia%20Oficial%20Golf%20pt2.pdf",
     usedByAi: true,
   },
   {

@@ -19,7 +19,7 @@ import {
   SavedPersonalRival,
   UnitEvent,
 } from "../lib/types";
-import { BOTTOM_NAV_TARGETS, contrastToggleLabel, type AppTab } from "../lib/app-navigation";
+import { BOTTOM_NAV_TARGETS, contrastToggleLabel, rulesContextForRound, type AppTab } from "../lib/app-navigation";
 import {
   calculateBallFriend,
   calculateFoursomes,
@@ -43,9 +43,15 @@ import {
 } from "../lib/engine";
 import { PollaLivePanel } from "./components/polla-live-panel";
 import { RulesPanel } from "./components/rules-panel";
-import { buildHoleSummary, clearActiveRoundStorage, hasRoundProgress, historicalGolfStats, mergeCoursesPreservingEdits, migrateDraftPressures, privateLeaderboard, pushUndoState, STORAGE_KEYS, upsertFrequentPlayers } from "../lib/round-utils";
+import { NumericCaptureInput } from "./components/numeric-capture-input";
+import { AccountProvider, useBackyardAccount } from "./components/account-provider";
+import { AccountPanel } from "./components/account-panel";
+import { BrandLockup } from "./components/brand-lockup";
+import { GroupBuilder } from "./components/group-builder";
+import { createSingleAdvance, HOLE_SUMMARY_DURATION_MS, nextHoleDestination } from "../lib/hole-summary";
+import { buildHoleSummary, clearActiveRoundStorage, hasRoundProgress, historicalGolfStats, mergeCoursesPreservingEdits, migrateDraftPressures, persistRoundHistory, privateLeaderboard, pushUndoState, readStoredJson, resolveHistoricalRoundDeletion, resolvePersonalHistoryDeletion, STORAGE_KEYS, upsertFrequentPlayers } from "../lib/round-utils";
 import { downloadRoundCsv, downloadRoundImage, downloadRoundPdf, shareRound } from "../lib/round-export";
-import { readScorecardPhoto, saveScorecardPhoto } from "../lib/scorecard-photo";
+import { deleteScorecardPhoto, readScorecardPhoto, saveScorecardPhoto } from "../lib/scorecard-photo";
 import { cloneLaVistaLocalRules, isLaVistaCourse, LA_VISTA_LOCAL_RULES_UPDATED_AT, withDefaultLaVistaRules } from "../lib/local-rules";
 import {
   addFrequentGroupMember,
@@ -241,7 +247,7 @@ function normalizeExpenses(raw: any): Expense {
 }
 
 function Toggle({ on, onClick, label = "activar" }: { on: boolean; onClick: () => void; label?: string }) {
-  return <button className={`switch ${on ? "on" : ""}`} onClick={onClick} aria-label={label}><span /></button>;
+  return <button className={`switch ${on ? "on" : ""}`} role="switch" aria-checked={on} onClick={onClick} aria-label={label}><span /></button>;
 }
 
 function ParticipantChips({
@@ -256,11 +262,11 @@ function ParticipantChips({
 }
 
 function NumberField({ label, value, onChange, step = 1 }: { label: string; value: number; onChange: (v: number) => void; step?: number }) {
-  return <div><label>{label}</label><input type="number" step={step} value={value} onChange={(e) => onChange(Number(e.target.value) || 0)} /></div>;
+  return <div><label>{label}</label><NumericCaptureInput inputMode="decimal" step={step} value={value} onValueChange={(next) => onChange(next ?? 0)} /></div>;
 }
 
 function HcpPercentInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  return <div><label>% HCP</label><input type="number" inputMode="numeric" min={0} max={100} step={5} placeholder="0" value={value === 0 ? "" : value} onChange={(e) => onChange(e.target.value === "" ? 0 : Math.min(100, Math.max(0, Number(e.target.value) || 0)))} /></div>;
+  return <div><label>% HCP</label><NumericCaptureInput inputMode="numeric" min={0} max={100} step={5} value={value} emptyWhenZero={false} onValueChange={(next) => onChange(next === null ? 0 : Math.min(100, Math.max(0, next)))} /></div>;
 }
 
 function HandicapModeSelect({ value, onChange }: { value: HandicapMode; onChange: (mode: HandicapMode) => void }) {
@@ -298,10 +304,11 @@ function PollaBetEditor({
 }
 
 function MoneyInput({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
-  return <div><label>{label}</label><div className="moneyField"><span>$</span><input type="number" inputMode="decimal" placeholder="0" value={value === 0 ? "" : value} onChange={(e) => onChange(e.target.value === "" ? 0 : Number(e.target.value) || 0)} /></div></div>;
+  return <div><label>{label}</label><div className="moneyField"><span>$</span><NumericCaptureInput inputMode="decimal" value={value} onValueChange={(next) => onChange(next ?? 0)} /></div></div>;
 }
 
-export default function Page() {
+function GolfBetsApp() {
+  const { identity } = useBackyardAccount();
   const [tab, setTab] = useState<AppTab>("welcome");
   const [courses, setCourses] = useState<Course[]>(defaultCourses);
   const [course, setCourse] = useState<Course>(laVista);
@@ -345,16 +352,20 @@ export default function Page() {
   const [privateBoardMode, setPrivateBoardMode] = useState<"gross" | "net">("net");
   const [undoCount, setUndoCount] = useState(0);
   const [showDeleteRoundConfirm, setShowDeleteRoundConfirm] = useState(false);
-  const [showLocalRulesEditor, setShowLocalRulesEditor] = useState(false);
   const [editingFrequentPlayerId, setEditingFrequentPlayerId] = useState<string | null>(null);
   const [frequentPlayerDraft, setFrequentPlayerDraft] = useState<{ name: string; handicap: number | null }>({ name: "", handicap: null });
   const [frequentPlayerToDelete, setFrequentPlayerToDelete] = useState<FrequentPlayer | null>(null);
   const [editingSavedRivalId, setEditingSavedRivalId] = useState<string | null>(null);
   const [savedRivalDraft, setSavedRivalDraft] = useState<SavedPersonalRival | null>(null);
   const [savedRivalToDelete, setSavedRivalToDelete] = useState<SavedPersonalRival | null>(null);
+  const [historicalRoundToDelete, setHistoricalRoundToDelete] = useState<RoundSnapshot | null>(null);
+  const [personalHistoryToDelete, setPersonalHistoryToDelete] = useState<{ roundId: string; resultIndex: number; rivalName: string } | null>(null);
   const [rulesCourseContext, setRulesCourseContext] = useState("");
   const undoStack = useRef<Array<{ scores: Record<number, HoleScore>; unitEvents: UnitEvent[]; manualBets: ManualBet[]; ballFriendSetup: Record<number, BallFriendHole> }>>([]);
   const suppressNextDraftSave = useRef(false);
+  const holeSummaryTimer = useRef<number | null>(null);
+  const holeSummaryAdvance = useRef<(() => boolean) | null>(null);
+  const flushLocalState = useRef<(() => void) | null>(null);
 
   const order = useMemo(() => playOrder(startHole).slice(0, roundHoles), [startHole, roundHoles]);
   const holeNumber = order[currentIndex];
@@ -363,14 +374,14 @@ export default function Page() {
   const privateBoard = useMemo(() => privateLeaderboard(course, players, scores, order), [course, players, scores, order]);
 
   useEffect(() => {
+    const savedCourses = readStoredJson<unknown>(localStorage, STORAGE_KEYS.courses, null);
+    const savedHistory = readStoredJson<unknown>(localStorage, STORAGE_KEYS.history, null);
+    const savedRivals = readStoredJson<unknown>(localStorage, STORAGE_KEYS.rivals, null);
+    const draft = migrateDraftPressures(readStoredJson<unknown>(localStorage, STORAGE_KEYS.draft, null));
+    const savedFrequentPlayers = readStoredJson<unknown>(localStorage, STORAGE_KEYS.frequentPlayers, []);
+    const savedFrequentGroups = parseFrequentGroups(localStorage.getItem(STORAGE_KEYS.frequentGroups));
     try {
-      const savedCourses = JSON.parse(localStorage.getItem(STORAGE_KEYS.courses) || "null");
-      const savedHistory = JSON.parse(localStorage.getItem(STORAGE_KEYS.history) || "null");
-      const savedRivals = JSON.parse(localStorage.getItem(STORAGE_KEYS.rivals) || "null");
-      const draft = migrateDraftPressures(JSON.parse(localStorage.getItem(STORAGE_KEYS.draft) || "null"));
-      const savedFrequentPlayers = JSON.parse(localStorage.getItem(STORAGE_KEYS.frequentPlayers) || "[]");
-      const savedFrequentGroups = parseFrequentGroups(localStorage.getItem(STORAGE_KEYS.frequentGroups));
-      const mergedCourses = mergeDefaultCourses(savedCourses);
+      const mergedCourses = mergeDefaultCourses(Array.isArray(savedCourses) ? savedCourses as Course[] : null);
       setCourses(mergedCourses);
       if (Array.isArray(savedHistory)) setHistory(savedHistory.map((r: any) => ({ ...r, expenses: normalizeExpenses(r.expenses) })));
       if (Array.isArray(savedRivals)) setSavedPersonalRivals(savedRivals);
@@ -422,7 +433,7 @@ export default function Page() {
         if (draft.roundDate) setRoundDate(draft.roundDate);
         if (Number.isInteger(draft.currentIndex)) setCurrentIndex(Math.max(0, Math.min((draft.roundHoles || 18) - 1, draft.currentIndex)));
       }
-    } catch { /* ignore corrupt local data */ }
+    } catch { /* keep safe defaults for structurally invalid legacy data */ }
     setHydrated(true);
   }, []);
 
@@ -434,7 +445,7 @@ export default function Page() {
       return;
     }
     setSaveStatus("saving");
-    const timer = window.setTimeout(() => {
+    const persist = () => {
       try {
         localStorage.setItem(STORAGE_KEYS.courses, JSON.stringify(courses));
         localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(history));
@@ -451,9 +462,25 @@ export default function Page() {
       } catch {
         setSaveStatus("error");
       }
-    }, 250);
+    };
+    flushLocalState.current = persist;
+    const timer = window.setTimeout(persist, 250);
     return () => window.clearTimeout(timer);
   }, [hydrated, courses, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, course, startHole, roundHoles, players, ownerId, bets, segments, personalBets, manualBets, scores, unitEvents, ballFriendSetup, expenses, roundId, roundDate, currentIndex]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const flush = () => flushLocalState.current?.();
+    const flushWhenHidden = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", flushWhenHidden);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", flushWhenHidden);
+    };
+  }, [hydrated]);
 
   useEffect(() => {
     const defs = segmentDefinitions(order, bets.foursome.segmentSize);
@@ -495,6 +522,10 @@ export default function Page() {
       return changed ? { ...prev, [holeNumber]: nextRow } : prev;
     });
   }, [tab, holeNumber, hole, players]);
+
+  useEffect(() => () => {
+    if (holeSummaryTimer.current !== null) window.clearTimeout(holeSummaryTimer.current);
+  }, []);
 
   const rabbits = useMemo(() => calculateRabbits(course, scores, players, bets.rabbits, order), [course, scores, players, bets.rabbits, order]);
   const skins = useMemo(() => calculateSkins(course, scores, players, bets.skins, order), [course, scores, players, bets.skins, order]);
@@ -610,7 +641,7 @@ export default function Page() {
   }
 
   function navigateFromBottomBar(target: AppTab) {
-    if (target === "rules") setRulesCourseContext(course.name);
+    if (target === "rules") setRulesCourseContext(rulesContextForRound(hasRoundProgress({ players, scores, currentIndex }), course.name));
     setTab(target);
     window.setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 0);
   }
@@ -827,12 +858,9 @@ export default function Page() {
       return;
     }
     const updatedAt = localDateMexico();
-    const savedRules = isLaVistaCourse(name)
-      ? (Array.isArray(courseDraft.localRules) ? courseDraft.localRules : cloneLaVistaLocalRules()).filter((rule) => rule.title.trim() && rule.text.trim()).map((rule) => ({ ...rule, title: rule.title.trim(), text: rule.text.trim() }))
-      : courseDraft.localRules;
-    const saved = { ...courseDraft, name, teeName: "General", rating: undefined, slope: undefined, totalYards: undefined, updatedAt, localRules: savedRules, localRulesUpdatedAt: isLaVistaCourse(name) ? updatedAt : courseDraft.localRulesUpdatedAt, holes: courseDraft.holes.map((h) => ({ number: h.number, par: h.par, strokeIndex: h.strokeIndex })) };
+    const saved = withDefaultLaVistaRules({ ...courseDraft, name, teeName: "General", rating: undefined, slope: undefined, totalYards: undefined, updatedAt, holes: courseDraft.holes.map((h) => ({ number: h.number, par: h.par, strokeIndex: h.strokeIndex })) });
     setCourses((cs) => [saved, ...cs.filter((c) => c.id !== saved.id)]);
-    setCourse(saved); setShowLocalRulesEditor(false); setTab("setup");
+    setCourse(saved); setTab("setup");
   }
 
   function duplicateCourseDraft() {
@@ -872,6 +900,22 @@ export default function Page() {
     if (!name || !groupPlayers.length) return;
     setFrequentGroups((groups) => [{ id: makeId(), name, players: groupPlayers, uses: 0, updatedAt: new Date().toISOString() }, ...groups.filter((group) => group.name.toLocaleLowerCase("es-MX") !== name.toLocaleLowerCase("es-MX"))]);
     setGroupName("");
+  }
+
+  function saveGeneratedFrequentGroup(name: string, groupPlayers: Array<Pick<Player, "name" | "handicap">>) {
+    const normalized = name.trim().toLocaleLowerCase("es-MX");
+    if (!normalized || frequentGroups.some((group) => group.name.trim().toLocaleLowerCase("es-MX") === normalized)) return false;
+    setFrequentGroups((groups) => [{ id: makeId(), name: name.trim(), players: structuredClone(groupPlayers), uses: 0, updatedAt: new Date().toISOString() }, ...groups]);
+    return true;
+  }
+
+  function startRoundWithGeneratedGroup(groupPlayers: Player[]) {
+    resetRound();
+    const loaded = groupPlayers.map((player) => ({ ...player, id: makeId() }));
+    setPlayers(loaded);
+    setOwnerId(loaded[0]?.id || "");
+    setBets(initialBets(loaded.map((player) => player.id)));
+    setTab("setup");
   }
 
   function loadFrequentGroup(group: FrequentGroup) {
@@ -949,11 +993,39 @@ export default function Page() {
   }
 
   async function viewScorecardPhoto(round: RoundSnapshot) {
+    const preview = window.open("about:blank", "_blank");
+    if (preview) preview.opener = null;
     const blob = await readScorecardPhoto(round.photoId || round.id);
-    if (!blob) return window.alert("No se encontró la foto local.");
+    if (!blob) {
+      preview?.close();
+      window.alert("No se encontró la foto local.");
+      return;
+    }
     const url = URL.createObjectURL(blob);
-    window.open(url, "_blank", "noopener,noreferrer");
+    if (preview) preview.location.replace(url);
+    else window.location.assign(url);
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }
+
+  async function confirmHistoricalRoundDeletion() {
+    if (!historicalRoundToDelete) return;
+    const target = historicalRoundToDelete;
+    const next = resolveHistoricalRoundDeletion(history, target.id, "delete");
+    persistRoundHistory(window.localStorage, next);
+    setHistory(next);
+    setHistoricalRoundToDelete(null);
+    if (target.photoId) {
+      try { await deleteScorecardPhoto(target.photoId); } catch { /* the round deletion must not depend on optional local media */ }
+    }
+  }
+
+  function confirmPersonalHistoryDeletion() {
+    if (!personalHistoryToDelete) return;
+    const target = personalHistoryToDelete;
+    const next = resolvePersonalHistoryDeletion(history, target.roundId, target.resultIndex, "delete");
+    persistRoundHistory(window.localStorage, next);
+    setHistory(next);
+    setPersonalHistoryToDelete(null);
   }
 
   function renderManualBetsEditor(compact = false) {
@@ -965,7 +1037,7 @@ export default function Page() {
         const valid = Math.abs(total) < 0.001;
         return <div className="manualBet" key={bet.id}>
           <div className="row between"><input className="manualName" value={bet.name} onChange={(e) => updateManualBet(bet.id, { name: e.target.value })} /><button className="remove" onClick={() => setManualBets((bs) => bs.filter((x) => x.id !== bet.id))}>×</button></div>
-          <div className="manualGrid">{players.map((p) => <label key={p.id}><span>{p.name}</span><div className="moneyField"><span>$</span><input type="number" inputMode="decimal" step="50" placeholder="0" value={(bet.amounts[p.id] ?? 0) === 0 ? "" : bet.amounts[p.id]} onChange={(e) => setManualAmount(bet.id, p.id, Number(e.target.value) || 0)} /></div></label>)}</div>
+          <div className="manualGrid">{players.map((p) => <label key={p.id}><span>{p.name}</span><div className="moneyField"><span>$</span><NumericCaptureInput inputMode="decimal" step={50} value={bet.amounts[p.id] ?? 0} onValueChange={(next) => setManualAmount(bet.id, p.id, next ?? 0)} /></div></label>)}</div>
           <div className={`manualBalance ${valid ? "good" : "bad"}`}>{valid ? "✓ Cierra en $0 y se suma al resultado" : `Falta cuadrar ${money(-total)}`}</div>
         </div>;
       })}
@@ -984,6 +1056,7 @@ export default function Page() {
           {!result.liveComponents.length && <div className="empty">No hay componentes activos.</div>}
           {result.liveComponents.filter((component) => {
             if (!currentPhysicalNineOnly) return true;
+            if (roundHoles === 9) return component.key === "match1" || component.key === "medal1";
             if (component.key === "match18" || component.key === "medal18") return true;
             return holeNumber <= 9 ? component.key === "match1" || component.key === "medal1" : component.key === "match2" || component.key === "medal2";
           }).map((component) => {
@@ -1029,19 +1102,36 @@ export default function Page() {
   const bfTeamB = bfActiveIds.filter((id) => !bfSetup.teamA.includes(id));
   const bfDetail = ballFriend.details.find((d) => d.hole === holeNumber);
 
+  function closeHoleSummary() {
+    if (holeSummaryTimer.current !== null) {
+      window.clearTimeout(holeSummaryTimer.current);
+      holeSummaryTimer.current = null;
+    }
+    holeSummaryAdvance.current?.();
+  }
+
   function saveAndAdvance() {
+    if (holeSummaryTimer.current !== null) window.clearTimeout(holeSummaryTimer.current);
     const extras: string[] = [];
     const rabbit = currentRabbitEvents.at(-1);
     if (rabbit) extras.push(`Conejo: ${rabbit.playerId ? playerName(rabbit.playerId) : "libre"} · ${rabbit.type}`);
     if (currentSkin) extras.push(`Skins: ${currentSkin.winnerId ? `${playerName(currentSkin.winnerId)} cobra ${currentSkin.count}` : `carry ${currentSkin.count}`}`);
     const currentFoursome = foursomes.matches.find((match) => match.holePoints.some((item) => item.hole === holeNumber));
     if (currentFoursome) extras.push(`Foursome: ${playerName(currentFoursome.basePair[0])}/${playerName(currentFoursome.basePair[1])} ${currentFoursome.pointDiff >= 0 ? "+" : ""}${currentFoursome.pointDiff}`);
+    const unitLines = players.map((player) => ({ name: player.name, value: unitHoleNet(player.id) })).filter((item) => item.value !== 0);
+    if (unitLines.length) extras.push(`Unidades: ${unitLines.map((item) => `${item.name} ${item.value > 0 ? "+" : ""}${item.value}`).join(" · ")}`);
+    if (bfDetail) extras.push(`Bola Amiga: ${playerName(bfDetail.teamA[0])}/${playerName(bfDetail.teamA[1])} ${bfDetail.pointDiff >= 0 ? "+" : ""}${bfDetail.pointDiff} pts`);
+    for (const detail of [...polla.details, ...miniPolla.details].filter((item) => item.complete && item.holes.at(-1) === holeNumber)) {
+      extras.push(`${detail.label}: ${detail.winnerIds.map(playerName).join(" / ")} gana${detail.winnerIds.length > 1 ? "n" : ""}`);
+    }
     setHoleSummary(buildHoleSummary(holeNumber, players, scores, extras));
-    window.setTimeout(() => {
+    holeSummaryAdvance.current = createSingleAdvance(() => {
       setHoleSummary([]);
-      if (currentIndex < order.length - 1) goToHoleIndex(currentIndex + 1);
+      const destination = nextHoleDestination(order, currentIndex);
+      if (destination.kind === "hole") goToHoleIndex(destination.index);
       else { setTab("results"); window.scrollTo({ top: 0, behavior: "smooth" }); }
-    }, 900);
+    });
+    holeSummaryTimer.current = window.setTimeout(closeHoleSummary, HOLE_SUMMARY_DURATION_MS);
   }
 
   const todayMx = localDateMexico();
@@ -1053,15 +1143,16 @@ export default function Page() {
   const expenseByKey = (arr: RoundSnapshot[], key: keyof Expense) => arr.reduce((a, r) => a + (r.expenses[key] || 0), 0);
 
   const personalHistory = useMemo(() => {
-    const byRival = new Map<string, { key: string; name: string; total: number; rounds: number; wins: number; losses: number; ties: number }>();
+    const byRival = new Map<string, { key: string; name: string; total: number; rounds: number; wins: number; losses: number; ties: number; records: Array<{ roundId: string; resultIndex: number; date: string; courseName: string; totalMoney: number }> }>();
     for (const r of history) {
-      for (const pr of r.personalResults || []) {
-        const current = byRival.get(pr.rivalKey) || { key: pr.rivalKey, name: pr.rivalName, total: 0, rounds: 0, wins: 0, losses: 0, ties: 0 };
+      for (const [resultIndex, pr] of (r.personalResults || []).entries()) {
+        const current = byRival.get(pr.rivalKey) || { key: pr.rivalKey, name: pr.rivalName, total: 0, rounds: 0, wins: 0, losses: 0, ties: 0, records: [] };
         current.total += pr.totalMoney;
         current.rounds += 1;
         if (pr.totalMoney > 0) current.wins += 1;
         else if (pr.totalMoney < 0) current.losses += 1;
         else current.ties += 1;
+        current.records.push({ roundId: r.id, resultIndex, date: r.date, courseName: r.courseName, totalMoney: pr.totalMoney });
         byRival.set(pr.rivalKey, current);
       }
     }
@@ -1071,8 +1162,8 @@ export default function Page() {
 
   return <main className={`app ${highContrast ? "highContrast" : ""}`}>
     <header className="topbar">
-      <div><div className="brand">Golf Bets</div><div className="subbrand">Apuestas · liquidación · histórico</div></div>
-      <div className="topActions"><span className={`saveIndicator ${saveStatus}`}>{saveStatus === "saving" ? "Guardando…" : saveStatus === "error" ? "No se pudo guardar" : "✓ Guardado"}</span><button className="contrastButton" onClick={() => setHighContrast((value) => !value)} aria-pressed={highContrast}>{contrastToggleLabel(highContrast)}</button><span className="version">V3</span></div>
+      <button className="brandHomeButton" onClick={() => setTab("welcome")} aria-label="Ir a Inicio"><BrandLockup compact /></button>
+      <div className="topActions"><span className={`saveIndicator ${saveStatus}`}>{saveStatus === "saving" ? "Guardando…" : saveStatus === "error" ? "No se pudo guardar" : "✓ Guardado"}</span><button className="contrastButton" onClick={() => setHighContrast((value) => !value)} aria-pressed={highContrast}>{contrastToggleLabel(highContrast)}</button><button className="accountButton" onClick={() => setTab("account")} aria-label="Abrir Mi Cuenta">{identity.mode === "guest" ? <svg className="guestAvatar" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4.5 21c.5-5 3-7.5 7.5-7.5s7 2.5 7.5 7.5"/></svg> : (identity.displayName.trim()[0] || "S").toUpperCase()}</button></div>
     </header>
 
     {tab === "welcome" && <section className="welcomeScreen">
@@ -1080,16 +1171,23 @@ export default function Page() {
       <time dateTime={todayMexico}>{mexicoDateLabel(todayMexico)}</time>
       <h1>¿Listos para jugar?</h1>
       <p>Inicia una ronda nueva y configura jugadores, campo y apuestas.</p>
+      <div className="guestModeLine">{identity.mode === "guest" ? "Modo invitado · Los datos permanecen en este dispositivo" : `The Backyard Account · ${identity.displayName}`}</div>
       <button className="primary big" onClick={resetRound}>Nueva ronda</button>
+      <button className="secondary big groupsHomeButton" onClick={() => setTab("groups")}>Armar grupos</button>
       {draftAvailable && <div className="activeRoundActions"><button className="secondary big" onClick={() => setTab(players.length ? "round" : "setup")}>Continuar ronda · H{order[currentIndex]}</button><button className="deleteRoundButton" onClick={() => setShowDeleteRoundConfirm(true)}>Eliminar ronda</button></div>}
       <div className="welcomeLinks"><button className="secondary" onClick={() => { setRulesCourseContext(draftAvailable ? course.name : ""); setTab("rules"); }}>⚑ Reglas de Golf</button><button className="secondary" onClick={() => setTab("pollaLive")}>🏆 Polla Live</button></div>
       {history[0] && <button className="recentRound" onClick={() => setTab("history")}><span>Última ronda</span><b>{history[0].courseName} · {history[0].date}</b><strong className={history[0].netResult >= 0 ? "good" : "bad"}>{signedMoney(history[0].netResult)}</strong></button>}
+      <button className="textButton accountHomeLink" onClick={() => setTab("account")}>Mi Cuenta</button>
     </section>}
 
+    {tab === "groups" && <GroupBuilder frequentPlayers={frequentPlayers} frequentGroups={frequentGroups} onBack={() => setTab("welcome")} onPlay={startRoundWithGeneratedGroup} onSaveFrequentGroup={saveGeneratedFrequentGroup} onEditFrequentGroup={beginEditFrequentGroup} onDeleteFrequentGroup={setFrequentGroupToDelete} />}
+
+    {tab === "account" && <AccountPanel highContrast={highContrast} onHighContrastChange={setHighContrast} onBack={() => setTab("welcome")} />}
+
     {tab === "setup" && <>
-      <section className="hero">
-        <div><div className="eyebrow">NUEVA JUGADA</div><h1>Configura y juega.</h1><p>La app calcula lo automático; tú solo capturas score y eventos especiales.</p></div>
-        <input className="dateInput" type="date" value={roundDate} onChange={(e) => setRoundDate(e.target.value)} />
+      <section className="hero setupHero">
+        <div className="setupHeroCopy"><div className="eyebrow">NUEVA JUGADA</div><h1>Configura y juega.</h1><p>La app calcula lo automático; tú solo capturas score y eventos especiales.</p></div>
+        <div className="heroDate"><input aria-label="Fecha de la ronda" className="dateInput" type="date" value={roundDate} onChange={(e) => setRoundDate(e.target.value)} /></div>
       </section>
 
       <section className="card">
@@ -1101,7 +1199,7 @@ export default function Page() {
           <div><label>Inicio de ronda</label><select value={startHole} onChange={(e) => setStartHole(Number(e.target.value) as 1 | 10)}><option value={1}>Hoyo 1</option><option value={10}>Hoyo 10</option></select></div>
           <div><label>Hoyos a jugar</label><select value={roundHoles} onChange={(e) => setRoundHoles(Number(e.target.value) as 9 | 18)}><option value={18}>18 hoyos</option><option value={9}>9 hoyos</option></select></div>
         </div>
-        <div className="courseMeta"><span>18 hoyos configurados</span>{course.updatedAt && <span>Última actualización: {course.updatedAt}</span>}<button onClick={() => { setCourseDraft(withDefaultLaVistaRules(course)); setShowLocalRulesEditor(false); setTab("courses"); }}>{course.name === "La Vista Temporal" ? "Editar campo temporal" : "Editar campo"}</button>{isLaVistaCourse(course.name) && <button onClick={() => { setRulesCourseContext(course.name); setTab("rules"); }}>Ver Reglas Locales</button>}{isLaVistaCourse(course.name) && <button onClick={() => { setCourseDraft(withDefaultLaVistaRules(course)); setShowLocalRulesEditor(true); setTab("courses"); }}>Editar Reglas Locales</button>}</div>
+        <div className="courseMeta"><span>18 hoyos configurados</span>{course.updatedAt && <span>Última actualización: {course.updatedAt}</span>}<button onClick={() => { setCourseDraft(withDefaultLaVistaRules(course)); setTab("courses"); }}>{course.name === "La Vista Temporal" ? "Editar campo temporal" : "Editar campo"}</button>{isLaVistaCourse(course.name) && <button onClick={() => { setRulesCourseContext(course.name); setTab("rules"); }}>Ver Reglas Locales</button>}</div>
       </section>
 
       <section className="card">
@@ -1109,7 +1207,7 @@ export default function Page() {
         {!players.length && <div className="empty">Agrega los jugadores de esta ronda.</div>}
         {players.map((p) => <div className="playerEdit" key={p.id}>
           <input placeholder="Nombre" value={p.name} onChange={(e) => updatePlayer(p.id, { name: e.target.value })} />
-          <input className="hcpInput" type="number" inputMode="decimal" step="0.1" min={-15} max={54} placeholder="HCP" value={p.handicap ?? ""} onChange={(e) => updatePlayer(p.id, { handicap: e.target.value === "" ? null : Number(e.target.value) })} />
+          <NumericCaptureInput className="hcpInput" inputMode="decimal" step={0.1} min={-15} max={54} placeholder="HCP" value={p.handicap} emptyWhenZero={false} onValueChange={(handicap) => updatePlayer(p.id, { handicap })} />
           <button className={`ownerDot ${ownerId === p.id ? "active" : ""}`} onClick={() => setOwnerId(p.id)} title="Jugador principal">★</button>
           <button className="remove" onClick={() => setPlayers((ps) => ps.filter((x) => x.id !== p.id))}>×</button>
         </div>)}
@@ -1122,7 +1220,7 @@ export default function Page() {
           </div>)}</div>}
           {frequentPlayers.length > 0 && <div className="frequentTemplateList"><span className="templateSectionLabel">Jugadores frecuentes</span>{frequentPlayers.map((saved) => editingFrequentPlayerId === saved.id ? <div className="templateEditor" key={saved.id}>
             <input aria-label="Nombre frecuente" value={frequentPlayerDraft.name} onChange={(event) => setFrequentPlayerDraft((draft) => ({ ...draft, name: event.target.value }))} />
-            <input aria-label="HCP frecuente" className="hcpInput" type="number" inputMode="decimal" step="0.1" min={-15} max={54} placeholder="HCP" value={frequentPlayerDraft.handicap ?? ""} onChange={(event) => setFrequentPlayerDraft((draft) => ({ ...draft, handicap: event.target.value === "" ? null : Number(event.target.value) }))} />
+            <NumericCaptureInput aria-label="HCP frecuente" className="hcpInput" inputMode="decimal" step={0.1} min={-15} max={54} placeholder="HCP" value={frequentPlayerDraft.handicap} emptyWhenZero={false} onValueChange={(handicap) => setFrequentPlayerDraft((draft) => ({ ...draft, handicap }))} />
             <div className="templateActions"><button className="primary" disabled={!frequentPlayerDraft.name.trim()} onClick={saveFrequentPlayerEdit}>Guardar</button><button className="secondary" onClick={() => setEditingFrequentPlayerId(null)}>Cancelar</button></div>
           </div> : <div className="templateRow" key={saved.id}>
             <button className="templateLoad" onClick={() => appendPlayer(saved.name, saved.handicap)}><b>{saved.name}</b><span>HCP {saved.handicap ?? "—"} · + Agregar</span></button>
@@ -1185,6 +1283,7 @@ export default function Page() {
           description="Mejor medal neto en los hoyos físicos H1–9"
           config={bets.polla.first9}
           players={players}
+          unavailable={roundHoles === 9 && startHole === 10}
           onChange={(first9) => setBets({ ...bets, polla: { ...bets.polla, first9 } })}
         />
 
@@ -1193,7 +1292,7 @@ export default function Page() {
           description="Mejor medal neto en los hoyos físicos H10–18"
           config={bets.polla.second9}
           players={players}
-          unavailable={roundHoles === 9}
+          unavailable={roundHoles === 9 && startHole === 1}
           onChange={(second9) => setBets({ ...bets, polla: { ...bets.polla, second9 } })}
         />
 
@@ -1237,7 +1336,7 @@ export default function Page() {
         <div className="frequentTemplateList">{savedPersonalRivals.map((saved) => editingSavedRivalId === saved.id && savedRivalDraft ? <div className="templateEditor rivalTemplateEditor" key={saved.id}>
           <div className="grid3">
             <div><label>Nombre</label><input value={savedRivalDraft.name} onChange={(event) => setSavedRivalDraft((draft) => draft ? { ...draft, name: event.target.value } : draft)} /></div>
-            <div><label>HCP predeterminado</label><input type="number" inputMode="decimal" step="0.1" min={-15} max={54} placeholder="HCP" value={savedRivalDraft.handicap ?? ""} onChange={(event) => setSavedRivalDraft((draft) => draft ? { ...draft, handicap: event.target.value === "" ? null : Number(event.target.value) } : draft)} /></div>
+            <div><label>HCP predeterminado</label><NumericCaptureInput inputMode="decimal" step={0.1} min={-15} max={54} placeholder="HCP" value={savedRivalDraft.handicap} emptyWhenZero={false} onValueChange={(handicap) => setSavedRivalDraft((draft) => draft ? { ...draft, handicap } : draft)} /></div>
             <MoneyInput label="Valor base" value={savedRivalDraft.baseValue ?? 100} onChange={(value) => setSavedRivalDraft((draft) => draft ? { ...draft, baseValue: value } : draft)} />
             <div><label>Quién recibe ventaja</label><select value={savedRivalDraft.advantageReceiver ?? "rival"} onChange={(event) => setSavedRivalDraft((draft) => draft ? { ...draft, advantageReceiver: event.target.value as "owner" | "rival" } : draft)}><option value="owner">Jugador principal</option><option value="rival">Rival</option></select></div>
             <NumberField label="Golpes que recibe" value={savedRivalDraft.advantageStrokes ?? 0} onChange={(value) => setSavedRivalDraft((draft) => draft ? { ...draft, advantageStrokes: Math.max(0, value) } : draft)} />
@@ -1289,7 +1388,7 @@ export default function Page() {
             <div><label>Quién recibe ventaja</label><select value={bet.advantageReceiver === "owner" ? "owner" : "rival"} onChange={(e) => updatePersonalBet(bet.id, { advantageReceiver: e.target.value as "owner" | "rival" })}><option value="owner">{owner?.name} recibe</option><option value="rival">{displayRival} recibe</option></select></div>
             <NumberField label="Golpes que recibe" value={bet.advantageStrokes} onChange={(v) => updatePersonalBet(bet.id, { advantageStrokes: Math.max(0, v) })} />
           </div>
-          {bet.advantageStrokes === 0 && <div className="hint">0 golpes = sin ventaja.</div>}
+          {bet.advantageStrokes === 0 && <div className="hint">Sin ventaja.</div>}
           <div className="componentGrid">{(roundHoles === 9
             ? ([["match1","Match 9"],["medal1","Medal 9"]] as [keyof PersonalBet["components"], string][])
             : ([["match1","Match H1–9"],["medal1","Medal H1–9"],["match2","Match H10–18"],["medal2","Medal H10–18"],["match18","Match Total 18"],["medal18","Medal Total 18"]] as [keyof PersonalBet["components"], string][])
@@ -1299,7 +1398,7 @@ export default function Page() {
             <div className="row between"><div><b>Tarjeta de {displayRival}</b><div className="muted">Captúrala aparte; no entra a Conejos, Skins, Foursome, Bola Amiga ni Unidades.</div></div><span className="pillSmall">Otro grupo</span></div>
             <div className="externalScoreGrid">{order.map((h) => {
               const hd = course.holes.find((x) => x.number === h)!;
-              return <label className="externalHole" key={h}><span>H{h}<small> P{hd.par}</small></span><input type="number" min={1} inputMode="numeric" value={bet.externalScores?.[h] ?? ""} placeholder="–" onChange={(e) => setExternalPersonalScore(bet.id, h, e.target.value === "" ? null : Number(e.target.value))} /></label>;
+              return <label className="externalHole" key={h}><span>H{h}<small> P{hd.par}</small></span><NumericCaptureInput min={1} inputMode="numeric" value={bet.externalScores?.[h]} emptyWhenZero={false} placeholder="–" onValueChange={(value) => setExternalPersonalScore(bet.id, h, value)} /></label>;
             })}</div>
           </div>}
         </section>;
@@ -1391,8 +1490,8 @@ export default function Page() {
 
       {renderPersonalLive("Apuestas personales · en vivo", true)}
 
-      <div className="roundActions"><button className="secondary big" disabled={currentIndex === 0} onClick={() => goToHoleIndex(currentIndex - 1)}>← Anterior</button><button className="primary big" onClick={saveAndAdvance}>{currentIndex < order.length - 1 ? "Guardar y siguiente →" : "Ver resultados →"}</button></div>
-      {holeSummary.length > 0 && <div className="holeSummary" role="status">{holeSummary.map((line, index) => index === 0 ? <b key={line}>{line}</b> : <span key={`${line}-${index}`}>{line}</span>)}</div>}
+      <div className="roundActions"><button className="secondary big" disabled={currentIndex === 0 || holeSummary.length > 0} onClick={() => goToHoleIndex(currentIndex - 1)}>← Anterior</button><button className="primary big" disabled={holeSummary.length > 0} onClick={saveAndAdvance}>{currentIndex < order.length - 1 ? "Guardar y siguiente →" : "Ver resultados →"}</button></div>
+      {holeSummary.length > 0 && <div className="holeSummaryBackdrop"><div className="holeSummary" role="dialog" aria-modal="true" aria-label={`Resumen del hoyo ${holeNumber}`}><button autoFocus className="holeSummaryClose" aria-label="Cerrar resumen y avanzar" onClick={closeHoleSummary}>×</button><div role="status" aria-live="polite">{holeSummary.map((line, index) => index === 0 ? <b key={line}>{line}</b> : <span key={`${line}-${index}`}>{line}</span>)}</div><div className="holeSummaryTimer" aria-hidden="true" /></div></div>}
     </>}
 
     {tab === "standings" && <>
@@ -1475,26 +1574,17 @@ export default function Page() {
       <section className="card">
         <h2>Apuestas personales · histórico</h2>
         <p className="muted">Balance acumulado contra cada rival.</p>
-        {!personalHistory.length ? <div className="empty">Todavía no hay personales guardadas.</div> : personalHistory.map((r) => <div className="historyRow" key={r.key}><div><b>{r.name}</b><span>{r.rounds} rondas · {r.wins} ganadas · {r.losses} perdidas{r.ties ? ` · ${r.ties} tablas` : ""}</span></div><strong className={r.total > 0 ? "good" : r.total < 0 ? "bad" : ""}>{r.total > 0 ? "+" : ""}{money(r.total)}</strong></div>)}
+        {!personalHistory.length ? <div className="empty">Todavía no hay personales guardadas.</div> : personalHistory.map((r) => <div className="personalHistoryGroup" key={r.key}>
+          <div className="historyRow"><div><b>{r.name}</b><span>{r.rounds} rondas · {r.wins} ganadas · {r.losses} perdidas{r.ties ? ` · ${r.ties} tablas` : ""}</span></div><strong className={r.total > 0 ? "good" : r.total < 0 ? "bad" : ""}>{r.total > 0 ? "+" : ""}{money(r.total)}</strong></div>
+          <div className="personalHistoryRecords">{r.records.map((record) => <div className="personalHistoryRecord" key={`${record.roundId}:${record.resultIndex}`}><div><span>{record.date} · {record.courseName}</span><b className={record.totalMoney > 0 ? "good" : record.totalMoney < 0 ? "bad" : ""}>{signedMoney(record.totalMoney)}</b></div><button className="dangerGhost" onClick={() => setPersonalHistoryToDelete({ roundId: record.roundId, resultIndex: record.resultIndex, rivalName: r.name })}>Eliminar registro</button></div>)}</div>
+        </div>)}
       </section>
-      <section className="card"><div className="sectionTitle"><div><h2>Rondas</h2><p>Más recientes primero. Los campos se guardan como snapshot.</p></div><button className="textButton" onClick={resetRound}>+ Nueva</button></div>{!history.length ? <div className="empty">Todavía no has guardado rondas.</div> : history.map((r) => <div className="historyRound" key={r.id}><div className="historyRow"><div><b>{r.courseName}</b><span>{r.date} · {r.roundHoles || 18} hoyos · apuestas {money(r.betResult)} · gastos {money(r.expenseTotal)}</span></div><strong className={r.netResult >= 0 ? "good" : "bad"}>{money(r.netResult)}</strong></div><div className="historyActions"><button onClick={() => downloadRoundCsv(r)}>CSV</button><button onClick={() => downloadRoundPdf(r)}>PDF</button><button onClick={() => downloadRoundImage(r)}>Imagen</button><button onClick={() => shareRound(r)}>Compartir</button><label className="uploadButton">{r.photoId ? "Cambiar foto" : "Agregar foto de tarjeta"}<input type="file" accept="image/*" capture="environment" onChange={(event) => attachScorecardPhoto(r, event.target.files?.[0])} /></label>{r.photoId && <button onClick={() => viewScorecardPhoto(r)}>Ver tarjeta original</button>}</div></div>)}</section>
+      <section className="card"><div className="sectionTitle"><div><h2>Rondas</h2><p>Más recientes primero. Los campos se guardan como snapshot.</p></div><button className="textButton" onClick={resetRound}>+ Nueva</button></div>{!history.length ? <div className="empty">Todavía no has guardado rondas.</div> : history.map((r) => <div className="historyRound" key={r.id}><div className="historyRow"><div><b>{r.courseName}</b><span>{r.date} · {r.roundHoles || 18} hoyos · apuestas {money(r.betResult)} · gastos {money(r.expenseTotal)}</span></div><strong className={r.netResult >= 0 ? "good" : "bad"}>{money(r.netResult)}</strong></div><div className="historyActions"><button onClick={() => downloadRoundCsv(r)}>CSV</button><button onClick={() => downloadRoundPdf(r)}>PDF</button><button onClick={() => downloadRoundImage(r)}>Imagen</button><button onClick={() => shareRound(r)}>Compartir</button><label className="uploadButton">{r.photoId ? "Cambiar foto" : "Agregar foto de tarjeta"}<input type="file" accept="image/*" capture="environment" onChange={(event) => attachScorecardPhoto(r, event.target.files?.[0])} /></label>{r.photoId && <button onClick={() => viewScorecardPhoto(r)}>Ver tarjeta original</button>}<button className="dangerGhost" onClick={() => setHistoricalRoundToDelete(r)}>Eliminar ronda</button></div></div>)}</section>
     </>}
 
     {tab === "courses" && <>
       <section className="hero"><div><div className="eyebrow">CAMPO</div><h1>{courseDraft.name}</h1><p>Solo Par y Ventaja/SI. Las rondas históricas no cambian al editar este campo.</p>{courseDraft.updatedAt && <small>Última actualización: {courseDraft.updatedAt}</small>}</div><button className="secondary" onClick={duplicateCourseDraft}>Duplicar campo</button></section>
       <section className="card"><div><label>Nombre del campo</label><input value={courseDraft.name} onChange={(e) => setCourseDraft({ ...courseDraft, name: e.target.value })} /></div></section>
-      {isLaVistaCourse(courseDraft.name) && <section className="card localRulesEditor">
-        <div className="sectionTitle"><div><h2>Reglas Locales · La Vista</h2><p>Se guardan con el campo y cada ronda conserva su propio snapshot.</p>{courseDraft.localRulesUpdatedAt && <small>Última actualización: {courseDraft.localRulesUpdatedAt}</small>}</div><button className="secondary" onClick={() => setShowLocalRulesEditor((value) => !value)}>{showLocalRulesEditor ? "Cerrar editor" : "Editar Reglas Locales"}</button></div>
-        {showLocalRulesEditor && <>
-          <div className="localRuleEditorList">{(courseDraft.localRules || []).map((rule) => <article className="localRuleEditorRow" key={rule.id}>
-            <div className="row between"><b>{rule.hole ? `Hoyo ${rule.hole}` : "Regla general"}</b><Toggle on={rule.enabled} label={`Activar ${rule.title}`} onClick={() => setCourseDraft({ ...courseDraft, localRules: (courseDraft.localRules || []).map((candidate) => candidate.id === rule.id ? { ...candidate, enabled: !candidate.enabled } : candidate) })} /></div>
-            <div className="grid2"><div><label>Ámbito</label><select value={rule.hole ?? ""} onChange={(event) => setCourseDraft({ ...courseDraft, localRules: (courseDraft.localRules || []).map((candidate) => candidate.id === rule.id ? { ...candidate, hole: event.target.value === "" ? null : Number(event.target.value) } : candidate) })}><option value="">General</option>{Array.from({ length: 18 }, (_, index) => <option key={index + 1} value={index + 1}>Hoyo {index + 1}</option>)}</select></div><div><label>Título</label><input value={rule.title} onChange={(event) => setCourseDraft({ ...courseDraft, localRules: (courseDraft.localRules || []).map((candidate) => candidate.id === rule.id ? { ...candidate, title: event.target.value } : candidate) })} /></div></div>
-            <label>Regla local</label><textarea rows={3} value={rule.text} onChange={(event) => setCourseDraft({ ...courseDraft, localRules: (courseDraft.localRules || []).map((candidate) => candidate.id === rule.id ? { ...candidate, text: event.target.value } : candidate) })} />
-            <button className="removeCourse" onClick={() => setCourseDraft({ ...courseDraft, localRules: (courseDraft.localRules || []).filter((candidate) => candidate.id !== rule.id) })}>Eliminar regla</button>
-          </article>)}</div>
-          <button className="secondary big" onClick={() => setCourseDraft({ ...courseDraft, localRules: [...(courseDraft.localRules || []), { id: makeId(), title: "Nueva regla local", text: "", enabled: true, hole: null }] })}>+ Agregar Regla Local</button>
-        </>}
-      </section>}
       <section className="card"><div className="sectionTitle"><div><h2>Carga rápida</h2><p>Pega 18 ventajas/SI. Par es opcional si ya está correcto en la tabla.</p></div><button className="textButton" onClick={applyQuickCourseData}>Aplicar</button></div><div className="grid2"><div><label>Ventaja / SI (18 números)</label><textarea rows={3} placeholder="5, 17, 7, 1..." value={quickStroke} onChange={(e) => setQuickStroke(e.target.value)} /></div><div><label>Par (opcional, 18 números)</label><textarea rows={3} placeholder="4, 3, 4, 5..." value={quickPars} onChange={(e) => setQuickPars(e.target.value)} /></div></div></section>
       <section className="card"><div className="courseGrid simpleCourseGrid"><div className="courseGridHead">Hoyo</div><div className="courseGridHead">Par</div><div className="courseGridHead">Ventaja</div>{courseDraft.holes.map((h) => <div className="courseGridRow" key={h.number}><b>{h.number}</b><input type="number" min={3} max={6} value={h.par} onChange={(e) => setCourseDraft({ ...courseDraft, holes: courseDraft.holes.map((x) => x.number === h.number ? { ...x, par: Number(e.target.value) } : x) })} /><input type="number" min={1} max={18} value={h.strokeIndex} onChange={(e) => setCourseDraft({ ...courseDraft, holes: courseDraft.holes.map((x) => x.number === h.number ? { ...x, strokeIndex: Number(e.target.value) } : x) })} /></div>)}</div></section>
       <div className="courseDanger">{courseDraft.name === "La Vista Temporal" && <button className="secondary" onClick={restoreOriginalCourse}>Restablecer configuración original</button>}{!courseDraft.builtIn && <button className="removeCourse" onClick={deleteCourseDraft}>Eliminar campo personalizado</button>}</div>
@@ -1510,21 +1600,25 @@ export default function Page() {
       <div className="groupEditorSectionTitle"><h3>Integrantes</h3><span>{frequentGroupDraft.players.length}</span></div>
       <div className="groupMemberList">{frequentGroupDraft.players.map((member, index) => <div className="groupMemberEditor" key={index}>
         <label>Jugador {index + 1}<input aria-label={`Nombre del integrante ${index + 1}`} value={member.name} onChange={(event) => editFrequentGroupMember(index, { name: event.target.value })} /></label>
-        <label>HCP predeterminado<input aria-label={`HCP del integrante ${index + 1}`} type="number" inputMode="decimal" step="0.1" min={-15} max={54} placeholder="HCP" value={member.handicap ?? ""} onChange={(event) => editFrequentGroupMember(index, { handicap: event.target.value === "" ? null : Number(event.target.value) })} /></label>
+        <label>HCP predeterminado<NumericCaptureInput aria-label={`HCP del integrante ${index + 1}`} inputMode="decimal" step={0.1} min={-15} max={54} placeholder="HCP" value={member.handicap} emptyWhenZero={false} onValueChange={(handicap) => editFrequentGroupMember(index, { handicap })} /></label>
         <div className="groupMemberActions"><button className="secondary" aria-label={`Subir a ${member.name}`} disabled={index === 0} onClick={() => setFrequentGroupDraft((group) => group ? moveFrequentGroupMember(group, index, -1) : group)}>↑</button><button className="secondary" aria-label={`Bajar a ${member.name}`} disabled={index === frequentGroupDraft.players.length - 1} onClick={() => setFrequentGroupDraft((group) => group ? moveFrequentGroupMember(group, index, 1) : group)}>↓</button><button className="dangerGhost" onClick={() => removeMemberFromFrequentGroup(index)}>Quitar</button></div>
       </div>)}</div>
       {!frequentGroupDraft.players.length && <div className="empty">Agrega al menos un integrante para guardar el grupo.</div>}
       <div className="groupMemberAdd"><div className="groupEditorSectionTitle"><h3>Agregar integrante</h3></div>
         <div className="segmented"><button className={groupMemberSource === "frequent" ? "active" : ""} disabled={!frequentPlayers.length} onClick={() => setGroupMemberSource("frequent")}>Jugador frecuente</button><button className={groupMemberSource === "new" ? "active" : ""} onClick={() => setGroupMemberSource("new")}>Jugador nuevo</button></div>
         {groupMemberSource === "frequent" && frequentPlayers.length > 0 && <div className="groupMemberAddRow"><label>Elegir jugador<select value={selectedGroupFrequentPlayerId} onChange={(event) => setSelectedGroupFrequentPlayerId(event.target.value)}>{frequentPlayers.map((player) => <option key={player.id} value={player.id}>{player.name} · HCP {player.handicap ?? "—"}</option>)}</select></label><button className="secondary" disabled={!selectedGroupFrequentPlayerId} onClick={addExistingPlayerToFrequentGroup}>Agregar</button></div>}
-        {groupMemberSource === "new" && <><div className="groupMemberNewRow"><label>Nombre<input placeholder="Nombre del jugador" value={newGroupMember.name} onChange={(event) => setNewGroupMember((member) => ({ ...member, name: event.target.value }))} /></label><label>HCP predeterminado<input type="number" inputMode="decimal" step="0.1" min={-15} max={54} placeholder="HCP" value={newGroupMember.handicap ?? ""} onChange={(event) => setNewGroupMember((member) => ({ ...member, handicap: event.target.value === "" ? null : Number(event.target.value) }))} /></label></div><label className="checkRow"><input type="checkbox" checked={saveNewGroupMemberAsFrequent} onChange={(event) => setSaveNewGroupMemberAsFrequent(event.target.checked)} />Guardar como jugador frecuente</label><button className="secondary groupMemberAddButton" disabled={!newGroupMember.name.trim()} onClick={addNewPlayerToFrequentGroup}>Agregar jugador nuevo</button></>}
+        {groupMemberSource === "new" && <><div className="groupMemberNewRow"><label>Nombre<input placeholder="Nombre del jugador" value={newGroupMember.name} onChange={(event) => setNewGroupMember((member) => ({ ...member, name: event.target.value }))} /></label><label>HCP predeterminado<NumericCaptureInput inputMode="decimal" step={0.1} min={-15} max={54} placeholder="HCP" value={newGroupMember.handicap} emptyWhenZero={false} onValueChange={(handicap) => setNewGroupMember((member) => ({ ...member, handicap }))} /></label></div><label className="checkRow"><input type="checkbox" checked={saveNewGroupMemberAsFrequent} onChange={(event) => setSaveNewGroupMemberAsFrequent(event.target.checked)} />Guardar como jugador frecuente</label><button className="secondary groupMemberAddButton" disabled={!newGroupMember.name.trim()} onClick={addNewPlayerToFrequentGroup}>Agregar jugador nuevo</button></>}
       </div>
       <div className="dialogActions"><button className="secondary" onClick={resetFrequentGroupEditor}>Cancelar</button><button className="primary" disabled={!frequentGroupDraft.name.trim() || !frequentGroupDraft.players.length || frequentGroupDraft.players.some((member) => !member.name.trim())} onClick={saveFrequentGroupEdit}>Guardar</button></div>
     </section></div>}
 
-    {showDeleteRoundConfirm && <div className="modalBackdrop" role="presentation"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="delete-round-title" aria-describedby="delete-round-description"><h2 id="delete-round-title">¿Eliminar esta ronda?</h2><p id="delete-round-description">Se eliminará la ronda en curso y sus datos capturados. Esta acción no se puede deshacer.</p><div className="dialogActions"><button className="secondary" onClick={() => setShowDeleteRoundConfirm(false)}>Cancelar</button><button className="dangerButton" onClick={deleteActiveRound}>Eliminar ronda</button></div></section></div>}
+    {showDeleteRoundConfirm && <div className="modalBackdrop" role="presentation"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="delete-round-title" aria-describedby="delete-round-description"><h2 id="delete-round-title">¿Eliminar esta ronda?</h2><p id="delete-round-description">Se eliminará la ronda en curso y sus datos capturados. Esta acción no se puede deshacer.</p><div className="dialogActions"><button autoFocus className="secondary" onClick={() => setShowDeleteRoundConfirm(false)}>Cancelar</button><button className="dangerButton" onClick={deleteActiveRound}>Eliminar ronda</button></div></section></div>}
 
-    {frequentGroupToDelete && <div className="modalBackdrop" role="presentation"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="delete-group-title" aria-describedby="delete-group-description"><h2 id="delete-group-title">¿Eliminar grupo frecuente?</h2><p id="delete-group-description">Esto solo eliminará el grupo guardado. No afectará jugadores, rondas ni histórico.</p><div className="dialogActions"><button className="secondary" onClick={() => setFrequentGroupToDelete(null)}>Cancelar</button><button className="dangerButton" onClick={() => { setFrequentGroups((groups) => resolveFrequentGroupDeletion(groups, frequentGroupToDelete.id, "delete")); if (frequentGroupDraft?.id === frequentGroupToDelete.id) resetFrequentGroupEditor(); setFrequentGroupToDelete(null); }}>Eliminar</button></div></section></div>}
+    {historicalRoundToDelete && <div className="modalBackdrop" role="presentation"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="delete-history-round-title" aria-describedby="delete-history-round-description"><h2 id="delete-history-round-title">¿Eliminar esta ronda del histórico?</h2><p id="delete-history-round-description">Esta acción eliminará definitivamente esta ronda guardada y sus resultados.</p><div className="dialogActions"><button autoFocus className="secondary" onClick={() => setHistoricalRoundToDelete(null)}>Cancelar</button><button className="dangerButton" onClick={confirmHistoricalRoundDeletion}>Eliminar</button></div></section></div>}
+
+    {personalHistoryToDelete && <div className="modalBackdrop" role="presentation"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="delete-personal-history-title" aria-describedby="delete-personal-history-description"><h2 id="delete-personal-history-title">¿Eliminar este registro personal?</h2><p id="delete-personal-history-description">Esto eliminará este resultado del histórico de Personales contra {personalHistoryToDelete.rivalName}.</p><div className="dialogActions"><button autoFocus className="secondary" onClick={() => setPersonalHistoryToDelete(null)}>Cancelar</button><button className="dangerButton" onClick={confirmPersonalHistoryDeletion}>Eliminar</button></div></section></div>}
+
+    {frequentGroupToDelete && <div className="modalBackdrop" role="presentation"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="delete-group-title" aria-describedby="delete-group-description"><h2 id="delete-group-title">¿Eliminar grupo guardado?</h2><p id="delete-group-description">Esto eliminará únicamente este grupo. No afectará jugadores ni rondas anteriores.</p><div className="dialogActions"><button className="secondary" onClick={() => setFrequentGroupToDelete(null)}>Cancelar</button><button className="dangerButton" onClick={() => { setFrequentGroups((groups) => resolveFrequentGroupDeletion(groups, frequentGroupToDelete.id, "delete")); if (frequentGroupDraft?.id === frequentGroupToDelete.id) resetFrequentGroupEditor(); setFrequentGroupToDelete(null); }}>Eliminar</button></div></section></div>}
 
     {frequentPlayerToDelete && <div className="modalBackdrop" role="presentation"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="delete-frequent-title" aria-describedby="delete-frequent-description"><h2 id="delete-frequent-title">¿Eliminar jugador frecuente?</h2><p id="delete-frequent-description">Esto solamente lo eliminará de tu lista de jugadores frecuentes. No afectará rondas anteriores.</p><div className="dialogActions"><button className="secondary" onClick={() => setFrequentPlayerToDelete(null)}>Cancelar</button><button className="dangerButton" onClick={() => { setFrequentPlayers((templates) => removeFrequentPlayerTemplate(templates, frequentPlayerToDelete.id)); if (editingFrequentPlayerId === frequentPlayerToDelete.id) setEditingFrequentPlayerId(null); setFrequentPlayerToDelete(null); }}>Eliminar</button></div></section></div>}
 
@@ -1532,4 +1626,8 @@ export default function Page() {
 
     {tab !== "welcome" && <nav className="bottomNav"><button onClick={() => navigateFromBottomBar(BOTTOM_NAV_TARGETS.Inicio)}><span>⌂</span>Inicio</button><button className={tab === "round" || tab === "standings" ? "active" : ""} onClick={() => navigateFromBottomBar(BOTTOM_NAV_TARGETS.Tarjeta)}><span>{roundHoles}</span>Tarjeta</button><button className={tab === "personals" ? "active" : ""} onClick={() => navigateFromBottomBar(BOTTOM_NAV_TARGETS.Personales)}><span>↔</span>Personales</button><button className={tab === "results" ? "active" : ""} onClick={() => navigateFromBottomBar(BOTTOM_NAV_TARGETS.Resultados)}><span>$</span>Resultados</button><button className={tab === "history" ? "active" : ""} onClick={() => navigateFromBottomBar(BOTTOM_NAV_TARGETS.Histórico)}><span>↗</span>Histórico</button><button className={tab === "rules" ? "active" : ""} onClick={() => navigateFromBottomBar(BOTTOM_NAV_TARGETS.Reglas)}><span>⚑</span>Reglas</button></nav>}
   </main>;
+}
+
+export default function Page() {
+  return <AccountProvider><GolfBetsApp /></AccountProvider>;
 }

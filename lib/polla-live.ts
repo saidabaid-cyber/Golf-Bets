@@ -1,4 +1,5 @@
 import type { HandicapMode } from "./types";
+import { groupSizes, type GroupTarget } from "./group-generator";
 
 export type PollaFormat = "gross" | "net" | "both";
 export type PollaStatus = "upcoming" | "live" | "finished";
@@ -68,14 +69,52 @@ export function parsePollaPlayersCsv(csv: string) {
 }
 
 export function autoGroupPollaPlayers(players: PollaPlayerInput[], preferredSize = 4) {
-  const size = Math.min(5, Math.max(3, Math.round(preferredSize)));
+  const size = Math.min(5, Math.max(3, Math.round(preferredSize))) as GroupTarget;
+  const sizes = groupSizes(players.length, size);
+  if (!sizes.length) return [];
   const groups: PollaPlayerInput[][] = [];
-  for (let index = 0; index < players.length; index += size) groups.push(players.slice(index, index + size));
-  if (groups.length > 1 && groups.at(-1)!.length < 3) {
-    const tail = groups.pop()!;
-    tail.forEach((player, index) => groups[index % groups.length].push(player));
+  let offset = 0;
+  for (const groupSize of sizes) {
+    groups.push(players.slice(offset, offset + groupSize));
+    offset += groupSize;
   }
   return groups;
+}
+
+export type PollaCourseHole = { number: number; par: number };
+
+export function pollaHoleOrder(startHole: 1 | 10, holes: 9 | 18) {
+  const fullOrder = startHole === 10
+    ? [...Array.from({ length: 9 }, (_, index) => index + 10), ...Array.from({ length: 9 }, (_, index) => index + 1)]
+    : Array.from({ length: 18 }, (_, index) => index + 1);
+  return fullOrder.slice(0, holes);
+}
+
+export function pollaParForHole(courseSnapshot: PollaCourseHole[] | null | undefined, hole: number, fallback = 4) {
+  const par = courseSnapshot?.find((candidate) => candidate.number === hole)?.par;
+  return typeof par === "number" && Number.isFinite(par) && par > 0 ? par : fallback;
+}
+
+export function initializePollaHoleScores(
+  scores: Record<string, number>,
+  playerIds: string[],
+  hole: number,
+  courseSnapshot: PollaCourseHole[] | null | undefined,
+) {
+  const next = { ...scores };
+  const par = pollaParForHole(courseSnapshot, hole);
+  for (const playerId of playerIds) {
+    const key = `${playerId}:${hole}`;
+    if (typeof next[key] !== "number" || !Number.isFinite(next[key]) || next[key] < 1) next[key] = par;
+  }
+  return next;
+}
+
+export function nextPollaHole(currentHole: number, startHole: 1 | 10, holes: 9 | 18) {
+  const order = pollaHoleOrder(startHole, holes);
+  const index = order.indexOf(currentHole);
+  if (index < 0) return order[0] ?? null;
+  return order[index + 1] ?? null;
 }
 
 export function normalizeOyesDistance(value: number, unit: "m" | "cm" | "ft_in", inches = 0) {

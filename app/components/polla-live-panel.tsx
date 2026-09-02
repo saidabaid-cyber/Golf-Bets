@@ -1,11 +1,11 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import QRCode from "qrcode";
-import { autoGroupPollaPlayers, parsePollaPlayersCsv, rankPollaLeaderboard, type PollaLeaderboardRow, type PollaPlayerInput } from "../../lib/polla-live";
+import { autoGroupPollaPlayers, initializePollaHoleScores, nextPollaHole, parsePollaPlayersCsv, pollaHoleOrder, rankPollaLeaderboard, type PollaCourseHole, type PollaLeaderboardRow, type PollaPlayerInput } from "../../lib/polla-live";
 import { enqueuePollaScore, flushPollaScoreQueue, readPendingPollaScores } from "../../lib/polla-offline";
 import { getSupabaseBrowser, pollaCloudConfigured } from "../../lib/supabase/client";
 import type { Course } from "../../lib/types";
+import { NumericCaptureInput } from "./numeric-capture-input";
 
 type Screen = "home" | "create" | "join" | "leaderboard" | "scorecard" | "mine";
 type CreatedTournament = { public_id: string; short_code: string; name: string };
@@ -18,6 +18,7 @@ export function PollaLivePanel({ courses = [] }: { courses?: Course[] }) {
   const [screen, setScreen] = useState<Screen>("home");
   const [email, setEmail] = useState("");
   const [authMessage, setAuthMessage] = useState("");
+  const [shareMessage, setShareMessage] = useState("");
   const [accessToken, setAccessToken] = useState("");
   const [created, setCreated] = useState<CreatedTournament | null>(null);
   const [accessList, setAccessList] = useState<Array<{ playerId: string; name: string; group: string; pin: string }>>([]);
@@ -77,7 +78,7 @@ export function PollaLivePanel({ courses = [] }: { courses?: Course[] }) {
     event.preventDefault();
     const supabase = getSupabaseBrowser();
     if (!supabase) return;
-    const { error: authError } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: window.location.href } });
+    const { error: authError } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: `${window.location.origin}/auth/callback` } });
     setAuthMessage(authError ? authError.message : "Revisa tu correo para entrar y crear Pollas.");
   }
 
@@ -106,6 +107,7 @@ export function PollaLivePanel({ courses = [] }: { courses?: Course[] }) {
       setCreated(payload.tournament);
       setAccessList(payload.access || []);
       const link = `${window.location.origin}/?polla=${payload.tournament.public_id}`;
+      const { default: QRCode } = await import("qrcode");
       setQr(await QRCode.toDataURL(link, { width: 240, margin: 1, color: { dark: "#112d25", light: "#ffffff" } }));
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "No fue posible crear la Polla.");
@@ -135,20 +137,34 @@ export function PollaLivePanel({ courses = [] }: { courses?: Course[] }) {
   }
 
   async function loadGroup(session: GuestSession) {
-    const response = await fetch("/api/polla/group", { headers: { authorization: `Bearer ${session.access_token}` } });
-    if (!response.ok) return;
-    const payload = await response.json(); setGroupData(payload);
-    const next = Object.fromEntries((payload.scores || []).map((score: any) => [`${score.player_id}:${score.hole}`, score.score]));
-    setGroupScores(next);
+    try {
+      const response = await fetch("/api/polla/group", { headers: { authorization: `Bearer ${session.access_token}` } });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || "No fue posible cargar la tarjeta.");
+      setGroupData(payload);
+      const stored = Object.fromEntries((payload.scores || []).map((score: any) => [`${score.player_id}:${score.hole}`, score.score]));
+      const members = (payload.members || []).map((member: any) => member.tournament_players).filter(Boolean);
+      const tournament = Array.isArray(payload.group?.tournaments) ? payload.group.tournaments[0] : payload.group?.tournaments;
+      const start = payload.group?.start_hole === 10 ? 10 : 1;
+      const holes = tournament?.holes === 9 ? 9 : 18;
+      const order = pollaHoleOrder(start, holes);
+      const firstIncomplete = order.find((hole) => members.some((player: any) => typeof stored[`${player.id}:${hole}`] !== "number")) ?? order.at(-1) ?? start;
+      setCurrentHole(firstIncomplete);
+      setGroupScores(initializePollaHoleScores(stored, members.map((player: any) => player.id), firstIncomplete, tournament?.course_snapshot as PollaCourseHole[] | undefined));
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "No fue posible cargar la tarjeta.");
+    }
   }
 
   async function saveHole() {
     if (!guest || !groupData) return;
     const members = (groupData.members || []).map((member: any) => member.tournament_players).filter(Boolean);
+    const tournament = Array.isArray(groupData.group?.tournaments) ? groupData.group.tournaments[0] : groupData.group?.tournaments;
+    const courseSnapshot = tournament?.course_snapshot as PollaCourseHole[] | undefined;
     setSyncLabel("Guardando…");
     for (const player of members) {
-      const score = groupScores[`${player.id}:${currentHole}`];
-      if (!score) continue;
+      const initialized = initializePollaHoleScores(groupScores, [player.id], currentHole, courseSnapshot);
+      const score = initialized[`${player.id}:${currentHole}`];
       const item = { id: crypto.randomUUID(), tournamentId: guest.tournament_id, groupId: guest.group_id, playerId: player.id, hole: currentHole, score, queuedAt: new Date().toISOString() };
       if (!navigator.onLine) { enqueuePollaScore(item); continue; }
       try {
@@ -161,8 +177,36 @@ export function PollaLivePanel({ courses = [] }: { courses?: Course[] }) {
     }
     const pending = readPendingPollaScores().length; setPendingCount(pending);
     setSyncLabel(pending ? `Sin conexión · ${pending} cambio${pending === 1 ? "" : "s"} pendiente${pending === 1 ? "" : "s"}` : "✓ Sincronizado");
-    const totalHoles = groupData.group?.tournaments?.holes || 18;
-    if (currentHole < totalHoles) setCurrentHole((hole) => hole + 1);
+    const start = groupData.group?.start_hole === 10 ? 10 : 1;
+    const holes = tournament?.holes === 9 ? 9 : 18;
+    const nextHole = nextPollaHole(currentHole, start, holes);
+    if (nextHole !== null) {
+      setCurrentHole(nextHole);
+      setGroupScores((current) => initializePollaHoleScores(current, members.map((player: any) => player.id), nextHole, courseSnapshot));
+    } else {
+      setSyncLabel("✓ Último hoyo guardado");
+    }
+  }
+
+  async function shareCreatedPolla() {
+    if (!created) return;
+    const url = `${window.location.origin}/?polla=${created.public_id}`;
+    const text = `THE BACKYARD\n${created.name}\n${url}`;
+    setShareMessage("");
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: created.name, text, url });
+        setShareMessage("Invitación compartida.");
+      } else if (navigator.clipboard) {
+        await navigator.clipboard.writeText(text);
+        setShareMessage("Enlace copiado.");
+      } else {
+        setShareMessage(`Copia este enlace: ${url}`);
+      }
+    } catch (shareError) {
+      if (shareError instanceof DOMException && shareError.name === "AbortError") setShareMessage("Compartir cancelado.");
+      else setShareMessage(`No se pudo compartir. Copia este enlace: ${url}`);
+    }
   }
 
   async function closeCard() {
@@ -191,7 +235,8 @@ export function PollaLivePanel({ courses = [] }: { courses?: Course[] }) {
   useEffect(() => {
     if (screen !== "leaderboard" || !publicId) return;
     loadLeaderboard();
-    const timer = window.setInterval(loadLeaderboard, 15_000);
+    const refreshWhenVisible = () => { if (document.visibilityState === "visible") loadLeaderboard(); };
+    const timer = window.setInterval(refreshWhenVisible, 15_000);
     const supabase = getSupabaseBrowser();
     const channel = supabase?.channel(`polla-leaderboard-${publicId}`).on("postgres_changes", { event: "*", schema: "public", table: "tournament_scores" }, loadLeaderboard).subscribe();
     return () => { window.clearInterval(timer); if (channel) supabase?.removeChannel(channel); };
@@ -228,23 +273,23 @@ export function PollaLivePanel({ courses = [] }: { courses?: Course[] }) {
           <div><label>Formato</label><select value={draft.format} onChange={(event) => setDraft({ ...draft, format: event.target.value })}><option value="both">Gross + Neto</option><option value="gross">Medal Gross</option><option value="net">Medal Neto</option></select></div>
           <div><label>Hoyos</label><select value={draft.holes} onChange={(event) => setDraft({ ...draft, holes: Number(event.target.value) as 9 | 18 })}><option value={18}>18</option><option value={9}>9</option></select></div>
           <div><label>Salida</label><select value={draft.startHole} onChange={(event) => setDraft({ ...draft, startHole: Number(event.target.value) as 1 | 10 })}><option value={1}>H1</option><option value={10}>H10</option></select></div>
-          <div><label>% HCP</label><input type="number" min={0} max={100} step={5} value={draft.hcpPct} onChange={(event) => setDraft({ ...draft, hcpPct: Number(event.target.value) })} /></div>
+          <div><label>% HCP</label><NumericCaptureInput min={0} max={100} step={5} inputMode="numeric" value={draft.hcpPct} emptyWhenZero={false} onValueChange={(hcpPct) => setDraft({ ...draft, hcpPct: hcpPct ?? 0 })} /></div>
           <div><label>Modo HCP</label><select value={draft.handicapMode} onChange={(event) => setDraft({ ...draft, handicapMode: event.target.value })}><option value="decimal">Décimas</option><option value="half_up">.5 sube</option><option value="half_down">.5 baja</option><option value="six_up">.6 sube</option><option value="four_down">.4 baja</option></select></div>
         </div><label>Comentarios / reglas locales</label><textarea rows={3} value={draft.localRules} onChange={(event) => setDraft({ ...draft, localRules: event.target.value })} /></section>
         <section className="card"><div className="sectionTitle"><div><h2>Jugadores y grupos</h2><p>Manual, CSV o autoagrupar de 4; se permiten grupos de 3–5.</p></div><button type="button" className="textButton" onClick={() => setPlayers([...players, makePlayer(players.length)])}>+ Jugador</button></div>
-          {players.map((player, index) => <div className="pollaPlayer" key={player.id}><input placeholder="Nombre" value={player.name} onChange={(event) => setPlayers(players.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} /><input type="number" placeholder="HCP" value={player.handicap === 0 ? "" : player.handicap} onChange={(event) => setPlayers(players.map((item, itemIndex) => itemIndex === index ? { ...item, handicap: Number(event.target.value) || 0 } : item))} /><input placeholder="Grupo" value={player.group || ""} onChange={(event) => setPlayers(players.map((item, itemIndex) => itemIndex === index ? { ...item, group: event.target.value } : item))} /><button type="button" className="remove" onClick={() => setPlayers(players.filter((_, itemIndex) => itemIndex !== index))}>×</button></div>)}
+          {players.map((player, index) => <div className="pollaPlayer" key={player.id}><input placeholder="Nombre" value={player.name} onChange={(event) => setPlayers(players.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} /><NumericCaptureInput placeholder="HCP" inputMode="decimal" value={player.handicap} onValueChange={(handicap) => setPlayers(players.map((item, itemIndex) => itemIndex === index ? { ...item, handicap: handicap ?? 0 } : item))} /><input placeholder="Grupo" value={player.group || ""} onChange={(event) => setPlayers(players.map((item, itemIndex) => itemIndex === index ? { ...item, group: event.target.value } : item))} /><button type="button" className="remove" onClick={() => setPlayers(players.filter((_, itemIndex) => itemIndex !== index))}>×</button></div>)}
           <button type="button" className="secondary" onClick={autoGroup} disabled={players.length < 3}>Autoagrupar de 4</button>
           <div className="csvImport"><label>Importar CSV · name,handicap,group,startHole,teeTime</label><textarea rows={4} value={csv} onChange={(event) => setCsv(event.target.value)} /><button type="button" className="secondary" onClick={importCsv}>Validar e importar</button>{csvIssues.map((issue) => <div className="bad" key={issue}>{issue}</div>)}</div>
         </section>
-        <section className="card"><div className="sectionTitle"><div><h2>Premios y Oyes</h2><p>Solo registra/calcula; no mueve dinero.</p></div><button type="button" className="textButton" onClick={() => setPrizes([...prizes, { position: prizes.length + 1, category: "net", money: 0, percentage: 0, description: "" }])}>+ Premio</button></div>{prizes.map((prize, index) => <div className="prizeRow" key={index}><select value={prize.category} onChange={(event) => setPrizes(prizes.map((item, itemIndex) => itemIndex === index ? { ...item, category: event.target.value as "gross" | "net" | "other" } : item))}><option value="net">Neto</option><option value="gross">Gross</option><option value="other">Otro</option></select><input aria-label="Posición" type="number" min={1} value={prize.position} onChange={(event) => setPrizes(prizes.map((item, itemIndex) => itemIndex === index ? { ...item, position: Number(event.target.value) } : item))} /><div className="moneyField"><span>$</span><input aria-label="Dinero" type="number" placeholder="0" value={prize.money || ""} onChange={(event) => setPrizes(prizes.map((item, itemIndex) => itemIndex === index ? { ...item, money: Number(event.target.value) || 0 } : item))} /></div><input aria-label="Porcentaje" type="number" min={0} max={100} placeholder="%" value={prize.percentage || ""} onChange={(event) => setPrizes(prizes.map((item, itemIndex) => itemIndex === index ? { ...item, percentage: Number(event.target.value) || 0 } : item))} /><input placeholder="Texto / premio físico" value={prize.description} onChange={(event) => setPrizes(prizes.map((item, itemIndex) => itemIndex === index ? { ...item, description: event.target.value } : item))} /><button type="button" className="remove" onClick={() => setPrizes(prizes.filter((_, itemIndex) => itemIndex !== index))}>×</button></div>)}<label className="miniLabel">Oyes en Par 3</label><div className="chips">{(courses.find((course) => course.name === draft.courseName)?.holes || []).filter((hole) => hole.par === 3).map((hole) => <button type="button" key={hole.number} className={`chipButton ${oyesHoles.includes(hole.number) ? "selected" : ""}`} onClick={() => setOyesHoles(oyesHoles.includes(hole.number) ? oyesHoles.filter((number) => number !== hole.number) : [...oyesHoles, hole.number])}>H{hole.number}</button>)}</div></section>
+        <section className="card"><div className="sectionTitle"><div><h2>Premios y Oyes</h2><p>Solo registra/calcula; no mueve dinero.</p></div><button type="button" className="textButton" onClick={() => setPrizes([...prizes, { position: prizes.length + 1, category: "net", money: 0, percentage: 0, description: "" }])}>+ Premio</button></div>{prizes.map((prize, index) => <div className="prizeRow" key={index}><select value={prize.category} onChange={(event) => setPrizes(prizes.map((item, itemIndex) => itemIndex === index ? { ...item, category: event.target.value as "gross" | "net" | "other" } : item))}><option value="net">Neto</option><option value="gross">Gross</option><option value="other">Otro</option></select><input aria-label="Posición" type="number" min={1} value={prize.position} onChange={(event) => setPrizes(prizes.map((item, itemIndex) => itemIndex === index ? { ...item, position: Number(event.target.value) } : item))} /><div className="moneyField"><span>$</span><NumericCaptureInput aria-label="Dinero" inputMode="decimal" value={prize.money} onValueChange={(money) => setPrizes(prizes.map((item, itemIndex) => itemIndex === index ? { ...item, money: money ?? 0 } : item))} /></div><NumericCaptureInput aria-label="Porcentaje" min={0} max={100} inputMode="numeric" placeholder="%" value={prize.percentage} onValueChange={(percentage) => setPrizes(prizes.map((item, itemIndex) => itemIndex === index ? { ...item, percentage: percentage ?? 0 } : item))} /><input placeholder="Texto / premio físico" value={prize.description} onChange={(event) => setPrizes(prizes.map((item, itemIndex) => itemIndex === index ? { ...item, description: event.target.value } : item))} /><button type="button" className="remove" onClick={() => setPrizes(prizes.filter((_, itemIndex) => itemIndex !== index))}>×</button></div>)}<label className="miniLabel">Oyes en Par 3</label><div className="chips">{(courses.find((course) => course.name === draft.courseName)?.holes || []).filter((hole) => hole.par === 3).map((hole) => <button type="button" key={hole.number} className={`chipButton ${oyesHoles.includes(hole.number) ? "selected" : ""}`} onClick={() => setOyesHoles(oyesHoles.includes(hole.number) ? oyesHoles.filter((number) => number !== hole.number) : [...oyesHoles, hole.number])}>H{hole.number}</button>)}</div></section>
         <button className="primary big" disabled={busy}>{busy ? "Creando…" : "Crear Polla"}</button>
       </form>
-      {created && <section className="card createdPolla"><h2>✓ {created.name} creada</h2><b>Código: {created.short_code}</b>{qr && <img src={qr} alt="Código QR para unirse a la Polla" />}<button className="secondary" onClick={() => navigator.share?.({ title: created.name, url: `${location.origin}/?polla=${created.public_id}` })}>Compartir por WhatsApp</button><div className="accessPins">{accessList.map((item) => <span key={item.playerId}>{item.name} · {item.group} · PIN <b>{item.pin}</b></span>)}</div><div className="hint">Entrega cada PIN en privado. El backend solo conserva su hash.</div></section>}
+      {created && <section className="card createdPolla"><h2>✓ {created.name} creada</h2><b>Código: {created.short_code}</b>{qr && <img src={qr} alt="Código QR para unirse a la Polla" />}<button className="secondary" onClick={shareCreatedPolla}>Compartir invitación</button>{shareMessage && <div className="hint" role="status">{shareMessage}</div>}<div className="accessPins">{accessList.map((item) => <span key={item.playerId}>{item.name} · {item.group} · PIN <b>{item.pin}</b></span>)}</div><div className="hint">Entrega cada PIN en privado. El backend solo conserva su hash.</div></section>}
     </>}
 
     {screen === "join" && <section className="card"><h2>Unirme a Polla</h2><label>ID público</label><div className="inlineForm"><input value={publicId} onChange={(event) => setPublicId(event.target.value)} /><button className="secondary" onClick={loadInvite} disabled={busy}>Buscar</button></div>{invite && <form onSubmit={joinTournament}><h3>{invite.tournament.name}</h3><label>Mi nombre / grupo</label><select value={joinPlayerId} onChange={(event) => setJoinPlayerId(event.target.value)}>{invite.players.map((player: any) => <option key={player.id} value={player.id}>{player.name}</option>)}</select><label>PIN de 4–6 dígitos</label><input type="password" inputMode="numeric" pattern="[0-9]{4,6}" value={pin} onChange={(event) => setPin(event.target.value)} /><button className="primary" disabled={busy}>Entrar</button></form>}</section>}
 
-    {screen === "scorecard" && guest && <section className="card liveScorecard"><div className="row between"><div><h2>{groupData?.group?.name || "Tarjeta"}</h2><span className="syncState">{syncLabel}{pendingCount ? ` · ${pendingCount}` : ""}</span></div><b>Hoyo {currentHole}</b></div>{groupData?.group?.status === "confirmed" ? <div className="successBox">✓ Tarjeta confirmada · solo el admin puede corregirla.</div> : guest.role === "viewer" ? <div className="notice">Modo jugador: puedes revisar la tarjeta. Solo el scorer/capitán del grupo captura scores.</div> : <>{(groupData?.members || []).map((member: any) => { const player = member.tournament_players; const key = `${player.id}:${currentHole}`; const value = groupScores[key] || 4; return <div className="scoreRow" key={player.id}><div><b>{player.name}</b><span>HCP {player.handicap}</span></div><div className="stepper"><button onClick={() => setGroupScores({ ...groupScores, [key]: Math.max(1, value - 1) })}>−</button><input type="number" min={1} max={20} value={value} onChange={(event) => setGroupScores({ ...groupScores, [key]: Number(event.target.value) || 4 })} /><button onClick={() => setGroupScores({ ...groupScores, [key]: Math.min(20, value + 1) })}>+</button></div></div>; })}<button className="primary big" onClick={saveHole}>Guardar hoyo</button><button className="secondary" onClick={closeCard}>Cerrar tarjeta</button></>}</section>}
+    {screen === "scorecard" && guest && <section className="card liveScorecard"><div className="row between"><div><h2>{groupData?.group?.name || "Tarjeta"}</h2><span className="syncState">{syncLabel}{pendingCount ? ` · ${pendingCount}` : ""}</span></div><b>Hoyo {currentHole}</b></div>{groupData?.group?.status === "confirmed" ? <div className="successBox">✓ Tarjeta confirmada · solo el admin puede corregirla.</div> : guest.role === "viewer" ? <div className="notice">Modo jugador: puedes revisar la tarjeta. Solo el scorer/capitán del grupo captura scores.</div> : <>{(groupData?.members || []).map((member: any) => { const player = member.tournament_players; const key = `${player.id}:${currentHole}`; const tournament = Array.isArray(groupData.group?.tournaments) ? groupData.group.tournaments[0] : groupData.group?.tournaments; const initialized = initializePollaHoleScores(groupScores, [player.id], currentHole, tournament?.course_snapshot); const value = initialized[key]; return <div className="scoreRow" key={player.id}><div><b>{player.name}</b><span>HCP {player.handicap}</span></div><div className="stepper"><button aria-label={`Restar golpe a ${player.name}`} onClick={() => setGroupScores({ ...groupScores, [key]: Math.max(1, value - 1) })}>−</button><input aria-label={`Score de ${player.name} en hoyo ${currentHole}`} type="number" min={1} max={20} value={value} onChange={(event) => setGroupScores({ ...groupScores, [key]: Math.min(20, Math.max(1, Number(event.target.value) || value)) })} /><button aria-label={`Sumar golpe a ${player.name}`} onClick={() => setGroupScores({ ...groupScores, [key]: Math.min(20, value + 1) })}>+</button></div></div>; })}<button className="primary big" onClick={saveHole}>Guardar hoyo</button><button className="secondary" onClick={closeCard}>Cerrar tarjeta</button></>}</section>}
 
     {screen === "leaderboard" && <section className="card"><h2>Leaderboard en vivo</h2><div className="inlineForm"><input placeholder="ID público" value={publicId} onChange={(event) => setPublicId(event.target.value)} /><button className="secondary" onClick={loadLeaderboard}>Abrir</button></div><div className="segmented"><button className={leaderboardMode === "gross" ? "active" : ""} onClick={() => setLeaderboardMode("gross")}>Gross</button><button className={leaderboardMode === "net" ? "active" : ""} onClick={() => setLeaderboardMode("net")}>Neto</button></div><div className="tableWrap"><table><thead><tr><th>Pos</th><th>Jugador</th><th>HCP</th><th>Thru</th><th>Gross</th><th>Neto</th><th>+/- Par</th></tr></thead><tbody>{ranked.map((row, index) => <tr key={row.playerId}><td>{index + 1}</td><td><b>{row.name}</b></td><td>{row.handicap}</td><td>{row.finished ? "F" : row.thru}</td><td>{row.gross}</td><td>{row.net}</td><td>{row.relativeToPar > 0 ? "+" : ""}{row.relativeToPar}</td></tr>)}</tbody></table></div></section>}
 

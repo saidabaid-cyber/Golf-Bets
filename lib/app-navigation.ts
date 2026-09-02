@@ -1,4 +1,4 @@
-export type AppTab = "welcome" | "setup" | "round" | "standings" | "personals" | "results" | "history" | "courses" | "rules" | "pollaLive";
+export type AppTab = "welcome" | "setup" | "round" | "standings" | "personals" | "results" | "history" | "courses" | "rules" | "pollaLive" | "account" | "groups";
 
 export const BOTTOM_NAV_TARGETS = {
   Inicio: "welcome",
@@ -11,4 +11,8 @@ export const BOTTOM_NAV_TARGETS = {
 
 export function contrastToggleLabel(active: boolean) {
   return `${active ? "✓" : "☀"} Alto contraste`;
+}
+
+export function rulesContextForRound(hasActiveRound: boolean, courseName: string) {
+  return hasActiveRound ? courseName : "";
 }

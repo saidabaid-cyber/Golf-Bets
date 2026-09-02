@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildHoleSummary, hasRoundProgress, historicalGolfStats, mergeCoursesPreservingEdits, migrateDraftPressures, privateLeaderboard, pushUndoState, roundSnapshotToCsv, upsertFrequentPlayers } from "../lib/round-utils";
+import { buildHoleSummary, hasRoundProgress, historicalGolfStats, mergeCoursesPreservingEdits, migrateDraftPressures, privateLeaderboard, pushUndoState, readStoredJson, roundSnapshotToCsv, upsertFrequentPlayers } from "../lib/round-utils";
 import type { Course, RoundSnapshot } from "../lib/types";
 
 const original: Course = {
@@ -81,4 +81,16 @@ test("historical stats never invent golf averages without complete score snapsho
   assert.equal(stats.averageGross, undefined);
   assert.equal(stats.averageNet, undefined);
   assert.equal(stats.categoryTotals.Conejos, 100);
+});
+
+test("un valor corrupto de localStorage no impide restaurar las demás claves", () => {
+  const values = new Map<string, string>([
+    ["corrupt", "{bad-json"],
+    ["valid", JSON.stringify([{ id: "round-1" }])],
+  ]);
+  const storage = { getItem: (key: string) => values.get(key) ?? null };
+
+  assert.deepEqual(readStoredJson(storage as Pick<Storage, "getItem">, "corrupt", []), []);
+  assert.deepEqual(readStoredJson(storage as Pick<Storage, "getItem">, "valid", []), [{ id: "round-1" }]);
+  assert.deepEqual(readStoredJson(storage as Pick<Storage, "getItem">, "missing", ["fallback"]), ["fallback"]);
 });
