@@ -118,9 +118,9 @@ test("Histórico no mezcla balances de dos jugadores principales contra el mismo
   assert.equal(stats.find(item=>item.records[0].ownerName==="Said")?.total,800);
   assert.equal(stats.find(item=>item.records[0].ownerName==="Carlos")?.total,-100);
 });
-test("Editar activa y navegar no borra scores; Par se confirma por gesto explícito",()=>{
+test("Editar activa y navegar no borra scores; Guardar confirma la captura",()=>{
   const app=fs.readFileSync("app/page.tsx","utf8"),nav=fs.readFileSync("app/components/use-screen-navigation.ts","utf8");
   assert.match(app,/function editActiveRound\(\) \{ setEditingRound\(true\); setTab\("setup"\); \}/);
   assert.doesNotMatch(app,/if \(tab !== "round"[\s\S]{0,100}ensureHoleScoresAtPar/);
-  assert.match(app,/onClick=\{confirmSuggestedScores\}/);assert.match(nav,/window.history.back\(\)/);assert.match(nav,/previous.scroll/);
+  assert.match(app,/commitHoleCapture\(scores, scoreEdits, hole, players\)/);assert.doesNotMatch(app,/Confirmar Par/);assert.match(nav,/window.history.back\(\)/);assert.match(nav,/previous.scroll/);
 });

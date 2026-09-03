@@ -96,14 +96,14 @@ test("el micrófono detecta SpeechRecognition y WebKit", () => {
 
 test("el micrófono sin soporte muestra fallback y conserva búsqueda escrita", () => {
   assert.equal(speechRecognitionConstructor({}), null);
-  assert.match(panel, /Dictado no disponible en este dispositivo/);
+  assert.match(panel, /DICTATION_FALLBACK/);
   assert.match(panel, /onChange=\{\(event\) => setQuery\(event\.target\.value\)\}/);
 });
 
 test("La Vista y La Vista Temporal muestran Reglas Locales", () => {
   assert.equal(isLaVistaCourse("La Vista"), true);
   assert.equal(isLaVistaCourse("La Vista Temporal"), true);
-  assert.match(panel, /localRulesApply && <section className="card" id="reglas-locales"/);
+  assert.match(panel, /localRulesApply && <RulesDisclosure id="reglas-locales"/);
 });
 
 test("otros campos no reciben Reglas Locales de La Vista", () => {

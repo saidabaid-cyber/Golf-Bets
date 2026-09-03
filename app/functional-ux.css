@@ -6,3 +6,48 @@
 .localRulesList,.gentlemenGrid{display:grid!important;grid-template-columns:minmax(0,1fr)!important;gap:6px!important}.localRulesList article,.gentlemenGrid article{padding:10px 12px!important;border:1px solid var(--line);border-radius:10px!important}.localRulesList h3,.gentlemenGrid h3{font-size:14px!important;margin:2px 0 5px!important}.localRulesList p,.gentlemenGrid li{font-size:13px!important;line-height:1.5!important;margin:3px 0!important}.gentlemenGrid ul{margin:0;padding-left:18px}
 .pdfInternalViewer{position:fixed;inset:0;z-index:1200;background:var(--bg,#f7f6f2);display:flex;flex-direction:column;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}.pdfInternalHeader{padding:10px 12px;border-bottom:1px solid var(--line);background:var(--bg,#f7f6f2)}.pdfInternalHeader h2{font-size:14px;margin:8px 0}.pdfToolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.pdfToolbar button{min-height:44px;min-width:44px}.pdfToolbar input{width:66px;min-height:44px;font-size:16px}.pdfPages{flex:1;overflow:auto;overscroll-behavior:contain;padding:10px;min-height:0}.pdfCanvasWrap{width:max-content;min-width:100%;display:grid;justify-items:center}.pdfCanvasWrap canvas{background:white;box-shadow:0 2px 10px #0002}.pdfStatus{padding:14px}.pdfPageText{max-width:70ch;margin:auto;white-space:pre-wrap;font-size:14px}.pdfInternalViewer a{margin:10px;display:inline-block}.rulesSearchResults .ruleResult{content-visibility:auto;contain-intrinsic-size:auto 230px}
 @media(max-width:700px){.scoreConfirmation{align-items:stretch;flex-direction:column}.foursomeTeam b{font-size:17px}.compactResults .resultHero{gap:8px}.compactResults .playerSummary .row{flex-wrap:wrap}.pdfToolbar{gap:5px}.pdfInternalHeader{padding:8px}.pdfPages{padding:6px}.personalCompactCard strong{font-size:15px}}
+
+/* Capture controls: par is an editable suggestion until the hole is saved. */
+.scoreCaptureHint{font-size:13px;line-height:1.45;color:var(--muted);margin:10px 0}
+.scoreControls{display:grid;grid-template-columns:minmax(124px,154px) 40px;gap:5px;align-items:center}
+.scoreControls .stepper{width:100%;height:44px;grid-template-columns:40px minmax(40px,1fr) 40px}
+.scoreControls .stepper input{font-size:20px;padding:0;text-align:center;min-width:0}
+.parReset{min-height:44px;padding:2px;border:0;border-radius:8px;background:var(--soft);color:var(--green);font-size:10px;font-weight:850}
+.scoreCard .scoreRow{grid-template-columns:minmax(0,1fr) auto;gap:8px}
+.scoreCard .scoreRow>div:first-child{min-width:0;overflow-wrap:anywhere}
+.foursomeLiveMatch{padding:9px 11px;margin:6px 0;border-radius:11px}
+.foursomeTeam{padding:2px 0;gap:8px}.foursomeTeam b{font-size:15px;line-height:1.25}.foursomeTeam strong{font-size:22px;line-height:1.25}
+.foursomeCurrent,.foursomeAccumulated{display:block;border:0;padding:0;margin:4px 0;font-size:13px;line-height:1.4}
+.foursomeLiveDetails summary{cursor:pointer;min-height:32px;align-content:center;font-size:12px;font-weight:750}
+.foursomeLiveDetails p{font-size:12px;line-height:1.4;margin:5px 0;color:var(--muted)}
+.personalLiveCompact{padding:10px!important}.personalLiveCompact h2{font-size:16px;margin:0 0 6px}
+.personalLiveCompact .personalCompactCard{padding:9px 11px;gap:3px;margin-top:6px;grid-template-columns:minmax(0,1fr) auto}
+.personalLiveCompact .personalCompactCard>b{font-size:15px;grid-column:1/-1}
+.personalLiveCompact .personalCompactCard>div{grid-column:1/-1}
+.personalLiveCompact .personalCompactCard span{font-size:13px;line-height:1.4}
+.personalLiveCompact .personalCompactCard strong{font-size:13px}
+.personalLiveCompact .personalCompactCard small{align-self:center}
+.holeSummaryBackdrop .holeSummary{width:min(100%,480px);max-height:min(42svh,360px);padding:16px 54px 16px 16px;overflow-y:auto}
+.holeSummary h2{margin:0 0 10px;font-size:16px;line-height:1.35;text-transform:uppercase;color:#fff}
+.holeSummary .holeSummaryScores{display:flex;flex-wrap:wrap;gap:5px 0;margin:0 0 8px;line-height:1.5}
+.holeSummary .holeSummaryScores span{font-size:15px;color:#fff;white-space:nowrap}
+.holeSummaryScores span:not(:last-child)::after{content:" · ";white-space:pre;padding:0 3px}
+.holeSummaryBets{display:grid;gap:6px}.holeSummaryBets p{white-space:pre-line;margin:0;border-top:1px solid #ffffff30;padding-top:6px;font-size:13px;line-height:1.5;color:#edf5ef}
+.rulesDisclosure{border:1px solid var(--line);border-radius:14px;background:var(--card);margin:9px 0;overflow:hidden}
+.rulesDisclosure>h2{margin:0}.rulesDisclosureToggle{display:flex;justify-content:space-between;align-items:center;gap:12px;text-align:left;width:100%;min-height:58px;padding:14px;border:0;background:transparent;color:var(--ink);font-size:16px;font-weight:800}
+.rulesDisclosureToggle>span{font-size:12px;color:var(--green)}.rulesDisclosureBody{padding:0 10px 10px}.rulesDisclosureBody>.card{box-shadow:none;border:0;margin:0;padding:10px 2px}.rulesDisclosureBody .rulesSearchHero{margin-top:0}
+.scorecardZoom{display:flex;gap:6px;margin:0 0 10px}.scorecardZoom button{min-height:40px;font-size:12px}.scorecardZoom button[aria-pressed=true]{background:var(--green);color:#fff}
+.fullScorecard .scorecardTable{max-width:100%;overflow-x:auto;touch-action:pan-x pan-y pinch-zoom}
+.fullScorecard .scorecardTable table{font-size:calc(12px * var(--scorecard-scale,1));min-width:0;width:max-content}
+.fullScorecard .scorecardTable th,.fullScorecard .scorecardTable td{padding:calc(8px * var(--scorecard-scale,1));min-width:calc(48px * var(--scorecard-scale,1))}
+.fullScorecard .scorecardTable th:first-child,.fullScorecard .scorecardTable td:first-child{min-width:calc(130px * var(--scorecard-scale,1));max-width:180px;white-space:normal}
+.fullScorecard .scorecardTable small{font-size:calc(9px * var(--scorecard-scale,1))}
+.pdfCanvasWrap[hidden]{display:none}.pdfOfficialFallback{flex-shrink:0;font-size:13px;min-height:32px;align-content:center;text-decoration:underline;text-underline-offset:3px}
+@media(orientation:landscape) and (max-height:600px){
+  .fullScorecard{margin-left:-4px;margin-right:-4px;padding:10px 6px}
+  .fullScorecard .sectionTitle{margin-bottom:7px}.fullScorecard .sectionTitle h2{font-size:17px}.fullScorecard .sectionTitle p{font-size:11px}
+  .fullScorecard .scorecardTable th,.fullScorecard .scorecardTable td{padding:calc(5px * var(--scorecard-scale,1));min-width:calc(40px * var(--scorecard-scale,1))}
+  .fullScorecard .scorecardTable th:first-child,.fullScorecard .scorecardTable td:first-child{min-width:calc(110px * var(--scorecard-scale,1));max-width:140px}
+  .pdfInternalHeader{display:flex;flex-wrap:wrap;align-items:center;gap:6px}.pdfInternalHeader h2{margin:0;flex:1}.pdfToolbar{width:100%}
+  .holeSummaryBackdrop .holeSummary{max-height:55svh}
+}
