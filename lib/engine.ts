@@ -256,8 +256,41 @@ export function calculateSkins(
   return { won, events, carry };
 }
 
+/** The event's carry includes the next hole's own skin; only the excess is pending. */
+export function pendingSkinCarry(event: { winnerId?: string; carry: number }) {
+  return event.winnerId ? 0 : Math.max(0, event.carry - 1);
+}
+
 function zeroBalances(players: Player[]) {
   return Object.fromEntries(players.map((p) => [p.id, 0])) as Record<string, number>;
+}
+
+/** Cálculos E1448/E1450/E1452, F1459:F1461, M1491:M1493. */
+export function calculateMonkey(course: Course, scores: Record<number, HoleScore>, allPlayers: Player[], cfg: BetConfig["monkey"], order: number[]) {
+  const participants = playersByIds(allPlayers, [...new Set(cfg?.participantIds ?? [])]);
+  const balances = zeroBalances(participants);
+  const points = zeroBalances(participants);
+  const details: Array<{hole:number; net:Record<string,number>; points:Record<string,number>}> = [];
+  if (!cfg?.enabled || participants.length !== 3) return {balances, points, details, valid: !cfg?.enabled || participants.length === 3};
+  const minimum = Math.min(...participants.map(p=>p.handicap ?? 0));
+  for (const holeNumber of order) {
+    const hole=course.holes.find(h=>h.number===holeNumber);
+    if (!hole || !completedHole(holeNumber,scores,participants.map(p=>p.id))) continue;
+    const net=Object.fromEntries(participants.map(p=>{
+      const hcp=(p.handicap ?? 0)-minimum;
+      // The workbook uses the unrounded rebased HCP and SI/SI+18 only, no % control.
+      return [p.id, Number(scores[holeNumber][p.id]) - Number(hcp>=hole.strokeIndex) - Number(hcp>=hole.strokeIndex+18)];
+    }));
+    const earned=Object.fromEntries(participants.map(p=>[p.id,participants.reduce((sum,rival)=>sum+(rival.id===p.id ? 0 : net[p.id]<net[rival.id] ? 2 : net[p.id]===net[rival.id] ? 1 : 0),0)]));
+    for(const p of participants) points[p.id]+=earned[p.id];
+    details.push({hole:holeNumber,net,points:earned});
+  }
+  for(let i=0;i<participants.length;i++) for(let j=i+1;j<participants.length;j++) {
+    const a=participants[i].id,b=participants[j].id;
+    const amount=(points[a]-points[b])*cfg.value;
+    balances[a]+=amount; balances[b]-=amount;
+  }
+  return {balances, points, details, valid:true};
 }
 
 export function payoutWinnerTakesFromAll(
@@ -301,6 +334,7 @@ export function calculateUnits(
   const positive = Object.fromEntries(participants.map((p) => [p.id, 0])) as Record<string, number>;
   const negative = Object.fromEntries(participants.map((p) => [p.id, 0])) as Record<string, number>;
   const manualNet = Object.fromEntries(participants.map((p) => [p.id, 0])) as Record<string, number>;
+  const copas = Object.fromEntries(participants.map((p) => [p.id, 0])) as Record<string, number>;
   const autoNet = Object.fromEntries(participants.map((p) => [p.id, 0])) as Record<string, number>;
   const autoByHole: Record<number, Record<string, number>> = {};
   const net = Object.fromEntries(participants.map((p) => [p.id, 0])) as Record<string, number>;
@@ -315,6 +349,7 @@ export function calculateUnits(
     if (e.amount >= 0) positive[e.playerId] += e.amount;
     else negative[e.playerId] += Math.abs(e.amount);
     manualNet[e.playerId] += e.amount;
+    if (e.label === "Copa" && e.amount < 0) copas[e.playerId] += Math.abs(e.amount);
   }
 
   if (course) {
@@ -348,7 +383,7 @@ export function calculateUnits(
     for (let j = i + 1; j < participants.length; j++) {
       const a = participants[i].id;
       const b = participants[j].id;
-      const delta = (net[a] - net[b]) * cfg.value;
+      const delta = (net[a] - net[b]) * cfg.value - (copas[a] - copas[b]) * ((cfg.copaValue ?? cfg.value) - cfg.value);
       balances[a] += delta;
       balances[b] -= delta;
     }

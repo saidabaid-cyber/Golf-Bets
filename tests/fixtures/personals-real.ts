@@ -10,8 +10,9 @@ export const realGross = {
   javier: [4,5,5,3,5,4,4,5,7,6,4,3,6,5,5,4,3,6],
 };
 export const realPlayers: Player[] = Object.keys(realGross).map((id) => ({ id, name: id === "juan" ? "José Juan" : id, handicap: 36 }));
-// Par is irrelevant to Personal arithmetic; exact course pars are loaded from the app's course fixture in browser QA.
-export const realCourse: Course = { id: "real-temporary", name: "Temporary | La Vista Country Club", teeName: "Regresión SI", holes: realSI.map((strokeIndex,i) => ({number:i+1, strokeIndex, par:4})) };
+// Par69 verified in the actual local course editor; Personal strokes use SI, not par.
+const realPars=[4,3,4,3,4,3,3,4,5,5,4,3,4,4,5,4,3,4];
+export const realCourse: Course = { id: "real-temporary", name: "Temporary | La Vista Country Club", teeName: "Regresión SI", holes: realSI.map((strokeIndex,i) => ({number:i+1, strokeIndex, par:realPars[i]})) };
 export const realOrder = realSI.map((_,i) => i+1);
 export const realScores: Record<number,HoleScore> = Object.fromEntries(realOrder.map((h) => [h,Object.fromEntries(Object.entries(realGross).map(([id,scores]) => [id,scores[h-1]]))]));
 export const realCases = [

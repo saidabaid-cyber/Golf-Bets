@@ -58,6 +58,8 @@ export type MedalPollaConfig = ParticipantConfig & {
 };
 
 export type BetConfig = {
+  /** Original workbook Monkey: exactly three participants, disabled for legacy rounds. */
+  monkey?: ParticipantConfig & { enabled: boolean; value: number };
   rabbits: ParticipantConfig & {
     enabled: boolean;
     value: number;
@@ -75,6 +77,8 @@ export type BetConfig = {
   units: ParticipantConfig & {
     enabled: boolean;
     value: number;
+    /** Missing keeps the legacy unit value. Excel Copas may have a different stake. */
+    copaValue?: number;
   };
   foursome: ParticipantConfig & {
     enabled: boolean;
