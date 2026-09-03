@@ -69,8 +69,8 @@ for (const start of [1, 10] as const) for (const count of [9, 18]) test(`captura
   assert.equal(Object.keys(official).length, count);
 });
 
-test("nuevas rondas usan Excel y no ofrecen selector legacy; snapshots mantienen método", () => {
-  assert.match(app, /handicapMethod: "excel"/);
+test("nuevas rondas usan controles acordados sin selector interno; snapshots mantienen método", () => {
+  assert.match(readFileSync("lib/new-round-bets.ts", "utf8"), /handicapMethod: "configured"/);
   assert.doesNotMatch(app, /HCP de Foursome|Excel original · rebasing|Porcentaje \/ redondeo acordado/);
   assert.match(app, /handicapMethod: draft.bets.foursome\?\.handicapMethod \|\| "configured"/);
   const scores = { 1: { said:4, cuau:4, armando:4, jesus:4 } };

@@ -1,5 +1,8 @@
 "use client";
 import "./functional-ux.css";
+import { initialBets } from "../lib/new-round-bets";
+import { freezeRoundHandicapBases } from "../lib/handicap-base";
+import { HandicapBaseControl } from "./components/handicap-base-control";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -200,28 +203,6 @@ function mexicoDateLabel(date: string) {
 
 function mergeDefaultCourses(saved: Course[] | null | undefined) {
   return mergeCoursesPreservingEdits(defaultCourses, saved).map(withDefaultLaVistaRules);
-}
-
-function initialBets(ids: string[]): BetConfig {
-  return {
-    monkey: { enabled: false, value: 20, participantIds: ids.slice(0,3) },
-    rabbits: { enabled: true, value: 100, hcpPct: 100, decimals: "decimal", accumulate: true, participantIds: ids },
-    skins: { enabled: true, value: 50, hcpPct: 100, decimals: "decimal", accumulate: true, participantIds: ids },
-    units: { enabled: true, value: 100, participantIds: ids },
-    foursome: {
-      handicapMethod: "excel",
-      enabled: true, hcpPct: 100, decimals: "round", segmentSize: 6,
-      mode: "fixed", fixedValue: 200, pointValue: 100, pressSecond9: false,
-      pressureMultiplier: 1, pressureNine: "holes_10_18", participantIds: ids,
-    },
-    ballFriend: { enabled: false, value: 20, hcpPct: 100, decimals: "round", maxScore: 9, participantIds: ids },
-    polla: {
-      first9: { enabled: false, value: 100, hcpPct: 100, decimals: "round", participantIds: ids },
-      second9: { enabled: false, value: 100, hcpPct: 100, decimals: "round", participantIds: ids },
-      total18: { enabled: false, value: 100, hcpPct: 100, decimals: "round", participantIds: ids },
-    },
-    miniPolla: { enabled: false, value: 100, hcpPct: 100, decimals: "round", participantIds: ids },
-  };
 }
 
 function normalizePolla(raw: any, ids: string[]): BetConfig["polla"] {
@@ -438,7 +419,7 @@ function GolfBetsApp() {
             ...draft.bets,
             rabbits: { ...defaults.rabbits, ...(draft.bets.rabbits || {}), decimals: normalizeHandicapMode(draft.bets.rabbits?.decimals) },
             skins: { ...defaults.skins, ...(draft.bets.skins || {}), decimals: normalizeHandicapMode(draft.bets.skins?.decimals) },
-            foursome: { ...defaults.foursome, ...(draft.bets.foursome || {}), handicapMethod: draft.bets.foursome?.handicapMethod || "configured" },
+            foursome: { ...defaults.foursome, ...(draft.bets.foursome || {}), handicapMethod: draft.bets.foursome?.handicapMethod || "configured", baseMode: draft.bets.foursome?.baseMode },
             polla: normalizePolla(draft.bets.polla, draftPlayerIds),
             miniPolla: { ...defaults.miniPolla, ...(draft.bets.miniPolla || {}) },
           });
@@ -1321,7 +1302,7 @@ function GolfBetsApp() {
     if (!bets.monkey?.enabled) return null;
     const current = monkey.details.find(item=>item.hole===holeNumber);
     return <section className="card"><h2>Monkey · {money(bets.monkey.value)} por punto</h2>
-      <p>3 jugadores · 2 puntos por rival ganado, 1 por empate. HCP rebajado, sin porcentaje, según Excel.</p>
+      <p>3 jugadores · 2 puntos por rival ganado, 1 por empate. HCP rebajado, sin porcentaje.</p>
       {!monkey.valid ? <div className="empty">Selecciona exactamente tres jugadores en configuración.</div> : playersByIds(players,bets.monkey.participantIds).map(player=><div className="transfer" key={player.id}><span><b>{player.name}</b><small> H{holeNumber}: {current?.points[player.id] ?? "—"} · Total {monkey.points[player.id]} pts</small></span><strong>{signedMoney(monkey.balances[player.id])}</strong></div>)}
     </section>;
   }
@@ -1350,13 +1331,16 @@ function GolfBetsApp() {
     const committed = commitHoleCapture(scores, scoreEdits, hole, players);
     if (!committed) { setFeedback("Completa los scores vacíos antes de guardar el hoyo."); return; }
     checkpoint();
+    // Also covers entering Tarjeta directly without pressing Iniciar ronda.
+    const savedBets = freezeRoundHandicapBases(bets, players);
+    setBets(savedBets);
     setScores(committed.scores); setScoreEdits(committed.edits);
     const savedScores = committed.scores;
     const savedRabbits = calculateRabbits(course, savedScores, players, bets.rabbits, order);
     const savedSkins = calculateSkins(course, savedScores, players, bets.skins, order);
-    const savedFoursomes = calculateFoursomes(course, savedScores, players, bets.foursome, segments, order);
+    const savedFoursomes = calculateFoursomes(course, savedScores, players, savedBets.foursome, segments, order);
     const savedUnits = calculateUnits(players, unitEvents, bets.units, course, savedScores, order);
-    const savedBallFriend = calculateBallFriend(course, savedScores, players, bets.ballFriend, ballFriendSetup, order);
+    const savedBallFriend = calculateBallFriend(course, savedScores, players, savedBets.ballFriend, ballFriendSetup, order);
     const savedPolla = calculatePolla(course, savedScores, players, bets.polla, order);
     const savedMiniPolla = calculateMiniPolla(course, savedScores, players, bets.miniPolla, order);
     if (holeSummaryTimer.current !== null) window.clearTimeout(holeSummaryTimer.current);
@@ -1504,13 +1488,14 @@ function GolfBetsApp() {
         <div className="betCard">
           <div className="betHead"><div><b>🤝 Foursome</b><span>Fijo · fijo + patada · solo puntos</span></div><Toggle on={bets.foursome.enabled} onClick={() => setBets({ ...bets, foursome: { ...bets.foursome, enabled: !bets.foursome.enabled } })} /></div>
           {bets.foursome.enabled && <>
+            <HandicapBaseControl name="Foursome" config={bets.foursome} fallback="moving" onChange={baseMode => setBets({ ...bets, foursome: { ...bets.foursome, handicapMethod: "configured", baseMode, fixedBaseHandicap: undefined } })} />
             <div className="grid3">
               <div><label>Modalidad</label><select value={bets.foursome.mode} onChange={(e) => setBets({ ...bets, foursome: { ...bets.foursome, mode: e.target.value as BetConfig["foursome"]["mode"] } })}><option value="fixed">Fijo</option><option value="fixed_points">Fijo + Patada</option><option value="points">Solo puntos</option></select></div>
               <div><label>Cambia parejas</label><select value={bets.foursome.segmentSize} onChange={(e) => setBets({ ...bets, foursome: { ...bets.foursome, segmentSize: Number(e.target.value) as 3 | 6 | 9 | 18 } })}><option value={3}>Cada 3</option><option value={6}>Cada 6</option><option value={9}>Cada 9</option><option value={18}>18 hoyos</option></select></div>
-              {bets.foursome.handicapMethod !== "excel" && <HcpPercentInput value={bets.foursome.hcpPct} onChange={(v) => setBets({ ...bets, foursome: { ...bets.foursome, hcpPct: v } })} />}
+              <HcpPercentInput value={bets.foursome.hcpPct} onChange={(v) => setBets({ ...bets, foursome: { ...bets.foursome, handicapMethod: "configured", hcpPct: v } })} />
               {(bets.foursome.mode === "fixed" || bets.foursome.mode === "fixed_points") && <MoneyInput label="Foursome fijo" value={bets.foursome.fixedValue} onChange={(v) => setBets({ ...bets, foursome: { ...bets.foursome, fixedValue: v } })} />}
               {(bets.foursome.mode === "points" || bets.foursome.mode === "fixed_points") && <MoneyInput label="Valor punto / patada" value={bets.foursome.pointValue} onChange={(v) => setBets({ ...bets, foursome: { ...bets.foursome, pointValue: v } })} />}
-              {bets.foursome.handicapMethod !== "excel" && <div><label>Decimales</label><select value={bets.foursome.decimals} onChange={(e) => setBets({ ...bets, foursome: { ...bets.foursome, decimals: e.target.value as "partial" | "round" } })}><option value="round">Redondear</option><option value="partial">Cuentan</option></select></div>}
+              <div><label>Decimales</label><select aria-label="Decimales Foursome" value={bets.foursome.decimals} onChange={(e) => setBets({ ...bets, foursome: { ...bets.foursome, handicapMethod: "configured", decimals: e.target.value as "partial" | "round" } })}><option value="round">Redondear</option><option value="partial">Cuentan</option></select></div>
             </div>
             {roundHoles === 18 && <div className="pressureOption pressureGrid">
               <div><b>Presión Foursome</b><span>Se identifica siempre por hoyos físicos, aunque la salida sea H10.</span></div>
@@ -1528,11 +1513,12 @@ function GolfBetsApp() {
 
         <div className="betCard">
           <div className="betHead"><div><b>⚪ Bola Amiga</b><span>Parejas por hoyo · birdie o mejor voltea rival · máximo 9</span></div><Toggle on={bets.ballFriend.enabled} onClick={() => setBets({ ...bets, ballFriend: { ...bets.ballFriend, enabled: !bets.ballFriend.enabled } })} /></div>
+          {bets.ballFriend.enabled && <HandicapBaseControl name="Bola Amiga" config={bets.ballFriend} fallback="fixed" onChange={baseMode => setBets({ ...bets, ballFriend: { ...bets.ballFriend, baseMode, fixedBaseHandicap: undefined } })} />}
           {bets.ballFriend.enabled && <><div className="grid3"><MoneyInput label="Valor punto" value={bets.ballFriend.value} onChange={(v) => setBets({ ...bets, ballFriend: { ...bets.ballFriend, value: v } })} /><HcpPercentInput value={bets.ballFriend.hcpPct} onChange={(v) => setBets({ ...bets, ballFriend: { ...bets.ballFriend, hcpPct: v } })} /><NumberField label="Score máximo" value={bets.ballFriend.maxScore} onChange={(v) => setBets({ ...bets, ballFriend: { ...bets.ballFriend, maxScore: v } })} /></div><label className="miniLabel">Participan</label><ParticipantChips players={players} selected={bets.ballFriend.participantIds} onChange={(ids) => setBets({ ...bets, ballFriend: { ...bets.ballFriend, participantIds: ids } })} /></>}
         </div>
 
         <div className="betCard">
-          <div className="betHead"><div><b>Monkey</b><span>Modalidad del Excel · exactamente tres jugadores</span></div><Toggle on={Boolean(bets.monkey?.enabled)} onClick={()=>setBets({...bets,monkey:{value:20,participantIds:players.slice(0,3).map(p=>p.id),...bets.monkey,enabled:!bets.monkey?.enabled}})} /></div>
+          <div className="betHead"><div><b>Monkey</b><span>Exactamente tres jugadores</span></div><Toggle on={Boolean(bets.monkey?.enabled)} onClick={()=>setBets({...bets,monkey:{value:20,participantIds:players.slice(0,3).map(p=>p.id),...bets.monkey,enabled:!bets.monkey?.enabled}})} /></div>
           {bets.monkey?.enabled && <><MoneyInput label="Valor punto Monkey" value={bets.monkey.value} onChange={value=>setBets({...bets,monkey:{...bets.monkey!,value}})} /><ParticipantChips players={players} selected={bets.monkey.participantIds} onChange={participantIds=>setBets({...bets,monkey:{...bets.monkey!,participantIds}})} /><p>{monkey.valid ? "HCP rebajado entre estos tres. Sin porcentaje ni redondeo añadido." : "Selecciona exactamente tres jugadores; no se calcula con otra cantidad."}</p></>}
         </div>
 
@@ -1580,7 +1566,7 @@ function GolfBetsApp() {
         <button className="secondary" onClick={() => setTab("personals")}>Configurar Personales →</button>
       </section>
 
-      <button className="primary big" disabled={!players.length || players.some((player) => !player.name.trim())} onClick={() => { if (!editingRound) setCurrentIndex(0); setEditingRound(false); setTab("round"); }}>{editingRound ? "Guardar configuración y continuar →" : "Iniciar ronda →"}</button>
+      <button className="primary big" disabled={!players.length || players.some((player) => !player.name.trim())} onClick={() => { setBets(current => freezeRoundHandicapBases(current, players)); if (!editingRound) setCurrentIndex(0); setEditingRound(false); setTab("round"); }}>{editingRound ? "Guardar configuración y continuar →" : "Iniciar ronda →"}</button>
     </>}
 
     {tab === "personals" && <>

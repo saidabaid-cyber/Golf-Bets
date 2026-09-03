@@ -109,3 +109,29 @@ Los números ya existentes en borradores antiguos se conservan: el formato anter
 Snapshot2 agrega ownerId, parejas/segmentos, balances por jugador/categoría, detalle de motores y brutos Personales, junto con los datos completos previos. La corrección reutiliza ID, conserva foto y fecha original de terminación y actualiza updatedAt. Registros antiguos sin parejas Foursome quedan consultables de solo lectura: no se inventan parejas. Eliminar un Personal también retira su configuración y balances derivados para que corregir la ronda no lo resucite.
 
 Evidencia de esta continuación y límites de prueba física: `docs/QA_UX_FOURSOME.md`.
+
+## Instrucción posterior: bases HCP y rondas nuevas (3 septiembre 2026)
+
+El pedido posterior sustituye explícitamente el default anterior: nuevas rondas usan
+`handicapMethod: configured`, %HCP y redondeo, sin selector de motor. Todas las
+apuestas comienzan desactivadas. Esto es una regla de producto solicitada, no una
+nueva afirmación de equivalencia con el Excel. El modo `excel` de snapshots viejos
+sigue disponible internamente y no cambia al abrirlos. Cambiar expresamente un
+control HCP (base, porcentaje o redondeo) opta por el cálculo configurable de esa
+ronda; una corrección histórica requiere el flujo de confirmación existente.
+
+Foursome/Bola Amiga agregan `baseMode` y `fixedBaseHandicap` opcionales. La movible
+excluye descanso/jugadores fuera del match; la fija guarda el mínimo de los
+participantes al confirmar configuración (o primer Guardar si se entra directo
+a Tarjeta) y no lo modifica al cambiar parejas/participantes. Sin `baseMode`,
+Foursome conserva rebasing por match y Bola Amiga conserva su referencia global
+anterior: no se migran resultados guardados silenciosamente.
+
+Ejemplo solicitado: Daniel 0 descansa → Said 8, Tamayo 9, Juan 13, Flavio 14 →
+ventajas 0/1/5/6 en base movible. En SI6 y al100%, solo Flavio recibe golpe.
+Fija congelada con Daniel0 mantiene 8/9/13/14. Cubierto por pruebas de los motores,
+no solamente del helper. LB/HB, pagos, presión, carry, Monkey y Copas no cambiaron.
+
+La captura actual conserva el trabajo posterior documentado en
+`QA_SAVED_HOLE_IPHONE.md`: Par sugerido y PAR individual; solo **Guardar** confirma
+los scores y actualiza apuestas. Ya no existe Confirmar Par global.

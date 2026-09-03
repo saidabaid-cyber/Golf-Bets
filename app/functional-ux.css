@@ -51,3 +51,15 @@
   .pdfInternalHeader{display:flex;flex-wrap:wrap;align-items:center;gap:6px}.pdfInternalHeader h2{margin:0;flex:1}.pdfToolbar{width:100%}
   .holeSummaryBackdrop .holeSummary{max-height:55svh}
 }
+.handicapBaseControl { margin: 12px 0; min-width: 0; }
+.handicapBaseRow { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; }
+.handicapBaseChoices { display: flex; flex: 1; border: 1px solid var(--line, #cdd8d2); border-radius: 12px; overflow: hidden; }
+.handicapBaseChoices button { flex: 1; min-height: 44px; padding: 8px; border: 0; border-radius: 0; background: transparent; color: inherit; font: inherit; font-size: 14px; }
+.handicapBaseChoices button[aria-pressed="true"] { background: var(--green, #163d2b); color: white; font-weight: 700; }
+.handicapBaseHelp { flex: 0 0 44px; }
+.handicapBaseHelp summary { display: grid; place-items: center; min-width: 44px; min-height: 44px; border: 1px solid var(--line, #cdd8d2); border-radius: 12px; cursor: pointer; font-weight: 700; list-style: none; }
+.handicapBaseHelp summary::-webkit-details-marker { display: none; }
+.handicapBaseHelp[open] { flex-basis: 100%; font-size: 14px; }
+.handicapBaseHelp[open] summary { width: 44px; margin-left: auto; }
+.handicapBaseHelp p { margin: 5px 0 10px; }
+.handicapBaseControl small { display: block; margin-top: 6px; }

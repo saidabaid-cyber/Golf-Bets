@@ -14,6 +14,7 @@ import {
   UnitEvent,
 } from "./types";
 import { migratePersonalNassau } from "./personal-nassau";
+import { handicapBases } from "./handicap-base";
 
 const EPS = 1e-9;
 
@@ -444,8 +445,8 @@ export type FoursomeMatchResult = {
 
 /** Cálculos AB194/AB211 and AC195:AC196. Percentage/whole rounding controls
  * in Comienzo are not referenced by this Excel scoring path. */
-export function excelFoursomeNet(gross: number, id: string, si: number, matchPlayers: Player[]) {
-  const base = baseHandicaps(matchPlayers)[id] ?? 0;
+export function excelFoursomeNet(gross: number, id: string, si: number, matchPlayers: Player[], bases = baseHandicaps(matchPlayers)) {
+  const base = bases[id] ?? 0;
   const hcp = Math.round((base + EPS) * 10) / 10;
   return gross - (hcp >= si ? 1 : 0) - (hcp >= si + 18 ? 1 : 0);
 }
@@ -523,6 +524,7 @@ export function calculateFoursomes(
         if (source) matchPlayers.push({ ...source, id: FOURSOME_GHOST_ID, name: "Fantasma" });
       }
       const holePoints: FoursomeMatchResult["holePoints"] = [];
+      const bases = handicapBases(cfg, matchPlayers, participants);
       let complete = true;
       let pointDiff = 0;
 
@@ -535,8 +537,8 @@ export function calculateFoursomes(
         if (!hd) { complete = false; continue; }
         const row = scores[hole];
         const adjusted = (gross: number, id: string) => cfg.handicapMethod === "excel"
-          ? excelFoursomeNet(gross, id, hd.strokeIndex, matchPlayers)
-          : netScore(gross, id, hd.strokeIndex, matchPlayers, cfg.hcpPct, cfg.decimals);
+          ? excelFoursomeNet(gross, id, hd.strokeIndex, matchPlayers, bases)
+          : gross - strokeAllowanceForHole(playingHandicap(bases[id] ?? 0, cfg.hcpPct, cfg.decimals), hd.strokeIndex, cfg.decimals);
         const aScores = (segment.basePair as [string, string]).map((id) =>
           adjusted(row[id] as number, id),
         );
@@ -649,11 +651,13 @@ export function calculateBallFriend(
     if (!hd) continue;
     const row = scores[hole];
 
+    const activePlayers = playersByIds(participants, activeIds);
+    const bases = handicapBases(cfg, activePlayers, participants, participants);
     const adjusted = Object.fromEntries(
-      participants.map((p) => {
+      activePlayers.map((p) => {
         const gross = row[p.id];
         if (typeof gross !== "number") return [p.id, null];
-        const net = netScore(gross, p.id, hd.strokeIndex, participants, cfg.hcpPct, cfg.decimals);
+        const net = gross - strokeAllowanceForHole(playingHandicap(bases[p.id] ?? 0, cfg.hcpPct, cfg.decimals), hd.strokeIndex, cfg.decimals);
         return [p.id, Math.min(cfg.maxScore, net)];
       }),
     ) as Record<string, number | null>;

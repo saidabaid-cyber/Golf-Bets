@@ -57,6 +57,13 @@ export type MedalPollaConfig = ParticipantConfig & {
   decimals: DecimalMode;
 };
 
+export type HandicapBaseConfig = {
+  /** Missing preserves the calculation of previously saved rounds. */
+  baseMode?: "fixed" | "moving";
+  /** HCP reference frozen when fixed-base configuration is first confirmed. */
+  fixedBaseHandicap?: number;
+};
+
 export type BetConfig = {
   /** Original workbook Monkey: exactly three participants, disabled for legacy rounds. */
   monkey?: ParticipantConfig & { enabled: boolean; value: number };
@@ -80,7 +87,7 @@ export type BetConfig = {
     /** Missing keeps the legacy unit value. Excel Copas may have a different stake. */
     copaValue?: number;
   };
-  foursome: ParticipantConfig & {
+  foursome: ParticipantConfig & HandicapBaseConfig & {
     enabled: boolean;
     /** Missing preserves saved pre-Excel calculations. Excel uses raw rebased HCP,
      * rounded to one decimal, with SI/SI+18 thresholds (not fractional strokes). */
@@ -96,7 +103,7 @@ export type BetConfig = {
     pressureMultiplier?: PressureMultiplier;
     pressureNine?: PhysicalNine;
   };
-  ballFriend: ParticipantConfig & {
+  ballFriend: ParticipantConfig & HandicapBaseConfig & {
     enabled: boolean;
     value: number;
     hcpPct: number;
