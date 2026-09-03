@@ -16,6 +16,7 @@ async function officialPdfResponse(document: NonNullable<ReturnType<typeof offic
     const upstream = await fetch(document.officialUrl, {
       cache: "force-cache",
       redirect: "follow",
+      signal: AbortSignal.timeout(20000),
       headers: {
         Accept: "application/pdf",
         "User-Agent": "Mozilla/5.0",
@@ -36,7 +37,7 @@ async function officialPdfResponse(document: NonNullable<ReturnType<typeof offic
     if (contentLength) headers.set("Content-Length", contentLength);
     return new Response(upstream.body, { status: 200, headers });
   } catch {
-    return new Response("No fue posible cargar el PDF dentro de la app. Usa “Abrir en navegador” para consultar la fuente oficial.", {
+    return new Response("La fuente oficial no respondió. Puedes reintentar desde el visor de The Backyard.", {
       status: 502,
       headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
     });

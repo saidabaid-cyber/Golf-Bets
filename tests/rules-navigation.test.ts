@@ -36,7 +36,7 @@ test("una subregla se localiza y abre en una vista dedicada", () => {
   assert.equal(location?.chapter.number, "7");
   assert.equal(location?.section?.number, "7.3");
   assert.match(panel, /setDetail\(\{ chapter: entry, section: child \}\)/);
-  assert.match(panel, /Volver a Regla/);
+  assert.match(panel, /Regresar a Regla/);
 });
 
 test("la búsqueda por palabra encuentra la regla correcta", () => {
@@ -78,7 +78,7 @@ test("Procedimientos del Comité está separado de las Reglas", () => {
 });
 
 test("un resultado de búsqueda abre su regla o fuente correcta", () => {
-  assert.match(panel, /openRuleReference\(entry\.rule, entry\.sourceId\)/);
+  assert.match(panel, /openRuleReference\(entry\.rule, entry\.sourceId, entry\.page\)/);
   assert.match(panel, /findNavigableRule\(reference\)/);
   assert.match(panel, /setSelectedDocument\(document\)/);
 });
@@ -120,8 +120,8 @@ test("Código de Caballeros permanece separado y no oficial", () => {
 test("los tres PDFs conservan apertura accesible y regreso seguro", () => {
   assert.equal((panel.match(/Abrir documento/g) || []).length >= 1, true);
   assert.match(panel, /OFFICIAL_RULES_DOCUMENTS\.map/);
-  assert.match(panel, /← Volver a Reglas/);
-  assert.match(panel, /Abrir en navegador/);
+  assert.match(readFileSync("app/components/internal-pdf-viewer.tsx", "utf8"), /← Regresar a Reglas/);
+  assert.match(readFileSync("app/components/internal-pdf-viewer.tsx", "utf8"), /<canvas ref=\{canvas\}/);
 });
 
 test("la búsqueda manual cubre tres fuentes sin llamar OpenAI automáticamente", () => {

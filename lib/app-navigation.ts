@@ -1,4 +1,4 @@
-export type AppTab = "welcome" | "setup" | "round" | "standings" | "personals" | "results" | "history" | "courses" | "rules" | "pollaLive" | "account" | "groups";
+export type AppTab = "welcome" | "setup" | "round" | "standings" | "personals" | "personalDetail" | "historyDetail" | "results" | "history" | "courses" | "rules" | "pollaLive" | "account" | "groups";
 
 export const BOTTOM_NAV_TARGETS = {
   Inicio: "welcome",

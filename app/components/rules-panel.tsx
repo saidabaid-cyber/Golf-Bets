@@ -12,7 +12,9 @@ import {
 import { OFFICIAL_RULES_DOCUMENTS, type OfficialRulesDocument } from "../../lib/rules-documents";
 import { findNavigableRule, NAVIGABLE_GOLF_RULES, searchNavigableRules, type NavigableGolfRule, type NavigableRuleSection } from "../../lib/rules-navigation";
 import type { RulesDocumentType, RulesSearchResult } from "../../lib/rules-search";
-import { speechRecognitionConstructor, speechRecognitionErrorMessage, type SpeechRecognitionLike } from "../../lib/speech-dictation";
+import { speechRecognitionConstructor, createDictationSession } from "../../lib/speech-dictation";
+import { InternalPdfViewer } from "./internal-pdf-viewer";
+import { useSecondaryView } from "./use-secondary-view";
 import type { LocalRule } from "../../lib/types";
 
 type DictationTarget = "search" | "question";
@@ -54,17 +56,19 @@ export function RulesPanel({
   localRules,
   localRulesUpdatedAt,
   onBack,
+  active = true,
 }: {
   courseName: string;
   localRules?: LocalRule[];
   localRulesUpdatedAt?: string;
   onBack: () => void;
+  active?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<RulesSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [expandedRule, setExpandedRule] = useState<string | null>(null);
-  const [detail, setDetail] = useState<RuleDetail | null>(null);
+  const [detail, setDetail] = useSecondaryView<RuleDetail>("rulesDetail");
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
   const [error, setError] = useState("");
@@ -73,12 +77,21 @@ export function RulesPanel({
   const [dictationSupported, setDictationSupported] = useState<boolean | null>(null);
   const [listeningTarget, setListeningTarget] = useState<DictationTarget | null>(null);
   const [dictationMessage, setDictationMessage] = useState("");
-  const [selectedDocument, setSelectedDocument] = useState<OfficialRulesDocument | null>(null);
+  const [selectedDocument, setSelectedDocument] = useSecondaryView<OfficialRulesDocument>("rulesDocument");
+  const [documentPage, setDocumentPage] = useState(1);
+  const [visibleResults, setVisibleResults] = useState(20);
   const [resourceOpen, setResourceOpen] = useState<"clarification" | "committee" | null>(null);
   const [resourceResults, setResourceResults] = useState<Partial<Record<"clarification" | "committee", RulesSearchResult[]>>>({});
   const [resourceLoading, setResourceLoading] = useState<"clarification" | "committee" | null>(null);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const recognitionRef = useRef<ReturnType<typeof createDictationSession> | null>(null);
   const localRulesApply = isLaVistaCourse(courseName);
+  useEffect(() => {
+    if (!active) {
+      recognitionRef.current?.dispose();
+      recognitionRef.current = null;
+      setListeningTarget(null);
+    }
+  }, [active]);
   const visibleLocalRules = useMemo(
     () => localRulesApply ? activeLocalRules(Array.isArray(localRules) ? localRules : LA_VISTA_LOCAL_RULES) : [],
     [localRules, localRulesApply],
@@ -101,13 +114,14 @@ export function RulesPanel({
     const speechWindow = window as typeof window & { SpeechRecognition?: Parameters<typeof speechRecognitionConstructor>[0]["SpeechRecognition"]; webkitSpeechRecognition?: Parameters<typeof speechRecognitionConstructor>[0]["webkitSpeechRecognition"] };
     setDictationSupported(Boolean(speechRecognitionConstructor(speechWindow)));
     return () => {
-      recognitionRef.current?.stop();
+      recognitionRef.current?.dispose();
       recognitionRef.current = null;
     };
   }, []);
 
   useEffect(() => {
     const trimmed = query.trim();
+    setVisibleResults(20);
     if (!trimmed) {
       setResults([]);
       setSearching(false);
@@ -131,48 +145,20 @@ export function RulesPanel({
   }, [query]);
 
   function toggleDictation(target: DictationTarget) {
-    if (listeningTarget) {
-      const currentRecognition = recognitionRef.current;
-      recognitionRef.current = null;
-      setListeningTarget(null);
-      setDictationMessage("Dictado detenido.");
-      currentRecognition?.stop();
-      return;
-    }
-    const speechWindow = window as typeof window & { SpeechRecognition?: Parameters<typeof speechRecognitionConstructor>[0]["SpeechRecognition"]; webkitSpeechRecognition?: Parameters<typeof speechRecognitionConstructor>[0]["webkitSpeechRecognition"] };
-    const Recognition = speechRecognitionConstructor(speechWindow);
-    if (!Recognition) {
-      setDictationSupported(false);
-      setDictationMessage("Dictado no disponible en este dispositivo.");
-      return;
-    }
-    const recognition = new Recognition();
-    recognitionRef.current = recognition;
-    recognition.lang = "es-MX";
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.onstart = () => { setListeningTarget(target); setDictationMessage("Escuchando…"); };
-    recognition.onresult = (event) => {
-      const transcript = event.results[0]?.[0]?.transcript?.trim() || "";
-      if (transcript && target === "search") setQuery(transcript);
-      if (transcript && target === "question") setQuestion((current) => `${current.trim()}${current.trim() ? " " : ""}${transcript}`);
-      setDictationMessage(transcript ? (target === "search" ? "Búsqueda dictada." : "Texto dictado. Revísalo antes de consultar.") : "No escuchamos voz. Intenta nuevamente.");
-    };
-    recognition.onerror = (event) => {
-      setDictationMessage(speechRecognitionErrorMessage(event));
-      setListeningTarget(null);
-      recognitionRef.current = null;
-    };
-    recognition.onend = () => { setListeningTarget(null); recognitionRef.current = null; };
+    if (listeningTarget) { recognitionRef.current?.stop(); setListeningTarget(null); return; }
+    const Recognition = speechRecognitionConstructor(window as typeof window & Parameters<typeof speechRecognitionConstructor>[0]);
+    if (!Recognition) { setDictationSupported(false); setDictationMessage("Dictado no disponible en este dispositivo."); return; }
+    if (!window.isSecureContext) { setDictationMessage("El micrófono requiere HTTPS. Abre el enlace seguro de The Backyard."); return; }
+    recognitionRef.current?.dispose();
     try {
-      setListeningTarget(target);
-      setDictationMessage("Solicitando acceso al micrófono…");
-      recognition.start();
-    } catch {
-      recognitionRef.current = null;
-      setListeningTarget(null);
-      setDictationMessage("No fue posible iniciar el dictado.");
-    }
+      const session = createDictationSession(Recognition, {
+        transcript: text => target === "search" ? setQuery(text) : setQuestion(current => `${current.trim()}${current.trim() ? " " : ""}${text}`),
+        status: setDictationMessage,
+        listening: value => setListeningTarget(value ? target : null),
+      });
+      recognitionRef.current = session;
+      session.start();
+    } catch { setListeningTarget(null); setDictationMessage("Safari bloqueó el acceso al dictado. Revisa los permisos de micrófono o escribe la búsqueda."); }
   }
 
   function scrollToSection(id: string) {
@@ -185,7 +171,8 @@ export function RulesPanel({
     scrollToSection("preguntar-ia");
   }
 
-  function openRuleReference(reference: string, sourceId: OfficialRulesDocument["id"] = "official-guide-part-1") {
+  function openRuleReference(reference: string, sourceId: OfficialRulesDocument["id"] = "official-guide-part-1", page?: number) {
+    if (sourceId !== "official-guide-part-1") { const source = OFFICIAL_RULES_DOCUMENTS.find(entry => entry.id === sourceId); if (source) { setDocumentPage(page || 1); setSelectedDocument(source); } return; }
     const location = findNavigableRule(reference);
     if (location?.section) {
       setDetail({ chapter: location.chapter, section: location.section });
@@ -208,7 +195,7 @@ export function RulesPanel({
     setResourceLoading(next);
     const source = next === "clarification" ? "clarifications-july-2026" : "committee-procedures-part-2";
     try {
-      const response = await fetch(`/api/rules/search?source=${source}&limit=${next === "clarification" ? 20 : 18}`);
+      const response = await fetch(`/api/rules/search?source=${source}`);
       const payload = await response.json() as { results?: RulesSearchResult[] };
       if (!response.ok) throw new Error("resource failed");
       setResourceResults((current) => ({ ...current, [next]: payload.results || [] }));
@@ -243,7 +230,7 @@ export function RulesPanel({
 
   if (detail) return <>
     <header className="rulesPageHeader">
-      <button className="rulesBackButton" onClick={() => { setDetail(null); setExpandedRule(detail.chapter.number); scrollToSection(`regla-${detail.chapter.number}`); }}>← Volver a Regla {detail.chapter.number}</button>
+      <button className="rulesBackButton" onClick={() => setDetail(null)}>← Regresar a Regla {detail.chapter.number}</button>
       <div><span>THE BACKYARD</span><h1>Reglas de Golf</h1></div>
     </header>
     <section className="card ruleDetail" aria-labelledby="rule-detail-title">
@@ -268,7 +255,7 @@ export function RulesPanel({
 
   return <>
     <header className="rulesPageHeader">
-      <button className="rulesBackButton" onClick={onBack}>← Volver</button>
+      <button className="rulesBackButton" onClick={onBack}>← Regresar</button>
       <div><span>THE BACKYARD</span><h1>Reglas de Golf</h1></div>
     </header>
 
@@ -296,8 +283,8 @@ export function RulesPanel({
     {query && <section className="card rulesSearchResults" aria-live="polite">
       <div className="sectionTitle"><div><h2>Resultados</h2><p>Búsqueda local en Reglas, Procedimientos del Comité y Aclaraciones 2026.</p></div>{searching && <span className="statusPill">Buscando…</span>}</div>
       {!searching && !results.length && <div className="empty">No hay una coincidencia suficiente para “{query}”. <button className="textButton" onClick={() => prepareAi(query)}>Preguntar a IA</button></div>}
-      <div className="rulesResults">{results.map((entry) => <article className="ruleResult" key={entry.id}>
-        <button className="ruleResultOpen" onClick={() => openRuleReference(entry.rule, entry.sourceId)}>
+      <div className="rulesResults">{results.slice(0, visibleResults).map((entry) => <article className="ruleResult" key={entry.id}>
+        <button className="ruleResultOpen" onClick={() => openRuleReference(entry.rule, entry.sourceId, entry.page)}>
           <span className={`rulesSourceBadge ${entry.documentType}`}>{resultLabel(entry.documentType)}</span>
           <b>{entry.rule === "Fuente oficial" ? entry.rule : `Regla ${entry.rule}`}</b>
           <h3>{entry.title}</h3>
@@ -306,13 +293,15 @@ export function RulesPanel({
           <span className="ruleOpenLabel">Abrir referencia →</span>
         </button>
       </article>)}</div>
+      {results.length > visibleResults && <button className="secondary big" onClick={() => setVisibleResults(count => count + 20)}>Mostrar más · {visibleResults} de {results.length} coincidencias</button>}
+      {!searching && <p className="muted">{results.length} coincidencias · ninguna se descarta por límite</p>}
       {!searching && <div className="rulesAiFallback"><span>¿No encontraste lo que buscabas?</span><button className="textButton" onClick={() => prepareAi(query)}>Preguntar a IA</button></div>}
     </section>}
 
     {resourceOpen === "clarification" && <section className="card rulesResourceSection" id="aclaraciones">
       <div className="sectionTitle"><div><span className="rulesSourceBadge clarification">ACLARACIONES</span><h2>Aclaraciones vigentes 2026</h2><p>Las 13 páginas del documento vigente están indexadas y también participan en la búsqueda superior.</p></div><button className="textButton" onClick={() => setResourceOpen(null)}>Cerrar</button></div>
       {resourceLoading === "clarification" && <div className="empty">Cargando índice local…</div>}
-      {!resourceLoading && resourceResults.clarification?.map((entry) => <button className="resourceRow" key={entry.id} onClick={() => openRuleReference(entry.rule, entry.sourceId)}><span><b>{entry.title}</b><small>{entry.explanation}</small></span><strong>{entry.rule === "Fuente oficial" ? "Fuente" : `Regla ${entry.rule}`} →</strong></button>)}
+      {!resourceLoading && resourceResults.clarification?.map((entry) => <button className="resourceRow" key={entry.id} onClick={() => openRuleReference(entry.rule, entry.sourceId, entry.page)}><span><b>{entry.title}</b><small>{entry.explanation}</small></span><strong>{entry.rule === "Fuente oficial" ? "Fuente" : `Regla ${entry.rule}`} →</strong></button>)}
       {!resourceLoading && resourceResults.clarification?.length === 0 && <div className="empty">El índice no está disponible. El documento oficial sigue accesible.</div>}
       <button className="secondary big" onClick={() => setSelectedDocument(OFFICIAL_RULES_DOCUMENTS[2])}>Abrir Aclaraciones oficiales</button>
     </section>}
@@ -337,7 +326,7 @@ export function RulesPanel({
       <div className="committeeTopics">{COMMITTEE_TOPICS.map((topic) => <span key={topic}>{topic}</span>)}</div>
       {resourceOpen === "committee" && <div className="resourceIndex">
         {resourceLoading === "committee" && <div className="empty">Cargando índice local…</div>}
-        {!resourceLoading && resourceResults.committee?.map((entry) => <button className="resourceRow" key={entry.id} onClick={() => openRuleReference(entry.rule, entry.sourceId)}><span><b>{entry.title}</b><small>{entry.explanation}</small></span><strong>{entry.rule === "Fuente oficial" ? "Fuente" : `Regla ${entry.rule}`} →</strong></button>)}
+        {!resourceLoading && resourceResults.committee?.map((entry) => <button className="resourceRow" key={entry.id} onClick={() => openRuleReference(entry.rule, entry.sourceId, entry.page)}><span><b>{entry.title}</b><small>{entry.explanation}</small></span><strong>{entry.rule === "Fuente oficial" ? "Fuente" : `Regla ${entry.rule}`} →</strong></button>)}
       </div>}
       <button className="secondary big" onClick={() => setSelectedDocument(OFFICIAL_RULES_DOCUMENTS[1])}>Abrir Procedimientos oficiales</button>
     </section>
@@ -384,9 +373,6 @@ export function RulesPanel({
       <div className="hint">La búsqueda superior nunca llama a OpenAI. En competencia, el Comité o árbitro oficial tiene la decisión final.</div>
     </section>
 
-    {selectedDocument && <div className="rulesDocumentBackdrop" role="presentation"><section className="rulesDocumentViewer" role="dialog" aria-modal="true" aria-labelledby="rules-document-title">
-      <header className="rulesDocumentHeader"><button className="secondary" onClick={() => setSelectedDocument(null)}>← Volver a Reglas</button><div><span className="pillSmall">{selectedDocument.type}</span><h2 id="rules-document-title">{selectedDocument.title}</h2></div><a className="primary" href={selectedDocument.officialUrl} target="_blank" rel="noreferrer">Abrir en navegador ↗</a></header>
-      <div className="rulesDocumentFrame"><iframe src={selectedDocument.localUrl} title={selectedDocument.title} /><div className="rulesDocumentFallback">Si Safari no muestra el PDF dentro de la app, usa “Abrir en navegador”. THE BACKYARD permanecerá disponible para regresar.</div></div>
-    </section></div>}
+    {selectedDocument && <InternalPdfViewer document={selectedDocument} initialPage={documentPage} onBack={() => { setSelectedDocument(null); setDocumentPage(1); }} />}
   </>;
 }

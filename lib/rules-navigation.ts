@@ -1,4 +1,4 @@
-import { normalizeRulesSearch } from "./rules-search-normalization";
+import { normalizeRulesSearch, rulesSearchContains } from "./rules-search-normalization";
 
 export type NavigableRuleSection = {
   number: string;
@@ -268,7 +268,8 @@ function navigationTerms(query: string) {
   const aliases = Object.entries(NAVIGATION_ALIASES)
     .filter(([alias]) => new RegExp(`(?:^|\\s)${alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:$|\\s)`).test(normalized))
     .map(([, replacement]) => replacement);
-  return normalizeRulesSearch([normalized, ...aliases].join(" ")).split(/\s+/).filter(Boolean);
+  const stop = new Set(["de", "del", "la", "el", "los", "las", "en", "un", "una", "por", "para", "con", "que", "se", "regla"]);
+  return normalizeRulesSearch([normalized, ...aliases].join(" ")).split(/\s+/).filter(term => term && !stop.has(term));
 }
 
 export type NavigableRuleMatch = {
@@ -284,19 +285,21 @@ export function searchNavigableRules(query: string): NavigableRuleMatch[] {
   const matches: NavigableRuleMatch[] = [];
   for (const entry of NAVIGABLE_GOLF_RULES) {
     const chapterText = normalizeRulesSearch([entry.number, `regla ${entry.number}`, entry.title, entry.summary, ...entry.keywords].join(" "));
-    let chapterScore = chapterText.includes(normalized) ? 30 : 0;
-    chapterScore += terms.reduce((total, term) => total + (chapterText.includes(term) ? 4 : 0), 0);
+    let chapterScore = rulesSearchContains(chapterText, normalized) ? 30 : 0;
+    chapterScore += terms.reduce((total, term) => total + (rulesSearchContains(chapterText, term) ? 4 : 0), 0);
     if (normalized === entry.number || normalized === `regla ${entry.number}`) chapterScore += 80;
     if (chapterScore > 0) matches.push({ rule: entry, score: chapterScore });
     for (const child of entry.sections) {
-      const childText = normalizeRulesSearch([child.number, `regla ${child.number}`, child.title, child.summary || "", entry.title, ...entry.keywords].join(" "));
-      let childScore = childText.includes(normalized) ? 36 : 0;
-      childScore += terms.reduce((total, term) => total + (childText.includes(term) ? 5 : 0), 0);
+      // Match a subrule's own text; a parent's keyword must not promote every
+      // sibling (e.g. cart path must not claim the dangerous-animal subrule).
+      const childText = normalizeRulesSearch([child.number, `regla ${child.number}`, child.title, child.summary || ""].join(" "));
+      let childScore = rulesSearchContains(childText, normalized) ? 36 : 0;
+      childScore += terms.reduce((total, term) => total + (rulesSearchContains(childText, term) ? 5 : 0), 0);
       if (normalized === child.number || normalized === `regla ${child.number}`) childScore += 100;
-      if (childScore > chapterScore && childScore > 0) matches.push({ rule: entry, section: child, score: childScore });
+      if (childScore > 0) matches.push({ rule: entry, section: child, score: childScore });
     }
   }
-  return matches.sort((a, b) => b.score - a.score || Number(a.rule.number) - Number(b.rule.number)).slice(0, 18);
+  return matches.sort((a, b) => b.score - a.score || Number(a.rule.number) - Number(b.rule.number));
 }
 
 export function findNavigableRule(reference: string) {

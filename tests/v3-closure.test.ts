@@ -102,7 +102,7 @@ test("document buttons use official production sources and never show a localhos
   const panel = readFileSync("app/components/rules-panel.tsx", "utf8");
   const route = readFileSync("app/api/rules/documents/[id]/route.ts", "utf8");
   assert.match(panel, /setSelectedDocument\(document\)/);
-  assert.match(panel, /<iframe src=\{selectedDocument\.localUrl\}/);
+  assert.match(panel, /<InternalPdfViewer document=\{selectedDocument\}/);
   assert.match(panel, />Abrir documento<\/button>/);
   assert.match(route, /fetch\(document\.officialUrl/);
   assert.match(route, /Content-Disposition/);
@@ -112,9 +112,9 @@ test("document buttons use official production sources and never show a localhos
 
 test("document navigation leaves The Backyard available for a safe return", () => {
   const panel = readFileSync("app/components/rules-panel.tsx", "utf8");
-  assert.match(panel, /← Volver a Reglas/);
-  assert.match(panel, /href=\{selectedDocument\.officialUrl\} target="_blank" rel="noreferrer">Abrir en navegador/);
-  assert.match(panel, /Si Safari no muestra el PDF dentro de la app/);
+  assert.match(readFileSync("app/components/internal-pdf-viewer.tsx", "utf8"), /← Regresar a Reglas/);
+  assert.match(panel, /useSecondaryView<OfficialRulesDocument>/);
+  assert.doesNotMatch(panel, /<iframe src=\{selectedDocument/);
 });
 
 test("the setup date uses a centered responsive wrapper for mobile and desktop", () => {

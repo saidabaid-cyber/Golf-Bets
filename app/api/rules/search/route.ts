@@ -7,7 +7,7 @@ export async function GET(request: Request) {
   const query = params.get("q")?.slice(0, 160) || "";
   const source = params.get("source")?.slice(0, 80) || "";
   if (source && officialRulesDocument(source)) {
-    return NextResponse.json({ results: browseRulesSource(source as Parameters<typeof browseRulesSource>[0], Number(params.get("limit")) || 24) });
+    return NextResponse.json({ results: browseRulesSource(source as Parameters<typeof browseRulesSource>[0], Number(params.get("limit")) || Infinity) });
   }
   return NextResponse.json({ results: searchRulesCorpus(query) });
 }

@@ -1,7 +1,8 @@
 import corpus from "./rules-search-index.generated.json";
 import { golfRulesCatalog, type GolfRuleEntry } from "./rules-catalog";
 import { officialRulesDocument, type OfficialRulesDocument } from "./rules-documents";
-import { expandedRulesSearchTerms, normalizeRulesSearch } from "./rules-search-normalization";
+import { expandedRulesSearchTerms, normalizeRulesSearch, rulesSearchContains } from "./rules-search-normalization";
+import { searchNavigableRules } from "./rules-navigation";
 
 export type RulesDocumentType = "rules" | "committee" | "clarification";
 
@@ -75,14 +76,14 @@ function contextualExcerpt(text: string, normalizedQuery: string, terms: string[
   return `${start > 0 ? "…" : ""}${excerpt}${end < text.length ? "…" : ""}`;
 }
 
-export function searchRulesCorpus(query: string, limit = 12): RulesSearchResult[] {
+export function searchRulesCorpus(query: string, limit = Infinity): RulesSearchResult[] {
   const normalized = normalizeRulesSearch(query);
   if (!normalized) return golfRulesCatalog.slice(0, Math.min(limit, 4)).map(curatedResult);
   const terms = expandedRulesSearchTerms(query);
   const curated = golfRulesCatalog
     .map((entry) => {
       const haystack = normalizeRulesSearch([entry.rule, entry.title, entry.explanation, ...entry.keywords].join(" "));
-      const score = (haystack.includes(normalized) ? 20 : 0) + terms.reduce((sum, term) => sum + (haystack.includes(term) ? 4 : 0), 0);
+      const score = (rulesSearchContains(haystack, normalized) ? 20 : 0) + terms.reduce((sum, term) => sum + (rulesSearchContains(haystack, term) ? 4 : 0), 0);
       return { entry, score };
     })
     .filter(({ score }) => score > 0)
@@ -92,20 +93,25 @@ export function searchRulesCorpus(query: string, limit = 12): RulesSearchResult[
   const pages = (corpus as CorpusEntry[])
     .map((entry) => {
       const exactRule = Boolean(entry.rule) && (normalized === entry.rule || normalized.startsWith(`regla ${entry.rule}`));
-      const phrase = entry.searchText.includes(normalized);
-      const matched = terms.reduce((sum, term) => sum + (entry.searchText.includes(term) ? 1 : 0), 0);
+      const phrase = rulesSearchContains(entry.searchText, normalized);
+      const matched = terms.reduce((sum, term) => sum + (rulesSearchContains(entry.searchText, term) ? 1 : 0), 0);
       return { entry, score: (exactRule ? 40 : 0) + (phrase ? 12 : 0) + matched };
     })
     .filter(({ score }) => score > 0)
     .sort((a, b) => b.score - a.score || a.entry.page - b.entry.page);
 
   const seen = new Set(curated.map((entry) => `${entry.source}:${entry.rule}`));
-  const results = [...curated];
+  const navigation: RulesSearchResult[] = searchNavigableRules(query).map(({rule, section}) => ({
+    id: `navigation-${section?.number || rule.number}`, rule: section?.number || rule.number,
+    title: section?.title || rule.title, explanation: section?.summary || rule.summary,
+    source: "Reglas de Golf", sourceId: "official-guide-part-1", documentType: "rules", sourceUrl: rule.sourceUrl,
+  }));
+  const results = [...navigation, ...curated];
   for (const { entry } of pages) {
     const document = officialRulesDocument(entry.sourceId);
     if (!document) continue;
     const mainRule = entry.rule.split(".")[0];
-    const identity = `${entry.sourceId}:${entry.rule || entry.page}`;
+    const identity = `${entry.sourceId}:${entry.page}`;
     if (seen.has(identity)) continue;
     seen.add(identity);
     results.push({
@@ -130,12 +136,12 @@ function referencedRules(text: string) {
   return Array.from(new Set(references)).slice(0, 6);
 }
 
-export function browseRulesSource(sourceId: OfficialRulesDocument["id"], limit = 24): RulesSearchResult[] {
+export function browseRulesSource(sourceId: OfficialRulesDocument["id"], limit = Infinity): RulesSearchResult[] {
   const document = officialRulesDocument(sourceId);
   if (!document) return [];
   return (corpus as CorpusEntry[])
     .filter((entry) => entry.sourceId === sourceId)
-    .slice(0, Math.max(1, Math.min(limit, 200)))
+    .slice(0, Math.max(1, limit))
     .map((entry) => {
       const related = referencedRules(entry.searchText);
       const primaryRule = entry.rule || (related[0] ? String(related[0]) : "Fuente oficial");
