@@ -1,4 +1,5 @@
 import "server-only";
+import { officialPdfResponse } from "../../../../../lib/pdf-proxy";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { officialRulesDocument } from "../../../../../lib/rules-documents";
@@ -9,41 +10,6 @@ export const dynamic = "force-dynamic";
 function localRequest(request: Request) {
   const hostname = new URL(request.url).hostname;
   return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
-}
-
-async function officialPdfResponse(document: NonNullable<ReturnType<typeof officialRulesDocument>>) {
-  try {
-    const upstream = await fetch(document.officialUrl, {
-      // PDFs exceed Next's per-item Data Cache limit. Cache the HTTP response
-      // at the CDN/browser instead (Cache-Control below), not this fetch body.
-      cache: "no-store",
-      redirect: "follow",
-      signal: AbortSignal.timeout(20000),
-      headers: {
-        Accept: "application/pdf",
-        "User-Agent": "Mozilla/5.0",
-      },
-    });
-    const contentType = upstream.headers.get("content-type") || "";
-    if (!upstream.ok || !contentType.toLowerCase().includes("application/pdf") || !upstream.body) {
-      throw new Error(`Official PDF returned ${upstream.status}`);
-    }
-    const headers = new Headers({
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="${document.sourceFileName.replace(/["\\]/g, "")}"`,
-      "Cache-Control": "public, max-age=3600, s-maxage=86400",
-      "X-Content-Type-Options": "nosniff",
-      "X-Frame-Options": "SAMEORIGIN",
-    });
-    const contentLength = upstream.headers.get("content-length");
-    if (contentLength) headers.set("Content-Length", contentLength);
-    return new Response(upstream.body, { status: 200, headers });
-  } catch {
-    return new Response("La fuente oficial no respondió. Puedes reintentar desde el visor de The Backyard.", {
-      status: 502,
-      headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
-    });
-  }
 }
 
 export async function GET(request: Request, context: RouteContext<"/api/rules/documents/[id]">) {

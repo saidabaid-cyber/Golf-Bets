@@ -100,11 +100,11 @@ test("the three indexed official documents are visible through safe local ids", 
 
 test("document buttons use official production sources and never show a localhost-only dead end", () => {
   const panel = readFileSync("app/components/rules-panel.tsx", "utf8");
-  const route = readFileSync("app/api/rules/documents/[id]/route.ts", "utf8");
+  const route = readFileSync("app/api/rules/documents/[id]/route.ts", "utf8") + readFileSync("lib/pdf-proxy.ts", "utf8");
   assert.match(panel, /setSelectedDocument\(document\)/);
   assert.match(panel, /<InternalPdfViewer document=\{selectedDocument\}/);
   assert.match(panel, />Abrir documento<\/button>/);
-  assert.match(route, /fetch\(document\.officialUrl/);
+  assert.match(route, /fetcher\(document\.officialUrl/);
   assert.match(route, /Content-Disposition/);
   assert.match(route, /X-Frame-Options.*SAMEORIGIN/);
   assert.doesNotMatch(`${panel}\n${route}`, /únicamente en localhost/i);

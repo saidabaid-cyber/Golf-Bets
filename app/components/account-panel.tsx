@@ -7,7 +7,7 @@ import { useBackyardAccount } from "./account-provider";
 import { NumericCaptureInput } from "./numeric-capture-input";
 
 export function AccountPanel({ highContrast, onHighContrastChange, onBack }: { highContrast: boolean; onHighContrastChange: (value: boolean) => void; onBack: () => void }) {
-  const { identity, updateProfile, logout, openAccess, acceptances, cloudLinked, cloudStatus, requestCloudLink } = useBackyardAccount();
+  const { identity, updateProfile, logout, openAccess, acceptances, cloudLinked, cloudStatus, requestCloudLink, lastCloudSync, cloudError, retryCloudSync } = useBackyardAccount();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(identity.displayName);
   const [handicap, setHandicap] = useState<number | null>(identity.defaultHandicap);
@@ -17,7 +17,7 @@ export function AccountPanel({ highContrast, onHighContrastChange, onBack }: { h
   const [savingProfile, setSavingProfile] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
 
-  useEffect(() => { setName(identity.displayName); setHandicap(identity.defaultHandicap); }, [identity]);
+  useEffect(() => { if (!editing) { setName(identity.displayName); setHandicap(identity.defaultHandicap); } }, [identity.displayName, identity.defaultHandicap, editing]);
   const userAcceptances = useMemo(() => acceptances.filter((item) => item.userId === identity.userId), [acceptances, identity.userId]);
   const acceptance = (type: keyof typeof LEGAL_DOCUMENT_VERSIONS) => userAcceptances.find((item) => item.type === type);
   const acceptedLabel = (type: keyof typeof LEGAL_DOCUMENT_VERSIONS) => {
@@ -31,7 +31,7 @@ export function AccountPanel({ highContrast, onHighContrastChange, onBack }: { h
     try {
       await updateProfile({ displayName: name.trim(), defaultHandicap: handicap, avatarUrl: identity.avatarUrl });
       setEditing(false); setMessage("Perfil actualizado.");
-    } catch { setMessage("El perfil quedó guardado localmente, pero la nube todavía no respondió."); }
+    } catch { setMessage("No se confirmó el guardado del perfil. Conservamos lo que escribiste; reintenta."); }
     finally { setSavingProfile(false); }
   }
 
@@ -52,9 +52,13 @@ export function AccountPanel({ highContrast, onHighContrastChange, onBack }: { h
 
     {identity.mode === "guest" && <section className="card guestAccountCard"><h2>Modo invitado</h2><p>Los datos permanecen en este dispositivo. Crear una cuenta permitirá sincronizar tu información cuando la nube esté activada.</p><div className="accountInlineActions"><button className="primary" onClick={openAccess}>Crear cuenta</button><button className="secondary" onClick={openAccess}>Iniciar sesión</button></div></section>}
 
-    {identity.mode === "authenticated" && <div className={`cloudAccountStatus ${cloudStatus === "error" ? "bad" : ""}`} role="status">
-      {cloudStatus === "syncing" ? "Sincronizando…" : cloudStatus === "synced" ? "✓ Sincronizado" : cloudStatus === "error" ? "Sincronización pendiente" : cloudLinked ? "Cambios pendientes" : "Datos locales"}
-    </div>}
+    {identity.mode === "authenticated" && <section className="card cloudAccountStatus" aria-label="Estado de la cuenta">
+      <h2>Sesión iniciada</h2>
+      <p role="status">{cloudStatus === "synced" ? "Nube conectada · Sincronizado ✓" : cloudStatus === "syncing" ? "Sincronizando con Supabase…" : cloudStatus === "error" ? "Error de sincronización · Tu copia local se conserva" : cloudLinked ? "Sincronización pendiente" : "Datos locales · Nube sin vincular"}</p>
+      {lastCloudSync && <p className="hint">Última sincronización confirmada: {new Date(lastCloudSync).toLocaleString("es-MX")}</p>}
+      {cloudError && <p className="bad">{cloudError}</p>}
+      {cloudLinked && <button className="secondary" disabled={cloudStatus === "syncing"} onClick={retryCloudSync}>Reintentar sincronización</button>}
+    </section>}
     {identity.mode === "authenticated" && !cloudLinked && <section className="card"><h2>Sincronización</h2><p>Tus datos siguen seguros en este dispositivo. Puedes vincularlos a tu cuenta cuando la nube esté configurada.</p><button className="primary" onClick={requestCloudLink}>Vincular datos locales</button></section>}
 
     <section className="card profileCard">

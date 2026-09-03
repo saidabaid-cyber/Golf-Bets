@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path: string) => readFileSync(path, "utf8");
 const migration = read("supabase/migrations/202609020001_cloud_sync_polla_hardening.sql");
-const syncRoute = read("app/api/cloud/sync/route.ts");
+const syncRoute = read("app/api/cloud/sync/route.ts") + read("lib/cloud-sync-service.ts");
 const scoreRoute = read("app/api/polla/scores/route.ts");
 const adminRoute = read("app/api/polla/admin/[tournamentId]/route.ts");
 const leaderboardRoute = read("app/api/polla/leaderboard/[publicId]/route.ts");
@@ -21,7 +21,7 @@ test("migración cloud agrega snapshots normalizados, tombstones y RLS por dueñ
   }
   assert.match(syncRoute, /owner_id: userId/);
   assert.match(syncRoute, /applyTombstones/);
-  assert.match(syncRoute, /onlyNewerRows/);
+  assert.match(syncRoute, /writeVersionedRow/);
   assert.doesNotMatch(syncRoute, /service.role|SUPABASE_SERVICE_ROLE_KEY/);
 });
 

@@ -2,9 +2,9 @@ const DB_NAME = "golfbets-media-v1";
 const STORE = "scorecards";
 const CLOUD_BUCKET = "scorecard-photos";
 
-function cloudPath(userId: string, roundId: string) {
+function cloudPath(userId: string, roundId: string, photoId = roundId) {
   const clean = (value: string) => value.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 180);
-  return `${clean(userId)}/${clean(roundId)}.jpg`;
+  return photoId === roundId ? `${clean(userId)}/${clean(roundId)}.jpg` : `${clean(userId)}/${clean(roundId)}/${clean(photoId)}.jpg`;
 }
 
 function database() {
@@ -35,6 +35,7 @@ export async function saveScorecardPhoto(roundId: string, file: File) {
     transaction.objectStore(STORE).put(blob, roundId);
     transaction.oncomplete = () => resolve();
     transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () => reject(transaction.error || new Error("No se guardó la foto local."));
   });
   db.close();
   return roundId;
@@ -62,11 +63,11 @@ export async function deleteScorecardPhoto(roundId: string) {
   db.close();
 }
 
-export async function uploadScorecardPhotoCloud(userId: string, roundId: string, blob: Blob) {
+export async function uploadScorecardPhotoCloud(userId: string, roundId: string, blob: Blob, photoId = roundId) {
   const { getSupabaseBrowser } = await import("./supabase/client");
   const client = getSupabaseBrowser();
-  if (!client) return false;
-  const { error } = await client.storage.from(CLOUD_BUCKET).upload(cloudPath(userId, roundId), blob, {
+  if (!client) throw new Error("La nube no está disponible; la foto sigue guardada localmente.");
+  const { error } = await client.storage.from(CLOUD_BUCKET).upload(cloudPath(userId, roundId, photoId), blob, {
     upsert: true,
     contentType: blob.type || "image/jpeg",
     cacheControl: "3600",
@@ -75,20 +76,28 @@ export async function uploadScorecardPhotoCloud(userId: string, roundId: string,
   return true;
 }
 
-export async function readScorecardPhotoCloud(userId: string, roundId: string) {
+export async function readScorecardPhotoCloud(userId: string, roundId: string, photoId = roundId) {
   const { getSupabaseBrowser } = await import("./supabase/client");
   const client = getSupabaseBrowser();
-  if (!client) return undefined;
-  const { data, error } = await client.storage.from(CLOUD_BUCKET).download(cloudPath(userId, roundId));
-  if (error) return undefined;
+  if (!client) throw new Error("Nube no disponible.");
+  const { data, error } = await client.storage.from(CLOUD_BUCKET).download(cloudPath(userId, roundId, photoId));
+  if (error) throw error;
   return data;
 }
 
 export async function deleteScorecardPhotoCloud(userId: string, roundId: string) {
   const { getSupabaseBrowser } = await import("./supabase/client");
   const client = getSupabaseBrowser();
-  if (!client) return false;
-  const { error } = await client.storage.from(CLOUD_BUCKET).remove([cloudPath(userId, roundId)]);
+  if (!client) throw new Error("Nube no disponible.");
+  const folder = cloudPath(userId, roundId, "version").split("/").slice(0, -1).join("/");
+  const paths = [cloudPath(userId, roundId)];
+  for (let offset = 0; ; offset += 100) {
+    const result = await client.storage.from(CLOUD_BUCKET).list(folder, { limit: 100, offset });
+    if (result.error) throw result.error;
+    paths.push(...result.data.filter(item => item.id).map(item => `${folder}/${item.name}`));
+    if (result.data.length < 100) break;
+  }
+  const { error } = await client.storage.from(CLOUD_BUCKET).remove(paths);
   if (error) throw error;
   return true;
 }

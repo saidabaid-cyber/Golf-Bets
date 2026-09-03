@@ -1,7 +1,7 @@
 "use client";
 import "./functional-ux.css";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BallFriendHole,
   BetConfig,
@@ -62,7 +62,10 @@ import { createSingleAdvance, HOLE_SUMMARY_DURATION_MS, nextHoleDestination } fr
 import { buildHoleSummary, clearActiveRoundStorage, ensureHoleScoresAtPar, hasRoundProgress, historicalGolfStats, mergeCoursesPreservingEdits, migrateDraftPressures, persistRoundHistory, privateLeaderboard, pushUndoState, readStoredJson, resolveHistoricalRoundDeletion, resolvePersonalHistoryDeletion, STORAGE_KEYS, upsertFrequentPlayers } from "../lib/round-utils";
 import { downloadRoundCsv, downloadRoundImage, downloadRoundPdf, shareRound } from "../lib/round-export";
 import { deleteScorecardPhoto, deleteScorecardPhotoCloud, readScorecardPhoto, readScorecardPhotoCloud, saveScorecardPhoto, uploadScorecardPhotoCloud } from "../lib/scorecard-photo";
-import { CLOUD_TOMBSTONES_KEY, collectLocalCloudData, downloadCloudData, mergeLocalAndCloud, recordCloudDeletion, uploadCloudData } from "../lib/cloud-sync";
+import { CLOUD_TOMBSTONES_KEY, collectLocalCloudData, downloadCloudData, persistCloudMetadata, stableValue, trackLocalCloudEdits, type CloudDataBundle, recordCloudDeletion, uploadCloudData } from "../lib/cloud-sync";
+import { ownsLocalWorkspace, preserveDraftConflict } from "../lib/account-workspace";
+import { runCloudSyncCycle } from "../lib/cloud-sync-cycle";
+import { adoptGuestPhotoJobs, flushPhotoQueue, queuePhoto, photoJobs } from "../lib/photo-sync-queue";
 import { PRIVATE_POLLA_LINK_KEY, parsePrivatePollaLink, privatePollaScoreChanges } from "../lib/polla-private-link";
 import { enqueuePollaScore } from "../lib/polla-offline";
 import { cloneLaVistaLocalRules, isLaVistaCourse, LA_VISTA_LOCAL_RULES_UPDATED_AT, withDefaultLaVistaRules } from "../lib/local-rules";
@@ -323,7 +326,7 @@ function MoneyInput({ label, value, onChange }: { label: string; value: number; 
 }
 
 function GolfBetsApp() {
-  const { identity, cloudLinked, setCloudStatus } = useBackyardAccount();
+  const { identity, cloudLinked, cloudError, setCloudStatus, applyCloudPreferences } = useBackyardAccount();
   const { tab, setTab, goBack } = useScreenNavigation();
   const [rulesVisited, setRulesVisited] = useState(false);
   useEffect(() => { if (tab === "rules") setRulesVisited(true); }, [tab]);
@@ -385,12 +388,12 @@ function GolfBetsApp() {
   const [personalHistoryToDelete, setPersonalHistoryToDelete] = useState<{ roundId: string; resultIndex: number; rivalName: string } | null>(null);
   const [rulesCourseContext, setRulesCourseContext] = useState("");
   const undoStack = useRef<Array<{ scores: Record<number, HoleScore>; unitEvents: UnitEvent[]; manualBets: ManualBet[]; ballFriendSetup: Record<number, BallFriendHole> }>>([]);
-  const suppressNextDraftSave = useRef(false);
   const holeSummaryTimer = useRef<number | null>(null);
   const holeSummaryAdvance = useRef<(() => boolean) | null>(null);
-  const flushLocalState = useRef<(() => void) | null>(null);
-  const cloudHydratedUser = useRef("");
-  const cloudSyncTimer = useRef<number | null>(null);
+  const flushLocalState = useRef<(() => boolean) | null>(null);
+  const requestCloudSync = useRef<(() => void) | null>(null);
+  const liveIdentity = useRef(identity);
+  useEffect(() => { liveIdentity.current = identity; }, [identity]);
   const hadLocalPreferences = useRef(false);
 
   const order = useMemo(() => playOrder(startHole).slice(0, roundHoles), [startHole, roundHoles]);
@@ -399,25 +402,19 @@ function GolfBetsApp() {
   const courseNames: string[] = useMemo(() => Array.from(new Set<string>(courses.map((c) => c.name))).sort((a, b) => a.localeCompare(b)), [courses]);
   const privateBoard = useMemo(() => privateLeaderboard(course, players, scores, order), [course, players, scores, order]);
 
-  useEffect(() => {
-    hadLocalPreferences.current = localStorage.getItem(STORAGE_KEYS.contrast) !== null;
-    const savedCourses = readStoredJson<unknown>(localStorage, STORAGE_KEYS.courses, null);
-    const savedHistory = readStoredJson<unknown>(localStorage, STORAGE_KEYS.history, null);
-    const savedRivals = readStoredJson<unknown>(localStorage, STORAGE_KEYS.rivals, null);
-    const draft = migrateDraftPressures(readStoredJson<unknown>(localStorage, STORAGE_KEYS.draft, null));
-    const savedFrequentPlayers = readStoredJson<unknown>(localStorage, STORAGE_KEYS.frequentPlayers, []);
-    const savedFrequentGroups = parseFrequentGroups(localStorage.getItem(STORAGE_KEYS.frequentGroups));
-    try {
-      const mergedCourses = mergeDefaultCourses(Array.isArray(savedCourses) ? savedCourses as Course[] : null);
-      setCourses(mergedCourses);
-      if (Array.isArray(savedHistory)) setHistory(savedHistory.map((r: any) => ({ ...r, expenses: normalizeExpenses(r.expenses) })));
-      if (Array.isArray(savedRivals)) setSavedPersonalRivals(savedRivals);
-      if (Array.isArray(savedFrequentPlayers)) setFrequentPlayers(savedFrequentPlayers);
-      setFrequentGroups(savedFrequentGroups);
-      setHighContrast(localStorage.getItem(STORAGE_KEYS.contrast) === "true");
-      setDraftAvailable(hasRoundProgress(draft));
+  const applyDraft = useCallback((value: unknown) => {
+    if (holeSummaryTimer.current !== null) window.clearTimeout(holeSummaryTimer.current);
+    holeSummaryAdvance.current = null; setHoleSummary([]);
+    const draft = migrateDraftPressures(value);
+    setDraftAvailable(hasRoundProgress(draft));
+    if (!draft) {
+      setPlayers([]); setOwnerId(""); setScores({}); setUnitEvents([]); setBallFriendSetup({});
+      setPersonalBets([]); setManualBets([]); setExpenses(emptyExpenses); setBets(initialBets([]));
+      setStartHole(1); setRoundHoles(18); setSegments(segmentDefinitions(playOrder(1), 6));
+      setCurrentIndex(0); setRoundId(makeId()); setRoundDate(localDateMexico());
+    }
       if (draft) {
-        if (draft.course) setCourse(withDefaultLaVistaRules(mergedCourses.find((c) => c.id === draft.course.id) || draft.course));
+        if (draft.course) setCourse(withDefaultLaVistaRules(draft.course));
         if (draft.startHole) setStartHole(draft.startHole);
         if (draft.roundHoles === 9 || draft.roundHoles === 18) setRoundHoles(draft.roundHoles);
         if (draft.players) setPlayers(draft.players);
@@ -463,41 +460,59 @@ function GolfBetsApp() {
         if (draft.roundDate) setRoundDate(draft.roundDate);
         if (Number.isInteger(draft.currentIndex)) setCurrentIndex(Math.max(0, Math.min((draft.roundHoles || 18) - 1, draft.currentIndex)));
       }
+    undoStack.current = []; setUndoCount(0);
+  }, []);
+
+  useEffect(() => {
+    hadLocalPreferences.current = localStorage.getItem(STORAGE_KEYS.contrast) !== null;
+    const savedCourses = readStoredJson<unknown>(localStorage, STORAGE_KEYS.courses, null);
+    const savedHistory = readStoredJson<unknown>(localStorage, STORAGE_KEYS.history, null);
+    const savedRivals = readStoredJson<unknown>(localStorage, STORAGE_KEYS.rivals, null);
+    const draft = migrateDraftPressures(readStoredJson<unknown>(localStorage, STORAGE_KEYS.draft, null));
+    const savedFrequentPlayers = readStoredJson<unknown>(localStorage, STORAGE_KEYS.frequentPlayers, []);
+    const savedFrequentGroups = parseFrequentGroups(localStorage.getItem(STORAGE_KEYS.frequentGroups));
+    try {
+      const mergedCourses = mergeDefaultCourses(Array.isArray(savedCourses) ? savedCourses as Course[] : null);
+      setCourses(mergedCourses);
+      if (Array.isArray(savedHistory)) setHistory(savedHistory.map((r: any) => ({ ...r, expenses: normalizeExpenses(r.expenses) })));
+      if (Array.isArray(savedRivals)) setSavedPersonalRivals(savedRivals);
+      if (Array.isArray(savedFrequentPlayers)) setFrequentPlayers(savedFrequentPlayers);
+      setFrequentGroups(savedFrequentGroups);
+      setHighContrast(localStorage.getItem(STORAGE_KEYS.contrast) === "true");
+      setDraftAvailable(hasRoundProgress(draft));
+      applyDraft(draft);
     } catch { /* keep safe defaults for structurally invalid legacy data */ }
     if (new URLSearchParams(window.location.search).has("polla")) setTab("pollaLive");
     setHydrated(true);
-  }, [setTab]);
+  }, [setTab, applyDraft]);
 
   useEffect(() => {
     if (!hydrated) return;
-    if (suppressNextDraftSave.current) {
-      suppressNextDraftSave.current = false;
-      setSaveStatus("saved");
-      return;
-    }
     setSaveStatus("saving");
     const persist = () => {
+      if (!ownsLocalWorkspace(localStorage, identity.userId)) return false;
       try {
+        const draft = { version: 3, course, startHole, roundHoles, players, ownerId, bets, segments, personalBets, manualBets, scores, unitEvents, ballFriendSetup, expenses, roundId, roundDate, currentIndex };
+        trackLocalCloudEdits(localStorage, draft, { highContrast, language: "es-MX", notificationsEnabled: false, defaultHandicap: identity.defaultHandicap });
         localStorage.setItem(STORAGE_KEYS.courses, JSON.stringify(courses));
         localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(history));
         localStorage.setItem(STORAGE_KEYS.rivals, JSON.stringify(savedPersonalRivals));
         localStorage.setItem(STORAGE_KEYS.frequentPlayers, JSON.stringify(frequentPlayers));
         localStorage.setItem(STORAGE_KEYS.frequentGroups, serializeFrequentGroups(frequentGroups));
         localStorage.setItem(STORAGE_KEYS.contrast, String(highContrast));
-        localStorage.setItem(STORAGE_KEYS.draft, JSON.stringify({
-          version: 3, course, startHole, roundHoles, players, ownerId, bets, segments, personalBets, manualBets, scores,
-          unitEvents, ballFriendSetup, expenses, roundId, roundDate, currentIndex,
-        }));
+        localStorage.setItem(STORAGE_KEYS.draft, JSON.stringify(hasRoundProgress(draft) ? draft : null));
         setDraftAvailable(hasRoundProgress({ players, scores, currentIndex }));
         setSaveStatus("saved");
+        return true;
       } catch {
         setSaveStatus("error");
+        return false;
       }
     };
     flushLocalState.current = persist;
     const timer = window.setTimeout(persist, 250);
     return () => window.clearTimeout(timer);
-  }, [hydrated, courses, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, course, startHole, roundHoles, players, ownerId, bets, segments, personalBets, manualBets, scores, unitEvents, ballFriendSetup, expenses, roundId, roundDate, currentIndex]);
+  }, [hydrated, identity.userId, identity.defaultHandicap, courses, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, course, startHole, roundHoles, players, ownerId, bets, segments, personalBets, manualBets, scores, unitEvents, ballFriendSetup, expenses, roundId, roundDate, currentIndex]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -514,81 +529,106 @@ function GolfBetsApp() {
   }, [hydrated]);
 
   useEffect(() => {
-    if (!hydrated || identity.mode !== "authenticated" || !identity.accessToken || !cloudLinked || cloudHydratedUser.current === identity.userId) return;
-    let cancelled = false;
-    const hydrateCloud = async () => {
-      setCloudStatus("syncing");
+    if (!hydrated || identity.mode !== "authenticated" || !cloudLinked || cloudError) return;
+    const userId = identity.userId;
+    let cancelled = false, running = false, queued = false, attempts = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const current = () => !cancelled && ownsLocalWorkspace(localStorage, userId) && liveIdentity.current.userId === userId;
+    const read = () => {
+      if (!flushLocalState.current?.()) throw new Error("No se pudo guardar el estado local; no se enviaron datos incompletos.");
+      return collectLocalCloudData(localStorage, liveIdentity.current.defaultHandicap, hadLocalPreferences.current);
+    };
+    const schedule = () => {
+      if (!current()) return;
+      if (running) { queued = true; return; }
+      clearTimeout(timer);
+      setCloudStatus("pending");
+      timer = setTimeout(sync, 1_500);
+    };
+    const sync = async () => {
+      if (!current()) return;
+      if (running) { queued = true; return; }
+      if (!navigator.onLine) { setCloudStatus("pending"); return; }
+      running = true; queued = false;
       try {
-        const local = collectLocalCloudData(localStorage, identity.defaultHandicap, hadLocalPreferences.current);
-        const cloud = await downloadCloudData(identity.accessToken!);
-        if (cancelled) return;
-        const merged = mergeLocalAndCloud(local, cloud);
-        const mergedCourses = mergeDefaultCourses(merged.courses);
-        setCourses(mergedCourses);
-        setHistory(merged.history.map((round) => ({ ...round, expenses: normalizeExpenses(round.expenses) })));
-        setSavedPersonalRivals(merged.rivals);
-        setFrequentPlayers(merged.frequentPlayers);
-        setFrequentGroups(merged.frequentGroups);
-        setHighContrast(merged.preferences.highContrast);
-        localStorage.setItem(STORAGE_KEYS.courses, JSON.stringify(mergedCourses));
-        localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(merged.history));
-        localStorage.setItem(STORAGE_KEYS.rivals, JSON.stringify(merged.rivals));
-        localStorage.setItem(STORAGE_KEYS.frequentPlayers, JSON.stringify(merged.frequentPlayers));
-        localStorage.setItem(STORAGE_KEYS.frequentGroups, serializeFrequentGroups(merged.frequentGroups));
-        localStorage.setItem(CLOUD_TOMBSTONES_KEY, JSON.stringify(merged.tombstones));
-        localStorage.setItem(STORAGE_KEYS.contrast, String(merged.preferences.highContrast));
-        const hadLocalDraft = hasRoundProgress(local.activeDraft);
-        if (!hadLocalDraft && hasRoundProgress(merged.activeDraft)) {
-          localStorage.setItem(STORAGE_KEYS.draft, JSON.stringify(merged.activeDraft));
-          const reloadKey = `backyard-cloud-draft-restored-v1:${identity.userId}`;
-          if (!sessionStorage.getItem(reloadKey)) {
-            sessionStorage.setItem(reloadKey, "true");
-            window.location.reload();
-            return;
-          }
-        }
-        await uploadCloudData(merged, identity.accessToken!);
-        if (!cancelled) {
-          cloudHydratedUser.current = identity.userId;
-          setCloudStatus("synced");
-        }
+        const completed = await runCloudSyncCycle({
+          read, current, status: setCloudStatus,
+          download: () => downloadCloudData(liveIdentity.current.accessToken || ""),
+          upload: data => uploadCloudData(data, liveIdentity.current.accessToken || ""),
+          media: async data => {
+            adoptGuestPhotoJobs(localStorage, userId);
+            for (const round of data.history.filter(item => item.photoId)) {
+              if (!current()) throw new Error("Sync cancelled");
+              const marker = `backyard-photo-uploaded-v1:${userId}:${round.photoId}`;
+              if (!localStorage.getItem(marker) && !photoJobs(localStorage).some(job => job.userId === userId && job.roundId === round.id)) {
+                const blob = await readScorecardPhoto(round.photoId!);
+                if (!current()) throw new Error("Sync cancelled");
+                if (blob) queuePhoto(localStorage, { userId, roundId: round.id, photoId: round.photoId!, operation: "upload", revision: makeId() });
+              }
+            }
+            await flushPhotoQueue(localStorage, userId, data, {
+              read: readScorecardPhoto,
+              upload: async (roundId, photoId, blob) => {
+                const result = await uploadScorecardPhotoCloud(userId, roundId, blob, photoId);
+                if (result && current()) localStorage.setItem(`backyard-photo-uploaded-v1:${userId}:${photoId}`, "true");
+                return result;
+              },
+              remove: roundId => deleteScorecardPhotoCloud(userId, roundId),
+            }, current);
+          },
+          apply: (data: CloudDataBundle) => {
+            const local = read();
+            const changed = (a: unknown, b: unknown) => JSON.stringify(stableValue(a)) !== JSON.stringify(stableValue(b));
+            if (changed(local.activeDraft, data.activeDraft)) {
+              preserveDraftConflict(localStorage, local.activeDraft);
+              applyDraft(data.activeDraft);
+              setFeedback("Ronda actualizada desde la nube. La versión local anterior se conservó en este dispositivo.");
+            }
+            const mergedCourses = mergeDefaultCourses(data.courses);
+            if (changed(local.courses, data.courses)) setCourses(mergedCourses);
+            if (changed(local.history, data.history)) setHistory(data.history.map(round => ({ ...round, expenses: normalizeExpenses(round.expenses) })));
+            if (changed(local.rivals, data.rivals)) setSavedPersonalRivals(data.rivals);
+            if (changed(local.frequentPlayers, data.frequentPlayers)) setFrequentPlayers(data.frequentPlayers);
+            if (changed(local.frequentGroups, data.frequentGroups)) setFrequentGroups(data.frequentGroups);
+            setHighContrast(data.preferences.highContrast); applyCloudPreferences(data.preferences);
+            localStorage.setItem(STORAGE_KEYS.courses, JSON.stringify(mergedCourses));
+            localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(data.history));
+            localStorage.setItem(STORAGE_KEYS.rivals, JSON.stringify(data.rivals));
+            localStorage.setItem(STORAGE_KEYS.frequentPlayers, JSON.stringify(data.frequentPlayers));
+            localStorage.setItem(STORAGE_KEYS.frequentGroups, serializeFrequentGroups(data.frequentGroups));
+            localStorage.setItem(STORAGE_KEYS.contrast, String(data.preferences.highContrast));
+            localStorage.setItem(STORAGE_KEYS.draft, JSON.stringify(data.activeDraft));
+            localStorage.setItem(CLOUD_TOMBSTONES_KEY, JSON.stringify(data.tombstones));
+            persistCloudMetadata(localStorage, data);
+            hadLocalPreferences.current = true;
+          },
+        });
+        attempts = 0;
+        if (!completed) queued = true;
       } catch {
-        if (!cancelled) setCloudStatus(navigator.onLine ? "error" : "pending");
+        if (current() && ++attempts <= 3) timer = setTimeout(sync, attempts * 5_000);
+      } finally {
+        running = false;
+        if (queued && current()) schedule();
       }
     };
-    hydrateCloud();
-    return () => { cancelled = true; };
-  }, [hydrated, identity.mode, identity.userId, identity.accessToken, identity.defaultHandicap, cloudLinked, setCloudStatus]);
-
-  useEffect(() => {
-    if (!hydrated || identity.mode !== "authenticated" || !identity.accessToken || !cloudLinked || cloudHydratedUser.current !== identity.userId) return;
-    if (cloudSyncTimer.current !== null) window.clearTimeout(cloudSyncTimer.current);
-    setCloudStatus(navigator.onLine ? "syncing" : "pending");
-    cloudSyncTimer.current = window.setTimeout(async () => {
-      if (!navigator.onLine) { setCloudStatus("pending"); return; }
-      flushLocalState.current?.();
-      try {
-        await uploadCloudData(collectLocalCloudData(localStorage, identity.defaultHandicap), identity.accessToken!);
-        setCloudStatus("synced");
-      } catch { setCloudStatus("error"); }
-    }, 1_500);
+    requestCloudSync.current = schedule;
+    const onVisible = () => { if (document.visibilityState === "visible") schedule(); };
+    window.addEventListener("online", schedule);
+    window.addEventListener("backyard-sync-retry", schedule);
+    document.addEventListener("visibilitychange", onVisible);
+    schedule();
     return () => {
-      if (cloudSyncTimer.current !== null) window.clearTimeout(cloudSyncTimer.current);
+      cancelled = true; clearTimeout(timer); requestCloudSync.current = null;
+      window.removeEventListener("online", schedule);
+      window.removeEventListener("backyard-sync-retry", schedule);
+      document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [hydrated, identity.mode, identity.userId, identity.accessToken, identity.defaultHandicap, cloudLinked, courses, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, course, startHole, roundHoles, players, ownerId, bets, segments, personalBets, manualBets, scores, unitEvents, ballFriendSetup, expenses, roundId, roundDate, currentIndex, setCloudStatus]);
+  }, [hydrated, identity.mode, identity.userId, cloudLinked, cloudError, setCloudStatus, applyCloudPreferences, applyDraft]);
 
   useEffect(() => {
-    if (identity.mode !== "authenticated" || !identity.accessToken || !cloudLinked) return;
-    const syncWhenOnline = () => {
-      flushLocalState.current?.();
-      setCloudStatus("syncing");
-      uploadCloudData(collectLocalCloudData(localStorage, identity.defaultHandicap), identity.accessToken!)
-        .then(() => setCloudStatus("synced"))
-        .catch(() => setCloudStatus("error"));
-    };
-    window.addEventListener("online", syncWhenOnline);
-    return () => window.removeEventListener("online", syncWhenOnline);
-  }, [identity.mode, identity.accessToken, identity.defaultHandicap, cloudLinked, setCloudStatus]);
+    requestCloudSync.current?.();
+  }, [courses, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, course, startHole, roundHoles, players, ownerId, bets, segments, personalBets, manualBets, scores, unitEvents, ballFriendSetup, expenses, roundId, roundDate, currentIndex, identity.defaultHandicap]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -953,7 +993,8 @@ function GolfBetsApp() {
   }
 
   function deleteActiveRound() {
-    suppressNextDraftSave.current = true;
+    flushLocalState.current = null;
+    trackLocalCloudEdits(localStorage, null, { highContrast, language: "es-MX", notificationsEnabled: false, defaultHandicap: identity.defaultHandicap });
     clearActiveRoundStorage(window.localStorage);
     setPlayers([]); setOwnerId("");
     setScores({}); setUnitEvents([]); setBallFriendSetup({}); setPersonalBets([]); setManualBets([]); setShowFullScorecard(false); setExpenses(emptyExpenses);
@@ -1145,44 +1186,46 @@ function GolfBetsApp() {
 
   async function attachScorecardPhoto(round: RoundSnapshot, file?: File) {
     if (!file) return;
-    await saveScorecardPhoto(round.id, file);
-    setHistory((rounds) => rounds.map((item) => item.id === round.id ? { ...item, photoId: round.id, updatedAt: new Date().toISOString() } : item));
-    if (identity.mode === "authenticated" && cloudLinked) {
-      const blob = await readScorecardPhoto(round.id);
-      if (blob) uploadScorecardPhotoCloud(identity.userId, round.id, blob).catch(() => setCloudStatus("pending"));
-    }
+    const photoId = `${round.id}-${makeId()}`;
+    try {
+      await saveScorecardPhoto(photoId, file);
+      if (!ownsLocalWorkspace(localStorage, identity.userId)) return;
+      queuePhoto(localStorage, { userId: identity.userId, roundId: round.id, photoId, operation: "upload", revision: makeId() });
+      setHistory(rounds => rounds.map(item => item.id === round.id ? { ...item, photoId, updatedAt: new Date().toISOString() } : item));
+      setFeedback(cloudLinked ? "Foto guardada en este dispositivo · sincronización pendiente." : "Foto guardada en este dispositivo.");
+    } catch { setFeedback("No se pudo guardar la foto. Conserva el original y vuelve a intentarlo."); }
   }
 
   async function viewScorecardPhoto(round: RoundSnapshot) {
     const preview = window.open("about:blank", "_blank");
     if (preview) preview.opener = null;
-    let blob = await readScorecardPhoto(round.photoId || round.id);
-    if (!blob && identity.mode === "authenticated" && cloudLinked) blob = await readScorecardPhotoCloud(identity.userId, round.id);
-    if (!blob) {
+    try {
+      let blob = await readScorecardPhoto(round.photoId || round.id);
+      if (!blob && identity.mode === "authenticated" && cloudLinked) blob = await readScorecardPhotoCloud(identity.userId, round.id, round.photoId);
+      if (!blob) throw new Error("Photo unavailable");
+      const url = URL.createObjectURL(blob);
+      if (preview) preview.location.replace(url);
+      else { URL.revokeObjectURL(url); throw new Error("Popup blocked"); }
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
       preview?.close();
-      window.alert("No se encontró la foto local.");
-      return;
+      setFeedback("No pudimos abrir la foto. Puede seguir pendiente en el dispositivo original; revisa la conexión o permite abrir la ventana.");
     }
-    const url = URL.createObjectURL(blob);
-    if (preview) preview.location.replace(url);
-    else window.location.assign(url);
-    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
   }
 
   async function confirmHistoricalRoundDeletion() {
     if (!historicalRoundToDelete) return;
     const target = historicalRoundToDelete;
     const next = resolveHistoricalRoundDeletion(history, target.id, "delete");
-    recordCloudDeletion(localStorage, "round", target.id);
-    persistRoundHistory(window.localStorage, next);
-    setHistory(next);
-    setHistoricalRoundToDelete(null);
-    if (target.photoId) {
-      try { await deleteScorecardPhoto(target.photoId); } catch { /* the round deletion must not depend on optional local media */ }
-      if (identity.mode === "authenticated" && cloudLinked) {
-        try { await deleteScorecardPhotoCloud(identity.userId, target.id); } catch { setCloudStatus("pending"); }
+    try {
+      recordCloudDeletion(localStorage, "round", target.id);
+      queuePhoto(localStorage, { userId: identity.userId, roundId: target.id, photoId: target.photoId || target.id, operation: "delete", revision: makeId() });
+      persistRoundHistory(window.localStorage, next);
+      setHistory(next); setHistoricalRoundToDelete(null);
+      if (target.photoId) {
+        try { await deleteScorecardPhoto(target.photoId); } catch { /* Cloud cleanup remains independently retryable. */ }
       }
-    }
+    } catch { setFeedback("No se pudo guardar la eliminación. Reintenta; no se confirmó la sincronización."); }
   }
 
   function confirmPersonalHistoryDeletion() {

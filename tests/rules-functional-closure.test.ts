@@ -25,7 +25,7 @@ test("Visor PDF usa canvas interno, solo carga al abrir, con navegación, zoom y
   assert.match(viewer,/import\("pdfjs-dist\/legacy\/build\/pdf.mjs"\)/);assert.match(viewer,/getDocument\(\{ url: document.localUrl \}\)/);
   assert.match(viewer,/← Regresar a Reglas/);assert.match(viewer,/<canvas/);assert.match(viewer,/render\?\.cancel\(\)/);assert.match(viewer,/task\?\.destroy\(\)/);
   assert.match(panel,/selectedDocument && <InternalPdfViewer/);assert.doesNotMatch(panel,/<iframe src=\{selectedDocument/);
-  const route=readFileSync("app/api/rules/documents/[id]/route.ts","utf8");
+  const route=readFileSync("app/api/rules/documents/[id]/route.ts","utf8")+readFileSync("lib/pdf-proxy.ts","utf8");
   assert.match(route,/cache: "no-store"/);assert.match(route,/s-maxage=86400/);
 });
 class SpeechMock implements SpeechRecognitionLike {

@@ -95,11 +95,14 @@ export function normalizeOtp(value: string) {
 }
 
 export function authErrorMessage(error: unknown, context: "google" | "apple" | "email" | "otp" | "logout" = "email") {
-  const message = error instanceof Error ? error.message.toLowerCase() : String(error || "").toLowerCase();
+  const detail = error && typeof error === "object" ? error as { message?: string; code?: string; status?: number } : null;
+  const message = `${detail?.code || ""} ${detail?.message || String(error || "")}`.toLowerCase();
+  if (detail?.status === 429) return "Demasiados intentos. Espera un momento antes de solicitar otro código.";
   if (message.includes("provider") && (message.includes("disabled") || message.includes("not enabled") || message.includes("unsupported"))) return `Acceso con ${context === "google" ? "Google" : context === "apple" ? "Apple" : "correo"} pendiente de configuración.`;
   if (message.includes("rate") || message.includes("too many")) return "Demasiados intentos. Espera un momento antes de intentarlo nuevamente.";
   if (message.includes("expired")) return "El código expiró. Solicita uno nuevo.";
   if (message.includes("invalid") || message.includes("token")) return context === "otp" ? "El código no es correcto. Revísalo o solicita uno nuevo." : "Revisa la información e intenta nuevamente.";
+  if (message.includes("abort") || message.includes("timeout")) return "La conexión tardó demasiado. Revisa tu correo antes de reenviar el código o inténtalo nuevamente.";
   if (message.includes("network") || message.includes("fetch") || message.includes("connection")) return "No hay conexión. Intenta nuevamente.";
   if (context === "google") return "No pudimos iniciar sesión con Google.";
   if (context === "apple") return "No pudimos iniciar sesión con Apple.";

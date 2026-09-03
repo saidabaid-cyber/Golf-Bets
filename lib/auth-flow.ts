@@ -5,7 +5,7 @@ export type AuthFlowClient = {
   verifyOtp: (input: { email: string; token: string; type: "email" }) => Promise<{ data: { session: Session | null }; error: unknown }>;
   signInWithOAuth: (input: { provider: "google" | "apple"; options: { redirectTo: string } }) => Promise<{ error: unknown }>;
   getSession: () => Promise<{ data: { session: Session | null }; error: unknown }>;
-  signOut: () => Promise<{ error: unknown }>;
+  signOut: (options?: { scope: "local" }) => Promise<{ error: unknown }>;
 };
 
 function throwIfError(error: unknown) {
@@ -19,8 +19,11 @@ export function authIdentityChanged(currentUserId: string | null, nextUserId: st
 }
 
 export async function requireCloudWrites(writes: ArrayLike<PromiseLike<{ error: unknown }>>) {
-  const results = await Promise.all(Array.from(writes));
-  for (const result of results) throwIfError(result.error);
+  const results = await Promise.allSettled(Array.from(writes));
+  for (const result of results) {
+    if (result.status === "rejected") throw result.reason;
+    throwIfError(result.value.error);
+  }
 }
 
 export async function sendEmailOtp(auth: AuthFlowClient, email: string, redirectTo: string) {
@@ -47,6 +50,20 @@ export async function restoreAuthSession(auth: AuthFlowClient) {
 }
 
 export async function closeAuthSession(auth: AuthFlowClient) {
-  const result = await auth.signOut();
+  const result = await auth.signOut({ scope: "local" });
   throwIfError(result.error);
+}
+
+export const OTP_COOLDOWN_KEY = "backyard-otp-next-send-v1";
+export function otpRetrySeconds(nextSendAt: number, now = Date.now()) { return Math.max(0, Math.ceil((nextSendAt - now) / 1000)); }
+export class OtpSendGate {
+  pending = false;
+  nextSendAt = 0;
+  begin(now = Date.now()) {
+    if (this.pending || otpRetrySeconds(this.nextSendAt, now)) return false;
+    this.pending = true;
+    this.nextSendAt = now + 60_000;
+    return true;
+  }
+  finish() { this.pending = false; }
 }

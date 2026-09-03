@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { fetchWithTimeout } from "../network-timeout";
 
 let browserClient: SupabaseClient | null | undefined;
 
@@ -11,6 +12,7 @@ export function getSupabaseBrowser() {
     return null;
   }
   browserClient = createClient(url, anonKey, {
+    global: { fetch: fetchWithTimeout },
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, flowType: "pkce" },
   });
   return browserClient;
