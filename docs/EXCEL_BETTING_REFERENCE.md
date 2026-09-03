@@ -24,10 +24,10 @@ El archivo recibido es una plantilla sin los scores de la ronda de La Vista Temp
 | HCP Foursome | Comienzo M31/U31; Cálculos G99, E34, D36:D37; AB194/AB211 | El control % se refleja en G99, pero los scores efectivos de tabla1 usan **E34 sin %**. Tabla2 rebaja contra los cuatro elegidos mediante AA211:AA215/AB211. | App aplica %/redondeo y rebasa cada match. Diferencia real de cableado del libro; no atribuir a sus fórmulas controles que no usan. Pendiente resolver intención del control sin cambiarlo por intuición. |
 | Skins | Cálculos K99; M99:P99; D922:AG926; E991:F993 | HCP rebajado × %. Enteros primero, fracción desempata; carry suma hoyos sin ganador único; se paga solo al ganador único. | Comparar selección fraccionaria y acumulación con fixtures derivados. Carry final sin ganador no se paga. |
 | Conejos | Cálculos F99; D758:AG762; E848:I869 y bloques siguientes | Ganadores netos alimentan Libre/Agarra/Mantiene/Gana; ganar en segunda posición reinicia ciclo. Si no se cobra al cerrar ciclo de tres se acumula. E848:E852 contienen **solo candidatos ganadores**, no todos los nombres. | Máquina actual compatible en estructura; probar secuencias desde fórmulas, no confundir columnas candidatas con participantes. |
-| Bola Amiga | Cálculos A111:C125/D112:D113; M129:AC129; AD167; filas1523:1526 | Dos scores ajustados, cap Comienzo M30 (9). Orden bajo/alto; birdie gross de un equipo invierte dígitos del contrario. Diferencia de números de dos dígitos. | App tiene la estructura; validar HCP efectivo y pagos uniformes. Excel permite valores individuales: liquidación ponderada MIN, no disponible en app. |
+| Bola Amiga | Cálculos A111:C125/D112:D113; D108:D109; M129:AC129; AD167; filas1523:1526 | HCP rebajado × S6; V6=Sí compara con SI−.5 (redondeo .5 arriba). Dos scores ajustados, cap9. Birdie gross invierte dígitos del contrario. | Coinciden cap, inversión y pago uniforme en fixture derivado. Excel permite valores individuales con liquidación ponderada MIN, no disponible en app. |
 | Unidades | Jugar E/F de cada hoyo; Cálculos N1561, D1568:H1572 | Captura manual; cada positivo cobra a cada rival MIN de sus valores. | Coincide con importe uniforme; no hay fórmula de auto Birdie/Eagle/HIO en el libro. Automatismos aprobados de app no se afirman contrastados contra Excel. |
-| Copas | Cálculos Q1542:U1556, S1552 y diagonal | Captura separada; quien registra copa paga a cada rival. Valor/participación separados de Unidades. | App las registra como unidades negativas con mismo valor/participantes; equivalencia solo si iguales. Diferencia de configuración real. |
-| Monkey | Comienzo I16/L16; Cálculos P34:T34, E1447:E1452, F1459 y L1491:M1493 | Tres jugadores. Por cada rival: 2 puntos al ganarle, 1 al empatar, 0 al perder. Liquidar diferencias de puntos por pares × valor. | No existe motor/configuración Monkey en la app base. No confundir con Foursome Fantasma. |
+| Copas | Cálculos Q1542:U1556, S1552 y diagonal | Captura separada; quien registra copa paga a cada rival. Valor/participación separados de Unidades. | Corregido valor independiente `units.copaValue`; ausente hereda valor unitario antiguo. Solo eventos etiquetados Copa usan ese valor. Participantes siguen compartidos con Unidades; importes individuales por jugador no se implementaron. |
+| Monkey | Comienzo I16/L16; Cálculos P34:T34, E1447:E1452, F1459 y L1491:M1493 | Tres jugadores. Por cada rival: 2 puntos al ganarle, 1 al empatar, 0 al perder. Liquidar diferencias de puntos por pares × valor. | Implementado desde estas fórmulas, incluyendo HCP rebajado SI/SI+18, sin % añadido. Configuración opcional y desactivada para datos antiguos; live, Cómo Vamos, Resultados e histórico. No es Fantasma. |
 | Pollas / Mini Polla | Sin fórmula/etiqueta en ninguna de las siete hojas | No existen en este archivo. | Conservar reglas previamente aprobadas; no afirmar validación Excel. |
 
 ## Límites y defectos del archivo fuente
@@ -57,4 +57,28 @@ Carry ausente en apuestas antiguas = desactivado, para no introducir obligacione
 
 ## Validación y cierre
 
-En curso. Los resultados finales de tests, navegador y diferencias no resueltas se registrarán al terminar. Este documento distingue siempre fórmula trazada, extensión aprobada y caso real; no certifica todo el motor por el mero hecho de que pase la suite existente.
+Pruebas nuevas en `tests/excel-reference.test.ts`: traducción independiente del desempate decimal (2,160 combinaciones), carry Skins, estados Conejos, cinco resultados LB/HB, fijo+Patada, cap/inversión Bola Amiga, Unidades/Copas y Monkey. Todas esas comparaciones pasaron. No son un recálculo íntegro en Microsoft Excel.
+
+Los cuatro casos Personales fallaron primero contra la app base (Carlos −500, Flavio +700, Javier −700 para Said); luego pasaron con los resultados exigidos. Juan ya coincidía. Se actualizó el test antiguo que exigía presión física en Personales porque contradice la nueva instrucción explícita. Foursome mantiene presión física.
+
+### Revisión funcional en navegador
+
+- Origen QA `http://localhost:3001` separado del storage del usuario en3000. Proxy local al servidor Next existente, sin cambios de configuración publicados.
+- Captura manual automatizada por UI de los90 scores, SI real y Par69 verificados en editor.
+- Apuestas activas: Conejos, Skins, Unidades, Foursome (3 segmentos/9 matches), Monkey y los4 Personales. Gross finales:82/68/87/91/84.
+- Recarga trasH9, continuarH10, completarH18, guardar histórico, cerrar/reabrir:90 scores y carry conservados; histórico previo sigue presente.
+- Personales en pantalla: Said/Carlos−600; Said/José Juan−200; Said/Flavio+800; Said/Javier−800. Brutos100/700,200/400,800/0,0/800.
+- Ronda de QA con HCP publicados0 (ventajas Personales directas): totales de todas las apuestas Said−340, Carlos+8670, José Juan−2130, Flavio−3900, Javier−2300. Suma0. Estos totales combinados son evidencia de integración, no resultados cacheados del Excel original.
+- Monkey: puntos27/58/23, balances−540/+1320/−780; visible en resumen e histórico.
+- Resumen H1 avanzó por timeout una vez; X avanzó un hoyo en los siguientes; H18 terminó en Resultados. Se corrigió otro bug: resumen Skins usaba `count`=0 en empates; ahora muestra carry pendiente1 enH1 del fixture.
+- 390×844 y430×932: contenido/inputs legibles, sin overflow horizontal del documento (tablas con su scroll propio), consola sin errores. No sustituye prueba física de Safari/iPhone.
+
+### Diferencias todavía abiertas (NO certificadas como equivalencia total)
+
+1. Foursome: el %/redondeo visible del libro no alimenta sus scores de tabla1. App conserva el % configurable previamente aprobado mientras se resuelve si replicar literalmente ese cableado. El rebasing por match corresponde al mecanismo de tabla2 del libro, no a usar ciegamente todos los jugadores de tabla1.
+2. Excel admite importes por jugador y factor pago completo/mitad en matrices; la app usa importes uniformes y la convención mitad validada. No afirmar equivalencia para configuraciones no representables.
+3. Copas tiene valor propio ahora, pero no selección de participantes separada de Unidades ni valores individuales por jugador.
+4. Foursome Fantasma, tamaños3/9/18 y presión física; auto-unidades; Pollas/Mini Polla: extensiones previas sin fuente equivalente completa en este libro. Conservadas y cubiertas por regresiones existentes, no «validadas Excel».
+5. No se reparó ni reescribió el archivo original, ni se recalcularon todos sus30,195 registros de fórmula en Excel. Se trazaron dependencias y se contrastaron los fragmentos económicos indicados. Sus referencias rotas y plantilla sin scores impiden usar valores cacheados como oráculo de una ronda completa.
+
+Validación final/commits/Preview: ver `docs/QA_EXCEL_NASSAU.md`.
