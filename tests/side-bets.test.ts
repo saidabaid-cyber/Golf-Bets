@@ -86,8 +86,8 @@ test("H9 y H18 identifican cada keeper faltante con varias apuestas activas", ()
   for (const kind of ["vipers", "camels", "fish"] as CounterBetKind[]) keepers[kind].holes_10_18 = "daniel";
   assert.equal(requiredSideBetCapture(18, enabled, keepers, { enabled: false, participantIds: [] }, undefined), "");
   const page = readFileSync("app/page.tsx", "utf8");
-  assert.match(page, /const sideBetError = requiredSideBetCapture/);
-  assert.match(page, /if \(sideBetError\) \{ setFeedback\(sideBetError\); return; \}/);
+  assert.match(page, /const validationErrors = collectHoleValidationErrors/);
+  assert.match(page, /setHoleValidationErrors\(validationErrors\)/);
 });
 
 const lobaCourse: Course = {

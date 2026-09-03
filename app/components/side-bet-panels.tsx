@@ -108,6 +108,11 @@ export function LobaHolePanel({ config, players, hole, capture, liveDetail, onCh
     winner: "loba_team" | "opponents" | "tie";
     lobaBestNet: number;
     opponentBestNet: number;
+    playerUnits: Record<string, { automatic: number; manual: number; total: number }>;
+    lobaAutomaticUnits: number;
+    lobaManualUnits: number;
+    opponentAutomaticUnits: number;
+    opponentManualUnits: number;
     lobaUnits: number;
     opponentUnits: number;
     balances: Record<string, number>;
@@ -133,15 +138,19 @@ export function LobaHolePanel({ config, players, hole, capture, liveDetail, onCh
       <label>Quién es la Loba<select value={capture.lobaPlayerId || ""} onChange={event => onChange({ ...capture, lobaPlayerId: event.target.value || undefined, partnerId: undefined })}><option value="">Seleccionar…</option>{participants.map(player => <option key={player.id} value={player.id}>{player.name}</option>)}</select></label>
       <label>Modalidad<select value={capture.mode || ""} onChange={event => onChange({ ...capture, mode: event.target.value as LobaHole["mode"], partnerId: undefined })}><option value="">Seleccionar…</option><option value="partner">Con pareja · 1x</option><option value="solo">Sola · 2x</option><option value="solo_anticipated">Sola anticipada · 3x</option></select></label>
       {capture.mode === "partner" && <label>Pareja<select value={capture.partnerId || ""} onChange={event => onChange({ ...capture, partnerId: event.target.value || undefined })}><option value="">Seleccionar…</option>{rivals.map(player => <option key={player.id} value={player.id}>{player.name}</option>)}</select></label>}
-      <label>🔥 Multiplicador<NumericCaptureInput inputMode="numeric" min={1} max={99} step={1} value={capture.fireMultiplier} emptyWhenZero={false} onValueChange={value => onChange({ ...capture, fireMultiplier: Math.max(1, Math.trunc(value ?? 1)) })} /></label>
+      <div className="lobaFireField"><label>🔥 Multiplicador del hoyo<NumericCaptureInput inputMode="numeric" min={1} max={99} step={1} value={capture.fireMultiplier} emptyWhenZero={false} onValueChange={value => onChange({ ...capture, fireMultiplier: Math.max(1, Math.trunc(value ?? 1)) })} /></label><details><summary aria-label="Ayuda sobre multiplicador del hoyo de Loba">?</summary><p>El 🔥 multiplica únicamente el valor base de Loba. Con base $100 y 🔥5x: pareja $500, sola $1,000 y sola anticipada $1,500. No multiplica las Unidades.</p></details></div>
     </div>
-    {config.unitsEnabled && <><div className="miniLabel">📏 Unidades por jugador · pertenecen a su equipo</div><div className="quickCounterList">{participants.map(player => <div key={player.id}><b>{player.name}</b><Counter label={`Unidades Loba de ${player.name}`} value={capture.unitCounts[player.id] || 0} onChange={value => setUnit(player.id, value)} /></div>)}</div></>}
+    {config.unitsEnabled && <><div className="miniLabel">📏 Unidades naturales + manuales · pertenecen a su equipo</div><div className="quickCounterList lobaUnitPlayers">{participants.map(player => {
+      const unitDetail = liveDetail?.playerUnits[player.id];
+      const manual = capture.unitCounts[player.id] || 0;
+      return <div key={player.id}><span><b>{player.name}</b><small>{unitDetail ? `Auto +${unitDetail.automatic} · Manual +${unitDetail.manual} · Total +${unitDetail.total}` : `Auto — · Manual +${manual} · Total pendiente`}</small></span><Counter label={`Unidades manuales o especiales de Loba de ${player.name}`} value={manual} onChange={value => setUnit(player.id, value)} /></div>;
+    })}</div></>}
     {liveDetail ? <div className="lobaLive" aria-live="polite">
       <b>Estado vivo · HCP {config.hcpPct ?? 100}%</b>
       <div className="lobaLiveTeams"><span><strong>🐺 {liveDetail.lobaTeam.map(id => players.find(player => player.id === id)?.name || id).join(" + ")}</strong><small>Mejor neto: {liveDetail.lobaBestNet}</small></span><i>vs</i><span><strong>{liveDetail.opponents.map(id => players.find(player => player.id === id)?.name || id).join(" + ")}</strong><small>Mejor neto: {liveDetail.opponentBestNet}</small></span></div>
       <small>🔥 {liveDetail.fireMultiplier}x · {capture.mode === "partner" ? "Pareja 1x" : capture.mode === "solo" ? "Solo 2x" : "Solo anticipado 3x"} · Valor hoyo {money(liveDetail.effectiveValue)}</small>
       <strong>{liveDetail.winner === "tie" ? "Resultado: Empate" : liveDetail.winner === "loba_team" ? "Resultado: Equipo 🐺 gana" : "Resultado: Contrarios ganan"}</strong>
-      {config.unitsEnabled && <small>📏 Unidades: {liveDetail.lobaUnits} vs {liveDetail.opponentUnits} · valor efectivo {money(liveDetail.effectiveUnitValue)}</small>}
+      {config.unitsEnabled && <small>📏 Equipos: {liveDetail.lobaUnits} vs {liveDetail.opponentUnits} · 🐺 Auto {liveDetail.lobaAutomaticUnits} + Manual {liveDetail.lobaManualUnits} · Contrarios Auto {liveDetail.opponentAutomaticUnits} + Manual {liveDetail.opponentManualUnits} · valor efectivo {money(liveDetail.effectiveUnitValue)}</small>}
       <div>{Object.entries(liveDetail.balances).filter(([, amount]) => amount !== 0).map(([id, amount]) => <span key={id}>{players.find(player => player.id === id)?.name || id} <strong className={amount > 0 ? "good" : "bad"}>{signedMoney(amount)}</strong></span>)}</div>
     </div> : <div className="scoreGate" role="status">{configurationComplete ? "Esperando scores." : "Completa quién es la Loba, su modalidad y pareja cuando aplique."} El resultado se calculará automáticamente.</div>}
   </section>;

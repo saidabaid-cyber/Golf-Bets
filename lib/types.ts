@@ -79,7 +79,7 @@ export type LobaHole = {
   fireMultiplier: number;
   /** @deprecated Legacy drafts may contain this value; the result is now score-derived. */
   winner?: LobaWinner;
-  /** Unit captures remain per player, but settlement belongs to each team. */
+  /** Manual/special unit captures remain per player; natural units are score-derived. */
   unitCounts: Record<string, number>;
 };
 

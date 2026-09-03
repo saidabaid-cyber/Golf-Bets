@@ -313,7 +313,7 @@ export function payoutWinnerTakesFromAll(
   return balances;
 }
 
-function automaticUnitsForScore(gross: number, par: number) {
+export function automaticUnitsForScore(gross: number, par: number) {
   // HIO has priority and is never added on top of eagle/albatross.
   if (gross === 1) return 3;
   const underPar = par - gross;

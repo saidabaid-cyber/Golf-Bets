@@ -13,7 +13,7 @@ import type {
   PhysicalNine,
   Transfer,
 } from "./types";
-import { baseHandicaps, completedHole, playingHandicap, strokeAllowanceForHole } from "./engine";
+import { automaticUnitsForScore, baseHandicaps, completedHole, playingHandicap, strokeAllowanceForHole } from "./engine";
 
 const EPSILON = 0.0001;
 
@@ -134,12 +134,17 @@ export function modeMultiplier(mode?: LobaMode) {
 }
 
 export function validateLobaHole(hole: LobaHole | undefined, participantIds: string[]) {
-  if (participantIds.length < 2) return "Selecciona al menos dos jugadores para 🐺 Loba.";
-  if (!hole?.lobaPlayerId || !participantIds.includes(hole.lobaPlayerId)) return "Selecciona quién es la 🐺 Loba.";
-  if (!hole.mode) return "Selecciona la modalidad de 🐺 Loba.";
-  if (hole.mode === "partner" && (!hole.partnerId || hole.partnerId === hole.lobaPlayerId || !participantIds.includes(hole.partnerId))) return "Selecciona la pareja de la 🐺 Loba.";
-  if (!Number.isFinite(hole.fireMultiplier) || hole.fireMultiplier < 1) return "Define el multiplicador 🔥 del hoyo.";
-  return "";
+  return validateLobaHoleErrors(hole, participantIds)[0] || "";
+}
+
+export function validateLobaHoleErrors(hole: LobaHole | undefined, participantIds: string[]) {
+  const errors: string[] = [];
+  if (participantIds.length < 2) errors.push("Selecciona al menos dos jugadores para 🐺 Loba.");
+  if (!hole?.lobaPlayerId || !participantIds.includes(hole.lobaPlayerId)) errors.push("Selecciona quién es la 🐺 Loba.");
+  if (!hole?.mode) errors.push("Selecciona la modalidad de 🐺 Loba.");
+  if (hole?.mode === "partner" && (!hole.partnerId || hole.partnerId === hole.lobaPlayerId || !participantIds.includes(hole.partnerId))) errors.push("Selecciona la pareja de la 🐺 Loba.");
+  if (!Number.isFinite(hole?.fireMultiplier) || (hole?.fireMultiplier ?? 0) < 1) errors.push("Define el multiplicador 🔥 del hoyo.");
+  return errors;
 }
 
 export function calculateLoba(
@@ -194,8 +199,19 @@ export function calculateLoba(
         addTransfer(transfers, balances, loser, winner, effectiveValue, { betType: "loba", hole: holeNumber, metadata: { component: "base", multiplier, fireMultiplier } });
       }
     }
-    const lobaUnits = lobaTeam.reduce((sum, id) => sum + Math.max(0, Math.trunc(capture.unitCounts?.[id] || 0)), 0);
-    const opponentUnits = opponents.reduce((sum, id) => sum + Math.max(0, Math.trunc(capture.unitCounts?.[id] || 0)), 0);
+    const playerUnits = Object.fromEntries(participants.map(player => {
+      const automatic = config.unitsEnabled
+        ? automaticUnitsForScore(scores[holeNumber][player.id] as number, holeDefinition.par)
+        : 0;
+      const manual = config.unitsEnabled ? Math.max(0, Math.trunc(capture.unitCounts?.[player.id] || 0)) : 0;
+      return [player.id, { automatic, manual, total: automatic + manual }];
+    })) as Record<string, { automatic: number; manual: number; total: number }>;
+    const lobaAutomaticUnits = lobaTeam.reduce((sum, id) => sum + playerUnits[id].automatic, 0);
+    const lobaManualUnits = lobaTeam.reduce((sum, id) => sum + playerUnits[id].manual, 0);
+    const opponentAutomaticUnits = opponents.reduce((sum, id) => sum + playerUnits[id].automatic, 0);
+    const opponentManualUnits = opponents.reduce((sum, id) => sum + playerUnits[id].manual, 0);
+    const lobaUnits = lobaAutomaticUnits + lobaManualUnits;
+    const opponentUnits = opponentAutomaticUnits + opponentManualUnits;
     if (config.unitsEnabled && effectiveUnitValue > 0) {
       for (const lobaPlayer of lobaTeam) for (const opponent of opponents) {
         if (lobaUnits > 0) {
@@ -224,6 +240,11 @@ export function calculateLoba(
       fireMultiplier,
       effectiveValue,
       effectiveUnitValue,
+      playerUnits,
+      lobaAutomaticUnits,
+      lobaManualUnits,
+      opponentAutomaticUnits,
+      opponentManualUnits,
       lobaUnits,
       opponentUnits,
       balances: holeBalances,
@@ -240,15 +261,27 @@ export function requiredSideBetCapture(
   lobaConfig: { enabled: boolean; participantIds: string[] },
   lobaHole: LobaHole | undefined,
 ) {
+  return requiredSideBetCaptures(holeNumber, enabledCounterBets, keepers, lobaConfig, lobaHole)[0] || "";
+}
+
+export function requiredSideBetCaptures(
+  holeNumber: number,
+  enabledCounterBets: Array<{ kind: CounterBetKind; config: CounterBetConfig }>,
+  keepers: CounterBetKeepers,
+  lobaConfig: { enabled: boolean; participantIds: string[] },
+  lobaHole: LobaHole | undefined,
+) {
+  const errors: string[] = [];
   const nine = holeNumber === 9 ? "holes_1_9" : holeNumber === 18 ? "holes_10_18" : undefined;
   if (nine) {
     for (const { kind, config } of enabledCounterBets) {
       if (config.enabled && !keepers[kind]?.[nine]) {
         const meta = COUNTER_BET_META[kind];
-        return `Selecciona quién se quedó las ${meta.emoji} ${meta.plural} de esta vuelta.`;
+        const article = kind === "vipers" ? "las" : "los";
+        errors.push(`Selecciona quién se quedó ${article} ${meta.emoji} ${meta.plural} de esta vuelta.`);
       }
     }
   }
-  if (lobaConfig.enabled) return validateLobaHole(lobaHole, lobaConfig.participantIds);
-  return "";
+  if (lobaConfig.enabled) errors.push(...validateLobaHoleErrors(lobaHole, lobaConfig.participantIds));
+  return errors;
 }

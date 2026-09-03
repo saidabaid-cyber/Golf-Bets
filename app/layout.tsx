@@ -12,6 +12,10 @@ export const metadata = {
   title: "THE BACKYARD",
   description: "Built for the games we play.",
   manifest: "/manifest.webmanifest",
+  icons: {
+    icon: "/brand/the-backyard-logo.png",
+    apple: "/brand/the-backyard-logo.png",
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

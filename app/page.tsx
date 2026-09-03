@@ -63,7 +63,7 @@ import { GroupBuilder } from "./components/group-builder";
 import { PersonalHistoryPanel } from "./components/personal-history-panel";
 import { useScreenNavigation } from "./components/use-screen-navigation";
 import { commitHoleCapture, editCapturedScore, holeCapture, isHoleCaptureComplete, type ScoreRows } from "../lib/score-capture";
-import { foursomeHoleConfigurationError, foursomePressure, setFoursomePressure } from "../lib/foursome-config";
+import { foursomePressure, setFoursomePressure } from "../lib/foursome-config";
 import { FoursomeLive } from "./components/foursome-live";
 import { PersonalCompact } from "./components/personal-compact";
 import { HistoricalRoundDetail } from "./components/historical-round-detail";
@@ -83,13 +83,13 @@ import { enqueuePollaScore } from "../lib/polla-offline";
 import { cloneLaVistaLocalRules, isLaVistaCourse, LA_VISTA_LOCAL_RULES_UPDATED_AT, withDefaultLaVistaRules } from "../lib/local-rules";
 import { filterHistory, historyYears, MONTH_LABELS } from "../lib/history-filters";
 import { priorRabbitStatus, priorSkinsStatus } from "../lib/prior-hole-status";
-import { pollaDetailBalance } from "../lib/result-breakdown";
+import { buildGeneralResultsTable, pollaDetailBalance, type ResultCategoryColumn } from "../lib/result-breakdown";
+import { collectHoleValidationErrors } from "../lib/hole-validation";
 import {
   calculateCounterBet,
   calculateLoba,
   COUNTER_BET_META,
   emptyCounterBetKeepers,
-  requiredSideBetCapture,
   setCounterQuantity,
 } from "../lib/side-bets";
 import {
@@ -376,6 +376,8 @@ function GolfBetsApp() {
   const [draftAvailable, setDraftAvailable] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"saving" | "saved" | "error">("saved");
   const [holeSummary, setHoleSummary] = useState<string[]>([]);
+  const [holeValidationErrors, setHoleValidationErrors] = useState<string[]>([]);
+  const [resultsView, setResultsView] = useState<"players" | "general">("players");
   const [highContrast, setHighContrast] = useState(true);
   const [roundClosed, setRoundClosed] = useState(false);
   const [historyYear, setHistoryYear] = useState("");
@@ -767,6 +769,27 @@ function GolfBetsApp() {
     Personales: personals.balances[ownerId] ?? 0,
     Manuales: manual.balances[ownerId] ?? 0,
   }), [rabbitBalances, skinBalances, units.balances, monkey.balances, bets.monkey?.enabled, foursomes.balances, ballFriend.balances, polla.balances, miniPolla.balances, vipers.balances, camels.balances, fish.balances, loba.balances, personals.balances, manual.balances, ownerId]);
+
+  const generalResultCategories = useMemo<ResultCategoryColumn[]>(() => [
+    { key: "rabbits", label: "🐇 Conejos", balances: rabbitBalances, active: bets.rabbits.enabled, played: rabbits.events.length > 0 },
+    { key: "skins", label: "⛳ Skins", balances: skinBalances, active: bets.skins.enabled, played: skins.events.length > 0 },
+    { key: "units", label: "📏 Unidades", balances: units.balances, active: bets.units.enabled, played: completedHoles.size > 0 },
+    { key: "monkey", label: "Monkey", balances: monkey.balances, active: Boolean(bets.monkey?.enabled), played: monkey.details.length > 0 },
+    { key: "foursome", label: "Foursome", balances: foursomes.balances, active: bets.foursome.enabled, played: foursomes.matches.some(match => match.completedHoles > 0) },
+    { key: "ballFriend", label: "Bola Amiga", balances: ballFriend.balances, active: bets.ballFriend.enabled, played: ballFriend.details.length > 0 },
+    { key: "polla", label: "Polla", balances: polla.balances, active: pollaEnabled, played: polla.details.some(detail => detail.complete) },
+    { key: "miniPolla", label: "Mini Polla", balances: miniPolla.balances, active: bets.miniPolla.enabled, played: miniPolla.details.some(detail => detail.complete) },
+    { key: "vipers", label: "🐍 Víboras", balances: vipers.balances, active: bets.vipers.enabled, played: vipers.totalQuantity > 0 || vipers.halves.some(half => half.settled) },
+    { key: "camels", label: "🐫 Camellos", balances: camels.balances, active: bets.camels.enabled, played: camels.totalQuantity > 0 || camels.halves.some(half => half.settled) },
+    { key: "fish", label: "🐟 Peces", balances: fish.balances, active: bets.fish.enabled, played: fish.totalQuantity > 0 || fish.halves.some(half => half.settled) },
+    { key: "loba", label: "🐺 Loba", balances: loba.balances, active: bets.loba.enabled, played: loba.details.length > 0 },
+    { key: "personals", label: "Personales", balances: personals.balances, active: personalBets.length > 0, played: completedHoles.size > 0 },
+    { key: "manual", label: "Manuales", balances: manual.balances, active: manualBets.length > 0, played: manualBets.some(bet => Object.values(bet.amounts).some(amount => amount !== 0)) },
+  ], [rabbitBalances, bets.rabbits.enabled, rabbits.events.length, skinBalances, bets.skins.enabled, skins.events.length, units.balances, bets.units.enabled, completedHoles, monkey.balances, monkey.details.length, bets.monkey?.enabled, foursomes.balances, bets.foursome.enabled, foursomes.matches, ballFriend.balances, bets.ballFriend.enabled, ballFriend.details.length, polla.balances, pollaEnabled, polla.details, miniPolla.balances, bets.miniPolla.enabled, miniPolla.details, vipers.balances, bets.vipers.enabled, vipers.totalQuantity, vipers.halves, camels.balances, bets.camels.enabled, camels.totalQuantity, camels.halves, fish.balances, bets.fish.enabled, fish.totalQuantity, fish.halves, loba.balances, bets.loba.enabled, loba.details.length, personals.balances, personalBets.length, manual.balances, manualBets]);
+  const generalResults = useMemo(
+    () => buildGeneralResultsTable(settlementIds, generalResultCategories, allBetBalances),
+    [settlementIds, generalResultCategories, allBetBalances],
+  );
 
   const playerName = (id?: string) => {
     if (id === FOURSOME_GHOST_ID) return "Fantasma";
@@ -1452,33 +1475,32 @@ function GolfBetsApp() {
 
   function saveAndAdvance(event: { timeStamp: number }) {
     if (holeSummaryAdvance.current) return;
-    if (!scoreCaptureComplete) { setFeedback("Captura o confirma el score de todos los jugadores antes de guardar el hoyo."); return; }
-    const committed = commitHoleCapture(scores, scoreEdits, hole, players);
-    if (!committed) { setFeedback("Completa los scores vacíos antes de guardar el hoyo."); return; }
-    const sideBetError = requiredSideBetCapture(
+    const validationErrors = collectHoleValidationErrors({
+      scoreCaptureComplete,
       holeNumber,
-      [
+      players,
+      counterBets: [
         { kind: "vipers", config: bets.vipers },
         { kind: "camels", config: bets.camels },
         { kind: "fish", config: bets.fish },
       ],
       counterBetKeepers,
-      bets.loba,
-      lobaHoles[holeNumber],
-    );
-    if (sideBetError) { setFeedback(sideBetError); return; }
-    const foursomeError = foursomeHoleConfigurationError(bets.foursome, segments, order, holeNumber);
-    if (foursomeError) { setFeedback(foursomeError); return; }
-    if (bets.ballFriend.enabled) {
-      const participants = bets.ballFriend.participantIds.filter(id => players.some(player => player.id === id));
-      const setup = ballFriendSetup[holeNumber];
-      const active = participants.filter(id => id !== setup?.restPlayerId);
-      const teamB = active.filter(id => !setup?.teamA?.includes(id));
-      if ((participants.length === 5 && !setup?.restPlayerId) || setup?.teamA?.length !== 2 || teamB.length !== 2) {
-        setFeedback("Selecciona las parejas de Bola Amiga antes de continuar.");
-        return;
-      }
+      lobaConfig: bets.loba,
+      lobaHole: lobaHoles[holeNumber],
+      foursomeConfig: bets.foursome,
+      foursomeSegments: segments,
+      order,
+      ballFriendConfig: bets.ballFriend,
+      ballFriendSetup: ballFriendSetup[holeNumber],
+    });
+    if (validationErrors.length) {
+      setFeedback("");
+      setHoleValidationErrors(validationErrors);
+      return;
     }
+    const committed = commitHoleCapture(scores, scoreEdits, hole, players);
+    if (!committed) { setHoleValidationErrors(["Completa los scores vacíos antes de guardar el hoyo."]); return; }
+    setHoleValidationErrors([]);
     setFeedback("");
     checkpoint();
     // Also covers entering Tarjeta directly without pressing Iniciar ronda.
@@ -1526,7 +1548,7 @@ function GolfBetsApp() {
     if (lobaDetail) {
       const lobaNames = lobaDetail.lobaTeam.map(playerName).join(" + ");
       const opponentNames = lobaDetail.opponents.map(playerName).join(" + ");
-      extras.push(`🐺 ${lobaNames} ${lobaDetail.lobaBestNet} neto vs ${opponentNames} ${lobaDetail.opponentBestNet} neto · 🔥${lobaDetail.fireMultiplier}x · ${lobaDetail.winner === "tie" ? "Empate" : lobaDetail.winner === "loba_team" ? `ganó ${lobaNames}` : `ganó ${opponentNames}`}`);
+      extras.push(`🐺 ${lobaNames} ${lobaDetail.lobaBestNet} neto vs ${opponentNames} ${lobaDetail.opponentBestNet} neto · 🔥${lobaDetail.fireMultiplier}x · ${lobaDetail.winner === "tie" ? "Empate" : lobaDetail.winner === "loba_team" ? `ganó ${lobaNames}` : `ganó ${opponentNames}`}${bets.loba.unitsEnabled ? ` · 📏 ${lobaDetail.lobaUnits} vs ${lobaDetail.opponentUnits}` : ""}`);
     }
     const privatePollaLink = parsePrivatePollaLink(localStorage.getItem(PRIVATE_POLLA_LINK_KEY));
     if (privatePollaLink) {
@@ -1582,6 +1604,7 @@ function GolfBetsApp() {
     {feedback && <div className="notice" role="status">{feedback}<button className="textButton" aria-label="Cerrar mensaje" onClick={() => setFeedback("")}>×</button></div>}
     {copyFallback && <section className="card"><label>Resumen para copiar<textarea readOnly value={copyFallback} onFocus={event => event.currentTarget.select()} /></label><button onClick={() => setCopyFallback("")}>← Regresar</button></section>}
     {pendingRoundAction && <div className="modalBackdrop"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="round-change-title"><h2 id="round-change-title">Confirmar cambios</h2><p>{pendingRoundAction.message}</p><div className="dialogActions"><button autoFocus className="secondary" onClick={() => setPendingRoundAction(null)}>Cancelar</button><button className="primary" onClick={() => { const action = pendingRoundAction; setPendingRoundAction(null); action.run(); }}>Confirmar</button></div></section></div>}
+    {holeValidationErrors.length > 0 && <div className="modalBackdrop" role="presentation"><section className="confirmDialog holeValidationDialog" role="alertdialog" aria-modal="true" aria-labelledby="hole-validation-title" aria-describedby="hole-validation-description"><h2 id="hole-validation-title">Falta completar este hoyo</h2><p id="hole-validation-description">Revisa todos estos puntos antes de guardar y avanzar:</p><ul>{holeValidationErrors.map(error => <li key={error}>{error}</li>)}</ul><div className="dialogActions"><button autoFocus className="primary" onClick={() => setHoleValidationErrors([])}>Volver y completar</button></div></section></div>}
     {tab === "personalDetail" && renderPersonalLive("Detalle Personal")}
     {tab === "historyDetail" && (() => { const saved = history.find(round => round.id === historyDetailId); return saved ? <HistoricalRoundDetail round={saved} onEdit={() => editHistoricalRound(saved)} onPhoto={() => viewScorecardPhoto(saved)} /> : <div className="empty">La ronda ya no está disponible.</div>; })()}
     {tab === "groups" && <GroupBuilder frequentPlayers={frequentPlayers} frequentGroups={frequentGroups} onBack={goBack} onPlay={startRoundWithGeneratedGroup} onSaveFrequentGroup={saveGeneratedFrequentGroup} onEditFrequentGroup={beginEditFrequentGroup} onDeleteFrequentGroup={setFrequentGroupToDelete} />}
@@ -1910,7 +1933,7 @@ function GolfBetsApp() {
       {scoreCaptureComplete && renderMonkeyLive()}
 
       <div className="roundActions"><button className="secondary big" disabled={currentIndex === 0 || holeSummary.length > 0} onClick={() => goToHoleIndex(currentIndex - 1)}>← Anterior</button><button className="primary big" disabled={holeSummary.length > 0} onClick={saveAndAdvance}>{currentIndex < order.length - 1 ? "Guardar y siguiente hoyo →" : "Terminar y guardar ronda →"}</button></div>
-      {holeSummary.length > 0 && <div className="holeSummaryBackdrop"><div className="holeSummary" role="dialog" aria-modal="true" aria-label={`Resumen del hoyo ${holeNumber}`} onPointerDown={pauseHoleSummary} onPointerUp={resumeHoleSummary} onPointerCancel={resumeHoleSummary} onLostPointerCapture={resumeHoleSummary}><button autoFocus className="holeSummaryClose" aria-label="Cerrar resumen y avanzar" onClick={closeHoleSummary}>×</button><div role="status" aria-live="polite"><h2>{holeSummary[0]} ✓</h2><p className="holeSummaryScores">{holeSummary.slice(1, players.length + 1).map((line, index) => <span key={index}>{line}</span>)}</p><div className="holeSummaryBets">{holeSummary.slice(players.length + 1).map((line, index) => <p key={index}>{line}</p>)}</div><small className="holeSummaryHoldHint">Mantén presionado para pausar</small></div><div className="holeSummaryTimer" aria-hidden="true" /></div></div>}
+      {holeSummary.length > 0 && <div className="holeSummaryBackdrop"><div className="holeSummary" role="dialog" aria-modal="true" aria-label={`Resumen del hoyo ${holeNumber}`} onPointerDown={pauseHoleSummary} onPointerUp={resumeHoleSummary} onPointerCancel={resumeHoleSummary} onLostPointerCapture={resumeHoleSummary}><button autoFocus className="holeSummaryClose" aria-label="Cerrar resumen y avanzar" onClick={closeHoleSummary}>×</button><div className="holeSummaryContent" role="status" aria-live="polite"><h2>{holeSummary[0]} ✓</h2><p className="holeSummaryScores">{holeSummary.slice(1, players.length + 1).map((line, index) => <span key={index}>{line}</span>)}</p><div className="holeSummaryBets">{holeSummary.slice(players.length + 1).map((line, index) => <p key={index}>{line}</p>)}</div><small className="holeSummaryHoldHint">Mantén presionado para pausar</small></div><div className="holeSummaryTimer" aria-hidden="true" /></div></div>}
     </>}
 
     {tab === "standings" && <>
@@ -1955,8 +1978,8 @@ function GolfBetsApp() {
       </div></details>
 
       <section className="card playerSummary">
-        <div className="row between"><h2>Resumen por jugador</h2><button className="secondary" onClick={copyResultsSummary}>Copiar para WhatsApp</button></div>
-        <div className="playerResultGrid">{players.map((p) => <details className="playerResultCard" key={p.id}>
+        <div className="resultsViewHeader"><h2>Resultados</h2><div className="segmented" aria-label="Vista de resultados"><button className={resultsView === "players" ? "active" : ""} aria-pressed={resultsView === "players"} onClick={() => setResultsView("players")}>Jugadores</button><button className={resultsView === "general" ? "active" : ""} aria-pressed={resultsView === "general"} onClick={() => setResultsView("general")}>Resumen General</button></div></div>
+        {resultsView === "players" ? <><div className="row between resultsPlayerTools"><h3>Resumen por jugador</h3><button className="secondary" onClick={copyResultsSummary}>Copiar para WhatsApp</button></div><div className="playerResultGrid">{players.map((p) => <details className="playerResultCard" key={p.id}>
           <summary><b>{p.name}</b><span className="playerIndicators">{bets.rabbits.enabled ? `🐇 ${rabbits.won[p.id] ?? 0}` : ""}{bets.skins.enabled ? ` · ⛳ ${skins.won[p.id] ?? 0}` : ""}{bets.units.enabled ? ` · 📏 ${(units.net[p.id] ?? 0) > 0 ? "+" : ""}${units.net[p.id] ?? 0}` : ""}</span><strong className={(allBetBalances[p.id] ?? 0) > 0 ? "good" : (allBetBalances[p.id] ?? 0) < 0 ? "bad" : ""}>{signedMoney(allBetBalances[p.id] ?? 0)}</strong></summary>
           <div className="playerBetBlocks">
             {bets.rabbits.enabled && <div><span>🐇 Conejos · Jugados</span><b>{rabbits.won[p.id] ?? 0}</b><i>{signedMoney(rabbitBalances[p.id] ?? 0)}</i></div>}
@@ -1974,7 +1997,7 @@ function GolfBetsApp() {
             {bets.fish.enabled && <div><span>🐟 Peces</span><b>{fish.totalQuantity}</b><i>{signedMoney(fish.balances[p.id] ?? 0)}</i></div>}
             {bets.loba.enabled && <div><span>🐺 Loba</span><b>{loba.details.length}</b><i>{signedMoney(loba.balances[p.id] ?? 0)}</i></div>}
           </div>
-        </details>)}</div>
+        </details>)}</div></> : <div className="generalResultsWrap"><p className="muted">Todas las apuestas activas y ya jugadas. Desliza horizontalmente para revisar cada categoría.</p>{generalResults.categories.length ? <div className="generalResultsScroll" tabIndex={0} aria-label="Resumen general de resultados por apuesta"><table className="generalResultsTable"><thead><tr><th>Jugador</th>{generalResults.categories.map(category => <th key={category.key}>{category.label}</th>)}<th>TOTAL</th></tr></thead><tbody>{generalResults.rows.map(row => <tr key={row.playerId}><th scope="row">{playerName(row.playerId)}</th>{generalResults.categories.map(category => <td key={category.key}>{signedMoney(row.cells[category.key] || 0)}</td>)}<td className={!row.consistent ? "bad" : row.total > 0 ? "good" : row.total < 0 ? "bad" : ""}>{signedMoney(row.total)}</td></tr>)}<tr className="generalResultsTotal"><th scope="row">TOTAL GENERAL</th>{generalResults.categories.map(category => <td key={category.key}>{signedMoney(generalResults.categoryTotals[category.key] || 0)}</td>)}<td className={Math.abs(generalResults.grandTotal) < 0.001 ? "good" : "bad"}>{signedMoney(generalResults.grandTotal)}</td></tr></tbody></table></div> : <div className="empty">Todavía no hay apuestas activas con hoyos jugados.</div>}</div>}
       </section>
 
       <section className={`card settlementCard ${Math.abs(settlementDifference) < 0.001 ? "" : "settlementError"}`}>
@@ -1985,7 +2008,7 @@ function GolfBetsApp() {
       {bets.vipers.enabled && <CounterBetResults title="🐍 Víboras" halves={vipers.halves} playerName={playerName} />}
       {bets.camels.enabled && <CounterBetResults title="🐫 Camellos" halves={camels.halves} playerName={playerName} />}
       {bets.fish.enabled && <CounterBetResults title="🐟 Peces" halves={fish.halves} playerName={playerName} />}
-      {bets.loba.enabled && <details className="card sideBetResult"><summary>🐺 Loba</summary>{loba.details.length ? loba.details.map(detail => <div className="lobaResultHole" key={detail.hole}><div><b>H{detail.hole} · 🔥{detail.fireMultiplier}x · HCP {detail.hcpPct}%</b><span>{detail.lobaTeam.map(playerName).join(" + ")} {detail.lobaBestNet} neto vs {detail.opponents.map(playerName).join(" + ")} {detail.opponentBestNet} neto</span><span>{detail.winner === "tie" ? "Empate" : detail.winner === "loba_team" ? "Ganó equipo 🐺" : "Ganaron contrarios"}</span></div><strong>{money(detail.effectiveValue)}</strong><small>📏 {detail.lobaUnits} vs {detail.opponentUnits} · unidad efectiva {money(detail.effectiveUnitValue)}</small><div className="sideBetBalances">{Object.entries(detail.balances).filter(([, amount]) => amount !== 0).map(([id, amount]) => <span key={id}>{playerName(id)} <b className={amount > 0 ? "good" : "bad"}>{signedMoney(amount)}</b></span>)}</div></div>) : <div className="empty">Sin hoyos completos.</div>}</details>}
+      {bets.loba.enabled && <details className="card sideBetResult"><summary>🐺 Loba</summary>{loba.details.length ? loba.details.map(detail => <div className="lobaResultHole" key={detail.hole}><div><b>H{detail.hole} · 🔥{detail.fireMultiplier}x · HCP {detail.hcpPct}%</b><span>{detail.lobaTeam.map(playerName).join(" + ")} {detail.lobaBestNet} neto vs {detail.opponents.map(playerName).join(" + ")} {detail.opponentBestNet} neto</span><span>{detail.winner === "tie" ? "Empate" : detail.winner === "loba_team" ? "Ganó equipo 🐺" : "Ganaron contrarios"}</span></div><strong>{money(detail.effectiveValue)}</strong><small>📏 Equipos {detail.lobaUnits} vs {detail.opponentUnits} · unidad efectiva {money(detail.effectiveUnitValue)}</small><div className="lobaResultUnits">{Object.entries(detail.playerUnits).map(([id, unitDetail]) => <span key={id}>{playerName(id)} · Auto +{unitDetail.automatic} · Manual +{unitDetail.manual} · Total +{unitDetail.total}</span>)}</div><div className="sideBetBalances">{Object.entries(detail.balances).filter(([, amount]) => amount !== 0).map(([id, amount]) => <span key={id}>{playerName(id)} <b className={amount > 0 ? "good" : "bad"}>{signedMoney(amount)}</b></span>)}</div></div>) : <div className="empty">Sin hoyos completos.</div>}</details>}
 
       {bets.foursome.enabled && <details className="card">
         <summary>Detalle Foursome</summary>

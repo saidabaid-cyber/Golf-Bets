@@ -117,8 +117,9 @@ test("Foursome activo bloquea Guardar si el tramo actual no tiene pareja válida
   assert.match(foursomeHoleConfigurationError(enabled, [], order, 1), /Completa Foursome/);
   assert.equal(foursomeHoleConfigurationError(enabled, configured, order, 1), "");
   assert.match(foursomeHoleConfigurationError(enabled, missingCurrent, order, 7), /Completa Foursome/);
-  assert.match(app, /const foursomeError = foursomeHoleConfigurationError/);
-  assert.match(app, /if \(foursomeError\) \{ setFeedback\(foursomeError\); return; \}/);
+  assert.match(app, /const validationErrors = collectHoleValidationErrors/);
+  assert.match(app, /foursomeConfig: bets\.foursome/);
+  assert.match(app, /if \(validationErrors\.length\)/);
 });
 
 test("Live compacto conserva ambas perspectivas exactamente una vez y detalle plegado", () => {
