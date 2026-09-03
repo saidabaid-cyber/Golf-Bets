@@ -13,6 +13,13 @@ export function numericCaptureOr(raw: string, fallback = 0) {
   return parseNumericCapture(raw) ?? fallback;
 }
 
+export type NumericDirection = "gain" | "loss";
+
+export function applyNumericDirection(value: number | null, direction: NumericDirection) {
+  const magnitude = Math.abs(value ?? 0);
+  return direction === "loss" ? -magnitude : magnitude;
+}
+
 function finiteLimit(value: string | number | undefined) {
   if (value === undefined || value === "") return null;
   const parsed = Number(value);

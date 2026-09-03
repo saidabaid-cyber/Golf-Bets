@@ -86,6 +86,12 @@ export function mergeLegalAcceptances(current: LegalAcceptance[], next: LegalAcc
   return [...current.filter((item) => !replacements.has(`${item.userId}:${item.type}:${item.documentVersion}`)), ...next];
 }
 
+/** A guest entry is a new local legal ceremony. Authenticated acceptances are
+ * intentionally untouched and no golf data is removed. */
+export function clearLegalAcceptancesForUser(current: LegalAcceptance[], userId: string) {
+  return current.filter((item) => item.userId !== userId);
+}
+
 export function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }

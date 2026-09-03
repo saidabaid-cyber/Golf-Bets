@@ -55,9 +55,11 @@ test("callback intercambia código y siempre ofrece regreso seguro", () => {
 });
 
 test("consentimiento exige Árbitro y 18+ antes de continuar", () => {
+  assert.match(auth, /checked=\{terms\}/);
+  assert.match(auth, /checked=\{privacy\}/);
   assert.match(auth, /checked=\{rules\}/);
   assert.match(auth, /checked=\{age\}/);
-  assert.match(auth, /disabled=\{!rules \|\| !age \|\| busy\}/);
+  assert.match(auth, /disabled=\{!terms \|\| !privacy \|\| !rules \|\| !age \|\| busy\}/);
   assert.match(auth, /no es un árbitro oficial USGA/);
 });
 

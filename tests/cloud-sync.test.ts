@@ -45,6 +45,17 @@ test("fixture local conserva todas las colecciones y no modifica storage", () =>
   assert.deepEqual(storage.values, before);
 });
 
+test("un dispositivo sin preferencia inicia alto contraste activado", () => {
+  const storage = new MemoryStorage();
+  const defaults = collectLocalCloudData(storage as unknown as Storage);
+  assert.equal(defaults.preferences.highContrast, true);
+  assert.equal(defaults.preferences.hasLocalState, false);
+  storage.setItem(STORAGE_KEYS.contrast, "false");
+  const explicit = collectLocalCloudData(storage as unknown as Storage);
+  assert.equal(explicit.preferences.highContrast, false);
+  assert.equal(explicit.preferences.hasLocalState, true);
+});
+
 test("merge local/cloud es idempotente, evita duplicados y conserva la versión más reciente", () => {
   const oldPlayer = { id: "p1", name: "Viejo", handicap: 9, uses: 1, updatedAt: "2026-09-01T10:00:00Z" };
   const newPlayer = { ...oldPlayer, name: "Nuevo", updatedAt: "2026-09-02T10:00:00Z" };

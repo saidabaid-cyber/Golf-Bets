@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { expenseTotal } from "../lib/engine";
-import { initialNumericCapture, numericCaptureOr, parseNumericCapture } from "../lib/numeric-input";
+import { applyNumericDirection, initialNumericCapture, numericCaptureOr, parseNumericCapture } from "../lib/numeric-input";
 
 test("un cero inicial de captura se presenta vacío", () => {
   assert.equal(initialNumericCapture(0), "");
@@ -31,6 +31,8 @@ test("el motor puede interpretar el vacío como cero al confirmar", () => {
 
 test("una apuesta manual acepta una pérdida de -500", () => {
   assert.equal(parseNumericCapture("-500"), -500);
+  assert.equal(applyNumericDirection(500, "loss"), -500);
+  assert.equal(applyNumericDirection(-500, "gain"), 500);
 });
 
 test("un cero calculado real sigue siendo cero en resultados", () => {

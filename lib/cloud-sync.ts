@@ -49,7 +49,7 @@ export function collectLocalCloudData(storage: ReadableStorage, defaultHandicap:
     rivals: arrayOrEmpty<SavedPersonalRival>(readStoredJson<unknown>(storage, STORAGE_KEYS.rivals, [])),
     courses: arrayOrEmpty<Course>(readStoredJson<unknown>(storage, STORAGE_KEYS.courses, [])),
     preferences: {
-      highContrast: storage.getItem(STORAGE_KEYS.contrast) === "true",
+      highContrast: storage.getItem(STORAGE_KEYS.contrast) !== "false",
       language: "es-MX",
       notificationsEnabled: false,
       defaultHandicap,

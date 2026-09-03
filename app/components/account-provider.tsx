@@ -8,6 +8,7 @@ import {
   ACCOUNT_STORAGE_KEYS,
   authErrorMessage,
   buildLegalAcceptances,
+  clearLegalAcceptancesForUser,
   hasCurrentLegalConsent,
   hasLocalGolfData,
   isValidEmail,
@@ -213,6 +214,8 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
 }
 
 function ConsentScreen({ onAccept, onBack }: { onAccept: () => Promise<void>; onBack: () => Promise<void> }) {
+  const [terms, setTerms] = useState(false);
+  const [privacy, setPrivacy] = useState(false);
   const [rules, setRules] = useState(false);
   const [age, setAge] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -224,11 +227,12 @@ function ConsentScreen({ onAccept, onBack }: { onAccept: () => Promise<void>; on
     <p>The Backyard incorpora un asistente de reglas basado en las Reglas de Golf, aclaraciones y reglas locales disponibles.</p>
     <p>Cuando un grupo acuerde utilizar el Árbitro de Reglas de The Backyard como criterio para resolver una situación durante una partida, sus jugadores aceptan aplicar la resolución mostrada salvo que exista una decisión oficial de un Comité, árbitro autorizado o autoridad competente de la competencia.</p>
     <div className="officialPriority">En una competencia oficial, el Comité o árbitro oficial tiene siempre la decisión final. La IA no es un árbitro oficial USGA.</div>
+    <label className="consentCheck"><input type="checkbox" checked={terms} onChange={(event) => setTerms(event.target.checked)} /><span>Acepto los <Link href="/legal/terms">Términos de Uso</Link>.</span></label>
+    <label className="consentCheck"><input type="checkbox" checked={privacy} onChange={(event) => setPrivacy(event.target.checked)} /><span>He leído y acepto el <Link href="/legal/privacy">Aviso de Privacidad</Link>.</span></label>
     <label className="consentCheck"><input type="checkbox" checked={rules} onChange={(event) => setRules(event.target.checked)} /><span>Entiendo el alcance del Árbitro de Reglas y acepto utilizar sus resoluciones como referencia acordada entre los participantes cuando corresponda.</span></label>
     <label className="consentCheck"><input type="checkbox" checked={age} onChange={(event) => setAge(event.target.checked)} /><span>Confirmo que tengo 18 años o más.</span></label>
-    <p className="legalLead">También confirmas los <Link href="/legal/terms">Términos de Uso</Link> y el <Link href="/legal/privacy">Aviso de Privacidad</Link>.</p>
     {error && <p role="alert">{error}</p>}
-    <button className="primary big" disabled={!rules || !age || busy} onClick={async () => { setBusy(true); setError(""); try { await onAccept(); } catch { setError("No pudimos guardar tu aceptación en Supabase. Revisa tu conexión y vuelve a intentar."); } finally { setBusy(false); } }}>{busy ? "Guardando…" : "Continuar"}</button>
+    <button className="primary big" disabled={!terms || !privacy || !rules || !age || busy} onClick={async () => { setBusy(true); setError(""); try { await onAccept(); } catch { setError("No pudimos guardar tu aceptación en Supabase. Revisa tu conexión y vuelve a intentar."); } finally { setBusy(false); } }}>{busy ? "Guardando…" : "Continuar"}</button>
     <button className="textButton consentBack" disabled={busy} onClick={onBack}>← Volver al acceso</button>
   </section></main>;
 }
@@ -559,6 +563,9 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     }
     switchAccountWorkspace(localStorage, "guest");
     activeUserId.current = null;
+    const withoutPreviousGuestConsent = clearLegalAcceptancesForUser(acceptances, "guest");
+    localStorage.setItem(ACCOUNT_STORAGE_KEYS.acceptances, JSON.stringify(withoutPreviousGuestConsent));
+    setAcceptances(withoutPreviousGuestConsent);
     const profile = guestProfile();
     localStorage.setItem(ACCOUNT_STORAGE_KEYS.mode, "guest");
     setIdentity({ ...profile, mode: "guest", providers: [], accessToken: null });

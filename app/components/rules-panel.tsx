@@ -28,16 +28,6 @@ type DictationTarget = "search" | "question";
 type RuleDetail = { chapter: NavigableGolfRule; section: NavigableRuleSection };
 
 const CLARIFICATION_RULES = new Set([4, 5, 8, 10, 11, 14, 16, 25]);
-const COMMITTEE_TOPICS = [
-  "Rol del Comité",
-  "Marcación del campo",
-  "Reglas Locales Modelo",
-  "Condiciones de la competencia",
-  "Preparación del campo",
-  "Ritmo y suspensión del juego",
-  "Registro y validación de scores",
-  "Decisiones y situaciones especiales",
-];
 
 function resultLabel(type: RulesDocumentType) {
   if (type === "clarification") return "ACLARACIÓN";
@@ -88,8 +78,6 @@ export function RulesPanel({
   const [documentPage, setDocumentPage] = useState(1);
   const [visibleResults, setVisibleResults] = useState(20);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
-  const [resourceResults, setResourceResults] = useState<Partial<Record<"clarification" | "committee", RulesSearchResult[]>>>({});
-  const [resourceLoading, setResourceLoading] = useState<Partial<Record<"clarification" | "committee", boolean>>>({});
   const recognitionRef = useRef<ReturnType<typeof createDictationSession> | null>(null);
   const localRulesApply = isLaVistaCourse(courseName);
   useEffect(() => {
@@ -204,24 +192,6 @@ export function RulesPanel({
     setOpenSections(current => ({ ...current, [key]: !current[key] }));
   }
 
-  async function toggleResource(kind: "clarification" | "committee", forceOpen = false) {
-    const next = forceOpen || !openSections[kind];
-    setOpenSections(current => ({ ...current, [kind]: next }));
-    if (!next || resourceResults[kind] || resourceLoading[kind]) return;
-    setResourceLoading(current => ({ ...current, [kind]: true }));
-    const source = kind === "clarification" ? "clarifications-july-2026" : "committee-procedures-part-2";
-    try {
-      const response = await fetch(`/api/rules/search?source=${source}`);
-      const payload = await response.json() as { results?: RulesSearchResult[] };
-      if (!response.ok) throw new Error("resource failed");
-      setResourceResults(current => ({ ...current, [kind]: payload.results || [] }));
-    } catch {
-      setResourceResults(current => ({ ...current, [kind]: [] }));
-    } finally {
-      setResourceLoading(current => ({ ...current, [kind]: false }));
-    }
-  }
-
   async function ask(event: FormEvent) {
     event.preventDefault();
     if (question.trim().length < 8) return;
@@ -327,34 +297,22 @@ export function RulesPanel({
           {open && <div className="ruleChapterBody" id={`contenido-regla-${entry.number}`}>
             <p>{entry.summary}</p>
             <div className="ruleSections">{entry.sections.map((child) => <button key={child.number} onClick={() => { setDetail({ chapter: entry, section: child }); window.scrollTo({ top: 0, behavior: "smooth" }); }}><b>{child.number}</b><span>{child.title}</span><strong aria-hidden="true">›</strong></button>)}</div>
-            <div className="ruleChapterLinks"><a href={entry.sourceUrl} target="_blank" rel="noreferrer">Ver fuente oficial ↗</a>{CLARIFICATION_RULES.has(Number(entry.number)) && <button className="textButton" onClick={async () => { await toggleResource("clarification", true); scrollToSection("aclaraciones"); }}>Aclaraciones relacionadas</button>}</div>
+            <div className="ruleChapterLinks"><a href={entry.sourceUrl} target="_blank" rel="noreferrer">Ver fuente oficial ↗</a>{CLARIFICATION_RULES.has(Number(entry.number)) && <button className="textButton" onClick={() => { setDocumentPage(1); setSelectedDocument(OFFICIAL_RULES_DOCUMENTS[2]); }}>Abrir Aclaraciones relacionadas</button>}</div>
           </div>}
         </article>;
       })}</div>
     </section>
     </RulesDisclosure>
 
-    <RulesDisclosure id="procedimientos-comite" title="📋 Procedimientos / Comité" open={Boolean(openSections.committee)} onToggle={() => toggleResource("committee")}>
-<section className="card rulesResourceSection">
-      <div className="sectionTitle"><div><span className="rulesSourceBadge committee">COMITÉ</span><h2>Procedimientos del Comité</h2><p>Guía separada para quienes administran el campo o una competencia.</p></div></div>
-      <div className="committeeTopics">{COMMITTEE_TOPICS.map((topic) => <span key={topic}>{topic}</span>)}</div>
-      <div className="resourceIndex">
-        {resourceLoading.committee && <div className="empty">Cargando índice local…</div>}
-        {!resourceLoading.committee && resourceResults.committee?.map((entry) => <button className="resourceRow" key={entry.id} onClick={() => openRuleReference(entry.rule, entry.sourceId, entry.page)}><span><b>{entry.title}</b><small>{entry.explanation}</small></span><strong>{entry.rule === "Fuente oficial" ? "Fuente" : `Regla ${entry.rule}`} →</strong></button>)}
-      </div>
-      <button className="secondary big" onClick={() => setSelectedDocument(OFFICIAL_RULES_DOCUMENTS[1])}>Abrir Procedimientos oficiales</button>
+    <section className="card rulesResourceShortcut" id="procedimientos-comite">
+      <div className="sectionTitle"><div><span className="rulesSourceBadge committee">COMITÉ</span><h2>Procedimientos oficiales</h2><p>Guía separada para quienes administran el campo o una competencia.</p></div></div>
+      <button className="primary big" onClick={() => { setDocumentPage(1); setSelectedDocument(OFFICIAL_RULES_DOCUMENTS[1]); }}>Abrir Procedimientos oficiales</button>
     </section>
-    </RulesDisclosure>
 
-    <RulesDisclosure id="aclaraciones" title="📄 Aclaraciones" open={Boolean(openSections.clarification)} onToggle={() => toggleResource("clarification")}>
-    <section className="card rulesResourceSection">
-      <div className="sectionTitle"><div><span className="rulesSourceBadge clarification">ACLARACIONES</span><h2>Aclaraciones vigentes 2026</h2><p>Las 13 páginas del documento vigente están indexadas y también participan en la búsqueda superior.</p></div></div>
-      {resourceLoading.clarification && <div className="empty">Cargando índice local…</div>}
-      {!resourceLoading.clarification && resourceResults.clarification?.map((entry) => <button className="resourceRow" key={entry.id} onClick={() => openRuleReference(entry.rule, entry.sourceId, entry.page)}><span><b>{entry.title}</b><small>{entry.explanation}</small></span><strong>{entry.rule === "Fuente oficial" ? "Fuente" : `Regla ${entry.rule}`} →</strong></button>)}
-      {!resourceLoading.clarification && resourceResults.clarification?.length === 0 && <div className="empty">El índice no está disponible. El documento oficial sigue accesible.</div>}
-      <button className="secondary big" onClick={() => setSelectedDocument(OFFICIAL_RULES_DOCUMENTS[2])}>Abrir Aclaraciones oficiales</button>
+    <section className="card rulesResourceShortcut" id="aclaraciones">
+      <div className="sectionTitle"><div><span className="rulesSourceBadge clarification">ACLARACIONES</span><h2>Aclaraciones</h2><p>Documento vigente 2026; también participa en la búsqueda del reglamento.</p></div></div>
+      <button className="primary big" onClick={() => { setDocumentPage(1); setSelectedDocument(OFFICIAL_RULES_DOCUMENTS[2]); }}>Abrir Aclaraciones</button>
     </section>
-    </RulesDisclosure>
 
     {localRulesApply && <RulesDisclosure id="reglas-locales" title="⛳ Reglas Locales · La Vista" open={Boolean(openSections.local)} onToggle={() => toggleSection("local")}>
 <section className="card">
@@ -375,7 +333,7 @@ export function RulesPanel({
     <RulesDisclosure id="documentos-oficiales" title="📄 Documentos oficiales" open={Boolean(openSections.documents)} onToggle={() => toggleSection("documents")}>
 <section className="card officialLinks">
       <div className="sectionTitle"><div><h2>Documentos oficiales</h2><p>Fuentes completas usadas por el buscador y Preguntar a IA.</p></div></div>
-      <div className="officialDocumentGrid">{OFFICIAL_RULES_DOCUMENTS.map((document) => <article key={document.id}>
+      <div className="officialDocumentGrid">{OFFICIAL_RULES_DOCUMENTS.slice(0, 1).map((document) => <article key={document.id}>
         <span className="pillSmall">{document.type}</span>
         <h3>{document.title}</h3>
         <p>{document.edition}</p>
@@ -386,13 +344,11 @@ export function RulesPanel({
     </section>
     </RulesDisclosure>
 
-    <RulesDisclosure id="videos-reglas" title="🎥 Videos" open={Boolean(openSections.videos)} onToggle={() => toggleSection("videos")}>
-<section className="card videosCard">
+    <section className="card videosCard" id="videos-reglas">
       <div className="sectionTitle"><div><h2>Videos de Reglas</h2><p>Playlist existente de consulta para móvil y escritorio.</p></div></div>
       <div className="videoFrame"><iframe src={OFFICIAL_RULES_VIDEOS_EMBED_URL} title="Playlist Videos de Reglas" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen /></div>
       <a className="primary big" href={OFFICIAL_RULES_VIDEOS_URL} target="_blank" rel="noreferrer">Ver videos de Reglas ↗</a>
     </section>
-    </RulesDisclosure>
 
     {selectedDocument && <InternalPdfViewer document={selectedDocument} initialPage={documentPage} onBack={() => { setSelectedDocument(null); setDocumentPage(1); }} />}
   </>;

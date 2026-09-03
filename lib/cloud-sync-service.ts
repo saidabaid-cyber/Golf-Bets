@@ -162,11 +162,12 @@ export async function readCloudBundle(client: SupabaseClient, userId: string): P
     rivals: (rivals.data || []).map((row) => row.snapshot).filter(Boolean),
     courses: (courses.data || []).map((row) => row.snapshot).filter(Boolean),
     preferences: {
-      highContrast: Boolean(preferences.data?.high_contrast),
+      // No cloud row means no preference yet: product default is high contrast.
+      highContrast: preferences.data ? Boolean(preferences.data.high_contrast) : true,
       language: preferences.data?.locale || "es-MX",
       notificationsEnabled: Boolean(preferences.data?.notifications_enabled),
       defaultHandicap: preferences.data?.default_handicap === null || preferences.data?.default_handicap === undefined ? null : Number(preferences.data.default_handicap),
-      hasLocalState: true,
+      hasLocalState: Boolean(preferences.data),
       updatedAt: preferences.data?.updated_at,
     },
     activeDraft: state.data?.active_draft ?? null,

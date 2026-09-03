@@ -4,6 +4,7 @@ import {
   ACCOUNT_STORAGE_KEYS,
   authErrorMessage,
   buildLegalAcceptances,
+  clearLegalAcceptancesForUser,
   hasCurrentLegalConsent,
   hasLocalGolfData,
   isValidEmail,
@@ -65,4 +66,12 @@ test("la confirmación 18+ de invitado queda versionada en almacenamiento local"
   assert.equal(ACCOUNT_STORAGE_KEYS.acceptances, "backyard-legal-acceptances-v1");
   assert.equal(restored.some((item) => item.userId === "guest" && item.type === "age_confirmation"), true);
   assert.equal(hasCurrentLegalConsent(restored, "guest"), true);
+});
+
+test("cada entrada invitada puede reiniciar solo su ceremonia legal", () => {
+  const guest = buildLegalAcceptances("guest", "2026-09-02T12:00:00.000Z");
+  const account = buildLegalAcceptances("user-1", "2026-09-02T12:00:00.000Z");
+  const cleared = clearLegalAcceptancesForUser([...guest, ...account], "guest");
+  assert.equal(hasCurrentLegalConsent(cleared, "guest"), false);
+  assert.equal(hasCurrentLegalConsent(cleared, "user-1"), true);
 });

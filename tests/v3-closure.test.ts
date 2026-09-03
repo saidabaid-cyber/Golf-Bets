@@ -132,7 +132,8 @@ test("capture inputs use the empty-safe numeric control without zero placeholder
   const polla = readFileSync("app/components/polla-live-panel.tsx", "utf8");
   const input = readFileSync("app/components/numeric-capture-input.tsx", "utf8");
   assert.match(page, /NumberField label="Golpes que recibe"/);
-  assert.match(page, /NumericCaptureInput inputMode="decimal" step=\{50\}/);
+  assert.match(page, /SignedMoneyInput/);
+  assert.match(readFileSync("app/components/signed-money-input.tsx", "utf8"), /Pierde −/);
   assert.match(polla, /NumericCaptureInput placeholder="HCP"/);
   assert.match(input, /setRawValue\(event\.target\.value\)/);
   assert.doesNotMatch(`${page}\n${polla}`, /placeholder="0"/);

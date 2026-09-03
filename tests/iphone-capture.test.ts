@@ -135,21 +135,25 @@ test("18 hoyos de casos reales a través de Guardar conservan las cuatro regresi
   assert.equal(Object.values(result.balances).reduce((a,b)=>a+b,0),0);
 });
 
-test("Reglas inicialmente plegadas e independientes: IA primero, videos al final", () => {
+test("Reglas dejan IA/directorio plegables, recursos como accesos directos y videos abiertos al final", () => {
   assert.match(rules,/useState<Record<string, boolean>>\(\{\}\)/);
   assert.match(rules,/\[key\]: !current\[key\]/);
   assert.match(rules,/aria-expanded=\{open\}/);
   assert.match(rules,/open \? "▲" : "▼"/);
   const ids = [...rules.matchAll(/<RulesDisclosure id="([^"]+)"/g)].map(match=>match[1]);
-  assert.deepEqual(ids,["preguntar-ia","reglamento-navegable","procedimientos-comite","aclaraciones","reglas-locales","codigo-caballeros","documentos-oficiales","videos-reglas"]);
+  assert.deepEqual(ids,["preguntar-ia","reglamento-navegable","reglas-locales","codigo-caballeros","documentos-oficiales"]);
+  assert.match(rules, /className="card rulesResourceShortcut" id="procedimientos-comite"/);
+  assert.match(rules, /className="card rulesResourceShortcut" id="aclaraciones"/);
+  assert.match(rules, /className="card videosCard" id="videos-reglas"/);
+  assert.doesNotMatch(rules, /<RulesDisclosure id="videos-reglas"/);
   assert.match(rules,/NAVIGABLE_GOLF_RULES.map/);
   assert.match(rules,/\/api\/rules\/search\?q=/);
 });
 
 test("PDF falla de forma recuperable, enlaza fuente real, canvas limitado para iPhone", async () => {
   const viewer=readFileSync("app/components/internal-pdf-viewer.tsx","utf8");
-  assert.match(viewer,/Ver documento oficial ↗/); assert.match(viewer,/href=\{document.officialUrl\}/);
-  assert.match(viewer,/← Regresar a Reglas/); assert.match(viewer,/hidden=\{Boolean\(error\)\}/);
+  assert.match(viewer,/Ver fuente oficial ↗/); assert.match(viewer,/href=\{document.officialUrl\}/);
+  assert.match(viewer,/← Regresar a Reglas/); assert.match(viewer,/Array\.from\(\{ length: pdf\.numPages \}/);
   assert.ok(2000*3000*pdfPixelRatio(2000,3000,3)**2<=4_000_001);
   assert.equal(await withPdfDeadline(Promise.resolve(7),20),7);
   await assert.rejects(withPdfDeadline(new Promise(()=>undefined),5),/PDF timeout/);

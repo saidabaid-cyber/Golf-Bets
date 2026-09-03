@@ -67,7 +67,7 @@ test("las 13 páginas de Aclaraciones 2026 están disponibles", () => {
   const clarifications = browseRulesSource("clarifications-july-2026", 20);
   assert.equal(clarifications.length, 13);
   assert.ok(clarifications.every((result) => result.documentType === "clarification"));
-  assert.match(panel, /Aclaraciones vigentes 2026/);
+  assert.match(panel, /<h2>Aclaraciones<\/h2><p>Documento vigente 2026/);
 });
 
 test("Procedimientos del Comité está separado de las Reglas", () => {
@@ -118,8 +118,9 @@ test("Código de Caballeros permanece separado y no oficial", () => {
 });
 
 test("los tres PDFs conservan apertura accesible y regreso seguro", () => {
-  assert.equal((panel.match(/Abrir documento/g) || []).length >= 1, true);
-  assert.match(panel, /OFFICIAL_RULES_DOCUMENTS\.map/);
+  assert.match(panel, /OFFICIAL_RULES_DOCUMENTS\.slice\(0, 1\)\.map/);
+  assert.match(panel, /OFFICIAL_RULES_DOCUMENTS\[1\]/);
+  assert.match(panel, /OFFICIAL_RULES_DOCUMENTS\[2\]/);
   assert.match(readFileSync("app/components/internal-pdf-viewer.tsx", "utf8"), /← Regresar a Reglas/);
   assert.match(readFileSync("app/components/internal-pdf-viewer.tsx", "utf8"), /<canvas ref=\{canvas\}/);
 });
