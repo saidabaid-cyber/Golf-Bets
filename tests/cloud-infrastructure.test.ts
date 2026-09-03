@@ -94,7 +94,7 @@ test("consentimientos cloud reintentan de forma idempotente sin bloquear la copi
   assert.match(accountProvider, /currentConsent/);
   assert.match(accountProvider, /legal_acceptances"\)\.upsert/);
   assert.match(accountProvider, /ignoreDuplicates: true/);
-  assert.match(accountProvider, /Promise\.all\(writes\)\.catch/);
+  assert.match(accountProvider, /requireCloudWrites\(writes\)\.catch/);
 });
 
 test("env example contiene nombres requeridos pero ningún secreto real", () => {

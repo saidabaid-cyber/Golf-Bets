@@ -82,3 +82,10 @@ test("migración repetida conserva una sola ronda y el original local", () => {
   assert.equal(local.history.length, 1);
   assert.equal(second.history[0].id, "round-1");
 });
+
+test("autosave vacío de un dispositivo nuevo no oculta el draft cloud con scores", () => {
+  const draft = { players: [{ id: "a", name: "Said" }], scores: { 1: { a: 4 } }, currentIndex: 1 };
+  const empty = { players: [], scores: {}, currentIndex: 0 };
+  assert.deepEqual(mergeLocalAndCloud(bundle({ activeDraft: empty }), bundle({ activeDraft: draft })).activeDraft, draft);
+  assert.deepEqual(mergeLocalAndCloud(bundle({ activeDraft: draft }), bundle({ activeDraft: empty })).activeDraft, draft);
+});

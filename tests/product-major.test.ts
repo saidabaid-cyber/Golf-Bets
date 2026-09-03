@@ -149,8 +149,10 @@ test("aceptaciones son insert-only para conservar auditoría", () => {
   assert.doesNotMatch(migration, /legal_acceptances_self_delete/);
 });
 
-test("consentimiento local no se bloquea si las tablas de nube aún no responden", () => {
-  assert.match(auth, /Promise\.all\(writes\)\.catch\(\(\) => undefined\)/);
+test("invitado conserva consentimiento local y una cuenta no oculta fallos al sincronizarlo", () => {
+  assert.match(auth, /if \(identity.mode === "authenticated"\)/);
+  assert.match(auth, /await requireCloudWrites\(writes\)/);
+  assert.match(auth, /no se pudo sincronizar con Supabase/);
   assert.match(auth, /rules_referee_acceptances/);
   assert.match(auth, /migrationDecisionStorageKey\(identity\.userId\)/);
 });

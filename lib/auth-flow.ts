@@ -12,6 +12,17 @@ function throwIfError(error: unknown) {
   if (error) throw error;
 }
 
+/** TOKEN_REFRESHED/SIGNED_IN may repeat for the same user (focus, OTP callback).
+ * Only a different identity restarts onboarding/cloud hydration. */
+export function authIdentityChanged(currentUserId: string | null, nextUserId: string) {
+  return currentUserId !== nextUserId;
+}
+
+export async function requireCloudWrites(writes: ArrayLike<PromiseLike<{ error: unknown }>>) {
+  const results = await Promise.all(Array.from(writes));
+  for (const result of results) throwIfError(result.error);
+}
+
 export async function sendEmailOtp(auth: AuthFlowClient, email: string, redirectTo: string) {
   const result = await auth.signInWithOtp({ email: email.trim(), options: { shouldCreateUser: true, emailRedirectTo: redirectTo } });
   throwIfError(result.error);

@@ -1,5 +1,5 @@
 import type { Course, FrequentGroup, FrequentPlayer, RoundSnapshot, SavedPersonalRival } from "./types";
-import { STORAGE_KEYS, readStoredJson } from "./round-utils";
+import { STORAGE_KEYS, hasRoundProgress, readStoredJson } from "./round-utils";
 import { parseFrequentGroups } from "./frequent-templates";
 
 export const CLOUD_SYNC_VERSION = 1;
@@ -132,7 +132,9 @@ export function mergeLocalAndCloud(local: CloudDataBundle, cloud: CloudDataBundl
       defaultHandicap: local.preferences.defaultHandicap ?? cloud.preferences.defaultHandicap,
       hasLocalState: true,
     },
-    activeDraft: local.activeDraft ?? cloud.activeDraft,
+    // The initial autosave is an empty form, not a played round. It must not
+    // mask a real draft restored from another device.
+    activeDraft: hasRoundProgress(local.activeDraft) ? local.activeDraft : cloud.activeDraft,
     tombstones,
   };
 }

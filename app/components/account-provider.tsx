@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import {
   ACCOUNT_STORAGE_KEYS,
@@ -22,7 +22,8 @@ import {
 } from "../../lib/account-state";
 import { getSupabaseBrowser } from "../../lib/supabase/client";
 import { collectLocalCloudData, uploadCloudData } from "../../lib/cloud-sync";
-import { closeAuthSession, restoreAuthSession, sendEmailOtp, startSocialOAuth, verifyEmailOtp } from "../../lib/auth-flow";
+import { authIdentityChanged, closeAuthSession, requireCloudWrites, restoreAuthSession, sendEmailOtp, startSocialOAuth, verifyEmailOtp } from "../../lib/auth-flow";
+import type { AuthProviderStatus } from "../../lib/auth-provider-status";
 import { BrandLockup } from "./brand-lockup";
 
 export type BackyardIdentity = BackyardProfile & {
@@ -87,18 +88,23 @@ function AccessScreen({ onGuest, onAuthenticated }: { onGuest: () => void; onAut
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [socialEnabled, setSocialEnabled] = useState(true);
+  const [providers, setProviders] = useState<AuthProviderStatus | null>(null);
 
   useEffect(() => {
     let active = true;
     fetch("/api/features", { cache: "no-store" })
       .then((response) => response.ok ? response.json() : null)
-      .then((features) => { if (active && features?.authSocialEnabled === false) setSocialEnabled(false); })
-      .catch(() => undefined);
+      .then((features) => { if (!active) return; if (features?.authSocialEnabled === false) setSocialEnabled(false); setProviders(features?.authProviders || { status: "unavailable", email: false, google: false, apple: false }); })
+      .catch(() => { if (active) setProviders({ status: "unavailable", email: false, google: false, apple: false }); });
     return () => { active = false; };
   }, []);
 
   async function social(provider: "google" | "apple") {
-    if (!socialEnabled) {
+    if (!providers || providers.status === "unavailable") {
+      setMessage("No pudimos comprobar el proveedor de acceso. Revisa tu conexión y vuelve a intentar.");
+      return;
+    }
+    if (!socialEnabled || !providers[provider]) {
       setMessage(`Acceso con ${provider === "google" ? "Google" : "Apple"} pendiente de configuración.`);
       return;
     }
@@ -165,6 +171,7 @@ function AccessScreen({ onGuest, onAuthenticated }: { onGuest: () => void; onAut
         </>}
       </div>}
       {!socialEnabled && <p id="social-auth-status" className="hint">Google y Apple · Pendiente de configuración</p>}
+      {socialEnabled && providers?.status === "ready" && <p className="hint">{!providers.google && "Google · Pendiente de configuración. "}{!providers.apple && "Apple · Pendiente de configuración."}</p>}
       {message && <div className="accessMessage" role="status">{message}</div>}
       <p className="legalLead">Al continuar aceptas los <Link href="/legal/terms">Términos de Uso</Link> y el <Link href="/legal/privacy">Aviso de Privacidad</Link>.</p>
     </section>
@@ -175,6 +182,7 @@ function ConsentScreen({ onAccept, onBack }: { onAccept: () => Promise<void>; on
   const [rules, setRules] = useState(false);
   const [age, setAge] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
   return <main className="consentScreen"><section className="consentCard">
     <BrandLockup compact />
     <div className="eyebrow">PRIMER ACCESO</div>
@@ -185,7 +193,8 @@ function ConsentScreen({ onAccept, onBack }: { onAccept: () => Promise<void>; on
     <label className="consentCheck"><input type="checkbox" checked={rules} onChange={(event) => setRules(event.target.checked)} /><span>Entiendo el alcance del Árbitro de Reglas y acepto utilizar sus resoluciones como referencia acordada entre los participantes cuando corresponda.</span></label>
     <label className="consentCheck"><input type="checkbox" checked={age} onChange={(event) => setAge(event.target.checked)} /><span>Confirmo que tengo 18 años o más.</span></label>
     <p className="legalLead">También confirmas los <Link href="/legal/terms">Términos de Uso</Link> y el <Link href="/legal/privacy">Aviso de Privacidad</Link>.</p>
-    <button className="primary big" disabled={!rules || !age || busy} onClick={async () => { setBusy(true); try { await onAccept(); } finally { setBusy(false); } }}>{busy ? "Guardando…" : "Continuar"}</button>
+    {error && <p role="alert">{error}</p>}
+    <button className="primary big" disabled={!rules || !age || busy} onClick={async () => { setBusy(true); setError(""); try { await onAccept(); } catch { setError("No pudimos guardar tu aceptación en Supabase. Revisa tu conexión y vuelve a intentar."); } finally { setBusy(false); } }}>{busy ? "Guardando…" : "Continuar"}</button>
     <button className="textButton consentBack" disabled={busy} onClick={onBack}>← Volver al acceso</button>
   </section></main>;
 }
@@ -234,8 +243,16 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const [migrationError, setMigrationError] = useState("");
   const [profileSetupRequired, setProfileSetupRequired] = useState(false);
   const [profileChecked, setProfileChecked] = useState(false);
+  const activeUserId = useRef<string | null>(null);
+  const [accountCloudError, setAccountCloudError] = useState("");
 
   function activateSession(session: Session) {
+    if (!authIdentityChanged(activeUserId.current, session.user.id)) {
+      setIdentity((current) => current ? { ...current, accessToken: session.access_token, email: session.user.email || current.email } : current);
+      return;
+    }
+    activeUserId.current = session.user.id;
+    setAccountCloudError("");
     const profile = profileFromUser(session.user);
     setIdentity({ ...profile, mode: "authenticated", providers: session.user.app_metadata?.providers || [session.user.app_metadata?.provider].filter((value): value is string => Boolean(value)), accessToken: session.access_token });
     localStorage.setItem(ACCOUNT_STORAGE_KEYS.mode, "authenticated");
@@ -282,7 +299,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     }
     const listener = supabase?.auth.onAuthStateChange((_event, session) => {
       if (session) activateSession(session);
-      else if (localStorage.getItem(ACCOUNT_STORAGE_KEYS.mode) !== "guest") setIdentity(null);
+      else { activeUserId.current = null; if (localStorage.getItem(ACCOUNT_STORAGE_KEYS.mode) !== "guest") setIdentity(null); }
     });
     return () => { mounted = false; listener?.data.subscription.unsubscribe(); };
   }, []);
@@ -314,10 +331,11 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         }) : current);
         setProfileSetupRequired(!cloudProfile.onboarding_completed_at);
       } else {
-        // Older projects without the additive migration must remain usable.
+        setAccountCloudError("No pudimos leer tu perfil en Supabase. Los datos locales siguen disponibles; revisa la conexión y las migraciones.");
         setProfileSetupRequired(false);
       }
-    }).catch(() => undefined).finally(() => { if (mounted) { setCloudConsentChecked(true); setProfileChecked(true); } });
+      if (legalResult.error) setAccountCloudError("No pudimos leer tus consentimientos en Supabase. No se ha confirmado su sincronización.");
+    }).catch(() => { if (mounted) setAccountCloudError("No pudimos leer la cuenta en Supabase. Revisa tu conexión."); }).finally(() => { if (mounted) { setCloudConsentChecked(true); setProfileChecked(true); } });
     return () => { mounted = false; };
   }, [identity?.mode, identity?.userId]);
 
@@ -342,18 +360,16 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       accepted_at: rulesAcceptance.acceptedAt,
       locale: rulesAcceptance.locale,
     }, { onConflict: "user_id,document_version", ignoreDuplicates: true }));
-    void Promise.all(writes).catch(() => undefined);
+    void requireCloudWrites(writes).catch(() => setAccountCloudError("Tu aceptación está guardada en este dispositivo, pero no se pudo sincronizar con Supabase."));
   }, [identity?.mode, identity?.userId, currentConsent, acceptances]);
 
   async function acceptConsent() {
     if (!identity) return;
     const next = buildLegalAcceptances(identity.userId, new Date().toISOString());
     const merged = mergeLegalAcceptances(acceptances, next);
-    localStorage.setItem(ACCOUNT_STORAGE_KEYS.acceptances, JSON.stringify(merged));
-    setAcceptances(merged);
     if (identity.mode === "authenticated") {
       const supabase = getSupabaseBrowser();
-      if (!supabase) return;
+      if (!supabase) throw new Error("Supabase unavailable");
       const writes = [supabase.from("legal_acceptances").upsert(next.map((item) => ({
         user_id: item.userId, type: item.type, version: item.documentVersion, accepted_at: item.acceptedAt, locale: item.locale,
       })), { onConflict: "user_id,type,version", ignoreDuplicates: true })];
@@ -364,16 +380,18 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         accepted_at: rulesAcceptance.acceptedAt,
         locale: rulesAcceptance.locale,
       }, { onConflict: "user_id,document_version", ignoreDuplicates: true }));
-      await Promise.all(writes).catch(() => undefined);
+      await requireCloudWrites(writes);
     }
+    localStorage.setItem(ACCOUNT_STORAGE_KEYS.acceptances, JSON.stringify(merged));
+    setAcceptances(merged);
+    setAccountCloudError("");
   }
 
   async function updateProfile(profile: Pick<BackyardProfile, "displayName" | "defaultHandicap" | "avatarUrl">) {
     if (!identity) return;
     const next = mergeBackyardProfile(identity, profile);
-    setIdentity(next);
-    localStorage.setItem(`backyard-profile-cache-v1:${identity.userId}`, JSON.stringify(profile));
     if (identity.mode === "guest") {
+      setIdentity(next);
       localStorage.setItem(ACCOUNT_STORAGE_KEYS.guestProfile, JSON.stringify(profile));
       return;
     }
@@ -392,6 +410,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       supabase!.from("user_preferences").upsert({ user_id: identity.userId, default_handicap: profile.defaultHandicap, updated_at: updatedAt }),
     ]);
     if (profileResult.error || preferencesResult.error) throw profileResult.error || preferencesResult.error;
+    setIdentity(next);
+    localStorage.setItem(`backyard-profile-cache-v1:${identity.userId}`, JSON.stringify(profile));
     setProfileSetupRequired(false);
   }
 
@@ -403,6 +423,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       // Local logout remains available if the network/provider is unavailable.
     } finally {
       localStorage.removeItem(ACCOUNT_STORAGE_KEYS.mode);
+      activeUserId.current = null;
       setIdentity(null);
       setAccessRequested(false);
       setCloudLinked(false);
@@ -436,7 +457,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
           const rulesAcceptance = migrated.find((item) => item.type === "rules_referee");
           const writes = [supabase.from("legal_acceptances").upsert(migrated.map((item) => ({ user_id: item.userId, type: item.type, version: item.documentVersion, accepted_at: item.acceptedAt, locale: item.locale })), { onConflict: "user_id,type,version", ignoreDuplicates: true })];
           if (rulesAcceptance) writes.push(supabase.from("rules_referee_acceptances").upsert({ user_id: rulesAcceptance.userId, document_version: rulesAcceptance.documentVersion, accepted_at: rulesAcceptance.acceptedAt, locale: rulesAcceptance.locale }, { onConflict: "user_id,document_version", ignoreDuplicates: true }));
-          await Promise.all(writes).catch(() => undefined);
+          await requireCloudWrites(writes).catch(() => setAccountCloudError("Tus datos se vincularon, pero falta sincronizar los consentimientos con Supabase."));
         }
       }
     }
@@ -454,6 +475,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
 
   if (!ready) return <main className="accessScreen"><div className="accessLoading">Cargando The Backyard…</div></main>;
   if (!identity || accessRequested) return <AccessScreen onGuest={() => {
+    activeUserId.current = null;
     const profile = guestProfile();
     localStorage.setItem(ACCOUNT_STORAGE_KEYS.mode, "guest");
     setIdentity({ ...profile, mode: "guest", providers: [], accessToken: null });
@@ -469,6 +491,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   if (identity.mode === "authenticated" && profileSetupRequired) return <ProfileSetupScreen identity={identity} onSave={updateProfile} onBack={logout} />;
 
   return <AccountContext.Provider value={context!}>
+    {accountCloudError && <div className="notice bad" role="alert">{accountCloudError}<button onClick={() => window.location.reload()}>Reintentar conexión</button></div>}
     {children}
     {migrationDialog}
   </AccountContext.Provider>;

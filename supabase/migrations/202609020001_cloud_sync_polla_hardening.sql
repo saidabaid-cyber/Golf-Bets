@@ -1,7 +1,9 @@
 -- The Backyard cloud sync + Polla Live hardening.
 -- Additive/idempotent: preserves all V3 local data and existing tournament rows.
 
-create extension if not exists pgcrypto;
+create schema if not exists extensions;
+create extension if not exists pgcrypto with schema extensions;
+set search_path = public, extensions;
 
 alter table public.profiles add column if not exists onboarding_completed_at timestamptz;
 
@@ -232,7 +234,7 @@ revoke all on function public.join_polla(uuid, uuid, text) from anon, authentica
 grant execute on function public.join_polla(uuid, uuid, text) to service_role;
 
 create or replace function public.set_tournament_player_pin(p_player_id uuid, p_pin text)
-returns void language plpgsql security definer set search_path = public as $$
+returns void language plpgsql security definer set search_path = public, extensions as $$
 begin
   if p_pin !~ '^\d{4,6}$' then raise exception 'invalid_pin'; end if;
   update public.tournament_players set pin_hash = crypt(p_pin, gen_salt('bf')) where id = p_player_id;

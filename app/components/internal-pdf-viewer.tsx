@@ -21,13 +21,25 @@ export function InternalPdfViewer({ document, initialPage = 1, onBack }: { docum
     import("pdfjs-dist/legacy/build/pdf.mjs").then(async library => {
       if (disposed) return;
       library.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).toString();
-      const loadingTask = library.getDocument({ url: document.localUrl });
+      let loadingTask = library.getDocument({ url: document.localUrl });
       task = loadingTask;
-      const loaded = await loadingTask.promise;
+      let loaded: PDFDocumentProxy;
+      try { loaded = await loadingTask.promise; }
+      catch (error) {
+        if (disposed) return;
+        await loadingTask.destroy();
+        if (disposed) return;
+        // Some official CDNs reject server-side requests from Vercel. These
+        // public PDFs permit CORS: retry from the device, still in our canvas
+        // viewer, without navigating away or exposing server credentials.
+        loadingTask = library.getDocument({ url: document.officialUrl });
+        task = loadingTask;
+        try { loaded = await loadingTask.promise; } catch { throw error; }
+      }
       if (!disposed) { setPdf(loaded); setPage(Math.min(Math.max(1,initialPage),loaded.numPages)); }
     }).catch(() => { if (!disposed) { setError("No fue posible cargar este PDF. Reintenta la fuente oficial sin salir de The Backyard."); setLoading(false); } });
     return () => { disposed = true; void task?.destroy(); };
-  }, [document.localUrl, initialPage, retry]);
+  }, [document.localUrl, document.officialUrl, initialPage, retry]);
   useEffect(() => {
     const previous = window.document.body.style.overflow;
     window.document.body.style.overflow = "hidden";

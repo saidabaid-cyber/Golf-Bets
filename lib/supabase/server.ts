@@ -13,7 +13,7 @@ export function getSupabaseAdmin(feature: "cloud" | "polla" = "cloud") {
 export function getSupabaseForUser(token: string, feature: "cloud" | "polla" = "cloud") {
   if (!cloudServerEnabled || (feature === "polla" && !pollaLiveServerEnabled)) return null;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anonKey) return null;
   return createClient(url, anonKey, {
     global: { headers: { Authorization: `Bearer ${token}` } },

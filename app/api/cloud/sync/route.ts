@@ -13,6 +13,7 @@ function bearer(request: NextRequest) {
 async function accountClient(request: NextRequest) {
   if (!cloudServerEnabled) return { error: "La sincronización de nube está desactivada.", status: 503 } as const;
   const token = bearer(request);
+  if (!token) return { error: "Inicia sesión para sincronizar con Supabase.", status: 401 } as const;
   const client = token ? getSupabaseForUser(token) : null;
   if (!client) return { error: "Nube no configurada.", status: 503 } as const;
   const { data, error } = await client.auth.getUser(token);

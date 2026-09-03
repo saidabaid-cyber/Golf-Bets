@@ -3,6 +3,7 @@ import { getSupabaseForUser } from "../../../../lib/supabase/server";
 
 async function account(request: NextRequest) {
   const token = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+  if (!token) return { error: "Inicia sesión para consultar tus rondas en Supabase.", status: 401 } as const;
   const supabase = token ? getSupabaseForUser(token) : null;
   if (!supabase) return { error: "Nube no configurada.", status: 503 } as const;
   const { data: authData } = await supabase.auth.getUser(token);

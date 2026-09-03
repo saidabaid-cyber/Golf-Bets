@@ -1,4 +1,8 @@
-create extension if not exists pgcrypto;
+create schema if not exists extensions;
+create extension if not exists pgcrypto with schema extensions;
+-- Supabase installs pgcrypto outside public. This also resolves SQL-language
+-- function bodies while a fresh database is installing this migration.
+set search_path = public, extensions;
 
 create type public.tournament_status as enum ('upcoming', 'live', 'finished');
 create type public.tournament_role as enum ('admin', 'scorer', 'viewer');
@@ -217,7 +221,7 @@ create trigger tournament_score_audit after insert or update on public.tournamen
 
 create or replace function public.join_polla(p_public_id uuid, p_player_id uuid, p_pin text)
 returns table(access_token text, tournament_id uuid, group_id uuid, role public.tournament_role, player_name text)
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = public, extensions as $$
 declare
   v_player public.tournament_players%rowtype;
   v_group uuid;
@@ -244,7 +248,7 @@ create or replace function public.add_tournament_player(
   p_handicap numeric,
   p_pin text,
   p_is_scorer boolean default false
-) returns uuid language plpgsql security definer set search_path = public as $$
+) returns uuid language plpgsql security definer set search_path = public, extensions as $$
 declare v_player_id uuid;
 begin
   insert into public.tournament_players(tournament_id, name, handicap, pin_hash)
@@ -257,7 +261,7 @@ end $$;
 
 create or replace function public.resolve_polla_access(p_token text)
 returns table(access_id uuid, tournament_id uuid, group_id uuid, role public.tournament_role)
-language sql security definer stable set search_path = public as $$
+language sql security definer stable set search_path = public, extensions as $$
   select id, tournament_id, group_id, role from public.tournament_access
   where token_hash = encode(digest(p_token, 'sha256'), 'hex')
     and revoked_at is null and (expires_at is null or expires_at > now())
