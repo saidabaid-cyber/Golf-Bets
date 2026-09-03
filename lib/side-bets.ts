@@ -1,14 +1,19 @@
 import type {
+  BetConfig,
   CounterBetConfig,
   CounterBetEvent,
   CounterBetKeepers,
   CounterBetKind,
+  Course,
+  HoleScore,
   LobaHole,
   LobaMode,
+  LobaWinner,
   Player,
   PhysicalNine,
   Transfer,
 } from "./types";
+import { baseHandicaps, completedHole, playingHandicap, strokeAllowanceForHole } from "./engine";
 
 const EPSILON = 0.0001;
 
@@ -129,39 +134,51 @@ export function modeMultiplier(mode?: LobaMode) {
 }
 
 export function validateLobaHole(hole: LobaHole | undefined, participantIds: string[]) {
+  if (participantIds.length < 2) return "Selecciona al menos dos jugadores para 🐺 Loba.";
   if (!hole?.lobaPlayerId || !participantIds.includes(hole.lobaPlayerId)) return "Selecciona quién es la 🐺 Loba.";
   if (!hole.mode) return "Selecciona la modalidad de 🐺 Loba.";
   if (hole.mode === "partner" && (!hole.partnerId || hole.partnerId === hole.lobaPlayerId || !participantIds.includes(hole.partnerId))) return "Selecciona la pareja de la 🐺 Loba.";
   if (!Number.isFinite(hole.fireMultiplier) || hole.fireMultiplier < 1) return "Define el multiplicador 🔥 del hoyo.";
-  if (!hole.winner) return "Falta indicar el resultado de 🐺 Loba para este hoyo.";
   return "";
 }
 
 export function calculateLoba(
+  course: Course,
+  scores: Record<number, HoleScore>,
   allPlayers: Player[],
-  config: {
-    enabled: boolean;
-    participantIds: string[];
-    value: number;
-    unitsEnabled: boolean;
-    unitValue: number;
-    duplicateUnitsByMode: boolean;
-  },
+  config: BetConfig["loba"],
   holes: Record<number, LobaHole>,
   order: number[],
   completedHoles?: ReadonlySet<number>,
 ) {
   const participants = allPlayers.filter(player => config.participantIds.includes(player.id));
   const participantIds = participants.map(player => player.id);
+  const handicapBases = baseHandicaps(participants);
+  const configuredHcpPct = Number(config.hcpPct ?? 100);
+  const hcpPct = Number.isFinite(configuredHcpPct)
+    ? Math.min(100, Math.max(0, configuredHcpPct))
+    : 100;
   const balances = Object.fromEntries(participants.map(player => [player.id, 0])) as Record<string, number>;
   const transfers: Transfer[] = [];
   const details = order.flatMap(holeNumber => {
     const capture = holes[holeNumber];
     const validationError = validateLobaHole(capture, participantIds);
     if (!config.enabled || validationError || (completedHoles && !completedHoles.has(holeNumber))) return [];
+    const holeDefinition = course.holes.find(hole => hole.number === holeNumber);
+    if (!holeDefinition || !completedHole(holeNumber, scores, participantIds)) return [];
     const lobaTeam = capture.mode === "partner" ? [capture.lobaPlayerId!, capture.partnerId!] : [capture.lobaPlayerId!];
     const opponents = participantIds.filter(id => !lobaTeam.includes(id));
     if (!lobaTeam.length || !opponents.length) return [];
+    const netScores = Object.fromEntries(participants.map(player => {
+      const playingHcp = playingHandicap(handicapBases[player.id] ?? 0, hcpPct, "round");
+      const allowance = strokeAllowanceForHole(playingHcp, holeDefinition.strokeIndex, "round");
+      return [player.id, (scores[holeNumber][player.id] as number) - allowance];
+    })) as Record<string, number>;
+    const lobaBestNet = Math.min(...lobaTeam.map(id => netScores[id]));
+    const opponentBestNet = Math.min(...opponents.map(id => netScores[id]));
+    const winner: LobaWinner = Math.abs(lobaBestNet - opponentBestNet) < EPSILON
+      ? "tie"
+      : lobaBestNet < opponentBestNet ? "loba_team" : "opponents";
     const multiplier = modeMultiplier(capture.mode);
     const fireMultiplier = Math.max(1, capture.fireMultiplier || 1);
     const effectiveValue = roundMoney(Math.max(0, config.value || 0) * multiplier * fireMultiplier);
@@ -169,9 +186,9 @@ export function calculateLoba(
     const effectiveUnitValue = roundMoney(Math.max(0, config.unitValue || 0) * unitMultiplier);
     const holeBalances = Object.fromEntries(participants.map(player => [player.id, 0])) as Record<string, number>;
     const holeTransfers: Transfer[] = [];
-    if (capture.winner !== "tie") {
-      const winners = capture.winner === "loba_team" ? lobaTeam : opponents;
-      const losers = capture.winner === "loba_team" ? opponents : lobaTeam;
+    if (winner !== "tie") {
+      const winners = winner === "loba_team" ? lobaTeam : opponents;
+      const losers = winner === "loba_team" ? opponents : lobaTeam;
       for (const loser of losers) for (const winner of winners) {
         addTransfer(holeTransfers, holeBalances, loser, winner, effectiveValue, { betType: "loba", hole: holeNumber, metadata: { component: "base", multiplier, fireMultiplier } });
         addTransfer(transfers, balances, loser, winner, effectiveValue, { betType: "loba", hole: holeNumber, metadata: { component: "base", multiplier, fireMultiplier } });
@@ -198,6 +215,11 @@ export function calculateLoba(
       capture,
       lobaTeam,
       opponents,
+      winner,
+      hcpPct,
+      netScores,
+      lobaBestNet,
+      opponentBestNet,
       multiplier,
       fireMultiplier,
       effectiveValue,

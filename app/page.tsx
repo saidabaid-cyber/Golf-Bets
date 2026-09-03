@@ -719,7 +719,7 @@ function GolfBetsApp() {
   const vipers = useMemo(() => calculateCounterBet("vipers", players, bets.vipers, counterBetEvents, counterBetKeepers, order, completedHoles), [players, bets.vipers, counterBetEvents, counterBetKeepers, order, completedHoles]);
   const camels = useMemo(() => calculateCounterBet("camels", players, bets.camels, counterBetEvents, counterBetKeepers, order, completedHoles), [players, bets.camels, counterBetEvents, counterBetKeepers, order, completedHoles]);
   const fish = useMemo(() => calculateCounterBet("fish", players, bets.fish, counterBetEvents, counterBetKeepers, order, completedHoles), [players, bets.fish, counterBetEvents, counterBetKeepers, order, completedHoles]);
-  const loba = useMemo(() => calculateLoba(players, bets.loba, lobaHoles, order, completedHoles), [players, bets.loba, lobaHoles, order, completedHoles]);
+  const loba = useMemo(() => calculateLoba(course, scores, players, bets.loba, lobaHoles, order, completedHoles), [course, scores, players, bets.loba, lobaHoles, order, completedHoles]);
   const liveRabbits = useMemo(() => calculateRabbits(course, liveScores, players, bets.rabbits, order), [course, liveScores, players, bets.rabbits, order]);
   const liveSkins = useMemo(() => calculateSkins(course, liveScores, players, bets.skins, order), [course, liveScores, players, bets.skins, order]);
   const liveUnits = useMemo(() => calculateUnits(players, unitEvents, bets.units, course, liveScores, order), [players, unitEvents, bets.units, course, liveScores, order]);
@@ -727,7 +727,7 @@ function GolfBetsApp() {
   const liveFoursomes = useMemo(() => calculateFoursomes(course, liveScores, players, bets.foursome, segments, order), [course, liveScores, players, bets.foursome, segments, order]);
   const liveBallFriend = useMemo(() => calculateBallFriend(course, liveScores, players, bets.ballFriend, ballFriendSetup, order), [course, liveScores, players, bets.ballFriend, ballFriendSetup, order]);
   const livePersonals = useMemo(() => calculatePersonalBets(personalBets, ownerId, players, course, liveScores, order), [personalBets, ownerId, players, course, liveScores, order]);
-  const liveLoba = useMemo(() => calculateLoba(players, bets.loba, lobaHoles, order, liveCompletedHoles), [players, bets.loba, lobaHoles, order, liveCompletedHoles]);
+  const liveLoba = useMemo(() => calculateLoba(course, liveScores, players, bets.loba, lobaHoles, order, liveCompletedHoles), [course, liveScores, players, bets.loba, lobaHoles, order, liveCompletedHoles]);
   const priorOrder = useMemo(() => order.slice(0, currentIndex), [order, currentIndex]);
   const priorRabbits = useMemo(() => calculateRabbits(course, scores, players, bets.rabbits, priorOrder), [course, scores, players, bets.rabbits, priorOrder]);
   const priorSkins = useMemo(() => calculateSkins(course, scores, players, bets.skins, priorOrder), [course, scores, players, bets.skins, priorOrder]);
@@ -1479,6 +1479,7 @@ function GolfBetsApp() {
         return;
       }
     }
+    setFeedback("");
     checkpoint();
     // Also covers entering Tarjeta directly without pressing Iniciar ronda.
     const savedBets = freezeRoundHandicapBases(bets, players);
@@ -1496,7 +1497,7 @@ function GolfBetsApp() {
     const savedVipers = calculateCounterBet("vipers", players, bets.vipers, counterBetEvents, counterBetKeepers, order, savedCompletedHoles);
     const savedCamels = calculateCounterBet("camels", players, bets.camels, counterBetEvents, counterBetKeepers, order, savedCompletedHoles);
     const savedFish = calculateCounterBet("fish", players, bets.fish, counterBetEvents, counterBetKeepers, order, savedCompletedHoles);
-    const savedLoba = calculateLoba(players, bets.loba, lobaHoles, order, savedCompletedHoles);
+    const savedLoba = calculateLoba(course, savedScores, players, bets.loba, lobaHoles, order, savedCompletedHoles);
     if (holeSummaryTimer.current !== null) window.clearTimeout(holeSummaryTimer.current);
     const extras: string[] = [];
     const rabbit = savedRabbits.events.filter(event => event.hole === holeNumber).at(-1);
@@ -1525,7 +1526,7 @@ function GolfBetsApp() {
     if (lobaDetail) {
       const lobaNames = lobaDetail.lobaTeam.map(playerName).join(" + ");
       const opponentNames = lobaDetail.opponents.map(playerName).join(" + ");
-      extras.push(`🐺 ${lobaNames} vs ${opponentNames} · 🔥${lobaDetail.fireMultiplier}x · ${lobaDetail.capture.winner === "tie" ? "Empate" : lobaDetail.capture.winner === "loba_team" ? `ganó ${lobaNames}` : `ganó ${opponentNames}`}`);
+      extras.push(`🐺 ${lobaNames} ${lobaDetail.lobaBestNet} neto vs ${opponentNames} ${lobaDetail.opponentBestNet} neto · 🔥${lobaDetail.fireMultiplier}x · ${lobaDetail.winner === "tie" ? "Empate" : lobaDetail.winner === "loba_team" ? `ganó ${lobaNames}` : `ganó ${opponentNames}`}`);
     }
     const privatePollaLink = parsePrivatePollaLink(localStorage.getItem(PRIVATE_POLLA_LINK_KEY));
     if (privatePollaLink) {
@@ -1949,7 +1950,7 @@ function GolfBetsApp() {
         {bets.vipers.enabled && <span><b>🐍 Víboras</b>{money(bets.vipers.value)} · H10–18 {bets.vipers.secondNineMultiplier}x</span>}
         {bets.camels.enabled && <span><b>🐫 Camellos</b>{money(bets.camels.value)} · H10–18 {bets.camels.secondNineMultiplier}x</span>}
         {bets.fish.enabled && <span><b>🐟 Peces</b>{money(bets.fish.value)} · H10–18 {bets.fish.secondNineMultiplier}x</span>}
-        {bets.loba.enabled && <span><b>🐺 Loba</b>{money(bets.loba.value)} base{bets.loba.unitsEnabled ? ` · 📏 ${money(bets.loba.unitValue)}` : ""}</span>}
+        {bets.loba.enabled && <span><b>🐺 Loba</b>{money(bets.loba.value)} base · HCP {bets.loba.hcpPct ?? 100}%{bets.loba.unitsEnabled ? ` · 📏 ${money(bets.loba.unitValue)}` : ""}</span>}
         {personalBets.map((bet) => <span key={bet.id}><b>Personal {owner?.name} vs {bet.rivalMode === "group" ? playerName(bet.rivalPlayerId) : bet.rivalName}</b>{money(bet.baseValue)} base{roundHoles === 18 && (bet.pressureMultiplier || 1) > 1 ? ` · 2ª jugada ${bet.pressureMultiplier}x` : ""} · Carry {bet.carryEnabled ? "Sí" : "No"}</span>)}
       </div></details>
 
@@ -1984,7 +1985,7 @@ function GolfBetsApp() {
       {bets.vipers.enabled && <CounterBetResults title="🐍 Víboras" halves={vipers.halves} playerName={playerName} />}
       {bets.camels.enabled && <CounterBetResults title="🐫 Camellos" halves={camels.halves} playerName={playerName} />}
       {bets.fish.enabled && <CounterBetResults title="🐟 Peces" halves={fish.halves} playerName={playerName} />}
-      {bets.loba.enabled && <details className="card sideBetResult"><summary>🐺 Loba</summary>{loba.details.length ? loba.details.map(detail => <div className="lobaResultHole" key={detail.hole}><div><b>H{detail.hole} · 🔥{detail.fireMultiplier}x</b><span>{detail.lobaTeam.map(playerName).join(" + ")} vs {detail.opponents.map(playerName).join(" + ")}</span></div><strong>{money(detail.effectiveValue)}</strong><small>📏 {detail.lobaUnits} vs {detail.opponentUnits} · unidad efectiva {money(detail.effectiveUnitValue)}</small><div className="sideBetBalances">{Object.entries(detail.balances).filter(([, amount]) => amount !== 0).map(([id, amount]) => <span key={id}>{playerName(id)} <b className={amount > 0 ? "good" : "bad"}>{signedMoney(amount)}</b></span>)}</div></div>) : <div className="empty">Sin hoyos completos.</div>}</details>}
+      {bets.loba.enabled && <details className="card sideBetResult"><summary>🐺 Loba</summary>{loba.details.length ? loba.details.map(detail => <div className="lobaResultHole" key={detail.hole}><div><b>H{detail.hole} · 🔥{detail.fireMultiplier}x · HCP {detail.hcpPct}%</b><span>{detail.lobaTeam.map(playerName).join(" + ")} {detail.lobaBestNet} neto vs {detail.opponents.map(playerName).join(" + ")} {detail.opponentBestNet} neto</span><span>{detail.winner === "tie" ? "Empate" : detail.winner === "loba_team" ? "Ganó equipo 🐺" : "Ganaron contrarios"}</span></div><strong>{money(detail.effectiveValue)}</strong><small>📏 {detail.lobaUnits} vs {detail.opponentUnits} · unidad efectiva {money(detail.effectiveUnitValue)}</small><div className="sideBetBalances">{Object.entries(detail.balances).filter(([, amount]) => amount !== 0).map(([id, amount]) => <span key={id}>{playerName(id)} <b className={amount > 0 ? "good" : "bad"}>{signedMoney(amount)}</b></span>)}</div></div>) : <div className="empty">Sin hoyos completos.</div>}</details>}
 
       {bets.foursome.enabled && <details className="card">
         <summary>Detalle Foursome</summary>

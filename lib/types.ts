@@ -77,6 +77,7 @@ export type LobaHole = {
   mode?: LobaMode;
   partnerId?: string;
   fireMultiplier: number;
+  /** @deprecated Legacy drafts may contain this value; the result is now score-derived. */
   winner?: LobaWinner;
   /** Unit captures remain per player, but settlement belongs to each team. */
   unitCounts: Record<string, number>;
@@ -159,6 +160,8 @@ export type BetConfig = {
   loba: ParticipantConfig & {
     enabled: boolean;
     value: number;
+    /** Missing in older drafts is interpreted as 100%. */
+    hcpPct?: number;
     unitsEnabled: boolean;
     unitValue: number;
     duplicateUnitsByMode: boolean;

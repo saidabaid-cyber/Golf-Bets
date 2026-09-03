@@ -11,7 +11,7 @@ import {
   setCounterQuantity,
 } from "../lib/side-bets";
 import { calculateBallFriend, calculateFoursomes, calculateMiniPolla, calculatePersonalBets, calculatePolla, calculateRabbits, calculateSkins, calculateUnits, mergeBalances, payoutWinnerTakesFromAll, playersByIds } from "../lib/engine";
-import type { CounterBetConfig, CounterBetEvent, CounterBetKind, LobaHole, Player } from "../lib/types";
+import type { BetConfig, CounterBetConfig, CounterBetEvent, CounterBetKind, Course, HoleScore, LobaHole, Player } from "../lib/types";
 import { fullRoundBallFriend, fullRoundBets, fullRoundCourse, fullRoundOrder, fullRoundPersonal, fullRoundPlayers, fullRoundScores, fullRoundSegments } from "./fixtures/full-round";
 
 const players: Player[] = ["said", "juan", "pedro", "flavio", "daniel"].map((id, index) => ({ id, name: id, handicap: index * 3 }));
@@ -90,68 +90,173 @@ test("H9 y H18 identifican cada keeper faltante con varias apuestas activas", ()
   assert.match(page, /if \(sideBetError\) \{ setFeedback\(sideBetError\); return; \}/);
 });
 
-function lobaConfig(patch: Partial<{ value: number; unitsEnabled: boolean; unitValue: number; duplicateUnitsByMode: boolean }> = {}) {
-  return { enabled: true, participantIds: ids, value: 100, unitsEnabled: false, unitValue: 100, duplicateUnitsByMode: false, ...patch };
+const lobaCourse: Course = {
+  id: "loba-test", name: "Loba Test", teeName: "", holes: Array.from({ length: 18 }, (_, index) => ({ number: index + 1, par: 4, strokeIndex: index + 1 })),
+};
+
+function lobaConfig(patch: Partial<BetConfig["loba"]> = {}): BetConfig["loba"] {
+  return { enabled: true, participantIds: ids, value: 100, hcpPct: 100, unitsEnabled: false, unitValue: 100, duplicateUnitsByMode: false, ...patch };
 }
 
 function lobaHole(patch: Partial<LobaHole> = {}): LobaHole {
-  return { lobaPlayerId: "said", mode: "partner", partnerId: "pedro", fireMultiplier: 1, winner: "loba_team", unitCounts: {}, ...patch };
+  return { lobaPlayerId: "said", mode: "partner", partnerId: "pedro", fireMultiplier: 1, unitCounts: {}, ...patch };
 }
 
-test("Loba con pareja 1x distribuye 2 vs 3 mediante transferencias jugador contra jugador", () => {
-  const result = calculateLoba(players, lobaConfig(), { 1: lobaHole() }, [1]);
+function lobaScores(hole: number, values: Record<string, number>): Record<number, HoleScore> {
+  return { [hole]: values };
+}
+
+function calculateLobaHole(hole: number, values: Record<string, number>, config: BetConfig["loba"] = lobaConfig(), capture = lobaHole(), matchPlayers = players) {
+  return calculateLoba(lobaCourse, lobaScores(hole, values), matchPlayers, config, { [hole]: capture }, [hole], new Set([hole]));
+}
+
+test("Loba caso 1: pareja 2 vs 3 gana por mejor neto y liquida jugador contra jugador", () => {
+  const result = calculateLobaHole(1, { said: 5, pedro: 5, juan: 6, flavio: 7, daniel: 8 });
+  assert.equal(result.details[0].lobaBestNet, 4);
+  assert.equal(result.details[0].opponentBestNet, 5);
+  assert.equal(result.details[0].winner, "loba_team");
   assert.deepEqual(result.balances, { said: 300, juan: -200, pedro: 300, flavio: -200, daniel: -200 });
   assert.equal(result.transfers.length, 6);
   assert.equal(result.details[0].effectiveValue, 100);
   assert.equal(result.zeroSum, true);
 });
 
-test("Loba sola 2x y sola anticipada 3x funcionan 1 vs 4", () => {
-  const solo = calculateLoba(players, lobaConfig(), { 2: lobaHole({ mode: "solo", partnerId: undefined, winner: "loba_team" }) }, [2]);
+test("Loba caso 2: un mejor bruto peor puede ganar por HCP neto", () => {
+  const hcpPlayers: Player[] = [
+    { id: "said", name: "Said", handicap: 20 }, { id: "daniel", name: "Daniel", handicap: 18 },
+    { id: "juan", name: "Juan", handicap: 0 }, { id: "pedro", name: "Pedro", handicap: 2 }, { id: "flavio", name: "Flavio", handicap: 4 },
+  ];
+  const result = calculateLobaHole(1, { said: 6, daniel: 7, juan: 5, pedro: 6, flavio: 7 }, lobaConfig({ participantIds: hcpPlayers.map(player => player.id) }), lobaHole({ partnerId: "daniel" }), hcpPlayers);
+  assert.equal(Math.min(6, 7) > Math.min(5, 6, 7), true);
+  assert.equal(result.details[0].lobaBestNet, 4);
+  assert.equal(result.details[0].opponentBestNet, 5);
+  assert.equal(result.details[0].winner, "loba_team");
+});
+
+test("Loba caso 3: empate de mejores netos no paga base", () => {
+  const result = calculateLobaHole(1, { said: 4, pedro: 5, juan: 5, flavio: 7, daniel: 8 });
+  assert.equal(result.details[0].lobaBestNet, 4);
+  assert.equal(result.details[0].opponentBestNet, 4);
+  assert.equal(result.details[0].winner, "tie");
+  assert.equal(result.transfers.length, 0);
+});
+
+test("Loba espera scores completos y no materializa Par visual como resultado", () => {
+  const complete = { said: 5, pedro: 5, juan: 6, flavio: 7, daniel: 8 };
+  const empty = calculateLoba(lobaCourse, {}, players, lobaConfig(), { 1: lobaHole() }, [1], new Set([1]));
+  const partialScores: Record<number, HoleScore> = { 1: { ...complete, daniel: null } };
+  const partial = calculateLoba(lobaCourse, partialScores, players, lobaConfig(), { 1: lobaHole() }, [1], new Set([1]));
+  const confirmed = calculateLobaHole(1, complete);
+  assert.equal(empty.details.length, 0);
+  assert.equal(partial.details.length, 0);
+  assert.equal(confirmed.details.length, 1);
+});
+
+test("Loba casos 4 y 5: sola 2x y sola anticipada 3x funcionan 1 vs 4", () => {
+  const solo = calculateLobaHole(2, { said: 4, juan: 6, pedro: 6, flavio: 7, daniel: 8 }, lobaConfig(), lobaHole({ mode: "solo", partnerId: undefined }));
   assert.deepEqual(solo.balances, { said: 800, juan: -200, pedro: -200, flavio: -200, daniel: -200 });
-  const anticipated = calculateLoba(players, lobaConfig(), { 3: lobaHole({ mode: "solo_anticipated", partnerId: undefined, winner: "opponents" }) }, [3]);
+  const anticipated = calculateLobaHole(3, { said: 7, juan: 4, pedro: 6, flavio: 7, daniel: 8 }, lobaConfig(), lobaHole({ mode: "solo_anticipated", partnerId: undefined }));
   assert.deepEqual(anticipated.balances, { said: -1200, juan: 300, pedro: 300, flavio: 300, daniel: 300 });
   assert.ok(isZeroSum(solo.balances) && isZeroSum(anticipated.balances));
 });
 
+test("Loba casos 6, 7 y 8: HCP propio 100%, 80% y 0% cambia el neto determinísticamente", () => {
+  const capture = lobaHole({ lobaPlayerId: "daniel", partnerId: "flavio" });
+  const values = { said: 5, juan: 5, pedro: 5, flavio: 5, daniel: 5 };
+  const hundred = calculateLobaHole(11, values, lobaConfig({ hcpPct: 100 }), capture);
+  const eighty = calculateLobaHole(11, values, lobaConfig({ hcpPct: 80 }), capture);
+  const zero = calculateLobaHole(11, values, lobaConfig({ hcpPct: 0 }), capture);
+  assert.equal(hundred.details[0].netScores.daniel, 4);
+  assert.equal(hundred.details[0].winner, "loba_team");
+  assert.equal(eighty.details[0].netScores.daniel, 5);
+  assert.equal(eighty.details[0].winner, "tie");
+  assert.ok(Object.values(zero.details[0].netScores).every(score => score === 5));
+  assert.equal(zero.details[0].winner, "tie");
+});
+
+test("Loba caso 9: reparte el golpe exactamente por Stroke Index", () => {
+  const capture = lobaHole({ lobaPlayerId: "daniel", partnerId: "flavio" });
+  const same = { said: 5, juan: 5, pedro: 5, flavio: 5, daniel: 5 };
+  const atTwelve = calculateLobaHole(12, same, lobaConfig(), capture);
+  const atThirteen = calculateLobaHole(13, same, lobaConfig(), capture);
+  assert.equal(atTwelve.details[0].netScores.daniel, 4);
+  assert.equal(atThirteen.details[0].netScores.daniel, 5);
+});
+
 for (const fireMultiplier of [5, 10, 20, 17]) {
-  test(`Loba aplica 🔥${fireMultiplier}x solo al valor base`, () => {
-    const result = calculateLoba(players, lobaConfig({ unitsEnabled: true, unitValue: 100, duplicateUnitsByMode: true }), {
-      18: lobaHole({ mode: "solo", partnerId: undefined, fireMultiplier, unitCounts: { said: 1, juan: 1 } }),
-    }, [18]);
+  test(`Loba caso 10: 🔥${fireMultiplier}x solo cambia dinero, no ganador deportivo`, () => {
+    const result = calculateLobaHole(18, { said: 4, juan: 6, pedro: 6, flavio: 7, daniel: 8 }, lobaConfig({ unitsEnabled: true, unitValue: 100, duplicateUnitsByMode: true }), lobaHole({ mode: "solo", partnerId: undefined, fireMultiplier, unitCounts: { said: 1, juan: 1 } }));
     assert.equal(result.details[0].effectiveValue, 100 * fireMultiplier * 2);
     assert.equal(result.details[0].effectiveUnitValue, 200);
+    assert.equal(result.details[0].winner, "loba_team");
     assert.equal(result.zeroSum, true);
   });
 }
 
-test("Unidades Loba pertenecen al equipo y reproducen el caso 1 vs 4 exacto", () => {
-  const result = calculateLoba(players, lobaConfig({ value: 0, unitsEnabled: true, unitValue: 200 }), {
-    7: lobaHole({ mode: "solo", partnerId: undefined, winner: "tie", unitCounts: { said: 1, juan: 1, pedro: 2, flavio: 0, daniel: 0 } }),
-  }, [7]);
+test("Loba casos 11 y 12: unidades se liquidan independientes del ganador y también en empate", () => {
+  const losingBase = calculateLobaHole(7, { said: 8, pedro: 8, juan: 4, flavio: 6, daniel: 7 }, lobaConfig({ unitsEnabled: true, unitValue: 100 }), lobaHole({ unitCounts: { said: 2 } }));
+  assert.equal(losingBase.details[0].winner, "opponents");
+  assert.ok(losingBase.transfers.some(transfer => transfer.betType === "loba_units" && transfer.toPlayerId === "said"));
+  const result = calculateLobaHole(7, { said: 4, pedro: 5, juan: 4, flavio: 7, daniel: 8 }, lobaConfig({ value: 0, unitsEnabled: true, unitValue: 200 }), lobaHole({ mode: "solo", partnerId: undefined, unitCounts: { said: 1, juan: 1, pedro: 2, flavio: 0, daniel: 0 } }));
+  assert.equal(result.details[0].winner, "tie");
   assert.equal(result.details[0].lobaUnits, 1);
   assert.equal(result.details[0].opponentUnits, 3);
   assert.deepEqual(result.balances, { said: -1600, juan: 400, pedro: 400, flavio: 400, daniel: 400 });
   assert.equal(result.zeroSum, true);
 });
 
+test("Loba caso 13: dos unidades del equipo 2 vs 3 cobran a cada integrante y suman cero", () => {
+  const result = calculateLobaHole(1, { said: 4, pedro: 5, juan: 5, flavio: 7, daniel: 8 }, lobaConfig({ value: 0, unitsEnabled: true, unitValue: 100 }), lobaHole({ unitCounts: { said: 2 } }));
+  assert.deepEqual(result.balances, { said: 600, juan: -400, pedro: 600, flavio: -400, daniel: -400 });
+  assert.equal(Object.values(result.balances).reduce((sum, amount) => sum + amount, 0), 0);
+});
+
+test("Loba caso 14: base y unidades de ambos equipos conservan suma total cero", () => {
+  const result = calculateLobaHole(18, { said: 7, pedro: 7, juan: 4, flavio: 6, daniel: 8 }, lobaConfig({ unitsEnabled: true, unitValue: 100, duplicateUnitsByMode: true }), lobaHole({ mode: "solo_anticipated", partnerId: undefined, fireMultiplier: 20, unitCounts: { said: 2, juan: 1, pedro: 1 } }));
+  assert.equal(result.zeroSum, true);
+  assert.equal(Object.values(result.balances).reduce((sum, amount) => sum + amount, 0), 0);
+  assert.equal(result.details[0].effectiveUnitValue, 300);
+});
+
 test("Unidades Loba OFF no liquidan y ON sin duplicar ignora modalidad y fuego", () => {
-  const capture = lobaHole({ mode: "solo_anticipated", partnerId: undefined, fireMultiplier: 20, winner: "tie", unitCounts: { said: 2, juan: 1, pedro: 1 } });
-  const off = calculateLoba(players, lobaConfig({ value: 0, unitsEnabled: false }), { 18: capture }, [18]);
+  const capture = lobaHole({ mode: "solo_anticipated", partnerId: undefined, fireMultiplier: 20, unitCounts: { said: 2, juan: 1, pedro: 1 } });
+  const scores = lobaScores(18, { said: 5, juan: 5, pedro: 5, flavio: 5, daniel: 5 });
+  const off = calculateLoba(lobaCourse, scores, players, lobaConfig({ value: 0, unitsEnabled: false }), { 18: capture }, [18]);
   assert.deepEqual(off.balances, { said: 0, juan: 0, pedro: 0, flavio: 0, daniel: 0 });
-  const on = calculateLoba(players, lobaConfig({ value: 0, unitsEnabled: true, unitValue: 100, duplicateUnitsByMode: false }), { 18: capture }, [18]);
+  const on = calculateLoba(lobaCourse, scores, players, lobaConfig({ value: 0, unitsEnabled: true, unitValue: 100, duplicateUnitsByMode: false }), { 18: capture }, [18]);
   assert.equal(on.details[0].effectiveUnitValue, 100);
   assert.equal(on.zeroSum, true);
+});
+
+test("Loba ignora winner manual de borradores antiguos y usa scores netos", () => {
+  const legacy = calculateLobaHole(1, { said: 5, pedro: 5, juan: 6, flavio: 7, daniel: 8 }, lobaConfig(), lobaHole({ winner: "opponents" }));
+  assert.equal(legacy.details[0].winner, "loba_team");
+});
+
+test("Loba antigua sin hcpPct migra en cálculo a 100% sin alterar el borrador", () => {
+  const legacyConfig = structuredClone(lobaConfig());
+  Reflect.deleteProperty(legacyConfig, "hcpPct");
+  const result = calculateLobaHole(11, { said: 5, juan: 5, pedro: 5, flavio: 5, daniel: 5 }, legacyConfig, lobaHole({ lobaPlayerId: "daniel", partnerId: "flavio" }));
+  assert.equal(result.details[0].hcpPct, 100);
+  assert.equal(result.details[0].netScores.daniel, 4);
+  assert.equal("hcpPct" in legacyConfig, false);
 });
 
 test("captura obligatoria de Loba explica cada dato faltante", () => {
   const keepers = emptyCounterBetKeepers();
   const base = { enabled: true, participantIds: ids };
+  assert.match(requiredSideBetCapture(1, [], keepers, { enabled: true, participantIds: ["said"] }, undefined), /al menos dos/);
   assert.match(requiredSideBetCapture(1, [], keepers, base, undefined), /quién es/);
   assert.match(requiredSideBetCapture(1, [], keepers, base, { fireMultiplier: 1, unitCounts: {}, lobaPlayerId: "said" }), /modalidad/);
   assert.match(requiredSideBetCapture(1, [], keepers, base, { fireMultiplier: 1, unitCounts: {}, lobaPlayerId: "said", mode: "partner" }), /pareja/);
-  assert.match(requiredSideBetCapture(1, [], keepers, base, { fireMultiplier: 1, unitCounts: {}, lobaPlayerId: "said", mode: "solo" }), /resultado/);
-  assert.equal(requiredSideBetCapture(1, [], keepers, base, lobaHole()), "");
+  assert.equal(requiredSideBetCapture(1, [], keepers, base, { fireMultiplier: 1, unitCounts: {}, lobaPlayerId: "said", mode: "solo" }), "");
+  assert.equal(requiredSideBetCapture(1, [], keepers, base, lobaHole({ winner: undefined })), "");
+  const panel = readFileSync("app/components/side-bet-panels.tsx", "utf8");
+  assert.doesNotMatch(panel, /Ganó Loba|Ganaron rivales/);
+  assert.match(panel, /HCP Loba %/);
+  assert.match(panel, /aria-label="HCP Loba %"/);
+  assert.match(panel, /Esperando scores/);
+  assert.match(panel, /Resultado: Equipo 🐺 gana/);
 });
 
 test("ronda integral H1–18 combina motores existentes, 🐍🐫🐟🐺, reload y liquidación cero", () => {
@@ -161,7 +266,7 @@ test("ronda integral H1–18 combina motores existentes, 🐍🐫🐟🐺, reloa
     vipers: { enabled: true, value: 100, secondNineMultiplier: 2, participantIds: ids4 },
     camels: { enabled: true, value: 80, secondNineMultiplier: 3, participantIds: ids4 },
     fish: { enabled: true, value: 50, secondNineMultiplier: 1, participantIds: ids4 },
-    loba: { enabled: true, value: 100, unitsEnabled: true, unitValue: 25, duplicateUnitsByMode: true, participantIds: ids4 },
+    loba: { enabled: true, value: 100, hcpPct: 100, unitsEnabled: true, unitValue: 25, duplicateUnitsByMode: true, participantIds: ids4 },
   };
   const counterEvents: CounterBetEvent[] = (["vipers", "camels", "fish"] as CounterBetKind[]).flatMap((kind, index) => [
     { id: `${kind}-1`, kind, hole: 1, playerId: ids4[index], quantity: index + 1 },
@@ -191,7 +296,7 @@ test("ronda integral H1–18 combina motores existentes, 🐍🐫🐟🐺, reloa
     calculateCounterBet("vipers", fullRoundPlayers, configured.vipers, restored.counterEvents, restored.keepers, fullRoundOrder, complete).balances,
     calculateCounterBet("camels", fullRoundPlayers, configured.camels, restored.counterEvents, restored.keepers, fullRoundOrder, complete).balances,
     calculateCounterBet("fish", fullRoundPlayers, configured.fish, restored.counterEvents, restored.keepers, fullRoundOrder, complete).balances,
-    calculateLoba(fullRoundPlayers, configured.loba, restored.lobaHoles, fullRoundOrder, complete).balances,
+    calculateLoba(fullRoundCourse, fullRoundScores, fullRoundPlayers, configured.loba, restored.lobaHoles, fullRoundOrder, complete).balances,
   );
   assert.equal(Object.values(balances).reduce((sum, amount) => sum + amount, 0), 0);
   assert.ok(Object.values(balances).some(amount => amount !== 0));

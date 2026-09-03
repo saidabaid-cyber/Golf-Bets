@@ -23,6 +23,6 @@ export function initialBets(ids: string[]): BetConfig {
     vipers: { enabled: false, value: 100, secondNineMultiplier: 1, participantIds: [...ids] },
     camels: { enabled: false, value: 100, secondNineMultiplier: 1, participantIds: [...ids] },
     fish: { enabled: false, value: 100, secondNineMultiplier: 1, participantIds: [...ids] },
-    loba: { enabled: false, value: 100, unitsEnabled: false, unitValue: 100, duplicateUnitsByMode: false, participantIds: [...ids] },
+    loba: { enabled: false, value: 100, hcpPct: 100, unitsEnabled: false, unitValue: 100, duplicateUnitsByMode: false, participantIds: [...ids] },
   };
 }
