@@ -11,7 +11,7 @@ Supabase: `zhqmlpljloumldaczcfp`. No cambios en main, dominio ni Production.
 - Foursome sin scores/parcial: Esperando scores. Completo: +2/-2. Editar parejas conservó scores.
 - Reglas: 25 reglas; consultas `16.1`, `cart path`, `área penalidad` devuelven resultados; browser Back regresa a Histórico. Micrófono llega a solicitar permiso y presenta fallback por falta de inicio; no se verificó voz física ni iPhone.
 - Aclaraciones julio 2026: PDF HTTP 200, firma `%PDF-`, 316707 bytes, 13 páginas, render canvas y siguiente/regresar comprobados.
-- Parte 1 / Parte 2: el proxy inicial del Preview devuelve HTTP 502. GET desde este dispositivo a las URLs oficiales devuelve PDF real (13566580 / 5186675 bytes), CORS `*`. El visor ahora puede reintentar esa fuente desde el dispositivo sin salir de la app. Su verificación en el nuevo Preview se registra al cierre.
+- Parte 1 / Parte 2: el proxy del Preview devuelve HTTP 502. GET desde este dispositivo a las URLs oficiales devuelve PDF real (13566580 / 5186675 bytes), CORS `*`. En el Preview corregido, se verificó el render real interno de ambos PDFs (410 y 172 páginas), página 1 → 2 y regreso por botón/browser Back. La recuperación CORS funciona sin salir de The Backyard; no se afirma que el proxy 502 esté arreglado.
 - Se comprobaron los 12 chunks iniciales del Preview: proyecto Supabase esperado, clave pública presente, ninguna clave privilegiada identificada. `server.ts` continúa `server-only`; sync usa JWT de usuario, no admin/RLS bypass.
 - `/api/features`: cloud, Polla y social `true`. `/auth/v1/settings` REAL: email `true`, Google `false`, Apple `false`, registro habilitado y confirmación de correo obligatoria. Un flag no habilita un proveedor OAuth.
 - Lecturas anónimas reales: ninguna fila de perfiles, rondas, scores, jugadores, grupos, rivales, drafts, preferencias, borrados, consentimientos ni accesos. RPC `resolve_polla_access` e `is_polla_admin` rechazan anon (401 / PostgreSQL 42501).
@@ -62,6 +62,17 @@ Fuentes oficiales consultadas: [OTP](https://supabase.com/docs/guides/auth/auth-
 - `npm run build`: aprobado (Next.js 16.3.3, TypeScript y generación de páginas).
 - `git diff --check`: aprobado. `.env.local` y fuentes PDF locales ignorados; ningún candidato de clave privilegiada en archivos trackeables revisados.
 - La validación SQL es estructural; no equivale a ejecutar las migraciones en PostgreSQL ni a revisar Security Advisor.
+
+## Verificación del Preview corregido
+
+Código validado: `cf3cb20b9d99018554b9f60534d61612795c38fc`, deployment `dpl_5n82rV1CySFpC2Wiqccq3M63358g` READY, rama codex-dev, target Preview. El commit de cierre documental no cambia código.
+
+- Los tres PDFs renderizan dentro de la app; Parte 1/2 por recuperación CORS, Aclaraciones por proxy. Navegación de páginas y regreso comprobados. Navegador automatizado a 390×844; no es una prueba física de Safari/iPhone.
+- Google/Apple muestran «Pendiente de configuración» al pulsarlos, sin navegar al error JSON de Supabase. Correo inválido muestra mensaje humano; no se envió correo a un destinatario no autorizado.
+- Entrar/salir de la pantalla de acceso como invitado no borró consentimiento ni ronda. Recargar, continuar H1, abrir Histórico y Resultados mantuvo los 9 hoyos y la corrección de H1. Histórico sigue con una sola ronda.
+- Clipboard real verificado: THE BACKYARD / La Vista / fecha / cuatro jugadores con -1450, -50, -850, +2350. Mensaje «Resumen copiado» visible.
+- Script público real repetido: flags activos, proveedor Email habilitado, Google/Apple deshabilitados, endpoints cloud 401 sin sesión, ninguna fila privada anónima devuelta y sin clave privilegiada detectada en los 12 chunks iniciales. RLS entre cuentas y escrituras siguen pendientes.
+- «Preguntar a IA» aparece «IA no configurada» en este Preview. No se modificó ni reindexó el Vector Store ni se enviaron consultas a OpenAI.
 
 ## Repetir comprobaciones públicas
 
