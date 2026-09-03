@@ -21,7 +21,7 @@ El archivo recibido es una plantilla sin los scores de la ronda de La Vista Temp
 | Liquidación Personal | Cálculos L1103; reportes R J2–R J5 | Suma de importes con signo (equivalente a bruto de cada lado y compensación). | Exponer ambos brutos y neto; verificar casos reales. |
 | Foursome | Cálculos E33:K34; D193:G197; D228/I228/N228; J271:J277 | Low Ball contra Low Ball + High Ball contra High Ball; cada comparación SIGN, suma −2…+2. Gana fijo por signo del total del segmento. | Algoritmo LB/HB coincide; contrastar matrices económicas. |
 | Patada | Cálculos D235:M250, J271/J275/J276; segunda tabla L299:M299/J320 | Puntos del segmento × valor de patada; pagos entre contrarios con MIN de sus valores y factor W28 (.5 en el archivo). | Equivale a modo puntos/fijo+puntos con importes uniformes y pago mitad (.5). La app no ofrece el factor completo ni valores individuales del Excel. |
-| HCP Foursome | Comienzo M31/U31; Cálculos G99, E34, D36:D37; AB194/AB211 | El control % se refleja en G99, pero los scores efectivos de tabla1 usan **E34 sin %**. Tabla2 rebaja contra los cuatro elegidos mediante AA211:AA215/AB211. | App aplica %/redondeo y rebasa cada match. Diferencia real de cableado del libro; no atribuir a sus fórmulas controles que no usan. Pendiente resolver intención del control sin cambiarlo por intuición. |
+| HCP Foursome | Comienzo M31/U31; Cálculos G99, E34, D36:D37; AB194/AB211 | El control % se refleja en G99, pero los scores efectivos de tabla1 usan **E34 sin %**. Tabla2 rebaja contra los cuatro elegidos mediante AA211:AA215/AB211. | Cerrado para la variante representable: método explícito `excel` reproduce tabla2, sin % ni golpes fraccionarios. Método `configured` conserva acuerdos y borradores previos; no se denomina equivalencia Excel. Véase cierre UX abajo. |
 | Skins | Cálculos K99; M99:P99; D922:AG926; E991:F993 | HCP rebajado × %. Enteros primero, fracción desempata; carry suma hoyos sin ganador único; se paga solo al ganador único. | Comparar selección fraccionaria y acumulación con fixtures derivados. Carry final sin ganador no se paga. |
 | Conejos | Cálculos F99; D758:AG762; E848:I869 y bloques siguientes | Ganadores netos alimentan Libre/Agarra/Mantiene/Gana; ganar en segunda posición reinicia ciclo. Si no se cobra al cerrar ciclo de tres se acumula. E848:E852 contienen **solo candidatos ganadores**, no todos los nombres. | Máquina actual compatible en estructura; probar secuencias desde fórmulas, no confundir columnas candidatas con participantes. |
 | Bola Amiga | Cálculos A111:C125/D112:D113; D108:D109; M129:AC129; AD167; filas1523:1526 | HCP rebajado × S6; V6=Sí compara con SI−.5 (redondeo .5 arriba). Dos scores ajustados, cap9. Birdie gross invierte dígitos del contrario. | Coinciden cap, inversión y pago uniforme en fixture derivado. Excel permite valores individuales con liquidación ponderada MIN, no disponible en app. |
@@ -75,10 +75,37 @@ Los cuatro casos Personales fallaron primero contra la app base (Carlos −500, 
 
 ### Diferencias todavía abiertas (NO certificadas como equivalencia total)
 
-1. Foursome: el %/redondeo visible del libro no alimenta sus scores de tabla1. App conserva el % configurable previamente aprobado mientras se resuelve si replicar literalmente ese cableado. El rebasing por match corresponde al mecanismo de tabla2 del libro, no a usar ciegamente todos los jugadores de tabla1.
+1. Foursome: el %/redondeo visible del libro no alimenta sus scores de tabla1. La continuación UX implementa literalmente tabla2 como método `excel`; el método configurable previo permanece disponible y explícitamente diferenciado. El rebasing por match corresponde al mecanismo de tabla2, no a usar ciegamente todos los jugadores de tabla1. No se atribuye el método configurable al libro.
 2. Excel admite importes por jugador y factor pago completo/mitad en matrices; la app usa importes uniformes y la convención mitad validada. No afirmar equivalencia para configuraciones no representables.
 3. Copas tiene valor propio ahora, pero no selección de participantes separada de Unidades ni valores individuales por jugador.
 4. Foursome Fantasma, tamaños3/9/18 y presión física; auto-unidades; Pollas/Mini Polla: extensiones previas sin fuente equivalente completa en este libro. Conservadas y cubiertas por regresiones existentes, no «validadas Excel».
 5. No se reparó ni reescribió el archivo original, ni se recalcularon todos sus30,195 registros de fórmula en Excel. Se trazaron dependencias y se contrastaron los fragmentos económicos indicados. Sus referencias rotas y plantilla sin scores impiden usar valores cacheados como oráculo de una ronda completa.
 
 Validación final/commits/Preview: ver `docs/QA_EXCEL_NASSAU.md`.
+
+## Continuación UX / Foursome desde c18f992 (2 septiembre 2026)
+
+No se repitió la auditoría del libro ni se cambiaron las reglas Personales. Se volvió a consultar la extracción privada de las fórmulas de Foursome antes de implementar:
+
+- `AA211:AA215`: jugadores excluidos se sustituyen por999 para hallar el mínimo del match. La app utiliza exclusivamente sus participantes reales (y el duplicado Fantasma cuando aplica).
+- `AC211=MIN(AA211:AA215)`; `AB211=AA211-AC211`; `AB194=ROUND(AB211,1)`.
+- `AC195=IF(raw=0,0,IF(AB194-AC192>=0,raw-1,raw))`, con `AC192=SI`.
+- `AC196=IF(raw=0,0,IF(AB194-AC193>=0,AC195-1,AC195))`, con `AC193=SI+18`.
+- `D194:D197`: MIN contra MIN y MAX contra MAX; signos sumados −2/−1/0/+1/+2.
+- `D228/I228/N228`: puntos de cada segmento de seis. Matrices económicas y Patada indicadas arriba, con valores uniformes y factor .5.
+
+`excelFoursomeNet` reproduce esos dos umbrales y redondeo a una décima:4.6 no recibe golpe enSI5. El HCP porcentual no se inventa como dependencia del libro. La nueva configuración usa `handicapMethod: excel`; los borradores sin campo mantienen `configured`, con su porcentaje/redondeo previo, para no alterar acuerdos silenciosamente. Snapshots guardados no se recalculan por abrirlos. HCP más allá de36 conserva el comportamiento anterior en modo configurable; Excel replica su límite de dos umbrales.
+
+Los fixtures en `tests/functional-closure.test.ts` traducen independientemente las fórmulas citadas. Contrastan HCP decimales, jugador ajeno al match, scores ajustados, los tres modos económicos, ambas salidas y tamaños3/6/9/18. Solo la aplicación por6 se atribuye al libro; los demás tamaños, presión y Fantasma son extensiones aprobadas, verificadas por sus propias regresiones, no nuevas equivalencias1:1. Los cinco posibles resultados LB/HB y las matrices uniformes siguen cubiertos en `tests/excel-reference.test.ts`.
+
+### Cambio solicitado sobre Par y compatibilidad
+
+Un Par visual ya NO materializa un score. Solo captura, +/- o **Confirmar Par en scores pendientes** registra golpes. Sin los cuatro scores reales (tres para Fantasma), el match no produce puntos de ese hoyo. Se conserva únicamente el acumulado de hoyos registrados. El mismo almacenamiento vacío alimenta los otros motores: no reciben pars inventados.
+
+Los números ya existentes en borradores antiguos se conservan: el formato anterior no distingue si los generó el antiguo auto-Par o si fueron capturados. No es seguro borrarlos automáticamente. Se pueden borrar/corregir expresamente en Tarjeta. Históricos completos permanecen inmutables salvo confirmación de corrección.
+
+### Snapshots y corrección
+
+Snapshot2 agrega ownerId, parejas/segmentos, balances por jugador/categoría, detalle de motores y brutos Personales, junto con los datos completos previos. La corrección reutiliza ID, conserva foto y fecha original de terminación y actualiza updatedAt. Registros antiguos sin parejas Foursome quedan consultables de solo lectura: no se inventan parejas. Eliminar un Personal también retira su configuración y balances derivados para que corregir la ronda no lo resucite.
+
+Evidencia de esta continuación y límites de prueba física: `docs/QA_UX_FOURSOME.md`.
