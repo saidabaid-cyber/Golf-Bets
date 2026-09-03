@@ -8,6 +8,7 @@
     "start": "next start",
     "test": "tsc -p tsconfig.test.json && node --test .test-dist/tests/*.test.js",
     "lint": "eslint .",
+    "rules:pdf-index": "node scripts/build-rules-search-index.mjs",
     "rules:index": "node --env-file=.env.local scripts/index-rules-pdf.mjs"
   },
   "dependencies": {
@@ -22,17 +23,22 @@
     "server-only": "^0.0.1"
   },
   "devDependencies": {
+    "@napi-rs/canvas": "1.0.8",
+    "@tesseract.js-data/eng": "1.0.0",
+    "@tesseract.js-data/spa": "1.0.0",
     "@types/node": "22.10.2",
     "@types/qrcode": "^1.5.5",
     "@types/react": "19.0.3",
     "@types/react-dom": "19.0.2",
     "eslint": "^9.35.0",
     "eslint-config-next": "^16.0.0",
+    "tesseract.js": "7.0.0",
     "typescript": "5.7.2"
   },
   "pnpm": {
     "ignoredBuiltDependencies": [
       "core-js",
+      "tesseract.js",
       "unrs-resolver"
     ]
   }

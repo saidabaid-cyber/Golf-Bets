@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   calculateCounterBet,
   calculateLoba,
@@ -68,6 +69,25 @@ test("contadores rápidos conservan cantidad numérica, permiten borrar y no dup
   assert.equal(counterQuantity(state, "vipers", 4, "said"), 5);
   state = setCounterQuantity(state, "vipers", 4, "said", 0);
   assert.deepEqual(state, []);
+});
+
+test("H9 y H18 identifican cada keeper faltante con varias apuestas activas", () => {
+  const enabled = (["vipers", "camels", "fish"] as CounterBetKind[]).map((kind) => ({ kind, config: counterConfig() }));
+  const keepers = emptyCounterBetKeepers();
+  assert.match(requiredSideBetCapture(9, enabled, keepers, { enabled: false, participantIds: [] }, undefined), /🐍 Víboras/);
+  keepers.vipers.holes_1_9 = "said";
+  assert.match(requiredSideBetCapture(9, enabled, keepers, { enabled: false, participantIds: [] }, undefined), /🐫 Camellos/);
+  keepers.camels.holes_1_9 = "juan";
+  assert.match(requiredSideBetCapture(9, enabled, keepers, { enabled: false, participantIds: [] }, undefined), /🐟 Peces/);
+  keepers.fish.holes_1_9 = "pedro";
+  assert.equal(requiredSideBetCapture(9, enabled, keepers, { enabled: false, participantIds: [] }, undefined), "");
+
+  assert.match(requiredSideBetCapture(18, enabled, keepers, { enabled: false, participantIds: [] }, undefined), /🐍 Víboras/);
+  for (const kind of ["vipers", "camels", "fish"] as CounterBetKind[]) keepers[kind].holes_10_18 = "daniel";
+  assert.equal(requiredSideBetCapture(18, enabled, keepers, { enabled: false, participantIds: [] }, undefined), "");
+  const page = readFileSync("app/page.tsx", "utf8");
+  assert.match(page, /const sideBetError = requiredSideBetCapture/);
+  assert.match(page, /if \(sideBetError\) \{ setFeedback\(sideBetError\); return; \}/);
 });
 
 function lobaConfig(patch: Partial<{ value: number; unitsEnabled: boolean; unitValue: number; duplicateUnitsByMode: boolean }> = {}) {

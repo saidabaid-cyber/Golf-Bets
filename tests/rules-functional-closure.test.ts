@@ -41,6 +41,28 @@ test("visor PDF usa índice local por página, incluso si Safari no expone capa 
   assert.match(viewer,/static-index-unavailable/);assert.match(viewer,/índice local/);
   assert.match(route,/searchRulesDocumentPages/);assert.match(route,/static-page-index/);
 });
+test("índice PDF encuentra consultas reales y devuelve página, fragmento y navegación interna",()=>{
+  const cases: Array<["official-guide-part-1" | "committee-procedures-part-2", string]> = [
+    ["official-guide-part-1", "bola provisional"],
+    ["official-guide-part-1", "área de penalidad"],
+    ["official-guide-part-1", "bunker"],
+    ["official-guide-part-1", "obstrucción"],
+    ["official-guide-part-1", "cart path"],
+    ["official-guide-part-1", "bola injugable"],
+    ["committee-procedures-part-2", "ritmo de juego"],
+  ];
+  for (const [sourceId, query] of cases) {
+    const matches = searchRulesDocumentPages(sourceId, query);
+    assert.ok(matches.length > 0, query);
+    assert.ok(matches.every(match => Number.isInteger(match.page) && match.page > 0), `${query}: página`);
+    assert.ok(matches.every(match => Boolean(match.excerpt?.trim())), `${query}: fragmento`);
+  }
+  const viewer=readFileSync("app/components/internal-pdf-viewer.tsx","utf8");
+  assert.match(viewer,/scrollToPage\(indexed\[0\]\.page\)/);
+  assert.match(viewer,/moveMatch\(-1\)/);
+  assert.match(viewer,/moveMatch\(1\)/);
+  assert.match(viewer,/scrollIntoView\(\{ behavior: "smooth", block: "start" \}\)/);
+});
 class SpeechMock implements SpeechRecognitionLike {
   static last: SpeechMock; lang="";continuous=false;interimResults=false;
   onstart: SpeechRecognitionLike["onstart"]=null;onresult:SpeechRecognitionLike["onresult"]=null;onerror:SpeechRecognitionLike["onerror"]=null;onend:SpeechRecognitionLike["onend"]=null;

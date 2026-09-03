@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import { commitHoleCapture, editCapturedScore, holeCapture, isHoleCaptureComplete, type ScoreRows } from "../lib/score-capture";
-import { foursomePressure, setFoursomePressure } from "../lib/foursome-config";
+import { foursomeHoleConfigurationError, foursomePressure, setFoursomePressure } from "../lib/foursome-config";
 import { calculateFoursomes, calculatePersonalBets, opponentPairs, playOrder } from "../lib/engine";
 import { pdfPixelRatio, withPdfDeadline } from "../lib/pdf-viewer-utils";
 import { createDictationSession, DICTATION_FALLBACK, type SpeechRecognitionLike } from "../lib/speech-dictation";
@@ -105,6 +105,20 @@ test("dos seleccionados forman el único rival con cuatro; más jugadores no des
   assert.deepEqual(opponentPairs(["said","daniel","juan","flavio"],["said","daniel"]), [["juan","flavio"]]);
   assert.doesNotMatch(app,/opps\.map/);
   assert.match(app,/opps.length === 1/);
+});
+
+test("Foursome activo bloquea Guardar si el tramo actual no tiene pareja válida", () => {
+  const enabled = { ...cfg, enabled: true, participantIds: ["said", "cuau", "armando", "jesus"] };
+  const disabled = { ...enabled, enabled: false };
+  const order = playOrder();
+  const configured = segments.map((segment) => ({ ...segment }));
+  const missingCurrent = configured.map((segment, index) => index === 1 ? { ...segment, basePair: [] } : segment);
+  assert.equal(foursomeHoleConfigurationError(disabled, [], order, 1), "");
+  assert.match(foursomeHoleConfigurationError(enabled, [], order, 1), /Completa Foursome/);
+  assert.equal(foursomeHoleConfigurationError(enabled, configured, order, 1), "");
+  assert.match(foursomeHoleConfigurationError(enabled, missingCurrent, order, 7), /Completa Foursome/);
+  assert.match(app, /const foursomeError = foursomeHoleConfigurationError/);
+  assert.match(app, /if \(foursomeError\) \{ setFeedback\(foursomeError\); return; \}/);
 });
 
 test("Live compacto conserva ambas perspectivas exactamente una vez y detalle plegado", () => {

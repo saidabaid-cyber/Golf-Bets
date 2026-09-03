@@ -63,7 +63,7 @@ import { GroupBuilder } from "./components/group-builder";
 import { PersonalHistoryPanel } from "./components/personal-history-panel";
 import { useScreenNavigation } from "./components/use-screen-navigation";
 import { commitHoleCapture, editCapturedScore, holeCapture, isHoleCaptureComplete, type ScoreRows } from "../lib/score-capture";
-import { foursomePressure, setFoursomePressure } from "../lib/foursome-config";
+import { foursomeHoleConfigurationError, foursomePressure, setFoursomePressure } from "../lib/foursome-config";
 import { FoursomeLive } from "./components/foursome-live";
 import { PersonalCompact } from "./components/personal-compact";
 import { HistoricalRoundDetail } from "./components/historical-round-detail";
@@ -864,6 +864,7 @@ function GolfBetsApp() {
   }
 
   function navigateFromBottomBar(target: AppTab) {
+    setFeedback("");
     if (target === "rules") setRulesCourseContext(rulesContextForRound(hasRoundProgress({ players, scores, currentIndex }), course.name));
     if (roundClosed && (target === "round" || target === "standings" || target === "personals")) {
       setTab("history");
@@ -1466,6 +1467,8 @@ function GolfBetsApp() {
       lobaHoles[holeNumber],
     );
     if (sideBetError) { setFeedback(sideBetError); return; }
+    const foursomeError = foursomeHoleConfigurationError(bets.foursome, segments, order, holeNumber);
+    if (foursomeError) { setFeedback(foursomeError); return; }
     if (bets.ballFriend.enabled) {
       const participants = bets.ballFriend.participantIds.filter(id => players.some(player => player.id === id));
       const setup = ballFriendSetup[holeNumber];

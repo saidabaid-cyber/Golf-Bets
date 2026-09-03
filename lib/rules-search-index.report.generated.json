@@ -1,0 +1,61 @@
+{
+  "engine": "Tesseract.js 7.0.0 (spa+eng)",
+  "documents": [
+    {
+      "sourceId": "official-guide-part-1",
+      "source": "Guía Oficial / Reglas de Golf — Parte 1",
+      "filename": "2023 Guia Oficial Golf pt1.pdf",
+      "totalPages": 410,
+      "textPages": 408,
+      "ocrProcessedPages": 6,
+      "ocrPages": 0,
+      "indexedPages": 408,
+      "pagesWithoutText": 2,
+      "pagesWithoutTextNumbers": [
+        22,
+        356
+      ],
+      "ocrPageNumbers": [],
+      "coveragePercent": 99.51
+    },
+    {
+      "sourceId": "committee-procedures-part-2",
+      "source": "Procedimientos del Comité / Parte 2",
+      "filename": "2023 Guia Oficial Golf pt2.pdf",
+      "totalPages": 172,
+      "textPages": 171,
+      "ocrProcessedPages": 7,
+      "ocrPages": 0,
+      "indexedPages": 171,
+      "pagesWithoutText": 1,
+      "pagesWithoutTextNumbers": [
+        2
+      ],
+      "ocrPageNumbers": [],
+      "coveragePercent": 99.42
+    },
+    {
+      "sourceId": "clarifications-july-2026",
+      "source": "Aclaraciones vigentes — Julio 2026",
+      "filename": "Additional Clarifications of the 2023 Rules of Golf - 1 July 2026 - 2.pdf",
+      "totalPages": 13,
+      "textPages": 13,
+      "ocrProcessedPages": 0,
+      "ocrPages": 0,
+      "indexedPages": 13,
+      "pagesWithoutText": 0,
+      "pagesWithoutTextNumbers": [],
+      "ocrPageNumbers": [],
+      "coveragePercent": 100
+    }
+  ],
+  "totals": {
+    "totalPages": 595,
+    "textPages": 592,
+    "ocrProcessedPages": 13,
+    "ocrPages": 0,
+    "indexedPages": 592,
+    "pagesWithoutText": 3,
+    "coveragePercent": 99.5
+  }
+}

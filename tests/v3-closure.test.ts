@@ -19,6 +19,8 @@ test("bottom navigation maps Inicio to the real Home and every tab to its sectio
     Histórico: "history",
     Reglas: "rules",
   });
+  const page = readFileSync("app/page.tsx", "utf8");
+  assert.match(page, /function navigateFromBottomBar\(target: AppTab\) \{\s+setFeedback\(""\);/);
 });
 
 test("deleting the active round removes only the draft key", () => {
