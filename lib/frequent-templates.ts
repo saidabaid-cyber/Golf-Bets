@@ -150,6 +150,7 @@ export function applySavedPersonalRivalTemplate(bet: PersonalBet, template: Save
     externalRivalId: template.id,
     rivalPlayerId: undefined,
     rivalName: template.name,
+    rivalHandicap: template.handicap ?? null,
     baseValue: template.baseValue ?? bet.baseValue,
     advantageReceiver: template.advantageReceiver ?? bet.advantageReceiver,
     advantageStrokes: template.advantageStrokes ?? bet.advantageStrokes,

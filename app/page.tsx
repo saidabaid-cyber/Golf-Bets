@@ -48,6 +48,8 @@ import { AccountProvider, useBackyardAccount } from "./components/account-provid
 import { AccountPanel } from "./components/account-panel";
 import { BrandLockup } from "./components/brand-lockup";
 import { GroupBuilder } from "./components/group-builder";
+import { PersonalHistoryPanel } from "./components/personal-history-panel";
+import { snapshotPersonalResult } from "../lib/personal-history";
 import { createSingleAdvance, HOLE_SUMMARY_DURATION_MS, nextHoleDestination } from "../lib/hole-summary";
 import { buildHoleSummary, clearActiveRoundStorage, ensureHoleScoresAtPar, hasRoundProgress, historicalGolfStats, mergeCoursesPreservingEdits, migrateDraftPressures, persistRoundHistory, privateLeaderboard, pushUndoState, readStoredJson, resolveHistoricalRoundDeletion, resolvePersonalHistoryDeletion, STORAGE_KEYS, upsertFrequentPlayers } from "../lib/round-utils";
 import { downloadRoundCsv, downloadRoundImage, downloadRoundPdf, shareRound } from "../lib/round-export";
@@ -858,12 +860,7 @@ function GolfBetsApp() {
       courseSnapshot: structuredClone(course), order: [...order], completedAt: timestamp, updatedAt: timestamp,
       betConfig: structuredClone(bets), unitEvents: structuredClone(unitEvents), personalBets: structuredClone(personalBets),
       manualBets: structuredClone(manualBets), ballFriendSetup: structuredClone(ballFriendSetup),
-      personalResults: personals.results.map((r) => ({
-        rivalKey: r.rivalId,
-        rivalName: playerName(r.rivalId),
-        totalMoney: r.totalMoney,
-        componentMoney: r.componentMoney,
-      })),
+      personalResults: personals.results.map((r) => snapshotPersonalResult(personalBets.find((bet) => bet.id === r.betId)!, r, players)),
     };
   }
 
@@ -1244,22 +1241,6 @@ function GolfBetsApp() {
   const sum = (arr: RoundSnapshot[], key: "netResult" | "betResult" | "expenseTotal") => arr.reduce((a, r) => a + r[key], 0);
   const expenseByKey = (arr: RoundSnapshot[], key: keyof Expense) => arr.reduce((a, r) => a + (r.expenses[key] || 0), 0);
 
-  const personalHistory = useMemo(() => {
-    const byRival = new Map<string, { key: string; name: string; total: number; rounds: number; wins: number; losses: number; ties: number; records: Array<{ roundId: string; resultIndex: number; date: string; courseName: string; totalMoney: number }> }>();
-    for (const r of history) {
-      for (const [resultIndex, pr] of (r.personalResults || []).entries()) {
-        const current = byRival.get(pr.rivalKey) || { key: pr.rivalKey, name: pr.rivalName, total: 0, rounds: 0, wins: 0, losses: 0, ties: 0, records: [] };
-        current.total += pr.totalMoney;
-        current.rounds += 1;
-        if (pr.totalMoney > 0) current.wins += 1;
-        else if (pr.totalMoney < 0) current.losses += 1;
-        else current.ties += 1;
-        current.records.push({ roundId: r.id, resultIndex, date: r.date, courseName: r.courseName, totalMoney: pr.totalMoney });
-        byRival.set(pr.rivalKey, current);
-      }
-    }
-    return Array.from(byRival.values()).sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
-  }, [history]);
   const golfStats = useMemo(() => historicalGolfStats(history), [history]);
 
   return <main className={`app ${highContrast ? "highContrast" : ""}`}>
@@ -1433,6 +1414,8 @@ function GolfBetsApp() {
         <button className="secondary" onClick={newPersonalBet}>+ Personal</button>
       </section>
 
+      <PersonalHistoryPanel history={history} today={todayMx} onDelete={setPersonalHistoryToDelete} />
+
       {savedPersonalRivals.length > 0 && <section className="card savedRivalsCard">
         <div className="sectionTitle"><div><h2>Rivales guardados</h2><p>Plantillas para apuestas futuras. Editarlas no cambia esta ronda ni el Histórico.</p></div></div>
         <div className="frequentTemplateList">{savedPersonalRivals.map((saved) => editingSavedRivalId === saved.id && savedRivalDraft ? <div className="templateEditor rivalTemplateEditor" key={saved.id}>
@@ -1479,7 +1462,7 @@ function GolfBetsApp() {
             }}>{players.filter((p) => p.id !== ownerId).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div> : <>
               <div><label>Rival guardado</label><select value={bet.externalRivalId || ""} onChange={(e) => {
                 const saved = savedPersonalRivals.find((r) => r.id === e.target.value);
-                updatePersonalBet(bet.id, saved ? applySavedPersonalRivalTemplate(bet, saved) : { externalRivalId: undefined });
+                updatePersonalBet(bet.id, saved ? applySavedPersonalRivalTemplate(bet, saved) : { externalRivalId: undefined, rivalHandicap: null });
               }}><option value="">+ Nuevo rival</option>{savedPersonalRivals.map((r) => <option key={r.id} value={r.id}>{r.name}{typeof r.handicap === "number" ? ` · HCP ${r.handicap}` : ""}</option>)}</select></div>
               <div><label>Nombre del rival para esta ronda</label><input value={bet.rivalName} placeholder="Ej. Daniel" onChange={(e) => updatePersonalBet(bet.id, { rivalName: e.target.value })} /></div>
               <div className="templateSaveAction"><label>Plantilla frecuente</label><button className="secondary" disabled={!bet.rivalName.trim()} onClick={() => savePersonalRivalFromBet(bet)}>{bet.externalRivalId ? "Guardar cambio en rival frecuente" : "Guardar como rival frecuente"}</button></div>
@@ -1673,14 +1656,7 @@ function GolfBetsApp() {
       <div className="statsGrid"><div className="stat"><span>Neto este mes</span><b className={sum(monthRounds, "netResult") >= 0 ? "good" : "bad"}>{money(sum(monthRounds, "netResult"))}</b><small>{monthRounds.length} rondas</small></div><div className="stat"><span>Neto este año</span><b className={sum(yearRounds, "netResult") >= 0 ? "good" : "bad"}>{money(sum(yearRounds, "netResult"))}</b><small>{yearRounds.length} rondas</small></div><div className="stat"><span>Apuestas año</span><b>{money(sum(yearRounds, "betResult"))}</b><small>sin gastos</small></div><div className="stat"><span>Gasto año</span><b className="bad">{money(-sum(yearRounds, "expenseTotal"))}</b><small>costo real</small></div></div>
       {golfStats.rounds > 0 && <section className="card"><h2>Balance por apuesta</h2><div className="expenseBars">{Object.entries(golfStats.categoryTotals).map(([name, value]) => <div key={name}><span>{name}</span><b className={value > 0 ? "good" : value < 0 ? "bad" : ""}>{signedMoney(value)}</b></div>)}</div></section>}
       <section className="card"><h2>Gastos del año</h2><div className="expenseBars">{([['caddie','Caddie'],['food','Alimentos'],['drinks','Bebidas'],['greenFee','Greenfee'],['cartRental','Renta carrito'],['other','Otros']] as [keyof Expense,string][]).map(([k, label]) => <div key={k}><span>{label}</span><b>{money(expenseByKey(yearRounds, k))}</b></div>)}</div></section>
-      <section className="card">
-        <h2>Apuestas personales · histórico</h2>
-        <p className="muted">Balance acumulado contra cada rival.</p>
-        {!personalHistory.length ? <div className="empty">Todavía no hay personales guardadas.</div> : personalHistory.map((r) => <div className="personalHistoryGroup" key={r.key}>
-          <div className="historyRow"><div><b>{r.name}</b><span>{r.rounds} rondas · {r.wins} ganadas · {r.losses} perdidas{r.ties ? ` · ${r.ties} tablas` : ""}</span></div><strong className={r.total > 0 ? "good" : r.total < 0 ? "bad" : ""}>{r.total > 0 ? "+" : ""}{money(r.total)}</strong></div>
-          <div className="personalHistoryRecords">{r.records.map((record) => <div className="personalHistoryRecord" key={`${record.roundId}:${record.resultIndex}`}><div><span>{record.date} · {record.courseName}</span><b className={record.totalMoney > 0 ? "good" : record.totalMoney < 0 ? "bad" : ""}>{signedMoney(record.totalMoney)}</b></div><button className="dangerGhost" onClick={() => setPersonalHistoryToDelete({ roundId: record.roundId, resultIndex: record.resultIndex, rivalName: r.name })}>Eliminar registro</button></div>)}</div>
-        </div>)}
-      </section>
+      <PersonalHistoryPanel history={history} today={todayMx} onDelete={setPersonalHistoryToDelete} />
       <section className="card"><div className="sectionTitle"><div><h2>Rondas</h2><p>Más recientes primero. Los campos se guardan como snapshot.</p></div><button className="textButton" onClick={resetRound}>+ Nueva</button></div>{!history.length ? <div className="empty">Todavía no has guardado rondas.</div> : history.map((r) => <div className="historyRound" key={r.id}><div className="historyRow"><div><b>{r.courseName}</b><span>{r.date} · {r.roundHoles || 18} hoyos · apuestas {money(r.betResult)} · gastos {money(r.expenseTotal)}</span></div><strong className={r.netResult >= 0 ? "good" : "bad"}>{money(r.netResult)}</strong></div><div className="historyActions"><button onClick={() => downloadRoundCsv(r)}>CSV</button><button onClick={() => downloadRoundPdf(r)}>PDF</button><button onClick={() => downloadRoundImage(r)}>Imagen</button><button onClick={() => shareRound(r)}>Compartir</button><label className="uploadButton">{r.photoId ? "Cambiar foto" : "Agregar foto de tarjeta"}<input type="file" accept="image/*" capture="environment" onChange={(event) => attachScorecardPhoto(r, event.target.files?.[0])} /></label>{r.photoId && <button onClick={() => viewScorecardPhoto(r)}>Ver tarjeta original</button>}<button className="dangerGhost" onClick={() => setHistoricalRoundToDelete(r)}>Eliminar ronda</button></div></div>)}</section>
     </>}
 

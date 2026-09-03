@@ -158,6 +158,8 @@ export type PersonalBet = {
   rivalPlayerId?: string;
   externalRivalId?: string;
   rivalName: string;
+  /** Snapshot of the external rival's HCP; never read a mutable template for history. */
+  rivalHandicap?: number | null;
   externalScores: Record<number, number | null>;
   baseValue: number;
   // `none` remains accepted only to migrate old drafts. New UI never offers Scratch.
@@ -190,6 +192,10 @@ export type PersonalHistoryResult = {
   rivalName: string;
   totalMoney: number;
   componentMoney: Record<string, number>;
+  betId?: string;
+  rivalTemplateId?: string;
+  rivalHandicap?: number | null;
+  betSnapshot?: PersonalBet;
 };
 
 export type RoundSnapshot = {
