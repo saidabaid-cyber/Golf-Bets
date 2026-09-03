@@ -1,4 +1,5 @@
 import { playingHandicap, strokeAllowanceForHole } from "./engine";
+import { migratePersonalNassau } from "./personal-nassau";
 import type { Course, HoleScore, Player, RoundSnapshot } from "./types";
 import type { FrequentPlayer } from "./types";
 
@@ -104,18 +105,13 @@ export function hasRoundProgress(draft: any) {
 export function migrateDraftPressures(draft: any) {
   if (!draft || typeof draft !== "object") return draft;
   const startHole = draft.startHole === 10 ? 10 : 1;
-  const chronologicalSecondNine = startHole === 10 ? "holes_1_9" : "holes_10_18";
   const foursome = draft.bets?.foursome;
   if (foursome) {
     foursome.pressureMultiplier ??= foursome.pressSecond9 ? 2 : 1;
     foursome.pressureNine ??= "holes_10_18";
   }
   if (Array.isArray(draft.personalBets)) {
-    draft.personalBets = draft.personalBets.map((bet: any) => ({
-      ...bet,
-      pressureMultiplier: bet.pressureMultiplier ?? bet.back9Multiplier ?? 1,
-      pressureNine: bet.pressureNine ?? chronologicalSecondNine,
-    }));
+    draft.personalBets = draft.personalBets.map((bet: any) => migratePersonalNassau(bet, startHole, draft.roundHoles === 9 ? 9 : 18));
   }
   return draft;
 }

@@ -156,6 +156,7 @@ export function applySavedPersonalRivalTemplate(bet: PersonalBet, template: Save
     advantageStrokes: template.advantageStrokes ?? bet.advantageStrokes,
     pressureMultiplier: template.pressureMultiplier ?? bet.pressureMultiplier,
     pressureNine: template.pressureNine ?? bet.pressureNine,
+    carryEnabled: template.carryEnabled ?? bet.carryEnabled ?? false,
     back9Multiplier: 1,
   };
 }
@@ -175,6 +176,7 @@ export function personalRivalTemplateFromBet(
     advantageStrokes: bet.advantageStrokes,
     pressureMultiplier: bet.pressureMultiplier ?? 1,
     pressureNine: bet.pressureNine ?? "holes_10_18",
+    carryEnabled: bet.carryEnabled ?? false,
     updatedAt,
   };
 }

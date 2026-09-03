@@ -13,6 +13,7 @@ import {
   Transfer,
   UnitEvent,
 } from "./types";
+import { migratePersonalNassau } from "./personal-nassau";
 
 const EPS = 1e-9;
 
@@ -667,12 +668,13 @@ export function personalRivalKey(bet: PersonalBet) {
 }
 
 export function calculatePersonalBet(
-  bet: PersonalBet,
+  inputBet: PersonalBet,
   ownerId: string,
   course: Course,
   scores: Record<number, HoleScore>,
   order: number[],
 ) {
+  const bet = migratePersonalNassau(inputBet, order[0], order.length);
   const rivalId = personalRivalKey(bet);
   const componentMoney = {
     match1: 0,
@@ -737,18 +739,21 @@ export function calculatePersonalBet(
     };
   };
 
-  const holes1To9 = order.length >= 18 ? order.filter((hole) => hole <= 9) : order;
-  const holes10To18 = order.length >= 18 ? order.filter((hole) => hole >= 10) : [];
-  const explicitPressure = typeof bet.pressureMultiplier === "number";
+  const firstHoles = order.slice(0, 9);
+  const secondHoles = order.length >= 18 ? order.slice(9, 18) : [];
+  const explicitPressure = typeof inputBet.pressureMultiplier === "number";
   const pressureMultiplier = Math.min(5, Math.max(1, bet.pressureMultiplier ?? bet.back9Multiplier ?? 1));
-  const legacyPressedNine = order.slice(9, 18)[0] && order.slice(9, 18)[0] <= 9 ? "holes_1_9" : "holes_10_18";
-  const pressureNine = bet.pressureNine ?? legacyPressedNine;
-  const firstMultiplier = pressureNine === "holes_1_9" ? pressureMultiplier : 1;
-  const secondMultiplier = pressureNine === "holes_10_18" ? pressureMultiplier : 1;
-  const singleNineMultiplier = explicitPressure && (order[0] >= 10 ? pressureNine === "holes_10_18" : pressureNine === "holes_1_9") ? pressureMultiplier : 1;
-  const first = segment(holes1To9, order.length >= 18 ? firstMultiplier : singleNineMultiplier);
-  const second = segment(holes10To18, secondMultiplier);
+  const pressureNine = bet.pressureNine;
+  const first = segment(firstHoles);
+  const second = segment(secondHoles, pressureMultiplier);
   const total = segment(order.slice(0, 18), 1);
+  // Carry is earned only by a completed tied first component and never mixes Match/Medal.
+  const carryFor = (kind: "match" | "medal") => bet.carryEnabled && secondHoles.length && first.complete
+    && bet.components[`${kind}1`] && bet.components[`${kind}2`] && first[kind] === 0 ? bet.baseValue : 0;
+  const matchCarry = carryFor("match");
+  const medalCarry = carryFor("medal");
+  second.matchMoney = signMoney(second.match, bet.baseValue * pressureMultiplier + matchCarry);
+  second.medalMoney = signMoney(second.medal, bet.baseValue * pressureMultiplier + medalCarry);
 
   if (bet.components.match1 && first.complete) componentMoney.match1 = first.matchMoney;
   if (bet.components.medal1 && first.complete) componentMoney.medal1 = first.medalMoney;
@@ -759,21 +764,21 @@ export function calculatePersonalBet(
 
   const componentDefinitions = order.length >= 18
     ? [
-        { key: "match1", label: "Match H1–9", kind: "match", data: first, multiplier: firstMultiplier },
-        { key: "medal1", label: "Medal H1–9", kind: "medal", data: first, multiplier: firstMultiplier },
-        { key: "match2", label: "Match H10–18", kind: "match", data: second, multiplier: secondMultiplier },
-        { key: "medal2", label: "Medal H10–18", kind: "medal", data: second, multiplier: secondMultiplier },
-        { key: "match18", label: "Match 18 hoyos", kind: "match", data: total, multiplier: 1 },
-        { key: "medal18", label: "Medal 18 hoyos", kind: "medal", data: total, multiplier: 1 },
+        { key: "match1", label: `Match 1ª · H${firstHoles[0]}–${firstHoles.at(-1)}`, kind: "match", data: first, multiplier: 1, carry: 0, carryOut: matchCarry, holes: firstHoles },
+        { key: "medal1", label: `Medal 1ª · H${firstHoles[0]}–${firstHoles.at(-1)}`, kind: "medal", data: first, multiplier: 1, carry: 0, carryOut: medalCarry, holes: firstHoles },
+        { key: "match2", label: `Match 2ª · H${secondHoles[0]}–${secondHoles.at(-1)}`, kind: "match", data: second, multiplier: pressureMultiplier, carry: matchCarry, carryOut: 0, holes: secondHoles },
+        { key: "medal2", label: `Medal 2ª · H${secondHoles[0]}–${secondHoles.at(-1)}`, kind: "medal", data: second, multiplier: pressureMultiplier, carry: medalCarry, carryOut: 0, holes: secondHoles },
+        { key: "match18", label: "Match 18 hoyos", kind: "match", data: total, multiplier: 1, carry: 0, carryOut: 0, holes: order },
+        { key: "medal18", label: "Medal 18 hoyos", kind: "medal", data: total, multiplier: 1, carry: 0, carryOut: 0, holes: order },
       ] as const
     : [
-        { key: "match1", label: `Match ${order[0] >= 10 ? "H10–18" : "H1–9"}`, kind: "match", data: first, multiplier: singleNineMultiplier },
-        { key: "medal1", label: `Medal ${order[0] >= 10 ? "H10–18" : "H1–9"}`, kind: "medal", data: first, multiplier: singleNineMultiplier },
+        { key: "match1", label: `Match ${order[0] >= 10 ? "H10–18" : "H1–9"}`, kind: "match", data: first, multiplier: 1, carry: 0, carryOut: 0, holes: firstHoles },
+        { key: "medal1", label: `Medal ${order[0] >= 10 ? "H10–18" : "H1–9"}`, kind: "medal", data: first, multiplier: 1, carry: 0, carryOut: 0, holes: firstHoles },
       ] as const;
 
   const liveComponents = componentDefinitions
     .filter(({ key }) => bet.components[key])
-    .map(({ key, label, kind, data, multiplier }) => {
+    .map(({ key, label, kind, data, multiplier, carry, carryOut, holes }) => {
       const difference = kind === "match" ? data.match : data.medal;
       return {
         key,
@@ -782,8 +787,13 @@ export function calculatePersonalBet(
         complete: data.complete,
         playedHoles: data.holeResults.length,
         leader: difference > 0 ? "owner" as const : difference < 0 ? "rival" as const : "tie" as const,
-        stake: bet.baseValue * multiplier,
-        ownerMoney: signMoney(difference, bet.baseValue * multiplier),
+        holes,
+        baseStake: bet.baseValue,
+        pressureStake: bet.baseValue * multiplier,
+        carryIn: carry,
+        carryOut,
+        stake: bet.baseValue * multiplier + carry,
+        ownerMoney: signMoney(difference, bet.baseValue * multiplier + carry),
         matchState: data.match,
         medalDiff: data.medal,
         ownerNetTotal: data.ownerNetTotal,
@@ -793,12 +803,17 @@ export function calculatePersonalBet(
     });
 
   const totalMoney = Object.values(componentMoney).reduce((a, b) => a + b, 0);
+  const grossOwner = Object.values(componentMoney).reduce((sum, amount) => sum + Math.max(0, amount), 0);
+  const grossRival = Object.values(componentMoney).reduce((sum, amount) => sum + Math.max(0, -amount), 0);
   return {
     betId: bet.id,
     rivalId,
     rivalName: bet.rivalMode === "group" ? "" : bet.rivalName,
     componentMoney,
     totalMoney,
+    grossOwner,
+    grossRival,
+    carryEnabled: bet.carryEnabled,
     matchPoints: { first: first.match, second: second.match, total: total.match },
     medalDiff: { first: first.medal, second: second.medal, total: total.medal },
     pressureMultiplier,

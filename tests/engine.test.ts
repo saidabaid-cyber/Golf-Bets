@@ -558,7 +558,7 @@ test("Personales exposes auditable live Match and Medal state without settling e
   assert.deepEqual(aggregate.provisionalBalances, { said: 200, cuau: -200 });
 });
 
-test("Personales pressure applies to the selected physical nine, not chronological order", () => {
+test("Personales pressure applies to second PLAYED nine, including H10 starts (validated Nassau rule)", () => {
   const order = playOrder(10);
   const bet: PersonalBet = {
     id: "physical-pressure",
@@ -576,10 +576,10 @@ test("Personales pressure applies to the selected physical nine, not chronologic
   };
   const scores = scoresFor(order, { said: 3, cuau: 4 });
   const result = calculatePersonalBet(bet, "said", makeCourse(), scores, order);
-  assert.equal(result.componentMoney.match1, 300);
-  assert.equal(result.componentMoney.medal1, 300);
-  assert.equal(result.componentMoney.match2, 100);
-  assert.equal(result.componentMoney.medal2, 100);
+  assert.equal(result.componentMoney.match1, 100);
+  assert.equal(result.componentMoney.medal1, 100);
+  assert.equal(result.componentMoney.match2, 300);
+  assert.equal(result.componentMoney.medal2, 300);
   assert.equal(result.totalMoney, 800);
   assert.equal(result.pressureNine, "holes_1_9");
 });

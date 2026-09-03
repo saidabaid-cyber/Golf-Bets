@@ -423,6 +423,9 @@ function GolfBetsApp() {
           rivalMode: b.rivalMode || "group",
           rivalPlayerId: b.rivalPlayerId,
           externalRivalId: b.externalRivalId,
+          rivalHandicap: b.rivalHandicap ?? null,
+          nassauVersion: 2,
+          carryEnabled: b.carryEnabled ?? false,
           rivalName: b.rivalName || (draft.players || []).find((p: Player) => p.id === b.rivalPlayerId)?.name || "Rival",
           externalScores: b.externalScores || {},
           baseValue: b.baseValue ?? 100,
@@ -786,6 +789,8 @@ function GolfBetsApp() {
       advantageReceiver: "rival",
       advantageStrokes: 0,
       back9Multiplier: 1,
+      nassauVersion: 2,
+      carryEnabled: false,
       pressureMultiplier: 1,
       pressureNine: "holes_10_18",
       components: { match1: true, medal1: true, match2: true, medal2: true, match18: true, medal18: true },
@@ -828,6 +833,7 @@ function GolfBetsApp() {
       advantageReceiver: template.advantageReceiver ?? "rival",
       advantageStrokes: template.advantageStrokes ?? 0,
       pressureMultiplier: template.pressureMultiplier ?? 1,
+      carryEnabled: template.carryEnabled ?? false,
       pressureNine: template.pressureNine ?? "holes_10_18",
     });
   }
@@ -1148,7 +1154,7 @@ function GolfBetsApp() {
             if (!currentPhysicalNineOnly) return true;
             if (roundHoles === 9) return component.key === "match1" || component.key === "medal1";
             if (component.key === "match18" || component.key === "medal18") return true;
-            return holeNumber <= 9 ? component.key === "match1" || component.key === "medal1" : component.key === "match2" || component.key === "medal2";
+            return component.holes.includes(holeNumber);
           }).map((component) => {
             const leaderName = component.leader === "owner" ? ownerLabel : component.leader === "rival" ? rivalLabel : "";
             const loserName = component.leader === "owner" ? rivalLabel : component.leader === "rival" ? ownerLabel : "";
@@ -1167,6 +1173,8 @@ function GolfBetsApp() {
               <div className="row between"><div><b>{component.label}</b><small>{component.playedHoles} hoyo{component.playedHoles === 1 ? "" : "s"} registrado{component.playedHoles === 1 ? "" : "s"}</small></div><strong className={component.complete ? "settled" : "liveNow"}>{component.complete ? "Final" : "En vivo"}</strong></div>
               <div className="liveStatus">{status}</div>
               <div className="personalMoney">En juego <b>{money(component.stake)}</b> · {ownerLabel} <b className={component.ownerMoney > 0 ? "good" : component.ownerMoney < 0 ? "bad" : ""}>{signedMoney(component.ownerMoney)}</b> · {rivalLabel} <b className={component.ownerMoney < 0 ? "good" : component.ownerMoney > 0 ? "bad" : ""}>{signedMoney(-component.ownerMoney)}</b></div>
+              {(component.key === "match2" || component.key === "medal2") && <div className="hint">{component.kind === "match" ? "Match" : "Medal"} 2ª: {money(component.stake)} ({money(component.pressureStake)} {result.pressureMultiplier > 1 ? "presión" : "base"} + {money(component.carryIn)} carry){component.complete && component.leader === "tie" ? " · Empate final: no se cobra" : ""}</div>}
+              {component.carryOut > 0 && <div className="hint">Empate: {money(component.carryOut)} pasan a {component.kind === "match" ? "Match" : "Medal"} 2ª. No se cobran en esta vuelta.</div>}
               {component.kind === "match" ? <>
                 <div className="auditLine"><span>Estado Match</span><b>{matchState}</b></div>
                 <div className="holeAudit">{component.holeResults.length ? component.holeResults.map((holeResult) => <span key={holeResult.hole}>H{holeResult.hole}: {holeResult.winner === "tie" ? "Empate" : holeResult.winner === "owner" ? ownerLabel : rivalLabel} ({holeResult.ownerScore}–{holeResult.rivalScore})</span>) : <span>Sin hoyos completos</span>}</div>
@@ -1176,6 +1184,7 @@ function GolfBetsApp() {
               </>}
             </div>;
           })}
+          <div className="hint">Bruto liquidado: {ownerLabel} {money(result.grossOwner)} · {rivalLabel} {money(result.grossRival)}. Neto {ownerLabel}: {signedMoney(result.totalMoney)}. Provisional: {signedMoney(result.liveComponents.reduce((sum, component) => sum + component.ownerMoney, 0))}.</div>
         </div>;
       })}
     </section>;
@@ -1426,7 +1435,7 @@ function GolfBetsApp() {
             <div><label>Quién recibe ventaja</label><select value={savedRivalDraft.advantageReceiver ?? "rival"} onChange={(event) => setSavedRivalDraft((draft) => draft ? { ...draft, advantageReceiver: event.target.value as "owner" | "rival" } : draft)}><option value="owner">Jugador principal</option><option value="rival">Rival</option></select></div>
             <NumberField label="Golpes que recibe" value={savedRivalDraft.advantageStrokes ?? 0} onChange={(value) => setSavedRivalDraft((draft) => draft ? { ...draft, advantageStrokes: Math.max(0, value) } : draft)} />
             <div><label>Multiplicador</label><select value={savedRivalDraft.pressureMultiplier ?? 1} onChange={(event) => setSavedRivalDraft((draft) => draft ? { ...draft, pressureMultiplier: Number(event.target.value) as 1 | 2 | 3 | 4 | 5 } : draft)}>{[1,2,3,4,5].map((value) => <option key={value} value={value}>{value}x{value === 1 ? " · sin presión" : ""}</option>)}</select></div>
-            <div><label>Vuelta</label><select value={savedRivalDraft.pressureNine ?? "holes_10_18"} onChange={(event) => setSavedRivalDraft((draft) => draft ? { ...draft, pressureNine: event.target.value as "holes_1_9" | "holes_10_18" } : draft)}><option value="holes_1_9">H1–9</option><option value="holes_10_18">H10–18</option></select></div>
+            <div><label htmlFor="saved-rival-carry">Carry</label><select id="saved-rival-carry" value={savedRivalDraft.carryEnabled ? "yes" : "no"} onChange={(event) => setSavedRivalDraft((draft) => draft ? { ...draft, carryEnabled: event.target.value === "yes" } : draft)}><option value="no">No</option><option value="yes">Sí</option></select><small>Presión en segunda vuelta jugada.</small></div>
           </div>
           <div className="templateActions"><button className="primary" disabled={!savedRivalDraft.name.trim()} onClick={saveSavedRivalEdit}>Guardar plantilla</button><button className="secondary" onClick={() => { setEditingSavedRivalId(null); setSavedRivalDraft(null); }}>Cancelar</button></div>
         </div> : <div className="templateRow" key={saved.id}>
@@ -1468,15 +1477,15 @@ function GolfBetsApp() {
               <div className="templateSaveAction"><label>Plantilla frecuente</label><button className="secondary" disabled={!bet.rivalName.trim()} onClick={() => savePersonalRivalFromBet(bet)}>{bet.externalRivalId ? "Guardar cambio en rival frecuente" : "Guardar como rival frecuente"}</button></div>
             </>}
             <MoneyInput label="Valor base" value={bet.baseValue} onChange={(v) => updatePersonalBet(bet.id, { baseValue: v })} />
-            {roundHoles === 18 && <div><label>Multiplicador</label><select value={bet.pressureMultiplier ?? bet.back9Multiplier ?? 1} onChange={(event) => updatePersonalBet(bet.id, { pressureMultiplier: Number(event.target.value) as 1 | 2 | 3 | 4 | 5, back9Multiplier: 1 })}>{[1,2,3,4,5].map((value) => <option key={value} value={value}>{value}x{value === 1 ? " · sin presión" : ""}</option>)}</select></div>}
-            {roundHoles === 18 && <div><label>Vuelta</label><select value={bet.pressureNine ?? "holes_10_18"} onChange={(event) => updatePersonalBet(bet.id, { pressureNine: event.target.value as "holes_1_9" | "holes_10_18" })}><option value="holes_1_9">H1–9</option><option value="holes_10_18">H10–18</option></select></div>}
+            {roundHoles === 18 && <div><label htmlFor={`pressure-${bet.id}`}>Presión · 2ª vuelta jugada</label><select id={`pressure-${bet.id}`} value={bet.pressureMultiplier ?? bet.back9Multiplier ?? 1} onChange={(event) => updatePersonalBet(bet.id, { pressureMultiplier: Number(event.target.value) as 1 | 2 | 3 | 4 | 5, back9Multiplier: 1 })}><option value={1}>Sin presión</option><option value={2}>Sí · 2x</option>{[3,4,5].map((value) => <option key={value} value={value}>{value}x</option>)}</select><small>Aplica a {startHole === 10 ? "H1–9" : "H10–18"}. Total 18 conserva valor base.</small></div>}
+            {roundHoles === 18 && <div><label htmlFor={`carry-${bet.id}`}>Carry</label><select id={`carry-${bet.id}`} value={bet.carryEnabled ? "yes" : "no"} onChange={(event) => updatePersonalBet(bet.id, { carryEnabled: event.target.value === "yes" })}><option value="no">No</option><option value="yes">Sí</option></select><small>Match y Medal independientes. Se suma a la presión.</small></div>}
             <div><label>Quién recibe ventaja</label><select value={bet.advantageReceiver === "owner" ? "owner" : "rival"} onChange={(e) => updatePersonalBet(bet.id, { advantageReceiver: e.target.value as "owner" | "rival" })}><option value="owner">{owner?.name} recibe</option><option value="rival">{displayRival} recibe</option></select></div>
             <NumberField label="Golpes que recibe" value={bet.advantageStrokes} onChange={(v) => updatePersonalBet(bet.id, { advantageStrokes: Math.max(0, v) })} />
           </div>
           {bet.advantageStrokes === 0 && <div className="hint">Sin ventaja.</div>}
           <div className="componentGrid">{(roundHoles === 9
             ? ([["match1","Match 9"],["medal1","Medal 9"]] as [keyof PersonalBet["components"], string][])
-            : ([["match1","Match H1–9"],["medal1","Medal H1–9"],["match2","Match H10–18"],["medal2","Medal H10–18"],["match18","Match Total 18"],["medal18","Medal Total 18"]] as [keyof PersonalBet["components"], string][])
+            : ([["match1",`Match 1ª · ${startHole === 10 ? "H10–18" : "H1–9"}`],["medal1",`Medal 1ª · ${startHole === 10 ? "H10–18" : "H1–9"}`],["match2",`Match 2ª · ${startHole === 10 ? "H1–9" : "H10–18"}`],["medal2",`Medal 2ª · ${startHole === 10 ? "H1–9" : "H10–18"}`],["match18","Match Total 18"],["medal18","Medal Total 18"]] as [keyof PersonalBet["components"], string][])
           ).map(([key, label]) => <button key={key} className={`component ${bet.components[key] ? "selected" : ""}`} onClick={() => updatePersonalBet(bet.id, { components: { ...bet.components, [key]: !bet.components[key] } })}>{bet.components[key] ? "✓ " : ""}{label}</button>)}</div>
 
           {bet.rivalMode === "external" && <div className="externalCard">
@@ -1604,7 +1613,7 @@ function GolfBetsApp() {
         {bets.ballFriend.enabled && <span><b>Bola Amiga</b>{money(bets.ballFriend.value)} por punto</span>}
         {polla.details.map((detail) => <span key={detail.key}><b>{detail.label}</b>{money(detail.value)}</span>)}
         {bets.miniPolla.enabled && <span><b>Mini Polla</b>{money(bets.miniPolla.value)}</span>}
-        {personalBets.map((bet) => <span key={bet.id}><b>Personal {owner?.name} vs {bet.rivalMode === "group" ? playerName(bet.rivalPlayerId) : bet.rivalName}</b>{money(bet.baseValue)} base{(bet.pressureMultiplier || 1) > 1 ? ` · ${bet.pressureNine === "holes_1_9" ? "H1–9" : "H10–18"} ${bet.pressureMultiplier}x` : ""}</span>)}
+        {personalBets.map((bet) => <span key={bet.id}><b>Personal {owner?.name} vs {bet.rivalMode === "group" ? playerName(bet.rivalPlayerId) : bet.rivalName}</b>{money(bet.baseValue)} base{roundHoles === 18 && (bet.pressureMultiplier || 1) > 1 ? ` · 2ª jugada ${bet.pressureMultiplier}x` : ""} · Carry {bet.carryEnabled ? "Sí" : "No"}</span>)}
       </div></section>
 
       <section className="card">

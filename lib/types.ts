@@ -149,6 +149,7 @@ export type SavedPersonalRival = {
   advantageStrokes?: number;
   pressureMultiplier?: PressureMultiplier;
   pressureNine?: PhysicalNine;
+  carryEnabled?: boolean;
   updatedAt?: string;
 };
 
@@ -169,6 +170,10 @@ export type PersonalBet = {
   back9Multiplier: number;
   pressureMultiplier?: PressureMultiplier;
   pressureNine?: PhysicalNine;
+  /** Nassau2 keys 1/2 represent the first/second nine PLAYED, not physical halves. */
+  nassauVersion?: 2;
+  /** Missing in legacy data means false; historical payouts remain immutable. */
+  carryEnabled?: boolean;
   components: PersonalBetComponents;
 };
 
