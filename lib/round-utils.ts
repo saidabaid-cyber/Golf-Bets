@@ -1,4 +1,5 @@
-import { playingHandicap, strokeAllowanceForHole } from "./engine";
+import { playingHandicap, strokeAllowanceForHole, personalRivalKey } from "./engine";
+import type { calculatePersonalBets } from "./engine";
 import { migratePersonalNassau } from "./personal-nassau";
 import type { Course, HoleScore, Player, RoundSnapshot } from "./types";
 import type { FrequentPlayer } from "./types";
@@ -68,9 +69,21 @@ export function resolvePersonalHistoryDeletion(
     const removed = personalResults[resultIndex];
     if (!removed) return round;
     const normalizeZero = (value: number) => Math.abs(value) < 0.001 ? 0 : value;
+    const candidates = (round.personalBets || []).filter(bet => personalRivalKey(bet) === removed.rivalKey);
+    const betId = removed.betId || removed.betSnapshot?.id || (candidates.length === 1 ? candidates[0].id : undefined);
+    const ownerId = round.ownerId || round.players?.find(player => player.name === round.ownerName)?.id;
+    const subtractResult = (balances: Record<string, number> | undefined) => {
+      if (!balances || !ownerId) return balances;
+      return { ...balances, [ownerId]: normalizeZero((balances[ownerId] || 0) - removed.totalMoney), [removed.rivalKey]: normalizeZero((balances[removed.rivalKey] || 0) + removed.totalMoney) };
+    };
+    const personalDetails = round.resultDetails?.personals as ReturnType<typeof calculatePersonalBets> | undefined;
     return {
       ...round,
       personalResults: personalResults.filter((_, index) => index !== resultIndex),
+      personalBets: betId ? round.personalBets?.filter(bet => bet.id !== betId) : round.personalBets,
+      playerBalances: subtractResult(round.playerBalances),
+      categoryBalances: round.categoryBalances ? { ...round.categoryBalances, Personales: subtractResult(round.categoryBalances.Personales) || {} } : undefined,
+      resultDetails: round.resultDetails ? { ...round.resultDetails, ...(personalDetails ? { personals: { ...personalDetails, balances: subtractResult(personalDetails.balances), results: personalDetails.results.filter(result => result.betId !== betId) } } : {}) } : undefined,
       categoryResults: {
         ...round.categoryResults,
         Personales: normalizeZero((round.categoryResults.Personales || 0) - removed.totalMoney),

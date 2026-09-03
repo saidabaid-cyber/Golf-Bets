@@ -99,7 +99,7 @@ export function completedHole(
   participantIds: string[],
 ) {
   const row = scores[hole];
-  return !!row && participantIds.length > 0 && participantIds.every((id) => typeof row[id] === "number");
+  return !!row && participantIds.length > 0 && participantIds.every((id) => typeof row[id] === "number" && Number.isFinite(row[id]) && (row[id] as number) >= 1);
 }
 
 export function winnerIdsForHole(
@@ -439,8 +439,16 @@ export type FoursomeMatchResult = {
   provisionalTotalMoney: number;
   completedHoles: number;
   complete: boolean;
-  holePoints: { hole: number; points: number }[];
+  holePoints: { hole: number; points: number; netA?: number[]; netB?: number[] }[];
 };
+
+/** Cálculos AB194/AB211 and AC195:AC196. Percentage/whole rounding controls
+ * in Comienzo are not referenced by this Excel scoring path. */
+export function excelFoursomeNet(gross: number, id: string, si: number, matchPlayers: Player[]) {
+  const base = baseHandicaps(matchPlayers)[id] ?? 0;
+  const hcp = Math.round((base + EPS) * 10) / 10;
+  return gross - (hcp >= si ? 1 : 0) - (hcp >= si + 18 ? 1 : 0);
+}
 
 function teamHolePoints(teamA: number[], teamB: number[]) {
   const a = [...teamA].sort((x, y) => x - y);
@@ -499,7 +507,7 @@ export function calculateFoursomes(
     : 1;
   const pressureNine = cfg.pressureNine ?? "holes_10_18";
   for (const segment of segments) {
-    if (segment.basePair.length !== 2) continue;
+    if (segment.basePair.length !== 2 || new Set(segment.basePair).size !== 2 || !segment.basePair.every(id => participants.some(p => p.id === id))) continue;
     const opponents = opponentPairs(cfg.participantIds, segment.basePair);
     const holes = order.slice(segment.startIndex, segment.endIndex + 1);
 
@@ -514,7 +522,7 @@ export function calculateFoursomes(
         const source = matchPlayers.find((player) => player.id === ghostPlayerId);
         if (source) matchPlayers.push({ ...source, id: FOURSOME_GHOST_ID, name: "Fantasma" });
       }
-      const holePoints: { hole: number; points: number }[] = [];
+      const holePoints: FoursomeMatchResult["holePoints"] = [];
       let complete = true;
       let pointDiff = 0;
 
@@ -524,19 +532,22 @@ export function calculateFoursomes(
           continue;
         }
         const hd = course.holes.find((x) => x.number === hole);
-        if (!hd) continue;
+        if (!hd) { complete = false; continue; }
         const row = scores[hole];
+        const adjusted = (gross: number, id: string) => cfg.handicapMethod === "excel"
+          ? excelFoursomeNet(gross, id, hd.strokeIndex, matchPlayers)
+          : netScore(gross, id, hd.strokeIndex, matchPlayers, cfg.hcpPct, cfg.decimals);
         const aScores = (segment.basePair as [string, string]).map((id) =>
-          netScore(row[id] as number, id, hd.strokeIndex, matchPlayers, cfg.hcpPct, cfg.decimals),
+          adjusted(row[id] as number, id),
         );
         const bScores = opponent.map((id) => {
           const scoreId = id === FOURSOME_GHOST_ID ? ghostPlayerId as string : id;
-          return netScore(row[scoreId] as number, id, hd.strokeIndex, matchPlayers, cfg.hcpPct, cfg.decimals);
+          return adjusted(row[scoreId] as number, id);
         },
         );
         const points = teamHolePoints(aScores, bScores);
         pointDiff += points;
-        holePoints.push({ hole, points });
+        holePoints.push({ hole, points, netA: aScores, netB: bScores });
       }
 
       const first9PointDiff = holePoints.filter(({ hole }) => hole <= 9).reduce((total, item) => total + item.points, 0);
@@ -735,6 +746,10 @@ export function calculatePersonalBet(
       hole: number;
       ownerScore: number;
       rivalScore: number;
+      ownerGross: number;
+      rivalGross: number;
+      ownerStrokes: number;
+      rivalStrokes: number;
       winner: "owner" | "rival" | "tie";
     }> = [];
     for (const hole of holes) {
@@ -759,6 +774,10 @@ export function calculatePersonalBet(
         hole,
         ownerScore: owner,
         rivalScore: rival,
+        ownerGross,
+        rivalGross: rivalRaw,
+        ownerStrokes: ownerGross - owner,
+        rivalStrokes: rivalRaw - rival,
         winner: owner < rival ? "owner" : owner > rival ? "rival" : "tie",
       });
     }

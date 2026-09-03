@@ -82,6 +82,9 @@ export type BetConfig = {
   };
   foursome: ParticipantConfig & {
     enabled: boolean;
+    /** Missing preserves saved pre-Excel calculations. Excel uses raw rebased HCP,
+     * rounded to one decimal, with SI/SI+18 thresholds (not fractional strokes). */
+    handicapMethod?: "excel" | "configured";
     hcpPct: number;
     decimals: DecimalMode;
     segmentSize: 3 | 6 | 9 | 18;
@@ -205,6 +208,8 @@ export type PersonalHistoryResult = {
   rivalTemplateId?: string;
   rivalHandicap?: number | null;
   betSnapshot?: PersonalBet;
+  grossOwner?: number;
+  grossRival?: number;
 };
 
 export type RoundSnapshot = {
@@ -213,6 +218,8 @@ export type RoundSnapshot = {
   courseName: string;
   teeName: string;
   ownerName: string;
+  ownerId?: string;
+  snapshotVersion?: 2;
   roundHoles?: 9 | 18;
   startHole?: 1 | 10;
   betResult: number;
@@ -233,6 +240,10 @@ export type RoundSnapshot = {
   personalBets?: PersonalBet[];
   manualBets?: ManualBet[];
   ballFriendSetup?: Record<number, BallFriendHole>;
+  segments?: FoursomeSegment[];
+  playerBalances?: Record<string, number>;
+  categoryBalances?: Record<string, Record<string, number>>;
+  resultDetails?: Record<string, unknown>;
 };
 
 export type FrequentPlayer = {

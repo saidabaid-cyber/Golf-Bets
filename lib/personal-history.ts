@@ -7,7 +7,7 @@ const nameKey = (name: string) => name.trim().replace(/\s+/g, " ").toLocaleLower
 
 export function snapshotPersonalResult(
   bet: PersonalBet,
-  result: { totalMoney: number; componentMoney: Record<string, number> },
+  result: { totalMoney: number; componentMoney: Record<string, number>; grossOwner?: number; grossRival?: number },
   players: Player[],
 ): PersonalHistoryResult {
   const rival = bet.rivalMode === "group" ? players.find((player) => player.id === bet.rivalPlayerId) : undefined;
@@ -18,6 +18,8 @@ export function snapshotPersonalResult(
     rivalTemplateId: bet.rivalMode === "external" ? bet.externalRivalId : undefined,
     betId: bet.id,
     totalMoney: result.totalMoney,
+    grossOwner: result.grossOwner,
+    grossRival: result.grossRival,
     componentMoney: { ...result.componentMoney },
     betSnapshot: structuredClone(bet),
   };
@@ -63,7 +65,8 @@ export function buildPersonalHistory(
   period: PersonalHistoryPeriod = "all",
   sort: PersonalHistorySort = "recent",
 ): RivalHistory[] {
-  const entries = history.flatMap((round) => (round.personalResults || []).map((result, resultIndex) => {
+  const uniqueRounds = [...new Map([...history].sort((a,b) => (a.updatedAt || a.date).localeCompare(b.updatedAt || b.date)).map(round => [round.id, round])).values()];
+  const entries = uniqueRounds.flatMap((round) => (round.personalResults || []).map((result, resultIndex) => {
     const bet = recordedBet(round, result);
     const templateId = result.rivalTemplateId || (bet?.rivalMode === "external" ? bet.externalRivalId : undefined);
     const player = round.players?.find((candidate) => candidate.id === result.rivalKey);
@@ -86,7 +89,9 @@ export function buildPersonalHistory(
     const normalizedName = nameKey(result.rivalName);
     const alias = aliases.get(normalizedName);
     const stableId = templateId || (alias?.size === 1 ? [...alias][0] : undefined);
-    const key = stableId ? `template:${stableId}` : `name:${normalizedName || result.rivalKey}`;
+    // A rival can be shared by different principal players on this device.
+    // Round-local player IDs are not stable across rounds; snapshot names are.
+    const key = `${nameKey(round.ownerName)}::${stableId ? `template:${stableId}` : `name:${normalizedName || result.rivalKey}`}`;
     const rival = rivals.get(key) || { key, name: result.rivalName, total: 0, rounds: 0, wins: 0, losses: 0, ties: 0, matchMoney: 0, medalMoney: 0, records: [] };
     let record = rival.records.find((item) => item.roundId === round.id);
     if (!record) {
