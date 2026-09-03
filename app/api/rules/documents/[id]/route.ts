@@ -14,7 +14,9 @@ function localRequest(request: Request) {
 async function officialPdfResponse(document: NonNullable<ReturnType<typeof officialRulesDocument>>) {
   try {
     const upstream = await fetch(document.officialUrl, {
-      cache: "force-cache",
+      // PDFs exceed Next's per-item Data Cache limit. Cache the HTTP response
+      // at the CDN/browser instead (Cache-Control below), not this fetch body.
+      cache: "no-store",
       redirect: "follow",
       signal: AbortSignal.timeout(20000),
       headers: {

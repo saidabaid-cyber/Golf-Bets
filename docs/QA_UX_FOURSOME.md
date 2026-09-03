@@ -54,6 +54,7 @@ Origen QA `http://localhost:3001` (proxy al dev3000) aislado del localStorage de
 - PDFParte1:410páginas; render y cambio a página15 observados dentro deapp a430×932. Comité:172páginas. Aclaraciones:13páginas, render a390×844, zoom y siguiente; browserBack cerró visor y regresó aReglas.
 - Buildlocalproducción3002 (no deployment): GETParte1=200,13,566,580bytes; Parte2=200,5,186,675bytes; AclaracionesR&A=200,316,707bytes. Copia localAclaraciones314,785bytes, misma edición identificada1jul2026; no se exige identidad binaria entre archivos USGA/R&A.
 - Sin llamadas automáticas OpenAI por búsqueda. No se reindexó Vector Store ni se añadieron PDFs al repositorio.
+- La prueba de servidor detectó que losPDFs deParte1/Parte2 superan el límite2MB de Data Cache deNext. Se usa fetch no-store y se conserva Cache-Control paraCDN/navegador, evitando intentar guardar cuerpos grandes en Data Cache.
 
 ## Límites reales / revisión pendiente
 
