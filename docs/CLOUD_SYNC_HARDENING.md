@@ -54,3 +54,21 @@ https://golf-bets-git-codex-dev-saha8.vercel.app/auth/callback.
 No se conoce desde esta prueba el plan/SMTP efectivo. Supabase anunció restricciones para personalizar plantillas en proyectos Free nuevos con SMTP predeterminado; verificar esa condición antes de asumir que basta editar la plantilla:
 https://supabase.com/changelog/46599-changes-to-email-template-customisation-on-free-tier
 https://supabase.com/docs/guides/auth/auth-email-passwordless
+
+## Resultado comprobado del Preview
+
+Código: 95e316083ba2a8c24f377de62dcbe779c15f51e6.
+Deployment: dpl_HbjZywhZDCkYKoDLxH7v2WgvgbU3, READY, target Preview / codex-dev.
+El cierre documental posterior no modifica código de aplicación.
+
+- 313 tests aprobados / 0 fallidos (41 nuevos respecto de 272), lint sin errores ni advertencias, build aprobado y git diff --check correcto.
+- Las cuatro regresiones Personales y total Said siguen siendo -600, -200, +800, -800; total -800. Ningún archivo del motor fue modificado.
+- Node directo: las tres fuentes oficiales PDF responden 200. Desde Vercel: Parte 1 y Parte 2 reciben **HTTP403 de USGA**, observado mediante X-Rules-Source-Status: upstream-403; por eso el proxy devuelve 502. No es un fallo de Next Data Cache. No se intenta eludir ese rechazo; se conserva el fallback CORS interno.
+- Visor real en navegador: Parte 1 = 410 páginas, Parte 2 = 172 páginas, Aclaraciones = 13 páginas. Los tres renderizan dentro de The Backyard. Cambio de página y regreso por botón/browser Back conservan la búsqueda cart path. Aclaraciones responde HTTP200 por proxy.
+- Medidas DOM confirmadas 390×844 y 430×932. Capturas visuales de acceso, correo, configuración, modal histórico y PDFs; sin overflow horizontal del viewport en las pantallas revisadas. Inputs email de 16px. No se probó teclado nativo ni Safari/PWA físico.
+- En Preview: Apple/Google dan Pendiente de configuración sin salir al JSON de Supabase. Correo inválido produce error humano sin enviar OTP. El paso de seis dígitos se valida con mocks/estructura, no con correo entregado ni captura de una sesión real.
+- Invitado → Cuenta → Acceso → Invitado y recarga preservan la ronda QA de 9 hoyos y el histórico. H1 conserva 4/3/5/5; los demás hoyos siguen presentes. Se verificaron Foursome Live, resultados (-1450,-50,-850,+2350; suma cero), copia real a clipboard, abrir histórico, cancelar corrección y editar configuración sin modificar la tarjeta.
+- Script público de solo lectura: flags cloud/Polla/social activos, Email habilitado y Google/Apple deshabilitados; endpoints cloud devuelven 401 sin JWT. No devuelve filas privadas a anon. polla_join_attempts y RPCs sensibles consultados responden 401/42501. No se declara por esto RLS entre usuarios autenticados.
+- 12 chunks iniciales del navegador: URL del proyecto esperado, public key presente, cero candidatos de key privilegiada. No se imprimen claves ni tokens.
+- IA muestra IA no configurada en este Preview (estado previo); no se cambia Vector Store ni se envía consulta a OpenAI.
+- Pendiente humano: OTP real y E2E autenticado de perfil/consentimiento/sync, dos sesiones/dispositivos y fotos. La nueva tarjeta de estado cloud requiere esa sesión para su verificación visual autenticada. Dictado/AutoFill/teclado/Safari físico siguen pendientes.

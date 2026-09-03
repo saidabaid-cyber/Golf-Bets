@@ -42,7 +42,7 @@ try {
   for (const id of ['official-guide-part-1', 'committee-procedures-part-2', 'clarifications-july-2026']) {
     const response = await previewFetch(`/api/rules/documents/${id}`);
     const bytes = new Uint8Array(await response.arrayBuffer());
-    console.log(JSON.stringify({ check: 'internal-pdf', id, status: response.status, contentType: response.headers.get('content-type'), bytes: bytes.length, pdfSignature: Buffer.from(bytes.slice(0,5)).toString() === '%PDF-' }));
+    console.log(JSON.stringify({ check: 'internal-pdf', id, status: response.status, sourceStatus: response.headers.get('x-rules-source-status'), contentType: response.headers.get('content-type'), bytes: bytes.length, pdfSignature: Buffer.from(bytes.slice(0,5)).toString() === '%PDF-' }));
   }
   const features = await previewFetch('/api/features');
   console.log(JSON.stringify({ check: 'preview-features', status: features.status, flags: await features.json() }));
