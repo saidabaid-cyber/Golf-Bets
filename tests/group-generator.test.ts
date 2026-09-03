@@ -49,6 +49,21 @@ test("balanceado por HCP es determinista, válido y razonablemente parejo", () =
   assert.deepEqual(source.map((player) => player.handicap), [0, 3, 6, 9, 12, 15, 18, 21, 24, 27]);
 });
 
+test("stress 3–20 jugadores conserva a todos para objetivos 3, 4 y 5", () => {
+  for (let total = 3; total <= 20; total += 1) {
+    for (const target of [3, 4, 5] as GroupTarget[]) {
+      const source = players(total);
+      const random = generateRandomGroups(source, target, total * 100 + target);
+      const balanced = generateBalancedGroups(source, target, total * 100 + target);
+      for (const result of [random, balanced]) {
+        assert.equal(validateGroups(result, source), true, `${total} jugadores, objetivo ${target}`);
+        assert.ok(result.every((group) => group.length >= 3 && group.length <= 5));
+        assert.equal(new Set(result.flat().map((player) => player.id)).size, total);
+      }
+    }
+  }
+});
+
 test("nombres duplicados se ignoran y edición móvil no pierde jugadores", () => {
   const source = appendUniquePlayer([], { id: "a", name: "Sáíd", handicap: 7 });
   assert.equal(appendUniquePlayer(source, { id: "b", name: " said ", handicap: 9 }).length, 1);

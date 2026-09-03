@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "../../../../lib/supabase/server";
+import { canEditPollaScore, hasPollaScoreConflict } from "../../../../lib/polla-live";
 
 export async function POST(request: NextRequest) {
-  const admin = getSupabaseAdmin();
+  const admin = getSupabaseAdmin("polla");
   if (!admin) return NextResponse.json({ error: "Polla Live requiere configuración de nube." }, { status: 503 });
   const token = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
   if (!token) return NextResponse.json({ error: "Acceso requerido." }, { status: 401 });
@@ -12,13 +13,17 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   const hole = Number(body?.hole);
   const score = Number(body?.score);
-  if (!body?.playerId || !body.groupId || hole < 1 || hole > 18 || score < 1 || score > 20) return NextResponse.json({ error: "Score inválido." }, { status: 400 });
-  if (access.role === "scorer" && access.group_id !== body.groupId) return NextResponse.json({ error: "Solo puedes editar tu grupo." }, { status: 403 });
+  if (!body?.playerId || !body.groupId || !Number.isInteger(hole) || hole < 1 || hole > 18 || !Number.isInteger(score) || score < 1 || score > 20) return NextResponse.json({ error: "Score inválido." }, { status: 400 });
+  if (body.tournamentId && body.tournamentId !== access.tournament_id) return NextResponse.json({ error: "El torneo no coincide con la sesión." }, { status: 403 });
 
-  const { data: group } = await admin.from("tournament_groups").select("status").eq("id", body.groupId).eq("tournament_id", access.tournament_id).single();
-  if (!group || (group.status === "confirmed" && access.role !== "admin")) return NextResponse.json({ error: "La tarjeta está cerrada." }, { status: 423 });
+  const [{ data: group }, { data: membership }] = await Promise.all([
+    admin.from("tournament_groups").select("status").eq("id", body.groupId).eq("tournament_id", access.tournament_id).single(),
+    admin.from("group_members").select("group_id").eq("group_id", body.groupId).eq("tournament_player_id", body.playerId).maybeSingle(),
+  ]);
+  if (!membership) return NextResponse.json({ error: "El jugador no pertenece a este grupo." }, { status: 403 });
+  if (!group || !canEditPollaScore({ role: access.role, sessionGroupId: access.group_id, targetGroupId: String(body.groupId), cardStatus: group.status })) return NextResponse.json({ error: group?.status === "confirmed" ? "La tarjeta está cerrada." : "Solo puedes editar tu grupo." }, { status: group?.status === "confirmed" ? 423 : 403 });
   const { data: current } = await admin.from("tournament_scores").select("score,updated_at").eq("tournament_id", access.tournament_id).eq("player_id", body.playerId).eq("hole", hole).maybeSingle();
-  if (body.baseUpdatedAt && current?.updated_at && body.baseUpdatedAt !== current.updated_at) return NextResponse.json({ error: "El score cambió en otro dispositivo.", current }, { status: 409 });
+  if (hasPollaScoreConflict(typeof body.baseUpdatedAt === "string" ? body.baseUpdatedAt : undefined, current?.updated_at)) return NextResponse.json({ error: "El score cambió en otro dispositivo.", current }, { status: 409 });
 
   const { data, error } = await admin.from("tournament_scores").upsert({
     tournament_id: access.tournament_id,

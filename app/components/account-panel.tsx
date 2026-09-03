@@ -7,7 +7,7 @@ import { useBackyardAccount } from "./account-provider";
 import { NumericCaptureInput } from "./numeric-capture-input";
 
 export function AccountPanel({ highContrast, onHighContrastChange, onBack }: { highContrast: boolean; onHighContrastChange: (value: boolean) => void; onBack: () => void }) {
-  const { identity, updateProfile, logout, openAccess, acceptances } = useBackyardAccount();
+  const { identity, updateProfile, logout, openAccess, acceptances, cloudLinked, cloudStatus, requestCloudLink } = useBackyardAccount();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(identity.displayName);
   const [handicap, setHandicap] = useState<number | null>(identity.defaultHandicap);
@@ -51,6 +51,11 @@ export function AccountPanel({ highContrast, onHighContrastChange, onBack }: { h
     <section className="hero accountHero"><div><div className="eyebrow">THE BACKYARD ACCOUNT</div><h1>Mi Cuenta</h1><p>{identity.mode === "guest" ? "Estás usando The Backyard como invitado." : "Tu identidad para los juegos y futuros deportes de The Backyard."}</p></div><button className="secondary" onClick={onBack}>← Volver a Inicio</button></section>
 
     {identity.mode === "guest" && <section className="card guestAccountCard"><h2>Modo invitado</h2><p>Los datos permanecen en este dispositivo. Crear una cuenta permitirá sincronizar tu información cuando la nube esté activada.</p><div className="accountInlineActions"><button className="primary" onClick={openAccess}>Crear cuenta</button><button className="secondary" onClick={openAccess}>Iniciar sesión</button></div></section>}
+
+    {identity.mode === "authenticated" && <div className={`cloudAccountStatus ${cloudStatus === "error" ? "bad" : ""}`} role="status">
+      {cloudStatus === "syncing" ? "Sincronizando…" : cloudStatus === "synced" ? "✓ Sincronizado" : cloudStatus === "error" ? "Sincronización pendiente" : cloudLinked ? "Cambios pendientes" : "Datos locales"}
+    </div>}
+    {identity.mode === "authenticated" && !cloudLinked && <section className="card"><h2>Sincronización</h2><p>Tus datos siguen seguros en este dispositivo. Puedes vincularlos a tu cuenta cuando la nube esté configurada.</p><button className="primary" onClick={requestCloudLink}>Vincular datos locales</button></section>}
 
     <section className="card profileCard">
       <div className="sectionTitle"><div className="profileIdentity"><div className="accountAvatar">{identity.avatarUrl ? <img src={identity.avatarUrl} alt="Avatar" /> : (identity.displayName.trim()[0] || "J").toUpperCase()}</div><div><h2>{identity.displayName}</h2><p>{identity.email || "Sin correo · Invitado"}</p></div></div><button className="secondary" onClick={() => setEditing((value) => !value)}>{editing ? "Cancelar" : "Editar"}</button></div>

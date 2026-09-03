@@ -1,6 +1,9 @@
 import corpus from "./rules-search-index.generated.json";
 import { golfRulesCatalog, type GolfRuleEntry } from "./rules-catalog";
-import { officialRulesDocument } from "./rules-documents";
+import { officialRulesDocument, type OfficialRulesDocument } from "./rules-documents";
+import { expandedRulesSearchTerms, normalizeRulesSearch } from "./rules-search-normalization";
+
+export type RulesDocumentType = "rules" | "committee" | "clarification";
 
 export type RulesSearchResult = {
   id: string;
@@ -8,6 +11,8 @@ export type RulesSearchResult = {
   title: string;
   explanation: string;
   source: string;
+  sourceId: OfficialRulesDocument["id"];
+  documentType: RulesDocumentType;
   sourceUrl: string;
   page?: number;
 };
@@ -49,28 +54,14 @@ const RULE_TITLES: Record<string, string> = {
   "25": "Modificaciones para jugadores con discapacidades",
 };
 
-const ALIASES: Record<string, string[]> = {
-  agua: ["area de penalidad", "estaca roja", "estaca amarilla"],
-  "cart path": ["camino", "obstruccion inamovible"],
-  drop: ["dropear", "dropeo", "area de alivio"],
-  dropeo: ["dropear", "drop", "area de alivio"],
-  green: ["putting green"],
-  aspersor: ["obstruccion inamovible", "sprinkler"],
-  provisional: ["bola provisional", "perdida", "fuera de limites"],
-};
-
-export function normalizeRulesSearch(value: string) {
-  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es-MX").replace(/[^a-z0-9.()\s-]/g, " ").replace(/\s+/g, " ").trim();
-}
-
-function expandedTerms(query: string) {
-  const normalized = normalizeRulesSearch(query);
-  const aliases = Object.entries(ALIASES).flatMap(([key, values]) => normalized.includes(key) ? values : []);
-  return normalizeRulesSearch([normalized, ...aliases].join(" ")).split(/\s+/).filter((word) => word.length > 1 || /^\d+$/.test(word));
+function documentType(sourceId: CorpusEntry["sourceId"]): RulesDocumentType {
+  if (sourceId === "clarifications-july-2026") return "clarification";
+  if (sourceId === "committee-procedures-part-2") return "committee";
+  return "rules";
 }
 
 function curatedResult(entry: GolfRuleEntry): RulesSearchResult {
-  return { id: `curated-${entry.id}`, rule: entry.rule, title: entry.title, explanation: entry.explanation, source: "Reglas de Golf", sourceUrl: entry.sourceUrl };
+  return { id: `curated-${entry.id}`, rule: entry.rule, title: entry.title, explanation: entry.explanation, source: "Reglas de Golf", sourceId: "official-guide-part-1", documentType: "rules", sourceUrl: entry.sourceUrl };
 }
 
 function contextualExcerpt(text: string, normalizedQuery: string, terms: string[]) {
@@ -87,7 +78,7 @@ function contextualExcerpt(text: string, normalizedQuery: string, terms: string[
 export function searchRulesCorpus(query: string, limit = 12): RulesSearchResult[] {
   const normalized = normalizeRulesSearch(query);
   if (!normalized) return golfRulesCatalog.slice(0, Math.min(limit, 4)).map(curatedResult);
-  const terms = expandedTerms(query);
+  const terms = expandedRulesSearchTerms(query);
   const curated = golfRulesCatalog
     .map((entry) => {
       const haystack = normalizeRulesSearch([entry.rule, entry.title, entry.explanation, ...entry.keywords].join(" "));
@@ -123,12 +114,45 @@ export function searchRulesCorpus(query: string, limit = 12): RulesSearchResult[
       title: entry.rule && RULE_TITLES[mainRule] ? RULE_TITLES[mainRule] : entry.source,
       explanation: contextualExcerpt(entry.searchText, normalized, terms),
       source: entry.source,
+      sourceId: entry.sourceId as OfficialRulesDocument["id"],
+      documentType: documentType(entry.sourceId),
       sourceUrl: document.officialUrl,
       page: entry.page,
     });
     if (results.length >= limit) break;
   }
   return results.slice(0, limit);
+}
+
+function referencedRules(text: string) {
+  const references = Array.from(text.matchAll(/(?:regla|rule)\s+(\d{1,2})(?:\.\d+)?/g), (match) => Number(match[1]))
+    .filter((number) => number >= 1 && number <= 25);
+  return Array.from(new Set(references)).slice(0, 6);
+}
+
+export function browseRulesSource(sourceId: OfficialRulesDocument["id"], limit = 24): RulesSearchResult[] {
+  const document = officialRulesDocument(sourceId);
+  if (!document) return [];
+  return (corpus as CorpusEntry[])
+    .filter((entry) => entry.sourceId === sourceId)
+    .slice(0, Math.max(1, Math.min(limit, 200)))
+    .map((entry) => {
+      const related = referencedRules(entry.searchText);
+      const primaryRule = entry.rule || (related[0] ? String(related[0]) : "Fuente oficial");
+      return {
+        id: entry.id,
+        rule: primaryRule,
+        title: sourceId === "clarifications-july-2026" ? `Aclaraciones · página ${entry.page}` : `Procedimientos del Comité · página ${entry.page}`,
+        explanation: related.length
+          ? `Contenido oficial indexado con referencias a ${related.map((number) => `Regla ${number}`).join(", ")}. Usa el buscador para localizar un tema concreto o consulta la fuente completa.`
+          : "Contenido oficial indexado. Usa el buscador para localizar un tema concreto o consulta la fuente completa.",
+        source: entry.source,
+        sourceId,
+        documentType: documentType(sourceId),
+        sourceUrl: document.officialUrl,
+        page: entry.page,
+      } satisfies RulesSearchResult;
+    });
 }
 
 export function rulesCorpusCoverage() {

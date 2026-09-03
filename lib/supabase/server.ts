@@ -1,14 +1,17 @@
 import "server-only";
 import { createClient } from "@supabase/supabase-js";
+import { cloudServerEnabled, pollaLiveServerEnabled } from "../feature-flags";
 
-export function getSupabaseAdmin() {
+export function getSupabaseAdmin(feature: "cloud" | "polla" = "cloud") {
+  if (!cloudServerEnabled || (feature === "polla" && !pollaLiveServerEnabled)) return null;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceKey) return null;
   return createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
-export function getSupabaseForUser(token: string) {
+export function getSupabaseForUser(token: string, feature: "cloud" | "polla" = "cloud") {
+  if (!cloudServerEnabled || (feature === "polla" && !pollaLiveServerEnabled)) return null;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anonKey) return null;

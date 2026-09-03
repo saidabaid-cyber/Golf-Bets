@@ -109,7 +109,15 @@ export function authErrorMessage(error: unknown, context: "google" | "apple" | "
 }
 
 export function hasLocalGolfData(storage: Pick<Storage, "getItem">) {
-  const keys = ["golfbets-history", "golfbets-draft-v1", "golfbets-frequent-players-v1", "golfbets-frequent-groups-v1"];
+  const keys = [
+    "golfbets-history",
+    "golfbets-draft-v1",
+    "golfbets-frequent-players-v1",
+    "golfbets-frequent-groups-v1",
+    "golfbets-personal-rivals",
+    "golfbets-courses",
+    "golfbets-high-contrast-v1",
+  ];
   return keys.some((key) => {
     const value = storage.getItem(key);
     return Boolean(value && value !== "[]" && value !== "{}" && value !== "null");

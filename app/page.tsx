@@ -49,9 +49,12 @@ import { AccountPanel } from "./components/account-panel";
 import { BrandLockup } from "./components/brand-lockup";
 import { GroupBuilder } from "./components/group-builder";
 import { createSingleAdvance, HOLE_SUMMARY_DURATION_MS, nextHoleDestination } from "../lib/hole-summary";
-import { buildHoleSummary, clearActiveRoundStorage, hasRoundProgress, historicalGolfStats, mergeCoursesPreservingEdits, migrateDraftPressures, persistRoundHistory, privateLeaderboard, pushUndoState, readStoredJson, resolveHistoricalRoundDeletion, resolvePersonalHistoryDeletion, STORAGE_KEYS, upsertFrequentPlayers } from "../lib/round-utils";
+import { buildHoleSummary, clearActiveRoundStorage, ensureHoleScoresAtPar, hasRoundProgress, historicalGolfStats, mergeCoursesPreservingEdits, migrateDraftPressures, persistRoundHistory, privateLeaderboard, pushUndoState, readStoredJson, resolveHistoricalRoundDeletion, resolvePersonalHistoryDeletion, STORAGE_KEYS, upsertFrequentPlayers } from "../lib/round-utils";
 import { downloadRoundCsv, downloadRoundImage, downloadRoundPdf, shareRound } from "../lib/round-export";
-import { deleteScorecardPhoto, readScorecardPhoto, saveScorecardPhoto } from "../lib/scorecard-photo";
+import { deleteScorecardPhoto, deleteScorecardPhotoCloud, readScorecardPhoto, readScorecardPhotoCloud, saveScorecardPhoto, uploadScorecardPhotoCloud } from "../lib/scorecard-photo";
+import { CLOUD_TOMBSTONES_KEY, collectLocalCloudData, downloadCloudData, mergeLocalAndCloud, recordCloudDeletion, uploadCloudData } from "../lib/cloud-sync";
+import { PRIVATE_POLLA_LINK_KEY, parsePrivatePollaLink, privatePollaScoreChanges } from "../lib/polla-private-link";
+import { enqueuePollaScore } from "../lib/polla-offline";
 import { cloneLaVistaLocalRules, isLaVistaCourse, LA_VISTA_LOCAL_RULES_UPDATED_AT, withDefaultLaVistaRules } from "../lib/local-rules";
 import {
   addFrequentGroupMember,
@@ -308,7 +311,7 @@ function MoneyInput({ label, value, onChange }: { label: string; value: number; 
 }
 
 function GolfBetsApp() {
-  const { identity } = useBackyardAccount();
+  const { identity, cloudLinked, setCloudStatus } = useBackyardAccount();
   const [tab, setTab] = useState<AppTab>("welcome");
   const [courses, setCourses] = useState<Course[]>(defaultCourses);
   const [course, setCourse] = useState<Course>(laVista);
@@ -366,6 +369,9 @@ function GolfBetsApp() {
   const holeSummaryTimer = useRef<number | null>(null);
   const holeSummaryAdvance = useRef<(() => boolean) | null>(null);
   const flushLocalState = useRef<(() => void) | null>(null);
+  const cloudHydratedUser = useRef("");
+  const cloudSyncTimer = useRef<number | null>(null);
+  const hadLocalPreferences = useRef(false);
 
   const order = useMemo(() => playOrder(startHole).slice(0, roundHoles), [startHole, roundHoles]);
   const holeNumber = order[currentIndex];
@@ -374,6 +380,7 @@ function GolfBetsApp() {
   const privateBoard = useMemo(() => privateLeaderboard(course, players, scores, order), [course, players, scores, order]);
 
   useEffect(() => {
+    hadLocalPreferences.current = localStorage.getItem(STORAGE_KEYS.contrast) !== null;
     const savedCourses = readStoredJson<unknown>(localStorage, STORAGE_KEYS.courses, null);
     const savedHistory = readStoredJson<unknown>(localStorage, STORAGE_KEYS.history, null);
     const savedRivals = readStoredJson<unknown>(localStorage, STORAGE_KEYS.rivals, null);
@@ -434,6 +441,7 @@ function GolfBetsApp() {
         if (Number.isInteger(draft.currentIndex)) setCurrentIndex(Math.max(0, Math.min((draft.roundHoles || 18) - 1, draft.currentIndex)));
       }
     } catch { /* keep safe defaults for structurally invalid legacy data */ }
+    if (new URLSearchParams(window.location.search).has("polla")) setTab("pollaLive");
     setHydrated(true);
   }, []);
 
@@ -483,11 +491,90 @@ function GolfBetsApp() {
   }, [hydrated]);
 
   useEffect(() => {
-    const defs = segmentDefinitions(order, bets.foursome.segmentSize);
-    setSegments((old) => defs.map((d, i) => ({ ...d, basePair: old[i]?.basePair ?? [] })));
-  }, [order, bets.foursome.segmentSize]);
+    if (!hydrated || identity.mode !== "authenticated" || !identity.accessToken || !cloudLinked || cloudHydratedUser.current === identity.userId) return;
+    let cancelled = false;
+    const hydrateCloud = async () => {
+      setCloudStatus("syncing");
+      try {
+        const local = collectLocalCloudData(localStorage, identity.defaultHandicap, hadLocalPreferences.current);
+        const cloud = await downloadCloudData(identity.accessToken!);
+        if (cancelled) return;
+        const merged = mergeLocalAndCloud(local, cloud);
+        const mergedCourses = mergeDefaultCourses(merged.courses);
+        setCourses(mergedCourses);
+        setHistory(merged.history.map((round) => ({ ...round, expenses: normalizeExpenses(round.expenses) })));
+        setSavedPersonalRivals(merged.rivals);
+        setFrequentPlayers(merged.frequentPlayers);
+        setFrequentGroups(merged.frequentGroups);
+        setHighContrast(merged.preferences.highContrast);
+        localStorage.setItem(STORAGE_KEYS.courses, JSON.stringify(mergedCourses));
+        localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(merged.history));
+        localStorage.setItem(STORAGE_KEYS.rivals, JSON.stringify(merged.rivals));
+        localStorage.setItem(STORAGE_KEYS.frequentPlayers, JSON.stringify(merged.frequentPlayers));
+        localStorage.setItem(STORAGE_KEYS.frequentGroups, serializeFrequentGroups(merged.frequentGroups));
+        localStorage.setItem(CLOUD_TOMBSTONES_KEY, JSON.stringify(merged.tombstones));
+        localStorage.setItem(STORAGE_KEYS.contrast, String(merged.preferences.highContrast));
+        const hadLocalDraft = hasRoundProgress(local.activeDraft);
+        if (!hadLocalDraft && hasRoundProgress(merged.activeDraft)) {
+          localStorage.setItem(STORAGE_KEYS.draft, JSON.stringify(merged.activeDraft));
+          const reloadKey = `backyard-cloud-draft-restored-v1:${identity.userId}`;
+          if (!sessionStorage.getItem(reloadKey)) {
+            sessionStorage.setItem(reloadKey, "true");
+            window.location.reload();
+            return;
+          }
+        }
+        await uploadCloudData(merged, identity.accessToken!);
+        if (!cancelled) {
+          cloudHydratedUser.current = identity.userId;
+          setCloudStatus("synced");
+        }
+      } catch {
+        if (!cancelled) setCloudStatus(navigator.onLine ? "error" : "pending");
+      }
+    };
+    hydrateCloud();
+    return () => { cancelled = true; };
+  }, [hydrated, identity.mode, identity.userId, identity.accessToken, identity.defaultHandicap, cloudLinked, setCloudStatus]);
 
   useEffect(() => {
+    if (!hydrated || identity.mode !== "authenticated" || !identity.accessToken || !cloudLinked || cloudHydratedUser.current !== identity.userId) return;
+    if (cloudSyncTimer.current !== null) window.clearTimeout(cloudSyncTimer.current);
+    setCloudStatus(navigator.onLine ? "syncing" : "pending");
+    cloudSyncTimer.current = window.setTimeout(async () => {
+      if (!navigator.onLine) { setCloudStatus("pending"); return; }
+      flushLocalState.current?.();
+      try {
+        await uploadCloudData(collectLocalCloudData(localStorage, identity.defaultHandicap), identity.accessToken!);
+        setCloudStatus("synced");
+      } catch { setCloudStatus("error"); }
+    }, 1_500);
+    return () => {
+      if (cloudSyncTimer.current !== null) window.clearTimeout(cloudSyncTimer.current);
+    };
+  }, [hydrated, identity.mode, identity.userId, identity.accessToken, identity.defaultHandicap, cloudLinked, courses, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, course, startHole, roundHoles, players, ownerId, bets, segments, personalBets, manualBets, scores, unitEvents, ballFriendSetup, expenses, roundId, roundDate, currentIndex, setCloudStatus]);
+
+  useEffect(() => {
+    if (identity.mode !== "authenticated" || !identity.accessToken || !cloudLinked) return;
+    const syncWhenOnline = () => {
+      flushLocalState.current?.();
+      setCloudStatus("syncing");
+      uploadCloudData(collectLocalCloudData(localStorage, identity.defaultHandicap), identity.accessToken!)
+        .then(() => setCloudStatus("synced"))
+        .catch(() => setCloudStatus("error"));
+    };
+    window.addEventListener("online", syncWhenOnline);
+    return () => window.removeEventListener("online", syncWhenOnline);
+  }, [identity.mode, identity.accessToken, identity.defaultHandicap, cloudLinked, setCloudStatus]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const defs = segmentDefinitions(order, bets.foursome.segmentSize);
+    setSegments((old) => defs.map((d, i) => ({ ...d, basePair: old[i]?.basePair ?? [] })));
+  }, [hydrated, order, bets.foursome.segmentSize]);
+
+  useEffect(() => {
+    if (!hydrated) return;
     const valid = new Set(players.map((p) => p.id));
     const sanitize = (ids: string[]) => ids.filter((id) => valid.has(id));
     setBets((b) => ({
@@ -505,22 +592,14 @@ function GolfBetsApp() {
       miniPolla: { ...(b.miniPolla ?? initialBets(players.map((p) => p.id)).miniPolla), participantIds: sanitize((b.miniPolla ?? initialBets(players.map((p) => p.id)).miniPolla).participantIds) },
     }));
     if (!valid.has(ownerId)) setOwnerId(players[0]?.id ?? "");
-  }, [players, ownerId]);
+  }, [hydrated, players, ownerId]);
 
   // When a hole opens, every group player gets Par as a REAL score by default.
   // This fixes the old behavior where Par was only a placeholder and the hole stayed incomplete
   // until the user touched +/−. The user now only changes players who did not make Par.
   useEffect(() => {
     if (tab !== "round" || !hole) return;
-    setScores((prev) => {
-      const current = prev[holeNumber] || {};
-      let changed = false;
-      const nextRow: HoleScore = { ...current };
-      for (const p of players) {
-        if (typeof nextRow[p.id] !== "number") { nextRow[p.id] = hole.par; changed = true; }
-      }
-      return changed ? { ...prev, [holeNumber]: nextRow } : prev;
-    });
+    setScores((prev) => ensureHoleScoresAtPar(prev, hole, players));
   }, [tab, holeNumber, hole, players]);
 
   useEffect(() => () => {
@@ -540,6 +619,7 @@ function GolfBetsApp() {
   const rabbitBalances = useMemo(() => payoutWinnerTakesFromAll(playersByIds(players, bets.rabbits.participantIds), rabbits.won, bets.rabbits.value), [players, bets.rabbits, rabbits.won]);
   const skinBalances = useMemo(() => payoutWinnerTakesFromAll(playersByIds(players, bets.skins.participantIds), skins.won, bets.skins.value), [players, bets.skins, skins.won]);
   const allBetBalances = useMemo(() => mergeBalances(players, rabbitBalances, skinBalances, units.balances, foursomes.balances, ballFriend.balances, polla.balances, miniPolla.balances, personals.balances, manual.balances), [players, rabbitBalances, skinBalances, units.balances, foursomes.balances, ballFriend.balances, polla.balances, miniPolla.balances, personals.balances, manual.balances]);
+  const liveBetBalances = useMemo(() => mergeBalances(players, rabbitBalances, skinBalances, units.balances, foursomes.provisionalBalances, ballFriend.balances, polla.balances, miniPolla.balances, personals.provisionalBalances, manual.balances), [players, rabbitBalances, skinBalances, units.balances, foursomes.provisionalBalances, ballFriend.balances, polla.balances, miniPolla.balances, personals.provisionalBalances, manual.balances]);
   const settlementIds = useMemo(() => {
     const ids = [...players.map((p) => p.id)];
     for (const r of personals.results) if (r.rivalId.startsWith("personal:") && !ids.includes(r.rivalId)) ids.push(r.rivalId);
@@ -770,11 +850,14 @@ function GolfBetsApp() {
 
   function currentSnapshot(): RoundSnapshot | null {
     if (!owner) return null;
+    const timestamp = new Date().toISOString();
     return {
       id: roundId, date: roundDate, courseName: course.name, teeName: course.teeName,
       ownerName: owner.name, roundHoles, startHole, betResult: ownerBetResult, expenses, expenseTotal: ownerExpenseTotal,
       netResult: ownerNet, categoryResults, players: structuredClone(players), scores: structuredClone(scores),
-      courseSnapshot: structuredClone(course), order: [...order], completedAt: new Date().toISOString(),
+      courseSnapshot: structuredClone(course), order: [...order], completedAt: timestamp, updatedAt: timestamp,
+      betConfig: structuredClone(bets), unitEvents: structuredClone(unitEvents), personalBets: structuredClone(personalBets),
+      manualBets: structuredClone(manualBets), ballFriendSetup: structuredClone(ballFriendSetup),
       personalResults: personals.results.map((r) => ({
         rivalKey: r.rivalId,
         rivalName: playerName(r.rivalId),
@@ -857,7 +940,7 @@ function GolfBetsApp() {
       window.alert("Ventaja/SI debe contener los números 1 a 18, una sola vez cada uno.");
       return;
     }
-    const updatedAt = localDateMexico();
+    const updatedAt = new Date().toISOString();
     const saved = withDefaultLaVistaRules({ ...courseDraft, name, teeName: "General", rating: undefined, slope: undefined, totalYards: undefined, updatedAt, holes: courseDraft.holes.map((h) => ({ number: h.number, par: h.par, strokeIndex: h.strokeIndex })) });
     setCourses((cs) => [saved, ...cs.filter((c) => c.id !== saved.id)]);
     setCourse(saved); setTab("setup");
@@ -879,6 +962,7 @@ function GolfBetsApp() {
 
   function deleteCourseDraft() {
     if (courseDraft.builtIn || !window.confirm(`¿Eliminar el campo personalizado “${courseDraft.name}”?`)) return;
+    recordCloudDeletion(localStorage, "course", courseDraft.id);
     const remaining = courses.filter((candidate) => candidate.id !== courseDraft.id);
     setCourses(remaining);
     setCourse(remaining[0] || laVista);
@@ -989,13 +1073,18 @@ function GolfBetsApp() {
   async function attachScorecardPhoto(round: RoundSnapshot, file?: File) {
     if (!file) return;
     await saveScorecardPhoto(round.id, file);
-    setHistory((rounds) => rounds.map((item) => item.id === round.id ? { ...item, photoId: round.id } : item));
+    setHistory((rounds) => rounds.map((item) => item.id === round.id ? { ...item, photoId: round.id, updatedAt: new Date().toISOString() } : item));
+    if (identity.mode === "authenticated" && cloudLinked) {
+      const blob = await readScorecardPhoto(round.id);
+      if (blob) uploadScorecardPhotoCloud(identity.userId, round.id, blob).catch(() => setCloudStatus("pending"));
+    }
   }
 
   async function viewScorecardPhoto(round: RoundSnapshot) {
     const preview = window.open("about:blank", "_blank");
     if (preview) preview.opener = null;
-    const blob = await readScorecardPhoto(round.photoId || round.id);
+    let blob = await readScorecardPhoto(round.photoId || round.id);
+    if (!blob && identity.mode === "authenticated" && cloudLinked) blob = await readScorecardPhotoCloud(identity.userId, round.id);
     if (!blob) {
       preview?.close();
       window.alert("No se encontró la foto local.");
@@ -1011,11 +1100,15 @@ function GolfBetsApp() {
     if (!historicalRoundToDelete) return;
     const target = historicalRoundToDelete;
     const next = resolveHistoricalRoundDeletion(history, target.id, "delete");
+    recordCloudDeletion(localStorage, "round", target.id);
     persistRoundHistory(window.localStorage, next);
     setHistory(next);
     setHistoricalRoundToDelete(null);
     if (target.photoId) {
       try { await deleteScorecardPhoto(target.photoId); } catch { /* the round deletion must not depend on optional local media */ }
+      if (identity.mode === "authenticated" && cloudLinked) {
+        try { await deleteScorecardPhotoCloud(identity.userId, target.id); } catch { setCloudStatus("pending"); }
+      }
     }
   }
 
@@ -1116,13 +1209,22 @@ function GolfBetsApp() {
     const rabbit = currentRabbitEvents.at(-1);
     if (rabbit) extras.push(`Conejo: ${rabbit.playerId ? playerName(rabbit.playerId) : "libre"} · ${rabbit.type}`);
     if (currentSkin) extras.push(`Skins: ${currentSkin.winnerId ? `${playerName(currentSkin.winnerId)} cobra ${currentSkin.count}` : `carry ${currentSkin.count}`}`);
-    const currentFoursome = foursomes.matches.find((match) => match.holePoints.some((item) => item.hole === holeNumber));
-    if (currentFoursome) extras.push(`Foursome: ${playerName(currentFoursome.basePair[0])}/${playerName(currentFoursome.basePair[1])} ${currentFoursome.pointDiff >= 0 ? "+" : ""}${currentFoursome.pointDiff}`);
+    const currentFoursomes = foursomes.matches.filter((match) => match.holePoints.some((item) => item.hole === holeNumber));
+    for (const match of currentFoursomes) {
+      const holePoints = match.holePoints.find((item) => item.hole === holeNumber)?.points ?? 0;
+      extras.push(`Foursome: ${playerName(match.basePair[0])}/${playerName(match.basePair[1])} vs ${playerName(match.opponentPair[0])}/${playerName(match.opponentPair[1])} · H${holeNumber} ${holePoints >= 0 ? "+" : ""}${holePoints} · total ${match.pointDiff >= 0 ? "+" : ""}${match.pointDiff}`);
+    }
     const unitLines = players.map((player) => ({ name: player.name, value: unitHoleNet(player.id) })).filter((item) => item.value !== 0);
     if (unitLines.length) extras.push(`Unidades: ${unitLines.map((item) => `${item.name} ${item.value > 0 ? "+" : ""}${item.value}`).join(" · ")}`);
     if (bfDetail) extras.push(`Bola Amiga: ${playerName(bfDetail.teamA[0])}/${playerName(bfDetail.teamA[1])} ${bfDetail.pointDiff >= 0 ? "+" : ""}${bfDetail.pointDiff} pts`);
     for (const detail of [...polla.details, ...miniPolla.details].filter((item) => item.complete && item.holes.at(-1) === holeNumber)) {
       extras.push(`${detail.label}: ${detail.winnerIds.map(playerName).join(" / ")} gana${detail.winnerIds.length > 1 ? "n" : ""}`);
+    }
+    const privatePollaLink = parsePrivatePollaLink(localStorage.getItem(PRIVATE_POLLA_LINK_KEY));
+    if (privatePollaLink) {
+      const changes = privatePollaScoreChanges(privatePollaLink, holeNumber, scores[holeNumber] || {});
+      changes.forEach((change) => enqueuePollaScore(change));
+      if (changes.length && navigator.onLine) import("../lib/polla-offline").then(({ flushPollaScoreQueue }) => flushPollaScoreQueue(privatePollaLink.accessToken, { tournamentId: privatePollaLink.tournamentId, groupId: privatePollaLink.groupId })).catch(() => undefined);
     }
     setHoleSummary(buildHoleSummary(holeNumber, players, scores, extras));
     holeSummaryAdvance.current = createSingleAdvance(() => {
@@ -1161,10 +1263,10 @@ function GolfBetsApp() {
   const golfStats = useMemo(() => historicalGolfStats(history), [history]);
 
   return <main className={`app ${highContrast ? "highContrast" : ""}`}>
-    <header className="topbar">
+    {tab !== "rules" && <header className="topbar">
       <button className="brandHomeButton" onClick={() => setTab("welcome")} aria-label="Ir a Inicio"><BrandLockup compact /></button>
       <div className="topActions"><span className={`saveIndicator ${saveStatus}`}>{saveStatus === "saving" ? "Guardando…" : saveStatus === "error" ? "No se pudo guardar" : "✓ Guardado"}</span><button className="contrastButton" onClick={() => setHighContrast((value) => !value)} aria-pressed={highContrast}>{contrastToggleLabel(highContrast)}</button><button className="accountButton" onClick={() => setTab("account")} aria-label="Abrir Mi Cuenta">{identity.mode === "guest" ? <svg className="guestAvatar" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4.5 21c.5-5 3-7.5 7.5-7.5s7 2.5 7.5 7.5"/></svg> : (identity.displayName.trim()[0] || "S").toUpperCase()}</button></div>
-    </header>
+    </header>}
 
     {tab === "welcome" && <section className="welcomeScreen">
       <div className="eyebrow">HOY EN MÉXICO</div>
@@ -1261,7 +1363,7 @@ function GolfBetsApp() {
             </div>
             {roundHoles === 18 && <div className="pressureOption pressureGrid">
               <div><b>Presión Foursome</b><span>Se identifica siempre por hoyos físicos, aunque la salida sea H10.</span></div>
-              <div><label>Multiplicador</label><select value={bets.foursome.pressureMultiplier ?? (bets.foursome.pressSecond9 ? 2 : 1)} onChange={(event) => setBets({ ...bets, foursome: { ...bets.foursome, pressureMultiplier: Number(event.target.value) as 1 | 2 | 3 | 4 | 5, pressSecond9: false } })}>{[1,2,3,4,5].map((value) => <option key={value} value={value}>{value}x{value === 1 ? " · sin presión" : ""}</option>)}</select></div>
+              <div><label>Presión</label><select value={bets.foursome.pressureMultiplier ?? (bets.foursome.pressSecond9 ? 2 : 1)} onChange={(event) => setBets({ ...bets, foursome: { ...bets.foursome, pressureMultiplier: Number(event.target.value) as 1 | 2 | 3 | 4 | 5, pressSecond9: false } })}><option value={1}>Sin presión</option>{[2,3,4,5].map((value) => <option key={value} value={value}>{value}x</option>)}</select></div>
               <div><label>Vuelta presionada</label><select value={bets.foursome.pressureNine ?? "holes_10_18"} onChange={(event) => setBets({ ...bets, foursome: { ...bets.foursome, pressureNine: event.target.value as "holes_1_9" | "holes_10_18" } })}><option value="holes_1_9">H1–9</option><option value="holes_10_18">H10–18</option></select></div>
             </div>}
             <label className="miniLabel">Jugadores de Foursome</label><ParticipantChips players={players} selected={bets.foursome.participantIds} onChange={(ids) => setBets({ ...bets, foursome: { ...bets.foursome, participantIds: ids } })} />
@@ -1482,7 +1584,7 @@ function GolfBetsApp() {
             const current = m.holePoints.find((hp) => hp.hole === holeNumber)?.points;
             return <div className="foursomeLiveRow" key={i}>
               <div><b>{playerName(m.basePair[0])} + {playerName(m.basePair[1])}</b><span>vs {playerName(m.opponentPair[0])} + {playerName(m.opponentPair[1])}</span></div>
-              <div className="matchNums"><small>Hoyo {current === undefined ? "—" : `${current > 0 ? "+" : ""}${current}`}</small><b className={m.pointDiff > 0 ? "good" : m.pointDiff < 0 ? "bad" : ""}>{m.pointDiff === 0 ? "AS" : `${m.pointDiff > 0 ? `${playerName(m.basePair[0])}/${playerName(m.basePair[1])}` : `${playerName(m.opponentPair[0])}/${playerName(m.opponentPair[1])}`} +${Math.abs(m.pointDiff)}`}</b><small>Acumulado {m.pointDiff > 0 ? "+" : ""}{m.pointDiff} pts</small></div>
+              <div className="matchNums"><small>Hoyo {holeNumber}: {current === undefined ? "—" : `${current > 0 ? "+" : ""}${current}`}</small><b className={m.pointDiff > 0 ? "good" : m.pointDiff < 0 ? "bad" : ""}>{m.pointDiff === 0 ? "AS" : `${m.pointDiff > 0 ? `${playerName(m.basePair[0])}/${playerName(m.basePair[1])}` : `${playerName(m.opponentPair[0])}/${playerName(m.opponentPair[1])}`} ${Math.abs(m.pointDiff)} UP`}</b><small>Total {m.pointDiff > 0 ? "+" : ""}{m.pointDiff} pts · provisional {signedMoney(m.provisionalTotalMoney)}</small></div>
             </div>;
           })}</div>;
         })()}
@@ -1495,10 +1597,10 @@ function GolfBetsApp() {
     </>}
 
     {tab === "standings" && <>
-      <section className="hero standingsHero"><div><div className="eyebrow">CÓMO VAMOS</div><h1>Balance provisional.</h1><p>Solo cuenta apuestas ya cobradas o componentes completos; lo pendiente sigue marcado en vivo.</p></div><button className="secondary" onClick={() => setTab("round")}>Volver al hoyo</button></section>
-      <section className="provisionalGrid">{[...players].sort((a, b) => (allBetBalances[b.id] || 0) - (allBetBalances[a.id] || 0)).map((player, index) => <div className="stat" key={player.id}><span>{index + 1} · {player.name || "Sin nombre"}</span><b className={(allBetBalances[player.id] || 0) > 0 ? "good" : (allBetBalances[player.id] || 0) < 0 ? "bad" : ""}>{signedMoney(allBetBalances[player.id] || 0)}</b><small>provisional</small></div>)}</section>
-      <section className="card highlights"><h2>Highlights</h2>{(() => { const leader = [...players].sort((a, b) => (allBetBalances[b.id] || 0) - (allBetBalances[a.id] || 0))[0]; const rabbitLeader = [...players].sort((a, b) => (rabbits.won[b.id] || 0) - (rabbits.won[a.id] || 0))[0]; const skinLeader = [...players].sort((a, b) => (skins.won[b.id] || 0) - (skins.won[a.id] || 0))[0]; return <div className="highlightList">{leader && (allBetBalances[leader.id] || 0) > 0 && <span>🔥 {leader.name} lidera {signedMoney(allBetBalances[leader.id])}</span>}{rabbitLeader && (rabbits.won[rabbitLeader.id] || 0) > 0 && <span>🐇 {rabbitLeader.name} lleva {rabbits.won[rabbitLeader.id]} Conejos</span>}{skinLeader && (skins.won[skinLeader.id] || 0) > 0 && <span>⛳ {skinLeader.name} lleva {skins.won[skinLeader.id]} Skins</span>}{!leader && <span>Aún sin datos.</span>}</div>; })()}</section>
-      <section className="card"><h2>Desglose por apuesta</h2><div className="tableWrap"><table><thead><tr><th>Jugador</th><th>Conejos</th><th>Skins</th><th>Unidades</th><th>Foursome</th><th>Bola Amiga</th><th>Pollas</th><th>Personales</th><th>Manuales</th></tr></thead><tbody>{players.map((player) => <tr key={player.id}><td><b>{player.name}</b></td><td>{signedMoney(rabbitBalances[player.id] || 0)}</td><td>{signedMoney(skinBalances[player.id] || 0)}</td><td>{signedMoney(units.balances[player.id] || 0)}</td><td>{signedMoney(foursomes.balances[player.id] || 0)}</td><td>{signedMoney(ballFriend.balances[player.id] || 0)}</td><td>{signedMoney((polla.balances[player.id] || 0) + (miniPolla.balances[player.id] || 0))}</td><td>{signedMoney(personals.balances[player.id] || 0)}</td><td>{signedMoney(manual.balances[player.id] || 0)}</td></tr>)}</tbody></table></div></section>
+      <section className="hero standingsHero"><div><div className="eyebrow">CÓMO VAMOS</div><h1>Balance provisional.</h1><p>Combina lo ya cobrado con el valor provisional de Foursome y Personales; las Pollas pendientes no se liquidan antes de tiempo.</p></div><button className="secondary" onClick={() => setTab("round")}>Volver al hoyo</button></section>
+      <section className="provisionalGrid">{[...players].sort((a, b) => (liveBetBalances[b.id] || 0) - (liveBetBalances[a.id] || 0)).map((player, index) => <div className="stat" key={player.id}><span>{index + 1} · {player.name || "Sin nombre"}</span><b className={(liveBetBalances[player.id] || 0) > 0 ? "good" : (liveBetBalances[player.id] || 0) < 0 ? "bad" : ""}>{signedMoney(liveBetBalances[player.id] || 0)}</b><small>provisional</small></div>)}</section>
+      <section className="card highlights"><h2>Highlights</h2>{(() => { const leader = [...players].sort((a, b) => (liveBetBalances[b.id] || 0) - (liveBetBalances[a.id] || 0))[0]; const rabbitLeader = [...players].sort((a, b) => (rabbits.won[b.id] || 0) - (rabbits.won[a.id] || 0))[0]; const skinLeader = [...players].sort((a, b) => (skins.won[b.id] || 0) - (skins.won[a.id] || 0))[0]; return <div className="highlightList">{leader && (liveBetBalances[leader.id] || 0) > 0 && <span>🔥 {leader.name} lidera {signedMoney(liveBetBalances[leader.id])}</span>}{rabbitLeader && (rabbits.won[rabbitLeader.id] || 0) > 0 && <span>🐇 {rabbitLeader.name} lleva {rabbits.won[rabbitLeader.id]} Conejos</span>}{skinLeader && (skins.won[skinLeader.id] || 0) > 0 && <span>⛳ {skinLeader.name} lleva {skins.won[skinLeader.id]} Skins</span>}{!leader && <span>Aún sin datos.</span>}</div>; })()}</section>
+      <section className="card"><h2>Desglose por apuesta</h2><div className="tableWrap"><table><thead><tr><th>Jugador</th><th>Conejos</th><th>Skins</th><th>Unidades</th><th>Foursome</th><th>Bola Amiga</th><th>Pollas</th><th>Personales</th><th>Manuales</th></tr></thead><tbody>{players.map((player) => <tr key={player.id}><td><b>{player.name}</b></td><td>{signedMoney(rabbitBalances[player.id] || 0)}</td><td>{signedMoney(skinBalances[player.id] || 0)}</td><td>{signedMoney(units.balances[player.id] || 0)}</td><td>{signedMoney(foursomes.provisionalBalances[player.id] || 0)}</td><td>{signedMoney(ballFriend.balances[player.id] || 0)}</td><td>{signedMoney((polla.balances[player.id] || 0) + (miniPolla.balances[player.id] || 0))}</td><td>{signedMoney(personals.provisionalBalances[player.id] || 0)}</td><td>{signedMoney(manual.balances[player.id] || 0)}</td></tr>)}</tbody></table></div></section>
       <section className="card"><div className="sectionTitle"><div><h2>Leaderboard de la ronda</h2><p>Gross y Neto auditable con el HCP de ronda.</p></div><div className="segmented"><button className={privateBoardMode === "gross" ? "active" : ""} onClick={() => setPrivateBoardMode("gross")}>Gross</button><button className={privateBoardMode === "net" ? "active" : ""} onClick={() => setPrivateBoardMode("net")}>Neto</button></div></div><div className="tableWrap"><table><thead><tr><th>Pos</th><th>Jugador</th><th>HCP</th><th>Gross</th><th>Neto</th><th>+/- Par</th><th>Thru</th></tr></thead><tbody>{[...privateBoard].sort((a, b) => a[privateBoardMode] - b[privateBoardMode]).map((row, index) => <tr key={row.playerId}><td>{index + 1}</td><td><b>{row.name}</b></td><td>{row.handicap ?? "—"}</td><td>{row.gross || "—"}</td><td>{row.net || "—"}</td><td>{row.thru ? `${row.relativeToPar > 0 ? "+" : ""}${row.relativeToPar}` : "—"}</td><td>{row.finished ? "F" : row.thru}</td></tr>)}</tbody></table></div></section>
     </>}
 
@@ -1537,7 +1639,7 @@ function GolfBetsApp() {
 
       {bets.foursome.enabled && <section className="card">
         <h2>Detalle Foursome</h2>
-        {foursomes.matches.map((m, i) => <div className="matchLine" key={i}><div><b>H{m.startHole}–{m.endHole}: {playerName(m.basePair[0])}/{playerName(m.basePair[1])}</b><span>vs {playerName(m.opponentPair[0])}/{playerName(m.opponentPair[1])}</span></div><div className="matchNums"><span>{m.pointDiff > 0 ? "+" : ""}{m.pointDiff} pts{m.pressureMultiplier > 1 ? ` · H1–9 ${m.first9PointDiff >= 0 ? "+" : ""}${m.first9PointDiff}${m.pressureNine === "holes_1_9" ? ` x${m.pressureMultiplier}` : ""} · H10–18 ${m.second9PointDiff >= 0 ? "+" : ""}${m.second9PointDiff}${m.pressureNine === "holes_10_18" ? ` x${m.pressureMultiplier}` : ""}` : ""}</span><b className={m.totalMoney >= 0 ? "good" : "bad"}>{m.complete ? money(m.totalMoney) : "Pendiente"}</b></div></div>)}
+        {foursomes.matches.map((m, i) => <div className="matchLine foursomeResultLine" key={i}><div><b>H{m.startHole}–{m.endHole}: {playerName(m.basePair[0])}/{playerName(m.basePair[1])}</b><span>vs {playerName(m.opponentPair[0])}/{playerName(m.opponentPair[1])}</span></div><div className="matchNums"><span>Resultado: {m.pointDiff > 0 ? "+" : ""}{m.pointDiff} pts{m.pressureMultiplier > 1 ? ` · H1–9 ${m.first9PointDiff >= 0 ? "+" : ""}${m.first9PointDiff}${m.pressureNine === "holes_1_9" ? ` x${m.pressureMultiplier}` : ""} · H10–18 ${m.second9PointDiff >= 0 ? "+" : ""}${m.second9PointDiff}${m.pressureNine === "holes_10_18" ? ` x${m.pressureMultiplier}` : ""}` : ""}</span><small>{m.complete ? "Fijo" : "Fijo provisional"}: {signedMoney(m.complete ? m.fixedMoney : m.provisionalFixedMoney)} · {m.complete ? "Puntos/patada" : "Puntos/patada provisional"}: {signedMoney(m.complete ? m.pointMoney : m.provisionalPointMoney)}</small><b className={(m.complete ? m.totalMoney : m.provisionalTotalMoney) > 0 ? "good" : (m.complete ? m.totalMoney : m.provisionalTotalMoney) < 0 ? "bad" : ""}>{m.complete ? `Resultado económico: ${signedMoney(m.totalMoney)}` : `Provisional: ${signedMoney(m.provisionalTotalMoney)}`}</b></div></div>)}
       </section>}
 
       {(pollaEnabled || bets.miniPolla.enabled) && <section className="card"><h2>Polla / Mini Polla</h2>
@@ -1591,8 +1693,8 @@ function GolfBetsApp() {
       <div className="roundActions"><button className="secondary big" onClick={() => setTab("setup")}>Cancelar</button><button className="primary big" onClick={saveCourseDraft}>Guardar campo</button></div>
     </>}
 
-    {tab === "rules" && <RulesPanel courseName={rulesCourseContext} localRules={isLaVistaCourse(rulesCourseContext) ? course.localRules : undefined} localRulesUpdatedAt={isLaVistaCourse(rulesCourseContext) ? course.localRulesUpdatedAt : undefined} />}
-    {tab === "pollaLive" && <PollaLivePanel courses={courses} />}
+    {tab === "rules" && <RulesPanel courseName={rulesCourseContext} localRules={isLaVistaCourse(rulesCourseContext) ? course.localRules : undefined} localRulesUpdatedAt={isLaVistaCourse(rulesCourseContext) ? course.localRulesUpdatedAt : undefined} onBack={() => setTab("welcome")} />}
+    {tab === "pollaLive" && <PollaLivePanel courses={courses} privateRound={{ active: draftAvailable && players.length > 0, players }} />}
 
     {frequentGroupDraft && <div className="modalBackdrop" role="presentation"><section className="groupEditorDialog" role="dialog" aria-modal="true" aria-labelledby="edit-group-title" aria-describedby="edit-group-description">
       <div className="groupEditorHeader"><h2 id="edit-group-title">Editar grupo frecuente</h2><p id="edit-group-description">Los cambios se aplicarán únicamente a futuras cargas del grupo.</p></div>
@@ -1618,11 +1720,11 @@ function GolfBetsApp() {
 
     {personalHistoryToDelete && <div className="modalBackdrop" role="presentation"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="delete-personal-history-title" aria-describedby="delete-personal-history-description"><h2 id="delete-personal-history-title">¿Eliminar este registro personal?</h2><p id="delete-personal-history-description">Esto eliminará este resultado del histórico de Personales contra {personalHistoryToDelete.rivalName}.</p><div className="dialogActions"><button autoFocus className="secondary" onClick={() => setPersonalHistoryToDelete(null)}>Cancelar</button><button className="dangerButton" onClick={confirmPersonalHistoryDeletion}>Eliminar</button></div></section></div>}
 
-    {frequentGroupToDelete && <div className="modalBackdrop" role="presentation"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="delete-group-title" aria-describedby="delete-group-description"><h2 id="delete-group-title">¿Eliminar grupo guardado?</h2><p id="delete-group-description">Esto eliminará únicamente este grupo. No afectará jugadores ni rondas anteriores.</p><div className="dialogActions"><button className="secondary" onClick={() => setFrequentGroupToDelete(null)}>Cancelar</button><button className="dangerButton" onClick={() => { setFrequentGroups((groups) => resolveFrequentGroupDeletion(groups, frequentGroupToDelete.id, "delete")); if (frequentGroupDraft?.id === frequentGroupToDelete.id) resetFrequentGroupEditor(); setFrequentGroupToDelete(null); }}>Eliminar</button></div></section></div>}
+    {frequentGroupToDelete && <div className="modalBackdrop" role="presentation"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="delete-group-title" aria-describedby="delete-group-description"><h2 id="delete-group-title">¿Eliminar grupo guardado?</h2><p id="delete-group-description">Esto eliminará únicamente este grupo. No afectará jugadores ni rondas anteriores.</p><div className="dialogActions"><button className="secondary" onClick={() => setFrequentGroupToDelete(null)}>Cancelar</button><button className="dangerButton" onClick={() => { recordCloudDeletion(localStorage, "frequent_group", frequentGroupToDelete.id); setFrequentGroups((groups) => resolveFrequentGroupDeletion(groups, frequentGroupToDelete.id, "delete")); if (frequentGroupDraft?.id === frequentGroupToDelete.id) resetFrequentGroupEditor(); setFrequentGroupToDelete(null); }}>Eliminar</button></div></section></div>}
 
-    {frequentPlayerToDelete && <div className="modalBackdrop" role="presentation"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="delete-frequent-title" aria-describedby="delete-frequent-description"><h2 id="delete-frequent-title">¿Eliminar jugador frecuente?</h2><p id="delete-frequent-description">Esto solamente lo eliminará de tu lista de jugadores frecuentes. No afectará rondas anteriores.</p><div className="dialogActions"><button className="secondary" onClick={() => setFrequentPlayerToDelete(null)}>Cancelar</button><button className="dangerButton" onClick={() => { setFrequentPlayers((templates) => removeFrequentPlayerTemplate(templates, frequentPlayerToDelete.id)); if (editingFrequentPlayerId === frequentPlayerToDelete.id) setEditingFrequentPlayerId(null); setFrequentPlayerToDelete(null); }}>Eliminar</button></div></section></div>}
+    {frequentPlayerToDelete && <div className="modalBackdrop" role="presentation"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="delete-frequent-title" aria-describedby="delete-frequent-description"><h2 id="delete-frequent-title">¿Eliminar jugador frecuente?</h2><p id="delete-frequent-description">Esto solamente lo eliminará de tu lista de jugadores frecuentes. No afectará rondas anteriores.</p><div className="dialogActions"><button className="secondary" onClick={() => setFrequentPlayerToDelete(null)}>Cancelar</button><button className="dangerButton" onClick={() => { recordCloudDeletion(localStorage, "frequent_player", frequentPlayerToDelete.id); setFrequentPlayers((templates) => removeFrequentPlayerTemplate(templates, frequentPlayerToDelete.id)); if (editingFrequentPlayerId === frequentPlayerToDelete.id) setEditingFrequentPlayerId(null); setFrequentPlayerToDelete(null); }}>Eliminar</button></div></section></div>}
 
-    {savedRivalToDelete && <div className="modalBackdrop" role="presentation"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="delete-rival-title" aria-describedby="delete-rival-description"><h2 id="delete-rival-title">¿Eliminar rival guardado?</h2><p id="delete-rival-description">Esto solamente lo eliminará de tu lista de rivales para futuras apuestas personales. No afectará rondas ni resultados anteriores.</p><div className="dialogActions"><button className="secondary" onClick={() => setSavedRivalToDelete(null)}>Cancelar</button><button className="dangerButton" onClick={() => { setSavedPersonalRivals((templates) => removeSavedPersonalRivalTemplate(templates, savedRivalToDelete.id)); if (editingSavedRivalId === savedRivalToDelete.id) { setEditingSavedRivalId(null); setSavedRivalDraft(null); } setSavedRivalToDelete(null); }}>Eliminar</button></div></section></div>}
+    {savedRivalToDelete && <div className="modalBackdrop" role="presentation"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="delete-rival-title" aria-describedby="delete-rival-description"><h2 id="delete-rival-title">¿Eliminar rival guardado?</h2><p id="delete-rival-description">Esto solamente lo eliminará de tu lista de rivales para futuras apuestas personales. No afectará rondas ni resultados anteriores.</p><div className="dialogActions"><button className="secondary" onClick={() => setSavedRivalToDelete(null)}>Cancelar</button><button className="dangerButton" onClick={() => { recordCloudDeletion(localStorage, "rival", savedRivalToDelete.id); setSavedPersonalRivals((templates) => removeSavedPersonalRivalTemplate(templates, savedRivalToDelete.id)); if (editingSavedRivalId === savedRivalToDelete.id) { setEditingSavedRivalId(null); setSavedRivalDraft(null); } setSavedRivalToDelete(null); }}>Eliminar</button></div></section></div>}
 
     {tab !== "welcome" && <nav className="bottomNav"><button onClick={() => navigateFromBottomBar(BOTTOM_NAV_TARGETS.Inicio)}><span>⌂</span>Inicio</button><button className={tab === "round" || tab === "standings" ? "active" : ""} onClick={() => navigateFromBottomBar(BOTTOM_NAV_TARGETS.Tarjeta)}><span>{roundHoles}</span>Tarjeta</button><button className={tab === "personals" ? "active" : ""} onClick={() => navigateFromBottomBar(BOTTOM_NAV_TARGETS.Personales)}><span>↔</span>Personales</button><button className={tab === "results" ? "active" : ""} onClick={() => navigateFromBottomBar(BOTTOM_NAV_TARGETS.Resultados)}><span>$</span>Resultados</button><button className={tab === "history" ? "active" : ""} onClick={() => navigateFromBottomBar(BOTTOM_NAV_TARGETS.Histórico)}><span>↗</span>Histórico</button><button className={tab === "rules" ? "active" : ""} onClick={() => navigateFromBottomBar(BOTTOM_NAV_TARGETS.Reglas)}><span>⚑</span>Reglas</button></nav>}
   </main>;

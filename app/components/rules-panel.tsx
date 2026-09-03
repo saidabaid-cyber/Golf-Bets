@@ -8,41 +8,85 @@ import {
   OFFICIAL_RULES_URL,
   OFFICIAL_RULES_VIDEOS_EMBED_URL,
   OFFICIAL_RULES_VIDEOS_URL,
-  golfRulesCatalog,
-  searchGolfRules,
 } from "../../lib/rules-catalog";
 import { OFFICIAL_RULES_DOCUMENTS, type OfficialRulesDocument } from "../../lib/rules-documents";
-import type { RulesSearchResult } from "../../lib/rules-search";
+import { findNavigableRule, NAVIGABLE_GOLF_RULES, searchNavigableRules, type NavigableGolfRule, type NavigableRuleSection } from "../../lib/rules-navigation";
+import type { RulesDocumentType, RulesSearchResult } from "../../lib/rules-search";
 import { speechRecognitionConstructor, speechRecognitionErrorMessage, type SpeechRecognitionLike } from "../../lib/speech-dictation";
 import type { LocalRule } from "../../lib/types";
+
+type DictationTarget = "search" | "question";
+type RuleDetail = { chapter: NavigableGolfRule; section: NavigableRuleSection };
+
+const CLARIFICATION_RULES = new Set([4, 5, 8, 10, 11, 14, 16, 25]);
+const COMMITTEE_TOPICS = [
+  "Rol del Comité",
+  "Marcación del campo",
+  "Reglas Locales Modelo",
+  "Condiciones de la competencia",
+  "Preparación del campo",
+  "Ritmo y suspensión del juego",
+  "Registro y validación de scores",
+  "Decisiones y situaciones especiales",
+];
+
+function resultLabel(type: RulesDocumentType) {
+  if (type === "clarification") return "ACLARACIÓN";
+  if (type === "committee") return "COMITÉ";
+  return "REGLAS DE GOLF";
+}
+
+function fallbackSearchResults(query: string): RulesSearchResult[] {
+  return searchNavigableRules(query).map(({ rule, section }) => ({
+    id: `navigation-${section?.number || rule.number}`,
+    rule: section?.number || rule.number,
+    title: section?.title || rule.title,
+    explanation: section?.summary || rule.summary,
+    source: "Reglas de Golf",
+    sourceId: "official-guide-part-1",
+    documentType: "rules",
+    sourceUrl: rule.sourceUrl,
+  }));
+}
 
 export function RulesPanel({
   courseName,
   localRules,
   localRulesUpdatedAt,
+  onBack,
 }: {
   courseName: string;
   localRules?: LocalRule[];
   localRulesUpdatedAt?: string;
+  onBack: () => void;
 }) {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<RulesSearchResult[]>(() => golfRulesCatalog.slice(0, 4).map((entry) => ({ ...entry, source: "Reglas de Golf" })));
+  const [results, setResults] = useState<RulesSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
+  const [expandedRule, setExpandedRule] = useState<string | null>(null);
+  const [detail, setDetail] = useState<RuleDetail | null>(null);
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
   const [error, setError] = useState("");
   const [asking, setAsking] = useState(false);
   const [aiEnabled, setAiEnabled] = useState<boolean | null>(null);
   const [dictationSupported, setDictationSupported] = useState<boolean | null>(null);
-  const [listening, setListening] = useState(false);
+  const [listeningTarget, setListeningTarget] = useState<DictationTarget | null>(null);
   const [dictationMessage, setDictationMessage] = useState("");
   const [selectedDocument, setSelectedDocument] = useState<OfficialRulesDocument | null>(null);
+  const [resourceOpen, setResourceOpen] = useState<"clarification" | "committee" | null>(null);
+  const [resourceResults, setResourceResults] = useState<Partial<Record<"clarification" | "committee", RulesSearchResult[]>>>({});
+  const [resourceLoading, setResourceLoading] = useState<"clarification" | "committee" | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const localRulesApply = isLaVistaCourse(courseName);
   const visibleLocalRules = useMemo(
     () => localRulesApply ? activeLocalRules(Array.isArray(localRules) ? localRules : LA_VISTA_LOCAL_RULES) : [],
     [localRules, localRulesApply],
   );
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -65,7 +109,7 @@ export function RulesPanel({
   useEffect(() => {
     const trimmed = query.trim();
     if (!trimmed) {
-      setResults(golfRulesCatalog.slice(0, 4).map((entry) => ({ ...entry, source: "Reglas de Golf" })));
+      setResults([]);
       setSearching(false);
       return;
     }
@@ -78,9 +122,7 @@ export function RulesPanel({
         if (!response.ok) throw new Error("search failed");
         setResults(payload.results || []);
       } catch (searchError) {
-        if (!(searchError instanceof DOMException && searchError.name === "AbortError")) {
-          setResults(searchGolfRules(trimmed).map((entry) => ({ ...entry, source: "Reglas de Golf" })));
-        }
+        if (!(searchError instanceof DOMException && searchError.name === "AbortError")) setResults(fallbackSearchResults(trimmed));
       } finally {
         if (!controller.signal.aborted) setSearching(false);
       }
@@ -88,9 +130,13 @@ export function RulesPanel({
     return () => { window.clearTimeout(timer); controller.abort(); };
   }, [query]);
 
-  function toggleDictation() {
-    if (listening) {
-      recognitionRef.current?.stop();
+  function toggleDictation(target: DictationTarget) {
+    if (listeningTarget) {
+      const currentRecognition = recognitionRef.current;
+      recognitionRef.current = null;
+      setListeningTarget(null);
+      setDictationMessage("Dictado detenido.");
+      currentRecognition?.stop();
       return;
     }
     const speechWindow = window as typeof window & { SpeechRecognition?: Parameters<typeof speechRecognitionConstructor>[0]["SpeechRecognition"]; webkitSpeechRecognition?: Parameters<typeof speechRecognitionConstructor>[0]["webkitSpeechRecognition"] };
@@ -105,20 +151,71 @@ export function RulesPanel({
     recognition.lang = "es-MX";
     recognition.continuous = false;
     recognition.interimResults = false;
-    recognition.onstart = () => { setListening(true); setDictationMessage("Escuchando…"); };
+    recognition.onstart = () => { setListeningTarget(target); setDictationMessage("Escuchando…"); };
     recognition.onresult = (event) => {
       const transcript = event.results[0]?.[0]?.transcript?.trim() || "";
-      if (transcript) setQuestion((current) => `${current.trim()}${current.trim() ? " " : ""}${transcript}`);
-      setDictationMessage(transcript ? "Texto dictado. Puedes revisarlo antes de consultar." : "No escuchamos voz. Intenta nuevamente.");
+      if (transcript && target === "search") setQuery(transcript);
+      if (transcript && target === "question") setQuestion((current) => `${current.trim()}${current.trim() ? " " : ""}${transcript}`);
+      setDictationMessage(transcript ? (target === "search" ? "Búsqueda dictada." : "Texto dictado. Revísalo antes de consultar.") : "No escuchamos voz. Intenta nuevamente.");
     };
-    recognition.onerror = (event) => setDictationMessage(speechRecognitionErrorMessage(event));
-    recognition.onend = () => { setListening(false); recognitionRef.current = null; };
+    recognition.onerror = (event) => {
+      setDictationMessage(speechRecognitionErrorMessage(event));
+      setListeningTarget(null);
+      recognitionRef.current = null;
+    };
+    recognition.onend = () => { setListeningTarget(null); recognitionRef.current = null; };
     try {
+      setListeningTarget(target);
+      setDictationMessage("Solicitando acceso al micrófono…");
       recognition.start();
     } catch {
       recognitionRef.current = null;
-      setListening(false);
+      setListeningTarget(null);
       setDictationMessage("No fue posible iniciar el dictado.");
+    }
+  }
+
+  function scrollToSection(id: string) {
+    window.requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }
+
+  function prepareAi(prompt = query) {
+    if (prompt.trim()) setQuestion(prompt.trim());
+    setDetail(null);
+    scrollToSection("preguntar-ia");
+  }
+
+  function openRuleReference(reference: string, sourceId: OfficialRulesDocument["id"] = "official-guide-part-1") {
+    const location = findNavigableRule(reference);
+    if (location?.section) {
+      setDetail({ chapter: location.chapter, section: location.section });
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    if (location?.chapter) {
+      setExpandedRule(location.chapter.number);
+      scrollToSection(`regla-${location.chapter.number}`);
+      return;
+    }
+    const document = OFFICIAL_RULES_DOCUMENTS.find((entry) => entry.id === sourceId);
+    if (document) setSelectedDocument(document);
+  }
+
+  async function toggleResource(kind: "clarification" | "committee") {
+    const next = resourceOpen === kind ? null : kind;
+    setResourceOpen(next);
+    if (!next || resourceResults[next]) return;
+    setResourceLoading(next);
+    const source = next === "clarification" ? "clarifications-july-2026" : "committee-procedures-part-2";
+    try {
+      const response = await fetch(`/api/rules/search?source=${source}&limit=${next === "clarification" ? 20 : 18}`);
+      const payload = await response.json() as { results?: RulesSearchResult[] };
+      if (!response.ok) throw new Error("resource failed");
+      setResourceResults((current) => ({ ...current, [next]: payload.results || [] }));
+    } catch {
+      setResourceResults((current) => ({ ...current, [next]: [] }));
+    } finally {
+      setResourceLoading(null);
     }
   }
 
@@ -144,102 +241,147 @@ export function RulesPanel({
     }
   }
 
-  return <>
-    <section className="hero rulesHero">
-      <div><div className="eyebrow">REGLAS DE GOLF</div><h1>Resuelve la situación.</h1><p>Busca primero en la guía rápida y consulta siempre la fuente oficial.</p></div>
+  if (detail) return <>
+    <header className="rulesPageHeader">
+      <button className="rulesBackButton" onClick={() => { setDetail(null); setExpandedRule(detail.chapter.number); scrollToSection(`regla-${detail.chapter.number}`); }}>← Volver a Regla {detail.chapter.number}</button>
+      <div><span>THE BACKYARD</span><h1>Reglas de Golf</h1></div>
+    </header>
+    <section className="card ruleDetail" aria-labelledby="rule-detail-title">
+      <div className="ruleDetailNumber">REGLA {detail.section.number}</div>
+      <h2 id="rule-detail-title">{detail.section.title}</h2>
+      <p className="ruleDetailLead">{detail.section.summary || `Esta subregla desarrolla “${detail.section.title}” dentro de la Regla ${detail.chapter.number}.`}</p>
+      <div className="ruleDetailGrid">
+        <article><span>RESUMEN PRÁCTICO</span><p>{detail.chapter.summary}</p></article>
+        <article><span>QUÉ PERMITE</span><p>{detail.chapter.allows}</p></article>
+        <article><span>QUÉ NO PERMITE</span><p>{detail.chapter.forbids}</p></article>
+      </div>
+      {detail.section.penalty && <div className="rulePenalty"><b>Penalidad</b><p>{detail.section.penalty}</p></div>}
+      {!detail.section.penalty && <div className="hint">La consecuencia depende de los hechos y de la modalidad. Confírmala en la fuente oficial antes de aplicarla.</div>}
+      <div className="ruleSource"><span>Fuente</span><b>Reglas de Golf · Regla {detail.chapter.number}</b></div>
+      <div className="ruleDetailActions">
+        <button className="primary" onClick={() => prepareAi(`Tengo una pregunta sobre la Regla ${detail.section.number}: ${detail.section.title}.`)}>Preguntar a IA sobre esta regla</button>
+        <a className="secondary" href={detail.chapter.sourceUrl} target="_blank" rel="noreferrer">Ver fuente oficial ↗</a>
+      </div>
+      <div className="notice">Resumen práctico de THE BACKYARD. En competencia, el Comité o árbitro oficial tiene la decisión final.</div>
     </section>
+  </>;
+
+  return <>
+    <header className="rulesPageHeader">
+      <button className="rulesBackButton" onClick={onBack}>← Volver</button>
+      <div><span>THE BACKYARD</span><h1>Reglas de Golf</h1></div>
+    </header>
+
+    <section className="rulesSearchHero" id="buscar-regla">
+      <label className="srOnly" htmlFor="rules-search">Buscar en las Reglas</label>
+      <div className="rulesSearchField">
+        <span className="rulesSearchIcon" aria-hidden="true">⌕</span>
+        <input id="rules-search" type="search" autoComplete="off" value={query} placeholder="Buscar en las Reglas" onChange={(event) => setQuery(event.target.value)} />
+        <button type="button" className={`rulesMicButton ${listeningTarget === "search" ? "listening" : ""}`} aria-pressed={listeningTarget === "search"} aria-label={listeningTarget === "search" ? "Detener dictado de búsqueda" : "Dictar búsqueda"} onClick={() => toggleDictation("search")}>{listeningTarget === "search" ? <><span aria-hidden="true">🔴</span><b>Detener</b></> : <span aria-hidden="true">🎙</span>}</button>
+      </div>
+      {dictationSupported === false && <div className="rulesSearchStatus">Dictado no disponible en este dispositivo.</div>}
+      {dictationMessage && dictationSupported !== false && <div className="rulesSearchStatus" role="status">{dictationMessage}</div>}
+    </section>
+
+    <div className="rulesQuickActions" aria-label="Accesos rápidos">
+      <button className="primary" onClick={() => prepareAi(query)}>Preguntar a IA</button>
+      <button className="secondary" aria-expanded={resourceOpen === "clarification"} onClick={() => toggleResource("clarification")}>Aclaraciones</button>
+    </div>
 
     {courseName && <section className={`rulesCourseContext ${localRulesApply ? "active" : ""}`}>
       <b>📍 {courseName}</b>
-      <span>{localRulesApply ? (courseName === "La Vista Temporal" ? "Reglas Locales de La Vista activas" : "Reglas Locales activas") : "Solo Reglas generales de Golf"}</span>
+      <span>{localRulesApply ? "Reglas Locales · La Vista activas" : "Solo Reglas generales de Golf"}</span>
     </section>}
 
-    <section className="card rulesHub" aria-label="Accesos de Reglas">
-      <h2>Consulta rápida</h2>
-      <div className="rulesHubGrid">
-        <a href="#buscar-regla">Buscar Regla</a>
-        <a href="#preguntar-ia">Preguntar a IA</a>
-        <a href={OFFICIAL_RULES_URL} target="_blank" rel="noreferrer">Reglamento USGA ↗</a>
-        {localRulesApply && <a href="#reglas-locales">Reglas Locales · La Vista</a>}
-        <a href="#codigo-caballeros">Código de Caballeros</a>
-        <a href="#videos-reglas">Videos de Reglas</a>
-      </div>
-    </section>
-
-    <section className="card" id="buscar-regla">
-      <div className="sectionTitle"><div><h2>Buscar Regla</h2><p>Números y explicaciones verificables, sin inventar referencias.</p></div></div>
-      <label htmlFor="rules-search">Buscar en las Reglas de Golf</label>
-      <input id="rules-search" type="search" value={query} placeholder="Ej. bola movida, camino, estaca roja…" onChange={(event) => setQuery(event.target.value)} />
-      {searching && <div className="hint" role="status">Buscando en los tres documentos oficiales…</div>}
-      <div className="rulesResults">
-        {!searching && !results.length && <div className="empty">No hay una coincidencia segura. <button className="textButton" onClick={() => { setQuestion(query); document.getElementById("preguntar-ia")?.scrollIntoView({ behavior: "smooth" }); }}>Preguntar a IA sobre esta situación</button></div>}
-        {results.slice(0, query ? 12 : 4).map((entry) => <article className="ruleResult" key={entry.id}>
-          <div className="row between"><b>{entry.rule === "Fuente oficial" ? entry.rule : `Regla ${entry.rule}`}</b><span className="pillSmall">{entry.source}{entry.page ? ` · p. ${entry.page}` : ""}</span></div>
+    {query && <section className="card rulesSearchResults" aria-live="polite">
+      <div className="sectionTitle"><div><h2>Resultados</h2><p>Búsqueda local en Reglas, Procedimientos del Comité y Aclaraciones 2026.</p></div>{searching && <span className="statusPill">Buscando…</span>}</div>
+      {!searching && !results.length && <div className="empty">No hay una coincidencia suficiente para “{query}”. <button className="textButton" onClick={() => prepareAi(query)}>Preguntar a IA</button></div>}
+      <div className="rulesResults">{results.map((entry) => <article className="ruleResult" key={entry.id}>
+        <button className="ruleResultOpen" onClick={() => openRuleReference(entry.rule, entry.sourceId)}>
+          <span className={`rulesSourceBadge ${entry.documentType}`}>{resultLabel(entry.documentType)}</span>
+          <b>{entry.rule === "Fuente oficial" ? entry.rule : `Regla ${entry.rule}`}</b>
           <h3>{entry.title}</h3>
           <p>{entry.explanation}</p>
-          <a className="textButton" href={entry.sourceUrl} target="_blank" rel="noreferrer">Ver regla / fuente ↗</a>
-        </article>)}
-      </div>
+          <small>{entry.source}{entry.page ? ` · p. ${entry.page}` : ""}</small>
+          <span className="ruleOpenLabel">Abrir referencia →</span>
+        </button>
+      </article>)}</div>
+      {!searching && <div className="rulesAiFallback"><span>¿No encontraste lo que buscabas?</span><button className="textButton" onClick={() => prepareAi(query)}>Preguntar a IA</button></div>}
+    </section>}
+
+    {resourceOpen === "clarification" && <section className="card rulesResourceSection" id="aclaraciones">
+      <div className="sectionTitle"><div><span className="rulesSourceBadge clarification">ACLARACIONES</span><h2>Aclaraciones vigentes 2026</h2><p>Las 13 páginas del documento vigente están indexadas y también participan en la búsqueda superior.</p></div><button className="textButton" onClick={() => setResourceOpen(null)}>Cerrar</button></div>
+      {resourceLoading === "clarification" && <div className="empty">Cargando índice local…</div>}
+      {!resourceLoading && resourceResults.clarification?.map((entry) => <button className="resourceRow" key={entry.id} onClick={() => openRuleReference(entry.rule, entry.sourceId)}><span><b>{entry.title}</b><small>{entry.explanation}</small></span><strong>{entry.rule === "Fuente oficial" ? "Fuente" : `Regla ${entry.rule}`} →</strong></button>)}
+      {!resourceLoading && resourceResults.clarification?.length === 0 && <div className="empty">El índice no está disponible. El documento oficial sigue accesible.</div>}
+      <button className="secondary big" onClick={() => setSelectedDocument(OFFICIAL_RULES_DOCUMENTS[2])}>Abrir Aclaraciones oficiales</button>
+    </section>}
+
+    <section className="card rulesDirectory" id="reglas-de-golf">
+      <div className="sectionTitle"><div><div className="eyebrow">REGLAS DE GOLF</div><h2>Reglamento navegable</h2><p>25 reglas · toca una para ver sus subreglas.</p></div></div>
+      <div className="rulesAccordion">{NAVIGABLE_GOLF_RULES.map((entry) => {
+        const open = expandedRule === entry.number;
+        return <article className={`ruleChapter ${open ? "open" : ""}`} id={`regla-${entry.number}`} key={entry.number}>
+          <h3><button aria-expanded={open} aria-controls={`contenido-regla-${entry.number}`} onClick={() => setExpandedRule(open ? null : entry.number)}><span className="ruleChapterNumber">{entry.number}</span><span>{entry.title}</span><span className="ruleChevron" aria-hidden="true">⌄</span></button></h3>
+          {open && <div className="ruleChapterBody" id={`contenido-regla-${entry.number}`}>
+            <p>{entry.summary}</p>
+            <div className="ruleSections">{entry.sections.map((child) => <button key={child.number} onClick={() => { setDetail({ chapter: entry, section: child }); window.scrollTo({ top: 0, behavior: "smooth" }); }}><b>{child.number}</b><span>{child.title}</span><strong aria-hidden="true">›</strong></button>)}</div>
+            <div className="ruleChapterLinks"><a href={entry.sourceUrl} target="_blank" rel="noreferrer">Ver fuente oficial ↗</a>{CLARIFICATION_RULES.has(Number(entry.number)) && <button className="textButton" onClick={async () => { await toggleResource("clarification"); scrollToSection("aclaraciones"); }}>Aclaraciones relacionadas</button>}</div>
+          </div>}
+        </article>;
+      })}</div>
     </section>
 
-    <section className="card" id="preguntar-ia">
-      <div className="sectionTitle"><div><h2>Preguntar a IA</h2><p>{localRulesApply ? "Consulta las fuentes oficiales y las Reglas Locales aplicables a esta ronda." : "Consulta la Guía Oficial, Procedimientos y aclaraciones vigentes sin asumir Reglas Locales."}</p></div><span className={`statusPill ${aiEnabled ? "ready" : ""}`}>{aiEnabled === null ? "Verificando…" : aiEnabled ? "IA activa" : "IA no configurada"}</span></div>
-      <form onSubmit={ask}>
-        <label htmlFor="rules-question">Describe qué pasó</label>
-        <div className="dictationField"><textarea id="rules-question" rows={4} maxLength={1200} value={question} placeholder="Mi bola está fuera del camino pero mis pies están sobre el camino…" onChange={(event) => setQuestion(event.target.value)} /><button type="button" className={`dictationButton ${listening ? "listening" : ""}`} aria-pressed={listening} aria-label={listening ? "Detener dictado" : "Iniciar dictado"} disabled={dictationSupported === false} onClick={toggleDictation}>{listening ? "🔴 Detener" : "🎙"}</button></div>
-        {dictationSupported === false && <div className="hint">Dictado no disponible en este dispositivo.</div>}
-        {dictationMessage && dictationSupported !== false && <div className="hint" role="status">{dictationMessage}</div>}
-        <button className="primary" type="submit" disabled={asking || question.trim().length < 8}>{asking ? "Consultando…" : "Consultar reglamento"}</button>
-      </form>
-      {error && <div className="notice">{error} La búsqueda manual sigue disponible.</div>}
-      {answer && <div className="aiAnswer" aria-live="polite">{answer}</div>}
-      <div className="hint">En competencia, el Comité o árbitro tiene la decisión final.</div>
-    </section>
-
-    <section className="card officialLinks" id="reglamento-usga">
-      <h2>Reglamento USGA</h2>
-      <a className="secondary" href={OFFICIAL_RULES_SPANISH_URL} target="_blank" rel="noreferrer">USGA · recursos en español ↗</a>
-      <a className="secondary" href={OFFICIAL_RULES_URL} target="_blank" rel="noreferrer">Abrir Reglamento USGA ↗</a>
-      <div className="officialDocuments">
-        <div className="sectionTitle"><div><h3>Documentos oficiales</h3><p>Los tres documentos indexados para Preguntar a IA.</p></div></div>
-        <div className="officialDocumentGrid">{OFFICIAL_RULES_DOCUMENTS.map((document) => <article key={document.id}>
-          <span className="pillSmall">{document.type}</span>
-          <h4>{document.title}</h4>
-          <p>{document.edition}</p>
-          <small>Archivo: {document.sourceFileName}</small>
-          <b className="sourceUsed">Documento indexado para IA ✓</b>
-          <div className="documentActions"><button className="primary" onClick={() => setSelectedDocument(document)}>Abrir documento</button></div>
-        </article>)}</div>
-      </div>
-      <div className="aiSources">
-        <h3>Fuentes de la IA</h3>
-        <ul>
-          <li>✓ Reglas de Golf / Guía Oficial</li>
-          <li>✓ Procedimientos del Comité</li>
-          <li>✓ Aclaraciones julio 2026</li>
-          {localRulesApply && <li>✓ Reglas Locales · La Vista</li>}
-          <li>✓ Código de Caballeros <small>Etiqueta y cultura — no es una Regla oficial USGA</small></li>
-        </ul>
-      </div>
+    <section className="card rulesResourceSection" id="procedimientos-comite">
+      <div className="sectionTitle"><div><span className="rulesSourceBadge committee">COMITÉ</span><h2>Procedimientos del Comité</h2><p>Guía separada para quienes administran el campo o una competencia.</p></div><button className="textButton" aria-expanded={resourceOpen === "committee"} onClick={() => toggleResource("committee")}>{resourceOpen === "committee" ? "Ocultar" : "Explorar"}</button></div>
+      <div className="committeeTopics">{COMMITTEE_TOPICS.map((topic) => <span key={topic}>{topic}</span>)}</div>
+      {resourceOpen === "committee" && <div className="resourceIndex">
+        {resourceLoading === "committee" && <div className="empty">Cargando índice local…</div>}
+        {!resourceLoading && resourceResults.committee?.map((entry) => <button className="resourceRow" key={entry.id} onClick={() => openRuleReference(entry.rule, entry.sourceId)}><span><b>{entry.title}</b><small>{entry.explanation}</small></span><strong>{entry.rule === "Fuente oficial" ? "Fuente" : `Regla ${entry.rule}`} →</strong></button>)}
+      </div>}
+      <button className="secondary big" onClick={() => setSelectedDocument(OFFICIAL_RULES_DOCUMENTS[1])}>Abrir Procedimientos oficiales</button>
     </section>
 
     {localRulesApply && <section className="card" id="reglas-locales">
-      <div className="sectionTitle"><div><h2>Reglas Locales · La Vista</h2><p>Aplican únicamente cuando la ronda o la consulta corresponde a La Vista.</p></div>{localRulesUpdatedAt && <span className="statusPill">Actualizadas {localRulesUpdatedAt}</span>}</div>
-      <div className="localRulesList">{visibleLocalRules.map((rule) => <article key={rule.id}><span>{rule.hole ? `Hoyo ${rule.hole}` : "General"}</span><h3>{rule.title}</h3><p>{rule.text}</p></article>)}</div>
+      <div className="sectionTitle"><div><h2>Reglas Locales · La Vista</h2><p>Solo lectura. Aplican únicamente a La Vista y La Vista Temporal.</p></div>{localRulesUpdatedAt && <span className="statusPill">Actualizadas {localRulesUpdatedAt}</span>}</div>
+      <div className="localRulesList">{visibleLocalRules.map((entry) => <article key={entry.id}><span>{entry.hole ? `Hoyo ${entry.hole}` : "General"}</span><h3>{entry.title}</h3><p>{entry.text}</p></article>)}</div>
     </section>}
 
+    <section className="card officialLinks" id="documentos-oficiales">
+      <div className="sectionTitle"><div><h2>Documentos oficiales</h2><p>Fuentes completas usadas por el buscador y Preguntar a IA.</p></div></div>
+      <div className="officialDocumentGrid">{OFFICIAL_RULES_DOCUMENTS.map((document) => <article key={document.id}>
+        <span className="pillSmall">{document.type}</span>
+        <h3>{document.title}</h3>
+        <p>{document.edition}</p>
+        <b className="sourceUsed">Documento indexado para IA ✓</b>
+        <div className="documentActions"><button className="primary" onClick={() => setSelectedDocument(document)}>Abrir documento</button></div>
+      </article>)}</div>
+      <div className="officialLinkRow"><a className="secondary" href={OFFICIAL_RULES_SPANISH_URL} target="_blank" rel="noreferrer">Recursos USGA en español ↗</a><a className="secondary" href={OFFICIAL_RULES_URL} target="_blank" rel="noreferrer">Rules Hub USGA ↗</a></div>
+    </section>
+
+    <section className="card videosCard" id="videos-reglas">
+      <div className="sectionTitle"><div><h2>Videos de Reglas</h2><p>Playlist existente de consulta para móvil y escritorio.</p></div></div>
+      <div className="videoFrame"><iframe src={OFFICIAL_RULES_VIDEOS_EMBED_URL} title="Playlist Videos de Reglas" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen /></div>
+      <a className="primary big" href={OFFICIAL_RULES_VIDEOS_URL} target="_blank" rel="noreferrer">Ver videos de Reglas ↗</a>
+    </section>
+
     <section className="card" id="codigo-caballeros">
-      <h2>Código de Caballeros</h2>
-      <p className="muted">Etiqueta y cultura de juego</p>
-      <div className="gentlemenGrid">{GENTLEMEN_CODE.map((section) => <article key={section.id}><h3>{section.title}</h3><ul>{section.points.map((point) => <li key={point}>{point}</li>)}</ul></article>)}</div>
+      <div className="sectionTitle"><div><h2>Código de Caballeros</h2><p>Etiqueta y cultura de juego</p></div><span className="statusPill">NO OFICIAL</span></div>
+      <div className="gentlemenGrid">{GENTLEMEN_CODE.map((entry) => <article key={entry.id}><h3>{entry.title}</h3><ul>{entry.points.map((point) => <li key={point}>{point}</li>)}</ul></article>)}</div>
       <blockquote>{GENTLEMEN_CODE_FINAL_QUOTE}</blockquote>
       <div className="notice">{GENTLEMEN_CODE_DISCLAIMER}</div>
     </section>
 
-    <section className="card videosCard" id="videos-reglas">
-      <div className="sectionTitle"><div><h2>Videos de Reglas</h2><p>Playlist de consulta para móvil y escritorio.</p></div></div>
-      <div className="videoFrame"><iframe src={OFFICIAL_RULES_VIDEOS_EMBED_URL} title="Playlist Videos de Reglas" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen /></div>
-      <a className="primary big" href={OFFICIAL_RULES_VIDEOS_URL} target="_blank" rel="noreferrer">Ver videos de Reglas ↗</a>
+    <section className="card" id="preguntar-ia">
+      <div className="sectionTitle"><div><h2>Preguntar a IA</h2><p>{localRulesApply ? "Consulta fuentes oficiales y las Reglas Locales aplicables." : "Consulta Guía Oficial, Procedimientos y Aclaraciones sin asumir Reglas Locales."}</p></div><span className={`statusPill ${aiEnabled ? "ready" : ""}`}>{aiEnabled === null ? "Verificando…" : aiEnabled ? "IA activa" : "IA no configurada"}</span></div>
+      <form onSubmit={ask}>
+        <label htmlFor="rules-question">Describe qué pasó</label>
+        <div className="dictationField"><textarea id="rules-question" rows={4} maxLength={1200} value={question} placeholder="Mi bola está fuera del camino pero mis pies están sobre el camino…" onChange={(event) => setQuestion(event.target.value)} /><button type="button" className={`dictationButton ${listeningTarget === "question" ? "listening" : ""}`} aria-pressed={listeningTarget === "question"} aria-label={listeningTarget === "question" ? "Detener dictado" : "Iniciar dictado"} onClick={() => toggleDictation("question")}>{listeningTarget === "question" ? "🔴 Detener" : "🎙"}</button></div>
+        <button className="primary" type="submit" disabled={asking || question.trim().length < 8}>{asking ? "Consultando…" : "Consultar reglamento"}</button>
+      </form>
+      {error && <div className="notice">{error} La búsqueda manual sigue disponible.</div>}
+      {answer && <div className="aiAnswer" aria-live="polite">{answer}</div>}
+      <div className="hint">La búsqueda superior nunca llama a OpenAI. En competencia, el Comité o árbitro oficial tiene la decisión final.</div>
     </section>
 
     {selectedDocument && <div className="rulesDocumentBackdrop" role="presentation"><section className="rulesDocumentViewer" role="dialog" aria-modal="true" aria-labelledby="rules-document-title">

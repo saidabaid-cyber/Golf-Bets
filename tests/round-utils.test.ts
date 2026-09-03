@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildHoleSummary, hasRoundProgress, historicalGolfStats, mergeCoursesPreservingEdits, migrateDraftPressures, privateLeaderboard, pushUndoState, readStoredJson, roundSnapshotToCsv, upsertFrequentPlayers } from "../lib/round-utils";
-import type { Course, RoundSnapshot } from "../lib/types";
+import { buildHoleSummary, ensureHoleScoresAtPar, hasRoundProgress, historicalGolfStats, mergeCoursesPreservingEdits, migrateDraftPressures, privateLeaderboard, pushUndoState, readStoredJson, roundSnapshotToCsv, upsertFrequentPlayers } from "../lib/round-utils";
+import type { Course, HoleScore, RoundSnapshot } from "../lib/types";
 
 const original: Course = {
   id: "temporal",
@@ -34,6 +34,19 @@ test("draft progress distinguishes an empty new round from a resumable round", (
   assert.equal(hasRoundProgress({ players: [], scores: {}, currentIndex: 0 }), false);
   assert.equal(hasRoundProgress({ players: [{ id: "a", name: "Said", handicap: null }], scores: {}, currentIndex: 0 }), true);
   assert.equal(hasRoundProgress({ players: [], scores: { 1: { a: 4 } }, currentIndex: 0 }), true);
+});
+
+test("cada hoyo abierto materializa Par como score real sin sobrescribir capturas", () => {
+  const roundPlayers = [{ id: "a", name: "Said", handicap: 1 }, { id: "b", name: "Cuau", handicap: 7 }];
+  let scores: Record<number, HoleScore> = {};
+  for (let hole = 1; hole <= 18; hole++) scores = ensureHoleScoresAtPar(scores, { number: hole, par: hole % 3 === 0 ? 5 : 4 }, roundPlayers);
+  assert.equal(Object.keys(scores).length, 18);
+  assert.equal(scores[1].a, 4);
+  assert.equal(scores[3].b, 5);
+  const captured = { ...scores, 1: { ...scores[1], a: 3 } };
+  const unchanged = ensureHoleScoresAtPar(captured, { number: 1, par: 4 }, roundPlayers);
+  assert.equal(unchanged, captured);
+  assert.equal(unchanged[1].a, 3);
 });
 
 test("private leaderboard reports Gross, Neto, par and Thru without marking partial cards finished", () => {

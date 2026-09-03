@@ -211,7 +211,13 @@ export type RoundSnapshot = {
   courseSnapshot?: Course;
   order?: number[];
   completedAt?: string;
+  updatedAt?: string;
   photoId?: string;
+  betConfig?: BetConfig;
+  unitEvents?: UnitEvent[];
+  personalBets?: PersonalBet[];
+  manualBets?: ManualBet[];
+  ballFriendSetup?: Record<number, BallFriendHole>;
 };
 
 export type FrequentPlayer = {

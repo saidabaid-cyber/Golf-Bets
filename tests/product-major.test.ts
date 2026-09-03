@@ -4,6 +4,7 @@ import test from "node:test";
 
 const read = (path: string) => readFileSync(path, "utf8");
 const auth = read("app/components/account-provider.tsx");
+const authFlow = read("lib/auth-flow.ts");
 const account = read("app/components/account-panel.tsx");
 const page = read("app/page.tsx");
 const privacy = read("app/legal/privacy/page.tsx");
@@ -17,17 +18,19 @@ test("login muestra identidad, Apple, Google, correo e invitado", () => {
 });
 
 test("correo implementa OTP de seis dígitos, reenviar y cambiar correo", () => {
-  assert.match(auth, /signInWithOtp/);
-  assert.match(auth, /verifyOtp/);
+  assert.match(authFlow, /signInWithOtp/);
+  assert.match(authFlow, /verifyOtp/);
+  assert.match(auth, /sendEmailOtp/);
+  assert.match(auth, /verifyEmailOtp/);
   assert.match(auth, /otp\.length !== 6/);
   assert.match(auth, /Reenviar código/);
   assert.match(auth, /Cambiar correo/);
 });
 
 test("Google y Apple usan OAuth real sin credenciales inventadas", () => {
-  assert.match(auth, /signInWithOAuth/);
-  assert.match(auth, /provider,/);
-  assert.doesNotMatch(auth, /client[_-]?secret/i);
+  assert.match(authFlow, /signInWithOAuth/);
+  assert.match(authFlow, /provider,/);
+  assert.doesNotMatch(`${auth}\n${authFlow}`, /client[_-]?secret/i);
 });
 
 test("Supabase sin configurar mantiene fallback e invitado", () => {
@@ -36,9 +39,10 @@ test("Supabase sin configurar mantiene fallback e invitado", () => {
 });
 
 test("restauración y cierre de sesión no borran los datos locales de The Backyard", () => {
-  assert.match(auth, /auth\.getSession/);
-  assert.match(auth, /getSession\(\)\.then[\s\S]*\.catch/);
-  assert.match(auth, /auth\.signOut/);
+  assert.match(authFlow, /auth\.getSession/);
+  assert.match(authFlow, /auth\.signOut/);
+  assert.match(auth, /restoreAuthSession[\s\S]*\.then[\s\S]*\.catch/);
+  assert.match(auth, /closeAuthSession/);
   assert.doesNotMatch(auth, /localStorage\.clear/);
 });
 

@@ -29,6 +29,23 @@ export function clearActiveRoundStorage(storage: Pick<Storage, "removeItem">) {
   storage.removeItem(STORAGE_KEYS.draft);
 }
 
+export function ensureHoleScoresAtPar(
+  scores: Record<number, HoleScore>,
+  hole: Pick<Course["holes"][number], "number" | "par">,
+  players: Player[],
+) {
+  const current = scores[hole.number] || {};
+  let changed = false;
+  const nextRow: HoleScore = { ...current };
+  for (const player of players) {
+    if (typeof nextRow[player.id] !== "number") {
+      nextRow[player.id] = hole.par;
+      changed = true;
+    }
+  }
+  return changed ? { ...scores, [hole.number]: nextRow } : scores;
+}
+
 export type DeletionDecision = "cancel" | "delete";
 
 export function resolveHistoricalRoundDeletion(rounds: RoundSnapshot[], roundId: string, decision: DeletionDecision) {
@@ -41,6 +58,7 @@ export function resolvePersonalHistoryDeletion(
   roundId: string,
   resultIndex: number,
   decision: DeletionDecision,
+  updatedAt = new Date().toISOString(),
 ) {
   if (decision === "cancel") return rounds;
   return rounds.map((round) => {
@@ -58,6 +76,7 @@ export function resolvePersonalHistoryDeletion(
       },
       betResult: normalizeZero(round.betResult - removed.totalMoney),
       netResult: normalizeZero(round.netResult - removed.totalMoney),
+      updatedAt,
     };
   });
 }

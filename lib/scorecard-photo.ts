@@ -1,5 +1,11 @@
 const DB_NAME = "golfbets-media-v1";
 const STORE = "scorecards";
+const CLOUD_BUCKET = "scorecard-photos";
+
+function cloudPath(userId: string, roundId: string) {
+  const clean = (value: string) => value.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 180);
+  return `${clean(userId)}/${clean(roundId)}.jpg`;
+}
 
 function database() {
   return new Promise<IDBDatabase>((resolve, reject) => {
@@ -54,4 +60,35 @@ export async function deleteScorecardPhoto(roundId: string) {
     transaction.onerror = () => reject(transaction.error);
   });
   db.close();
+}
+
+export async function uploadScorecardPhotoCloud(userId: string, roundId: string, blob: Blob) {
+  const { getSupabaseBrowser } = await import("./supabase/client");
+  const client = getSupabaseBrowser();
+  if (!client) return false;
+  const { error } = await client.storage.from(CLOUD_BUCKET).upload(cloudPath(userId, roundId), blob, {
+    upsert: true,
+    contentType: blob.type || "image/jpeg",
+    cacheControl: "3600",
+  });
+  if (error) throw error;
+  return true;
+}
+
+export async function readScorecardPhotoCloud(userId: string, roundId: string) {
+  const { getSupabaseBrowser } = await import("./supabase/client");
+  const client = getSupabaseBrowser();
+  if (!client) return undefined;
+  const { data, error } = await client.storage.from(CLOUD_BUCKET).download(cloudPath(userId, roundId));
+  if (error) return undefined;
+  return data;
+}
+
+export async function deleteScorecardPhotoCloud(userId: string, roundId: string) {
+  const { getSupabaseBrowser } = await import("./supabase/client");
+  const client = getSupabaseBrowser();
+  if (!client) return false;
+  const { error } = await client.storage.from(CLOUD_BUCKET).remove([cloudPath(userId, roundId)]);
+  if (error) throw error;
+  return true;
 }

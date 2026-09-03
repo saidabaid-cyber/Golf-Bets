@@ -84,8 +84,11 @@ test("Flujo C simula correo, OTP, consentimiento, edición de perfil y sesión l
   assert.equal(edited.defaultHandicap, 7);
   assert.match(migrationDecisionStorageKey(edited.userId), /account-1$/);
   const providerSource = readFileSync("app/components/account-provider.tsx", "utf8");
-  assert.match(providerSource, /auth\.getSession/);
-  assert.match(providerSource, /auth\.signOut/);
+  const authFlowSource = readFileSync("lib/auth-flow.ts", "utf8");
+  assert.match(providerSource, /restoreAuthSession/);
+  assert.match(providerSource, /closeAuthSession/);
+  assert.match(authFlowSource, /auth\.getSession/);
+  assert.match(authFlowSource, /auth\.signOut/);
   assert.doesNotMatch(providerSource, /localStorage\.clear/);
 });
 

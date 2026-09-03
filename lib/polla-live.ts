@@ -1,8 +1,10 @@
 import type { HandicapMode } from "./types";
 import { groupSizes, type GroupTarget } from "./group-generator";
+import { playingHandicap, strokeAllowanceForHole } from "./engine";
 
 export type PollaFormat = "gross" | "net" | "both";
 export type PollaStatus = "upcoming" | "live" | "finished";
+export type PollaAccessRole = "owner" | "admin" | "scorer" | "viewer";
 
 export type PollaPlayerInput = {
   id: string;
@@ -33,9 +35,17 @@ export type PollaLeaderboardRow = {
   gross: number;
   net: number;
   relativeToPar: number;
+  grossRelativeToPar?: number;
+  netRelativeToPar?: number;
   thru: number;
   finished: boolean;
+  groupId?: string;
+  groupName?: string;
 };
+
+export type PollaLeaderboardScope = "all" | "front9" | "back9";
+export type PollaLeaderboardPlayer = { id: string; name: string; handicap: number; groupId?: string; groupName?: string };
+export type PollaLeaderboardScore = { playerId: string; hole: number; score: number };
 
 export type CsvIssue = { row: number; message: string };
 
@@ -122,6 +132,77 @@ export function normalizeOyesDistance(value: number, unit: "m" | "cm" | "ft_in",
   if (unit === "cm") return value / 100;
   if (unit === "ft_in") return value * 0.3048 + inches * 0.0254;
   return value;
+}
+
+export function normalizePollaHcpPercentage(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.min(100, Math.max(0, parsed)) : 100;
+}
+
+export function canEditPollaScore(input: {
+  role: PollaAccessRole;
+  sessionGroupId?: string | null;
+  targetGroupId: string;
+  cardStatus: "open" | "confirmed";
+}) {
+  if (input.role === "viewer") return false;
+  if (input.role === "scorer") return input.cardStatus === "open" && input.sessionGroupId === input.targetGroupId;
+  return input.role === "owner" || input.role === "admin";
+}
+
+export function hasPollaScoreConflict(baseUpdatedAt: string | undefined, cloudUpdatedAt: string | undefined) {
+  if (!cloudUpdatedAt) return false;
+  return !baseUpdatedAt || baseUpdatedAt !== cloudUpdatedAt;
+}
+
+export function buildPollaLeaderboard(input: {
+  players: PollaLeaderboardPlayer[];
+  scores: PollaLeaderboardScore[];
+  courseSnapshot: Array<{ number: number; par: number; strokeIndex?: number }>;
+  tournamentHoles: 9 | 18;
+  startHole: 1 | 10;
+  hcpPct: number;
+  handicapMode: HandicapMode;
+  scope?: PollaLeaderboardScope;
+  groupId?: string;
+}) {
+  const scope = input.scope || "all";
+  const tournamentOrder = pollaHoleOrder(input.startHole, input.tournamentHoles);
+  const scopedOrder = tournamentOrder.filter((hole) => scope === "all" || (scope === "front9" ? hole <= 9 : hole >= 10));
+  const allowedHoles = new Set(scopedOrder);
+  const parByHole = new Map(input.courseSnapshot.map((hole) => [hole.number, hole.par]));
+  const strokeIndexByHole = new Map(input.courseSnapshot.map((hole) => [hole.number, hole.strokeIndex || hole.number]));
+  const scoresByPlayer = new Map<string, PollaLeaderboardScore[]>();
+  for (const score of input.scores) {
+    if (!allowedHoles.has(score.hole)) continue;
+    const current = scoresByPlayer.get(score.playerId) || [];
+    current.push(score);
+    scoresByPlayer.set(score.playerId, current);
+  }
+  return input.players.filter((player) => !input.groupId || player.groupId === input.groupId).map((player): PollaLeaderboardRow => {
+    const own = scoresByPlayer.get(player.id) || [];
+    const gross = own.reduce((sum, score) => sum + score.score, 0);
+    const par = own.reduce((sum, score) => sum + (parByHole.get(score.hole) || 4), 0);
+    const playingHcp = playingHandicap(Math.max(0, Number(player.handicap)), input.hcpPct, input.handicapMode);
+    const allowance = own.reduce((sum, score) => sum + strokeAllowanceForHole(playingHcp, strokeIndexByHole.get(score.hole) || score.hole, input.handicapMode), 0);
+    const net = gross - allowance;
+    const grossRelativeToPar = gross - par;
+    const netRelativeToPar = net - par;
+    return {
+      playerId: player.id,
+      name: player.name,
+      handicap: Number(player.handicap),
+      gross,
+      net,
+      relativeToPar: netRelativeToPar,
+      grossRelativeToPar,
+      netRelativeToPar,
+      thru: own.length,
+      finished: scopedOrder.length > 0 && own.length === scopedOrder.length,
+      groupId: player.groupId,
+      groupName: player.groupName,
+    };
+  });
 }
 
 export function rankPollaLeaderboard(rows: PollaLeaderboardRow[], mode: "gross" | "net" = "net") {

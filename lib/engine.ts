@@ -398,6 +398,10 @@ export type FoursomeMatchResult = {
   fixedMoney: number;
   pointMoney: number;
   totalMoney: number;
+  provisionalFixedMoney: number;
+  provisionalPointMoney: number;
+  provisionalTotalMoney: number;
+  completedHoles: number;
   complete: boolean;
   holePoints: { hole: number; points: number }[];
 };
@@ -410,6 +414,34 @@ function teamHolePoints(teamA: number[], teamB: number[]) {
   return low + high;
 }
 
+function foursomeEconomics(
+  holePoints: { hole: number; points: number }[],
+  segmentHoles: number[],
+  cfg: BetConfig["foursome"],
+  pressureMultiplier: number,
+  pressureNine: "holes_1_9" | "holes_10_18",
+) {
+  const sign = (value: number) => value > 0 ? 1 : value < 0 ? -1 : 0;
+  const isPressedHole = (hole: number) => pressureMultiplier > 1 &&
+    (pressureNine === "holes_1_9" ? hole <= 9 : hole >= 10);
+  const pointDiff = holePoints.reduce((total, item) => total + item.points, 0);
+  const spansBothPhysicalNines = segmentHoles.some((hole) => hole <= 9) && segmentHoles.some((hole) => hole >= 10);
+
+  const fixedMoney = cfg.mode === "fixed" || cfg.mode === "fixed_points"
+    ? pressureMultiplier > 1 && spansBothPhysicalNines
+      ? [
+          { points: holePoints.filter(({ hole }) => hole <= 9), multiplier: pressureNine === "holes_1_9" ? pressureMultiplier : 1 },
+          { points: holePoints.filter(({ hole }) => hole >= 10), multiplier: pressureNine === "holes_10_18" ? pressureMultiplier : 1 },
+        ].reduce((money, group) => money + sign(group.points.reduce((sum, item) => sum + item.points, 0)) * cfg.fixedValue * group.multiplier, 0)
+      : sign(pointDiff) * cfg.fixedValue * (segmentHoles.every(isPressedHole) ? pressureMultiplier : 1)
+    : 0;
+  const pointMoney = cfg.mode === "points" || cfg.mode === "fixed_points"
+    ? holePoints.reduce((money, item) => money + item.points * cfg.pointValue * (isPressedHole(item.hole) ? pressureMultiplier : 1), 0)
+    : 0;
+
+  return { fixedMoney, pointMoney, totalMoney: fixedMoney + pointMoney };
+}
+
 export function calculateFoursomes(
   course: Course,
   scores: Record<number, HoleScore>,
@@ -420,8 +452,9 @@ export function calculateFoursomes(
 ) {
   const participants = playersByIds(allPlayers, cfg.participantIds);
   const balances = zeroBalances(participants);
+  const provisionalBalances = zeroBalances(participants);
   const matches: FoursomeMatchResult[] = [];
-  if (!cfg.enabled || participants.length < 3) return { balances, matches };
+  if (!cfg.enabled || participants.length < 3) return { balances, provisionalBalances, matches };
 
   // Pressure is a two-nine option. A residual saved setting must never double a
   // standalone nine-hole round after the user changes the round length.
@@ -429,9 +462,6 @@ export function calculateFoursomes(
     ? Math.min(5, Math.max(1, cfg.pressureMultiplier ?? (cfg.pressSecond9 ? 2 : 1)))
     : 1;
   const pressureNine = cfg.pressureNine ?? "holes_10_18";
-  const isPressedHole = (hole: number) => pressureMultiplier > 1 &&
-    (pressureNine === "holes_1_9" ? hole <= 9 : hole >= 10);
-
   for (const segment of segments) {
     if (segment.basePair.length !== 2) continue;
     const opponents = opponentPairs(cfg.participantIds, segment.basePair);
@@ -476,20 +506,21 @@ export function calculateFoursomes(
       const first9PointDiff = holePoints.filter(({ hole }) => hole <= 9).reduce((total, item) => total + item.points, 0);
       const second9PointDiff = holePoints.filter(({ hole }) => hole >= 10).reduce((total, item) => total + item.points, 0);
       const second9Pressed = pressureMultiplier > 1 && pressureNine === "holes_10_18";
-      const sign = (value: number) => value > 0 ? 1 : value < 0 ? -1 : 0;
-      const physicalGroups = [
-        { holes: holePoints.filter(({ hole }) => hole <= 9), multiplier: pressureNine === "holes_1_9" ? pressureMultiplier : 1 },
-        { holes: holePoints.filter(({ hole }) => hole >= 10), multiplier: pressureNine === "holes_10_18" ? pressureMultiplier : 1 },
-      ].filter((group) => group.holes.length > 0);
-      const fixedMoney = complete && (cfg.mode === "fixed" || cfg.mode === "fixed_points")
-        ? pressureMultiplier > 1 && physicalGroups.length > 1
-          ? physicalGroups.reduce((money, group) => money + sign(group.holes.reduce((sum, item) => sum + item.points, 0)) * cfg.fixedValue * group.multiplier, 0)
-          : sign(pointDiff) * cfg.fixedValue * (holes.every(isPressedHole) ? pressureMultiplier : 1)
+      const provisional = foursomeEconomics(holePoints, holes, cfg, pressureMultiplier, pressureNine);
+      const fixedMoney = complete ? provisional.fixedMoney : 0;
+      const pointMoney = complete ? provisional.pointMoney : 0;
+      const totalMoney = complete ? provisional.totalMoney : 0;
+
+      for (const id of segment.basePair as [string, string]) {
+        provisionalBalances[id] = (provisionalBalances[id] ?? 0) + provisional.totalMoney;
+      }
+      const provisionalRealOpponents = opponent.filter((id) => id !== FOURSOME_GHOST_ID);
+      const provisionalOpponentShare = provisionalRealOpponents.length
+        ? provisional.totalMoney * 2 / provisionalRealOpponents.length
         : 0;
-      const pointMoney = complete && (cfg.mode === "points" || cfg.mode === "fixed_points")
-        ? holePoints.reduce((money, item) => money + item.points * cfg.pointValue * (isPressedHole(item.hole) ? pressureMultiplier : 1), 0)
-        : 0;
-      const totalMoney = fixedMoney + pointMoney;
+      for (const id of provisionalRealOpponents) {
+        provisionalBalances[id] = (provisionalBalances[id] ?? 0) - provisionalOpponentShare;
+      }
 
       if (complete) {
         for (const id of segment.basePair as [string, string]) balances[id] = (balances[id] ?? 0) + totalMoney;
@@ -514,12 +545,16 @@ export function calculateFoursomes(
         fixedMoney,
         pointMoney,
         totalMoney,
+        provisionalFixedMoney: provisional.fixedMoney,
+        provisionalPointMoney: provisional.pointMoney,
+        provisionalTotalMoney: provisional.totalMoney,
+        completedHoles: holePoints.length,
         complete,
         holePoints,
       });
     }
   }
-  return { balances, matches };
+  return { balances, provisionalBalances, matches };
 }
 
 function buildBallFriendNumber(a: number, b: number, flipped: boolean) {
@@ -782,12 +817,16 @@ export function calculatePersonalBets(
   order: number[],
 ) {
   const balances = zeroBalances(allPlayers);
+  const provisionalBalances = zeroBalances(allPlayers);
   const results = bets.map((b) => calculatePersonalBet(b, ownerId, course, scores, order));
   for (const r of results) {
     balances[ownerId] = (balances[ownerId] ?? 0) + r.totalMoney;
     balances[r.rivalId] = (balances[r.rivalId] ?? 0) - r.totalMoney;
+    const provisionalTotal = r.liveComponents.reduce((total, component) => total + component.ownerMoney, 0);
+    provisionalBalances[ownerId] = (provisionalBalances[ownerId] ?? 0) + provisionalTotal;
+    provisionalBalances[r.rivalId] = (provisionalBalances[r.rivalId] ?? 0) - provisionalTotal;
   }
-  return { results, balances };
+  return { results, balances, provisionalBalances };
 }
 
 

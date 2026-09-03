@@ -7,6 +7,7 @@ import {
   calculateManualBets,
   calculateMiniPolla,
   calculatePersonalBet,
+  calculatePersonalBets,
   calculatePolla,
   calculateRabbits,
   calculateSkins,
@@ -14,11 +15,29 @@ import {
   expenseTotal,
   mergeBalances,
   normalizeHandicapMode,
+  payoutWinnerTakesFromAll,
   playOrder,
   playingHandicap,
   segmentDefinitions,
 } from "../lib/engine";
 import type { BetConfig, Course, HoleScore, PersonalBet, Player } from "../lib/types";
+import {
+  historicalFoursomeCourse,
+  historicalFoursomeMatchPoints,
+  historicalFoursomePlayers,
+  historicalFoursomeScores,
+  historicalFoursomeSegments,
+} from "./fixtures/foursome-historical";
+import {
+  fullRoundBallFriend,
+  fullRoundBets,
+  fullRoundCourse,
+  fullRoundOrder,
+  fullRoundPersonal,
+  fullRoundPlayers,
+  fullRoundScores,
+  fullRoundSegments,
+} from "./fixtures/full-round";
 
 const players: Player[] = [
   { id: "said", name: "Said", handicap: 0 },
@@ -216,6 +235,129 @@ test("Foursome ignores residual pressure settings in a standalone nine-hole roun
   assert.deepEqual(residual.balances, normal.balances);
 });
 
+test("Foursome histórico de cinco jugadores conserva los nueve matches y sus tres liquidaciones validadas", () => {
+  const participantIds = historicalFoursomePlayers.map((player) => player.id);
+  const base = {
+    ...betConfig(participantIds).foursome,
+    segmentSize: 6 as const,
+    pressureMultiplier: 1 as const,
+    pressureNine: "holes_10_18" as const,
+  };
+  const cases = [
+    { mode: "fixed" as const, fixedValue: 200, pointValue: 0, expected: { said: -400, cuau: 800, armando: 600, jesus: -1400, raul: 400 } },
+    { mode: "fixed_points" as const, fixedValue: 200, pointValue: 100, expected: { said: -800, cuau: 1400, armando: 1100, jesus: -2600, raul: 900 } },
+    { mode: "points" as const, fixedValue: 0, pointValue: 100, expected: { said: -400, cuau: 600, armando: 500, jesus: -1200, raul: 500 } },
+  ];
+
+  for (const current of cases) {
+    const result = calculateFoursomes(historicalFoursomeCourse, historicalFoursomeScores, historicalFoursomePlayers, { ...base, ...current }, historicalFoursomeSegments, playOrder(1));
+    assert.deepEqual(result.matches.map((match) => match.pointDiff), historicalFoursomeMatchPoints);
+    assert.deepEqual(result.balances, current.expected);
+    assert.equal(Object.values(result.balances).reduce((sum, amount) => sum + amount, 0), 0);
+  }
+});
+
+test("Foursome rebasa HCP exclusivamente con los cuatro jugadores del match", () => {
+  const comparison = [
+    { id: "said", name: "Said", handicap: 0 },
+    { id: "cuau", name: "Cuau", handicap: 11 },
+    { id: "armando", name: "Armando", handicap: 7 },
+    { id: "jesus", name: "Jesús", handicap: 2 },
+  ];
+  const withOutsideLow = [...comparison, { id: "raul", name: "Raúl", handicap: -1 }];
+  const row = { said: 4, cuau: 4, armando: 4, jesus: 4, raul: 4 };
+  const segment = [{ id: "match", startIndex: 0, endIndex: 0, basePair: ["said", "cuau"] }];
+  const fourCfg = { ...betConfig(comparison.map((player) => player.id)).foursome, mode: "points" as const };
+  const fiveCfg = { ...fourCfg, participantIds: withOutsideLow.map((player) => player.id) };
+  const course = makeCourse(Array(18).fill(4), [3, 1, 2, ...Array.from({ length: 15 }, (_, index) => index + 4)]);
+  const expected = calculateFoursomes(course, { 1: row }, comparison, fourCfg, segment, [1]);
+  const actual = calculateFoursomes(course, { 1: row }, withOutsideLow, fiveCfg, segment, [1]);
+  assert.equal(expected.matches[0].pointDiff, 0);
+  assert.equal(actual.matches[0].pointDiff, expected.matches[0].pointDiff);
+});
+
+test("Foursome aplica el porcentaje HCP y limita cada hoyo de -2 a +2", () => {
+  const four: Player[] = [
+    { id: "a", name: "A", handicap: 0 },
+    { id: "b", name: "B", handicap: 10 },
+    { id: "c", name: "C", handicap: 0 },
+    { id: "d", name: "D", handicap: 0 },
+  ];
+  const segment = [{ id: "match", startIndex: 0, endIndex: 1, basePair: ["a", "b"] }];
+  const course = makeCourse(Array(18).fill(4), [6, 5, 1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]);
+  const scores = { 1: { a: 4, b: 4, c: 4, d: 4 }, 2: { a: 2, b: 2, c: 6, d: 6 } };
+  const base = { ...betConfig(four.map((player) => player.id)).foursome, mode: "points" as const };
+  const hundred = calculateFoursomes(course, scores, four, { ...base, hcpPct: 100 }, segment, [1, 2]);
+  const fifty = calculateFoursomes(course, scores, four, { ...base, hcpPct: 50 }, segment, [1, 2]);
+  assert.equal(hundred.matches[0].holePoints[0].points, 1);
+  assert.equal(fifty.matches[0].holePoints[0].points, 0);
+  assert.equal(hundred.matches[0].holePoints[1].points, 2);
+  assert.equal(fifty.matches[0].holePoints[1].points, 2);
+  assert.ok(hundred.matches[0].holePoints.every(({ points }) => points >= -2 && points <= 2));
+});
+
+test("Foursome expone dinero provisional sin liquidarlo antes de cerrar el segmento", () => {
+  const four = zeroHcpPlayers.slice(0, 4);
+  const cfg = betConfig(four.map((player) => player.id)).foursome;
+  const segments = [{ id: "match", startIndex: 0, endIndex: 1, basePair: ["said", "cuau"] }];
+  const result = calculateFoursomes(makeCourse(), { 1: { said: 3, cuau: 5, armando: 4, jesus: 6 } }, four, cfg, segments, [1, 2]);
+  assert.equal(result.matches[0].complete, false);
+  assert.equal(result.matches[0].completedHoles, 1);
+  assert.equal(result.matches[0].totalMoney, 0);
+  assert.equal(result.matches[0].provisionalFixedMoney, 100);
+  assert.equal(result.matches[0].provisionalPointMoney, 20);
+  assert.equal(result.matches[0].provisionalTotalMoney, 120);
+  assert.deepEqual(result.balances, { said: 0, cuau: 0, armando: 0, jesus: 0 });
+  assert.deepEqual(result.provisionalBalances, { said: 120, cuau: 120, armando: -120, jesus: -120 });
+});
+
+test("segmentos Foursome 3, 6, 9 y 18 cubren cada hoyo exactamente una vez", () => {
+  for (const size of [3, 6, 9, 18] as const) {
+    const definitions = segmentDefinitions(playOrder(10), size);
+    const indexes = definitions.flatMap((segment) => Array.from({ length: segment.endIndex - segment.startIndex + 1 }, (_, offset) => segment.startIndex + offset));
+    assert.deepEqual(indexes, Array.from({ length: 18 }, (_, index) => index));
+  }
+});
+
+test("fixture integral de 18 hoyos mantiene todos los motores coordinados y settlement cero-sum", () => {
+  const rabbits = calculateRabbits(fullRoundCourse, fullRoundScores, fullRoundPlayers, fullRoundBets.rabbits, fullRoundOrder);
+  const skins = calculateSkins(fullRoundCourse, fullRoundScores, fullRoundPlayers, fullRoundBets.skins, fullRoundOrder);
+  const units = calculateUnits(fullRoundPlayers, [{ id: "sandy", hole: 1, playerId: "said", amount: 1, label: "Sandy Par" }], fullRoundBets.units, fullRoundCourse, fullRoundScores, fullRoundOrder);
+  const foursomes = calculateFoursomes(fullRoundCourse, fullRoundScores, fullRoundPlayers, fullRoundBets.foursome, fullRoundSegments, fullRoundOrder);
+  const ballFriend = calculateBallFriend(fullRoundCourse, fullRoundScores, fullRoundPlayers, fullRoundBets.ballFriend, fullRoundBallFriend, fullRoundOrder);
+  const polla = calculatePolla(fullRoundCourse, fullRoundScores, fullRoundPlayers, fullRoundBets.polla, fullRoundOrder);
+  const mini = calculateMiniPolla(fullRoundCourse, fullRoundScores, fullRoundPlayers, fullRoundBets.miniPolla, fullRoundOrder);
+  const personals = calculatePersonalBets([fullRoundPersonal], "said", fullRoundPlayers, fullRoundCourse, fullRoundScores, fullRoundOrder);
+  const rabbitBalances = payoutWinnerTakesFromAll(fullRoundPlayers, rabbits.won, fullRoundBets.rabbits.value);
+  const skinBalances = payoutWinnerTakesFromAll(fullRoundPlayers, skins.won, fullRoundBets.skins.value);
+  const settlement = mergeBalances(fullRoundPlayers, rabbitBalances, skinBalances, units.balances, foursomes.balances, ballFriend.balances, polla.balances, mini.balances, personals.balances);
+
+  assert.equal(foursomes.matches.length, 3);
+  assert.ok(foursomes.matches.every((match) => match.complete && match.completedHoles === 6));
+  assert.equal(ballFriend.details.length, 18);
+  assert.ok(polla.details.every((detail) => detail.complete));
+  assert.ok(mini.details.every((detail) => detail.complete));
+  assert.equal(personals.results.length, 1);
+  assert.ok(Object.values(settlement).every(Number.isFinite));
+  assert.equal(Object.values(settlement).reduce((sum, amount) => sum + amount, 0), 0);
+});
+
+test("fixture integral actualiza cada hoyo en vivo sin perder scores ni romper cero-sum", () => {
+  for (let through = 1; through <= 18; through += 1) {
+    const holes = fullRoundOrder.slice(0, through);
+    const liveScores = Object.fromEntries(holes.map((hole) => [hole, fullRoundScores[hole]]));
+    const foursomes = calculateFoursomes(fullRoundCourse, liveScores, fullRoundPlayers, fullRoundBets.foursome, fullRoundSegments, fullRoundOrder);
+    const ballFriend = calculateBallFriend(fullRoundCourse, liveScores, fullRoundPlayers, fullRoundBets.ballFriend, fullRoundBallFriend, fullRoundOrder);
+    const personals = calculatePersonalBets([fullRoundPersonal], "said", fullRoundPlayers, fullRoundCourse, liveScores, fullRoundOrder);
+
+    assert.ok(holes.every((hole) => fullRoundPlayers.every((player) => typeof liveScores[hole]?.[player.id] === "number")));
+    assert.ok(foursomes.matches.flatMap((match) => match.holePoints).every(({ points }) => points >= -2 && points <= 2));
+    assert.equal(Object.values(foursomes.provisionalBalances).reduce((sum, amount) => sum + amount, 0), 0);
+    assert.equal(Object.values(ballFriend.balances).reduce((sum, amount) => sum + amount, 0), 0);
+    assert.equal(Object.values(personals.provisionalBalances).reduce((sum, amount) => sum + amount, 0), 0);
+  }
+});
+
 test("Bola Amiga flips the opposing two-digit score on birdie or better", () => {
   const four = zeroHcpPlayers.slice(0, 4);
   const cfg = betConfig(four.map((player) => player.id)).ballFriend;
@@ -407,6 +549,13 @@ test("Personales exposes auditable live Match and Medal state without settling e
   assert.equal(medal.ownerNetTotal, 7);
   assert.equal(medal.rivalNetTotal, 8);
   assert.equal(medal.ownerMoney, 100);
+
+  const aggregate = calculatePersonalBets([bet], "said", zeroHcpPlayers.slice(0, 2), makeCourse(), {
+    1: { said: 3, cuau: 4 },
+    2: { said: 4, cuau: 4 },
+  }, order);
+  assert.deepEqual(aggregate.balances, { said: 0, cuau: 0 });
+  assert.deepEqual(aggregate.provisionalBalances, { said: 200, cuau: -200 });
 });
 
 test("Personales pressure applies to the selected physical nine, not chronological order", () => {

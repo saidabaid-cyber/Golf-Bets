@@ -3,6 +3,7 @@ node_modules/
 .next/
 out/
 .test-dist/
+*.tsbuildinfo
 .env*
 !.env.example
 rules-source/
