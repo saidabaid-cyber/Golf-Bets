@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getSupabaseBrowser } from "../../../lib/supabase/client";
 import { authErrorMessage } from "../../../lib/account-state";
+import { restoreAuthSession } from "../../../lib/auth-flow";
 import { BrandLockup } from "../../components/brand-lockup";
 
 export default function AuthCallbackPage() {
@@ -28,8 +29,8 @@ export default function AuthCallbackPage() {
           const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
           if (exchangeError) throw exchangeError;
         }
-        const { data, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError || !data.session) throw sessionError || new Error("No session");
+        const session = await restoreAuthSession(supabase.auth);
+        if (!session) throw new Error("account_session_missing");
         if (mounted && !timedOut) window.location.replace("/?auth=complete");
       } catch (callbackError) {
         if (mounted && !timedOut) setError(authErrorMessage(callbackError));

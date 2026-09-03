@@ -14,7 +14,9 @@ const migration = read("supabase/migrations/202609010002_backyard_accounts_legal
 
 test("login muestra identidad, Apple, Google, correo e invitado", () => {
   const accessSource = auth + read("app/components/brand-lockup.tsx");
-  for (const text of ["THE BACKYARD", "Continuar con Apple", "Continuar con Google", "Continuar con correo", "Continuar como invitado"]) assert.match(accessSource, new RegExp(text));
+  for (const text of ["THE BACKYARD", "Apple", "Google", "Continuar con correo", "Continuar como invitado"]) assert.match(accessSource, new RegExp(text));
+  assert.match(accessSource, /Continuar con \$\{name\}/);
+  assert.match(accessSource, /disabled=\{busy \|\| !available\}/);
 });
 
 test("correo implementa OTP de seis dígitos, reenviar y cambiar correo", () => {

@@ -22,7 +22,7 @@ import {
   type LegalAcceptance,
 } from "../../lib/account-state";
 import { getSupabaseBrowser } from "../../lib/supabase/client";
-import { authIdentityChanged, closeAuthSession, requireCloudWrites, restoreAuthSession, sendEmailOtp, startSocialOAuth, verifyEmailOtp, OtpSendGate, otpRetrySeconds, OTP_COOLDOWN_KEY } from "../../lib/auth-flow";
+import { authIdentityChanged, closeAuthSession, isAccountSession, requireCloudWrites, restoreAuthSession, sendEmailOtp, startSocialOAuth, verifyEmailOtp, OtpSendGate, otpRetrySeconds, OTP_COOLDOWN_KEY } from "../../lib/auth-flow";
 import { ownsLocalWorkspace, switchAccountWorkspace } from "../../lib/account-workspace";
 import { CLOUD_LOCAL_META_KEY, type CloudPreferences } from "../../lib/cloud-sync";
 import type { AuthProviderStatus } from "../../lib/auth-provider-status";
@@ -86,7 +86,7 @@ function guestProfile(): BackyardProfile {
   return { userId: "guest", displayName: "Invitado", email: "", avatarUrl: "", defaultHandicap: null };
 }
 
-function AccessScreen({ onGuest, onAuthenticated }: { onGuest: () => void | Promise<void>; onAuthenticated: (session: Session) => void }) {
+function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () => void | Promise<void>; onAuthenticated: (session: Session) => void; sessionError: string }) {
   const [emailMode, setEmailMode] = useState(false);
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
@@ -98,7 +98,8 @@ function AccessScreen({ onGuest, onAuthenticated }: { onGuest: () => void | Prom
   const sendGate = useRef(new OtpSendGate());
   const [retrySeconds, setRetrySeconds] = useState(0);
   useEffect(() => {
-    sendGate.current.nextSendAt = Number(sessionStorage.getItem(OTP_COOLDOWN_KEY)) || 0;
+    try { sendGate.current.nextSendAt = Number(sessionStorage.getItem(OTP_COOLDOWN_KEY)) || 0; }
+    catch { /* Private-mode storage may be unavailable; the in-memory cooldown still applies. */ }
     const tick = () => setRetrySeconds(otpRetrySeconds(sendGate.current.nextSendAt));
     tick(); const timer = window.setInterval(tick, 1000);
     return () => window.clearInterval(timer);
@@ -142,7 +143,8 @@ function AccessScreen({ onGuest, onAuthenticated }: { onGuest: () => void | Prom
     if (!supabase) { setMessage("Acceso con correo pendiente de configuración."); return; }
     if (providers?.status === "ready" && !providers.email) { setMessage("Acceso con correo pendiente de configuración."); return; }
     if (!sendGate.current.begin()) return;
-    sessionStorage.setItem(OTP_COOLDOWN_KEY, String(sendGate.current.nextSendAt));
+    try { sessionStorage.setItem(OTP_COOLDOWN_KEY, String(sendGate.current.nextSendAt)); }
+    catch { /* Never prevent OTP capture because optional cooldown persistence failed. */ }
     setRetrySeconds(otpRetrySeconds(sendGate.current.nextSendAt));
     setBusy(true); setMessage("");
     try {
@@ -171,8 +173,12 @@ function AccessScreen({ onGuest, onAuthenticated }: { onGuest: () => void | Prom
       <BrandLockup />
       <p className="accessPromise">Tu juego. Tus grupos. Tus reglas. Tu historia.</p>
       {!emailMode ? <div className="accessActions">
-        <button className="oauthButton apple" disabled={busy} aria-describedby={!socialEnabled ? "social-auth-status" : undefined} onClick={() => social("apple")}>Continuar con Apple</button>
-        <button className="oauthButton google" disabled={busy} aria-describedby={!socialEnabled ? "social-auth-status" : undefined} onClick={() => social("google")}>Continuar con Google</button>
+        {(["apple", "google"] as const).map(provider => {
+          const name = provider === "apple" ? "Apple" : "Google";
+          const available = socialEnabled && providers?.status === "ready" && providers[provider];
+          const label = !providers ? `${name} · comprobando acceso…` : providers.status === "unavailable" ? `${name} · acceso no disponible` : !available ? `${name} · pendiente de configuración` : `Continuar con ${name}`;
+          return <button key={provider} className={`oauthButton ${provider}`} disabled={busy || !available} onClick={() => social(provider)}>{label}</button>;
+        })}
         <button className="secondary big" disabled={busy} onClick={() => { setEmailMode(true); setMessage(""); }}>Continuar con correo</button>
         <button className="guestButton" disabled={busy} onClick={async () => {
           setBusy(true); setMessage("");
@@ -186,16 +192,21 @@ function AccessScreen({ onGuest, onAuthenticated }: { onGuest: () => void | Prom
           <button className="primary big" disabled={busy || retrySeconds > 0} onClick={sendCode}>{busy ? "Enviando…" : retrySeconds ? `Enviar en ${retrySeconds}s` : "Enviar código"}</button>
           <button className="textButton" disabled={busy} onClick={() => setEmailMode(false)}>← Volver</button>
         </> : <>
-          <h2>Introduce el código que enviamos a tu correo</h2>
+          <h2>Código de verificación</h2>
           <p>Enviado a {email.trim()}</p>
-          <input className="otpInput" aria-label="Código de seis dígitos" inputMode="numeric" autoComplete="one-time-code" maxLength={6} disabled={busy} value={otp} onChange={(event) => setOtp(normalizeOtp(event.target.value))} placeholder="6 dígitos" />
+          <label htmlFor="access-otp">Introduce los 6 dígitos del correo</label>
+          <input id="access-otp" className="otpInput" aria-label="Código de seis dígitos" inputMode="numeric" autoComplete="one-time-code" maxLength={6} disabled={busy} value={otp} onChange={(event) => setOtp(normalizeOtp(event.target.value))} placeholder="6 dígitos" />
+          <p className="hint">Todavía no has iniciado sesión. Tu cuenta se abrirá solo al verificar el código.</p>
+          <details className="hint"><summary>¿Recibiste un enlace en lugar del código?</summary><p>El correo de Supabase necesita la plantilla de código de seis dígitos. Ese enlace no sustituye esta verificación; puedes regresar y elegir explícitamente el modo invitado.</p></details>
           <button className="primary big" disabled={busy || otp.length !== 6} onClick={verifyCode}>{busy ? "Verificando…" : "Verificar"}</button>
           <div className="otpLinks"><button className="textButton" disabled={busy || retrySeconds > 0} onClick={sendCode}>{retrySeconds ? `Reenviar en ${retrySeconds}s` : "Reenviar código"}</button><button className="textButton" disabled={busy} onClick={() => { setCodeSent(false); setOtp(""); setMessage(""); }}>Cambiar correo</button></div>
+          <button className="textButton" disabled={busy} onClick={() => { setEmailMode(false); setMessage(""); }}>← Regresar al acceso</button>
         </>}
       </div>}
       {!socialEnabled && <p id="social-auth-status" className="hint">Google y Apple · Pendiente de configuración</p>}
       {socialEnabled && providers?.status === "ready" && <p className="hint">{!providers.google && "Google · Pendiente de configuración. "}{!providers.apple && "Apple · Pendiente de configuración."}</p>}
-      {message && <div className="accessMessage" role="status">{message}</div>}
+      {(message || sessionError) && <div className="accessMessage" role="status">{message || sessionError}</div>}
+      <p className="hint">Invitado es un acceso independiente: no inicia sesión ni sincroniza tus datos con una cuenta.</p>
       <p className="legalLead">Al continuar aceptas los <Link href="/legal/terms">Términos de Uso</Link> y el <Link href="/legal/privacy">Aviso de Privacidad</Link>.</p>
     </section>
   </main>;
@@ -289,6 +300,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   }, [identity]);
 
   const activateSession = useCallback((session: Session) => {
+    if (!isAccountSession(session)) throw new Error("account_session_missing");
     if (!authIdentityChanged(activeUserId.current, session.user.id)) {
       setIdentity((current) => current ? { ...current, accessToken: session.access_token, email: session.user.email || current.email } : current);
       return;
@@ -317,21 +329,17 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     let mounted = true;
     let authEventRevision = 0;
     if (supabase) restoreAuthSession(supabase.auth).then((session) => {
-      if (!mounted) return;
-      if (session && authEventRevision === 0) activateSession(session);
+      if (!mounted || authEventRevision !== 0) return;
+      if (session) activateSession(session);
       else if (localStorage.getItem(ACCOUNT_STORAGE_KEYS.mode) === "guest") {
         const profile = guestProfile();
         setIdentity({ ...profile, mode: "guest", providers: [], accessToken: null });
         setCloudConsentChecked(true);
       }
       setReady(true);
-    }).catch(() => {
-      if (!mounted) return;
-      if (localStorage.getItem(ACCOUNT_STORAGE_KEYS.mode) === "guest") {
-        const profile = guestProfile();
-        setIdentity({ ...profile, mode: "guest", providers: [], accessToken: null });
-        setCloudConsentChecked(true);
-      }
+    }).catch((error) => {
+      if (!mounted || authEventRevision !== 0) return;
+      setAccountCloudError(authErrorMessage(error));
       setReady(true);
     });
     if (!supabase) {
@@ -345,11 +353,31 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     const listener = supabase?.auth.onAuthStateChange((_event, session) => {
       if (!mounted) return;
       authEventRevision += 1;
-      if (session) activateSession(session);
-      else { activeUserId.current = null; if (localStorage.getItem(ACCOUNT_STORAGE_KEYS.mode) !== "guest") { switchAccountWorkspace(localStorage, "guest"); setIdentity(null); } }
+      const revision = authEventRevision;
+      // Supabase holds an auth lock during callbacks. Read getSession only after
+      // the callback returns; stale reads cannot reactivate a logged-out identity.
+      window.setTimeout(() => {
+        if (!mounted || revision !== authEventRevision) return;
+        void restoreAuthSession(supabase.auth).then(current => {
+          if (!mounted || revision !== authEventRevision) return;
+          if (current && current.user.id === session?.user.id) activateSession(current);
+          else if (!current) {
+            activeUserId.current = null;
+            if (localStorage.getItem(ACCOUNT_STORAGE_KEYS.mode) === "guest") {
+              setIdentity({ ...guestProfile(), mode: "guest", providers: [], accessToken: null });
+              setCloudConsentChecked(true);
+            } else { switchAccountWorkspace(localStorage, "guest"); setIdentity(null); }
+            setCloudLinked(false); setCloudStatus("local"); setLastCloudSync(null);
+          }
+          setReady(true);
+        }).catch(error => {
+          if (!mounted || revision !== authEventRevision) return;
+          setAccountCloudError(authErrorMessage(error)); setReady(true);
+        });
+      }, 0);
     });
     return () => { mounted = false; listener?.data.subscription.unsubscribe(); };
-  }, [activateSession]);
+  }, [activateSession, setCloudStatus]);
 
   useEffect(() => {
     if (identity?.mode !== "authenticated") return;
@@ -536,8 +564,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     setIdentity({ ...profile, mode: "guest", providers: [], accessToken: null });
     setCloudConsentChecked(true);
     setAccessRequested(false);
-    setAccountCloudError(""); setCloudStatus("local");
-  }} onAuthenticated={(session) => { activateSession(session); setAccessRequested(false); }} />;
+    setAccountCloudError(""); setCloudStatus("local"); setCloudLinked(false); setLastCloudSync(null); setShowMigration(false);
+  }} sessionError={accountCloudError} onAuthenticated={(session) => { activateSession(session); setAccessRequested(false); }} />;
   if (identity.mode === "authenticated" && !currentConsent && !cloudConsentChecked) return <main className="accessScreen"><div className="accessLoading">Verificando tus consentimientos…</div></main>;
   if (!currentConsent) {
     if (migrationDialog && hasCurrentLegalConsent(acceptances, "guest")) return <main className="accessScreen">{migrationDialog}</main>;

@@ -32,10 +32,13 @@ export async function sendEmailOtp(auth: AuthFlowClient, email: string, redirect
 }
 
 export async function verifyEmailOtp(auth: AuthFlowClient, email: string, token: string) {
+  if (!/^\d{6}$/.test(token)) throw new Error("invalid otp");
   const result = await auth.verifyOtp({ email: email.trim(), token, type: "email" });
   throwIfError(result.error);
-  if (!result.data.session) throw new Error("invalid otp session");
-  return result.data.session;
+  if (!isAccountSession(result.data.session)) throw new Error("account_session_missing");
+  const session = await restoreAuthSession(auth);
+  if (!session || session.user.id !== result.data.session.user.id || session.user.email?.toLowerCase() !== email.trim().toLowerCase()) throw new Error("account_session_missing");
+  return session;
 }
 
 export async function startSocialOAuth(auth: AuthFlowClient, provider: "google" | "apple", redirectTo: string) {
@@ -46,7 +49,15 @@ export async function startSocialOAuth(auth: AuthFlowClient, provider: "google" 
 export async function restoreAuthSession(auth: AuthFlowClient) {
   const result = await auth.getSession();
   throwIfError(result.error);
+  if (result.data.session && !isAccountSession(result.data.session)) throw new Error("account_session_missing");
   return result.data.session;
+}
+
+/** UI gate only. Authorization remains server-side/JWT + RLS, never this predicate. */
+export function isAccountSession(session: Session | null): session is Session {
+  return Boolean(session?.user?.id && session.user.id !== "guest" && !session.user.is_anonymous &&
+    session.access_token?.trim() && session.refresh_token?.trim() &&
+    typeof session.expires_at === "number" && session.expires_at * 1000 > Date.now());
 }
 
 export async function closeAuthSession(auth: AuthFlowClient) {

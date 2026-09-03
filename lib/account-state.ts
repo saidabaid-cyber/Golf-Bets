@@ -97,6 +97,7 @@ export function normalizeOtp(value: string) {
 export function authErrorMessage(error: unknown, context: "google" | "apple" | "email" | "otp" | "logout" = "email") {
   const detail = error && typeof error === "object" ? error as { message?: string; code?: string; status?: number } : null;
   const message = `${detail?.code || ""} ${detail?.message || String(error || "")}`.toLowerCase();
+  if (message.includes("account_session_missing")) return "No se pudo confirmar tu sesión. No has iniciado sesión; vuelve a verificar el código o solicita uno nuevo.";
   if (detail?.status === 429) return "Demasiados intentos. Espera un momento antes de solicitar otro código.";
   if (message.includes("provider") && (message.includes("disabled") || message.includes("not enabled") || message.includes("unsupported"))) return `Acceso con ${context === "google" ? "Google" : context === "apple" ? "Apple" : "correo"} pendiente de configuración.`;
   if (message.includes("rate") || message.includes("too many")) return "Demasiados intentos. Espera un momento antes de intentarlo nuevamente.";

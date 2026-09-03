@@ -13,4 +13,13 @@ El botón ya llama `signInWithOAuth({ provider: "apple" })`. No hay Team ID, Ser
 
 Apple puede entregar nombre completo solo en la primera autorización. La app por eso solicita/completa el nombre en el onboarding si el perfil cloud todavía no está completo.
 
-El client secret de Apple expira y debe rotarse según su vigencia. Hasta terminar la configuración, el modo Invitado y Email OTP siguen operativos.
+El client secret de Apple expira y debe rotarse según su vigencia. Hasta terminar
+la configuración, el botón muestra **Apple · pendiente de configuración** y está
+deshabilitado. Invitado continúa disponible; Email OTP requiere su configuración
+propia descrita en `SETUP_EMAIL_OTP.md`.
+
+Para esta etapa: callback del proveedor
+`https://zhqmlpljloumldaczcfp.supabase.co/auth/v1/callback`; redirect de la app
+permitido por Supabase
+`https://golf-bets-git-codex-dev-saha8.vercel.app/auth/callback`. No modificar
+Production ni dominios. No se han configurado ni inventado credenciales Apple.
