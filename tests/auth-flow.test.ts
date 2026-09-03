@@ -19,21 +19,22 @@ function authMock(overrides: Partial<AuthFlowClient> = {}) {
   return { auth, calls, session };
 }
 
-test("Email OTP mock envía código y verifica una sesión de seis dígitos", async () => {
+test("Email OTP mock envía código y verifica una sesión de ocho dígitos", async () => {
   const { auth, calls, session } = authMock();
   await sendEmailOtp(auth, " jugador@example.com ", "http://localhost:3000/auth/callback");
-  const restored = await verifyEmailOtp(auth, "jugador@example.com", "123456");
+  const restored = await verifyEmailOtp(auth, "jugador@example.com", "00123456");
   assert.equal(restored, session);
   assert.deepEqual(calls.map((call) => call.method), ["otp-send", "otp-verify", "restore"]);
   assert.equal((calls[1].input as { type: string }).type, "email");
+  assert.equal((calls[1].input as { token: string }).token, "00123456");
   assert.deepEqual((calls[0].input as { email: string }).email, "jugador@example.com");
 });
 
 test("OTP incorrecto/expirado propaga error y permite reintentar sin sesión falsa", async () => {
   let attempts = 0;
   const { auth } = authMock({ verifyOtp: async () => ({ data: { session: null }, error: new Error(++attempts === 1 ? "invalid token" : "token expired") }) });
-  await assert.rejects(() => verifyEmailOtp(auth, "a@b.com", "111111"), /invalid/);
-  await assert.rejects(() => verifyEmailOtp(auth, "a@b.com", "222222"), /expired/);
+  await assert.rejects(() => verifyEmailOtp(auth, "a@b.com", "11111111"), /invalid/);
+  await assert.rejects(() => verifyEmailOtp(auth, "a@b.com", "22222222"), /expired/);
   assert.equal(attempts, 2);
 });
 
@@ -68,17 +69,17 @@ test("enviar correo no verifica ni activa sesión; envío fallido se propaga", a
 
 test("OTP válido sin sesión persistida no deja entrar", async () => {
   const { auth } = authMock({ getSession: async () => ({ data: { session: null }, error: null }) });
-  await assert.rejects(() => verifyEmailOtp(auth, "jugador@example.com", "123456"), /account_session_missing/);
+  await assert.rejects(() => verifyEmailOtp(auth, "jugador@example.com", "12345678"), /account_session_missing/);
 });
 
 test("OTP rechaza sesión de otra identidad, correo o expiración", async () => {
   const { auth, session } = authMock();
   for (const user of [{ id: "other", email: "jugador@example.com" }, { id: "user-1", email: "other@example.com" }]) {
     auth.getSession = async () => ({ data: { session: { ...session, user } as never }, error: null });
-    await assert.rejects(() => verifyEmailOtp(auth, "jugador@example.com", "123456"), /account_session_missing/);
+    await assert.rejects(() => verifyEmailOtp(auth, "jugador@example.com", "12345678"), /account_session_missing/);
   }
   auth.getSession = async () => ({ data: { session: { ...session, expires_at: 1 } }, error: null });
-  await assert.rejects(() => verifyEmailOtp(auth, "jugador@example.com", "123456"), /account_session_missing/);
+  await assert.rejects(() => verifyEmailOtp(auth, "jugador@example.com", "12345678"), /account_session_missing/);
 });
 
 test("sesión invitada/anónima, sin JWT o refresh no es cuenta autenticada", () => {
@@ -96,11 +97,20 @@ test("OTP malformed no llama Supabase; restore fallido no crea cuenta", async ()
   await assert.rejects(() => restoreAuthSession(auth), /network/);
 });
 
+test("OTP con menos de ocho dígitos no llama verifyOtp", async () => {
+  const { auth, calls } = authMock();
+  await assert.rejects(() => verifyEmailOtp(auth, "jugador@example.com", "1234567"), /invalid/);
+  assert.equal(calls.length, 0);
+});
+
 test("pantalla OTP tiene captura, regreso y separación explícita de invitado", () => {
   const ui = readFileSync("app/components/account-provider.tsx", "utf8");
   assert.match(ui, /Código de verificación/);
   assert.match(ui, /id="access-otp"/);
   assert.match(ui, /autoComplete="one-time-code"/);
+  assert.match(ui, /maxLength=\{8\}/);
+  assert.match(ui, /otp\.length !== 8/);
+  assert.match(ui, /disabled=\{busy \|\| otp\.length !== 8\}/);
   assert.match(ui, /setCodeSent\(true\)/);
   assert.match(ui, /onAuthenticated\(await verifyEmailOtp/);
   assert.match(ui, /Todavía no has iniciado sesión/);

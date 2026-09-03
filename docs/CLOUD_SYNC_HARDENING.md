@@ -21,7 +21,7 @@ Las pruebas nuevas de sincronización usan un fake de PostgREST y transportes en
 - Fotos: archivo local primero, identificador versionado, cola persistente por usuario, confirmación de subida y reintento de errores. No se borra el blob al subir. Las fotos de otra cuenta no se envían.
 - Cuenta distingue sesión, pendiente, sincronizando, error y última sincronización confirmada. Lectura/guardado fallido de cuenta o consentimiento bloquea la confirmación del ciclo de datos.
 - Onboarding guarda preferencias antes del marcador de perfil completado; un fallo no permite omitir el paso tras recargar.
-- OTP usa verifyOtp type=email, correo editable, input de seis dígitos, errores humanos y cooldown persistente de 60 segundos para reenvío/doble clic. Peticiones del cliente tienen timeout recuperable y conservan cancelación externa.
+- OTP usa verifyOtp type=email, correo editable, input de ocho dígitos, errores humanos y cooldown persistente de 60 segundos para reenvío/doble clic. Peticiones del cliente tienen timeout recuperable y conservan cancelación externa.
 - Google/Apple consultan estado público del proveedor antes de OAuth; deshabilitados muestran Pendiente de configuración.
 
 ## Límites y conflictos (no ocultarlos)
@@ -66,7 +66,7 @@ El cierre documental posterior no modifica código de aplicación.
 - Node directo: las tres fuentes oficiales PDF responden 200. Desde Vercel: Parte 1 y Parte 2 reciben **HTTP403 de USGA**, observado mediante X-Rules-Source-Status: upstream-403; por eso el proxy devuelve 502. No es un fallo de Next Data Cache. No se intenta eludir ese rechazo; se conserva el fallback CORS interno.
 - Visor real en navegador: Parte 1 = 410 páginas, Parte 2 = 172 páginas, Aclaraciones = 13 páginas. Los tres renderizan dentro de The Backyard. Cambio de página y regreso por botón/browser Back conservan la búsqueda cart path. Aclaraciones responde HTTP200 por proxy.
 - Medidas DOM confirmadas 390×844 y 430×932. Capturas visuales de acceso, correo, configuración, modal histórico y PDFs; sin overflow horizontal del viewport en las pantallas revisadas. Inputs email de 16px. No se probó teclado nativo ni Safari/PWA físico.
-- En Preview: Apple/Google dan Pendiente de configuración sin salir al JSON de Supabase. Correo inválido produce error humano sin enviar OTP. El paso de seis dígitos se valida con mocks/estructura, no con correo entregado ni captura de una sesión real.
+- En Preview: Apple/Google dan Pendiente de configuración sin salir al JSON de Supabase. Correo inválido produce error humano sin enviar OTP. El paso de ocho dígitos se valida con mocks/estructura; la longitud de ocho fue confirmada además mediante una entrega física real de Supabase hosted.
 - Invitado → Cuenta → Acceso → Invitado y recarga preservan la ronda QA de 9 hoyos y el histórico. H1 conserva 4/3/5/5; los demás hoyos siguen presentes. Se verificaron Foursome Live, resultados (-1450,-50,-850,+2350; suma cero), copia real a clipboard, abrir histórico, cancelar corrección y editar configuración sin modificar la tarjeta.
 - Script público de solo lectura: flags cloud/Polla/social activos, Email habilitado y Google/Apple deshabilitados; endpoints cloud devuelven 401 sin JWT. No devuelve filas privadas a anon. polla_join_attempts y RPCs sensibles consultados responden 401/42501. No se declara por esto RLS entre usuarios autenticados.
 - 12 chunks iniciales del navegador: URL del proyecto esperado, public key presente, cero candidatos de key privilegiada. No se imprimen claves ni tokens.

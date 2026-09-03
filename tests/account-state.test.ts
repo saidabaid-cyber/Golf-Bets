@@ -42,7 +42,9 @@ test("merge de consentimiento conserva otros usuarios sin duplicar tipos", () =>
 test("correo y OTP se validan sin llamar OAuth real", () => {
   assert.equal(isValidEmail("jugador@example.com"), true);
   assert.equal(isValidEmail("incorrecto"), false);
-  assert.equal(normalizeOtp("12a 34-567"), "123456");
+  assert.equal(normalizeOtp("00a 12-3456"), "00123456");
+  assert.equal(normalizeOtp("12a 34-56b78"), "12345678");
+  assert.equal(normalizeOtp("1234567890"), "12345678");
   assert.match(authErrorMessage(new Error("token expired"), "otp"), /expiró/);
   assert.match(authErrorMessage(new Error("Failed to fetch"), "google"), /conexión/);
   assert.match(authErrorMessage(new Error("provider not enabled"), "apple"), /pendiente de configuración/);

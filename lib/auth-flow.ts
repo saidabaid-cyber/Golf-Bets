@@ -32,7 +32,7 @@ export async function sendEmailOtp(auth: AuthFlowClient, email: string, redirect
 }
 
 export async function verifyEmailOtp(auth: AuthFlowClient, email: string, token: string) {
-  if (!/^\d{6}$/.test(token)) throw new Error("invalid otp");
+  if (!/^\d{8}$/.test(token)) throw new Error("invalid otp");
   const result = await auth.verifyOtp({ email: email.trim(), token, type: "email" });
   throwIfError(result.error);
   if (!isAccountSession(result.data.session)) throw new Error("account_session_missing");

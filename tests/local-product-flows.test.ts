@@ -75,7 +75,7 @@ test("Flujo B arma, resortea, edita, comparte, guarda y reutiliza 10 jugadores e
 
 test("Flujo C simula correo, OTP, consentimiento, edición de perfil y sesión local", () => {
   assert.equal(isValidEmail("said@example.com"), true);
-  assert.equal(normalizeOtp("12 34-56"), "123456");
+  assert.equal(normalizeOtp("00 12-3456"), "00123456");
   const accepted = buildLegalAcceptances("account-1", "2026-09-01T12:00:00.000Z");
   assert.equal(hasCurrentLegalConsent(accepted, "account-1"), true);
   const profile: BackyardProfile = { userId: "account-1", displayName: "Said", email: "said@example.com", avatarUrl: "", defaultHandicap: null };

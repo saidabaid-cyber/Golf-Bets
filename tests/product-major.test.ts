@@ -19,12 +19,14 @@ test("login muestra identidad, Apple, Google, correo e invitado", () => {
   assert.match(accessSource, /disabled=\{busy \|\| !available\}/);
 });
 
-test("correo implementa OTP de seis dígitos, reenviar y cambiar correo", () => {
+test("correo implementa OTP de ocho dígitos, reenviar y cambiar correo", () => {
   assert.match(authFlow, /signInWithOtp/);
   assert.match(authFlow, /verifyOtp/);
   assert.match(auth, /sendEmailOtp/);
   assert.match(auth, /verifyEmailOtp/);
-  assert.match(auth, /otp\.length !== 6/);
+  assert.match(auth, /otp\.length !== 8/);
+  assert.match(auth, /maxLength=\{8\}/);
+  assert.match(authFlow, /\^\\d\{8\}\$/);
   assert.match(auth, /Reenviar código/);
   assert.match(auth, /Cambiar correo/);
 });

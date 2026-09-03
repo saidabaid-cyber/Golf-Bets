@@ -158,7 +158,7 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
   }
 
   async function verifyCode() {
-    if (otp.length !== 6) { setMessage("Introduce los 6 dígitos del código."); return; }
+    if (otp.length !== 8) { setMessage("Introduce los 8 dígitos del código."); return; }
     const supabase = getSupabaseBrowser();
     if (!supabase) { setMessage("Acceso con correo pendiente de configuración."); return; }
     setBusy(true); setMessage("");
@@ -195,11 +195,11 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
         </> : <>
           <h2>Código de verificación</h2>
           <p>Enviado a {email.trim()}</p>
-          <label htmlFor="access-otp">Introduce los 6 dígitos del correo</label>
-          <input id="access-otp" className="otpInput" aria-label="Código de seis dígitos" inputMode="numeric" autoComplete="one-time-code" maxLength={6} disabled={busy} value={otp} onChange={(event) => setOtp(normalizeOtp(event.target.value))} placeholder="6 dígitos" />
+          <label htmlFor="access-otp">Introduce los 8 dígitos del correo</label>
+          <input id="access-otp" className="otpInput" aria-label="Código de ocho dígitos" inputMode="numeric" autoComplete="one-time-code" maxLength={8} disabled={busy} value={otp} onChange={(event) => setOtp(normalizeOtp(event.target.value))} placeholder="8 dígitos" />
           <p className="hint">Todavía no has iniciado sesión. Tu cuenta se abrirá solo al verificar el código.</p>
-          <details className="hint"><summary>¿Recibiste un enlace en lugar del código?</summary><p>El correo de Supabase necesita la plantilla de código de seis dígitos. Ese enlace no sustituye esta verificación; puedes regresar y elegir explícitamente el modo invitado.</p></details>
-          <button className="primary big" disabled={busy || otp.length !== 6} onClick={verifyCode}>{busy ? "Verificando…" : "Verificar"}</button>
+          <details className="hint"><summary>¿Recibiste un enlace en lugar del código?</summary><p>El correo de Supabase necesita la plantilla de código de ocho dígitos. Ese enlace no sustituye esta verificación; puedes regresar y elegir explícitamente el modo invitado.</p></details>
+          <button className="primary big" disabled={busy || otp.length !== 8} onClick={verifyCode}>{busy ? "Verificando…" : "Verificar"}</button>
           <div className="otpLinks"><button className="textButton" disabled={busy || retrySeconds > 0} onClick={sendCode}>{retrySeconds ? `Reenviar en ${retrySeconds}s` : "Reenviar código"}</button><button className="textButton" disabled={busy} onClick={() => { setCodeSent(false); setOtp(""); setMessage(""); }}>Cambiar correo</button></div>
           <button className="textButton" disabled={busy} onClick={() => { setEmailMode(false); setMessage(""); }}>← Regresar al acceso</button>
         </>}

@@ -97,7 +97,7 @@ export function isValidEmail(email: string) {
 }
 
 export function normalizeOtp(value: string) {
-  return value.replace(/\D/g, "").slice(0, 6);
+  return value.replace(/\D/g, "").slice(0, 8);
 }
 
 export function authErrorMessage(error: unknown, context: "google" | "apple" | "email" | "otp" | "logout" = "email") {
