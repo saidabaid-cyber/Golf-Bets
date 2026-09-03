@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
-import { browseRulesSource, searchRulesCorpus } from "../lib/rules-search";
+import { browseRulesSource, searchRulesCorpus, searchRulesDocumentPages } from "../lib/rules-search";
 import { searchNavigableRules } from "../lib/rules-navigation";
 import { createDictationSession, DICTATION_NO_RESULT, speechRecognitionErrorMessage, type SpeechRecognitionLike } from "../lib/speech-dictation";
 
@@ -27,6 +27,19 @@ test("Visor PDF usa canvas interno, solo carga al abrir, con navegación, zoom y
   assert.match(panel,/selectedDocument && <InternalPdfViewer/);assert.doesNotMatch(panel,/<iframe src=\{selectedDocument/);
   const route=readFileSync("app/api/rules/documents/[id]/route.ts","utf8")+readFileSync("lib/pdf-proxy.ts","utf8");
   assert.match(route,/cache: "no-store"/);assert.match(route,/s-maxage=86400/);
+});
+test("visor PDF usa índice local por página, incluso si Safari no expone capa de texto",()=>{
+  const viewer=readFileSync("app/components/internal-pdf-viewer.tsx","utf8");
+  const route=readFileSync("app/api/rules/documents/[id]/search/route.ts","utf8");
+  const penalty=searchRulesDocumentPages("official-guide-part-1","área de penalidad");
+  const provisional=searchRulesDocumentPages("official-guide-part-1","bola provisional");
+  const committee=searchRulesDocumentPages("committee-procedures-part-2","ritmo de juego");
+  assert.ok(penalty.length>1);assert.ok(committee.length>0);
+  assert.ok(provisional.length>0);assert.ok(provisional.every(match=>match.excerpt.includes("bola provisional")));
+  assert.deepEqual(searchRulesDocumentPages("official-guide-part-1","ÁREA  DE PENALIDAD"),penalty);
+  assert.deepEqual(searchRulesDocumentPages("clarifications-july-2026","texto-inexistente-zzzz"),[]);
+  assert.match(viewer,/static-index-unavailable/);assert.match(viewer,/índice local/);
+  assert.match(route,/searchRulesDocumentPages/);assert.match(route,/static-page-index/);
 });
 class SpeechMock implements SpeechRecognitionLike {
   static last: SpeechMock; lang="";continuous=false;interimResults=false;

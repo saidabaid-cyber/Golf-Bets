@@ -37,6 +37,10 @@ export const fullRoundBets: BetConfig = {
     total18: { enabled: true, value: 200, hcpPct: 100, decimals: "round", participantIds: allIds },
   },
   miniPolla: { enabled: true, value: 100, hcpPct: 100, decimals: "round", participantIds: allIds },
+  vipers: { enabled: false, value: 100, secondNineMultiplier: 1, participantIds: allIds },
+  camels: { enabled: false, value: 100, secondNineMultiplier: 1, participantIds: allIds },
+  fish: { enabled: false, value: 100, secondNineMultiplier: 1, participantIds: allIds },
+  loba: { enabled: false, value: 100, unitsEnabled: false, unitValue: 100, duplicateUnitsByMode: false, participantIds: allIds },
 };
 
 export const fullRoundSegments: FoursomeSegment[] = [

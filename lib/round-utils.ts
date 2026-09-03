@@ -27,6 +27,53 @@ export function readStoredJson<T>(
   }
 }
 
+function recordValue(value: unknown): Record<string, any> | undefined {
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, any> : undefined;
+}
+
+function validScoreRows(value: unknown) {
+  const source = recordValue(value);
+  if (!source) return {};
+  const rows: Record<number, HoleScore> = {};
+  for (const [rawHole, rawRow] of Object.entries(source)) {
+    const hole = Number(rawHole);
+    const row = recordValue(rawRow);
+    if (!Number.isInteger(hole) || hole < 1 || hole > 18 || !row) continue;
+    const clean = Object.fromEntries(Object.entries(row).filter(([, score]) => score === null || (typeof score === "number" && Number.isInteger(score) && score >= 1)));
+    if (Object.keys(clean).length) rows[hole] = clean as HoleScore;
+  }
+  return rows;
+}
+
+/** Keep independent valid blocks of a legacy/local draft and discard only the
+ * malformed portions. This function never clears storage or mutates its input. */
+export function normalizeRoundDraft(value: unknown) {
+  const source = recordValue(value);
+  if (!source) return null;
+  const players = Array.isArray(source.players)
+    ? source.players.filter(player => recordValue(player) && typeof player.id === "string" && typeof player.name === "string")
+    : [];
+  const course = recordValue(source.course) && Array.isArray(source.course.holes) && source.course.holes.length === 18 ? source.course : undefined;
+  const draft = {
+    ...source,
+    ...(course ? { course } : { course: undefined }),
+    players,
+    bets: recordValue(source.bets),
+    segments: Array.isArray(source.segments) ? source.segments : [],
+    personalBets: Array.isArray(source.personalBets) ? source.personalBets : [],
+    manualBets: Array.isArray(source.manualBets) ? source.manualBets : [],
+    scores: validScoreRows(source.scores),
+    scoreEdits: validScoreRows(source.scoreEdits),
+    unitEvents: Array.isArray(source.unitEvents) ? source.unitEvents : [],
+    counterBetEvents: Array.isArray(source.counterBetEvents) ? source.counterBetEvents : [],
+    counterBetKeepers: recordValue(source.counterBetKeepers),
+    lobaHoles: recordValue(source.lobaHoles) || {},
+    ballFriendSetup: recordValue(source.ballFriendSetup) || {},
+    expenses: recordValue(source.expenses),
+  };
+  return migrateDraftPressures(draft);
+}
+
 export function clearActiveRoundStorage(storage: Pick<Storage, "removeItem">) {
   storage.removeItem(STORAGE_KEYS.draft);
 }
@@ -111,7 +158,11 @@ export function mergeCoursesPreservingEdits(defaults: Course[], saved: Course[] 
 export function hasRoundProgress(draft: any) {
   if (!draft || typeof draft !== "object") return false;
   const namedPlayers = Array.isArray(draft.players) && draft.players.some((player: Player) => player.name?.trim());
-  const enteredScores = draft.scores && Object.values(draft.scores as Record<number, HoleScore>).some((row) => Object.values(row || {}).some((score) => typeof score === "number"));
+  const scoreRows = recordValue(draft.scores);
+  const enteredScores = scoreRows && Object.values(scoreRows).some((row) => {
+    const values = recordValue(row);
+    return values ? Object.values(values).some((score) => typeof score === "number") : false;
+  });
   return Boolean(namedPlayers || enteredScores || draft.currentIndex > 0);
 }
 

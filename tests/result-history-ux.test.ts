@@ -43,7 +43,9 @@ test("búsqueda PDF ignora acentos, mayúsculas y espacios y cuenta frases", () 
 
 test("UI dinámica oculta apuestas apagadas, separa Pollas y cierra la ronda activa", () => {
   const page = readFileSync("app/page.tsx", "utf8");
-  assert.match(page, /bets\.rabbits\.enabled && <div><span>Conejos<\/span>/);
+  assert.match(page, /bets\.rabbits\.enabled && <div><span>🐇 Conejos · Jugados<\/span>/);
+  assert.match(page, /scoreCaptureComplete && \(bets\.rabbits\.enabled \|\| bets\.skins\.enabled\)/);
+  assert.match(page, /<details className="playerResultCard" key=\{p\.id\}>/);
   assert.match(page, /polla\.details\.filter\(\(detail\) => Object\.hasOwn\(detail\.totals, p\.id\)\)\.map/);
   assert.match(page, /clearActiveRoundStorage\(window\.localStorage\);[\s\S]{0,120}setRoundClosed\(true\)/);
   assert.match(page, /draftAvailable && !roundClosed/);

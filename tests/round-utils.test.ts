@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildHoleSummary, ensureHoleScoresAtPar, hasRoundProgress, historicalGolfStats, mergeCoursesPreservingEdits, migrateDraftPressures, privateLeaderboard, pushUndoState, readStoredJson, roundSnapshotToCsv, upsertFrequentPlayers } from "../lib/round-utils";
+import { buildHoleSummary, ensureHoleScoresAtPar, hasRoundProgress, historicalGolfStats, mergeCoursesPreservingEdits, migrateDraftPressures, normalizeRoundDraft, privateLeaderboard, pushUndoState, readStoredJson, roundSnapshotToCsv, upsertFrequentPlayers } from "../lib/round-utils";
 import type { Course, HoleScore, RoundSnapshot } from "../lib/types";
 
 const original: Course = {
@@ -36,7 +36,7 @@ test("draft progress distinguishes an empty new round from a resumable round", (
   assert.equal(hasRoundProgress({ players: [], scores: { 1: { a: 4 } }, currentIndex: 0 }), true);
 });
 
-test("cada hoyo abierto materializa Par como score real sin sobrescribir capturas", () => {
+test("cada hoyo abierto materializa la sugerencia visual de Par sin sobrescribir capturas", () => {
   const roundPlayers = [{ id: "a", name: "Said", handicap: 1 }, { id: "b", name: "Cuau", handicap: 7 }];
   let scores: Record<number, HoleScore> = {};
   for (let hole = 1; hole <= 18; hole++) scores = ensureHoleScoresAtPar(scores, { number: hole, par: hole % 3 === 0 ? 5 : 4 }, roundPlayers);
@@ -106,4 +106,23 @@ test("un valor corrupto de localStorage no impide restaurar las demás claves", 
   assert.deepEqual(readStoredJson(storage as Pick<Storage, "getItem">, "corrupt", []), []);
   assert.deepEqual(readStoredJson(storage as Pick<Storage, "getItem">, "valid", []), [{ id: "round-1" }]);
   assert.deepEqual(readStoredJson(storage as Pick<Storage, "getItem">, "missing", ["fallback"]), ["fallback"]);
+});
+
+test("estructura vieja o parcialmente corrupta conserva scores y descarta solo bloques inválidos", () => {
+  const normalized = normalizeRoundDraft({
+    version: 2,
+    players: [{ id: "said", name: "Said", handicap: 8 }, { id: 4, name: null }],
+    scores: { 1: { said: 4, bad: "0" }, 2: "dañado", 30: { said: 3 } },
+    scoreEdits: "dañado",
+    bets: { rabbits: { enabled: true } },
+    personalBets: "dañado",
+    counterBetEvents: "dañado",
+    lobaHoles: null,
+  });
+  assert.deepEqual(normalized?.players, [{ id: "said", name: "Said", handicap: 8 }]);
+  assert.deepEqual(normalized?.scores, { 1: { said: 4 } });
+  assert.deepEqual(normalized?.scoreEdits, {});
+  assert.deepEqual(normalized?.personalBets, []);
+  assert.deepEqual(normalized?.counterBetEvents, []);
+  assert.equal(normalized?.bets?.rabbits.enabled, true);
 });

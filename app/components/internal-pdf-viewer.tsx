@@ -5,7 +5,7 @@ import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import type { OfficialRulesDocument } from "../../lib/rules-documents";
 import { countPdfTextMatches, pdfPixelRatio, withPdfDeadline } from "../../lib/pdf-viewer-utils";
 
-type SearchMatch = { page: number; count: number };
+type SearchMatch = { page: number; count: number; excerpt?: string };
 
 function PdfPage({ pdf, pageNumber, width, zoom, title, scrollRoot, highlighted, onVisible }: {
   pdf: PDFDocumentProxy;
@@ -87,11 +87,12 @@ export function InternalPdfViewer({ document, initialPage = 1, onBack }: { docum
   const [matches, setMatches] = useState<SearchMatch[]>([]);
   const [matchIndex, setMatchIndex] = useState(0);
   const [textUnavailable, setTextUnavailable] = useState(false);
+  const [searchSource, setSearchSource] = useState<"index" | "pdf" | "">("");
 
   useEffect(() => {
     let disposed = false;
     let task: { destroy: () => Promise<void> } | undefined;
-    setError(""); setLoading(true); setPdf(null); setMatches([]); setTextUnavailable(false); setSearchCompleted(false);
+    setError(""); setLoading(true); setPdf(null); setMatches([]); setTextUnavailable(false); setSearchCompleted(false); setSearchSource("");
     import("pdfjs-dist/legacy/build/pdf.mjs").then(async (library) => {
       if (disposed) return;
       library.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).toString();
@@ -160,9 +161,20 @@ export function InternalPdfViewer({ document, initialPage = 1, onBack }: { docum
     if (!pdf || !query) { setMatches([]); setTextUnavailable(false); setSearchCompleted(false); return; }
     const generation = ++searchGeneration.current;
     setSearching(true); setSearchProgress(0); setMatches([]); setMatchIndex(0); setTextUnavailable(false); setSearchCompleted(false);
-    let extractedCharacters = 0;
-    const found: SearchMatch[] = [];
+    setSearchSource("");
     try {
+      const response = await fetch(`/api/rules/documents/${encodeURIComponent(document.id)}/search?q=${encodeURIComponent(query)}`, { cache: "no-store" });
+      if (!response.ok) throw new Error("static-index-unavailable");
+      const payload = await response.json() as { matches?: SearchMatch[] };
+      const indexed = Array.isArray(payload.matches) ? payload.matches : [];
+      if (generation !== searchGeneration.current) return;
+      setMatches(indexed);
+      setSearchSource("index");
+      if (indexed[0]) scrollToPage(indexed[0].page);
+      setTextUnavailable(false);
+    } catch {
+      let extractedCharacters = 0;
+      const found: SearchMatch[] = [];
       for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
         if (generation !== searchGeneration.current) return;
         const page = await pdf.getPage(pageNumber);
@@ -177,9 +189,8 @@ export function InternalPdfViewer({ document, initialPage = 1, onBack }: { docum
       if (generation !== searchGeneration.current) return;
       setMatches(found);
       setTextUnavailable(extractedCharacters === 0);
+      setSearchSource("pdf");
       if (found[0]) scrollToPage(found[0].page);
-    } catch {
-      if (generation === searchGeneration.current) setTextUnavailable(true);
     } finally {
       if (generation === searchGeneration.current) { setSearching(false); setSearchCompleted(true); }
     }
@@ -196,7 +207,7 @@ export function InternalPdfViewer({ document, initialPage = 1, onBack }: { docum
     <header className="pdfInternalHeader">
       <div className="pdfHeaderTop"><button autoFocus className="secondary" onClick={onBack}>← Regresar a Reglas</button><div><h2>{document.title}</h2>{pdf && <small>Página visible {currentPage} de {pdf.numPages}</small>}</div></div>
       {pdf && <div className="pdfToolbar"><button className="secondary" aria-label="Reducir zoom" disabled={zoom <= .75} onClick={() => setZoom((value) => Math.max(.75, value - .25))}>−</button><b>{Math.round(zoom * 100)}%</b><button className="secondary" aria-label="Ampliar zoom" disabled={zoom >= 2} onClick={() => setZoom((value) => Math.min(2, value + .25))}>+</button><form className="pdfSearch" onSubmit={searchDocument}><label className="srOnly" htmlFor="pdf-search">Buscar en documento</label><input id="pdf-search" type="search" value={search} placeholder="Buscar en documento" onChange={(event) => { setSearch(event.target.value); setSearchCompleted(false); }} /><button className="primary" disabled={searching || !search.trim()}>{searching ? `${searchProgress}/${pdf.numPages}` : "Buscar"}</button></form></div>}
-      {(textUnavailable || matches.length > 0 || searchCompleted) && <div className="pdfSearchResults" role="status">{textUnavailable ? "Este PDF no ofrece texto extraíble; la búsqueda no está disponible." : matches.length ? <><span>{totalMatches} coincidencia{totalMatches === 1 ? "" : "s"} en {matches.length} página{matches.length === 1 ? "" : "s"}</span><div><button className="secondary" onClick={() => moveMatch(-1)}>‹ Anterior</button><button className="secondary" onClick={() => moveMatch(1)}>Siguiente ›</button></div></> : "Sin coincidencias."}</div>}
+      {(textUnavailable || matches.length > 0 || searchCompleted) && <div className="pdfSearchResults" role="status">{textUnavailable ? "Este documento no ofrece texto buscable en el PDF ni en el índice local." : matches.length ? <><span>{totalMatches} coincidencia{totalMatches === 1 ? "" : "s"} en {matches.length} página{matches.length === 1 ? "" : "s"}{searchSource === "index" ? " · índice local" : ""}</span><div><button className="secondary" onClick={() => moveMatch(-1)}>‹ Anterior</button><button className="secondary" onClick={() => moveMatch(1)}>Siguiente ›</button></div></> : "Sin coincidencias."}</div>}
     </header>
     {loading && <div className="pdfStatus" role="status">Cargando documento…</div>}
     {error && <div className="pdfStatus" role="alert">{error}<button className="secondary" onClick={() => setRetry((value) => value + 1)}>Reintentar</button></div>}

@@ -86,3 +86,7 @@ button:disabled{cursor:not-allowed;opacity:.5}.app{padding-top:calc(14px + env(s
 @media(max-width:700px){.rivalHistoryEntry{align-items:flex-start;flex-direction:column}.rivalHistoryEntry button{align-self:flex-end}.rivalHistoryRound>header{flex-wrap:wrap}}
 .foursomeLiveRow,.matchLine.foursomeResultLine{display:grid;grid-template-columns:minmax(0,1fr) minmax(190px,auto);align-items:center}.foursomeLiveRow>div,.foursomeResultLine>div{min-width:0}.foursomeLiveRow .matchNums,.foursomeResultLine .matchNums{white-space:normal}.foursomeResultLine .matchNums small{margin:3px 0}.foursomeResultLine .matchNums b{display:block;margin-top:3px}
 @media(max-width:700px){.foursomeLiveRow,.matchLine.foursomeResultLine{grid-template-columns:1fr}.foursomeLiveRow .matchNums,.foursomeResultLine .matchNums{text-align:left;margin-top:6px}}
+
+/* El menú inferior conserva legibilidad WCAG aun en el ancho mínimo de iPhone. */
+.bottomNav button{color:#5f6963}
+@media(max-width:430px){.bottomNav button{font-size:9px}}

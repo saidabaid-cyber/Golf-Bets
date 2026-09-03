@@ -16,6 +16,15 @@ export function editCapturedScore(edits: ScoreRows, hole: number, player: string
   return { ...edits, [hole]: { ...edits[hole], [player]: value === null ? null : Math.max(1, Math.trunc(value)) } };
 }
 
+/** A suggested par is not a played score. The row is ready only after it was
+ * previously saved or every player explicitly confirmed/edited this hole. */
+export function isHoleCaptureComplete(scores: ScoreRows, edits: ScoreRows, hole: number, players: Player[]): boolean {
+  if (!players.length) return false;
+  const saved = players.every(player => typeof scores[hole]?.[player.id] === "number");
+  const explicitlyCaptured = players.every(player => typeof edits[hole]?.[player.id] === "number");
+  return saved || explicitlyCaptured;
+}
+
 export function commitHoleCapture(scores: ScoreRows, edits: ScoreRows, hole: Pick<Course["holes"][number], "number" | "par">, players: Player[]) {
   const row = holeCapture(scores, edits, hole, players);
   if (!players.length || Object.values(row).some(value => typeof value !== "number" || !Number.isInteger(value) || value < 1)) return null;

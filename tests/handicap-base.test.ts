@@ -96,8 +96,8 @@ test("nueva ronda: todas apagadas; ninguna configuración se comparte con la ant
   const previous = initialBets(ids);
   previous.foursome.enabled = true; previous.polla.first9.enabled = true;
   const fresh = initialBets(ids);
-  const configs = [fresh.monkey!, fresh.rabbits, fresh.skins, fresh.units, fresh.foursome, fresh.ballFriend, ...Object.values(fresh.polla), fresh.miniPolla];
-  assert.equal(configs.length, 10);
+  const configs = [fresh.monkey!, fresh.rabbits, fresh.skins, fresh.units, fresh.foursome, fresh.ballFriend, ...Object.values(fresh.polla), fresh.miniPolla, fresh.vipers, fresh.camels, fresh.fish, fresh.loba];
+  assert.equal(configs.length, 14);
   assert.ok(configs.every(cfg => cfg.enabled === false));
   assert.equal(fresh.foursome.handicapMethod, "configured");
   const frozen = freezeRoundHandicapBases(fresh, players);

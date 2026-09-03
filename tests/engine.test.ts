@@ -75,6 +75,10 @@ function betConfig(ids = players.map((player) => player.id)): BetConfig {
       total18: { enabled: true, value: 300, hcpPct: 100, decimals: "round", participantIds: ids },
     },
     miniPolla: { enabled: true, value: 100, hcpPct: 100, decimals: "round", participantIds: ids },
+    vipers: { enabled: false, value: 100, secondNineMultiplier: 1, participantIds: ids },
+    camels: { enabled: false, value: 100, secondNineMultiplier: 1, participantIds: ids },
+    fish: { enabled: false, value: 100, secondNineMultiplier: 1, participantIds: ids },
+    loba: { enabled: false, value: 100, unitsEnabled: false, unitValue: 100, duplicateUnitsByMode: false, participantIds: ids },
   };
 }
 

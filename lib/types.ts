@@ -50,6 +50,38 @@ export type ParticipantConfig = {
   participantIds: string[];
 };
 
+export type CounterBetKind = "vipers" | "camels" | "fish";
+
+export type CounterBetConfig = ParticipantConfig & {
+  enabled: boolean;
+  value: number;
+  /** Multiplier for physical holes H10-H18. */
+  secondNineMultiplier: number;
+};
+
+export type CounterBetEvent = {
+  id: string;
+  kind: CounterBetKind;
+  hole: number;
+  playerId: string;
+  quantity: number;
+};
+
+export type CounterBetKeepers = Record<CounterBetKind, Partial<Record<PhysicalNine, string>>>;
+
+export type LobaMode = "partner" | "solo" | "solo_anticipated";
+export type LobaWinner = "loba_team" | "opponents" | "tie";
+
+export type LobaHole = {
+  lobaPlayerId?: string;
+  mode?: LobaMode;
+  partnerId?: string;
+  fireMultiplier: number;
+  winner?: LobaWinner;
+  /** Unit captures remain per player, but settlement belongs to each team. */
+  unitCounts: Record<string, number>;
+};
+
 export type MedalPollaConfig = ParticipantConfig & {
   enabled: boolean;
   value: number;
@@ -120,6 +152,16 @@ export type BetConfig = {
     value: number;
     hcpPct: number;
     decimals: DecimalMode;
+  };
+  vipers: CounterBetConfig;
+  camels: CounterBetConfig;
+  fish: CounterBetConfig;
+  loba: ParticipantConfig & {
+    enabled: boolean;
+    value: number;
+    unitsEnabled: boolean;
+    unitValue: number;
+    duplicateUnitsByMode: boolean;
   };
 };
 
@@ -244,6 +286,9 @@ export type RoundSnapshot = {
   photoId?: string;
   betConfig?: BetConfig;
   unitEvents?: UnitEvent[];
+  counterBetEvents?: CounterBetEvent[];
+  counterBetKeepers?: CounterBetKeepers;
+  lobaHoles?: Record<number, LobaHole>;
   personalBets?: PersonalBet[];
   manualBets?: ManualBet[];
   ballFriendSetup?: Record<number, BallFriendHole>;
@@ -273,4 +318,7 @@ export type Transfer = {
   fromPlayerId: string;
   toPlayerId: string;
   amount: number;
+  betType?: string;
+  hole?: number;
+  metadata?: Record<string, string | number | boolean | null>;
 };

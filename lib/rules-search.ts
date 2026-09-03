@@ -27,6 +27,12 @@ type CorpusEntry = {
   searchText: string;
 };
 
+export type RulesDocumentPageMatch = {
+  page: number;
+  count: number;
+  excerpt: string;
+};
+
 const RULE_TITLES: Record<string, string> = {
   "1": "El juego, la conducta del jugador y las Reglas",
   "2": "El campo",
@@ -167,4 +173,45 @@ export function rulesCorpusCoverage() {
     pages: entries.length,
     sources: new Set(entries.map((entry) => entry.sourceId)).size,
   };
+}
+
+function countOccurrences(text: string, query: string) {
+  if (!query) return 0;
+  let count = 0;
+  let offset = 0;
+  while ((offset = text.indexOf(query, offset)) !== -1) {
+    count += 1;
+    offset += Math.max(1, query.length);
+  }
+  return count;
+}
+
+/** Search the build-time page index used by the in-app PDF viewer. This avoids
+ * repeatedly downloading or parsing a 13 MB PDF on iPhone and still works when
+ * Safari exposes no text layer for a rendered/scanned page. */
+export function searchRulesDocumentPages(sourceId: OfficialRulesDocument["id"], query: string, limit = 100): RulesDocumentPageMatch[] {
+  const normalized = normalizeRulesSearch(query);
+  if (!normalized || !officialRulesDocument(sourceId)) return [];
+  const terms = expandedRulesSearchTerms(query).filter(term => term.length > 2);
+  const baseTerms = normalized.split(/\s+/).filter(term => term.length > 2);
+  const candidates = (corpus as CorpusEntry[])
+    .filter(entry => entry.sourceId === sourceId)
+    .map(entry => {
+      const phraseCount = countOccurrences(entry.searchText, normalized);
+      const baseCounts = baseTerms.map(term => countOccurrences(entry.searchText, term));
+      const allBaseTerms = baseTerms.length > 1 && baseCounts.every(count => count > 0);
+      const expandedCount = terms.reduce((sum, term) => sum + countOccurrences(entry.searchText, term), 0);
+      const rank = phraseCount > 0 ? 3 : allBaseTerms ? 2 : expandedCount > 0 ? 1 : 0;
+      const count = phraseCount || (allBaseTerms ? baseCounts.reduce((sum, value) => sum + value, 0) : expandedCount);
+      return { entry, count, rank };
+    });
+  const bestRank = candidates.reduce((best, candidate) => Math.max(best, candidate.rank), 0);
+  return candidates
+    .filter(({ rank }) => rank === bestRank && rank > 0)
+    .slice(0, Math.max(1, limit))
+    .map(({ entry, count }) => ({
+      page: entry.page,
+      count,
+      excerpt: contextualExcerpt(entry.searchText, normalized, terms),
+    }));
 }

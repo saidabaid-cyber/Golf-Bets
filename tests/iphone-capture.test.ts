@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
-import { commitHoleCapture, editCapturedScore, holeCapture, type ScoreRows } from "../lib/score-capture";
+import { commitHoleCapture, editCapturedScore, holeCapture, isHoleCaptureComplete, type ScoreRows } from "../lib/score-capture";
 import { foursomePressure, setFoursomePressure } from "../lib/foursome-config";
 import { calculateFoursomes, calculatePersonalBets, opponentPairs, playOrder } from "../lib/engine";
 import { pdfPixelRatio, withPdfDeadline } from "../lib/pdf-viewer-utils";
@@ -20,6 +20,7 @@ test("nuevo hoyo propone Par como valor sin crear scores oficiales", () => {
   assert.deepEqual(holeCapture(scores, {}, course.holes[0], players), { said:4, cuau:4, armando:4, jesus:4 });
   assert.deepEqual(scores, {});
   assert.equal(engine(scores).foursome.matches[0].completedHoles, 0);
+  assert.equal(isHoleCaptureComplete(scores, {}, 1, players), false);
 });
 
 test("más, menos, PAR y borrar solo modifican captura; guardar con vacío se rechaza", () => {
@@ -34,9 +35,12 @@ test("más, menos, PAR y borrar solo modifican captura; guardar con vacío se re
   assert.equal(commitHoleCapture({}, edits, course.holes[0], players), null);
 });
 
-test("todos Par: basta Guardar; Foursome y Personal solo cambian después", () => {
+test("todos Par requieren confirmación explícita; Foursome y Personal solo cambian después de Guardar", () => {
   const before = engine({});
-  const committed = commitHoleCapture({}, {}, course.holes[0], players)!;
+  let edits: ScoreRows = {};
+  for (const player of players) edits = editCapturedScore(edits, 1, player.id, course.holes[0].par);
+  assert.equal(isHoleCaptureComplete({}, edits, 1, players), true);
+  const committed = commitHoleCapture({}, edits, course.holes[0], players)!;
   assert.equal(Object.keys(committed.scores[1]).length, 4);
   assert.equal(engine(committed.scores).foursome.matches[0].completedHoles, 1);
   assert.equal(before.personal.results[0].liveComponents[0].playedHoles, 0);
@@ -64,7 +68,10 @@ for (const start of [1, 10] as const) for (const count of [9, 18]) test(`captura
     const hole = course.holes.find(item => item.number === number)!;
     assert.equal(official[number], undefined);
     assert.equal(holeCapture(official, {}, hole, players).said, hole.par);
-    official = commitHoleCapture(official, {}, hole, players)!.scores;
+    let edits: ScoreRows = {};
+    for (const player of players) edits = editCapturedScore(edits, number, player.id, hole.par);
+    assert.equal(isHoleCaptureComplete(official, edits, number, players), true);
+    official = commitHoleCapture(official, edits, hole, players)!.scores;
   }
   assert.equal(Object.keys(official).length, count);
 });
@@ -161,9 +168,10 @@ test("PDF falla de forma recuperable, enlaza fuente real, canvas limitado para i
 
 test("tarjeta admite paisaje, escalas y zoom nativo sin bloquear viewport", () => {
   const layout=readFileSync("app/layout.tsx","utf8");
+  const scorecard=readFileSync("app/components/full-scorecard.tsx","utf8");
   assert.doesNotMatch(layout,/userScalable:\s*false|maximumScale:\s*1/);
   assert.match(css,/orientation:landscape/); assert.match(css,/touch-action:pan-x pan-y pinch-zoom/);
-  assert.match(app,/\[75,90,100\]/); assert.match(css,/scorecardTable\{max-width:100%;overflow-x:auto/);
+  assert.match(scorecard,/\[75,\s*90,\s*100\]/); assert.match(css,/scorecardTable\{max-width:100%;overflow-x:auto/);
 });
 
 test("dictado entrega parcial y final sin borrar al terminar; si no transcribe ofrece teclado", () => {
