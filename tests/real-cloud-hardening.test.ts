@@ -13,6 +13,16 @@ test("refrescar token o repetir SIGNED_IN de la misma cuenta no reinicia onboard
   assert.ok(provider.indexOf("authIdentityChanged(activeUserId.current") < provider.indexOf("setProfileChecked(false)"));
 });
 
+test("un fallo de perfil no se interpreta como perfil inexistente ni menciona migraciones", () => {
+  const provider = readFileSync("app/components/account-provider.tsx", "utf8");
+  const account = readFileSync("lib/cloud-account.ts", "utf8");
+  const route = readFileSync("app/api/cloud/sync/route.ts", "utf8");
+  assert.match(provider, /Sin conexión · estamos usando el perfil guardado/);
+  assert.match(provider, /setProfileSetupRequired\(false\)/);
+  assert.doesNotMatch(account, /revisa la conexión y las migraciones/i);
+  assert.doesNotMatch(route, /Aplica las migraciones pendientes|Falta aplicar la migración/i);
+});
+
 test("errores PostgREST resueltos como data.error no se confunden con escritura correcta", async () => {
   await requireCloudWrites([Promise.resolve({ error: null })]);
   await assert.rejects(requireCloudWrites([Promise.resolve({ error: new Error("RLS denied") })]), /RLS denied/);
@@ -71,7 +81,7 @@ test("cloud sin token devuelve 401, no un falso error de configuración 503", ()
 
 test("PDF con proxy fallido reintenta la fuente CORS dentro del visor sin navegar fuera", () => {
   const viewer = readFileSync("app/components/internal-pdf-viewer.tsx", "utf8");
-  assert.match(viewer, /getDocument\(\{ url: document\.localUrl \}\)/);
+  assert.match(viewer, /getDocument\(\{ url: document\.localUrl/);
   assert.match(viewer, /getDocument\(\{ url: document\.officialUrl \}\)/);
   assert.doesNotMatch(viewer, /window\.location|window\.open/);
 });

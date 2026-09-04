@@ -6,8 +6,14 @@ export type OfficialRulesDocument = {
   sourceFileName: string;
   localUrl: string;
   officialUrl: string;
+  /** Some official publishers expose one combined guide. These fields map
+   * each logical document to its page window without copying the PDF. */
+  pageOffset?: number;
+  pageCount?: number;
   usedByAi: true;
 };
+
+const FMG_OFFICIAL_GUIDE_URL = "https://www.fmg.org.mx/sites/default/files/championship/documents/2026/07/Guia%20Oficial%20a%20las%20Reglas%20de%20Golf%202023.pdf";
 
 export const OFFICIAL_RULES_DOCUMENTS: OfficialRulesDocument[] = [
   {
@@ -17,7 +23,9 @@ export const OFFICIAL_RULES_DOCUMENTS: OfficialRulesDocument[] = [
     edition: "Edición efectiva enero de 2023",
     sourceFileName: "2023 Guia Oficial Golf pt1.pdf",
     localUrl: "/api/rules/documents/official-guide-part-1",
-    officialUrl: "https://www.usga.org/content/dam/usga/pdf/2023/rules/2023%20Guia%20Oficial%20Golf%20pt1.pdf",
+    officialUrl: FMG_OFFICIAL_GUIDE_URL,
+    pageOffset: 0,
+    pageCount: 410,
     usedByAi: true,
   },
   {
@@ -27,7 +35,9 @@ export const OFFICIAL_RULES_DOCUMENTS: OfficialRulesDocument[] = [
     edition: "Edición efectiva enero de 2023",
     sourceFileName: "2023 Guia Oficial Golf pt2.pdf",
     localUrl: "/api/rules/documents/committee-procedures-part-2",
-    officialUrl: "https://www.usga.org/content/dam/usga/pdf/2023/rules/2023%20Guia%20Oficial%20Golf%20pt2.pdf",
+    officialUrl: FMG_OFFICIAL_GUIDE_URL,
+    pageOffset: 410,
+    pageCount: 172,
     usedByAi: true,
   },
   {

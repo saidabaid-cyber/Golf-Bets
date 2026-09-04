@@ -69,9 +69,9 @@ async function readOwnedRows(client: SupabaseClient, table: string, userId: stri
   return { data: rows as unknown as Array<{ snapshot: unknown; entity_type: CloudEntityType; local_id: string; deleted_at: string }>, error: null };
 }
 
-async function applyTombstones(client: SupabaseClient, userId: string, tombstones: CloudTombstone[]) {
+async function applyTombstones(client: SupabaseClient, userId: string, tombstones: CloudTombstone[], deviceId: string | null = null) {
   if (tombstones.length) {
-    const { error } = await client.from("cloud_deletions").upsert(tombstones.map((item) => ({ owner_id: userId, entity_type: item.entityType, local_id: item.localId, deleted_at: item.deletedAt })), { onConflict: "owner_id,entity_type,local_id" });
+    const { error } = await client.from("cloud_deletions").upsert(tombstones.map((item) => ({ owner_id: userId, entity_type: item.entityType, local_id: item.localId, deleted_at: item.deletedAt, deleted_by_device: deviceId })), { onConflict: "owner_id,entity_type,local_id" });
     if (error) throw error;
   }
   const { data, error } = await readOwnedRows(client, "cloud_deletions", userId, "entity_type,local_id,deleted_at");
@@ -87,7 +87,7 @@ async function applyTombstones(client: SupabaseClient, userId: string, tombstone
   return all;
 }
 
-async function projectRoundSnapshots(client: SupabaseClient, userId: string, history: Record<string, unknown>[]) {
+async function projectRoundSnapshots(client: SupabaseClient, userId: string, history: Record<string, unknown>[], deviceId: string | null) {
   if (!history.length) return;
   const ids = history.map(localId);
   const { data: cloudRounds, error } = await client.from("rounds_cloud").select("id,local_id").eq("owner_id", userId).in("local_id", ids);
@@ -105,6 +105,7 @@ async function projectRoundSnapshots(client: SupabaseClient, userId: string, his
         local_player_id: localId(player),
         name: String(player.name || "Jugador").slice(0, 120),
         handicap: player.handicap ?? null,
+        updated_by_device: deviceId,
       }))).select("id,local_player_id");
       if (playersError || insertedPlayers?.length !== players.length) throw playersError || new Error("Jugadores no confirmados");
       const cloudPlayerByLocal = new Map((insertedPlayers || []).map((player) => [String(player.local_player_id), String(player.id)]));
@@ -116,11 +117,17 @@ async function projectRoundSnapshots(client: SupabaseClient, userId: string, his
         for (const [playerLocalId, scoreValue] of Object.entries(playerScores)) {
           const score = Number(scoreValue);
           const cloudPlayerId = cloudPlayerByLocal.get(playerLocalId);
-          if (cloudPlayerId && Number.isInteger(score) && score >= 1 && score <= 20) scoreRows.push({ round_player_id: cloudPlayerId, hole, score });
+          if (cloudPlayerId && Number.isInteger(score) && score >= 1 && score <= 20) scoreRows.push({ round_player_id: cloudPlayerId, hole, score, updated_by_device: deviceId });
         }
       }
       if (scoreRows.length) {
-        const { data: savedScores, error: scoresError } = await client.from("round_scores_cloud").insert(scoreRows).select("id");
+        // round_scores_cloud deliberately has no surrogate `id`: its primary
+        // key is (round_player_id, hole). Returning the real key both confirms
+        // every write and keeps this projection aligned with the SQL schema.
+        const { data: savedScores, error: scoresError } = await client
+          .from("round_scores_cloud")
+          .insert(scoreRows)
+          .select("round_player_id,hole");
         if (scoresError || savedScores?.length !== scoreRows.length) throw scoresError || new Error("Scores no confirmados");
       }
     }
@@ -134,7 +141,7 @@ async function projectRoundSnapshots(client: SupabaseClient, userId: string, his
       ["round_local_rules_snapshots", "local_rules", (round.courseSnapshot as { localRules?: unknown } | undefined)?.localRules || []],
     ] as const;
     for (const [table, column, value] of projections) {
-      const { data: projection, error: projectionError } = await client.from(table).upsert({ round_id: roundId, [column]: value }).select("round_id");
+      const { data: projection, error: projectionError } = await client.from(table).upsert({ round_id: roundId, [column]: value, updated_by_device: deviceId }).select("round_id");
       if (projectionError || projection?.length !== 1) throw projectionError || new Error("Proyección no confirmada");
     }
   }
@@ -185,11 +192,25 @@ export async function writeCloudBundle(client: SupabaseClient, userId: string, b
   let rivals = safeArray<Record<string, unknown>>(body.data.rivals, 500).filter(localId);
   let courses = safeArray<Record<string, unknown>>(body.data.courses, 200).filter(localId);
   const now = new Date().toISOString();
+  const deviceId = typeof body.data.deviceId === "string" ? body.data.deviceId.slice(0, 120) : null;
+
+  const diagnosticCode = (error: unknown) => {
+    if (error && typeof error === "object" && "code" in error && typeof error.code === "string") return error.code.slice(0, 80);
+    const message = error instanceof Error ? error.message : String(error || "");
+    if (/permission|row-level|42501/i.test(message)) return "permission_or_rls";
+    if (/schema|table|column|PGRST20|42P01|42703/i.test(message)) return "schema_mismatch";
+    if (/fetch|network|timeout/i.test(message)) return "network";
+    return "sync_failed";
+  };
 
   try {
-    const { error: requestError } = await client.from("account_data_migrations").upsert({ user_id: userId, local_fingerprint: body.fingerprint.slice(0, 160), status: "requested", updated_at: now }, { onConflict: "user_id,local_fingerprint" });
+    const { error: requestError } = await client.from("account_data_migrations").upsert({ user_id: userId, local_fingerprint: body.fingerprint.slice(0, 160), status: "requested", updated_at: now, last_attempt_at: now, last_error_code: null }, { onConflict: "user_id,local_fingerprint" });
     if (requestError) throw requestError;
-    const allTombstones = await applyTombstones(client, userId, validTombstones(body.data.tombstones));
+    if (deviceId) {
+      const device = await client.from("user_devices").upsert({ user_id: userId, device_id: deviceId, last_seen_at: now, last_sync_at: now }, { onConflict: "user_id,device_id" }).select("device_id");
+      if (device.error || device.data?.length !== 1) throw device.error || new Error("El dispositivo no fue confirmado por Supabase");
+    }
+    const allTombstones = await applyTombstones(client, userId, validTombstones(body.data.tombstones), deviceId);
     const deleted = new Set(allTombstones.map((item) => `${item.entityType}:${item.localId}`));
     history = history.filter((item) => !deleted.has(`round:${localId(item)}`));
     players = players.filter((item) => !deleted.has(`frequent_player:${localId(item)}`));
@@ -197,11 +218,11 @@ export async function writeCloudBundle(client: SupabaseClient, userId: string, b
     rivals = rivals.filter((item) => !deleted.has(`rival:${localId(item)}`));
     courses = courses.filter((item) => !deleted.has(`course:${localId(item)}`));
     const writes = await Promise.allSettled([
-      upsertRows(client, "rounds_cloud", history.map((round) => ({ owner_id: userId, local_round_id: localId(round), local_id: localId(round), snapshot: round, updated_at: String(round.updatedAt || round.completedAt || round.date || new Date(0).toISOString()) }))),
-      upsertRows(client, "players", players.map((player) => ({ owner_id: userId, local_id: localId(player), name: String(player.name || "Jugador").slice(0, 120), handicap: player.handicap ?? 0, usage_count: Number(player.uses) || 0, snapshot: player, updated_at: String(player.updatedAt || new Date(0).toISOString()) }))),
-      upsertRows(client, "frequent_groups_cloud", groups.map((group) => ({ owner_id: userId, local_id: localId(group), name: String(group.name || "Grupo").slice(0, 160), snapshot: group, updated_at: String(group.updatedAt || new Date(0).toISOString()) }))),
-      upsertRows(client, "personal_rivals_cloud", rivals.map((rival) => ({ owner_id: userId, local_id: localId(rival), name: String(rival.name || "Rival").slice(0, 120), snapshot: rival, updated_at: String(rival.updatedAt || new Date(0).toISOString()) }))),
-      upsertRows(client, "courses_cloud", courses.map((course) => ({ owner_id: userId, local_id: localId(course), name: String(course.name || "Campo").slice(0, 160), snapshot: course, updated_at: String(course.updatedAt || new Date(0).toISOString()) }))),
+      upsertRows(client, "rounds_cloud", history.map((round) => ({ owner_id: userId, local_round_id: localId(round), local_id: localId(round), snapshot: round, updated_at: String(round.updatedAt || round.completedAt || round.date || new Date(0).toISOString()), updated_by_device: deviceId }))),
+      upsertRows(client, "players", players.map((player) => ({ owner_id: userId, local_id: localId(player), name: String(player.name || "Jugador").slice(0, 120), handicap: player.handicap ?? 0, usage_count: Number(player.uses) || 0, snapshot: player, updated_at: String(player.updatedAt || new Date(0).toISOString()), updated_by_device: deviceId }))),
+      upsertRows(client, "frequent_groups_cloud", groups.map((group) => ({ owner_id: userId, local_id: localId(group), name: String(group.name || "Grupo").slice(0, 160), snapshot: group, updated_at: String(group.updatedAt || new Date(0).toISOString()), updated_by_device: deviceId }))),
+      upsertRows(client, "personal_rivals_cloud", rivals.map((rival) => ({ owner_id: userId, local_id: localId(rival), name: String(rival.name || "Rival").slice(0, 120), snapshot: rival, updated_at: String(rival.updatedAt || new Date(0).toISOString()), updated_by_device: deviceId }))),
+      upsertRows(client, "courses_cloud", courses.map((course) => ({ owner_id: userId, local_id: localId(course), name: String(course.name || "Campo").slice(0, 160), snapshot: course, updated_at: String(course.updatedAt || new Date(0).toISOString()), updated_by_device: deviceId }))),
     ]);
     const failed = writes.find(result => result.status === "rejected");
     if (failed?.status === "rejected") throw failed.reason;
@@ -210,7 +231,7 @@ export async function writeCloudBundle(client: SupabaseClient, userId: string, b
     const canonical = await readCloudBundle(client, userId);
     const requestedIds = new Set(history.map(localId));
     const toProject = canonical.history.filter(round => requestedIds.has(round.id));
-    await projectRoundSnapshots(client, userId, toProject as unknown as Record<string, unknown>[]);
+    await projectRoundSnapshots(client, userId, toProject as unknown as Record<string, unknown>[], deviceId);
     const afterProjection = await readCloudBundle(client, userId);
     if (toProject.some(round => JSON.stringify(afterProjection.history.find(other => other.id === round.id)) !== JSON.stringify(round))) throw new Error("La ronda cambió durante la proyección. Reintenta.");
     const preferences = body.data.preferences;
@@ -221,8 +242,9 @@ export async function writeCloudBundle(client: SupabaseClient, userId: string, b
       notifications_enabled: Boolean(preferences?.notificationsEnabled),
       default_handicap: preferences?.defaultHandicap ?? null,
       updated_at: preferences?.updatedAt || new Date(0).toISOString(),
+      updated_by_device: deviceId,
     });
-    await writeVersionedRow(client, "user_cloud_state", { user_id: userId }, { user_id: userId, active_draft: body.data.activeDraft ?? null, updated_at: body.data.activeDraftUpdatedAt || new Date(0).toISOString() });
+    await writeVersionedRow(client, "user_cloud_state", { user_id: userId }, { user_id: userId, active_draft: body.data.activeDraft ?? null, updated_at: body.data.activeDraftUpdatedAt || new Date(0).toISOString(), updated_by_device: deviceId });
     // A deletion can arrive after the first read. Sweep again; GET also filters
     // permanent tombstones so a concurrent stale insert is never resurrected UI.
     await applyTombstones(client, userId, []);
@@ -232,12 +254,14 @@ export async function writeCloudBundle(client: SupabaseClient, userId: string, b
       status: "completed",
       imported_round_ids: history.map(localId),
       updated_at: now,
+      last_attempt_at: now,
+      last_error_code: null,
     }, { onConflict: "user_id,local_fingerprint" });
     if (migrationError) throw migrationError;
     return { ok: true, fingerprint: body.fingerprint };
   } catch (error) {
     const message = error instanceof Error ? error.message : "No fue posible sincronizar los datos.";
-    try { await client.from("account_data_migrations").upsert({ user_id: userId, local_fingerprint: body.fingerprint.slice(0, 160), status: "failed", updated_at: now }, { onConflict: "user_id,local_fingerprint" }); } catch { /* Original failure remains visible even if its diagnostic write fails. */ }
+    try { await client.from("account_data_migrations").upsert({ user_id: userId, local_fingerprint: body.fingerprint.slice(0, 160), status: "failed", updated_at: now, last_attempt_at: now, last_error_code: diagnosticCode(error) }, { onConflict: "user_id,local_fingerprint" }); } catch { /* Original failure remains visible even if its diagnostic write fails. */ }
     throw new Error(message);
   }
 }

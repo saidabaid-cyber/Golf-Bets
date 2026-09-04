@@ -51,11 +51,18 @@ export type RivalHistory = {
   name: string;
   total: number;
   rounds: number;
+  bets: number;
   wins: number;
   losses: number;
   ties: number;
+  wonMoney: number;
+  lostMoney: number;
   matchMoney: number;
   medalMoney: number;
+  pressureMoney: number;
+  firstMoney: number;
+  secondMoney: number;
+  total18Money: number;
   records: RivalHistoryRound[];
 };
 
@@ -92,7 +99,7 @@ export function buildPersonalHistory(
     // A rival can be shared by different principal players on this device.
     // Round-local player IDs are not stable across rounds; snapshot names are.
     const key = `${nameKey(round.ownerName)}::${stableId ? `template:${stableId}` : `name:${normalizedName || result.rivalKey}`}`;
-    const rival = rivals.get(key) || { key, name: result.rivalName, total: 0, rounds: 0, wins: 0, losses: 0, ties: 0, matchMoney: 0, medalMoney: 0, records: [] };
+    const rival = rivals.get(key) || { key, name: result.rivalName, total: 0, rounds: 0, bets: 0, wins: 0, losses: 0, ties: 0, wonMoney: 0, lostMoney: 0, matchMoney: 0, medalMoney: 0, pressureMoney: 0, firstMoney: 0, secondMoney: 0, total18Money: 0, records: [] };
     let record = rival.records.find((item) => item.roundId === round.id);
     if (!record) {
       record = { roundId: round.id, date: round.date, courseName: round.courseName, ownerName: round.ownerName, totalMoney: 0, entries: [] };
@@ -101,11 +108,25 @@ export function buildPersonalHistory(
     const componentMoney = result.componentMoney || {};
     const matchMoney = Object.entries(componentMoney).filter(([key]) => key.startsWith("match")).reduce((sum, [, value]) => sum + value, 0);
     const medalMoney = Object.entries(componentMoney).filter(([key]) => key.startsWith("medal")).reduce((sum, [, value]) => sum + value, 0);
+    const firstMoney = (componentMoney.match1 || 0) + (componentMoney.medal1 || 0);
+    const secondMoney = (componentMoney.match2 || 0) + (componentMoney.medal2 || 0);
+    const total18Money = (componentMoney.match18 || 0) + (componentMoney.medal18 || 0);
+    const pressureMultiplier = Math.max(1, bet?.pressureMultiplier ?? bet?.back9Multiplier ?? 1);
+    const pressurePerWonComponent = (bet?.baseValue || 0) * (pressureMultiplier - 1);
+    const pressureMoney = [componentMoney.match2 || 0, componentMoney.medal2 || 0]
+      .reduce((sum, amount) => sum + (amount > 0 ? pressurePerWonComponent : amount < 0 ? -pressurePerWonComponent : 0), 0);
     record.entries.push({ ...result, resultIndex, rivalHandicap: handicap, betSnapshot: bet, matchMoney, medalMoney });
     record.totalMoney += result.totalMoney;
     rival.total += result.totalMoney;
+    rival.bets += 1;
+    rival.wonMoney += Math.max(0, result.totalMoney);
+    rival.lostMoney += Math.max(0, -result.totalMoney);
     rival.matchMoney += matchMoney;
     rival.medalMoney += medalMoney;
+    rival.pressureMoney += pressureMoney;
+    rival.firstMoney += firstMoney;
+    rival.secondMoney += secondMoney;
+    rival.total18Money += total18Money;
     rivals.set(key, rival);
   }
   for (const rival of rivals.values()) {

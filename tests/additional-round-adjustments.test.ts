@@ -3,7 +3,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { calculateLoba } from "../lib/side-bets";
 import { collectHoleValidationErrors } from "../lib/hole-validation";
-import { buildGeneralResultsTable, type ResultCategoryColumn } from "../lib/result-breakdown";
+import {
+  buildGeneralResultsTable,
+  pollaDetailBalances,
+  pollaPositionLabels,
+  type ResultCategoryColumn,
+} from "../lib/result-breakdown";
+import type { MedalPollaDetail } from "../lib/engine";
 import type { BetConfig, Course, HoleScore, LobaHole, Player } from "../lib/types";
 import { emptyCounterBetKeepers } from "../lib/side-bets";
 import { fullRoundBets, fullRoundPlayers } from "./fixtures/full-round";
@@ -131,6 +137,28 @@ test("Resumen General usa categorías dinámicas, total consolidado y total gene
   assert.deepEqual(result.rows.map(row => row.total), [200, -200]);
   assert.ok(result.rows.every(row => row.consistent));
   assert.deepEqual(result.categoryTotals, { rabbits: 0, skins: 0 });
+  assert.equal(result.grandTotal, 0);
+});
+
+test("Resumen General conserva las cuatro Pollas independientes con posición y suma cero", () => {
+  const detail: MedalPollaDetail = { key: "first9", label: "Polla H1–9", holes: [1,2,3,4,5,6,7,8,9], value: 100, complete: true, totals: { said: 35, juan: 36, pedro: 36 }, winnerIds: ["said"], grossPrizePerWinner: 300 };
+  const first = pollaDetailBalances(detail);
+  const second = { said: -100, juan: 200, pedro: -100 };
+  const nassau = { said: 0, juan: -100, pedro: 100 };
+  const mini = { said: -50, juan: -50, pedro: 100 };
+  const categories: ResultCategoryColumn[] = [
+    { key: "p1", label: "Polla 1ª vuelta", balances: first, active: true, played: true, detailByPlayer: pollaPositionLabels(detail, ["said", "juan", "pedro"]) },
+    { key: "p2", label: "Polla 2ª vuelta", balances: second, active: true, played: true },
+    { key: "pn", label: "Polla Nassau", balances: nassau, active: true, played: true },
+    { key: "mini", label: "Mini Polla", balances: mini, active: true, played: true },
+  ];
+  const consolidated = { said: 50, juan: -50, pedro: 0 };
+  const result = buildGeneralResultsTable(["said", "juan", "pedro"], categories, consolidated);
+  assert.deepEqual(result.categories.map(category => category.label), ["Polla 1ª vuelta", "Polla 2ª vuelta", "Polla Nassau", "Mini Polla"]);
+  assert.equal(categories[0].detailByPlayer?.said, "Ganó");
+  assert.equal(categories[0].detailByPlayer?.juan, "Empate · 2º");
+  assert.ok(Object.values(result.categoryTotals).every(total => total === 0));
+  assert.ok(result.rows.every(row => row.consistent));
   assert.equal(result.grandTotal, 0);
 });
 

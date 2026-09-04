@@ -18,7 +18,7 @@ export async function GET(request: Request, context: RouteContext<"/api/rules/do
   if (!document) return new Response("Documento no encontrado.", { status: 404 });
 
   if (process.env.NODE_ENV === "production" || !localRequest(request)) {
-    return officialPdfResponse(document);
+    return officialPdfResponse(document, fetch, request.headers.get("range") || "");
   }
 
   for (const folder of ["rules-source", "rules-sources"]) {
@@ -40,5 +40,5 @@ export async function GET(request: Request, context: RouteContext<"/api/rules/do
     }
   }
 
-  return officialPdfResponse(document);
+  return officialPdfResponse(document, fetch, request.headers.get("range") || "");
 }

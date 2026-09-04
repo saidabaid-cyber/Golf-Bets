@@ -155,12 +155,23 @@ export function calculateRabbits(
     if (!winners.length) continue;
 
     const uniqueWinner = winners.length === 1 ? winners[0] : null;
+    const finalPlayedHole = hole === order.at(-1);
     let rabbitWonBy: string | null = null;
 
     if (rabbitHole === 1) {
       if (uniqueWinner) {
         holder = uniqueWinner;
         events.push({ hole, type: "grab", playerId: holder });
+        // A rabbit opened on the last played hole cannot be defended on a
+        // later hole. A valid outright grab therefore settles it immediately.
+        if (finalPlayedHole) {
+          won[holder] = (won[holder] ?? 0) + pending;
+          events.push({ hole, type: "win", playerId: holder, count: pending });
+          pending = 1;
+          holder = null;
+          rabbitHole = 1;
+          continue;
+        }
       } else {
         holder = null;
         events.push({ hole, type: "free" });

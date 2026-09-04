@@ -176,7 +176,7 @@ test("Reglas dejan IA/directorio plegables, recursos como accesos directos y vid
 test("PDF falla de forma recuperable, enlaza fuente real, canvas limitado para iPhone", async () => {
   const viewer=readFileSync("app/components/internal-pdf-viewer.tsx","utf8");
   assert.match(viewer,/Ver fuente oficial ↗/); assert.match(viewer,/href=\{document.officialUrl\}/);
-  assert.match(viewer,/← Regresar a Reglas/); assert.match(viewer,/Array\.from\(\{ length: pdf\.numPages \}/);
+  assert.match(viewer,/← Regresar a Reglas/); assert.match(viewer,/Array\.from\(\{ length: logicalPageCount \}/);
   assert.ok(2000*3000*pdfPixelRatio(2000,3000,3)**2<=4_000_001);
   assert.equal(await withPdfDeadline(Promise.resolve(7),20),7);
   await assert.rejects(withPdfDeadline(new Promise(()=>undefined),5),/PDF timeout/);

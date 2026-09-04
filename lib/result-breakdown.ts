@@ -8,11 +8,36 @@ export type ResultCategoryColumn = {
   balances: Record<string, number>;
   active: boolean;
   played: boolean;
+  quantityTotal?: number;
+  quantities?: Record<string, number>;
+  quantityLabel?: string;
+  signedQuantity?: boolean;
+  detailByPlayer?: Record<string, string>;
 };
 
 export function pollaDetailBalance(detail: MedalPollaDetail, playerId: string) {
   if (!detail.complete || !Object.hasOwn(detail.totals, playerId)) return 0;
   return -detail.value + (detail.winnerIds.includes(playerId) ? detail.grossPrizePerWinner : 0);
+}
+
+export function pollaDetailBalances(detail: MedalPollaDetail | undefined) {
+  if (!detail) return {} as Record<string, number>;
+  return Object.fromEntries(Object.keys(detail.totals).map(playerId => [playerId, pollaDetailBalance(detail, playerId)]));
+}
+
+export function pollaPositionLabel(detail: MedalPollaDetail | undefined, playerId: string) {
+  if (!detail || !Object.hasOwn(detail.totals, playerId)) return "";
+  if (!detail.complete) return "Pendiente";
+  const score = detail.totals[playerId];
+  const rankedScores = [...new Set(Object.values(detail.totals).sort((a, b) => a - b))];
+  const position = rankedScores.indexOf(score) + 1;
+  const tied = Object.values(detail.totals).filter(value => Math.abs(value - score) < MONEY_EPSILON).length > 1;
+  if (position === 1) return tied ? "Empate 1º" : "Ganó";
+  return `${tied ? "Empate · " : ""}${position}º`;
+}
+
+export function pollaPositionLabels(detail: MedalPollaDetail | undefined, playerIds: string[]) {
+  return Object.fromEntries(playerIds.map(playerId => [playerId, pollaPositionLabel(detail, playerId)]));
 }
 
 export function buildGeneralResultsTable(

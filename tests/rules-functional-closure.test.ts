@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { browseRulesSource, searchRulesCorpus, searchRulesDocumentPages } from "../lib/rules-search";
 import { searchNavigableRules } from "../lib/rules-navigation";
 import { createDictationSession, DICTATION_NO_RESULT, speechRecognitionErrorMessage, type SpeechRecognitionLike } from "../lib/speech-dictation";
+import { OFFICIAL_RULES_DOCUMENTS } from "../lib/rules-documents";
 
 test("Búsquedas reales: número, subregla, título, sinónimos y acentos",()=>{
   for(const [query,reference] of [["16.1","16.1"],["bola provisional","18.3"],["cart path","16.1"],["OB","18"],["drop","14.3"],["bola injugable","19"],["ÁREA DE PENALIDAD","17"],["aspersor","16"],["7.3","7.3"]]) {
@@ -22,11 +23,22 @@ test("Búsqueda no corta coincidencias a12 ni subreglas a18; incluye Comité y A
 });
 test("Visor PDF usa canvas interno, solo carga al abrir, con navegación, zoom y limpieza",()=>{
   const viewer=readFileSync("app/components/internal-pdf-viewer.tsx","utf8"), panel=readFileSync("app/components/rules-panel.tsx","utf8");
-  assert.match(viewer,/import\("pdfjs-dist\/legacy\/build\/pdf.mjs"\)/);assert.match(viewer,/getDocument\(\{ url: document.localUrl \}\)/);
+  assert.match(viewer,/import\("pdfjs-dist\/legacy\/build\/pdf.mjs"\)/);assert.match(viewer,/getDocument\(\{ url: document.localUrl/);
   assert.match(viewer,/← Regresar a Reglas/);assert.match(viewer,/<canvas/);assert.match(viewer,/render\?\.cancel\(\)/);assert.match(viewer,/task\?\.destroy\(\)/);
   assert.match(panel,/selectedDocument && <InternalPdfViewer/);assert.doesNotMatch(panel,/<iframe src=\{selectedDocument/);
   const route=readFileSync("app/api/rules/documents/[id]/route.ts","utf8")+readFileSync("lib/pdf-proxy.ts","utf8");
   assert.match(route,/cache: "no-store"/);assert.match(route,/s-maxage=86400/);
+});
+test("Parte 1 y Parte 2 usan el espejo oficial estable de FMG con ventanas de páginas correctas",()=>{
+  const [part1,part2,clarifications]=OFFICIAL_RULES_DOCUMENTS;
+  assert.match(part1.officialUrl,/^https:\/\/www\.fmg\.org\.mx\//);
+  assert.equal(part1.officialUrl,part2.officialUrl);
+  assert.deepEqual([part1.pageOffset,part1.pageCount],[0,410]);
+  assert.deepEqual([part2.pageOffset,part2.pageCount],[410,172]);
+  assert.match(clarifications.officialUrl,/^https:\/\/assets\.randa\.org\//);
+  const viewer=readFileSync("app/components/internal-pdf-viewer.tsx","utf8");
+  assert.match(viewer,/pdf\.getPage\(pageNumber \+ pageOffset\)/);
+  assert.match(viewer,/pdfPageNumber=\{pageOffset \+ index \+ 1\}/);
 });
 test("visor PDF usa índice local por página, incluso si Safari no expone capa de texto",()=>{
   const viewer=readFileSync("app/components/internal-pdf-viewer.tsx","utf8");

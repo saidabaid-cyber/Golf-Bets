@@ -7,9 +7,10 @@ import { countPdfTextMatches, pdfPixelRatio, withPdfDeadline } from "../../lib/p
 
 type SearchMatch = { page: number; count: number; excerpt?: string };
 
-function PdfPage({ pdf, pageNumber, width, zoom, title, scrollRoot, highlighted, onVisible }: {
+function PdfPage({ pdf, pageNumber, pdfPageNumber, width, zoom, title, scrollRoot, highlighted, onVisible }: {
   pdf: PDFDocumentProxy;
   pageNumber: number;
+  pdfPageNumber: number;
   width: number;
   zoom: number;
   title: string;
@@ -45,7 +46,7 @@ function PdfPage({ pdf, pageNumber, width, zoom, title, scrollRoot, highlighted,
     let cancelled = false;
     let render: RenderTask | undefined;
     setError(false);
-    withPdfDeadline(pdf.getPage(pageNumber), 12_000).then(async (source) => {
+    withPdfDeadline(pdf.getPage(pdfPageNumber), 12_000).then(async (source) => {
       if (cancelled || !canvas.current) return;
       const base = source.getViewport({ scale: 1 });
       setAspectRatio(base.height / base.width);
@@ -61,7 +62,7 @@ function PdfPage({ pdf, pageNumber, width, zoom, title, scrollRoot, highlighted,
       if (!cancelled && reason?.name !== "RenderingCancelledException") setError(true);
     });
     return () => { cancelled = true; render?.cancel(); };
-  }, [nearViewport, pageNumber, pdf, width, zoom]);
+  }, [nearViewport, pageNumber, pdf, pdfPageNumber, width, zoom]);
 
   const pageWidth = Math.max(200, width * zoom);
   return <article ref={host} id={`pdf-page-${pageNumber}`} className={`pdfDocumentPage ${highlighted ? "searchMatch" : ""}`} style={{ minHeight: Math.round(pageWidth * aspectRatio) }}>
@@ -88,6 +89,8 @@ export function InternalPdfViewer({ document, initialPage = 1, onBack }: { docum
   const [matchIndex, setMatchIndex] = useState(0);
   const [textUnavailable, setTextUnavailable] = useState(false);
   const [searchSource, setSearchSource] = useState<"index" | "pdf" | "">("");
+  const pageOffset = document.pageOffset || 0;
+  const logicalPageCount = pdf ? Math.max(0, Math.min(document.pageCount || pdf.numPages, pdf.numPages - pageOffset)) : 0;
 
   useEffect(() => {
     let disposed = false;
@@ -96,7 +99,10 @@ export function InternalPdfViewer({ document, initialPage = 1, onBack }: { docum
     import("pdfjs-dist/legacy/build/pdf.mjs").then(async (library) => {
       if (disposed) return;
       library.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.min.mjs", import.meta.url).toString();
-      let loadingTask = library.getDocument({ url: document.localUrl });
+      // Disable the full streaming body after headers so large guides are
+      // fetched in byte ranges. This avoids Vercel's large Function payload
+      // limit and is materially more reliable on Safari/iPhone.
+      let loadingTask = library.getDocument({ url: document.localUrl, disableStream: true, rangeChunkSize: 1_048_576 });
       task = loadingTask;
       let loaded: PDFDocumentProxy;
       try {
@@ -110,7 +116,8 @@ export function InternalPdfViewer({ document, initialPage = 1, onBack }: { docum
       }
       if (!disposed) {
         setPdf(loaded);
-        setCurrentPage(Math.min(Math.max(1, initialPage), loaded.numPages));
+        const availablePages = Math.max(1, Math.min(document.pageCount || loaded.numPages, loaded.numPages - (document.pageOffset || 0)));
+        setCurrentPage(Math.min(Math.max(1, initialPage), availablePages));
         setLoading(false);
       }
     }).catch(() => {
@@ -121,7 +128,7 @@ export function InternalPdfViewer({ document, initialPage = 1, onBack }: { docum
       searchGeneration.current += 1;
       void task?.destroy();
     };
-  }, [document.localUrl, document.officialUrl, initialPage, retry]);
+  }, [document.localUrl, document.officialUrl, document.pageCount, document.pageOffset, initialPage, retry]);
 
   useEffect(() => {
     const previous = window.document.body.style.overflow;
@@ -151,9 +158,9 @@ export function InternalPdfViewer({ document, initialPage = 1, onBack }: { docum
 
   useEffect(() => {
     if (!pdf) return;
-    const timer = window.setTimeout(() => scrollToPage(Math.min(Math.max(1, initialPage), pdf.numPages)), 80);
+    const timer = window.setTimeout(() => scrollToPage(Math.min(Math.max(1, initialPage), logicalPageCount)), 80);
     return () => window.clearTimeout(timer);
-  }, [initialPage, pdf, scrollToPage]);
+  }, [initialPage, logicalPageCount, pdf, scrollToPage]);
 
   async function searchDocument(event: FormEvent) {
     event.preventDefault();
@@ -175,15 +182,15 @@ export function InternalPdfViewer({ document, initialPage = 1, onBack }: { docum
     } catch {
       let extractedCharacters = 0;
       const found: SearchMatch[] = [];
-      for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+      for (let pageNumber = 1; pageNumber <= logicalPageCount; pageNumber += 1) {
         if (generation !== searchGeneration.current) return;
-        const page = await pdf.getPage(pageNumber);
+        const page = await pdf.getPage(pageNumber + pageOffset);
         const content = await page.getTextContent();
         const text = content.items.map((item) => "str" in item ? item.str : "").join(" ");
         extractedCharacters += text.trim().length;
         const count = countPdfTextMatches(text, query);
         if (count) found.push({ page: pageNumber, count });
-        if (pageNumber % 5 === 0 || pageNumber === pdf.numPages) setSearchProgress(pageNumber);
+        if (pageNumber % 5 === 0 || pageNumber === logicalPageCount) setSearchProgress(pageNumber);
         if (pageNumber % 12 === 0) await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       }
       if (generation !== searchGeneration.current) return;
@@ -205,15 +212,15 @@ export function InternalPdfViewer({ document, initialPage = 1, onBack }: { docum
 
   return <section className="pdfInternalViewer" role="dialog" aria-modal="true" aria-label={document.title}>
     <header className="pdfInternalHeader">
-      <div className="pdfHeaderTop"><button autoFocus className="secondary" onClick={onBack}>← Regresar a Reglas</button><div><h2>{document.title}</h2>{pdf && <small>Página visible {currentPage} de {pdf.numPages}</small>}</div></div>
-      {pdf && <div className="pdfToolbar"><button className="secondary" aria-label="Reducir zoom" disabled={zoom <= .75} onClick={() => setZoom((value) => Math.max(.75, value - .25))}>−</button><b>{Math.round(zoom * 100)}%</b><button className="secondary" aria-label="Ampliar zoom" disabled={zoom >= 2} onClick={() => setZoom((value) => Math.min(2, value + .25))}>+</button><form className="pdfSearch" onSubmit={searchDocument}><label className="srOnly" htmlFor="pdf-search">Buscar en documento</label><input id="pdf-search" type="search" value={search} placeholder="Buscar en documento" onChange={(event) => { setSearch(event.target.value); setSearchCompleted(false); }} /><button className="primary" disabled={searching || !search.trim()}>{searching ? `${searchProgress}/${pdf.numPages}` : "Buscar"}</button></form></div>}
+      <div className="pdfHeaderTop"><button autoFocus className="secondary" onClick={onBack}>← Regresar a Reglas</button><div><h2>{document.title}</h2>{pdf && <small>Página visible {currentPage} de {logicalPageCount}</small>}</div></div>
+      {pdf && <div className="pdfToolbar"><button className="secondary" aria-label="Reducir zoom" disabled={zoom <= .75} onClick={() => setZoom((value) => Math.max(.75, value - .25))}>−</button><b>{Math.round(zoom * 100)}%</b><button className="secondary" aria-label="Ampliar zoom" disabled={zoom >= 2} onClick={() => setZoom((value) => Math.min(2, value + .25))}>+</button><form className="pdfSearch" onSubmit={searchDocument}><label className="srOnly" htmlFor="pdf-search">Buscar en documento</label><input id="pdf-search" type="search" value={search} placeholder="Buscar en documento" onChange={(event) => { setSearch(event.target.value); setSearchCompleted(false); }} /><button className="primary" disabled={searching || !search.trim()}>{searching ? `${searchProgress}/${logicalPageCount}` : "Buscar"}</button></form></div>}
       {(textUnavailable || matches.length > 0 || searchCompleted) && <div className="pdfSearchResults" role="status">{textUnavailable ? "Este documento no ofrece texto buscable en el PDF ni en el índice local." : matches.length ? <><span>{totalMatches} coincidencia{totalMatches === 1 ? "" : "s"} en {matches.length} página{matches.length === 1 ? "" : "s"}{searchSource === "index" ? " · índice local" : ""}</span><div><button className="secondary" onClick={() => moveMatch(-1)}>‹ Anterior</button><button className="secondary" onClick={() => moveMatch(1)}>Siguiente ›</button></div></> : "Sin coincidencias."}</div>}
     </header>
     {loading && <div className="pdfStatus" role="status">Cargando documento…</div>}
     {error && <div className="pdfStatus" role="alert">{error}<button className="secondary" onClick={() => setRetry((value) => value + 1)}>Reintentar</button></div>}
     <a className={error ? "primary pdfOfficialFallback" : "pdfOfficialFallback"} href={document.officialUrl} target="_blank" rel="noopener noreferrer">Ver fuente oficial ↗</a>
     <div className="pdfPages" ref={container}>
-      {pdf && !error && Array.from({ length: pdf.numPages }, (_, index) => <PdfPage key={index + 1} pdf={pdf} pageNumber={index + 1} width={width} zoom={zoom} title={document.title} scrollRoot={container} highlighted={highlightedPages.has(index + 1)} onVisible={markVisible} />)}
+      {pdf && !error && Array.from({ length: logicalPageCount }, (_, index) => <PdfPage key={index + 1} pdf={pdf} pageNumber={index + 1} pdfPageNumber={pageOffset + index + 1} width={width} zoom={zoom} title={document.title} scrollRoot={container} highlighted={highlightedPages.has(index + 1)} onVisible={markVisible} />)}
     </div>
   </section>;
 }

@@ -13,8 +13,9 @@ export class CloudDb {
 class Query {
   op = "select"; payload: Row[] = []; filters: Array<(row: Row) => boolean> = [];
   first = 0; last = 999; single = false; conflict = ""; ignored = false;
+  selectedColumns = "*";
   constructor(private db: CloudDb, private table: string) {}
-  select() { return this; }
+  select(columns = "*") { this.selectedColumns = columns; return this; }
   eq(key: string, value: unknown) { this.filters.push(row => row[key] === value); return this; }
   not(key: string) { this.filters.push(row => row[key] != null); return this; }
   in(key: string, values: unknown[]) { this.filters.push(row => values.includes(row[key])); return this; }
@@ -29,9 +30,16 @@ class Query {
   delete() { this.op = "delete"; return this; }
   async execute() {
     this.db.calls.push({ table: this.table, op: this.op }); this.db.before?.(this.table, this.op);
+    const knownColumns: Record<string, Set<string>> = {
+      round_scores_cloud: new Set(["round_player_id", "hole", "score", "updated_at", "version", "updated_by_device"]),
+    };
+    const selected = this.selectedColumns === "*" ? [] : this.selectedColumns.split(",").map(column => column.trim());
+    const invalid = knownColumns[this.table] && selected.find(column => !knownColumns[this.table].has(column));
+    if (invalid) return { error: Object.assign(new Error(`column ${this.table}.${invalid} does not exist`), { code: "42703" }), data: null };
     if (this.db.fail?.(this.table, this.op, this.payload)) return { error: new Error("Injected Supabase failure"), data: null };
     const rows = this.db.rows(this.table), matches = rows.filter(row => this.filters.every(filter => filter(row)));
-    if (this.op === "select") return { error: null, data: structuredClone(this.single ? matches[0] || null : matches.slice(this.first, this.last + 1)) };
+    const project = (row: Row) => selected.length ? Object.fromEntries(selected.map(column => [column, row[column]])) : row;
+    if (this.op === "select") return { error: null, data: structuredClone(this.single ? (matches[0] ? project(matches[0]) : null) : matches.slice(this.first, this.last + 1).map(project)) };
     if (this.op === "delete") {
       this.db.tables[this.table] = rows.filter(row => !matches.includes(row));
       if (this.table === "round_players_cloud") this.db.tables.round_scores_cloud = this.db.rows("round_scores_cloud").filter(score => !matches.some(player => player.id === score.round_player_id));
@@ -40,13 +48,18 @@ class Query {
     if (this.op === "update") { for (const row of matches) Object.assign(row, structuredClone(this.payload[0])); return { error: null, data: matches }; }
     const written = [];
     for (const row of this.payload) {
-      const keys = this.conflict ? this.conflict.split(",") : this.table === "round_players_cloud" ? ["round_id", "local_player_id"] : this.table === "round_scores_cloud" ? ["round_player_id", "hole"] : row.local_id ? ["owner_id", "local_id"] : row.round_id ? ["round_id"] : row.user_id ? ["user_id"] : row.id ? ["id"] : [];
+      const keys = this.conflict ? this.conflict.split(",") : this.table === "round_players_cloud" ? ["round_id", "local_player_id"] : this.table === "round_scores_cloud" ? ["round_player_id", "hole"] : this.table === "user_devices" ? ["user_id", "device_id"] : row.local_id ? ["owner_id", "local_id"] : row.round_id ? ["round_id"] : row.user_id ? ["user_id"] : row.id ? ["id"] : [];
       const existing = keys.length ? rows.find(other => keys.every(key => other[key] === row[key])) : undefined;
       if (existing && this.op === "insert") return { error: new Error("Unique conflict"), data: null };
       if (existing) { if (!this.ignored) Object.assign(existing, structuredClone(row)); written.push(existing); }
-      else { const created = { id: "generated-" + (++this.db.seq), ...structuredClone(row) }; rows.push(created); written.push(created); }
+      else {
+        const created = this.table === "round_scores_cloud"
+          ? structuredClone(row)
+          : { id: "generated-" + (++this.db.seq), ...structuredClone(row) };
+        rows.push(created); written.push(created);
+      }
     }
-    return { error: null, data: written };
+    return { error: null, data: written.map(project) };
   }
   then(resolve: (value: unknown) => unknown, reject?: (error: unknown) => unknown) { return this.execute().then(resolve, reject); }
 }

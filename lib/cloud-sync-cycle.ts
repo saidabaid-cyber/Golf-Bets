@@ -1,6 +1,6 @@
 import { cloudDataFingerprint, mergeLocalAndCloud, type CloudDataBundle } from "./cloud-sync";
 
-export type SyncStatus = "local" | "syncing" | "synced" | "pending" | "error";
+export type SyncStatus = "local" | "saving" | "offline" | "syncing" | "synced" | "pending" | "error";
 type CycleOptions = {
   read: () => CloudDataBundle;
   download: () => Promise<CloudDataBundle>;
@@ -9,6 +9,7 @@ type CycleOptions = {
   apply: (bundle: CloudDataBundle) => void;
   current: () => boolean;
   status: (value: SyncStatus) => void;
+  conflicts?: (local: CloudDataBundle, remote: CloudDataBundle) => boolean;
 };
 
 /** One acknowledged cycle. Re-read before merging and before applying so UI
@@ -19,6 +20,10 @@ export async function runCloudSyncCycle(options: CycleOptions) {
     check(); options.status("syncing");
     const remote = await options.download(); check();
     const before = options.read();
+    if (options.conflicts?.(before, remote)) {
+      options.status("pending");
+      return false;
+    }
     const merged = mergeLocalAndCloud(before, remote);
     await options.upload(merged); check();
     // Refetch the canonical result: another device may have won a conflict.

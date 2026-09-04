@@ -24,6 +24,24 @@ test("proxy rechaza HTML 200, conserva fallback y diagnóstico recuperable", asy
   const response = await officialPdfResponse(OFFICIAL_RULES_DOCUMENTS[0], async () => new Response("<html>not a PDF</html>"));
   assert.equal(response.status, 502); assert.equal(response.headers.get("x-rules-source-status"), "invalid-pdf");
 });
+test("proxy transmite rangos reales para que PDF.js no descargue 17 MB en una sola Function", async () => {
+  const bytes = new TextEncoder().encode("chunk-at-offset");
+  let range = "";
+  const response = await officialPdfResponse(OFFICIAL_RULES_DOCUMENTS[0], async (_url, init) => {
+    range = new Headers(init?.headers).get("range") || "";
+    return new Response(bytes, { status: 206, headers: {
+      "content-type": "application/pdf",
+      "content-range": "bytes 1048576-1048590/17679342",
+      "content-length": String(bytes.length),
+      "accept-ranges": "bytes",
+    } });
+  }, "bytes=1048576-1048590");
+  assert.equal(range, "bytes=1048576-1048590");
+  assert.equal(response.status, 206);
+  assert.equal(response.headers.get("content-range"), "bytes 1048576-1048590/17679342");
+  assert.equal(response.headers.get("content-length"), String(bytes.length));
+  assert.equal(await response.text(), "chunk-at-offset");
+});
 test("timeout aborta petición y permite reintentar, sin depender de AbortSignal.any", async () => {
   const original = globalThis.fetch;
   try {

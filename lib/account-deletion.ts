@@ -8,6 +8,8 @@ export const ACCOUNT_OWNED_ROWS = [
   ["legal_acceptances", "user_id"],
   ["user_preferences", "user_id"],
   ["user_cloud_state", "user_id"],
+  ["user_devices", "user_id"],
+  ["cloud_record_versions", "owner_id"],
   ["cloud_deletions", "owner_id"],
   ["frequent_groups_cloud", "owner_id"],
   ["personal_rivals_cloud", "owner_id"],

@@ -73,6 +73,26 @@ export const ACCOUNT_STORAGE_KEYS = {
   migrationDecision: "backyard-local-migration-decision-v1",
 } as const;
 
+type OfflineProfileStorage = Pick<Storage, "getItem">;
+
+/** Restore only non-sensitive display data for an already selected local
+ * workspace. This is not an authenticated session and never contains a JWT. */
+export function readOfflineAuthenticatedProfile(storage: OfflineProfileStorage, userId: string): BackyardProfile | null {
+  if (!userId || userId === "guest" || storage.getItem(ACCOUNT_STORAGE_KEYS.mode) !== "authenticated") return null;
+  try {
+    const cached = JSON.parse(storage.getItem(`backyard-profile-cache-v1:${userId}`) || "null");
+    if (!cached || typeof cached !== "object") return null;
+    const displayName = typeof cached.displayName === "string" && cached.displayName.trim() ? cached.displayName.trim() : "Jugador";
+    return {
+      userId,
+      displayName,
+      email: typeof cached.email === "string" ? cached.email : "",
+      avatarUrl: typeof cached.avatarUrl === "string" ? cached.avatarUrl : "",
+      defaultHandicap: cached.defaultHandicap === null || (typeof cached.defaultHandicap === "number" && Number.isFinite(cached.defaultHandicap)) ? cached.defaultHandicap : null,
+    };
+  } catch { return null; }
+}
+
 export function migrationDecisionStorageKey(userId: string) {
   return `${ACCOUNT_STORAGE_KEYS.migrationDecision}:${userId}`;
 }

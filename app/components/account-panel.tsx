@@ -55,10 +55,10 @@ export function AccountPanel({ highContrast, onHighContrastChange }: { highContr
 
     {identity.mode === "authenticated" && <section className="card cloudAccountStatus" aria-label="Estado de la cuenta">
       <h2>Sesión iniciada</h2>
-      <p role="status">{cloudStatus === "synced" ? "Nube conectada · Sincronizado ✓" : cloudStatus === "syncing" ? "Sincronizando con la nube…" : cloudStatus === "error" ? "Error de sincronización · Tu copia local se conserva" : cloudLinked ? "Sincronización pendiente" : "Datos locales · Nube sin vincular"}</p>
+      <p role="status">{cloudStatus === "synced" ? "Guardado en la nube ✓" : cloudStatus === "syncing" ? "Sincronizando con la nube…" : cloudStatus === "saving" ? "Guardando en este dispositivo…" : cloudStatus === "offline" ? "Sin conexión · Pendiente de sincronizar" : cloudStatus === "error" ? "Error de sincronización · Tu copia local se conserva" : cloudLinked ? "Pendiente de sincronizar" : "Guardado en este dispositivo · Nube sin vincular"}</p>
       {lastCloudSync && <p className="hint">Última sincronización confirmada: {new Date(lastCloudSync).toLocaleString("es-MX")}</p>}
       {cloudError && <p className="bad">{cloudError}</p>}
-      {cloudLinked && <button className="secondary" disabled={cloudStatus === "syncing"} onClick={retryCloudSync}>Reintentar sincronización</button>}
+      {cloudLinked && <button className="secondary" disabled={cloudStatus === "syncing" || cloudStatus === "saving"} onClick={retryCloudSync}>Reintentar sincronización</button>}
     </section>}
     {identity.mode === "authenticated" && !cloudLinked && <section className="card"><h2>Sincronización</h2><p>Tus datos siguen seguros en este dispositivo. Puedes vincularlos a tu cuenta cuando la nube esté configurada.</p><button className="primary" onClick={requestCloudLink}>Vincular datos locales</button></section>}
 

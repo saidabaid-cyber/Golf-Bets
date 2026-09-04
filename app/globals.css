@@ -94,3 +94,15 @@ button:disabled{cursor:not-allowed;opacity:.5}.app{padding-top:calc(14px + env(s
 /* El menú inferior conserva legibilidad WCAG aun en el ancho mínimo de iPhone. */
 .bottomNav button{color:#5f6963}
 @media(max-width:430px){.bottomNav button{font-size:9px}}
+/* Offline status stays above the app chrome and respects the iPhone notch. */
+.offlineBanner {
+  position: sticky;
+  top: 0;
+  z-index: 120;
+  padding: calc(.45rem + env(safe-area-inset-top)) 1rem .45rem;
+  background: #8a5a00;
+  color: #fff;
+  text-align: center;
+  font-size: .82rem;
+  font-weight: 750;
+}

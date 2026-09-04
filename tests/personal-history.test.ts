@@ -97,6 +97,41 @@ test("Match y Medal suman importes ya presionados sin aplicar otra vez el multip
   assert.deepEqual([row.total, row.matchMoney, row.medalMoney], [600, 300, 300]);
 });
 
+test("análisis por rival separa apuestas, ganado, perdido, press y tramos sin duplicar rondas", () => {
+  const pressured = snapshotPersonalResult(bet, {
+    totalMoney: 600,
+    componentMoney: { match1: 100, medal1: -100, match2: 300, medal2: 200, match18: 100 },
+  }, []);
+  const loss = snapshotPersonalResult(bet, {
+    totalMoney: -250,
+    componentMoney: { match1: -100, medal1: -150 },
+  }, []);
+  const row = buildPersonalHistory([
+    round("same-round", today, [pressured, loss]),
+  ], today)[0];
+  assert.deepEqual({
+    rounds: row.rounds,
+    bets: row.bets,
+    wonMoney: row.wonMoney,
+    lostMoney: row.lostMoney,
+    net: row.total,
+    first: row.firstMoney,
+    second: row.secondMoney,
+    total18: row.total18Money,
+    pressure: row.pressureMoney,
+  }, {
+    rounds: 1,
+    bets: 2,
+    wonMoney: 600,
+    lostMoney: 250,
+    net: 350,
+    first: -250,
+    second: 500,
+    total18: 100,
+    pressure: 200,
+  });
+});
+
 test("compatibilidad legacy recupera configuración por identidad y nunca por índice tras borrar", () => {
   const source = round("a", today, [result("personal:carlos", 100), result("personal:jorge", 200, "Jorge")]);
   source.personalBets = [bet, { ...bet, id: "other", externalRivalId: "jorge", rivalName: "Jorge", rivalHandicap: 7 }];

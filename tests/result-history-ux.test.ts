@@ -54,7 +54,8 @@ test("UI dinámica oculta apuestas apagadas, separa Pollas y cierra la ronda act
 
 test("visor PDF es continuo, busca texto y no usa paginación como navegación principal", () => {
   const viewer = readFileSync("app/components/internal-pdf-viewer.tsx", "utf8");
-  assert.match(viewer, /Array\.from\(\{ length: pdf\.numPages \}/);
+  assert.match(viewer, /Array\.from\(\{ length: logicalPageCount \}/);
+  assert.match(viewer, /pdfPageNumber=\{pageOffset \+ index \+ 1\}/);
   assert.match(viewer, /getTextContent\(\)/);
   assert.match(viewer, /Buscar en documento/);
   assert.match(viewer, /IntersectionObserver/);

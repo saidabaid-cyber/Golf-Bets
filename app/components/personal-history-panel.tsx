@@ -16,20 +16,29 @@ export function PersonalHistoryPanel({ history, today, onDelete }: {
 }) {
   const [period, setPeriod] = useState<PersonalHistoryPeriod>("all");
   const [sort, setSort] = useState<PersonalHistorySort>("recent");
+  const [year, setYear] = useState("");
+  const [month, setMonth] = useState("");
+  const [rivalFilter, setRivalFilter] = useState("");
   const [selected, setSelected] = useSecondaryView<string>("personalHistoryDetail");
-  const rivals = useMemo(() => buildPersonalHistory(history, today, period, sort), [history, today, period, sort]);
+  const allRivals = useMemo(() => buildPersonalHistory(history, today, "all", "recent"), [history, today]);
+  const years = useMemo(() => [...new Set(history.filter(round => round.personalResults?.length).map(round => round.date.slice(0, 4)))].sort().reverse(), [history]);
+  const datedHistory = useMemo(() => history.filter(round => (!year || round.date.startsWith(year)) && (!month || round.date.slice(5, 7) === month)), [history, year, month]);
+  const rivals = useMemo(() => buildPersonalHistory(datedHistory, today, period, sort).filter(rival => !rivalFilter || rival.key === rivalFilter), [datedHistory, today, period, sort, rivalFilter]);
   return <section className="card personalRivalHistory">
     <h2>Apuestas personales · histórico</h2>
     <p className="muted">Jugadas = rondas distintas. Balance del jugador principal.</p>
     {selected && <button className="secondary" onClick={() => setSelected(null)}>← Regresar</button>}
     <div className="rivalHistoryFilters">
+      <label>Rival<select value={rivalFilter} onChange={(event) => { setRivalFilter(event.target.value); setSelected(null); }}><option value="">Todos los rivales</option>{allRivals.map(rival => <option key={rival.key} value={rival.key}>{rival.records[0].ownerName} vs {rival.name}</option>)}</select></label>
+      <label>Año<select value={year} onChange={(event) => { setYear(event.target.value); setSelected(null); }}><option value="">Todos los años</option>{years.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
+      <label>Mes<select value={month} onChange={(event) => { setMonth(event.target.value); setSelected(null); }}><option value="">Todos los meses</option>{["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"].map((label, index) => <option key={label} value={String(index + 1).padStart(2, "0")}>{label}</option>)}</select></label>
       <label>Periodo<select value={period} onChange={(event) => setPeriod(event.target.value as PersonalHistoryPeriod)}><option value="all">Total</option><option value="year">Este año</option><option value="month">Este mes</option></select></label>
       <label>Ordenar por<select value={sort} onChange={(event) => setSort(event.target.value as PersonalHistorySort)}><option value="recent">Reciente</option><option value="played">Más jugado</option><option value="won">Más ganado</option><option value="lost">Más perdido</option></select></label>
     </div>
     {!rivals.length ? <div className="empty">Todavía no hay personales guardadas en este periodo.</div> : rivals.filter(rival => !selected || rival.key === selected).map((rival) => <div className="rivalHistoryDetails" key={rival.key}>
-      <button className="personalHistorySummary" onClick={() => setSelected(rival.key)}><b>{rival.records[0].ownerName} vs {rival.name}</b><span>Jugadas: {rival.rounds}</span><span>{rival.records[0].ownerName} ganó: {rival.wins} · perdió: {rival.losses} · Empates: {rival.ties}</span><strong className={tone(rival.total)}>Balance {rival.records[0].ownerName}: {money(rival.total)}</strong></button>
+      <button className="personalHistorySummary" onClick={() => setSelected(rival.key)}><b>{rival.records[0].ownerName} vs {rival.name}</b><span>Rondas: {rival.rounds} · Apuestas: {rival.bets}</span><span>{rival.records[0].ownerName} ganó: {rival.wins} · perdió: {rival.losses} · Empates: {rival.ties}</span><span>Ganado: {money(rival.wonMoney)} · Perdido: {money(-rival.lostMoney)}</span><strong className={tone(rival.total)}>Balance {rival.records[0].ownerName}: {money(rival.total)}</strong></button>
       {selected === rival.key && <>
-      <div className="rivalHistoryBreakdown">Match {money(rival.matchMoney)} · Medal {money(rival.medalMoney)}<small>Los importes incluyen las presiones aplicables; no se suman dos veces.</small></div>
+      <div className="rivalHistoryBreakdown">Match {money(rival.matchMoney)} · Medal {money(rival.medalMoney)} · Press {money(rival.pressureMoney)}<br />1ª {money(rival.firstMoney)} · 2ª {money(rival.secondMoney)} · Total 18 {money(rival.total18Money)}<small>Press es la porción adicional ya incluida en Match/Medal y 2ª; no se suma otra vez.</small></div>
       {rival.records.map((record) => <article className="rivalHistoryRound" key={record.roundId}>
         <header><div><b>{dateLabel(record.date)} · {record.courseName}</b><small>Jugador principal: {record.ownerName}</small></div><strong className={tone(record.totalMoney)}>{money(record.totalMoney)}</strong></header>
         {record.entries.map((entry) => <div className="rivalHistoryEntry" key={entry.resultIndex}>

@@ -95,8 +95,9 @@ test("the three indexed official documents are visible through safe local ids", 
   ]);
   assert.ok(OFFICIAL_RULES_DOCUMENTS.every((document) => document.usedByAi && document.localUrl.startsWith("/api/rules/documents/") && !document.localUrl.includes(".pdf")));
   assert.ok(OFFICIAL_RULES_DOCUMENTS.every((document) => document.officialUrl.startsWith("https://") && document.officialUrl.toLowerCase().endsWith(".pdf")));
-  assert.equal(OFFICIAL_RULES_DOCUMENTS[0].officialUrl, "https://www.usga.org/content/dam/usga/pdf/2023/rules/2023%20Guia%20Oficial%20Golf%20pt1.pdf");
-  assert.equal(OFFICIAL_RULES_DOCUMENTS[1].officialUrl, "https://www.usga.org/content/dam/usga/pdf/2023/rules/2023%20Guia%20Oficial%20Golf%20pt2.pdf");
+  assert.match(OFFICIAL_RULES_DOCUMENTS[0].officialUrl, /^https:\/\/www\.fmg\.org\.mx\/.*Guia%20Oficial/);
+  assert.equal(OFFICIAL_RULES_DOCUMENTS[1].officialUrl, OFFICIAL_RULES_DOCUMENTS[0].officialUrl);
+  assert.deepEqual(OFFICIAL_RULES_DOCUMENTS.slice(0, 2).map((document) => [document.pageOffset, document.pageCount]), [[0, 410], [410, 172]]);
   assert.match(OFFICIAL_RULES_DOCUMENTS[2].officialUrl, /assets\.randa\.org\/.*1%20July%202026_RA\.pdf$/);
 });
 

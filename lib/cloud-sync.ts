@@ -21,6 +21,8 @@ export type CloudPreferences = {
 
 export type CloudDataBundle = {
   version: typeof CLOUD_SYNC_VERSION;
+  /** Stable installation id used only for conflict/audit metadata. */
+  deviceId?: string;
   history: RoundSnapshot[];
   frequentPlayers: FrequentPlayer[];
   frequentGroups: FrequentGroup[];
@@ -29,7 +31,20 @@ export type CloudDataBundle = {
   preferences: CloudPreferences;
   activeDraft: unknown | null;
   activeDraftUpdatedAt?: string;
+  /** Last canonical draft seen by this device. These fields remain local and
+   * let us detect two-device edits instead of trusting wall-clock order. */
+  baseDraftUpdatedAt?: string;
+  baseDraftFingerprint?: string;
   tombstones: CloudTombstone[];
+};
+
+export type CloudConflictCollection = "history" | "frequentPlayers" | "frequentGroups" | "rivals" | "courses" | "preferences" | "activeDraft";
+export type CloudDataConflict = {
+  collection: CloudConflictCollection;
+  localId: string;
+  localValue: unknown;
+  cloudValue: unknown;
+  updatedAt?: string;
 };
 
 type ReadableStorage = Pick<Storage, "getItem">;
@@ -39,7 +54,7 @@ function arrayOrEmpty<T>(value: unknown): T[] {
 }
 
 export function collectLocalCloudData(storage: ReadableStorage, defaultHandicap: number | null = null, hasLocalPreferenceState = storage.getItem(STORAGE_KEYS.contrast) !== null): CloudDataBundle {
-  const meta = readStoredJson<{ draftAt?: string; preferencesAt?: string }>(storage, CLOUD_LOCAL_META_KEY, {});
+  const meta = readStoredJson<{ draftAt?: string; preferencesAt?: string; cloudDraftAt?: string; cloudDraftFingerprint?: string }>(storage, CLOUD_LOCAL_META_KEY, {});
   const draft = readStoredJson<unknown | null>(storage, STORAGE_KEYS.draft, null);
   return {
     version: CLOUD_SYNC_VERSION,
@@ -58,6 +73,8 @@ export function collectLocalCloudData(storage: ReadableStorage, defaultHandicap:
     },
     activeDraft: hasRoundProgress(draft) ? draft : null,
     activeDraftUpdatedAt: meta.draftAt,
+    baseDraftUpdatedAt: meta.cloudDraftAt,
+    baseDraftFingerprint: meta.cloudDraftFingerprint,
     tombstones: arrayOrEmpty<CloudTombstone>(readStoredJson<unknown>(storage, CLOUD_TOMBSTONES_KEY, []))
       .filter((item) => item && typeof item.localId === "string" && typeof item.entityType === "string" && typeof item.deletedAt === "string"),
   };
@@ -115,6 +132,8 @@ export function trackLocalCloudEdits(storage: Pick<Storage, "getItem" | "setItem
 export function persistCloudMetadata(storage: Pick<Storage, "setItem">, bundle: CloudDataBundle) {
   storage.setItem(CLOUD_LOCAL_META_KEY, JSON.stringify({ draftAt: bundle.activeDraftUpdatedAt, preferencesAt: bundle.preferences.updatedAt,
     draftValue: JSON.stringify(stableValue(bundle.activeDraft)),
+    cloudDraftAt: bundle.activeDraftUpdatedAt,
+    cloudDraftFingerprint: JSON.stringify(stableValue(bundle.activeDraft)),
     preferenceValue: JSON.stringify([bundle.preferences.highContrast, bundle.preferences.language, bundle.preferences.notificationsEnabled, bundle.preferences.defaultHandicap]),
   }));
 }
@@ -151,6 +170,7 @@ export function mergeLocalAndCloud(local: CloudDataBundle, cloud: CloudDataBundl
   const localPreferences = chooseLocalVersion(local.preferences.updatedAt, cloud.preferences.updatedAt, local.preferences.hasLocalState);
   return {
     version: CLOUD_SYNC_VERSION,
+    deviceId: local.deviceId || cloud.deviceId,
     history: mergeCloudCollection(local.history, cloud.history, (round) => round.id, (round) => round.updatedAt || round.completedAt || round.date).filter((round) => !deleted.has(`round:${round.id}`)),
     frequentPlayers: mergeCloudCollection(local.frequentPlayers, cloud.frequentPlayers, (player) => player.id, (player) => player.updatedAt).filter((player) => !deleted.has(`frequent_player:${player.id}`)),
     frequentGroups: mergeCloudCollection(local.frequentGroups, cloud.frequentGroups, (group) => group.id, (group) => group.updatedAt).filter((group) => !deleted.has(`frequent_group:${group.id}`)),
@@ -159,8 +179,72 @@ export function mergeLocalAndCloud(local: CloudDataBundle, cloud: CloudDataBundl
     preferences: { ...(localPreferences ? local.preferences : cloud.preferences), hasLocalState: true },
     activeDraft: localDraft ? local.activeDraft : cloud.activeDraft,
     activeDraftUpdatedAt: localDraft ? local.activeDraftUpdatedAt : cloud.activeDraftUpdatedAt,
+    baseDraftUpdatedAt: local.baseDraftUpdatedAt,
+    baseDraftFingerprint: local.baseDraftFingerprint,
     tombstones,
   };
+}
+
+function sameValue(left: unknown, right: unknown) {
+  return JSON.stringify(stableValue(left)) === JSON.stringify(stableValue(right));
+}
+
+/** Equal clocks with different payloads cannot be resolved safely by last-write
+ * wins. Surface them instead of silently picking a browser. */
+export function findAmbiguousCloudConflicts(local: CloudDataBundle, cloud: CloudDataBundle) {
+  const conflicts: CloudDataConflict[] = [];
+  const collections = ["history", "frequentPlayers", "frequentGroups", "rivals", "courses"] as const;
+  for (const collection of collections) {
+    const remote = new Map(cloud[collection].map((item) => [item.id, item]));
+    for (const item of local[collection]) {
+      const other = remote.get(item.id);
+      if (!other) continue;
+      const localAt = "updatedAt" in item ? item.updatedAt : undefined;
+      const cloudAt = "updatedAt" in other ? other.updatedAt : undefined;
+      if (timestamp(localAt) > 0 && timestamp(localAt) === timestamp(cloudAt) && !sameValue(item, other)) {
+        conflicts.push({ collection, localId: item.id, localValue: item, cloudValue: other, updatedAt: localAt });
+      }
+    }
+  }
+  const localDraftFingerprint = JSON.stringify(stableValue(local.activeDraft));
+  const cloudDraftFingerprint = JSON.stringify(stableValue(cloud.activeDraft));
+  const localChangedFromBase = Boolean(local.baseDraftFingerprint && localDraftFingerprint !== local.baseDraftFingerprint);
+  const cloudChangedFromBase = Boolean(local.baseDraftFingerprint && (
+    cloudDraftFingerprint !== local.baseDraftFingerprint
+    || timestamp(cloud.activeDraftUpdatedAt) !== timestamp(local.baseDraftUpdatedAt)
+  ));
+  if (!sameValue(local.activeDraft, cloud.activeDraft) && (
+    (localChangedFromBase && cloudChangedFromBase)
+    || (timestamp(local.activeDraftUpdatedAt) > 0 && timestamp(local.activeDraftUpdatedAt) === timestamp(cloud.activeDraftUpdatedAt))
+  )) {
+    conflicts.push({ collection: "activeDraft", localId: "active-draft", localValue: local.activeDraft, cloudValue: cloud.activeDraft, updatedAt: local.activeDraftUpdatedAt });
+  }
+  if (timestamp(local.preferences.updatedAt) > 0 && timestamp(local.preferences.updatedAt) === timestamp(cloud.preferences.updatedAt) && local.preferences.hasLocalState && cloud.preferences.hasLocalState && !sameValue(local.preferences, cloud.preferences)) {
+    conflicts.push({ collection: "preferences", localId: "preferences", localValue: local.preferences, cloudValue: cloud.preferences, updatedAt: local.preferences.updatedAt });
+  }
+  return conflicts;
+}
+
+/** Resolve only after an explicit user choice and advance the clock so the
+ * selected copy is unambiguous on the next compare-and-swap cycle. */
+export function resolveAmbiguousCloudConflicts(local: CloudDataBundle, cloud: CloudDataBundle, conflicts: CloudDataConflict[], choice: "local" | "cloud", now = new Date().toISOString()) {
+  const resolved = mergeLocalAndCloud(local, cloud);
+  for (const conflict of conflicts) {
+    const selected = structuredClone(choice === "local" ? conflict.localValue : conflict.cloudValue);
+    if (conflict.collection === "activeDraft") {
+      resolved.activeDraft = selected;
+      resolved.activeDraftUpdatedAt = now;
+    } else if (conflict.collection === "preferences") {
+      resolved.preferences = { ...(selected as CloudPreferences), updatedAt: now, hasLocalState: true };
+    } else {
+      const collection = resolved[conflict.collection] as Array<{ id: string; updatedAt?: string }>;
+      const updated = { ...(selected as { id: string }), updatedAt: now };
+      const index = collection.findIndex((item) => item.id === conflict.localId);
+      if (index >= 0) collection[index] = updated as typeof collection[number];
+      else collection.push(updated as typeof collection[number]);
+    }
+  }
+  return resolved;
 }
 
 async function parseCloudResponse(response: Response) {

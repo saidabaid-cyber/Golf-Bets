@@ -12,3 +12,4 @@ brand-source/
 tmp/
 
 .vercel
+supabase/.temp/

@@ -75,17 +75,18 @@ import { buildHoleSummary, clearActiveRoundStorage, hasRoundProgress, historical
 import { monkeyHoleSummary, personalHoleSummary } from "../lib/personal-summary";
 import { downloadRoundCsv, downloadRoundImage, downloadRoundPdf, shareRound } from "../lib/round-export";
 import { deleteScorecardPhoto, deleteScorecardPhotoCloud, readScorecardPhoto, readScorecardPhotoCloud, saveScorecardPhoto, uploadScorecardPhotoCloud } from "../lib/scorecard-photo";
-import { CLOUD_TOMBSTONES_KEY, cloudDataFingerprint, collectLocalCloudData, downloadCloudData, persistCloudMetadata, stableValue, trackLocalCloudEdits, type CloudDataBundle, recordCloudDeletion, uploadCloudData } from "../lib/cloud-sync";
-import { ownsLocalWorkspace, preserveDraftConflict } from "../lib/account-workspace";
+import { CLOUD_TOMBSTONES_KEY, cloudDataFingerprint, collectLocalCloudData, downloadCloudData, findAmbiguousCloudConflicts, persistCloudMetadata, resolveAmbiguousCloudConflicts, stableValue, trackLocalCloudEdits, type CloudDataBundle, type CloudDataConflict, recordCloudDeletion, uploadCloudData } from "../lib/cloud-sync";
+import { ownsLocalWorkspace, preserveDataConflicts, preserveDraftConflict } from "../lib/account-workspace";
 import { runCloudSyncCycle } from "../lib/cloud-sync-cycle";
 import { CloudSyncGate, cloudSyncErrorMessage, syncStatusAfterSkip, type CloudSyncTrigger } from "../lib/cloud-sync-gate";
 import { adoptGuestPhotoJobs, flushPhotoQueue, queuePhoto, photoJobs } from "../lib/photo-sync-queue";
+import { acknowledgeOfflineBundle, getOfflineDeviceId, markOfflineAttempt, offlineRetryDelayMs, persistOfflineBundle, restoreOfflineWorkspace, writeCloudBundleToStorage } from "../lib/offline-store";
 import { PRIVATE_POLLA_LINK_KEY, parsePrivatePollaLink, privatePollaScoreChanges } from "../lib/polla-private-link";
 import { enqueuePollaScore } from "../lib/polla-offline";
 import { cloneLaVistaLocalRules, isLaVistaCourse, LA_VISTA_LOCAL_RULES_UPDATED_AT, withDefaultLaVistaRules } from "../lib/local-rules";
 import { filterHistory, historyYears, MONTH_LABELS } from "../lib/history-filters";
 import { priorRabbitStatus, priorSkinsStatus } from "../lib/prior-hole-status";
-import { buildGeneralResultsTable, pollaDetailBalance, type ResultCategoryColumn } from "../lib/result-breakdown";
+import { buildGeneralResultsTable, pollaDetailBalance, pollaDetailBalances, pollaPositionLabels, type ResultCategoryColumn } from "../lib/result-breakdown";
 import { collectHoleValidationErrors } from "../lib/hole-validation";
 import {
   calculateCounterBet,
@@ -339,7 +340,7 @@ function MoneyInput({ label, value, onChange }: { label: string; value: number; 
 }
 
 function GolfBetsApp() {
-  const { identity, cloudLinked, setCloudStatus, applyCloudPreferences, reportCloudSyncError, clearCloudSyncError } = useBackyardAccount();
+  const { identity, cloudLinked, cloudStatus, setCloudStatus, applyCloudPreferences, reportCloudSyncError, clearCloudSyncError } = useBackyardAccount();
   const { tab, setTab, goBack } = useScreenNavigation();
   const [rulesVisited, setRulesVisited] = useState(false);
   useEffect(() => { if (tab === "rules") setRulesVisited(true); }, [tab]);
@@ -349,6 +350,7 @@ function GolfBetsApp() {
   const [feedback, setFeedback] = useState("");
   const [copyFallback, setCopyFallback] = useState("");
   const [pendingRoundAction, setPendingRoundAction] = useState<{ message: string; run: () => void } | null>(null);
+  const [pendingCloudConflict, setPendingCloudConflict] = useState<{ local: CloudDataBundle; cloud: CloudDataBundle; conflicts: CloudDataConflict[] } | null>(null);
   const [courses, setCourses] = useState<Course[]>(defaultCourses);
   const [course, setCourse] = useState<Course>(laVista);
   const [courseDraft, setCourseDraft] = useState<Course>(laVista);
@@ -382,6 +384,7 @@ function GolfBetsApp() {
   const [hydrated, setHydrated] = useState(false);
   const [draftAvailable, setDraftAvailable] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"saving" | "saved" | "error">("saved");
+  const offlineDeviceId = useRef("");
   const [holeSummary, setHoleSummary] = useState<string[]>([]);
   const [holeValidationErrors, setHoleValidationErrors] = useState<string[]>([]);
   const [resultsView, setResultsView] = useState<"players" | "general">("players");
@@ -509,29 +512,43 @@ function GolfBetsApp() {
   }, []);
 
   useEffect(() => {
-    hadLocalPreferences.current = localStorage.getItem(STORAGE_KEYS.contrast) !== null;
-    const savedCourses = readStoredJson<unknown>(localStorage, STORAGE_KEYS.courses, null);
-    const savedHistory = readStoredJson<unknown>(localStorage, STORAGE_KEYS.history, null);
-    const savedRivals = readStoredJson<unknown>(localStorage, STORAGE_KEYS.rivals, null);
-    const draft = normalizeRoundDraft(readStoredJson<unknown>(localStorage, STORAGE_KEYS.draft, null));
-    const savedFrequentPlayers = readStoredJson<unknown>(localStorage, STORAGE_KEYS.frequentPlayers, []);
-    const savedFrequentGroups = parseFrequentGroups(localStorage.getItem(STORAGE_KEYS.frequentGroups));
-    try {
-      const mergedCourses = mergeDefaultCourses(Array.isArray(savedCourses) ? savedCourses as Course[] : null);
-      setCourses(mergedCourses);
-      if (Array.isArray(savedHistory)) setHistory(savedHistory.map((r: any) => ({ ...r, expenses: normalizeExpenses(r.expenses) })));
-      if (Array.isArray(savedRivals)) setSavedPersonalRivals(savedRivals);
-      if (Array.isArray(savedFrequentPlayers)) setFrequentPlayers(savedFrequentPlayers);
-      setFrequentGroups(savedFrequentGroups);
-      setHighContrast(localStorage.getItem(STORAGE_KEYS.contrast) !== "false");
-      setDraftAvailable(hasRoundProgress(draft));
-      applyDraft(draft);
-    } catch { /* keep safe defaults for structurally invalid legacy data */ }
-    const entry = new URLSearchParams(window.location.search);
-    if (entry.has("polla")) setTab("pollaLive");
-    else if (entry.get("screen") === "account") setTab("account");
-    setHydrated(true);
-  }, [setTab, applyDraft]);
+    let cancelled = false;
+    setHydrated(false);
+    const hydrate = async () => {
+      try {
+        offlineDeviceId.current = await getOfflineDeviceId();
+        if (!cancelled && ownsLocalWorkspace(localStorage, identity.userId)) {
+          await restoreOfflineWorkspace(identity.userId, localStorage, identity.defaultHandicap);
+        }
+      } catch {
+        if (!cancelled) setSaveStatus("error");
+      }
+      if (cancelled || !ownsLocalWorkspace(localStorage, identity.userId)) return;
+      hadLocalPreferences.current = localStorage.getItem(STORAGE_KEYS.contrast) !== null;
+      const savedCourses = readStoredJson<unknown>(localStorage, STORAGE_KEYS.courses, null);
+      const savedHistory = readStoredJson<unknown>(localStorage, STORAGE_KEYS.history, null);
+      const savedRivals = readStoredJson<unknown>(localStorage, STORAGE_KEYS.rivals, null);
+      const draft = normalizeRoundDraft(readStoredJson<unknown>(localStorage, STORAGE_KEYS.draft, null));
+      const savedFrequentPlayers = readStoredJson<unknown>(localStorage, STORAGE_KEYS.frequentPlayers, []);
+      const savedFrequentGroups = parseFrequentGroups(localStorage.getItem(STORAGE_KEYS.frequentGroups));
+      try {
+        setCourses(mergeDefaultCourses(Array.isArray(savedCourses) ? savedCourses as Course[] : null));
+        if (Array.isArray(savedHistory)) setHistory(savedHistory.map((r: any) => ({ ...r, expenses: normalizeExpenses(r.expenses) })));
+        if (Array.isArray(savedRivals)) setSavedPersonalRivals(savedRivals);
+        if (Array.isArray(savedFrequentPlayers)) setFrequentPlayers(savedFrequentPlayers);
+        setFrequentGroups(savedFrequentGroups);
+        setHighContrast(localStorage.getItem(STORAGE_KEYS.contrast) !== "false");
+        setDraftAvailable(hasRoundProgress(draft));
+        applyDraft(draft);
+      } catch { /* keep safe defaults for structurally invalid legacy data */ }
+      const entry = new URLSearchParams(window.location.search);
+      if (entry.has("polla")) setTab("pollaLive");
+      else if (entry.get("screen") === "account") setTab("account");
+      setHydrated(true);
+    };
+    void hydrate();
+    return () => { cancelled = true; };
+  }, [identity.userId, identity.defaultHandicap, setTab, applyDraft]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -550,7 +567,11 @@ function GolfBetsApp() {
         localStorage.setItem(STORAGE_KEYS.contrast, String(highContrast));
         localStorage.setItem(STORAGE_KEYS.draft, JSON.stringify(!roundClosed && hasRoundProgress(draft) ? draft : null));
         setDraftAvailable(!roundClosed && hasRoundProgress({ players, scores, currentIndex }));
-        setSaveStatus("saved");
+        const offline = collectLocalCloudData(localStorage, identity.defaultHandicap, hadLocalPreferences.current);
+        offline.deviceId = offlineDeviceId.current;
+        void persistOfflineBundle(identity.userId, offline, identity.mode === "authenticated" && cloudLinked)
+          .then(() => setSaveStatus("saved"))
+          .catch(() => setSaveStatus("error"));
         return true;
       } catch {
         setSaveStatus("error");
@@ -560,7 +581,7 @@ function GolfBetsApp() {
     flushLocalState.current = persist;
     const timer = window.setTimeout(persist, 250);
     return () => window.clearTimeout(timer);
-  }, [hydrated, identity.userId, identity.defaultHandicap, courses, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, roundClosed, course, startHole, roundHoles, players, ownerId, bets, segments, personalBets, manualBets, scores, scoreEdits, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, currentIndex]);
+  }, [hydrated, identity.userId, identity.mode, identity.defaultHandicap, cloudLinked, courses, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, roundClosed, course, startHole, roundHoles, players, ownerId, bets, segments, personalBets, manualBets, scores, scoreEdits, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, currentIndex]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -582,6 +603,8 @@ function GolfBetsApp() {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let scheduledTrigger: CloudSyncTrigger = "mount";
+    let failedAttempts = 0;
+    let nextAutoAttemptAt = 0;
     const gate = new CloudSyncGate();
     const debug = (event: string, trigger?: CloudSyncTrigger) => {
       if (process.env.NODE_ENV === "development") console.info("[cloud-sync]", event, { trigger, user: userId.slice(0, 8) });
@@ -589,7 +612,9 @@ function GolfBetsApp() {
     const current = () => !cancelled && ownsLocalWorkspace(localStorage, userId) && liveIdentity.current.userId === userId;
     const read = () => {
       if (!flushLocalState.current?.()) throw new Error("No se pudo guardar el estado local; no se enviaron datos incompletos.");
-      return collectLocalCloudData(localStorage, liveIdentity.current.defaultHandicap, hadLocalPreferences.current);
+      const data = collectLocalCloudData(localStorage, liveIdentity.current.defaultHandicap, hadLocalPreferences.current);
+      data.deviceId = offlineDeviceId.current;
+      return data;
     };
     const schedule = (trigger: CloudSyncTrigger = "local") => {
       if (!current()) return;
@@ -605,7 +630,8 @@ function GolfBetsApp() {
     };
     const sync = async (trigger: CloudSyncTrigger) => {
       if (!current()) return;
-      if (!navigator.onLine) { setCloudStatus("pending"); return; }
+      if (!navigator.onLine) { setCloudStatus("offline"); return; }
+      if (trigger !== "manual" && Date.now() < nextAutoAttemptAt) { setCloudStatus("error"); return; }
       let fingerprint = "";
       let queued: CloudSyncTrigger | null = null;
       try {
@@ -621,6 +647,14 @@ function GolfBetsApp() {
           read, current, status: setCloudStatus,
           download: () => downloadCloudData(liveIdentity.current.accessToken || ""),
           upload: data => uploadCloudData(data, liveIdentity.current.accessToken || ""),
+          conflicts: (local, cloud) => {
+            const conflicts = findAmbiguousCloudConflicts(local, cloud);
+            if (!conflicts.length) return false;
+            preserveDataConflicts(localStorage, conflicts);
+            setPendingCloudConflict({ local, cloud, conflicts });
+            setFeedback("Encontramos cambios simultáneos. Elige qué copia conservar; ninguna fue eliminada.");
+            return true;
+          },
           media: async data => {
             adoptGuestPhotoJobs(localStorage, userId);
             for (const round of data.history.filter(item => item.photoId)) {
@@ -667,11 +701,16 @@ function GolfBetsApp() {
             localStorage.setItem(CLOUD_TOMBSTONES_KEY, JSON.stringify(data.tombstones));
             persistCloudMetadata(localStorage, data);
             hadLocalPreferences.current = true;
-            appliedFingerprint = cloudDataFingerprint(collectLocalCloudData(localStorage, data.preferences.defaultHandicap, true));
+            const applied = collectLocalCloudData(localStorage, data.preferences.defaultHandicap, true);
+            applied.deviceId = offlineDeviceId.current;
+            appliedFingerprint = cloudDataFingerprint(applied);
           },
         });
         if (completed) {
-          queued = gate.success(appliedFingerprint || cloudDataFingerprint(read()));
+          const confirmedFingerprint = appliedFingerprint || cloudDataFingerprint(read());
+          queued = gate.success(confirmedFingerprint);
+          void acknowledgeOfflineBundle(userId, confirmedFingerprint);
+          failedAttempts = 0; nextAutoAttemptAt = 0;
           clearCloudSyncError();
           debug("finish", trigger);
         } else {
@@ -680,8 +719,11 @@ function GolfBetsApp() {
         }
       } catch (error) {
         gate.failure(fingerprint);
+        failedAttempts += 1;
+        nextAutoAttemptAt = Date.now() + offlineRetryDelayMs(failedAttempts);
         const message = cloudSyncErrorMessage(error);
         if (current() && message) reportCloudSyncError(message);
+        if (current()) void markOfflineAttempt(userId, message || "Sincronización cancelada");
         debug("error", trigger);
       } finally {
         if (queued && current()) schedule(queued);
@@ -689,15 +731,26 @@ function GolfBetsApp() {
     };
     requestCloudSync.current = () => schedule("local");
     const onOnline = () => schedule("online");
+    const onOffline = () => { if (current()) setCloudStatus("offline"); };
     const onRetry = () => schedule("manual");
     const onVisible = () => { if (document.visibilityState === "visible") schedule("visible"); };
+    const onFocus = () => schedule("visible");
+    // Realtime is intentionally not required for round ownership sync. A
+    // bounded foreground refresh makes two open devices converge without
+    // maintaining a fragile channel while a player is moving on the course.
+    const foregroundRefresh = window.setInterval(() => {
+      if (document.visibilityState === "visible" && navigator.onLine) schedule("visible");
+    }, 45_000);
     window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    window.addEventListener("focus", onFocus);
     window.addEventListener("backyard-sync-retry", onRetry);
     document.addEventListener("visibilitychange", onVisible);
     schedule("mount");
     return () => {
       cancelled = true; gate.cancel(); clearTimeout(timer); requestCloudSync.current = null;
-      window.removeEventListener("online", onOnline);
+      window.removeEventListener("online", onOnline); window.removeEventListener("offline", onOffline);
+      window.removeEventListener("focus", onFocus); window.clearInterval(foregroundRefresh);
       window.removeEventListener("backyard-sync-retry", onRetry);
       document.removeEventListener("visibilitychange", onVisible);
     };
@@ -706,6 +759,26 @@ function GolfBetsApp() {
   useEffect(() => {
     requestCloudSync.current?.();
   }, [courses, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, course, startHole, roundHoles, players, ownerId, bets, segments, personalBets, manualBets, scores, scoreEdits, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, currentIndex, identity.defaultHandicap]);
+
+  function resolveCloudConflict(choice: "local" | "cloud") {
+    if (!pendingCloudConflict) return;
+    const resolved = resolveAmbiguousCloudConflicts(pendingCloudConflict.local, pendingCloudConflict.cloud, pendingCloudConflict.conflicts, choice);
+    const mergedCourses = mergeDefaultCourses(resolved.courses);
+    resolved.courses = mergedCourses;
+    writeCloudBundleToStorage(localStorage, resolved);
+    setCourses(mergedCourses);
+    setHistory(resolved.history.map(round => ({ ...round, expenses: normalizeExpenses(round.expenses) })));
+    setSavedPersonalRivals(resolved.rivals);
+    setFrequentPlayers(resolved.frequentPlayers);
+    setFrequentGroups(resolved.frequentGroups);
+    setHighContrast(resolved.preferences.highContrast);
+    applyCloudPreferences(resolved.preferences);
+    applyDraft(resolved.activeDraft);
+    setPendingCloudConflict(null);
+    setCloudStatus(navigator.onLine ? "pending" : "offline");
+    setFeedback(choice === "local" ? "Conservamos la copia de este dispositivo. Se sincronizará sin borrar la otra versión auditada." : "Conservamos la copia de la nube. La versión local anterior quedó auditada en este dispositivo.");
+    requestCloudSync.current?.();
+  }
 
   useEffect(() => {
     if (!hydrated) return;
@@ -790,6 +863,14 @@ function GolfBetsApp() {
   const totalRabbitsWon = Object.values(rabbits.won).reduce((total, count) => total + count, 0);
   const totalSkinsWon = Object.values(skins.won).reduce((total, count) => total + count, 0);
   const pollaEnabled = bets.polla.first9.enabled || bets.polla.second9.enabled || bets.polla.total18.enabled;
+  const pollaFirstDetail = polla.details.find(detail => detail.key === "first9");
+  const pollaSecondDetail = polla.details.find(detail => detail.key === "second9");
+  const pollaNassauDetail = polla.details.find(detail => detail.key === "total18");
+  const miniPollaDetail = miniPolla.details.find(detail => detail.key === "mini");
+  const pollaFirstBalances = useMemo(() => pollaDetailBalances(pollaFirstDetail), [pollaFirstDetail]);
+  const pollaSecondBalances = useMemo(() => pollaDetailBalances(pollaSecondDetail), [pollaSecondDetail]);
+  const pollaNassauBalances = useMemo(() => pollaDetailBalances(pollaNassauDetail), [pollaNassauDetail]);
+  const miniPollaComponentBalances = useMemo(() => pollaDetailBalances(miniPollaDetail), [miniPollaDetail]);
 
   const categoryResults = useMemo(() => ({
     Conejos: rabbitBalances[ownerId] ?? 0,
@@ -798,7 +879,9 @@ function GolfBetsApp() {
     ...(bets.monkey?.enabled ? { Monkey: monkey.balances[ownerId] ?? 0 } : {}),
     Foursome: foursomes.balances[ownerId] ?? 0,
     "Bola Amiga": ballFriend.balances[ownerId] ?? 0,
-    Polla: polla.balances[ownerId] ?? 0,
+    "Polla 1ª vuelta": pollaFirstBalances[ownerId] ?? 0,
+    "Polla 2ª vuelta": pollaSecondBalances[ownerId] ?? 0,
+    "Polla Nassau": pollaNassauBalances[ownerId] ?? 0,
     "Mini Polla": miniPolla.balances[ownerId] ?? 0,
     "🐍 Víboras": vipers.balances[ownerId] ?? 0,
     "🐫 Camellos": camels.balances[ownerId] ?? 0,
@@ -806,24 +889,26 @@ function GolfBetsApp() {
     "🐺 Loba": loba.balances[ownerId] ?? 0,
     Personales: personals.balances[ownerId] ?? 0,
     Manuales: manual.balances[ownerId] ?? 0,
-  }), [rabbitBalances, skinBalances, units.balances, monkey.balances, bets.monkey?.enabled, foursomes.balances, ballFriend.balances, polla.balances, miniPolla.balances, vipers.balances, camels.balances, fish.balances, loba.balances, personals.balances, manual.balances, ownerId]);
+  }), [rabbitBalances, skinBalances, units.balances, monkey.balances, bets.monkey?.enabled, foursomes.balances, ballFriend.balances, pollaFirstBalances, pollaSecondBalances, pollaNassauBalances, miniPolla.balances, vipers.balances, camels.balances, fish.balances, loba.balances, personals.balances, manual.balances, ownerId]);
 
   const generalResultCategories = useMemo<ResultCategoryColumn[]>(() => [
-    { key: "rabbits", label: "🐇 Conejos", balances: rabbitBalances, active: bets.rabbits.enabled, played: rabbits.events.length > 0 },
-    { key: "skins", label: "⛳ Skins", balances: skinBalances, active: bets.skins.enabled, played: skins.events.length > 0 },
-    { key: "units", label: "📏 Unidades", balances: units.balances, active: bets.units.enabled, played: completedHoles.size > 0 },
-    { key: "monkey", label: "Monkey", balances: monkey.balances, active: Boolean(bets.monkey?.enabled), played: monkey.details.length > 0 },
+    { key: "rabbits", label: "🐇 Conejos", balances: rabbitBalances, active: bets.rabbits.enabled, played: rabbits.events.length > 0, quantityTotal: totalRabbitsWon, quantities: rabbits.won, quantityLabel: "conejos" },
+    { key: "skins", label: "⛳ Skins", balances: skinBalances, active: bets.skins.enabled, played: skins.events.length > 0, quantityTotal: totalSkinsWon, quantities: skins.won, quantityLabel: "skins" },
+    { key: "units", label: "📏 Unidades", balances: units.balances, active: bets.units.enabled, played: completedHoles.size > 0, quantityTotal: units.registeredTotal, quantities: units.net, quantityLabel: "unidades", signedQuantity: true },
+    { key: "monkey", label: "🐒 Monkey", balances: monkey.balances, active: Boolean(bets.monkey?.enabled), played: monkey.details.length > 0, quantities: monkey.points, quantityLabel: "puntos" },
     { key: "foursome", label: "Foursome", balances: foursomes.balances, active: bets.foursome.enabled, played: foursomes.matches.some(match => match.completedHoles > 0) },
-    { key: "ballFriend", label: "Bola Amiga", balances: ballFriend.balances, active: bets.ballFriend.enabled, played: ballFriend.details.length > 0 },
-    { key: "polla", label: "Polla", balances: polla.balances, active: pollaEnabled, played: polla.details.some(detail => detail.complete) },
-    { key: "miniPolla", label: "Mini Polla", balances: miniPolla.balances, active: bets.miniPolla.enabled, played: miniPolla.details.some(detail => detail.complete) },
+    { key: "ballFriend", label: "⚪🤝 Bola Amiga", balances: ballFriend.balances, active: bets.ballFriend.enabled, played: ballFriend.details.length > 0, quantityTotal: ballFriend.details.length, quantities: ballFriend.points, quantityLabel: "puntos", signedQuantity: true },
+    { key: "pollaFirst", label: "Polla 1ª vuelta", balances: pollaFirstBalances, active: bets.polla.first9.enabled, played: Boolean(pollaFirstDetail?.complete), detailByPlayer: pollaPositionLabels(pollaFirstDetail, settlementIds) },
+    { key: "pollaSecond", label: "Polla 2ª vuelta", balances: pollaSecondBalances, active: bets.polla.second9.enabled, played: Boolean(pollaSecondDetail?.complete), detailByPlayer: pollaPositionLabels(pollaSecondDetail, settlementIds) },
+    { key: "pollaNassau", label: "Polla Nassau", balances: pollaNassauBalances, active: bets.polla.total18.enabled, played: Boolean(pollaNassauDetail?.complete), detailByPlayer: pollaPositionLabels(pollaNassauDetail, settlementIds) },
+    { key: "miniPolla", label: "Mini Polla", balances: miniPollaComponentBalances, active: bets.miniPolla.enabled, played: Boolean(miniPollaDetail?.complete), detailByPlayer: pollaPositionLabels(miniPollaDetail, settlementIds) },
     { key: "vipers", label: "🐍 Víboras", balances: vipers.balances, active: bets.vipers.enabled, played: vipers.totalQuantity > 0 || vipers.halves.some(half => half.settled) },
     { key: "camels", label: "🐫 Camellos", balances: camels.balances, active: bets.camels.enabled, played: camels.totalQuantity > 0 || camels.halves.some(half => half.settled) },
     { key: "fish", label: "🐟 Peces", balances: fish.balances, active: bets.fish.enabled, played: fish.totalQuantity > 0 || fish.halves.some(half => half.settled) },
     { key: "loba", label: "🐺 Loba", balances: loba.balances, active: bets.loba.enabled, played: loba.details.length > 0 },
     { key: "personals", label: "Personales", balances: personals.balances, active: personalBets.length > 0, played: completedHoles.size > 0 },
     { key: "manual", label: "Manuales", balances: manual.balances, active: manualBets.length > 0, played: manualBets.some(bet => Object.values(bet.amounts).some(amount => amount !== 0)) },
-  ], [rabbitBalances, bets.rabbits.enabled, rabbits.events.length, skinBalances, bets.skins.enabled, skins.events.length, units.balances, bets.units.enabled, completedHoles, monkey.balances, monkey.details.length, bets.monkey?.enabled, foursomes.balances, bets.foursome.enabled, foursomes.matches, ballFriend.balances, bets.ballFriend.enabled, ballFriend.details.length, polla.balances, pollaEnabled, polla.details, miniPolla.balances, bets.miniPolla.enabled, miniPolla.details, vipers.balances, bets.vipers.enabled, vipers.totalQuantity, vipers.halves, camels.balances, bets.camels.enabled, camels.totalQuantity, camels.halves, fish.balances, bets.fish.enabled, fish.totalQuantity, fish.halves, loba.balances, bets.loba.enabled, loba.details.length, personals.balances, personalBets.length, manual.balances, manualBets]);
+  ], [rabbitBalances, bets.rabbits.enabled, rabbits.events.length, rabbits.won, totalRabbitsWon, skinBalances, bets.skins.enabled, skins.events.length, skins.won, totalSkinsWon, units.balances, units.registeredTotal, units.net, bets.units.enabled, completedHoles, monkey.balances, monkey.points, monkey.details.length, bets.monkey?.enabled, foursomes.balances, bets.foursome.enabled, foursomes.matches, ballFriend.balances, ballFriend.points, bets.ballFriend.enabled, ballFriend.details.length, pollaFirstBalances, pollaSecondBalances, pollaNassauBalances, miniPollaComponentBalances, bets.polla.first9.enabled, bets.polla.second9.enabled, bets.polla.total18.enabled, bets.miniPolla.enabled, pollaFirstDetail, pollaSecondDetail, pollaNassauDetail, miniPollaDetail, settlementIds, vipers.balances, bets.vipers.enabled, vipers.totalQuantity, vipers.halves, camels.balances, bets.camels.enabled, camels.totalQuantity, camels.halves, fish.balances, bets.fish.enabled, fish.totalQuantity, fish.halves, loba.balances, bets.loba.enabled, loba.details.length, personals.balances, personalBets.length, manual.balances, manualBets]);
   const generalResults = useMemo(
     () => buildGeneralResultsTable(settlementIds, generalResultCategories, allBetBalances),
     [settlementIds, generalResultCategories, allBetBalances],
@@ -1083,7 +1168,7 @@ function GolfBetsApp() {
     return structuredClone({
       id: roundId, date: roundDate, courseName: course.name, teeName: course.teeName,
       snapshotVersion: 2, ownerId: owner.id, segments, playerBalances: allBetBalances,
-      categoryBalances: { Conejos: rabbitBalances, Skins: skinBalances, Unidades: units.balances, Monkey: monkey.balances, Foursome: foursomes.balances, "Bola Amiga": ballFriend.balances, Polla: polla.balances, "Mini Polla": miniPolla.balances, "🐍 Víboras": vipers.balances, "🐫 Camellos": camels.balances, "🐟 Peces": fish.balances, "🐺 Loba": loba.balances, Personales: personals.balances, Manuales: manual.balances },
+      categoryBalances: { Conejos: rabbitBalances, Skins: skinBalances, Unidades: units.balances, Monkey: monkey.balances, Foursome: foursomes.balances, "Bola Amiga": ballFriend.balances, "Polla 1ª vuelta": pollaFirstBalances, "Polla 2ª vuelta": pollaSecondBalances, "Polla Nassau": pollaNassauBalances, "Mini Polla": miniPollaComponentBalances, "🐍 Víboras": vipers.balances, "🐫 Camellos": camels.balances, "🐟 Peces": fish.balances, "🐺 Loba": loba.balances, Personales: personals.balances, Manuales: manual.balances },
       resultDetails: { rabbits, skins, units, monkey, foursomes, ballFriend, polla, miniPolla, vipers, camels, fish, loba, settlementTransfers, settlementDifference, personals, manual },
       ownerName: owner.name, roundHoles, startHole, betResult: ownerBetResult, expenses, expenseTotal: ownerExpenseTotal,
       netResult: ownerNet, categoryResults, players: structuredClone(players), scores: structuredClone(scores),
@@ -1094,12 +1179,19 @@ function GolfBetsApp() {
     });
   }
 
-  function saveRound() {
+  function saveRound(allowPendingCloud = false) {
     if (order.some(number => players.some(player => Object.hasOwn(scoreEdits[number] || {}, player.id)))) { setFeedback("Hay scores editados sin guardar. Guarda cada hoyo modificado desde Tarjeta antes de terminar."); return; }
     const snapshot = currentSnapshot();
     if (!snapshot) return;
     if (order.some(number => players.some(player => typeof scores[number]?.[player.id] !== "number"))) {
       setFeedback("Faltan scores por confirmar. Completa la tarjeta antes de terminar la ronda."); return;
+    }
+    if (!allowPendingCloud && identity.mode === "authenticated" && cloudLinked && cloudStatus !== "synced") {
+      setPendingRoundAction({
+        message: "Esta ronda quedará cerrada y segura en este dispositivo, pero todavía tiene cambios pendientes de sincronizar con la nube. ¿Cerrar provisionalmente y sincronizar cuando vuelva la conexión?",
+        run: () => saveRound(true),
+      });
+      return;
     }
     if (history.some(round => round.id === roundId)) {
       setPendingRoundAction({ message: "¿Sobrescribir esta ronda terminada? Se actualizarán sus resultados e histórico Personal con el mismo ID; se conservará la foto. No se creará otra ronda.", run: () => saveConfirmedRound(snapshot) }); return;
@@ -1116,7 +1208,7 @@ function GolfBetsApp() {
     setDraftAvailable(false);
     const timestamp = new Date().toISOString();
     setFrequentPlayers((current) => upsertFrequentPlayers(current, players, timestamp));
-    setFeedback("Ronda guardada ✓");
+    setFeedback(identity.mode === "authenticated" && cloudLinked && cloudStatus !== "synced" ? "Ronda guardada en este dispositivo · Pendiente de sincronizar" : "Ronda guardada ✓");
     setTab("results");
   }
 
@@ -1576,7 +1668,7 @@ function GolfBetsApp() {
     const unitLines = players.map((player) => ({ name: player.name, value: (savedUnits.autoByHole[holeNumber]?.[player.id] || 0) + unitHoleManual(player.id) })).filter((item) => item.value !== 0);
     if (unitLines.length) extras.push(`📏 Unidades: ${unitLines.map((item) => `${item.name} ${item.value > 0 ? "+" : ""}${item.value}`).join(" · ")}`);
     const bfDetail = savedBallFriend.details.find(item => item.hole === holeNumber);
-    if (bfDetail) extras.push(`Bola Amiga: ${playerName(bfDetail.teamA[0])}/${playerName(bfDetail.teamA[1])} ${bfDetail.pointDiff >= 0 ? "+" : ""}${bfDetail.pointDiff} pts`);
+    if (bfDetail) extras.push(`⚪🤝 Bola Amiga: ${playerName(bfDetail.teamA[0])}/${playerName(bfDetail.teamA[1])} ${bfDetail.pointDiff >= 0 ? "+" : ""}${bfDetail.pointDiff} pts`);
     for (const detail of [...savedPolla.details, ...savedMiniPolla.details].filter((item) => item.complete && item.holes.at(-1) === holeNumber)) {
       extras.push(`${detail.label}: ${detail.winnerIds.map(playerName).join(" / ")} gana${detail.winnerIds.length > 1 ? "n" : ""}`);
     }
@@ -1631,7 +1723,7 @@ function GolfBetsApp() {
   return <main className={`app ${highContrast ? "highContrast" : ""} ${tab === "results" ? "compactResults" : ""}`}>
     {tab !== "rules" && <header className="topbar">
       <button className="brandHomeButton" onClick={() => setTab("welcome")} aria-label="Ir a Inicio"><BrandLockup compact /></button>
-      <div className="topActions"><span className={`saveIndicator ${saveStatus}`}>{saveStatus === "saving" ? "Guardando…" : saveStatus === "error" ? "No se pudo guardar" : "✓ Guardado"}</span><button className="contrastButton" onClick={() => setHighContrast((value) => !value)} aria-pressed={highContrast}>{contrastToggleLabel(highContrast)}</button><button className="accountButton" onClick={() => setTab("account")} aria-label="Abrir Mi Cuenta">{identity.mode === "guest" ? <svg className="guestAvatar" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4.5 21c.5-5 3-7.5 7.5-7.5s7 2.5 7.5 7.5"/></svg> : (identity.displayName.trim()[0] || "S").toUpperCase()}</button></div>
+      <div className="topActions"><span className={`saveIndicator ${saveStatus}`}>{saveStatus === "saving" ? "Guardando…" : saveStatus === "error" ? "Error de guardado" : identity.mode !== "authenticated" || !cloudLinked ? "Guardado en este dispositivo" : cloudStatus === "synced" ? "Guardado en la nube ✓" : cloudStatus === "syncing" ? "Sincronizando…" : cloudStatus === "offline" ? "Sin conexión · pendiente" : cloudStatus === "error" ? "Error de sincronización" : "Pendiente de sincronizar"}</span><button className="contrastButton" onClick={() => setHighContrast((value) => !value)} aria-pressed={highContrast}>{contrastToggleLabel(highContrast)}</button><button className="accountButton" onClick={() => setTab("account")} aria-label="Abrir Mi Cuenta">{identity.mode === "guest" ? <svg className="guestAvatar" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4.5 21c.5-5 3-7.5 7.5-7.5s7 2.5 7.5 7.5"/></svg> : (identity.displayName.trim()[0] || "S").toUpperCase()}</button></div>
     </header>}
 
     {tab === "welcome" && <section className="welcomeScreen">
@@ -1652,6 +1744,7 @@ function GolfBetsApp() {
     {feedback && <div className="notice" role="status">{feedback}<button className="textButton" aria-label="Cerrar mensaje" onClick={() => setFeedback("")}>×</button></div>}
     {copyFallback && <section className="card"><label>Resumen para copiar<textarea readOnly value={copyFallback} onFocus={event => event.currentTarget.select()} /></label><button onClick={() => setCopyFallback("")}>← Regresar</button></section>}
     {pendingRoundAction && <div className="modalBackdrop"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="round-change-title"><h2 id="round-change-title">Confirmar cambios</h2><p>{pendingRoundAction.message}</p><div className="dialogActions"><button autoFocus className="secondary" onClick={() => setPendingRoundAction(null)}>Cancelar</button><button className="primary" onClick={() => { const action = pendingRoundAction; setPendingRoundAction(null); action.run(); }}>Confirmar</button></div></section></div>}
+    {pendingCloudConflict && <div className="modalBackdrop"><section className="confirmDialog" role="alertdialog" aria-modal="true" aria-labelledby="cloud-conflict-title"><h2 id="cloud-conflict-title">Cambios en dos dispositivos</h2><p>Encontramos {pendingCloudConflict.conflicts.length} cambio{pendingCloudConflict.conflicts.length === 1 ? "" : "s"} con la misma versión. Conservamos ambas copias y necesitamos que elijas cuál debe continuar.</p><div className="dialogActions"><button className="secondary" onClick={() => resolveCloudConflict("cloud")}>Usar copia de la nube</button><button className="primary" onClick={() => resolveCloudConflict("local")}>Usar este dispositivo</button></div></section></div>}
     {holeValidationErrors.length > 0 && <div className="modalBackdrop" role="presentation"><section className="confirmDialog holeValidationDialog" role="alertdialog" aria-modal="true" aria-labelledby="hole-validation-title" aria-describedby="hole-validation-description"><h2 id="hole-validation-title">Falta completar este hoyo</h2><p id="hole-validation-description">Revisa todos estos puntos antes de guardar y avanzar:</p><ul>{holeValidationErrors.map(error => <li key={error}>{error}</li>)}</ul><div className="dialogActions"><button autoFocus className="primary" onClick={() => setHoleValidationErrors([])}>Volver y completar</button></div></section></div>}
     {tab === "personalDetail" && renderPersonalLive("Detalle Personal")}
     {tab === "historyDetail" && (() => { const saved = history.find(round => round.id === historyDetailId); return saved ? <HistoricalRoundDetail round={saved} onEdit={() => editHistoricalRound(saved)} onPhoto={() => viewScorecardPhoto(saved)} /> : <div className="empty">La ronda ya no está disponible.</div>; })()}
@@ -1749,7 +1842,7 @@ function GolfBetsApp() {
         </div>
 
         <div className="betCard">
-          <div className="betHead"><div><b>⛳🤝 Bola Amiga</b><span>Parejas por hoyo · birdie o mejor voltea rival · máximo 9</span></div><Toggle on={bets.ballFriend.enabled} onClick={() => setBets({ ...bets, ballFriend: { ...bets.ballFriend, enabled: !bets.ballFriend.enabled } })} /></div>
+          <div className="betHead"><div><b>⚪🤝 Bola Amiga</b><span>Parejas por hoyo · birdie o mejor voltea rival · máximo 9</span></div><Toggle on={bets.ballFriend.enabled} onClick={() => setBets({ ...bets, ballFriend: { ...bets.ballFriend, enabled: !bets.ballFriend.enabled } })} /></div>
           {bets.ballFriend.enabled && <HandicapBaseControl name="Bola Amiga" config={bets.ballFriend} fallback="fixed" onChange={baseMode => setBets({ ...bets, ballFriend: { ...bets.ballFriend, baseMode, fixedBaseHandicap: undefined } })} />}
           {bets.ballFriend.enabled && <><div className="grid3"><MoneyInput label="Valor punto" value={bets.ballFriend.value} onChange={(v) => setBets({ ...bets, ballFriend: { ...bets.ballFriend, value: v } })} /><HcpPercentInput value={bets.ballFriend.hcpPct} onChange={(v) => setBets({ ...bets, ballFriend: { ...bets.ballFriend, hcpPct: v } })} /><NumberField label="Score máximo" value={bets.ballFriend.maxScore} onChange={(v) => setBets({ ...bets, ballFriend: { ...bets.ballFriend, maxScore: v } })} /></div><label className="miniLabel">Participan</label><ParticipantChips players={players} selected={bets.ballFriend.participantIds} onChange={(ids) => setBets({ ...bets, ballFriend: { ...bets.ballFriend, participantIds: ids } })} /></>}
         </div>
@@ -1955,7 +2048,7 @@ function GolfBetsApp() {
       </section>}
 
       {scoreCaptureComplete && bets.ballFriend.enabled && <section className="card">
-        <div className="sectionTitle"><div><h2>Bola Amiga</h2><p>Elige descanso (si son 5) y una pareja; la otra sale sola.</p></div></div>
+        <div className="sectionTitle"><div><h2>⚪🤝 Bola Amiga</h2><p>Elige descanso (si son 5) y una pareja; la otra sale sola.</p></div></div>
         {bfParticipants.length === 5 && <><label className="miniLabel">Descansa</label><div className="chips">{bfParticipants.map((p) => <button key={p.id} className={`chipButton ${bfSetup.restPlayerId === p.id ? "resting" : ""}`} onClick={() => setBallFriendSetup((s) => ({ ...s, [holeNumber]: { teamA: (s[holeNumber]?.teamA || []).filter((id) => id !== p.id), restPlayerId: p.id } }))}>{p.name}</button>)}</div></>}
         <label className="miniLabel">Primera pareja</label>
         <div className="chips">{bfParticipants.filter((p) => p.id !== bfSetup.restPlayerId).map((p) => <button key={p.id} className={`chipButton ${bfSetup.teamA.includes(p.id) ? "selected" : ""}`} onClick={() => setBallFriendSetup((state) => {
@@ -1983,7 +2076,7 @@ function GolfBetsApp() {
       {scoreCaptureComplete && renderMonkeyLive()}
 
       <div className="roundActions"><button className="secondary big" disabled={currentIndex === 0 || holeSummary.length > 0} onClick={() => goToHoleIndex(currentIndex - 1)}>← Anterior</button><button className="primary big" disabled={holeSummary.length > 0} onClick={saveAndAdvance}>{currentIndex < order.length - 1 ? "Guardar y siguiente hoyo →" : "Terminar y guardar ronda →"}</button></div>
-      {holeSummary.length > 0 && <div className="holeSummaryBackdrop"><div className="holeSummary" role="dialog" aria-modal="true" aria-label={`Resumen del hoyo ${holeNumber}`} onPointerDown={pauseHoleSummary} onPointerUp={resumeHoleSummary} onPointerCancel={resumeHoleSummary} onLostPointerCapture={resumeHoleSummary}><button autoFocus className="holeSummaryClose" aria-label="Cerrar resumen y avanzar" onClick={closeHoleSummary}>×</button><div className="holeSummaryContent" role="status" aria-live="polite"><h2>{holeSummary[0]} ✓</h2><p className="holeSummaryScores">{holeSummary.slice(1, players.length + 1).map((line, index) => <span key={index}>{line}</span>)}</p><div className="holeSummaryBets">{holeSummary.slice(players.length + 1).map((line, index) => <p key={index}>{line}</p>)}</div><small className="holeSummaryHoldHint">Mantén presionado para pausar</small></div><div className="holeSummaryTimer" aria-hidden="true" /></div></div>}
+      {holeSummary.length > 0 && <div className="holeSummaryBackdrop"><div className="holeSummary" role="dialog" aria-modal="true" aria-label={`Resumen del hoyo ${holeNumber}`}><button type="button" autoFocus className="holeSummaryClose" aria-label="Cerrar resumen y avanzar" onPointerDown={(event) => event.stopPropagation()} onPointerUp={(event) => { event.preventDefault(); event.stopPropagation(); closeHoleSummary(); }} onClick={(event) => { event.stopPropagation(); closeHoleSummary(); }}>×</button><div className="holeSummaryContent" role="status" aria-live="polite" onPointerDown={pauseHoleSummary} onPointerUp={resumeHoleSummary} onPointerCancel={resumeHoleSummary} onLostPointerCapture={resumeHoleSummary}><h2>{holeSummary[0]} ✓</h2><p className="holeSummaryScores">{holeSummary.slice(1, players.length + 1).map((line, index) => <span key={index}>{line}</span>)}</p><div className="holeSummaryBets">{holeSummary.slice(players.length + 1).map((line, index) => <p key={index}>{line}</p>)}</div><small className="holeSummaryHoldHint">Mantén presionado para pausar</small></div><div className="holeSummaryTimer" aria-hidden="true" /></div></div>}
     </>}
 
     {tab === "standings" && <>
@@ -1991,7 +2084,7 @@ function GolfBetsApp() {
       <section className="hero standingsHero"><div><div className="eyebrow">CÓMO VAMOS</div><h1>Balance provisional.</h1><p>Combina lo ya cobrado con el valor provisional de Foursome y Personales; las Pollas pendientes no se liquidan antes de tiempo.</p></div><button className="secondary" onClick={() => setTab("round")}>Volver al hoyo</button></section>
       <section className="provisionalGrid">{[...players].sort((a, b) => (liveBetBalances[b.id] || 0) - (liveBetBalances[a.id] || 0)).map((player, index) => <div className="stat" key={player.id}><span>{index + 1} · {player.name || "Sin nombre"}</span><b className={(liveBetBalances[player.id] || 0) > 0 ? "good" : (liveBetBalances[player.id] || 0) < 0 ? "bad" : ""}>{signedMoney(liveBetBalances[player.id] || 0)}</b><small>provisional</small></div>)}</section>
       <section className="card highlights"><h2>Highlights</h2>{(() => { const leader = [...players].sort((a, b) => (liveBetBalances[b.id] || 0) - (liveBetBalances[a.id] || 0))[0]; const rabbitLeader = [...players].sort((a, b) => (rabbits.won[b.id] || 0) - (rabbits.won[a.id] || 0))[0]; const skinLeader = [...players].sort((a, b) => (skins.won[b.id] || 0) - (skins.won[a.id] || 0))[0]; return <div className="highlightList">{leader && (liveBetBalances[leader.id] || 0) > 0 && <span>🔥 {leader.name} lidera {signedMoney(liveBetBalances[leader.id])}</span>}{rabbitLeader && (rabbits.won[rabbitLeader.id] || 0) > 0 && <span>🐇 {rabbitLeader.name} lleva {rabbits.won[rabbitLeader.id]} Conejos</span>}{skinLeader && (skins.won[skinLeader.id] || 0) > 0 && <span>⛳ {skinLeader.name} lleva {skins.won[skinLeader.id]} Skins</span>}{!leader && <span>Aún sin datos.</span>}</div>; })()}</section>
-<section className="card"><h2>Desglose por apuesta</h2><div className="tableWrap"><table><thead><tr><th>Jugador</th><th>🐇</th><th>⛳</th><th>📏</th><th>Foursome</th><th>Bola Amiga</th><th>Pollas</th><th>Personales</th><th>Manuales</th>{bets.monkey?.enabled && <th>Monkey</th>}{bets.vipers.enabled && <th>🐍</th>}{bets.camels.enabled && <th>🐫</th>}{bets.fish.enabled && <th>🐟</th>}{bets.loba.enabled && <th>🐺</th>}</tr></thead><tbody>{players.map((player) => <tr key={player.id}><td><b>{player.name}</b></td><td>{signedMoney(rabbitBalances[player.id] || 0)}</td><td>{signedMoney(skinBalances[player.id] || 0)}</td><td>{signedMoney(units.balances[player.id] || 0)}</td><td>{signedMoney(foursomes.provisionalBalances[player.id] || 0)}</td><td>{signedMoney(ballFriend.balances[player.id] || 0)}</td><td>{signedMoney((polla.balances[player.id] || 0) + (miniPolla.balances[player.id] || 0))}</td><td>{signedMoney(personals.provisionalBalances[player.id] || 0)}</td><td>{signedMoney(manual.balances[player.id] || 0)}</td>{bets.monkey?.enabled && <td>{signedMoney(monkey.balances[player.id] || 0)}</td>}{bets.vipers.enabled && <td>{signedMoney(vipers.balances[player.id] || 0)}</td>}{bets.camels.enabled && <td>{signedMoney(camels.balances[player.id] || 0)}</td>}{bets.fish.enabled && <td>{signedMoney(fish.balances[player.id] || 0)}</td>}{bets.loba.enabled && <td>{signedMoney(loba.balances[player.id] || 0)}</td>}</tr>)}</tbody></table></div></section>
+<section className="card"><h2>Desglose por apuesta</h2><div className="tableWrap"><table><thead><tr><th>Jugador</th><th>🐇</th><th>⛳</th><th>📏</th><th>Foursome</th><th>⚪🤝 Bola Amiga</th><th>Pollas</th><th>Personales</th><th>Manuales</th>{bets.monkey?.enabled && <th>Monkey</th>}{bets.vipers.enabled && <th>🐍</th>}{bets.camels.enabled && <th>🐫</th>}{bets.fish.enabled && <th>🐟</th>}{bets.loba.enabled && <th>🐺</th>}</tr></thead><tbody>{players.map((player) => <tr key={player.id}><td><b>{player.name}</b></td><td>{signedMoney(rabbitBalances[player.id] || 0)}</td><td>{signedMoney(skinBalances[player.id] || 0)}</td><td>{signedMoney(units.balances[player.id] || 0)}</td><td>{signedMoney(foursomes.provisionalBalances[player.id] || 0)}</td><td>{signedMoney(ballFriend.balances[player.id] || 0)}</td><td>{signedMoney((polla.balances[player.id] || 0) + (miniPolla.balances[player.id] || 0))}</td><td>{signedMoney(personals.provisionalBalances[player.id] || 0)}</td><td>{signedMoney(manual.balances[player.id] || 0)}</td>{bets.monkey?.enabled && <td>{signedMoney(monkey.balances[player.id] || 0)}</td>}{bets.vipers.enabled && <td>{signedMoney(vipers.balances[player.id] || 0)}</td>}{bets.camels.enabled && <td>{signedMoney(camels.balances[player.id] || 0)}</td>}{bets.fish.enabled && <td>{signedMoney(fish.balances[player.id] || 0)}</td>}{bets.loba.enabled && <td>{signedMoney(loba.balances[player.id] || 0)}</td>}</tr>)}</tbody></table></div></section>
       <section className="card"><div className="sectionTitle"><div><h2>Leaderboard de la ronda</h2><p>Gross y Neto auditable con el HCP de ronda.</p></div><div className="segmented"><button className={privateBoardMode === "gross" ? "active" : ""} onClick={() => setPrivateBoardMode("gross")}>Gross</button><button className={privateBoardMode === "net" ? "active" : ""} onClick={() => setPrivateBoardMode("net")}>Neto</button></div></div><div className="tableWrap"><table><thead><tr><th>Pos</th><th>Jugador</th><th>HCP</th><th>Gross</th><th>Neto</th><th>+/- Par</th><th>Thru</th></tr></thead><tbody>{[...privateBoard].sort((a, b) => a[privateBoardMode] - b[privateBoardMode]).map((row, index) => <tr key={row.playerId}><td>{index + 1}</td><td><b>{row.name}</b></td><td>{row.handicap ?? "—"}</td><td>{row.gross || "—"}</td><td>{row.net || "—"}</td><td>{row.thru ? `${row.relativeToPar > 0 ? "+" : ""}${row.relativeToPar}` : "—"}</td><td>{row.finished ? "F" : row.thru}</td></tr>)}</tbody></table></div></section>
     </>}
 
@@ -2017,7 +2110,7 @@ function GolfBetsApp() {
         {bets.skins.enabled && <span><b>⛳ Skins</b>{money(bets.skins.value)} c/u</span>}
         {bets.units.enabled && <span><b>📏 Unidades / Copas</b>{money(bets.units.value)} por unidad · {money(bets.units.copaValue ?? bets.units.value)} por Copa</span>}
         {bets.foursome.enabled && <span><b>Foursome</b>{(bets.foursome.mode === "fixed" || bets.foursome.mode === "fixed_points") ? `${money(bets.foursome.fixedValue)} fijo` : ""}{bets.foursome.mode === "fixed_points" ? " · " : ""}{(bets.foursome.mode === "points" || bets.foursome.mode === "fixed_points") ? `${money(bets.foursome.pointValue)} punto` : ""}{(bets.foursome.pressureMultiplier || 1) > 1 ? ` · ${bets.foursome.pressureNine === "holes_1_9" ? "H1–9" : "H10–18"} ${bets.foursome.pressureMultiplier}x` : ""}</span>}
-        {bets.ballFriend.enabled && <span><b>⛳🤝 Bola Amiga</b>{money(bets.ballFriend.value)} por punto</span>}
+        {bets.ballFriend.enabled && <span><b>⚪🤝 Bola Amiga</b>{money(bets.ballFriend.value)} por punto</span>}
         {polla.details.map((detail) => <span key={detail.key}><b>{detail.label}</b>{money(detail.value)}</span>)}
         {bets.miniPolla.enabled && <span><b>Mini Polla</b>{money(bets.miniPolla.value)}</span>}
         {bets.vipers.enabled && <span><b>🐍 Víboras</b>{money(bets.vipers.value)} · H10–18 {bets.vipers.secondNineMultiplier}x</span>}
@@ -2036,7 +2129,7 @@ function GolfBetsApp() {
             {bets.skins.enabled && <div><span>⛳ Skins · Jugados</span><b>{skins.won[p.id] ?? 0}</b><i>{signedMoney(skinBalances[p.id] ?? 0)}</i></div>}
             {bets.units.enabled && <div><span>📏 Unidades · Jugadas</span><b>{(units.net[p.id] ?? 0) > 0 ? "+" : ""}{units.net[p.id] ?? 0}</b><i>{signedMoney(units.balances[p.id] ?? 0)}</i></div>}
             {bets.foursome.enabled && <div><span>Foursome</span><i>{signedMoney(foursomes.balances[p.id] ?? 0)}</i></div>}
-            {bets.ballFriend.enabled && <div><span>⛳🤝 Bola Amiga</span><i>{signedMoney(ballFriend.balances[p.id] ?? 0)}</i></div>}
+            {bets.ballFriend.enabled && <div><span>⚪🤝 Bola Amiga</span><i>{signedMoney(ballFriend.balances[p.id] ?? 0)}</i></div>}
             {polla.details.filter((detail) => Object.hasOwn(detail.totals, p.id)).map((detail) => <div key={detail.key}><span>{detail.label}</span><b>1</b><i>{signedMoney(pollaDetailBalance(detail, p.id))}</i></div>)}
             {miniPolla.details.filter((detail) => Object.hasOwn(detail.totals, p.id)).map((detail) => <div key={detail.key}><span>Mini Polla</span><b>1</b><i>{signedMoney(pollaDetailBalance(detail, p.id))}</i></div>)}
             {personalBets.length > 0 && <div><span>Personales</span><i>{signedMoney(personals.balances[p.id] ?? 0)}</i></div>}
@@ -2047,7 +2140,7 @@ function GolfBetsApp() {
             {bets.fish.enabled && <div><span>🐟 Peces</span><b>{fish.totalQuantity}</b><i>{signedMoney(fish.balances[p.id] ?? 0)}</i></div>}
             {bets.loba.enabled && <div><span>🐺 Loba</span><b>{loba.details.length}</b><i>{signedMoney(loba.balances[p.id] ?? 0)}</i></div>}
           </div>
-        </details>)}</div></> : <div className="generalResultsWrap"><p className="muted">Todas las apuestas activas y ya jugadas. Desliza horizontalmente para revisar cada categoría.</p>{generalResults.categories.length ? <div className="generalResultsScroll" tabIndex={0} aria-label="Resumen general de resultados por apuesta"><table className="generalResultsTable"><thead><tr><th>Jugador</th>{generalResults.categories.map(category => <th key={category.key}>{category.label}</th>)}<th>TOTAL</th></tr></thead><tbody>{generalResults.rows.map(row => <tr key={row.playerId}><th scope="row">{playerName(row.playerId)}</th>{generalResults.categories.map(category => <td key={category.key}>{signedMoney(row.cells[category.key] || 0)}</td>)}<td className={!row.consistent ? "bad" : row.total > 0 ? "good" : row.total < 0 ? "bad" : ""}>{signedMoney(row.total)}</td></tr>)}<tr className="generalResultsTotal"><th scope="row">TOTAL GENERAL</th>{generalResults.categories.map(category => <td key={category.key}>{signedMoney(generalResults.categoryTotals[category.key] || 0)}</td>)}<td className={Math.abs(generalResults.grandTotal) < 0.001 ? "good" : "bad"}>{signedMoney(generalResults.grandTotal)}</td></tr></tbody></table></div> : <div className="empty">Todavía no hay apuestas activas con hoyos jugados.</div>}</div>}
+        </details>)}</div></> : <div className="generalResultsWrap"><p className="muted">Todas las apuestas activas y ya jugadas. Desliza horizontalmente para revisar cada categoría.</p>{generalResults.categories.length ? <div className="generalResultsScroll" tabIndex={0} aria-label="Resumen general de resultados por apuesta"><table className="generalResultsTable"><thead><tr><th>Jugador</th>{generalResults.categories.map(category => <th key={category.key}>{category.label}{category.quantityTotal !== undefined ? ` · ${category.quantityTotal}` : ""}</th>)}<th>TOTAL</th></tr></thead><tbody>{generalResults.rows.map(row => <tr key={row.playerId}><th scope="row">{playerName(row.playerId)}</th>{generalResults.categories.map(category => { const amount = row.cells[category.key] || 0; const quantity = category.quantities?.[row.playerId]; const quantityText = quantity === undefined ? "" : `${category.signedQuantity && quantity > 0 ? "+" : ""}${quantity} ${category.quantityLabel || ""}`.trim(); return <td key={category.key}><div className="generalResultCell">{category.detailByPlayer?.[row.playerId] && <span>{category.detailByPlayer[row.playerId]}</span>}{quantityText && <span>{quantityText}</span>}<strong className={amount > 0 ? "good" : amount < 0 ? "bad" : ""}>{signedMoney(amount)}</strong></div></td>; })}<td className={!row.consistent ? "bad" : row.total > 0 ? "good" : row.total < 0 ? "bad" : ""}>{signedMoney(row.total)}</td></tr>)}<tr className="generalResultsTotal"><th scope="row">TOTAL GENERAL</th>{generalResults.categories.map(category => <td key={category.key} className={Math.abs(generalResults.categoryTotals[category.key] || 0) < 0.001 ? "good" : "bad"}>{signedMoney(generalResults.categoryTotals[category.key] || 0)}</td>)}<td className={Math.abs(generalResults.grandTotal) < 0.001 ? "good" : "bad"}>{signedMoney(generalResults.grandTotal)}</td></tr></tbody></table></div> : <div className="empty">Todavía no hay apuestas activas con hoyos jugados.</div>}</div>}
       </section>
 
       <section className={`card settlementCard ${Math.abs(settlementDifference) < 0.001 ? "" : "settlementError"}`}>
@@ -2088,7 +2181,7 @@ function GolfBetsApp() {
       </section>
 
       <section className="card summaryCard"><div><span>Apuestas</span><b className={ownerBetResult >= 0 ? "good" : "bad"}>{money(ownerBetResult)}</b></div><div><span>Gastos</span><b className="bad">{money(-ownerExpenseTotal)}</b></div><div className="grand"><span>NETO DEL DÍA</span><b className={ownerNet >= 0 ? "good" : "bad"}>{money(ownerNet)}</b></div></section>
-      <div className="roundActions"><button className="secondary big" onClick={async () => { const snapshot = currentSnapshot(); if (snapshot) await shareRound(snapshot); }}>Compartir ronda</button><button className="secondary big" onClick={resetRound}>Nueva ronda</button>{roundClosed ? <button className="primary big" onClick={() => setTab("history")}>Abrir Histórico</button> : <button className="primary big" onClick={saveRound}>Guardar en histórico</button>}</div>
+      <div className="roundActions"><button className="secondary big" onClick={async () => { const snapshot = currentSnapshot(); if (snapshot) await shareRound(snapshot); }}>Compartir ronda</button><button className="secondary big" onClick={resetRound}>Nueva ronda</button>{roundClosed ? <button className="primary big" onClick={() => setTab("history")}>Abrir Histórico</button> : <button className="primary big" onClick={() => saveRound()}>Guardar en histórico</button>}</div>
     </>}
 
     {tab === "history" && <>

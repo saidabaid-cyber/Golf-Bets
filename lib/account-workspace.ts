@@ -4,7 +4,8 @@ import { PHOTO_QUEUE_KEY } from "./photo-sync-queue";
 
 export const WORKSPACE_OWNER_KEY = "backyard-local-workspace-owner-v1";
 export const CLOUD_CONFLICTS_KEY = "backyard-cloud-conflicts-v1";
-const workspaceKeys = [...Object.values(STORAGE_KEYS), CLOUD_LOCAL_META_KEY, CLOUD_TOMBSTONES_KEY, CLOUD_CONFLICTS_KEY, PHOTO_QUEUE_KEY];
+export const CLOUD_DATA_CONFLICTS_KEY = "backyard-cloud-data-conflicts-v1";
+const workspaceKeys = [...Object.values(STORAGE_KEYS), CLOUD_LOCAL_META_KEY, CLOUD_TOMBSTONES_KEY, CLOUD_CONFLICTS_KEY, CLOUD_DATA_CONFLICTS_KEY, PHOTO_QUEUE_KEY];
 type WorkspaceStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 const archiveKey = (owner: string) => `backyard-local-workspace-v1:${owner}`;
 
@@ -44,6 +45,7 @@ export function discardAccountWorkspace(storage: WorkspaceStorage, userId: strin
   if (ownsLocalWorkspace(storage, userId)) switchAccountWorkspace(storage, "guest");
   storage.removeItem(archiveKey(userId));
   storage.removeItem(`backyard-profile-cache-v1:${userId}`);
+  storage.removeItem(`backyard-profile-ready-v1:${userId}`);
   storage.removeItem(`backyard-last-sync-v1:${userId}`);
   storage.removeItem(`backyard-local-migration-decision-v1:${userId}`);
 }
@@ -52,4 +54,12 @@ export function preserveDraftConflict(storage: Pick<Storage, "getItem" | "setIte
   if (!draft) return;
   const versions = readStoredJson<unknown[]>(storage, CLOUD_CONFLICTS_KEY, []);
   if (!versions.some(value => JSON.stringify(value) === JSON.stringify(draft))) storage.setItem(CLOUD_CONFLICTS_KEY, JSON.stringify([...versions, draft]));
+}
+
+export function preserveDataConflicts(storage: Pick<Storage, "getItem" | "setItem">, conflicts: unknown[]) {
+  if (!conflicts.length) return;
+  const prior = readStoredJson<unknown[]>(storage, CLOUD_DATA_CONFLICTS_KEY, []);
+  const next = [...prior];
+  for (const conflict of conflicts) if (!next.some(value => JSON.stringify(value) === JSON.stringify(conflict))) next.push(conflict);
+  storage.setItem(CLOUD_DATA_CONFLICTS_KEY, JSON.stringify(next.slice(-50)));
 }

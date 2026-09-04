@@ -346,6 +346,42 @@ test("fixture integral de 18 hoyos mantiene todos los motores coordinados y sett
   assert.equal(Object.values(settlement).reduce((sum, amount) => sum + amount, 0), 0);
 });
 
+test("Conejos: H16 agarra, H17 gana y el conejo nuevo de H18 se cobra para llegar exactamente a siete", () => {
+  const rabbitPlayers = zeroHcpPlayers.slice(0, 3);
+  const rabbitScores: Record<number, HoleScore> = {};
+  for (let hole = 1; hole <= 15; hole += 1) {
+    const phase = (hole - 1) % 3;
+    rabbitScores[hole] = phase === 0
+      ? { said: 3, cuau: 4, armando: 5 }
+      : phase === 1
+        ? { said: 5, cuau: 3, armando: 4 }
+        : { said: 5, cuau: 4, armando: 3 };
+  }
+  rabbitScores[16] = { said: 3, cuau: 4, armando: 5 };
+  rabbitScores[17] = { said: 3, cuau: 4, armando: 5 };
+  rabbitScores[18] = { said: 3, cuau: 4, armando: 5 };
+  const cfg = { ...betConfig(rabbitPlayers.map(player => player.id)).rabbits, enabled: true, accumulate: true };
+  const result = calculateRabbits(makeCourse(), rabbitScores, rabbitPlayers, cfg, fullRoundOrder);
+  const hole16 = result.events.filter(event => event.hole === 16);
+  const hole17 = result.events.filter(event => event.hole === 17);
+  const hole18 = result.events.filter(event => event.hole === 18);
+  assert.ok(hole16.some(event => event.type === "grab" && event.playerId === "said"));
+  assert.ok(hole17.some(event => event.type === "win" && event.playerId === "said"));
+  assert.ok(hole18.some(event => event.type === "grab" && event.playerId === "said"));
+  assert.ok(hole18.some(event => event.type === "win" && event.playerId === "said"));
+  assert.equal(Object.values(result.won).reduce((sum, amount) => sum + amount, 0), 7);
+  const balances = payoutWinnerTakesFromAll(rabbitPlayers, result.won, 100);
+  assert.equal(Object.values(balances).reduce((sum, amount) => sum + amount, 0), 0);
+});
+
+test("Conejos: un empate en el último hoyo no crea ganador", () => {
+  const rabbitPlayers = zeroHcpPlayers;
+  const cfg = { ...betConfig(rabbitPlayers.map(player => player.id)).rabbits, enabled: true };
+  const result = calculateRabbits(makeCourse(), { 18: { said: 4, cuau: 4, armando: 5 } }, rabbitPlayers, cfg, [18]);
+  assert.equal(Object.values(result.won).reduce((sum, amount) => sum + amount, 0), 0);
+  assert.equal(result.events.some(event => event.type === "win"), false);
+});
+
 test("fixture integral actualiza cada hoyo en vivo sin perder scores ni romper cero-sum", () => {
   for (let through = 1; through <= 18; through += 1) {
     const holes = fullRoundOrder.slice(0, through);

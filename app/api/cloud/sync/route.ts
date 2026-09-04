@@ -21,6 +21,20 @@ async function accountClient(request: NextRequest) {
   return { client, userId: data.user.id } as const;
 }
 
+function safeFailure(error: unknown) {
+  const candidate = (error && typeof error === "object" ? error : {}) as { code?: string; message?: string };
+  const code = String(candidate.code || "");
+  const message = String(candidate.message || (error instanceof Error ? error.message : ""));
+  if (code === "42501" || /permission denied|row-level security/i.test(message)) return "La nube rechazó esta operación. Vuelve a iniciar sesión y reintenta; tu copia local se conserva.";
+  if (["42P01", "42703", "PGRST204", "PGRST205"].includes(code) || /schema cache|does not exist/i.test(message)) return "La nube no pudo completar esta sincronización. Tu copia local se conserva; reintenta más tarde.";
+  return "La sincronización no terminó. Puede haber datos pendientes; tu copia local se conserva. Reintenta.";
+}
+
+function logFailure(operation: "read" | "write", error: unknown) {
+  const candidate = (error && typeof error === "object" ? error : {}) as { code?: string; status?: number };
+  console.error("backyard_cloud_sync_failed", { operation, code: String(candidate.code || "unknown").slice(0, 32), status: candidate.status || null });
+}
+
 
 export async function GET(request: NextRequest) {
   try {
@@ -28,7 +42,7 @@ export async function GET(request: NextRequest) {
     if ("error" in account) return NextResponse.json({ error: account.error }, { status: account.status });
     const data = await readCloudBundle(account.client, account.userId);
     return NextResponse.json({ data }, { headers: { "cache-control": "private, no-store" } });
-  } catch { return NextResponse.json({ error: "No pudimos leer Supabase. Tus datos locales se conservan; reintenta la sincronización." }, { status: 503 }); }
+  } catch (error) { logFailure("read", error); return NextResponse.json({ error: safeFailure(error) }, { status: 503 }); }
 }
 
 export async function POST(request: NextRequest) {
@@ -45,5 +59,5 @@ export async function POST(request: NextRequest) {
 
     const result = await writeCloudBundle(account.client, account.userId, body as { data: CloudDataBundle; fingerprint: string });
     return NextResponse.json(result, { headers: { "cache-control": "private, no-store" } });
-  } catch { return NextResponse.json({ error: "La sincronización no terminó. Puede haber datos pendientes; tu copia local se conserva. Reintenta." }, { status: 503 }); }
+  } catch (error) { logFailure("write", error); return NextResponse.json({ error: safeFailure(error) }, { status: 503 }); }
 }

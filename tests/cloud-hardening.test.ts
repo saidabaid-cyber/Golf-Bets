@@ -233,4 +233,17 @@ test("18 hoyos y cuatro jugadores: 72 scores, retry sin duplicados y corrección
   assert.equal(db.rows("round_scores_cloud").length, 72);
   assert.deepEqual((await readCloudBundle(db.client, "user-a")).history, [corrected]);
   assert.equal(db.rows("round_scores_cloud").filter(score => score.hole === 1 && score.score === 2).length, 1);
+  assert.equal(Object.hasOwn(db.rows("round_scores_cloud")[0], "id"), false);
+});
+
+test("proyección de scores usa la clave compuesta real y nunca consulta una columna id inexistente", async () => {
+  const db = new CloudDb();
+  await write(db, bundle({ history: [round()] }));
+  assert.deepEqual(
+    Object.keys(db.rows("round_scores_cloud")[0]).sort(),
+    ["hole", "round_player_id", "score", "updated_by_device"].sort(),
+  );
+  const source = await import("node:fs/promises").then(fs => fs.readFile("lib/cloud-sync-service.ts", "utf8"));
+  assert.doesNotMatch(source, /from\("round_scores_cloud"\)[\s\S]{0,160}select\("id"\)/);
+  assert.match(source, /select\("round_player_id,hole"\)/);
 });

@@ -60,6 +60,8 @@ export function cloudSyncErrorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : String(error || "");
   if (/cancel/i.test(message)) return "";
   if (/token|sesión|jwt|401/i.test(message)) return "Tu sesión cambió. Vuelve a iniciar sesión para sincronizar.";
+  if (/permission|permisos|row-level|42501/i.test(message)) return "La nube rechazó la sincronización. Tu copia local se conserva; vuelve a iniciar sesión o reintenta.";
+  if (/schema|migration|migración|tabla|column|PGRST20|42P01|42703/i.test(message)) return "La nube no pudo guardar todos los datos. Tu copia local se conserva; reintenta más tarde.";
   if (/timeout|fetch|network|conexión|503/i.test(message)) return "No pudimos conectar con la nube. Tu copia local se conserva.";
   if (/conflicto/i.test(message)) return "Otro dispositivo actualizó tus datos. Reintenta para conciliarlos.";
   if (/foto|photo/i.test(message)) return "La foto sigue guardada en este dispositivo y queda pendiente de sincronizar.";
