@@ -95,3 +95,35 @@
 .resultAccordion{overflow:hidden;padding:0!important}.resultAccordionHeading{margin:0!important}.resultAccordionHeading>button{display:flex;width:100%;min-height:48px;align-items:center;justify-content:space-between;gap:12px;border:0;background:transparent;padding:10px 14px;color:var(--ink);font:inherit;font-size:15px;font-weight:900;text-align:left;touch-action:manipulation}.resultAccordionHeading>button:focus-visible{outline:3px solid #d2a63f;outline-offset:-4px}.resultAccordionChevron{flex:0 0 auto;color:var(--green);font-size:18px}.resultAccordionBody{border-top:1px solid var(--line);padding:10px 14px 14px}.resultAccordionBody>.card{margin:0!important;border:0!important;background:transparent!important;box-shadow:none!important;padding:0!important}.resultBalanceList small{display:block;margin-top:2px;color:var(--muted);font-size:10px}.resultAccordion .roundStats{margin:10px 0 0}.personalCompact:not(.card){padding:0}.personalCompact:not(.card) .personalCompactCard:first-child{margin-top:0}
 
 @media(max-width:700px){.compactResults .resultAccordion{margin-bottom:7px}.compactResults .resultAccordionHeading>button{min-height:46px;padding:7px 10px;font-size:13px}.compactResults .resultAccordionBody{padding:7px 9px 9px}.compactResults .generalResultsWrap>.muted{margin:0 0 5px;font-size:10px}.compactResults .generalResultsTable th,.compactResults .generalResultsTable td{height:56px;padding:4px 7px;line-height:1.12}.compactResults .generalResultsTable thead th{height:42px;font-size:10px}.compactResults .generalResultsTable th:first-child{min-width:92px}.compactResults .generalResultCell{min-width:96px;gap:1px}.compactResults .generalResultCell span{font-size:8px;line-height:1.1}.compactResults .generalResultCell strong{font-size:11px;line-height:1.1}.compactResults .generalResultsTotal th,.compactResults .generalResultsTotal td{height:44px;padding-top:4px;padding-bottom:4px}.compactResults .resultsViewHeader{margin-bottom:6px}.compactResults .resultsPlayerTools{margin-top:2px}.compactResults .resultsPlayerTools h3{margin:0}.compactResults .resultAccordion .roundStats .stat{min-height:38px;padding:5px 7px}.compactResults .resultAccordion .roundStats .stat b{font-size:18px}.compactResults .resultAccordion .transfer{padding:5px 0}}
+
+/* Setup editors live with the active round; Results stays read-only. */
+.resultAccordionHeading{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center}.resultAccordionHeaderAction{padding-right:10px}.resultAccordionHeaderAction .textButton{min-height:40px;padding:7px 9px;white-space:nowrap}.setupBetsAccordion{scroll-margin-top:88px}.setupBetsAccordion .resultAccordionBody{display:grid;gap:8px}.personalSetupList{display:grid;gap:7px}.personalSetupItem{scroll-margin:100px 0 calc(45vh + env(safe-area-inset-bottom));padding:0!important;overflow:hidden}.personalSetupHeading{display:grid;grid-template-columns:minmax(0,1fr) 44px;align-items:center}.personalSetupHeading>button:first-child{display:flex;min-height:44px;align-items:center;justify-content:space-between;gap:10px;border:0;background:transparent;padding:8px 10px;color:var(--ink);font:inherit;font-weight:850;text-align:left}.personalSetupHeading i{color:var(--green);font-style:normal}.personalSetupHeading .remove{margin-right:4px}.personalSetupBody{border-top:1px solid var(--line);padding:10px}.personalSetupBody>.muted{margin:0 0 8px}.manualBetsEditor>.muted{margin:0 0 8px}.manualResultsList{display:grid;gap:7px}.manualResult{border:1px solid var(--line);border-radius:11px;padding:9px}.manualResult>.row{gap:8px}.manualResult>.row span{font-size:10px;font-weight:800}.manualResultPlayers{display:grid;gap:3px;margin-top:7px}.manualResultPlayers>div,.manualResultTotal{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 0;border-top:1px solid var(--line);font-size:12px}.manualResultTotal{margin-top:4px;font-weight:850}
+
+/* Local-only result navigation; never included in draft/cloud state. */
+.resultJumpNav{position:sticky;z-index:20;top:64px;display:flex;max-width:100%;gap:5px;margin:0 0 6px;overflow-x:auto;padding:5px 1px;background:color-mix(in srgb,var(--bg) 92%,transparent);scrollbar-width:none;-webkit-overflow-scrolling:touch}.resultJumpNav::-webkit-scrollbar{display:none}.resultJumpNav button{min-height:44px;flex:0 0 auto;border:1px solid var(--line);border-radius:999px;background:var(--card);padding:7px 10px;color:var(--ink);font-size:10px;font-weight:850;white-space:nowrap}.resultJumpNav button[aria-pressed=true]{border-color:var(--green);background:var(--green2);color:var(--green)}.compactResults .resultAccordion{scroll-margin-top:116px}.compactResults{padding-bottom:calc(92px + env(safe-area-inset-bottom))}
+
+@media(max-width:700px){
+  .compactResults .resultAccordion{margin-bottom:5px}
+  .compactResults .resultAccordionHeading>button{min-height:44px;padding:5px 9px;font-size:12px;line-height:1.15}
+  .compactResults .resultAccordionBody{padding:5px 8px 7px}
+  .compactResults .generalResultsTable th,.compactResults .generalResultsTable td{height:46px;padding:3px 6px;line-height:1.05}
+  .compactResults .generalResultsTable thead th{height:38px;font-size:9px}
+  .compactResults .generalResultsTable th:first-child{min-width:84px;font-size:10px}
+  .compactResults .generalResultCell{min-width:90px;gap:0}
+  .compactResults .generalResultCell span{font-size:7.5px;line-height:1.05}
+  .compactResults .generalResultCell strong{font-size:10px;line-height:1.05}
+  .compactResults .generalResultsTotal th,.compactResults .generalResultsTotal td{height:40px;padding-top:3px;padding-bottom:3px}
+  .resultJumpNav{top:57px;margin-inline:-2px}
+  .resultJumpNav button{min-height:44px;padding:6px 9px}
+  .resultAccordionHeaderAction{padding-right:5px}.resultAccordionHeaderAction .textButton{min-height:44px;font-size:11px}
+  .setupBetsAccordion .resultAccordionHeading>button{min-height:48px}
+}
+
+@media(orientation:landscape) and (max-height:600px){
+  .compactResults .resultAccordion{margin-bottom:5px}
+  .compactResults .resultAccordionHeading>button{min-height:44px;padding:5px 10px;font-size:12px;line-height:1.15}
+  .compactResults .resultAccordionBody{padding:5px 8px 7px}
+  .compactResults .generalResultsTable th,.compactResults .generalResultsTable td{height:46px;padding:3px 6px;line-height:1.05}
+  .compactResults .generalResultsTable thead th{height:38px;font-size:9px}
+  .compactResults .generalResultsTotal th,.compactResults .generalResultsTotal td{height:40px}
+}

@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { PersonalHistoryPanel } from "../app/components/personal-history-panel";
 import { buildPersonalHistory, selectPersonalRivalHistory, snapshotPersonalResult } from "../lib/personal-history";
 import { applySavedPersonalRivalTemplate, updateSavedPersonalRivalTemplate } from "../lib/frequent-templates";
 import { resolvePersonalHistoryDeletion } from "../lib/round-utils";
@@ -145,6 +148,16 @@ test("histórico personal no presenta resultados antes de elegir contrincante", 
   const rows = buildPersonalHistory([round("a", today, [result("carlos-id", 300, "Carlos")])], today);
   assert.equal(selectPersonalRivalHistory(rows, ""), null);
   assert.equal(selectPersonalRivalHistory(rows, rows[0].key)?.name, "Carlos");
+
+  const markup = renderToStaticMarkup(createElement(PersonalHistoryPanel, {
+    history: [round("a", today, [result("carlos-id", 300, "Carlos")])],
+    today,
+    onDelete: () => undefined,
+  }));
+  assert.match(markup, />Selecciona un contrincante</);
+  assert.match(markup, /<option value="[^"\s]+">Carlos<\/option>/);
+  assert.doesNotMatch(markup, /Said vs Carlos/);
+  assert.doesNotMatch(markup, /Balance:/);
 });
 
 test("selección usa clave estable y no mezcla dos contrincantes homónimos", () => {

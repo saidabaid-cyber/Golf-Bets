@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -57,4 +58,52 @@ test("las secciones de detalle de Resultados inician cerradas sin perder su cont
     assert.match(markup, /hidden=""/);
     assert.match(markup, new RegExp(`Detalle ${title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
   }
+});
+
+test("ResultAccordion admite control externo sin perder el modo no controlado", () => {
+  const forcedClosed = renderToStaticMarkup(createElement(ResultAccordion, {
+    id: "controlled-closed",
+    title: "Controlado cerrado",
+    defaultOpen: true,
+    open: false,
+    onOpenChange: () => undefined,
+  }, createElement("p", null, "Detalle conservado")));
+  const forcedOpen = renderToStaticMarkup(createElement(ResultAccordion, {
+    id: "controlled-open",
+    title: "Controlado abierto",
+    open: true,
+    onOpenChange: () => undefined,
+  }, createElement("p", null, "Detalle visible")));
+
+  assert.match(forcedClosed, /aria-expanded="false"/);
+  assert.match(forcedClosed, /hidden=""/);
+  assert.match(forcedOpen, /aria-expanded="true"/);
+  assert.doesNotMatch(forcedOpen, /hidden=""/);
+});
+
+test("Editar ronda concentra Personales/Manuales y Resultados conserva navegación y lectura", () => {
+  const page = readFileSync("app/page.tsx", "utf8");
+  const setup = page.slice(page.indexOf('{tab === "setup"'), page.indexOf('{tab === "personals"'));
+  const personals = page.slice(page.indexOf('{tab === "personals"'), page.indexOf('{tab === "round"'));
+  const results = page.slice(page.indexOf('{tab === "results" && <>'), page.indexOf('{tab === "history" && <>'));
+
+  assert.ok(setup.indexOf('id="setup-personals"') < setup.indexOf('id="setup-manuals"'));
+  assert.match(setup, /renderPersonalBetsEditor\(\)/);
+  assert.match(setup, /renderManualBetsEditor\(true\)/);
+  assert.match(personals, /<PersonalHistoryPanel/);
+  assert.doesNotMatch(personals, /renderPersonalBetsEditor|\+ Personal/);
+  assert.match(results, /className="resultJumpNav"/);
+  assert.match(results, /openResultSection\(item\.id\)/);
+  assert.match(results, /renderManualBetResults\(\)/);
+  assert.doesNotMatch(results, /renderManualBetsEditor/);
+  assert.doesNotMatch(results, /\.click\(\)/);
+});
+
+test("Resultados mantiene controles táctiles de 44px y filas compactas en portrait y landscape", () => {
+  const css = readFileSync("app/functional-ux.css", "utf8");
+  assert.match(css, /\.resultJumpNav button\{min-height:44px/);
+  assert.match(css, /\.compactResults \.resultAccordion\{margin-bottom:5px\}/);
+  assert.match(css, /\.compactResults \.resultAccordionHeading>button\{min-height:44px/);
+  assert.match(css, /\.compactResults \.generalResultsTable th,\.compactResults \.generalResultsTable td\{height:46px/);
+  assert.match(css, /@media\(orientation:landscape\) and \(max-height:600px\)/);
 });

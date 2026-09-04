@@ -162,7 +162,9 @@ test("UI distingue guardado local, pendiente, offline, nube y error", () => {
   for (const label of ["Guardado en este dispositivo", "Pendiente de sincronizar", "Sin conexión", "Sincronizando", "Guardado en la nube", "Error de sincronización"]) {
     assert.match(`${page}\n${account}`, new RegExp(label, "i"));
   }
-  assert.match(page, /todavía tiene cambios pendientes de sincronizar/);
+  assert.match(page, /saveRoundHistoryLocalFirst/);
+  assert.match(page, /Ronda guardada en este dispositivo · Pendiente de sincronizar/);
+  assert.doesNotMatch(page, /todavía tiene cambios pendientes de sincronizar/);
   assert.match(page, /window\.addEventListener\("focus", onFocus\)/);
   assert.match(page, /45_000/);
 });
