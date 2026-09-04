@@ -25,7 +25,7 @@ function bundle(data: Partial<CloudDataBundle> = {}): CloudDataBundle {
 function round(score = 4, updatedAt = earlier) {
   return { id: "r", updatedAt, date: "2026-09-03", photoId: "photo", players: draft().players, scores: draft(score).scores, personalBets: [{ carryEnabled: true }], betConfig: { foursome: { mode: "fixed" } }, categoryResults: { personal: { p: -600 } }, manualBets: [], expenses: { food: 150 }, courseSnapshot: { holes: [{ number: 1, par: 4, strokeIndex: 1 }] } } as unknown as CloudDataBundle["history"][number];
 }
-const write = (db: CloudDb, data: CloudDataBundle) => writeCloudBundle(db.client, "user-a", { data, fingerprint: "test" });
+const write = (db: CloudDb, data: CloudDataBundle) => writeCloudBundle(db.client, "user-a", { data, fingerprint: "test" }, { extendedSchema: db.extendedSchema });
 
 for (const winner of ["local", "remote"] as const) test("draft " + winner + " más reciente conserva todos los scores", () => {
   const local = bundle({ activeDraft: draft(3), activeDraftUpdatedAt: winner === "local" ? later : earlier });
@@ -281,4 +281,11 @@ test("un error PostgREST conserva su código para diagnóstico seguro del Previe
   const route = await import("node:fs/promises").then(fs => fs.readFile("app/api/cloud/sync/route.ts", "utf8"));
   assert.match(route, /candidate\.code/);
   assert.doesNotMatch(route, /console\.error\([^\n]*(message|token|body)/);
+});
+
+test("sincronización normal no detecta migraciones provocando errores de columna inexistente", async () => {
+  const source = await import("node:fs/promises").then(fs => fs.readFile("lib/cloud-sync-service.ts", "utf8"));
+  assert.doesNotMatch(source, /from\("round_scores_cloud"\)\.select\("version"\)/);
+  const route = await import("node:fs/promises").then(fs => fs.readFile("app/api/cloud/sync/route.ts", "utf8"));
+  assert.match(route, /supportsExtendedCloudSchema\(account\.token\)/);
 });

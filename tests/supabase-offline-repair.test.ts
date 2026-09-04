@@ -171,12 +171,12 @@ test("dos dispositivos conservan identidad estable y una ronda se actualiza sin 
     deviceId: "device-computer",
     history: [{ id: "round-qa", date: "2026-09-03", updatedAt: "2026-09-03T12:00:00.000Z", scores: { 1: { player: 4 } } } as unknown as CloudDataBundle["history"][number]],
   });
-  await writeCloudBundle(db.client, "auth-user-a", { data: first, fingerprint: "computer-v1" });
+  await writeCloudBundle(db.client, "auth-user-a", { data: first, fingerprint: "computer-v1" }, { extendedSchema: db.extendedSchema });
   const second = bundle({
     deviceId: "device-phone",
     history: [{ id: "round-qa", date: "2026-09-03", updatedAt: "2026-09-03T12:01:00.000Z", scores: { 1: { player: 3 } } } as unknown as CloudDataBundle["history"][number]],
   });
-  await writeCloudBundle(db.client, "auth-user-a", { data: second, fingerprint: "phone-v2" });
+  await writeCloudBundle(db.client, "auth-user-a", { data: second, fingerprint: "phone-v2" }, { extendedSchema: db.extendedSchema });
   const restored = await readCloudBundle(db.client, "auth-user-a");
   assert.equal(restored.history.length, 1);
   assert.deepEqual(restored.history[0].scores, { 1: { player: 3 } });
@@ -188,11 +188,11 @@ test("servidor combina hoyos distintos y rechaza sólo el mismo score concurrent
   const db = new CloudDb();
   const baseDraft = { roundId: "round-live", players: [{ id: "p", name: "Said" }], scores: { 5: { p: 4 }, 6: { p: 4 } } };
   const baseFingerprint = JSON.stringify(stableValue(baseDraft));
-  await writeCloudBundle(db.client, "auth-user-a", { data: bundle({ deviceId: "base-device", activeDraft: baseDraft, activeDraftUpdatedAt: "2026-09-03T12:00:00Z" }), fingerprint: "base" });
+  await writeCloudBundle(db.client, "auth-user-a", { data: bundle({ deviceId: "base-device", activeDraft: baseDraft, activeDraftUpdatedAt: "2026-09-03T12:00:00Z" }), fingerprint: "base" }, { extendedSchema: db.extendedSchema });
   const computer = bundle({ deviceId: "computer", activeDraft: { ...baseDraft, scores: { 5: { p: 3 }, 6: { p: 4 } } }, activeDraftUpdatedAt: "2026-09-03T12:01:00Z", baseDraft, baseDraftFingerprint: baseFingerprint, baseDraftUpdatedAt: "2026-09-03T12:00:00Z" });
   const phone = bundle({ deviceId: "phone", activeDraft: { ...baseDraft, scores: { 5: { p: 4 }, 6: { p: 3 } } }, activeDraftUpdatedAt: "2026-09-03T12:02:00Z", baseDraft, baseDraftFingerprint: baseFingerprint, baseDraftUpdatedAt: "2026-09-03T12:00:00Z" });
-  await writeCloudBundle(db.client, "auth-user-a", { data: computer, fingerprint: "computer-h5" });
-  await writeCloudBundle(db.client, "auth-user-a", { data: phone, fingerprint: "phone-h6" });
+  await writeCloudBundle(db.client, "auth-user-a", { data: computer, fingerprint: "computer-h5" }, { extendedSchema: db.extendedSchema });
+  await writeCloudBundle(db.client, "auth-user-a", { data: phone, fingerprint: "phone-h6" }, { extendedSchema: db.extendedSchema });
   const combined = await readCloudBundle(db.client, "auth-user-a");
   assert.deepEqual((combined.activeDraft as typeof baseDraft).scores, { 5: { p: 3 }, 6: { p: 3 } });
 
@@ -200,8 +200,8 @@ test("servidor combina hoyos distintos y rechaza sólo el mismo score concurrent
   const newFingerprint = JSON.stringify(stableValue(newBase));
   const conflictA = bundle({ deviceId: "computer", activeDraft: { ...baseDraft, scores: { 5: { p: 2 }, 6: { p: 3 } } }, activeDraftUpdatedAt: "2026-09-03T12:04:00Z", baseDraft: newBase, baseDraftFingerprint: newFingerprint, baseDraftUpdatedAt: combined.activeDraftUpdatedAt });
   const conflictB = bundle({ deviceId: "phone", activeDraft: { ...baseDraft, scores: { 5: { p: 5 }, 6: { p: 3 } } }, activeDraftUpdatedAt: "2026-09-03T12:05:00Z", baseDraft: newBase, baseDraftFingerprint: newFingerprint, baseDraftUpdatedAt: combined.activeDraftUpdatedAt });
-  await writeCloudBundle(db.client, "auth-user-a", { data: conflictA, fingerprint: "conflict-a" });
-  await assert.rejects(writeCloudBundle(db.client, "auth-user-a", { data: conflictB, fingerprint: "conflict-b" }), (error: unknown) => {
+  await writeCloudBundle(db.client, "auth-user-a", { data: conflictA, fingerprint: "conflict-a" }, { extendedSchema: db.extendedSchema });
+  await assert.rejects(writeCloudBundle(db.client, "auth-user-a", { data: conflictB, fingerprint: "conflict-b" }, { extendedSchema: db.extendedSchema }), (error: unknown) => {
     if (!error || typeof error !== "object" || !("code" in error) || error.code !== "CLOUD_FIELD_CONFLICT" || !("conflicts" in error) || !Array.isArray(error.conflicts)) return false;
     assert.equal(error.conflicts.length, 1);
     assert.equal(error.conflicts[0].fieldPath, "/scores/5/p");

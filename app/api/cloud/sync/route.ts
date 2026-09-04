@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseForUser } from "../../../../lib/supabase/server";
 import { cloudServerEnabled } from "../../../../lib/feature-flags";
 import type { CloudDataBundle, CloudDataConflict } from "../../../../lib/cloud-sync";
-import { readCloudBundle, supportsExtendedCloudSchema, writeCloudBundle } from "../../../../lib/cloud-sync-service";
+import { readCloudBundle, writeCloudBundle } from "../../../../lib/cloud-sync-service";
+import { supportsExtendedCloudSchema } from "../../../../lib/cloud-schema";
 
 const MAX_BODY_BYTES = 5_000_000;
 
@@ -18,7 +19,7 @@ async function accountClient(request: NextRequest) {
   if (!client) return { error: "Nube no configurada.", status: 503 } as const;
   const { data, error } = await client.auth.getUser(token);
   if (error || !data.user) return { error: "Sesión inválida.", status: 401 } as const;
-  return { client, userId: data.user.id } as const;
+  return { client, userId: data.user.id, token } as const;
 }
 
 function safeFailure(error: unknown) {
@@ -47,7 +48,7 @@ export async function GET(request: NextRequest) {
   try {
     const account = await accountClient(request);
     if ("error" in account) return NextResponse.json({ error: account.error }, { status: account.status });
-    const extendedSchema = await supportsExtendedCloudSchema(account.client);
+    const extendedSchema = await supportsExtendedCloudSchema(account.token);
     const data = await readCloudBundle(account.client, account.userId, extendedSchema);
     return NextResponse.json({ data }, { headers: { "cache-control": "private, no-store" } });
   } catch (error) { logFailure("read", error); return NextResponse.json({ error: safeFailure(error) }, { status: 503 }); }
@@ -65,7 +66,8 @@ export async function POST(request: NextRequest) {
   if (serializedLength > MAX_BODY_BYTES) return NextResponse.json({ error: "Los datos exceden el tamaño permitido." }, { status: 413 });
 
 
-    const result = await writeCloudBundle(account.client, account.userId, body as { data: CloudDataBundle; fingerprint: string });
+    const extendedSchema = await supportsExtendedCloudSchema(account.token);
+    const result = await writeCloudBundle(account.client, account.userId, body as { data: CloudDataBundle; fingerprint: string }, { extendedSchema });
     return NextResponse.json(result, { headers: { "cache-control": "private, no-store" } });
   } catch (error) {
     logFailure("write", error);

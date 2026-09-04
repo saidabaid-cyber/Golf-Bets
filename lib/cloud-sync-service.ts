@@ -16,23 +16,6 @@ async function upsertRows(client: SupabaseClient, table: string, rows: Record<st
   for (const row of rows) await writeVersionedRow(client, table, { owner_id: row.owner_id, local_id: row.local_id }, row);
 }
 
-// Only an absent additive column means "legacy but usable". A missing core
-// table (42P01/PGRST205) is a real installation error and must remain visible.
-const LEGACY_SCHEMA_CODES = new Set(["42703", "PGRST204"]);
-
-/** The September 4 migration adds conflict/audit metadata, but the core cloud
- * schema predates it. Probe one additive column so an existing installation
- * keeps syncing complete snapshots while that non-destructive migration is
- * awaiting administrative application. Permission/network errors remain hard
- * failures and can never be mistaken for a legacy schema. */
-export async function supportsExtendedCloudSchema(client: SupabaseClient) {
-  const result = await client.from("round_scores_cloud").select("version").range(0, 0);
-  if (!result.error) return true;
-  const code = typeof result.error.code === "string" ? result.error.code : "";
-  if (LEGACY_SCHEMA_CODES.has(code)) return false;
-  throw result.error;
-}
-
 function withDevice(row: Record<string, unknown>, deviceId: string | null, extendedSchema: boolean) {
   return extendedSchema ? { ...row, updated_by_device: deviceId } : row;
 }
@@ -219,7 +202,12 @@ export async function readCloudBundle(client: SupabaseClient, userId: string, ex
 }
 
 
-export async function writeCloudBundle(client: SupabaseClient, userId: string, body: { data: CloudDataBundle; fingerprint: string }) {
+export async function writeCloudBundle(
+  client: SupabaseClient,
+  userId: string,
+  body: { data: CloudDataBundle; fingerprint: string },
+  options: { extendedSchema?: boolean } = {},
+) {
   // Re-read inside the write request. Two devices may both have downloaded the
   // same base; this server-side three-way merge closes that race without
   // overwriting compatible score edits from the other device.
@@ -239,9 +227,8 @@ export async function writeCloudBundle(client: SupabaseClient, userId: string, b
     return "sync_failed";
   };
 
-  let extendedSchema = false;
+  const extendedSchema = options.extendedSchema ?? true;
   try {
-    extendedSchema = await supportsExtendedCloudSchema(client);
     const currentCloud = await readCloudBundle(client, userId, extendedSchema);
     const lateConflicts = findAmbiguousCloudConflicts(body.data, currentCloud);
     if (lateConflicts.length) throw Object.assign(new Error("Hay un cambio simultáneo en el mismo dato."), { code: "CLOUD_FIELD_CONFLICT", conflicts: lateConflicts });
