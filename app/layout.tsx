@@ -14,8 +14,8 @@ export const metadata = {
   description: "Built for the games we play.",
   manifest: "/manifest.webmanifest",
   icons: {
-    icon: "/brand/the-backyard-logo.png",
-    apple: "/brand/the-backyard-logo.png",
+    icon: "/apple-icon.png?v=3",
+apple: "/apple-icon.png?v=3",
   },
   appleWebApp: {
     capable: true,
