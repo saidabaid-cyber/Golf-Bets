@@ -3,21 +3,21 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { LEGAL_DOCUMENT_VERSIONS, legalConfig } from "../../lib/legal-config";
+import { profileHandicapInput, profileHandicapLabel, validateProfileDraft } from "../../lib/account-state";
 import { useBackyardAccount } from "./account-provider";
-import { NumericCaptureInput } from "./numeric-capture-input";
 
 export function AccountPanel({ highContrast, onHighContrastChange, onBack }: { highContrast: boolean; onHighContrastChange: (value: boolean) => void; onBack: () => void }) {
   const { identity, updateProfile, logout, openAccess, acceptances, cloudLinked, cloudStatus, requestCloudLink, lastCloudSync, cloudError, retryCloudSync } = useBackyardAccount();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(identity.displayName);
-  const [handicap, setHandicap] = useState<number | null>(identity.defaultHandicap);
+  const [handicap, setHandicap] = useState(profileHandicapInput(identity.defaultHandicap));
   const [message, setMessage] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteText, setDeleteText] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
 
-  useEffect(() => { if (!editing) { setName(identity.displayName); setHandicap(identity.defaultHandicap); } }, [identity.displayName, identity.defaultHandicap, editing]);
+  useEffect(() => { if (!editing) { setName(identity.displayName); setHandicap(profileHandicapInput(identity.defaultHandicap)); } }, [identity.displayName, identity.defaultHandicap, editing]);
   const userAcceptances = useMemo(() => acceptances.filter((item) => item.userId === identity.userId), [acceptances, identity.userId]);
   const acceptance = (type: keyof typeof LEGAL_DOCUMENT_VERSIONS) => userAcceptances.find((item) => item.type === type);
   const acceptedLabel = (type: keyof typeof LEGAL_DOCUMENT_VERSIONS) => {
@@ -26,10 +26,11 @@ export function AccountPanel({ highContrast, onHighContrastChange, onBack }: { h
   };
 
   async function saveProfile() {
-    if (!name.trim()) { setMessage("Escribe un nombre."); return; }
+    const validation = validateProfileDraft(name, handicap);
+    if (!validation.ok) { setMessage(validation.message); return; }
     setSavingProfile(true); setMessage("");
     try {
-      await updateProfile({ displayName: name.trim(), defaultHandicap: handicap, avatarUrl: identity.avatarUrl });
+      await updateProfile({ displayName: validation.displayName, defaultHandicap: validation.defaultHandicap, avatarUrl: identity.avatarUrl });
       setEditing(false); setMessage("Perfil actualizado.");
     } catch { setMessage("No se confirmó el guardado del perfil. Conservamos lo que escribiste; reintenta."); }
     finally { setSavingProfile(false); }
@@ -63,8 +64,8 @@ export function AccountPanel({ highContrast, onHighContrastChange, onBack }: { h
 
     <section className="card profileCard">
       <div className="sectionTitle"><div className="profileIdentity"><div className="accountAvatar">{identity.avatarUrl ? <img src={identity.avatarUrl} alt="Avatar" /> : (identity.displayName.trim()[0] || "J").toUpperCase()}</div><div><h2>{identity.displayName}</h2><p>{identity.email || "Sin correo · Invitado"}</p></div></div><button className="secondary" onClick={() => setEditing((value) => !value)}>{editing ? "Cancelar" : "Editar"}</button></div>
-      {editing && <div className="profileForm"><label>Nombre<input value={name} onChange={(event) => setName(event.target.value)} /></label><label>HCP predeterminado<NumericCaptureInput inputMode="decimal" step={0.1} min={-15} max={54} placeholder="HCP" value={handicap} emptyWhenZero={false} onValueChange={setHandicap} /></label><button className="primary" disabled={savingProfile} onClick={saveProfile}>{savingProfile ? "Guardando…" : "Guardar perfil"}</button></div>}
-      {!editing && <div className="profileMeta"><span>HCP predeterminado</span><b>{identity.defaultHandicap ?? "Sin capturar"}</b></div>}
+      {editing && <div className="profileForm"><label>Nombre<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Tu nombre" /></label><label>HCP Index (opcional)<input type="text" inputMode="decimal" value={handicap} onChange={(event) => setHandicap(event.target.value)} placeholder="Ej. 8.4 o +1.2" /></label><button className="primary" disabled={savingProfile} onClick={saveProfile}>{savingProfile ? "Guardando…" : "Guardar perfil"}</button></div>}
+      {!editing && <div className="profileMeta"><span>HCP Index</span><b>{profileHandicapLabel(identity.defaultHandicap)}</b></div>}
     </section>
 
     <section className="card"><h2>Documentos y consentimiento</h2><div className="documentConsentList">

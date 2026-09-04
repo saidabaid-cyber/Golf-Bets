@@ -154,6 +154,13 @@ test("onboarding no se completa cuando fallan preferencias; retry confirma ambas
   db.fail = undefined; await saveCloudProfile(db.client, "a", profile, later);
   assert.equal(db.rows("profiles")[0].onboarding_completed_at, later);
 });
+test("perfil cloud conserva HCP Index opcional como null", async () => {
+  const db = new CloudDb();
+  await saveCloudProfile(db.client, "a", { displayName: "Said", defaultHandicap: null, avatarUrl: "" }, later);
+  assert.equal(db.rows("profiles")[0].default_handicap, null);
+  assert.equal(db.rows("user_preferences")[0].default_handicap, null);
+  assert.equal(db.rows("profiles")[0].name, "Said");
+});
 test("foto pendiente/fallida/retry conserva blob y solo quita cola con confirmación", async () => {
   const storage = new MemoryStorage(); queuePhoto(storage, { userId: "a", roundId: "r", photoId: "photo", operation: "upload", revision: "v1" });
   const blob = new Blob(["fixture"]); let failed = true, uploads = 0;

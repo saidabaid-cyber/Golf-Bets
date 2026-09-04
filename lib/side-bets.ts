@@ -17,10 +17,10 @@ import { automaticUnitsForScore, baseHandicaps, completedHole, playingHandicap, 
 
 const EPSILON = 0.0001;
 
-export const COUNTER_BET_META: Record<CounterBetKind, { emoji: string; singular: string; plural: string }> = {
-  vipers: { emoji: "🐍", singular: "Víbora", plural: "Víboras" },
-  camels: { emoji: "🐫", singular: "Camello", plural: "Camellos" },
-  fish: { emoji: "🐟", singular: "Pez", plural: "Peces" },
+export const COUNTER_BET_META: Record<CounterBetKind, { emoji: string; singular: string; plural: string; article: "las" | "los" }> = {
+  vipers: { emoji: "🐍", singular: "Víbora", plural: "Víboras", article: "las" },
+  camels: { emoji: "🐫", singular: "Camello", plural: "Camellos", article: "los" },
+  fish: { emoji: "🐟", singular: "Pez", plural: "Peces", article: "los" },
 };
 
 export const emptyCounterBetKeepers = (): CounterBetKeepers => ({ vipers: {}, camels: {}, fish: {} });
@@ -277,8 +277,7 @@ export function requiredSideBetCaptures(
     for (const { kind, config } of enabledCounterBets) {
       if (config.enabled && !keepers[kind]?.[nine]) {
         const meta = COUNTER_BET_META[kind];
-        const article = kind === "vipers" ? "las" : "los";
-        errors.push(`Selecciona quién se quedó ${article} ${meta.emoji} ${meta.plural} de esta vuelta.`);
+        errors.push(`Selecciona quién se quedó ${meta.article} ${meta.emoji} ${meta.plural} de esta vuelta.`);
       }
     }
   }

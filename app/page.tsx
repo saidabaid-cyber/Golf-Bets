@@ -72,6 +72,7 @@ import { restoreRoundSnapshot, resultSummaryText, upsertRoundSnapshot } from "..
 import { snapshotPersonalResult } from "../lib/personal-history";
 import { createSingleAdvance, HOLE_SUMMARY_DURATION_MS, nextHoleDestination, pauseCountdown, resumeCountdown, startCountdown, type CountdownState } from "../lib/hole-summary";
 import { buildHoleSummary, clearActiveRoundStorage, hasRoundProgress, historicalGolfStats, mergeCoursesPreservingEdits, normalizeRoundDraft, persistRoundHistory, privateLeaderboard, pushUndoState, readStoredJson, resolveHistoricalRoundDeletion, resolvePersonalHistoryDeletion, STORAGE_KEYS, upsertFrequentPlayers } from "../lib/round-utils";
+import { monkeyHoleSummary, personalHoleSummary } from "../lib/personal-summary";
 import { downloadRoundCsv, downloadRoundImage, downloadRoundPdf, shareRound } from "../lib/round-export";
 import { deleteScorecardPhoto, deleteScorecardPhotoCloud, readScorecardPhoto, readScorecardPhotoCloud, saveScorecardPhoto, uploadScorecardPhotoCloud } from "../lib/scorecard-photo";
 import { CLOUD_TOMBSTONES_KEY, collectLocalCloudData, downloadCloudData, persistCloudMetadata, stableValue, trackLocalCloudEdits, type CloudDataBundle, recordCloudDeletion, uploadCloudData } from "../lib/cloud-sync";
@@ -1515,6 +1516,8 @@ function GolfBetsApp() {
     const savedBallFriend = calculateBallFriend(course, savedScores, players, savedBets.ballFriend, ballFriendSetup, order);
     const savedPolla = calculatePolla(course, savedScores, players, bets.polla, order);
     const savedMiniPolla = calculateMiniPolla(course, savedScores, players, bets.miniPolla, order);
+    const savedPersonals = calculatePersonalBets(personalBets, ownerId, players, course, savedScores, order);
+    const savedMonkey = calculateMonkey(course, savedScores, players, bets.monkey, order);
     const savedCompletedHoles = new Set([...completedHoles, holeNumber]);
     const savedVipers = calculateCounterBet("vipers", players, bets.vipers, counterBetEvents, counterBetKeepers, order, savedCompletedHoles);
     const savedCamels = calculateCounterBet("camels", players, bets.camels, counterBetEvents, counterBetKeepers, order, savedCompletedHoles);
@@ -1549,6 +1552,14 @@ function GolfBetsApp() {
       const lobaNames = lobaDetail.lobaTeam.map(playerName).join(" + ");
       const opponentNames = lobaDetail.opponents.map(playerName).join(" + ");
       extras.push(`🐺 ${lobaNames} ${lobaDetail.lobaBestNet} neto vs ${opponentNames} ${lobaDetail.opponentBestNet} neto · 🔥${lobaDetail.fireMultiplier}x · ${lobaDetail.winner === "tie" ? "Empate" : lobaDetail.winner === "loba_team" ? `ganó ${lobaNames}` : `ganó ${opponentNames}`}${bets.loba.unitsEnabled ? ` · 📏 ${lobaDetail.lobaUnits} vs ${lobaDetail.opponentUnits}` : ""}`);
+    }
+    for (const result of savedPersonals.results) {
+      const line = personalHoleSummary(result, playerName(ownerId), playerName(result.rivalId), holeNumber);
+      if (line) extras.push(line);
+    }
+    if (bets.monkey?.enabled) {
+      const participants = playersByIds(players, [...new Set(bets.monkey.participantIds)]);
+      extras.push(savedMonkey.valid ? monkeyHoleSummary(participants, savedMonkey.points) : "Monkey: selecciona exactamente tres jugadores");
     }
     const privatePollaLink = parsePrivatePollaLink(localStorage.getItem(PRIVATE_POLLA_LINK_KEY));
     if (privatePollaLink) {

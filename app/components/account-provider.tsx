@@ -2,7 +2,7 @@
 import { saveCloudProfile } from "../../lib/cloud-account";
 
 import Link from "next/link";
-import { Fragment, createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { Fragment, createContext, useCallback, useContext, useEffect, useRef, useState, type FormEvent } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import {
   ACCOUNT_STORAGE_KEYS,
@@ -18,6 +18,8 @@ import {
   normalizeBackyardProfileCache,
   normalizeOtp,
   parseLegalAcceptances,
+  profileHandicapInput,
+  validateProfileDraft,
   type AccountMode,
   type BackyardProfile,
   type LegalAcceptance,
@@ -243,27 +245,32 @@ function ProfileSetupScreen({ identity, onSave, onBack }: {
   onBack: () => Promise<void>;
 }) {
   const [name, setName] = useState(identity.displayName === "Jugador" ? "" : identity.displayName);
-  const [handicap, setHandicap] = useState<string>(identity.defaultHandicap === null ? "" : String(identity.defaultHandicap));
+  const [handicap, setHandicap] = useState(profileHandicapInput(identity.defaultHandicap));
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  return <main className="consentScreen"><section className="consentCard profileSetupCard">
+  async function saveProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const validation = validateProfileDraft(name, handicap);
+    if (!validation.ok) { setMessage(validation.message); return; }
+    setBusy(true); setMessage("");
+    try { await onSave({ displayName: validation.displayName, defaultHandicap: validation.defaultHandicap, avatarUrl: identity.avatarUrl }); }
+    catch { setMessage("No pudimos completar el perfil. Revisa tu conexión e intenta nuevamente."); }
+    finally { setBusy(false); }
+  }
+  return <main className="consentScreen profileSetupScreen"><section className="consentCard profileSetupCard">
     <BrandLockup compact />
     <div className="eyebrow">THE BACKYARD ACCOUNT</div>
     <h1>Completa tu perfil</h1>
     <p>Solo necesitamos lo esencial para identificarte en tus rondas.</p>
-    <label htmlFor="profile-setup-name">Nombre</label>
-    <input id="profile-setup-name" autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} placeholder="Tu nombre" />
-    <label htmlFor="profile-setup-hcp">HCP predeterminado</label>
-    <input id="profile-setup-hcp" type="number" inputMode="decimal" min={-15} max={54} step={0.1} value={handicap} onChange={(event) => setHandicap(event.target.value)} placeholder="Ej. 7.2" />
-    {message && <div className="accessMessage" role="status">{message}</div>}
-    <button className="primary big" disabled={busy || !name.trim() || handicap === ""} onClick={async () => {
-      const parsed = Number(handicap);
-      if (!Number.isFinite(parsed) || parsed < -15 || parsed > 54) { setMessage("Escribe un HCP válido entre -15 y 54."); return; }
-      setBusy(true); setMessage("");
-      try { await onSave({ displayName: name.trim(), defaultHandicap: parsed, avatarUrl: identity.avatarUrl }); }
-      catch { setMessage("No pudimos completar el perfil. Revisa tu conexión e intenta nuevamente."); }
-      finally { setBusy(false); }
-    }}>{busy ? "Guardando…" : "Guardar y continuar"}</button>
+    <form className="profileSetupForm" onSubmit={saveProfile} noValidate>
+      <label htmlFor="profile-setup-name">Nombre</label>
+      <input id="profile-setup-name" autoComplete="name" enterKeyHint="next" value={name} onChange={(event) => setName(event.target.value)} placeholder="Tu nombre" />
+      <label htmlFor="profile-setup-hcp">HCP Index (opcional)</label>
+      <input id="profile-setup-hcp" type="text" inputMode="decimal" enterKeyHint="done" autoComplete="off" value={handicap} onChange={(event) => setHandicap(event.target.value)} placeholder="Ej. 8.4 o +1.2" aria-describedby="profile-setup-hcp-help" />
+      <small id="profile-setup-hcp-help" className="profileFieldHelp">Puedes dejarlo vacío. El HCP de juego se define por separado en cada ronda.</small>
+      {message && <div className="accessMessage" role="alert">{message}</div>}
+      <button type="submit" className="primary big" disabled={busy}>{busy ? "Guardando…" : "Guardar y continuar"}</button>
+    </form>
     <button className="textButton" disabled={busy} onClick={onBack}>← Volver al acceso</button>
   </section></main>;
 }

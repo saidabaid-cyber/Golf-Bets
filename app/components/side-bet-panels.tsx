@@ -89,7 +89,7 @@ export function CounterBetHolePanel({ kind, config, players, events, hole, keepe
       const quantity = counterQuantity(events, kind, hole, player.id);
       return <div key={player.id}><b>{player.name}</b><Counter label={`${meta.plural} de ${player.name}`} value={quantity} onChange={value => onQuantity(player.id, value)} /></div>;
     })}</div>
-    {asksKeeper && <label className="keeperSelect">¿Quién se quedó las {meta.emoji} {meta.plural} de la {hole === 9 ? "primera" : "segunda"} vuelta?<select value={keepers[kind]?.[nine] || ""} onChange={event => onKeeper(event.target.value)}><option value="">Seleccionar…</option>{participants.map(player => <option key={player.id} value={player.id}>{player.name}</option>)}</select></label>}
+    {asksKeeper && <label className="keeperSelect">¿Quién se quedó {meta.article} {meta.emoji} {meta.plural} de la {hole === 9 ? "primera" : "segunda"} vuelta?<select value={keepers[kind]?.[nine] || ""} onChange={event => onKeeper(event.target.value)}><option value="">Seleccionar…</option>{participants.map(player => <option key={player.id} value={player.id}>{player.name}</option>)}</select></label>}
   </section>;
 }
 

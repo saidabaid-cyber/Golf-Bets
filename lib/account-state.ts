@@ -35,6 +35,37 @@ export function mergeBackyardProfile<T extends BackyardProfile>(current: T, patc
   return { ...current, ...patch, displayName: patch.displayName.trim() };
 }
 
+export type ProfileDraftValidation =
+  | { ok: true; displayName: string; defaultHandicap: number | null }
+  | { ok: false; message: string };
+
+/** Profile handicap is an Index, not a round Playing Handicap. Internally a
+ * plus Index is negative, while the user-facing golf notation remains +1.2. */
+export function profileHandicapInput(value: number | null) {
+  if (value === null) return "";
+  return value < 0 ? `+${Math.abs(value)}` : String(value);
+}
+
+export function profileHandicapLabel(value: number | null) {
+  return value === null ? "Sin capturar" : profileHandicapInput(value);
+}
+
+export function validateProfileDraft(name: string, handicapInput: string): ProfileDraftValidation {
+  const displayName = name.trim();
+  if (!displayName) return { ok: false, message: "Escribe tu nombre para continuar." };
+  const normalized = handicapInput.trim().replace(",", ".");
+  if (!normalized) return { ok: true, displayName, defaultHandicap: null };
+  if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(normalized)) {
+    return { ok: false, message: "Escribe un HCP Index válido entre +15.0 y 54.0." };
+  }
+  const numeric = Number(normalized);
+  const defaultHandicap = normalized.startsWith("+") ? -Math.abs(numeric) : numeric;
+  if (!Number.isFinite(defaultHandicap) || defaultHandicap < -15 || defaultHandicap > 54) {
+    return { ok: false, message: "Escribe un HCP Index válido entre +15.0 y 54.0." };
+  }
+  return { ok: true, displayName, defaultHandicap };
+}
+
 export const ACCOUNT_STORAGE_KEYS = {
   mode: "backyard-account-mode-v1",
   acceptances: "backyard-legal-acceptances-v1",

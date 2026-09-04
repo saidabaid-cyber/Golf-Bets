@@ -74,10 +74,11 @@ test("Mi Cuenta muestra perfil, documentos, métodos, preferencias y cierre", ()
   for (const text of ["Mi Cuenta", "Documentos y consentimiento", "Métodos de acceso", "Preferencias", "Cerrar sesión"]) assert.match(account, new RegExp(text));
 });
 
-test("perfil permite nombre y HCP predeterminado vacío", () => {
+test("perfil permite nombre y HCP Index opcional vacío", () => {
   assert.match(account, /displayName/);
   assert.match(account, /defaultHandicap/);
-  assert.match(account, /emptyWhenZero=\{false\}/);
+  assert.match(account, /HCP Index \(opcional\)/);
+  assert.match(account, /validateProfileDraft\(name, handicap\)/);
 });
 
 test("eliminar cuenta requiere confirmación fuerte y nunca usa secret en cliente", () => {
