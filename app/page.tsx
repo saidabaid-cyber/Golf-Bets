@@ -48,7 +48,6 @@ import {
   playOrder,
   playersByIds,
   personalRivalKey,
-  pendingSkinCarry,
   segmentDefinitions,
   settleBalances,
 } from "../lib/engine";
@@ -86,6 +85,7 @@ import { enqueuePollaScore } from "../lib/polla-offline";
 import { cloneLaVistaLocalRules, isLaVistaCourse, LA_VISTA_LOCAL_RULES_UPDATED_AT, withDefaultLaVistaRules } from "../lib/local-rules";
 import { filterHistory, historyYears, MONTH_LABELS } from "../lib/history-filters";
 import { priorRabbitStatus, priorSkinsStatus } from "../lib/prior-hole-status";
+import { playerHoleBetLabels, skinHoleNotice } from "../lib/hole-bet-display";
 import { buildGeneralResultsTable, pollaDetailBalance, pollaDetailBalances, pollaPositionLabels, type ResultCategoryColumn } from "../lib/result-breakdown";
 import { collectHoleValidationErrors } from "../lib/hole-validation";
 import {
@@ -96,6 +96,7 @@ import {
   setCounterQuantity,
 } from "../lib/side-bets";
 import {
+  BallFriendHolePanel,
   CounterBetConfigPanel,
   CounterBetHolePanel,
   CounterBetResults,
@@ -1610,10 +1611,7 @@ function GolfBetsApp() {
   const unitHoleManual = (id: string) => unitEvents.filter((e) => e.hole === holeNumber && e.playerId === id).reduce((a, e) => a + e.amount, 0);
   const unitHoleAuto = (id: string) => liveUnits.autoByHole[holeNumber]?.[id] ?? 0;
   const unitHoleNet = (id: string) => unitHoleManual(id) + unitHoleAuto(id);
-  const bfParticipants = playersByIds(players, bets.ballFriend.participantIds);
   const bfSetup = ballFriendSetup[holeNumber] ?? { teamA: [] };
-  const bfActiveIds = bets.ballFriend.participantIds.filter((id) => id !== bfSetup.restPlayerId);
-  const bfTeamB = bfActiveIds.filter((id) => !bfSetup.teamA.includes(id));
   const bfDetail = liveBallFriend.details.find((d) => d.hole === holeNumber);
 
   function closeHoleSummary() {
@@ -1677,7 +1675,7 @@ function GolfBetsApp() {
     const rabbit = savedRabbits.events.filter(event => event.hole === holeNumber).at(-1);
     const currentSkin = savedSkins.events.find(item => item.hole === holeNumber);
     if (rabbit) extras.push(`🐇 Conejo: ${rabbit.playerId ? playerName(rabbit.playerId) : "libre"}`);
-    if (currentSkin) extras.push(`⛳ Skins: ${currentSkin.winnerId ? `${playerName(currentSkin.winnerId)} cobra ${currentSkin.count}` : `carry ${pendingSkinCarry(currentSkin)}`}`);
+    if (currentSkin) extras.push(...skinHoleNotice(currentSkin, bets.skins.value, currentIndex === order.length - 1, playerName));
     const currentFoursomes = savedFoursomes.matches.filter((match) => match.holePoints.some((item) => item.hole === holeNumber));
     for (const match of currentFoursomes) {
       const holePoints = match.holePoints.find((item) => item.hole === holeNumber)?.points ?? 0;
@@ -2017,45 +2015,52 @@ function GolfBetsApp() {
     </>}
 
     {tab === "round" && <>
-      <button className="secondary" onClick={editActiveRound}>Editar configuración</button>
-      <p className="scoreCaptureHint">Todos comienzan en Par. Ajusta las excepciones y guarda el hoyo para actualizar las apuestas.</p>
-      <div className="holeNav">{order.map((h, i) => <button key={h} className={i === currentIndex ? "active" : scores[h] ? "done" : ""} onClick={() => goToHoleIndex(i)}>{h}</button>)}</div>
       <section className="holeHero">
         <div><div className="eyebrow">{course.name}</div><h1>Hoyo {holeNumber}</h1><p>Par {hole.par} · Ventaja {hole.strokeIndex}</p></div>
         <div className="progress">{currentIndex + 1}<span>/{order.length}</span></div>
       </section>
+      <div className="holeNav">{order.map((h, i) => <button key={h} className={i === currentIndex ? "active" : scores[h] ? "done" : ""} onClick={() => goToHoleIndex(i)}>{h}</button>)}</div>
 
-      <div className="scorecardToggle row"><button className="secondary" onClick={() => setShowFullScorecard((v) => !v)}>{showFullScorecard ? "Ocultar tarjeta completa" : "Ver tarjeta completa"}</button><button className="secondary" onClick={() => setTab("standings")}>CÓMO VAMOS</button><button className="secondary" onClick={undoLastAction} disabled={undoCount === 0}>↶ Deshacer</button><button className="secondary" onClick={() => { setTab("results"); window.setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }), 0); }}>Gastos</button></div>
+      <div className="scorecardToggle row"><button className="secondary" onClick={() => setShowFullScorecard((v) => !v)}>{showFullScorecard ? "Ocultar tarjeta completa" : "Ver tarjeta completa"}</button><button className="secondary" onClick={() => setTab("standings")}>CÓMO VAMOS</button><button className="secondary" onClick={undoLastAction} disabled={undoCount === 0}>↶ Deshacer</button><button className="secondary" onClick={() => { setTab("results"); window.setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }), 0); }}>Gastos</button><button className="secondary" onClick={editActiveRound}>Editar configuración</button></div>
 
       {showFullScorecard && <FullScorecard course={course} players={players} scores={scores} order={order} scale={scorecardScale} onScale={setScorecardScale} />}
 
-      <section className="card scoreCard">
-        {players.map((p) => <div className="scoreRow" key={p.id}>
-          <div><b>{p.name.trim() || "Sin nombre"}</b><span>HCP {p.handicap ?? "—"}</span></div>
-          <div className="scoreControls"><div className="stepper"><button aria-label={`Restar golpe a ${p.name}`} onClick={() => changeScore(p.id, -1)}>−</button><input aria-label={`Score ${p.name} hoyo ${holeNumber}`} type="number" inputMode="numeric" min={1} step={1} value={scoreFor(p.id) ?? ""} placeholder={String(hole.par)} onChange={(e) => setScore(p.id, e.target.value === "" ? null : Number(e.target.value))} /><button aria-label={`Sumar golpe a ${p.name}`} onClick={() => changeScore(p.id, 1)}>+</button></div><button className="parReset" aria-label={`Restablecer Par de ${p.name}`} onClick={() => setScore(p.id, hole.par)}>PAR</button></div>
-        </div>)}
-        {scoreCaptureComplete && <div className="liveBadges">
-          {currentRabbitEvents.map((e, i) => <span className="badge" key={`${e.type}-${i}`}>🐇 {e.type === "grab" ? "Agarra" : e.type === "hold" ? "Mantiene" : e.type === "win" ? `Gana ×${e.count}` : e.type === "lose" ? "Pierde / libre" : e.type === "accumulate" ? `Acumula → ${e.count}` : "Libre"} {e.playerId ? playerName(e.playerId) : ""}</span>)}
-          {currentSkin?.winnerId && <span className="badge">⛳ {playerName(currentSkin.winnerId)} gana {currentSkin.count} skin{currentSkin.count !== 1 ? "s" : ""}</span>}
-        </div>}
-      </section>
-
-      {!scoreCaptureComplete && <div className="scoreGate" role="status">Captura o confirma el score de cada jugador. Al completar el último aparecerán las apuestas de este hoyo.</div>}
-
-      {scoreCaptureComplete && <>
-        <CounterBetHolePanel kind="vipers" config={bets.vipers} players={players} events={counterBetEvents} hole={holeNumber} keepers={counterBetKeepers} onQuantity={(playerId, value) => changeCounterBet("vipers", playerId, value)} onKeeper={playerId => setCounterBetKeeper("vipers", playerId)} />
-        <CounterBetHolePanel kind="camels" config={bets.camels} players={players} events={counterBetEvents} hole={holeNumber} keepers={counterBetKeepers} onQuantity={(playerId, value) => changeCounterBet("camels", playerId, value)} onKeeper={playerId => setCounterBetKeeper("camels", playerId)} />
-        <CounterBetHolePanel kind="fish" config={bets.fish} players={players} events={counterBetEvents} hole={holeNumber} keepers={counterBetKeepers} onQuantity={(playerId, value) => changeCounterBet("fish", playerId, value)} onKeeper={playerId => setCounterBetKeeper("fish", playerId)} />
-        <LobaHolePanel config={bets.loba} players={players} hole={holeNumber} capture={lobaHoles[holeNumber] || { fireMultiplier: 1, unitCounts: {} }} liveDetail={liveLoba.details.find(detail => detail.hole === holeNumber)} onChange={setLobaHole} />
-      </>}
-
-      {scoreCaptureComplete && (bets.rabbits.enabled || bets.skins.enabled) && <section className="card compact priorBetStatus" aria-label="Estado antes de este hoyo">
+      {(bets.rabbits.enabled || bets.skins.enabled) && <section className="card compact priorBetStatus" aria-label="Estado antes de este hoyo">
         <div className="sectionTitle"><div><h2>Antes del hoyo {holeNumber}</h2><p>Solo considera hoyos anteriores ya guardados.</p></div></div>
         <div className="priorBetGrid">
           {bets.rabbits.enabled && <article><span aria-hidden="true">🐇</span><div><b>Conejo</b>{priorRabbitStatus(priorRabbits.events, priorRabbits.pending, bets.rabbits.value, playerName).map((line) => <small key={line}>{line}</small>)}</div></article>}
           {bets.skins.enabled && <article><span aria-hidden="true">⛳</span><div><b>Skins</b>{priorSkinsStatus(priorSkins.carry, bets.skins.value).map((line) => <small key={line}>{line}</small>)}</div></article>}
         </div>
       </section>}
+
+      {(bets.loba.enabled || bets.ballFriend.enabled) && <section className="holeBetSetup" aria-labelledby="hole-bets-title">
+        <div className="holeBetSetupHeader"><h2 id="hole-bets-title">Apuestas de este hoyo</h2><p>Configúralas antes de capturar los scores.</p></div>
+        <LobaHolePanel config={bets.loba} players={players} hole={holeNumber} capture={lobaHoles[holeNumber] || { fireMultiplier: 1, unitCounts: {} }} liveDetail={liveLoba.details.find(detail => detail.hole === holeNumber)} onChange={setLobaHole} showValidation={holeValidationErrors.some(error => error.includes("Loba") || error.includes("🔥"))} />
+        <BallFriendHolePanel config={bets.ballFriend} players={players} hole={holeNumber} capture={bfSetup} liveDetail={bfDetail} onChange={next => { checkpoint(); setBallFriendSetup(state => ({ ...state, [holeNumber]: next })); }} showValidation={holeValidationErrors.some(error => error.includes("Bola Amiga"))} />
+      </section>}
+
+      <p className="scoreCaptureHint">Todos comienzan en Par. Configura las apuestas del hoyo, ajusta las excepciones y guarda para calcular los resultados.</p>
+
+      <section className="card scoreCard">
+        {players.map((p) => {
+          const indicators = playerHoleBetLabels(p.id, bets.loba.enabled ? lobaHoles[holeNumber] : undefined, bets.ballFriend.enabled ? bfSetup : undefined, bets.ballFriend.participantIds);
+          return <div className="scoreRow" key={p.id}>
+          <div><b>{p.name.trim() || "Sin nombre"}</b><span>HCP {p.handicap ?? "—"}</span>{indicators.length > 0 && <span className="playerHoleBetBadges">{indicators.map(indicator => <i key={indicator}>{indicator}</i>)}</span>}</div>
+          <div className="scoreControls"><div className="stepper"><button aria-label={`Restar golpe a ${p.name}`} onClick={() => changeScore(p.id, -1)}>−</button><input aria-label={`Score ${p.name} hoyo ${holeNumber}`} type="number" inputMode="numeric" min={1} step={1} value={scoreFor(p.id) ?? ""} placeholder={String(hole.par)} onChange={(e) => setScore(p.id, e.target.value === "" ? null : Number(e.target.value))} /><button aria-label={`Sumar golpe a ${p.name}`} onClick={() => changeScore(p.id, 1)}>+</button></div><button className="parReset" aria-label={`Restablecer Par de ${p.name}`} onClick={() => setScore(p.id, hole.par)}>PAR</button></div>
+        </div>;})}
+        {scoreCaptureComplete && <div className="liveBadges">
+          {currentRabbitEvents.map((e, i) => <span className="badge" key={`${e.type}-${i}`}>🐇 {e.type === "grab" ? "Agarra" : e.type === "hold" ? "Mantiene" : e.type === "win" ? `Gana ×${e.count}` : e.type === "lose" ? "Pierde / libre" : e.type === "accumulate" ? `Acumula → ${e.count}` : "Libre"} {e.playerId ? playerName(e.playerId) : ""}</span>)}
+          {skinHoleNotice(currentSkin, bets.skins.value, currentIndex === order.length - 1, playerName).map((line, index) => <span className={`badge ${!currentSkin?.winnerId ? "skinCarryBadge" : ""}`} key={`${line}-${index}`}>{line}</span>)}
+        </div>}
+      </section>
+
+      {!scoreCaptureComplete && <div className="scoreGate" role="status">Captura o confirma el score de cada jugador. Los resultados vivos aparecerán al completar el último.</div>}
+
+      {scoreCaptureComplete && <>
+        <CounterBetHolePanel kind="vipers" config={bets.vipers} players={players} events={counterBetEvents} hole={holeNumber} keepers={counterBetKeepers} onQuantity={(playerId, value) => changeCounterBet("vipers", playerId, value)} onKeeper={playerId => setCounterBetKeeper("vipers", playerId)} />
+        <CounterBetHolePanel kind="camels" config={bets.camels} players={players} events={counterBetEvents} hole={holeNumber} keepers={counterBetKeepers} onQuantity={(playerId, value) => changeCounterBet("camels", playerId, value)} onKeeper={playerId => setCounterBetKeeper("camels", playerId)} />
+        <CounterBetHolePanel kind="fish" config={bets.fish} players={players} events={counterBetEvents} hole={holeNumber} keepers={counterBetKeepers} onQuantity={(playerId, value) => changeCounterBet("fish", playerId, value)} onKeeper={playerId => setCounterBetKeeper("fish", playerId)} />
+      </>}
 
       {scoreCaptureComplete && bets.units.enabled && <section className="card">
         <div className="sectionTitle"><div><h2>📏 Unidades / Copas</h2><p>Birdie/Águila/Albatros/HIO se detectan solos. Marca aquí solo las especiales.</p></div></div>
@@ -2071,20 +2076,6 @@ function GolfBetsApp() {
             <button className="undo" onClick={() => undoLastUnit(p.id)}>↶</button>
           </div>
         </div>)}
-      </section>}
-
-      {scoreCaptureComplete && bets.ballFriend.enabled && <section className="card">
-        <div className="sectionTitle"><div><h2>⚪🤝 Bola Amiga</h2><p>Elige descanso (si son 5) y una pareja; la otra sale sola.</p></div></div>
-        {bfParticipants.length === 5 && <><label className="miniLabel">Descansa</label><div className="chips">{bfParticipants.map((p) => <button key={p.id} className={`chipButton ${bfSetup.restPlayerId === p.id ? "resting" : ""}`} onClick={() => setBallFriendSetup((s) => ({ ...s, [holeNumber]: { teamA: (s[holeNumber]?.teamA || []).filter((id) => id !== p.id), restPlayerId: p.id } }))}>{p.name}</button>)}</div></>}
-        <label className="miniLabel">Primera pareja</label>
-        <div className="chips">{bfParticipants.filter((p) => p.id !== bfSetup.restPlayerId).map((p) => <button key={p.id} className={`chipButton ${bfSetup.teamA.includes(p.id) ? "selected" : ""}`} onClick={() => setBallFriendSetup((state) => {
-          const old = state[holeNumber] || { teamA: [], restPlayerId: bfSetup.restPlayerId };
-          const on = old.teamA.includes(p.id);
-          const team = on ? old.teamA.filter((id) => id !== p.id) : old.teamA.length < 2 ? [...old.teamA, p.id] : [old.teamA[1], p.id];
-          return { ...state, [holeNumber]: { ...old, teamA: team } };
-        })}>{p.name}</button>)}</div>
-        {bfSetup.teamA.length === 2 && bfTeamB.length === 2 && <div className="versus"><b>{playerName(bfSetup.teamA[0])} + {playerName(bfSetup.teamA[1])}</b><span>VS</span><b>{playerName(bfTeamB[0])} + {playerName(bfTeamB[1])}</b></div>}
-        {bfDetail && <div className="ballResult"><span>{bfDetail.numberA.toFixed(1).replace('.0','')} vs {bfDetail.numberB.toFixed(1).replace('.0','')}</span><b className={bfDetail.pointDiff >= 0 ? "good" : "bad"}>{bfDetail.pointDiff >= 0 ? "+" : ""}{bfDetail.pointDiff.toFixed(1).replace('.0','')} puntos equipo 1</b>{(bfDetail.birdieOrBetterA || bfDetail.birdieOrBetterB) && <small>🐦 Birdie o mejor: se volteó el score contrario.</small>}</div>}
       </section>}
 
       {scoreCaptureComplete && bets.foursome.enabled && <section className="card compact">

@@ -11,9 +11,9 @@ export function priorRabbitStatus(events: RabbitEvent[], pending: number, value:
 
 export function priorSkinsStatus(carry: number, value: number) {
   const active = Math.max(1, carry);
-  const carriedHoles = Math.max(0, active - 1);
-  return [
-    `Skin actual: $${(active * value).toLocaleString("es-MX")}`,
-    carriedHoles ? `Carry de ${carriedHoles} hoyo${carriedHoles === 1 ? "" : "s"}` : "Sin carry pendiente",
+  if (active > 1) return [
+    "Skin se acumula",
+    `Próximo hoyo: ${active} skins · $${(active * value).toLocaleString("es-MX")} en juego`,
   ];
+  return [`Skin actual: $${value.toLocaleString("es-MX")}`, "Sin carry pendiente"];
 }

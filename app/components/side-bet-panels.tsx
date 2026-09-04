@@ -1,4 +1,5 @@
 import type {
+  BallFriendHole,
   BetConfig,
   CounterBetConfig,
   CounterBetEvent,
@@ -93,7 +94,7 @@ export function CounterBetHolePanel({ kind, config, players, events, hole, keepe
   </section>;
 }
 
-export function LobaHolePanel({ config, players, hole, capture, liveDetail, onChange }: {
+export function LobaHolePanel({ config, players, hole, capture, liveDetail, onChange, showValidation = false }: {
   config: BetConfig["loba"];
   players: Player[];
   hole: number;
@@ -118,6 +119,7 @@ export function LobaHolePanel({ config, players, hole, capture, liveDetail, onCh
     balances: Record<string, number>;
   };
   onChange: (next: LobaHole) => void;
+  showValidation?: boolean;
 }) {
   if (!config.enabled) return null;
   const participants = players.filter(player => config.participantIds.includes(player.id));
@@ -132,6 +134,10 @@ export function LobaHolePanel({ config, players, hole, capture, liveDetail, onCh
     capture.fireMultiplier >= 1 &&
     (capture.mode !== "partner" || (capture.partnerId && capture.partnerId !== capture.lobaPlayerId)),
   );
+  const lobaPlayer = participants.find(player => player.id === capture.lobaPlayerId);
+  const partner = participants.find(player => player.id === capture.partnerId);
+  const lobaTeam = capture.mode === "partner" ? [capture.lobaPlayerId, capture.partnerId].filter(Boolean) : [capture.lobaPlayerId].filter(Boolean);
+  const opponents = participants.filter(player => !lobaTeam.includes(player.id));
   return <section className="card compact lobaCapture">
     <div className="sectionTitle"><div><h2>🐺 Loba · H{hole}</h2><p>Completa la jugada antes de avanzar.</p></div><b>{money(effective)}</b></div>
     <div className="lobaCaptureGrid">
@@ -140,6 +146,12 @@ export function LobaHolePanel({ config, players, hole, capture, liveDetail, onCh
       {capture.mode === "partner" && <label>Pareja<select value={capture.partnerId || ""} onChange={event => onChange({ ...capture, partnerId: event.target.value || undefined })}><option value="">Seleccionar…</option>{rivals.map(player => <option key={player.id} value={player.id}>{player.name}</option>)}</select></label>}
       <div className="lobaFireField"><label>🔥 Multiplicador del hoyo<NumericCaptureInput inputMode="numeric" min={1} max={99} step={1} value={capture.fireMultiplier} emptyWhenZero={false} onValueChange={value => onChange({ ...capture, fireMultiplier: Math.max(1, Math.trunc(value ?? 1)) })} /></label><details><summary aria-label="Ayuda sobre multiplicador del hoyo de Loba">?</summary><p>El 🔥 multiplica únicamente el valor base de Loba. Con base $100 y 🔥5x: pareja $500, sola $1,000 y sola anticipada $1,500. No multiplica las Unidades.</p></details></div>
     </div>
+    {lobaPlayer && <div className="holeBetSetupSummary" aria-live="polite">
+      <strong>🐺 Loba: {lobaPlayer.name}{capture.mode === "solo" ? " · Va sola 2x" : capture.mode === "solo_anticipated" ? " · Sola anticipada 3x" : ""}</strong>
+      {capture.mode === "partner" && partner && <span>Pareja: {partner.name}</span>}
+      {opponents.length > 0 && <span>Contrarios: {opponents.map(player => player.name).join(" + ")}</span>}
+      {capture.mode === "partner" && partner && <span>Modalidad: Con pareja · 🔥{Math.max(1, capture.fireMultiplier || 1)}x</span>}
+    </div>}
     {config.unitsEnabled && <><div className="miniLabel">📏 Unidades naturales + manuales · pertenecen a su equipo</div><div className="quickCounterList lobaUnitPlayers">{participants.map(player => {
       const unitDetail = liveDetail?.playerUnits[player.id];
       const manual = capture.unitCounts[player.id] || 0;
@@ -153,6 +165,58 @@ export function LobaHolePanel({ config, players, hole, capture, liveDetail, onCh
       {config.unitsEnabled && <small>📏 Equipos: {liveDetail.lobaUnits} vs {liveDetail.opponentUnits} · 🐺 Auto {liveDetail.lobaAutomaticUnits} + Manual {liveDetail.lobaManualUnits} · Contrarios Auto {liveDetail.opponentAutomaticUnits} + Manual {liveDetail.opponentManualUnits} · valor efectivo {money(liveDetail.effectiveUnitValue)}</small>}
       <div>{Object.entries(liveDetail.balances).filter(([, amount]) => amount !== 0).map(([id, amount]) => <span key={id}>{players.find(player => player.id === id)?.name || id} <strong className={amount > 0 ? "good" : "bad"}>{signedMoney(amount)}</strong></span>)}</div>
     </div> : <div className="scoreGate" role="status">{configurationComplete ? "Esperando scores." : "Completa quién es la Loba, su modalidad y pareja cuando aplique."} El resultado se calculará automáticamente.</div>}
+    {showValidation && !configurationComplete && <p className="holeBetInlineError" role="alert">Completa la configuración de Loba antes de guardar.</p>}
+  </section>;
+}
+
+export function BallFriendHolePanel({ config, players, hole, capture, liveDetail, onChange, showValidation = false }: {
+  config: BetConfig["ballFriend"];
+  players: Player[];
+  hole: number;
+  capture: BallFriendHole;
+  liveDetail?: {
+    teamA: [string, string];
+    teamB: [string, string];
+    restPlayerId?: string;
+    numberA: number;
+    numberB: number;
+    pointDiff: number;
+    birdieOrBetterA: boolean;
+    birdieOrBetterB: boolean;
+  };
+  onChange: (next: BallFriendHole) => void;
+  showValidation?: boolean;
+}) {
+  if (!config.enabled) return null;
+  const participants = players.filter(player => config.participantIds.includes(player.id));
+  const activeIds = participants.map(player => player.id).filter(id => id !== capture.restPlayerId);
+  const teamA = capture.teamA.filter(id => activeIds.includes(id));
+  const teamB = activeIds.filter(id => !teamA.includes(id));
+  const complete = (participants.length !== 5 || Boolean(capture.restPlayerId)) && teamA.length === 2 && teamB.length === 2;
+  const name = (id?: string) => players.find(player => player.id === id)?.name || "Sin nombre";
+
+  const selectRest = (playerId: string) => {
+    onChange({ restPlayerId: playerId, teamA: capture.teamA.filter(id => id !== playerId) });
+  };
+  const toggleTeamA = (playerId: string) => {
+    const selected = capture.teamA.includes(playerId);
+    const team = selected
+      ? capture.teamA.filter(id => id !== playerId)
+      : capture.teamA.length < 2 ? [...capture.teamA, playerId] : [capture.teamA[1], playerId];
+    onChange({ ...capture, teamA: team });
+  };
+
+  return <section className="card compact ballFriendCapture">
+    <div className="sectionTitle"><div><h2>⚪🤝 Bola Amiga · H{hole}</h2><p>Elige descanso (si son 5) y la primera pareja; la segunda sale sola.</p></div></div>
+    {participants.length === 5 && <><label className="miniLabel">Descansa</label><div className="chips">{participants.map(player => <button type="button" key={player.id} className={`chipButton ${capture.restPlayerId === player.id ? "resting" : ""}`} onClick={() => selectRest(player.id)}>{player.name}</button>)}</div></>}
+    <label className="miniLabel">Primera pareja</label>
+    <div className="chips">{participants.filter(player => player.id !== capture.restPlayerId).map(player => <button type="button" key={player.id} className={`chipButton ${capture.teamA.includes(player.id) ? "selected" : ""}`} onClick={() => toggleTeamA(player.id)}>{player.name}</button>)}</div>
+    {complete && <div className="holeBetSetupSummary" aria-live="polite">
+      <strong>{name(teamA[0])} + {name(teamA[1])} <span>VS</span> {name(teamB[0])} + {name(teamB[1])}</strong>
+      {capture.restPlayerId && <span>Descansa: {name(capture.restPlayerId)}</span>}
+    </div>}
+    {liveDetail ? <div className="ballResult" aria-live="polite"><span>{liveDetail.numberA.toFixed(1).replace(".0", "")} vs {liveDetail.numberB.toFixed(1).replace(".0", "")}</span><b className={liveDetail.pointDiff >= 0 ? "good" : "bad"}>{liveDetail.pointDiff >= 0 ? "+" : ""}{liveDetail.pointDiff.toFixed(1).replace(".0", "")} puntos equipo 1</b>{(liveDetail.birdieOrBetterA || liveDetail.birdieOrBetterB) && <small>🐦 Birdie o mejor: se volteó el score contrario.</small>}</div> : <div className="scoreGate" role="status">{complete ? "Esperando scores. El resultado aparecerá aquí." : "Completa descanso y parejas antes de guardar."}</div>}
+    {showValidation && !complete && <p className="holeBetInlineError" role="alert">Completa la configuración de Bola Amiga antes de guardar.</p>}
   </section>;
 }
 

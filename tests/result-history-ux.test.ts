@@ -25,7 +25,7 @@ test("Histórico filtra mes/año sin modificar datos ni perder años disponibles
 test("estado previo usa exclusivamente eventos guardados y expresa carry", () => {
   assert.deepEqual(priorRabbitStatus([{ hole: 2, type: "hold", playerId: "juan" }], 1, 100, () => "Juan"), ["Juan trae el Conejo", "En juego $100"]);
   assert.deepEqual(priorRabbitStatus([], 2, 100, () => "—"), ["Conejo libre", "Acumula $200"]);
-  assert.deepEqual(priorSkinsStatus(4, 50), ["Skin actual: $200", "Carry de 3 hoyos"]);
+  assert.deepEqual(priorSkinsStatus(4, 50), ["Skin se acumula", "Próximo hoyo: 4 skins · $200 en juego"]);
 });
 
 test("cada Polla se liquida por separado por jugador", () => {
@@ -44,7 +44,7 @@ test("búsqueda PDF ignora acentos, mayúsculas y espacios y cuenta frases", () 
 test("UI dinámica oculta apuestas apagadas, separa Pollas y cierra la ronda activa", () => {
   const page = readFileSync("app/page.tsx", "utf8");
   assert.match(page, /bets\.rabbits\.enabled && <div><span>🐇 Conejos · Jugados<\/span>/);
-  assert.match(page, /scoreCaptureComplete && \(bets\.rabbits\.enabled \|\| bets\.skins\.enabled\)/);
+  assert.match(page, /\{\(bets\.rabbits\.enabled \|\| bets\.skins\.enabled\) && <section className="card compact priorBetStatus"/);
   assert.match(page, /<details className="playerResultCard" key=\{p\.id\}>/);
   assert.match(page, /polla\.details\.filter\(\(detail\) => Object\.hasOwn\(detail\.totals, p\.id\)\)\.map/);
   assert.match(page, /clearActiveRoundStorage\(window\.localStorage\);[\s\S]{0,120}setRoundClosed\(true\)/);
