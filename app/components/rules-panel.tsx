@@ -70,7 +70,7 @@ export function RulesPanel({
   const [answer, setAnswer] = useState("");
   const [error, setError] = useState("");
   const [asking, setAsking] = useState(false);
-  const [aiEnabled, setAiEnabled] = useState<boolean | null>(null);
+  const [aiState, setAiState] = useState<"checking" | "ready" | "disabled" | "missing_config" | "unavailable">("checking");
   const [dictationSupported, setDictationSupported] = useState<boolean | null>(null);
   const [listeningTarget, setListeningTarget] = useState<DictationTarget | null>(null);
   const [dictationMessage, setDictationMessage] = useState("");
@@ -100,8 +100,8 @@ export function RulesPanel({
     let active = true;
     fetch("/api/rules/ask")
       .then((response) => response.json())
-      .then((payload: { enabled?: boolean }) => { if (active) setAiEnabled(Boolean(payload.enabled)); })
-      .catch(() => { if (active) setAiEnabled(false); });
+      .then((payload: { enabled?: boolean; state?: "ready" | "disabled" | "missing_config" }) => { if (active) setAiState(payload.enabled ? "ready" : payload.state || "missing_config"); })
+      .catch(() => { if (active) setAiState("unavailable"); });
     return () => { active = false; };
   }, []);
 
@@ -247,7 +247,7 @@ export function RulesPanel({
 
     <RulesDisclosure id="preguntar-ia" title="🤖 Preguntar a la IA" open={Boolean(openSections.ai)} onToggle={() => toggleSection("ai")}>
 <section className="card">
-      <div className="sectionTitle"><div><h2>Preguntar a la IA</h2><p>{localRulesApply ? "Consulta fuentes oficiales y las Reglas Locales aplicables." : "Consulta Guía Oficial, Procedimientos y Aclaraciones sin asumir Reglas Locales."}</p></div><span className={`statusPill ${aiEnabled ? "ready" : ""}`}>{aiEnabled === null ? "Verificando…" : aiEnabled ? "IA activa" : "IA no configurada"}</span></div>
+      <div className="sectionTitle"><div><h2>Preguntar a la IA</h2><p>{localRulesApply ? "Consulta fuentes oficiales y las Reglas Locales aplicables." : "Consulta Guía Oficial, Procedimientos y Aclaraciones sin asumir Reglas Locales."}</p></div><span className={`statusPill ${aiState === "ready" ? "ready" : ""}`}>{aiState === "checking" ? "Verificando…" : aiState === "ready" ? "IA activa" : aiState === "disabled" ? "IA no activada" : aiState === "unavailable" ? "Estado no disponible" : "Falta configuración"}</span></div>
       <form onSubmit={ask}>
         <label htmlFor="rules-question">Describe qué pasó</label>
         <div className="dictationField"><textarea id="rules-question" rows={4} maxLength={1200} value={question} placeholder="Mi bola está fuera del camino pero mis pies están sobre el camino…" onChange={(event) => setQuestion(event.target.value)} /><button type="button" className={`dictationButton ${listeningTarget === "question" ? "listening" : ""}`} aria-pressed={listeningTarget === "question"} aria-label={listeningTarget === "question" ? "Detener dictado" : "Iniciar dictado"} onClick={() => toggleDictation("question")}>{listeningTarget === "question" ? "🔴 Detener" : "🎙"}</button></div>

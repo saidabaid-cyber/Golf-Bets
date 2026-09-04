@@ -70,9 +70,9 @@ La migración crea el bucket privado `scorecard-photos`, máximo 8 MB, JPEG/PNG/
 
 Configura **Authentication → URL Configuration**:
 
-- Site URL actual: `https://golf-bets-psi.vercel.app`
+- Site URL de beta: `https://beta.thebackyard.com.mx`
 - Redirect local: `http://localhost:3000/auth/callback`
-- Redirect actual: `https://golf-bets-psi.vercel.app/auth/callback`
+- Redirect beta: `https://beta.thebackyard.com.mx/auth/callback`
 - Redirects futuros, solo cuando los dominios existan: `https://thebackyard.com.mx/auth/callback` y `https://www.thebackyard.com.mx/auth/callback`
 
 Continúa con [Email OTP](./SETUP_EMAIL_OTP.md), [Google](./SETUP_GOOGLE_AUTH.md) y [Apple](./SETUP_APPLE_AUTH.md).

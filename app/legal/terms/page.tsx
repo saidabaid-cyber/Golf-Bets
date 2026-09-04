@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { legalConfig } from "../../../lib/legal-config";
+import { LegalDocumentLink } from "../../components/legal-navigation-links";
 
 export const metadata = { title: "Términos de Uso · The Backyard" };
 
@@ -10,7 +10,7 @@ export default function TermsPage() {
     <p className="legalVersion">Versión {legalConfig.termsVersion} · Vigentes a partir del {legalConfig.effectiveDate}</p>
     <p>Responsable: {legalConfig.responsibleName}. Contacto general: <a href={`mailto:${legalConfig.contactEmail}`}>{legalConfig.contactEmail}</a>.</p>
 
-    <h2>1. Aceptación</h2><p>Al usar The Backyard aceptas estos Términos y el <Link href="/legal/privacy">Aviso de Privacidad</Link>. Si no estás de acuerdo, no utilices el servicio.</p>
+    <h2>1. Aceptación</h2><p>Al usar The Backyard aceptas estos Términos y el <LegalDocumentLink href="/legal/privacy">Aviso de Privacidad</LegalDocumentLink>. Si no estás de acuerdo, no utilices el servicio.</p>
     <h2>2. Cuenta de usuario</h2><p>La cuenta es personal. Debes proporcionar información razonablemente correcta, proteger tus métodos de acceso y avisar de usos no autorizados. También puedes usar el modo invitado, cuyos datos permanecen principalmente en ese dispositivo.</p>
     <h2>3. Edad</h2><p>Debes tener al menos 18 años para usar funciones relacionadas con apuestas. No uses esas funciones si la ley de tu ubicación las prohíbe o limita.</p>
     <h2>4. Uso permitido</h2><p>Puedes utilizar la aplicación para organizar juegos, registrar scores, calcular resultados, consultar reglas y mantener históricos propios o de grupos en los que participas. No debes usarla para fraude, suplantación, acceso no autorizado, daño al servicio o infracción de derechos.</p>
@@ -26,7 +26,7 @@ export default function TermsPage() {
     <h2>14. Suspensión o cancelación</h2><p>Podremos limitar una cuenta ante abuso, riesgo de seguridad o incumplimiento grave, procurando una medida proporcional. El usuario puede cerrar sesión y, cuando el backend esté habilitado, solicitar eliminación de cuenta y datos.</p>
     <h2>15. Responsabilidad</h2><p>En la medida permitida por la ley, el servicio se ofrece como herramienta de apoyo. No respondemos por acuerdos o pagos entre jugadores, decisiones oficiales de competencia, datos incorrectos capturados por usuarios ni consecuencias de usar una respuesta de IA sin revisión. Nada de esto limita derechos irrenunciables del consumidor ni responsabilidad que legalmente no pueda excluirse.</p>
     <h2>16. Cambios</h2><p>Podemos actualizar estos Términos. Publicaremos la versión vigente y solicitaremos nueva aceptación cuando el cambio lo requiera.</p>
-    <h2>17. Privacidad</h2><p>El tratamiento de datos se describe en el <Link href="/legal/privacy">Aviso de Privacidad Integral</Link>.</p>
+    <h2>17. Privacidad</h2><p>El tratamiento de datos se describe en el <LegalDocumentLink href="/legal/privacy">Aviso de Privacidad Integral</LegalDocumentLink>.</p>
     <h2>18. Contacto</h2><p>Para preguntas generales: <a href={`mailto:${legalConfig.contactEmail}`}>{legalConfig.contactEmail}</a>. Para soporte: <a href={`mailto:${legalConfig.supportEmail}`}>{legalConfig.supportEmail}</a>. Para privacidad: <a href={`mailto:${legalConfig.privacyEmail}`}>{legalConfig.privacyEmail}</a>. Domicilio del responsable: {legalConfig.responsibleAddress}.</p>
   </article>;
 }

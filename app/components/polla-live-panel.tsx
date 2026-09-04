@@ -394,7 +394,7 @@ export function PollaLivePanel({ courses = [], privateRound }: { courses?: Cours
     </section>}
 
     {screen === "create" && <>
-      {!accessToken && <section className="card"><h2>Cuenta del administrador</h2><p className="muted">Inicia sesión con correo OTP, Google o Apple para crear y administrar la Polla.</p><button type="button" className="secondary big" onClick={openAccess}>Iniciar sesión</button></section>}
+      {!accessToken && <section className="card"><h2>Cuenta del administrador</h2><p className="muted">Inicia sesión con correo OTP o Google para crear y administrar la Polla.</p><button type="button" className="secondary big" onClick={openAccess}>Iniciar sesión</button></section>}
       <form onSubmit={createTournament}>
         <section className="card"><h2>Crear Polla</h2><div className="grid2">
           <div><label>Nombre</label><input required value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></div>

@@ -22,7 +22,7 @@ Las pruebas nuevas de sincronización usan un fake de PostgREST y transportes en
 - Cuenta distingue sesión, pendiente, sincronizando, error y última sincronización confirmada. Lectura/guardado fallido de cuenta o consentimiento bloquea la confirmación del ciclo de datos.
 - Onboarding guarda preferencias antes del marcador de perfil completado; un fallo no permite omitir el paso tras recargar.
 - OTP usa verifyOtp type=email, correo editable, input de ocho dígitos, errores humanos y cooldown persistente de 60 segundos para reenvío/doble clic. Peticiones del cliente tienen timeout recuperable y conservan cancelación externa.
-- Google/Apple consultan estado público del proveedor antes de OAuth; deshabilitados muestran Pendiente de configuración.
+- Google consulta el estado público del proveedor antes de OAuth. Apple queda oculto de la UX actual.
 
 ## Límites y conflictos (no ocultarlos)
 
@@ -40,7 +40,7 @@ La comprobación directa desde Node de las tres fuentes oficiales devolvió HTTP
 
 ## Prueba humana pendiente
 
-1. Abrir https://golf-bets-git-codex-dev-saha8.vercel.app y usar un correo real autorizado.
+1. Abrir https://beta.thebackyard.com.mx y usar un correo real autorizado.
 2. Recibir código, introducirlo, completar consentimientos/perfil y vincular datos.
 3. Confirmar Cuenta → Sincronizado con hora actual. Recargar, cerrar y reabrir; comprobar sesión.
 4. Segundo navegador con la misma cuenta: recuperar draft, scores, históricos, jugadores, grupos, rivales, campos y preferencias.
@@ -50,7 +50,7 @@ La comprobación directa desde Node de las tres fuentes oficiales devolvió HTTP
 8. Safari/PWA iPhone físico: teclado OTP/AutoFill, micrófono con permisos, safe areas y regreso desde PDF.
 
 Si llega solo enlace y no código, comprobar plantilla de Supabase con {{ .Token }}, SMTP y redirect permitido:
-https://golf-bets-git-codex-dev-saha8.vercel.app/auth/callback.
+https://beta.thebackyard.com.mx/auth/callback.
 No se conoce desde esta prueba el plan/SMTP efectivo. Supabase anunció restricciones para personalizar plantillas en proyectos Free nuevos con SMTP predeterminado; verificar esa condición antes de asumir que basta editar la plantilla:
 https://supabase.com/changelog/46599-changes-to-email-template-customisation-on-free-tier
 https://supabase.com/docs/guides/auth/auth-email-passwordless

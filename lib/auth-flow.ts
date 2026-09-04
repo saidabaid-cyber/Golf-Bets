@@ -3,9 +3,9 @@ import type { Session } from "@supabase/supabase-js";
 export type AuthFlowClient = {
   signInWithOtp: (input: { email: string; options: { shouldCreateUser: boolean; emailRedirectTo: string } }) => Promise<{ error: unknown }>;
   verifyOtp: (input: { email: string; token: string; type: "email" }) => Promise<{ data: { session: Session | null }; error: unknown }>;
-  signInWithOAuth: (input: { provider: "google" | "apple"; options: { redirectTo: string } }) => Promise<{ error: unknown }>;
+  signInWithOAuth: (input: { provider: "google" | "apple"; options: { redirectTo: string; queryParams?: Record<string, string> } }) => Promise<{ error: unknown }>;
   getSession: () => Promise<{ data: { session: Session | null }; error: unknown }>;
-  signOut: (options?: { scope: "local" }) => Promise<{ error: unknown }>;
+  signOut: (options?: { scope: "global" | "local" }) => Promise<{ error: unknown }>;
 };
 
 function throwIfError(error: unknown) {
@@ -42,7 +42,8 @@ export async function verifyEmailOtp(auth: AuthFlowClient, email: string, token:
 }
 
 export async function startSocialOAuth(auth: AuthFlowClient, provider: "google" | "apple", redirectTo: string) {
-  const result = await auth.signInWithOAuth({ provider, options: { redirectTo } });
+  const options = provider === "google" ? { redirectTo, queryParams: { prompt: "select_account" } } : { redirectTo };
+  const result = await auth.signInWithOAuth({ provider, options });
   throwIfError(result.error);
 }
 
@@ -61,8 +62,17 @@ export function isAccountSession(session: Session | null): session is Session {
 }
 
 export async function closeAuthSession(auth: AuthFlowClient) {
-  const result = await auth.signOut({ scope: "local" });
+  // Default/global sign-out revokes refresh sessions at Supabase instead of
+  // merely hiding the token in this browser. Local workspace data is managed
+  // separately and is never removed by this operation.
+  const result = await auth.signOut();
   throwIfError(result.error);
+}
+
+/** The Auth user has already been deleted server-side. This local cleanup must
+ * not fail just because that now-invalid token can no longer reach Auth. */
+export async function clearDeletedAuthSession(auth: AuthFlowClient) {
+  try { await auth.signOut({ scope: "local" }); } catch { /* local state still clears in the provider */ }
 }
 
 export const OTP_COOLDOWN_KEY = "backyard-otp-next-send-v1";

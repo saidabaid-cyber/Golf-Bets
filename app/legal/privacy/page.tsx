@@ -27,7 +27,7 @@ export default function PrivacyPage() {
     <p>Actualmente no usamos tus datos para publicidad o mercadotecnia. Si se incorporaran comunicaciones promocionales, se ofrecería una elección separada y un mecanismo para retirarla.</p>
 
     <h2>6. Proveedores y transferencias</h2>
-    <p>Para prestar determinadas funciones podemos apoyarnos en encargados o proveedores tecnológicos como Vercel (alojamiento), Supabase (autenticación y datos en nube), OpenAI (procesamiento de consultas al asistente de reglas) y Google o Apple (autenticación cuando el usuario elige esos métodos). La información compartida se limita a la necesaria para la función solicitada. Sus condiciones, ubicaciones de procesamiento y plazos pueden depender de la configuración y términos aplicables; no afirmamos condiciones contractuales o de retención que no hayan sido confirmadas.</p>
+    <p>Para prestar determinadas funciones podemos apoyarnos en encargados o proveedores tecnológicos como Vercel (alojamiento), Supabase (autenticación y datos en nube), OpenAI (procesamiento de consultas al asistente de reglas) y Google (autenticación cuando el usuario elige ese método). La información compartida se limita a la necesaria para la función solicitada. Sus condiciones, ubicaciones de procesamiento y plazos pueden depender de la configuración y términos aplicables; no afirmamos condiciones contractuales o de retención que no hayan sido confirmadas.</p>
     <p>Las transferencias o comunicaciones de datos se realizarán cuando sean necesarias para las finalidades descritas, exista una relación con un encargado, lo requiera una autoridad competente o exista otra base jurídica aplicable.</p>
 
     <h2>7. Inteligencia artificial</h2>

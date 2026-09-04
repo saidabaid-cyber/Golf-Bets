@@ -7,6 +7,7 @@ import {
   buildRulesQuestionContext,
   cleanRulesAiAnswer,
   isLaVistaRulesContext,
+  classifyRulesAiFailure,
   publicRulesAiStatus,
   rulesAiConfig,
   type RulesAiClient,
@@ -15,9 +16,17 @@ import {
 test("Rules AI reports disabled and incomplete configuration without exposing secrets", () => {
   assert.equal(rulesAiConfig({ RULES_AI_ENABLED: "false", OPENAI_API_KEY: "secret" }).ready, false);
   const status = publicRulesAiStatus({ RULES_AI_ENABLED: "true", OPENAI_API_KEY: "secret", OPENAI_RULES_VECTOR_STORE_ID: "vs_test" });
-  assert.deepEqual(status, { enabled: true, configured: true });
+  assert.deepEqual(status, { enabled: true, configured: true, state: "ready" });
   assert.equal("apiKey" in status, false);
   assert.equal("vectorStoreId" in status, false);
+});
+
+test("Rules AI distingue cuota, rate limit, timeout, red y configuración", () => {
+  assert.equal(classifyRulesAiFailure({ status: 429, code: "insufficient_quota" }).code, "quota");
+  assert.equal(classifyRulesAiFailure({ status: 429, code: "rate_limit_exceeded" }).code, "rate_limit");
+  assert.equal(classifyRulesAiFailure({ name: "AbortError" }).code, "timeout");
+  assert.equal(classifyRulesAiFailure({ message: "Failed to fetch" }).code, "network");
+  assert.equal(classifyRulesAiFailure({ status: 401, message: "invalid api key" }).code, "provider_config");
 });
 
 test("Rules AI prompt preserves source hierarchy and gentlemen-code safety", () => {

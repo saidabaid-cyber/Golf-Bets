@@ -1,4 +1,5 @@
 import { getSupabaseAdmin, getSupabaseForUser } from "../../../../lib/supabase/server";
+import { deleteAccountGraph, supabaseAccountDeletionGateway } from "../../../../lib/account-deletion";
 
 export async function DELETE(request: Request) {
   const authorization = request.headers.get("authorization") || "";
@@ -13,7 +14,10 @@ export async function DELETE(request: Request) {
   if (!userClient || !admin) return Response.json({ error: "La eliminación segura de cuentas está pendiente de configuración del servidor." }, { status: 503 });
   const { data, error } = await userClient.auth.getUser(token);
   if (error || !data.user) return Response.json({ error: "Sesión no válida." }, { status: 401 });
-  const { error: deleteError } = await admin.auth.admin.deleteUser(data.user.id);
-  if (deleteError) return Response.json({ error: "No se pudo eliminar la cuenta." }, { status: 500 });
-  return Response.json({ ok: true });
+  try {
+    const deleted = await deleteAccountGraph(supabaseAccountDeletionGateway(admin), data.user.id);
+    return Response.json({ ok: true, deleted });
+  } catch {
+    return Response.json({ error: "No se completó la eliminación. La cuenta sigue activa; reintenta o contacta soporte." }, { status: 500 });
+  }
 }

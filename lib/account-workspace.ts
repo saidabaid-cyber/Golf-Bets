@@ -37,6 +37,17 @@ export function ownsLocalWorkspace(storage: Pick<Storage, "getItem">, userId: st
   return (storage.getItem(WORKSPACE_OWNER_KEY) || "guest") === userId;
 }
 
+/** Permanently discard only one deleted account's local workspace. Guest data
+ * and every other account archive remain untouched. */
+export function discardAccountWorkspace(storage: WorkspaceStorage, userId: string) {
+  if (!userId || userId === "guest") return;
+  if (ownsLocalWorkspace(storage, userId)) switchAccountWorkspace(storage, "guest");
+  storage.removeItem(archiveKey(userId));
+  storage.removeItem(`backyard-profile-cache-v1:${userId}`);
+  storage.removeItem(`backyard-last-sync-v1:${userId}`);
+  storage.removeItem(`backyard-local-migration-decision-v1:${userId}`);
+}
+
 export function preserveDraftConflict(storage: Pick<Storage, "getItem" | "setItem">, draft: unknown) {
   if (!draft) return;
   const versions = readStoredJson<unknown[]>(storage, CLOUD_CONFLICTS_KEY, []);

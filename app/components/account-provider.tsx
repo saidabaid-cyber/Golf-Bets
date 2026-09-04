@@ -25,8 +25,8 @@ import {
   type LegalAcceptance,
 } from "../../lib/account-state";
 import { getSupabaseBrowser } from "../../lib/supabase/client";
-import { authIdentityChanged, closeAuthSession, isAccountSession, requireCloudWrites, restoreAuthSession, sendEmailOtp, startSocialOAuth, verifyEmailOtp, OtpSendGate, otpRetrySeconds, OTP_COOLDOWN_KEY } from "../../lib/auth-flow";
-import { ownsLocalWorkspace, switchAccountWorkspace } from "../../lib/account-workspace";
+import { authIdentityChanged, clearDeletedAuthSession, closeAuthSession, isAccountSession, requireCloudWrites, restoreAuthSession, sendEmailOtp, startSocialOAuth, verifyEmailOtp, OtpSendGate, otpRetrySeconds, OTP_COOLDOWN_KEY } from "../../lib/auth-flow";
+import { discardAccountWorkspace, ownsLocalWorkspace, switchAccountWorkspace } from "../../lib/account-workspace";
 import { CLOUD_LOCAL_META_KEY, type CloudPreferences } from "../../lib/cloud-sync";
 import type { AuthProviderStatus } from "../../lib/auth-provider-status";
 import { BrandLockup } from "./brand-lockup";
@@ -41,6 +41,7 @@ type AccountContextValue = {
   identity: BackyardIdentity;
   updateProfile: (profile: Pick<BackyardProfile, "displayName" | "defaultHandicap" | "avatarUrl">) => Promise<void>;
   logout: () => Promise<void>;
+  finishAccountDeletion: () => Promise<void>;
   openAccess: () => void;
   acceptances: LegalAcceptance[];
   cloudLinked: boolean;
@@ -50,6 +51,8 @@ type AccountContextValue = {
   lastCloudSync: string | null;
   cloudError: string;
   retryCloudSync: () => void;
+  reportCloudSyncError: (message: string) => void;
+  clearCloudSyncError: () => void;
   applyCloudPreferences: (preferences: CloudPreferences) => void;
 };
 
@@ -117,25 +120,25 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
     return () => { active = false; };
   }, []);
 
-  async function social(provider: "google" | "apple") {
+  async function social() {
     if (!providers || providers.status === "unavailable") {
       setMessage("No pudimos comprobar el proveedor de acceso. Revisa tu conexión y vuelve a intentar.");
       return;
     }
-    if (!socialEnabled || !providers[provider]) {
-      setMessage(`Acceso con ${provider === "google" ? "Google" : "Apple"} pendiente de configuración.`);
+    if (!socialEnabled || !providers.google) {
+      setMessage("Acceso con Google pendiente de configuración.");
       return;
     }
     const supabase = getSupabaseBrowser();
     if (!supabase) {
-      setMessage(`Acceso con ${provider === "google" ? "Google" : "Apple"} pendiente de configuración.`);
+      setMessage("Acceso con Google pendiente de configuración.");
       return;
     }
     setBusy(true); setMessage("");
     try {
-      await startSocialOAuth(supabase.auth, provider, `${window.location.origin}/auth/callback`);
+      await startSocialOAuth(supabase.auth, "google", `${window.location.origin}/auth/callback`);
     } catch (error) {
-      setMessage(authErrorMessage(error, provider));
+      setMessage(authErrorMessage(error, "google"));
       setBusy(false);
     }
   }
@@ -176,12 +179,11 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
       <BrandLockup />
       <p className="accessPromise">Tu juego. Tus grupos. Tus reglas. Tu historia.</p>
       {!emailMode ? <div className="accessActions">
-        {(["apple", "google"] as const).map(provider => {
-          const name = provider === "apple" ? "Apple" : "Google";
-          const available = socialEnabled && providers?.status === "ready" && providers[provider];
-          const label = !providers ? `${name} · comprobando acceso…` : providers.status === "unavailable" ? `${name} · acceso no disponible` : !available ? `${name} · pendiente de configuración` : `Continuar con ${name}`;
-          return <button key={provider} className={`oauthButton ${provider}`} disabled={busy || !available} onClick={() => social(provider)}>{label}</button>;
-        })}
+        {(() => {
+          const available = socialEnabled && providers?.status === "ready" && providers.google;
+          const label = !providers ? "Google · comprobando acceso…" : providers.status === "unavailable" ? "Google · acceso no disponible" : !available ? "Google · pendiente de configuración" : "Continuar con Google";
+          return <button className="oauthButton google" disabled={busy || !available} onClick={social}>{label}</button>;
+        })()}
         <button className="secondary big" disabled={busy} onClick={() => { setEmailMode(true); setMessage(""); }}>Continuar con correo</button>
         <button className="guestButton" disabled={busy} onClick={async () => {
           setBusy(true); setMessage("");
@@ -206,11 +208,11 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
           <button className="textButton" disabled={busy} onClick={() => { setEmailMode(false); setMessage(""); }}>← Regresar al acceso</button>
         </>}
       </div>}
-      {!socialEnabled && <p id="social-auth-status" className="hint">Google y Apple · Pendiente de configuración</p>}
-      {socialEnabled && providers?.status === "ready" && <p className="hint">{!providers.google && "Google · Pendiente de configuración. "}{!providers.apple && "Apple · Pendiente de configuración."}</p>}
+      {!socialEnabled && <p id="social-auth-status" className="hint">Google · Pendiente de configuración</p>}
+      {socialEnabled && providers?.status === "ready" && !providers.google && <p className="hint">Google · Pendiente de configuración.</p>}
       {(message || sessionError) && <div className="accessMessage" role="status">{message || sessionError}</div>}
       <p className="hint">Invitado es un acceso independiente: no inicia sesión ni sincroniza tus datos con una cuenta.</p>
-      <p className="legalLead">Al continuar aceptas los <Link href="/legal/terms">Términos de Uso</Link> y el <Link href="/legal/privacy">Aviso de Privacidad</Link>.</p>
+      <p className="legalLead">Al continuar aceptas los <Link href="/legal/terms?returnTo=access">Términos de Uso</Link> y el <Link href="/legal/privacy?returnTo=access">Aviso de Privacidad</Link>.</p>
     </section>
   </main>;
 }
@@ -229,8 +231,8 @@ function ConsentScreen({ onAccept, onBack }: { onAccept: () => Promise<void>; on
     <p>The Backyard incorpora un asistente de reglas basado en las Reglas de Golf, aclaraciones y reglas locales disponibles.</p>
     <p>Cuando un grupo acuerde utilizar el Árbitro de Reglas de The Backyard como criterio para resolver una situación durante una partida, sus jugadores aceptan aplicar la resolución mostrada salvo que exista una decisión oficial de un Comité, árbitro autorizado o autoridad competente de la competencia.</p>
     <div className="officialPriority">En una competencia oficial, el Comité o árbitro oficial tiene siempre la decisión final. La IA no es un árbitro oficial USGA.</div>
-    <label className="consentCheck"><input type="checkbox" checked={terms} onChange={(event) => setTerms(event.target.checked)} /><span>Acepto los <Link href="/legal/terms">Términos de Uso</Link>.</span></label>
-    <label className="consentCheck"><input type="checkbox" checked={privacy} onChange={(event) => setPrivacy(event.target.checked)} /><span>He leído y acepto el <Link href="/legal/privacy">Aviso de Privacidad</Link>.</span></label>
+    <label className="consentCheck"><input type="checkbox" checked={terms} onChange={(event) => setTerms(event.target.checked)} /><span>Acepto los <Link href="/legal/terms?returnTo=onboarding">Términos de Uso</Link>.</span></label>
+    <label className="consentCheck"><input type="checkbox" checked={privacy} onChange={(event) => setPrivacy(event.target.checked)} /><span>He leído y acepto el <Link href="/legal/privacy?returnTo=onboarding">Aviso de Privacidad</Link>.</span></label>
     <label className="consentCheck"><input type="checkbox" checked={rules} onChange={(event) => setRules(event.target.checked)} /><span>Entiendo el alcance del Árbitro de Reglas y acepto utilizar sus resoluciones como referencia acordada entre los participantes cuando corresponda.</span></label>
     <label className="consentCheck"><input type="checkbox" checked={age} onChange={(event) => setAge(event.target.checked)} /><span>Confirmo que tengo 18 años o más.</span></label>
     {error && <p role="alert">{error}</p>}
@@ -291,6 +293,9 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const [profileChecked, setProfileChecked] = useState(false);
   const activeUserId = useRef<string | null>(null);
   const [accountCloudError, setAccountCloudError] = useState("");
+  const [syncCloudError, setSyncCloudError] = useState("");
+  const reportCloudSyncError = useCallback((message: string) => setSyncCloudError(message), []);
+  const clearCloudSyncError = useCallback(() => setSyncCloudError(""), []);
   const setCloudStatus = useCallback((status: AccountContextValue["cloudStatus"]) => {
     setRawCloudStatus(status);
     if (status === "synced" && activeUserId.current) {
@@ -320,6 +325,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     activeUserId.current = session.user.id;
     setLastCloudSync(localStorage.getItem(`backyard-last-sync-v1:${session.user.id}`));
     setAccountCloudError("");
+    setSyncCloudError("");
     const profile = profileFromUser(session.user);
     setIdentity({ ...profile, mode: "authenticated", providers: session.user.app_metadata?.providers || [session.user.app_metadata?.provider].filter((value): value is string => Boolean(value)), accessToken: session.access_token });
     localStorage.setItem(ACCOUNT_STORAGE_KEYS.mode, "authenticated");
@@ -516,7 +522,30 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       setCloudLinked(false);
       setCloudStatus("local");
       setLastCloudSync(null);
+      setSyncCloudError("");
     }
+  }
+
+  async function finishAccountDeletion() {
+    if (!identity || identity.mode !== "authenticated") return;
+    const deletedUserId = identity.userId;
+    // Invalidate every in-flight sync before touching the local Supabase cache.
+    activeUserId.current = null;
+    discardAccountWorkspace(localStorage, deletedUserId);
+    localStorage.removeItem(ACCOUNT_STORAGE_KEYS.mode);
+    const remainingAcceptances = clearLegalAcceptancesForUser(acceptances, deletedUserId);
+    localStorage.setItem(ACCOUNT_STORAGE_KEYS.acceptances, JSON.stringify(remainingAcceptances));
+    setAcceptances(remainingAcceptances);
+    const supabase = getSupabaseBrowser();
+    if (supabase) await clearDeletedAuthSession(supabase.auth);
+    setIdentity(null);
+    setAccessRequested(false);
+    setCloudLinked(false);
+    setCloudStatus("local");
+    setLastCloudSync(null);
+    setAccountCloudError("");
+    setSyncCloudError("");
+    setShowMigration(false);
   }
 
   async function keepLocalDataForAccount() {
@@ -551,8 +580,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     setMigrationBusy(false);
   }
 
-  const context = identity ? ({ identity, updateProfile, logout, openAccess: () => setAccessRequested(true), acceptances, cloudLinked, cloudStatus: accountCloudError ? "error" as const : cloudStatus, setCloudStatus, lastCloudSync, cloudError: accountCloudError, applyCloudPreferences,
-    retryCloudSync: () => { if (accountCloudError) window.location.reload(); else window.dispatchEvent(new Event("backyard-sync-retry")); },
+  const context = identity ? ({ identity, updateProfile, logout, finishAccountDeletion, openAccess: () => setAccessRequested(true), acceptances, cloudLinked, cloudStatus: accountCloudError || syncCloudError ? "error" as const : cloudStatus, setCloudStatus, lastCloudSync, cloudError: accountCloudError || syncCloudError, applyCloudPreferences,
+    reportCloudSyncError,
+    clearCloudSyncError,
+    retryCloudSync: () => { setSyncCloudError(""); setRawCloudStatus("pending"); window.setTimeout(() => window.dispatchEvent(new Event("backyard-sync-retry")), 0); },
     requestCloudLink: () => { setMigrationError(""); setShowMigration(true); } }) : null;
   const migrationDialog = showMigration && <div className="modalBackdrop"><section className="confirmDialog migrationDialog" role="dialog" aria-modal="true" aria-labelledby="migration-title">
     <h2 id="migration-title">Encontramos datos de The Backyard en este dispositivo.</h2>

@@ -44,6 +44,8 @@ test("Google y Apple usan OAuth mock con callback, nunca proveedor real", async 
   await startSocialOAuth(auth, "apple", "https://golf-bets-psi.vercel.app/auth/callback");
   assert.deepEqual(calls.map((call) => call.method), ["oauth", "oauth"]);
   assert.deepEqual(calls.map((call) => (call.input as { provider: string }).provider), ["google", "apple"]);
+  assert.deepEqual((calls[0].input as { options: { queryParams: Record<string, string> } }).options.queryParams, { prompt: "select_account" });
+  assert.equal((calls[1].input as { options: { queryParams?: Record<string, string> } }).options.queryParams, undefined);
 });
 
 test("restauración y logout usan el cliente mock", async () => {

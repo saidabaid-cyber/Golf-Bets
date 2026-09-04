@@ -75,9 +75,10 @@ import { buildHoleSummary, clearActiveRoundStorage, hasRoundProgress, historical
 import { monkeyHoleSummary, personalHoleSummary } from "../lib/personal-summary";
 import { downloadRoundCsv, downloadRoundImage, downloadRoundPdf, shareRound } from "../lib/round-export";
 import { deleteScorecardPhoto, deleteScorecardPhotoCloud, readScorecardPhoto, readScorecardPhotoCloud, saveScorecardPhoto, uploadScorecardPhotoCloud } from "../lib/scorecard-photo";
-import { CLOUD_TOMBSTONES_KEY, collectLocalCloudData, downloadCloudData, persistCloudMetadata, stableValue, trackLocalCloudEdits, type CloudDataBundle, recordCloudDeletion, uploadCloudData } from "../lib/cloud-sync";
+import { CLOUD_TOMBSTONES_KEY, cloudDataFingerprint, collectLocalCloudData, downloadCloudData, persistCloudMetadata, stableValue, trackLocalCloudEdits, type CloudDataBundle, recordCloudDeletion, uploadCloudData } from "../lib/cloud-sync";
 import { ownsLocalWorkspace, preserveDraftConflict } from "../lib/account-workspace";
 import { runCloudSyncCycle } from "../lib/cloud-sync-cycle";
+import { CloudSyncGate, cloudSyncErrorMessage, syncStatusAfterSkip, type CloudSyncTrigger } from "../lib/cloud-sync-gate";
 import { adoptGuestPhotoJobs, flushPhotoQueue, queuePhoto, photoJobs } from "../lib/photo-sync-queue";
 import { PRIVATE_POLLA_LINK_KEY, parsePrivatePollaLink, privatePollaScoreChanges } from "../lib/polla-private-link";
 import { enqueuePollaScore } from "../lib/polla-offline";
@@ -294,6 +295,10 @@ function HcpPercentInput({ value, onChange }: { value: number; onChange: (v: num
   return <div><label>% HCP</label><NumericCaptureInput inputMode="numeric" min={0} max={100} step={5} value={value} emptyWhenZero={false} onValueChange={(next) => onChange(next === null ? 0 : Math.min(100, Math.max(0, next)))} /></div>;
 }
 
+function TrophyIcon({ tone }: { tone: "silver" | "gold" }) {
+  return <svg className={`trophyIcon ${tone}`} viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10v4c0 4-2 7-5 7S7 11 7 7V3Zm0 2H4v2c0 2 1.4 3.5 3.5 3.8M17 5h3v2c0 2-1.4 3.5-3.5 3.8M12 14v4m-4 3h8m-6-3h4" /></svg>;
+}
+
 function HandicapModeSelect({ value, onChange }: { value: HandicapMode; onChange: (mode: HandicapMode) => void }) {
   return <div><label>Modo HCP</label><select value={normalizeHandicapMode(value)} onChange={(e) => onChange(e.target.value as HandicapMode)}>
     <option value="decimal">Décimas / sin redondear</option>
@@ -305,7 +310,7 @@ function HandicapModeSelect({ value, onChange }: { value: HandicapMode; onChange
 }
 
 function PollaBetEditor({
-  title, description, config, players, onChange, unavailable,
+  title, description, config, players, onChange, unavailable, trophy = "gold",
 }: {
   title: string;
   description: string;
@@ -313,9 +318,10 @@ function PollaBetEditor({
   players: Player[];
   onChange: (config: MedalPollaConfig) => void;
   unavailable?: boolean;
+  trophy?: "silver" | "gold";
 }) {
   return <div className="betCard">
-    <div className="betHead"><div><b>🏆 {title}</b><span>{description}</span></div><Toggle on={config.enabled} onClick={() => onChange({ ...config, enabled: !config.enabled })} /></div>
+    <div className="betHead"><div><b className="betTitle"><TrophyIcon tone={trophy} />{title}</b><span>{description}</span></div><Toggle on={config.enabled} onClick={() => onChange({ ...config, enabled: !config.enabled })} /></div>
     {config.enabled && <>
       <div className="grid3">
         <MoneyInput label="Valor" value={config.value} onChange={(value) => onChange({ ...config, value })} />
@@ -333,7 +339,7 @@ function MoneyInput({ label, value, onChange }: { label: string; value: number; 
 }
 
 function GolfBetsApp() {
-  const { identity, cloudLinked, cloudError, setCloudStatus, applyCloudPreferences } = useBackyardAccount();
+  const { identity, cloudLinked, setCloudStatus, applyCloudPreferences, reportCloudSyncError, clearCloudSyncError } = useBackyardAccount();
   const { tab, setTab, goBack } = useScreenNavigation();
   const [rulesVisited, setRulesVisited] = useState(false);
   useEffect(() => { if (tab === "rules") setRulesVisited(true); }, [tab]);
@@ -521,7 +527,9 @@ function GolfBetsApp() {
       setDraftAvailable(hasRoundProgress(draft));
       applyDraft(draft);
     } catch { /* keep safe defaults for structurally invalid legacy data */ }
-    if (new URLSearchParams(window.location.search).has("polla")) setTab("pollaLive");
+    const entry = new URLSearchParams(window.location.search);
+    if (entry.has("polla")) setTab("pollaLive");
+    else if (entry.get("screen") === "account") setTab("account");
     setHydrated(true);
   }, [setTab, applyDraft]);
 
@@ -569,28 +577,46 @@ function GolfBetsApp() {
   }, [hydrated]);
 
   useEffect(() => {
-    if (!hydrated || identity.mode !== "authenticated" || !cloudLinked || cloudError) return;
+    if (!hydrated || identity.mode !== "authenticated" || !cloudLinked) return;
     const userId = identity.userId;
-    let cancelled = false, running = false, queued = false, attempts = 0;
+    let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let scheduledTrigger: CloudSyncTrigger = "mount";
+    const gate = new CloudSyncGate();
+    const debug = (event: string, trigger?: CloudSyncTrigger) => {
+      if (process.env.NODE_ENV === "development") console.info("[cloud-sync]", event, { trigger, user: userId.slice(0, 8) });
+    };
     const current = () => !cancelled && ownsLocalWorkspace(localStorage, userId) && liveIdentity.current.userId === userId;
     const read = () => {
       if (!flushLocalState.current?.()) throw new Error("No se pudo guardar el estado local; no se enviaron datos incompletos.");
       return collectLocalCloudData(localStorage, liveIdentity.current.defaultHandicap, hadLocalPreferences.current);
     };
-    const schedule = () => {
+    const schedule = (trigger: CloudSyncTrigger = "local") => {
       if (!current()) return;
-      if (running) { queued = true; return; }
       clearTimeout(timer);
+      const priority: Record<CloudSyncTrigger, number> = { local: 0, visible: 1, online: 2, mount: 3, manual: 4 };
+      if (priority[trigger] > priority[scheduledTrigger]) scheduledTrigger = trigger;
       setCloudStatus("pending");
-      timer = setTimeout(sync, 1_500);
+      timer = setTimeout(() => {
+        const next = scheduledTrigger;
+        scheduledTrigger = "local";
+        void sync(next);
+      }, trigger === "manual" ? 0 : 1_500);
     };
-    const sync = async () => {
+    const sync = async (trigger: CloudSyncTrigger) => {
       if (!current()) return;
-      if (running) { queued = true; return; }
       if (!navigator.onLine) { setCloudStatus("pending"); return; }
-      running = true; queued = false;
+      let fingerprint = "";
+      let queued: CloudSyncTrigger | null = null;
       try {
+        const initial = read();
+        fingerprint = cloudDataFingerprint(initial);
+        const decision = gate.begin(fingerprint, trigger);
+        const skippedStatus = syncStatusAfterSkip(decision);
+        if (skippedStatus) { setCloudStatus(skippedStatus); return; }
+        if (decision !== "run") return;
+        debug("start", trigger);
+        let appliedFingerprint = "";
         const completed = await runCloudSyncCycle({
           read, current, status: setCloudStatus,
           download: () => downloadCloudData(liveIdentity.current.accessToken || ""),
@@ -641,30 +667,41 @@ function GolfBetsApp() {
             localStorage.setItem(CLOUD_TOMBSTONES_KEY, JSON.stringify(data.tombstones));
             persistCloudMetadata(localStorage, data);
             hadLocalPreferences.current = true;
+            appliedFingerprint = cloudDataFingerprint(collectLocalCloudData(localStorage, data.preferences.defaultHandicap, true));
           },
         });
-        attempts = 0;
-        if (!completed) queued = true;
-      } catch {
-        if (current() && ++attempts <= 3) timer = setTimeout(sync, attempts * 5_000);
+        if (completed) {
+          queued = gate.success(appliedFingerprint || cloudDataFingerprint(read()));
+          clearCloudSyncError();
+          debug("finish", trigger);
+        } else {
+          queued = gate.pending();
+          debug("local-change-during-sync", trigger);
+        }
+      } catch (error) {
+        gate.failure(fingerprint);
+        const message = cloudSyncErrorMessage(error);
+        if (current() && message) reportCloudSyncError(message);
+        debug("error", trigger);
       } finally {
-        running = false;
-        if (queued && current()) schedule();
+        if (queued && current()) schedule(queued);
       }
     };
-    requestCloudSync.current = schedule;
-    const onVisible = () => { if (document.visibilityState === "visible") schedule(); };
-    window.addEventListener("online", schedule);
-    window.addEventListener("backyard-sync-retry", schedule);
+    requestCloudSync.current = () => schedule("local");
+    const onOnline = () => schedule("online");
+    const onRetry = () => schedule("manual");
+    const onVisible = () => { if (document.visibilityState === "visible") schedule("visible"); };
+    window.addEventListener("online", onOnline);
+    window.addEventListener("backyard-sync-retry", onRetry);
     document.addEventListener("visibilitychange", onVisible);
-    schedule();
+    schedule("mount");
     return () => {
-      cancelled = true; clearTimeout(timer); requestCloudSync.current = null;
-      window.removeEventListener("online", schedule);
-      window.removeEventListener("backyard-sync-retry", schedule);
+      cancelled = true; gate.cancel(); clearTimeout(timer); requestCloudSync.current = null;
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("backyard-sync-retry", onRetry);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [hydrated, identity.mode, identity.userId, cloudLinked, cloudError, setCloudStatus, applyCloudPreferences, applyDraft]);
+  }, [hydrated, identity.mode, identity.userId, cloudLinked, setCloudStatus, applyCloudPreferences, applyDraft, reportCloudSyncError, clearCloudSyncError]);
 
   useEffect(() => {
     requestCloudSync.current?.();
@@ -1433,7 +1470,7 @@ function GolfBetsApp() {
     if (!bets.monkey?.enabled) return null;
     const currentResult = scoreCaptureComplete ? liveMonkey : monkey;
     const current = currentResult.details.find(item=>item.hole===holeNumber);
-    return <section className="card"><h2>Monkey · {money(bets.monkey.value)} por punto</h2>
+    return <section className="card"><h2>🐒 Monkey · {money(bets.monkey.value)} por punto</h2>
       <p>3 jugadores · 2 puntos por rival ganado, 1 por empate. HCP rebajado, sin porcentaje.</p>
       {!currentResult.valid ? <div className="empty">Selecciona exactamente tres jugadores en configuración.</div> : playersByIds(players,bets.monkey.participantIds).map(player=><div className="transfer" key={player.id}><span><b>{player.name}</b><small> H{holeNumber}: {current?.points[player.id] ?? "—"} · Total {currentResult.points[player.id]} pts</small></span><strong>{signedMoney(currentResult.balances[player.id])}</strong></div>)}
     </section>;
@@ -1620,7 +1657,7 @@ function GolfBetsApp() {
     {tab === "historyDetail" && (() => { const saved = history.find(round => round.id === historyDetailId); return saved ? <HistoricalRoundDetail round={saved} onEdit={() => editHistoricalRound(saved)} onPhoto={() => viewScorecardPhoto(saved)} /> : <div className="empty">La ronda ya no está disponible.</div>; })()}
     {tab === "groups" && <GroupBuilder frequentPlayers={frequentPlayers} frequentGroups={frequentGroups} onBack={goBack} onPlay={startRoundWithGeneratedGroup} onSaveFrequentGroup={saveGeneratedFrequentGroup} onEditFrequentGroup={beginEditFrequentGroup} onDeleteFrequentGroup={setFrequentGroupToDelete} />}
 
-    {tab === "account" && <AccountPanel highContrast={highContrast} onHighContrastChange={setHighContrast} onBack={goBack} />}
+    {tab === "account" && <AccountPanel highContrast={highContrast} onHighContrastChange={setHighContrast} />}
 
     {tab === "setup" && <>
       <section className="hero setupHero">
@@ -1712,18 +1749,19 @@ function GolfBetsApp() {
         </div>
 
         <div className="betCard">
-          <div className="betHead"><div><b>⚪ Bola Amiga</b><span>Parejas por hoyo · birdie o mejor voltea rival · máximo 9</span></div><Toggle on={bets.ballFriend.enabled} onClick={() => setBets({ ...bets, ballFriend: { ...bets.ballFriend, enabled: !bets.ballFriend.enabled } })} /></div>
+          <div className="betHead"><div><b>⛳🤝 Bola Amiga</b><span>Parejas por hoyo · birdie o mejor voltea rival · máximo 9</span></div><Toggle on={bets.ballFriend.enabled} onClick={() => setBets({ ...bets, ballFriend: { ...bets.ballFriend, enabled: !bets.ballFriend.enabled } })} /></div>
           {bets.ballFriend.enabled && <HandicapBaseControl name="Bola Amiga" config={bets.ballFriend} fallback="fixed" onChange={baseMode => setBets({ ...bets, ballFriend: { ...bets.ballFriend, baseMode, fixedBaseHandicap: undefined } })} />}
           {bets.ballFriend.enabled && <><div className="grid3"><MoneyInput label="Valor punto" value={bets.ballFriend.value} onChange={(v) => setBets({ ...bets, ballFriend: { ...bets.ballFriend, value: v } })} /><HcpPercentInput value={bets.ballFriend.hcpPct} onChange={(v) => setBets({ ...bets, ballFriend: { ...bets.ballFriend, hcpPct: v } })} /><NumberField label="Score máximo" value={bets.ballFriend.maxScore} onChange={(v) => setBets({ ...bets, ballFriend: { ...bets.ballFriend, maxScore: v } })} /></div><label className="miniLabel">Participan</label><ParticipantChips players={players} selected={bets.ballFriend.participantIds} onChange={(ids) => setBets({ ...bets, ballFriend: { ...bets.ballFriend, participantIds: ids } })} /></>}
         </div>
 
         <div className="betCard">
-          <div className="betHead"><div><b>Monkey</b><span>Exactamente tres jugadores</span></div><Toggle on={Boolean(bets.monkey?.enabled)} onClick={()=>setBets({...bets,monkey:{value:20,participantIds:players.slice(0,3).map(p=>p.id),...bets.monkey,enabled:!bets.monkey?.enabled}})} /></div>
+          <div className="betHead"><div><b>🐒 Monkey</b><span>Exactamente tres jugadores</span></div><Toggle on={Boolean(bets.monkey?.enabled)} onClick={()=>setBets({...bets,monkey:{value:20,participantIds:players.slice(0,3).map(p=>p.id),...bets.monkey,enabled:!bets.monkey?.enabled}})} /></div>
           {bets.monkey?.enabled && <><MoneyInput label="Valor punto Monkey" value={bets.monkey.value} onChange={value=>setBets({...bets,monkey:{...bets.monkey!,value}})} /><ParticipantChips players={players} selected={bets.monkey.participantIds} onChange={participantIds=>setBets({...bets,monkey:{...bets.monkey!,participantIds}})} /><p>{monkey.valid ? "HCP rebajado entre estos tres. Sin porcentaje ni redondeo añadido." : "Selecciona exactamente tres jugadores; no se calcula con otra cantidad."}</p></>}
         </div>
 
         <PollaBetEditor
           title="Polla H1–9"
+          trophy="silver"
           description="Mejor medal neto en los hoyos físicos H1–9"
           config={bets.polla.first9}
           players={players}
@@ -1733,6 +1771,7 @@ function GolfBetsApp() {
 
         <PollaBetEditor
           title="Polla H10–18"
+          trophy="silver"
           description="Mejor medal neto en los hoyos físicos H10–18"
           config={bets.polla.second9}
           players={players}
@@ -1978,7 +2017,7 @@ function GolfBetsApp() {
         {bets.skins.enabled && <span><b>⛳ Skins</b>{money(bets.skins.value)} c/u</span>}
         {bets.units.enabled && <span><b>📏 Unidades / Copas</b>{money(bets.units.value)} por unidad · {money(bets.units.copaValue ?? bets.units.value)} por Copa</span>}
         {bets.foursome.enabled && <span><b>Foursome</b>{(bets.foursome.mode === "fixed" || bets.foursome.mode === "fixed_points") ? `${money(bets.foursome.fixedValue)} fijo` : ""}{bets.foursome.mode === "fixed_points" ? " · " : ""}{(bets.foursome.mode === "points" || bets.foursome.mode === "fixed_points") ? `${money(bets.foursome.pointValue)} punto` : ""}{(bets.foursome.pressureMultiplier || 1) > 1 ? ` · ${bets.foursome.pressureNine === "holes_1_9" ? "H1–9" : "H10–18"} ${bets.foursome.pressureMultiplier}x` : ""}</span>}
-        {bets.ballFriend.enabled && <span><b>Bola Amiga</b>{money(bets.ballFriend.value)} por punto</span>}
+        {bets.ballFriend.enabled && <span><b>⛳🤝 Bola Amiga</b>{money(bets.ballFriend.value)} por punto</span>}
         {polla.details.map((detail) => <span key={detail.key}><b>{detail.label}</b>{money(detail.value)}</span>)}
         {bets.miniPolla.enabled && <span><b>Mini Polla</b>{money(bets.miniPolla.value)}</span>}
         {bets.vipers.enabled && <span><b>🐍 Víboras</b>{money(bets.vipers.value)} · H10–18 {bets.vipers.secondNineMultiplier}x</span>}
@@ -1997,12 +2036,12 @@ function GolfBetsApp() {
             {bets.skins.enabled && <div><span>⛳ Skins · Jugados</span><b>{skins.won[p.id] ?? 0}</b><i>{signedMoney(skinBalances[p.id] ?? 0)}</i></div>}
             {bets.units.enabled && <div><span>📏 Unidades · Jugadas</span><b>{(units.net[p.id] ?? 0) > 0 ? "+" : ""}{units.net[p.id] ?? 0}</b><i>{signedMoney(units.balances[p.id] ?? 0)}</i></div>}
             {bets.foursome.enabled && <div><span>Foursome</span><i>{signedMoney(foursomes.balances[p.id] ?? 0)}</i></div>}
-            {bets.ballFriend.enabled && <div><span>Bola Amiga</span><i>{signedMoney(ballFriend.balances[p.id] ?? 0)}</i></div>}
+            {bets.ballFriend.enabled && <div><span>⛳🤝 Bola Amiga</span><i>{signedMoney(ballFriend.balances[p.id] ?? 0)}</i></div>}
             {polla.details.filter((detail) => Object.hasOwn(detail.totals, p.id)).map((detail) => <div key={detail.key}><span>{detail.label}</span><b>1</b><i>{signedMoney(pollaDetailBalance(detail, p.id))}</i></div>)}
             {miniPolla.details.filter((detail) => Object.hasOwn(detail.totals, p.id)).map((detail) => <div key={detail.key}><span>Mini Polla</span><b>1</b><i>{signedMoney(pollaDetailBalance(detail, p.id))}</i></div>)}
             {personalBets.length > 0 && <div><span>Personales</span><i>{signedMoney(personals.balances[p.id] ?? 0)}</i></div>}
             {manualBets.length > 0 && <div><span>Manuales</span><i>{signedMoney(manual.balances[p.id] ?? 0)}</i></div>}
-            {bets.monkey?.enabled && <div><span>Monkey</span><b>{monkey.points[p.id] ?? 0}</b><i>{signedMoney(monkey.balances[p.id] ?? 0)}</i></div>}
+            {bets.monkey?.enabled && <div><span>🐒 Monkey</span><b>{monkey.points[p.id] ?? 0}</b><i>{signedMoney(monkey.balances[p.id] ?? 0)}</i></div>}
             {bets.vipers.enabled && <div><span>🐍 Víboras</span><b>{vipers.totalQuantity}</b><i>{signedMoney(vipers.balances[p.id] ?? 0)}</i></div>}
             {bets.camels.enabled && <div><span>🐫 Camellos</span><b>{camels.totalQuantity}</b><i>{signedMoney(camels.balances[p.id] ?? 0)}</i></div>}
             {bets.fish.enabled && <div><span>🐟 Peces</span><b>{fish.totalQuantity}</b><i>{signedMoney(fish.balances[p.id] ?? 0)}</i></div>}

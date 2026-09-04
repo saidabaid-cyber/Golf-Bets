@@ -74,7 +74,7 @@ test("link de ronda privada proyecta exclusivamente scores", () => {
 
 test("enlace corto abre Polla Live, carga la invitación y conserva QR compartible", () => {
   assert.match(read("app/polla/[code]/page.tsx"), /redirect\(`\/\?polla=/);
-  assert.match(appPage, /URLSearchParams\(window\.location\.search\)\.has\("polla"\).*setTab\("pollaLive"\)/);
+  assert.match(appPage, /entry\.has\("polla"\).*setTab\("pollaLive"\)/);
   assert.match(pollaPanel, /requestPollaInvite\(invitedId\)/);
   assert.match(pollaPanel, /\/polla\/\$\{created\.short_code\}/);
   assert.match(pollaPanel, /leaderboard\.tournament\?\.publicId/);

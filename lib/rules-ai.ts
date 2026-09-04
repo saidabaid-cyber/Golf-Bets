@@ -28,7 +28,22 @@ export function rulesAiConfig(env: RulesAiEnvironment) {
 
 export function publicRulesAiStatus(env: RulesAiEnvironment) {
   const config = rulesAiConfig(env);
-  return { enabled: config.ready, configured: config.hasApiKey && config.hasVectorStore };
+  return {
+    enabled: config.ready,
+    configured: config.hasApiKey && config.hasVectorStore,
+    state: config.ready ? "ready" as const : config.enabled ? "missing_config" as const : "disabled" as const,
+  };
+}
+
+export function classifyRulesAiFailure(error: unknown) {
+  const detail = error && typeof error === "object" ? error as { status?: number; code?: string; message?: string; name?: string } : {};
+  const text = `${detail.code || ""} ${detail.message || ""}`.toLowerCase();
+  if (detail.status === 429 && /quota|credit|billing/.test(text)) return { status: 503, code: "quota", message: "La IA está configurada, pero el proveedor no tiene crédito disponible. Intenta más tarde." };
+  if (detail.status === 429) return { status: 429, code: "rate_limit", message: "Hay demasiadas consultas en este momento. Intenta de nuevo en un minuto." };
+  if (detail.status === 401 || detail.status === 403 || /api.?key|authentication/.test(text)) return { status: 503, code: "provider_config", message: "La conexión privada del reglamento necesita revisión de configuración." };
+  if (detail.name === "AbortError" || /timeout|timed out|aborted/.test(text)) return { status: 504, code: "timeout", message: "La consulta tardó demasiado. Intenta nuevamente." };
+  if (/fetch|network|connection|econn/.test(text)) return { status: 502, code: "network", message: "No pudimos conectar con el proveedor de IA. Intenta nuevamente." };
+  return { status: 502, code: "temporary", message: "No fue posible consultar el reglamento en este momento." };
 }
 
 export function isLaVistaRulesContext(courseName: string, question: string) {

@@ -12,10 +12,11 @@ const terms = read("app/legal/terms/page.tsx");
 const callback = read("app/auth/callback/page.tsx");
 const migration = read("supabase/migrations/202609010002_backyard_accounts_legal.sql");
 
-test("login muestra identidad, Apple, Google, correo e invitado", () => {
+test("login muestra identidad, Google, correo e invitado sin exponer Apple", () => {
   const accessSource = auth + read("app/components/brand-lockup.tsx");
-  for (const text of ["THE BACKYARD", "Apple", "Google", "Continuar con correo", "Continuar como invitado"]) assert.match(accessSource, new RegExp(text));
-  assert.match(accessSource, /Continuar con \$\{name\}/);
+  for (const text of ["THE BACKYARD", "Google", "Continuar con correo", "Continuar como invitado"]) assert.match(accessSource, new RegExp(text));
+  assert.doesNotMatch(accessSource, /Continuar con Apple|Apple · pendiente/);
+  assert.match(accessSource, /Continuar con Google/);
   assert.match(accessSource, /disabled=\{busy \|\| !available\}/);
 });
 
@@ -31,7 +32,7 @@ test("correo implementa OTP de ocho dígitos, reenviar y cambiar correo", () => 
   assert.match(auth, /Cambiar correo/);
 });
 
-test("Google y Apple usan OAuth real sin credenciales inventadas", () => {
+test("Google usa OAuth real sin credenciales inventadas", () => {
   assert.match(authFlow, /signInWithOAuth/);
   assert.match(authFlow, /provider,/);
   assert.doesNotMatch(`${auth}\n${authFlow}`, /client[_-]?secret/i);
@@ -66,8 +67,8 @@ test("consentimiento exige Árbitro y 18+ antes de continuar", () => {
 });
 
 test("links legales existen tanto en acceso como en consentimiento", () => {
-  assert.ok(auth.match(/href="\/legal\/terms"/g)!.length >= 2);
-  assert.ok(auth.match(/href="\/legal\/privacy"/g)!.length >= 2);
+  assert.ok(auth.match(/href="\/legal\/terms\?returnTo=/g)!.length >= 2);
+  assert.ok(auth.match(/href="\/legal\/privacy\?returnTo=/g)!.length >= 2);
 });
 
 test("Mi Cuenta muestra perfil, documentos, métodos, preferencias y cierre", () => {
@@ -167,6 +168,6 @@ test("invitado conserva consentimiento local y una cuenta no oculta fallos al si
 test("configuración documenta redirects exactos local y producción", () => {
   const setup = read("docs/SETUP_AUTH.md");
   assert.match(setup, /http:\/\/localhost:3000\/auth\/callback/);
-  assert.match(setup, /https:\/\/golf-bets-psi\.vercel\.app\/auth\/callback/);
+  assert.match(setup, /https:\/\/beta\.thebackyard\.com\.mx\/auth\/callback/);
   assert.match(setup, /SUPABASE_SECRET_KEY/);
 });

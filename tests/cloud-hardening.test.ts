@@ -78,10 +78,10 @@ test("versiones de draft perdedor se preservan sin duplicados", () => {
 test("token refresh no cambia identidad; cuenta distinta sí", () => {
   assert.equal(authIdentityChanged("a", "a"), false); assert.equal(authIdentityChanged("a", "b"), true);
 });
-test("logout usa scope local y propaga fallo sin éxito falso", async () => {
+test("logout revoca la sesión global y propaga fallo sin éxito falso", async () => {
   let scope: unknown;
   await assert.rejects(closeAuthSession({ signOut: async options => { scope = options; return { error: new Error("network") }; } } as AuthFlowClient));
-  assert.deepEqual(scope, { scope: "local" });
+  assert.equal(scope, undefined);
 });
 test("sin JWT ni siquiera se envía petición cloud", async () => {
   await assert.rejects(uploadCloudData(bundle(), ""), /Inicia sesión/); await assert.rejects(downloadCloudData(" "), /Inicia sesión/);

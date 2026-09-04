@@ -1,7 +1,7 @@
 import "server-only";
 import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
-import { askRulesWithClient, publicRulesAiStatus, rulesAiConfig } from "../../../../lib/rules-ai";
+import { askRulesWithClient, classifyRulesAiFailure, publicRulesAiStatus, rulesAiConfig } from "../../../../lib/rules-ai";
 import type { LocalRule } from "../../../../lib/types";
 
 const windows = new Map<string, { count: number; resetAt: number }>();
@@ -23,14 +23,14 @@ function allowed(ip: string) {
 export async function POST(request: NextRequest) {
   const config = rulesAiConfig(process.env);
   if (!config.enabled) {
-    return NextResponse.json({ error: "La consulta con IA no está activada." }, { status: 503 });
+    return NextResponse.json({ error: "La consulta con IA no está activada.", code: "disabled" }, { status: 503 });
   }
   if (!config.hasApiKey || !config.hasVectorStore) {
-    return NextResponse.json({ error: "Falta configurar el reglamento privado." }, { status: 503 });
+    return NextResponse.json({ error: "Falta configurar el reglamento privado.", code: "missing_config" }, { status: 503 });
   }
 
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "local";
-  if (!allowed(ip)) return NextResponse.json({ error: "Demasiadas consultas. Intenta de nuevo en un minuto." }, { status: 429 });
+  if (!allowed(ip)) return NextResponse.json({ error: "Demasiadas consultas. Intenta de nuevo en un minuto.", code: "rate_limit" }, { status: 429 });
 
   const body = await request.json().catch(() => null) as { question?: unknown; courseName?: unknown; localRules?: unknown } | null;
   const question = typeof body?.question === "string" ? body.question.trim().slice(0, 1200) : "";
@@ -38,13 +38,14 @@ export async function POST(request: NextRequest) {
   const courseName = typeof body?.courseName === "string" ? body.courseName.trim().slice(0, 120) : "";
   const localRules = Array.isArray(body?.localRules) ? body.localRules.slice(0, 30).filter((rule): rule is LocalRule => Boolean(rule && typeof rule === "object" && typeof rule.text === "string" && typeof rule.title === "string")) : undefined;
 
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 20_000, maxRetries: 1 });
   try {
     const answer = await askRulesWithClient({ client, env: process.env, question, courseName, localRules });
     return NextResponse.json({ answer });
-  } catch {
-    console.error("Rules AI request failed");
-    return NextResponse.json({ error: "No fue posible consultar el reglamento en este momento." }, { status: 502 });
+  } catch (error) {
+    const failure = classifyRulesAiFailure(error);
+    console.error("Rules AI request failed", { code: failure.code, status: failure.status });
+    return NextResponse.json({ error: failure.message, code: failure.code }, { status: failure.status });
   }
 }
 

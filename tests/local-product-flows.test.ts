@@ -101,7 +101,7 @@ test("Flujo D conserva búsqueda, IA, documentos oficiales, regreso y videos", (
   const legalLayout = readFileSync("app/legal/layout.tsx", "utf8");
   assert.match(rulesSource, /Preguntar a IA/);
   assert.match(rulesSource, /target="_blank"/);
-  assert.match(legalLayout, /← Volver/);
+  assert.match(legalLayout, /LegalBackLink/);
 });
 
 test("contratos responsive cubren iPhone pequeño, iPhone grande y safe area", () => {

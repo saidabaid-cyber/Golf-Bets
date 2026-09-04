@@ -8,7 +8,7 @@ Se conservaron los 13 archivos de la pasada interrumpida; no hubo reset, cambio 
 
 Implementación: `a440f6f2a21df249c1a65331af3775c7f69666e3`.
 Preview de código probado: `dpl_F89a8Yzhg4Rj4LaPZb6PHuYJoNXY`, READY.
-URL estable: https://golf-bets-git-codex-dev-saha8.vercel.app
+URL estable: https://beta.thebackyard.com.mx
 
 No se modificaron `lib/engine.ts`, `lib/personal-nassau.ts`, los fixtures Personal autoritativos, Auth, Supabase ni Polla Live. No se tocaron main, Production, dominio o migraciones remotas.
 

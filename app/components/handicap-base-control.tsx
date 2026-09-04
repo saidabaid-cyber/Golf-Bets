@@ -18,9 +18,8 @@ export function HandicapBaseControl({ name, config, fallback, onChange }: {
       </div>
       <details className="handicapBaseHelp">
         <summary aria-label={`Ayuda de base de HCP · ${name}`}>?</summary>
-        <div><b>Base fija</b><p>Las ventajas usan la base de menor HCP al confirmar la configuración. Esa referencia se mantiene durante la ronda, aunque cambien las parejas o alguien descanse.</p>
-          <b>Base movible</b><p>Se recalcula con el menor HCP entre quienes participan en ese hoyo o match. El jugador que descansa no interviene.</p>
-          <p>Si descansa Daniel (0), Said (8), Tamayo (9), Juan (13) y Flavio (14) quedan con 0, 1, 5 y 6. En SI 6, al 100% de HCP, solo Flavio recibe un golpe.</p></div>
+        <div><b>Base fija</b><p>La referencia de HCP se mantiene durante toda la ronda.</p>
+          <b>Base movible</b><p>La base se recalcula con el HCP más bajo de los jugadores que participan en ese hoyo. Quien descansa no cuenta.</p></div>
       </details>
     </div>
     {mode === "fixed" && config.fixedBaseHandicap !== undefined && <small>Referencia conservada: HCP {config.fixedBaseHandicap}</small>}

@@ -13,7 +13,7 @@ La app usa Supabase Auth con PKCE y restaura la sesión. Sin Supabase conserva L
 ## Redirects
 
 - Local: `http://localhost:3000/auth/callback`
-- Producción actual: `https://golf-bets-psi.vercel.app/auth/callback`
+- Beta `codex-dev`: `https://beta.thebackyard.com.mx/auth/callback`
 - Futuro, todavía no activar: `https://thebackyard.com.mx/auth/callback`
 - Futuro, todavía no activar: `https://www.thebackyard.com.mx/auth/callback`
 
@@ -22,6 +22,6 @@ La app usa Supabase Auth con PKCE y restaura la sesión. Sin Supabase conserva L
 - [Supabase completo](./SETUP_SUPABASE.md)
 - [Email OTP](./SETUP_EMAIL_OTP.md)
 - [Google](./SETUP_GOOGLE_AUTH.md)
-- [Apple](./SETUP_APPLE_AUTH.md)
+- Apple queda documentado solo para una etapa futura; no se muestra en la UX actual.
 
 Después de cualquier proveedor, Supabase regresa a `/auth/callback`; la página intercambia el code PKCE y vuelve a Home. En error siempre ofrece “Volver a The Backyard”.
