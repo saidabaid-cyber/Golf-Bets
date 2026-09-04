@@ -40,6 +40,13 @@ export function pollaPositionLabels(detail: MedalPollaDetail | undefined, player
   return Object.fromEntries(playerIds.map(playerId => [playerId, pollaPositionLabel(detail, playerId)]));
 }
 
+/** Presentation-only summary. Monetary settlement remains owned by calculateUnits. */
+export function summarizeNetUnitQuantities(net: Record<string, number>, playerIds: string[]) {
+  const quantities = Object.fromEntries(playerIds.map(playerId => [playerId, Number.isFinite(net[playerId]) ? net[playerId] : 0]));
+  const total = Object.values(quantities).reduce((sum, value) => sum + value, 0);
+  return { quantities, total };
+}
+
 export function buildGeneralResultsTable(
   playerIds: string[],
   categoryColumns: ResultCategoryColumn[],

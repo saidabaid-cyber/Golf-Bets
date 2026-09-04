@@ -46,6 +46,7 @@ export function NumericCaptureInput({
 
   return <input
     {...inputProps}
+    data-numeric-capture="true"
     type="text"
     inputMode="text"
     enterKeyHint={inputProps.enterKeyHint ?? "done"}

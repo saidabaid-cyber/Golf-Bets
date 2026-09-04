@@ -65,6 +65,7 @@ import { commitHoleCapture, editCapturedScore, holeCapture, isHoleCaptureComplet
 import { foursomePressure, setFoursomePressure } from "../lib/foursome-config";
 import { FoursomeLive } from "./components/foursome-live";
 import { PersonalCompact } from "./components/personal-compact";
+import { ResultAccordion } from "./components/result-accordion";
 import { HistoricalRoundDetail } from "./components/historical-round-detail";
 import { FullScorecard } from "./components/full-scorecard";
 import { restoreRoundSnapshot, resultSummaryText, upsertRoundSnapshot } from "../lib/round-editing";
@@ -87,7 +88,7 @@ import { cloneLaVistaLocalRules, isLaVistaCourse, LA_VISTA_LOCAL_RULES_UPDATED_A
 import { filterHistory, historyYears, MONTH_LABELS } from "../lib/history-filters";
 import { priorRabbitStatus, priorSkinsStatus } from "../lib/prior-hole-status";
 import { ballFriendScoreResult, ballFriendSetupChipLabel, lobaSetupChipLabel, playerHoleBetLabels, skinHoleNotice } from "../lib/hole-bet-display";
-import { buildGeneralResultsTable, pollaDetailBalance, pollaDetailBalances, pollaPositionLabels, type ResultCategoryColumn } from "../lib/result-breakdown";
+import { buildGeneralResultsTable, pollaDetailBalance, pollaDetailBalances, pollaPositionLabels, summarizeNetUnitQuantities, type ResultCategoryColumn } from "../lib/result-breakdown";
 import { collectHoleValidationErrors } from "../lib/hole-validation";
 import {
   calculateCounterBet,
@@ -392,7 +393,7 @@ function GolfBetsApp() {
   const [holeSummary, setHoleSummary] = useState<string[]>([]);
   const [holeValidationErrors, setHoleValidationErrors] = useState<string[]>([]);
   const [holeBetEditor, setHoleBetEditor] = useState<"loba" | "ballFriend" | null>(null);
-  const [resultsView, setResultsView] = useState<"players" | "general">("players");
+  const [resultsView, setResultsView] = useState<"players" | "general">("general");
   const [highContrast, setHighContrast] = useState(true);
   const [roundClosed, setRoundClosed] = useState(false);
   const [historyYear, setHistoryYear] = useState("");
@@ -424,6 +425,8 @@ function GolfBetsApp() {
   const [holeSummaryPaused, setHoleSummaryPaused] = useState(false);
   const flushLocalState = useRef<(() => boolean) | null>(null);
   const requestCloudSync = useRef<(() => void) | null>(null);
+  const saveAfterNumericCommit = useRef(false);
+  const latestSaveAndAdvance = useRef<() => void>(() => undefined);
   useEffect(() => {
     if (tab !== "round") {
       holeSummarySession.current?.dispose();
@@ -905,6 +908,10 @@ function GolfBetsApp() {
   const ownerNet = ownerBetResult - ownerExpenseTotal;
   const totalRabbitsWon = Object.values(rabbits.won).reduce((total, count) => total + count, 0);
   const totalSkinsWon = Object.values(skins.won).reduce((total, count) => total + count, 0);
+  const unitQuantitySummary = useMemo(
+    () => summarizeNetUnitQuantities(units.net, players.map(player => player.id)),
+    [units.net, players],
+  );
   const pollaEnabled = bets.polla.first9.enabled || bets.polla.second9.enabled || bets.polla.total18.enabled;
   const pollaFirstDetail = polla.details.find(detail => detail.key === "first9");
   const pollaSecondDetail = polla.details.find(detail => detail.key === "second9");
@@ -937,7 +944,7 @@ function GolfBetsApp() {
   const generalResultCategories = useMemo<ResultCategoryColumn[]>(() => [
     { key: "rabbits", label: "🐇 Conejos", balances: rabbitBalances, active: bets.rabbits.enabled, played: rabbits.events.length > 0, quantityTotal: totalRabbitsWon, quantities: rabbits.won, quantityLabel: "conejos" },
     { key: "skins", label: "⛳ Skins", balances: skinBalances, active: bets.skins.enabled, played: skins.events.length > 0, quantityTotal: totalSkinsWon, quantities: skins.won, quantityLabel: "skins" },
-    { key: "units", label: "📏 Unidades", balances: units.balances, active: bets.units.enabled, played: completedHoles.size > 0, quantityTotal: units.registeredTotal, quantities: units.net, quantityLabel: "unidades", signedQuantity: true },
+    { key: "units", label: "📏 Unidades", balances: units.balances, active: bets.units.enabled, played: completedHoles.size > 0, quantityTotal: unitQuantitySummary.total, quantities: unitQuantitySummary.quantities, quantityLabel: "unidades", signedQuantity: true },
     { key: "monkey", label: "🐒 Monkey", balances: monkey.balances, active: Boolean(bets.monkey?.enabled), played: monkey.details.length > 0, quantities: monkey.points, quantityLabel: "puntos" },
     { key: "foursome", label: "Foursome", balances: foursomes.balances, active: bets.foursome.enabled, played: foursomes.matches.some(match => match.completedHoles > 0) },
     { key: "ballFriend", label: "⚪🤝 Bola Amiga", balances: ballFriend.balances, active: bets.ballFriend.enabled, played: ballFriend.details.length > 0, quantityTotal: ballFriend.details.length, quantities: ballFriend.points, quantityLabel: "puntos", signedQuantity: true },
@@ -950,7 +957,7 @@ function GolfBetsApp() {
     { key: "fish", label: "🐟 Peces", balances: fish.balances, active: bets.fish.enabled, played: fish.totalQuantity > 0 || fish.halves.some(half => half.settled) },
     { key: "loba", label: "🐺 Loba", balances: loba.balances, active: bets.loba.enabled, played: loba.details.length > 0 },
     { key: "manual", label: "Manuales", balances: manual.balances, active: manualBets.length > 0, played: manualBets.some(bet => Object.values(bet.amounts).some(amount => amount !== 0)) },
-  ], [rabbitBalances, bets.rabbits.enabled, rabbits.events.length, rabbits.won, totalRabbitsWon, skinBalances, bets.skins.enabled, skins.events.length, skins.won, totalSkinsWon, units.balances, units.registeredTotal, units.net, bets.units.enabled, completedHoles, monkey.balances, monkey.points, monkey.details.length, bets.monkey?.enabled, foursomes.balances, bets.foursome.enabled, foursomes.matches, ballFriend.balances, ballFriend.points, bets.ballFriend.enabled, ballFriend.details.length, pollaFirstBalances, pollaSecondBalances, pollaNassauBalances, miniPollaComponentBalances, bets.polla.first9.enabled, bets.polla.second9.enabled, bets.polla.total18.enabled, bets.miniPolla.enabled, pollaFirstDetail, pollaSecondDetail, pollaNassauDetail, miniPollaDetail, settlementIds, vipers.balances, bets.vipers.enabled, vipers.totalQuantity, vipers.halves, camels.balances, bets.camels.enabled, camels.totalQuantity, camels.halves, fish.balances, bets.fish.enabled, fish.totalQuantity, fish.halves, loba.balances, bets.loba.enabled, loba.details.length, manual.balances, manualBets]);
+  ], [rabbitBalances, bets.rabbits.enabled, rabbits.events.length, rabbits.won, totalRabbitsWon, skinBalances, bets.skins.enabled, skins.events.length, skins.won, totalSkinsWon, units.balances, unitQuantitySummary, bets.units.enabled, completedHoles, monkey.balances, monkey.points, monkey.details.length, bets.monkey?.enabled, foursomes.balances, bets.foursome.enabled, foursomes.matches, ballFriend.balances, ballFriend.points, bets.ballFriend.enabled, ballFriend.details.length, pollaFirstBalances, pollaSecondBalances, pollaNassauBalances, miniPollaComponentBalances, bets.polla.first9.enabled, bets.polla.second9.enabled, bets.polla.total18.enabled, bets.miniPolla.enabled, pollaFirstDetail, pollaSecondDetail, pollaNassauDetail, miniPollaDetail, settlementIds, vipers.balances, bets.vipers.enabled, vipers.totalQuantity, vipers.halves, camels.balances, bets.camels.enabled, camels.totalQuantity, camels.halves, fish.balances, bets.fish.enabled, fish.totalQuantity, fish.halves, loba.balances, bets.loba.enabled, loba.details.length, manual.balances, manualBets]);
   const generalResults = useMemo(
     () => buildGeneralResultsTable(players.map(player => player.id), generalResultCategories, generalBetBalances),
     [players, generalResultCategories, generalBetBalances],
@@ -1627,6 +1634,23 @@ function GolfBetsApp() {
     holeSummarySession.current?.togglePause();
   }
 
+  function commitFocusedNumericCapture() {
+    const active = document.activeElement;
+    if (active instanceof HTMLInputElement && active.dataset.numericCapture === "true") {
+      saveAfterNumericCommit.current = true;
+      active.blur();
+    }
+  }
+
+  function requestSaveAndAdvance() {
+    if (!saveAfterNumericCommit.current) {
+      saveAndAdvance();
+      return;
+    }
+    saveAfterNumericCommit.current = false;
+    queueMicrotask(() => latestSaveAndAdvance.current());
+  }
+
   function saveAndAdvance() {
     if (holeSummarySession.current) return;
     const validationErrors = collectHoleValidationErrors({
@@ -1736,6 +1760,7 @@ function GolfBetsApp() {
       },
     });
   }
+  latestSaveAndAdvance.current = saveAndAdvance;
 
   const todayMx = localDateMexico();
   const currentMonth = todayMx.slice(0, 7);
@@ -2103,7 +2128,7 @@ function GolfBetsApp() {
       {scoreCaptureComplete && <PersonalCompact results={livePersonals.results} owner={owner?.name || "Jugador principal"} name={playerName} hole={holeNumber} onOpen={id => { setPersonalDetailId(id); setTab("personalDetail"); }} />}
       {scoreCaptureComplete && renderMonkeyLive()}
 
-      <div className="roundActions"><button className="secondary big" disabled={currentIndex === 0 || holeSummary.length > 0} onClick={() => goToHoleIndex(currentIndex - 1)}>← Anterior</button><button className="primary big" disabled={holeSummary.length > 0} onClick={saveAndAdvance}>{currentIndex < order.length - 1 ? "Guardar y siguiente hoyo →" : "Terminar y guardar ronda →"}</button></div>
+      <div className="roundActions"><button className="secondary big" disabled={currentIndex === 0 || holeSummary.length > 0} onClick={() => goToHoleIndex(currentIndex - 1)}>← Anterior</button><button className="primary big" disabled={holeSummary.length > 0} onPointerDown={commitFocusedNumericCapture} onClick={requestSaveAndAdvance}>{currentIndex < order.length - 1 ? "Guardar y siguiente hoyo →" : "Terminar y guardar ronda →"}</button></div>
       {holeSummary.length > 0 && <div className="holeSummaryBackdrop" onClick={(event) => event.stopPropagation()}><div className={`holeSummary ${holeSummaryPaused ? "paused" : ""}`} role="dialog" aria-modal="true" aria-label={`Resumen del hoyo ${holeNumber}`} onClick={toggleHoleSummaryPause}><button type="button" autoFocus className="holeSummaryClose" aria-label="Cerrar resumen y avanzar" onClick={(event) => { event.preventDefault(); event.stopPropagation(); closeHoleSummary(); }}>×</button><div className="holeSummaryContent" role="status" aria-live="polite"><h2>{holeSummary[0]} ✓</h2><p className="holeSummaryScores">{holeSummary.slice(1, players.length + 1).map((line, index) => <span key={index}>{line}</span>)}</p><div className="holeSummaryBets">{holeSummary.slice(players.length + 1).map((line, index) => <p key={index}>{line}</p>)}</div><small className="holeSummaryHoldHint">{holeSummaryPaused ? "Pausado · toca para reanudar" : "Toca el resumen para pausar"}</small></div><div className="holeSummaryTimer" aria-hidden="true" /></div></div>}
     </>}
 
@@ -2119,21 +2144,20 @@ function GolfBetsApp() {
     {tab === "results" && <>
       <section className="hero resultHero"><div><div className="eyebrow">RESULTADO DEL DÍA</div><h1 className={ownerNet >= 0 ? "good" : "bad"}>{money(ownerNet)}</h1><p>{owner?.name}: apuestas {money(ownerBetResult)} · gastos {money(-ownerExpenseTotal)}</p></div>{roundClosed ? <button className="secondary" onClick={() => setTab("history")}>Ver ronda guardada</button> : <button className="secondary" onClick={() => setTab("round")}>Editar tarjeta</button>}</section>
 
-      <section className="card finalPlayerSummary">
-        <h2>Resultado final por jugador</h2><p className="muted">Cuánto gana o pierde exactamente cada persona en todas las apuestas.</p>
+      <ResultAccordion id="final-player-summary" title="Resultado final por jugador" defaultOpen className="finalPlayerSummary">
+        <p className="muted">Cuánto gana o pierde exactamente cada persona en todas las apuestas.</p>
         {settlementIds.map((id) => {
           const total = allBetBalances[id] ?? 0;
           return <div className="transfer" key={id}><span><b>{playerName(id)}</b></span><strong className={total > 0 ? "good" : total < 0 ? "bad" : ""}>{total > 0 ? "+" : ""}{money(total)}</strong></div>;
         })}
-      </section>
+        {(bets.rabbits.enabled || bets.skins.enabled || bets.units.enabled) && <div className="roundStats" aria-label="Conteos globales de la ronda">
+          {bets.rabbits.enabled && <div className="stat"><span>🐇 Conejos · Jugados</span><b>{totalRabbitsWon}</b><small>realmente cobrados</small></div>}
+          {bets.skins.enabled && <div className="stat"><span>⛳ Skins · Jugados</span><b>{totalSkinsWon}</b><small>sin carry final</small></div>}
+          {bets.units.enabled && <div className="stat"><span>📏 Unidades · Netas</span><b>{unitQuantitySummary.total > 0 ? "+" : ""}{unitQuantitySummary.total}</b><small>suma del neto mostrado</small></div>}
+        </div>}
+      </ResultAccordion>
 
-      {(bets.rabbits.enabled || bets.skins.enabled || bets.units.enabled) && <section className="roundStats" aria-label="Conteos globales de la ronda">
-        {bets.rabbits.enabled && <div className="stat"><span>🐇 Conejos · Jugados</span><b>{totalRabbitsWon}</b><small>realmente cobrados</small></div>}
-        {bets.skins.enabled && <div className="stat"><span>⛳ Skins · Jugados</span><b>{totalSkinsWon}</b><small>sin carry final</small></div>}
-        {bets.units.enabled && <div className="stat"><span>📏 Unidades · Jugadas</span><b>{units.registeredTotal}</b><small>registradas y copas</small></div>}
-      </section>}
-
-      <details className="card betValues"><summary>Valores de apuesta</summary><div className="valueGrid">
+      <ResultAccordion id="bet-values" title="Valores de apuesta" className="betValues"><div className="valueGrid">
         {bets.rabbits.enabled && <span><b>🐇 Conejos</b>{money(bets.rabbits.value)} c/u</span>}
         {bets.skins.enabled && <span><b>⛳ Skins</b>{money(bets.skins.value)} c/u</span>}
         {bets.units.enabled && <span><b>📏 Unidades / Copas</b>{money(bets.units.value)} por unidad · {money(bets.units.copaValue ?? bets.units.value)} por Copa</span>}
@@ -2146,16 +2170,16 @@ function GolfBetsApp() {
         {bets.fish.enabled && <span><b>🐟 Peces</b>{money(bets.fish.value)} · H10–18 {bets.fish.secondNineMultiplier}x</span>}
         {bets.loba.enabled && <span><b>🐺 Loba</b>{money(bets.loba.value)} base · HCP {bets.loba.hcpPct ?? 100}%{bets.loba.unitsEnabled ? ` · 📏 ${money(bets.loba.unitValue)}` : ""}</span>}
         {personalBets.map((bet) => <span key={bet.id}><b>Personal {owner?.name} vs {bet.rivalMode === "group" ? playerName(bet.rivalPlayerId) : bet.rivalName}</b>{money(bet.baseValue)} base{roundHoles === 18 && (bet.pressureMultiplier || 1) > 1 ? ` · 2ª jugada ${bet.pressureMultiplier}x` : ""} · Carry {bet.carryEnabled ? "Sí" : "No"}</span>)}
-      </div></details>
+      </div></ResultAccordion>
 
-      <section className="card playerSummary">
-        <div className="resultsViewHeader"><h2>Resultados</h2><div className="segmented" aria-label="Vista de resultados"><button className={resultsView === "players" ? "active" : ""} aria-pressed={resultsView === "players"} onClick={() => setResultsView("players")}>Jugadores</button><button className={resultsView === "general" ? "active" : ""} aria-pressed={resultsView === "general"} onClick={() => setResultsView("general")}>Resumen General</button></div></div>
+      <ResultAccordion id="general-summary" title={resultsView === "general" ? "Resumen General" : "Resumen por jugador"} defaultOpen className="playerSummary">
+        <div className="resultsViewHeader"><div className="segmented" aria-label="Vista de resultados"><button className={resultsView === "players" ? "active" : ""} aria-pressed={resultsView === "players"} onClick={() => setResultsView("players")}>Jugadores</button><button className={resultsView === "general" ? "active" : ""} aria-pressed={resultsView === "general"} onClick={() => setResultsView("general")}>Resumen General</button></div></div>
         {resultsView === "players" ? <><div className="row between resultsPlayerTools"><h3>Resumen por jugador</h3><button className="secondary" onClick={copyResultsSummary}>Copiar para WhatsApp</button></div><div className="playerResultGrid">{players.map((p) => <details className="playerResultCard" key={p.id}>
           <summary><b>{p.name}</b><span className="playerIndicators">{bets.rabbits.enabled ? `🐇 ${rabbits.won[p.id] ?? 0}` : ""}{bets.skins.enabled ? ` · ⛳ ${skins.won[p.id] ?? 0}` : ""}{bets.units.enabled ? ` · 📏 ${(units.net[p.id] ?? 0) > 0 ? "+" : ""}${units.net[p.id] ?? 0}` : ""}</span><strong className={(allBetBalances[p.id] ?? 0) > 0 ? "good" : (allBetBalances[p.id] ?? 0) < 0 ? "bad" : ""}>{signedMoney(allBetBalances[p.id] ?? 0)}</strong></summary>
           <div className="playerBetBlocks">
             {bets.rabbits.enabled && <div><span>🐇 Conejos · Jugados</span><b>{rabbits.won[p.id] ?? 0}</b><i>{signedMoney(rabbitBalances[p.id] ?? 0)}</i></div>}
             {bets.skins.enabled && <div><span>⛳ Skins · Jugados</span><b>{skins.won[p.id] ?? 0}</b><i>{signedMoney(skinBalances[p.id] ?? 0)}</i></div>}
-            {bets.units.enabled && <div><span>📏 Unidades · Jugadas</span><b>{(units.net[p.id] ?? 0) > 0 ? "+" : ""}{units.net[p.id] ?? 0}</b><i>{signedMoney(units.balances[p.id] ?? 0)}</i></div>}
+            {bets.units.enabled && <div><span>📏 Unidades · Netas</span><b>{(unitQuantitySummary.quantities[p.id] ?? 0) > 0 ? "+" : ""}{unitQuantitySummary.quantities[p.id] ?? 0}</b><i>{signedMoney(units.balances[p.id] ?? 0)}</i></div>}
             {bets.foursome.enabled && <div><span>Foursome</span><i>{signedMoney(foursomes.balances[p.id] ?? 0)}</i></div>}
             {bets.ballFriend.enabled && <div><span>⚪🤝 Bola Amiga</span><i>{signedMoney(ballFriend.balances[p.id] ?? 0)}</i></div>}
             {polla.details.filter((detail) => Object.hasOwn(detail.totals, p.id)).map((detail) => <div key={detail.key}><span>{detail.label}</span><b>1</b><i>{signedMoney(pollaDetailBalance(detail, p.id))}</i></div>)}
@@ -2169,35 +2193,41 @@ function GolfBetsApp() {
             {bets.loba.enabled && <div><span>🐺 Loba</span><b>{loba.details.length}</b><i>{signedMoney(loba.balances[p.id] ?? 0)}</i></div>}
           </div>
         </details>)}</div></> : <div className="generalResultsWrap"><p className="muted">Todas las apuestas activas y ya jugadas. Desliza horizontalmente para revisar cada categoría.</p>{generalResults.categories.length ? <div className="generalResultsScroll" tabIndex={0} aria-label="Resumen general de resultados por apuesta"><table className="generalResultsTable"><thead><tr><th>Jugador</th>{generalResults.categories.map(category => <th key={category.key}>{category.label}{category.quantityTotal !== undefined ? ` · ${category.quantityTotal}` : ""}</th>)}<th>TOTAL</th></tr></thead><tbody>{generalResults.rows.map(row => <tr key={row.playerId}><th scope="row">{playerName(row.playerId)}</th>{generalResults.categories.map(category => { const amount = row.cells[category.key] || 0; const quantity = category.quantities?.[row.playerId]; const quantityText = quantity === undefined ? "" : `${category.signedQuantity && quantity > 0 ? "+" : ""}${quantity} ${category.quantityLabel || ""}`.trim(); return <td key={category.key}><div className="generalResultCell">{category.detailByPlayer?.[row.playerId] && <span>{category.detailByPlayer[row.playerId]}</span>}{quantityText && <span>{quantityText}</span>}<strong className={amount > 0 ? "good" : amount < 0 ? "bad" : ""}>{signedMoney(amount)}</strong></div></td>; })}<td className={!row.consistent ? "bad" : row.total > 0 ? "good" : row.total < 0 ? "bad" : ""}>{signedMoney(row.total)}</td></tr>)}<tr className="generalResultsTotal"><th scope="row">TOTAL GENERAL</th>{generalResults.categories.map(category => <td key={category.key} className={Math.abs(generalResults.categoryTotals[category.key] || 0) < 0.001 ? "good" : "bad"}>{signedMoney(generalResults.categoryTotals[category.key] || 0)}</td>)}<td className={Math.abs(generalResults.grandTotal) < 0.001 ? "good" : "bad"}>{signedMoney(generalResults.grandTotal)}</td></tr></tbody></table></div> : <div className="empty">Todavía no hay apuestas activas con hoyos jugados.</div>}</div>}
-      </section>
+      </ResultAccordion>
 
-      <PersonalCompact title="Resultados de Apuestas Personales" results={personals.results} owner={owner?.name || "Jugador principal"} name={playerName} onOpen={id => { setPersonalDetailId(id); setTab("personalDetail"); }} />
+      {bets.rabbits.enabled && <ResultAccordion id="rabbits" title={`🐇 Conejos · ${totalRabbitsWon}`}><div className="resultBalanceList">{playersByIds(players, bets.rabbits.participantIds).map(player => <div className="transfer" key={player.id}><span><b>{player.name}</b><small>{rabbits.won[player.id] ?? 0} conejos</small></span><strong className={(rabbitBalances[player.id] ?? 0) > 0 ? "good" : (rabbitBalances[player.id] ?? 0) < 0 ? "bad" : ""}>{signedMoney(rabbitBalances[player.id] ?? 0)}</strong></div>)}</div></ResultAccordion>}
+      {bets.skins.enabled && <ResultAccordion id="skins" title={`⛳ Skins · ${totalSkinsWon}`}><div className="resultBalanceList">{playersByIds(players, bets.skins.participantIds).map(player => <div className="transfer" key={player.id}><span><b>{player.name}</b><small>{skins.won[player.id] ?? 0} skins</small></span><strong className={(skinBalances[player.id] ?? 0) > 0 ? "good" : (skinBalances[player.id] ?? 0) < 0 ? "bad" : ""}>{signedMoney(skinBalances[player.id] ?? 0)}</strong></div>)}</div></ResultAccordion>}
+      {bets.units.enabled && <ResultAccordion id="units" title={`📏 Unidades · ${unitQuantitySummary.total > 0 ? "+" : ""}${unitQuantitySummary.total}`}><div className="resultBalanceList">{playersByIds(players, bets.units.participantIds).map(player => { const quantity = unitQuantitySummary.quantities[player.id] ?? 0; const amount = units.balances[player.id] ?? 0; return <div className="transfer" key={player.id}><span><b>{player.name}</b><small>{quantity > 0 ? "+" : ""}{quantity} unidades netas</small></span><strong className={amount > 0 ? "good" : amount < 0 ? "bad" : ""}>{signedMoney(amount)}</strong></div>; })}</div></ResultAccordion>}
+      {bets.ballFriend.enabled && <ResultAccordion id="ball-friend" title="⚪🤝 Bola Amiga"><div className="resultBalanceList">{playersByIds(players, bets.ballFriend.participantIds).map(player => { const amount = ballFriend.balances[player.id] ?? 0; const points = ballFriend.points[player.id] ?? 0; return <div className="transfer" key={player.id}><span><b>{player.name}</b><small>{points > 0 ? "+" : ""}{points} puntos</small></span><strong className={amount > 0 ? "good" : amount < 0 ? "bad" : ""}>{signedMoney(amount)}</strong></div>; })}</div></ResultAccordion>}
 
-      <section className={`card settlementCard ${Math.abs(settlementDifference) < 0.001 ? "" : "settlementError"}`}>
-        <div className="row between"><div><h2>Liquidación final</h2><p className="muted">Pagos mínimos sugeridos después de netear todas las apuestas.</p></div><b>{Math.abs(settlementDifference) < 0.001 ? "✓ Suma $0" : `Inconsistencia ${signedMoney(settlementDifference)}`}</b></div>
+      {personals.results.length > 0 && <ResultAccordion id="personals" title="Resultados de Apuestas Personales"><PersonalCompact embedded results={personals.results} owner={owner?.name || "Jugador principal"} name={playerName} onOpen={id => { setPersonalDetailId(id); setTab("personalDetail"); }} /></ResultAccordion>}
+
+      <ResultAccordion id="settlement" title="Liquidación final" className={`settlementCard ${Math.abs(settlementDifference) < 0.001 ? "" : "settlementError"}`}>
+        <div className="row between"><p className="muted">Pagos mínimos sugeridos después de netear todas las apuestas.</p><b>{Math.abs(settlementDifference) < 0.001 ? "✓ Suma $0" : `Inconsistencia ${signedMoney(settlementDifference)}`}</b></div>
         {settlementTransfers.length ? settlementTransfers.map((transfer, index) => <div className="transfer" key={`${transfer.fromPlayerId}-${transfer.toPlayerId}-${index}`}><span><b>{playerName(transfer.fromPlayerId)}</b> paga a {playerName(transfer.toPlayerId)}</span><strong>{money(transfer.amount)}</strong></div>) : <div className="empty">No hay pagos pendientes.</div>}
-      </section>
+      </ResultAccordion>
 
       {bets.vipers.enabled && <CounterBetResults title="🐍 Víboras" halves={vipers.halves} playerName={playerName} />}
       {bets.camels.enabled && <CounterBetResults title="🐫 Camellos" halves={camels.halves} playerName={playerName} />}
       {bets.fish.enabled && <CounterBetResults title="🐟 Peces" halves={fish.halves} playerName={playerName} />}
-      {bets.loba.enabled && <details className="card sideBetResult"><summary>🐺 Loba</summary>{loba.details.length ? loba.details.map(detail => <div className="lobaResultHole" key={detail.hole}><div><b>H{detail.hole} · 🔥{detail.fireMultiplier}x · HCP {detail.hcpPct}%</b><span>{detail.lobaTeam.map(playerName).join(" + ")} {detail.lobaBestNet} neto vs {detail.opponents.map(playerName).join(" + ")} {detail.opponentBestNet} neto</span><span>{detail.winner === "tie" ? "Empate" : detail.winner === "loba_team" ? "Ganó equipo 🐺" : "Ganaron contrarios"}</span></div><strong>{money(detail.effectiveValue)}</strong><small>📏 Equipos {detail.lobaUnits} vs {detail.opponentUnits} · unidad efectiva {money(detail.effectiveUnitValue)}</small><div className="lobaResultUnits">{Object.entries(detail.playerUnits).map(([id, unitDetail]) => <span key={id}>{playerName(id)} · Auto +{unitDetail.automatic} · Manual +{unitDetail.manual} · Total +{unitDetail.total}</span>)}</div><div className="sideBetBalances">{Object.entries(detail.balances).filter(([, amount]) => amount !== 0).map(([id, amount]) => <span key={id}>{playerName(id)} <b className={amount > 0 ? "good" : "bad"}>{signedMoney(amount)}</b></span>)}</div></div>) : <div className="empty">Sin hoyos completos.</div>}</details>}
+      {bets.loba.enabled && <ResultAccordion id="loba" title="🐺 Loba" className="sideBetResult">{loba.details.length ? loba.details.map(detail => <div className="lobaResultHole" key={detail.hole}><div><b>H{detail.hole} · 🔥{detail.fireMultiplier}x · HCP {detail.hcpPct}%</b><span>{detail.lobaTeam.map(playerName).join(" + ")} {detail.lobaBestNet} neto vs {detail.opponents.map(playerName).join(" + ")} {detail.opponentBestNet} neto</span><span>{detail.winner === "tie" ? "Empate" : detail.winner === "loba_team" ? "Ganó equipo 🐺" : "Ganaron contrarios"}</span></div><strong>{money(detail.effectiveValue)}</strong><small>📏 Equipos {detail.lobaUnits} vs {detail.opponentUnits} · unidad efectiva {money(detail.effectiveUnitValue)}</small><div className="lobaResultUnits">{Object.entries(detail.playerUnits).map(([id, unitDetail]) => <span key={id}>{playerName(id)} · Auto +{unitDetail.automatic} · Manual +{unitDetail.manual} · Total +{unitDetail.total}</span>)}</div><div className="sideBetBalances">{Object.entries(detail.balances).filter(([, amount]) => amount !== 0).map(([id, amount]) => <span key={id}>{playerName(id)} <b className={amount > 0 ? "good" : "bad"}>{signedMoney(amount)}</b></span>)}</div></div>) : <div className="empty">Sin hoyos completos.</div>}</ResultAccordion>}
 
-      {bets.foursome.enabled && <details className="card">
-        <summary>Detalle Foursome</summary>
+      {bets.foursome.enabled && <ResultAccordion id="foursome" title="Foursome">
         {foursomes.matches.map((m, i) => <div className="matchLine foursomeResultLine" key={i}><div><b>H{m.startHole}–{m.endHole}: {playerName(m.basePair[0])}/{playerName(m.basePair[1])}</b><span>vs {playerName(m.opponentPair[0])}/{playerName(m.opponentPair[1])}</span></div><div className="matchNums"><span>Resultado: {m.pointDiff > 0 ? "+" : ""}{m.pointDiff} pts{m.pressureMultiplier > 1 ? ` · H1–9 ${m.first9PointDiff >= 0 ? "+" : ""}${m.first9PointDiff}${m.pressureNine === "holes_1_9" ? ` x${m.pressureMultiplier}` : ""} · H10–18 ${m.second9PointDiff >= 0 ? "+" : ""}${m.second9PointDiff}${m.pressureNine === "holes_10_18" ? ` x${m.pressureMultiplier}` : ""}` : ""}</span><small>{m.complete ? "Fijo" : "Fijo provisional"}: {signedMoney(m.complete ? m.fixedMoney : m.provisionalFixedMoney)} · {m.complete ? "Puntos/patada" : "Puntos/patada provisional"}: {signedMoney(m.complete ? m.pointMoney : m.provisionalPointMoney)}</small><b className={(m.complete ? m.totalMoney : m.provisionalTotalMoney) > 0 ? "good" : (m.complete ? m.totalMoney : m.provisionalTotalMoney) < 0 ? "bad" : ""}>{m.complete ? `Resultado económico: ${signedMoney(m.totalMoney)}` : `Provisional: ${signedMoney(m.provisionalTotalMoney)}`}</b></div></div>)}
-      </details>}
+      </ResultAccordion>}
 
-      {(pollaEnabled || bets.miniPolla.enabled) && <section className="card"><h2>Polla / Mini Polla</h2>
-        {[...polla.details, ...miniPolla.details].map((d) => <div className="pollaResult" key={d.key}><div className="row between"><div><b>{d.label}</b><div className="muted">Hoyos {d.holes.join(", ")} · valor {money(d.value)} por jugador</div></div><strong>{d.complete ? (d.winnerIds.length ? d.winnerIds.map(playerName).join(" / ") : "—") : "Pendiente"}</strong></div>{d.complete && <div className="componentResults"><span>Ganador{d.winnerIds.length !== 1 ? "es" : ""}: <b>{d.winnerIds.map(playerName).join(" / ")}</b></span><span>Premio bruto c/u: <b>{money(d.grossPrizePerWinner)}</b></span>{d.winnerIds.length > 1 && <span>Empate: <b>premio dividido</b></span>}</div>}</div>)}
-      </section>}
+      {pollaEnabled && <ResultAccordion id="polla" title="Polla">
+        {polla.details.map((d) => <div className="pollaResult" key={d.key}><div className="row between"><div><b>{d.label}</b><div className="muted">Hoyos {d.holes.join(", ")} · valor {money(d.value)} por jugador</div></div><strong>{d.complete ? (d.winnerIds.length ? d.winnerIds.map(playerName).join(" / ") : "—") : "Pendiente"}</strong></div>{d.complete && <div className="componentResults"><span>Ganador{d.winnerIds.length !== 1 ? "es" : ""}: <b>{d.winnerIds.map(playerName).join(" / ")}</b></span><span>Premio bruto c/u: <b>{money(d.grossPrizePerWinner)}</b></span>{d.winnerIds.length > 1 && <span>Empate: <b>premio dividido</b></span>}</div>}</div>)}
+      </ResultAccordion>}
+      {bets.miniPolla.enabled && <ResultAccordion id="mini-polla" title="Mini Polla">
+        {miniPolla.details.map((d) => <div className="pollaResult" key={d.key}><div className="row between"><div><b>{d.label}</b><div className="muted">Hoyos {d.holes.join(", ")} · valor {money(d.value)} por jugador</div></div><strong>{d.complete ? (d.winnerIds.length ? d.winnerIds.map(playerName).join(" / ") : "—") : "Pendiente"}</strong></div>{d.complete && <div className="componentResults"><span>Ganador{d.winnerIds.length !== 1 ? "es" : ""}: <b>{d.winnerIds.map(playerName).join(" / ")}</b></span><span>Premio bruto c/u: <b>{money(d.grossPrizePerWinner)}</b></span>{d.winnerIds.length > 1 && <span>Empate: <b>premio dividido</b></span>}</div>}</div>)}
+      </ResultAccordion>}
 
-      {renderMonkeyLive()}
+      {bets.monkey?.enabled && <ResultAccordion id="monkey" title="🐒 Monkey">{renderMonkeyLive()}</ResultAccordion>}
 
-      {renderManualBetsEditor()}
+      <ResultAccordion id="manuals" title="Manuales">{renderManualBetsEditor(true)}</ResultAccordion>
 
-      <section className="card">
-        <h2>Gastos de {owner?.name}</h2>
+      <ResultAccordion id="expenses" title={`Gastos de ${owner?.name}`}>
         <div className="grid2">
           <MoneyInput label="Caddie" value={expenses.caddie} onChange={(v) => setExpenses({ ...expenses, caddie: v })} />
           <MoneyInput label="Alimentos" value={expenses.food} onChange={(v) => setExpenses({ ...expenses, food: v })} />
@@ -2207,7 +2237,7 @@ function GolfBetsApp() {
           <MoneyInput label="Otros" value={expenses.other} onChange={(v) => setExpenses({ ...expenses, other: v })} />
         </div>
         <div className="totalStrip"><span>Total gastos</span><b>{money(ownerExpenseTotal)}</b></div>
-      </section>
+      </ResultAccordion>
 
       <section className="card summaryCard"><div><span>Apuestas</span><b className={ownerBetResult >= 0 ? "good" : "bad"}>{money(ownerBetResult)}</b></div><div><span>Gastos</span><b className="bad">{money(-ownerExpenseTotal)}</b></div><div className="grand"><span>NETO DEL DÍA</span><b className={ownerNet >= 0 ? "good" : "bad"}>{money(ownerNet)}</b></div></section>
       <div className="roundActions"><button className="secondary big" onClick={async () => { const snapshot = currentSnapshot(); if (snapshot) await shareRound(snapshot); }}>Compartir ronda</button><button className="secondary big" onClick={resetRound}>Nueva ronda</button>{roundClosed ? <button className="primary big" onClick={() => setTab("history")}>Abrir Histórico</button> : <button className="primary big" onClick={() => saveRound()}>Guardar en histórico</button>}</div>

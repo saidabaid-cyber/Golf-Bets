@@ -3,10 +3,10 @@ import { personalHoleStatus } from "../../lib/personal-summary";
 type Result = ReturnType<typeof calculatePersonalBets>["results"][number];
 const signed = (value: number) => `${value > 0 ? "+" : ""}${value}`;
 const money = (value: number) => `${value > 0 ? "+" : value < 0 ? "-" : ""}$${Math.abs(value).toLocaleString("es-MX")}`;
-export function PersonalCompact({ results, owner, name, hole, title = "Personales", onOpen }: { results: Result[]; owner: string; name: (id: string) => string; hole?: number; title?: string; onOpen: (id: string) => void }) {
+export function PersonalCompact({ results, owner, name, hole, title = "Personales", embedded = false, onOpen }: { results: Result[]; owner: string; name: (id: string) => string; hole?: number; title?: string; embedded?: boolean; onOpen: (id: string) => void }) {
   if (!results.length) return null;
   const ownerTotal = results.reduce((total, result) => total + result.totalMoney, 0);
-  return <section className={`card personalCompact ${hole ? "personalLiveCompact" : ""}`}><h2>{title}</h2>{results.map(result => {
+  return <section className={`${embedded ? "" : "card"} personalCompact ${hole ? "personalLiveCompact" : ""}`.trim()}>{!embedded && <h2>{title}</h2>}{results.map(result => {
     const rival = name(result.rivalId);
     const provisional = result.liveComponents.reduce((sum, component) => sum + component.ownerMoney, 0);
     const complete = result.liveComponents.every(component => component.complete);

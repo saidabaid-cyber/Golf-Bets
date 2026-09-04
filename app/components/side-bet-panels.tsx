@@ -15,6 +15,7 @@ import {
   type CounterBetHalfResult,
 } from "../../lib/side-bets";
 import { NumericCaptureInput } from "./numeric-capture-input";
+import { ResultAccordion } from "./result-accordion";
 
 const money = (value: number) => `${value < 0 ? "−" : ""}$${Math.abs(value).toLocaleString("es-MX", { maximumFractionDigits: 2 })}`;
 const signedMoney = (value: number) => `${value > 0 ? "+" : ""}${money(value)}`;
@@ -221,5 +222,6 @@ export function BallFriendHolePanel({ config, players, hole, capture, liveDetail
 }
 
 export function CounterBetResults({ title, halves, playerName }: { title: string; halves: CounterBetHalfResult[]; playerName: (id?: string) => string }) {
-  return <details className="card sideBetResult"><summary>{title}</summary>{halves.filter(half => half.holes.length).map(half => <div className="sideBetHalf" key={half.nine}><div><b>{half.nine === "holes_1_9" ? "H1–9" : "H10–18"}</b><span>{half.quantity} jugadas · {money(half.value)} c/u{half.multiplier > 1 ? ` · ${half.multiplier}x` : ""}</span></div><strong>{half.keeperId ? `${playerName(half.keeperId)} se quedó` : "Pendiente"}</strong>{half.settled && <div className="sideBetBalances">{Object.entries(half.balances).filter(([, amount]) => amount !== 0).map(([id, amount]) => <span key={id}>{playerName(id)} <b className={amount > 0 ? "good" : "bad"}>{signedMoney(amount)}</b></span>)}</div>}</div>)}</details>;
+  const id = title.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase();
+  return <ResultAccordion id={id} title={title} className="sideBetResult">{halves.filter(half => half.holes.length).map(half => <div className="sideBetHalf" key={half.nine}><div><b>{half.nine === "holes_1_9" ? "H1–9" : "H10–18"}</b><span>{half.quantity} jugadas · {money(half.value)} c/u{half.multiplier > 1 ? ` · ${half.multiplier}x` : ""}</span></div><strong>{half.keeperId ? `${playerName(half.keeperId)} se quedó` : "Pendiente"}</strong>{half.settled && <div className="sideBetBalances">{Object.entries(half.balances).filter(([, amount]) => amount !== 0).map(([id, amount]) => <span key={id}>{playerName(id)} <b className={amount > 0 ? "good" : "bad"}>{signedMoney(amount)}</b></span>)}</div>}</div>)}</ResultAccordion>;
 }
