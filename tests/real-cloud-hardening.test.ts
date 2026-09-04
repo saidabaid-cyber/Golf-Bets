@@ -20,9 +20,13 @@ test("refrescar token o repetir SIGNED_IN de la misma cuenta no reinicia onboard
   assert.match(sameIdentityBranch, /backyard-sync-retry/);
 });
 
-test("Reintentar conexión renueva y valida sesión antes de rehidratar nube", () => {
+test("Reintentar valida la sesión y un 401 fuerza una sola renovación antes de rehidratar nube", () => {
   const provider = readFileSync("app/components/account-provider.tsx", "utf8");
-  assert.match(provider, /recoverAuthSession\(supabase\.auth, \{ forceRefresh: true \}\)/);
+  assert.match(provider, /recoverAuthSession\(supabase\.auth, \{ forceRefresh \}\)/);
+  assert.match(provider, /recoverCloudSession\(true\)/);
+  assert.match(provider, /recoverCloudSession\(false\)/);
+  assert.match(provider, /sessionRecovery\.current\?\.userId === expectedUserId/);
+  assert.match(provider, /activeUserId\.current !== expectedUserId/);
   assert.match(provider, /activateSession\(session, \{ rehydrate: true \}\)/);
   assert.doesNotMatch(provider, /accountCloudError\s*\|\|\s*legalCloudError\s*\|\|\s*syncCloudError/);
 });

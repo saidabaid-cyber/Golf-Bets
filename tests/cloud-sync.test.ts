@@ -202,6 +202,21 @@ test("un error de esquema, RLS o conflicto nunca intenta renovar la sesión", as
   }
 });
 
+test("una caída de red, timeout o 5xx conserva la sesión y nunca intenta renovarla", async () => {
+  for (const error of [
+    new TypeError("Failed to fetch"),
+    new CloudSyncHttpError("La operación agotó el tiempo", 503, "AUTH_UNAVAILABLE"),
+    new CloudSyncHttpError("gateway", 502, "UPSTREAM_ERROR"),
+  ]) {
+    let recoveries = 0;
+    await assert.rejects(
+      () => withCloudAuthRetry(async () => { throw error; }, "valid", async () => { recoveries += 1; return "new"; }),
+      (candidate: unknown) => candidate === error,
+    );
+    assert.equal(recoveries, 0);
+  }
+});
+
 test("merge rebasa contra la última copia cloud para que el mismo conflicto no reaparezca", () => {
   const base = { roundId: "round-1", scores: { 5: { a: 4 }, 6: { a: 4 } } };
   const local = bundle({ activeDraft: { roundId: "round-1", scores: { 5: { a: 3 }, 6: { a: 4 } } }, baseDraft: base, baseDraftFingerprint: JSON.stringify(base), activeDraftUpdatedAt: "2026-09-04T10:00:00Z" });
@@ -210,4 +225,20 @@ test("merge rebasa contra la última copia cloud para que el mismo conflicto no 
   assert.deepEqual(merged.baseDraft, cloud.activeDraft);
   assert.equal(merged.baseDraftUpdatedAt, cloud.activeDraftUpdatedAt);
   assert.equal(findAmbiguousCloudConflicts(merged, cloud).length, 0);
+});
+
+test("un score local basado en la nube avanza la revisión aunque el reloj del dispositivo esté atrasado", () => {
+  const base = { roundId: "round-1", scores: { 5: { a: 4 } } };
+  const cloudAt = "2026-09-04T12:00:00.000Z";
+  const local = bundle({
+    activeDraft: { roundId: "round-1", scores: { 5: { a: 3 } } },
+    activeDraftUpdatedAt: "2026-09-04T11:59:00.000Z",
+    baseDraft: base,
+    baseDraftFingerprint: JSON.stringify(base),
+  });
+  const remote = bundle({ activeDraft: base, activeDraftUpdatedAt: cloudAt });
+  const merged = mergeLocalAndCloud(local, remote);
+  assert.equal((merged.activeDraft as typeof base).scores[5].a, 3);
+  assert.ok(Date.parse(merged.activeDraftUpdatedAt || "") > Date.parse(cloudAt));
+  assert.equal(findAmbiguousCloudConflicts(local, remote).length, 0);
 });

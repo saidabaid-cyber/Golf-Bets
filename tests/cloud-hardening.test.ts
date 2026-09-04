@@ -287,6 +287,8 @@ test("sincronización normal no detecta migraciones provocando errores de column
   const source = await import("node:fs/promises").then(fs => fs.readFile("lib/cloud-sync-service.ts", "utf8"));
   assert.doesNotMatch(source, /from\("round_scores_cloud"\)\.select\("version"\)/);
   const route = await import("node:fs/promises").then(fs => fs.readFile("app/api/cloud/sync/route.ts", "utf8"));
-  assert.match(route, /supportsExtendedCloudSchema\(account\.client, account\.userId\)/);
+  assert.doesNotMatch(route, /supportsExtendedCloudSchema/);
+  assert.match(route, /readCloudBundle\(account\.client, account\.userId, true\)/);
+  assert.match(route, /extendedSchema: true/);
   assert.doesNotMatch(route, /\/rest\/v1\//);
 });

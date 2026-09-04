@@ -1,4 +1,5 @@
 import type { Session, User } from "@supabase/supabase-js";
+import { isDefinitiveAuthFailure } from "./auth-errors";
 
 export type AuthFlowClient = {
   signInWithOtp: (input: { email: string; options: { shouldCreateUser: boolean; emailRedirectTo: string } }) => Promise<{ error: unknown }>;
@@ -67,15 +68,34 @@ function recoverableSessionCandidate(session: Session | null): session is Sessio
     session.access_token?.trim() && session.refresh_token?.trim());
 }
 
-function definitelyInvalidAuth(error: unknown) {
-  const detail = error && typeof error === "object" ? error as { status?: number; code?: string; message?: string } : {};
-  const text = `${detail.code || ""} ${detail.message || ""}`.toLowerCase();
-  if (detail.status === 401) return true;
-  return /refresh_token_(?:not_found|already_used)|invalid refresh token|refresh token.*(?:expired|revoked)|bad_jwt|invalid jwt|user_not_found/.test(text);
+function throwRecovery(error: unknown): never {
+  throw new AuthSessionRecoveryError(isDefinitiveAuthFailure(error) ? "invalid" : "transient", error);
 }
 
-function throwRecovery(error: unknown): never {
-  throw new AuthSessionRecoveryError(definitelyInvalidAuth(error) ? "invalid" : "transient", error);
+function sameSessionToken(left: Session | null, right: Session | null) {
+  return Boolean(left && right && left.access_token === right.access_token && left.refresh_token === right.refresh_token);
+}
+
+async function readSession(auth: AuthFlowClient) {
+  const result = await auth.getSession().catch(throwRecovery);
+  if (result.error) throwRecovery(result.error);
+  return result.data.session;
+}
+
+async function refreshStoredSession(auth: AuthFlowClient, previous: Session) {
+  if (!auth.refreshSession) return previous;
+  // Do not pass a captured refresh token. Supabase's browser client owns the
+  // persisted session and its cross-tab lock; supplying an older token here
+  // can race a TOKEN_REFRESHED event from another tab.
+  const refreshed = await auth.refreshSession().catch((error: unknown) => ({ data: { session: null }, error }));
+  if (!refreshed.error && recoverableSessionCandidate(refreshed.data.session)) return refreshed.data.session;
+
+  // Another tab can finish rotating the token while this request is in flight.
+  // Re-read storage once before declaring the account invalid.
+  const current = await readSession(auth);
+  if (recoverableSessionCandidate(current) && !sameSessionToken(current, previous)) return current;
+  if (refreshed.error) throwRecovery(refreshed.error);
+  throw new AuthSessionRecoveryError("invalid", new Error("account_session_missing"));
 }
 
 /** Restores, refreshes when necessary, and validates the authenticated user.
@@ -86,24 +106,26 @@ export async function recoverAuthSession(
   auth: AuthFlowClient,
   options: { forceRefresh?: boolean; refreshSkewSeconds?: number; now?: number; validateUser?: boolean } = {},
 ) {
-  const current = await auth.getSession().catch(throwRecovery);
-  if (current.error) throwRecovery(current.error);
-  let session = current.data.session;
+  let session = await readSession(auth);
   if (!session) return null;
   if (!recoverableSessionCandidate(session)) throw new AuthSessionRecoveryError("invalid", new Error("account_session_missing"));
 
   const now = options.now ?? Date.now();
   const refreshSkew = (options.refreshSkewSeconds ?? 120) * 1000;
   const expiresSoon = typeof session.expires_at !== "number" || session.expires_at * 1000 <= now + refreshSkew;
+  let refreshedOnce = false;
   if ((options.forceRefresh || expiresSoon) && auth.refreshSession) {
-    const refreshed = await auth.refreshSession({ refresh_token: session.refresh_token }).catch(throwRecovery);
-    if (refreshed.error) throwRecovery(refreshed.error);
-    if (!recoverableSessionCandidate(refreshed.data.session)) throw new AuthSessionRecoveryError("invalid", new Error("account_session_missing"));
-    session = refreshed.data.session;
+    session = await refreshStoredSession(auth, session);
+    refreshedOnce = true;
   }
 
   if (options.validateUser !== false && auth.getUser) {
-    const verified = await auth.getUser(session.access_token).catch(throwRecovery);
+    let verified = await auth.getUser(session.access_token).catch(throwRecovery);
+    if (verified.error && isDefinitiveAuthFailure(verified.error) && !refreshedOnce && auth.refreshSession) {
+      session = await refreshStoredSession(auth, session);
+      refreshedOnce = true;
+      verified = await auth.getUser(session.access_token).catch(throwRecovery);
+    }
     if (verified.error) throwRecovery(verified.error);
     if (!verified.data.user || verified.data.user.id !== session.user.id) throw new AuthSessionRecoveryError("invalid", new Error("account_session_missing"));
   }

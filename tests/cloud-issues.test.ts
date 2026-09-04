@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { cloudIssueFromError } from "../lib/cloud-issues";
+import { authUserFailure } from "../lib/auth-errors";
 
 test("un 409 cloud se presenta como conflicto y nunca como sesión inválida", () => {
   const issue = cloudIssueFromError("round", { status: 409, code: "CLOUD_FIELD_CONFLICT" }, true);
@@ -22,4 +23,12 @@ test("una caída temporal de Auth no exige volver a iniciar sesión", () => {
   assert.equal(issue.kind, "offline");
   assert.equal(issue.retryable, true);
   assert.doesNotMatch(issue.message, /vuelve a iniciar sesión/i);
+});
+
+test("el servidor reserva 401 para rechazo real de Auth", () => {
+  assert.deepEqual(authUserFailure({ status: 401, message: "invalid jwt" }, false)?.status, 401);
+  assert.deepEqual(authUserFailure(new TypeError("Failed to fetch"), false)?.status, 503);
+  assert.deepEqual(authUserFailure({ status: 502, message: "gateway" }, false)?.status, 503);
+  assert.equal(authUserFailure({ status: 401 }, true), null);
+  assert.equal(cloudIssueFromError("auth", new DOMException("This operation was aborted", "AbortError"), true).kind, "offline");
 });

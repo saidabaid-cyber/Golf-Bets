@@ -3,7 +3,7 @@ import { getSupabaseForUser } from "../../../../lib/supabase/server";
 import { cloudServerEnabled } from "../../../../lib/feature-flags";
 import type { CloudDataBundle, CloudDataConflict } from "../../../../lib/cloud-sync";
 import { readCloudBundle, writeCloudBundle } from "../../../../lib/cloud-sync-service";
-import { supportsExtendedCloudSchema } from "../../../../lib/cloud-schema";
+import { authUserFailure } from "../../../../lib/auth-errors";
 
 const MAX_BODY_BYTES = 5_000_000;
 
@@ -18,8 +18,11 @@ async function accountClient(request: NextRequest) {
   const client = token ? getSupabaseForUser(token) : null;
   if (!client) return { error: "Nube no configurada.", status: 503 } as const;
   const { data, error } = await client.auth.getUser(token);
-  if (error || !data.user) return { error: "Sesión inválida.", status: 401 } as const;
-  return { client, userId: data.user.id, token } as const;
+  const user = data.user;
+  const failure = authUserFailure(error, Boolean(user));
+  if (failure) return failure;
+  if (!user) return { error: "La sesión terminó. Vuelve a iniciar sesión para conectar la nube.", status: 401, code: "AUTH_REQUIRED" } as const;
+  return { client, userId: user.id, token } as const;
 }
 
 function safeFailure(error: unknown) {
@@ -54,9 +57,10 @@ function failureStatus(error: unknown) {
 export async function GET(request: NextRequest) {
   try {
     const account = await accountClient(request);
-    if ("error" in account) return NextResponse.json({ error: account.error }, { status: account.status });
-    const extendedSchema = await supportsExtendedCloudSchema(account.client, account.userId);
-    const data = await readCloudBundle(account.client, account.userId, extendedSchema);
+    if ("error" in account) return NextResponse.json({ error: account.error, code: account.code || "AUTH_REQUIRED" }, { status: account.status });
+    // The additive cloud schema is part of the deployed migration baseline.
+    // Runtime probing adds a failure point and previously blocked valid users.
+    const data = await readCloudBundle(account.client, account.userId, true);
     return NextResponse.json({ data }, { headers: { "cache-control": "private, no-store" } });
   } catch (error) {
     logFailure("read", error);
@@ -68,7 +72,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const account = await accountClient(request);
-    if ("error" in account) return NextResponse.json({ error: account.error }, { status: account.status });
+    if ("error" in account) return NextResponse.json({ error: account.error, code: account.code || "AUTH_REQUIRED" }, { status: account.status });
   const contentLength = Number(request.headers.get("content-length") || 0);
   if (contentLength > MAX_BODY_BYTES) return NextResponse.json({ error: "Los datos exceden el tamaño permitido." }, { status: 413 });
   const body = await request.json().catch(() => null) as { data?: Partial<CloudDataBundle>; fingerprint?: string } | null;
@@ -77,8 +81,7 @@ export async function POST(request: NextRequest) {
   if (serializedLength > MAX_BODY_BYTES) return NextResponse.json({ error: "Los datos exceden el tamaño permitido." }, { status: 413 });
 
 
-    const extendedSchema = await supportsExtendedCloudSchema(account.client, account.userId);
-    const result = await writeCloudBundle(account.client, account.userId, body as { data: CloudDataBundle; fingerprint: string }, { extendedSchema });
+    const result = await writeCloudBundle(account.client, account.userId, body as { data: CloudDataBundle; fingerprint: string }, { extendedSchema: true });
     return NextResponse.json(result, { headers: { "cache-control": "private, no-store" } });
   } catch (error) {
     logFailure("write", error);

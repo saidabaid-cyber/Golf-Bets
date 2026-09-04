@@ -111,6 +111,65 @@ test("reintento fuerza refresh, valida getUser y conserva la identidad", async (
   assert.deepEqual(calls.map(call => call.method), ["restore", "refresh", "user"]);
 });
 
+test("una rotación concurrente adopta la sesión nueva en vez de declarar inválida la cuenta", async () => {
+  const expired = { ...authMock().session, access_token: "access-old", refresh_token: "refresh-old", expires_at: 1 } as Session;
+  const rotated = { ...authMock().session, access_token: "access-new", refresh_token: "refresh-new", expires_at: Math.floor(Date.now() / 1000) + 3600 } as Session;
+  let reads = 0;
+  let refreshInput: unknown = "not-called";
+  const { auth } = authMock({
+    getSession: async () => ({ data: { session: reads++ === 0 ? expired : rotated }, error: null }),
+    refreshSession: async (input) => {
+      refreshInput = input;
+      return { data: { session: null }, error: { status: 401, code: "refresh_token_already_used" } };
+    },
+    getUser: async (jwt) => ({ data: { user: jwt === rotated.access_token ? rotated.user : null }, error: null }),
+  });
+  const recovered = await recoverAuthSession(auth);
+  assert.equal(recovered?.access_token, "access-new");
+  assert.equal(refreshInput, undefined, "Supabase debe refrescar desde su sesión persistida, no con un token capturado");
+  assert.equal(reads, 2);
+});
+
+test("un access token rechazado se refresca y reintenta getUser exactamente una vez", async () => {
+  const initial = authMock().session;
+  const renewed = { ...initial, access_token: "renewed", refresh_token: "renewed-refresh" } as Session;
+  const seen: string[] = [];
+  let refreshes = 0;
+  const { auth } = authMock({
+    getSession: async () => ({ data: { session: initial }, error: null }),
+    refreshSession: async () => { refreshes += 1; return { data: { session: renewed }, error: null }; },
+    getUser: async (jwt) => {
+      seen.push(String(jwt));
+      return jwt === "renewed"
+        ? { data: { user: renewed.user }, error: null }
+        : { data: { user: null }, error: { status: 401, message: "invalid jwt" } };
+    },
+  });
+  assert.equal((await recoverAuthSession(auth, { refreshSkewSeconds: 0 }))?.access_token, "renewed");
+  assert.equal(refreshes, 1);
+  assert.deepEqual(seen, [initial.access_token, "renewed"]);
+});
+
+test("dos recuperaciones concurrentes aceptan la misma rotación sin invalidarse", async () => {
+  const initial = { ...authMock().session, access_token: "old", refresh_token: "old-refresh", expires_at: 1 } as Session;
+  const renewed = { ...initial, access_token: "new", refresh_token: "new-refresh", expires_at: Math.floor(Date.now() / 1000) + 3600 } as Session;
+  let stored = initial;
+  let refreshes = 0;
+  const { auth } = authMock({
+    getSession: async () => ({ data: { session: stored }, error: null }),
+    refreshSession: async () => {
+      refreshes += 1;
+      await new Promise(resolve => setTimeout(resolve, 1));
+      if (stored === initial) { stored = renewed; return { data: { session: renewed }, error: null }; }
+      return { data: { session: null }, error: { status: 401, code: "refresh_token_already_used" } };
+    },
+    getUser: async () => ({ data: { user: renewed.user }, error: null }),
+  });
+  const recovered = await Promise.all([recoverAuthSession(auth), recoverAuthSession(auth)]);
+  assert.deepEqual(recovered.map(session => session?.access_token), ["new", "new"]);
+  assert.equal(refreshes, 2);
+});
+
 test("sesión invitada/anónima, sin JWT o refresh no es cuenta autenticada", () => {
   const { session } = authMock();
   assert.equal(isAccountSession(session), true);

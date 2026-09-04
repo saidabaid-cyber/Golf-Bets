@@ -296,7 +296,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const [profileSetupRequired, setProfileSetupRequired] = useState(false);
   const [profileChecked, setProfileChecked] = useState(false);
   const activeUserId = useRef<string | null>(null);
-  const sessionRecovery = useRef<Promise<string> | null>(null);
+  const sessionRecovery = useRef<{ userId: string; promise: Promise<string> } | null>(null);
   const [cloudIssuesByDomain, setCloudIssuesByDomain] = useState<Partial<Record<CloudIssueDomain, CloudIssue>>>({});
   const [legalRetryRevision, setLegalRetryRevision] = useState(0);
   const [accountReloadRevision, setAccountReloadRevision] = useState(0);
@@ -674,18 +674,24 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     setMigrationBusy(false);
   }
 
-  const refreshCloudSession = useCallback(async () => {
-    if (sessionRecovery.current) return sessionRecovery.current;
+  const recoverCloudSession = useCallback(async (forceRefresh = false) => {
+    const expectedUserId = identity?.mode === "authenticated" ? identity.userId : "";
+    if (!expectedUserId) throw new AuthSessionRecoveryError("invalid", new Error("account_session_missing"));
+    if (sessionRecovery.current?.userId === expectedUserId) return sessionRecovery.current.promise;
     const recovery = (async () => {
       const supabase = getSupabaseBrowser();
-      if (identity?.mode !== "authenticated" || !supabase) throw new AuthSessionRecoveryError("invalid", new Error("account_session_missing"));
+      if (!supabase) throw new AuthSessionRecoveryError("invalid", new Error("account_session_missing"));
       try {
-        const session = await recoverAuthSession(supabase.auth, { forceRefresh: true });
-        if (!session || session.user.id !== identity.userId) throw new AuthSessionRecoveryError("invalid", new Error("account_session_missing"));
+        const session = await recoverAuthSession(supabase.auth, { forceRefresh });
+        if (!session || session.user.id !== expectedUserId) throw new AuthSessionRecoveryError("invalid", new Error("account_session_missing"));
+        if (activeUserId.current !== expectedUserId) throw new AuthSessionRecoveryError("transient", new Error("account_session_changed"));
         activateSession(session, { rehydrate: true });
         setCloudIssue("auth", null);
         return session.access_token;
       } catch (error) {
+        // A late response from account A must never update account B's notices
+        // or provide A's token to B's synchronization cycle.
+        if (activeUserId.current !== expectedUserId) throw error;
         const cause = error instanceof AuthSessionRecoveryError ? error.cause : error;
         const issue = cloudIssueFromError("auth", cause, navigator.onLine);
         setCloudIssue("auth", issue);
@@ -696,10 +702,15 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         throw error;
       }
     })();
-    sessionRecovery.current = recovery;
+    sessionRecovery.current = { userId: expectedUserId, promise: recovery };
     try { return await recovery; }
-    finally { if (sessionRecovery.current === recovery) sessionRecovery.current = null; }
+    finally { if (sessionRecovery.current?.promise === recovery) sessionRecovery.current = null; }
   }, [activateSession, identity, setCloudIssue]);
+
+  // A cloud 401 uses a forced, single refresh. Manual retry first validates
+  // the persisted session and refreshes only when expired/near expiry, which
+  // avoids unnecessary refresh-token rotations across Safari/PWA tabs.
+  const refreshCloudSession = useCallback(() => recoverCloudSession(true), [recoverCloudSession]);
 
   const retryAllCloud = async () => {
     if (!navigator.onLine) {
@@ -709,7 +720,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     }
     if (identity?.mode === "authenticated") {
       try {
-        await refreshCloudSession();
+        await recoverCloudSession(false);
       } catch { return; }
     } else {
       setLegalRetryRevision(value => value + 1);

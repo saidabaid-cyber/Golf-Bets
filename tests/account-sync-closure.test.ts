@@ -43,7 +43,8 @@ test("logout/cambio de cuenta cancela el coordinador sin ejecutar cola obsoleta"
 
 test("errores cloud son humanos, recuperables y no exponen detalles internos", () => {
   assert.match(cloudSyncErrorMessage(new Error("Failed to fetch")), /copia local/);
-  assert.match(cloudSyncErrorMessage(new Error("JWT expired")), /sesión cambió/);
+  assert.match(cloudSyncErrorMessage(new Error("JWT expired")), /renovar la sesión/);
+  assert.doesNotMatch(cloudSyncErrorMessage(new Error("JWT expired")), /vuelve a iniciar sesión/i);
   assert.match(cloudSyncErrorMessage(new Error("photo upload failed")), /foto sigue guardada/);
   assert.equal(cloudSyncErrorMessage(new Error("Sync cancelled")), "");
 });

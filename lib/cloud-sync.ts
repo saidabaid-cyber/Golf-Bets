@@ -315,9 +315,13 @@ export function mergeLocalAndCloud(local: CloudDataBundle, cloud: CloudDataBundl
     (item) => item.deletedAt,
   );
   const deleted = new Set(tombstones.map((item) => `${item.entityType}:${item.localId}`));
-  const localDraft = chooseLocalVersion(local.activeDraftUpdatedAt, cloud.activeDraftUpdatedAt, hasRoundProgress(local.activeDraft));
   const draftMerge = mergeActiveDraftGranular(local, cloud);
-  const combinedDraft = !sameValue(draftMerge.value, stripLocalRoundUi(local.activeDraft)) && !sameValue(draftMerge.value, stripLocalRoundUi(cloud.activeDraft));
+  const cloudDraft = stripLocalRoundUi(cloud.activeDraft);
+  // A device clock may be behind the server clock. When the three-way merge
+  // proves that local fields changed on top of the cloud base, advance the
+  // revision beyond both clocks. Reusing the cloud timestamp made the CAS skip
+  // a valid score update and caused a repeating empty 409 conflict.
+  const draftNeedsWrite = !sameValue(draftMerge.value, cloudDraft);
   const localPreferences = chooseLocalVersion(local.preferences.updatedAt, cloud.preferences.updatedAt, local.preferences.hasLocalState);
   return {
     version: CLOUD_SYNC_VERSION,
@@ -329,7 +333,7 @@ export function mergeLocalAndCloud(local: CloudDataBundle, cloud: CloudDataBundl
     courses: mergeCloudCollection(local.courses, cloud.courses, (course) => course.id, (course) => course.updatedAt).filter((course) => !deleted.has(`course:${course.id}`)),
     preferences: { ...(localPreferences ? local.preferences : cloud.preferences), hasLocalState: true },
     activeDraft: draftMerge.value,
-    activeDraftUpdatedAt: combinedDraft ? timestampAfter(local.activeDraftUpdatedAt, cloud.activeDraftUpdatedAt) : localDraft ? local.activeDraftUpdatedAt : cloud.activeDraftUpdatedAt,
+    activeDraftUpdatedAt: draftNeedsWrite ? timestampAfter(local.activeDraftUpdatedAt, cloud.activeDraftUpdatedAt) : cloud.activeDraftUpdatedAt,
     // The canonical cloud draft is the three-way base for the write that
     // follows. Keeping an older local base here caused every later write to be
     // reported as the same 409 conflict again.

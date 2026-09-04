@@ -20,7 +20,7 @@ export function cloudIssueFromError(domain: CloudIssueDomain, error: unknown, on
   if (domain === "conflict" || status === 409 || code === "CLOUD_FIELD_CONFLICT") {
     return { domain: "conflict", kind: "conflict", retryable: true, message: "Hay un cambio puntual pendiente entre dos dispositivos. Elige cuál conservar; los demás datos siguen sincronizados." };
   }
-  if (!online || /failed to fetch|network|offline|timeout|connection|conexi[oó]n/.test(text)) {
+  if (!online || /failed to fetch|network|offline|timeout|timed out|abort(?:ed|error)?|connection|conexi[oó]n/.test(text)) {
     return { domain, kind: "offline", retryable: true, message: "Trabajando sin conexión · tus cambios están guardados en este dispositivo y quedan pendientes de sincronizar." };
   }
   if ((domain === "auth" && status === 401) || /account_session_missing|refresh_token_(?:not_found|already_used)|invalid refresh token|refresh token.*(?:expired|revoked)|bad_jwt|invalid jwt|user_not_found/.test(text)) {
