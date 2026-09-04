@@ -1,4 +1,4 @@
-import { CLOUD_TOMBSTONES_KEY, cloudDataFingerprint, collectLocalCloudData, mergeLocalAndCloud, persistCloudMetadata, type CloudDataBundle } from "./cloud-sync";
+import { CLOUD_TOMBSTONES_KEY, cloudDataFingerprint, collectLocalCloudData, mergeLocalAndCloud, persistCloudMetadata, restoreLocalRoundUi, type CloudDataBundle } from "./cloud-sync";
 import { serializeFrequentGroups } from "./frequent-templates";
 import { STORAGE_KEYS } from "./round-utils";
 
@@ -135,14 +135,16 @@ export async function markOfflineAttempt(ownerId: string, error: string) {
   await transactionDone(tx);
 }
 
-export function writeCloudBundleToStorage(storage: Pick<Storage, "setItem">, bundle: CloudDataBundle) {
+export function writeCloudBundleToStorage(storage: Pick<Storage, "getItem" | "setItem">, bundle: CloudDataBundle) {
   storage.setItem(STORAGE_KEYS.courses, JSON.stringify(bundle.courses));
   storage.setItem(STORAGE_KEYS.history, JSON.stringify(bundle.history));
   storage.setItem(STORAGE_KEYS.rivals, JSON.stringify(bundle.rivals));
   storage.setItem(STORAGE_KEYS.frequentPlayers, JSON.stringify(bundle.frequentPlayers));
   storage.setItem(STORAGE_KEYS.frequentGroups, serializeFrequentGroups(bundle.frequentGroups));
   storage.setItem(STORAGE_KEYS.contrast, String(bundle.preferences.highContrast));
-  storage.setItem(STORAGE_KEYS.draft, JSON.stringify(bundle.activeDraft));
+  let localDraft: unknown = null;
+  try { localDraft = JSON.parse(storage.getItem(STORAGE_KEYS.draft) || "null") as unknown; } catch { /* invalid legacy cache is replaced */ }
+  storage.setItem(STORAGE_KEYS.draft, JSON.stringify(restoreLocalRoundUi(bundle.activeDraft, localDraft)));
   storage.setItem(CLOUD_TOMBSTONES_KEY, JSON.stringify(bundle.tombstones));
   persistCloudMetadata(storage, bundle);
 }

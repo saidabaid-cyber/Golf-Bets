@@ -70,12 +70,12 @@ import { HistoricalRoundDetail } from "./components/historical-round-detail";
 import { FullScorecard } from "./components/full-scorecard";
 import { restoreRoundSnapshot, resultSummaryText, upsertRoundSnapshot } from "../lib/round-editing";
 import { snapshotPersonalResult } from "../lib/personal-history";
-import { createSingleAdvance, HOLE_SUMMARY_DURATION_MS, nextHoleDestination, pauseCountdown, resumeCountdown, startCountdown, type CountdownState } from "../lib/hole-summary";
+import { createHoleSummarySession, nextHoleDestination, type HoleSummarySession } from "../lib/hole-summary";
 import { buildHoleSummary, clearActiveRoundStorage, hasRoundProgress, historicalGolfStats, mergeCoursesPreservingEdits, normalizeRoundDraft, persistRoundHistory, privateLeaderboard, pushUndoState, readStoredJson, resolveHistoricalRoundDeletion, resolvePersonalHistoryDeletion, STORAGE_KEYS, upsertFrequentPlayers } from "../lib/round-utils";
 import { monkeyHoleSummary, personalHoleSummary } from "../lib/personal-summary";
 import { downloadRoundCsv, downloadRoundImage, downloadRoundPdf, shareRound } from "../lib/round-export";
 import { deleteScorecardPhoto, deleteScorecardPhotoCloud, readScorecardPhoto, readScorecardPhotoCloud, saveScorecardPhoto, uploadScorecardPhotoCloud } from "../lib/scorecard-photo";
-import { CLOUD_TOMBSTONES_KEY, cloudDataFingerprint, collectLocalCloudData, downloadCloudData, findAmbiguousCloudConflicts, persistCloudMetadata, resolveAmbiguousCloudConflicts, stableValue, trackLocalCloudEdits, type CloudDataBundle, type CloudDataConflict, recordCloudDeletion, uploadCloudData } from "../lib/cloud-sync";
+import { CLOUD_TOMBSTONES_KEY, cloudDataFingerprint, collectLocalCloudData, downloadCloudData, findAmbiguousCloudConflicts, persistCloudMetadata, resolveAmbiguousCloudConflicts, restoreLocalRoundUi, stableValue, trackLocalCloudEdits, type CloudDataBundle, type CloudDataConflict, recordCloudDeletion, uploadCloudData } from "../lib/cloud-sync";
 import { ownsLocalWorkspace, preserveDataConflicts, preserveDraftConflict } from "../lib/account-workspace";
 import { runCloudSyncCycle } from "../lib/cloud-sync-cycle";
 import { CloudSyncGate, cloudSyncErrorMessage, syncStatusAfterSkip, type CloudSyncTrigger } from "../lib/cloud-sync-gate";
@@ -374,6 +374,8 @@ function GolfBetsApp() {
   const [lobaHoles, setLobaHoles] = useState<Record<number, LobaHole>>({});
   const [ballFriendSetup, setBallFriendSetup] = useState<Record<number, BallFriendHole>>({});
   const [currentIndex, setCurrentIndex] = useState(0);
+  const currentIndexRef = useRef(0);
+  currentIndexRef.current = currentIndex;
   const [expenses, setExpenses] = useState<Expense>(emptyExpenses);
   const [history, setHistory] = useState<RoundSnapshot[]>([]);
   const [roundId, setRoundId] = useState(makeId());
@@ -415,15 +417,14 @@ function GolfBetsApp() {
   const [personalHistoryToDelete, setPersonalHistoryToDelete] = useState<{ roundId: string; resultIndex: number; rivalName: string } | null>(null);
   const [rulesCourseContext, setRulesCourseContext] = useState("");
   const undoStack = useRef<Array<{ scores: Record<number, HoleScore>; scoreEdits: ScoreRows; unitEvents: UnitEvent[]; counterBetEvents: CounterBetEvent[]; counterBetKeepers: CounterBetKeepers; lobaHoles: Record<number, LobaHole>; manualBets: ManualBet[]; ballFriendSetup: Record<number, BallFriendHole> }>>([]);
-  const holeSummaryTimer = useRef<number | null>(null);
-  const holeSummaryAdvance = useRef<(() => boolean) | null>(null);
-  const holeSummaryCountdown = useRef<CountdownState | null>(null);
+  const holeSummarySession = useRef<HoleSummarySession | null>(null);
+  const [holeSummaryPaused, setHoleSummaryPaused] = useState(false);
   const flushLocalState = useRef<(() => boolean) | null>(null);
   const requestCloudSync = useRef<(() => void) | null>(null);
   useEffect(() => {
     if (tab !== "round") {
-      if (holeSummaryTimer.current !== null) window.clearTimeout(holeSummaryTimer.current);
-      holeSummaryTimer.current = null; holeSummaryAdvance.current = null; holeSummaryCountdown.current = null; setHoleSummary([]);
+      holeSummarySession.current?.dispose();
+      holeSummarySession.current = null; setHoleSummaryPaused(false); setHoleSummary([]);
     }
   }, [tab]);
   const liveIdentity = useRef(identity);
@@ -441,9 +442,11 @@ function GolfBetsApp() {
   const liveScores = useMemo(() => scoreCaptureComplete ? { ...scores, [holeNumber]: scoreDraft } : scores, [scoreCaptureComplete, scores, holeNumber, scoreDraft]);
   const liveCompletedHoles = useMemo(() => new Set([...completedHoles, ...(scoreCaptureComplete ? [holeNumber] : [])]), [completedHoles, scoreCaptureComplete, holeNumber]);
 
-  const applyDraft = useCallback((value: unknown) => {
-    if (holeSummaryTimer.current !== null) window.clearTimeout(holeSummaryTimer.current);
-    holeSummaryAdvance.current = null; setHoleSummary([]);
+  const applyDraft = useCallback((value: unknown, options: { preserveLocalUi?: boolean } = {}) => {
+    if (!options.preserveLocalUi) {
+      holeSummarySession.current?.dispose();
+      holeSummarySession.current = null; setHoleSummaryPaused(false); setHoleSummary([]);
+    }
     const draft = normalizeRoundDraft(value);
     setRoundClosed(false);
     setDraftAvailable(hasRoundProgress(draft));
@@ -451,7 +454,8 @@ function GolfBetsApp() {
       setPlayers([]); setOwnerId(""); setScores({}); setScoreEdits({}); setUnitEvents([]); setCounterBetEvents([]); setCounterBetKeepers(emptyCounterBetKeepers()); setLobaHoles({}); setBallFriendSetup({});
       setPersonalBets([]); setManualBets([]); setExpenses(emptyExpenses); setBets(initialBets([]));
       setStartHole(1); setRoundHoles(18); setSegments(segmentDefinitions(playOrder(1), 6));
-      setCurrentIndex(0); setRoundId(makeId()); setRoundDate(localDateMexico());
+      if (!options.preserveLocalUi) setCurrentIndex(0);
+      setRoundId(makeId()); setRoundDate(localDateMexico());
     }
       if (draft) {
         if (draft.course) setCourse(withDefaultLaVistaRules(draft.course));
@@ -506,7 +510,7 @@ function GolfBetsApp() {
         if (draft.expenses) setExpenses(normalizeExpenses(draft.expenses));
         if (draft.roundId) setRoundId(draft.roundId);
         if (draft.roundDate) setRoundDate(draft.roundDate);
-        if (Number.isInteger(draft.currentIndex)) setCurrentIndex(Math.max(0, Math.min((draft.roundHoles || 18) - 1, draft.currentIndex)));
+        if (!options.preserveLocalUi && Number.isInteger(draft.currentIndex)) setCurrentIndex(Math.max(0, Math.min((draft.roundHoles || 18) - 1, draft.currentIndex)));
       }
     undoStack.current = []; setUndoCount(0);
   }, []);
@@ -681,7 +685,7 @@ function GolfBetsApp() {
             const changed = (a: unknown, b: unknown) => JSON.stringify(stableValue(a)) !== JSON.stringify(stableValue(b));
             if (changed(local.activeDraft, data.activeDraft)) {
               preserveDraftConflict(localStorage, local.activeDraft);
-              applyDraft(data.activeDraft);
+              applyDraft(data.activeDraft, { preserveLocalUi: true });
               setFeedback("Ronda actualizada desde la nube. La versión local anterior se conservó en este dispositivo.");
             }
             const mergedCourses = mergeDefaultCourses(data.courses);
@@ -697,7 +701,8 @@ function GolfBetsApp() {
             localStorage.setItem(STORAGE_KEYS.frequentPlayers, JSON.stringify(data.frequentPlayers));
             localStorage.setItem(STORAGE_KEYS.frequentGroups, serializeFrequentGroups(data.frequentGroups));
             localStorage.setItem(STORAGE_KEYS.contrast, String(data.preferences.highContrast));
-            localStorage.setItem(STORAGE_KEYS.draft, JSON.stringify(data.activeDraft));
+            const localDraftWithNavigation = restoreLocalRoundUi(data.activeDraft, { currentIndex: currentIndexRef.current });
+            localStorage.setItem(STORAGE_KEYS.draft, JSON.stringify(localDraftWithNavigation));
             localStorage.setItem(CLOUD_TOMBSTONES_KEY, JSON.stringify(data.tombstones));
             persistCloudMetadata(localStorage, data);
             hadLocalPreferences.current = true;
@@ -758,11 +763,17 @@ function GolfBetsApp() {
 
   useEffect(() => {
     requestCloudSync.current?.();
-  }, [courses, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, course, startHole, roundHoles, players, ownerId, bets, segments, personalBets, manualBets, scores, scoreEdits, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, currentIndex, identity.defaultHandicap]);
+  }, [courses, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, course, startHole, roundHoles, players, ownerId, bets, segments, personalBets, manualBets, scores, scoreEdits, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, identity.defaultHandicap]);
 
   function resolveCloudConflict(choice: "local" | "cloud") {
     if (!pendingCloudConflict) return;
-    const resolved = resolveAmbiguousCloudConflicts(pendingCloudConflict.local, pendingCloudConflict.cloud, pendingCloudConflict.conflicts, choice);
+    const [conflict, ...remaining] = pendingCloudConflict.conflicts;
+    if (!conflict) { setPendingCloudConflict(null); return; }
+    const resolved = resolveAmbiguousCloudConflicts(pendingCloudConflict.local, pendingCloudConflict.cloud, [conflict], choice);
+    if (remaining.length) {
+      setPendingCloudConflict({ ...pendingCloudConflict, local: resolved, conflicts: remaining });
+      return;
+    }
     const mergedCourses = mergeDefaultCourses(resolved.courses);
     resolved.courses = mergedCourses;
     writeCloudBundleToStorage(localStorage, resolved);
@@ -773,7 +784,7 @@ function GolfBetsApp() {
     setFrequentGroups(resolved.frequentGroups);
     setHighContrast(resolved.preferences.highContrast);
     applyCloudPreferences(resolved.preferences);
-    applyDraft(resolved.activeDraft);
+    applyDraft(resolved.activeDraft, { preserveLocalUi: true });
     setPendingCloudConflict(null);
     setCloudStatus(navigator.onLine ? "pending" : "offline");
     setFeedback(choice === "local" ? "Conservamos la copia de este dispositivo. Se sincronizará sin borrar la otra versión auditada." : "Conservamos la copia de la nube. La versión local anterior quedó auditada en este dispositivo.");
@@ -815,9 +826,7 @@ function GolfBetsApp() {
   // Par is a suggestion, never a played score until explicit confirmation.
   // Existing numeric drafts remain intact: old versions did not record provenance.
 
-  useEffect(() => () => {
-    if (holeSummaryTimer.current !== null) window.clearTimeout(holeSummaryTimer.current);
-  }, []);
+  useEffect(() => () => { holeSummarySession.current?.dispose(); }, []);
 
   const rabbits = useMemo(() => calculateRabbits(course, scores, players, bets.rabbits, order), [course, scores, players, bets.rabbits, order]);
   const skins = useMemo(() => calculateSkins(course, scores, players, bets.skins, order), [course, scores, players, bets.skins, order]);
@@ -1580,31 +1589,15 @@ function GolfBetsApp() {
   const bfDetail = liveBallFriend.details.find((d) => d.hole === holeNumber);
 
   function closeHoleSummary() {
-    if (holeSummaryTimer.current !== null) {
-      window.clearTimeout(holeSummaryTimer.current);
-      holeSummaryTimer.current = null;
-    }
-    holeSummaryCountdown.current = null;
-    holeSummaryAdvance.current?.();
+    holeSummarySession.current?.finish();
   }
 
-  function pauseHoleSummary(event: { timeStamp: number }) {
-    if (!holeSummaryAdvance.current || !holeSummaryCountdown.current || holeSummaryCountdown.current.paused) return;
-    if (holeSummaryTimer.current !== null) window.clearTimeout(holeSummaryTimer.current);
-    holeSummaryTimer.current = null;
-    holeSummaryCountdown.current = pauseCountdown(holeSummaryCountdown.current, event.timeStamp);
+  function toggleHoleSummaryPause() {
+    holeSummarySession.current?.togglePause();
   }
 
-  function resumeHoleSummary(event: { timeStamp: number }) {
-    if (!holeSummaryAdvance.current || !holeSummaryCountdown.current?.paused) return;
-    const resumed = resumeCountdown(holeSummaryCountdown.current, event.timeStamp);
-    holeSummaryCountdown.current = resumed;
-    if (resumed.remaining <= 0) closeHoleSummary();
-    else holeSummaryTimer.current = window.setTimeout(closeHoleSummary, resumed.remaining);
-  }
-
-  function saveAndAdvance(event: { timeStamp: number }) {
-    if (holeSummaryAdvance.current) return;
+  function saveAndAdvance() {
+    if (holeSummarySession.current) return;
     const validationErrors = collectHoleValidationErrors({
       scoreCaptureComplete,
       holeNumber,
@@ -1652,7 +1645,6 @@ function GolfBetsApp() {
     const savedCamels = calculateCounterBet("camels", players, bets.camels, counterBetEvents, counterBetKeepers, order, savedCompletedHoles);
     const savedFish = calculateCounterBet("fish", players, bets.fish, counterBetEvents, counterBetKeepers, order, savedCompletedHoles);
     const savedLoba = calculateLoba(course, savedScores, players, bets.loba, lobaHoles, order, savedCompletedHoles);
-    if (holeSummaryTimer.current !== null) window.clearTimeout(holeSummaryTimer.current);
     const extras: string[] = [];
     const rabbit = savedRabbits.events.filter(event => event.hole === holeNumber).at(-1);
     const currentSkin = savedSkins.events.find(item => item.hole === holeNumber);
@@ -1697,15 +1689,21 @@ function GolfBetsApp() {
       if (changes.length && navigator.onLine) import("../lib/polla-offline").then(({ flushPollaScoreQueue }) => flushPollaScoreQueue(privatePollaLink.accessToken, { tournamentId: privatePollaLink.tournamentId, groupId: privatePollaLink.groupId })).catch(() => undefined);
     }
     setHoleSummary(buildHoleSummary(holeNumber, players, savedScores, extras));
-    holeSummaryAdvance.current = createSingleAdvance(() => {
-      holeSummaryAdvance.current = null;
-      setHoleSummary([]);
-      const destination = nextHoleDestination(order, currentIndex);
-      if (destination.kind === "hole") goToHoleIndex(destination.index);
-      else { setTab("results"); finishRound.current(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+    const savedIndex = currentIndex;
+    holeSummarySession.current = createHoleSummarySession({
+      now: () => window.performance.now(),
+      schedule: (action, delay) => window.setTimeout(action, delay),
+      cancel: timer => window.clearTimeout(timer),
+      onPauseChange: paused => setHoleSummaryPaused(paused),
+      onAdvance: () => {
+        holeSummarySession.current = null;
+        setHoleSummaryPaused(false);
+        setHoleSummary([]);
+        const destination = nextHoleDestination(order, savedIndex);
+        if (destination.kind === "hole") goToHoleIndex(destination.index);
+        else { setTab("results"); finishRound.current(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+      },
     });
-    holeSummaryCountdown.current = startCountdown(HOLE_SUMMARY_DURATION_MS, event.timeStamp);
-    holeSummaryTimer.current = window.setTimeout(closeHoleSummary, HOLE_SUMMARY_DURATION_MS);
   }
 
   const todayMx = localDateMexico();
@@ -1744,7 +1742,7 @@ function GolfBetsApp() {
     {feedback && <div className="notice" role="status">{feedback}<button className="textButton" aria-label="Cerrar mensaje" onClick={() => setFeedback("")}>×</button></div>}
     {copyFallback && <section className="card"><label>Resumen para copiar<textarea readOnly value={copyFallback} onFocus={event => event.currentTarget.select()} /></label><button onClick={() => setCopyFallback("")}>← Regresar</button></section>}
     {pendingRoundAction && <div className="modalBackdrop"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="round-change-title"><h2 id="round-change-title">Confirmar cambios</h2><p>{pendingRoundAction.message}</p><div className="dialogActions"><button autoFocus className="secondary" onClick={() => setPendingRoundAction(null)}>Cancelar</button><button className="primary" onClick={() => { const action = pendingRoundAction; setPendingRoundAction(null); action.run(); }}>Confirmar</button></div></section></div>}
-    {pendingCloudConflict && <div className="modalBackdrop"><section className="confirmDialog" role="alertdialog" aria-modal="true" aria-labelledby="cloud-conflict-title"><h2 id="cloud-conflict-title">Cambios en dos dispositivos</h2><p>Encontramos {pendingCloudConflict.conflicts.length} cambio{pendingCloudConflict.conflicts.length === 1 ? "" : "s"} con la misma versión. Conservamos ambas copias y necesitamos que elijas cuál debe continuar.</p><div className="dialogActions"><button className="secondary" onClick={() => resolveCloudConflict("cloud")}>Usar copia de la nube</button><button className="primary" onClick={() => resolveCloudConflict("local")}>Usar este dispositivo</button></div></section></div>}
+    {pendingCloudConflict && (() => { const conflict = pendingCloudConflict.conflicts[0]; const label = conflict?.playerId ? `${players.find(player => player.id === conflict.playerId)?.name || conflict.playerId} · Hoyo ${conflict.hole}` : conflict?.fieldPath || conflict?.localId; return <div className="modalBackdrop"><section className="confirmDialog" role="alertdialog" aria-modal="true" aria-labelledby="cloud-conflict-title"><h2 id="cloud-conflict-title">Cambio en dos dispositivos</h2><p>Elige únicamente el dato en conflicto. Los demás cambios compatibles ya se combinaron.</p><div className="cloudConflictField"><b>{label}</b><span>Nube: {String(conflict?.cloudValue ?? "vacío")} · {conflict?.cloudUpdatedAt || "fecha no disponible"} · {conflict?.cloudDeviceId || "otro dispositivo"}</span><span>Este dispositivo: {String(conflict?.localValue ?? "vacío")} · {conflict?.localUpdatedAt || "fecha no disponible"} · {conflict?.localDeviceId || "este dispositivo"}</span></div>{pendingCloudConflict.conflicts.length > 1 && <small>Quedan {pendingCloudConflict.conflicts.length} conflictos por revisar.</small>}<div className="dialogActions"><button className="secondary" onClick={() => resolveCloudConflict("cloud")}>Usar nube para este dato</button><button className="primary" onClick={() => resolveCloudConflict("local")}>Usar este dispositivo</button></div></section></div>; })()}
     {holeValidationErrors.length > 0 && <div className="modalBackdrop" role="presentation"><section className="confirmDialog holeValidationDialog" role="alertdialog" aria-modal="true" aria-labelledby="hole-validation-title" aria-describedby="hole-validation-description"><h2 id="hole-validation-title">Falta completar este hoyo</h2><p id="hole-validation-description">Revisa todos estos puntos antes de guardar y avanzar:</p><ul>{holeValidationErrors.map(error => <li key={error}>{error}</li>)}</ul><div className="dialogActions"><button autoFocus className="primary" onClick={() => setHoleValidationErrors([])}>Volver y completar</button></div></section></div>}
     {tab === "personalDetail" && renderPersonalLive("Detalle Personal")}
     {tab === "historyDetail" && (() => { const saved = history.find(round => round.id === historyDetailId); return saved ? <HistoricalRoundDetail round={saved} onEdit={() => editHistoricalRound(saved)} onPhoto={() => viewScorecardPhoto(saved)} /> : <div className="empty">La ronda ya no está disponible.</div>; })()}
@@ -2076,7 +2074,7 @@ function GolfBetsApp() {
       {scoreCaptureComplete && renderMonkeyLive()}
 
       <div className="roundActions"><button className="secondary big" disabled={currentIndex === 0 || holeSummary.length > 0} onClick={() => goToHoleIndex(currentIndex - 1)}>← Anterior</button><button className="primary big" disabled={holeSummary.length > 0} onClick={saveAndAdvance}>{currentIndex < order.length - 1 ? "Guardar y siguiente hoyo →" : "Terminar y guardar ronda →"}</button></div>
-      {holeSummary.length > 0 && <div className="holeSummaryBackdrop"><div className="holeSummary" role="dialog" aria-modal="true" aria-label={`Resumen del hoyo ${holeNumber}`}><button type="button" autoFocus className="holeSummaryClose" aria-label="Cerrar resumen y avanzar" onPointerDown={(event) => event.stopPropagation()} onPointerUp={(event) => { event.preventDefault(); event.stopPropagation(); closeHoleSummary(); }} onClick={(event) => { event.stopPropagation(); closeHoleSummary(); }}>×</button><div className="holeSummaryContent" role="status" aria-live="polite" onPointerDown={pauseHoleSummary} onPointerUp={resumeHoleSummary} onPointerCancel={resumeHoleSummary} onLostPointerCapture={resumeHoleSummary}><h2>{holeSummary[0]} ✓</h2><p className="holeSummaryScores">{holeSummary.slice(1, players.length + 1).map((line, index) => <span key={index}>{line}</span>)}</p><div className="holeSummaryBets">{holeSummary.slice(players.length + 1).map((line, index) => <p key={index}>{line}</p>)}</div><small className="holeSummaryHoldHint">Mantén presionado para pausar</small></div><div className="holeSummaryTimer" aria-hidden="true" /></div></div>}
+      {holeSummary.length > 0 && <div className="holeSummaryBackdrop" onClick={(event) => event.stopPropagation()}><div className={`holeSummary ${holeSummaryPaused ? "paused" : ""}`} role="dialog" aria-modal="true" aria-label={`Resumen del hoyo ${holeNumber}`} onClick={toggleHoleSummaryPause}><button type="button" autoFocus className="holeSummaryClose" aria-label="Cerrar resumen y avanzar" onClick={(event) => { event.preventDefault(); event.stopPropagation(); closeHoleSummary(); }}>×</button><div className="holeSummaryContent" role="status" aria-live="polite"><h2>{holeSummary[0]} ✓</h2><p className="holeSummaryScores">{holeSummary.slice(1, players.length + 1).map((line, index) => <span key={index}>{line}</span>)}</p><div className="holeSummaryBets">{holeSummary.slice(players.length + 1).map((line, index) => <p key={index}>{line}</p>)}</div><small className="holeSummaryHoldHint">{holeSummaryPaused ? "Pausado · toca para reanudar" : "Toca el resumen para pausar"}</small></div><div className="holeSummaryTimer" aria-hidden="true" /></div></div>}
     </>}
 
     {tab === "standings" && <>

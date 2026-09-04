@@ -6,6 +6,8 @@ import {
   cloudDataFingerprint,
   collectLocalCloudData,
   mergeLocalAndCloud,
+  findAmbiguousCloudConflicts,
+  resolveAmbiguousCloudConflicts,
   recordCloudDeletion,
   type CloudDataBundle,
 } from "../lib/cloud-sync";
@@ -97,6 +99,49 @@ test("migración repetida conserva una sola ronda y el original local", () => {
 test("autosave vacío de un dispositivo nuevo no oculta el draft cloud con scores", () => {
   const draft = { players: [{ id: "a", name: "Said" }], scores: { 1: { a: 4 } }, currentIndex: 1 };
   const empty = { players: [], scores: {}, currentIndex: 0 };
-  assert.deepEqual(mergeLocalAndCloud(bundle({ activeDraft: empty }), bundle({ activeDraft: draft })).activeDraft, draft);
-  assert.deepEqual(mergeLocalAndCloud(bundle({ activeDraft: draft }), bundle({ activeDraft: empty })).activeDraft, draft);
+  const synchronized = { players: draft.players, scores: draft.scores };
+  assert.deepEqual(mergeLocalAndCloud(bundle({ activeDraft: empty }), bundle({ activeDraft: draft })).activeDraft, synchronized);
+  assert.deepEqual(mergeLocalAndCloud(bundle({ activeDraft: draft }), bundle({ activeDraft: empty })).activeDraft, synchronized);
+});
+
+test("currentIndex es navegación local: no se sube ni produce conflictos", () => {
+  const storage = new MemoryStorage();
+  storage.setItem(STORAGE_KEYS.draft, JSON.stringify({ roundId: "round-1", players: [{ id: "p", name: "Said" }], scores: { 5: { p: 4 } }, currentIndex: 4 }));
+  const local = collectLocalCloudData(storage as unknown as Storage);
+  assert.equal("currentIndex" in (local.activeDraft as Record<string, unknown>), false);
+  const remote = bundle({ activeDraft: { roundId: "round-1", players: [{ id: "p", name: "Said" }], scores: { 5: { p: 4 } }, currentIndex: 12 } });
+  assert.equal(findAmbiguousCloudConflicts(local, remote).some(item => item.collection === "activeDraft"), false);
+});
+
+test("ediciones compatibles de hoyos y jugadores distintos se combinan por campo", () => {
+  const base = { roundId: "round-1", players: [{ id: "a", name: "Said" }, { id: "b", name: "Juan" }], scores: { 5: { a: 4, b: 5 }, 6: { a: 4, b: 4 } } };
+  const baseFingerprint = JSON.stringify(base);
+  const local = bundle({ activeDraft: { ...base, scores: { 5: { a: 3, b: 5 }, 6: { a: 4, b: 4 } } }, activeDraftUpdatedAt: "2026-09-03T12:02:00Z", baseDraft: base, baseDraftFingerprint: baseFingerprint, deviceId: "computer" });
+  const remote = bundle({ activeDraft: { ...base, scores: { 5: { a: 4, b: 5 }, 6: { a: 4, b: 3 } } }, activeDraftUpdatedAt: "2026-09-03T12:03:00Z", deviceId: "phone" });
+  assert.equal(findAmbiguousCloudConflicts(local, remote).length, 0);
+  assert.deepEqual((mergeLocalAndCloud(local, remote).activeDraft as typeof base).scores, { 5: { a: 3, b: 5 }, 6: { a: 4, b: 3 } });
+});
+
+test("dos jugadores distintos del mismo hoyo se combinan sin conflicto", () => {
+  const base = { roundId: "round-1", players: [{ id: "a", name: "Said" }, { id: "b", name: "Juan" }], scores: { 5: { a: 4, b: 5 } } };
+  const local = bundle({ activeDraft: { ...base, scores: { 5: { a: 3, b: 5 } } }, activeDraftUpdatedAt: "2026-09-03T12:02:00Z", baseDraft: base, baseDraftFingerprint: JSON.stringify(base), deviceId: "computer" });
+  const remote = bundle({ activeDraft: { ...base, scores: { 5: { a: 4, b: 4 } } }, activeDraftUpdatedAt: "2026-09-03T12:03:00Z", deviceId: "phone" });
+  assert.equal(findAmbiguousCloudConflicts(local, remote).length, 0);
+  assert.deepEqual((mergeLocalAndCloud(local, remote).activeDraft as typeof base).scores, { 5: { a: 3, b: 4 } });
+});
+
+test("solo el mismo score divergente genera conflicto granular", () => {
+  const base = { roundId: "round-1", players: [{ id: "a", name: "Said" }], scores: { 5: { a: 4 }, 6: { a: 4 } } };
+  const local = bundle({ activeDraft: { ...base, scores: { 5: { a: 3 }, 6: { a: 4 } } }, activeDraftUpdatedAt: "2026-09-03T12:02:00Z", baseDraft: base, baseDraftFingerprint: JSON.stringify(base), deviceId: "computer" });
+  const remote = bundle({ activeDraft: { ...base, scores: { 5: { a: 5 }, 6: { a: 3 } } }, activeDraftUpdatedAt: "2026-09-03T12:03:00Z", deviceId: "phone" });
+  const conflicts = findAmbiguousCloudConflicts(local, remote);
+  assert.equal(conflicts.length, 1);
+  assert.equal(conflicts[0].fieldPath, "/scores/5/a");
+  assert.equal(conflicts[0].playerId, "a");
+  assert.equal(conflicts[0].hole, 5);
+  assert.equal((mergeLocalAndCloud(local, remote).activeDraft as typeof base).scores[6].a, 3);
+  const resolved = resolveAmbiguousCloudConflicts(local, remote, conflicts, "local", "2026-09-03T12:04:00Z");
+  assert.equal((resolved.activeDraft as typeof base).scores[5].a, 3);
+  assert.equal((resolved.activeDraft as typeof base).scores[6].a, 3);
+  assert.equal(findAmbiguousCloudConflicts(resolved, remote).length, 0, "el mismo conflicto no debe reaparecer");
 });

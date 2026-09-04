@@ -30,7 +30,9 @@ const write = (db: CloudDb, data: CloudDataBundle) => writeCloudBundle(db.client
 for (const winner of ["local", "remote"] as const) test("draft " + winner + " más reciente conserva todos los scores", () => {
   const local = bundle({ activeDraft: draft(3), activeDraftUpdatedAt: winner === "local" ? later : earlier });
   const remote = bundle({ activeDraft: draft(5), activeDraftUpdatedAt: winner === "remote" ? later : earlier });
-  assert.deepEqual(mergeLocalAndCloud(local, remote).activeDraft, winner === "local" ? local.activeDraft : remote.activeDraft);
+  const expected = { ...(winner === "local" ? local.activeDraft : remote.activeDraft) as ReturnType<typeof draft> };
+  delete (expected as { currentIndex?: number }).currentIndex;
+  assert.deepEqual(mergeLocalAndCloud(local, remote).activeDraft, expected);
 });
 for (const side of ["local", "remote"] as const) test("borrado draft " + side + " no resucita al sincronizar", () => {
   const deleted = bundle({ activeDraft: null, activeDraftUpdatedAt: later }), stale = bundle({ activeDraft: draft(), activeDraftUpdatedAt: earlier });
@@ -114,14 +116,15 @@ test("logout/cambio de usuario durante request bloquea apply y acknowledgment", 
 });
 test("fallo parcial de proyección se reintenta aun con snapshot idéntico", async () => {
   const db = new CloudDb(), data = bundle({ history: [round()], activeDraft: draft(), activeDraftUpdatedAt: earlier });
-  db.fail = (table, op) => table === "round_scores_cloud" && op === "insert";
+  db.fail = (table, op) => table === "round_scores_cloud" && op === "upsert";
   await assert.rejects(write(db, data));
   assert.equal(db.rows("rounds_cloud").length, 1); assert.equal(db.rows("account_data_migrations")[0].status, "failed");
   db.fail = undefined; await write(db, data); await write(db, data);
   assert.equal(db.rows("rounds_cloud").length, 1); assert.equal(db.rows("round_scores_cloud").length, 1);
   assert.equal(db.rows("round_scores_cloud")[0].score, 4);
   assert.deepEqual((await readCloudBundle(db.client, "user-a")).history, data.history);
-  assert.deepEqual((await readCloudBundle(db.client, "user-a")).activeDraft, draft());
+  const expectedDraft = draft(); delete (expectedDraft as { currentIndex?: number }).currentIndex;
+  assert.deepEqual((await readCloudBundle(db.client, "user-a")).activeDraft, expectedDraft);
   assert.equal(db.rows("account_data_migrations")[0].status, "completed");
 });
 test("proyecciones siempre usan snapshot remoto más reciente, no versión rechazada", async () => {
@@ -241,7 +244,7 @@ test("proyección de scores usa la clave compuesta real y nunca consulta una col
   await write(db, bundle({ history: [round()] }));
   assert.deepEqual(
     Object.keys(db.rows("round_scores_cloud")[0]).sort(),
-    ["hole", "round_player_id", "score", "updated_by_device"].sort(),
+    ["hole", "round_player_id", "score", "updated_at", "updated_by_device"].sort(),
   );
   const source = await import("node:fs/promises").then(fs => fs.readFile("lib/cloud-sync-service.ts", "utf8"));
   assert.doesNotMatch(source, /from\("round_scores_cloud"\)[\s\S]{0,160}select\("id"\)/);

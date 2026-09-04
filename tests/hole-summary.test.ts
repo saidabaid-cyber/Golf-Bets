@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createSingleAdvance, HOLE_SUMMARY_DURATION_MS, nextHoleDestination, pauseCountdown, resumeCountdown, startCountdown } from "../lib/hole-summary";
+import { createHoleSummarySession, createSingleAdvance, HOLE_SUMMARY_DURATION_MS, nextHoleDestination, pauseCountdown, resumeCountdown, startCountdown } from "../lib/hole-summary";
 
 test("resumen de hoyo permanece diez segundos", () => {
   assert.equal(HOLE_SUMMARY_DURATION_MS, 10_000);
@@ -35,9 +35,46 @@ test("hoyos críticos avanzan una sola vez y el último termina sin desbordar", 
   }
 });
 
-test("la X de resumen cierra en pointerup sin compartir la pausa", async () => {
-  const { readFile } = await import("node:fs/promises");
-  const page = await readFile("app/page.tsx", "utf8");
-  assert.match(page, /className="holeSummaryClose"[\s\S]{0,320}onPointerUp=[\s\S]{0,180}closeHoleSummary/);
-  assert.match(page, /className="holeSummaryContent"[\s\S]{0,220}onPointerDown=\{pauseHoleSummary\}/);
+test("sesión real pausa con un toque, conserva el tiempo y reanuda con otro", () => {
+  let now = 1_000;
+  let advances = 0;
+  let nextTimer = 0;
+  const timers = new Map<number, { action: () => void; delay: number }>();
+  const paused: boolean[] = [];
+  const session = createHoleSummarySession({
+    now: () => now,
+    schedule: (action, delay) => { const id = ++nextTimer; timers.set(id, { action, delay }); return id; },
+    cancel: id => { timers.delete(id); },
+    onAdvance: () => { advances += 1; },
+    onPauseChange: value => paused.push(value),
+  });
+  assert.equal(timers.get(1)?.delay, 10_000);
+  now = 4_250;
+  assert.equal(session.togglePause(), true);
+  assert.equal(session.isPaused(), true);
+  assert.equal(session.remaining(), 6_750);
+  assert.equal(timers.size, 0);
+  now = 20_000;
+  assert.equal(advances, 0, "esperar pausado no puede avanzar");
+  session.togglePause();
+  assert.equal(session.isPaused(), false);
+  assert.equal(Array.from(timers.values())[0]?.delay, 6_750);
+  assert.deepEqual(paused, [true, false]);
+});
+
+test("X, timeout y sincronización simultánea avanzan exactamente una vez", () => {
+  let advances = 0;
+  let timerAction: (() => void) | null = null;
+  const session = createHoleSummarySession({
+    now: () => 0,
+    schedule: action => { timerAction = action; return 1; },
+    cancel: () => {},
+    onAdvance: () => { advances += 1; },
+  });
+  // Una descarga cloud puede completar en este instante, pero ya no posee ni
+  // cancela la sesión. X gana la carrera y el callback tardío es inocuo.
+  assert.equal(session.finish(), true);
+  (timerAction as (() => void) | null)?.();
+  assert.equal(session.finish(), false);
+  assert.equal(advances, 1);
 });

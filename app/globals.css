@@ -106,3 +106,12 @@ button:disabled{cursor:not-allowed;opacity:.5}.app{padding-top:calc(14px + env(s
   font-size: .82rem;
   font-weight: 750;
 }
+
+.holeSummary.paused .holeSummaryTimer {
+  animation-play-state: paused;
+}
+
+.holeSummaryClose {
+  z-index: 2;
+  touch-action: manipulation;
+}

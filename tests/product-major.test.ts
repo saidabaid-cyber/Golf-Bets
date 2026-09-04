@@ -137,8 +137,8 @@ test("grupos guardados se cargan por nombre y se administran desde Armar grupos"
 });
 
 test("resumen del hoyo usa diez segundos, X y gate contra doble avance", () => {
-  assert.match(page, /HOLE_SUMMARY_DURATION_MS/);
-  assert.match(page, /createSingleAdvance/);
+  assert.match(page, /createHoleSummarySession/);
+  assert.match(page, /toggleHoleSummaryPause/);
   assert.match(page, /Cerrar resumen y avanzar/);
   assert.match(page, /clearTimeout/);
 });
@@ -160,7 +160,9 @@ test("aceptaciones son insert-only para conservar auditoría", () => {
 test("invitado conserva consentimiento local y una cuenta no oculta fallos al sincronizarlo", () => {
   assert.match(auth, /if \(identity.mode === "authenticated"\)/);
   assert.match(auth, /await requireCloudWrites\(writes\)/);
-  assert.match(auth, /no se pudo sincronizar con Supabase/);
+  assert.match(auth, /queueLegalSync/);
+  assert.match(auth, /markLegalSyncFailed/);
+  assert.match(auth, /clearPendingLegalSync/);
   assert.match(auth, /rules_referee_acceptances/);
   assert.match(auth, /migrationDecisionStorageKey\(identity\.userId\)/);
 });

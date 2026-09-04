@@ -29,6 +29,7 @@ import { getSupabaseBrowser } from "../../lib/supabase/client";
 import { authIdentityChanged, clearDeletedAuthSession, closeAuthSession, isAccountSession, requireCloudWrites, restoreAuthSession, sendEmailOtp, startSocialOAuth, verifyEmailOtp, OtpSendGate, otpRetrySeconds, OTP_COOLDOWN_KEY } from "../../lib/auth-flow";
 import { discardAccountWorkspace, ownsLocalWorkspace, switchAccountWorkspace, WORKSPACE_OWNER_KEY } from "../../lib/account-workspace";
 import { CLOUD_LOCAL_META_KEY, type CloudPreferences } from "../../lib/cloud-sync";
+import { clearPendingLegalSync, legalSyncErrorMessage, markLegalSyncFailed, queueLegalSync, readPendingLegalSync } from "../../lib/legal-sync-queue";
 import type { AuthProviderStatus } from "../../lib/auth-provider-status";
 import { BrandLockup } from "./brand-lockup";
 
@@ -294,7 +295,9 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const [profileChecked, setProfileChecked] = useState(false);
   const activeUserId = useRef<string | null>(null);
   const [accountCloudError, setAccountCloudError] = useState("");
+  const [legalCloudError, setLegalCloudError] = useState("");
   const [syncCloudError, setSyncCloudError] = useState("");
+  const [legalRetryRevision, setLegalRetryRevision] = useState(0);
   const cloudProfileFallback = useMemo(() => ({
     displayName: identity?.displayName || "Jugador",
     defaultHandicap: identity?.defaultHandicap ?? null,
@@ -312,6 +315,26 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   }, []);
   const applyCloudPreferences = useCallback((preferences: CloudPreferences) => {
     setIdentity(current => current?.mode === "authenticated" ? { ...current, defaultHandicap: preferences.defaultHandicap } : current);
+  }, []);
+  const flushLegalAcceptances = useCallback(async (userId: string, current: LegalAcceptance[]) => {
+    const supabase = getSupabaseBrowser();
+    if (!supabase) throw new Error("Supabase unavailable");
+    const rulesAcceptance = current.find((item) => item.type === "rules_referee");
+    const writes = [supabase.from("legal_acceptances").upsert(current.map((item) => ({
+      user_id: item.userId,
+      type: item.type,
+      version: item.documentVersion,
+      accepted_at: item.acceptedAt,
+      locale: item.locale,
+    })), { onConflict: "user_id,type,version", ignoreDuplicates: true })];
+    if (rulesAcceptance) writes.push(supabase.from("rules_referee_acceptances").upsert({
+      user_id: rulesAcceptance.userId,
+      document_version: rulesAcceptance.documentVersion,
+      accepted_at: rulesAcceptance.acceptedAt,
+      locale: rulesAcceptance.locale,
+    }, { onConflict: "user_id,document_version", ignoreDuplicates: true }));
+    await requireCloudWrites(writes);
+    if (activeUserId.current !== userId) throw new Error("Session changed");
   }, []);
   useEffect(() => {
     if (identity?.mode === "authenticated") {
@@ -331,6 +354,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     activeUserId.current = session.user.id;
     setLastCloudSync(localStorage.getItem(`backyard-last-sync-v1:${session.user.id}`));
     setAccountCloudError("");
+    setLegalCloudError("");
     setSyncCloudError("");
     const profile = profileFromUser(session.user);
     setIdentity({ ...profile, mode: "authenticated", providers: session.user.app_metadata?.providers || [session.user.app_metadata?.provider].filter((value): value is string => Boolean(value)), accessToken: session.access_token });
@@ -475,7 +499,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         setProfileSetupRequired(false);
       }
       if (navigator.onLine && legalResult.error) setAccountCloudError("No pudimos leer tus consentimientos en la nube. Tu copia local se conserva y puedes reintentar.");
-      if (navigator.onLine && preferencesResult.error) setAccountCloudError("No pudimos leer tus preferencias en la nube. Tu copia local se conserva y puedes reintentar.");
+      else if (navigator.onLine && preferencesResult.error) setAccountCloudError("No pudimos leer tus preferencias en la nube. Tu copia local se conserva y puedes reintentar.");
+      else if (profileResult.status === "fulfilled") setAccountCloudError("");
     }).catch((error) => { if (mounted) setAccountCloudError(cloudAccountErrorMessage(error)); }).finally(() => { if (mounted) { setCloudConsentChecked(true); setProfileChecked(true); } });
     return () => { mounted = false; };
   }, [identity?.mode, identity?.userId, identity?.accessToken, cloudProfileFallback]);
@@ -484,51 +509,39 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (identity?.mode !== "authenticated" || !identity.accessToken || !currentConsent) return;
-    const supabase = getSupabaseBrowser();
-    if (!supabase) return;
-    const current = acceptances.filter((item) => item.userId === identity.userId);
-    const rulesAcceptance = current.find((item) => item.type === "rules_referee");
-    const writes = [supabase.from("legal_acceptances").upsert(current.map((item) => ({
-      user_id: item.userId,
-      type: item.type,
-      version: item.documentVersion,
-      accepted_at: item.acceptedAt,
-      locale: item.locale,
-    })), { onConflict: "user_id,type,version", ignoreDuplicates: true })];
-    if (rulesAcceptance) writes.push(supabase.from("rules_referee_acceptances").upsert({
-      user_id: rulesAcceptance.userId,
-      document_version: rulesAcceptance.documentVersion,
-      accepted_at: rulesAcceptance.acceptedAt,
-      locale: rulesAcceptance.locale,
-    }, { onConflict: "user_id,document_version", ignoreDuplicates: true }));
+    const saved = acceptances.filter((item) => item.userId === identity.userId);
+    const pending = readPendingLegalSync(localStorage, identity.userId);
+    const current = pending?.acceptances.length ? pending.acceptances : saved;
+    queueLegalSync(localStorage, identity.userId, current);
     let mounted = true;
-    void requireCloudWrites(writes).catch(() => { if (mounted) setAccountCloudError("Tu aceptación está guardada en este dispositivo, pero no se pudo sincronizar con Supabase."); });
+    void flushLegalAcceptances(identity.userId, current).then(() => {
+      if (!mounted) return;
+      clearPendingLegalSync(localStorage, identity.userId);
+      setLegalCloudError("");
+    }).catch((error) => {
+      markLegalSyncFailed(localStorage, identity.userId, error);
+      if (mounted) setLegalCloudError(legalSyncErrorMessage(error, navigator.onLine));
+    });
     return () => { mounted = false; };
-  }, [identity?.mode, identity?.userId, identity?.accessToken, currentConsent, acceptances]);
+  }, [identity?.mode, identity?.userId, identity?.accessToken, currentConsent, acceptances, legalRetryRevision, flushLegalAcceptances]);
 
   async function acceptConsent() {
     if (!identity) return;
     const next = buildLegalAcceptances(identity.userId, new Date().toISOString());
     const merged = mergeLegalAcceptances(acceptances, next);
-    if (identity.mode === "authenticated") {
-      const supabase = getSupabaseBrowser();
-      if (!supabase) throw new Error("Supabase unavailable");
-      const writes = [supabase.from("legal_acceptances").upsert(next.map((item) => ({
-        user_id: item.userId, type: item.type, version: item.documentVersion, accepted_at: item.acceptedAt, locale: item.locale,
-      })), { onConflict: "user_id,type,version", ignoreDuplicates: true })];
-      const rulesAcceptance = next.find((item) => item.type === "rules_referee");
-      if (rulesAcceptance) writes.push(supabase.from("rules_referee_acceptances").upsert({
-        user_id: rulesAcceptance.userId,
-        document_version: rulesAcceptance.documentVersion,
-        accepted_at: rulesAcceptance.acceptedAt,
-        locale: rulesAcceptance.locale,
-      }, { onConflict: "user_id,document_version", ignoreDuplicates: true }));
-      await requireCloudWrites(writes);
-      if (activeUserId.current !== identity.userId) return;
-    }
     localStorage.setItem(ACCOUNT_STORAGE_KEYS.acceptances, JSON.stringify(merged));
     setAcceptances(merged);
-    setAccountCloudError("");
+    if (identity.mode === "authenticated") {
+      queueLegalSync(localStorage, identity.userId, next);
+      try {
+        await flushLegalAcceptances(identity.userId, next);
+        clearPendingLegalSync(localStorage, identity.userId);
+        setLegalCloudError("");
+      } catch (error) {
+        markLegalSyncFailed(localStorage, identity.userId, error);
+        setLegalCloudError(legalSyncErrorMessage(error, navigator.onLine));
+      }
+    }
   }
 
   async function updateProfile(profile: Pick<BackyardProfile, "displayName" | "defaultHandicap" | "avatarUrl">) {
@@ -569,6 +582,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       setCloudStatus("local");
       setLastCloudSync(null);
       setSyncCloudError("");
+      setLegalCloudError("");
     }
   }
 
@@ -590,6 +604,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     setCloudStatus("local");
     setLastCloudSync(null);
     setAccountCloudError("");
+    setLegalCloudError("");
     setSyncCloudError("");
     setShowMigration(false);
   }
@@ -626,10 +641,16 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     setMigrationBusy(false);
   }
 
-  const context = identity ? ({ identity, updateProfile, logout, finishAccountDeletion, openAccess: () => setAccessRequested(true), acceptances, cloudLinked, cloudStatus: accountCloudError || syncCloudError ? "error" as const : cloudStatus, setCloudStatus, lastCloudSync, cloudError: accountCloudError || syncCloudError, applyCloudPreferences,
+  const retryAllCloud = () => {
+    setLegalRetryRevision(value => value + 1);
+    setRawCloudStatus(navigator.onLine ? "pending" : "offline");
+    window.setTimeout(() => window.dispatchEvent(new Event("backyard-sync-retry")), 0);
+  };
+  const combinedCloudError = accountCloudError || legalCloudError || syncCloudError;
+  const context = identity ? ({ identity, updateProfile, logout, finishAccountDeletion, openAccess: () => setAccessRequested(true), acceptances, cloudLinked, cloudStatus: combinedCloudError ? "error" as const : cloudStatus, setCloudStatus, lastCloudSync, cloudError: combinedCloudError, applyCloudPreferences,
     reportCloudSyncError,
     clearCloudSyncError,
-    retryCloudSync: () => { setSyncCloudError(""); setRawCloudStatus("pending"); window.setTimeout(() => window.dispatchEvent(new Event("backyard-sync-retry")), 0); },
+    retryCloudSync: retryAllCloud,
     requestCloudLink: () => { setMigrationError(""); setShowMigration(true); } }) : null;
   const migrationDialog = showMigration && <div className="modalBackdrop"><section className="confirmDialog migrationDialog" role="dialog" aria-modal="true" aria-labelledby="migration-title">
     <h2 id="migration-title">Encontramos datos de The Backyard en este dispositivo.</h2>
@@ -655,7 +676,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     setIdentity({ ...profile, mode: "guest", providers: [], accessToken: null });
     setCloudConsentChecked(true);
     setAccessRequested(false);
-    setAccountCloudError(""); setCloudStatus("local"); setCloudLinked(false); setLastCloudSync(null); setShowMigration(false);
+    setAccountCloudError(""); setLegalCloudError(""); setCloudStatus("local"); setCloudLinked(false); setLastCloudSync(null); setShowMigration(false);
   }} sessionError={accountCloudError} onAuthenticated={(session) => { activateSession(session); setAccessRequested(false); }} />;
   if (identity.mode === "authenticated" && !currentConsent && !cloudConsentChecked) return <main className="accessScreen"><div className="accessLoading">Verificando tus consentimientos…</div></main>;
   if (!currentConsent) {
@@ -666,7 +687,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   if (identity.mode === "authenticated" && profileSetupRequired) return <>{accountCloudError && <div role="alert" className="notice bad">{accountCloudError}</div>}<ProfileSetupScreen identity={identity} onSave={updateProfile} onBack={logout} /></>;
 
   return <AccountContext.Provider value={context!}>
-    {accountCloudError && <div className="notice bad" role="alert">{accountCloudError}<button onClick={() => window.location.reload()}>Reintentar conexión</button></div>}
+    {combinedCloudError && <div className="notice bad" role="alert">{combinedCloudError}<button onClick={retryAllCloud}>Reintentar conexión</button></div>}
     <Fragment key={identity.userId}>{children}</Fragment>
     {migrationDialog}
   </AccountContext.Provider>;

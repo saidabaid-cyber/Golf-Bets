@@ -35,6 +35,8 @@ export type CloudDataBundle = {
    * let us detect two-device edits instead of trusting wall-clock order. */
   baseDraftUpdatedAt?: string;
   baseDraftFingerprint?: string;
+  /** Parsed canonical base kept on this device only for a three-way merge. */
+  baseDraft?: unknown | null;
   tombstones: CloudTombstone[];
 };
 
@@ -45,6 +47,13 @@ export type CloudDataConflict = {
   localValue: unknown;
   cloudValue: unknown;
   updatedAt?: string;
+  fieldPath?: string;
+  playerId?: string;
+  hole?: number;
+  localDeviceId?: string;
+  cloudDeviceId?: string;
+  localUpdatedAt?: string;
+  cloudUpdatedAt?: string;
 };
 
 type ReadableStorage = Pick<Storage, "getItem">;
@@ -53,9 +62,34 @@ function arrayOrEmpty<T>(value: unknown): T[] {
   return Array.isArray(value) ? value as T[] : [];
 }
 
+export function stripLocalRoundUi(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const result = { ...(value as Record<string, unknown>) };
+  delete result.currentIndex;
+  delete result.activeTab;
+  delete result.openModal;
+  delete result.scrollPosition;
+  delete result.holeSummary;
+  return result;
+}
+
+export function restoreLocalRoundUi(cloudDraft: unknown, localDraft: unknown) {
+  if (!cloudDraft || typeof cloudDraft !== "object" || Array.isArray(cloudDraft)) return cloudDraft;
+  if (!localDraft || typeof localDraft !== "object" || Array.isArray(localDraft)) return cloudDraft;
+  const local = localDraft as Record<string, unknown>;
+  const restored = { ...(cloudDraft as Record<string, unknown>) };
+  if (Number.isInteger(local.currentIndex)) restored.currentIndex = local.currentIndex;
+  return restored;
+}
+
+function parseDraftBase(value: string | undefined) {
+  if (!value) return undefined;
+  try { return JSON.parse(value) as unknown; } catch { return undefined; }
+}
+
 export function collectLocalCloudData(storage: ReadableStorage, defaultHandicap: number | null = null, hasLocalPreferenceState = storage.getItem(STORAGE_KEYS.contrast) !== null): CloudDataBundle {
   const meta = readStoredJson<{ draftAt?: string; preferencesAt?: string; cloudDraftAt?: string; cloudDraftFingerprint?: string }>(storage, CLOUD_LOCAL_META_KEY, {});
-  const draft = readStoredJson<unknown | null>(storage, STORAGE_KEYS.draft, null);
+  const draft = stripLocalRoundUi(readStoredJson<unknown | null>(storage, STORAGE_KEYS.draft, null));
   return {
     version: CLOUD_SYNC_VERSION,
     history: arrayOrEmpty<RoundSnapshot>(readStoredJson<unknown>(storage, STORAGE_KEYS.history, [])),
@@ -75,6 +109,7 @@ export function collectLocalCloudData(storage: ReadableStorage, defaultHandicap:
     activeDraftUpdatedAt: meta.draftAt,
     baseDraftUpdatedAt: meta.cloudDraftAt,
     baseDraftFingerprint: meta.cloudDraftFingerprint,
+    baseDraft: parseDraftBase(meta.cloudDraftFingerprint),
     tombstones: arrayOrEmpty<CloudTombstone>(readStoredJson<unknown>(storage, CLOUD_TOMBSTONES_KEY, []))
       .filter((item) => item && typeof item.localId === "string" && typeof item.entityType === "string" && typeof item.deletedAt === "string"),
   };
@@ -118,22 +153,29 @@ export function timestamp(value: string | undefined) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function timestampAfter(left?: string, right?: string) {
+  const latest = Math.max(timestamp(left), timestamp(right));
+  return new Date(latest ? latest + 1 : Date.now()).toISOString();
+}
+
 /** The clock advances on edits, never on reload, sync or autosave alone. */
 export function trackLocalCloudEdits(storage: Pick<Storage, "getItem" | "setItem">, draft: unknown, preferences: Omit<CloudPreferences, "updatedAt">, now = new Date().toISOString()) {
   const meta = readStoredJson<{ draftAt?: string; preferencesAt?: string; draftValue?: string; preferenceValue?: string }>(storage, CLOUD_LOCAL_META_KEY, {});
-  const draftValue = JSON.stringify(stableValue(hasRoundProgress(draft) ? draft : null));
+  const cloudDraft = stripLocalRoundUi(draft);
+  const draftValue = JSON.stringify(stableValue(hasRoundProgress(cloudDraft) ? cloudDraft : null));
   const preferenceValue = JSON.stringify([preferences.highContrast, preferences.language, preferences.notificationsEnabled, preferences.defaultHandicap]);
-  const oldDraft = JSON.stringify(stableValue(readStoredJson(storage, STORAGE_KEYS.draft, null)));
+  const oldDraft = JSON.stringify(stableValue(stripLocalRoundUi(readStoredJson(storage, STORAGE_KEYS.draft, null))));
   if (meta.draftValue !== draftValue && (meta.draftValue !== undefined || (draftValue !== "null" && oldDraft !== draftValue))) meta.draftAt = now;
   if (meta.preferenceValue !== preferenceValue && meta.preferenceValue !== undefined) meta.preferencesAt = now;
   storage.setItem(CLOUD_LOCAL_META_KEY, JSON.stringify({ ...meta, draftValue, preferenceValue }));
 }
 
 export function persistCloudMetadata(storage: Pick<Storage, "setItem">, bundle: CloudDataBundle) {
+  const cloudDraft = stripLocalRoundUi(bundle.activeDraft);
   storage.setItem(CLOUD_LOCAL_META_KEY, JSON.stringify({ draftAt: bundle.activeDraftUpdatedAt, preferencesAt: bundle.preferences.updatedAt,
-    draftValue: JSON.stringify(stableValue(bundle.activeDraft)),
+    draftValue: JSON.stringify(stableValue(cloudDraft)),
     cloudDraftAt: bundle.activeDraftUpdatedAt,
-    cloudDraftFingerprint: JSON.stringify(stableValue(bundle.activeDraft)),
+    cloudDraftFingerprint: JSON.stringify(stableValue(cloudDraft)),
     preferenceValue: JSON.stringify([bundle.preferences.highContrast, bundle.preferences.language, bundle.preferences.notificationsEnabled, bundle.preferences.defaultHandicap]),
   }));
 }
@@ -158,6 +200,107 @@ export function mergeCloudCollection<T>(
   return Array.from(merged.values());
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function idArray(value: unknown): value is Array<Record<string, unknown> & { id: string }> {
+  return Array.isArray(value) && value.every(item => isRecord(item) && typeof item.id === "string");
+}
+
+function pointer(parts: string[]) {
+  return `/${parts.map(part => part.replaceAll("~", "~0").replaceAll("/", "~1")).join("/")}`;
+}
+
+function pointerParts(value: string) {
+  return value.split("/").slice(1).map(part => part.replaceAll("~1", "/").replaceAll("~0", "~"));
+}
+
+function scoreConflictDetails(parts: string[]) {
+  if (parts[0] !== "scores" || parts.length !== 3) return {};
+  const hole = Number(parts[1]);
+  return { playerId: parts[2], hole: Number.isInteger(hole) ? hole : undefined };
+}
+
+function mergeDraftNode(
+  base: unknown,
+  local: unknown,
+  cloud: unknown,
+  parts: string[],
+  context: Pick<CloudDataBundle, "deviceId" | "activeDraftUpdatedAt"> & { cloudDeviceId?: string; cloudUpdatedAt?: string },
+  conflicts: CloudDataConflict[],
+): unknown {
+  if (sameValue(local, cloud)) return structuredClone(local);
+  if (sameValue(local, base)) return structuredClone(cloud);
+  if (sameValue(cloud, base)) return structuredClone(local);
+
+  if (isRecord(local) && isRecord(cloud) && (base === undefined || base === null || isRecord(base))) {
+    const baseRecord = isRecord(base) ? base : {};
+    const result: Record<string, unknown> = {};
+    for (const key of new Set([...Object.keys(baseRecord), ...Object.keys(local), ...Object.keys(cloud)])) {
+      const merged = mergeDraftNode(baseRecord[key], local[key], cloud[key], [...parts, key], context, conflicts);
+      if (merged !== undefined) result[key] = merged;
+    }
+    return result;
+  }
+
+  if (idArray(local) && idArray(cloud) && (base === undefined || base === null || idArray(base))) {
+    const baseRows = idArray(base) ? base : [];
+    const baseById = new Map(baseRows.map(item => [item.id, item]));
+    const localById = new Map(local.map(item => [item.id, item]));
+    const cloudById = new Map(cloud.map(item => [item.id, item]));
+    const order = [...cloud.map(item => item.id), ...local.map(item => item.id).filter(id => !cloudById.has(id))];
+    return order.map(id => mergeDraftNode(baseById.get(id), localById.get(id), cloudById.get(id), [...parts, `@${id}`], context, conflicts)).filter(item => item !== undefined);
+  }
+
+  const fieldPath = pointer(parts);
+  conflicts.push({
+    collection: "activeDraft",
+    localId: fieldPath || "/",
+    fieldPath,
+    localValue: structuredClone(local),
+    cloudValue: structuredClone(cloud),
+    updatedAt: context.activeDraftUpdatedAt,
+    localUpdatedAt: context.activeDraftUpdatedAt,
+    cloudUpdatedAt: context.cloudUpdatedAt,
+    localDeviceId: context.deviceId,
+    cloudDeviceId: context.cloudDeviceId,
+    ...scoreConflictDetails(parts),
+  });
+  // Nothing is uploaded while conflicts exist; retaining the local value here
+  // merely provides the base for resolving this exact field in the dialog.
+  return structuredClone(local);
+}
+
+export function mergeActiveDraftGranular(local: CloudDataBundle, cloud: CloudDataBundle) {
+  const conflicts: CloudDataConflict[] = [];
+  const hasBase = local.baseDraftFingerprint !== undefined;
+  if (!hasBase) {
+    if (sameValue(local.activeDraft, cloud.activeDraft)) return { value: stripLocalRoundUi(local.activeDraft), conflicts };
+    if (local.activeDraft === null || cloud.activeDraft === null) {
+      const localAt = timestamp(local.activeDraftUpdatedAt);
+      const cloudAt = timestamp(cloud.activeDraftUpdatedAt);
+      if (localAt || cloudAt) return { value: stripLocalRoundUi(localAt >= cloudAt ? local.activeDraft : cloud.activeDraft), conflicts };
+    }
+    const localHasProgress = hasRoundProgress(local.activeDraft);
+    const cloudHasProgress = hasRoundProgress(cloud.activeDraft);
+    if (!localHasProgress || !cloudHasProgress) return { value: stripLocalRoundUi(localHasProgress ? local.activeDraft : cloud.activeDraft), conflicts };
+    if (timestamp(local.activeDraftUpdatedAt) !== timestamp(cloud.activeDraftUpdatedAt)) {
+      return { value: stripLocalRoundUi(chooseLocalVersion(local.activeDraftUpdatedAt, cloud.activeDraftUpdatedAt, localHasProgress) ? local.activeDraft : cloud.activeDraft), conflicts };
+    }
+  }
+  const base = hasBase ? (local.baseDraft !== undefined ? local.baseDraft : parseDraftBase(local.baseDraftFingerprint)) : undefined;
+  return {
+    value: mergeDraftNode(base, stripLocalRoundUi(local.activeDraft), stripLocalRoundUi(cloud.activeDraft), [], {
+      deviceId: local.deviceId,
+      activeDraftUpdatedAt: local.activeDraftUpdatedAt,
+      cloudDeviceId: cloud.deviceId,
+      cloudUpdatedAt: cloud.activeDraftUpdatedAt,
+    }, conflicts),
+    conflicts,
+  };
+}
+
 export function mergeLocalAndCloud(local: CloudDataBundle, cloud: CloudDataBundle): CloudDataBundle {
   const tombstones = mergeCloudCollection(
     local.tombstones || [],
@@ -167,6 +310,8 @@ export function mergeLocalAndCloud(local: CloudDataBundle, cloud: CloudDataBundl
   );
   const deleted = new Set(tombstones.map((item) => `${item.entityType}:${item.localId}`));
   const localDraft = chooseLocalVersion(local.activeDraftUpdatedAt, cloud.activeDraftUpdatedAt, hasRoundProgress(local.activeDraft));
+  const draftMerge = mergeActiveDraftGranular(local, cloud);
+  const combinedDraft = !sameValue(draftMerge.value, stripLocalRoundUi(local.activeDraft)) && !sameValue(draftMerge.value, stripLocalRoundUi(cloud.activeDraft));
   const localPreferences = chooseLocalVersion(local.preferences.updatedAt, cloud.preferences.updatedAt, local.preferences.hasLocalState);
   return {
     version: CLOUD_SYNC_VERSION,
@@ -177,10 +322,11 @@ export function mergeLocalAndCloud(local: CloudDataBundle, cloud: CloudDataBundl
     rivals: mergeCloudCollection(local.rivals, cloud.rivals, (rival) => rival.id, (rival) => rival.updatedAt).filter((rival) => !deleted.has(`rival:${rival.id}`)),
     courses: mergeCloudCollection(local.courses, cloud.courses, (course) => course.id, (course) => course.updatedAt).filter((course) => !deleted.has(`course:${course.id}`)),
     preferences: { ...(localPreferences ? local.preferences : cloud.preferences), hasLocalState: true },
-    activeDraft: localDraft ? local.activeDraft : cloud.activeDraft,
-    activeDraftUpdatedAt: localDraft ? local.activeDraftUpdatedAt : cloud.activeDraftUpdatedAt,
+    activeDraft: draftMerge.value,
+    activeDraftUpdatedAt: combinedDraft ? timestampAfter(local.activeDraftUpdatedAt, cloud.activeDraftUpdatedAt) : localDraft ? local.activeDraftUpdatedAt : cloud.activeDraftUpdatedAt,
     baseDraftUpdatedAt: local.baseDraftUpdatedAt,
     baseDraftFingerprint: local.baseDraftFingerprint,
+    baseDraft: local.baseDraft,
     tombstones,
   };
 }
@@ -206,19 +352,7 @@ export function findAmbiguousCloudConflicts(local: CloudDataBundle, cloud: Cloud
       }
     }
   }
-  const localDraftFingerprint = JSON.stringify(stableValue(local.activeDraft));
-  const cloudDraftFingerprint = JSON.stringify(stableValue(cloud.activeDraft));
-  const localChangedFromBase = Boolean(local.baseDraftFingerprint && localDraftFingerprint !== local.baseDraftFingerprint);
-  const cloudChangedFromBase = Boolean(local.baseDraftFingerprint && (
-    cloudDraftFingerprint !== local.baseDraftFingerprint
-    || timestamp(cloud.activeDraftUpdatedAt) !== timestamp(local.baseDraftUpdatedAt)
-  ));
-  if (!sameValue(local.activeDraft, cloud.activeDraft) && (
-    (localChangedFromBase && cloudChangedFromBase)
-    || (timestamp(local.activeDraftUpdatedAt) > 0 && timestamp(local.activeDraftUpdatedAt) === timestamp(cloud.activeDraftUpdatedAt))
-  )) {
-    conflicts.push({ collection: "activeDraft", localId: "active-draft", localValue: local.activeDraft, cloudValue: cloud.activeDraft, updatedAt: local.activeDraftUpdatedAt });
-  }
+  conflicts.push(...mergeActiveDraftGranular(local, cloud).conflicts);
   if (timestamp(local.preferences.updatedAt) > 0 && timestamp(local.preferences.updatedAt) === timestamp(cloud.preferences.updatedAt) && local.preferences.hasLocalState && cloud.preferences.hasLocalState && !sameValue(local.preferences, cloud.preferences)) {
     conflicts.push({ collection: "preferences", localId: "preferences", localValue: local.preferences, cloudValue: cloud.preferences, updatedAt: local.preferences.updatedAt });
   }
@@ -232,7 +366,8 @@ export function resolveAmbiguousCloudConflicts(local: CloudDataBundle, cloud: Cl
   for (const conflict of conflicts) {
     const selected = structuredClone(choice === "local" ? conflict.localValue : conflict.cloudValue);
     if (conflict.collection === "activeDraft") {
-      resolved.activeDraft = selected;
+      if (conflict.fieldPath) resolved.activeDraft = setDraftPointer(resolved.activeDraft, conflict.fieldPath, selected);
+      else resolved.activeDraft = selected;
       resolved.activeDraftUpdatedAt = now;
     } else if (conflict.collection === "preferences") {
       resolved.preferences = { ...(selected as CloudPreferences), updatedAt: now, hasLocalState: true };
@@ -244,7 +379,34 @@ export function resolveAmbiguousCloudConflicts(local: CloudDataBundle, cloud: Cl
       else collection.push(updated as typeof collection[number]);
     }
   }
+  resolved.baseDraft = stripLocalRoundUi(cloud.activeDraft);
+  resolved.baseDraftUpdatedAt = cloud.activeDraftUpdatedAt;
+  resolved.baseDraftFingerprint = JSON.stringify(stableValue(resolved.baseDraft));
   return resolved;
+}
+
+function setDraftPointer(value: unknown, path: string, selected: unknown) {
+  const root = structuredClone(value);
+  const parts = pointerParts(path);
+  if (!parts.length) return structuredClone(selected);
+  let cursor: unknown = root;
+  for (let index = 0; index < parts.length - 1; index += 1) {
+    const part = parts[index];
+    if (part.startsWith("@") && Array.isArray(cursor)) cursor = cursor.find(item => isRecord(item) && item.id === part.slice(1));
+    else if (isRecord(cursor)) cursor = cursor[part];
+    else return root;
+  }
+  const leaf = parts.at(-1)!;
+  if (leaf.startsWith("@") && Array.isArray(cursor)) {
+    const index = cursor.findIndex(item => isRecord(item) && item.id === leaf.slice(1));
+    if (selected === undefined && index >= 0) cursor.splice(index, 1);
+    else if (index >= 0) cursor[index] = structuredClone(selected);
+    else if (selected !== undefined) cursor.push(structuredClone(selected));
+  } else if (isRecord(cursor)) {
+    if (selected === undefined) delete cursor[leaf];
+    else cursor[leaf] = structuredClone(selected);
+  }
+  return root;
 }
 
 async function parseCloudResponse(response: Response) {

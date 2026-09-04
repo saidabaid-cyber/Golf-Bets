@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseForUser } from "../../../../lib/supabase/server";
 import { cloudServerEnabled } from "../../../../lib/feature-flags";
 import type { CloudDataBundle } from "../../../../lib/cloud-sync";
-import { readCloudBundle, writeCloudBundle } from "../../../../lib/cloud-sync-service";
+import { readCloudBundle, supportsExtendedCloudSchema, writeCloudBundle } from "../../../../lib/cloud-sync-service";
 
 const MAX_BODY_BYTES = 5_000_000;
 
@@ -25,6 +25,7 @@ function safeFailure(error: unknown) {
   const candidate = (error && typeof error === "object" ? error : {}) as { code?: string; message?: string };
   const code = String(candidate.code || "");
   const message = String(candidate.message || (error instanceof Error ? error.message : ""));
+  if (code === "CLOUD_FIELD_CONFLICT") return "Otro dispositivo cambió el mismo dato. Actualiza para elegir cuál conservar.";
   if (code === "42501" || /permission denied|row-level security/i.test(message)) return "La nube rechazó esta operación. Vuelve a iniciar sesión y reintenta; tu copia local se conserva.";
   if (["42P01", "42703", "PGRST204", "PGRST205"].includes(code) || /schema cache|does not exist/i.test(message)) return "La nube no pudo completar esta sincronización. Tu copia local se conserva; reintenta más tarde.";
   return "La sincronización no terminó. Puede haber datos pendientes; tu copia local se conserva. Reintenta.";
@@ -40,7 +41,8 @@ export async function GET(request: NextRequest) {
   try {
     const account = await accountClient(request);
     if ("error" in account) return NextResponse.json({ error: account.error }, { status: account.status });
-    const data = await readCloudBundle(account.client, account.userId);
+    const extendedSchema = await supportsExtendedCloudSchema(account.client);
+    const data = await readCloudBundle(account.client, account.userId, extendedSchema);
     return NextResponse.json({ data }, { headers: { "cache-control": "private, no-store" } });
   } catch (error) { logFailure("read", error); return NextResponse.json({ error: safeFailure(error) }, { status: 503 }); }
 }
@@ -59,5 +61,5 @@ export async function POST(request: NextRequest) {
 
     const result = await writeCloudBundle(account.client, account.userId, body as { data: CloudDataBundle; fingerprint: string });
     return NextResponse.json(result, { headers: { "cache-control": "private, no-store" } });
-  } catch (error) { logFailure("write", error); return NextResponse.json({ error: safeFailure(error) }, { status: 503 }); }
+  } catch (error) { logFailure("write", error); const code = error && typeof error === "object" && "code" in error ? String(error.code) : ""; return NextResponse.json({ error: safeFailure(error) }, { status: code === "CLOUD_FIELD_CONFLICT" ? 409 : 503 }); }
 }

@@ -9,6 +9,7 @@ import { readCloudBundle, writeCloudBundle } from "../lib/cloud-sync-service";
 import { offlineRetryDelayMs, outboxAcknowledged } from "../lib/offline-store";
 import { CloudDb } from "./helpers/cloud-db";
 import { ACCOUNT_STORAGE_KEYS, readOfflineAuthenticatedProfile } from "../lib/account-state";
+import { clearPendingLegalSync, legalSyncErrorMessage, markLegalSyncFailed, queueLegalSync, readPendingLegalSync } from "../lib/legal-sync-queue";
 
 const at = "2026-09-03T12:00:00.000Z";
 function bundle(data: Partial<CloudDataBundle> = {}): CloudDataBundle {
@@ -134,6 +135,25 @@ test("service worker cachea shell pero nunca APIs ni datos privados", () => {
   assert.ok(manifest.icons.length >= 2);
 });
 
+test("aceptaciones pendientes forman una cola idempotente, reintentable y limpiable", () => {
+  const values = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => { values.set(key, value); },
+    removeItem: (key: string) => { values.delete(key); },
+  };
+  const acceptance = { userId: "auth-user-a", type: "terms" as const, documentVersion: "v1", acceptedAt: at, locale: "es-MX" };
+  queueLegalSync(storage as unknown as Storage, "auth-user-a", [acceptance], at);
+  queueLegalSync(storage as unknown as Storage, "auth-user-a", [acceptance], at);
+  assert.equal(readPendingLegalSync(storage, "auth-user-a")?.acceptances.length, 1);
+  markLegalSyncFailed(storage as unknown as Storage, "auth-user-a", { code: "42501" }, at);
+  assert.equal(readPendingLegalSync(storage, "auth-user-a")?.attempts, 1);
+  clearPendingLegalSync(storage, "auth-user-a");
+  assert.equal(readPendingLegalSync(storage, "auth-user-a"), null);
+  assert.match(legalSyncErrorMessage(new TypeError("Failed to fetch"), false), /Sin conexión/);
+  assert.match(legalSyncErrorMessage({ code: "42501", message: "permission denied" }, true), /rechazó/);
+});
+
 test("UI distingue guardado local, pendiente, offline, nube y error", () => {
   const page = readFileSync("app/page.tsx", "utf8");
   const account = readFileSync("app/components/account-panel.tsx", "utf8");
@@ -162,4 +182,24 @@ test("dos dispositivos conservan identidad estable y una ronda se actualiza sin 
   assert.deepEqual(restored.history[0].scores, { 1: { player: 3 } });
   assert.equal(db.rows("user_devices").length, 2);
   assert.equal(db.rows("rounds_cloud")[0].updated_by_device, "device-phone");
+});
+
+test("servidor combina hoyos distintos y rechaza sólo el mismo score concurrente", async () => {
+  const db = new CloudDb();
+  const baseDraft = { roundId: "round-live", players: [{ id: "p", name: "Said" }], scores: { 5: { p: 4 }, 6: { p: 4 } } };
+  const baseFingerprint = JSON.stringify(stableValue(baseDraft));
+  await writeCloudBundle(db.client, "auth-user-a", { data: bundle({ deviceId: "base-device", activeDraft: baseDraft, activeDraftUpdatedAt: "2026-09-03T12:00:00Z" }), fingerprint: "base" });
+  const computer = bundle({ deviceId: "computer", activeDraft: { ...baseDraft, scores: { 5: { p: 3 }, 6: { p: 4 } } }, activeDraftUpdatedAt: "2026-09-03T12:01:00Z", baseDraft, baseDraftFingerprint: baseFingerprint, baseDraftUpdatedAt: "2026-09-03T12:00:00Z" });
+  const phone = bundle({ deviceId: "phone", activeDraft: { ...baseDraft, scores: { 5: { p: 4 }, 6: { p: 3 } } }, activeDraftUpdatedAt: "2026-09-03T12:02:00Z", baseDraft, baseDraftFingerprint: baseFingerprint, baseDraftUpdatedAt: "2026-09-03T12:00:00Z" });
+  await writeCloudBundle(db.client, "auth-user-a", { data: computer, fingerprint: "computer-h5" });
+  await writeCloudBundle(db.client, "auth-user-a", { data: phone, fingerprint: "phone-h6" });
+  const combined = await readCloudBundle(db.client, "auth-user-a");
+  assert.deepEqual((combined.activeDraft as typeof baseDraft).scores, { 5: { p: 3 }, 6: { p: 3 } });
+
+  const newBase = combined.activeDraft;
+  const newFingerprint = JSON.stringify(stableValue(newBase));
+  const conflictA = bundle({ deviceId: "computer", activeDraft: { ...baseDraft, scores: { 5: { p: 2 }, 6: { p: 3 } } }, activeDraftUpdatedAt: "2026-09-03T12:04:00Z", baseDraft: newBase, baseDraftFingerprint: newFingerprint, baseDraftUpdatedAt: combined.activeDraftUpdatedAt });
+  const conflictB = bundle({ deviceId: "phone", activeDraft: { ...baseDraft, scores: { 5: { p: 5 }, 6: { p: 3 } } }, activeDraftUpdatedAt: "2026-09-03T12:05:00Z", baseDraft: newBase, baseDraftFingerprint: newFingerprint, baseDraftUpdatedAt: combined.activeDraftUpdatedAt });
+  await writeCloudBundle(db.client, "auth-user-a", { data: conflictA, fingerprint: "conflict-a" });
+  await assert.rejects(writeCloudBundle(db.client, "auth-user-a", { data: conflictB, fingerprint: "conflict-b" }), (error: unknown) => Boolean(error && typeof error === "object" && "code" in error && error.code === "CLOUD_FIELD_CONFLICT"));
 });

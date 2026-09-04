@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { mergeLocalAndCloud, timestamp, type CloudDataBundle, type CloudEntityType, type CloudTombstone } from "./cloud-sync";
+import { findAmbiguousCloudConflicts, mergeLocalAndCloud, stableValue, timestamp, type CloudDataBundle, type CloudEntityType, type CloudTombstone } from "./cloud-sync";
 
 function safeArray<T>(value: unknown, limit: number): T[] {
   if (Array.isArray(value) && value.length > limit) throw new Error("La colección excede el límite; no se sincronizó parcialmente.");
@@ -122,15 +122,22 @@ async function projectRoundSnapshots(client: SupabaseClient, userId: string, his
     const roundId = cloudIdByLocal.get(localId(round));
     if (!roundId) continue;
     const players = safeArray<Record<string, unknown>>(round.players, 200).filter(localId);
-    const { error: clearPlayersError } = await client.from("round_players_cloud").delete().eq("round_id", roundId);
-    if (clearPlayersError) throw clearPlayersError;
     if (players.length) {
-      const { data: insertedPlayers, error: playersError } = await client.from("round_players_cloud").insert(players.map((player) => withDevice({
+      const { data: existingPlayers, error: existingPlayersError } = await client.from("round_players_cloud").select("id,local_player_id").eq("round_id", roundId);
+      if (existingPlayersError) throw existingPlayersError;
+      const playerIds = new Set(players.map(localId));
+      const removedIds = (existingPlayers || []).filter(player => !playerIds.has(String(player.local_player_id))).map(player => String(player.id));
+      if (removedIds.length) {
+        const removed = await client.from("round_players_cloud").delete().eq("round_id", roundId).in("id", removedIds);
+        if (removed.error) throw removed.error;
+      }
+      const { data: insertedPlayers, error: playersError } = await client.from("round_players_cloud").upsert(players.map((player) => withDevice({
         round_id: roundId,
         local_player_id: localId(player),
         name: String(player.name || "Jugador").slice(0, 120),
         handicap: player.handicap ?? null,
-      }, deviceId, extendedSchema))).select("id,local_player_id");
+        ...(extendedSchema ? { updated_at: String(round.updatedAt || round.completedAt || new Date().toISOString()) } : {}),
+      }, deviceId, extendedSchema)), { onConflict: "round_id,local_player_id" }).select("id,local_player_id");
       if (playersError || insertedPlayers?.length !== players.length) throw playersError || new Error("Jugadores no confirmados");
       const cloudPlayerByLocal = new Map((insertedPlayers || []).map((player) => [String(player.local_player_id), String(player.id)]));
       const scores = round.scores && typeof round.scores === "object" ? round.scores as Record<string, Record<string, unknown>> : {};
@@ -141,7 +148,7 @@ async function projectRoundSnapshots(client: SupabaseClient, userId: string, his
         for (const [playerLocalId, scoreValue] of Object.entries(playerScores)) {
           const score = Number(scoreValue);
           const cloudPlayerId = cloudPlayerByLocal.get(playerLocalId);
-          if (cloudPlayerId && Number.isInteger(score) && score >= 1 && score <= 20) scoreRows.push(withDevice({ round_player_id: cloudPlayerId, hole, score }, deviceId, extendedSchema));
+          if (cloudPlayerId && Number.isInteger(score) && score >= 1 && score <= 20) scoreRows.push(withDevice({ round_player_id: cloudPlayerId, hole, score, ...(extendedSchema ? { updated_at: String(round.updatedAt || round.completedAt || new Date().toISOString()) } : {}) }, deviceId, extendedSchema));
         }
       }
       if (scoreRows.length) {
@@ -150,7 +157,7 @@ async function projectRoundSnapshots(client: SupabaseClient, userId: string, his
         // every write and keeps this projection aligned with the SQL schema.
         const { data: savedScores, error: scoresError } = await client
           .from("round_scores_cloud")
-          .insert(scoreRows)
+          .upsert(scoreRows, { onConflict: "round_player_id,hole" })
           .select("round_player_id,hole");
         if (scoresError || savedScores?.length !== scoreRows.length) throw scoresError || new Error("Scores no confirmados");
       }
@@ -172,7 +179,8 @@ async function projectRoundSnapshots(client: SupabaseClient, userId: string, his
 }
 
 
-export async function readCloudBundle(client: SupabaseClient, userId: string): Promise<CloudDataBundle> {
+export async function readCloudBundle(client: SupabaseClient, userId: string, extendedSchema = false): Promise<CloudDataBundle> {
+  const stateColumns = extendedSchema ? "active_draft,updated_at,updated_by_device" : "active_draft,updated_at";
   const [rounds, players, groups, rivals, courses, preferences, state, deletions] = await Promise.all([
     readOwnedRows(client, "rounds_cloud", userId, "snapshot"),
     readOwnedRows(client, "players", userId, "snapshot"),
@@ -180,11 +188,12 @@ export async function readCloudBundle(client: SupabaseClient, userId: string): P
     readOwnedRows(client, "personal_rivals_cloud", userId, "snapshot"),
     readOwnedRows(client, "courses_cloud", userId, "snapshot"),
     client.from("user_preferences").select("high_contrast,locale,notifications_enabled,default_handicap,updated_at").eq("user_id", userId).maybeSingle(),
-    client.from("user_cloud_state").select("active_draft,updated_at").eq("user_id", userId).maybeSingle(),
+    client.from("user_cloud_state").select(stateColumns).eq("user_id", userId).maybeSingle(),
     readOwnedRows(client, "cloud_deletions", userId, "entity_type,local_id,deleted_at"),
   ]);
   const firstError = [rounds, players, groups, rivals, courses, preferences, state, deletions].find((result) => result.error)?.error;
   if (firstError) throw firstError;
+  const stateData = state.data as null | { active_draft?: unknown; updated_at?: string; updated_by_device?: string };
   const data: CloudDataBundle = {
     version: 1,
     history: (rounds.data || []).map((row) => row.snapshot).filter(Boolean),
@@ -201,8 +210,9 @@ export async function readCloudBundle(client: SupabaseClient, userId: string): P
       hasLocalState: Boolean(preferences.data),
       updatedAt: preferences.data?.updated_at,
     },
-    activeDraft: state.data?.active_draft ?? null,
-    activeDraftUpdatedAt: state.data?.updated_at,
+    activeDraft: stateData?.active_draft ?? null,
+    activeDraftUpdatedAt: stateData?.updated_at,
+    deviceId: extendedSchema && typeof stateData?.updated_by_device === "string" ? stateData.updated_by_device : undefined,
     tombstones: (deletions.data || []).map((item) => ({ entityType: item.entity_type, localId: item.local_id, deletedAt: item.deleted_at })),
   } as CloudDataBundle;
   return mergeLocalAndCloud(data, data);
@@ -210,13 +220,15 @@ export async function readCloudBundle(client: SupabaseClient, userId: string): P
 
 
 export async function writeCloudBundle(client: SupabaseClient, userId: string, body: { data: CloudDataBundle; fingerprint: string }) {
-  let history = safeArray<Record<string, unknown>>(body.data.history, 1000).filter(localId);
-  let players = safeArray<Record<string, unknown>>(body.data.frequentPlayers, 500).filter(localId);
-  let groups = safeArray<Record<string, unknown>>(body.data.frequentGroups, 250).filter(localId);
-  let rivals = safeArray<Record<string, unknown>>(body.data.rivals, 500).filter(localId);
-  let courses = safeArray<Record<string, unknown>>(body.data.courses, 200).filter(localId);
+  // Re-read inside the write request. Two devices may both have downloaded the
+  // same base; this server-side three-way merge closes that race without
+  // overwriting compatible score edits from the other device.
   const now = new Date().toISOString();
-  const deviceId = typeof body.data.deviceId === "string" ? body.data.deviceId.slice(0, 120) : null;
+  let history: Record<string, unknown>[] = [];
+  let players: Record<string, unknown>[] = [];
+  let groups: Record<string, unknown>[] = [];
+  let rivals: Record<string, unknown>[] = [];
+  let courses: Record<string, unknown>[] = [];
 
   const diagnosticCode = (error: unknown) => {
     if (error && typeof error === "object" && "code" in error && typeof error.code === "string") return error.code.slice(0, 80);
@@ -230,6 +242,16 @@ export async function writeCloudBundle(client: SupabaseClient, userId: string, b
   let extendedSchema = false;
   try {
     extendedSchema = await supportsExtendedCloudSchema(client);
+    const currentCloud = await readCloudBundle(client, userId, extendedSchema);
+    const lateConflicts = findAmbiguousCloudConflicts(body.data, currentCloud);
+    if (lateConflicts.length) throw Object.assign(new Error("Hay un cambio simultáneo en el mismo dato."), { code: "CLOUD_FIELD_CONFLICT" });
+    const incoming = mergeLocalAndCloud(body.data, currentCloud);
+    history = safeArray<Record<string, unknown>>(incoming.history, 1000).filter(localId);
+    players = safeArray<Record<string, unknown>>(incoming.frequentPlayers, 500).filter(localId);
+    groups = safeArray<Record<string, unknown>>(incoming.frequentGroups, 250).filter(localId);
+    rivals = safeArray<Record<string, unknown>>(incoming.rivals, 500).filter(localId);
+    courses = safeArray<Record<string, unknown>>(incoming.courses, 200).filter(localId);
+    const deviceId = typeof incoming.deviceId === "string" ? incoming.deviceId.slice(0, 120) : null;
     const requestRow: Record<string, unknown> = extendedSchema
       ? { user_id: userId, local_fingerprint: body.fingerprint.slice(0, 160), status: "requested", updated_at: now, last_attempt_at: now, last_error_code: null }
       : { user_id: userId, local_fingerprint: body.fingerprint.slice(0, 160), status: "requested", updated_at: now };
@@ -239,7 +261,7 @@ export async function writeCloudBundle(client: SupabaseClient, userId: string, b
       const device = await client.from("user_devices").upsert({ user_id: userId, device_id: deviceId, last_seen_at: now, last_sync_at: now }, { onConflict: "user_id,device_id" }).select("device_id");
       if (device.error || device.data?.length !== 1) throw device.error || new Error("El dispositivo no fue confirmado por Supabase");
     }
-    const allTombstones = await applyTombstones(client, userId, validTombstones(body.data.tombstones), deviceId, extendedSchema);
+    const allTombstones = await applyTombstones(client, userId, validTombstones(incoming.tombstones), deviceId, extendedSchema);
     const deleted = new Set(allTombstones.map((item) => `${item.entityType}:${item.localId}`));
     history = history.filter((item) => !deleted.has(`round:${localId(item)}`));
     players = players.filter((item) => !deleted.has(`frequent_player:${localId(item)}`));
@@ -257,13 +279,13 @@ export async function writeCloudBundle(client: SupabaseClient, userId: string, b
     if (failed?.status === "rejected") throw failed.reason;
     // Retry projections even when the snapshot timestamp is unchanged. Always
     // project the stored winner, never an older device's rejected snapshot.
-    const canonical = await readCloudBundle(client, userId);
+    const canonical = await readCloudBundle(client, userId, extendedSchema);
     const requestedIds = new Set(history.map(localId));
     const toProject = canonical.history.filter(round => requestedIds.has(round.id));
     await projectRoundSnapshots(client, userId, toProject as unknown as Record<string, unknown>[], deviceId, extendedSchema);
-    const afterProjection = await readCloudBundle(client, userId);
+    const afterProjection = await readCloudBundle(client, userId, extendedSchema);
     if (toProject.some(round => JSON.stringify(afterProjection.history.find(other => other.id === round.id)) !== JSON.stringify(round))) throw new Error("La ronda cambió durante la proyección. Reintenta.");
-    const preferences = body.data.preferences;
+    const preferences = incoming.preferences;
     await writeVersionedRow(client, "user_preferences", { user_id: userId }, withDevice({
       user_id: userId,
       high_contrast: Boolean(preferences?.highContrast),
@@ -272,7 +294,11 @@ export async function writeCloudBundle(client: SupabaseClient, userId: string, b
       default_handicap: preferences?.defaultHandicap ?? null,
       updated_at: preferences?.updatedAt || new Date(0).toISOString(),
     }, deviceId, extendedSchema));
-    await writeVersionedRow(client, "user_cloud_state", { user_id: userId }, withDevice({ user_id: userId, active_draft: body.data.activeDraft ?? null, updated_at: body.data.activeDraftUpdatedAt || new Date(0).toISOString() }, deviceId, extendedSchema));
+    await writeVersionedRow(client, "user_cloud_state", { user_id: userId }, withDevice({ user_id: userId, active_draft: incoming.activeDraft ?? null, updated_at: incoming.activeDraftUpdatedAt || new Date(0).toISOString() }, deviceId, extendedSchema));
+    const confirmedState = await client.from("user_cloud_state").select("active_draft").eq("user_id", userId).maybeSingle();
+    if (confirmedState.error || JSON.stringify(stableValue(confirmedState.data?.active_draft ?? null)) !== JSON.stringify(stableValue(incoming.activeDraft ?? null))) {
+      throw confirmedState.error || Object.assign(new Error("Otro dispositivo cambió la ronda durante la escritura."), { code: "CLOUD_FIELD_CONFLICT" });
+    }
     // A deletion can arrive after the first read. Sweep again; GET also filters
     // permanent tombstones so a concurrent stale insert is never resurrected UI.
     await applyTombstones(client, userId, []);
