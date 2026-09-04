@@ -272,7 +272,7 @@ function ProfileSetupScreen({ identity, onSave, onBack }: {
       <label htmlFor="profile-setup-name">Nombre</label>
       <input id="profile-setup-name" autoComplete="name" enterKeyHint="next" value={name} onChange={(event) => setName(event.target.value)} placeholder="Tu nombre" />
       <label htmlFor="profile-setup-hcp">HCP Index (opcional)</label>
-      <input id="profile-setup-hcp" type="text" inputMode="decimal" enterKeyHint="done" autoComplete="off" value={handicap} onChange={(event) => setHandicap(event.target.value)} placeholder="Ej. 8.4 o +1.2" aria-describedby="profile-setup-hcp-help" />
+      <input id="profile-setup-hcp" type="text" inputMode="text" enterKeyHint="done" autoComplete="off" value={handicap} onChange={(event) => setHandicap(event.target.value)} placeholder="Ej. 8.4 o +1.2" aria-describedby="profile-setup-hcp-help" />
       <small id="profile-setup-hcp-help" className="profileFieldHelp">Puedes dejarlo vacío. El HCP de juego se define por separado en cada ronda.</small>
       {message && <div className="accessMessage" role="alert">{message}</div>}
       <button type="submit" className="primary big" disabled={busy}>{busy ? "Guardando…" : "Guardar y continuar"}</button>

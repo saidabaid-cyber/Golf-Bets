@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { expenseTotal } from "../lib/engine";
-import { applyNumericDirection, initialNumericCapture, numericCaptureOr, parseNumericCapture } from "../lib/numeric-input";
+import { applyNumericDirection, finalizeNumericCapture, initialNumericCapture, normalizeNumericCaptureText, numericCaptureOr, parseNumericCapture } from "../lib/numeric-input";
 
 test("un cero inicial de captura se presenta vacío", () => {
   assert.equal(initialNumericCapture(0), "");
@@ -33,6 +33,19 @@ test("una apuesta manual acepta una pérdida de -500", () => {
   assert.equal(parseNumericCapture("-500"), -500);
   assert.equal(applyNumericDirection(500, "loss"), -500);
   assert.equal(applyNumericDirection(-500, "gain"), 500);
+});
+
+test("la escritura 1 → 10 → 100 permanece temporal hasta confirmar 100", () => {
+  assert.deepEqual(["1", "10", "100"].map(normalizeNumericCaptureText), ["1", "10", "100"]);
+  assert.deepEqual(finalizeNumericCapture("100"), { raw: "100", value: 100 });
+  assert.deepEqual(finalizeNumericCapture("80", 0, 100), { raw: "80", value: 80 });
+});
+
+test("captura numérica acepta signo y coma decimal pero nunca guarda letras", () => {
+  assert.equal(normalizeNumericCaptureText(" - 12,7 abc"), "-12,7");
+  assert.equal(parseNumericCapture("-12,7"), -12.7);
+  assert.equal(parseNumericCapture("USD cien"), null);
+  assert.deepEqual(finalizeNumericCapture("125", 0, 100), { raw: "100", value: 100 });
 });
 
 test("un cero calculado real sigue siendo cero en resultados", () => {

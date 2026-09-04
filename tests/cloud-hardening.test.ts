@@ -104,10 +104,34 @@ for (const step of ["download", "upload", "media"] as const) test("fallo " + ste
   await assert.rejects(run()); assert.equal(applied, 0); assert.equal(statuses.includes("synced"), false);
   failed = false; assert.equal(await run(), true); assert.equal(applied, 1); assert.equal(statuses.at(-1), "synced");
 });
-test("edición durante upload no se sobrescribe con respuesta vieja", async () => {
-  let local = bundle(), applied = false; const states: SyncStatus[] = [];
-  const complete = await runCloudSyncCycle({ read: () => local, download: async () => bundle(), upload: async () => { local = bundle({ activeDraft: draft() }); }, media: async () => {}, apply: () => { applied = true; }, current: () => true, status: value => states.push(value) });
-  assert.equal(complete, false); assert.equal(applied, false); assert.equal(states.at(-1), "pending");
+test("edición durante upload se rebasa sin sobrescribirse y programa retry", async () => {
+  let cloud = bundle({ activeDraft: draft(1), activeDraftUpdatedAt: earlier, deviceId: "iphone" });
+  let local = bundle({ activeDraft: draft(1), activeDraftUpdatedAt: earlier, deviceId: "iphone" });
+  let applied: CloudDataBundle | undefined; let retries = 0; let uploads = 0; const states: SyncStatus[] = [];
+  const cycle = () => runCloudSyncCycle({
+    read: () => local,
+    download: async () => cloud,
+    upload: async data => {
+      uploads += 1;
+      cloud = structuredClone(data);
+      if (uploads === 1) local = bundle({ activeDraft: draft(80), activeDraftUpdatedAt: later, deviceId: "iphone", baseDraft: draft(1), baseDraftFingerprint: JSON.stringify(draft(1)) });
+    },
+    media: async () => {},
+    apply: data => { applied = data; local = data; },
+    retry: () => { retries += 1; },
+    current: () => true,
+    status: value => states.push(value),
+  });
+  const complete = await cycle();
+  assert.equal(complete, false);
+  assert.equal((applied?.activeDraft as ReturnType<typeof draft>).scores[1].p, 80);
+  assert.equal((applied?.baseDraft as ReturnType<typeof draft>).scores[1].p, 1);
+  assert.equal(retries, 1);
+  assert.equal(states.at(-1), "pending");
+  assert.equal(await cycle(), true);
+  assert.equal((cloud.activeDraft as ReturnType<typeof draft>).scores[1].p, 80);
+  assert.equal((local.activeDraft as ReturnType<typeof draft>).scores[1].p, 80);
+  assert.equal(states.at(-1), "synced");
 });
 test("logout/cambio de usuario durante request bloquea apply y acknowledgment", async () => {
   let current = true, applied = false; const states: SyncStatus[] = [];

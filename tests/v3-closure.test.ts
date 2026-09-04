@@ -138,7 +138,10 @@ test("capture inputs use the empty-safe numeric control without zero placeholder
   assert.match(page, /SignedMoneyInput/);
   assert.match(readFileSync("app/components/signed-money-input.tsx", "utf8"), /Pierde −/);
   assert.match(polla, /NumericCaptureInput placeholder="HCP"/);
-  assert.match(input, /setRawValue\(event\.target\.value\)/);
+  assert.match(input, /setRawValue\(normalizeNumericCaptureText\(event\.target\.value\)\)/);
+  assert.match(input, /type="text"/);
+  assert.match(input, /inputMode="text"/);
+  assert.doesNotMatch(input, /onValueChange\(parseNumericCapture\(event\.target\.value\)\)/);
   assert.doesNotMatch(`${page}\n${polla}`, /placeholder="0"/);
 });
 

@@ -93,7 +93,7 @@ test("layout de alta es seguro para 390x844, 430x932 y teclado iOS", () => {
   assert.match(css, /@media\(max-width:430px\)\{\.profileSetupScreen\{[^}]*safe-area-inset-bottom/);
 });
 
-test("Resultados comparte una sola fuente consolidada entre tarjetas, general, liquidación y WhatsApp", () => {
+test("Resultados mantiene Personales fuera del Resumen General y dentro del total consolidado final", () => {
   const balances = { said: 800, flavio: -500, juan: -300 };
   const general = buildGeneralResultsTable(Object.keys(balances), [
     { key: "all", label: "Apuestas", balances, active: true, played: true },
@@ -109,8 +109,10 @@ test("Resultados comparte una sola fuente consolidada entre tarjetas, general, l
   const page = read("app/page.tsx");
   for (const pattern of [
     /settleBalances\(allBetBalances\)/,
-    /buildGeneralResultsTable\(settlementIds, generalResultCategories, allBetBalances\)/,
+    /buildGeneralResultsTable\(players\.map\(player => player\.id\), generalResultCategories, generalBetBalances\)/,
     /allBetBalances\[p\.id\]/,
     /resultSummaryText\(course\.name, roundDate, settlementIds\.map[\s\S]*allBetBalances/,
   ]) assert.match(page, pattern);
+  assert.doesNotMatch(page, /key: "personals"[\s\S]*generalResultCategories/);
+  assert.match(page, /title="Resultados de Apuestas Personales"/);
 });

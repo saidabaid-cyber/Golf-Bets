@@ -1,20 +1,24 @@
 "use client";
 
 import { useEffect, useRef, useState, type InputHTMLAttributes } from "react";
-import { finalizeNumericCapture, initialNumericCapture, parseNumericCapture } from "../../lib/numeric-input";
+import { flushSync } from "react-dom";
+import { finalizeNumericCapture, initialNumericCapture, normalizeNumericCaptureText } from "../../lib/numeric-input";
 
 type NumericCaptureInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "type" | "value" | "onChange"> & {
   value: number | null | undefined;
   onValueChange: (value: number | null) => void;
   emptyWhenZero?: boolean;
+  commitUnchanged?: boolean;
 };
 
 export function NumericCaptureInput({
   value,
   onValueChange,
   emptyWhenZero = true,
+  commitUnchanged = false,
   onBlur,
   onFocus,
+  onKeyDown,
   min,
   max,
   ...inputProps
@@ -29,11 +33,22 @@ export function NumericCaptureInput({
     if (!focused.current) setRawValue(initialNumericCapture(value, emptyWhenZero));
   }, [emptyWhenZero, value]);
 
+  const commit = () => {
+    const finalized = finalizeNumericCapture(rawValue, min, max);
+    setRawValue(finalized.raw);
+    previousValue.current = finalized.value;
+    if (commitUnchanged || !Object.is(finalized.value, value)) {
+      // A Save-button click follows blur in the same browser gesture. Flush the
+      // confirmed value now so that Save never observes the previous render.
+      flushSync(() => onValueChange(finalized.value));
+    }
+  };
+
   return <input
     {...inputProps}
-    type="number"
-    min={min}
-    max={max}
+    type="text"
+    inputMode="text"
+    enterKeyHint={inputProps.enterKeyHint ?? "done"}
     value={rawValue}
     onFocus={(event) => {
       focused.current = true;
@@ -41,15 +56,15 @@ export function NumericCaptureInput({
     }}
     onBlur={(event) => {
       focused.current = false;
-      const finalized = finalizeNumericCapture(rawValue, min, max);
-      setRawValue(finalized.raw);
-      previousValue.current = finalized.value;
-      if (!Object.is(finalized.value, value)) onValueChange(finalized.value);
+      commit();
       onBlur?.(event);
     }}
     onChange={(event) => {
-      setRawValue(event.target.value);
-      onValueChange(parseNumericCapture(event.target.value));
+      setRawValue(normalizeNumericCaptureText(event.target.value));
+    }}
+    onKeyDown={(event) => {
+      if (event.key === "Enter") event.currentTarget.blur();
+      onKeyDown?.(event);
     }}
   />;
 }

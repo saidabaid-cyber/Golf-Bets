@@ -10,6 +10,7 @@ type CycleOptions = {
   current: () => boolean;
   status: (value: SyncStatus) => void;
   conflicts?: (local: CloudDataBundle, remote: CloudDataBundle) => boolean;
+  retry?: () => void;
 };
 
 /** One acknowledged cycle. Re-read before merging and before applying so UI
@@ -31,8 +32,16 @@ export async function runCloudSyncCycle(options: CycleOptions) {
     await options.media(canonical); check();
     const latest = options.read();
     if (cloudDataFingerprint(before) !== cloudDataFingerprint(latest)) {
-      // Do not set synced or overwrite new local state; next cycle will merge it.
+      // Rebase the newer local edit on the write that the server actually
+      // confirmed. This records the canonical base without letting an older
+      // response overwrite text that changed while the request was in flight.
+      if (options.conflicts?.(latest, canonical)) {
+        options.status("pending");
+        return false;
+      }
+      options.apply(mergeLocalAndCloud(latest, canonical));
       options.status("pending");
+      options.retry?.();
       return false;
     }
     options.apply(canonical);

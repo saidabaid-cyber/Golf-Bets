@@ -167,7 +167,8 @@ test("Resultados ofrece Jugadores y Resumen General con scroll y columnas fijas"
   const css = readFileSync("app/functional-ux.css", "utf8");
   assert.match(page, />Jugadores<\/button>/);
   assert.match(page, />Resumen General<\/button>/);
-  assert.match(page, /buildGeneralResultsTable\(settlementIds, generalResultCategories, allBetBalances\)/);
+  assert.match(page, /buildGeneralResultsTable\(players\.map\(player => player\.id\), generalResultCategories, generalBetBalances\)/);
+  assert.match(page, /Resultados de Apuestas Personales/);
   assert.match(page, /TOTAL GENERAL/);
   assert.match(css, /\.generalResultsScroll\{[^}]*overflow-x:auto/);
   assert.match(css, /\.generalResultsTable th:first-child\{[^}]*position:sticky/);

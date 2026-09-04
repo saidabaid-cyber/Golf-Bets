@@ -178,10 +178,16 @@ export function trackLocalCloudEdits(storage: Pick<Storage, "getItem" | "setItem
 
 export function persistCloudMetadata(storage: Pick<Storage, "setItem">, bundle: CloudDataBundle) {
   const cloudDraft = stripLocalRoundUi(bundle.activeDraft);
+  const confirmedBase = bundle.baseDraftFingerprint !== undefined
+    ? stripLocalRoundUi(bundle.baseDraft)
+    : cloudDraft;
+  const confirmedAt = bundle.baseDraftFingerprint !== undefined
+    ? bundle.baseDraftUpdatedAt
+    : bundle.activeDraftUpdatedAt;
   storage.setItem(CLOUD_LOCAL_META_KEY, JSON.stringify({ draftAt: bundle.activeDraftUpdatedAt, preferencesAt: bundle.preferences.updatedAt,
     draftValue: JSON.stringify(stableValue(cloudDraft)),
-    cloudDraftAt: bundle.activeDraftUpdatedAt,
-    cloudDraftFingerprint: JSON.stringify(stableValue(cloudDraft)),
+    cloudDraftAt: confirmedAt,
+    cloudDraftFingerprint: JSON.stringify(stableValue(confirmedBase)),
     preferenceValue: JSON.stringify([bundle.preferences.highContrast, bundle.preferences.language, bundle.preferences.notificationsEnabled, bundle.preferences.defaultHandicap]),
   }));
 }
@@ -260,6 +266,10 @@ function mergeDraftNode(
   }
 
   const fieldPath = pointer(parts);
+  // A response from an earlier write by this same installation is not a
+  // two-device conflict. The local value is the newer edit and will be rebased
+  // on the confirmed cloud response by the next acknowledged cycle.
+  if (context.deviceId && context.deviceId === context.cloudDeviceId) return structuredClone(local);
   conflicts.push({
     collection: "activeDraft",
     localId: fieldPath || "/",
@@ -361,15 +371,23 @@ export function findAmbiguousCloudConflicts(local: CloudDataBundle, cloud: Cloud
       const localAt = "updatedAt" in item ? item.updatedAt : undefined;
       const cloudAt = "updatedAt" in other ? other.updatedAt : undefined;
       if (timestamp(localAt) > 0 && timestamp(localAt) === timestamp(cloudAt) && !sameValue(item, other)) {
-        conflicts.push({ collection, localId: item.id, localValue: item, cloudValue: other, updatedAt: localAt });
+        conflicts.push({ collection, localId: item.id, localValue: item, cloudValue: other, updatedAt: localAt, localDeviceId: local.deviceId, cloudDeviceId: cloud.deviceId });
       }
     }
   }
   conflicts.push(...mergeActiveDraftGranular(local, cloud).conflicts);
   if (timestamp(local.preferences.updatedAt) > 0 && timestamp(local.preferences.updatedAt) === timestamp(cloud.preferences.updatedAt) && local.preferences.hasLocalState && cloud.preferences.hasLocalState && !sameValue(local.preferences, cloud.preferences)) {
-    conflicts.push({ collection: "preferences", localId: "preferences", localValue: local.preferences, cloudValue: cloud.preferences, updatedAt: local.preferences.updatedAt });
+    conflicts.push({ collection: "preferences", localId: "preferences", localValue: local.preferences, cloudValue: cloud.preferences, updatedAt: local.preferences.updatedAt, localDeviceId: local.deviceId, cloudDeviceId: cloud.deviceId });
   }
   return conflicts;
+}
+
+export function isSameDeviceCloudConflict(conflict: CloudDataConflict) {
+  return Boolean(conflict.localDeviceId && conflict.cloudDeviceId && conflict.localDeviceId === conflict.cloudDeviceId);
+}
+
+export function actionableCloudConflicts(conflicts: CloudDataConflict[]) {
+  return conflicts.filter(conflict => !isSameDeviceCloudConflict(conflict));
 }
 
 /** Resolve only after an explicit user choice and advance the clock so the

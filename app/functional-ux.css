@@ -27,6 +27,8 @@
 .personalLiveCompact .personalCompactCard span{font-size:13px;line-height:1.4}
 .personalLiveCompact .personalCompactCard strong{font-size:13px}
 .personalLiveCompact .personalCompactCard small{align-self:center}
+.personalCompactTotal{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:8px;padding-top:10px;border-top:1px solid var(--line);font-size:13px;font-weight:850}
+.ballFriendScoreResult{margin-top:8px;padding:8px 10px;border-radius:10px;background:var(--soft);font-size:13px;font-weight:850}
 .holeSummaryBackdrop .holeSummary{width:min(100%,480px);max-height:calc(100dvh - 112px - env(safe-area-inset-top) - env(safe-area-inset-bottom));padding:0;overflow:hidden}
 .holeSummaryContent{min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:16px 54px 18px 16px;-webkit-overflow-scrolling:touch}
 .holeSummary h2{margin:0 0 10px;font-size:16px;line-height:1.35;text-transform:uppercase;color:#fff}

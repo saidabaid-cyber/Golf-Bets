@@ -3,9 +3,30 @@ export function initialNumericCapture(value: number | null | undefined, emptyWhe
   return String(value);
 }
 
+/** Keeps the editing buffer human-friendly without turning intermediate input
+ * into application state. iOS can show its complete keyboard while the final
+ * value remains strictly numeric. */
+export function normalizeNumericCaptureText(raw: string) {
+  const compact = raw.replace(/\s/g, "");
+  const sign = /^[+-]/.test(compact) ? compact[0] : "";
+  const body = compact.replace(/[+-]/g, "");
+  let separator = false;
+  let normalized = "";
+  for (const character of body) {
+    if (/\d/.test(character)) normalized += character;
+    else if ((character === "." || character === ",") && !separator) {
+      normalized += character;
+      separator = true;
+    }
+  }
+  return sign + normalized;
+}
+
 export function parseNumericCapture(raw: string) {
   if (raw.trim() === "") return null;
-  const value = Number(raw);
+  const normalized = normalizeNumericCaptureText(raw).replace(",", ".");
+  if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(normalized)) return null;
+  const value = Number(normalized);
   return Number.isFinite(value) ? value : null;
 }
 

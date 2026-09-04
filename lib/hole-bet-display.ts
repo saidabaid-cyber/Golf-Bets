@@ -72,3 +72,12 @@ export function ballFriendSetupChipLabel(ballFriend: BallFriendHole | undefined,
   const name = (id: string) => players.find(player => player.id === id)?.name || "Sin nombre";
   return `⚪🤝 ${ballFriend.teamA.map(name).join("/")} vs ${teamB.map(name).join("/")}`;
 }
+
+export function ballFriendScoreResult(
+  detail: { pointDiff: number },
+  value: number,
+) {
+  if (detail.pointDiff === 0) return "🤝 Bola Amiga · Empate · $0";
+  const team = detail.pointDiff > 0 ? "Equipo 1" : "Equipo 2";
+  return `🤝 Bola Amiga · Ganó ${team} · ${pesos(Math.abs(detail.pointDiff) * value)} por jugador`;
+}
