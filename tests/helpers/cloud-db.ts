@@ -4,6 +4,7 @@ type Row = Record<string, unknown>;
 export class CloudDb {
   tables: Record<string, Row[]> = {};
   calls: Array<{ table: string; op: string }> = [];
+  extendedSchema = true;
   fail?: (table: string, op: string, payload: Row[]) => boolean;
   before?: (table: string, op: string) => void;
   seq = 0;
@@ -31,11 +32,18 @@ class Query {
   async execute() {
     this.db.calls.push({ table: this.table, op: this.op }); this.db.before?.(this.table, this.op);
     const knownColumns: Record<string, Set<string>> = {
-      round_scores_cloud: new Set(["round_player_id", "hole", "score", "updated_at", "version", "updated_by_device"]),
+      round_scores_cloud: new Set(this.db.extendedSchema
+        ? ["round_player_id", "hole", "score", "updated_at", "version", "updated_by_device"]
+        : ["round_player_id", "hole", "score"]),
     };
     const selected = this.selectedColumns === "*" ? [] : this.selectedColumns.split(",").map(column => column.trim());
     const invalid = knownColumns[this.table] && selected.find(column => !knownColumns[this.table].has(column));
     if (invalid) return { error: Object.assign(new Error(`column ${this.table}.${invalid} does not exist`), { code: "42703" }), data: null };
+    const invalidPayload = knownColumns[this.table] && this.payload.flatMap(row => Object.keys(row)).find(column => !knownColumns[this.table].has(column));
+    if (invalidPayload) return { error: Object.assign(new Error(`column ${this.table}.${invalidPayload} does not exist`), { code: "PGRST204" }), data: null };
+    if (!this.db.extendedSchema && ["user_devices", "cloud_record_versions"].includes(this.table)) {
+      return { error: Object.assign(new Error(`table ${this.table} does not exist`), { code: "PGRST205" }), data: null };
+    }
     if (this.db.fail?.(this.table, this.op, this.payload)) return { error: new Error("Injected Supabase failure"), data: null };
     const rows = this.db.rows(this.table), matches = rows.filter(row => this.filters.every(filter => filter(row)));
     const project = (row: Row) => selected.length ? Object.fromEntries(selected.map(column => [column, row[column]])) : row;

@@ -16,6 +16,27 @@ async function upsertRows(client: SupabaseClient, table: string, rows: Record<st
   for (const row of rows) await writeVersionedRow(client, table, { owner_id: row.owner_id, local_id: row.local_id }, row);
 }
 
+// Only an absent additive column means "legacy but usable". A missing core
+// table (42P01/PGRST205) is a real installation error and must remain visible.
+const LEGACY_SCHEMA_CODES = new Set(["42703", "PGRST204"]);
+
+/** The September 4 migration adds conflict/audit metadata, but the core cloud
+ * schema predates it. Probe one additive column so an existing installation
+ * keeps syncing complete snapshots while that non-destructive migration is
+ * awaiting administrative application. Permission/network errors remain hard
+ * failures and can never be mistaken for a legacy schema. */
+export async function supportsExtendedCloudSchema(client: SupabaseClient) {
+  const result = await client.from("round_scores_cloud").select("version").range(0, 0);
+  if (!result.error) return true;
+  const code = typeof result.error.code === "string" ? result.error.code : "";
+  if (LEGACY_SCHEMA_CODES.has(code)) return false;
+  throw result.error;
+}
+
+function withDevice(row: Record<string, unknown>, deviceId: string | null, extendedSchema: boolean) {
+  return extendedSchema ? { ...row, updated_by_device: deviceId } : row;
+}
+
 /** Compare-and-swap protects the read→write window across Vercel instances.
  * A concurrent change or RLS's zero-row update is a recoverable error, NOT ack. */
 export async function writeVersionedRow(client: SupabaseClient, table: string, keys: Record<string, unknown>, row: Record<string, unknown>) {
@@ -69,9 +90,13 @@ async function readOwnedRows(client: SupabaseClient, table: string, userId: stri
   return { data: rows as unknown as Array<{ snapshot: unknown; entity_type: CloudEntityType; local_id: string; deleted_at: string }>, error: null };
 }
 
-async function applyTombstones(client: SupabaseClient, userId: string, tombstones: CloudTombstone[], deviceId: string | null = null) {
+async function applyTombstones(client: SupabaseClient, userId: string, tombstones: CloudTombstone[], deviceId: string | null = null, extendedSchema = true) {
   if (tombstones.length) {
-    const { error } = await client.from("cloud_deletions").upsert(tombstones.map((item) => ({ owner_id: userId, entity_type: item.entityType, local_id: item.localId, deleted_at: item.deletedAt, deleted_by_device: deviceId })), { onConflict: "owner_id,entity_type,local_id" });
+    const rows = tombstones.map((item) => {
+      const row = { owner_id: userId, entity_type: item.entityType, local_id: item.localId, deleted_at: item.deletedAt };
+      return extendedSchema ? { ...row, deleted_by_device: deviceId } : row;
+    });
+    const { error } = await client.from("cloud_deletions").upsert(rows, { onConflict: "owner_id,entity_type,local_id" });
     if (error) throw error;
   }
   const { data, error } = await readOwnedRows(client, "cloud_deletions", userId, "entity_type,local_id,deleted_at");
@@ -87,7 +112,7 @@ async function applyTombstones(client: SupabaseClient, userId: string, tombstone
   return all;
 }
 
-async function projectRoundSnapshots(client: SupabaseClient, userId: string, history: Record<string, unknown>[], deviceId: string | null) {
+async function projectRoundSnapshots(client: SupabaseClient, userId: string, history: Record<string, unknown>[], deviceId: string | null, extendedSchema: boolean) {
   if (!history.length) return;
   const ids = history.map(localId);
   const { data: cloudRounds, error } = await client.from("rounds_cloud").select("id,local_id").eq("owner_id", userId).in("local_id", ids);
@@ -100,13 +125,12 @@ async function projectRoundSnapshots(client: SupabaseClient, userId: string, his
     const { error: clearPlayersError } = await client.from("round_players_cloud").delete().eq("round_id", roundId);
     if (clearPlayersError) throw clearPlayersError;
     if (players.length) {
-      const { data: insertedPlayers, error: playersError } = await client.from("round_players_cloud").insert(players.map((player) => ({
+      const { data: insertedPlayers, error: playersError } = await client.from("round_players_cloud").insert(players.map((player) => withDevice({
         round_id: roundId,
         local_player_id: localId(player),
         name: String(player.name || "Jugador").slice(0, 120),
         handicap: player.handicap ?? null,
-        updated_by_device: deviceId,
-      }))).select("id,local_player_id");
+      }, deviceId, extendedSchema))).select("id,local_player_id");
       if (playersError || insertedPlayers?.length !== players.length) throw playersError || new Error("Jugadores no confirmados");
       const cloudPlayerByLocal = new Map((insertedPlayers || []).map((player) => [String(player.local_player_id), String(player.id)]));
       const scores = round.scores && typeof round.scores === "object" ? round.scores as Record<string, Record<string, unknown>> : {};
@@ -117,7 +141,7 @@ async function projectRoundSnapshots(client: SupabaseClient, userId: string, his
         for (const [playerLocalId, scoreValue] of Object.entries(playerScores)) {
           const score = Number(scoreValue);
           const cloudPlayerId = cloudPlayerByLocal.get(playerLocalId);
-          if (cloudPlayerId && Number.isInteger(score) && score >= 1 && score <= 20) scoreRows.push({ round_player_id: cloudPlayerId, hole, score, updated_by_device: deviceId });
+          if (cloudPlayerId && Number.isInteger(score) && score >= 1 && score <= 20) scoreRows.push(withDevice({ round_player_id: cloudPlayerId, hole, score }, deviceId, extendedSchema));
         }
       }
       if (scoreRows.length) {
@@ -141,7 +165,7 @@ async function projectRoundSnapshots(client: SupabaseClient, userId: string, his
       ["round_local_rules_snapshots", "local_rules", (round.courseSnapshot as { localRules?: unknown } | undefined)?.localRules || []],
     ] as const;
     for (const [table, column, value] of projections) {
-      const { data: projection, error: projectionError } = await client.from(table).upsert({ round_id: roundId, [column]: value, updated_by_device: deviceId }).select("round_id");
+      const { data: projection, error: projectionError } = await client.from(table).upsert(withDevice({ round_id: roundId, [column]: value }, deviceId, extendedSchema)).select("round_id");
       if (projectionError || projection?.length !== 1) throw projectionError || new Error("Proyección no confirmada");
     }
   }
@@ -203,14 +227,19 @@ export async function writeCloudBundle(client: SupabaseClient, userId: string, b
     return "sync_failed";
   };
 
+  let extendedSchema = false;
   try {
-    const { error: requestError } = await client.from("account_data_migrations").upsert({ user_id: userId, local_fingerprint: body.fingerprint.slice(0, 160), status: "requested", updated_at: now, last_attempt_at: now, last_error_code: null }, { onConflict: "user_id,local_fingerprint" });
+    extendedSchema = await supportsExtendedCloudSchema(client);
+    const requestRow: Record<string, unknown> = extendedSchema
+      ? { user_id: userId, local_fingerprint: body.fingerprint.slice(0, 160), status: "requested", updated_at: now, last_attempt_at: now, last_error_code: null }
+      : { user_id: userId, local_fingerprint: body.fingerprint.slice(0, 160), status: "requested", updated_at: now };
+    const { error: requestError } = await client.from("account_data_migrations").upsert(requestRow, { onConflict: "user_id,local_fingerprint" });
     if (requestError) throw requestError;
-    if (deviceId) {
+    if (extendedSchema && deviceId) {
       const device = await client.from("user_devices").upsert({ user_id: userId, device_id: deviceId, last_seen_at: now, last_sync_at: now }, { onConflict: "user_id,device_id" }).select("device_id");
       if (device.error || device.data?.length !== 1) throw device.error || new Error("El dispositivo no fue confirmado por Supabase");
     }
-    const allTombstones = await applyTombstones(client, userId, validTombstones(body.data.tombstones), deviceId);
+    const allTombstones = await applyTombstones(client, userId, validTombstones(body.data.tombstones), deviceId, extendedSchema);
     const deleted = new Set(allTombstones.map((item) => `${item.entityType}:${item.localId}`));
     history = history.filter((item) => !deleted.has(`round:${localId(item)}`));
     players = players.filter((item) => !deleted.has(`frequent_player:${localId(item)}`));
@@ -218,11 +247,11 @@ export async function writeCloudBundle(client: SupabaseClient, userId: string, b
     rivals = rivals.filter((item) => !deleted.has(`rival:${localId(item)}`));
     courses = courses.filter((item) => !deleted.has(`course:${localId(item)}`));
     const writes = await Promise.allSettled([
-      upsertRows(client, "rounds_cloud", history.map((round) => ({ owner_id: userId, local_round_id: localId(round), local_id: localId(round), snapshot: round, updated_at: String(round.updatedAt || round.completedAt || round.date || new Date(0).toISOString()), updated_by_device: deviceId }))),
-      upsertRows(client, "players", players.map((player) => ({ owner_id: userId, local_id: localId(player), name: String(player.name || "Jugador").slice(0, 120), handicap: player.handicap ?? 0, usage_count: Number(player.uses) || 0, snapshot: player, updated_at: String(player.updatedAt || new Date(0).toISOString()), updated_by_device: deviceId }))),
-      upsertRows(client, "frequent_groups_cloud", groups.map((group) => ({ owner_id: userId, local_id: localId(group), name: String(group.name || "Grupo").slice(0, 160), snapshot: group, updated_at: String(group.updatedAt || new Date(0).toISOString()), updated_by_device: deviceId }))),
-      upsertRows(client, "personal_rivals_cloud", rivals.map((rival) => ({ owner_id: userId, local_id: localId(rival), name: String(rival.name || "Rival").slice(0, 120), snapshot: rival, updated_at: String(rival.updatedAt || new Date(0).toISOString()), updated_by_device: deviceId }))),
-      upsertRows(client, "courses_cloud", courses.map((course) => ({ owner_id: userId, local_id: localId(course), name: String(course.name || "Campo").slice(0, 160), snapshot: course, updated_at: String(course.updatedAt || new Date(0).toISOString()), updated_by_device: deviceId }))),
+      upsertRows(client, "rounds_cloud", history.map((round) => withDevice({ owner_id: userId, local_round_id: localId(round), local_id: localId(round), snapshot: round, updated_at: String(round.updatedAt || round.completedAt || round.date || new Date(0).toISOString()) }, deviceId, extendedSchema))),
+      upsertRows(client, "players", players.map((player) => withDevice({ owner_id: userId, local_id: localId(player), name: String(player.name || "Jugador").slice(0, 120), handicap: player.handicap ?? 0, usage_count: Number(player.uses) || 0, snapshot: player, updated_at: String(player.updatedAt || new Date(0).toISOString()) }, deviceId, extendedSchema))),
+      upsertRows(client, "frequent_groups_cloud", groups.map((group) => withDevice({ owner_id: userId, local_id: localId(group), name: String(group.name || "Grupo").slice(0, 160), snapshot: group, updated_at: String(group.updatedAt || new Date(0).toISOString()) }, deviceId, extendedSchema))),
+      upsertRows(client, "personal_rivals_cloud", rivals.map((rival) => withDevice({ owner_id: userId, local_id: localId(rival), name: String(rival.name || "Rival").slice(0, 120), snapshot: rival, updated_at: String(rival.updatedAt || new Date(0).toISOString()) }, deviceId, extendedSchema))),
+      upsertRows(client, "courses_cloud", courses.map((course) => withDevice({ owner_id: userId, local_id: localId(course), name: String(course.name || "Campo").slice(0, 160), snapshot: course, updated_at: String(course.updatedAt || new Date(0).toISOString()) }, deviceId, extendedSchema))),
     ]);
     const failed = writes.find(result => result.status === "rejected");
     if (failed?.status === "rejected") throw failed.reason;
@@ -231,37 +260,44 @@ export async function writeCloudBundle(client: SupabaseClient, userId: string, b
     const canonical = await readCloudBundle(client, userId);
     const requestedIds = new Set(history.map(localId));
     const toProject = canonical.history.filter(round => requestedIds.has(round.id));
-    await projectRoundSnapshots(client, userId, toProject as unknown as Record<string, unknown>[], deviceId);
+    await projectRoundSnapshots(client, userId, toProject as unknown as Record<string, unknown>[], deviceId, extendedSchema);
     const afterProjection = await readCloudBundle(client, userId);
     if (toProject.some(round => JSON.stringify(afterProjection.history.find(other => other.id === round.id)) !== JSON.stringify(round))) throw new Error("La ronda cambió durante la proyección. Reintenta.");
     const preferences = body.data.preferences;
-    await writeVersionedRow(client, "user_preferences", { user_id: userId }, {
+    await writeVersionedRow(client, "user_preferences", { user_id: userId }, withDevice({
       user_id: userId,
       high_contrast: Boolean(preferences?.highContrast),
       locale: typeof preferences?.language === "string" ? preferences.language.slice(0, 12) : "es-MX",
       notifications_enabled: Boolean(preferences?.notificationsEnabled),
       default_handicap: preferences?.defaultHandicap ?? null,
       updated_at: preferences?.updatedAt || new Date(0).toISOString(),
-      updated_by_device: deviceId,
-    });
-    await writeVersionedRow(client, "user_cloud_state", { user_id: userId }, { user_id: userId, active_draft: body.data.activeDraft ?? null, updated_at: body.data.activeDraftUpdatedAt || new Date(0).toISOString(), updated_by_device: deviceId });
+    }, deviceId, extendedSchema));
+    await writeVersionedRow(client, "user_cloud_state", { user_id: userId }, withDevice({ user_id: userId, active_draft: body.data.activeDraft ?? null, updated_at: body.data.activeDraftUpdatedAt || new Date(0).toISOString() }, deviceId, extendedSchema));
     // A deletion can arrive after the first read. Sweep again; GET also filters
     // permanent tombstones so a concurrent stale insert is never resurrected UI.
     await applyTombstones(client, userId, []);
-    const { error: migrationError } = await client.from("account_data_migrations").upsert({
+    const completedRow: Record<string, unknown> = {
       user_id: userId,
       local_fingerprint: body.fingerprint.slice(0, 160),
       status: "completed",
       imported_round_ids: history.map(localId),
       updated_at: now,
-      last_attempt_at: now,
-      last_error_code: null,
-    }, { onConflict: "user_id,local_fingerprint" });
+      ...(extendedSchema ? { last_attempt_at: now, last_error_code: null } : {}),
+    };
+    const { error: migrationError } = await client.from("account_data_migrations").upsert(completedRow, { onConflict: "user_id,local_fingerprint" });
     if (migrationError) throw migrationError;
     return { ok: true, fingerprint: body.fingerprint };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "No fue posible sincronizar los datos.";
-    try { await client.from("account_data_migrations").upsert({ user_id: userId, local_fingerprint: body.fingerprint.slice(0, 160), status: "failed", updated_at: now, last_attempt_at: now, last_error_code: diagnosticCode(error) }, { onConflict: "user_id,local_fingerprint" }); } catch { /* Original failure remains visible even if its diagnostic write fails. */ }
-    throw new Error(message);
+    const failedRow: Record<string, unknown> = {
+      user_id: userId,
+      local_fingerprint: body.fingerprint.slice(0, 160),
+      status: "failed",
+      updated_at: now,
+      ...(extendedSchema ? { last_attempt_at: now, last_error_code: diagnosticCode(error) } : {}),
+    };
+    try { await client.from("account_data_migrations").upsert(failedRow, { onConflict: "user_id,local_fingerprint" }); } catch { /* Original failure remains visible even if its diagnostic write fails. */ }
+    // Preserve PostgREST's safe code/status for server diagnostics. Wrapping
+    // the object as a generic Error erased 42703/42501 from real Preview logs.
+    throw error;
   }
 }

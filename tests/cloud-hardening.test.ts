@@ -247,3 +247,32 @@ test("proyección de scores usa la clave compuesta real y nunca consulta una col
   assert.doesNotMatch(source, /from\("round_scores_cloud"\)[\s\S]{0,160}select\("id"\)/);
   assert.match(source, /select\("round_player_id,hole"\)/);
 });
+
+test("esquema cloud anterior sincroniza ronda completa sin columnas aditivas ni éxito local falso", async () => {
+  const db = new CloudDb();
+  db.extendedSchema = false;
+  const players = ["Said", "Flavio"].map((name, index) => ({ id: `legacy-p${index}`, name, handicap: index * 5 }));
+  const scores = Object.fromEntries(Array.from({ length: 18 }, (_, index) => [index + 1, Object.fromEntries(players.map((player, playerIndex) => [player.id, 3 + (index + playerIndex) % 4]))]));
+  const snapshot = { ...round(), id: "legacy-round", players, scores, updatedAt: later };
+  const data = bundle({ deviceId: "device-phone", history: [snapshot] });
+  await write(db, data);
+  await write(db, data);
+  assert.equal(db.rows("rounds_cloud").length, 1);
+  assert.equal(db.rows("round_players_cloud").length, 2);
+  assert.equal(db.rows("round_scores_cloud").length, 36);
+  assert.equal(db.rows("account_data_migrations")[0].status, "completed");
+  assert.equal(db.calls.some(call => call.table === "user_devices"), false);
+  for (const table of ["rounds_cloud", "round_players_cloud", "round_scores_cloud", "round_bet_configs", "round_bet_results", "user_preferences", "user_cloud_state"]) {
+    assert.equal(db.rows(table).some(row => Object.hasOwn(row, "updated_by_device")), false, `${table} no debe recibir columnas nuevas`);
+  }
+  assert.deepEqual((await readCloudBundle(db.client, "user-a")).history, [snapshot]);
+});
+
+test("un error PostgREST conserva su código para diagnóstico seguro del Preview", async () => {
+  const source = await import("node:fs/promises").then(fs => fs.readFile("lib/cloud-sync-service.ts", "utf8"));
+  assert.match(source, /throw error;/);
+  assert.doesNotMatch(source, /throw new Error\(message\)/);
+  const route = await import("node:fs/promises").then(fs => fs.readFile("app/api/cloud/sync/route.ts", "utf8"));
+  assert.match(route, /candidate\.code/);
+  assert.doesNotMatch(route, /console\.error\([^\n]*(message|token|body)/);
+});

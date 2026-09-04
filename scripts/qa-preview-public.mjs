@@ -64,6 +64,16 @@ try {
     console.log(JSON.stringify({ check: 'anon-read', table, status: response.status, rows, errorCode: data?.code }));
     if (table !== 'tournament_leaderboard_events') assert.ok(!rows, `Anonymous rows exposed in ${table}`);
   }
+  for (const [table, columns] of [
+    ['profiles', 'id,onboarding_completed_at,version,updated_by_device'],
+    ['round_scores_cloud', 'round_player_id,hole,version,updated_by_device'],
+    ['account_data_migrations', 'user_id,last_attempt_at,last_error_code'],
+    ['user_devices', 'user_id,device_id,last_sync_at'],
+    ['cloud_record_versions', 'owner_id,entity_type,local_id,version'],
+  ]) {
+    const { response, data } = await supabaseRead(`/rest/v1/${table}?select=${columns}&limit=1`);
+    console.log(JSON.stringify({ check: 'schema-shape', table, status: response.status, errorCode: data?.code }));
+  }
   for (const [fn, body] of [['resolve_polla_access', { p_token: 'qa-not-a-real-token' }], ['is_polla_admin', { p_tournament_id: '00000000-0000-0000-0000-000000000000' }]]) {
     const { response, data } = await supabaseRead(`/rest/v1/rpc/${fn}`, { method: 'POST', body: JSON.stringify(body) });
     console.log(JSON.stringify({ check: 'anon-rpc', fn, status: response.status, errorCode: data?.code }));
