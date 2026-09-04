@@ -1,4 +1,4 @@
-import type { BallFriendHole, LobaHole } from "./types";
+import type { BallFriendHole, LobaHole, Player } from "./types";
 
 export type SkinHoleEvent = {
   winnerId?: string;
@@ -52,4 +52,23 @@ export function playerHoleBetLabels(
   }
 
   return labels;
+}
+
+export function lobaSetupChipLabel(loba: LobaHole | undefined, players: Player[]) {
+  const lobaPlayer = players.find(player => player.id === loba?.lobaPlayerId);
+  if (!lobaPlayer || !loba?.mode) return "🐺 Elegir Loba";
+  if (loba.mode === "partner") {
+    const partner = players.find(player => player.id === loba.partnerId);
+    return partner ? `🐺 ${lobaPlayer.name} + ${partner.name}` : "🐺 Elegir Loba";
+  }
+  return `🐺 ${lobaPlayer.name} · ${loba.mode === "solo_anticipated" ? "Sola anticipada" : "Va sola"}`;
+}
+
+export function ballFriendSetupChipLabel(ballFriend: BallFriendHole | undefined, players: Player[], participantIds: string[]) {
+  if (!ballFriend || ballFriend.teamA.length !== 2) return "⚪🤝 Elegir Bola Amiga";
+  const activeIds = participantIds.filter(id => id !== ballFriend.restPlayerId);
+  const teamB = activeIds.filter(id => !ballFriend.teamA.includes(id));
+  if (activeIds.length !== 4 || teamB.length !== 2) return "⚪🤝 Elegir Bola Amiga";
+  const name = (id: string) => players.find(player => player.id === id)?.name || "Sin nombre";
+  return `⚪🤝 ${ballFriend.teamA.map(name).join("/")} vs ${teamB.map(name).join("/")}`;
 }

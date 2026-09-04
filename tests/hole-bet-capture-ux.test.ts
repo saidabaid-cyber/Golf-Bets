@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { calculateBallFriend, calculateSkins } from "../lib/engine";
-import { playerHoleBetLabels, skinHoleNotice } from "../lib/hole-bet-display";
+import { ballFriendSetupChipLabel, lobaSetupChipLabel, playerHoleBetLabels, skinHoleNotice } from "../lib/hole-bet-display";
 import { calculateLoba } from "../lib/side-bets";
 import type { BetConfig, Course, HoleScore, LobaHole, Player } from "../lib/types";
 
@@ -45,15 +45,23 @@ const ballFriendConfig: BetConfig["ballFriend"] = {
 };
 const ballFriendHole = { teamA: ["said", "abel"], restPlayerId: "daniel" };
 
-test("Loba y Bola Amiga se renderizan una sola vez antes de la tarjeta de scores", () => {
+test("la tarjeta de scores queda antes del estado previo y contiene accesos compactos sin paneles grandes", () => {
   const page = readFileSync("app/page.tsx", "utf8");
-  const setup = page.indexOf("Apuestas de este hoyo");
   const scorecard = page.indexOf('<section className="card scoreCard">');
-  assert.ok(setup >= 0 && scorecard > setup);
+  const priorStatus = page.indexOf('<section className="card compact priorBetStatus"');
+  const editor = page.indexOf('{holeBetEditor && <div className="modalBackdrop');
+  assert.ok(scorecard >= 0 && priorStatus > scorecard && editor > priorStatus);
+  assert.match(page.slice(scorecard, priorStatus), /scoreBetQuickSetup/);
   assert.equal((page.match(/<LobaHolePanel config=/g) || []).length, 1);
   assert.equal((page.match(/<BallFriendHolePanel config=/g) || []).length, 1);
-  assert.doesNotMatch(page, /scoreCaptureComplete && bets\.ballFriend\.enabled/);
-  assert.doesNotMatch(page, /scoreCaptureComplete[\s\S]{0,120}<LobaHolePanel/);
+  assert.doesNotMatch(page.slice(0, scorecard), /<LobaHolePanel|<BallFriendHolePanel/);
+});
+
+test("accesos compactos resumen Loba y Bola Amiga configuradas", () => {
+  assert.equal(lobaSetupChipLabel(undefined, players), "🐺 Elegir Loba");
+  assert.equal(lobaSetupChipLabel(lobaHole, players), "🐺 Said + Abel");
+  assert.equal(ballFriendSetupChipLabel(undefined, players, players.map(player => player.id)), "⚪🤝 Elegir Bola Amiga");
+  assert.equal(ballFriendSetupChipLabel(ballFriendHole, players, players.map(player => player.id)), "⚪🤝 Said/Abel vs Bringas/Pepe Lalo");
 });
 
 test("etiquetas por jugador reflejan Loba, pareja, equipos y descanso antes de capturar", () => {
