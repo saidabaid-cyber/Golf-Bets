@@ -11,13 +11,27 @@ test("refrescar token o repetir SIGNED_IN de la misma cuenta no reinicia onboard
   const provider = readFileSync("app/components/account-provider.tsx", "utf8");
   assert.match(provider, /authIdentityChanged\(activeUserId\.current, session\.user\.id\)/);
   assert.ok(provider.indexOf("authIdentityChanged(activeUserId.current") < provider.indexOf("setProfileChecked(false)"));
+  const sameIdentityStart = provider.indexOf("if (!authIdentityChanged(activeUserId.current, session.user.id))");
+  const sameIdentityEnd = provider.indexOf("switchAccountWorkspace(localStorage, session.user.id)", sameIdentityStart);
+  const sameIdentityBranch = provider.slice(sameIdentityStart, sameIdentityEnd);
+  assert.match(sameIdentityBranch, /setCloudIssue\("auth", null\)/);
+  assert.match(sameIdentityBranch, /setAccountReloadRevision/);
+  assert.match(sameIdentityBranch, /setLegalRetryRevision/);
+  assert.match(sameIdentityBranch, /backyard-sync-retry/);
+});
+
+test("Reintentar conexión renueva y valida sesión antes de rehidratar nube", () => {
+  const provider = readFileSync("app/components/account-provider.tsx", "utf8");
+  assert.match(provider, /recoverAuthSession\(supabase\.auth, \{ forceRefresh: true \}\)/);
+  assert.match(provider, /activateSession\(session, \{ rehydrate: true \}\)/);
+  assert.doesNotMatch(provider, /accountCloudError\s*\|\|\s*legalCloudError\s*\|\|\s*syncCloudError/);
 });
 
 test("un fallo de perfil no se interpreta como perfil inexistente ni menciona migraciones", () => {
   const provider = readFileSync("app/components/account-provider.tsx", "utf8");
   const account = readFileSync("lib/cloud-account.ts", "utf8");
   const route = readFileSync("app/api/cloud/sync/route.ts", "utf8");
-  assert.match(provider, /Sin conexión · estamos usando el perfil guardado/);
+  assert.match(provider, /Trabajando sin conexión · estamos usando el perfil guardado/);
   assert.match(provider, /setProfileSetupRequired\(false\)/);
   assert.doesNotMatch(account, /revisa la conexión y las migraciones/i);
   assert.doesNotMatch(route, /Aplica las migraciones pendientes|Falta aplicar la migración/i);

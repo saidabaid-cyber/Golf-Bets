@@ -75,7 +75,7 @@ import { buildHoleSummary, clearActiveRoundStorage, hasRoundProgress, historical
 import { monkeyHoleSummary, personalHoleSummary } from "../lib/personal-summary";
 import { downloadRoundCsv, downloadRoundImage, downloadRoundPdf, shareRound } from "../lib/round-export";
 import { deleteScorecardPhoto, deleteScorecardPhotoCloud, readScorecardPhoto, readScorecardPhotoCloud, saveScorecardPhoto, uploadScorecardPhotoCloud } from "../lib/scorecard-photo";
-import { CLOUD_TOMBSTONES_KEY, cloudDataFingerprint, collectLocalCloudData, downloadCloudData, findAmbiguousCloudConflicts, persistCloudMetadata, resolveAmbiguousCloudConflicts, restoreLocalRoundUi, stableValue, trackLocalCloudEdits, type CloudDataBundle, type CloudDataConflict, recordCloudDeletion, uploadCloudData } from "../lib/cloud-sync";
+import { CLOUD_TOMBSTONES_KEY, cloudDataFingerprint, collectLocalCloudData, downloadCloudData, findAmbiguousCloudConflicts, isCloudFieldConflict, mergeLocalAndCloud, persistCloudMetadata, resolveAmbiguousCloudConflicts, restoreLocalRoundUi, stableValue, trackLocalCloudEdits, type CloudDataBundle, type CloudDataConflict, recordCloudDeletion, uploadCloudData } from "../lib/cloud-sync";
 import { ownsLocalWorkspace, preserveDataConflicts, preserveDraftConflict } from "../lib/account-workspace";
 import { runCloudSyncCycle } from "../lib/cloud-sync-cycle";
 import { CloudSyncGate, cloudSyncErrorMessage, syncStatusAfterSkip, type CloudSyncTrigger } from "../lib/cloud-sync-gate";
@@ -340,7 +340,7 @@ function MoneyInput({ label, value, onChange }: { label: string; value: number; 
 }
 
 function GolfBetsApp() {
-  const { identity, cloudLinked, cloudStatus, setCloudStatus, applyCloudPreferences, reportCloudSyncError, clearCloudSyncError } = useBackyardAccount();
+  const { identity, cloudLinked, cloudStatus, cloudIssues, setCloudStatus, applyCloudPreferences, reportCloudSyncError, clearCloudSyncError } = useBackyardAccount();
   const { tab, setTab, goBack } = useScreenNavigation();
   const [rulesVisited, setRulesVisited] = useState(false);
   useEffect(() => { if (tab === "rules") setRulesVisited(true); }, [tab]);
@@ -601,6 +601,37 @@ function GolfBetsApp() {
     };
   }, [hydrated]);
 
+  const applyCloudBundle = useCallback((data: CloudDataBundle, local: CloudDataBundle) => {
+    const changed = (left: unknown, right: unknown) => JSON.stringify(stableValue(left)) !== JSON.stringify(stableValue(right));
+    if (changed(local.activeDraft, data.activeDraft)) {
+      preserveDraftConflict(localStorage, local.activeDraft);
+      applyDraft(data.activeDraft, { preserveLocalUi: true });
+      setFeedback("Ronda actualizada desde la nube. La versión local anterior se conservó en este dispositivo.");
+    }
+    const mergedCourses = mergeDefaultCourses(data.courses);
+    if (changed(local.courses, data.courses)) setCourses(mergedCourses);
+    if (changed(local.history, data.history)) setHistory(data.history.map(round => ({ ...round, expenses: normalizeExpenses(round.expenses) })));
+    if (changed(local.rivals, data.rivals)) setSavedPersonalRivals(data.rivals);
+    if (changed(local.frequentPlayers, data.frequentPlayers)) setFrequentPlayers(data.frequentPlayers);
+    if (changed(local.frequentGroups, data.frequentGroups)) setFrequentGroups(data.frequentGroups);
+    setHighContrast(data.preferences.highContrast);
+    applyCloudPreferences(data.preferences);
+    localStorage.setItem(STORAGE_KEYS.courses, JSON.stringify(mergedCourses));
+    localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(data.history));
+    localStorage.setItem(STORAGE_KEYS.rivals, JSON.stringify(data.rivals));
+    localStorage.setItem(STORAGE_KEYS.frequentPlayers, JSON.stringify(data.frequentPlayers));
+    localStorage.setItem(STORAGE_KEYS.frequentGroups, serializeFrequentGroups(data.frequentGroups));
+    localStorage.setItem(STORAGE_KEYS.contrast, String(data.preferences.highContrast));
+    const localDraftWithNavigation = restoreLocalRoundUi(data.activeDraft, { currentIndex: currentIndexRef.current });
+    localStorage.setItem(STORAGE_KEYS.draft, JSON.stringify(localDraftWithNavigation));
+    localStorage.setItem(CLOUD_TOMBSTONES_KEY, JSON.stringify(data.tombstones));
+    persistCloudMetadata(localStorage, data);
+    hadLocalPreferences.current = true;
+    const applied = collectLocalCloudData(localStorage, data.preferences.defaultHandicap, true);
+    applied.deviceId = offlineDeviceId.current;
+    return cloudDataFingerprint(applied);
+  }, [applyCloudPreferences, applyDraft]);
+
   useEffect(() => {
     if (!hydrated || identity.mode !== "authenticated" || !cloudLinked) return;
     const userId = identity.userId;
@@ -613,7 +644,7 @@ function GolfBetsApp() {
     const debug = (event: string, trigger?: CloudSyncTrigger) => {
       if (process.env.NODE_ENV === "development") console.info("[cloud-sync]", event, { trigger, user: userId.slice(0, 8) });
     };
-    const current = () => !cancelled && ownsLocalWorkspace(localStorage, userId) && liveIdentity.current.userId === userId;
+    const current = () => !cancelled && ownsLocalWorkspace(localStorage, userId) && liveIdentity.current.userId === userId && Boolean(liveIdentity.current.accessToken);
     const read = () => {
       if (!flushLocalState.current?.()) throw new Error("No se pudo guardar el estado local; no se enviaron datos incompletos.");
       const data = collectLocalCloudData(localStorage, liveIdentity.current.defaultHandicap, hadLocalPreferences.current);
@@ -680,36 +711,7 @@ function GolfBetsApp() {
               remove: roundId => deleteScorecardPhotoCloud(userId, roundId),
             }, current);
           },
-          apply: (data: CloudDataBundle) => {
-            const local = read();
-            const changed = (a: unknown, b: unknown) => JSON.stringify(stableValue(a)) !== JSON.stringify(stableValue(b));
-            if (changed(local.activeDraft, data.activeDraft)) {
-              preserveDraftConflict(localStorage, local.activeDraft);
-              applyDraft(data.activeDraft, { preserveLocalUi: true });
-              setFeedback("Ronda actualizada desde la nube. La versión local anterior se conservó en este dispositivo.");
-            }
-            const mergedCourses = mergeDefaultCourses(data.courses);
-            if (changed(local.courses, data.courses)) setCourses(mergedCourses);
-            if (changed(local.history, data.history)) setHistory(data.history.map(round => ({ ...round, expenses: normalizeExpenses(round.expenses) })));
-            if (changed(local.rivals, data.rivals)) setSavedPersonalRivals(data.rivals);
-            if (changed(local.frequentPlayers, data.frequentPlayers)) setFrequentPlayers(data.frequentPlayers);
-            if (changed(local.frequentGroups, data.frequentGroups)) setFrequentGroups(data.frequentGroups);
-            setHighContrast(data.preferences.highContrast); applyCloudPreferences(data.preferences);
-            localStorage.setItem(STORAGE_KEYS.courses, JSON.stringify(mergedCourses));
-            localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(data.history));
-            localStorage.setItem(STORAGE_KEYS.rivals, JSON.stringify(data.rivals));
-            localStorage.setItem(STORAGE_KEYS.frequentPlayers, JSON.stringify(data.frequentPlayers));
-            localStorage.setItem(STORAGE_KEYS.frequentGroups, serializeFrequentGroups(data.frequentGroups));
-            localStorage.setItem(STORAGE_KEYS.contrast, String(data.preferences.highContrast));
-            const localDraftWithNavigation = restoreLocalRoundUi(data.activeDraft, { currentIndex: currentIndexRef.current });
-            localStorage.setItem(STORAGE_KEYS.draft, JSON.stringify(localDraftWithNavigation));
-            localStorage.setItem(CLOUD_TOMBSTONES_KEY, JSON.stringify(data.tombstones));
-            persistCloudMetadata(localStorage, data);
-            hadLocalPreferences.current = true;
-            const applied = collectLocalCloudData(localStorage, data.preferences.defaultHandicap, true);
-            applied.deviceId = offlineDeviceId.current;
-            appliedFingerprint = cloudDataFingerprint(applied);
-          },
+          apply: (data: CloudDataBundle) => { appliedFingerprint = applyCloudBundle(data, read()); },
         });
         if (completed) {
           const confirmedFingerprint = appliedFingerprint || cloudDataFingerprint(read());
@@ -724,10 +726,36 @@ function GolfBetsApp() {
         }
       } catch (error) {
         gate.failure(fingerprint);
+        if (isCloudFieldConflict(error) && current()) {
+          try {
+            const local = read();
+            const cloud = await downloadCloudData(liveIdentity.current.accessToken || "");
+            const discovered = findAmbiguousCloudConflicts(local, cloud);
+            const conflicts = discovered.length ? discovered : error.conflicts;
+            if (conflicts.length) {
+              preserveDataConflicts(localStorage, conflicts);
+              setPendingCloudConflict({ local, cloud, conflicts });
+              reportCloudSyncError(error);
+              setFeedback("Encontramos cambios simultáneos solo en los datos indicados. Los demás cambios compatibles se conservaron.");
+              setCloudStatus("pending");
+              return;
+            }
+            // The write raced with a compatible field. Rebase on the latest
+            // canonical copy, keep local navigation, and retry immediately.
+            const rebased = mergeLocalAndCloud(local, cloud);
+            applyCloudBundle(rebased, local);
+            clearCloudSyncError();
+            setCloudStatus("pending");
+            window.setTimeout(() => window.dispatchEvent(new Event("backyard-sync-retry")), 0);
+            return;
+          } catch (recoveryError) {
+            if (current()) reportCloudSyncError(recoveryError);
+          }
+        }
         failedAttempts += 1;
         nextAutoAttemptAt = Date.now() + offlineRetryDelayMs(failedAttempts);
         const message = cloudSyncErrorMessage(error);
-        if (current() && message) reportCloudSyncError(message);
+        if (current() && message) reportCloudSyncError(error);
         if (current()) void markOfflineAttempt(userId, message || "Sincronización cancelada");
         debug("error", trigger);
       } finally {
@@ -759,7 +787,7 @@ function GolfBetsApp() {
       window.removeEventListener("backyard-sync-retry", onRetry);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [hydrated, identity.mode, identity.userId, cloudLinked, setCloudStatus, applyCloudPreferences, applyDraft, reportCloudSyncError, clearCloudSyncError]);
+  }, [hydrated, identity.mode, identity.userId, identity.accessToken, cloudLinked, setCloudStatus, applyCloudBundle, reportCloudSyncError, clearCloudSyncError]);
 
   useEffect(() => {
     requestCloudSync.current?.();
@@ -1729,7 +1757,7 @@ function GolfBetsApp() {
       <time dateTime={todayMexico}>{mexicoDateLabel(todayMexico)}</time>
       <h1>¿Listos para jugar?</h1>
       <p>Inicia una ronda nueva y configura jugadores, campo y apuestas.</p>
-      <div className="guestModeLine">{identity.mode === "guest" ? "Modo invitado · Los datos permanecen en este dispositivo" : `The Backyard Account · ${identity.displayName}`}</div>
+      <div className="guestModeLine">{identity.mode === "guest" ? "Modo invitado · Los datos permanecen en este dispositivo" : cloudIssues.some((issue) => issue.kind === "session_expired") ? `Perfil local · ${identity.displayName} · Vuelve a iniciar sesión para conectar la nube` : `The Backyard Account · ${identity.displayName}`}</div>
       <button className="primary big" onClick={resetRound}>Nueva ronda</button>
       <button className="secondary big groupsHomeButton" onClick={() => setTab("groups")}>Armar grupos</button>
       {draftAvailable && !roundClosed && <div className="activeRoundActions"><button className="secondary big" onClick={editActiveRound}>Editar ronda</button><button className="primary big" onClick={() => setTab(players.length ? "round" : "setup")}>Continuar ronda · H{order[currentIndex]}</button><button className="deleteRoundButton" onClick={() => setShowDeleteRoundConfirm(true)}>Eliminar ronda</button></div>}

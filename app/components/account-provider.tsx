@@ -26,11 +26,12 @@ import {
   type LegalAcceptance,
 } from "../../lib/account-state";
 import { getSupabaseBrowser } from "../../lib/supabase/client";
-import { authIdentityChanged, clearDeletedAuthSession, closeAuthSession, isAccountSession, requireCloudWrites, restoreAuthSession, sendEmailOtp, startSocialOAuth, verifyEmailOtp, OtpSendGate, otpRetrySeconds, OTP_COOLDOWN_KEY } from "../../lib/auth-flow";
+import { AuthSessionRecoveryError, authIdentityChanged, clearDeletedAuthSession, closeAuthSession, isAccountSession, recoverAuthSession, requireCloudWrites, restoreAuthSession, sendEmailOtp, startSocialOAuth, verifyEmailOtp, OtpSendGate, otpRetrySeconds, OTP_COOLDOWN_KEY } from "../../lib/auth-flow";
 import { discardAccountWorkspace, ownsLocalWorkspace, switchAccountWorkspace, WORKSPACE_OWNER_KEY } from "../../lib/account-workspace";
 import { CLOUD_LOCAL_META_KEY, type CloudPreferences } from "../../lib/cloud-sync";
 import { clearPendingLegalSync, legalSyncErrorMessage, markLegalSyncFailed, queueLegalSync, readPendingLegalSync } from "../../lib/legal-sync-queue";
 import type { AuthProviderStatus } from "../../lib/auth-provider-status";
+import { cloudIssueFromError, cloudIssuePriority, type CloudIssue, type CloudIssueDomain } from "../../lib/cloud-issues";
 import { BrandLockup } from "./brand-lockup";
 
 export type BackyardIdentity = BackyardProfile & {
@@ -51,9 +52,9 @@ type AccountContextValue = {
   setCloudStatus: (status: AccountContextValue["cloudStatus"]) => void;
   requestCloudLink: () => void;
   lastCloudSync: string | null;
-  cloudError: string;
-  retryCloudSync: () => void;
-  reportCloudSyncError: (message: string) => void;
+  cloudIssues: CloudIssue[];
+  retryCloudSync: () => void | Promise<void>;
+  reportCloudSyncError: (error: unknown) => void;
   clearCloudSyncError: () => void;
   applyCloudPreferences: (preferences: CloudPreferences) => void;
 };
@@ -294,17 +295,36 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const [profileSetupRequired, setProfileSetupRequired] = useState(false);
   const [profileChecked, setProfileChecked] = useState(false);
   const activeUserId = useRef<string | null>(null);
-  const [accountCloudError, setAccountCloudError] = useState("");
-  const [legalCloudError, setLegalCloudError] = useState("");
-  const [syncCloudError, setSyncCloudError] = useState("");
+  const [cloudIssuesByDomain, setCloudIssuesByDomain] = useState<Partial<Record<CloudIssueDomain, CloudIssue>>>({});
   const [legalRetryRevision, setLegalRetryRevision] = useState(0);
+  const [accountReloadRevision, setAccountReloadRevision] = useState(0);
   const cloudProfileFallback = useMemo(() => ({
     displayName: identity?.displayName || "Jugador",
     defaultHandicap: identity?.defaultHandicap ?? null,
     avatarUrl: identity?.avatarUrl || "",
   }), [identity?.displayName, identity?.defaultHandicap, identity?.avatarUrl]);
-  const reportCloudSyncError = useCallback((message: string) => setSyncCloudError(message), []);
-  const clearCloudSyncError = useCallback(() => setSyncCloudError(""), []);
+  const setCloudIssue = useCallback((domain: CloudIssueDomain, issue: CloudIssue | null) => {
+    setCloudIssuesByDomain((current) => {
+      if (!issue && !current[domain]) return current;
+      const next = { ...current };
+      if (issue) next[domain] = issue;
+      else delete next[domain];
+      return next;
+    });
+  }, []);
+  const issueWithMessage = useCallback((domain: CloudIssueDomain, message: string, kind: CloudIssue["kind"] = "server") => {
+    setCloudIssue(domain, message ? { domain, kind, message, retryable: kind !== "session_expired" } : null);
+  }, [setCloudIssue]);
+  const accountCloudError = cloudIssuesByDomain.auth?.message || cloudIssuesByDomain.profile?.message || "";
+  const reportCloudSyncError = useCallback((error: unknown) => {
+    const issue = cloudIssueFromError("round", error, navigator.onLine);
+    setCloudIssue(issue.domain, issue);
+  }, [setCloudIssue]);
+  const clearCloudSyncError = useCallback(() => {
+    setCloudIssue("round", null);
+    setCloudIssue("files", null);
+    setCloudIssue("conflict", null);
+  }, [setCloudIssue]);
   const setCloudStatus = useCallback((status: AccountContextValue["cloudStatus"]) => {
     setRawCloudStatus(status);
     if (status === "synced" && activeUserId.current) {
@@ -340,22 +360,27 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     if (identity?.mode === "authenticated") {
       const { displayName, defaultHandicap, avatarUrl, email } = identity;
       try { localStorage.setItem(`backyard-profile-cache-v1:${identity.userId}`, JSON.stringify({ displayName, defaultHandicap, avatarUrl, email })); }
-      catch { setAccountCloudError("No se pudo guardar el perfil local. Libera espacio y reintenta."); }
+      catch { issueWithMessage("profile", "No se pudo guardar el perfil local. Libera espacio y reintenta."); }
     }
-  }, [identity]);
+  }, [identity, issueWithMessage]);
 
-  const activateSession = useCallback((session: Session) => {
+  const activateSession = useCallback((session: Session, options: { rehydrate?: boolean } = {}) => {
     if (!isAccountSession(session)) throw new Error("account_session_missing");
     if (!authIdentityChanged(activeUserId.current, session.user.id)) {
       setIdentity((current) => current ? { ...current, accessToken: session.access_token, email: session.user.email || current.email } : current);
+      setCloudIssue("auth", null);
+      if (options.rehydrate !== false) {
+        setCloudStatus(navigator.onLine ? "pending" : "offline");
+        setAccountReloadRevision((value) => value + 1);
+        setLegalRetryRevision((value) => value + 1);
+        window.setTimeout(() => window.dispatchEvent(new Event("backyard-sync-retry")), 0);
+      }
       return;
     }
     switchAccountWorkspace(localStorage, session.user.id);
     activeUserId.current = session.user.id;
     setLastCloudSync(localStorage.getItem(`backyard-last-sync-v1:${session.user.id}`));
-    setAccountCloudError("");
-    setLegalCloudError("");
-    setSyncCloudError("");
+    setCloudIssuesByDomain({});
     const profile = profileFromUser(session.user);
     setIdentity({ ...profile, mode: "authenticated", providers: session.user.app_metadata?.providers || [session.user.app_metadata?.provider].filter((value): value is string => Boolean(value)), accessToken: session.access_token });
     localStorage.setItem(ACCOUNT_STORAGE_KEYS.mode, "authenticated");
@@ -367,7 +392,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     setCloudLinked(migrationDecision === "linked" || !localDataExists);
     setCloudStatus(migrationDecision === "linked" || !localDataExists ? "pending" : "local");
     setShowMigration(localDataExists && !migrationDecision);
-  }, [setCloudStatus]);
+  }, [setCloudIssue, setCloudStatus]);
 
   const activateOfflineWorkspace = useCallback(() => {
     const ownerId = localStorage.getItem(WORKSPACE_OWNER_KEY) || "";
@@ -404,8 +429,9 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       setReady(true);
     }).catch((error) => {
       if (!mounted || authEventRevision !== 0) return;
-      if (!navigator.onLine && activateOfflineWorkspace()) return;
-      setAccountCloudError(authErrorMessage(error));
+      const issue = cloudIssueFromError("auth", error instanceof AuthSessionRecoveryError ? error.cause : error, navigator.onLine);
+      if (activateOfflineWorkspace()) setCloudIssue("auth", issue);
+      else setCloudIssue("auth", issue);
       setReady(true);
     });
     if (!supabase) {
@@ -416,7 +442,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       }
       setReady(true);
     }
-    const listener = supabase?.auth.onAuthStateChange((_event, session) => {
+    const listener = supabase?.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
       authEventRevision += 1;
       const revision = authEventRevision;
@@ -426,7 +452,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         if (!mounted || revision !== authEventRevision) return;
         void restoreAuthSession(supabase.auth).then(current => {
           if (!mounted || revision !== authEventRevision) return;
-          if (current && current.user.id === session?.user.id) activateSession(current);
+          if (current && current.user.id === session?.user.id) activateSession(current, { rehydrate: event === "TOKEN_REFRESHED" || event === "SIGNED_IN" || event === "USER_UPDATED" });
           else if (!current) {
             if (!navigator.onLine && activateOfflineWorkspace()) return;
             activeUserId.current = null;
@@ -439,8 +465,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
           setReady(true);
         }).catch(error => {
           if (!mounted || revision !== authEventRevision) return;
-          if (!navigator.onLine && activateOfflineWorkspace()) return;
-          setAccountCloudError(authErrorMessage(error)); setReady(true);
+          const issue = cloudIssueFromError("auth", error instanceof AuthSessionRecoveryError ? error.cause : error, navigator.onLine);
+          if (activateOfflineWorkspace()) setCloudIssue("auth", issue);
+          else setCloudIssue("auth", issue);
+          setReady(true);
         });
       }, 0);
     });
@@ -448,11 +476,16 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       if (!supabase) return;
       void restoreAuthSession(supabase.auth).then(session => {
         if (mounted && session) activateSession(session);
-      }).catch(error => { if (mounted) setAccountCloudError(authErrorMessage(error)); });
+      }).catch(error => {
+        if (!mounted) return;
+        const issue = cloudIssueFromError("auth", error instanceof AuthSessionRecoveryError ? error.cause : error, navigator.onLine);
+        if (activateOfflineWorkspace()) setCloudIssue("auth", issue);
+        else setCloudIssue("auth", issue);
+      });
     };
     window.addEventListener("online", restoreWhenOnline);
     return () => { mounted = false; listener?.data.subscription.unsubscribe(); window.removeEventListener("online", restoreWhenOnline); };
-  }, [activateSession, activateOfflineWorkspace, setCloudStatus]);
+  }, [activateSession, activateOfflineWorkspace, setCloudIssue, setCloudStatus]);
 
   useEffect(() => {
     if (identity?.mode !== "authenticated" || !identity.accessToken) return;
@@ -490,20 +523,21 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         setProfileSetupRequired(!cloudProfile.onboarding_completed_at);
         if (cloudProfile.onboarding_completed_at) localStorage.setItem(`backyard-profile-ready-v1:${identity.userId}`, "true");
       } else {
-        setAccountCloudError(navigator.onLine
+        issueWithMessage("profile", navigator.onLine
           ? cloudAccountErrorMessage(profileResult.reason, "tu perfil")
-          : "Sin conexión · estamos usando el perfil guardado en este dispositivo.");
+          : "Trabajando sin conexión · estamos usando el perfil guardado en este dispositivo.", navigator.onLine ? "server" : "offline");
         // A failed query is not proof that the profile is missing. Keep the
         // authenticated local profile usable; only a successful cloud row
         // without onboarding_completed_at may open profile setup.
         setProfileSetupRequired(false);
       }
-      if (navigator.onLine && legalResult.error) setAccountCloudError("No pudimos leer tus consentimientos en la nube. Tu copia local se conserva y puedes reintentar.");
-      else if (navigator.onLine && preferencesResult.error) setAccountCloudError("No pudimos leer tus preferencias en la nube. Tu copia local se conserva y puedes reintentar.");
-      else if (profileResult.status === "fulfilled") setAccountCloudError("");
-    }).catch((error) => { if (mounted) setAccountCloudError(cloudAccountErrorMessage(error)); }).finally(() => { if (mounted) { setCloudConsentChecked(true); setProfileChecked(true); } });
+      if (legalResult.error) setCloudIssue("legal", cloudIssueFromError("legal", legalResult.error, navigator.onLine));
+      else setCloudIssue("legal", null);
+      if (preferencesResult.error) setCloudIssue("profile", cloudIssueFromError("profile", preferencesResult.error, navigator.onLine));
+      else if (profileResult.status === "fulfilled") setCloudIssue("profile", null);
+    }).catch((error) => { if (mounted) setCloudIssue("profile", cloudIssueFromError("profile", error, navigator.onLine)); }).finally(() => { if (mounted) { setCloudConsentChecked(true); setProfileChecked(true); } });
     return () => { mounted = false; };
-  }, [identity?.mode, identity?.userId, identity?.accessToken, cloudProfileFallback]);
+  }, [identity?.mode, identity?.userId, identity?.accessToken, cloudProfileFallback, accountReloadRevision, issueWithMessage, setCloudIssue]);
 
   const currentConsent = identity ? hasCurrentLegalConsent(acceptances, identity.userId) : false;
 
@@ -517,13 +551,13 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     void flushLegalAcceptances(identity.userId, current).then(() => {
       if (!mounted) return;
       clearPendingLegalSync(localStorage, identity.userId);
-      setLegalCloudError("");
+      setCloudIssue("legal", null);
     }).catch((error) => {
       markLegalSyncFailed(localStorage, identity.userId, error);
-      if (mounted) setLegalCloudError(legalSyncErrorMessage(error, navigator.onLine));
+      if (mounted) issueWithMessage("legal", legalSyncErrorMessage(error, navigator.onLine), navigator.onLine ? "server" : "offline");
     });
     return () => { mounted = false; };
-  }, [identity?.mode, identity?.userId, identity?.accessToken, currentConsent, acceptances, legalRetryRevision, flushLegalAcceptances]);
+  }, [identity?.mode, identity?.userId, identity?.accessToken, currentConsent, acceptances, legalRetryRevision, flushLegalAcceptances, issueWithMessage, setCloudIssue]);
 
   async function acceptConsent() {
     if (!identity) return;
@@ -536,10 +570,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       try {
         await flushLegalAcceptances(identity.userId, next);
         clearPendingLegalSync(localStorage, identity.userId);
-        setLegalCloudError("");
+        setCloudIssue("legal", null);
       } catch (error) {
         markLegalSyncFailed(localStorage, identity.userId, error);
-        setLegalCloudError(legalSyncErrorMessage(error, navigator.onLine));
+        issueWithMessage("legal", legalSyncErrorMessage(error, navigator.onLine), navigator.onLine ? "server" : "offline");
       }
     }
   }
@@ -561,7 +595,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(`backyard-profile-cache-v1:${identity.userId}`, JSON.stringify(profile));
     setProfileSetupRequired(false);
     localStorage.setItem(`backyard-profile-ready-v1:${identity.userId}`, "true");
-    setAccountCloudError("");
+    setCloudIssue("profile", null);
   }
 
   async function logout() {
@@ -569,7 +603,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       const supabase = getSupabaseBrowser();
       if (supabase) await closeAuthSession(supabase.auth);
     } catch {
-      setAccountCloudError("No pudimos cerrar la sesión. Revisa tu conexión e inténtalo nuevamente.");
+      issueWithMessage("auth", "No pudimos cerrar la sesión. Revisa tu conexión e inténtalo nuevamente.");
       return;
     }
     {
@@ -581,8 +615,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       setCloudLinked(false);
       setCloudStatus("local");
       setLastCloudSync(null);
-      setSyncCloudError("");
-      setLegalCloudError("");
+      setCloudIssuesByDomain({});
     }
   }
 
@@ -603,9 +636,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     setCloudLinked(false);
     setCloudStatus("local");
     setLastCloudSync(null);
-    setAccountCloudError("");
-    setLegalCloudError("");
-    setSyncCloudError("");
+    setCloudIssuesByDomain({});
     setShowMigration(false);
   }
 
@@ -641,13 +672,42 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     setMigrationBusy(false);
   }
 
-  const retryAllCloud = () => {
-    setLegalRetryRevision(value => value + 1);
-    setRawCloudStatus(navigator.onLine ? "pending" : "offline");
-    window.setTimeout(() => window.dispatchEvent(new Event("backyard-sync-retry")), 0);
+  const retryAllCloud = async () => {
+    if (!navigator.onLine) {
+      setRawCloudStatus("offline");
+      setCloudIssue("round", cloudIssueFromError("round", new Error("offline"), false));
+      return;
+    }
+    const supabase = getSupabaseBrowser();
+    if (identity?.mode === "authenticated") {
+      if (!supabase) {
+        issueWithMessage("auth", "No pudimos reconectar la sesión. Tus datos siguen en este dispositivo.");
+        return;
+      }
+      try {
+        const session = await recoverAuthSession(supabase.auth, { forceRefresh: true });
+        if (!session) throw new AuthSessionRecoveryError("invalid", new Error("account_session_missing"));
+        activateSession(session, { rehydrate: true });
+      } catch (error) {
+        const cause = error instanceof AuthSessionRecoveryError ? error.cause : error;
+        const issue = cloudIssueFromError("auth", cause, true);
+        setCloudIssue("auth", issue);
+        if (issue.kind === "session_expired") {
+          setIdentity((current) => current?.mode === "authenticated" ? { ...current, accessToken: null } : current);
+          setRawCloudStatus("error");
+        }
+        return;
+      }
+    } else {
+      setLegalRetryRevision(value => value + 1);
+      setAccountReloadRevision(value => value + 1);
+      window.setTimeout(() => window.dispatchEvent(new Event("backyard-sync-retry")), 0);
+    }
+    setRawCloudStatus("pending");
   };
-  const combinedCloudError = accountCloudError || legalCloudError || syncCloudError;
-  const context = identity ? ({ identity, updateProfile, logout, finishAccountDeletion, openAccess: () => setAccessRequested(true), acceptances, cloudLinked, cloudStatus: combinedCloudError ? "error" as const : cloudStatus, setCloudStatus, lastCloudSync, cloudError: combinedCloudError, applyCloudPreferences,
+  const cloudIssues = Object.values(cloudIssuesByDomain).filter((issue): issue is CloudIssue => Boolean(issue)).sort((left, right) => cloudIssuePriority(left) - cloudIssuePriority(right));
+  const effectiveCloudStatus: AccountContextValue["cloudStatus"] = cloudIssues.some((issue) => issue.kind === "offline") ? "offline" : cloudIssues.some((issue) => issue.kind === "conflict") ? "pending" : cloudIssues.length ? "error" : cloudStatus;
+  const context = identity ? ({ identity, updateProfile, logout, finishAccountDeletion, openAccess: () => setAccessRequested(true), acceptances, cloudLinked, cloudStatus: effectiveCloudStatus, setCloudStatus, lastCloudSync, cloudIssues, applyCloudPreferences,
     reportCloudSyncError,
     clearCloudSyncError,
     retryCloudSync: retryAllCloud,
@@ -676,7 +736,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     setIdentity({ ...profile, mode: "guest", providers: [], accessToken: null });
     setCloudConsentChecked(true);
     setAccessRequested(false);
-    setAccountCloudError(""); setLegalCloudError(""); setCloudStatus("local"); setCloudLinked(false); setLastCloudSync(null); setShowMigration(false);
+    setCloudIssuesByDomain({}); setCloudStatus("local"); setCloudLinked(false); setLastCloudSync(null); setShowMigration(false);
   }} sessionError={accountCloudError} onAuthenticated={(session) => { activateSession(session); setAccessRequested(false); }} />;
   if (identity.mode === "authenticated" && !currentConsent && !cloudConsentChecked) return <main className="accessScreen"><div className="accessLoading">Verificando tus consentimientos…</div></main>;
   if (!currentConsent) {
@@ -687,7 +747,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   if (identity.mode === "authenticated" && profileSetupRequired) return <>{accountCloudError && <div role="alert" className="notice bad">{accountCloudError}</div>}<ProfileSetupScreen identity={identity} onSave={updateProfile} onBack={logout} /></>;
 
   return <AccountContext.Provider value={context!}>
-    {combinedCloudError && <div className="notice bad" role="alert">{combinedCloudError}<button onClick={retryAllCloud}>Reintentar conexión</button></div>}
+    {cloudIssues.map((issue) => <div className={`notice ${issue.kind === "offline" || issue.kind === "conflict" ? "" : "bad"}`} role="alert" key={issue.domain}>{issue.message}{issue.kind === "session_expired" ? <button onClick={() => setAccessRequested(true)}>Volver a iniciar sesión</button> : issue.retryable ? <button onClick={() => void retryAllCloud()}>Reintentar conexión</button> : null}</div>)}
     <Fragment key={identity.userId}>{children}</Fragment>
     {migrationDialog}
   </AccountContext.Provider>;

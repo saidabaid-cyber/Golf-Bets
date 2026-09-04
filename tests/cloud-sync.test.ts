@@ -3,12 +3,14 @@ import test from "node:test";
 
 import {
   CLOUD_TOMBSTONES_KEY,
+  CloudSyncHttpError,
   cloudDataFingerprint,
   collectLocalCloudData,
   mergeLocalAndCloud,
   findAmbiguousCloudConflicts,
   resolveAmbiguousCloudConflicts,
   recordCloudDeletion,
+  uploadCloudData,
   type CloudDataBundle,
 } from "../lib/cloud-sync";
 import { STORAGE_KEYS } from "../lib/round-utils";
@@ -144,4 +146,31 @@ test("solo el mismo score divergente genera conflicto granular", () => {
   assert.equal((resolved.activeDraft as typeof base).scores[5].a, 3);
   assert.equal((resolved.activeDraft as typeof base).scores[6].a, 3);
   assert.equal(findAmbiguousCloudConflicts(resolved, remote).length, 0, "el mismo conflicto no debe reaparecer");
+});
+
+test("409 conserva status, código y conflicto granular a través de la API", async () => {
+  const originalFetch = globalThis.fetch;
+  const conflict = { collection: "activeDraft" as const, localId: "/scores/5/a", fieldPath: "/scores/5/a", playerId: "a", hole: 5, localValue: 4, cloudValue: 5 };
+  globalThis.fetch = async () => new Response(JSON.stringify({ error: "Cambio simultáneo", code: "CLOUD_FIELD_CONFLICT", conflicts: [conflict] }), { status: 409, headers: { "content-type": "application/json" } });
+  try {
+    await assert.rejects(() => uploadCloudData(bundle(), "access-token"), (error: unknown) => {
+      assert.ok(error instanceof CloudSyncHttpError);
+      assert.equal(error.status, 409);
+      assert.equal(error.code, "CLOUD_FIELD_CONFLICT");
+      assert.deepEqual(error.conflicts, [conflict]);
+      return true;
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("merge rebasa contra la última copia cloud para que el mismo conflicto no reaparezca", () => {
+  const base = { roundId: "round-1", scores: { 5: { a: 4 }, 6: { a: 4 } } };
+  const local = bundle({ activeDraft: { roundId: "round-1", scores: { 5: { a: 3 }, 6: { a: 4 } } }, baseDraft: base, baseDraftFingerprint: JSON.stringify(base), activeDraftUpdatedAt: "2026-09-04T10:00:00Z" });
+  const cloud = bundle({ activeDraft: { roundId: "round-1", scores: { 5: { a: 4 }, 6: { a: 3 } } }, activeDraftUpdatedAt: "2026-09-04T10:01:00Z" });
+  const merged = mergeLocalAndCloud(local, cloud);
+  assert.deepEqual(merged.baseDraft, cloud.activeDraft);
+  assert.equal(merged.baseDraftUpdatedAt, cloud.activeDraftUpdatedAt);
+  assert.equal(findAmbiguousCloudConflicts(merged, cloud).length, 0);
 });

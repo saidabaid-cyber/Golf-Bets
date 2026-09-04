@@ -17,7 +17,8 @@ Las pruebas nuevas de sincronización usan un fake de PostgREST y transportes en
 - Fallos parciales conservan snapshots canónicos. Reintentos reconstruyen las proyecciones desde la versión guardada, incluyendo scores, jugadores, personales, apuestas, resultados, gastos y campo.
 - Las colecciones conservan sus ids; las correcciones históricas no duplican rondas. Los campos predeterminados también conservan sus modificaciones al sincronizar.
 - Cambiar de cuenta archiva y restaura el espacio local correspondiente; un callback antiguo no puede aplicar datos sobre una identidad distinta. Invitado conserva su espacio.
-- Una versión de draft desplazada por la versión remota se conserva localmente en backyard-cloud-conflicts-v1. No se fusionan automáticamente scores contradictorios. Esta copia es de recuperación técnica; todavía no hay selector visual de versiones.
+- La ronda se combina por campo desde una base canónica: hoyos y jugadores distintos se conservan automáticamente. Solo dos valores distintos del mismo campo (por ejemplo, el mismo jugador/hoyo) abren el selector visual, que muestra jugador, hoyo, valores, fecha y dispositivo y resuelve únicamente ese campo.
+- Un `CLOUD_FIELD_CONFLICT` tardío conserva HTTP 409 y un arreglo `conflicts`; el cliente vuelve a descargar, rebasa la base y reintenta cambios compatibles. `currentIndex`, pestaña, resumen de hoyo, contador, modales, scroll y navegación nunca forman parte del estado compartido.
 - Fotos: archivo local primero, identificador versionado, cola persistente por usuario, confirmación de subida y reintento de errores. No se borra el blob al subir. Las fotos de otra cuenta no se envían.
 - Cuenta distingue sesión, pendiente, sincronizando, error y última sincronización confirmada. Lectura/guardado fallido de cuenta o consentimiento bloquea la confirmación del ciclo de datos.
 - Onboarding guarda preferencias antes del marcador de perfil completado; un fallo no permite omitir el paso tras recargar.
@@ -28,7 +29,7 @@ Las pruebas nuevas de sincronización usan un fake de PostgREST y transportes en
 
 La API actual usa varias operaciones PostgREST, no una transacción SQL global. Los snapshots son canónicos; las proyecciones pueden estar temporalmente incompletas hasta un reintento exitoso. Se rechaza la confirmación si una proyección falla o cambia la versión durante su cálculo. Una garantía serializable entre dispositivos para todas las tablas requeriría una operación transaccional en backend; no se añadió ni aplicó una migración remota.
 
-La resolución de versiones es por fecha de edición (relojes de dispositivos). No resuelve semánticamente dos ediciones concurrentes del mismo score. Los borrados son definitivos para ese id. Relojes muy desajustados requieren corrección/revisión del usuario. La sincronización se activa tras editar, volver a la pestaña, recuperar conexión o Reintentar; no es streaming Realtime del draft.
+La resolución de colecciones históricas sigue usando fecha de edición; dentro del draft se usa merge de tres vías por campo e identidad estable. Un mismo score contradictorio requiere elección explícita. Los borrados son definitivos para ese id. La sincronización se activa tras editar, volver a la pestaña, recuperar conexión o Reintentar; no es streaming Realtime del draft.
 
 Si un dispositivo se desconecta después de subir el tombstone pero antes de borrar la foto, la limpieza queda en su cola hasta reconectarse. La ronda no reaparece. Una foto aún solo local no puede recuperarse desde otro dispositivo hasta que el original complete su cola.
 

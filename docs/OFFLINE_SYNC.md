@@ -28,15 +28,18 @@ La aplicación nunca traduce un `42703`, `42501`, 503 o una confirmación incomp
 
 Si el token vence mientras el teléfono está sin red, la app puede abrir la copia local del último workspace autenticado usando únicamente nombre/HCP/ID no sensibles. Ese modo no contiene JWT ni autoriza peticiones cloud. Al regresar internet, Supabase debe restaurar una sesión real antes de sincronizar.
 
+Una rotación normal de token para el mismo `auth.uid()` no cambia workspace ni reinicia onboarding. `Reintentar conexión` obtiene/renueva la sesión con Supabase, valida `getUser()`, vuelve a cargar perfil, preferencias y consentimientos y después reintenta la cola legal y la ronda. Los errores se mantienen por dominio (sesión, perfil, consentimientos, ronda, archivos y conflicto), de modo que un 409 o una caída de red nunca se presentan como sesión revocada.
+
 ## Eliminaciones
 
 Las eliminaciones generan tombstones `(owner_id, entity_type, local_id, deleted_at)`. El servidor aplica primero los tombstones y vuelve a barrer después de escribir. Por eso una copia obsoleta no puede reinsertar una ronda, jugador, grupo, rival o campo eliminado.
 
 ## Conflictos
 
-- Fechas distintas: gana el `updated_at` más reciente.
-- Un score vive dentro del draft/snapshot y las proyecciones cloud lo materializan por jugador/hoyo.
-- Dos dispositivos que modificaron el mismo draft desde la última base canónica (aunque sus relojes difieran), o igual fecha con payload distinto: no se elige en silencio. La UI conserva ambas copias y pide “Usar copia de la nube” o “Usar este dispositivo”. La elección avanza la fecha de versión.
+- Colecciones con IDs estables usan `updated_at`; el draft usa merge de tres vías por campo desde la última base canónica.
+- Un score se identifica por ronda + jugador + hoyo; jugadores/hoyos distintos se combinan. Solo el mismo dato divergente genera conflicto.
+- La API devuelve 409 estructurado con rutas y valores. La UI conserva ambas copias, muestra un conflicto a la vez y la elección rebasa la base antes de reintentar, evitando repetir el mismo diálogo.
+- `currentIndex`, pantalla, resumen abierto/pausado, contador, modal y scroll son estado local de interfaz y no se sincronizan.
 - Antes de reemplazar rondas/drafts, Supabase guarda la versión anterior en `cloud_record_versions` con el dispositivo que la sustituyó.
 - Los snapshots históricos mantienen ID estable; una corrección actualiza ese mismo ID en vez de duplicarlo.
 

@@ -7,7 +7,7 @@ import { profileHandicapInput, profileHandicapLabel, validateProfileDraft } from
 import { useBackyardAccount } from "./account-provider";
 
 export function AccountPanel({ highContrast, onHighContrastChange }: { highContrast: boolean; onHighContrastChange: (value: boolean) => void }) {
-  const { identity, updateProfile, logout, finishAccountDeletion, openAccess, acceptances, cloudLinked, cloudStatus, requestCloudLink, lastCloudSync, cloudError, retryCloudSync } = useBackyardAccount();
+  const { identity, updateProfile, logout, finishAccountDeletion, openAccess, acceptances, cloudLinked, cloudStatus, requestCloudLink, lastCloudSync, cloudIssues, retryCloudSync } = useBackyardAccount();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(identity.displayName);
   const [handicap, setHandicap] = useState(profileHandicapInput(identity.defaultHandicap));
@@ -16,6 +16,7 @@ export function AccountPanel({ highContrast, onHighContrastChange }: { highContr
   const [deleteText, setDeleteText] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const sessionExpired = cloudIssues.some((issue) => issue.kind === "session_expired");
 
   useEffect(() => { if (!editing) { setName(identity.displayName); setHandicap(profileHandicapInput(identity.defaultHandicap)); } }, [identity.displayName, identity.defaultHandicap, editing]);
   const userAcceptances = useMemo(() => acceptances.filter((item) => item.userId === identity.userId), [acceptances, identity.userId]);
@@ -54,11 +55,12 @@ export function AccountPanel({ highContrast, onHighContrastChange }: { highContr
     {identity.mode === "guest" && <section className="card guestAccountCard"><h2>Modo invitado</h2><p>Los datos permanecen en este dispositivo. Crear una cuenta permitirá sincronizar tu información cuando la nube esté activada.</p><div className="accountInlineActions"><button className="primary" onClick={openAccess}>Crear cuenta</button><button className="secondary" onClick={openAccess}>Iniciar sesión</button></div></section>}
 
     {identity.mode === "authenticated" && <section className="card cloudAccountStatus" aria-label="Estado de la cuenta">
-      <h2>Sesión iniciada</h2>
+      <h2>{sessionExpired ? "Datos disponibles en este dispositivo" : "Sesión iniciada"}</h2>
       <p role="status">{cloudStatus === "synced" ? "Guardado en la nube ✓" : cloudStatus === "syncing" ? "Sincronizando con la nube…" : cloudStatus === "saving" ? "Guardando en este dispositivo…" : cloudStatus === "offline" ? "Sin conexión · Pendiente de sincronizar" : cloudStatus === "error" ? "Error de sincronización · Tu copia local se conserva" : cloudLinked ? "Pendiente de sincronizar" : "Guardado en este dispositivo · Nube sin vincular"}</p>
       {lastCloudSync && <p className="hint">Última sincronización confirmada: {new Date(lastCloudSync).toLocaleString("es-MX")}</p>}
-      {cloudError && <p className="bad">{cloudError}</p>}
-      {cloudLinked && <button className="secondary" disabled={cloudStatus === "syncing" || cloudStatus === "saving"} onClick={retryCloudSync}>Reintentar sincronización</button>}
+      {cloudIssues.map((issue) => <p className={issue.kind === "offline" || issue.kind === "conflict" ? "hint" : "bad"} key={issue.domain}><b>{issue.domain === "auth" ? "Sesión" : issue.domain === "profile" ? "Perfil" : issue.domain === "legal" ? "Consentimientos" : issue.domain === "files" ? "Archivos" : issue.domain === "conflict" ? "Conflicto" : "Ronda"}:</b> {issue.message}</p>)}
+      {cloudLinked && !sessionExpired && <button className="secondary" disabled={cloudStatus === "syncing" || cloudStatus === "saving"} onClick={() => void retryCloudSync()}>Reintentar sincronización</button>}
+      {sessionExpired && <button className="primary" onClick={openAccess}>Volver a iniciar sesión</button>}
     </section>}
     {identity.mode === "authenticated" && !cloudLinked && <section className="card"><h2>Sincronización</h2><p>Tus datos siguen seguros en este dispositivo. Puedes vincularlos a tu cuenta cuando la nube esté configurada.</p><button className="primary" onClick={requestCloudLink}>Vincular datos locales</button></section>}
 

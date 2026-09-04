@@ -52,7 +52,7 @@ export async function writeVersionedRow(client: SupabaseClient, table: string, k
     let update = client.from(table).update(row).eq("updated_at", old.updated_at);
     for (const [key, value] of Object.entries(keys)) update = update.eq(key, value);
     const result = await update.select();
-    if (result.error || !result.data?.length) throw result.error || new Error("Conflicto entre dispositivos; reintenta");
+    if (result.error || !result.data?.length) throw result.error || Object.assign(new Error("Otro dispositivo actualizó este dato durante la escritura."), { code: "CLOUD_WRITE_RACE" });
   }
   return true;
 }
@@ -244,7 +244,7 @@ export async function writeCloudBundle(client: SupabaseClient, userId: string, b
     extendedSchema = await supportsExtendedCloudSchema(client);
     const currentCloud = await readCloudBundle(client, userId, extendedSchema);
     const lateConflicts = findAmbiguousCloudConflicts(body.data, currentCloud);
-    if (lateConflicts.length) throw Object.assign(new Error("Hay un cambio simultáneo en el mismo dato."), { code: "CLOUD_FIELD_CONFLICT" });
+    if (lateConflicts.length) throw Object.assign(new Error("Hay un cambio simultáneo en el mismo dato."), { code: "CLOUD_FIELD_CONFLICT", conflicts: lateConflicts });
     const incoming = mergeLocalAndCloud(body.data, currentCloud);
     history = safeArray<Record<string, unknown>>(incoming.history, 1000).filter(localId);
     players = safeArray<Record<string, unknown>>(incoming.frequentPlayers, 500).filter(localId);
@@ -297,7 +297,10 @@ export async function writeCloudBundle(client: SupabaseClient, userId: string, b
     await writeVersionedRow(client, "user_cloud_state", { user_id: userId }, withDevice({ user_id: userId, active_draft: incoming.activeDraft ?? null, updated_at: incoming.activeDraftUpdatedAt || new Date(0).toISOString() }, deviceId, extendedSchema));
     const confirmedState = await client.from("user_cloud_state").select("active_draft").eq("user_id", userId).maybeSingle();
     if (confirmedState.error || JSON.stringify(stableValue(confirmedState.data?.active_draft ?? null)) !== JSON.stringify(stableValue(incoming.activeDraft ?? null))) {
-      throw confirmedState.error || Object.assign(new Error("Otro dispositivo cambió la ronda durante la escritura."), { code: "CLOUD_FIELD_CONFLICT" });
+      if (confirmedState.error) throw confirmedState.error;
+      const latest = await readCloudBundle(client, userId, extendedSchema);
+      const conflicts = findAmbiguousCloudConflicts(body.data, latest);
+      throw Object.assign(new Error("Otro dispositivo cambió la ronda durante la escritura."), { code: "CLOUD_FIELD_CONFLICT", conflicts });
     }
     // A deletion can arrive after the first read. Sweep again; GET also filters
     // permanent tombstones so a concurrent stale insert is never resurrected UI.
@@ -322,6 +325,11 @@ export async function writeCloudBundle(client: SupabaseClient, userId: string, b
       ...(extendedSchema ? { last_attempt_at: now, last_error_code: diagnosticCode(error) } : {}),
     };
     try { await client.from("account_data_migrations").upsert(failedRow, { onConflict: "user_id,local_fingerprint" }); } catch { /* Original failure remains visible even if its diagnostic write fails. */ }
+    if (error && typeof error === "object" && "code" in error && error.code === "CLOUD_WRITE_RACE") {
+      const latest = await readCloudBundle(client, userId, extendedSchema).catch(() => null);
+      const conflicts = latest ? findAmbiguousCloudConflicts(body.data, latest) : [];
+      throw Object.assign(new Error("Otro dispositivo cambió datos durante la escritura."), { code: "CLOUD_FIELD_CONFLICT", conflicts });
+    }
     // Preserve PostgREST's safe code/status for server diagnostics. Wrapping
     // the object as a generic Error erased 42703/42501 from real Preview logs.
     throw error;

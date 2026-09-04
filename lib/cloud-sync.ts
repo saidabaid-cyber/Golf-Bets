@@ -70,6 +70,12 @@ export function stripLocalRoundUi(value: unknown) {
   delete result.openModal;
   delete result.scrollPosition;
   delete result.holeSummary;
+  delete result.holeSummaryPaused;
+  delete result.holeSummaryRemaining;
+  delete result.holeSummaryAdvance;
+  delete result.selectedTab;
+  delete result.modal;
+  delete result.navigation;
   return result;
 }
 
@@ -324,9 +330,12 @@ export function mergeLocalAndCloud(local: CloudDataBundle, cloud: CloudDataBundl
     preferences: { ...(localPreferences ? local.preferences : cloud.preferences), hasLocalState: true },
     activeDraft: draftMerge.value,
     activeDraftUpdatedAt: combinedDraft ? timestampAfter(local.activeDraftUpdatedAt, cloud.activeDraftUpdatedAt) : localDraft ? local.activeDraftUpdatedAt : cloud.activeDraftUpdatedAt,
-    baseDraftUpdatedAt: local.baseDraftUpdatedAt,
-    baseDraftFingerprint: local.baseDraftFingerprint,
-    baseDraft: local.baseDraft,
+    // The canonical cloud draft is the three-way base for the write that
+    // follows. Keeping an older local base here caused every later write to be
+    // reported as the same 409 conflict again.
+    baseDraftUpdatedAt: cloud.activeDraftUpdatedAt,
+    baseDraftFingerprint: JSON.stringify(stableValue(stripLocalRoundUi(cloud.activeDraft))),
+    baseDraft: stripLocalRoundUi(cloud.activeDraft),
     tombstones,
   };
 }
@@ -409,9 +418,26 @@ function setDraftPointer(value: unknown, path: string, selected: unknown) {
   return root;
 }
 
+export class CloudSyncHttpError extends Error {
+  readonly status: number;
+  readonly code: string;
+  readonly conflicts: CloudDataConflict[];
+  constructor(message: string, status: number, code = "", conflicts: CloudDataConflict[] = []) {
+    super(message);
+    this.name = "CloudSyncHttpError";
+    this.status = status;
+    this.code = code;
+    this.conflicts = conflicts;
+  }
+}
+
+export function isCloudFieldConflict(error: unknown): error is CloudSyncHttpError {
+  return error instanceof CloudSyncHttpError && error.status === 409 && error.code === "CLOUD_FIELD_CONFLICT";
+}
+
 async function parseCloudResponse(response: Response) {
-  const payload = await response.json().catch(() => ({})) as { ok?: boolean; error?: string; data?: CloudDataBundle; fingerprint?: string };
-  if (!response.ok) throw new Error(payload.error || "No fue posible sincronizar la nube.");
+  const payload = await response.json().catch(() => ({})) as { ok?: boolean; error?: string; code?: string; conflicts?: CloudDataConflict[]; data?: CloudDataBundle; fingerprint?: string };
+  if (!response.ok) throw new CloudSyncHttpError(payload.error || "No fue posible sincronizar la nube.", response.status, payload.code || "", Array.isArray(payload.conflicts) ? payload.conflicts : []);
   return payload;
 }
 

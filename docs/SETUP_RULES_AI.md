@@ -21,6 +21,8 @@ OPENAI_RULES_MODEL=gpt-5.4-mini
 RULES_AI_ENABLED=true
 ```
 
-El endpoint `/api/rules/ask` ejecuta Responses API con `file_search`, limita consultas por ventana de tiempo y exige que la respuesta se base en el documento indexado. La API key jamás se entrega al cliente. Si falta configuración, devuelve un estado controlado y el buscador manual sigue disponible.
+El endpoint `/api/rules/ask` ejecuta Responses API con `file_search` y exige que la respuesta se base en el documento indexado. La API key jamás se entrega al cliente. Si falta configuración, devuelve un estado controlado y el buscador manual sigue disponible.
+
+Antes de activar el endpoint, aplica también `20260904104145_rules_ai_rate_limit.sql`. El límite de costo es persistente y atómico en Supabase; solo `service_role` puede usar su RPC. La tabla guarda un HMAC del origen y contadores por ventana, nunca el texto de las consultas, scores, apuestas, históricos ni datos personales.
 
 Las respuestas son informativas: en competencia, el Comité o árbitro tiene la decisión final.

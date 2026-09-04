@@ -78,6 +78,33 @@ create table if not exists public.cloud_record_versions (
 create index if not exists cloud_record_versions_owner_entity_idx
   on public.cloud_record_versions(owner_id, entity_type, local_id, replaced_at desc);
 
+-- Foreign-key lookup indexes reported by the Security/Performance Advisor.
+-- Existing primary/unique indexes already cover owner_id/round_id keys; these
+-- cover only FK columns that otherwise require a sequential scan on cascades
+-- or common joins.
+create index if not exists players_profile_id_idx on public.players(profile_id);
+create index if not exists course_versions_created_by_idx on public.course_versions(created_by);
+create index if not exists tournaments_created_by_idx on public.tournaments(created_by);
+create index if not exists tournament_groups_tournament_id_idx on public.tournament_groups(tournament_id);
+create index if not exists tournament_groups_confirmed_by_idx on public.tournament_groups(confirmed_by);
+create index if not exists tournament_players_player_id_idx on public.tournament_players(player_id);
+create index if not exists tournament_players_profile_id_idx on public.tournament_players(profile_id);
+create index if not exists group_members_player_id_idx on public.group_members(tournament_player_id);
+create index if not exists tournament_access_tournament_id_idx on public.tournament_access(tournament_id);
+create index if not exists tournament_access_group_id_idx on public.tournament_access(group_id);
+create index if not exists tournament_access_player_id_idx on public.tournament_access(tournament_player_id);
+create index if not exists tournament_access_user_id_idx on public.tournament_access(user_id);
+create index if not exists tournament_scores_group_id_idx on public.tournament_scores(group_id);
+create index if not exists tournament_scores_player_id_idx on public.tournament_scores(player_id);
+create index if not exists tournament_scores_entered_by_idx on public.tournament_scores(entered_by);
+create index if not exists tournament_scores_access_id_idx on public.tournament_scores(access_id);
+create index if not exists tournament_oyes_player_id_idx on public.tournament_oyes(player_id);
+create index if not exists tournament_oyes_entered_by_idx on public.tournament_oyes(entered_by);
+create index if not exists tournament_oyes_access_id_idx on public.tournament_oyes(access_id);
+create index if not exists tournament_invites_tournament_id_idx on public.tournament_invites(tournament_id);
+create index if not exists tournament_invites_group_id_idx on public.tournament_invites(group_id);
+create index if not exists shared_round_links_round_id_idx on public.shared_round_links(round_id);
+
 create or replace function public.handle_backyard_user_profile()
 returns trigger
 language plpgsql
@@ -207,6 +234,119 @@ drop policy if exists cloud_record_versions_self_read on public.cloud_record_ver
 create policy cloud_record_versions_self_read on public.cloud_record_versions for select to authenticated
 using ((select auth.uid()) = owner_id);
 
+-- Recreate account/round policies with auth.uid() as an init-plan so Postgres
+-- evaluates it once per statement instead of once per row. Policy names and
+-- access semantics stay unchanged.
+drop policy if exists profiles_self on public.profiles;
+create policy profiles_self on public.profiles for all to authenticated
+using (id = (select auth.uid())) with check (id = (select auth.uid()));
+drop policy if exists players_owner on public.players;
+create policy players_owner on public.players for all to authenticated
+using (owner_id = (select auth.uid())) with check (owner_id = (select auth.uid()));
+drop policy if exists courses_owner on public.courses_cloud;
+create policy courses_owner on public.courses_cloud for all to authenticated
+using (owner_id = (select auth.uid())) with check (owner_id = (select auth.uid()));
+drop policy if exists course_versions_owner on public.course_versions;
+create policy course_versions_owner on public.course_versions for all to authenticated
+using (exists(select 1 from public.courses_cloud c where c.id = course_id and c.owner_id = (select auth.uid())))
+with check (exists(select 1 from public.courses_cloud c where c.id = course_id and c.owner_id = (select auth.uid())));
+drop policy if exists tournaments_admin on public.tournaments;
+create policy tournaments_admin on public.tournaments for all to authenticated
+using (created_by = (select auth.uid())) with check (created_by = (select auth.uid()));
+drop policy if exists groups_admin on public.tournament_groups;
+create policy groups_admin on public.tournament_groups for all to authenticated
+using (exists(select 1 from public.tournaments t where t.id = tournament_id and t.created_by = (select auth.uid())))
+with check (exists(select 1 from public.tournaments t where t.id = tournament_id and t.created_by = (select auth.uid())));
+drop policy if exists tournament_players_admin on public.tournament_players;
+create policy tournament_players_admin on public.tournament_players for all to authenticated
+using (exists(select 1 from public.tournaments t where t.id = tournament_id and t.created_by = (select auth.uid())))
+with check (exists(select 1 from public.tournaments t where t.id = tournament_id and t.created_by = (select auth.uid())));
+drop policy if exists group_members_admin on public.group_members;
+create policy group_members_admin on public.group_members for all to authenticated
+using (exists(select 1 from public.tournament_groups g join public.tournaments t on t.id = g.tournament_id where g.id = group_id and t.created_by = (select auth.uid())))
+with check (exists(select 1 from public.tournament_groups g join public.tournaments t on t.id = g.tournament_id where g.id = group_id and t.created_by = (select auth.uid())));
+drop policy if exists scores_admin on public.tournament_scores;
+create policy scores_admin on public.tournament_scores for all to authenticated
+using (exists(select 1 from public.tournaments t where t.id = tournament_id and t.created_by = (select auth.uid())))
+with check (exists(select 1 from public.tournaments t where t.id = tournament_id and t.created_by = (select auth.uid())));
+drop policy if exists audit_admin_read on public.score_audit_log;
+create policy audit_admin_read on public.score_audit_log for select to authenticated
+using (exists(select 1 from public.tournaments t where t.id = tournament_id and t.created_by = (select auth.uid())));
+drop policy if exists access_admin on public.tournament_access;
+create policy access_admin on public.tournament_access for select to authenticated
+using (exists(select 1 from public.tournaments t where t.id = tournament_id and t.created_by = (select auth.uid())) or user_id = (select auth.uid()));
+drop policy if exists prizes_admin on public.tournament_prizes;
+create policy prizes_admin on public.tournament_prizes for all to authenticated
+using (exists(select 1 from public.tournaments t where t.id = tournament_id and t.created_by = (select auth.uid())))
+with check (exists(select 1 from public.tournaments t where t.id = tournament_id and t.created_by = (select auth.uid())));
+drop policy if exists oyes_admin on public.tournament_oyes;
+create policy oyes_admin on public.tournament_oyes for all to authenticated
+using (exists(select 1 from public.tournaments t where t.id = tournament_id and t.created_by = (select auth.uid())))
+with check (exists(select 1 from public.tournaments t where t.id = tournament_id and t.created_by = (select auth.uid())));
+drop policy if exists invites_admin on public.tournament_invites;
+create policy invites_admin on public.tournament_invites for all to authenticated
+using (exists(select 1 from public.tournaments t where t.id = tournament_id and t.created_by = (select auth.uid())))
+with check (exists(select 1 from public.tournaments t where t.id = tournament_id and t.created_by = (select auth.uid())));
+drop policy if exists rounds_owner on public.rounds_cloud;
+create policy rounds_owner on public.rounds_cloud for all to authenticated
+using (owner_id = (select auth.uid())) with check (owner_id = (select auth.uid()));
+drop policy if exists round_players_owner on public.round_players_cloud;
+create policy round_players_owner on public.round_players_cloud for all to authenticated
+using (exists(select 1 from public.rounds_cloud r where r.id = round_id and r.owner_id = (select auth.uid())))
+with check (exists(select 1 from public.rounds_cloud r where r.id = round_id and r.owner_id = (select auth.uid())));
+drop policy if exists round_scores_owner on public.round_scores_cloud;
+create policy round_scores_owner on public.round_scores_cloud for all to authenticated
+using (exists(select 1 from public.round_players_cloud rp join public.rounds_cloud r on r.id = rp.round_id where rp.id = round_player_id and r.owner_id = (select auth.uid())))
+with check (exists(select 1 from public.round_players_cloud rp join public.rounds_cloud r on r.id = rp.round_id where rp.id = round_player_id and r.owner_id = (select auth.uid())));
+drop policy if exists shared_links_owner on public.shared_round_links;
+create policy shared_links_owner on public.shared_round_links for all to authenticated
+using (exists(select 1 from public.rounds_cloud r where r.id = round_id and r.owner_id = (select auth.uid())))
+with check (exists(select 1 from public.rounds_cloud r where r.id = round_id and r.owner_id = (select auth.uid())));
+
+drop policy if exists legal_acceptances_self_read on public.legal_acceptances;
+create policy legal_acceptances_self_read on public.legal_acceptances for select to authenticated using ((select auth.uid()) = user_id);
+drop policy if exists legal_acceptances_self_insert on public.legal_acceptances;
+create policy legal_acceptances_self_insert on public.legal_acceptances for insert to authenticated with check ((select auth.uid()) = user_id);
+drop policy if exists rules_referee_self_read on public.rules_referee_acceptances;
+create policy rules_referee_self_read on public.rules_referee_acceptances for select to authenticated using ((select auth.uid()) = user_id);
+drop policy if exists rules_referee_self_insert on public.rules_referee_acceptances;
+create policy rules_referee_self_insert on public.rules_referee_acceptances for insert to authenticated with check ((select auth.uid()) = user_id);
+drop policy if exists user_preferences_self on public.user_preferences;
+create policy user_preferences_self on public.user_preferences for all to authenticated
+using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+drop policy if exists account_migrations_self on public.account_data_migrations;
+create policy account_migrations_self on public.account_data_migrations for all to authenticated
+using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+
+drop policy if exists frequent_groups_owner on public.frequent_groups_cloud;
+create policy frequent_groups_owner on public.frequent_groups_cloud for all to authenticated
+using (owner_id = (select auth.uid())) with check (owner_id = (select auth.uid()));
+drop policy if exists personal_rivals_owner on public.personal_rivals_cloud;
+create policy personal_rivals_owner on public.personal_rivals_cloud for all to authenticated
+using (owner_id = (select auth.uid())) with check (owner_id = (select auth.uid()));
+drop policy if exists user_cloud_state_owner on public.user_cloud_state;
+create policy user_cloud_state_owner on public.user_cloud_state for all to authenticated
+using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+drop policy if exists cloud_deletions_owner on public.cloud_deletions;
+create policy cloud_deletions_owner on public.cloud_deletions for all to authenticated
+using (owner_id = (select auth.uid())) with check (owner_id = (select auth.uid()));
+
+do $$
+declare policy_table text;
+begin
+  foreach policy_table in array array[
+    'round_bet_configs', 'round_bet_results', 'personal_bets_cloud',
+    'manual_bets_cloud', 'expenses_cloud', 'round_course_snapshots',
+    'round_local_rules_snapshots'
+  ] loop
+    execute format('drop policy if exists %I on public.%I', policy_table || '_owner', policy_table);
+    execute format(
+      'create policy %I on public.%I for all to authenticated using (exists(select 1 from public.rounds_cloud r where r.id = round_id and r.owner_id = (select auth.uid()))) with check (exists(select 1 from public.rounds_cloud r where r.id = round_id and r.owner_id = (select auth.uid())))',
+      policy_table || '_owner', policy_table
+    );
+  end loop;
+end $$;
+
 -- Explicit grants are required for projects using the new opt-in Data API
 -- behavior. RLS remains the row-level boundary for every private table.
 grant usage on schema public to anon, authenticated;
@@ -276,5 +416,13 @@ grant usage, select on sequence public.cloud_deletions_id_seq to authenticated;
 -- Preserve the intentional hardening: join attempts are never client-accessible.
 revoke all on table public.polla_join_attempts from public, anon, authenticated;
 revoke all on sequence public.polla_join_attempts_id_seq from public, anon, authenticated;
+
+-- is_polla_admin(uuid) intentionally remains executable by authenticated:
+-- delegated-admin SELECT policies call it with the current tournament id. The
+-- SECURITY DEFINER function derives identity from auth.uid() and accepts no user
+-- id, while direct table writes remain protected by RLS. Revoking EXECUTE would
+-- make those policies fail rather than harden them.
+comment on function public.is_polla_admin(uuid) is
+  'RLS helper for delegated Polla admins; authenticated EXECUTE is required by policies and identity is derived from auth.uid().';
 
 commit;

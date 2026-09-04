@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { Session } from "@supabase/supabase-js";
 
-import { closeAuthSession, isAccountSession, restoreAuthSession, sendEmailOtp, startSocialOAuth, verifyEmailOtp, type AuthFlowClient } from "../lib/auth-flow";
+import { AuthSessionRecoveryError, closeAuthSession, isAccountSession, recoverAuthSession, restoreAuthSession, sendEmailOtp, startSocialOAuth, verifyEmailOtp, type AuthFlowClient } from "../lib/auth-flow";
 import { readFileSync } from "node:fs";
 
 function authMock(overrides: Partial<AuthFlowClient> = {}) {
@@ -13,6 +13,8 @@ function authMock(overrides: Partial<AuthFlowClient> = {}) {
     verifyOtp: async (input) => { calls.push({ method: "otp-verify", input }); return { data: { session }, error: null }; },
     signInWithOAuth: async (input) => { calls.push({ method: "oauth", input }); return { error: null }; },
     getSession: async () => { calls.push({ method: "restore" }); return { data: { session }, error: null }; },
+    refreshSession: async () => { calls.push({ method: "refresh" }); return { data: { session }, error: null }; },
+    getUser: async () => { calls.push({ method: "user" }); return { data: { user: session.user }, error: null }; },
     signOut: async () => { calls.push({ method: "logout" }); return { error: null }; },
     ...overrides,
   };
@@ -24,7 +26,7 @@ test("Email OTP mock envía código y verifica una sesión de ocho dígitos", as
   await sendEmailOtp(auth, " jugador@example.com ", "http://localhost:3000/auth/callback");
   const restored = await verifyEmailOtp(auth, "jugador@example.com", "00123456");
   assert.equal(restored, session);
-  assert.deepEqual(calls.map((call) => call.method), ["otp-send", "otp-verify", "restore"]);
+  assert.deepEqual(calls.map((call) => call.method), ["otp-send", "otp-verify", "restore", "user"]);
   assert.equal((calls[1].input as { type: string }).type, "email");
   assert.equal((calls[1].input as { token: string }).token, "00123456");
   assert.deepEqual((calls[0].input as { email: string }).email, "jugador@example.com");
@@ -52,7 +54,7 @@ test("restauración y logout usan el cliente mock", async () => {
   const { auth, calls, session } = authMock();
   assert.equal(await restoreAuthSession(auth), session);
   await closeAuthSession(auth);
-  assert.deepEqual(calls.map((call) => call.method), ["restore", "logout"]);
+  assert.deepEqual(calls.map((call) => call.method), ["restore", "user", "logout"]);
 });
 
 for (const provider of ["google", "apple"] as const) test(`${provider} fallido no autentica ni consulta una sesión inventada`, async () => {
@@ -74,14 +76,39 @@ test("OTP válido sin sesión persistida no deja entrar", async () => {
   await assert.rejects(() => verifyEmailOtp(auth, "jugador@example.com", "12345678"), /account_session_missing/);
 });
 
-test("OTP rechaza sesión de otra identidad, correo o expiración", async () => {
+test("OTP rechaza sesión de otra identidad o correo", async () => {
   const { auth, session } = authMock();
   for (const user of [{ id: "other", email: "jugador@example.com" }, { id: "user-1", email: "other@example.com" }]) {
     auth.getSession = async () => ({ data: { session: { ...session, user } as never }, error: null });
     await assert.rejects(() => verifyEmailOtp(auth, "jugador@example.com", "12345678"), /account_session_missing/);
   }
-  auth.getSession = async () => ({ data: { session: { ...session, expires_at: 1 } }, error: null });
-  await assert.rejects(() => verifyEmailOtp(auth, "jugador@example.com", "12345678"), /account_session_missing/);
+});
+
+test("token vencido con refresh válido se renueva y valida sin sacar al usuario", async () => {
+  const { auth, calls, session } = authMock({
+    getSession: async () => ({ data: { session: { ...authMock().session, expires_at: 1 } }, error: null }),
+  });
+  const recovered = await recoverAuthSession(auth, { now: Date.now() });
+  assert.equal(recovered?.user.id, session.user.id);
+  assert.deepEqual(calls.map(call => call.method), ["refresh", "user"]);
+});
+
+test("refresh inválido se distingue de una caída transitoria y nunca borra datos por sí mismo", async () => {
+  const { auth } = authMock({
+    getSession: async () => ({ data: { session: { ...authMock().session, expires_at: 1 } }, error: null }),
+    refreshSession: async () => ({ data: { session: null }, error: { status: 401, message: "Invalid Refresh Token" } }),
+  });
+  await assert.rejects(() => recoverAuthSession(auth), (error: unknown) => error instanceof AuthSessionRecoveryError && error.failure === "invalid");
+
+  const transient = authMock({ getSession: async () => { throw new TypeError("Failed to fetch"); } }).auth;
+  await assert.rejects(() => recoverAuthSession(transient), (error: unknown) => error instanceof AuthSessionRecoveryError && error.failure === "transient");
+});
+
+test("reintento fuerza refresh, valida getUser y conserva la identidad", async () => {
+  const { auth, calls, session } = authMock();
+  const recovered = await recoverAuthSession(auth, { forceRefresh: true });
+  assert.equal(recovered?.user.id, session.user.id);
+  assert.deepEqual(calls.map(call => call.method), ["restore", "refresh", "user"]);
 });
 
 test("sesión invitada/anónima, sin JWT o refresh no es cuenta autenticada", () => {
@@ -96,7 +123,10 @@ test("OTP malformed no llama Supabase; restore fallido no crea cuenta", async ()
   const { auth, calls } = authMock({ getSession: async () => ({ data: { session: null }, error: new Error("network") }) });
   await assert.rejects(() => verifyEmailOtp(auth, "jugador@example.com", "12abcd"), /invalid/);
   assert.equal(calls.length, 0);
-  await assert.rejects(() => restoreAuthSession(auth), /network/);
+  await assert.rejects(
+    () => restoreAuthSession(auth),
+    (error: unknown) => error instanceof AuthSessionRecoveryError && error.failure === "transient" && error.cause instanceof Error && error.cause.message === "network",
+  );
 });
 
 test("OTP con menos de ocho dígitos no llama verifyOtp", async () => {

@@ -201,5 +201,11 @@ test("servidor combina hoyos distintos y rechaza sólo el mismo score concurrent
   const conflictA = bundle({ deviceId: "computer", activeDraft: { ...baseDraft, scores: { 5: { p: 2 }, 6: { p: 3 } } }, activeDraftUpdatedAt: "2026-09-03T12:04:00Z", baseDraft: newBase, baseDraftFingerprint: newFingerprint, baseDraftUpdatedAt: combined.activeDraftUpdatedAt });
   const conflictB = bundle({ deviceId: "phone", activeDraft: { ...baseDraft, scores: { 5: { p: 5 }, 6: { p: 3 } } }, activeDraftUpdatedAt: "2026-09-03T12:05:00Z", baseDraft: newBase, baseDraftFingerprint: newFingerprint, baseDraftUpdatedAt: combined.activeDraftUpdatedAt });
   await writeCloudBundle(db.client, "auth-user-a", { data: conflictA, fingerprint: "conflict-a" });
-  await assert.rejects(writeCloudBundle(db.client, "auth-user-a", { data: conflictB, fingerprint: "conflict-b" }), (error: unknown) => Boolean(error && typeof error === "object" && "code" in error && error.code === "CLOUD_FIELD_CONFLICT"));
+  await assert.rejects(writeCloudBundle(db.client, "auth-user-a", { data: conflictB, fingerprint: "conflict-b" }), (error: unknown) => {
+    if (!error || typeof error !== "object" || !("code" in error) || error.code !== "CLOUD_FIELD_CONFLICT" || !("conflicts" in error) || !Array.isArray(error.conflicts)) return false;
+    assert.equal(error.conflicts.length, 1);
+    assert.equal(error.conflicts[0].fieldPath, "/scores/5/p");
+    assert.equal(error.conflicts[0].hole, 5);
+    return true;
+  });
 });

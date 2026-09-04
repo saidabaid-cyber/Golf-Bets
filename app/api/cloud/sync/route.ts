@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseForUser } from "../../../../lib/supabase/server";
 import { cloudServerEnabled } from "../../../../lib/feature-flags";
-import type { CloudDataBundle } from "../../../../lib/cloud-sync";
+import type { CloudDataBundle, CloudDataConflict } from "../../../../lib/cloud-sync";
 import { readCloudBundle, supportsExtendedCloudSchema, writeCloudBundle } from "../../../../lib/cloud-sync-service";
 
 const MAX_BODY_BYTES = 5_000_000;
@@ -29,6 +29,12 @@ function safeFailure(error: unknown) {
   if (code === "42501" || /permission denied|row-level security/i.test(message)) return "La nube rechazó esta operación. Vuelve a iniciar sesión y reintenta; tu copia local se conserva.";
   if (["42P01", "42703", "PGRST204", "PGRST205"].includes(code) || /schema cache|does not exist/i.test(message)) return "La nube no pudo completar esta sincronización. Tu copia local se conserva; reintenta más tarde.";
   return "La sincronización no terminó. Puede haber datos pendientes; tu copia local se conserva. Reintenta.";
+}
+
+function safeConflicts(error: unknown): CloudDataConflict[] {
+  const conflicts = error && typeof error === "object" && "conflicts" in error ? error.conflicts : null;
+  if (!Array.isArray(conflicts)) return [];
+  return conflicts.slice(0, 100).filter((item): item is CloudDataConflict => Boolean(item && typeof item === "object" && item.collection && item.localId));
 }
 
 function logFailure(operation: "read" | "write", error: unknown) {
@@ -61,5 +67,10 @@ export async function POST(request: NextRequest) {
 
     const result = await writeCloudBundle(account.client, account.userId, body as { data: CloudDataBundle; fingerprint: string });
     return NextResponse.json(result, { headers: { "cache-control": "private, no-store" } });
-  } catch (error) { logFailure("write", error); const code = error && typeof error === "object" && "code" in error ? String(error.code) : ""; return NextResponse.json({ error: safeFailure(error) }, { status: code === "CLOUD_FIELD_CONFLICT" ? 409 : 503 }); }
+  } catch (error) {
+    logFailure("write", error);
+    const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+    const status = code === "CLOUD_FIELD_CONFLICT" ? 409 : 503;
+    return NextResponse.json({ error: safeFailure(error), code: code || "CLOUD_SYNC_FAILED", ...(status === 409 ? { conflicts: safeConflicts(error) } : {}) }, { status });
+  }
 }

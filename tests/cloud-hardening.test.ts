@@ -135,7 +135,10 @@ test("proyecciones siempre usan snapshot remoto más reciente, no versión recha
 test("CAS detecta carrera y cero filas actualizadas: nunca acknowledgment falso", async () => {
   const db = new CloudDb(); db.rows("players").push({ owner_id: "a", local_id: "p", updated_at: earlier });
   db.before = (table, op) => { if (table === "players" && op === "update") db.rows(table)[0].updated_at = later; };
-  await assert.rejects(writeVersionedRow(db.client, "players", { owner_id: "a", local_id: "p" }, { updated_at: later }), /Conflicto/);
+  await assert.rejects(
+    writeVersionedRow(db.client, "players", { owner_id: "a", local_id: "p" }, { updated_at: later }),
+    (error: unknown) => error instanceof Error && "code" in error && error.code === "CLOUD_WRITE_RACE",
+  );
 });
 test("tombstone posterior a la primera página sigue borrando datos", async () => {
   const db = new CloudDb(); db.tables.cloud_deletions = Array.from({ length: 1200 }, (_, i) => ({ owner_id: "user-a", local_id: "r" + i, entity_type: "round", deleted_at: earlier }));
