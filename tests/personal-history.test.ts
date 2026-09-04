@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildPersonalHistory, snapshotPersonalResult } from "../lib/personal-history";
+import { buildPersonalHistory, selectPersonalRivalHistory, snapshotPersonalResult } from "../lib/personal-history";
 import { applySavedPersonalRivalTemplate, updateSavedPersonalRivalTemplate } from "../lib/frequent-templates";
 import { resolvePersonalHistoryDeletion } from "../lib/round-utils";
 import type { PersonalBet, PersonalHistoryResult, RoundSnapshot } from "../lib/types";
@@ -139,4 +139,19 @@ test("compatibilidad legacy recupera configuración por identidad y nunca por í
   const row = buildPersonalHistory(remaining, today)[0];
   assert.equal(row.records[0].entries[0].betSnapshot?.id, "other");
   assert.equal(row.records[0].entries[0].rivalHandicap, 7);
+});
+
+test("histórico personal no presenta resultados antes de elegir contrincante", () => {
+  const rows = buildPersonalHistory([round("a", today, [result("carlos-id", 300, "Carlos")])], today);
+  assert.equal(selectPersonalRivalHistory(rows, ""), null);
+  assert.equal(selectPersonalRivalHistory(rows, rows[0].key)?.name, "Carlos");
+});
+
+test("selección usa clave estable y no mezcla dos contrincantes homónimos", () => {
+  const first = { ...result("round-player-a", 100, "Carlos"), rivalTemplateId: "rival-a" };
+  const second = { ...result("round-player-b", -200, "Carlos"), rivalTemplateId: "rival-b" };
+  const rows = buildPersonalHistory([round("a", today, [first, second])], today);
+  assert.equal(rows.length, 2);
+  assert.equal(selectPersonalRivalHistory(rows, rows[0].key)?.key, rows[0].key);
+  assert.notEqual(rows[0].key, rows[1].key);
 });

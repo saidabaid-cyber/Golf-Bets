@@ -2,45 +2,60 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { supportsExtendedCloudSchema } from "../lib/cloud-schema";
 
-const env = {
-  NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
-  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "publishable-test",
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: "",
-};
-
-function schema(extended: boolean) {
-  const common = { updated_at: {} };
+function client(row: Record<string, unknown> | null, error: unknown = null) {
+  const calls: string[] = [];
   return {
-    definitions: {
-      round_scores_cloud: { properties: extended ? { ...common, version: {}, updated_by_device: {} } : common },
-      profiles: { properties: extended ? { ...common, version: {}, updated_by_device: {} } : common },
-      account_data_migrations: { properties: extended ? { last_attempt_at: {}, last_error_code: {} } : {} },
+    calls,
+    from(table: string) {
+      calls.push(`from:${table}`);
+      return {
+        select(columns: string) {
+          calls.push(`select:${columns}`);
+          return {
+            eq(column: string, value: string) {
+              calls.push(`eq:${column}:${value}`);
+              return { maybeSingle: async () => ({ data: row, error }) };
+            },
+          };
+        },
+      };
     },
   };
 }
 
-test("detección de esquema usa OpenAPI autenticado y no consulta columnas inexistentes", async () => {
-  const requests: Array<{ input: string; init?: RequestInit }> = [];
-  const fetcher = (async (input: string | URL | Request, init?: RequestInit) => {
-    requests.push({ input: String(input), init });
-    return new Response(JSON.stringify(schema(true)), { status: 200 });
+test("sincronización detecta el esquema extendido con una lectura RLS del perfil", async () => {
+  const database = client({ id: "user-1", updated_at: "2026-09-04", version: 1, updated_by_device: null });
+  assert.equal(await supportsExtendedCloudSchema(database as never, "user-1", { useCache: false }), true);
+  assert.deepEqual(database.calls, ["from:profiles", "select:*", "eq:id:user-1"]);
+});
+
+test("esquema anterior activa fallback legacy sin pedir una columna inexistente", async () => {
+  const database = client({ id: "user-1", updated_at: "2026-09-04" });
+  assert.equal(await supportsExtendedCloudSchema(database as never, "user-1", { useCache: false }), false);
+  assert.deepEqual(database.calls, ["from:profiles", "select:*", "eq:id:user-1"]);
+});
+
+test("Auth 200 no depende del OpenAPI /rest/v1 aunque ese endpoint devolvería 401", async () => {
+  const originalFetch = globalThis.fetch;
+  let openApiRequests = 0;
+  globalThis.fetch = (async () => {
+    openApiRequests += 1;
+    return new Response("unauthorized", { status: 401 });
   }) as typeof fetch;
-  assert.equal(await supportsExtendedCloudSchema("user-jwt", { env, fetcher, useCache: false }), true);
-  assert.equal(requests[0].input, "https://example.supabase.co/rest/v1/");
-  assert.equal(new Headers(requests[0].init?.headers).get("authorization"), "Bearer user-jwt");
-  assert.doesNotMatch(requests[0].input, /version|round_scores_cloud/);
+  try {
+    const database = client({ id: "user-1", updated_at: "2026-09-04", version: 2, updated_by_device: "iphone" });
+    assert.equal(await supportsExtendedCloudSchema(database as never, "user-1", { useCache: false }), true);
+    assert.equal(openApiRequests, 0, "la detección nunca debe consultar el documento OpenAPI");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
-test("OpenAPI anterior activa fallback legacy sin producir un 400 esperado", async () => {
-  const fetcher = (async () => new Response(JSON.stringify(schema(false)), { status: 200 })) as typeof fetch;
-  assert.equal(await supportsExtendedCloudSchema("user-jwt", { env, fetcher, useCache: false }), false);
-});
-
-test("fallo real de inspección de esquema permanece visible y no se interpreta como legacy", async () => {
-  const fetcher = (async () => new Response("unavailable", { status: 503 })) as typeof fetch;
+test("un error RLS/PostgREST real permanece tipado en vez de parecer sesión inválida", async () => {
+  const failure = { code: "42501", message: "permission denied for table profiles", status: 403 };
+  const database = client(null, failure);
   await assert.rejects(
-    supportsExtendedCloudSchema("user-jwt", { env, fetcher, useCache: false }),
-    (error: unknown) => error instanceof Error && (error as Error & { status?: number }).status === 503,
+    supportsExtendedCloudSchema(database as never, "user-1", { useCache: false }),
+    (error: unknown) => error === failure,
   );
 });
-

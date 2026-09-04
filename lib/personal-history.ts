@@ -66,6 +66,14 @@ export type RivalHistory = {
   records: RivalHistoryRound[];
 };
 
+/** A rival must be chosen explicitly before presenting personal results. The
+ * stable key, rather than the display name, prevents two homonyms from being
+ * selected together. */
+export function selectPersonalRivalHistory(rivals: RivalHistory[], rivalKey: string) {
+  if (!rivalKey) return null;
+  return rivals.find((rival) => rival.key === rivalKey) || null;
+}
+
 export function buildPersonalHistory(
   history: RoundSnapshot[],
   today: string,

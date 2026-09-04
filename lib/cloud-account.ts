@@ -22,7 +22,7 @@ export function cloudAccountErrorMessage(error: unknown, subject = "tu cuenta") 
     return `La nube no pudo leer ${subject}. Tus datos locales se conservan; reintenta más tarde.`;
   }
   if (candidate.status === 401 || /jwt|token|session|sesión/i.test(message)) {
-    return "Tu sesión ya no es válida. Vuelve a iniciar sesión para conectar la nube.";
+    return "La nube pidió renovar la sesión. Tus datos siguen en este dispositivo; reintenta la conexión.";
   }
   if (/fetch|network|timeout|conexión|offline/i.test(message)) {
     return `No pudimos conectar con Supabase para leer ${subject}. Tus datos siguen guardados en este dispositivo.`;

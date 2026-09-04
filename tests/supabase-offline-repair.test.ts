@@ -37,6 +37,8 @@ test("errores de permisos, esquema y red son recuperables sin jerga ni secretos"
   assert.match(cloudAccountErrorMessage({ code: "PGRST205" }), /no pudo leer tu cuenta/);
   assert.match(cloudAccountErrorMessage(new TypeError("Failed to fetch")), /conectar con Supabase/);
   assert.doesNotMatch(cloudAccountErrorMessage({ code: "PGRST205" }), /migraci|RLS|PGRST/i);
+  assert.match(cloudAccountErrorMessage({ status: 401, message: "stale access token" }), /renovar la sesión/);
+  assert.doesNotMatch(cloudAccountErrorMessage({ status: 401, message: "stale access token" }), /ya no es válida|volver a iniciar/i);
 });
 
 test("migración reparadora es aditiva, repara perfiles y otorga Data API solo con RLS", () => {

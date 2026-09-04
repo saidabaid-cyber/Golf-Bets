@@ -75,7 +75,7 @@ import { buildHoleSummary, clearActiveRoundStorage, hasRoundProgress, historical
 import { monkeyHoleSummary, personalHoleSummary } from "../lib/personal-summary";
 import { downloadRoundCsv, downloadRoundImage, downloadRoundPdf, shareRound } from "../lib/round-export";
 import { deleteScorecardPhoto, deleteScorecardPhotoCloud, readScorecardPhoto, readScorecardPhotoCloud, saveScorecardPhoto, uploadScorecardPhotoCloud } from "../lib/scorecard-photo";
-import { CLOUD_TOMBSTONES_KEY, cloudDataFingerprint, collectLocalCloudData, downloadCloudData, findAmbiguousCloudConflicts, isCloudFieldConflict, mergeLocalAndCloud, persistCloudMetadata, resolveAmbiguousCloudConflicts, restoreLocalRoundUi, stableValue, trackLocalCloudEdits, type CloudDataBundle, type CloudDataConflict, recordCloudDeletion, uploadCloudData } from "../lib/cloud-sync";
+import { CLOUD_TOMBSTONES_KEY, cloudDataFingerprint, collectLocalCloudData, downloadCloudData, findAmbiguousCloudConflicts, isCloudFieldConflict, mergeLocalAndCloud, persistCloudMetadata, resolveAmbiguousCloudConflicts, restoreLocalRoundUi, stableValue, trackLocalCloudEdits, type CloudDataBundle, type CloudDataConflict, recordCloudDeletion, uploadCloudData, withCloudAuthRetry } from "../lib/cloud-sync";
 import { ownsLocalWorkspace, preserveDataConflicts, preserveDraftConflict } from "../lib/account-workspace";
 import { runCloudSyncCycle } from "../lib/cloud-sync-cycle";
 import { CloudSyncGate, cloudSyncErrorMessage, syncStatusAfterSkip, type CloudSyncTrigger } from "../lib/cloud-sync-gate";
@@ -340,7 +340,7 @@ function MoneyInput({ label, value, onChange }: { label: string; value: number; 
 }
 
 function GolfBetsApp() {
-  const { identity, cloudLinked, cloudStatus, cloudIssues, setCloudStatus, applyCloudPreferences, reportCloudSyncError, clearCloudSyncError } = useBackyardAccount();
+  const { identity, cloudLinked, cloudStatus, cloudIssues, setCloudStatus, applyCloudPreferences, reportCloudSyncError, clearCloudSyncError, refreshCloudSession } = useBackyardAccount();
   const { tab, setTab, goBack } = useScreenNavigation();
   const [rulesVisited, setRulesVisited] = useState(false);
   useEffect(() => { if (tab === "rules") setRulesVisited(true); }, [tab]);
@@ -680,8 +680,8 @@ function GolfBetsApp() {
         let appliedFingerprint = "";
         const completed = await runCloudSyncCycle({
           read, current, status: setCloudStatus,
-          download: () => downloadCloudData(liveIdentity.current.accessToken || ""),
-          upload: data => uploadCloudData(data, liveIdentity.current.accessToken || ""),
+          download: () => withCloudAuthRetry(downloadCloudData, liveIdentity.current.accessToken || "", refreshCloudSession),
+          upload: data => withCloudAuthRetry(token => uploadCloudData(data, token), liveIdentity.current.accessToken || "", refreshCloudSession),
           conflicts: (local, cloud) => {
             const conflicts = findAmbiguousCloudConflicts(local, cloud);
             if (!conflicts.length) return false;
@@ -729,7 +729,7 @@ function GolfBetsApp() {
         if (isCloudFieldConflict(error) && current()) {
           try {
             const local = read();
-            const cloud = await downloadCloudData(liveIdentity.current.accessToken || "");
+            const cloud = await withCloudAuthRetry(downloadCloudData, liveIdentity.current.accessToken || "", refreshCloudSession);
             const discovered = findAmbiguousCloudConflicts(local, cloud);
             const conflicts = discovered.length ? discovered : error.conflicts;
             if (conflicts.length) {
@@ -787,7 +787,7 @@ function GolfBetsApp() {
       window.removeEventListener("backyard-sync-retry", onRetry);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [hydrated, identity.mode, identity.userId, identity.accessToken, cloudLinked, setCloudStatus, applyCloudBundle, reportCloudSyncError, clearCloudSyncError]);
+  }, [hydrated, identity.mode, identity.userId, identity.accessToken, cloudLinked, setCloudStatus, applyCloudBundle, reportCloudSyncError, clearCloudSyncError, refreshCloudSession]);
 
   useEffect(() => {
     requestCloudSync.current?.();

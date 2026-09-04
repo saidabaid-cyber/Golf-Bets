@@ -11,6 +11,7 @@ import {
   resolveAmbiguousCloudConflicts,
   recordCloudDeletion,
   uploadCloudData,
+  withCloudAuthRetry,
   type CloudDataBundle,
 } from "../lib/cloud-sync";
 import { STORAGE_KEYS } from "../lib/round-utils";
@@ -162,6 +163,42 @@ test("409 conserva status, código y conflicto granular a través de la API", as
     });
   } finally {
     globalThis.fetch = originalFetch;
+  }
+});
+
+test("un 401 cloud renueva una sola vez y reintenta con el token nuevo", async () => {
+  const tokens: string[] = [];
+  let recoveries = 0;
+  const value = await withCloudAuthRetry(async (token) => {
+    tokens.push(token);
+    if (token === "expired") throw new CloudSyncHttpError("token vencido", 401, "AUTH_REQUIRED");
+    return "sincronizado";
+  }, "expired", async () => { recoveries += 1; return "renewed"; });
+  assert.equal(value, "sincronizado");
+  assert.equal(recoveries, 1);
+  assert.deepEqual(tokens, ["expired", "renewed"]);
+});
+
+test("un segundo 401 no inicia un ciclo infinito de renovación", async () => {
+  let calls = 0;
+  let recoveries = 0;
+  await assert.rejects(() => withCloudAuthRetry(async () => {
+    calls += 1;
+    throw new CloudSyncHttpError("token rechazado", 401, "AUTH_REQUIRED");
+  }, "expired", async () => { recoveries += 1; return "still-invalid"; }), (error: unknown) => error instanceof CloudSyncHttpError && error.status === 401);
+  assert.equal(calls, 2);
+  assert.equal(recoveries, 1);
+});
+
+test("un error de esquema, RLS o conflicto nunca intenta renovar la sesión", async () => {
+  for (const error of [
+    new CloudSyncHttpError("schema", 503, "42703"),
+    new CloudSyncHttpError("rls", 403, "42501"),
+    new CloudSyncHttpError("conflict", 409, "CLOUD_FIELD_CONFLICT"),
+  ]) {
+    let recoveries = 0;
+    await assert.rejects(() => withCloudAuthRetry(async () => { throw error; }, "valid", async () => { recoveries += 1; return "new"; }), (candidate: unknown) => candidate === error);
+    assert.equal(recoveries, 0);
   }
 });
 

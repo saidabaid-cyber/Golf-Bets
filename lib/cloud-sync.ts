@@ -435,6 +435,25 @@ export function isCloudFieldConflict(error: unknown): error is CloudSyncHttpErro
   return error instanceof CloudSyncHttpError && error.status === 409 && error.code === "CLOUD_FIELD_CONFLICT";
 }
 
+/** Retry exactly once with a freshly validated Supabase access token. A 401
+ * from the cloud route can be caused by an access token expiring between auth
+ * and sync; other failures (schema, RLS, conflict, network) must retain their
+ * own classification and never trigger a fake sign-out. */
+export async function withCloudAuthRetry<T>(
+  operation: (accessToken: string) => Promise<T>,
+  accessToken: string,
+  recover: () => Promise<string>,
+) {
+  try {
+    return await operation(accessToken);
+  } catch (error) {
+    if (!(error instanceof CloudSyncHttpError) || error.status !== 401) throw error;
+    const refreshedToken = await recover();
+    if (!refreshedToken) throw error;
+    return operation(refreshedToken);
+  }
+}
+
 async function parseCloudResponse(response: Response) {
   const payload = await response.json().catch(() => ({})) as { ok?: boolean; error?: string; code?: string; conflicts?: CloudDataConflict[]; data?: CloudDataBundle; fingerprint?: string };
   if (!response.ok) throw new CloudSyncHttpError(payload.error || "No fue posible sincronizar la nube.", response.status, payload.code || "", Array.isArray(payload.conflicts) ? payload.conflicts : []);

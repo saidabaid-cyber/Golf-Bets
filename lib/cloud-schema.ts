@@ -1,50 +1,35 @@
-type SchemaEnvironment = Pick<NodeJS.ProcessEnv,
-  "NEXT_PUBLIC_SUPABASE_URL" | "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY" | "NEXT_PUBLIC_SUPABASE_ANON_KEY">;
+import type { SupabaseClient } from "@supabase/supabase-js";
 
-type OpenApiSchema = {
-  definitions?: Record<string, { properties?: Record<string, unknown> }>;
-  components?: { schemas?: Record<string, { properties?: Record<string, unknown> }> };
-};
+type SchemaClient = Pick<SupabaseClient, "from">;
+type ProfileCapabilityRow = { version?: unknown; updated_by_device?: unknown; updated_at?: unknown };
 
-let cachedCapability: { projectUrl: string; extended: boolean; expiresAt: number } | null = null;
+const capabilityCache = new Map<string, { extended: boolean; expiresAt: number }>();
 
-/** Inspect PostgREST's authenticated OpenAPI document instead of deliberately
- * selecting a column that may not exist. This keeps the temporary legacy
- * fallback quiet while an additive migration is rolling out. */
+/**
+ * Detect the additive cloud schema without requesting PostgREST's OpenAPI
+ * document. Hosted Supabase no longer exposes GET /rest/v1/ to a normal user
+ * JWT, even when that user is valid, so that endpoint must never gate sync.
+ *
+ * `profiles.select("*")` is an ordinary owner-scoped RLS query. Selecting all
+ * existing columns works on both schema generations and lets us inspect the
+ * returned row without deliberately requesting a missing column.
+ */
 export async function supportsExtendedCloudSchema(
-  accessToken: string,
-  options: {
-    env?: SchemaEnvironment;
-    fetcher?: typeof fetch;
-    now?: number;
-    useCache?: boolean;
-  } = {},
+  client: SchemaClient,
+  userId: string,
+  options: { now?: number; useCache?: boolean } = {},
 ) {
-  const env = options.env || process.env;
-  const projectUrl = env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "") || "";
-  const publishableKey = env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-  if (!projectUrl || !publishableKey || !accessToken) throw new Error("cloud_schema_configuration_missing");
-
+  if (!userId) throw new Error("cloud_schema_user_missing");
   const now = options.now ?? Date.now();
-  if (options.useCache !== false && cachedCapability?.projectUrl === projectUrl && cachedCapability.expiresAt > now) {
-    return cachedCapability.extended;
-  }
+  const cached = capabilityCache.get(userId);
+  if (options.useCache !== false && cached && cached.expiresAt > now) return cached.extended;
 
-  const response = await (options.fetcher || fetch)(`${projectUrl}/rest/v1/`, {
-    headers: { apikey: publishableKey, Authorization: `Bearer ${accessToken}` },
-    cache: "no-store",
-  });
-  if (!response.ok) throw Object.assign(new Error("cloud_schema_unavailable"), { status: response.status });
-  const document = await response.json() as OpenApiSchema;
-  const schemas = document.definitions || document.components?.schemas || {};
-  const hasColumns = (table: string, columns: string[]) => {
-    const properties = schemas[table]?.properties || {};
-    return columns.every((column) => Object.hasOwn(properties, column));
-  };
-  const extended = hasColumns("round_scores_cloud", ["version", "updated_by_device", "updated_at"])
-    && hasColumns("profiles", ["version", "updated_by_device", "updated_at"])
-    && hasColumns("account_data_migrations", ["last_attempt_at", "last_error_code"]);
-  if (options.useCache !== false) cachedCapability = { projectUrl, extended, expiresAt: now + 5 * 60_000 };
+  const { data, error } = await client.from("profiles").select("*").eq("id", userId).maybeSingle();
+  if (error) throw error;
+  const row = (data || {}) as ProfileCapabilityRow;
+  const extended = Object.hasOwn(row, "version")
+    && Object.hasOwn(row, "updated_by_device")
+    && Object.hasOwn(row, "updated_at");
+  if (options.useCache !== false) capabilityCache.set(userId, { extended, expiresAt: now + 60_000 });
   return extended;
 }
-
