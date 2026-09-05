@@ -8,6 +8,7 @@
     "start": "next start",
     "test": "tsc -p tsconfig.test.json && node --test .test-dist/tests/*.test.js",
     "lint": "eslint .",
+    "pwa:icons": "node scripts/build-pwa-icons.mjs",
     "rules:pdf-index": "node scripts/build-rules-search-index.mjs",
     "rules:index": "node --env-file=.env.local scripts/index-rules-pdf.mjs"
   },

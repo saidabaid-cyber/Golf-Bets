@@ -1,5 +1,5 @@
-const CACHE = "the-backyard-shell-v2";
-const CORE = ["/", "/manifest.webmanifest", "/brand/the-backyard-logo.svg", "/brand/the-backyard-logo.png"];
+const CACHE = "the-backyard-shell-v3";
+const CORE = ["/", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/maskable-192.png", "/icons/maskable-512.png", "/apple-icon.png"];
 
 async function cacheShell() {
   const cache = await caches.open(CACHE);
@@ -24,6 +24,10 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key.startsWith("the-backyard-shell-") && key !== CACHE).map((key) => caches.delete(key)))).then(() => self.clients.claim()));
 });
 
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") void self.skipWaiting();
+});
+
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   if (request.method !== "GET") return;
@@ -36,7 +40,7 @@ self.addEventListener("fetch", (event) => {
     }).catch(async () => (await caches.match(request)) || (await caches.match("/")) || Response.error()));
     return;
   }
-  if (url.pathname.startsWith("/_next/static/") || url.pathname.startsWith("/brand/") || url.pathname === "/manifest.webmanifest") {
+  if (url.pathname.startsWith("/_next/static/") || url.pathname.startsWith("/brand/") || url.pathname.startsWith("/icons/") || url.pathname === "/apple-icon.png" || url.pathname === "/manifest.webmanifest") {
     event.respondWith(caches.match(request).then((cached) => cached || fetch(request).then(async (response) => {
       if (response.ok) (await caches.open(CACHE)).put(request, response.clone());
       return response;

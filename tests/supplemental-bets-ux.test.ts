@@ -5,6 +5,7 @@ import test from "node:test";
 const page = readFileSync("app/page.tsx", "utf8");
 const editor = readFileSync("app/components/supplemental-bets-editor.tsx", "utf8");
 const styles = readFileSync("app/components/supplemental-bets.module.css", "utf8");
+const sideBets = readFileSync("app/components/side-bet-panels.tsx", "utf8");
 
 test("round setup keeps current Personals first, the seven new games in order, and Manuals last", () => {
   const currentPersonals = page.indexOf('title="Apuestas personales actuales"');
@@ -25,6 +26,35 @@ test("every existing and new bet type has compact contextual help in a closable 
   assert.match(editor, /Reglas importantes/);
   assert.match(editor, /Ejemplo simple/);
   assert.match(editor, /aria-label="Cerrar ayuda"/);
+  const itemHeader = editor.slice(editor.indexOf("function ItemShell"), editor.indexOf("const COMPONENT_LABELS"));
+  assert.ok(itemHeader.indexOf("<BetHelpButton") < itemHeader.indexOf("<Switch"));
+  assert.match(itemHeader, /bet\.enabled && <div className=\{styles\.fields\}/);
+});
+
+test("la configuración usa las descripciones compactas solicitadas y alinea ayuda con switch", () => {
+  for (const description of [
+    "Gana hoyos · captura y conserva el conejo",
+    "Mejor score único gana · empates acumulan",
+    "Puntos positivos y negativos · todos contra todos",
+    "Parejas · puntos por Low/High según configuración",
+    "Los 2 jugadores de la derecha vs los 2 de la izquierda",
+  ]) assert.match(page, new RegExp(description.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  for (const description of [
+    "3 putts · el último jugador que la tenga paga",
+    "Bunker · se acumulan por jugador",
+    "Agua · se acumulan por jugador",
+    "El Lobo elige pareja o juega solo",
+  ]) assert.match(sideBets, new RegExp(description.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  for (const description of [
+    "Jugador vs jugador · ida, vuelta y total",
+    "Diferencia de golpes netos · pago por golpe",
+    "Duelo hoyo por hoyo · al perder se abre nueva presión",
+    "Low Ball / High Ball por equipos · con presiones",
+    "Puntos contra cuota según handicap",
+    "Scores de pareja concatenados · diferencia por unidad",
+    "Menos putts de la ronda gana el ante",
+  ]) assert.ok(editor.includes(description));
+  assert.match(styles, /\.itemActions\{display:flex;align-items:center/);
 });
 
 test("Personal and Manual switches retain their editors and move inactive records after active ones", () => {

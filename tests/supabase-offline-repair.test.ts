@@ -128,13 +128,27 @@ test("offline-first usa IndexedDB y una sola operación por cuenta", () => {
 
 test("service worker cachea shell pero nunca APIs ni datos privados", () => {
   const worker = readFileSync("public/sw.js", "utf8");
+  const runtime = readFileSync("app/components/pwa-runtime.tsx", "utf8");
   const manifest = JSON.parse(readFileSync("public/manifest.webmanifest", "utf8"));
   assert.match(worker, /url\.pathname\.startsWith\("\/api\/"\)/);
   assert.match(worker, /request\.mode === "navigate"/);
   assert.match(worker, /caches\.match\("\/"\)/);
   assert.equal(manifest.display, "standalone");
+  assert.equal(manifest.id, "/");
+  assert.equal(manifest.start_url, "/");
   assert.equal(manifest.scope, "/");
-  assert.ok(manifest.icons.length >= 2);
+  assert.deepEqual(manifest.icons.map((icon: { sizes: string; purpose: string }) => [icon.sizes, icon.purpose]), [
+    ["192x192", "any"], ["512x512", "any"], ["192x192", "maskable"], ["512x512", "maskable"],
+  ]);
+  for (const icon of manifest.icons) {
+    const png = readFileSync(`public${icon.src}`);
+    assert.equal(png.readUInt32BE(16), Number(icon.sizes.split("x")[0]));
+    assert.equal(png.readUInt32BE(20), Number(icon.sizes.split("x")[1]));
+  }
+  assert.match(worker, /the-backyard-shell-v3/);
+  assert.match(worker, /SKIP_WAITING/);
+  assert.match(runtime, /updateViaCache: "none"/);
+  assert.match(runtime, /registration\.update\(\)/);
 });
 
 test("aceptaciones pendientes forman una cola idempotente, reintentable y limpiable", () => {

@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { CLOUD_TOMBSTONES_KEY, type CloudDataBundle } from "../lib/cloud-sync";
+import { CLOUD_TOMBSTONES_KEY, collectLocalCloudData, mergeLocalAndCloud, type CloudDataBundle } from "../lib/cloud-sync";
+import { writeCloudBundleToStorage } from "../lib/offline-store";
 import { saveRoundHistoryLocalFirst } from "../lib/round-history-save";
 import { readStoredJson, STORAGE_KEYS } from "../lib/round-utils";
 import type { Course, Player, RoundSnapshot } from "../lib/types";
@@ -142,4 +143,39 @@ test("el botón finaliza solo después de persistir local/IndexedDB y nunca pide
   assert.ok(clearDraft < closeRound);
   assert.ok(closeRound < queueCloud);
   assert.doesNotMatch(page.slice(page.indexOf("function saveRound()"), saveEnd), /cloudStatus\s*!==\s*["']synced["']/);
+});
+
+test("Guardar → nube atrasada → aplicar respuesta → Histórico → reload nunca pierde la ronda", async () => {
+  const storage = new MemoryStorage();
+  const previous = snapshot("round-anterior");
+  storage.setItem(STORAGE_KEYS.history, JSON.stringify([previous]));
+  const beforeSave = collectLocalCloudData(storage as unknown as Storage, null, false);
+  beforeSave.deviceId = "device-cloud";
+
+  await saveRoundHistoryLocalFirst({
+    storage: storage as unknown as Storage,
+    ownerId: "account-1",
+    snapshot: snapshot("round-local-final"),
+    deviceId: "device-local",
+    defaultHandicap: null,
+    hasLocalPreferenceState: false,
+    queueForCloud: true,
+    persistOffline: async () => "stored-offline",
+  });
+
+  const localAfterSave = collectLocalCloudData(storage as unknown as Storage, null, false);
+  localAfterSave.deviceId = "device-local";
+  const reconciled = mergeLocalAndCloud(localAfterSave, beforeSave);
+  writeCloudBundleToStorage(storage as unknown as Storage, reconciled);
+
+  const reloaded = readStoredJson<RoundSnapshot[]>(storage as unknown as Storage, STORAGE_KEYS.history, []);
+  assert.deepEqual(reloaded.map((round) => round.id).sort(), ["round-anterior", "round-local-final"]);
+  const finalRound = reloaded.find((round) => round.id === "round-local-final");
+  assert.equal(Object.values(finalRound?.scores || {}).flatMap((row) => Object.values(row)).length, 72);
+
+  const page = readFileSync("app/page.tsx", "utf8");
+  const start = page.indexOf("const applyCloudBundle");
+  const end = page.indexOf("useEffect(() =>", start);
+  assert.match(page.slice(start, end), /const reconciled = mergeLocalAndCloud\(local, data\)/);
+  assert.match(page.slice(start, end), /JSON\.stringify\(reconciled\.history\)/);
 });

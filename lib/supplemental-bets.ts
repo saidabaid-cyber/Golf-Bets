@@ -34,6 +34,7 @@ export const SUPPLEMENTAL_BET_LABELS: Record<SupplementalBet["type"], string> = 
 
 export type SupplementalPressureDetail = {
   label: string;
+  component?: "Low Ball" | "High Ball";
   startHole: number;
   endHole?: number;
   winnerIds: string[];
@@ -114,6 +115,28 @@ function settleTeams(balances: Record<string, number>, winners: string[], losers
       addBalance(balances, loser, -value);
     }
   }
+}
+
+/** A team-pressure value is a stake per occupied team seat, not one stake for
+ * every winner/loser cross. Standard 2-vs-2 therefore pays each real player
+ * exactly `value`. In Mudo/Yo-Yo the real partner owns the virtual seat's
+ * stake, keeping the three-player settlement zero-sum. */
+function settleTeamPressure(
+  balances: Record<string, number>,
+  matchup: PressureMatchup,
+  outcome: number,
+  value: number,
+) {
+  const teamAWon = outcome > 0;
+  const winners = teamAWon ? matchup.teamA : matchup.teamB;
+  const losers = teamAWon ? matchup.teamB : matchup.teamA;
+  const weight = (id: string) => matchup.virtual && id === matchup.teamA[0] ? 2 : 1;
+  const winnerWeight = winners.reduce((total, id) => total + weight(id), 0);
+  const loserWeight = losers.reduce((total, id) => total + weight(id), 0);
+  if (!winnerWeight || !loserWeight) return;
+  const teamStake = Math.max(winnerWeight, loserWeight) * value;
+  for (const winner of winners) addBalance(balances, winner, teamStake * weight(winner) / winnerWeight);
+  for (const loser of losers) addBalance(balances, loser, -teamStake * weight(loser) / loserWeight);
 }
 
 function calculateNassau(
@@ -299,28 +322,33 @@ function calculateTeamPressures(
   const matchIsComplete = order.length > 0 && order.every(holeIsComplete);
   if (!enabled(bet) || !matchups.length) return { betId: bet.id, type: bet.type, label: SUPPLEMENTAL_BET_LABELS[bet.type], complete: false, balances, lines: [], pressures };
   for (const matchup of matchups) {
-    let startHole = order[0];
-    for (let index = 0; index < order.length; index += 1) {
-      const holeNumber = order[index];
-      if (!bet.carryEnabled && index === 9) startHole = holeNumber;
-      const hole = course.holes.find((candidate) => candidate.number === holeNumber);
-      if (!hole || !holeIsComplete(holeNumber)) continue;
-      const adjusted = Object.fromEntries(participants.map((player) => [player.id, netScore(grossFor(holeNumber, player.id) as number, player.id, hole.strokeIndex, participants, bet.hcpPct, normalizeHandicapMode(bet.decimals))])) as Record<string, number>;
-      const virtualScore = matchup.virtual === "mudo" ? hole.par : matchup.virtual === "yoyo" ? adjusted[matchup.teamA[0]] : undefined;
-      const teamAScores = [...matchup.teamA.map((id) => adjusted[id]), ...(virtualScore === undefined ? [] : [virtualScore])];
-      const teamBScores = matchup.teamB.map((id) => adjusted[id]);
-      if (!teamAScores.length || !teamBScores.length) continue;
-      const low = Math.sign(Math.min(...teamBScores) - Math.min(...teamAScores));
-      const high = Math.sign(Math.max(...teamBScores) - Math.max(...teamAScores));
-      const outcome = bet.metric === "low" ? low : bet.metric === "high" ? high : low + high;
-      if (outcome === 0) continue;
-      const winners = outcome > 0 ? matchup.teamA : matchup.teamB;
-      const losers = outcome > 0 ? matchup.teamB : matchup.teamA;
-      settleTeams(balances, winners, losers, Math.max(0, bet.value));
-      pressures.push({ label: matchup.label, startHole, endHole: holeNumber, winnerIds: winners, loserIds: losers, value: Math.max(0, bet.value), open: false });
-      startHole = order[index + 1] ?? 0;
+    const components = bet.metric === "low_high"
+      ? (["Low Ball", "High Ball"] as const)
+      : ([bet.metric === "low" ? "Low Ball" : "High Ball"] as const);
+    for (const component of components) {
+      let startHole = order[0];
+      for (let index = 0; index < order.length; index += 1) {
+        const holeNumber = order[index];
+        if (!bet.carryEnabled && index === 9) startHole = holeNumber;
+        const hole = course.holes.find((candidate) => candidate.number === holeNumber);
+        if (!hole || !holeIsComplete(holeNumber)) continue;
+        const adjusted = Object.fromEntries(participants.map((player) => [player.id, netScore(grossFor(holeNumber, player.id) as number, player.id, hole.strokeIndex, participants, bet.hcpPct, normalizeHandicapMode(bet.decimals))])) as Record<string, number>;
+        const virtualScore = matchup.virtual === "mudo" ? hole.par : matchup.virtual === "yoyo" ? adjusted[matchup.teamA[0]] : undefined;
+        const teamAScores = [...matchup.teamA.map((id) => adjusted[id]), ...(virtualScore === undefined ? [] : [virtualScore])];
+        const teamBScores = matchup.teamB.map((id) => adjusted[id]);
+        if (!teamAScores.length || !teamBScores.length) continue;
+        const outcome = component === "Low Ball"
+          ? Math.sign(Math.min(...teamBScores) - Math.min(...teamAScores))
+          : Math.sign(Math.max(...teamBScores) - Math.max(...teamAScores));
+        if (outcome === 0) continue;
+        const winners = outcome > 0 ? matchup.teamA : matchup.teamB;
+        const losers = outcome > 0 ? matchup.teamB : matchup.teamA;
+        settleTeamPressure(balances, matchup, outcome, Math.max(0, bet.value));
+        pressures.push({ label: matchup.label, component, startHole, endHole: holeNumber, winnerIds: winners, loserIds: losers, value: Math.max(0, bet.value), open: false });
+        startHole = order[index + 1] ?? 0;
+      }
+      if (startHole && order.includes(startHole)) pressures.push({ label: matchup.label, component, startHole, winnerIds: [], loserIds: [], value: Math.max(0, bet.value), open: true });
     }
-    if (startHole && order.includes(startHole)) pressures.push({ label: matchup.label, startHole, winnerIds: [], loserIds: [], value: Math.max(0, bet.value), open: true });
   }
   return {
     betId: bet.id,
@@ -329,7 +357,7 @@ function calculateTeamPressures(
     complete: matchIsComplete,
     balances,
     pressures,
-    lines: pressures.map((pressure, index) => `${pressure.label} · Presión ${index + 1} · H${pressure.startHole}${pressure.endHole ? `–H${pressure.endHole}` : " · abierta"}`),
+    lines: pressures.map((pressure, index) => `${pressure.label} · ${pressure.component || "Presión"} ${index + 1} · H${pressure.startHole}${pressure.endHole ? `–H${pressure.endHole}` : " · abierta"}`),
   };
 }
 

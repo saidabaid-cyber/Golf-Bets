@@ -87,7 +87,7 @@ test("Mudo and Yo-Yo create the three documented matchups for three real players
     const bet = { ...createSupplementalBet("team_pressures", players.slice(0, 3), virtualMode), virtualMode } as SupplementalBet;
     const result = calculate([bet], players.slice(0, 3), { 1: { a: 3, b: 5, c: 6 } }, [1]);
     assert.equal(new Set(result.results[0].pressures?.map((item) => item.label)).size, 3);
-    assert.deepEqual(result.balances, { a: 300, b: 0, c: -300 });
+    assert.deepEqual(result.balances, { a: 600, b: 0, c: -600 });
     assertZero(result);
   }
 });
@@ -121,11 +121,62 @@ test("Presiones por parejas compare Low and High after handicap", () => {
   assertZero(result);
 });
 
+test("Presiones por parejas liquidan Low y High como componentes independientes", () => {
+  const base = createSupplementalBet("team_pressures", players, "team-components");
+  const low = calculate([{ ...base, metric: "low", value: 20 } as SupplementalBet], players, { 1: { a: 3, b: 5, c: 4, d: 6 } }, [1]);
+  const high = calculate([{ ...base, metric: "high", value: 20 } as SupplementalBet], players, { 1: { a: 4, b: 5, c: 4, d: 6 } }, [1]);
+  assert.deepEqual(low.balances, { a: 20, b: 20, c: -20, d: -20 });
+  assert.deepEqual(high.balances, { a: 20, b: 20, c: -20, d: -20 });
+  assert.equal(low.results[0].pressures?.[0].component, "Low Ball");
+  assert.equal(high.results[0].pressures?.[0].component, "High Ball");
+  assertZero(low);
+  assertZero(high);
+});
+
+test("Low + High conserva resultados cruzados aunque su dinero se compense", () => {
+  const bet = { ...createSupplementalBet("team_pressures", players, "team-crossed"), value: 20 } as SupplementalBet;
+  const result = calculate([bet], players, { 1: { a: 3, b: 7, c: 4, d: 6 } }, [1]);
+  assert.deepEqual(result.balances, { a: 0, b: 0, c: 0, d: 0 });
+  assert.deepEqual(result.results[0].pressures?.map((pressure) => [pressure.component, pressure.winnerIds]), [
+    ["Low Ball", ["a", "b"]],
+    ["High Ball", ["c", "d"]],
+  ]);
+  assertZero(result);
+});
+
+test("un empate Low permanece abierto mientras High se cierra", () => {
+  const bet = { ...createSupplementalBet("team_pressures", players, "team-open"), value: 20 } as SupplementalBet;
+  const result = calculate([bet], players, { 1: { a: 4, b: 5, c: 4, d: 6 } }, [1]);
+  const low = result.results[0].pressures?.find((pressure) => pressure.component === "Low Ball");
+  const high = result.results[0].pressures?.find((pressure) => pressure.component === "High Ball");
+  assert.equal(low?.open, true);
+  assert.equal(high?.open, false);
+  assert.deepEqual(result.balances, { a: 20, b: 20, c: -20, d: -20 });
+});
+
+test("Presiones por parejas aplican HCP antes de Low y High", () => {
+  const handicapPlayers = players.map((player) => ({ ...player, handicap: player.id === "c" || player.id === "d" ? 18 : 0 }));
+  const bet = { ...createSupplementalBet("team_pressures", handicapPlayers, "team-hcp"), value: 20, hcpPct: 100 } as SupplementalBet;
+  const result = calculate([bet], handicapPlayers, { 1: { a: 4, b: 5, c: 5, d: 6 } }, [1]);
+  assert.deepEqual(result.balances, { a: 0, b: 0, c: 0, d: 0 });
+  assert.equal(result.results[0].pressures?.filter((pressure) => pressure.open).length, 2);
+});
+
+test("cada componente de Presiones por parejas conserva carry entre H9 y H10", () => {
+  const base = { ...createSupplementalBet("team_pressures", players, "team-carry"), metric: "low", value: 20 } as SupplementalBet;
+  const rows = { ...scores(Array.from({ length: 9 }, (_, index) => index + 1), { a: 4, b: 5, c: 4, d: 6 }), 10: { a: 3, b: 5, c: 4, d: 6 } };
+  const order = Array.from({ length: 10 }, (_, index) => index + 1);
+  const withCarry = calculate([{ ...base, carryEnabled: true } as SupplementalBet], players, rows, order);
+  const withoutCarry = calculate([{ ...base, carryEnabled: false } as SupplementalBet], players, rows, order);
+  assert.equal(withCarry.results[0].pressures?.find((pressure) => !pressure.open)?.startHole, 1);
+  assert.equal(withoutCarry.results[0].pressures?.find((pressure) => !pressure.open)?.startHole, 10);
+});
+
 test("Presiones por parejas use the configured maximum for a player who abandoned", () => {
   const bet = { ...createSupplementalBet("team_pressures", players, "abandoned"), metric: "high", abandonedPlayerIds: ["b"], abandonedMaxScore: 8 } as SupplementalBet;
   const result = calculate([bet], players, { 1: { a: 3, c: 5, d: 6 } }, [1]);
   assert.equal(result.results[0].complete, true);
-  assert.deepEqual(result.balances, { a: -200, b: -200, c: 200, d: 200 });
+  assert.deepEqual(result.balances, { a: -100, b: -100, c: 100, d: 100 });
   assertZero(result);
 });
 
@@ -163,4 +214,22 @@ test("OFF preserves Personal, Manual and supplemental data but excludes every re
   assert.equal(calculate([restored], players.slice(0, 2), scoreRows, order).results.length, 1);
   assert.equal((restored as Extract<SupplementalBet, { type: "dollar_stroke" }>).valuePerStroke, 10);
   assert.equal((normalizeRoundDraft({ players: players.slice(0, 2), supplementalBets: [supplemental], manualBets: [manual], putts: { 1: { a: 2 } } })?.putts as PuttsByHole)[1].a, 2);
+});
+
+test("las siete modalidades conservan configuración completa en draft y reload sin romper históricos anteriores", () => {
+  const types: SupplementalBet["type"][] = ["individual_nassau", "dollar_stroke", "individual_pressures", "team_pressures", "chicago", "vegas", "minimum_putts"];
+  const configured = types.map((type, index) => ({ ...createSupplementalBet(type, players, `persist-${index}`), enabled: index % 2 === 0 })) as SupplementalBet[];
+  const serialized = JSON.parse(JSON.stringify(configured));
+  const normalized = normalizeSupplementalBets(serialized);
+  assert.deepEqual(normalized, configured);
+
+  const draft = normalizeRoundDraft({
+    version: 5,
+    players,
+    supplementalBets: configured,
+    putts: { 1: { a: 2, b: 1, c: 3, d: 2 } },
+  });
+  assert.deepEqual(draft?.supplementalBets, configured);
+  assert.deepEqual(draft?.putts, { 1: { a: 2, b: 1, c: 3, d: 2 } });
+  assert.deepEqual(normalizeRoundDraft({ version: 1, players })?.supplementalBets, []);
 });

@@ -33,6 +33,22 @@ const HELP: Record<BetKind, { title: string; what: string; how: string; rules: s
   loba: { title: "Loba", what: "La Loba juega con pareja o sola contra los demás.", how: "La app compara el mejor neto de cada equipo y aplica modalidad y multiplicador.", rules: "Las unidades son por equipo y el multiplicador 🔥 no las modifica.", example: "Jugador A va con B contra Equipo B y gana el hoyo." },
 };
 
+const SUPPLEMENTAL_META: Record<SupplementalBet["type"], { icon: string; description: string }> = {
+  individual_nassau: { icon: "🏌️", description: "Jugador vs jugador · ida, vuelta y total" },
+  dollar_stroke: { icon: "💵", description: "Diferencia de golpes netos · pago por golpe" },
+  individual_pressures: { icon: "⚡", description: "Duelo hoyo por hoyo · al perder se abre nueva presión" },
+  team_pressures: { icon: "🤝", description: "Low Ball / High Ball por equipos · con presiones" },
+  chicago: { icon: "🌆", description: "Puntos contra cuota según handicap" },
+  vegas: { icon: "🎲", description: "Scores de pareja concatenados · diferencia por unidad" },
+  minimum_putts: { icon: "⛳", description: "Menos putts de la ronda gana el ante" },
+};
+
+function createSupplementalBetId(type: SupplementalBet["type"]) {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${type}-${Date.now()}`;
+}
+
 export function BetHelpButton({ kind }: { kind: BetKind }) {
   const [open, setOpen] = useState(false);
   const help = HELP[kind];
@@ -72,9 +88,14 @@ function ParticipantChips({ players, selected, onChange }: { players: Player[]; 
 }
 
 function ItemShell({ bet, label, onToggle, onRemove, children }: { bet: SupplementalBet; label: string; onToggle: () => void; onRemove: () => void; children: ReactNode }) {
+  const meta = SUPPLEMENTAL_META[bet.type];
   return <article className={`${styles.betItem} ${!bet.enabled ? styles.disabled : ""}`}>
-    <div className={styles.itemHeader}><div><b>{label}</b><small>{bet.enabled ? "Activa" : "Desactivada · no participa en resultados"}</small></div><Switch on={bet.enabled} label={label} onChange={onToggle} /><button type="button" className="remove" aria-label={`Eliminar ${label}`} onClick={onRemove}>×</button></div>
-    <div className={styles.fields}>{children}</div>
+    <div className={styles.itemHeader}>
+      <div><b>{meta.icon} {label}</b><small>{meta.description}</small>{!bet.enabled && <small>Desactivada · conserva sus datos y no participa</small>}</div>
+      <span className={styles.itemActions}><BetHelpButton kind={bet.type} /><Switch on={bet.enabled} label={label} onChange={onToggle} /></span>
+      <button type="button" className="remove" aria-label={`Eliminar ${label}`} onClick={onRemove}>×</button>
+    </div>
+    {bet.enabled && <div className={styles.fields}>{children}</div>}
   </article>;
 }
 
@@ -88,14 +109,14 @@ export function SupplementalBetsEditor({ bets, players, onChange }: { bets: Supp
   const update = (id: string, next: Partial<SupplementalBet>) => onChange(bets.map((bet) => bet.id === id ? { ...bet, ...next } as SupplementalBet : bet));
   const remove = (id: string) => onChange(bets.filter((bet) => bet.id !== id));
   const add = (type: SupplementalBet["type"]) => {
-    const id = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${type}-${Date.now()}`;
+    const id = createSupplementalBetId(type);
     onChange([...bets, createSupplementalBet(type, players, id)]);
   };
 
   return <div className={styles.editor}>{ORDER.map((type) => {
     const typeBets = bets.filter((bet) => bet.type === type).map((bet, index) => ({ bet, index })).sort((first, second) => Number(second.bet.enabled) - Number(first.bet.enabled));
-    const title = SUPPLEMENTAL_BET_LABELS[type].toUpperCase();
-    return <ResultAccordion key={type} id={`setup-${type}`} title={title} className="setupBetsAccordion" headerAction={<span className={styles.headerActions}><BetHelpButton kind={type} /><button type="button" className="textButton" onClick={(event) => { event.stopPropagation(); add(type); }}>+ Agregar</button></span>}>
+    const title = `${SUPPLEMENTAL_META[type].icon} ${SUPPLEMENTAL_BET_LABELS[type].toUpperCase()}`;
+    return <ResultAccordion key={type} id={`setup-${type}`} title={title} className="setupBetsAccordion" headerAction={<span className={styles.headerActions}><button type="button" className="textButton" onClick={(event) => { event.stopPropagation(); add(type); }}>+ Agregar</button></span>}>
       {!typeBets.length && <div className="empty">Todavía no hay apuestas de este tipo.</div>}
       {typeBets.map(({ bet, index }) => <ItemShell key={bet.id} bet={bet} label={`${SUPPLEMENTAL_BET_LABELS[type]} ${index + 1}`} onToggle={() => update(bet.id, { enabled: !bet.enabled })} onRemove={() => remove(bet.id)}>
         {bet.type === "individual_nassau" && <>

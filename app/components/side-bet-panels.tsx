@@ -35,8 +35,13 @@ export function CounterBetConfigPanel({ kind, config, players, onChange }: {
   onChange: (next: CounterBetConfig) => void;
 }) {
   const meta = COUNTER_BET_META[kind];
+  const description = kind === "vipers"
+    ? "3 putts · el último jugador que la tenga paga"
+    : kind === "camels"
+      ? "Bunker · se acumulan por jugador"
+      : "Agua · se acumulan por jugador";
   return <div className="betCard">
-    <div className="betHead"><div><b>{meta.emoji} {meta.plural}</b><span>Múltiples por jugador y hoyo · liquidación por vuelta</span></div><span className="betHeadActions"><BetHelpButton kind={kind} /><button type="button" className={`switch ${config.enabled ? "on" : ""}`} role="switch" aria-checked={config.enabled} aria-label={`Activar ${meta.plural}`} onClick={() => onChange({ ...config, enabled: !config.enabled })}><span /></button></span></div>
+    <div className="betHead"><div><b>{meta.emoji} {meta.plural}</b><span>{description}</span></div><span className="betHeadActions"><BetHelpButton kind={kind} /><button type="button" className={`switch ${config.enabled ? "on" : ""}`} role="switch" aria-checked={config.enabled} aria-label={`Activar ${meta.plural}`} onClick={() => onChange({ ...config, enabled: !config.enabled })}><span /></button></span></div>
     {config.enabled && <>
       <div className="grid2">
         <div><label>Valor {meta.singular}</label><div className="moneyField"><span>$</span><NumericCaptureInput inputMode="decimal" value={config.value} onValueChange={value => onChange({ ...config, value: Math.max(0, value ?? 0) })} /></div></div>
@@ -53,7 +58,7 @@ export function LobaConfigPanel({ config, players, onChange }: {
   onChange: (next: typeof config) => void;
 }) {
   return <div className="betCard">
-    <div className="betHead"><div><b>🐺 Loba</b><span>Pareja, sola o sola anticipada · 🔥 por hoyo</span></div><span className="betHeadActions"><BetHelpButton kind="loba" /><button type="button" className={`switch ${config.enabled ? "on" : ""}`} role="switch" aria-checked={config.enabled} aria-label="Activar Loba" onClick={() => onChange({ ...config, enabled: !config.enabled })}><span /></button></span></div>
+    <div className="betHead"><div><b>🐺 Loba</b><span>El Lobo elige pareja o juega solo</span></div><span className="betHeadActions"><BetHelpButton kind="loba" /><button type="button" className={`switch ${config.enabled ? "on" : ""}`} role="switch" aria-checked={config.enabled} aria-label="Activar Loba" onClick={() => onChange({ ...config, enabled: !config.enabled })}><span /></button></span></div>
     {config.enabled && <>
       <div className="grid3">
         <div><label>Valor Loba</label><div className="moneyField"><span>$</span><NumericCaptureInput inputMode="decimal" value={config.value} onValueChange={value => onChange({ ...config, value: Math.max(0, value ?? 0) })} /></div></div>

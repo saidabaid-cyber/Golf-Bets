@@ -651,32 +651,36 @@ function GolfBetsApp() {
   }, [hydrated]);
 
   const applyCloudBundle = useCallback((data: CloudDataBundle, local: CloudDataBundle) => {
+    // Cloud responses can arrive after a local-first finalization. Reconcile
+    // again at the UI boundary so a canonical response captured before the
+    // save can never replace a newly confirmed Historical round.
+    const reconciled = mergeLocalAndCloud(local, data);
     const changed = (left: unknown, right: unknown) => JSON.stringify(stableValue(left)) !== JSON.stringify(stableValue(right));
-    if (changed(local.activeDraft, data.activeDraft)) {
+    if (changed(local.activeDraft, reconciled.activeDraft)) {
       preserveDraftConflict(localStorage, local.activeDraft);
-      applyDraft(data.activeDraft, { preserveLocalUi: true });
+      applyDraft(reconciled.activeDraft, { preserveLocalUi: true });
       setFeedback("Ronda actualizada desde la nube. La versión local anterior se conservó en este dispositivo.");
     }
-    const mergedCourses = mergeDefaultCourses(data.courses);
-    if (changed(local.courses, data.courses)) setCourses(mergedCourses);
-    if (changed(local.history, data.history)) setHistory(data.history.map(round => ({ ...round, expenses: normalizeExpenses(round.expenses) })));
-    if (changed(local.rivals, data.rivals)) setSavedPersonalRivals(data.rivals);
-    if (changed(local.frequentPlayers, data.frequentPlayers)) setFrequentPlayers(data.frequentPlayers);
-    if (changed(local.frequentGroups, data.frequentGroups)) setFrequentGroups(data.frequentGroups);
-    setHighContrast(data.preferences.highContrast);
-    applyCloudPreferences(data.preferences);
+    const mergedCourses = mergeDefaultCourses(reconciled.courses);
+    if (changed(local.courses, reconciled.courses)) setCourses(mergedCourses);
+    if (changed(local.history, reconciled.history)) setHistory(reconciled.history.map(round => ({ ...round, expenses: normalizeExpenses(round.expenses) })));
+    if (changed(local.rivals, reconciled.rivals)) setSavedPersonalRivals(reconciled.rivals);
+    if (changed(local.frequentPlayers, reconciled.frequentPlayers)) setFrequentPlayers(reconciled.frequentPlayers);
+    if (changed(local.frequentGroups, reconciled.frequentGroups)) setFrequentGroups(reconciled.frequentGroups);
+    setHighContrast(reconciled.preferences.highContrast);
+    applyCloudPreferences(reconciled.preferences);
     localStorage.setItem(STORAGE_KEYS.courses, JSON.stringify(mergedCourses));
-    localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(data.history));
-    localStorage.setItem(STORAGE_KEYS.rivals, JSON.stringify(data.rivals));
-    localStorage.setItem(STORAGE_KEYS.frequentPlayers, JSON.stringify(data.frequentPlayers));
-    localStorage.setItem(STORAGE_KEYS.frequentGroups, serializeFrequentGroups(data.frequentGroups));
-    localStorage.setItem(STORAGE_KEYS.contrast, String(data.preferences.highContrast));
-    const localDraftWithNavigation = restoreLocalRoundUi(data.activeDraft, { currentIndex: currentIndexRef.current });
+    localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(reconciled.history));
+    localStorage.setItem(STORAGE_KEYS.rivals, JSON.stringify(reconciled.rivals));
+    localStorage.setItem(STORAGE_KEYS.frequentPlayers, JSON.stringify(reconciled.frequentPlayers));
+    localStorage.setItem(STORAGE_KEYS.frequentGroups, serializeFrequentGroups(reconciled.frequentGroups));
+    localStorage.setItem(STORAGE_KEYS.contrast, String(reconciled.preferences.highContrast));
+    const localDraftWithNavigation = restoreLocalRoundUi(reconciled.activeDraft, { currentIndex: currentIndexRef.current });
     localStorage.setItem(STORAGE_KEYS.draft, JSON.stringify(localDraftWithNavigation));
-    localStorage.setItem(CLOUD_TOMBSTONES_KEY, JSON.stringify(data.tombstones));
-    persistCloudMetadata(localStorage, data);
+    localStorage.setItem(CLOUD_TOMBSTONES_KEY, JSON.stringify(reconciled.tombstones));
+    persistCloudMetadata(localStorage, reconciled);
     hadLocalPreferences.current = true;
-    const applied = collectLocalCloudData(localStorage, data.preferences.defaultHandicap, true);
+    const applied = collectLocalCloudData(localStorage, reconciled.preferences.defaultHandicap, true);
     applied.deviceId = offlineDeviceId.current;
     return cloudDataFingerprint(applied);
   }, [applyCloudPreferences, applyDraft]);
@@ -2102,22 +2106,22 @@ function GolfBetsApp() {
         <div className="sectionTitle"><div><h2>3. Apuestas generales</h2><p>Cada apuesta tiene su propio porcentaje y participantes.</p></div></div>
 
         <div className="betCard">
-          <div className="betHead"><div><b>🐇 Conejos</b><span>Agarra · mantiene · gana · acumula</span></div><span className="betHeadActions"><BetHelpButton kind="rabbits" /><Toggle on={bets.rabbits.enabled} onClick={() => setBets({ ...bets, rabbits: { ...bets.rabbits, enabled: !bets.rabbits.enabled } })} /></span></div>
+          <div className="betHead"><div><b>🐇 Conejos</b><span>Gana hoyos · captura y conserva el conejo</span></div><span className="betHeadActions"><BetHelpButton kind="rabbits" /><Toggle on={bets.rabbits.enabled} onClick={() => setBets({ ...bets, rabbits: { ...bets.rabbits, enabled: !bets.rabbits.enabled } })} /></span></div>
           {bets.rabbits.enabled && <><div className="grid3"><MoneyInput label="Valor" value={bets.rabbits.value} onChange={(v) => setBets({ ...bets, rabbits: { ...bets.rabbits, value: v } })} /><HcpPercentInput value={bets.rabbits.hcpPct} onChange={(v) => setBets({ ...bets, rabbits: { ...bets.rabbits, hcpPct: v } })} /><HandicapModeSelect value={bets.rabbits.decimals} onChange={(decimals) => setBets({ ...bets, rabbits: { ...bets.rabbits, decimals } })} /></div><label className="miniLabel">Participan</label><ParticipantChips players={players} selected={bets.rabbits.participantIds} onChange={(ids) => setBets({ ...bets, rabbits: { ...bets.rabbits, participantIds: ids } })} /></>}
         </div>
 
         <div className="betCard">
-          <div className="betHead"><div><b>⛳ Skins</b><span>Empates acumulan</span></div><span className="betHeadActions"><BetHelpButton kind="skins" /><Toggle on={bets.skins.enabled} onClick={() => setBets({ ...bets, skins: { ...bets.skins, enabled: !bets.skins.enabled } })} /></span></div>
+          <div className="betHead"><div><b>⛳ Skins</b><span>Mejor score único gana · empates acumulan</span></div><span className="betHeadActions"><BetHelpButton kind="skins" /><Toggle on={bets.skins.enabled} onClick={() => setBets({ ...bets, skins: { ...bets.skins, enabled: !bets.skins.enabled } })} /></span></div>
           {bets.skins.enabled && <><div className="grid3"><MoneyInput label="Valor" value={bets.skins.value} onChange={(v) => setBets({ ...bets, skins: { ...bets.skins, value: v } })} /><HcpPercentInput value={bets.skins.hcpPct} onChange={(v) => setBets({ ...bets, skins: { ...bets.skins, hcpPct: v } })} /><HandicapModeSelect value={bets.skins.decimals} onChange={(decimals) => setBets({ ...bets, skins: { ...bets.skins, decimals } })} /></div><label className="miniLabel">Participan</label><ParticipantChips players={players} selected={bets.skins.participantIds} onChange={(ids) => setBets({ ...bets, skins: { ...bets.skins, participantIds: ids } })} /></>}
         </div>
 
         <div className="betCard">
-          <div className="betHead"><div><b>📏 Unidades / Copas</b><span>Positivas menos negativas; todos pagan a todos</span></div><span className="betHeadActions"><BetHelpButton kind="units" /><Toggle on={bets.units.enabled} onClick={() => setBets({ ...bets, units: { ...bets.units, enabled: !bets.units.enabled } })} /></span></div>
+          <div className="betHead"><div><b>📏 Unidades / Copas</b><span>Puntos positivos y negativos · todos contra todos</span></div><span className="betHeadActions"><BetHelpButton kind="units" /><Toggle on={bets.units.enabled} onClick={() => setBets({ ...bets, units: { ...bets.units, enabled: !bets.units.enabled } })} /></span></div>
           {bets.units.enabled && <><div className="grid2"><MoneyInput label="Valor por unidad" value={bets.units.value} onChange={(v) => setBets({ ...bets, units: { ...bets.units, value: v } })} /><MoneyInput label="Valor por Copa" value={bets.units.copaValue ?? bets.units.value} onChange={(v) => setBets({ ...bets, units: { ...bets.units, copaValue: v } })} /></div><label className="miniLabel">Participan en Unidades / Copas</label><ParticipantChips players={players} selected={bets.units.participantIds} onChange={(ids) => setBets({ ...bets, units: { ...bets.units, participantIds: ids } })} /></>}
         </div>
 
         <div className="betCard">
-          <div className="betHead"><div><b>🤝 Foursome</b><span>Fijo · fijo + patada · solo puntos</span></div><span className="betHeadActions"><BetHelpButton kind="foursome" /><Toggle on={bets.foursome.enabled} onClick={() => setBets({ ...bets, foursome: { ...bets.foursome, enabled: !bets.foursome.enabled } })} /></span></div>
+          <div className="betHead"><div><b>🤝 Foursome</b><span>Parejas · puntos por Low/High según configuración</span></div><span className="betHeadActions"><BetHelpButton kind="foursome" /><Toggle on={bets.foursome.enabled} onClick={() => setBets({ ...bets, foursome: { ...bets.foursome, enabled: !bets.foursome.enabled } })} /></span></div>
           {bets.foursome.enabled && <>
             <HandicapBaseControl name="Foursome" config={bets.foursome} fallback="moving" onChange={baseMode => setBets({ ...bets, foursome: { ...bets.foursome, handicapMethod: "configured", baseMode, fixedBaseHandicap: undefined } })} />
             <div className="grid3">
@@ -2143,7 +2147,7 @@ function GolfBetsApp() {
         </div>
 
         <div className="betCard">
-          <div className="betHead"><div><b>⚪🤝 Bola Amiga</b><span>Parejas por hoyo · birdie o mejor voltea rival · máximo 9</span></div><span className="betHeadActions"><BetHelpButton kind="ball_friend" /><Toggle on={bets.ballFriend.enabled} onClick={() => setBets({ ...bets, ballFriend: { ...bets.ballFriend, enabled: !bets.ballFriend.enabled } })} /></span></div>
+          <div className="betHead"><div><b>⚪🤝 Bola Amiga</b><span>Los 2 jugadores de la derecha vs los 2 de la izquierda</span></div><span className="betHeadActions"><BetHelpButton kind="ball_friend" /><Toggle on={bets.ballFriend.enabled} onClick={() => setBets({ ...bets, ballFriend: { ...bets.ballFriend, enabled: !bets.ballFriend.enabled } })} /></span></div>
           {bets.ballFriend.enabled && <HandicapBaseControl name="Bola Amiga" config={bets.ballFriend} fallback="fixed" onChange={baseMode => setBets({ ...bets, ballFriend: { ...bets.ballFriend, baseMode, fixedBaseHandicap: undefined } })} />}
           {bets.ballFriend.enabled && <><div className="grid3"><MoneyInput label="Valor punto" value={bets.ballFriend.value} onChange={(v) => setBets({ ...bets, ballFriend: { ...bets.ballFriend, value: v } })} /><HcpPercentInput value={bets.ballFriend.hcpPct} onChange={(v) => setBets({ ...bets, ballFriend: { ...bets.ballFriend, hcpPct: v } })} /><NumberField label="Score máximo" value={bets.ballFriend.maxScore} onChange={(v) => setBets({ ...bets, ballFriend: { ...bets.ballFriend, maxScore: v } })} /></div><label className="miniLabel">Participan</label><ParticipantChips players={players} selected={bets.ballFriend.participantIds} onChange={(ids) => setBets({ ...bets, ballFriend: { ...bets.ballFriend, participantIds: ids } })} /></>}
         </div>
