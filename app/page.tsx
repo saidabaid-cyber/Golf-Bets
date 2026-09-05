@@ -747,7 +747,7 @@ function GolfBetsApp() {
     let nextAutoAttemptAt = 0;
     const gate = new CloudSyncGate();
     const debug = (event: string, trigger?: CloudSyncTrigger) => {
-      if (process.env.NODE_ENV === "development") console.info("[cloud-sync]", event, { trigger, user: userId.slice(0, 8) });
+      if (process.env.NODE_ENV === "development") console.info("[cloud-sync]", event, { trigger });
     };
     const current = () => !cancelled && ownsLocalWorkspace(localStorage, userId) && liveIdentity.current.userId === userId && Boolean(liveIdentity.current.accessToken);
     const read = () => {
