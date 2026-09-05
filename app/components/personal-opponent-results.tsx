@@ -1,9 +1,15 @@
 import { groupCurrentPersonalResults } from "../../lib/personal-opponents";
 import type { PersonalOpponentResult } from "../../lib/types";
+import { SUPPLEMENTAL_META } from "./supplemental-bets-editor";
 
 const money = (value: number) => `${value > 0 ? "+" : value < 0 ? "−" : ""}$${Math.abs(value).toLocaleString("es-MX", { maximumFractionDigits: 2 })}`;
 const tone = (value: number) => value > 0 ? "good" : value < 0 ? "bad" : "";
 const statusLabel = (status: PersonalOpponentResult["status"]) => status === "final" ? "Final" : status === "partial" ? "Parcial" : "Pendiente";
+const personalModeIcon: Record<PersonalOpponentResult["mode"], string> = {
+  nassau_individual: SUPPLEMENTAL_META.individual_nassau.icon,
+  dollar_stroke: SUPPLEMENTAL_META.dollar_stroke.icon,
+  individual_pressures: SUPPLEMENTAL_META.individual_pressures.icon,
+};
 
 export function PersonalOpponentResults({ entries, compact = false }: { entries: PersonalOpponentResult[]; compact?: boolean }) {
   const rivals = groupCurrentPersonalResults(entries);
@@ -15,7 +21,7 @@ export function PersonalOpponentResults({ entries, compact = false }: { entries:
       const sameMode = all.filter((candidate) => candidate.mode === entry.mode);
       const instance = sameMode.length > 1 ? ` · #${sameMode.findIndex((candidate) => candidate === entry) + 1}` : "";
       return <details className="personalModeDisclosure" key={`${entry.betId}-${entry.mode}-${index}`}>
-        <summary><span>{entry.modeLabel}{instance}<small>{statusLabel(entry.status)}</small></span><b className={tone(entry.amount)}>{money(entry.amount)}</b><i aria-hidden="true">⌄</i></summary>
+        <summary><span>{personalModeIcon[entry.mode]} {entry.modeLabel}{instance}<small>{statusLabel(entry.status)}</small></span><b className={tone(entry.amount)}>{money(entry.amount)}</b><i aria-hidden="true">⌄</i></summary>
         <div className="personalModeDetails">
           {(entry.detailLines || []).map((line, detailIndex) => <p key={`${entry.betId}-detail-${detailIndex}`}>{line}</p>)}
           {!entry.detailLines?.length && !entry.components?.length && <p>Este resultado heredado conserva su subtotal; el detalle auditable no estaba disponible en esa versión.</p>}
