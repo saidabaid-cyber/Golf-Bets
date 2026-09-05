@@ -9,6 +9,7 @@ import {
   isLaVistaRulesContext,
   classifyRulesAiFailure,
   publicRulesAiStatus,
+  RULES_AI_UNCERTAIN_MESSAGE,
   rulesAiConfig,
   type RulesAiClient,
 } from "../lib/rules-ai";
@@ -57,13 +58,27 @@ test("Rules AI uses local rules only for the active La Vista fields and stays ge
 
 test("enabled Rules AI uses Responses file_search with a configured vector store and a mock client", async () => {
   let request: Record<string, unknown> | undefined;
-  const client: RulesAiClient = { responses: { create: async (input) => { request = input; return { output_text: "QUÉ PROCEDE\nAlivio.\n\nPENALIDAD\nSin penalidad." }; } } };
+  const client: RulesAiClient = { responses: { create: async (input) => { request = input; return { output_text: "QUÉ PROCEDE\nAlivio.\n\nPENALIDAD\nSin penalidad.", output: [{ type: "file_search_call", results: [{ score: 0.91 }] }] }; } } };
   const env = { RULES_AI_ENABLED: "true", OPENAI_API_KEY: "secret-never-send", OPENAI_RULES_VECTOR_STORE_ID: "vs_rules", OPENAI_RULES_MODEL: "gpt-5.4-mini" };
   const answer = await askRulesWithClient({ client, env, question: "¿Tengo alivio del camino?", courseName: "La Vista" });
   assert.match(answer, /QUÉ PROCEDE/);
   assert.equal(request?.model, "gpt-5.4-mini");
-  assert.deepEqual(request?.tools, [{ type: "file_search", vector_store_ids: ["vs_rules"], max_num_results: 12 }]);
+  assert.deepEqual(request?.tools, [{ type: "file_search", vector_store_ids: ["vs_rules"], max_num_results: 12, ranking_options: { score_threshold: 0.2 } }]);
   assert.equal(JSON.stringify(request).includes("secret-never-send"), false);
+});
+
+test("Rules AI no muestra una respuesta sin evidencia recuperada", async () => {
+  const client: RulesAiClient = { responses: { create: async () => ({
+    output_text: "Respuesta no sustentada",
+    output: [{ type: "file_search_call", results: [] }],
+  }) } };
+  const answer = await askRulesWithClient({
+    client,
+    env: { RULES_AI_ENABLED: "true", OPENAI_API_KEY: "secret", OPENAI_RULES_VECTOR_STORE_ID: "vs_rules" },
+    question: "¿De qué color deben ser mis calcetines?",
+    courseName: "",
+  });
+  assert.equal(answer, RULES_AI_UNCERTAIN_MESSAGE);
 });
 
 test("Rules AI removes internal file citation markers from the visible answer", () => {

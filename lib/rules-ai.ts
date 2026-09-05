@@ -2,13 +2,16 @@ import type { LocalRule } from "./types";
 import { activeLocalRules, isLaVistaCourse, LA_VISTA_LOCAL_RULES } from "./local-rules";
 
 export const DEFAULT_RULES_AI_MODEL = "gpt-5.4-mini";
-export const RULES_AI_UNCERTAIN_MESSAGE = "No pude confirmar esta situación con suficiente seguridad.";
+export const RULES_AI_UNCERTAIN_MESSAGE = "No encontré suficiente fundamento en las reglas disponibles para responder con seguridad.";
 
 type RulesAiEnvironment = Record<string, string | undefined>;
 
 export type RulesAiClient = {
   responses: {
-    create: (input: Record<string, unknown>) => Promise<{ output_text?: string }>;
+    create: (input: Record<string, unknown>) => Promise<{
+      output_text?: string;
+      output?: Array<{ type?: string; results?: unknown[] | null }>;
+    }>;
   };
 };
 
@@ -111,8 +114,15 @@ export async function askRulesWithClient({
     model: config.model,
     instructions: buildRulesAiInstructions(),
     input: buildRulesQuestionContext({ question, courseName, localRules }),
-    tools: [{ type: "file_search", vector_store_ids: [config.vectorStoreId], max_num_results: 12 }],
+    tools: [{
+      type: "file_search",
+      vector_store_ids: [config.vectorStoreId],
+      max_num_results: 12,
+      ranking_options: { score_threshold: 0.2 },
+    }],
     include: ["file_search_call.results"],
   });
+  const hasRetrievedEvidence = response.output?.some((item) => item.type === "file_search_call" && Array.isArray(item.results) && item.results.length > 0);
+  if (!hasRetrievedEvidence) return RULES_AI_UNCERTAIN_MESSAGE;
   return cleanRulesAiAnswer(response.output_text || "") || RULES_AI_UNCERTAIN_MESSAGE;
 }
