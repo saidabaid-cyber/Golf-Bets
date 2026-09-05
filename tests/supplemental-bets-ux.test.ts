@@ -7,12 +7,13 @@ const editor = readFileSync("app/components/supplemental-bets-editor.tsx", "utf8
 const styles = readFileSync("app/components/supplemental-bets.module.css", "utf8");
 const sideBets = readFileSync("app/components/side-bet-panels.tsx", "utf8");
 
-test("round setup keeps canonical Nassau first, supplemental games in order, and Manuals last", () => {
+test("round setup keeps general additions first, Manuals before the final Personales group", () => {
   const currentPersonals = page.indexOf('id="setup-personals"');
   const supplemental = page.indexOf("<SupplementalBetsEditor");
   const manuals = page.indexOf('id="setup-manuals"');
-  assert.ok(currentPersonals >= 0 && supplemental > currentPersonals && manuals > supplemental);
-  assert.match(editor, /const ORDER:[^=]+\= \["dollar_stroke", "individual_pressures", "team_pressures", "chicago", "vegas", "minimum_putts"\]/);
+  assert.ok(supplemental >= 0 && manuals > supplemental && currentPersonals > manuals);
+  assert.match(editor, /const ORDER:[^=]+\= \["team_pressures", "chicago", "vegas", "minimum_putts"\]/);
+  assert.match(page, /types=\{\["dollar_stroke", "individual_pressures"\]\}/);
 });
 
 test("every existing and new bet type has compact contextual help in a closable modal", () => {
@@ -60,8 +61,8 @@ test("la configuración usa las descripciones compactas solicitadas y alinea ayu
 
 test("Personal and Manual switches retain their editors and move inactive records after active ones", () => {
   assert.match(page, /sort\(\(first, second\) => Number\(second\.enabled !== false\) - Number\(first\.enabled !== false\)\)/);
-  assert.match(page, /runAfterBettingConsent\(\(\) => updatePersonalBet\(bet\.id, \{ enabled: true \}\)\)/);
-  assert.match(page, /runAfterBettingConsent\(\(\) => updateManualBet\(bet\.id, \{ enabled: true \}\)\)/);
+  assert.match(page, /runAfterBettingConsent\(\(\) => updatePersonalBet\(bet\.id, \{ enabled: true, enabledBeforeCategoryOff: undefined \}\)\)/);
+  assert.match(page, /runAfterBettingConsent\(\(\) => updateManualBet\(bet\.id, \{ enabled: true, enabledBeforeCategoryOff: undefined \}\)\)/);
   assert.match(page, /bet\.enabled === false \? "betItemDisabled"/);
   assert.match(styles, /\.disabled\{order:2;/);
   const signedInput = readFileSync("app/components/signed-money-input.tsx", "utf8");
@@ -82,7 +83,8 @@ test("Minimum Putts capture stays inside the existing score card and persists in
 test("new games feed live standings, general results, settlement and individual result accordions", () => {
   assert.match(page, /liveSupplemental\.balances/);
   assert.match(page, /supplemental\.balances/);
-  assert.match(page, /generalResultCategories[\s\S]*supplemental\.results\.filter\(result => result\.type !== "individual_nassau"\)\.map/);
+  assert.match(page, /const supplementalGeneralResults = useMemo\(\(\) => supplemental\.results\.filter\(\(result\) => !isPersonalSupplementalType\(result\.type\)\)/);
+  assert.match(page, /generalResultCategories[\s\S]*supplementalGeneralResults\.map/);
   assert.match(page, /id=\{`supplemental-\$\{result\.betId\}`\}/);
-  assert.match(page, /<SupplementalBetResults results=\{\[result\]\}/);
+  assert.match(page, /supplementalGeneralResults\.map\(\(result\) => <ResultAccordion[\s\S]*<SupplementalBetResults results=\{\[result\]\}/);
 });

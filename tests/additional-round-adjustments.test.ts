@@ -168,7 +168,8 @@ test("Resultados ofrece Jugadores y Resumen General con scroll y columnas fijas"
   assert.match(page, />Jugadores<\/button>/);
   assert.match(page, />Resumen General<\/button>/);
   assert.match(page, /buildGeneralResultsTable\(players\.map\(player => player\.id\), generalResultCategories, generalBetBalances\)/);
-  assert.match(page, /Resultados de Nassau Individual/);
+  assert.match(page, /title="Personales"/);
+  assert.match(page, /<PersonalOpponentResults entries=\{personalOpponentResults\}/);
   assert.match(page, /TOTAL GENERAL/);
   assert.match(css, /\.generalResultsScroll\{[^}]*overflow-x:auto/);
   assert.match(css, /\.generalResultsTable th:first-child\{[^}]*position:sticky/);

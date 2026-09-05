@@ -16,7 +16,7 @@ import {
 } from "../../lib/side-bets";
 import { NumericCaptureInput } from "./numeric-capture-input";
 import { ResultAccordion } from "./result-accordion";
-import { BetHelpButton } from "./supplemental-bets-editor";
+import { SetupBetCard } from "./setup-bet-card";
 
 const money = (value: number) => `${value < 0 ? "−" : ""}$${Math.abs(value).toLocaleString("es-MX", { maximumFractionDigits: 2 })}`;
 const signedMoney = (value: number) => `${value > 0 ? "+" : ""}${money(value)}`;
@@ -42,19 +42,15 @@ export function CounterBetConfigPanel({ kind, config, players, onChange, request
     : kind === "camels"
       ? "Bunker · se acumulan por jugador"
       : "Agua · se acumulan por jugador";
-  return <div className="betCard">
-    <div className="betHead"><div><b>{meta.emoji} {meta.plural}</b><span>{description}</span></div><span className="betHeadActions"><BetHelpButton kind={kind} /><button type="button" className={`switch ${config.enabled ? "on" : ""}`} role="switch" aria-checked={config.enabled} aria-label={`Activar ${meta.plural}`} onClick={() => {
-      if (config.enabled || !requestActivation) onChange({ ...config, enabled: !config.enabled });
-      else void requestActivation().then((accepted) => { if (accepted) onChange({ ...config, enabled: true }); });
-    }}><span /></button></span></div>
-    {config.enabled && !locked && <>
+  return <SetupBetCard id={kind} icon={meta.emoji} title={meta.plural} description={description} help={kind} enabled={config.enabled} locked={locked} requestActivation={requestActivation} onEnabledChange={(enabled) => onChange({ ...config, enabled })}>
+    <>
       <div className="grid2">
         <div><label>Valor {meta.singular}</label><div className="moneyField"><span>$</span><NumericCaptureInput inputMode="decimal" value={config.value} onValueChange={value => onChange({ ...config, value: Math.max(0, value ?? 0) })} /></div></div>
         <div><label>H10–18</label><select value={config.secondNineMultiplier} onChange={event => onChange({ ...config, secondNineMultiplier: Math.max(1, Number(event.target.value) || 1) })}>{[1, 2, 3, 4, 5].map(value => <option key={value} value={value}>{value === 1 ? "Normal" : `${value}x`}</option>)}</select></div>
       </div>
       <label className="miniLabel">Participan</label><PlayerChips players={players} selected={config.participantIds} onChange={participantIds => onChange({ ...config, participantIds })} />
-    </>}
-  </div>;
+    </>
+  </SetupBetCard>;
 }
 
 export function LobaConfigPanel({ config, players, onChange, requestActivation, locked = false }: {
@@ -64,12 +60,8 @@ export function LobaConfigPanel({ config, players, onChange, requestActivation, 
   requestActivation?: () => Promise<boolean>;
   locked?: boolean;
 }) {
-  return <div className="betCard">
-    <div className="betHead"><div><b>🐺 Loba</b><span>El Lobo elige pareja o juega solo</span></div><span className="betHeadActions"><BetHelpButton kind="loba" /><button type="button" className={`switch ${config.enabled ? "on" : ""}`} role="switch" aria-checked={config.enabled} aria-label="Activar Loba" onClick={() => {
-      if (config.enabled || !requestActivation) onChange({ ...config, enabled: !config.enabled });
-      else void requestActivation().then((accepted) => { if (accepted) onChange({ ...config, enabled: true }); });
-    }}><span /></button></span></div>
-    {config.enabled && !locked && <>
+  return <SetupBetCard id="loba" icon="🐺" title="Loba" description="El Lobo elige pareja o juega solo" help="loba" enabled={config.enabled} locked={locked} requestActivation={requestActivation} onEnabledChange={(enabled) => onChange({ ...config, enabled })}>
+    <>
       <div className="grid3">
         <div><label>Valor Loba</label><div className="moneyField"><span>$</span><NumericCaptureInput inputMode="decimal" value={config.value} onValueChange={value => onChange({ ...config, value: Math.max(0, value ?? 0) })} /></div></div>
         <div><label htmlFor="loba-hcp-pct">HCP Loba %</label><NumericCaptureInput id="loba-hcp-pct" aria-label="HCP Loba %" inputMode="numeric" min={0} max={100} step={5} value={config.hcpPct ?? 100} emptyWhenZero={false} onValueChange={value => onChange({ ...config, hcpPct: Math.min(100, Math.max(0, value ?? 100)) })} /></div>
@@ -78,8 +70,8 @@ export function LobaConfigPanel({ config, players, onChange, requestActivation, 
       </div>
       {config.unitsEnabled && <div className="lobaUnitToggle"><label><input type="checkbox" checked={config.duplicateUnitsByMode} onChange={event => onChange({ ...config, duplicateUnitsByMode: event.target.checked })} /> Unidades también se duplican</label><details><summary aria-label="Ayuda sobre unidades de Loba">?</summary><p>El multiplicador especial 🔥 del hoyo no modifica las unidades. Si “Unidades también se duplican” está activado, las unidades valen 1x con pareja, 2x cuando la Loba va sola y 3x cuando se declara sola anticipadamente.</p></details></div>}
       <label className="miniLabel">Participan</label><PlayerChips players={players} selected={config.participantIds} onChange={participantIds => onChange({ ...config, participantIds })} />
-    </>}
-  </div>;
+    </>
+  </SetupBetCard>;
 }
 
 function Counter({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {

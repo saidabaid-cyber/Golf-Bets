@@ -50,7 +50,7 @@ test("acordeón de Resultados expone estado accesible y contenido asociado", () 
 });
 
 test("las secciones de detalle de Resultados inician cerradas sin perder su contenido", () => {
-  for (const [id, title] of [["rabbits", "🐇 Conejos"], ["skins", "⛳ Skins"], ["units", "📏 Unidades"], ["foursome", "Foursome"], ["ball-friend", "⚪🤝 Bola Amiga"], ["polla", "Polla"], ["mini-polla", "Mini Polla"], ["personals", "Resultados de Nassau Individual"], ["manuals", "Manuales"]]) {
+  for (const [id, title] of [["rabbits", "🐇 Conejos"], ["skins", "⛳ Skins"], ["units", "📏 Unidades"], ["foursome", "Foursome"], ["ball-friend", "⚪🤝 Bola Amiga"], ["polla", "Polla"], ["mini-polla", "Mini Polla"], ["personals", "Personales"], ["manuals", "Manuales"]]) {
     const markup = renderToStaticMarkup(createElement(ResultAccordion, {
       id,
       title,
@@ -88,7 +88,7 @@ test("Editar ronda concentra Personales/Manuales y Resultados conserva navegaci�
   const personals = page.slice(page.indexOf('{tab === "personals"'), page.indexOf('{tab === "round"'));
   const results = page.slice(page.indexOf('{tab === "results" && <>'), page.indexOf('{tab === "history" && <>'));
 
-  assert.ok(setup.indexOf('id="setup-personals"') < setup.indexOf('id="setup-manuals"'));
+  assert.ok(setup.indexOf('id="setup-manuals"') < setup.indexOf('id="setup-personals"'));
   assert.match(setup, /renderPersonalBetsEditor\(\)/);
   assert.match(setup, /renderManualBetsEditor\(true\)/);
   assert.match(personals, /<PersonalHistoryPanel/);

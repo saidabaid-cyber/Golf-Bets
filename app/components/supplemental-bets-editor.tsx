@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createSupplementalBet, SUPPLEMENTAL_BET_LABELS } from "../../lib/supplemental-bets";
+import { setSupplementalCategoryEnabled } from "../../lib/bet-activation";
 import type { Player, SupplementalBet } from "../../lib/types";
 import { NumericCaptureInput } from "./numeric-capture-input";
 import { ResultAccordion } from "./result-accordion";
@@ -113,17 +114,20 @@ function ItemShell({ bet, label, onToggle, onRemove, children, locked }: { bet: 
   </article>;
 }
 
-const ORDER: SupplementalBet["type"][] = ["dollar_stroke", "individual_pressures", "team_pressures", "chicago", "vegas", "minimum_putts"];
+const ORDER: SupplementalBet["type"][] = ["team_pressures", "chicago", "vegas", "minimum_putts"];
 
-export function SupplementalBetsEditor({ bets, players, onChange, requestActivation, locked = false }: { bets: SupplementalBet[]; players: Player[]; onChange: (bets: SupplementalBet[]) => void; requestActivation?: () => Promise<boolean>; locked?: boolean }) {
+export function SupplementalBetsEditor({ bets, players, onChange, requestActivation, locked = false, types = ORDER }: { bets: SupplementalBet[]; players: Player[]; onChange: (bets: SupplementalBet[]) => void; requestActivation?: () => Promise<boolean>; locked?: boolean; types?: SupplementalBet["type"][] }) {
   const [openTypes, setOpenTypes] = useState<Partial<Record<SupplementalBet["type"], boolean>>>({});
   const pendingFocus = useRef<string | null>(null);
+  const pendingConsentAction = useRef(false);
   const editorRef = useRef<HTMLDivElement>(null);
   const update = (id: string, next: Partial<SupplementalBet>) => onChange(bets.map((bet) => bet.id === id ? { ...bet, ...next } as SupplementalBet : bet));
   const remove = (id: string) => onChange(bets.filter((bet) => bet.id !== id));
   const runAfterConsent = (action: () => void) => {
     if (!requestActivation) { action(); return; }
-    void requestActivation().then((accepted) => { if (accepted) action(); });
+    if (pendingConsentAction.current) return;
+    pendingConsentAction.current = true;
+    void requestActivation().then((accepted) => { if (accepted) action(); }).finally(() => { pendingConsentAction.current = false; });
   };
   const addNow = (type: SupplementalBet["type"]) => {
     const id = createSupplementalBetId(type);
@@ -143,7 +147,7 @@ export function SupplementalBetsEditor({ bets, players, onChange, requestActivat
       addNow(type);
       return;
     }
-    onChange(bets.map((bet) => bet.type === type ? { ...bet, enabled } as SupplementalBet : bet));
+    onChange(setSupplementalCategoryEnabled(bets, type, enabled));
   };
 
   useEffect(() => {
@@ -157,7 +161,7 @@ export function SupplementalBetsEditor({ bets, players, onChange, requestActivat
     field.focus({ preventScroll: true });
   }, [bets, openTypes]);
 
-  return <div ref={editorRef} className={styles.editor}>{ORDER.map((type) => {
+  return <div ref={editorRef} className={styles.editor}>{types.map((type) => {
     const typeBets = bets.filter((bet) => bet.type === type).map((bet, index) => ({ bet, index })).sort((first, second) => Number(second.bet.enabled) - Number(first.bet.enabled));
     const modeEnabled = typeBets.some(({ bet }) => bet.enabled);
     const label = SUPPLEMENTAL_BET_LABELS[type];
@@ -165,7 +169,7 @@ export function SupplementalBetsEditor({ bets, players, onChange, requestActivat
     return <ResultAccordion key={type} id={`setup-${type}`} title={title} open={Boolean(openTypes[type])} onOpenChange={(open) => setOpenTypes((current) => ({ ...current, [type]: open }))} className="setupBetsAccordion" headerAction={<span className={styles.headerActions}><BetHelpButton kind={type} /><Switch on={modeEnabled} label={label} onChange={() => setTypeEnabled(type, !modeEnabled)} /></span>}>
       <div className={styles.modeTools}><button type="button" className="textButton" onClick={() => add(type)}>+ Agregar</button></div>
       {!typeBets.length && <div className="empty">Todavía no hay apuestas de este tipo.</div>}
-      {typeBets.map(({ bet, index }) => <ItemShell key={bet.id} bet={bet} locked={locked} label={`${SUPPLEMENTAL_BET_LABELS[type]} ${index + 1}`} onToggle={() => bet.enabled ? update(bet.id, { enabled: false }) : runAfterConsent(() => update(bet.id, { enabled: true }))} onRemove={() => remove(bet.id)}>
+      {typeBets.map(({ bet, index }) => <ItemShell key={bet.id} bet={bet} locked={locked} label={`${SUPPLEMENTAL_BET_LABELS[type]} ${index + 1}`} onToggle={() => bet.enabled ? update(bet.id, { enabled: false, enabledBeforeCategoryOff: undefined }) : runAfterConsent(() => update(bet.id, { enabled: true, enabledBeforeCategoryOff: undefined }))} onRemove={() => remove(bet.id)}>
         {bet.type === "dollar_stroke" && <>
           <div className="grid2"><PlayerSelect label="Jugador A" value={bet.playerAId} players={players} exclude={bet.playerBId} onChange={(playerAId) => update(bet.id, { playerAId })} /><PlayerSelect label="Jugador B" value={bet.playerBId} players={players} exclude={bet.playerAId} onChange={(playerBId) => update(bet.id, { playerBId })} /></div>
           <div className="grid3"><MoneyField label="Valor por golpe" value={bet.valuePerStroke} onChange={(valuePerStroke) => update(bet.id, { valuePerStroke })} /><PlayerSelect label="Quién recibe ventaja" value={bet.advantageReceiverId || ""} players={players.filter((player) => player.id === bet.playerAId || player.id === bet.playerBId)} onChange={(advantageReceiverId) => update(bet.id, { advantageReceiverId: advantageReceiverId || undefined })} /><NumberField label="Golpes" value={bet.advantageStrokes} min={0} onChange={(advantageStrokes) => update(bet.id, { advantageStrokes })} /></div>
@@ -203,7 +207,10 @@ export function SupplementalBetsEditor({ bets, players, onChange, requestActivat
   })}</div>;
 }
 
-export function SupplementalBetResults({ results, players }: { results: Array<{ betId: string; label: string; complete: boolean; balances: Record<string, number>; lines: string[] }>; players: Player[] }) {
+export function SupplementalBetResults({ results, players, throughHole }: { results: Array<{ betId: string; label: string; complete: boolean; balances: Record<string, number>; lines: string[] }>; players: Player[]; throughHole?: number }) {
   const playerName = (id: string) => players.find((player) => player.id === id)?.name || id;
-  return <div className={styles.results}>{results.map((result) => <article key={result.betId} className={styles.resultItem}><div><b>{result.label}</b><span>{result.complete ? "Resultado final" : "Provisional"}</span></div>{result.lines.map((line, index) => <p key={`${result.betId}-${index}`}>{line}</p>)}<div className={styles.resultBalances}>{Object.entries(result.balances).map(([id, amount]) => <span key={id}>{playerName(id)} <b className={amount > 0 ? "good" : amount < 0 ? "bad" : ""}>{amount > 0 ? "+" : ""}${amount.toLocaleString("es-MX")}</b></span>)}</div></article>)}</div>;
+  return <div className={styles.results}>{results.map((result) => <details key={result.betId} className={`${styles.resultItem} ${styles.liveDisclosure}`}>
+    <summary><span><b>{result.label}</b><small>{throughHole ? `Acumulado hasta H${throughHole}` : result.complete ? "Resultado final" : "Provisional"}</small></span><span className={styles.resultBalances}>{Object.entries(result.balances).filter(([, amount]) => amount !== 0 || !Object.values(result.balances).some(Boolean)).map(([id, amount]) => <span key={id}>{playerName(id)} <b className={amount > 0 ? "good" : amount < 0 ? "bad" : ""}>{amount > 0 ? "+" : ""}${amount.toLocaleString("es-MX")}</b></span>)}</span><i aria-hidden="true">⌄</i></summary>
+    <div className={styles.liveDetails}>{result.lines.length ? result.lines.map((line, index) => <p key={`${result.betId}-${index}`}>{line}</p>) : <p>Pendiente de resolverse con los hoyos guardados.</p>}</div>
+  </details>)}</div>;
 }

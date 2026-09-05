@@ -6,7 +6,7 @@ test("resumen de hoyo permanece diez segundos", () => {
   assert.equal(HOLE_SUMMARY_DURATION_MS, 10_000);
 });
 
-test("X y timeout no pueden avanzar dos veces", () => {
+test("un callback de timeout repetido no puede avanzar dos veces", () => {
   let advances = 0;
   const advance = createSingleAdvance(() => { advances += 1; });
   assert.equal(advance(), true);
@@ -62,7 +62,7 @@ test("sesión real pausa con un toque, conserva el tiempo y reanuda con otro", (
   assert.deepEqual(paused, [true, false]);
 });
 
-test("X, timeout y sincronización simultánea avanzan exactamente una vez", () => {
+test("timeout y una respuesta tardía avanzan exactamente una vez", () => {
   let advances = 0;
   let timerAction: (() => void) | null = null;
   const session = createHoleSummarySession({
@@ -72,7 +72,7 @@ test("X, timeout y sincronización simultánea avanzan exactamente una vez", () 
     onAdvance: () => { advances += 1; },
   });
   // Una descarga cloud puede completar en este instante, pero ya no posee ni
-  // cancela la sesión. X gana la carrera y el callback tardío es inocuo.
+  // cancela la sesión. El timeout gana la carrera y el callback tardío es inocuo.
   assert.equal(session.finish(), true);
   (timerAction as (() => void) | null)?.();
   assert.equal(session.finish(), false);

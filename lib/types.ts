@@ -216,6 +216,7 @@ export type PersonalBet = {
   id: string;
   /** Missing in saved rounds means active for backward compatibility. */
   enabled?: boolean;
+  enabledBeforeCategoryOff?: boolean;
   rivalMode: "group" | "external";
   rivalPlayerId?: string;
   externalRivalId?: string;
@@ -242,6 +243,7 @@ export type ManualBet = {
   id: string;
   /** Missing in saved rounds means active for backward compatibility. */
   enabled?: boolean;
+  enabledBeforeCategoryOff?: boolean;
   name: string;
   amounts: Record<string, number>;
 };
@@ -249,6 +251,8 @@ export type ManualBet = {
 export type SupplementalBetBase = {
   id: string;
   enabled: boolean;
+  /** Remembers the per-instance state while a whole category is off. */
+  enabledBeforeCategoryOff?: boolean;
 };
 
 export type IndividualNassauBet = SupplementalBetBase & {
@@ -364,6 +368,15 @@ export type PersonalHistoryResult = {
   grossRival?: number;
 };
 
+export type PersonalOpponentResult = {
+  betId: string;
+  mode: "nassau_individual" | "dollar_stroke" | "individual_pressures";
+  modeLabel: string;
+  opponentId: string;
+  opponentName: string;
+  amount: number;
+};
+
 export type RoundSnapshot = {
   id: string;
   date: string;
@@ -380,6 +393,8 @@ export type RoundSnapshot = {
   netResult: number;
   categoryResults: Record<string, number>;
   personalResults?: PersonalHistoryResult[];
+  /** Immutable owner-perspective breakdown used by the Personales history. */
+  personalOpponentResults?: PersonalOpponentResult[];
   players?: Player[];
   scores?: Record<number, HoleScore>;
   courseSnapshot?: Course;

@@ -53,6 +53,7 @@ type AccountContextValue = {
   openAccess: () => void;
   acceptances: LegalAcceptance[];
   bettingConsentGranted: boolean;
+  bettingConsentResolved: boolean;
   requestBettingConsent: () => Promise<boolean>;
   cloudLinked: boolean;
   cloudStatus: "local" | "saving" | "offline" | "syncing" | "synced" | "pending" | "error";
@@ -552,6 +553,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
 
   const currentConsent = identity ? hasCurrentLegalConsent(acceptances, identity.userId) : false;
   const bettingConsentGranted = identity ? hasCurrentBettingDataConsent(acceptances, identity.userId) : false;
+  const bettingConsentResolved = Boolean(identity && (identity.mode === "guest" || cloudConsentChecked));
 
   const closeBettingConsent = useCallback((accepted: boolean) => {
     const pending = bettingConsentRequest.current;
@@ -567,9 +569,16 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     let resolveRequest!: (accepted: boolean) => void;
     const promise = new Promise<boolean>((resolve) => { resolveRequest = resolve; });
     bettingConsentRequest.current = { userId: identity.userId, promise, resolve: resolveRequest };
-    setBettingConsentOpen(true);
+    if (identity.mode === "guest" || cloudConsentChecked) setBettingConsentOpen(true);
     return promise;
-  }, [acceptances, identity]);
+  }, [acceptances, identity, cloudConsentChecked]);
+
+  useEffect(() => {
+    const pending = bettingConsentRequest.current;
+    if (!pending || !identity || pending.userId !== identity.userId || (identity.mode === "authenticated" && !cloudConsentChecked)) return;
+    if (hasCurrentBettingDataConsent(acceptances, identity.userId)) closeBettingConsent(true);
+    else setBettingConsentOpen(true);
+  }, [acceptances, identity, cloudConsentChecked, closeBettingConsent]);
 
   useEffect(() => {
     const pending = bettingConsentRequest.current;
@@ -796,7 +805,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   };
   const cloudIssues = Object.values(cloudIssuesByDomain).filter((issue): issue is CloudIssue => Boolean(issue)).sort((left, right) => cloudIssuePriority(left) - cloudIssuePriority(right));
   const effectiveCloudStatus: AccountContextValue["cloudStatus"] = cloudIssues.some((issue) => issue.kind === "offline") ? "offline" : cloudIssues.some((issue) => issue.kind === "conflict") ? "pending" : cloudIssues.length ? "error" : cloudStatus;
-  const context = identity ? ({ identity, updateProfile, logout, finishAccountDeletion, openAccess: () => setAccessRequested(true), acceptances, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus: effectiveCloudStatus, setCloudStatus, lastCloudSync, cloudIssues, applyCloudPreferences,
+  const context = identity ? ({ identity, updateProfile, logout, finishAccountDeletion, openAccess: () => setAccessRequested(true), acceptances, bettingConsentGranted, bettingConsentResolved, requestBettingConsent, cloudLinked, cloudStatus: effectiveCloudStatus, setCloudStatus, lastCloudSync, cloudIssues, applyCloudPreferences,
     reportCloudSyncError,
     clearCloudSyncError,
     retryCloudSync: retryAllCloud,
