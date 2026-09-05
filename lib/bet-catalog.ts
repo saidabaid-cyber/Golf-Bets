@@ -40,3 +40,61 @@ export function supplementalBetDisplayLabel(type: SupplementalBet["type"], title
   const icon = SUPPLEMENTAL_BET_PRESENTATION[type].icon;
   return title.startsWith(icon) ? title : `${icon} ${title}`;
 }
+
+type HistoricalBetPresentation = {
+  icon: string;
+  title: string;
+  aliases: readonly string[];
+};
+
+const HISTORICAL_BET_PRESENTATIONS: readonly HistoricalBetPresentation[] = [
+  { ...BET_PRESENTATION.rabbits, aliases: ["Conejos"] },
+  { ...BET_PRESENTATION.skins, aliases: ["Skins"] },
+  { ...BET_PRESENTATION.units, aliases: ["Unidades", "Unidades / Copas"] },
+  { ...BET_PRESENTATION.monkey, aliases: ["Monkey"] },
+  { ...BET_PRESENTATION.foursome, aliases: ["Foursome"] },
+  { ...BET_PRESENTATION.ball_friend, aliases: ["Bola Amiga"] },
+  { ...BET_PRESENTATION.polla_first, aliases: ["Polla 1ª vuelta", "Polla H1–9"] },
+  { ...BET_PRESENTATION.polla_second, aliases: ["Polla 2ª vuelta", "Polla H10–18"] },
+  { ...BET_PRESENTATION.polla_total, aliases: ["Polla Nassau", "Polla 18 hoyos"] },
+  { ...BET_PRESENTATION.mini_polla, aliases: ["Mini Polla"] },
+  { ...BET_PRESENTATION.vipers, aliases: ["Víboras"] },
+  { ...BET_PRESENTATION.camels, aliases: ["Camellos"] },
+  { ...BET_PRESENTATION.fish, aliases: ["Peces"] },
+  { ...BET_PRESENTATION.loba, aliases: ["Loba"] },
+  { ...SUPPLEMENTAL_BET_PRESENTATION.team_pressures, aliases: ["Presiones por parejas"] },
+  { ...SUPPLEMENTAL_BET_PRESENTATION.chicago, aliases: ["Chicago"] },
+  { ...SUPPLEMENTAL_BET_PRESENTATION.vegas, aliases: ["Vegas"] },
+  { ...SUPPLEMENTAL_BET_PRESENTATION.minimum_putts, aliases: ["Mínimo de Putts"] },
+  { ...SUPPLEMENTAL_BET_PRESENTATION.individual_nassau, aliases: ["Nassau individual"] },
+  { ...SUPPLEMENTAL_BET_PRESENTATION.dollar_stroke, aliases: ["Dollar a Stroke", "Dollar a stroke"] },
+  { ...SUPPLEMENTAL_BET_PRESENTATION.individual_pressures, aliases: ["Presiones individuales"] },
+  { ...BET_PRESENTATION.manuals, aliases: ["Manuales", "Apuestas Manuales"] },
+  { ...BET_PRESENTATION.personals, aliases: ["Personales"] },
+];
+
+const HISTORICAL_BET_ICONS = [...new Set(HISTORICAL_BET_PRESENTATIONS.map((entry) => entry.icon))]
+  .sort((left, right) => right.length - left.length);
+
+/** Present persisted category keys without rewriting historical snapshots.
+ * Legacy labels and numbered supplemental instances resolve through the same
+ * metadata used by Configuración and Resultados. Unknown custom labels are
+ * kept verbatim so old or manual data is never hidden. */
+export function historicalBetDisplayLabel(label: string) {
+  const original = label.trim();
+  const leadingIcon = HISTORICAL_BET_ICONS.find((icon) => original.startsWith(icon));
+  const undecorated = leadingIcon ? original.slice(leadingIcon.length).trimStart() : original;
+  const comparable = undecorated.toLocaleLowerCase("es-MX");
+
+  for (const presentation of HISTORICAL_BET_PRESENTATIONS) {
+    for (const alias of presentation.aliases) {
+      const comparableAlias = alias.toLocaleLowerCase("es-MX");
+      if (comparable === comparableAlias) return `${presentation.icon} ${presentation.title}`;
+      if (comparable.startsWith(`${comparableAlias} `) || comparable.startsWith(`${comparableAlias} ·`)) {
+        return `${presentation.icon} ${presentation.title}${undecorated.slice(alias.length)}`;
+      }
+    }
+  }
+
+  return original;
+}
