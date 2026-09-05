@@ -115,3 +115,21 @@ button:disabled{cursor:not-allowed;opacity:.5}.app{padding-top:calc(14px + env(s
   z-index: 2;
   touch-action: manipulation;
 }
+
+.signedMoneyCapture.gain .moneyField {
+  border-color: #84b28f;
+  background: var(--green2);
+  color: var(--good);
+}
+
+.signedMoneyCapture.loss .moneyField {
+  border-color: #e0a49e;
+  background: #fff0ef;
+  color: var(--bad);
+}
+
+.signedMoneyCapture.gain input,
+.signedMoneyCapture.loss input {
+  color: inherit;
+  font-weight: 900;
+}

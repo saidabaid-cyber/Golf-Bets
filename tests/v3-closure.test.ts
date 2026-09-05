@@ -130,13 +130,15 @@ test("the setup date uses a centered responsive wrapper for mobile and desktop",
   assert.match(css, /@media\(max-width:430px\)[\s\S]*\.setupHero \.heroDate\{[^}]*align-self:center/);
 });
 
-test("capture inputs use the empty-safe numeric control without zero placeholders", () => {
+test("capture inputs use the empty-safe numeric control and Manuales accept a direct signed amount", () => {
   const page = readFileSync("app/page.tsx", "utf8");
   const polla = readFileSync("app/components/polla-live-panel.tsx", "utf8");
   const input = readFileSync("app/components/numeric-capture-input.tsx", "utf8");
   assert.match(page, /NumberField label="Golpes que recibe"/);
   assert.match(page, /SignedMoneyInput/);
-  assert.match(readFileSync("app/components/signed-money-input.tsx", "utf8"), /Pierde −/);
+  const signedInput = readFileSync("app/components/signed-money-input.tsx", "utf8");
+  assert.match(signedInput, /NumericCaptureInput/);
+  assert.doesNotMatch(signedInput, /Gana \+|Pierde −|signedMoneyDirection/);
   assert.match(polla, /NumericCaptureInput placeholder="HCP"/);
   assert.match(input, /setRawValue\(normalizeNumericCaptureText\(event\.target\.value\)\)/);
   assert.match(input, /type="text"/);

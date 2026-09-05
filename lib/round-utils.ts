@@ -61,9 +61,11 @@ export function normalizeRoundDraft(value: unknown) {
     bets: recordValue(source.bets),
     segments: Array.isArray(source.segments) ? source.segments : [],
     personalBets: Array.isArray(source.personalBets) ? source.personalBets : [],
+    supplementalBets: Array.isArray(source.supplementalBets) ? source.supplementalBets : [],
     manualBets: Array.isArray(source.manualBets) ? source.manualBets : [],
     scores: validScoreRows(source.scores),
     scoreEdits: validScoreRows(source.scoreEdits),
+    putts: validPuttRows(source.putts),
     unitEvents: Array.isArray(source.unitEvents) ? source.unitEvents : [],
     counterBetEvents: Array.isArray(source.counterBetEvents) ? source.counterBetEvents : [],
     counterBetKeepers: recordValue(source.counterBetKeepers),
@@ -72,6 +74,20 @@ export function normalizeRoundDraft(value: unknown) {
     expenses: recordValue(source.expenses),
   };
   return migrateDraftPressures(draft);
+}
+
+function validPuttRows(value: unknown) {
+  const source = recordValue(value);
+  if (!source) return {};
+  const rows: Record<number, Record<string, number>> = {};
+  for (const [rawHole, rawRow] of Object.entries(source)) {
+    const hole = Number(rawHole);
+    const row = recordValue(rawRow);
+    if (!Number.isInteger(hole) || hole < 1 || hole > 18 || !row) continue;
+    const clean = Object.fromEntries(Object.entries(row).filter(([, count]) => typeof count === "number" && Number.isInteger(count) && count >= 0));
+    if (Object.keys(clean).length) rows[hole] = clean as Record<string, number>;
+  }
+  return rows;
 }
 
 export function clearActiveRoundStorage(storage: Pick<Storage, "removeItem">) {

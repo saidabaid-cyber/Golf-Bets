@@ -214,6 +214,8 @@ export type SavedPersonalRival = {
 
 export type PersonalBet = {
   id: string;
+  /** Missing in saved rounds means active for backward compatibility. */
+  enabled?: boolean;
   rivalMode: "group" | "external";
   rivalPlayerId?: string;
   externalRivalId?: string;
@@ -238,9 +240,107 @@ export type PersonalBet = {
 
 export type ManualBet = {
   id: string;
+  /** Missing in saved rounds means active for backward compatibility. */
+  enabled?: boolean;
   name: string;
   amounts: Record<string, number>;
 };
+
+export type SupplementalBetBase = {
+  id: string;
+  enabled: boolean;
+};
+
+export type IndividualNassauBet = SupplementalBetBase & {
+  type: "individual_nassau";
+  playerAId: string;
+  playerBId: string;
+  value: number;
+  advantageReceiverId?: string;
+  advantageStrokes: number;
+  carryEnabled: boolean;
+  components: PersonalBetComponents;
+};
+
+export type DollarStrokeBet = SupplementalBetBase & {
+  type: "dollar_stroke";
+  playerAId: string;
+  playerBId: string;
+  valuePerStroke: number;
+  advantageReceiverId?: string;
+  advantageStrokes: number;
+};
+
+export type IndividualPressuresBet = SupplementalBetBase & {
+  type: "individual_pressures";
+  participantIds: string[];
+  value: number;
+  hcpPct: number;
+  decimals: HandicapMode;
+  carryEnabled: boolean;
+  matchPlayEnabled: boolean;
+};
+
+export type TeamPressureMetric = "low" | "high" | "low_high";
+export type TeamPressureVirtualMode = "standard" | "mudo" | "yoyo";
+
+export type TeamPressuresBet = SupplementalBetBase & {
+  type: "team_pressures";
+  participantIds: string[];
+  /** Missing scores for these players use abandonedMaxScore. */
+  abandonedPlayerIds?: string[];
+  teamA: string[];
+  metric: TeamPressureMetric;
+  virtualMode: TeamPressureVirtualMode;
+  value: number;
+  hcpPct: number;
+  decimals: HandicapMode;
+  carryEnabled: boolean;
+  abandonedMaxScore: number;
+};
+
+export type ChicagoBet = SupplementalBetBase & {
+  type: "chicago";
+  participantIds: string[];
+  quotaBase: number;
+  valuePerPoint: number;
+  points: {
+    birdieOrBetter: number;
+    par: number;
+    bogey: number;
+    doubleBogeyOrWorse: number;
+  };
+};
+
+export type VegasBet = SupplementalBetBase & {
+  type: "vegas";
+  participantIds: string[];
+  teamA: string[];
+  valuePerUnit: number;
+  rotation: "fixed" | "each_hole" | "blocks";
+  blockSize: 3 | 6 | 9;
+  hcpPct: number;
+  decimals: HandicapMode;
+  birdiePenalty: boolean;
+};
+
+export type MinimumPuttsBet = SupplementalBetBase & {
+  type: "minimum_putts";
+  participantIds: string[];
+  ante: number;
+  holes: 9 | 18;
+};
+
+export type SupplementalBet =
+  | IndividualNassauBet
+  | DollarStrokeBet
+  | IndividualPressuresBet
+  | TeamPressuresBet
+  | ChicagoBet
+  | VegasBet
+  | MinimumPuttsBet;
+
+export type PuttsByHole = Record<number, Record<string, number | null>>;
 
 export type Expense = {
   caddie: number;
@@ -294,6 +394,8 @@ export type RoundSnapshot = {
   lobaHoles?: Record<number, LobaHole>;
   personalBets?: PersonalBet[];
   manualBets?: ManualBet[];
+  supplementalBets?: SupplementalBet[];
+  putts?: PuttsByHole;
   ballFriendSetup?: Record<number, BallFriendHole>;
   segments?: FoursomeSegment[];
   playerBalances?: Record<string, number>;

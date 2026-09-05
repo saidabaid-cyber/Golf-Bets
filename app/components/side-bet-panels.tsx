@@ -16,6 +16,7 @@ import {
 } from "../../lib/side-bets";
 import { NumericCaptureInput } from "./numeric-capture-input";
 import { ResultAccordion } from "./result-accordion";
+import { BetHelpButton } from "./supplemental-bets-editor";
 
 const money = (value: number) => `${value < 0 ? "−" : ""}$${Math.abs(value).toLocaleString("es-MX", { maximumFractionDigits: 2 })}`;
 const signedMoney = (value: number) => `${value > 0 ? "+" : ""}${money(value)}`;
@@ -35,7 +36,7 @@ export function CounterBetConfigPanel({ kind, config, players, onChange }: {
 }) {
   const meta = COUNTER_BET_META[kind];
   return <div className="betCard">
-    <div className="betHead"><div><b>{meta.emoji} {meta.plural}</b><span>Múltiples por jugador y hoyo · liquidación por vuelta</span></div><button type="button" className={`switch ${config.enabled ? "on" : ""}`} role="switch" aria-checked={config.enabled} aria-label={`Activar ${meta.plural}`} onClick={() => onChange({ ...config, enabled: !config.enabled })}><span /></button></div>
+    <div className="betHead"><div><b>{meta.emoji} {meta.plural}</b><span>Múltiples por jugador y hoyo · liquidación por vuelta</span></div><span className="betHeadActions"><BetHelpButton kind={kind} /><button type="button" className={`switch ${config.enabled ? "on" : ""}`} role="switch" aria-checked={config.enabled} aria-label={`Activar ${meta.plural}`} onClick={() => onChange({ ...config, enabled: !config.enabled })}><span /></button></span></div>
     {config.enabled && <>
       <div className="grid2">
         <div><label>Valor {meta.singular}</label><div className="moneyField"><span>$</span><NumericCaptureInput inputMode="decimal" value={config.value} onValueChange={value => onChange({ ...config, value: Math.max(0, value ?? 0) })} /></div></div>
@@ -52,7 +53,7 @@ export function LobaConfigPanel({ config, players, onChange }: {
   onChange: (next: typeof config) => void;
 }) {
   return <div className="betCard">
-    <div className="betHead"><div><b>🐺 Loba</b><span>Pareja, sola o sola anticipada · 🔥 por hoyo</span></div><button type="button" className={`switch ${config.enabled ? "on" : ""}`} role="switch" aria-checked={config.enabled} aria-label="Activar Loba" onClick={() => onChange({ ...config, enabled: !config.enabled })}><span /></button></div>
+    <div className="betHead"><div><b>🐺 Loba</b><span>Pareja, sola o sola anticipada · 🔥 por hoyo</span></div><span className="betHeadActions"><BetHelpButton kind="loba" /><button type="button" className={`switch ${config.enabled ? "on" : ""}`} role="switch" aria-checked={config.enabled} aria-label="Activar Loba" onClick={() => onChange({ ...config, enabled: !config.enabled })}><span /></button></span></div>
     {config.enabled && <>
       <div className="grid3">
         <div><label>Valor Loba</label><div className="moneyField"><span>$</span><NumericCaptureInput inputMode="decimal" value={config.value} onValueChange={value => onChange({ ...config, value: Math.max(0, value ?? 0) })} /></div></div>

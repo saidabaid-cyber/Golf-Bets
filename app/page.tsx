@@ -25,6 +25,8 @@ import {
   Player,
   RoundSnapshot,
   SavedPersonalRival,
+  SupplementalBet,
+  PuttsByHole,
   UnitEvent,
 } from "../lib/types";
 import { BOTTOM_NAV_TARGETS, contrastToggleLabel, rulesContextForRound, type AppTab } from "../lib/app-navigation";
@@ -89,6 +91,8 @@ import { cloneLaVistaLocalRules, isLaVistaCourse, LA_VISTA_LOCAL_RULES_UPDATED_A
 import { filterHistory, historyYears, MONTH_LABELS } from "../lib/history-filters";
 import { priorRabbitStatus, priorSkinsStatus } from "../lib/prior-hole-status";
 import { ballFriendScoreResult, ballFriendSetupChipLabel, lobaSetupChipLabel, playerHoleBetLabels, skinHoleNotice } from "../lib/hole-bet-display";
+import { calculateSupplementalBets, normalizeSupplementalBets, supplementalBetValue, SUPPLEMENTAL_BET_LABELS } from "../lib/supplemental-bets";
+import { BetHelpButton, SupplementalBetsEditor, SupplementalBetResults } from "./components/supplemental-bets-editor";
 import { buildGeneralResultsTable, pollaDetailBalance, pollaDetailBalances, pollaPositionLabels, summarizeNetUnitQuantities, type ResultCategoryColumn } from "../lib/result-breakdown";
 import { collectHoleValidationErrors } from "../lib/hole-validation";
 import {
@@ -326,7 +330,7 @@ function PollaBetEditor({
   trophy?: "silver" | "gold";
 }) {
   return <div className="betCard">
-    <div className="betHead"><div><b className="betTitle"><TrophyIcon tone={trophy} />{title}</b><span>{description}</span></div><Toggle on={config.enabled} onClick={() => onChange({ ...config, enabled: !config.enabled })} /></div>
+    <div className="betHead"><div><b className="betTitle"><TrophyIcon tone={trophy} />{title}</b><span>{description}</span></div><span className="betHeadActions"><BetHelpButton kind="polla" /><Toggle on={config.enabled} onClick={() => onChange({ ...config, enabled: !config.enabled })} /></span></div>
     {config.enabled && <>
       <div className="grid3">
         <MoneyInput label="Valor" value={config.value} onChange={(value) => onChange({ ...config, value })} />
@@ -367,6 +371,8 @@ function GolfBetsApp() {
   const [personalBets, setPersonalBets] = useState<PersonalBet[]>([]);
   const [savedPersonalRivals, setSavedPersonalRivals] = useState<SavedPersonalRival[]>([]);
   const [manualBets, setManualBets] = useState<ManualBet[]>([]);
+  const [supplementalBets, setSupplementalBets] = useState<SupplementalBet[]>([]);
+  const [putts, setPutts] = useState<PuttsByHole>({});
   const [showFullScorecard, setShowFullScorecard] = useState(false);
   const [scores, setScores] = useState<Record<number, HoleScore>>({});
   const [scoreEdits, setScoreEdits] = useState<ScoreRows>({});
@@ -427,7 +433,7 @@ function GolfBetsApp() {
   const [historicalRoundToDelete, setHistoricalRoundToDelete] = useState<RoundSnapshot | null>(null);
   const [personalHistoryToDelete, setPersonalHistoryToDelete] = useState<{ roundId: string; resultIndex: number; rivalName: string } | null>(null);
   const [rulesCourseContext, setRulesCourseContext] = useState("");
-  const undoStack = useRef<Array<{ scores: Record<number, HoleScore>; scoreEdits: ScoreRows; unitEvents: UnitEvent[]; counterBetEvents: CounterBetEvent[]; counterBetKeepers: CounterBetKeepers; lobaHoles: Record<number, LobaHole>; manualBets: ManualBet[]; ballFriendSetup: Record<number, BallFriendHole> }>>([]);
+  const undoStack = useRef<Array<{ scores: Record<number, HoleScore>; scoreEdits: ScoreRows; putts: PuttsByHole; unitEvents: UnitEvent[]; counterBetEvents: CounterBetEvent[]; counterBetKeepers: CounterBetKeepers; lobaHoles: Record<number, LobaHole>; manualBets: ManualBet[]; ballFriendSetup: Record<number, BallFriendHole> }>>([]);
   const holeSummarySession = useRef<HoleSummarySession | null>(null);
   const [holeSummaryPaused, setHoleSummaryPaused] = useState(false);
   const flushLocalState = useRef<(() => boolean) | null>(null);
@@ -476,6 +482,7 @@ function GolfBetsApp() {
   const completedHoles = useMemo(() => new Set(order.filter(number => players.length > 0 && players.every(player => typeof scores[number]?.[player.id] === "number"))), [order, players, scores]);
   const scoreDraft = useMemo(() => holeCapture(scores, scoreEdits, hole, players), [scores, scoreEdits, hole, players]);
   const scoreCaptureComplete = isHoleCaptureComplete(scores, scoreEdits, holeNumber, players);
+  const activePuttPlayerIds = useMemo(() => new Set(supplementalBets.flatMap((bet) => bet.enabled !== false && bet.type === "minimum_putts" && currentIndex < bet.holes ? bet.participantIds : [])), [supplementalBets, currentIndex]);
   const liveScores = useMemo(() => scoreCaptureComplete ? { ...scores, [holeNumber]: scoreDraft } : scores, [scoreCaptureComplete, scores, holeNumber, scoreDraft]);
   const liveCompletedHoles = useMemo(() => new Set([...completedHoles, ...(scoreCaptureComplete ? [holeNumber] : [])]), [completedHoles, scoreCaptureComplete, holeNumber]);
 
@@ -489,7 +496,7 @@ function GolfBetsApp() {
     setDraftAvailable(hasRoundProgress(draft));
     if (!draft) {
       setPlayers([]); setOwnerId(""); setScores({}); setScoreEdits({}); setUnitEvents([]); setCounterBetEvents([]); setCounterBetKeepers(emptyCounterBetKeepers()); setLobaHoles({}); setBallFriendSetup({});
-      setPersonalBets([]); setManualBets([]); setExpenses(emptyExpenses); setBets(initialBets([]));
+      setPersonalBets([]); setManualBets([]); setSupplementalBets([]); setPutts({}); setExpenses(emptyExpenses); setBets(initialBets([]));
       setStartHole(1); setRoundHoles(18); setSegments(segmentDefinitions(playOrder(1), 6));
       if (!options.preserveLocalUi) setCurrentIndex(0);
       setRoundId(makeId()); setRoundDate(localDateMexico());
@@ -520,6 +527,7 @@ function GolfBetsApp() {
         if (draft.segments) setSegments(draft.segments);
         if (draft.personalBets) setPersonalBets(draft.personalBets.map((b: any) => ({
           id: b.id || makeId(),
+          enabled: b.enabled !== false,
           rivalMode: b.rivalMode || "group",
           rivalPlayerId: b.rivalPlayerId,
           externalRivalId: b.externalRivalId,
@@ -536,7 +544,9 @@ function GolfBetsApp() {
           pressureNine: b.pressureNine ?? (draft.startHole === 10 ? "holes_1_9" : "holes_10_18"),
           components: b.components || { match1: true, medal1: true, match2: true, medal2: true, match18: true, medal18: true },
         })));
-        if (Array.isArray(draft.manualBets)) setManualBets(draft.manualBets);
+        if (Array.isArray(draft.manualBets)) setManualBets(draft.manualBets.map((bet: ManualBet) => ({ ...bet, enabled: bet.enabled !== false })));
+        setSupplementalBets(normalizeSupplementalBets(draft.supplementalBets));
+        setPutts(draft.putts && typeof draft.putts === "object" ? draft.putts : {});
         if (draft.scores) setScores(draft.scores);
         setScoreEdits(draft.scoreEdits || {});
         if (draft.unitEvents) setUnitEvents(draft.unitEvents);
@@ -599,7 +609,7 @@ function GolfBetsApp() {
       if (revision !== localPersistRevision.current) return false;
       if (!ownsLocalWorkspace(localStorage, identity.userId)) return false;
       try {
-        const draft = { version: 4, course, startHole, roundHoles, players, ownerId, bets, segments, personalBets, manualBets, scores, scoreEdits, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, currentIndex };
+        const draft = { version: 5, course, startHole, roundHoles, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, currentIndex };
         const activeDraft = roundClosed ? null : draft;
         trackLocalCloudEdits(localStorage, activeDraft, { highContrast, language: "es-MX", notificationsEnabled: false, defaultHandicap: identity.defaultHandicap });
         localStorage.setItem(STORAGE_KEYS.courses, JSON.stringify(courses));
@@ -624,7 +634,7 @@ function GolfBetsApp() {
     flushLocalState.current = persist;
     const timer = window.setTimeout(persist, 250);
     return () => window.clearTimeout(timer);
-  }, [hydrated, identity.userId, identity.mode, identity.defaultHandicap, cloudLinked, courses, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, roundClosed, course, startHole, roundHoles, players, ownerId, bets, segments, personalBets, manualBets, scores, scoreEdits, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, currentIndex]);
+  }, [hydrated, identity.userId, identity.mode, identity.defaultHandicap, cloudLinked, courses, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, roundClosed, course, startHole, roundHoles, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, currentIndex]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -832,7 +842,7 @@ function GolfBetsApp() {
 
   useEffect(() => {
     requestCloudSync.current?.();
-  }, [courses, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, course, startHole, roundHoles, players, ownerId, bets, segments, personalBets, manualBets, scores, scoreEdits, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, identity.defaultHandicap]);
+  }, [courses, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, course, startHole, roundHoles, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, identity.defaultHandicap]);
 
   function resolveCloudConflict(choice: "local" | "cloud") {
     if (!pendingCloudConflict) return;
@@ -889,6 +899,17 @@ function GolfBetsApp() {
       fish: { ...(b.fish ?? initialBets(players.map((p) => p.id)).fish), participantIds: sanitize((b.fish ?? initialBets(players.map((p) => p.id)).fish).participantIds) },
       loba: { ...(b.loba ?? initialBets(players.map((p) => p.id)).loba), participantIds: sanitize((b.loba ?? initialBets(players.map((p) => p.id)).loba).participantIds) },
     }));
+    setSupplementalBets((current) => current.map((bet) => {
+      if (bet.type === "individual_nassau" || bet.type === "dollar_stroke") return {
+        ...bet,
+        playerAId: valid.has(bet.playerAId) ? bet.playerAId : "",
+        playerBId: valid.has(bet.playerBId) ? bet.playerBId : "",
+        advantageReceiverId: bet.advantageReceiverId && valid.has(bet.advantageReceiverId) ? bet.advantageReceiverId : undefined,
+      };
+      if (bet.type === "team_pressures") return { ...bet, participantIds: sanitize(bet.participantIds), abandonedPlayerIds: sanitize(bet.abandonedPlayerIds || []), teamA: sanitize(bet.teamA) };
+      if (bet.type === "vegas") return { ...bet, participantIds: sanitize(bet.participantIds), teamA: sanitize(bet.teamA) };
+      return { ...bet, participantIds: sanitize(bet.participantIds) };
+    }));
     if (!valid.has(ownerId)) setOwnerId(players[0]?.id ?? "");
   }, [hydrated, players, ownerId]);
 
@@ -907,6 +928,7 @@ function GolfBetsApp() {
   const polla = useMemo(() => calculatePolla(course, scores, players, bets.polla, order), [course, scores, players, bets.polla, order]);
   const miniPolla = useMemo(() => calculateMiniPolla(course, scores, players, bets.miniPolla, order), [course, scores, players, bets.miniPolla, order]);
   const manual = useMemo(() => calculateManualBets(players, manualBets), [players, manualBets]);
+  const supplemental = useMemo(() => calculateSupplementalBets(supplementalBets, players, course, scores, putts, order), [supplementalBets, players, course, scores, putts, order]);
   const vipers = useMemo(() => calculateCounterBet("vipers", players, bets.vipers, counterBetEvents, counterBetKeepers, order, completedHoles), [players, bets.vipers, counterBetEvents, counterBetKeepers, order, completedHoles]);
   const camels = useMemo(() => calculateCounterBet("camels", players, bets.camels, counterBetEvents, counterBetKeepers, order, completedHoles), [players, bets.camels, counterBetEvents, counterBetKeepers, order, completedHoles]);
   const fish = useMemo(() => calculateCounterBet("fish", players, bets.fish, counterBetEvents, counterBetKeepers, order, completedHoles), [players, bets.fish, counterBetEvents, counterBetKeepers, order, completedHoles]);
@@ -918,6 +940,7 @@ function GolfBetsApp() {
   const liveFoursomes = useMemo(() => calculateFoursomes(course, liveScores, players, bets.foursome, segments, order), [course, liveScores, players, bets.foursome, segments, order]);
   const liveBallFriend = useMemo(() => calculateBallFriend(course, liveScores, players, bets.ballFriend, ballFriendSetup, order), [course, liveScores, players, bets.ballFriend, ballFriendSetup, order]);
   const livePersonals = useMemo(() => calculatePersonalBets(personalBets, ownerId, players, course, liveScores, order), [personalBets, ownerId, players, course, liveScores, order]);
+  const liveSupplemental = useMemo(() => calculateSupplementalBets(supplementalBets, players, course, liveScores, putts, order), [supplementalBets, players, course, liveScores, putts, order]);
   const liveLoba = useMemo(() => calculateLoba(course, liveScores, players, bets.loba, lobaHoles, order, liveCompletedHoles), [course, liveScores, players, bets.loba, lobaHoles, order, liveCompletedHoles]);
   const priorOrder = useMemo(() => order.slice(0, currentIndex), [order, currentIndex]);
   const priorRabbits = useMemo(() => calculateRabbits(course, scores, players, bets.rabbits, priorOrder), [course, scores, players, bets.rabbits, priorOrder]);
@@ -925,9 +948,9 @@ function GolfBetsApp() {
 
   const rabbitBalances = useMemo(() => payoutWinnerTakesFromAll(playersByIds(players, bets.rabbits.participantIds), rabbits.won, bets.rabbits.value), [players, bets.rabbits, rabbits.won]);
   const skinBalances = useMemo(() => payoutWinnerTakesFromAll(playersByIds(players, bets.skins.participantIds), skins.won, bets.skins.value), [players, bets.skins, skins.won]);
-  const allBetBalances = useMemo(() => mergeBalances(players, rabbitBalances, skinBalances, units.balances, monkey.balances, foursomes.balances, ballFriend.balances, polla.balances, miniPolla.balances, personals.balances, manual.balances, vipers.balances, camels.balances, fish.balances, loba.balances), [players, rabbitBalances, skinBalances, units.balances, monkey.balances, foursomes.balances, ballFriend.balances, polla.balances, miniPolla.balances, personals.balances, manual.balances, vipers.balances, camels.balances, fish.balances, loba.balances]);
-  const generalBetBalances = useMemo(() => mergeBalances(players, rabbitBalances, skinBalances, units.balances, monkey.balances, foursomes.balances, ballFriend.balances, polla.balances, miniPolla.balances, manual.balances, vipers.balances, camels.balances, fish.balances, loba.balances), [players, rabbitBalances, skinBalances, units.balances, monkey.balances, foursomes.balances, ballFriend.balances, polla.balances, miniPolla.balances, manual.balances, vipers.balances, camels.balances, fish.balances, loba.balances]);
-  const liveBetBalances = useMemo(() => mergeBalances(players, rabbitBalances, skinBalances, units.balances, monkey.balances, foursomes.provisionalBalances, ballFriend.balances, polla.balances, miniPolla.balances, personals.provisionalBalances, manual.balances, vipers.balances, camels.balances, fish.balances, loba.balances), [players, rabbitBalances, skinBalances, units.balances, monkey.balances, foursomes.provisionalBalances, ballFriend.balances, polla.balances, miniPolla.balances, personals.provisionalBalances, manual.balances, vipers.balances, camels.balances, fish.balances, loba.balances]);
+  const allBetBalances = useMemo(() => mergeBalances(players, rabbitBalances, skinBalances, units.balances, monkey.balances, foursomes.balances, ballFriend.balances, polla.balances, miniPolla.balances, supplemental.balances, personals.balances, manual.balances, vipers.balances, camels.balances, fish.balances, loba.balances), [players, rabbitBalances, skinBalances, units.balances, monkey.balances, foursomes.balances, ballFriend.balances, polla.balances, miniPolla.balances, supplemental.balances, personals.balances, manual.balances, vipers.balances, camels.balances, fish.balances, loba.balances]);
+  const generalBetBalances = useMemo(() => mergeBalances(players, rabbitBalances, skinBalances, units.balances, monkey.balances, foursomes.balances, ballFriend.balances, polla.balances, miniPolla.balances, supplemental.balances, manual.balances, vipers.balances, camels.balances, fish.balances, loba.balances), [players, rabbitBalances, skinBalances, units.balances, monkey.balances, foursomes.balances, ballFriend.balances, polla.balances, miniPolla.balances, supplemental.balances, manual.balances, vipers.balances, camels.balances, fish.balances, loba.balances]);
+  const liveBetBalances = useMemo(() => mergeBalances(players, rabbitBalances, skinBalances, units.balances, monkey.balances, foursomes.provisionalBalances, ballFriend.balances, polla.balances, miniPolla.balances, liveSupplemental.balances, personals.provisionalBalances, manual.balances, vipers.balances, camels.balances, fish.balances, loba.balances), [players, rabbitBalances, skinBalances, units.balances, monkey.balances, foursomes.provisionalBalances, ballFriend.balances, polla.balances, miniPolla.balances, liveSupplemental.balances, personals.provisionalBalances, manual.balances, vipers.balances, camels.balances, fish.balances, loba.balances]);
   const settlementTransfers = useMemo(() => settleBalances(allBetBalances), [allBetBalances]);
   const settlementDifference = useMemo(() => Object.values(allBetBalances).reduce((sum, amount) => sum + amount, 0), [allBetBalances]);
   const settlementIds = useMemo(() => {
@@ -969,9 +992,10 @@ function GolfBetsApp() {
     "🐫 Camellos": camels.balances[ownerId] ?? 0,
     "🐟 Peces": fish.balances[ownerId] ?? 0,
     "🐺 Loba": loba.balances[ownerId] ?? 0,
+    ...Object.fromEntries(supplemental.results.map((result, index) => [`${result.label}${supplemental.results.length > 1 ? ` ${index + 1}` : ""}`, result.balances[ownerId] ?? 0])),
     Personales: personals.balances[ownerId] ?? 0,
     Manuales: manual.balances[ownerId] ?? 0,
-  }), [rabbitBalances, skinBalances, units.balances, monkey.balances, bets.monkey?.enabled, foursomes.balances, ballFriend.balances, pollaFirstBalances, pollaSecondBalances, pollaNassauBalances, miniPolla.balances, vipers.balances, camels.balances, fish.balances, loba.balances, personals.balances, manual.balances, ownerId]);
+  }), [rabbitBalances, skinBalances, units.balances, monkey.balances, bets.monkey?.enabled, foursomes.balances, ballFriend.balances, pollaFirstBalances, pollaSecondBalances, pollaNassauBalances, miniPolla.balances, vipers.balances, camels.balances, fish.balances, loba.balances, supplemental.results, personals.balances, manual.balances, ownerId]);
 
   const generalResultCategories = useMemo<ResultCategoryColumn[]>(() => [
     { key: "rabbits", label: "🐇 Conejos", balances: rabbitBalances, active: bets.rabbits.enabled, played: rabbits.events.length > 0, quantityTotal: totalRabbitsWon, quantities: rabbits.won, quantityLabel: "conejos" },
@@ -988,8 +1012,9 @@ function GolfBetsApp() {
     { key: "camels", label: "🐫 Camellos", balances: camels.balances, active: bets.camels.enabled, played: camels.totalQuantity > 0 || camels.halves.some(half => half.settled) },
     { key: "fish", label: "🐟 Peces", balances: fish.balances, active: bets.fish.enabled, played: fish.totalQuantity > 0 || fish.halves.some(half => half.settled) },
     { key: "loba", label: "🐺 Loba", balances: loba.balances, active: bets.loba.enabled, played: loba.details.length > 0 },
-    { key: "manual", label: "Manuales", balances: manual.balances, active: manualBets.length > 0, played: manualBets.some(bet => Object.values(bet.amounts).some(amount => amount !== 0)) },
-  ], [rabbitBalances, bets.rabbits.enabled, rabbits.events.length, rabbits.won, totalRabbitsWon, skinBalances, bets.skins.enabled, skins.events.length, skins.won, totalSkinsWon, units.balances, unitQuantitySummary, bets.units.enabled, completedHoles, monkey.balances, monkey.points, monkey.details.length, bets.monkey?.enabled, foursomes.balances, bets.foursome.enabled, foursomes.matches, ballFriend.balances, ballFriend.points, bets.ballFriend.enabled, ballFriend.details.length, pollaFirstBalances, pollaSecondBalances, pollaNassauBalances, miniPollaComponentBalances, bets.polla.first9.enabled, bets.polla.second9.enabled, bets.polla.total18.enabled, bets.miniPolla.enabled, pollaFirstDetail, pollaSecondDetail, pollaNassauDetail, miniPollaDetail, settlementIds, vipers.balances, bets.vipers.enabled, vipers.totalQuantity, vipers.halves, camels.balances, bets.camels.enabled, camels.totalQuantity, camels.halves, fish.balances, bets.fish.enabled, fish.totalQuantity, fish.halves, loba.balances, bets.loba.enabled, loba.details.length, manual.balances, manualBets]);
+    ...supplemental.results.map(result => ({ key: `supplemental-${result.betId}`, label: result.label, balances: result.balances, active: true, played: result.lines.length > 0 || result.complete })),
+    { key: "manual", label: "Manuales", balances: manual.balances, active: manualBets.some(bet => bet.enabled !== false), played: manualBets.some(bet => bet.enabled !== false && Object.values(bet.amounts).some(amount => amount !== 0)) },
+  ], [rabbitBalances, bets.rabbits.enabled, rabbits.events.length, rabbits.won, totalRabbitsWon, skinBalances, bets.skins.enabled, skins.events.length, skins.won, totalSkinsWon, units.balances, unitQuantitySummary, bets.units.enabled, completedHoles, monkey.balances, monkey.points, monkey.details.length, bets.monkey?.enabled, foursomes.balances, bets.foursome.enabled, foursomes.matches, ballFriend.balances, ballFriend.points, bets.ballFriend.enabled, ballFriend.details.length, pollaFirstBalances, pollaSecondBalances, pollaNassauBalances, miniPollaComponentBalances, bets.polla.first9.enabled, bets.polla.second9.enabled, bets.polla.total18.enabled, bets.miniPolla.enabled, pollaFirstDetail, pollaSecondDetail, pollaNassauDetail, miniPollaDetail, settlementIds, vipers.balances, bets.vipers.enabled, vipers.totalQuantity, vipers.halves, camels.balances, bets.camels.enabled, camels.totalQuantity, camels.halves, fish.balances, bets.fish.enabled, fish.totalQuantity, fish.halves, loba.balances, bets.loba.enabled, loba.details.length, supplemental.results, manual.balances, manualBets]);
   const generalResults = useMemo(
     () => buildGeneralResultsTable(players.map(player => player.id), generalResultCategories, generalBetBalances),
     [players, generalResultCategories, generalBetBalances],
@@ -1022,6 +1047,7 @@ function GolfBetsApp() {
     undoStack.current = pushUndoState(undoStack.current, {
       scores: structuredClone(scores),
       scoreEdits: structuredClone(scoreEdits),
+      putts: structuredClone(putts),
       unitEvents: structuredClone(unitEvents),
       counterBetEvents: structuredClone(counterBetEvents),
       counterBetKeepers: structuredClone(counterBetKeepers),
@@ -1038,6 +1064,7 @@ function GolfBetsApp() {
     setUndoCount(undoStack.current.length);
     setScores(previous.scores);
     setScoreEdits(previous.scoreEdits);
+    setPutts(previous.putts);
     setUnitEvents(previous.unitEvents);
     setCounterBetEvents(previous.counterBetEvents);
     setCounterBetKeepers(previous.counterBetKeepers);
@@ -1088,6 +1115,16 @@ function GolfBetsApp() {
     setScoreEdits(prev => editCapturedScore(prev, holeNumber, playerId, value));
   }
 
+  function setPutt(playerId: string, value: number | null) {
+    checkpoint();
+    setPutts((current) => {
+      const row = { ...(current[holeNumber] || {}) };
+      if (value === null) delete row[playerId];
+      else row[playerId] = Math.max(0, Math.trunc(value));
+      return { ...current, [holeNumber]: row };
+    });
+  }
+
   function confirmRoundChange(message: string, run: () => void) {
     const played = Object.values(scores).some(row => Object.values(row).some(value => typeof value === "number"));
     if (played) setPendingRoundAction({ message: `${message}\nLos scores se conservan. Los resultados de esta ronda se recalcularán; el histórico no cambia hasta guardar. ¿Continuar?`, run });
@@ -1120,6 +1157,7 @@ function GolfBetsApp() {
   function newManualBet() {
     setManualBets((bets) => [...bets, {
       id: makeId(),
+      enabled: true,
       name: `Apuesta manual ${bets.length + 1}`,
       amounts: Object.fromEntries(players.map((p) => [p.id, 0])),
     }]);
@@ -1182,6 +1220,7 @@ function GolfBetsApp() {
     const saved = savedPersonalRivals[0];
     const draft: PersonalBet = {
       id: makeId(),
+      enabled: true,
       rivalMode: rival ? "group" : "external",
       rivalPlayerId: rival?.id,
       externalRivalId: rival ? undefined : saved?.id,
@@ -1267,13 +1306,13 @@ function GolfBetsApp() {
     return structuredClone({
       id: roundId, date: roundDate, courseName: course.name, teeName: course.teeName,
       snapshotVersion: 2, ownerId: owner.id, segments, playerBalances: allBetBalances,
-      categoryBalances: { Conejos: rabbitBalances, Skins: skinBalances, Unidades: units.balances, Monkey: monkey.balances, Foursome: foursomes.balances, "Bola Amiga": ballFriend.balances, "Polla 1ª vuelta": pollaFirstBalances, "Polla 2ª vuelta": pollaSecondBalances, "Polla Nassau": pollaNassauBalances, "Mini Polla": miniPollaComponentBalances, "🐍 Víboras": vipers.balances, "🐫 Camellos": camels.balances, "🐟 Peces": fish.balances, "🐺 Loba": loba.balances, Personales: personals.balances, Manuales: manual.balances },
-      resultDetails: { rabbits, skins, units, monkey, foursomes, ballFriend, polla, miniPolla, vipers, camels, fish, loba, settlementTransfers, settlementDifference, personals, manual },
+      categoryBalances: { Conejos: rabbitBalances, Skins: skinBalances, Unidades: units.balances, Monkey: monkey.balances, Foursome: foursomes.balances, "Bola Amiga": ballFriend.balances, "Polla 1ª vuelta": pollaFirstBalances, "Polla 2ª vuelta": pollaSecondBalances, "Polla Nassau": pollaNassauBalances, "Mini Polla": miniPollaComponentBalances, "🐍 Víboras": vipers.balances, "🐫 Camellos": camels.balances, "🐟 Peces": fish.balances, "🐺 Loba": loba.balances, ...Object.fromEntries(supplemental.results.map((result, index) => [`${result.label}${supplemental.results.length > 1 ? ` ${index + 1}` : ""}`, result.balances])), Personales: personals.balances, Manuales: manual.balances },
+      resultDetails: { rabbits, skins, units, monkey, foursomes, ballFriend, polla, miniPolla, vipers, camels, fish, loba, supplemental, settlementTransfers, settlementDifference, personals, manual },
       ownerName: owner.name, roundHoles, startHole, betResult: ownerBetResult, expenses, expenseTotal: ownerExpenseTotal,
       netResult: ownerNet, categoryResults, players: structuredClone(players), scores: structuredClone(scores),
       courseSnapshot: structuredClone(course), order: [...order], completedAt: timestamp, updatedAt: timestamp,
       betConfig: structuredClone(bets), unitEvents: structuredClone(unitEvents), counterBetEvents: structuredClone(counterBetEvents), counterBetKeepers: structuredClone(counterBetKeepers), lobaHoles: structuredClone(lobaHoles), personalBets: structuredClone(personalBets),
-      manualBets: structuredClone(manualBets), ballFriendSetup: structuredClone(ballFriendSetup),
+      supplementalBets: structuredClone(supplementalBets), putts: structuredClone(putts), manualBets: structuredClone(manualBets), ballFriendSetup: structuredClone(ballFriendSetup),
       personalResults: personals.results.map((r) => snapshotPersonalResult(personalBets.find((bet) => bet.id === r.betId)!, r, players)),
     });
   }
@@ -1345,6 +1384,7 @@ function GolfBetsApp() {
     setStartHole(restored.startHole || (restored.order![0] === 10 ? 10 : 1)); setRoundHoles(restored.roundHoles || (restored.order!.length === 9 ? 9 : 18));
     setBets(restored.betConfig!); setSegments(restored.segments || []);
     setPersonalBets(restored.personalBets || []); setUnitEvents(restored.unitEvents || []);
+    setSupplementalBets(normalizeSupplementalBets(restored.supplementalBets)); setPutts(restored.putts || {});
     setCounterBetEvents(restored.counterBetEvents || []); setCounterBetKeepers(restored.counterBetKeepers || emptyCounterBetKeepers()); setLobaHoles(restored.lobaHoles || {});
     setManualBets(restored.manualBets || []); setBallFriendSetup(restored.ballFriendSetup || {}); setExpenses(normalizeExpenses(restored.expenses));
     setCurrentIndex(0); setRoundClosed(false); setEditingRound(true); setDraftAvailable(true); undoStack.current = []; setUndoCount(0); setTab("setup");
@@ -1362,7 +1402,7 @@ function GolfBetsApp() {
   function resetRound() {
     setEditingRound(false); setRoundClosed(false); setFeedback("");
     setPlayers([]); setOwnerId("");
-    setScores({}); setScoreEdits({}); setUnitEvents([]); setCounterBetEvents([]); setCounterBetKeepers(emptyCounterBetKeepers()); setLobaHoles({}); setBallFriendSetup({}); setPersonalBets([]); setManualBets([]); setShowFullScorecard(false); setExpenses(emptyExpenses);
+    setScores({}); setScoreEdits({}); setPutts({}); setUnitEvents([]); setCounterBetEvents([]); setCounterBetKeepers(emptyCounterBetKeepers()); setLobaHoles({}); setBallFriendSetup({}); setPersonalBets([]); setSupplementalBets([]); setManualBets([]); setShowFullScorecard(false); setExpenses(emptyExpenses);
     setBets(initialBets([])); setSegments(segmentDefinitions(playOrder(startHole).slice(0, roundHoles), 6));
     setCurrentIndex(0); setRoundId(makeId()); setRoundDate(localDateMexico()); setDraftAvailable(false); setHoleSummary([]); setShowDeleteRoundConfirm(false); undoStack.current = []; setUndoCount(0); setTab("setup");
   }
@@ -1372,7 +1412,7 @@ function GolfBetsApp() {
     trackLocalCloudEdits(localStorage, null, { highContrast, language: "es-MX", notificationsEnabled: false, defaultHandicap: identity.defaultHandicap });
     clearActiveRoundStorage(window.localStorage);
     setPlayers([]); setOwnerId("");
-    setScores({}); setScoreEdits({}); setUnitEvents([]); setCounterBetEvents([]); setCounterBetKeepers(emptyCounterBetKeepers()); setLobaHoles({}); setBallFriendSetup({}); setPersonalBets([]); setManualBets([]); setShowFullScorecard(false); setExpenses(emptyExpenses);
+    setScores({}); setScoreEdits({}); setPutts({}); setUnitEvents([]); setCounterBetEvents([]); setCounterBetKeepers(emptyCounterBetKeepers()); setLobaHoles({}); setBallFriendSetup({}); setPersonalBets([]); setSupplementalBets([]); setManualBets([]); setShowFullScorecard(false); setExpenses(emptyExpenses);
     setBets(initialBets([])); setSegments(segmentDefinitions(playOrder(startHole).slice(0, roundHoles), 6));
     setCurrentIndex(0); setRoundId(makeId()); setRoundDate(localDateMexico()); setRoundClosed(false); setDraftAvailable(false); setHoleSummary([]); setShowDeleteRoundConfirm(false); undoStack.current = []; setUndoCount(0); setSaveStatus("saved"); setTab("welcome");
   }
@@ -1635,12 +1675,12 @@ function GolfBetsApp() {
 
       {!personalBets.length && <div className="empty">Todavía no hay apuestas personales. Toca “+ Personal”.</div>}
 
-      <div ref={personalSetupListRef} className="personalSetupList">{personalBets.map((bet) => {
+      <div ref={personalSetupListRef} className="personalSetupList">{[...personalBets].sort((first, second) => Number(second.enabled !== false) - Number(first.enabled !== false)).map((bet) => {
         const groupRival = bet.rivalPlayerId ? players.find((p) => p.id === bet.rivalPlayerId) : undefined;
         const displayRival = bet.rivalMode === "group" ? (groupRival?.name || "Rival") : (bet.rivalName || "Rival");
         const expanded = expandedPersonalId === bet.id;
-        return <section className="card personalSetupItem" key={bet.id} data-personal-editor={bet.id}>
-          <div className="personalSetupHeading"><button type="button" aria-expanded={expanded} aria-controls={`personal-editor-${bet.id}`} onClick={() => setExpandedPersonalId(expanded ? null : bet.id)}><span>{owner?.name ?? "Base"} vs {displayRival}</span><i aria-hidden="true">{expanded ? "⌃" : "⌄"}</i></button><button type="button" className="remove" aria-label={`Eliminar Personal contra ${displayRival}`} onClick={() => { setPersonalBets((items) => items.filter((item) => item.id !== bet.id)); if (expanded) setExpandedPersonalId(null); }}>×</button></div>
+        return <section className={`card personalSetupItem ${bet.enabled === false ? "betItemDisabled" : ""}`} key={bet.id} data-personal-editor={bet.id}>
+          <div className="personalSetupHeading"><button type="button" aria-expanded={expanded} aria-controls={`personal-editor-${bet.id}`} onClick={() => setExpandedPersonalId(expanded ? null : bet.id)}><span>{owner?.name ?? "Base"} vs {displayRival}<small>{bet.enabled === false ? "Desactivada · no participa" : "Activa"}</small></span><i aria-hidden="true">{expanded ? "⌃" : "⌄"}</i></button><Toggle on={bet.enabled !== false} label={`${bet.enabled === false ? "Activar" : "Desactivar"} Personal contra ${displayRival}`} onClick={() => updatePersonalBet(bet.id, { enabled: bet.enabled === false })} /><button type="button" className="remove" aria-label={`Eliminar Personal contra ${displayRival}`} onClick={() => { setPersonalBets((items) => items.filter((item) => item.id !== bet.id)); if (expanded) setExpandedPersonalId(null); }}>×</button></div>
           {expanded && <div id={`personal-editor-${bet.id}`} className="personalSetupBody">
           <p className="muted">Ventaja y presión aplican solo a esta apuesta.</p>
           <div className="grid3">
@@ -1698,11 +1738,11 @@ function GolfBetsApp() {
       {!embedded && <div className="sectionTitle"><div><h2>Apuestas manuales</h2><p>Para cualquier apuesta no contemplada. Captura ganancia (+) o pérdida (−); debe cerrar en $0.</p></div><button className="textButton" onClick={newManualBet}>+ Apuesta</button></div>}
       {embedded && <p className="muted">Para cualquier apuesta no contemplada. Captura ganancia (+) o pérdida (−); debe cerrar en $0.</p>}
       {!manualBets.length && <div className="empty">Sin apuestas manuales.</div>}
-      {manualBets.map((bet) => {
+      {[...manualBets].sort((first, second) => Number(second.enabled !== false) - Number(first.enabled !== false)).map((bet) => {
         const total = manualBetTotal(bet);
         const valid = Math.abs(total) < 0.001;
-        return <div className="manualBet" key={bet.id}>
-          <div className="row between"><input className="manualName" value={bet.name} onChange={(e) => updateManualBet(bet.id, { name: e.target.value })} /><button className="remove" onClick={() => setManualBets((bs) => bs.filter((x) => x.id !== bet.id))}>×</button></div>
+        return <div className={`manualBet ${bet.enabled === false ? "betItemDisabled" : ""}`} key={bet.id}>
+          <div className="row between"><input className="manualName" value={bet.name} onChange={(e) => updateManualBet(bet.id, { name: e.target.value })} /><span className="manualBetActions"><Toggle on={bet.enabled !== false} label={`${bet.enabled === false ? "Activar" : "Desactivar"} ${bet.name || "apuesta manual"}`} onClick={() => updateManualBet(bet.id, { enabled: bet.enabled === false })} /><button className="remove" aria-label={`Eliminar ${bet.name || "apuesta manual"}`} onClick={() => setManualBets((bs) => bs.filter((x) => x.id !== bet.id))}>×</button></span></div>
           <div className="manualGrid">{players.map((p) => <label key={p.id}><span>{p.name}</span><SignedMoneyInput label={`${bet.name || "apuesta manual"} · ${p.name}`} value={bet.amounts[p.id] ?? 0} onChange={(next) => setManualAmount(bet.id, p.id, next)} /></label>)}</div>
           <div className={`manualBalance ${valid ? "good" : "bad"}`}>{valid ? "✓ Cierra en $0 y se suma al resultado" : `Falta cuadrar ${money(-total)}`}</div>
         </div>;
@@ -1711,8 +1751,9 @@ function GolfBetsApp() {
   }
 
   function renderManualBetResults() {
-    if (!manualBets.length) return <div className="empty">Sin apuestas manuales en esta ronda.</div>;
-    return <div className="manualResultsList">{manualBets.map((bet) => {
+    const activeManualBets = manualBets.filter((bet) => bet.enabled !== false);
+    if (!activeManualBets.length) return <div className="empty">Sin apuestas manuales activas en esta ronda.</div>;
+    return <div className="manualResultsList">{activeManualBets.map((bet) => {
       const total = manualBetTotal(bet);
       const valid = Math.abs(total) < 0.001;
       return <article className="manualResult" key={bet.id}>
@@ -1834,6 +1875,7 @@ function GolfBetsApp() {
 
   function saveAndAdvance() {
     if (holeSummarySession.current) return;
+    const missingPutts = players.filter((player) => activePuttPlayerIds.has(player.id) && typeof putts[holeNumber]?.[player.id] !== "number").map((player) => player.name || "Sin nombre");
     const validationErrors = collectHoleValidationErrors({
       scoreCaptureComplete,
       holeNumber,
@@ -1851,6 +1893,7 @@ function GolfBetsApp() {
       order,
       ballFriendConfig: bets.ballFriend,
       ballFriendSetup: ballFriendSetup[holeNumber],
+      extraErrors: missingPutts.length ? [`Captura los putts de ${missingPutts.join(", ")} antes de continuar.`] : [],
     });
     if (validationErrors.length) {
       setFeedback("");
@@ -1966,8 +2009,9 @@ function GolfBetsApp() {
     { id: "polla-second9", label: "Polla 2ª", visible: bets.polla.second9.enabled },
     { id: "polla-total18", label: "Polla Nassau", visible: bets.polla.total18.enabled },
     { id: "mini-polla", label: "Mini Polla", visible: bets.miniPolla.enabled },
+    ...supplemental.results.map((result) => ({ id: `supplemental-${result.betId}`, label: result.label, visible: true })),
     { id: "personals", label: "Personales", visible: personals.results.length > 0 },
-    { id: "manuals", label: "Manuales", visible: manualBets.length > 0 },
+    { id: "manuals", label: "Manuales", visible: manualBets.some((bet) => bet.enabled !== false) },
     { id: "vipers", label: "Víboras", visible: bets.vipers.enabled },
     { id: "camels", label: "Camellos", visible: bets.camels.enabled },
     { id: "fish", label: "Peces", visible: bets.fish.enabled },
@@ -2058,22 +2102,22 @@ function GolfBetsApp() {
         <div className="sectionTitle"><div><h2>3. Apuestas generales</h2><p>Cada apuesta tiene su propio porcentaje y participantes.</p></div></div>
 
         <div className="betCard">
-          <div className="betHead"><div><b>🐇 Conejos</b><span>Agarra · mantiene · gana · acumula</span></div><Toggle on={bets.rabbits.enabled} onClick={() => setBets({ ...bets, rabbits: { ...bets.rabbits, enabled: !bets.rabbits.enabled } })} /></div>
+          <div className="betHead"><div><b>🐇 Conejos</b><span>Agarra · mantiene · gana · acumula</span></div><span className="betHeadActions"><BetHelpButton kind="rabbits" /><Toggle on={bets.rabbits.enabled} onClick={() => setBets({ ...bets, rabbits: { ...bets.rabbits, enabled: !bets.rabbits.enabled } })} /></span></div>
           {bets.rabbits.enabled && <><div className="grid3"><MoneyInput label="Valor" value={bets.rabbits.value} onChange={(v) => setBets({ ...bets, rabbits: { ...bets.rabbits, value: v } })} /><HcpPercentInput value={bets.rabbits.hcpPct} onChange={(v) => setBets({ ...bets, rabbits: { ...bets.rabbits, hcpPct: v } })} /><HandicapModeSelect value={bets.rabbits.decimals} onChange={(decimals) => setBets({ ...bets, rabbits: { ...bets.rabbits, decimals } })} /></div><label className="miniLabel">Participan</label><ParticipantChips players={players} selected={bets.rabbits.participantIds} onChange={(ids) => setBets({ ...bets, rabbits: { ...bets.rabbits, participantIds: ids } })} /></>}
         </div>
 
         <div className="betCard">
-          <div className="betHead"><div><b>⛳ Skins</b><span>Empates acumulan</span></div><Toggle on={bets.skins.enabled} onClick={() => setBets({ ...bets, skins: { ...bets.skins, enabled: !bets.skins.enabled } })} /></div>
+          <div className="betHead"><div><b>⛳ Skins</b><span>Empates acumulan</span></div><span className="betHeadActions"><BetHelpButton kind="skins" /><Toggle on={bets.skins.enabled} onClick={() => setBets({ ...bets, skins: { ...bets.skins, enabled: !bets.skins.enabled } })} /></span></div>
           {bets.skins.enabled && <><div className="grid3"><MoneyInput label="Valor" value={bets.skins.value} onChange={(v) => setBets({ ...bets, skins: { ...bets.skins, value: v } })} /><HcpPercentInput value={bets.skins.hcpPct} onChange={(v) => setBets({ ...bets, skins: { ...bets.skins, hcpPct: v } })} /><HandicapModeSelect value={bets.skins.decimals} onChange={(decimals) => setBets({ ...bets, skins: { ...bets.skins, decimals } })} /></div><label className="miniLabel">Participan</label><ParticipantChips players={players} selected={bets.skins.participantIds} onChange={(ids) => setBets({ ...bets, skins: { ...bets.skins, participantIds: ids } })} /></>}
         </div>
 
         <div className="betCard">
-          <div className="betHead"><div><b>📏 Unidades / Copas</b><span>Positivas menos negativas; todos pagan a todos</span></div><Toggle on={bets.units.enabled} onClick={() => setBets({ ...bets, units: { ...bets.units, enabled: !bets.units.enabled } })} /></div>
+          <div className="betHead"><div><b>📏 Unidades / Copas</b><span>Positivas menos negativas; todos pagan a todos</span></div><span className="betHeadActions"><BetHelpButton kind="units" /><Toggle on={bets.units.enabled} onClick={() => setBets({ ...bets, units: { ...bets.units, enabled: !bets.units.enabled } })} /></span></div>
           {bets.units.enabled && <><div className="grid2"><MoneyInput label="Valor por unidad" value={bets.units.value} onChange={(v) => setBets({ ...bets, units: { ...bets.units, value: v } })} /><MoneyInput label="Valor por Copa" value={bets.units.copaValue ?? bets.units.value} onChange={(v) => setBets({ ...bets, units: { ...bets.units, copaValue: v } })} /></div><label className="miniLabel">Participan en Unidades / Copas</label><ParticipantChips players={players} selected={bets.units.participantIds} onChange={(ids) => setBets({ ...bets, units: { ...bets.units, participantIds: ids } })} /></>}
         </div>
 
         <div className="betCard">
-          <div className="betHead"><div><b>🤝 Foursome</b><span>Fijo · fijo + patada · solo puntos</span></div><Toggle on={bets.foursome.enabled} onClick={() => setBets({ ...bets, foursome: { ...bets.foursome, enabled: !bets.foursome.enabled } })} /></div>
+          <div className="betHead"><div><b>🤝 Foursome</b><span>Fijo · fijo + patada · solo puntos</span></div><span className="betHeadActions"><BetHelpButton kind="foursome" /><Toggle on={bets.foursome.enabled} onClick={() => setBets({ ...bets, foursome: { ...bets.foursome, enabled: !bets.foursome.enabled } })} /></span></div>
           {bets.foursome.enabled && <>
             <HandicapBaseControl name="Foursome" config={bets.foursome} fallback="moving" onChange={baseMode => setBets({ ...bets, foursome: { ...bets.foursome, handicapMethod: "configured", baseMode, fixedBaseHandicap: undefined } })} />
             <div className="grid3">
@@ -2099,13 +2143,13 @@ function GolfBetsApp() {
         </div>
 
         <div className="betCard">
-          <div className="betHead"><div><b>⚪🤝 Bola Amiga</b><span>Parejas por hoyo · birdie o mejor voltea rival · máximo 9</span></div><Toggle on={bets.ballFriend.enabled} onClick={() => setBets({ ...bets, ballFriend: { ...bets.ballFriend, enabled: !bets.ballFriend.enabled } })} /></div>
+          <div className="betHead"><div><b>⚪🤝 Bola Amiga</b><span>Parejas por hoyo · birdie o mejor voltea rival · máximo 9</span></div><span className="betHeadActions"><BetHelpButton kind="ball_friend" /><Toggle on={bets.ballFriend.enabled} onClick={() => setBets({ ...bets, ballFriend: { ...bets.ballFriend, enabled: !bets.ballFriend.enabled } })} /></span></div>
           {bets.ballFriend.enabled && <HandicapBaseControl name="Bola Amiga" config={bets.ballFriend} fallback="fixed" onChange={baseMode => setBets({ ...bets, ballFriend: { ...bets.ballFriend, baseMode, fixedBaseHandicap: undefined } })} />}
           {bets.ballFriend.enabled && <><div className="grid3"><MoneyInput label="Valor punto" value={bets.ballFriend.value} onChange={(v) => setBets({ ...bets, ballFriend: { ...bets.ballFriend, value: v } })} /><HcpPercentInput value={bets.ballFriend.hcpPct} onChange={(v) => setBets({ ...bets, ballFriend: { ...bets.ballFriend, hcpPct: v } })} /><NumberField label="Score máximo" value={bets.ballFriend.maxScore} onChange={(v) => setBets({ ...bets, ballFriend: { ...bets.ballFriend, maxScore: v } })} /></div><label className="miniLabel">Participan</label><ParticipantChips players={players} selected={bets.ballFriend.participantIds} onChange={(ids) => setBets({ ...bets, ballFriend: { ...bets.ballFriend, participantIds: ids } })} /></>}
         </div>
 
         <div className="betCard">
-          <div className="betHead"><div><b>🐒 Monkey</b><span>Exactamente tres jugadores</span></div><Toggle on={Boolean(bets.monkey?.enabled)} onClick={()=>setBets({...bets,monkey:{value:20,participantIds:players.slice(0,3).map(p=>p.id),...bets.monkey,enabled:!bets.monkey?.enabled}})} /></div>
+          <div className="betHead"><div><b>🐒 Monkey</b><span>Exactamente tres jugadores</span></div><span className="betHeadActions"><BetHelpButton kind="monkey" /><Toggle on={Boolean(bets.monkey?.enabled)} onClick={()=>setBets({...bets,monkey:{value:20,participantIds:players.slice(0,3).map(p=>p.id),...bets.monkey,enabled:!bets.monkey?.enabled}})} /></span></div>
           {bets.monkey?.enabled && <><MoneyInput label="Valor punto Monkey" value={bets.monkey.value} onChange={value=>setBets({...bets,monkey:{...bets.monkey!,value}})} /><ParticipantChips players={players} selected={bets.monkey.participantIds} onChange={participantIds=>setBets({...bets,monkey:{...bets.monkey!,participantIds}})} /><p>{monkey.valid ? "HCP rebajado entre estos tres. Sin porcentaje ni redondeo añadido." : "Selecciona exactamente tres jugadores; no se calcula con otra cantidad."}</p></>}
         </div>
 
@@ -2139,7 +2183,7 @@ function GolfBetsApp() {
         />
 
         <div className="betCard">
-          <div className="betHead"><div><b>⚡ Mini Polla</b><span>Medal neto de los últimos 3 hoyos realmente jugados</span></div><Toggle on={bets.miniPolla.enabled} onClick={() => setBets({ ...bets, miniPolla: { ...bets.miniPolla, enabled: !bets.miniPolla.enabled } })} /></div>
+          <div className="betHead"><div><b>⚡ Mini Polla</b><span>Medal neto de los últimos 3 hoyos realmente jugados</span></div><span className="betHeadActions"><BetHelpButton kind="mini_polla" /><Toggle on={bets.miniPolla.enabled} onClick={() => setBets({ ...bets, miniPolla: { ...bets.miniPolla, enabled: !bets.miniPolla.enabled } })} /></span></div>
           {bets.miniPolla.enabled && <>
             <div className="grid3"><MoneyInput label="Valor" value={bets.miniPolla.value} onChange={(v) => setBets({ ...bets, miniPolla: { ...bets.miniPolla, value: v } })} /><HcpPercentInput value={bets.miniPolla.hcpPct} onChange={(v) => setBets({ ...bets, miniPolla: { ...bets.miniPolla, hcpPct: v } })} /><div><label>Decimales</label><select value={bets.miniPolla.decimals} onChange={(e) => setBets({ ...bets, miniPolla: { ...bets.miniPolla, decimals: e.target.value as "partial" | "round" } })}><option value="round">Redondear</option><option value="partial">Cuentan</option></select></div></div>
             <label className="miniLabel">Participan</label><ParticipantChips players={players} selected={bets.miniPolla.participantIds} onChange={(ids) => setBets({ ...bets, miniPolla: { ...bets.miniPolla, participantIds: ids } })} />
@@ -2155,12 +2199,14 @@ function GolfBetsApp() {
 
       <ResultAccordion
         id="setup-personals"
-        title="Apuestas personales"
+        title="Apuestas personales actuales"
         open={personalSetupOpen}
         onOpenChange={setPersonalSetupOpen}
         className="setupBetsAccordion"
-        headerAction={<button type="button" className="textButton" onClick={(event) => { event.stopPropagation(); newPersonalBet(); }}>+ Personal</button>}
+        headerAction={<span className="resultHeaderActions"><BetHelpButton kind="personal" /><button type="button" className="textButton" onClick={(event) => { event.stopPropagation(); newPersonalBet(); }}>+ Personal</button></span>}
       >{renderPersonalBetsEditor()}</ResultAccordion>
+
+      <SupplementalBetsEditor bets={supplementalBets} players={players} onChange={setSupplementalBets} />
 
       <ResultAccordion
         id="setup-manuals"
@@ -2168,7 +2214,7 @@ function GolfBetsApp() {
         open={manualSetupOpen}
         onOpenChange={setManualSetupOpen}
         className="setupBetsAccordion"
-        headerAction={<button type="button" className="textButton" onClick={(event) => { event.stopPropagation(); setManualSetupOpen(true); newManualBet(); }}>+ Apuesta</button>}
+        headerAction={<span className="resultHeaderActions"><BetHelpButton kind="manual" /><button type="button" className="textButton" onClick={(event) => { event.stopPropagation(); setManualSetupOpen(true); newManualBet(); }}>+ Apuesta</button></span>}
       >{renderManualBetsEditor(true)}</ResultAccordion>
 
       <button className="primary big" disabled={!players.length || players.some((player) => !player.name.trim())} onClick={() => { setBets(current => freezeRoundHandicapBases(current, players)); if (!editingRound) setCurrentIndex(0); setEditingRound(false); setTab("round"); }}>{editingRound ? "Guardar configuración y continuar →" : "Iniciar ronda →"}</button>
@@ -2202,7 +2248,7 @@ function GolfBetsApp() {
         {players.map((p) => {
           const indicators = playerHoleBetLabels(p.id, bets.loba.enabled ? lobaHoles[holeNumber] : undefined, bets.ballFriend.enabled ? bfSetup : undefined, bets.ballFriend.participantIds);
           return <div className="scoreRow" key={p.id}>
-          <div><b>{p.name.trim() || "Sin nombre"}</b><span>HCP {p.handicap ?? "—"}</span>{indicators.length > 0 && <span className="playerHoleBetBadges">{indicators.map(indicator => <i key={indicator}>{indicator}</i>)}</span>}</div>
+          <div><b>{p.name.trim() || "Sin nombre"}</b><span>HCP {p.handicap ?? "—"}</span>{indicators.length > 0 && <span className="playerHoleBetBadges">{indicators.map(indicator => <i key={indicator}>{indicator}</i>)}</span>}{activePuttPlayerIds.has(p.id) && <label className="puttsCapture">Putts<NumericCaptureInput aria-label={`Putts ${p.name} hoyo ${holeNumber}`} min={0} max={20} step={1} value={putts[holeNumber]?.[p.id]} emptyWhenZero={false} placeholder="—" onValueChange={(value) => setPutt(p.id, value)} /></label>}</div>
           <div className="scoreControls"><div className="stepper"><button aria-label={`Restar golpe a ${p.name}`} onClick={() => changeScore(p.id, -1)}>−</button><NumericCaptureInput aria-label={`Score ${p.name} hoyo ${holeNumber}`} min={1} step={1} value={scoreFor(p.id)} emptyWhenZero={false} commitUnchanged placeholder={String(hole.par)} onValueChange={(value) => setScore(p.id, value)} /><button aria-label={`Sumar golpe a ${p.name}`} onClick={() => changeScore(p.id, 1)}>+</button></div><button className="parReset" aria-label={`Restablecer Par de ${p.name}`} onClick={() => setScore(p.id, hole.par)}>PAR</button></div>
         </div>;})}
         {scoreCaptureComplete && <div className="liveBadges">
@@ -2264,6 +2310,7 @@ function GolfBetsApp() {
       </section>}
 
       {scoreCaptureComplete && <PersonalCompact results={livePersonals.results} owner={owner?.name || "Jugador principal"} name={playerName} hole={holeNumber} onOpen={id => { setPersonalDetailId(id); setTab("personalDetail"); }} />}
+      {scoreCaptureComplete && liveSupplemental.results.length > 0 && <section className="card compact"><div className="sectionTitle"><div><h2>Otras apuestas · en vivo</h2><p>Calculadas con los scores confirmados hasta este hoyo.</p></div></div><SupplementalBetResults results={liveSupplemental.results} players={players} /></section>}
       {scoreCaptureComplete && renderMonkeyLive()}
 
       <div className="roundActions"><button className="secondary big" disabled={currentIndex === 0 || holeSummary.length > 0} onClick={() => goToHoleIndex(currentIndex - 1)}>← Anterior</button><button className="primary big" disabled={holeSummary.length > 0} onPointerDown={commitFocusedNumericCapture} onClick={requestSaveAndAdvance}>{currentIndex < order.length - 1 ? "Guardar y siguiente hoyo →" : "Terminar y guardar ronda →"}</button></div>
@@ -2275,7 +2322,7 @@ function GolfBetsApp() {
       <section className="hero standingsHero"><div><div className="eyebrow">CÓMO VAMOS</div><h1>Balance provisional.</h1><p>Combina lo ya cobrado con el valor provisional de Foursome y Personales; las Pollas pendientes no se liquidan antes de tiempo.</p></div><button className="secondary" onClick={() => setTab("round")}>Volver al hoyo</button></section>
       <section className="provisionalGrid">{[...players].sort((a, b) => (liveBetBalances[b.id] || 0) - (liveBetBalances[a.id] || 0)).map((player, index) => <div className="stat" key={player.id}><span>{index + 1} · {player.name || "Sin nombre"}</span><b className={(liveBetBalances[player.id] || 0) > 0 ? "good" : (liveBetBalances[player.id] || 0) < 0 ? "bad" : ""}>{signedMoney(liveBetBalances[player.id] || 0)}</b><small>provisional</small></div>)}</section>
       <section className="card highlights"><h2>Highlights</h2>{(() => { const leader = [...players].sort((a, b) => (liveBetBalances[b.id] || 0) - (liveBetBalances[a.id] || 0))[0]; const rabbitLeader = [...players].sort((a, b) => (rabbits.won[b.id] || 0) - (rabbits.won[a.id] || 0))[0]; const skinLeader = [...players].sort((a, b) => (skins.won[b.id] || 0) - (skins.won[a.id] || 0))[0]; return <div className="highlightList">{leader && (liveBetBalances[leader.id] || 0) > 0 && <span>🔥 {leader.name} lidera {signedMoney(liveBetBalances[leader.id])}</span>}{rabbitLeader && (rabbits.won[rabbitLeader.id] || 0) > 0 && <span>🐇 {rabbitLeader.name} lleva {rabbits.won[rabbitLeader.id]} Conejos</span>}{skinLeader && (skins.won[skinLeader.id] || 0) > 0 && <span>⛳ {skinLeader.name} lleva {skins.won[skinLeader.id]} Skins</span>}{!leader && <span>Aún sin datos.</span>}</div>; })()}</section>
-<section className="card"><h2>Desglose por apuesta</h2><div className="tableWrap"><table><thead><tr><th>Jugador</th><th>🐇</th><th>⛳</th><th>📏</th><th>Foursome</th><th>⚪🤝 Bola Amiga</th><th>Pollas</th><th>Personales</th><th>Manuales</th>{bets.monkey?.enabled && <th>Monkey</th>}{bets.vipers.enabled && <th>🐍</th>}{bets.camels.enabled && <th>🐫</th>}{bets.fish.enabled && <th>🐟</th>}{bets.loba.enabled && <th>🐺</th>}</tr></thead><tbody>{players.map((player) => <tr key={player.id}><td><b>{player.name}</b></td><td>{signedMoney(rabbitBalances[player.id] || 0)}</td><td>{signedMoney(skinBalances[player.id] || 0)}</td><td>{signedMoney(units.balances[player.id] || 0)}</td><td>{signedMoney(foursomes.provisionalBalances[player.id] || 0)}</td><td>{signedMoney(ballFriend.balances[player.id] || 0)}</td><td>{signedMoney((polla.balances[player.id] || 0) + (miniPolla.balances[player.id] || 0))}</td><td>{signedMoney(personals.provisionalBalances[player.id] || 0)}</td><td>{signedMoney(manual.balances[player.id] || 0)}</td>{bets.monkey?.enabled && <td>{signedMoney(monkey.balances[player.id] || 0)}</td>}{bets.vipers.enabled && <td>{signedMoney(vipers.balances[player.id] || 0)}</td>}{bets.camels.enabled && <td>{signedMoney(camels.balances[player.id] || 0)}</td>}{bets.fish.enabled && <td>{signedMoney(fish.balances[player.id] || 0)}</td>}{bets.loba.enabled && <td>{signedMoney(loba.balances[player.id] || 0)}</td>}</tr>)}</tbody></table></div></section>
+<section className="card"><h2>Desglose por apuesta</h2><div className="tableWrap"><table><thead><tr><th>Jugador</th><th>🐇</th><th>⛳</th><th>📏</th><th>Foursome</th><th>⚪🤝 Bola Amiga</th><th>Pollas</th>{liveSupplemental.results.map((result) => <th key={result.betId}>{result.label}</th>)}<th>Personales</th><th>Manuales</th>{bets.monkey?.enabled && <th>Monkey</th>}{bets.vipers.enabled && <th>🐍</th>}{bets.camels.enabled && <th>🐫</th>}{bets.fish.enabled && <th>🐟</th>}{bets.loba.enabled && <th>🐺</th>}</tr></thead><tbody>{players.map((player) => <tr key={player.id}><td><b>{player.name}</b></td><td>{signedMoney(rabbitBalances[player.id] || 0)}</td><td>{signedMoney(skinBalances[player.id] || 0)}</td><td>{signedMoney(units.balances[player.id] || 0)}</td><td>{signedMoney(foursomes.provisionalBalances[player.id] || 0)}</td><td>{signedMoney(ballFriend.balances[player.id] || 0)}</td><td>{signedMoney((polla.balances[player.id] || 0) + (miniPolla.balances[player.id] || 0))}</td>{liveSupplemental.results.map((result) => <td key={result.betId}>{signedMoney(result.balances[player.id] || 0)}</td>)}<td>{signedMoney(personals.provisionalBalances[player.id] || 0)}</td><td>{signedMoney(manual.balances[player.id] || 0)}</td>{bets.monkey?.enabled && <td>{signedMoney(monkey.balances[player.id] || 0)}</td>}{bets.vipers.enabled && <td>{signedMoney(vipers.balances[player.id] || 0)}</td>}{bets.camels.enabled && <td>{signedMoney(camels.balances[player.id] || 0)}</td>}{bets.fish.enabled && <td>{signedMoney(fish.balances[player.id] || 0)}</td>}{bets.loba.enabled && <td>{signedMoney(loba.balances[player.id] || 0)}</td>}</tr>)}</tbody></table></div></section>
       <section className="card"><div className="sectionTitle"><div><h2>Leaderboard de la ronda</h2><p>Gross y Neto auditable con el HCP de ronda.</p></div><div className="segmented"><button className={privateBoardMode === "gross" ? "active" : ""} onClick={() => setPrivateBoardMode("gross")}>Gross</button><button className={privateBoardMode === "net" ? "active" : ""} onClick={() => setPrivateBoardMode("net")}>Neto</button></div></div><div className="tableWrap"><table><thead><tr><th>Pos</th><th>Jugador</th><th>HCP</th><th>Gross</th><th>Neto</th><th>+/- Par</th><th>Thru</th></tr></thead><tbody>{[...privateBoard].sort((a, b) => a[privateBoardMode] - b[privateBoardMode]).map((row, index) => <tr key={row.playerId}><td>{index + 1}</td><td><b>{row.name}</b></td><td>{row.handicap ?? "—"}</td><td>{row.gross || "—"}</td><td>{row.net || "—"}</td><td>{row.thru ? `${row.relativeToPar > 0 ? "+" : ""}${row.relativeToPar}` : "—"}</td><td>{row.finished ? "F" : row.thru}</td></tr>)}</tbody></table></div></section>
     </>}
 
@@ -2311,7 +2358,8 @@ function GolfBetsApp() {
         {bets.camels.enabled && <span><b>🐫 Camellos</b>{money(bets.camels.value)} · H10–18 {bets.camels.secondNineMultiplier}x</span>}
         {bets.fish.enabled && <span><b>🐟 Peces</b>{money(bets.fish.value)} · H10–18 {bets.fish.secondNineMultiplier}x</span>}
         {bets.loba.enabled && <span><b>🐺 Loba</b>{money(bets.loba.value)} base · HCP {bets.loba.hcpPct ?? 100}%{bets.loba.unitsEnabled ? ` · 📏 ${money(bets.loba.unitValue)}` : ""}</span>}
-        {personalBets.map((bet) => <span key={bet.id}><b>Personal {owner?.name} vs {bet.rivalMode === "group" ? playerName(bet.rivalPlayerId) : bet.rivalName}</b>{money(bet.baseValue)} base{roundHoles === 18 && (bet.pressureMultiplier || 1) > 1 ? ` · 2ª jugada ${bet.pressureMultiplier}x` : ""} · Carry {bet.carryEnabled ? "Sí" : "No"}</span>)}
+        {supplementalBets.filter((bet) => bet.enabled !== false).map((bet) => <span key={bet.id}><b>{SUPPLEMENTAL_BET_LABELS[bet.type]}</b>{money(supplementalBetValue(bet))}</span>)}
+        {personalBets.filter((bet) => bet.enabled !== false).map((bet) => <span key={bet.id}><b>Personal {owner?.name} vs {bet.rivalMode === "group" ? playerName(bet.rivalPlayerId) : bet.rivalName}</b>{money(bet.baseValue)} base{roundHoles === 18 && (bet.pressureMultiplier || 1) > 1 ? ` · 2ª jugada ${bet.pressureMultiplier}x` : ""} · Carry {bet.carryEnabled ? "Sí" : "No"}</span>)}
       </div></ResultAccordion>
 
       <ResultAccordion id="general-summary" title={resultsView === "general" ? "Resumen General" : "Resumen por jugador"} className="playerSummary" {...resultAccordionProps("general-summary")}>
@@ -2326,8 +2374,9 @@ function GolfBetsApp() {
             {bets.ballFriend.enabled && <div><span>⚪🤝 Bola Amiga</span><i>{signedMoney(ballFriend.balances[p.id] ?? 0)}</i></div>}
             {polla.details.filter((detail) => Object.hasOwn(detail.totals, p.id)).map((detail) => <div key={detail.key}><span>{detail.label}</span><b>1</b><i>{signedMoney(pollaDetailBalance(detail, p.id))}</i></div>)}
             {miniPolla.details.filter((detail) => Object.hasOwn(detail.totals, p.id)).map((detail) => <div key={detail.key}><span>Mini Polla</span><b>1</b><i>{signedMoney(pollaDetailBalance(detail, p.id))}</i></div>)}
-            {personalBets.length > 0 && <div><span>Personales</span><i>{signedMoney(personals.balances[p.id] ?? 0)}</i></div>}
-            {manualBets.length > 0 && <div><span>Manuales</span><i>{signedMoney(manual.balances[p.id] ?? 0)}</i></div>}
+            {supplemental.results.map((result) => <div key={result.betId}><span>{result.label}</span><i>{signedMoney(result.balances[p.id] ?? 0)}</i></div>)}
+            {personalBets.some((bet) => bet.enabled !== false) && <div><span>Personales</span><i>{signedMoney(personals.balances[p.id] ?? 0)}</i></div>}
+            {manualBets.some((bet) => bet.enabled !== false) && <div><span>Manuales</span><i>{signedMoney(manual.balances[p.id] ?? 0)}</i></div>}
             {bets.monkey?.enabled && <div><span>🐒 Monkey</span><b>{monkey.points[p.id] ?? 0}</b><i>{signedMoney(monkey.balances[p.id] ?? 0)}</i></div>}
             {bets.vipers.enabled && <div><span>🐍 Víboras</span><b>{vipers.totalQuantity}</b><i>{signedMoney(vipers.balances[p.id] ?? 0)}</i></div>}
             {bets.camels.enabled && <div><span>🐫 Camellos</span><b>{camels.totalQuantity}</b><i>{signedMoney(camels.balances[p.id] ?? 0)}</i></div>}
@@ -2367,7 +2416,9 @@ function GolfBetsApp() {
 
       {bets.monkey?.enabled && <ResultAccordion id="monkey" title="🐒 Monkey" {...resultAccordionProps("monkey")}>{renderMonkeyLive()}</ResultAccordion>}
 
-      {manualBets.length > 0 && <ResultAccordion id="manuals" title="Manuales" {...resultAccordionProps("manuals")}>{renderManualBetResults()}</ResultAccordion>}
+      {supplemental.results.map((result) => <ResultAccordion key={result.betId} id={`supplemental-${result.betId}`} title={result.label} {...resultAccordionProps(`supplemental-${result.betId}`)}><SupplementalBetResults results={[result]} players={players} /></ResultAccordion>)}
+
+      {manualBets.some((bet) => bet.enabled !== false) && <ResultAccordion id="manuals" title="Manuales" {...resultAccordionProps("manuals")}>{renderManualBetResults()}</ResultAccordion>}
 
       <ResultAccordion id="expenses" title={`Gastos de ${owner?.name}`} {...resultAccordionProps("expenses")}>
         <div className="grid2">

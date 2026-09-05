@@ -902,7 +902,7 @@ export function calculatePersonalBets(
 ) {
   const balances = zeroBalances(allPlayers);
   const provisionalBalances = zeroBalances(allPlayers);
-  const results = bets.map((b) => calculatePersonalBet(b, ownerId, course, scores, order));
+  const results = bets.filter((bet) => bet.enabled !== false).map((b) => calculatePersonalBet(b, ownerId, course, scores, order));
   for (const r of results) {
     balances[ownerId] = (balances[ownerId] ?? 0) + r.totalMoney;
     balances[r.rivalId] = (balances[r.rivalId] ?? 0) - r.totalMoney;
@@ -1038,7 +1038,7 @@ export function calculateMiniPolla(
 
 export function calculateManualBets(allPlayers: Player[], bets: ManualBet[]) {
   const balances = zeroBalances(allPlayers);
-  const details = bets.map((bet) => {
+  const details = bets.filter((bet) => bet.enabled !== false).map((bet) => {
     const total = allPlayers.reduce((sum, p) => sum + Number(bet.amounts[p.id] ?? 0), 0);
     const valid = Math.abs(total) < EPS;
     if (valid) {
