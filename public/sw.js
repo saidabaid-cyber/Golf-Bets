@@ -1,4 +1,4 @@
-const CACHE = "the-backyard-shell-v3";
+const CACHE = "the-backyard-shell-v4";
 const CORE = ["/", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/maskable-192.png", "/icons/maskable-512.png", "/apple-icon.png"];
 
 async function cacheShell() {

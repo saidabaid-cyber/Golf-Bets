@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createSupplementalBet, SUPPLEMENTAL_BET_LABELS } from "../../lib/supplemental-bets";
-import type { PersonalBetComponents, Player, SupplementalBet } from "../../lib/types";
+import type { Player, SupplementalBet } from "../../lib/types";
 import { NumericCaptureInput } from "./numeric-capture-input";
 import { ResultAccordion } from "./result-accordion";
 import styles from "./supplemental-bets.module.css";
@@ -10,7 +10,7 @@ import styles from "./supplemental-bets.module.css";
 export type BetKind = SupplementalBet["type"] | "personal" | "manual" | "rabbits" | "skins" | "units" | "foursome" | "ball_friend" | "monkey" | "polla" | "mini_polla" | "vipers" | "camels" | "fish" | "loba";
 
 const HELP: Record<BetKind, { title: string; what: string; how: string; rules: string; example: string }> = {
-  personal: { title: "Apuestas personales actuales", what: "Un enfrentamiento privado entre dos jugadores.", how: "La app compara Match y/o Medal por primera vuelta, segunda vuelta y total.", rules: "La ventaja directa, presión y carry se conservan de forma independiente.", example: "Jugador A gana Match de la primera vuelta y cobra el valor pactado a Jugador B." },
+  personal: { title: "Nassau Individual", what: "Un enfrentamiento privado entre Jugador A y Jugador B.", how: "La app compara Match y/o Medal por primera vuelta, segunda vuelta y total.", rules: "La ventaja directa, presión y carry se conservan de forma independiente.", example: "Jugador A gana Match de la primera vuelta y cobra el valor pactado a Jugador B." },
   individual_nassau: { title: "Nassau individual", what: "Tres enfrentamientos entre Jugador A y Jugador B: primera vuelta, segunda vuelta y total.", how: "Puede jugarse Match, Medal o ambos, aplicando la ventaja pactada antes de comparar.", rules: "Cada componente se liquida por separado y el carry no mezcla Match con Medal.", example: "Jugador A gana la primera, Jugador B la segunda y el total queda empatado." },
   dollar_stroke: { title: "Dollar a Stroke", what: "Juego individual donde cada golpe neto de diferencia tiene un valor.", how: "Se restan las ventajas, se comparan totales netos y la diferencia se multiplica por el valor por golpe.", rules: "Solo participan Jugador A y Jugador B; el mejor total neto cobra.", example: "Neto 70 contra 90, a $10 por golpe: Jugador A cobra $200." },
   individual_pressures: { title: "Presiones individuales", what: "Cada jugador mantiene un challenge contra cada oponente.", how: "Un empate deja la presión abierta; al ganar un hoyo se cierra y comienza la siguiente.", rules: "El carry puede pasar una presión empatada a la siguiente vuelta. Match Play adicional es opcional.", example: "Presión 1 abre en H1, empata H1 y cierra en H2 cuando gana Jugador A." },
@@ -52,11 +52,25 @@ function createSupplementalBetId(type: SupplementalBet["type"]) {
 export function BetHelpButton({ kind }: { kind: BetKind }) {
   const [open, setOpen] = useState(false);
   const help = HELP[kind];
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    dialogRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+  }, [open]);
+  const close = () => { setOpen(false); window.setTimeout(() => triggerRef.current?.focus(), 0); };
   return <>
-    <button type="button" className={styles.helpButton} aria-label={`Ayuda sobre ${help.title}`} onClick={(event) => { event.stopPropagation(); setOpen(true); }}>?</button>
-    {open && <div className={styles.helpBackdrop} role="presentation" onClick={() => setOpen(false)}>
-      <section className={styles.helpDialog} role="dialog" aria-modal="true" aria-label={help.title} onClick={(event) => event.stopPropagation()}>
-        <button type="button" className={styles.helpClose} aria-label="Cerrar ayuda" onClick={() => setOpen(false)}>×</button>
+    <button ref={triggerRef} type="button" className={styles.helpButton} aria-label={`Ayuda sobre ${help.title}`} aria-haspopup="dialog" onClick={(event) => { event.stopPropagation(); setOpen(true); }}>?</button>
+    {open && <div className={styles.helpBackdrop} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
+      <section ref={dialogRef} className={styles.helpDialog} role="dialog" aria-modal="true" aria-label={help.title} onKeyDown={(event) => {
+        if (event.key === "Escape") { event.preventDefault(); close(); return; }
+        if (event.key !== "Tab") return;
+        const controls = [...(dialogRef.current?.querySelectorAll<HTMLElement>("button, a[href]") || [])];
+        if (!controls.length) return;
+        if (event.shiftKey && document.activeElement === controls[0]) { event.preventDefault(); controls.at(-1)?.focus(); }
+        else if (!event.shiftKey && document.activeElement === controls.at(-1)) { event.preventDefault(); controls[0].focus(); }
+      }} onClick={(event) => event.stopPropagation()}>
+        <button type="button" className={styles.helpClose} aria-label="Cerrar ayuda" onClick={close}>×</button>
         <h2>{help.title}</h2>
         <dl><div><dt>Qué es</dt><dd>{help.what}</dd></div><div><dt>Cómo funciona</dt><dd>{help.how}</dd></div><div><dt>Reglas importantes</dt><dd>{help.rules}</dd></div><div><dt>Ejemplo simple</dt><dd>{help.example}</dd></div></dl>
       </section>
@@ -65,7 +79,7 @@ export function BetHelpButton({ kind }: { kind: BetKind }) {
 }
 
 function Switch({ on, label, onChange }: { on: boolean; label: string; onChange: () => void }) {
-  return <button type="button" className={`switch ${on ? "on" : ""}`} role="switch" aria-checked={on} aria-label={`${on ? "Desactivar" : "Activar"} ${label}`} onClick={onChange}><span /></button>;
+  return <button type="button" className={`switch ${on ? "on" : ""}`} role="switch" aria-checked={on} aria-label={`${on ? "Desactivar" : "Activar"} ${label}`} onClick={(event) => { event.stopPropagation(); onChange(); }}><span /></button>;
 }
 
 function MoneyField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
@@ -87,44 +101,71 @@ function ParticipantChips({ players, selected, onChange }: { players: Player[]; 
   })}</div>;
 }
 
-function ItemShell({ bet, label, onToggle, onRemove, children }: { bet: SupplementalBet; label: string; onToggle: () => void; onRemove: () => void; children: ReactNode }) {
+function ItemShell({ bet, label, onToggle, onRemove, children, locked }: { bet: SupplementalBet; label: string; onToggle: () => void; onRemove: () => void; children: ReactNode; locked: boolean }) {
   const meta = SUPPLEMENTAL_META[bet.type];
-  return <article className={`${styles.betItem} ${!bet.enabled ? styles.disabled : ""}`}>
+  return <article data-supplemental-editor={bet.id} className={`${styles.betItem} ${!bet.enabled ? styles.disabled : ""}`}>
     <div className={styles.itemHeader}>
       <div><b>{meta.icon} {label}</b><small>{meta.description}</small>{!bet.enabled && <small>Desactivada · conserva sus datos y no participa</small>}</div>
-      <span className={styles.itemActions}><BetHelpButton kind={bet.type} /><Switch on={bet.enabled} label={label} onChange={onToggle} /></span>
+      <span className={styles.itemActions}><Switch on={bet.enabled} label={label} onChange={onToggle} /></span>
       <button type="button" className="remove" aria-label={`Eliminar ${label}`} onClick={onRemove}>×</button>
     </div>
-    {bet.enabled && <div className={styles.fields}>{children}</div>}
+    {bet.enabled && <fieldset disabled={locked} className={`${styles.fields} bettingEditorFieldset`}>{children}</fieldset>}
   </article>;
 }
 
-const COMPONENT_LABELS: Array<[keyof PersonalBetComponents, string]> = [
-  ["match1", "Match primera"], ["medal1", "Medal primera"], ["match2", "Match segunda"], ["medal2", "Medal segunda"], ["match18", "Match total"], ["medal18", "Medal total"],
-];
+const ORDER: SupplementalBet["type"][] = ["dollar_stroke", "individual_pressures", "team_pressures", "chicago", "vegas", "minimum_putts"];
 
-const ORDER: SupplementalBet["type"][] = ["individual_nassau", "dollar_stroke", "individual_pressures", "team_pressures", "chicago", "vegas", "minimum_putts"];
-
-export function SupplementalBetsEditor({ bets, players, onChange }: { bets: SupplementalBet[]; players: Player[]; onChange: (bets: SupplementalBet[]) => void }) {
+export function SupplementalBetsEditor({ bets, players, onChange, requestActivation, locked = false }: { bets: SupplementalBet[]; players: Player[]; onChange: (bets: SupplementalBet[]) => void; requestActivation?: () => Promise<boolean>; locked?: boolean }) {
+  const [openTypes, setOpenTypes] = useState<Partial<Record<SupplementalBet["type"], boolean>>>({});
+  const pendingFocus = useRef<string | null>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
   const update = (id: string, next: Partial<SupplementalBet>) => onChange(bets.map((bet) => bet.id === id ? { ...bet, ...next } as SupplementalBet : bet));
   const remove = (id: string) => onChange(bets.filter((bet) => bet.id !== id));
-  const add = (type: SupplementalBet["type"]) => {
+  const runAfterConsent = (action: () => void) => {
+    if (!requestActivation) { action(); return; }
+    void requestActivation().then((accepted) => { if (accepted) action(); });
+  };
+  const addNow = (type: SupplementalBet["type"]) => {
     const id = createSupplementalBetId(type);
+    setOpenTypes((current) => ({ ...current, [type]: true }));
+    pendingFocus.current = id;
     onChange([...bets, createSupplementalBet(type, players, id)]);
   };
+  const add = (type: SupplementalBet["type"]) => runAfterConsent(() => addNow(type));
+  const setTypeEnabled = (type: SupplementalBet["type"], enabled: boolean) => {
+    if (enabled) { runAfterConsent(() => setTypeEnabledNow(type, true)); return; }
+    setTypeEnabledNow(type, false);
+  };
+  const setTypeEnabledNow = (type: SupplementalBet["type"], enabled: boolean) => {
+    const current = bets.filter((bet) => bet.type === type);
+    setOpenTypes((open) => ({ ...open, [type]: true }));
+    if (enabled && current.length === 0) {
+      addNow(type);
+      return;
+    }
+    onChange(bets.map((bet) => bet.type === type ? { ...bet, enabled } as SupplementalBet : bet));
+  };
 
-  return <div className={styles.editor}>{ORDER.map((type) => {
+  useEffect(() => {
+    const targetId = pendingFocus.current;
+    if (!targetId) return;
+    const section = editorRef.current?.querySelector<HTMLElement>(`[data-supplemental-editor="${CSS.escape(targetId)}"]`);
+    const field = section?.querySelector<HTMLElement>("fieldset input, fieldset select, fieldset textarea, fieldset button");
+    if (!section || !field) return;
+    pendingFocus.current = null;
+    section.scrollIntoView({ behavior: "smooth", block: "center" });
+    field.focus({ preventScroll: true });
+  }, [bets, openTypes]);
+
+  return <div ref={editorRef} className={styles.editor}>{ORDER.map((type) => {
     const typeBets = bets.filter((bet) => bet.type === type).map((bet, index) => ({ bet, index })).sort((first, second) => Number(second.bet.enabled) - Number(first.bet.enabled));
-    const title = `${SUPPLEMENTAL_META[type].icon} ${SUPPLEMENTAL_BET_LABELS[type].toUpperCase()}`;
-    return <ResultAccordion key={type} id={`setup-${type}`} title={title} className="setupBetsAccordion" headerAction={<span className={styles.headerActions}><button type="button" className="textButton" onClick={(event) => { event.stopPropagation(); add(type); }}>+ Agregar</button></span>}>
+    const modeEnabled = typeBets.some(({ bet }) => bet.enabled);
+    const label = SUPPLEMENTAL_BET_LABELS[type];
+    const title = <span className={styles.modeTitle}><b>{SUPPLEMENTAL_META[type].icon} {label}</b><small>{SUPPLEMENTAL_META[type].description}</small></span>;
+    return <ResultAccordion key={type} id={`setup-${type}`} title={title} open={Boolean(openTypes[type])} onOpenChange={(open) => setOpenTypes((current) => ({ ...current, [type]: open }))} className="setupBetsAccordion" headerAction={<span className={styles.headerActions}><BetHelpButton kind={type} /><Switch on={modeEnabled} label={label} onChange={() => setTypeEnabled(type, !modeEnabled)} /></span>}>
+      <div className={styles.modeTools}><button type="button" className="textButton" onClick={() => add(type)}>+ Agregar</button></div>
       {!typeBets.length && <div className="empty">Todavía no hay apuestas de este tipo.</div>}
-      {typeBets.map(({ bet, index }) => <ItemShell key={bet.id} bet={bet} label={`${SUPPLEMENTAL_BET_LABELS[type]} ${index + 1}`} onToggle={() => update(bet.id, { enabled: !bet.enabled })} onRemove={() => remove(bet.id)}>
-        {bet.type === "individual_nassau" && <>
-          <div className="grid2"><PlayerSelect label="Jugador A" value={bet.playerAId} players={players} exclude={bet.playerBId} onChange={(playerAId) => update(bet.id, { playerAId })} /><PlayerSelect label="Jugador B" value={bet.playerBId} players={players} exclude={bet.playerAId} onChange={(playerBId) => update(bet.id, { playerBId })} /></div>
-          <div className="grid3"><MoneyField label="Monto pactado" value={bet.value} onChange={(value) => update(bet.id, { value })} /><PlayerSelect label="Quién recibe ventaja" value={bet.advantageReceiverId || ""} players={players.filter((player) => player.id === bet.playerAId || player.id === bet.playerBId)} onChange={(advantageReceiverId) => update(bet.id, { advantageReceiverId: advantageReceiverId || undefined })} /><NumberField label="Golpes" value={bet.advantageStrokes} min={0} onChange={(advantageStrokes) => update(bet.id, { advantageStrokes })} /></div>
-          <label className="checkRow"><input type="checkbox" checked={bet.carryEnabled} onChange={(event) => update(bet.id, { carryEnabled: event.target.checked })} />Carry</label>
-          <div className="componentGrid">{COMPONENT_LABELS.map(([key, label]) => <button type="button" key={key} className={`component ${bet.components[key] ? "selected" : ""}`} onClick={() => update(bet.id, { components: { ...bet.components, [key]: !bet.components[key] } })}>{bet.components[key] ? "✓ " : ""}{label}</button>)}</div>
-        </>}
+      {typeBets.map(({ bet, index }) => <ItemShell key={bet.id} bet={bet} locked={locked} label={`${SUPPLEMENTAL_BET_LABELS[type]} ${index + 1}`} onToggle={() => bet.enabled ? update(bet.id, { enabled: false }) : runAfterConsent(() => update(bet.id, { enabled: true }))} onRemove={() => remove(bet.id)}>
         {bet.type === "dollar_stroke" && <>
           <div className="grid2"><PlayerSelect label="Jugador A" value={bet.playerAId} players={players} exclude={bet.playerBId} onChange={(playerAId) => update(bet.id, { playerAId })} /><PlayerSelect label="Jugador B" value={bet.playerBId} players={players} exclude={bet.playerAId} onChange={(playerBId) => update(bet.id, { playerBId })} /></div>
           <div className="grid3"><MoneyField label="Valor por golpe" value={bet.valuePerStroke} onChange={(valuePerStroke) => update(bet.id, { valuePerStroke })} /><PlayerSelect label="Quién recibe ventaja" value={bet.advantageReceiverId || ""} players={players.filter((player) => player.id === bet.playerAId || player.id === bet.playerBId)} onChange={(advantageReceiverId) => update(bet.id, { advantageReceiverId: advantageReceiverId || undefined })} /><NumberField label="Golpes" value={bet.advantageStrokes} min={0} onChange={(advantageStrokes) => update(bet.id, { advantageStrokes })} /></div>

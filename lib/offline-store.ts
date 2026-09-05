@@ -7,6 +7,8 @@ const DB_VERSION = 1;
 const WORKSPACES = "workspaces";
 const OUTBOX = "outbox";
 const META = "meta";
+const FALLBACK_WORKSPACE_PREFIX = "backyard-offline-workspace-fallback-v1:";
+const FALLBACK_OUTBOX_PREFIX = "backyard-offline-outbox-fallback-v1:";
 
 export type OfflineWorkspace = {
   ownerId: string;
@@ -56,6 +58,30 @@ function openOfflineDb() {
   });
 }
 
+function browserStorage() {
+  try { return typeof localStorage === "undefined" ? null : localStorage; }
+  catch { return null; }
+}
+
+function readFallback<T>(prefix: string, ownerId: string): T | null {
+  const storage = browserStorage();
+  if (!storage) return null;
+  try { return JSON.parse(storage.getItem(`${prefix}${ownerId}`) || "null") as T | null; }
+  catch { return null; }
+}
+
+function writeFallback(ownerId: string, workspace: OfflineWorkspace, outbox?: OfflineOutbox) {
+  const storage = browserStorage();
+  if (!storage) throw new Error("No existe una persistencia local alternativa");
+  storage.setItem(`${FALLBACK_WORKSPACE_PREFIX}${ownerId}`, JSON.stringify(workspace));
+  if (outbox) storage.setItem(`${FALLBACK_OUTBOX_PREFIX}${ownerId}`, JSON.stringify(outbox));
+  const verifiedWorkspace = readFallback<OfflineWorkspace>(FALLBACK_WORKSPACE_PREFIX, ownerId);
+  const verifiedOutbox = outbox ? readFallback<OfflineOutbox>(FALLBACK_OUTBOX_PREFIX, ownerId) : null;
+  if (verifiedWorkspace?.fingerprint !== workspace.fingerprint || (outbox && verifiedOutbox?.fingerprint !== outbox.fingerprint)) {
+    throw new Error("No se pudo verificar la cola local alternativa");
+  }
+}
+
 export function createDeviceId() {
   return globalThis.crypto?.randomUUID?.() || `device-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
@@ -76,27 +102,49 @@ export async function getOfflineDeviceId() {
 /** One durable snapshot and one idempotent outbox item per account. Repeated
  * edits replace the pending snapshot instead of creating duplicate operations. */
 export async function persistOfflineBundle(ownerId: string, bundle: CloudDataBundle, queueForCloud: boolean) {
-  const db = await openOfflineDb();
-  if (!db) throw new Error("IndexedDB no está disponible");
   const fingerprint = cloudDataFingerprint(bundle);
   const now = new Date().toISOString();
-  const tx = db.transaction(queueForCloud ? [WORKSPACES, OUTBOX] : [WORKSPACES], "readwrite");
-  tx.objectStore(WORKSPACES).put({ ownerId, bundle, fingerprint, savedAt: now } satisfies OfflineWorkspace);
-  if (queueForCloud) tx.objectStore(OUTBOX).put({ ownerId, bundle, fingerprint, queuedAt: now, attempts: 0 } satisfies OfflineOutbox);
-  await transactionDone(tx);
+  const workspace = { ownerId, bundle, fingerprint, savedAt: now } satisfies OfflineWorkspace;
+  const outbox = queueForCloud ? { ownerId, bundle, fingerprint, queuedAt: now, attempts: 0 } satisfies OfflineOutbox : undefined;
+  try {
+    const db = await openOfflineDb();
+    if (!db) throw new Error("IndexedDB no está disponible");
+    const tx = db.transaction(queueForCloud ? [WORKSPACES, OUTBOX] : [WORKSPACES], "readwrite");
+    tx.objectStore(WORKSPACES).put(workspace);
+    if (outbox) tx.objectStore(OUTBOX).put(outbox);
+    await transactionDone(tx);
+    const storage = browserStorage();
+    storage?.removeItem(`${FALLBACK_WORKSPACE_PREFIX}${ownerId}`);
+    storage?.removeItem(`${FALLBACK_OUTBOX_PREFIX}${ownerId}`);
+  } catch {
+    // Safari private mode and storage pressure can reject IndexedDB while
+    // localStorage is still durable. Keep one idempotent, verified fallback
+    // snapshot/outbox so refresh and reconnect do not lose the pending round.
+    writeFallback(ownerId, workspace, outbox);
+  }
   return fingerprint;
 }
 
 export async function readOfflineBundle(ownerId: string) {
-  const db = await openOfflineDb();
-  if (!db) return null;
-  return (await requestResult(db.transaction(WORKSPACES, "readonly").objectStore(WORKSPACES).get(ownerId)) as OfflineWorkspace | undefined) || null;
+  try {
+    const db = await openOfflineDb();
+    if (db) {
+      const saved = (await requestResult(db.transaction(WORKSPACES, "readonly").objectStore(WORKSPACES).get(ownerId)) as OfflineWorkspace | undefined) || null;
+      if (saved) return saved;
+    }
+  } catch { /* use the verified fallback below */ }
+  return readFallback<OfflineWorkspace>(FALLBACK_WORKSPACE_PREFIX, ownerId);
 }
 
 export async function readOfflineOutbox(ownerId: string) {
-  const db = await openOfflineDb();
-  if (!db) return null;
-  return (await requestResult(db.transaction(OUTBOX, "readonly").objectStore(OUTBOX).get(ownerId)) as OfflineOutbox | undefined) || null;
+  try {
+    const db = await openOfflineDb();
+    if (db) {
+      const saved = (await requestResult(db.transaction(OUTBOX, "readonly").objectStore(OUTBOX).get(ownerId)) as OfflineOutbox | undefined) || null;
+      if (saved) return saved;
+    }
+  } catch { /* use the verified fallback below */ }
+  return readFallback<OfflineOutbox>(FALLBACK_OUTBOX_PREFIX, ownerId);
 }
 
 export function outboxAcknowledged(outbox: Pick<OfflineOutbox, "fingerprint"> | null, fingerprint: string) {
@@ -113,10 +161,19 @@ export function offlineRetryDelayMs(attempts: number) {
 /** Delete pending work only after the exact snapshot was acknowledged. A newer
  * local edit remains queued even if an older request finishes later. */
 export async function acknowledgeOfflineBundle(ownerId: string, fingerprint: string) {
-  const db = await openOfflineDb();
-  if (!db) return false;
   const current = await readOfflineOutbox(ownerId);
   if (!outboxAcknowledged(current, fingerprint)) return false;
+  const fallback = readFallback<OfflineOutbox>(FALLBACK_OUTBOX_PREFIX, ownerId);
+  if (fallback?.fingerprint === fingerprint) {
+    const storage = browserStorage();
+    const workspace = readFallback<OfflineWorkspace>(FALLBACK_WORKSPACE_PREFIX, ownerId);
+    if (!storage) return false;
+    if (workspace) storage.setItem(`${FALLBACK_WORKSPACE_PREFIX}${ownerId}`, JSON.stringify({ ...workspace, syncedAt: new Date().toISOString() }));
+    storage.removeItem(`${FALLBACK_OUTBOX_PREFIX}${ownerId}`);
+    return true;
+  }
+  const db = await openOfflineDb();
+  if (!db) return false;
   const workspace = await readOfflineBundle(ownerId);
   const tx = db.transaction([WORKSPACES, OUTBOX], "readwrite");
   tx.objectStore(OUTBOX).delete(ownerId);
@@ -126,10 +183,15 @@ export async function acknowledgeOfflineBundle(ownerId: string, fingerprint: str
 }
 
 export async function markOfflineAttempt(ownerId: string, error: string) {
-  const db = await openOfflineDb();
-  if (!db) return;
   const current = await readOfflineOutbox(ownerId);
   if (!current) return;
+  const fallback = readFallback<OfflineOutbox>(FALLBACK_OUTBOX_PREFIX, ownerId);
+  if (fallback?.fingerprint === current.fingerprint) {
+    browserStorage()?.setItem(`${FALLBACK_OUTBOX_PREFIX}${ownerId}`, JSON.stringify({ ...current, attempts: current.attempts + 1, lastError: error.slice(0, 240) }));
+    return;
+  }
+  const db = await openOfflineDb();
+  if (!db) return;
   const tx = db.transaction(OUTBOX, "readwrite");
   tx.objectStore(OUTBOX).put({ ...current, attempts: current.attempts + 1, lastError: error.slice(0, 240) });
   await transactionDone(tx);

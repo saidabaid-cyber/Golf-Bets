@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { CLOUD_TOMBSTONES_KEY, collectLocalCloudData, mergeLocalAndCloud, type CloudDataBundle } from "../lib/cloud-sync";
-import { writeCloudBundleToStorage } from "../lib/offline-store";
+import { acknowledgeOfflineBundle, markOfflineAttempt, persistOfflineBundle, readOfflineBundle, readOfflineOutbox, writeCloudBundleToStorage } from "../lib/offline-store";
 import { saveRoundHistoryLocalFirst } from "../lib/round-history-save";
 import { readStoredJson, STORAGE_KEYS } from "../lib/round-utils";
 import type { Course, Player, RoundSnapshot } from "../lib/types";
@@ -12,6 +12,7 @@ class MemoryStorage {
   values = new Map<string, string>();
   getItem(key: string) { return this.values.get(key) ?? null; }
   setItem(key: string, value: string) { this.values.set(key, value); }
+  removeItem(key: string) { this.values.delete(key); }
 }
 
 const players: Player[] = ["said", "abel", "bringas", "pepe"].map((id, index) => ({ id, name: id, handicap: index * 3 }));
@@ -110,11 +111,11 @@ test("reintentar guardado o corregir usa el mismo ID, conserva foto y crea una s
   assert.equal(new Set(fingerprints).size, 1);
 });
 
-test("si IndexedDB no confirma, el flujo rechaza y conserva el borrador para reintentar", async () => {
+test("localStorage confirmado conserva Histórico aunque IndexedDB falle y marca persistencia secundaria pendiente", async () => {
   const storage = new MemoryStorage();
   storage.setItem(STORAGE_KEYS.draft, JSON.stringify({ roundId: "round-qa", players, scores: { 1: { said: 4 } } }));
 
-  await assert.rejects(saveRoundHistoryLocalFirst({
+  const saved = await saveRoundHistoryLocalFirst({
     storage: storage as unknown as Storage,
     ownerId: "account-1",
     snapshot: snapshot(),
@@ -123,10 +124,91 @@ test("si IndexedDB no confirma, el flujo rechaza y conserva el borrador para rei
     hasLocalPreferenceState: false,
     queueForCloud: true,
     persistOffline: async () => { throw new Error("IndexedDB bloqueado"); },
-  }), /IndexedDB bloqueado/);
+  });
 
+  assert.equal(saved.offlinePersisted, false);
+  assert.equal(saved.fingerprint, null);
   assert.ok(storage.getItem(STORAGE_KEYS.draft));
   assert.equal(readStoredJson<RoundSnapshot[]>(storage as unknown as Storage, STORAGE_KEYS.history, [])[0].id, "round-qa");
+});
+
+test("si IndexedDB no existe, la cola local alternativa sobrevive, reintenta y se confirma sin duplicados", async () => {
+  const storage = new MemoryStorage();
+  const localStorageDescriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  const indexedDbDescriptor = Object.getOwnPropertyDescriptor(globalThis, "indexedDB");
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, value: storage });
+  Object.defineProperty(globalThis, "indexedDB", { configurable: true, value: undefined });
+  try {
+    const bundle = collectLocalCloudData(storage as unknown as Storage, null, false);
+    bundle.history = [snapshot("fallback-round")];
+    const first = await persistOfflineBundle("fallback-owner", bundle, true);
+    const second = await persistOfflineBundle("fallback-owner", bundle, true);
+    assert.equal(second, first);
+    assert.equal((await readOfflineBundle("fallback-owner"))?.bundle.history[0]?.id, "fallback-round");
+    assert.equal((await readOfflineOutbox("fallback-owner"))?.fingerprint, first);
+    assert.equal([...storage.values.keys()].filter((key) => key.includes("outbox-fallback")).length, 1);
+
+    await markOfflineAttempt("fallback-owner", "Sin red");
+    assert.equal((await readOfflineOutbox("fallback-owner"))?.attempts, 1);
+    assert.equal(await acknowledgeOfflineBundle("fallback-owner", "respuesta-atrasada"), false);
+    assert.ok(await readOfflineOutbox("fallback-owner"));
+    assert.equal(await acknowledgeOfflineBundle("fallback-owner", first), true);
+    assert.equal(await readOfflineOutbox("fallback-owner"), null);
+    assert.equal((await readOfflineBundle("fallback-owner"))?.syncedAt?.length ? true : false, true);
+  } finally {
+    if (localStorageDescriptor) Object.defineProperty(globalThis, "localStorage", localStorageDescriptor);
+    else delete (globalThis as { localStorage?: unknown }).localStorage;
+    if (indexedDbDescriptor) Object.defineProperty(globalThis, "indexedDB", indexedDbDescriptor);
+    else delete (globalThis as { indexedDB?: unknown }).indexedDB;
+  }
+});
+
+test("si localStorage falla no confirma el Histórico ni permite cerrar el borrador", async () => {
+  const storage = new MemoryStorage();
+  storage.setItem(STORAGE_KEYS.draft, JSON.stringify({ roundId: "round-qa", players, scores: { 1: { said: 4 } } }));
+  const failingStorage = {
+    getItem: storage.getItem.bind(storage),
+    setItem(key: string, value: string) {
+      if (key === STORAGE_KEYS.history) throw new Error("Cuota local agotada");
+      storage.setItem(key, value);
+    },
+  };
+
+  await assert.rejects(saveRoundHistoryLocalFirst({
+    storage: failingStorage as unknown as Storage,
+    ownerId: "account-1",
+    snapshot: snapshot(),
+    deviceId: "device-a",
+    defaultHandicap: null,
+    hasLocalPreferenceState: false,
+    queueForCloud: true,
+  }), /Cuota local agotada/);
+
+  assert.ok(storage.getItem(STORAGE_KEYS.draft));
+  assert.equal(storage.getItem(STORAGE_KEYS.history), null);
+});
+
+test("un almacenamiento que conserva el ID pero corrompe el contenido no se considera guardado", async () => {
+  const storage = new MemoryStorage();
+  storage.setItem(STORAGE_KEYS.draft, JSON.stringify({ roundId: "round-qa", scores: { 1: { said: 4 } } }));
+  const corrupting = {
+    getItem: storage.getItem.bind(storage),
+    setItem(key: string, value: string) {
+      if (key !== STORAGE_KEYS.history) { storage.setItem(key, value); return; }
+      const rounds = JSON.parse(value) as RoundSnapshot[];
+      storage.setItem(key, JSON.stringify(rounds.map((round) => ({ ...round, scores: {} }))));
+    },
+  };
+  await assert.rejects(saveRoundHistoryLocalFirst({
+    storage: corrupting as unknown as Storage,
+    ownerId: "account-1",
+    snapshot: snapshot(),
+    deviceId: "device-a",
+    defaultHandicap: null,
+    hasLocalPreferenceState: false,
+    queueForCloud: true,
+  }), /comprobar la ronda/);
+  assert.ok(storage.getItem(STORAGE_KEYS.draft));
 });
 
 test("el botón finaliza solo después de persistir local/IndexedDB y nunca pide confirmar el estado cloud", () => {

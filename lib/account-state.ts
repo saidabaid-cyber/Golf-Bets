@@ -1,7 +1,14 @@
 import { LEGAL_DOCUMENT_VERSIONS } from "./legal-config";
+import { PRIVACY_CONTENT_ID } from "./privacy-content";
 
 export type AccountMode = "undecided" | "guest" | "authenticated";
-export type ConsentType = keyof typeof LEGAL_DOCUMENT_VERSIONS;
+export const BETTING_DATA_CONSENT_TYPE = "betting_financial" as const;
+export const BETTING_DATA_CONSENT_VERSION = `${PRIVACY_CONTENT_ID}:express-betting-data`;
+
+export type GeneralConsentType = keyof typeof LEGAL_DOCUMENT_VERSIONS;
+export type ConsentType = GeneralConsentType | typeof BETTING_DATA_CONSENT_TYPE;
+export type ConsentPersistenceStatus = "persisted";
+export type ConsentSyncStatus = "local_only" | "pending" | "synced";
 
 export type LegalAcceptance = {
   userId: string;
@@ -9,6 +16,8 @@ export type LegalAcceptance = {
   documentVersion: string;
   acceptedAt: string;
   locale: string;
+  persistenceStatus?: ConsentPersistenceStatus;
+  syncStatus?: ConsentSyncStatus;
 };
 
 export type BackyardProfile = {
@@ -97,7 +106,8 @@ export function migrationDecisionStorageKey(userId: string) {
   return `${ACCOUNT_STORAGE_KEYS.migrationDecision}:${userId}`;
 }
 
-export const REQUIRED_CONSENTS = Object.keys(LEGAL_DOCUMENT_VERSIONS) as ConsentType[];
+export const REQUIRED_CONSENTS = Object.keys(LEGAL_DOCUMENT_VERSIONS) as GeneralConsentType[];
+export const KNOWN_CONSENT_TYPES: ConsentType[] = [...REQUIRED_CONSENTS, BETTING_DATA_CONSENT_TYPE];
 
 export function buildLegalAcceptances(userId: string, acceptedAt: string, locale = "es-MX"): LegalAcceptance[] {
   return REQUIRED_CONSENTS.map((type) => ({
@@ -109,13 +119,30 @@ export function buildLegalAcceptances(userId: string, acceptedAt: string, locale
   }));
 }
 
+export function buildBettingDataAcceptance(
+  userId: string,
+  acceptedAt: string,
+  syncStatus: ConsentSyncStatus,
+  locale = "es-MX",
+): LegalAcceptance {
+  return {
+    userId,
+    type: BETTING_DATA_CONSENT_TYPE,
+    documentVersion: BETTING_DATA_CONSENT_VERSION,
+    acceptedAt,
+    locale,
+    persistenceStatus: "persisted",
+    syncStatus,
+  };
+}
+
 export function parseLegalAcceptances(raw: string | null): LegalAcceptance[] {
   if (!raw) return [];
   try {
     const value = JSON.parse(raw);
     return Array.isArray(value)
       ? value.filter((item): item is LegalAcceptance => Boolean(
-        item && typeof item.userId === "string" && REQUIRED_CONSENTS.includes(item.type)
+        item && typeof item.userId === "string" && KNOWN_CONSENT_TYPES.includes(item.type)
           && typeof item.documentVersion === "string" && typeof item.acceptedAt === "string",
       ))
       : [];
@@ -130,6 +157,27 @@ export function hasCurrentLegalConsent(acceptances: LegalAcceptance[], userId: s
     && acceptance.type === type
     && acceptance.documentVersion === LEGAL_DOCUMENT_VERSIONS[type]
   )));
+}
+
+export function hasCurrentBettingDataConsent(acceptances: LegalAcceptance[], userId: string) {
+  return acceptances.some((acceptance) => (
+    acceptance.userId === userId
+    && acceptance.type === BETTING_DATA_CONSENT_TYPE
+    && acceptance.documentVersion === BETTING_DATA_CONSENT_VERSION
+    && acceptance.persistenceStatus === "persisted"
+  ));
+}
+
+export function markLegalAcceptancesSynced(current: LegalAcceptance[], synced: LegalAcceptance[]) {
+  const keys = new Set(synced.map((item) => `${item.userId}:${item.type}:${item.documentVersion}`));
+  let changed = false;
+  const next = current.map((item) => {
+    if (!keys.has(`${item.userId}:${item.type}:${item.documentVersion}`)) return item;
+    if (item.persistenceStatus === "persisted" && item.syncStatus === "synced") return item;
+    changed = true;
+    return { ...item, persistenceStatus: item.persistenceStatus || "persisted", syncStatus: "synced" } as LegalAcceptance;
+  });
+  return changed ? next : current;
 }
 
 export function mergeLegalAcceptances(current: LegalAcceptance[], next: LegalAcceptance[]) {

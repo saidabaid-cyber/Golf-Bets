@@ -1,4 +1,5 @@
 import type { RoundSnapshot, Player } from "./types";
+import { migrateSupplementalNassau } from "./nassau-migration";
 
 /** Never merge mutable draft objects into an existing historical object. */
 export function upsertRoundSnapshot(history: RoundSnapshot[], next: RoundSnapshot) {
@@ -16,7 +17,8 @@ export function canEditSnapshot(round: RoundSnapshot) {
 export function restoreRoundSnapshot(round: RoundSnapshot) {
   if (!canEditSnapshot(round)) return null;
   const copy = structuredClone(round);
-  return { ...copy, ownerId: copy.ownerId || copy.players!.find(player => player.name === copy.ownerName)?.id || copy.players![0].id };
+  const restored = { ...copy, ownerId: copy.ownerId || copy.players!.find(player => player.name === copy.ownerName)?.id || copy.players![0].id };
+  return migrateSupplementalNassau(restored);
 }
 
 export function resultSummaryText(course: string, date: string, players: Pick<Player, "id" | "name">[], balances: Record<string, number>, ownerId: string, expenses: number) {

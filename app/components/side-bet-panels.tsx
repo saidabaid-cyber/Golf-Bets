@@ -28,11 +28,13 @@ function PlayerChips({ players, selected, onChange }: { players: Player[]; selec
   })}</div>;
 }
 
-export function CounterBetConfigPanel({ kind, config, players, onChange }: {
+export function CounterBetConfigPanel({ kind, config, players, onChange, requestActivation, locked = false }: {
   kind: CounterBetKind;
   config: CounterBetConfig;
   players: Player[];
   onChange: (next: CounterBetConfig) => void;
+  requestActivation?: () => Promise<boolean>;
+  locked?: boolean;
 }) {
   const meta = COUNTER_BET_META[kind];
   const description = kind === "vipers"
@@ -41,8 +43,11 @@ export function CounterBetConfigPanel({ kind, config, players, onChange }: {
       ? "Bunker · se acumulan por jugador"
       : "Agua · se acumulan por jugador";
   return <div className="betCard">
-    <div className="betHead"><div><b>{meta.emoji} {meta.plural}</b><span>{description}</span></div><span className="betHeadActions"><BetHelpButton kind={kind} /><button type="button" className={`switch ${config.enabled ? "on" : ""}`} role="switch" aria-checked={config.enabled} aria-label={`Activar ${meta.plural}`} onClick={() => onChange({ ...config, enabled: !config.enabled })}><span /></button></span></div>
-    {config.enabled && <>
+    <div className="betHead"><div><b>{meta.emoji} {meta.plural}</b><span>{description}</span></div><span className="betHeadActions"><BetHelpButton kind={kind} /><button type="button" className={`switch ${config.enabled ? "on" : ""}`} role="switch" aria-checked={config.enabled} aria-label={`Activar ${meta.plural}`} onClick={() => {
+      if (config.enabled || !requestActivation) onChange({ ...config, enabled: !config.enabled });
+      else void requestActivation().then((accepted) => { if (accepted) onChange({ ...config, enabled: true }); });
+    }}><span /></button></span></div>
+    {config.enabled && !locked && <>
       <div className="grid2">
         <div><label>Valor {meta.singular}</label><div className="moneyField"><span>$</span><NumericCaptureInput inputMode="decimal" value={config.value} onValueChange={value => onChange({ ...config, value: Math.max(0, value ?? 0) })} /></div></div>
         <div><label>H10–18</label><select value={config.secondNineMultiplier} onChange={event => onChange({ ...config, secondNineMultiplier: Math.max(1, Number(event.target.value) || 1) })}>{[1, 2, 3, 4, 5].map(value => <option key={value} value={value}>{value === 1 ? "Normal" : `${value}x`}</option>)}</select></div>
@@ -52,14 +57,19 @@ export function CounterBetConfigPanel({ kind, config, players, onChange }: {
   </div>;
 }
 
-export function LobaConfigPanel({ config, players, onChange }: {
+export function LobaConfigPanel({ config, players, onChange, requestActivation, locked = false }: {
   config: BetConfig["loba"];
   players: Player[];
   onChange: (next: typeof config) => void;
+  requestActivation?: () => Promise<boolean>;
+  locked?: boolean;
 }) {
   return <div className="betCard">
-    <div className="betHead"><div><b>🐺 Loba</b><span>El Lobo elige pareja o juega solo</span></div><span className="betHeadActions"><BetHelpButton kind="loba" /><button type="button" className={`switch ${config.enabled ? "on" : ""}`} role="switch" aria-checked={config.enabled} aria-label="Activar Loba" onClick={() => onChange({ ...config, enabled: !config.enabled })}><span /></button></span></div>
-    {config.enabled && <>
+    <div className="betHead"><div><b>🐺 Loba</b><span>El Lobo elige pareja o juega solo</span></div><span className="betHeadActions"><BetHelpButton kind="loba" /><button type="button" className={`switch ${config.enabled ? "on" : ""}`} role="switch" aria-checked={config.enabled} aria-label="Activar Loba" onClick={() => {
+      if (config.enabled || !requestActivation) onChange({ ...config, enabled: !config.enabled });
+      else void requestActivation().then((accepted) => { if (accepted) onChange({ ...config, enabled: true }); });
+    }}><span /></button></span></div>
+    {config.enabled && !locked && <>
       <div className="grid3">
         <div><label>Valor Loba</label><div className="moneyField"><span>$</span><NumericCaptureInput inputMode="decimal" value={config.value} onValueChange={value => onChange({ ...config, value: Math.max(0, value ?? 0) })} /></div></div>
         <div><label htmlFor="loba-hcp-pct">HCP Loba %</label><NumericCaptureInput id="loba-hcp-pct" aria-label="HCP Loba %" inputMode="numeric" min={0} max={100} step={5} value={config.hcpPct ?? 100} emptyWhenZero={false} onValueChange={value => onChange({ ...config, hcpPct: Math.min(100, Math.max(0, value ?? 100)) })} /></div>

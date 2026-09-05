@@ -26,7 +26,7 @@ export function PersonalHistoryPanel({ history, today, onDelete }: {
     return selectedRival ? [selectedRival] : [];
   }, [datedHistory, today, rivalFilter]);
   return <section className="card personalRivalHistory">
-    <h2>Apuestas personales · histórico</h2>
+    <h2>Nassau Individual · histórico</h2>
     <p className="muted">Selecciona un contrincante para consultar el balance de tus rondas contra esa persona.</p>
     {selected && <button className="secondary" onClick={() => setSelected(null)}>← Regresar</button>}
     <div className="rivalHistoryFilters">

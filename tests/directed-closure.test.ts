@@ -116,7 +116,7 @@ test("logo oficial usa SVG vectorial primero, PNG transparente como fallback y h
 });
 
 test("configuración legal real es única, completa y usa la versión solicitada", () => {
-  assert.equal(LEGAL_DOCUMENT_VERSIONS.privacy, "2026-09-02-v2");
+  assert.match(LEGAL_DOCUMENT_VERSIONS.privacy, /^2026-09-02-v2\+sha256-/);
   assert.equal(legalConfig.responsibleName, "Said Abaid Taja");
   assert.match(legalConfig.responsibleAddress, /Calle 1 Retorno Osa Menor/);
   assert.match(legalConfig.responsibleAddress, /Periférico Ecológico/);
@@ -129,9 +129,8 @@ test("configuración legal real es única, completa y usa la versión solicitada
 test("Aviso y Términos consumen legalConfig y mantienen los límites económicos", () => {
   const privacy = read("app/legal/privacy/page.tsx");
   const terms = read("app/legal/terms/page.tsx");
-  assert.match(privacy, /legalConfig\.privacyVersion/);
-  assert.match(privacy, /legalConfig\.responsibleAddress/);
-  assert.match(privacy, /legalConfig\.privacyEmail/);
+  assert.match(privacy, /PRIVACY_LEGAL_VERSION/);
+  assert.match(privacy, /PRIVACY_SECTIONS/);
   assert.match(terms, /THE BACKYARD/);
   assert.match(terms, /No recibe,[^;]*ni procesa dinero/i);
   assert.match(terms, /legalConfig\.contactEmail/);

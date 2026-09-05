@@ -25,7 +25,7 @@ async function requestPollaInvite(identifier: string) {
 }
 
 export function PollaLivePanel({ courses = [], privateRound }: { courses?: Course[]; privateRound?: { active: boolean; players: Player[] } }) {
-  const { identity, openAccess } = useBackyardAccount();
+  const { identity, openAccess, bettingConsentGranted, requestBettingConsent } = useBackyardAccount();
   const [screen, setScreen] = useState<Screen>("home");
   const [shareMessage, setShareMessage] = useState("");
   const accessToken = identity.mode === "authenticated" ? identity.accessToken || "" : "";
@@ -72,7 +72,7 @@ export function PollaLivePanel({ courses = [], privateRound }: { courses?: Cours
   const [pollaEnabled, setPollaEnabled] = useState(true);
 
   useEffect(() => {
-    if (!pollaCloudConfigured) return;
+    if (!pollaCloudConfigured || !bettingConsentGranted) return;
     fetch("/api/features", { cache: "no-store" })
       .then((response) => response.ok ? response.json() : null)
       .then((features) => { if (features?.pollaLiveEnabled === false) setPollaEnabled(false); })
@@ -91,10 +91,10 @@ export function PollaLivePanel({ courses = [], privateRound }: { courses?: Cours
         .catch((requestError) => setError(requestError instanceof Error ? requestError.message : "No fue posible abrir la Polla."))
         .finally(() => setBusy(false));
     }
-  }, []);
+  }, [bettingConsentGranted]);
 
   useEffect(() => {
-    if (!guest || screen !== "scorecard") return;
+    if (!bettingConsentGranted || !guest || screen !== "scorecard") return;
     loadGroup(guest);
     const online = async () => {
       setSyncLabel("Sincronizando…");
@@ -110,7 +110,7 @@ export function PollaLivePanel({ courses = [], privateRound }: { courses?: Cours
     const supabase = getSupabaseBrowser();
     const channel = supabase?.channel(`polla-scorecard-${guest.tournament_id}-${guest.group_id}`).on("postgres_changes", { event: "*", schema: "public", table: "tournament_leaderboard_events", filter: `tournament_id=eq.${guest.tournament_id}` }, refresh).subscribe();
     return () => { window.removeEventListener("online", online); window.clearInterval(timer); if (channel) supabase?.removeChannel(channel); };
-  }, [guest, screen]);
+  }, [bettingConsentGranted, guest, screen]);
 
   function importCsv() {
     const parsed = parsePollaPlayersCsv(csv);
@@ -360,7 +360,7 @@ export function PollaLivePanel({ courses = [], privateRound }: { courses?: Cours
   }
 
   useEffect(() => {
-    if (screen !== "leaderboard" || !publicId) return;
+    if (!bettingConsentGranted || screen !== "leaderboard" || !publicId) return;
     loadLeaderboard();
     const refreshWhenVisible = () => { if (document.visibilityState === "visible") loadLeaderboard(); };
     const timer = window.setInterval(refreshWhenVisible, 15_000);
@@ -370,7 +370,7 @@ export function PollaLivePanel({ courses = [], privateRound }: { courses?: Cours
       ? supabase?.channel(`polla-leaderboard-${realtimePublicId}`).on("postgres_changes", { event: "*", schema: "public", table: "tournament_leaderboard_events", filter: `public_id=eq.${realtimePublicId}` }, loadLeaderboard).subscribe()
       : undefined;
     return () => { window.clearInterval(timer); if (channel) supabase?.removeChannel(channel); };
-  }, [screen, publicId, leaderboard.tournament?.publicId, loadLeaderboard]);
+  }, [bettingConsentGranted, screen, publicId, leaderboard.tournament?.publicId, loadLeaderboard]);
 
   const effectiveLeaderboardMode = leaderboardMode === "general" ? (leaderboard.tournament?.format === "gross" ? "gross" : "net") : leaderboardMode;
   const ranked = useMemo(() => rankPollaLeaderboard(leaderboard.rows, effectiveLeaderboardMode), [leaderboard.rows, effectiveLeaderboardMode]);
@@ -378,6 +378,11 @@ export function PollaLivePanel({ courses = [], privateRound }: { courses?: Cours
   if (!pollaCloudConfigured || !pollaEnabled) return <>
     <section className="hero pollaHero"><div><div className="eyebrow">🏆 POLLA LIVE</div><h1>Torneo grande, score simple.</h1><p>La modalidad cloud es independiente de Conejos, Skins y tus apuestas privadas.</p></div><span className="livePill">LIVE</span></section>
     <section className="card cloudRequired"><h2>{pollaCloudConfigured ? "Polla Live está pendiente de activación" : "Configura la nube para activar Polla Live"}</h2><p>La ronda privada sigue funcionando completa sin internet. Para torneos, agrega las variables de Supabase indicadas en <code>.env.example</code>, aplica la migración y habilita el flag del servidor.</p></section>
+  </>;
+
+  if (!bettingConsentGranted) return <>
+    <section className="hero pollaHero"><div><div className="eyebrow">🏆 POLLA LIVE</div><h1>Torneo en vivo.</h1><p>Antes de registrar información de Polla Live necesitamos tu consentimiento expreso.</p></div><span className="livePill">LIVE</span></section>
+    <section className="card bettingConsentGate"><h2>Activa Polla Live deliberadamente</h2><p>La casilla de consentimiento aparecerá sin marcar. Puedes consultar el <a href="/legal/privacy?returnTo=app">Aviso de Privacidad</a> antes de decidir.</p><button type="button" className="primary big" onClick={() => void requestBettingConsent()}>Activar Polla Live</button></section>
   </>;
 
   return <>

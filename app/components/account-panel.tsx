@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { LEGAL_DOCUMENT_VERSIONS, legalConfig } from "../../lib/legal-config";
-import { profileHandicapInput, profileHandicapLabel, validateProfileDraft } from "../../lib/account-state";
+import { BETTING_DATA_CONSENT_TYPE, profileHandicapInput, profileHandicapLabel, validateProfileDraft } from "../../lib/account-state";
 import { useBackyardAccount } from "./account-provider";
 
 export function AccountPanel({ highContrast, onHighContrastChange }: { highContrast: boolean; onHighContrastChange: (value: boolean) => void }) {
@@ -25,6 +25,10 @@ export function AccountPanel({ highContrast, onHighContrastChange }: { highContr
     const record = acceptance(type);
     return record ? `v. ${record.documentVersion} · ${new Date(record.acceptedAt).toLocaleDateString("es-MX")}` : "Pendiente";
   };
+  const bettingAcceptance = userAcceptances.find((item) => item.type === BETTING_DATA_CONSENT_TYPE);
+  const bettingAcceptanceLabel = bettingAcceptance
+    ? `${new Date(bettingAcceptance.acceptedAt).toLocaleDateString("es-MX")} · ${bettingAcceptance.syncStatus === "synced" ? "Sincronizada" : bettingAcceptance.syncStatus === "pending" ? "Local; nube pendiente" : "En este dispositivo"}`
+    : "No otorgado";
 
   async function saveProfile() {
     const validation = validateProfileDraft(name, handicap);
@@ -75,6 +79,7 @@ export function AccountPanel({ highContrast, onHighContrastChange }: { highContr
       <Link href="/legal/privacy?returnTo=account"><span>Aviso de Privacidad</span><b>{acceptedLabel("privacy")}</b></Link>
       <Link href="/legal/terms?returnTo=account#rules-referee"><span>Árbitro de Reglas</span><b>{acceptedLabel("rules_referee")}</b></Link>
       <div><span>Edad 18+</span><b>{acceptance("age_confirmation") ? "Confirmada" : "Pendiente"}</b></div>
+      <div><span>Datos de apuestas, resultados y gastos</span><b>{bettingAcceptanceLabel}</b></div>
     </div></section>
 
     <section className="card"><h2>Métodos de acceso</h2>{identity.mode === "guest" ? <p className="muted">Invitado local · sin proveedor vinculado</p> : <div className="accessMethodList">{["google", "email"].map((provider) => <span key={provider}>{provider === "google" ? "Google" : "Correo"}<b>{identity.providers.includes(provider) || (provider === "email" && Boolean(identity.email)) ? "✓" : "—"}</b></span>)}</div>}<p className="hint">Tu cuenta conserva el mismo perfil tanto con Google como con código por correo.</p></section>

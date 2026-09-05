@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react";
 
 type ResultAccordionProps = {
   id: string;
-  title: string;
+  title: ReactNode;
   children?: ReactNode;
   headerAction?: ReactNode;
   defaultOpen?: boolean;

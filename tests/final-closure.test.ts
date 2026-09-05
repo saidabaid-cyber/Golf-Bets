@@ -114,5 +114,5 @@ test("Resultados mantiene Personales fuera del Resumen General y dentro del tota
     /resultSummaryText\(course\.name, roundDate, settlementIds\.map[\s\S]*allBetBalances/,
   ]) assert.match(page, pattern);
   assert.doesNotMatch(page, /key: "personals"[\s\S]*generalResultCategories/);
-  assert.match(page, /title="Resultados de Apuestas Personales"/);
+  assert.match(page, /title="Resultados de Nassau Individual"/);
 });

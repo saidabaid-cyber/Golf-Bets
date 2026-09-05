@@ -95,7 +95,9 @@ test("Mi Cuenta no expone una exportación indiscriminada ni tokens de Polla Liv
 });
 
 test("Aviso Integral contiene finalidades, IA, ARCO, menores y seguridad", () => {
-  for (const text of ["Finalidades primarias", "Inteligencia artificial", "Derechos ARCO", "Menores de edad", "Seguridad", "localStorage"]) assert.match(privacy, new RegExp(text, "i"));
+  const privacyContent = read("lib/privacy-content.ts");
+  assert.match(privacy, /PRIVACY_SECTIONS/);
+  for (const text of ["Finalidades primarias", "Inteligencia artificial", "Derechos ARCO", "Menores de edad", "Seguridad", "localStorage"]) assert.match(privacyContent, new RegExp(text, "i"));
 });
 
 test("Términos aclaran que The Backyard no recibe ni procesa dinero", () => {

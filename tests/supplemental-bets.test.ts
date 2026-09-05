@@ -60,6 +60,28 @@ test("Dollar a Stroke applies direct advantage and pays the net stroke differenc
   assertZero(result);
 });
 
+test("Dollar a Stroke: 70 vs 95, ventaja 5 y $10 produce exactamente $200", () => {
+  const order = Array.from({ length: 18 }, (_, index) => index + 1);
+  const referenceCourse: Course = {
+    ...course,
+    holes: order.map((number) => ({ number, par: 4, strokeIndex: number })),
+  };
+  const grossA = [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 3];
+  const grossB = [6, 6, 6, 6, 6, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5];
+  assert.equal(grossA.reduce((sum, value) => sum + value, 0), 70);
+  assert.equal(grossB.reduce((sum, value) => sum + value, 0), 95);
+  const scores = Object.fromEntries(order.map((hole, index) => [hole, { a: grossA[index], b: grossB[index] }]));
+  const bet = {
+    ...createSupplementalBet("dollar_stroke", players.slice(0, 2), "stroke-reference"),
+    valuePerStroke: 10,
+    advantageReceiverId: "b",
+    advantageStrokes: 5,
+  } as Extract<SupplementalBet, { type: "dollar_stroke" }>;
+  const result = calculateSupplementalBets([bet], players.slice(0, 2), referenceCourse, scores, {}, order).results[0];
+  assert.match(result.lines.join(" "), /Jugador A 70 · Jugador B 90/);
+  assert.deepEqual(result.balances, { a: 200, b: -200 });
+});
+
 test("Presiones individuales keep ties open and close on the next winner", () => {
   const bet = createSupplementalBet("individual_pressures", players.slice(0, 2), "press");
   const result = calculate([bet], players.slice(0, 2), {
@@ -216,7 +238,7 @@ test("OFF preserves Personal, Manual and supplemental data but excludes every re
   assert.equal((normalizeRoundDraft({ players: players.slice(0, 2), supplementalBets: [supplemental], manualBets: [manual], putts: { 1: { a: 2 } } })?.putts as PuttsByHole)[1].a, 2);
 });
 
-test("las siete modalidades conservan configuración completa en draft y reload sin romper históricos anteriores", () => {
+test("las modalidades conservan configuración y Nassau suplementario migra a la Personal canónica", () => {
   const types: SupplementalBet["type"][] = ["individual_nassau", "dollar_stroke", "individual_pressures", "team_pressures", "chicago", "vegas", "minimum_putts"];
   const configured = types.map((type, index) => ({ ...createSupplementalBet(type, players, `persist-${index}`), enabled: index % 2 === 0 })) as SupplementalBet[];
   const serialized = JSON.parse(JSON.stringify(configured));
@@ -225,11 +247,49 @@ test("las siete modalidades conservan configuración completa en draft y reload 
 
   const draft = normalizeRoundDraft({
     version: 5,
+    ownerId: "a",
     players,
     supplementalBets: configured,
     putts: { 1: { a: 2, b: 1, c: 3, d: 2 } },
   });
-  assert.deepEqual(draft?.supplementalBets, configured);
+  assert.deepEqual(draft?.supplementalBets, configured.filter((bet) => bet.type !== "individual_nassau"));
+  assert.equal(draft?.personalBets.length, 1);
+  assert.deepEqual(draft?.personalBets[0], {
+    id: "persist-0", enabled: true, rivalMode: "group", rivalPlayerId: "b", rivalName: "Jugador B", rivalHandicap: 0,
+    externalScores: {}, baseValue: 100, advantageReceiver: "none", advantageStrokes: 0, back9Multiplier: 1,
+    pressureMultiplier: 1, pressureNine: "holes_10_18", nassauVersion: 2, carryEnabled: false,
+    components: { match1: true, medal1: true, match2: true, medal2: true, match18: true, medal18: true },
+  });
   assert.deepEqual(draft?.putts, { 1: { a: 2, b: 1, c: 3, d: 2 } });
   assert.deepEqual(normalizeRoundDraft({ version: 1, players })?.supplementalBets, []);
+});
+
+test("migrar Nassau representable conserva ID, pareja, ventaja y fórmula incluso saliendo por H10", () => {
+  const playOrders = [
+    Array.from({ length: 18 }, (_, index) => index + 1),
+    [...Array.from({ length: 9 }, (_, index) => index + 10), ...Array.from({ length: 9 }, (_, index) => index + 1)],
+  ];
+  for (const order of playOrders) {
+    const startHole = order[0];
+    const scoreRows = Object.fromEntries(order.map((hole, index) => [hole, { a: index % 3 === 0 ? 4 : 5, b: index % 4 === 0 ? 6 : 4 }]));
+    const legacy = {
+      ...createSupplementalBet("individual_nassau", players.slice(0, 2), `legacy-${startHole}`),
+      playerAId: "b",
+      playerBId: "a",
+      value: 50,
+      advantageReceiverId: "a",
+      advantageStrokes: 5,
+      carryEnabled: true,
+    } as Extract<SupplementalBet, { type: "individual_nassau" }>;
+    const before = calculateSupplementalBets([legacy], players.slice(0, 2), course, scoreRows, {}, order).results[0];
+    const migrated = normalizeRoundDraft({ version: 5, ownerId: "a", startHole, players: players.slice(0, 2), supplementalBets: [legacy] });
+    assert.equal(migrated?.supplementalBets.length, 0);
+    assert.equal(migrated?.personalBets[0]?.id, legacy.id);
+    assert.equal(migrated?.personalBets[0]?.rivalPlayerId, "b");
+    assert.equal(migrated?.personalBets[0]?.advantageReceiver, "owner");
+    assert.equal(migrated?.personalBets[0]?.advantageStrokes, 5);
+    assert.equal(migrated?.personalBets[0]?.pressureNine, startHole === 10 ? "holes_1_9" : "holes_10_18");
+    const after = calculatePersonalBets(migrated?.personalBets || [], "a", players.slice(0, 2), course, scoreRows, order);
+    assert.deepEqual(after.balances, before.balances);
+  }
 });

@@ -145,7 +145,7 @@ test("service worker cachea shell pero nunca APIs ni datos privados", () => {
     assert.equal(png.readUInt32BE(16), Number(icon.sizes.split("x")[0]));
     assert.equal(png.readUInt32BE(20), Number(icon.sizes.split("x")[1]));
   }
-  assert.match(worker, /the-backyard-shell-v3/);
+  assert.match(worker, /the-backyard-shell-v4/);
   assert.match(worker, /SKIP_WAITING/);
   assert.match(runtime, /updateViaCache: "none"/);
   assert.match(runtime, /registration\.update\(\)/);
@@ -177,7 +177,7 @@ test("UI distingue guardado local, pendiente, offline, nube y error", () => {
     assert.match(`${page}\n${account}`, new RegExp(label, "i"));
   }
   assert.match(page, /saveRoundHistoryLocalFirst/);
-  assert.match(page, /Ronda guardada en este dispositivo · Pendiente de sincronizar/);
+  assert.match(page, /Ronda guardada en este dispositivo · sincronización pendiente\./);
   assert.doesNotMatch(page, /todavía tiene cambios pendientes de sincronizar/);
   assert.match(page, /window\.addEventListener\("focus", onFocus\)/);
   assert.match(page, /45_000/);

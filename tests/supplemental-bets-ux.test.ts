@@ -7,12 +7,12 @@ const editor = readFileSync("app/components/supplemental-bets-editor.tsx", "utf8
 const styles = readFileSync("app/components/supplemental-bets.module.css", "utf8");
 const sideBets = readFileSync("app/components/side-bet-panels.tsx", "utf8");
 
-test("round setup keeps current Personals first, the seven new games in order, and Manuals last", () => {
-  const currentPersonals = page.indexOf('title="Apuestas personales actuales"');
+test("round setup keeps canonical Nassau first, supplemental games in order, and Manuals last", () => {
+  const currentPersonals = page.indexOf('id="setup-personals"');
   const supplemental = page.indexOf("<SupplementalBetsEditor");
   const manuals = page.indexOf('id="setup-manuals"');
   assert.ok(currentPersonals >= 0 && supplemental > currentPersonals && manuals > supplemental);
-  assert.match(editor, /const ORDER:[^=]+\= \["individual_nassau", "dollar_stroke", "individual_pressures", "team_pressures", "chicago", "vegas", "minimum_putts"\]/);
+  assert.match(editor, /const ORDER:[^=]+\= \["dollar_stroke", "individual_pressures", "team_pressures", "chicago", "vegas", "minimum_putts"\]/);
 });
 
 test("every existing and new bet type has compact contextual help in a closable modal", () => {
@@ -26,9 +26,10 @@ test("every existing and new bet type has compact contextual help in a closable 
   assert.match(editor, /Reglas importantes/);
   assert.match(editor, /Ejemplo simple/);
   assert.match(editor, /aria-label="Cerrar ayuda"/);
+  assert.match(editor, /headerAction=\{<span className=\{styles\.headerActions\}><BetHelpButton kind=\{type\} \/><Switch/);
   const itemHeader = editor.slice(editor.indexOf("function ItemShell"), editor.indexOf("const COMPONENT_LABELS"));
-  assert.ok(itemHeader.indexOf("<BetHelpButton") < itemHeader.indexOf("<Switch"));
-  assert.match(itemHeader, /bet\.enabled && <div className=\{styles\.fields\}/);
+  assert.match(itemHeader, /<Switch on=\{bet\.enabled\}/);
+  assert.match(itemHeader, /<fieldset disabled=\{locked\} className=\{`\$\{styles\.fields\} bettingEditorFieldset`\}/);
 });
 
 test("la configuración usa las descripciones compactas solicitadas y alinea ayuda con switch", () => {
@@ -59,8 +60,8 @@ test("la configuración usa las descripciones compactas solicitadas y alinea ayu
 
 test("Personal and Manual switches retain their editors and move inactive records after active ones", () => {
   assert.match(page, /sort\(\(first, second\) => Number\(second\.enabled !== false\) - Number\(first\.enabled !== false\)\)/);
-  assert.match(page, /updatePersonalBet\(bet\.id, \{ enabled: bet\.enabled === false \}\)/);
-  assert.match(page, /updateManualBet\(bet\.id, \{ enabled: bet\.enabled === false \}\)/);
+  assert.match(page, /runAfterBettingConsent\(\(\) => updatePersonalBet\(bet\.id, \{ enabled: true \}\)\)/);
+  assert.match(page, /runAfterBettingConsent\(\(\) => updateManualBet\(bet\.id, \{ enabled: true \}\)\)/);
   assert.match(page, /bet\.enabled === false \? "betItemDisabled"/);
   assert.match(styles, /\.disabled\{order:2;/);
   const signedInput = readFileSync("app/components/signed-money-input.tsx", "utf8");
@@ -81,7 +82,7 @@ test("Minimum Putts capture stays inside the existing score card and persists in
 test("new games feed live standings, general results, settlement and individual result accordions", () => {
   assert.match(page, /liveSupplemental\.balances/);
   assert.match(page, /supplemental\.balances/);
-  assert.match(page, /generalResultCategories[\s\S]*supplemental\.results\.map/);
+  assert.match(page, /generalResultCategories[\s\S]*supplemental\.results\.filter\(result => result\.type !== "individual_nassau"\)\.map/);
   assert.match(page, /id=\{`supplemental-\$\{result\.betId\}`\}/);
   assert.match(page, /<SupplementalBetResults results=\{\[result\]\}/);
 });
