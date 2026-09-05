@@ -6,6 +6,8 @@ export type RoundHandicapBasis = "relative" | "course";
 export type FoursomeMode = "fixed" | "fixed_points" | "points";
 export type PhysicalNine = "holes_1_9" | "holes_10_18";
 export type PressureMultiplier = 1 | 2 | 3 | 4 | 5;
+export type RabbitMode = "continuous" | "three_hole_blocks";
+export type SkinsMode = "carry" | "no_carry";
 
 export type Player = {
   id: string;
@@ -104,6 +106,8 @@ export type BetConfig = {
   monkey?: ParticipantConfig & { enabled: boolean; value: number };
   rabbits: ParticipantConfig & {
     enabled: boolean;
+    /** Missing in historical rounds preserves the original continuous mode. */
+    mode?: RabbitMode;
     value: number;
     hcpPct: number;
     decimals: HandicapMode;
@@ -111,6 +115,8 @@ export type BetConfig = {
   };
   skins: ParticipantConfig & {
     enabled: boolean;
+    /** Missing in historical rounds preserves the original carry mode. */
+    mode?: SkinsMode;
     value: number;
     hcpPct: number;
     decimals: HandicapMode;

@@ -16,6 +16,7 @@ import {
 } from "./types";
 import { migratePersonalNassau } from "./personal-nassau";
 import { handicapBases, playersMissingRoundHandicap, roundHandicapBases } from "./handicap-base";
+import { normalizeRabbitMode, normalizeSkinsMode } from "./bet-modes";
 
 const EPS = 1e-9;
 
@@ -132,6 +133,10 @@ export type RabbitEvent = {
   type: "grab" | "hold" | "lose" | "win" | "free" | "accumulate";
   playerId?: string;
   count?: number;
+  /** Present only in the fixed six-rabbit mode. */
+  rabbitNumber?: number;
+  blockStart?: number;
+  blockEnd?: number;
 };
 
 export function calculateRabbits(
@@ -147,6 +152,7 @@ export function calculateRabbits(
   const events: RabbitEvent[] = [];
   const missingHandicapPlayerIds = playersMissingRoundHandicap(participants).map((player) => player.id);
   if (!cfg.enabled || participants.length < 2 || missingHandicapPlayerIds.length) return { events, won, pending: 0, missingHandicapPlayerIds };
+  const mode = normalizeRabbitMode(cfg.mode);
 
   // Excel state machine: every rabbit has Hoyo 1, 2 and (if needed) 3.
   // If it is won on Hoyo 2, a new rabbit starts immediately on the next real hole.
@@ -154,13 +160,26 @@ export function calculateRabbits(
   let rabbitHole: 1 | 2 | 3 = 1;
   let holder: string | null = null;
   let pending = 1;
+  let physicalBlock = -1;
+  let blockSettled = false;
 
   for (const hole of order) {
+    if (mode === "three_hole_blocks") {
+      const nextBlock = Math.floor((hole - 1) / 3);
+      if (nextBlock !== physicalBlock) {
+        physicalBlock = nextBlock;
+        rabbitHole = 1;
+        holder = null;
+        pending = 1;
+        blockSettled = false;
+      }
+      if (blockSettled) continue;
+    }
     const winners = winnerIdsForHole(hole, course, scores, participants, cfg.hcpPct, cfg.decimals, basis);
     if (!winners.length) continue;
 
     const uniqueWinner = winners.length === 1 ? winners[0] : null;
-    const finalPlayedHole = hole === order.at(-1);
+    const finalPlayedHole = mode === "three_hole_blocks" ? hole % 3 === 0 : hole === order.at(-1);
     let rabbitWonBy: string | null = null;
 
     if (rabbitHole === 1) {
@@ -175,6 +194,7 @@ export function calculateRabbits(
           pending = 1;
           holder = null;
           rabbitHole = 1;
+          if (mode === "three_hole_blocks") blockSettled = true;
           continue;
         }
       } else {
@@ -211,6 +231,7 @@ export function calculateRabbits(
         pending = 1;
         holder = null;
         rabbitHole = 1;
+        if (mode === "three_hole_blocks") blockSettled = true;
       } else {
         rabbitHole = 3;
       }
@@ -232,7 +253,8 @@ export function calculateRabbits(
       won[rabbitWonBy] = (won[rabbitWonBy] ?? 0) + pending;
       events.push({ hole, type: "win", playerId: rabbitWonBy, count: pending });
       pending = 1;
-    } else if (cfg.accumulate) {
+      if (mode === "three_hole_blocks") blockSettled = true;
+    } else if (mode === "continuous" && cfg.accumulate) {
       pending += 1;
       events.push({ hole, type: "accumulate", count: pending });
     } else {
@@ -242,7 +264,18 @@ export function calculateRabbits(
     rabbitHole = 1;
   }
 
-  return { events, won, pending };
+  return {
+    events: mode === "three_hole_blocks"
+      ? events.map((event) => ({
+          ...event,
+          rabbitNumber: Math.floor((event.hole - 1) / 3) + 1,
+          blockStart: Math.floor((event.hole - 1) / 3) * 3 + 1,
+          blockEnd: Math.floor((event.hole - 1) / 3) * 3 + 3,
+        }))
+      : events,
+    won,
+    pending,
+  };
 }
 
 export function calculateSkins(
@@ -259,6 +292,10 @@ export function calculateSkins(
   const missingHandicapPlayerIds = playersMissingRoundHandicap(participants).map((player) => player.id);
   if (!cfg.enabled || participants.length < 2 || missingHandicapPlayerIds.length) return { won, events, carry: 0, missingHandicapPlayerIds };
 
+  const mode = normalizeSkinsMode(cfg.mode);
+  // `accumulate` is retained only for legacy snapshots that predate the
+  // explicit mode. Once a mode exists, it is the sole source of truth.
+  const carryEnabled = cfg.mode === undefined ? cfg.accumulate : mode === "carry";
   let carry = 1;
   for (const hole of order) {
     const winners = winnerIdsForHole(hole, course, scores, participants, cfg.hcpPct, cfg.decimals, basis);
@@ -268,7 +305,7 @@ export function calculateSkins(
       events.push({ hole, winnerId: winners[0], count: carry, carry: 1 });
       carry = 1;
     } else {
-      if (cfg.accumulate) carry += 1;
+      if (carryEnabled) carry += 1;
       events.push({ hole, count: 0, carry });
     }
   }

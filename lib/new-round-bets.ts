@@ -4,8 +4,8 @@ import type { BetConfig } from "./types";
 export function initialBets(ids: string[]): BetConfig {
   return {
     monkey: { enabled: false, value: 20, participantIds: ids.slice(0, 3) },
-    rabbits: { enabled: false, value: 100, hcpPct: 100, decimals: "decimal", accumulate: true, participantIds: [...ids] },
-    skins: { enabled: false, value: 50, hcpPct: 100, decimals: "decimal", accumulate: true, participantIds: [...ids] },
+    rabbits: { enabled: false, mode: "continuous", value: 100, hcpPct: 100, decimals: "decimal", accumulate: true, participantIds: [...ids] },
+    skins: { enabled: false, mode: "carry", value: 50, hcpPct: 100, decimals: "decimal", accumulate: true, participantIds: [...ids] },
     units: { enabled: false, value: 100, participantIds: [...ids] },
     foursome: {
       handicapMethod: "configured", baseMode: "moving",

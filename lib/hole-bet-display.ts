@@ -1,4 +1,4 @@
-import type { BallFriendHole, LobaHole, Player } from "./types";
+import type { BallFriendHole, LobaHole, Player, SkinsMode } from "./types";
 
 export type SkinHoleEvent = {
   winnerId?: string;
@@ -13,11 +13,13 @@ export function skinHoleNotice(
   value: number,
   finalHole: boolean,
   playerName: (id: string) => string,
+  mode: SkinsMode = "carry",
 ) {
   if (!event) return [];
   if (event.winnerId) {
     return [`⛳ ${playerName(event.winnerId)} gana ${event.count} skin${event.count === 1 ? "" : "s"}`];
   }
+  if (mode === "no_carry") return ["⛳ Skin sin ganador · no se acumula"];
 
   const accumulated = Math.max(1, event.carry);
   if (finalHole) {

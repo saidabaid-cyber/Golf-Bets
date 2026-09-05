@@ -1,6 +1,7 @@
 "use client";
 import "./functional-ux.css";
 import { initialBets } from "../lib/new-round-bets";
+import { normalizeRabbitMode, normalizeSkinsMode } from "../lib/bet-modes";
 import { freezeRoundHandicapBases, missingHandicapsForActiveBets, normalizeRoundHandicapBasis } from "../lib/handicap-base";
 import { HandicapBaseControl } from "./components/handicap-base-control";
 import { RoundHandicapBasisControl } from "./components/round-handicap-basis-control";
@@ -26,9 +27,11 @@ import {
   MedalPollaConfig,
   PersonalBet,
   Player,
+  RabbitMode,
   RoundHandicapBasis,
   RoundSnapshot,
   SavedPersonalRival,
+  SkinsMode,
   SupplementalBet,
   PuttsByHole,
   UnitEvent,
@@ -278,6 +281,14 @@ function normalizePolla(raw: any, ids: string[]): BetConfig["polla"] {
 }
 
 const emptyExpenses: Expense = { caddie: 0, food: 0, drinks: 0, greenFee: 0, cartRental: 0, other: 0 };
+const RABBIT_MODE_OPTIONS: ReadonlyArray<{ value: RabbitMode; label: string; description: string }> = [
+  { value: "continuous", label: "Conejos continuos", description: "Al ganar un conejo puede comenzar uno nuevo." },
+  { value: "three_hole_blocks", label: "6 Conejos", description: "Un conejo por cada bloque de 3 hoyos." },
+];
+const SKINS_MODE_OPTIONS: ReadonlyArray<{ value: SkinsMode; label: string; description: string }> = [
+  { value: "carry", label: "Acumulables", description: "Los skins sin ganador pasan al siguiente hoyo." },
+  { value: "no_carry", label: "No acumulables", description: "Cada hoyo vale 1 skin; los empates no se acumulan." },
+];
 
 function normalizeExpenses(raw: any): Expense {
   return {
@@ -300,6 +311,22 @@ function Toggle({ on, onClick, label = "activar", disabled = false }: { on: bool
 
 function SetupModeTitle({ icon, title, description }: { icon: string; title: string; description: string }) {
   return <span className="setupModeTitle"><b>{icon} {title}</b><small>{description}</small></span>;
+}
+
+function BetModeControl<T extends string>({ label, value, options, onChange }: {
+  label: string;
+  value: T;
+  options: ReadonlyArray<{ value: T; label: string; description: string }>;
+  onChange: (value: T) => void;
+}) {
+  const selected = options.find((option) => option.value === value) || options[0];
+  return <div className="betModeControl">
+    <span className="miniLabel" id={`${label}-mode-label`}>Modalidad</span>
+    <div className="segmented" role="group" aria-labelledby={`${label}-mode-label`}>
+      {options.map((option) => <button type="button" key={option.value} className={option.value === selected.value ? "active" : ""} aria-pressed={option.value === selected.value} onClick={() => onChange(option.value)}>{option.label}</button>)}
+    </div>
+    <p>{selected.description}</p>
+  </div>;
 }
 
 function ParticipantChips({
@@ -573,8 +600,8 @@ function GolfBetsApp() {
           setBets({
             ...defaults,
             ...draft.bets,
-            rabbits: { ...defaults.rabbits, ...(draft.bets.rabbits || {}), decimals: normalizeHandicapMode(draft.bets.rabbits?.decimals) },
-            skins: { ...defaults.skins, ...(draft.bets.skins || {}), decimals: normalizeHandicapMode(draft.bets.skins?.decimals) },
+            rabbits: { ...defaults.rabbits, ...(draft.bets.rabbits || {}), mode: normalizeRabbitMode(draft.bets.rabbits?.mode), decimals: normalizeHandicapMode(draft.bets.rabbits?.decimals) },
+            skins: { ...defaults.skins, ...(draft.bets.skins || {}), mode: normalizeSkinsMode(draft.bets.skins?.mode), decimals: normalizeHandicapMode(draft.bets.skins?.decimals) },
             foursome: { ...defaults.foursome, ...(draft.bets.foursome || {}), handicapMethod: draft.bets.foursome?.handicapMethod || "configured", baseMode: draft.bets.foursome?.baseMode },
             polla: normalizePolla(draft.bets.polla, draftPlayerIds),
             miniPolla: { ...defaults.miniPolla, ...(draft.bets.miniPolla || {}) },
@@ -1034,6 +1061,8 @@ function GolfBetsApp() {
   const ownerNet = ownerBetResult - ownerExpenseTotal;
   const totalRabbitsWon = Object.values(rabbits.won).reduce((total, count) => total + count, 0);
   const totalSkinsWon = Object.values(skins.won).reduce((total, count) => total + count, 0);
+  const rabbitMode = normalizeRabbitMode(bets.rabbits.mode);
+  const skinsMode = normalizeSkinsMode(bets.skins.mode);
   const unitQuantitySummary = useMemo(
     () => summarizeNetUnitQuantities(units.net, players.map(player => player.id)),
     [units.net, players],
@@ -1972,6 +2001,10 @@ function GolfBetsApp() {
   }
 
   const currentRabbitEvents = liveRabbits.events.filter((e) => e.hole === holeNumber);
+  const currentRabbitNumber = Math.floor((holeNumber - 1) / 3) + 1;
+  const currentRabbitBlockWinner = rabbitMode === "three_hole_blocks"
+    ? liveRabbits.events.find((event) => event.rabbitNumber === currentRabbitNumber && event.type === "win")
+    : undefined;
   const currentSkin = liveSkins.events.find((e) => e.hole === holeNumber);
   const unitHoleManual = (id: string) => unitEvents.filter((e) => e.hole === holeNumber && e.playerId === id).reduce((a, e) => a + e.amount, 0);
   const unitHoleAuto = (id: string) => liveUnits.autoByHole[holeNumber]?.[id] ?? 0;
@@ -2079,9 +2112,12 @@ function GolfBetsApp() {
     const savedLoba = calculateLoba(course, savedScores, players, bets.loba, lobaHoles, order, savedCompletedHoles, roundHandicapBasis);
     const extras: string[] = [];
     const rabbit = savedRabbits.events.filter(event => event.hole === holeNumber).at(-1);
+    const rabbitBlockWinner = rabbitMode === "three_hole_blocks"
+      ? savedRabbits.events.find((event) => event.rabbitNumber === currentRabbitNumber && event.type === "win")
+      : undefined;
     const currentSkin = savedSkins.events.find(item => item.hole === holeNumber);
-    if (bets.rabbits.enabled) extras.push(`🐇 Conejo: ${rabbit?.playerId ? playerName(rabbit.playerId) : rabbit ? "libre" : "pendiente de resolverse"}`);
-    if (bets.skins.enabled) extras.push(...(currentSkin ? skinHoleNotice(currentSkin, bets.skins.value, currentIndex === order.length - 1, playerName) : ["⛳ Skins: pendiente de resolverse"]));
+    if (bets.rabbits.enabled) extras.push(`🐇 Conejo: ${rabbit?.playerId ? playerName(rabbit.playerId) : rabbit ? "libre" : rabbitBlockWinner?.playerId ? `bloque cerrado · ganó ${playerName(rabbitBlockWinner.playerId)}` : "pendiente de resolverse"}`);
+    if (bets.skins.enabled) extras.push(...(currentSkin ? skinHoleNotice(currentSkin, bets.skins.value, currentIndex === order.length - 1, playerName, skinsMode) : ["⛳ Skins: pendiente de resolverse"]));
     const currentFoursomes = savedFoursomes.matches.filter((match) => match.holePoints.some((item) => item.hole === holeNumber));
     for (const match of currentFoursomes) {
       const holePoints = match.holePoints.find((item) => item.hole === holeNumber)?.points ?? 0;
@@ -2280,9 +2316,9 @@ function GolfBetsApp() {
         {!bettingConsentGranted && <div className="notice compactConsentNotice" role="status">Para activar o registrar apuestas, completa el consentimiento específico desde <button type="button" className="textButton" onClick={() => setTab("account")}>Mi Cuenta</button>. Tus datos anteriores se conservan.</div>}
         <div className="groupedBetSetupList">
 
-        <SetupBetCard id="rabbits" icon="🐇" title="Conejos" description="Gana hoyos · captura y conserva el conejo" help="rabbits" enabled={bets.rabbits.enabled} locked={!bettingConsentGranted} requestActivation={requestBettingConsent} onEnabledChange={(enabled) => setBets((current) => ({ ...current, rabbits: { ...current.rabbits, enabled } }))}><div className="grid3"><MoneyInput label="Valor" value={bets.rabbits.value} onChange={(v) => setBets({ ...bets, rabbits: { ...bets.rabbits, value: v } })} /><HcpPercentInput value={bets.rabbits.hcpPct} onChange={(v) => setBets({ ...bets, rabbits: { ...bets.rabbits, hcpPct: v } })} /><HandicapModeSelect value={bets.rabbits.decimals} onChange={(decimals) => setBets({ ...bets, rabbits: { ...bets.rabbits, decimals } })} /></div><label className="miniLabel">Participan</label><ParticipantChips players={players} selected={bets.rabbits.participantIds} onChange={(ids) => setBets({ ...bets, rabbits: { ...bets.rabbits, participantIds: ids } })} /></SetupBetCard>
+        <SetupBetCard id="rabbits" icon="🐇" title="Conejos" description="Gana hoyos · captura y conserva el conejo" help="rabbits" enabled={bets.rabbits.enabled} locked={!bettingConsentGranted} requestActivation={requestBettingConsent} onEnabledChange={(enabled) => setBets((current) => ({ ...current, rabbits: { ...current.rabbits, enabled } }))}><BetModeControl label="conejos" value={rabbitMode} options={RABBIT_MODE_OPTIONS} onChange={(mode) => setBets((current) => ({ ...current, rabbits: { ...current.rabbits, mode } }))} /><div className="grid3"><MoneyInput label="Valor" value={bets.rabbits.value} onChange={(v) => setBets({ ...bets, rabbits: { ...bets.rabbits, value: v } })} /><HcpPercentInput value={bets.rabbits.hcpPct} onChange={(v) => setBets({ ...bets, rabbits: { ...bets.rabbits, hcpPct: v } })} /><HandicapModeSelect value={bets.rabbits.decimals} onChange={(decimals) => setBets({ ...bets, rabbits: { ...bets.rabbits, decimals } })} /></div><label className="miniLabel">Participan</label><ParticipantChips players={players} selected={bets.rabbits.participantIds} onChange={(ids) => setBets({ ...bets, rabbits: { ...bets.rabbits, participantIds: ids } })} /></SetupBetCard>
 
-        <SetupBetCard id="skins" icon="⛳" title="Skins" description="Mejor score único gana · empates acumulan" help="skins" enabled={bets.skins.enabled} locked={!bettingConsentGranted} requestActivation={requestBettingConsent} onEnabledChange={(enabled) => setBets((current) => ({ ...current, skins: { ...current.skins, enabled } }))}><div className="grid3"><MoneyInput label="Valor" value={bets.skins.value} onChange={(v) => setBets({ ...bets, skins: { ...bets.skins, value: v } })} /><HcpPercentInput value={bets.skins.hcpPct} onChange={(v) => setBets({ ...bets, skins: { ...bets.skins, hcpPct: v } })} /><HandicapModeSelect value={bets.skins.decimals} onChange={(decimals) => setBets({ ...bets, skins: { ...bets.skins, decimals } })} /></div><label className="miniLabel">Participan</label><ParticipantChips players={players} selected={bets.skins.participantIds} onChange={(ids) => setBets({ ...bets, skins: { ...bets.skins, participantIds: ids } })} /></SetupBetCard>
+        <SetupBetCard id="skins" icon="⛳" title="Skins" description="Mejor score neto único gana el skin" help="skins" enabled={bets.skins.enabled} locked={!bettingConsentGranted} requestActivation={requestBettingConsent} onEnabledChange={(enabled) => setBets((current) => ({ ...current, skins: { ...current.skins, enabled } }))}><BetModeControl label="skins" value={skinsMode} options={SKINS_MODE_OPTIONS} onChange={(mode) => setBets((current) => ({ ...current, skins: { ...current.skins, mode } }))} /><div className="grid3"><MoneyInput label="Valor" value={bets.skins.value} onChange={(v) => setBets({ ...bets, skins: { ...bets.skins, value: v } })} /><HcpPercentInput value={bets.skins.hcpPct} onChange={(v) => setBets({ ...bets, skins: { ...bets.skins, hcpPct: v } })} /><HandicapModeSelect value={bets.skins.decimals} onChange={(decimals) => setBets({ ...bets, skins: { ...bets.skins, decimals } })} /></div><label className="miniLabel">Participan</label><ParticipantChips players={players} selected={bets.skins.participantIds} onChange={(ids) => setBets({ ...bets, skins: { ...bets.skins, participantIds: ids } })} /></SetupBetCard>
 
         <SetupBetCard id="units" icon="📏" title="Unidades / Copas" description="Puntos positivos y negativos · todos contra todos" help="units" enabled={bets.units.enabled} locked={!bettingConsentGranted} requestActivation={requestBettingConsent} onEnabledChange={(enabled) => setBets((current) => ({ ...current, units: { ...current.units, enabled } }))}><div className="grid2"><MoneyInput label="Valor por unidad" value={bets.units.value} onChange={(v) => setBets({ ...bets, units: { ...bets.units, value: v } })} /><MoneyInput label="Valor por Copa" value={bets.units.copaValue ?? bets.units.value} onChange={(v) => setBets({ ...bets, units: { ...bets.units, copaValue: v } })} /></div><label className="miniLabel">Participan en Unidades / Copas</label><ParticipantChips players={players} selected={bets.units.participantIds} onChange={(ids) => setBets({ ...bets, units: { ...bets.units, participantIds: ids } })} /></SetupBetCard>
 
@@ -2442,7 +2478,8 @@ function GolfBetsApp() {
         </div>;})}
         {scoreCaptureComplete && <div className="liveBadges">
           {currentRabbitEvents.map((e, i) => <span className="badge" key={`${e.type}-${i}`}>🐇 {e.type === "grab" ? "Agarra" : e.type === "hold" ? "Mantiene" : e.type === "win" ? `Gana ×${e.count}` : e.type === "lose" ? "Pierde / libre" : e.type === "accumulate" ? `Acumula → ${e.count}` : "Libre"} {e.playerId ? playerName(e.playerId) : ""}</span>)}
-          {skinHoleNotice(currentSkin, bets.skins.value, currentIndex === order.length - 1, playerName).map((line, index) => <span className={`badge ${!currentSkin?.winnerId ? "skinCarryBadge" : ""}`} key={`${line}-${index}`}>{line}</span>)}
+          {rabbitMode === "three_hole_blocks" && currentRabbitEvents.length === 0 && currentRabbitBlockWinner?.playerId && <span className="badge">🐇 Conejo {currentRabbitNumber} ya ganado por {playerName(currentRabbitBlockWinner.playerId)}</span>}
+          {skinHoleNotice(currentSkin, bets.skins.value, currentIndex === order.length - 1, playerName, skinsMode).map((line, index) => <span className={`badge ${!currentSkin?.winnerId ? "skinCarryBadge" : ""}`} key={`${line}-${index}`}>{line}</span>)}
         </div>}
         {completedHoles.has(holeNumber) && savedBfDetail && <div className="ballFriendScoreResult" role="status">{ballFriendScoreResult(savedBfDetail, bets.ballFriend.value)}</div>}
       </section>
@@ -2450,7 +2487,7 @@ function GolfBetsApp() {
       {(bets.rabbits.enabled || bets.skins.enabled) && <section className="card compact priorBetStatus" aria-label="Estado antes de este hoyo">
         <div className="sectionTitle"><div><h2>Antes del hoyo {holeNumber}</h2><p>Solo considera hoyos anteriores ya guardados.</p></div></div>
         <div className="priorBetGrid">
-          {bets.rabbits.enabled && <article><span aria-hidden="true">🐇</span><div><b>Conejo</b>{priorRabbitStatus(priorRabbits.events, priorRabbits.pending, bets.rabbits.value, playerName).map((line) => <small key={line}>{line}</small>)}</div></article>}
+          {bets.rabbits.enabled && <article><span aria-hidden="true">🐇</span><div><b>Conejo</b>{priorRabbitStatus(priorRabbits.events, priorRabbits.pending, bets.rabbits.value, playerName, rabbitMode, holeNumber).map((line) => <small key={line}>{line}</small>)}</div></article>}
           {bets.skins.enabled && <article><span aria-hidden="true">⛳</span><div><b>Skins</b>{priorSkinsStatus(priorSkins.carry, bets.skins.value).map((line) => <small key={line}>{line}</small>)}</div></article>}
         </div>
       </section>}
@@ -2575,7 +2612,7 @@ function GolfBetsApp() {
         </details>)}</div></> : <div className="generalResultsWrap"><p className="muted">Todas las apuestas activas y ya jugadas. Desliza horizontalmente para revisar cada categoría.</p>{generalResults.categories.length ? <div className="generalResultsScroll" tabIndex={0} aria-label="Resumen general de resultados por apuesta"><table className="generalResultsTable"><thead><tr><th>Jugador</th>{generalResults.categories.map(category => <th key={category.key}>{category.label}{category.quantityTotal !== undefined ? ` · ${category.quantityTotal}` : ""}</th>)}<th>TOTAL</th></tr></thead><tbody>{generalResults.rows.map(row => <tr key={row.playerId}><th scope="row">{playerName(row.playerId)}</th>{generalResults.categories.map(category => { const amount = row.cells[category.key] || 0; const quantity = category.quantities?.[row.playerId]; const quantityText = quantity === undefined ? "" : `${category.signedQuantity && quantity > 0 ? "+" : ""}${quantity} ${category.quantityLabel || ""}`.trim(); return <td key={category.key}><div className="generalResultCell">{category.detailByPlayer?.[row.playerId] && <span>{category.detailByPlayer[row.playerId]}</span>}{quantityText && <span>{quantityText}</span>}<strong className={amount > 0 ? "good" : amount < 0 ? "bad" : ""}>{signedMoney(amount)}</strong></div></td>; })}<td className={!row.consistent ? "bad" : row.total > 0 ? "good" : row.total < 0 ? "bad" : ""}>{signedMoney(row.total)}</td></tr>)}<tr className="generalResultsTotal"><th scope="row">TOTAL GENERAL</th>{generalResults.categories.map(category => <td key={category.key} className={Math.abs(generalResults.categoryTotals[category.key] || 0) < 0.001 ? "good" : "bad"}>{signedMoney(generalResults.categoryTotals[category.key] || 0)}</td>)}<td className={Math.abs(generalResults.grandTotal) < 0.001 ? "good" : "bad"}>{signedMoney(generalResults.grandTotal)}</td></tr></tbody></table></div> : <div className="empty">Todavía no hay apuestas activas con hoyos jugados.</div>}</div>}
       </ResultAccordion>
 
-      {bets.rabbits.enabled && <ResultAccordion id="rabbits" title={`${betDisplayLabel("rabbits")} · ${totalRabbitsWon}`} {...resultAccordionProps("rabbits")}><div className="resultBalanceList">{playersByIds(players, bets.rabbits.participantIds).map(player => <div className="transfer" key={player.id}><span><b>{player.name}</b><small>{rabbits.won[player.id] ?? 0} conejos</small></span><strong className={(rabbitBalances[player.id] ?? 0) > 0 ? "good" : (rabbitBalances[player.id] ?? 0) < 0 ? "bad" : ""}>{signedMoney(rabbitBalances[player.id] ?? 0)}</strong></div>)}</div></ResultAccordion>}
+      {bets.rabbits.enabled && <ResultAccordion id="rabbits" title={`${betDisplayLabel("rabbits")} · ${totalRabbitsWon}`} {...resultAccordionProps("rabbits")}><div className="resultBalanceList">{playersByIds(players, bets.rabbits.participantIds).map(player => <div className="transfer" key={player.id}><span><b>{player.name}</b><small>{rabbits.won[player.id] ?? 0} conejos</small></span><strong className={(rabbitBalances[player.id] ?? 0) > 0 ? "good" : (rabbitBalances[player.id] ?? 0) < 0 ? "bad" : ""}>{signedMoney(rabbitBalances[player.id] ?? 0)}</strong></div>)}</div>{rabbitMode === "three_hole_blocks" && <div className="rabbitBlockResults">{[...new Set(order.map((currentHole) => Math.floor((currentHole - 1) / 3) + 1))].map((rabbitNumber) => { const start = (rabbitNumber - 1) * 3 + 1; const end = start + 2; const winner = rabbits.events.find((event) => event.rabbitNumber === rabbitNumber && event.type === "win"); const complete = completedHoles.has(end); return <div className="matchLine" key={rabbitNumber}><span><b>Conejo {rabbitNumber}</b>H{start}–H{end}</span><strong>{winner?.playerId ? playerName(winner.playerId) : complete ? "Sin ganador" : "Pendiente"}</strong></div>; })}</div>}</ResultAccordion>}
       {bets.skins.enabled && <ResultAccordion id="skins" title={`${betDisplayLabel("skins")} · ${totalSkinsWon}`} {...resultAccordionProps("skins")}><div className="resultBalanceList">{playersByIds(players, bets.skins.participantIds).map(player => <div className="transfer" key={player.id}><span><b>{player.name}</b><small>{skins.won[player.id] ?? 0} skins</small></span><strong className={(skinBalances[player.id] ?? 0) > 0 ? "good" : (skinBalances[player.id] ?? 0) < 0 ? "bad" : ""}>{signedMoney(skinBalances[player.id] ?? 0)}</strong></div>)}</div></ResultAccordion>}
       {bets.units.enabled && <ResultAccordion id="units" title={`${betDisplayLabel("units")} · ${unitQuantitySummary.total > 0 ? "+" : ""}${unitQuantitySummary.total}`} {...resultAccordionProps("units")}><div className="resultBalanceList">{playersByIds(players, bets.units.participantIds).map(player => { const quantity = unitQuantitySummary.quantities[player.id] ?? 0; const amount = units.balances[player.id] ?? 0; return <div className="transfer" key={player.id}><span><b>{player.name}</b><small>{quantity > 0 ? "+" : ""}{quantity} unidades netas</small></span><strong className={amount > 0 ? "good" : amount < 0 ? "bad" : ""}>{signedMoney(amount)}</strong></div>; })}</div></ResultAccordion>}
       {bets.ballFriend.enabled && <ResultAccordion id="ball-friend" title={betDisplayLabel("ball_friend")} {...resultAccordionProps("ball-friend")}><div className="resultBalanceList">{playersByIds(players, bets.ballFriend.participantIds).map(player => { const amount = ballFriend.balances[player.id] ?? 0; const points = ballFriend.points[player.id] ?? 0; return <div className="transfer" key={player.id}><span><b>{player.name}</b><small>{points > 0 ? "+" : ""}{points} puntos</small></span><strong className={amount > 0 ? "good" : amount < 0 ? "bad" : ""}>{signedMoney(amount)}</strong></div>; })}</div></ResultAccordion>}

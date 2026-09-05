@@ -37,7 +37,7 @@ test("every existing and new bet type has compact contextual help in a closable 
 test("la configuración usa las descripciones compactas solicitadas y alinea ayuda con switch", () => {
   for (const description of [
     "Gana hoyos · captura y conserva el conejo",
-    "Mejor score único gana · empates acumulan",
+    "Mejor score neto único gana el skin",
     "Puntos positivos y negativos · todos contra todos",
     "Parejas · puntos por Low/High según configuración",
     "Los 2 jugadores de la derecha vs los 2 de la izquierda",
