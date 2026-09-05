@@ -51,6 +51,18 @@ export type SupplementalBetResult = {
   balances: Record<string, number>;
   lines: string[];
   pressures?: SupplementalPressureDetail[];
+  audit?: {
+    playedHoles: number;
+    participantIds: string[];
+    detailLines: string[];
+    components: Array<{
+      key: string;
+      label: string;
+      status: "partial" | "final" | "pending";
+      amounts: Record<string, number>;
+      lines: string[];
+    }>;
+  };
 };
 
 export type SupplementalPlayerAmount = {
@@ -179,6 +191,29 @@ function calculateNassau(
     complete: completeForPlayers(order, scores, [playerA.id, playerB.id]),
     balances,
     lines,
+    audit: {
+      playedHoles: Math.max(0, ...result.liveComponents.map((component) => component.playedHoles)),
+      participantIds: [playerA.id, playerB.id],
+      detailLines: [
+        `Participantes: ${playerA.name} y ${playerB.name}`,
+        `Monto pactado: $${Math.max(0, bet.value)}`,
+        bet.advantageStrokes > 0 ? `Ventaja pactada: ${bet.advantageStrokes} golpes para ${bet.advantageReceiverId === playerA.id ? playerA.name : playerB.name}` : "Ventaja pactada: sin golpes",
+        `Carry: ${bet.carryEnabled ? "sí" : "no"}`,
+      ],
+      components: result.liveComponents.map((component) => ({
+        key: component.key,
+        label: component.label,
+        status: component.playedHoles === 0 ? "pending" : component.complete ? "final" : "partial",
+        amounts: { [playerA.id]: component.ownerMoney, [playerB.id]: -component.ownerMoney },
+        lines: [
+          `${component.playedHoles} hoyos considerados`,
+          component.kind === "match"
+            ? `Match: ${component.matchState === 0 ? "AS" : `${component.matchState > 0 ? playerA.name : playerB.name} +${Math.abs(component.matchState)}`}`
+            : `Medal neto: ${playerA.name} ${component.ownerNetTotal} · ${playerB.name} ${component.rivalNetTotal} · diferencia ${Math.abs(component.medalDiff)}`,
+          `Monto de este componente: $${component.stake}`,
+        ],
+      })),
+    },
   };
 }
 
@@ -197,6 +232,8 @@ function calculateDollarStroke(
   }
   let totalA = 0;
   let totalB = 0;
+  let grossTotalA = 0;
+  let grossTotalB = 0;
   let played = 0;
   for (const holeNumber of order) {
     const hole = course.holes.find((candidate) => candidate.number === holeNumber);
@@ -205,6 +242,8 @@ function calculateDollarStroke(
     if (!hole || typeof grossA !== "number" || typeof grossB !== "number") continue;
     totalA += headToHeadNet(bet, playerA.id, grossA, hole.strokeIndex);
     totalB += headToHeadNet(bet, playerB.id, grossB, hole.strokeIndex);
+    grossTotalA += grossA;
+    grossTotalB += grossB;
     played += 1;
   }
   const difference = totalB - totalA;
@@ -217,6 +256,24 @@ function calculateDollarStroke(
     complete: played === order.length,
     balances,
     lines: played ? [`Neto: ${playerA.name} ${totalA} · ${playerB.name} ${totalB}`, `Diferencia ${Math.abs(difference)} golpes · $${Math.abs(amountA)}`] : [],
+    audit: {
+      playedHoles: played,
+      participantIds: [playerA.id, playerB.id],
+      detailLines: [
+        `Participantes: ${playerA.name} y ${playerB.name}`,
+        `Scores considerados (${played} hoyos): ${playerA.name} ${grossTotalA} · ${playerB.name} ${grossTotalB}`,
+        bet.advantageStrokes > 0 ? `Ventaja pactada: ${bet.advantageStrokes} golpes para ${bet.advantageReceiverId === playerA.id ? playerA.name : playerB.name}` : "Ventaja pactada: sin golpes",
+        `Resultado ajustado: ${playerA.name} ${totalA} · ${playerB.name} ${totalB}`,
+        `Diferencia: ${Math.abs(difference)} golpes · valor $${Math.max(0, bet.valuePerStroke)} por golpe`,
+      ],
+      components: [{
+        key: "dollar-stroke-total",
+        label: played === order.length ? "Resultado final" : "Acumulado",
+        status: played === 0 ? "pending" : played === order.length ? "final" : "partial",
+        amounts: { [playerA.id]: played > 0 ? amountA : 0, [playerB.id]: played > 0 ? -amountA : 0 },
+        lines: played ? [`${Math.abs(difference)} golpes × $${Math.max(0, bet.valuePerStroke)}`, `${playerA.name} ${amountA >= 0 ? "+" : "−"}$${Math.abs(amountA)} · ${playerB.name} ${amountA <= 0 ? "+" : "−"}$${Math.abs(amountA)}`] : ["Pendiente de scores confirmados"],
+      }],
+    },
   };
 }
 
@@ -243,6 +300,7 @@ function calculateIndividualPressures(
   const balances = zeroBalances(players);
   const participants = selectedPlayers(players, bet.participantIds);
   const pressures: SupplementalPressureDetail[] = [];
+  const auditComponents: NonNullable<SupplementalBetResult["audit"]>["components"] = [];
   if (!enabled(bet) || participants.length < 2) return { betId: bet.id, type: bet.type, label: SUPPLEMENTAL_BET_LABELS[bet.type], complete: false, balances, lines: [], pressures };
   for (const [first, second] of pairwise(participants)) {
     let startHole = order[0];
@@ -264,15 +322,18 @@ function calculateIndividualPressures(
       else secondWins += 1;
       settleHeadToHead(balances, winner.id, loser.id, Math.max(0, bet.value));
       pressures.push({ label: `${first.name} vs ${second.name}`, startHole, endHole: holeNumber, winnerIds: [winner.id], loserIds: [loser.id], value: Math.max(0, bet.value), open: false });
+      auditComponents.push({ key: `${first.id}:${second.id}:pressure:${startHole}`, label: `Presión · H${startHole}–H${holeNumber}`, status: "final", amounts: { [winner.id]: Math.max(0, bet.value), [loser.id]: -Math.max(0, bet.value) }, lines: [`${first.name} vs ${second.name}`, `Ganó ${winner.name} · $${Math.max(0, bet.value)}`] });
       startHole = order[index + 1] ?? 0;
     }
     if (startHole && order.includes(startHole) && !completeForPlayers(order.slice(order.indexOf(startHole)), scores, [first.id, second.id])) {
       pressures.push({ label: `${first.name} vs ${second.name}`, startHole, winnerIds: [], loserIds: [], value: Math.max(0, bet.value), open: true });
+      auditComponents.push({ key: `${first.id}:${second.id}:pressure:${startHole}`, label: `Presión abierta · H${startHole}`, status: "pending", amounts: { [first.id]: 0, [second.id]: 0 }, lines: [`${first.name} vs ${second.name}`, "Pendiente de cierre con hoyos confirmados"] });
     }
     if (bet.matchPlayEnabled && completeForPlayers(order, scores, [first.id, second.id]) && firstWins !== secondWins) {
       const winner = firstWins > secondWins ? first : second;
       const loser = winner.id === first.id ? second : first;
       settleHeadToHead(balances, winner.id, loser.id, Math.max(0, bet.value));
+      auditComponents.push({ key: `${first.id}:${second.id}:match`, label: "Match Play adicional", status: "final", amounts: { [winner.id]: Math.max(0, bet.value), [loser.id]: -Math.max(0, bet.value) }, lines: [`${first.name} ${firstWins} hoyos · ${second.name} ${secondWins} hoyos`, `Ganó ${winner.name} · $${Math.max(0, bet.value)}`] });
     }
   }
   return {
@@ -283,6 +344,16 @@ function calculateIndividualPressures(
     balances,
     pressures,
     lines: pressures.map((pressure, index) => `Presión ${index + 1} · H${pressure.startHole}${pressure.endHole ? `–H${pressure.endHole}` : " · abierta"}${pressure.winnerIds[0] ? ` · gana ${players.find((player) => player.id === pressure.winnerIds[0])?.name}` : ""}`),
+    audit: {
+      playedHoles: order.filter((hole) => completedHole(hole, scores, participants.map((player) => player.id))).length,
+      participantIds: participants.map((player) => player.id),
+      detailLines: [
+        `Contrincantes: ${participants.map((player) => player.name).join(" · ")}`,
+        `Valor por presión: $${Math.max(0, bet.value)}`,
+        `HCP: ${bet.hcpPct}% · Carry: ${bet.carryEnabled ? "sí" : "no"} · Match adicional: ${bet.matchPlayEnabled ? "sí" : "no"}`,
+      ],
+      components: auditComponents,
+    },
   };
 }
 

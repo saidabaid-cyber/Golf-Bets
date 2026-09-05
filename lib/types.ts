@@ -375,6 +375,15 @@ export type PersonalOpponentResult = {
   opponentId: string;
   opponentName: string;
   amount: number;
+  status?: "partial" | "final" | "pending";
+  detailLines?: string[];
+  components?: Array<{
+    key: string;
+    label: string;
+    amount: number;
+    status: "partial" | "final" | "pending";
+    lines: string[];
+  }>;
 };
 
 export type RoundSnapshot = {

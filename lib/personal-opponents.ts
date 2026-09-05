@@ -1,7 +1,24 @@
 import { calculateSupplementalBets } from "./supplemental-bets";
-import type { Course, PersonalOpponentResult, Player, PuttsByHole, RoundSnapshot, SupplementalBet } from "./types";
+import type { Course, PersonalBet, PersonalOpponentResult, Player, PuttsByHole, RoundSnapshot, SupplementalBet } from "./types";
 
-type CanonicalPersonalResult = { betId: string; rivalId: string; totalMoney: number };
+type CanonicalPersonalResult = {
+  betId: string;
+  rivalId: string;
+  totalMoney: number;
+  liveComponents?: Array<{
+    key: string;
+    label: string;
+    kind: "match" | "medal";
+    complete: boolean;
+    playedHoles: number;
+    ownerMoney: number;
+    matchState: number;
+    medalDiff: number;
+    ownerNetTotal: number;
+    rivalNetTotal: number;
+    stake: number;
+  }>;
+};
 
 const PERSONAL_MODE_LABELS: Record<PersonalOpponentResult["mode"], string> = {
   nassau_individual: "Nassau individual",
@@ -31,17 +48,45 @@ export function buildPersonalOpponentResults({
   putts: PuttsByHole;
   order: number[];
   canonicalResults: CanonicalPersonalResult[];
-  personalBets: Array<{ id: string; rivalName: string }>;
+  personalBets: PersonalBet[];
   supplementalBets: SupplementalBet[];
 }): PersonalOpponentResult[] {
-  const entries: PersonalOpponentResult[] = canonicalResults.map((result) => ({
-    betId: result.betId,
-    mode: "nassau_individual",
-    modeLabel: PERSONAL_MODE_LABELS.nassau_individual,
-    opponentId: result.rivalId,
-    opponentName: opponentName(players, result.rivalId, personalBets.find((bet) => bet.id === result.betId)?.rivalName),
-    amount: result.totalMoney,
-  }));
+  const entries: PersonalOpponentResult[] = canonicalResults.map((result) => {
+    const config = personalBets.find((bet) => bet.id === result.betId);
+    const owner = opponentName(players, ownerId, "Jugador principal");
+    const rival = opponentName(players, result.rivalId, config?.rivalName);
+    const components = result.liveComponents || [];
+    const played = components.some((component) => component.playedHoles > 0);
+    const amount = components.length ? components.reduce((sum, component) => sum + component.ownerMoney, 0) : result.totalMoney;
+    return {
+      betId: result.betId,
+      mode: "nassau_individual",
+      modeLabel: PERSONAL_MODE_LABELS.nassau_individual,
+      opponentId: result.rivalId,
+      opponentName: rival,
+      amount,
+      status: !played ? "pending" : components.every((component) => component.complete) ? "final" : "partial",
+      detailLines: config ? [
+        `Participantes: ${owner} y ${rival}`,
+        `Monto pactado: $${Math.max(0, config.baseValue)}`,
+        config.advantageStrokes > 0 ? `Ventaja pactada: ${config.advantageStrokes} golpes para ${config.advantageReceiver === "owner" ? owner : rival}` : "Ventaja pactada: sin golpes",
+        `Carry: ${config.carryEnabled ? "sí" : "no"} · Presión: ${config.pressureMultiplier || config.back9Multiplier || 1}x`,
+      ] : undefined,
+      components: components.map((component) => ({
+        key: component.key,
+        label: component.label,
+        amount: component.ownerMoney,
+        status: component.playedHoles === 0 ? "pending" : component.complete ? "final" : "partial",
+        lines: [
+          `${component.playedHoles} hoyos considerados`,
+          component.kind === "match"
+            ? `Match: ${component.matchState === 0 ? "AS" : `${component.matchState > 0 ? owner : rival} +${Math.abs(component.matchState)}`}`
+            : `Medal neto: ${owner} ${component.ownerNetTotal} · ${rival} ${component.rivalNetTotal} · diferencia ${Math.abs(component.medalDiff)}`,
+          `Monto de este componente: $${component.stake}`,
+        ],
+      })),
+    };
+  });
 
   for (const bet of supplementalBets.filter((item) => item.enabled !== false)) {
     if (bet.type === "dollar_stroke" || bet.type === "individual_nassau") {
@@ -57,6 +102,15 @@ export function buildPersonalOpponentResults({
         opponentId,
         opponentName: opponentName(players, opponentId),
         amount: result.balances[ownerId] ?? 0,
+        status: !result.audit?.playedHoles ? "pending" : result.complete ? "final" : "partial",
+        detailLines: result.audit?.detailLines || result.lines,
+        components: result.audit?.components.map((component) => ({
+          key: component.key,
+          label: component.label,
+          amount: component.amounts[ownerId] ?? 0,
+          status: component.status,
+          lines: component.lines,
+        })),
       });
       continue;
     }
@@ -72,6 +126,15 @@ export function buildPersonalOpponentResults({
         opponentId,
         opponentName: opponentName(players, opponentId),
         amount: result.balances[ownerId] ?? 0,
+        status: !result.audit?.playedHoles ? "pending" : result.complete ? "final" : "partial",
+        detailLines: result.audit?.detailLines || result.lines,
+        components: result.audit?.components.map((component) => ({
+          key: component.key,
+          label: component.label,
+          amount: component.amounts[ownerId] ?? 0,
+          status: component.status,
+          lines: component.lines,
+        })),
       });
     }
   }

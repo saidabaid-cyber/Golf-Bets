@@ -61,7 +61,7 @@ test("la configuración usa las descripciones compactas solicitadas y alinea ayu
 
 test("Personal and Manual switches retain their editors and move inactive records after active ones", () => {
   assert.match(page, /sort\(\(first, second\) => Number\(second\.enabled !== false\) - Number\(first\.enabled !== false\)\)/);
-  assert.match(page, /runAfterBettingConsent\(\(\) => updatePersonalBet\(bet\.id, \{ enabled: true, enabledBeforeCategoryOff: undefined \}\)\)/);
+  assert.match(page, /runAfterBettingConsent\(\(\) => \{ updatePersonalBet\(bet\.id, \{ enabled: true, enabledBeforeCategoryOff: undefined \}\); setExpandedPersonalId\(bet\.id\); \}\)/);
   assert.match(page, /runAfterBettingConsent\(\(\) => updateManualBet\(bet\.id, \{ enabled: true, enabledBeforeCategoryOff: undefined \}\)\)/);
   assert.match(page, /bet\.enabled === false \? "betItemDisabled"/);
   assert.match(styles, /\.disabled\{order:2;/);

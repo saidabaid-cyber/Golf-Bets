@@ -106,6 +106,12 @@ export function migrationDecisionStorageKey(userId: string) {
   return `${ACCOUNT_STORAGE_KEYS.migrationDecision}:${userId}`;
 }
 
+/** Records that this identity already saw the one-time access update. It is
+ * presentation state only; it never counts as consent. */
+export function bettingConsentPromptStorageKey(userId: string) {
+  return `backyard-betting-consent-prompt-v1:${userId}:${BETTING_DATA_CONSENT_VERSION}`;
+}
+
 export const REQUIRED_CONSENTS = Object.keys(LEGAL_DOCUMENT_VERSIONS) as GeneralConsentType[];
 export const KNOWN_CONSENT_TYPES: ConsentType[] = [...REQUIRED_CONSENTS, BETTING_DATA_CONSENT_TYPE];
 

@@ -78,3 +78,26 @@ test("timeout y una respuesta tardía avanzan exactamente una vez", () => {
   assert.equal(session.finish(), false);
   assert.equal(advances, 1);
 });
+
+test("la X termina una sesión pausada, cancela el timer y avanza una sola vez", () => {
+  let advances = 0;
+  let nextTimer = 0;
+  const timers = new Map<number, () => void>();
+  const session = createHoleSummarySession({
+    now: () => 1_000,
+    schedule: action => {
+      const id = ++nextTimer;
+      timers.set(id, action);
+      return id;
+    },
+    cancel: id => { timers.delete(id); },
+    onAdvance: () => { advances += 1; },
+  });
+
+  session.togglePause();
+  assert.equal(session.isPaused(), true);
+  assert.equal(timers.size, 0);
+  assert.equal(session.finish(), true);
+  assert.equal(session.finish(), false);
+  assert.equal(advances, 1);
+});

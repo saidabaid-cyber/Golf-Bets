@@ -291,8 +291,8 @@ function normalizeHistorySnapshot(round: RoundSnapshot): RoundSnapshot {
   return migrateSupplementalNassau({ ...round, expenses: normalizeExpenses(round.expenses) });
 }
 
-function Toggle({ on, onClick, label = "activar" }: { on: boolean; onClick: () => void; label?: string }) {
-  return <button className={`switch ${on ? "on" : ""}`} role="switch" aria-checked={on} onClick={onClick} aria-label={label}><span /></button>;
+function Toggle({ on, onClick, label = "activar", disabled = false }: { on: boolean; onClick: () => void; label?: string; disabled?: boolean }) {
+  return <button className={`switch ${on ? "on" : ""}`} role="switch" aria-checked={on} onClick={onClick} aria-label={label} title={disabled ? "Completa el consentimiento específico desde Mi Cuenta" : undefined} disabled={disabled}><span /></button>;
 }
 
 function SetupModeTitle({ icon, title, description }: { icon: string; title: string; description: string }) {
@@ -497,21 +497,17 @@ function GolfBetsApp() {
     const targetId = pendingPersonalFocus.current;
     if (tab !== "setup" || !personalSetupOpen || !targetId || expandedPersonalId !== targetId) return;
     const section = Array.from(personalSetupListRef.current?.querySelectorAll<HTMLElement>("[data-personal-editor]") || []).find((element) => element.dataset.personalEditor === targetId);
-    const field = section?.querySelector<HTMLElement>("[data-personal-first]");
-    if (!section || !field) return;
+    if (!section) return;
     pendingPersonalFocus.current = null;
     section.scrollIntoView({ behavior: "smooth", block: "center" });
-    field.focus({ preventScroll: true });
   }, [tab, personalSetupOpen, expandedPersonalId, personalBets]);
   useEffect(() => {
     const targetId = pendingManualFocus.current;
     if (tab !== "setup" || !manualSetupOpen || !targetId) return;
     const section = Array.from(manualSetupListRef.current?.querySelectorAll<HTMLElement>("[data-manual-editor]") || []).find((element) => element.dataset.manualEditor === targetId);
-    const field = section?.querySelector<HTMLElement>("[data-manual-first]");
-    if (!section || !field) return;
+    if (!section) return;
     pendingManualFocus.current = null;
     section.scrollIntoView({ behavior: "smooth", block: "center" });
-    field.focus({ preventScroll: true });
   }, [tab, manualSetupOpen, manualBets]);
   useEffect(() => {
     const id = pendingResultScroll;
@@ -671,7 +667,7 @@ function GolfBetsApp() {
         localStorage.setItem(STORAGE_KEYS.frequentGroups, serializeFrequentGroups(frequentGroups));
         localStorage.setItem(STORAGE_KEYS.contrast, String(highContrast));
         localStorage.setItem(STORAGE_KEYS.draft, JSON.stringify(!roundClosed && hasRoundProgress(draft) ? draft : null));
-        setDraftAvailable(!roundClosed && hasRoundProgress({ players, scores, currentIndex }));
+        setDraftAvailable(!roundClosed && hasRoundProgress(draft));
         const offline = collectLocalCloudData(localStorage, identity.defaultHandicap, hadLocalPreferences.current);
         offline.deviceId = offlineDeviceId.current;
         void persistOfflineBundle(identity.userId, offline, identity.mode === "authenticated" && cloudLinked)
@@ -995,10 +991,9 @@ function GolfBetsApp() {
   const liveMonkey = useMemo(() => calculateMonkey(course, liveScores, players, bets.monkey, order), [course, liveScores, players, bets.monkey, order]);
   const liveFoursomes = useMemo(() => calculateFoursomes(course, liveScores, players, bets.foursome, segments, order), [course, liveScores, players, bets.foursome, segments, order]);
   const liveBallFriend = useMemo(() => calculateBallFriend(course, liveScores, players, bets.ballFriend, ballFriendSetup, order), [course, liveScores, players, bets.ballFriend, ballFriendSetup, order]);
-  const livePersonals = useMemo(() => calculatePersonalBets(personalBets, ownerId, players, course, liveScores, order), [personalBets, ownerId, players, course, liveScores, order]);
   const liveSupplemental = useMemo(() => calculateSupplementalBets(supplementalBets, players, course, liveScores, putts, order), [supplementalBets, players, course, liveScores, putts, order]);
   const personalOpponentResults = useMemo(() => buildPersonalOpponentResults({ ownerId, players, course, scores, putts, order, canonicalResults: personals.results, personalBets, supplementalBets }), [ownerId, players, course, scores, putts, order, personals.results, personalBets, supplementalBets]);
-  const livePersonalOpponentResults = useMemo(() => buildPersonalOpponentResults({ ownerId, players, course, scores: liveScores, putts, order, canonicalResults: livePersonals.results, personalBets, supplementalBets }), [ownerId, players, course, liveScores, putts, order, livePersonals.results, personalBets, supplementalBets]);
+  const livePersonalOpponentResults = useMemo(() => buildPersonalOpponentResults({ ownerId, players, course, scores, putts, order, canonicalResults: personals.results, personalBets, supplementalBets }), [ownerId, players, course, scores, putts, order, personals.results, personalBets, supplementalBets]);
   const supplementalGeneralResults = useMemo(() => supplemental.results.filter((result) => !isPersonalSupplementalType(result.type)), [supplemental.results]);
   const liveSupplementalGeneralResults = useMemo(() => liveSupplemental.results.filter((result) => !isPersonalSupplementalType(result.type)), [liveSupplemental.results]);
   const supplementalGeneralBalances = useMemo(() => mergeBalances(players, ...supplementalGeneralResults.map((result) => result.balances)), [players, supplementalGeneralResults]);
@@ -1230,7 +1225,7 @@ function GolfBetsApp() {
   }
 
   function setManualModeEnabled(enabled: boolean) {
-    setManualSetupOpen(true);
+    setManualSetupOpen(enabled);
     if (enabled && manualBets.length === 0) {
       newManualBet();
       return;
@@ -1318,7 +1313,8 @@ function GolfBetsApp() {
   }
 
   function setPersonalModeEnabled(enabled: boolean) {
-    setPersonalSetupOpen(true);
+    setPersonalSetupOpen(enabled || personalSetupOpen);
+    setNassauSetupOpen(enabled);
     if (enabled && personalBets.length === 0) {
       newPersonalBet();
       return;
@@ -1803,11 +1799,11 @@ function GolfBetsApp() {
         const displayRival = bet.rivalMode === "group" ? (groupRival?.name || "Rival") : (bet.rivalName || "Rival");
         const expanded = expandedPersonalId === bet.id;
         return <section className={`card personalSetupItem ${bet.enabled === false ? "betItemDisabled" : ""}`} key={bet.id} data-personal-editor={bet.id}>
-          <div className="personalSetupHeading"><button type="button" aria-expanded={expanded} aria-controls={`personal-editor-${bet.id}`} onClick={() => setExpandedPersonalId(expanded ? null : bet.id)}><span>{owner?.name ?? "Base"} vs {displayRival}<small>{bet.enabled === false ? "Desactivada · no participa" : "Activa"}</small></span><i aria-hidden="true">{expanded ? "⌃" : "⌄"}</i></button><Toggle on={bet.enabled !== false} label={`${bet.enabled === false ? "Activar" : "Desactivar"} Nassau Individual contra ${displayRival}`} onClick={() => {
-            if (bet.enabled === false) runAfterBettingConsent(() => updatePersonalBet(bet.id, { enabled: true, enabledBeforeCategoryOff: undefined }));
-            else updatePersonalBet(bet.id, { enabled: false, enabledBeforeCategoryOff: undefined });
+          <div className="personalSetupHeading"><button type="button" aria-expanded={expanded} aria-disabled={bet.enabled === false} aria-controls={`personal-editor-${bet.id}`} onClick={() => { if (bet.enabled !== false) setExpandedPersonalId(expanded ? null : bet.id); }}><span>{owner?.name ?? "Base"} vs {displayRival}<small>{bet.enabled === false ? "Desactivada · no participa" : "Activa"}</small></span><i aria-hidden="true">{expanded ? "⌃" : "⌄"}</i></button><Toggle on={bet.enabled !== false} disabled={!bettingConsentGranted} label={`${bet.enabled === false ? "Activar" : "Desactivar"} Nassau Individual contra ${displayRival}`} onClick={() => {
+            if (bet.enabled === false) runAfterBettingConsent(() => { updatePersonalBet(bet.id, { enabled: true, enabledBeforeCategoryOff: undefined }); setExpandedPersonalId(bet.id); });
+            else { updatePersonalBet(bet.id, { enabled: false, enabledBeforeCategoryOff: undefined }); if (expanded) setExpandedPersonalId(null); }
           }} /><button type="button" className="remove" aria-label={`Eliminar Nassau Individual contra ${displayRival}`} onClick={() => { setPersonalBets((items) => items.filter((item) => item.id !== bet.id)); if (expanded) setExpandedPersonalId(null); }}>×</button></div>
-          {expanded && <fieldset disabled={!bettingConsentGranted} id={`personal-editor-${bet.id}`} className="personalSetupBody bettingEditorFieldset">
+          {expanded && bet.enabled !== false && <fieldset disabled={!bettingConsentGranted} id={`personal-editor-${bet.id}`} className="personalSetupBody bettingEditorFieldset">
           <p className="muted">Ventaja y presión aplican solo a esta apuesta.</p>
           <div className="grid3">
             <div><label>¿Dónde juega el rival?</label><select data-personal-first value={bet.rivalMode} onFocus={(event) => event.currentTarget.closest<HTMLElement>("[data-personal-editor]")?.scrollIntoView({ behavior: "smooth", block: "center" })} onChange={(e) => {
@@ -1868,12 +1864,12 @@ function GolfBetsApp() {
         const total = manualBetTotal(bet);
         const valid = Math.abs(total) < 0.001;
         return <div data-manual-editor={bet.id} className={`manualBet ${bet.enabled === false ? "betItemDisabled" : ""}`} key={bet.id}>
-          <div className="row between"><input disabled={!bettingConsentGranted} data-manual-first className="manualName" value={bet.name} onChange={(e) => updateManualBet(bet.id, { name: e.target.value })} /><span className="manualBetActions"><Toggle on={bet.enabled !== false} label={`${bet.enabled === false ? "Activar" : "Desactivar"} ${bet.name || "apuesta manual"}`} onClick={() => {
+          <div className="row between"><input disabled={!bettingConsentGranted} data-manual-first className="manualName" value={bet.name} onChange={(e) => updateManualBet(bet.id, { name: e.target.value })} /><span className="manualBetActions"><Toggle on={bet.enabled !== false} disabled={!bettingConsentGranted} label={`${bet.enabled === false ? "Activar" : "Desactivar"} ${bet.name || "apuesta manual"}`} onClick={() => {
             if (bet.enabled === false) runAfterBettingConsent(() => updateManualBet(bet.id, { enabled: true, enabledBeforeCategoryOff: undefined }));
             else updateManualBet(bet.id, { enabled: false, enabledBeforeCategoryOff: undefined });
           }} /><button className="remove" aria-label={`Eliminar ${bet.name || "apuesta manual"}`} onClick={() => setManualBets((bs) => bs.filter((x) => x.id !== bet.id))}>×</button></span></div>
-          <fieldset disabled={!bettingConsentGranted} className="manualGrid bettingEditorFieldset">{players.map((p) => <label key={p.id}><span>{p.name}</span><SignedMoneyInput label={`${bet.name || "apuesta manual"} · ${p.name}`} value={bet.amounts[p.id] ?? 0} onChange={(next) => setManualAmount(bet.id, p.id, next)} /></label>)}</fieldset>
-          <div className={`manualBalance ${valid ? "good" : "bad"}`}>{valid ? "✓ Cierra en $0 y se suma al resultado" : `Falta cuadrar ${money(-total)}`}</div>
+          {bet.enabled !== false && <><fieldset disabled={!bettingConsentGranted} className="manualGrid bettingEditorFieldset">{players.map((p) => <label key={p.id}><span>{p.name}</span><SignedMoneyInput label={`${bet.name || "apuesta manual"} · ${p.name}`} value={bet.amounts[p.id] ?? 0} onChange={(next) => setManualAmount(bet.id, p.id, next)} /></label>)}</fieldset>
+          <div className={`manualBalance ${valid ? "good" : "bad"}`}>{valid ? "✓ Cierra en $0 y se suma al resultado" : `Falta cuadrar ${money(-total)}`}</div></>}
         </div>;
       })}
     </section>;
@@ -2216,8 +2212,6 @@ function GolfBetsApp() {
         <div className="heroDate"><input aria-label="Fecha de la ronda" className="dateInput" type="date" value={roundDate} onChange={(e) => setRoundDate(e.target.value)} /></div>
       </section>
 
-      {!bettingConsentGranted && <section className="card bettingConsentGate"><h2>Registro de apuestas y gastos</h2><p>Antes de activar o crear una apuesta, la app solicitará tu consentimiento expreso con una casilla sin marcar. Puedes leer primero el <a href="/legal/privacy?returnTo=app">Aviso de Privacidad</a>.</p><button type="button" className="secondary" onClick={() => void requestBettingConsent()}>Revisar consentimiento</button></section>}
-
       <section className="card">
         <div className="sectionTitle"><div><h2>1. Campo</h2><p>Elige el campo; Par y Ventaja/SI se conservan por hoyo.</p></div><button className="textButton" onClick={startNewCourse}>+ Campo</button></div>
         <div className="grid2">
@@ -2258,7 +2252,8 @@ function GolfBetsApp() {
       </section>
 
       <section className="card">
-        <div className="sectionTitle"><div><h2>3. Apuestas generales</h2><p>Cada apuesta tiene su propio porcentaje y participantes.</p></div></div>
+        <div className="sectionTitle"><div><h2>3. Apuestas grupales</h2><p>Todas las modalidades del grupo, con su porcentaje y participantes.</p></div></div>
+        {!bettingConsentGranted && <div className="notice compactConsentNotice" role="status">Para activar o registrar apuestas, completa el consentimiento específico desde <button type="button" className="textButton" onClick={() => setTab("account")}>Mi Cuenta</button>. Tus datos anteriores se conservan.</div>}
 
         <SetupBetCard id="rabbits" icon="🐇" title="Conejos" description="Gana hoyos · captura y conserva el conejo" help="rabbits" enabled={bets.rabbits.enabled} locked={!bettingConsentGranted} requestActivation={requestBettingConsent} onEnabledChange={(enabled) => setBets({ ...bets, rabbits: { ...bets.rabbits, enabled } })}><div className="grid3"><MoneyInput label="Valor" value={bets.rabbits.value} onChange={(v) => setBets({ ...bets, rabbits: { ...bets.rabbits, value: v } })} /><HcpPercentInput value={bets.rabbits.hcpPct} onChange={(v) => setBets({ ...bets, rabbits: { ...bets.rabbits, hcpPct: v } })} /><HandicapModeSelect value={bets.rabbits.decimals} onChange={(decimals) => setBets({ ...bets, rabbits: { ...bets.rabbits, decimals } })} /></div><label className="miniLabel">Participan</label><ParticipantChips players={players} selected={bets.rabbits.participantIds} onChange={(ids) => setBets({ ...bets, rabbits: { ...bets.rabbits, participantIds: ids } })} /></SetupBetCard>
 
@@ -2342,34 +2337,35 @@ function GolfBetsApp() {
         <CounterBetConfigPanel kind="camels" config={bets.camels} players={players} requestActivation={requestBettingConsent} locked={!bettingConsentGranted} onChange={camels => setBets({ ...bets, camels })} />
         <CounterBetConfigPanel kind="fish" config={bets.fish} players={players} requestActivation={requestBettingConsent} locked={!bettingConsentGranted} onChange={fish => setBets({ ...bets, fish })} />
         <LobaConfigPanel config={bets.loba} players={players} requestActivation={requestBettingConsent} locked={!bettingConsentGranted} onChange={lobaConfig => setBets({ ...bets, loba: lobaConfig })} />
+        <SupplementalBetsEditor bets={supplementalBets} players={players} onChange={setSupplementalBets} requestActivation={requestBettingConsent} locked={!bettingConsentGranted} />
       </section>
-
-      <SupplementalBetsEditor bets={supplementalBets} players={players} onChange={setSupplementalBets} requestActivation={requestBettingConsent} locked={!bettingConsentGranted} />
 
       <ResultAccordion
         id="setup-manuals"
         title={<SetupModeTitle icon="✍️" title="Apuestas Manuales" description="Importes directos por jugador · la suma debe cerrar en $0" />}
         open={manualSetupOpen}
-        onOpenChange={setManualSetupOpen}
+        disclosureDisabled={!manualBets.some((bet) => bet.enabled !== false) || !bettingConsentGranted}
+        onOpenChange={(open) => { if (manualBets.some((bet) => bet.enabled !== false) && bettingConsentGranted) setManualSetupOpen(open); }}
         className="setupBetsAccordion"
-        headerAction={<span className="resultHeaderActions"><BetHelpButton kind="manual" /><Toggle on={manualBets.some((bet) => bet.enabled !== false)} label={`${manualBets.some((bet) => bet.enabled !== false) ? "Desactivar" : "Activar"} Apuestas Manuales`} onClick={() => {
+        headerAction={<span className="resultHeaderActions"><BetHelpButton kind="manual" /><Toggle on={manualBets.some((bet) => bet.enabled !== false)} disabled={!bettingConsentGranted} label={`${manualBets.some((bet) => bet.enabled !== false) ? "Desactivar" : "Activar"} Apuestas Manuales`} onClick={() => {
           const enabled = manualBets.some((bet) => bet.enabled !== false);
           if (enabled) setManualModeEnabled(false); else runAfterBettingConsent(() => setManualModeEnabled(true));
         }} /></span>}
-      ><div className="setupModeTools"><button type="button" className="textButton" onClick={() => runAfterBettingConsent(newManualBet)}>+ Apuesta</button></div>{renderManualBetsEditor(true)}</ResultAccordion>
+      >{manualBets.some((bet) => bet.enabled !== false) && <><div className="setupModeTools"><button type="button" className="textButton" onClick={() => runAfterBettingConsent(newManualBet)}>+ Apuesta</button></div>{renderManualBetsEditor(true)}</>}</ResultAccordion>
 
       <ResultAccordion id="setup-personals" title={<SetupModeTitle icon="↔" title="Personales" description="Nassau, Dollar a Stroke y Presiones individuales" />} open={personalSetupOpen} onOpenChange={setPersonalSetupOpen} className="setupBetsAccordion personalSetupGroup">
         <ResultAccordion
           id="setup-personal-nassau"
           title={<SetupModeTitle icon="🏌️" title="Nassau Individual" description="Jugador vs jugador · ida, vuelta y total" />}
           open={nassauSetupOpen}
-          onOpenChange={setNassauSetupOpen}
+          disclosureDisabled={!personalBets.some((bet) => bet.enabled !== false) || !bettingConsentGranted}
+          onOpenChange={(open) => { if (personalBets.some((bet) => bet.enabled !== false) && bettingConsentGranted) setNassauSetupOpen(open); }}
           className="setupBetsAccordion nestedSetupAccordion"
-          headerAction={<span className="resultHeaderActions"><BetHelpButton kind="personal" /><Toggle on={personalBets.some((bet) => bet.enabled !== false)} label={`${personalBets.some((bet) => bet.enabled !== false) ? "Desactivar" : "Activar"} Nassau Individual`} onClick={() => {
+          headerAction={<span className="resultHeaderActions"><BetHelpButton kind="personal" /><Toggle on={personalBets.some((bet) => bet.enabled !== false)} disabled={!bettingConsentGranted} label={`${personalBets.some((bet) => bet.enabled !== false) ? "Desactivar" : "Activar"} Nassau Individual`} onClick={() => {
             const enabled = personalBets.some((bet) => bet.enabled !== false);
             if (enabled) setPersonalModeEnabled(false); else runAfterBettingConsent(() => { setPersonalModeEnabled(true); setNassauSetupOpen(true); });
           }} /></span>}
-        ><div className="setupModeTools"><button type="button" className="textButton" onClick={() => runAfterBettingConsent(() => { newPersonalBet(); setNassauSetupOpen(true); })}>+ Nassau Individual</button></div>{supplementalBets.some((bet) => bet.type === "individual_nassau") && <div className="notice">Se conserva sin reinterpretar una Nassau heredada entre jugadores distintos del principal. Sigue calculándose con su ID, pareja, ventaja y monto originales; no se convirtió automáticamente.</div>}{renderPersonalBetsEditor()}</ResultAccordion>
+        >{personalBets.some((bet) => bet.enabled !== false) && <><div className="setupModeTools"><button type="button" className="textButton" onClick={() => runAfterBettingConsent(() => { newPersonalBet(); setNassauSetupOpen(true); })}>+ Nassau Individual</button></div>{supplementalBets.some((bet) => bet.type === "individual_nassau") && <div className="notice">Se conserva sin reinterpretar una Nassau heredada entre jugadores distintos del principal. Sigue calculándose con su ID, pareja, ventaja y monto originales; no se convirtió automáticamente.</div>}{renderPersonalBetsEditor()}</>}</ResultAccordion>
         <SupplementalBetsEditor bets={supplementalBets} players={players} onChange={setSupplementalBets} requestActivation={requestBettingConsent} locked={!bettingConsentGranted} types={["dollar_stroke", "individual_pressures"]} />
       </ResultAccordion>
 
@@ -2473,7 +2469,7 @@ function GolfBetsApp() {
       {scoreCaptureComplete && renderMonkeyLive()}
 
       <div className="roundActions"><button className="secondary big" disabled={currentIndex === 0 || holeSummary.length > 0} onClick={() => goToHoleIndex(currentIndex - 1)}>← Anterior</button><button className="primary big" disabled={holeSummary.length > 0} onPointerDown={commitFocusedNumericCapture} onClick={requestSaveAndAdvance}>{currentIndex < order.length - 1 ? "Guardar y siguiente hoyo →" : "Terminar ronda"}</button></div>
-      {holeSummary.length > 0 && <div className="holeSummaryBackdrop" onClick={(event) => event.stopPropagation()}><div className={`holeSummary ${holeSummaryPaused ? "paused" : ""}`} role="dialog" aria-modal="true" aria-label={`Resumen del hoyo ${holeNumber}`} onPointerDown={(event) => { holeSummaryPointerStart.current = { x: event.clientX, y: event.clientY }; }} onClick={handleHoleSummaryTap}><div className="holeSummaryContent" role="status" aria-live="polite"><h2>{holeSummary[0]} ✓</h2><p className="holeSummaryScores">{holeSummary.slice(1, players.length + 1).map((line, index) => <span key={index}>{line}</span>)}</p><div className="holeSummaryBets">{holeSummary.slice(players.length + 1).map((line, index) => <p key={index}>{line}</p>)}</div><small className="holeSummaryHoldHint">{holeSummaryPaused ? "Pausado · toca una zona libre para reanudar" : "Toca una zona libre para pausar"}</small></div><div className="holeSummaryTimer" aria-hidden="true" /></div></div>}
+      {holeSummary.length > 0 && <div className="holeSummaryBackdrop" onClick={(event) => event.stopPropagation()}><div className={`holeSummary ${holeSummaryPaused ? "paused" : ""}`} role="dialog" aria-modal="true" aria-label={`Resumen del hoyo ${holeNumber}`} onPointerDown={(event) => { holeSummaryPointerStart.current = { x: event.clientX, y: event.clientY }; }} onClick={handleHoleSummaryTap}><button type="button" className="holeSummaryClose" aria-label="Cerrar resumen y avanzar" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); holeSummaryPointerStart.current = null; holeSummarySession.current?.finish(); }}>×</button><div className="holeSummaryContent" role="status" aria-live="polite"><h2>{holeSummary[0]} ✓</h2><p className="holeSummaryScores">{holeSummary.slice(1, players.length + 1).map((line, index) => <span key={index}>{line}</span>)}</p><div className="holeSummaryBets">{holeSummary.slice(players.length + 1).map((line, index) => <p key={index}>{line}</p>)}</div><small className="holeSummaryHoldHint">{holeSummaryPaused ? "Pausado · toca una zona libre para reanudar" : "Toca una zona libre para pausar"}</small></div><div className="holeSummaryTimer" aria-hidden="true" /></div></div>}
     </>}
 
     {tab === "standings" && <>

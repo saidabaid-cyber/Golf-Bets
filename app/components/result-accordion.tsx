@@ -11,6 +11,7 @@ type ResultAccordionProps = {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   className?: string;
+  disclosureDisabled?: boolean;
 };
 
 export function ResultAccordion({
@@ -22,6 +23,7 @@ export function ResultAccordion({
   open: controlledOpen,
   onOpenChange,
   className = "",
+  disclosureDisabled = false,
 }: ResultAccordionProps) {
   const [uncontrolledOpen, setUncontrolledOpen] = useState(defaultOpen);
   const open = controlledOpen ?? uncontrolledOpen;
@@ -36,8 +38,9 @@ export function ResultAccordion({
       <button
         type="button"
         aria-expanded={open}
+        aria-disabled={disclosureDisabled}
         aria-controls={contentId}
-        onClick={() => setOpen(!open)}
+        onClick={() => { if (!disclosureDisabled) setOpen(!open); }}
       >
         <span>{title}</span>
         <span className="resultAccordionChevron" aria-hidden="true">{open ? "⌃" : "⌄"}</span>

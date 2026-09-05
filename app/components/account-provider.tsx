@@ -8,6 +8,7 @@ import {
   ACCOUNT_STORAGE_KEYS,
   BETTING_DATA_CONSENT_TYPE,
   authErrorMessage,
+  bettingConsentPromptStorageKey,
   buildLegalAcceptances,
   clearLegalAcceptancesForUser,
   hasCurrentLegalConsent,
@@ -229,11 +230,12 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
   </main>;
 }
 
-function ConsentScreen({ onAccept, onBack }: { onAccept: () => Promise<void>; onBack: () => Promise<void> }) {
+function ConsentScreen({ onAccept, onBack }: { onAccept: (includeBettingConsent: boolean) => Promise<void>; onBack: () => Promise<void> }) {
   const [terms, setTerms] = useState(false);
   const [privacy, setPrivacy] = useState(false);
   const [rules, setRules] = useState(false);
   const [age, setAge] = useState(false);
+  const [betting, setBetting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   return <main className="consentScreen"><section className="consentCard">
@@ -247,8 +249,9 @@ function ConsentScreen({ onAccept, onBack }: { onAccept: () => Promise<void>; on
     <label className="consentCheck"><input type="checkbox" checked={privacy} onChange={(event) => setPrivacy(event.target.checked)} /><span>He leído y acepto el <Link href="/legal/privacy?returnTo=onboarding">Aviso de Privacidad</Link>.</span></label>
     <label className="consentCheck"><input type="checkbox" checked={rules} onChange={(event) => setRules(event.target.checked)} /><span>Entiendo el alcance del Árbitro de Reglas y acepto utilizar sus resoluciones como referencia acordada entre los participantes cuando corresponda.</span></label>
     <label className="consentCheck"><input type="checkbox" checked={age} onChange={(event) => setAge(event.target.checked)} /><span>Confirmo que tengo 18 años o más.</span></label>
+    <label className="consentCheck expressConsentCheck"><input type="checkbox" checked={betting} onChange={(event) => setBetting(event.target.checked)} /><span>Consiento expresamente el tratamiento de los datos relativos a apuestas registradas, resultados y gastos, conforme al <Link href="/legal/privacy?returnTo=onboarding">Aviso de Privacidad</Link>. Esta autorización es específica y opcional para continuar a funciones que no registran esos datos.</span></label>
     {error && <p role="alert">{error}</p>}
-    <button className="primary big" disabled={!terms || !privacy || !rules || !age || busy} onClick={async () => { setBusy(true); setError(""); try { await onAccept(); } catch { setError("No pudimos guardar tu aceptación en la nube. Revisa tu conexión y vuelve a intentar."); } finally { setBusy(false); } }}>{busy ? "Guardando…" : "Continuar"}</button>
+    <button className="primary big" disabled={!terms || !privacy || !rules || !age || busy} onClick={async () => { setBusy(true); setError(""); try { await onAccept(betting); } catch { setError("No pudimos guardar tu aceptación en este dispositivo. Libera espacio y vuelve a intentar."); } finally { setBusy(false); } }}>{busy ? "Guardando…" : "Continuar"}</button>
     <button className="textButton consentBack" disabled={busy} onClick={onBack}>← Volver al acceso</button>
   </section></main>;
 }
@@ -366,6 +369,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       locale: rulesAcceptance.locale,
     }, { onConflict: "user_id,document_version", ignoreDuplicates: true }));
     await requireCloudWrites(writes);
+    const confirmation = await supabase.from("legal_acceptances").select("type,version").eq("user_id", userId);
+    if (confirmation.error) throw confirmation.error;
+    const confirmed = new Set((confirmation.data || []).map((item) => `${item.type}:${item.version}`));
+    if (current.some((item) => !confirmed.has(`${item.type}:${item.documentVersion}`))) throw new Error("legal_acceptance_not_confirmed");
     if (activeUserId.current !== userId) throw new Error("Session changed");
   }, []);
   useEffect(() => {
@@ -557,10 +564,15 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
 
   const closeBettingConsent = useCallback((accepted: boolean) => {
     const pending = bettingConsentRequest.current;
+    const pendingUserId = pending?.userId || identity?.userId || activeUserId.current;
+    if (!accepted && pendingUserId) {
+      try { localStorage.setItem(bettingConsentPromptStorageKey(pendingUserId), "seen"); }
+      catch { /* This marker is not consent and must never prevent dismissal. */ }
+    }
     bettingConsentRequest.current = null;
     setBettingConsentOpen(false);
     pending?.resolve(accepted);
-  }, []);
+  }, [identity?.userId]);
 
   const requestBettingConsent = useCallback(() => {
     if (!identity) return Promise.resolve(false);
@@ -586,6 +598,13 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   }, [identity?.userId, closeBettingConsent]);
 
   useEffect(() => {
+    if (!identity || !currentConsent || !bettingConsentResolved || bettingConsentGranted || showMigration) return;
+    if (identity.mode === "authenticated" && (!profileChecked || profileSetupRequired)) return;
+    if (localStorage.getItem(bettingConsentPromptStorageKey(identity.userId)) === "seen") return;
+    setBettingConsentOpen(true);
+  }, [identity, currentConsent, bettingConsentResolved, bettingConsentGranted, showMigration, profileChecked, profileSetupRequired]);
+
+  useEffect(() => {
     if (identity?.mode !== "authenticated" || !identity.accessToken || !currentConsent) return;
     const saved = acceptances.filter((item) => item.userId === identity.userId);
     const pending = readPendingLegalSync(localStorage, identity.userId);
@@ -608,17 +627,26 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     return () => { mounted = false; };
   }, [identity?.mode, identity?.userId, identity?.accessToken, currentConsent, acceptances, legalRetryRevision, flushLegalAcceptances, issueWithMessage, setCloudIssue]);
 
-  async function acceptConsent() {
+  async function acceptConsent(includeBettingConsent: boolean) {
     if (!identity) return;
     const next = buildLegalAcceptances(identity.userId, new Date().toISOString());
-    const merged = mergeLegalAcceptances(acceptances, next);
+    let merged = mergeLegalAcceptances(acceptances, next);
     localStorage.setItem(ACCOUNT_STORAGE_KEYS.acceptances, JSON.stringify(merged));
+    if (includeBettingConsent) {
+      merged = persistBettingDataConsent(localStorage, identity.userId, identity.mode === "authenticated" ? "pending" : "local_only").acceptances;
+    } else {
+      localStorage.setItem(bettingConsentPromptStorageKey(identity.userId), "seen");
+    }
     setAcceptances(merged);
     if (identity.mode === "authenticated") {
-      queueLegalSync(localStorage, identity.userId, next);
+      const accountAcceptances = merged.filter((item) => item.userId === identity.userId);
+      queueLegalSync(localStorage, identity.userId, accountAcceptances);
       try {
-        await flushLegalAcceptances(identity.userId, next);
+        await flushLegalAcceptances(identity.userId, accountAcceptances);
         clearPendingLegalSync(localStorage, identity.userId);
+        const synced = markLegalAcceptancesSynced(merged, accountAcceptances);
+        localStorage.setItem(ACCOUNT_STORAGE_KEYS.acceptances, JSON.stringify(synced));
+        setAcceptances(synced);
         setCloudIssue("legal", null);
       } catch (error) {
         markLegalSyncFailed(localStorage, identity.userId, error);
@@ -635,6 +663,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       identity.mode === "authenticated" ? "pending" : "local_only",
     );
     setAcceptances(persisted.acceptances);
+    localStorage.removeItem(bettingConsentPromptStorageKey(identity.userId));
     if (identity.mode === "authenticated") {
       const pending = queueLegalSync(localStorage, identity.userId, [persisted.acceptance]);
       try {
@@ -804,6 +833,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     setRawCloudStatus("pending");
   };
   const cloudIssues = Object.values(cloudIssuesByDomain).filter((issue): issue is CloudIssue => Boolean(issue)).sort((left, right) => cloudIssuePriority(left) - cloudIssuePriority(right));
+  const blockingCloudIssues = cloudIssues.filter((issue) => issue.kind === "session_expired");
   const effectiveCloudStatus: AccountContextValue["cloudStatus"] = cloudIssues.some((issue) => issue.kind === "offline") ? "offline" : cloudIssues.some((issue) => issue.kind === "conflict") ? "pending" : cloudIssues.length ? "error" : cloudStatus;
   const context = identity ? ({ identity, updateProfile, logout, finishAccountDeletion, openAccess: () => setAccessRequested(true), acceptances, bettingConsentGranted, bettingConsentResolved, requestBettingConsent, cloudLinked, cloudStatus: effectiveCloudStatus, setCloudStatus, lastCloudSync, cloudIssues, applyCloudPreferences,
     reportCloudSyncError,
@@ -844,11 +874,11 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   }
   if (identity.mode === "authenticated" && !profileChecked) return <main className="accessScreen"><div className="accessLoading">Preparando tu perfil…</div></main>;
   if (identity.mode === "authenticated" && profileSetupRequired) return <>{accountCloudError && <div role="alert" className="notice bad">{accountCloudError}</div>}<ProfileSetupScreen identity={identity} onSave={updateProfile} onBack={logout} /></>;
+  if (bettingConsentOpen) return <AccountContext.Provider value={context!}><BettingConsentDialog onDismiss={() => closeBettingConsent(false)} onAccept={acceptBettingConsent} /></AccountContext.Provider>;
 
   return <AccountContext.Provider value={context!}>
-    {cloudIssues.map((issue) => <div className={`notice ${issue.kind === "offline" || issue.kind === "conflict" ? "" : "bad"}`} role="alert" key={issue.domain}>{issue.message}{issue.kind === "session_expired" ? <button onClick={() => setAccessRequested(true)}>Volver a iniciar sesión</button> : issue.retryable ? <button onClick={() => void retryAllCloud()}>Reintentar conexión</button> : null}</div>)}
+    {blockingCloudIssues.map((issue) => <div className="notice bad" role="alert" key={issue.domain}>{issue.message}<button onClick={() => setAccessRequested(true)}>Volver a iniciar sesión</button></div>)}
     <Fragment key={identity.userId}>{children}</Fragment>
     {migrationDialog}
-    {bettingConsentOpen && <BettingConsentDialog onDismiss={() => closeBettingConsent(false)} onAccept={acceptBettingConsent} />}
   </AccountContext.Provider>;
 }

@@ -2,6 +2,7 @@ import { playingHandicap, strokeAllowanceForHole, personalRivalKey } from "./eng
 import type { calculatePersonalBets } from "./engine";
 import { migratePersonalNassau } from "./personal-nassau";
 import { migrateSupplementalNassau } from "./nassau-migration";
+import { initialBets } from "./new-round-bets";
 import type { Course, HoleScore, Player, RoundSnapshot } from "./types";
 import type { FrequentPlayer } from "./types";
 
@@ -180,7 +181,14 @@ export function hasRoundProgress(draft: any) {
     const values = recordValue(row);
     return values ? Object.values(values).some((score) => typeof score === "number") : false;
   });
-  return Boolean(namedPlayers || enteredScores || draft.currentIndex > 0);
+  const playerIds = Array.isArray(draft.players)
+    ? draft.players.filter((player: Player) => typeof player?.id === "string").map((player: Player) => player.id)
+    : [];
+  const configuredGroupBet = Boolean(recordValue(draft.bets))
+    && JSON.stringify(draft.bets) !== JSON.stringify(initialBets(playerIds));
+  const configuredInstance = [draft.personalBets, draft.supplementalBets, draft.manualBets]
+    .some((items) => Array.isArray(items) && items.length > 0);
+  return Boolean(namedPlayers || enteredScores || draft.currentIndex > 0 || configuredGroupBet || configuredInstance);
 }
 
 export function migrateDraftPressures(draft: any) {

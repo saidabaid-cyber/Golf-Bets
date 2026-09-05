@@ -20,7 +20,7 @@ export function personalHoleStatus(result: PersonalResult, ownerName: string, ri
 
 export function personalHoleSummary(result: PersonalResult, ownerName: string, rivalName: string, hole: number) {
   const status = personalHoleStatus(result, ownerName, rivalName, hole);
-  return status.length ? `PERSONAL · ${ownerName} vs ${rivalName}\n${status.join(" · ")}` : "";
+  return status.length ? `Nassau individual · ${ownerName} vs ${rivalName}\n${status.join(" · ")}` : "";
 }
 
 export function monkeyHoleSummary(players: Array<{ id: string; name: string }>, points: Record<string, number>) {

@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { setRememberedCategoryEnabled, setSupplementalCategoryEnabled } from "../lib/bet-activation";
 import { initialBets } from "../lib/new-round-bets";
-import { buildPersonalOpponentHistory, groupCurrentPersonalResults } from "../lib/personal-opponents";
+import { buildPersonalOpponentHistory, buildPersonalOpponentResults, groupCurrentPersonalResults } from "../lib/personal-opponents";
 import { persistPendingRoundReview } from "../lib/round-review";
 import { saveRoundHistoryLocalFirst } from "../lib/round-history-save";
 import { normalizeRoundDraft, readStoredJson, STORAGE_KEYS } from "../lib/round-utils";
@@ -149,6 +149,11 @@ test("Dollar a Stroke respeta 70 vs 95, cinco golpes pactados para B y liquida e
   assert.match(result.lines.join(" "), /Jugador A 70 · Jugador B 90/);
   assert.equal(result.balances["owner-a"], 200);
   assert.equal(result.balances["opponent-b"], -200);
+  const [detail] = buildPersonalOpponentResults({ ownerId: "owner-a", players, course, scores, putts: {}, order, canonicalResults: [], personalBets: [], supplementalBets: [bet] });
+  assert.equal(detail.status, "final");
+  assert.equal(detail.components?.[0].amount, 200);
+  assert.match(detail.detailLines?.join(" ") || "", /Scores considerados \(18 hoyos\): Jugador A 70 · Jugador B 95/);
+  assert.match(detail.detailLines?.join(" ") || "", /Resultado ajustado: Jugador A 70 · Jugador B 90/);
 });
 
 test("Personales agrupa +200−50+100 = +250 por identidad estable y una edición sustituye sin duplicar", () => {

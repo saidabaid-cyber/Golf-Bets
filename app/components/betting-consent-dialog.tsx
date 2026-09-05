@@ -30,12 +30,12 @@ export function BettingConsentDialog({ onAccept, onDismiss }: {
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
   }
 
-  return <div className="modalBackdrop bettingConsentBackdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onDismiss(); }}>
-    <section ref={dialogRef} className="confirmDialog bettingConsentDialog" role="dialog" aria-modal="true" aria-labelledby="betting-consent-title" aria-describedby="betting-consent-description" onKeyDown={handleKeyDown}>
+  return <main className="consentScreen bettingConsentAccess">
+    <section ref={dialogRef} className="consentCard bettingConsentDialog" role="dialog" aria-modal="true" aria-labelledby="betting-consent-title" aria-describedby="betting-consent-description" onKeyDown={handleKeyDown}>
       <button type="button" className="modalClose" aria-label="Cerrar consentimiento" disabled={busy} onClick={onDismiss}>×</button>
       <div className="eyebrow">CONSENTIMIENTO EXPRESO</div>
       <h2 id="betting-consent-title">Apuestas, resultados y gastos</h2>
-      <p id="betting-consent-description">Para registrar estos datos necesitamos tu autorización específica. Puedes seguir usando las funciones que no dependan de este tratamiento si cierras esta ventana.</p>
+       <p id="betting-consent-description">Para registrar estos datos necesitamos tu autorización específica. Puedes seguir usando las funciones que no dependan de este tratamiento si eliges “Ahora no”.</p>
       <label className="consentCheck bettingConsentCheck">
         <input ref={checkboxRef} type="checkbox" checked={checked} onChange={(event) => setChecked(event.target.checked)} />
         <span>Consiento expresamente el tratamiento de los datos relativos a apuestas registradas, resultados y gastos, conforme al <Link href="/legal/privacy?returnTo=app">Aviso de Privacidad</Link>.</span>
@@ -50,6 +50,6 @@ export function BettingConsentDialog({ onAccept, onDismiss }: {
           finally { setBusy(false); }
         }}>{busy ? "Guardando…" : "Aceptar y continuar"}</button>
       </div>
-    </section>
-  </div>;
+     </section>
+   </main>;
 }

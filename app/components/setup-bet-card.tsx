@@ -19,19 +19,24 @@ export function SetupBetCard({ id, icon, title, description, help, enabled, lock
   const [open, setOpen] = useState(false);
   const activationPending = useRef(false);
   const toggle = () => {
-    if (enabled) { onEnabledChange(false); return; }
-    setOpen(true);
-    if (!requestActivation) { onEnabledChange(true); return; }
+    if (locked) return;
+    if (enabled) { setOpen(false); onEnabledChange(false); return; }
+    if (!requestActivation) { onEnabledChange(true); setOpen(true); return; }
     if (activationPending.current) return;
     activationPending.current = true;
-    void requestActivation().then((accepted) => { if (accepted) onEnabledChange(true); }).finally(() => { activationPending.current = false; });
+    void requestActivation().then((accepted) => {
+      if (!accepted) return;
+      onEnabledChange(true);
+      setOpen(true);
+    }).finally(() => { activationPending.current = false; });
   };
   return <ResultAccordion
     id={`setup-${id}`}
     title={<span className="setupModeTitle"><b>{icon} {title}</b><small>{description}</small></span>}
     open={open}
-    onOpenChange={setOpen}
+    onOpenChange={(next) => { if (enabled && !locked) setOpen(next); }}
+    disclosureDisabled={!enabled || locked}
     className="setupBetsAccordion setupBetCard"
-    headerAction={<span className="resultHeaderActions"><BetHelpButton kind={help} /><button type="button" className={`switch ${enabled ? "on" : ""}`} role="switch" aria-checked={enabled} aria-label={`${enabled ? "Desactivar" : "Activar"} ${title}`} onClick={(event) => { event.stopPropagation(); toggle(); }}><span /></button></span>}
-  >{enabled && !locked ? children : <div className="empty">{enabled ? "Verificando el consentimiento guardado…" : "Activa la apuesta para configurar sus datos."}</div>}</ResultAccordion>;
+    headerAction={<span className="resultHeaderActions"><BetHelpButton kind={help} /><button type="button" className={`switch ${enabled ? "on" : ""}`} role="switch" aria-checked={enabled} aria-label={`${enabled ? "Desactivar" : "Activar"} ${title}`} title={locked ? "Completa el consentimiento específico desde Mi Cuenta" : undefined} disabled={locked} onClick={(event) => { event.stopPropagation(); toggle(); }}><span /></button></span>}
+  >{enabled && !locked ? children : null}</ResultAccordion>;
 }

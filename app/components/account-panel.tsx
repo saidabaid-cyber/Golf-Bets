@@ -7,7 +7,7 @@ import { BETTING_DATA_CONSENT_TYPE, profileHandicapInput, profileHandicapLabel, 
 import { useBackyardAccount } from "./account-provider";
 
 export function AccountPanel({ highContrast, onHighContrastChange }: { highContrast: boolean; onHighContrastChange: (value: boolean) => void }) {
-  const { identity, updateProfile, logout, finishAccountDeletion, openAccess, acceptances, cloudLinked, cloudStatus, requestCloudLink, lastCloudSync, cloudIssues, retryCloudSync } = useBackyardAccount();
+  const { identity, updateProfile, logout, finishAccountDeletion, openAccess, acceptances, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, requestCloudLink, lastCloudSync, cloudIssues, retryCloudSync } = useBackyardAccount();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(identity.displayName);
   const [handicap, setHandicap] = useState(profileHandicapInput(identity.defaultHandicap));
@@ -81,6 +81,7 @@ export function AccountPanel({ highContrast, onHighContrastChange }: { highContr
       <div><span>Edad 18+</span><b>{acceptance("age_confirmation") ? "Confirmada" : "Pendiente"}</b></div>
       <div><span>Datos de apuestas, resultados y gastos</span><b>{bettingAcceptanceLabel}</b></div>
     </div></section>
+    {!bettingConsentGranted && <section className="card"><h2>Funciones de apuestas</h2><p className="muted">Para activar o registrar apuestas, resultados y gastos necesitas otorgar el consentimiento específico. Las demás funciones y tus datos anteriores siguen disponibles.</p><button type="button" className="secondary" onClick={() => void requestBettingConsent()}>Revisar consentimiento específico</button></section>}
 
     <section className="card"><h2>Métodos de acceso</h2>{identity.mode === "guest" ? <p className="muted">Invitado local · sin proveedor vinculado</p> : <div className="accessMethodList">{["google", "email"].map((provider) => <span key={provider}>{provider === "google" ? "Google" : "Correo"}<b>{identity.providers.includes(provider) || (provider === "email" && Boolean(identity.email)) ? "✓" : "—"}</b></span>)}</div>}<p className="hint">Tu cuenta conserva el mismo perfil tanto con Google como con código por correo.</p></section>
 

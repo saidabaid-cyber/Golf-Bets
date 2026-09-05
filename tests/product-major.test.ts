@@ -138,10 +138,11 @@ test("grupos guardados se cargan por nombre y se administran desde Armar grupos"
   assert.match(page, /Esto eliminará únicamente este grupo\. No afectará jugadores ni rondas anteriores\./);
 });
 
-test("resumen del hoyo usa diez segundos, pausa y gate contra doble avance sin X", () => {
+test("resumen del hoyo usa diez segundos, pausa y X conectada al avance único", () => {
   assert.match(page, /createHoleSummarySession/);
   assert.match(page, /toggleHoleSummaryPause/);
-  assert.doesNotMatch(page, /Cerrar resumen y avanzar|holeSummaryClose/);
+  assert.match(page, /aria-label="Cerrar resumen y avanzar"/);
+  assert.match(page, /holeSummarySession\.current\?\.finish\(\)/);
   assert.match(page, /Pausado · toca una zona libre para reanudar/);
   assert.match(page, /clearTimeout/);
 });

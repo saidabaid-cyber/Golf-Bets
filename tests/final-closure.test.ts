@@ -24,7 +24,7 @@ test("resumen post-hoyo reutiliza Personales guardadas y presenta Match y Medal 
   const partialScores = { 1: realScores[1] };
   const result = calculatePersonalBets([realPersonal(realCases[0])], "said", realPlayers, realCourse, partialScores, realOrder).results[0];
   const summary = personalHoleSummary(result, "Said", "Carlos", 1);
-  assert.match(summary, /^PERSONAL · Said vs Carlos\n/);
+  assert.match(summary, /^Nassau individual · Said vs Carlos\n/);
   assert.match(summary, /Match:/);
   assert.match(summary, /Medal:/);
   const page = read("app/page.tsx");

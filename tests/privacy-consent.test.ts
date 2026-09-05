@@ -6,6 +6,7 @@ import {
   ACCOUNT_STORAGE_KEYS,
   BETTING_DATA_CONSENT_TYPE,
   BETTING_DATA_CONSENT_VERSION,
+  bettingConsentPromptStorageKey,
   buildLegalAcceptances,
   hasCurrentBettingDataConsent,
   markLegalAcceptancesSynced,
@@ -38,6 +39,13 @@ test("una aceptación antigua o genérica no equivale al consentimiento expreso"
   const collision = { ...generic[0], type: "privacy" as const, documentVersion: "2026-09-02-v2" };
   assert.equal(hasCurrentBettingDataConsent([...generic, collision], "guest"), false);
   assert.notEqual(BETTING_DATA_CONSENT_VERSION, collision.documentVersion);
+});
+
+test("haber visto la actualización de acceso no fabrica consentimiento", () => {
+  const storage = new MemoryStorage();
+  storage.setItem(bettingConsentPromptStorageKey("account-a"), "seen");
+  assert.equal(hasCurrentBettingDataConsent(parseLegalAcceptances(storage.getItem(ACCOUNT_STORAGE_KEYS.acceptances)), "account-a"), false);
+  assert.match(bettingConsentPromptStorageKey("account-a"), new RegExp(BETTING_DATA_CONSENT_VERSION.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
 test("consentimiento invitado se persiste, se verifica al recargar y no se atribuye a otra cuenta", () => {

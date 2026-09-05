@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { buildHoleSummary, ensureHoleScoresAtPar, hasRoundProgress, historicalGolfStats, mergeCoursesPreservingEdits, migrateDraftPressures, normalizeRoundDraft, privateLeaderboard, pushUndoState, readStoredJson, roundSnapshotToCsv, upsertFrequentPlayers } from "../lib/round-utils";
+import { initialBets } from "../lib/new-round-bets";
 import type { Course, HoleScore, RoundSnapshot } from "../lib/types";
 
 const original: Course = {
@@ -34,6 +35,10 @@ test("draft progress distinguishes an empty new round from a resumable round", (
   assert.equal(hasRoundProgress({ players: [], scores: {}, currentIndex: 0 }), false);
   assert.equal(hasRoundProgress({ players: [{ id: "a", name: "Said", handicap: null }], scores: {}, currentIndex: 0 }), true);
   assert.equal(hasRoundProgress({ players: [], scores: { 1: { a: 4 } }, currentIndex: 0 }), true);
+  assert.equal(hasRoundProgress({ players: [], bets: initialBets([]), scores: {}, currentIndex: 0 }), false);
+  assert.equal(hasRoundProgress({ players: [], bets: { ...initialBets([]), skins: { ...initialBets([]).skins, enabled: true } }, scores: {}, currentIndex: 0 }), true);
+  assert.equal(hasRoundProgress({ players: [], bets: { ...initialBets([]), loba: { ...initialBets([]).loba, value: 50 } }, scores: {}, currentIndex: 0 }), true);
+  assert.equal(hasRoundProgress({ players: [], bets: initialBets([]), supplementalBets: [{ id: "saved-disabled", type: "dollar_stroke", enabled: false }], scores: {}, currentIndex: 0 }), true);
 });
 
 test("cada hoyo abierto materializa la sugerencia visual de Par sin sobrescribir capturas", () => {
