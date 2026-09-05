@@ -122,6 +122,25 @@ test("Chicago uses configurable quota/points and settles every pair", () => {
   assertZero(result);
 });
 
+test("Chicago aplica el HCP % a la cuota y una ronda antigua sin porcentaje conserva 100%", () => {
+  const selected: Player[] = [
+    { id: "a", name: "Jugador A", handicap: 10 },
+    { id: "b", name: "Jugador B", handicap: 0 },
+  ];
+  const base = createSupplementalBet("chicago", selected, "chicago-hcp");
+  const scoreRows = { 1: { a: 4, b: 4 } };
+  const hundred = calculate([{ ...base, hcpPct: 100 } as SupplementalBet], selected, scoreRows, [1]);
+  const eighty = calculate([{ ...base, hcpPct: 80 } as SupplementalBet], selected, scoreRows, [1]);
+  const legacy = structuredClone(base) as SupplementalBet;
+  Reflect.deleteProperty(legacy, "hcpPct");
+  const historical = calculate([legacy], selected, scoreRows, [1]);
+  assert.deepEqual(hundred.balances, { a: 100, b: -100 });
+  assert.deepEqual(eighty.balances, { a: 80, b: -80 });
+  assert.deepEqual(historical.balances, hundred.balances);
+  assertZero(hundred);
+  assertZero(eighty);
+});
+
 test("Mínimo de Putts splits the loser-funded pot and all-tie pays nothing", () => {
   const selected = players.slice(0, 3);
   const bet = { ...createSupplementalBet("minimum_putts", selected, "putts"), holes: 9 } as SupplementalBet;

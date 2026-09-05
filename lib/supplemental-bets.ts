@@ -448,12 +448,13 @@ function calculateChicago(bet: ChicagoBet, players: Player[], course: Course, sc
   const missingHandicapPlayerIds = playersMissingRoundHandicap(participants).map((player) => player.id);
   const complete = enabled(bet) && participants.length >= 2 && !missingHandicapPlayerIds.length && completeForPlayers(order, scores, participants.map((player) => player.id));
   if (!complete) return { betId: bet.id, type: bet.type, label: SUPPLEMENTAL_BET_LABELS[bet.type], complete: false, balances, lines: [], missingHandicapPlayerIds };
+  const hcpPct = Number.isFinite(bet.hcpPct) ? Math.min(100, Math.max(0, bet.hcpPct as number)) : 100;
   const chicagoBalances = Object.fromEntries(participants.map((player) => {
     const points = order.reduce((total, holeNumber) => {
       const hole = course.holes.find((candidate) => candidate.number === holeNumber)!;
       return total + chicagoPoints(scores[holeNumber][player.id] as number, hole.par, bet);
     }, 0);
-    const quota = bet.quotaBase - player.handicap!;
+    const quota = bet.quotaBase - (player.handicap! * hcpPct) / 100;
     return [player.id, { points, quota, balance: points - quota }];
   })) as Record<string, { points: number; quota: number; balance: number }>;
   for (const [first, second] of pairwise(participants)) {
@@ -580,7 +581,7 @@ export function createSupplementalBet(type: SupplementalBet["type"], players: Pl
     case "dollar_stroke": return { id, type, enabled: true, ...headToHead, valuePerStroke: 10 };
     case "individual_pressures": return { id, type, enabled: true, participantIds: ids, value: 100, hcpPct: 100, decimals: "half_up", carryEnabled: true, matchPlayEnabled: false };
     case "team_pressures": return { id, type, enabled: true, participantIds: ids.slice(0, ids.length === 3 ? 3 : 4), abandonedPlayerIds: [], teamA: ids.slice(0, 2), metric: "low_high", virtualMode: ids.length === 3 ? "mudo" : "standard", value: 100, hcpPct: 100, decimals: "half_up", carryEnabled: true, abandonedMaxScore: 9 };
-    case "chicago": return { id, type, enabled: true, participantIds: ids, quotaBase: 39, valuePerPoint: 10, points: { birdieOrBetter: 4, par: 2, bogey: 1, doubleBogeyOrWorse: 0 } };
+    case "chicago": return { id, type, enabled: true, participantIds: ids, quotaBase: 39, hcpPct: 100, valuePerPoint: 10, points: { birdieOrBetter: 4, par: 2, bogey: 1, doubleBogeyOrWorse: 0 } };
     case "vegas": return { id, type, enabled: true, participantIds: ids.slice(0, 4), teamA: ids.slice(0, 2), valuePerUnit: 10, rotation: "fixed", blockSize: 3, hcpPct: 100, decimals: "half_up", birdiePenalty: false };
     case "minimum_putts": return { id, type, enabled: true, participantIds: ids, ante: 50, holes: 18 };
   }

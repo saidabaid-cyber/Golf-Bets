@@ -55,12 +55,15 @@ export type ParticipantConfig = {
 };
 
 export type CounterBetKind = "vipers" | "camels" | "fish";
+export type CounterBetSettlementMode = "round" | "legacy_halves";
 
 export type CounterBetConfig = ParticipantConfig & {
   enabled: boolean;
   value: number;
-  /** Multiplier for physical holes H10-H18. */
-  secondNineMultiplier: number;
+  /** New rounds use one accumulated bag. Missing preserves historical half settlements. */
+  settlementMode?: CounterBetSettlementMode;
+  /** @deprecated Retained only to reproduce historical half-settlement snapshots. */
+  secondNineMultiplier?: number;
 };
 
 export type CounterBetEvent = {
@@ -69,9 +72,12 @@ export type CounterBetEvent = {
   hole: number;
   playerId: string;
   quantity: number;
+  /** Centimetres from the hole; requested only for a same-hole Viper tie. */
+  distanceToHole?: number;
 };
 
-export type CounterBetKeepers = Record<CounterBetKind, Partial<Record<PhysicalNine, string>>>;
+export type CounterBetPeriod = PhysicalNine | "round";
+export type CounterBetKeepers = Record<CounterBetKind, Partial<Record<CounterBetPeriod, string>>>;
 
 export type LobaMode = "partner" | "solo" | "solo_anticipated";
 export type LobaWinner = "loba_team" | "opponents" | "tie";
@@ -103,7 +109,12 @@ export type HandicapBaseConfig = {
 
 export type BetConfig = {
   /** Original workbook Monkey: exactly three participants, disabled for legacy rounds. */
-  monkey?: ParticipantConfig & { enabled: boolean; value: number };
+  monkey?: ParticipantConfig & {
+    enabled: boolean;
+    value: number;
+    /** Missing in historical rounds preserves the original 100% calculation. */
+    hcpPct?: number;
+  };
   rabbits: ParticipantConfig & {
     enabled: boolean;
     /** Missing in historical rounds preserves the original continuous mode. */
@@ -315,6 +326,8 @@ export type ChicagoBet = SupplementalBetBase & {
   type: "chicago";
   participantIds: string[];
   quotaBase: number;
+  /** Missing in historical rounds preserves the original 100% quota handicap. */
+  hcpPct?: number;
   valuePerPoint: number;
   points: {
     birdieOrBetter: number;

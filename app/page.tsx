@@ -1,6 +1,6 @@
 "use client";
 import "./functional-ux.css";
-import { initialBets } from "../lib/new-round-bets";
+import { initialBets, restoreCounterBetConfig } from "../lib/new-round-bets";
 import { normalizeRabbitMode, normalizeSkinsMode } from "../lib/bet-modes";
 import { freezeRoundHandicapBases, missingHandicapsForActiveBets, normalizeRoundHandicapBasis } from "../lib/handicap-base";
 import { HandicapBaseControl } from "./components/handicap-base-control";
@@ -112,6 +112,7 @@ import {
   calculateLoba,
   COUNTER_BET_META,
   emptyCounterBetKeepers,
+  setCounterDistance,
   setCounterQuantity,
 } from "../lib/side-bets";
 import {
@@ -605,9 +606,9 @@ function GolfBetsApp() {
             foursome: { ...defaults.foursome, ...(draft.bets.foursome || {}), handicapMethod: draft.bets.foursome?.handicapMethod || "configured", baseMode: draft.bets.foursome?.baseMode },
             polla: normalizePolla(draft.bets.polla, draftPlayerIds),
             miniPolla: { ...defaults.miniPolla, ...(draft.bets.miniPolla || {}) },
-            vipers: { ...defaults.vipers, ...(draft.bets.vipers || {}) },
-            camels: { ...defaults.camels, ...(draft.bets.camels || {}) },
-            fish: { ...defaults.fish, ...(draft.bets.fish || {}) },
+            vipers: restoreCounterBetConfig(defaults.vipers, draft.bets.vipers),
+            camels: restoreCounterBetConfig(defaults.camels, draft.bets.camels),
+            fish: restoreCounterBetConfig(defaults.fish, draft.bets.fish),
             loba: { ...defaults.loba, ...(draft.bets.loba || {}) },
           });
         }
@@ -1297,10 +1298,14 @@ function GolfBetsApp() {
     setCounterBetEvents(events => setCounterQuantity(events, kind, holeNumber, playerId, quantity, makeId()));
   }
 
-  function setCounterBetKeeper(kind: CounterBetKind, playerId: string) {
+  function changeCounterBetDistance(kind: CounterBetKind, eventHole: number, playerId: string, distance: number | null) {
     checkpoint();
-    const nine = holeNumber <= 9 ? "holes_1_9" : "holes_10_18";
-    setCounterBetKeepers(current => ({ ...current, [kind]: { ...current[kind], [nine]: playerId || undefined } }));
+    setCounterBetEvents(events => setCounterDistance(events, kind, eventHole, playerId, distance));
+  }
+
+  function setCounterBetKeeper(kind: CounterBetKind, playerId: string, period: "round" | "holes_1_9" | "holes_10_18") {
+    checkpoint();
+    setCounterBetKeepers(current => ({ ...current, [kind]: { ...current[kind], [period]: playerId || undefined } }));
   }
 
   function setLobaHole(next: LobaHole) {
@@ -2068,6 +2073,7 @@ function GolfBetsApp() {
         { kind: "fish", config: bets.fish },
       ],
       counterBetKeepers,
+      counterBetEvents,
       lobaConfig: bets.loba,
       lobaHole: lobaHoles[holeNumber],
       foursomeConfig: bets.foursome,
@@ -2349,7 +2355,7 @@ function GolfBetsApp() {
 
         <SetupBetCard id="ball-friend" icon="⚪🤝" title="Bola Amiga" description="Los 2 jugadores de la derecha vs los 2 de la izquierda" help="ball_friend" enabled={bets.ballFriend.enabled} locked={!bettingConsentGranted} requestActivation={requestBettingConsent} onEnabledChange={(enabled) => setBets((current) => ({ ...current, ballFriend: { ...current.ballFriend, enabled } }))}>{roundHandicapBasis === "relative" && <HandicapBaseControl name="Bola Amiga" config={bets.ballFriend} fallback="fixed" onChange={baseMode => setBets({ ...bets, ballFriend: { ...bets.ballFriend, baseMode, fixedBaseHandicap: undefined } })} />}<div className="grid3"><MoneyInput label="Valor punto" value={bets.ballFriend.value} onChange={(v) => setBets({ ...bets, ballFriend: { ...bets.ballFriend, value: v } })} /><HcpPercentInput value={bets.ballFriend.hcpPct} onChange={(v) => setBets({ ...bets, ballFriend: { ...bets.ballFriend, hcpPct: v } })} /><NumberField label="Score máximo" value={bets.ballFriend.maxScore} onChange={(v) => setBets({ ...bets, ballFriend: { ...bets.ballFriend, maxScore: v } })} /></div><label className="miniLabel">Participan</label><ParticipantChips players={players} selected={bets.ballFriend.participantIds} onChange={(ids) => setBets({ ...bets, ballFriend: { ...bets.ballFriend, participantIds: ids } })} /></SetupBetCard>
 
-        <SetupBetCard id="monkey" icon="🐒" title="Monkey" description="Exactamente tres jugadores" help="monkey" enabled={Boolean(bets.monkey?.enabled)} locked={!bettingConsentGranted} requestActivation={requestBettingConsent} onEnabledChange={(enabled) => setBets((current) => ({ ...current, monkey: { value: 20, participantIds: players.slice(0, 3).map((player) => player.id), ...current.monkey, enabled } }))}><MoneyInput label="Valor punto Monkey" value={bets.monkey?.value ?? 20} onChange={value=>setBets({...bets,monkey:{...bets.monkey!,value}})} /><ParticipantChips players={players} selected={bets.monkey?.participantIds ?? []} onChange={participantIds=>setBets({...bets,monkey:{...bets.monkey!,participantIds}})} /><p>{monkey.valid ? roundHandicapBasis === "course" ? "HCP sobre el campo entre estos tres. Sin porcentaje ni redondeo añadido." : "HCP rebajado entre estos tres. Sin porcentaje ni redondeo añadido." : missingActiveHandicapPlayers.length ? "Completa el HCP de los participantes para calcular." : "Selecciona exactamente tres jugadores; no se calcula con otra cantidad."}</p></SetupBetCard>
+        <SetupBetCard id="monkey" icon="🐒" title="Monkey" description="Exactamente tres jugadores · 6 puntos por hoyo" help="monkey" enabled={Boolean(bets.monkey?.enabled)} locked={!bettingConsentGranted} requestActivation={requestBettingConsent} onEnabledChange={(enabled) => setBets((current) => ({ ...current, monkey: { value: 20, hcpPct: 100, participantIds: players.slice(0, 3).map((player) => player.id), ...current.monkey, enabled } }))}><div className="grid2"><MoneyInput label="Valor punto Monkey" value={bets.monkey?.value ?? 20} onChange={value=>setBets(current => ({...current,monkey:{...current.monkey!,value}}))} /><HcpPercentInput value={bets.monkey?.hcpPct ?? 100} onChange={hcpPct=>setBets(current => ({...current,monkey:{...current.monkey!,hcpPct}}))} /></div><ParticipantChips players={players} selected={bets.monkey?.participantIds ?? []} onChange={participantIds=>setBets(current => ({...current,monkey:{...current.monkey!,participantIds}}))} /><p>{monkey.valid ? roundHandicapBasis === "course" ? `HCP sobre el campo · ${bets.monkey?.hcpPct ?? 100}% · sin redondeo.` : `HCP entre estos tres · ${bets.monkey?.hcpPct ?? 100}% · sin redondeo.` : missingActiveHandicapPlayers.length ? "Completa el HCP de los participantes para calcular." : "Selecciona exactamente tres jugadores; no se calcula con otra cantidad."}</p></SetupBetCard>
 
         <PollaBetEditor
           title={BET_PRESENTATION.polla_first.title}
@@ -2418,7 +2424,7 @@ function GolfBetsApp() {
         }} /></span>}
       >{manualBets.some((bet) => bet.enabled !== false) && <><div className="setupModeTools"><button type="button" className="textButton" onClick={() => runAfterBettingConsent(newManualBet)}>+ Apuesta</button></div>{renderManualBetsEditor(true)}</>}</ResultAccordion>
 
-      <ResultAccordion id="setup-personals" title={<SetupModeTitle icon={BET_PRESENTATION.personals.icon} title={BET_PRESENTATION.personals.title} description="Nassau, Dollar a Stroke y Presiones individuales" />} open={personalSetupOpen} onOpenChange={setPersonalSetupOpen} className="setupBetsAccordion personalSetupGroup">
+      <ResultAccordion id="setup-personals" title={<SetupModeTitle icon={BET_PRESENTATION.personals.icon} title={BET_PRESENTATION.personals.title} description="Nassau, Dollar a Stroke y Presiones individuales" />} open={personalSetupOpen} onOpenChange={setPersonalSetupOpen} className="setupBetsAccordion personalSetupGroup" headerAction={<span className="resultHeaderActions"><BetHelpButton kind="personal_group" /></span>}>
         <ResultAccordion
           id="setup-personal-nassau"
           title={<SetupModeTitle icon={SUPPLEMENTAL_BET_PRESENTATION.individual_nassau.icon} title={SUPPLEMENTAL_BET_PRESENTATION.individual_nassau.title} description={SUPPLEMENTAL_BET_PRESENTATION.individual_nassau.description} />}
@@ -2503,9 +2509,9 @@ function GolfBetsApp() {
       {!scoreCaptureComplete && <div className="scoreGate" role="status">Captura o confirma el score de cada jugador. Los resultados vivos aparecerán al completar el último.</div>}
 
       {scoreCaptureComplete && <>
-        <CounterBetHolePanel kind="vipers" config={bets.vipers} players={players} events={counterBetEvents} hole={holeNumber} keepers={counterBetKeepers} onQuantity={(playerId, value) => changeCounterBet("vipers", playerId, value)} onKeeper={playerId => setCounterBetKeeper("vipers", playerId)} />
-        <CounterBetHolePanel kind="camels" config={bets.camels} players={players} events={counterBetEvents} hole={holeNumber} keepers={counterBetKeepers} onQuantity={(playerId, value) => changeCounterBet("camels", playerId, value)} onKeeper={playerId => setCounterBetKeeper("camels", playerId)} />
-        <CounterBetHolePanel kind="fish" config={bets.fish} players={players} events={counterBetEvents} hole={holeNumber} keepers={counterBetKeepers} onQuantity={(playerId, value) => changeCounterBet("fish", playerId, value)} onKeeper={playerId => setCounterBetKeeper("fish", playerId)} />
+        <CounterBetHolePanel kind="vipers" config={bets.vipers} players={players} events={counterBetEvents} hole={holeNumber} order={order} keepers={counterBetKeepers} onQuantity={(playerId, value) => changeCounterBet("vipers", playerId, value)} onDistance={(eventHole, playerId, value) => changeCounterBetDistance("vipers", eventHole, playerId, value)} onKeeper={(playerId, period) => setCounterBetKeeper("vipers", playerId, period)} />
+        <CounterBetHolePanel kind="camels" config={bets.camels} players={players} events={counterBetEvents} hole={holeNumber} order={order} keepers={counterBetKeepers} onQuantity={(playerId, value) => changeCounterBet("camels", playerId, value)} onDistance={(eventHole, playerId, value) => changeCounterBetDistance("camels", eventHole, playerId, value)} onKeeper={(playerId, period) => setCounterBetKeeper("camels", playerId, period)} />
+        <CounterBetHolePanel kind="fish" config={bets.fish} players={players} events={counterBetEvents} hole={holeNumber} order={order} keepers={counterBetKeepers} onQuantity={(playerId, value) => changeCounterBet("fish", playerId, value)} onDistance={(eventHole, playerId, value) => changeCounterBetDistance("fish", eventHole, playerId, value)} onKeeper={(playerId, period) => setCounterBetKeeper("fish", playerId, period)} />
       </>}
 
       {scoreCaptureComplete && bets.units.enabled && <section className="card">
@@ -2578,11 +2584,12 @@ function GolfBetsApp() {
         {bets.units.enabled && <span><b>📏 Unidades / Copas</b>{money(bets.units.value)} por unidad · {money(bets.units.copaValue ?? bets.units.value)} por Copa</span>}
         {bets.foursome.enabled && <span><b>🤝 Foursome</b>{(bets.foursome.mode === "fixed" || bets.foursome.mode === "fixed_points") ? `${money(bets.foursome.fixedValue)} fijo` : ""}{bets.foursome.mode === "fixed_points" ? " · " : ""}{(bets.foursome.mode === "points" || bets.foursome.mode === "fixed_points") ? `${money(bets.foursome.pointValue)} punto` : ""}{(bets.foursome.pressureMultiplier || 1) > 1 ? ` · ${bets.foursome.pressureNine === "holes_1_9" ? "H1–9" : "H10–18"} ${bets.foursome.pressureMultiplier}x` : ""}</span>}
         {bets.ballFriend.enabled && <span><b>⚪🤝 Bola Amiga</b>{money(bets.ballFriend.value)} por punto</span>}
+        {bets.monkey?.enabled && <span><b>🐒 Monkey</b>{money(bets.monkey.value)} por punto · HCP {bets.monkey.hcpPct ?? 100}%</span>}
         {polla.details.map((detail) => <span key={detail.key}><b>{detail.key === "total18" ? "🏆" : "🥈"} {detail.label}</b>{money(detail.value)}</span>)}
         {bets.miniPolla.enabled && <span><b>⚡ Mini Polla</b>{money(bets.miniPolla.value)}</span>}
-        {bets.vipers.enabled && <span><b>🐍 Víboras</b>{money(bets.vipers.value)} · H10–18 {bets.vipers.secondNineMultiplier}x</span>}
-        {bets.camels.enabled && <span><b>🐫 Camellos</b>{money(bets.camels.value)} · H10–18 {bets.camels.secondNineMultiplier}x</span>}
-        {bets.fish.enabled && <span><b>🐟 Peces</b>{money(bets.fish.value)} · H10–18 {bets.fish.secondNineMultiplier}x</span>}
+        {bets.vipers.enabled && <span><b>🐍 Víboras</b>{money(bets.vipers.value)} por evento · {bets.vipers.settlementMode === "round" ? "bolsa de ronda" : `histórico por vueltas · H10–18 ${bets.vipers.secondNineMultiplier || 1}x`}</span>}
+        {bets.camels.enabled && <span><b>🐫 Camellos</b>{money(bets.camels.value)} por evento · {bets.camels.settlementMode === "round" ? "bolsa de ronda" : `histórico por vueltas · H10–18 ${bets.camels.secondNineMultiplier || 1}x`}</span>}
+        {bets.fish.enabled && <span><b>🐟 Peces</b>{money(bets.fish.value)} por evento · {bets.fish.settlementMode === "round" ? "bolsa de ronda" : `histórico por vueltas · H10–18 ${bets.fish.secondNineMultiplier || 1}x`}</span>}
         {bets.loba.enabled && <span><b>🐺 Loba</b>{money(bets.loba.value)} base · HCP {bets.loba.hcpPct ?? 100}%{bets.loba.unitsEnabled ? ` · 📏 ${money(bets.loba.unitValue)}` : ""}</span>}
         {supplementalBets.filter((bet) => bet.enabled !== false).map((bet) => <span key={bet.id}><b>{supplementalBetDisplayLabel(bet.type)}</b>{money(supplementalBetValue(bet))}</span>)}
         {personalBets.filter((bet) => bet.enabled !== false).map((bet) => <span key={bet.id}><b>🏌️ Nassau Individual · {owner?.name} vs {bet.rivalMode === "group" ? playerName(bet.rivalPlayerId) : bet.rivalName}</b>{money(bet.baseValue)} base{roundHoles === 18 && (bet.pressureMultiplier || 1) > 1 ? ` · 2ª jugada ${bet.pressureMultiplier}x` : ""} · Carry {bet.carryEnabled ? "Sí" : "No"}</span>)}

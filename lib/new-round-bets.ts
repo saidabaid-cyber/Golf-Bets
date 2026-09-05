@@ -1,9 +1,17 @@
-import type { BetConfig } from "./types";
+import type { BetConfig, CounterBetConfig } from "./types";
+
+/** Defaults complete missing fields without converting a pre-change round to the new settlement. */
+export function restoreCounterBetConfig(fallback: CounterBetConfig, saved?: CounterBetConfig): CounterBetConfig {
+  if (!saved) return fallback;
+  const restored = { ...fallback, ...saved };
+  if (saved.settlementMode === undefined) delete restored.settlementMode;
+  return restored;
+}
 
 /** Only used for a new round, never to overwrite saved configurations. */
 export function initialBets(ids: string[]): BetConfig {
   return {
-    monkey: { enabled: false, value: 20, participantIds: ids.slice(0, 3) },
+    monkey: { enabled: false, value: 20, hcpPct: 100, participantIds: ids.slice(0, 3) },
     rabbits: { enabled: false, mode: "continuous", value: 100, hcpPct: 100, decimals: "decimal", accumulate: true, participantIds: [...ids] },
     skins: { enabled: false, mode: "carry", value: 50, hcpPct: 100, decimals: "decimal", accumulate: true, participantIds: [...ids] },
     units: { enabled: false, value: 100, participantIds: [...ids] },
@@ -20,9 +28,10 @@ export function initialBets(ids: string[]): BetConfig {
       total18: { enabled: false, value: 100, hcpPct: 100, decimals: "round", participantIds: [...ids] },
     },
     miniPolla: { enabled: false, value: 100, hcpPct: 100, decimals: "round", participantIds: [...ids] },
-    vipers: { enabled: false, value: 100, secondNineMultiplier: 1, participantIds: [...ids] },
-    camels: { enabled: false, value: 100, secondNineMultiplier: 1, participantIds: [...ids] },
-    fish: { enabled: false, value: 100, secondNineMultiplier: 1, participantIds: [...ids] },
+    // Kept at 1 as a downgrade-safe legacy field. The round settlement engine ignores it.
+    vipers: { enabled: false, value: 100, secondNineMultiplier: 1, settlementMode: "round", participantIds: [...ids] },
+    camels: { enabled: false, value: 100, secondNineMultiplier: 1, settlementMode: "round", participantIds: [...ids] },
+    fish: { enabled: false, value: 100, secondNineMultiplier: 1, settlementMode: "round", participantIds: [...ids] },
     loba: { enabled: false, value: 100, hcpPct: 100, unitsEnabled: false, unitValue: 100, duplicateUnitsByMode: false, participantIds: [...ids] },
   };
 }

@@ -76,6 +76,6 @@ export function SetupBetCard({ id, icon, title, description, help, enabled, lock
     onOpenChange={(next) => { if (enabled && !locked) setOpen(next); }}
     disclosureDisabled={!enabled || locked}
     className="setupBetsAccordion setupBetCard"
-    headerAction={<span className="resultHeaderActions"><BetHelpButton kind={help} /><button ref={switchRef} type="button" className={`switch ${enabled ? "on" : ""}`} role="switch" aria-checked={enabled} aria-label={`${enabled ? "Desactivar" : "Activar"} ${presentation.title}`} title={locked ? "Completa el consentimiento específico desde Mi Cuenta" : undefined} disabled={locked} onClick={(event) => { event.stopPropagation(); toggle(); }}><span /></button></span>}
+    headerAction={<span className="resultHeaderActions"><BetHelpButton kind={help} title={`${presentation.icon} ${presentation.title}`} /><button ref={switchRef} type="button" className={`switch ${enabled ? "on" : ""}`} role="switch" aria-checked={enabled} aria-label={`${enabled ? "Desactivar" : "Activar"} ${presentation.title}`} title={locked ? "Completa el consentimiento específico desde Mi Cuenta" : undefined} disabled={locked} onClick={(event) => { event.stopPropagation(); toggle(); }}><span /></button></span>}
   >{enabled && !locked ? children : null}</ResultAccordion>;
 }

@@ -17,6 +17,7 @@ export type HoleValidationInput = {
   players: Pick<Player, "id">[];
   counterBets: Array<{ kind: CounterBetKind; config: CounterBetConfig }>;
   counterBetKeepers: CounterBetKeepers;
+  counterBetEvents?: import("./types").CounterBetEvent[];
   lobaConfig: BetConfig["loba"];
   lobaHole?: LobaHole;
   foursomeConfig: BetConfig["foursome"];
@@ -37,6 +38,8 @@ export function collectHoleValidationErrors(input: HoleValidationInput) {
     input.counterBetKeepers,
     input.lobaConfig,
     input.lobaHole,
+    input.counterBetEvents || [],
+    input.order,
   ));
 
   const foursomeError = foursomeHoleConfigurationError(

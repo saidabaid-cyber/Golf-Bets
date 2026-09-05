@@ -152,3 +152,6 @@
 .courseSelectionField{display:grid;gap:4px}
 .courseSelectionField.isMissing select{border-color:#b43b2f;box-shadow:0 0 0 2px color-mix(in srgb,#b43b2f 18%,transparent)}
 .courseSelectionError{color:#a52920;font-size:11px;font-weight:800}
+.counterTieBreak{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px;border:1px solid var(--line);border-radius:12px;background:var(--soft);padding:10px}.counterTieBreak legend{padding:0 5px;color:var(--green);font-size:12px;font-weight:900}.counterTieBreak p{grid-column:1/-1;margin:0;color:var(--muted);font-size:11px}.counterTieBreak label{font-size:11px;font-weight:800}
+.betHelpDialog dd p{margin:0}.betHelpDialog dd ul{display:grid;gap:5px;margin:0;padding-left:19px}.betHelpDialog dd li{padding-left:1px}
+@media(max-width:430px){.counterTieBreak{grid-template-columns:1fr}}

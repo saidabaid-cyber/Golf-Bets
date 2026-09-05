@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { BET_HELP, type BetHelpKind } from "../lib/bet-help";
 
 const page = readFileSync("app/page.tsx", "utf8");
 const editor = readFileSync("app/components/supplemental-bets-editor.tsx", "utf8");
@@ -18,15 +19,23 @@ test("round setup keeps general additions first, Manuals before the final Person
 });
 
 test("every existing and new bet type has compact contextual help in a closable modal", () => {
-  for (const kind of [
-    "personal", "individual_nassau", "dollar_stroke", "individual_pressures", "team_pressures", "chicago", "vegas", "minimum_putts", "manual",
+  const kinds: BetHelpKind[] = [
+    "personal_group", "personal", "individual_nassau", "dollar_stroke", "individual_pressures", "team_pressures", "chicago", "vegas", "minimum_putts", "manual",
     "rabbits", "skins", "units", "foursome", "ball_friend", "monkey", "polla", "mini_polla", "vipers", "camels", "fish", "loba",
-  ]) assert.match(editor, new RegExp(`\\b${kind}: \\{`));
+  ];
+  assert.deepEqual(Object.keys(BET_HELP).sort(), [...kinds].sort());
+  for (const kind of kinds) {
+    const help = BET_HELP[kind];
+    assert.match(help.title, /^\P{Letter}+/u);
+    for (const section of [help.what, help.how, help.rules, help.example]) {
+      assert.ok(typeof section === "string" ? section.trim().length > 0 : section.length > 0);
+    }
+  }
   assert.match(editor, /role="dialog" aria-modal="true"/);
-  assert.match(editor, /Qué es/);
-  assert.match(editor, /Cómo funciona/);
-  assert.match(editor, /Reglas importantes/);
-  assert.match(editor, /Ejemplo simple/);
+  assert.match(editor, /QUÉ ES/);
+  assert.match(editor, /CÓMO FUNCIONA/);
+  assert.match(editor, /REGLAS IMPORTANTES/);
+  assert.match(editor, /EJEMPLO SIMPLE/);
   assert.match(editor, /aria-label="Cerrar ayuda"/);
   assert.match(editor, /headerAction=\{<span className=\{styles\.headerActions\}><BetHelpButton kind=\{type\} \/><Switch/);
   const itemHeader = editor.slice(editor.indexOf("function ItemShell"), editor.indexOf("const COMPONENT_LABELS"));
@@ -44,8 +53,8 @@ test("la configuración usa las descripciones compactas solicitadas y alinea ayu
   ]) assert.match(page, new RegExp(description.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   for (const description of [
     "3 putts · el último jugador que la tenga paga",
-    "Bunker · se acumulan por jugador",
-    "Agua · se acumulan por jugador",
+    "Bunker · el último jugador paga la bolsa",
+    "Agua · el último jugador paga la bolsa",
     "El Lobo elige pareja o juega solo",
   ]) assert.match(sideBets, new RegExp(description.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   for (const description of [

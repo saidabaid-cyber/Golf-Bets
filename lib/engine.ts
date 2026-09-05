@@ -330,13 +330,16 @@ export function calculateMonkey(course: Course, scores: Record<number, HoleScore
   const missingHandicapPlayerIds = playersMissingRoundHandicap(participants).map((player) => player.id);
   if (!cfg?.enabled || participants.length !== 3 || missingHandicapPlayerIds.length) return {balances, points, details, valid: !cfg?.enabled || (participants.length === 3 && !missingHandicapPlayerIds.length), missingHandicapPlayerIds};
   const bases = baseHandicaps(participants, basis);
+  const hcpPct = Number.isFinite(cfg.hcpPct) ? Math.min(100, Math.max(0, cfg.hcpPct as number)) : 100;
   for (const holeNumber of order) {
     const hole=course.holes.find(h=>h.number===holeNumber);
     if (!hole || !completedHole(holeNumber,scores,participants.map(p=>p.id))) continue;
     const net=Object.fromEntries(participants.map(p=>{
-      const hcp=bases[p.id];
-      // The workbook uses the unrounded rebased HCP and SI/SI+18 only, no % control.
-      return [p.id, Number(scores[holeNumber][p.id]) - Number(hcp>=hole.strokeIndex) - Number(hcp>=hole.strokeIndex+18)];
+      const playingHcp = playingHandicap(bases[p.id], hcpPct, "decimal");
+      // Preserve Monkey's original whole-stroke SI/SI+18 thresholds. The new
+      // percentage changes the HCP fed into those thresholds, not its point rule.
+      const allowance = Number(playingHcp >= hole.strokeIndex) + Number(playingHcp >= hole.strokeIndex + 18);
+      return [p.id, Number(scores[holeNumber][p.id]) - allowance];
     }));
     const earned=Object.fromEntries(participants.map(p=>[p.id,participants.reduce((sum,rival)=>sum+(rival.id===p.id ? 0 : net[p.id]<net[rival.id] ? 2 : net[p.id]===net[rival.id] ? 1 : 0),0)]));
     for(const p of participants) points[p.id]+=earned[p.id];
@@ -347,7 +350,7 @@ export function calculateMonkey(course: Course, scores: Record<number, HoleScore
     const amount=(points[a]-points[b])*cfg.value;
     balances[a]+=amount; balances[b]-=amount;
   }
-  return {balances, points, details, valid:true};
+  return {balances, points, details, valid:true, hcpPct};
 }
 
 export function payoutWinnerTakesFromAll(

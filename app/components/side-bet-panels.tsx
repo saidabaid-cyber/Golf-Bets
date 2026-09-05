@@ -11,6 +11,7 @@ import type {
 import {
   COUNTER_BET_META,
   counterQuantity,
+  latestCounterBetCandidates,
   physicalNineForHole,
   type CounterBetHalfResult,
 } from "../../lib/side-bets";
@@ -41,15 +42,17 @@ export function CounterBetConfigPanel({ kind, config, players, onChange, request
   const description = kind === "vipers"
     ? "3 putts · el último jugador que la tenga paga"
     : kind === "camels"
-      ? "Bunker · se acumulan por jugador"
-      : "Agua · se acumulan por jugador";
+      ? "Bunker · el último jugador paga la bolsa"
+      : "Agua · el último jugador paga la bolsa";
   const presentation = BET_PRESENTATION[kind];
+  const roundMode = config.settlementMode === "round";
   return <SetupBetCard id={kind} icon={presentation.icon} title={presentation.title} description={description} help={kind} enabled={config.enabled} locked={locked} requestActivation={requestActivation} onEnabledChange={(enabled) => onChange({ ...config, enabled })}>
     <>
-      <div className="grid2">
+      <div className="grid2 counterBetConfigGrid">
         <div><label>Valor {meta.singular}</label><div className="moneyField"><span>$</span><NumericCaptureInput inputMode="decimal" value={config.value} onValueChange={value => onChange({ ...config, value: Math.max(0, value ?? 0) })} /></div></div>
-        <div><label>H10–18</label><select value={config.secondNineMultiplier} onChange={event => onChange({ ...config, secondNineMultiplier: Math.max(1, Number(event.target.value) || 1) })}>{[1, 2, 3, 4, 5].map(value => <option key={value} value={value}>{value === 1 ? "Normal" : `${value}x`}</option>)}</select></div>
+        {!roundMode && <div><label>H10–18 · compatibilidad histórica</label><select value={config.secondNineMultiplier || 1} onChange={event => onChange({ ...config, secondNineMultiplier: Math.max(1, Number(event.target.value) || 1) })}>{[1, 2, 3, 4, 5].map(value => <option key={value} value={value}>{value === 1 ? "Normal" : `${value}x`}</option>)}</select></div>}
       </div>
+      <p className="hint">{roundMode ? "Una sola bolsa durante toda la ronda. El último evento determina quién se la queda y paga el acumulado a cada rival." : "Esta ronda conserva el cálculo histórico por vueltas con el que fue creada."}</p>
       <label className="miniLabel">Participan</label><PlayerChips players={players} selected={config.participantIds} onChange={participantIds => onChange({ ...config, participantIds })} />
     </>
   </SetupBetCard>;
@@ -76,32 +79,40 @@ export function LobaConfigPanel({ config, players, onChange, requestActivation, 
   </SetupBetCard>;
 }
 
-function Counter({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
-  return <div className="quickCounter" aria-label={label}><button type="button" aria-label={`Restar ${label}`} onClick={() => onChange(Math.max(0, value - 1))}>−</button><strong aria-live="polite">{value}</strong><button type="button" aria-label={`Sumar ${label}`} onClick={() => onChange(value + 1)}>+</button></div>;
+function Counter({ label, value, onChange, max }: { label: string; value: number; onChange: (value: number) => void; max?: number }) {
+  return <div className="quickCounter" aria-label={label}><button type="button" aria-label={`Restar ${label}`} onClick={() => onChange(Math.max(0, value - 1))}>−</button><strong aria-live="polite">{value}</strong><button type="button" aria-label={`Sumar ${label}`} onClick={() => onChange(Math.min(max ?? Number.POSITIVE_INFINITY, value + 1))}>+</button></div>;
 }
 
-export function CounterBetHolePanel({ kind, config, players, events, hole, keepers, onQuantity, onKeeper }: {
+export function CounterBetHolePanel({ kind, config, players, events, hole, order, keepers, onQuantity, onDistance, onKeeper }: {
   kind: CounterBetKind;
   config: CounterBetConfig;
   players: Player[];
   events: CounterBetEvent[];
   hole: number;
+  order: number[];
   keepers: CounterBetKeepers;
   onQuantity: (playerId: string, value: number) => void;
-  onKeeper: (playerId: string) => void;
+  onDistance: (eventHole: number, playerId: string, value: number | null) => void;
+  onKeeper: (playerId: string, period: "round" | "holes_1_9" | "holes_10_18") => void;
 }) {
   if (!config.enabled) return null;
   const meta = COUNTER_BET_META[kind];
   const participants = players.filter(player => config.participantIds.includes(player.id));
-  const asksKeeper = hole === 9 || hole === 18;
+  const roundMode = config.settlementMode === "round";
+  const asksLegacyKeeper = !roundMode && (hole === 9 || hole === 18);
   const nine = physicalNineForHole(hole);
+  const latest = latestCounterBetCandidates(kind, config.participantIds, events, order);
+  const tieCandidates = latest.candidates.length > 1 && (latest.hole === hole || hole === order.at(-1)) ? latest.candidates : [];
+  const asksRoundKeeper = roundMode && kind !== "vipers" && hole === order.at(-1) && tieCandidates.length > 1;
   return <section className="card compact sideEventCard">
-    <div className="sectionTitle"><div><h2>{meta.emoji} {meta.plural}</h2><p>Registra todas las del hoyo.</p></div><span className="eventValue">{money(config.value * (nine === "holes_10_18" ? config.secondNineMultiplier : 1))} c/u</span></div>
+    <div className="sectionTitle"><div><h2>{meta.emoji} {meta.plural}</h2><p>{kind === "vipers" ? "Marca una si hizo 3 putts o más." : "Registra todas las del hoyo."}</p></div><span className="eventValue">{money(config.value * (!roundMode && nine === "holes_10_18" ? config.secondNineMultiplier || 1 : 1))} c/u</span></div>
     <div className="quickCounterList">{participants.map(player => {
       const quantity = counterQuantity(events, kind, hole, player.id);
-      return <div key={player.id}><b>{player.name}</b><Counter label={`${meta.plural} de ${player.name}`} value={quantity} onChange={value => onQuantity(player.id, value)} /></div>;
+      return <div key={player.id}><b>{player.name}</b><Counter label={`${meta.plural} de ${player.name}`} value={quantity} max={kind === "vipers" ? 1 : undefined} onChange={value => onQuantity(player.id, value)} /></div>;
     })}</div>
-    {asksKeeper && <label className="keeperSelect">¿Quién se quedó {meta.article} {meta.emoji} {meta.plural} de la {hole === 9 ? "primera" : "segunda"} vuelta?<select value={keepers[kind]?.[nine] || ""} onChange={event => onKeeper(event.target.value)}><option value="">Seleccionar…</option>{participants.map(player => <option key={player.id} value={player.id}>{player.name}</option>)}</select></label>}
+    {roundMode && kind === "vipers" && tieCandidates.length > 1 && <fieldset className="counterTieBreak"><legend>Distancia de la última Víbora · H{latest.hole}</legend><p>Captura centímetros; la bola más cercana al hoyo se queda con la bolsa.</p>{tieCandidates.map(candidate => <label key={candidate.playerId}>{players.find(player => player.id === candidate.playerId)?.name || "Sin nombre"}<NumericCaptureInput inputMode="decimal" min={0} step={1} placeholder="cm" value={candidate.distanceToHole} onValueChange={value => onDistance(latest.hole as number, candidate.playerId, value)} /></label>)}</fieldset>}
+    {asksRoundKeeper && <label className="keeperSelect">Varios jugadores generaron el último {meta.singular} en H{latest.hole}. Selecciona quién lo generó al final:<select value={keepers[kind]?.round || ""} onChange={event => onKeeper(event.target.value, "round")}><option value="">Seleccionar…</option>{tieCandidates.map(candidate => <option key={candidate.playerId} value={candidate.playerId}>{players.find(player => player.id === candidate.playerId)?.name || "Sin nombre"}</option>)}</select></label>}
+    {asksLegacyKeeper && <label className="keeperSelect">¿Quién se quedó {meta.article} {meta.emoji} {meta.plural} de la {hole === 9 ? "primera" : "segunda"} vuelta?<select value={keepers[kind]?.[nine] || ""} onChange={event => onKeeper(event.target.value, nine)}><option value="">Seleccionar…</option>{participants.map(player => <option key={player.id} value={player.id}>{player.name}</option>)}</select></label>}
   </section>;
 }
 
@@ -235,5 +246,5 @@ export function CounterBetResults({ title, halves, playerName, id: explicitId, o
   const presentationKey = explicitId === "vipers" || explicitId === "camels" || explicitId === "fish" ? explicitId : null;
   const displayTitle = presentationKey ? betDisplayLabel(presentationKey) : title;
   const id = explicitId || displayTitle.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase();
-  return <ResultAccordion id={id} title={displayTitle} open={open} onOpenChange={onOpenChange} className="sideBetResult">{halves.filter(half => half.holes.length).map(half => <div className="sideBetHalf" key={half.nine}><div><b>{half.nine === "holes_1_9" ? "H1–9" : "H10–18"}</b><span>{half.quantity} jugadas · {money(half.value)} c/u{half.multiplier > 1 ? ` · ${half.multiplier}x` : ""}</span></div><strong>{half.keeperId ? `${playerName(half.keeperId)} se quedó` : "Pendiente"}</strong>{half.settled && <div className="sideBetBalances">{Object.entries(half.balances).filter(([, amount]) => amount !== 0).map(([id, amount]) => <span key={id}>{playerName(id)} <b className={amount > 0 ? "good" : "bad"}>{signedMoney(amount)}</b></span>)}</div>}</div>)}</ResultAccordion>;
+  return <ResultAccordion id={id} title={displayTitle} open={open} onOpenChange={onOpenChange} className="sideBetResult">{halves.filter(half => half.holes.length).map(half => <div className="sideBetHalf" key={half.nine}><div><b>{half.nine === "round" ? "Ronda completa" : half.nine === "holes_1_9" ? "H1–9" : "H10–18"}</b><span>{half.quantity} jugadas · {money(half.value)} c/u{half.multiplier > 1 ? ` · ${half.multiplier}x` : ""}{half.lastEventHole ? ` · último evento H${half.lastEventHole}` : ""}</span></div><strong>{half.keeperId ? `${playerName(half.keeperId)} se quedó y paga` : half.quantity === 0 ? "Sin eventos" : half.needsTieBreak ? "Desempate pendiente" : "Pendiente hasta terminar"}</strong>{half.settled && <div className="sideBetBalances">{Object.entries(half.balances).filter(([, amount]) => amount !== 0).map(([id, amount]) => <span key={id}>{playerName(id)} <b className={amount > 0 ? "good" : "bad"}>{signedMoney(amount)}</b></span>)}</div>}</div>)}</ResultAccordion>;
 }

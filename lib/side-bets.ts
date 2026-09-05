@@ -4,6 +4,7 @@ import type {
   CounterBetEvent,
   CounterBetKeepers,
   CounterBetKind,
+  CounterBetPeriod,
   Course,
   HoleScore,
   LobaHole,
@@ -63,8 +64,27 @@ export function setCounterQuantity(
   id = `${kind}:${hole}:${playerId}`,
 ) {
   const nextQuantity = Math.max(0, Math.trunc(Number.isFinite(quantity) ? quantity : 0));
+  const existing = events.find(event => event.kind === kind && event.hole === hole && event.playerId === playerId);
   const remaining = events.filter(event => !(event.kind === kind && event.hole === hole && event.playerId === playerId));
-  return nextQuantity > 0 ? [...remaining, { id, kind, hole, playerId, quantity: nextQuantity }] : remaining;
+  return nextQuantity > 0 ? [...remaining, { ...existing, id: existing?.id ?? id, kind, hole, playerId, quantity: nextQuantity }] : remaining;
+}
+
+export function setCounterDistance(
+  events: CounterBetEvent[],
+  kind: CounterBetKind,
+  hole: number,
+  playerId: string,
+  distanceToHole: number | null,
+) {
+  return events.map(event => {
+    if (event.kind !== kind || event.hole !== hole || event.playerId !== playerId) return event;
+    if (distanceToHole === null || !Number.isFinite(distanceToHole) || distanceToHole < 0) {
+      const next = { ...event };
+      delete next.distanceToHole;
+      return next;
+    }
+    return { ...event, distanceToHole };
+  });
 }
 
 export function counterQuantity(events: CounterBetEvent[], kind: CounterBetKind, hole: number, playerId: string) {
@@ -74,16 +94,98 @@ export function counterQuantity(events: CounterBetEvent[], kind: CounterBetKind,
 }
 
 export type CounterBetHalfResult = {
-  nine: PhysicalNine;
+  nine: CounterBetPeriod;
   holes: number[];
   quantity: number;
   multiplier: number;
   value: number;
   keeperId?: string;
+  lastEventHole?: number;
+  candidateIds?: string[];
+  needsTieBreak?: boolean;
   settled: boolean;
   balances: Record<string, number>;
   transfers: Transfer[];
 };
+
+export function latestCounterBetCandidates(
+  kind: CounterBetKind,
+  participantIds: string[],
+  events: CounterBetEvent[],
+  order: number[],
+) {
+  const allowed = new Set(participantIds);
+  const orderIndex = new Map(order.map((hole, index) => [hole, index]));
+  const relevant = events.filter(event => event.kind === kind && allowed.has(event.playerId) && event.quantity > 0 && orderIndex.has(event.hole));
+  if (!relevant.length) return { hole: undefined, candidates: [] as CounterBetEvent[] };
+  const lastIndex = Math.max(...relevant.map(event => orderIndex.get(event.hole) ?? -1));
+  const hole = order[lastIndex];
+  const candidates = relevant.filter(event => event.hole === hole);
+  return { hole, candidates };
+}
+
+function viperKeeper(candidates: CounterBetEvent[]) {
+  if (candidates.length === 1) return candidates[0].playerId;
+  if (!candidates.length || candidates.some(candidate => !Number.isFinite(candidate.distanceToHole) || (candidate.distanceToHole as number) < 0)) return undefined;
+  const closest = Math.min(...candidates.map(candidate => candidate.distanceToHole as number));
+  const closestCandidates = candidates.filter(candidate => Math.abs((candidate.distanceToHole as number) - closest) < EPSILON);
+  return closestCandidates.length === 1 ? closestCandidates[0].playerId : undefined;
+}
+
+function roundCounterBetResult(
+  kind: CounterBetKind,
+  participants: Player[],
+  config: CounterBetConfig,
+  events: CounterBetEvent[],
+  keepers: CounterBetKeepers,
+  order: number[],
+  completedHoles?: ReadonlySet<number>,
+) {
+  const balances = Object.fromEntries(participants.map(player => [player.id, 0])) as Record<string, number>;
+  const transfers: Transfer[] = [];
+  const participantIds = participants.map(player => player.id);
+  const allowed = new Set(participantIds);
+  const relevant = events.filter(event => event.kind === kind && allowed.has(event.playerId) && order.includes(event.hole));
+  const quantity = relevant.reduce((sum, event) => sum + Math.max(0, Math.trunc(event.quantity || 0)), 0);
+  const { hole: lastEventHole, candidates } = latestCounterBetCandidates(kind, participantIds, relevant, order);
+  const candidateIds = candidates.map(candidate => candidate.playerId);
+  const manuallySelected = keepers[kind]?.round;
+  const keeperId = kind === "vipers"
+    ? viperKeeper(candidates)
+    : candidates.length === 1
+      ? candidates[0].playerId
+      : manuallySelected && candidateIds.includes(manuallySelected) ? manuallySelected : undefined;
+  const needsTieBreak = candidates.length > 1 && !keeperId;
+  const complete = order.length > 0 && (!completedHoles || order.every(hole => completedHoles.has(hole)));
+  const value = roundMoney(Math.max(0, config.value || 0));
+  const settled = Boolean(config.enabled && complete && quantity > 0 && keeperId);
+  if (settled && keeperId) {
+    const amount = roundMoney(quantity * value);
+    for (const player of participants) {
+      if (player.id === keeperId) continue;
+      addTransfer(transfers, balances, keeperId, player.id, amount, {
+        betType: kind,
+        hole: lastEventHole,
+        metadata: { period: "round", quantity, unitValue: value, lastEventHole: lastEventHole ?? null },
+      });
+    }
+  }
+  const round: CounterBetHalfResult = {
+    nine: "round",
+    holes: order,
+    quantity,
+    multiplier: 1,
+    value,
+    keeperId,
+    lastEventHole,
+    candidateIds,
+    needsTieBreak,
+    settled,
+    balances,
+    transfers,
+  };
+  return { kind, halves: [round], balances, transfers, totalQuantity: quantity, zeroSum: isZeroSum(balances), settlementMode: "round" as const };
+}
 
 export function calculateCounterBet(
   kind: CounterBetKind,
@@ -95,6 +197,7 @@ export function calculateCounterBet(
   completedHoles?: ReadonlySet<number>,
 ) {
   const participants = allPlayers.filter(player => config.participantIds.includes(player.id));
+  if (config.settlementMode === "round") return roundCounterBetResult(kind, participants, config, events, keepers, order, completedHoles);
   const balances = Object.fromEntries(participants.map(player => [player.id, 0])) as Record<string, number>;
   const transfers: Transfer[] = [];
   const halves = (["holes_1_9", "holes_10_18"] as PhysicalNine[]).map((nine): CounterBetHalfResult => {
@@ -126,7 +229,7 @@ export function calculateCounterBet(
     }
     return { nine, holes, quantity, multiplier, value, keeperId, settled, balances: halfBalances, transfers: halfTransfers };
   });
-  return { kind, halves, balances, transfers, totalQuantity: halves.reduce((sum, half) => sum + half.quantity, 0), zeroSum: isZeroSum(balances) };
+  return { kind, halves, balances, transfers, totalQuantity: halves.reduce((sum, half) => sum + half.quantity, 0), zeroSum: isZeroSum(balances), settlementMode: "legacy_halves" as const };
 }
 
 export function modeMultiplier(mode?: LobaMode) {
@@ -264,8 +367,10 @@ export function requiredSideBetCapture(
   keepers: CounterBetKeepers,
   lobaConfig: { enabled: boolean; participantIds: string[] },
   lobaHole: LobaHole | undefined,
+  events: CounterBetEvent[] = [],
+  order: number[] = Array.from({ length: 18 }, (_, index) => index + 1),
 ) {
-  return requiredSideBetCaptures(holeNumber, enabledCounterBets, keepers, lobaConfig, lobaHole)[0] || "";
+  return requiredSideBetCaptures(holeNumber, enabledCounterBets, keepers, lobaConfig, lobaHole, events, order)[0] || "";
 }
 
 export function requiredSideBetCaptures(
@@ -274,15 +379,30 @@ export function requiredSideBetCaptures(
   keepers: CounterBetKeepers,
   lobaConfig: { enabled: boolean; participantIds: string[] },
   lobaHole: LobaHole | undefined,
+  events: CounterBetEvent[] = [],
+  order: number[] = Array.from({ length: 18 }, (_, index) => index + 1),
 ) {
   const errors: string[] = [];
   const nine = holeNumber === 9 ? "holes_1_9" : holeNumber === 18 ? "holes_10_18" : undefined;
-  if (nine) {
-    for (const { kind, config } of enabledCounterBets) {
-      if (config.enabled && !keepers[kind]?.[nine]) {
+  for (const { kind, config } of enabledCounterBets) {
+    if (!config.enabled) continue;
+    if (config.settlementMode === "round") {
+      if (holeNumber !== order.at(-1)) continue;
+      const meta = COUNTER_BET_META[kind];
+      const { hole: lastEventHole, candidates } = latestCounterBetCandidates(kind, config.participantIds, events, order);
+      if (candidates.length < 2) continue;
+      if (kind === "vipers") {
+        const missingDistance = candidates.some(candidate => !Number.isFinite(candidate.distanceToHole) || (candidate.distanceToHole as number) < 0);
+        if (missingDistance) errors.push(`Captura la distancia al hoyo de quienes hicieron la última ${meta.emoji} ${meta.singular} en H${lastEventHole}.`);
+        else if (!viperKeeper(candidates)) errors.push(`Las distancias de la última ${meta.emoji} ${meta.singular} siguen empatadas; define una distancia distinta para identificar la bola más cercana.`);
+      } else if (!keepers[kind]?.round || !candidates.some(candidate => candidate.playerId === keepers[kind]?.round)) {
+        errors.push(`Selecciona quién generó el último ${meta.emoji} ${meta.singular} en H${lastEventHole}.`);
+      }
+      continue;
+    }
+    if (nine && !keepers[kind]?.[nine]) {
         const meta = COUNTER_BET_META[kind];
         errors.push(`Selecciona quién se quedó ${meta.article} ${meta.emoji} ${meta.plural} de esta vuelta.`);
-      }
     }
   }
   if (lobaConfig.enabled) errors.push(...validateLobaHoleErrors(lobaHole, lobaConfig.participantIds));
