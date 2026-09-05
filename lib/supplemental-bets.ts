@@ -20,19 +20,14 @@ import type {
   TeamPressuresBet,
   VegasBet,
 } from "./types";
+import { SUPPLEMENTAL_BET_PRESENTATION } from "./bet-catalog";
 import { playersMissingRoundHandicap } from "./handicap-base";
 
 const EPS = 1e-9;
 
-export const SUPPLEMENTAL_BET_LABELS: Record<SupplementalBet["type"], string> = {
-  individual_nassau: "Nassau individual",
-  dollar_stroke: "Dollar a Stroke",
-  individual_pressures: "Presiones individuales",
-  team_pressures: "Presiones por parejas",
-  chicago: "Chicago",
-  vegas: "Vegas",
-  minimum_putts: "Mínimo de Putts",
-};
+export const SUPPLEMENTAL_BET_LABELS = Object.fromEntries(
+  Object.entries(SUPPLEMENTAL_BET_PRESENTATION).map(([type, presentation]) => [type, presentation.title]),
+) as Record<SupplementalBet["type"], string>;
 
 export type SupplementalPressureDetail = {
   label: string;

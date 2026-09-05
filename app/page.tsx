@@ -5,6 +5,7 @@ import { freezeRoundHandicapBases, missingHandicapsForActiveBets, normalizeRound
 import { HandicapBaseControl } from "./components/handicap-base-control";
 import { RoundHandicapBasisControl } from "./components/round-handicap-basis-control";
 import { SetupBetCard } from "./components/setup-bet-card";
+import { BET_PRESENTATION, betDisplayLabel, SUPPLEMENTAL_BET_PRESENTATION, supplementalBetDisplayLabel } from "../lib/bet-catalog";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -100,7 +101,7 @@ import { calculateSupplementalBets, normalizeSupplementalBets, supplementalBetVa
 import { isPersonalSupplementalType, setRememberedCategoryEnabled } from "../lib/bet-activation";
 import { buildPersonalOpponentResults } from "../lib/personal-opponents";
 import { persistPendingRoundReview, ROUND_REVIEW_NOTICE } from "../lib/round-review";
-import { BetHelpButton, supplementalBetDisplayLabel, SupplementalBetsEditor, SupplementalBetResults } from "./components/supplemental-bets-editor";
+import { BetHelpButton, SupplementalBetsEditor, SupplementalBetResults } from "./components/supplemental-bets-editor";
 import { buildGeneralResultsTable, pollaDetailBalance, pollaDetailBalances, pollaPositionLabels, summarizeNetUnitQuantities, type ResultCategoryColumn } from "../lib/result-breakdown";
 import { collectHoleValidationErrors } from "../lib/hole-validation";
 import {
@@ -335,9 +336,10 @@ function HandicapModeSelect({ value, onChange }: { value: HandicapMode; onChange
 }
 
 function PollaBetEditor({
-  title, description, config, players, onChange, unavailable, trophy = "gold", requestActivation, locked = false,
+  title, icon, description, config, players, onChange, unavailable, trophy = "gold", requestActivation, locked = false,
 }: {
   title: string;
+  icon: string;
   description: string;
   config: MedalPollaConfig;
   players: Player[];
@@ -347,7 +349,7 @@ function PollaBetEditor({
   requestActivation?: () => Promise<boolean>;
   locked?: boolean;
 }) {
-  return <SetupBetCard id={title.replace(/\W+/g, "-").toLowerCase()} icon={trophy === "gold" ? "🏆" : "🥈"} title={title} description={description} help="polla" enabled={config.enabled} locked={locked} requestActivation={requestActivation} onEnabledChange={(enabled) => onChange({ ...config, enabled })}>
+  return <SetupBetCard id={title.replace(/\W+/g, "-").toLowerCase()} icon={icon} title={title} description={description} help="polla" enabled={config.enabled} locked={locked} requestActivation={requestActivation} onEnabledChange={(enabled) => onChange({ ...config, enabled })}>
       <span className="visuallyHidden"><TrophyIcon tone={trophy} /></span>
       <div className="grid3">
         <MoneyInput label="Valor" value={config.value} onChange={(value) => onChange({ ...config, value })} />
@@ -377,6 +379,8 @@ function GolfBetsApp() {
   const [pendingCloudConflict, setPendingCloudConflict] = useState<{ local: CloudDataBundle; cloud: CloudDataBundle; conflicts: CloudDataConflict[] } | null>(null);
   const [courses, setCourses] = useState<Course[]>(defaultCourses);
   const [course, setCourse] = useState<Course>(laVista);
+  const [courseSelected, setCourseSelected] = useState(false);
+  const [courseSelectionError, setCourseSelectionError] = useState(false);
   const [courseDraft, setCourseDraft] = useState<Course>(laVista);
   const [startHole, setStartHole] = useState<1 | 10>(1);
   const [roundHoles, setRoundHoles] = useState<9 | 18>(18);
@@ -550,11 +554,14 @@ function GolfBetsApp() {
       setPlayers([]); setOwnerId(""); setScores({}); setScoreEdits({}); setUnitEvents([]); setCounterBetEvents([]); setCounterBetKeepers(emptyCounterBetKeepers()); setLobaHoles({}); setBallFriendSetup({});
       setPersonalBets([]); setManualBets([]); setSupplementalBets([]); setPutts({}); setExpenses(emptyExpenses); setBets(initialBets([]));
       setStartHole(1); setRoundHoles(18); setRoundHandicapBasis("relative"); setSegments(segmentDefinitions(playOrder(1), 6));
+      setCourseSelected(false); setCourseSelectionError(false);
       if (!options.preserveLocalUi) setCurrentIndex(0);
       setRoundId(makeId()); setRoundDate(localDateMexico());
     }
       if (draft) {
         if (draft.course) setCourse(withDefaultLaVistaRules(draft.course));
+        setCourseSelected(draft.courseSelected === true);
+        setCourseSelectionError(false);
         if (draft.startHole) setStartHole(draft.startHole);
         if (draft.roundHoles === 9 || draft.roundHoles === 18) setRoundHoles(draft.roundHoles);
         setRoundHandicapBasis(normalizeRoundHandicapBasis(draft.handicapBasis));
@@ -662,7 +669,7 @@ function GolfBetsApp() {
       if (revision !== localPersistRevision.current) return false;
       if (!ownsLocalWorkspace(localStorage, identity.userId)) return false;
       try {
-        const draft = { version: 7, course, startHole, roundHoles, handicapBasis: roundHandicapBasis, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, currentIndex, reviewPending: roundReviewPending };
+        const draft = { version: 8, course, courseSelected, startHole, roundHoles, handicapBasis: roundHandicapBasis, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, currentIndex, reviewPending: roundReviewPending };
         const activeDraft = roundClosed ? null : draft;
         trackLocalCloudEdits(localStorage, activeDraft, { highContrast, language: "es-MX", notificationsEnabled: false, defaultHandicap: identity.defaultHandicap });
         localStorage.setItem(STORAGE_KEYS.courses, JSON.stringify(courses));
@@ -687,7 +694,7 @@ function GolfBetsApp() {
     flushLocalState.current = persist;
     const timer = window.setTimeout(persist, 250);
     return () => window.clearTimeout(timer);
-  }, [hydrated, identity.userId, identity.mode, identity.defaultHandicap, cloudLinked, courses, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, roundClosed, roundReviewPending, course, startHole, roundHoles, roundHandicapBasis, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, currentIndex]);
+  }, [hydrated, identity.userId, identity.mode, identity.defaultHandicap, cloudLinked, courses, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, roundClosed, roundReviewPending, course, courseSelected, startHole, roundHoles, roundHandicapBasis, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, currentIndex]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -899,7 +906,7 @@ function GolfBetsApp() {
 
   useEffect(() => {
     requestCloudSync.current?.();
-  }, [courses, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, course, startHole, roundHoles, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, identity.defaultHandicap]);
+  }, [courses, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, course, courseSelected, startHole, roundHoles, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, identity.defaultHandicap]);
 
   function resolveCloudConflict(choice: "local" | "cloud") {
     if (!pendingCloudConflict) return;
@@ -1207,7 +1214,7 @@ function GolfBetsApp() {
 
   function navigateFromBottomBar(target: AppTab) {
     setFeedback("");
-    if (target === "rules") setRulesCourseContext(rulesContextForRound(hasRoundProgress({ players, scores, currentIndex }), course.name));
+    if (target === "rules") setRulesCourseContext(rulesContextForRound(hasRoundProgress({ players, scores, currentIndex }) && courseSelected, course.name));
     if (roundClosed && (target === "round" || target === "standings")) {
       setTab("history");
       window.setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 0);
@@ -1405,7 +1412,7 @@ function GolfBetsApp() {
 
   function roundDraftPayload(overrides: { scores?: Record<number, HoleScore>; scoreEdits?: ScoreRows; bets?: BetConfig; currentIndex?: number; reviewPending?: boolean } = {}) {
     return {
-      version: 7, course, startHole, roundHoles, handicapBasis: roundHandicapBasis, players, ownerId,
+      version: 8, course, courseSelected, startHole, roundHoles, handicapBasis: roundHandicapBasis, players, ownerId,
       bets: overrides.bets || bets, segments, personalBets, supplementalBets, manualBets,
       scores: overrides.scores || scores, scoreEdits: overrides.scoreEdits || scoreEdits, putts, unitEvents, counterBetEvents,
       counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate,
@@ -1506,7 +1513,7 @@ function GolfBetsApp() {
     const restored = restoreRoundSnapshot(snapshot);
     if (!restored) return;
     setPendingRoundAction({ message: "¿Corregir esta ronda terminada? Se abrirá una copia editable en lugar de la ronda activa. El histórico permanecerá intacto hasta confirmar Guardar; se reutilizará el ID y se conservará la foto.", run: () => {
-    setRoundId(restored.id); setRoundDate(restored.date); setCourse(restored.courseSnapshot!);
+    setRoundId(restored.id); setRoundDate(restored.date); setCourse(restored.courseSnapshot!); setCourseSelected(true); setCourseSelectionError(false);
     setPlayers(restored.players!); setOwnerId(restored.ownerId); setScores(restored.scores!); setScoreEdits({});
     setStartHole(restored.startHole || (restored.order![0] === 10 ? 10 : 1)); setRoundHoles(restored.roundHoles || (restored.order!.length === 9 ? 9 : 18));
     setRoundHandicapBasis(normalizeRoundHandicapBasis(restored.handicapBasis));
@@ -1531,7 +1538,7 @@ function GolfBetsApp() {
     setEditingRound(false); setRoundClosed(false); setRoundReviewPending(false); setShowRoundFinishedNotice(false); setFeedback("");
     setPlayers([]); setOwnerId("");
     setScores({}); setScoreEdits({}); setPutts({}); setUnitEvents([]); setCounterBetEvents([]); setCounterBetKeepers(emptyCounterBetKeepers()); setLobaHoles({}); setBallFriendSetup({}); setPersonalBets([]); setSupplementalBets([]); setManualBets([]); setShowFullScorecard(false); setExpenses(emptyExpenses);
-    setBets(initialBets([])); setRoundHandicapBasis("relative"); setSegments(segmentDefinitions(playOrder(startHole).slice(0, roundHoles), 6));
+    setBets(initialBets([])); setRoundHandicapBasis("relative"); setSegments(segmentDefinitions(playOrder(startHole).slice(0, roundHoles), 6)); setCourseSelected(false); setCourseSelectionError(false);
     setCurrentIndex(0); setRoundId(makeId()); setRoundDate(localDateMexico()); setDraftAvailable(false); setHoleSummary([]); setShowDeleteRoundConfirm(false); undoStack.current = []; setUndoCount(0); setTab("setup");
   }
 
@@ -1541,7 +1548,7 @@ function GolfBetsApp() {
     clearActiveRoundStorage(window.localStorage);
     setPlayers([]); setOwnerId("");
     setScores({}); setScoreEdits({}); setPutts({}); setUnitEvents([]); setCounterBetEvents([]); setCounterBetKeepers(emptyCounterBetKeepers()); setLobaHoles({}); setBallFriendSetup({}); setPersonalBets([]); setSupplementalBets([]); setManualBets([]); setShowFullScorecard(false); setExpenses(emptyExpenses);
-    setBets(initialBets([])); setRoundHandicapBasis("relative"); setSegments(segmentDefinitions(playOrder(startHole).slice(0, roundHoles), 6));
+    setBets(initialBets([])); setRoundHandicapBasis("relative"); setSegments(segmentDefinitions(playOrder(startHole).slice(0, roundHoles), 6)); setCourseSelected(false); setCourseSelectionError(false);
     setCurrentIndex(0); setRoundId(makeId()); setRoundDate(localDateMexico()); setRoundClosed(false); setRoundReviewPending(false); setDraftAvailable(false); setHoleSummary([]); setShowDeleteRoundConfirm(false); setShowRoundFinishedNotice(false); undoStack.current = []; setUndoCount(0); setSaveStatus("saved"); setTab("welcome");
   }
 
@@ -1595,7 +1602,7 @@ function GolfBetsApp() {
     }
     const updatedAt = new Date().toISOString();
     const saved = withDefaultLaVistaRules({ ...courseDraft, name, teeName: "General", rating: undefined, slope: undefined, totalYards: undefined, updatedAt, holes: courseDraft.holes.map((h) => ({ number: h.number, par: h.par, strokeIndex: h.strokeIndex })) });
-    const apply = () => { setCourses((cs) => [saved, ...cs.filter((c) => c.id !== saved.id)]); setCourse(saved); goBack(); };
+    const apply = () => { setCourses((cs) => [saved, ...cs.filter((c) => c.id !== saved.id)]); setCourse(saved); setCourseSelected(true); setCourseSelectionError(false); goBack(); };
     if (Object.values(scores).some(hole => Object.values(hole).some(value => typeof value === "number")) && JSON.stringify(saved.holes) !== JSON.stringify(course.holes)) {
       setPendingRoundAction({ message: "Cambiar Par o Ventaja/SI recalculará las apuestas de la ronda activa. Los scores capturados y el histórico guardado se conservan.", run: apply });
     } else apply();
@@ -2162,28 +2169,31 @@ function GolfBetsApp() {
   const golfStats = useMemo(() => historicalGolfStats(history), [history]);
   const availableHistoryYears = useMemo(() => historyYears(history), [history]);
   const filteredHistory = useMemo(() => filterHistory(history, historyYear, historyMonth), [history, historyYear, historyMonth]);
+  const personalModesActive = personalBets.some((bet) => bet.enabled !== false)
+    || supplementalBets.some((bet) => bet.enabled !== false && isPersonalSupplementalType(bet.type));
   const resultNavigationItems = [
     { id: "final-player-summary", label: "Resultado final", visible: true },
-    { id: "settlement", label: "Liquidación final", visible: true },
+    { id: "bet-values", label: "Valores de apuesta", visible: true },
     { id: "general-summary", label: "Resumen General", visible: true },
-    { id: "rabbits", label: "🐇 Conejos", visible: bets.rabbits.enabled },
-    { id: "skins", label: "⛳ Skins", visible: bets.skins.enabled },
-    { id: "units", label: "📏 Unidades", visible: bets.units.enabled },
-    { id: "ball-friend", label: "⚪🤝 Bola Amiga", visible: bets.ballFriend.enabled },
-    { id: "vipers", label: "🐍 Víboras", visible: bets.vipers.enabled },
-    { id: "camels", label: "🐫 Camellos", visible: bets.camels.enabled },
-    { id: "fish", label: "🐟 Peces", visible: bets.fish.enabled },
-    { id: "loba", label: "🐺 Loba", visible: bets.loba.enabled },
-    { id: "foursome", label: "🤝 Foursome", visible: bets.foursome.enabled },
-    { id: "polla-first9", label: "🥈 Polla 1ª", visible: bets.polla.first9.enabled },
-    { id: "polla-second9", label: "🥈 Polla 2ª", visible: bets.polla.second9.enabled },
-    { id: "polla-total18", label: "🏆 Polla Nassau", visible: bets.polla.total18.enabled },
-    { id: "mini-polla", label: "⚡ Mini Polla", visible: bets.miniPolla.enabled },
-    { id: "monkey", label: "🐒 Monkey", visible: Boolean(bets.monkey?.enabled) },
+    { id: "rabbits", label: betDisplayLabel("rabbits"), visible: bets.rabbits.enabled },
+    { id: "skins", label: betDisplayLabel("skins"), visible: bets.skins.enabled },
+    { id: "units", label: betDisplayLabel("units"), visible: bets.units.enabled },
+    { id: "ball-friend", label: betDisplayLabel("ball_friend"), visible: bets.ballFriend.enabled },
+    { id: "vipers", label: betDisplayLabel("vipers"), visible: bets.vipers.enabled },
+    { id: "camels", label: betDisplayLabel("camels"), visible: bets.camels.enabled },
+    { id: "fish", label: betDisplayLabel("fish"), visible: bets.fish.enabled },
+    { id: "loba", label: betDisplayLabel("loba"), visible: bets.loba.enabled },
+    { id: "foursome", label: betDisplayLabel("foursome"), visible: bets.foursome.enabled },
+    { id: "polla-first9", label: betDisplayLabel("polla_first"), visible: bets.polla.first9.enabled },
+    { id: "polla-second9", label: betDisplayLabel("polla_second"), visible: bets.polla.second9.enabled },
+    { id: "polla-total18", label: betDisplayLabel("polla_total"), visible: bets.polla.total18.enabled },
+    { id: "mini-polla", label: betDisplayLabel("mini_polla"), visible: bets.miniPolla.enabled },
+    { id: "monkey", label: betDisplayLabel("monkey"), visible: Boolean(bets.monkey?.enabled) },
     ...supplementalGeneralResults.map((result) => ({ id: `supplemental-${result.betId}`, label: supplementalBetDisplayLabel(result.type, result.label), visible: true })),
-    { id: "manuals", label: "✍️ Manuales", visible: manualBets.some((bet) => bet.enabled !== false) },
-    { id: "personals", label: "↔ Personales", visible: personalOpponentResults.length > 0 },
-    { id: "expenses", label: "Gastos", visible: ownerExpenseTotal !== 0 },
+    { id: "manuals", label: betDisplayLabel("manuals"), visible: manualBets.some((bet) => bet.enabled !== false) },
+    { id: "personals", label: betDisplayLabel("personals"), visible: personalModesActive },
+    { id: "expenses", label: "Gastos", visible: true },
+    { id: "settlement", label: "Liquidación final", visible: true },
   ].filter((item) => item.visible);
 
   return <main className={`app ${highContrast ? "highContrast" : ""} ${tab === "results" ? "compactResults" : ""}`}>
@@ -2201,7 +2211,7 @@ function GolfBetsApp() {
       <button className="primary big" onClick={resetRound}>Nueva ronda</button>
       <button className="secondary big groupsHomeButton" onClick={() => setTab("groups")}>Armar grupos</button>
       {draftAvailable && !roundClosed && <div className="activeRoundActions"><button className="secondary big" onClick={editActiveRound}>Editar ronda</button><button className="primary big" onClick={() => setTab(roundReviewPending ? "results" : players.length ? "round" : "setup")}>{roundReviewPending ? "Revisar ronda terminada" : `Continuar ronda · H${order[currentIndex]}`}</button><button className="deleteRoundButton" onClick={() => setShowDeleteRoundConfirm(true)}>Eliminar ronda</button></div>}
-      <div className="welcomeLinks"><button className="secondary" onClick={() => { setRulesCourseContext(draftAvailable ? course.name : ""); setTab("rules"); }}>⚑ Reglas de Golf</button><button className="secondary" onClick={() => setTab("pollaLive")}>🏆 Polla Live</button></div>
+      <div className="welcomeLinks"><button className="secondary" onClick={() => { setRulesCourseContext(draftAvailable && courseSelected ? course.name : ""); setTab("rules"); }}>⚑ Reglas de Golf</button><button className="secondary" onClick={() => setTab("pollaLive")}>🏆 Polla Live</button></div>
       {history[0] && <button className="recentRound" onClick={() => setTab("history")}><span>Última ronda</span><b>{history[0].courseName} · {history[0].date}</b><strong className={history[0].netResult >= 0 ? "good" : "bad"}>{signedMoney(history[0].netResult)}</strong></button>}
       <button className="textButton accountHomeLink" onClick={() => setTab("account")}>Mi Cuenta</button>
     </section>}
@@ -2228,13 +2238,13 @@ function GolfBetsApp() {
       <section className="card">
         <div className="sectionTitle"><div><h2>1. Campo</h2><p>Elige el campo; Par y Ventaja/SI se conservan por hoyo.</p></div><button className="textButton" onClick={startNewCourse}>+ Campo</button></div>
         <div className="grid2">
-          <div><label>Campo</label><select value={course.name} onChange={(e) => {
-            const next = courses.find((x) => x.name === e.target.value); if (next) confirmRoundChange("Cambiar campo modifica el Par/SI aplicado a los scores existentes.", () => setCourse(next));
-          }}>{courseNames.map((name) => <option key={name} value={name}>{name}</option>)}</select></div>
+          <div className={`courseSelectionField ${courseSelectionError ? "isMissing" : ""}`}><label htmlFor="round-course">Campo</label><select id="round-course" value={courseSelected ? course.name : ""} aria-invalid={courseSelectionError} aria-describedby={courseSelectionError ? "round-course-error" : undefined} onChange={(e) => {
+            const next = courses.find((x) => x.name === e.target.value); if (next) confirmRoundChange("Cambiar campo modifica el Par/SI aplicado a los scores existentes.", () => { setCourse(next); setCourseSelected(true); setCourseSelectionError(false); });
+          }}><option value="" disabled>Selecciona un campo</option>{courseNames.map((name) => <option key={name} value={name}>{name}</option>)}</select>{courseSelectionError && <span id="round-course-error" className="courseSelectionError" role="alert">Selecciona un campo para continuar.</span>}</div>
           <div><label>Inicio de ronda</label><select value={startHole} onChange={(e) => { const next = Number(e.target.value) as 1 | 10; confirmRoundChange("Cambiar la salida cambia el orden Nassau y los segmentos de Foursome.", () => { setStartHole(next); setCurrentIndex(0); }); }}><option value={1}>Hoyo 1</option><option value={10}>Hoyo 10</option></select></div>
           <div><label>Hoyos a jugar</label><select value={roundHoles} onChange={(e) => { const next = Number(e.target.value) as 9 | 18; confirmRoundChange("Cambiar la duración excluye del cálculo los hoyos fuera de la nueva vuelta, sin borrar sus scores.", () => { setRoundHoles(next); setCurrentIndex(0); }); }}><option value={18}>18 hoyos</option><option value={9}>9 hoyos</option></select></div>
         </div>
-        <div className="courseMeta"><span>18 hoyos configurados</span>{course.updatedAt && <span>Última actualización: {course.updatedAt}</span>}<button onClick={() => { setCourseDraft(withDefaultLaVistaRules(course)); setTab("courses"); }}>{course.name === "La Vista Temporal" ? "Editar campo temporal" : "Editar campo"}</button>{isLaVistaCourse(course.name) && <button onClick={() => { setRulesCourseContext(course.name); setTab("rules"); }}>Ver Reglas Locales</button>}</div>
+        {courseSelected && <div className="courseMeta"><span>18 hoyos configurados</span>{course.updatedAt && <span>Última actualización: {course.updatedAt}</span>}<button onClick={() => { setCourseDraft(withDefaultLaVistaRules(course)); setTab("courses"); }}>{course.name === "La Vista Temporal" ? "Editar campo temporal" : "Editar campo"}</button>{isLaVistaCourse(course.name) && <button onClick={() => { setRulesCourseContext(course.name); setTab("rules"); }}>Ver Reglas Locales</button>}</div>}
       </section>
 
       <section className="card">
@@ -2268,6 +2278,7 @@ function GolfBetsApp() {
       <section className="card">
         <div className="sectionTitle"><div><h2>3. Apuestas grupales</h2><p>Todas las modalidades del grupo, con su porcentaje y participantes.</p></div></div>
         {!bettingConsentGranted && <div className="notice compactConsentNotice" role="status">Para activar o registrar apuestas, completa el consentimiento específico desde <button type="button" className="textButton" onClick={() => setTab("account")}>Mi Cuenta</button>. Tus datos anteriores se conservan.</div>}
+        <div className="groupedBetSetupList">
 
         <SetupBetCard id="rabbits" icon="🐇" title="Conejos" description="Gana hoyos · captura y conserva el conejo" help="rabbits" enabled={bets.rabbits.enabled} locked={!bettingConsentGranted} requestActivation={requestBettingConsent} onEnabledChange={(enabled) => setBets((current) => ({ ...current, rabbits: { ...current.rabbits, enabled } }))}><div className="grid3"><MoneyInput label="Valor" value={bets.rabbits.value} onChange={(v) => setBets({ ...bets, rabbits: { ...bets.rabbits, value: v } })} /><HcpPercentInput value={bets.rabbits.hcpPct} onChange={(v) => setBets({ ...bets, rabbits: { ...bets.rabbits, hcpPct: v } })} /><HandicapModeSelect value={bets.rabbits.decimals} onChange={(decimals) => setBets({ ...bets, rabbits: { ...bets.rabbits, decimals } })} /></div><label className="miniLabel">Participan</label><ParticipantChips players={players} selected={bets.rabbits.participantIds} onChange={(ids) => setBets({ ...bets, rabbits: { ...bets.rabbits, participantIds: ids } })} /></SetupBetCard>
 
@@ -2305,7 +2316,8 @@ function GolfBetsApp() {
         <SetupBetCard id="monkey" icon="🐒" title="Monkey" description="Exactamente tres jugadores" help="monkey" enabled={Boolean(bets.monkey?.enabled)} locked={!bettingConsentGranted} requestActivation={requestBettingConsent} onEnabledChange={(enabled) => setBets((current) => ({ ...current, monkey: { value: 20, participantIds: players.slice(0, 3).map((player) => player.id), ...current.monkey, enabled } }))}><MoneyInput label="Valor punto Monkey" value={bets.monkey?.value ?? 20} onChange={value=>setBets({...bets,monkey:{...bets.monkey!,value}})} /><ParticipantChips players={players} selected={bets.monkey?.participantIds ?? []} onChange={participantIds=>setBets({...bets,monkey:{...bets.monkey!,participantIds}})} /><p>{monkey.valid ? roundHandicapBasis === "course" ? "HCP sobre el campo entre estos tres. Sin porcentaje ni redondeo añadido." : "HCP rebajado entre estos tres. Sin porcentaje ni redondeo añadido." : missingActiveHandicapPlayers.length ? "Completa el HCP de los participantes para calcular." : "Selecciona exactamente tres jugadores; no se calcula con otra cantidad."}</p></SetupBetCard>
 
         <PollaBetEditor
-          title="Polla H1–9"
+          title={BET_PRESENTATION.polla_first.title}
+          icon={BET_PRESENTATION.polla_first.icon}
           trophy="silver"
           description="Mejor medal neto en los hoyos físicos H1–9"
           config={bets.polla.first9}
@@ -2317,7 +2329,8 @@ function GolfBetsApp() {
         />
 
         <PollaBetEditor
-          title="Polla H10–18"
+          title={BET_PRESENTATION.polla_second.title}
+          icon={BET_PRESENTATION.polla_second.icon}
           trophy="silver"
           description="Mejor medal neto en los hoyos físicos H10–18"
           config={bets.polla.second9}
@@ -2329,7 +2342,8 @@ function GolfBetsApp() {
         />
 
         <PollaBetEditor
-          title="Polla 18 hoyos"
+          title={BET_PRESENTATION.polla_total.title}
+          icon={BET_PRESENTATION.polla_total.icon}
           description="Mejor medal neto de la ronda completa"
           config={bets.polla.total18}
           players={players}
@@ -2352,11 +2366,12 @@ function GolfBetsApp() {
         <CounterBetConfigPanel kind="fish" config={bets.fish} players={players} requestActivation={requestBettingConsent} locked={!bettingConsentGranted} onChange={fish => setBets((current) => ({ ...current, fish: { ...current.fish, ...fish } }))} />
         <LobaConfigPanel config={bets.loba} players={players} requestActivation={requestBettingConsent} locked={!bettingConsentGranted} onChange={lobaConfig => setBets((current) => ({ ...current, loba: { ...current.loba, ...lobaConfig } }))} />
         <SupplementalBetsEditor bets={supplementalBets} players={players} onChange={setSupplementalBets} requestActivation={requestBettingConsent} locked={!bettingConsentGranted} />
+        </div>
       </section>
 
       <ResultAccordion
         id="setup-manuals"
-        title={<SetupModeTitle icon="✍️" title="Apuestas Manuales" description="Importes directos por jugador · la suma debe cerrar en $0" />}
+        title={<SetupModeTitle icon={BET_PRESENTATION.manuals.icon} title={BET_PRESENTATION.manuals.title} description="Importes directos por jugador · la suma debe cerrar en $0" />}
         open={manualSetupOpen}
         disclosureDisabled={!manualBets.some((bet) => bet.enabled !== false) || !bettingConsentGranted}
         onOpenChange={(open) => { if (manualBets.some((bet) => bet.enabled !== false) && bettingConsentGranted) setManualSetupOpen(open); }}
@@ -2367,10 +2382,10 @@ function GolfBetsApp() {
         }} /></span>}
       >{manualBets.some((bet) => bet.enabled !== false) && <><div className="setupModeTools"><button type="button" className="textButton" onClick={() => runAfterBettingConsent(newManualBet)}>+ Apuesta</button></div>{renderManualBetsEditor(true)}</>}</ResultAccordion>
 
-      <ResultAccordion id="setup-personals" title={<SetupModeTitle icon="↔" title="Personales" description="Nassau, Dollar a Stroke y Presiones individuales" />} open={personalSetupOpen} onOpenChange={setPersonalSetupOpen} className="setupBetsAccordion personalSetupGroup">
+      <ResultAccordion id="setup-personals" title={<SetupModeTitle icon={BET_PRESENTATION.personals.icon} title={BET_PRESENTATION.personals.title} description="Nassau, Dollar a Stroke y Presiones individuales" />} open={personalSetupOpen} onOpenChange={setPersonalSetupOpen} className="setupBetsAccordion personalSetupGroup">
         <ResultAccordion
           id="setup-personal-nassau"
-          title={<SetupModeTitle icon="🏌️" title="Nassau Individual" description="Jugador vs jugador · ida, vuelta y total" />}
+          title={<SetupModeTitle icon={SUPPLEMENTAL_BET_PRESENTATION.individual_nassau.icon} title={SUPPLEMENTAL_BET_PRESENTATION.individual_nassau.title} description={SUPPLEMENTAL_BET_PRESENTATION.individual_nassau.description} />}
           open={nassauSetupOpen}
           disclosureDisabled={!personalBets.some((bet) => bet.enabled !== false) || !bettingConsentGranted}
           onOpenChange={(open) => { if (personalBets.some((bet) => bet.enabled !== false) && bettingConsentGranted) setNassauSetupOpen(open); }}
@@ -2384,6 +2399,11 @@ function GolfBetsApp() {
       </ResultAccordion>
 
       <button className="primary big" disabled={!players.length || players.some((player) => !player.name.trim())} onClick={() => {
+        if (!courseSelected) {
+          setCourseSelectionError(true);
+          document.getElementById("round-course")?.scrollIntoView({ behavior: "smooth", block: "center" });
+          return;
+        }
         const start = () => { setBets(current => freezeRoundHandicapBases(current, players, roundHandicapBasis)); if (!editingRound) setCurrentIndex(0); setEditingRound(false); setTab("round"); };
         if (hasActiveBettingConfiguration()) runAfterBettingConsent(start); else start();
       }}>{editingRound ? "Guardar configuración y continuar →" : "Iniciar ronda →"}</button>
@@ -2515,11 +2535,6 @@ function GolfBetsApp() {
         </div>}
       </ResultAccordion>
 
-      <ResultAccordion id="settlement" title="Liquidación final" className={`settlementCard ${Math.abs(settlementDifference) < 0.001 ? "" : "settlementError"}`} {...resultAccordionProps("settlement")}>
-        <div className="row between"><p className="muted">Pagos mínimos sugeridos después de netear todas las apuestas.</p><b>{Math.abs(settlementDifference) < 0.001 ? "✓ Suma $0" : `Inconsistencia ${signedMoney(settlementDifference)}`}</b></div>
-        {settlementTransfers.length ? settlementTransfers.map((transfer, index) => <div className="transfer" key={`${transfer.fromPlayerId}-${transfer.toPlayerId}-${index}`}><span><b>{playerName(transfer.fromPlayerId)}</b> paga a {playerName(transfer.toPlayerId)}</span><strong>{money(transfer.amount)}</strong></div>) : <div className="empty">No hay pagos pendientes.</div>}
-      </ResultAccordion>
-
       <ResultAccordion id="bet-values" title="Valores de apuesta" className="betValues" {...resultAccordionProps("bet-values")}><div className="valueGrid">
         {bets.rabbits.enabled && <span><b>🐇 Conejos</b>{money(bets.rabbits.value)} c/u</span>}
         {bets.skins.enabled && <span><b>⛳ Skins</b>{money(bets.skins.value)} c/u</span>}
@@ -2560,10 +2575,10 @@ function GolfBetsApp() {
         </details>)}</div></> : <div className="generalResultsWrap"><p className="muted">Todas las apuestas activas y ya jugadas. Desliza horizontalmente para revisar cada categoría.</p>{generalResults.categories.length ? <div className="generalResultsScroll" tabIndex={0} aria-label="Resumen general de resultados por apuesta"><table className="generalResultsTable"><thead><tr><th>Jugador</th>{generalResults.categories.map(category => <th key={category.key}>{category.label}{category.quantityTotal !== undefined ? ` · ${category.quantityTotal}` : ""}</th>)}<th>TOTAL</th></tr></thead><tbody>{generalResults.rows.map(row => <tr key={row.playerId}><th scope="row">{playerName(row.playerId)}</th>{generalResults.categories.map(category => { const amount = row.cells[category.key] || 0; const quantity = category.quantities?.[row.playerId]; const quantityText = quantity === undefined ? "" : `${category.signedQuantity && quantity > 0 ? "+" : ""}${quantity} ${category.quantityLabel || ""}`.trim(); return <td key={category.key}><div className="generalResultCell">{category.detailByPlayer?.[row.playerId] && <span>{category.detailByPlayer[row.playerId]}</span>}{quantityText && <span>{quantityText}</span>}<strong className={amount > 0 ? "good" : amount < 0 ? "bad" : ""}>{signedMoney(amount)}</strong></div></td>; })}<td className={!row.consistent ? "bad" : row.total > 0 ? "good" : row.total < 0 ? "bad" : ""}>{signedMoney(row.total)}</td></tr>)}<tr className="generalResultsTotal"><th scope="row">TOTAL GENERAL</th>{generalResults.categories.map(category => <td key={category.key} className={Math.abs(generalResults.categoryTotals[category.key] || 0) < 0.001 ? "good" : "bad"}>{signedMoney(generalResults.categoryTotals[category.key] || 0)}</td>)}<td className={Math.abs(generalResults.grandTotal) < 0.001 ? "good" : "bad"}>{signedMoney(generalResults.grandTotal)}</td></tr></tbody></table></div> : <div className="empty">Todavía no hay apuestas activas con hoyos jugados.</div>}</div>}
       </ResultAccordion>
 
-      {bets.rabbits.enabled && <ResultAccordion id="rabbits" title={`🐇 Conejos · ${totalRabbitsWon}`} {...resultAccordionProps("rabbits")}><div className="resultBalanceList">{playersByIds(players, bets.rabbits.participantIds).map(player => <div className="transfer" key={player.id}><span><b>{player.name}</b><small>{rabbits.won[player.id] ?? 0} conejos</small></span><strong className={(rabbitBalances[player.id] ?? 0) > 0 ? "good" : (rabbitBalances[player.id] ?? 0) < 0 ? "bad" : ""}>{signedMoney(rabbitBalances[player.id] ?? 0)}</strong></div>)}</div></ResultAccordion>}
-      {bets.skins.enabled && <ResultAccordion id="skins" title={`⛳ Skins · ${totalSkinsWon}`} {...resultAccordionProps("skins")}><div className="resultBalanceList">{playersByIds(players, bets.skins.participantIds).map(player => <div className="transfer" key={player.id}><span><b>{player.name}</b><small>{skins.won[player.id] ?? 0} skins</small></span><strong className={(skinBalances[player.id] ?? 0) > 0 ? "good" : (skinBalances[player.id] ?? 0) < 0 ? "bad" : ""}>{signedMoney(skinBalances[player.id] ?? 0)}</strong></div>)}</div></ResultAccordion>}
-      {bets.units.enabled && <ResultAccordion id="units" title={`📏 Unidades · ${unitQuantitySummary.total > 0 ? "+" : ""}${unitQuantitySummary.total}`} {...resultAccordionProps("units")}><div className="resultBalanceList">{playersByIds(players, bets.units.participantIds).map(player => { const quantity = unitQuantitySummary.quantities[player.id] ?? 0; const amount = units.balances[player.id] ?? 0; return <div className="transfer" key={player.id}><span><b>{player.name}</b><small>{quantity > 0 ? "+" : ""}{quantity} unidades netas</small></span><strong className={amount > 0 ? "good" : amount < 0 ? "bad" : ""}>{signedMoney(amount)}</strong></div>; })}</div></ResultAccordion>}
-      {bets.ballFriend.enabled && <ResultAccordion id="ball-friend" title="⚪🤝 Bola Amiga" {...resultAccordionProps("ball-friend")}><div className="resultBalanceList">{playersByIds(players, bets.ballFriend.participantIds).map(player => { const amount = ballFriend.balances[player.id] ?? 0; const points = ballFriend.points[player.id] ?? 0; return <div className="transfer" key={player.id}><span><b>{player.name}</b><small>{points > 0 ? "+" : ""}{points} puntos</small></span><strong className={amount > 0 ? "good" : amount < 0 ? "bad" : ""}>{signedMoney(amount)}</strong></div>; })}</div></ResultAccordion>}
+      {bets.rabbits.enabled && <ResultAccordion id="rabbits" title={`${betDisplayLabel("rabbits")} · ${totalRabbitsWon}`} {...resultAccordionProps("rabbits")}><div className="resultBalanceList">{playersByIds(players, bets.rabbits.participantIds).map(player => <div className="transfer" key={player.id}><span><b>{player.name}</b><small>{rabbits.won[player.id] ?? 0} conejos</small></span><strong className={(rabbitBalances[player.id] ?? 0) > 0 ? "good" : (rabbitBalances[player.id] ?? 0) < 0 ? "bad" : ""}>{signedMoney(rabbitBalances[player.id] ?? 0)}</strong></div>)}</div></ResultAccordion>}
+      {bets.skins.enabled && <ResultAccordion id="skins" title={`${betDisplayLabel("skins")} · ${totalSkinsWon}`} {...resultAccordionProps("skins")}><div className="resultBalanceList">{playersByIds(players, bets.skins.participantIds).map(player => <div className="transfer" key={player.id}><span><b>{player.name}</b><small>{skins.won[player.id] ?? 0} skins</small></span><strong className={(skinBalances[player.id] ?? 0) > 0 ? "good" : (skinBalances[player.id] ?? 0) < 0 ? "bad" : ""}>{signedMoney(skinBalances[player.id] ?? 0)}</strong></div>)}</div></ResultAccordion>}
+      {bets.units.enabled && <ResultAccordion id="units" title={`${betDisplayLabel("units")} · ${unitQuantitySummary.total > 0 ? "+" : ""}${unitQuantitySummary.total}`} {...resultAccordionProps("units")}><div className="resultBalanceList">{playersByIds(players, bets.units.participantIds).map(player => { const quantity = unitQuantitySummary.quantities[player.id] ?? 0; const amount = units.balances[player.id] ?? 0; return <div className="transfer" key={player.id}><span><b>{player.name}</b><small>{quantity > 0 ? "+" : ""}{quantity} unidades netas</small></span><strong className={amount > 0 ? "good" : amount < 0 ? "bad" : ""}>{signedMoney(amount)}</strong></div>; })}</div></ResultAccordion>}
+      {bets.ballFriend.enabled && <ResultAccordion id="ball-friend" title={betDisplayLabel("ball_friend")} {...resultAccordionProps("ball-friend")}><div className="resultBalanceList">{playersByIds(players, bets.ballFriend.participantIds).map(player => { const amount = ballFriend.balances[player.id] ?? 0; const points = ballFriend.points[player.id] ?? 0; return <div className="transfer" key={player.id}><span><b>{player.name}</b><small>{points > 0 ? "+" : ""}{points} puntos</small></span><strong className={amount > 0 ? "good" : amount < 0 ? "bad" : ""}>{signedMoney(amount)}</strong></div>; })}</div></ResultAccordion>}
 
       {bets.vipers.enabled && <CounterBetResults id="vipers" title="🐍 Víboras" halves={vipers.halves} playerName={playerName} {...resultAccordionProps("vipers")} />}
       {bets.camels.enabled && <CounterBetResults id="camels" title="🐫 Camellos" halves={camels.halves} playerName={playerName} {...resultAccordionProps("camels")} />}
@@ -2574,20 +2589,20 @@ function GolfBetsApp() {
         {foursomes.matches.map((m, i) => <div className="matchLine foursomeResultLine" key={i}><div><b>H{m.startHole}–{m.endHole}: {playerName(m.basePair[0])}/{playerName(m.basePair[1])}</b><span>vs {playerName(m.opponentPair[0])}/{playerName(m.opponentPair[1])}</span></div><div className="matchNums"><span>Resultado: {m.pointDiff > 0 ? "+" : ""}{m.pointDiff} pts{m.pressureMultiplier > 1 ? ` · H1–9 ${m.first9PointDiff >= 0 ? "+" : ""}${m.first9PointDiff}${m.pressureNine === "holes_1_9" ? ` x${m.pressureMultiplier}` : ""} · H10–18 ${m.second9PointDiff >= 0 ? "+" : ""}${m.second9PointDiff}${m.pressureNine === "holes_10_18" ? ` x${m.pressureMultiplier}` : ""}` : ""}</span><small>{m.complete ? "Fijo" : "Fijo provisional"}: {signedMoney(m.complete ? m.fixedMoney : m.provisionalFixedMoney)} · {m.complete ? "Puntos/patada" : "Puntos/patada provisional"}: {signedMoney(m.complete ? m.pointMoney : m.provisionalPointMoney)}</small><b className={(m.complete ? m.totalMoney : m.provisionalTotalMoney) > 0 ? "good" : (m.complete ? m.totalMoney : m.provisionalTotalMoney) < 0 ? "bad" : ""}>{m.complete ? `Resultado económico: ${signedMoney(m.totalMoney)}` : `Provisional: ${signedMoney(m.provisionalTotalMoney)}`}</b></div></div>)}
       </ResultAccordion>}
 
-      {bets.polla.first9.enabled && pollaFirstDetail && <ResultAccordion id="polla-first9" title="🥈 Polla 1ª vuelta" {...resultAccordionProps("polla-first9")}>{renderPollaResult(pollaFirstDetail)}</ResultAccordion>}
-      {bets.polla.second9.enabled && pollaSecondDetail && <ResultAccordion id="polla-second9" title="🥈 Polla 2ª vuelta" {...resultAccordionProps("polla-second9")}>{renderPollaResult(pollaSecondDetail)}</ResultAccordion>}
-      {bets.polla.total18.enabled && pollaNassauDetail && <ResultAccordion id="polla-total18" title="🏆 Polla Nassau" {...resultAccordionProps("polla-total18")}>{renderPollaResult(pollaNassauDetail)}</ResultAccordion>}
-      {bets.miniPolla.enabled && <ResultAccordion id="mini-polla" title="⚡ Mini Polla" {...resultAccordionProps("mini-polla")}>
+      {bets.polla.first9.enabled && <ResultAccordion id="polla-first9" title={betDisplayLabel("polla_first")} {...resultAccordionProps("polla-first9")}>{pollaFirstDetail ? renderPollaResult(pollaFirstDetail) : <div className="empty">Pendiente de completar los hoyos configurados.</div>}</ResultAccordion>}
+      {bets.polla.second9.enabled && <ResultAccordion id="polla-second9" title={betDisplayLabel("polla_second")} {...resultAccordionProps("polla-second9")}>{pollaSecondDetail ? renderPollaResult(pollaSecondDetail) : <div className="empty">Pendiente de completar los hoyos configurados.</div>}</ResultAccordion>}
+      {bets.polla.total18.enabled && <ResultAccordion id="polla-total18" title={betDisplayLabel("polla_total")} {...resultAccordionProps("polla-total18")}>{pollaNassauDetail ? renderPollaResult(pollaNassauDetail) : <div className="empty">Pendiente de completar la ronda.</div>}</ResultAccordion>}
+      {bets.miniPolla.enabled && <ResultAccordion id="mini-polla" title={betDisplayLabel("mini_polla")} {...resultAccordionProps("mini-polla")}>
         {miniPolla.details.map((detail) => <div key={detail.key}>{renderPollaResult(detail)}</div>)}
       </ResultAccordion>}
 
-      {bets.monkey?.enabled && <ResultAccordion id="monkey" title="🐒 Monkey" {...resultAccordionProps("monkey")}>{renderMonkeyLive()}</ResultAccordion>}
+      {bets.monkey?.enabled && <ResultAccordion id="monkey" title={betDisplayLabel("monkey")} {...resultAccordionProps("monkey")}>{renderMonkeyLive()}</ResultAccordion>}
 
       {supplementalGeneralResults.map((result) => <ResultAccordion key={result.betId} id={`supplemental-${result.betId}`} title={supplementalBetDisplayLabel(result.type, result.label)} {...resultAccordionProps(`supplemental-${result.betId}`)}><SupplementalBetResults results={[result]} players={players} /></ResultAccordion>)}
 
-      {manualBets.some((bet) => bet.enabled !== false) && <ResultAccordion id="manuals" title="✍️ Manuales" {...resultAccordionProps("manuals")}>{renderManualBetResults()}</ResultAccordion>}
+      {manualBets.some((bet) => bet.enabled !== false) && <ResultAccordion id="manuals" title={betDisplayLabel("manuals")} {...resultAccordionProps("manuals")}>{renderManualBetResults()}</ResultAccordion>}
 
-      {personalOpponentResults.length > 0 && <ResultAccordion id="personals" title="↔ Personales" {...resultAccordionProps("personals")}><p className="muted">Balances contra cada contrincante. Estas tres modalidades no forman parte del Resumen General.</p><PersonalOpponentResults entries={personalOpponentResults} /></ResultAccordion>}
+      {personalModesActive && <ResultAccordion id="personals" title={betDisplayLabel("personals")} {...resultAccordionProps("personals")}><p className="muted">Balances contra cada contrincante. Estas tres modalidades no forman parte del Resumen General.</p><PersonalOpponentResults entries={personalOpponentResults} /></ResultAccordion>}
 
       <ResultAccordion id="expenses" title={`Gastos de ${owner?.name}`} {...resultAccordionProps("expenses")}>
         <div className="grid2">
@@ -2599,6 +2614,11 @@ function GolfBetsApp() {
           <MoneyInput label="Otros" value={expenses.other} onChange={(v) => runAfterBettingConsent(() => setExpenses({ ...expenses, other: v }))} />
         </div>
         <div className="totalStrip"><span>Total gastos</span><b>{money(ownerExpenseTotal)}</b></div>
+      </ResultAccordion>
+
+      <ResultAccordion id="settlement" title="Liquidación final" className={`settlementCard ${Math.abs(settlementDifference) < 0.001 ? "" : "settlementError"}`} {...resultAccordionProps("settlement")}>
+        <div className="row between"><p className="muted">Pagos mínimos sugeridos después de netear todas las apuestas.</p><b>{Math.abs(settlementDifference) < 0.001 ? "✓ Suma $0" : `Inconsistencia ${signedMoney(settlementDifference)}`}</b></div>
+        {settlementTransfers.length ? settlementTransfers.map((transfer, index) => <div className="transfer" key={`${transfer.fromPlayerId}-${transfer.toPlayerId}-${index}`}><span><b>{playerName(transfer.fromPlayerId)}</b> paga a {playerName(transfer.toPlayerId)}</span><strong>{money(transfer.amount)}</strong></div>) : <div className="empty">No hay pagos pendientes.</div>}
       </ResultAccordion>
 
       <section className="card summaryCard"><div><span>Apuestas</span><b className={ownerBetResult >= 0 ? "good" : "bad"}>{money(ownerBetResult)}</b></div><div><span>Gastos</span><b className="bad">{money(-ownerExpenseTotal)}</b></div><div className="grand"><span>NETO DEL DÍA</span><b className={ownerNet >= 0 ? "good" : "bad"}>{money(ownerNet)}</b></div></section>

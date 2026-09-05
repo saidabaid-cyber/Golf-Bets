@@ -622,7 +622,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       setCloudIssue("legal", null);
     }).catch((error) => {
       markLegalSyncFailed(localStorage, identity.userId, error);
-      if (mounted) issueWithMessage("legal", legalSyncErrorMessage(error, navigator.onLine), navigator.onLine ? "server" : "offline");
+      if (mounted) setCloudIssue("legal", {
+        ...cloudIssueFromError("legal", error, navigator.onLine),
+        message: legalSyncErrorMessage(error, navigator.onLine),
+      });
     });
     return () => { mounted = false; };
   }, [identity?.mode, identity?.userId, identity?.accessToken, currentConsent, acceptances, legalRetryRevision, flushLegalAcceptances, issueWithMessage, setCloudIssue]);
@@ -650,7 +653,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         setCloudIssue("legal", null);
       } catch (error) {
         markLegalSyncFailed(localStorage, identity.userId, error);
-        issueWithMessage("legal", legalSyncErrorMessage(error, navigator.onLine), navigator.onLine ? "server" : "offline");
+        setCloudIssue("legal", {
+          ...cloudIssueFromError("legal", error, navigator.onLine),
+          message: legalSyncErrorMessage(error, navigator.onLine),
+        });
       }
     }
   }
@@ -675,7 +681,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         setCloudIssue("legal", null);
       } catch (error) {
         markLegalSyncFailed(localStorage, identity.userId, error);
-        issueWithMessage("legal", legalSyncErrorMessage(error, navigator.onLine), navigator.onLine ? "server" : "offline");
+        setCloudIssue("legal", {
+          ...cloudIssueFromError("legal", error, navigator.onLine),
+          message: legalSyncErrorMessage(error, navigator.onLine),
+        });
       }
     }
     closeBettingConsent(true);

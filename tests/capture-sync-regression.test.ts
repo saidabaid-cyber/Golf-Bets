@@ -101,7 +101,7 @@ test("scores siguen arriba y Personales queda fuera del Resumen General sin dupl
   assert.ok(scorecard >= 0 && priorStatus > scorecard);
   assert.match(page, /generalBetBalances = useMemo\(\(\) => mergeBalances\(players,[^\n]+manual\.balances/);
   assert.doesNotMatch(page.match(/const generalBetBalances[^\n]+/)?.[0] || "", /personals\.balances/);
-  assert.match(page, /title={<SetupModeTitle icon="↔" title="Personales"/);
-  assert.match(page, /id="personals" title="↔ Personales"/);
+  assert.match(page, /title={<SetupModeTitle icon=\{BET_PRESENTATION\.personals\.icon\} title=\{BET_PRESENTATION\.personals\.title\}/);
+  assert.match(page, /id="personals" title=\{betDisplayLabel\("personals"\)\}/);
   assert.match(readFileSync("app/components/personal-opponent-results.tsx", "utf8"), /<span>Contra<\/span>[\s\S]*Balance/);
 });

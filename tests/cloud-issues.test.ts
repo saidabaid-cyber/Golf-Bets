@@ -13,6 +13,7 @@ test("un 409 cloud se presenta como conflicto y nunca como sesión inválida", (
 test("red, permisos, esquema y sesión revocada conservan dominios distintos", () => {
   assert.equal(cloudIssueFromError("profile", new TypeError("Failed to fetch"), true).kind, "offline");
   assert.equal(cloudIssueFromError("legal", { status: 403, code: "42501" }, true).kind, "permission");
+  assert.equal(cloudIssueFromError("legal", { code: "23514", message: "check constraint" }, true).kind, "schema");
   assert.equal(cloudIssueFromError("round", { code: "42703", message: "column missing" }, true).kind, "schema");
   assert.equal(cloudIssueFromError("auth", { status: 401, message: "invalid refresh token" }, true).kind, "session_expired");
   assert.equal(cloudIssueFromError("round", { status: 401 }, true).kind, "pending");

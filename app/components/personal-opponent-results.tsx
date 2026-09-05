@@ -1,14 +1,14 @@
 import { groupCurrentPersonalResults } from "../../lib/personal-opponents";
 import type { PersonalOpponentResult } from "../../lib/types";
-import { SUPPLEMENTAL_META } from "./supplemental-bets-editor";
+import { SUPPLEMENTAL_BET_PRESENTATION } from "../../lib/bet-catalog";
 
 const money = (value: number) => `${value > 0 ? "+" : value < 0 ? "−" : ""}$${Math.abs(value).toLocaleString("es-MX", { maximumFractionDigits: 2 })}`;
 const tone = (value: number) => value > 0 ? "good" : value < 0 ? "bad" : "";
 const statusLabel = (status: PersonalOpponentResult["status"]) => status === "final" ? "Final" : status === "partial" ? "Parcial" : "Pendiente";
 const personalModeIcon: Record<PersonalOpponentResult["mode"], string> = {
-  nassau_individual: SUPPLEMENTAL_META.individual_nassau.icon,
-  dollar_stroke: SUPPLEMENTAL_META.dollar_stroke.icon,
-  individual_pressures: SUPPLEMENTAL_META.individual_pressures.icon,
+  nassau_individual: SUPPLEMENTAL_BET_PRESENTATION.individual_nassau.icon,
+  dollar_stroke: SUPPLEMENTAL_BET_PRESENTATION.dollar_stroke.icon,
+  individual_pressures: SUPPLEMENTAL_BET_PRESENTATION.individual_pressures.icon,
 };
 
 export function PersonalOpponentResults({ entries, compact = false }: { entries: PersonalOpponentResult[]; compact?: boolean }) {

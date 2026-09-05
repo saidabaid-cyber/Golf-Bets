@@ -151,13 +151,17 @@ export function hasDuplicatePlayerNames(players: GroupPlayer[]) {
 }
 
 export function moveGroupPlayer(groups: GroupPlayer[][], playerId: string, destinationIndex: number) {
-  const next = groups.map((group) => [...group]);
-  const sourceIndex = next.findIndex((group) => group.some((player) => player.id === playerId));
-  if (sourceIndex < 0 || sourceIndex === destinationIndex || !next[destinationIndex] || next[destinationIndex].length >= 5 || next[sourceIndex].length <= 3) return groups;
-  const playerIndex = next[sourceIndex].findIndex((player) => player.id === playerId);
-  const [player] = next[sourceIndex].splice(playerIndex, 1);
-  next[destinationIndex].push(player);
-  return next;
+  const sourceIndex = groups.findIndex((group) => group.some((player) => player.id === playerId));
+  const player = groups.flat().find((item) => item.id === playerId);
+  if (!player || sourceIndex < 0 || sourceIndex === destinationIndex || !groups[destinationIndex]) return groups;
+
+  // Manual editing intentionally permits temporary group sizes outside the
+  // 3–5 draw target. Remove the ID from every group before inserting it once,
+  // so even legacy/corrupt duplicate layouts recover the visible invariant.
+  return groups.map((group, index) => [
+    ...group.filter((item) => item.id !== playerId),
+    ...(index === destinationIndex ? [player] : []),
+  ]);
 }
 
 export function swapGroupPlayers(groups: GroupPlayer[][], firstId: string, secondId: string) {

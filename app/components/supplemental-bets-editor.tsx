@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { createSupplementalBet, SUPPLEMENTAL_BET_LABELS } from "../../lib/supplemental-bets";
+import { SUPPLEMENTAL_BET_PRESENTATION, supplementalBetDisplayLabel } from "../../lib/bet-catalog";
 import { setSupplementalCategoryEnabled } from "../../lib/bet-activation";
 import type { Player, SupplementalBet } from "../../lib/types";
 import { NumericCaptureInput } from "./numeric-capture-input";
@@ -33,21 +34,6 @@ const HELP: Record<BetKind, { title: string; what: string; how: string; rules: s
   fish: { title: "Peces", what: "Conteo especial por jugador y vuelta.", how: "Se capturan los eventos y al final de la vuelta se indica quién se los quedó.", rules: "La segunda vuelta usa el multiplicador configurado.", example: "Jugador C se queda los Peces de la vuelta." },
   loba: { title: "Loba", what: "La Loba juega con pareja o sola contra los demás.", how: "La app compara el mejor neto de cada equipo y aplica modalidad y multiplicador.", rules: "Las unidades son por equipo y el multiplicador 🔥 no las modifica.", example: "Jugador A va con B contra Equipo B y gana el hoyo." },
 };
-
-export const SUPPLEMENTAL_META: Record<SupplementalBet["type"], { icon: string; description: string }> = {
-  individual_nassau: { icon: "🏌️", description: "Jugador vs jugador · ida, vuelta y total" },
-  dollar_stroke: { icon: "💵", description: "Diferencia de golpes netos · pago por golpe" },
-  individual_pressures: { icon: "⚡", description: "Duelo hoyo por hoyo · al perder se abre nueva presión" },
-  team_pressures: { icon: "🤝", description: "Low Ball / High Ball por equipos · con presiones" },
-  chicago: { icon: "🌆", description: "Puntos contra cuota según handicap" },
-  vegas: { icon: "🎲", description: "Scores de pareja concatenados · diferencia por unidad" },
-  minimum_putts: { icon: "⛳", description: "Menos putts de la ronda gana el ante" },
-};
-
-export function supplementalBetDisplayLabel(type: SupplementalBet["type"], label = SUPPLEMENTAL_BET_LABELS[type]) {
-  const icon = SUPPLEMENTAL_META[type].icon;
-  return label.startsWith(icon) ? label : `${icon} ${label}`;
-}
 
 function createSupplementalBetId(type: SupplementalBet["type"]) {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -108,7 +94,7 @@ function ParticipantChips({ players, selected, onChange }: { players: Player[]; 
 }
 
 function ItemShell({ bet, label, onToggle, onRemove, children, locked }: { bet: SupplementalBet; label: string; onToggle: () => void; onRemove: () => void; children: ReactNode; locked: boolean }) {
-  const meta = SUPPLEMENTAL_META[bet.type];
+  const meta = SUPPLEMENTAL_BET_PRESENTATION[bet.type];
   return <article data-supplemental-editor={bet.id} className={`${styles.betItem} ${!bet.enabled ? styles.disabled : ""}`}>
     <div className={styles.itemHeader}>
       <div><b>{meta.icon} {label}</b><small>{meta.description}</small>{!bet.enabled && <small>Desactivada · conserva sus datos y no participa</small>}</div>
@@ -176,7 +162,7 @@ export function SupplementalBetsEditor({ bets, players, onChange, requestActivat
     const typeBets = bets.filter((bet) => bet.type === type).map((bet, index) => ({ bet, index })).sort((first, second) => Number(second.bet.enabled) - Number(first.bet.enabled));
     const modeEnabled = typeBets.some(({ bet }) => bet.enabled);
     const label = SUPPLEMENTAL_BET_LABELS[type];
-    const title = <span className={styles.modeTitle}><b>{SUPPLEMENTAL_META[type].icon} {label}</b><small>{SUPPLEMENTAL_META[type].description}</small></span>;
+    const title = <span className={styles.modeTitle}><b>{SUPPLEMENTAL_BET_PRESENTATION[type].icon} {label}</b><small>{SUPPLEMENTAL_BET_PRESENTATION[type].description}</small></span>;
     return <ResultAccordion key={type} id={`setup-${type}`} title={title} open={modeEnabled && Boolean(openTypes[type])} disclosureDisabled={!modeEnabled || locked} onOpenChange={(open) => { if (modeEnabled && !locked) setOpenTypes((current) => ({ ...current, [type]: open })); }} className={`setupBetsAccordion ${groupLayout ? styles.groupModeCard : ""}`.trim()} headerAction={<span className={styles.headerActions}><BetHelpButton kind={type} /><Switch buttonRef={(node) => { switchRefs.current[type] = node; }} on={modeEnabled} label={label} disabled={locked} onChange={() => setTypeEnabled(type, !modeEnabled)} /></span>}>
       {modeEnabled && <>
       <div className={styles.modeTools}><button type="button" className="textButton" onClick={() => add(type)}>+ Agregar</button></div>

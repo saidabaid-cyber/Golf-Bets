@@ -13,6 +13,7 @@ import {
   type GroupPlayer,
   type GroupTarget,
 } from "../lib/group-generator";
+import { parseFrequentGroups, playersFromFrequentGroup, serializeFrequentGroups } from "../lib/frequent-templates";
 
 const players = (count: number): GroupPlayer[] => Array.from({ length: count }, (_, index) => ({
   id: `p${index + 1}`,
@@ -74,6 +75,60 @@ test("nombres duplicados se ignoran y edición móvil no pierde jugadores", () =
   assert.equal(validateGroups(moved, players(8)), true);
   const swapped = swapGroupPlayers(moved, moved[0][0].id, moved[1][0].id);
   assert.equal(validateGroups(swapped, players(8)), true);
+});
+
+test("mover desde un grupo de tres funciona y conserva al jugador una sola vez", () => {
+  const source = players(6);
+  const original = [source.slice(0, 3), source.slice(3)];
+  const player = original[0][0];
+  const moved = moveGroupPlayer(original, player.id, 1);
+
+  assert.deepEqual(moved.map((group) => group.length), [2, 4]);
+  assert.equal(moved.flat().filter((item) => item.id === player.id).length, 1);
+  assert.deepEqual(moved[1].find((item) => item.id === player.id), player);
+
+  const returned = moveGroupPlayer(moved, player.id, 0);
+  assert.deepEqual(returned.map((group) => group.length), [3, 3]);
+  assert.equal(returned.flat().filter((item) => item.id === player.id).length, 1);
+});
+
+test("movimientos consecutivos usan el acomodo más reciente sin pérdidas", () => {
+  const source = players(9);
+  let groups = [source.slice(0, 3), source.slice(3, 6), source.slice(6)];
+  groups = moveGroupPlayer(groups, source[0].id, 1);
+  groups = moveGroupPlayer(groups, source[3].id, 2);
+  groups = moveGroupPlayer(groups, source[7].id, 0);
+
+  const ids = groups.flat().map((player) => player.id);
+  assert.equal(ids.length, source.length);
+  assert.equal(new Set(ids).size, source.length);
+  assert.deepEqual([...ids].sort(), source.map((player) => player.id).sort());
+});
+
+test("mover repara una duplicación heredada del jugador seleccionado", () => {
+  const source = players(6);
+  const original = [source.slice(0, 3), [{ ...source[0] }, ...source.slice(3)]];
+  const moved = moveGroupPlayer(original, source[0].id, 1);
+  assert.equal(moved.flat().filter((item) => item.id === source[0].id).length, 1);
+});
+
+test("el acomodo movido se guarda y vuelve a cargar como grupo frecuente", () => {
+  const source = players(6);
+  const moved = moveGroupPlayer([source.slice(0, 3), source.slice(3)], source[0].id, 1);
+  const expected = moved[1].map(({ name, handicap }) => ({ name, handicap }));
+  const serialized = serializeFrequentGroups([{
+    id: "frequent-moved",
+    name: "Grupo reorganizado",
+    players: expected,
+    uses: 0,
+    updatedAt: "2026-09-05T12:00:00.000Z",
+  }]);
+  const restored = parseFrequentGroups(serialized)[0];
+  assert.deepEqual(restored.players, expected);
+  assert.deepEqual(
+    playersFromFrequentGroup(restored, (() => { let index = 0; return () => `restored-${++index}`; })()).map(({ name, handicap }) => ({ name, handicap })),
+    expected,
+  );
 });
 
 test("resumen para WhatsApp usa identidad The Backyard", () => {

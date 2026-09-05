@@ -168,6 +168,7 @@ test("aceptaciones pendientes forman una cola idempotente, reintentable y limpia
   assert.equal(readPendingLegalSync(storage, "auth-user-a"), null);
   assert.match(legalSyncErrorMessage(new TypeError("Failed to fetch"), false), /Sin conexión/);
   assert.match(legalSyncErrorMessage({ code: "42501", message: "permission denied" }, true), /rechazó/);
+  assert.match(legalSyncErrorMessage({ code: "23514", message: "check constraint" }, true), /consentimiento específico vigente/);
 });
 
 test("UI distingue guardado local, pendiente, offline, nube y error", () => {

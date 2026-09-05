@@ -17,6 +17,7 @@ import {
 import { NumericCaptureInput } from "./numeric-capture-input";
 import { ResultAccordion } from "./result-accordion";
 import { SetupBetCard } from "./setup-bet-card";
+import { BET_PRESENTATION, betDisplayLabel } from "../../lib/bet-catalog";
 
 const money = (value: number) => `${value < 0 ? "−" : ""}$${Math.abs(value).toLocaleString("es-MX", { maximumFractionDigits: 2 })}`;
 const signedMoney = (value: number) => `${value > 0 ? "+" : ""}${money(value)}`;
@@ -42,7 +43,8 @@ export function CounterBetConfigPanel({ kind, config, players, onChange, request
     : kind === "camels"
       ? "Bunker · se acumulan por jugador"
       : "Agua · se acumulan por jugador";
-  return <SetupBetCard id={kind} icon={meta.emoji} title={meta.plural} description={description} help={kind} enabled={config.enabled} locked={locked} requestActivation={requestActivation} onEnabledChange={(enabled) => onChange({ ...config, enabled })}>
+  const presentation = BET_PRESENTATION[kind];
+  return <SetupBetCard id={kind} icon={presentation.icon} title={presentation.title} description={description} help={kind} enabled={config.enabled} locked={locked} requestActivation={requestActivation} onEnabledChange={(enabled) => onChange({ ...config, enabled })}>
     <>
       <div className="grid2">
         <div><label>Valor {meta.singular}</label><div className="moneyField"><span>$</span><NumericCaptureInput inputMode="decimal" value={config.value} onValueChange={value => onChange({ ...config, value: Math.max(0, value ?? 0) })} /></div></div>
@@ -60,7 +62,7 @@ export function LobaConfigPanel({ config, players, onChange, requestActivation, 
   requestActivation?: () => Promise<boolean>;
   locked?: boolean;
 }) {
-  return <SetupBetCard id="loba" icon="🐺" title="Loba" description="El Lobo elige pareja o juega solo" help="loba" enabled={config.enabled} locked={locked} requestActivation={requestActivation} onEnabledChange={(enabled) => onChange({ ...config, enabled })}>
+  return <SetupBetCard id="loba" icon={BET_PRESENTATION.loba.icon} title={BET_PRESENTATION.loba.title} description="El Lobo elige pareja o juega solo" help="loba" enabled={config.enabled} locked={locked} requestActivation={requestActivation} onEnabledChange={(enabled) => onChange({ ...config, enabled })}>
     <>
       <div className="grid3">
         <div><label>Valor Loba</label><div className="moneyField"><span>$</span><NumericCaptureInput inputMode="decimal" value={config.value} onValueChange={value => onChange({ ...config, value: Math.max(0, value ?? 0) })} /></div></div>
@@ -230,6 +232,8 @@ export function BallFriendHolePanel({ config, players, hole, capture, liveDetail
 }
 
 export function CounterBetResults({ title, halves, playerName, id: explicitId, open, onOpenChange }: { title: string; halves: CounterBetHalfResult[]; playerName: (id?: string) => string; id?: string; open?: boolean; onOpenChange?: (open: boolean) => void }) {
-  const id = explicitId || title.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase();
-  return <ResultAccordion id={id} title={title} open={open} onOpenChange={onOpenChange} className="sideBetResult">{halves.filter(half => half.holes.length).map(half => <div className="sideBetHalf" key={half.nine}><div><b>{half.nine === "holes_1_9" ? "H1–9" : "H10–18"}</b><span>{half.quantity} jugadas · {money(half.value)} c/u{half.multiplier > 1 ? ` · ${half.multiplier}x` : ""}</span></div><strong>{half.keeperId ? `${playerName(half.keeperId)} se quedó` : "Pendiente"}</strong>{half.settled && <div className="sideBetBalances">{Object.entries(half.balances).filter(([, amount]) => amount !== 0).map(([id, amount]) => <span key={id}>{playerName(id)} <b className={amount > 0 ? "good" : "bad"}>{signedMoney(amount)}</b></span>)}</div>}</div>)}</ResultAccordion>;
+  const presentationKey = explicitId === "vipers" || explicitId === "camels" || explicitId === "fish" ? explicitId : null;
+  const displayTitle = presentationKey ? betDisplayLabel(presentationKey) : title;
+  const id = explicitId || displayTitle.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase();
+  return <ResultAccordion id={id} title={displayTitle} open={open} onOpenChange={onOpenChange} className="sideBetResult">{halves.filter(half => half.holes.length).map(half => <div className="sideBetHalf" key={half.nine}><div><b>{half.nine === "holes_1_9" ? "H1–9" : "H10–18"}</b><span>{half.quantity} jugadas · {money(half.value)} c/u{half.multiplier > 1 ? ` · ${half.multiplier}x` : ""}</span></div><strong>{half.keeperId ? `${playerName(half.keeperId)} se quedó` : "Pendiente"}</strong>{half.settled && <div className="sideBetBalances">{Object.entries(half.balances).filter(([, amount]) => amount !== 0).map(([id, amount]) => <span key={id}>{playerName(id)} <b className={amount > 0 ? "good" : "bad"}>{signedMoney(amount)}</b></span>)}</div>}</div>)}</ResultAccordion>;
 }

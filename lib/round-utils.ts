@@ -60,6 +60,7 @@ export function normalizeRoundDraft(value: unknown) {
   const draft = {
     ...source,
     ...(course ? { course } : { course: undefined }),
+    courseSelected: typeof source.courseSelected === "boolean" ? source.courseSelected && Boolean(course) : Boolean(course),
     players,
     bets: recordValue(source.bets),
     segments: Array.isArray(source.segments) ? source.segments : [],

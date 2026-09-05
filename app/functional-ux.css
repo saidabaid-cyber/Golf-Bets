@@ -142,3 +142,13 @@
   .compactResults .generalResultsTable thead th{height:38px;font-size:9px}
   .compactResults .generalResultsTotal th,.compactResults .generalResultsTotal td{height:40px}
 }
+
+/* Every group bet card participates in one parent grid. The supplemental
+   editor wrapper is layout-neutral so its cards cannot add a second margin. */
+.groupedBetSetupList{display:grid;gap:7px}
+.groupedBetSetupList>.setupBetsAccordion{width:100%;margin:0!important}
+.groupedBetSetupList>div{display:contents}
+.groupedBetSetupList>div>.resultAccordion{width:100%;margin:0!important}
+.courseSelectionField{display:grid;gap:4px}
+.courseSelectionField.isMissing select{border-color:#b43b2f;box-shadow:0 0 0 2px color-mix(in srgb,#b43b2f 18%,transparent)}
+.courseSelectionError{color:#a52920;font-size:11px;font-weight:800}

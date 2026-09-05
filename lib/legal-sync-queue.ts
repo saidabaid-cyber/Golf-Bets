@@ -52,6 +52,7 @@ export function legalSyncErrorMessage(error: unknown, online: boolean) {
   const message = String(candidate.message || error || "");
   if (["401", "403"].includes(String(candidate.status || "")) || /jwt|session|token.*expir/i.test(message)) return "Tu sesión venció. Inicia sesión nuevamente para sincronizar la aceptación.";
   if (code === "42501" || /permission|row-level|rls/i.test(message)) return "Supabase rechazó la aceptación de esta cuenta. Tu copia local se conserva; reintenta después de revisar el acceso.";
+  if (code === "23514") return "La nube todavía no admite el consentimiento específico vigente. Tu aceptación local se conserva pendiente de sincronizar.";
   if (["42P01", "42703", "PGRST204", "PGRST205"].includes(code) || /schema|column.*does not exist/i.test(message)) return "Supabase todavía no admite esta escritura de aceptación. Tu copia local se conserva.";
   return "Tu aceptación está guardada en este dispositivo, pero sigue pendiente de sincronizar.";
 }

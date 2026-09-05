@@ -32,6 +32,9 @@ export function cloudIssueFromError(domain: CloudIssueDomain, error: unknown, on
   if (code === "42501" || status === 403 || /permission denied|row-level|\brls\b/.test(text)) {
     return { domain, kind: "permission", retryable: true, message: "Supabase rechazó esta operación para la cuenta actual. Tus datos locales se conservan." };
   }
+  if (domain === "legal" && code === "23514") {
+    return { domain, kind: "schema", retryable: true, message: "La nube todavía no admite el consentimiento específico vigente. Tu aceptación local se conserva pendiente de sincronizar." };
+  }
   if (["42P01", "42703", "PGRST204", "PGRST205"].includes(code) || /schema cache|column .* does not exist|table .* does not exist/.test(text)) {
     return { domain, kind: "schema", retryable: true, message: "La nube todavía no admite esta operación. Tus datos locales se conservan." };
   }

@@ -4,6 +4,7 @@ import test from "node:test";
 
 const page = readFileSync("app/page.tsx", "utf8");
 const editor = readFileSync("app/components/supplemental-bets-editor.tsx", "utf8");
+const catalog = readFileSync("lib/bet-catalog.ts", "utf8");
 const styles = readFileSync("app/components/supplemental-bets.module.css", "utf8");
 const sideBets = readFileSync("app/components/side-bet-panels.tsx", "utf8");
 
@@ -55,7 +56,7 @@ test("la configuración usa las descripciones compactas solicitadas y alinea ayu
     "Puntos contra cuota según handicap",
     "Scores de pareja concatenados · diferencia por unidad",
     "Menos putts de la ronda gana el ante",
-  ]) assert.ok(editor.includes(description));
+  ]) assert.ok(catalog.includes(description));
   assert.match(styles, /\.itemActions\{display:flex;align-items:center/);
 });
 
