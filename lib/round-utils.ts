@@ -5,6 +5,7 @@ import { migrateSupplementalNassau } from "./nassau-migration";
 import { initialBets } from "./new-round-bets";
 import type { Course, HoleScore, Player, RoundSnapshot } from "./types";
 import type { FrequentPlayer } from "./types";
+import { hasValidRoundHandicap } from "./handicap-base";
 
 export const STORAGE_KEYS = {
   courses: "golfbets-courses",
@@ -210,7 +211,7 @@ export type PrivateLeaderboardRow = {
   name: string;
   handicap: number | null;
   gross: number;
-  net: number;
+  net: number | null;
   relativeToPar: number;
   thru: number;
   finished: boolean;
@@ -219,16 +220,16 @@ export type PrivateLeaderboardRow = {
 export function privateLeaderboard(course: Course, players: Player[], scores: Record<number, HoleScore>, order: number[]) {
   return players.map((player): PrivateLeaderboardRow => {
     let gross = 0;
-    let net = 0;
+    let net: number | null = hasValidRoundHandicap(player) ? 0 : null;
     let par = 0;
     let thru = 0;
-    const roundHandicap = playingHandicap(Math.max(0, Number(player.handicap ?? 0)), 100, "half_up");
+    const roundHandicap = hasValidRoundHandicap(player) ? playingHandicap(Math.max(0, player.handicap), 100, "half_up") : null;
     for (const holeNumber of order) {
       const score = scores[holeNumber]?.[player.id];
       const hole = course.holes.find((candidate) => candidate.number === holeNumber);
       if (typeof score !== "number" || !hole) continue;
       gross += score;
-      net += score - strokeAllowanceForHole(roundHandicap, hole.strokeIndex, "half_up");
+      if (net !== null && roundHandicap !== null) net += score - strokeAllowanceForHole(roundHandicap, hole.strokeIndex, "half_up");
       par += hole.par;
       thru += 1;
     }
@@ -303,7 +304,7 @@ export function historicalGolfStats(rounds: RoundSnapshot[]) {
     rounds: rounds.length,
     scoredRounds: complete.length,
     averageGross: average(complete.map((row) => row.gross)),
-    averageNet: average(complete.map((row) => row.net)),
+    averageNet: average(complete.flatMap((row) => row.net === null ? [] : [row.net])),
     bestRelativeToPar: complete.length ? Math.min(...complete.map((row) => row.relativeToPar)) : undefined,
     coursesPlayed: new Set(rounds.map((round) => round.courseName)).size,
     betBalance: rounds.reduce((sum, round) => sum + round.betResult, 0),

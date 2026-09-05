@@ -1,5 +1,6 @@
 import { playingHandicap, strokeAllowanceForHole } from "../../lib/engine";
 import type { Course, HoleScore, Player } from "../../lib/types";
+import { hasValidRoundHandicap } from "../../lib/handicap-base";
 
 export function FullScorecard({ course, players, scores, order, scale, onScale }: {
   course: Course;
@@ -24,7 +25,7 @@ export function FullScorecard({ course, players, scores, order, scale, onScale }
     <div className="tableWrap scorecardTable" tabIndex={0} aria-label="Tarjeta completa, desliza horizontalmente">
       <table><thead><tr><th>Jugador</th>{front.map(hole => <th key={hole}><span>H{hole}</span><small>SI {byNumber.get(hole)?.strokeIndex ?? "—"}</small></th>)}{front.length > 0 && <th className="scorecardCut">OUT</th>}{back.map(hole => <th key={hole}><span>H{hole}</span><small>SI {byNumber.get(hole)?.strokeIndex ?? "—"}</small></th>)}{back.length > 0 && <th className="scorecardCut">IN</th>}<th>TOTAL</th><th>+/− PAR</th></tr></thead>
       <tbody>{players.map(player => {
-        const roundHcp = playingHandicap(Math.max(0, Number(player.handicap ?? 0)), 100, "half_up");
+        const roundHcp = hasValidRoundHandicap(player) ? playingHandicap(Math.max(0, player.handicap), 100, "half_up") : null;
         const allHoles = [...front, ...back];
         const entered = allHoles.filter(hole => typeof scores[hole]?.[player.id] === "number");
         const total = sum(allHoles, player.id);
@@ -33,6 +34,7 @@ export function FullScorecard({ course, players, scores, order, scale, onScale }
           const gross = scores[holeNumber]?.[player.id];
           const hole = byNumber.get(holeNumber);
           if (typeof gross !== "number" || !hole) return <td key={holeNumber} aria-label={`${player.name} hoyo ${holeNumber} pendiente`}></td>;
+          if (roundHcp === null) return <td key={holeNumber}><b>{gross}</b><small>Completa el HCP<br />Neto —</small></td>;
           const strokes = strokeAllowanceForHole(roundHcp, hole.strokeIndex, "half_up");
           return <td key={holeNumber}><b>{gross}</b><small>{strokes ? `+${strokes} golpe${strokes === 1 ? "" : "s"}` : "Sin ventaja"}<br />Neto {gross - strokes}</small></td>;
         };

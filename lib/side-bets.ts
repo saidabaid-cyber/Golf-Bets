@@ -11,9 +11,11 @@ import type {
   LobaWinner,
   Player,
   PhysicalNine,
+  RoundHandicapBasis,
   Transfer,
 } from "./types";
 import { automaticUnitsForScore, baseHandicaps, completedHole, playingHandicap, strokeAllowanceForHole } from "./engine";
+import { playersMissingRoundHandicap } from "./handicap-base";
 
 const EPSILON = 0.0001;
 
@@ -155,10 +157,12 @@ export function calculateLoba(
   holes: Record<number, LobaHole>,
   order: number[],
   completedHoles?: ReadonlySet<number>,
+  basis: RoundHandicapBasis = "relative",
 ) {
   const participants = allPlayers.filter(player => config.participantIds.includes(player.id));
   const participantIds = participants.map(player => player.id);
-  const handicapBases = baseHandicaps(participants);
+  const missingHandicapPlayerIds = playersMissingRoundHandicap(participants).map((player) => player.id);
+  const handicapBases = baseHandicaps(participants, basis);
   const configuredHcpPct = Number(config.hcpPct ?? 100);
   const hcpPct = Number.isFinite(configuredHcpPct)
     ? Math.min(100, Math.max(0, configuredHcpPct))
@@ -168,14 +172,14 @@ export function calculateLoba(
   const details = order.flatMap(holeNumber => {
     const capture = holes[holeNumber];
     const validationError = validateLobaHole(capture, participantIds);
-    if (!config.enabled || validationError || (completedHoles && !completedHoles.has(holeNumber))) return [];
+    if (!config.enabled || missingHandicapPlayerIds.length || validationError || (completedHoles && !completedHoles.has(holeNumber))) return [];
     const holeDefinition = course.holes.find(hole => hole.number === holeNumber);
     if (!holeDefinition || !completedHole(holeNumber, scores, participantIds)) return [];
     const lobaTeam = capture.mode === "partner" ? [capture.lobaPlayerId!, capture.partnerId!] : [capture.lobaPlayerId!];
     const opponents = participantIds.filter(id => !lobaTeam.includes(id));
     if (!lobaTeam.length || !opponents.length) return [];
     const netScores = Object.fromEntries(participants.map(player => {
-      const playingHcp = playingHandicap(handicapBases[player.id] ?? 0, hcpPct, "round");
+      const playingHcp = playingHandicap(handicapBases[player.id], hcpPct, "round");
       const allowance = strokeAllowanceForHole(playingHcp, holeDefinition.strokeIndex, "round");
       return [player.id, (scores[holeNumber][player.id] as number) - allowance];
     })) as Record<string, number>;
@@ -251,7 +255,7 @@ export function calculateLoba(
       transfers: holeTransfers,
     }];
   });
-  return { balances, transfers, details, zeroSum: isZeroSum(balances) };
+  return { balances, transfers, details, zeroSum: isZeroSum(balances), missingHandicapPlayerIds };
 }
 
 export function requiredSideBetCapture(

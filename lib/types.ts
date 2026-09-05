@@ -1,6 +1,8 @@
 export type DecimalMode = "partial" | "round";
 // `partial` and `round` remain valid so drafts saved before V2.4 keep loading.
 export type HandicapMode = DecimalMode | "decimal" | "half_up" | "half_down" | "six_up" | "four_down";
+/** How original round handicaps are converted into the base consumed by bets. */
+export type RoundHandicapBasis = "relative" | "course";
 export type FoursomeMode = "fixed" | "fixed_points" | "points";
 export type PhysicalNine = "holes_1_9" | "holes_10_18";
 export type PressureMultiplier = 1 | 2 | 3 | 4 | 5;
@@ -396,6 +398,8 @@ export type RoundSnapshot = {
   snapshotVersion?: 2;
   roundHoles?: 9 | 18;
   startHole?: 1 | 10;
+  /** Missing on legacy snapshots preserves the previous player-relative behavior. */
+  handicapBasis?: RoundHandicapBasis;
   betResult: number;
   expenses: Expense;
   expenseTotal: number;

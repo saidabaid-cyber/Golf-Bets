@@ -1,5 +1,6 @@
 import { calculateSupplementalBets } from "./supplemental-bets";
-import type { Course, PersonalBet, PersonalOpponentResult, Player, PuttsByHole, RoundSnapshot, SupplementalBet } from "./types";
+import type { Course, PersonalBet, PersonalOpponentResult, Player, PuttsByHole, RoundHandicapBasis, RoundSnapshot, SupplementalBet } from "./types";
+import { normalizeRoundHandicapBasis } from "./handicap-base";
 
 type CanonicalPersonalResult = {
   betId: string;
@@ -40,6 +41,7 @@ export function buildPersonalOpponentResults({
   canonicalResults,
   personalBets,
   supplementalBets,
+  handicapBasis = "relative",
 }: {
   ownerId: string;
   players: Player[];
@@ -50,6 +52,7 @@ export function buildPersonalOpponentResults({
   canonicalResults: CanonicalPersonalResult[];
   personalBets: PersonalBet[];
   supplementalBets: SupplementalBet[];
+  handicapBasis?: RoundHandicapBasis;
 }): PersonalOpponentResult[] {
   const entries: PersonalOpponentResult[] = canonicalResults.map((result) => {
     const config = personalBets.find((bet) => bet.id === result.betId);
@@ -93,7 +96,7 @@ export function buildPersonalOpponentResults({
       if (bet.playerAId !== ownerId && bet.playerBId !== ownerId) continue;
       const opponentId = bet.playerAId === ownerId ? bet.playerBId : bet.playerAId;
       if (!opponentId || opponentId === ownerId) continue;
-      const result = calculateSupplementalBets([bet], players, course, scores, putts, order).results[0];
+      const result = calculateSupplementalBets([bet], players, course, scores, putts, order, handicapBasis).results[0];
       if (!result) continue;
       entries.push({
         betId: bet.id,
@@ -117,7 +120,7 @@ export function buildPersonalOpponentResults({
     if (bet.type !== "individual_pressures" || !bet.participantIds.includes(ownerId)) continue;
     for (const opponentId of bet.participantIds.filter((id) => id !== ownerId)) {
       const pairBet = { ...bet, participantIds: [ownerId, opponentId] };
-      const result = calculateSupplementalBets([pairBet], players, course, scores, putts, order).results[0];
+      const result = calculateSupplementalBets([pairBet], players, course, scores, putts, order, handicapBasis).results[0];
       if (!result) continue;
       entries.push({
         betId: bet.id,
@@ -178,6 +181,7 @@ function legacyEntries(round: RoundSnapshot): PersonalOpponentResult[] {
     canonicalResults: [],
     personalBets: [],
     supplementalBets: round.supplementalBets,
+    handicapBasis: normalizeRoundHandicapBasis(round.handicapBasis),
   });
   return [...canonical, ...supplemental];
 }

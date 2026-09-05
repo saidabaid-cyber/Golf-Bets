@@ -33,6 +33,8 @@ function humanValue(value: unknown, field = "") {
   if (typeof value === "boolean") return value ? "Sí" : "No";
   if (typeof value === "number" && field === "hcpPct") return `${value}%`;
   if (typeof value === "number" && field === "value") return `$${value.toLocaleString("es-MX")}`;
+  if (field === "handicapBasis" && value === "course") return "Ventajas sobre el campo";
+  if (field === "handicapBasis" && value === "relative") return "Ventajas entre jugadores";
   if (Array.isArray(value)) return `${value.length} seleccionado${value.length === 1 ? "" : "s"}`;
   if (typeof value === "string" || typeof value === "number") return String(value);
   return "Configuración diferente";
@@ -47,6 +49,13 @@ export function describeCloudConflict(conflict: CloudDataConflict, playerName: (
     };
   }
   const parts = (conflict.fieldPath || "").split("/").filter(Boolean);
+  if (parts.at(-1) === "handicapBasis") {
+    return {
+      label: "Aplicación del HCP de la ronda",
+      cloudValue: humanValue(conflict.cloudValue, "handicapBasis"),
+      localValue: humanValue(conflict.localValue, "handicapBasis"),
+    };
+  }
   if (parts[0] === "bets" && parts[1]) {
     const field = parts.at(-1) || "";
     const bet = BET_LABELS[parts[1]] || "la apuesta";

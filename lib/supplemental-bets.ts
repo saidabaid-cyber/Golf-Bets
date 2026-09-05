@@ -15,10 +15,12 @@ import type {
   PersonalBet,
   Player,
   PuttsByHole,
+  RoundHandicapBasis,
   SupplementalBet,
   TeamPressuresBet,
   VegasBet,
 } from "./types";
+import { playersMissingRoundHandicap } from "./handicap-base";
 
 const EPS = 1e-9;
 
@@ -51,6 +53,7 @@ export type SupplementalBetResult = {
   balances: Record<string, number>;
   lines: string[];
   pressures?: SupplementalPressureDetail[];
+  missingHandicapPlayerIds?: string[];
   audit?: {
     playedHoles: number;
     participantIds: string[];
@@ -285,9 +288,10 @@ function pairNet(
   holeNumber: number,
   hcpPct: number,
   decimals: IndividualPressuresBet["decimals"],
+  basis: RoundHandicapBasis,
 ) {
   const hole = course.holes.find((candidate) => candidate.number === holeNumber);
-  return hole ? netScore(gross, player.id, hole.strokeIndex, players, hcpPct, normalizeHandicapMode(decimals)) : gross;
+  return hole ? netScore(gross, player.id, hole.strokeIndex, players, hcpPct, normalizeHandicapMode(decimals), basis) : gross;
 }
 
 function calculateIndividualPressures(
@@ -296,12 +300,14 @@ function calculateIndividualPressures(
   course: Course,
   scores: Record<number, HoleScore>,
   order: number[],
+  basis: RoundHandicapBasis,
 ): SupplementalBetResult {
   const balances = zeroBalances(players);
   const participants = selectedPlayers(players, bet.participantIds);
   const pressures: SupplementalPressureDetail[] = [];
   const auditComponents: NonNullable<SupplementalBetResult["audit"]>["components"] = [];
-  if (!enabled(bet) || participants.length < 2) return { betId: bet.id, type: bet.type, label: SUPPLEMENTAL_BET_LABELS[bet.type], complete: false, balances, lines: [], pressures };
+  const missingHandicapPlayerIds = playersMissingRoundHandicap(participants).map((player) => player.id);
+  if (!enabled(bet) || participants.length < 2 || missingHandicapPlayerIds.length) return { betId: bet.id, type: bet.type, label: SUPPLEMENTAL_BET_LABELS[bet.type], complete: false, balances, lines: [], pressures, missingHandicapPlayerIds };
   for (const [first, second] of pairwise(participants)) {
     let startHole = order[0];
     let firstWins = 0;
@@ -313,8 +319,8 @@ function calculateIndividualPressures(
       const secondGross = scores[holeNumber]?.[second.id];
       if (typeof firstGross !== "number" || typeof secondGross !== "number") continue;
       const comparison: [Player, Player] = [first, second];
-      const firstScore = pairNet(comparison, first, firstGross, course, holeNumber, bet.hcpPct, bet.decimals);
-      const secondScore = pairNet(comparison, second, secondGross, course, holeNumber, bet.hcpPct, bet.decimals);
+      const firstScore = pairNet(comparison, first, firstGross, course, holeNumber, bet.hcpPct, bet.decimals, basis);
+      const secondScore = pairNet(comparison, second, secondGross, course, holeNumber, bet.hcpPct, bet.decimals, basis);
       if (Math.abs(firstScore - secondScore) < EPS) continue;
       const winner = firstScore < secondScore ? first : second;
       const loser = winner.id === first.id ? second : first;
@@ -379,19 +385,21 @@ function calculateTeamPressures(
   course: Course,
   scores: Record<number, HoleScore>,
   order: number[],
+  basis: RoundHandicapBasis,
 ): SupplementalBetResult {
   const balances = zeroBalances(players);
   const participants = selectedPlayers(players, bet.participantIds);
   const matchups = teamPressureMatchups(bet, participants);
   const pressures: SupplementalPressureDetail[] = [];
   const abandoned = new Set(bet.abandonedPlayerIds || []);
+  const missingHandicapPlayerIds = playersMissingRoundHandicap(participants).map((player) => player.id);
   const grossFor = (holeNumber: number, playerId: string) => {
     const captured = scores[holeNumber]?.[playerId];
     return typeof captured === "number" ? captured : abandoned.has(playerId) ? Math.max(1, bet.abandonedMaxScore) : undefined;
   };
   const holeIsComplete = (holeNumber: number) => participants.every((player) => typeof grossFor(holeNumber, player.id) === "number");
   const matchIsComplete = order.length > 0 && order.every(holeIsComplete);
-  if (!enabled(bet) || !matchups.length) return { betId: bet.id, type: bet.type, label: SUPPLEMENTAL_BET_LABELS[bet.type], complete: false, balances, lines: [], pressures };
+  if (!enabled(bet) || !matchups.length || missingHandicapPlayerIds.length) return { betId: bet.id, type: bet.type, label: SUPPLEMENTAL_BET_LABELS[bet.type], complete: false, balances, lines: [], pressures, missingHandicapPlayerIds };
   for (const matchup of matchups) {
     const components = bet.metric === "low_high"
       ? (["Low Ball", "High Ball"] as const)
@@ -403,7 +411,7 @@ function calculateTeamPressures(
         if (!bet.carryEnabled && index === 9) startHole = holeNumber;
         const hole = course.holes.find((candidate) => candidate.number === holeNumber);
         if (!hole || !holeIsComplete(holeNumber)) continue;
-        const adjusted = Object.fromEntries(participants.map((player) => [player.id, netScore(grossFor(holeNumber, player.id) as number, player.id, hole.strokeIndex, participants, bet.hcpPct, normalizeHandicapMode(bet.decimals))])) as Record<string, number>;
+        const adjusted = Object.fromEntries(participants.map((player) => [player.id, netScore(grossFor(holeNumber, player.id) as number, player.id, hole.strokeIndex, participants, bet.hcpPct, normalizeHandicapMode(bet.decimals), basis)])) as Record<string, number>;
         const virtualScore = matchup.virtual === "mudo" ? hole.par : matchup.virtual === "yoyo" ? adjusted[matchup.teamA[0]] : undefined;
         const teamAScores = [...matchup.teamA.map((id) => adjusted[id]), ...(virtualScore === undefined ? [] : [virtualScore])];
         const teamBScores = matchup.teamB.map((id) => adjusted[id]);
@@ -442,14 +450,15 @@ function chicagoPoints(gross: number, par: number, bet: ChicagoBet) {
 function calculateChicago(bet: ChicagoBet, players: Player[], course: Course, scores: Record<number, HoleScore>, order: number[]): SupplementalBetResult {
   const balances = zeroBalances(players);
   const participants = selectedPlayers(players, bet.participantIds);
-  const complete = enabled(bet) && participants.length >= 2 && completeForPlayers(order, scores, participants.map((player) => player.id));
-  if (!complete) return { betId: bet.id, type: bet.type, label: SUPPLEMENTAL_BET_LABELS[bet.type], complete: false, balances, lines: [] };
+  const missingHandicapPlayerIds = playersMissingRoundHandicap(participants).map((player) => player.id);
+  const complete = enabled(bet) && participants.length >= 2 && !missingHandicapPlayerIds.length && completeForPlayers(order, scores, participants.map((player) => player.id));
+  if (!complete) return { betId: bet.id, type: bet.type, label: SUPPLEMENTAL_BET_LABELS[bet.type], complete: false, balances, lines: [], missingHandicapPlayerIds };
   const chicagoBalances = Object.fromEntries(participants.map((player) => {
     const points = order.reduce((total, holeNumber) => {
       const hole = course.holes.find((candidate) => candidate.number === holeNumber)!;
       return total + chicagoPoints(scores[holeNumber][player.id] as number, hole.par, bet);
     }, 0);
-    const quota = bet.quotaBase - Number(player.handicap ?? 0);
+    const quota = bet.quotaBase - player.handicap!;
     return [player.id, { points, quota, balance: points - quota }];
   })) as Record<string, { points: number; quota: number; balance: number }>;
   for (const [first, second] of pairwise(participants)) {
@@ -485,17 +494,18 @@ function vegasNumber(first: number, second: number, flip: boolean) {
   return flip ? high * 10 + low : low * 10 + high;
 }
 
-function calculateVegas(bet: VegasBet, players: Player[], course: Course, scores: Record<number, HoleScore>, order: number[]): SupplementalBetResult {
+function calculateVegas(bet: VegasBet, players: Player[], course: Course, scores: Record<number, HoleScore>, order: number[], basis: RoundHandicapBasis): SupplementalBetResult {
   const balances = zeroBalances(players);
   const participants = selectedPlayers(players, bet.participantIds);
   const lines: string[] = [];
-  if (!enabled(bet) || participants.length !== 4) return { betId: bet.id, type: bet.type, label: SUPPLEMENTAL_BET_LABELS[bet.type], complete: false, balances, lines };
+  const missingHandicapPlayerIds = playersMissingRoundHandicap(participants).map((player) => player.id);
+  if (!enabled(bet) || participants.length !== 4 || missingHandicapPlayerIds.length) return { betId: bet.id, type: bet.type, label: SUPPLEMENTAL_BET_LABELS[bet.type], complete: false, balances, lines, missingHandicapPlayerIds };
   for (let index = 0; index < order.length; index += 1) {
     const holeNumber = order[index];
     const hole = course.holes.find((candidate) => candidate.number === holeNumber);
     const pairing = vegasPairing(bet, participants, index);
     if (!hole || !pairing || !completedHole(holeNumber, scores, participants.map((player) => player.id))) continue;
-    const adjusted = Object.fromEntries(participants.map((player) => [player.id, Math.round(netScore(scores[holeNumber][player.id] as number, player.id, hole.strokeIndex, participants, bet.hcpPct, normalizeHandicapMode(bet.decimals)))])) as Record<string, number>;
+    const adjusted = Object.fromEntries(participants.map((player) => [player.id, Math.round(netScore(scores[holeNumber][player.id] as number, player.id, hole.strokeIndex, participants, bet.hcpPct, normalizeHandicapMode(bet.decimals), basis))])) as Record<string, number>;
     const grossLowA = Math.min(...pairing.teamA.map((id) => scores[holeNumber][id] as number));
     const grossLowB = Math.min(...pairing.teamB.map((id) => scores[holeNumber][id] as number));
     const penalizeA = bet.birdiePenalty && grossLowB < hole.par && grossLowA > hole.par;
@@ -545,16 +555,17 @@ export function calculateSupplementalBets(
   scores: Record<number, HoleScore>,
   putts: PuttsByHole,
   order: number[],
+  basis: RoundHandicapBasis = "relative",
 ) {
   const balances = zeroBalances(players);
   const rawResults = bets.filter(enabled).map((bet): SupplementalBetResult => {
     switch (bet.type) {
       case "individual_nassau": return calculateNassau(bet, players, course, scores, order);
       case "dollar_stroke": return calculateDollarStroke(bet, players, course, scores, order);
-      case "individual_pressures": return calculateIndividualPressures(bet, players, course, scores, order);
-      case "team_pressures": return calculateTeamPressures(bet, players, course, scores, order);
+      case "individual_pressures": return calculateIndividualPressures(bet, players, course, scores, order, basis);
+      case "team_pressures": return calculateTeamPressures(bet, players, course, scores, order, basis);
       case "chicago": return calculateChicago(bet, players, course, scores, order);
-      case "vegas": return calculateVegas(bet, players, course, scores, order);
+      case "vegas": return calculateVegas(bet, players, course, scores, order, basis);
       case "minimum_putts": return calculateMinimumPutts(bet, players, putts, order);
     }
   });

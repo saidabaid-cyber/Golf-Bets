@@ -10,11 +10,12 @@ import {
   ManualBet,
   PersonalBet,
   Player,
+  RoundHandicapBasis,
   Transfer,
   UnitEvent,
 } from "./types";
 import { migratePersonalNassau } from "./personal-nassau";
-import { handicapBases } from "./handicap-base";
+import { handicapBases, playersMissingRoundHandicap, roundHandicapBases } from "./handicap-base";
 
 const EPS = 1e-9;
 
@@ -29,11 +30,8 @@ export function playersByIds(players: Player[], ids: string[]) {
   return players.filter((p) => wanted.has(p.id));
 }
 
-export function baseHandicaps(players: Player[]) {
-  if (!players.length) return {} as Record<string, number>;
-  const handicap = (player: Player) => Number(player.handicap ?? 0);
-  const best = Math.min(...players.map(handicap));
-  return Object.fromEntries(players.map((p) => [p.id, handicap(p) - best])) as Record<string, number>;
+export function baseHandicaps(players: Player[], basis: RoundHandicapBasis = "relative") {
+  return roundHandicapBases(players, basis);
 }
 
 export function normalizeHandicapMode(mode: HandicapMode | string | null | undefined): Exclude<HandicapMode, DecimalMode> {
@@ -88,9 +86,12 @@ export function netScore(
   comparisonPlayers: Player[],
   pct: number,
   decimals: HandicapMode,
+  basis: RoundHandicapBasis = "relative",
 ) {
-  const bases = baseHandicaps(comparisonPlayers);
-  const ph = playingHandicap(bases[playerId] ?? 0, pct, decimals);
+  const bases = baseHandicaps(comparisonPlayers, basis);
+  const base = bases[playerId];
+  if (base === undefined) return Number.NaN;
+  const ph = playingHandicap(base, pct, decimals);
   return gross - strokeAllowanceForHole(ph, holeStrokeIndex, decimals);
 }
 
@@ -110,15 +111,17 @@ export function winnerIdsForHole(
   comparisonPlayers: Player[],
   pct: number,
   decimals: HandicapMode,
+  basis: RoundHandicapBasis = "relative",
 ) {
   const ids = comparisonPlayers.map((p) => p.id);
   if (!completedHole(hole, scores, ids)) return [] as string[];
   const holeDef = course.holes.find((h) => h.number === hole);
   if (!holeDef) return [] as string[];
   const row = scores[hole];
+  if (playersMissingRoundHandicap(comparisonPlayers).length) return [] as string[];
   const nets = comparisonPlayers.map((p) => ({
     id: p.id,
-    net: netScore(row[p.id] as number, p.id, holeDef.strokeIndex, comparisonPlayers, pct, decimals),
+    net: netScore(row[p.id] as number, p.id, holeDef.strokeIndex, comparisonPlayers, pct, decimals, basis),
   }));
   const best = Math.min(...nets.map((x) => x.net));
   return nets.filter((x) => Math.abs(x.net - best) < EPS).map((x) => x.id);
@@ -137,11 +140,13 @@ export function calculateRabbits(
   allPlayers: Player[],
   cfg: BetConfig["rabbits"],
   order: number[],
+  basis: RoundHandicapBasis = "relative",
 ) {
   const participants = playersByIds(allPlayers, cfg.participantIds);
   const won = Object.fromEntries(participants.map((p) => [p.id, 0])) as Record<string, number>;
   const events: RabbitEvent[] = [];
-  if (!cfg.enabled || participants.length < 2) return { events, won, pending: 0 };
+  const missingHandicapPlayerIds = playersMissingRoundHandicap(participants).map((player) => player.id);
+  if (!cfg.enabled || participants.length < 2 || missingHandicapPlayerIds.length) return { events, won, pending: 0, missingHandicapPlayerIds };
 
   // Excel state machine: every rabbit has Hoyo 1, 2 and (if needed) 3.
   // If it is won on Hoyo 2, a new rabbit starts immediately on the next real hole.
@@ -151,7 +156,7 @@ export function calculateRabbits(
   let pending = 1;
 
   for (const hole of order) {
-    const winners = winnerIdsForHole(hole, course, scores, participants, cfg.hcpPct, cfg.decimals);
+    const winners = winnerIdsForHole(hole, course, scores, participants, cfg.hcpPct, cfg.decimals, basis);
     if (!winners.length) continue;
 
     const uniqueWinner = winners.length === 1 ? winners[0] : null;
@@ -246,15 +251,17 @@ export function calculateSkins(
   allPlayers: Player[],
   cfg: BetConfig["skins"],
   order: number[],
+  basis: RoundHandicapBasis = "relative",
 ) {
   const participants = playersByIds(allPlayers, cfg.participantIds);
   const won = Object.fromEntries(participants.map((p) => [p.id, 0])) as Record<string, number>;
   const events: { hole: number; winnerId?: string; count: number; carry: number }[] = [];
-  if (!cfg.enabled || participants.length < 2) return { won, events, carry: 0 };
+  const missingHandicapPlayerIds = playersMissingRoundHandicap(participants).map((player) => player.id);
+  if (!cfg.enabled || participants.length < 2 || missingHandicapPlayerIds.length) return { won, events, carry: 0, missingHandicapPlayerIds };
 
   let carry = 1;
   for (const hole of order) {
-    const winners = winnerIdsForHole(hole, course, scores, participants, cfg.hcpPct, cfg.decimals);
+    const winners = winnerIdsForHole(hole, course, scores, participants, cfg.hcpPct, cfg.decimals, basis);
     if (!winners.length) continue;
     if (winners.length === 1) {
       won[winners[0]] = (won[winners[0]] ?? 0) + carry;
@@ -278,18 +285,19 @@ function zeroBalances(players: Player[]) {
 }
 
 /** Cálculos E1448/E1450/E1452, F1459:F1461, M1491:M1493. */
-export function calculateMonkey(course: Course, scores: Record<number, HoleScore>, allPlayers: Player[], cfg: BetConfig["monkey"], order: number[]) {
+export function calculateMonkey(course: Course, scores: Record<number, HoleScore>, allPlayers: Player[], cfg: BetConfig["monkey"], order: number[], basis: RoundHandicapBasis = "relative") {
   const participants = playersByIds(allPlayers, [...new Set(cfg?.participantIds ?? [])]);
   const balances = zeroBalances(participants);
   const points = zeroBalances(participants);
   const details: Array<{hole:number; net:Record<string,number>; points:Record<string,number>}> = [];
-  if (!cfg?.enabled || participants.length !== 3) return {balances, points, details, valid: !cfg?.enabled || participants.length === 3};
-  const minimum = Math.min(...participants.map(p=>p.handicap ?? 0));
+  const missingHandicapPlayerIds = playersMissingRoundHandicap(participants).map((player) => player.id);
+  if (!cfg?.enabled || participants.length !== 3 || missingHandicapPlayerIds.length) return {balances, points, details, valid: !cfg?.enabled || (participants.length === 3 && !missingHandicapPlayerIds.length), missingHandicapPlayerIds};
+  const bases = baseHandicaps(participants, basis);
   for (const holeNumber of order) {
     const hole=course.holes.find(h=>h.number===holeNumber);
     if (!hole || !completedHole(holeNumber,scores,participants.map(p=>p.id))) continue;
     const net=Object.fromEntries(participants.map(p=>{
-      const hcp=(p.handicap ?? 0)-minimum;
+      const hcp=bases[p.id];
       // The workbook uses the unrounded rebased HCP and SI/SI+18 only, no % control.
       return [p.id, Number(scores[holeNumber][p.id]) - Number(hcp>=hole.strokeIndex) - Number(hcp>=hole.strokeIndex+18)];
     }));
@@ -505,12 +513,14 @@ export function calculateFoursomes(
   cfg: BetConfig["foursome"],
   segments: FoursomeSegment[],
   order: number[],
+  basis: RoundHandicapBasis = "relative",
 ) {
   const participants = playersByIds(allPlayers, cfg.participantIds);
   const balances = zeroBalances(participants);
   const provisionalBalances = zeroBalances(participants);
   const matches: FoursomeMatchResult[] = [];
-  if (!cfg.enabled || participants.length < 3) return { balances, provisionalBalances, matches };
+  const missingHandicapPlayerIds = playersMissingRoundHandicap(participants).map((player) => player.id);
+  if (!cfg.enabled || participants.length < 3 || missingHandicapPlayerIds.length) return { balances, provisionalBalances, matches, missingHandicapPlayerIds };
 
   // Pressure is a two-nine option. A residual saved setting must never double a
   // standalone nine-hole round after the user changes the round length.
@@ -535,7 +545,7 @@ export function calculateFoursomes(
         if (source) matchPlayers.push({ ...source, id: FOURSOME_GHOST_ID, name: "Fantasma" });
       }
       const holePoints: FoursomeMatchResult["holePoints"] = [];
-      const bases = handicapBases(cfg, matchPlayers, participants);
+      const bases = handicapBases(cfg, matchPlayers, participants, matchPlayers, basis);
       let complete = true;
       let pointDiff = 0;
 
@@ -549,7 +559,7 @@ export function calculateFoursomes(
         const row = scores[hole];
         const adjusted = (gross: number, id: string) => cfg.handicapMethod === "excel"
           ? excelFoursomeNet(gross, id, hd.strokeIndex, matchPlayers, bases)
-          : gross - strokeAllowanceForHole(playingHandicap(bases[id] ?? 0, cfg.hcpPct, cfg.decimals), hd.strokeIndex, cfg.decimals);
+          : gross - strokeAllowanceForHole(playingHandicap(bases[id], cfg.hcpPct, cfg.decimals), hd.strokeIndex, cfg.decimals);
         const aScores = (segment.basePair as [string, string]).map((id) =>
           adjusted(row[id] as number, id),
         );
@@ -630,6 +640,7 @@ export function calculateBallFriend(
   cfg: BetConfig["ballFriend"],
   holeSetup: Record<number, BallFriendHole>,
   order: number[],
+  basis: RoundHandicapBasis = "relative",
 ) {
   const participants = playersByIds(allPlayers, cfg.participantIds);
   const points = zeroBalances(participants);
@@ -646,7 +657,8 @@ export function calculateBallFriend(
     birdieOrBetterB: boolean;
   }[] = [];
 
-  if (!cfg.enabled || participants.length < 4) return { points, balances, details };
+  const missingHandicapPlayerIds = playersMissingRoundHandicap(participants).map((player) => player.id);
+  if (!cfg.enabled || participants.length < 4 || missingHandicapPlayerIds.length) return { points, balances, details, missingHandicapPlayerIds };
 
   for (const hole of order) {
     const setup = holeSetup[hole];
@@ -663,12 +675,12 @@ export function calculateBallFriend(
     const row = scores[hole];
 
     const activePlayers = playersByIds(participants, activeIds);
-    const bases = handicapBases(cfg, activePlayers, participants, participants);
+    const bases = handicapBases(cfg, activePlayers, participants, participants, basis);
     const adjusted = Object.fromEntries(
       activePlayers.map((p) => {
         const gross = row[p.id];
         if (typeof gross !== "number") return [p.id, null];
-        const net = gross - strokeAllowanceForHole(playingHandicap(bases[p.id] ?? 0, cfg.hcpPct, cfg.decimals), hd.strokeIndex, cfg.decimals);
+        const net = gross - strokeAllowanceForHole(playingHandicap(bases[p.id], cfg.hcpPct, cfg.decimals), hd.strokeIndex, cfg.decimals);
         return [p.id, Math.min(cfg.maxScore, net)];
       }),
     ) as Record<string, number | null>;
@@ -935,10 +947,11 @@ function calculateMedalComponent(
   participants: Player[],
   hcpPct: number,
   decimals: DecimalMode,
+  basis: RoundHandicapBasis,
 ) {
   const totals = Object.fromEntries(participants.map((p) => [p.id, 0])) as Record<string, number>;
   const ids = participants.map((p) => p.id);
-  const complete = value > 0 && holes.length > 0 && holes.every((hole) => completedHole(hole, scores, ids));
+  const complete = value > 0 && holes.length > 0 && !playersMissingRoundHandicap(participants).length && holes.every((hole) => completedHole(hole, scores, ids));
 
   if (!complete) {
     return {
@@ -952,7 +965,7 @@ function calculateMedalComponent(
     if (!hd) continue;
     const row = scores[hole];
     for (const p of participants) {
-      totals[p.id] += netScore(row[p.id] as number, p.id, hd.strokeIndex, participants, hcpPct, decimals);
+      totals[p.id] += netScore(row[p.id] as number, p.id, hd.strokeIndex, participants, hcpPct, decimals, basis);
     }
   }
 
@@ -979,6 +992,7 @@ export function calculatePolla(
   allPlayers: Player[],
   cfg: BetConfig["polla"],
   order: number[],
+  basis: RoundHandicapBasis = "relative",
 ) {
   const balances = zeroBalances(allPlayers);
   const details: MedalPollaDetail[] = [];
@@ -1010,6 +1024,7 @@ export function calculatePolla(
       participants,
       componentCfg.hcpPct,
       componentCfg.decimals,
+      basis,
     );
     details.push(result.detail);
     for (const [id, amount] of Object.entries(result.balances)) balances[id] = (balances[id] ?? 0) + amount;
@@ -1023,6 +1038,7 @@ export function calculateMiniPolla(
   allPlayers: Player[],
   cfg: BetConfig["miniPolla"],
   order: number[],
+  basis: RoundHandicapBasis = "relative",
 ) {
   const participants = playersByIds(allPlayers, cfg.participantIds);
   const balances = zeroBalances(participants);
@@ -1030,7 +1046,7 @@ export function calculateMiniPolla(
   if (!cfg.enabled || participants.length < 2) return { balances, details };
 
   // Always the last three holes actually PLAYED. If starting on 10, these are 7-8-9.
-  const result = calculateMedalComponent("mini", "Mini Polla · últimos 3", order.slice(-3), cfg.value, course, scores, participants, cfg.hcpPct, cfg.decimals);
+  const result = calculateMedalComponent("mini", "Mini Polla · últimos 3", order.slice(-3), cfg.value, course, scores, participants, cfg.hcpPct, cfg.decimals, basis);
   details.push(result.detail);
   for (const [id, amount] of Object.entries(result.balances)) balances[id] = (balances[id] ?? 0) + amount;
   return { balances, details };
