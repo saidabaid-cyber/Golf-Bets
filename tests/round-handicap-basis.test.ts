@@ -18,6 +18,7 @@ import {
   calculatePolla,
   calculateRabbits,
   calculateSkins,
+  excelFoursomeNet,
   playingHandicap,
   strokeAllowanceForHole,
 } from "../lib/engine";
@@ -109,6 +110,38 @@ test("el dominio de HCP de ronda acepta -15..54, incluido cero y plus negativos"
     scratch: 15,
     "high-limit": 69,
   });
+});
+
+test("HCP plus da golpes desde SI 18 y conserva fracciones y ciclos", () => {
+  assert.equal(strokeAllowanceForHole(-2, 18, "half_up"), -1);
+  assert.equal(strokeAllowanceForHole(-2, 17, "half_up"), -1);
+  assert.equal(strokeAllowanceForHole(-2, 16, "half_up"), 0);
+  assert.equal(strokeAllowanceForHole(-2.5, 16, "decimal"), -0.5);
+  assert.equal(strokeAllowanceForHole(-20.5, 18, "decimal"), -2);
+  assert.equal(strokeAllowanceForHole(-20.5, 17, "decimal"), -2);
+  assert.equal(strokeAllowanceForHole(-20.5, 16, "decimal"), -1.5);
+  assert.equal(strokeAllowanceForHole(Number.NaN, 18, "half_up"), 0);
+  assert.equal(strokeAllowanceForHole(-2, 19, "half_up"), 0);
+});
+
+test("leaderboard y motores legacy aplican HCP plus sobre el campo", () => {
+  const plusPlayers: Player[] = [
+    { id: "plus", name: "Plus", handicap: -1 },
+    { id: "scratch", name: "Scratch", handicap: 0 },
+    { id: "hcp", name: "HCP", handicap: 1 },
+  ];
+  const si18Course: Course = { id: "plus-course", name: "Plus QA", teeName: "General", holes: [{ number: 18, par: 4, strokeIndex: 18 }] };
+  const equalScores = { 18: { plus: 4, scratch: 4, hcp: 4 } };
+  const board = privateLeaderboard(si18Course, plusPlayers, equalScores, [18]);
+  assert.deepEqual(board.map((row) => [row.playerId, row.net]), [["plus", 5], ["scratch", 4], ["hcp", 4]]);
+
+  const monkey = { ...initialBets(plusPlayers.map((player) => player.id)).monkey!, enabled: true };
+  assert.deepEqual(calculateMonkey(si18Course, equalScores, plusPlayers, monkey, [18], "course").details[0].net, { plus: 5, scratch: 4, hcp: 4 });
+  assert.equal(excelFoursomeNet(4, "plus", 18, plusPlayers, { plus: -1, scratch: 0, hcp: 1 }), 5);
+
+  const skins = { ...initialBets(["plus", "scratch"]).skins, enabled: true };
+  const result = calculateSkins(si18Course, { 18: { plus: 4, scratch: 4 } }, plusPlayers.slice(0, 2), skins, [18], "course");
+  assert.equal(result.events[0].winnerId, "scratch");
 });
 
 test("un HCP fuera de -15..54 se considera faltante y no genera bases", () => {

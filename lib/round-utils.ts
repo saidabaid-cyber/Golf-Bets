@@ -231,7 +231,7 @@ export function privateLeaderboard(course: Course, players: Player[], scores: Re
     let net: number | null = hasValidRoundHandicap(player) ? 0 : null;
     let par = 0;
     let thru = 0;
-    const roundHandicap = hasValidRoundHandicap(player) ? playingHandicap(Math.max(0, player.handicap), 100, "half_up") : null;
+    const roundHandicap = hasValidRoundHandicap(player) ? playingHandicap(player.handicap, 100, "half_up") : null;
     for (const holeNumber of order) {
       const score = scores[holeNumber]?.[player.id];
       const hole = course.holes.find((candidate) => candidate.number === holeNumber);

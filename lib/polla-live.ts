@@ -183,7 +183,7 @@ export function buildPollaLeaderboard(input: {
     const own = scoresByPlayer.get(player.id) || [];
     const gross = own.reduce((sum, score) => sum + score.score, 0);
     const par = own.reduce((sum, score) => sum + (parByHole.get(score.hole) || 4), 0);
-    const playingHcp = playingHandicap(Math.max(0, Number(player.handicap)), input.hcpPct, input.handicapMode);
+    const playingHcp = playingHandicap(Number(player.handicap), input.hcpPct, input.handicapMode);
     const allowance = own.reduce((sum, score) => sum + strokeAllowanceForHole(playingHcp, strokeIndexByHole.get(score.hole) || score.hole, input.handicapMode), 0);
     const net = gross - allowance;
     const grossRelativeToPar = gross - par;

@@ -101,23 +101,37 @@ export function playingHandicap(base: number, pct: number, mode: HandicapMode) {
 }
 
 /**
- * Distributes handicap by stroke index. Supports >18 handicaps and, in partial
- * mode, gives the decimal on the next stroke-index hole exactly as the Excel
- * model does for tie-breaking.
+ * Distributes handicap by stroke index. Positive handicaps receive strokes from
+ * SI 1 upward; plus handicaps give strokes back from SI 18 downward. Supports
+ * multiple 18-hole cycles and, in decimal mode, places the fraction on the next
+ * applicable stroke-index hole.
  */
 export function strokeAllowanceForHole(playingHcp: number, strokeIndex: number, mode: HandicapMode) {
-  const safe = Math.max(0, playingHcp);
-  const full = Math.floor(safe);
-  const fraction = safe - full;
+  if (!Number.isFinite(playingHcp) || !Number.isInteger(strokeIndex) || strokeIndex < 1 || strokeIndex > 18) return 0;
+  const direction = playingHcp < -EPS ? -1 : 1;
+  const magnitude = Math.abs(playingHcp);
+  const full = Math.floor(magnitude);
+  const fraction = magnitude - full;
   const cycles = Math.floor(full / 18);
   const remainder = full % 18;
-  let allowance = cycles + (strokeIndex <= remainder ? 1 : 0);
+  const receivesWhole = direction > 0
+    ? strokeIndex <= remainder
+    : strokeIndex > 18 - remainder;
+  let allowance = direction * (cycles + (receivesWhole ? 1 : 0));
 
   if (normalizeHandicapMode(mode) === "decimal" && fraction > EPS) {
-    const nextIndex = remainder + 1;
-    if (strokeIndex === nextIndex) allowance += fraction;
+    const nextIndex = direction > 0 ? remainder + 1 : 18 - remainder;
+    if (strokeIndex === nextIndex) allowance += direction * fraction;
   }
-  return allowance;
+  return Math.abs(allowance) < EPS ? 0 : allowance;
+}
+
+/** Preserves the legacy two-threshold Excel engines while supporting plus HCP. */
+function excelStrokeAllowanceForHole(playingHcp: number, strokeIndex: number) {
+  if (playingHcp >= 0) return Number(playingHcp >= strokeIndex) + Number(playingHcp >= strokeIndex + 18);
+  const magnitude = Math.abs(playingHcp);
+  const reverseStrokeIndex = 19 - strokeIndex;
+  return -(Number(magnitude >= reverseStrokeIndex) + Number(magnitude >= reverseStrokeIndex + 18));
 }
 
 export function netScore(
@@ -403,7 +417,7 @@ export function calculateMonkey(course: Course, scores: Record<number, HoleScore
       const playingHcp = playingHandicap(bases[p.id], hcpPct, "decimal");
       // Preserve Monkey's original whole-stroke SI/SI+18 thresholds. The new
       // percentage changes the HCP fed into those thresholds, not its point rule.
-      const allowance = Number(playingHcp >= hole.strokeIndex) + Number(playingHcp >= hole.strokeIndex + 18);
+      const allowance = excelStrokeAllowanceForHole(playingHcp, hole.strokeIndex);
       return [p.id, Number(scores[holeNumber][p.id]) - allowance];
     }));
     const earned=Object.fromEntries(participants.map(p=>[p.id,participants.reduce((sum,rival)=>sum+(rival.id===p.id ? 0 : net[p.id]<net[rival.id] ? 2 : net[p.id]===net[rival.id] ? 1 : 0),0)]));
@@ -590,7 +604,7 @@ export type FoursomeMatchResult = {
 export function excelFoursomeNet(gross: number, id: string, si: number, matchPlayers: Player[], bases = baseHandicaps(matchPlayers)) {
   const base = bases[id] ?? 0;
   const hcp = Math.round((base + EPS) * 10) / 10;
-  return gross - (hcp >= si ? 1 : 0) - (hcp >= si + 18 ? 1 : 0);
+  return gross - excelStrokeAllowanceForHole(hcp, si);
 }
 
 function teamHolePoints(teamA: number[], teamB: number[]) {

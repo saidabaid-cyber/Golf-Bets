@@ -78,6 +78,21 @@ test("leaderboard filtra vueltas y grupo sin fetch por jugador", () => {
   assert.ok(back.every((row) => row.thru === 9 && row.finished));
 });
 
+test("leaderboard neto aplica HCP plus desde el stroke index más alto", () => {
+  const rows = buildPollaLeaderboard({
+    players: [{ id: "plus", name: "Plus", handicap: -1 }],
+    scores: [{ playerId: "plus", hole: 18, score: 4 }],
+    courseSnapshot: [{ number: 18, par: 4, strokeIndex: 18 }],
+    tournamentHoles: 9,
+    startHole: 10,
+    hcpPct: 100,
+    handicapMode: "half_up",
+  });
+  assert.equal(rows[0].gross, 4);
+  assert.equal(rows[0].net, 5);
+  assert.equal(rows[0].netRelativeToPar, 1);
+});
+
 test("RLS lógico: scorer solo su grupo abierto, viewer nunca y admin sí", () => {
   assert.equal(canEditPollaScore({ role: "scorer", sessionGroupId: "g1", targetGroupId: "g1", cardStatus: "open" }), true);
   assert.equal(canEditPollaScore({ role: "scorer", sessionGroupId: "g1", targetGroupId: "g2", cardStatus: "open" }), false);
