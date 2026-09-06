@@ -1,4 +1,5 @@
 import type { Course } from "./types";
+import { buildInternalCourseCatalog, type InternalCourseCatalog } from "./course-catalog";
 
 export type ProviderFailureCode =
   | "not_configured"
@@ -12,7 +13,7 @@ export type ProviderResult<T> =
   | { ok: true; data: T; providerId: string }
   | { ok: false; code: ProviderFailureCode; message: string; providerId: string };
 
-export type CourseDataCapability = "search" | "details" | "manual_write" | "remote_catalog";
+export type CourseDataCapability = "search" | "details" | "manual_write" | "remote_catalog" | "structured_catalog";
 
 export type CourseSearchInput = {
   /** The caller-owned catalog. The internal provider never adds remote records. */
@@ -26,6 +27,10 @@ export type CourseSearchData = {
   query: string;
   total: number;
   hasMore: boolean;
+  /** Formal, validated course/tee/hole records for the returned page. */
+  catalog: InternalCourseCatalog;
+  /** Records kept by the caller but excluded because they are unsafe to play. */
+  rejected: number;
 };
 
 export interface CourseDataProvider {
@@ -58,21 +63,30 @@ export function searchInternalCourses(input: CourseSearchInput): CourseSearchDat
   const query = searchableText(input.query);
   const tokens = query.split(/\s+/).filter(Boolean);
   const limit = searchLimit(input.limit);
+  const fullCatalog = buildInternalCourseCatalog(input.courses);
 
-  const matches = input.courses
-    .map((course, index) => {
-      const name = searchableText(course.name);
-      const tee = searchableText(course.teeName);
+  const matches = fullCatalog.entries
+    .map((entry, index) => {
+      if (!entry.playable || !entry.course || !entry.tee) return null;
+      const name = searchableText(entry.course.name);
+      const tee = searchableText(entry.tee.name);
       const haystack = `${name} ${tee}`.trim();
       if (!tokens.every((token) => haystack.includes(token))) return null;
       const rank = !query || name === query ? 0 : name.startsWith(query) ? 1 : name.includes(query) ? 2 : 3;
-      return { course, index, rank };
+      return { course: entry.sourceCourse, index, rank };
     })
     .filter((match): match is { course: Course; index: number; rank: number } => Boolean(match));
 
   if (query) matches.sort((left, right) => left.rank - right.rank || left.index - right.index);
   const courses = matches.slice(0, limit).map((match) => match.course);
-  return { courses, query: String(input.query ?? "").trim(), total: matches.length, hasMore: matches.length > courses.length };
+  return {
+    courses,
+    query: String(input.query ?? "").trim(),
+    total: matches.length,
+    hasMore: matches.length > courses.length,
+    catalog: buildInternalCourseCatalog(courses),
+    rejected: fullCatalog.rejectedCount,
+  };
 }
 
 /** Default provider for Beta: a deterministic, offline search over real local data. */
@@ -85,6 +99,7 @@ export const internalCourseDataProvider: CourseDataProvider = {
     details: true,
     manual_write: true,
     remote_catalog: false,
+    structured_catalog: true,
   },
   async search(input) {
     return { ok: true, data: searchInternalCourses(input), providerId: this.id };

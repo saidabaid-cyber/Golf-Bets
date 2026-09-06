@@ -17,15 +17,6 @@ export type CourseLibraryProps = {
   onEditCourse?: (course: Course) => void;
 };
 
-function coursePar(course: Course) {
-  return course.holes.reduce((total, hole) => total + hole.par, 0);
-}
-
-function courseYardage(course: Course) {
-  if (!course.holes.length || course.holes.some((hole) => typeof hole.yards !== "number" || !Number.isFinite(hole.yards))) return null;
-  return course.holes.reduce((total, hole) => total + (hole.yards || 0), 0);
-}
-
 function updatedLabel(updatedAt: string | undefined) {
   if (!updatedAt) return null;
   const date = new Date(updatedAt.length === 10 ? `${updatedAt}T12:00:00-06:00` : updatedAt);
@@ -38,7 +29,12 @@ export function CourseLibrary({ courses, favoriteCourseIds, recentCourseIds = []
   const [filter, setFilter] = useState<CourseFilter>("all");
   const favoriteSet = useMemo(() => new Set(favoriteCourseIds), [favoriteCourseIds]);
   const recentRank = useMemo(() => new Map(recentCourseIds.map((id, index) => [id, index])), [recentCourseIds]);
-  const searchedCourses = useMemo(() => searchInternalCourses({ courses, query, limit: 200 }).courses, [courses, query]);
+  const searchResult = useMemo(() => searchInternalCourses({ courses, query, limit: 200 }), [courses, query]);
+  const searchedCourses = searchResult.courses;
+  const catalogEntryBySelection = useMemo(
+    () => new Map(searchResult.catalog.entries.map((entry) => [entry.selectionId, entry])),
+    [searchResult.catalog.entries],
+  );
   const visibleCourses = useMemo(() => searchedCourses
     .filter((course) => {
       if (filter === "favorites" && !favoriteSet.has(course.id)) return false;
@@ -68,18 +64,22 @@ export function CourseLibrary({ courses, favoriteCourseIds, recentCourseIds = []
       <p className="srOnly" role="status" aria-live="polite">{visibleCourses.length} campo{visibleCourses.length === 1 ? "" : "s"} visible{visibleCourses.length === 1 ? "" : "s"}.</p>
     </section>
 
+    {searchResult.rejected > 0 && <div className="notice bad" role="alert">No mostramos {searchResult.rejected} registro{searchResult.rejected === 1 ? "" : "s"} con datos incompletos o ambiguos. Sus datos siguen guardados y no se usarán en una ronda hasta quedar válidos.</div>}
+
     {visibleCourses.length ? <section className="betaCourseList" aria-label={`${visibleCourses.length} campos`}>
       {visibleCourses.map((course) => {
-        const yardage = courseYardage(course);
-        const updated = updatedLabel(course.updatedAt);
+        const entry = catalogEntryBySelection.get(course.id);
+        if (!entry?.course || !entry.tee) return null;
+        const yardage = entry.tee.totalYardage;
+        const updated = updatedLabel(entry.course.updatedAt);
         const favorite = favoriteSet.has(course.id);
         const selected = selectedCourseId === course.id;
         return <article className={`card betaCourseCard ${selected ? "selected" : ""}`} key={course.id}>
           <div className="betaCourseCardHead">
-            <div>{selected && <span className="betaSelectedCourse">SELECCIONADO</span>}<h2>{course.name}</h2><p>{course.teeName || "Tee sin nombre"}</p></div>
+            <div>{selected && <span className="betaSelectedCourse">SELECCIONADO</span>}<h2>{entry.course.name}</h2><p>Tee {entry.tee.name}</p></div>
             <button type="button" className={`betaFavoriteCourse ${favorite ? "active" : ""}`} aria-pressed={favorite} aria-label={`${favorite ? "Quitar" : "Agregar"} ${course.name} ${favorite ? "de" : "a"} favoritos`} onClick={() => onToggleFavorite(course.id)}>{favorite ? "★" : "☆"}</button>
           </div>
-          <div className="betaCourseFacts"><span><small>Hoyos</small><b>{course.holes.length}</b></span><span><small>Par</small><b>{coursePar(course)}</b></span>{yardage !== null && <span><small>Yardas</small><b>{yardage.toLocaleString("es-MX")}</b></span>}</div>
+          <div className="betaCourseFacts"><span><small>Hoyos</small><b>{entry.course.holesCount}</b></span><span><small>Par</small><b>{entry.course.par}</b></span>{yardage !== undefined && <span><small>Yardas</small><b>{yardage.toLocaleString("es-MX")}</b></span>}{entry.tee.rating !== undefined && <span><small>Rating</small><b>{entry.tee.rating}</b></span>}{entry.tee.slope !== undefined && <span><small>Slope</small><b>{entry.tee.slope}</b></span>}</div>
           {updated && <p className="betaCourseUpdated">Actualizado {updated}</p>}
           <div className="betaCourseActions"><button type="button" className="primary" onClick={() => onSelectCourse(course)}>{selected ? "Usar este campo" : "Seleccionar campo"}</button>{onEditCourse && <button type="button" className="secondary" onClick={() => onEditCourse(course)}>Editar</button>}</div>
         </article>;
