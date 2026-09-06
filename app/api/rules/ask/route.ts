@@ -51,5 +51,5 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET() {
-  return NextResponse.json(publicRulesAiStatus(process.env));
+  return NextResponse.json(publicRulesAiStatus(process.env), { headers: { "cache-control": "no-store" } });
 }

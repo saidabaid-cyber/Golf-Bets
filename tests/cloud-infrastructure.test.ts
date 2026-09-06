@@ -72,9 +72,11 @@ test("link de ronda privada proyecta exclusivamente scores", () => {
   assert.doesNotMatch(privateLink, /rabbits|skins|foursome|personalBets|expenses|balances/);
 });
 
-test("enlace corto abre Polla Live, carga la invitación y conserva QR compartible", () => {
+test("Polla Live conserva backend y enlaces, pero el acceso principal queda visible e inhabilitado", () => {
   assert.match(read("app/polla/[code]/page.tsx"), /redirect\(`\/\?polla=/);
-  assert.match(appPage, /entry\.has\("polla"\).*setTab\("pollaLive"\)/);
+  assert.doesNotMatch(appPage, /entry\.has\("polla"\).*setTab\("pollaLive"\)/);
+  assert.match(appPage, /className="secondary comingSoonFeature"[^>]*disabled[^>]*aria-disabled="true"/);
+  assert.match(appPage, /Polla Live<\/span><small>Próximamente<\/small>/);
   assert.match(pollaPanel, /requestPollaInvite\(invitedId\)/);
   assert.match(pollaPanel, /\/polla\/\$\{created\.short_code\}/);
   assert.match(pollaPanel, /leaderboard\.tournament\?\.publicId/);

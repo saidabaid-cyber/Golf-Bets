@@ -687,8 +687,7 @@ function GolfBetsApp() {
         applyDraft(draft);
       } catch { /* keep safe defaults for structurally invalid legacy data */ }
       const entry = new URLSearchParams(window.location.search);
-      if (entry.has("polla")) setTab("pollaLive");
-      else if (entry.get("screen") === "account") setTab("account");
+      if (entry.get("screen") === "account") setTab("account");
       setHydrated(true);
     };
     void hydrate();
@@ -2306,7 +2305,7 @@ function GolfBetsApp() {
       <button className="primary big" onClick={requestNewRound}>Nueva ronda</button>
       <button className="secondary big groupsHomeButton" onClick={() => setTab("groups")}>Armar grupos</button>
       {draftAvailable && !roundClosed && <div className="activeRoundActions"><button className="secondary big" onClick={editActiveRound}>Editar ronda</button><button className="primary big" onClick={() => setTab(roundReviewPending ? "results" : players.length ? "round" : "setup")}>{roundReviewPending ? "Revisar ronda terminada" : `Continuar ronda · H${order[currentIndex]}`}</button><button className="deleteRoundButton" onClick={() => setShowDeleteRoundConfirm(true)}>Eliminar ronda</button></div>}
-      <div className="welcomeLinks"><button className="secondary" onClick={() => { setRulesCourseContext(draftAvailable && courseSelected ? course.name : ""); setTab("rules"); }}>⚑ Reglas de Golf</button><button className="secondary" onClick={() => setTab("pollaLive")}>🏆 Polla Live</button></div>
+      <div className="welcomeLinks"><button className="secondary" onClick={() => { setRulesCourseContext(draftAvailable && courseSelected ? course.name : ""); setTab("rules"); }}>⚑ Reglas de Golf</button><button className="secondary comingSoonFeature" type="button" disabled aria-disabled="true"><span>🏆 Polla Live</span><small>Próximamente</small></button></div>
       {history[0] && <button className="recentRound" onClick={() => setTab("history")}><span>Última ronda</span><b>{history[0].courseName} · {history[0].date}</b><strong className={history[0].netResult >= 0 ? "good" : "bad"}>{signedMoney(history[0].netResult)}</strong></button>}
       <button className="textButton accountHomeLink" onClick={() => setTab("account")}>Mi Cuenta</button>
     </section>}

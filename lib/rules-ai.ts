@@ -39,6 +39,8 @@ export function publicRulesAiStatus(env: RulesAiEnvironment) {
   return {
     enabled: config.ready,
     configured: config.providerSupported && config.hasApiKey,
+    provider: config.provider,
+    model: config.model,
     state: config.ready ? "ready" as const : config.enabled ? "missing_config" as const : "disabled" as const,
   };
 }

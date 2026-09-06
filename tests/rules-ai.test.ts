@@ -28,7 +28,7 @@ test("Rules AI defaults to OpenAI and reports configuration without exposing sec
   assert.equal(DEFAULT_RULES_AI_PROVIDER, "openai");
   assert.equal(rulesAiConfig({ RULES_AI_ENABLED: "false", OPENAI_API_KEY: "secret" }).ready, false);
   const status = publicRulesAiStatus({ RULES_AI_ENABLED: "true", OPENAI_API_KEY: "secret" });
-  assert.deepEqual(status, { enabled: true, configured: true, state: "ready" });
+  assert.deepEqual(status, { enabled: true, configured: true, provider: "openai", model: DEFAULT_OPENAI_RULES_MODEL, state: "ready" });
   assert.equal("apiKey" in status, false);
   assert.equal(rulesAiConfig({ RULES_AI_ENABLED: "true", OPENAI_API_KEY: "secret" }).model, DEFAULT_OPENAI_RULES_MODEL);
   assert.equal(rulesAiConfig({ RULES_AI_ENABLED: "true", RULES_AI_PROVIDER: "otro", OPENAI_API_KEY: "secret" }).ready, false);
@@ -52,6 +52,7 @@ test("Rules AI distinguishes Gemini quota, OpenAI quota, rate limit, timeout, ne
   assert.equal(classifyRulesAiFailure(new RulesAiProviderRequestError("gemini", 429, "RESOURCE_EXHAUSTED", "quota")).code, "quota");
   assert.match(classifyRulesAiFailure(new RulesAiProviderRequestError("gemini", 429, "RESOURCE_EXHAUSTED", "quota")).message, /Gemini/);
   assert.equal(classifyRulesAiFailure({ status: 429, code: "insufficient_quota" }, "openai").code, "quota");
+  assert.match(classifyRulesAiFailure({ status: 429, code: "credit_balance_exhausted" }, "openai").message, /no tiene crédito disponible/);
   assert.equal(classifyRulesAiFailure({ status: 429, code: "rate_limit_exceeded" }, "openai").code, "rate_limit");
   assert.equal(classifyRulesAiFailure({ name: "AbortError" }).code, "timeout");
   assert.equal(classifyRulesAiFailure({ message: "Failed to fetch" }).code, "network");
