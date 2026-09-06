@@ -59,7 +59,7 @@ test("restoring legacy Skins without a mode preserves its accumulate flag", () =
     accumulate: false,
     participantIds: ids,
   };
-  const restored = restoreBetConfig({ skins: JSON.parse(JSON.stringify(legacy)) }, ids).skins;
+  const restored = restoreBetConfig({ skins: JSON.parse(JSON.stringify(legacy)) }, ids, { startHole: 1, roundHoles: 18 }).skins;
   assert.equal(restored.mode, undefined);
   const scores = { 1: { a: 4, b: 4 }, 2: { a: 3, b: 4 } };
   assert.equal(calculateSkins(course, scores, players, restored, [1, 2]).won.a, 1);

@@ -18,6 +18,7 @@ import { migratePersonalNassau } from "./personal-nassau";
 import { handicapBases, isValidRoundHandicapValue, playersMissingRoundHandicap, roundHandicapBases } from "./handicap-base";
 import { normalizeRabbitMode, normalizeSkinsMode } from "./bet-modes";
 import { isFiniteZeroSum } from "./settlement-integrity";
+import { physicalNineForPlayedHalf, roundHalfForHole, roundHalfHoles } from "./round-half";
 
 const EPS = 1e-9;
 
@@ -620,19 +621,20 @@ function foursomeEconomics(
   segmentHoles: number[],
   cfg: BetConfig["foursome"],
   pressureMultiplier: number,
-  pressureNine: "holes_1_9" | "holes_10_18",
+  roundOrder: number[],
 ) {
   const sign = (value: number) => value > 0 ? 1 : value < 0 ? -1 : 0;
   const isPressedHole = (hole: number) => pressureMultiplier > 1 &&
-    (pressureNine === "holes_1_9" ? hole <= 9 : hole >= 10);
+    roundHalfForHole(hole, roundOrder) === "second_half";
   const pointDiff = holePoints.reduce((total, item) => total + item.points, 0);
-  const spansBothPhysicalNines = segmentHoles.some((hole) => hole <= 9) && segmentHoles.some((hole) => hole >= 10);
+  const spansBothPlayedHalves = segmentHoles.some((hole) => roundHalfForHole(hole, roundOrder) === "first_half")
+    && segmentHoles.some((hole) => roundHalfForHole(hole, roundOrder) === "second_half");
 
   const fixedMoney = cfg.mode === "fixed" || cfg.mode === "fixed_points"
-    ? pressureMultiplier > 1 && spansBothPhysicalNines
+    ? pressureMultiplier > 1 && spansBothPlayedHalves
       ? [
-          { points: holePoints.filter(({ hole }) => hole <= 9), multiplier: pressureNine === "holes_1_9" ? pressureMultiplier : 1 },
-          { points: holePoints.filter(({ hole }) => hole >= 10), multiplier: pressureNine === "holes_10_18" ? pressureMultiplier : 1 },
+          { points: holePoints.filter(({ hole }) => roundHalfForHole(hole, roundOrder) === "first_half"), multiplier: 1 },
+          { points: holePoints.filter(({ hole }) => roundHalfForHole(hole, roundOrder) === "second_half"), multiplier: pressureMultiplier },
         ].reduce((money, group) => money + sign(group.points.reduce((sum, item) => sum + item.points, 0)) * cfg.fixedValue * group.multiplier, 0)
       : sign(pointDiff) * cfg.fixedValue * (segmentHoles.every(isPressedHole) ? pressureMultiplier : 1)
     : 0;
@@ -690,7 +692,7 @@ export function calculateFoursomes(
   const pressureMultiplier = order.length >= 18
     ? Math.min(5, Math.max(1, cfg.pressureMultiplier ?? (cfg.pressSecond9 ? 2 : 1)))
     : 1;
-  const pressureNine = cfg.pressureNine ?? "holes_10_18";
+  const pressureNine = physicalNineForPlayedHalf(order, "second_half") ?? cfg.pressureNine ?? "holes_10_18";
   for (const segment of Array.isArray(segments) ? segments : []) {
     if (!segment || typeof segment !== "object") continue;
     const basePair = Array.isArray(segment?.basePair) ? segment.basePair : [];
@@ -741,10 +743,10 @@ export function calculateFoursomes(
         holePoints.push({ hole, points, netA: aScores, netB: bScores });
       }
 
-      const first9PointDiff = holePoints.filter(({ hole }) => hole <= 9).reduce((total, item) => total + item.points, 0);
-      const second9PointDiff = holePoints.filter(({ hole }) => hole >= 10).reduce((total, item) => total + item.points, 0);
-      const second9Pressed = pressureMultiplier > 1 && pressureNine === "holes_10_18";
-      const provisional = foursomeEconomics(holePoints, holes, cfg, pressureMultiplier, pressureNine);
+      const first9PointDiff = holePoints.filter(({ hole }) => roundHalfForHole(hole, order) === "first_half").reduce((total, item) => total + item.points, 0);
+      const second9PointDiff = holePoints.filter(({ hole }) => roundHalfForHole(hole, order) === "second_half").reduce((total, item) => total + item.points, 0);
+      const second9Pressed = pressureMultiplier > 1;
+      const provisional = foursomeEconomics(holePoints, holes, cfg, pressureMultiplier, order);
       const fixedMoney = complete ? provisional.fixedMoney : 0;
       const pointMoney = complete ? provisional.pointMoney : 0;
       const totalMoney = complete ? provisional.totalMoney : 0;
@@ -1412,16 +1414,16 @@ export function calculatePolla(
 ) {
   const balances = zeroBalances(allPlayers);
   const details: MedalPollaDetail[] = [];
-  const holes1To9 = order.filter((hole) => hole <= 9);
-  const holes10To18 = order.filter((hole) => hole >= 10);
+  const firstPlayedNine = roundHalfHoles(order, "first_half");
+  const secondPlayedNine = roundHalfHoles(order, "second_half");
   const components: Array<[
     Exclude<MedalPollaDetail["key"], "mini">,
     string,
     number[],
     BetConfig["polla"]["first9"] | undefined,
   ]> = [];
-  if (holes1To9.length === 9) components.push(["first9", "Polla H1–9", holes1To9, cfg?.first9]);
-  if (holes10To18.length === 9) components.push(["second9", "Polla H10–18", holes10To18, cfg?.second9]);
+  if (firstPlayedNine.length === 9) components.push(["first9", `Polla 1ª vuelta · H${firstPlayedNine[0]}–H${firstPlayedNine.at(-1)}`, firstPlayedNine, cfg?.first9]);
+  if (secondPlayedNine.length === 9) components.push(["second9", `Polla 2ª vuelta · H${secondPlayedNine[0]}–H${secondPlayedNine.at(-1)}`, secondPlayedNine, cfg?.second9]);
   if (order.length >= 18) components.push(["total18", "Polla 18 hoyos", order.slice(0, 18), cfg?.total18]);
 
   for (const [key, label, holes, componentCfg] of components) {

@@ -197,27 +197,27 @@ test("Foursome Fantasma duplicates the third player and settles zero-sum among t
   assert.equal(Object.values(result.balances).reduce((sum, amount) => sum + amount, 0), 0);
 });
 
-test("Foursome pressure uses the selected physical nine even when starting on H10", () => {
+test("Foursome pressure always uses the second played half when starting on H10", () => {
   const four = zeroHcpPlayers.slice(0, 4);
   const order = playOrder(10);
   const scores = scoresFor(order, { said: 3, cuau: 5, armando: 4, jesus: 6 });
   const segment = [{ ...segmentDefinitions(order, 18)[0], basePair: ["said", "cuau"] }];
   const base = { ...betConfig(four.map((player) => player.id)).foursome, segmentSize: 18 as const, pressSecond9: false };
-  const holes1Pressed = calculateFoursomes(makeCourse(), scores, four, {
+  const savedAsFirstPhysical = calculateFoursomes(makeCourse(), scores, four, {
     ...base,
     pressureMultiplier: 3,
     pressureNine: "holes_1_9",
   }, segment, order);
-  const holes10Pressed = calculateFoursomes(makeCourse(), scores, four, {
+  const savedAsSecondPhysical = calculateFoursomes(makeCourse(), scores, four, {
     ...base,
-    pressureMultiplier: 2,
+    pressureMultiplier: 3,
     pressureNine: "holes_10_18",
   }, segment, order);
 
-  assert.equal(holes1Pressed.matches[0].fixedMoney, 400);
-  assert.equal(holes1Pressed.matches[0].pointMoney, 720);
-  assert.equal(holes10Pressed.matches[0].fixedMoney, 300);
-  assert.equal(holes10Pressed.matches[0].pointMoney, 540);
+  assert.equal(savedAsFirstPhysical.matches[0].fixedMoney, 400);
+  assert.equal(savedAsFirstPhysical.matches[0].pointMoney, 720);
+  assert.equal(savedAsFirstPhysical.matches[0].pressureNine, "holes_1_9");
+  assert.deepEqual(savedAsSecondPhysical.matches[0], savedAsFirstPhysical.matches[0]);
 });
 
 test("Foursome ignores residual pressure settings in a standalone nine-hole round", () => {
@@ -477,27 +477,27 @@ test("Polla Nassau 18 pays all three independent components", () => {
   assert.deepEqual(result.balances, { said: 2400, cuau: -600, armando: -600, jesus: -600, raul: -600 });
 });
 
-test("Polla components always use physical H1–9 and H10–18", () => {
+test("Polla components follow first and second played halves", () => {
   const order = playOrder(10);
   const scores = scoresFor(order, { said: 4, cuau: 4, armando: 4, jesus: 4, raul: 4 });
   for (const hole of Array.from({ length: 9 }, (_, index) => index + 1)) scores[hole].said = 3;
   const result = calculatePolla(makeCourse(), scores, zeroHcpPlayers, betConfig().polla, order);
   const first = result.details.find((detail) => detail.key === "first9")!;
   const second = result.details.find((detail) => detail.key === "second9")!;
-  assert.deepEqual(first.holes, [1, 2, 3, 4, 5, 6, 7, 8, 9]);
-  assert.deepEqual(second.holes, [10, 11, 12, 13, 14, 15, 16, 17, 18]);
-  assert.deepEqual(first.winnerIds, ["said"]);
-  assert.equal(second.winnerIds.length, 5);
+  assert.deepEqual(first.holes, [10, 11, 12, 13, 14, 15, 16, 17, 18]);
+  assert.deepEqual(second.holes, [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  assert.equal(first.winnerIds.length, 5);
+  assert.deepEqual(second.winnerIds, ["said"]);
 });
 
-test("Polla de nueve hoyos saliendo por H10 liquida únicamente H10–18", () => {
+test("Polla de nueve hoyos saliendo por H10 liquida su primera vuelta jugada", () => {
   const order = playOrder(10).slice(0, 9);
   const scores = scoresFor(order, { said: 3, cuau: 4, armando: 4, jesus: 4, raul: 4 });
   const result = calculatePolla(makeCourse(), scores, zeroHcpPlayers, betConfig().polla, order);
 
-  assert.deepEqual(result.details.map((detail) => detail.key), ["second9"]);
+  assert.deepEqual(result.details.map((detail) => detail.key), ["first9"]);
   assert.deepEqual(result.details[0].holes, [10, 11, 12, 13, 14, 15, 16, 17, 18]);
-  assert.deepEqual(result.balances, { said: 800, cuau: -200, armando: -200, jesus: -200, raul: -200 });
+  assert.deepEqual(result.balances, { said: 400, cuau: -100, armando: -100, jesus: -100, raul: -100 });
 });
 
 test("Each Polla component honors its own switch, value and participants", () => {

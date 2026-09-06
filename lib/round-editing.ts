@@ -21,14 +21,14 @@ export function canEditSnapshot(round: RoundSnapshot) {
 export function restoreRoundSnapshot(round: RoundSnapshot) {
   if (!canEditSnapshot(round)) return null;
   const copy = structuredClone(round);
+  const startHole: 1 | 10 = copy.order![0] === 10 ? 10 : copy.order![0] === 1 ? 1 : copy.startHole === 10 ? 10 : 1;
+  const roundHoles: 9 | 18 = copy.order!.length === 9 ? 9 : copy.order!.length === 18 ? 18 : copy.roundHoles === 9 ? 9 : 18;
   const restored = {
     ...copy,
     ownerId: copy.ownerId || copy.players!.find(player => player.name === copy.ownerName)?.id || copy.players![0].id,
-    betConfig: restoreBetConfig(copy.betConfig, copy.players!.map((player) => player.id)),
+    betConfig: restoreBetConfig(copy.betConfig, copy.players!.map((player) => player.id), { startHole, roundHoles }),
   };
   const migrated = migrateSupplementalNassau(restored);
-  const startHole = migrated.startHole ?? (migrated.order?.[0] === 10 ? 10 : 1);
-  const roundHoles = migrated.roundHoles ?? (migrated.order?.length === 9 ? 9 : 18);
   return {
     ...migrated,
     ...(migrated.scoreCaptureMode === undefined ? {} : { scoreCaptureMode: normalizeScoreCaptureMode(migrated.scoreCaptureMode) }),

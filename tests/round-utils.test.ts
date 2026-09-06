@@ -28,6 +28,7 @@ test("V2.5 pressure settings migrate to physical nines", () => {
   assert.equal(fromOne.bets.foursome.pressureNine, "holes_10_18");
   assert.equal(fromOne.personalBets[0].pressureNine, "holes_10_18");
   const fromTen = migrateDraftPressures({ startHole: 10, bets: { foursome: { pressSecond9: false } }, personalBets: [{ back9Multiplier: 2 }] });
+  assert.equal(fromTen.bets.foursome.pressureNine, "holes_1_9");
   assert.equal(fromTen.personalBets[0].pressureNine, "holes_1_9");
 });
 

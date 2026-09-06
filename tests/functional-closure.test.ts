@@ -101,6 +101,23 @@ test("Corregir un snapshot parcial completa modos ausentes sin mutar el históri
   assert.equal(restored?.betConfig?.foursome.mode,cfg.mode);
   assert.deepEqual(Object.keys(legacy.betConfig),["foursome"]);
 });
+test("Corregir una ronda H10 migra Polla en la copia editable sin alterar el histórico",()=>{
+  const original=snapshot();
+  const betConfig=structuredClone(original.betConfig!);
+  betConfig.polla.first9={...betConfig.polla.first9,enabled:false,value:111};
+  betConfig.polla.second9={...betConfig.polla.second9,enabled:true,value:222};
+  delete betConfig.polla.first9.playedHalfVersion;
+  const legacy={...original,startHole:10 as const,order:playOrder(10),betConfig};
+  const before=structuredClone(legacy);
+  const restored=restoreRoundSnapshot(legacy)!;
+  assert.equal(restored.betConfig?.polla.first9.value,222);
+  assert.equal(restored.betConfig?.polla.first9.enabled,true);
+  assert.equal(restored.betConfig?.polla.second9.value,111);
+  assert.equal(restored.betConfig?.polla.first9.playedHalfVersion,1);
+  assert.deepEqual(legacy,before);
+  assert.deepEqual(restored.playerBalances,legacy.playerBalances);
+  assert.deepEqual(restored.categoryBalances,legacy.categoryBalances);
+});
 test("Corregir migra la ventaja personal legacy antes de recalcular",()=>{
   const original=snapshot();
   const modern=realPersonal(realCases[0]);

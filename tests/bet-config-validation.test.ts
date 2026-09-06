@@ -135,7 +135,7 @@ test("Bola Amiga accepts four or five participants but rejects an impossible lar
   assert.ok(codes(input).includes("ball-friend-participants"));
 });
 
-test("Polla rejects physical halves that are not part of a nine-hole round", () => {
+test("Polla validates first and second played halves for a nine-hole round", () => {
   const input = configuration({ roundHoles: 9, startHole: 1 });
   input.bets.polla.first9 = { ...input.bets.polla.first9, enabled: true, participantIds: ["a", "b"] };
   input.bets.polla.second9 = { ...input.bets.polla.second9, enabled: true, participantIds: ["a", "b"] };
@@ -147,8 +147,8 @@ test("Polla rejects physical halves that are not part of a nine-hole round", () 
 
   input.startHole = 10;
   const secondNineCodes = codes(input);
-  assert.ok(secondNineCodes.includes("polla-first-availability"));
-  assert.equal(secondNineCodes.includes("polla-second-availability"), false);
+  assert.equal(secondNineCodes.includes("polla-first-availability"), false);
+  assert.ok(secondNineCodes.includes("polla-second-availability"));
 });
 
 test("Vegas and team pressures validate their exact team shapes", () => {
@@ -420,12 +420,12 @@ test("legacy nested bet containers restore safely without changing legacy HCP ba
     units: null,
     ballFriend: { ...defaults.ballFriend, baseMode: undefined },
     foursome: { ...defaults.foursome, baseMode: undefined },
-  } as unknown as Partial<typeof defaults>, ["a", "b"]);
+  } as unknown as Partial<typeof defaults>, ["a", "b"], { startHole: 1, roundHoles: 18 });
   assert.ok(restored.units && restored.ballFriend && restored.foursome);
   assert.equal(restored.ballFriend.baseMode, undefined);
   assert.equal(restored.foursome.baseMode, undefined);
 
-  const corrupt = restoreBetConfig({ units: null, ballFriend: null } as unknown as Partial<typeof defaults>, ["a", "b"]);
+  const corrupt = restoreBetConfig({ units: null, ballFriend: null } as unknown as Partial<typeof defaults>, ["a", "b"], { startHole: 1, roundHoles: 18 });
   assert.deepEqual(corrupt.units, defaults.units);
   assert.deepEqual(corrupt.ballFriend, defaults.ballFriend);
 });
@@ -435,7 +435,7 @@ test("restoring an active partial mode never invents participants, stakes or HCP
     units: { enabled: true },
     rabbits: { enabled: true },
     skins: { enabled: true },
-  } as unknown as Partial<ReturnType<typeof initialBets>>, ["a", "b"]);
+  } as unknown as Partial<ReturnType<typeof initialBets>>, ["a", "b"], { startHole: 1, roundHoles: 18 });
   assert.deepEqual(restored.units.participantIds, []);
   assert.equal(restored.units.value, undefined);
   assert.deepEqual(restored.rabbits.participantIds, []);
@@ -460,6 +460,89 @@ test("restoring an active partial mode never invents participants, stakes or HCP
   assert.ok(currentCodes.includes("skins-stake"));
   assert.ok(currentCodes.includes("skins-hcp"));
   assert.ok(currentCodes.includes("skins-decimals"));
+});
+
+test("legacy Polla from H10 migrates physical nines to played halves exactly once", () => {
+  const legacy = initialBets(["a", "b"]);
+  legacy.polla.first9 = { ...legacy.polla.first9, enabled: true, value: 111, participantIds: ["a", "b"] };
+  legacy.polla.second9 = { ...legacy.polla.second9, enabled: true, value: 222, participantIds: ["b", "a"] };
+  delete legacy.polla.first9.playedHalfVersion;
+  const original = structuredClone(legacy);
+
+  const restored = restoreBetConfig(legacy, ["a", "b"], { startHole: 10, roundHoles: 18 });
+  assert.equal(restored.polla.first9.value, 222);
+  assert.deepEqual(restored.polla.first9.participantIds, ["b", "a"]);
+  assert.equal(restored.polla.second9.value, 111);
+  assert.deepEqual(restored.polla.second9.participantIds, ["a", "b"]);
+  assert.equal(restored.polla.first9.playedHalfVersion, 1);
+  assert.deepEqual(legacy, original);
+
+  const restoredAgain = restoreBetConfig(restored, ["a", "b"], { startHole: 10, roundHoles: 18 });
+  assert.equal(restoredAgain.polla.first9.value, 222);
+  assert.equal(restoredAgain.polla.second9.value, 111);
+});
+
+test("legacy nine-hole Polla from H10 activates only the played first half", () => {
+  const legacy = initialBets(["a", "b"]);
+  legacy.polla.first9 = { ...legacy.polla.first9, enabled: false, value: 111 };
+  legacy.polla.second9 = { ...legacy.polla.second9, enabled: true, value: 222 };
+  delete legacy.polla.first9.playedHalfVersion;
+
+  const restored = restoreBetConfig(legacy, ["a", "b"], { startHole: 10, roundHoles: 9 });
+  assert.equal(restored.polla.first9.enabled, true);
+  assert.equal(restored.polla.first9.value, 222);
+  assert.equal(restored.polla.second9.enabled, false);
+  assert.equal(restored.polla.second9.value, 111);
+  assert.equal(codes(configuration({ bets: restored, startHole: 10, roundHoles: 9 })).includes("polla-first-availability"), false);
+  assert.equal(codes(configuration({ bets: restored, startHole: 10, roundHoles: 9 })).includes("polla-second-availability"), false);
+});
+
+test("legacy H10 Polla preserves active invalid components so settlement fails closed", () => {
+  const defaults = initialBets(["a", "b"]);
+  const legacy = {
+    ...defaults,
+    polla: {
+      first9: { ...defaults.polla.first9, enabled: true, value: 111 },
+      second9: { enabled: true },
+      total18: defaults.polla.total18,
+    },
+  } as unknown as ReturnType<typeof initialBets>;
+  delete legacy.polla.first9.playedHalfVersion;
+
+  const restored = restoreBetConfig(legacy, ["a", "b"], { startHole: 10, roundHoles: 9 });
+  assert.deepEqual(restored.polla.first9.participantIds, []);
+  assert.equal(restored.polla.first9.value, undefined);
+  assert.equal(restored.polla.first9.hcpPct, undefined);
+  assert.equal(restored.polla.first9.decimals, undefined);
+  const currentCodes = codes(configuration({ players: players.slice(0, 2), bets: restored, startHole: 10, roundHoles: 9 }));
+  assert.ok(currentCodes.includes("polla-first-participants"));
+  assert.ok(currentCodes.includes("polla-first-invalid-stake"));
+  assert.ok(currentCodes.includes("polla-first-hcp"));
+  assert.ok(currentCodes.includes("polla-first-decimals"));
+  assert.ok(currentCodes.includes("polla-second-availability"));
+});
+
+test("flat legacy Polla maps H10 values by play order and disables unavailable categories", () => {
+  const flat = {
+    enabled: true,
+    first9Value: 111,
+    second9Value: 222,
+    total18Value: 333,
+    hcpPct: 80,
+    decimals: "partial",
+    participantIds: ["a", "b"],
+  };
+  const eighteen = restoreBetConfig({ polla: flat } as unknown as Partial<ReturnType<typeof initialBets>>, ["a", "b"], { startHole: 10, roundHoles: 18 });
+  assert.deepEqual([eighteen.polla.first9.value, eighteen.polla.second9.value, eighteen.polla.total18.value], [222, 111, 333]);
+  assert.deepEqual([eighteen.polla.first9.enabled, eighteen.polla.second9.enabled, eighteen.polla.total18.enabled], [true, true, true]);
+
+  const nine = restoreBetConfig({ polla: flat } as unknown as Partial<ReturnType<typeof initialBets>>, ["a", "b"], { startHole: 10, roundHoles: 9 });
+  assert.deepEqual([nine.polla.first9.value, nine.polla.second9.value], [222, 111]);
+  assert.deepEqual([nine.polla.first9.enabled, nine.polla.second9.enabled, nine.polla.total18.enabled], [true, false, false]);
+
+  const invalid = restoreBetConfig({ polla: { ...flat, second9Value: null } } as unknown as Partial<ReturnType<typeof initialBets>>, ["a", "b"], { startHole: 10, roundHoles: 9 });
+  assert.equal((invalid.polla.first9 as unknown as { value: unknown }).value, null);
+  assert.ok(codes(configuration({ players: players.slice(0, 2), bets: invalid, startHole: 10, roundHoles: 9 })).includes("polla-first-invalid-stake"));
 });
 
 test("Personal rejects an unknown rival mode and advantage strokes without a receiver", () => {

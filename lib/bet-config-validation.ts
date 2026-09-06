@@ -215,7 +215,7 @@ function stakeIssue(
 }
 
 function validateMainBets(input: RoundBetConfiguration, issues: BetConfigurationIssue[]) {
-  const { bets, players, roundHoles, startHole, segments } = input;
+  const { bets, players, roundHoles, segments } = input;
   const participantModes = [
     [bets.rabbits, "setup-rabbits", "rabbits-participants", "Conejos"],
     [bets.skins, "setup-skins", "skins-participants", "Skins"],
@@ -373,11 +373,9 @@ function validateMainBets(input: RoundBetConfiguration, issues: BetConfiguration
     }
   }
 
-  const physicalFirstNineAvailable = roundHoles === 18 || startHole === 1;
-  const physicalSecondNineAvailable = roundHoles === 18 || startHole === 10;
   const pollaComponents = [
-    [bets.polla.first9, "polla-first", "setup-polla-h1-9", "Polla H1–9", physicalFirstNineAvailable],
-    [bets.polla.second9, "polla-second", "setup-polla-h10-18", "Polla H10–18", physicalSecondNineAvailable],
+    [bets.polla.first9, "polla-first", "setup-polla-h1-9", "Polla 1ª vuelta", true],
+    [bets.polla.second9, "polla-second", "setup-polla-h10-18", "Polla 2ª vuelta", roundHoles === 18],
     [bets.polla.total18, "polla-total", "setup-polla-18-hoyos", "Polla 18 hoyos", roundHoles === 18],
   ] as const;
   for (const [config, code, sectionId, label, available] of pollaComponents) {
@@ -620,8 +618,8 @@ export function collectBetConfigurationIssues(input: RoundBetConfiguration) {
     [input.bets.units.enabled, "units-enabled", "setup-units", "Unidades / Copas"],
     [input.bets.foursome.enabled, "foursome-enabled", "setup-foursome", "Foursome"],
     [input.bets.ballFriend.enabled, "ball-friend-enabled", "setup-ball-friend", "Bola Amiga"],
-    [input.bets.polla.first9.enabled, "polla-first-enabled", "setup-polla-h1-9", "Polla H1–9"],
-    [input.bets.polla.second9.enabled, "polla-second-enabled", "setup-polla-h10-18", "Polla H10–18"],
+    [input.bets.polla.first9.enabled, "polla-first-enabled", "setup-polla-h1-9", "Polla 1ª vuelta"],
+    [input.bets.polla.second9.enabled, "polla-second-enabled", "setup-polla-h10-18", "Polla 2ª vuelta"],
     [input.bets.polla.total18.enabled, "polla-total-enabled", "setup-polla-18-hoyos", "Polla 18 hoyos"],
     [input.bets.miniPolla.enabled, "mini-polla-enabled", "setup-mini-polla", "Mini Polla"],
     [input.bets.vipers.enabled, "vipers-enabled", "setup-vipers", "Víboras"],

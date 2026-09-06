@@ -1,4 +1,9 @@
-import type { BetConfig, CounterBetConfig } from "./types";
+import type { BetConfig, CounterBetConfig, MedalPollaConfig } from "./types";
+
+export type RestoreBetConfigContext = {
+  startHole: 1 | 10;
+  roundHoles: 9 | 18;
+};
 
 /** Defaults complete missing fields without converting a pre-change round to the new settlement. */
 export function restoreCounterBetConfig(fallback: CounterBetConfig, saved?: CounterBetConfig): CounterBetConfig {
@@ -23,12 +28,12 @@ export function initialBets(ids: string[]): BetConfig {
     },
     ballFriend: { enabled: false, baseMode: "moving", value: 20, hcpPct: 100, decimals: "round", maxScore: 9, participantIds: [...ids] },
     polla: {
-      first9: { enabled: false, value: 100, hcpPct: 100, decimals: "round", participantIds: [...ids] },
+      first9: { enabled: false, value: 100, hcpPct: 100, decimals: "round", playedHalfVersion: 1, participantIds: [...ids] },
       second9: { enabled: false, value: 100, hcpPct: 100, decimals: "round", participantIds: [...ids] },
       total18: { enabled: false, value: 100, hcpPct: 100, decimals: "round", participantIds: [...ids] },
     },
     miniPolla: { enabled: false, value: 100, hcpPct: 100, decimals: "round", participantIds: [...ids] },
-    // Each physical nine has its own bag. Pressure only changes H10–H18 event values.
+    // Each played half has its own bag. Pressure only changes the second played half.
     vipers: { enabled: false, value: 100, secondNinePressed: false, secondNineMultiplier: 2, settlementMode: "halves", participantIds: [...ids] },
     camels: { enabled: false, value: 100, secondNinePressed: false, secondNineMultiplier: 2, settlementMode: "halves", participantIds: [...ids] },
     fish: { enabled: false, value: 100, secondNinePressed: false, secondNineMultiplier: 2, settlementMode: "halves", participantIds: [...ids] },
@@ -37,7 +42,11 @@ export function initialBets(ids: string[]): BetConfig {
 }
 
 /** Completes an editable legacy/draft config without mutating its saved snapshot. */
-export function restoreBetConfig(saved: Partial<BetConfig> | null | undefined, ids: string[]): BetConfig {
+export function restoreBetConfig(
+  saved: Partial<BetConfig> | null | undefined,
+  ids: string[],
+  context: RestoreBetConfigContext,
+): BetConfig {
   const defaults = initialBets(ids);
   const source = saved && typeof saved === "object" ? saved : {};
   const objectConfig = <T>(value: unknown) => value && typeof value === "object" && !Array.isArray(value) ? value as Partial<T> : undefined;
@@ -66,7 +75,40 @@ export function restoreBetConfig(saved: Partial<BetConfig> | null | undefined, i
     if (candidate && candidate.baseMode === undefined) delete restored.baseMode;
     return restored;
   };
-  const polla = objectConfig<BetConfig["polla"]>(source.polla) || defaults.polla;
+  const rawPolla = objectConfig<Record<string, unknown>>(source.polla);
+  const hasStructuredPolla = Boolean(rawPolla && ["first9", "second9", "total18"].some((key) => Object.hasOwn(rawPolla, key)));
+  const rawFirstPolla = objectConfig<MedalPollaConfig>(rawPolla?.first9);
+  const rawSecondPolla = objectConfig<MedalPollaConfig>(rawPolla?.second9);
+  const rawTotalPolla = objectConfig<MedalPollaConfig>(rawPolla?.total18);
+  const migratePhysicalNines = hasStructuredPolla && context.startHole === 10 && rawFirstPolla?.playedHalfVersion !== 1;
+  const rawPollaField = (key: string, fallback: unknown) => rawPolla && Object.hasOwn(rawPolla, key) ? rawPolla[key] : fallback;
+  const firstRawPollaField = (keys: string[], fallback: unknown) => {
+    const key = keys.find((candidate) => rawPolla && Object.hasOwn(rawPolla, candidate));
+    return key ? rawPolla![key] : fallback;
+  };
+  const legacyPollaComponent = (valueKeys: string[], enabled: unknown): Partial<MedalPollaConfig> => ({
+    enabled,
+    value: firstRawPollaField(valueKeys, defaults.polla.first9.value),
+    hcpPct: rawPollaField("hcpPct", defaults.polla.first9.hcpPct),
+    decimals: rawPollaField("decimals", defaults.polla.first9.decimals),
+    participantIds: rawPollaField("participantIds", [...ids]),
+  } as Partial<MedalPollaConfig>);
+  const legacyEnabled = rawPollaField("enabled", false);
+  const legacyFirstValueKeys = context.startHole === 10
+    ? ["second9Value", "nineValue"]
+    : ["first9Value", "nineValue"];
+  const legacySecondValueKeys = context.startHole === 10
+    ? ["first9Value"]
+    : ["second9Value"];
+  const firstPollaSource = hasStructuredPolla
+    ? (migratePhysicalNines ? rawSecondPolla : rawFirstPolla)
+    : rawPolla ? legacyPollaComponent(legacyFirstValueKeys, legacyEnabled) : undefined;
+  const secondPollaSource = hasStructuredPolla
+    ? (migratePhysicalNines ? rawFirstPolla : rawSecondPolla)
+    : rawPolla ? legacyPollaComponent(legacySecondValueKeys, context.roundHoles === 18 ? legacyEnabled : false) : undefined;
+  const totalPollaSource = hasStructuredPolla
+    ? rawTotalPolla
+    : rawPolla ? legacyPollaComponent(["total18Value"], context.roundHoles === 18 ? legacyEnabled : false) : undefined;
   const counter = (fallback: CounterBetConfig, value: CounterBetConfig | undefined) => {
     const candidate = objectConfig<CounterBetConfig>(value) as CounterBetConfig | undefined;
     const restored = restoreCounterBetConfig(fallback, candidate);
@@ -103,9 +145,10 @@ export function restoreBetConfig(saved: Partial<BetConfig> | null | undefined, i
     ...(foursome.mode === "points" || foursome.mode === "fixed_points" ? ["pointValue"] as Array<keyof typeof foursome> : []),
   ]);
   const ballFriend = requireActiveFields(mergeLegacyBase(defaults.ballFriend, source.ballFriend), source.ballFriend, ["value", "hcpPct", "decimals", "maxScore"]);
-  const pollaFirst = requireActiveFields(mergeParticipant(defaults.polla.first9, polla.first9), polla.first9, ["value", "hcpPct", "decimals"]);
-  const pollaSecond = requireActiveFields(mergeParticipant(defaults.polla.second9, polla.second9), polla.second9, ["value", "hcpPct", "decimals"]);
-  const pollaTotal = requireActiveFields(mergeParticipant(defaults.polla.total18, polla.total18), polla.total18, ["value", "hcpPct", "decimals"]);
+  const pollaFirst = requireActiveFields(mergeParticipant(defaults.polla.first9, firstPollaSource), firstPollaSource, ["value", "hcpPct", "decimals"]);
+  pollaFirst.playedHalfVersion = 1;
+  const pollaSecond = requireActiveFields(mergeParticipant(defaults.polla.second9, secondPollaSource), secondPollaSource, ["value", "hcpPct", "decimals"]);
+  const pollaTotal = requireActiveFields(mergeParticipant(defaults.polla.total18, totalPollaSource), totalPollaSource, ["value", "hcpPct", "decimals"]);
   const miniPolla = requireActiveFields(mergeParticipant(defaults.miniPolla, source.miniPolla), source.miniPolla, ["value", "hcpPct", "decimals"]);
   const loba = requireActiveFields(mergeParticipant(defaults.loba, source.loba), source.loba, [
     "value",
