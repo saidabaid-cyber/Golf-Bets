@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 
 export function PwaRuntime() {
   const [offline, setOffline] = useState(false);
+  const [updateReady, setUpdateReady] = useState(false);
+
   useEffect(() => {
     let disposed = false;
     let removeRegistrationListeners = () => {};
@@ -14,19 +16,22 @@ export function PwaRuntime() {
     if ("serviceWorker" in navigator && process.env.NODE_ENV === "production") {
       void navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" }).then((registration) => {
         if (disposed) return;
-        const activateWaiting = () => registration.waiting?.postMessage({ type: "SKIP_WAITING" });
+        const handleInstalledWorker = (worker: ServiceWorker) => {
+          if (navigator.serviceWorker.controller && worker.state === "installed") setUpdateReady(true);
+        };
         let installing: ServiceWorker | null = null;
         const handleStateChange = () => {
-          if (installing?.state === "installed") activateWaiting();
+          if (installing?.state === "installed") handleInstalledWorker(installing);
         };
         const handleUpdateFound = () => {
           installing?.removeEventListener("statechange", handleStateChange);
           installing = registration.installing;
           installing?.addEventListener("statechange", handleStateChange);
         };
-        activateWaiting();
+        if (registration.installing) handleUpdateFound();
+        if (registration.waiting) handleInstalledWorker(registration.waiting);
         registration.addEventListener("updatefound", handleUpdateFound);
-        const checkForUpdate = () => { if (navigator.onLine) void registration.update(); };
+        const checkForUpdate = () => { if (navigator.onLine) void registration.update().catch(() => undefined); };
         window.addEventListener("online", checkForUpdate);
         window.addEventListener("pageshow", checkForUpdate);
         removeRegistrationListeners = () => {
@@ -46,5 +51,12 @@ export function PwaRuntime() {
       window.removeEventListener("offline", update);
     };
   }, []);
-  return offline ? <div className="offlineBanner" role="status">Sin conexión · Los cambios se guardan en este dispositivo y se sincronizarán al volver internet.</div> : null;
+
+  return <>
+    {offline && <div className="offlineBanner" role="status">Sin conexión · Los cambios permanecen guardados en este dispositivo mientras vuelve internet.</div>}
+    {!offline && updateReady && <div className="pwaUpdateBanner" role="status">
+      <div><b>Nueva versión lista</b><span>Para aplicarla con seguridad, guarda tu captura y cierra todas las ventanas de The Backyard. Se instalará al volver a abrir.</span></div>
+      <div><button type="button" className="secondary" onClick={() => setUpdateReady(false)}>Entendido</button></div>
+    </div>}
+  </>;
 }

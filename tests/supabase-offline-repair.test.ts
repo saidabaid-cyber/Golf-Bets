@@ -132,7 +132,9 @@ test("service worker cachea shell pero nunca APIs ni datos privados", () => {
   const manifest = JSON.parse(readFileSync("public/manifest.webmanifest", "utf8"));
   assert.match(worker, /url\.pathname\.startsWith\("\/api\/"\)/);
   assert.match(worker, /request\.mode === "navigate"/);
-  assert.match(worker, /caches\.match\("\/"\)/);
+  assert.match(worker, /cache\.match\(fallback\)/);
+  assert.match(worker, /url\.pathname === "\/" \? shellRequest\("\/"\) : shellRequest\("\/offline\.html"\)/);
+  assert.match(readFileSync("public/offline.html", "utf8"), /Tu ronda guardada permanece en este dispositivo/);
   assert.equal(manifest.display, "standalone");
   assert.equal(manifest.id, "/");
   assert.equal(manifest.start_url, "/");
@@ -145,10 +147,22 @@ test("service worker cachea shell pero nunca APIs ni datos privados", () => {
     assert.equal(png.readUInt32BE(16), Number(icon.sizes.split("x")[0]));
     assert.equal(png.readUInt32BE(20), Number(icon.sizes.split("x")[1]));
   }
-  assert.match(worker, /the-backyard-shell-v4/);
-  assert.match(worker, /SKIP_WAITING/);
+  assert.match(worker, /the-backyard-shell-v5/);
+  assert.doesNotMatch(worker, /skipWaiting|SKIP_WAITING/);
+  assert.match(worker, /credentials: "omit"/);
+  assert.match(worker, /redirect: "error"/);
+  assert.match(worker, /if \(!assets\.length\) throw new Error\("required shell assets unavailable"\)/);
+  assert.match(worker, /await Promise\.all\(assets\.map/);
+  assert.match(worker, /throw new Error\("required shell response unavailable"\)/);
+  assert.doesNotMatch(worker, /caches\.match\(/);
+  assert.doesNotMatch(worker, /request\.mode === "navigate"[\s\S]{0,260}cache\.put/);
   assert.match(runtime, /updateViaCache: "none"/);
   assert.match(runtime, /registration\.update\(\)/);
+  assert.match(runtime, /if \(registration\.installing\) handleUpdateFound\(\)/);
+  assert.match(runtime, /setUpdateReady\(true\)/);
+  assert.match(runtime, /Nueva versión lista/);
+  assert.match(runtime, /cierra todas las ventanas de The Backyard/);
+  assert.doesNotMatch(runtime, /location\.reload|postMessage/);
 });
 
 test("aceptaciones pendientes forman una cola idempotente, reintentable y limpiable", () => {
