@@ -129,10 +129,34 @@ export function deriveInternalNotifications(
   state: InternalNotificationReadState,
 ): InternalNotification[] {
   const readKeys = new Set(normalizeInternalNotificationReadState(state).readEventKeys);
-  return activity.map((item) => {
+  const seenEventKeys = new Set<string>();
+  const notifications: InternalNotification[] = [];
+  for (const item of activity) {
     const eventKey = internalNotificationEventKey(item);
-    return { ...item, eventKey, unread: !readKeys.has(eventKey) };
-  });
+    // Local recovery or sync can temporarily surface the same snapshot twice.
+    // Keep the first occurrence so the badge and React keys never double-count it.
+    if (seenEventKeys.has(eventKey)) continue;
+    seenEventKeys.add(eventKey);
+    notifications.push({ ...item, eventKey, unread: !readKeys.has(eventKey) });
+  }
+  return notifications;
+}
+
+/** Toggle one local event without navigating away. This makes every notice,
+ * including a non-openable recovery event, independently dismissible. */
+export function setInternalNotificationRead(
+  state: InternalNotificationReadState,
+  activity: Pick<PersonalActivity, "id" | "occurredAt">,
+  read: boolean,
+): InternalNotificationReadState {
+  const eventKey = internalNotificationEventKey(activity);
+  const current = normalizeInternalNotificationReadState(state).readEventKeys;
+  return {
+    version: 1,
+    readEventKeys: read
+      ? uniqueRecentKeys([eventKey, ...current])
+      : current.filter((key) => key !== eventKey),
+  };
 }
 
 export function markAllInternalNotificationsRead(activity: readonly PersonalActivity[]): InternalNotificationReadState {

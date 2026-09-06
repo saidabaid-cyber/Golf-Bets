@@ -11,6 +11,7 @@ import {
   normalizeInternalNotificationReadState,
   persistInternalNotificationReadState,
   readInternalNotificationReadState,
+  setInternalNotificationRead,
 } from "../lib/internal-notifications";
 import type { PersonalActivity } from "../lib/golf-insights";
 
@@ -126,4 +127,25 @@ test("identidad faltante y error de lectura se distinguen sin compartir namespac
     state: { version: 1, readEventKeys: [] },
     error: "storage_read_failed",
   });
+});
+
+test("un aviso se puede marcar leído y no leído sin perder las demás marcas", () => {
+  const first = activity("round:r1", "2026-09-06T10:00:00.000Z");
+  const second = activity("group:g1", "2026-09-06T09:00:00.000Z");
+  const firstRead = setInternalNotificationRead({ version: 1, readEventKeys: [] }, first, true);
+  const bothRead = setInternalNotificationRead(firstRead, second, true);
+
+  assert.deepEqual(deriveInternalNotifications([first, second], bothRead).map((item) => item.unread), [false, false]);
+  const firstUnread = setInternalNotificationRead(bothRead, first, false);
+  assert.deepEqual(deriveInternalNotifications([first, second], firstUnread).map((item) => item.unread), [true, false]);
+});
+
+test("avisos locales duplicados no inflan el contador ni repiten claves React", () => {
+  const original = activity("round:r1", "2026-09-06T10:00:00.000Z");
+  const duplicate = { ...original, title: "Copia recuperada" };
+  const notifications = deriveInternalNotifications([original, duplicate], { version: 1, readEventKeys: [] });
+
+  assert.equal(notifications.length, 1);
+  assert.equal(notifications[0].title, original.title);
+  assert.equal(notifications[0].unread, true);
 });

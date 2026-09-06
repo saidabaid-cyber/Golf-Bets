@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { PersonalActivity } from "../../lib/golf-insights";
 import {
   deriveInternalNotifications,
@@ -8,6 +8,7 @@ import {
   persistInternalNotificationReadState,
   readInternalNotificationReadState,
   markAllInternalNotificationsReadInStorage,
+  setInternalNotificationRead,
   type InternalNotification,
   type InternalNotificationReadState,
 } from "../../lib/internal-notifications";
@@ -52,9 +53,36 @@ function InternalNotificationContent({ item }: { item: InternalNotification }) {
   </>;
 }
 
+type InternalNotificationListProps = {
+  notifications: InternalNotification[];
+  onOpen: (item: InternalNotification) => void;
+  onReadChange: (item: InternalNotification, read: boolean) => void;
+};
+
+export function InternalNotificationList({ notifications, onOpen, onReadChange }: InternalNotificationListProps) {
+  return <section className="card" aria-label="Avisos internos"><ol className="internalNotificationList">
+    {notifications.map((item) => <li key={item.eventKey}>
+      {canOpenActivity(item)
+        ? <button type="button" className={`internalNotificationItem ${item.unread ? "unread" : ""}`} onClick={() => onOpen(item)} aria-label={`${item.unread ? "Nuevo: " : ""}${item.title} Abrir`}><InternalNotificationContent item={item} /></button>
+        : <article className={`internalNotificationItem ${item.unread ? "unread" : ""}`}><InternalNotificationContent item={item} /></article>}
+      <div className="internalNotificationActions">
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => onReadChange(item, item.unread)}
+          aria-label={`Marcar “${item.title}” como ${item.unread ? "leído" : "no leído"}`}
+        >
+          {item.unread ? "Marcar como leído" : "Marcar como no leído"}
+        </button>
+      </div>
+    </li>)}
+  </ol></section>;
+}
+
 export function SocialFeed({ activity, identityUserId, notificationsEnabled, onNotificationsEnabledChange, onOpenRound, onOpenGroup, onCreateRound, onOpenGroups }: SocialFeedProps) {
   const [view, setView] = useState<"activity" | "notifications">("activity");
   const [readState, setReadState] = useState<InternalNotificationReadState>(emptyInternalNotificationReadState);
+  const readStateRef = useRef<InternalNotificationReadState>(emptyInternalNotificationReadState());
   const [readStatus, setReadStatus] = useState<"loading" | "ready" | "error">("loading");
   const [readMessage, setReadMessage] = useState("");
 
@@ -62,6 +90,7 @@ export function SocialFeed({ activity, identityUserId, notificationsEnabled, onN
     setReadStatus("loading");
     setReadMessage("");
     const result = readInternalNotificationReadState(window.localStorage, identityUserId, activity);
+    readStateRef.current = result.state;
     setReadState(result.state);
     if (result.ok) {
       setReadStatus("ready");
@@ -83,6 +112,7 @@ export function SocialFeed({ activity, identityUserId, notificationsEnabled, onN
 
   function storeReadState(next: InternalNotificationReadState) {
     const result = persistInternalNotificationReadState(window.localStorage, identityUserId, next, activity);
+    readStateRef.current = result.state;
     setReadState(result.state);
     if (result.ok) {
       setReadStatus("ready");
@@ -94,12 +124,17 @@ export function SocialFeed({ activity, identityUserId, notificationsEnabled, onN
   }
 
   function openNotification(item: InternalNotification) {
-    if (item.unread) storeReadState({ version: 1, readEventKeys: [item.eventKey, ...readState.readEventKeys] });
+    if (item.unread) storeReadState(setInternalNotificationRead(readStateRef.current, item, true));
     openActivity(item, onOpenRound, onOpenGroup);
+  }
+
+  function changeNotificationRead(item: InternalNotification, read: boolean) {
+    storeReadState(setInternalNotificationRead(readStateRef.current, item, read));
   }
 
   function markAllRead() {
     const result = markAllInternalNotificationsReadInStorage(window.localStorage, identityUserId, activity);
+    readStateRef.current = result.state;
     setReadState(result.state);
     if (result.ok) {
       setReadStatus("ready");
@@ -145,12 +180,7 @@ export function SocialFeed({ activity, identityUserId, notificationsEnabled, onN
       {readStatus === "loading" ? <section className="card betaSocialEmpty" role="status"><h2>Cargando avisos…</h2><p>Estamos revisando qué actividad ya viste en este dispositivo.</p></section> : <>
         <div className="internalNotificationActions"><span className="hint" aria-live="polite">{unreadCount ? `${unreadCount} ${unreadCount === 1 ? "aviso nuevo" : "avisos nuevos"}` : "Todo al día"}</span><button type="button" className="secondary" disabled={unreadCount === 0} onClick={markAllRead}>Marcar todo como leído</button></div>
         {readMessage && <div className={readStatus === "error" ? "notice bad" : "notice"} role={readStatus === "error" ? "alert" : "status"}>{readMessage}</div>}
-        {notifications.length ? <section className="card" aria-label="Avisos internos"><ol className="internalNotificationList">
-          {notifications.map((item) => <li key={item.eventKey}>{canOpenActivity(item)
-            ? <button type="button" className={`internalNotificationItem ${item.unread ? "unread" : ""}`} onClick={() => openNotification(item)} aria-label={`${item.unread ? "Nuevo: " : ""}${item.title} Abrir`}><InternalNotificationContent item={item} /></button>
-            : <article className={`internalNotificationItem ${item.unread ? "unread" : ""}`}><InternalNotificationContent item={item} /></article>}
-          </li>)}
-        </ol></section> : <section className="card betaSocialEmpty"><span className="betaEmptyFlag" aria-hidden="true">✓</span><h2>Aún no hay avisos.</h2><p>Cuando guardes una ronda o actualices un grupo, aparecerá aquí sin salir de tu espacio.</p></section>}
+        {notifications.length ? <InternalNotificationList notifications={notifications} onOpen={openNotification} onReadChange={changeNotificationRead} /> : <section className="card betaSocialEmpty"><span className="betaEmptyFlag" aria-hidden="true">✓</span><h2>Aún no hay avisos.</h2><p>Cuando guardes una ronda o actualices un grupo, aparecerá aquí sin salir de tu espacio.</p></section>}
       </>}
     </>}
   </section>;
