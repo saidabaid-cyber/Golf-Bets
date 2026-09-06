@@ -50,7 +50,7 @@ function validScoreRows(value: unknown) {
 
 /** Keep independent valid blocks of a legacy/local draft and discard only the
  * malformed portions. This function never clears storage or mutates its input. */
-export function normalizeRoundDraft(value: unknown) {
+export function normalizeRoundDraft(value: unknown, resolvedOwnerId?: string) {
   const parsed = recordValue(value);
   if (!parsed) return null;
   const source = structuredClone(parsed);
@@ -78,7 +78,8 @@ export function normalizeRoundDraft(value: unknown) {
     ballFriendSetup: recordValue(source.ballFriendSetup) || {},
     expenses: recordValue(source.expenses),
   };
-  return migrateDraftPressures(migrateSupplementalNassau(draft));
+  const ownerAwareDraft = resolvedOwnerId === undefined ? draft : { ...draft, ownerId: resolvedOwnerId };
+  return migrateDraftPressures(migrateSupplementalNassau(ownerAwareDraft));
 }
 
 function validPuttRows(value: unknown) {

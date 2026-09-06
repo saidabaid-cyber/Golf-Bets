@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { resolveRoundDraftCore } from "../app/draft-restoration";
+import { resolveRoundDraftCore, resolvedOwnerIdForRoundDraft } from "../app/draft-restoration";
 import { accountPrimaryPlayerId } from "../lib/account-primary-player";
+import { normalizeRoundDraft } from "../lib/round-utils";
 import type { Player } from "../lib/types";
 
 const previousRound = { startHole: 10 as const, roundHoles: 9 as const, ownerId: "previous-owner" };
@@ -52,4 +53,37 @@ test("draft application wires resolved values through unconditional setters", ()
   assert.doesNotMatch(page, /if \(draft\.expenses\) setExpenses/);
   assert.match(page, /id: b\.id,\s+enabled: b\.enabled/);
   assert.match(page, /advantageReceiver: b\.nassauVersion === 2\s+\? b\.advantageReceiver/);
+});
+
+test("legacy Nassau migration resolves the authenticated owner before becoming Personal", () => {
+  const accountId = accountPrimaryPlayerId("user-1");
+  const roster: Player[] = [
+    { id: "first", name: "Primero", handicap: 4 },
+    { id: accountId, accountUserId: "user-1", name: "Cuenta", handicap: 8 },
+    { id: "rival", name: "Rival", handicap: 10 },
+  ];
+  const legacyNassau = {
+    id: "legacy-owner-sensitive",
+    type: "individual_nassau",
+    enabled: true,
+    playerAId: "first",
+    playerBId: "rival",
+    value: 100,
+    advantageStrokes: 0,
+    carryEnabled: false,
+    components: { match1: true, medal1: true, match2: true, medal2: true, match18: true, medal18: true },
+  };
+  const source = { players: roster, supplementalBets: [legacyNassau] };
+  const ownerId = resolvedOwnerIdForRoundDraft(source, "user-1");
+  const normalized = normalizeRoundDraft(source, ownerId)!;
+
+  assert.equal(ownerId, accountId);
+  assert.deepEqual(normalized.personalBets, []);
+  assert.deepEqual(normalized.supplementalBets, [legacyNassau]);
+
+  const accountNassau = { ...legacyNassau, id: "legacy-account", playerAId: accountId };
+  const accountSource = { players: roster, supplementalBets: [accountNassau] };
+  const migrated = normalizeRoundDraft(accountSource, resolvedOwnerIdForRoundDraft(accountSource, "user-1"))!;
+  assert.equal(migrated.personalBets[0].rivalPlayerId, "rival");
+  assert.equal(migrated.supplementalBets.length, 0);
 });

@@ -8,6 +8,13 @@ type RoundDraftCore = {
   players?: unknown;
 };
 
+export function resolvedOwnerIdForRoundDraft(value: unknown, userId: string) {
+  const draft = value && typeof value === "object" && !Array.isArray(value)
+    ? value as RoundDraftCore
+    : {};
+  return resolveRoundDraftCore(draft, userId).ownerId;
+}
+
 /** Resolves fields that must never leak from the previously rendered round. */
 export function resolveRoundDraftCore(draft: RoundDraftCore, userId: string) {
   const players = Array.isArray(draft.players)

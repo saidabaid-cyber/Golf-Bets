@@ -67,7 +67,7 @@ import { RulesPanel } from "./components/rules-panel";
 import { NumericCaptureInput } from "./components/numeric-capture-input";
 import { SignedMoneyInput } from "./components/signed-money-input";
 import { AccountProvider, useBackyardAccount } from "./components/account-provider";
-import { resolveRoundDraftCore } from "./draft-restoration";
+import { resolveRoundDraftCore, resolvedOwnerIdForRoundDraft } from "./draft-restoration";
 import { ACCOUNT_STORAGE_KEYS, hasCurrentBettingDataConsent, parseLegalAcceptances } from "../lib/account-state";
 import { AccountPanel } from "./components/account-panel";
 import { BrandLockup } from "./components/brand-lockup";
@@ -645,7 +645,7 @@ function GolfBetsApp() {
       holeSummarySession.current?.dispose();
       holeSummarySession.current = null; setHoleSummaryPaused(false); setHoleSummary([]);
     }
-    const draft = normalizeRoundDraft(value);
+    const draft = normalizeRoundDraft(value, resolvedOwnerIdForRoundDraft(value, identity.userId));
     const draftCore = draft ? resolveRoundDraftCore(draft, identity.userId) : null;
     const draftRoundHoles: 9 | 18 = draftCore?.roundHoles ?? 18;
     setRoundClosed(false);
@@ -746,7 +746,8 @@ function GolfBetsApp() {
       const savedCourses = readStoredJson<unknown>(localStorage, STORAGE_KEYS.courses, null);
       const savedHistory = readStoredJson<unknown>(localStorage, STORAGE_KEYS.history, null);
       const savedRivals = readStoredJson<unknown>(localStorage, STORAGE_KEYS.rivals, null);
-      const draft = normalizeRoundDraft(readStoredJson<unknown>(localStorage, STORAGE_KEYS.draft, null));
+      const rawDraft = readStoredJson<unknown>(localStorage, STORAGE_KEYS.draft, null);
+      const draft = normalizeRoundDraft(rawDraft, resolvedOwnerIdForRoundDraft(rawDraft, identity.userId));
       const savedFrequentPlayers = readStoredJson<unknown>(localStorage, STORAGE_KEYS.frequentPlayers, []);
       const savedFrequentGroups = parseFrequentGroups(localStorage.getItem(STORAGE_KEYS.frequentGroups));
       try {
