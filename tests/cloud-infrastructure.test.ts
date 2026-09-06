@@ -60,6 +60,13 @@ test("cambiar scorer o PIN revoca sesiones anteriores y admin delegado respeta e
   assert.match(adminRoute, /Date\.parse\(delegated\.expires_at\) > Date\.now\(\)/);
 });
 
+test("cambiar scorer falla cerrado si el grupo no pertenece a la Polla autorizada", () => {
+  const setScorer = adminRoute.slice(adminRoute.indexOf('action === "setScorer"'), adminRoute.indexOf('action === "regeneratePin"'));
+  assert.match(setScorer, /from\("tournament_groups"\)[\s\S]*?\.eq\("id", body\.groupId\)[\s\S]*?\.eq\("tournament_id", tournamentId\)/);
+  assert.match(setScorer, /if \(!group \|\| !member\)/);
+  assert.ok(setScorer.indexOf("if (!group || !member)") < setScorer.indexOf("update({ is_scorer: false })"));
+});
+
 test("Realtime público solo expone señal y leaderboard sanitizado", () => {
   assert.match(migration, /tournament_leaderboard_events/);
   assert.match(migration, /create policy leaderboard_events_public/);

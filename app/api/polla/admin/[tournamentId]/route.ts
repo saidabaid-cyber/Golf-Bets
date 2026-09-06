@@ -77,8 +77,11 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ t
     return NextResponse.json({ score: saved });
   } else if (action === "setScorer") {
     if (typeof body?.groupId !== "string" || typeof body?.playerId !== "string") return NextResponse.json({ error: "Scorer inválido." }, { status: 400 });
-    const { data: member } = await admin.from("group_members").select("group_id").eq("group_id", body.groupId).eq("tournament_player_id", body.playerId).maybeSingle();
-    if (!member) return NextResponse.json({ error: "El scorer no pertenece al grupo." }, { status: 403 });
+    const [{ data: group }, { data: member }] = await Promise.all([
+      admin.from("tournament_groups").select("id").eq("id", body.groupId).eq("tournament_id", tournamentId).maybeSingle(),
+      admin.from("group_members").select("group_id").eq("group_id", body.groupId).eq("tournament_player_id", body.playerId).maybeSingle(),
+    ]);
+    if (!group || !member) return NextResponse.json({ error: "El scorer o grupo no pertenece a esta Polla." }, { status: 403 });
     const { error: revokeError } = await admin.from("tournament_access").update({ revoked_at: new Date().toISOString() }).eq("tournament_id", tournamentId).eq("group_id", body.groupId).eq("role", "scorer").is("revoked_at", null);
     if (revokeError) return NextResponse.json({ error: "No fue posible cerrar las sesiones anteriores del scorer." }, { status: 500 });
     const { error: clearError } = await admin.from("group_members").update({ is_scorer: false }).eq("group_id", body.groupId);
