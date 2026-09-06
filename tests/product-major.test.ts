@@ -106,10 +106,12 @@ test("Términos aclaran que The Backyard no recibe ni procesa dinero", () => {
   assert.match(terms, /Comité o árbitro autorizado/i);
 });
 
-test("Home ofrece generador independiente y Mi Cuenta sin séptima pestaña", () => {
-  assert.match(page, /Armar grupos/);
-  assert.match(page, /setTab\("account"\)/);
-  assert.match(read("app/globals.css"), /bottomNav\{grid-template-columns:repeat\(6,1fr\)/);
+test("Home conecta grupos y perfil dentro de cinco destinos principales", () => {
+  assert.match(read("app/components/home-dashboard.tsx"), /onOpenGroups/);
+  assert.match(page, /setTab\("profile"\)/);
+  const navigation = read("lib/app-navigation.ts");
+  for (const label of ["Inicio", "Jugar", "Grupos", "Social", "Perfil"]) assert.match(navigation, new RegExp(label));
+  assert.match(read("app/globals.css"), /betaBottomNav\{grid-template-columns:repeat\(5,minmax\(0,1fr\)\)!important/);
 });
 
 test("grupo generado puede compartirse, guardarse y cargarse a una ronda", () => {

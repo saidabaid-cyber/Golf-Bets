@@ -7,6 +7,7 @@ import {
   calculateSupplementalBets,
   createSupplementalBet,
   normalizeSupplementalBets,
+  supplementalBetsForRoundHoles,
   supplementalBalancesAreZero,
 } from "../lib/supplemental-bets";
 import type { Course, HoleScore, ManualBet, PersonalBet, Player, PuttsByHole, SupplementalBet } from "../lib/types";
@@ -141,18 +142,59 @@ test("Chicago aplica el HCP % a la cuota y una ronda antigua sin porcentaje cons
   assertZero(eighty);
 });
 
-test("Mínimo de Putts splits the loser-funded pot and all-tie pays nothing", () => {
+test("Mínimo de Putts usa la duración explícita de una ronda de 9 hoyos", () => {
   const selected = players.slice(0, 3);
-  const bet = { ...createSupplementalBet("minimum_putts", selected, "putts"), holes: 9 } as SupplementalBet;
+  const bet = createSupplementalBet("minimum_putts", selected, "putts-9", 9);
+  assert.equal(bet.type === "minimum_putts" && bet.holes, 9);
   const order = Array.from({ length: 9 }, (_, index) => index + 1);
   const putts = Object.fromEntries(order.map((hole) => [hole, { a: 1, b: 2, c: 3 }]));
   const result = calculate([bet], selected, {}, order, putts);
+  assert.equal(result.results[0].complete, true);
   assert.deepEqual(result.balances, { a: 100, b: -50, c: -50 });
   assertZero(result);
+
+  const incomplete = calculate([bet], selected, {}, order, Object.fromEntries(Object.entries(putts).slice(0, 8)));
+  assert.equal(incomplete.results[0].complete, false);
+  assert.deepEqual(incomplete.balances, { a: 0, b: 0, c: 0 });
+
   const tiePutts = Object.fromEntries(order.map((hole) => [hole, { a: 2, b: 2, c: 2 }]));
   assert.deepEqual(calculate([bet], selected, {}, order, tiePutts).balances, { a: 0, b: 0, c: 0 });
   const splitPutts = Object.fromEntries(order.map((hole) => [hole, { a: 1, b: 1, c: 2 }]));
   assert.deepEqual(calculate([bet], selected, {}, order, splitPutts).balances, { a: 25, b: 25, c: -50 });
+
+  const backNine = Array.from({ length: 9 }, (_, index) => index + 10);
+  const backNinePutts = Object.fromEntries(backNine.map((hole) => [hole, { a: 1, b: 2, c: 3 }]));
+  assert.deepEqual(calculate([bet], selected, {}, backNine, backNinePutts).balances, { a: 100, b: -50, c: -50 });
+});
+
+test("Mínimo de Putts conserva exactamente configuración, snapshot y liquidación de 18 hoyos", () => {
+  const selected = players.slice(0, 3);
+  const bet = createSupplementalBet("minimum_putts", selected, "putts-18");
+  assert.equal(bet.type === "minimum_putts" && bet.holes, 18);
+  const serialized = JSON.parse(JSON.stringify([bet]));
+  assert.deepEqual(normalizeSupplementalBets(serialized, 18), [bet]);
+  assert.strictEqual(supplementalBetsForRoundHoles([bet], 18)[0], bet);
+
+  const order = Array.from({ length: 18 }, (_, index) => index + 1);
+  const putts = Object.fromEntries(order.map((hole) => [hole, { a: 1, b: 2, c: 3 }]));
+  const result = calculate([bet], selected, {}, order, putts);
+  assert.equal(result.results[0].complete, true);
+  assert.deepEqual(result.balances, { a: 100, b: -50, c: -50 });
+  assertZero(result);
+
+  const tied = Object.fromEntries(order.map((hole) => [hole, { a: 2, b: 2, c: 2 }]));
+  assert.deepEqual(calculate([bet], selected, {}, order, tied).balances, { a: 0, b: 0, c: 0 });
+});
+
+test("una configuración imposible de 18 putts se repara solo al abrir o convertir una ronda de 9", () => {
+  const bet = createSupplementalBet("minimum_putts", players.slice(0, 3), "putts-repair");
+  const chicago = createSupplementalBet("chicago", players.slice(0, 3), "chicago-unchanged");
+  const fittedBets = supplementalBetsForRoundHoles([chicago, bet], 9);
+  assert.strictEqual(fittedBets[0], chicago);
+  const fitted = fittedBets[1];
+  assert.equal(fitted.type === "minimum_putts" && fitted.holes, 9);
+  assert.equal((normalizeSupplementalBets([bet], 9)[0] as Extract<SupplementalBet, { type: "minimum_putts" }>).holes, 9);
+  assert.deepEqual(normalizeSupplementalBets([bet], 18), [bet]);
 });
 
 test("Presiones por parejas compare Low and High after handicap", () => {

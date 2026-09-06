@@ -7,6 +7,7 @@ import { discardAccountWorkspace, switchAccountWorkspace, WORKSPACE_OWNER_KEY } 
 import { CloudSyncGate, cloudSyncErrorMessage, syncStatusAfterSkip } from "../lib/cloud-sync-gate";
 import { STORAGE_KEYS } from "../lib/round-utils";
 import { legalReturnDestination, preserveLegalReturn } from "../lib/legal-navigation";
+import { coursePreferenceStorageKey } from "../lib/course-preferences";
 
 class MemoryStorage {
   data = new Map<string, string>();
@@ -55,6 +56,8 @@ test("eliminar cuenta local descarta solo A y conserva invitado y B", () => {
   switchAccountWorkspace(storage, "user-a");
   storage.setItem(STORAGE_KEYS.history, "a-history");
   storage.setItem("backyard-profile-cache-v1:user-a", "a-profile");
+  storage.setItem(coursePreferenceStorageKey("favorites", "user-a"), '["course-a"]');
+  storage.setItem(coursePreferenceStorageKey("recents", "user-a"), '["course-a"]');
   switchAccountWorkspace(storage, "user-b");
   storage.setItem(STORAGE_KEYS.history, "b-history");
   switchAccountWorkspace(storage, "user-a");
@@ -63,6 +66,8 @@ test("eliminar cuenta local descarta solo A y conserva invitado y B", () => {
   assert.equal(storage.getItem(WORKSPACE_OWNER_KEY), "guest");
   assert.equal(storage.getItem(STORAGE_KEYS.history), "guest-history");
   assert.equal(storage.getItem("backyard-profile-cache-v1:user-a"), null);
+  assert.equal(storage.getItem(coursePreferenceStorageKey("favorites", "user-a")), null);
+  assert.equal(storage.getItem(coursePreferenceStorageKey("recents", "user-a")), null);
   switchAccountWorkspace(storage, "user-b");
   assert.equal(storage.getItem(STORAGE_KEYS.history), "b-history");
   switchAccountWorkspace(storage, "user-a");

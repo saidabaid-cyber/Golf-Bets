@@ -91,7 +91,7 @@ function ItemShell({ bet, label, onToggle, onRemove, children, locked }: { bet: 
 
 const ORDER: SupplementalBet["type"][] = ["team_pressures", "chicago", "vegas", "minimum_putts"];
 
-export function SupplementalBetsEditor({ bets, players, onChange, requestActivation, locked = false, types = ORDER }: { bets: SupplementalBet[]; players: Player[]; onChange: Dispatch<SetStateAction<SupplementalBet[]>>; requestActivation?: () => Promise<boolean>; locked?: boolean; types?: SupplementalBet["type"][] }) {
+export function SupplementalBetsEditor({ bets, players, onChange, requestActivation, locked = false, types = ORDER, roundHoles = 18 }: { bets: SupplementalBet[]; players: Player[]; onChange: Dispatch<SetStateAction<SupplementalBet[]>>; requestActivation?: () => Promise<boolean>; locked?: boolean; types?: SupplementalBet["type"][]; roundHoles?: 9 | 18 }) {
   const [openTypes, setOpenTypes] = useState<Partial<Record<SupplementalBet["type"], boolean>>>({});
   const pendingScroll = useRef<string | null>(null);
   const pendingConsentAction = useRef(false);
@@ -109,7 +109,7 @@ export function SupplementalBetsEditor({ bets, players, onChange, requestActivat
     const id = createSupplementalBetId(type);
     setOpenTypes((current) => ({ ...current, [type]: true }));
     pendingScroll.current = id;
-    onChange((current) => current.some((bet) => bet.id === id) ? current : [...current, createSupplementalBet(type, players, id)]);
+    onChange((current) => current.some((bet) => bet.id === id) ? current : [...current, createSupplementalBet(type, players, id, roundHoles)]);
     switchRefs.current[type]?.focus({ preventScroll: true });
   };
   const add = (type: SupplementalBet["type"]) => runAfterConsent(() => addNow(type));
@@ -124,7 +124,7 @@ export function SupplementalBetsEditor({ bets, players, onChange, requestActivat
       pendingScroll.current = id;
       onChange((current) => current.some((bet) => bet.type === type)
         ? setSupplementalCategoryEnabled(current, type, true)
-        : [...current, createSupplementalBet(type, players, id)]);
+        : [...current, createSupplementalBet(type, players, id, roundHoles)]);
       switchRefs.current[type]?.focus({ preventScroll: true });
     } else {
       onChange((current) => setSupplementalCategoryEnabled(current, type, enabled));
@@ -180,7 +180,7 @@ export function SupplementalBetsEditor({ bets, players, onChange, requestActivat
           <label className="miniLabel">Equipo A · el resto forma Equipo B</label><ParticipantChips players={players.filter((player) => bet.participantIds.includes(player.id))} selected={bet.teamA} onChange={(teamA) => update(bet.id, { teamA: teamA.slice(-2) })} />
         </>}
         {bet.type === "minimum_putts" && <>
-          <div className="grid2"><MoneyField label="Ante" value={bet.ante} onChange={(ante) => update(bet.id, { ante })} /><label>Hoyos<select value={bet.holes} onChange={(event) => update(bet.id, { holes: Number(event.target.value) as 9 | 18 })}><option value={9}>9 hoyos</option><option value={18}>18 hoyos</option></select></label></div>
+          <div className="grid2"><MoneyField label="Ante" value={bet.ante} onChange={(ante) => update(bet.id, { ante })} /><label>Duración de la apuesta<select value={bet.holes} onChange={(event) => update(bet.id, { holes: Number(event.target.value) as 9 | 18 })}><option value={9}>9 hoyos</option>{roundHoles === 18 && <option value={18}>18 hoyos</option>}</select><small>Ronda configurada: {roundHoles} hoyos.</small></label></div>
           <label className="miniLabel">Participan</label><ParticipantChips players={players} selected={bet.participantIds} onChange={(participantIds) => update(bet.id, { participantIds })} />
         </>}
       </ItemShell>)}

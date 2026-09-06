@@ -13,11 +13,10 @@ import type { Course } from "../lib/types";
 test("bottom navigation maps Inicio to the real Home and every tab to its section", () => {
   assert.deepEqual(BOTTOM_NAV_TARGETS, {
     Inicio: "welcome",
-    Tarjeta: "round",
-    Personales: "personals",
-    Resultados: "results",
-    Histórico: "history",
-    Reglas: "rules",
+    Jugar: "play",
+    Grupos: "groups",
+    Social: "social",
+    Perfil: "profile",
   });
   const page = readFileSync("app/page.tsx", "utf8");
   assert.match(page, /function navigateFromBottomBar\(target: AppTab\) \{\s+setFeedback\(""\);/);

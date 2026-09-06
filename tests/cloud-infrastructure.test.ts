@@ -10,6 +10,7 @@ const adminRoute = read("app/api/polla/admin/[tournamentId]/route.ts");
 const leaderboardRoute = read("app/api/polla/leaderboard/[publicId]/route.ts");
 const privateLink = read("lib/polla-private-link.ts");
 const pollaPanel = read("app/components/polla-live-panel.tsx");
+const playHub = read("app/components/play-hub.tsx");
 const appPage = read("app/page.tsx");
 const accountProvider = read("app/components/account-provider.tsx");
 const envExample = read(".env.example");
@@ -75,8 +76,9 @@ test("link de ronda privada proyecta exclusivamente scores", () => {
 test("Polla Live conserva backend y enlaces, pero el acceso principal queda visible e inhabilitado", () => {
   assert.match(read("app/polla/[code]/page.tsx"), /redirect\(`\/\?polla=/);
   assert.doesNotMatch(appPage, /entry\.has\("polla"\).*setTab\("pollaLive"\)/);
-  assert.match(appPage, /className="secondary comingSoonFeature"[^>]*disabled[^>]*aria-disabled="true"/);
-  assert.match(appPage, /Polla Live<\/span><small>Próximamente<\/small>/);
+  assert.match(playHub, /className="betaPlayFuture" aria-disabled="true"/);
+  assert.match(playHub, /<b>Polla Live<\/b>/);
+  assert.match(playHub, /<strong>Próximamente<\/strong>/);
   assert.match(pollaPanel, /requestPollaInvite\(invitedId\)/);
   assert.match(pollaPanel, /\/polla\/\$\{created\.short_code\}/);
   assert.match(pollaPanel, /leaderboard\.tournament\?\.publicId/);

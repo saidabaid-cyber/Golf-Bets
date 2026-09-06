@@ -573,7 +573,7 @@ export function calculateSupplementalBets(
   return { balances, results };
 }
 
-export function createSupplementalBet(type: SupplementalBet["type"], players: Player[], id: string): SupplementalBet {
+export function createSupplementalBet(type: SupplementalBet["type"], players: Player[], id: string, roundHoles: 9 | 18 = 18): SupplementalBet {
   const ids = players.map((player) => player.id);
   const headToHead = { playerAId: ids[0] ?? "", playerBId: ids[1] ?? "", advantageStrokes: 0 };
   switch (type) {
@@ -583,13 +583,30 @@ export function createSupplementalBet(type: SupplementalBet["type"], players: Pl
     case "team_pressures": return { id, type, enabled: true, participantIds: ids.slice(0, ids.length === 3 ? 3 : 4), abandonedPlayerIds: [], teamA: ids.slice(0, 2), metric: "low_high", virtualMode: ids.length === 3 ? "mudo" : "standard", value: 100, hcpPct: 100, decimals: "half_up", carryEnabled: true, abandonedMaxScore: 9 };
     case "chicago": return { id, type, enabled: true, participantIds: ids, quotaBase: 39, hcpPct: 100, valuePerPoint: 10, points: { birdieOrBetter: 4, par: 2, bogey: 1, doubleBogeyOrWorse: 0 } };
     case "vegas": return { id, type, enabled: true, participantIds: ids.slice(0, 4), teamA: ids.slice(0, 2), valuePerUnit: 10, rotation: "fixed", blockSize: 3, hcpPct: 100, decimals: "half_up", birdiePenalty: false };
-    case "minimum_putts": return { id, type, enabled: true, participantIds: ids, ante: 50, holes: 18 };
+    case "minimum_putts": return { id, type, enabled: true, participantIds: ids, ante: 50, holes: roundHoles };
   }
 }
 
-export function normalizeSupplementalBets(value: unknown): SupplementalBet[] {
+/**
+ * A 9-hole round cannot contain an 18-hole Minimum Putts wager. This only
+ * repairs that impossible active configuration; choosing nine holes during an
+ * 18-hole round remains valid and every 18-hole snapshot stays unchanged.
+ */
+export function supplementalBetsForRoundHoles(bets: SupplementalBet[], roundHoles: 9 | 18) {
+  if (roundHoles === 18) return bets;
+  return bets.map((bet): SupplementalBet => bet.type === "minimum_putts" && bet.holes !== 9
+    ? { ...bet, holes: 9 }
+    : bet);
+}
+
+export function normalizeSupplementalBets(value: unknown, roundHoles?: 9 | 18): SupplementalBet[] {
   if (!Array.isArray(value)) return [];
-  return value.filter((item): item is SupplementalBet => Boolean(item && typeof item === "object" && typeof (item as SupplementalBet).id === "string" && Object.hasOwn(SUPPLEMENTAL_BET_LABELS, (item as SupplementalBet).type))).map((item) => ({ ...item, enabled: item.enabled !== false }));
+  const normalized = value
+    .filter((item): item is SupplementalBet => Boolean(item && typeof item === "object" && typeof (item as SupplementalBet).id === "string" && Object.hasOwn(SUPPLEMENTAL_BET_LABELS, (item as SupplementalBet).type)))
+    .map((item): SupplementalBet => item.type === "minimum_putts"
+      ? { ...item, enabled: item.enabled !== false, holes: item.holes === 9 ? 9 : 18 }
+      : { ...item, enabled: item.enabled !== false });
+  return roundHoles ? supplementalBetsForRoundHoles(normalized, roundHoles) : normalized;
 }
 
 export function supplementalBalancesAreZero(result: SupplementalBetResult) {

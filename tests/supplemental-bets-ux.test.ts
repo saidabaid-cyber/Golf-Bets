@@ -87,7 +87,11 @@ test("Minimum Putts capture stays inside the existing score card and persists in
   assert.ok(scoreCard >= 0 && putts > scoreCard && previousBets > putts);
   assert.match(page, /supplementalBets, manualBets, scores, scoreEdits, putts,/);
   assert.match(page, /supplementalBets: structuredClone\(supplementalBets\), putts: structuredClone\(putts\)/);
-  assert.match(page, /setSupplementalBets\(normalizeSupplementalBets\(restored\.supplementalBets\)\); setPutts\(restored\.putts \|\| \{\}\)/);
+  assert.match(page, /setSupplementalBets\(normalizeSupplementalBets\(restored\.supplementalBets, restoredRoundHoles\)\); setPutts\(restored\.putts \|\| \{\}\)/);
+  assert.match(page, /setSupplementalBets\(\(current\) => supplementalBetsForRoundHoles\(current, next\)\)/);
+  assert.match(page, /<SupplementalBetsEditor[^>]+roundHoles=\{roundHoles\}/);
+  assert.match(editor, /createSupplementalBet\(type, players, id, roundHoles\)/);
+  assert.match(editor, /Ronda configurada: \{roundHoles\} hoyos\./);
 });
 
 test("new games feed live standings, general results, settlement and individual result accordions", () => {

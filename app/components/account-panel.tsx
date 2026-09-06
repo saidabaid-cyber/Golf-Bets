@@ -4,9 +4,23 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { LEGAL_DOCUMENT_VERSIONS, legalConfig } from "../../lib/legal-config";
 import { BETTING_DATA_CONSENT_TYPE, profileHandicapInput, profileHandicapLabel, validateProfileDraft } from "../../lib/account-state";
+import type { GolfInsights } from "../../lib/golf-insights";
 import { useBackyardAccount } from "./account-provider";
 
-export function AccountPanel({ highContrast, onHighContrastChange }: { highContrast: boolean; onHighContrastChange: (value: boolean) => void }) {
+type AccountPanelProps = {
+  highContrast: boolean;
+  onHighContrastChange: (value: boolean) => void;
+  golfInsights?: GolfInsights;
+  onOpenStats?: () => void;
+};
+
+function profileMoney(value: number) {
+  const rounded = Math.round(value);
+  if (rounded === 0) return "$0";
+  return `${rounded > 0 ? "+" : "−"}$${Math.abs(rounded).toLocaleString("es-MX")}`;
+}
+
+export function AccountPanel({ highContrast, onHighContrastChange, golfInsights, onOpenStats }: AccountPanelProps) {
   const { identity, updateProfile, logout, finishAccountDeletion, openAccess, acceptances, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, requestCloudLink, lastCloudSync, cloudIssues, retryCloudSync } = useBackyardAccount();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(identity.displayName);
@@ -72,6 +86,17 @@ export function AccountPanel({ highContrast, onHighContrastChange }: { highContr
       <div className="sectionTitle"><div className="profileIdentity"><div className="accountAvatar">{identity.avatarUrl ? <img src={identity.avatarUrl} alt="Avatar" /> : (identity.displayName.trim()[0] || "J").toUpperCase()}</div><div><h2>{identity.displayName}</h2><p>{identity.email || "Sin correo"}</p></div></div><button className="secondary" onClick={() => setEditing((value) => !value)}>{editing ? "Cancelar" : "Editar"}</button></div>
       {editing && <div className="profileForm"><label>Nombre<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Tu nombre" /></label><label>HCP Index (opcional)<input type="text" inputMode="text" value={handicap} onChange={(event) => setHandicap(event.target.value)} placeholder="Ej. 8.4 o +1.2" /></label><button className="primary" disabled={savingProfile} onClick={saveProfile}>{savingProfile ? "Guardando…" : "Guardar perfil"}</button></div>}
       {!editing && <div className="profileMeta"><span>HCP Index</span><b>{profileHandicapLabel(identity.defaultHandicap)}</b></div>}
+    </section>}
+
+    {golfInsights && <section className="card betaProfileGolfCard">
+      <div className="sectionTitle"><div><h2>Mi golf</h2><p>Resumen calculado sólo con tu histórico disponible.</p></div>{onOpenStats && <button type="button" className="textButton" onClick={onOpenStats}>Ver Stats</button>}</div>
+      <div className="betaProfileGolfStats">
+        <span><small>Rondas</small><b>{golfInsights.rounds}</b></span>
+        <span><small>Promedio{golfInsights.scoreScopeHoles ? ` · ${golfInsights.scoreScopeHoles}H` : ""}</small><b>{golfInsights.averageScore === undefined ? "—" : golfInsights.averageScore.toFixed(1)}</b></span>
+        <span><small>Mejor score{golfInsights.scoreScopeHoles ? ` · ${golfInsights.scoreScopeHoles}H` : ""}</small><b>{golfInsights.bestScore ?? "—"}</b></span>
+        <span><small>Apuestas</small><b className={golfInsights.betBalance >= 0 ? "good" : "bad"}>{profileMoney(golfInsights.betBalance)}</b></span>
+      </div>
+      {!golfInsights.scoredRounds && <p className="hint">Las rondas sin tarjeta completa se conservan, pero no generan promedios.</p>}
     </section>}
 
     <section className="card"><h2>Documentos y consentimiento</h2><div className="documentConsentList">
