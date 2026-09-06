@@ -127,7 +127,7 @@ export function HomeDashboard({
     <section className="betaHomeStats" aria-label="Resumen de golf">
       <article><span>Rondas</span><b>{insights.rounds}</b><small>{insights.scoredRounds} con score completo</small></article>
       <article><span>Promedio</span><b>{formatAverage(insights.averageScore)}</b><small>{insights.scoreScopeHoles ? `score bruto · ${insights.scoreScopeHoles} hoyos` : "score bruto"}</small></article>
-      <article><span>Apuestas</span><b className={insights.betBalance >= 0 ? "good" : "bad"}>{signedMoney(insights.betBalance)}</b><small>histórico registrado</small></article>
+      <article><span>Apuestas</span><b className={insights.betBalance === undefined ? "" : insights.betBalance >= 0 ? "good" : "bad"}>{insights.betBalance === undefined ? "—" : signedMoney(insights.betBalance)}</b><small>{insights.betRounds ? `${insights.betRounds} resultado${insights.betRounds === 1 ? "" : "s"} verificado${insights.betRounds === 1 ? "" : "s"}` : "sin resultado verificable"}</small></article>
       <article><span>Grupos</span><b>{groupCount}</b><small>guardados</small></article>
     </section>
 
@@ -150,7 +150,7 @@ export function HomeDashboard({
         <span><small>Score</small><strong>{latestRound.gross}</strong></span>
         <span><small>vs par</small><strong>{formatRelative(latestRound.relativeToPar)}</strong></span>
         <span><small>Neto</small><strong>{latestRound.net ?? "—"}</strong></span>
-        <span><small>Apuestas</small><strong className={latestRound.betResult >= 0 ? "good" : "bad"}>{signedMoney(latestRound.betResult)}</strong></span>
+        <span><small>Apuestas</small><strong className={latestRound.betResult === undefined ? "" : latestRound.betResult >= 0 ? "good" : "bad"}>{latestRound.betResult === undefined ? "—" : signedMoney(latestRound.betResult)}</strong></span>
       </button>
     </section> : <section className="card betaHomeEmptyRound"><h2>{insights.rounds ? "Tus rondas siguen en Histórico." : "Tu primera tarjeta empieza aquí."}</h2><p>{insights.rounds ? "Aún no hay una tarjeta completa para mostrar score y estadísticas confiables en Inicio." : "Cuando cierres una ronda, verás aquí score, campo y resultado de apuestas."}</p><button type="button" className="primary" onClick={insights.rounds ? onOpenHistory : onNewRound}>{insights.rounds ? "Revisar histórico" : "Crear primera ronda"}</button></section>}
 

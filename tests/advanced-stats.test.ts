@@ -116,7 +116,8 @@ test("Stats ignora valores avanzados corruptos de un histórico legacy", () => {
   };
   const insight = scoredRoundInsight(corrupt);
   assert.equal(insight?.penaltyStrokes, 0);
-  assert.equal(insight?.fairwaysHit, 1);
+  // Fairway capture on a par 3 is not a real fairway attempt.
+  assert.equal(insight?.fairwaysHit, 0);
   assert.equal(insight?.greensInRegulation, 1);
 });
 

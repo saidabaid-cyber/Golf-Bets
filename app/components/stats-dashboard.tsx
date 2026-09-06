@@ -102,7 +102,7 @@ export function StatsDashboard({ insights, onOpenHistory, onOpenRound }: StatsDa
     </section>
 
     <section className="betaSecondaryStats">
-      <article className="card"><span className="eyebrow">APUESTAS REGISTRADAS</span><b className={insights.betBalance >= 0 ? "good" : "bad"}>{money(insights.betBalance)}</b><small>Balance acumulado del histórico disponible.</small></article>
+      <article className="card"><span className="eyebrow">APUESTAS REGISTRADAS</span><b className={insights.betBalance === undefined ? "" : insights.betBalance >= 0 ? "good" : "bad"}>{insights.betBalance === undefined ? "—" : money(insights.betBalance)}</b><small>{insights.betRounds ? `Balance de ${insights.betRounds} ronda${insights.betRounds === 1 ? "" : "s"} con resultado verificable.` : "Sin liquidaciones verificables en el histórico."}</small></article>
       <article className="card"><span className="eyebrow">PUTTS</span>{insights.averagePutts !== undefined ? <><b>{decimal(insights.averagePutts)}</b><small>Promedio en {insights.puttRounds} ronda{insights.puttRounds === 1 ? "" : "s"} de {scopeLabel} con captura completa.</small></> : <><b>—</b><small>Se mostrará cuando una ronda tenga putts en todos sus hoyos.</small></>}</article>
     </section>
 

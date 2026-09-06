@@ -167,7 +167,7 @@ export function AccountPanel({ highContrast, onHighContrastChange, notifications
         <span><small>Rondas</small><b>{golfInsights.rounds}</b></span>
         <span><small>Promedio{golfInsights.scoreScopeHoles ? ` · ${golfInsights.scoreScopeHoles}H` : ""}</small><b>{profileDecimal(golfInsights.averageScore)}</b></span>
         <span><small>Mejor score{golfInsights.scoreScopeHoles ? ` · ${golfInsights.scoreScopeHoles}H` : ""}</small><b>{golfInsights.bestScore ?? "—"}</b></span>
-        <span><small>Apuestas</small><b className={golfInsights.betBalance >= 0 ? "good" : "bad"}>{profileMoney(golfInsights.betBalance)}</b></span>
+        <span><small>Apuestas</small><b className={golfInsights.betBalance === undefined ? "" : golfInsights.betBalance >= 0 ? "good" : "bad"}>{golfInsights.betBalance === undefined ? "—" : profileMoney(golfInsights.betBalance)}</b></span>
       </div>
       <div className="betaProfileGolfStats betaProfileScoringStats">
         <span><small>Pars</small><b>{golfInsights.scoredRounds ? golfInsights.pars : "—"}</b></span>

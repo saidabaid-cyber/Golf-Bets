@@ -280,7 +280,7 @@ function normalizedCourse(value: unknown, order: readonly number[], meta: Histor
     const hole = record(rawHole);
     if (!hole
       || !integerInRange(hole.number, 1, 18)
-      || !integerInRange(hole.par, 1, 9)
+      || !integerInRange(hole.par, 3, 6)
       || !integerInRange(hole.strokeIndex, 1, 18)) continue;
     if (holes.has(hole.number)) {
       duplicate = true;
@@ -447,10 +447,15 @@ function optionalPlayerStats(
     const scoring = scoringForPlayer(player.id, order, course, scores);
     const putts = puttsForPlayer(source.putts, player.id, order);
     const summary = summarizePlayerAdvancedStats(source.advancedStats as RoundSnapshot["advancedStats"], player.id, [...order]);
+    const fairwaySummary = summarizePlayerAdvancedStats(
+      source.advancedStats as RoundSnapshot["advancedStats"],
+      player.id,
+      order.filter((holeNumber) => course.holes.find((hole) => hole.number === holeNumber)?.par !== 3),
+    );
     const advanced: HistoricalAdvancedStatsRecap | undefined = summary.capturedHoles
       ? {
           capturedHoles: summary.capturedHoles,
-          ...(summary.fairwayAttempts ? { fairways: { hit: summary.fairwaysHit, attempts: summary.fairwayAttempts } } : {}),
+          ...(fairwaySummary.fairwayAttempts ? { fairways: { hit: fairwaySummary.fairwaysHit, attempts: fairwaySummary.fairwayAttempts } } : {}),
           ...(summary.greenAttempts ? { greensInRegulation: { hit: summary.greensInRegulation, attempts: summary.greenAttempts } } : {}),
           ...(summary.penaltyHoles ? { penalties: { strokes: summary.penaltyStrokes, capturedHoles: summary.penaltyHoles } } : {}),
         }
@@ -670,6 +675,7 @@ function persistedCategoryBalances(
 function safeMeta(source: RuntimeRecord): HistoricalRoundRecapMeta {
   const holeCount = source.roundHoles === 9 || source.roundHoles === 18 ? source.roundHoles : undefined;
   const startHole = source.startHole === 1 || source.startHole === 10 ? source.startHole : undefined;
+  const normalizedLifecycle = lifecycleState(source.lifecycleState);
   return {
     ...(stableId(source.id) ? { roundId: source.id } : {}),
     ...(nonblank(source.date) ? { date: nonblank(source.date) } : {}),
@@ -677,7 +683,11 @@ function safeMeta(source: RuntimeRecord): HistoricalRoundRecapMeta {
     ...(nonblank(source.teeName) ? { teeName: nonblank(source.teeName) } : {}),
     ...(stableId(source.ownerId) ? { ownerId: source.ownerId } : {}),
     ...(nonblank(source.ownerName) ? { ownerName: nonblank(source.ownerName) } : {}),
-    lifecycleState: lifecycleState(source.lifecycleState) || "completed",
+    // Only a genuinely missing legacy field defaults to completed. An explicit
+    // unknown value is quarantined instead of silently becoming a final round.
+    ...(source.lifecycleState === undefined
+      ? { lifecycleState: "completed" as const }
+      : normalizedLifecycle ? { lifecycleState: normalizedLifecycle } : {}),
     ...(holeCount ? { holeCount } : {}),
     ...(startHole ? { startHole } : {}),
   };
