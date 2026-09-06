@@ -1,5 +1,6 @@
 import { privateLeaderboard } from "./round-utils";
 import type { FrequentGroup, Player, RoundSnapshot } from "./types";
+import { summarizePlayerAdvancedStats } from "./advanced-stats";
 
 export type ScoredRoundInsight = {
   id: string;
@@ -15,6 +16,12 @@ export type ScoredRoundInsight = {
   bogeys: number;
   doublesOrWorse: number;
   putts: number | null;
+  fairwaysHit: number;
+  fairwayAttempts: number;
+  greensInRegulation: number;
+  greenAttempts: number;
+  penaltyStrokes: number;
+  advancedHoles: number;
   betResult: number;
   holeCount: 9 | 18;
 };
@@ -39,6 +46,12 @@ export type GolfInsights = {
   doublesOrWorse: number;
   averagePutts?: number;
   puttRounds: number;
+  advancedRounds: number;
+  fairwaysHit: number;
+  fairwayAttempts: number;
+  greensInRegulation: number;
+  greenAttempts: number;
+  penaltyStrokes: number;
   coursesPlayed: number;
   betBalance: number;
   recentRounds: ScoredRoundInsight[];
@@ -107,6 +120,7 @@ export function scoredRoundInsight(round: RoundSnapshot): ScoredRoundInsight | n
     if (finiteScore(putts)) puttValues.push(putts);
     else completePutts = false;
   }
+  const advanced = summarizePlayerAdvancedStats(round.advancedStats, player.id, order);
 
   return {
     id: round.id,
@@ -122,6 +136,12 @@ export function scoredRoundInsight(round: RoundSnapshot): ScoredRoundInsight | n
     bogeys,
     doublesOrWorse,
     putts: completePutts ? puttValues.reduce((total, value) => total + value, 0) : null,
+    fairwaysHit: advanced.fairwaysHit,
+    fairwayAttempts: advanced.fairwayAttempts,
+    greensInRegulation: advanced.greensInRegulation,
+    greenAttempts: advanced.greenAttempts,
+    penaltyStrokes: advanced.penaltyStrokes,
+    advancedHoles: advanced.capturedHoles,
     betResult: round.betResult,
     holeCount: order.length,
   };
@@ -141,6 +161,7 @@ export function buildGolfInsights(rounds: RoundSnapshot[]): GolfInsights {
   const comparableRounds = rounds18.length ? rounds18 : rounds9;
   const scoreScopeHoles = comparableRounds[0]?.holeCount;
   const puttRounds = comparableRounds.filter((round) => round.putts !== null);
+  const advancedRounds = chronological.filter((round) => round.advancedHoles > 0);
   const last5 = comparableRounds.slice(0, 5);
   const last10 = comparableRounds.slice(0, 10);
 
@@ -164,6 +185,12 @@ export function buildGolfInsights(rounds: RoundSnapshot[]): GolfInsights {
     doublesOrWorse: chronological.reduce((total, round) => total + round.doublesOrWorse, 0),
     averagePutts: average(puttRounds.map((round) => round.putts as number)),
     puttRounds: puttRounds.length,
+    advancedRounds: advancedRounds.length,
+    fairwaysHit: advancedRounds.reduce((total, round) => total + round.fairwaysHit, 0),
+    fairwayAttempts: advancedRounds.reduce((total, round) => total + round.fairwayAttempts, 0),
+    greensInRegulation: advancedRounds.reduce((total, round) => total + round.greensInRegulation, 0),
+    greenAttempts: advancedRounds.reduce((total, round) => total + round.greenAttempts, 0),
+    penaltyStrokes: advancedRounds.reduce((total, round) => total + round.penaltyStrokes, 0),
     coursesPlayed: new Set(rounds.map((round) => round.courseName).filter(Boolean)).size,
     betBalance: rounds.reduce((total, round) => total + round.betResult, 0),
     recentRounds: chronological,

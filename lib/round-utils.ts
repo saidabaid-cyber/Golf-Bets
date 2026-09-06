@@ -6,6 +6,7 @@ import { initialBets } from "./new-round-bets";
 import type { Course, HoleScore, Player, RoundSnapshot } from "./types";
 import type { FrequentPlayer } from "./types";
 import { hasValidRoundHandicap } from "./handicap-base";
+import { normalizeAdvancedStats, normalizeScoreCaptureMode } from "./advanced-stats";
 
 export const STORAGE_KEYS = {
   courses: "golfbets-courses",
@@ -71,6 +72,8 @@ export function normalizeRoundDraft(value: unknown, resolvedOwnerId?: string) {
     scores: validScoreRows(source.scores),
     scoreEdits: validScoreRows(source.scoreEdits),
     putts: validPuttRows(source.putts),
+    scoreCaptureMode: normalizeScoreCaptureMode(source.scoreCaptureMode),
+    advancedStats: normalizeAdvancedStats(source.advancedStats),
     unitEvents: Array.isArray(source.unitEvents) ? source.unitEvents : [],
     counterBetEvents: Array.isArray(source.counterBetEvents) ? source.counterBetEvents : [],
     counterBetKeepers: recordValue(source.counterBetKeepers),

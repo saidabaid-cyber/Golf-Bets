@@ -16,13 +16,14 @@
 - Home con identidad/HCP manual, ronda abierta o revisión pendiente como acción dominante, última tarjeta completa, accesos rápidos, grupos, balance y actividad real del espacio local.
 - Hub Jugar con retorno seguro a configuración/score/resultados, atajos contextuales de ronda y acceso conservado a Histórico, Personales, Stats, Campos, Grupos y Reglas.
 - Perfil con resumen de golf real y Stats separada. Promedio, mejor score, tendencia y putts nunca mezclan tarjetas de 9 y 18 hoyos; la UI declara la cohorte utilizada.
+- Tarjeta con captura `Rápida` (score y putts exigidos por apuestas) o `Estadísticas` opcionales. Fairway, GIR y penalidades se guardan sin cambiar scores ni motores de apuestas; Stats e Histórico muestran únicamente datos capturados, sin completar huecos.
 - Actividad personal derivada sólo de rondas y grupos guardados. No se presenta como un feed compartido ni se publica a terceros.
 - Biblioteca de campos con búsqueda tolerante a acentos, favoritos, recientes, creación/edición manual y selección explícita. Editar catálogo no cambia silenciosamente el campo del draft.
 - Preferencias de campos aisladas por identidad y eliminadas al borrar la cuenta local.
 - Contratos tipados `CourseDataProvider`, `HandicapProvider`, `GolfProfileProvider`, `GolfMapProvider` y `DistanceProvider`; el único proveedor activo busca sin red sobre `Course[]` existentes.
 - Minimum Putts usa la duración explícita de ronda: H1–9 y H10–18 liquidan correctamente en rondas de 9; snapshots válidos de 18 conservan su comportamiento.
 - Importes ordinarios de apuestas se limitan a cero o más en captura; Manuales conserva deliberadamente importes firmados.
-- QA local del último milestone: lint sin errores, TypeScript correcto, 724/724 tests y build Next.js 16.3.3 correcto. El QA visual previo a 320/375/390/430 px permanece vigente; el nuevo cambio es de persistencia y no altera layout.
+- QA local del último milestone: lint sin errores, TypeScript correcto, 730/730 tests, build Next.js 16.3.3 correcto y respuesta HTTP local 200. El host no expone navegador para verificar visualmente la nueva captura en viewports móviles; ese QA queda pendiente y no se presenta como certificado.
 
 ## PARTIAL — útil, pero todavía no cumple el modelo final
 

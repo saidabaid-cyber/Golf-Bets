@@ -25,6 +25,10 @@ function money(value: number) {
   return `${rounded > 0 ? "+" : "−"}$${Math.abs(rounded).toLocaleString("es-MX")}`;
 }
 
+function percentage(hit: number, attempts: number) {
+  return attempts ? `${Math.round((hit / attempts) * 100)}%` : "—";
+}
+
 function roundDate(value: string) {
   const date = new Date(`${value}T12:00:00-06:00`);
   if (Number.isNaN(date.getTime())) return value;
@@ -101,6 +105,15 @@ export function StatsDashboard({ insights, onOpenHistory, onOpenRound }: StatsDa
       <article className="card"><span className="eyebrow">APUESTAS REGISTRADAS</span><b className={insights.betBalance >= 0 ? "good" : "bad"}>{money(insights.betBalance)}</b><small>Balance acumulado del histórico disponible.</small></article>
       <article className="card"><span className="eyebrow">PUTTS</span>{insights.averagePutts !== undefined ? <><b>{decimal(insights.averagePutts)}</b><small>Promedio en {insights.puttRounds} ronda{insights.puttRounds === 1 ? "" : "s"} de {scopeLabel} con captura completa.</small></> : <><b>—</b><small>Se mostrará cuando una ronda tenga putts en todos sus hoyos.</small></>}</article>
     </section>
+
+    {insights.advancedRounds > 0 && <section className="card betaAdvancedStats">
+      <div className="sectionTitle"><div><h2>Estadísticas avanzadas</h2><p>Solo usa datos capturados expresamente; los huecos no se completan.</p></div><span className="betaStatsSample">{insights.advancedRounds} ronda{insights.advancedRounds === 1 ? "" : "s"}</span></div>
+      <div className="betaStatTiles" aria-label="Estadísticas avanzadas registradas">
+        <article><span>Fairways</span><b>{percentage(insights.fairwaysHit, insights.fairwayAttempts)}</b><small>{insights.fairwaysHit} de {insights.fairwayAttempts} capturados</small></article>
+        <article><span>GIR</span><b>{percentage(insights.greensInRegulation, insights.greenAttempts)}</b><small>{insights.greensInRegulation} de {insights.greenAttempts} capturados</small></article>
+        <article><span>Penalidades</span><b>{insights.penaltyStrokes}</b><small>golpes registrados</small></article>
+      </div>
+    </section>}
 
     <section className="card betaRecentScores">
       <div className="sectionTitle"><div><h2>Rondas recientes</h2><p>Abre una tarjeta para ver todo su detalle.</p></div></div>

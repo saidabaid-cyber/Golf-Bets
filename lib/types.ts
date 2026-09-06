@@ -9,6 +9,7 @@ export type PressureMultiplier = 1 | 2 | 3 | 4 | 5;
 export type RabbitMode = "continuous" | "three_hole_blocks";
 export type SkinsMode = "carry" | "no_carry";
 export type RoundLifecycleState = "draft" | "live" | "completed" | "cancelled";
+export type ScoreCaptureMode = "quick" | "advanced";
 
 export type Player = {
   id: string;
@@ -375,6 +376,17 @@ export type SupplementalBet =
 
 export type PuttsByHole = Record<number, Record<string, number | null>>;
 
+export type AdvancedHoleStat = {
+  /** Missing means not captured; false is an explicit miss. */
+  fairwayHit?: boolean;
+  /** Missing means not captured; false is an explicit missed green. */
+  greenInRegulation?: boolean;
+  /** Missing means not captured; zero is an explicit no-penalty result. */
+  penaltyStrokes?: number;
+};
+
+export type AdvancedStatsByHole = Record<number, Record<string, AdvancedHoleStat>>;
+
 export type Expense = {
   caddie: number;
   food: number;
@@ -419,6 +431,8 @@ export type RoundSnapshot = {
   id: string;
   /** Missing in legacy history is normalized to completed without rewriting storage. */
   lifecycleState?: RoundLifecycleState;
+  /** Missing in legacy rounds preserves the former score-only capture. */
+  scoreCaptureMode?: ScoreCaptureMode;
   date: string;
   courseName: string;
   teeName: string;
@@ -453,6 +467,7 @@ export type RoundSnapshot = {
   manualBets?: ManualBet[];
   supplementalBets?: SupplementalBet[];
   putts?: PuttsByHole;
+  advancedStats?: AdvancedStatsByHole;
   ballFriendSetup?: Record<number, BallFriendHole>;
   segments?: FoursomeSegment[];
   playerBalances?: Record<string, number>;

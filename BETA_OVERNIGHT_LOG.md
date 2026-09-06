@@ -110,3 +110,14 @@ La publicación pendiente debe realizarse únicamente con `git push origin beta`
 - Históricos antiguos sin estado se interpretan como `completed` en memoria, sin migración destructiva ni reescritura masiva.
 - QA: lint correcto, TypeScript correcto, 724/724 pruebas y build de producción correcto.
 - Publicación: `git push origin beta` continúa bloqueado por el control de seguridad del entorno al tratarse de un remoto público. No se intentó una vía alternativa y Preview sigue sin contener los commits locales.
+
+## Reanudación — captura rápida y estadísticas opcionales
+
+- Se añadió un selector por ronda entre captura `Rápida` y `Estadísticas`; cambiarlo no enfoca campos ni altera score o apuestas.
+- El modo rápido conserva el flujo previo. Putts continúa apareciendo y siendo obligatorio únicamente cuando Mínimo de Putts lo requiere.
+- El modo Estadísticas permite capturar putts, fairway (solo Par 4/5), GIR y golpes de penalidad por jugador/hoyo. Todos son opcionales y distinguen valor ausente de `false` o cero explícitos.
+- `scoreCaptureMode` y `advancedStats` se normalizan y persisten en draft v9, autosave, IndexedDB/outbox, snapshot de Histórico, recarga, undo y edición de una ronda guardada.
+- Stats agrega porcentajes solo sobre intentos capturados y penalidades registradas; Histórico identifica cuántos hoyos contienen al menos un dato avanzado.
+- Compatibilidad: rondas anteriores sin estos campos abren en modo rápido y no se reescriben. Ninguna fórmula de apuesta recibe los nuevos datos.
+- QA: lint correcto, TypeScript correcto, 730/730 pruebas, build correcto y HTTP local 200 con contenido de The Backyard.
+- Límite visual: no hay ejecutable `agent-browser` ni navegador CUA disponible en este host. La verificación física/emulada de iPhone para esta nueva UI queda pendiente; no se declara superada.
