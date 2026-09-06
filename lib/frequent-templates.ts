@@ -1,16 +1,47 @@
 import type { FrequentGroup, FrequentPlayer, PersonalBet, Player, SavedPersonalRival } from "./types";
 import { accountPrimaryPlayerId } from "./account-primary-player";
+import { normalizePlayerName } from "./group-generator";
 
 export type FrequentGroupMember = FrequentGroup["players"][number];
 
 function memberKey(name: string) {
-  return name.trim().toLocaleLowerCase("es-MX");
+  return normalizePlayerName(name);
 }
 
-function cleanGroupMember(member: FrequentGroupMember): FrequentGroupMember | null {
+function accountKey(accountUserId: string | undefined) {
+  return accountUserId?.trim() || "";
+}
+
+function cleanGroupMember(member: Partial<FrequentGroupMember> | null | undefined): FrequentGroupMember | null {
+  if (typeof member?.name !== "string") return null;
   const name = member.name.trim();
   if (!name) return null;
-  return { name, handicap: member.handicap ?? null, ...(member.accountUserId ? { accountUserId: member.accountUserId } : {}) };
+  const handicap = typeof member.handicap === "number" && Number.isFinite(member.handicap) && member.handicap >= -15 && member.handicap <= 54
+    ? member.handicap
+    : null;
+  const accountUserId = typeof member.accountUserId === "string" && member.accountUserId.trim().length <= 200
+    ? member.accountUserId.trim()
+    : "";
+  return { name, handicap, ...(accountUserId ? { accountUserId } : {}) };
+}
+
+function membersConflict(first: FrequentGroupMember, second: FrequentGroupMember) {
+  const firstAccount = accountKey(first.accountUserId);
+  const secondAccount = accountKey(second.accountUserId);
+  return memberKey(first.name) === memberKey(second.name)
+    || Boolean(firstAccount && secondAccount && firstAccount === secondAccount);
+}
+
+function cleanUniqueGroupMembers(members: readonly Partial<FrequentGroupMember>[]) {
+  const players: FrequentGroupMember[] = [];
+  let invalid = false;
+  for (const member of members) {
+    const cleaned = cleanGroupMember(member);
+    if (!cleaned) { invalid = true; continue; }
+    if (players.some((candidate) => membersConflict(candidate, cleaned))) { invalid = true; continue; }
+    players.push(cleaned);
+  }
+  return { players, invalid };
 }
 
 export function parseFrequentGroups(raw: string | null | undefined): FrequentGroup[] {
@@ -22,14 +53,7 @@ export function parseFrequentGroups(raw: string | null | undefined): FrequentGro
       const group = value as Partial<FrequentGroup>;
       const name = typeof group.name === "string" ? group.name.trim() : "";
       const players = Array.isArray(group.players)
-        ? group.players.flatMap((member) => {
-          if (!member || typeof member !== "object") return [];
-          const candidate = member as Partial<FrequentGroupMember>;
-          if (typeof candidate.name !== "string") return [];
-          const handicap = candidate.handicap === null || typeof candidate.handicap === "number" ? candidate.handicap : null;
-          const cleaned = cleanGroupMember({ name: candidate.name, handicap, ...(typeof candidate.accountUserId === "string" ? { accountUserId: candidate.accountUserId } : {}) });
-          return cleaned ? [cleaned] : [];
-        })
+        ? cleanUniqueGroupMembers(group.players.filter((member) => Boolean(member && typeof member === "object"))).players
         : [];
       if (typeof group.id !== "string" || !group.id || !name || !players.length) return [];
       return [{
@@ -56,18 +80,20 @@ export function updateFrequentGroupTemplate(
   updatedAt: string,
 ) {
   const name = patch.name.trim();
-  const players = patch.players.flatMap((member) => {
-    const cleaned = cleanGroupMember(member);
-    return cleaned ? [cleaned] : [];
-  });
-  if (!name || !players.length) return groups;
+  const cleaned = cleanUniqueGroupMembers(patch.players);
+  if (!name || !cleaned.players.length || cleaned.invalid || cleaned.players.length !== patch.players.length) return groups;
+  const players = cleaned.players;
   return groups.map((group) => group.id === id ? { ...group, name, players, updatedAt } : group);
 }
 
 export function addFrequentGroupMember(group: FrequentGroup, member: FrequentGroupMember) {
   const cleaned = cleanGroupMember(member);
-  if (!cleaned || group.players.some((candidate) => memberKey(candidate.name) === memberKey(cleaned.name))) return group;
+  if (!cleaned || group.players.some((candidate) => membersConflict(candidate, cleaned))) return group;
   return { ...group, players: [...group.players, cleaned] };
+}
+
+export function frequentGroupMemberFromFrequentPlayer(player: Pick<FrequentPlayer, "name" | "handicap" | "accountUserId">) {
+  return cleanGroupMember(player);
 }
 
 export function updateFrequentGroupMember(group: FrequentGroup, index: number, patch: Partial<FrequentGroupMember>) {
@@ -96,7 +122,7 @@ export function resolveFrequentGroupDeletion(groups: FrequentGroup[], id: string
 }
 
 export function playersFromFrequentGroup(group: FrequentGroup, idFactory: () => string): Player[] {
-  return group.players.map((member) => ({
+  return cleanUniqueGroupMembers(Array.isArray(group.players) ? group.players : []).players.map((member) => ({
     id: member.accountUserId ? accountPrimaryPlayerId(member.accountUserId) : idFactory(),
     name: member.name,
     handicap: member.handicap,

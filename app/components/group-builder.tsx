@@ -6,8 +6,9 @@ import {
   appendUniquePlayer,
   generateBalancedGroups,
   generateRandomGroups,
+  groupPlayerDuplicateReason,
   groupsShareText,
-  hasDuplicatePlayerNames,
+  hasDuplicateGroupPlayers,
   swapGroupPlayers,
   type GroupPlayer,
   type GroupTarget,
@@ -45,8 +46,9 @@ export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, 
   const playerOptions = useMemo(() => groups.flat(), [groups]);
 
   function add(player: GroupPlayer) {
+    const duplicateReason = groupPlayerDuplicateReason(players, player);
     const next = appendUniquePlayer(players, player);
-    if (next.length === players.length) setMessage("Este jugador ya está en la lista.");
+    if (next.length === players.length) setMessage(duplicateReason === "account" ? "Esta cuenta ya está incluida en la lista, aunque tenga otro nombre." : "Este jugador ya está en la lista.");
     else {
       setPlayers(next);
       if (next.some((item) => typeof item.handicap !== "number" || !Number.isFinite(item.handicap))) setMode("random");
@@ -67,7 +69,7 @@ export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, 
 
   function draw() {
     if (players.length < 3) { setMessage("Agrega al menos 3 jugadores."); return; }
-    if (hasDuplicatePlayerNames(players)) { setMessage("Este jugador ya está en la lista."); return; }
+    if (hasDuplicateGroupPlayers(players)) { setMessage("Hay una cuenta o jugador repetido. Quítalo antes de armar los grupos."); return; }
     drawSequence.current += 1;
     const seed = (Date.now() + drawSequence.current * 2654435761) >>> 0;
     const useBalancedMode = mode === "balanced" && allHaveHcp;

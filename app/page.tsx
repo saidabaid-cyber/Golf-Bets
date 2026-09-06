@@ -151,6 +151,7 @@ import {
   addFrequentGroupMember,
   addFrequentPlayerTemplate,
   applySavedPersonalRivalTemplate,
+  frequentGroupMemberFromFrequentPlayer,
   moveFrequentGroupMember,
   parseFrequentGroups,
   personalRivalTemplateFromBet,
@@ -165,10 +166,15 @@ import {
   updateFrequentPlayerTemplate,
   updateSavedPersonalRivalTemplate,
 } from "../lib/frequent-templates";
+import { hasDuplicateGroupPlayers } from "../lib/group-generator";
 
 const makeId = () => Math.random().toString(36).slice(2, 10);
 const money = (n: number) => `${n < 0 ? "-" : ""}$${Math.abs(Math.round(n)).toLocaleString("es-MX")}`;
 const signedMoney = (n: number) => `${n > 0 ? "+" : ""}${money(n)}`;
+
+function frequentGroupHasDuplicateMembers(group: FrequentGroup) {
+  return hasDuplicateGroupPlayers(group.players.map((member, index) => ({ id: `member-${index}`, ...member })));
+}
 
 const laVistaPars = [4,3,4,5,4,4,3,4,5,5,4,3,4,4,5,4,3,4];
 const laVistaStroke = [5,17,7,1,9,13,15,3,11,12,8,18,14,2,4,10,16,6];
@@ -523,6 +529,7 @@ function GolfBetsApp() {
   const [frequentGroups, setFrequentGroups] = useState<FrequentGroup[]>([]);
   const [groupName, setGroupName] = useState("");
   const [frequentGroupDraft, setFrequentGroupDraft] = useState<FrequentGroup | null>(null);
+  const [frequentGroupEditError, setFrequentGroupEditError] = useState("");
   const [frequentGroupToDelete, setFrequentGroupToDelete] = useState<FrequentGroup | null>(null);
   const [groupMemberSource, setGroupMemberSource] = useState<"frequent" | "new">("frequent");
   const [selectedGroupFrequentPlayerId, setSelectedGroupFrequentPlayerId] = useState("");
@@ -2053,6 +2060,7 @@ function GolfBetsApp() {
 
   function resetFrequentGroupEditor() {
     setFrequentGroupDraft(null);
+    setFrequentGroupEditError("");
     setGroupMemberSource("frequent");
     setSelectedGroupFrequentPlayerId("");
     setNewGroupMember({ name: "", handicap: null });
@@ -2062,6 +2070,7 @@ function GolfBetsApp() {
 
   function beginEditFrequentGroup(group: FrequentGroup) {
     setFrequentGroupDraft(structuredClone(group));
+    setFrequentGroupEditError("");
     setGroupMemberSource(frequentPlayers.length ? "frequent" : "new");
     setSelectedGroupFrequentPlayerId(frequentPlayers[0]?.id || "");
     setNewGroupMember({ name: "", handicap: null });
@@ -2071,14 +2080,28 @@ function GolfBetsApp() {
 
   function addExistingPlayerToFrequentGroup() {
     const saved = frequentPlayers.find((player) => player.id === selectedGroupFrequentPlayerId);
-    if (!saved) return;
-    setFrequentGroupDraft((group) => group ? addFrequentGroupMember(group, { name: saved.name, handicap: saved.handicap }) : group);
+    if (!saved || !frequentGroupDraft) return;
+    const member = frequentGroupMemberFromFrequentPlayer(saved);
+    if (!member) return;
+    const next = addFrequentGroupMember(frequentGroupDraft, member);
+    if (next === frequentGroupDraft) {
+      setFrequentGroupEditError("Esta cuenta o jugador ya forma parte del grupo.");
+      return;
+    }
+    setFrequentGroupEditError("");
+    setFrequentGroupDraft(next);
   }
 
   function addNewPlayerToFrequentGroup() {
     const member = { name: newGroupMember.name.trim(), handicap: newGroupMember.handicap };
-    if (!member.name || frequentGroupDraft?.players.some((candidate) => candidate.name.trim().toLocaleLowerCase("es-MX") === member.name.toLocaleLowerCase("es-MX"))) return;
-    setFrequentGroupDraft((group) => group ? addFrequentGroupMember(group, member) : group);
+    if (!member.name || !frequentGroupDraft) return;
+    const next = addFrequentGroupMember(frequentGroupDraft, member);
+    if (next === frequentGroupDraft) {
+      setFrequentGroupEditError("Esta cuenta o jugador ya forma parte del grupo.");
+      return;
+    }
+    setFrequentGroupEditError("");
+    setFrequentGroupDraft(next);
     if (saveNewGroupMemberAsFrequent) setPendingGroupFrequentPlayers((members) => [...members, member]);
     setNewGroupMember({ name: "", handicap: null });
     setSaveNewGroupMemberAsFrequent(false);
@@ -2087,6 +2110,7 @@ function GolfBetsApp() {
   function editFrequentGroupMember(index: number, patch: Partial<FrequentGroup["players"][number]>) {
     const previous = frequentGroupDraft?.players[index];
     if (!previous) return;
+    setFrequentGroupEditError("");
     setFrequentGroupDraft((group) => group ? updateFrequentGroupMember(group, index, patch) : group);
     setPendingGroupFrequentPlayers((members) => members.map((member) => member.name === previous.name ? { ...member, ...patch } : member));
   }
@@ -2094,12 +2118,17 @@ function GolfBetsApp() {
   function removeMemberFromFrequentGroup(index: number) {
     const previous = frequentGroupDraft?.players[index];
     if (!previous) return;
+    setFrequentGroupEditError("");
     setFrequentGroupDraft((group) => group ? removeFrequentGroupMember(group, index) : group);
     setPendingGroupFrequentPlayers((members) => members.filter((member) => member.name !== previous.name));
   }
 
   function saveFrequentGroupEdit() {
     if (!frequentGroupDraft?.name.trim() || !frequentGroupDraft.players.length || frequentGroupDraft.players.some((member) => !member.name.trim())) return;
+    if (frequentGroupHasDuplicateMembers(frequentGroupDraft)) {
+      setFrequentGroupEditError("Hay una cuenta o jugador repetido. Corrige los integrantes antes de guardar.");
+      return;
+    }
     const now = new Date().toISOString();
     setFrequentGroups((groups) => updateFrequentGroupTemplate(groups, frequentGroupDraft.id, frequentGroupDraft, now));
     if (pendingGroupFrequentPlayers.length) {
@@ -3192,6 +3221,7 @@ function GolfBetsApp() {
         {groupMemberSource === "frequent" && frequentPlayers.length > 0 && <div className="groupMemberAddRow"><label>Elegir jugador<select value={selectedGroupFrequentPlayerId} onChange={(event) => setSelectedGroupFrequentPlayerId(event.target.value)}>{frequentPlayers.map((player) => <option key={player.id} value={player.id}>{player.name} · HCP {player.handicap ?? "—"}</option>)}</select></label><button className="secondary" disabled={!selectedGroupFrequentPlayerId} onClick={addExistingPlayerToFrequentGroup}>Agregar</button></div>}
         {groupMemberSource === "new" && <><div className="groupMemberNewRow"><label>Nombre<input placeholder="Nombre del jugador" value={newGroupMember.name} onChange={(event) => setNewGroupMember((member) => ({ ...member, name: event.target.value }))} /></label><label>HCP predeterminado<NumericCaptureInput inputMode="decimal" step={0.1} min={-15} max={54} placeholder="HCP" value={newGroupMember.handicap} emptyWhenZero={false} onValueChange={(handicap) => setNewGroupMember((member) => ({ ...member, handicap }))} /></label></div><label className="checkRow"><input type="checkbox" checked={saveNewGroupMemberAsFrequent} onChange={(event) => setSaveNewGroupMemberAsFrequent(event.target.checked)} />Guardar como jugador frecuente</label><button className="secondary groupMemberAddButton" disabled={!newGroupMember.name.trim()} onClick={addNewPlayerToFrequentGroup}>Agregar jugador nuevo</button></>}
       </div>
+      {frequentGroupEditError && <div className="notice bad" role="alert">{frequentGroupEditError}</div>}
       <div className="dialogActions"><button className="secondary" onClick={resetFrequentGroupEditor}>Cancelar</button><button className="primary" disabled={!frequentGroupDraft.name.trim() || !frequentGroupDraft.players.length || frequentGroupDraft.players.some((member) => !member.name.trim())} onClick={saveFrequentGroupEdit}>Guardar</button></div>
     </section></div>}
 

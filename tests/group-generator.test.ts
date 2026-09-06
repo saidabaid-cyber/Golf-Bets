@@ -4,8 +4,10 @@ import {
   appendUniquePlayer,
   generateBalancedGroups,
   generateRandomGroups,
+  groupPlayerDuplicateReason,
   groupSizes,
   groupsShareText,
+  hasDuplicateGroupPlayers,
   hasDuplicatePlayerNames,
   moveGroupPlayer,
   swapGroupPlayers,
@@ -75,6 +77,16 @@ test("nombres duplicados se ignoran y edición móvil no pierde jugadores", () =
   assert.equal(validateGroups(moved, players(8)), true);
   const swapped = swapGroupPlayers(moved, moved[0][0].id, moved[1][0].id);
   assert.equal(validateGroups(swapped, players(8)), true);
+});
+
+test("una cuenta vinculada no puede entrar dos veces aunque cambie su nombre", () => {
+  const linked = appendUniquePlayer([], { id: "local-1", name: "Said", handicap: 7, accountUserId: " user-123 " });
+  const repeatedAccount = { id: "local-2", name: "Said actualizado", handicap: 6, accountUserId: "user-123" };
+  assert.equal(groupPlayerDuplicateReason(linked, repeatedAccount), "account");
+  assert.equal(appendUniquePlayer(linked, repeatedAccount), linked);
+  assert.equal(linked[0].accountUserId, "user-123");
+  assert.equal(hasDuplicateGroupPlayers([...linked, repeatedAccount]), true);
+  assert.equal(hasDuplicateGroupPlayers(linked), false);
 });
 
 test("mover desde un grupo de tres funciona y conserva al jugador una sola vez", () => {

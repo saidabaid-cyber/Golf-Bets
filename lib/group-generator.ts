@@ -139,15 +139,39 @@ export function normalizePlayerName(name: string) {
   return name.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es-MX");
 }
 
+function normalizeAccountUserId(accountUserId: string | undefined) {
+  return accountUserId?.trim() || "";
+}
+
+export type GroupPlayerDuplicateReason = "account" | "name";
+
+/**
+ * Account identity is stronger than a display name. A linked player can be
+ * renamed between devices, but it must never enter a group twice because that
+ * would produce the same stable round-player id and corrupt score/bet maps.
+ */
+export function groupPlayerDuplicateReason(players: GroupPlayer[], next: GroupPlayer): GroupPlayerDuplicateReason | null {
+  const accountUserId = normalizeAccountUserId(next.accountUserId);
+  if (accountUserId && players.some((player) => normalizeAccountUserId(player.accountUserId) === accountUserId)) return "account";
+  const normalizedName = normalizePlayerName(next.name);
+  if (normalizedName && players.some((player) => normalizePlayerName(player.name) === normalizedName)) return "name";
+  return null;
+}
+
 export function appendUniquePlayer(players: GroupPlayer[], next: GroupPlayer) {
-  const normalized = normalizePlayerName(next.name);
-  if (!normalized || players.some((player) => normalizePlayerName(player.name) === normalized)) return players;
-  return [...players, { ...next, name: next.name.trim() }];
+  const name = next.name.trim();
+  if (!name || groupPlayerDuplicateReason(players, next)) return players;
+  const accountUserId = normalizeAccountUserId(next.accountUserId);
+  return [...players, { id: next.id, name, handicap: next.handicap, ...(accountUserId ? { accountUserId } : {}) }];
 }
 
 export function hasDuplicatePlayerNames(players: GroupPlayer[]) {
   const names = players.map((player) => normalizePlayerName(player.name)).filter(Boolean);
   return new Set(names).size !== names.length;
+}
+
+export function hasDuplicateGroupPlayers(players: GroupPlayer[]) {
+  return players.some((player, index) => groupPlayerDuplicateReason(players.slice(0, index), player) !== null);
 }
 
 export function moveGroupPlayer(groups: GroupPlayer[][], playerId: string, destinationIndex: number) {

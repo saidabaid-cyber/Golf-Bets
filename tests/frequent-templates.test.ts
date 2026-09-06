@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { accountPrimaryPlayerId } from "../lib/account-primary-player";
 import {
   addFrequentGroupMember,
   addFrequentPlayerTemplate,
   applySavedPersonalRivalTemplate,
+  frequentGroupMemberFromFrequentPlayer,
   moveFrequentGroupMember,
   parseFrequentGroups,
   personalRivalTemplateFromBet,
@@ -156,4 +158,53 @@ test("a new group member becomes a frequent player only after the explicit choic
   const explicitlySaved = addFrequentPlayerTemplate(existing, { name: "Jorge", handicap: 14 }, "fp-jorge", "new");
   assert.deepEqual(explicitlySaved[0], { id: "fp-jorge", name: "Jorge", handicap: 14, uses: 0, updatedAt: "new" });
   assert.equal(existing.length, 1);
+});
+
+test("grupos restaurados reparan identidades duplicadas antes de crear la ronda", () => {
+  const raw = JSON.stringify([{
+    id: "group-linked",
+    name: "Viernes",
+    players: [
+      { name: "Said", handicap: 7, accountUserId: " user-123 " },
+      { name: "Said nuevo", handicap: 6, accountUserId: "user-123" },
+      { name: "Cuau", handicap: 12 },
+      { name: " Cúau ", handicap: 10 },
+      { name: "Jorge", handicap: 999 },
+    ],
+    uses: 1,
+    updatedAt: "saved",
+  }]);
+  const restored = parseFrequentGroups(raw)[0];
+  assert.deepEqual(restored.players, [
+    { name: "Said", handicap: 7, accountUserId: "user-123" },
+    { name: "Cuau", handicap: 12 },
+    { name: "Jorge", handicap: null },
+  ]);
+  let guestIndex = 0;
+  const roundPlayers = playersFromFrequentGroup(restored, () => `guest-${++guestIndex}`);
+  assert.equal(new Set(roundPlayers.map((player) => player.id)).size, roundPlayers.length);
+  assert.equal(roundPlayers[0].id, accountPrimaryPlayerId("user-123"));
+});
+
+test("una edición con integrantes duplicados falla cerrada y conserva el grupo", () => {
+  const duplicated = updateFrequentGroupTemplate([frequentGroup], frequentGroup.id, {
+    name: "Viernes",
+    players: [
+      { name: "Said", handicap: 7, accountUserId: "user-123" },
+      { name: "Otro nombre", handicap: 8, accountUserId: "user-123" },
+    ],
+  }, "new");
+  assert.deepEqual(duplicated, [frequentGroup]);
+  assert.equal(addFrequentGroupMember(frequentGroup, { name: "Said renombrado", handicap: 6, accountUserId: "user-123" }).players.length, 3);
+  const linkedGroup = addFrequentGroupMember(frequentGroup, { name: "Yo", handicap: 6, accountUserId: "user-123" });
+  assert.equal(addFrequentGroupMember(linkedGroup, { name: "Yo renombrado", handicap: 5, accountUserId: " user-123 " }), linkedGroup);
+});
+
+test("agregar un jugador frecuente al grupo conserva su vínculo de cuenta", () => {
+  const member = frequentGroupMemberFromFrequentPlayer({ name: " Cuenta ligada ", handicap: 7, accountUserId: " user-123 " });
+  assert.deepEqual(member, { name: "Cuenta ligada", handicap: 7, accountUserId: "user-123" });
+  const linkedGroup = member ? addFrequentGroupMember(frequentGroup, member) : frequentGroup;
+  const loaded = playersFromFrequentGroup(linkedGroup, () => "guest");
+  assert.equal(loaded.at(-1)?.id, accountPrimaryPlayerId("user-123"));
+  assert.equal(loaded.at(-1)?.accountUserId, "user-123");
 });
