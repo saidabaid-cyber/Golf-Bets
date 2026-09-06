@@ -58,6 +58,7 @@ test("the primary mobile navigation has five stable product areas", () => {
     ["round", "Jugar"],
     ["results", "Jugar"],
     ["history", "Jugar"],
+    ["balances", "Jugar"],
     ["courseLibrary", "Jugar"],
     ["rules", "Jugar"],
     ["groups", "Grupos"],
@@ -85,7 +86,7 @@ test("an invalid active bet draft can only be opened in setup, without blocking 
     assert.equal(activeBetSafeDestination(tab, true), "setup");
     assert.equal(activeBetSafeDestination(tab, false), tab);
   }
-  for (const tab of ["welcome", "play", "personals", "history", "historyDetail", "stats", "groups", "social", "profile"] as AppTab[]) {
+  for (const tab of ["welcome", "play", "personals", "history", "historyDetail", "balances", "stats", "groups", "social", "profile"] as AppTab[]) {
     assert.equal(activeBetSafeDestination(tab, true), tab);
   }
 });

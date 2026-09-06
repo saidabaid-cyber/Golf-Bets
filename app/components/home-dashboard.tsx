@@ -26,6 +26,7 @@ export type HomeDashboardProps = {
   onNewRound: () => void;
   onOpenProfile: () => void;
   onOpenHistory: () => void;
+  onOpenBalances: () => void;
   onOpenStats: () => void;
   onOpenGroups: () => void;
   onOpenSocial: () => void;
@@ -84,6 +85,7 @@ export function HomeDashboard({
   onNewRound,
   onOpenProfile,
   onOpenHistory,
+  onOpenBalances,
   onOpenStats,
   onOpenGroups,
   onOpenSocial,
@@ -134,6 +136,7 @@ export function HomeDashboard({
       <div className="betaQuickGrid">
         <button type="button" onClick={onNewRound}><span aria-hidden="true">＋</span><b>Nueva ronda</b></button>
         <button type="button" onClick={onOpenHistory}><span aria-hidden="true">↺</span><b>Histórico</b></button>
+        <button type="button" onClick={onOpenBalances}><span aria-hidden="true">$</span><b>Balances</b></button>
         <button type="button" onClick={onOpenStats}><span aria-hidden="true">↗</span><b>Stats</b></button>
         <button type="button" onClick={onOpenGroups}><span aria-hidden="true">◎</span><b>Grupos</b></button>
         <button type="button" onClick={onOpenCourses}><span aria-hidden="true">⚑</span><b>Campos</b></button>

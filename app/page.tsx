@@ -77,6 +77,7 @@ import { HomeDashboard, type ActiveRoundSummary } from "./components/home-dashbo
 import { PlayHub } from "./components/play-hub";
 import { SocialFeed } from "./components/social-feed";
 import { StatsDashboard } from "./components/stats-dashboard";
+import { BalanceLedgerPanel } from "./components/balance-ledger-panel";
 import { CourseLibrary } from "./components/course-library";
 import { PersonalHistoryPanel } from "./components/personal-history-panel";
 import { PersonalOpponentResults } from "./components/personal-opponent-results";
@@ -2532,6 +2533,7 @@ function GolfBetsApp() {
       onNewRound={requestNewRound}
       onOpenProfile={() => setTab("profile")}
       onOpenHistory={() => setTab("history")}
+      onOpenBalances={() => setTab("balances")}
       onOpenStats={() => setTab("stats")}
       onOpenGroups={() => setTab("groups")}
       onOpenSocial={() => setTab("social")}
@@ -2549,6 +2551,7 @@ function GolfBetsApp() {
       onEditRound={activeRoundSummary ? editActiveRound : undefined}
       onNewRound={requestNewRound}
       onOpenHistory={() => setTab("history")}
+      onOpenBalances={() => setTab("balances")}
       onOpenPersonalHistory={() => setTab("personals")}
       onOpenStats={() => setTab("stats")}
       onOpenCourses={() => setTab("courseLibrary")}
@@ -2559,6 +2562,7 @@ function GolfBetsApp() {
     />}
 
     {tab === "social" && <SocialFeed activity={personalActivity} onOpenRound={openHistoricalRound} onOpenGroup={() => setTab("groups")} onCreateRound={requestNewRound} onOpenGroups={() => setTab("groups")} />}
+    {tab === "balances" && <BalanceLedgerPanel history={history} currentUserId={identity.mode === "authenticated" ? identity.userId : undefined} />}
     {tab === "stats" && <StatsDashboard insights={betaGolfInsights} onOpenHistory={() => setTab("history")} onOpenRound={openHistoricalRound} />}
     {tab === "courseLibrary" && <CourseLibrary courses={courses} favoriteCourseIds={favoriteCourseIds} recentCourseIds={recentCourseIds} selectedCourseId={courseSelected ? course.id : null} onToggleFavorite={(courseId) => setFavoriteCourseIds((current) => toggleFavoriteCourse(current, courseId))} onSelectCourse={(nextCourse) => selectRoundCourse(nextCourse, true)} onCreateCourse={startNewCourse} onEditCourse={editCourseFromLibrary} />}
 

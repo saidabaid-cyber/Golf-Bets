@@ -1,4 +1,4 @@
-export type AppTab = "welcome" | "play" | "setup" | "round" | "standings" | "personals" | "personalDetail" | "historyDetail" | "results" | "history" | "stats" | "courseLibrary" | "courses" | "rules" | "pollaLive" | "account" | "profile" | "groups" | "social";
+export type AppTab = "welcome" | "play" | "setup" | "round" | "standings" | "personals" | "personalDetail" | "historyDetail" | "results" | "history" | "balances" | "stats" | "courseLibrary" | "courses" | "rules" | "pollaLive" | "account" | "profile" | "groups" | "social";
 
 export const BOTTOM_NAV_TARGETS = {
   Inicio: "welcome",
@@ -13,7 +13,7 @@ export type ActiveRoundStatus = "setup" | "live" | "review";
 
 const PLAY_TABS = new Set<AppTab>([
   "play", "setup", "round", "standings", "personals", "personalDetail",
-  "historyDetail", "results", "history", "courseLibrary", "courses", "rules", "pollaLive",
+  "historyDetail", "results", "history", "balances", "courseLibrary", "courses", "rules", "pollaLive",
 ]);
 
 export function primarySectionForTab(tab: AppTab): PrimaryAppSection {

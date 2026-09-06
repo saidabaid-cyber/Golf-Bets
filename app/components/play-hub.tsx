@@ -8,6 +8,7 @@ export type PlayHubProps = {
   onEditRound?: () => void;
   onNewRound: () => void;
   onOpenHistory: () => void;
+  onOpenBalances: () => void;
   onOpenPersonalHistory: () => void;
   onOpenStats: () => void;
   onOpenCourses: () => void;
@@ -25,7 +26,7 @@ function roundProgress(round: ActiveRoundSummary) {
   return `${current}${progress}`;
 }
 
-export function PlayHub({ activeRound, onContinueRound, onEditRound, onNewRound, onOpenHistory, onOpenPersonalHistory, onOpenStats, onOpenCourses, onOpenGroups, onOpenRules, onOpenStandings, onOpenResults }: PlayHubProps) {
+export function PlayHub({ activeRound, onContinueRound, onEditRound, onNewRound, onOpenHistory, onOpenBalances, onOpenPersonalHistory, onOpenStats, onOpenCourses, onOpenGroups, onOpenRules, onOpenStandings, onOpenResults }: PlayHubProps) {
   return <section className="betaPlayHub" aria-labelledby="beta-play-title">
     <section className="hero betaPlayHero">
       <div><span className="eyebrow">THE BACKYARD · JUGAR</span><h1 id="beta-play-title">Tu próxima salida.</h1><p>Empieza rápido o regresa exactamente a la ronda que dejaste abierta.</p></div>
@@ -49,6 +50,7 @@ export function PlayHub({ activeRound, onContinueRound, onEditRound, onNewRound,
         <button type="button" onClick={onOpenCourses}><span aria-hidden="true">⌖</span><div><b>Campos</b><small>Buscar, elegir y editar</small></div><strong aria-hidden="true">›</strong></button>
         <button type="button" onClick={onOpenGroups}><span aria-hidden="true">◎</span><div><b>Armar grupos</b><small>Jugadores frecuentes y sorteo</small></div><strong aria-hidden="true">›</strong></button>
         <button type="button" onClick={onOpenHistory}><span aria-hidden="true">↺</span><div><b>Histórico</b><small>Tarjetas y resultados guardados</small></div><strong aria-hidden="true">›</strong></button>
+        <button type="button" onClick={onOpenBalances}><span aria-hidden="true">$</span><div><b>Balances</b><small>Ledger y cuentas sugeridas</small></div><strong aria-hidden="true">›</strong></button>
         <button type="button" onClick={onOpenPersonalHistory}><span aria-hidden="true">↔</span><div><b>Personales</b><small>Histórico contra tus rivales</small></div><strong aria-hidden="true">›</strong></button>
         <button type="button" onClick={onOpenStats}><span aria-hidden="true">↗</span><div><b>Mis stats</b><small>Sólo rondas con datos completos</small></div><strong aria-hidden="true">›</strong></button>
         <button type="button" onClick={onOpenRules}><span aria-hidden="true">?</span><div><b>Reglas de golf</b><small>Consulta el árbitro y las fuentes</small></div><strong aria-hidden="true">›</strong></button>
