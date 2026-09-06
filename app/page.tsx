@@ -87,7 +87,7 @@ import { buildHoleSummary, clearActiveRoundStorage, hasRoundProgress, historical
 import { monkeyHoleSummary, personalHoleSummary } from "../lib/personal-summary";
 import { downloadRoundCsv, downloadRoundImage, downloadRoundPdf, shareRound } from "../lib/round-export";
 import { deleteScorecardPhoto, deleteScorecardPhotoCloud, readScorecardPhoto, readScorecardPhotoCloud, saveScorecardPhoto, uploadScorecardPhotoCloud } from "../lib/scorecard-photo";
-import { actionableCloudConflicts, CLOUD_TOMBSTONES_KEY, cloudDataFingerprint, collectLocalCloudData, downloadCloudData, findAmbiguousCloudConflicts, isCloudFieldConflict, mergeLocalAndCloud, persistCloudMetadata, resolveAmbiguousCloudConflicts, restoreLocalRoundUi, stableValue, trackLocalCloudEdits, type CloudDataBundle, type CloudDataConflict, recordCloudDeletion, uploadCloudData, withCloudAuthRetry } from "../lib/cloud-sync";
+import { actionableCloudConflicts, CLOUD_TOMBSTONES_KEY, cloudDataFingerprint, collectLocalCloudData, downloadCloudData, findAmbiguousCloudConflicts, isCloudFieldConflict, mergeLocalAndCloud, persistCloudMetadata, resolveAmbiguousCloudConflicts, restoreLocalRoundUi, stableValue, trackLocalCloudCheckpoint, trackLocalCloudEdits, type CloudDataBundle, type CloudDataConflict, recordCloudDeletion, uploadCloudData, withCloudAuthRetry } from "../lib/cloud-sync";
 import { describeCloudConflict } from "../lib/cloud-conflict-display";
 import { ownsLocalWorkspace, preserveDataConflicts, preserveDraftConflict } from "../lib/account-workspace";
 import { accountPrimaryPlayerId, accountPrimaryRoundPlayer, syncAccountPrimaryFrequentPlayer, syncLinkedRoundPlayerName } from "../lib/account-primary-player";
@@ -104,7 +104,7 @@ import { ballFriendScoreResult, ballFriendSetupChipLabel, lobaSetupChipLabel, pl
 import { calculateSupplementalBets, normalizeSupplementalBets, supplementalBetValue } from "../lib/supplemental-bets";
 import { isPersonalSupplementalType, setRememberedCategoryEnabled } from "../lib/bet-activation";
 import { buildPersonalOpponentResults } from "../lib/personal-opponents";
-import { persistPendingRoundReview, ROUND_REVIEW_NOTICE } from "../lib/round-review";
+import { persistPendingRoundReview, persistRoundDraftCheckpoint, ROUND_REVIEW_NOTICE } from "../lib/round-review";
 import { BetHelpButton, SupplementalBetsEditor, SupplementalBetResults } from "./components/supplemental-bets-editor";
 import { buildGeneralResultsTable, pollaDetailBalance, pollaDetailBalances, pollaPositionLabels, summarizeNetUnitQuantities, type ResultCategoryColumn } from "../lib/result-breakdown";
 import { collectHoleValidationErrors } from "../lib/hole-validation";
@@ -773,8 +773,8 @@ function GolfBetsApp() {
     if (changed(local.rivals, reconciled.rivals)) setSavedPersonalRivals(reconciled.rivals);
     if (changed(local.frequentPlayers, reconciled.frequentPlayers)) setFrequentPlayers(reconciled.frequentPlayers);
     if (changed(local.frequentGroups, reconciled.frequentGroups)) setFrequentGroups(reconciled.frequentGroups);
-    setHighContrast(reconciled.preferences.highContrast);
-    applyCloudPreferences(reconciled.preferences);
+    if (local.preferences.highContrast !== reconciled.preferences.highContrast) setHighContrast(reconciled.preferences.highContrast);
+    if (!Object.is(local.preferences.defaultHandicap, reconciled.preferences.defaultHandicap)) applyCloudPreferences(reconciled.preferences);
     localStorage.setItem(STORAGE_KEYS.courses, JSON.stringify(mergedCourses));
     localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(reconciled.history));
     localStorage.setItem(STORAGE_KEYS.rivals, JSON.stringify(reconciled.rivals));
@@ -948,11 +948,11 @@ function GolfBetsApp() {
       window.removeEventListener("backyard-sync-retry", onRetry);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [hydrated, identity.mode, identity.userId, identity.accessToken, cloudLinked, setCloudStatus, applyCloudBundle, reportCloudSyncError, clearCloudSyncError, refreshCloudSession]);
+  }, [hydrated, identity.mode, identity.userId, cloudLinked, setCloudStatus, applyCloudBundle, reportCloudSyncError, clearCloudSyncError, refreshCloudSession]);
 
   useEffect(() => {
     requestCloudSync.current?.();
-  }, [courses, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, course, courseSelected, startHole, roundHoles, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, identity.defaultHandicap]);
+  }, [courses, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, course, courseSelected, startHole, roundHoles, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, putts, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, identity.defaultHandicap]);
 
   function resolveCloudConflict(choice: "local" | "cloud") {
     if (!pendingCloudConflict) return;
@@ -1484,8 +1484,9 @@ function GolfBetsApp() {
 
   function persistReviewBeforeLeavingRound(savedScores: Record<number, HoleScore>, savedEdits: ScoreRows, savedBets: BetConfig, savedIndex: number) {
     try {
+      const previousDraft = readStoredJson<unknown>(window.localStorage, STORAGE_KEYS.draft, null);
       const draft = persistPendingRoundReview(window.localStorage, roundDraftPayload({ scores: savedScores, scoreEdits: savedEdits, bets: savedBets, currentIndex: savedIndex, reviewPending: true }));
-      trackLocalCloudEdits(localStorage, draft, { highContrast, language: "es-MX", notificationsEnabled: false, defaultHandicap: identity.defaultHandicap });
+      trackLocalCloudCheckpoint(localStorage, draft, { highContrast, language: "es-MX", notificationsEnabled: false, defaultHandicap: identity.defaultHandicap }, previousDraft);
       setRoundReviewPending(true);
       setDraftAvailable(true);
       setSaveStatus("saved");
@@ -2088,7 +2089,31 @@ function GolfBetsApp() {
     }
   }
 
+  function persistCommittedHoleBeforeAdvance(savedScores: Record<number, HoleScore>, savedEdits: ScoreRows, savedBets: BetConfig, savedIndex: number) {
+    try {
+      const previousDraft = readStoredJson<unknown>(localStorage, STORAGE_KEYS.draft, null);
+      const draft = roundDraftPayload({ scores: savedScores, scoreEdits: savedEdits, bets: savedBets, currentIndex: savedIndex, reviewPending: false });
+      // localStorage is the synchronous durability boundary used by Safari/PWA.
+      // Metadata and the offline outbox are created only after exact readback.
+      persistRoundDraftCheckpoint(localStorage, draft);
+      trackLocalCloudCheckpoint(localStorage, draft, { highContrast, language: "es-MX", notificationsEnabled: false, defaultHandicap: identity.defaultHandicap }, previousDraft);
+      setDraftAvailable(true);
+      setSaveStatus("saved");
+      const offline = collectLocalCloudData(localStorage, identity.defaultHandicap, hadLocalPreferences.current);
+      offline.deviceId = offlineDeviceId.current;
+      void persistOfflineBundle(identity.userId, offline, identity.mode === "authenticated" && cloudLinked).catch(() => undefined);
+      return true;
+    } catch {
+      setSaveStatus("error");
+      setFeedback("No se pudo guardar el hoyo en este dispositivo. Conservamos la captura en pantalla; libera espacio y vuelve a pulsar Guardar y siguiente hoyo.");
+      return false;
+    }
+  }
+
   function requestSaveAndAdvance() {
+    // Keyboard activation and some iOS touch paths can reach click without a
+    // reliable pointerdown. Blur once more here if needed before reading state.
+    commitFocusedNumericCapture();
     // pointerdown/blur commits the input with flushSync. The layout effect from
     // that render has already refreshed this ref, so Save reads the confirmed
     // score immediately without a timing delay or a stale closure.
@@ -2096,6 +2121,7 @@ function GolfBetsApp() {
   }
 
   function requestRoundHistorySave() {
+    commitFocusedNumericCapture();
     latestSaveRound.current();
   }
 
@@ -2136,11 +2162,16 @@ function GolfBetsApp() {
     }
     const committed = commitHoleCapture(scores, scoreEdits, hole, players);
     if (!committed) { setHoleValidationErrors(["Completa los scores vacíos antes de guardar el hoyo."]); return; }
+    // Also covers entering Tarjeta directly without pressing Iniciar ronda.
+    const savedBets = freezeRoundHandicapBases(bets, players, roundHandicapBasis);
+    const savedIndex = currentIndex;
+    const checkpointPersisted = savedIndex === order.length - 1
+      ? persistReviewBeforeLeavingRound(committed.scores, committed.edits, savedBets, savedIndex)
+      : persistCommittedHoleBeforeAdvance(committed.scores, committed.edits, savedBets, savedIndex);
+    if (!checkpointPersisted) return;
     setHoleValidationErrors([]);
     setFeedback("");
     checkpoint();
-    // Also covers entering Tarjeta directly without pressing Iniciar ronda.
-    const savedBets = freezeRoundHandicapBases(bets, players, roundHandicapBasis);
     setBets(savedBets);
     setScores(committed.scores); setScoreEdits(committed.edits);
     const savedScores = committed.scores;
@@ -2223,8 +2254,6 @@ function GolfBetsApp() {
       changes.forEach((change) => enqueuePollaScore(change));
       if (changes.length && navigator.onLine) import("../lib/polla-offline").then(({ flushPollaScoreQueue }) => flushPollaScoreQueue(privatePollaLink.accessToken, { tournamentId: privatePollaLink.tournamentId, groupId: privatePollaLink.groupId })).catch(() => undefined);
     }
-    const savedIndex = currentIndex;
-    if (savedIndex === order.length - 1 && !persistReviewBeforeLeavingRound(savedScores, committed.edits, savedBets, savedIndex)) return;
     setHoleSummary(buildHoleSummary(holeNumber, players, savedScores, extras));
     holeSummarySession.current = createHoleSummarySession({
       now: () => window.performance.now(),

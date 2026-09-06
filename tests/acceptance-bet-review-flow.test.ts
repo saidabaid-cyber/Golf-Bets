@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { setRememberedCategoryEnabled, setSupplementalCategoryEnabled } from "../lib/bet-activation";
 import { initialBets } from "../lib/new-round-bets";
 import { buildPersonalOpponentHistory, buildPersonalOpponentResults, groupCurrentPersonalResults } from "../lib/personal-opponents";
-import { persistPendingRoundReview } from "../lib/round-review";
+import { persistPendingRoundReview, persistRoundDraftCheckpoint } from "../lib/round-review";
 import { saveRoundHistoryLocalFirst } from "../lib/round-history-save";
 import { normalizeRoundDraft, readStoredJson, STORAGE_KEYS } from "../lib/round-utils";
 import { calculateSupplementalBets, createSupplementalBet, normalizeSupplementalBets, supplementalBetValue } from "../lib/supplemental-bets";
@@ -195,4 +196,41 @@ test("Terminar conserva 72 scores como pendiente; solo Guardar archiva y el retr
   assert.equal(history[0].photoId, "qa-photo");
   assert.equal(buildPersonalOpponentHistory(history)[0].total, 250);
   assert.ok(storage.getItem(STORAGE_KEYS.draft), "la capa de página solo limpia después de esta confirmación durable");
+});
+
+test("Guardar hoyo verifica localStorage antes de avanzar y sobrevive un cierre inmediato", () => {
+  const storage = new MemoryStorage();
+  const draft = {
+    version: 8,
+    roundId: "round-hole-checkpoint",
+    players,
+    course,
+    scores: { 1: { "owner-a": 4, "opponent-b": 5, "player-c": 4, "player-d": 6 } },
+    scoreEdits: {},
+    currentIndex: 0,
+  };
+  persistRoundDraftCheckpoint(storage as unknown as Storage, draft);
+  const reloaded = normalizeRoundDraft(JSON.parse(storage.getItem(STORAGE_KEYS.draft)!));
+  assert.equal(reloaded?.roundId, draft.roundId);
+  assert.deepEqual(reloaded?.scores?.[1], draft.scores[1]);
+});
+
+test("Guardar hoyo no confirma ni avanza ante una escritura local truncada", () => {
+  const storage = {
+    value: null as string | null,
+    setItem(_key: string, value: string) { this.value = value.slice(0, -1); },
+    getItem() { return this.value; },
+  };
+  assert.throws(
+    () => persistRoundDraftCheckpoint(storage, { roundId: "round-corrupt", scores: { 1: { "owner-a": 4 } } }),
+    /comprobar el borrador/,
+  );
+
+  const page = readFileSync("app/page.tsx", "utf8");
+  const saveStart = page.indexOf("function saveAndAdvance()");
+  const persist = page.indexOf("persistCommittedHoleBeforeAdvance(committed.scores, committed.edits", saveStart);
+  const blocked = page.indexOf("if (!checkpointPersisted) return", persist);
+  const updateUi = page.indexOf("setScores(committed.scores)", blocked);
+  const summary = page.indexOf("setHoleSummary(buildHoleSummary", updateUi);
+  assert.ok(saveStart >= 0 && persist > saveStart && blocked > persist && updateUi > blocked && summary > updateUi);
 });

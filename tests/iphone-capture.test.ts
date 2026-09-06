@@ -138,7 +138,8 @@ test("captura conecta controles, PAR y Guardar, no Confirmar Par global; resumen
   assert.match(app,/setScoreEdits\(prev => editCapturedScore/);
   assert.match(app,/setScores\(committed.scores\)/);
   assert.match(app,/setFeedback\(""\);\s*checkpoint\(\)/);
-  assert.match(app,/persistReviewBeforeLeavingRound\(savedScores, committed\.edits, savedBets, savedIndex\)/);
+  assert.match(app,/persistReviewBeforeLeavingRound\(committed\.scores, committed\.edits, savedBets, savedIndex\)/);
+  assert.match(app,/persistCommittedHoleBeforeAdvance\(committed\.scores, committed\.edits, savedBets, savedIndex\)/);
   assert.match(app,/holeSummaryClose/);
   assert.match(app,/Cerrar resumen y avanzar/);
   assert.match(css,/holeSummaryScores span:not\(:last-child\)::after\{content:" · "/);

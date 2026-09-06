@@ -166,11 +166,21 @@ function timestampAfter(left?: string, right?: string) {
 
 /** The clock advances on edits, never on reload, sync or autosave alone. */
 export function trackLocalCloudEdits(storage: Pick<Storage, "getItem" | "setItem">, draft: unknown, preferences: Omit<CloudPreferences, "updatedAt">, now = new Date().toISOString()) {
+  return trackLocalCloudEditValues(storage, draft, preferences, readStoredJson(storage, STORAGE_KEYS.draft, null), now);
+}
+
+/** Records metadata after a verified checkpoint while still comparing against
+ * the draft that existed before the write. */
+export function trackLocalCloudCheckpoint(storage: Pick<Storage, "getItem" | "setItem">, draft: unknown, preferences: Omit<CloudPreferences, "updatedAt">, previousDraft: unknown, now = new Date().toISOString()) {
+  return trackLocalCloudEditValues(storage, draft, preferences, previousDraft, now);
+}
+
+function trackLocalCloudEditValues(storage: Pick<Storage, "getItem" | "setItem">, draft: unknown, preferences: Omit<CloudPreferences, "updatedAt">, previousDraft: unknown, now: string) {
   const meta = readStoredJson<{ draftAt?: string; preferencesAt?: string; draftValue?: string; preferenceValue?: string }>(storage, CLOUD_LOCAL_META_KEY, {});
   const cloudDraft = stripLocalRoundUi(draft);
   const draftValue = JSON.stringify(stableValue(hasRoundProgress(cloudDraft) ? cloudDraft : null));
   const preferenceValue = JSON.stringify([preferences.highContrast, preferences.language, preferences.notificationsEnabled, preferences.defaultHandicap]);
-  const oldDraft = JSON.stringify(stableValue(stripLocalRoundUi(readStoredJson(storage, STORAGE_KEYS.draft, null))));
+  const oldDraft = JSON.stringify(stableValue(stripLocalRoundUi(previousDraft)));
   if (meta.draftValue !== draftValue && (meta.draftValue !== undefined || (draftValue !== "null" && oldDraft !== draftValue))) meta.draftAt = now;
   if (meta.preferenceValue !== preferenceValue && meta.preferenceValue !== undefined) meta.preferencesAt = now;
   storage.setItem(CLOUD_LOCAL_META_KEY, JSON.stringify({ ...meta, draftValue, preferenceValue }));
