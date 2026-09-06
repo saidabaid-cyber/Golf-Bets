@@ -2,11 +2,12 @@ import "server-only";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
+import packageJson from "../package.json";
 import { getSupabaseAdmin, getSupabaseForUser } from "./supabase/server";
 import { adminAccessDecision } from "./admin-core";
 
 export const runtimeIdentity = () => ({
-  appVersion: process.env.APP_VERSION || process.env.npm_package_version || "unknown",
+  appVersion: process.env.APP_VERSION || process.env.npm_package_version || packageJson.version,
   buildSha: process.env.VERCEL_GIT_COMMIT_SHA || process.env.GIT_COMMIT_SHA || null,
   environment: process.env.VERCEL_ENV || process.env.NODE_ENV || "unknown",
 });
