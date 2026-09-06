@@ -4,6 +4,7 @@ import test from "node:test";
 
 import { describeCloudConflict } from "../lib/cloud-conflict-display";
 import { actionableCloudConflicts, findAmbiguousCloudConflicts, mergeLocalAndCloud, type CloudDataBundle } from "../lib/cloud-sync";
+import { runCloudSyncCycle } from "../lib/cloud-sync-cycle";
 import { ballFriendScoreResult } from "../lib/hole-bet-display";
 import { finalizeNumericCapture, normalizeNumericCaptureText, parseNumericCapture } from "../lib/numeric-input";
 
@@ -44,6 +45,24 @@ test("$100 y 80% se confirman completos; signo, punto y coma usan teclado de tex
   assert.match(page, /commitUnchanged placeholder=\{String\(hole\.par\)\}/);
 });
 
+test("el último carácter del score se confirma antes de guardar, sin microtask ni render intermedio", () => {
+  let editingBuffer = normalizeNumericCaptureText("4");
+  editingBuffer = normalizeNumericCaptureText("17");
+  let confirmedScore: number | null = 4;
+  const finalized = finalizeNumericCapture(editingBuffer, 1, 20);
+  confirmedScore = finalized.value;
+  const savedScore = confirmedScore;
+  assert.equal(savedScore, 17, "el guardado observa el valor final ya validado, no el render anterior");
+
+  const input = readFileSync("app/components/numeric-capture-input.tsx", "utf8");
+  assert.match(input, /finalizeNumericCapture\(rawValueRef\.current, min, max\)/);
+  assert.match(input, /rawValueRef\.current = nextRawValue/);
+  const page = readFileSync("app/page.tsx", "utf8");
+  assert.match(page, /useLayoutEffect\(\(\) => \{ latestSaveAndAdvance\.current = saveAndAdvance; \}\)/);
+  assert.match(page, /function requestSaveAndAdvance\(\) \{[\s\S]*?latestSaveAndAdvance\.current\(\);[\s\S]*?\}/);
+  assert.doesNotMatch(page, /queueMicrotask\(\(\) => latestSaveAndAdvance\.current\(\)\)/);
+});
+
 test("todas las apuestas editadas por el mismo dispositivo conservan el valor local sin modal", () => {
   const betKeys = ["rabbits", "skins", "units", "foursome", "polla", "miniPolla", "ballFriend", "loba"];
   for (const key of betKeys) {
@@ -72,6 +91,66 @@ test("dos dispositivos distintos todavía generan conflicto para el mismo dato",
     ...bundle("iphone-b", cloud, undefined), baseDraftFingerprint: undefined, baseDraft: undefined,
   }));
   assert.deepEqual(conflicts.map(item => item.fieldPath).sort(), ["/bets/rabbits/hcpPct", "/bets/rabbits/value"]);
+});
+
+test("una respuesta cloud más nueva en reloj del mismo dispositivo no retrocede scores locales", () => {
+  const local = { roundId: "round-live", scores: { 7: { said: 4 }, 8: { said: 3 } }, scoreEdits: {} };
+  const staleCloud = { roundId: "round-live", scores: { 7: { said: 4 } }, scoreEdits: {} };
+  const localBundle = { ...bundle("iphone-main", local, undefined), activeDraftUpdatedAt: "2026-09-04T10:00:00.000Z", baseDraftFingerprint: undefined };
+  const cloudBundle = { ...bundle("iphone-main", staleCloud, undefined), activeDraftUpdatedAt: "2026-09-04T10:05:00.000Z", baseDraftFingerprint: undefined };
+  assert.deepEqual(mergeLocalAndCloud(localBundle, cloudBundle).activeDraft, local);
+  assert.equal(findAmbiguousCloudConflicts(localBundle, cloudBundle).length, 0);
+});
+
+test("dos dispositivos sin base común no usan el reloj para ocultar un conflicto real", () => {
+  const local = { roundId: "round-live", scores: { 8: { said: 3 } } };
+  const cloud = { roundId: "round-live", scores: { 8: { said: 6 } } };
+  const localBundle = { ...bundle("iphone-a", local, undefined), activeDraftUpdatedAt: "2026-09-04T10:00:00.000Z", baseDraftFingerprint: undefined };
+  const cloudBundle = { ...bundle("iphone-b", cloud, undefined), activeDraftUpdatedAt: "2026-09-04T10:05:00.000Z", baseDraftFingerprint: undefined };
+  const conflicts = actionableCloudConflicts(findAmbiguousCloudConflicts(localBundle, cloudBundle));
+  assert.deepEqual(conflicts.map(item => item.fieldPath), ["/scores/8/said"]);
+  assert.equal((mergeLocalAndCloud(localBundle, cloudBundle).activeDraft as typeof local).scores[8].said, 3);
+});
+
+test("cambios rápidos entre hoyos sobreviven a una respuesta retrasada y se sincronizan en el reintento", async () => {
+  const deviceId = "iphone-main";
+  const initial = { roundId: "round-live", scores: { 7: { said: 4 } }, scoreEdits: {} };
+  const changed = { roundId: "round-live", scores: { 7: { said: 4 }, 8: { said: 3 }, 9: { said: 5 } }, scoreEdits: {} };
+  let local: CloudDataBundle = { ...bundle(deviceId, initial, undefined), activeDraftUpdatedAt: "2026-09-04T10:00:00.000Z", baseDraftFingerprint: undefined };
+  let cloud: CloudDataBundle = structuredClone(local);
+  let uploadCount = 0;
+  let retries = 0;
+  const apply = (data: CloudDataBundle) => { local = structuredClone(data); };
+  const first = await runCloudSyncCycle({
+    read: () => local,
+    download: async () => structuredClone(cloud),
+    upload: async data => {
+      uploadCount += 1;
+      cloud = structuredClone(data);
+      local = { ...bundle(deviceId, changed, initial), activeDraftUpdatedAt: "2026-09-04T10:01:00.000Z", baseDraftFingerprint: JSON.stringify(initial) };
+    },
+    media: async () => {},
+    apply,
+    retry: () => { retries += 1; },
+    current: () => true,
+    status: () => {},
+  });
+  assert.equal(first, false);
+  assert.equal(retries, 1);
+  assert.deepEqual((local.activeDraft as typeof changed).scores, changed.scores);
+
+  const second = await runCloudSyncCycle({
+    read: () => local,
+    download: async () => structuredClone(cloud),
+    upload: async data => { uploadCount += 1; cloud = structuredClone(data); },
+    media: async () => {},
+    apply,
+    current: () => true,
+    status: () => {},
+  });
+  assert.equal(second, true);
+  assert.equal(uploadCount, 2);
+  assert.deepEqual((cloud.activeDraft as typeof changed).scores, changed.scores);
 });
 
 test("el conflicto muestra contexto humano sin ruta, UUID, JSON ni timestamp", () => {
