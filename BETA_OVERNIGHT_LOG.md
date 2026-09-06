@@ -2,12 +2,12 @@
 
 Fecha: 2026-09-06. Hora aproximada de cierre: 01:45, zona `America/Mexico_City` (UTC−06).
 
-## Estado de ramas al cierre
+## Estado inicial registrado al cierre del primer bloque (histórico; publicación ya resuelta)
 
 - Rama activa y única rama modificada: `beta`.
 - `beta` local: `e7da2b2685b28c77203be3d1b076d4888a67ab29`.
 - `origin/beta`: `b2d10bb125bdba4b3a716ceb11dd3f170a68cf93`.
-- Estado: `beta` local está tres commits adelante de `origin/beta`.
+- Estado en ese momento: `beta` local estaba tres commits adelante de `origin/beta`.
 - `main` y `origin/main`: `6ceea3f4f9ccfe474f3cd2f804b1ee3e88cb59f4`.
 - El tag `stable-2026-09-05` continúa apuntando a `6ceea3f`.
 - No se hizo merge a `main`, promoción a Production ni cambio de tag estable.
@@ -62,19 +62,19 @@ Creado aproximadamente a las 01:42.
 
 Estas validaciones corresponden a los commits locales. No equivalen a una verificación del nuevo código en Preview/Beta remoto mientras los commits no estén publicados.
 
-## Bloqueo de publicación
+## Bloqueo inicial de publicación (resuelto)
 
-El remoto configurado es el repositorio público `https://github.com/saidabaid-cyber/Golf-Bets.git`. El push de `beta` quedó bloqueado por el control de seguridad del entorno, que exige aprobación explícita antes de escribir en un remoto público.
+El remoto configurado es el repositorio público `https://github.com/saidabaid-cyber/Golf-Bets.git`. En el primer bloque, el push de `beta` quedó bloqueado por el control de seguridad del entorno. La autorización posterior permitió publicar exclusivamente `origin/beta`; este apartado se conserva como historia del incidente, no como estado actual.
 
-Consecuencias comprobadas:
+Consecuencias comprobadas en ese momento:
 
 - no se ejecutó un push efectivo;
-- `origin/beta` permanece en `b2d10bb`;
-- los tres commits existen únicamente en la rama `beta` local;
-- el alias Preview de rama y `https://beta.thebackyard.com.mx` siguen sirviendo el último commit remoto, no `e7da2b2`;
-- no se inició un deployment nuevo y no se tocó Production.
+- `origin/beta` permanecía en `b2d10bb`;
+- los tres commits existían únicamente en la rama `beta` local;
+- el alias Preview de rama todavía servía el último commit remoto, no `e7da2b2`;
+- no se había iniciado un deployment nuevo y no se había tocado Production.
 
-La publicación pendiente debe realizarse únicamente con `git push origin beta` después de obtener la aprobación correspondiente. Después se debe esperar el deployment Preview de esa rama, verificar su SHA y hacer QA remoto antes de declarar el milestone desplegado. No se debe usar merge a `main`, `--prod` ni promoción manual.
+La publicación se resolvió posteriormente mediante `git push origin beta`, sin merge a `main`, `--prod` ni promoción manual. El resultado actual está registrado al final de este log.
 
 ## Decisiones técnicas
 
@@ -91,14 +91,13 @@ La publicación pendiente debe realizarse únicamente con `git push origin beta`
 - No se cambiaron variables Production, secretos, proveedores externos ni configuración de cobros.
 - Polla Live, GPS, integraciones externas, pagos y suscripciones permanecen deshabilitados u ocultos según el alcance existente.
 
-## Handoff seguro
+## Handoff seguro inicial (completado)
 
-1. Obtener aprobación para escribir únicamente en `origin/beta`.
-2. Hacer push de los tres commits locales sin modificar `main`.
-3. Confirmar que el deployment Preview corresponde a `e7da2b2`.
-4. Verificar alias de rama y dominio Beta en móvil y revisar errores de consola/red.
-5. Volver a confirmar que `main`, el tag estable, el deployment Production y `https://app.thebackyard.com.mx` permanecen intactos.
-6. Antes de nuevas migraciones, crear o asignar una base Supabase aislada para Beta y verificar su referencia.
+1. Se obtuvo autorización para escribir únicamente en `origin/beta`.
+2. Se hizo push fast-forward sin modificar `main`.
+3. Vercel generó un Preview READY para el SHA publicado.
+4. Se verificaron HTTP, manifest, metadata de deployment y assets del bundle.
+5. Antes de nuevas migraciones sigue siendo obligatorio crear o asignar una base Supabase aislada para Beta y verificar su referencia.
 
 ## Reanudación — lifecycle local de rondas
 
@@ -108,8 +107,8 @@ La publicación pendiente debe realizarse únicamente con `git push origin beta`
 - “Terminar ronda” conserva el draft durable como `completed` pendiente de revisión; guardarlo en Histórico genera un snapshot `completed`.
 - Al confirmar una nueva ronda, la anterior se copia como `cancelled` en el respaldo recuperable y solo después se limpia el slot activo.
 - Históricos antiguos sin estado se interpretan como `completed` en memoria, sin migración destructiva ni reescritura masiva.
-- QA: lint correcto, TypeScript correcto, 724/724 pruebas y build de producción correcto.
-- Publicación: `git push origin beta` continúa bloqueado por el control de seguridad del entorno al tratarse de un remoto público. No se intentó una vía alternativa y Preview sigue sin contener los commits locales.
+- QA: lint correcto, TypeScript correcto, 724/724 pruebas y build optimizado de Next.js correcto.
+- Publicación en ese punto de la reanudación: todavía pendiente; quedó resuelta al cierre consolidado descrito abajo.
 
 ## Reanudación — captura rápida y estadísticas opcionales
 
@@ -120,7 +119,7 @@ La publicación pendiente debe realizarse únicamente con `git push origin beta`
 - Stats agrega porcentajes solo sobre intentos capturados y penalidades registradas; Histórico identifica cuántos hoyos contienen al menos un dato avanzado.
 - Compatibilidad: rondas anteriores sin estos campos abren en modo rápido y no se reescriben. Ninguna fórmula de apuesta recibe los nuevos datos.
 - QA: lint correcto, TypeScript correcto, 730/730 pruebas, build correcto y HTTP local 200 con contenido de The Backyard.
-- Límite visual: no hay ejecutable `agent-browser` ni navegador CUA disponible en este host. La verificación física/emulada de iPhone para esta nueva UI queda pendiente; no se declara superada.
+- Límite visual de ese pase: no había ejecutable `agent-browser` disponible. Después se completó QA local en viewports móviles para las vistas indicadas en el cierre consolidado; Safari/iPhone físico sigue pendiente.
 
 ## Reanudación — perfil de golf ampliado local
 
@@ -128,12 +127,35 @@ La publicación pendiente debe realizarse únicamente con `git push origin beta`
 - Los cachés legacy se normalizan con campos vacíos y privacidad privada; no se reescriben datos históricos ni se inventan identidades para invitado.
 - El guardado es local-first y nunca serializa `accessToken` ni proveedores de Auth. Los campos base conservan su escritura Supabase existente.
 - El formulario comunica que los datos ampliados quedan locales hasta que exista un esquema/RLS Beta aislado; no declara sincronización remota inexistente.
-- QA: lint correcto, TypeScript correcto, 734/734 tests y build de producción correcto.
-- QA visual: pendiente porque este host no dispone de un navegador automatizable; no se certifica Safari/iPhone físico.
+- QA: lint correcto, TypeScript correcto, 734/734 tests y build optimizado de Next.js correcto.
+- QA visual en ese punto: pendiente. Después se verificó localmente el formulario en el navegador disponible; no se certifica Safari/iPhone físico.
 
-## Punto de continuación de esta sesión
+## Commits adicionales consolidados
 
-- Milestones cerrados en la reanudación: lifecycle durable de ronda; captura rápida/estadísticas opcionales; perfil ampliado local.
-- El siguiente milestone no implementado es amistades persistentes. Requiere primero una base Supabase Beta aislada, una proyección pública mínima y pruebas RLS con dos usuarios.
-- Los hitos dependientes de la misma infraestructura —grupos sociales, invitaciones, feed compartido, notificaciones y edición multiusuario— quedan bloqueados, no simulados.
-- `origin/beta` y el Preview siguen en el commit remoto anterior porque el push al repositorio público fue rechazado por el control de seguridad del entorno. `main` y Production no se tocaron.
+- `87420c8` — `docs(beta): add overnight milestone log`.
+- `d615c20` — `fix(beta): validate active bets before settlement`.
+- `3efa6e1` — `fix(beta): preserve owner during Nassau migration`.
+- `6f6071c` — `fix(beta): align wager identity and manual states`.
+- `8d355c2` — `feat(beta): add historical balance ledger`.
+- `18977c7` — `feat(beta): persist round lifecycle states`.
+- `58c9d3a` — `feat(beta): add optional advanced score capture`.
+- `ae3de0a` — `feat(beta): persist extended golf profile locally`.
+- `752edb9` — `docs(beta): record overnight resumption handoff`.
+
+## Cierre consolidado y publicación verificada
+
+- Push: `b2d10bb..752edb9 beta -> beta`.
+- SHA verificado en `origin/beta`: `752edb9b3c3afca8b63b09624479f799d05130ae`.
+- Preview: `https://golf-bets-idkeq8epx-saha8.vercel.app`.
+- Deployment: `dpl_63VyHZRp47wCcE3dui6rWSdUedqh`, estado READY, target Preview, source Git y ref `beta`.
+- Alias de rama: `https://golf-bets-git-beta-saha8.vercel.app`.
+- Verificación remota: `/` HTTP 200, manifest HTTP 200 y assets Next publicados. El bundle contiene la navegación Inicio/Jugar/Grupos/Social/Perfil y las acciones principales de Home.
+- QA reproducido en el SHA publicado: lint limpio, TypeScript limpio, 734/734 pruebas y build correcto con 18/18 rutas.
+- QA visual local acumulado: Home a 320/375/390/430 px y Jugar/Campos/Setup/Grupos/Social/Perfil/Stats/Balances a 390 px, sin overflow horizontal ni errores de consola en los pases registrados.
+- No se crearon/aplicaron migrations, tablas ni policies; no se tocaron variables Production.
+
+## Punto exacto de continuación
+
+- Amistades persistentes sigue siendo el siguiente hito bloqueado por infraestructura: necesita una base Supabase Beta aislada, proyección pública mínima y pruebas RLS de dos usuarios. No se simuló una amistad local como si fuera compartida.
+- Mientras se provisiona esa base, el siguiente trabajo seguro es cerrar semántica versionada de HCP plus, empates finales y abandono/DNF, seguido de PWA/offline en dispositivos físicos.
+- `main`, el tag estable y Production no se tocaron.

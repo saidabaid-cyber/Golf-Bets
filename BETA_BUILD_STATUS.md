@@ -24,7 +24,9 @@
 - Contratos tipados `CourseDataProvider`, `HandicapProvider`, `GolfProfileProvider`, `GolfMapProvider` y `DistanceProvider`; el único proveedor activo busca sin red sobre `Course[]` existentes.
 - Minimum Putts usa la duración explícita de ronda: H1–9 y H10–18 liquidan correctamente en rondas de 9; snapshots válidos de 18 conservan su comportamiento.
 - Importes ordinarios de apuestas se limitan a cero o más en captura; Manuales conserva deliberadamente importes firmados.
-- QA local del último milestone: lint sin errores, TypeScript correcto, 734/734 tests, build Next.js 16.3.3 correcto y respuesta HTTP local 200. El host no expone navegador para verificar visualmente la nueva captura y el formulario ampliado en viewports móviles; ese QA queda pendiente y no se presenta como certificado.
+- Las configuraciones activas de apuestas pasan por un validador puro compartido y fail-closed antes de guardar, iniciar o liquidar: participantes, equipos, bases HCP, carry/press, IDs y valores no finitos quedan bloqueados con reparación explícita, sin convertir una configuración inválida en un resultado de `$0`.
+- Ledger histórico derivado exclusivamente de resultados persistidos: totales por jugador, transferencias sugeridas por ronda y cara a cara bilateral. No registra pagos, no edita resultados y separa identidades autenticadas de invitados por ronda.
+- QA del SHA publicado: lint sin errores, TypeScript correcto, 734/734 tests y build Next.js 16.3.3 correcto con 18/18 rutas. El Preview responde HTTP 200 y su manifest PWA responde 200. El QA visual local registrado cubrió Home a 320/375/390/430 px y las vistas principales a 390 px sin overflow ni errores de consola; Safari/iPhone físico sigue pendiente.
 
 ## PARTIAL — útil, pero todavía no cumple el modelo final
 
@@ -68,38 +70,42 @@ Corregidos:
 - El resultado accesible de búsqueda de campos anunciaba tarjetas completas y algunos targets medían menos de 44 px.
 - Minimum Putts de 18 nunca cerraba dentro de una ronda de 9 hoyos.
 - Stakes negativos podían invertir liquidaciones en inputs ordinarios.
+- Configuraciones activas incompletas podían llegar a inicio o liquidación y aparecer como un resultado de `$0`.
+- La migración de Nassau suplementario podía resolver al owner antes de disponer de la identidad autenticada.
+- IDs externos con espacios y estados Manuales sin nombre podían producir identidades o resultados ambiguos.
+- En modo invitado, comparar IDs ausentes podía marcar erróneamente a todos los jugadores como “tú” en Balances.
 
 Pendientes y aislados para un milestone de cálculo versionado:
 
 - HCP plus (“+1.2”) se conserva en cuenta, pero algunos cálculos/leaderboard legacy todavía lo limitan a cero.
 - Empates finales abiertos en ciertas Presiones individuales/por pareja necesitan un contrato de cierre y auditoría uniforme.
-- Configuraciones activas inválidas (participantes/equipos incompletos) pueden terminar como resultado `$0`; deben bloquear inicio/cierre con un validador puro compartido.
 - La nube persiste snapshots/resultados calculados por cliente; una futura ronda colaborativa exige validación/liquidación autoritativa server-side.
+- El abandono/DNF de Presiones por pareja necesita semántica de ronda explícita; no se debe fabricar un score gross ni contaminar Stats para completar esa liquidación.
 
 ## Despliegue
 
 - Rama objetivo: `beta`.
-- Alias Preview de rama activo: `https://golf-bets-git-beta-saha8.vercel.app`.
-- Deployment remoto observado antes de estos commits: `https://golf-bets-ernyj25ny-saha8.vercel.app`, commit `b2d10bb`.
-- Dominio Beta: `https://beta.thebackyard.com.mx`; DNS/TLS/HTTP 200 activos y el set de assets coincide con el alias de rama.
-- Commits locales de esta reanudación: `18977c7` (lifecycle), `58c9d3a` (captura rápida/avanzada) y `ae3de0a` (perfil ampliado local), además de los commits Beta anteriores todavía no publicados.
-- El push a `https://github.com/saidabaid-cyber/Golf-Bets.git` requiere aprobación explícita del control de seguridad del entorno. Hasta obtenerla, el dominio sirve el último commit remoto y estas funciones no se declaran desplegadas.
+- `origin/beta` publicado y verificado en `752edb9b3c3afca8b63b09624479f799d05130ae` mediante avance fast-forward desde `b2d10bb`.
+- Preview READY del SHA publicado: `https://golf-bets-idkeq8epx-saha8.vercel.app` (`dpl_63VyHZRp47wCcE3dui6rWSdUedqh`, target Preview).
+- Alias Preview de rama: `https://golf-bets-git-beta-saha8.vercel.app`.
+- El HTML remoto responde 200, referencia los assets del build, incluye `viewport-fit=cover` y el bundle publicado contiene Inicio, Jugar, Grupos, Social, Perfil, Nueva ronda, Continuar ronda, Histórico, Stats, Amigos, Reglas y Balances.
+- No se hizo merge, promoción a Production, despliegue `--prod` ni cambio de variables Production.
 
 ## QA ejecutado
 
 - `eslint .`: correcto, cero errores.
 - `tsc -p tsconfig.test.json`: correcto.
-- `node --test .test-dist/tests/*.test.js`: 623 tests, 623 pass, 0 fail/skip/todo.
+- `node --test .test-dist/tests/*.test.js`: 734 tests, 734 pass, 0 fail/skip/todo.
 - `next build`: correcto; 18 rutas estáticas/dinámicas generadas sin error.
 - Browser QA local: Home a 320/375/390/430 y Jugar/Campos/Setup/Grupos/Social/Perfil/Stats a 390; cero overflow y cero errores de consola.
 - Cobertura existente conservada: Auth, guests, grupos locales, ronda 9/18, HCP 0, score/edit/save/reopen, apuestas, histórico, IndexedDB/outbox/reconnect, PWA y reglas.
-- Preview/Beta remoto y comprobación posterior de producción se registrarán después del push Git autorizado de estos commits.
+- Preview remoto: estado READY para el SHA de `origin/beta`; `/` y `/manifest.webmanifest` responden 200. El service worker usa `/` como fallback offline y evita cachear APIs.
 
 ## NEXT — diez trabajos recomendados
 
 1. Crear una branch/proyecto Supabase exclusivo para Beta y verificar su ref antes de cualquier DDL.
 2. Corregir ACL/grants y drift del esquema en esa base, con pruebas RLS de dos usuarios.
-3. Añadir validador puro de configuraciones de apuestas y versionar el tratamiento de HCP plus/empates finales.
+3. Versionar el tratamiento de HCP plus, empates finales y abandono/DNF sin inventar score de golf.
 4. Diseñar y migrar amistades con unicidad, estados, bloqueo y una proyección pública mínima de perfil.
 5. Convertir plantillas de grupos en grupos sociales persistentes sin romper compatibilidad local.
 6. Modelar invitaciones, roles, permisos de score y conflictos multi-dispositivo por participante.

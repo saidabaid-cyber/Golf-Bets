@@ -26,7 +26,7 @@ Los Route Handlers bajo `app/api` atienden cuenta, sincronización cloud, reglas
 
 ## Ronda privada y persistencia
 
-`RoundSnapshot` es el registro histórico inmutable de una ronda cerrada. Incluye campo, jugadores, HCP usado, scores, configuración y resultados de apuestas, gastos, balances, eventos y metadatos de cierre. El catálogo editable no altera el `courseSnapshot` de una ronda histórica.
+`RoundSnapshot` es el snapshot histórico persistido y versionado de una ronda cerrada. Incluye campo, jugadores, HCP usado, scores, estadísticas opcionales, configuración y resultados de apuestas, gastos, balances, eventos, lifecycle y metadatos de cierre. Puede actualizarse deliberadamente mediante el flujo de edición histórica conservando el mismo ID; el catálogo editable nunca altera por sí solo su `courseSnapshot`.
 
 La persistencia es local-first:
 
@@ -38,6 +38,16 @@ La persistencia es local-first:
 6. La sincronización usa timestamps, compare-and-swap, tombstones y conflictos explícitos para evitar sobrescrituras silenciosas o resurrección de datos borrados.
 
 Los “grupos” actuales son plantillas locales/frecuentes de jugadores. Todavía no equivalen a grupos sociales persistentes con admin, membresías e invitaciones.
+
+## Validación y liquidación determinística
+
+`lib/bet-config-validation.ts` centraliza la validación fail-closed de apuestas activas. Setup, restauración de drafts, inicio de ronda y liquidación comparten los mismos invariantes para participantes, equipos, rivales, bases HCP, valores finitos, carry y press. Una configuración legacy inválida se conserva para poder repararla, pero no se ejecuta silenciosamente.
+
+El motor sigue siendo determinístico y separado de IA. Balances usa resultados históricos persistidos como ledger derivado: no muta snapshots, no acepta edición arbitraria, no registra pagos y no afirma que una sugerencia de liquidación sea una deuda pagada. Los invitados usan identidad acotada a la ronda; las cuentas estables requieren un ID persistido no ambiguo.
+
+`lifecycleState` añade `draft`, `live`, `completed` y `cancelled` de forma compatible. Las rondas legacy sin estado se leen como `completed` sin migración destructiva. La captura avanzada es opcional: `scoreCaptureMode` y `advancedStats` se persisten con la ronda, pero nunca alimentan el motor de apuestas.
+
+El perfil ampliado normaliza username, ubicación, club, tee, mano, bio y visibilidad en la caché local por identidad. Nombre, HCP y avatar conservan el write cloud existente; los campos nuevos no se presentan como sincronizados hasta contar con columnas y RLS en una base Beta aislada.
 
 ## Supabase existente
 
@@ -102,7 +112,7 @@ Polla Live debe permanecer visible solo como “Próximamente” y deshabilitado
 2. Ejecutar lint, typecheck/pruebas y build.
 3. Crear commits pequeños de milestone en `beta`.
 4. Hacer push solo a `origin/beta` para obtener Preview.
-5. Verificar la URL Preview y, si existe la asociación, `https://beta.thebackyard.com.mx`.
-6. Volver a comprobar que `main`, el tag estable, el deployment Production y `https://app.thebackyard.com.mx` no cambiaron.
+5. Verificar que la URL Preview esté READY, responda 200 y corresponda al SHA de `origin/beta`.
+6. Confirmar por metadata Git/deployment que `main`, el tag estable y Production no cambiaron, sin navegar ni modificar producción.
 
 Nunca usar merge a `main`, despliegue `--prod`, promoción de deployment ni variables Production para cerrar un milestone Beta.
