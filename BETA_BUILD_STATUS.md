@@ -9,6 +9,7 @@
 - Línea base previa al milestone: lint correcto, 609 tests correctos y build Next.js correcto.
 - Núcleo existente conservado: invitado/cuenta, login OTP/Google condicionado a configuración, perfiles básicos, jugadores invitados, plantillas de grupos, rondas de 9/18 hoyos, HCP, score, resultados, histórico, exportación, reglas y apuestas actuales.
 - Durabilidad local existente: autosave, snapshot en IndexedDB, fallback verificado en `localStorage`, outbox idempotente, reintento y resolución explícita de conflictos cloud.
+- Ciclo de vida local de ronda versionado de forma aditiva: `draft` antes del primer score confirmado, `live` después de capturar, `completed` al quedar pendiente de revisión o entrar a Histórico y `cancelled` en el respaldo recuperable de una ronda reemplazada. Los históricos anteriores sin el campo se leen como `completed` sin reescribirlos.
 - PWA existente: manifest, iconos, modo standalone, service worker y fallback de navegación offline.
 - Polla Live permanece deshabilitado en la navegación principal con la etiqueta “Próximamente”.
 - Navegación mobile-first de cinco destinos: Inicio, Jugar, Grupos, Social y Perfil, con sección activa accesible y safe area inferior.
@@ -21,7 +22,7 @@
 - Contratos tipados `CourseDataProvider`, `HandicapProvider`, `GolfProfileProvider`, `GolfMapProvider` y `DistanceProvider`; el único proveedor activo busca sin red sobre `Course[]` existentes.
 - Minimum Putts usa la duración explícita de ronda: H1–9 y H10–18 liquidan correctamente en rondas de 9; snapshots válidos de 18 conservan su comportamiento.
 - Importes ordinarios de apuestas se limitan a cero o más en captura; Manuales conserva deliberadamente importes firmados.
-- QA local final: lint sin errores, TypeScript correcto, 623/623 tests, build Next.js 16.3.3 correcto y QA visual sin overflow ni errores de consola a 320/375/390/430 px.
+- QA local del último milestone: lint sin errores, TypeScript correcto, 724/724 tests y build Next.js 16.3.3 correcto. El QA visual previo a 320/375/390/430 px permanece vigente; el nuevo cambio es de persistencia y no altera layout.
 
 ## PARTIAL — útil, pero todavía no cumple el modelo final
 
@@ -30,7 +31,7 @@
 - Campos conservan el modelo legacy `Course`/tee con 18 hoyos. La biblioteca mejora el uso real, pero la normalización Course/Tees/Holes requiere una migración aditiva en Beta.
 - Social es un feed privado local; amigos, solicitudes, bloqueo, feed compartido y reacciones requieren backend multiusuario.
 - Live score y sync multi-dispositivo funcionan para el workspace de una misma cuenta; faltan participantes con permisos individuales y edición por jugador.
-- El histórico conserva snapshots completos, pero el lifecycle cloud todavía no expone estados formales `draft/live/completed/cancelled` como entidades colaborativas.
+- El histórico conserva snapshots completos y ya normaliza estados `draft/live/completed/cancelled` localmente; el lifecycle cloud todavía no los expone como entidades colaborativas consultables porque falta el esquema Beta aislado.
 
 ## BLOCKED — sin detener el trabajo no dependiente
 

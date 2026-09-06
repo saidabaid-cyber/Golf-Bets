@@ -116,6 +116,7 @@ import { calculateSupplementalBets, normalizeSupplementalBets, supplementalBetsF
 import { isPersonalSupplementalType, setRememberedCategoryEnabled } from "../lib/bet-activation";
 import { buildPersonalOpponentResults } from "../lib/personal-opponents";
 import { persistPendingRoundReview, ROUND_REVIEW_NOTICE } from "../lib/round-review";
+import { markRoundDraftCancelled, normalizeHistoricalRoundLifecycle, withDerivedRoundLifecycle } from "../lib/round-lifecycle";
 import { BetHelpButton, SupplementalBetsEditor, SupplementalBetResults } from "./components/supplemental-bets-editor";
 import { buildGeneralResultsTable, pollaDetailBalance, pollaDetailBalances, pollaPositionLabels, summarizeNetUnitQuantities, type ResultCategoryColumn } from "../lib/result-breakdown";
 import { collectHoleValidationErrors } from "../lib/hole-validation";
@@ -314,7 +315,7 @@ function normalizeExpenses(raw: any): Expense {
 }
 
 function normalizeHistorySnapshot(round: RoundSnapshot): RoundSnapshot {
-  return migrateSupplementalNassau({ ...round, expenses: normalizeExpenses(round.expenses) });
+  return normalizeHistoricalRoundLifecycle(migrateSupplementalNassau({ ...round, expenses: normalizeExpenses(round.expenses) }));
 }
 
 function Toggle({ on, onClick, label = "activar", disabled = false }: { on: boolean; onClick: () => void; label?: string; disabled?: boolean }) {
@@ -781,7 +782,7 @@ function GolfBetsApp() {
       if (revision !== localPersistRevision.current) return false;
       if (!ownsLocalWorkspace(localStorage, identity.userId)) return false;
       try {
-        const draft = { version: 8, course, courseSelected, startHole, roundHoles, handicapBasis: roundHandicapBasis, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, currentIndex, reviewPending: roundReviewPending };
+        const draft = withDerivedRoundLifecycle({ version: 8, course, courseSelected, startHole, roundHoles, handicapBasis: roundHandicapBasis, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, currentIndex, reviewPending: roundReviewPending });
         const activeDraft = roundClosed ? null : draft;
         trackLocalCloudEdits(localStorage, activeDraft, { highContrast, language: "es-MX", notificationsEnabled: false, defaultHandicap: identity.defaultHandicap });
         localStorage.setItem(STORAGE_KEYS.courses, JSON.stringify(courses));
@@ -1566,7 +1567,7 @@ function GolfBetsApp() {
       fish: bets.fish,
     });
     return structuredClone({
-      id: roundId, date: roundDate, courseName: course.name, teeName: course.teeName,
+      id: roundId, lifecycleState: "completed", date: roundDate, courseName: course.name, teeName: course.teeName,
       snapshotVersion: 2, ownerId: owner.id, handicapBasis: roundHandicapBasis, segments, playerBalances: allBetBalances,
       categoryBalances: { Conejos: rabbitBalances, Skins: skinBalances, Unidades: units.balances, Monkey: monkey.balances, Foursome: foursomes.balances, "Bola Amiga": ballFriend.balances, "Polla 1ª vuelta": pollaFirstBalances, "Polla 2ª vuelta": pollaSecondBalances, "Polla Nassau": pollaNassauBalances, "Mini Polla": miniPollaComponentBalances, "🐍 Víboras": vipers.balances, "🐫 Camellos": camels.balances, "🐟 Peces": fish.balances, "🐺 Loba": loba.balances, ...Object.fromEntries(supplementalGeneralResults.map((result, index) => [`${result.label}${supplementalGeneralResults.length > 1 ? ` ${index + 1}` : ""}`, result.balances])), Personales: personalCombinedBalances, Manuales: manual.balances },
       resultDetails: { rabbits, skins, units, monkey, foursomes, ballFriend, polla, miniPolla, vipers, camels, fish, loba, supplemental, settlementTransfers, settlementDifference, personals, manual },
@@ -1581,14 +1582,14 @@ function GolfBetsApp() {
   }
 
   function roundDraftPayload(overrides: { scores?: Record<number, HoleScore>; scoreEdits?: ScoreRows; bets?: BetConfig; currentIndex?: number; reviewPending?: boolean } = {}) {
-    return {
+    return withDerivedRoundLifecycle({
       version: 8, course, courseSelected, startHole, roundHoles, handicapBasis: roundHandicapBasis, players, ownerId,
       bets: overrides.bets || bets, segments, personalBets, supplementalBets, manualBets,
       scores: overrides.scores || scores, scoreEdits: overrides.scoreEdits || scoreEdits, putts, unitEvents, counterBetEvents,
       counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate,
       currentIndex: overrides.currentIndex ?? currentIndex,
       reviewPending: overrides.reviewPending ?? roundReviewPending,
-    };
+    });
   }
 
   function persistReviewBeforeLeavingRound(savedScores: Record<number, HoleScore>, savedEdits: ScoreRows, savedBets: BetConfig, savedIndex: number) {
@@ -1751,7 +1752,10 @@ function GolfBetsApp() {
     try {
       if (!flushLocalState.current?.()) throw new Error("local write failed");
       const activeDraft = readStoredJson<unknown>(localStorage, STORAGE_KEYS.draft, null);
-      if (!hasRoundProgress(activeDraft) || !preserveDraftConflict(localStorage, activeDraft)) throw new Error("backup verification failed");
+      const cancelledDraft = activeDraft && typeof activeDraft === "object" && !Array.isArray(activeDraft)
+        ? markRoundDraftCancelled(activeDraft as Record<string, unknown>)
+        : activeDraft;
+      if (!hasRoundProgress(activeDraft) || !preserveDraftConflict(localStorage, cancelledDraft)) throw new Error("backup verification failed");
       resetRound("La ronda anterior quedó respaldada en este dispositivo.");
     } catch {
       setNewRoundBackupError("No se pudo comprobar el respaldo de la ronda actual. No se inició otra ronda; vuelve a intentar.");

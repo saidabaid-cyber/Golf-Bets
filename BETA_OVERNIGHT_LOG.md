@@ -99,3 +99,14 @@ La publicación pendiente debe realizarse únicamente con `git push origin beta`
 4. Verificar alias de rama y dominio Beta en móvil y revisar errores de consola/red.
 5. Volver a confirmar que `main`, el tag estable, el deployment Production y `https://app.thebackyard.com.mx` permanecen intactos.
 6. Antes de nuevas migraciones, crear o asignar una base Supabase aislada para Beta y verificar su referencia.
+
+## Reanudación — lifecycle local de rondas
+
+- Se continuó desde `8d355c2` sobre `beta`, sin cambiar `main`, Production ni dominios.
+- Se añadió metadata aditiva `lifecycleState` a drafts y snapshots: `draft`, `live`, `completed` y `cancelled`.
+- Los scores temporales sin confirmar no convierten la ronda en `live`; el cambio ocurre al persistirse un score confirmado.
+- “Terminar ronda” conserva el draft durable como `completed` pendiente de revisión; guardarlo en Histórico genera un snapshot `completed`.
+- Al confirmar una nueva ronda, la anterior se copia como `cancelled` en el respaldo recuperable y solo después se limpia el slot activo.
+- Históricos antiguos sin estado se interpretan como `completed` en memoria, sin migración destructiva ni reescritura masiva.
+- QA: lint correcto, TypeScript correcto, 724/724 pruebas y build de producción correcto.
+- Publicación: `git push origin beta` continúa bloqueado por el control de seguridad del entorno al tratarse de un remoto público. No se intentó una vía alternativa y Preview sigue sin contener los commits locales.

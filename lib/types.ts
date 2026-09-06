@@ -8,6 +8,7 @@ export type PhysicalNine = "holes_1_9" | "holes_10_18";
 export type PressureMultiplier = 1 | 2 | 3 | 4 | 5;
 export type RabbitMode = "continuous" | "three_hole_blocks";
 export type SkinsMode = "carry" | "no_carry";
+export type RoundLifecycleState = "draft" | "live" | "completed" | "cancelled";
 
 export type Player = {
   id: string;
@@ -416,6 +417,8 @@ export type PersonalOpponentResult = {
 
 export type RoundSnapshot = {
   id: string;
+  /** Missing in legacy history is normalized to completed without rewriting storage. */
+  lifecycleState?: RoundLifecycleState;
   date: string;
   courseName: string;
   teeName: string;

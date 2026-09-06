@@ -14,7 +14,8 @@ test("Nueva ronda pide confirmación exacta y conserva respaldo antes de reempla
   assert.match(page, /¿Iniciar una nueva ronda\?/);
   assert.match(page, /Ya tienes una ronda en curso\. Si comienzas una nueva, la ronda actual dejará de ser la ronda activa\./);
   assert.match(page, /Sí, iniciar nueva ronda/);
-  assert.match(page, /preserveDraftConflict\(localStorage, activeDraft\)/);
+  assert.match(page, /markRoundDraftCancelled\(activeDraft/);
+  assert.match(page, /preserveDraftConflict\(localStorage, cancelledDraft\)/);
 });
 
 test("Cuenta invitada muestra solo el estado local y nunca una tarjeta de identidad falsa", () => {
