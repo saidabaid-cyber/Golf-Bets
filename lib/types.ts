@@ -5,6 +5,7 @@ export type HandicapMode = DecimalMode | "decimal" | "half_up" | "half_down" | "
 export type RoundHandicapBasis = "relative" | "course";
 export type FoursomeMode = "fixed" | "fixed_points" | "points";
 export type PhysicalNine = "holes_1_9" | "holes_10_18";
+export type RoundHalf = "first_half" | "second_half";
 export type PressureMultiplier = 1 | 2 | 3 | 4 | 5;
 export type RabbitMode = "continuous" | "three_hole_blocks";
 export type SkinsMode = "carry" | "no_carry";
@@ -62,11 +63,11 @@ export type CounterBetSettlementMode = "halves" | "round" | "legacy_halves";
 export type CounterBetConfig = ParticipantConfig & {
   enabled: boolean;
   value: number;
-  /** Current rounds settle each physical nine independently. Older values remain readable. */
+  /** Current rounds settle each played half independently. Older values remain readable. */
   settlementMode?: CounterBetSettlementMode;
   /** Explicit pressure state. Missing derives from a saved multiplier for compatibility. */
   secondNinePressed?: boolean;
-  /** H10–H18 pressure multiplier. Missing/non-pressed is effectively 1x. */
+  /** Second played half pressure multiplier. Missing/non-pressed is effectively 1x. */
   secondNineMultiplier?: number;
 };
 
@@ -83,7 +84,7 @@ export type CounterBetEvent = {
   effectiveTotalValue?: number;
 };
 
-export type CounterBetPeriod = PhysicalNine | "round";
+export type CounterBetPeriod = PhysicalNine | RoundHalf | "round";
 export type CounterBetKeepers = Record<CounterBetKind, Partial<Record<CounterBetPeriod, string>>>;
 
 export type LobaMode = "partner" | "solo" | "solo_anticipated";
@@ -105,6 +106,8 @@ export type MedalPollaConfig = ParticipantConfig & {
   value: number;
   hcpPct: number;
   decimals: DecimalMode;
+  /** Identifies component keys that already describe played halves. */
+  playedHalfVersion?: 1;
 };
 
 export type HandicapBaseConfig = {

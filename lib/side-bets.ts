@@ -13,11 +13,13 @@ import type {
   Player,
   PhysicalNine,
   PressureMultiplier,
+  RoundHalf,
   RoundHandicapBasis,
   Transfer,
 } from "./types";
 import { automaticUnitsForScore, baseHandicaps, completedHole, playingHandicap, strokeAllowanceForHole } from "./engine";
 import { playersMissingRoundHandicap } from "./handicap-base";
+import { physicalNineForPlayedHalf, roundHalfForHole, roundHalfHoles } from "./round-half";
 
 const EPSILON = 0.0001;
 
@@ -48,8 +50,8 @@ export function counterBetSecondNineMultiplier(config: CounterBetConfig): Pressu
   return counterBetSecondNinePressed(config) ? counterBetConfiguredSecondNineMultiplier(config) : 1;
 }
 
-export function counterBetEffectiveUnitValue(config: CounterBetConfig, hole: number) {
-  const multiplier = physicalNineForHole(hole) === "holes_10_18" ? counterBetSecondNineMultiplier(config) : 1;
+export function counterBetEffectiveUnitValue(config: CounterBetConfig, hole: number, order: readonly number[]) {
+  const multiplier = roundHalfForHole(hole, order) === "second_half" ? counterBetSecondNineMultiplier(config) : 1;
   return roundMoney(Math.max(0, config.value || 0) * multiplier);
 }
 
@@ -116,6 +118,7 @@ export function counterQuantity(events: CounterBetEvent[], kind: CounterBetKind,
 
 export type CounterBetHalfResult = {
   nine: CounterBetPeriod;
+  roundHalf?: RoundHalf;
   holes: number[];
   quantity: number;
   pressed: boolean;
@@ -138,9 +141,9 @@ export type CounterBetValuedEvent = CounterBetEvent & {
   effectiveTotalValue: number;
 };
 
-export function valueCounterBetEvent(event: CounterBetEvent, config: CounterBetConfig): CounterBetValuedEvent {
-  const multiplier = physicalNineForHole(event.hole) === "holes_10_18" ? counterBetSecondNineMultiplier(config) : 1;
-  const effectiveUnitValue = counterBetEffectiveUnitValue(config, event.hole);
+export function valueCounterBetEvent(event: CounterBetEvent, config: CounterBetConfig, order: readonly number[]): CounterBetValuedEvent {
+  const multiplier = roundHalfForHole(event.hole, order) === "second_half" ? counterBetSecondNineMultiplier(config) : 1;
+  const effectiveUnitValue = counterBetEffectiveUnitValue(config, event.hole, order);
   return {
     ...event,
     multiplier,
@@ -149,8 +152,8 @@ export function valueCounterBetEvent(event: CounterBetEvent, config: CounterBetC
   };
 }
 
-export function snapshotCounterBetEvents(events: CounterBetEvent[], configs: Record<CounterBetKind, CounterBetConfig>) {
-  return events.map(event => valueCounterBetEvent(event, configs[event.kind]));
+export function snapshotCounterBetEvents(events: CounterBetEvent[], configs: Record<CounterBetKind, CounterBetConfig>, order: readonly number[]) {
+  return events.map(event => valueCounterBetEvent(event, configs[event.kind], order));
 }
 
 export function latestCounterBetCandidates(
@@ -189,20 +192,21 @@ export function calculateCounterBet(
   const participants = allPlayers.filter(player => config.participantIds.includes(player.id));
   const balances = Object.fromEntries(participants.map(player => [player.id, 0])) as Record<string, number>;
   const transfers: Transfer[] = [];
-  const halves = (["holes_1_9", "holes_10_18"] as PhysicalNine[]).map((nine): CounterBetHalfResult => {
-    const holes = order.filter(hole => physicalNineForHole(hole) === nine);
+  const halves = (["first_half", "second_half"] as RoundHalf[]).map((roundHalf): CounterBetHalfResult => {
+    const holes = roundHalfHoles(order, roundHalf);
+    const legacyNine = physicalNineForPlayedHalf(order, roundHalf);
     const participantIds = new Set(participants.map(player => player.id));
     const valuedEvents = events
       .filter(event => event.kind === kind && holes.includes(event.hole) && participantIds.has(event.playerId))
-      .map(event => valueCounterBetEvent(event, config));
+      .map(event => valueCounterBetEvent(event, config, order));
     const quantity = valuedEvents.reduce((sum, event) => sum + Math.max(0, Math.trunc(event.quantity || 0)), 0);
-    const multiplier = nine === "holes_10_18" ? counterBetSecondNineMultiplier(config) : 1;
-    const pressed = nine === "holes_10_18" && counterBetSecondNinePressed(config);
+    const multiplier = roundHalf === "second_half" ? counterBetSecondNineMultiplier(config) : 1;
+    const pressed = roundHalf === "second_half" && counterBetSecondNinePressed(config);
     const value = roundMoney(Math.max(0, config.value || 0) * multiplier);
     const bagValue = roundMoney(valuedEvents.reduce((sum, event) => sum + event.effectiveTotalValue, 0));
     const { hole: lastEventHole, candidates } = latestCounterBetCandidates(kind, [...participantIds], valuedEvents, holes);
     const candidateIds = candidates.map(candidate => candidate.playerId);
-    const manuallySelected = keepers[kind]?.[nine];
+    const manuallySelected = keepers[kind]?.[roundHalf] ?? (legacyNine ? keepers[kind]?.[legacyNine] : undefined);
     const keeperId = kind === "vipers"
       ? viperKeeper(candidates)
       : candidates.length === 1
@@ -220,16 +224,16 @@ export function calculateCounterBet(
         addTransfer(halfTransfers, halfBalances, keeperId, player.id, amount, {
           betType: kind,
           hole: lastEventHole,
-          metadata: { nine, quantity, unitValue: value, pressed, multiplier, bagValue, lastEventHole: lastEventHole ?? null },
+          metadata: { nine: roundHalf, quantity, unitValue: value, pressed, multiplier, bagValue, lastEventHole: lastEventHole ?? null },
         });
         addTransfer(transfers, balances, keeperId, player.id, amount, {
           betType: kind,
           hole: lastEventHole,
-          metadata: { nine, quantity, unitValue: value, pressed, multiplier, bagValue, lastEventHole: lastEventHole ?? null },
+          metadata: { nine: roundHalf, quantity, unitValue: value, pressed, multiplier, bagValue, lastEventHole: lastEventHole ?? null },
         });
       }
     }
-    return { nine, holes, quantity, pressed, multiplier, value, bagValue, events: valuedEvents, keeperId, lastEventHole, candidateIds, needsTieBreak, settled, balances: halfBalances, transfers: halfTransfers };
+    return { nine: roundHalf, roundHalf, holes, quantity, pressed, multiplier, value, bagValue, events: valuedEvents, keeperId, lastEventHole, candidateIds, needsTieBreak, settled, balances: halfBalances, transfers: halfTransfers };
   });
   return { kind, halves, balances, transfers, totalQuantity: halves.reduce((sum, half) => sum + half.quantity, 0), totalBagValue: roundMoney(halves.reduce((sum, half) => sum + half.bagValue, 0)), zeroSum: isZeroSum(balances), settlementMode: "halves" as const };
 }
@@ -387,8 +391,9 @@ export function requiredSideBetCaptures(
   const errors: string[] = [];
   for (const { kind, config } of enabledCounterBets) {
     if (!config.enabled) continue;
-    const nine = physicalNineForHole(holeNumber);
-    const holes = order.filter(currentHole => physicalNineForHole(currentHole) === nine);
+    const roundHalf = roundHalfForHole(holeNumber, order);
+    if (!roundHalf) continue;
+    const holes = roundHalfHoles(order, roundHalf);
     if (!holes.length || holeNumber !== holes.at(-1)) continue;
     const meta = COUNTER_BET_META[kind];
     const { hole: lastEventHole, candidates } = latestCounterBetCandidates(kind, config.participantIds, events, holes);
@@ -397,7 +402,10 @@ export function requiredSideBetCaptures(
       const missingDistance = candidates.some(candidate => !Number.isFinite(candidate.distanceToHole) || (candidate.distanceToHole as number) < 0);
       if (missingDistance) errors.push(`Captura la distancia al hoyo de quienes hicieron la última ${meta.emoji} ${meta.singular} en H${lastEventHole}.`);
       else if (!viperKeeper(candidates)) errors.push(`Las distancias de la última ${meta.emoji} ${meta.singular} siguen empatadas; define una distancia distinta para identificar la bola más cercana.`);
-    } else if (!keepers[kind]?.[nine] || !candidates.some(candidate => candidate.playerId === keepers[kind]?.[nine])) {
+    } else {
+      const legacyNine = physicalNineForPlayedHalf(order, roundHalf);
+      const selectedKeeper = keepers[kind]?.[roundHalf] ?? (legacyNine ? keepers[kind]?.[legacyNine] : undefined);
+      if (selectedKeeper && candidates.some(candidate => candidate.playerId === selectedKeeper)) continue;
       errors.push(`Selecciona quién generó el último ${meta.emoji} ${meta.singular} en H${lastEventHole}.`);
     }
   }

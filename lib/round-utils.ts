@@ -199,7 +199,7 @@ export function migrateDraftPressures(draft: any) {
   const foursome = draft.bets?.foursome;
   if (foursome) {
     foursome.pressureMultiplier ??= foursome.pressSecond9 ? 2 : 1;
-    foursome.pressureNine ??= "holes_10_18";
+    foursome.pressureNine ??= startHole === 10 ? "holes_1_9" : "holes_10_18";
   }
   if (Array.isArray(draft.personalBets)) {
     draft.personalBets = draft.personalBets.map((bet: any) => migratePersonalNassau(bet, startHole, draft.roundHoles === 9 ? 9 : 18));

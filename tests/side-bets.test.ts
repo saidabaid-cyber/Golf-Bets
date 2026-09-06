@@ -103,7 +103,7 @@ for (const kind of ["vipers", "camels", "fish"] as CounterBetKind[]) {
       const result = calculateCounterBet(kind, players, sample.config, tenEventsPerHalf(kind), emptyCounterBetKeepers(), order, new Set(order));
       const firstBag = sample.firstValue * 10;
       const secondBag = sample.secondValue * 10;
-      assert.deepEqual(result.halves.map(half => half.nine), ["holes_1_9", "holes_10_18"]);
+      assert.deepEqual(result.halves.map(half => half.nine), ["first_half", "second_half"]);
       assert.deepEqual(result.halves.map(half => half.quantity), [10, 10]);
       assert.deepEqual(result.halves.map(half => half.value), [sample.firstValue, sample.secondValue]);
       assert.deepEqual(result.halves.map(half => half.bagValue), [firstBag, secondBag]);
@@ -139,7 +139,7 @@ test("snapshot conserva presión, multiplicador y valor efectivo por vuelta", ()
     { id: "c-h18", kind: "camels", hole: 18, playerId: ids[2], quantity: 1 },
     { id: "f-h18", kind: "fish", hole: 18, playerId: ids[3], quantity: 1 },
   ];
-  const stored = JSON.parse(JSON.stringify(snapshotCounterBetEvents(eventRows, configs))) as CounterBetEvent[];
+  const stored = JSON.parse(JSON.stringify(snapshotCounterBetEvents(eventRows, configs, order))) as CounterBetEvent[];
   assert.deepEqual(stored.map(event => [event.effectiveUnitValue, event.effectiveTotalValue]), [[100, 200], [200, 600], [500, 500], [100, 100]]);
   assert.equal(configs.vipers.secondNinePressed, true);
   assert.equal(configs.fish.secondNinePressed, false);
@@ -174,27 +174,27 @@ test("Víboras desempata por menor distancia dentro de cada vuelta y conserva la
   assert.equal(requiredSideBetCapture(9, [{ kind: "vipers", config: counterConfig() }], emptyCounterBetKeepers(), { enabled: false, participantIds: [] }, undefined, eventRows, order), "");
 });
 
-test("cada bolsa se liquida solo al completar su propia vuelta física", () => {
+test("cada bolsa se liquida solo al completar su propia vuelta jugada", () => {
   const eventRows: CounterBetEvent[] = [
     { id: "v-h9", kind: "vipers", hole: 9, playerId: ids[0], quantity: 1 },
     { id: "v-h18", kind: "vipers", hole: 18, playerId: ids[1], quantity: 1 },
   ];
-  const afterNine = new Set(order.filter(hole => hole <= 9));
+  const afterNine = new Set(order.slice(0, 9));
   const result = calculateCounterBet("vipers", players, counterConfig(2), eventRows, emptyCounterBetKeepers(), order, afterNine);
   assert.equal(result.halves[0].settled, true);
   assert.equal(result.halves[1].settled, false);
   assert.equal(result.transfers.length, 4);
-  assert.ok(result.transfers.every(transfer => transfer.metadata?.nine === "holes_1_9"));
+  assert.ok(result.transfers.every(transfer => transfer.metadata?.nine === "first_half"));
 });
 
-test("una salida por H10 conserva dos liquidaciones físicas independientes", () => {
+test("una salida por H10 conserva dos liquidaciones independientes en orden de juego", () => {
   const startAtTen = [...Array.from({ length: 9 }, (_, index) => index + 10), ...Array.from({ length: 9 }, (_, index) => index + 1)];
   const eventRows: CounterBetEvent[] = [
     { id: "camel-18", kind: "camels", hole: 18, playerId: ids[0], quantity: 1 },
     { id: "camel-9", kind: "camels", hole: 9, playerId: ids[1], quantity: 1 },
   ];
   const result = calculateCounterBet("camels", players, counterConfig(), eventRows, emptyCounterBetKeepers(), startAtTen, new Set(startAtTen));
-  assert.deepEqual(result.halves.map(half => [half.lastEventHole, half.keeperId]), [[9, ids[1]], [18, ids[0]]]);
+  assert.deepEqual(result.halves.map(half => [half.lastEventHole, half.keeperId]), [[18, ids[0]], [9, ids[1]]]);
 });
 
 for (const kind of ["camels", "fish"] as CounterBetKind[]) {

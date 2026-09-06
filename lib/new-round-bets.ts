@@ -23,12 +23,12 @@ export function initialBets(ids: string[]): BetConfig {
     },
     ballFriend: { enabled: false, baseMode: "moving", value: 20, hcpPct: 100, decimals: "round", maxScore: 9, participantIds: [...ids] },
     polla: {
-      first9: { enabled: false, value: 100, hcpPct: 100, decimals: "round", participantIds: [...ids] },
+      first9: { enabled: false, value: 100, hcpPct: 100, decimals: "round", playedHalfVersion: 1, participantIds: [...ids] },
       second9: { enabled: false, value: 100, hcpPct: 100, decimals: "round", participantIds: [...ids] },
       total18: { enabled: false, value: 100, hcpPct: 100, decimals: "round", participantIds: [...ids] },
     },
     miniPolla: { enabled: false, value: 100, hcpPct: 100, decimals: "round", participantIds: [...ids] },
-    // Each physical nine has its own bag. Pressure only changes H10–H18 event values.
+    // Each played half has its own bag. Pressure only changes the second played half.
     vipers: { enabled: false, value: 100, secondNinePressed: false, secondNineMultiplier: 2, settlementMode: "halves", participantIds: [...ids] },
     camels: { enabled: false, value: 100, secondNinePressed: false, secondNineMultiplier: 2, settlementMode: "halves", participantIds: [...ids] },
     fish: { enabled: false, value: 100, secondNinePressed: false, secondNineMultiplier: 2, settlementMode: "halves", participantIds: [...ids] },
