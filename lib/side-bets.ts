@@ -12,6 +12,7 @@ import type {
   LobaWinner,
   Player,
   PhysicalNine,
+  PressureMultiplier,
   RoundHandicapBasis,
   Transfer,
 } from "./types";
@@ -30,6 +31,16 @@ export const emptyCounterBetKeepers = (): CounterBetKeepers => ({ vipers: {}, ca
 
 export function physicalNineForHole(hole: number): PhysicalNine {
   return hole <= 9 ? "holes_1_9" : "holes_10_18";
+}
+
+export function counterBetSecondNineMultiplier(config: CounterBetConfig): PressureMultiplier {
+  const value = Math.trunc(config.secondNineMultiplier ?? 1);
+  return Math.min(5, Math.max(1, Number.isFinite(value) ? value : 1)) as PressureMultiplier;
+}
+
+export function counterBetEffectiveUnitValue(config: CounterBetConfig, hole: number) {
+  const multiplier = physicalNineForHole(hole) === "holes_10_18" ? counterBetSecondNineMultiplier(config) : 1;
+  return roundMoney(Math.max(0, config.value || 0) * multiplier);
 }
 
 export function roundMoney(value: number) {
@@ -99,6 +110,8 @@ export type CounterBetHalfResult = {
   quantity: number;
   multiplier: number;
   value: number;
+  bagValue: number;
+  events: CounterBetValuedEvent[];
   keeperId?: string;
   lastEventHole?: number;
   candidateIds?: string[];
@@ -107,6 +120,27 @@ export type CounterBetHalfResult = {
   balances: Record<string, number>;
   transfers: Transfer[];
 };
+
+export type CounterBetValuedEvent = CounterBetEvent & {
+  multiplier: PressureMultiplier;
+  effectiveUnitValue: number;
+  effectiveTotalValue: number;
+};
+
+export function valueCounterBetEvent(event: CounterBetEvent, config: CounterBetConfig): CounterBetValuedEvent {
+  const multiplier = physicalNineForHole(event.hole) === "holes_10_18" ? counterBetSecondNineMultiplier(config) : 1;
+  const effectiveUnitValue = counterBetEffectiveUnitValue(config, event.hole);
+  return {
+    ...event,
+    multiplier,
+    effectiveUnitValue,
+    effectiveTotalValue: roundMoney(Math.max(0, Math.trunc(event.quantity || 0)) * effectiveUnitValue),
+  };
+}
+
+export function snapshotCounterBetEvents(events: CounterBetEvent[], configs: Record<CounterBetKind, CounterBetConfig>) {
+  return events.map(event => valueCounterBetEvent(event, configs[event.kind]));
+}
 
 export function latestCounterBetCandidates(
   kind: CounterBetKind,
@@ -145,8 +179,11 @@ function roundCounterBetResult(
   const transfers: Transfer[] = [];
   const participantIds = participants.map(player => player.id);
   const allowed = new Set(participantIds);
-  const relevant = events.filter(event => event.kind === kind && allowed.has(event.playerId) && order.includes(event.hole));
+  const relevant = events
+    .filter(event => event.kind === kind && allowed.has(event.playerId) && order.includes(event.hole))
+    .map(event => valueCounterBetEvent(event, config));
   const quantity = relevant.reduce((sum, event) => sum + Math.max(0, Math.trunc(event.quantity || 0)), 0);
+  const bagValue = roundMoney(relevant.reduce((sum, event) => sum + event.effectiveTotalValue, 0));
   const { hole: lastEventHole, candidates } = latestCounterBetCandidates(kind, participantIds, relevant, order);
   const candidateIds = candidates.map(candidate => candidate.playerId);
   const manuallySelected = keepers[kind]?.round;
@@ -160,13 +197,24 @@ function roundCounterBetResult(
   const value = roundMoney(Math.max(0, config.value || 0));
   const settled = Boolean(config.enabled && complete && quantity > 0 && keeperId);
   if (settled && keeperId) {
-    const amount = roundMoney(quantity * value);
+    const amount = bagValue;
+    const firstNineQuantity = relevant.filter(event => event.hole <= 9).reduce((sum, event) => sum + event.quantity, 0);
+    const secondNineQuantity = quantity - firstNineQuantity;
     for (const player of participants) {
       if (player.id === keeperId) continue;
       addTransfer(transfers, balances, keeperId, player.id, amount, {
         betType: kind,
         hole: lastEventHole,
-        metadata: { period: "round", quantity, unitValue: value, lastEventHole: lastEventHole ?? null },
+        metadata: {
+          period: "round",
+          quantity,
+          unitValue: value,
+          secondNineMultiplier: counterBetSecondNineMultiplier(config),
+          firstNineQuantity,
+          secondNineQuantity,
+          bagValue,
+          lastEventHole: lastEventHole ?? null,
+        },
       });
     }
   }
@@ -176,6 +224,8 @@ function roundCounterBetResult(
     quantity,
     multiplier: 1,
     value,
+    bagValue,
+    events: relevant,
     keeperId,
     lastEventHole,
     candidateIds,
@@ -184,7 +234,7 @@ function roundCounterBetResult(
     balances,
     transfers,
   };
-  return { kind, halves: [round], balances, transfers, totalQuantity: quantity, zeroSum: isZeroSum(balances), settlementMode: "round" as const };
+  return { kind, halves: [round], balances, transfers, totalQuantity: quantity, totalBagValue: bagValue, zeroSum: isZeroSum(balances), settlementMode: "round" as const };
 }
 
 export function calculateCounterBet(
@@ -203,18 +253,20 @@ export function calculateCounterBet(
   const halves = (["holes_1_9", "holes_10_18"] as PhysicalNine[]).map((nine): CounterBetHalfResult => {
     const holes = order.filter(hole => physicalNineForHole(hole) === nine);
     const participantIds = new Set(participants.map(player => player.id));
-    const quantity = events
+    const valuedEvents = events
       .filter(event => event.kind === kind && holes.includes(event.hole) && participantIds.has(event.playerId))
-      .reduce((sum, event) => sum + Math.max(0, Math.trunc(event.quantity || 0)), 0);
-    const multiplier = nine === "holes_10_18" ? Math.max(1, config.secondNineMultiplier || 1) : 1;
+      .map(event => valueCounterBetEvent(event, config));
+    const quantity = valuedEvents.reduce((sum, event) => sum + Math.max(0, Math.trunc(event.quantity || 0)), 0);
+    const multiplier = nine === "holes_10_18" ? counterBetSecondNineMultiplier(config) : 1;
     const value = roundMoney(Math.max(0, config.value || 0) * multiplier);
+    const bagValue = roundMoney(valuedEvents.reduce((sum, event) => sum + event.effectiveTotalValue, 0));
     const keeperId = keepers[kind]?.[nine];
     const settled = Boolean(config.enabled && holes.length && keeperId && participantIds.has(keeperId) &&
       (!completedHoles || holes.every(hole => completedHoles.has(hole))));
     const halfBalances = Object.fromEntries(participants.map(player => [player.id, 0])) as Record<string, number>;
     const halfTransfers: Transfer[] = [];
     if (settled && keeperId && quantity > 0) {
-      const amount = roundMoney(quantity * value);
+      const amount = bagValue;
       for (const player of participants) {
         if (player.id === keeperId) continue;
         addTransfer(halfTransfers, halfBalances, keeperId, player.id, amount, {
@@ -227,9 +279,9 @@ export function calculateCounterBet(
         });
       }
     }
-    return { nine, holes, quantity, multiplier, value, keeperId, settled, balances: halfBalances, transfers: halfTransfers };
+    return { nine, holes, quantity, multiplier, value, bagValue, events: valuedEvents, keeperId, settled, balances: halfBalances, transfers: halfTransfers };
   });
-  return { kind, halves, balances, transfers, totalQuantity: halves.reduce((sum, half) => sum + half.quantity, 0), zeroSum: isZeroSum(balances), settlementMode: "legacy_halves" as const };
+  return { kind, halves, balances, transfers, totalQuantity: halves.reduce((sum, half) => sum + half.quantity, 0), totalBagValue: roundMoney(halves.reduce((sum, half) => sum + half.bagValue, 0)), zeroSum: isZeroSum(balances), settlementMode: "legacy_halves" as const };
 }
 
 export function modeMultiplier(mode?: LobaMode) {

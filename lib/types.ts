@@ -64,7 +64,7 @@ export type CounterBetConfig = ParticipantConfig & {
   value: number;
   /** New rounds use one accumulated bag. Missing preserves historical half settlements. */
   settlementMode?: CounterBetSettlementMode;
-  /** @deprecated Retained only to reproduce historical half-settlement snapshots. */
+  /** H10–H18 event value multiplier. Missing is 1x for historical compatibility. */
   secondNineMultiplier?: number;
 };
 
@@ -76,6 +76,9 @@ export type CounterBetEvent = {
   quantity: number;
   /** Centimetres from the hole; requested only for a same-hole Viper tie. */
   distanceToHole?: number;
+  /** Derived audit fields persisted in finalized snapshots; calculation remains config-driven. */
+  effectiveUnitValue?: number;
+  effectiveTotalValue?: number;
 };
 
 export type CounterBetPeriod = PhysicalNine | "round";

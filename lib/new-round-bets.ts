@@ -28,7 +28,7 @@ export function initialBets(ids: string[]): BetConfig {
       total18: { enabled: false, value: 100, hcpPct: 100, decimals: "round", participantIds: [...ids] },
     },
     miniPolla: { enabled: false, value: 100, hcpPct: 100, decimals: "round", participantIds: [...ids] },
-    // Kept at 1 as a downgrade-safe legacy field. The round settlement engine ignores it.
+    // New rounds keep one bag; only the value of events from H10–H18 is multiplied.
     vipers: { enabled: false, value: 100, secondNineMultiplier: 1, settlementMode: "round", participantIds: [...ids] },
     camels: { enabled: false, value: 100, secondNineMultiplier: 1, settlementMode: "round", participantIds: [...ids] },
     fish: { enabled: false, value: 100, secondNineMultiplier: 1, settlementMode: "round", participantIds: [...ids] },

@@ -141,6 +141,10 @@ button:disabled{cursor:not-allowed;opacity:.5}.app{padding-top:calc(14px + env(s
 .betModeControl .segmented { flex-wrap: wrap; }
 .betModeControl .segmented button { min-height: 40px; flex: 1 1 150px; }
 .betModeControl > p { margin: 6px 0 0; color: var(--muted); font-size: 11px; line-height: 1.4; }
+.counterBetMultiplier { margin: 0; }
+.counterBetMultiplier .segmented button { flex: 1 1 42px; min-height: 40px; padding-inline: 7px; }
+.sideBetEventBreakdown { display: grid; gap: 4px; margin-top: 8px; }
+.sideBetEventBreakdown > span { color: var(--muted); font-size: 10px; line-height: 1.35; }
 
 .expenseBars > div { gap: 8px; min-width: 0; }
 .expenseBars > div > span { min-width: 0; overflow-wrap: anywhere; }
