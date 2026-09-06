@@ -90,6 +90,7 @@ import { FoursomeLive } from "./components/foursome-live";
 import { ResultAccordion } from "./components/result-accordion";
 import { HistoricalRoundDetail } from "./components/historical-round-detail";
 import { FullScorecard } from "./components/full-scorecard";
+import { ScorecardHoleContext, ScorecardHoleNetPreview } from "./components/scorecard-hole-preview";
 import { GolfLeaderboard } from "./components/golf-leaderboard";
 import { restoreRoundSnapshot, resultSummaryText } from "../lib/round-editing";
 import { abandonedPressurePlayersWithMissingScores, firstIncompleteRoundCapture, incompleteCoreBetSettlements, incompleteExternalPersonalBets, unsettledSupplementalBetResults } from "../lib/round-completion";
@@ -2951,7 +2952,7 @@ function GolfBetsApp() {
 
     {tab === "round" && <>
       <section className="holeHero">
-        <div><div className="eyebrow">{course.name}</div><h1>Hoyo {holeNumber}</h1><p>Par {hole.par} · Ventaja {hole.strokeIndex}</p></div>
+        <div><div className="eyebrow">{course.name}</div><h1>Hoyo {holeNumber}</h1><ScorecardHoleContext hole={hole} teeName={course.teeName} /></div>
         <div className="progress">{currentIndex + 1}<span>/{order.length}</span></div>
       </section>
       <div className="holeNav">{order.map((h, i) => <button key={h} className={i === currentIndex ? "active" : scores[h] ? "done" : ""} onClick={() => goToHoleIndex(i)}>{h}</button>)}</div>
@@ -2969,6 +2970,7 @@ function GolfBetsApp() {
             <button type="button" className={scoreCaptureMode === "advanced" ? "active" : ""} aria-pressed={scoreCaptureMode === "advanced"} onClick={() => setScoreCaptureMode("advanced")}>Estadísticas</button>
           </div>
           <p>{scoreCaptureMode === "quick" ? "Solo score. Los putts siguen apareciendo cuando una apuesta los necesita." : "Opcional: putts, fairway, green en regulación y penalidades. Nada de esto cambia el score ni las apuestas."}</p>
+          <small className="scorecardNetNote">El neto de tarjeta usa el HCP de ronda al 100%; cada apuesta conserva su propia configuración.</small>
         </fieldset>
         {(bets.loba.enabled || bets.ballFriend.enabled) && <div className="scoreBetQuickSetup" aria-label="Apuestas de este hoyo">
           {bets.loba.enabled && <button type="button" onClick={() => setHoleBetEditor("loba")}>{lobaSetupChipLabel(lobaHoles[holeNumber], players)}</button>}
@@ -2978,7 +2980,7 @@ function GolfBetsApp() {
           const indicators = playerHoleBetLabels(p.id, bets.loba.enabled ? lobaHoles[holeNumber] : undefined, bets.ballFriend.enabled ? bfSetup : undefined, bets.ballFriend.participantIds);
           const advanced = advancedStats[holeNumber]?.[p.id] || {};
           return <div className="scoreRow" key={p.id}>
-          <div><b>{p.name.trim() || "Sin nombre"}</b><span>HCP {p.handicap ?? "—"}</span>{indicators.length > 0 && <span className="playerHoleBetBadges">{indicators.map(indicator => <i key={indicator}>{indicator}</i>)}</span>}{(scoreCaptureMode === "advanced" || activePuttPlayerIds.has(p.id)) && <label className="puttsCapture">Putts<NumericCaptureInput aria-label={`Putts ${p.name} hoyo ${holeNumber}`} min={0} max={20} step={1} value={putts[holeNumber]?.[p.id]} emptyWhenZero={false} placeholder="—" onValueChange={(value) => setPutt(p.id, value)} /></label>}</div>
+          <div><b>{p.name.trim() || "Sin nombre"}</b><span>HCP {p.handicap ?? "—"}</span><ScorecardHoleNetPreview player={p} hole={hole} gross={scoreFor(p.id)} />{indicators.length > 0 && <span className="playerHoleBetBadges">{indicators.map(indicator => <i key={indicator}>{indicator}</i>)}</span>}{(scoreCaptureMode === "advanced" || activePuttPlayerIds.has(p.id)) && <label className="puttsCapture">Putts<NumericCaptureInput aria-label={`Putts ${p.name} hoyo ${holeNumber}`} min={0} max={20} step={1} value={putts[holeNumber]?.[p.id]} emptyWhenZero={false} placeholder="—" onValueChange={(value) => setPutt(p.id, value)} /></label>}</div>
           <div className="scoreControls"><div className="stepper"><button aria-label={`Restar golpe a ${p.name}`} onClick={() => changeScore(p.id, -1)}>−</button><NumericCaptureInput aria-label={`Score ${p.name} hoyo ${holeNumber}`} min={1} step={1} value={scoreFor(p.id)} emptyWhenZero={false} commitUnchanged placeholder={String(hole.par)} onValueChange={(value) => setScore(p.id, value)} /><button aria-label={`Sumar golpe a ${p.name}`} onClick={() => changeScore(p.id, 1)}>+</button></div><button className="parReset" aria-label={`Restablecer Par de ${p.name}`} onClick={() => setScore(p.id, hole.par)}>PAR</button></div>
           {scoreCaptureMode === "advanced" && <div className="advancedStatCapture" aria-label={`Estadísticas opcionales de ${p.name} en hoyo ${holeNumber}`}>
             {hole.par > 3 && <div><span>Fairway</span><div className="segmented"><button type="button" className={advanced.fairwayHit === true ? "active" : ""} aria-pressed={advanced.fairwayHit === true} onClick={() => setAdvancedStat(p.id, { fairwayHit: advanced.fairwayHit === true ? undefined : true })}>Sí</button><button type="button" className={advanced.fairwayHit === false ? "active" : ""} aria-pressed={advanced.fairwayHit === false} onClick={() => setAdvancedStat(p.id, { fairwayHit: advanced.fairwayHit === false ? undefined : false })}>No</button></div></div>}
