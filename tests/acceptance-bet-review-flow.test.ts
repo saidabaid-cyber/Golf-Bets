@@ -205,7 +205,7 @@ test("Guardar hoyo verifica el borrador y sobrevive un cierre inmediato antes de
     roundId: "round-hole-checkpoint",
     players,
     course,
-    scores: { 1: { "owner-a": 4, "opponent-b": 5, "player-c": 4, "player-d": 6 } },
+    scores: { 1: { "owner-a": 4, "opponent-b": 5, "player-c": 3, "player-d": 6 } },
     scoreEdits: {},
     currentIndex: 0,
   };

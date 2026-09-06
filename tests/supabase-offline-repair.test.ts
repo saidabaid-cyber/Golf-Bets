@@ -100,6 +100,14 @@ test("ACK de IndexedDB solo vacía el snapshot exacto", () => {
   assert.equal(outboxAcknowledged(null, "v1-new"), false);
 });
 
+test("el ciclo cloud separa el fingerprint del payload del ACK durable", () => {
+  const page = readFileSync("app/page.tsx", "utf8");
+  assert.match(page, /const offlineFingerprint = cloudDataFingerprint\(initial\)/);
+  assert.match(page, /fingerprint = cloudSyncPayloadFingerprint\(initial\)/);
+  assert.match(page, /acknowledgeOfflineBundle\(userId, offlineFingerprint\)/);
+  assert.doesNotMatch(page, /acknowledgeOfflineBundle\(userId, confirmedFingerprint\)/);
+});
+
 test("reintentos offline usan backoff creciente y acotado", () => {
   assert.equal(offlineRetryDelayMs(0), 0);
   assert.equal(offlineRetryDelayMs(1), 15_000);
@@ -208,7 +216,7 @@ test("UI distingue guardado local, pendiente, offline, nube y error", () => {
   assert.match(page, /saveRoundHistoryLocalFirst/);
   assert.match(page, /Ronda guardada en este dispositivo · sincronización pendiente\./);
   assert.doesNotMatch(page, /todavía tiene cambios pendientes de sincronizar/);
-  assert.match(page, /window\.addEventListener\("focus", onFocus\)/);
+  assert.doesNotMatch(page, /window\.addEventListener\("focus",/);
   assert.match(page, /45_000/);
 });
 

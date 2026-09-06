@@ -263,6 +263,6 @@ test("Guardar → nube atrasada → aplicar respuesta → Histórico → reload 
   const page = readFileSync("app/page.tsx", "utf8");
   const start = page.indexOf("const applyCloudBundle");
   const end = page.indexOf("useEffect(() =>", start);
-  assert.match(page.slice(start, end), /const reconciled = mergeLocalAndCloud\(local, data\)/);
+  assert.match(page.slice(start, end), /const reconciled = mergeLocalFirstActiveDraft\(local, data\)/);
   assert.match(page.slice(start, end), /JSON\.stringify\(reconciled\.history\)/);
 });
