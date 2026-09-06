@@ -59,7 +59,7 @@ function Switch({ on, label, onChange, disabled = false, buttonRef }: { on: bool
 }
 
 function MoneyField({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
-  return <label>{label}<span className="moneyField"><span>$</span><NumericCaptureInput value={value} onValueChange={(next) => onChange(next ?? 0)} /></span></label>;
+  return <label>{label}<span className="moneyField"><span>$</span><NumericCaptureInput min={0} value={value} onValueChange={(next) => onChange(next ?? 0)} /></span></label>;
 }
 
 function NumberField({ label, value, onChange, min, max, step = 1 }: { label: string; value: number; onChange: (value: number) => void; min?: number; max?: number; step?: number }) {

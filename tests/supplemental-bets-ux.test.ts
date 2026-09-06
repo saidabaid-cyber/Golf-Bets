@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { BET_HELP, type BetHelpKind } from "../lib/bet-help";
+import { finalizeNumericCapture } from "../lib/numeric-input";
 
 const page = readFileSync("app/page.tsx", "utf8");
 const editor = readFileSync("app/components/supplemental-bets-editor.tsx", "utf8");
@@ -78,6 +79,18 @@ test("Personal and Manual switches retain their editors and move inactive record
   const signedInput = readFileSync("app/components/signed-money-input.tsx", "utf8");
   assert.doesNotMatch(signedInput, /Gana \+|Pierde −|signedMoneyDirection/);
   assert.match(signedInput, /value=\{value\}/);
+});
+
+test("importes ordinarios tienen mínimo cero y Manuales conserva captura firmada", () => {
+  const moneyInput = page.slice(page.indexOf("function MoneyInput"), page.indexOf("function GolfBetsApp"));
+  const moneyField = editor.slice(editor.indexOf("function MoneyField"), editor.indexOf("function NumberField"));
+  const signedInput = readFileSync("app/components/signed-money-input.tsx", "utf8");
+  assert.match(moneyInput, /<NumericCaptureInput[^>]+min=\{0\}/);
+  assert.match(moneyField, /<NumericCaptureInput[^>]+min=\{0\}/);
+  assert.doesNotMatch(signedInput, /min=\{0\}/);
+  assert.match(page, /manualGrid[\s\S]{0,500}<SignedMoneyInput/);
+  assert.deepEqual(finalizeNumericCapture("-50", 0), { raw: "0", value: 0 });
+  assert.deepEqual(finalizeNumericCapture("-50"), { raw: "-50", value: -50 });
 });
 
 test("Minimum Putts capture stays inside the existing score card and persists in draft/history", () => {

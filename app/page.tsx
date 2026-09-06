@@ -396,7 +396,7 @@ function PollaBetEditor({
 }
 
 function MoneyInput({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
-  return <div><label>{label}</label><div className="moneyField"><span>$</span><NumericCaptureInput inputMode="decimal" value={value} onValueChange={(next) => onChange(next ?? 0)} /></div></div>;
+  return <div><label>{label}</label><div className="moneyField"><span>$</span><NumericCaptureInput inputMode="decimal" min={0} value={value} onValueChange={(next) => onChange(next ?? 0)} /></div></div>;
 }
 
 function GolfBetsApp() {
