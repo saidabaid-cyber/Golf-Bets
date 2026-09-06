@@ -159,3 +159,48 @@ La publicación se resolvió posteriormente mediante `git push origin beta`, sin
 - Amistades persistentes sigue siendo el siguiente hito bloqueado por infraestructura: necesita una base Supabase Beta aislada, proyección pública mínima y pruebas RLS de dos usuarios. No se simuló una amistad local como si fuera compartida.
 - Mientras se provisiona esa base, el siguiente trabajo seguro es cerrar semántica versionada de HCP plus, empates finales y abandono/DNF, seguido de PWA/offline en dispositivos físicos.
 - `main`, el tag estable y Production no se tocaron.
+
+## Continuación funcional — plataforma, confiabilidad y catálogo
+
+Commits publicados después del cierre anterior:
+
+- `21dab41` — `docs(beta): record published preview verification`.
+- `a3c5736` — `fix(beta): apply plus handicap across scoring`.
+- `0c2c81f` — `fix(beta): harden profile and advanced stats`.
+- `391f4e2` — `fix(beta): reconcile derived round lifecycle`.
+- `91a5c9d` — `fix(beta): preserve profile edits across sync failures`.
+- `cdff658` — `fix(beta): persist round start lifecycle`.
+- `6038075` — `fix(beta): settle terminal pressure ties`.
+- `ad39b89` — `fix(beta): guard final wager settlement`.
+- `b6d83c0` — `fix(beta): require complete round settlement`.
+- `d61d815` — `fix(beta): clarify pressure withdrawal limits`.
+- `97c312f` — `fix(beta): checkpoint every confirmed hole`.
+- `1a63f2a` — `fix(beta): explain withdrawal during score capture`.
+- `73c7d15` — `feat(beta): complete golfer profile insights`.
+- `b2c8de6` — `fix(beta): protect group round replacement`.
+- `4060612` — `feat(beta): harden PWA updates and offline shell`.
+- `8ebfe27` — `fix(beta): scope scorer changes to tournament`.
+- `febbe18` — `feat(beta): add final golf leaderboard to results`.
+- `63a43de` — `feat(beta): add internal activity notifications`.
+- `1b534de` — `feat(beta): complete historical round recap`.
+- `e12eb1c` — `fix(beta): make historical insights fail closed`.
+- `8542986` — `feat(beta): make home and stats fully interactive`.
+- `84d875c` — `feat(beta): separate golfer profile from account`.
+- `101498e` — `fix(beta): deduplicate and validate history filters`.
+- `3435964` — `fix(beta): keep guest profile claims honest`.
+- `ed729a5` — `fix(beta): expose profile failures accessibly`.
+- `0f98e85` — `fix(beta): recover the newest offline score state`.
+- `e8f881a` — `fix(beta): preserve linked identities in groups`.
+- `26340e4` — `feat(beta): formalize validated course catalog`.
+
+QA integral después de `26340e4`: ESLint limpio, TypeScript app/tests limpio, 865/865 pruebas correctas y build Next.js correcto con 18/18 rutas. No se aplicó DDL, no se cambiaron variables y todos los pushes de esta continuación apuntaron exclusivamente a `origin/beta`.
+
+## Continuación funcional — flags, avisos y Scorecard en vivo
+
+- `dff92cb` — `fix(beta): keep Polla Live fail closed`. Sólo `1`, `true`, `on` o `yes` habilitan el flag; valores ausentes, falsos o desconocidos no crean clientes de Polla, incluida la service role. El módulo continúa deshabilitado y no se cambió ningún entorno.
+- `0cba731` — `feat(beta): add reliable notification read controls`. Añade leído/no leído por aviso, deduplicación exacta, badge coherente y controles accesibles sin convertir la actividad local en una red compartida.
+- `1c770b8` — `feat(beta): add live net context to scorecard`. Muestra Par/SI/yardaje/tee cuando existen y una vista previa de golpes/neto por jugador; los datos ausentes fallan cerrados y las fórmulas de apuestas permanecen intactas.
+
+QA integral final de código a las 12:12 `America/Mexico_City`: `eslint .` correcto, `tsc --noEmit` correcto, compilación TypeScript de tests correcta, 874/874 pruebas correctas y `next build` correcto con 18/18 rutas. El Preview funcional `https://golf-bets-dmvpg7j61-saha8.vercel.app` está READY para el SHA exacto `1c770b8fc964db1e49a59399174dd759a4a884a0` y responde HTTP 200 con `viewport-fit=cover`.
+
+Este pase no creó/aplicó migrations, tablas o policies; no cambió Supabase alojado ni variables de runtime. Los pushes se dirigieron exclusivamente a `origin/beta`. La automatización visual no encontró una superficie de navegador disponible en el host, por lo que no se registra una nueva certificación de dispositivo físico.

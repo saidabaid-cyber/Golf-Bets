@@ -45,9 +45,15 @@ Los “grupos” actuales son plantillas locales/frecuentes de jugadores. Todav�
 
 El motor sigue siendo determinístico y separado de IA. Balances usa resultados históricos persistidos como ledger derivado: no muta snapshots, no acepta edición arbitraria, no registra pagos y no afirma que una sugerencia de liquidación sea una deuda pagada. Los invitados usan identidad acotada a la ronda; las cuentas estables requieren un ID persistido no ambiguo.
 
+La Scorecard calcula una vista previa de neto a HCP de ronda al 100% exclusivamente para contexto de golf. Acepta HCP cero, plus y ciclos adicionales por encima de 18; si falta HCP o score no fabrica un neto. Este helper no entra al motor de apuestas: cada modalidad conserva su propia base y porcentaje.
+
 `lifecycleState` añade `draft`, `live`, `completed` y `cancelled` de forma compatible. Las rondas legacy sin estado se leen como `completed` sin migración destructiva. La captura avanzada es opcional: `scoreCaptureMode` y `advancedStats` se persisten con la ronda, pero nunca alimentan el motor de apuestas.
 
 El perfil ampliado normaliza username, ubicación, club, tee, mano, bio y visibilidad en la caché local por identidad. Nombre, HCP y avatar conservan el write cloud existente; los campos nuevos no se presentan como sincronizados hasta contar con columnas y RLS en una base Beta aislada.
+
+Perfil y Cuenta son vistas distintas. Sólo una sesión autenticada puede editar la identidad persistente; un workspace invitado conserva rondas y estadísticas locales, pero no se etiqueta como cuenta ni perfil sincronizable. Los errores de formulario/guardado usan estados accesibles separados del éxito.
+
+Social y notificaciones son actualmente una proyección privada de actividad local. El estado leído se guarda por identidad en el dispositivo, deduplica eventos exactos y no crea una relación social remota. Los avisos compartidos seguirán bloqueados hasta disponer de tablas, RLS y pruebas multiusuario en Beta.
 
 ## Supabase existente
 
@@ -89,11 +95,15 @@ No se creó ni aplicó una migración durante este milestone. Amistades, grupos 
 
 El único proveedor concreto es `internalCourseDataProvider`: busca, sin red, únicamente sobre los objetos `Course[]` que la app ya posee. No crea campos, tees, yardas ni coordenadas. Los contratos externos no implican una integración activa, licencia, autorización ni exactitud oficial.
 
+`lib/course-catalog.ts` construye un read model provider-neutral que separa Course, Tee, Hole y yardaje por tee sin reescribir drafts o históricos legacy. Sólo proyecta registros con ID/nombre/tee, 9 o 18 hoyos completos, Par válido y SI único; metadatos opcionales inválidos se omiten y se auditan como warnings. Persistir esas entidades en tablas normalizadas queda bloqueado hasta disponer de una base Beta aislada.
+
 La UI debe distinguir siempre el HCP manual/de juego de cualquier índice oficial. Una futura integración solo podrá etiquetarse como oficial si el proveedor y la autorización correspondientes lo permiten.
 
 ## PWA y offline
 
 La app ya dispone de manifest, iconos normales/maskable, Apple touch icon, modo standalone y service worker. El worker precachea el shell/activos estáticos, evita cachear APIs y usa navegación network-first con fallback local. La durabilidad de score depende del flujo local-first, no de cachear respuestas privadas.
+
+El store offline lee tanto IndexedDB como el fallback verificado en `localStorage` y selecciona el snapshot/outbox más reciente. Un watermark de ACK más compare-and-swap transaccional impide que respuestas o reintentos antiguos eliminen una mutación nueva; un guardado local-only nunca borra por accidente una cola cloud pendiente.
 
 ## Feature flags
 
@@ -104,7 +114,7 @@ Flags de servidor existentes:
 - `AUTH_SOCIAL_ENABLED`
 - `RULES_AI_ENABLED`
 
-Polla Live debe permanecer visible solo como “Próximamente” y deshabilitado en esta iteración. GPS, integraciones de campos/HCP/perfil, pagos, suscripciones y módulos incompletos deben quedar ocultos o protegidos por flags; no deben generar botones muertos.
+Polla Live debe permanecer visible solo como “Próximamente” y deshabilitado en esta iteración. `POLLA_LIVE_ENABLED` falla cerrado: únicamente los valores normalizados `1`, `true`, `on` y `yes` habilitan el backend; ausente, vacío, falso o desconocido impide instanciar también el cliente con service role. GPS, integraciones de campos/HCP/perfil, pagos, suscripciones y módulos incompletos deben quedar ocultos o protegidos por flags; no deben generar botones muertos.
 
 ## Flujo de despliegue seguro
 

@@ -15,25 +15,34 @@
 - Navegación mobile-first de cinco destinos: Inicio, Jugar, Grupos, Social y Perfil, con sección activa accesible y safe area inferior.
 - Home con identidad/HCP manual, ronda abierta o revisión pendiente como acción dominante, última tarjeta completa, accesos rápidos, grupos, balance y actividad real del espacio local.
 - Hub Jugar con retorno seguro a configuración/score/resultados, atajos contextuales de ronda y acceso conservado a Histórico, Personales, Stats, Campos, Grupos y Reglas.
-- Perfil con resumen de golf real y Stats separada. Promedio, mejor score, tendencia y putts nunca mezclan tarjetas de 9 y 18 hoyos; la UI declara la cohorte utilizada.
+- Perfil autenticado con edición persistente y Cuenta separada. El modo invitado conserva golf/Stats locales sin presentarse falsamente como identidad persistente. Los fallos de validación o guardado se anuncian como errores accesibles.
+- Stats permite elegir una cohorte real de 9H o 18H cuando ambas existen y alternar la gráfica entre Gross y vs Par; todos los promedios, tendencia y rondas recientes respetan esa selección.
 - Perfil de golf ampliado compatible con cachés anteriores: nombre, apellidos, usuario, ubicación, club, tee, mano, bio y privacidad se editan y recuperan localmente sin guardar tokens ni fabricar una identidad para invitado. Nombre/HCP/avatar conservan su escritura cloud existente; los campos nuevos quedan honestamente marcados como locales hasta disponer de esquema Beta aislado.
 - Tarjeta con captura `Rápida` (score y putts exigidos por apuestas) o `Estadísticas` opcionales. Fairway, GIR y penalidades se guardan sin cambiar scores ni motores de apuestas; Stats e Histórico muestran únicamente datos capturados, sin completar huecos.
 - Actividad personal derivada sólo de rondas y grupos guardados. No se presenta como un feed compartido ni se publica a terceros.
+- El centro de actividad permite marcar cada aviso local como leído/no leído, conserva pulsaciones consecutivas y deduplica eventos exactos para que el badge no se infle. Los controles funcionan tanto para avisos navegables como informativos.
 - Biblioteca de campos con búsqueda tolerante a acentos, favoritos, recientes, creación/edición manual y selección explícita. Editar catálogo no cambia silenciosamente el campo del draft.
 - Preferencias de campos aisladas por identidad y eliminadas al borrar la cuenta local.
 - Contratos tipados `CourseDataProvider`, `HandicapProvider`, `GolfProfileProvider`, `GolfMapProvider` y `DistanceProvider`; el único proveedor activo busca sin red sobre `Course[]` existentes.
+- Read model formal y validado para `courses`, `tees`, `holes` y yardajes por tee. IDs, Par, numeración y SI ambiguos fallan cerrados; rating, slope y yardaje sólo se muestran cuando provienen de datos válidos capturados.
 - Minimum Putts usa la duración explícita de ronda: H1–9 y H10–18 liquidan correctamente en rondas de 9; snapshots válidos de 18 conservan su comportamiento.
 - Importes ordinarios de apuestas se limitan a cero o más en captura; Manuales conserva deliberadamente importes firmados.
 - Las configuraciones activas de apuestas pasan por un validador puro compartido y fail-closed antes de guardar, iniciar o liquidar: participantes, equipos, bases HCP, carry/press, IDs y valores no finitos quedan bloqueados con reparación explícita, sin convertir una configuración inválida en un resultado de `$0`.
 - Ledger histórico derivado exclusivamente de resultados persistidos: totales por jugador, transferencias sugeridas por ronda y cara a cara bilateral. No registra pagos, no edita resultados y separa identidades autenticadas de invitados por ronda.
-- QA del SHA publicado: lint sin errores, TypeScript correcto, 734/734 tests y build Next.js 16.3.3 correcto con 18/18 rutas. El Preview responde HTTP 200 y su manifest PWA responde 200. El QA visual local registrado cubrió Home a 320/375/390/430 px y las vistas principales a 390 px sin overflow ni errores de consola; Safari/iPhone físico sigue pendiente.
+- Home convierte sus métricas en acciones accesibles hacia Histórico, Stats, Balances y Grupos, y separa hoyos confirmados del hoyo que se está editando.
+- Histórico deduplica snapshots por ID, valida fechas calendario y conserva registros dañados sólo en la vista sin filtros para permitir inspección/eliminación segura.
+- Recuperación offline compara IndexedDB y fallback, conserva el snapshot más reciente, usa ACK durable y CAS para que una confirmación o reintento antiguo no borre una edición de score nueva.
+- Grupos locales preservan la identidad estable de cuentas vinculadas y reparan duplicados por cuenta o nombre antes de crear jugadores de ronda; el editor falla cerrado y muestra un error explícito.
+- Scorecard en vivo muestra Par, SI, yardaje y tee únicamente cuando el campo los contiene. Cada jugador recibe una vista previa determinística de golpes de HCP y neto al guardar; HCP/score ausentes permanecen pendientes y las bases propias de apuestas no se reinterpretan.
+- Polla Live falla cerrada también ante valores desconocidos del flag: sólo `1`, `true`, `on` o `yes` pueden habilitar su backend. En esta iteración permanece deshabilitada y no se instancian sus clientes, incluida la service role, con el flag ausente o falso.
+- QA integral más reciente: lint sin errores, TypeScript de app/tests correcto, 874/874 tests y build Next.js 16.3.3 correcto con 18/18 rutas.
 
 ## PARTIAL — útil, pero todavía no cumple el modelo final
 
 - Perfil ampliado ya es persistente y recuperable en el dispositivo. Su sincronización multi-dispositivo, unicidad de username y aplicación remota de privacidad siguen pendientes de esquema Beta/RLS; favoritos permanecen en la biblioteca de campos y Stats se deriva del histórico en vez de duplicarse en el perfil.
-- Grupos siguen siendo plantillas privadas de jugadores con creación/edición/sorteo/carga a ronda; no son aún comunidades con admin, invitaciones y membresías.
-- Campos conservan el modelo legacy `Course`/tee con 18 hoyos. La biblioteca mejora el uso real, pero la normalización Course/Tees/Holes requiere una migración aditiva en Beta.
-- Social es un feed privado local; amigos, solicitudes, bloqueo, feed compartido y reacciones requieren backend multiusuario.
+- Grupos son plantillas privadas robustas con identidad estable, creación/edición/sorteo/carga a ronda; todavía no son comunidades remotas con admin, invitaciones y membresías.
+- Campos conservan persistencia legacy `Course` por tee. El read model formal ya separa entidades en memoria, pero su persistencia normalizada requiere una migración aditiva en una base Beta aislada.
+- Social es un feed y centro de avisos privado local con estado leído; amigos, solicitudes, bloqueo, feed compartido y reacciones requieren backend multiusuario.
 - Live score y sync multi-dispositivo funcionan para el workspace de una misma cuenta; faltan participantes con permisos individuales y edición por jugador.
 - El histórico conserva snapshots completos y ya normaliza estados `draft/live/completed/cancelled` localmente; el lifecycle cloud todavía no los expone como entidades colaborativas consultables porque falta el esquema Beta aislado.
 
@@ -74,19 +83,21 @@ Corregidos:
 - La migración de Nassau suplementario podía resolver al owner antes de disponer de la identidad autenticada.
 - IDs externos con espacios y estados Manuales sin nombre podían producir identidades o resultados ambiguos.
 - En modo invitado, comparar IDs ausentes podía marcar erróneamente a todos los jugadores como “tú” en Balances.
+- Una confirmación cloud o reintento antiguo podía borrar una edición de score más nueva; ahora el ACK usa watermark y compare-and-swap.
+- Perfiles renombrados vinculados a una cuenta podían duplicarse dentro de una plantilla de grupo; ahora se deduplican por identidad estable antes de cargar la ronda.
+- Valores desconocidos de `POLLA_LIVE_ENABLED` podían interpretarse de forma permisiva; ahora el flag falla cerrado.
+- Eventos internos idénticos podían duplicar avisos y badges; ahora se deduplican y el estado leído admite cambios consecutivos.
 
-Pendientes y aislados para un milestone de cálculo versionado:
+Pendientes y aislados para un milestone colaborativo:
 
-- HCP plus (“+1.2”) se conserva en cuenta, pero algunos cálculos/leaderboard legacy todavía lo limitan a cero.
-- Empates finales abiertos en ciertas Presiones individuales/por pareja necesitan un contrato de cierre y auditoría uniforme.
 - La nube persiste snapshots/resultados calculados por cliente; una futura ronda colaborativa exige validación/liquidación autoritativa server-side.
 - El abandono/DNF de Presiones por pareja necesita semántica de ronda explícita; no se debe fabricar un score gross ni contaminar Stats para completar esa liquidación.
 
 ## Despliegue
 
 - Rama objetivo: `beta`.
-- `origin/beta` publicado y verificado en `752edb9b3c3afca8b63b09624479f799d05130ae` mediante avance fast-forward desde `b2d10bb`.
-- Preview READY del SHA publicado: `https://golf-bets-idkeq8epx-saha8.vercel.app` (`dpl_63VyHZRp47wCcE3dui6rWSdUedqh`, target Preview).
+- `origin/beta` publicado por avance fast-forward desde `b2d10bb`; el último SHA funcional verificado de esta actualización es `1c770b8fc964db1e49a59399174dd759a4a884a0`.
+- Preview funcional verificado: `https://golf-bets-dmvpg7j61-saha8.vercel.app`, deployment `dpl_8f1xKcTdAWyncdhStu9yw5pr99Mz`, READY, target Preview, source Git, ref `beta` y SHA exacto `1c770b8fc964db1e49a59399174dd759a4a884a0`.
 - Alias Preview de rama: `https://golf-bets-git-beta-saha8.vercel.app`.
 - El HTML remoto responde 200, referencia los assets del build, incluye `viewport-fit=cover` y el bundle publicado contiene Inicio, Jugar, Grupos, Social, Perfil, Nueva ronda, Continuar ronda, Histórico, Stats, Amigos, Reglas y Balances.
 - No se hizo merge, promoción a Production, despliegue `--prod` ni cambio de variables Production.
@@ -94,22 +105,24 @@ Pendientes y aislados para un milestone de cálculo versionado:
 ## QA ejecutado
 
 - `eslint .`: correcto, cero errores.
+- `tsc --noEmit`: correcto.
 - `tsc -p tsconfig.test.json`: correcto.
-- `node --test .test-dist/tests/*.test.js`: 734 tests, 734 pass, 0 fail/skip/todo.
+- `node --test .test-dist/tests/*.test.js`: 874 tests, 874 pass, 0 fail/skip/todo.
 - `next build`: correcto; 18 rutas estáticas/dinámicas generadas sin error.
 - Browser QA local: Home a 320/375/390/430 y Jugar/Campos/Setup/Grupos/Social/Perfil/Stats a 390; cero overflow y cero errores de consola.
 - Cobertura existente conservada: Auth, guests, grupos locales, ronda 9/18, HCP 0, score/edit/save/reopen, apuestas, histórico, IndexedDB/outbox/reconnect, PWA y reglas.
-- Preview remoto: estado READY para el SHA de `origin/beta`; `/` y `/manifest.webmanifest` responden 200. El service worker usa `/` como fallback offline y evita cachear APIs.
+- Preview remoto funcional: estado READY para `1c770b8`; `/` responde 200 y el HTML contiene `viewport-fit=cover`. El service worker usa `/` como fallback offline y evita cachear APIs.
+- El pase visual automatizado nuevo no pudo abrir una superficie de navegador en este host; se conservan las verificaciones móviles registradas previamente y no se afirma una nueva certificación Safari/iPhone físico.
 
 ## NEXT — diez trabajos recomendados
 
 1. Crear una branch/proyecto Supabase exclusivo para Beta y verificar su ref antes de cualquier DDL.
 2. Corregir ACL/grants y drift del esquema en esa base, con pruebas RLS de dos usuarios.
-3. Versionar el tratamiento de HCP plus, empates finales y abandono/DNF sin inventar score de golf.
+3. Diseñar la semántica explícita de abandono/DNF sin inventar score de golf.
 4. Diseñar y migrar amistades con unicidad, estados, bloqueo y una proyección pública mínima de perfil.
 5. Convertir plantillas de grupos en grupos sociales persistentes sin romper compatibilidad local.
 6. Modelar invitaciones, roles, permisos de score y conflictos multi-dispositivo por participante.
-7. Formalizar courses, tees y holes mediante migración aditiva y herramienta manual autorizada.
+7. Persistir el read model formal de courses, tees y holes mediante migración aditiva y herramienta manual autorizada.
 8. Completar perfil persistente y preferencias de privacidad; después construir feed/notificaciones.
 9. Mover validación/liquidación de rondas colaborativas a una frontera autoritativa de servidor.
 10. Verificar instalación PWA y recuperación offline en iPhone/Android físicos con red intermitente.
@@ -118,4 +131,4 @@ Punto exacto de continuidad: provisionar y verificar primero una branch/proyecto
 
 ## Confirmación de producción
 
-Hasta esta actualización no se ha hecho merge a `main`, no se ha promovido ningún deployment, no se han cambiado variables Production y no se ha aplicado DDL al Supabase compartido. `main`, `origin/main` y el tag estable continúan en `6ceea3f`; `https://app.thebackyard.com.mx` permanece fuera de toda acción de escritura.
+Hasta esta actualización no se ha ejecutado ningún merge o push a `main`, no se ha promovido ningún deployment, no se han cambiado variables Production y no se ha aplicado DDL al Supabase compartido. `https://app.thebackyard.com.mx` permanece fuera de toda acción de escritura de esta sesión.
