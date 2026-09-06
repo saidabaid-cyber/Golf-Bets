@@ -28,6 +28,19 @@ export type BackyardProfile = {
   defaultHandicap: number | null;
 };
 
+/** Guest is a storage context, never an account identity. Legacy guest
+ * preferences may keep an HCP default, but names/emails/avatars are ignored. */
+export function guestBackyardProfile(value: unknown = null): BackyardProfile {
+  const candidate = value && typeof value === "object" ? value as Partial<BackyardProfile> : {};
+  return {
+    userId: "guest",
+    displayName: "",
+    email: "",
+    avatarUrl: "",
+    defaultHandicap: typeof candidate.defaultHandicap === "number" && Number.isFinite(candidate.defaultHandicap) ? candidate.defaultHandicap : null,
+  };
+}
+
 export function normalizeBackyardProfileCache(value: unknown, fallback: BackyardProfile): BackyardProfile {
   if (!value || typeof value !== "object") return fallback;
   const candidate = value as Partial<BackyardProfile>;

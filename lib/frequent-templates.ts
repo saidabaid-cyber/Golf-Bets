@@ -1,4 +1,5 @@
 import type { FrequentGroup, FrequentPlayer, PersonalBet, Player, SavedPersonalRival } from "./types";
+import { accountPrimaryPlayerId } from "./account-primary-player";
 
 export type FrequentGroupMember = FrequentGroup["players"][number];
 
@@ -9,7 +10,7 @@ function memberKey(name: string) {
 function cleanGroupMember(member: FrequentGroupMember): FrequentGroupMember | null {
   const name = member.name.trim();
   if (!name) return null;
-  return { name, handicap: member.handicap ?? null };
+  return { name, handicap: member.handicap ?? null, ...(member.accountUserId ? { accountUserId: member.accountUserId } : {}) };
 }
 
 export function parseFrequentGroups(raw: string | null | undefined): FrequentGroup[] {
@@ -26,7 +27,7 @@ export function parseFrequentGroups(raw: string | null | undefined): FrequentGro
           const candidate = member as Partial<FrequentGroupMember>;
           if (typeof candidate.name !== "string") return [];
           const handicap = candidate.handicap === null || typeof candidate.handicap === "number" ? candidate.handicap : null;
-          const cleaned = cleanGroupMember({ name: candidate.name, handicap });
+          const cleaned = cleanGroupMember({ name: candidate.name, handicap, ...(typeof candidate.accountUserId === "string" ? { accountUserId: candidate.accountUserId } : {}) });
           return cleaned ? [cleaned] : [];
         })
         : [];
@@ -95,7 +96,12 @@ export function resolveFrequentGroupDeletion(groups: FrequentGroup[], id: string
 }
 
 export function playersFromFrequentGroup(group: FrequentGroup, idFactory: () => string): Player[] {
-  return group.players.map((member) => ({ id: idFactory(), name: member.name, handicap: member.handicap }));
+  return group.players.map((member) => ({
+    id: member.accountUserId ? accountPrimaryPlayerId(member.accountUserId) : idFactory(),
+    name: member.name,
+    handicap: member.handicap,
+    ...(member.accountUserId ? { accountUserId: member.accountUserId } : {}),
+  }));
 }
 
 export function addFrequentPlayerTemplate(

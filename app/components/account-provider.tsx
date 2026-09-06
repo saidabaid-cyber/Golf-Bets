@@ -14,6 +14,7 @@ import {
   hasCurrentLegalConsent,
   hasCurrentBettingDataConsent,
   hasLocalGolfData,
+  guestBackyardProfile,
   isValidEmail,
   mergeLegalAcceptances,
   markLegalAcceptancesSynced,
@@ -94,15 +95,9 @@ function profileFromUser(user: User): BackyardProfile {
 function guestProfile(): BackyardProfile {
   try {
     const saved = JSON.parse(localStorage.getItem(ACCOUNT_STORAGE_KEYS.guestProfile) || "null");
-    if (saved && typeof saved === "object") return {
-      userId: "guest",
-      displayName: typeof saved.displayName === "string" ? saved.displayName : "Invitado",
-      email: "",
-      avatarUrl: typeof saved.avatarUrl === "string" ? saved.avatarUrl : "",
-      defaultHandicap: typeof saved.defaultHandicap === "number" ? saved.defaultHandicap : null,
-    };
+    return guestBackyardProfile(saved);
   } catch { /* keep safe guest defaults */ }
-  return { userId: "guest", displayName: "Invitado", email: "", avatarUrl: "", defaultHandicap: null };
+  return guestBackyardProfile();
 }
 
 function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () => void | Promise<void>; onAuthenticated: (session: Session) => void; sessionError: string }) {

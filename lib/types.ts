@@ -13,6 +13,8 @@ export type Player = {
   id: string;
   name: string;
   handicap: number | null;
+  /** Stable account link for the signed-in user's principal player. */
+  accountUserId?: string;
 };
 
 export type Hole = {
@@ -454,6 +456,8 @@ export type FrequentPlayer = {
   id: string;
   name: string;
   handicap: number | null;
+  /** Present only for the account owner's principal player template. */
+  accountUserId?: string;
   uses: number;
   updatedAt: string;
 };
@@ -461,7 +465,7 @@ export type FrequentPlayer = {
 export type FrequentGroup = {
   id: string;
   name: string;
-  players: Array<Pick<Player, "name" | "handicap">>;
+  players: Array<Pick<Player, "name" | "handicap" | "accountUserId">>;
   uses: number;
   updatedAt: string;
 };

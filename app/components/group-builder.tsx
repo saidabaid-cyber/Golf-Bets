@@ -21,7 +21,7 @@ export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, 
   frequentGroups: FrequentGroup[];
   onBack: () => void;
   onPlay: (players: Player[]) => void;
-  onSaveFrequentGroup: (name: string, players: Array<Pick<Player, "name" | "handicap">>) => boolean;
+  onSaveFrequentGroup: (name: string, players: Array<Pick<Player, "name" | "handicap" | "accountUserId">>) => boolean;
   onEditFrequentGroup: (group: FrequentGroup) => void;
   onDeleteFrequentGroup: (group: FrequentGroup) => void;
 }) {
@@ -57,7 +57,7 @@ export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, 
 
   function addFrequentGroup(group: FrequentGroup) {
     let next = players;
-    for (const member of group.players) next = appendUniquePlayer(next, { id: id(), name: member.name, handicap: member.handicap });
+    for (const member of group.players) next = appendUniquePlayer(next, { id: id(), name: member.name, handicap: member.handicap, ...(member.accountUserId ? { accountUserId: member.accountUserId } : {}) });
     setPlayers(next);
     if (next.some((item) => typeof item.handicap !== "number" || !Number.isFinite(item.handicap))) setMode("random");
     setGroups([]);
@@ -103,7 +103,7 @@ export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, 
 
   function saveGroup(index: number) {
     if (!saveName.trim()) { setMessage("Escribe un nombre para el grupo frecuente."); return; }
-    const saved = onSaveFrequentGroup(saveName.trim(), groups[index].map(({ name, handicap }) => ({ name, handicap })));
+    const saved = onSaveFrequentGroup(saveName.trim(), groups[index].map(({ name, handicap, accountUserId }) => ({ name, handicap, ...(accountUserId ? { accountUserId } : {}) })));
     if (!saved) { setMessage("Ya existe un grupo frecuente con ese nombre."); return; }
     setMessage("Grupo frecuente guardado."); setSaveIndex(null); setSaveName("");
   }
@@ -124,7 +124,7 @@ export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, 
     if (new Set(normalized).size !== normalized.length || normalized.some((name) => existing.has(name))) {
       setMessage("Cada grupo necesita un nombre distinto que no exista todavía."); return;
     }
-    const saved = groups.every((group, index) => onSaveFrequentGroup(cleaned[index], group.map(({ name, handicap }) => ({ name, handicap }))));
+    const saved = groups.every((group, index) => onSaveFrequentGroup(cleaned[index], group.map(({ name, handicap, accountUserId }) => ({ name, handicap, ...(accountUserId ? { accountUserId } : {}) }))));
     if (!saved) { setMessage("No se pudieron guardar todos los grupos. Revisa sus nombres."); return; }
     setSaveAllOpen(false); setSaveAllNames([]); setMessage("Todos los grupos se guardaron como grupos frecuentes.");
   }
@@ -132,8 +132,8 @@ export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, 
   return <>
     <section className="hero groupsHero"><div><div className="eyebrow">THE BACKYARD · GOLF</div><h1>Armar grupos</h1><p>Sortea foursomes sin iniciar una ronda. Nadie queda fuera.</p></div><button className="secondary" onClick={onBack}>← Volver a Inicio</button></section>
     <section className="card groupCapture"><div className="sectionTitle"><div><h2>Jugadores</h2><p>Frecuentes, grupos guardados o captura manual.</p></div><strong className="playerCounter">{players.length} jugadores</strong></div>
-      {frequentPlayers.length > 0 && <details className="frequentDisclosure groupBuilderDisclosure"><summary>Jugadores frecuentes ({frequentPlayers.length})</summary><div className="chips">{frequentPlayers.map((player) => <button className="chipButton" key={player.id} onClick={() => add({ id: id(), name: player.name, handicap: player.handicap })}>+ {player.name}{typeof player.handicap === "number" ? ` · HCP ${player.handicap}` : ""}</button>)}</div></details>}
-      {frequentGroups.length > 0 && <details className="frequentDisclosure groupBuilderDisclosure"><summary>Grupos guardados ({frequentGroups.length})</summary><div className="savedGroupManager">{frequentGroups.map((group) => <div className="savedGroupItem" key={group.id}>
+      {frequentPlayers.length > 0 && <details className="frequentDisclosure groupBuilderDisclosure"><summary><span>Jugadores frecuentes ({frequentPlayers.length})<small>Toca aquí para agregar un jugador</small></span></summary><div className="chips">{frequentPlayers.map((player) => <button className="chipButton" key={player.id} onClick={() => add({ id: id(), name: player.name, handicap: player.handicap, ...(player.accountUserId ? { accountUserId: player.accountUserId } : {}) })}>+ {player.name}{typeof player.handicap === "number" ? ` · HCP ${player.handicap}` : ""}</button>)}</div></details>}
+      {frequentGroups.length > 0 && <details className="frequentDisclosure groupBuilderDisclosure"><summary><span>Grupos guardados ({frequentGroups.length})<small>Toca aquí para agregar un grupo</small></span></summary><div className="savedGroupManager">{frequentGroups.map((group) => <div className="savedGroupItem" key={group.id}>
         <button className="savedGroupLoad" onClick={() => addFrequentGroup(group)}><b>{group.name}</b><span>{group.players.length} jugadores · Toca para cargar</span></button>
         <button className="savedGroupMenuButton" aria-label={`Administrar ${group.name}`} aria-expanded={openSavedGroupMenu === group.id} onClick={() => setOpenSavedGroupMenu((current) => current === group.id ? null : group.id)}>⋮</button>
         {openSavedGroupMenu === group.id && <div className="savedGroupMenu" role="menu" aria-label={`Opciones de ${group.name}`}>

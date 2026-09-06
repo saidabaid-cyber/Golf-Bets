@@ -51,9 +51,11 @@ export function discardAccountWorkspace(storage: WorkspaceStorage, userId: strin
 }
 
 export function preserveDraftConflict(storage: Pick<Storage, "getItem" | "setItem">, draft: unknown) {
-  if (!draft) return;
+  if (!draft) return false;
+  const serialized = JSON.stringify(draft);
   const versions = readStoredJson<unknown[]>(storage, CLOUD_CONFLICTS_KEY, []);
-  if (!versions.some(value => JSON.stringify(value) === JSON.stringify(draft))) storage.setItem(CLOUD_CONFLICTS_KEY, JSON.stringify([...versions, draft]));
+  if (!versions.some(value => JSON.stringify(value) === serialized)) storage.setItem(CLOUD_CONFLICTS_KEY, JSON.stringify([...versions, draft]));
+  return readStoredJson<unknown[]>(storage, CLOUD_CONFLICTS_KEY, []).some(value => JSON.stringify(value) === serialized);
 }
 
 export function preserveDataConflicts(storage: Pick<Storage, "getItem" | "setItem">, conflicts: unknown[]) {

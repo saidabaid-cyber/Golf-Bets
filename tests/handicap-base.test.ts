@@ -103,9 +103,9 @@ test("nueva ronda: todas apagadas; ninguna configuración se comparte con la ant
   const frozen = freezeRoundHandicapBases(fresh, players);
   assert.deepEqual(frozen, fresh);
   const ui = readFileSync("app/page.tsx", "utf8");
-  const reset = ui.slice(ui.indexOf("function resetRound()"), ui.indexOf("function deleteActiveRound()"));
+  const reset = ui.slice(ui.indexOf("function resetRound("), ui.indexOf("function deleteActiveRound()"));
   assert.match(reset, /setPersonalBets\(\[\]\)/);
-  assert.match(reset, /setBets\(initialBets\(\[\]\)\)/);
+  assert.match(reset, /setBets\(initialBets\(nextPlayers\.map/);
 });
 
 test("UI controles visibles sin motores internos y ayuda independiente para ambas apuestas", () => {

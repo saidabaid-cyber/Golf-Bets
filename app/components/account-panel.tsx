@@ -54,9 +54,9 @@ export function AccountPanel({ highContrast, onHighContrastChange }: { highContr
   }
 
   return <>
-    <section className="hero accountHero"><div><div className="eyebrow">THE BACKYARD ACCOUNT</div><h1>Mi Cuenta</h1><p>{identity.mode === "guest" ? "Estás usando The Backyard como invitado." : "Tu identidad para los juegos y futuros deportes de The Backyard."}</p></div></section>
+    <section className="hero accountHero"><div><div className="eyebrow">THE BACKYARD ACCOUNT</div><h1>Mi Cuenta</h1>{identity.mode === "authenticated" && <p>Tu identidad para los juegos y futuros deportes de The Backyard.</p>}</div></section>
 
-    {identity.mode === "guest" && <section className="card guestAccountCard"><h2>Modo invitado</h2><p>Los datos permanecen en este dispositivo. Crear una cuenta permitirá sincronizar tu información cuando la nube esté activada.</p><div className="accountInlineActions"><button className="primary" onClick={openAccess}>Crear cuenta</button><button className="secondary" onClick={openAccess}>Iniciar sesión</button></div></section>}
+    {identity.mode === "guest" && <section className="card guestAccountCard"><h2>Modo invitado · Los datos permanecen en este dispositivo</h2><div className="accountInlineActions"><button className="primary" onClick={openAccess}>Crear cuenta</button><button className="secondary" onClick={openAccess}>Iniciar sesión</button></div></section>}
 
     {identity.mode === "authenticated" && <section className="card cloudAccountStatus" aria-label="Estado de la cuenta">
       <h2>{sessionExpired ? "Datos disponibles en este dispositivo" : "Sesión iniciada"}</h2>
@@ -68,11 +68,11 @@ export function AccountPanel({ highContrast, onHighContrastChange }: { highContr
     </section>}
     {identity.mode === "authenticated" && !cloudLinked && <section className="card"><h2>Sincronización</h2><p>Tus datos siguen seguros en este dispositivo. Puedes vincularlos a tu cuenta cuando la nube esté configurada.</p><button className="primary" onClick={requestCloudLink}>Vincular datos locales</button></section>}
 
-    <section className="card profileCard">
-      <div className="sectionTitle"><div className="profileIdentity"><div className="accountAvatar">{identity.avatarUrl ? <img src={identity.avatarUrl} alt="Avatar" /> : (identity.displayName.trim()[0] || "J").toUpperCase()}</div><div><h2>{identity.displayName}</h2><p>{identity.email || "Sin correo · Invitado"}</p></div></div><button className="secondary" onClick={() => setEditing((value) => !value)}>{editing ? "Cancelar" : "Editar"}</button></div>
+    {identity.mode === "authenticated" && <section className="card profileCard">
+      <div className="sectionTitle"><div className="profileIdentity"><div className="accountAvatar">{identity.avatarUrl ? <img src={identity.avatarUrl} alt="Avatar" /> : (identity.displayName.trim()[0] || "J").toUpperCase()}</div><div><h2>{identity.displayName}</h2><p>{identity.email || "Sin correo"}</p></div></div><button className="secondary" onClick={() => setEditing((value) => !value)}>{editing ? "Cancelar" : "Editar"}</button></div>
       {editing && <div className="profileForm"><label>Nombre<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Tu nombre" /></label><label>HCP Index (opcional)<input type="text" inputMode="text" value={handicap} onChange={(event) => setHandicap(event.target.value)} placeholder="Ej. 8.4 o +1.2" /></label><button className="primary" disabled={savingProfile} onClick={saveProfile}>{savingProfile ? "Guardando…" : "Guardar perfil"}</button></div>}
       {!editing && <div className="profileMeta"><span>HCP Index</span><b>{profileHandicapLabel(identity.defaultHandicap)}</b></div>}
-    </section>
+    </section>}
 
     <section className="card"><h2>Documentos y consentimiento</h2><div className="documentConsentList">
       <Link href="/legal/terms?returnTo=account"><span>Términos de Uso</span><b>{acceptedLabel("terms")}</b></Link>
@@ -83,7 +83,7 @@ export function AccountPanel({ highContrast, onHighContrastChange }: { highContr
     </div></section>
     {!bettingConsentGranted && <section className="card"><h2>Funciones de apuestas</h2><p className="muted">Para activar o registrar apuestas, resultados y gastos necesitas otorgar el consentimiento específico. Las demás funciones y tus datos anteriores siguen disponibles.</p><button type="button" className="secondary" onClick={() => void requestBettingConsent()}>Revisar consentimiento específico</button></section>}
 
-    <section className="card"><h2>Métodos de acceso</h2>{identity.mode === "guest" ? <p className="muted">Invitado local · sin proveedor vinculado</p> : <div className="accessMethodList">{["google", "email"].map((provider) => <span key={provider}>{provider === "google" ? "Google" : "Correo"}<b>{identity.providers.includes(provider) || (provider === "email" && Boolean(identity.email)) ? "✓" : "—"}</b></span>)}</div>}<p className="hint">Tu cuenta conserva el mismo perfil tanto con Google como con código por correo.</p></section>
+    {identity.mode === "authenticated" && <section className="card"><h2>Métodos de acceso</h2><div className="accessMethodList">{["google", "email"].map((provider) => <span key={provider}>{provider === "google" ? "Google" : "Correo"}<b>{identity.providers.includes(provider) || (provider === "email" && Boolean(identity.email)) ? "✓" : "—"}</b></span>)}</div><p className="hint">Tu cuenta conserva el mismo perfil tanto con Google como con código por correo.</p></section>}
 
     <section className="card"><h2>Preferencias</h2><label className="preferenceRow"><span>Alto contraste</span><input type="checkbox" checked={highContrast} onChange={(event) => onHighContrastChange(event.target.checked)} /></label><label className="preferenceRow"><span>Idioma</span><select value="es" disabled><option value="es">Español</option></select></label><label className="preferenceRow"><span>Notificaciones</span><select value="future" disabled><option value="future">Próximamente</option></select></label></section>
 

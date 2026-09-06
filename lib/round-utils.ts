@@ -271,19 +271,25 @@ export function pushUndoState<T>(stack: T[], state: T, limit = 15) {
 }
 
 export function upsertFrequentPlayers(current: FrequentPlayer[], players: Player[], updatedAt: string) {
-  const byName = new Map(current.map((player) => [player.name.trim().toLocaleLowerCase("es-MX"), player]));
+  const next = [...current];
   for (const player of players.filter((item) => item.name.trim())) {
-    const key = player.name.trim().toLocaleLowerCase("es-MX");
-    const previous = byName.get(key);
-    byName.set(key, {
+    const nameKey = player.name.trim().toLocaleLowerCase("es-MX");
+    const index = player.accountUserId
+      ? next.findIndex((candidate) => candidate.accountUserId === player.accountUserId)
+      : next.findIndex((candidate) => !candidate.accountUserId && candidate.name.trim().toLocaleLowerCase("es-MX") === nameKey);
+    const previous = index >= 0 ? next[index] : undefined;
+    const value: FrequentPlayer = {
       id: previous?.id || player.id,
       name: player.name.trim(),
       handicap: player.handicap,
+      ...(player.accountUserId ? { accountUserId: player.accountUserId } : {}),
       uses: (previous?.uses || 0) + 1,
       updatedAt,
-    });
+    };
+    if (index >= 0) next[index] = value;
+    else next.push(value);
   }
-  return Array.from(byName.values()).sort((a, b) => b.uses - a.uses || a.name.localeCompare(b.name, "es-MX"));
+  return next.sort((a, b) => b.uses - a.uses || a.name.localeCompare(b.name, "es-MX"));
 }
 
 export function buildHoleSummary(hole: number, players: Player[], scores: Record<number, HoleScore>, extras: string[] = []) {

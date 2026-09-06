@@ -90,6 +90,7 @@ import { deleteScorecardPhoto, deleteScorecardPhotoCloud, readScorecardPhoto, re
 import { actionableCloudConflicts, CLOUD_TOMBSTONES_KEY, cloudDataFingerprint, collectLocalCloudData, downloadCloudData, findAmbiguousCloudConflicts, isCloudFieldConflict, mergeLocalAndCloud, persistCloudMetadata, resolveAmbiguousCloudConflicts, restoreLocalRoundUi, stableValue, trackLocalCloudEdits, type CloudDataBundle, type CloudDataConflict, recordCloudDeletion, uploadCloudData, withCloudAuthRetry } from "../lib/cloud-sync";
 import { describeCloudConflict } from "../lib/cloud-conflict-display";
 import { ownsLocalWorkspace, preserveDataConflicts, preserveDraftConflict } from "../lib/account-workspace";
+import { accountPrimaryPlayerId, accountPrimaryRoundPlayer, syncAccountPrimaryFrequentPlayer, syncLinkedRoundPlayerName } from "../lib/account-primary-player";
 import { runCloudSyncCycle } from "../lib/cloud-sync-cycle";
 import { CloudSyncGate, cloudSyncErrorMessage, syncStatusAfterSkip, type CloudSyncTrigger } from "../lib/cloud-sync-gate";
 import { adoptGuestPhotoJobs, flushPhotoQueue, queuePhoto, photoJobs } from "../lib/photo-sync-queue";
@@ -477,6 +478,8 @@ function GolfBetsApp() {
   const [privateBoardMode, setPrivateBoardMode] = useState<"gross" | "net">("net");
   const [undoCount, setUndoCount] = useState(0);
   const [showDeleteRoundConfirm, setShowDeleteRoundConfirm] = useState(false);
+  const [showNewRoundConfirm, setShowNewRoundConfirm] = useState(false);
+  const [newRoundBackupError, setNewRoundBackupError] = useState("");
   const [editingFrequentPlayerId, setEditingFrequentPlayerId] = useState<string | null>(null);
   const [frequentPlayerDraft, setFrequentPlayerDraft] = useState<{ name: string; handicap: number | null }>({ name: "", handicap: null });
   const [frequentPlayerToDelete, setFrequentPlayerToDelete] = useState<FrequentPlayer | null>(null);
@@ -737,6 +740,20 @@ function GolfBetsApp() {
       document.removeEventListener("visibilitychange", flushWhenHidden);
     };
   }, [hydrated]);
+
+  useEffect(() => {
+    if (!hydrated || identity.mode !== "authenticated" || !identity.displayName.trim()) return;
+    const profile = {
+      userId: identity.userId,
+      displayName: identity.displayName,
+      email: identity.email,
+      avatarUrl: identity.avatarUrl,
+      defaultHandicap: identity.defaultHandicap,
+    };
+    const updatedAt = new Date().toISOString();
+    setFrequentPlayers((current) => syncAccountPrimaryFrequentPlayer(current, profile, updatedAt));
+    setPlayers((current) => syncLinkedRoundPlayerName(current, profile));
+  }, [hydrated, identity.mode, identity.userId, identity.displayName, identity.email, identity.avatarUrl, identity.defaultHandicap]);
 
   const applyCloudBundle = useCallback((data: CloudDataBundle, local: CloudDataBundle) => {
     // Cloud responses can arrive after a local-first finalization. Reconcile
@@ -1177,9 +1194,13 @@ function GolfBetsApp() {
     setPlayers((ps) => ps.map((p) => p.id === id ? { ...p, ...patch } : p));
   }
 
-  function appendPlayer(name = "", handicap: number | null = null) {
-    const id = makeId();
-    const p: Player = { id, name, handicap };
+  function appendPlayer(name = "", handicap: number | null = null, accountUserId?: string) {
+    if (accountUserId && players.some((player) => player.accountUserId === accountUserId || player.id === accountPrimaryPlayerId(accountUserId))) {
+      setFeedback("Ese jugador principal ya está en la ronda.");
+      return;
+    }
+    const id = accountUserId ? accountPrimaryPlayerId(accountUserId) : makeId();
+    const p: Player = { id, name, handicap, ...(accountUserId ? { accountUserId } : {}) };
     setPlayers((ps) => [...ps, p]);
     if (!players.length) setOwnerId(id);
     setBets((b) => ({
@@ -1568,12 +1589,36 @@ function GolfBetsApp() {
     catch { setFeedback("No se pudo copiar automáticamente. Selecciona y copia el resumen de abajo."); setCopyFallback(text); }
   }
 
-  function resetRound() {
+  function resetRound(nextFeedback = "") {
+    const principal = identity.mode === "authenticated" ? accountPrimaryRoundPlayer(identity) : null;
+    const nextPlayers = principal ? [principal] : [];
     setEditingRound(false); setRoundClosed(false); setRoundReviewPending(false); setShowRoundFinishedNotice(false); setFeedback("");
-    setPlayers([]); setOwnerId("");
+    setPlayers(nextPlayers); setOwnerId(principal?.id || "");
     setScores({}); setScoreEdits({}); setPutts({}); setUnitEvents([]); setCounterBetEvents([]); setCounterBetKeepers(emptyCounterBetKeepers()); setLobaHoles({}); setBallFriendSetup({}); setPersonalBets([]); setSupplementalBets([]); setManualBets([]); setShowFullScorecard(false); setExpenses(emptyExpenses);
-    setBets(initialBets([])); setRoundHandicapBasis("relative"); setSegments(segmentDefinitions(playOrder(startHole).slice(0, roundHoles), 6)); setCourseSelected(false); setCourseSelectionError(false);
-    setCurrentIndex(0); setRoundId(makeId()); setRoundDate(localDateMexico()); setDraftAvailable(false); setHoleSummary([]); setShowDeleteRoundConfirm(false); undoStack.current = []; setUndoCount(0); setTab("setup");
+    setBets(initialBets(nextPlayers.map((player) => player.id))); setRoundHandicapBasis("relative"); setSegments(segmentDefinitions(playOrder(startHole).slice(0, roundHoles), 6)); setCourseSelected(false); setCourseSelectionError(false);
+    setCurrentIndex(0); setRoundId(makeId()); setRoundDate(localDateMexico()); setDraftAvailable(false); setHoleSummary([]); setShowDeleteRoundConfirm(false); setShowNewRoundConfirm(false); setNewRoundBackupError(""); undoStack.current = []; setUndoCount(0); setTab("setup");
+    if (nextFeedback) setFeedback(nextFeedback);
+  }
+
+  function requestNewRound() {
+    if (draftAvailable && !roundClosed) {
+      setNewRoundBackupError("");
+      setShowNewRoundConfirm(true);
+      return;
+    }
+    resetRound();
+  }
+
+  function confirmNewRound() {
+    setNewRoundBackupError("");
+    try {
+      if (!flushLocalState.current?.()) throw new Error("local write failed");
+      const activeDraft = readStoredJson<unknown>(localStorage, STORAGE_KEYS.draft, null);
+      if (!hasRoundProgress(activeDraft) || !preserveDraftConflict(localStorage, activeDraft)) throw new Error("backup verification failed");
+      resetRound("La ronda anterior quedó respaldada en este dispositivo.");
+    } catch {
+      setNewRoundBackupError("No se pudo comprobar el respaldo de la ronda actual. No se inició otra ronda; vuelve a intentar.");
+    }
   }
 
   function deleteActiveRound() {
@@ -1676,13 +1721,13 @@ function GolfBetsApp() {
 
   function saveFrequentGroup() {
     const name = groupName.trim();
-    const groupPlayers = players.filter((player) => player.name.trim()).map((player) => ({ name: player.name.trim(), handicap: player.handicap }));
+    const groupPlayers = players.filter((player) => player.name.trim()).map((player) => ({ name: player.name.trim(), handicap: player.handicap, ...(player.accountUserId ? { accountUserId: player.accountUserId } : {}) }));
     if (!name || !groupPlayers.length) return;
     setFrequentGroups((groups) => [{ id: makeId(), name, players: groupPlayers, uses: 0, updatedAt: new Date().toISOString() }, ...groups.filter((group) => group.name.toLocaleLowerCase("es-MX") !== name.toLocaleLowerCase("es-MX"))]);
     setGroupName("");
   }
 
-  function saveGeneratedFrequentGroup(name: string, groupPlayers: Array<Pick<Player, "name" | "handicap">>) {
+  function saveGeneratedFrequentGroup(name: string, groupPlayers: Array<Pick<Player, "name" | "handicap" | "accountUserId">>) {
     const normalized = name.trim().toLocaleLowerCase("es-MX");
     if (!normalized || frequentGroups.some((group) => group.name.trim().toLocaleLowerCase("es-MX") === normalized)) return false;
     setFrequentGroups((groups) => [{ id: makeId(), name: name.trim(), players: structuredClone(groupPlayers), uses: 0, updatedAt: new Date().toISOString() }, ...groups]);
@@ -1691,9 +1736,9 @@ function GolfBetsApp() {
 
   function startRoundWithGeneratedGroup(groupPlayers: Player[]) {
     resetRound();
-    const loaded = groupPlayers.map((player) => ({ ...player, id: makeId() }));
+    const loaded = groupPlayers.map((player) => ({ ...player, id: player.accountUserId ? accountPrimaryPlayerId(player.accountUserId) : makeId() }));
     setPlayers(loaded);
-    setOwnerId(loaded[0]?.id || "");
+    setOwnerId(loaded.find((player) => player.accountUserId === identity.userId)?.id || loaded[0]?.id || "");
     setBets(initialBets(loaded.map((player) => player.id)));
     setTab("setup");
   }
@@ -1702,7 +1747,7 @@ function GolfBetsApp() {
     confirmRoundChange("Cargar el grupo reemplazará los jugadores y apuestas actuales. Los scores anteriores quedarán conservados, pero no se asignarán automáticamente a nuevos jugadores.", () => {
     const loaded = playersFromFrequentGroup(group, makeId);
     setPlayers(loaded);
-    setOwnerId(loaded[0]?.id || "");
+    setOwnerId(loaded.find((player) => player.accountUserId === identity.userId)?.id || loaded[0]?.id || "");
     setBets(initialBets(loaded.map((player) => player.id)));
     setFrequentGroups((groups) => groups.map((item) => item.id === group.id ? { ...item, uses: item.uses + 1, updatedAt: new Date().toISOString() } : item));
     });
@@ -2250,7 +2295,7 @@ function GolfBetsApp() {
       <h1>¿Listos para jugar?</h1>
       <p>Inicia una ronda nueva y configura jugadores, campo y apuestas.</p>
       <div className="guestModeLine">{identity.mode === "guest" ? "Modo invitado · Los datos permanecen en este dispositivo" : cloudIssues.some((issue) => issue.kind === "session_expired") ? `Perfil local · ${identity.displayName} · Vuelve a iniciar sesión para conectar la nube` : `The Backyard Account · ${identity.displayName}`}</div>
-      <button className="primary big" onClick={resetRound}>Nueva ronda</button>
+      <button className="primary big" onClick={requestNewRound}>Nueva ronda</button>
       <button className="secondary big groupsHomeButton" onClick={() => setTab("groups")}>Armar grupos</button>
       {draftAvailable && !roundClosed && <div className="activeRoundActions"><button className="secondary big" onClick={editActiveRound}>Editar ronda</button><button className="primary big" onClick={() => setTab(roundReviewPending ? "results" : players.length ? "round" : "setup")}>{roundReviewPending ? "Revisar ronda terminada" : `Continuar ronda · H${order[currentIndex]}`}</button><button className="deleteRoundButton" onClick={() => setShowDeleteRoundConfirm(true)}>Eliminar ronda</button></div>}
       <div className="welcomeLinks"><button className="secondary" onClick={() => { setRulesCourseContext(draftAvailable && courseSelected ? course.name : ""); setTab("rules"); }}>⚑ Reglas de Golf</button><button className="secondary" onClick={() => setTab("pollaLive")}>🏆 Polla Live</button></div>
@@ -2261,6 +2306,7 @@ function GolfBetsApp() {
     {tab !== "welcome" && tab !== "rules" && <button className="secondary pageBack" onClick={goBack}>← Regresar</button>}
     {feedback && <div className="notice" role="status">{feedback}<button className="textButton" aria-label="Cerrar mensaje" onClick={() => setFeedback("")}>×</button></div>}
     {copyFallback && <section className="card"><label>Resumen para copiar<textarea readOnly value={copyFallback} onFocus={event => event.currentTarget.select()} /></label><button onClick={() => setCopyFallback("")}>← Regresar</button></section>}
+    {showNewRoundConfirm && <div className="modalBackdrop"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="new-round-title" aria-describedby="new-round-description"><h2 id="new-round-title">¿Iniciar una nueva ronda?</h2><p id="new-round-description">Ya tienes una ronda en curso. Si comienzas una nueva, la ronda actual dejará de ser la ronda activa.</p>{newRoundBackupError && <div className="notice bad" role="alert">{newRoundBackupError}</div>}<div className="dialogActions"><button autoFocus className="secondary" onClick={() => { setShowNewRoundConfirm(false); setNewRoundBackupError(""); }}>Cancelar</button><button className="primary" onClick={confirmNewRound}>Sí, iniciar nueva ronda</button></div></section></div>}
     {pendingRoundAction && <div className="modalBackdrop"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="round-change-title"><h2 id="round-change-title">Confirmar cambios</h2><p>{pendingRoundAction.message}</p><div className="dialogActions"><button autoFocus className="secondary" onClick={() => setPendingRoundAction(null)}>Cancelar</button><button className="primary" onClick={() => { const action = pendingRoundAction; setPendingRoundAction(null); action.run(); }}>Confirmar</button></div></section></div>}
     {showRoundFinishedNotice && <div className="modalBackdrop"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="round-finished-title"><h2 id="round-finished-title">Ronda terminada</h2><p>{ROUND_REVIEW_NOTICE}</p><div className="dialogActions"><button autoFocus className="primary" onClick={() => { setShowRoundFinishedNotice(false); setTab("results"); }}>Revisar resultados</button></div></section></div>}
     {pendingCloudConflict && (() => { const conflict = pendingCloudConflict.conflicts[0]; if (!conflict) return null; const display = describeCloudConflict(conflict, playerName); return <div className="modalBackdrop"><section className="confirmDialog" role="alertdialog" aria-modal="true" aria-labelledby="cloud-conflict-title"><h2 id="cloud-conflict-title">Cambio en dos dispositivos</h2><p>Elige únicamente el dato en conflicto. Los demás cambios compatibles ya se combinaron.</p><div className="cloudConflictField"><b>{display.label}</b><span>Nube: {display.cloudValue}</span><span>Este dispositivo: {display.localValue}</span></div>{pendingCloudConflict.conflicts.length > 1 && <small>Quedan {pendingCloudConflict.conflicts.length} conflictos por revisar.</small>}<div className="dialogActions"><button className="secondary" onClick={() => resolveCloudConflict("cloud")}>Usar nube para este dato</button><button className="primary" onClick={() => resolveCloudConflict("local")}>Usar este dispositivo</button></div></section></div>; })()}
@@ -2301,16 +2347,16 @@ function GolfBetsApp() {
         <RoundHandicapBasisControl value={roundHandicapBasis} onChange={setRoundHandicapBasis} />
         <div className="hint">★ marca al jugador principal para estadísticas y gastos.</div>
         {(frequentGroups.length > 0 || frequentPlayers.length > 0) && <div className="frequentBox">
-          {frequentGroups.length > 0 && <details className="frequentDisclosure"><summary>Grupos guardados ({frequentGroups.length})</summary><div className="frequentGroupList">{frequentGroups.map((group) => <div className="templateRow groupTemplateRow" key={group.id}>
+          {frequentGroups.length > 0 && <details className="frequentDisclosure"><summary><span>Grupos guardados ({frequentGroups.length})<small>Toca aquí para agregar un grupo</small></span></summary><div className="frequentGroupList">{frequentGroups.map((group) => <div className="templateRow groupTemplateRow" key={group.id}>
             <button className="templateLoad" onClick={() => loadFrequentGroup(group)} aria-label={`Cargar grupo ${group.name} a la ronda`}><b>{group.name}</b><span>{group.players.map((member) => member.name).join(" · ")}<br />Toca el nombre para cargar este grupo</span></button>
             <div className="templateActions"><button className="secondary" onClick={() => beginEditFrequentGroup(group)}>✏ Editar</button><button className="dangerGhost" onClick={() => setFrequentGroupToDelete(group)}>🗑 Eliminar</button></div>
           </div>)}</div></details>}
-          {frequentPlayers.length > 0 && <details className="frequentDisclosure"><summary>Jugadores frecuentes ({frequentPlayers.length})</summary><div className="frequentTemplateList">{frequentPlayers.map((saved) => editingFrequentPlayerId === saved.id ? <div className="templateEditor" key={saved.id}>
+          {frequentPlayers.length > 0 && <details className="frequentDisclosure"><summary><span>Jugadores frecuentes ({frequentPlayers.length})<small>Toca aquí para agregar un jugador</small></span></summary><div className="frequentTemplateList">{frequentPlayers.map((saved) => editingFrequentPlayerId === saved.id ? <div className="templateEditor" key={saved.id}>
             <input aria-label="Nombre frecuente" value={frequentPlayerDraft.name} onChange={(event) => setFrequentPlayerDraft((draft) => ({ ...draft, name: event.target.value }))} />
             <NumericCaptureInput aria-label="HCP frecuente" className="hcpInput" inputMode="decimal" step={0.1} min={-15} max={54} placeholder="HCP" value={frequentPlayerDraft.handicap} emptyWhenZero={false} onValueChange={(handicap) => setFrequentPlayerDraft((draft) => ({ ...draft, handicap }))} />
             <div className="templateActions"><button className="primary" disabled={!frequentPlayerDraft.name.trim()} onClick={saveFrequentPlayerEdit}>Guardar</button><button className="secondary" onClick={() => setEditingFrequentPlayerId(null)}>Cancelar</button></div>
           </div> : <div className="templateRow" key={saved.id}>
-            <button className="templateLoad" onClick={() => appendPlayer(saved.name, saved.handicap)}><b>{saved.name}</b><span>HCP {saved.handicap ?? "—"} · + Agregar</span></button>
+            <button className="templateLoad" onClick={() => appendPlayer(saved.name, saved.handicap, saved.accountUserId)}><b>{saved.name}</b><span>HCP {saved.handicap ?? "—"} · + Agregar</span></button>
             <div className="templateActions"><button className="secondary" onClick={() => beginEditFrequentPlayer(saved)}>✏ Editar</button><button className="dangerGhost" onClick={() => setFrequentPlayerToDelete(saved)}>🗑 Eliminar</button></div>
           </div>)}</div></details>}
         </div>}
@@ -2648,7 +2694,7 @@ function GolfBetsApp() {
 
       {personalModesActive && <ResultAccordion id="personals" title={betDisplayLabel("personals")} {...resultAccordionProps("personals")}><p className="muted">Balances contra cada contrincante. Estas tres modalidades no forman parte del Resumen General.</p><PersonalOpponentResults entries={personalOpponentResults} /></ResultAccordion>}
 
-      <ResultAccordion id="expenses" title={`Gastos de ${owner?.name}`} {...resultAccordionProps("expenses")}>
+      <ResultAccordion id="expenses" title="Gastos" {...resultAccordionProps("expenses")}>
         <div className="grid2">
           <MoneyInput label="Caddie" value={expenses.caddie} onChange={(v) => runAfterBettingConsent(() => setExpenses({ ...expenses, caddie: v }))} />
           <MoneyInput label="Alimentos" value={expenses.food} onChange={(v) => runAfterBettingConsent(() => setExpenses({ ...expenses, food: v }))} />
@@ -2666,7 +2712,7 @@ function GolfBetsApp() {
       </ResultAccordion>
 
       <section className="card summaryCard"><div><span>Apuestas</span><b className={ownerBetResult >= 0 ? "good" : "bad"}>{money(ownerBetResult)}</b></div><div><span>Gastos</span><b className="bad">{money(-ownerExpenseTotal)}</b></div><div className="grand"><span>NETO DEL DÍA</span><b className={ownerNet >= 0 ? "good" : "bad"}>{money(ownerNet)}</b></div></section>
-      <div className="roundActions"><button className="secondary big" onClick={async () => { const snapshot = currentSnapshot(); if (snapshot) await shareRound(snapshot); }}>Compartir ronda</button>{!roundReviewPending && <button className="secondary big" onClick={resetRound}>Nueva ronda</button>}{roundClosed ? <button className="primary big" onClick={() => setTab("history")}>Abrir Histórico</button> : roundReviewPending ? <button className="primary big" disabled={saveStatus === "saving"} onPointerDown={commitFocusedNumericCapture} onClick={requestRoundHistorySave}>Guardar en Histórico</button> : <button className="primary big" onClick={() => setTab("round")}>Volver a la ronda</button>}</div>
+      <div className="roundActions"><button className="secondary big" onClick={async () => { const snapshot = currentSnapshot(); if (snapshot) await shareRound(snapshot); }}>Compartir ronda</button>{!roundReviewPending && <button className="secondary big" onClick={requestNewRound}>Nueva ronda</button>}{roundClosed ? <button className="primary big" onClick={() => setTab("history")}>Abrir Histórico</button> : roundReviewPending ? <button className="primary big" disabled={saveStatus === "saving"} onPointerDown={commitFocusedNumericCapture} onClick={requestRoundHistorySave}>Guardar en Histórico</button> : <button className="primary big" onClick={() => setTab("round")}>Volver a la ronda</button>}</div>
     </>}
 
     {tab === "history" && <>
@@ -2675,7 +2721,7 @@ function GolfBetsApp() {
       <div className="statsGrid"><div className="stat"><span>Neto este mes</span><b className={sum(monthRounds, "netResult") >= 0 ? "good" : "bad"}>{money(sum(monthRounds, "netResult"))}</b><small>{monthRounds.length} rondas</small></div><div className="stat"><span>Neto este año</span><b className={sum(yearRounds, "netResult") >= 0 ? "good" : "bad"}>{money(sum(yearRounds, "netResult"))}</b><small>{yearRounds.length} rondas</small></div><div className="stat"><span>Apuestas año</span><b>{money(sum(yearRounds, "betResult"))}</b><small>sin gastos</small></div><div className="stat"><span>Gasto año</span><b className="bad">{money(-sum(yearRounds, "expenseTotal"))}</b><small>costo real</small></div></div>
       {golfStats.rounds > 0 && <ResultAccordion id="history-bet-balance" title="Balance por apuesta"><div className="expenseBars">{Object.entries(golfStats.categoryTotals).map(([name, value]) => <div key={name}><span>{historicalBetDisplayLabel(name)}</span><b className={value > 0 ? "good" : value < 0 ? "bad" : ""}>{signedMoney(value)}</b></div>)}</div></ResultAccordion>}
       <ResultAccordion id="history-year-expenses" title="Gastos del año"><div className="expenseBars">{([['caddie','Caddie'],['food','Alimentos'],['drinks','Bebidas'],['greenFee','Greenfee'],['cartRental','Renta carrito'],['other','Otros']] as [keyof Expense,string][]).map(([k, label]) => <div key={k}><span>{label}</span><b>{money(expenseByKey(yearRounds, k))}</b></div>)}</div></ResultAccordion>
-      <section className="card"><div className="sectionTitle"><div><h2>Rondas</h2><p>Más recientes primero. Los campos se guardan como snapshot.</p></div><button className="textButton" onClick={resetRound}>+ Nueva</button></div>
+      <section className="card"><div className="sectionTitle"><div><h2>Rondas</h2><p>Más recientes primero. Los campos se guardan como snapshot.</p></div><button className="textButton" onClick={requestNewRound}>+ Nueva</button></div>
         <div className="historyFilters" aria-label="Filtrar rondas por fecha"><label>Año<select value={historyYear} onChange={(event) => setHistoryYear(event.target.value)}><option value="">Todos</option>{availableHistoryYears.map((year) => <option key={year} value={year}>{year}</option>)}</select></label><label>Mes<select value={historyMonth} onChange={(event) => setHistoryMonth(event.target.value)}><option value="">Todos</option>{MONTH_LABELS.map((label, index) => <option key={label} value={String(index + 1).padStart(2, "0")}>{label}</option>)}</select></label></div>
         {!history.length ? <div className="empty">Todavía no has guardado rondas.</div> : !filteredHistory.length ? <div className="empty">No hay rondas en el periodo seleccionado.</div> : filteredHistory.map((r) => <div className="historyRound" key={r.id}><div className="historyRow"><div><b>{r.courseName}</b><span>{r.date} · {r.roundHoles || 18} hoyos · apuestas {money(r.betResult)} · gastos {money(r.expenseTotal)}</span></div><strong className={r.netResult >= 0 ? "good" : "bad"}>{money(r.netResult)}</strong></div><div className="historyActions"><button onClick={() => { setHistoryDetailId(r.id); setTab("historyDetail"); }}>Abrir ronda</button><button onClick={() => downloadRoundCsv(r)}>CSV</button><button onClick={() => downloadRoundPdf(r)}>PDF</button><button onClick={() => downloadRoundImage(r)}>Imagen</button><button onClick={() => shareRound(r)}>Compartir</button><label className="uploadButton">{r.photoId ? "Cambiar foto" : "Agregar foto de tarjeta"}<input type="file" accept="image/*" capture="environment" onChange={(event) => attachScorecardPhoto(r, event.target.files?.[0])} /></label>{r.photoId && <button onClick={() => viewScorecardPhoto(r)}>Ver tarjeta original</button>}<button className="dangerGhost" onClick={() => setHistoricalRoundToDelete(r)}>Eliminar ronda</button></div></div>)}
       </section>

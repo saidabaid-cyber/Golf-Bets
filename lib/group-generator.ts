@@ -1,4 +1,4 @@
-export type GroupPlayer = { id: string; name: string; handicap: number | null };
+export type GroupPlayer = { id: string; name: string; handicap: number | null; accountUserId?: string };
 export type GroupTarget = 3 | 4 | 5;
 
 function compositions(total: number, min = 3, max = 5): number[][] {
