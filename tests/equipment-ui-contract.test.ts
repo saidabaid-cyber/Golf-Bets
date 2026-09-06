@@ -14,6 +14,8 @@ const workspace = readFileSync("lib/account-workspace.ts", "utf8");
 const equipmentProfileHook = readFileSync("app/components/use-equipment-profile.ts", "utf8");
 const catalogSearchHook = readFileSync("app/components/use-equipment-catalog-search.ts", "utf8");
 const catalogRoute = readFileSync("app/api/catalog/equipment/route.ts", "utf8");
+const ballFitRoute = readFileSync("app/api/ball-fitting/route.ts", "utf8");
+const ballFitApi = readFileSync("lib/ball-fitting-api.ts", "utf8");
 const catalogServerLoader = readFileSync("lib/equipment-catalog-provider.server.ts", "utf8");
 
 test("el onboarding de equipo ocurre después del perfil básico y siempre se puede omitir", () => {
@@ -67,6 +69,23 @@ test("bola y Ball Fit exponen el flujo completo sin presentar una verdad oficial
   assert.match(wizard, /BACKYARD_BALL_FIT_DISCLAIMER/);
   assert.match(fitting, /No es un fitting oficial/);
   assert.doesNotMatch(wizard, /fitting oficial de (Titleist|Callaway|Bridgestone)/i);
+});
+
+test("Ball Fit evalúa el catálogo completo en servidor y falla cerrado antes de rankear una página parcial", () => {
+  assert.match(wizard, /fetch\("\/api\/ball-fitting"/);
+  assert.match(wizard, /createBallFitTransportInput\(input\)/);
+  assert.match(wizard, /JSON\.stringify\(\{ input: transportInput \}\)/);
+  assert.doesNotMatch(wizard, /runBackyardBallFit\(catalog,/);
+  assert.match(wizard, /normalizeBallFitApiSuccess/);
+  assert.match(wizard, /no mostramos rankings parciales/);
+  assert.match(ballFitRoute, /loadBallFitCatalog/);
+  assert.match(ballFitRoute, /normalizeBallFitTransportInput/);
+  assert.match(ballFitRoute, /BALL_FIT_CATALOG_MAX_CANDIDATES/);
+  assert.match(ballFitRoute, /if \(!scope\.complete\)/);
+  assert.match(ballFitRoute, /runBackyardBallFit\(scope\.items, input\)/);
+  assert.match(ballFitRoute, /private, no-store/);
+  assert.match(ballFitApi, /BALL_FIT_CATALOG_MAX_CANDIDATES = 2_000/);
+  assert.match(ballFitApi, /returns only the current and recommended records/);
 });
 
 test("los selectores buscan catálogo en servidor con debounce, límite y fallback offline", () => {

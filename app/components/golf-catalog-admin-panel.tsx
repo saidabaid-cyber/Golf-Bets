@@ -1,13 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { GolfCatalogAdminResource } from "../../lib/golf-catalog-admin-contract";
+import { createLatestRequestGate } from "../../lib/latest-request-gate";
 import { useBackyardAccount } from "./account-provider";
 import styles from "../admin/admin.module.css";
 
 type AdminItem = Record<string, unknown> & { id: string; active?: boolean };
+type AdminEditSelection = Readonly<{ resource: GolfCatalogAdminResource; item: AdminItem }>;
+type AdminLoadContext = Readonly<{
+  resource: GolfCatalogAdminResource;
+  query: string;
+  includeArchived: boolean;
+  token: string | null;
+}>;
 type FieldKind = "text" | "number" | "url" | "datetime-local" | "select";
 type FieldDefinition = {
   name: string;
@@ -170,6 +178,13 @@ function responseError(value: unknown, fallback: string): string {
   return isRecord(value) && typeof value.error === "string" ? value.error : fallback;
 }
 
+function sameLoadContext(left: AdminLoadContext, right: AdminLoadContext): boolean {
+  return left.resource === right.resource
+    && left.query === right.query
+    && left.includeArchived === right.includeArchived
+    && left.token === right.token;
+}
+
 export function GolfCatalogAdminPanel() {
   const { identity, openAccess } = useBackyardAccount();
   const [resource, setResource] = useState<GolfCatalogAdminResource>("balls");
@@ -181,16 +196,21 @@ export function GolfCatalogAdminPanel() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const [editing, setEditing] = useState<AdminItem | null>(null);
+  const [editing, setEditing] = useState<AdminEditSelection | null>(null);
   const editor = useMemo(() => EDITORS.find(candidate => candidate.resource === resource) || EDITORS[0], [resource]);
   const [values, setValues] = useState<Record<string, string>>(() => ({ ...editor.defaults }));
   const [brandOptions, setBrandOptions] = useState<readonly { value: string; label: string }[]>([]);
   const [brandsLoading, setBrandsLoading] = useState(false);
   const [brandError, setBrandError] = useState("");
   const token = identity.mode === "authenticated" ? identity.accessToken : null;
+  const loadRequestGate = useRef(createLatestRequestGate());
+  const loadContext = useRef<AdminLoadContext>({ resource, query, includeArchived, token });
 
   const load = useCallback(async (cursor: string | null = null, append = false) => {
     if (!token) return;
+    const requestedContext: AdminLoadContext = { resource, query, includeArchived, token };
+    if (!sameLoadContext(loadContext.current, requestedContext)) return;
+    const request = loadRequestGate.current.begin();
     setLoading(true);
     setError("");
     try {
@@ -201,8 +221,10 @@ export function GolfCatalogAdminPanel() {
       const response = await fetch(`/api/admin/golf-catalog?${parameters}`, {
         headers: { authorization: `Bearer ${token}` },
         cache: "no-store",
+        signal: request.signal,
       });
       const payload: unknown = await response.json().catch(() => null);
+      if (!request.isCurrent() || !sameLoadContext(loadContext.current, requestedContext)) return;
       if (!response.ok) throw new Error(responseError(payload, "No fue posible cargar el catálogo."));
       const payloadRecord = isRecord(payload) ? payload : {};
       const nextItems = Array.isArray(payloadRecord.items)
@@ -211,19 +233,67 @@ export function GolfCatalogAdminPanel() {
       setItems(current => append ? [...current, ...nextItems] : nextItems);
       setNextCursor(typeof payloadRecord.nextCursor === "string" ? payloadRecord.nextCursor : null);
     } catch (loadError) {
+      if (!request.isCurrent()
+        || !sameLoadContext(loadContext.current, requestedContext)
+        || (loadError instanceof Error && loadError.name === "AbortError")) return;
       setError(loadError instanceof Error ? loadError.message : "No fue posible cargar el catálogo.");
       if (!append) setItems([]);
-    } finally { setLoading(false); }
+    } finally {
+      if (request.isCurrent() && sameLoadContext(loadContext.current, requestedContext)) setLoading(false);
+    }
   }, [includeArchived, query, resource, token]);
 
   useEffect(() => {
+    const requestGate = loadRequestGate.current;
+    loadContext.current = { resource, query, includeArchived, token };
     setEditing(null);
     setValues({ ...editor.defaults });
     setMessage("");
     if (!token) { setItems([]); return; }
     const timer = window.setTimeout(() => { void load(); }, 250);
-    return () => window.clearTimeout(timer);
-  }, [editor, load, token]);
+    return () => {
+      window.clearTimeout(timer);
+      requestGate.invalidate();
+    };
+  }, [editor, includeArchived, load, query, resource, token]);
+
+  function clearLoadedSelection() {
+    loadRequestGate.current.invalidate();
+    setLoading(false);
+    setItems([]);
+    setNextCursor(null);
+    setEditing(null);
+    setError("");
+    setMessage("");
+  }
+
+  function changeResource(nextResource: GolfCatalogAdminResource) {
+    const nextEditor = EDITORS.find(candidate => candidate.resource === nextResource) || EDITORS[0];
+    loadContext.current = { ...loadContext.current, resource: nextResource };
+    clearLoadedSelection();
+    setValues({ ...nextEditor.defaults });
+    setResource(nextResource);
+  }
+
+  function changeQuery(nextQuery: string) {
+    loadContext.current = { ...loadContext.current, query: nextQuery };
+    loadRequestGate.current.invalidate();
+    setLoading(false);
+    setItems([]);
+    setNextCursor(null);
+    setError("");
+    setQuery(nextQuery);
+  }
+
+  function changeIncludeArchived(nextIncludeArchived: boolean) {
+    loadContext.current = { ...loadContext.current, includeArchived: nextIncludeArchived };
+    loadRequestGate.current.invalidate();
+    setLoading(false);
+    setItems([]);
+    setNextCursor(null);
+    setError("");
+    setIncludeArchived(nextIncludeArchived);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -260,7 +330,7 @@ export function GolfCatalogAdminPanel() {
     for (const field of editor.fields) {
       nextValues[field.name] = field.kind === "datetime-local" ? dateTimeInput(item[field.name]) : displayValue(item[field.name]);
     }
-    setEditing(item);
+    setEditing({ resource, item });
     setValues(nextValues);
     setMessage("");
     setError("");
@@ -291,6 +361,12 @@ export function GolfCatalogAdminPanel() {
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!token) return;
+    if (editing && editing.resource !== resource) {
+      setError("La selección cambió. Vuelve a elegir el registro antes de guardar.");
+      resetEditor();
+      return;
+    }
+    const savedResource = editing?.resource || resource;
     setSaving(true);
     setError("");
     setMessage("");
@@ -299,16 +375,19 @@ export function GolfCatalogAdminPanel() {
         method: editing ? "PATCH" : "POST",
         headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
         body: JSON.stringify(editing
-          ? { resource, id: editing.id, changes: payloadFromValues() }
+          ? { resource: editing.resource, id: editing.item.id, changes: payloadFromValues() }
           : { resource, data: { ...payloadFromValues(), ...(editor.active ? { active: true } : {}) } }),
       });
       const payload: unknown = await response.json().catch(() => null);
       if (!response.ok) throw new Error(responseError(payload, "No fue posible guardar el registro."));
+      if (loadContext.current.resource !== savedResource) return;
       setMessage(editing ? "Cambios guardados." : `${editor.singular[0].toUpperCase()}${editor.singular.slice(1)} agregado.`);
       resetEditor();
       await load();
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "No fue posible guardar el registro.");
+      if (loadContext.current.resource === savedResource) {
+        setError(saveError instanceof Error ? saveError.message : "No fue posible guardar el registro.");
+      }
     } finally { setSaving(false); }
   }
 
@@ -319,18 +398,22 @@ export function GolfCatalogAdminPanel() {
     setSaving(true);
     setError("");
     setMessage("");
+    const archivedResource = resource;
     try {
       const response = await fetch("/api/admin/golf-catalog", {
         method: "PATCH",
         headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-        body: JSON.stringify({ resource, id: item.id, changes: { active: !item.active } }),
+        body: JSON.stringify({ resource: archivedResource, id: item.id, changes: { active: !item.active } }),
       });
       const payload: unknown = await response.json().catch(() => null);
       if (!response.ok) throw new Error(responseError(payload, "No fue posible cambiar el estado."));
+      if (loadContext.current.resource !== archivedResource) return;
       setMessage(archive ? "Registro archivado sin borrarlo." : "Registro reactivado.");
       await load();
     } catch (archiveError) {
-      setError(archiveError instanceof Error ? archiveError.message : "No fue posible cambiar el estado.");
+      if (loadContext.current.resource === archivedResource) {
+        setError(archiveError instanceof Error ? archiveError.message : "No fue posible cambiar el estado.");
+      }
     } finally { setSaving(false); }
   }
 
@@ -351,11 +434,11 @@ export function GolfCatalogAdminPanel() {
     </header>
 
     <section className={styles.toolbar} aria-label="Seleccionar catálogo">
-      <label>Catálogo<select value={resource} onChange={event => setResource(event.target.value as GolfCatalogAdminResource)}>
+      <label>Catálogo<select value={resource} onChange={event => changeResource(event.target.value as GolfCatalogAdminResource)}>
         {EDITORS.map(option => <option key={option.resource} value={option.resource}>{option.label}</option>)}
       </select></label>
-      <label>Buscar<input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder={`Buscar ${editor.label.toLowerCase()}…`} /></label>
-      {editor.active && <label className={styles.checkbox}><input type="checkbox" checked={includeArchived} onChange={event => setIncludeArchived(event.target.checked)} />Incluir archivados</label>}
+      <label>Buscar<input type="search" value={query} onChange={event => changeQuery(event.target.value)} placeholder={`Buscar ${editor.label.toLowerCase()}…`} /></label>
+      {editor.active && <label className={styles.checkbox}><input type="checkbox" checked={includeArchived} onChange={event => changeIncludeArchived(event.target.checked)} />Incluir archivados</label>}
     </section>
 
     <div className={styles.columns}>

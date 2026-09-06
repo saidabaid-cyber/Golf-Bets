@@ -22,9 +22,26 @@ export type EquipmentCatalogSearchInput = {
   pinnedIds?: readonly string[];
 };
 
+export type EquipmentBallFitCatalogInput = {
+  /** An archived current ball may be included only as a comparison baseline. */
+  currentBallId?: string | null;
+  /** The caller must choose a finite ceiling. An incomplete scope is never
+   * returned as a usable candidate list, preventing a partial ranking. */
+  maximumCandidates: number;
+};
+
+export type EquipmentBallFitCatalogScope = {
+  items: GolfBallCatalog[];
+  complete: boolean;
+  activeCandidateCount: number;
+  evaluatedCandidateCount: number;
+  maximumCandidates: number;
+};
+
 export interface EquipmentCatalogProvider {
   readonly id: string;
   search(input: EquipmentCatalogSearchInput): Promise<GolfCatalogPage<EquipmentCatalogItem>>;
+  loadBallFitCatalog(input: EquipmentBallFitCatalogInput): Promise<EquipmentBallFitCatalogScope>;
 }
 
 function searchable(value: string) {
@@ -56,6 +73,11 @@ function safePinnedIds(values: readonly string[] | undefined) {
     .map((value) => value.trim())
     .filter((value) => value.length > 0 && value.length <= 240))]
     .slice(0, 25);
+}
+
+function safeBallFitMaximum(value: number) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(5_000, Math.trunc(value)));
 }
 
 function rank(item: EquipmentCatalogItem, query: string) {
@@ -122,6 +144,33 @@ export function createInternalEquipmentCatalogProvider(catalogs: {
       if (input.kind === "BALL") return page(catalogs.balls, input);
       if (input.kind === "CLUB") return page(catalogs.clubs, input);
       return page(catalogs.shafts, input);
+    },
+    async loadBallFitCatalog(input) {
+      const maximumCandidates = safeBallFitMaximum(input.maximumCandidates);
+      const active = catalogs.balls.filter((ball) => ball.active);
+      if (maximumCandidates === 0 || active.length > maximumCandidates) {
+        return {
+          items: [],
+          complete: false,
+          activeCandidateCount: active.length,
+          evaluatedCandidateCount: 0,
+          maximumCandidates,
+        };
+      }
+
+      const byId = new Map(active.map((ball) => [ball.id, ball]));
+      const currentBallId = input.currentBallId?.trim() || null;
+      if (currentBallId) {
+        const current = catalogs.balls.find((ball) => ball.id === currentBallId);
+        if (current) byId.set(current.id, current);
+      }
+      return {
+        items: [...byId.values()],
+        complete: true,
+        activeCandidateCount: active.length,
+        evaluatedCandidateCount: active.length,
+        maximumCandidates,
+      };
     },
   };
 }

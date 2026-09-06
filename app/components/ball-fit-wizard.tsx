@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   APPROACH_BEHAVIORS,
   BACKYARD_BALL_FIT_DISCLAIMER,
@@ -13,12 +13,17 @@ import {
   SWING_SPEED_BANDS,
   YES_NO_UNKNOWN,
   getBallFitInputCompleteness,
-  runBackyardBallFit,
   type BallFitInput,
   type BallFitProfileDefaults,
   type BallFitPriority,
   type BallFitResult,
 } from "../../lib/ball-fitting";
+import {
+  BALL_FIT_CATALOG_SCOPE_ERROR,
+  createBallFitTransportInput,
+  normalizeBallFitApiSuccess,
+  type BallFitCatalogScope,
+} from "../../lib/ball-fitting-api";
 import { loadBallFitDraft, removeBallFitDraft, saveBallFitDraft, type BallFitDraft } from "../../lib/ball-fitting-storage";
 import type { GolfBallCatalog, PlayerBall, QualitativeLevel } from "../../lib/golf-equipment";
 import { LaunchMonitorCapture } from "./launch-monitor-capture";
@@ -62,6 +67,7 @@ const LEVEL_LABELS: Record<QualitativeLevel, string> = {
 
 const PRICE_RESULT_LABELS = { ECONOMY: "Económica", MID: "Media", PREMIUM: "Premium" } as const;
 const DRAFT_SAVE_ERROR = "No pudimos guardar este borrador en el dispositivo. Mantén esta pantalla abierta o libera espacio antes de salir.";
+const FIT_REQUEST_ERROR = "No pudimos evaluar el catálogo completo. Revisa tu conexión e inténtalo de nuevo; no mostramos rankings parciales.";
 
 function defaultInput(userId: string, handicap: number | null, currentBallId: string | null, defaults?: BallFitProfileDefaults): BallFitInput {
   return {
@@ -115,9 +121,14 @@ export function BallFitWizard({ userId, defaultHandicap, profileDefaults, curren
   const [savedDraft, setSavedDraft] = useState<BallFitDraft | null>(null);
   const [draftChoicePending, setDraftChoicePending] = useState(false);
   const [result, setResult] = useState<BallFitResult | null>(null);
+  const [resultCatalog, setResultCatalog] = useState<GolfBallCatalog[]>([]);
+  const [catalogScope, setCatalogScope] = useState<BallFitCatalogScope | null>(null);
+  const [calculating, setCalculating] = useState(false);
   const [message, setMessage] = useState("");
+  const requestRef = useRef<AbortController | null>(null);
+  const displayCatalog = useMemo(() => [...new Map([...catalog, ...resultCatalog].map((ball) => [ball.id, ball])).values()], [catalog, resultCatalog]);
   const activeBalls = useMemo(() => catalog.filter((ball) => ball.active), [catalog]);
-  const currentCatalogBall = input.currentBallId ? catalog.find((ball) => ball.id === input.currentBallId) || null : null;
+  const currentCatalogBall = input.currentBallId ? displayCatalog.find((ball) => ball.id === input.currentBallId) || null : null;
 
   useEffect(() => {
     const saved = loadBallFitDraft(localStorage, userId);
@@ -127,6 +138,8 @@ export function BallFitWizard({ userId, defaultHandicap, profileDefaults, curren
     }
     setHydrated(true);
   }, [userId]);
+
+  useEffect(() => () => requestRef.current?.abort(), []);
 
   useEffect(() => {
     if (!hydrated || draftChoicePending) return;
@@ -141,6 +154,8 @@ export function BallFitWizard({ userId, defaultHandicap, profileDefaults, curren
     setInput(savedDraft.input);
     setStep(Math.min(savedDraft.step, 5));
     setResult(null);
+    setResultCatalog([]);
+    setCatalogScope(null);
     setDraftChoicePending(false);
   }
 
@@ -164,7 +179,7 @@ export function BallFitWizard({ userId, defaultHandicap, profileDefaults, curren
 
   function previous() {
     setMessage("");
-    if (result) { setResult(null); setStep(5); return; }
+    if (result) { setResult(null); setResultCatalog([]); setCatalogScope(null); setStep(5); return; }
     setStep((current) => Math.max(0, current - 1));
   }
 
@@ -181,12 +196,55 @@ export function BallFitWizard({ userId, defaultHandicap, profileDefaults, curren
     patchInput({ priorities });
   }
 
-  function calculate() {
-    const fit = runBackyardBallFit(catalog, input);
-    setResult(fit);
-    setStep(6);
-    if (!saveBallFitDraft(localStorage, input, 6)) setMessage(DRAFT_SAVE_ERROR);
-    if (fit.recommendations.length === 0) setMessage(fit.warnings[0] || "Necesitamos más preferencias para comparar bolas.");
+  async function calculate() {
+    if (calculating) return;
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
+    setCalculating(true);
+    setMessage("");
+    try {
+      const transportInput = createBallFitTransportInput(input);
+      if (!transportInput) {
+        setMessage(FIT_REQUEST_ERROR);
+        return;
+      }
+      const response = await fetch("/api/ball-fitting", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ input: transportInput }),
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      const payload: unknown = await response.json().catch(() => null);
+      if (!response.ok) {
+        const errorRecord = payload && typeof payload === "object" && !Array.isArray(payload) ? payload as Record<string, unknown> : null;
+        if (errorRecord?.code === BALL_FIT_CATALOG_SCOPE_ERROR) {
+          setMessage("El catálogo creció más allá del alcance seguro de esta versión. No se calculó un ranking parcial.");
+          return;
+        }
+        setMessage(FIT_REQUEST_ERROR);
+        return;
+      }
+      const fit = normalizeBallFitApiSuccess(payload);
+      if (!fit) {
+        setMessage(FIT_REQUEST_ERROR);
+        return;
+      }
+      setResult(fit.result);
+      setResultCatalog(fit.catalog);
+      setCatalogScope(fit.scope);
+      setStep(6);
+      if (!saveBallFitDraft(localStorage, input, 6)) setMessage(DRAFT_SAVE_ERROR);
+      else if (fit.result.recommendations.length === 0) setMessage(fit.result.warnings[0] || "Necesitamos más preferencias para comparar bolas.");
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      void error;
+      setMessage(FIT_REQUEST_ERROR);
+    } finally {
+      if (requestRef.current === controller) requestRef.current = null;
+      if (!controller.signal.aborted) setCalculating(false);
+    }
   }
 
   function saveAndClose() {
@@ -227,6 +285,7 @@ export function BallFitWizard({ userId, defaultHandicap, profileDefaults, curren
       <p>Usamos tu HCP capturado si existe. No lo interpretamos como un índice oficial.</p>
       {currentBall && <div className={styles.ballHero}><span className={styles.ballGlyph}>●</span><div><h3>{currentBall.ballBrand} {currentBall.ballModel}</h3><p>Bola actual guardada{currentBall.catalogBallId ? " · disponible para comparación verificada" : " · modelo manual"}</p></div></div>}
       <label>Bola actual para comparar (opcional)<select value={input.currentBallId || ""} onChange={(event) => patchInput({ currentBallId: event.target.value || null })}><option value="">Sin bola fija / no aparece</option>{activeBalls.map((ball) => <option key={ball.id} value={ball.id}>{ball.brand} {ball.model}{ball.generation ? ` · ${ball.generation}` : ""}</option>)}</select></label>
+      <p className={styles.subtle}>Esta lista es sólo para indicar tu bola actual. Al calcular, el servidor evalúa el catálogo activo completo o cancela sin mostrar un ranking parcial.</p>
       <div className="grid2"><label>HCP manual (opcional)<input type="number" inputMode="decimal" min={-20} max={54} step="0.1" value={input.handicap ?? ""} onChange={(event) => patchInput({ handicap: optionalNumber(event.target.value, -20, 54) })} placeholder="8.4" /></label><label>Score típico (opcional)<input type="number" inputMode="numeric" min={40} max={200} value={input.typicalScore ?? ""} onChange={(event) => patchInput({ typicalScore: optionalNumber(event.target.value, 40, 200) })} placeholder="86" /></label></div>
     </section>}
 
@@ -264,13 +323,14 @@ export function BallFitWizard({ userId, defaultHandicap, profileDefaults, curren
       <p className={styles.subtle}>Completitud de respuestas: {completeness}%. El recomendador puede dar una coincidencia parcial, pero necesita al menos dos preferencias comparables.</p>
     </section>}
 
-    {result && <BallFitResults result={result} catalog={catalog} current={currentCatalogBall} />}
+    {result && <BallFitResults result={result} catalog={displayCatalog} current={currentCatalogBall} catalogScope={catalogScope} />}
+    {calculating && <div className={styles.loadingState} role="status">Evaluando el catálogo completo disponible…</div>}
     {message && <div className={styles.formMessage} role="alert">{message}</div>}
     {message === DRAFT_SAVE_ERROR && <button type="button" className="textButton" onClick={exitWithoutSaving}>Salir sin guardar</button>}
     <div className={styles.wizardActions}>
-      <button type="button" className="secondary" onClick={previous} disabled={!result && step === 0}>← Anterior</button>
-      {!result && step < 5 && <button type="button" className="primary" onClick={next}>Siguiente →</button>}
-      {!result && step === 5 && <button type="button" className="primary" onClick={calculate}>Ver mi Top 3</button>}
+      <button type="button" className="secondary" onClick={previous} disabled={calculating || (!result && step === 0)}>← Anterior</button>
+      {!result && step < 5 && <button type="button" className="primary" onClick={next} disabled={calculating}>Siguiente →</button>}
+      {!result && step === 5 && <button type="button" className="primary" onClick={calculate} disabled={calculating}>{calculating ? "Evaluando…" : "Ver mi Top 3"}</button>}
       {result && result.recommendations.length > 0 && <button type="button" className="primary" onClick={finish}>Guardar resultado</button>}
     </div>
   </div>;
@@ -284,10 +344,11 @@ function technicalFact(value: string | number | null | undefined, suffix = "") {
   return value === null || value === undefined || value === "" ? "Sin dato verificado" : `${value}${suffix}`;
 }
 
-export function BallFitResults({ result, catalog, current }: { result: BallFitResult; catalog: readonly GolfBallCatalog[]; current: GolfBallCatalog | null }) {
+export function BallFitResults({ result, catalog, current, catalogScope = null }: { result: BallFitResult; catalog: readonly GolfBallCatalog[]; current: GolfBallCatalog | null; catalogScope?: BallFitCatalogScope | null }) {
   if (!result.recommendations.length) return <section className={styles.emptyState}><b>Aún no hay una comparación suficiente</b><p>{result.warnings[0] || "Agrega dos preferencias comparables y vuelve a intentar."}</p></section>;
   const recommendationCatalog = result.recommendations.map((item) => catalog.find((ball) => ball.id === item.catalogBallId) || null);
   return <>
+    {catalogScope && <p className={styles.subtle}>Se evaluó el catálogo activo completo disponible: {catalogScope.evaluatedCandidateCount} modelo(s). No se usó una primera página recortada.</p>}
     <div className={styles.resultGrid}>{result.recommendations.map((recommendation) => {
       const catalogBall = catalog.find((ball) => ball.id === recommendation.catalogBallId);
       return <article className={styles.recommendation} key={recommendation.catalogBallId}>

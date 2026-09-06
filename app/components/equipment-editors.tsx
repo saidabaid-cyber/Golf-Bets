@@ -12,6 +12,7 @@ import type {
   PlayerClubDistance,
   ShaftFlex,
 } from "../../lib/golf-equipment";
+import { resolveCatalogShaftSelection } from "../../lib/equipment-editor-selection";
 import styles from "./equipment.module.css";
 import { useEquipmentCatalogSearch } from "./use-equipment-catalog-search";
 import { useModalDialog } from "./use-modal-dialog";
@@ -135,7 +136,7 @@ export function ClubEditor({ userId, catalog, shafts, existing, onCancel, onSave
     if (existingShaft) byId.set(existingShaft.id, existingShaft);
     return [...byId.values()];
   }, [existingShaft, shaftSearch.items]);
-  const selectedShaft = activeShafts.find((shaft) => shaft.id === shaftId) || existingShaft || null;
+  const selectedShaft = resolveCatalogShaftSelection(shaftId, activeShafts, existingShaft);
   const selectedVariant = selectedCatalogClub?.variants.find((variant) => Math.abs(variant.loft - Number(loft)) < 0.001) || null;
   const availableHands = selectedVariant?.handedness || selectedCatalogClub?.handedness || (["RH", "LH"] as ClubHandedness[]);
 

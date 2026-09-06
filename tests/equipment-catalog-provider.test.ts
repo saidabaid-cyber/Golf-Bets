@@ -55,3 +55,45 @@ test("saved catalog ids are pinned across pagination and may resolve archived hi
   assert.equal(result.items.some((item) => item.id === archivedBall.id), true);
   assert.equal(result.items.find((item) => item.id === archivedBall.id)?.active, false);
 });
+
+test("Ball Fit recibe el catálogo activo completo aunque la búsqueda normal tenga varias páginas", async () => {
+  const expandedBalls = Array.from({ length: 51 }, (_, index) => ({
+    ...golfBallCatalog[index % golfBallCatalog.length],
+    id: `expanded-ball-${index}`,
+    brand: `Brand ${index}`,
+  }));
+  const archivedCurrent = { ...golfBallCatalog[0], id: "archived-current", active: false };
+  const provider = createInternalEquipmentCatalogProvider({
+    balls: [...expandedBalls, archivedCurrent],
+    clubs: golfClubCatalog,
+    shafts: golfShaftCatalog,
+  });
+  const firstPage = await provider.search({ kind: "BALL", limit: 50 });
+  const fitScope = await provider.loadBallFitCatalog({ currentBallId: archivedCurrent.id, maximumCandidates: 100 });
+
+  assert.equal(firstPage.items.length, 50);
+  assert.equal(firstPage.hasMore, true);
+  assert.equal(fitScope.complete, true);
+  assert.equal(fitScope.activeCandidateCount, 51);
+  assert.equal(fitScope.evaluatedCandidateCount, 51);
+  assert.equal(fitScope.items.filter((ball) => ball.active).length, 51);
+  assert.equal(fitScope.items.some((ball) => ball.id === archivedCurrent.id), true);
+});
+
+test("Ball Fit falla cerrado cuando el catálogo rebasa el máximo; nunca entrega una muestra parcial", async () => {
+  const expandedBalls = Array.from({ length: 51 }, (_, index) => ({
+    ...golfBallCatalog[index % golfBallCatalog.length],
+    id: `bounded-ball-${index}`,
+  }));
+  const provider = createInternalEquipmentCatalogProvider({
+    balls: expandedBalls,
+    clubs: golfClubCatalog,
+    shafts: golfShaftCatalog,
+  });
+  const fitScope = await provider.loadBallFitCatalog({ maximumCandidates: 50 });
+
+  assert.equal(fitScope.complete, false);
+  assert.equal(fitScope.activeCandidateCount, 51);
+  assert.equal(fitScope.evaluatedCandidateCount, 0);
+  assert.deepEqual(fitScope.items, []);
+});

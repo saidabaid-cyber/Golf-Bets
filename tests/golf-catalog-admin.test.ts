@@ -13,6 +13,7 @@ import {
   parseGolfCatalogAdminResource,
   validGolfAdminId,
 } from "../lib/golf-catalog-admin-contract";
+import { createLatestRequestGate } from "../lib/latest-request-gate";
 
 const route = readFileSync("app/api/admin/golf-catalog/route.ts", "utf8");
 const panel = readFileSync("app/components/golf-catalog-admin-panel.tsx", "utf8");
@@ -225,4 +226,29 @@ test("/admin ofrece alta, edición y archivo sin exponer una acción destructiva
   assert.match(panel, /name: "brand_id", label: "Marca", kind: "select", required: true/);
   assert.match(panel, /resource=\$\{brandResource\}&limit=50&includeArchived=true/);
   assert.doesNotMatch(panel, /method:\s*"DELETE"/);
+});
+
+test("el admin invalida cargas anteriores al cambiar catálogo o búsqueda", () => {
+  const gate = createLatestRequestGate();
+  const first = gate.begin();
+  const second = gate.begin();
+
+  assert.equal(first.signal.aborted, true);
+  assert.equal(first.isCurrent(), false);
+  assert.equal(second.signal.aborted, false);
+  assert.equal(second.isCurrent(), true);
+
+  gate.invalidate();
+  assert.equal(second.signal.aborted, true);
+  assert.equal(second.isCurrent(), false);
+
+  assert.match(panel, /signal: request\.signal/);
+  assert.match(panel, /!request\.isCurrent\(\) \|\| !sameLoadContext\(loadContext\.current, requestedContext\)/);
+  assert.match(panel, /if \(!sameLoadContext\(loadContext\.current, requestedContext\)\) return/);
+  assert.match(panel, /function changeResource[\s\S]*clearLoadedSelection\(\)[\s\S]*setResource\(nextResource\)/);
+  assert.match(panel, /function clearLoadedSelection[\s\S]*setItems\(\[\]\)[\s\S]*setEditing\(null\)/);
+  assert.match(panel, /setEditing\(\{ resource, item \}\)/);
+  assert.match(panel, /editing && editing\.resource !== resource/);
+  assert.match(panel, /resource: editing\.resource, id: editing\.item\.id/);
+  assert.match(panel, /if \(loadContext\.current\.resource !== savedResource\) return/);
 });
