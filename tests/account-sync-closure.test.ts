@@ -37,6 +37,28 @@ test("coordinador cloud evita loops propios, agrupa cambios y permite retry manu
   gate.success("v3");
 });
 
+test("diez renders derivados de la misma nube conservan single-flight y no generan otro POST", () => {
+  const gate = new CloudSyncGate();
+  let networkCycles = 0;
+  const begin = (fingerprint: string) => {
+    const decision = gate.begin(fingerprint, "local");
+    if (decision === "run") networkCycles += 1;
+    return decision;
+  };
+  assert.equal(begin("same-state"), "run");
+  for (let index = 0; index < 10; index += 1) assert.equal(begin("same-state"), "busy");
+  assert.equal(gate.success("same-state"), "local", "las diez solicitudes se consolidan en una sola pendiente");
+  assert.equal(begin("same-state"), "unchanged", "el fingerprint confirmado no vuelve a la red");
+  assert.equal(networkCycles, 1);
+
+  const page = readFileSync("app/page.tsx", "utf8");
+  const requestEffect = page.slice(page.indexOf("requestCloudSync.current?.();"), page.indexOf("function resolveCloudConflict"));
+  assert.doesNotMatch(requestEffect, /scoreEdits/);
+  assert.doesNotMatch(page.match(/\}, \[hydrated, identity\.mode[^\n]+/)?.[0] || "", /identity\.accessToken/);
+  const provider = readFileSync("app/components/account-provider.tsx", "utf8");
+  assert.match(provider, /!Object\.is\(current\.defaultHandicap, preferences\.defaultHandicap\)/);
+});
+
 test("logout/cambio de cuenta cancela el coordinador sin ejecutar cola obsoleta", () => {
   const gate = new CloudSyncGate();
   assert.equal(gate.begin("a1", "mount"), "run");

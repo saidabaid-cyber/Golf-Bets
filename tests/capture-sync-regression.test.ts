@@ -55,11 +55,13 @@ test("el último carácter del score se confirma antes de guardar, sin microtask
   assert.equal(savedScore, 17, "el guardado observa el valor final ya validado, no el render anterior");
 
   const input = readFileSync("app/components/numeric-capture-input.tsx", "utf8");
-  assert.match(input, /finalizeNumericCapture\(rawValueRef\.current, min, max\)/);
+  assert.match(input, /commit\(event\.currentTarget\.value\)/);
+  assert.match(input, /finalizeNumericCapture\(latestRawValue, min, max\)/);
   assert.match(input, /rawValueRef\.current = nextRawValue/);
   const page = readFileSync("app/page.tsx", "utf8");
   assert.match(page, /useLayoutEffect\(\(\) => \{ latestSaveAndAdvance\.current = saveAndAdvance; \}\)/);
   assert.match(page, /function requestSaveAndAdvance\(\) \{[\s\S]*?latestSaveAndAdvance\.current\(\);[\s\S]*?\}/);
+  assert.match(page, /function requestSaveAndAdvance\(\) \{[\s\S]*?commitFocusedNumericCapture\(\);[\s\S]*?latestSaveAndAdvance\.current\(\);/);
   assert.doesNotMatch(page, /queueMicrotask\(\(\) => latestSaveAndAdvance\.current\(\)\)/);
 });
 

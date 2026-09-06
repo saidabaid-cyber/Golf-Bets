@@ -210,7 +210,6 @@ test("Guardar hoyo verifica el borrador y sobrevive un cierre inmediato antes de
     currentIndex: 0,
   };
   persistRoundDraftCheckpoint(storage as unknown as Storage, draft);
-
   const reloaded = normalizeRoundDraft(JSON.parse(storage.getItem(STORAGE_KEYS.draft)!));
   assert.equal(reloaded?.roundId, "round-hole-checkpoint");
   assert.deepEqual(reloaded?.scores?.[1], draft.scores[1]);

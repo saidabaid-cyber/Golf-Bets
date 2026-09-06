@@ -375,7 +375,9 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
   const applyCloudPreferences = useCallback((preferences: CloudPreferences) => {
-    setIdentity(current => current?.mode === "authenticated" ? { ...current, defaultHandicap: preferences.defaultHandicap } : current);
+    setIdentity(current => current?.mode === "authenticated" && !Object.is(current.defaultHandicap, preferences.defaultHandicap)
+      ? { ...current, defaultHandicap: preferences.defaultHandicap }
+      : current);
   }, []);
   const flushLegalAcceptances = useCallback(async (userId: string, current: LegalAcceptance[]) => {
     const supabase = getSupabaseBrowser();
@@ -930,8 +932,9 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     setMigrationBusy(false);
   }
 
+  const cloudSessionUserId = identity?.mode === "authenticated" ? identity.userId : "";
   const recoverCloudSession = useCallback(async (forceRefresh = false) => {
-    const expectedUserId = identity?.mode === "authenticated" ? identity.userId : "";
+    const expectedUserId = cloudSessionUserId;
     if (!expectedUserId) throw new AuthSessionRecoveryError("invalid", new Error("account_session_missing"));
     if (sessionRecovery.current?.userId === expectedUserId) return sessionRecovery.current.promise;
     const recovery = (async () => {
@@ -961,7 +964,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     sessionRecovery.current = { userId: expectedUserId, promise: recovery };
     try { return await recovery; }
     finally { if (sessionRecovery.current?.promise === recovery) sessionRecovery.current = null; }
-  }, [activateSession, identity, setCloudIssue]);
+  }, [activateSession, cloudSessionUserId, setCloudIssue]);
 
   // A cloud 401 uses a forced, single refresh. Manual retry first validates
   // the persisted session and refreshes only when expired/near expiry, which

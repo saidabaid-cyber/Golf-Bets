@@ -2,8 +2,8 @@ import { STORAGE_KEYS, readStoredJson } from "./round-utils";
 
 export const ROUND_REVIEW_NOTICE = "Ronda terminada. Aún no está guardada en Histórico. Revisa los resultados y, cuando estén correctos, pulsa ‘Guardar en Histórico’ al final de esa pantalla.";
 
-/** A confirmed hole must survive an immediate PWA termination. Writing and
- * reading back the exact payload keeps the UI from advancing on a false save. */
+/** A confirmed hole must survive an immediate PWA termination. The exact
+ * serialized payload is read back before the caller is allowed to advance. */
 export function persistRoundDraftCheckpoint(
   storage: Pick<Storage, "getItem" | "setItem">,
   draft: Record<string, unknown>,

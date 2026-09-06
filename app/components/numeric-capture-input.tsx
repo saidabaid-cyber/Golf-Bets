@@ -38,11 +38,12 @@ export function NumericCaptureInput({
     }
   }, [emptyWhenZero, value]);
 
-  const commit = () => {
+  const commit = (domValue?: string) => {
     // The DOM change event and the Save pointer gesture can occur before React
     // commits the render containing the last character (notably on iOS). Keep
     // the editing buffer in a ref so blur always confirms the newest input.
-    const finalized = finalizeNumericCapture(rawValueRef.current, min, max);
+    const latestRawValue = domValue === undefined ? rawValueRef.current : normalizeNumericCaptureText(domValue);
+    const finalized = finalizeNumericCapture(latestRawValue, min, max);
     rawValueRef.current = finalized.raw;
     setRawValue(finalized.raw);
     previousValue.current = finalized.value;
@@ -66,7 +67,7 @@ export function NumericCaptureInput({
     }}
     onBlur={(event) => {
       focused.current = false;
-      commit();
+      commit(event.currentTarget.value);
       onBlur?.(event);
     }}
     onChange={(event) => {
