@@ -128,7 +128,13 @@ export function AccountPanel({ view, highContrast, onHighContrastChange, notific
     </section>}
     {view === "account" && identity.mode === "authenticated" && !cloudLinked && <section className="card"><h2>Sincronización</h2><p>Tus datos siguen seguros en este dispositivo. Puedes vincularlos a tu cuenta cuando la nube esté configurada.</p><button className="primary" onClick={requestCloudLink}>Vincular datos locales</button></section>}
 
-    {view === "profile" && <section className="card profileCard">
+    {view === "profile" && identity.mode === "guest" && <section className="card guestAccountCard">
+      <h2>Tu golf permanece en este dispositivo</h2>
+      <p>Las rondas, grupos y estadísticas locales siguen disponibles. Crea una cuenta o inicia sesión para tener un perfil persistente con nombre, avatar y preferencias.</p>
+      <div className="accountInlineActions"><button className="primary" onClick={openAccess}>Crear cuenta</button><button className="secondary" onClick={openAccess}>Iniciar sesión</button></div>
+    </section>}
+
+    {view === "profile" && identity.mode === "authenticated" && <section className="card profileCard">
       <div className="sectionTitle"><div className="profileIdentity"><div className="accountAvatar">{identity.avatarUrl ? <img src={identity.avatarUrl} alt={`Avatar de ${identity.displayName}`} referrerPolicy="no-referrer" /> : (identity.displayName.trim()[0] || "J").toUpperCase()}</div><div><h2>{identity.displayName}</h2><p>{identity.email || "Perfil local en este dispositivo"}</p></div></div><button className="secondary" onClick={() => setEditing((value) => !value)}>{editing ? "Cancelar" : "Editar perfil"}</button></div>
       {editing && <div className="profileForm profileFormExpanded">
         <label>Nombre visible<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Tu nombre" /></label>
@@ -164,7 +170,7 @@ export function AccountPanel({ view, highContrast, onHighContrastChange, notific
       </div>}
     </section>}
 
-    {view === "profile" && message && <div className="notice" role="status">{message}</div>}
+    {view === "profile" && identity.mode === "authenticated" && message && <div className="notice" role="status">{message}</div>}
 
     {view === "profile" && golfInsights && <section className="card betaProfileGolfCard">
       <div className="sectionTitle"><div><h2>Mi golf</h2><p>Resumen calculado sólo con tu histórico disponible.</p></div>{onOpenStats && <button type="button" className="textButton" onClick={onOpenStats}>Ver Stats</button>}</div>

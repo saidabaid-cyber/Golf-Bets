@@ -29,10 +29,12 @@ test("Jugar con un grupo usa el mismo respaldo seguro que Nueva ronda", () => {
   assert.match(page, />Cancelar<\/button>/);
 });
 
-test("el perfil invitado es local y Cuenta no inventa una identidad de nube", () => {
+test("el invitado conserva su golf local sin presentar un perfil falso como persistente", () => {
   assert.match(account, /Modo invitado · Los datos permanecen en este dispositivo/);
-  assert.match(account, /view === "profile" && <section className="card profileCard">/);
-  assert.match(account, /Perfil local en este dispositivo/);
+  assert.match(account, /view === "profile" && identity\.mode === "guest"/);
+  assert.match(account, /Las rondas, grupos y estadísticas locales siguen disponibles/);
+  assert.match(account, /perfil persistente con nombre, avatar y preferencias/);
+  assert.match(account, /view === "profile" && identity\.mode === "authenticated" && <section className="card profileCard">/);
   assert.doesNotMatch(account, /Sin correo · Invitado/);
 });
 
