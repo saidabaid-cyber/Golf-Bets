@@ -106,6 +106,20 @@ test("saved advanced data contributes to Stats without changing gross score", ()
   assert.equal(aggregate.penaltyStrokes, 1);
 });
 
+test("Stats ignora valores avanzados corruptos de un histórico legacy", () => {
+  const corrupt = {
+    ...completeRound(),
+    advancedStats: {
+      1: { owner: { fairwayHit: true, penaltyStrokes: -5 } },
+      2: { owner: { greenInRegulation: true, penaltyStrokes: 51 } },
+    },
+  };
+  const insight = scoredRoundInsight(corrupt);
+  assert.equal(insight?.penaltyStrokes, 0);
+  assert.equal(insight?.fairwaysHit, 1);
+  assert.equal(insight?.greensInRegulation, 1);
+});
+
 test("draft normalization persists mode and valid stats while old drafts stay compatible", () => {
   const modern = normalizeRoundDraft({ roundId: "modern", scoreCaptureMode: "advanced", advancedStats: { 4: { owner: { fairwayHit: false, penaltyStrokes: 0 } } } });
   assert.equal(modern?.scoreCaptureMode, "advanced");

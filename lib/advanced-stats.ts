@@ -69,6 +69,7 @@ export function summarizePlayerAdvancedStats(
   playerId: string,
   order: number[],
 ): PlayerAdvancedStatsSummary {
+  const safeStats = normalizeAdvancedStats(stats);
   const captured = new Set<number>();
   let fairwaysHit = 0;
   let fairwayAttempts = 0;
@@ -77,7 +78,7 @@ export function summarizePlayerAdvancedStats(
   let penaltyStrokes = 0;
   let penaltyHoles = 0;
   for (const hole of order) {
-    const value = stats?.[hole]?.[playerId];
+    const value = safeStats[hole]?.[playerId];
     if (!value) continue;
     if (typeof value.fairwayHit === "boolean") {
       fairwayAttempts += 1;

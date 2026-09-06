@@ -318,7 +318,12 @@ function normalizeExpenses(raw: any): Expense {
 }
 
 function normalizeHistorySnapshot(round: RoundSnapshot): RoundSnapshot {
-  return normalizeHistoricalRoundLifecycle(migrateSupplementalNassau({ ...round, expenses: normalizeExpenses(round.expenses) }));
+  return normalizeHistoricalRoundLifecycle(migrateSupplementalNassau({
+    ...round,
+    expenses: normalizeExpenses(round.expenses),
+    scoreCaptureMode: normalizeScoreCaptureMode(round.scoreCaptureMode),
+    advancedStats: normalizeAdvancedStats(round.advancedStats),
+  }));
 }
 
 function Toggle({ on, onClick, label = "activar", disabled = false }: { on: boolean; onClick: () => void; label?: string; disabled?: boolean }) {

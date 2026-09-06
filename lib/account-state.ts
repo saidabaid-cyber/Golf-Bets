@@ -77,9 +77,11 @@ function profileDetails(candidate: Partial<BackyardProfile>, fallback?: Backyard
     country: profileText(candidate.country, fallback?.country, 100),
     homeClub: profileText(candidate.homeClub, fallback?.homeClub, 120),
     preferredTee: profileText(candidate.preferredTee, fallback?.preferredTee, 80),
-    handedness: candidate.handedness === "right" || candidate.handedness === "left" || candidate.handedness === "ambidextrous"
-      ? candidate.handedness
-      : fallback?.handedness || "",
+    handedness: candidate.handedness === ""
+      ? ""
+      : candidate.handedness === "right" || candidate.handedness === "left" || candidate.handedness === "ambidextrous"
+        ? candidate.handedness
+        : fallback?.handedness || "",
     bio: profileText(candidate.bio, fallback?.bio, 280),
     profileVisibility: candidate.profileVisibility === "friends" || candidate.profileVisibility === "private"
       ? candidate.profileVisibility

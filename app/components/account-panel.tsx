@@ -77,7 +77,7 @@ export function AccountPanel({ highContrast, onHighContrastChange, golfInsights,
     try {
       const result = await updateProfile({ displayName: validation.displayName, defaultHandicap: validation.defaultHandicap, avatarUrl: identity.avatarUrl, ...profileDetails });
       setEditing(false);
-      setMessage(result === "cloud" ? "Perfil actualizado y sincronizado." : "Perfil actualizado en este dispositivo. Los datos ampliados quedan pendientes de sincronización Beta.");
+      setMessage(result === "cloud" ? "Nombre, avatar y HCP sincronizados. Los datos ampliados se guardaron en este dispositivo." : "Perfil actualizado en este dispositivo. Los datos ampliados quedan pendientes de sincronización Beta.");
     } catch { setMessage("No se confirmó el guardado del perfil. Conservamos lo que escribiste; reintenta."); }
     finally { setSavingProfile(false); }
   }

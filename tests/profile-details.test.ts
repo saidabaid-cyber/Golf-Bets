@@ -76,3 +76,14 @@ test("datos ampliados inválidos vuelven a defaults seguros", () => {
   assert.equal(restored.profileVisibility, "private");
   assert.equal(restored.bio, "");
 });
+
+test("Sin indicar elimina una mano guardada previamente", () => {
+  const withHandedness = { ...baseProfile, handedness: "right" as const };
+  const cleared = mergeBackyardProfile(withHandedness, {
+    displayName: withHandedness.displayName,
+    defaultHandicap: withHandedness.defaultHandicap,
+    avatarUrl: withHandedness.avatarUrl,
+    handedness: "",
+  });
+  assert.equal(cleared.handedness, "");
+});

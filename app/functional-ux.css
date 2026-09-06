@@ -173,3 +173,8 @@
 @media(max-width:430px){
   .sideBetResult .sideBetHalfMetrics,.sideBetResult .sideBetBalances{grid-template-columns:minmax(0,1fr)}
 }
+
+/* Optional score capture remains thumb-friendly on small screens. */
+.scoreCaptureMode .segmented button,
+.advancedStatCapture .segmented button,
+.advancedStatCapture input{min-height:44px}

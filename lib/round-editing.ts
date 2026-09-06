@@ -2,6 +2,7 @@ import type { PersonalBet, RoundSnapshot, Player } from "./types";
 import { migrateSupplementalNassau } from "./nassau-migration";
 import { migratePersonalNassau } from "./personal-nassau";
 import { restoreBetConfig } from "./new-round-bets";
+import { normalizeAdvancedStats, normalizeScoreCaptureMode } from "./advanced-stats";
 
 /** Never merge mutable draft objects into an existing historical object. */
 export function upsertRoundSnapshot(history: RoundSnapshot[], next: RoundSnapshot) {
@@ -29,6 +30,8 @@ export function restoreRoundSnapshot(round: RoundSnapshot) {
   const roundHoles = migrated.roundHoles ?? (migrated.order?.length === 9 ? 9 : 18);
   return {
     ...migrated,
+    ...(migrated.scoreCaptureMode === undefined ? {} : { scoreCaptureMode: normalizeScoreCaptureMode(migrated.scoreCaptureMode) }),
+    ...(migrated.advancedStats === undefined ? {} : { advancedStats: normalizeAdvancedStats(migrated.advancedStats) }),
     personalBets: migrated.personalBets?.map((bet) => {
       const legacy = bet as PersonalBet & { advantageReceiverId?: string };
       if (legacy.nassauVersion === 2) return migratePersonalNassau(legacy, startHole, roundHoles);
