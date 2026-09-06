@@ -118,7 +118,8 @@ import { calculateSupplementalBets, normalizeSupplementalBets, supplementalBetsF
 import { isPersonalSupplementalType, setRememberedCategoryEnabled } from "../lib/bet-activation";
 import { buildPersonalOpponentResults } from "../lib/personal-opponents";
 import { persistPendingRoundReview, persistRoundDraftCheckpoint, ROUND_REVIEW_NOTICE } from "../lib/round-review";
-import { markRoundDraftCancelled, normalizeHistoricalRoundLifecycle, normalizeRoundStartedAt, withDerivedRoundLifecycle } from "../lib/round-lifecycle";
+import { normalizeHistoricalRoundLifecycle, normalizeRoundStartedAt, withDerivedRoundLifecycle } from "../lib/round-lifecycle";
+import { backupActiveRoundForReplacement } from "../lib/new-round-safety";
 import { normalizeAdvancedStats, normalizeScoreCaptureMode, updateAdvancedHoleStat } from "../lib/advanced-stats";
 import { BetHelpButton, SupplementalBetsEditor, SupplementalBetResults } from "./components/supplemental-bets-editor";
 import { buildGeneralResultsTable, pollaDetailBalance, pollaDetailBalances, pollaPositionLabels, summarizeNetUnitQuantities, type ResultCategoryColumn } from "../lib/result-breakdown";
@@ -434,6 +435,10 @@ function MoneyInput({ label, value, onChange }: { label: string; value: number; 
   return <div><label>{label}</label><div className="moneyField"><span>$</span><NumericCaptureInput inputMode="decimal" min={0} value={value} onValueChange={(next) => onChange(next ?? 0)} /></div></div>;
 }
 
+type NewRoundIntent =
+  | { kind: "blank" }
+  | { kind: "group"; players: Player[] };
+
 function GolfBetsApp() {
   const { identity, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, setCloudStatus, applyCloudPreferences, reportCloudSyncError, clearCloudSyncError, refreshCloudSession } = useBackyardAccount();
   const { tab, setTab, goBack, setNavigationGuard } = useScreenNavigation();
@@ -526,6 +531,7 @@ function GolfBetsApp() {
   const [showDeleteRoundConfirm, setShowDeleteRoundConfirm] = useState(false);
   const [showNewRoundConfirm, setShowNewRoundConfirm] = useState(false);
   const [newRoundBackupError, setNewRoundBackupError] = useState("");
+  const [pendingNewRoundIntent, setPendingNewRoundIntent] = useState<NewRoundIntent | null>(null);
   const [editingFrequentPlayerId, setEditingFrequentPlayerId] = useState<string | null>(null);
   const [frequentPlayerDraft, setFrequentPlayerDraft] = useState<{ name: string; handicap: number | null }>({ name: "", handicap: null });
   const [frequentPlayerToDelete, setFrequentPlayerToDelete] = useState<FrequentPlayer | null>(null);
@@ -1818,29 +1824,40 @@ function GolfBetsApp() {
     setPlayers(nextPlayers); setOwnerId(principal?.id || "");
     setScores({}); setScoreEdits({}); setPutts({}); setScoreCaptureMode("quick"); setAdvancedStats({}); setUnitEvents([]); setCounterBetEvents([]); setCounterBetKeepers(emptyCounterBetKeepers()); setLobaHoles({}); setBallFriendSetup({}); setPersonalBets([]); setSupplementalBets([]); setManualBets([]); setShowFullScorecard(false); setExpenses(emptyExpenses);
     setBets(initialBets(nextPlayers.map((player) => player.id))); setRoundHandicapBasis("relative"); setSegments(segmentDefinitions(playOrder(startHole).slice(0, roundHoles), 6)); setCourseSelected(false); setCourseSelectionError(false);
-    setCurrentIndex(0); setRoundId(makeId()); setRoundDate(localDateMexico()); setRoundStartedAt(null); setDraftAvailable(false); setHoleSummary([]); setShowDeleteRoundConfirm(false); setShowNewRoundConfirm(false); setNewRoundBackupError(""); undoStack.current = []; setUndoCount(0); setTab("setup");
+    setCurrentIndex(0); setRoundId(makeId()); setRoundDate(localDateMexico()); setRoundStartedAt(null); setDraftAvailable(false); setHoleSummary([]); setShowDeleteRoundConfirm(false); setShowNewRoundConfirm(false); setNewRoundBackupError(""); setPendingNewRoundIntent(null); undoStack.current = []; setUndoCount(0); setTab("setup");
     if (nextFeedback) setFeedback(nextFeedback);
   }
 
-  function requestNewRound() {
-    if (draftAvailable && !roundClosed) {
+  function applyNewRoundIntent(intent: NewRoundIntent, nextFeedback = "") {
+    resetRound(nextFeedback);
+    if (intent.kind !== "group") return;
+    const loaded = intent.players.map((player) => ({ ...player, id: player.accountUserId ? accountPrimaryPlayerId(player.accountUserId) : makeId() }));
+    setPlayers(loaded);
+    setOwnerId(loaded.find((player) => player.accountUserId === identity.userId)?.id || loaded[0]?.id || "");
+    setBets(initialBets(loaded.map((player) => player.id)));
+  }
+
+  function requestNewRoundIntent(intent: NewRoundIntent) {
+    if (!roundClosed && hasRoundProgress(roundDraftPayload())) {
       setNewRoundBackupError("");
+      setPendingNewRoundIntent(intent);
       setShowNewRoundConfirm(true);
       return;
     }
-    resetRound();
+    applyNewRoundIntent(intent);
+  }
+
+  function requestNewRound() {
+    requestNewRoundIntent({ kind: "blank" });
   }
 
   function confirmNewRound() {
     setNewRoundBackupError("");
     try {
-      if (!flushLocalState.current?.()) throw new Error("local write failed");
-      const activeDraft = readStoredJson<unknown>(localStorage, STORAGE_KEYS.draft, null);
-      const cancelledDraft = activeDraft && typeof activeDraft === "object" && !Array.isArray(activeDraft)
-        ? markRoundDraftCancelled(activeDraft as Record<string, unknown>)
-        : activeDraft;
-      if (!hasRoundProgress(activeDraft) || !preserveDraftConflict(localStorage, cancelledDraft)) throw new Error("backup verification failed");
-      resetRound("La ronda anterior quedó respaldada en este dispositivo.");
+      const intent = pendingNewRoundIntent;
+      if (!intent) throw new Error("new round intent missing");
+      if (!backupActiveRoundForReplacement(localStorage, () => Boolean(flushLocalState.current?.()))) throw new Error("backup verification failed");
+      applyNewRoundIntent(intent, "La ronda anterior quedó respaldada en este dispositivo.");
     } catch {
       setNewRoundBackupError("No se pudo comprobar el respaldo de la ronda actual. No se inició otra ronda; vuelve a intentar.");
     }
@@ -2005,12 +2022,7 @@ function GolfBetsApp() {
   }
 
   function startRoundWithGeneratedGroup(groupPlayers: Player[]) {
-    resetRound();
-    const loaded = groupPlayers.map((player) => ({ ...player, id: player.accountUserId ? accountPrimaryPlayerId(player.accountUserId) : makeId() }));
-    setPlayers(loaded);
-    setOwnerId(loaded.find((player) => player.accountUserId === identity.userId)?.id || loaded[0]?.id || "");
-    setBets(initialBets(loaded.map((player) => player.id)));
-    setTab("setup");
+    requestNewRoundIntent({ kind: "group", players: structuredClone(groupPlayers) });
   }
 
   function loadFrequentGroup(group: FrequentGroup) {
@@ -2675,7 +2687,7 @@ function GolfBetsApp() {
 
     {feedback && <div className="notice" role="status">{feedback}<button className="textButton" aria-label="Cerrar mensaje" onClick={() => setFeedback("")}>×</button></div>}
     {copyFallback && <section className="card"><label>Resumen para copiar<textarea readOnly value={copyFallback} onFocus={event => event.currentTarget.select()} /></label><button onClick={() => setCopyFallback("")}>← Regresar</button></section>}
-    {showNewRoundConfirm && <div className="modalBackdrop"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="new-round-title" aria-describedby="new-round-description"><h2 id="new-round-title">¿Iniciar una nueva ronda?</h2><p id="new-round-description">Ya tienes una ronda en curso. Si comienzas una nueva, la ronda actual dejará de ser la ronda activa.</p>{newRoundBackupError && <div className="notice bad" role="alert">{newRoundBackupError}</div>}<div className="dialogActions"><button autoFocus className="secondary" onClick={() => { setShowNewRoundConfirm(false); setNewRoundBackupError(""); }}>Cancelar</button><button className="primary" onClick={confirmNewRound}>Sí, iniciar nueva ronda</button></div></section></div>}
+    {showNewRoundConfirm && <div className="modalBackdrop"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="new-round-title" aria-describedby="new-round-description"><h2 id="new-round-title">¿Iniciar una nueva ronda?</h2><p id="new-round-description">Ya tienes una ronda en curso. Si comienzas una nueva, la ronda actual dejará de ser la ronda activa.</p>{newRoundBackupError && <div className="notice bad" role="alert">{newRoundBackupError}</div>}<div className="dialogActions"><button autoFocus className="secondary" onClick={() => { setShowNewRoundConfirm(false); setNewRoundBackupError(""); setPendingNewRoundIntent(null); }}>Cancelar</button><button className="primary" onClick={confirmNewRound}>Sí, iniciar nueva ronda</button></div></section></div>}
     {pendingRoundAction && <div className="modalBackdrop"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="round-change-title"><h2 id="round-change-title">Confirmar cambios</h2><p>{pendingRoundAction.message}</p><div className="dialogActions"><button autoFocus className="secondary" onClick={() => setPendingRoundAction(null)}>Cancelar</button><button className="primary" onClick={() => { const action = pendingRoundAction; setPendingRoundAction(null); action.run(); }}>Confirmar</button></div></section></div>}
     {showRoundFinishedNotice && <div className="modalBackdrop"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="round-finished-title"><h2 id="round-finished-title">Ronda terminada</h2><p>{ROUND_REVIEW_NOTICE}</p><div className="dialogActions"><button autoFocus className="primary" onClick={() => { setShowRoundFinishedNotice(false); setTab("results"); }}>Revisar resultados</button></div></section></div>}
     {pendingCloudConflict && (() => { const conflict = pendingCloudConflict.conflicts[0]; if (!conflict) return null; const display = describeCloudConflict(conflict, playerName); return <div className="modalBackdrop"><section className="confirmDialog" role="alertdialog" aria-modal="true" aria-labelledby="cloud-conflict-title"><h2 id="cloud-conflict-title">Cambio en dos dispositivos</h2><p>Elige únicamente el dato en conflicto. Los demás cambios compatibles ya se combinaron.</p><div className="cloudConflictField"><b>{display.label}</b><span>Nube: {display.cloudValue}</span><span>Este dispositivo: {display.localValue}</span></div>{pendingCloudConflict.conflicts.length > 1 && <small>Quedan {pendingCloudConflict.conflicts.length} conflictos por revisar.</small>}<div className="dialogActions"><button className="secondary" onClick={() => resolveCloudConflict("cloud")}>Usar nube para este dato</button><button className="primary" onClick={() => resolveCloudConflict("local")}>Usar este dispositivo</button></div></section></div>; })()}

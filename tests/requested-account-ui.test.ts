@@ -14,8 +14,18 @@ test("Nueva ronda pide confirmación exacta y conserva respaldo antes de reempla
   assert.match(page, /¿Iniciar una nueva ronda\?/);
   assert.match(page, /Ya tienes una ronda en curso\. Si comienzas una nueva, la ronda actual dejará de ser la ronda activa\./);
   assert.match(page, /Sí, iniciar nueva ronda/);
-  assert.match(page, /markRoundDraftCancelled\(activeDraft/);
-  assert.match(page, /preserveDraftConflict\(localStorage, cancelledDraft\)/);
+  assert.match(page, /backupActiveRoundForReplacement\(localStorage/);
+  assert.match(page, /applyNewRoundIntent\(intent, "La ronda anterior quedó respaldada en este dispositivo\."\)/);
+});
+
+test("Jugar con un grupo usa el mismo respaldo seguro que Nueva ronda", () => {
+  assert.match(page, /function startRoundWithGeneratedGroup\(groupPlayers: Player\[\]\) \{\s*requestNewRoundIntent\(\{ kind: "group", players: structuredClone\(groupPlayers\) \}\);\s*\}/);
+  assert.doesNotMatch(page, /function startRoundWithGeneratedGroup[\s\S]{0,220}resetRound\(\)/);
+  assert.match(page, /setPendingNewRoundIntent\(intent\);\s*setShowNewRoundConfirm\(true\)/);
+  assert.match(page, /if \(!roundClosed && hasRoundProgress\(roundDraftPayload\(\)\)\)/);
+  assert.doesNotMatch(page, /if \(draftAvailable && !roundClosed\) \{\s*setNewRoundBackupError/);
+  assert.match(page, /setPendingNewRoundIntent\(null\)/);
+  assert.match(page, />Cancelar<\/button>/);
 });
 
 test("Cuenta invitada muestra solo el estado local y nunca una tarjeta de identidad falsa", () => {

@@ -116,6 +116,7 @@ test("Home conecta grupos y perfil dentro de cinco destinos principales", () => 
 
 test("grupo generado puede compartirse, guardarse y cargarse a una ronda", () => {
   assert.match(page, /startRoundWithGeneratedGroup/);
+  assert.match(page, /requestNewRoundIntent\(\{ kind: "group", players: structuredClone\(groupPlayers\) \}\)/);
   assert.match(page, /saveGeneratedFrequentGroup/);
   const builder = read("app/components/group-builder.tsx");
   assert.match(builder, /navigator\.share/);
