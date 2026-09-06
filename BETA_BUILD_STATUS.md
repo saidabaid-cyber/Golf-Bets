@@ -16,6 +16,7 @@
 - Home con identidad/HCP manual, ronda abierta o revisión pendiente como acción dominante, última tarjeta completa, accesos rápidos, grupos, balance y actividad real del espacio local.
 - Hub Jugar con retorno seguro a configuración/score/resultados, atajos contextuales de ronda y acceso conservado a Histórico, Personales, Stats, Campos, Grupos y Reglas.
 - Perfil con resumen de golf real y Stats separada. Promedio, mejor score, tendencia y putts nunca mezclan tarjetas de 9 y 18 hoyos; la UI declara la cohorte utilizada.
+- Perfil de golf ampliado compatible con cachés anteriores: nombre, apellidos, usuario, ubicación, club, tee, mano, bio y privacidad se editan y recuperan localmente sin guardar tokens ni fabricar una identidad para invitado. Nombre/HCP/avatar conservan su escritura cloud existente; los campos nuevos quedan honestamente marcados como locales hasta disponer de esquema Beta aislado.
 - Tarjeta con captura `Rápida` (score y putts exigidos por apuestas) o `Estadísticas` opcionales. Fairway, GIR y penalidades se guardan sin cambiar scores ni motores de apuestas; Stats e Histórico muestran únicamente datos capturados, sin completar huecos.
 - Actividad personal derivada sólo de rondas y grupos guardados. No se presenta como un feed compartido ni se publica a terceros.
 - Biblioteca de campos con búsqueda tolerante a acentos, favoritos, recientes, creación/edición manual y selección explícita. Editar catálogo no cambia silenciosamente el campo del draft.
@@ -23,11 +24,11 @@
 - Contratos tipados `CourseDataProvider`, `HandicapProvider`, `GolfProfileProvider`, `GolfMapProvider` y `DistanceProvider`; el único proveedor activo busca sin red sobre `Course[]` existentes.
 - Minimum Putts usa la duración explícita de ronda: H1–9 y H10–18 liquidan correctamente en rondas de 9; snapshots válidos de 18 conservan su comportamiento.
 - Importes ordinarios de apuestas se limitan a cero o más en captura; Manuales conserva deliberadamente importes firmados.
-- QA local del último milestone: lint sin errores, TypeScript correcto, 730/730 tests, build Next.js 16.3.3 correcto y respuesta HTTP local 200. El host no expone navegador para verificar visualmente la nueva captura en viewports móviles; ese QA queda pendiente y no se presenta como certificado.
+- QA local del último milestone: lint sin errores, TypeScript correcto, 734/734 tests, build Next.js 16.3.3 correcto y respuesta HTTP local 200. El host no expone navegador para verificar visualmente la nueva captura y el formulario ampliado en viewports móviles; ese QA queda pendiente y no se presenta como certificado.
 
 ## PARTIAL — útil, pero todavía no cumple el modelo final
 
-- Perfil persistente sigue limitado a nombre, email/avatar de Auth y HCP Index manual. Username, ubicación, club, tee, mano, bio, favoritos y privacidad necesitan esquema Beta/RLS.
+- Perfil ampliado ya es persistente y recuperable en el dispositivo. Su sincronización multi-dispositivo, unicidad de username y aplicación remota de privacidad siguen pendientes de esquema Beta/RLS; favoritos permanecen en la biblioteca de campos y Stats se deriva del histórico en vez de duplicarse en el perfil.
 - Grupos siguen siendo plantillas privadas de jugadores con creación/edición/sorteo/carga a ronda; no son aún comunidades con admin, invitaciones y membresías.
 - Campos conservan el modelo legacy `Course`/tee con 18 hoyos. La biblioteca mejora el uso real, pero la normalización Course/Tees/Holes requiere una migración aditiva en Beta.
 - Social es un feed privado local; amigos, solicitudes, bloqueo, feed compartido y reacciones requieren backend multiusuario.

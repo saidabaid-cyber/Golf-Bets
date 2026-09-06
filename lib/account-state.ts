@@ -26,7 +26,66 @@ export type BackyardProfile = {
   email: string;
   avatarUrl: string;
   defaultHandicap: number | null;
+} & Partial<BackyardProfileDetails>;
+
+export type BackyardProfileDetails = {
+  givenName: string;
+  familyName: string;
+  username: string;
+  city: string;
+  state: string;
+  country: string;
+  homeClub: string;
+  preferredTee: string;
+  handedness: "right" | "left" | "ambidextrous" | "";
+  bio: string;
+  profileVisibility: "private" | "friends";
 };
+
+export type BackyardProfileUpdate = Pick<BackyardProfile, "displayName" | "defaultHandicap" | "avatarUrl">
+  & Partial<BackyardProfileDetails>;
+
+const EMPTY_PROFILE_DETAILS: BackyardProfileDetails = {
+  givenName: "",
+  familyName: "",
+  username: "",
+  city: "",
+  state: "",
+  country: "",
+  homeClub: "",
+  preferredTee: "",
+  handedness: "",
+  bio: "",
+  profileVisibility: "private",
+};
+
+export function emptyBackyardProfileDetails() {
+  return { ...EMPTY_PROFILE_DETAILS };
+}
+
+function profileText(value: unknown, fallback = "", maxLength = 120) {
+  return typeof value === "string" ? value.trim().slice(0, maxLength) : fallback;
+}
+
+function profileDetails(candidate: Partial<BackyardProfile>, fallback?: BackyardProfile) {
+  return {
+    givenName: profileText(candidate.givenName, fallback?.givenName, 80),
+    familyName: profileText(candidate.familyName, fallback?.familyName, 100),
+    username: profileText(candidate.username, fallback?.username, 40).replace(/^@+/, ""),
+    city: profileText(candidate.city, fallback?.city, 100),
+    state: profileText(candidate.state, fallback?.state, 100),
+    country: profileText(candidate.country, fallback?.country, 100),
+    homeClub: profileText(candidate.homeClub, fallback?.homeClub, 120),
+    preferredTee: profileText(candidate.preferredTee, fallback?.preferredTee, 80),
+    handedness: candidate.handedness === "right" || candidate.handedness === "left" || candidate.handedness === "ambidextrous"
+      ? candidate.handedness
+      : fallback?.handedness || "",
+    bio: profileText(candidate.bio, fallback?.bio, 280),
+    profileVisibility: candidate.profileVisibility === "friends" || candidate.profileVisibility === "private"
+      ? candidate.profileVisibility
+      : fallback?.profileVisibility || "private",
+  } satisfies typeof EMPTY_PROFILE_DETAILS;
+}
 
 /** Guest is a storage context, never an account identity. Legacy guest
  * preferences may keep an HCP default, but names/emails/avatars are ignored. */
@@ -38,6 +97,7 @@ export function guestBackyardProfile(value: unknown = null): BackyardProfile {
     email: "",
     avatarUrl: "",
     defaultHandicap: typeof candidate.defaultHandicap === "number" && Number.isFinite(candidate.defaultHandicap) ? candidate.defaultHandicap : null,
+    ...EMPTY_PROFILE_DETAILS,
   };
 }
 
@@ -50,11 +110,18 @@ export function normalizeBackyardProfileCache(value: unknown, fallback: Backyard
     displayName: typeof candidate.displayName === "string" && candidate.displayName.trim() ? candidate.displayName.trim() : fallback.displayName,
     avatarUrl: typeof candidate.avatarUrl === "string" ? candidate.avatarUrl : fallback.avatarUrl,
     defaultHandicap: candidate.defaultHandicap === null || (typeof candidate.defaultHandicap === "number" && Number.isFinite(candidate.defaultHandicap)) ? candidate.defaultHandicap : fallback.defaultHandicap,
+    ...profileDetails(candidate, fallback),
   };
 }
 
-export function mergeBackyardProfile<T extends BackyardProfile>(current: T, patch: Pick<BackyardProfile, "displayName" | "defaultHandicap" | "avatarUrl">): T {
-  return { ...current, ...patch, displayName: patch.displayName.trim() };
+export function mergeBackyardProfile<T extends BackyardProfile>(current: T, patch: BackyardProfileUpdate): T {
+  return {
+    ...current,
+    ...patch,
+    displayName: patch.displayName.trim(),
+    avatarUrl: patch.avatarUrl.trim(),
+    ...profileDetails(patch, current),
+  };
 }
 
 export type ProfileDraftValidation =
@@ -111,6 +178,7 @@ export function readOfflineAuthenticatedProfile(storage: OfflineProfileStorage, 
       email: typeof cached.email === "string" ? cached.email : "",
       avatarUrl: typeof cached.avatarUrl === "string" ? cached.avatarUrl : "",
       defaultHandicap: cached.defaultHandicap === null || (typeof cached.defaultHandicap === "number" && Number.isFinite(cached.defaultHandicap)) ? cached.defaultHandicap : null,
+      ...profileDetails(cached),
     };
   } catch { return null; }
 }

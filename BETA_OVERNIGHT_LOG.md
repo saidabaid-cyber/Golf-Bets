@@ -121,3 +121,12 @@ La publicación pendiente debe realizarse únicamente con `git push origin beta`
 - Compatibilidad: rondas anteriores sin estos campos abren en modo rápido y no se reescriben. Ninguna fórmula de apuesta recibe los nuevos datos.
 - QA: lint correcto, TypeScript correcto, 730/730 pruebas, build correcto y HTTP local 200 con contenido de The Backyard.
 - Límite visual: no hay ejecutable `agent-browser` ni navegador CUA disponible en este host. La verificación física/emulada de iPhone para esta nueva UI queda pendiente; no se declara superada.
+
+## Reanudación — perfil de golf ampliado local
+
+- Se extendió el perfil de cuenta de forma aditiva con nombre, apellidos, username, ciudad, estado, país, club, tee, mano, bio y privacidad.
+- Los cachés legacy se normalizan con campos vacíos y privacidad privada; no se reescriben datos históricos ni se inventan identidades para invitado.
+- El guardado es local-first y nunca serializa `accessToken` ni proveedores de Auth. Los campos base conservan su escritura Supabase existente.
+- El formulario comunica que los datos ampliados quedan locales hasta que exista un esquema/RLS Beta aislado; no declara sincronización remota inexistente.
+- QA: lint correcto, TypeScript correcto, 734/734 tests y build de producción correcto.
+- QA visual: pendiente porque este host no dispone de un navegador automatizable; no se certifica Safari/iPhone físico.

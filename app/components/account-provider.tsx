@@ -11,6 +11,7 @@ import {
   bettingConsentPromptStorageKey,
   buildLegalAcceptances,
   clearLegalAcceptancesForUser,
+  emptyBackyardProfileDetails,
   hasCurrentLegalConsent,
   hasCurrentBettingDataConsent,
   hasLocalGolfData,
@@ -28,6 +29,7 @@ import {
   validateProfileDraft,
   type AccountMode,
   type BackyardProfile,
+  type BackyardProfileUpdate,
   type LegalAcceptance,
 } from "../../lib/account-state";
 import { getSupabaseBrowser } from "../../lib/supabase/client";
@@ -49,7 +51,7 @@ export type BackyardIdentity = BackyardProfile & {
 
 type AccountContextValue = {
   identity: BackyardIdentity;
-  updateProfile: (profile: Pick<BackyardProfile, "displayName" | "defaultHandicap" | "avatarUrl">) => Promise<void>;
+  updateProfile: (profile: BackyardProfileUpdate) => Promise<"local" | "cloud">;
   logout: () => Promise<void>;
   finishAccountDeletion: () => Promise<void>;
   openAccess: () => void;
@@ -72,6 +74,11 @@ type AccountContextValue = {
 
 const AccountContext = createContext<AccountContextValue | null>(null);
 
+function profileCachePayload(profile: BackyardProfile) {
+  const { userId, displayName, email, avatarUrl, defaultHandicap, givenName, familyName, username, city, state, country, homeClub, preferredTee, handedness, bio, profileVisibility } = profile;
+  return { userId, displayName, email, avatarUrl, defaultHandicap, givenName, familyName, username, city, state, country, homeClub, preferredTee, handedness, bio, profileVisibility };
+}
+
 export function useBackyardAccount() {
   const value = useContext(AccountContext);
   if (!value) throw new Error("useBackyardAccount debe usarse dentro de AccountProvider");
@@ -85,6 +92,7 @@ function profileFromUser(user: User): BackyardProfile {
     email: user.email || "",
     avatarUrl: String(user.user_metadata?.avatar_url || user.user_metadata?.picture || ""),
     defaultHandicap: typeof user.user_metadata?.default_handicap === "number" ? user.user_metadata.default_handicap : null,
+    ...emptyBackyardProfileDetails(),
   };
   try {
     const cached = JSON.parse(localStorage.getItem(`backyard-profile-cache-v1:${user.id}`) || "null");
@@ -253,7 +261,7 @@ function ConsentScreen({ onAccept, onBack }: { onAccept: (includeBettingConsent:
 
 function ProfileSetupScreen({ identity, onSave, onBack }: {
   identity: BackyardIdentity;
-  onSave: (profile: Pick<BackyardProfile, "displayName" | "defaultHandicap" | "avatarUrl">) => Promise<void>;
+  onSave: (profile: BackyardProfileUpdate) => Promise<"local" | "cloud">;
   onBack: () => Promise<void>;
 }) {
   const [name, setName] = useState(identity.displayName === "Jugador" ? "" : identity.displayName);
@@ -372,8 +380,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   }, []);
   useEffect(() => {
     if (identity?.mode === "authenticated") {
-      const { displayName, defaultHandicap, avatarUrl, email } = identity;
-      try { localStorage.setItem(`backyard-profile-cache-v1:${identity.userId}`, JSON.stringify({ displayName, defaultHandicap, avatarUrl, email })); }
+      try { localStorage.setItem(`backyard-profile-cache-v1:${identity.userId}`, JSON.stringify(profileCachePayload(identity))); }
       catch { issueWithMessage("profile", "No se pudo guardar el perfil local. Libera espacio y reintenta."); }
     }
   }, [identity, issueWithMessage]);
@@ -685,24 +692,33 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     closeBettingConsent(true);
   }
 
-  async function updateProfile(profile: Pick<BackyardProfile, "displayName" | "defaultHandicap" | "avatarUrl">) {
-    if (!identity) return;
+  async function updateProfile(profile: BackyardProfileUpdate): Promise<"local" | "cloud"> {
+    if (!identity) return "local";
     const next = mergeBackyardProfile(identity, profile);
     if (identity.mode === "guest") {
       setIdentity(next);
       localStorage.setItem(ACCOUNT_STORAGE_KEYS.guestProfile, JSON.stringify(profile));
-      return;
+      return "local";
     }
-    const supabase = getSupabaseBrowser();
-    const updatedAt = new Date().toISOString();
-    if (!supabase) throw new Error("Supabase unavailable");
-    await saveCloudProfile(supabase, identity.userId, profile, updatedAt);
-    if (activeUserId.current !== identity.userId) return;
     setIdentity(next);
-    localStorage.setItem(`backyard-profile-cache-v1:${identity.userId}`, JSON.stringify(profile));
+    localStorage.setItem(`backyard-profile-cache-v1:${identity.userId}`, JSON.stringify(profileCachePayload(next)));
     setProfileSetupRequired(false);
     localStorage.setItem(`backyard-profile-ready-v1:${identity.userId}`, "true");
-    setCloudIssue("profile", null);
+    const supabase = getSupabaseBrowser();
+    const updatedAt = new Date().toISOString();
+    if (!supabase || !identity.accessToken) {
+      issueWithMessage("profile", "Perfil guardado en este dispositivo · sincronización pendiente.", navigator.onLine ? "server" : "offline");
+      return "local";
+    }
+    try {
+      await saveCloudProfile(supabase, identity.userId, profile, updatedAt);
+      if (activeUserId.current !== identity.userId) return "local";
+      setCloudIssue("profile", null);
+      return "cloud";
+    } catch (error) {
+      setCloudIssue("profile", cloudIssueFromError("profile", error, navigator.onLine));
+      return "local";
+    }
   }
 
   async function logout() {

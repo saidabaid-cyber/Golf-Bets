@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { LEGAL_DOCUMENT_VERSIONS, legalConfig } from "../../lib/legal-config";
-import { BETTING_DATA_CONSENT_TYPE, profileHandicapInput, profileHandicapLabel, validateProfileDraft } from "../../lib/account-state";
+import { BETTING_DATA_CONSENT_TYPE, emptyBackyardProfileDetails, profileHandicapInput, profileHandicapLabel, validateProfileDraft, type BackyardProfile, type BackyardProfileDetails } from "../../lib/account-state";
 import type { GolfInsights } from "../../lib/golf-insights";
 import { useBackyardAccount } from "./account-provider";
 
@@ -20,11 +20,31 @@ function profileMoney(value: number) {
   return `${rounded > 0 ? "+" : "−"}$${Math.abs(rounded).toLocaleString("es-MX")}`;
 }
 
+type ProfileDetailsDraft = BackyardProfileDetails;
+
+function profileDetailsDraft(profile: BackyardProfile): ProfileDetailsDraft {
+  const defaults = emptyBackyardProfileDetails();
+  return {
+    givenName: profile.givenName || defaults.givenName,
+    familyName: profile.familyName || defaults.familyName,
+    username: profile.username || defaults.username,
+    city: profile.city || defaults.city,
+    state: profile.state || defaults.state,
+    country: profile.country || defaults.country,
+    homeClub: profile.homeClub || defaults.homeClub,
+    preferredTee: profile.preferredTee || defaults.preferredTee,
+    handedness: profile.handedness || defaults.handedness,
+    bio: profile.bio || defaults.bio,
+    profileVisibility: profile.profileVisibility || defaults.profileVisibility,
+  };
+}
+
 export function AccountPanel({ highContrast, onHighContrastChange, golfInsights, onOpenStats }: AccountPanelProps) {
   const { identity, updateProfile, logout, finishAccountDeletion, openAccess, acceptances, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, requestCloudLink, lastCloudSync, cloudIssues, retryCloudSync } = useBackyardAccount();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(identity.displayName);
   const [handicap, setHandicap] = useState(profileHandicapInput(identity.defaultHandicap));
+  const [profileDetails, setProfileDetails] = useState<ProfileDetailsDraft>(() => profileDetailsDraft(identity));
   const [message, setMessage] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteText, setDeleteText] = useState("");
@@ -32,7 +52,13 @@ export function AccountPanel({ highContrast, onHighContrastChange, golfInsights,
   const [deletingAccount, setDeletingAccount] = useState(false);
   const sessionExpired = cloudIssues.some((issue) => issue.kind === "session_expired");
 
-  useEffect(() => { if (!editing) { setName(identity.displayName); setHandicap(profileHandicapInput(identity.defaultHandicap)); } }, [identity.displayName, identity.defaultHandicap, editing]);
+  useEffect(() => {
+    if (!editing) {
+      setName(identity.displayName);
+      setHandicap(profileHandicapInput(identity.defaultHandicap));
+      setProfileDetails(profileDetailsDraft(identity));
+    }
+  }, [identity, editing]);
   const userAcceptances = useMemo(() => acceptances.filter((item) => item.userId === identity.userId), [acceptances, identity.userId]);
   const acceptance = (type: keyof typeof LEGAL_DOCUMENT_VERSIONS) => userAcceptances.find((item) => item.type === type);
   const acceptedLabel = (type: keyof typeof LEGAL_DOCUMENT_VERSIONS) => {
@@ -49,8 +75,9 @@ export function AccountPanel({ highContrast, onHighContrastChange, golfInsights,
     if (!validation.ok) { setMessage(validation.message); return; }
     setSavingProfile(true); setMessage("");
     try {
-      await updateProfile({ displayName: validation.displayName, defaultHandicap: validation.defaultHandicap, avatarUrl: identity.avatarUrl });
-      setEditing(false); setMessage("Perfil actualizado.");
+      const result = await updateProfile({ displayName: validation.displayName, defaultHandicap: validation.defaultHandicap, avatarUrl: identity.avatarUrl, ...profileDetails });
+      setEditing(false);
+      setMessage(result === "cloud" ? "Perfil actualizado y sincronizado." : "Perfil actualizado en este dispositivo. Los datos ampliados quedan pendientes de sincronización Beta.");
     } catch { setMessage("No se confirmó el guardado del perfil. Conservamos lo que escribiste; reintenta."); }
     finally { setSavingProfile(false); }
   }
@@ -84,8 +111,32 @@ export function AccountPanel({ highContrast, onHighContrastChange, golfInsights,
 
     {identity.mode === "authenticated" && <section className="card profileCard">
       <div className="sectionTitle"><div className="profileIdentity"><div className="accountAvatar">{identity.avatarUrl ? <img src={identity.avatarUrl} alt="Avatar" /> : (identity.displayName.trim()[0] || "J").toUpperCase()}</div><div><h2>{identity.displayName}</h2><p>{identity.email || "Sin correo"}</p></div></div><button className="secondary" onClick={() => setEditing((value) => !value)}>{editing ? "Cancelar" : "Editar"}</button></div>
-      {editing && <div className="profileForm"><label>Nombre<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Tu nombre" /></label><label>HCP Index (opcional)<input type="text" inputMode="text" value={handicap} onChange={(event) => setHandicap(event.target.value)} placeholder="Ej. 8.4 o +1.2" /></label><button className="primary" disabled={savingProfile} onClick={saveProfile}>{savingProfile ? "Guardando…" : "Guardar perfil"}</button></div>}
-      {!editing && <div className="profileMeta"><span>HCP Index</span><b>{profileHandicapLabel(identity.defaultHandicap)}</b></div>}
+      {editing && <div className="profileForm profileFormExpanded">
+        <label>Nombre visible<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Tu nombre" /></label>
+        <label>HCP Index (opcional)<input type="text" inputMode="text" value={handicap} onChange={(event) => setHandicap(event.target.value)} placeholder="Ej. 8.4 o +1.2" /></label>
+        <label>Nombre(s)<input value={profileDetails.givenName} onChange={(event) => setProfileDetails((current) => ({ ...current, givenName: event.target.value }))} autoComplete="given-name" /></label>
+        <label>Apellidos<input value={profileDetails.familyName} onChange={(event) => setProfileDetails((current) => ({ ...current, familyName: event.target.value }))} autoComplete="family-name" /></label>
+        <label>Usuario<input value={profileDetails.username} onChange={(event) => setProfileDetails((current) => ({ ...current, username: event.target.value }))} placeholder="sin @" autoComplete="username" /></label>
+        <label>Club<input value={profileDetails.homeClub} onChange={(event) => setProfileDetails((current) => ({ ...current, homeClub: event.target.value }))} /></label>
+        <label>Ciudad<input value={profileDetails.city} onChange={(event) => setProfileDetails((current) => ({ ...current, city: event.target.value }))} autoComplete="address-level2" /></label>
+        <label>Estado<input value={profileDetails.state} onChange={(event) => setProfileDetails((current) => ({ ...current, state: event.target.value }))} autoComplete="address-level1" /></label>
+        <label>País<input value={profileDetails.country} onChange={(event) => setProfileDetails((current) => ({ ...current, country: event.target.value }))} autoComplete="country-name" /></label>
+        <label>Tee preferido<input value={profileDetails.preferredTee} onChange={(event) => setProfileDetails((current) => ({ ...current, preferredTee: event.target.value }))} /></label>
+        <label>Mano<select value={profileDetails.handedness} onChange={(event) => setProfileDetails((current) => ({ ...current, handedness: event.target.value as ProfileDetailsDraft["handedness"] }))}><option value="">Sin indicar</option><option value="right">Derecha</option><option value="left">Izquierda</option><option value="ambidextrous">Ambas</option></select></label>
+        <label>Privacidad<select value={profileDetails.profileVisibility} onChange={(event) => setProfileDetails((current) => ({ ...current, profileVisibility: event.target.value as ProfileDetailsDraft["profileVisibility"] }))}><option value="private">Privado</option><option value="friends">Amigos</option></select></label>
+        <label className="profileBioField">Bio<textarea value={profileDetails.bio} onChange={(event) => setProfileDetails((current) => ({ ...current, bio: event.target.value }))} maxLength={280} rows={3} /></label>
+        <p className="hint profileLocalDetail">Los datos ampliados se conservan en este dispositivo. Su réplica multi-dispositivo se habilitará sólo con el esquema aislado de Beta.</p>
+        <button className="primary profileSaveButton" disabled={savingProfile} onClick={saveProfile}>{savingProfile ? "Guardando…" : "Guardar perfil"}</button>
+      </div>}
+      {!editing && <div className="profileMetaList">
+        <div className="profileMeta"><span>HCP Index</span><b>{profileHandicapLabel(identity.defaultHandicap)}</b></div>
+        {identity.username && <div className="profileMeta"><span>Usuario</span><b>@{identity.username}</b></div>}
+        {identity.homeClub && <div className="profileMeta"><span>Club</span><b>{identity.homeClub}</b></div>}
+        {(identity.city || identity.state || identity.country) && <div className="profileMeta"><span>Ubicación</span><b>{[identity.city, identity.state, identity.country].filter(Boolean).join(", ")}</b></div>}
+        {identity.preferredTee && <div className="profileMeta"><span>Tee preferido</span><b>{identity.preferredTee}</b></div>}
+        {identity.handedness && <div className="profileMeta"><span>Mano</span><b>{identity.handedness === "right" ? "Derecha" : identity.handedness === "left" ? "Izquierda" : "Ambas"}</b></div>}
+        {identity.bio && <p className="profileBio">{identity.bio}</p>}
+      </div>}
     </section>}
 
     {golfInsights && <section className="card betaProfileGolfCard">

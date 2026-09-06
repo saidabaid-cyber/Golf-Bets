@@ -9,7 +9,7 @@ import {
 } from "../lib/account-primary-player";
 import { upsertFrequentPlayers } from "../lib/round-utils";
 import { parseFrequentGroups, playersFromFrequentGroup, serializeFrequentGroups } from "../lib/frequent-templates";
-import { guestBackyardProfile } from "../lib/account-state";
+import { emptyBackyardProfileDetails, guestBackyardProfile } from "../lib/account-state";
 
 const profile = {
   userId: "user-123",
@@ -36,6 +36,7 @@ test("el modo invitado ignora nombres, correo y avatar heredados", () => {
     email: "",
     avatarUrl: "",
     defaultHandicap: 8,
+    ...emptyBackyardProfileDetails(),
   });
 });
 

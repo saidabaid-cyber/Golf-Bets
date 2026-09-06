@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { calculateMonkey, calculatePersonalBets, settleBalances } from "../lib/engine";
-import { normalizeBackyardProfileCache, profileHandicapInput, profileHandicapLabel, validateProfileDraft } from "../lib/account-state";
+import { emptyBackyardProfileDetails, normalizeBackyardProfileCache, profileHandicapInput, profileHandicapLabel, validateProfileDraft } from "../lib/account-state";
 import { buildGeneralResultsTable } from "../lib/result-breakdown";
 import { resultSummaryText } from "../lib/round-editing";
 import { COUNTER_BET_META } from "../lib/side-bets";
@@ -59,10 +59,10 @@ test("HCP Index conserva decimales y notación plus sin convertir vacío a cero"
 test("perfil completado conserva nombre y HCP Index null o decimal al recargar", () => {
   const fallback = { userId: "account-1", displayName: "Jugador", email: "said@example.com", avatarUrl: "", defaultHandicap: 10 };
   assert.deepEqual(normalizeBackyardProfileCache({ displayName: "Said", defaultHandicap: null, avatarUrl: "" }, fallback), {
-    ...fallback, displayName: "Said", defaultHandicap: null,
+    ...fallback, ...emptyBackyardProfileDetails(), displayName: "Said", defaultHandicap: null,
   });
   assert.deepEqual(normalizeBackyardProfileCache({ displayName: "Said", defaultHandicap: 8.4, avatarUrl: "" }, fallback), {
-    ...fallback, displayName: "Said", defaultHandicap: 8.4,
+    ...fallback, ...emptyBackyardProfileDetails(), displayName: "Said", defaultHandicap: 8.4,
   });
   assert.match(read("app/components/account-provider.tsx"), /setProfileSetupRequired\(!cloudProfile\.onboarding_completed_at\)/);
 });
