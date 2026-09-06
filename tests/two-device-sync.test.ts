@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { cloudDataFingerprint, findAmbiguousCloudConflicts, resolveAmbiguousCloudConflicts, stableValue, type CloudDataBundle, type CloudDataConflict } from "../lib/cloud-sync";
+import { cloudDataFingerprint, findAmbiguousCloudConflicts, mergeLocalAndCloud, resolveAmbiguousCloudConflicts, stableValue, type CloudDataBundle, type CloudDataConflict } from "../lib/cloud-sync";
 import { runCloudSyncCycle } from "../lib/cloud-sync-cycle";
 import { readCloudBundle, writeCloudBundle } from "../lib/cloud-sync-service";
 import { CloudDb } from "./helpers/cloud-db";
@@ -19,6 +19,29 @@ function empty(deviceId: string): CloudDataBundle {
 function round(score = 4) {
   return { roundId: "round-shared", players: [{ id: "player-said", name: "Said", handicap: 8 }], scores: { 5: { "player-said": score }, 6: { "player-said": 4 } }, bets: { skins: { enabled: true, value: 100 } } };
 }
+
+test("lifecycle derivado no crea conflicto cuando terminar y capturar ocurren en dispositivos distintos", () => {
+  const base = { roundId: "round-lifecycle", players: [{ id: "player-said", name: "Said", handicap: 8 }], scores: {}, reviewPending: false, lifecycleState: "draft" };
+  const local = {
+    ...empty("computer"),
+    activeDraft: { ...base, scores: { 1: { "player-said": 4 } }, reviewPending: true, lifecycleState: "completed" },
+    activeDraftUpdatedAt: "2026-09-06T12:02:00.000Z",
+    baseDraft: base,
+    baseDraftFingerprint: JSON.stringify(base),
+  };
+  const cloud = {
+    ...empty("phone"),
+    activeDraft: { ...base, scores: { 2: { "player-said": 5 } }, lifecycleState: "live" },
+    activeDraftUpdatedAt: "2026-09-06T12:03:00.000Z",
+  };
+
+  assert.deepEqual(findAmbiguousCloudConflicts(local, cloud), []);
+  const merged = mergeLocalAndCloud(local, cloud).activeDraft as typeof base & { scores: Record<number, Record<string, number>> };
+  assert.equal(merged.lifecycleState, "completed");
+  assert.equal(merged.reviewPending, true);
+  assert.equal(merged.scores[1]["player-said"], 4);
+  assert.equal(merged.scores[2]["player-said"], 5);
+});
 
 test("dos dispositivos descargan, editan, trabajan offline y convergen sin duplicados ni conflictos falsos", async () => {
   const db = new CloudDb();

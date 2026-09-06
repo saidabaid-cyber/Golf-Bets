@@ -2,6 +2,7 @@ import type { Course, FrequentGroup, FrequentPlayer, RoundSnapshot, SavedPersona
 import { STORAGE_KEYS, hasRoundProgress, readStoredJson } from "./round-utils";
 import { parseFrequentGroups } from "./frequent-templates";
 import { fetchWithTimeout } from "./network-timeout";
+import { withDerivedRoundLifecycle } from "./round-lifecycle";
 
 export const CLOUD_SYNC_VERSION = 1;
 export const CLOUD_TOMBSTONES_KEY = "backyard-cloud-tombstones-v1";
@@ -288,31 +289,56 @@ function mergeDraftNode(
   return structuredClone(local);
 }
 
+function hasLifecycleMetadata(value: unknown) {
+  return isRecord(value) && Object.hasOwn(value, "lifecycleState");
+}
+
+/** `draft`/`live`/`completed` are projections of durable round facts, not an
+ * independently editable field. Remove that projection before a three-way
+ * merge and derive it again afterwards. `cancelled` remains an explicit user
+ * action and therefore participates in conflict resolution. */
+function withoutDerivedLifecycle(value: unknown) {
+  const stripped = stripLocalRoundUi(value);
+  if (!isRecord(stripped) || stripped.lifecycleState === "cancelled") return stripped;
+  const result = { ...stripped };
+  delete result.lifecycleState;
+  return result;
+}
+
+function restoreMergedLifecycle(value: unknown, lifecycleAware: boolean) {
+  return lifecycleAware && isRecord(value) ? withDerivedRoundLifecycle(value) : value;
+}
+
 export function mergeActiveDraftGranular(local: CloudDataBundle, cloud: CloudDataBundle) {
   const conflicts: CloudDataConflict[] = [];
   const hasBase = local.baseDraftFingerprint !== undefined;
+  const base = hasBase ? (local.baseDraft !== undefined ? local.baseDraft : parseDraftBase(local.baseDraftFingerprint)) : undefined;
+  const lifecycleAware = [base, local.activeDraft, cloud.activeDraft].some(hasLifecycleMetadata);
+  const localDraft = withoutDerivedLifecycle(local.activeDraft);
+  const cloudDraft = withoutDerivedLifecycle(cloud.activeDraft);
+  const baseDraft = withoutDerivedLifecycle(base);
   if (!hasBase) {
-    if (sameValue(local.activeDraft, cloud.activeDraft)) return { value: stripLocalRoundUi(local.activeDraft), conflicts };
-    if (local.activeDraft === null || cloud.activeDraft === null) {
+    if (sameValue(localDraft, cloudDraft)) return { value: restoreMergedLifecycle(localDraft, lifecycleAware), conflicts };
+    if (localDraft === null || cloudDraft === null) {
       const localAt = timestamp(local.activeDraftUpdatedAt);
       const cloudAt = timestamp(cloud.activeDraftUpdatedAt);
-      if (localAt || cloudAt) return { value: stripLocalRoundUi(localAt >= cloudAt ? local.activeDraft : cloud.activeDraft), conflicts };
+      if (localAt || cloudAt) return { value: restoreMergedLifecycle(localAt >= cloudAt ? localDraft : cloudDraft, lifecycleAware), conflicts };
     }
-    const localHasProgress = hasRoundProgress(local.activeDraft);
-    const cloudHasProgress = hasRoundProgress(cloud.activeDraft);
-    if (!localHasProgress || !cloudHasProgress) return { value: stripLocalRoundUi(localHasProgress ? local.activeDraft : cloud.activeDraft), conflicts };
+    const localHasProgress = hasRoundProgress(localDraft);
+    const cloudHasProgress = hasRoundProgress(cloudDraft);
+    if (!localHasProgress || !cloudHasProgress) return { value: restoreMergedLifecycle(localHasProgress ? localDraft : cloudDraft, lifecycleAware), conflicts };
     if (timestamp(local.activeDraftUpdatedAt) !== timestamp(cloud.activeDraftUpdatedAt)) {
-      return { value: stripLocalRoundUi(chooseLocalVersion(local.activeDraftUpdatedAt, cloud.activeDraftUpdatedAt, localHasProgress) ? local.activeDraft : cloud.activeDraft), conflicts };
+      return { value: restoreMergedLifecycle(chooseLocalVersion(local.activeDraftUpdatedAt, cloud.activeDraftUpdatedAt, localHasProgress) ? localDraft : cloudDraft, lifecycleAware), conflicts };
     }
   }
-  const base = hasBase ? (local.baseDraft !== undefined ? local.baseDraft : parseDraftBase(local.baseDraftFingerprint)) : undefined;
+  const value = mergeDraftNode(baseDraft, localDraft, cloudDraft, [], {
+    deviceId: local.deviceId,
+    activeDraftUpdatedAt: local.activeDraftUpdatedAt,
+    cloudDeviceId: cloud.deviceId,
+    cloudUpdatedAt: cloud.activeDraftUpdatedAt,
+  }, conflicts);
   return {
-    value: mergeDraftNode(base, stripLocalRoundUi(local.activeDraft), stripLocalRoundUi(cloud.activeDraft), [], {
-      deviceId: local.deviceId,
-      activeDraftUpdatedAt: local.activeDraftUpdatedAt,
-      cloudDeviceId: cloud.deviceId,
-      cloudUpdatedAt: cloud.activeDraftUpdatedAt,
-    }, conflicts),
+    value: restoreMergedLifecycle(value, lifecycleAware),
     conflicts,
   };
 }
