@@ -6,7 +6,7 @@ import { calculatePersonalBets } from "../lib/engine";
 import { emptyCounterBetKeepers } from "../lib/side-bets";
 import { initialBets } from "../lib/new-round-bets";
 import { createSupplementalBet } from "../lib/supplemental-bets";
-import { firstIncompleteRoundCapture, incompleteCoreBetSettlements, incompleteExternalPersonalBets, unsettledSupplementalBetResults } from "../lib/round-completion";
+import { abandonedPressurePlayersWithMissingScores, firstIncompleteRoundCapture, incompleteCoreBetSettlements, incompleteExternalPersonalBets, unsettledSupplementalBetResults } from "../lib/round-completion";
 import type { Course, PersonalBet, Player, PuttsByHole, SupplementalBet } from "../lib/types";
 
 const players: Player[] = [{ id: "owner", name: "Said", handicap: 8 }];
@@ -76,6 +76,43 @@ test("archive rejects provisional supplemental calculations without altering fin
   const final = { betId: "final", type: "chicago" as const, label: "Chicago", complete: true };
   assert.deepEqual(unsettledSupplementalBetResults([final, pending]), [pending]);
   assert.deepEqual(unsettledSupplementalBetResults([final]), []);
+});
+
+test("a team-pressure abandonment substitute never completes the canonical DNF card", () => {
+  const roundPlayers: Player[] = [
+    { id: "a", name: "A", handicap: 0 },
+    { id: "b", name: "B", handicap: 0 },
+    { id: "c", name: "C", handicap: 0 },
+    { id: "d", name: "D", handicap: 0 },
+  ];
+  const pressure = createSupplementalBet("team_pressures", roundPlayers, "dnf");
+  assert.equal(pressure.type, "team_pressures");
+  if (pressure.type !== "team_pressures") return;
+  pressure.abandonedPlayerIds = ["b", "b", "outside"];
+  const rotatedOrder = order.slice(9);
+  const partialScores = Object.fromEntries(rotatedOrder.map((hole) => [hole, { a: 4, c: 4, d: 4 }]));
+
+  assert.deepEqual(
+    abandonedPressurePlayersWithMissingScores(rotatedOrder, roundPlayers, partialScores, [pressure]).map((player) => player.id),
+    ["b"],
+  );
+  assert.equal(Object.hasOwn(partialScores[10], "b"), false);
+
+  const completeScores = Object.fromEntries(rotatedOrder.map((hole) => [hole, { a: 4, b: 8, c: 4, d: 4 }]));
+  assert.deepEqual(abandonedPressurePlayersWithMissingScores(rotatedOrder, roundPlayers, completeScores, [pressure]), []);
+});
+
+test("the DNF explanation runs before the generic missing-score archive guard", () => {
+  const page = readFileSync("app/page.tsx", "utf8");
+  const saveStart = page.indexOf("function saveRound()");
+  const specificGuard = page.indexOf("abandonedPressurePlayersWithMissingScores", saveStart);
+  const genericGuard = page.indexOf("Faltan scores por confirmar", saveStart);
+  assert.ok(saveStart >= 0 && specificGuard > saveStart && genericGuard > specificGuard);
+  assert.match(page.slice(specificGuard, genericGuard), /no captures scores ficticios/);
+
+  const editor = readFileSync("app/components/supplemental-bets-editor.tsx", "utf8");
+  assert.match(editor, /Score máximo \(solo apuesta\)/);
+  assert.match(editor, /no completa la tarjeta DNF/);
 });
 
 test("the history action applies the supplemental settlement guard before persisting", () => {

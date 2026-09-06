@@ -91,7 +91,7 @@ import { ResultAccordion } from "./components/result-accordion";
 import { HistoricalRoundDetail } from "./components/historical-round-detail";
 import { FullScorecard } from "./components/full-scorecard";
 import { restoreRoundSnapshot, resultSummaryText } from "../lib/round-editing";
-import { firstIncompleteRoundCapture, incompleteCoreBetSettlements, incompleteExternalPersonalBets, unsettledSupplementalBetResults } from "../lib/round-completion";
+import { abandonedPressurePlayersWithMissingScores, firstIncompleteRoundCapture, incompleteCoreBetSettlements, incompleteExternalPersonalBets, unsettledSupplementalBetResults } from "../lib/round-completion";
 import { migrateSupplementalNassau } from "../lib/nassau-migration";
 import { saveRoundHistoryLocalFirst } from "../lib/round-history-save";
 import { snapshotPersonalResult } from "../lib/personal-history";
@@ -1658,6 +1658,11 @@ function GolfBetsApp() {
       setFeedback(`Completa el HCP de ${missingActiveHandicapPlayers.map((player) => player.name.trim() || "Sin nombre").join(", ")} antes de guardar los cálculos en Histórico.`); return;
     }
     if (order.some(number => players.some(player => Object.hasOwn(scoreEdits[number] || {}, player.id)))) { setFeedback("Hay scores editados sin guardar. Guarda cada hoyo modificado desde Tarjeta antes de archivar."); return; }
+    const abandonedPressurePlayers = abandonedPressurePlayersWithMissingScores(order, players, scores, supplementalBets);
+    if (abandonedPressurePlayers.length) {
+      setFeedback(`El score máximo de ${abandonedPressurePlayers.map((player) => player.name.trim() || "Sin nombre").join(", ")} solo liquida Presiones por pareja. Esta versión todavía no archiva tarjetas DNF: conserva la ronda abierta y no captures scores ficticios.`);
+      return;
+    }
     if (order.some(number => players.some(player => typeof scores[number]?.[player.id] !== "number"))) {
       setFeedback("Faltan scores por confirmar. Completa la tarjeta antes de terminar la ronda."); return;
     }

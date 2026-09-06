@@ -319,7 +319,8 @@ export type TeamPressureVirtualMode = "standard" | "mudo" | "yoyo";
 export type TeamPressuresBet = SupplementalBetBase & {
   type: "team_pressures";
   participantIds: string[];
-  /** Missing scores for these players use abandonedMaxScore. */
+  /** Missing scores for these players use abandonedMaxScore in this wager only.
+   * They never populate the canonical scorecard or imply round-level DNF support. */
   abandonedPlayerIds?: string[];
   teamA: string[];
   metric: TeamPressureMetric;

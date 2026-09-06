@@ -18,6 +18,25 @@ import type {
 
 type PersonalResult = ReturnType<typeof calculatePersonalBets>["results"][number];
 
+export function abandonedPressurePlayersWithMissingScores(
+  order: number[],
+  players: Player[],
+  scores: Record<number, HoleScore>,
+  supplementalBets: SupplementalBet[],
+) {
+  const playerById = new Map(players.map((player) => [player.id, player]));
+  const affectedIds = new Set<string>();
+  for (const bet of supplementalBets) {
+    if (bet.enabled === false || bet.type !== "team_pressures" || !Array.isArray(bet.abandonedPlayerIds)) continue;
+    const participantIds = new Set(Array.isArray(bet.participantIds) ? bet.participantIds : []);
+    for (const playerId of bet.abandonedPlayerIds) {
+      if (!participantIds.has(playerId) || !playerById.has(playerId)) continue;
+      if (order.some((hole) => typeof scores[hole]?.[playerId] !== "number")) affectedIds.add(playerId);
+    }
+  }
+  return players.filter((player) => affectedIds.has(player.id));
+}
+
 type HoleResult = { hole: number };
 type PollaResult = {
   key: "first9" | "second9" | "total18" | "mini";
