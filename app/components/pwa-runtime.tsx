@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { trackOperationalError } from "../../lib/telemetry";
 
 export function PwaRuntime() {
   const [offline, setOffline] = useState(false);
@@ -35,7 +36,8 @@ export function PwaRuntime() {
           window.removeEventListener("online", checkForUpdate);
           window.removeEventListener("pageshow", checkForUpdate);
         };
-      }).catch(() => {
+      }).catch((error) => {
+        trackOperationalError("pwa_service_worker_error", error);
         // IndexedDB autosave still protects the round; Account shows the error.
       });
     }

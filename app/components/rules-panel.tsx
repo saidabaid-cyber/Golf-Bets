@@ -16,6 +16,7 @@ import { speechRecognitionConstructor, createDictationSession, DICTATION_FALLBAC
 import { InternalPdfViewer } from "./internal-pdf-viewer";
 import { useSecondaryView } from "./use-secondary-view";
 import type { LocalRule } from "../../lib/types";
+import { trackEvent, trackOperationalError } from "../../lib/telemetry";
 
 function RulesDisclosure({ id, title, open, onToggle, children }: { id: string; title: string; open: boolean; onToggle: () => void; children: ReactNode }) {
   return <section className="rulesDisclosure" id={id}>
@@ -68,6 +69,11 @@ export function RulesPanel({
   const [detail, setDetail] = useSecondaryView<RuleDetail>("rulesDetail");
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
+  const openedTelemetry = useRef(false);
+  useEffect(() => {
+    if (active && !openedTelemetry.current) { openedTelemetry.current = true; trackEvent("rules_ai_opened"); }
+    if (!active) openedTelemetry.current = false;
+  }, [active]);
   const [error, setError] = useState("");
   const [asking, setAsking] = useState(false);
   const [aiState, setAiState] = useState<"checking" | "ready" | "disabled" | "missing_config" | "unavailable">("checking");
@@ -198,6 +204,7 @@ export function RulesPanel({
     setAsking(true);
     setAnswer("");
     setError("");
+    trackEvent("rules_ai_question", { metadata: { course_context: isLaVistaCourse(courseName) ? "la_vista" : "general" } });
     try {
       const response = await fetch("/api/rules/ask", {
         method: "POST",
@@ -207,8 +214,11 @@ export function RulesPanel({
       const payload = await response.json() as { answer?: string; error?: string };
       if (!response.ok) throw new Error(payload.error || "No fue posible consultar.");
       setAnswer(payload.answer || "No se encontró una respuesta suficiente.");
+      trackEvent("rules_ai_success", { metadata: { course_context: isLaVistaCourse(courseName) ? "la_vista" : "general" } });
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "No fue posible consultar.");
+      trackEvent("rules_ai_error", { metadata: { course_context: isLaVistaCourse(courseName) ? "la_vista" : "general" } });
+      trackOperationalError("rules_ai_error", requestError, { route: "/api/rules/ask" });
     } finally {
       setAsking(false);
     }

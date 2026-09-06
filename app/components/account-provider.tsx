@@ -40,6 +40,7 @@ import { cloudIssueFromError, cloudIssuePriority, type CloudIssue, type CloudIss
 import { BrandLockup } from "./brand-lockup";
 import { BettingConsentDialog } from "./betting-consent-dialog";
 import { persistBettingDataConsent } from "../../lib/betting-consent";
+import { setTelemetryIdentity, trackEvent, trackOperationalError } from "../../lib/telemetry";
 
 export type BackyardIdentity = BackyardProfile & {
   mode: Exclude<AccountMode, "undecided">;
@@ -146,6 +147,7 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
     try {
       await startSocialOAuth(supabase.auth, "google", `${window.location.origin}/auth/callback`);
     } catch (error) {
+      trackOperationalError("auth_google_error", error, { route: "/auth/callback" });
       setMessage(authErrorMessage(error, "google"));
       setBusy(false);
     }
@@ -166,6 +168,7 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
       setCodeSent(true);
       setMessage("Código enviado. Revisa tu correo.");
     } catch (error) {
+      trackOperationalError("auth_email_send_error", error);
       setMessage(authErrorMessage(error, "email"));
     } finally { sendGate.current.finish(); setBusy(false); }
   }
@@ -178,6 +181,7 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
     try {
       onAuthenticated(await verifyEmailOtp(supabase.auth, email, otp));
     } catch (error) {
+      trackOperationalError("auth_otp_error", error);
       setMessage(authErrorMessage(error, "otp"));
     } finally { setBusy(false); }
   }
@@ -328,6 +332,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const accountCloudError = cloudIssuesByDomain.auth?.message || cloudIssuesByDomain.profile?.message || "";
   const reportCloudSyncError = useCallback((error: unknown) => {
     const issue = cloudIssueFromError("round", error, navigator.onLine);
+    trackEvent("sync_error", { metadata: { domain: issue.domain, kind: issue.kind } });
+    trackOperationalError("cloud_sync_error", error, { code: issue.kind });
     setCloudIssue(issue.domain, issue);
   }, [setCloudIssue]);
   const clearCloudSyncError = useCallback(() => {
@@ -338,6 +344,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const setCloudStatus = useCallback((status: AccountContextValue["cloudStatus"]) => {
     setRawCloudStatus(status);
     if (status === "synced" && activeUserId.current) {
+      trackEvent("sync_success");
       const at = new Date().toISOString();
       setLastCloudSync(at);
       localStorage.setItem(`backyard-last-sync-v1:${activeUserId.current}`, at);
@@ -373,6 +380,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     if (activeUserId.current !== userId) throw new Error("Session changed");
   }, []);
   useEffect(() => {
+    setTelemetryIdentity(identity?.mode === "authenticated" ? identity.userId : null, identity?.accessToken || null);
+    if (identity) trackEvent("app_opened");
+  }, [identity]);
+  useEffect(() => {
     if (identity?.mode === "authenticated") {
       const { displayName, defaultHandicap, avatarUrl, email } = identity;
       try { localStorage.setItem(`backyard-profile-cache-v1:${identity.userId}`, JSON.stringify({ displayName, defaultHandicap, avatarUrl, email })); }
@@ -398,6 +409,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     setLastCloudSync(localStorage.getItem(`backyard-last-sync-v1:${session.user.id}`));
     setCloudIssuesByDomain({});
     const profile = profileFromUser(session.user);
+    setTelemetryIdentity(session.user.id, session.access_token);
     setIdentity({ ...profile, mode: "authenticated", providers: session.user.app_metadata?.providers || [session.user.app_metadata?.provider].filter((value): value is string => Boolean(value)), accessToken: session.access_token });
     localStorage.setItem(ACCOUNT_STORAGE_KEYS.mode, "authenticated");
     setCloudConsentChecked(false);
@@ -408,6 +420,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     setCloudLinked(migrationDecision === "linked" || !localDataExists);
     setCloudStatus(migrationDecision === "linked" || !localDataExists ? "pending" : "local");
     setShowMigration(localDataExists && !migrationDecision);
+    trackEvent("login_completed", { metadata: { provider: String(session.user.app_metadata?.provider || "unknown") } });
+    if (Date.now() - Date.parse(session.user.created_at) < 10 * 60 * 1000) trackEvent("signup_completed", { metadata: { provider: String(session.user.app_metadata?.provider || "unknown") } });
   }, [setCloudIssue, setCloudStatus]);
 
   const activateOfflineWorkspace = useCallback(() => {
@@ -693,6 +707,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     if (identity.mode === "guest") {
       setIdentity(next);
       localStorage.setItem(ACCOUNT_STORAGE_KEYS.guestProfile, JSON.stringify(profile));
+      trackEvent("profile_updated");
       return;
     }
     const supabase = getSupabaseBrowser();
@@ -705,6 +720,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     setProfileSetupRequired(false);
     localStorage.setItem(`backyard-profile-ready-v1:${identity.userId}`, "true");
     setCloudIssue("profile", null);
+    trackEvent("profile_updated");
   }
 
   async function logout() {
@@ -715,11 +731,13 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       issueWithMessage("auth", "No pudimos cerrar la sesión. Revisa tu conexión e inténtalo nuevamente.");
       return;
     }
+    trackEvent("logout");
     {
       switchAccountWorkspace(localStorage, "guest");
       localStorage.removeItem(ACCOUNT_STORAGE_KEYS.mode);
       activeUserId.current = null;
       setIdentity(null);
+      setTelemetryIdentity(null, null);
       setAccessRequested(false);
       setCloudLinked(false);
       setCloudStatus("local");

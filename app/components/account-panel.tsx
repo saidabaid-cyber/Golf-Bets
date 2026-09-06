@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { LEGAL_DOCUMENT_VERSIONS, legalConfig } from "../../lib/legal-config";
 import { BETTING_DATA_CONSENT_TYPE, profileHandicapInput, profileHandicapLabel, validateProfileDraft } from "../../lib/account-state";
 import { useBackyardAccount } from "./account-provider";
+import { trackEvent } from "../../lib/telemetry";
 
 export function AccountPanel({ highContrast, onHighContrastChange }: { highContrast: boolean; onHighContrastChange: (value: boolean) => void }) {
   const { identity, updateProfile, logout, finishAccountDeletion, openAccess, acceptances, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, requestCloudLink, lastCloudSync, cloudIssues, retryCloudSync } = useBackyardAccount();
@@ -17,6 +18,7 @@ export function AccountPanel({ highContrast, onHighContrastChange }: { highContr
   const [savingProfile, setSavingProfile] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const sessionExpired = cloudIssues.some((issue) => issue.kind === "session_expired");
+  useEffect(() => { trackEvent("profile_opened"); }, []);
 
   useEffect(() => { if (!editing) { setName(identity.displayName); setHandicap(profileHandicapInput(identity.defaultHandicap)); } }, [identity.displayName, identity.defaultHandicap, editing]);
   const userAcceptances = useMemo(() => acceptances.filter((item) => item.userId === identity.userId), [acceptances, identity.userId]);
