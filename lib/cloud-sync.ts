@@ -144,14 +144,43 @@ export function stableValue(value: unknown): unknown {
   return value;
 }
 
-export function cloudDataFingerprint(bundle: CloudDataBundle) {
-  const text = JSON.stringify(stableValue(bundle));
+function fingerprint(value: unknown) {
+  const text = JSON.stringify(stableValue(value));
   let hash = 0x811c9dc5;
   for (let index = 0; index < text.length; index += 1) {
     hash ^= text.charCodeAt(index);
     hash = Math.imul(hash, 0x01000193);
   }
   return `v${CLOUD_SYNC_VERSION}-${(hash >>> 0).toString(16).padStart(8, "0")}`;
+}
+
+export function cloudDataFingerprint(bundle: CloudDataBundle) {
+  return fingerprint(bundle);
+}
+
+/** Fingerprint only data that can change the canonical account snapshot.
+ * Device and three-way-merge metadata are local coordination details and must
+ * never turn an otherwise identical foreground poll into another POST. */
+export function cloudSyncPayloadFingerprint(bundle: CloudDataBundle) {
+  const preferences = {
+    highContrast: bundle.preferences.highContrast,
+    language: bundle.preferences.language,
+    notificationsEnabled: bundle.preferences.notificationsEnabled,
+    defaultHandicap: bundle.preferences.defaultHandicap,
+    updatedAt: bundle.preferences.updatedAt,
+  };
+  return fingerprint({
+    version: bundle.version,
+    history: bundle.history,
+    frequentPlayers: bundle.frequentPlayers,
+    frequentGroups: bundle.frequentGroups,
+    rivals: bundle.rivals,
+    courses: bundle.courses,
+    preferences,
+    activeDraft: stripLocalRoundUi(bundle.activeDraft),
+    activeDraftUpdatedAt: bundle.activeDraftUpdatedAt,
+    tombstones: bundle.tombstones,
+  });
 }
 
 export function timestamp(value: string | undefined) {
@@ -380,6 +409,27 @@ function sameValue(left: unknown, right: unknown) {
   return JSON.stringify(stableValue(left)) === JSON.stringify(stableValue(right));
 }
 
+/** During active capture this installation is authoritative for its draft.
+ * Other account collections still merge normally, while the cloud draft is
+ * retained only as the next compare-and-swap base. */
+export function mergeLocalFirstActiveDraft(local: CloudDataBundle, cloud: CloudDataBundle): CloudDataBundle {
+  const merged = mergeLocalAndCloud(local, cloud);
+  if (!hasRoundProgress(local.activeDraft)) return merged;
+  const activeDraft = stripLocalRoundUi(local.activeDraft);
+  const cloudDraft = stripLocalRoundUi(cloud.activeDraft);
+  const draftNeedsWrite = !sameValue(activeDraft, cloudDraft);
+  return {
+    ...merged,
+    activeDraft,
+    activeDraftUpdatedAt: draftNeedsWrite
+      ? timestampAfter(local.activeDraftUpdatedAt, cloud.activeDraftUpdatedAt)
+      : cloud.activeDraftUpdatedAt,
+    baseDraft: cloudDraft,
+    baseDraftUpdatedAt: cloud.activeDraftUpdatedAt,
+    baseDraftFingerprint: JSON.stringify(stableValue(cloudDraft)),
+  };
+}
+
 /** Equal clocks with different payloads cannot be resolved safely by last-write
  * wins. Surface them instead of silently picking a browser. */
 export function findAmbiguousCloudConflicts(local: CloudDataBundle, cloud: CloudDataBundle) {
@@ -402,6 +452,31 @@ export function findAmbiguousCloudConflicts(local: CloudDataBundle, cloud: Cloud
     conflicts.push({ collection: "preferences", localId: "preferences", localValue: local.preferences, cloudValue: cloud.preferences, updatedAt: local.preferences.updatedAt, localDeviceId: local.deviceId, cloudDeviceId: cloud.deviceId });
   }
   return conflicts;
+}
+
+/** Client-only ownership guard. The service keeps its granular merge so
+ * compatible account data can converge, but an installation actively
+ * capturing a round never accepts a different draft from another device. */
+export function findActiveDraftOwnershipConflicts(local: CloudDataBundle, cloud: CloudDataBundle) {
+  const localDraftActive = hasRoundProgress(local.activeDraft);
+  const differentInstallation = Boolean(local.deviceId && cloud.deviceId && local.deviceId !== cloud.deviceId);
+  const cloudDraft = stripLocalRoundUi(cloud.activeDraft);
+  const differentDraft = !sameValue(stripLocalRoundUi(local.activeDraft), cloudDraft);
+  const cloudChangedSinceLocalBase = local.baseDraftFingerprint === undefined
+    || local.baseDraftFingerprint !== JSON.stringify(stableValue(cloudDraft));
+  if (localDraftActive && differentInstallation && differentDraft && cloudChangedSinceLocalBase) {
+    return [{
+      collection: "activeDraft",
+      localId: "/",
+      localValue: stripLocalRoundUi(local.activeDraft),
+      cloudValue: stripLocalRoundUi(cloud.activeDraft),
+      localDeviceId: local.deviceId,
+      cloudDeviceId: cloud.deviceId,
+      localUpdatedAt: local.activeDraftUpdatedAt,
+      cloudUpdatedAt: cloud.activeDraftUpdatedAt,
+    } satisfies CloudDataConflict];
+  }
+  return [];
 }
 
 export function isSameDeviceCloudConflict(conflict: CloudDataConflict) {

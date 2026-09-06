@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { describeCloudConflict } from "../lib/cloud-conflict-display";
-import { actionableCloudConflicts, findAmbiguousCloudConflicts, mergeLocalAndCloud, type CloudDataBundle } from "../lib/cloud-sync";
+import { actionableCloudConflicts, cloudSyncPayloadFingerprint, findActiveDraftOwnershipConflicts, findAmbiguousCloudConflicts, mergeLocalAndCloud, mergeLocalFirstActiveDraft, restoreLocalRoundUi, type CloudDataBundle } from "../lib/cloud-sync";
 import { runCloudSyncCycle } from "../lib/cloud-sync-cycle";
 import { ballFriendScoreResult } from "../lib/hole-bet-display";
 import { finalizeNumericCapture, normalizeNumericCaptureText, parseNumericCapture } from "../lib/numeric-input";
@@ -153,6 +153,87 @@ test("cambios rápidos entre hoyos sobreviven a una respuesta retrasada y se sin
   assert.equal(second, true);
   assert.equal(uploadCount, 2);
   assert.deepEqual((cloud.activeDraft as typeof changed).scores, changed.scores);
+});
+
+test("ronda activa local conserva H1 exacto ante nube retrasada y usa un solo ciclo GET POST GET", async () => {
+  const h1 = { said: 4, playerB: 5, playerC: 3, playerD: 6 };
+  const localDraft = { roundId: "round-live", scores: { 1: h1 }, scoreEdits: {}, currentIndex: 1 };
+  const staleDraft = { roundId: "round-live", scores: { 1: { said: 5, playerB: 5, playerC: 3, playerD: 6 } }, scoreEdits: {}, currentIndex: 0 };
+  let local: CloudDataBundle = { ...bundle("iphone-main", localDraft, staleDraft), activeDraftUpdatedAt: "2026-09-06T17:10:00.000Z" };
+  const cloud = { ...bundle("iphone-main", staleDraft, undefined), baseDraft: undefined, baseDraftFingerprint: undefined, activeDraftUpdatedAt: "2026-09-06T17:09:00.000Z" };
+  let gets = 0;
+  let posts = 0;
+  const complete = await runCloudSyncCycle({
+    read: () => structuredClone(local),
+    download: async () => { gets += 1; return structuredClone(cloud); },
+    upload: async () => { posts += 1; },
+    media: async () => {},
+    apply: data => {
+      local = { ...structuredClone(data), activeDraft: restoreLocalRoundUi(data.activeDraft, local.activeDraft) };
+    },
+    current: () => true,
+    status: () => {},
+    merge: mergeLocalFirstActiveDraft,
+    shouldUpload: (_before, remote, merged) => cloudSyncPayloadFingerprint(remote) !== cloudSyncPayloadFingerprint(merged),
+  });
+  assert.equal(complete, true);
+  assert.equal(gets, 2);
+  assert.equal(posts, 1);
+  assert.deepEqual((local.activeDraft as typeof localDraft).scores[1], h1);
+  assert.equal((local.activeDraft as typeof localDraft).currentIndex, 1);
+});
+
+test("veinte ciclos derivados sin edición hacen GET de seguridad pero cero POST", async () => {
+  const draft = { roundId: "round-live", scores: { 1: { said: 4, playerB: 5, playerC: 3, playerD: 6 } }, scoreEdits: {} };
+  let local = bundle("iphone-main", draft, draft);
+  const cloud = bundle("iphone-main", draft, draft);
+  let gets = 0;
+  let posts = 0;
+  for (let index = 0; index < 20; index += 1) {
+    assert.equal(await runCloudSyncCycle({
+      read: () => structuredClone(local),
+      download: async () => { gets += 1; return structuredClone(cloud); },
+      upload: async () => { posts += 1; },
+      media: async () => {},
+      apply: data => { local = structuredClone(data); },
+      current: () => true,
+      status: () => {},
+      merge: mergeLocalFirstActiveDraft,
+      shouldUpload: (_before, remote, merged) => cloudSyncPayloadFingerprint(remote) !== cloudSyncPayloadFingerprint(merged),
+    }), true);
+  }
+  assert.equal(gets, 20, "cada polling explícito realiza como máximo un GET");
+  assert.equal(posts, 0, "un payload confirmado nunca se vuelve a escribir");
+  assert.deepEqual(local.activeDraft, draft);
+
+  const page = readFileSync("app/page.tsx", "utf8");
+  assert.doesNotMatch(page, /window\.addEventListener\("focus",/);
+  assert.doesNotMatch(page, /useEffect\(\(\) => \{\s*requestCloudSync\.current\?\.\(\);\s*\}, \[courses,/);
+});
+
+test("otro dispositivo con una versión distinta detiene sync y conserva el draft local", async () => {
+  const localDraft = { roundId: "round-live", scores: { 1: { said: 4 } }, scoreEdits: {} };
+  const cloudDraft = { roundId: "round-live", scores: { 1: { said: 6 } }, scoreEdits: {} };
+  let local = bundle("iphone-a", localDraft, undefined);
+  const cloud = { ...bundle("iphone-b", cloudDraft, undefined), baseDraft: undefined, baseDraftFingerprint: undefined };
+  let applied = 0;
+  let posts = 0;
+  const complete = await runCloudSyncCycle({
+    read: () => structuredClone(local),
+    download: async () => structuredClone(cloud),
+    upload: async () => { posts += 1; },
+    media: async () => {},
+    apply: data => { applied += 1; local = structuredClone(data); },
+    conflicts: (before, remote) => actionableCloudConflicts(findActiveDraftOwnershipConflicts(before, remote)).length > 0,
+    current: () => true,
+    status: () => {},
+    merge: mergeLocalFirstActiveDraft,
+    shouldUpload: (_before, remote, merged) => cloudSyncPayloadFingerprint(remote) !== cloudSyncPayloadFingerprint(merged),
+  });
+  assert.equal(complete, false);
+  assert.equal(posts, 0);
+  assert.equal(applied, 0);
+  assert.deepEqual(local.activeDraft, localDraft);
 });
 
 test("el conflicto muestra contexto humano sin ruta, UUID, JSON ni timestamp", () => {

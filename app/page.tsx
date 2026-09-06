@@ -87,7 +87,7 @@ import { buildHoleSummary, clearActiveRoundStorage, hasRoundProgress, historical
 import { monkeyHoleSummary, personalHoleSummary } from "../lib/personal-summary";
 import { downloadRoundCsv, downloadRoundImage, downloadRoundPdf, shareRound } from "../lib/round-export";
 import { deleteScorecardPhoto, deleteScorecardPhotoCloud, readScorecardPhoto, readScorecardPhotoCloud, saveScorecardPhoto, uploadScorecardPhotoCloud } from "../lib/scorecard-photo";
-import { actionableCloudConflicts, CLOUD_TOMBSTONES_KEY, cloudDataFingerprint, collectLocalCloudData, downloadCloudData, findAmbiguousCloudConflicts, isCloudFieldConflict, mergeLocalAndCloud, persistCloudMetadata, resolveAmbiguousCloudConflicts, restoreLocalRoundUi, stableValue, trackLocalCloudCheckpoint, trackLocalCloudEdits, type CloudDataBundle, type CloudDataConflict, recordCloudDeletion, uploadCloudData, withCloudAuthRetry } from "../lib/cloud-sync";
+import { actionableCloudConflicts, CLOUD_TOMBSTONES_KEY, cloudSyncPayloadFingerprint, collectLocalCloudData, downloadCloudData, findActiveDraftOwnershipConflicts, findAmbiguousCloudConflicts, isCloudFieldConflict, mergeLocalFirstActiveDraft, persistCloudMetadata, resolveAmbiguousCloudConflicts, restoreLocalRoundUi, stableValue, trackLocalCloudCheckpoint, trackLocalCloudEdits, type CloudDataBundle, type CloudDataConflict, recordCloudDeletion, uploadCloudData, withCloudAuthRetry } from "../lib/cloud-sync";
 import { describeCloudConflict } from "../lib/cloud-conflict-display";
 import { ownsLocalWorkspace, preserveDataConflicts, preserveDraftConflict } from "../lib/account-workspace";
 import { accountPrimaryPlayerId, accountPrimaryRoundPlayer, syncAccountPrimaryFrequentPlayer, syncLinkedRoundPlayerName } from "../lib/account-primary-player";
@@ -760,9 +760,9 @@ function GolfBetsApp() {
     // Cloud responses can arrive after a local-first finalization. Reconcile
     // again at the UI boundary so a canonical response captured before the
     // save can never replace a newly confirmed Historical round.
-    const reconciled = mergeLocalAndCloud(local, data);
+    const reconciled = mergeLocalFirstActiveDraft(local, data);
     const changed = (left: unknown, right: unknown) => JSON.stringify(stableValue(left)) !== JSON.stringify(stableValue(right));
-    if (changed(local.activeDraft, reconciled.activeDraft)) {
+    if (!hasRoundProgress(local.activeDraft) && changed(local.activeDraft, reconciled.activeDraft)) {
       preserveDraftConflict(localStorage, local.activeDraft);
       applyDraft(reconciled.activeDraft, { preserveLocalUi: true });
       setFeedback("Ronda actualizada desde la nube. La versión local anterior se conservó en este dispositivo.");
@@ -788,7 +788,7 @@ function GolfBetsApp() {
     hadLocalPreferences.current = true;
     const applied = collectLocalCloudData(localStorage, reconciled.preferences.defaultHandicap, true);
     applied.deviceId = offlineDeviceId.current;
-    return cloudDataFingerprint(applied);
+    return cloudSyncPayloadFingerprint(applied);
   }, [applyCloudPreferences, applyDraft]);
 
   useEffect(() => {
@@ -830,7 +830,7 @@ function GolfBetsApp() {
       let queued: CloudSyncTrigger | null = null;
       try {
         const initial = read();
-        fingerprint = cloudDataFingerprint(initial);
+        fingerprint = cloudSyncPayloadFingerprint(initial);
         const decision = gate.begin(fingerprint, trigger);
         const skippedStatus = syncStatusAfterSkip(decision);
         if (skippedStatus) { setCloudStatus(skippedStatus); return; }
@@ -839,10 +839,13 @@ function GolfBetsApp() {
         let appliedFingerprint = "";
         const completed = await runCloudSyncCycle({
           read, current, status: setCloudStatus,
+          merge: mergeLocalFirstActiveDraft,
+          shouldUpload: (_local, remote, merged) => cloudSyncPayloadFingerprint(remote) !== cloudSyncPayloadFingerprint(merged),
           download: () => withCloudAuthRetry(downloadCloudData, liveIdentity.current.accessToken || "", refreshCloudSession),
           upload: data => withCloudAuthRetry(token => uploadCloudData(data, token), liveIdentity.current.accessToken || "", refreshCloudSession),
           conflicts: (local, cloud) => {
-            const conflicts = actionableCloudConflicts(findAmbiguousCloudConflicts(local, cloud));
+            const ownershipConflicts = findActiveDraftOwnershipConflicts(local, cloud);
+            const conflicts = actionableCloudConflicts(ownershipConflicts.length ? ownershipConflicts : findAmbiguousCloudConflicts(local, cloud));
             if (!conflicts.length) return false;
             preserveDataConflicts(localStorage, conflicts);
             setPendingCloudConflict({ local, cloud, conflicts });
@@ -874,7 +877,7 @@ function GolfBetsApp() {
           retry: () => { queued = "local"; },
         });
         if (completed) {
-          const confirmedFingerprint = appliedFingerprint || cloudDataFingerprint(read());
+          const confirmedFingerprint = appliedFingerprint || cloudSyncPayloadFingerprint(read());
           queued = gate.success(confirmedFingerprint);
           void acknowledgeOfflineBundle(userId, confirmedFingerprint);
           failedAttempts = 0; nextAutoAttemptAt = 0;
@@ -903,7 +906,7 @@ function GolfBetsApp() {
             }
             // The write raced with a compatible field. Rebase on the latest
             // canonical copy, keep local navigation, and retry immediately.
-            const rebased = mergeLocalAndCloud(local, cloud);
+            const rebased = mergeLocalFirstActiveDraft(local, cloud);
             applyCloudBundle(rebased, local);
             clearCloudSyncError();
             setCloudStatus("pending");
@@ -928,7 +931,6 @@ function GolfBetsApp() {
     const onOffline = () => { if (current()) setCloudStatus("offline"); };
     const onRetry = () => schedule("manual");
     const onVisible = () => { if (document.visibilityState === "visible") schedule("visible"); };
-    const onFocus = () => schedule("visible");
     // Realtime is intentionally not required for round ownership sync. A
     // bounded foreground refresh makes two open devices converge without
     // maintaining a fragile channel while a player is moving on the course.
@@ -937,22 +939,17 @@ function GolfBetsApp() {
     }, 45_000);
     window.addEventListener("online", onOnline);
     window.addEventListener("offline", onOffline);
-    window.addEventListener("focus", onFocus);
     window.addEventListener("backyard-sync-retry", onRetry);
     document.addEventListener("visibilitychange", onVisible);
     schedule("mount");
     return () => {
       cancelled = true; gate.cancel(); clearTimeout(timer); requestCloudSync.current = null;
       window.removeEventListener("online", onOnline); window.removeEventListener("offline", onOffline);
-      window.removeEventListener("focus", onFocus); window.clearInterval(foregroundRefresh);
+      window.clearInterval(foregroundRefresh);
       window.removeEventListener("backyard-sync-retry", onRetry);
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [hydrated, identity.mode, identity.userId, cloudLinked, setCloudStatus, applyCloudBundle, reportCloudSyncError, clearCloudSyncError, refreshCloudSession]);
-
-  useEffect(() => {
-    requestCloudSync.current?.();
-  }, [courses, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, course, courseSelected, startHole, roundHoles, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, putts, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, identity.defaultHandicap]);
 
   function resolveCloudConflict(choice: "local" | "cloud") {
     if (!pendingCloudConflict) return;
@@ -1495,6 +1492,7 @@ function GolfBetsApp() {
       void persistOfflineBundle(identity.userId, offline, identity.mode === "authenticated" && cloudLinked).catch(() => {
         setFeedback("Ronda terminada y guardada en este dispositivo; el respaldo secundario y la sincronización siguen pendientes.");
       });
+      requestCloudSync.current?.();
       return true;
     } catch {
       setSaveStatus("error");
@@ -2102,6 +2100,7 @@ function GolfBetsApp() {
       const offline = collectLocalCloudData(localStorage, identity.defaultHandicap, hadLocalPreferences.current);
       offline.deviceId = offlineDeviceId.current;
       void persistOfflineBundle(identity.userId, offline, identity.mode === "authenticated" && cloudLinked).catch(() => undefined);
+      requestCloudSync.current?.();
       return true;
     } catch {
       setSaveStatus("error");

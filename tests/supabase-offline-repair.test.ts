@@ -180,7 +180,7 @@ test("UI distingue guardado local, pendiente, offline, nube y error", () => {
   assert.match(page, /saveRoundHistoryLocalFirst/);
   assert.match(page, /Ronda guardada en este dispositivo · sincronización pendiente\./);
   assert.doesNotMatch(page, /todavía tiene cambios pendientes de sincronizar/);
-  assert.match(page, /window\.addEventListener\("focus", onFocus\)/);
+  assert.doesNotMatch(page, /window\.addEventListener\("focus",/);
   assert.match(page, /45_000/);
 });
 
