@@ -44,14 +44,14 @@ export const BET_HELP: Record<BetHelpKind, BetHelpCopy> = {
     title: "⚡ Presiones individuales",
     what: "Serie de enfrentamientos hoyo a hoyo entre cada pareja de participantes.",
     how: ["La presión abre en un hoyo y permanece abierta mientras empatan.", "Cuando uno obtiene mejor score neto, cierra esa presión y la siguiente comienza en el próximo hoyo."],
-    rules: ["Aplica las ventajas y el porcentaje HCP configurado.", "El carry decide si una presión abierta continúa al cambiar de vuelta. El Match Play adicional, si se activa, se liquida aparte."],
+    rules: ["Aplica las ventajas y el porcentaje HCP configurado.", "El carry decide si una presión abierta continúa al cambiar de vuelta; un empate al terminar la vuelta paga $0. El Match Play adicional se liquida aparte."],
     example: "Jugador A y B empatan H1; A gana H2. La presión H1–H2 paga el valor configurado a A y otra comienza en H3.",
   },
   team_pressures: {
     title: "🤝 Presiones por parejas",
     what: "Presiones entre equipos comparando Low Ball, High Ball o ambos.",
     how: ["Primero calcula el score neto de cada participante con su HCP configurado.", "La comparación elegida cierra una presión cuando un equipo supera al otro y abre la siguiente en el próximo hoyo."],
-    rules: ["En 2 vs 2 cada integrante recibe o paga una participación.", "Con tres jugadores, Mudo aporta Par y Yo-Yo copia el score neto de su pareja. Los abandonos usan el score máximo configurado."],
+    rules: ["En 2 vs 2 cada integrante recibe o paga una participación; un empate al terminar la vuelta paga $0.", "Con tres jugadores, Mudo aporta Par y Yo-Yo copia el score neto de su pareja. Los abandonos usan el score máximo configurado."],
     example: "Equipo A gana Low Ball en H3: cierra esa presión y cada integrante cobra el valor correspondiente.",
   },
   chicago: {

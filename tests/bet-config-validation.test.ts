@@ -703,7 +703,8 @@ test("supplemental calculators fail closed for malformed required numeric fields
   }
   const unusedAbandonedScore = createSupplementalBet("team_pressures", players, "numeric-team-unused-abandoned") as Extract<SupplementalBet, { type: "team_pressures" }>;
   unusedAbandonedScore.abandonedMaxScore = Number.NaN;
-  assert.equal(calculate(unusedAbandonedScore).complete, true);
+  const decisiveTeamScores = Object.fromEntries(order.map((hole) => [hole, { a: 3, b: 4, c: 5, d: 6 }]));
+  assert.equal(calculateSupplementalBets([unusedAbandonedScore], players.slice(0, 4), course, decisiveTeamScores, completePutts, order).results[0].complete, true);
   const usedAbandonedScore = { ...unusedAbandonedScore, id: "numeric-team-used-abandoned", abandonedPlayerIds: ["a"] };
   assertFailsClosed(usedAbandonedScore);
   const fractionalAbandonedScore = { ...unusedAbandonedScore, id: "numeric-team-fractional-abandoned", abandonedPlayerIds: ["a"], abandonedMaxScore: 7.5 };

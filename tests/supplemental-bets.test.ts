@@ -101,8 +101,56 @@ test("Presiones individuales carry an open H9 challenge into H10 only when enabl
   const scoreRows = { ...tiedFirstNine, 10: { a: 3, b: 4 } };
   const withCarry = calculate([{ ...base, carryEnabled: true } as SupplementalBet], players.slice(0, 2), scoreRows, Array.from({ length: 10 }, (_, index) => index + 1));
   const withoutCarry = calculate([{ ...base, carryEnabled: false } as SupplementalBet], players.slice(0, 2), scoreRows, Array.from({ length: 10 }, (_, index) => index + 1));
-  assert.equal(withCarry.results[0].pressures?.find((item) => !item.open)?.startHole, 1);
-  assert.equal(withoutCarry.results[0].pressures?.find((item) => !item.open)?.startHole, 10);
+  assert.equal(withCarry.results[0].pressures?.find((item) => item.winnerIds.length)?.startHole, 1);
+  assert.equal(withoutCarry.results[0].pressures?.find((item) => item.winnerIds.length)?.startHole, 10);
+  assert.equal(withoutCarry.results[0].pressures?.find((item) => item.tied)?.endHole, 9);
+});
+
+test("Presiones individuales liquidan un empate terminal sin cobro y conservan lo ya ganado", () => {
+  const bet = createSupplementalBet("individual_pressures", players.slice(0, 2), "press-final-tie");
+  const order = Array.from({ length: 9 }, (_, index) => index + 1);
+  const scoreRows = scores(order, { a: 4, b: 4 });
+  scoreRows[1] = { a: 3, b: 4 };
+  const result = calculate([bet], players.slice(0, 2), scoreRows, order).results[0];
+  const tiedPressure = result.pressures?.find((pressure) => pressure.tied);
+  assert.deepEqual(result.balances, { a: 100, b: -100 });
+  assert.deepEqual(result.pressures?.filter((pressure) => pressure.winnerIds.length).map((pressure) => [pressure.startHole, pressure.endHole]), [[1, 1]]);
+  assert.equal(tiedPressure?.startHole, 2);
+  assert.equal(tiedPressure?.endHole, 9);
+  assert.equal(tiedPressure?.open, false);
+  assert.equal(result.complete, true);
+  assert.equal(result.audit?.components.at(-1)?.status, "final");
+  assert.match(result.lines.at(-1) || "", /empate final · sin cobro/);
+});
+
+test("Presiones individuales cierran sin cobro el empate de 18 hoyos y respetan orden y carry", () => {
+  const bet = createSupplementalBet("individual_pressures", players.slice(0, 2), "press-full-tie");
+  for (const order of [
+    Array.from({ length: 18 }, (_, index) => index + 1),
+    [...Array.from({ length: 9 }, (_, index) => index + 10), ...Array.from({ length: 9 }, (_, index) => index + 1)],
+  ]) {
+    for (const carryEnabled of [true, false]) {
+      const result = calculate([{ ...bet, carryEnabled } as SupplementalBet], players.slice(0, 2), scores(order, { a: 4, b: 4 }), order).results[0];
+      const expectedStart = carryEnabled ? order[0] : order[9];
+      assert.equal(result.pressures?.some((pressure) => pressure.open), false);
+      assert.equal(result.pressures?.at(-1)?.startHole, expectedStart);
+      assert.equal(result.pressures?.at(-1)?.endHole, order.at(-1));
+      assert.equal(result.pressures?.every((pressure) => pressure.tied), true);
+      assert.equal(result.pressures?.length, carryEnabled ? 1 : 2);
+      assert.equal(result.complete, true);
+    }
+  }
+});
+
+test("Presiones individuales sí cierran cuando el último hoyo rompe el empate", () => {
+  const bet = createSupplementalBet("individual_pressures", players.slice(0, 2), "press-last-hole");
+  const order = Array.from({ length: 9 }, (_, index) => index + 1);
+  const scoreRows = scores(order, { a: 4, b: 4 });
+  scoreRows[9] = { a: 3, b: 4 };
+  const result = calculate([bet], players.slice(0, 2), scoreRows, order).results[0];
+  assert.equal(result.pressures?.some((pressure) => pressure.open), false);
+  assert.equal(result.pressures?.[0]?.endHole, 9);
+  assert.equal(result.complete, true);
 });
 
 test("Mudo and Yo-Yo create the three documented matchups for three real players", () => {
@@ -240,7 +288,52 @@ test("un empate Low permanece abierto mientras High se cierra", () => {
   const high = result.results[0].pressures?.find((pressure) => pressure.component === "High Ball");
   assert.equal(low?.open, true);
   assert.equal(high?.open, false);
+  assert.equal(result.results[0].complete, false);
   assert.deepEqual(result.balances, { a: 20, b: 20, c: -20, d: -20 });
+});
+
+test("Presiones por parejas liquidan un componente terminal empatado sin cobro", () => {
+  const bet = { ...createSupplementalBet("team_pressures", players, "team-final-tie"), metric: "low" } as SupplementalBet;
+  const order = Array.from({ length: 9 }, (_, index) => index + 1);
+  const result = calculate([bet], players, scores(order, { a: 4, b: 5, c: 4, d: 6 }), order).results[0];
+  assert.equal(result.pressures?.length, 1);
+  assert.equal(result.pressures?.[0]?.component, "Low Ball");
+  assert.equal(result.pressures?.[0]?.startHole, 1);
+  assert.equal(result.pressures?.[0]?.endHole, 9);
+  assert.equal(result.pressures?.[0]?.open, false);
+  assert.equal(result.pressures?.[0]?.tied, true);
+  assert.equal(result.complete, true);
+  assert.deepEqual(result.balances, { a: 0, b: 0, c: 0, d: 0 });
+  assert.match(result.lines[0], /empate final · sin cobro/);
+});
+
+test("Presiones por parejas cierran empates de 18 hoyos por vuelta y desde H10", () => {
+  const bet = { ...createSupplementalBet("team_pressures", players, "team-full-tie"), metric: "low" } as SupplementalBet;
+  for (const order of [
+    Array.from({ length: 18 }, (_, index) => index + 1),
+    [...Array.from({ length: 9 }, (_, index) => index + 10), ...Array.from({ length: 9 }, (_, index) => index + 1)],
+  ]) {
+    for (const carryEnabled of [true, false]) {
+      const result = calculate([{ ...bet, carryEnabled } as SupplementalBet], players, scores(order, { a: 4, b: 5, c: 4, d: 6 }), order).results[0];
+      assert.equal(result.complete, true);
+      assert.equal(result.pressures?.some((pressure) => pressure.open), false);
+      assert.equal(result.pressures?.every((pressure) => pressure.tied), true);
+      assert.equal(result.pressures?.length, carryEnabled ? 1 : 2);
+      assert.equal(result.pressures?.at(-1)?.startHole, carryEnabled ? order[0] : order[9]);
+      assert.equal(result.pressures?.at(-1)?.endHole, order.at(-1));
+    }
+  }
+});
+
+test("Presiones por parejas sí cierran cuando el último hoyo es decisivo", () => {
+  const bet = { ...createSupplementalBet("team_pressures", players, "team-last-hole"), metric: "low" } as SupplementalBet;
+  const order = Array.from({ length: 9 }, (_, index) => index + 1);
+  const scoreRows = scores(order, { a: 4, b: 5, c: 4, d: 6 });
+  scoreRows[9] = { a: 3, b: 5, c: 4, d: 6 };
+  const result = calculate([bet], players, scoreRows, order).results[0];
+  assert.equal(result.pressures?.some((pressure) => pressure.open), false);
+  assert.equal(result.pressures?.[0]?.endHole, 9);
+  assert.equal(result.complete, true);
 });
 
 test("Presiones por parejas aplican HCP antes de Low y High", () => {
@@ -257,8 +350,9 @@ test("cada componente de Presiones por parejas conserva carry entre H9 y H10", (
   const order = Array.from({ length: 10 }, (_, index) => index + 1);
   const withCarry = calculate([{ ...base, carryEnabled: true } as SupplementalBet], players, rows, order);
   const withoutCarry = calculate([{ ...base, carryEnabled: false } as SupplementalBet], players, rows, order);
-  assert.equal(withCarry.results[0].pressures?.find((pressure) => !pressure.open)?.startHole, 1);
-  assert.equal(withoutCarry.results[0].pressures?.find((pressure) => !pressure.open)?.startHole, 10);
+  assert.equal(withCarry.results[0].pressures?.find((pressure) => pressure.winnerIds.length)?.startHole, 1);
+  assert.equal(withoutCarry.results[0].pressures?.find((pressure) => pressure.winnerIds.length)?.startHole, 10);
+  assert.equal(withoutCarry.results[0].pressures?.find((pressure) => pressure.tied)?.endHole, 9);
 });
 
 test("Presiones por parejas use the configured maximum for a player who abandoned", () => {

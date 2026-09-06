@@ -39,6 +39,7 @@ export type SupplementalPressureDetail = {
   loserIds: string[];
   value: number;
   open: boolean;
+  tied?: boolean;
 };
 
 export type SupplementalBetResult = {
@@ -414,31 +415,40 @@ function calculateIndividualPressures(
   const missingHandicapPlayerIds = playersMissingRoundHandicap(participants).map((player) => player.id);
   if (!enabled(bet) || !hasCleanSelectedPlayerIds(players, bet.participantIds, 2) || participants.length < 2 || missingHandicapPlayerIds.length || !validStake(bet.value) || !validHandicapPercentage(bet.hcpPct) || !validHandicapMode(bet.decimals) || typeof bet.carryEnabled !== "boolean" || typeof bet.matchPlayEnabled !== "boolean") return { betId: bet.id, type: bet.type, label: SUPPLEMENTAL_BET_LABELS[bet.type], complete: false, balances, lines: [], pressures, missingHandicapPlayerIds };
   for (const [first, second] of pairwise(participants)) {
-    let startHole = order[0];
     let firstWins = 0;
     let secondWins = 0;
-    for (let index = 0; index < order.length; index += 1) {
-      const holeNumber = order[index];
-      if (!bet.carryEnabled && index === 9) startHole = holeNumber;
-      const firstGross = scores[holeNumber]?.[first.id];
-      const secondGross = scores[holeNumber]?.[second.id];
-      if (typeof firstGross !== "number" || typeof secondGross !== "number") continue;
-      const comparison: [Player, Player] = [first, second];
-      const firstScore = pairNet(comparison, first, firstGross, course, holeNumber, bet.hcpPct, bet.decimals, basis);
-      const secondScore = pairNet(comparison, second, secondGross, course, holeNumber, bet.hcpPct, bet.decimals, basis);
-      if (Math.abs(firstScore - secondScore) < EPS) continue;
-      const winner = firstScore < secondScore ? first : second;
-      const loser = winner.id === first.id ? second : first;
-      if (winner.id === first.id) firstWins += 1;
-      else secondWins += 1;
-      settleHeadToHead(balances, winner.id, loser.id, Math.max(0, bet.value));
-      pressures.push({ label: `${first.name} vs ${second.name}`, startHole, endHole: holeNumber, winnerIds: [winner.id], loserIds: [loser.id], value: Math.max(0, bet.value), open: false });
-      auditComponents.push({ key: `${first.id}:${second.id}:pressure:${startHole}`, label: `Presión · H${startHole}–H${holeNumber}`, status: "final", amounts: { [winner.id]: Math.max(0, bet.value), [loser.id]: -Math.max(0, bet.value) }, lines: [`${first.name} vs ${second.name}`, `Ganó ${winner.name} · $${Math.max(0, bet.value)}`] });
-      startHole = order[index + 1] ?? 0;
-    }
-    if (startHole && order.includes(startHole) && !completeForPlayers(order.slice(order.indexOf(startHole)), scores, [first.id, second.id])) {
-      pressures.push({ label: `${first.name} vs ${second.name}`, startHole, winnerIds: [], loserIds: [], value: Math.max(0, bet.value), open: true });
-      auditComponents.push({ key: `${first.id}:${second.id}:pressure:${startHole}`, label: `Presión abierta · H${startHole}`, status: "pending", amounts: { [first.id]: 0, [second.id]: 0 }, lines: [`${first.name} vs ${second.name}`, "Pendiente de cierre con hoyos confirmados"] });
+    const segments = !bet.carryEnabled && order.length > 9 ? [order.slice(0, 9), order.slice(9)] : [order];
+    for (const segment of segments.filter((candidate) => candidate.length > 0)) {
+      let startHole = segment[0];
+      for (let index = 0; index < segment.length; index += 1) {
+        const holeNumber = segment[index];
+        const firstGross = scores[holeNumber]?.[first.id];
+        const secondGross = scores[holeNumber]?.[second.id];
+        if (typeof firstGross !== "number" || typeof secondGross !== "number") continue;
+        const comparison: [Player, Player] = [first, second];
+        const firstScore = pairNet(comparison, first, firstGross, course, holeNumber, bet.hcpPct, bet.decimals, basis);
+        const secondScore = pairNet(comparison, second, secondGross, course, holeNumber, bet.hcpPct, bet.decimals, basis);
+        if (Math.abs(firstScore - secondScore) < EPS) continue;
+        const winner = firstScore < secondScore ? first : second;
+        const loser = winner.id === first.id ? second : first;
+        if (winner.id === first.id) firstWins += 1;
+        else secondWins += 1;
+        settleHeadToHead(balances, winner.id, loser.id, Math.max(0, bet.value));
+        pressures.push({ label: `${first.name} vs ${second.name}`, startHole, endHole: holeNumber, winnerIds: [winner.id], loserIds: [loser.id], value: Math.max(0, bet.value), open: false });
+        auditComponents.push({ key: `${first.id}:${second.id}:pressure:${startHole}`, label: `Presión · H${startHole}–H${holeNumber}`, status: "final", amounts: { [winner.id]: Math.max(0, bet.value), [loser.id]: -Math.max(0, bet.value) }, lines: [`${first.name} vs ${second.name}`, `Ganó ${winner.name} · $${Math.max(0, bet.value)}`] });
+        startHole = segment[index + 1] ?? 0;
+      }
+      if (!startHole || !segment.includes(startHole)) continue;
+      const remaining = segment.slice(segment.indexOf(startHole));
+      const segmentFinished = (segment.length === 9 || segment.length === 18) && completeForPlayers(remaining, scores, [first.id, second.id]);
+      if (segmentFinished) {
+        const endHole = segment.at(-1) as number;
+        pressures.push({ label: `${first.name} vs ${second.name}`, startHole, endHole, winnerIds: [], loserIds: [], value: Math.max(0, bet.value), open: false, tied: true });
+        auditComponents.push({ key: `${first.id}:${second.id}:pressure:${startHole}`, label: `Presión · H${startHole}–H${endHole}`, status: "final", amounts: { [first.id]: 0, [second.id]: 0 }, lines: [`${first.name} vs ${second.name}`, "Empate final · sin cobro"] });
+      } else {
+        pressures.push({ label: `${first.name} vs ${second.name}`, startHole, winnerIds: [], loserIds: [], value: Math.max(0, bet.value), open: true });
+        auditComponents.push({ key: `${first.id}:${second.id}:pressure:${startHole}`, label: `Presión abierta · H${startHole}`, status: "pending", amounts: { [first.id]: 0, [second.id]: 0 }, lines: [`${first.name} vs ${second.name}`, "Pendiente de cierre con hoyos confirmados"] });
+      }
     }
     if (bet.matchPlayEnabled && completeForPlayers(order, scores, [first.id, second.id]) && firstWins !== secondWins) {
       const winner = firstWins > secondWins ? first : second;
@@ -451,10 +461,10 @@ function calculateIndividualPressures(
     betId: bet.id,
     type: bet.type,
     label: SUPPLEMENTAL_BET_LABELS[bet.type],
-    complete: completeForPlayers(order, scores, participants.map((player) => player.id)),
+    complete: completeForPlayers(order, scores, participants.map((player) => player.id)) && !pressures.some((pressure) => pressure.open),
     balances,
     pressures,
-    lines: pressures.map((pressure, index) => `Presión ${index + 1} · H${pressure.startHole}${pressure.endHole ? `–H${pressure.endHole}` : " · abierta"}${pressure.winnerIds[0] ? ` · gana ${players.find((player) => player.id === pressure.winnerIds[0])?.name}` : ""}`),
+    lines: pressures.map((pressure, index) => `Presión ${index + 1} · H${pressure.startHole}${pressure.endHole ? `–H${pressure.endHole}` : ""}${pressure.open ? " · abierta" : pressure.tied ? " · empate final · sin cobro" : ""}${pressure.winnerIds[0] ? ` · gana ${players.find((player) => player.id === pressure.winnerIds[0])?.name}` : ""}`),
     audit: {
       playedHoles: order.filter((hole) => completedHole(hole, scores, participants.map((player) => player.id))).length,
       participantIds: participants.map((player) => player.id),
@@ -518,38 +528,45 @@ function calculateTeamPressures(
       ? (["Low Ball", "High Ball"] as const)
       : ([bet.metric === "low" ? "Low Ball" : "High Ball"] as const);
     for (const component of components) {
-      let startHole = order[0];
-      for (let index = 0; index < order.length; index += 1) {
-        const holeNumber = order[index];
-        if (!bet.carryEnabled && index === 9) startHole = holeNumber;
-        const hole = course.holes.find((candidate) => candidate.number === holeNumber);
-        if (!hole || !holeIsComplete(holeNumber)) continue;
-        const adjusted = Object.fromEntries(participants.map((player) => [player.id, netScore(grossFor(holeNumber, player.id) as number, player.id, hole.strokeIndex, participants, bet.hcpPct, normalizeHandicapMode(bet.decimals), basis)])) as Record<string, number>;
-        const virtualScore = matchup.virtual === "mudo" ? hole.par : matchup.virtual === "yoyo" ? adjusted[matchup.teamA[0]] : undefined;
-        const teamAScores = [...matchup.teamA.map((id) => adjusted[id]), ...(virtualScore === undefined ? [] : [virtualScore])];
-        const teamBScores = matchup.teamB.map((id) => adjusted[id]);
-        if (!teamAScores.length || !teamBScores.length) continue;
-        const outcome = component === "Low Ball"
-          ? Math.sign(Math.min(...teamBScores) - Math.min(...teamAScores))
-          : Math.sign(Math.max(...teamBScores) - Math.max(...teamAScores));
-        if (outcome === 0) continue;
-        const winners = outcome > 0 ? matchup.teamA : matchup.teamB;
-        const losers = outcome > 0 ? matchup.teamB : matchup.teamA;
-        settleTeamPressure(balances, matchup, outcome, Math.max(0, bet.value));
-        pressures.push({ label: matchup.label, component, startHole, endHole: holeNumber, winnerIds: winners, loserIds: losers, value: Math.max(0, bet.value), open: false });
-        startHole = order[index + 1] ?? 0;
+      const segments = !bet.carryEnabled && order.length > 9 ? [order.slice(0, 9), order.slice(9)] : [order];
+      for (const segment of segments.filter((candidate) => candidate.length > 0)) {
+        let startHole = segment[0];
+        for (let index = 0; index < segment.length; index += 1) {
+          const holeNumber = segment[index];
+          const hole = course.holes.find((candidate) => candidate.number === holeNumber);
+          if (!hole || !holeIsComplete(holeNumber)) continue;
+          const adjusted = Object.fromEntries(participants.map((player) => [player.id, netScore(grossFor(holeNumber, player.id) as number, player.id, hole.strokeIndex, participants, bet.hcpPct, normalizeHandicapMode(bet.decimals), basis)])) as Record<string, number>;
+          const virtualScore = matchup.virtual === "mudo" ? hole.par : matchup.virtual === "yoyo" ? adjusted[matchup.teamA[0]] : undefined;
+          const teamAScores = [...matchup.teamA.map((id) => adjusted[id]), ...(virtualScore === undefined ? [] : [virtualScore])];
+          const teamBScores = matchup.teamB.map((id) => adjusted[id]);
+          if (!teamAScores.length || !teamBScores.length) continue;
+          const outcome = component === "Low Ball"
+            ? Math.sign(Math.min(...teamBScores) - Math.min(...teamAScores))
+            : Math.sign(Math.max(...teamBScores) - Math.max(...teamAScores));
+          if (outcome === 0) continue;
+          const winners = outcome > 0 ? matchup.teamA : matchup.teamB;
+          const losers = outcome > 0 ? matchup.teamB : matchup.teamA;
+          settleTeamPressure(balances, matchup, outcome, Math.max(0, bet.value));
+          pressures.push({ label: matchup.label, component, startHole, endHole: holeNumber, winnerIds: winners, loserIds: losers, value: Math.max(0, bet.value), open: false });
+          startHole = segment[index + 1] ?? 0;
+        }
+        if (!startHole || !segment.includes(startHole)) continue;
+        const remaining = segment.slice(segment.indexOf(startHole));
+        const segmentFinished = (segment.length === 9 || segment.length === 18) && remaining.every(holeIsComplete);
+        pressures.push(segmentFinished
+          ? { label: matchup.label, component, startHole, endHole: segment.at(-1) as number, winnerIds: [], loserIds: [], value: Math.max(0, bet.value), open: false, tied: true }
+          : { label: matchup.label, component, startHole, winnerIds: [], loserIds: [], value: Math.max(0, bet.value), open: true });
       }
-      if (startHole && order.includes(startHole)) pressures.push({ label: matchup.label, component, startHole, winnerIds: [], loserIds: [], value: Math.max(0, bet.value), open: true });
     }
   }
   return {
     betId: bet.id,
     type: bet.type,
     label: SUPPLEMENTAL_BET_LABELS[bet.type],
-    complete: matchIsComplete,
+    complete: matchIsComplete && !pressures.some((pressure) => pressure.open),
     balances,
     pressures,
-    lines: pressures.map((pressure, index) => `${pressure.label} · ${pressure.component || "Presión"} ${index + 1} · H${pressure.startHole}${pressure.endHole ? `–H${pressure.endHole}` : " · abierta"}`),
+    lines: pressures.map((pressure, index) => `${pressure.label} · ${pressure.component || "Presión"} ${index + 1} · H${pressure.startHole}${pressure.endHole ? `–H${pressure.endHole}` : ""}${pressure.open ? " · abierta" : pressure.tied ? " · empate final · sin cobro" : ""}`),
   };
 }
 
