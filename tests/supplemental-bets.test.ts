@@ -336,6 +336,22 @@ test("Presiones por parejas sí cierran cuando el último hoyo es decisivo", () 
   assert.equal(result.complete, true);
 });
 
+test("Presiones fallan cerradas si el campo omite o duplica un hoyo jugado", () => {
+  const order = Array.from({ length: 9 }, (_, index) => index + 1);
+  const scoreRows = scores(order, { a: 4, b: 4, c: 4, d: 5 });
+  const missingHoleCourse = { ...course, holes: course.holes.filter((hole) => hole.number !== 9) };
+  const duplicateHoleCourse = { ...course, holes: course.holes.map((hole) => hole.number === 9 ? { ...hole, number: 8 } : hole) };
+  const individual = createSupplementalBet("individual_pressures", players.slice(0, 2), "press-missing-hole");
+  const team = { ...createSupplementalBet("team_pressures", players, "team-duplicate-hole"), metric: "low" } as SupplementalBet;
+  const individualResult = calculateSupplementalBets([individual], players.slice(0, 2), missingHoleCourse, scoreRows, {}, order).results[0];
+  const teamResult = calculateSupplementalBets([team], players, duplicateHoleCourse, scoreRows, {}, order).results[0];
+  for (const result of [individualResult, teamResult]) {
+    assert.equal(result.complete, false);
+    assert.equal(result.pressures?.some((pressure) => pressure.open), true);
+    assertZero({ balances: result.balances, results: [result] });
+  }
+});
+
 test("Presiones por parejas aplican HCP antes de Low y High", () => {
   const handicapPlayers = players.map((player) => ({ ...player, handicap: player.id === "c" || player.id === "d" ? 18 : 0 }));
   const bet = { ...createSupplementalBet("team_pressures", handicapPlayers, "team-hcp"), value: 20, hcpPct: 100 } as SupplementalBet;

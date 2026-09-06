@@ -78,6 +78,11 @@ function addBalance(target: Record<string, number>, id: string, amount: number) 
   target[id] = (target[id] ?? 0) + amount;
 }
 
+function uniqueCourseHole(course: Course, holeNumber: number) {
+  const matches = course.holes.filter((hole) => hole.number === holeNumber);
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
 function enabled<T extends { enabled?: boolean }>(bet: T) {
   return bet.enabled === undefined || bet.enabled === true;
 }
@@ -396,7 +401,7 @@ function pairNet(
   decimals: IndividualPressuresBet["decimals"],
   basis: RoundHandicapBasis,
 ) {
-  const hole = course.holes.find((candidate) => candidate.number === holeNumber);
+  const hole = uniqueCourseHole(course, holeNumber);
   return hole ? netScore(gross, player.id, hole.strokeIndex, players, hcpPct, normalizeHandicapMode(decimals), basis) : gross;
 }
 
@@ -422,6 +427,7 @@ function calculateIndividualPressures(
       let startHole = segment[0];
       for (let index = 0; index < segment.length; index += 1) {
         const holeNumber = segment[index];
+        if (!uniqueCourseHole(course, holeNumber)) continue;
         const firstGross = scores[holeNumber]?.[first.id];
         const secondGross = scores[holeNumber]?.[second.id];
         if (typeof firstGross !== "number" || typeof secondGross !== "number") continue;
@@ -440,7 +446,9 @@ function calculateIndividualPressures(
       }
       if (!startHole || !segment.includes(startHole)) continue;
       const remaining = segment.slice(segment.indexOf(startHole));
-      const segmentFinished = (segment.length === 9 || segment.length === 18) && completeForPlayers(remaining, scores, [first.id, second.id]);
+      const segmentFinished = (segment.length === 9 || segment.length === 18)
+        && remaining.every((holeNumber) => Boolean(uniqueCourseHole(course, holeNumber)))
+        && completeForPlayers(remaining, scores, [first.id, second.id]);
       if (segmentFinished) {
         const endHole = segment.at(-1) as number;
         pressures.push({ label: `${first.name} vs ${second.name}`, startHole, endHole, winnerIds: [], loserIds: [], value: Math.max(0, bet.value), open: false, tied: true });
@@ -461,7 +469,9 @@ function calculateIndividualPressures(
     betId: bet.id,
     type: bet.type,
     label: SUPPLEMENTAL_BET_LABELS[bet.type],
-    complete: completeForPlayers(order, scores, participants.map((player) => player.id)) && !pressures.some((pressure) => pressure.open),
+    complete: order.every((holeNumber) => Boolean(uniqueCourseHole(course, holeNumber)))
+      && completeForPlayers(order, scores, participants.map((player) => player.id))
+      && !pressures.some((pressure) => pressure.open),
     balances,
     pressures,
     lines: pressures.map((pressure, index) => `Presión ${index + 1} · H${pressure.startHole}${pressure.endHole ? `–H${pressure.endHole}` : ""}${pressure.open ? " · abierta" : pressure.tied ? " · empate final · sin cobro" : ""}${pressure.winnerIds[0] ? ` · gana ${players.find((player) => player.id === pressure.winnerIds[0])?.name}` : ""}`),
@@ -521,7 +531,7 @@ function calculateTeamPressures(
     const captured = scores[holeNumber]?.[playerId];
     return typeof captured === "number" ? captured : abandoned.has(playerId) ? Math.max(1, bet.abandonedMaxScore) : undefined;
   };
-  const holeIsComplete = (holeNumber: number) => participants.every((player) => typeof grossFor(holeNumber, player.id) === "number");
+  const holeIsComplete = (holeNumber: number) => Boolean(uniqueCourseHole(course, holeNumber)) && participants.every((player) => typeof grossFor(holeNumber, player.id) === "number");
   const matchIsComplete = order.length > 0 && order.every(holeIsComplete);
   for (const matchup of matchups) {
     const components = bet.metric === "low_high"
@@ -533,7 +543,7 @@ function calculateTeamPressures(
         let startHole = segment[0];
         for (let index = 0; index < segment.length; index += 1) {
           const holeNumber = segment[index];
-          const hole = course.holes.find((candidate) => candidate.number === holeNumber);
+          const hole = uniqueCourseHole(course, holeNumber);
           if (!hole || !holeIsComplete(holeNumber)) continue;
           const adjusted = Object.fromEntries(participants.map((player) => [player.id, netScore(grossFor(holeNumber, player.id) as number, player.id, hole.strokeIndex, participants, bet.hcpPct, normalizeHandicapMode(bet.decimals), basis)])) as Record<string, number>;
           const virtualScore = matchup.virtual === "mudo" ? hole.par : matchup.virtual === "yoyo" ? adjusted[matchup.teamA[0]] : undefined;

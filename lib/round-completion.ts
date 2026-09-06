@@ -1,5 +1,6 @@
 import type { calculatePersonalBets } from "./engine";
 import { collectHoleValidationErrors } from "./hole-validation";
+import type { SupplementalBetResult } from "./supplemental-bets";
 import type {
   BallFriendHole,
   BetConfig,
@@ -15,6 +16,14 @@ import type {
 } from "./types";
 
 type PersonalResult = ReturnType<typeof calculatePersonalBets>["results"][number];
+
+/** A completed history entry must never turn a provisional supplemental
+ * calculation into a final ledger balance. */
+export function unsettledSupplementalBetResults(
+  results: Array<Pick<SupplementalBetResult, "betId" | "complete" | "label" | "type">>,
+) {
+  return results.filter((result) => result.complete !== true);
+}
 
 /** External rivals do not appear in the round-player scorecard, so their
  * selected Personal components need an explicit completion check at archive. */

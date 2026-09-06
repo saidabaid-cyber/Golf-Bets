@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { calculatePersonalBets } from "../lib/engine";
 import { emptyCounterBetKeepers } from "../lib/side-bets";
 import { initialBets } from "../lib/new-round-bets";
 import { createSupplementalBet } from "../lib/supplemental-bets";
-import { firstIncompleteRoundCapture, incompleteExternalPersonalBets } from "../lib/round-completion";
+import { firstIncompleteRoundCapture, incompleteExternalPersonalBets, unsettledSupplementalBetResults } from "../lib/round-completion";
 import type { Course, PersonalBet, Player, PuttsByHole, SupplementalBet } from "../lib/types";
 
 const players: Player[] = [{ id: "owner", name: "Said", handicap: 8 }];
@@ -58,6 +59,24 @@ test("disabled and in-group Personal bets do not require a separate external car
   const disabled = { ...externalBet({ match1: true, medal1: false, match2: false, medal2: false, match18: false, medal18: false }), enabled: false };
   const group = { ...disabled, id: "group", enabled: true, rivalMode: "group" as const, rivalPlayerId: "friend" };
   assert.deepEqual(incompleteExternalPersonalBets([disabled, group], []), []);
+});
+
+test("archive rejects provisional supplemental calculations without altering final ones", () => {
+  const pending = { betId: "pending", type: "individual_pressures" as const, label: "Presiones", complete: false };
+  const final = { betId: "final", type: "chicago" as const, label: "Chicago", complete: true };
+  assert.deepEqual(unsettledSupplementalBetResults([final, pending]), [pending]);
+  assert.deepEqual(unsettledSupplementalBetResults([final]), []);
+});
+
+test("the history action applies the supplemental settlement guard before persisting", () => {
+  const page = readFileSync("app/page.tsx", "utf8");
+  const saveStart = page.indexOf("function saveRound()");
+  const persistStart = page.indexOf("void saveConfirmedRound(snapshot)", saveStart);
+  const guardStart = page.indexOf("unsettledSupplementalBetResults(supplemental.results)", saveStart);
+  assert.ok(saveStart >= 0 && guardStart > saveStart && persistStart > guardStart);
+  assert.match(page.slice(guardStart, persistStart), /sigue provisional/);
+  assert.match(page.slice(guardStart, persistStart), /supplemental\.results\.length !== activeSupplementalCount/);
+  assert.match(page.slice(guardStart, persistStart), /isFiniteZeroSum\(Object\.values\(allBetBalances\)\)/);
 });
 
 test("archive rechecks Minimum Putts across prior holes and only its configured duration", () => {

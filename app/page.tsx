@@ -91,7 +91,7 @@ import { ResultAccordion } from "./components/result-accordion";
 import { HistoricalRoundDetail } from "./components/historical-round-detail";
 import { FullScorecard } from "./components/full-scorecard";
 import { restoreRoundSnapshot, resultSummaryText } from "../lib/round-editing";
-import { firstIncompleteRoundCapture, incompleteExternalPersonalBets } from "../lib/round-completion";
+import { firstIncompleteRoundCapture, incompleteExternalPersonalBets, unsettledSupplementalBetResults } from "../lib/round-completion";
 import { migrateSupplementalNassau } from "../lib/nassau-migration";
 import { saveRoundHistoryLocalFirst } from "../lib/round-history-save";
 import { snapshotPersonalResult } from "../lib/personal-history";
@@ -1658,8 +1658,6 @@ function GolfBetsApp() {
       setFeedback(`Completa el HCP de ${missingActiveHandicapPlayers.map((player) => player.name.trim() || "Sin nombre").join(", ")} antes de guardar los cálculos en Histórico.`); return;
     }
     if (order.some(number => players.some(player => Object.hasOwn(scoreEdits[number] || {}, player.id)))) { setFeedback("Hay scores editados sin guardar. Guarda cada hoyo modificado desde Tarjeta antes de archivar."); return; }
-    const snapshot = currentSnapshot();
-    if (!snapshot) return;
     if (order.some(number => players.some(player => typeof scores[number]?.[player.id] !== "number"))) {
       setFeedback("Faltan scores por confirmar. Completa la tarjeta antes de terminar la ronda."); return;
     }
@@ -1674,9 +1672,22 @@ function GolfBetsApp() {
       setFeedback(`Revisa las capturas pendientes del hoyo ${incompleteCapture.holeNumber} antes de guardar la ronda.`);
       return;
     }
+    const unsettledSupplemental = unsettledSupplementalBetResults(supplemental.results);
+    const activeSupplementalCount = supplementalBets.filter((bet) => bet.enabled !== false).length;
+    if (unsettledSupplemental.length || supplemental.results.length !== activeSupplementalCount) {
+      const labels = [...new Set(unsettledSupplemental.map((result) => supplementalBetDisplayLabel(result.type, result.label)))];
+      setFeedback(`No se guardó la ronda: ${labels.length ? labels.join(", ") : "una apuesta complementaria"} sigue provisional. Revisa sus capturas o configuración antes de liquidar.`);
+      return;
+    }
     if (unresolvedExternalPersonalBets.length) {
       setFeedback(`Completa la tarjeta externa de ${unresolvedExternalPersonalBets.map((bet) => bet.rivalName?.trim() || "Rival externo").join(", ")} para liquidar sus apuestas personales antes de guardar.`); return;
     }
+    if (!isFiniteZeroSum(Object.values(allBetBalances))) {
+      setFeedback("No se guardó la ronda porque la liquidación no suma $0 o contiene un importe inválido. Revisa las apuestas activas.");
+      return;
+    }
+    const snapshot = currentSnapshot();
+    if (!snapshot) return;
     const storedHistory = readStoredJson<unknown>(localStorage, STORAGE_KEYS.history, []);
     if (Array.isArray(storedHistory) && storedHistory.some((round) => round && typeof round === "object" && (round as RoundSnapshot).id === roundId)) {
       setPendingRoundAction({ message: "¿Sobrescribir esta ronda terminada? Se actualizarán sus resultados e histórico Personal con el mismo ID; se conservará la foto. No se creará otra ronda.", run: () => { void saveConfirmedRound(snapshot); } }); return;
