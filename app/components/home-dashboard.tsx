@@ -60,8 +60,18 @@ function shortDate(value: string) {
 function activeRoundLabel(round: ActiveRoundSummary) {
   if (round.status === "review") return "Lista para revisar";
   if (round.status === "setup") return "Configuración pendiente";
-  if (round.currentHole) return `Hoyo ${round.currentHole} de ${round.totalHoles}`;
-  return "Ronda en juego";
+  const played = round.playedHoles;
+  const current = round.currentHole;
+  const playedHoles = typeof played === "number" && Number.isInteger(played) && played >= 0 && played <= round.totalHoles
+    ? played
+    : undefined;
+  const currentHole = typeof current === "number" && Number.isInteger(current) && current >= 1 && current <= 18
+    ? current
+    : undefined;
+  const progress = playedHoles === undefined
+    ? "Ronda en juego"
+    : `${playedHoles} de ${round.totalHoles} hoyos capturados`;
+  return currentHole === undefined ? progress : `${progress} · Editando hoyo ${currentHole}`;
 }
 
 function ActivityPreview({ item, onOpen }: { item: PersonalActivity; onOpen: () => void }) {
@@ -124,11 +134,11 @@ export function HomeDashboard({
       </div>
     </section>
 
-    <section className="betaHomeStats" aria-label="Resumen de golf">
-      <article><span>Rondas</span><b>{insights.rounds}</b><small>{insights.scoredRounds} con score completo</small></article>
-      <article><span>Promedio</span><b>{formatAverage(insights.averageScore)}</b><small>{insights.scoreScopeHoles ? `score bruto · ${insights.scoreScopeHoles} hoyos` : "score bruto"}</small></article>
-      <article><span>Apuestas</span><b className={insights.betBalance === undefined ? "" : insights.betBalance >= 0 ? "good" : "bad"}>{insights.betBalance === undefined ? "—" : signedMoney(insights.betBalance)}</b><small>{insights.betRounds ? `${insights.betRounds} resultado${insights.betRounds === 1 ? "" : "s"} verificado${insights.betRounds === 1 ? "" : "s"}` : "sin resultado verificable"}</small></article>
-      <article><span>Grupos</span><b>{groupCount}</b><small>guardados</small></article>
+    <section className="betaHomeStats" aria-label="Resumen y accesos de golf">
+      <button type="button" className="stat" onClick={onOpenHistory} aria-label={`Abrir histórico: ${insights.rounds} ronda${insights.rounds === 1 ? "" : "s"} guardada${insights.rounds === 1 ? "" : "s"}`}><span>Rondas</span><b>{insights.rounds}</b><small>{insights.scoredRounds} con score completo</small></button>
+      <button type="button" className="stat" onClick={onOpenStats} aria-label={insights.averageScore === undefined ? "Abrir estadísticas: promedio no disponible" : `Abrir estadísticas: promedio bruto ${formatAverage(insights.averageScore)}`}><span>Promedio</span><b>{formatAverage(insights.averageScore)}</b><small>{insights.scoreScopeHoles ? `score bruto · ${insights.scoreScopeHoles} hoyos` : "score bruto"}</small></button>
+      <button type="button" className="stat" onClick={onOpenBalances} aria-label={insights.betBalance === undefined ? "Abrir balances: sin resultado de apuestas verificable" : `Abrir balances: ${signedMoney(insights.betBalance)}`}><span>Apuestas</span><b className={insights.betBalance === undefined ? "" : insights.betBalance >= 0 ? "good" : "bad"}>{insights.betBalance === undefined ? "—" : signedMoney(insights.betBalance)}</b><small>{insights.betRounds ? `${insights.betRounds} resultado${insights.betRounds === 1 ? "" : "s"} verificado${insights.betRounds === 1 ? "" : "s"}` : "sin resultado verificable"}</small></button>
+      <button type="button" className="stat" onClick={onOpenGroups} aria-label={`Abrir grupos: ${groupCount} grupo${groupCount === 1 ? "" : "s"} guardado${groupCount === 1 ? "" : "s"}`}><span>Grupos</span><b>{groupCount}</b><small>guardados</small></button>
     </section>
 
     <section className="card betaQuickCard">
