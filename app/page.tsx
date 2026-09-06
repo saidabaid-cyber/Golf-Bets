@@ -8,7 +8,7 @@ import { RoundHandicapBasisControl } from "./components/round-handicap-basis-con
 import { SetupBetCard } from "./components/setup-bet-card";
 import { BET_PRESENTATION, betDisplayLabel, historicalBetDisplayLabel, SUPPLEMENTAL_BET_PRESENTATION, supplementalBetDisplayLabel } from "../lib/bet-catalog";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   BallFriendHole,
   BetConfig,
@@ -499,7 +499,6 @@ function GolfBetsApp() {
   const flushLocalState = useRef<(() => boolean) | null>(null);
   const localPersistRevision = useRef(0);
   const requestCloudSync = useRef<(() => void) | null>(null);
-  const saveAfterNumericCommit = useRef(false);
   const latestSaveAndAdvance = useRef<() => void>(() => undefined);
   const latestSaveRound = useRef<() => void>(() => undefined);
   const roundSaveInFlight = useRef(false);
@@ -1567,7 +1566,7 @@ function GolfBetsApp() {
     }
   }
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     latestSaveRound.current = saveRound;
   });
 
@@ -2085,27 +2084,19 @@ function GolfBetsApp() {
   function commitFocusedNumericCapture() {
     const active = document.activeElement;
     if (active instanceof HTMLInputElement && active.dataset.numericCapture === "true") {
-      saveAfterNumericCommit.current = true;
       active.blur();
     }
   }
 
   function requestSaveAndAdvance() {
-    if (!saveAfterNumericCommit.current) {
-      saveAndAdvance();
-      return;
-    }
-    saveAfterNumericCommit.current = false;
-    queueMicrotask(() => latestSaveAndAdvance.current());
+    // pointerdown/blur commits the input with flushSync. The layout effect from
+    // that render has already refreshed this ref, so Save reads the confirmed
+    // score immediately without a timing delay or a stale closure.
+    latestSaveAndAdvance.current();
   }
 
   function requestRoundHistorySave() {
-    if (!saveAfterNumericCommit.current) {
-      latestSaveRound.current();
-      return;
-    }
-    saveAfterNumericCommit.current = false;
-    queueMicrotask(() => latestSaveRound.current());
+    latestSaveRound.current();
   }
 
   function saveAndAdvance() {
@@ -2250,7 +2241,7 @@ function GolfBetsApp() {
       },
     });
   }
-  useEffect(() => { latestSaveAndAdvance.current = saveAndAdvance; });
+  useLayoutEffect(() => { latestSaveAndAdvance.current = saveAndAdvance; });
 
   const todayMx = localDateMexico();
   const currentMonth = todayMx.slice(0, 7);

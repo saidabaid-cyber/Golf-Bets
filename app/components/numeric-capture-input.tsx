@@ -24,17 +24,26 @@ export function NumericCaptureInput({
   ...inputProps
 }: NumericCaptureInputProps) {
   const [rawValue, setRawValue] = useState(() => initialNumericCapture(value, emptyWhenZero));
+  const rawValueRef = useRef(rawValue);
   const focused = useRef(false);
   const previousValue = useRef(value);
 
   useEffect(() => {
     if (Object.is(previousValue.current, value)) return;
     previousValue.current = value;
-    if (!focused.current) setRawValue(initialNumericCapture(value, emptyWhenZero));
+    if (!focused.current) {
+      const nextRawValue = initialNumericCapture(value, emptyWhenZero);
+      rawValueRef.current = nextRawValue;
+      setRawValue(nextRawValue);
+    }
   }, [emptyWhenZero, value]);
 
   const commit = () => {
-    const finalized = finalizeNumericCapture(rawValue, min, max);
+    // The DOM change event and the Save pointer gesture can occur before React
+    // commits the render containing the last character (notably on iOS). Keep
+    // the editing buffer in a ref so blur always confirms the newest input.
+    const finalized = finalizeNumericCapture(rawValueRef.current, min, max);
+    rawValueRef.current = finalized.raw;
     setRawValue(finalized.raw);
     previousValue.current = finalized.value;
     if (commitUnchanged || !Object.is(finalized.value, value)) {
@@ -61,7 +70,9 @@ export function NumericCaptureInput({
       onBlur?.(event);
     }}
     onChange={(event) => {
-      setRawValue(normalizeNumericCaptureText(event.target.value));
+      const nextRawValue = normalizeNumericCaptureText(event.target.value);
+      rawValueRef.current = nextRawValue;
+      setRawValue(nextRawValue);
     }}
     onKeyDown={(event) => {
       if (event.key === "Enter") event.currentTarget.blur();

@@ -140,7 +140,8 @@ test("capture inputs use the empty-safe numeric control and Manuales accept a di
   assert.match(signedInput, /NumericCaptureInput/);
   assert.doesNotMatch(signedInput, /Gana \+|Pierde −|signedMoneyDirection/);
   assert.match(polla, /NumericCaptureInput placeholder="HCP"/);
-  assert.match(input, /setRawValue\(normalizeNumericCaptureText\(event\.target\.value\)\)/);
+  assert.match(input, /const nextRawValue = normalizeNumericCaptureText\(event\.target\.value\)/);
+  assert.match(input, /rawValueRef\.current = nextRawValue/);
   assert.match(input, /type="text"/);
   assert.match(input, /inputMode="text"/);
   assert.doesNotMatch(input, /onValueChange\(parseNumericCapture\(event\.target\.value\)\)/);

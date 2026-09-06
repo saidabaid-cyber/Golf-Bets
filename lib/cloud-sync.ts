@@ -290,18 +290,30 @@ function mergeDraftNode(
 
 export function mergeActiveDraftGranular(local: CloudDataBundle, cloud: CloudDataBundle) {
   const conflicts: CloudDataConflict[] = [];
+  if (sameValue(local.activeDraft, cloud.activeDraft)) return { value: stripLocalRoundUi(local.activeDraft), conflicts };
+  const localHasProgress = hasRoundProgress(local.activeDraft);
+  const cloudHasProgress = hasRoundProgress(cloud.activeDraft);
+  const sameInstallation = Boolean(local.deviceId && cloud.deviceId && local.deviceId === cloud.deviceId);
+  const differentInstallations = Boolean(local.deviceId && cloud.deviceId && local.deviceId !== cloud.deviceId);
+
+  // A canonical response can carry a server timestamp newer than the edit that
+  // triggered it even though its draft payload is older. During active capture,
+  // this installation's durable local draft is authoritative and is uploaded on
+  // the next acknowledged cycle; never let that response roll scores backward.
+  if (sameInstallation && localHasProgress) return { value: stripLocalRoundUi(local.activeDraft), conflicts };
+
   const hasBase = local.baseDraftFingerprint !== undefined;
   if (!hasBase) {
-    if (sameValue(local.activeDraft, cloud.activeDraft)) return { value: stripLocalRoundUi(local.activeDraft), conflicts };
     if (local.activeDraft === null || cloud.activeDraft === null) {
       const localAt = timestamp(local.activeDraftUpdatedAt);
       const cloudAt = timestamp(cloud.activeDraftUpdatedAt);
       if (localAt || cloudAt) return { value: stripLocalRoundUi(localAt >= cloudAt ? local.activeDraft : cloud.activeDraft), conflicts };
     }
-    const localHasProgress = hasRoundProgress(local.activeDraft);
-    const cloudHasProgress = hasRoundProgress(cloud.activeDraft);
     if (!localHasProgress || !cloudHasProgress) return { value: stripLocalRoundUi(localHasProgress ? local.activeDraft : cloud.activeDraft), conflicts };
-    if (timestamp(local.activeDraftUpdatedAt) !== timestamp(cloud.activeDraftUpdatedAt)) {
+    // With two identified installations and no common base, timestamps alone
+    // cannot prove that one set of scores contains the other. Merge compatible
+    // fields and surface only genuinely divergent fields for explicit choice.
+    if (!differentInstallations && timestamp(local.activeDraftUpdatedAt) !== timestamp(cloud.activeDraftUpdatedAt)) {
       return { value: stripLocalRoundUi(chooseLocalVersion(local.activeDraftUpdatedAt, cloud.activeDraftUpdatedAt, localHasProgress) ? local.activeDraft : cloud.activeDraft), conflicts };
     }
   }
