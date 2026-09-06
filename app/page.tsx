@@ -91,7 +91,7 @@ import { ResultAccordion } from "./components/result-accordion";
 import { HistoricalRoundDetail } from "./components/historical-round-detail";
 import { FullScorecard } from "./components/full-scorecard";
 import { restoreRoundSnapshot, resultSummaryText } from "../lib/round-editing";
-import { firstIncompleteRoundCapture, incompleteExternalPersonalBets, unsettledSupplementalBetResults } from "../lib/round-completion";
+import { firstIncompleteRoundCapture, incompleteCoreBetSettlements, incompleteExternalPersonalBets, unsettledSupplementalBetResults } from "../lib/round-completion";
 import { migrateSupplementalNassau } from "../lib/nassau-migration";
 import { saveRoundHistoryLocalFirst } from "../lib/round-history-save";
 import { snapshotPersonalResult } from "../lib/personal-history";
@@ -1681,6 +1681,23 @@ function GolfBetsApp() {
     }
     if (unresolvedExternalPersonalBets.length) {
       setFeedback(`Completa la tarjeta externa de ${unresolvedExternalPersonalBets.map((bet) => bet.rivalName?.trim() || "Rival externo").join(", ")} para liquidar sus apuestas personales antes de guardar.`); return;
+    }
+    const incompleteCoreBets = incompleteCoreBetSettlements({
+      order,
+      bets,
+      segments,
+      foursomeMatches: foursomes.matches,
+      pollaDetails: polla.details,
+      miniPollaDetails: miniPolla.details,
+      personalBets,
+      personalResults: personals.results,
+      monkey,
+      ballFriendDetails: ballFriend.details,
+      loba,
+    });
+    if (incompleteCoreBets.length) {
+      setFeedback(`No se guardó la ronda: falta cerrar ${incompleteCoreBets.join(", ")}. Revisa sus capturas antes de liquidar.`);
+      return;
     }
     if (!isFiniteZeroSum(Object.values(allBetBalances))) {
       setFeedback("No se guardó la ronda porque la liquidación no suma $0 o contiene un importe inválido. Revisa las apuestas activas.");
