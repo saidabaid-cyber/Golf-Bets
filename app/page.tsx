@@ -90,6 +90,7 @@ import { FoursomeLive } from "./components/foursome-live";
 import { ResultAccordion } from "./components/result-accordion";
 import { HistoricalRoundDetail } from "./components/historical-round-detail";
 import { FullScorecard } from "./components/full-scorecard";
+import { GolfLeaderboard } from "./components/golf-leaderboard";
 import { restoreRoundSnapshot, resultSummaryText } from "../lib/round-editing";
 import { abandonedPressurePlayersWithMissingScores, firstIncompleteRoundCapture, incompleteCoreBetSettlements, incompleteExternalPersonalBets, unsettledSupplementalBetResults } from "../lib/round-completion";
 import { migrateSupplementalNassau } from "../lib/nassau-migration";
@@ -508,7 +509,7 @@ function GolfBetsApp() {
   const pendingPersonalFocus = useRef<string | null>(null);
   const manualSetupListRef = useRef<HTMLElement>(null);
   const pendingManualFocus = useRef<string | null>(null);
-  const [openResultSections, setOpenResultSections] = useState<Record<string, boolean>>({ "final-player-summary": true, "general-summary": true });
+  const [openResultSections, setOpenResultSections] = useState<Record<string, boolean>>({ "golf-result": true, "final-player-summary": true, "general-summary": true });
   const [pendingResultScroll, setPendingResultScroll] = useState<string | null>(null);
   const [highContrast, setHighContrast] = useState(true);
   const [roundClosed, setRoundClosed] = useState(false);
@@ -2609,6 +2610,7 @@ function GolfBetsApp() {
   const personalModesActive = personalBets.some((bet) => bet.enabled !== false)
     || supplementalBets.some((bet) => bet.enabled !== false && isPersonalSupplementalType(bet.type));
   const resultNavigationItems = [
+    { id: "golf-result", label: "Golf", visible: true },
     { id: "final-player-summary", label: "Resultado final", visible: true },
     { id: "bet-values", label: "Valores de apuesta", visible: true },
     { id: "general-summary", label: "Resumen General", visible: true },
@@ -3010,7 +3012,7 @@ function GolfBetsApp() {
       <section className="provisionalGrid">{[...players].sort((a, b) => (liveBetBalances[b.id] || 0) - (liveBetBalances[a.id] || 0)).map((player, index) => <div className="stat" key={player.id}><span>{index + 1} · {player.name || "Sin nombre"}</span><b className={(liveBetBalances[player.id] || 0) > 0 ? "good" : (liveBetBalances[player.id] || 0) < 0 ? "bad" : ""}>{signedMoney(liveBetBalances[player.id] || 0)}</b><small>provisional</small></div>)}</section>
       <section className="card highlights"><h2>Highlights</h2>{(() => { const leader = [...players].sort((a, b) => (liveBetBalances[b.id] || 0) - (liveBetBalances[a.id] || 0))[0]; const rabbitLeader = [...players].sort((a, b) => (rabbits.won[b.id] || 0) - (rabbits.won[a.id] || 0))[0]; const skinLeader = [...players].sort((a, b) => (skins.won[b.id] || 0) - (skins.won[a.id] || 0))[0]; return <div className="highlightList">{leader && (liveBetBalances[leader.id] || 0) > 0 && <span>🔥 {leader.name} lidera {signedMoney(liveBetBalances[leader.id])}</span>}{rabbitLeader && (rabbits.won[rabbitLeader.id] || 0) > 0 && <span>🐇 {rabbitLeader.name} lleva {rabbits.won[rabbitLeader.id]} Conejos</span>}{skinLeader && (skins.won[skinLeader.id] || 0) > 0 && <span>⛳ {skinLeader.name} lleva {skins.won[skinLeader.id]} Skins</span>}{!leader && <span>Aún sin datos.</span>}</div>; })()}</section>
 <section className="card"><h2>Desglose por apuesta</h2><div className="tableWrap"><table><thead><tr><th>Jugador</th><th>🐇</th><th>⛳</th><th>📏</th><th>🤝 Foursome</th><th>⚪🤝 Bola Amiga</th><th>🏆 Pollas</th>{liveSupplementalGeneralResults.map((result) => <th key={result.betId}>{supplementalBetDisplayLabel(result.type, result.label)}</th>)}<th>↔ Personales</th><th>✍️ Manuales</th>{bets.monkey?.enabled && <th>🐒 Monkey</th>}{bets.vipers.enabled && <th>🐍</th>}{bets.camels.enabled && <th>🐫</th>}{bets.fish.enabled && <th>🐟</th>}{bets.loba.enabled && <th>🐺</th>}</tr></thead><tbody>{players.map((player) => <tr key={player.id}><td><b>{player.name}</b></td><td>{signedMoney(rabbitBalances[player.id] || 0)}</td><td>{signedMoney(skinBalances[player.id] || 0)}</td><td>{signedMoney(units.balances[player.id] || 0)}</td><td>{signedMoney(foursomes.provisionalBalances[player.id] || 0)}</td><td>{signedMoney(ballFriend.balances[player.id] || 0)}</td><td>{signedMoney((polla.balances[player.id] || 0) + (miniPolla.balances[player.id] || 0))}</td>{liveSupplementalGeneralResults.map((result) => <td key={result.betId}>{signedMoney(result.balances[player.id] || 0)}</td>)}<td>{signedMoney(ownerId === player.id ? livePersonalOpponentResults.reduce((sum, entry) => sum + entry.amount, 0) : livePersonalOpponentResults.filter((entry) => entry.opponentId === player.id).reduce((sum, entry) => sum - entry.amount, 0))}</td><td>{signedMoney(manual.balances[player.id] || 0)}</td>{bets.monkey?.enabled && <td>{signedMoney(monkey.balances[player.id] || 0)}</td>}{bets.vipers.enabled && <td>{signedMoney(vipers.balances[player.id] || 0)}</td>}{bets.camels.enabled && <td>{signedMoney(camels.balances[player.id] || 0)}</td>}{bets.fish.enabled && <td>{signedMoney(fish.balances[player.id] || 0)}</td>}{bets.loba.enabled && <td>{signedMoney(loba.balances[player.id] || 0)}</td>}</tr>)}</tbody></table></div></section>
-      <section className="card"><div className="sectionTitle"><div><h2>Leaderboard de la ronda</h2><p>Gross y Neto auditable con el HCP de ronda.</p></div><div className="segmented"><button className={privateBoardMode === "gross" ? "active" : ""} onClick={() => setPrivateBoardMode("gross")}>Gross</button><button className={privateBoardMode === "net" ? "active" : ""} onClick={() => setPrivateBoardMode("net")}>Neto</button></div></div><div className="tableWrap"><table><thead><tr><th>Pos</th><th>Jugador</th><th>HCP</th><th>Gross</th><th>Neto</th><th>+/- Par</th><th>Thru</th></tr></thead><tbody>{[...privateBoard].sort((a, b) => (a[privateBoardMode] ?? Number.POSITIVE_INFINITY) - (b[privateBoardMode] ?? Number.POSITIVE_INFINITY)).map((row, index) => <tr key={row.playerId}><td>{index + 1}</td><td><b>{row.name}</b></td><td>{row.handicap ?? "—"}</td><td>{row.gross || "—"}</td><td>{row.net ?? "—"}</td><td>{row.thru ? `${row.relativeToPar > 0 ? "+" : ""}${row.relativeToPar}` : "—"}</td><td>{row.finished ? "F" : row.thru}</td></tr>)}</tbody></table></div></section>
+      <section className="card"><GolfLeaderboard rows={privateBoard} mode={privateBoardMode} onModeChange={setPrivateBoardMode} context="live" /></section>
     </>}
 
     {tab === "results" && <>
@@ -3019,6 +3021,10 @@ function GolfBetsApp() {
       <nav className="resultJumpNav" aria-label="Ir a un resultado">
         {resultNavigationItems.map((item) => <button type="button" key={item.id} aria-pressed={Boolean(openResultSections[item.id])} onClick={() => openResultSection(item.id)}>{item.label}</button>)}
       </nav>
+
+      <ResultAccordion id="golf-result" title="Resultado de golf" className="golfResult" {...resultAccordionProps("golf-result")}>
+        <GolfLeaderboard rows={privateBoard} mode={privateBoardMode} onModeChange={setPrivateBoardMode} context="results" />
+      </ResultAccordion>
 
       <ResultAccordion id="final-player-summary" title="Resultado final por jugador" className="finalPlayerSummary" {...resultAccordionProps("final-player-summary")}>
         <p className="muted">Cuánto gana o pierde exactamente cada persona en todas las apuestas.</p>

@@ -5,8 +5,10 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { ResultAccordion } from "../app/components/result-accordion";
+import { GolfLeaderboard, rankGolfLeaderboard } from "../app/components/golf-leaderboard";
 import { calculateUnits } from "../lib/engine";
 import { summarizeNetUnitQuantities } from "../lib/result-breakdown";
+import type { PrivateLeaderboardRow } from "../lib/round-utils";
 import type { BetConfig, Player, UnitEvent } from "../lib/types";
 
 test("Resumen de Unidades usa eventos reales: +4 −1 da +3 y conserva suma monetaria cero", () => {
@@ -86,6 +88,7 @@ test("Editar ronda concentra Personales/Manuales y Resultados conserva navegaci�
   const page = readFileSync("app/page.tsx", "utf8");
   const setup = page.slice(page.indexOf('{tab === "setup"'), page.indexOf('{tab === "personals"'));
   const personals = page.slice(page.indexOf('{tab === "personals"'), page.indexOf('{tab === "round"'));
+  const standings = page.slice(page.indexOf('{tab === "standings" && <>'), page.indexOf('{tab === "results" && <>'));
   const results = page.slice(page.indexOf('{tab === "results" && <>'), page.indexOf('{tab === "history" && <>'));
 
   assert.ok(setup.indexOf('id="setup-manuals"') < setup.indexOf('id="setup-personals"'));
@@ -93,11 +96,42 @@ test("Editar ronda concentra Personales/Manuales y Resultados conserva navegaci�
   assert.match(setup, /renderManualBetsEditor\(true\)/);
   assert.match(personals, /<PersonalHistoryPanel/);
   assert.doesNotMatch(personals, /renderPersonalBetsEditor|\+ Personal/);
+  assert.match(standings, /<GolfLeaderboard/);
   assert.match(results, /className="resultJumpNav"/);
+  assert.match(page, /\{ id: "golf-result", label: "Golf", visible: true \}/);
+  assert.ok(results.indexOf('id="golf-result"') < results.indexOf('id="final-player-summary"'));
   assert.match(results, /openResultSection\(item\.id\)/);
   assert.match(results, /renderManualBetResults\(\)/);
   assert.doesNotMatch(results, /renderManualBetsEditor/);
   assert.doesNotMatch(results, /\.click\(\)/);
+});
+
+test("clasificación de golf distingue final, provisional, empates y HCP faltante", () => {
+  const complete: PrivateLeaderboardRow[] = [
+    { playerId: "a", name: "Ana", handicap: 0, gross: 72, net: 72, relativeToPar: 0, thru: 18, finished: true },
+    { playerId: "b", name: "Beto", handicap: -1, gross: 72, net: 73, relativeToPar: 0, thru: 18, finished: true },
+    { playerId: "c", name: "Caro", handicap: null, gross: 80, net: null, relativeToPar: 8, thru: 18, finished: true },
+  ];
+  assert.deepEqual(rankGolfLeaderboard(complete, "gross").map(({ row, position }) => [row.playerId, position]), [["a", "T1"], ["b", "T1"], ["c", "3"]]);
+  assert.deepEqual(rankGolfLeaderboard(complete, "net").map(({ row, position }) => [row.playerId, position]), [["a", "1"], ["b", "2"], ["c", "—"]]);
+  assert.deepEqual(rankGolfLeaderboard([
+    { ...complete[0], playerId: "front-even", gross: 36, relativeToPar: 0, thru: 9, finished: false },
+    { ...complete[1], playerId: "full-even", gross: 72, relativeToPar: 0, thru: 18, finished: true },
+    { ...complete[2], playerId: "front-over", handicap: 0, gross: 37, net: 37, relativeToPar: 1, thru: 9, finished: false },
+  ], "gross").map(({ row, position }) => [row.playerId, position]), [["full-even", "T1"], ["front-even", "T1"], ["front-over", "3"]]);
+
+  const finalMarkup = renderToStaticMarkup(createElement(GolfLeaderboard, { rows: complete, mode: "net", onModeChange: () => undefined, context: "results" }));
+  assert.match(finalMarkup, /Clasificación final/);
+  assert.match(finalMarkup, /Neto \+\/− Par/);
+  assert.match(finalMarkup, />\+1</);
+  assert.match(finalMarkup, /Caro[\s\S]*?<td>—<\/td>/);
+
+  const provisionalMarkup = renderToStaticMarkup(createElement(GolfLeaderboard, { rows: [{ ...complete[0], thru: 7, finished: false }], mode: "gross", onModeChange: () => undefined, context: "results" }));
+  assert.match(provisionalMarkup, /Clasificación provisional/);
+  assert.match(provisionalMarkup, /hoyos pendientes no se inventan/);
+  const liveMarkup = renderToStaticMarkup(createElement(GolfLeaderboard, { rows: complete, mode: "gross", onModeChange: () => undefined, context: "live" }));
+  assert.match(liveMarkup, /<h2>Leaderboard de la ronda<\/h2>/);
+  assert.match(liveMarkup, /Gross \+\/− Par/);
 });
 
 test("Resultados mantiene controles táctiles de 44px y filas compactas en portrait y landscape", () => {

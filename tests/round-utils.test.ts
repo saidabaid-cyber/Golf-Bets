@@ -80,6 +80,20 @@ test("private leaderboard reports Gross, Neto, par and Thru without marking part
   assert.equal(rows[0].finished, false);
 });
 
+test("private leaderboard preserves scratch, plus and missing HCP without fabricating net scores", () => {
+  const players = [
+    { id: "scratch", name: "Scratch", handicap: 0 },
+    { id: "plus", name: "Plus", handicap: -1 },
+    { id: "missing", name: "Sin HCP", handicap: null },
+  ];
+  const rows = privateLeaderboard(original, players, { 18: { scratch: 4, plus: 4, missing: 4 } }, [18]);
+  assert.deepEqual(rows.map(({ playerId, gross, net, finished }) => ({ playerId, gross, net, finished })), [
+    { playerId: "scratch", gross: 4, net: 4, finished: true },
+    { playerId: "plus", gross: 4, net: 5, finished: true },
+    { playerId: "missing", gross: 4, net: null, finished: true },
+  ]);
+});
+
 test("CSV export includes audit fields, players and scores", () => {
   const round: RoundSnapshot = {
     id: "r1", date: "2026-09-01", courseName: "La Vista", teeName: "General", ownerName: "Said",
