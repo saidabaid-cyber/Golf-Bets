@@ -82,7 +82,7 @@ Pendientes y aislados para un milestone de cálculo versionado:
 - Alias Preview de rama activo: `https://golf-bets-git-beta-saha8.vercel.app`.
 - Deployment remoto observado antes de estos commits: `https://golf-bets-ernyj25ny-saha8.vercel.app`, commit `b2d10bb`.
 - Dominio Beta: `https://beta.thebackyard.com.mx`; DNS/TLS/HTTP 200 activos y el set de assets coincide con el alias de rama.
-- Commits locales listos: `23598e2` y `c0a7b5d`.
+- Commits locales de esta reanudación: `18977c7` (lifecycle), `58c9d3a` (captura rápida/avanzada) y `ae3de0a` (perfil ampliado local), además de los commits Beta anteriores todavía no publicados.
 - El push a `https://github.com/saidabaid-cyber/Golf-Bets.git` requiere aprobación explícita del control de seguridad del entorno. Hasta obtenerla, el dominio sirve el último commit remoto y estas funciones no se declaran desplegadas.
 
 ## QA ejecutado
@@ -107,6 +107,8 @@ Pendientes y aislados para un milestone de cálculo versionado:
 8. Completar perfil persistente y preferencias de privacidad; después construir feed/notificaciones.
 9. Mover validación/liquidación de rondas colaborativas a una frontera autoritativa de servidor.
 10. Verificar instalación PWA y recuperación offline en iPhone/Android físicos con red intermitente.
+
+Punto exacto de continuidad: provisionar y verificar primero una branch/proyecto Supabase exclusivo para Beta. Después iniciar el milestone de amistades con una proyección pública mínima de perfil, estados de solicitud, bloqueo, unicidad y pruebas RLS de dos cuentas. Hasta entonces no crear una versión local que se presente falsamente como amistad sincronizada.
 
 ## Confirmación de producción
 

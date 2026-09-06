@@ -130,3 +130,10 @@ La publicación pendiente debe realizarse únicamente con `git push origin beta`
 - El formulario comunica que los datos ampliados quedan locales hasta que exista un esquema/RLS Beta aislado; no declara sincronización remota inexistente.
 - QA: lint correcto, TypeScript correcto, 734/734 tests y build de producción correcto.
 - QA visual: pendiente porque este host no dispone de un navegador automatizable; no se certifica Safari/iPhone físico.
+
+## Punto de continuación de esta sesión
+
+- Milestones cerrados en la reanudación: lifecycle durable de ronda; captura rápida/estadísticas opcionales; perfil ampliado local.
+- El siguiente milestone no implementado es amistades persistentes. Requiere primero una base Supabase Beta aislada, una proyección pública mínima y pruebas RLS con dos usuarios.
+- Los hitos dependientes de la misma infraestructura —grupos sociales, invitaciones, feed compartido, notificaciones y edición multiusuario— quedan bloqueados, no simulados.
+- `origin/beta` y el Preview siguen en el commit remoto anterior porque el push al repositorio público fue rechazado por el control de seguridad del entorno. `main` y Production no se tocaron.
