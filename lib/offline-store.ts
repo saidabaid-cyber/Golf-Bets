@@ -9,6 +9,7 @@ const OUTBOX = "outbox";
 const META = "meta";
 const FALLBACK_WORKSPACE_PREFIX = "backyard-offline-workspace-fallback-v1:";
 const FALLBACK_OUTBOX_PREFIX = "backyard-offline-outbox-fallback-v1:";
+const FALLBACK_ACK_PREFIX = "backyard-offline-ack-fallback-v1:";
 
 export type OfflineWorkspace = {
   ownerId: string;
@@ -25,6 +26,13 @@ export type OfflineOutbox = {
   queuedAt: string;
   attempts: number;
   lastError?: string;
+};
+
+export type OfflineAcknowledgement = {
+  ownerId: string;
+  fingerprint: string;
+  queuedAt: string;
+  acknowledgedAt: string;
 };
 
 function requestResult<T>(request: IDBRequest<T>) {
@@ -82,6 +90,74 @@ function writeFallback(ownerId: string, workspace: OfflineWorkspace, outbox?: Of
   }
 }
 
+function timestampMs(value: string | undefined) {
+  const parsed = value ? Date.parse(value) : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function newestRecord<T>(indexedDbRecord: T | null, fallbackRecord: T | null, timestamp: (record: T) => string) {
+  if (!indexedDbRecord) return fallbackRecord;
+  if (!fallbackRecord) return indexedDbRecord;
+  const indexedDbTime = timestampMs(timestamp(indexedDbRecord));
+  const fallbackTime = timestampMs(timestamp(fallbackRecord));
+  if (indexedDbTime === null) return fallbackRecord;
+  if (fallbackTime === null) return indexedDbRecord;
+  // A fallback is written after an IndexedDB failure. Prefer it on an exact
+  // timestamp tie so a score captured in the same millisecond is not lost.
+  return fallbackTime >= indexedDbTime ? fallbackRecord : indexedDbRecord;
+}
+
+export function selectNewestOfflineWorkspace(indexedDbRecord: OfflineWorkspace | null, fallbackRecord: OfflineWorkspace | null) {
+  return newestRecord(indexedDbRecord, fallbackRecord, record => record.savedAt);
+}
+
+export function outboxSupersededByAcknowledgement(outbox: OfflineOutbox | null, acknowledgement: OfflineAcknowledgement | null) {
+  if (!outbox || !acknowledgement || outbox.ownerId !== acknowledgement.ownerId) return false;
+  if (outbox.fingerprint === acknowledgement.fingerprint) return true;
+  const queuedAt = timestampMs(outbox.queuedAt);
+  const acknowledgedQueuedAt = timestampMs(acknowledgement.queuedAt);
+  // Preserve different snapshots on a tie or with malformed legacy clocks.
+  // A new write from this version is always timestamped after the watermark.
+  return queuedAt !== null && acknowledgedQueuedAt !== null && queuedAt < acknowledgedQueuedAt;
+}
+
+export function selectPendingOfflineOutbox(
+  indexedDbRecord: OfflineOutbox | null,
+  fallbackRecord: OfflineOutbox | null,
+  acknowledgement: OfflineAcknowledgement | null = null,
+) {
+  const indexedDbPending = outboxSupersededByAcknowledgement(indexedDbRecord, acknowledgement) ? null : indexedDbRecord;
+  const fallbackPending = outboxSupersededByAcknowledgement(fallbackRecord, acknowledgement) ? null : fallbackRecord;
+  return newestRecord(indexedDbPending, fallbackPending, record => record.queuedAt);
+}
+
+function nextOfflineTimestamp(ownerId: string) {
+  const acknowledgement = readFallback<OfflineAcknowledgement>(FALLBACK_ACK_PREFIX, ownerId);
+  const acknowledgedQueuedAt = timestampMs(acknowledgement?.queuedAt);
+  return new Date(Math.max(Date.now(), acknowledgedQueuedAt === null ? 0 : acknowledgedQueuedAt + 1)).toISOString();
+}
+
+function clearAcknowledgement(ownerId: string) {
+  try { browserStorage()?.removeItem(`${FALLBACK_ACK_PREFIX}${ownerId}`); }
+  catch { /* the newer queuedAt still keeps this outbox above the watermark */ }
+}
+
+function removeFallbackIfSuperseded<T extends { fingerprint: string }>(
+  prefix: string,
+  ownerId: string,
+  persisted: T,
+  timestamp: (record: T) => string,
+) {
+  const storage = browserStorage();
+  if (!storage) return;
+  const fallback = readFallback<T>(prefix, ownerId);
+  if (!fallback) return;
+  const selected = newestRecord(persisted, fallback, timestamp);
+  if (fallback.fingerprint === persisted.fingerprint || selected === persisted) {
+    try { storage.removeItem(`${prefix}${ownerId}`); } catch { /* stale fallback remains harmless */ }
+  }
+}
+
 export function createDeviceId() {
   return globalThis.crypto?.randomUUID?.() || `device-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
@@ -103,7 +179,7 @@ export async function getOfflineDeviceId() {
  * edits replace the pending snapshot instead of creating duplicate operations. */
 export async function persistOfflineBundle(ownerId: string, bundle: CloudDataBundle, queueForCloud: boolean) {
   const fingerprint = cloudDataFingerprint(bundle);
-  const now = new Date().toISOString();
+  const now = nextOfflineTimestamp(ownerId);
   const workspace = { ownerId, bundle, fingerprint, savedAt: now } satisfies OfflineWorkspace;
   const outbox = queueForCloud ? { ownerId, bundle, fingerprint, queuedAt: now, attempts: 0 } satisfies OfflineOutbox : undefined;
   try {
@@ -113,38 +189,43 @@ export async function persistOfflineBundle(ownerId: string, bundle: CloudDataBun
     tx.objectStore(WORKSPACES).put(workspace);
     if (outbox) tx.objectStore(OUTBOX).put(outbox);
     await transactionDone(tx);
-    const storage = browserStorage();
-    storage?.removeItem(`${FALLBACK_WORKSPACE_PREFIX}${ownerId}`);
-    storage?.removeItem(`${FALLBACK_OUTBOX_PREFIX}${ownerId}`);
+    removeFallbackIfSuperseded(FALLBACK_WORKSPACE_PREFIX, ownerId, workspace, record => record.savedAt);
+    // A local-only save must not erase a previously queued cloud mutation.
+    if (outbox) removeFallbackIfSuperseded(FALLBACK_OUTBOX_PREFIX, ownerId, outbox, record => record.queuedAt);
   } catch {
     // Safari private mode and storage pressure can reject IndexedDB while
     // localStorage is still durable. Keep one idempotent, verified fallback
     // snapshot/outbox so refresh and reconnect do not lose the pending round.
     writeFallback(ownerId, workspace, outbox);
   }
+  if (outbox) clearAcknowledgement(ownerId);
   return fingerprint;
 }
 
 export async function readOfflineBundle(ownerId: string) {
+  let indexedDbRecord: OfflineWorkspace | null = null;
   try {
     const db = await openOfflineDb();
     if (db) {
-      const saved = (await requestResult(db.transaction(WORKSPACES, "readonly").objectStore(WORKSPACES).get(ownerId)) as OfflineWorkspace | undefined) || null;
-      if (saved) return saved;
+      indexedDbRecord = (await requestResult(db.transaction(WORKSPACES, "readonly").objectStore(WORKSPACES).get(ownerId)) as OfflineWorkspace | undefined) || null;
     }
   } catch { /* use the verified fallback below */ }
-  return readFallback<OfflineWorkspace>(FALLBACK_WORKSPACE_PREFIX, ownerId);
+  return selectNewestOfflineWorkspace(indexedDbRecord, readFallback<OfflineWorkspace>(FALLBACK_WORKSPACE_PREFIX, ownerId));
 }
 
 export async function readOfflineOutbox(ownerId: string) {
+  let indexedDbRecord: OfflineOutbox | null = null;
   try {
     const db = await openOfflineDb();
     if (db) {
-      const saved = (await requestResult(db.transaction(OUTBOX, "readonly").objectStore(OUTBOX).get(ownerId)) as OfflineOutbox | undefined) || null;
-      if (saved) return saved;
+      indexedDbRecord = (await requestResult(db.transaction(OUTBOX, "readonly").objectStore(OUTBOX).get(ownerId)) as OfflineOutbox | undefined) || null;
     }
   } catch { /* use the verified fallback below */ }
-  return readFallback<OfflineOutbox>(FALLBACK_OUTBOX_PREFIX, ownerId);
+  return selectPendingOfflineOutbox(
+    indexedDbRecord,
+    readFallback<OfflineOutbox>(FALLBACK_OUTBOX_PREFIX, ownerId),
+    readFallback<OfflineAcknowledgement>(FALLBACK_ACK_PREFIX, ownerId),
+  );
 }
 
 export function outboxAcknowledged(outbox: Pick<OfflineOutbox, "fingerprint"> | null, fingerprint: string) {
@@ -162,23 +243,52 @@ export function offlineRetryDelayMs(attempts: number) {
  * local edit remains queued even if an older request finishes later. */
 export async function acknowledgeOfflineBundle(ownerId: string, fingerprint: string) {
   const current = await readOfflineOutbox(ownerId);
-  if (!outboxAcknowledged(current, fingerprint)) return false;
-  const fallback = readFallback<OfflineOutbox>(FALLBACK_OUTBOX_PREFIX, ownerId);
-  if (fallback?.fingerprint === fingerprint) {
-    const storage = browserStorage();
-    const workspace = readFallback<OfflineWorkspace>(FALLBACK_WORKSPACE_PREFIX, ownerId);
-    if (!storage) return false;
-    if (workspace) storage.setItem(`${FALLBACK_WORKSPACE_PREFIX}${ownerId}`, JSON.stringify({ ...workspace, syncedAt: new Date().toISOString() }));
-    storage.removeItem(`${FALLBACK_OUTBOX_PREFIX}${ownerId}`);
-    return true;
+  if (!current || !outboxAcknowledged(current, fingerprint)) return false;
+  const acknowledgement = {
+    ownerId,
+    fingerprint,
+    queuedAt: current.queuedAt,
+    acknowledgedAt: new Date().toISOString(),
+  } satisfies OfflineAcknowledgement;
+  const storage = browserStorage();
+  let acknowledgementPersisted = false;
+  if (storage) {
+    try {
+      storage.setItem(`${FALLBACK_ACK_PREFIX}${ownerId}`, JSON.stringify(acknowledgement));
+      acknowledgementPersisted = readFallback<OfflineAcknowledgement>(FALLBACK_ACK_PREFIX, ownerId)?.fingerprint === fingerprint;
+    } catch { /* IndexedDB can still complete the acknowledgement atomically */ }
   }
-  const db = await openOfflineDb();
-  if (!db) return false;
-  const workspace = await readOfflineBundle(ownerId);
-  const tx = db.transaction([WORKSPACES, OUTBOX], "readwrite");
-  tx.objectStore(OUTBOX).delete(ownerId);
-  if (workspace) tx.objectStore(WORKSPACES).put({ ...workspace, syncedAt: new Date().toISOString() });
-  await transactionDone(tx);
+
+  let indexedDbAcknowledged = false;
+  try {
+    const db = await openOfflineDb();
+    if (db) {
+      const tx = db.transaction([WORKSPACES, OUTBOX], "readwrite");
+      const done = transactionDone(tx);
+      const outboxStore = tx.objectStore(OUTBOX);
+      const workspaceStore = tx.objectStore(WORKSPACES);
+      const [storedOutbox, storedWorkspace] = await Promise.all([
+        requestResult(outboxStore.get(ownerId)) as Promise<OfflineOutbox | undefined>,
+        requestResult(workspaceStore.get(ownerId)) as Promise<OfflineWorkspace | undefined>,
+      ]);
+      if (outboxSupersededByAcknowledgement(storedOutbox || null, acknowledgement)) outboxStore.delete(ownerId);
+      if (storedWorkspace?.fingerprint === fingerprint) workspaceStore.put({ ...storedWorkspace, syncedAt: acknowledgement.acknowledgedAt });
+      await done;
+      indexedDbAcknowledged = true;
+    }
+  } catch { /* the durable watermark prevents an old IndexedDB row resurfacing */ }
+
+  if (!acknowledgementPersisted && !indexedDbAcknowledged) return false;
+  const fallbackOutbox = readFallback<OfflineOutbox>(FALLBACK_OUTBOX_PREFIX, ownerId);
+  if (storage && outboxSupersededByAcknowledgement(fallbackOutbox, acknowledgement)) {
+    try {
+      const workspace = readFallback<OfflineWorkspace>(FALLBACK_WORKSPACE_PREFIX, ownerId);
+      if (workspace?.fingerprint === fingerprint) {
+        storage.setItem(`${FALLBACK_WORKSPACE_PREFIX}${ownerId}`, JSON.stringify({ ...workspace, syncedAt: acknowledgement.acknowledgedAt }));
+      }
+      storage.removeItem(`${FALLBACK_OUTBOX_PREFIX}${ownerId}`);
+    } catch { /* the watermark keeps the acknowledged item logically empty */ }
+  }
   return true;
 }
 
@@ -187,14 +297,22 @@ export async function markOfflineAttempt(ownerId: string, error: string) {
   if (!current) return;
   const fallback = readFallback<OfflineOutbox>(FALLBACK_OUTBOX_PREFIX, ownerId);
   if (fallback?.fingerprint === current.fingerprint) {
-    browserStorage()?.setItem(`${FALLBACK_OUTBOX_PREFIX}${ownerId}`, JSON.stringify({ ...current, attempts: current.attempts + 1, lastError: error.slice(0, 240) }));
+    const latestFallback = readFallback<OfflineOutbox>(FALLBACK_OUTBOX_PREFIX, ownerId);
+    if (latestFallback?.fingerprint === current.fingerprint) {
+      browserStorage()?.setItem(`${FALLBACK_OUTBOX_PREFIX}${ownerId}`, JSON.stringify({ ...latestFallback, attempts: latestFallback.attempts + 1, lastError: error.slice(0, 240) }));
+    }
     return;
   }
   const db = await openOfflineDb();
   if (!db) return;
   const tx = db.transaction(OUTBOX, "readwrite");
-  tx.objectStore(OUTBOX).put({ ...current, attempts: current.attempts + 1, lastError: error.slice(0, 240) });
-  await transactionDone(tx);
+  const done = transactionDone(tx);
+  const store = tx.objectStore(OUTBOX);
+  const stored = await requestResult(store.get(ownerId)) as OfflineOutbox | undefined;
+  if (stored?.fingerprint === current.fingerprint) {
+    store.put({ ...stored, attempts: stored.attempts + 1, lastError: error.slice(0, 240) });
+  }
+  await done;
 }
 
 export function writeCloudBundleToStorage(storage: Pick<Storage, "getItem" | "setItem">, bundle: CloudDataBundle) {
