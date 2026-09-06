@@ -17,7 +17,7 @@ test("CounterBetHolePanel usa artículos correctos para Víboras, Camellos y Pec
     camels: "los",
     fish: "los",
   });
-  assert.match(read("app/components/side-bet-panels.tsx"), /¿Quién se quedó \{meta\.article\} \{meta\.emoji\} \{meta\.plural\}/);
+  assert.match(read("app/components/side-bet-panels.tsx"), /Selecciona quién lo generó al final/);
 });
 
 test("resumen post-hoyo reutiliza Personales guardadas y presenta Match y Medal compactos", () => {

@@ -28,10 +28,10 @@ export function initialBets(ids: string[]): BetConfig {
       total18: { enabled: false, value: 100, hcpPct: 100, decimals: "round", participantIds: [...ids] },
     },
     miniPolla: { enabled: false, value: 100, hcpPct: 100, decimals: "round", participantIds: [...ids] },
-    // New rounds keep one bag; only the value of events from H10–H18 is multiplied.
-    vipers: { enabled: false, value: 100, secondNineMultiplier: 1, settlementMode: "round", participantIds: [...ids] },
-    camels: { enabled: false, value: 100, secondNineMultiplier: 1, settlementMode: "round", participantIds: [...ids] },
-    fish: { enabled: false, value: 100, secondNineMultiplier: 1, settlementMode: "round", participantIds: [...ids] },
+    // Each physical nine has its own bag. Pressure only changes H10–H18 event values.
+    vipers: { enabled: false, value: 100, secondNinePressed: false, secondNineMultiplier: 2, settlementMode: "halves", participantIds: [...ids] },
+    camels: { enabled: false, value: 100, secondNinePressed: false, secondNineMultiplier: 2, settlementMode: "halves", participantIds: [...ids] },
+    fish: { enabled: false, value: 100, secondNinePressed: false, secondNineMultiplier: 2, settlementMode: "halves", participantIds: [...ids] },
     loba: { enabled: false, value: 100, hcpPct: 100, unitsEnabled: false, unitValue: 100, duplicateUnitsByMode: false, participantIds: [...ids] },
   };
 }

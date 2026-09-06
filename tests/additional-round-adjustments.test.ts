@@ -93,6 +93,10 @@ test("validación central reúne scores, tres keepers y configuraciones incomple
       { kind: "fish", config: bets.fish },
     ],
     counterBetKeepers: emptyCounterBetKeepers(),
+    counterBetEvents: (["vipers", "camels", "fish"] as const).flatMap(kind => [
+      { id: `${kind}-a`, kind, hole: 9, playerId: fullRoundPlayers[0].id, quantity: 1 },
+      { id: `${kind}-b`, kind, hole: 9, playerId: fullRoundPlayers[1].id, quantity: 1 },
+    ]),
     lobaConfig: bets.loba,
     foursomeConfig: bets.foursome,
     foursomeSegments: [],
@@ -100,9 +104,9 @@ test("validación central reúne scores, tres keepers y configuraciones incomple
     ballFriendConfig: bets.ballFriend,
   });
   assert.ok(errors.some(error => error.includes("score")));
-  assert.ok(errors.some(error => error.includes("🐍 Víboras")));
-  assert.ok(errors.some(error => error.includes("🐫 Camellos")));
-  assert.ok(errors.some(error => error.includes("🐟 Peces")));
+  assert.ok(errors.some(error => error.includes("🐍 Víbora")));
+  assert.ok(errors.some(error => error.includes("🐫 Camello")));
+  assert.ok(errors.some(error => error.includes("🐟 Pez")));
   assert.ok(errors.some(error => error.includes("Loba")));
   assert.ok(errors.some(error => error.includes("Foursome")));
   assert.ok(errors.some(error => error.includes("Bola Amiga")));

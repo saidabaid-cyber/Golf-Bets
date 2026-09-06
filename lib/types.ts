@@ -57,14 +57,16 @@ export type ParticipantConfig = {
 };
 
 export type CounterBetKind = "vipers" | "camels" | "fish";
-export type CounterBetSettlementMode = "round" | "legacy_halves";
+export type CounterBetSettlementMode = "halves" | "round" | "legacy_halves";
 
 export type CounterBetConfig = ParticipantConfig & {
   enabled: boolean;
   value: number;
-  /** New rounds use one accumulated bag. Missing preserves historical half settlements. */
+  /** Current rounds settle each physical nine independently. Older values remain readable. */
   settlementMode?: CounterBetSettlementMode;
-  /** H10–H18 event value multiplier. Missing is 1x for historical compatibility. */
+  /** Explicit pressure state. Missing derives from a saved multiplier for compatibility. */
+  secondNinePressed?: boolean;
+  /** H10–H18 pressure multiplier. Missing/non-pressed is effectively 1x. */
   secondNineMultiplier?: number;
 };
 

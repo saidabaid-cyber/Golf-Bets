@@ -10,8 +10,9 @@ import type {
 } from "../../lib/types";
 import {
   COUNTER_BET_META,
+  counterBetConfiguredSecondNineMultiplier,
   counterBetEffectiveUnitValue,
-  counterBetSecondNineMultiplier,
+  counterBetSecondNinePressed,
   counterQuantity,
   latestCounterBetCandidates,
   physicalNineForHole,
@@ -47,15 +48,16 @@ export function CounterBetConfigPanel({ kind, config, players, onChange, request
       ? "Bunker · el último jugador paga la bolsa"
       : "Agua · el último jugador paga la bolsa";
   const presentation = BET_PRESENTATION[kind];
-  const roundMode = config.settlementMode === "round";
-  const secondNineMultiplier = counterBetSecondNineMultiplier(config);
+  const secondNinePressed = counterBetSecondNinePressed(config);
+  const configuredMultiplier = counterBetConfiguredSecondNineMultiplier(config);
   return <SetupBetCard id={kind} icon={presentation.icon} title={presentation.title} description={description} help={kind} enabled={config.enabled} locked={locked} requestActivation={requestActivation} onEnabledChange={(enabled) => onChange({ ...config, enabled })}>
     <>
       <div className="grid2 counterBetConfigGrid">
         <div><label>Valor por evento</label><div className="moneyField"><span>$</span><NumericCaptureInput inputMode="decimal" value={config.value} onValueChange={value => onChange({ ...config, value: Math.max(0, value ?? 0) })} /></div></div>
-        <div className="betModeControl counterBetMultiplier"><span className="miniLabel">Multiplicador segunda vuelta</span><div className="segmented" role="group" aria-label={`Multiplicador segunda vuelta de ${meta.plural}`}>{([1, 2, 3, 4, 5] as const).map(value => <button type="button" key={value} className={secondNineMultiplier === value ? "active" : ""} aria-pressed={secondNineMultiplier === value} onClick={() => onChange({ ...config, secondNineMultiplier: value })}>{value}x</button>)}</div></div>
+        <div className="betModeControl counterBetPressure"><span className="miniLabel">Presión en segunda vuelta</span><div className="segmented" role="group" aria-label={`Presión en segunda vuelta de ${meta.plural}`}><button type="button" className={!secondNinePressed ? "active" : ""} aria-pressed={!secondNinePressed} onClick={() => onChange({ ...config, settlementMode: "halves", secondNinePressed: false })}>No</button><button type="button" className={secondNinePressed ? "active" : ""} aria-pressed={secondNinePressed} onClick={() => onChange({ ...config, settlementMode: "halves", secondNinePressed: true, secondNineMultiplier: configuredMultiplier })}>Sí</button></div></div>
       </div>
-      <p className="hint">{roundMode ? "Una sola bolsa durante toda la ronda. H10–H18 multiplica únicamente el valor de cada evento nuevo; el último evento determina quién paga el total acumulado a cada rival." : "Esta ronda conserva el cálculo histórico por vueltas con el que fue creada; el multiplicador mantiene su valor guardado."}</p>
+      {secondNinePressed && <div className="betModeControl counterBetMultiplier"><span className="miniLabel">Multiplicador segunda vuelta</span><div className="segmented" role="group" aria-label={`Multiplicador segunda vuelta de ${meta.plural}`}>{([2, 3, 4, 5] as const).map(value => <button type="button" key={value} className={configuredMultiplier === value ? "active" : ""} aria-pressed={configuredMultiplier === value} onClick={() => onChange({ ...config, settlementMode: "halves", secondNinePressed: true, secondNineMultiplier: value })}>{value}x</button>)}</div></div>}
+      <p className="hint">H1–H9 y H10–H18 se liquidan por separado. {secondNinePressed ? `La bolsa de H10–H18 usa ${configuredMultiplier}x por evento.` : "Sin presión, ambas vueltas usan el valor base."}</p>
       <label className="miniLabel">Participan</label><PlayerChips players={players} selected={config.participantIds} onChange={participantIds => onChange({ ...config, participantIds })} />
     </>
   </SetupBetCard>;
@@ -101,21 +103,20 @@ export function CounterBetHolePanel({ kind, config, players, events, hole, order
   if (!config.enabled) return null;
   const meta = COUNTER_BET_META[kind];
   const participants = players.filter(player => config.participantIds.includes(player.id));
-  const roundMode = config.settlementMode === "round";
-  const asksLegacyKeeper = !roundMode && (hole === 9 || hole === 18);
   const nine = physicalNineForHole(hole);
-  const latest = latestCounterBetCandidates(kind, config.participantIds, events, order);
-  const tieCandidates = latest.candidates.length > 1 && (latest.hole === hole || hole === order.at(-1)) ? latest.candidates : [];
-  const asksRoundKeeper = roundMode && kind !== "vipers" && hole === order.at(-1) && tieCandidates.length > 1;
+  const periodOrder = order.filter(currentHole => physicalNineForHole(currentHole) === nine);
+  const latest = latestCounterBetCandidates(kind, config.participantIds, events, periodOrder);
+  const atPeriodEnd = periodOrder.length > 0 && hole === periodOrder.at(-1);
+  const tieCandidates = atPeriodEnd && latest.candidates.length > 1 ? latest.candidates : [];
+  const asksKeeper = kind !== "vipers" && tieCandidates.length > 1;
   return <section className="card compact sideEventCard">
     <div className="sectionTitle"><div><h2>{meta.emoji} {meta.plural}</h2><p>{kind === "vipers" ? "Marca una si hizo 3 putts o más." : "Registra todas las del hoyo."}</p></div><span className="eventValue">{money(counterBetEffectiveUnitValue(config, hole))} c/u</span></div>
     <div className="quickCounterList">{participants.map(player => {
       const quantity = counterQuantity(events, kind, hole, player.id);
       return <div key={player.id}><b>{player.name}</b><Counter label={`${meta.plural} de ${player.name}`} value={quantity} max={kind === "vipers" ? 1 : undefined} onChange={value => onQuantity(player.id, value)} /></div>;
     })}</div>
-    {roundMode && kind === "vipers" && tieCandidates.length > 1 && <fieldset className="counterTieBreak"><legend>Distancia de la última Víbora · H{latest.hole}</legend><p>Captura centímetros; la bola más cercana al hoyo se queda con la bolsa.</p>{tieCandidates.map(candidate => <label key={candidate.playerId}>{players.find(player => player.id === candidate.playerId)?.name || "Sin nombre"}<NumericCaptureInput inputMode="decimal" min={0} step={1} placeholder="cm" value={candidate.distanceToHole} onValueChange={value => onDistance(latest.hole as number, candidate.playerId, value)} /></label>)}</fieldset>}
-    {asksRoundKeeper && <label className="keeperSelect">Varios jugadores generaron el último {meta.singular} en H{latest.hole}. Selecciona quién lo generó al final:<select value={keepers[kind]?.round || ""} onChange={event => onKeeper(event.target.value, "round")}><option value="">Seleccionar…</option>{tieCandidates.map(candidate => <option key={candidate.playerId} value={candidate.playerId}>{players.find(player => player.id === candidate.playerId)?.name || "Sin nombre"}</option>)}</select></label>}
-    {asksLegacyKeeper && <label className="keeperSelect">¿Quién se quedó {meta.article} {meta.emoji} {meta.plural} de la {hole === 9 ? "primera" : "segunda"} vuelta?<select value={keepers[kind]?.[nine] || ""} onChange={event => onKeeper(event.target.value, nine)}><option value="">Seleccionar…</option>{participants.map(player => <option key={player.id} value={player.id}>{player.name}</option>)}</select></label>}
+    {kind === "vipers" && tieCandidates.length > 1 && <fieldset className="counterTieBreak"><legend>Distancia de la última Víbora · H{latest.hole}</legend><p>Captura centímetros; la bola más cercana al hoyo se queda con la bolsa de esta vuelta.</p>{tieCandidates.map(candidate => <label key={candidate.playerId}>{players.find(player => player.id === candidate.playerId)?.name || "Sin nombre"}<NumericCaptureInput inputMode="decimal" min={0} step={1} placeholder="cm" value={candidate.distanceToHole} onValueChange={value => onDistance(latest.hole as number, candidate.playerId, value)} /></label>)}</fieldset>}
+    {asksKeeper && <label className="keeperSelect">Varios jugadores generaron el último {meta.singular} en H{latest.hole}. Selecciona quién lo generó al final:<select value={keepers[kind]?.[nine] || ""} onChange={event => onKeeper(event.target.value, nine)}><option value="">Seleccionar…</option>{tieCandidates.map(candidate => <option key={candidate.playerId} value={candidate.playerId}>{players.find(player => player.id === candidate.playerId)?.name || "Sin nombre"}</option>)}</select></label>}
   </section>;
 }
 
@@ -248,6 +249,21 @@ export function BallFriendHolePanel({ config, players, hole, capture, liveDetail
 export function CounterBetResults({ title, halves, playerName, id: explicitId, open, onOpenChange }: { title: string; halves: CounterBetHalfResult[]; playerName: (id?: string) => string; id?: string; open?: boolean; onOpenChange?: (open: boolean) => void }) {
   const presentationKey = explicitId === "vipers" || explicitId === "camels" || explicitId === "fish" ? explicitId : null;
   const displayTitle = presentationKey ? betDisplayLabel(presentationKey) : title;
+  const meta = presentationKey ? COUNTER_BET_META[presentationKey] : undefined;
   const id = explicitId || displayTitle.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase();
-  return <ResultAccordion id={id} title={displayTitle} open={open} onOpenChange={onOpenChange} className="sideBetResult">{halves.filter(half => half.holes.length).map(half => <div className="sideBetHalf" key={half.nine}><div><b>{half.nine === "round" ? "Ronda completa" : half.nine === "holes_1_9" ? "H1–9" : "H10–18"}</b><span>{half.quantity} eventos · Bolsa: {money(half.bagValue)}{half.lastEventHole ? ` · último evento H${half.lastEventHole}` : ""}</span></div><strong>{half.keeperId ? half.settled ? `${playerName(half.keeperId)} se queda con la bolsa y paga ${money(half.bagValue)} a cada rival` : `${playerName(half.keeperId)} lleva el último evento; liquidación pendiente` : half.quantity === 0 ? "Sin eventos" : half.needsTieBreak ? "Desempate pendiente" : "Pendiente hasta terminar"}</strong>{half.events.length > 0 && <div className="sideBetEventBreakdown">{half.events.map(event => <span key={event.id}>H{event.hole} · {playerName(event.playerId)} · {event.quantity} × {money(event.effectiveUnitValue)} = <b>{money(event.effectiveTotalValue)}</b></span>)}</div>}{half.settled && <div className="sideBetBalances">{Object.entries(half.balances).filter(([, amount]) => amount !== 0).map(([id, amount]) => <span key={id}>{playerName(id)} <b className={amount > 0 ? "good" : "bad"}>{signedMoney(amount)}</b></span>)}</div>}</div>)}</ResultAccordion>;
+  const visibleHalves = halves.filter(half => half.holes.length && half.nine !== "round");
+  const totalBalances = visibleHalves.reduce<Record<string, number>>((totals, half) => {
+    for (const [playerId, amount] of Object.entries(half.balances)) totals[playerId] = (totals[playerId] || 0) + amount;
+    return totals;
+  }, {});
+  return <ResultAccordion id={id} title={displayTitle} open={open} onOpenChange={onOpenChange} className="sideBetResult">
+    {visibleHalves.map(half => <section className="sideBetHalf" key={half.nine}>
+      <div className="sideBetHalfHeader"><div><b>{half.nine === "holes_1_9" ? "PRIMERA VUELTA" : "SEGUNDA VUELTA"}</b><span>{half.nine === "holes_1_9" ? "H1–H9" : "H10–H18"}</span></div>{half.pressed && <strong>Presión {half.multiplier}x</strong>}</div>
+      <div className="sideBetHalfMetrics"><div><span>Eventos</span><b>{half.quantity}</b></div><div><span>Valor por evento</span><b>{money(half.value)}</b></div><div><span>Bolsa</span><b>{money(half.bagValue)}</b></div></div>
+      <p className="sideBetKeeper">{half.keeperId ? half.settled ? <><b>Se {meta?.article === "las" ? "las" : "los"} queda: {playerName(half.keeperId)}</b><span>{playerName(half.keeperId)} paga {money(half.bagValue)} a cada rival.</span></> : <><b>Último evento: {playerName(half.keeperId)}</b><span>Liquidación pendiente de completar la vuelta.</span></> : half.quantity === 0 ? <span>Sin eventos en esta vuelta.</span> : half.needsTieBreak ? <span>Desempate pendiente.</span> : <span>Pendiente de completar la vuelta.</span>}</p>
+      {half.events.length > 0 && <div className="sideBetEventBreakdown">{half.events.map(event => <article key={event.id}><b>H{event.hole} · {playerName(event.playerId)}</b><span>{event.quantity} {event.quantity === 1 ? meta?.singular || "evento" : meta?.plural || "eventos"} × {money(event.effectiveUnitValue)} = <strong>{money(event.effectiveTotalValue)}</strong></span></article>)}</div>}
+      {half.settled && <div className="sideBetBalances">{Object.entries(half.balances).map(([playerId, amount]) => <span key={playerId}>{playerName(playerId)} <b className={amount > 0 ? "good" : amount < 0 ? "bad" : ""}>{signedMoney(amount)}</b></span>)}</div>}
+    </section>)}
+    {visibleHalves.length > 0 && <section className="counterBetTotal"><h3>TOTAL {meta?.plural.toUpperCase() || displayTitle.toUpperCase()}</h3><div className="sideBetBalances">{Object.entries(totalBalances).map(([playerId, amount]) => <span key={playerId}>{playerName(playerId)} <b className={amount > 0 ? "good" : amount < 0 ? "bad" : ""}>{signedMoney(amount)}</b></span>)}</div></section>}
+  </ResultAccordion>;
 }

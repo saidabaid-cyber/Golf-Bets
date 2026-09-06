@@ -155,3 +155,18 @@
 .counterTieBreak{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px;border:1px solid var(--line);border-radius:12px;background:var(--soft);padding:10px}.counterTieBreak legend{padding:0 5px;color:var(--green);font-size:12px;font-weight:900}.counterTieBreak p{grid-column:1/-1;margin:0;color:var(--muted);font-size:11px}.counterTieBreak label{font-size:11px;font-weight:800}
 .betHelpDialog dd p{margin:0}.betHelpDialog dd ul{display:grid;gap:5px;margin:0;padding-left:19px}.betHelpDialog dd li{padding-left:1px}
 @media(max-width:430px){.counterTieBreak{grid-template-columns:1fr}}
+
+/* Counter bets use full-width rows at every viewport. This intentionally comes
+   after the legacy side-bet rules above so mobile never inherits their rigid
+   two-column result layout. */
+.sideBetResult .sideBetHalf{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;min-width:0;width:100%;padding:13px 0}
+.sideBetResult .sideBetHalfHeader,.sideBetResult .sideBetHalfMetrics,.sideBetResult .sideBetKeeper,.sideBetResult .sideBetEventBreakdown,.sideBetResult .sideBetBalances{grid-column:1;min-width:0;width:100%}
+.sideBetResult .sideBetEventBreakdown{display:grid;grid-template-columns:minmax(0,1fr);gap:6px}
+.sideBetResult .sideBetEventBreakdown>article{display:grid;grid-template-columns:minmax(0,1fr);gap:2px;width:100%;min-width:0}
+.sideBetResult .sideBetEventBreakdown>article b,.sideBetResult .sideBetEventBreakdown>article span{min-width:0;overflow-wrap:anywhere;word-break:normal}
+.sideBetResult .sideBetBalances{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-top:0}
+.sideBetResult .sideBetBalances>span{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0;border-radius:9px;padding:7px 8px}
+.sideBetResult .sideBetBalances>span b{flex:0 0 auto;white-space:nowrap}
+@media(max-width:430px){
+  .sideBetResult .sideBetHalfMetrics,.sideBetResult .sideBetBalances{grid-template-columns:minmax(0,1fr)}
+}

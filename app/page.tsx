@@ -113,6 +113,7 @@ import {
   calculateLoba,
   COUNTER_BET_META,
   counterBetSecondNineMultiplier,
+  counterBetSecondNinePressed,
   emptyCounterBetKeepers,
   setCounterDistance,
   setCounterQuantity,
@@ -2640,9 +2641,9 @@ function GolfBetsApp() {
         {bets.monkey?.enabled && <span><b>🐒 Monkey</b>{money(bets.monkey.value)} por punto · HCP {bets.monkey.hcpPct ?? 100}%</span>}
         {polla.details.map((detail) => <span key={detail.key}><b>{detail.key === "total18" ? "🏆" : "🥈"} {detail.label}</b>{money(detail.value)}</span>)}
         {bets.miniPolla.enabled && <span><b>⚡ Mini Polla</b>{money(bets.miniPolla.value)}</span>}
-        {bets.vipers.enabled && <span><b>🐍 Víboras</b>{money(bets.vipers.value)} por evento · H10–18 {counterBetSecondNineMultiplier(bets.vipers)}x · {bets.vipers.settlementMode === "round" ? "bolsa única" : "histórico por vueltas"}</span>}
-        {bets.camels.enabled && <span><b>🐫 Camellos</b>{money(bets.camels.value)} por evento · H10–18 {counterBetSecondNineMultiplier(bets.camels)}x · {bets.camels.settlementMode === "round" ? "bolsa única" : "histórico por vueltas"}</span>}
-        {bets.fish.enabled && <span><b>🐟 Peces</b>{money(bets.fish.value)} por evento · H10–18 {counterBetSecondNineMultiplier(bets.fish)}x · {bets.fish.settlementMode === "round" ? "bolsa única" : "histórico por vueltas"}</span>}
+        {bets.vipers.enabled && <span><b>🐍 Víboras</b>{money(bets.vipers.value)} por evento · dos bolsas · {counterBetSecondNinePressed(bets.vipers) ? `H10–18 presionada ${counterBetSecondNineMultiplier(bets.vipers)}x` : "sin presión"}</span>}
+        {bets.camels.enabled && <span><b>🐫 Camellos</b>{money(bets.camels.value)} por evento · dos bolsas · {counterBetSecondNinePressed(bets.camels) ? `H10–18 presionada ${counterBetSecondNineMultiplier(bets.camels)}x` : "sin presión"}</span>}
+        {bets.fish.enabled && <span><b>🐟 Peces</b>{money(bets.fish.value)} por evento · dos bolsas · {counterBetSecondNinePressed(bets.fish) ? `H10–18 presionada ${counterBetSecondNineMultiplier(bets.fish)}x` : "sin presión"}</span>}
         {bets.loba.enabled && <span><b>🐺 Loba</b>{money(bets.loba.value)} base · HCP {bets.loba.hcpPct ?? 100}%{bets.loba.unitsEnabled ? ` · 📏 ${money(bets.loba.unitValue)}` : ""}</span>}
         {supplementalBets.filter((bet) => bet.enabled !== false).map((bet) => <span key={bet.id}><b>{supplementalBetDisplayLabel(bet.type)}</b>{money(supplementalBetValue(bet))}</span>)}
         {personalBets.filter((bet) => bet.enabled !== false).map((bet) => <span key={bet.id}><b>🏌️ Nassau Individual · {owner?.name} vs {bet.rivalMode === "group" ? playerName(bet.rivalPlayerId) : bet.rivalName}</b>{money(bet.baseValue)} base{roundHoles === 18 && (bet.pressureMultiplier || 1) > 1 ? ` · 2ª jugada ${bet.pressureMultiplier}x` : ""} · Carry {bet.carryEnabled ? "Sí" : "No"}</span>)}

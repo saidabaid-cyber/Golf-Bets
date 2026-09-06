@@ -16,27 +16,32 @@ import { calculateBallFriend, calculateFoursomes, calculateMiniPolla, calculateM
 import type { BetConfig, CounterBetConfig, CounterBetEvent, CounterBetKind, Course, HoleScore, LobaHole, Player } from "../lib/types";
 import { fullRoundBallFriend, fullRoundBets, fullRoundCourse, fullRoundOrder, fullRoundPersonal, fullRoundPlayers, fullRoundScores, fullRoundSegments } from "./fixtures/full-round";
 import { initialBets, restoreCounterBetConfig } from "../lib/new-round-bets";
+import { buildGeneralResultsTable } from "../lib/result-breakdown";
 
 const players: Player[] = ["said", "juan", "pedro", "flavio", "daniel"].map((id, index) => ({ id, name: id, handicap: index * 3 }));
 const ids = players.map(player => player.id);
 const order = Array.from({ length: 18 }, (_, index) => index + 1);
 
-function counterConfig(multiplier = 1): CounterBetConfig {
-  return { enabled: true, value: 100, secondNineMultiplier: multiplier, participantIds: ids };
+function counterConfig(multiplier: 1 | 2 | 3 | 4 | 5 = 1, value = 100, participantIds = ids): CounterBetConfig {
+  return {
+    enabled: true,
+    settlementMode: "halves",
+    value,
+    secondNinePressed: multiplier > 1,
+    secondNineMultiplier: multiplier > 1 ? multiplier : 2,
+    participantIds,
+  };
 }
 
-function events(kind: CounterBetKind): CounterBetEvent[] {
+function tenEventsPerHalf(kind: CounterBetKind): CounterBetEvent[] {
   return [
-    { id: "a", kind, hole: 1, playerId: "juan", quantity: 2 },
-    { id: "b", kind, hole: 1, playerId: "said", quantity: 3 },
-    { id: "c", kind, hole: 8, playerId: "pedro", quantity: 5 },
-    { id: "d", kind, hole: 10, playerId: "flavio", quantity: 2 },
-    { id: "e", kind, hole: 18, playerId: "daniel", quantity: 1 },
+    { id: `${kind}-h2-said`, kind, hole: 2, playerId: "said", quantity: 3 },
+    { id: `${kind}-h6-pedro`, kind, hole: 6, playerId: "pedro", quantity: 2 },
+    { id: `${kind}-h9-said`, kind, hole: 9, playerId: "said", quantity: 5 },
+    { id: `${kind}-h10-juan`, kind, hole: 10, playerId: "juan", quantity: 2 },
+    { id: `${kind}-h15-daniel`, kind, hole: 15, playerId: "daniel", quantity: 3 },
+    { id: `${kind}-h18-juan`, kind, hole: 18, playerId: "juan", quantity: 5 },
   ];
-}
-
-function roundCounterConfig(multiplier: 1 | 2 | 3 | 4 | 5 = 1): CounterBetConfig {
-  return { enabled: true, settlementMode: "round", value: 100, secondNineMultiplier: multiplier, participantIds: ids.slice(0, 4) };
 }
 
 test("Monkey conserva exactamente 6 puntos en sus cuatro distribuciones", () => {
@@ -89,193 +94,133 @@ test("Monkey conserva sus umbrales SI históricos con HCP decimal", () => {
 });
 
 for (const kind of ["vipers", "camels", "fish"] as CounterBetKind[]) {
-  test(`${kind}: la bolsa nueva acumula H1-H18 y el último evento paga N × valor a cada rival`, () => {
-    const selectedPlayers = players.slice(0, 4);
-    const eventRows: CounterBetEvent[] = [
-      { id: `${kind}-1`, kind, hole: 2, playerId: selectedPlayers[0].id, quantity: 1 },
-      { id: `${kind}-2`, kind, hole: 10, playerId: selectedPlayers[1].id, quantity: 1 },
-      { id: `${kind}-3`, kind, hole: 17, playerId: selectedPlayers[2].id, quantity: 1 },
-    ];
-    const result = calculateCounterBet(kind, selectedPlayers, roundCounterConfig(), eventRows, emptyCounterBetKeepers(), order, new Set(order));
-    assert.equal(result.halves.length, 1);
-    assert.equal(result.halves[0].nine, "round");
-    assert.equal(result.halves[0].quantity, 3);
-    assert.equal(result.halves[0].keeperId, selectedPlayers[2].id);
-    assert.deepEqual(result.balances, { said: 300, juan: 300, pedro: -900, flavio: 300 });
-    assert.equal(result.zeroSum, true);
-  });
-}
-
-for (const kind of ["vipers", "camels", "fish"] as CounterBetKind[]) {
-  for (const multiplier of [1, 2, 5] as const) {
-    test(`${kind}: bolsa única aplica ${multiplier}x solo a H10–H18 y paga el total por rival`, () => {
-      const selectedPlayers = players.slice(0, 4);
-      const eventRows: CounterBetEvent[] = [
-        { id: `${kind}-h2`, kind, hole: 2, playerId: selectedPlayers[0].id, quantity: 1 },
-        { id: `${kind}-h9`, kind, hole: 9, playerId: selectedPlayers[1].id, quantity: 1 },
-        { id: `${kind}-h10`, kind, hole: 10, playerId: selectedPlayers[2].id, quantity: 1 },
-        { id: `${kind}-h18`, kind, hole: 18, playerId: selectedPlayers[3].id, quantity: 1 },
-      ];
-      const result = calculateCounterBet(kind, selectedPlayers, roundCounterConfig(multiplier), eventRows, emptyCounterBetKeepers(), order, new Set(order));
-      const expectedBag = 200 + (200 * multiplier);
-      assert.equal(result.halves.length, 1);
-      assert.equal(result.halves[0].nine, "round");
-      assert.equal(result.halves[0].quantity, 4);
-      assert.equal(result.halves[0].bagValue, expectedBag);
-      assert.equal(result.totalBagValue, expectedBag);
-      assert.deepEqual(result.halves[0].events.map(event => event.effectiveUnitValue), [100, 100, 100 * multiplier, 100 * multiplier]);
-      assert.equal(result.halves[0].keeperId, selectedPlayers[3].id);
-      assert.deepEqual(result.transfers.map(transfer => transfer.amount), [expectedBag, expectedBag, expectedBag]);
-      assert.deepEqual(result.balances, {
-        [selectedPlayers[0].id]: expectedBag,
-        [selectedPlayers[1].id]: expectedBag,
-        [selectedPlayers[2].id]: expectedBag,
-        [selectedPlayers[3].id]: -expectedBag * 3,
-      });
+  for (const sample of [
+    { label: "$100 sin presión", config: counterConfig(1, 100), firstValue: 100, secondValue: 100 },
+    { label: "$100 con presión 2x", config: counterConfig(2, 100), firstValue: 100, secondValue: 200 },
+    { label: "$200 con presión 3x", config: counterConfig(3, 200), firstValue: 200, secondValue: 600 },
+  ]) {
+    test(`${kind}: ${sample.label} liquida cada vuelta por separado y en suma cero`, () => {
+      const result = calculateCounterBet(kind, players, sample.config, tenEventsPerHalf(kind), emptyCounterBetKeepers(), order, new Set(order));
+      const firstBag = sample.firstValue * 10;
+      const secondBag = sample.secondValue * 10;
+      assert.deepEqual(result.halves.map(half => half.nine), ["holes_1_9", "holes_10_18"]);
+      assert.deepEqual(result.halves.map(half => half.quantity), [10, 10]);
+      assert.deepEqual(result.halves.map(half => half.value), [sample.firstValue, sample.secondValue]);
+      assert.deepEqual(result.halves.map(half => half.bagValue), [firstBag, secondBag]);
+      assert.deepEqual(result.halves.map(half => half.keeperId), ["said", "juan"]);
+      assert.deepEqual(result.halves[0].balances, { said: -firstBag * 4, juan: firstBag, pedro: firstBag, flavio: firstBag, daniel: firstBag });
+      assert.deepEqual(result.halves[1].balances, { said: secondBag, juan: -secondBag * 4, pedro: secondBag, flavio: secondBag, daniel: secondBag });
+      assert.equal(isZeroSum(result.halves[0].balances), true);
+      assert.equal(isZeroSum(result.halves[1].balances), true);
       assert.equal(result.zeroSum, true);
-      assert.equal(Object.values(result.balances).reduce((sum, amount) => sum + amount, 0), 0);
+      assert.equal(result.totalBagValue, firstBag + secondBag);
+      assert.equal(result.transfers.length, 8);
+      assert.deepEqual(result.transfers.slice(0, 4).map(transfer => transfer.amount), Array(4).fill(firstBag));
+      assert.deepEqual(result.transfers.slice(4).map(transfer => transfer.amount), Array(4).fill(secondBag));
     });
   }
 }
 
-test("snapshot de bolsa conserva valor base, multiplicador y valor efectivo por evento", () => {
-  const configs = {
-    vipers: roundCounterConfig(2),
-    camels: roundCounterConfig(5),
-    fish: roundCounterConfig(1),
-  };
+test("los balances de las dos vueltas llegan al Resumen General sin convertirse en cero", () => {
+  const result = calculateCounterBet("vipers", players, counterConfig(2), tenEventsPerHalf("vipers"), emptyCounterBetKeepers(), order, new Set(order));
+  const general = buildGeneralResultsTable(ids, [{ key: "vipers", label: "🐍 Víboras", balances: result.balances, active: true, played: true }], result.balances);
+  assert.equal(general.categories.length, 1);
+  assert.equal(general.rows.every(row => row.consistent), true);
+  assert.equal(general.rows.every(row => row.cells.vipers === result.balances[row.playerId]), true);
+  assert.equal(general.rows.some(row => row.cells.vipers !== 0), true);
+  assert.equal(general.grandTotal, 0);
+});
+
+test("snapshot conserva presión, multiplicador y valor efectivo por vuelta", () => {
+  const configs = { vipers: counterConfig(2), camels: counterConfig(5), fish: counterConfig(1) };
   const eventRows: CounterBetEvent[] = [
     { id: "v-h9", kind: "vipers", hole: 9, playerId: ids[0], quantity: 2 },
     { id: "v-h10", kind: "vipers", hole: 10, playerId: ids[1], quantity: 3 },
     { id: "c-h18", kind: "camels", hole: 18, playerId: ids[2], quantity: 1 },
+    { id: "f-h18", kind: "fish", hole: 18, playerId: ids[3], quantity: 1 },
   ];
   const stored = JSON.parse(JSON.stringify(snapshotCounterBetEvents(eventRows, configs))) as CounterBetEvent[];
-  assert.deepEqual(stored.map(event => [event.effectiveUnitValue, event.effectiveTotalValue]), [[100, 200], [200, 600], [500, 500]]);
-  assert.equal(configs.vipers.value, 100);
-  assert.equal(configs.vipers.secondNineMultiplier, 2);
-  const restored = calculateCounterBet("vipers", players.slice(0, 4), configs.vipers, stored, emptyCounterBetKeepers(), order, new Set(order));
-  assert.equal(restored.halves[0].bagValue, 800);
+  assert.deepEqual(stored.map(event => [event.effectiveUnitValue, event.effectiveTotalValue]), [[100, 200], [200, 600], [500, 500], [100, 100]]);
+  assert.equal(configs.vipers.secondNinePressed, true);
+  assert.equal(configs.fish.secondNinePressed, false);
+  const restored = calculateCounterBet("vipers", players, configs.vipers, stored, emptyCounterBetKeepers(), order, new Set(order));
+  assert.deepEqual(restored.halves.map(half => half.bagValue), [200, 600]);
 });
 
-test("bolsa de ronda antigua sin multiplicador conserva 1x", () => {
-  const config: CounterBetConfig = { enabled: true, settlementMode: "round", value: 100, participantIds: ids.slice(0, 4) };
+test("configuración anterior sin presión explícita conserva 1x o infiere su multiplicador guardado", () => {
+  const noMultiplier: CounterBetConfig = { enabled: true, settlementMode: "round", value: 100, participantIds: ids };
+  const savedMultiplier: CounterBetConfig = { enabled: true, value: 100, secondNineMultiplier: 3, participantIds: ids };
   const eventRows: CounterBetEvent[] = [
     { id: "old-h9", kind: "fish", hole: 9, playerId: ids[0], quantity: 1 },
     { id: "old-h10", kind: "fish", hole: 10, playerId: ids[1], quantity: 1 },
   ];
-  const result = calculateCounterBet("fish", players.slice(0, 4), config, eventRows, emptyCounterBetKeepers(), order, new Set(order));
-  assert.equal(result.halves[0].bagValue, 200);
-  assert.deepEqual(result.halves[0].events.map(event => event.effectiveUnitValue), [100, 100]);
+  assert.deepEqual(calculateCounterBet("fish", players, noMultiplier, eventRows, emptyCounterBetKeepers(), order, new Set(order)).halves.map(half => half.value), [100, 100]);
+  assert.deepEqual(calculateCounterBet("fish", players, savedMultiplier, eventRows, emptyCounterBetKeepers(), order, new Set(order)).halves.map(half => half.value), [100, 300]);
 });
 
-test("Víboras resuelve candidatos del último hoyo por la menor distancia y conserva la distancia al editar cantidad", () => {
-  const selectedPlayers = players.slice(0, 4);
+test("Víboras desempata por menor distancia dentro de cada vuelta y conserva la distancia al editar", () => {
   let eventRows: CounterBetEvent[] = [
-    { id: "v-a", kind: "vipers", hole: 18, playerId: selectedPlayers[0].id, quantity: 1 },
-    { id: "v-b", kind: "vipers", hole: 18, playerId: selectedPlayers[1].id, quantity: 2 },
+    { id: "v-9-a", kind: "vipers", hole: 9, playerId: ids[0], quantity: 1 },
+    { id: "v-9-b", kind: "vipers", hole: 9, playerId: ids[1], quantity: 2 },
+    { id: "v-18-c", kind: "vipers", hole: 18, playerId: ids[2], quantity: 1 },
   ];
-  eventRows = setCounterDistance(eventRows, "vipers", 18, selectedPlayers[0].id, 75);
-  eventRows = setCounterDistance(eventRows, "vipers", 18, selectedPlayers[1].id, 30);
-  eventRows = setCounterQuantity(eventRows, "vipers", 18, selectedPlayers[1].id, 3);
-  assert.equal(eventRows.find((event) => event.playerId === selectedPlayers[1].id)?.distanceToHole, 30);
-  const result = calculateCounterBet("vipers", selectedPlayers, roundCounterConfig(), eventRows, emptyCounterBetKeepers(), order, new Set(order));
-  assert.equal(result.halves[0].keeperId, selectedPlayers[1].id);
-  assert.equal(result.halves[0].quantity, 4);
-  assert.deepEqual(result.balances, { said: 400, juan: -1200, pedro: 400, flavio: 400 });
-  assert.equal(requiredSideBetCapture(18, [{ kind: "vipers", config: roundCounterConfig() }], emptyCounterBetKeepers(), { enabled: false, participantIds: [] }, undefined, eventRows, order), "");
+  assert.match(requiredSideBetCapture(9, [{ kind: "vipers", config: counterConfig() }], emptyCounterBetKeepers(), { enabled: false, participantIds: [] }, undefined, eventRows, order), /distancia/);
+  eventRows = setCounterDistance(eventRows, "vipers", 9, ids[0], 75);
+  eventRows = setCounterDistance(eventRows, "vipers", 9, ids[1], 30);
+  eventRows = setCounterQuantity(eventRows, "vipers", 9, ids[1], 3);
+  assert.equal(eventRows.find(event => event.playerId === ids[1] && event.hole === 9)?.distanceToHole, 30);
+  const result = calculateCounterBet("vipers", players, counterConfig(), eventRows, emptyCounterBetKeepers(), order, new Set(order));
+  assert.deepEqual(result.halves.map(half => half.keeperId), [ids[1], ids[2]]);
+  assert.equal(requiredSideBetCapture(9, [{ kind: "vipers", config: counterConfig() }], emptyCounterBetKeepers(), { enabled: false, participantIds: [] }, undefined, eventRows, order), "");
 });
 
-test("Víboras exige distancia solo ante empate de candidatos en el último hoyo", () => {
+test("cada bolsa se liquida solo al completar su propia vuelta física", () => {
   const eventRows: CounterBetEvent[] = [
-    { id: "v-a", kind: "vipers", hole: 18, playerId: ids[0], quantity: 1 },
-    { id: "v-b", kind: "vipers", hole: 18, playerId: ids[1], quantity: 1 },
+    { id: "v-h9", kind: "vipers", hole: 9, playerId: ids[0], quantity: 1 },
+    { id: "v-h18", kind: "vipers", hole: 18, playerId: ids[1], quantity: 1 },
   ];
-  assert.match(requiredSideBetCapture(18, [{ kind: "vipers", config: roundCounterConfig() }], emptyCounterBetKeepers(), { enabled: false, participantIds: [] }, undefined, eventRows, order), /distancia/);
-  assert.equal(requiredSideBetCapture(17, [{ kind: "vipers", config: roundCounterConfig() }], emptyCounterBetKeepers(), { enabled: false, participantIds: [] }, undefined, eventRows, order), "");
+  const afterNine = new Set(order.filter(hole => hole <= 9));
+  const result = calculateCounterBet("vipers", players, counterConfig(2), eventRows, emptyCounterBetKeepers(), order, afterNine);
+  assert.equal(result.halves[0].settled, true);
+  assert.equal(result.halves[1].settled, false);
+  assert.equal(result.transfers.length, 4);
+  assert.ok(result.transfers.every(transfer => transfer.metadata?.nine === "holes_1_9"));
 });
 
-test("la bolsa completa no se liquida en H9 ni antes del último hoyo programado", () => {
-  const eventRows: CounterBetEvent[] = [{ id: "round-viper", kind: "vipers", hole: 9, playerId: ids[0], quantity: 1 }];
-  const incomplete = new Set(order.filter((hole) => hole !== 18));
-  const result = calculateCounterBet("vipers", players.slice(0, 4), roundCounterConfig(), eventRows, emptyCounterBetKeepers(), order, incomplete);
-  assert.equal(result.halves[0].settled, false);
-  assert.deepEqual(result.balances, { said: 0, juan: 0, pedro: 0, flavio: 0 });
-  assert.equal(requiredSideBetCapture(9, [{ kind: "vipers", config: roundCounterConfig() }], emptyCounterBetKeepers(), { enabled: false, participantIds: [] }, undefined, eventRows, order), "");
-});
-
-test("el último evento sigue el orden real de salida cuando la ronda comienza en H10", () => {
+test("una salida por H10 conserva dos liquidaciones físicas independientes", () => {
   const startAtTen = [...Array.from({ length: 9 }, (_, index) => index + 10), ...Array.from({ length: 9 }, (_, index) => index + 1)];
   const eventRows: CounterBetEvent[] = [
     { id: "camel-18", kind: "camels", hole: 18, playerId: ids[0], quantity: 1 },
     { id: "camel-9", kind: "camels", hole: 9, playerId: ids[1], quantity: 1 },
   ];
-  const result = calculateCounterBet("camels", players.slice(0, 4), roundCounterConfig(), eventRows, emptyCounterBetKeepers(), startAtTen, new Set(startAtTen));
-  assert.equal(result.halves[0].lastEventHole, 9);
-  assert.equal(result.halves[0].keeperId, ids[1]);
+  const result = calculateCounterBet("camels", players, counterConfig(), eventRows, emptyCounterBetKeepers(), startAtTen, new Set(startAtTen));
+  assert.deepEqual(result.halves.map(half => [half.lastEventHole, half.keeperId]), [[9, ids[1]], [18, ids[0]]]);
 });
 
 for (const kind of ["camels", "fish"] as CounterBetKind[]) {
-  test(`${kind}: candidatos en el mismo último hoyo conservan la elección manual existente`, () => {
+  test(`${kind}: empate del último hoyo usa la selección manual de esa vuelta`, () => {
     const eventRows: CounterBetEvent[] = [
       { id: `${kind}-a`, kind, hole: 18, playerId: ids[0], quantity: 1 },
       { id: `${kind}-b`, kind, hole: 18, playerId: ids[1], quantity: 1 },
     ];
     const keepers = emptyCounterBetKeepers();
-    assert.match(requiredSideBetCapture(18, [{ kind, config: roundCounterConfig() }], keepers, { enabled: false, participantIds: [] }, undefined, eventRows, order), /Selecciona quién/);
-    keepers[kind].round = ids[1];
-    const result = calculateCounterBet(kind, players.slice(0, 4), roundCounterConfig(), eventRows, keepers, order, new Set(order));
-    assert.equal(result.halves[0].keeperId, ids[1]);
+    assert.match(requiredSideBetCapture(18, [{ kind, config: counterConfig() }], keepers, { enabled: false, participantIds: [] }, undefined, eventRows, order), /Selecciona quién/);
+    keepers[kind].holes_10_18 = ids[1];
+    const result = calculateCounterBet(kind, players, counterConfig(), eventRows, keepers, order, new Set(order));
+    assert.equal(result.halves[1].keeperId, ids[1]);
     assert.equal(result.zeroSum, true);
   });
 }
 
-test("la ausencia de settlementMode preserva exactamente la liquidación histórica por vueltas", () => {
-  const keepers = emptyCounterBetKeepers();
-  keepers.vipers = { holes_1_9: "said", holes_10_18: "juan" };
-  const historical = calculateCounterBet("vipers", players, counterConfig(2), events("vipers"), keepers, order, new Set(order));
-  assert.equal(historical.halves.length, 2);
-  assert.deepEqual(historical.halves.map((half) => half.nine), ["holes_1_9", "holes_10_18"]);
-  assert.equal(historical.halves[1].value, 200);
-});
-
-test("restaurar un borrador anterior no le atribuye la bolsa nueva de 18 hoyos", () => {
+test("restaurar borradores conserva datos antiguos y las rondas nuevas nacen por vueltas", () => {
   const fresh = initialBets(ids).vipers;
   const saved: CounterBetConfig = { enabled: true, value: 75, secondNineMultiplier: 3, participantIds: ids.slice(0, 4) };
   const restored = restoreCounterBetConfig(fresh, saved);
   assert.equal(restored.settlementMode, undefined);
   assert.equal(restored.secondNineMultiplier, 3);
   assert.equal(restored.value, 75);
-  assert.deepEqual(restoreCounterBetConfig(fresh).settlementMode, "round");
+  assert.deepEqual(restoreCounterBetConfig(fresh).settlementMode, "halves");
 });
-
-for (const kind of ["vipers", "camels", "fish"] as CounterBetKind[]) {
-  test(`${kind}: admite múltiples eventos por jugador/hoyo y liquida ambas vueltas en suma cero`, () => {
-    const keepers = emptyCounterBetKeepers();
-    keepers[kind] = { holes_1_9: "said", holes_10_18: "juan" };
-    const result = calculateCounterBet(kind, players, counterConfig(2), events(kind), keepers, order);
-
-    assert.equal(result.halves[0].quantity, 10);
-    assert.equal(result.halves[0].value, 100);
-    assert.deepEqual(result.halves[0].balances, { said: -4000, juan: 1000, pedro: 1000, flavio: 1000, daniel: 1000 });
-    assert.equal(result.halves[1].quantity, 3);
-    assert.equal(result.halves[1].value, 200);
-    assert.deepEqual(result.halves[1].balances, { said: 600, juan: -2400, pedro: 600, flavio: 600, daniel: 600 });
-    assert.equal(result.zeroSum, true);
-    assert.equal(Object.values(result.balances).reduce((sum, amount) => sum + amount, 0), 0);
-  });
-
-  test(`${kind}: segunda vuelta 3x, H9/H18 y captura pendiente no se liquidan antes de tiempo`, () => {
-    const keepers = emptyCounterBetKeepers();
-    keepers[kind] = { holes_1_9: "said", holes_10_18: "juan" };
-    const completed = new Set(order.filter(hole => hole !== 18));
-    const result = calculateCounterBet(kind, players, counterConfig(3), events(kind), keepers, order, completed);
-    assert.equal(result.halves[0].settled, true);
-    assert.equal(result.halves[1].settled, false);
-    assert.ok(result.transfers.every(transfer => transfer.metadata?.nine === "holes_1_9"));
-    assert.equal(requiredSideBetCapture(9, [{ kind, config: counterConfig() }], emptyCounterBetKeepers(), { enabled: false, participantIds: [] }, undefined).includes("Selecciona quién"), true);
-    assert.equal(requiredSideBetCapture(18, [{ kind, config: counterConfig() }], keepers, { enabled: false, participantIds: [] }, undefined), "");
-  });
-}
 
 test("contadores rápidos conservan cantidad numérica, permiten borrar y no duplican la llave", () => {
   let state: CounterBetEvent[] = [];
@@ -290,17 +235,27 @@ test("contadores rápidos conservan cantidad numérica, permiten borrar y no dup
 test("H9 y H18 identifican cada keeper faltante con varias apuestas activas", () => {
   const enabled = (["vipers", "camels", "fish"] as CounterBetKind[]).map((kind) => ({ kind, config: counterConfig() }));
   const keepers = emptyCounterBetKeepers();
-  assert.match(requiredSideBetCapture(9, enabled, keepers, { enabled: false, participantIds: [] }, undefined), /🐍 Víboras/);
-  keepers.vipers.holes_1_9 = "said";
-  assert.match(requiredSideBetCapture(9, enabled, keepers, { enabled: false, participantIds: [] }, undefined), /🐫 Camellos/);
+  let eventRows: CounterBetEvent[] = (["vipers", "camels", "fish"] as CounterBetKind[]).flatMap(kind => [
+    { id: `${kind}-9-a`, kind, hole: 9, playerId: "said", quantity: 1 },
+    { id: `${kind}-9-b`, kind, hole: 9, playerId: "juan", quantity: 1 },
+    { id: `${kind}-18-a`, kind, hole: 18, playerId: "pedro", quantity: 1 },
+    { id: `${kind}-18-b`, kind, hole: 18, playerId: "daniel", quantity: 1 },
+  ]);
+  assert.match(requiredSideBetCapture(9, enabled, keepers, { enabled: false, participantIds: [] }, undefined, eventRows, order), /🐍 Víbora/);
+  eventRows = setCounterDistance(eventRows, "vipers", 9, "said", 20);
+  eventRows = setCounterDistance(eventRows, "vipers", 9, "juan", 40);
+  assert.match(requiredSideBetCapture(9, enabled, keepers, { enabled: false, participantIds: [] }, undefined, eventRows, order), /🐫 Camello/);
   keepers.camels.holes_1_9 = "juan";
-  assert.match(requiredSideBetCapture(9, enabled, keepers, { enabled: false, participantIds: [] }, undefined), /🐟 Peces/);
-  keepers.fish.holes_1_9 = "pedro";
-  assert.equal(requiredSideBetCapture(9, enabled, keepers, { enabled: false, participantIds: [] }, undefined), "");
+  assert.match(requiredSideBetCapture(9, enabled, keepers, { enabled: false, participantIds: [] }, undefined, eventRows, order), /🐟 Pez/);
+  keepers.fish.holes_1_9 = "said";
+  assert.equal(requiredSideBetCapture(9, enabled, keepers, { enabled: false, participantIds: [] }, undefined, eventRows, order), "");
 
-  assert.match(requiredSideBetCapture(18, enabled, keepers, { enabled: false, participantIds: [] }, undefined), /🐍 Víboras/);
-  for (const kind of ["vipers", "camels", "fish"] as CounterBetKind[]) keepers[kind].holes_10_18 = "daniel";
-  assert.equal(requiredSideBetCapture(18, enabled, keepers, { enabled: false, participantIds: [] }, undefined), "");
+  assert.match(requiredSideBetCapture(18, enabled, keepers, { enabled: false, participantIds: [] }, undefined, eventRows, order), /🐍 Víbora/);
+  eventRows = setCounterDistance(eventRows, "vipers", 18, "pedro", 25);
+  eventRows = setCounterDistance(eventRows, "vipers", 18, "daniel", 45);
+  keepers.camels.holes_10_18 = "daniel";
+  keepers.fish.holes_10_18 = "daniel";
+  assert.equal(requiredSideBetCapture(18, enabled, keepers, { enabled: false, participantIds: [] }, undefined, eventRows, order), "");
   const page = readFileSync("app/page.tsx", "utf8");
   assert.match(page, /const validationErrors = collectHoleValidationErrors/);
   assert.match(page, /setHoleValidationErrors\(validationErrors\)/);
