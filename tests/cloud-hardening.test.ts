@@ -191,6 +191,55 @@ test("perfil cloud conserva HCP Index opcional como null", async () => {
   assert.equal(db.rows("user_preferences")[0].default_handicap, null);
   assert.equal(db.rows("profiles")[0].name, "Said");
 });
+test("perfil usa CAS y una escritura vieja no pisa otro dispositivo", async () => {
+  const db = new CloudDb();
+  const current = { displayName: "Perfil nuevo", defaultHandicap: -1.2, avatarUrl: "new.webp" };
+  await saveCloudProfile(db.client, "a", current, later);
+  await assert.rejects(
+    saveCloudProfile(db.client, "a", { displayName: "Perfil viejo", defaultHandicap: 9, avatarUrl: "old.webp" }, earlier),
+    (error: unknown) => error instanceof Error && "code" in error && error.code === "CLOUD_FIELD_CONFLICT",
+  );
+  assert.equal(db.rows("profiles")[0].display_name, current.displayName);
+  assert.equal(db.rows("user_preferences")[0].default_handicap, current.defaultHandicap);
+});
+test("perfil detecta una colisión de reloj pero acepta un retry idempotente", async () => {
+  const db = new CloudDb();
+  const current = { displayName: "Said", defaultHandicap: 7, avatarUrl: "" };
+  await saveCloudProfile(db.client, "a", current, later);
+  await saveCloudProfile(db.client, "a", current, later);
+  await assert.rejects(
+    saveCloudProfile(db.client, "a", { ...current, displayName: "Otro" }, later),
+    (error: unknown) => error instanceof Error && "code" in error && error.code === "CLOUD_FIELD_CONFLICT",
+  );
+  assert.equal(db.rows("profiles")[0].display_name, "Said");
+});
+test("guardar perfil se rebasa sobre el reloj del servidor sin depender del teléfono", async () => {
+  const db = new CloudDb();
+  const serverAhead = "2026-09-07T12:00:00.000Z";
+  db.rows("profiles").push({ id: "a", name: "Anterior", display_name: "Anterior", default_handicap: 9, avatar_url: null, onboarding_completed_at: serverAhead, updated_at: serverAhead });
+  db.rows("user_preferences").push({ user_id: "a", default_handicap: 9, updated_at: serverAhead });
+  const saved = await saveCloudProfile(db.client, "a", { displayName: "Said", defaultHandicap: 7, avatarUrl: "" }, earlier, { rebaseOnServerClock: true });
+  assert.ok(Date.parse(saved.updatedAt) > Date.parse(serverAhead));
+  assert.equal(db.rows("profiles")[0].display_name, "Said");
+  assert.equal(db.rows("user_preferences")[0].default_handicap, 7);
+});
+test("un fallo parcial comunica el reloj rebased para que el pending pueda completar", async () => {
+  const db = new CloudDb();
+  db.rows("profiles").push({ id: "a", name: "Anterior", display_name: "Anterior", default_handicap: 9, avatar_url: null, onboarding_completed_at: earlier, updated_at: earlier });
+  db.rows("user_preferences").push({ user_id: "a", default_handicap: 9, updated_at: earlier });
+  db.fail = (table, op) => table === "profiles" && op === "update";
+  let rebasedAt = "";
+  await assert.rejects(
+    saveCloudProfile(db.client, "a", { displayName: "Said", defaultHandicap: 7, avatarUrl: "" }, earlier, { rebaseOnServerClock: true }),
+    (error: unknown) => {
+      rebasedAt = error && typeof error === "object" && "profileUpdatedAt" in error && typeof error.profileUpdatedAt === "string" ? error.profileUpdatedAt : "";
+      return Boolean(rebasedAt);
+    },
+  );
+  db.fail = undefined;
+  await saveCloudProfile(db.client, "a", { displayName: "Said", defaultHandicap: 7, avatarUrl: "" }, rebasedAt);
+  assert.equal(db.rows("profiles")[0].display_name, "Said");
+});
 test("foto pendiente/fallida/retry conserva blob y solo quita cola con confirmación", async () => {
   const storage = new MemoryStorage(); queuePhoto(storage, { userId: "a", roundId: "r", photoId: "photo", operation: "upload", revision: "v1" });
   const blob = new Blob(["fixture"]); let failed = true, uploads = 0;

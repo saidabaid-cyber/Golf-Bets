@@ -17,6 +17,9 @@ export function cloudIssueFromError(domain: CloudIssueDomain, error: unknown, on
   const message = String(detail.message || (error instanceof Error ? error.message : error || ""));
   const text = `${code} ${message}`.toLowerCase();
 
+  if (domain === "profile" && (status === 409 || code === "CLOUD_FIELD_CONFLICT")) {
+    return { domain, kind: "conflict", retryable: true, message: "Tu perfil cambió en otro dispositivo. Conservamos esta edición local; revisa el perfil y vuelve a guardarlo." };
+  }
   if (domain === "conflict" || status === 409 || code === "CLOUD_FIELD_CONFLICT") {
     return { domain: "conflict", kind: "conflict", retryable: true, message: "Hay un cambio puntual pendiente entre dos dispositivos. Elige cuál conservar; los demás datos siguen sincronizados." };
   }

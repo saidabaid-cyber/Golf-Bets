@@ -83,7 +83,10 @@ test("alta social prellena el nombre disponible y exige perfil incompleto para c
   const provider = read("app/components/account-provider.tsx");
   assert.match(provider, /user\.user_metadata\?\.full_name \|\| user\.user_metadata\?\.name/);
   assert.match(provider, /identity\.mode === "authenticated" && profileSetupRequired/);
-  assert.match(provider, /await saveCloudProfile\(supabase, identity\.userId, profile, updatedAt\)/);
+  assert.match(provider, /queuePendingProfileWrite\(localStorage, identity\.userId, next, updatedAt\)/);
+  assert.match(provider, /profileWriteCoordinator\.run\(async \(\) =>/);
+  assert.match(provider, /await saveCloudProfile\(supabase, identity\.userId, pending\.profile, pending\.updatedAt, \{ rebaseOnServerClock: true \}\)/);
+  assert.match(provider, /cloudProfileFallbackRef\.current !== fallback/);
 });
 
 test("layout de alta es seguro para 390x844, 430x932 y teclado iOS", () => {

@@ -1,5 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { findAmbiguousCloudConflicts, mergeLocalAndCloud, stableValue, timestamp, type CloudDataBundle, type CloudEntityType, type CloudTombstone } from "./cloud-sync";
+import { findAmbiguousCloudConflicts, mergeLocalAndCloud, stableValue, type CloudDataBundle, type CloudEntityType, type CloudTombstone } from "./cloud-sync";
+import { writeVersionedRow } from "./cloud-write";
+
+export { writeVersionedRow } from "./cloud-write";
 
 function safeArray<T>(value: unknown, limit: number): T[] {
   if (Array.isArray(value) && value.length > limit) throw new Error("La colección excede el límite; no se sincronizó parcialmente.");
@@ -18,26 +21,6 @@ async function upsertRows(client: SupabaseClient, table: string, rows: Record<st
 
 function withDevice(row: Record<string, unknown>, deviceId: string | null, extendedSchema: boolean) {
   return extendedSchema ? { ...row, updated_by_device: deviceId } : row;
-}
-
-/** Compare-and-swap protects the read→write window across Vercel instances.
- * A concurrent change or RLS's zero-row update is a recoverable error, NOT ack. */
-export async function writeVersionedRow(client: SupabaseClient, table: string, keys: Record<string, unknown>, row: Record<string, unknown>) {
-  let select = client.from(table).select("updated_at");
-  for (const [key, value] of Object.entries(keys)) select = select.eq(key, value);
-  const { data: old, error } = await select.maybeSingle();
-  if (error) throw error;
-  if (old && timestamp(String(row.updated_at)) <= timestamp(old.updated_at)) return false;
-  if (!old) {
-    const result = await client.from(table).insert(row).select();
-    if (result.error || !result.data?.length) throw result.error || new Error("Escritura no confirmada");
-  } else {
-    let update = client.from(table).update(row).eq("updated_at", old.updated_at);
-    for (const [key, value] of Object.entries(keys)) update = update.eq(key, value);
-    const result = await update.select();
-    if (result.error || !result.data?.length) throw result.error || Object.assign(new Error("Otro dispositivo actualizó este dato durante la escritura."), { code: "CLOUD_WRITE_RACE" });
-  }
-  return true;
 }
 
 const CLOUD_TABLES: Record<CloudEntityType, string> = {

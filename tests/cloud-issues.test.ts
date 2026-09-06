@@ -10,6 +10,13 @@ test("un 409 cloud se presenta como conflicto y nunca como sesión inválida", (
   assert.equal(issue.kind, "conflict");
 });
 
+test("un conflicto de perfil conserva la edición local y pide guardarla de nuevo", () => {
+  const issue = cloudIssueFromError("profile", { code: "CLOUD_FIELD_CONFLICT" }, true);
+  assert.equal(issue.domain, "profile");
+  assert.equal(issue.kind, "conflict");
+  assert.match(issue.message, /edición local/);
+});
+
 test("red, permisos, esquema y sesión revocada conservan dominios distintos", () => {
   assert.equal(cloudIssueFromError("profile", new TypeError("Failed to fetch"), true).kind, "offline");
   assert.equal(cloudIssueFromError("legal", { status: 403, code: "42501" }, true).kind, "permission");

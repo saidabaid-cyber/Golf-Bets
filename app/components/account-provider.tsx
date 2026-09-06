@@ -2,7 +2,7 @@
 import { cloudAccountErrorMessage, ensureCloudProfile, saveCloudProfile } from "../../lib/cloud-account";
 
 import Link from "next/link";
-import { Fragment, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { Fragment, createContext, useCallback, useContext, useEffect, useRef, useState, type FormEvent } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import {
   ACCOUNT_STORAGE_KEYS,
@@ -42,6 +42,7 @@ import { cloudIssueFromError, cloudIssuePriority, type CloudIssue, type CloudIss
 import { BrandLockup } from "./brand-lockup";
 import { BettingConsentDialog } from "./betting-consent-dialog";
 import { persistBettingDataConsent } from "../../lib/betting-consent";
+import { acknowledgePendingProfileWrite, cloudProfileFields, cloudProfileRevisionIsNewer, cloudProfileRevisionKey, createProfileWriteCoordinator, queuePendingProfileWrite, readPendingProfileWrite, recordCloudProfileRevision, retimePendingProfileWrite, type CloudProfileFields, type ProfileWriteCoordinator } from "../../lib/profile-sync";
 
 export type BackyardIdentity = BackyardProfile & {
   mode: Exclude<AccountMode, "undecided">;
@@ -316,11 +317,15 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const [cloudIssuesByDomain, setCloudIssuesByDomain] = useState<Partial<Record<CloudIssueDomain, CloudIssue>>>({});
   const [legalRetryRevision, setLegalRetryRevision] = useState(0);
   const [accountReloadRevision, setAccountReloadRevision] = useState(0);
-  const cloudProfileFallback = useMemo(() => ({
-    displayName: identity?.displayName || "Jugador",
-    defaultHandicap: identity?.defaultHandicap ?? null,
-    avatarUrl: identity?.avatarUrl || "",
-  }), [identity?.displayName, identity?.defaultHandicap, identity?.avatarUrl]);
+  const cloudProfileFallbackRef = useRef<{ userId: string; profile: CloudProfileFields } | null>(null);
+  const profileWriteCoordinators = useRef(new Map<string, ProfileWriteCoordinator>());
+  const profileWriterFor = useCallback((userId: string) => {
+    const existing = profileWriteCoordinators.current.get(userId);
+    if (existing) return existing;
+    const coordinator = createProfileWriteCoordinator();
+    profileWriteCoordinators.current.set(userId, coordinator);
+    return coordinator;
+  }, []);
   const setCloudIssue = useCallback((domain: CloudIssueDomain, issue: CloudIssue | null) => {
     setCloudIssuesByDomain((current) => {
       if (!issue && !current[domain]) return current;
@@ -380,6 +385,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   }, []);
   useEffect(() => {
     if (identity?.mode === "authenticated") {
+      cloudProfileFallbackRef.current = { userId: identity.userId, profile: cloudProfileFields(identity) };
       try { localStorage.setItem(`backyard-profile-cache-v1:${identity.userId}`, JSON.stringify(profileCachePayload(identity))); }
       catch { issueWithMessage("profile", "No se pudo guardar el perfil local. Libera espacio y reintenta."); }
     }
@@ -398,11 +404,13 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       }
       return;
     }
+    if (activeUserId.current) profileWriteCoordinators.current.delete(activeUserId.current);
     switchAccountWorkspace(localStorage, session.user.id);
     activeUserId.current = session.user.id;
     setLastCloudSync(localStorage.getItem(`backyard-last-sync-v1:${session.user.id}`));
     setCloudIssuesByDomain({});
     const profile = profileFromUser(session.user);
+    cloudProfileFallbackRef.current = { userId: profile.userId, profile: cloudProfileFields(profile) };
     setIdentity({ ...profile, mode: "authenticated", providers: session.user.app_metadata?.providers || [session.user.app_metadata?.provider].filter((value): value is string => Boolean(value)), accessToken: session.access_token });
     localStorage.setItem(ACCOUNT_STORAGE_KEYS.mode, "authenticated");
     setCloudConsentChecked(false);
@@ -420,6 +428,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     const profile = readOfflineAuthenticatedProfile(localStorage, ownerId);
     if (!profile || !ownsLocalWorkspace(localStorage, profile.userId)) return false;
     activeUserId.current = profile.userId;
+    cloudProfileFallbackRef.current = { userId: profile.userId, profile: cloudProfileFields(profile) };
     const linked = localStorage.getItem(migrationDecisionStorageKey(profile.userId)) === "linked";
     setIdentity({ ...profile, mode: "authenticated", providers: [], accessToken: null });
     setCloudLinked(linked);
@@ -508,19 +517,52 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     return () => { mounted = false; listener?.data.subscription.unsubscribe(); window.removeEventListener("online", restoreWhenOnline); };
   }, [activateSession, activateOfflineWorkspace, setCloudIssue, setCloudStatus]);
 
+  const authenticatedUserId = identity?.mode === "authenticated" ? identity.userId : "";
+  const authenticatedAccessToken = identity?.mode === "authenticated" ? identity.accessToken : null;
+
   useEffect(() => {
-    if (identity?.mode !== "authenticated" || !identity.accessToken) return;
+    if (!authenticatedUserId) return;
+    const revisionKey = cloudProfileRevisionKey(authenticatedUserId);
+    const reloadProfileFromAnotherTab = (event: StorageEvent) => {
+      if (event.key === revisionKey && event.newValue) setAccountReloadRevision((value) => value + 1);
+    };
+    window.addEventListener("storage", reloadProfileFromAnotherTab);
+    return () => window.removeEventListener("storage", reloadProfileFromAnotherTab);
+  }, [authenticatedUserId]);
+
+  useEffect(() => {
+    if (!authenticatedUserId || !authenticatedAccessToken) return;
     const supabase = getSupabaseBrowser();
     if (!supabase) return;
+    const fallback = cloudProfileFallbackRef.current;
+    if (!fallback || fallback.userId !== authenticatedUserId) return;
+    const profileWriteCoordinator = profileWriterFor(authenticatedUserId);
     let mounted = true;
+    const pendingProfile = readPendingProfileWrite(localStorage, authenticatedUserId);
+    const pendingProfileAttempt = pendingProfile
+      ? profileWriteCoordinator.run(async () => {
+          const saved = await saveCloudProfile(supabase, authenticatedUserId, pendingProfile.profile, pendingProfile.updatedAt);
+          if (mounted && activeUserId.current === authenticatedUserId) {
+            recordCloudProfileRevision(localStorage, authenticatedUserId, saved.updatedAt);
+            acknowledgePendingProfileWrite(localStorage, authenticatedUserId, pendingProfile.revision);
+          }
+        })
+          .then(() => {
+            return { status: "fulfilled" as const };
+          })
+          .catch((reason: unknown) => ({ status: "rejected" as const, reason }))
+      : Promise.resolve({ status: "none" as const });
+    const profileRead = pendingProfileAttempt.then(() => ensureCloudProfile(supabase, authenticatedUserId, fallback.profile)
+      .then((value) => ({ status: "fulfilled" as const, value }))
+      .catch((reason: unknown) => ({ status: "rejected" as const, reason })));
+    const preferencesRead = pendingProfileAttempt.then(() => supabase.from("user_preferences").select("default_handicap,updated_at").eq("user_id", authenticatedUserId).maybeSingle());
     Promise.all([
-      supabase.from("legal_acceptances").select("user_id,type,version,accepted_at,locale").eq("user_id", identity.userId),
-      ensureCloudProfile(supabase, identity.userId, cloudProfileFallback)
-        .then((value) => ({ status: "fulfilled" as const, value }))
-        .catch((reason: unknown) => ({ status: "rejected" as const, reason })),
-      supabase.from("user_preferences").select("default_handicap").eq("user_id", identity.userId).maybeSingle(),
-    ]).then(([legalResult, profileResult, preferencesResult]) => {
-      if (!mounted) return;
+      supabase.from("legal_acceptances").select("user_id,type,version,accepted_at,locale").eq("user_id", authenticatedUserId),
+      profileRead,
+      preferencesRead,
+      pendingProfileAttempt,
+    ]).then(([legalResult, profileResult, preferencesResult, pendingResult]) => {
+      if (!mounted || activeUserId.current !== authenticatedUserId) return;
       if (!legalResult.error && Array.isArray(legalResult.data)) {
         const cloud = parseLegalAcceptances(JSON.stringify(legalResult.data.map((item) => ({ userId: item.user_id, type: item.type, documentVersion: item.version, acceptedAt: item.accepted_at, locale: item.locale, persistenceStatus: "persisted", syncStatus: "synced" }))));
         setAcceptances((current) => {
@@ -529,10 +571,23 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
           return merged;
         });
       }
+      const profileWriteStillPending = Boolean(readPendingProfileWrite(localStorage, authenticatedUserId));
+      // A newer edit may already have completed and cleared its marker while
+      // this older read was in flight. The fallback object is also a local
+      // revision token, so that older response can never repaint the UI.
+      const profileChangedWhileReading = cloudProfileFallbackRef.current !== fallback;
+      const profileResponseAt = profileResult.status === "fulfilled" ? Date.parse(profileResult.value.updated_at || "") : Number.NaN;
+      const preferencesResponseAt = Date.parse(typeof preferencesResult.data?.updated_at === "string" ? preferencesResult.data.updated_at : "");
+      const completeResponseAt = Number.isFinite(profileResponseAt) && Number.isFinite(preferencesResponseAt)
+        ? new Date(Math.min(profileResponseAt, preferencesResponseAt)).toISOString()
+        : null;
+      const newerTabRevisionExists = cloudProfileRevisionIsNewer(localStorage, authenticatedUserId, completeResponseAt);
+      const keepLocalProfile = pendingResult.status === "rejected" || profileWriteStillPending || profileChangedWhileReading || newerTabRevisionExists;
       if (profileResult.status === "fulfilled") {
         const cloudProfile = profileResult.value;
         setIdentity((current) => {
-          if (!current) return current;
+          if (!current || current.mode !== "authenticated" || current.userId !== authenticatedUserId) return current;
+          if (keepLocalProfile) return current;
           const displayName = typeof cloudProfile.display_name === "string" && cloudProfile.display_name.trim() ? cloudProfile.display_name : current.displayName;
           const avatarUrl = typeof cloudProfile.avatar_url === "string" ? cloudProfile.avatar_url : current.avatarUrl;
           // Existing preference clocks belong to the full sync merge. Updating
@@ -541,8 +596,11 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
           if (current.displayName === displayName && current.avatarUrl === avatarUrl && current.defaultHandicap === defaultHandicap) return current;
           return { ...current, displayName, avatarUrl, defaultHandicap };
         });
-        setProfileSetupRequired(!cloudProfile.onboarding_completed_at);
-        if (cloudProfile.onboarding_completed_at) localStorage.setItem(`backyard-profile-ready-v1:${identity.userId}`, "true");
+        if (!keepLocalProfile) {
+          if (completeResponseAt) recordCloudProfileRevision(localStorage, authenticatedUserId, completeResponseAt);
+          setProfileSetupRequired(!cloudProfile.onboarding_completed_at);
+          if (cloudProfile.onboarding_completed_at) localStorage.setItem(`backyard-profile-ready-v1:${authenticatedUserId}`, "true");
+        }
       } else {
         issueWithMessage("profile", navigator.onLine
           ? cloudAccountErrorMessage(profileResult.reason, "tu perfil")
@@ -554,11 +612,16 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       }
       if (legalResult.error) setCloudIssue("legal", cloudIssueFromError("legal", legalResult.error, navigator.onLine));
       else setCloudIssue("legal", null);
-      if (preferencesResult.error) setCloudIssue("profile", cloudIssueFromError("profile", preferencesResult.error, navigator.onLine));
-      else if (profileResult.status === "fulfilled") setCloudIssue("profile", null);
-    }).catch((error) => { if (mounted) setCloudIssue("profile", cloudIssueFromError("profile", error, navigator.onLine)); }).finally(() => { if (mounted) { setCloudConsentChecked(true); setProfileChecked(true); } });
+      if (pendingResult.status === "rejected") setCloudIssue("profile", cloudIssueFromError("profile", pendingResult.reason, navigator.onLine));
+      else if (preferencesResult.error) setCloudIssue("profile", cloudIssueFromError("profile", preferencesResult.error, navigator.onLine));
+      else if (profileResult.status === "fulfilled" && !keepLocalProfile) setCloudIssue("profile", null);
+    }).catch((error) => {
+      if (mounted && activeUserId.current === authenticatedUserId) setCloudIssue("profile", cloudIssueFromError("profile", error, navigator.onLine));
+    }).finally(() => {
+      if (mounted && activeUserId.current === authenticatedUserId) { setCloudConsentChecked(true); setProfileChecked(true); }
+    });
     return () => { mounted = false; };
-  }, [identity?.mode, identity?.userId, identity?.accessToken, cloudProfileFallback, accountReloadRevision, issueWithMessage, setCloudIssue]);
+  }, [authenticatedUserId, authenticatedAccessToken, accountReloadRevision, issueWithMessage, profileWriterFor, setCloudIssue]);
 
   const currentConsent = identity ? hasCurrentLegalConsent(acceptances, identity.userId) : false;
   const bettingConsentGranted = identity ? hasCurrentBettingDataConsent(acceptances, identity.userId) : false;
@@ -700,22 +763,38 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem(ACCOUNT_STORAGE_KEYS.guestProfile, JSON.stringify(profile));
       return "local";
     }
+    const updatedAt = new Date().toISOString();
+    const pending = queuePendingProfileWrite(localStorage, identity.userId, next, updatedAt);
+    cloudProfileFallbackRef.current = { userId: identity.userId, profile: pending.profile };
     setIdentity(next);
     localStorage.setItem(`backyard-profile-cache-v1:${identity.userId}`, JSON.stringify(profileCachePayload(next)));
     setProfileSetupRequired(false);
     localStorage.setItem(`backyard-profile-ready-v1:${identity.userId}`, "true");
     const supabase = getSupabaseBrowser();
-    const updatedAt = new Date().toISOString();
     if (!supabase || !identity.accessToken) {
       issueWithMessage("profile", "Perfil guardado en este dispositivo · sincronización pendiente.", navigator.onLine ? "server" : "offline");
       return "local";
     }
     try {
-      await saveCloudProfile(supabase, identity.userId, profile, updatedAt);
+      const profileWriteCoordinator = profileWriterFor(identity.userId);
+      const acknowledged = await profileWriteCoordinator.run(async () => {
+        const saved = await saveCloudProfile(supabase, identity.userId, pending.profile, pending.updatedAt, { rebaseOnServerClock: true });
+        if (activeUserId.current !== identity.userId) return false;
+        recordCloudProfileRevision(localStorage, identity.userId, saved.updatedAt);
+        return acknowledgePendingProfileWrite(localStorage, identity.userId, pending.revision);
+      });
       if (activeUserId.current !== identity.userId) return "local";
+      if (!acknowledged) {
+        issueWithMessage("profile", "Hay una edición de perfil más reciente pendiente de sincronizar.", "pending");
+        return "local";
+      }
       setCloudIssue("profile", null);
       return "cloud";
     } catch (error) {
+      const rebasedAt = error && typeof error === "object" && "profileUpdatedAt" in error && typeof error.profileUpdatedAt === "string"
+        ? error.profileUpdatedAt
+        : null;
+      if (rebasedAt) retimePendingProfileWrite(localStorage, identity.userId, pending.revision, rebasedAt);
       setCloudIssue("profile", cloudIssueFromError("profile", error, navigator.onLine));
       return "local";
     }
@@ -732,6 +811,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     {
       switchAccountWorkspace(localStorage, "guest");
       localStorage.removeItem(ACCOUNT_STORAGE_KEYS.mode);
+      if (activeUserId.current) profileWriteCoordinators.current.delete(activeUserId.current);
       activeUserId.current = null;
       setIdentity(null);
       setAccessRequested(false);
@@ -747,6 +827,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     const deletedUserId = identity.userId;
     // Invalidate every in-flight sync before touching the local Supabase cache.
     activeUserId.current = null;
+    profileWriteCoordinators.current.delete(deletedUserId);
     discardAccountWorkspace(localStorage, deletedUserId);
     localStorage.removeItem(ACCOUNT_STORAGE_KEYS.mode);
     const remainingAcceptances = clearLegalAcceptancesForUser(acceptances, deletedUserId);
