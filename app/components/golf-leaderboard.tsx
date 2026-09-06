@@ -58,7 +58,7 @@ export function GolfLeaderboard({ rows, mode, onModeChange, context }: {
   rows: readonly PrivateLeaderboardRow[];
   mode: GolfLeaderboardMode;
   onModeChange: (mode: GolfLeaderboardMode) => void;
-  context: "live" | "results";
+  context: "live" | "results" | "history";
 }) {
   const hasScores = rows.some((row) => row.thru > 0);
   const final = hasScores && rows.every((row) => row.finished);
@@ -69,7 +69,9 @@ export function GolfLeaderboard({ rows, mode, onModeChange, context }: {
       <div>
         {context === "live"
           ? <h2>Leaderboard de la ronda</h2>
-          : <h3>{final ? "Clasificación final" : "Clasificación provisional"}</h3>}
+          : context === "history"
+            ? <h2>{final ? "Clasificación final de golf" : "Clasificación guardada"}</h2>
+            : <h3>{final ? "Clasificación final" : "Clasificación provisional"}</h3>}
         <p>{final ? "Tarjetas completas con el HCP usado en esta ronda." : "Se actualiza sólo con scores confirmados; los hoyos pendientes no se inventan."}</p>
       </div>
       <div className="segmented" aria-label="Ordenar clasificación de golf">
