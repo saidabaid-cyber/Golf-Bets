@@ -31,6 +31,20 @@ test("V2.5 pressure settings migrate to physical nines", () => {
   assert.equal(fromTen.personalBets[0].pressureNine, "holes_1_9");
 });
 
+test("draft pressure migration preserves a corrupt legacy flag for validation", () => {
+  const source = {
+    startHole: 1,
+    bets: { foursome: { pressSecond9: "false" } },
+  };
+  const original = structuredClone(source);
+  const draft = normalizeRoundDraft(source)!;
+
+  assert.equal(draft.bets.foursome.pressSecond9, "false");
+  assert.equal(draft.bets.foursome.pressureMultiplier, undefined);
+  assert.equal(draft.bets.foursome.pressureNine, "holes_10_18");
+  assert.deepEqual(source, original);
+});
+
 test("draft progress distinguishes an empty new round from a resumable round", () => {
   assert.equal(hasRoundProgress({ players: [], scores: {}, currentIndex: 0 }), false);
   assert.equal(hasRoundProgress({ players: [{ id: "a", name: "Said", handicap: null }], scores: {}, currentIndex: 0 }), true);
@@ -130,4 +144,28 @@ test("estructura vieja o parcialmente corrupta conserva scores y descarta solo b
   assert.deepEqual(normalized?.personalBets, []);
   assert.deepEqual(normalized?.counterBetEvents, []);
   assert.equal(normalized?.bets?.rabbits.enabled, true);
+});
+
+test("normalización descarta elementos primitivos antes de migrar apuestas persistidas", () => {
+  const normalized = normalizeRoundDraft(JSON.parse(JSON.stringify({
+    ownerId: "a",
+    players: [{ id: "a", name: "Ana" }, { id: "b", name: "Beto" }],
+    personalBets: [null, 7, { id: "personal", enabled: false }],
+    supplementalBets: [null, "dañado", {
+      id: "legacy-nassau",
+      type: "individual_nassau",
+      enabled: true,
+      playerAId: "a",
+      playerBId: "b",
+      value: 100,
+      advantageStrokes: 0,
+      carryEnabled: false,
+      components: { match1: true, medal1: true, match2: true, medal2: true, match18: true, medal18: true },
+    }],
+    manualBets: [null, false, { id: "manual", enabled: false }],
+  })));
+
+  assert.deepEqual(normalized?.personalBets?.map((bet: { id: string }) => bet.id), ["personal", "legacy-nassau"]);
+  assert.deepEqual(normalized?.supplementalBets, []);
+  assert.deepEqual(normalized?.manualBets, [{ id: "manual", enabled: false }]);
 });

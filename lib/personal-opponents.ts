@@ -117,8 +117,9 @@ export function buildPersonalOpponentResults({
       });
       continue;
     }
-    if (bet.type !== "individual_pressures" || !bet.participantIds.includes(ownerId)) continue;
-    for (const opponentId of bet.participantIds.filter((id) => id !== ownerId)) {
+    const participantIds = bet.type === "individual_pressures" && Array.isArray(bet.participantIds) ? bet.participantIds : [];
+    if (bet.type !== "individual_pressures" || !participantIds.includes(ownerId)) continue;
+    for (const opponentId of participantIds.filter((id) => id !== ownerId)) {
       const pairBet = { ...bet, participantIds: [ownerId, opponentId] };
       const result = calculateSupplementalBets([pairBet], players, course, scores, putts, order, handicapBasis).results[0];
       if (!result) continue;

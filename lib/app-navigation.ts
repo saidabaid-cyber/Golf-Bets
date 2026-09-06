@@ -35,6 +35,13 @@ export function activeRoundContinueTarget(status: ActiveRoundStatus | null | und
   return "setup";
 }
 
+const ACTIVE_BET_RESULT_TABS = new Set<AppTab>(["round", "standings", "personalDetail", "results"]);
+
+/** Keeps malformed active bet drafts away from deterministic live/result views until setup is corrected. */
+export function activeBetSafeDestination(next: AppTab, hasConfigurationIssues: boolean): AppTab {
+  return hasConfigurationIssues && ACTIVE_BET_RESULT_TABS.has(next) ? "setup" : next;
+}
+
 export function contrastToggleLabel(active: boolean) {
   return `${active ? "✓" : "☀"} Alto contraste`;
 }

@@ -8,6 +8,7 @@ import type {
   ChicagoBet,
   Course,
   DollarStrokeBet,
+  HandicapMode,
   HoleScore,
   IndividualNassauBet,
   IndividualPressuresBet,
@@ -77,12 +78,105 @@ function addBalance(target: Record<string, number>, id: string, amount: number) 
 }
 
 function enabled<T extends { enabled?: boolean }>(bet: T) {
+  return bet.enabled === undefined || bet.enabled === true;
+}
+
+function includedInCalculation<T extends { enabled?: boolean }>(bet: T) {
   return bet.enabled !== false;
 }
 
-function selectedPlayers(players: Player[], ids: string[]) {
-  const selected = new Set(ids);
+function validStake(value: number) {
+  return Number.isFinite(value) && value >= 0;
+}
+
+function validHandicapPercentage(value: number) {
+  return Number.isFinite(value) && value >= 0 && value <= 100;
+}
+
+const HANDICAP_MODES = new Set<HandicapMode>(["partial", "round", "decimal", "half_up", "half_down", "six_up", "four_down"]);
+
+function validHandicapMode(value: unknown): value is HandicapMode {
+  return typeof value === "string" && HANDICAP_MODES.has(value as HandicapMode);
+}
+
+function normalizedEnabledFlag(value: unknown) {
+  return value === undefined ? true : value;
+}
+
+function normalizedSupplementalHandicapMode(value: unknown) {
+  if (value === undefined) return "decimal";
+  return validHandicapMode(value) ? normalizeHandicapMode(value) : value;
+}
+
+function validStrokeAdvantage(bet: { advantageReceiverId?: string; advantageStrokes: number }, playerIds: [string, string]) {
+  return Number.isInteger(bet.advantageStrokes)
+    && bet.advantageStrokes >= 0
+    && (bet.advantageStrokes === 0 || playerIds.includes(bet.advantageReceiverId ?? ""));
+}
+
+function hasValidApplicableNassauComponents(components: PersonalBet["components"] | undefined, order: number[]) {
+  const keys: Array<keyof PersonalBet["components"]> = order.length >= 18
+    ? ["match1", "medal1", "match2", "medal2", "match18", "medal18"]
+    : ["match1", "medal1"];
+  return Boolean(components)
+    && typeof components === "object"
+    && !Array.isArray(components)
+    && keys.every((key) => typeof components[key] === "boolean")
+    && keys.some((key) => components[key]);
+}
+
+function selectedPlayers(players: Player[], ids: string[] | undefined) {
+  const selected = new Set(Array.isArray(ids) ? ids : []);
   return players.filter((player) => selected.has(player.id));
+}
+
+function cleanPlayerId(value: unknown) {
+  return typeof value === "string" && Boolean(value) && !/\s/.test(value);
+}
+
+function cleanInstanceId(value: unknown) {
+  return typeof value === "string" && Boolean(value.trim());
+}
+
+function hasCleanSelectedPlayerIds(players: Player[], ids: unknown, minimum: number, exact?: number) {
+  if (!Array.isArray(ids) || ids.some((id) => !cleanPlayerId(id)) || new Set(ids).size !== ids.length) return false;
+  const available = new Set(players.map((player) => player.id));
+  if (!ids.every((id) => available.has(id))) return false;
+  return exact === undefined ? ids.length >= minimum : ids.length === exact;
+}
+
+function hasExactTeamSelection(participantIds: unknown, teamIds: unknown, size: number) {
+  if (!Array.isArray(participantIds) || !Array.isArray(teamIds) || teamIds.length !== size || new Set(teamIds).size !== teamIds.length) return false;
+  const selected = new Set(participantIds);
+  return teamIds.every((id) => cleanPlayerId(id) && selected.has(id));
+}
+
+function hasValidAbandonedSelection(participantIds: unknown, abandonedIds: unknown) {
+  if (abandonedIds === undefined) return true;
+  if (!Array.isArray(participantIds) || !Array.isArray(abandonedIds) || new Set(abandonedIds).size !== abandonedIds.length) return false;
+  const selected = new Set(participantIds);
+  return abandonedIds.every((id) => cleanPlayerId(id) && selected.has(id));
+}
+
+function supplementalIdentitiesAreValid(bets: SupplementalBet[]) {
+  const ids = bets.filter(enabled).map((bet) => bet.id);
+  return ids.every(cleanInstanceId) && new Set(ids).size === ids.length;
+}
+
+function supplementalRosterIsValid(players: Player[]) {
+  const ids = players.map((player) => player.id);
+  return ids.every(cleanPlayerId) && new Set(ids).size === ids.length;
+}
+
+function invalidSupplementalResult(bet: SupplementalBet, players: Player[]): SupplementalBetResult {
+  return {
+    betId: cleanInstanceId(bet?.id) ? bet.id : "invalid-supplemental",
+    type: bet.type,
+    label: SUPPLEMENTAL_BET_LABELS[bet.type] ?? "Apuesta inválida",
+    complete: false,
+    balances: zeroBalances(players),
+    lines: [],
+  };
 }
 
 function directAllowance(strokes: number, strokeIndex: number) {
@@ -159,7 +253,16 @@ function calculateNassau(
   const balances = zeroBalances(players);
   const playerA = players.find((player) => player.id === bet.playerAId);
   const playerB = players.find((player) => player.id === bet.playerBId);
-  if (!enabled(bet) || !playerA || !playerB || playerA.id === playerB.id) {
+  if (
+    !enabled(bet)
+    || !playerA
+    || !playerB
+    || playerA.id === playerB.id
+    || !validStake(bet.value)
+    || !validStrokeAdvantage(bet, [playerA.id, playerB.id])
+    || !hasValidApplicableNassauComponents(bet.components, order)
+    || typeof bet.carryEnabled !== "boolean"
+  ) {
     return { betId: bet.id, type: bet.type, label: SUPPLEMENTAL_BET_LABELS[bet.type], complete: false, balances, lines: [] };
   }
   const personal: PersonalBet = {
@@ -225,7 +328,14 @@ function calculateDollarStroke(
   const balances = zeroBalances(players);
   const playerA = players.find((player) => player.id === bet.playerAId);
   const playerB = players.find((player) => player.id === bet.playerBId);
-  if (!enabled(bet) || !playerA || !playerB || playerA.id === playerB.id) {
+  if (
+    !enabled(bet)
+    || !playerA
+    || !playerB
+    || playerA.id === playerB.id
+    || !validStake(bet.valuePerStroke)
+    || !validStrokeAdvantage(bet, [playerA.id, playerB.id])
+  ) {
     return { betId: bet.id, type: bet.type, label: SUPPLEMENTAL_BET_LABELS[bet.type], complete: false, balances, lines: [] };
   }
   let totalA = 0;
@@ -302,7 +412,7 @@ function calculateIndividualPressures(
   const pressures: SupplementalPressureDetail[] = [];
   const auditComponents: NonNullable<SupplementalBetResult["audit"]>["components"] = [];
   const missingHandicapPlayerIds = playersMissingRoundHandicap(participants).map((player) => player.id);
-  if (!enabled(bet) || participants.length < 2 || missingHandicapPlayerIds.length) return { betId: bet.id, type: bet.type, label: SUPPLEMENTAL_BET_LABELS[bet.type], complete: false, balances, lines: [], pressures, missingHandicapPlayerIds };
+  if (!enabled(bet) || !hasCleanSelectedPlayerIds(players, bet.participantIds, 2) || participants.length < 2 || missingHandicapPlayerIds.length || !validStake(bet.value) || !validHandicapPercentage(bet.hcpPct) || !validHandicapMode(bet.decimals) || typeof bet.carryEnabled !== "boolean" || typeof bet.matchPlayEnabled !== "boolean") return { betId: bet.id, type: bet.type, label: SUPPLEMENTAL_BET_LABELS[bet.type], complete: false, balances, lines: [], pressures, missingHandicapPlayerIds };
   for (const [first, second] of pairwise(participants)) {
     let startHole = order[0];
     let firstWins = 0;
@@ -370,7 +480,7 @@ function teamPressureMatchups(bet: TeamPressuresBet, participants: Player[]): Pr
       virtual: virtualMode,
     }));
   }
-  const teamA = bet.teamA.filter((id) => participants.some((player) => player.id === id));
+  const teamA = (Array.isArray(bet.teamA) ? bet.teamA : []).filter((id) => participants.some((player) => player.id === id));
   return teamA.length === 2 ? [{ label: "Equipo A vs Equipo B", teamA, teamB: participants.filter((player) => !teamA.includes(player.id)).map((player) => player.id) }] : [];
 }
 
@@ -386,15 +496,23 @@ function calculateTeamPressures(
   const participants = selectedPlayers(players, bet.participantIds);
   const matchups = teamPressureMatchups(bet, participants);
   const pressures: SupplementalPressureDetail[] = [];
-  const abandoned = new Set(bet.abandonedPlayerIds || []);
+  const abandoned = new Set(Array.isArray(bet.abandonedPlayerIds) ? bet.abandonedPlayerIds : []);
   const missingHandicapPlayerIds = playersMissingRoundHandicap(participants).map((player) => player.id);
+  const validMetric = bet.metric === "low" || bet.metric === "high" || bet.metric === "low_high";
+  const validVirtualMode = bet.virtualMode === "standard" || bet.virtualMode === "mudo" || bet.virtualMode === "yoyo";
+  const validParticipants = validVirtualMode && hasCleanSelectedPlayerIds(players, bet.participantIds, bet.virtualMode === "standard" ? 4 : 3, bet.virtualMode === "standard" ? 4 : 3);
+  const validTeam = validVirtualMode && (bet.virtualMode !== "standard" || hasExactTeamSelection(bet.participantIds, bet.teamA, 2));
+  const validAbandoned = hasValidAbandonedSelection(bet.participantIds, bet.abandonedPlayerIds);
+  const validAbandonedScore = abandoned.size === 0 || (Number.isInteger(bet.abandonedMaxScore) && bet.abandonedMaxScore >= 1);
+  if (!enabled(bet) || !validParticipants || !validTeam || !validAbandoned || !matchups.length || missingHandicapPlayerIds.length || !validMetric || !validVirtualMode || !validStake(bet.value) || !validHandicapPercentage(bet.hcpPct) || !validHandicapMode(bet.decimals) || typeof bet.carryEnabled !== "boolean" || !validAbandonedScore) {
+    return { betId: bet.id, type: bet.type, label: SUPPLEMENTAL_BET_LABELS[bet.type], complete: false, balances, lines: [], pressures, missingHandicapPlayerIds };
+  }
   const grossFor = (holeNumber: number, playerId: string) => {
     const captured = scores[holeNumber]?.[playerId];
     return typeof captured === "number" ? captured : abandoned.has(playerId) ? Math.max(1, bet.abandonedMaxScore) : undefined;
   };
   const holeIsComplete = (holeNumber: number) => participants.every((player) => typeof grossFor(holeNumber, player.id) === "number");
   const matchIsComplete = order.length > 0 && order.every(holeIsComplete);
-  if (!enabled(bet) || !matchups.length || missingHandicapPlayerIds.length) return { betId: bet.id, type: bet.type, label: SUPPLEMENTAL_BET_LABELS[bet.type], complete: false, balances, lines: [], pressures, missingHandicapPlayerIds };
   for (const matchup of matchups) {
     const components = bet.metric === "low_high"
       ? (["Low Ball", "High Ball"] as const)
@@ -436,19 +554,29 @@ function calculateTeamPressures(
 }
 
 function chicagoPoints(gross: number, par: number, bet: ChicagoBet) {
-  if (gross <= par - 1) return bet.points.birdieOrBetter;
-  if (gross === par) return bet.points.par;
-  if (gross === par + 1) return bet.points.bogey;
-  return bet.points.doubleBogeyOrWorse;
+  const points = bet.points;
+  if (!points) return 0;
+  if (gross <= par - 1) return points.birdieOrBetter;
+  if (gross === par) return points.par;
+  if (gross === par + 1) return points.bogey;
+  return points.doubleBogeyOrWorse;
 }
 
 function calculateChicago(bet: ChicagoBet, players: Player[], course: Course, scores: Record<number, HoleScore>, order: number[]): SupplementalBetResult {
   const balances = zeroBalances(players);
   const participants = selectedPlayers(players, bet.participantIds);
   const missingHandicapPlayerIds = playersMissingRoundHandicap(participants).map((player) => player.id);
-  const complete = enabled(bet) && participants.length >= 2 && !missingHandicapPlayerIds.length && completeForPlayers(order, scores, participants.map((player) => player.id));
+  const validPoints = Boolean(bet.points) && [
+    bet.quotaBase,
+    bet.points?.birdieOrBetter,
+    bet.points?.par,
+    bet.points?.bogey,
+    bet.points?.doubleBogeyOrWorse,
+  ].every(Number.isFinite);
+  const validHcpPct = bet.hcpPct === undefined || validHandicapPercentage(bet.hcpPct);
+  const complete = enabled(bet) && hasCleanSelectedPlayerIds(players, bet.participantIds, 2) && validStake(bet.valuePerPoint) && validPoints && validHcpPct && participants.length >= 2 && !missingHandicapPlayerIds.length && completeForPlayers(order, scores, participants.map((player) => player.id));
   if (!complete) return { betId: bet.id, type: bet.type, label: SUPPLEMENTAL_BET_LABELS[bet.type], complete: false, balances, lines: [], missingHandicapPlayerIds };
-  const hcpPct = Number.isFinite(bet.hcpPct) ? Math.min(100, Math.max(0, bet.hcpPct as number)) : 100;
+  const hcpPct = bet.hcpPct ?? 100;
   const chicagoBalances = Object.fromEntries(participants.map((player) => {
     const points = order.reduce((total, holeNumber) => {
       const hole = course.holes.find((candidate) => candidate.number === holeNumber)!;
@@ -472,7 +600,7 @@ function calculateChicago(bet: ChicagoBet, players: Player[], course: Course, sc
 }
 
 function vegasPairing(bet: VegasBet, participants: Player[], holeIndex: number) {
-  const baseA = bet.teamA.filter((id) => participants.some((player) => player.id === id));
+  const baseA = (Array.isArray(bet.teamA) ? bet.teamA : []).filter((id) => participants.some((player) => player.id === id));
   const baseB = participants.filter((player) => !baseA.includes(player.id)).map((player) => player.id);
   if (baseA.length !== 2 || baseB.length !== 2) return null;
   const pairings = [
@@ -495,7 +623,10 @@ function calculateVegas(bet: VegasBet, players: Player[], course: Course, scores
   const participants = selectedPlayers(players, bet.participantIds);
   const lines: string[] = [];
   const missingHandicapPlayerIds = playersMissingRoundHandicap(participants).map((player) => player.id);
-  if (!enabled(bet) || participants.length !== 4 || missingHandicapPlayerIds.length) return { betId: bet.id, type: bet.type, label: SUPPLEMENTAL_BET_LABELS[bet.type], complete: false, balances, lines, missingHandicapPlayerIds };
+  const validRotation = bet.rotation === "fixed" || bet.rotation === "each_hole" || bet.rotation === "blocks";
+  const validBlockSize = bet.rotation !== "blocks" || bet.blockSize === 3 || bet.blockSize === 6 || bet.blockSize === 9;
+  const validTeam = hasExactTeamSelection(bet.participantIds, bet.teamA, 2);
+  if (!enabled(bet) || !hasCleanSelectedPlayerIds(players, bet.participantIds, 4, 4) || !validTeam || participants.length !== 4 || missingHandicapPlayerIds.length || !validRotation || !validBlockSize || !validStake(bet.valuePerUnit) || !validHandicapPercentage(bet.hcpPct) || !validHandicapMode(bet.decimals) || typeof bet.birdiePenalty !== "boolean") return { betId: bet.id, type: bet.type, label: SUPPLEMENTAL_BET_LABELS[bet.type], complete: false, balances, lines, missingHandicapPlayerIds };
   for (let index = 0; index < order.length; index += 1) {
     const holeNumber = order[index];
     const hole = course.holes.find((candidate) => candidate.number === holeNumber);
@@ -522,8 +653,9 @@ function calculateVegas(bet: VegasBet, players: Player[], course: Course, scores
 function calculateMinimumPutts(bet: MinimumPuttsBet, players: Player[], putts: PuttsByHole, order: number[]): SupplementalBetResult {
   const balances = zeroBalances(players);
   const participants = selectedPlayers(players, bet.participantIds);
+  const validConfiguration = validStake(bet.ante) && (bet.holes === 9 || bet.holes === 18) && bet.holes <= order.length;
   const holes = order.slice(0, Math.min(bet.holes, order.length));
-  const complete = enabled(bet) && participants.length >= 2 && holes.length === bet.holes && holes.every((hole) => participants.every((player) => typeof putts[hole]?.[player.id] === "number"));
+  const complete = enabled(bet) && hasCleanSelectedPlayerIds(players, bet.participantIds, 2) && validConfiguration && participants.length >= 2 && holes.length === bet.holes && holes.every((hole) => participants.every((player) => typeof putts[hole]?.[player.id] === "number"));
   if (!complete) return { betId: bet.id, type: bet.type, label: SUPPLEMENTAL_BET_LABELS[bet.type], complete: false, balances, lines: [] };
   const totals = Object.fromEntries(participants.map((player) => [player.id, holes.reduce((total, hole) => total + Number(putts[hole]?.[player.id] ?? 0), 0)])) as Record<string, number>;
   const lowest = Math.min(...Object.values(totals));
@@ -554,7 +686,10 @@ export function calculateSupplementalBets(
   basis: RoundHandicapBasis = "relative",
 ) {
   const balances = zeroBalances(players);
-  const rawResults = bets.filter(enabled).map((bet): SupplementalBetResult => {
+  const safeBets = Array.isArray(bets) ? bets.filter((bet): bet is SupplementalBet => Boolean(bet) && typeof bet === "object" && !Array.isArray(bet)) : [];
+  const runtimeCollectionIsValid = supplementalRosterIsValid(players) && supplementalIdentitiesAreValid(safeBets);
+  const rawResults = safeBets.filter(includedInCalculation).map((bet): SupplementalBetResult => {
+    if (!runtimeCollectionIsValid) return invalidSupplementalResult(bet, players);
     switch (bet.type) {
       case "individual_nassau": return calculateNassau(bet, players, course, scores, order);
       case "dollar_stroke": return calculateDollarStroke(bet, players, course, scores, order);
@@ -563,6 +698,7 @@ export function calculateSupplementalBets(
       case "chicago": return calculateChicago(bet, players, course, scores, order);
       case "vegas": return calculateVegas(bet, players, course, scores, order, basis);
       case "minimum_putts": return calculateMinimumPutts(bet, players, putts, order);
+      default: return invalidSupplementalResult(bet, players);
     }
   });
   const results = rawResults.map((result) => ({
@@ -603,9 +739,13 @@ export function normalizeSupplementalBets(value: unknown, roundHoles?: 9 | 18): 
   if (!Array.isArray(value)) return [];
   const normalized = value
     .filter((item): item is SupplementalBet => Boolean(item && typeof item === "object" && typeof (item as SupplementalBet).id === "string" && Object.hasOwn(SUPPLEMENTAL_BET_LABELS, (item as SupplementalBet).type)))
-    .map((item): SupplementalBet => item.type === "minimum_putts"
-      ? { ...item, enabled: item.enabled !== false, holes: item.holes === 9 ? 9 : 18 }
-      : { ...item, enabled: item.enabled !== false });
+    .map((item): SupplementalBet => {
+      if (item.type === "minimum_putts") return { ...item, enabled: normalizedEnabledFlag(item.enabled), holes: item.holes === 9 ? 9 : 18 } as SupplementalBet;
+      if (item.type === "individual_pressures" || item.type === "team_pressures" || item.type === "vegas") {
+        return { ...item, enabled: normalizedEnabledFlag(item.enabled), decimals: normalizedSupplementalHandicapMode(item.decimals) } as SupplementalBet;
+      }
+      return { ...item, enabled: normalizedEnabledFlag(item.enabled) } as SupplementalBet;
+    });
   return roundHoles ? supplementalBetsForRoundHoles(normalized, roundHoles) : normalized;
 }
 

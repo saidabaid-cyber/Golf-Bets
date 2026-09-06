@@ -51,8 +51,9 @@ function validScoreRows(value: unknown) {
 /** Keep independent valid blocks of a legacy/local draft and discard only the
  * malformed portions. This function never clears storage or mutates its input. */
 export function normalizeRoundDraft(value: unknown) {
-  const source = recordValue(value);
-  if (!source) return null;
+  const parsed = recordValue(value);
+  if (!parsed) return null;
+  const source = structuredClone(parsed);
   const players = Array.isArray(source.players)
     ? source.players.filter(player => recordValue(player) && typeof player.id === "string" && typeof player.name === "string")
     : [];
@@ -64,9 +65,9 @@ export function normalizeRoundDraft(value: unknown) {
     players,
     bets: recordValue(source.bets),
     segments: Array.isArray(source.segments) ? source.segments : [],
-    personalBets: Array.isArray(source.personalBets) ? source.personalBets : [],
-    supplementalBets: Array.isArray(source.supplementalBets) ? source.supplementalBets : [],
-    manualBets: Array.isArray(source.manualBets) ? source.manualBets : [],
+    personalBets: Array.isArray(source.personalBets) ? source.personalBets.filter((item) => Boolean(recordValue(item))) : [],
+    supplementalBets: Array.isArray(source.supplementalBets) ? source.supplementalBets.filter((item) => Boolean(recordValue(item))) : [],
+    manualBets: Array.isArray(source.manualBets) ? source.manualBets.filter((item) => Boolean(recordValue(item))) : [],
     scores: validScoreRows(source.scores),
     scoreEdits: validScoreRows(source.scoreEdits),
     putts: validPuttRows(source.putts),
@@ -198,7 +199,9 @@ export function migrateDraftPressures(draft: any) {
   const startHole = draft.startHole === 10 ? 10 : 1;
   const foursome = draft.bets?.foursome;
   if (foursome) {
-    foursome.pressureMultiplier ??= foursome.pressSecond9 ? 2 : 1;
+    if (foursome.pressureMultiplier === undefined && typeof foursome.pressSecond9 === "boolean") {
+      foursome.pressureMultiplier = foursome.pressSecond9 ? 2 : 1;
+    }
     foursome.pressureNine ??= "holes_10_18";
   }
   if (Array.isArray(draft.personalBets)) {

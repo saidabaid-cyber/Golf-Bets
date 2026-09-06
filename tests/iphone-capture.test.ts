@@ -79,7 +79,9 @@ for (const start of [1, 10] as const) for (const count of [9, 18]) test(`captura
 test("nuevas rondas usan controles acordados sin selector interno; snapshots mantienen método", () => {
   assert.match(readFileSync("lib/new-round-bets.ts", "utf8"), /handicapMethod: "configured"/);
   assert.doesNotMatch(app, /HCP de Foursome|Excel original · rebasing|Porcentaje \/ redondeo acordado/);
-  assert.match(app, /handicapMethod: draft.bets.foursome\?\.handicapMethod \|\| "configured"/);
+  assert.match(app, /const restored = restoreBetConfig\(draft\.bets, draftPlayerIds\)/);
+  assert.match(app, /foursome: restored\.foursome/);
+  assert.match(app, /DecimalModeSelect label="Decimales Foursome"/);
   const scores = { 1: { said:4, cuau:4, armando:4, jesus:4 } };
   const legacy = { ...cfg, handicapMethod:"configured" as const, hcpPct:0 };
   const saved = JSON.parse(JSON.stringify({ scores, config: legacy }));

@@ -4,7 +4,7 @@ import test from "node:test";
 import { normalizeRabbitMode, normalizeSkinsMode } from "../lib/bet-modes";
 import { calculateRabbits, calculateSkins, payoutWinnerTakesFromAll } from "../lib/engine";
 import { skinHoleNotice } from "../lib/hole-bet-display";
-import { initialBets } from "../lib/new-round-bets";
+import { initialBets, restoreBetConfig } from "../lib/new-round-bets";
 import { restoreRoundSnapshot } from "../lib/round-editing";
 import { persistRoundHistory, readStoredJson, STORAGE_KEYS } from "../lib/round-utils";
 import type { BetConfig, Course, HoleScore, Player, RoundSnapshot } from "../lib/types";
@@ -48,6 +48,21 @@ test("legacy mode values resolve to the original Conejos and Skins behavior", ()
     calculateSkins(course, scores, players, skins(), [1, 2, 3, 4]),
     calculateSkins(course, scores, players, skins("carry"), [1, 2, 3, 4]),
   );
+});
+
+test("restoring legacy Skins without a mode preserves its accumulate flag", () => {
+  const legacy = {
+    enabled: true,
+    value: 50,
+    hcpPct: 100,
+    decimals: "decimal" as const,
+    accumulate: false,
+    participantIds: ids,
+  };
+  const restored = restoreBetConfig({ skins: JSON.parse(JSON.stringify(legacy)) }, ids).skins;
+  assert.equal(restored.mode, undefined);
+  const scores = { 1: { a: 4, b: 4 }, 2: { a: 3, b: 4 } };
+  assert.equal(calculateSkins(course, scores, players, restored, [1, 2]).won.a, 1);
 });
 
 test("6 Conejos allows at most one settled rabbit in every physical three-hole block", () => {

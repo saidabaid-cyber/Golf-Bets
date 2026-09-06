@@ -148,7 +148,10 @@ test("capture inputs use the empty-safe numeric control and Manuales accept a di
 
 test("draft hydration finishes before segment regeneration or participant sanitization", () => {
   const page = readFileSync("app/page.tsx", "utf8");
-  assert.match(page, /useEffect\(\(\) => \{\s+if \(!hydrated\) return;\s+const defs = segmentDefinitions/);
+  assert.match(
+    page,
+    /useEffect\(\(\) => \{\s+if \(!hydrated\) return;\s+setSegments\(\(old\) => normalizeFoursomeSegments\(old, order, bets\.foursome\.segmentSize\)\)/,
+  );
   assert.match(page, /useEffect\(\(\) => \{\s+if \(!hydrated\) return;\s+const valid = new Set\(players/);
   assert.match(page, /\[hydrated, players, ownerId\]/);
 });

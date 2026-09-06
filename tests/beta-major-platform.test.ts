@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { activeRoundContinueTarget, BOTTOM_NAV_TARGETS, primarySectionForTab, resolveActiveRoundStatus, type AppTab } from "../lib/app-navigation";
+import { activeBetSafeDestination, activeRoundContinueTarget, BOTTOM_NAV_TARGETS, primarySectionForTab, resolveActiveRoundStatus, type AppTab } from "../lib/app-navigation";
 import { buildGolfInsights, buildPersonalActivity, scoredRoundInsight } from "../lib/golf-insights";
 import { internalCourseDataProvider, searchInternalCourses } from "../lib/golf-providers";
 import type { Course, FrequentGroup, HoleScore, RoundSnapshot } from "../lib/types";
@@ -78,6 +78,16 @@ test("continuing a draft never opens score before field, players and score progr
   assert.equal(activeRoundContinueTarget("live", true), "round");
   assert.equal(activeRoundContinueTarget("live", false), "setup");
   assert.equal(activeRoundContinueTarget("review", false), "results");
+});
+
+test("an invalid active bet draft can only be opened in setup, without blocking independent history", () => {
+  for (const tab of ["round", "standings", "personalDetail", "results"] as AppTab[]) {
+    assert.equal(activeBetSafeDestination(tab, true), "setup");
+    assert.equal(activeBetSafeDestination(tab, false), tab);
+  }
+  for (const tab of ["welcome", "play", "personals", "history", "historyDetail", "stats", "groups", "social", "profile"] as AppTab[]) {
+    assert.equal(activeBetSafeDestination(tab, true), tab);
+  }
 });
 
 test("a complete card produces only stats supported by captured scores", () => {

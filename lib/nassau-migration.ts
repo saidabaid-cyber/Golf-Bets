@@ -30,20 +30,28 @@ export function migrateSupplementalNassau<T extends NassauMigrationSource>(sourc
       continue;
     }
     if (existingIds.has(bet.id)) {
-      represented.add(bet.id);
+      // A matching identifier does not prove these are the same wager. Keep
+      // the legacy entry available for the validator/editor so a user can
+      // resolve the collision without silently losing either configuration.
       continue;
     }
     const rival = source.players?.find((player) => player.id === rivalPlayerId);
     migrated.push({
       id: bet.id,
-      enabled: bet.enabled !== false,
+      enabled: bet.enabled,
       rivalMode: "group",
       rivalPlayerId,
       rivalName: rival?.name || "Rival",
       rivalHandicap: rival?.handicap ?? null,
       externalScores: {},
       baseValue: bet.value,
-      advantageReceiver: !bet.advantageReceiverId ? "none" : bet.advantageReceiverId === ownerId ? "owner" : "rival",
+      advantageReceiver: !bet.advantageReceiverId
+        ? "none"
+        : bet.advantageReceiverId === ownerId
+          ? "owner"
+          : bet.advantageReceiverId === rivalPlayerId
+            ? "rival"
+            : bet.advantageReceiverId as PersonalBet["advantageReceiver"],
       advantageStrokes: bet.advantageStrokes,
       back9Multiplier: 1,
       pressureMultiplier: 1,

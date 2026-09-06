@@ -4,6 +4,7 @@ import fs from "node:fs";
 import { calculateFoursomes, calculatePersonalBets, excelFoursomeNet, playOrder, segmentDefinitions } from "../lib/engine";
 import { ensureHoleScoresAtPar, persistRoundHistory, readStoredJson, resolvePersonalHistoryDeletion, STORAGE_KEYS } from "../lib/round-utils";
 import { canEditSnapshot, restoreRoundSnapshot, resultSummaryText, upsertRoundSnapshot } from "../lib/round-editing";
+import { initialBets } from "../lib/new-round-bets";
 import { buildPersonalHistory, snapshotPersonalResult } from "../lib/personal-history";
 import { realCases, realCourse, realOrder, realPersonal, realPlayers, realScores } from "./fixtures/personals-real";
 import type { BetConfig, Course, Player, RoundSnapshot, HoleScore } from "../lib/types";
@@ -71,10 +72,12 @@ test("Los cuatro Personales reales siguen EXACTOS al integrar snapshots",()=>{
   result.results.forEach((item,i)=>assert.deepEqual([snapshotPersonalResult(bets[i],item,realPlayers).grossOwner,item.grossRival],realCases[i].gross));
 });
 function snapshot():RoundSnapshot {
+  const defaults=initialBets(realPlayers.map((player)=>player.id));
   return {id:"same",date:"2026-09-02",ownerId:"said",ownerName:"Said",courseName:realCourse.name,teeName:"",roundHoles:18,startHole:1,
     betResult:-800,expenseTotal:100,netResult:-900,expenses:{caddie:100,food:0,drinks:0,greenFee:0,cartRental:0,other:0},categoryResults:{Personales:-800},
     players:structuredClone(realPlayers),scores:structuredClone(realScores),courseSnapshot:structuredClone(realCourse),order:realOrder,
-    betConfig:{foursome:cfg} as BetConfig,segments:seg,personalBets:realCases.map(realPersonal),unitEvents:[],manualBets:[],ballFriendSetup:{},
+    betConfig:{...defaults,foursome:{...defaults.foursome,...cfg}},segments:seg,
+    personalBets:realCases.map((item)=>({...realPersonal(item),pressureNine:"holes_10_18" as const})),unitEvents:[],manualBets:[],ballFriendSetup:{},
     completedAt:"2026-09-02T18:00:00Z",updatedAt:"2026-09-02T18:00:00Z",photoId:"photo",playerBalances:{said:-800,carlos:600,juan:200,flavio:-800,javier:800}};
 }
 test("Terminar → serializar → recargar → abrir conserva configuración completa y foto",()=>{
@@ -89,6 +92,36 @@ test("Corregir reutiliza ID, conserva foto/fecha original y actualiza sin duplic
   const old=snapshot(), updated={...snapshot(),photoId:undefined,updatedAt:"2026-09-03T12:00:00Z",completedAt:"2026-09-03T12:00:00Z"};
   const saved=upsertRoundSnapshot([old],updated);assert.equal(saved.length,1);assert.equal(saved[0].photoId,"photo");assert.equal(saved[0].completedAt,old.completedAt);assert.equal(saved[0].updatedAt,updated.updatedAt);
   assert.equal(canEditSnapshot({...old,segments:undefined}),false);
+});
+test("Corregir un snapshot parcial completa modos ausentes sin mutar el histórico",()=>{
+  const original=snapshot();
+  const legacy={...original,betConfig:{foursome:cfg} as BetConfig};
+  const restored=restoreRoundSnapshot(legacy);
+  assert.ok(restored?.betConfig?.rabbits && restored.betConfig.miniPolla && restored.betConfig.loba);
+  assert.equal(restored?.betConfig?.foursome.mode,cfg.mode);
+  assert.deepEqual(Object.keys(legacy.betConfig),["foursome"]);
+});
+test("Corregir migra la ventaja personal legacy antes de recalcular",()=>{
+  const original=snapshot();
+  const modern=realPersonal(realCases[0]);
+  const oldShape={...modern} as Partial<typeof modern>;
+  delete oldShape.nassauVersion;
+  const legacy={...oldShape,advantageReceiver:undefined,advantageReceiverId:"said",advantageStrokes:3} as unknown as typeof modern;
+  const restored=restoreRoundSnapshot({...original,personalBets:[legacy]})!;
+  assert.equal(restored.personalBets?.[0].advantageReceiver,"owner");
+  const expected=calculatePersonalBets([{...modern,advantageReceiver:"owner",advantageStrokes:3}],"said",realPlayers,realCourse,realScores,realOrder);
+  const actual=calculatePersonalBets(restored.personalBets!,"said",realPlayers,realCourse,realScores,realOrder);
+  assert.equal(actual.results[0].totalMoney,expected.results[0].totalMoney);
+});
+test("Corregir preserva una ventaja V2 corrupta para bloquear la liquidación",()=>{
+  const original=snapshot();
+  const modern=realPersonal(realCases[0]);
+  const corrupt={...modern,advantageReceiver:"corrupt",advantageReceiverId:"said"} as unknown as typeof modern;
+  const restored=restoreRoundSnapshot({...original,personalBets:[corrupt]})!;
+  assert.equal(restored.personalBets?.[0].advantageReceiver,"corrupt");
+  const actual=calculatePersonalBets(restored.personalBets!,"said",realPlayers,realCourse,realScores,realOrder);
+  assert.equal(actual.results[0].totalMoney,0);
+  assert.equal(actual.balances.said,0);
 });
 test("Una ronda repetida cuenta una vez y balance/ganadas son del principal",()=>{
   const old={...snapshot(),personalResults:[{rivalKey:"carlos",rivalName:"Carlos",totalMoney:-600,componentMoney:{match2:-300,match18:-100,medal1:100,medal2:-200,medal18:-100}}]};

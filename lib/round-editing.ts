@@ -1,5 +1,7 @@
-import type { RoundSnapshot, Player } from "./types";
+import type { PersonalBet, RoundSnapshot, Player } from "./types";
 import { migrateSupplementalNassau } from "./nassau-migration";
+import { migratePersonalNassau } from "./personal-nassau";
+import { restoreBetConfig } from "./new-round-bets";
 
 /** Never merge mutable draft objects into an existing historical object. */
 export function upsertRoundSnapshot(history: RoundSnapshot[], next: RoundSnapshot) {
@@ -10,15 +12,36 @@ export function upsertRoundSnapshot(history: RoundSnapshot[], next: RoundSnapsho
 }
 
 export function canEditSnapshot(round: RoundSnapshot) {
-  return Boolean(round.players?.length && round.courseSnapshot && round.scores && round.betConfig && round.order?.length &&
-    (!round.betConfig.foursome.enabled || round.segments?.length));
+  return Boolean(round.players?.length && round.courseSnapshot && round.scores && round.betConfig && round.order?.length
+    && (!round.betConfig.foursome?.enabled || round.segments?.length));
 }
 
 export function restoreRoundSnapshot(round: RoundSnapshot) {
   if (!canEditSnapshot(round)) return null;
   const copy = structuredClone(round);
-  const restored = { ...copy, ownerId: copy.ownerId || copy.players!.find(player => player.name === copy.ownerName)?.id || copy.players![0].id };
-  return migrateSupplementalNassau(restored);
+  const restored = {
+    ...copy,
+    ownerId: copy.ownerId || copy.players!.find(player => player.name === copy.ownerName)?.id || copy.players![0].id,
+    betConfig: restoreBetConfig(copy.betConfig, copy.players!.map((player) => player.id)),
+  };
+  const migrated = migrateSupplementalNassau(restored);
+  const startHole = migrated.startHole ?? (migrated.order?.[0] === 10 ? 10 : 1);
+  const roundHoles = migrated.roundHoles ?? (migrated.order?.length === 9 ? 9 : 18);
+  return {
+    ...migrated,
+    personalBets: migrated.personalBets?.map((bet) => {
+      const legacy = bet as PersonalBet & { advantageReceiverId?: string };
+      if (legacy.nassauVersion === 2) return migratePersonalNassau(legacy, startHole, roundHoles);
+      const advantageReceiver = legacy.advantageReceiver === "owner" || legacy.advantageReceiver === "rival" || legacy.advantageReceiver === "none"
+        ? legacy.advantageReceiver
+        : legacy.advantageReceiverId ? (legacy.advantageReceiverId === migrated.ownerId ? "owner" : "rival") : "rival";
+      return migratePersonalNassau({
+        ...legacy,
+        advantageReceiver,
+        advantageStrokes: advantageReceiver === "none" ? 0 : legacy.advantageStrokes ?? 0,
+      }, startHole, roundHoles);
+    }),
+  };
 }
 
 export function resultSummaryText(course: string, date: string, players: Pick<Player, "id" | "name">[], balances: Record<string, number>, ownerId: string, expenses: number) {

@@ -26,10 +26,11 @@ import { BET_PRESENTATION, betDisplayLabel } from "../../lib/bet-catalog";
 const money = (value: number) => `${value < 0 ? "−" : ""}$${Math.abs(value).toLocaleString("es-MX", { maximumFractionDigits: 2 })}`;
 const signedMoney = (value: number) => `${value > 0 ? "+" : ""}${money(value)}`;
 
-function PlayerChips({ players, selected, onChange }: { players: Player[]; selected: string[]; onChange: (ids: string[]) => void }) {
+function PlayerChips({ players, selected, onChange }: { players: Player[]; selected: string[] | undefined; onChange: (ids: string[]) => void }) {
+  const selectedIds = Array.isArray(selected) ? selected : [];
   return <div className="chips">{players.map(player => {
-    const active = selected.includes(player.id);
-    return <button type="button" key={player.id} className={`chipButton ${active ? "selected" : ""}`} onClick={() => onChange(active ? selected.filter(id => id !== player.id) : [...selected, player.id])}>{active ? "✓ " : ""}{player.name || "Sin nombre"}</button>;
+    const active = selectedIds.includes(player.id);
+    return <button type="button" key={player.id} className={`chipButton ${active ? "selected" : ""}`} onClick={() => onChange(active ? selectedIds.filter(id => id !== player.id) : [...selectedIds, player.id])}>{active ? "✓ " : ""}{player.name || "Sin nombre"}</button>;
   })}</div>;
 }
 
@@ -102,10 +103,11 @@ export function CounterBetHolePanel({ kind, config, players, events, hole, order
 }) {
   if (!config.enabled) return null;
   const meta = COUNTER_BET_META[kind];
-  const participants = players.filter(player => config.participantIds.includes(player.id));
+  const participantIds = Array.isArray(config.participantIds) ? config.participantIds : [];
+  const participants = players.filter(player => participantIds.includes(player.id));
   const nine = physicalNineForHole(hole);
   const periodOrder = order.filter(currentHole => physicalNineForHole(currentHole) === nine);
-  const latest = latestCounterBetCandidates(kind, config.participantIds, events, periodOrder);
+  const latest = latestCounterBetCandidates(kind, participantIds, events, periodOrder);
   const atPeriodEnd = periodOrder.length > 0 && hole === periodOrder.at(-1);
   const tieCandidates = atPeriodEnd && latest.candidates.length > 1 ? latest.candidates : [];
   const asksKeeper = kind !== "vipers" && tieCandidates.length > 1;
@@ -148,7 +150,8 @@ export function LobaHolePanel({ config, players, hole, capture, liveDetail, onCh
   showValidation?: boolean;
 }) {
   if (!config.enabled) return null;
-  const participants = players.filter(player => config.participantIds.includes(player.id));
+  const participantIds = Array.isArray(config.participantIds) ? config.participantIds : [];
+  const participants = players.filter(player => participantIds.includes(player.id));
   const rivals = participants.filter(player => player.id !== capture.lobaPlayerId);
   const setUnit = (playerId: string, value: number) => onChange({ ...capture, unitCounts: { ...capture.unitCounts, [playerId]: Math.max(0, value) } });
   const modeMultiplier = capture.mode === "solo" ? 2 : capture.mode === "solo_anticipated" ? 3 : 1;
@@ -180,7 +183,7 @@ export function LobaHolePanel({ config, players, hole, capture, liveDetail, onCh
     </div>}
     {config.unitsEnabled && <><div className="miniLabel">📏 Unidades naturales + manuales · pertenecen a su equipo</div><div className="quickCounterList lobaUnitPlayers">{participants.map(player => {
       const unitDetail = liveDetail?.playerUnits[player.id];
-      const manual = capture.unitCounts[player.id] || 0;
+      const manual = capture.unitCounts?.[player.id] || 0;
       return <div key={player.id}><span><b>{player.name}</b><small>{unitDetail ? `Auto +${unitDetail.automatic} · Manual +${unitDetail.manual} · Total +${unitDetail.total}` : `Auto — · Manual +${manual} · Total pendiente`}</small></span><Counter label={`Unidades manuales o especiales de Loba de ${player.name}`} value={manual} onChange={value => setUnit(player.id, value)} /></div>;
     })}</div></>}
     {liveDetail ? <div className="lobaLive" aria-live="polite">

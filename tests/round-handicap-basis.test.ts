@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 import {
   handicapBases,
   hasValidRoundHandicap,
+  MAX_ROUND_HANDICAP,
+  MIN_ROUND_HANDICAP,
   missingHandicapsForActiveBets,
   normalizeRoundHandicapBasis,
   roundHandicapBases,
@@ -85,6 +87,43 @@ test("cero explícito es válido; vacío no entra como base ni produce un result
   assert.deepEqual(roundHandicapBases([{ id: "plus", name: "Plus", handicap: -2 }, { id: "high", name: "Alto", handicap: 20.5 }], "course"), { plus: -2, high: 20.5 });
   assert.equal(strokeAllowanceForHole(20.5, 3, "decimal"), 1.5);
   assert.equal(strokeAllowanceForHole(20.5, 2, "decimal"), 2);
+});
+
+test("el dominio de HCP de ronda acepta -15..54, incluido cero y plus negativos", () => {
+  const boundaryPlayers: Player[] = [
+    { id: "plus-limit", name: "Plus límite", handicap: MIN_ROUND_HANDICAP },
+    { id: "plus", name: "Plus", handicap: -2.4 },
+    { id: "scratch", name: "Scratch", handicap: 0 },
+    { id: "high-limit", name: "Límite alto", handicap: MAX_ROUND_HANDICAP },
+  ];
+  assert.ok(boundaryPlayers.every(hasValidRoundHandicap));
+  assert.deepEqual(roundHandicapBases(boundaryPlayers, "course"), {
+    "plus-limit": -15,
+    plus: -2.4,
+    scratch: 0,
+    "high-limit": 54,
+  });
+  assert.deepEqual(roundHandicapBases(boundaryPlayers, "relative"), {
+    "plus-limit": 0,
+    plus: 12.6,
+    scratch: 15,
+    "high-limit": 69,
+  });
+});
+
+test("un HCP fuera de -15..54 se considera faltante y no genera bases", () => {
+  const below: Player = { id: "below", name: "Fuera bajo", handicap: MIN_ROUND_HANDICAP - 0.1 };
+  const above: Player = { id: "above", name: "Fuera alto", handicap: MAX_ROUND_HANDICAP + 0.1 };
+  assert.equal(hasValidRoundHandicap(below), false);
+  assert.equal(hasValidRoundHandicap(above), false);
+  assert.deepEqual(roundHandicapBases([players[0], below], "course"), {});
+  assert.deepEqual(roundHandicapBases([players[0], above], "relative"), {});
+  assert.deepEqual(handicapBases({ baseMode: "moving" }, [players[0], below], [players[0], below]), {});
+  assert.deepEqual(handicapBases({ baseMode: "fixed", fixedBaseHandicap: MIN_ROUND_HANDICAP - 0.1 }, players, players), {});
+
+  const bets = initialBets([players[0].id, above.id]);
+  bets.skins = { ...bets.skins, enabled: true };
+  assert.deepEqual(missingHandicapsForActiveBets([players[0], above], bets, []).map((player) => player.id), ["above"]);
 });
 
 test("motores antiguos reciben la base elegida sin cambiar sus reglas económicas", () => {

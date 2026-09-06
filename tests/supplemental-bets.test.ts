@@ -10,7 +10,7 @@ import {
   supplementalBetsForRoundHoles,
   supplementalBalancesAreZero,
 } from "../lib/supplemental-bets";
-import type { Course, HoleScore, ManualBet, PersonalBet, Player, PuttsByHole, SupplementalBet } from "../lib/types";
+import type { Course, HandicapMode, HoleScore, ManualBet, PersonalBet, Player, PuttsByHole, SupplementalBet } from "../lib/types";
 
 const players: Player[] = [
   { id: "a", name: "Jugador A", handicap: 0 },
@@ -140,6 +140,12 @@ test("Chicago aplica el HCP % a la cuota y una ronda antigua sin porcentaje cons
   assert.deepEqual(historical.balances, hundred.balances);
   assertZero(hundred);
   assertZero(eighty);
+
+  for (const hcpPct of [Number.NaN, Number.POSITIVE_INFINITY, -1, 101]) {
+    const invalid = calculate([{ ...base, hcpPct } as SupplementalBet], selected, scoreRows, [1]);
+    assert.equal(invalid.results[0].complete, false, String(hcpPct));
+    assert.deepEqual(invalid.balances, { a: 0, b: 0 }, String(hcpPct));
+  }
 });
 
 test("Mínimo de Putts usa la duración explícita de una ronda de 9 hoyos", () => {
@@ -299,6 +305,152 @@ test("OFF preserves Personal, Manual and supplemental data but excludes every re
   assert.equal((normalizeRoundDraft({ players: players.slice(0, 2), supplementalBets: [supplemental], manualBets: [manual], putts: { 1: { a: 2 } } })?.putts as PuttsByHole)[1].a, 2);
 });
 
+test("normalización hace explícito el redondeo legacy y preserva valores corruptos para fallar cerrado", () => {
+  for (const type of ["individual_pressures", "team_pressures", "vegas"] as const) {
+    const bet = createSupplementalBet(type, players, `legacy-decimals-${type}`);
+    delete (bet as SupplementalBet & { decimals?: string }).decimals;
+    const restored = normalizeSupplementalBets([JSON.parse(JSON.stringify(bet))])[0] as SupplementalBet & { decimals?: string };
+    assert.equal(restored.decimals, "decimal");
+    const corrupt = normalizeSupplementalBets([{ ...bet, decimals: "corrupt" } as unknown as SupplementalBet])[0] as SupplementalBet & { decimals?: string };
+    assert.equal(corrupt.decimals, "corrupt");
+  }
+});
+
+test("flags y redondeos suplementarios corruptos fallan cerrados sin salida monetaria", () => {
+  const order = Array.from({ length: 18 }, (_, index) => index + 1);
+  const scoreRows = scores(order, { a: 3, b: 4, c: 5, d: 6 });
+  const zero = { a: 0, b: 0, c: 0, d: 0 };
+  const assertFailsClosed = (bet: SupplementalBet) => {
+    const result = calculate([bet], players, scoreRows, order);
+    assert.equal(result.results.length, 1);
+    assert.equal(result.results[0].complete, false);
+    assert.deepEqual(result.results[0].balances, zero);
+    assert.deepEqual(result.balances, zero);
+    assert.ok(Object.values(result.results[0].balances).every(Number.isFinite));
+    assert.ok(Object.values(result.balances).every(Number.isFinite));
+  };
+
+  for (const invalidEnabled of ["true", 1, null, {}]) {
+    const bet = { ...createSupplementalBet("dollar_stroke", players, `invalid-enabled-${String(invalidEnabled)}`), enabled: invalidEnabled } as unknown as SupplementalBet;
+    assertFailsClosed(bet);
+    const restored = normalizeSupplementalBets([bet])[0];
+    assert.equal((restored as unknown as { enabled: unknown }).enabled, invalidEnabled);
+    assertFailsClosed(restored);
+  }
+
+  const disabled = { ...createSupplementalBet("dollar_stroke", players, "explicitly-disabled"), enabled: false } as SupplementalBet;
+  assert.equal(calculate([disabled], players, scoreRows, order).results.length, 0);
+  const legacyEnabled = createSupplementalBet("dollar_stroke", players, "legacy-enabled") as Extract<SupplementalBet, { type: "dollar_stroke" }>;
+  delete (legacyEnabled as Partial<typeof legacyEnabled>).enabled;
+  assert.equal(calculate([legacyEnabled], players, scoreRows, order).results[0].complete, true);
+  assert.equal(normalizeSupplementalBets([legacyEnabled])[0].enabled, true);
+
+  const nassau = createSupplementalBet("individual_nassau", players, "invalid-nassau-carry") as Extract<SupplementalBet, { type: "individual_nassau" }>;
+  nassau.carryEnabled = "yes" as unknown as boolean;
+  assertFailsClosed(nassau);
+
+  const individualCarry = createSupplementalBet("individual_pressures", players, "invalid-individual-carry") as Extract<SupplementalBet, { type: "individual_pressures" }>;
+  individualCarry.carryEnabled = "yes" as unknown as boolean;
+  assertFailsClosed(individualCarry);
+  const individualMatch = createSupplementalBet("individual_pressures", players, "invalid-individual-match") as Extract<SupplementalBet, { type: "individual_pressures" }>;
+  individualMatch.matchPlayEnabled = 1 as unknown as boolean;
+  assertFailsClosed(individualMatch);
+
+  const team = createSupplementalBet("team_pressures", players, "invalid-team-carry") as Extract<SupplementalBet, { type: "team_pressures" }>;
+  team.carryEnabled = null as unknown as boolean;
+  assertFailsClosed(team);
+
+  const vegas = createSupplementalBet("vegas", players, "invalid-vegas-penalty") as Extract<SupplementalBet, { type: "vegas" }>;
+  vegas.birdiePenalty = "false" as unknown as boolean;
+  assertFailsClosed(vegas);
+
+  for (const type of ["individual_pressures", "team_pressures", "vegas"] as const) {
+    const bet = createSupplementalBet(type, players, `invalid-decimals-${type}`) as SupplementalBet & { decimals: HandicapMode };
+    bet.decimals = "corrupt" as HandicapMode;
+    assertFailsClosed(bet);
+    const restored = normalizeSupplementalBets([bet])[0] as SupplementalBet & { decimals: unknown };
+    assert.equal(restored.decimals, "corrupt");
+    assertFailsClosed(restored);
+  }
+});
+
+test("Nassau exige booleanos literales únicamente en componentes aplicables", () => {
+  const fullOrder = Array.from({ length: 18 }, (_, index) => index + 1);
+  const fullScores = scores(fullOrder, { a: 3, b: 4 });
+  const zero = { a: 0, b: 0 };
+  const assertFailsClosed = (bet: SupplementalBet, order: number[]) => {
+    const result = calculate([bet], players.slice(0, 2), fullScores, order);
+    assert.equal(result.results[0].complete, false);
+    assert.deepEqual(result.results[0].balances, zero);
+    assert.deepEqual(result.balances, zero);
+    assert.ok(Object.values(result.results[0].balances).every(Number.isFinite));
+    assert.ok(Object.values(result.balances).every(Number.isFinite));
+  };
+
+  for (const key of ["match1", "medal1", "match2", "medal2", "match18", "medal18"] as const) {
+    const bet = createSupplementalBet("individual_nassau", players, `invalid-component-18-${key}`) as Extract<SupplementalBet, { type: "individual_nassau" }>;
+    (bet.components as unknown as Record<string, unknown>)[key] = "true";
+    assertFailsClosed(bet, fullOrder);
+  }
+
+  const firstNine = fullOrder.slice(0, 9);
+  for (const key of ["match1", "medal1"] as const) {
+    const bet = createSupplementalBet("individual_nassau", players, `invalid-component-9-${key}`) as Extract<SupplementalBet, { type: "individual_nassau" }>;
+    (bet.components as unknown as Record<string, unknown>)[key] = 1;
+    assertFailsClosed(bet, firstNine);
+  }
+
+  const ignoredComponents = createSupplementalBet("individual_nassau", players, "ignored-components-9") as Extract<SupplementalBet, { type: "individual_nassau" }>;
+  for (const key of ["match2", "medal2", "match18", "medal18"] as const) {
+    (ignoredComponents.components as unknown as Record<string, unknown>)[key] = "legacy";
+  }
+  const validNine = calculate([ignoredComponents], players.slice(0, 2), fullScores, firstNine);
+  assert.equal(validNine.results[0].complete, true);
+  assert.deepEqual(validNine.balances, { a: 200, b: -200 });
+  assertZero(validNine);
+});
+
+test("enums suplementarios corruptos fallan cerrados solo cuando son aplicables", () => {
+  const order = Array.from({ length: 18 }, (_, index) => index + 1);
+  const scoreRows = scores(order, { a: 3, b: 4, c: 5, d: 6 });
+  const zero = { a: 0, b: 0, c: 0, d: 0 };
+  const assertFailsClosed = (bet: SupplementalBet) => {
+    const result = calculate([bet], players, scoreRows, order);
+    assert.equal(result.results[0].complete, false);
+    assert.deepEqual(result.results[0].balances, zero);
+    assert.deepEqual(result.balances, zero);
+    assert.ok(Object.values(result.results[0].balances).every(Number.isFinite));
+    assert.ok(Object.values(result.balances).every(Number.isFinite));
+  };
+
+  const invalidMetric = createSupplementalBet("team_pressures", players, "invalid-team-metric") as Extract<SupplementalBet, { type: "team_pressures" }>;
+  invalidMetric.metric = "average" as typeof invalidMetric.metric;
+  assertFailsClosed(invalidMetric);
+
+  const invalidVirtualMode = createSupplementalBet("team_pressures", players, "invalid-team-virtual") as Extract<SupplementalBet, { type: "team_pressures" }>;
+  invalidVirtualMode.virtualMode = "ghost" as typeof invalidVirtualMode.virtualMode;
+  assertFailsClosed(invalidVirtualMode);
+
+  const invalidRotation = createSupplementalBet("vegas", players, "invalid-vegas-rotation") as Extract<SupplementalBet, { type: "vegas" }>;
+  invalidRotation.rotation = "random" as typeof invalidRotation.rotation;
+  assertFailsClosed(invalidRotation);
+
+  const invalidBlockSize = createSupplementalBet("vegas", players, "invalid-vegas-block") as Extract<SupplementalBet, { type: "vegas" }>;
+  invalidBlockSize.rotation = "blocks";
+  invalidBlockSize.blockSize = 4 as typeof invalidBlockSize.blockSize;
+  assertFailsClosed(invalidBlockSize);
+
+  for (const rotation of ["fixed", "each_hole"] as const) {
+    const legacy = createSupplementalBet("vegas", players, `legacy-vegas-${rotation}`) as Extract<SupplementalBet, { type: "vegas" }>;
+    legacy.rotation = rotation;
+    delete (legacy as Partial<typeof legacy>).blockSize;
+    const result = calculate([legacy], players, scoreRows, order);
+    assert.equal(result.results[0].complete, true, rotation);
+    assert.ok(Object.values(result.balances).every(Number.isFinite));
+    assertZero(result);
+  }
+});
+
 test("las modalidades conservan configuración y Nassau suplementario migra a la Personal canónica", () => {
   const types: SupplementalBet["type"][] = ["individual_nassau", "dollar_stroke", "individual_pressures", "team_pressures", "chicago", "vegas", "minimum_putts"];
   const configured = types.map((type, index) => ({ ...createSupplementalBet(type, players, `persist-${index}`), enabled: index % 2 === 0 })) as SupplementalBet[];
@@ -323,6 +475,48 @@ test("las modalidades conservan configuración y Nassau suplementario migra a la
   });
   assert.deepEqual(draft?.putts, { 1: { a: 2, b: 1, c: 3, d: 2 } });
   assert.deepEqual(normalizeRoundDraft({ version: 1, players })?.supplementalBets, []);
+});
+
+test("una colisión de ID entre Personal y Nassau supplemental conserva ambas apuestas", () => {
+  const personal: PersonalBet = {
+    id: "shared-id",
+    enabled: true,
+    rivalMode: "group",
+    rivalPlayerId: "c",
+    rivalName: "Jugador C",
+    rivalHandicap: 0,
+    externalScores: {},
+    baseValue: 275,
+    advantageReceiver: "rival",
+    advantageStrokes: 3,
+    back9Multiplier: 1,
+    pressureMultiplier: 1,
+    pressureNine: "holes_10_18",
+    nassauVersion: 2,
+    carryEnabled: true,
+    components: { match1: true, medal1: false, match2: true, medal2: false, match18: true, medal18: false },
+  };
+  const supplemental = {
+    ...createSupplementalBet("individual_nassau", players.slice(0, 2), "shared-id"),
+    value: 50,
+  } as Extract<SupplementalBet, { type: "individual_nassau" }>;
+  const migratable = createSupplementalBet("individual_nassau", [players[0], players[3]], "migratable-id");
+  const serialized = JSON.parse(JSON.stringify({
+    version: 5,
+    ownerId: "a",
+    players,
+    personalBets: [personal],
+    supplementalBets: [supplemental, migratable],
+  }));
+
+  const normalized = normalizeRoundDraft(serialized);
+
+  assert.deepEqual(normalized?.personalBets[0], personal);
+  assert.deepEqual(normalized?.personalBets.map((bet: PersonalBet) => bet.id), ["shared-id", "migratable-id"]);
+  assert.deepEqual(normalized?.supplementalBets, [supplemental]);
+  const normalizedAgain = normalizeRoundDraft(JSON.parse(JSON.stringify(normalized)));
+  assert.deepEqual(normalizedAgain?.personalBets, normalized?.personalBets);
+  assert.deepEqual(normalizedAgain?.supplementalBets, [supplemental]);
 });
 
 test("migrar Nassau representable conserva ID, pareja, ventaja y fórmula incluso saliendo por H10", () => {
@@ -352,5 +546,118 @@ test("migrar Nassau representable conserva ID, pareja, ventaja y fórmula inclus
     assert.equal(migrated?.personalBets[0]?.pressureNine, startHole === 10 ? "holes_1_9" : "holes_10_18");
     const after = calculatePersonalBets(migrated?.personalBets || [], "a", players.slice(0, 2), course, scoreRows, order);
     assert.deepEqual(after.balances, before.balances);
+  }
+});
+
+test("migrar Nassau conserva flags e identidad corruptos para fallar cerrado", () => {
+  const legacy = {
+    ...createSupplementalBet("individual_nassau", players.slice(0, 2), "corrupt-legacy"),
+    enabled: "false",
+    advantageReceiverId: "missing-player",
+  } as unknown as Extract<SupplementalBet, { type: "individual_nassau" }>;
+  const normalized = normalizeRoundDraft({
+    ownerId: "a",
+    players: players.slice(0, 2),
+    supplementalBets: [legacy],
+  });
+  const migrated = normalized?.personalBets[0] as unknown as Record<string, unknown>;
+
+  assert.equal(migrated.enabled, "false");
+  assert.equal(migrated.advantageReceiver, "missing-player");
+  const result = calculatePersonalBets(normalized?.personalBets || [], "a", players.slice(0, 2), course, {}, [1]);
+  assert.deepEqual(result.balances, { a: 0, b: 0 });
+});
+
+test("Manual falla cerrado ante IDs activos duplicados o vacíos y nombres corruptos", () => {
+  const base: ManualBet = {
+    id: "manual-valid",
+    enabled: true,
+    name: "Ajuste válido",
+    amounts: { a: 100, b: -100 },
+  };
+  const cases: Array<{ label: string; bets: ManualBet[] }> = [
+    {
+      label: "IDs duplicados",
+      bets: [base, { ...base, name: "Otro ajuste" }],
+    },
+    {
+      label: "ID vacío",
+      bets: [{ ...base, id: "" }],
+    },
+    {
+      label: "nombre no textual",
+      bets: [{ ...base, name: 7 } as unknown as ManualBet],
+    },
+  ];
+
+  for (const { label, bets } of cases) {
+    const result = calculateManualBets(players.slice(0, 2), bets);
+    assert.deepEqual(result.balances, { a: 0, b: 0 }, label);
+    assert.equal(result.details.length, bets.length, label);
+    assert.equal(result.details.every((detail) => detail.valid === false), true, label);
+    assert.equal(Object.values(result.balances).every(Number.isFinite), true, label);
+  }
+});
+
+test("el agregado supplemental invalida toda identidad activa duplicada o vacía", () => {
+  const order = Array.from({ length: 18 }, (_, index) => index + 1);
+  const scoreRows = scores(order, { a: 3, b: 5 });
+  const base = createSupplementalBet("dollar_stroke", players.slice(0, 2), "supplemental-valid");
+  const cases: Array<{ label: string; bets: SupplementalBet[] }> = [
+    {
+      label: "IDs duplicados",
+      bets: [base, { ...base }],
+    },
+    {
+      label: "ID vacío",
+      bets: [{ ...base, id: "" }],
+    },
+  ];
+
+  for (const { label, bets } of cases) {
+    const result = calculate(bets, players.slice(0, 2), scoreRows, order);
+    assert.deepEqual(result.balances, { a: 0, b: 0 }, label);
+    assert.equal(result.results.length, bets.length, label);
+    assert.equal(result.results.every((item) => item.complete === false), true, label);
+    assert.equal(result.results.every((item) => Object.values(item.balances).every((amount) => amount === 0 && Number.isFinite(amount))), true, label);
+  }
+});
+
+test("participantIds duplicados o fuera del roster fallan cerrados en apuestas suplementarias grupales", () => {
+  const order = Array.from({ length: 18 }, (_, index) => index + 1);
+  const scoreRows = scores(order, { a: 3, b: 4, c: 5, d: 6 });
+  const putts = Object.fromEntries(order.map((hole) => [hole, { a: 1, b: 2, c: 3, d: 4 }])) as PuttsByHole;
+  const types = ["individual_pressures", "team_pressures", "chicago", "vegas", "minimum_putts"] as const;
+
+  for (const type of types) {
+    const base = createSupplementalBet(type, players, `participants-${type}`);
+    const invalidParticipantLists = [
+      ["a", "a", "c", "d"],
+      ["a", "b", "c", "missing-player"],
+    ];
+
+    for (const participantIds of invalidParticipantLists) {
+      const bet = { ...base, participantIds } as SupplementalBet;
+      const result = calculate([bet], players, scoreRows, order, putts);
+      assert.equal(result.results.length, 1, `${type}: ${participantIds.join(",")}`);
+      assert.equal(result.results[0].complete, false, `${type}: ${participantIds.join(",")}`);
+      assert.deepEqual(result.balances, { a: 0, b: 0, c: 0, d: 0 }, `${type}: ${participantIds.join(",")}`);
+      assert.equal(Object.values(result.results[0].balances).every((amount) => amount === 0 && Number.isFinite(amount)), true, type);
+    }
+  }
+
+  const team = createSupplementalBet("team_pressures", players, "invalid-team") as Extract<SupplementalBet, { type: "team_pressures" }>;
+  const vegas = createSupplementalBet("vegas", players, "invalid-vegas-team") as Extract<SupplementalBet, { type: "vegas" }>;
+  for (const bet of [
+    { ...team, teamA: ["a", "b", "missing-player"] },
+    { ...team, teamA: ["a", "a"] },
+    { ...team, abandonedPlayerIds: ["a", "a"] },
+    { ...team, abandonedPlayerIds: ["missing-player"] },
+    { ...vegas, teamA: ["a", "b", "missing-player"] },
+    { ...vegas, teamA: ["a", "a"] },
+  ] as SupplementalBet[]) {
+    const result = calculate([bet], players, scoreRows, order, putts);
+    assert.equal(result.results[0].complete, false, `${bet.type}: ${bet.id}`);
+    assert.deepEqual(result.balances, { a: 0, b: 0, c: 0, d: 0 }, `${bet.type}: ${bet.id}`);
   }
 });

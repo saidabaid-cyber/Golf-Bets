@@ -21,6 +21,31 @@ import { playersMissingRoundHandicap } from "./handicap-base";
 
 const EPSILON = 0.0001;
 
+function isFiniteNonNegative(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function safeCounterQuantity(value: unknown) {
+  return isFiniteNonNegative(value) ? Math.trunc(value) : 0;
+}
+
+function hasCleanParticipants(players: Player[], participantIds: unknown, minimum: number) {
+  if (!Array.isArray(participantIds) || participantIds.some((id) => typeof id !== "string" || !id)) return false;
+  if (new Set(participantIds).size !== participantIds.length) return false;
+  const available = new Set(players.map((player) => player.id));
+  return participantIds.length >= minimum && participantIds.every((id) => available.has(id));
+}
+
+function isValidCounterConfig(players: Player[], config: CounterBetConfig | undefined) {
+  if (config?.enabled !== true) return true;
+  const multiplier = config.secondNineMultiplier;
+  const multiplierIsRelevant = config.secondNinePressed !== false;
+  return hasCleanParticipants(players, config.participantIds, 2)
+    && isFiniteNonNegative(config.value)
+    && (config.secondNinePressed === undefined || typeof config.secondNinePressed === "boolean")
+    && (!multiplierIsRelevant || multiplier === undefined || (Number.isInteger(multiplier) && multiplier >= 1 && multiplier <= 5));
+}
+
 export const COUNTER_BET_META: Record<CounterBetKind, { emoji: string; singular: string; plural: string; article: "las" | "los" }> = {
   vipers: { emoji: "🐍", singular: "Víbora", plural: "Víboras", article: "las" },
   camels: { emoji: "🐫", singular: "Camello", plural: "Camellos", article: "los" },
@@ -33,24 +58,25 @@ export function physicalNineForHole(hole: number): PhysicalNine {
   return hole <= 9 ? "holes_1_9" : "holes_10_18";
 }
 
-export function counterBetConfiguredSecondNineMultiplier(config: CounterBetConfig): Exclude<PressureMultiplier, 1> {
-  const value = Math.trunc(config.secondNineMultiplier ?? 2);
+export function counterBetConfiguredSecondNineMultiplier(config: CounterBetConfig | undefined): Exclude<PressureMultiplier, 1> {
+  const value = Math.trunc(config?.secondNineMultiplier ?? 2);
   return Math.min(5, Math.max(2, Number.isFinite(value) ? value : 2)) as Exclude<PressureMultiplier, 1>;
 }
 
-export function counterBetSecondNinePressed(config: CounterBetConfig) {
-  if (typeof config.secondNinePressed === "boolean") return config.secondNinePressed;
-  const savedMultiplier = Math.trunc(config.secondNineMultiplier ?? 1);
+export function counterBetSecondNinePressed(config: CounterBetConfig | undefined) {
+  if (typeof config?.secondNinePressed === "boolean") return config.secondNinePressed;
+  const savedMultiplier = Math.trunc(config?.secondNineMultiplier ?? 1);
   return Number.isFinite(savedMultiplier) && savedMultiplier > 1;
 }
 
-export function counterBetSecondNineMultiplier(config: CounterBetConfig): PressureMultiplier {
+export function counterBetSecondNineMultiplier(config: CounterBetConfig | undefined): PressureMultiplier {
   return counterBetSecondNinePressed(config) ? counterBetConfiguredSecondNineMultiplier(config) : 1;
 }
 
-export function counterBetEffectiveUnitValue(config: CounterBetConfig, hole: number) {
+export function counterBetEffectiveUnitValue(config: CounterBetConfig | undefined, hole: number) {
   const multiplier = physicalNineForHole(hole) === "holes_10_18" ? counterBetSecondNineMultiplier(config) : 1;
-  return roundMoney(Math.max(0, config.value || 0) * multiplier);
+  const value = isFiniteNonNegative(config?.value) ? config.value : 0;
+  return roundMoney(value * multiplier);
 }
 
 export function roundMoney(value: number) {
@@ -111,7 +137,7 @@ export function setCounterDistance(
 export function counterQuantity(events: CounterBetEvent[], kind: CounterBetKind, hole: number, playerId: string) {
   return events
     .filter(event => event.kind === kind && event.hole === hole && event.playerId === playerId)
-    .reduce((sum, event) => sum + Math.max(0, Math.trunc(event.quantity || 0)), 0);
+    .reduce((sum, event) => sum + safeCounterQuantity(event.quantity), 0);
 }
 
 export type CounterBetHalfResult = {
@@ -138,15 +164,19 @@ export type CounterBetValuedEvent = CounterBetEvent & {
   effectiveTotalValue: number;
 };
 
-export function valueCounterBetEvent(event: CounterBetEvent, config: CounterBetConfig): CounterBetValuedEvent {
+export function valueCounterBetEvent(event: CounterBetEvent, config: CounterBetConfig | undefined): CounterBetValuedEvent {
   const multiplier = physicalNineForHole(event.hole) === "holes_10_18" ? counterBetSecondNineMultiplier(config) : 1;
   const effectiveUnitValue = counterBetEffectiveUnitValue(config, event.hole);
-  return {
+  const quantity = safeCounterQuantity(event.quantity);
+  const valued: CounterBetValuedEvent = {
     ...event,
+    quantity,
     multiplier,
     effectiveUnitValue,
-    effectiveTotalValue: roundMoney(Math.max(0, Math.trunc(event.quantity || 0)) * effectiveUnitValue),
+    effectiveTotalValue: roundMoney(quantity * effectiveUnitValue),
   };
+  if (valued.distanceToHole !== undefined && !isFiniteNonNegative(valued.distanceToHole)) delete valued.distanceToHole;
+  return valued;
 }
 
 export function snapshotCounterBetEvents(events: CounterBetEvent[], configs: Record<CounterBetKind, CounterBetConfig>) {
@@ -161,7 +191,7 @@ export function latestCounterBetCandidates(
 ) {
   const allowed = new Set(participantIds);
   const orderIndex = new Map(order.map((hole, index) => [hole, index]));
-  const relevant = events.filter(event => event.kind === kind && allowed.has(event.playerId) && event.quantity > 0 && orderIndex.has(event.hole));
+  const relevant = events.filter(event => event.kind === kind && allowed.has(event.playerId) && safeCounterQuantity(event.quantity) > 0 && orderIndex.has(event.hole));
   if (!relevant.length) return { hole: undefined, candidates: [] as CounterBetEvent[] };
   const lastIndex = Math.max(...relevant.map(event => orderIndex.get(event.hole) ?? -1));
   const hole = order[lastIndex];
@@ -186,23 +216,27 @@ export function calculateCounterBet(
   order: number[],
   completedHoles?: ReadonlySet<number>,
 ) {
-  const participants = allPlayers.filter(player => config.participantIds.includes(player.id));
+  const configuredParticipantIds = Array.isArray(config?.participantIds) ? config.participantIds : [];
+  const participants = allPlayers.filter(player => configuredParticipantIds.includes(player.id));
+  const configIsValid = isValidCounterConfig(allPlayers, config);
+  const valueConfig = configIsValid ? config : undefined;
+  const playedOrder = Array.isArray(order) ? order : [];
   const balances = Object.fromEntries(participants.map(player => [player.id, 0])) as Record<string, number>;
   const transfers: Transfer[] = [];
   const halves = (["holes_1_9", "holes_10_18"] as PhysicalNine[]).map((nine): CounterBetHalfResult => {
-    const holes = order.filter(hole => physicalNineForHole(hole) === nine);
+    const holes = playedOrder.filter(hole => physicalNineForHole(hole) === nine);
     const participantIds = new Set(participants.map(player => player.id));
-    const valuedEvents = events
-      .filter(event => event.kind === kind && holes.includes(event.hole) && participantIds.has(event.playerId))
-      .map(event => valueCounterBetEvent(event, config));
-    const quantity = valuedEvents.reduce((sum, event) => sum + Math.max(0, Math.trunc(event.quantity || 0)), 0);
-    const multiplier = nine === "holes_10_18" ? counterBetSecondNineMultiplier(config) : 1;
-    const pressed = nine === "holes_10_18" && counterBetSecondNinePressed(config);
-    const value = roundMoney(Math.max(0, config.value || 0) * multiplier);
+    const valuedEvents = (Array.isArray(events) ? events : [])
+      .filter(event => Boolean(event && typeof event === "object" && event.kind === kind && holes.includes(event.hole) && participantIds.has(event.playerId)))
+      .map(event => valueCounterBetEvent(event, valueConfig));
+    const quantity = valuedEvents.reduce((sum, event) => sum + safeCounterQuantity(event.quantity), 0);
+    const multiplier = nine === "holes_10_18" ? counterBetSecondNineMultiplier(valueConfig) : 1;
+    const pressed = nine === "holes_10_18" && counterBetSecondNinePressed(valueConfig);
+    const value = counterBetEffectiveUnitValue(valueConfig, nine === "holes_10_18" ? 10 : 1);
     const bagValue = roundMoney(valuedEvents.reduce((sum, event) => sum + event.effectiveTotalValue, 0));
     const { hole: lastEventHole, candidates } = latestCounterBetCandidates(kind, [...participantIds], valuedEvents, holes);
     const candidateIds = candidates.map(candidate => candidate.playerId);
-    const manuallySelected = keepers[kind]?.[nine];
+    const manuallySelected = keepers?.[kind]?.[nine];
     const keeperId = kind === "vipers"
       ? viperKeeper(candidates)
       : candidates.length === 1
@@ -210,7 +244,7 @@ export function calculateCounterBet(
         : manuallySelected && candidateIds.includes(manuallySelected) ? manuallySelected : undefined;
     const needsTieBreak = candidates.length > 1 && !keeperId;
     const complete = holes.length > 0 && (!completedHoles || holes.every(hole => completedHoles.has(hole)));
-    const settled = Boolean(config.enabled && complete && quantity > 0 && keeperId);
+    const settled = Boolean(configIsValid && config?.enabled === true && complete && quantity > 0 && keeperId);
     const halfBalances = Object.fromEntries(participants.map(player => [player.id, 0])) as Record<string, number>;
     const halfTransfers: Transfer[] = [];
     if (settled && keeperId && quantity > 0) {
@@ -250,6 +284,7 @@ export function validateLobaHoleErrors(hole: LobaHole | undefined, participantId
   if (!hole?.lobaPlayerId || !participantIds.includes(hole.lobaPlayerId)) errors.push("Selecciona quién es la 🐺 Loba.");
   if (!hole?.mode) errors.push("Selecciona la modalidad de 🐺 Loba.");
   if (hole?.mode === "partner" && (!hole.partnerId || hole.partnerId === hole.lobaPlayerId || !participantIds.includes(hole.partnerId))) errors.push("Selecciona la pareja de la 🐺 Loba.");
+  if (hole?.mode === "partner" && participantIds.length === 2 && hole.partnerId && participantIds.includes(hole.partnerId)) errors.push("Con dos jugadores, la 🐺 Loba debe jugar sola para conservar un contrario.");
   if (!Number.isFinite(hole?.fireMultiplier) || (hole?.fireMultiplier ?? 0) < 1) errors.push("Define el multiplicador 🔥 del hoyo.");
   return errors;
 }
@@ -264,23 +299,35 @@ export function calculateLoba(
   completedHoles?: ReadonlySet<number>,
   basis: RoundHandicapBasis = "relative",
 ) {
-  const participants = allPlayers.filter(player => config.participantIds.includes(player.id));
+  const configuredParticipantIds = Array.isArray(config?.participantIds) ? config.participantIds : [];
+  const participants = allPlayers.filter(player => configuredParticipantIds.includes(player.id));
   const participantIds = participants.map(player => player.id);
   const missingHandicapPlayerIds = playersMissingRoundHandicap(participants).map((player) => player.id);
   const handicapBases = baseHandicaps(participants, basis);
-  const configuredHcpPct = Number(config.hcpPct ?? 100);
-  const hcpPct = Number.isFinite(configuredHcpPct)
-    ? Math.min(100, Math.max(0, configuredHcpPct))
-    : 100;
+  const hcpPct = config?.hcpPct ?? 100;
+  const configIsValid = config?.enabled !== true || (
+    hasCleanParticipants(allPlayers, config.participantIds, 2)
+    && isFiniteNonNegative(config.value)
+    // HCP percentage did not exist in early Loba snapshots and was 100%.
+    && (config.hcpPct === undefined || (Number.isFinite(config.hcpPct) && config.hcpPct >= 0 && config.hcpPct <= 100))
+    && typeof config.unitsEnabled === "boolean"
+    && (!config.unitsEnabled || typeof config.duplicateUnitsByMode === "boolean")
+    && (!config.unitsEnabled || isFiniteNonNegative(config.unitValue))
+  );
   const balances = Object.fromEntries(participants.map(player => [player.id, 0])) as Record<string, number>;
   const transfers: Transfer[] = [];
   const details = order.flatMap(holeNumber => {
-    const capture = holes[holeNumber];
+    const capture = holes && typeof holes === "object" ? holes[holeNumber] : undefined;
     const validationError = validateLobaHole(capture, participantIds);
-    if (!config.enabled || missingHandicapPlayerIds.length || validationError || (completedHoles && !completedHoles.has(holeNumber))) return [];
+    if (config?.enabled !== true || !configIsValid || !capture || missingHandicapPlayerIds.length || participantIds.some((id) => !Number.isFinite(handicapBases[id])) || validationError || (completedHoles && !completedHoles.has(holeNumber))) return [];
     const holeDefinition = course.holes.find(hole => hole.number === holeNumber);
     if (!holeDefinition || !completedHole(holeNumber, scores, participantIds)) return [];
-    const lobaTeam = capture.mode === "partner" ? [capture.lobaPlayerId!, capture.partnerId!] : [capture.lobaPlayerId!];
+    const unitCounts = Object.fromEntries(participantIds.map((id) => {
+      const captured = capture.unitCounts?.[id];
+      return [id, isFiniteNonNegative(captured) ? Math.trunc(captured) : 0];
+    }));
+    const safeCapture: LobaHole = { ...capture, unitCounts };
+    const lobaTeam = safeCapture.mode === "partner" ? [safeCapture.lobaPlayerId!, safeCapture.partnerId!] : [safeCapture.lobaPlayerId!];
     const opponents = participantIds.filter(id => !lobaTeam.includes(id));
     if (!lobaTeam.length || !opponents.length) return [];
     const netScores = Object.fromEntries(participants.map(player => {
@@ -293,11 +340,11 @@ export function calculateLoba(
     const winner: LobaWinner = Math.abs(lobaBestNet - opponentBestNet) < EPSILON
       ? "tie"
       : lobaBestNet < opponentBestNet ? "loba_team" : "opponents";
-    const multiplier = modeMultiplier(capture.mode);
-    const fireMultiplier = Math.max(1, capture.fireMultiplier || 1);
-    const effectiveValue = roundMoney(Math.max(0, config.value || 0) * multiplier * fireMultiplier);
+    const multiplier = modeMultiplier(safeCapture.mode);
+    const fireMultiplier = safeCapture.fireMultiplier;
+    const effectiveValue = roundMoney(config.value * multiplier * fireMultiplier);
     const unitMultiplier = config.duplicateUnitsByMode ? multiplier : 1;
-    const effectiveUnitValue = roundMoney(Math.max(0, config.unitValue || 0) * unitMultiplier);
+    const effectiveUnitValue = roundMoney((config.unitsEnabled ? config.unitValue : 0) * unitMultiplier);
     const holeBalances = Object.fromEntries(participants.map(player => [player.id, 0])) as Record<string, number>;
     const holeTransfers: Transfer[] = [];
     if (winner !== "tie") {
@@ -312,7 +359,8 @@ export function calculateLoba(
       const automatic = config.unitsEnabled
         ? automaticUnitsForScore(scores[holeNumber][player.id] as number, holeDefinition.par)
         : 0;
-      const manual = config.unitsEnabled ? Math.max(0, Math.trunc(capture.unitCounts?.[player.id] || 0)) : 0;
+      const capturedUnits = safeCapture.unitCounts[player.id];
+      const manual = config.unitsEnabled && isFiniteNonNegative(capturedUnits) ? Math.trunc(capturedUnits) : 0;
       return [player.id, { automatic, manual, total: automatic + manual }];
     })) as Record<string, { automatic: number; manual: number; total: number }>;
     const lobaAutomaticUnits = lobaTeam.reduce((sum, id) => sum + playerUnits[id].automatic, 0);
@@ -337,7 +385,7 @@ export function calculateLoba(
     }
     return [{
       hole: holeNumber,
-      capture,
+      capture: safeCapture,
       lobaTeam,
       opponents,
       winner,
@@ -386,7 +434,7 @@ export function requiredSideBetCaptures(
 ) {
   const errors: string[] = [];
   for (const { kind, config } of enabledCounterBets) {
-    if (!config.enabled) continue;
+    if (config.enabled !== true) continue;
     const nine = physicalNineForHole(holeNumber);
     const holes = order.filter(currentHole => physicalNineForHole(currentHole) === nine);
     if (!holes.length || holeNumber !== holes.at(-1)) continue;
@@ -401,6 +449,6 @@ export function requiredSideBetCaptures(
       errors.push(`Selecciona quién generó el último ${meta.emoji} ${meta.singular} en H${lastEventHole}.`);
     }
   }
-  if (lobaConfig.enabled) errors.push(...validateLobaHoleErrors(lobaHole, lobaConfig.participantIds));
+  if (lobaConfig.enabled === true) errors.push(...validateLobaHoleErrors(lobaHole, lobaConfig.participantIds));
   return errors;
 }

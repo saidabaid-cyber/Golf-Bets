@@ -92,7 +92,7 @@ test("legacy missing carry stays off; migration is idempotent and preserves sele
   assert.deepEqual(migrated.components,{match1:false,medal1:true,match2:true,medal2:false,match18:true,medal18:true});
   assert.deepEqual(migratePersonalNassau(migrated,10,18),migrated);
   assert.equal(JSON.stringify(legacy),untouched);
-  const old=calculatePersonalBet({...realPersonal(realCases[0]),carryEnabled:undefined},"said",realCourse,realScores,realOrder);
+  const old=calculatePersonalBet({...realPersonal(realCases[0]),carryEnabled:undefined,nassauVersion:undefined},"said",realCourse,realScores,realOrder);
   assert.equal(old.totalMoney,-500);
 });
 

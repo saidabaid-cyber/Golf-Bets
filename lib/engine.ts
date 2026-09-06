@@ -15,10 +15,50 @@ import {
   UnitEvent,
 } from "./types";
 import { migratePersonalNassau } from "./personal-nassau";
-import { handicapBases, playersMissingRoundHandicap, roundHandicapBases } from "./handicap-base";
+import { handicapBases, isValidRoundHandicapValue, playersMissingRoundHandicap, roundHandicapBases } from "./handicap-base";
 import { normalizeRabbitMode, normalizeSkinsMode } from "./bet-modes";
+import { isFiniteZeroSum } from "./settlement-integrity";
 
 const EPS = 1e-9;
+
+const HANDICAP_MODES = new Set<HandicapMode>([
+  "partial",
+  "round",
+  "decimal",
+  "half_up",
+  "half_down",
+  "six_up",
+  "four_down",
+]);
+const DECIMAL_MODES = new Set<DecimalMode>(["partial", "round"]);
+
+function hasCleanParticipants(players: Player[], participantIds: unknown, minimum: number, exact?: number) {
+  if (!Array.isArray(participantIds) || participantIds.some((id) => typeof id !== "string" || !id)) return false;
+  if (new Set(participantIds).size !== participantIds.length) return false;
+  const available = new Set(players.map((player) => player.id));
+  if (!participantIds.every((id) => available.has(id))) return false;
+  return exact === undefined ? participantIds.length >= minimum : participantIds.length === exact;
+}
+
+function isFiniteNonNegative(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function isFinitePositive(value: unknown): value is number {
+  return isFiniteNonNegative(value) && value > 0;
+}
+
+function isValidHcpPct(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 100;
+}
+
+function isValidHandicapMode(value: unknown): value is HandicapMode {
+  return typeof value === "string" && HANDICAP_MODES.has(value as HandicapMode);
+}
+
+function isValidDecimalMode(value: unknown): value is DecimalMode {
+  return typeof value === "string" && DECIMAL_MODES.has(value as DecimalMode);
+}
 
 export function playOrder(startHole: 1 | 10 = 1) {
   return startHole === 1
@@ -26,8 +66,8 @@ export function playOrder(startHole: 1 | 10 = 1) {
     : [...Array.from({ length: 9 }, (_, i) => i + 10), ...Array.from({ length: 9 }, (_, i) => i + 1)];
 }
 
-export function playersByIds(players: Player[], ids: string[]) {
-  const wanted = new Set(ids);
+export function playersByIds(players: Player[], ids: string[] | undefined) {
+  const wanted = new Set(Array.isArray(ids) ? ids : []);
   return players.filter((p) => wanted.has(p.id));
 }
 
@@ -102,7 +142,7 @@ export function completedHole(
   participantIds: string[],
 ) {
   const row = scores[hole];
-  return !!row && participantIds.length > 0 && participantIds.every((id) => typeof row[id] === "number" && Number.isFinite(row[id]) && (row[id] as number) >= 1);
+  return !!row && participantIds.length > 0 && participantIds.every((id) => typeof row[id] === "number" && Number.isInteger(row[id]) && (row[id] as number) >= 1);
 }
 
 export function winnerIdsForHole(
@@ -147,11 +187,21 @@ export function calculateRabbits(
   order: number[],
   basis: RoundHandicapBasis = "relative",
 ) {
-  const participants = playersByIds(allPlayers, cfg.participantIds);
+  const participants = playersByIds(allPlayers, cfg?.participantIds);
   const won = Object.fromEntries(participants.map((p) => [p.id, 0])) as Record<string, number>;
   const events: RabbitEvent[] = [];
   const missingHandicapPlayerIds = playersMissingRoundHandicap(participants).map((player) => player.id);
-  if (!cfg.enabled || participants.length < 2 || missingHandicapPlayerIds.length) return { events, won, pending: 0, missingHandicapPlayerIds };
+  const modeIsValid = cfg?.mode === undefined || cfg.mode === "continuous" || cfg.mode === "three_hole_blocks";
+  const needsAccumulateFlag = cfg?.mode === undefined || cfg.mode === "continuous";
+  const configIsValid = cfg?.enabled !== true || (
+    hasCleanParticipants(allPlayers, cfg.participantIds, 2)
+    && isFiniteNonNegative(cfg.value)
+    && isValidHcpPct(cfg.hcpPct)
+    && isValidHandicapMode(cfg.decimals)
+    && modeIsValid
+    && (!needsAccumulateFlag || typeof cfg.accumulate === "boolean")
+  );
+  if (cfg?.enabled !== true || !configIsValid || participants.length < 2 || missingHandicapPlayerIds.length) return { events, won, pending: 0, missingHandicapPlayerIds };
   const mode = normalizeRabbitMode(cfg.mode);
 
   // Excel state machine: every rabbit has Hoyo 1, 2 and (if needed) 3.
@@ -286,11 +336,20 @@ export function calculateSkins(
   order: number[],
   basis: RoundHandicapBasis = "relative",
 ) {
-  const participants = playersByIds(allPlayers, cfg.participantIds);
+  const participants = playersByIds(allPlayers, cfg?.participantIds);
   const won = Object.fromEntries(participants.map((p) => [p.id, 0])) as Record<string, number>;
   const events: { hole: number; winnerId?: string; count: number; carry: number }[] = [];
   const missingHandicapPlayerIds = playersMissingRoundHandicap(participants).map((player) => player.id);
-  if (!cfg.enabled || participants.length < 2 || missingHandicapPlayerIds.length) return { won, events, carry: 0, missingHandicapPlayerIds };
+  const modeIsValid = cfg?.mode === undefined || cfg.mode === "carry" || cfg.mode === "no_carry";
+  const configIsValid = cfg?.enabled !== true || (
+    hasCleanParticipants(allPlayers, cfg.participantIds, 2)
+    && isFiniteNonNegative(cfg.value)
+    && isValidHcpPct(cfg.hcpPct)
+    && isValidHandicapMode(cfg.decimals)
+    && modeIsValid
+    && (cfg.mode !== undefined || typeof cfg.accumulate === "boolean")
+  );
+  if (cfg?.enabled !== true || !configIsValid || participants.length < 2 || missingHandicapPlayerIds.length) return { won, events, carry: 0, missingHandicapPlayerIds };
 
   const mode = normalizeSkinsMode(cfg.mode);
   // `accumulate` is retained only for legacy snapshots that predate the
@@ -323,12 +382,18 @@ function zeroBalances(players: Player[]) {
 
 /** Cálculos E1448/E1450/E1452, F1459:F1461, M1491:M1493. */
 export function calculateMonkey(course: Course, scores: Record<number, HoleScore>, allPlayers: Player[], cfg: BetConfig["monkey"], order: number[], basis: RoundHandicapBasis = "relative") {
-  const participants = playersByIds(allPlayers, [...new Set(cfg?.participantIds ?? [])]);
+  const participants = playersByIds(allPlayers, cfg?.participantIds);
   const balances = zeroBalances(participants);
   const points = zeroBalances(participants);
   const details: Array<{hole:number; net:Record<string,number>; points:Record<string,number>}> = [];
   const missingHandicapPlayerIds = playersMissingRoundHandicap(participants).map((player) => player.id);
-  if (!cfg?.enabled || participants.length !== 3 || missingHandicapPlayerIds.length) return {balances, points, details, valid: !cfg?.enabled || (participants.length === 3 && !missingHandicapPlayerIds.length), missingHandicapPlayerIds};
+  const configIsValid = cfg?.enabled !== true || (
+    hasCleanParticipants(allPlayers, cfg.participantIds, 3, 3)
+    && isFiniteNonNegative(cfg.value)
+    // Historical Monkey snapshots predate the percentage control and remain 100%.
+    && (cfg.hcpPct === undefined || isValidHcpPct(cfg.hcpPct))
+  );
+  if (cfg?.enabled !== true || !configIsValid || participants.length !== 3 || missingHandicapPlayerIds.length) return {balances, points, details, valid: cfg?.enabled !== true || (configIsValid && participants.length === 3 && !missingHandicapPlayerIds.length), missingHandicapPlayerIds};
   const bases = baseHandicaps(participants, basis);
   const hcpPct = Number.isFinite(cfg.hcpPct) ? Math.min(100, Math.max(0, cfg.hcpPct as number)) : 100;
   for (const holeNumber of order) {
@@ -359,9 +424,10 @@ export function payoutWinnerTakesFromAll(
   unitValue: number,
 ) {
   const balances = zeroBalances(participants);
+  if (!isFiniteNonNegative(unitValue)) return balances;
   for (const winner of participants) {
     const count = wins[winner.id] ?? 0;
-    if (!count) continue;
+    if (!isFiniteNonNegative(count) || !count) continue;
     const perRival = count * unitValue;
     for (const rival of participants) {
       if (rival.id === winner.id) continue;
@@ -390,7 +456,7 @@ export function calculateUnits(
   scores: Record<number, HoleScore> = {},
   order: number[] = [],
 ) {
-  const participants = playersByIds(allPlayers, cfg.participantIds);
+  const participants = playersByIds(allPlayers, cfg?.participantIds);
   const positive = Object.fromEntries(participants.map((p) => [p.id, 0])) as Record<string, number>;
   const negative = Object.fromEntries(participants.map((p) => [p.id, 0])) as Record<string, number>;
   const manualNet = Object.fromEntries(participants.map((p) => [p.id, 0])) as Record<string, number>;
@@ -398,13 +464,20 @@ export function calculateUnits(
   const autoNet = Object.fromEntries(participants.map((p) => [p.id, 0])) as Record<string, number>;
   const autoByHole: Record<number, Record<string, number>> = {};
   const net = Object.fromEntries(participants.map((p) => [p.id, 0])) as Record<string, number>;
-  const allowed = new Set(cfg.participantIds);
+  const allowed = new Set(Array.isArray(cfg?.participantIds) ? cfg.participantIds : []);
+  const configIsValid = cfg?.enabled !== true || (
+    hasCleanParticipants(allPlayers, cfg.participantIds, 2)
+    && isFiniteNonNegative(cfg.value)
+    // Missing Copa value is a documented legacy fallback to the regular unit value.
+    && (cfg.copaValue === undefined || isFiniteNonNegative(cfg.copaValue))
+  );
 
-  if (!cfg.enabled || participants.length < 2) {
+  if (cfg?.enabled !== true || !configIsValid || participants.length < 2) {
     return { positive, negative, manualNet, autoNet, autoByHole, net, registeredTotal: 0, balances: zeroBalances(participants) };
   }
 
-  for (const e of unitEvents) {
+  for (const e of Array.isArray(unitEvents) ? unitEvents : []) {
+    if (!e || typeof e !== "object" || !Number.isFinite(e.amount)) continue;
     if (!allowed.has(e.playerId)) continue;
     if (e.amount >= 0) positive[e.playerId] += e.amount;
     else negative[e.playerId] += Math.abs(e.amount);
@@ -420,7 +493,7 @@ export function calculateUnits(
       if (!row) continue;
       for (const p of participants) {
         const gross = row[p.id];
-        if (typeof gross !== "number") continue;
+        if (typeof gross !== "number" || !Number.isFinite(gross) || gross < 1) continue;
         const amount = automaticUnitsForScore(gross, hd.par);
         if (!amount) continue;
         autoByHole[hole] ??= {};
@@ -453,19 +526,29 @@ export function calculateUnits(
 
 export function segmentDefinitions(order: number[], size: 3 | 6 | 9 | 18): FoursomeSegment[] {
   const result: FoursomeSegment[] = [];
-  for (let start = 0; start < order.length; start += size) {
+  const safeSize = [3, 6, 9, 18].includes(size) ? size : 6;
+  for (let start = 0; start < order.length; start += safeSize) {
     result.push({
       id: `seg-${start}`,
       startIndex: start,
-      endIndex: Math.min(order.length - 1, start + size - 1),
+      endIndex: Math.min(order.length - 1, start + safeSize - 1),
       basePair: [],
     });
   }
   return result;
 }
 
-export function opponentPairs(participantIds: string[], basePair: string[]) {
-  if (basePair.length !== 2) return [] as [string, string][];
+/** Repairs draft-only segment structure while preserving each valid selected pair. */
+export function normalizeFoursomeSegments(value: unknown, order: number[], size: 3 | 6 | 9 | 18) {
+  const existing = Array.isArray(value) ? value : [];
+  return segmentDefinitions(order, size).map((segment, index) => ({
+    ...segment,
+    basePair: Array.isArray(existing[index]?.basePair) ? [...existing[index].basePair] : [],
+  }));
+}
+
+export function opponentPairs(participantIds: string[] | undefined, basePair: string[] | undefined) {
+  if (!Array.isArray(participantIds) || !Array.isArray(basePair) || basePair.length !== 2) return [] as [string, string][];
   const base = new Set(basePair);
   const rest = participantIds.filter((id) => !base.has(id));
   if (participantIds.length === 3 && rest.length === 1) return [[rest[0], FOURSOME_GHOST_ID] as [string, string]];
@@ -555,12 +638,38 @@ export function calculateFoursomes(
   order: number[],
   basis: RoundHandicapBasis = "relative",
 ) {
-  const participants = playersByIds(allPlayers, cfg.participantIds);
+  const participants = playersByIds(allPlayers, cfg?.participantIds);
   const balances = zeroBalances(participants);
   const provisionalBalances = zeroBalances(participants);
   const matches: FoursomeMatchResult[] = [];
   const missingHandicapPlayerIds = playersMissingRoundHandicap(participants).map((player) => player.id);
-  if (!cfg.enabled || participants.length < 3 || missingHandicapPlayerIds.length) return { balances, provisionalBalances, matches, missingHandicapPlayerIds };
+  const modeIsValid = cfg?.mode === "fixed" || cfg?.mode === "fixed_points" || cfg?.mode === "points";
+  const methodIsValid = cfg?.handicapMethod === undefined || cfg.handicapMethod === "excel" || cfg.handicapMethod === "configured";
+  const baseModeIsValid = basis === "course" || cfg?.baseMode === undefined || cfg.baseMode === "fixed" || cfg.baseMode === "moving";
+  const usesConfiguredHandicap = cfg?.handicapMethod !== "excel";
+  const usesFixedValue = cfg?.mode === "fixed" || cfg?.mode === "fixed_points";
+  const usesPointValue = cfg?.mode === "points" || cfg?.mode === "fixed_points";
+  const savedPressureMultiplier = cfg?.pressureMultiplier;
+  const effectivePressureMultiplier = savedPressureMultiplier ?? (cfg?.pressSecond9 ? 2 : 1);
+  const pressureIsApplicable = Array.isArray(order) && order.length >= 18;
+  const pressureIsValid = !pressureIsApplicable || (
+    (savedPressureMultiplier === undefined || (Number.isInteger(savedPressureMultiplier) && savedPressureMultiplier >= 1 && savedPressureMultiplier <= 5))
+    && (savedPressureMultiplier !== undefined || cfg?.pressSecond9 === undefined || typeof cfg.pressSecond9 === "boolean")
+    && (effectivePressureMultiplier <= 1 || cfg?.pressureNine === undefined || cfg.pressureNine === "holes_1_9" || cfg.pressureNine === "holes_10_18")
+  );
+  const configIsValid = cfg?.enabled !== true || (
+    hasCleanParticipants(allPlayers, cfg.participantIds, 3)
+    && [3, 6, 9, 18].includes(cfg.segmentSize)
+    && modeIsValid
+    && methodIsValid
+    && baseModeIsValid
+    && (!usesFixedValue || isFiniteNonNegative(cfg.fixedValue))
+    && (!usesPointValue || isFiniteNonNegative(cfg.pointValue))
+    && (!usesConfiguredHandicap || (isValidHcpPct(cfg.hcpPct) && isValidDecimalMode(cfg.decimals)))
+    && (basis === "course" || cfg.baseMode !== "fixed" || cfg.fixedBaseHandicap === undefined || isValidRoundHandicapValue(cfg.fixedBaseHandicap))
+    && pressureIsValid
+  );
+  if (cfg?.enabled !== true || !configIsValid || participants.length < 3 || missingHandicapPlayerIds.length) return { balances, provisionalBalances, matches, missingHandicapPlayerIds };
 
   // Pressure is a two-nine option. A residual saved setting must never double a
   // standalone nine-hole round after the user changes the round length.
@@ -568,13 +677,17 @@ export function calculateFoursomes(
     ? Math.min(5, Math.max(1, cfg.pressureMultiplier ?? (cfg.pressSecond9 ? 2 : 1)))
     : 1;
   const pressureNine = cfg.pressureNine ?? "holes_10_18";
-  for (const segment of segments) {
-    if (segment.basePair.length !== 2 || new Set(segment.basePair).size !== 2 || !segment.basePair.every(id => participants.some(p => p.id === id))) continue;
-    const opponents = opponentPairs(cfg.participantIds, segment.basePair);
+  for (const segment of Array.isArray(segments) ? segments : []) {
+    if (!segment || typeof segment !== "object") continue;
+    const basePair = Array.isArray(segment?.basePair) ? segment.basePair : [];
+    if (basePair.length !== 2 || new Set(basePair).size !== 2 || !basePair.every(id => participants.some(p => p.id === id))) continue;
+    if (!Number.isInteger(segment.startIndex) || !Number.isInteger(segment.endIndex) || segment.startIndex < 0 || segment.endIndex < segment.startIndex || segment.endIndex >= order.length) continue;
+    const opponents = opponentPairs(cfg.participantIds, basePair);
     const holes = order.slice(segment.startIndex, segment.endIndex + 1);
+    if (!holes.length) continue;
 
     for (const opponent of opponents) {
-      const ids = [...segment.basePair, ...opponent];
+      const ids = [...basePair, ...opponent];
       const ghostPlayerId = opponent.includes(FOURSOME_GHOST_ID)
         ? opponent.find((id) => id !== FOURSOME_GHOST_ID)
         : undefined;
@@ -586,6 +699,7 @@ export function calculateFoursomes(
       }
       const holePoints: FoursomeMatchResult["holePoints"] = [];
       const bases = handicapBases(cfg, matchPlayers, participants, matchPlayers, basis);
+      if (matchPlayers.some((player) => !Number.isFinite(bases[player.id]))) continue;
       let complete = true;
       let pointDiff = 0;
 
@@ -600,7 +714,7 @@ export function calculateFoursomes(
         const adjusted = (gross: number, id: string) => cfg.handicapMethod === "excel"
           ? excelFoursomeNet(gross, id, hd.strokeIndex, matchPlayers, bases)
           : gross - strokeAllowanceForHole(playingHandicap(bases[id], cfg.hcpPct, cfg.decimals), hd.strokeIndex, cfg.decimals);
-        const aScores = (segment.basePair as [string, string]).map((id) =>
+        const aScores = (basePair as [string, string]).map((id) =>
           adjusted(row[id] as number, id),
         );
         const bScores = opponent.map((id) => {
@@ -621,7 +735,7 @@ export function calculateFoursomes(
       const pointMoney = complete ? provisional.pointMoney : 0;
       const totalMoney = complete ? provisional.totalMoney : 0;
 
-      for (const id of segment.basePair as [string, string]) {
+      for (const id of basePair as [string, string]) {
         provisionalBalances[id] = (provisionalBalances[id] ?? 0) + provisional.totalMoney;
       }
       const provisionalRealOpponents = opponent.filter((id) => id !== FOURSOME_GHOST_ID);
@@ -633,7 +747,7 @@ export function calculateFoursomes(
       }
 
       if (complete) {
-        for (const id of segment.basePair as [string, string]) balances[id] = (balances[id] ?? 0) + totalMoney;
+        for (const id of basePair as [string, string]) balances[id] = (balances[id] ?? 0) + totalMoney;
         const realOpponents = opponent.filter((id) => id !== FOURSOME_GHOST_ID);
         const opponentShare = realOpponents.length ? totalMoney * 2 / realOpponents.length : 0;
         for (const id of realOpponents) balances[id] = (balances[id] ?? 0) - opponentShare;
@@ -643,7 +757,7 @@ export function calculateFoursomes(
         segmentId: segment.id,
         startHole: holes[0],
         endHole: holes[holes.length - 1],
-        basePair: segment.basePair as [string, string],
+        basePair: basePair as [string, string],
         opponentPair: opponent,
         pointDiff,
         first9PointDiff,
@@ -682,7 +796,7 @@ export function calculateBallFriend(
   order: number[],
   basis: RoundHandicapBasis = "relative",
 ) {
-  const participants = playersByIds(allPlayers, cfg.participantIds);
+  const participants = playersByIds(allPlayers, cfg?.participantIds);
   const points = zeroBalances(participants);
   const balances = zeroBalances(participants);
   const details: {
@@ -698,11 +812,24 @@ export function calculateBallFriend(
   }[] = [];
 
   const missingHandicapPlayerIds = playersMissingRoundHandicap(participants).map((player) => player.id);
-  if (!cfg.enabled || participants.length < 4 || missingHandicapPlayerIds.length) return { points, balances, details, missingHandicapPlayerIds };
+  const participantCountIsValid = hasCleanParticipants(allPlayers, cfg?.participantIds, 4, 4)
+    || hasCleanParticipants(allPlayers, cfg?.participantIds, 5, 5);
+  const baseModeIsValid = basis === "course" || cfg?.baseMode === undefined || cfg.baseMode === "fixed" || cfg.baseMode === "moving";
+  const configIsValid = cfg?.enabled !== true || (
+    participantCountIsValid
+    && isFiniteNonNegative(cfg.value)
+    && isValidHcpPct(cfg.hcpPct)
+    && isValidDecimalMode(cfg.decimals)
+    && Number.isInteger(cfg.maxScore)
+    && cfg.maxScore >= 1
+    && baseModeIsValid
+    && (basis === "course" || cfg.baseMode !== "fixed" || cfg.fixedBaseHandicap === undefined || isValidRoundHandicapValue(cfg.fixedBaseHandicap))
+  );
+  if (cfg?.enabled !== true || !configIsValid || (participants.length !== 4 && participants.length !== 5) || missingHandicapPlayerIds.length) return { points, balances, details, missingHandicapPlayerIds };
 
   for (const hole of order) {
-    const setup = holeSetup[hole];
-    if (!setup || setup.teamA.length !== 2) continue;
+    const setup = holeSetup && typeof holeSetup === "object" ? holeSetup[hole] : undefined;
+    if (!setup || !Array.isArray(setup.teamA) || setup.teamA.length !== 2) continue;
     const activeIds = cfg.participantIds.filter((id) => id !== setup.restPlayerId);
     if (activeIds.length !== 4) continue;
     const teamA = setup.teamA.filter((id) => activeIds.includes(id));
@@ -716,6 +843,7 @@ export function calculateBallFriend(
 
     const activePlayers = playersByIds(participants, activeIds);
     const bases = handicapBases(cfg, activePlayers, participants, participants, basis);
+    if (activePlayers.some((player) => !Number.isFinite(bases[player.id]))) continue;
     const adjusted = Object.fromEntries(
       activePlayers.map((p) => {
         const gross = row[p.id];
@@ -772,12 +900,183 @@ function personalAdjustedScore(
 }
 
 function signMoney(value: number, stake: number) {
+  if (!Number.isFinite(value) || !isFiniteNonNegative(stake)) return 0;
   return value > 0 ? stake : value < 0 ? -stake : 0;
 }
 
+const PERSONAL_COMPONENT_KEYS = ["match1", "medal1", "match2", "medal2", "match18", "medal18"] as const;
+const DISABLED_PERSONAL_COMPONENTS: PersonalBet["components"] = {
+  match1: false,
+  medal1: false,
+  match2: false,
+  medal2: false,
+  match18: false,
+  medal18: false,
+};
+
+function hasBooleanPersonalComponents(value: unknown, orderLength: number): value is PersonalBet["components"] {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const components = value as Record<string, unknown>;
+  const requiredKeys = orderLength >= 18 ? PERSONAL_COMPONENT_KEYS : (["match1", "medal1"] as const);
+  return requiredKeys.every((key) => typeof components[key] === "boolean");
+}
+
+function hasApplicablePersonalComponent(components: PersonalBet["components"], orderLength: number) {
+  const applicableKeys = orderLength >= 18 ? PERSONAL_COMPONENT_KEYS : (["match1", "medal1"] as const);
+  return applicableKeys.some((key) => components[key]);
+}
+
+function isPersonalInstanceId(value: unknown): value is string {
+  return typeof value === "string" && Boolean(value.trim());
+}
+
+function isRoundPlayerId(value: unknown): value is string {
+  return typeof value === "string" && Boolean(value) && !/\s/.test(value);
+}
+
+function isPersonalScore(value: unknown) {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1;
+}
+
+function personalScoreMap(value: unknown): Record<number, number | null> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<number, number | null>
+    : {};
+}
+
+function personalScoreRows(value: unknown): Record<number, HoleScore> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<number, HoleScore>
+    : {};
+}
+
+function personalRelevantHoles(components: PersonalBet["components"], order: number[]) {
+  const relevant = new Set<number>();
+  const first = order.slice(0, 9);
+  const second = order.length >= 18 ? order.slice(9, 18) : [];
+  if (components.match1 || components.medal1) first.forEach((hole) => relevant.add(hole));
+  if (components.match2 || components.medal2) second.forEach((hole) => relevant.add(hole));
+  if (components.match18 || components.medal18) order.slice(0, 18).forEach((hole) => relevant.add(hole));
+  return [...relevant];
+}
+
+type PersonalBetRuntimeContext = {
+  availablePlayerIds?: ReadonlySet<string>;
+  instanceIdIsUnique?: boolean;
+  rosterIsValid?: boolean;
+};
+
+function personalBetRuntimeIsSafe(
+  inputBet: PersonalBet,
+  migratedBet: PersonalBet,
+  ownerId: string,
+  scores: Record<number, HoleScore>,
+  order: number[],
+  context?: PersonalBetRuntimeContext,
+) {
+  if ((inputBet.enabled !== undefined && inputBet.enabled !== true)
+    || !isPersonalInstanceId(inputBet.id)
+    || context?.instanceIdIsUnique === false
+    || context?.rosterIsValid === false
+    || !isRoundPlayerId(ownerId)
+    || (context?.availablePlayerIds && !context.availablePlayerIds.has(ownerId))
+    || !isFiniteNonNegative(migratedBet.baseValue)
+    || !Number.isInteger(migratedBet.advantageStrokes)
+    || migratedBet.advantageStrokes < 0) return false;
+
+  if (migratedBet.advantageStrokes > 0
+    && migratedBet.advantageReceiver !== "owner"
+    && migratedBet.advantageReceiver !== "rival") return false;
+
+  const componentsAreSafe = hasBooleanPersonalComponents(migratedBet.components, order.length);
+  if (!componentsAreSafe || !hasApplicablePersonalComponent(migratedBet.components, order.length)) return false;
+
+  if (migratedBet.rivalMode === "group") {
+    if (!isRoundPlayerId(migratedBet.rivalPlayerId)
+      || migratedBet.rivalPlayerId === ownerId
+      || (context?.availablePlayerIds && !context.availablePlayerIds.has(migratedBet.rivalPlayerId))) return false;
+  } else if (migratedBet.rivalMode === "external") {
+    if (typeof migratedBet.rivalName !== "string" || !migratedBet.rivalName.trim()) return false;
+    if (migratedBet.externalRivalId !== undefined && !isPersonalInstanceId(migratedBet.externalRivalId)) return false;
+    if (migratedBet.externalScores !== undefined
+      && (!migratedBet.externalScores || typeof migratedBet.externalScores !== "object" || Array.isArray(migratedBet.externalScores))) return false;
+  } else {
+    return false;
+  }
+
+  const carryIsRelevant = order.length >= 18 && Boolean(
+    (migratedBet.components.match1 && migratedBet.components.match2)
+    || (migratedBet.components.medal1 && migratedBet.components.medal2),
+  );
+  if (carryIsRelevant && typeof migratedBet.carryEnabled !== "boolean") return false;
+
+  const usesSecondNinePressure = order.length >= 18
+    && Boolean(migratedBet.components.match2 || migratedBet.components.medal2);
+  const configuredPressureMultiplier = inputBet.nassauVersion === 2
+    ? inputBet.pressureMultiplier
+    : inputBet.pressureMultiplier ?? inputBet.back9Multiplier ?? 1;
+  const pressureMultiplierIsValid = typeof configuredPressureMultiplier === "number"
+    && Number.isInteger(configuredPressureMultiplier)
+    && configuredPressureMultiplier >= 1
+    && configuredPressureMultiplier <= 5;
+  if (usesSecondNinePressure && !pressureMultiplierIsValid) return false;
+  if (usesSecondNinePressure
+    && pressureMultiplierIsValid
+    && configuredPressureMultiplier > 1
+    && migratedBet.pressureNine !== undefined
+    && migratedBet.pressureNine !== "holes_1_9"
+    && migratedBet.pressureNine !== "holes_10_18") return false;
+
+  const externalScores = personalScoreMap(migratedBet.externalScores);
+  for (const hole of personalRelevantHoles(migratedBet.components, order)) {
+    const row = scores[hole];
+    if (row !== undefined && row !== null && (typeof row !== "object" || Array.isArray(row))) return false;
+    const ownerScore = row?.[ownerId];
+    if (ownerScore !== undefined && ownerScore !== null && !isPersonalScore(ownerScore)) return false;
+    const rivalScore = migratedBet.rivalMode === "group"
+      ? row?.[migratedBet.rivalPlayerId as string]
+      : externalScores[hole];
+    if (rivalScore !== undefined && rivalScore !== null && !isPersonalScore(rivalScore)) return false;
+  }
+  return true;
+}
+
+function inertPersonalBet(inputBet: PersonalBet, migratedBet: PersonalBet, ownerId: string, order: number[], context?: PersonalBetRuntimeContext): PersonalBet {
+  const id = isPersonalInstanceId(inputBet.id) ? inputBet.id : "invalid-personal";
+  const groupRivalIsSafe = migratedBet.rivalMode === "group"
+    && isRoundPlayerId(migratedBet.rivalPlayerId)
+    && migratedBet.rivalPlayerId !== ownerId
+    && (!context?.availablePlayerIds || context.availablePlayerIds.has(migratedBet.rivalPlayerId));
+  const externalRivalId = isPersonalInstanceId(migratedBet.externalRivalId)
+    ? migratedBet.externalRivalId
+    : `invalid-${id}`;
+  return {
+    ...migratedBet,
+    id,
+    enabled: true,
+    rivalMode: groupRivalIsSafe ? "group" : "external",
+    rivalPlayerId: groupRivalIsSafe ? migratedBet.rivalPlayerId : undefined,
+    externalRivalId,
+    rivalName: typeof migratedBet.rivalName === "string" ? migratedBet.rivalName : "",
+    externalScores: {},
+    baseValue: 0,
+    advantageReceiver: "none",
+    advantageStrokes: 0,
+    back9Multiplier: 1,
+    pressureMultiplier: 1,
+    pressureNine: order[0] === 10 ? "holes_1_9" : "holes_10_18",
+    nassauVersion: 2,
+    carryEnabled: false,
+    components: { ...DISABLED_PERSONAL_COMPONENTS },
+  };
+}
+
 export function personalRivalKey(bet: PersonalBet) {
-  if (bet.rivalMode === "group" && bet.rivalPlayerId) return bet.rivalPlayerId;
-  return `personal:${bet.externalRivalId || bet.id}`;
+  if (bet?.rivalMode === "group" && isRoundPlayerId(bet.rivalPlayerId)) return bet.rivalPlayerId;
+  const externalKey = isPersonalInstanceId(bet?.externalRivalId)
+    ? bet.externalRivalId
+    : isPersonalInstanceId(bet?.id) ? bet.id : "invalid-personal";
+  return `personal:${externalKey}`;
 }
 
 export function calculatePersonalBet(
@@ -786,8 +1085,46 @@ export function calculatePersonalBet(
   course: Course,
   scores: Record<number, HoleScore>,
   order: number[],
+  runtimeContext?: PersonalBetRuntimeContext,
 ) {
-  const bet = migratePersonalNassau(inputBet, order[0], order.length);
+  const rawBet = inputBet && typeof inputBet === "object" && !Array.isArray(inputBet)
+    ? inputBet
+    : {} as PersonalBet;
+  const safeOrder = Array.isArray(order) ? order : [];
+  const safeScores = personalScoreRows(scores);
+  const migratedBet = migratePersonalNassau(rawBet, safeOrder[0], safeOrder.length);
+  const componentsAreSafe = hasBooleanPersonalComponents(migratedBet.components, safeOrder.length);
+  const carryIsRelevant = safeOrder.length >= 18 && componentsAreSafe && Boolean(
+    (migratedBet.components.match1 && migratedBet.components.match2)
+    || (migratedBet.components.medal1 && migratedBet.components.medal2),
+  );
+  const safeV2Features = rawBet.nassauVersion !== 2 || (
+    componentsAreSafe
+    && (!carryIsRelevant || typeof migratedBet.carryEnabled === "boolean")
+  );
+  // The setup gate normally catches this. Keep the deterministic engine safe
+  // when called directly with a corrupt persisted V2 wager: truthy strings or
+  // partial component maps must never become money.
+  const runtimeIsSafe = safeV2Features
+    && personalBetRuntimeIsSafe(rawBet, migratedBet, ownerId, safeScores, safeOrder, runtimeContext);
+  const migratedPressure = migratedBet.pressureMultiplier ?? migratedBet.back9Multiplier ?? 1;
+  const normalizedPressure = typeof migratedPressure === "number"
+    && Number.isInteger(migratedPressure)
+    && migratedPressure >= 1
+    && migratedPressure <= 5
+    ? migratedPressure
+    : 1;
+  const bet = runtimeIsSafe
+    ? {
+        ...migratedBet,
+        externalScores: personalScoreMap(migratedBet.externalScores),
+        carryEnabled: typeof migratedBet.carryEnabled === "boolean" ? migratedBet.carryEnabled : false,
+        pressureMultiplier: normalizedPressure as 1 | 2 | 3 | 4 | 5,
+        pressureNine: migratedBet.pressureNine === "holes_1_9" || migratedBet.pressureNine === "holes_10_18"
+          ? migratedBet.pressureNine
+          : safeOrder[0] === 10 ? "holes_1_9" : "holes_10_18",
+      }
+    : inertPersonalBet(rawBet, migratedBet, ownerId, safeOrder, runtimeContext);
   const rivalId = personalRivalKey(bet);
   const componentMoney = {
     match1: 0,
@@ -799,7 +1136,7 @@ export function calculatePersonalBet(
   };
 
   const rivalGross = (hole: number) => {
-    if (bet.rivalMode === "group" && bet.rivalPlayerId) return scores[hole]?.[bet.rivalPlayerId] ?? null;
+    if (bet.rivalMode === "group" && bet.rivalPlayerId) return safeScores[hole]?.[bet.rivalPlayerId] ?? null;
     return bet.externalScores?.[hole] ?? null;
   };
 
@@ -820,9 +1157,9 @@ export function calculatePersonalBet(
       winner: "owner" | "rival" | "tie";
     }> = [];
     for (const hole of holes) {
-      const ownerGross = scores[hole]?.[ownerId];
+      const ownerGross = safeScores[hole]?.[ownerId];
       const rivalRaw = rivalGross(hole);
-      if (typeof ownerGross !== "number" || typeof rivalRaw !== "number") {
+      if (typeof ownerGross !== "number" || !Number.isInteger(ownerGross) || ownerGross < 1 || typeof rivalRaw !== "number" || !Number.isInteger(rivalRaw) || rivalRaw < 1) {
         complete = false;
         continue;
       }
@@ -860,14 +1197,14 @@ export function calculatePersonalBet(
     };
   };
 
-  const firstHoles = order.slice(0, 9);
-  const secondHoles = order.length >= 18 ? order.slice(9, 18) : [];
-  const explicitPressure = typeof inputBet.pressureMultiplier === "number";
-  const pressureMultiplier = Math.min(5, Math.max(1, bet.pressureMultiplier ?? bet.back9Multiplier ?? 1));
+  const firstHoles = safeOrder.slice(0, 9);
+  const secondHoles = safeOrder.length >= 18 ? safeOrder.slice(9, 18) : [];
+  const explicitPressure = typeof rawBet.pressureMultiplier === "number" && Number.isFinite(rawBet.pressureMultiplier);
+  const pressureMultiplier = bet.pressureMultiplier ?? 1;
   const pressureNine = bet.pressureNine;
   const first = segment(firstHoles);
   const second = segment(secondHoles, pressureMultiplier);
-  const total = segment(order.slice(0, 18), 1);
+  const total = segment(safeOrder.slice(0, 18), 1);
   // Carry is earned only by a completed tied first component and never mixes Match/Medal.
   const carryFor = (kind: "match" | "medal") => bet.carryEnabled && secondHoles.length && first.complete
     && bet.components[`${kind}1`] && bet.components[`${kind}2`] && first[kind] === 0 ? bet.baseValue : 0;
@@ -878,23 +1215,23 @@ export function calculatePersonalBet(
 
   if (bet.components.match1 && first.complete) componentMoney.match1 = first.matchMoney;
   if (bet.components.medal1 && first.complete) componentMoney.medal1 = first.medalMoney;
-  if (order.length >= 18 && bet.components.match2 && second.complete) componentMoney.match2 = second.matchMoney;
-  if (order.length >= 18 && bet.components.medal2 && second.complete) componentMoney.medal2 = second.medalMoney;
-  if (order.length >= 18 && bet.components.match18 && total.complete) componentMoney.match18 = total.matchMoney;
-  if (order.length >= 18 && bet.components.medal18 && total.complete) componentMoney.medal18 = total.medalMoney;
+  if (safeOrder.length >= 18 && bet.components.match2 && second.complete) componentMoney.match2 = second.matchMoney;
+  if (safeOrder.length >= 18 && bet.components.medal2 && second.complete) componentMoney.medal2 = second.medalMoney;
+  if (safeOrder.length >= 18 && bet.components.match18 && total.complete) componentMoney.match18 = total.matchMoney;
+  if (safeOrder.length >= 18 && bet.components.medal18 && total.complete) componentMoney.medal18 = total.medalMoney;
 
-  const componentDefinitions = order.length >= 18
+  const componentDefinitions = safeOrder.length >= 18
     ? [
         { key: "match1", label: `Match 1ª · H${firstHoles[0]}–${firstHoles.at(-1)}`, kind: "match", data: first, multiplier: 1, carry: 0, carryOut: matchCarry, holes: firstHoles },
         { key: "medal1", label: `Medal 1ª · H${firstHoles[0]}–${firstHoles.at(-1)}`, kind: "medal", data: first, multiplier: 1, carry: 0, carryOut: medalCarry, holes: firstHoles },
         { key: "match2", label: `Match 2ª · H${secondHoles[0]}–${secondHoles.at(-1)}`, kind: "match", data: second, multiplier: pressureMultiplier, carry: matchCarry, carryOut: 0, holes: secondHoles },
         { key: "medal2", label: `Medal 2ª · H${secondHoles[0]}–${secondHoles.at(-1)}`, kind: "medal", data: second, multiplier: pressureMultiplier, carry: medalCarry, carryOut: 0, holes: secondHoles },
-        { key: "match18", label: "Match 18 hoyos", kind: "match", data: total, multiplier: 1, carry: 0, carryOut: 0, holes: order },
-        { key: "medal18", label: "Medal 18 hoyos", kind: "medal", data: total, multiplier: 1, carry: 0, carryOut: 0, holes: order },
+        { key: "match18", label: "Match 18 hoyos", kind: "match", data: total, multiplier: 1, carry: 0, carryOut: 0, holes: safeOrder },
+        { key: "medal18", label: "Medal 18 hoyos", kind: "medal", data: total, multiplier: 1, carry: 0, carryOut: 0, holes: safeOrder },
       ] as const
     : [
-        { key: "match1", label: `Match ${order[0] >= 10 ? "H10–18" : "H1–9"}`, kind: "match", data: first, multiplier: 1, carry: 0, carryOut: 0, holes: firstHoles },
-        { key: "medal1", label: `Medal ${order[0] >= 10 ? "H10–18" : "H1–9"}`, kind: "medal", data: first, multiplier: 1, carry: 0, carryOut: 0, holes: firstHoles },
+        { key: "match1", label: `Match ${safeOrder[0] >= 10 ? "H10–18" : "H1–9"}`, kind: "match", data: first, multiplier: 1, carry: 0, carryOut: 0, holes: firstHoles },
+        { key: "medal1", label: `Medal ${safeOrder[0] >= 10 ? "H10–18" : "H1–9"}`, kind: "medal", data: first, multiplier: 1, carry: 0, carryOut: 0, holes: firstHoles },
       ] as const;
 
   const liveComponents = componentDefinitions
@@ -954,7 +1291,23 @@ export function calculatePersonalBets(
 ) {
   const balances = zeroBalances(allPlayers);
   const provisionalBalances = zeroBalances(allPlayers);
-  const results = bets.filter((bet) => bet.enabled !== false).map((b) => calculatePersonalBet(b, ownerId, course, scores, order));
+  const activeBets = (Array.isArray(bets) ? bets : []).filter((bet) => {
+    if (!bet || typeof bet !== "object" || Array.isArray(bet)) return true;
+    return bet.enabled === undefined || bet.enabled === true;
+  });
+  const playerIds = allPlayers.map((player) => player.id);
+  const rosterIsValid = playerIds.every(isRoundPlayerId) && new Set(playerIds).size === playerIds.length;
+  const availablePlayerIds = new Set(playerIds);
+  const instanceCounts = new Map<string, number>();
+  for (const bet of activeBets) {
+    if (!isPersonalInstanceId(bet?.id)) continue;
+    instanceCounts.set(bet.id, (instanceCounts.get(bet.id) ?? 0) + 1);
+  }
+  const results = activeBets.map((bet) => calculatePersonalBet(bet, ownerId, course, scores, order, {
+    availablePlayerIds,
+    instanceIdIsUnique: isPersonalInstanceId(bet?.id) && instanceCounts.get(bet.id) === 1,
+    rosterIsValid,
+  }));
   for (const r of results) {
     balances[ownerId] = (balances[ownerId] ?? 0) + r.totalMoney;
     balances[r.rivalId] = (balances[r.rivalId] ?? 0) - r.totalMoney;
@@ -991,7 +1344,12 @@ function calculateMedalComponent(
 ) {
   const totals = Object.fromEntries(participants.map((p) => [p.id, 0])) as Record<string, number>;
   const ids = participants.map((p) => p.id);
-  const complete = value > 0 && holes.length > 0 && !playersMissingRoundHandicap(participants).length && holes.every((hole) => completedHole(hole, scores, ids));
+  const complete = isFinitePositive(value)
+    && isValidHcpPct(hcpPct)
+    && isValidDecimalMode(decimals)
+    && holes.length > 0
+    && !playersMissingRoundHandicap(participants).length
+    && holes.every((hole) => course.holes.some((definition) => definition.number === hole) && completedHole(hole, scores, ids));
 
   if (!complete) {
     return {
@@ -1038,22 +1396,24 @@ export function calculatePolla(
   const details: MedalPollaDetail[] = [];
   const holes1To9 = order.filter((hole) => hole <= 9);
   const holes10To18 = order.filter((hole) => hole >= 10);
-  const components = [
-    ...(holes1To9.length === 9
-      ? ([["first9", "Polla H1–9", holes1To9, cfg.first9]] as const)
-      : []),
-    ...(holes10To18.length === 9
-      ? ([["second9", "Polla H10–18", holes10To18, cfg.second9]] as const)
-      : []),
-    ...(order.length >= 18
-      ? ([["total18", "Polla 18 hoyos", order.slice(0, 18), cfg.total18]] as const)
-      : []),
-  ] as const;
+  const components: Array<[
+    Exclude<MedalPollaDetail["key"], "mini">,
+    string,
+    number[],
+    BetConfig["polla"]["first9"] | undefined,
+  ]> = [];
+  if (holes1To9.length === 9) components.push(["first9", "Polla H1–9", holes1To9, cfg?.first9]);
+  if (holes10To18.length === 9) components.push(["second9", "Polla H10–18", holes10To18, cfg?.second9]);
+  if (order.length >= 18) components.push(["total18", "Polla 18 hoyos", order.slice(0, 18), cfg?.total18]);
 
   for (const [key, label, holes, componentCfg] of components) {
-    if (!componentCfg.enabled) continue;
+    if (componentCfg?.enabled !== true) continue;
     const participants = playersByIds(allPlayers, componentCfg.participantIds);
-    if (participants.length < 2) continue;
+    const configIsValid = hasCleanParticipants(allPlayers, componentCfg.participantIds, 2)
+      && isFinitePositive(componentCfg.value)
+      && isValidHcpPct(componentCfg.hcpPct)
+      && isValidDecimalMode(componentCfg.decimals);
+    if (!configIsValid || participants.length < 2) continue;
     const result = calculateMedalComponent(
       key,
       label,
@@ -1080,10 +1440,16 @@ export function calculateMiniPolla(
   order: number[],
   basis: RoundHandicapBasis = "relative",
 ) {
-  const participants = playersByIds(allPlayers, cfg.participantIds);
+  const participants = playersByIds(allPlayers, cfg?.participantIds);
   const balances = zeroBalances(participants);
   const details: MedalPollaDetail[] = [];
-  if (!cfg.enabled || participants.length < 2) return { balances, details };
+  const configIsValid = cfg?.enabled !== true || (
+    hasCleanParticipants(allPlayers, cfg.participantIds, 2)
+    && isFinitePositive(cfg.value)
+    && isValidHcpPct(cfg.hcpPct)
+    && isValidDecimalMode(cfg.decimals)
+  );
+  if (cfg?.enabled !== true || !configIsValid || participants.length < 2) return { balances, details };
 
   // Always the last three holes actually PLAYED. If starting on 10, these are 7-8-9.
   const result = calculateMedalComponent("mini", "Mini Polla · últimos 3", order.slice(-3), cfg.value, course, scores, participants, cfg.hcpPct, cfg.decimals, basis);
@@ -1094,11 +1460,20 @@ export function calculateMiniPolla(
 
 export function calculateManualBets(allPlayers: Player[], bets: ManualBet[]) {
   const balances = zeroBalances(allPlayers);
-  const details = bets.filter((bet) => bet.enabled !== false).map((bet) => {
-    const total = allPlayers.reduce((sum, p) => sum + Number(bet.amounts[p.id] ?? 0), 0);
-    const valid = Math.abs(total) < EPS;
+  const activeBets = (Array.isArray(bets) ? bets : []).filter((bet) => bet && typeof bet === "object" && (bet.enabled === undefined || bet.enabled === true));
+  const ids = activeBets.map((bet) => bet.id);
+  const identitiesAreValid = ids.every(isPersonalInstanceId) && new Set(ids).size === ids.length;
+  const details = activeBets.map((bet) => {
+    const amounts = bet.amounts && typeof bet.amounts === "object" ? bet.amounts : {};
+    const values = allPlayers.map((player) => amounts[player.id] ?? 0);
+    const total = values.reduce((sum, amount) => sum + Number(amount), 0);
+    const valid = identitiesAreValid
+      && typeof bet.name === "string"
+      && Boolean(bet.name.trim())
+      && values.every((amount) => typeof amount === "number")
+      && isFiniteZeroSum(values as number[]);
     if (valid) {
-      for (const p of allPlayers) balances[p.id] = (balances[p.id] ?? 0) + Number(bet.amounts[p.id] ?? 0);
+      for (const p of allPlayers) balances[p.id] = (balances[p.id] ?? 0) + Number(amounts[p.id] ?? 0);
     }
     return { ...bet, total, valid };
   });

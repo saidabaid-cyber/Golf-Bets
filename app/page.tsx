@@ -1,7 +1,8 @@
 "use client";
 import "./functional-ux.css";
-import { initialBets, restoreCounterBetConfig } from "../lib/new-round-bets";
-import { normalizeRabbitMode, normalizeSkinsMode } from "../lib/bet-modes";
+import { initialBets, restoreBetConfig } from "../lib/new-round-bets";
+import { collectBetConfigurationIssues } from "../lib/bet-config-validation";
+import { isFiniteZeroSum } from "../lib/settlement-integrity";
 import { freezeRoundHandicapBases, missingHandicapsForActiveBets, normalizeRoundHandicapBasis } from "../lib/handicap-base";
 import { HandicapBaseControl } from "./components/handicap-base-control";
 import { RoundHandicapBasisControl } from "./components/round-handicap-basis-control";
@@ -36,7 +37,7 @@ import {
   PuttsByHole,
   UnitEvent,
 } from "../lib/types";
-import { activeRoundContinueTarget, contrastToggleLabel, resolveActiveRoundStatus, rulesContextForRound, type AppTab } from "../lib/app-navigation";
+import { activeBetSafeDestination, activeRoundContinueTarget, contrastToggleLabel, resolveActiveRoundStatus, rulesContextForRound, type AppTab } from "../lib/app-navigation";
 import {
   calculateBallFriend,
   calculateFoursomes,
@@ -51,6 +52,7 @@ import {
   expenseTotal,
   FOURSOME_GHOST_ID,
   mergeBalances,
+  normalizeFoursomeSegments,
   normalizeHandicapMode,
   opponentPairs,
   payoutWinnerTakesFromAll,
@@ -65,6 +67,7 @@ import { RulesPanel } from "./components/rules-panel";
 import { NumericCaptureInput } from "./components/numeric-capture-input";
 import { SignedMoneyInput } from "./components/signed-money-input";
 import { AccountProvider, useBackyardAccount } from "./components/account-provider";
+import { resolveRoundDraftCore } from "./draft-restoration";
 import { ACCOUNT_STORAGE_KEYS, hasCurrentBettingDataConsent, parseLegalAcceptances } from "../lib/account-state";
 import { AccountPanel } from "./components/account-panel";
 import { BrandLockup } from "./components/brand-lockup";
@@ -85,6 +88,7 @@ import { ResultAccordion } from "./components/result-accordion";
 import { HistoricalRoundDetail } from "./components/historical-round-detail";
 import { FullScorecard } from "./components/full-scorecard";
 import { restoreRoundSnapshot, resultSummaryText } from "../lib/round-editing";
+import { firstIncompleteRoundCapture, incompleteExternalPersonalBets } from "../lib/round-completion";
 import { migrateSupplementalNassau } from "../lib/nassau-migration";
 import { saveRoundHistoryLocalFirst } from "../lib/round-history-save";
 import { snapshotPersonalResult } from "../lib/personal-history";
@@ -322,27 +326,28 @@ function SetupModeTitle({ icon, title, description }: { icon: string; title: str
 
 function BetModeControl<T extends string>({ label, value, options, onChange }: {
   label: string;
-  value: T;
+  value: T | null | undefined;
   options: ReadonlyArray<{ value: T; label: string; description: string }>;
   onChange: (value: T) => void;
 }) {
-  const selected = options.find((option) => option.value === value) || options[0];
+  const selected = options.find((option) => option.value === value);
   return <div className="betModeControl">
     <span className="miniLabel" id={`${label}-mode-label`}>Modalidad</span>
     <div className="segmented" role="group" aria-labelledby={`${label}-mode-label`}>
-      {options.map((option) => <button type="button" key={option.value} className={option.value === selected.value ? "active" : ""} aria-pressed={option.value === selected.value} onClick={() => onChange(option.value)}>{option.label}</button>)}
+      {options.map((option) => <button type="button" key={option.value} className={option.value === selected?.value ? "active" : ""} aria-pressed={option.value === selected?.value} onClick={() => onChange(option.value)}>{option.label}</button>)}
     </div>
-    <p>{selected.description}</p>
+    <p>{selected?.description ?? "Selecciona una modalidad válida para continuar."}</p>
   </div>;
 }
 
 function ParticipantChips({
   players, selected, onChange,
-}: { players: Player[]; selected: string[]; onChange: (ids: string[]) => void }) {
+}: { players: Player[]; selected: string[] | undefined; onChange: (ids: string[]) => void }) {
+  const selectedIds = Array.isArray(selected) ? selected : [];
   return <div className="chips">{players.map((p) => {
-    const on = selected.includes(p.id);
+    const on = selectedIds.includes(p.id);
     return <button key={p.id} className={`chipButton ${on ? "selected" : ""}`} onClick={() => {
-      onChange(on ? selected.filter((id) => id !== p.id) : [...selected, p.id]);
+      onChange(on ? selectedIds.filter((id) => id !== p.id) : [...selectedIds, p.id]);
     }}>{on ? `✓ ${p.name.trim() || "Sin nombre"}` : p.name.trim() || "Sin nombre"}</button>;
   })}</div>;
 }
@@ -359,13 +364,33 @@ function TrophyIcon({ tone }: { tone: "silver" | "gold" }) {
   return <svg className={`trophyIcon ${tone}`} viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h10v4c0 4-2 7-5 7S7 11 7 7V3Zm0 2H4v2c0 2 1.4 3.5 3.5 3.8M17 5h3v2c0 2-1.4 3.5-3.5 3.8M12 14v4m-4 3h8m-6-3h4" /></svg>;
 }
 
-function HandicapModeSelect({ value, onChange }: { value: HandicapMode; onChange: (mode: HandicapMode) => void }) {
-  return <div><label>Modo HCP</label><select value={normalizeHandicapMode(value)} onChange={(e) => onChange(e.target.value as HandicapMode)}>
+function HandicapModeSelect({ value, onChange }: { value: unknown; onChange: (mode: HandicapMode) => void }) {
+  const known = value === "partial" || value === "round" || value === "decimal" || value === "half_up" || value === "half_down" || value === "six_up" || value === "four_down";
+  const selected = known ? normalizeHandicapMode(value as HandicapMode) : "";
+  return <div><label>Modo HCP</label><select value={selected} onChange={(e) => onChange(e.target.value as HandicapMode)}>
+    <option value="" disabled>Selecciona</option>
     <option value="decimal">Décimas / sin redondear</option>
     <option value="half_up">.5 sube</option>
     <option value="half_down">.5 baja</option>
     <option value="six_up">.6 sube</option>
     <option value="four_down">.4 baja</option>
+  </select></div>;
+}
+
+function DecimalModeSelect({
+  label = "Decimales",
+  value,
+  onChange,
+}: {
+  label?: string;
+  value: unknown;
+  onChange: (mode: "partial" | "round") => void;
+}) {
+  const selected = value === "partial" || value === "round" ? value : "";
+  return <div><label>{label}</label><select value={selected} onChange={(event) => onChange(event.target.value as "partial" | "round")}>
+    <option value="" disabled>Selecciona</option>
+    <option value="round">Redondear</option>
+    <option value="partial">Cuentan</option>
   </select></div>;
 }
 
@@ -388,7 +413,7 @@ function PollaBetEditor({
       <div className="grid3">
         <MoneyInput label="Valor" value={config.value} onChange={(value) => onChange({ ...config, value })} />
         <HcpPercentInput value={config.hcpPct} onChange={(hcpPct) => onChange({ ...config, hcpPct })} />
-        <div><label>Decimales</label><select value={config.decimals} onChange={(e) => onChange({ ...config, decimals: e.target.value as "partial" | "round" })}><option value="round">Redondear</option><option value="partial">Cuentan</option></select></div>
+        <DecimalModeSelect value={config.decimals} onChange={(decimals) => onChange({ ...config, decimals })} />
       </div>
       <label className="miniLabel">Participan</label><ParticipantChips players={players} selected={config.participantIds} onChange={(participantIds) => onChange({ ...config, participantIds })} />
       <div className="hint">Cada valor es por jugador. El pozo se reparte entre los ganadores si empatan.{unavailable ? " Esta apuesta requiere una ronda de 18 hoyos." : ""}</div>
@@ -401,7 +426,7 @@ function MoneyInput({ label, value, onChange }: { label: string; value: number; 
 
 function GolfBetsApp() {
   const { identity, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, setCloudStatus, applyCloudPreferences, reportCloudSyncError, clearCloudSyncError, refreshCloudSession } = useBackyardAccount();
-  const { tab, setTab, goBack } = useScreenNavigation();
+  const { tab, setTab, goBack, setNavigationGuard } = useScreenNavigation();
   const [rulesVisited, setRulesVisited] = useState(false);
   useEffect(() => { if (tab === "rules") setRulesVisited(true); }, [tab]);
   const [personalDetailId] = useState<string | null>(null);
@@ -417,6 +442,7 @@ function GolfBetsApp() {
   const [course, setCourse] = useState<Course>(laVista);
   const [courseSelected, setCourseSelected] = useState(false);
   const [courseSelectionError, setCourseSelectionError] = useState(false);
+  const [showBetSetupErrors, setShowBetSetupErrors] = useState(false);
   const [courseDraft, setCourseDraft] = useState<Course>(laVista);
   const [courseEditorSelectOnSave, setCourseEditorSelectOnSave] = useState(false);
   const [startHole, setStartHole] = useState<1 | 10>(1);
@@ -576,6 +602,41 @@ function GolfBetsApp() {
   const scoreCaptureComplete = isHoleCaptureComplete(scores, scoreEdits, holeNumber, players);
   const activePuttPlayerIds = useMemo(() => new Set(supplementalBets.flatMap((bet) => bet.enabled !== false && bet.type === "minimum_putts" && currentIndex < bet.holes ? bet.participantIds : [])), [supplementalBets, currentIndex]);
   const missingActiveHandicapPlayers = useMemo(() => missingHandicapsForActiveBets(players, bets, supplementalBets), [players, bets, supplementalBets]);
+  const betConfigurationIssues = useMemo(() => collectBetConfigurationIssues({
+    players,
+    ownerId,
+    bets,
+    segments,
+    personalBets,
+    supplementalBets,
+    manualBets,
+    roundHoles,
+    startHole,
+    handicapBasis: roundHandicapBasis,
+  }), [players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, roundHoles, startHole, roundHandicapBasis]);
+  useEffect(() => {
+    setNavigationGuard((next) => {
+      const safeDestination = activeBetSafeDestination(next, draftAvailable && !roundClosed && betConfigurationIssues.length > 0);
+      if (safeDestination !== next) {
+        setShowBetSetupErrors(true);
+        setEditingRound(true);
+        setFeedback("Corrige las apuestas activas antes de abrir la tarjeta o sus resultados.");
+      }
+      return safeDestination;
+    });
+    return () => setNavigationGuard();
+  }, [betConfigurationIssues.length, draftAvailable, roundClosed, setNavigationGuard]);
+  useEffect(() => {
+    const safeDestination = activeBetSafeDestination(tab, draftAvailable && !roundClosed && betConfigurationIssues.length > 0);
+    if (safeDestination === tab) return;
+    const frame = requestAnimationFrame(() => {
+      setShowBetSetupErrors(true);
+      setEditingRound(true);
+      setFeedback("La configuración recibida cambió. Corrige sus apuestas antes de continuar.");
+      setTab(safeDestination);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [betConfigurationIssues.length, draftAvailable, roundClosed, setTab, tab]);
   const liveScores = useMemo(() => scoreCaptureComplete ? { ...scores, [holeNumber]: scoreDraft } : scores, [scoreCaptureComplete, scores, holeNumber, scoreDraft]);
   const liveCompletedHoles = useMemo(() => new Set([...completedHoles, ...(scoreCaptureComplete ? [holeNumber] : [])]), [completedHoles, scoreCaptureComplete, holeNumber]);
 
@@ -585,7 +646,8 @@ function GolfBetsApp() {
       holeSummarySession.current = null; setHoleSummaryPaused(false); setHoleSummary([]);
     }
     const draft = normalizeRoundDraft(value);
-    const draftRoundHoles: 9 | 18 = draft?.roundHoles === 9 ? 9 : 18;
+    const draftCore = draft ? resolveRoundDraftCore(draft, identity.userId) : null;
+    const draftRoundHoles: 9 | 18 = draftCore?.roundHoles ?? 18;
     setRoundClosed(false);
     setRoundReviewPending(Boolean(draft?.reviewPending));
     setDraftAvailable(hasRoundProgress(draft));
@@ -597,53 +659,59 @@ function GolfBetsApp() {
       if (!options.preserveLocalUi) setCurrentIndex(0);
       setRoundId(makeId()); setRoundDate(localDateMexico());
     }
-      if (draft) {
-        if (draft.course) setCourse(withDefaultLaVistaRules(draft.course));
+    if (draft && draftCore) {
+        setCourse(draft.course ? withDefaultLaVistaRules(draft.course) : laVista);
         setCourseSelected(draft.courseSelected === true);
         setCourseSelectionError(false);
-        if (draft.startHole) setStartHole(draft.startHole);
-        if (draft.roundHoles === 9 || draft.roundHoles === 18) setRoundHoles(draft.roundHoles);
+        setStartHole(draftCore.startHole);
+        setRoundHoles(draftCore.roundHoles);
         setRoundHandicapBasis(normalizeRoundHandicapBasis(draft.handicapBasis));
-        if (draft.players) setPlayers(draft.players);
-        if (draft.ownerId) setOwnerId(draft.ownerId);
-        if (draft.bets) {
-          const draftPlayerIds = (draft.players || []).map((p: Player) => p.id);
-          const defaults = initialBets(draftPlayerIds);
-          setBets({
-            ...defaults,
-            ...draft.bets,
-            rabbits: { ...defaults.rabbits, ...(draft.bets.rabbits || {}), mode: normalizeRabbitMode(draft.bets.rabbits?.mode), decimals: normalizeHandicapMode(draft.bets.rabbits?.decimals) },
-            skins: { ...defaults.skins, ...(draft.bets.skins || {}), mode: normalizeSkinsMode(draft.bets.skins?.mode), decimals: normalizeHandicapMode(draft.bets.skins?.decimals) },
-            foursome: { ...defaults.foursome, ...(draft.bets.foursome || {}), handicapMethod: draft.bets.foursome?.handicapMethod || "configured", baseMode: draft.bets.foursome?.baseMode },
-            polla: normalizePolla(draft.bets.polla, draftPlayerIds),
-            miniPolla: { ...defaults.miniPolla, ...(draft.bets.miniPolla || {}) },
-            vipers: restoreCounterBetConfig(defaults.vipers, draft.bets.vipers),
-            camels: restoreCounterBetConfig(defaults.camels, draft.bets.camels),
-            fish: restoreCounterBetConfig(defaults.fish, draft.bets.fish),
-            loba: { ...defaults.loba, ...(draft.bets.loba || {}) },
-          });
+        setPlayers(draftCore.players);
+        setOwnerId(draftCore.ownerId);
+        const draftPlayerIds = draftCore.players.map((p: Player) => p.id);
+        const restored = restoreBetConfig(draft.bets, draftPlayerIds);
+        const rawPolla = draft.bets?.polla;
+        const restoredPolla = rawPolla && !rawPolla.first9 && !rawPolla.second9 && !rawPolla.total18
+          ? normalizePolla(rawPolla, draftPlayerIds)
+          : normalizePolla(restored.polla, draftPlayerIds);
+        setBets({
+          ...restored,
+          rabbits: restored.rabbits,
+          skins: restored.skins,
+          foursome: restored.foursome,
+          ballFriend: restored.ballFriend,
+          polla: restoredPolla,
+        });
+        if (draft.segments) {
+          const draftOrder = playOrder(draftCore.startHole).slice(0, draftRoundHoles);
+          const segmentSize = [3, 6, 9, 18].includes(draft.bets?.foursome?.segmentSize) ? draft.bets.foursome.segmentSize : 6;
+          setSegments(normalizeFoursomeSegments(draft.segments, draftOrder, segmentSize));
         }
-        if (draft.segments) setSegments(draft.segments);
         if (draft.personalBets) setPersonalBets(draft.personalBets.map((b: any) => ({
-          id: b.id || makeId(),
-          enabled: b.enabled !== false,
-          rivalMode: b.rivalMode || "group",
+          id: b.id,
+          enabled: b.enabled,
+          rivalMode: b.rivalMode,
           rivalPlayerId: b.rivalPlayerId,
           externalRivalId: b.externalRivalId,
           rivalHandicap: b.rivalHandicap ?? null,
-          nassauVersion: 2,
-          carryEnabled: b.carryEnabled ?? false,
-          rivalName: b.rivalName || (draft.players || []).find((p: Player) => p.id === b.rivalPlayerId)?.name || "Rival",
-          externalScores: b.externalScores || {},
-          baseValue: b.baseValue ?? 100,
-          advantageReceiver: (b.advantageReceiver === "owner" || b.advantageReceiver === "rival") ? b.advantageReceiver : (b.advantageReceiverId ? (b.advantageReceiverId === draft.ownerId ? "owner" : "rival") : "rival"),
-          advantageStrokes: b.advantageReceiver === "none" ? 0 : (b.advantageStrokes ?? 0),
-          back9Multiplier: b.back9Multiplier ?? 1,
-          pressureMultiplier: b.pressureMultiplier ?? b.back9Multiplier ?? 1,
-          pressureNine: b.pressureNine ?? (draft.startHole === 10 ? "holes_1_9" : "holes_10_18"),
-          components: b.components || { match1: true, medal1: true, match2: true, medal2: true, match18: true, medal18: true },
+          nassauVersion: b.nassauVersion,
+          carryEnabled: b.carryEnabled,
+          rivalName: b.rivalName,
+          externalScores: b.externalScores && typeof b.externalScores === "object" && !Array.isArray(b.externalScores) ? b.externalScores : {},
+          baseValue: Object.hasOwn(b, "baseValue") ? b.baseValue : undefined,
+          advantageReceiver: b.nassauVersion === 2
+            ? b.advantageReceiver
+            : (b.advantageReceiver === "owner" || b.advantageReceiver === "rival" || b.advantageReceiver === "none")
+              ? b.advantageReceiver
+              : b.advantageReceiverId ? (b.advantageReceiverId === draftCore.ownerId ? "owner" : "rival")
+                : b.advantageStrokes === 0 ? "none" : undefined,
+          advantageStrokes: Object.hasOwn(b, "advantageStrokes") ? b.advantageStrokes : undefined,
+          back9Multiplier: b.back9Multiplier,
+          pressureMultiplier: b.pressureMultiplier,
+          pressureNine: b.pressureNine,
+          components: b.components,
         })));
-        if (Array.isArray(draft.manualBets)) setManualBets(draft.manualBets.map((bet: ManualBet) => ({ ...bet, enabled: bet.enabled !== false })));
+        if (Array.isArray(draft.manualBets)) setManualBets(draft.manualBets.map((bet: ManualBet) => ({ ...bet, name: typeof bet.name === "string" ? bet.name : "" })));
         setSupplementalBets(normalizeSupplementalBets(draft.supplementalBets, draftRoundHoles));
         setPutts(draft.putts && typeof draft.putts === "object" ? draft.putts : {});
         if (draft.scores) setScores(draft.scores);
@@ -653,13 +721,13 @@ function GolfBetsApp() {
         setCounterBetKeepers({ ...emptyCounterBetKeepers(), ...(draft.counterBetKeepers || {}) });
         setLobaHoles(draft.lobaHoles && typeof draft.lobaHoles === "object" ? draft.lobaHoles : {});
         if (draft.ballFriendSetup) setBallFriendSetup(draft.ballFriendSetup);
-        if (draft.expenses) setExpenses(normalizeExpenses(draft.expenses));
-        if (draft.roundId) setRoundId(draft.roundId);
-        if (draft.roundDate) setRoundDate(draft.roundDate);
-        if (!options.preserveLocalUi && Number.isInteger(draft.currentIndex)) setCurrentIndex(Math.max(0, Math.min((draft.roundHoles || 18) - 1, draft.currentIndex)));
+        setExpenses(draft.expenses ? normalizeExpenses(draft.expenses) : emptyExpenses);
+        setRoundId(typeof draft.roundId === "string" && draft.roundId.trim() ? draft.roundId : makeId());
+        setRoundDate(typeof draft.roundDate === "string" && draft.roundDate.trim() ? draft.roundDate : localDateMexico());
+        if (!options.preserveLocalUi && Number.isInteger(draft.currentIndex)) setCurrentIndex(Math.max(0, Math.min(draftRoundHoles - 1, draft.currentIndex)));
       }
     undoStack.current = []; setUndoCount(0);
-  }, []);
+  }, [identity.userId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -994,14 +1062,13 @@ function GolfBetsApp() {
 
   useEffect(() => {
     if (!hydrated) return;
-    const defs = segmentDefinitions(order, bets.foursome.segmentSize);
-    setSegments((old) => defs.map((d, i) => ({ ...d, basePair: old[i]?.basePair ?? [] })));
+    setSegments((old) => normalizeFoursomeSegments(old, order, bets.foursome.segmentSize));
   }, [hydrated, order, bets.foursome.segmentSize]);
 
   useEffect(() => {
     if (!hydrated) return;
     const valid = new Set(players.map((p) => p.id));
-    const sanitize = (ids: string[]) => ids.filter((id) => valid.has(id));
+    const sanitize = (ids: string[] | undefined) => (Array.isArray(ids) ? ids : []).filter((id) => valid.has(id));
     setBets((b) => ({
       ...b,
       rabbits: { ...b.rabbits, participantIds: sanitize(b.rabbits.participantIds) },
@@ -1047,6 +1114,10 @@ function GolfBetsApp() {
   const foursomes = useMemo(() => calculateFoursomes(course, scores, players, bets.foursome, segments, order, roundHandicapBasis), [course, scores, players, bets.foursome, segments, order, roundHandicapBasis]);
   const ballFriend = useMemo(() => calculateBallFriend(course, scores, players, bets.ballFriend, ballFriendSetup, order, roundHandicapBasis), [course, scores, players, bets.ballFriend, ballFriendSetup, order, roundHandicapBasis]);
   const personals = useMemo(() => calculatePersonalBets(personalBets, ownerId, players, course, scores, order), [personalBets, ownerId, players, course, scores, order]);
+  const unresolvedExternalPersonalBets = useMemo(
+    () => incompleteExternalPersonalBets(personalBets, personals.results),
+    [personalBets, personals.results],
+  );
   const polla = useMemo(() => calculatePolla(course, scores, players, bets.polla, order, roundHandicapBasis), [course, scores, players, bets.polla, order, roundHandicapBasis]);
   const miniPolla = useMemo(() => calculateMiniPolla(course, scores, players, bets.miniPolla, order, roundHandicapBasis), [course, scores, players, bets.miniPolla, order, roundHandicapBasis]);
   const manual = useMemo(() => calculateManualBets(players, manualBets), [players, manualBets]);
@@ -1092,8 +1163,8 @@ function GolfBetsApp() {
   const ownerNet = ownerBetResult - ownerExpenseTotal;
   const totalRabbitsWon = Object.values(rabbits.won).reduce((total, count) => total + count, 0);
   const totalSkinsWon = Object.values(skins.won).reduce((total, count) => total + count, 0);
-  const rabbitMode = normalizeRabbitMode(bets.rabbits.mode);
-  const skinsMode = normalizeSkinsMode(bets.skins.mode);
+  const rabbitMode = bets.rabbits.mode === undefined ? "continuous" : bets.rabbits.mode;
+  const skinsMode = bets.skins.mode === undefined ? "carry" : bets.skins.mode;
   const unitQuantitySummary = useMemo(
     () => summarizeNetUnitQuantities(units.net, players.map(player => player.id)),
     [units.net, players],
@@ -1143,7 +1214,7 @@ function GolfBetsApp() {
     { key: "fish", label: "🐟 Peces", balances: fish.balances, active: bets.fish.enabled, played: fish.totalQuantity > 0 || fish.halves.some(half => half.settled) },
     { key: "loba", label: "🐺 Loba", balances: loba.balances, active: bets.loba.enabled, played: loba.details.length > 0 },
     ...supplementalGeneralResults.map(result => ({ key: `supplemental-${result.betId}`, label: supplementalBetDisplayLabel(result.type, result.label), balances: result.balances, active: true, played: result.lines.length > 0 || result.complete })),
-    { key: "manual", label: "✍️ Manuales", balances: manual.balances, active: manualBets.some(bet => bet.enabled !== false), played: manualBets.some(bet => bet.enabled !== false && Object.values(bet.amounts).some(amount => amount !== 0)) },
+    { key: "manual", label: "✍️ Manuales", balances: manual.balances, active: manualBets.some(bet => bet.enabled !== false), played: manualBets.some(bet => bet.enabled !== false && Object.values(bet.amounts ?? {}).some(amount => amount !== 0)) },
   ], [rabbitBalances, bets.rabbits.enabled, rabbits.events.length, rabbits.won, totalRabbitsWon, skinBalances, bets.skins.enabled, skins.events.length, skins.won, totalSkinsWon, units.balances, unitQuantitySummary, bets.units.enabled, completedHoles, monkey.balances, monkey.points, monkey.details.length, bets.monkey?.enabled, foursomes.balances, bets.foursome.enabled, foursomes.matches, ballFriend.balances, ballFriend.points, bets.ballFriend.enabled, ballFriend.details.length, pollaFirstBalances, pollaSecondBalances, pollaNassauBalances, miniPollaComponentBalances, bets.polla.first9.enabled, bets.polla.second9.enabled, bets.polla.total18.enabled, bets.miniPolla.enabled, pollaFirstDetail, pollaSecondDetail, pollaNassauDetail, miniPollaDetail, settlementIds, vipers.balances, bets.vipers.enabled, vipers.totalQuantity, vipers.halves, camels.balances, bets.camels.enabled, camels.totalQuantity, camels.halves, fish.balances, bets.fish.enabled, fish.totalQuantity, fish.halves, loba.balances, bets.loba.enabled, loba.details.length, supplementalGeneralResults, manual.balances, manualBets]);
   const generalResults = useMemo(
     () => buildGeneralResultsTable(players.map(player => player.id), generalResultCategories, generalBetBalances),
@@ -1337,7 +1408,11 @@ function GolfBetsApp() {
   }
 
   function manualBetTotal(bet: ManualBet) {
-    return players.reduce((sum, p) => sum + Number(bet.amounts[p.id] ?? 0), 0);
+    return players.reduce((sum, p) => sum + Number(bet.amounts?.[p.id] ?? 0), 0);
+  }
+
+  function manualBetIsValid(bet: ManualBet) {
+    return isFiniteZeroSum(players.map((player) => bet.amounts?.[player.id] ?? 0));
   }
 
   function addUnit(playerId: string, amount: number, label = amount > 0 ? "Otra positiva" : "Copa") {
@@ -1375,8 +1450,8 @@ function GolfBetsApp() {
 
   function toggleBasePair(segmentId: string, playerId: string) {
     setSegments((segs) => segs.map((s) => {
-      if (s.id !== segmentId) return s;
-      const pair = [...s.basePair];
+      if (!s || typeof s !== "object" || s.id !== segmentId) return s;
+      const pair = Array.isArray(s.basePair) ? [...s.basePair] : [];
       const exists = pair.includes(playerId);
       const next = exists ? pair.filter((id) => id !== playerId) : pair.length < 2 ? [...pair, playerId] : [pair[1], playerId];
       return { ...s, basePair: next };
@@ -1474,7 +1549,7 @@ function GolfBetsApp() {
   function setExternalPersonalScore(betId: string, hole: number, value: number | null) {
     setPersonalBets((bets) => bets.map((b) => b.id === betId ? {
       ...b,
-      externalScores: { ...b.externalScores, [hole]: value },
+      externalScores: { ...b.externalScores, [hole]: value === null ? null : Math.max(1, Math.trunc(value)) },
     } : b));
   }
 
@@ -1533,6 +1608,13 @@ function GolfBetsApp() {
   }
 
   function saveRound() {
+    if (betConfigurationIssues.length) {
+      setShowBetSetupErrors(true);
+      setEditingRound(true);
+      setTab("setup");
+      setFeedback("Revisa la configuración de apuestas antes de guardar resultados en Histórico.");
+      return;
+    }
     if (hasActiveBettingConfiguration() && !hasPersistedBettingConsent()) {
       runAfterBettingConsent(() => latestSaveRound.current());
       return;
@@ -1546,6 +1628,20 @@ function GolfBetsApp() {
     if (!snapshot) return;
     if (order.some(number => players.some(player => typeof scores[number]?.[player.id] !== "number"))) {
       setFeedback("Faltan scores por confirmar. Completa la tarjeta antes de terminar la ronda."); return;
+    }
+    const incompleteCapture = firstIncompleteRoundCapture({
+      order, players, scores, bets, segments, supplementalBets, putts,
+      counterBetKeepers, counterBetEvents, lobaHoles, ballFriendSetup,
+    });
+    if (incompleteCapture) {
+      setCurrentIndex(incompleteCapture.index);
+      setHoleValidationErrors(incompleteCapture.errors);
+      setTab("round");
+      setFeedback(`Revisa las capturas pendientes del hoyo ${incompleteCapture.holeNumber} antes de guardar la ronda.`);
+      return;
+    }
+    if (unresolvedExternalPersonalBets.length) {
+      setFeedback(`Completa la tarjeta externa de ${unresolvedExternalPersonalBets.map((bet) => bet.rivalName?.trim() || "Rival externo").join(", ")} para liquidar sus apuestas personales antes de guardar.`); return;
     }
     const storedHistory = readStoredJson<unknown>(localStorage, STORAGE_KEYS.history, []);
     if (Array.isArray(storedHistory) && storedHistory.some((round) => round && typeof round === "object" && (round as RoundSnapshot).id === roundId)) {
@@ -1609,7 +1705,7 @@ function GolfBetsApp() {
     setPlayers(restored.players!); setOwnerId(restored.ownerId); setScores(restored.scores!); setScoreEdits({});
     setStartHole(restored.startHole || (restored.order![0] === 10 ? 10 : 1)); setRoundHoles(restoredRoundHoles);
     setRoundHandicapBasis(normalizeRoundHandicapBasis(restored.handicapBasis));
-    setBets(restored.betConfig!); setSegments(restored.segments || []);
+    setBets(restored.betConfig!); setSegments(normalizeFoursomeSegments(restored.segments, restored.order!, restored.betConfig!.foursome.segmentSize));
     setPersonalBets(restored.personalBets || []); setUnitEvents(restored.unitEvents || []);
     setSupplementalBets(normalizeSupplementalBets(restored.supplementalBets, restoredRoundHoles)); setPutts(restored.putts || {});
     setCounterBetEvents(restored.counterBetEvents || []); setCounterBetKeepers(restored.counterBetKeepers || emptyCounterBetKeepers()); setLobaHoles(restored.lobaHoles || {});
@@ -1983,7 +2079,7 @@ function GolfBetsApp() {
           {expanded && bet.enabled !== false && <fieldset disabled={!bettingConsentGranted} id={`personal-editor-${bet.id}`} className="personalSetupBody bettingEditorFieldset">
           <p className="muted">Ventaja y presión aplican solo a esta apuesta.</p>
           <div className="grid3">
-            <div><label>¿Dónde juega el rival?</label><select data-personal-first value={bet.rivalMode} onFocus={(event) => event.currentTarget.closest<HTMLElement>("[data-personal-editor]")?.scrollIntoView({ behavior: "smooth", block: "center" })} onChange={(e) => {
+            <div><label>¿Dónde juega el rival?</label><select data-personal-first value={bet.rivalMode === "group" || bet.rivalMode === "external" ? bet.rivalMode : ""} onFocus={(event) => event.currentTarget.closest<HTMLElement>("[data-personal-editor]")?.scrollIntoView({ behavior: "smooth", block: "center" })} onChange={(e) => {
               const mode = e.target.value as "group" | "external";
               const first = players.find((p) => p.id !== ownerId);
               const saved = savedPersonalRivals.find((template) => template.id === bet.externalRivalId) || savedPersonalRivals[0];
@@ -1995,29 +2091,32 @@ function GolfBetsApp() {
                 rivalName: mode === "group" ? (first?.name || bet.rivalName) : (saved?.name || bet.rivalName || "Rival"),
               };
               updatePersonalBet(bet.id, mode === "external" && saved ? applySavedPersonalRivalTemplate(nextBet, saved) : nextBet);
-            }}><option value="group">Mi foursome</option><option value="external">Otro foursome</option></select></div>
+            }}><option value="" disabled>Selecciona</option><option value="group">Mi foursome</option><option value="external">Otro foursome</option></select></div>
             {bet.rivalMode === "group" ? <div><label>Rival</label><select value={bet.rivalPlayerId || ""} onChange={(e) => {
               const rp = players.find((p) => p.id === e.target.value);
               updatePersonalBet(bet.id, { rivalPlayerId: e.target.value, rivalName: rp?.name || "Rival" });
-            }}>{players.filter((p) => p.id !== ownerId).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div> : <>
+            }}>{players.filter((p) => p.id !== ownerId).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></div> : bet.rivalMode === "external" ? <>
               <div><label>Rival guardado</label><select value={bet.externalRivalId || ""} onChange={(e) => {
                 const saved = savedPersonalRivals.find((r) => r.id === e.target.value);
                 updatePersonalBet(bet.id, saved ? applySavedPersonalRivalTemplate(bet, saved) : { externalRivalId: undefined, rivalHandicap: null });
               }}><option value="">+ Nuevo rival</option>{savedPersonalRivals.map((r) => <option key={r.id} value={r.id}>{r.name}{typeof r.handicap === "number" ? ` · HCP ${r.handicap}` : ""}</option>)}</select></div>
-              <div><label>Nombre del rival para esta ronda</label><input value={bet.rivalName} placeholder="Ej. Daniel" onChange={(e) => updatePersonalBet(bet.id, { rivalName: e.target.value })} /></div>
-              <div className="templateSaveAction"><label>Plantilla frecuente</label><button className="secondary" disabled={!bet.rivalName.trim()} onClick={() => savePersonalRivalFromBet(bet)}>{bet.externalRivalId ? "Guardar cambio en rival frecuente" : "Guardar como rival frecuente"}</button></div>
-            </>}
+              <div><label>Nombre del rival para esta ronda</label><input value={bet.rivalName ?? ""} placeholder="Ej. Daniel" onChange={(e) => updatePersonalBet(bet.id, { rivalName: e.target.value })} /></div>
+              <div className="templateSaveAction"><label>Plantilla frecuente</label><button className="secondary" disabled={!bet.rivalName?.trim()} onClick={() => savePersonalRivalFromBet(bet)}>{bet.externalRivalId ? "Guardar cambio en rival frecuente" : "Guardar como rival frecuente"}</button></div>
+            </> : null}
             <MoneyInput label="Valor base" value={bet.baseValue} onChange={(v) => updatePersonalBet(bet.id, { baseValue: v })} />
             {roundHoles === 18 && <div><label htmlFor={`pressure-${bet.id}`}>Presión · 2ª vuelta jugada</label><select id={`pressure-${bet.id}`} value={bet.pressureMultiplier ?? bet.back9Multiplier ?? 1} onChange={(event) => updatePersonalBet(bet.id, { pressureMultiplier: Number(event.target.value) as 1 | 2 | 3 | 4 | 5, back9Multiplier: 1 })}><option value={1}>Sin presión</option><option value={2}>Sí · 2x</option>{[3,4,5].map((value) => <option key={value} value={value}>{value}x</option>)}</select><small>Aplica a {startHole === 10 ? "H1–9" : "H10–18"}. Total 18 conserva valor base.</small></div>}
             {roundHoles === 18 && <div><label htmlFor={`carry-${bet.id}`}>Carry</label><select id={`carry-${bet.id}`} value={bet.carryEnabled ? "yes" : "no"} onChange={(event) => updatePersonalBet(bet.id, { carryEnabled: event.target.value === "yes" })}><option value="no">No</option><option value="yes">Sí</option></select><small>Match y Medal independientes. Se suma a la presión.</small></div>}
-            <div><label>Quién recibe ventaja</label><select value={bet.advantageReceiver === "owner" ? "owner" : "rival"} onChange={(e) => updatePersonalBet(bet.id, { advantageReceiver: e.target.value as "owner" | "rival" })}><option value="owner">{owner?.name} recibe</option><option value="rival">{displayRival} recibe</option></select></div>
+            <div><label>Quién recibe ventaja</label><select value={bet.advantageReceiver === "owner" || bet.advantageReceiver === "rival" ? bet.advantageReceiver : ""} onChange={(e) => updatePersonalBet(bet.id, { advantageReceiver: e.target.value as "owner" | "rival" })}><option value="" disabled>Selecciona</option><option value="owner">{owner?.name} recibe</option><option value="rival">{displayRival} recibe</option></select></div>
             <NumberField label="Golpes que recibe" value={bet.advantageStrokes} onChange={(v) => updatePersonalBet(bet.id, { advantageStrokes: Math.max(0, v) })} />
           </div>
           {bet.advantageStrokes === 0 && <div className="hint">Sin ventaja.</div>}
           <div className="componentGrid">{(roundHoles === 9
             ? ([["match1","Match 9"],["medal1","Medal 9"]] as [keyof PersonalBet["components"], string][])
             : ([["match1",`Match 1ª · ${startHole === 10 ? "H10–18" : "H1–9"}`],["medal1",`Medal 1ª · ${startHole === 10 ? "H10–18" : "H1–9"}`],["match2",`Match 2ª · ${startHole === 10 ? "H1–9" : "H10–18"}`],["medal2",`Medal 2ª · ${startHole === 10 ? "H1–9" : "H10–18"}`],["match18","Match Total 18"],["medal18","Medal Total 18"]] as [keyof PersonalBet["components"], string][])
-          ).map(([key, label]) => <button key={key} className={`component ${bet.components[key] ? "selected" : ""}`} onClick={() => updatePersonalBet(bet.id, { components: { ...bet.components, [key]: !bet.components[key] } })}>{bet.components[key] ? "✓ " : ""}{label}</button>)}</div>
+          ).map(([key, label]) => {
+            const selected = Boolean(bet.components?.[key]);
+            return <button type="button" key={key} className={`component ${selected ? "selected" : ""}`} onClick={() => updatePersonalBet(bet.id, { components: { ...(bet.components || {}), [key]: !selected } as PersonalBet["components"] })}>{selected ? "✓ " : ""}{label}</button>;
+          })}</div>
 
           {bet.rivalMode === "external" && <div className="externalCard">
             <div className="row between"><div><b>Tarjeta de {displayRival}</b><div className="muted">Captúrala aparte; no entra a Conejos, Skins, Foursome, Bola Amiga ni Unidades.</div></div><span className="pillSmall">Otro grupo</span></div>
@@ -2039,13 +2138,13 @@ function GolfBetsApp() {
       {!manualBets.length && <div className="empty">Sin apuestas manuales.</div>}
       {[...manualBets].sort((first, second) => Number(second.enabled !== false) - Number(first.enabled !== false)).map((bet) => {
         const total = manualBetTotal(bet);
-        const valid = Math.abs(total) < 0.001;
+        const valid = manualBetIsValid(bet);
         return <div data-manual-editor={bet.id} className={`manualBet ${bet.enabled === false ? "betItemDisabled" : ""}`} key={bet.id}>
-          <div className="row between"><input disabled={!bettingConsentGranted} data-manual-first className="manualName" value={bet.name} onChange={(e) => updateManualBet(bet.id, { name: e.target.value })} /><span className="manualBetActions"><Toggle on={bet.enabled !== false} disabled={!bettingConsentGranted} label={`${bet.enabled === false ? "Activar" : "Desactivar"} ${bet.name || "apuesta manual"}`} onClick={() => {
+          <div className="row between"><input disabled={!bettingConsentGranted} data-manual-first className="manualName" value={bet.name ?? ""} onChange={(e) => updateManualBet(bet.id, { name: e.target.value })} /><span className="manualBetActions"><Toggle on={bet.enabled !== false} disabled={!bettingConsentGranted} label={`${bet.enabled === false ? "Activar" : "Desactivar"} ${bet.name || "apuesta manual"}`} onClick={() => {
             if (bet.enabled === false) runAfterBettingConsent(() => updateManualBet(bet.id, { enabled: true, enabledBeforeCategoryOff: undefined }));
             else updateManualBet(bet.id, { enabled: false, enabledBeforeCategoryOff: undefined });
           }} /><button className="remove" aria-label={`Eliminar ${bet.name || "apuesta manual"}`} onClick={() => setManualBets((bs) => bs.filter((x) => x.id !== bet.id))}>×</button></span></div>
-          {bet.enabled !== false && <><fieldset disabled={!bettingConsentGranted} className="manualGrid bettingEditorFieldset">{players.map((p) => <label key={p.id}><span>{p.name}</span><SignedMoneyInput label={`${bet.name || "apuesta manual"} · ${p.name}`} value={bet.amounts[p.id] ?? 0} onChange={(next) => setManualAmount(bet.id, p.id, next)} /></label>)}</fieldset>
+          {bet.enabled !== false && <><fieldset disabled={!bettingConsentGranted} className="manualGrid bettingEditorFieldset">{players.map((p) => <label key={p.id}><span>{p.name}</span><SignedMoneyInput label={`${bet.name || "apuesta manual"} · ${p.name}`} value={bet.amounts?.[p.id] ?? 0} onChange={(next) => setManualAmount(bet.id, p.id, next)} /></label>)}</fieldset>
           <div className={`manualBalance ${valid ? "good" : "bad"}`}>{valid ? "✓ Cierra en $0 y se suma al resultado" : `Falta cuadrar ${money(-total)}`}</div></>}
         </div>;
       })}
@@ -2057,10 +2156,10 @@ function GolfBetsApp() {
     if (!activeManualBets.length) return <div className="empty">Sin apuestas manuales activas en esta ronda.</div>;
     return <div className="manualResultsList">{activeManualBets.map((bet) => {
       const total = manualBetTotal(bet);
-      const valid = Math.abs(total) < 0.001;
+      const valid = manualBetIsValid(bet);
       return <article className="manualResult" key={bet.id}>
-        <div className="row between"><b>{bet.name.trim() || "Apuesta manual"}</b><span className={valid ? "good" : "bad"}>{valid ? "✓ Cierra en $0" : "Pendiente de cuadrar"}</span></div>
-        <div className="manualResultPlayers">{players.map((player) => { const amount = bet.amounts[player.id] ?? 0; return <div key={player.id}><span>{player.name}</span><strong className={amount > 0 ? "good" : amount < 0 ? "bad" : ""}>{signedMoney(amount)}</strong></div>; })}</div>
+        <div className="row between"><b>{typeof bet.name === "string" && bet.name.trim() ? bet.name.trim() : "Apuesta manual"}</b><span className={valid ? "good" : "bad"}>{valid ? "✓ Cierra en $0" : "Pendiente de cuadrar"}</span></div>
+        <div className="manualResultPlayers">{players.map((player) => { const amount = bet.amounts?.[player.id] ?? 0; return <div key={player.id}><span>{player.name}</span><strong className={amount > 0 ? "good" : amount < 0 ? "bad" : ""}>{signedMoney(amount)}</strong></div>; })}</div>
         <div className="manualResultTotal"><span>Total de la apuesta</span><b className={valid ? "good" : "bad"}>{signedMoney(total)}</b></div>
       </article>;
     })}</div>;
@@ -2210,7 +2309,7 @@ function GolfBetsApp() {
       ballFriendSetup: ballFriendSetup[holeNumber],
       extraErrors: [
         ...(missingPutts.length ? [`Captura los putts de ${missingPutts.join(", ")} antes de continuar.`] : []),
-        ...missingActiveHandicapPlayers.map((player) => `${player.name.trim() || "Sin nombre"}: Completa el HCP para calcular las apuestas activas.`),
+        ...betConfigurationIssues.map((issue) => issue.message),
       ],
     });
     if (validationErrors.length) {
@@ -2294,7 +2393,7 @@ function GolfBetsApp() {
       extras.push(`${isPersonalSupplementalType(result.type) ? "↔ Personales · " : ""}${supplementalBetDisplayLabel(result.type, result.label)} · hoyo: ${holeLine || "pendiente o sin movimiento"}\nAcumulado hasta H${holeNumber}: ${balance || "$0"}`);
     }
     for (const bet of manualBets.filter((item) => item.enabled !== false)) {
-      const balance = Object.entries(bet.amounts).filter(([, amount]) => amount !== 0).map(([id, amount]) => `${playerName(id)} ${signedMoney(amount)}`).join(" · ");
+      const balance = Object.entries(bet.amounts ?? {}).filter(([, amount]) => amount !== 0).map(([id, amount]) => `${playerName(id)} ${signedMoney(amount)}`).join(" · ");
       extras.push(`✍️ Manuales · ${bet.name || "Apuesta"}: ${balance || "pendiente o $0"}`);
     }
     if (bets.monkey?.enabled) {
@@ -2355,8 +2454,30 @@ function GolfBetsApp() {
       playerCount: players.length,
     };
   }, [draftAvailable, roundClosed, roundReviewPending, courseSelected, course.name, roundDate, roundHoles, order, currentIndex, completedHoles, players.length, scores]);
+  const openActiveRound = () => {
+    if (betConfigurationIssues.length) {
+      setShowBetSetupErrors(true);
+      setEditingRound(true);
+      setFeedback("La ronda se conserva, pero debes corregir sus apuestas activas antes de continuar la tarjeta.");
+      setTab("setup");
+      return;
+    }
+    setTab("round");
+  };
   const continueActiveRound = () => {
-    setTab(activeRoundContinueTarget(activeRoundSummary?.status, courseSelected));
+    const target = activeRoundContinueTarget(activeRoundSummary?.status, courseSelected);
+    if (target === "round") openActiveRound();
+    else setTab(target);
+  };
+  const handlePageBack = () => {
+    if (tab === "setup" && editingRound && betConfigurationIssues.length) {
+      setEditingRound(false);
+      setShowBetSetupErrors(true);
+      setFeedback("La configuración incompleta quedó guardada como borrador. Corrígela antes de continuar la tarjeta.");
+      setTab("welcome");
+      return;
+    }
+    goBack();
   };
   const availableHistoryYears = useMemo(() => historyYears(history), [history]);
   const filteredHistory = useMemo(() => filterHistory(history, historyYear, historyMonth), [history, historyYear, historyMonth]);
@@ -2415,7 +2536,7 @@ function GolfBetsApp() {
       onOpenActivity={openPersonalActivity}
     />}
 
-    {!(["welcome", "play", "groups", "social", "profile"] as AppTab[]).includes(tab) && tab !== "rules" && <button className="secondary pageBack" onClick={goBack}>← Regresar</button>}
+    {!(["welcome", "play", "groups", "social", "profile"] as AppTab[]).includes(tab) && tab !== "rules" && <button className="secondary pageBack" onClick={handlePageBack}>← Regresar</button>}
 
     {tab === "play" && <PlayHub
       activeRound={activeRoundSummary}
@@ -2467,7 +2588,7 @@ function GolfBetsApp() {
         {courseSelected && <div className="courseMeta"><span>18 hoyos configurados</span>{course.updatedAt && <span>Última actualización: {course.updatedAt}</span>}<button onClick={() => { setCourseEditorSelectOnSave(true); setCourseDraft(withDefaultLaVistaRules(course)); setTab("courses"); }}>{course.name === "La Vista Temporal" ? "Editar campo temporal" : "Editar campo"}</button>{isLaVistaCourse(course.name) && <button onClick={() => { setRulesCourseContext(course.name); setTab("rules"); }}>Ver Reglas Locales</button>}</div>}
       </section>
 
-      <section className="card">
+      <section className="card" id="round-players">
         <div className="sectionTitle"><div><h2>2. Jugadores</h2><p>Captura el HCP original de cada jugador para esta ronda.</p></div><button className="textButton" onClick={addPlayer}>+ Jugador</button></div>
         {!players.length && <div className="empty">Agrega los jugadores de esta ronda.</div>}
         {players.map((p) => <div className="playerEdit" key={p.id}>
@@ -2500,7 +2621,7 @@ function GolfBetsApp() {
         {!bettingConsentGranted && <div className="notice compactConsentNotice" role="status">Para activar o registrar apuestas, completa el consentimiento específico desde <button type="button" className="textButton" onClick={() => setTab("account")}>Mi Cuenta</button>. Tus datos anteriores se conservan.</div>}
         <div className="groupedBetSetupList">
 
-        <SetupBetCard id="rabbits" icon="🐇" title="Conejos" description="Gana hoyos · captura y conserva el conejo" help="rabbits" enabled={bets.rabbits.enabled} locked={!bettingConsentGranted} requestActivation={requestBettingConsent} onEnabledChange={(enabled) => setBets((current) => ({ ...current, rabbits: { ...current.rabbits, enabled } }))}><BetModeControl label="conejos" value={rabbitMode} options={RABBIT_MODE_OPTIONS} onChange={(mode) => setBets((current) => ({ ...current, rabbits: { ...current.rabbits, mode } }))} /><div className="grid3"><MoneyInput label="Valor" value={bets.rabbits.value} onChange={(v) => setBets({ ...bets, rabbits: { ...bets.rabbits, value: v } })} /><HcpPercentInput value={bets.rabbits.hcpPct} onChange={(v) => setBets({ ...bets, rabbits: { ...bets.rabbits, hcpPct: v } })} /><HandicapModeSelect value={bets.rabbits.decimals} onChange={(decimals) => setBets({ ...bets, rabbits: { ...bets.rabbits, decimals } })} /></div><label className="miniLabel">Participan</label><ParticipantChips players={players} selected={bets.rabbits.participantIds} onChange={(ids) => setBets({ ...bets, rabbits: { ...bets.rabbits, participantIds: ids } })} /></SetupBetCard>
+        <SetupBetCard id="rabbits" icon="🐇" title="Conejos" description="Gana hoyos · captura y conserva el conejo" help="rabbits" enabled={bets.rabbits.enabled} locked={!bettingConsentGranted} requestActivation={requestBettingConsent} onEnabledChange={(enabled) => setBets((current) => ({ ...current, rabbits: { ...current.rabbits, enabled } }))}><BetModeControl label="conejos" value={rabbitMode} options={RABBIT_MODE_OPTIONS} onChange={(mode) => setBets((current) => ({ ...current, rabbits: { ...current.rabbits, mode, ...(mode === "continuous" ? { accumulate: true } : {}) } }))} /><div className="grid3"><MoneyInput label="Valor" value={bets.rabbits.value} onChange={(v) => setBets({ ...bets, rabbits: { ...bets.rabbits, value: v } })} /><HcpPercentInput value={bets.rabbits.hcpPct} onChange={(v) => setBets({ ...bets, rabbits: { ...bets.rabbits, hcpPct: v } })} /><HandicapModeSelect value={bets.rabbits.decimals} onChange={(decimals) => setBets({ ...bets, rabbits: { ...bets.rabbits, decimals } })} /></div><label className="miniLabel">Participan</label><ParticipantChips players={players} selected={bets.rabbits.participantIds} onChange={(ids) => setBets({ ...bets, rabbits: { ...bets.rabbits, participantIds: ids } })} /></SetupBetCard>
 
         <SetupBetCard id="skins" icon="⛳" title="Skins" description="Mejor score neto único gana el skin" help="skins" enabled={bets.skins.enabled} locked={!bettingConsentGranted} requestActivation={requestBettingConsent} onEnabledChange={(enabled) => setBets((current) => ({ ...current, skins: { ...current.skins, enabled } }))}><BetModeControl label="skins" value={skinsMode} options={SKINS_MODE_OPTIONS} onChange={(mode) => setBets((current) => ({ ...current, skins: { ...current.skins, mode } }))} /><div className="grid3"><MoneyInput label="Valor" value={bets.skins.value} onChange={(v) => setBets({ ...bets, skins: { ...bets.skins, value: v } })} /><HcpPercentInput value={bets.skins.hcpPct} onChange={(v) => setBets({ ...bets, skins: { ...bets.skins, hcpPct: v } })} /><HandicapModeSelect value={bets.skins.decimals} onChange={(decimals) => setBets({ ...bets, skins: { ...bets.skins, decimals } })} /></div><label className="miniLabel">Participan</label><ParticipantChips players={players} selected={bets.skins.participantIds} onChange={(ids) => setBets({ ...bets, skins: { ...bets.skins, participantIds: ids } })} /></SetupBetCard>
 
@@ -2515,7 +2636,7 @@ function GolfBetsApp() {
               <HcpPercentInput value={bets.foursome.hcpPct} onChange={(v) => setBets({ ...bets, foursome: { ...bets.foursome, handicapMethod: "configured", hcpPct: v } })} />
               {(bets.foursome.mode === "fixed" || bets.foursome.mode === "fixed_points") && <MoneyInput label="Foursome fijo" value={bets.foursome.fixedValue} onChange={(v) => setBets({ ...bets, foursome: { ...bets.foursome, fixedValue: v } })} />}
               {(bets.foursome.mode === "points" || bets.foursome.mode === "fixed_points") && <MoneyInput label="Valor punto / patada" value={bets.foursome.pointValue} onChange={(v) => setBets({ ...bets, foursome: { ...bets.foursome, pointValue: v } })} />}
-              <div><label>Decimales</label><select aria-label="Decimales Foursome" value={bets.foursome.decimals} onChange={(e) => setBets({ ...bets, foursome: { ...bets.foursome, handicapMethod: "configured", decimals: e.target.value as "partial" | "round" } })}><option value="round">Redondear</option><option value="partial">Cuentan</option></select></div>
+              <DecimalModeSelect label="Decimales Foursome" value={bets.foursome.decimals} onChange={(decimals) => setBets({ ...bets, foursome: { ...bets.foursome, handicapMethod: "configured", decimals } })} />
             </div>
             {roundHoles === 18 && <div className="pressureOption pressureGrid">
               <div><b>Presión Foursome</b><span>Se identifica siempre por hoyos físicos, aunque la salida sea H10.</span></div>
@@ -2524,14 +2645,16 @@ function GolfBetsApp() {
             </div>}
             <label className="miniLabel">Jugadores de Foursome</label><ParticipantChips players={players} selected={bets.foursome.participantIds} onChange={(ids) => setBets({ ...bets, foursome: { ...bets.foursome, participantIds: ids } })} />
             <div className="segments">{segments.map((s) => {
+              if (!s || typeof s !== "object") return null;
               const holes = order.slice(s.startIndex, s.endIndex + 1);
-              const opps = opponentPairs(bets.foursome.participantIds, s.basePair);
-              return <div className="segment" key={s.id}><div className="segmentTitle">Hoyos {holes[0]}–{holes[holes.length - 1]} · pareja base</div><div className="chips">{playersByIds(players, bets.foursome.participantIds).map((p) => <button key={p.id} className={`chipButton ${s.basePair.includes(p.id) ? "selected" : ""}`} onClick={() => toggleBasePair(s.id, p.id)}>{p.name}</button>)}</div>{s.basePair.length === 2 && <div className="generated"><b>{playerName(s.basePair[0])} + {playerName(s.basePair[1])}</b>{opps.length === 1 ? <span>vs {opps[0].map(playerName).join(" + ")}</span> : <span>vs {playersByIds(players, bets.foursome.participantIds).filter(player => !s.basePair.includes(player.id)).map(player => player.name).join(" · ")} · {opps.length} matches</span>}</div>}</div>;
+              const basePair = Array.isArray(s.basePair) ? s.basePair : [];
+              const opps = opponentPairs(bets.foursome.participantIds, basePair);
+              return <div className="segment" key={s.id}><div className="segmentTitle">Hoyos {holes[0]}–{holes[holes.length - 1]} · pareja base</div><div className="chips">{playersByIds(players, bets.foursome.participantIds).map((p) => <button key={p.id} className={`chipButton ${basePair.includes(p.id) ? "selected" : ""}`} onClick={() => toggleBasePair(s.id, p.id)}>{p.name}</button>)}</div>{basePair.length === 2 && <div className="generated"><b>{playerName(basePair[0])} + {playerName(basePair[1])}</b>{opps.length === 1 ? <span>vs {opps[0].map(playerName).join(" + ")}</span> : <span>vs {playersByIds(players, bets.foursome.participantIds).filter(player => !basePair.includes(player.id)).map(player => player.name).join(" · ")} · {opps.length} matches</span>}</div>}</div>;
             })}</div>
           </>
         </SetupBetCard>
 
-        <SetupBetCard id="ball-friend" icon="⚪🤝" title="Bola Amiga" description="Los 2 jugadores de la derecha vs los 2 de la izquierda" help="ball_friend" enabled={bets.ballFriend.enabled} locked={!bettingConsentGranted} requestActivation={requestBettingConsent} onEnabledChange={(enabled) => setBets((current) => ({ ...current, ballFriend: { ...current.ballFriend, enabled } }))}>{roundHandicapBasis === "relative" && <HandicapBaseControl name="Bola Amiga" config={bets.ballFriend} fallback="fixed" onChange={baseMode => setBets({ ...bets, ballFriend: { ...bets.ballFriend, baseMode, fixedBaseHandicap: undefined } })} />}<div className="grid3"><MoneyInput label="Valor punto" value={bets.ballFriend.value} onChange={(v) => setBets({ ...bets, ballFriend: { ...bets.ballFriend, value: v } })} /><HcpPercentInput value={bets.ballFriend.hcpPct} onChange={(v) => setBets({ ...bets, ballFriend: { ...bets.ballFriend, hcpPct: v } })} /><NumberField label="Score máximo" value={bets.ballFriend.maxScore} onChange={(v) => setBets({ ...bets, ballFriend: { ...bets.ballFriend, maxScore: v } })} /></div><label className="miniLabel">Participan</label><ParticipantChips players={players} selected={bets.ballFriend.participantIds} onChange={(ids) => setBets({ ...bets, ballFriend: { ...bets.ballFriend, participantIds: ids } })} /></SetupBetCard>
+        <SetupBetCard id="ball-friend" icon="⚪🤝" title="Bola Amiga" description="Los 2 jugadores de la derecha vs los 2 de la izquierda" help="ball_friend" enabled={bets.ballFriend.enabled} locked={!bettingConsentGranted} requestActivation={requestBettingConsent} onEnabledChange={(enabled) => setBets((current) => ({ ...current, ballFriend: { ...current.ballFriend, enabled } }))}>{roundHandicapBasis === "relative" && <HandicapBaseControl name="Bola Amiga" config={bets.ballFriend} fallback="fixed" onChange={baseMode => setBets({ ...bets, ballFriend: { ...bets.ballFriend, baseMode, fixedBaseHandicap: undefined } })} />}<div className="grid3"><MoneyInput label="Valor punto" value={bets.ballFriend.value} onChange={(v) => setBets({ ...bets, ballFriend: { ...bets.ballFriend, value: v } })} /><HcpPercentInput value={bets.ballFriend.hcpPct} onChange={(v) => setBets({ ...bets, ballFriend: { ...bets.ballFriend, hcpPct: v } })} /><NumberField label="Score máximo" value={bets.ballFriend.maxScore} onChange={(v) => setBets({ ...bets, ballFriend: { ...bets.ballFriend, maxScore: v } })} /><DecimalModeSelect value={bets.ballFriend.decimals} onChange={(decimals) => setBets({ ...bets, ballFriend: { ...bets.ballFriend, decimals } })} /></div><label className="miniLabel">Participan</label><ParticipantChips players={players} selected={bets.ballFriend.participantIds} onChange={(ids) => setBets({ ...bets, ballFriend: { ...bets.ballFriend, participantIds: ids } })} /></SetupBetCard>
 
         <SetupBetCard id="monkey" icon="🐒" title="Monkey" description="Exactamente tres jugadores · 6 puntos por hoyo" help="monkey" enabled={Boolean(bets.monkey?.enabled)} locked={!bettingConsentGranted} requestActivation={requestBettingConsent} onEnabledChange={(enabled) => setBets((current) => ({ ...current, monkey: { value: 20, hcpPct: 100, participantIds: players.slice(0, 3).map((player) => player.id), ...current.monkey, enabled } }))}><div className="grid2"><MoneyInput label="Valor punto Monkey" value={bets.monkey?.value ?? 20} onChange={value=>setBets(current => ({...current,monkey:{...current.monkey!,value}}))} /><HcpPercentInput value={bets.monkey?.hcpPct ?? 100} onChange={hcpPct=>setBets(current => ({...current,monkey:{...current.monkey!,hcpPct}}))} /></div><ParticipantChips players={players} selected={bets.monkey?.participantIds ?? []} onChange={participantIds=>setBets(current => ({...current,monkey:{...current.monkey!,participantIds}}))} /><p>{monkey.valid ? roundHandicapBasis === "course" ? `HCP sobre el campo · ${bets.monkey?.hcpPct ?? 100}% · sin redondeo.` : `HCP entre estos tres · ${bets.monkey?.hcpPct ?? 100}% · sin redondeo.` : missingActiveHandicapPlayers.length ? "Completa el HCP de los participantes para calcular." : "Selecciona exactamente tres jugadores; no se calcula con otra cantidad."}</p></SetupBetCard>
 
@@ -2575,7 +2698,7 @@ function GolfBetsApp() {
 
         <SetupBetCard id="mini-polla" icon="⚡" title="Mini Polla" description="Medal neto de los últimos 3 hoyos realmente jugados" help="mini_polla" enabled={bets.miniPolla.enabled} locked={!bettingConsentGranted} requestActivation={requestBettingConsent} onEnabledChange={(enabled) => setBets((current) => ({ ...current, miniPolla: { ...current.miniPolla, enabled } }))}>
           <>
-            <div className="grid3"><MoneyInput label="Valor" value={bets.miniPolla.value} onChange={(v) => setBets({ ...bets, miniPolla: { ...bets.miniPolla, value: v } })} /><HcpPercentInput value={bets.miniPolla.hcpPct} onChange={(v) => setBets({ ...bets, miniPolla: { ...bets.miniPolla, hcpPct: v } })} /><div><label>Decimales</label><select value={bets.miniPolla.decimals} onChange={(e) => setBets({ ...bets, miniPolla: { ...bets.miniPolla, decimals: e.target.value as "partial" | "round" } })}><option value="round">Redondear</option><option value="partial">Cuentan</option></select></div></div>
+            <div className="grid3"><MoneyInput label="Valor" value={bets.miniPolla.value} onChange={(v) => setBets({ ...bets, miniPolla: { ...bets.miniPolla, value: v } })} /><HcpPercentInput value={bets.miniPolla.hcpPct} onChange={(v) => setBets({ ...bets, miniPolla: { ...bets.miniPolla, hcpPct: v } })} /><DecimalModeSelect value={bets.miniPolla.decimals} onChange={(decimals) => setBets({ ...bets, miniPolla: { ...bets.miniPolla, decimals } })} /></div>
             <label className="miniLabel">Participan</label><ParticipantChips players={players} selected={bets.miniPolla.participantIds} onChange={(ids) => setBets({ ...bets, miniPolla: { ...bets.miniPolla, participantIds: ids } })} />
             <div className="hint">Siempre toma los últimos 3 hoyos realmente jugados: {order.slice(-3).join(", ")}.</div>
           </>
@@ -2615,8 +2738,14 @@ function GolfBetsApp() {
             if (enabled) setPersonalModeEnabled(false); else runAfterBettingConsent(() => { setPersonalModeEnabled(true); setNassauSetupOpen(true); });
           }} /></span>}
         >{personalBets.some((bet) => bet.enabled !== false) && <><div className="setupModeTools"><button type="button" className="textButton" onClick={() => runAfterBettingConsent(() => { newPersonalBet(); setNassauSetupOpen(true); })}>+ Nassau Individual</button></div>{supplementalBets.some((bet) => bet.type === "individual_nassau") && <div className="notice">Se conserva sin reinterpretar una Nassau heredada entre jugadores distintos del principal. Sigue calculándose con su ID, pareja, ventaja y monto originales; no se convirtió automáticamente.</div>}{renderPersonalBetsEditor()}</>}</ResultAccordion>
+        {supplementalBets.some((bet) => bet.type === "individual_nassau") && <SupplementalBetsEditor bets={supplementalBets} players={players} onChange={setSupplementalBets} requestActivation={requestBettingConsent} locked={!bettingConsentGranted} types={["individual_nassau"]} roundHoles={roundHoles} allowAdd={false} />}
         <SupplementalBetsEditor bets={supplementalBets} players={players} onChange={setSupplementalBets} requestActivation={requestBettingConsent} locked={!bettingConsentGranted} types={["dollar_stroke", "individual_pressures"]} roundHoles={roundHoles} />
       </ResultAccordion>
+
+      {showBetSetupErrors && betConfigurationIssues.length > 0 && <div id="round-bet-validation" className="notice bad" role="alert">
+        <b>Revisa las apuestas activas antes de iniciar.</b>
+        <ul>{betConfigurationIssues.map((issue) => <li key={`${issue.code}:${issue.sectionId}`}>{issue.message}</li>)}</ul>
+      </div>}
 
       <button className="primary big" disabled={!players.length || players.some((player) => !player.name.trim())} onClick={() => {
         if (!courseSelected) {
@@ -2624,6 +2753,12 @@ function GolfBetsApp() {
           document.getElementById("round-course")?.scrollIntoView({ behavior: "smooth", block: "center" });
           return;
         }
+        if (betConfigurationIssues.length) {
+          setShowBetSetupErrors(true);
+          requestAnimationFrame(() => document.getElementById("round-bet-validation")?.scrollIntoView({ behavior: "smooth", block: "center" }));
+          return;
+        }
+        setShowBetSetupErrors(false);
         const start = () => { setBets(current => freezeRoundHandicapBases(current, players, roundHandicapBasis)); if (!editingRound) setCurrentIndex(0); setEditingRound(false); setTab("round"); };
         if (hasActiveBettingConfiguration()) runAfterBettingConsent(start); else start();
       }}>{editingRound ? "Guardar configuración y continuar →" : "Iniciar ronda →"}</button>
@@ -2729,7 +2864,7 @@ function GolfBetsApp() {
 
     {tab === "standings" && <>
       {renderMonkeyLive()}
-      <section className="hero standingsHero"><div><div className="eyebrow">CÓMO VAMOS</div><h1>Balance provisional.</h1><p>Combina lo ya cobrado con el valor provisional de Foursome y Personales; las Pollas pendientes no se liquidan antes de tiempo.</p></div><button className="secondary" onClick={() => setTab("round")}>Volver al hoyo</button></section>
+      <section className="hero standingsHero"><div><div className="eyebrow">CÓMO VAMOS</div><h1>Balance provisional.</h1><p>Combina lo ya cobrado con el valor provisional de Foursome y Personales; las Pollas pendientes no se liquidan antes de tiempo.</p></div><button className="secondary" onClick={openActiveRound}>Volver al hoyo</button></section>
       <section className="provisionalGrid">{[...players].sort((a, b) => (liveBetBalances[b.id] || 0) - (liveBetBalances[a.id] || 0)).map((player, index) => <div className="stat" key={player.id}><span>{index + 1} · {player.name || "Sin nombre"}</span><b className={(liveBetBalances[player.id] || 0) > 0 ? "good" : (liveBetBalances[player.id] || 0) < 0 ? "bad" : ""}>{signedMoney(liveBetBalances[player.id] || 0)}</b><small>provisional</small></div>)}</section>
       <section className="card highlights"><h2>Highlights</h2>{(() => { const leader = [...players].sort((a, b) => (liveBetBalances[b.id] || 0) - (liveBetBalances[a.id] || 0))[0]; const rabbitLeader = [...players].sort((a, b) => (rabbits.won[b.id] || 0) - (rabbits.won[a.id] || 0))[0]; const skinLeader = [...players].sort((a, b) => (skins.won[b.id] || 0) - (skins.won[a.id] || 0))[0]; return <div className="highlightList">{leader && (liveBetBalances[leader.id] || 0) > 0 && <span>🔥 {leader.name} lidera {signedMoney(liveBetBalances[leader.id])}</span>}{rabbitLeader && (rabbits.won[rabbitLeader.id] || 0) > 0 && <span>🐇 {rabbitLeader.name} lleva {rabbits.won[rabbitLeader.id]} Conejos</span>}{skinLeader && (skins.won[skinLeader.id] || 0) > 0 && <span>⛳ {skinLeader.name} lleva {skins.won[skinLeader.id]} Skins</span>}{!leader && <span>Aún sin datos.</span>}</div>; })()}</section>
 <section className="card"><h2>Desglose por apuesta</h2><div className="tableWrap"><table><thead><tr><th>Jugador</th><th>🐇</th><th>⛳</th><th>📏</th><th>🤝 Foursome</th><th>⚪🤝 Bola Amiga</th><th>🏆 Pollas</th>{liveSupplementalGeneralResults.map((result) => <th key={result.betId}>{supplementalBetDisplayLabel(result.type, result.label)}</th>)}<th>↔ Personales</th><th>✍️ Manuales</th>{bets.monkey?.enabled && <th>🐒 Monkey</th>}{bets.vipers.enabled && <th>🐍</th>}{bets.camels.enabled && <th>🐫</th>}{bets.fish.enabled && <th>🐟</th>}{bets.loba.enabled && <th>🐺</th>}</tr></thead><tbody>{players.map((player) => <tr key={player.id}><td><b>{player.name}</b></td><td>{signedMoney(rabbitBalances[player.id] || 0)}</td><td>{signedMoney(skinBalances[player.id] || 0)}</td><td>{signedMoney(units.balances[player.id] || 0)}</td><td>{signedMoney(foursomes.provisionalBalances[player.id] || 0)}</td><td>{signedMoney(ballFriend.balances[player.id] || 0)}</td><td>{signedMoney((polla.balances[player.id] || 0) + (miniPolla.balances[player.id] || 0))}</td>{liveSupplementalGeneralResults.map((result) => <td key={result.betId}>{signedMoney(result.balances[player.id] || 0)}</td>)}<td>{signedMoney(ownerId === player.id ? livePersonalOpponentResults.reduce((sum, entry) => sum + entry.amount, 0) : livePersonalOpponentResults.filter((entry) => entry.opponentId === player.id).reduce((sum, entry) => sum - entry.amount, 0))}</td><td>{signedMoney(manual.balances[player.id] || 0)}</td>{bets.monkey?.enabled && <td>{signedMoney(monkey.balances[player.id] || 0)}</td>}{bets.vipers.enabled && <td>{signedMoney(vipers.balances[player.id] || 0)}</td>}{bets.camels.enabled && <td>{signedMoney(camels.balances[player.id] || 0)}</td>}{bets.fish.enabled && <td>{signedMoney(fish.balances[player.id] || 0)}</td>}{bets.loba.enabled && <td>{signedMoney(loba.balances[player.id] || 0)}</td>}</tr>)}</tbody></table></div></section>
@@ -2737,7 +2872,7 @@ function GolfBetsApp() {
     </>}
 
     {tab === "results" && <>
-      <section className="hero resultHero"><div><div className="eyebrow">RESULTADO DEL DÍA</div><h1 className={ownerNet >= 0 ? "good" : "bad"}>{money(ownerNet)}</h1><p>{owner?.name}: apuestas {money(ownerBetResult)} · gastos {money(-ownerExpenseTotal)}</p>{roundReviewPending && <small>Pendiente de revisión · aún no está en Histórico</small>}</div>{roundClosed ? <button className="secondary" onClick={() => setTab("history")}>Ver ronda guardada</button> : <button className="secondary" onClick={() => setTab("round")}>Editar tarjeta</button>}</section>
+      <section className="hero resultHero"><div><div className="eyebrow">RESULTADO DEL DÍA</div><h1 className={ownerNet >= 0 ? "good" : "bad"}>{money(ownerNet)}</h1><p>{owner?.name}: apuestas {money(ownerBetResult)} · gastos {money(-ownerExpenseTotal)}</p>{roundReviewPending && <small>Pendiente de revisión · aún no está en Histórico</small>}</div>{roundClosed ? <button className="secondary" onClick={() => setTab("history")}>Ver ronda guardada</button> : <button className="secondary" onClick={openActiveRound}>Editar tarjeta</button>}</section>
 
       <nav className="resultJumpNav" aria-label="Ir a un resultado">
         {resultNavigationItems.map((item) => <button type="button" key={item.id} aria-pressed={Boolean(openResultSections[item.id])} onClick={() => openResultSection(item.id)}>{item.label}</button>)}
@@ -2844,7 +2979,7 @@ function GolfBetsApp() {
       </ResultAccordion>
 
       <section className="card summaryCard"><div><span>Apuestas</span><b className={ownerBetResult >= 0 ? "good" : "bad"}>{money(ownerBetResult)}</b></div><div><span>Gastos</span><b className="bad">{money(-ownerExpenseTotal)}</b></div><div className="grand"><span>NETO DEL DÍA</span><b className={ownerNet >= 0 ? "good" : "bad"}>{money(ownerNet)}</b></div></section>
-      <div className="roundActions"><button className="secondary big" onClick={async () => { const snapshot = currentSnapshot(); if (snapshot) await shareRound(snapshot); }}>Compartir ronda</button>{!roundReviewPending && <button className="secondary big" onClick={requestNewRound}>Nueva ronda</button>}{roundClosed ? <button className="primary big" onClick={() => setTab("history")}>Abrir Histórico</button> : roundReviewPending ? <button className="primary big" disabled={saveStatus === "saving"} onPointerDown={commitFocusedNumericCapture} onClick={requestRoundHistorySave}>Guardar en Histórico</button> : <button className="primary big" onClick={() => setTab("round")}>Volver a la ronda</button>}</div>
+      <div className="roundActions"><button className="secondary big" onClick={async () => { const snapshot = currentSnapshot(); if (snapshot) await shareRound(snapshot); }}>Compartir ronda</button>{!roundReviewPending && <button className="secondary big" onClick={requestNewRound}>Nueva ronda</button>}{roundClosed ? <button className="primary big" onClick={() => setTab("history")}>Abrir Histórico</button> : roundReviewPending ? <button className="primary big" disabled={saveStatus === "saving"} onPointerDown={commitFocusedNumericCapture} onClick={requestRoundHistorySave}>Guardar en Histórico</button> : <button className="primary big" onClick={openActiveRound}>Volver a la ronda</button>}</div>
     </>}
 
     {tab === "history" && <>

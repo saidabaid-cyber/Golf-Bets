@@ -1,13 +1,22 @@
 import type { BetConfig, HandicapBaseConfig, Player, RoundHandicapBasis, SupplementalBet } from "./types";
 
 export const DEFAULT_ROUND_HANDICAP_BASIS: RoundHandicapBasis = "relative";
+export const MIN_ROUND_HANDICAP = -15;
+export const MAX_ROUND_HANDICAP = 54;
 
 export function normalizeRoundHandicapBasis(value: unknown): RoundHandicapBasis {
   return value === "course" ? "course" : DEFAULT_ROUND_HANDICAP_BASIS;
 }
 
+export function isValidRoundHandicapValue(value: unknown): value is number {
+  return typeof value === "number"
+    && Number.isFinite(value)
+    && value >= MIN_ROUND_HANDICAP
+    && value <= MAX_ROUND_HANDICAP;
+}
+
 export function hasValidRoundHandicap<T extends Pick<Player, "handicap">>(player: T): player is T & { handicap: number } {
-  return typeof player.handicap === "number" && Number.isFinite(player.handicap);
+  return isValidRoundHandicapValue(player.handicap);
 }
 
 export function playersMissingRoundHandicap(players: Player[]) {
@@ -33,7 +42,7 @@ export function handicapBases(config: HandicapBaseConfig, active: Player[], part
   const reference = config.baseMode === "fixed"
     ? config.fixedBaseHandicap ?? lowestHandicap(participants)
     : lowestHandicap(config.baseMode === "moving" ? active : legacy);
-  if (reference === undefined) return {} as Record<string, number>;
+  if (!isValidRoundHandicapValue(reference)) return {} as Record<string, number>;
   return Object.fromEntries(active.map(player => [player.id, player.handicap! - reference]));
 }
 
@@ -55,7 +64,7 @@ export function freezeRoundHandicapBases(bets: BetConfig, players: Player[], bas
 export function missingHandicapsForActiveBets(players: Player[], bets: BetConfig, supplementalBets: SupplementalBet[]) {
   const requiredIds = new Set<string>();
   const add = (enabled: boolean | undefined, participantIds: string[] | undefined) => {
-    if (enabled && participantIds) participantIds.forEach((id) => requiredIds.add(id));
+    if (enabled && Array.isArray(participantIds)) participantIds.forEach((id) => requiredIds.add(id));
   };
   add(bets.rabbits.enabled, bets.rabbits.participantIds);
   add(bets.skins.enabled, bets.skins.participantIds);
@@ -68,8 +77,8 @@ export function missingHandicapsForActiveBets(players: Player[], bets: BetConfig
   add(bets.miniPolla.enabled, bets.miniPolla.participantIds);
   add(bets.loba.enabled, bets.loba.participantIds);
   for (const bet of supplementalBets) {
-    if (!bet.enabled || bet.type === "individual_nassau" || bet.type === "dollar_stroke" || bet.type === "minimum_putts") continue;
-    bet.participantIds.forEach((id) => requiredIds.add(id));
+    if (bet.enabled === false || bet.type === "individual_nassau" || bet.type === "dollar_stroke" || bet.type === "minimum_putts") continue;
+    add(true, bet.participantIds);
   }
   return players.filter((player) => requiredIds.has(player.id) && !hasValidRoundHandicap(player));
 }
