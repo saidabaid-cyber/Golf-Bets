@@ -117,7 +117,7 @@ import { ballFriendScoreResult, ballFriendSetupChipLabel, lobaSetupChipLabel, pl
 import { calculateSupplementalBets, normalizeSupplementalBets, supplementalBetsForRoundHoles, supplementalBetValue } from "../lib/supplemental-bets";
 import { isPersonalSupplementalType, setRememberedCategoryEnabled } from "../lib/bet-activation";
 import { buildPersonalOpponentResults } from "../lib/personal-opponents";
-import { persistPendingRoundReview, ROUND_REVIEW_NOTICE } from "../lib/round-review";
+import { persistPendingRoundReview, persistRoundDraftCheckpoint, ROUND_REVIEW_NOTICE } from "../lib/round-review";
 import { markRoundDraftCancelled, normalizeHistoricalRoundLifecycle, normalizeRoundStartedAt, withDerivedRoundLifecycle } from "../lib/round-lifecycle";
 import { normalizeAdvancedStats, normalizeScoreCaptureMode, updateAdvancedHoleStat } from "../lib/advanced-stats";
 import { BetHelpButton, SupplementalBetsEditor, SupplementalBetResults } from "./components/supplemental-bets-editor";
@@ -1623,8 +1623,9 @@ function GolfBetsApp() {
 
   function persistReviewBeforeLeavingRound(savedScores: Record<number, HoleScore>, savedEdits: ScoreRows, savedBets: BetConfig, savedIndex: number, startedAt?: string | null) {
     try {
-      const draft = persistPendingRoundReview(window.localStorage, roundDraftPayload({ scores: savedScores, scoreEdits: savedEdits, bets: savedBets, currentIndex: savedIndex, reviewPending: true, startedAt }));
-      trackLocalCloudEdits(localStorage, draft, { highContrast, language: "es-MX", notificationsEnabled: false, defaultHandicap: identity.defaultHandicap });
+      const pendingDraft = roundDraftPayload({ scores: savedScores, scoreEdits: savedEdits, bets: savedBets, currentIndex: savedIndex, reviewPending: true, startedAt });
+      trackLocalCloudEdits(localStorage, { ...pendingDraft, reviewPending: true, lifecycleState: "completed" }, { highContrast, language: "es-MX", notificationsEnabled: false, defaultHandicap: identity.defaultHandicap });
+      persistPendingRoundReview(window.localStorage, pendingDraft);
       setRoundReviewPending(true);
       setDraftAvailable(true);
       setSaveStatus("saved");
@@ -1637,6 +1638,26 @@ function GolfBetsApp() {
     } catch {
       setSaveStatus("error");
       setFeedback("No se pudo comprobar la ronda pendiente en este dispositivo. Conservamos la ronda abierta; libera espacio y vuelve a pulsar Terminar ronda.");
+      return false;
+    }
+  }
+
+  function persistCommittedHoleBeforeAdvance(savedScores: Record<number, HoleScore>, savedEdits: ScoreRows, savedBets: BetConfig, savedIndex: number, startedAt?: string | null) {
+    try {
+      const draft = roundDraftPayload({ scores: savedScores, scoreEdits: savedEdits, bets: savedBets, currentIndex: savedIndex, reviewPending: false, startedAt });
+      trackLocalCloudEdits(localStorage, draft, { highContrast, language: "es-MX", notificationsEnabled: false, defaultHandicap: identity.defaultHandicap });
+      persistRoundDraftCheckpoint(window.localStorage, draft);
+      setDraftAvailable(true);
+      setSaveStatus("saved");
+      const offline = collectLocalCloudData(localStorage, identity.defaultHandicap, hadLocalPreferences.current);
+      offline.deviceId = offlineDeviceId.current;
+      // The verified localStorage checkpoint is already durable. IndexedDB and
+      // cloud remain best-effort here and the regular retry loop will resume them.
+      void persistOfflineBundle(identity.userId, offline, identity.mode === "authenticated" && cloudLinked).catch(() => undefined);
+      return true;
+    } catch {
+      setSaveStatus("error");
+      setFeedback("No se pudo guardar el hoyo en este dispositivo. Conservamos la captura en pantalla; libera espacio y vuelve a pulsar Guardar hoyo.");
       return false;
     }
   }
@@ -2392,12 +2413,17 @@ function GolfBetsApp() {
     }
     const committed = commitHoleCapture(scores, scoreEdits, hole, players);
     if (!committed) { setHoleValidationErrors(["Completa los scores vacíos antes de guardar el hoyo."]); return; }
-    setHoleValidationErrors([]);
-    setFeedback("");
-    checkpoint();
     const startedAt = ensureRoundStarted();
     // Also covers entering Tarjeta directly without pressing Iniciar ronda.
     const savedBets = freezeRoundHandicapBases(bets, players, roundHandicapBasis);
+    const savedIndex = currentIndex;
+    const checkpointPersisted = savedIndex === order.length - 1
+      ? persistReviewBeforeLeavingRound(committed.scores, committed.edits, savedBets, savedIndex, startedAt)
+      : persistCommittedHoleBeforeAdvance(committed.scores, committed.edits, savedBets, savedIndex, startedAt);
+    if (!checkpointPersisted) return;
+    setHoleValidationErrors([]);
+    setFeedback("");
+    checkpoint();
     setBets(savedBets);
     setScores(committed.scores); setScoreEdits(committed.edits);
     const savedScores = committed.scores;
@@ -2480,8 +2506,6 @@ function GolfBetsApp() {
       changes.forEach((change) => enqueuePollaScore(change));
       if (changes.length && navigator.onLine) import("../lib/polla-offline").then(({ flushPollaScoreQueue }) => flushPollaScoreQueue(privatePollaLink.accessToken, { tournamentId: privatePollaLink.tournamentId, groupId: privatePollaLink.groupId })).catch(() => undefined);
     }
-    const savedIndex = currentIndex;
-    if (savedIndex === order.length - 1 && !persistReviewBeforeLeavingRound(savedScores, committed.edits, savedBets, savedIndex, startedAt)) return;
     setHoleSummary(buildHoleSummary(holeNumber, players, savedScores, extras));
     holeSummarySession.current = createHoleSummarySession({
       now: () => window.performance.now(),

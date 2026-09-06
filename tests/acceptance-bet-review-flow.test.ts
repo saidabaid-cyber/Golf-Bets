@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { setRememberedCategoryEnabled, setSupplementalCategoryEnabled } from "../lib/bet-activation";
 import { initialBets } from "../lib/new-round-bets";
 import { buildPersonalOpponentHistory, buildPersonalOpponentResults, groupCurrentPersonalResults } from "../lib/personal-opponents";
-import { persistPendingRoundReview } from "../lib/round-review";
+import { persistPendingRoundReview, persistRoundDraftCheckpoint } from "../lib/round-review";
 import { saveRoundHistoryLocalFirst } from "../lib/round-history-save";
 import { normalizeRoundDraft, readStoredJson, STORAGE_KEYS } from "../lib/round-utils";
 import { calculateSupplementalBets, createSupplementalBet, normalizeSupplementalBets, supplementalBetValue } from "../lib/supplemental-bets";
@@ -195,4 +196,57 @@ test("Terminar conserva 72 scores como pendiente; solo Guardar archiva y el retr
   assert.equal(history[0].photoId, "qa-photo");
   assert.equal(buildPersonalOpponentHistory(history)[0].total, 250);
   assert.ok(storage.getItem(STORAGE_KEYS.draft), "la capa de página solo limpia después de esta confirmación durable");
+});
+
+test("Guardar hoyo verifica el borrador y sobrevive un cierre inmediato antes del autosave", () => {
+  const storage = new MemoryStorage();
+  const draft = {
+    version: 9,
+    roundId: "round-hole-checkpoint",
+    players,
+    course,
+    scores: { 1: { "owner-a": 4, "opponent-b": 5, "player-c": 4, "player-d": 6 } },
+    scoreEdits: {},
+    currentIndex: 0,
+  };
+  persistRoundDraftCheckpoint(storage as unknown as Storage, draft);
+
+  const reloaded = normalizeRoundDraft(JSON.parse(storage.getItem(STORAGE_KEYS.draft)!));
+  assert.equal(reloaded?.roundId, "round-hole-checkpoint");
+  assert.deepEqual(reloaded?.scores?.[1], draft.scores[1]);
+});
+
+test("Guardar hoyo no confirma una escritura local truncada", () => {
+  const storage = {
+    value: null as string | null,
+    setItem(_key: string, value: string) { this.value = value.slice(0, -1); },
+    getItem() { return this.value; },
+  };
+  assert.throws(
+    () => persistRoundDraftCheckpoint(storage, { roundId: "round-corrupt", scores: { 1: { "owner-a": 4 } } }),
+    /comprobar el borrador/,
+  );
+});
+
+test("un error de cuota conserva intacto el último borrador confirmado", () => {
+  const prior = JSON.stringify({ roundId: "round-prior", scores: { 1: { "owner-a": 4 } } });
+  const storage = {
+    getItem() { return prior; },
+    setItem() { throw new DOMException("Sin espacio", "QuotaExceededError"); },
+  };
+  assert.throws(() => persistRoundDraftCheckpoint(storage, { roundId: "round-new", scores: { 1: { "owner-a": 3 } } }), /Sin espacio/);
+  assert.equal(storage.getItem(), prior);
+});
+
+test("la UI persiste cada hoyo antes del resumen y de avanzar", () => {
+  const page = readFileSync("app/page.tsx", "utf8");
+  const saveStart = page.indexOf("function saveAndAdvance()");
+  const checkpoint = page.indexOf("const checkpointPersisted", saveStart);
+  const committedCall = page.indexOf("persistCommittedHoleBeforeAdvance(committed.scores, committed.edits", checkpoint);
+  const blocked = page.indexOf("if (!checkpointPersisted) return", checkpoint);
+  const setScores = page.indexOf("setScores(committed.scores)", checkpoint);
+  const summary = page.indexOf("setHoleSummary(buildHoleSummary", saveStart);
+  const advance = page.indexOf("onAdvance:", saveStart);
+  assert.ok(saveStart >= 0 && checkpoint > saveStart && committedCall > checkpoint);
+  assert.ok(blocked > committedCall && setScores > blocked && summary > setScores && advance > summary);
 });
