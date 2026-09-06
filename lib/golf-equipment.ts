@@ -30,6 +30,9 @@ export type ShaftFlex = (typeof SHAFT_FLEXES)[number];
 export const BALL_PRICE_TIERS = ["ECONOMY", "MID", "PREMIUM"] as const;
 export type BallPriceTier = (typeof BALL_PRICE_TIERS)[number];
 
+export const BALL_COMPRESSION_TYPES = ["MANUFACTURER", "INDEPENDENT_MEASURED", "ESTIMATED", "UNKNOWN"] as const;
+export type BallCompressionType = (typeof BALL_COMPRESSION_TYPES)[number];
+
 export type GolfBallCatalog = {
   id: string;
   brand: string;
@@ -40,6 +43,9 @@ export type GolfBallCatalog = {
   coverMaterial: string | null;
   construction: string | null;
   compression: number | null;
+  compressionType: BallCompressionType;
+  compressionSource: string | null;
+  compressionSourceUrl: string | null;
   flight: QualitativeLevel | null;
   driverSpin: QualitativeLevel | null;
   ironSpin: QualitativeLevel | null;
@@ -86,12 +92,16 @@ export type GolfShaftCatalog = {
   id: string;
   brand: string;
   model: string;
+  generation: string | null;
   active: boolean;
   weight: number | null;
   flex: ShaftFlex[];
   launch: QualitativeLevel | null;
   spin: QualitativeLevel | null;
   material: string | null;
+  torque: number | null;
+  tipDiameter: number | null;
+  buttDiameter: number | null;
   officialUrl: string | null;
   sourceName: string | null;
   verifiedAt: string | null;
@@ -111,6 +121,9 @@ export type PlayerClub = {
   loft: number | null;
   handedness: ClubHandedness;
   shaftId: string | null;
+  customShaftBrand: string | null;
+  customShaftModel: string | null;
+  /** Legacy combined field retained so existing v1 profiles remain readable. */
   customShaft: string | null;
   flex: ShaftFlex | null;
   shaftWeightGrams: number | null;
@@ -120,6 +133,8 @@ export type PlayerClub = {
   notes: string | null;
   setComposition: string[];
   isCurrent: boolean;
+  startedUsingAt: string | null;
+  stoppedUsingAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -133,8 +148,31 @@ export type PlayerBall = {
   generation: string | null;
   year: number | null;
   color: string | null;
+  notes: string | null;
   isCurrent: boolean;
+  startedUsingAt: string | null;
+  stoppedUsingAt: string | null;
   createdAt: string;
+  updatedAt: string;
+};
+
+export const CLUB_DISTANCE_UNITS = ["YD", "M"] as const;
+export type ClubDistanceUnit = (typeof CLUB_DISTANCE_UNITS)[number];
+
+export const CLUB_DISTANCE_SOURCES = ["MANUAL", "ROUND_ESTIMATE", "LAUNCH_MONITOR", "GPS", "IMPORT"] as const;
+export type ClubDistanceSource = (typeof CLUB_DISTANCE_SOURCES)[number];
+
+export type PlayerClubDistance = {
+  id: string;
+  userId: string;
+  playerClubId: string;
+  carryDistance: number | null;
+  totalDistance: number | null;
+  unit: ClubDistanceUnit;
+  source: ClubDistanceSource;
+  sampleCount: number | null;
+  /** Confidence is an optional 0–100 score, never inferred for manual input. */
+  confidence: number | null;
   updatedAt: string;
 };
 
@@ -191,16 +229,23 @@ export type EquipmentBallFitInputSnapshot = {
   launchMonitorSession: LaunchMonitorSession | null;
 };
 
+/** The envelope/key version remains stable so existing local profiles are
+ * discovered and migrated in place instead of becoming orphaned. */
 export const EQUIPMENT_PROFILE_STORAGE_VERSION = 1 as const;
+/** Snapshot v2 adds temporal equipment fields, split shaft identity and club
+ * distances. Cloud writes accept only this canonical version, while reads
+ * migrate v1 snapshots without discarding the original data. */
+export const EQUIPMENT_PROFILE_SCHEMA_VERSION = 2 as const;
 
 export type EquipmentProfile = {
-  schemaVersion: typeof EQUIPMENT_PROFILE_STORAGE_VERSION;
+  schemaVersion: typeof EQUIPMENT_PROFILE_SCHEMA_VERSION;
   userId: string;
   equipmentOnboarding: OptionalOnboardingStatus;
   ballOnboarding: OptionalOnboardingStatus;
   ballPreference: BallPreference;
   clubs: PlayerClub[];
   balls: PlayerBall[];
+  distances: PlayerClubDistance[];
   lastBallFit: EquipmentBallFitSummary | null;
   createdAt: string;
   updatedAt: string;
@@ -282,7 +327,7 @@ export type EquipmentStorageResult =
 
 type UnknownRecord = Record<string, unknown>;
 
-const SET_COMPOSITION = new Set(["1", "2", "3", "4", "5", "6", "7", "8", "9", "PW", "GW", "AW", "SW", "LW"]);
+const SET_COMPOSITION = new Set(["1", "2", "3", "4", "5", "6", "7", "8", "9", "PW", "UW", "GW", "AW", "SW", "LW"]);
 
 function record(value: unknown): UnknownRecord | null {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value as UnknownRecord : null;
@@ -368,7 +413,14 @@ export function normalizeGolfBallCatalog(value: unknown): GolfBallCatalog | null
   const verifiedAt = isoDate(source.verifiedAt);
   const createdAt = isoDate(source.createdAt);
   const updatedAt = isoDate(source.updatedAt);
-  if (!id || !brand || !model || active === null || !sourceName || !verifiedAt || !createdAt || !updatedAt) return null;
+  const compression = nullableNumber(source.compression, 1, 200);
+  const compressionType = memberOf(source.compressionType, BALL_COMPRESSION_TYPES);
+  const compressionSource = text(source.compressionSource, 300);
+  const compressionSourceUrl = httpsUrl(source.compressionSourceUrl);
+  const compressionIsSourced = compression === null
+    ? compressionType === "UNKNOWN" && compressionSource === null && compressionSourceUrl === null
+    : compressionType !== null && compressionType !== "UNKNOWN" && compressionSource !== null && compressionSourceUrl !== null;
+  if (!id || !brand || !model || active === null || !sourceName || !verifiedAt || !createdAt || !updatedAt || !compressionType || !compressionIsSourced) return null;
 
   return {
     id,
@@ -379,7 +431,10 @@ export function normalizeGolfBallCatalog(value: unknown): GolfBallCatalog | null
     active,
     coverMaterial: text(source.coverMaterial),
     construction: text(source.construction),
-    compression: nullableNumber(source.compression, 1, 200),
+    compression,
+    compressionType,
+    compressionSource,
+    compressionSourceUrl,
     flight: memberOf(source.flight, QUALITATIVE_LEVELS),
     driverSpin: memberOf(source.driverSpin, QUALITATIVE_LEVELS),
     ironSpin: memberOf(source.ironSpin, QUALITATIVE_LEVELS),
@@ -488,12 +543,16 @@ export function normalizeGolfShaftCatalog(value: unknown): GolfShaftCatalog | nu
     id,
     brand,
     model,
+    generation: text(source.generation),
     active,
     weight: nullableNumber(source.weight, 1, 250),
     flex,
     launch: memberOf(source.launch, QUALITATIVE_LEVELS),
     spin: memberOf(source.spin, QUALITATIVE_LEVELS),
     material: text(source.material),
+    torque: nullableNumber(source.torque, 0, 30),
+    tipDiameter: nullableNumber(source.tipDiameter, 0.1, 2),
+    buttDiameter: nullableNumber(source.buttDiameter, 0.1, 2),
     officialUrl: httpsUrl(source.officialUrl),
     sourceName: text(source.sourceName),
     verifiedAt: isoDate(source.verifiedAt),
@@ -541,6 +600,8 @@ export function normalizePlayerClub(value: unknown, expectedUserId?: string): Pl
     loft: nullableNumber(source.loft, 0, 90),
     handedness,
     shaftId: identifier(source.shaftId),
+    customShaftBrand: text(source.customShaftBrand),
+    customShaftModel: text(source.customShaftModel),
     customShaft: text(source.customShaft),
     flex: memberOf(source.flex, SHAFT_FLEXES),
     shaftWeightGrams: nullableNumber(source.shaftWeightGrams, 1, 300),
@@ -550,6 +611,8 @@ export function normalizePlayerClub(value: unknown, expectedUserId?: string): Pl
     notes: text(source.notes, 1_000),
     setComposition: category === "IRON_SET" ? normalizeSetComposition(source.setComposition) : [],
     isCurrent,
+    startedUsingAt: isoDate(source.startedUsingAt),
+    stoppedUsingAt: isCurrent ? null : isoDate(source.stoppedUsingAt),
     createdAt,
     updatedAt,
   };
@@ -576,8 +639,51 @@ export function normalizePlayerBall(value: unknown, expectedUserId?: string): Pl
     generation: text(source.generation),
     year: nullableInteger(source.year, 1900, 2200),
     color: text(source.color),
+    notes: text(source.notes, 1_000),
     isCurrent,
+    startedUsingAt: isoDate(source.startedUsingAt),
+    stoppedUsingAt: isCurrent ? null : isoDate(source.stoppedUsingAt),
     createdAt,
+    updatedAt,
+  };
+}
+
+export function normalizePlayerClubDistance(value: unknown, expectedUserId?: string): PlayerClubDistance | null {
+  const source = record(value);
+  if (!source) return null;
+  const id = identifier(source.id);
+  const userId = identifier(source.userId);
+  const playerClubId = identifier(source.playerClubId);
+  const carryDistance = nullableNumber(source.carryDistance, 0, 800);
+  const totalDistance = nullableNumber(source.totalDistance, 0, 800);
+  const carryWasProvided = source.carryDistance !== null && source.carryDistance !== undefined;
+  const totalWasProvided = source.totalDistance !== null && source.totalDistance !== undefined;
+  const unit = memberOf(source.unit, CLUB_DISTANCE_UNITS);
+  const distanceSource = memberOf(source.source, CLUB_DISTANCE_SOURCES);
+  const sampleCount = source.sampleCount === null || source.sampleCount === undefined
+    ? null
+    : nullableInteger(source.sampleCount, 1, 1_000_000);
+  const confidence = source.confidence === null || source.confidence === undefined
+    ? null
+    : nullableNumber(source.confidence, 0, 100);
+  const updatedAt = isoDate(source.updatedAt);
+  if (!id || !userId || (expectedUserId && userId !== expectedUserId) || !playerClubId
+    || (carryDistance === null && totalDistance === null) || !unit || !distanceSource
+    || (carryWasProvided && carryDistance === null) || (totalWasProvided && totalDistance === null)
+    || (carryDistance !== null && totalDistance !== null && totalDistance < carryDistance)
+    || (source.sampleCount !== null && source.sampleCount !== undefined && sampleCount === null)
+    || (source.confidence !== null && source.confidence !== undefined && confidence === null)
+    || !updatedAt) return null;
+  return {
+    id,
+    userId,
+    playerClubId,
+    carryDistance,
+    totalDistance,
+    unit,
+    source: distanceSource,
+    sampleCount,
+    confidence,
     updatedAt,
   };
 }
@@ -685,7 +791,7 @@ function latestFirst<T extends { id: string; updatedAt: string }>(items: T[]): T
 
 export function normalizeEquipmentProfile(value: unknown, expectedUserId?: string): EquipmentProfile | null {
   const source = record(value);
-  if (!source || source.schemaVersion !== EQUIPMENT_PROFILE_STORAGE_VERSION) return null;
+  if (!source || (source.schemaVersion !== 1 && source.schemaVersion !== EQUIPMENT_PROFILE_SCHEMA_VERSION)) return null;
   const userId = identifier(source.userId);
   const equipmentOnboarding = memberOf(source.equipmentOnboarding, ["NOT_ASKED", "SKIPPED", "IN_PROGRESS", "COMPLETED"] as const);
   const ballOnboarding = memberOf(source.ballOnboarding, ["NOT_ASKED", "SKIPPED", "IN_PROGRESS", "COMPLETED"] as const);
@@ -702,6 +808,11 @@ export function normalizeEquipmentProfile(value: unknown, expectedUserId?: strin
     const ball = normalizePlayerBall(candidate, userId);
     return ball ? [ball] : [];
   }));
+  const clubIds = new Set(clubs.map((club) => club.id));
+  const distances = latestFirst((Array.isArray(source.distances) ? source.distances : []).flatMap((candidate) => {
+    const distance = normalizePlayerClubDistance(candidate, userId);
+    return distance && clubIds.has(distance.playerClubId) ? [distance] : [];
+  }));
 
   if (ballPreference === "FIXED") {
     const current = balls.find((ball) => ball.isCurrent);
@@ -712,13 +823,14 @@ export function normalizeEquipmentProfile(value: unknown, expectedUserId?: strin
   }
 
   return {
-    schemaVersion: EQUIPMENT_PROFILE_STORAGE_VERSION,
+    schemaVersion: EQUIPMENT_PROFILE_SCHEMA_VERSION,
     userId,
     equipmentOnboarding,
     ballOnboarding,
     ballPreference,
     clubs,
     balls,
+    distances,
     lastBallFit: normalizeBallFitSummary(source.lastBallFit, userId),
     createdAt,
     updatedAt,
@@ -731,8 +843,10 @@ export function normalizeEquipmentProfile(value: unknown, expectedUserId?: strin
 export function normalizeEquipmentProfileStrict(value: unknown, expectedUserId: string): EquipmentProfile | null {
   const source = record(value);
   const normalized = normalizeEquipmentProfile(value, expectedUserId);
-  if (!source || !normalized || !Array.isArray(source.clubs) || !Array.isArray(source.balls)) return null;
-  if (source.clubs.length !== normalized.clubs.length || source.balls.length !== normalized.balls.length) return null;
+  if (!source || source.schemaVersion !== EQUIPMENT_PROFILE_SCHEMA_VERSION || !normalized
+    || !Array.isArray(source.clubs) || !Array.isArray(source.balls) || !Array.isArray(source.distances)) return null;
+  if (source.clubs.length !== normalized.clubs.length || source.balls.length !== normalized.balls.length
+    || source.distances.length !== normalized.distances.length) return null;
   if (source.lastBallFit !== null && source.lastBallFit !== undefined) {
     const rawFit = record(source.lastBallFit);
     if (!rawFit || !normalized.lastBallFit?.input || !Array.isArray(rawFit.recommendations)
@@ -766,28 +880,60 @@ export function createEmptyEquipmentProfile(userIdValue: string, now = new Date(
   const timestamp = isoDate(now);
   if (!userId || !timestamp) return null;
   return {
-    schemaVersion: EQUIPMENT_PROFILE_STORAGE_VERSION,
+    schemaVersion: EQUIPMENT_PROFILE_SCHEMA_VERSION,
     userId,
     equipmentOnboarding: "NOT_ASKED",
     ballOnboarding: "NOT_ASKED",
     ballPreference: "NOT_ASKED",
     clubs: [],
     balls: [],
+    distances: [],
     lastBallFit: null,
     createdAt: timestamp,
     updatedAt: timestamp,
   };
 }
 
+/**
+ * Stable semantic identity for the local-first aggregate. Audit-only
+ * `updatedAt` changes are intentionally ignored so React re-renders and
+ * equivalent editor submissions cannot enqueue duplicate cloud mutations.
+ */
+export function equipmentProfileFingerprint(value: unknown, expectedUserId?: string): string | null {
+  const profile = normalizeEquipmentProfile(value, expectedUserId);
+  if (!profile) return null;
+  const canonicalize = (candidate: unknown): unknown => {
+    if (Array.isArray(candidate)) return candidate.map(canonicalize);
+    const source = record(candidate);
+    if (!source) return candidate;
+    return Object.fromEntries(Object.keys(source)
+      .filter((key) => key !== "updatedAt")
+      .sort()
+      .map((key) => [key, canonicalize(source[key])]));
+  };
+  return JSON.stringify(canonicalize({
+    ...profile,
+    clubs: [...profile.clubs].sort((left, right) => left.id.localeCompare(right.id)),
+    balls: [...profile.balls].sort((left, right) => left.id.localeCompare(right.id)),
+    distances: [...profile.distances].sort((left, right) => left.id.localeCompare(right.id)),
+  }));
+}
+
+function sameEquipmentProfile(left: EquipmentProfile, right: EquipmentProfile) {
+  return equipmentProfileFingerprint(left, left.userId) === equipmentProfileFingerprint(right, left.userId);
+}
+
 export function setEquipmentOnboardingStatus(profile: EquipmentProfile, status: OptionalOnboardingStatus, now = new Date().toISOString()): EquipmentProfile | null {
   const validProfile = normalizeEquipmentProfile(profile, profile.userId);
   if (!validProfile || !memberOf(status, ["NOT_ASKED", "SKIPPED", "IN_PROGRESS", "COMPLETED"] as const)) return null;
+  if (validProfile.equipmentOnboarding === status) return validProfile;
   return withUpdatedAt({ ...validProfile, equipmentOnboarding: status }, now);
 }
 
 export function setBallOnboardingStatus(profile: EquipmentProfile, status: OptionalOnboardingStatus, now = new Date().toISOString()): EquipmentProfile | null {
   const validProfile = normalizeEquipmentProfile(profile, profile.userId);
   if (!validProfile || !memberOf(status, ["NOT_ASKED", "SKIPPED", "IN_PROGRESS", "COMPLETED"] as const)) return null;
+  if (validProfile.ballOnboarding === status) return validProfile;
   return withUpdatedAt({ ...validProfile, ballOnboarding: status }, now);
 }
 
@@ -795,12 +941,14 @@ export function setLastBallFit(profile: EquipmentProfile, summaryValue: unknown,
   const validProfile = normalizeEquipmentProfile(profile, profile.userId);
   const summary = normalizeBallFitSummary(summaryValue, profile.userId);
   if (!validProfile || !summary) return null;
-  return withUpdatedAt({ ...validProfile, lastBallFit: summary }, now);
+  const next = { ...validProfile, lastBallFit: summary };
+  return sameEquipmentProfile(validProfile, next) ? validProfile : withUpdatedAt(next, now);
 }
 
 export function clearLastBallFit(profile: EquipmentProfile, now = new Date().toISOString()): EquipmentProfile | null {
   const validProfile = normalizeEquipmentProfile(profile, profile.userId);
-  return validProfile ? withUpdatedAt({ ...validProfile, lastBallFit: null }, now) : null;
+  if (!validProfile || validProfile.lastBallFit === null) return validProfile;
+  return withUpdatedAt({ ...validProfile, lastBallFit: null }, now);
 }
 
 function withUpdatedAt(profile: EquipmentProfile, now: string): EquipmentProfile | null {
@@ -810,46 +958,140 @@ function withUpdatedAt(profile: EquipmentProfile, now: string): EquipmentProfile
 
 export function upsertPlayerClub(profile: EquipmentProfile, value: unknown, now = new Date().toISOString()): EquipmentProfile | null {
   const validProfile = normalizeEquipmentProfile(profile, profile.userId);
-  const club = normalizePlayerClub(value, profile.userId);
-  if (!validProfile || !club) return null;
-  return withUpdatedAt({ ...validProfile, clubs: latestFirst([...validProfile.clubs.filter((item) => item.id !== club.id), club]) }, now);
+  const normalizedClub = normalizePlayerClub(value, profile.userId);
+  const timestamp = isoDate(now);
+  if (!validProfile || !normalizedClub || !timestamp) return null;
+  const existing = validProfile.clubs.find((item) => item.id === normalizedClub.id);
+  const club: PlayerClub = {
+    ...normalizedClub,
+    startedUsingAt: normalizedClub.isCurrent
+      ? normalizedClub.startedUsingAt || existing?.startedUsingAt || normalizedClub.createdAt
+      : normalizedClub.startedUsingAt || existing?.startedUsingAt || null,
+    stoppedUsingAt: normalizedClub.isCurrent
+      ? null
+      : normalizedClub.stoppedUsingAt || existing?.stoppedUsingAt || timestamp,
+  };
+  const next = { ...validProfile, clubs: latestFirst([...validProfile.clubs.filter((item) => item.id !== club.id), club]) };
+  return sameEquipmentProfile(validProfile, next) ? validProfile : withUpdatedAt(next, timestamp);
 }
 
 export function removePlayerClub(profile: EquipmentProfile, clubIdValue: string, now = new Date().toISOString()): EquipmentProfile | null {
   const validProfile = normalizeEquipmentProfile(profile, profile.userId);
   const clubId = identifier(clubIdValue);
   if (!validProfile || !clubId) return null;
-  return withUpdatedAt({ ...validProfile, clubs: validProfile.clubs.filter((club) => club.id !== clubId) }, now);
+  if (!validProfile.clubs.some((club) => club.id === clubId)) return validProfile;
+  return withUpdatedAt({
+    ...validProfile,
+    clubs: validProfile.clubs.filter((club) => club.id !== clubId),
+    distances: validProfile.distances.filter((distance) => distance.playerClubId !== clubId),
+  }, now);
 }
 
 export function setPlayerClubCurrent(profile: EquipmentProfile, clubIdValue: string, isCurrent: boolean, now = new Date().toISOString()): EquipmentProfile | null {
   const validProfile = normalizeEquipmentProfile(profile, profile.userId);
   const clubId = identifier(clubIdValue);
   if (!validProfile || !clubId || !validProfile.clubs.some((club) => club.id === clubId)) return null;
+  const timestamp = isoDate(now);
+  if (!timestamp) return null;
+  const selected = validProfile.clubs.find((club) => club.id === clubId)!;
+  if (selected.isCurrent === isCurrent) return validProfile;
   return withUpdatedAt({
     ...validProfile,
-    clubs: validProfile.clubs.map((club) => club.id === clubId ? { ...club, isCurrent, updatedAt: isoDate(now) ?? club.updatedAt } : club),
-  }, now);
+    clubs: validProfile.clubs.map((club) => club.id === clubId ? {
+      ...club,
+      isCurrent,
+      startedUsingAt: isCurrent ? club.startedUsingAt || timestamp : club.startedUsingAt,
+      stoppedUsingAt: isCurrent ? null : timestamp,
+      updatedAt: timestamp,
+    } : club),
+  }, timestamp);
+}
+
+/** Archives the current physical club before adding a different model. Specs,
+ * shaft and notes for the same model continue to update the existing row. */
+export function replaceCurrentPlayerClub(
+  profile: EquipmentProfile,
+  previousClubIdValue: string,
+  replacementValue: unknown,
+  now = new Date().toISOString(),
+): EquipmentProfile | null {
+  const validProfile = normalizeEquipmentProfile(profile, profile.userId);
+  const previousClubId = identifier(previousClubIdValue);
+  const replacement = normalizePlayerClub(replacementValue, profile.userId);
+  const timestamp = isoDate(now);
+  const previous = validProfile?.clubs.find((club) => club.id === previousClubId);
+  if (!validProfile || !previousClubId || !replacement || !timestamp || !previous?.isCurrent
+    || replacement.id === previous.id || !replacement.isCurrent) return null;
+  const archived = setPlayerClubCurrent(validProfile, previous.id, false, timestamp);
+  return archived ? upsertPlayerClub(archived, {
+    ...replacement,
+    startedUsingAt: timestamp,
+    stoppedUsingAt: null,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  }, timestamp) : null;
 }
 
 export function upsertPlayerBall(profile: EquipmentProfile, value: unknown, now = new Date().toISOString()): EquipmentProfile | null {
   const validProfile = normalizeEquipmentProfile(profile, profile.userId);
-  const ball = normalizePlayerBall(value, profile.userId);
-  if (!validProfile || !ball) return null;
+  const normalizedBall = normalizePlayerBall(value, profile.userId);
+  const timestamp = isoDate(now);
+  if (!validProfile || !normalizedBall || !timestamp) return null;
+  const existing = validProfile.balls.find((item) => item.id === normalizedBall.id);
+  const ball: PlayerBall = {
+    ...normalizedBall,
+    startedUsingAt: normalizedBall.isCurrent
+      ? normalizedBall.startedUsingAt || existing?.startedUsingAt || normalizedBall.createdAt
+      : normalizedBall.startedUsingAt || existing?.startedUsingAt || null,
+    stoppedUsingAt: normalizedBall.isCurrent
+      ? null
+      : normalizedBall.stoppedUsingAt || existing?.stoppedUsingAt || timestamp,
+  };
   let balls = latestFirst([...validProfile.balls.filter((item) => item.id !== ball.id), ball]);
-  if (ball.isCurrent) balls = balls.map((item) => ({ ...item, isCurrent: item.id === ball.id }));
+  if (ball.isCurrent) balls = balls.map((item) => item.id === ball.id ? item : item.isCurrent ? {
+    ...item,
+    isCurrent: false,
+    stoppedUsingAt: timestamp,
+    updatedAt: timestamp,
+  } : item);
   const ballPreference = ball.isCurrent
     ? "FIXED"
     : validProfile.ballPreference === "FIXED" && !balls.some((item) => item.isCurrent)
       ? "NOT_ASKED"
       : validProfile.ballPreference;
-  return withUpdatedAt({ ...validProfile, balls, ballPreference }, now);
+  const next = { ...validProfile, balls, ballPreference };
+  return sameEquipmentProfile(validProfile, next) ? validProfile : withUpdatedAt(next, timestamp);
+}
+
+/** Preserves ball history when an edit selects a different catalog/manual
+ * model. A color or notes-only edit keeps the original player-ball identity. */
+export function replaceCurrentPlayerBall(
+  profile: EquipmentProfile,
+  previousBallIdValue: string,
+  replacementValue: unknown,
+  now = new Date().toISOString(),
+): EquipmentProfile | null {
+  const validProfile = normalizeEquipmentProfile(profile, profile.userId);
+  const previousBallId = identifier(previousBallIdValue);
+  const replacement = normalizePlayerBall(replacementValue, profile.userId);
+  const timestamp = isoDate(now);
+  const previous = validProfile?.balls.find((ball) => ball.id === previousBallId);
+  if (!validProfile || !previousBallId || !replacement || !timestamp || !previous?.isCurrent
+    || replacement.id === previous.id || !replacement.isCurrent) return null;
+  return upsertPlayerBall(validProfile, {
+    ...replacement,
+    startedUsingAt: timestamp,
+    stoppedUsingAt: null,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  }, timestamp);
 }
 
 export function removePlayerBall(profile: EquipmentProfile, ballIdValue: string, now = new Date().toISOString()): EquipmentProfile | null {
   const validProfile = normalizeEquipmentProfile(profile, profile.userId);
   const ballId = identifier(ballIdValue);
   if (!validProfile || !ballId) return null;
+  if (!validProfile.balls.some((ball) => ball.id === ballId)) return validProfile;
   const balls = validProfile.balls.filter((ball) => ball.id !== ballId);
   const ballPreference = validProfile.ballPreference === "FIXED" && !balls.some((ball) => ball.isCurrent)
     ? "NOT_ASKED"
@@ -863,9 +1105,22 @@ export function setCurrentPlayerBall(profile: EquipmentProfile, ballIdValue: str
   if (!validProfile || !ballId || !validProfile.balls.some((ball) => ball.id === ballId)) return null;
   const updatedAt = isoDate(now);
   if (!updatedAt) return null;
+  const current = validProfile.balls.find((ball) => ball.isCurrent);
+  if (current?.id === ballId && validProfile.ballPreference === "FIXED") return validProfile;
   return {
     ...validProfile,
-    balls: validProfile.balls.map((ball) => ({ ...ball, isCurrent: ball.id === ballId, ...(ball.id === ballId ? { updatedAt } : {}) })),
+    balls: validProfile.balls.map((ball) => ball.id === ballId ? {
+      ...ball,
+      isCurrent: true,
+      startedUsingAt: ball.startedUsingAt || updatedAt,
+      stoppedUsingAt: null,
+      updatedAt,
+    } : ball.isCurrent ? {
+      ...ball,
+      isCurrent: false,
+      stoppedUsingAt: updatedAt,
+      updatedAt,
+    } : ball),
     ballPreference: "FIXED",
     updatedAt,
   };
@@ -875,10 +1130,41 @@ export function setBallPreference(profile: EquipmentProfile, preference: BallPre
   const validProfile = normalizeEquipmentProfile(profile, profile.userId);
   if (!validProfile || !memberOf(preference, ["NOT_ASKED", "FIXED", "NO_FIXED_BALL", "SKIPPED"] as const)) return null;
   if (preference === "FIXED" && !validProfile.balls.some((ball) => ball.isCurrent)) return null;
+  if (validProfile.ballPreference === preference
+    && (preference === "FIXED" || !validProfile.balls.some((ball) => ball.isCurrent))) return validProfile;
+  const timestamp = isoDate(now);
+  if (!timestamp) return null;
   return withUpdatedAt({
     ...validProfile,
     ballPreference: preference,
-    balls: preference === "FIXED" ? validProfile.balls : validProfile.balls.map((ball) => ({ ...ball, isCurrent: false })),
+    balls: preference === "FIXED" ? validProfile.balls : validProfile.balls.map((ball) => ball.isCurrent ? {
+      ...ball,
+      isCurrent: false,
+      stoppedUsingAt: timestamp,
+      updatedAt: timestamp,
+    } : ball),
+  }, timestamp);
+}
+
+export function upsertPlayerClubDistance(profile: EquipmentProfile, value: unknown, now = new Date().toISOString()): EquipmentProfile | null {
+  const validProfile = normalizeEquipmentProfile(profile, profile.userId);
+  const distance = normalizePlayerClubDistance(value, profile.userId);
+  if (!validProfile || !distance || !validProfile.clubs.some((club) => club.id === distance.playerClubId)) return null;
+  const next = {
+    ...validProfile,
+    distances: latestFirst([...validProfile.distances.filter((item) => item.id !== distance.id), distance]),
+  };
+  return sameEquipmentProfile(validProfile, next) ? validProfile : withUpdatedAt(next, now);
+}
+
+export function removePlayerClubDistance(profile: EquipmentProfile, distanceIdValue: string, now = new Date().toISOString()): EquipmentProfile | null {
+  const validProfile = normalizeEquipmentProfile(profile, profile.userId);
+  const distanceId = identifier(distanceIdValue);
+  if (!validProfile || !distanceId) return null;
+  if (!validProfile.distances.some((distance) => distance.id === distanceId)) return validProfile;
+  return withUpdatedAt({
+    ...validProfile,
+    distances: validProfile.distances.filter((distance) => distance.id !== distanceId),
   }, now);
 }
 

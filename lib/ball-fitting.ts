@@ -14,7 +14,46 @@ import {
 
 export const BACKYARD_BALL_FIT_DISCLAIMER =
   "The Backyard Ball Fit es una recomendación orientativa basada en tus preferencias y en datos públicos verificados. No es un fitting oficial de ningún fabricante ni sustituye una prueba profesional.";
-export const BACKYARD_BALL_FIT_ALGORITHM_VERSION = "backyard-ball-fit-v1";
+export const BACKYARD_BALL_FIT_ALGORITHM_VERSION = "backyard-ball-fit-v2";
+
+/**
+ * Central, inspectable weights for the first-party recommender. Keeping these
+ * values together makes a saved result reproducible by algorithm version and
+ * prevents product rules from leaking into React components.
+ *
+ * Handicap only applies a deliberately small multiplier to criteria the
+ * player explicitly selected. It never creates a preference or a candidate on
+ * its own. Launch-monitor data outranks these heuristics once comparable,
+ * licensed ball-test windows are available; until then it remains transparent
+ * context and is not converted into an invented performance claim.
+ */
+export const BALL_FIT_WEIGHT_CONFIG = Object.freeze({
+  preference: Object.freeze({
+    feel: 5,
+    flight: 5,
+    approach: 5,
+    greensideSpinYes: 5,
+    greensideSpinNo: 4,
+    firmGreens: 2,
+    orderedPriorityMaximum: 5,
+    orderedPriorityMinimum: 2,
+    orderedPriorityStep: 0.5,
+    price: 3,
+    color: 1,
+  }),
+  playerProfile: Object.freeze({
+    lowHandicapMaximum: 8,
+    highHandicapMinimum: 18,
+    lowHandicapControlMultiplier: 1.08,
+    highHandicapLongGameMultiplier: 1.08,
+    highHandicapPriceMultiplier: 1.05,
+  }),
+  confidence: Object.freeze({
+    affinityShare: 0.5,
+    coverageShare: 0.5,
+    maximumMatchScore: 98,
+  }),
+});
 
 export const SWING_SPEED_BANDS = ["UNDER_85", "FROM_85_TO_95", "FROM_95_TO_105", "OVER_105", "UNKNOWN"] as const;
 export type SwingSpeedBand = (typeof SWING_SPEED_BANDS)[number];
@@ -70,6 +109,43 @@ export type BallFitInput = {
   colorPreference: BallColorPreference;
   launchMonitorSession: LaunchMonitorSession | null;
 };
+
+export type BallFitProfileDefaults = {
+  typicalScore?: number | null;
+  driverDistanceYards?: number | null;
+  swingSpeedBand?: SwingSpeedBand;
+  trajectoryPreference?: BallTrajectoryPreference;
+  priorities?: BallFitPriority[];
+};
+
+export type BallFitProfileSource = {
+  typicalScore?: number | null;
+  driverDistanceYards?: number | null;
+  driverSwingSpeedBand?: Exclude<SwingSpeedBand, "UNKNOWN"> | "";
+  usualTrajectory?: Exclude<BallTrajectoryPreference, "UNKNOWN"> | "";
+  gamePriority?: "DISTANCE" | "CONTROL" | "ACCURACY" | "FEEL" | "SHORT_GAME" | "";
+};
+
+export function ballFitDefaultsFromProfile(profile: BallFitProfileSource): BallFitProfileDefaults {
+  const priorities: BallFitPriority[] = profile.gamePriority === "DISTANCE"
+    ? ["DRIVER_DISTANCE"]
+    : profile.gamePriority === "CONTROL"
+      ? ["IRON_CONTROL", "STABILITY_CONTROL"]
+      : profile.gamePriority === "ACCURACY"
+        ? ["STABILITY_CONTROL"]
+        : profile.gamePriority === "FEEL"
+          ? ["GREENSIDE_FEEL", "PUTTER_FEEL"]
+          : profile.gamePriority === "SHORT_GAME"
+            ? ["WEDGE_SPIN", "GREENSIDE_FEEL"]
+            : [];
+  return {
+    typicalScore: profile.typicalScore ?? null,
+    driverDistanceYards: profile.driverDistanceYards ?? null,
+    swingSpeedBand: profile.driverSwingSpeedBand || "UNKNOWN",
+    trajectoryPreference: profile.usualTrajectory || "UNKNOWN",
+    priorities,
+  };
+}
 
 export type BallFitVerifiedAttributes = {
   flight: QualitativeLevel | null;
@@ -205,52 +281,81 @@ function addCriterion(criteria: Criterion[], criterion: Criterion) {
   else criteria.push(criterion);
 }
 
+function profileWeightMultiplier(input: BallFitInput, attribute: ScoredAttribute): number {
+  if (input.handicap === null) return 1;
+  if (input.handicap <= BALL_FIT_WEIGHT_CONFIG.playerProfile.lowHandicapMaximum) {
+    return attribute === "feel" || attribute === "flight" || attribute === "ironSpin" || attribute === "shortGameSpin"
+      ? BALL_FIT_WEIGHT_CONFIG.playerProfile.lowHandicapControlMultiplier
+      : 1;
+  }
+  if (input.handicap >= BALL_FIT_WEIGHT_CONFIG.playerProfile.highHandicapMinimum) {
+    return attribute === "flight" || attribute === "driverSpin"
+      ? BALL_FIT_WEIGHT_CONFIG.playerProfile.highHandicapLongGameMultiplier
+      : 1;
+  }
+  return 1;
+}
+
+function weightedCriterion(input: BallFitInput, criterion: Criterion): Criterion {
+  return {
+    ...criterion,
+    weight: criterion.weight * profileWeightMultiplier(input, criterion.attribute),
+  };
+}
+
+function addProfiledCriterion(input: BallFitInput, criteria: Criterion[], criterion: Criterion) {
+  addCriterion(criteria, weightedCriterion(input, criterion));
+}
+
 function criteriaFor(input: BallFitInput): Criterion[] {
   const criteria: Criterion[] = [];
   if (input.feelPreference !== "ANY") {
-    addCriterion(criteria, {
+    addProfiledCriterion(input, criteria, {
       attribute: "feel",
       target: FEEL_TARGETS[input.feelPreference],
       mode: "EXACT",
-      weight: 5,
+      weight: BALL_FIT_WEIGHT_CONFIG.preference.feel,
       reason: "El feel verificado se acerca a la sensación que prefieres.",
     });
   }
   if (input.trajectoryPreference !== "UNKNOWN") {
-    addCriterion(criteria, {
+    addProfiledCriterion(input, criteria, {
       attribute: "flight",
       target: input.trajectoryPreference,
       mode: "EXACT",
-      weight: 5,
+      weight: BALL_FIT_WEIGHT_CONFIG.preference.flight,
       reason: "El vuelo verificado coincide con la trayectoria que buscas.",
     });
   }
   if (input.approachBehavior === "ROLLS_TOO_MUCH") {
-    addCriterion(criteria, { attribute: "ironSpin", target: "HIGH", mode: "AT_LEAST", weight: 5, reason: "Su spin de hierros verificado favorece tu prioridad de detener mejor el approach." });
+    addProfiledCriterion(input, criteria, { attribute: "ironSpin", target: "HIGH", mode: "AT_LEAST", weight: BALL_FIT_WEIGHT_CONFIG.preference.approach, reason: "Su spin de hierros verificado favorece tu prioridad de detener mejor el approach." });
   } else if (input.approachBehavior === "TOO_MUCH_BACKSPIN") {
-    addCriterion(criteria, { attribute: "ironSpin", target: "LOW", mode: "AT_MOST", weight: 5, reason: "Su perfil de spin de hierros se acerca a tu búsqueda de reducir backspin." });
+    addProfiledCriterion(input, criteria, { attribute: "ironSpin", target: "LOW", mode: "AT_MOST", weight: BALL_FIT_WEIGHT_CONFIG.preference.approach, reason: "Su perfil de spin de hierros se acerca a tu búsqueda de reducir backspin." });
   }
   if (input.wantsGreensideSpin === "YES") {
-    addCriterion(criteria, { attribute: "shortGameSpin", target: "HIGH", mode: "AT_LEAST", weight: 5, reason: "El spin de juego corto verificado acompaña tu búsqueda de mayor control alrededor del green." });
+    addProfiledCriterion(input, criteria, { attribute: "shortGameSpin", target: "HIGH", mode: "AT_LEAST", weight: BALL_FIT_WEIGHT_CONFIG.preference.greensideSpinYes, reason: "El spin de juego corto verificado acompaña tu búsqueda de mayor control alrededor del green." });
   } else if (input.wantsGreensideSpin === "NO") {
-    addCriterion(criteria, { attribute: "shortGameSpin", target: "LOW", mode: "AT_MOST", weight: 4, reason: "El spin de juego corto verificado se acerca a tu preferencia de una respuesta menos activa." });
+    addProfiledCriterion(input, criteria, { attribute: "shortGameSpin", target: "LOW", mode: "AT_MOST", weight: BALL_FIT_WEIGHT_CONFIG.preference.greensideSpinNo, reason: "El spin de juego corto verificado se acerca a tu preferencia de una respuesta menos activa." });
   }
   if (input.greenFirmness === "FIRM") {
-    addCriterion(criteria, { attribute: "shortGameSpin", target: "HIGH", mode: "AT_LEAST", weight: 2, reason: "El perfil de juego corto puede ajustarse mejor a los greens firmes que juegas." });
+    addProfiledCriterion(input, criteria, { attribute: "shortGameSpin", target: "HIGH", mode: "AT_LEAST", weight: BALL_FIT_WEIGHT_CONFIG.preference.firmGreens, reason: "El perfil de juego corto puede ajustarse mejor a los greens firmes que juegas." });
   }
 
   input.priorities.forEach((priority, index) => {
-    const weight = Math.max(2, 5 - index * 0.5);
+    const weight = Math.max(
+      BALL_FIT_WEIGHT_CONFIG.preference.orderedPriorityMinimum,
+      BALL_FIT_WEIGHT_CONFIG.preference.orderedPriorityMaximum - index * BALL_FIT_WEIGHT_CONFIG.preference.orderedPriorityStep,
+    );
     if (priority === "LESS_DRIVER_SPIN") {
-      addCriterion(criteria, { attribute: "driverSpin", target: "LOW", mode: "AT_MOST", weight, reason: "El spin de driver verificado se acerca a tu prioridad de reducir spin en el juego largo." });
+      addProfiledCriterion(input, criteria, { attribute: "driverSpin", target: "LOW", mode: "AT_MOST", weight, reason: "El spin de driver verificado se acerca a tu prioridad de reducir spin en el juego largo." });
     } else if (priority === "HEIGHT") {
-      addCriterion(criteria, { attribute: "flight", target: "HIGH", mode: "AT_LEAST", weight, reason: "El vuelo verificado acompaña tu prioridad de ganar altura." });
+      addProfiledCriterion(input, criteria, { attribute: "flight", target: "HIGH", mode: "AT_LEAST", weight, reason: "El vuelo verificado acompaña tu prioridad de ganar altura." });
     } else if (priority === "IRON_CONTROL" || priority === "STOP_ON_GREEN") {
-      addCriterion(criteria, { attribute: "ironSpin", target: "HIGH", mode: "AT_LEAST", weight, reason: "El spin de hierros verificado acompaña tu prioridad de control en approach." });
+      addProfiledCriterion(input, criteria, { attribute: "ironSpin", target: "HIGH", mode: "AT_LEAST", weight, reason: "El spin de hierros verificado acompaña tu prioridad de control en approach." });
     } else if (priority === "WEDGE_SPIN") {
-      addCriterion(criteria, { attribute: "shortGameSpin", target: "HIGH", mode: "AT_LEAST", weight, reason: "El spin de juego corto verificado coincide con tu prioridad de wedges." });
+      addProfiledCriterion(input, criteria, { attribute: "shortGameSpin", target: "HIGH", mode: "AT_LEAST", weight, reason: "El spin de juego corto verificado coincide con tu prioridad de wedges." });
     } else if ((priority === "GREENSIDE_FEEL" || priority === "PUTTER_FEEL") && input.feelPreference !== "ANY") {
-      addCriterion(criteria, { attribute: "feel", target: FEEL_TARGETS[input.feelPreference], mode: "EXACT", weight, reason: "La sensación verificada se acerca a tu prioridad alrededor del green y con el putter." });
+      addProfiledCriterion(input, criteria, { attribute: "feel", target: FEEL_TARGETS[input.feelPreference], mode: "EXACT", weight, reason: "La sensación verificada se acerca a tu prioridad alrededor del green y con el putter." });
     }
   });
   return criteria;
@@ -346,22 +451,28 @@ function scoreBall(ball: GolfBallCatalog, input: BallFitInput, criteria: readonl
   }
 
   if (input.pricePreference !== "BEST_FIT") {
-    intendedWeight += 3;
+    const priceWeight = BALL_FIT_WEIGHT_CONFIG.preference.price * (
+      input.handicap !== null && input.handicap >= BALL_FIT_WEIGHT_CONFIG.playerProfile.highHandicapMinimum
+        ? BALL_FIT_WEIGHT_CONFIG.playerProfile.highHandicapPriceMultiplier
+        : 1
+    );
+    intendedWeight += priceWeight;
     const match = priceSimilarity(ball.priceTier, input.pricePreference);
     if (match !== null) {
-      knownWeight += 3;
-      matchedWeight += match * 3;
-      if (match === 1) reasons.push({ text: "Está dentro de la categoría de precio que elegiste.", strength: 3 });
+      knownWeight += priceWeight;
+      matchedWeight += match * priceWeight;
+      if (match === 1) reasons.push({ text: "Está dentro de la categoría de precio que elegiste.", strength: priceWeight });
     }
   }
 
   if (input.colorPreference !== "ANY") {
-    intendedWeight += 1;
+    const colorWeight = BALL_FIT_WEIGHT_CONFIG.preference.color;
+    intendedWeight += colorWeight;
     const match = colorSimilarity(ball.colors, input.colorPreference);
     if (match !== null) {
-      knownWeight += 1;
-      matchedWeight += match;
-      if (match === 1) reasons.push({ text: "Está disponible en el color que prefieres según el catálogo verificado.", strength: 1 });
+      knownWeight += colorWeight;
+      matchedWeight += match * colorWeight;
+      if (match === 1) reasons.push({ text: "Está disponible en el color que prefieres según el catálogo verificado.", strength: colorWeight });
     }
   }
 
@@ -370,7 +481,13 @@ function scoreBall(ball: GolfBallCatalog, input: BallFitInput, criteria: readonl
   const quality = matchedWeight / knownWeight;
   // Match score is confidence-adjusted: perfect affinity on half the requested
   // verified data cannot look like a 90% conclusion.
-  const score = Math.min(98, Math.max(1, Math.round(quality * (0.5 + coverage * 0.5) * 100)));
+  const score = Math.min(
+    BALL_FIT_WEIGHT_CONFIG.confidence.maximumMatchScore,
+    Math.max(1, Math.round(quality * (
+      BALL_FIT_WEIGHT_CONFIG.confidence.affinityShare
+      + coverage * BALL_FIT_WEIGHT_CONFIG.confidence.coverageShare
+    ) * 100)),
+  );
   const uniqueReasons = [...new Map(reasons.sort((left, right) => right.strength - left.strength).map((reason) => [reason.text, reason.text])).values()];
   return { ball, score, coverage: Math.round(coverage * 100), reasons: uniqueReasons.slice(0, 4) };
 }
@@ -378,6 +495,27 @@ function scoreBall(ball: GolfBallCatalog, input: BallFitInput, criteria: readonl
 function comparableSignalCount(input: BallFitInput, criteria: readonly Criterion[]): number {
   void input;
   return new Set(criteria.map((criterion) => criterion.attribute)).size;
+}
+
+function selectMultiBrandTopThree(candidates: readonly CandidateScore[]): CandidateScore[] {
+  const selected: CandidateScore[] = [];
+  const selectedIds = new Set<string>();
+  const brands = new Set<string>();
+
+  for (const candidate of candidates) {
+    const normalizedBrand = candidate.ball.brand.toLocaleLowerCase("es-MX");
+    if (brands.has(normalizedBrand)) continue;
+    selected.push(candidate);
+    selectedIds.add(candidate.ball.id);
+    brands.add(normalizedBrand);
+    if (selected.length === 3) return selected;
+  }
+  for (const candidate of candidates) {
+    if (selectedIds.has(candidate.ball.id)) continue;
+    selected.push(candidate);
+    if (selected.length === 3) break;
+  }
+  return selected;
 }
 
 export function runBackyardBallFit(catalogValues: readonly unknown[], inputValue: unknown): BallFitResult {
@@ -441,7 +579,7 @@ export function runBackyardBallFit(catalogValues: readonly unknown[], inputValue
     };
   }
 
-  const recommendations = candidates.slice(0, 3).map((candidate, index): BallFitRecommendation => ({
+  const recommendations = selectMultiBrandTopThree(candidates).map((candidate, index): BallFitRecommendation => ({
     rank: (index + 1) as 1 | 2 | 3,
     catalogBallId: candidate.ball.id,
     brand: candidate.ball.brand,
@@ -466,6 +604,9 @@ export function runBackyardBallFit(catalogValues: readonly unknown[], inputValue
   }
   if (input.swingSpeedBand !== "UNKNOWN" || input.driverDistanceYards !== null) {
     warnings.push("La velocidad y distancia de driver aportan contexto, pero no se usan para inventar compresión ni para imponer una bola por sí solas.");
+  }
+  if (input.handicap !== null) {
+    warnings.push("El HCP sólo ajusta ligeramente el peso de preferencias que elegiste; nunca determina una bola por sí solo.");
   }
   const contextualPriorities = input.priorities.filter((priority) => priority === "DRIVER_DISTANCE" || priority === "STABILITY_CONTROL");
   if (contextualPriorities.length > 0) {

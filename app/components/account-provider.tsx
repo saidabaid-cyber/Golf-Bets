@@ -44,6 +44,7 @@ import { BettingConsentDialog } from "./betting-consent-dialog";
 import { persistBettingDataConsent } from "../../lib/betting-consent";
 import { acknowledgePendingProfileWrite, cloudProfileFields, cloudProfileRevisionIsNewer, cloudProfileRevisionKey, createProfileWriteCoordinator, queuePendingProfileWrite, readPendingProfileWrite, recordCloudProfileRevision, retimePendingProfileWrite, type CloudProfileFields, type ProfileWriteCoordinator } from "../../lib/profile-sync";
 import { createEmptyEquipmentProfile, loadEquipmentProfile, saveEquipmentProfile } from "../../lib/golf-equipment";
+import { ballFitDefaultsFromProfile } from "../../lib/ball-fitting";
 import { EquipmentOnboarding } from "./equipment-onboarding";
 
 export type BackyardIdentity = BackyardProfile & {
@@ -78,8 +79,20 @@ type AccountContextValue = {
 const AccountContext = createContext<AccountContextValue | null>(null);
 
 function profileCachePayload(profile: BackyardProfile) {
-  const { userId, displayName, email, avatarUrl, defaultHandicap, givenName, familyName, username, city, state, country, homeClub, preferredTee, handedness, bio, profileVisibility } = profile;
-  return { userId, displayName, email, avatarUrl, defaultHandicap, givenName, familyName, username, city, state, country, homeClub, preferredTee, handedness, bio, profileVisibility };
+  const {
+    userId, displayName, email, avatarUrl, defaultHandicap, givenName, familyName,
+    username, city, state, country, homeClub, preferredTee, handedness,
+    typicalScore, driverDistanceYards, driverSwingSpeedBand, usualTrajectory,
+    shotTendency, greenSpeed, gamePriority, priceImportance, golfProfileUpdatedAt,
+    bio, profileVisibility,
+  } = profile;
+  return {
+    userId, displayName, email, avatarUrl, defaultHandicap, givenName, familyName,
+    username, city, state, country, homeClub, preferredTee, handedness,
+    typicalScore, driverDistanceYards, driverSwingSpeedBand, usualTrajectory,
+    shotTendency, greenSpeed, gamePriority, priceImportance, golfProfileUpdatedAt,
+    bio, profileVisibility,
+  };
 }
 
 export function useBackyardAccount() {
@@ -1015,7 +1028,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   }
   if (identity.mode === "authenticated" && !profileChecked) return <main className="accessScreen"><div className="accessLoading">Preparando tu perfil…</div></main>;
   if (identity.mode === "authenticated" && profileSetupRequired) return <>{accountCloudError && <div role="alert" className="notice bad">{accountCloudError}</div>}<ProfileSetupScreen identity={identity} onSave={saveInitialProfile} onBack={logout} /></>;
-  if (identity.mode === "authenticated" && equipmentOnboardingRequired) return <EquipmentOnboarding userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={identity.defaultHandicap} onComplete={finishEquipmentOnboarding} />;
+  if (identity.mode === "authenticated" && equipmentOnboardingRequired) return <EquipmentOnboarding userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={identity.defaultHandicap} ballFitDefaults={ballFitDefaultsFromProfile(identity)} onComplete={finishEquipmentOnboarding} />;
   if (bettingConsentOpen) return <AccountContext.Provider value={context!}><BettingConsentDialog onDismiss={() => closeBettingConsent(false)} onAccept={acceptBettingConsent} /></AccountContext.Provider>;
 
   return <AccountContext.Provider value={context!}>

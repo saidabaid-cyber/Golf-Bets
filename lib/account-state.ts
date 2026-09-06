@@ -28,6 +28,24 @@ export type BackyardProfile = {
   defaultHandicap: number | null;
 } & Partial<BackyardProfileDetails>;
 
+export const DRIVER_SWING_SPEED_BANDS = ["UNDER_85", "FROM_85_TO_95", "FROM_95_TO_105", "OVER_105"] as const;
+export type DriverSwingSpeedBand = (typeof DRIVER_SWING_SPEED_BANDS)[number] | "";
+
+export const USUAL_TRAJECTORIES = ["LOW", "MID", "HIGH"] as const;
+export type UsualTrajectory = (typeof USUAL_TRAJECTORIES)[number] | "";
+
+export const SHOT_TENDENCIES = ["DRAW", "FADE", "HOOK", "SLICE", "STRAIGHT", "VARIABLE"] as const;
+export type ShotTendency = (typeof SHOT_TENDENCIES)[number] | "";
+
+export const GREEN_SPEEDS = ["SLOW", "MID", "FAST", "VARIABLE"] as const;
+export type GreenSpeed = (typeof GREEN_SPEEDS)[number] | "";
+
+export const GAME_PRIORITIES = ["DISTANCE", "CONTROL", "ACCURACY", "FEEL", "SHORT_GAME"] as const;
+export type GamePriority = (typeof GAME_PRIORITIES)[number] | "";
+
+export const PRICE_IMPORTANCE_LEVELS = ["LOW", "MID", "HIGH"] as const;
+export type PriceImportance = (typeof PRICE_IMPORTANCE_LEVELS)[number] | "";
+
 export type BackyardProfileDetails = {
   givenName: string;
   familyName: string;
@@ -38,6 +56,15 @@ export type BackyardProfileDetails = {
   homeClub: string;
   preferredTee: string;
   handedness: "right" | "left" | "ambidextrous" | "";
+  typicalScore: number | null;
+  driverDistanceYards: number | null;
+  driverSwingSpeedBand: DriverSwingSpeedBand;
+  usualTrajectory: UsualTrajectory;
+  shotTendency: ShotTendency;
+  greenSpeed: GreenSpeed;
+  gamePriority: GamePriority;
+  priceImportance: PriceImportance;
+  golfProfileUpdatedAt: string | null;
   bio: string;
   profileVisibility: "private" | "friends";
 };
@@ -55,6 +82,15 @@ const EMPTY_PROFILE_DETAILS: BackyardProfileDetails = {
   homeClub: "",
   preferredTee: "",
   handedness: "",
+  typicalScore: null,
+  driverDistanceYards: null,
+  driverSwingSpeedBand: "",
+  usualTrajectory: "",
+  shotTendency: "",
+  greenSpeed: "",
+  gamePriority: "",
+  priceImportance: "",
+  golfProfileUpdatedAt: null,
   bio: "",
   profileVisibility: "private",
 };
@@ -65,6 +101,25 @@ export function emptyBackyardProfileDetails() {
 
 function profileText(value: unknown, fallback = "", maxLength = 120) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : fallback;
+}
+
+function optionalProfileNumber(value: unknown, fallback: number | null | undefined, minimum: number, maximum: number) {
+  if (value === null) return null;
+  return typeof value === "number" && Number.isFinite(value) && value >= minimum && value <= maximum
+    ? value
+    : fallback ?? null;
+}
+
+function profileChoice<const T extends readonly string[]>(value: unknown, choices: T, fallback: T[number] | "" | undefined) {
+  if (value === "") return "";
+  return typeof value === "string" && (choices as readonly string[]).includes(value)
+    ? value as T[number]
+    : fallback ?? "";
+}
+
+function profileTimestamp(value: unknown, fallback: string | null | undefined) {
+  if (value === null) return null;
+  return typeof value === "string" && !Number.isNaN(Date.parse(value)) ? value : fallback ?? null;
 }
 
 function profileDetails(candidate: Partial<BackyardProfile>, fallback?: BackyardProfile) {
@@ -82,6 +137,15 @@ function profileDetails(candidate: Partial<BackyardProfile>, fallback?: Backyard
       : candidate.handedness === "right" || candidate.handedness === "left" || candidate.handedness === "ambidextrous"
         ? candidate.handedness
         : fallback?.handedness || "",
+    typicalScore: optionalProfileNumber(candidate.typicalScore, fallback?.typicalScore, 40, 200),
+    driverDistanceYards: optionalProfileNumber(candidate.driverDistanceYards, fallback?.driverDistanceYards, 50, 500),
+    driverSwingSpeedBand: profileChoice(candidate.driverSwingSpeedBand, DRIVER_SWING_SPEED_BANDS, fallback?.driverSwingSpeedBand),
+    usualTrajectory: profileChoice(candidate.usualTrajectory, USUAL_TRAJECTORIES, fallback?.usualTrajectory),
+    shotTendency: profileChoice(candidate.shotTendency, SHOT_TENDENCIES, fallback?.shotTendency),
+    greenSpeed: profileChoice(candidate.greenSpeed, GREEN_SPEEDS, fallback?.greenSpeed),
+    gamePriority: profileChoice(candidate.gamePriority, GAME_PRIORITIES, fallback?.gamePriority),
+    priceImportance: profileChoice(candidate.priceImportance, PRICE_IMPORTANCE_LEVELS, fallback?.priceImportance),
+    golfProfileUpdatedAt: profileTimestamp(candidate.golfProfileUpdatedAt, fallback?.golfProfileUpdatedAt),
     bio: profileText(candidate.bio, fallback?.bio, 280),
     profileVisibility: candidate.profileVisibility === "friends" || candidate.profileVisibility === "private"
       ? candidate.profileVisibility

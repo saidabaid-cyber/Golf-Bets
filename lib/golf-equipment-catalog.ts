@@ -40,6 +40,44 @@ function catalogBrands<T extends { brand: string }>(seed: SeedEnvelope, models: 
   return normalizedBrands([...declared, ...discovered]);
 }
 
+function brandId(scope: "ball" | "club", name: string) {
+  const slug = name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("en-US")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  return `${scope}-brand-${slug}`;
+}
+
+function brandRows<T extends { brand: string; officialUrl: string | null; sourceName: string | null; verifiedAt: string | null }>(
+  scope: "ball" | "club",
+  brands: readonly string[],
+  models: readonly T[],
+) {
+  return brands.map((name) => {
+    const evidence = models.find((model) => model.brand === name && model.officialUrl && model.verifiedAt) || null;
+    return {
+      id: brandId(scope, name),
+      name,
+      active: models.some((model) => model.brand === name),
+      official_url: evidence?.officialUrl || null,
+      source_name: evidence?.sourceName || null,
+      verified_at: evidence?.verifiedAt || null,
+      created_at: evidence?.verifiedAt || rawBallSeed.verifiedAt || rawClubSeed.verifiedAt,
+      updated_at: evidence?.verifiedAt || rawBallSeed.verifiedAt || rawClubSeed.verifiedAt,
+    };
+  });
+}
+
+function ballFeelProfile(value: GolfBallCatalog["feel"]) {
+  if (value === "VERY_LOW") return "VERY_SOFT";
+  if (value === "LOW") return "SOFT";
+  if (value === "HIGH") return "FIRM";
+  if (value === "VERY_HIGH") return "VERY_FIRM";
+  return value;
+}
+
 const rawBallSeed = golfBallSeed as SeedEnvelope;
 const rawClubSeed = golfClubSeed as SeedEnvelope;
 const rawShaftSeed = golfShaftSeed as SeedEnvelope;
@@ -104,8 +142,11 @@ function requiredCatalogSource(model: { id: string; officialUrl: string | null; 
  */
 export function equipmentCatalogDatabaseSeed() {
   return {
+    ballBrands: brandRows("ball", golfBallBrands, golfBallCatalog),
+    clubBrands: brandRows("club", golfClubBrands, golfClubCatalog),
     balls: golfBallCatalog.map((ball) => ({
       id: ball.id,
+      brand_id: brandId("ball", ball.brand),
       brand: ball.brand,
       model: ball.model,
       generation: ball.generation,
@@ -114,6 +155,21 @@ export function equipmentCatalogDatabaseSeed() {
       cover_material: ball.coverMaterial,
       construction: ball.construction,
       compression: ball.compression,
+      compression_type: ball.compressionType,
+      compression_source: ball.compressionSource,
+      compression_source_url: ball.compressionSourceUrl,
+      compression_min: null,
+      compression_max: null,
+      compression_average: null,
+      construction_pieces: null,
+      dimple_count: null,
+      year_from: ball.year,
+      year_to: null,
+      feel_profile: ballFeelProfile(ball.feel),
+      recommended_swing_speed_min_mph: null,
+      recommended_swing_speed_max_mph: null,
+      target_player_description: ball.targetProfile.length ? ball.targetProfile.join(" · ") : null,
+      usga_conforming: null,
       flight: ball.flight,
       driver_spin: ball.driverSpin,
       iron_spin: ball.ironSpin,
@@ -133,10 +189,13 @@ export function equipmentCatalogDatabaseSeed() {
     })),
     clubs: golfClubCatalog.map((club) => ({
       id: club.id,
+      brand_id: brandId("club", club.brand),
       brand: club.brand,
       model: club.model,
       generation: club.generation,
       year: club.year,
+      year_from: club.year,
+      year_to: null,
       category: club.category,
       sub_category: club.subCategory,
       active: club.active,
@@ -146,6 +205,7 @@ export function equipmentCatalogDatabaseSeed() {
       standard_length_inches: club.standardLength,
       lie_degrees: club.lie,
       head_volume_cc: club.headVolume,
+      construction: null,
       ...requiredCatalogSource(club),
       created_at: club.createdAt ?? club.verifiedAt,
       updated_at: club.updatedAt ?? club.verifiedAt,
@@ -154,8 +214,11 @@ export function equipmentCatalogDatabaseSeed() {
       id: shaft.id,
       brand: shaft.brand,
       model: shaft.model,
-      generation: null,
+      generation: shaft.generation,
       year: null,
+      torque_degrees: shaft.torque,
+      tip_diameter_inches: shaft.tipDiameter,
+      butt_diameter_inches: shaft.buttDiameter,
       active: shaft.active,
       weight_grams: shaft.weight,
       flex: [...shaft.flex],

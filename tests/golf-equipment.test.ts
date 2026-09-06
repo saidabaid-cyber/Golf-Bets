@@ -6,6 +6,7 @@ import {
   createEmptyEquipmentProfile,
   decodeEquipmentProfile,
   encodeEquipmentProfile,
+  equipmentProfileFingerprint,
   equipmentProfileStorageKey,
   getLaunchMonitorProtocolProgress,
   loadEquipmentProfile,
@@ -18,8 +19,12 @@ import {
   normalizeGolfShaftCatalog,
   normalizeLaunchMonitorSession,
   normalizePlayerClub,
+  normalizePlayerClubDistance,
   removeEquipmentProfile,
   removePlayerClub,
+  removePlayerClubDistance,
+  replaceCurrentPlayerBall,
+  replaceCurrentPlayerClub,
   robustAverage,
   saveEquipmentProfile,
   setBallOnboardingStatus,
@@ -31,6 +36,7 @@ import {
   summarizeLaunchMonitorSession,
   upsertPlayerBall,
   upsertPlayerClub,
+  upsertPlayerClubDistance,
   type EquipmentProfile,
   type EquipmentStorageLike,
 } from "../lib/golf-equipment";
@@ -61,6 +67,8 @@ function manualClub(overrides: Record<string, unknown> = {}) {
     loft: null,
     handedness: "RH",
     shaftId: null,
+    customShaftBrand: null,
+    customShaftModel: null,
     customShaft: null,
     flex: null,
     shaftWeightGrams: null,
@@ -70,6 +78,8 @@ function manualClub(overrides: Record<string, unknown> = {}) {
     notes: null,
     setComposition: [],
     isCurrent: true,
+    startedUsingAt: CREATED_AT,
+    stoppedUsingAt: null,
     createdAt: CREATED_AT,
     updatedAt: UPDATED_AT,
     ...overrides,
@@ -86,7 +96,10 @@ function playerBall(overrides: Record<string, unknown> = {}) {
     generation: null,
     year: 2026,
     color: "Blanco",
+    notes: null,
     isCurrent: true,
+    startedUsingAt: CREATED_AT,
+    stoppedUsingAt: null,
     createdAt: CREATED_AT,
     updatedAt: UPDATED_AT,
     ...overrides,
@@ -104,6 +117,9 @@ function ballCatalog(overrides: Record<string, unknown> = {}) {
     coverMaterial: "Urethane",
     construction: "3-piece",
     compression: null,
+    compressionType: "UNKNOWN",
+    compressionSource: null,
+    compressionSourceUrl: null,
     flight: "MID",
     driverSpin: "LOW",
     ironSpin: "HIGH",
@@ -186,7 +202,7 @@ test("una bolsa completa conserva múltiples maderas, híbridos, wedges y compos
       category,
       customBrand: `Marca ${index}`,
       customModel: `Modelo ${index}`,
-      setComposition: category === "IRON_SET" ? ["4", "5", "6", "7", "8", "9", "PW", "GW", "desconocido"] : [],
+      setComposition: category === "IRON_SET" ? ["1", "2", "4", "5", "6", "7", "8", "9", "PW", "UW", "desconocido"] : [],
       loft: category === "WEDGE" ? 50 + index : null,
     }), UPDATED_AT));
   });
@@ -194,7 +210,26 @@ test("una bolsa completa conserva múltiples maderas, híbridos, wedges y compos
   assert.equal(profile.clubs.length, categories.length);
   assert.equal(profile.clubs.filter((club) => club.category === "FAIRWAY_WOOD").length, 2);
   assert.equal(profile.clubs.filter((club) => club.category === "WEDGE").length, 3);
-  assert.deepEqual(profile.clubs.find((club) => club.category === "IRON_SET")?.setComposition, ["4", "5", "6", "7", "8", "9", "PW", "GW"]);
+  assert.deepEqual(profile.clubs.find((club) => club.category === "IRON_SET")?.setComposition, ["1", "2", "4", "5", "6", "7", "8", "9", "PW", "UW"]);
+});
+
+test("sets combinados conservan un modelo por set y composiciones independientes", () => {
+  let profile = required(upsertPlayerClub(emptyProfile(), manualClub({
+    id: "combo-long",
+    category: "IRON_SET",
+    customModel: "Modelo A",
+    setComposition: ["4", "5", "6"],
+  }), UPDATED_AT));
+  profile = required(upsertPlayerClub(profile, manualClub({
+    id: "combo-short",
+    category: "IRON_SET",
+    customModel: "Modelo B",
+    setComposition: ["7", "8", "9", "PW"],
+  }), "2026-09-06T12:02:00.000Z"));
+
+  assert.equal(profile.clubs.filter((club) => club.category === "IRON_SET").length, 2);
+  assert.deepEqual(profile.clubs.find((club) => club.id === "combo-long")?.setComposition, ["4", "5", "6"]);
+  assert.deepEqual(profile.clubs.find((club) => club.id === "combo-short")?.setComposition, ["7", "8", "9", "PW"]);
 });
 
 test("un modelo ausente del catálogo usa identidad manual y nunca crea una segunda cuenta", () => {
@@ -208,22 +243,95 @@ test("un modelo ausente del catálogo usa identidad manual y nunca crea una segu
   assert.equal(profile.clubs[0].userId, USER_ID);
 });
 
-test("editar y archivar un bastón conserva su identidad; eliminarlo respeta la elección del usuario", () => {
+test("editar y archivar un bastón conserva shaft separado y fechas de uso", () => {
   let profile = required(upsertPlayerClub(emptyProfile(), manualClub(), UPDATED_AT));
-  profile = required(upsertPlayerClub(profile, manualClub({ customShaft: "Shaft nuevo", flex: "STIFF", updatedAt: "2026-09-06T12:02:00.000Z" }), "2026-09-06T12:02:00.000Z"));
+  profile = required(upsertPlayerClub(profile, manualClub({ customShaftBrand: "Fujikura", customShaftModel: "Ventus Blue", customShaft: "Fujikura Ventus Blue", flex: "STIFF", updatedAt: "2026-09-06T12:02:00.000Z" }), "2026-09-06T12:02:00.000Z"));
   assert.equal(profile.clubs.length, 1);
-  assert.equal(profile.clubs[0].customShaft, "Shaft nuevo");
+  assert.equal(profile.clubs[0].customShaftBrand, "Fujikura");
+  assert.equal(profile.clubs[0].customShaftModel, "Ventus Blue");
 
   profile = required(setPlayerClubCurrent(profile, "club-driver", false, "2026-09-06T12:03:00.000Z"));
   assert.equal(profile.clubs[0].isCurrent, false, "el equipo anterior queda disponible como histórico local");
+  assert.equal(profile.clubs[0].stoppedUsingAt, "2026-09-06T12:03:00.000Z");
+
+  profile = required(setPlayerClubCurrent(profile, "club-driver", true, "2026-09-06T12:03:30.000Z"));
+  assert.equal(profile.clubs[0].startedUsingAt, CREATED_AT);
+  assert.equal(profile.clubs[0].stoppedUsingAt, null);
 
   profile = required(removePlayerClub(profile, "club-driver", "2026-09-06T12:04:00.000Z"));
   assert.deepEqual(profile.clubs, []);
 });
 
-test("bola fija, cambio de bola y 'no tengo bola fija' preservan el historial sin dos actuales", () => {
-  let profile = required(upsertPlayerBall(emptyProfile(), playerBall(), UPDATED_AT));
+test("cambiar el modelo actual archiva el bastón anterior y comienza una identidad nueva", () => {
+  let profile = required(upsertPlayerClub(emptyProfile(), manualClub(), UPDATED_AT));
+  profile = required(replaceCurrentPlayerClub(profile, "club-driver", manualClub({
+    id: "club-driver-next",
+    customModel: "Modelo siguiente",
+    createdAt: "2026-09-06T13:00:00.000Z",
+    updatedAt: "2026-09-06T13:00:00.000Z",
+  }), "2026-09-06T13:00:00.000Z"));
+  assert.equal(profile.clubs.length, 2);
+  assert.equal(profile.clubs.find((club) => club.id === "club-driver")?.isCurrent, false);
+  assert.equal(profile.clubs.find((club) => club.id === "club-driver")?.stoppedUsingAt, "2026-09-06T13:00:00.000Z");
+  assert.equal(profile.clubs.find((club) => club.id === "club-driver-next")?.isCurrent, true);
+  assert.equal(profile.clubs.find((club) => club.id === "club-driver-next")?.startedUsingAt, "2026-09-06T13:00:00.000Z");
+});
+
+test("distancias manuales validan dueño y bastón, persisten y se eliminan en cascada", () => {
+  let profile = required(upsertPlayerClub(emptyProfile(), manualClub(), UPDATED_AT));
+  const distance = {
+    id: "distance-driver",
+    userId: USER_ID,
+    playerClubId: "club-driver",
+    carryDistance: 235,
+    totalDistance: 252,
+    unit: "YD",
+    source: "MANUAL",
+    sampleCount: 1,
+    confidence: null,
+    updatedAt: "2026-09-06T12:02:00.000Z",
+  };
+  assert.ok(normalizePlayerClubDistance(distance, USER_ID));
+  assert.equal(normalizePlayerClubDistance({ ...distance, userId: "other-user" }, USER_ID), null);
+  assert.equal(normalizePlayerClubDistance({ ...distance, carryDistance: 250, totalDistance: 240 }, USER_ID), null);
+  assert.equal(normalizePlayerClubDistance({ ...distance, carryDistance: 801 }, USER_ID), null);
+  assert.equal(upsertPlayerClubDistance(profile, { ...distance, playerClubId: "missing-club" }), null);
+
+  profile = required(upsertPlayerClubDistance(profile, distance, "2026-09-06T12:02:00.000Z"));
+  assert.equal(profile.distances[0].carryDistance, 235);
+  const reopened = decodeEquipmentProfile(required(encodeEquipmentProfile(profile, "2026-09-06T12:03:00.000Z")), USER_ID);
+  assert.equal(reopened?.distances[0].totalDistance, 252);
+
+  profile = required(removePlayerClubDistance(profile, "distance-driver", "2026-09-06T12:04:00.000Z"));
+  assert.deepEqual(profile.distances, []);
+  profile = required(upsertPlayerClubDistance(profile, distance, "2026-09-06T12:05:00.000Z"));
+  profile = required(removePlayerClub(profile, "club-driver", "2026-09-06T12:06:00.000Z"));
+  assert.deepEqual(profile.distances, [], "no quedan referencias huérfanas al borrar el bastón");
+});
+
+test("fingerprint y mutadores no cambian ante una escritura semánticamente idéntica", () => {
+  const profile = required(upsertPlayerClub(emptyProfile(), manualClub(), UPDATED_AT));
+  const fingerprint = equipmentProfileFingerprint(profile, USER_ID);
+  const repeated = required(upsertPlayerClub(profile, manualClub({ updatedAt: "2026-09-06T19:00:00.000Z" }), "2026-09-06T19:00:00.000Z"));
+  assert.equal(equipmentProfileFingerprint(repeated, USER_ID), fingerprint);
+  assert.equal(repeated.updatedAt, profile.updatedAt, "un submit equivalente no genera nueva mutación de sync");
+  const statusRepeated = required(setEquipmentOnboardingStatus(profile, profile.equipmentOnboarding, "2026-09-06T20:00:00.000Z"));
+  assert.equal(statusRepeated.updatedAt, profile.updatedAt);
+
+  let rendered = profile;
+  let simulatedPosts = 0;
+  for (let index = 0; index < 20; index += 1) {
+    const next = required(setEquipmentOnboardingStatus(rendered, rendered.equipmentOnboarding, new Date(Date.parse(UPDATED_AT) + index * 1_000).toISOString()));
+    if (equipmentProfileFingerprint(next, USER_ID) !== equipmentProfileFingerprint(rendered, USER_ID)) simulatedPosts += 1;
+    rendered = next;
+  }
+  assert.equal(simulatedPosts, 0, "20 renders sin cambios no producen una mutación de red pendiente");
+});
+
+test("bola fija, notas, cambio e historial conservan una sola actual y fechas de uso", () => {
+  let profile = required(upsertPlayerBall(emptyProfile(), playerBall({ notes: "Funciona bien con viento." }), UPDATED_AT));
   assert.equal(profile.ballPreference, "FIXED");
+  assert.equal(profile.balls[0].notes, "Funciona bien con viento.");
   profile = required(upsertPlayerBall(profile, playerBall({
     id: "player-ball-2",
     catalogBallId: "ball-two",
@@ -234,13 +342,32 @@ test("bola fija, cambio de bola y 'no tengo bola fija' preservan el historial si
   assert.equal(profile.balls.length, 2);
   assert.equal(profile.balls.filter((ball) => ball.isCurrent).length, 1);
   assert.equal(profile.balls.find((ball) => ball.isCurrent)?.id, "player-ball-2");
+  assert.equal(profile.balls.find((ball) => ball.id === "player-ball-1")?.stoppedUsingAt, "2026-09-06T12:02:00.000Z");
 
   profile = required(setCurrentPlayerBall(profile, "player-ball-1", "2026-09-06T12:03:00.000Z"));
   assert.equal(profile.balls.find((ball) => ball.isCurrent)?.id, "player-ball-1");
+  assert.equal(profile.balls.find((ball) => ball.id === "player-ball-1")?.stoppedUsingAt, null);
+  assert.equal(profile.balls.find((ball) => ball.id === "player-ball-2")?.stoppedUsingAt, "2026-09-06T12:03:00.000Z");
   profile = required(setBallPreference(profile, "NO_FIXED_BALL", "2026-09-06T12:04:00.000Z"));
   assert.equal(profile.ballPreference, "NO_FIXED_BALL");
   assert.equal(profile.balls.some((ball) => ball.isCurrent), false);
   assert.equal(profile.balls.length, 2);
+  assert.equal(profile.balls.find((ball) => ball.id === "player-ball-1")?.stoppedUsingAt, "2026-09-06T12:04:00.000Z");
+});
+
+test("cambiar modelo desde editar preserva la bola anterior como histórico", () => {
+  let profile = required(upsertPlayerBall(emptyProfile(), playerBall(), UPDATED_AT));
+  profile = required(replaceCurrentPlayerBall(profile, "player-ball-1", playerBall({
+    id: "player-ball-next",
+    catalogBallId: "ball-next",
+    ballModel: "Bola siguiente",
+    createdAt: "2026-09-06T13:00:00.000Z",
+    updatedAt: "2026-09-06T13:00:00.000Z",
+  }), "2026-09-06T13:00:00.000Z"));
+  assert.equal(profile.balls.length, 2);
+  assert.equal(profile.balls.find((ball) => ball.id === "player-ball-1")?.isCurrent, false);
+  assert.equal(profile.balls.find((ball) => ball.id === "player-ball-1")?.stoppedUsingAt, "2026-09-06T13:00:00.000Z");
+  assert.equal(profile.balls.find((ball) => ball.id === "player-ball-next")?.isCurrent, true);
 });
 
 test("guardar, cerrar y reabrir usa un envelope versionado y aislado por userId", () => {
@@ -264,6 +391,25 @@ test("guardar, cerrar y reabrir usa un envelope versionado y aislado por userId"
 
   assert.equal(removeEquipmentProfile(storage, USER_ID).ok, true);
   assert.equal(storage.values.has(key), false);
+});
+
+test("un modelo de proveedor conserva snapshots de club y shaft al reabrir sin catálogo cliente", () => {
+  const profile = required(upsertPlayerClub(emptyProfile(), manualClub({
+    catalogClubId: "db-only-club",
+    customBrand: "Marca remota",
+    customModel: "Modelo remoto",
+    shaftId: "db-only-shaft",
+    customShaftBrand: "Shaft remoto",
+    customShaftModel: "Serie remota",
+    customShaft: "Shaft remoto Serie remota",
+  }), UPDATED_AT));
+  const reopened = decodeEquipmentProfile(required(encodeEquipmentProfile(profile)), USER_ID);
+  assert.equal(reopened?.clubs[0].catalogClubId, "db-only-club");
+  assert.equal(reopened?.clubs[0].customBrand, "Marca remota");
+  assert.equal(reopened?.clubs[0].customModel, "Modelo remoto");
+  assert.equal(reopened?.clubs[0].shaftId, "db-only-shaft");
+  assert.equal(reopened?.clubs[0].customShaftBrand, "Shaft remoto");
+  assert.equal(reopened?.clubs[0].customShaftModel, "Serie remota");
 });
 
 test("el último resultado de fitting se incorpora al mismo perfil versionado", () => {
@@ -301,6 +447,17 @@ test("la normalización no pierde el perfil existente por entradas opcionales in
 
   const encoded = encodeEquipmentProfile(normalized, UPDATED_AT);
   assert.ok(encoded);
+});
+
+test("un snapshot v1 anterior sin distancias sigue siendo legible", () => {
+  const current = emptyProfile();
+  const legacy: Record<string, unknown> = { ...current, schemaVersion: 1 };
+  delete legacy.distances;
+  const normalized = normalizeEquipmentProfile(legacy, USER_ID);
+  assert.ok(normalized);
+  assert.equal(normalized.schemaVersion, 2);
+  assert.deepEqual(normalized.distances, []);
+  assert.equal(normalizeEquipmentProfileStrict(legacy, USER_ID), null, "un cliente v1 nunca puede bajar el snapshot cloud v2");
 });
 
 test("los catálogos conservan null cuando no existe compresión u otro dato verificado", () => {

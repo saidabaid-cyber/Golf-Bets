@@ -21,6 +21,40 @@ export class EquipmentSyncError extends Error {
   }
 }
 
+export type EquipmentSyncScope = {
+  generation: number;
+  userId: string;
+  accessToken: string | null;
+};
+
+/** Async equipment work is allowed to mutate client state only while it still
+ * belongs to the exact account/session generation that started it. Comparing
+ * the token as well as the user protects refreshes where the user id stays the
+ * same but an older request finishes after the replacement session. */
+export function isEquipmentSyncScopeCurrent(
+  expected: EquipmentSyncScope | null,
+  current: EquipmentSyncScope | null,
+) {
+  return Boolean(expected && current
+    && expected.generation === current.generation
+    && expected.userId === current.userId
+    && expected.accessToken === current.accessToken);
+}
+
+/**
+ * A value equal to the last confirmed cloud fingerprint still needs queuing
+ * while another value is pending: that pending upload may otherwise overwrite
+ * the cloud after the user has already reverted locally.
+ */
+export function shouldQueueEquipmentFingerprint(
+  fingerprint: string | null,
+  lastSyncedFingerprint: string | null,
+  lastQueuedFingerprint: string | null,
+) {
+  if (!fingerprint || fingerprint === lastQueuedFingerprint) return false;
+  return fingerprint !== lastSyncedFingerprint || lastQueuedFingerprint !== null;
+}
+
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
 type EquipmentResponse = {

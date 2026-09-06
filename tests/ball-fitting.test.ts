@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  BACKYARD_BALL_FIT_ALGORITHM_VERSION,
   BACKYARD_BALL_FIT_DISCLAIMER,
+  BALL_FIT_WEIGHT_CONFIG,
+  ballFitDefaultsFromProfile,
   getBallFitInputCompleteness,
   normalizeBallFitInput,
   restoreEquipmentBallFitSummary,
@@ -24,6 +27,9 @@ function catalogBall(overrides: Record<string, unknown> = {}) {
     coverMaterial: "Urethane",
     construction: "3-piece",
     compression: null,
+    compressionType: "UNKNOWN",
+    compressionSource: null,
+    compressionSourceUrl: null,
     flight: "MID",
     driverSpin: "LOW",
     ironSpin: "HIGH",
@@ -119,6 +125,60 @@ test("The Backyard Ball Fit devuelve un grupo Top 3, no una verdad única", () =
   assert.equal(result.disclaimer, BACKYARD_BALL_FIT_DISCLAIMER);
   assert.match(result.disclaimer, /orientativa/);
   assert.match(result.disclaimer, /No es un fitting oficial/);
+});
+
+test("los pesos son centrales, versionados y la selección prioriza un Top 3 multimarca", () => {
+  assert.equal(BACKYARD_BALL_FIT_ALGORITHM_VERSION, "backyard-ball-fit-v2");
+  assert.equal(BALL_FIT_WEIGHT_CONFIG.confidence.maximumMatchScore, 98);
+
+  const result = runBackyardBallFit([
+    catalogBall({ id: "brand-a-one", brand: "Brand A", model: "One" }),
+    catalogBall({ id: "brand-a-two", brand: "Brand A", model: "Two" }),
+    catalogBall({ id: "brand-b", brand: "Brand B", model: "Three", feel: "MID" }),
+    catalogBall({ id: "brand-c", brand: "Brand C", model: "Four", flight: "HIGH" }),
+  ], completeInput());
+
+  assert.equal(result.recommendations.length, 3);
+  assert.deepEqual(new Set(result.recommendations.map((item) => item.brand)).size, 3);
+  assert.equal(result.recommendations[0].catalogBallId, "brand-a-one");
+});
+
+test("HCP bajo y alto sólo ponderan preferencias explícitas y nunca eligen una bola por sí solos", () => {
+  const lowHandicap = runBackyardBallFit(catalog(), completeInput({ handicap: 4 }));
+  const highHandicap = runBackyardBallFit(catalog(), completeInput({ handicap: 24 }));
+
+  assert.equal(lowHandicap.recommendations[0].catalogBallId, "control-ball");
+  assert.equal(highHandicap.recommendations[0].catalogBallId, "control-ball");
+  assert.ok(lowHandicap.warnings.some((warning) => warning.includes("nunca determina")));
+  assert.ok(highHandicap.warnings.some((warning) => warning.includes("nunca determina")));
+
+  const handicapOnly = runBackyardBallFit(catalog(), { userId: "fit-user", handicap: 24 });
+  assert.equal(handicapOnly.status, "INSUFFICIENT_INPUT");
+  assert.deepEqual(handicapOnly.recommendations, []);
+});
+
+test("el fitting precarga señales conocidas de Mi juego sin fabricar respuestas", () => {
+  const defaults = ballFitDefaultsFromProfile({
+    typicalScore: 84,
+    driverDistanceYards: 252,
+    driverSwingSpeedBand: "FROM_95_TO_105",
+    usualTrajectory: "MID",
+    gamePriority: "SHORT_GAME",
+  });
+  assert.deepEqual(defaults, {
+    typicalScore: 84,
+    driverDistanceYards: 252,
+    swingSpeedBand: "FROM_95_TO_105",
+    trajectoryPreference: "MID",
+    priorities: ["WEDGE_SPIN", "GREENSIDE_FEEL"],
+  });
+  assert.deepEqual(ballFitDefaultsFromProfile({}), {
+    typicalScore: null,
+    driverDistanceYards: null,
+    swingSpeedBand: "UNKNOWN",
+    trajectoryPreference: "UNKNOWN",
+    priorities: [],
+  });
 });
 
 test("un fitting corto pero suficiente produce resultado parcial y conserva null sin dato verificado", () => {

@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { toEquipmentBallFitSummary, type BallFitInput, type BallFitResult } from "../../lib/ball-fitting";
-import { golfBallCatalog, golfClubCatalog, golfShaftCatalog } from "../../lib/golf-equipment-catalog";
+import { toEquipmentBallFitSummary, type BallFitInput, type BallFitProfileDefaults, type BallFitResult } from "../../lib/ball-fitting";
 import {
   setBallOnboardingStatus,
   setBallPreference,
@@ -17,6 +16,7 @@ import { BallFitWizard } from "./ball-fit-wizard";
 import { BallEditor, CLUB_CATEGORY_ICONS, CLUB_CATEGORY_LABELS, ClubEditor } from "./equipment-editors";
 import { BrandLockup } from "./brand-lockup";
 import { equipmentStatusLabel, useEquipmentProfile } from "./use-equipment-profile";
+import { useEquipmentCatalogSearch } from "./use-equipment-catalog-search";
 import styles from "./equipment.module.css";
 
 type Step = "clubs-prompt" | "clubs-build" | "ball-prompt" | "ball-select" | "fit-prompt" | "fit";
@@ -25,6 +25,7 @@ type EquipmentOnboardingProps = {
   userId: string;
   accessToken: string | null;
   defaultHandicap: number | null;
+  ballFitDefaults?: BallFitProfileDefaults;
   onComplete: () => void;
 };
 
@@ -40,7 +41,7 @@ function initialStep(profile: ReturnType<typeof useEquipmentProfile>["profile"])
   return "fit-prompt";
 }
 
-export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, onComplete }: EquipmentOnboardingProps) {
+export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, ballFitDefaults, onComplete }: EquipmentOnboardingProps) {
   const { profile, status, message, update } = useEquipmentProfile(userId, accessToken);
   const [step, setStep] = useState<Step>("clubs-prompt");
   const [initialized, setInitialized] = useState(false);
@@ -48,6 +49,12 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, onCo
   const [ballEditorOpen, setBallEditorOpen] = useState(false);
   const currentClubs = useMemo(() => profile?.clubs.filter((club) => club.isCurrent) || [], [profile]);
   const currentBall = profile?.balls.find((ball) => ball.isCurrent) || null;
+  const pinnedClubIds = useMemo(() => profile?.clubs.flatMap((club) => club.catalogClubId ? [club.catalogClubId] : []) || [], [profile]);
+  const pinnedShaftIds = useMemo(() => profile?.clubs.flatMap((club) => club.shaftId ? [club.shaftId] : []) || [], [profile]);
+  const pinnedBallIds = useMemo(() => profile?.balls.flatMap((ball) => ball.catalogBallId ? [ball.catalogBallId] : []) || [], [profile]);
+  const clubCatalog = useEquipmentCatalogSearch({ kind: "CLUB", query: "", pinnedIds: pinnedClubIds });
+  const shaftCatalog = useEquipmentCatalogSearch({ kind: "SHAFT", query: "", pinnedIds: pinnedShaftIds });
+  const ballCatalog = useEquipmentCatalogSearch({ kind: "BALL", query: "", pinnedIds: pinnedBallIds });
 
   useEffect(() => {
     if (!profile || initialized) return;
@@ -125,7 +132,7 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, onCo
     {step === "clubs-build" && <>
       <div className="eyebrow">TUS BASTONES</div><h1>Construye tu bolsa</h1><p>Agrega sólo lo que quieras. Marca + modelo es suficiente y puedes regresar después desde Perfil.</p>
       <div className={styles.onboardingBuilder}>
-        {!currentClubs.length ? <div className={styles.emptyState}><b>Tu bolsa está lista para empezar</b><p>Driver, maderas, híbridos, utility, hierros, wedges y putter.</p></div> : <div className={styles.equipmentList}>{currentClubs.map((club) => { const catalog = club.catalogClubId ? golfClubCatalog.find((item) => item.id === club.catalogClubId) : null; return <div className={styles.equipmentItem} key={club.id}><div className={styles.itemIdentity}><span className={styles.categoryIcon}>{CLUB_CATEGORY_ICONS[club.category]}</span><div><h3>{catalog ? `${catalog.brand} ${catalog.model}` : `${club.customBrand} ${club.customModel}`}</h3><p>{CLUB_CATEGORY_LABELS[club.category]}{club.loft === null ? "" : ` · ${club.loft}°`}</p></div></div></div>; })}</div>}
+        {!currentClubs.length ? <div className={styles.emptyState}><b>Tu bolsa está lista para empezar</b><p>Driver, maderas, híbridos, utility, hierros, wedges y putter.</p></div> : <div className={styles.equipmentList}>{currentClubs.map((club) => { const catalog = club.catalogClubId ? clubCatalog.items.find((item) => item.id === club.catalogClubId) : null; const savedName = [club.customBrand, club.customModel].filter(Boolean).join(" ") || "Bastón guardado"; return <div className={styles.equipmentItem} key={club.id}><div className={styles.itemIdentity}><span className={styles.categoryIcon}>{CLUB_CATEGORY_ICONS[club.category]}</span><div><h3>{catalog ? `${catalog.brand} ${catalog.model}` : savedName}</h3><p>{CLUB_CATEGORY_LABELS[club.category]}{club.loft === null ? "" : ` · ${club.loft}°`}</p></div></div></div>; })}</div>}
         <div className={styles.onboardingActions}><button type="button" className="secondary" onClick={() => setClubEditorOpen(true)}>+ Agregar bastón</button><button type="button" className="primary" onClick={() => finishClubs(currentClubs.length ? "COMPLETED" : "SKIPPED")}>{currentClubs.length ? "Continuar con mi bolsa" : "Continuar sin bastones"}</button></div>
       </div>
     </>}
@@ -147,11 +154,11 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, onCo
       <div className={styles.onboardingActions}><button type="button" className="primary" onClick={() => setStep("fit")}>Hacer fitting de bola</button><button type="button" className="secondary" onClick={onComplete}>Ahora no</button></div>
     </>}
 
-    {step === "fit" && <BallFitWizard userId={userId} defaultHandicap={defaultHandicap} currentBall={currentBall} catalog={golfBallCatalog} onCancel={onComplete} onComplete={completeFit} />}
+    {step === "fit" && (ballCatalog.items.length ? <BallFitWizard userId={userId} defaultHandicap={defaultHandicap} profileDefaults={ballFitDefaults} currentBall={currentBall} catalog={ballCatalog.items} onCancel={onComplete} onComplete={completeFit} /> : <div className={ballCatalog.status === "loading" ? styles.loadingState : styles.errorState} role="status">{ballCatalog.status === "loading" ? "Cargando catálogo de bolas…" : <>No pudimos cargar el catálogo. Puedes continuar y hacer el fitting después. <button type="button" className="textButton" onClick={ballCatalog.retry}>Reintentar</button><button type="button" className="secondary" onClick={onComplete}>Después</button></>}</div>)}
 
     {step !== "fit" && <button type="button" className={styles.onboardingSkip} onClick={skipEverything}>Saltar por ahora y entrar a The Backyard</button>}
     <p className={styles.syncStatus} data-state={status} role="status">{equipmentStatusLabel(status)}{message ? ` · ${message}` : ""}</p>
-    {clubEditorOpen && <ClubEditor userId={userId} catalog={golfClubCatalog} shafts={golfShaftCatalog} onCancel={() => setClubEditorOpen(false)} onSave={saveClub} />}
-    {ballEditorOpen && <BallEditor userId={userId} catalog={golfBallCatalog} existing={null} onCancel={() => setBallEditorOpen(false)} onSave={saveBall} />}
+    {clubEditorOpen && <ClubEditor userId={userId} catalog={clubCatalog.items} shafts={shaftCatalog.items} onCancel={() => setClubEditorOpen(false)} onSave={saveClub} />}
+    {ballEditorOpen && <BallEditor userId={userId} catalog={ballCatalog.items} existing={null} onCancel={() => setBallEditorOpen(false)} onSave={saveBall} />}
   </section></main>;
 }

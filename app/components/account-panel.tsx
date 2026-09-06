@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { LEGAL_DOCUMENT_VERSIONS, legalConfig } from "../../lib/legal-config";
 import { BETTING_DATA_CONSENT_TYPE, emptyBackyardProfileDetails, profileHandicapInput, profileHandicapLabel, validateProfileAvatarUrl, validateProfileDraft, type BackyardProfile, type BackyardProfileDetails } from "../../lib/account-state";
+import { ballFitDefaultsFromProfile } from "../../lib/ball-fitting";
 import type { GolfInsights } from "../../lib/golf-insights";
 import { useBackyardAccount } from "./account-provider";
 import { EquipmentProfilePanel } from "./equipment-profile-panel";
@@ -50,9 +51,63 @@ function profileDetailsDraft(profile: BackyardProfile): ProfileDetailsDraft {
     homeClub: profile.homeClub || defaults.homeClub,
     preferredTee: profile.preferredTee || defaults.preferredTee,
     handedness: profile.handedness || defaults.handedness,
+    typicalScore: profile.typicalScore ?? defaults.typicalScore,
+    driverDistanceYards: profile.driverDistanceYards ?? defaults.driverDistanceYards,
+    driverSwingSpeedBand: profile.driverSwingSpeedBand || defaults.driverSwingSpeedBand,
+    usualTrajectory: profile.usualTrajectory || defaults.usualTrajectory,
+    shotTendency: profile.shotTendency || defaults.shotTendency,
+    greenSpeed: profile.greenSpeed || defaults.greenSpeed,
+    gamePriority: profile.gamePriority || defaults.gamePriority,
+    priceImportance: profile.priceImportance || defaults.priceImportance,
+    golfProfileUpdatedAt: profile.golfProfileUpdatedAt ?? defaults.golfProfileUpdatedAt,
     bio: profile.bio || defaults.bio,
     profileVisibility: profile.profileVisibility || defaults.profileVisibility,
   };
+}
+
+function optionalDraftNumber(value: string) {
+  if (!value.trim()) return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+const SWING_SPEED_LABELS: Record<Exclude<BackyardProfileDetails["driverSwingSpeedBand"], "">, string> = {
+  UNDER_85: "Menos de 85 mph",
+  FROM_85_TO_95: "85–95 mph",
+  FROM_95_TO_105: "95–105 mph",
+  OVER_105: "Más de 105 mph",
+};
+
+const TRAJECTORY_LABELS: Record<Exclude<BackyardProfileDetails["usualTrajectory"], "">, string> = { LOW: "Baja", MID: "Media", HIGH: "Alta" };
+const TENDENCY_LABELS: Record<Exclude<BackyardProfileDetails["shotTendency"], "">, string> = { DRAW: "Draw", FADE: "Fade", HOOK: "Hook", SLICE: "Slice", STRAIGHT: "Recta", VARIABLE: "Variable" };
+const GREEN_SPEED_LABELS: Record<Exclude<BackyardProfileDetails["greenSpeed"], "">, string> = { SLOW: "Lentos", MID: "Medios", FAST: "Rápidos", VARIABLE: "Varía" };
+const GAME_PRIORITY_LABELS: Record<Exclude<BackyardProfileDetails["gamePriority"], "">, string> = { DISTANCE: "Distancia", CONTROL: "Control", ACCURACY: "Precisión", FEEL: "Sensación", SHORT_GAME: "Juego corto" };
+const PRICE_IMPORTANCE_LABELS: Record<Exclude<BackyardProfileDetails["priceImportance"], "">, string> = { LOW: "Poca", MID: "Media", HIGH: "Alta" };
+
+function gameProfileChanged(profile: BackyardProfile, draft: ProfileDetailsDraft, handicap: number | null) {
+  return JSON.stringify([
+    profile.defaultHandicap ?? null,
+    profile.handedness || "",
+    profile.typicalScore ?? null,
+    profile.driverDistanceYards ?? null,
+    profile.driverSwingSpeedBand || "",
+    profile.usualTrajectory || "",
+    profile.shotTendency || "",
+    profile.greenSpeed || "",
+    profile.gamePriority || "",
+    profile.priceImportance || "",
+  ]) !== JSON.stringify([
+    handicap,
+    draft.handedness,
+    draft.typicalScore,
+    draft.driverDistanceYards,
+    draft.driverSwingSpeedBand,
+    draft.usualTrajectory,
+    draft.shotTendency,
+    draft.greenSpeed,
+    draft.gamePriority,
+    draft.priceImportance,
+  ]);
 }
 
 export function AccountPanel({ view, highContrast, onHighContrastChange, notificationsEnabled, onNotificationsEnabledChange, golfInsights, onOpenStats, onOpenAccount }: AccountPanelProps) {
@@ -94,11 +149,20 @@ export function AccountPanel({ view, highContrast, onHighContrastChange, notific
     if (!validation.ok) { setMessageKind("error"); setMessage(validation.message); return; }
     const avatarValidation = validateProfileAvatarUrl(avatarUrl);
     if (!avatarValidation.ok) { setMessageKind("error"); setMessage(avatarValidation.message); return; }
+    if (profileDetails.typicalScore !== null && (!Number.isInteger(profileDetails.typicalScore) || profileDetails.typicalScore < 40 || profileDetails.typicalScore > 200)) {
+      setMessageKind("error"); setMessage("El score típico debe ser un entero entre 40 y 200, o quedar vacío."); return;
+    }
+    if (profileDetails.driverDistanceYards !== null && (!Number.isFinite(profileDetails.driverDistanceYards) || profileDetails.driverDistanceYards < 50 || profileDetails.driverDistanceYards > 500)) {
+      setMessageKind("error"); setMessage("La distancia de driver debe estar entre 50 y 500 yardas, o quedar vacía."); return;
+    }
     setSavingProfile(true); setMessageKind("success"); setMessage("");
     try {
-      const result = await updateProfile({ displayName: validation.displayName, defaultHandicap: validation.defaultHandicap, avatarUrl: avatarValidation.avatarUrl, ...profileDetails });
+      const golfProfileUpdatedAt = gameProfileChanged(identity, profileDetails, validation.defaultHandicap)
+        ? new Date().toISOString()
+        : identity.golfProfileUpdatedAt ?? null;
+      const result = await updateProfile({ displayName: validation.displayName, defaultHandicap: validation.defaultHandicap, avatarUrl: avatarValidation.avatarUrl, ...profileDetails, golfProfileUpdatedAt });
       setEditing(false);
-      setMessage(result === "cloud" ? "Nombre, avatar y HCP sincronizados. Los datos ampliados se guardaron en este dispositivo." : "Perfil actualizado en este dispositivo. Los datos ampliados quedan pendientes de sincronización Beta.");
+      setMessage(result === "cloud" ? "Perfil y datos de Mi juego guardados. La identidad básica quedó sincronizada." : "Perfil y Mi juego actualizados en este dispositivo. Los datos ampliados quedan pendientes de sincronización Beta.");
     } catch { setMessageKind("error"); setMessage("No se confirmó el guardado del perfil. Conservamos lo que escribiste; reintenta."); }
     finally { setSavingProfile(false); }
   }
@@ -155,6 +219,15 @@ export function AccountPanel({ view, highContrast, onHighContrastChange, notific
         <label>País<input value={profileDetails.country} onChange={(event) => setProfileDetails((current) => ({ ...current, country: event.target.value }))} autoComplete="country-name" /></label>
         <label>Tee preferido<input value={profileDetails.preferredTee} onChange={(event) => setProfileDetails((current) => ({ ...current, preferredTee: event.target.value }))} /></label>
         <label>Mano<select value={profileDetails.handedness} onChange={(event) => setProfileDetails((current) => ({ ...current, handedness: event.target.value as ProfileDetailsDraft["handedness"] }))}><option value="">Sin indicar</option><option value="right">Derecha</option><option value="left">Izquierda</option><option value="ambidextrous">Ambas</option></select></label>
+        <div className="profileGameHeading"><div className="eyebrow">MI JUEGO</div><b>Preferencias golfísticas opcionales</b><p className="hint">HCP y mano usan los mismos datos de tu perfil; no necesitas repetirlos. Completa sólo lo que conozcas.</p></div>
+        <label>Score típico<input type="number" inputMode="numeric" min={40} max={200} value={profileDetails.typicalScore ?? ""} onChange={(event) => setProfileDetails((current) => ({ ...current, typicalScore: optionalDraftNumber(event.target.value) }))} placeholder="Ej. 88" /></label>
+        <label>Distancia con driver (yd)<input type="number" inputMode="decimal" min={50} max={500} step="1" value={profileDetails.driverDistanceYards ?? ""} onChange={(event) => setProfileDetails((current) => ({ ...current, driverDistanceYards: optionalDraftNumber(event.target.value) }))} placeholder="Ej. 235" /></label>
+        <label>Velocidad de swing · driver<select value={profileDetails.driverSwingSpeedBand} onChange={(event) => setProfileDetails((current) => ({ ...current, driverSwingSpeedBand: event.target.value as ProfileDetailsDraft["driverSwingSpeedBand"] }))}><option value="">No la sé / sin indicar</option><option value="UNDER_85">Menos de 85 mph</option><option value="FROM_85_TO_95">85–95 mph</option><option value="FROM_95_TO_105">95–105 mph</option><option value="OVER_105">Más de 105 mph</option></select></label>
+        <label>Trayectoria habitual<select value={profileDetails.usualTrajectory} onChange={(event) => setProfileDetails((current) => ({ ...current, usualTrajectory: event.target.value as ProfileDetailsDraft["usualTrajectory"] }))}><option value="">Sin indicar</option><option value="LOW">Baja</option><option value="MID">Media</option><option value="HIGH">Alta</option></select></label>
+        <label>Tendencia habitual<select value={profileDetails.shotTendency} onChange={(event) => setProfileDetails((current) => ({ ...current, shotTendency: event.target.value as ProfileDetailsDraft["shotTendency"] }))}><option value="">Sin indicar</option><option value="DRAW">Draw</option><option value="FADE">Fade</option><option value="HOOK">Hook</option><option value="SLICE">Slice</option><option value="STRAIGHT">Recta</option><option value="VARIABLE">Variable</option></select></label>
+        <label>Greens habituales<select value={profileDetails.greenSpeed} onChange={(event) => setProfileDetails((current) => ({ ...current, greenSpeed: event.target.value as ProfileDetailsDraft["greenSpeed"] }))}><option value="">Sin indicar</option><option value="SLOW">Lentos</option><option value="MID">Medios</option><option value="FAST">Rápidos</option><option value="VARIABLE">Varía</option></select></label>
+        <label>Prioridad de juego<select value={profileDetails.gamePriority} onChange={(event) => setProfileDetails((current) => ({ ...current, gamePriority: event.target.value as ProfileDetailsDraft["gamePriority"] }))}><option value="">Sin indicar</option><option value="DISTANCE">Distancia</option><option value="CONTROL">Control</option><option value="ACCURACY">Precisión</option><option value="FEEL">Sensación</option><option value="SHORT_GAME">Juego corto</option></select></label>
+        <label>Importancia del precio<select value={profileDetails.priceImportance} onChange={(event) => setProfileDetails((current) => ({ ...current, priceImportance: event.target.value as ProfileDetailsDraft["priceImportance"] }))}><option value="">Sin indicar</option><option value="LOW">Poca</option><option value="MID">Media</option><option value="HIGH">Alta</option></select></label>
         <label>Privacidad<select value={profileDetails.profileVisibility} onChange={(event) => setProfileDetails((current) => ({ ...current, profileVisibility: event.target.value as ProfileDetailsDraft["profileVisibility"] }))}><option value="private">Privado</option><option value="friends">Amigos</option></select></label>
         <label className="profileBioField">Bio<textarea value={profileDetails.bio} onChange={(event) => setProfileDetails((current) => ({ ...current, bio: event.target.value }))} maxLength={280} rows={3} /></label>
         <p className="hint profileLocalDetail">Los datos ampliados se conservan en este dispositivo. Su réplica multi-dispositivo se habilitará sólo con el esquema aislado de Beta.</p>
@@ -167,6 +240,15 @@ export function AccountPanel({ view, highContrast, onHighContrastChange, notific
         {(identity.city || identity.state || identity.country) && <div className="profileMeta"><span>Ubicación</span><b>{[identity.city, identity.state, identity.country].filter(Boolean).join(", ")}</b></div>}
         {identity.preferredTee && <div className="profileMeta"><span>Tee preferido</span><b>{identity.preferredTee}</b></div>}
         {identity.handedness && <div className="profileMeta"><span>Mano</span><b>{identity.handedness === "right" ? "Derecha" : identity.handedness === "left" ? "Izquierda" : "Ambas"}</b></div>}
+        {(identity.typicalScore !== null && identity.typicalScore !== undefined) && <div className="profileMeta"><span>Score típico</span><b>{identity.typicalScore}</b></div>}
+        {(identity.driverDistanceYards !== null && identity.driverDistanceYards !== undefined) && <div className="profileMeta"><span>Driver aproximado</span><b>{identity.driverDistanceYards} yd</b></div>}
+        {identity.driverSwingSpeedBand && <div className="profileMeta"><span>Velocidad de swing</span><b>{SWING_SPEED_LABELS[identity.driverSwingSpeedBand]}</b></div>}
+        {identity.usualTrajectory && <div className="profileMeta"><span>Trayectoria</span><b>{TRAJECTORY_LABELS[identity.usualTrajectory]}</b></div>}
+        {identity.shotTendency && <div className="profileMeta"><span>Tendencia</span><b>{TENDENCY_LABELS[identity.shotTendency]}</b></div>}
+        {identity.greenSpeed && <div className="profileMeta"><span>Greens habituales</span><b>{GREEN_SPEED_LABELS[identity.greenSpeed]}</b></div>}
+        {identity.gamePriority && <div className="profileMeta"><span>Prioridad</span><b>{GAME_PRIORITY_LABELS[identity.gamePriority]}</b></div>}
+        {identity.priceImportance && <div className="profileMeta"><span>Importancia del precio</span><b>{PRICE_IMPORTANCE_LABELS[identity.priceImportance]}</b></div>}
+        {identity.golfProfileUpdatedAt && <div className="profileMeta"><span>Mi juego actualizado</span><b>{new Date(identity.golfProfileUpdatedAt).toLocaleDateString("es-MX")}</b></div>}
         {identity.bio && <p className="profileBio">{identity.bio}</p>}
         <p className="hint">The Backyard guarda el valor que capturas; no emite ni certifica un handicap oficial.</p>
       </div>}
@@ -174,7 +256,7 @@ export function AccountPanel({ view, highContrast, onHighContrastChange, notific
 
     {view === "profile" && identity.mode === "authenticated" && message && <div className={messageKind === "error" ? "notice bad" : "notice"} role={messageKind === "error" ? "alert" : "status"}>{message}</div>}
 
-    {view === "profile" && identity.mode === "authenticated" && <EquipmentProfilePanel userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={identity.defaultHandicap} />}
+    {view === "profile" && identity.mode === "authenticated" && <EquipmentProfilePanel userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={identity.defaultHandicap} ballFitDefaults={ballFitDefaultsFromProfile(identity)} />}
 
     {view === "profile" && golfInsights && <section className="card betaProfileGolfCard">
       <div className="sectionTitle"><div><h2>Mi golf</h2><p>Resumen calculado sólo con tu histórico disponible.</p></div>{onOpenStats && <button type="button" className="textButton" onClick={onOpenStats}>Ver Stats</button>}</div>

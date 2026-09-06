@@ -15,6 +15,7 @@ import {
   getBallFitInputCompleteness,
   runBackyardBallFit,
   type BallFitInput,
+  type BallFitProfileDefaults,
   type BallFitPriority,
   type BallFitResult,
 } from "../../lib/ball-fitting";
@@ -62,18 +63,18 @@ const LEVEL_LABELS: Record<QualitativeLevel, string> = {
 const PRICE_RESULT_LABELS = { ECONOMY: "Económica", MID: "Media", PREMIUM: "Premium" } as const;
 const DRAFT_SAVE_ERROR = "No pudimos guardar este borrador en el dispositivo. Mantén esta pantalla abierta o libera espacio antes de salir.";
 
-function defaultInput(userId: string, handicap: number | null, currentBallId: string | null): BallFitInput {
+function defaultInput(userId: string, handicap: number | null, currentBallId: string | null, defaults?: BallFitProfileDefaults): BallFitInput {
   return {
     userId,
     currentBallId,
     handicap,
-    typicalScore: null,
-    driverDistanceYards: null,
-    swingSpeedBand: "UNKNOWN",
+    typicalScore: defaults?.typicalScore ?? null,
+    driverDistanceYards: defaults?.driverDistanceYards ?? null,
+    swingSpeedBand: defaults?.swingSpeedBand || "UNKNOWN",
     feelPreference: "ANY",
-    trajectoryPreference: "UNKNOWN",
+    trajectoryPreference: defaults?.trajectoryPreference || "UNKNOWN",
     greenFirmness: "VARIES_UNKNOWN",
-    priorities: [],
+    priorities: defaults?.priorities || [],
     approachBehavior: "UNKNOWN",
     wantsGreensideSpin: "UNKNOWN",
     pricePreference: "BEST_FIT",
@@ -100,14 +101,15 @@ function OptionGrid<T extends string>({ values, labels, selected, onSelect }: {
 type BallFitWizardProps = {
   userId: string;
   defaultHandicap: number | null;
+  profileDefaults?: BallFitProfileDefaults;
   currentBall: PlayerBall | null;
   catalog: readonly GolfBallCatalog[];
   onCancel: () => void;
   onComplete: (result: BallFitResult, input: BallFitInput) => boolean | void;
 };
 
-export function BallFitWizard({ userId, defaultHandicap, currentBall, catalog, onCancel, onComplete }: BallFitWizardProps) {
-  const [input, setInput] = useState<BallFitInput>(() => defaultInput(userId, defaultHandicap, currentBall?.catalogBallId || null));
+export function BallFitWizard({ userId, defaultHandicap, profileDefaults, currentBall, catalog, onCancel, onComplete }: BallFitWizardProps) {
+  const [input, setInput] = useState<BallFitInput>(() => defaultInput(userId, defaultHandicap, currentBall?.catalogBallId || null, profileDefaults));
   const [step, setStep] = useState(0);
   const [hydrated, setHydrated] = useState(false);
   const [savedDraft, setSavedDraft] = useState<BallFitDraft | null>(null);
@@ -144,7 +146,7 @@ export function BallFitWizard({ userId, defaultHandicap, currentBall, catalog, o
 
   function startNewFit() {
     removeBallFitDraft(localStorage, userId);
-    setInput(defaultInput(userId, defaultHandicap, currentBall?.catalogBallId || null));
+    setInput(defaultInput(userId, defaultHandicap, currentBall?.catalogBallId || null, profileDefaults));
     setStep(0);
     setResult(null);
     setSavedDraft(null);
@@ -192,6 +194,10 @@ export function BallFitWizard({ userId, defaultHandicap, currentBall, catalog, o
       setMessage(DRAFT_SAVE_ERROR);
       return;
     }
+    onCancel();
+  }
+
+  function exitWithoutSaving() {
     onCancel();
   }
 
@@ -260,6 +266,7 @@ export function BallFitWizard({ userId, defaultHandicap, currentBall, catalog, o
 
     {result && <BallFitResults result={result} catalog={catalog} current={currentCatalogBall} />}
     {message && <div className={styles.formMessage} role="alert">{message}</div>}
+    {message === DRAFT_SAVE_ERROR && <button type="button" className="textButton" onClick={exitWithoutSaving}>Salir sin guardar</button>}
     <div className={styles.wizardActions}>
       <button type="button" className="secondary" onClick={previous} disabled={!result && step === 0}>← Anterior</button>
       {!result && step < 5 && <button type="button" className="primary" onClick={next}>Siguiente →</button>}
@@ -273,8 +280,13 @@ function fact(value: QualitativeLevel | null) {
   return value ? LEVEL_LABELS[value] : "Sin dato verificado";
 }
 
+function technicalFact(value: string | number | null | undefined, suffix = "") {
+  return value === null || value === undefined || value === "" ? "Sin dato verificado" : `${value}${suffix}`;
+}
+
 export function BallFitResults({ result, catalog, current }: { result: BallFitResult; catalog: readonly GolfBallCatalog[]; current: GolfBallCatalog | null }) {
   if (!result.recommendations.length) return <section className={styles.emptyState}><b>Aún no hay una comparación suficiente</b><p>{result.warnings[0] || "Agrega dos preferencias comparables y vuelve a intentar."}</p></section>;
+  const recommendationCatalog = result.recommendations.map((item) => catalog.find((ball) => ball.id === item.catalogBallId) || null);
   return <>
     <div className={styles.resultGrid}>{result.recommendations.map((recommendation) => {
       const catalogBall = catalog.find((ball) => ball.id === recommendation.catalogBallId);
@@ -299,6 +311,9 @@ export function BallFitResults({ result, catalog, current }: { result: BallFitRe
 
     <div className={styles.comparisonTable} aria-label="Comparar bolas recomendadas"><table><thead><tr><th>Atributo</th><th>Actual</th>{result.recommendations.map((item) => <th key={item.catalogBallId}>{item.brand} {item.model}</th>)}</tr></thead><tbody>
       {(["flight", "feel", "driverSpin", "ironSpin", "shortGameSpin"] as const).map((attribute) => <tr key={attribute}><th>{attribute === "flight" ? "Vuelo" : attribute === "feel" ? "Feel" : attribute === "driverSpin" ? "Spin driver" : attribute === "ironSpin" ? "Spin hierros" : "Spin short game"}</th><td>{fact(current?.[attribute] || null)}</td>{result.recommendations.map((item) => <td key={item.catalogBallId}>{fact(item.attributes[attribute])}</td>)}</tr>)}
+      <tr><th>Construcción</th><td>{technicalFact(current?.construction)}</td>{recommendationCatalog.map((ball, index) => <td key={result.recommendations[index].catalogBallId}>{technicalFact(ball?.construction)}</td>)}</tr>
+      <tr><th>Cubierta</th><td>{technicalFact(current?.coverMaterial)}</td>{recommendationCatalog.map((ball, index) => <td key={result.recommendations[index].catalogBallId}>{technicalFact(ball?.coverMaterial)}</td>)}</tr>
+      <tr><th>Compresión</th><td>{technicalFact(current?.compression)}</td>{recommendationCatalog.map((ball, index) => <td key={result.recommendations[index].catalogBallId}>{technicalFact(ball?.compression)}</td>)}</tr>
       <tr><th>Precio</th><td>{current?.priceTier ? PRICE_RESULT_LABELS[current.priceTier] : "Sin dato verificado"}</td>{result.recommendations.map((item) => <td key={item.catalogBallId}>{item.attributes.priceTier ? PRICE_RESULT_LABELS[item.attributes.priceTier] : "Sin dato verificado"}</td>)}</tr>
     </tbody></table></div>
     {result.warnings.map((warning) => <p className={styles.disclaimer} key={warning}>{warning}</p>)}

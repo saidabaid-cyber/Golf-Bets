@@ -1,0 +1,127 @@
+import type {
+  ClubCategory,
+  GolfBallCatalog,
+  GolfClubCatalog,
+  GolfShaftCatalog,
+} from "./golf-equipment";
+import type { GolfCatalogPage } from "./golf-catalog-domain";
+
+export const EQUIPMENT_CATALOG_KINDS = ["BALL", "CLUB", "SHAFT"] as const;
+export type EquipmentCatalogKind = (typeof EQUIPMENT_CATALOG_KINDS)[number];
+export type EquipmentCatalogItem = GolfBallCatalog | GolfClubCatalog | GolfShaftCatalog;
+
+export type EquipmentCatalogSearchInput = {
+  kind: EquipmentCatalogKind;
+  query?: string;
+  category?: ClubCategory | null;
+  cursor?: string | null;
+  limit?: number;
+  includeArchived?: boolean;
+  /** Catalog identities already stored in a player snapshot. These are
+   * returned alongside the requested page even when archived. */
+  pinnedIds?: readonly string[];
+};
+
+export interface EquipmentCatalogProvider {
+  readonly id: string;
+  search(input: EquipmentCatalogSearchInput): Promise<GolfCatalogPage<EquipmentCatalogItem>>;
+}
+
+function searchable(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLocaleLowerCase("es-MX");
+}
+
+function safeLimit(value: number | undefined) {
+  if (!Number.isFinite(value)) return 20;
+  return Math.max(1, Math.min(50, Math.trunc(value as number)));
+}
+
+function decodeCursor(value: string | null | undefined) {
+  if (!value || value.length > 240) return null;
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
+}
+
+function safePinnedIds(values: readonly string[] | undefined) {
+  if (!values) return [];
+  return [...new Set(values
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0 && value.length <= 240))]
+    .slice(0, 25);
+}
+
+function rank(item: EquipmentCatalogItem, query: string) {
+  if (!query) return 0;
+  const brand = searchable(item.brand);
+  const model = searchable(item.model);
+  const combined = `${brand} ${model}`;
+  if (model === query || combined === query) return 0;
+  if (model.startsWith(query) || combined.startsWith(query)) return 1;
+  if (brand.startsWith(query)) return 2;
+  return 3;
+}
+
+function page<T extends EquipmentCatalogItem>(items: readonly T[], input: EquipmentCatalogSearchInput): GolfCatalogPage<EquipmentCatalogItem> {
+  const query = searchable(input.query || "").slice(0, 120);
+  const tokens = query.split(" ").filter(Boolean);
+  const candidates = items
+    .filter((item) => input.includeArchived || item.active)
+    .filter((item) => input.kind !== "CLUB" || !input.category || (item as GolfClubCatalog).category === input.category)
+    .filter((item) => {
+      if (!tokens.length) return true;
+      const generation = "generation" in item ? item.generation : "";
+      const haystack = searchable(`${item.brand} ${item.model} ${generation || ""}`);
+      return tokens.every((token) => haystack.includes(token));
+    })
+    .sort((left, right) => rank(left, query) - rank(right, query)
+      || left.brand.localeCompare(right.brand, "es-MX")
+      || left.model.localeCompare(right.model, "es-MX")
+      || left.id.localeCompare(right.id));
+
+  const cursorId = decodeCursor(input.cursor);
+  const cursorIndex = cursorId ? candidates.findIndex((item) => item.id === cursorId) : -1;
+  const start = cursorIndex >= 0 ? cursorIndex + 1 : 0;
+  const limit = safeLimit(input.limit);
+  const selected = candidates.slice(start, start + limit);
+  const hasMore = start + selected.length < candidates.length;
+  const pinnedIds = safePinnedIds(input.pinnedIds);
+  const byId = new Map<string, EquipmentCatalogItem>();
+  for (const id of pinnedIds) {
+    const pinned = items.find((item) => item.id === id);
+    if (pinned) byId.set(pinned.id, pinned);
+  }
+  for (const item of selected) byId.set(item.id, item);
+  return {
+    items: [...byId.values()],
+    hasMore,
+    nextCursor: hasMore && selected.length ? encodeURIComponent(selected[selected.length - 1].id) : null,
+  };
+}
+
+/**
+ * Small QA provider backed by versioned, sourced seed files. UI consumes this
+ * through a server route so replacing it with a paginated Supabase provider
+ * does not change the picker contract or ship a future 40k-row catalog.
+ */
+export function createInternalEquipmentCatalogProvider(catalogs: {
+  balls: readonly GolfBallCatalog[];
+  clubs: readonly GolfClubCatalog[];
+  shafts: readonly GolfShaftCatalog[];
+}): EquipmentCatalogProvider {
+  return {
+    id: "backyard-equipment-seed",
+    async search(input) {
+      if (input.kind === "BALL") return page(catalogs.balls, input);
+      if (input.kind === "CLUB") return page(catalogs.clubs, input);
+      return page(catalogs.shafts, input);
+    },
+  };
+}

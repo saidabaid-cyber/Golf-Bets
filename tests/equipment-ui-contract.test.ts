@@ -11,6 +11,10 @@ const fitting = readFileSync("lib/ball-fitting.ts", "utf8");
 const launch = readFileSync("app/components/launch-monitor-capture.tsx", "utf8");
 const accountPanel = readFileSync("app/components/account-panel.tsx", "utf8");
 const workspace = readFileSync("lib/account-workspace.ts", "utf8");
+const equipmentProfileHook = readFileSync("app/components/use-equipment-profile.ts", "utf8");
+const catalogSearchHook = readFileSync("app/components/use-equipment-catalog-search.ts", "utf8");
+const catalogRoute = readFileSync("app/api/catalog/equipment/route.ts", "utf8");
+const catalogServerLoader = readFileSync("lib/equipment-catalog-provider.server.ts", "utf8");
 
 test("el onboarding de equipo ocurre después del perfil básico y siempre se puede omitir", () => {
   assert.match(provider, /ProfileSetupScreen[\s\S]*onSave=\{saveInitialProfile\}/);
@@ -33,6 +37,20 @@ test("Mi bolsa permite catálogo, captura manual, múltiples categorías, edici�
   assert.match(panel, /Mover a anterior/);
   assert.match(panel, /Equipo anterior/);
   assert.match(panel, /removePlayerClub/);
+  for (const iron of ["1", "2", "UW"]) assert.match(editors, new RegExp(`"${iron}"`));
+  assert.match(editors, /customShaftBrand/);
+  assert.match(editors, /customShaftModel/);
+});
+
+test("Mi juego y las distancias manuales son opcionales y usan el mismo perfil", () => {
+  assert.match(accountPanel, /MI JUEGO/);
+  for (const field of ["typicalScore", "driverDistanceYards", "driverSwingSpeedBand", "usualTrajectory", "shotTendency", "greenSpeed", "gamePriority", "priceImportance"]) assert.match(accountPanel, new RegExp(field));
+  assert.match(panel, /<h2>Distancias<\/h2>/);
+  assert.match(panel, /upsertPlayerClubDistance/);
+  assert.match(panel, /removePlayerClubDistance/);
+  assert.match(panel, /item\.source === "MANUAL"/);
+  assert.match(editors, /ClubDistanceEditor/);
+  assert.match(editors, /source: "MANUAL"/);
 });
 
 test("bola y Ball Fit exponen el flujo completo sin presentar una verdad oficial", () => {
@@ -45,9 +63,36 @@ test("bola y Ball Fit exponen el flujo completo sin presentar una verdad oficial
   assert.match(wizard, /Match/);
   assert.match(wizard, /Sin dato verificado/);
   assert.match(wizard, /Comparar bolas recomendadas/);
+  for (const row of ["Construcción", "Cubierta", "Compresión"]) assert.match(wizard, new RegExp(row));
   assert.match(wizard, /BACKYARD_BALL_FIT_DISCLAIMER/);
   assert.match(fitting, /No es un fitting oficial/);
   assert.doesNotMatch(wizard, /fitting oficial de (Titleist|Callaway|Bridgestone)/i);
+});
+
+test("los selectores buscan catálogo en servidor con debounce, límite y fallback offline", () => {
+  assert.match(editors, /useEquipmentCatalogSearch/);
+  assert.match(editors, /Buscar bastón/);
+  assert.match(editors, /Buscar bola/);
+  assert.match(catalogSearchHook, /window\.setTimeout/);
+  assert.match(catalogSearchHook, /250/);
+  assert.match(editors, /Sin conexión/);
+  assert.match(catalogRoute, /internalEquipmentCatalogProvider\.search/);
+  assert.match(catalogRoute, /limit/);
+  assert.match(catalogRoute, /cache-control/);
+  assert.match(catalogRoute, /pinnedIds/);
+  assert.match(catalogSearchHook, /loadMore/);
+  assert.match(catalogSearchHook, /normalizeGolfBallCatalogEntries/);
+  assert.match(catalogServerLoader, /import "server-only"/);
+  assert.doesNotMatch(onboarding, /golf-equipment-catalog/);
+  assert.doesNotMatch(panel, /golf-equipment-catalog/);
+  assert.match(editors, /immutable display snapshot/);
+});
+
+test("una página de una búsqueda anterior nunca se anexa después de cambiar query o categoría", () => {
+  assert.match(catalogSearchHook, /requestGenerationRef/);
+  assert.match(catalogSearchHook, /loadMoreControllerRef\.current\?\.abort\(\)/);
+  assert.match(catalogSearchHook, /requestGenerationRef\.current !== generation/);
+  assert.match(catalogSearchHook, /signal: controller\.signal/);
 });
 
 test("cerrar el Ball Fit no afirma guardar cuando localStorage falla", () => {
@@ -55,6 +100,8 @@ test("cerrar el Ball Fit no afirma guardar cuando localStorage falla", () => {
   assert.match(wizard, /if \(!saveBallFitDraft\(localStorage, input,/);
   assert.match(wizard, /setMessage\(DRAFT_SAVE_ERROR\);\s*return;/);
   assert.match(wizard, /onClick=\{saveAndClose\}>Guardar y regresar/);
+  assert.match(wizard, /message === DRAFT_SAVE_ERROR/);
+  assert.match(wizard, /onClick=\{exitWithoutSaving\}>Salir sin guardar/);
 });
 
 test("las doce señales rápidas y las prioridades ordenables están disponibles", () => {
@@ -89,4 +136,7 @@ test("el módulo incluye estados de carga, vacío, error, offline y sincronizaci
   assert.match(panel, /message/);
   assert.match(panel, /status === "offline"/);
   assert.match(panel, /status === "conflict"/);
+  assert.match(equipmentProfileHook, /equipmentProfileFingerprint/);
+  assert.match(equipmentProfileHook, /lastQueuedFingerprintRef/);
+  assert.match(equipmentProfileHook, /shouldQueueEquipmentFingerprint/);
 });

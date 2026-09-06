@@ -41,6 +41,15 @@ test("edición ampliada conserva campos, normaliza usuario y no cambia email", (
     homeClub: " La Vista ",
     preferredTee: " Azules ",
     handedness: "right",
+    typicalScore: 82,
+    driverDistanceYards: 245,
+    driverSwingSpeedBand: "FROM_95_TO_105",
+    usualTrajectory: "MID",
+    shotTendency: "FADE",
+    greenSpeed: "FAST",
+    gamePriority: "CONTROL",
+    priceImportance: "MID",
+    golfProfileUpdatedAt: "2026-09-06T20:00:00.000Z",
     bio: " Golf de fin de semana. ",
     profileVisibility: "friends",
   });
@@ -49,6 +58,15 @@ test("edición ampliada conserva campos, normaliza usuario y no cambia email", (
   assert.equal(edited.defaultHandicap, -1.2);
   assert.equal(edited.username, "said.golf");
   assert.equal(edited.homeClub, "La Vista");
+  assert.equal(edited.typicalScore, 82);
+  assert.equal(edited.driverDistanceYards, 245);
+  assert.equal(edited.driverSwingSpeedBand, "FROM_95_TO_105");
+  assert.equal(edited.usualTrajectory, "MID");
+  assert.equal(edited.shotTendency, "FADE");
+  assert.equal(edited.greenSpeed, "FAST");
+  assert.equal(edited.gamePriority, "CONTROL");
+  assert.equal(edited.priceImportance, "MID");
+  assert.equal(edited.golfProfileUpdatedAt, "2026-09-06T20:00:00.000Z");
   assert.equal(edited.profileVisibility, "friends");
 });
 
@@ -72,10 +90,60 @@ test("perfil offline autenticado recupera detalles locales y no inventa los ause
 });
 
 test("datos ampliados inválidos vuelven a defaults seguros", () => {
-  const restored = normalizeBackyardProfileCache({ handedness: "upside-down", profileVisibility: "public", bio: 99 }, baseProfile);
+  const restored = normalizeBackyardProfileCache({
+    handedness: "upside-down",
+    profileVisibility: "public",
+    bio: 99,
+    typicalScore: 12,
+    driverDistanceYards: 2_000,
+    driverSwingSpeedBand: "PRO",
+    usualTrajectory: "MOON",
+    shotTendency: "KNUCKLE",
+    greenSpeed: "GLASS",
+    gamePriority: "ADS",
+    priceImportance: "FREE",
+    golfProfileUpdatedAt: "not-a-date",
+  }, baseProfile);
   assert.equal(restored.handedness, "");
   assert.equal(restored.profileVisibility, "private");
   assert.equal(restored.bio, "");
+  assert.equal(restored.typicalScore, null);
+  assert.equal(restored.driverDistanceYards, null);
+  assert.equal(restored.driverSwingSpeedBand, "");
+  assert.equal(restored.usualTrajectory, "");
+  assert.equal(restored.shotTendency, "");
+  assert.equal(restored.greenSpeed, "");
+  assert.equal(restored.gamePriority, "");
+  assert.equal(restored.priceImportance, "");
+  assert.equal(restored.golfProfileUpdatedAt, null);
+});
+
+test("Mi juego permite borrar datos opcionales sin duplicar HCP ni mano", () => {
+  const populated = mergeBackyardProfile(baseProfile, {
+    displayName: baseProfile.displayName,
+    defaultHandicap: 4.3,
+    avatarUrl: baseProfile.avatarUrl,
+    handedness: "left",
+    typicalScore: 78,
+    driverDistanceYards: 260,
+    usualTrajectory: "HIGH",
+  });
+  const cleared = mergeBackyardProfile(populated, {
+    displayName: populated.displayName,
+    defaultHandicap: populated.defaultHandicap,
+    avatarUrl: populated.avatarUrl,
+    handedness: "",
+    typicalScore: null,
+    driverDistanceYards: null,
+    usualTrajectory: "",
+  });
+  assert.equal(cleared.defaultHandicap, 4.3);
+  assert.equal(cleared.handedness, "");
+  assert.equal(cleared.typicalScore, null);
+  assert.equal(cleared.driverDistanceYards, null);
+  assert.equal(cleared.usualTrajectory, "");
+  assert.equal("handicap" in cleared, false);
+  assert.equal("playingHand" in cleared, false);
 });
 
 test("Sin indicar elimina una mano guardada previamente", () => {

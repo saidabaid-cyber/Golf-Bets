@@ -6,7 +6,9 @@ import {
   EquipmentSyncError,
   chooseEquipmentProfile,
   downloadEquipmentProfile,
+  isEquipmentSyncScopeCurrent,
   uploadEquipmentProfile,
+  shouldQueueEquipmentFingerprint,
   type EquipmentCloudRecord,
 } from "../lib/equipment-sync";
 import { isExplicitFeatureEnabled } from "../lib/feature-flags";
@@ -190,6 +192,27 @@ test("la decisión de merge nunca resuelve silenciosamente empates divergentes",
     chooseEquipmentProfile({ ...base, ballPreference: "SKIPPED" }, cloudRecord(base)),
     "conflict",
   );
+});
+
+test("una reversión local se encola mientras otro fingerprint sigue pendiente", () => {
+  assert.equal(shouldQueueEquipmentFingerprint("X", "X", null), false);
+  assert.equal(shouldQueueEquipmentFingerprint("A", "X", null), true);
+  assert.equal(shouldQueueEquipmentFingerprint("X", "X", "A"), true);
+  assert.equal(shouldQueueEquipmentFingerprint("X", "X", "X"), false);
+});
+
+test("un refresh de token invalida respuestas de la generación anterior aunque conserve userId", () => {
+  const oldScope = { generation: 7, userId: USER_ID, accessToken: "token-old" };
+  const refreshedScope = { generation: 8, userId: USER_ID, accessToken: "token-new" };
+
+  assert.equal(isEquipmentSyncScopeCurrent(oldScope, oldScope), true);
+  assert.equal(isEquipmentSyncScopeCurrent(oldScope, refreshedScope), false);
+  assert.equal(isEquipmentSyncScopeCurrent(
+    { ...refreshedScope, accessToken: "token-old" },
+    refreshedScope,
+  ), false);
+  assert.equal(isEquipmentSyncScopeCurrent(refreshedScope, refreshedScope), true);
+  assert.equal(isEquipmentSyncScopeCurrent(refreshedScope, null), false);
 });
 
 test("la ruta deriva identidad del token, limita payload y no expone errores internos", () => {

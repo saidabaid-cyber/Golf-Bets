@@ -175,6 +175,15 @@ test("el catálogo de bolas incluye cada marca mínima y solo atributos normaliz
     assert.ok(model.coverMaterial === null || typeof model.coverMaterial === "string");
     assert.ok(model.construction === null || typeof model.construction === "string");
     assert.ok(model.compression === null || (typeof model.compression === "number" && model.compression > 0));
+    if (model.compression === null) {
+      assert.equal(model.compressionType, "UNKNOWN");
+      assert.equal(model.compressionSource, null);
+      assert.equal(model.compressionSourceUrl, null);
+    } else {
+      assert.equal(model.compressionType, "MANUFACTURER");
+      assert.equal(model.compressionSource, model.sourceName);
+      assert.equal(model.compressionSourceUrl, model.officialUrl);
+    }
     for (const field of qualitativeFields) {
       assert.ok(model[field] === null || QUALITATIVE_LEVELS.includes(model[field] as (typeof QUALITATIVE_LEVELS)[number]));
     }
@@ -215,8 +224,30 @@ test("el catálogo de shafts conserva variantes familiares sin inventar un peso 
     assert.ok(model.flex.every((flex) => SHAFT_FLEXES.includes(flex as (typeof SHAFT_FLEXES)[number])));
     assert.ok(model.launch === null || QUALITATIVE_LEVELS.includes(model.launch as (typeof QUALITATIVE_LEVELS)[number]));
     assert.ok(model.spin === null || QUALITATIVE_LEVELS.includes(model.spin as (typeof QUALITATIVE_LEVELS)[number]));
+    for (const field of ["generation", "torque", "tipDiameter", "buttDiameter"] as const) assert.equal(model[field] ?? null, null);
   }
   assert.ok(seed.models.every((model) => model.weight === null), "Los modelos familiares no deben fingir un único peso común a todos sus flexes");
+});
+
+test("la proyección de compresión y shaft usa procedencia explícita, nunca inferencia", () => {
+  const projected = equipmentCatalogDatabaseSeed();
+  for (const ball of projected.balls) {
+    if (ball.compression === null) {
+      assert.equal(ball.compression_type, "UNKNOWN");
+      assert.equal(ball.compression_source, null);
+      assert.equal(ball.compression_source_url, null);
+    } else {
+      assert.equal(ball.compression_type, "MANUFACTURER");
+      assert.ok(ball.compression_source);
+      assert.equal(ball.compression_source_url, ball.official_url);
+    }
+  }
+  for (const shaft of projected.shafts) {
+    assert.equal(shaft.generation, null);
+    assert.equal(shaft.torque_degrees, null);
+    assert.equal(shaft.tip_diameter_inches, null);
+    assert.equal(shaft.butt_diameter_inches, null);
+  }
 });
 
 test("los loaders del dominio importan todos los modelos sin descartes silenciosos", () => {
@@ -233,12 +264,22 @@ test("cada catálogo tiene una proyección completa e idempotente para Supabase 
   assert.equal(projected.balls.length, readSeed(FILES.balls).models.length);
   assert.equal(projected.clubs.length, readSeed(FILES.clubs).models.length);
   assert.equal(projected.shafts.length, readSeed(FILES.shafts).models.length);
+  assert.equal(projected.ballBrands.length, REQUIRED_BALL_BRANDS.length);
+  assert.ok(projected.clubBrands.length >= REQUIRED_CLUB_BRANDS.length);
+  assert.equal(new Set(projected.ballBrands.map((row) => row.id)).size, projected.ballBrands.length);
+  assert.ok(projected.balls.every((row) => projected.ballBrands.some((brand) => brand.id === row.brand_id)));
+  assert.ok(projected.clubs.every((row) => projected.clubBrands.some((brand) => brand.id === row.brand_id)));
+  assert.ok(projected.balls.every((row) => row.compression_type === (row.compression === null ? "UNKNOWN" : "MANUFACTURER")));
+  assert.ok(projected.balls.every((row) => row.recommended_swing_speed_min_mph === null && row.usga_conforming === null));
 
-  for (const row of [...projected.balls, ...projected.clubs, ...projected.shafts]) {
+  for (const row of [...projected.ballBrands, ...projected.clubBrands, ...projected.balls, ...projected.clubs, ...projected.shafts]) {
     assert.ok(row.id);
-    assert.equal(row.source_url, row.official_url);
-    assert.match(row.source_url, /^https:\/\//);
+    if ("source_url" in row) {
+      assert.equal(row.source_url, row.official_url);
+      assert.match(row.source_url, /^https:\/\//);
+    }
     assert.ok(row.source_name);
+    assert.ok(row.verified_at);
     assert.ok(Number.isFinite(Date.parse(row.verified_at)));
   }
 });
