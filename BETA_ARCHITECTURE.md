@@ -55,6 +55,32 @@ Perfil y Cuenta son vistas distintas. Sólo una sesión autenticada puede editar
 
 Social y notificaciones son actualmente una proyección privada de actividad local. El estado leído se guarda por identidad en el dispositivo, deduplica eventos exactos y no crea una relación social remota. Los avisos compartidos seguirán bloqueados hasta disponer de tablas, RLS y pruebas multiusuario en Beta.
 
+## Perfil de equipo, bola y Ball Fit
+
+El equipo extiende la identidad autenticada existente; no crea una segunda cuenta ni un segundo jugador. `EquipmentProfile` es un documento versionado por `userId` que contiene bastones, bolas, preferencias y el resumen del último fit. Su storage local usa la llave `the-backyard:equipment-profile:v1:<userId>` y valida propietario/esquema antes de leer o sobrescribir. El borrador del cuestionario se guarda por separado en `the-backyard:ball-fit-draft:v1:<userId>` para poder cerrar y reabrir la PWA sin perder respuestas.
+
+El flujo opcional se integra después de completar el perfil básico de una cuenta nueva. Cada etapa permite omitir y las cuentas existentes acceden directamente desde Perfil, sin ser forzadas a un nuevo onboarding. “Mi bolsa” y “Mi bola” consumen el mismo store local-first: una entrada puede referir a catálogo o usar `customBrand`/`customModel`; todos los datos técnicos adicionales son opcionales. `isCurrent=false` conserva equipo/bolas anteriores y la UI también permite eliminación explícita por decisión del usuario.
+
+Los catálogos no están hardcodeados en componentes React. `lib/golf-equipment-catalog.ts` carga tres seeds JSON versionados e importables:
+
+- bolas: 11 marcas y 11 modelos;
+- bastones: 15 marcas y 17 modelos;
+- shafts: 5 marcas y 5 familias de modelos.
+
+Cada registro aceptado conserva fuente oficial y `verifiedAt`. `equipmentCatalogDatabaseSeed()` proyecta los contratos a columnas SQL `snake_case`, incluida la correspondencia explícita `officialUrl → source_url`, para un futuro `upsert` idempotente en una base Beta elegida deliberadamente. Los atributos cualitativos se normalizan a `VERY_LOW`, `LOW`, `MID`, `HIGH` o `VERY_HIGH`; compresión y cualquier otro dato no confirmado permanecen `null`. Los modelos antiguos pueden mantenerse con `active=false` en lugar de borrarse.
+
+`lib/ball-fitting.ts` implementa un recomendador determinístico y explicable, separado de apuestas, scores e IA. Normaliza respuestas incompletas, pondera preferencias y prioridades ordenadas únicamente contra atributos verificados, calcula cobertura, y devuelve como máximo tres alternativas con Match Score, motivos y comparación contra la bola actual. Una falta de evidencia reduce cobertura o produce “Sin dato verificado”; el producto nunca se presenta como fitting oficial de un fabricante.
+
+El launch monitor es una captura estructurada opcional para Driver, hierro 7, pitching wedge y medio wedge. Admite múltiples golpes, exclusión/reactivación de mishits y resume sólo muestras incluidas mediante mediana y promedio resistente. El protocolo visible guía 3 golpes por categoría, pero los resúmenes todavía no cambian el ranking: no se han inventado ventanas ni algoritmos propietarios.
+
+### Persistencia y sincronización de equipo
+
+El guardado confirmado es local-first. La UI expone estados de carga, guardado local, sincronizando, sincronizado, offline, pendiente, conflicto y error. Cambiar de dispositivo requiere la ruta autenticada `/api/equipment`, que valida el token con Supabase, obliga a que el snapshot pertenezca a `auth.uid()`, limita el payload, exige normalización canónica sin truncamientos y usa mutation ID, versión y compare-and-swap. Fechas iguales con payload distinto son conflicto explícito; ninguna versión gana silenciosamente.
+
+La frontera cloud falla cerrada mediante `EQUIPMENT_CLOUD_ENABLED`: sólo un valor afirmativo explícito habilita la ruta y `/api/features` informa esa capacidad al cliente. El flag permanece ausente/deshabilitado porque la migración todavía no se ha aplicado en una base Beta aislada. Por tanto, el comportamiento realmente disponible en este milestone es persistencia local por identidad; la réplica multi-dispositivo está implementada y probada por contrato, pero no activa.
+
+La API guarda el snapshot canónico en `player_equipment_profiles`. Las demás tablas de la migración preparan proyecciones normalizadas para catálogo, historial, fits/recomendaciones y golpes de launch monitor; este milestone no afirma que esas proyecciones se estén poblando remotamente.
+
 ## Supabase existente
 
 Las migraciones ya versionadas en `supabase/migrations` cubren, entre otras entidades:
@@ -81,7 +107,14 @@ La inspección read-only del proyecto alojado encontró drift y riesgos que debe
 
 Estas observaciones no implicaron DDL ni cambios de configuración. El orden seguro es: capturar baseline/drift, cerrar ACL/grants, probar RLS con dos usuarios y sólo después añadir perfiles públicos mínimos, amistades, grupos y permisos de ronda.
 
-No se creó ni aplicó una migración durante este milestone. Amistades, grupos sociales, feed compartido, notificaciones, participación multi-dispositivo y administración ampliada requieren un diseño aditivo y pruebas RLS en una base Beta separada.
+Se creó, pero **no se aplicó remotamente**, la migración aditiva `20260906193435_equipment_ball_fitting.sql`. Prepara 9 tablas: `golf_ball_catalog`, `golf_club_catalog`, `golf_shaft_catalog`, `player_equipment_profiles`, `player_clubs`, `player_balls`, `ball_fit_sessions`, `ball_fit_recommendations` y `launch_monitor_shots`. Todas habilitan RLS y en conjunto declaran 27 policies:
+
+- los tres catálogos permiten lectura autenticada y `insert/update` sólo cuando `app_metadata.role = admin`;
+- las seis tablas de jugador permiten `select/insert/update` únicamente cuando `user_id = auth.uid()`;
+- `anon` no recibe grants, los clientes autenticados no reciben `DELETE` y `service_role` obtiene explícitamente sólo `select/insert/update` para las rutas server-only;
+- triggers validan identidad consistente, timestamps/versiones y compare-and-swap del snapshot canónico.
+
+`supabase/tests/equipment_ball_fitting_rls.sql` prepara verificación transaccional de aislamiento. Las pruebas TypeScript inspeccionan además grants, owner checks y que `user_metadata` no participe en autorización. Ejecutar esta migration/prueba contra Supabase permanece bloqueado hasta disponer de una base Beta separada; el proyecto alojado no fue modificado.
 
 ## Proveedores de golf
 
@@ -110,11 +143,12 @@ El store offline lee tanto IndexedDB como el fallback verificado en `localStorag
 Flags de servidor existentes:
 
 - `CLOUD_ENABLED`
+- `EQUIPMENT_CLOUD_ENABLED`
 - `POLLA_LIVE_ENABLED`
 - `AUTH_SOCIAL_ENABLED`
 - `RULES_AI_ENABLED`
 
-Polla Live debe permanecer visible solo como “Próximamente” y deshabilitado en esta iteración. `POLLA_LIVE_ENABLED` falla cerrado: únicamente los valores normalizados `1`, `true`, `on` y `yes` habilitan el backend; ausente, vacío, falso o desconocido impide instanciar también el cliente con service role. GPS, integraciones de campos/HCP/perfil, pagos, suscripciones y módulos incompletos deben quedar ocultos o protegidos por flags; no deben generar botones muertos.
+Polla Live debe permanecer visible solo como “Próximamente” y deshabilitado en esta iteración. `POLLA_LIVE_ENABLED` falla cerrado: únicamente los valores normalizados `1`, `true`, `on` y `yes` habilitan el backend; ausente, vacío, falso o desconocido impide instanciar también el cliente con service role. `EQUIPMENT_CLOUD_ENABLED` usa el mismo criterio explícito y permanece deshabilitado mientras no exista una base Beta con la migration aplicada. GPS, integraciones de campos/HCP/perfil, pagos, suscripciones y módulos incompletos deben quedar ocultos o protegidos por flags; no deben generar botones muertos.
 
 ## Flujo de despliegue seguro
 

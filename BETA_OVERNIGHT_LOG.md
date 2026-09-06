@@ -204,3 +204,53 @@ QA integral después de `26340e4`: ESLint limpio, TypeScript app/tests limpio, 8
 QA integral final de código a las 12:12 `America/Mexico_City`: `eslint .` correcto, `tsc --noEmit` correcto, compilación TypeScript de tests correcta, 874/874 pruebas correctas y `next build` correcto con 18/18 rutas. El Preview funcional `https://golf-bets-dmvpg7j61-saha8.vercel.app` está READY para el SHA exacto `1c770b8fc964db1e49a59399174dd759a4a884a0` y responde HTTP 200 con `viewport-fit=cover`.
 
 Este pase no creó/aplicó migrations, tablas o policies; no cambió Supabase alojado ni variables de runtime. Los pushes se dirigieron exclusivamente a `origin/beta`. La automatización visual no encontró una superficie de navegador disponible en el host, por lo que no se registra una nueva certificación de dispositivo físico.
+
+## Continuación funcional — Perfil de equipo + bola + The Backyard Ball Fit
+
+Hora aproximada de cierre técnico: 14:56 `America/Mexico_City`. El milestone se inició sobre `8023cee7928ca47963c296ad5a7e780a0896de4d` y quedó implementado en `c8b285e5212d568558cc5b1d11bf78d6df34dea2` (`feat(beta): add equipment profile and Backyard Ball Fit`).
+
+### Funcionalidad implementada
+
+- Se añadió un onboarding ligero después del perfil básico de cuentas nuevas con “Tus bastones”, “Tu bola” y la invitación a Ball Fit. Todas las etapas son opcionales, incluyen omisión inmediata y nunca bloquean la creación del perfil ni la entrada a la app.
+- Las cuentas existentes no reciben onboarding forzado. Perfil incorpora “Mi bolsa”, “Mi bola” y el último resultado de The Backyard Ball Fit para la misma identidad autenticada.
+- Mi bolsa permite Driver, Mini Driver, maderas, híbridos, Utility/Driving Iron, hierros, wedges y putter; admite múltiples unidades, composición de hierros y datos opcionales de loft, mano, shaft, flex, peso, longitud, lie, grip y notas. Marca + modelo bastan y “Mi bastón no aparece” habilita captura manual.
+- Los bastones pueden agregarse, editarse, eliminarse o moverse entre actual/anterior. La bola puede seleccionarse por marca/modelo o capturarse manualmente, marcarse como actual, editarse, eliminarse, quedar como “sin bola fija” o reactivarse desde historial.
+- El cuestionario rápido conserva un borrador por usuario, precarga HCP/bola disponibles y cubre distancia/speed, feel, trayectoria, greens, prioridades ordenadas, comportamiento en approach, greenside, precio y color. Las respuestas incompletas permanecen válidas cuando hay suficiente señal, sin fabricar datos.
+- El resultado entrega hasta tres recomendaciones con Match Score, cobertura, razones, vuelo, feel, spin por zona, nivel de precio, comparación con la bola actual y tabla comparativa. Cuando un atributo no está verificado muestra “Sin dato verificado”. Se comunica que es orientativo y no oficial de Titleist, Callaway u otro fabricante.
+- La captura avanzada admite golpes de Driver, hierro 7, pitching wedge y medio wedge, protocolo visible de 3 por categoría, exclusión/reactivación y resúmenes mediante mediana/promedio resistente. Los datos se guardan como contexto estructurado pero todavía no alteran el ranking.
+
+### Catálogos y persistencia
+
+- Seeds JSON estructurados e importables, sin catálogo hardcodeado en React:
+  - bolas: 11 marcas / 11 modelos;
+  - bastones: 15 marcas / 17 modelos;
+  - shafts: 5 marcas / 5 familias.
+- Los modelos contienen URL oficial y fecha de verificación; datos no confirmados, incluida compresión cuando el fabricante no la publica, quedan `null`. `active=false` permite archivar generaciones sin borrar referencias de jugadores.
+- El perfil de equipo y el borrador de Ball Fit se guardan local-first, versionados y aislados por `userId`. La eliminación del workspace de cuenta limpia también estas llaves.
+- La ruta autenticada `/api/equipment` y el cliente de sync implementan límites de payload, validación de propietario, mutation IDs, versiones, compare-and-swap, errores seguros, reintento por reconexión y conflicto explícito.
+- La réplica cloud queda detrás de `EQUIPMENT_CLOUD_ENABLED`, que falla cerrado y permanece deshabilitado. No se cambió ninguna variable remota o de Production.
+
+### Migración preparada, no aplicada
+
+- Se creó `supabase/migrations/20260906193435_equipment_ball_fitting.sql`; **no fue aplicada remotamente** porque el único proyecto Supabase disponible no es una base Beta aislada.
+- Tablas preparadas: `golf_ball_catalog`, `golf_club_catalog`, `golf_shaft_catalog`, `player_equipment_profiles`, `player_clubs`, `player_balls`, `ball_fit_sessions`, `ball_fit_recommendations` y `launch_monitor_shots`.
+- Las 9 tablas habilitan RLS. Hay 27 policies: catálogos legibles por autenticados y modificables sólo por admin de `app_metadata`; datos de jugador limitados a `auth.uid()`. `anon` no recibe grants y clientes autenticados no reciben `DELETE`.
+- Se añadió `supabase/tests/equipment_ball_fitting_rls.sql` y pruebas de contrato para grants, RLS, aislamiento por usuario y CAS. Su ejecución real contra Postgres/Supabase queda pendiente de una base Beta segura; no había Docker, `psql` ni Supabase local disponibles en este host.
+
+### QA del código antes de esta actualización documental
+
+- `eslint .`: correcto, cero errores.
+- `tsc --noEmit`: correcto.
+- Compilación TypeScript de tests: correcta.
+- Suite completa: 931/931 pruebas correctas, 0 fallos/omitidos/pendientes.
+- `next build`: correcto con Next.js 16.3.3 y 19/19 rutas, incluida `/api/equipment`.
+- La cobertura nueva incluye usuario que omite, club manual, bolsa completa, bola fija/no fija, edición/historial, persistencia y reanudación de borrador, ranking Top 3, input incompleto, catálogos/fuentes, launch monitor, seguridad del sync y contrato de migración/RLS.
+- La automatización visual no encontró navegador disponible en el host. No se afirma verificación nueva en Safari/iPhone físico; ese pase sigue pendiente.
+
+### Estado de entrega de este milestone al registrar la sección
+
+- Commit funcional: `c8b285e5212d568558cc5b1d11bf78d6df34dea2`.
+- Push exclusivo a `origin/beta`: pendiente.
+- Nuevo Preview Vercel asociado al SHA del milestone: pendiente.
+- Aplicación de migration/seed y sync multi-dispositivo: bloqueados hasta disponer de una base Supabase Beta aislada.
+- No se tocó el motor de apuestas, cálculos de ronda, histórico existente, `main`, Production ni `app.thebackyard.com.mx`.
