@@ -62,6 +62,7 @@ export function AccountPanel({ view, highContrast, onHighContrastChange, notific
   const [avatarUrl, setAvatarUrl] = useState(identity.avatarUrl);
   const [profileDetails, setProfileDetails] = useState<ProfileDetailsDraft>(() => profileDetailsDraft(identity));
   const [message, setMessage] = useState("");
+  const [messageKind, setMessageKind] = useState<"success" | "error">("success");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteText, setDeleteText] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
@@ -89,27 +90,27 @@ export function AccountPanel({ view, highContrast, onHighContrastChange, notific
 
   async function saveProfile() {
     const validation = validateProfileDraft(name, handicap);
-    if (!validation.ok) { setMessage(validation.message); return; }
+    if (!validation.ok) { setMessageKind("error"); setMessage(validation.message); return; }
     const avatarValidation = validateProfileAvatarUrl(avatarUrl);
-    if (!avatarValidation.ok) { setMessage(avatarValidation.message); return; }
-    setSavingProfile(true); setMessage("");
+    if (!avatarValidation.ok) { setMessageKind("error"); setMessage(avatarValidation.message); return; }
+    setSavingProfile(true); setMessageKind("success"); setMessage("");
     try {
       const result = await updateProfile({ displayName: validation.displayName, defaultHandicap: validation.defaultHandicap, avatarUrl: avatarValidation.avatarUrl, ...profileDetails });
       setEditing(false);
       setMessage(result === "cloud" ? "Nombre, avatar y HCP sincronizados. Los datos ampliados se guardaron en este dispositivo." : "Perfil actualizado en este dispositivo. Los datos ampliados quedan pendientes de sincronización Beta.");
-    } catch { setMessage("No se confirmó el guardado del perfil. Conservamos lo que escribiste; reintenta."); }
+    } catch { setMessageKind("error"); setMessage("No se confirmó el guardado del perfil. Conservamos lo que escribiste; reintenta."); }
     finally { setSavingProfile(false); }
   }
 
   async function deleteAccount() {
-    if (identity.mode === "guest") { setMessage("El modo invitado no tiene una cuenta de nube. Puedes borrar cada ronda e histórico desde la app o los datos del sitio desde el navegador."); setDeleteOpen(false); return; }
-    setDeletingAccount(true); setMessage("");
+    if (identity.mode === "guest") { setMessageKind("success"); setMessage("El modo invitado no tiene una cuenta de nube. Puedes borrar cada ronda e histórico desde la app o los datos del sitio desde el navegador."); setDeleteOpen(false); return; }
+    setDeletingAccount(true); setMessageKind("success"); setMessage("");
     try {
       const response = await fetch("/api/account/delete", { method: "DELETE", headers: { authorization: `Bearer ${identity.accessToken}`, "content-type": "application/json" }, body: JSON.stringify({ confirmation: "ELIMINAR" }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "delete failed");
       await finishAccountDeletion();
-    } catch (error) { setMessage(error instanceof Error ? error.message : "No se completó la eliminación. La cuenta sigue activa; reintenta."); setDeleteOpen(false); }
+    } catch (error) { setMessageKind("error"); setMessage(error instanceof Error ? error.message : "No se completó la eliminación. La cuenta sigue activa; reintenta."); setDeleteOpen(false); }
     finally { setDeletingAccount(false); }
   }
 
@@ -170,7 +171,7 @@ export function AccountPanel({ view, highContrast, onHighContrastChange, notific
       </div>}
     </section>}
 
-    {view === "profile" && identity.mode === "authenticated" && message && <div className="notice" role="status">{message}</div>}
+    {view === "profile" && identity.mode === "authenticated" && message && <div className={messageKind === "error" ? "notice bad" : "notice"} role={messageKind === "error" ? "alert" : "status"}>{message}</div>}
 
     {view === "profile" && golfInsights && <section className="card betaProfileGolfCard">
       <div className="sectionTitle"><div><h2>Mi golf</h2><p>Resumen calculado sólo con tu histórico disponible.</p></div>{onOpenStats && <button type="button" className="textButton" onClick={onOpenStats}>Ver Stats</button>}</div>
@@ -214,7 +215,7 @@ export function AccountPanel({ view, highContrast, onHighContrastChange, notific
     <section className="card accountContactCard"><h2>Contacto</h2><div className="accountContacts"><a href={`mailto:${legalConfig.supportEmail}`}><span>Soporte</span><b>{legalConfig.supportEmail}</b></a><a href={`mailto:${legalConfig.privacyEmail}`}><span>Privacidad y ARCO</span><b>{legalConfig.privacyEmail}</b></a></div></section>
 
     <section className={`card accountSessionCard ${identity.mode === "guest" ? "single" : ""}`}><button className="secondary big" onClick={logout}>{identity.mode === "guest" ? "Salir del modo invitado" : "Cerrar sesión"}</button>{identity.mode === "authenticated" && <button className="dangerButton" onClick={() => setDeleteOpen(true)}>Eliminar cuenta</button>}</section>
-    {message && <div className="notice" role="status">{message}</div>}
+    {message && <div className={messageKind === "error" ? "notice bad" : "notice"} role={messageKind === "error" ? "alert" : "status"}>{message}</div>}
 
     {deleteOpen && <div className="modalBackdrop"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="delete-account-title"><h2 id="delete-account-title">Eliminar mi cuenta y mis datos</h2><p>Se eliminarán definitivamente tu usuario, datos de nube y fotos. También se limpiará el workspace local de esta cuenta; los datos de invitado y de otras cuentas no se tocarán. Escribe <b>ELIMINAR</b> para confirmar.</p><input aria-label="Confirmación de eliminación" value={deleteText} onChange={(event) => setDeleteText(event.target.value)} placeholder="ELIMINAR" autoComplete="off" /><div className="dialogActions"><button className="secondary" disabled={deletingAccount} onClick={() => { setDeleteOpen(false); setDeleteText(""); }}>Cancelar</button><button className="dangerButton" disabled={deleteText !== "ELIMINAR" || deletingAccount} onClick={deleteAccount}>{deletingAccount ? "Eliminando…" : "Eliminar definitivamente"}</button></div></section></div>}
     </>}

@@ -60,6 +60,12 @@ test("Perfil permite una foto HTTPS removible sin filtrar referrer", () => {
   assert.match(account, /referrerPolicy="no-referrer"/);
 });
 
+test("Perfil y Cuenta anuncian errores como alertas sin disfrazarlos de éxito", () => {
+  assert.match(account, /setMessageKind\("error"\)/);
+  assert.match(account, /messageKind === "error" \? "notice bad" : "notice"/);
+  assert.match(account, /role=\{messageKind === "error" \? "alert" : "status"\}/);
+});
+
 test("Perfil muestra estadísticas reales y deja ausentes como guion", () => {
   for (const field of ["pars", "birdies", "bogeys", "doublesOrWorse", "last5Average", "last10Average", "averageVsPar"]) {
     assert.match(account, new RegExp(`golfInsights\\.${field}`));
