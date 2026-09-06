@@ -525,6 +525,8 @@ test("Personal fails closed for every malformed economic or rival term", () => {
     ["invalid explicit pressure nine", { ...personal, pressureNine: "unknown" }],
     ["blank external name", { ...personal, rivalMode: "external", rivalPlayerId: undefined, rivalName: " ", externalScores: {} }],
     ["invalid external identity", { ...personal, rivalMode: "external", rivalPlayerId: undefined, rivalName: "Rival", externalRivalId: 42, externalScores: {} }],
+    ["padded external identity", { ...personal, rivalMode: "external", rivalPlayerId: undefined, rivalName: "Rival", externalRivalId: " padded", externalScores: {} }],
+    ["spaced external identity", { ...personal, rivalMode: "external", rivalPlayerId: undefined, rivalName: "Rival", externalRivalId: "rival id", externalScores: {} }],
     ["invalid external score map", { ...personal, rivalMode: "external", rivalPlayerId: undefined, rivalName: "Rival", externalScores: "scores" }],
   ];
 

@@ -930,6 +930,10 @@ function isPersonalInstanceId(value: unknown): value is string {
   return typeof value === "string" && Boolean(value.trim());
 }
 
+function isExternalRivalId(value: unknown): value is string {
+  return typeof value === "string" && Boolean(value) && !/\s/.test(value);
+}
+
 function isRoundPlayerId(value: unknown): value is string {
   return typeof value === "string" && Boolean(value) && !/\s/.test(value);
 }
@@ -997,7 +1001,7 @@ function personalBetRuntimeIsSafe(
       || (context?.availablePlayerIds && !context.availablePlayerIds.has(migratedBet.rivalPlayerId))) return false;
   } else if (migratedBet.rivalMode === "external") {
     if (typeof migratedBet.rivalName !== "string" || !migratedBet.rivalName.trim()) return false;
-    if (migratedBet.externalRivalId !== undefined && !isPersonalInstanceId(migratedBet.externalRivalId)) return false;
+    if (migratedBet.externalRivalId !== undefined && !isExternalRivalId(migratedBet.externalRivalId)) return false;
     if (migratedBet.externalScores !== undefined
       && (!migratedBet.externalScores || typeof migratedBet.externalScores !== "object" || Array.isArray(migratedBet.externalScores))) return false;
   } else {
@@ -1047,7 +1051,7 @@ function inertPersonalBet(inputBet: PersonalBet, migratedBet: PersonalBet, owner
     && isRoundPlayerId(migratedBet.rivalPlayerId)
     && migratedBet.rivalPlayerId !== ownerId
     && (!context?.availablePlayerIds || context.availablePlayerIds.has(migratedBet.rivalPlayerId));
-  const externalRivalId = isPersonalInstanceId(migratedBet.externalRivalId)
+  const externalRivalId = isExternalRivalId(migratedBet.externalRivalId)
     ? migratedBet.externalRivalId
     : `invalid-${id}`;
   return {
@@ -1073,7 +1077,7 @@ function inertPersonalBet(inputBet: PersonalBet, migratedBet: PersonalBet, owner
 
 export function personalRivalKey(bet: PersonalBet) {
   if (bet?.rivalMode === "group" && isRoundPlayerId(bet.rivalPlayerId)) return bet.rivalPlayerId;
-  const externalKey = isPersonalInstanceId(bet?.externalRivalId)
+  const externalKey = isExternalRivalId(bet?.externalRivalId)
     ? bet.externalRivalId
     : isPersonalInstanceId(bet?.id) ? bet.id : "invalid-personal";
   return `personal:${externalKey}`;

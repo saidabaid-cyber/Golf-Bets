@@ -414,7 +414,7 @@ function validatePersonalBets(input: RoundBetConfiguration, issues: BetConfigura
       if (typeof bet.rivalName !== "string" || !bet.rivalName.trim()) {
         issues.push({ code: `personal-${bet.id}-rival`, sectionId: "setup-personal-nassau", message: `${label}: escribe el nombre del contrincante externo.` });
       }
-      if (bet.externalRivalId !== undefined && (typeof bet.externalRivalId !== "string" || !bet.externalRivalId.trim())) {
+      if (bet.externalRivalId !== undefined && (typeof bet.externalRivalId !== "string" || !bet.externalRivalId || /\s/.test(bet.externalRivalId))) {
         issues.push({ code: `personal-${bet.id}-external-rival-id`, sectionId: "setup-personal-nassau", message: `${label}: vuelve a seleccionar o guardar el contrincante externo.` });
       }
     }

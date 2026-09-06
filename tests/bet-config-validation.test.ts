@@ -474,7 +474,7 @@ test("Personal rejects an unknown rival mode and advantage strokes without a rec
 });
 
 test("Personal externo rechaza una identidad de rival vacía o corrupta", () => {
-  for (const externalRivalId of ["", "   ", 42]) {
+  for (const externalRivalId of ["", "   ", " padded", "internal id", "trailing ", 42]) {
     const input = configuration({
       personalBets: [personalBet({
         rivalMode: "external",
@@ -646,7 +646,8 @@ test("the setup gate renders every issue before consent, HCP freezing or round n
   assert.match(page, /activeBetSafeDestination\(next, draftAvailable && !roundClosed && betConfigurationIssues\.length > 0\)/);
   assert.match(page, /activeBetSafeDestination\(tab, draftAvailable && !roundClosed && betConfigurationIssues\.length > 0\)/);
   assert.match(page, /handicapBasis: roundHandicapBasis/);
-  assert.match(page, /function manualBetIsValid\(bet: ManualBet\) \{\s*return isFiniteZeroSum/);
+  assert.match(page, /function manualBetIsValid\(bet: ManualBet\) \{\s*return typeof bet\.name === "string"[\s\S]*?&& isFiniteZeroSum/);
+  assert.match(page, /Escribe un nombre para la apuesta/);
   assert.match(page, /types=\{\["individual_nassau"\]\}[\s\S]*allowAdd=\{false\}/);
   assert.match(page, /onClick=\{handlePageBack\}/);
 

@@ -1413,7 +1413,9 @@ function GolfBetsApp() {
   }
 
   function manualBetIsValid(bet: ManualBet) {
-    return isFiniteZeroSum(players.map((player) => bet.amounts?.[player.id] ?? 0));
+    return typeof bet.name === "string"
+      && Boolean(bet.name.trim())
+      && isFiniteZeroSum(players.map((player) => bet.amounts?.[player.id] ?? 0));
   }
 
   function addUnit(playerId: string, amount: number, label = amount > 0 ? "Otra positiva" : "Copa") {
@@ -2146,7 +2148,9 @@ function GolfBetsApp() {
             else updateManualBet(bet.id, { enabled: false, enabledBeforeCategoryOff: undefined });
           }} /><button className="remove" aria-label={`Eliminar ${bet.name || "apuesta manual"}`} onClick={() => setManualBets((bs) => bs.filter((x) => x.id !== bet.id))}>×</button></span></div>
           {bet.enabled !== false && <><fieldset disabled={!bettingConsentGranted} className="manualGrid bettingEditorFieldset">{players.map((p) => <label key={p.id}><span>{p.name}</span><SignedMoneyInput label={`${bet.name || "apuesta manual"} · ${p.name}`} value={bet.amounts?.[p.id] ?? 0} onChange={(next) => setManualAmount(bet.id, p.id, next)} /></label>)}</fieldset>
-          <div className={`manualBalance ${valid ? "good" : "bad"}`}>{valid ? "✓ Cierra en $0 y se suma al resultado" : `Falta cuadrar ${money(-total)}`}</div></>}
+          <div className={`manualBalance ${valid ? "good" : "bad"}`}>{valid
+            ? "✓ Cierra en $0 y se suma al resultado"
+            : !bet.name?.trim() ? "Escribe un nombre para la apuesta" : `Falta cuadrar ${money(-total)}`}</div></>}
         </div>;
       })}
     </section>;
@@ -2159,7 +2163,7 @@ function GolfBetsApp() {
       const total = manualBetTotal(bet);
       const valid = manualBetIsValid(bet);
       return <article className="manualResult" key={bet.id}>
-        <div className="row between"><b>{typeof bet.name === "string" && bet.name.trim() ? bet.name.trim() : "Apuesta manual"}</b><span className={valid ? "good" : "bad"}>{valid ? "✓ Cierra en $0" : "Pendiente de cuadrar"}</span></div>
+        <div className="row between"><b>{typeof bet.name === "string" && bet.name.trim() ? bet.name.trim() : "Apuesta manual"}</b><span className={valid ? "good" : "bad"}>{valid ? "✓ Cierra en $0" : !bet.name?.trim() ? "Falta nombre" : "Pendiente de cuadrar"}</span></div>
         <div className="manualResultPlayers">{players.map((player) => { const amount = bet.amounts?.[player.id] ?? 0; return <div key={player.id}><span>{player.name}</span><strong className={amount > 0 ? "good" : amount < 0 ? "bad" : ""}>{signedMoney(amount)}</strong></div>; })}</div>
         <div className="manualResultTotal"><span>Total de la apuesta</span><b className={valid ? "good" : "bad"}>{signedMoney(total)}</b></div>
       </article>;
