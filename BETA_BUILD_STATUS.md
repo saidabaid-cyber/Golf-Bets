@@ -112,7 +112,9 @@ Pendientes y aislados para un milestone colaborativo:
 - Rama objetivo: `beta`.
 - El último SHA publicado y verificado anterior a este milestone es `8023cee7928ca47963c296ad5a7e780a0896de4d`.
 - El Preview anterior verificado es `https://golf-bets-1ps4i70si-saha8.vercel.app`, deployment `dpl_ByuS4LnsGYXFv8Pn3nsH1TNjh7py`, READY, target Preview, source Git, ref `beta` y SHA exacto `8023cee7928ca47963c296ad5a7e780a0896de4d`.
-- Commit funcional del milestone: `c8b285e5212d568558cc5b1d11bf78d6df34dea2` — `feat(beta): add equipment profile and Backyard Ball Fit`. Push y nuevo Preview todavía pendientes al momento de este registro previo a publicación.
+- Commit funcional del milestone: `c8b285e5212d568558cc5b1d11bf78d6df34dea2` — `feat(beta): add equipment profile and Backyard Ball Fit`.
+- Corrección de verificación: `76fba0b301b58da2effbd14faaaf4af18ca0f637` — `fix(beta): enforce Polla Live release lock`. Un valor Preview obsoleto ya no puede sacar Polla Live de “Próximamente”.
+- Preview del código verificado: `https://golf-bets-ipomcf91t-saha8.vercel.app`, deployment `dpl_FSBVHoEiBbRgx6aEu35LTGBvQBhH`, READY, target Preview, ref `beta` y SHA exacto `76fba0b301b58da2effbd14faaaf4af18ca0f637`.
 - Alias Preview de rama: `https://golf-bets-git-beta-saha8.vercel.app`.
 - El HTML remoto responde 200, referencia los assets del build, incluye `viewport-fit=cover` y el bundle publicado contiene Inicio, Jugar, Grupos, Social, Perfil, Nueva ronda, Continuar ronda, Histórico, Stats, Amigos, Reglas y Balances.
 - No se hizo merge, promoción a Production, despliegue `--prod` ni cambio de variables Production.
@@ -127,7 +129,7 @@ Pendientes y aislados para un milestone colaborativo:
 - Pruebas nuevas cubren normalización/persistencia de equipo por usuario, club manual y bolsa completa, bola fija/no fija, borrador de Ball Fit, ranking Top 3, datos incompletos, catálogo/fuentes, seguridad de sync/CAS, contrato de UI y migración/RLS.
 - Browser QA local: Home a 320/375/390/430 y Jugar/Campos/Setup/Grupos/Social/Perfil/Stats a 390; cero overflow y cero errores de consola.
 - Cobertura existente conservada: Auth, guests, grupos locales, ronda 9/18, HCP 0, score/edit/save/reopen, apuestas, histórico, IndexedDB/outbox/reconnect, PWA y reglas.
-- Preview remoto funcional: estado READY para `1c770b8`; `/` responde 200 y el HTML contiene `viewport-fit=cover`. El service worker usa `/` como fallback offline y evita cachear APIs.
+- Preview remoto funcional: estado READY para `76fba0b`; `/` y el manifest responden 200, el HTML contiene `viewport-fit=cover`, `/api/features` confirma Google listo, `equipmentCloudEnabled=false` y `pollaLiveEnabled=false`. `/api/equipment` falla cerrado con 503 mientras la base Beta no exista. El service worker usa `/` como fallback offline y evita cachear APIs.
 - El pase visual automatizado de este milestone no pudo abrir una superficie de navegador en este host; se conservan las verificaciones móviles registradas previamente y no se afirma una nueva certificación de Mi bolsa/Ball Fit en Safari o iPhone físico.
 
 ## NEXT — diez trabajos recomendados

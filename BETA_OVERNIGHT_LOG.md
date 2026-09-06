@@ -250,7 +250,14 @@ Hora aproximada de cierre técnico: 14:56 `America/Mexico_City`. El milestone se
 ### Estado de entrega de este milestone al registrar la sección
 
 - Commit funcional: `c8b285e5212d568558cc5b1d11bf78d6df34dea2`.
-- Push exclusivo a `origin/beta`: pendiente.
-- Nuevo Preview Vercel asociado al SHA del milestone: pendiente.
+- Push exclusivo a `origin/beta`: completado (`8023cee..fb2887d` y corrección `fb2887d..76fba0b`).
+- Preview Vercel del código: `https://golf-bets-ipomcf91t-saha8.vercel.app`, deployment `dpl_FSBVHoEiBbRgx6aEu35LTGBvQBhH`, READY para `76fba0b301b58da2effbd14faaaf4af18ca0f637`.
 - Aplicación de migration/seed y sync multi-dispositivo: bloqueados hasta disponer de una base Supabase Beta aislada.
 - No se tocó el motor de apuestas, cálculos de ronda, histórico existente, `main`, Production ni `app.thebackyard.com.mx`.
+
+### Cierre de verificación — 15:05 `America/Mexico_City`
+
+- La raíz y `manifest.webmanifest` responden HTTP 200; el viewport conserva `viewport-fit=cover`.
+- `/api/features` confirma Email/Google listos, `equipmentCloudEnabled=false` y `pollaLiveEnabled=false`.
+- `/api/equipment` responde 503 privado/no-store mientras el flag permanece apagado, sin intentar escribir al Supabase compartido.
+- El hallazgo de Polla Preview activa se corrigió en el commit separado `76fba0b` mediante un release lock revisable en código, sin cambiar variables remotas.
