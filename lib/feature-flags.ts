@@ -14,6 +14,9 @@ export function isExplicitFeatureEnabled(value: string | undefined) {
 export const cloudServerEnabled = enabled(process.env.CLOUD_ENABLED);
 export const pollaLiveServerEnabled = isExplicitFeatureEnabled(process.env.POLLA_LIVE_ENABLED);
 export const authSocialServerEnabled = enabled(process.env.AUTH_SOCIAL_ENABLED);
+/** Equipment cloud storage is additive and must never target the shared
+ * database until the isolated Beta migration has been applied deliberately. */
+export const equipmentCloudServerEnabled = isExplicitFeatureEnabled(process.env.EQUIPMENT_CLOUD_ENABLED);
 
 export function isFeatureEnabled(value: string | undefined, fallback = true) {
   return enabled(value, fallback);

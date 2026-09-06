@@ -43,6 +43,8 @@ import { BrandLockup } from "./brand-lockup";
 import { BettingConsentDialog } from "./betting-consent-dialog";
 import { persistBettingDataConsent } from "../../lib/betting-consent";
 import { acknowledgePendingProfileWrite, cloudProfileFields, cloudProfileRevisionIsNewer, cloudProfileRevisionKey, createProfileWriteCoordinator, queuePendingProfileWrite, readPendingProfileWrite, recordCloudProfileRevision, retimePendingProfileWrite, type CloudProfileFields, type ProfileWriteCoordinator } from "../../lib/profile-sync";
+import { createEmptyEquipmentProfile, loadEquipmentProfile, saveEquipmentProfile } from "../../lib/golf-equipment";
+import { EquipmentOnboarding } from "./equipment-onboarding";
 
 export type BackyardIdentity = BackyardProfile & {
   mode: Exclude<AccountMode, "undecided">;
@@ -310,6 +312,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const [migrationBusy, setMigrationBusy] = useState(false);
   const [migrationError, setMigrationError] = useState("");
   const [profileSetupRequired, setProfileSetupRequired] = useState(false);
+  const [equipmentOnboardingRequired, setEquipmentOnboardingRequired] = useState(false);
   const [profileChecked, setProfileChecked] = useState(false);
   const activeUserId = useRef<string | null>(null);
   const sessionRecovery = useRef<{ userId: string; promise: Promise<string> } | null>(null);
@@ -326,6 +329,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     profileWriteCoordinators.current.set(userId, coordinator);
     return coordinator;
   }, []);
+
+  const equipmentOnboardingReadyKey = useCallback((userId: string) => `the-backyard:equipment-onboarding-ready:v1:${encodeURIComponent(userId)}`, []);
   const setCloudIssue = useCallback((domain: CloudIssueDomain, issue: CloudIssue | null) => {
     setCloudIssuesByDomain((current) => {
       if (!issue && !current[domain]) return current;
@@ -415,13 +420,15 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(ACCOUNT_STORAGE_KEYS.mode, "authenticated");
     setCloudConsentChecked(false);
     setProfileChecked(false);
+    const equipmentRead = loadEquipmentProfile(localStorage, session.user.id);
+    setEquipmentOnboardingRequired(Boolean(equipmentRead.ok && equipmentRead.profile && localStorage.getItem(equipmentOnboardingReadyKey(session.user.id)) !== "true"));
     const migrationDecision = localStorage.getItem(migrationDecisionStorageKey(session.user.id));
     const localDataExists = hasLocalGolfData(localStorage);
     if (!localDataExists && !migrationDecision) localStorage.setItem(migrationDecisionStorageKey(session.user.id), "linked");
     setCloudLinked(migrationDecision === "linked" || !localDataExists);
     setCloudStatus(migrationDecision === "linked" || !localDataExists ? "pending" : "local");
     setShowMigration(localDataExists && !migrationDecision);
-  }, [setCloudIssue, setCloudStatus]);
+  }, [equipmentOnboardingReadyKey, setCloudIssue, setCloudStatus]);
 
   const activateOfflineWorkspace = useCallback(() => {
     const ownerId = localStorage.getItem(WORKSPACE_OWNER_KEY) || "";
@@ -437,9 +444,11 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     setCloudConsentChecked(true);
     setProfileChecked(true);
     setProfileSetupRequired(localStorage.getItem(`backyard-profile-ready-v1:${profile.userId}`) !== "true");
+    const equipmentRead = loadEquipmentProfile(localStorage, profile.userId);
+    setEquipmentOnboardingRequired(Boolean(equipmentRead.ok && equipmentRead.profile && localStorage.getItem(equipmentOnboardingReadyKey(profile.userId)) !== "true"));
     setReady(true);
     return true;
-  }, [setCloudStatus]);
+  }, [equipmentOnboardingReadyKey, setCloudStatus]);
 
   useEffect(() => {
     const localAcceptances = parseLegalAcceptances(localStorage.getItem(ACCOUNT_STORAGE_KEYS.acceptances));
@@ -664,10 +673,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!identity || !currentConsent || !bettingConsentResolved || bettingConsentGranted || showMigration) return;
-    if (identity.mode === "authenticated" && (!profileChecked || profileSetupRequired)) return;
+    if (identity.mode === "authenticated" && (!profileChecked || profileSetupRequired || equipmentOnboardingRequired)) return;
     if (localStorage.getItem(bettingConsentPromptStorageKey(identity.userId)) === "seen") return;
     setBettingConsentOpen(true);
-  }, [identity, currentConsent, bettingConsentResolved, bettingConsentGranted, showMigration, profileChecked, profileSetupRequired]);
+  }, [identity, currentConsent, bettingConsentResolved, bettingConsentGranted, showMigration, profileChecked, profileSetupRequired, equipmentOnboardingRequired]);
 
   useEffect(() => {
     if (identity?.mode !== "authenticated" || !identity.accessToken || !currentConsent) return;
@@ -800,6 +809,34 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  async function saveInitialProfile(profile: BackyardProfileUpdate): Promise<"local" | "cloud"> {
+    if (identity?.mode === "authenticated") {
+      const existingEquipment = loadEquipmentProfile(localStorage, identity.userId);
+      const emptyEquipment = existingEquipment.ok && existingEquipment.profile === null
+        ? createEmptyEquipmentProfile(identity.userId)
+        : null;
+      if (emptyEquipment) {
+        try {
+          saveEquipmentProfile(localStorage, emptyEquipment);
+          localStorage.removeItem(equipmentOnboardingReadyKey(identity.userId));
+        } catch { /* Optional equipment persistence must not block the basic profile. */ }
+      }
+      // Re-opening the basic setup must never erase an existing (or unreadable)
+      // equipment profile. Only a genuinely new optional profile enters this
+      // onboarding flow.
+      setEquipmentOnboardingRequired(Boolean(emptyEquipment));
+    }
+    return updateProfile(profile);
+  }
+
+  function finishEquipmentOnboarding() {
+    if (identity?.mode === "authenticated") {
+      try { localStorage.setItem(equipmentOnboardingReadyKey(identity.userId), "true"); }
+      catch { /* An optional local marker must never block entry into the app. */ }
+    }
+    setEquipmentOnboardingRequired(false);
+  }
+
   async function logout() {
     try {
       const supabase = getSupabaseBrowser();
@@ -814,6 +851,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       if (activeUserId.current) profileWriteCoordinators.current.delete(activeUserId.current);
       activeUserId.current = null;
       setIdentity(null);
+      setEquipmentOnboardingRequired(false);
       setAccessRequested(false);
       setCloudLinked(false);
       setCloudStatus("local");
@@ -836,6 +874,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     const supabase = getSupabaseBrowser();
     if (supabase) await clearDeletedAuthSession(supabase.auth);
     setIdentity(null);
+    setEquipmentOnboardingRequired(false);
     setAccessRequested(false);
     setCloudLinked(false);
     setCloudStatus("local");
@@ -964,6 +1003,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     const profile = guestProfile();
     localStorage.setItem(ACCOUNT_STORAGE_KEYS.mode, "guest");
     setIdentity({ ...profile, mode: "guest", providers: [], accessToken: null });
+    setEquipmentOnboardingRequired(false);
     setCloudConsentChecked(true);
     setAccessRequested(false);
     setCloudIssuesByDomain({}); setCloudStatus("local"); setCloudLinked(false); setLastCloudSync(null); setShowMigration(false);
@@ -974,7 +1014,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     return <>{accountCloudError && <div role="alert" className="notice bad">{accountCloudError}</div>}<ConsentScreen onAccept={acceptConsent} onBack={logout} /></>;
   }
   if (identity.mode === "authenticated" && !profileChecked) return <main className="accessScreen"><div className="accessLoading">Preparando tu perfil…</div></main>;
-  if (identity.mode === "authenticated" && profileSetupRequired) return <>{accountCloudError && <div role="alert" className="notice bad">{accountCloudError}</div>}<ProfileSetupScreen identity={identity} onSave={updateProfile} onBack={logout} /></>;
+  if (identity.mode === "authenticated" && profileSetupRequired) return <>{accountCloudError && <div role="alert" className="notice bad">{accountCloudError}</div>}<ProfileSetupScreen identity={identity} onSave={saveInitialProfile} onBack={logout} /></>;
+  if (identity.mode === "authenticated" && equipmentOnboardingRequired) return <EquipmentOnboarding userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={identity.defaultHandicap} onComplete={finishEquipmentOnboarding} />;
   if (bettingConsentOpen) return <AccountContext.Provider value={context!}><BettingConsentDialog onDismiss={() => closeBettingConsent(false)} onAccept={acceptBettingConsent} /></AccountContext.Provider>;
 
   return <AccountContext.Provider value={context!}>

@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "verifiedAt": "2026-09-06T00:00:00.000Z",
+  "brands": [
+    "Fujikura",
+    "Mitsubishi Chemical",
+    "KBS",
+    "Graphite Design",
+    "True Temper"
+  ],
+  "models": [
+    {
+      "id": "fujikura-ventus-blue-velocore-plus-unversioned",
+      "brand": "Fujikura",
+      "model": "VENTUS Blue VeloCore+",
+      "active": true,
+      "weight": null,
+      "flex": ["SENIOR", "REGULAR", "STIFF", "X_STIFF", "TX"],
+      "launch": "MID",
+      "spin": "LOW",
+      "material": "Multi-material carbon fiber",
+      "officialUrl": "https://fujikuragolf.com/woods/ventus/",
+      "sourceName": "Fujikura Golf official VENTUS VeloCore+ product page",
+      "verifiedAt": "2026-09-06T00:00:00.000Z",
+      "createdAt": "2026-09-06T00:00:00.000Z",
+      "updatedAt": "2026-09-06T00:00:00.000Z"
+    },
+    {
+      "id": "mitsubishi-tensei-1k-pro-blue-unversioned",
+      "brand": "Mitsubishi Chemical",
+      "model": "TENSEI 1K Pro Blue",
+      "active": true,
+      "weight": null,
+      "flex": ["REGULAR", "STIFF", "X_STIFF", "TX"],
+      "launch": "MID",
+      "spin": "MID",
+      "material": "Carbon fiber composite",
+      "officialUrl": "https://mitsubishigolf.com/products/tensei-1k-pro-blue",
+      "sourceName": "Mitsubishi Chemical Golf official TENSEI 1K Pro Blue product page",
+      "verifiedAt": "2026-09-06T00:00:00.000Z",
+      "createdAt": "2026-09-06T00:00:00.000Z",
+      "updatedAt": "2026-09-06T00:00:00.000Z"
+    },
+    {
+      "id": "kbs-tour-unversioned",
+      "brand": "KBS",
+      "model": "KBS TOUR",
+      "active": true,
+      "weight": null,
+      "flex": ["REGULAR", "STIFF", "X_STIFF", "OTHER"],
+      "launch": "MID",
+      "spin": null,
+      "material": "Steel",
+      "officialUrl": "https://kbsgolfshafts.com/products/tour",
+      "sourceName": "KBS official TOUR shaft product page",
+      "verifiedAt": "2026-09-06T00:00:00.000Z",
+      "createdAt": "2026-09-06T00:00:00.000Z",
+      "updatedAt": "2026-09-06T00:00:00.000Z"
+    },
+    {
+      "id": "graphite-design-tour-ad-di-unversioned",
+      "brand": "Graphite Design",
+      "model": "Tour AD DI",
+      "active": true,
+      "weight": null,
+      "flex": ["SENIOR", "REGULAR", "STIFF", "X_STIFF", "TX", "OTHER"],
+      "launch": "HIGH",
+      "spin": "LOW",
+      "material": "Graphite composite",
+      "officialUrl": "https://proschoicegolfshafts.com/tour-ad-di-wood-shafts/",
+      "sourceName": "Pro's Choice Golf Shafts, official Graphite Design distributor product page",
+      "verifiedAt": "2026-09-06T00:00:00.000Z",
+      "createdAt": "2026-09-06T00:00:00.000Z",
+      "updatedAt": "2026-09-06T00:00:00.000Z"
+    },
+    {
+      "id": "true-temper-dynamic-gold-unversioned",
+      "brand": "True Temper",
+      "model": "Dynamic Gold",
+      "active": true,
+      "weight": null,
+      "flex": ["REGULAR", "STIFF", "X_STIFF"],
+      "launch": "LOW",
+      "spin": "LOW",
+      "material": "Steel",
+      "officialUrl": "https://www.truetemper.com/products/dynamic-gold",
+      "sourceName": "True Temper official Dynamic Gold product page",
+      "verifiedAt": "2026-09-06T00:00:00.000Z",
+      "createdAt": "2026-09-06T00:00:00.000Z",
+      "updatedAt": "2026-09-06T00:00:00.000Z"
+    }
+  ]
+}

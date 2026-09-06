@@ -10,6 +10,8 @@ import { legalReturnDestination, preserveLegalReturn } from "../lib/legal-naviga
 import { coursePreferenceStorageKey } from "../lib/course-preferences";
 import { cloudProfileRevisionKey, pendingProfileWriteKey } from "../lib/profile-sync";
 import { internalNotificationStorageKey } from "../lib/internal-notifications";
+import { equipmentProfileRecoveryStorageKey, equipmentProfileStorageKey } from "../lib/golf-equipment";
+import { ballFitDraftStorageKey } from "../lib/ball-fitting-storage";
 
 class MemoryStorage {
   data = new Map<string, string>();
@@ -64,6 +66,9 @@ test("eliminar cuenta local descarta solo A y conserva invitado y B", () => {
   storage.setItem(coursePreferenceStorageKey("recents", "user-a"), '["course-a"]');
   storage.setItem(internalNotificationStorageKey("user-a"), '{"version":1,"readEventKeys":["round-a"]}');
   storage.setItem(internalNotificationStorageKey("user-b"), '{"version":1,"readEventKeys":["round-b"]}');
+  storage.setItem(equipmentProfileStorageKey("user-a")!, "equipment");
+  storage.setItem(equipmentProfileRecoveryStorageKey("user-a")!, "equipment-recovery");
+  storage.setItem(ballFitDraftStorageKey("user-a")!, "fit-draft");
   switchAccountWorkspace(storage, "user-b");
   storage.setItem(STORAGE_KEYS.history, "b-history");
   switchAccountWorkspace(storage, "user-a");
@@ -77,6 +82,9 @@ test("eliminar cuenta local descarta solo A y conserva invitado y B", () => {
   assert.equal(storage.getItem(coursePreferenceStorageKey("favorites", "user-a")), null);
   assert.equal(storage.getItem(coursePreferenceStorageKey("recents", "user-a")), null);
   assert.equal(storage.getItem(internalNotificationStorageKey("user-a")), null);
+  assert.equal(storage.getItem(equipmentProfileStorageKey("user-a")!), null);
+  assert.equal(storage.getItem(equipmentProfileRecoveryStorageKey("user-a")!), null);
+  assert.equal(storage.getItem(ballFitDraftStorageKey("user-a")!), null);
   assert.equal(storage.getItem(internalNotificationStorageKey("user-b")), '{"version":1,"readEventKeys":["round-b"]}');
   switchAccountWorkspace(storage, "user-b");
   assert.equal(storage.getItem(STORAGE_KEYS.history), "b-history");

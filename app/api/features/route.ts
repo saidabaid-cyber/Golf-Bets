@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { authSocialServerEnabled, cloudServerEnabled, pollaLiveServerEnabled } from "../../../lib/feature-flags";
+import { authSocialServerEnabled, cloudServerEnabled, equipmentCloudServerEnabled, pollaLiveServerEnabled } from "../../../lib/feature-flags";
 import { readAuthProviderStatus } from "../../../lib/auth-provider-status";
 
 export async function GET() {
@@ -9,6 +9,7 @@ export async function GET() {
     authProviders,
     authSocialEnabled: authSocialServerEnabled,
     cloudEnabled: cloudServerEnabled,
+    equipmentCloudEnabled: cloudServerEnabled && equipmentCloudServerEnabled,
     pollaLiveEnabled: cloudServerEnabled && pollaLiveServerEnabled,
   }, { headers: { "cache-control": "no-store" } });
 }

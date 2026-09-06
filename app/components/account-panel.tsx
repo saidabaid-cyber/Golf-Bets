@@ -6,6 +6,7 @@ import { LEGAL_DOCUMENT_VERSIONS, legalConfig } from "../../lib/legal-config";
 import { BETTING_DATA_CONSENT_TYPE, emptyBackyardProfileDetails, profileHandicapInput, profileHandicapLabel, validateProfileAvatarUrl, validateProfileDraft, type BackyardProfile, type BackyardProfileDetails } from "../../lib/account-state";
 import type { GolfInsights } from "../../lib/golf-insights";
 import { useBackyardAccount } from "./account-provider";
+import { EquipmentProfilePanel } from "./equipment-profile-panel";
 
 type AccountPanelProps = {
   view: "profile" | "account";
@@ -172,6 +173,8 @@ export function AccountPanel({ view, highContrast, onHighContrastChange, notific
     </section>}
 
     {view === "profile" && identity.mode === "authenticated" && message && <div className={messageKind === "error" ? "notice bad" : "notice"} role={messageKind === "error" ? "alert" : "status"}>{message}</div>}
+
+    {view === "profile" && identity.mode === "authenticated" && <EquipmentProfilePanel userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={identity.defaultHandicap} />}
 
     {view === "profile" && golfInsights && <section className="card betaProfileGolfCard">
       <div className="sectionTitle"><div><h2>Mi golf</h2><p>Resumen calculado sólo con tu histórico disponible.</p></div>{onOpenStats && <button type="button" className="textButton" onClick={onOpenStats}>Ver Stats</button>}</div>

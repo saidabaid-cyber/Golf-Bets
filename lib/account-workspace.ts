@@ -4,6 +4,8 @@ import { PHOTO_QUEUE_KEY } from "./photo-sync-queue";
 import { coursePreferenceStorageKey } from "./course-preferences";
 import { cloudProfileRevisionKey, forgetProfileWriteClock, pendingProfileWriteKey } from "./profile-sync";
 import { internalNotificationStorageKey } from "./internal-notifications";
+import { equipmentProfileRecoveryStorageKey, equipmentProfileStorageKey } from "./golf-equipment";
+import { ballFitDraftStorageKey } from "./ball-fitting-storage";
 
 export const WORKSPACE_OWNER_KEY = "backyard-local-workspace-owner-v1";
 export const CLOUD_CONFLICTS_KEY = "backyard-cloud-conflicts-v1";
@@ -57,6 +59,13 @@ export function discardAccountWorkspace(storage: WorkspaceStorage, userId: strin
   storage.removeItem(coursePreferenceStorageKey("favorites", userId));
   storage.removeItem(coursePreferenceStorageKey("recents", userId));
   storage.removeItem(internalNotificationStorageKey(userId));
+  const equipmentKey = equipmentProfileStorageKey(userId);
+  const equipmentRecoveryKey = equipmentProfileRecoveryStorageKey(userId);
+  const fittingKey = ballFitDraftStorageKey(userId);
+  if (equipmentKey) storage.removeItem(equipmentKey);
+  if (equipmentRecoveryKey) storage.removeItem(equipmentRecoveryKey);
+  if (fittingKey) storage.removeItem(fittingKey);
+  storage.removeItem(`the-backyard:equipment-onboarding-ready:v1:${encodeURIComponent(userId)}`);
 }
 
 export function preserveDraftConflict(storage: Pick<Storage, "getItem" | "setItem">, draft: unknown) {
