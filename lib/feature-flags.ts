@@ -12,7 +12,12 @@ export function isExplicitFeatureEnabled(value: string | undefined) {
 
 /** Server-side feature switches. Public Supabase values are still required. */
 export const cloudServerEnabled = enabled(process.env.CLOUD_ENABLED);
-export const pollaLiveServerEnabled = isExplicitFeatureEnabled(process.env.POLLA_LIVE_ENABLED);
+/** Product release lock: Polla Live remains "Próximamente" even if a stale
+ * Preview variable is truthy. A future release must change this reviewed code
+ * and still explicitly enable the environment flag. */
+export const POLLA_LIVE_RELEASED = false;
+export const pollaLiveServerEnabled = POLLA_LIVE_RELEASED
+  && isExplicitFeatureEnabled(process.env.POLLA_LIVE_ENABLED);
 export const authSocialServerEnabled = enabled(process.env.AUTH_SOCIAL_ENABLED);
 /** Equipment cloud storage is additive and must never target the shared
  * database until the isolated Beta migration has been applied deliberately. */
