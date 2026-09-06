@@ -2,7 +2,8 @@ import "server-only";
 import { createHmac } from "node:crypto";
 import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
-import { askRulesWithClient, classifyRulesAiFailure, publicRulesAiStatus, rulesAiConfig } from "../../../../lib/rules-ai";
+import { askRulesWithProvider, classifyRulesAiFailure, publicRulesAiStatus, rulesAiConfig, rulesAiProviderSecret } from "../../../../lib/rules-ai";
+import { createGeminiRulesProvider, createOpenAiRulesProvider } from "../../../../lib/rules-ai-providers";
 import { consumePersistentRulesAiLimit } from "../../../../lib/rules-ai-rate-limit";
 import { getSupabaseAdmin } from "../../../../lib/supabase/server";
 import type { LocalRule } from "../../../../lib/types";
@@ -15,7 +16,7 @@ export async function POST(request: NextRequest) {
   if (!config.enabled) {
     return NextResponse.json({ error: "La consulta con IA no está activada.", code: "disabled" }, { status: 503 });
   }
-  if (!config.hasApiKey || !config.hasVectorStore) {
+  if (!config.providerSupported || !config.hasApiKey) {
     return NextResponse.json({ error: "Falta configurar el reglamento privado.", code: "missing_config" }, { status: 503 });
   }
 
@@ -23,7 +24,7 @@ export async function POST(request: NextRequest) {
   const limiter = getSupabaseAdmin("cloud");
   if (!limiter) return NextResponse.json({ error: "El control de uso de la IA necesita configuración del servidor.", code: "rate_limit_config" }, { status: 503 });
   try {
-    const keyHash = createHmac("sha256", process.env.OPENAI_API_KEY!).update(ip).digest("hex");
+    const keyHash = createHmac("sha256", rulesAiProviderSecret(process.env)).update(ip).digest("hex");
     const allowed = await consumePersistentRulesAiLimit(limiter, keyHash, LIMIT, WINDOW_SECONDS);
     if (!allowed) return NextResponse.json({ error: "Demasiadas consultas. Intenta de nuevo en un minuto.", code: "rate_limit" }, { status: 429 });
   } catch {
@@ -36,12 +37,14 @@ export async function POST(request: NextRequest) {
   const courseName = typeof body?.courseName === "string" ? body.courseName.trim().slice(0, 120) : "";
   const localRules = Array.isArray(body?.localRules) ? body.localRules.slice(0, 30).filter((rule): rule is LocalRule => Boolean(rule && typeof rule === "object" && typeof rule.text === "string" && typeof rule.title === "string")) : undefined;
 
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 20_000, maxRetries: 1 });
+  const provider = config.provider === "gemini"
+    ? createGeminiRulesProvider({ apiKey: process.env.GEMINI_API_KEY! })
+    : createOpenAiRulesProvider(new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 20_000, maxRetries: 1 }));
   try {
-    const answer = await askRulesWithClient({ client, env: process.env, question, courseName, localRules });
+    const answer = await askRulesWithProvider({ provider, env: process.env, question, courseName, localRules });
     return NextResponse.json({ answer });
   } catch (error) {
-    const failure = classifyRulesAiFailure(error);
+    const failure = classifyRulesAiFailure(error, config.provider);
     console.error("Rules AI request failed", { code: failure.code, status: failure.status });
     return NextResponse.json({ error: failure.message, code: failure.code }, { status: failure.status });
   }

@@ -100,7 +100,8 @@ test("consentimientos cloud reintentan de forma idempotente sin bloquear la copi
 });
 
 test("env example contiene nombres requeridos pero ningún secreto real", () => {
-  for (const name of ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY", "CLOUD_ENABLED", "POLLA_LIVE_ENABLED", "AUTH_SOCIAL_ENABLED", "OPENAI_API_KEY", "OPENAI_RULES_VECTOR_STORE_ID", "OPENAI_RULES_MODEL", "RULES_AI_ENABLED"]) assert.match(envExample, new RegExp(`^${name}=$`, "m"));
+  for (const name of ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY", "CLOUD_ENABLED", "POLLA_LIVE_ENABLED", "AUTH_SOCIAL_ENABLED", "RULES_AI_PROVIDER", "GEMINI_API_KEY", "GEMINI_RULES_MODEL", "OPENAI_API_KEY", "OPENAI_RULES_VECTOR_STORE_ID", "OPENAI_RULES_MODEL", "RULES_AI_ENABLED"]) assert.match(envExample, new RegExp(`^${name}=$`, "m"));
+  assert.doesNotMatch(envExample, /^NEXT_PUBLIC_GEMINI_API_KEY=/m);
   assert.doesNotMatch(envExample, /eyJ[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9]{16,}|service_role\.[A-Za-z0-9]/);
 });
 
