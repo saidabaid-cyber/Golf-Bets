@@ -31,6 +31,26 @@ test("V2.5 pressure settings migrate to physical nines", () => {
   assert.equal(fromTen.personalBets[0].pressureNine, "holes_1_9");
 });
 
+test("un campo guardado recibe metadatos aditivos del catálogo sin perder sus ediciones", () => {
+  const seeded: Course = {
+    ...original,
+    catalogClubId: "club-temporal",
+    catalogCourseId: "course-temporal",
+    catalogTeeId: "tee-temporal-general",
+    clubName: "Club Temporal",
+    city: "Puebla",
+    provider: "BACKYARD_INTERNAL",
+  };
+  const saved: Course = { ...original, name: "Mi nombre guardado", holes: original.holes.map((hole) => hole.number === 1 ? { ...hole, par: 5 } : hole) };
+  const [merged] = mergeCoursesPreservingEdits([seeded], [saved]);
+
+  assert.equal(merged.name, "Mi nombre guardado");
+  assert.equal(merged.holes[0].par, 5);
+  assert.equal(merged.catalogCourseId, "course-temporal");
+  assert.equal(merged.catalogTeeId, "tee-temporal-general");
+  assert.equal(merged.city, "Puebla");
+});
+
 test("draft pressure migration preserves a corrupt legacy flag for validation", () => {
   const source = {
     startHole: 1,

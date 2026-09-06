@@ -121,7 +121,7 @@ test("IDs duplicados se aíslan para evitar una selección ambigua", () => {
 });
 
 test("el provider interno devuelve búsqueda y catálogo validados sin consultar una red", async () => {
-  const mexico = course({ id: "mexico-blue", name: "Club México", teeName: "Azules" });
+  const mexico = course({ id: "mexico-blue", name: "Club México", teeName: "Azules", clubName: "Club de Golf México", city: "Ciudad de México" });
   const other = course({ id: "other-white", name: "Otro campo", teeName: "Blancas" });
   const invalid = course({ id: "unsafe", name: "México incompleto", holes: [] });
 
@@ -140,4 +140,35 @@ test("el provider interno devuelve búsqueda y catálogo validados sin consultar
   assert.equal(result.data.catalog.playableCount, 1);
   assert.equal(internalCourseDataProvider.capabilities.structured_catalog, true);
   assert.equal(internalCourseDataProvider.capabilities.remote_catalog, false);
+
+  const firstPage = await internalCourseDataProvider.searchCourses({ courses: [mexico, other], limit: 1 });
+  assert.equal(firstPage.ok, true);
+  if (!firstPage.ok) return;
+  assert.equal(firstPage.data.nextCursor, "mexico-blue");
+  const secondPage = await internalCourseDataProvider.searchCourses({ courses: [mexico, other], limit: 1, cursor: firstPage.data.nextCursor });
+  assert.equal(secondPage.ok, true);
+  if (!secondPage.ok) return;
+  assert.deepEqual(secondPage.data.courses.map((item) => item.id), ["other-white"]);
+  assert.equal(secondPage.data.hasMore, false);
+
+  const details = await internalCourseDataProvider.getCourse({ courses: [mexico, other], courseId: "mexico-blue" });
+  const tees = await internalCourseDataProvider.getTees({ courses: [mexico, other], courseId: "mexico-blue" });
+  const holes = await internalCourseDataProvider.getHoles({ courses: [mexico, other], courseId: "mexico-blue" });
+  const features = await internalCourseDataProvider.getGeoFeatures({ courses: [mexico, other], courseId: "mexico-blue", holeNumber: 1 });
+  assert.equal(details.ok && details.data.name, "Club México");
+  assert.equal(tees.ok && tees.data.length, 1);
+  assert.equal(holes.ok && holes.data.length, 18);
+  assert.deepEqual(features.ok && features.data, []);
+
+  const missing = await internalCourseDataProvider.getCourse({ courses: [mexico], courseId: "missing" });
+  assert.equal(missing.ok, false);
+  if (!missing.ok) assert.equal(missing.code, "not_found");
+
+  const nearby = await internalCourseDataProvider.nearbyCourses({
+    courses: [{ ...mexico, latitude: 19, longitude: -98 }, { ...other, latitude: 20, longitude: -98 }],
+    origin: { latitude: 19, longitude: -98 },
+    radiusKm: 10,
+  });
+  assert.equal(nearby.ok, true);
+  if (nearby.ok) assert.deepEqual(nearby.data.matches.map((match) => match.course.id), ["mexico-blue"]);
 });

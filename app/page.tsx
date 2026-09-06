@@ -112,7 +112,8 @@ import { adoptGuestPhotoJobs, flushPhotoQueue, queuePhoto, photoJobs } from "../
 import { acknowledgeOfflineBundle, getOfflineDeviceId, markOfflineAttempt, offlineRetryDelayMs, persistOfflineBundle, restoreOfflineWorkspace, writeCloudBundleToStorage } from "../lib/offline-store";
 import { PRIVATE_POLLA_LINK_KEY, parsePrivatePollaLink, privatePollaScoreChanges } from "../lib/polla-private-link";
 import { enqueuePollaScore } from "../lib/polla-offline";
-import { cloneLaVistaLocalRules, isLaVistaCourse, LA_VISTA_LOCAL_RULES_UPDATED_AT, withDefaultLaVistaRules } from "../lib/local-rules";
+import { isLaVistaCourse, withDefaultLaVistaRules } from "../lib/local-rules";
+import { DEFAULT_COURSES, DEFAULT_LA_VISTA_COURSE } from "../lib/golf-course-directory";
 import { filterHistory, historyYears, MONTH_LABELS } from "../lib/history-filters";
 import { priorRabbitStatus, priorSkinsStatus } from "../lib/prior-hole-status";
 import { ballFriendScoreResult, ballFriendSetupChipLabel, lobaSetupChipLabel, playerHoleBetLabels, skinHoleNotice } from "../lib/hole-bet-display";
@@ -177,90 +178,8 @@ function frequentGroupHasDuplicateMembers(group: FrequentGroup) {
   return hasDuplicateGroupPlayers(group.players.map((member, index) => ({ id: `member-${index}`, ...member })));
 }
 
-const laVistaPars = [4,3,4,5,4,4,3,4,5,5,4,3,4,4,5,4,3,4];
-const laVistaStroke = [5,17,7,1,9,13,15,3,11,12,8,18,14,2,4,10,16,6];
-const laVistaTees = [
-  { id: "lavista-azules", teeName: "Azules", rating: 74.3, slope: 146, totalYards: 7230, yards: [435,187,416,538,419,367,191,425,562,538,388,158,393,505,605,418,213,471] },
-  { id: "lavista-blancas", teeName: "Blancas", rating: 70.8, slope: 128, totalYards: 6590, yards: [392,165,398,483,389,343,158,374,488,529,358,138,368,433,581,395,173,425] },
-  { id: "lavista-doradas", teeName: "Doradas", rating: 68.4, slope: 121, totalYards: 6038, yards: [362,136,358,469,365,323,138,334,457,490,326,108,326,392,542,368,156,388] },
-  { id: "lavista-rojas", teeName: "Rojas", rating: 71.0, slope: 137, totalYards: 5476, yards: [331,115,297,447,319,270,116,306,430,446,306,99,292,364,503,343,135,357] },
-] as const;
-
-const laVistaCourses: Course[] = laVistaTees.map((tee) => ({
-  id: tee.id,
-  name: "La Vista",
-  teeName: tee.teeName,
-  rating: tee.rating,
-  slope: tee.slope,
-  totalYards: tee.totalYards,
-  holes: laVistaPars.map((par, i) => ({ number: i + 1, par, strokeIndex: laVistaStroke[i], yards: tee.yards[i] })),
-  localRules: cloneLaVistaLocalRules(),
-  localRulesUpdatedAt: LA_VISTA_LOCAL_RULES_UPDATED_AT,
-}));
-
-const laVistaTemporalPars = [4,3,4,3,4,3,3,4,5,5,4,3,4,4,5,4,3,4];
-const laVistaTemporalStroke = [4,16,8,18,6,14,12,2,10,11,7,17,13,1,3,9,15,5];
-const laVistaTemporalTees = [
-  { id: "lavista-temporal-blue", teeName: "Blue", rating: 70.2, slope: 126 },
-  { id: "lavista-temporal-white", teeName: "White", rating: 67.5, slope: 119 },
-  { id: "lavista-temporal-gold", teeName: "Gold", rating: 65.2, slope: 113 },
-  { id: "lavista-temporal-red", teeName: "Red", rating: 67.9, slope: 127 },
-] as const;
-
-const laVistaTemporalCourses: Course[] = laVistaTemporalTees.map((tee) => ({
-  id: tee.id,
-  name: "La Vista Temporal",
-  teeName: tee.teeName,
-  rating: tee.rating,
-  slope: tee.slope,
-  holes: laVistaTemporalPars.map((par, i) => ({ number: i + 1, par, strokeIndex: laVistaTemporalStroke[i] })),
-  localRules: cloneLaVistaLocalRules(),
-  localRulesUpdatedAt: LA_VISTA_LOCAL_RULES_UPDATED_AT,
-}));
-
-function makeGeneralCourse(id: string, name: string, pars: number[], stroke: number[], yards?: number[]): Course {
-  return {
-    id,
-    name,
-    teeName: "General",
-    totalYards: yards?.reduce((a, y) => a + y, 0),
-    holes: pars.map((par, i) => ({ number: i + 1, par, strokeIndex: stroke[i], yards: yards?.[i] })),
-  };
-}
-
-// Campos de Puebla precargados. Par + Ventaja/SI son suficientes para el motor de apuestas.
-// Rating, slope y tees adicionales se pueden completar/editarlos después sin afectar el cálculo base.
-const campestrePuebla = makeGeneralCourse(
-  "campestre-puebla-general",
-  "Campestre de Puebla",
-  [4,3,5,4,4,4,4,3,5,4,4,5,3,4,5,4,3,4],
-  [11,17,1,15,7,9,3,13,5,2,18,6,12,10,8,4,14,16],
-);
-
-const elCristo = makeGeneralCourse(
-  "el-cristo-general",
-  "El Cristo",
-  [5,3,4,4,4,4,3,4,5,5,3,4,4,4,5,4,3,4],
-  [4,18,12,14,6,8,16,2,10,5,15,3,9,11,13,1,17,7],
-);
-
-const colaDeLagarto = makeGeneralCourse(
-  "cola-de-lagarto-general",
-  "Cola de Lagarto",
-  [5,4,4,3,4,4,5,3,5,4,3,5,4,4,3,4,3,5],
-  [5,17,15,3,13,9,11,7,1,4,14,12,16,2,8,10,6,18],
-);
-
-const laVista = laVistaCourses.find((course) => course.teeName === "Blancas")!;
-const laVistaTemporal = laVistaTemporalCourses.find((course) => course.teeName === "White")!;
-
-const defaultCourses: Course[] = [
-  laVista,
-  laVistaTemporal,
-  campestrePuebla,
-  elCristo,
-  colaDeLagarto,
-].map((course) => ({ ...course, builtIn: true, updatedAt: course.name === "La Vista Temporal" ? "2026-09-01" : course.updatedAt }));
+const laVista = DEFAULT_LA_VISTA_COURSE;
+const defaultCourses = DEFAULT_COURSES;
 
 function localDateMexico() {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -641,7 +560,9 @@ function GolfBetsApp() {
   const order = useMemo(() => playOrder(startHole).slice(0, roundHoles), [startHole, roundHoles]);
   const holeNumber = order[currentIndex];
   const hole = course.holes.find((h) => h.number === holeNumber) ?? course.holes[0];
-  const courseNames: string[] = useMemo(() => Array.from(new Set<string>(courses.map((c) => c.name))).sort((a, b) => a.localeCompare(b)), [courses]);
+  const courseOptions = useMemo(() => [...courses].sort((left, right) => (
+    left.name.localeCompare(right.name, "es-MX") || left.teeName.localeCompare(right.teeName, "es-MX")
+  )), [courses]);
   const privateBoard = useMemo(() => privateLeaderboard(course, players, scores, order), [course, players, scores, order]);
   const completedHoles = useMemo(() => new Set(order.filter(number => players.length > 0 && players.every(player => typeof scores[number]?.[player.id] === "number"))), [order, players, scores]);
   const scoreDraft = useMemo(() => holeCapture(scores, scoreEdits, hole, players), [scores, scoreEdits, hole, players]);
@@ -2755,15 +2676,15 @@ function GolfBetsApp() {
       </section>
 
       <section className="card">
-        <div className="sectionTitle"><div><h2>1. Campo</h2><p>Elige el campo; Par y Ventaja/SI se conservan por hoyo.</p></div><button className="textButton" onClick={startNewCourse}>+ Campo</button></div>
+        <div className="sectionTitle"><div><h2>1. Campo y tee</h2><p>Elige el campo y la salida; Par y Ventaja/SI se conservan por hoyo.</p></div><div className="courseSetupActions"><button className="textButton" onClick={() => setTab("courseLibrary")}>Buscar / cerca</button><button className="textButton" onClick={startNewCourse}>+ Campo</button></div></div>
         <div className="grid2">
-          <div className={`courseSelectionField ${courseSelectionError ? "isMissing" : ""}`}><label htmlFor="round-course">Campo</label><select id="round-course" value={courseSelected ? course.name : ""} aria-invalid={courseSelectionError} aria-describedby={courseSelectionError ? "round-course-error" : undefined} onChange={(e) => {
-            const next = courses.find((x) => x.name === e.target.value); if (next) selectRoundCourse(next);
-          }}><option value="" disabled>Selecciona un campo</option>{courseNames.map((name) => <option key={name} value={name}>{name}</option>)}</select>{courseSelectionError && <span id="round-course-error" className="courseSelectionError" role="alert">Selecciona un campo para continuar.</span>}</div>
+          <div className={`courseSelectionField ${courseSelectionError ? "isMissing" : ""}`}><label htmlFor="round-course">Campo · Tee</label><select id="round-course" value={courseSelected ? course.id : ""} aria-invalid={courseSelectionError} aria-describedby={courseSelectionError ? "round-course-error" : undefined} onChange={(e) => {
+            const next = courses.find((candidate) => candidate.id === e.target.value); if (next) selectRoundCourse(next);
+          }}><option value="" disabled>Selecciona campo y tee</option>{courseOptions.map((option) => <option key={option.id} value={option.id}>{option.name} · {option.teeName}</option>)}</select>{courseSelectionError && <span id="round-course-error" className="courseSelectionError" role="alert">Selecciona un campo para continuar.</span>}</div>
           <div><label>Inicio de ronda</label><select value={startHole} onChange={(e) => { const next = Number(e.target.value) as 1 | 10; confirmRoundChange("Cambiar la salida cambia el orden Nassau y los segmentos de Foursome.", () => { setStartHole(next); setCurrentIndex(0); }); }}><option value={1}>Hoyo 1</option><option value={10}>Hoyo 10</option></select></div>
           <div><label>Hoyos a jugar</label><select value={roundHoles} onChange={(e) => { const next = Number(e.target.value) as 9 | 18; confirmRoundChange("Cambiar la duración excluye del cálculo los hoyos fuera de la nueva vuelta, sin borrar sus scores.", () => { setRoundHoles(next); setSupplementalBets((current) => supplementalBetsForRoundHoles(current, next)); setCurrentIndex(0); }); }}><option value={18}>18 hoyos</option><option value={9}>9 hoyos</option></select></div>
         </div>
-        {courseSelected && <div className="courseMeta"><span>18 hoyos configurados</span>{course.updatedAt && <span>Última actualización: {course.updatedAt}</span>}<button onClick={() => { setCourseEditorSelectOnSave(true); setCourseDraft(withDefaultLaVistaRules(course)); setTab("courses"); }}>{course.name === "La Vista Temporal" ? "Editar campo temporal" : "Editar campo"}</button>{isLaVistaCourse(course.name) && <button onClick={() => { setRulesCourseContext(course.name); setTab("rules"); }}>Ver Reglas Locales</button>}</div>}
+        {courseSelected && <div className="courseMeta"><span>{course.holes.length} hoyos configurados</span><span>Tee {course.teeName}</span>{course.updatedAt && <span>Última actualización: {course.updatedAt}</span>}<button onClick={() => { setCourseEditorSelectOnSave(true); setCourseDraft(withDefaultLaVistaRules(course)); setTab("courses"); }}>{course.name === "La Vista Temporal" ? "Editar campo temporal" : "Editar campo"}</button>{isLaVistaCourse(course.name) && <button onClick={() => { setRulesCourseContext(course.name); setTab("rules"); }}>Ver Reglas Locales</button>}</div>}
       </section>
 
       <section className="card" id="round-players">

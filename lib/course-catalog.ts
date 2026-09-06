@@ -35,18 +35,26 @@ export type CourseCatalogIssue = {
  */
 export type GolfCourseRecord = {
   id: string;
+  clubId?: string;
   name: string;
   holesCount: 9 | 18;
   par: number;
   active: boolean;
   source: "built_in" | "manual";
   updatedAt?: string;
-  club?: string;
+  clubName?: string;
   city?: string;
-  state?: string;
+  stateRegion?: string;
   country?: string;
+  address?: string;
   latitude?: number;
   longitude?: number;
+  timezone?: string;
+  provider?: string;
+  providerExternalId?: string;
+  sourceName?: string;
+  sourceUrl?: string;
+  verifiedAt?: string;
 };
 
 export type CourseTeeRecord = {
@@ -104,6 +112,14 @@ function cleanOptionalDate(value: unknown) {
   if (typeof value !== "string" || !value.trim()) return undefined;
   const trimmed = value.trim();
   return Number.isNaN(Date.parse(trimmed)) ? undefined : trimmed;
+}
+
+function cleanOptionalText(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function cleanCoordinate(value: unknown, min: number, max: number) {
+  return typeof value === "number" && Number.isFinite(value) && value >= min && value <= max ? value : undefined;
 }
 
 function issue(
@@ -238,9 +254,11 @@ export function inspectInternalCourse(value: unknown): InternalCourseCatalogEntr
   if (rawSlope !== undefined && !finitePositive(rawSlope)) issues.push(issue("invalid_slope", "warning", "El slope no es un número positivo y no se mostrará.", selectionId));
   if (rawTotalYards !== undefined && !finitePositive(rawTotalYards)) issues.push(issue("invalid_total_yardage", "warning", "El yardaje total no es válido y no se mostrará.", selectionId));
 
+  const courseId = cleanOptionalText(Reflect.get(value, "catalogCourseId")) ?? selectionId;
+  const teeId = cleanOptionalText(Reflect.get(value, "catalogTeeId")) ?? selectionId;
   const holeYardages = inspectedHoles.holes
     .filter((hole) => finitePositive(hole.yards))
-    .map((hole) => ({ teeId: selectionId, holeNumber: hole.number, yardage: hole.yards as number }));
+    .map((hole) => ({ teeId, holeNumber: hole.number, yardage: hole.yards as number }));
   const hasCompleteHoleYardage = inspectedHoles.holesCount !== null && holeYardages.length === inspectedHoles.holesCount;
   const summedYardage = hasCompleteHoleYardage
     ? holeYardages.reduce((total, record) => total + record.yardage, 0)
@@ -256,19 +274,33 @@ export function inspectInternalCourse(value: unknown): InternalCourseCatalogEntr
     && !issues.some((candidate) => candidate.severity === "error");
   const course = hasIdentity && inspectedHoles.holesCount !== null
     ? {
-        id: selectionId,
+        id: courseId,
+        ...(cleanOptionalText(Reflect.get(value, "catalogClubId")) ? { clubId: cleanOptionalText(Reflect.get(value, "catalogClubId")) } : {}),
         name,
         holesCount: inspectedHoles.holesCount,
         par: inspectedHoles.holes.reduce((total, hole) => total + hole.par, 0),
         active: true,
         source: Reflect.get(value, "builtIn") === true ? "built_in" as const : "manual" as const,
         ...(cleanOptionalDate(Reflect.get(value, "updatedAt")) ? { updatedAt: cleanOptionalDate(Reflect.get(value, "updatedAt")) } : {}),
+        ...(cleanOptionalText(Reflect.get(value, "clubName")) ? { clubName: cleanOptionalText(Reflect.get(value, "clubName")) } : {}),
+        ...(cleanOptionalText(Reflect.get(value, "city")) ? { city: cleanOptionalText(Reflect.get(value, "city")) } : {}),
+        ...(cleanOptionalText(Reflect.get(value, "stateRegion")) ? { stateRegion: cleanOptionalText(Reflect.get(value, "stateRegion")) } : {}),
+        ...(cleanOptionalText(Reflect.get(value, "country")) ? { country: cleanOptionalText(Reflect.get(value, "country")) } : {}),
+        ...(cleanOptionalText(Reflect.get(value, "address")) ? { address: cleanOptionalText(Reflect.get(value, "address")) } : {}),
+        ...(cleanCoordinate(Reflect.get(value, "latitude"), -90, 90) !== undefined ? { latitude: cleanCoordinate(Reflect.get(value, "latitude"), -90, 90) } : {}),
+        ...(cleanCoordinate(Reflect.get(value, "longitude"), -180, 180) !== undefined ? { longitude: cleanCoordinate(Reflect.get(value, "longitude"), -180, 180) } : {}),
+        ...(cleanOptionalText(Reflect.get(value, "timezone")) ? { timezone: cleanOptionalText(Reflect.get(value, "timezone")) } : {}),
+        ...(cleanOptionalText(Reflect.get(value, "provider")) ? { provider: cleanOptionalText(Reflect.get(value, "provider")) } : {}),
+        ...(cleanOptionalText(Reflect.get(value, "providerExternalId")) ? { providerExternalId: cleanOptionalText(Reflect.get(value, "providerExternalId")) } : {}),
+        ...(cleanOptionalText(Reflect.get(value, "sourceName")) ? { sourceName: cleanOptionalText(Reflect.get(value, "sourceName")) } : {}),
+        ...(cleanOptionalText(Reflect.get(value, "sourceUrl")) ? { sourceUrl: cleanOptionalText(Reflect.get(value, "sourceUrl")) } : {}),
+        ...(cleanOptionalDate(Reflect.get(value, "verifiedAt")) ? { verifiedAt: cleanOptionalDate(Reflect.get(value, "verifiedAt")) } : {}),
       }
     : undefined;
   const tee = hasIdentity
     ? {
-        id: selectionId,
-        courseId: selectionId,
+        id: teeId,
+        courseId,
         name: teeName,
         ...(finitePositive(rawRating) ? { rating: rawRating } : {}),
         ...(finitePositive(rawSlope) ? { slope: rawSlope } : {}),
@@ -309,11 +341,13 @@ export function buildInternalCourseCatalog(values: readonly unknown[]): Internal
   const issues = entries.flatMap((entry) => entry.issues);
 
   const playableEntries = entries.filter((entry) => entry.playable && entry.course && entry.tee);
+  const courses = Array.from(new Map(playableEntries.map((entry) => [(entry.course as GolfCourseRecord).id, entry.course as GolfCourseRecord])).values());
+  const holes = Array.from(new Map(playableEntries.flatMap((entry) => entry.holes).map((hole) => [`${hole.courseId}:${hole.holeNumber}`, hole])).values());
   return {
     entries,
-    courses: playableEntries.map((entry) => entry.course as GolfCourseRecord),
+    courses,
     tees: playableEntries.map((entry) => entry.tee as CourseTeeRecord),
-    holes: playableEntries.flatMap((entry) => entry.holes),
+    holes,
     teeHoleYardages: playableEntries.flatMap((entry) => entry.teeHoleYardages),
     issues,
     playableCount: playableEntries.length,

@@ -50,6 +50,23 @@ export type Course = {
   holes: Hole[];
   builtIn?: boolean;
   updatedAt?: string;
+  /** Optional normalized-catalog references. Legacy drafts remain valid without them. */
+  catalogClubId?: string;
+  catalogCourseId?: string;
+  catalogTeeId?: string;
+  clubName?: string;
+  city?: string;
+  stateRegion?: string;
+  country?: string;
+  address?: string;
+  latitude?: number;
+  longitude?: number;
+  timezone?: string;
+  provider?: string;
+  providerExternalId?: string;
+  sourceName?: string;
+  sourceUrl?: string;
+  verifiedAt?: string;
   localRules?: LocalRule[];
   localRulesUpdatedAt?: string;
 };

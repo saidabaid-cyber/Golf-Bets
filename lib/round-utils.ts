@@ -178,7 +178,8 @@ export function mergeCoursesPreservingEdits(defaults: Course[], saved: Course[] 
   const byId = new Map(defaults.map((course) => [course.id, { ...course, holes: course.holes.map((hole) => ({ ...hole })) }]));
   for (const course of Array.isArray(saved) ? saved : []) {
     if (!course?.id || !Array.isArray(course.holes) || course.holes.length !== 18) continue;
-    byId.set(course.id, { ...course, holes: course.holes.map((hole) => ({ ...hole })) });
+    const seededMetadata = byId.get(course.id);
+    byId.set(course.id, { ...seededMetadata, ...course, holes: course.holes.map((hole) => ({ ...hole })) });
   }
   return Array.from(byId.values());
 }
