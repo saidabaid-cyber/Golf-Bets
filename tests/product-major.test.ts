@@ -71,14 +71,14 @@ test("links legales existen tanto en acceso como en consentimiento", () => {
   assert.ok(auth.match(/href="\/legal\/privacy\?returnTo=/g)!.length >= 2);
 });
 
-test("Mi Cuenta muestra perfil, documentos, métodos, preferencias y cierre", () => {
-  for (const text of ["Mi Cuenta", "Documentos y consentimiento", "Métodos de acceso", "Preferencias", "Cerrar sesión"]) assert.match(account, new RegExp(text));
+test("Cuenta y privacidad conserva documentos, métodos, preferencias y cierre", () => {
+  for (const text of ["Cuenta y privacidad", "Documentos y consentimiento", "Métodos de acceso", "Preferencias", "Cerrar sesión"]) assert.match(account, new RegExp(text));
 });
 
-test("perfil permite nombre y HCP Index opcional vacío", () => {
+test("perfil permite nombre y HCP manual opcional vacío", () => {
   assert.match(account, /displayName/);
   assert.match(account, /defaultHandicap/);
-  assert.match(account, /HCP Index \(opcional\)/);
+  assert.match(account, /HCP capturado manualmente \(opcional\)/);
   assert.match(account, /validateProfileDraft\(name, handicap\)/);
 });
 

@@ -72,10 +72,11 @@ test("pantalla de perfil usa labels, estado vacío y validación compartida", ()
   const account = read("app/components/account-panel.tsx");
   assert.match(provider, /<label htmlFor="profile-setup-name">Nombre<\/label>/);
   assert.match(provider, /placeholder="Tu nombre"/);
-  assert.match(provider, /<label htmlFor="profile-setup-hcp">HCP Index \(opcional\)<\/label>/);
+  assert.match(provider, /<label htmlFor="profile-setup-hcp">HCP capturado manualmente \(opcional\)<\/label>/);
+  assert.match(provider, /No es una emisión oficial/);
   assert.match(provider, /disabled=\{busy\}/);
   assert.doesNotMatch(provider, /disabled=\{busy \|\| !name\.trim\(\) \|\| handicap === ""\}/);
-  assert.match(account, /<span>HCP Index<\/span>/);
+  assert.match(account, /<span>HCP capturado manualmente<\/span>/);
   assert.match(account, /validateProfileDraft\(name, handicap\)/);
 });
 

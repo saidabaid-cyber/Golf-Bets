@@ -8,12 +8,14 @@ import type { GolfInsights } from "../../lib/golf-insights";
 import { useBackyardAccount } from "./account-provider";
 
 type AccountPanelProps = {
+  view: "profile" | "account";
   highContrast: boolean;
   onHighContrastChange: (value: boolean) => void;
   notificationsEnabled: boolean;
   onNotificationsEnabledChange: (value: boolean) => void;
   golfInsights?: GolfInsights;
   onOpenStats?: () => void;
+  onOpenAccount?: () => void;
 };
 
 function profileMoney(value: number) {
@@ -52,7 +54,7 @@ function profileDetailsDraft(profile: BackyardProfile): ProfileDetailsDraft {
   };
 }
 
-export function AccountPanel({ highContrast, onHighContrastChange, notificationsEnabled, onNotificationsEnabledChange, golfInsights, onOpenStats }: AccountPanelProps) {
+export function AccountPanel({ view, highContrast, onHighContrastChange, notificationsEnabled, onNotificationsEnabledChange, golfInsights, onOpenStats, onOpenAccount }: AccountPanelProps) {
   const { identity, updateProfile, logout, finishAccountDeletion, openAccess, acceptances, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, requestCloudLink, lastCloudSync, cloudIssues, retryCloudSync } = useBackyardAccount();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(identity.displayName);
@@ -112,11 +114,11 @@ export function AccountPanel({ highContrast, onHighContrastChange, notifications
   }
 
   return <>
-    <section className="hero accountHero"><div><div className="eyebrow">THE BACKYARD ACCOUNT</div><h1>Mi Cuenta</h1>{identity.mode === "authenticated" && <p>Tu identidad para los juegos y futuros deportes de The Backyard.</p>}</div></section>
+    <section className="hero accountHero"><div><div className="eyebrow">{view === "profile" ? "THE BACKYARD · GOLFISTA" : "THE BACKYARD ACCOUNT"}</div><h1>{view === "profile" ? "Mi Perfil" : "Cuenta y privacidad"}</h1><p>{view === "profile" ? "Tu identidad de golf, HCP capturado y estadísticas reales." : "Acceso, sincronización, consentimientos y preferencias de tu cuenta."}</p></div></section>
 
-    {identity.mode === "guest" && <section className="card guestAccountCard"><h2>Modo invitado · Los datos permanecen en este dispositivo</h2><div className="accountInlineActions"><button className="primary" onClick={openAccess}>Crear cuenta</button><button className="secondary" onClick={openAccess}>Iniciar sesión</button></div></section>}
+    {view === "account" && identity.mode === "guest" && <section className="card guestAccountCard"><h2>Modo invitado · Los datos permanecen en este dispositivo</h2><div className="accountInlineActions"><button className="primary" onClick={openAccess}>Crear cuenta</button><button className="secondary" onClick={openAccess}>Iniciar sesión</button></div></section>}
 
-    {identity.mode === "authenticated" && <section className="card cloudAccountStatus" aria-label="Estado de la cuenta">
+    {view === "account" && identity.mode === "authenticated" && <section className="card cloudAccountStatus" aria-label="Estado de la cuenta">
       <h2>{sessionExpired ? "Datos disponibles en este dispositivo" : "Sesión iniciada"}</h2>
       <p role="status">{cloudStatus === "synced" ? "Guardado en la nube ✓" : cloudStatus === "syncing" ? "Sincronizando con la nube…" : cloudStatus === "saving" ? "Guardando en este dispositivo…" : cloudStatus === "offline" ? "Sin conexión · Pendiente de sincronizar" : cloudStatus === "error" ? "Error de sincronización · Tu copia local se conserva" : cloudLinked ? "Pendiente de sincronizar" : "Guardado en este dispositivo · Nube sin vincular"}</p>
       {lastCloudSync && <p className="hint">Última sincronización confirmada: {new Date(lastCloudSync).toLocaleString("es-MX")}</p>}
@@ -124,13 +126,13 @@ export function AccountPanel({ highContrast, onHighContrastChange, notifications
       {cloudLinked && !sessionExpired && <button className="secondary" disabled={cloudStatus === "syncing" || cloudStatus === "saving"} onClick={() => void retryCloudSync()}>Reintentar sincronización</button>}
       {sessionExpired && <button className="primary" onClick={openAccess}>Volver a iniciar sesión</button>}
     </section>}
-    {identity.mode === "authenticated" && !cloudLinked && <section className="card"><h2>Sincronización</h2><p>Tus datos siguen seguros en este dispositivo. Puedes vincularlos a tu cuenta cuando la nube esté configurada.</p><button className="primary" onClick={requestCloudLink}>Vincular datos locales</button></section>}
+    {view === "account" && identity.mode === "authenticated" && !cloudLinked && <section className="card"><h2>Sincronización</h2><p>Tus datos siguen seguros en este dispositivo. Puedes vincularlos a tu cuenta cuando la nube esté configurada.</p><button className="primary" onClick={requestCloudLink}>Vincular datos locales</button></section>}
 
-    {identity.mode === "authenticated" && <section className="card profileCard">
-      <div className="sectionTitle"><div className="profileIdentity"><div className="accountAvatar">{identity.avatarUrl ? <img src={identity.avatarUrl} alt="Avatar" referrerPolicy="no-referrer" /> : (identity.displayName.trim()[0] || "J").toUpperCase()}</div><div><h2>{identity.displayName}</h2><p>{identity.email || "Sin correo"}</p></div></div><button className="secondary" onClick={() => setEditing((value) => !value)}>{editing ? "Cancelar" : "Editar"}</button></div>
+    {view === "profile" && <section className="card profileCard">
+      <div className="sectionTitle"><div className="profileIdentity"><div className="accountAvatar">{identity.avatarUrl ? <img src={identity.avatarUrl} alt={`Avatar de ${identity.displayName}`} referrerPolicy="no-referrer" /> : (identity.displayName.trim()[0] || "J").toUpperCase()}</div><div><h2>{identity.displayName}</h2><p>{identity.email || "Perfil local en este dispositivo"}</p></div></div><button className="secondary" onClick={() => setEditing((value) => !value)}>{editing ? "Cancelar" : "Editar perfil"}</button></div>
       {editing && <div className="profileForm profileFormExpanded">
         <label>Nombre visible<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Tu nombre" /></label>
-        <label>HCP Index (opcional)<input type="text" inputMode="text" value={handicap} onChange={(event) => setHandicap(event.target.value)} placeholder="Ej. 8.4 o +1.2" /></label>
+        <label>HCP capturado manualmente (opcional)<input type="text" inputMode="text" value={handicap} onChange={(event) => setHandicap(event.target.value)} placeholder="Ej. 8.4 o +1.2" /></label>
         <div className="profileAvatarEditor">
           <label>Foto de perfil (URL HTTPS)<input type="url" inputMode="url" autoComplete="url" maxLength={2048} value={avatarUrl} onChange={(event) => setAvatarUrl(event.target.value)} placeholder="https://…" /></label>
           <button type="button" className="secondary" disabled={!avatarUrl} onClick={() => setAvatarUrl("")}>Quitar foto</button>
@@ -151,17 +153,20 @@ export function AccountPanel({ highContrast, onHighContrastChange, notifications
         <button className="primary profileSaveButton" disabled={savingProfile} onClick={saveProfile}>{savingProfile ? "Guardando…" : "Guardar perfil"}</button>
       </div>}
       {!editing && <div className="profileMetaList">
-        <div className="profileMeta"><span>HCP Index</span><b>{profileHandicapLabel(identity.defaultHandicap)}</b></div>
+        <div className="profileMeta"><span>HCP capturado manualmente</span><b>{profileHandicapLabel(identity.defaultHandicap)}</b></div>
         {identity.username && <div className="profileMeta"><span>Usuario</span><b>@{identity.username}</b></div>}
         {identity.homeClub && <div className="profileMeta"><span>Club</span><b>{identity.homeClub}</b></div>}
         {(identity.city || identity.state || identity.country) && <div className="profileMeta"><span>Ubicación</span><b>{[identity.city, identity.state, identity.country].filter(Boolean).join(", ")}</b></div>}
         {identity.preferredTee && <div className="profileMeta"><span>Tee preferido</span><b>{identity.preferredTee}</b></div>}
         {identity.handedness && <div className="profileMeta"><span>Mano</span><b>{identity.handedness === "right" ? "Derecha" : identity.handedness === "left" ? "Izquierda" : "Ambas"}</b></div>}
         {identity.bio && <p className="profileBio">{identity.bio}</p>}
+        <p className="hint">The Backyard guarda el valor que capturas; no emite ni certifica un handicap oficial.</p>
       </div>}
     </section>}
 
-    {golfInsights && <section className="card betaProfileGolfCard">
+    {view === "profile" && message && <div className="notice" role="status">{message}</div>}
+
+    {view === "profile" && golfInsights && <section className="card betaProfileGolfCard">
       <div className="sectionTitle"><div><h2>Mi golf</h2><p>Resumen calculado sólo con tu histórico disponible.</p></div>{onOpenStats && <button type="button" className="textButton" onClick={onOpenStats}>Ver Stats</button>}</div>
       <div className="betaProfileGolfStats">
         <span><small>Rondas</small><b>{golfInsights.rounds}</b></span>
@@ -185,7 +190,9 @@ export function AccountPanel({ highContrast, onHighContrastChange, notifications
         : <p className="hint">Las rondas sin tarjeta completa se conservan, pero no generan promedios.</p>}
     </section>}
 
-    <section className="card"><h2>Documentos y consentimiento</h2><div className="documentConsentList">
+    {view === "profile" && <section className="card"><div className="sectionTitle"><div><h2>Cuenta y privacidad</h2><p>Acceso, sincronización, documentos, preferencias y cierre de sesión.</p></div></div><button type="button" className="secondary big" onClick={onOpenAccount}>Abrir configuración de cuenta</button></section>}
+
+    {view === "account" && <><section className="card"><h2>Documentos y consentimiento</h2><div className="documentConsentList">
       <Link href="/legal/terms?returnTo=account"><span>Términos de Uso</span><b>{acceptedLabel("terms")}</b></Link>
       <Link href="/legal/privacy?returnTo=account"><span>Aviso de Privacidad</span><b>{acceptedLabel("privacy")}</b></Link>
       <Link href="/legal/terms?returnTo=account#rules-referee"><span>Árbitro de Reglas</span><b>{acceptedLabel("rules_referee")}</b></Link>
@@ -204,5 +211,6 @@ export function AccountPanel({ highContrast, onHighContrastChange, notifications
     {message && <div className="notice" role="status">{message}</div>}
 
     {deleteOpen && <div className="modalBackdrop"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="delete-account-title"><h2 id="delete-account-title">Eliminar mi cuenta y mis datos</h2><p>Se eliminarán definitivamente tu usuario, datos de nube y fotos. También se limpiará el workspace local de esta cuenta; los datos de invitado y de otras cuentas no se tocarán. Escribe <b>ELIMINAR</b> para confirmar.</p><input aria-label="Confirmación de eliminación" value={deleteText} onChange={(event) => setDeleteText(event.target.value)} placeholder="ELIMINAR" autoComplete="off" /><div className="dialogActions"><button className="secondary" disabled={deletingAccount} onClick={() => { setDeleteOpen(false); setDeleteText(""); }}>Cancelar</button><button className="dangerButton" disabled={deleteText !== "ELIMINAR" || deletingAccount} onClick={deleteAccount}>{deletingAccount ? "Eliminando…" : "Eliminar definitivamente"}</button></div></section></div>}
+    </>}
   </>;
 }

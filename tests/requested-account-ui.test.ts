@@ -29,10 +29,20 @@ test("Jugar con un grupo usa el mismo respaldo seguro que Nueva ronda", () => {
   assert.match(page, />Cancelar<\/button>/);
 });
 
-test("Cuenta invitada muestra solo el estado local y nunca una tarjeta de identidad falsa", () => {
+test("el perfil invitado es local y Cuenta no inventa una identidad de nube", () => {
   assert.match(account, /Modo invitado · Los datos permanecen en este dispositivo/);
-  assert.match(account, /identity\.mode === "authenticated" && <section className="card profileCard">/);
+  assert.match(account, /view === "profile" && <section className="card profileCard">/);
+  assert.match(account, /Perfil local en este dispositivo/);
   assert.doesNotMatch(account, /Sin correo · Invitado/);
+});
+
+test("Perfil separa el golf de la configuración sensible de Cuenta", () => {
+  assert.match(page, /<AccountPanel view="profile"/);
+  assert.match(page, /<AccountPanel view="account"/);
+  assert.match(account, /view === "profile" && golfInsights/);
+  assert.match(account, /view === "account" && <><section className="card"><h2>Documentos y consentimiento/);
+  assert.match(account, /Abrir configuración de cuenta/);
+  assert.match(account, /no emite ni certifica un handicap oficial/);
 });
 
 test("Configuración explica cómo agregar jugadores y grupos guardados", () => {
