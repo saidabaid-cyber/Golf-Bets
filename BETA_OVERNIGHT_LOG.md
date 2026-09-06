@@ -261,3 +261,49 @@ Hora aproximada de cierre técnico: 14:56 `America/Mexico_City`. El milestone se
 - `/api/features` confirma Email/Google listos, `equipmentCloudEnabled=false` y `pollaLiveEnabled=false`.
 - `/api/equipment` responde 503 privado/no-store mientras el flag permanece apagado, sin intentar escribir al Supabase compartido.
 - El hallazgo de Polla Preview activa se corrigió en el commit separado `76fba0b` mediante un release lock revisable en código, sin cambiar variables remotas.
+
+## Continuación — arquitectura golfística integral
+
+Hora aproximada de cierre técnico: 16:40 `America/Mexico_City`.
+
+### `6187d8e` — `feat(beta): add course directory and nearby GPS flow`
+
+- Se formalizó el directorio provider-neutral de clubs, courses, tees, holes, yardajes y geo-features.
+- El seed QA pequeño conserva cuatro campos ya conocidos, siete tees y 72 hoyos; URLs oficiales/procedencia se guardan y toda coordenada no verificada queda `null`.
+- Nueva Ronda ofrece Cerca de mí, Recientes, Favoritos, Buscar y Mis campos. La ubicación sólo se solicita por acción explícita; denegarla conserva el flujo manual.
+- `InternalCourseProvider` implementa búsqueda/cercanía/detalle/tees/hoyos/features y el servicio Haversine se prueba con coordenadas sintéticas.
+- QA focal del milestone: 35/35 pruebas, lint y TypeScript correctos.
+
+### `e60d172` — `feat(beta): complete golfer equipment and multibrand ball fit`
+
+- “Mi juego” añade variables golfísticas opcionales sobre el mismo perfil; “Mi bolsa” conserva historia por etapas, shafts desglosados y sets combinados.
+- Se añadió captura manual de distancias por bastón con un dominio preparado para ronda, launch monitor, GPS e importación futura.
+- Bola y Ball Fit usan catálogo paginado server-only, no seeds grandes en React. Búsquedas antiguas se cancelan e invalidan antes de actualizar la consulta vigente.
+- Ball Fit v2 centraliza pesos explicables, usa HCP sólo como ponderador suave sobre preferencias explícitas, exige suficiente cobertura y entrega un Top 3 multimarca sin candidatos inactivos.
+- La sincronización de equipo deduplica fingerprints y acota colas/respuestas por generación, usuario y token para que refresh/logout no aplique trabajo obsoleto.
+
+### `19c048c` — `feat(beta): add protected golf catalog schema and admin`
+
+- Se preparó `20260906211937_golf_profile_course_architecture.sql`: 12 tablas nuevas, extensiones aditivas de perfil/equipo/catálogos, 37 policies y 40 índices.
+- Se creó prueba SQL transaccional de RLS para owner A/B y admin/no-admin, además de verificación estática de constraints, grants y procedencia.
+- `/admin` y `/api/admin/golf-catalog` permiten CRUD acotado y archivado de bolas, bastones, shafts, clubs, courses, tees y holes. La autorización se revalida server-side contra `app_metadata.role=admin` y falla cerrada sin Beta DB/flag.
+- No se aplicó DDL ni seed remoto: el único Supabase disponible no está aislado de producción.
+
+### `42bac5f` — `fix(beta): harden golf catalog workflows`
+
+- Corrige limpieza explícita de shaft, invalida respuestas/acciones antiguas del admin y evita cruces de IDs entre recursos.
+- Mueve el ranking a `/api/ball-fitting`: catálogo activo completo hasta 2,000 candidatos, respuesta acotada a actual/Top 3 y fallo cerrado si el proveedor no puede entregar alcance exhaustivo.
+- Sustituye la identidad local por un scope opaco antes del POST; el endpoint rechaza `userId` reales y no persiste el request.
+
+### QA integral posterior a los tres commits
+
+- `npm test`: 998/998 correctos, 0 fallos, 0 omitidos y 0 pendientes.
+- `npm run lint`: correcto.
+- `tsc --noEmit`: correcto.
+- `npm run build`: correcto con Next.js 16.3.3 y 20/20 rutas, incluidas `/admin`, `/api/admin/golf-catalog` y `/api/catalog/equipment`.
+- Revisión de migración: cero hallazgos P0/P1 pendientes; el test SQL conductual no pudo ejecutarse porque no hay Supabase local, `psql`, Docker ni una base Beta aislada.
+- Cierre posterior a auditoría: limpiar shaft ya no revive el anterior; Ball Fit rankea en `/api/ball-fitting` sobre catálogo exhaustivo o falla cerrado, omite identidad real del transporte; y admin invalida cargas/acciones obsoletas por generación/recurso.
+- Smoke local posterior al build: raíz 200, búsqueda de catálogo 200, Ball Fit 200 con 11 modelos evaluados/Top 3, payload con identidad real rechazado 400 y rutas cloud/admin bloqueadas 503 privado/no-store con los flags seguros.
+- QA visual nuevo bloqueado por superficie: no existe `agent-browser` y Computer Use no expuso Chrome, Edge ni navegador integrado. No se afirma una certificación visual nueva; permanece pendiente el pase en Safari/PWA físico.
+- GitHub reportó el contexto Vercel en `success` para `42bac5f`. `https://golf-bets-git-beta-saha8.vercel.app` respondió 200 y expuso la ruta nueva; el dominio `beta.thebackyard.com.mx` siguió sirviendo un build anterior (la misma ruta dio 404). No se intentó reasociar sin credenciales ni se tocó Production.
+- Pushes realizados sólo como fast-forward a `origin/beta`; ningún merge, `--prod`, variable Production o DDL remoto.

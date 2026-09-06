@@ -49,7 +49,7 @@ La Scorecard calcula una vista previa de neto a HCP de ronda al 100% exclusivame
 
 `lifecycleState` añade `draft`, `live`, `completed` y `cancelled` de forma compatible. Las rondas legacy sin estado se leen como `completed` sin migración destructiva. La captura avanzada es opcional: `scoreCaptureMode` y `advancedStats` se persisten con la ronda, pero nunca alimentan el motor de apuestas.
 
-El perfil ampliado normaliza username, ubicación, club, tee, mano, bio y visibilidad en la caché local por identidad. Nombre, HCP y avatar conservan el write cloud existente; los campos nuevos no se presentan como sincronizados hasta contar con columnas y RLS en una base Beta aislada.
+El perfil ampliado normaliza username, ubicación, club, tee, mano, bio y visibilidad en la caché local por identidad. “Mi juego” añade score típico, distancia/velocidad de driver, trayectoria, tendencia, tipo de greens, prioridad y sensibilidad al precio reutilizando el HCP y la mano existentes. Nombre, HCP y avatar conservan el write cloud existente; los campos nuevos no se presentan como sincronizados hasta contar con columnas y RLS en una base Beta aislada.
 
 Perfil y Cuenta son vistas distintas. Sólo una sesión autenticada puede editar la identidad persistente; un workspace invitado conserva rondas y estadísticas locales, pero no se etiqueta como cuenta ni perfil sincronizable. Los errores de formulario/guardado usan estados accesibles separados del éxito.
 
@@ -57,9 +57,9 @@ Social y notificaciones son actualmente una proyección privada de actividad loc
 
 ## Perfil de equipo, bola y Ball Fit
 
-El equipo extiende la identidad autenticada existente; no crea una segunda cuenta ni un segundo jugador. `EquipmentProfile` es un documento versionado por `userId` que contiene bastones, bolas, preferencias y el resumen del último fit. Su storage local usa la llave `the-backyard:equipment-profile:v1:<userId>` y valida propietario/esquema antes de leer o sobrescribir. El borrador del cuestionario se guarda por separado en `the-backyard:ball-fit-draft:v1:<userId>` para poder cerrar y reabrir la PWA sin perder respuestas.
+El equipo extiende la identidad autenticada existente; no crea una segunda cuenta ni un segundo jugador. `EquipmentProfile` es un documento de esquema v2 por `userId` que contiene bastones, bolas, distancias y el resumen del último fit. Conserva la llave descubrible `the-backyard:equipment-profile:v1:<userId>` para migrar tolerante y localmente los documentos v1 antes de exigir v2 en escrituras cloud. El borrador del cuestionario se guarda por separado en `the-backyard:ball-fit-draft:v1:<userId>` para poder cerrar y reabrir la PWA sin perder respuestas.
 
-El flujo opcional se integra después de completar el perfil básico de una cuenta nueva. Cada etapa permite omitir y las cuentas existentes acceden directamente desde Perfil, sin ser forzadas a un nuevo onboarding. “Mi bolsa” y “Mi bola” consumen el mismo store local-first: una entrada puede referir a catálogo o usar `customBrand`/`customModel`; todos los datos técnicos adicionales son opcionales. `isCurrent=false` conserva equipo/bolas anteriores y la UI también permite eliminación explícita por decisión del usuario.
+El flujo opcional se integra después de completar el perfil básico de una cuenta nueva. Cada etapa permite omitir y las cuentas existentes acceden directamente desde Perfil, sin ser forzadas a un nuevo onboarding. “Mi bolsa” y “Mi bola” consumen el mismo store local-first: una entrada puede referir a catálogo o usar `customBrand`/`customModel`; todos los datos técnicos adicionales son opcionales. Un cambio de modelo cierra la etapa actual con `stoppedUsingAt` y crea la nueva con `startedUsingAt`; `isCurrent=false` conserva equipo/bolas anteriores y la UI también permite eliminación explícita por decisión del usuario.
 
 Los catálogos no están hardcodeados en componentes React. `lib/golf-equipment-catalog.ts` carga tres seeds JSON versionados e importables:
 
@@ -69,13 +69,17 @@ Los catálogos no están hardcodeados en componentes React. `lib/golf-equipment-
 
 Cada registro aceptado conserva fuente oficial y `verifiedAt`. `equipmentCatalogDatabaseSeed()` proyecta los contratos a columnas SQL `snake_case`, incluida la correspondencia explícita `officialUrl → source_url`, para un futuro `upsert` idempotente en una base Beta elegida deliberadamente. Los atributos cualitativos se normalizan a `VERY_LOW`, `LOW`, `MID`, `HIGH` o `VERY_HIGH`; compresión y cualquier otro dato no confirmado permanecen `null`. Los modelos antiguos pueden mantenerse con `active=false` en lugar de borrarse.
 
-`lib/ball-fitting.ts` implementa un recomendador determinístico y explicable, separado de apuestas, scores e IA. Normaliza respuestas incompletas, pondera preferencias y prioridades ordenadas únicamente contra atributos verificados, calcula cobertura, y devuelve como máximo tres alternativas con Match Score, motivos y comparación contra la bola actual. Una falta de evidencia reduce cobertura o produce “Sin dato verificado”; el producto nunca se presenta como fitting oficial de un fabricante.
+Los componentes no importan esos seeds. `lib/equipment-catalog-provider.ts` define un contrato paginado y `lib/equipment-catalog-provider.server.ts` encapsula el proveedor interno con `server-only`; `/api/catalog/equipment` entrega como máximo una página pequeña, admite búsqueda/categoría/cursor e IDs fijados para resolver selecciones archivadas. El hook cliente aplica debounce, `AbortController` y una generación monotónica para impedir que respuestas antiguas contaminen una consulta nueva.
+
+`PlayerClubDistance` cuelga del mismo `PlayerClub` y guarda carry/total, unidad, fuente, muestras y confianza. La primera UI escribe sólo fuente `MANUAL`; los enums reservan `ROUND_ESTIMATE`, `LAUNCH_MONITOR`, `GPS` e `IMPORT` sin afirmar que ya se estén calculando.
+
+`lib/ball-fitting.ts` implementa un recomendador determinístico y explicable, separado de apuestas, scores e IA. `/api/ball-fitting` ejecuta ese motor server-side sobre el catálogo activo completo hasta un techo explícito de 2,000 candidatos; si el proveedor informa un alcance incompleto, responde fail-closed y no publica un ranking parcial. El cliente recibe sólo el registro actual y Top 3. El transporte sustituye la identidad real y la identidad de la sesión de launch monitor por un scope opaco, sin modificar el input local que se persiste. Una falta de evidencia reduce cobertura o produce “Sin dato verificado”; el producto nunca se presenta como fitting oficial de un fabricante.
 
 El launch monitor es una captura estructurada opcional para Driver, hierro 7, pitching wedge y medio wedge. Admite múltiples golpes, exclusión/reactivación de mishits y resume sólo muestras incluidas mediante mediana y promedio resistente. El protocolo visible guía 3 golpes por categoría, pero los resúmenes todavía no cambian el ranking: no se han inventado ventanas ni algoritmos propietarios.
 
 ### Persistencia y sincronización de equipo
 
-El guardado confirmado es local-first. La UI expone estados de carga, guardado local, sincronizando, sincronizado, offline, pendiente, conflicto y error. Cambiar de dispositivo requiere la ruta autenticada `/api/equipment`, que valida el token con Supabase, obliga a que el snapshot pertenezca a `auth.uid()`, limita el payload, exige normalización canónica sin truncamientos y usa mutation ID, versión y compare-and-swap. Fechas iguales con payload distinto son conflicto explícito; ninguna versión gana silenciosamente.
+El guardado confirmado es local-first. La UI expone estados de carga, guardado local, sincronizando, sincronizado, offline, pendiente, conflicto y error. Cambiar de dispositivo requiere la ruta autenticada `/api/equipment`, que valida el token con Supabase, obliga a que el snapshot pertenezca a `auth.uid()`, limita el payload, exige normalización canónica sin truncamientos y usa mutation ID, versión y compare-and-swap. Fechas iguales con payload distinto son conflicto explícito; ninguna versión gana silenciosamente. La cola deduplica fingerprints reales, permite una reversión A→X→A y acota cada operación a `{generation,userId,accessToken}`; tras un refresh/logout una respuesta anterior no puede tocar refs ni UI.
 
 La frontera cloud falla cerrada mediante `EQUIPMENT_CLOUD_ENABLED`: sólo un valor afirmativo explícito habilita la ruta y `/api/features` informa esa capacidad al cliente. El flag permanece ausente/deshabilitado porque la migración todavía no se ha aplicado en una base Beta aislada. Por tanto, el comportamiento realmente disponible en este milestone es persistencia local por identidad; la réplica multi-dispositivo está implementada y probada por contrato, pero no activa.
 
@@ -116,6 +120,12 @@ Se creó, pero **no se aplicó remotamente**, la migración aditiva `20260906193
 
 `supabase/tests/equipment_ball_fitting_rls.sql` prepara verificación transaccional de aislamiento. Las pruebas TypeScript inspeccionan además grants, owner checks y que `user_metadata` no participe en autorización. Ejecutar esta migration/prueba contra Supabase permanece bloqueado hasta disponer de una base Beta separada; el proyecto alojado no fue modificado.
 
+La segunda migración aditiva `20260906211937_golf_profile_course_architecture.sql`, también preparada y **no aplicada remotamente**, añade los campos opcionales de “Mi juego”, fortalece historia/procedencia del equipo y crea 12 tablas: dos marcas canónicas, pruebas de bola, distancias por bastón, clubs, courses, tees, holes, yardajes por tee, geo-features, favoritos y recientes. Extiende el puente `courses_cloud` sin modificar snapshots de ronda. Declara 37 policies y 40 índices para owner, admin, búsqueda trigram, marca/modelo, proveedor/ID externo, recencia y búsqueda geográfica futura.
+
+`supabase/tests/golf_profile_course_architecture_rls.sql` incluye casos conductuales dentro de una transacción para usuario A, usuario B, no-admin y admin. Las pruebas estáticas verifican además FKs, constraints, grants y propagación transaccional al renombrar una marca canónica. No se ejecutó SQL real por no existir Supabase local, `psql`, Docker o una base Beta aislada.
+
+`/admin` es una superficie compacta para marcas/modelos de bola, marcas/modelos de bastón, shafts, clubs, courses, tees y holes. Su Route Handler falla cerrado antes de construir clientes si el feature de equipo no está habilitado, vuelve a validar el JWT y sólo confía en `app_metadata.role = admin`. La administración pagina/busca, limita payloads y archiva (`active=false`) en vez de borrar; nunca autoriza por ocultar el botón ni por `user_metadata`. Las cargas usan abort + generación + contexto, y guardar/archivar permanece ligado al recurso original para que respuestas antiguas no crucen IDs entre catálogos.
+
 ## Proveedores de golf
 
 `lib/golf-providers.ts` define contratos tipados para:
@@ -126,9 +136,11 @@ Se creó, pero **no se aplicó remotamente**, la migración aditiva `20260906193
 - `GolfMapProvider`
 - `DistanceProvider`
 
-El único proveedor concreto es `internalCourseDataProvider`: busca, sin red, únicamente sobre los objetos `Course[]` que la app ya posee. No crea campos, tees, yardas ni coordenadas. Los contratos externos no implican una integración activa, licencia, autorización ni exactitud oficial.
+`InternalCourseProvider` es el proveedor concreto inicial. Implementa `searchCourses`, `nearbyCourses`, `getCourse`, `getTees`, `getHoles` y `getGeoFeatures` sobre un directorio interno provider-neutral. No hace fetch externo, scraping ni crea coordenadas. Cualquier futuro GolfAPI/Google Places/proveedor autorizado podrá implementar el mismo contrato sin cambiar la UI.
 
-`lib/course-catalog.ts` construye un read model provider-neutral que separa Course, Tee, Hole y yardaje por tee sin reescribir drafts o históricos legacy. Sólo proyecta registros con ID/nombre/tee, 9 o 18 hoyos completos, Par válido y SI único; metadatos opcionales inválidos se omiten y se auditan como warnings. Persistir esas entidades en tablas normalizadas queda bloqueado hasta disponer de una base Beta aislada.
+`lib/golf-course-directory.ts` construye entidades separadas `GolfClub`, `GolfCourse`, `GolfCourseTee`, `GolfHole`, yardaje y `GolfHoleGeoFeature`, y proyecta selecciones legacy para no reescribir drafts o históricos. El seed QA contiene cuatro clubs/courses, siete tees y 72 hoyos basados en el catálogo ya existente y páginas oficiales; las coordenadas no verificadas permanecen `null`. `lib/course-catalog.ts` valida ID/nombre/tee, 9/18 hoyos completos, Par y SI únicos; metadatos opcionales inválidos se omiten con warnings.
+
+`lib/course-distance.ts` mantiene Haversine y orden de cercanía separados del navegador. Nueva Ronda solicita geolocalización únicamente por acción explícita, explica que es opcional y mantiene búsqueda manual cuando se rechaza o falla. Sin coordenadas verificadas el estado cercano queda honestamente vacío; las pruebas usan coordenadas sintéticas y no presentan La Vista/Campestre/El Cristo/Cola de Lagarto a distancias inventadas.
 
 La UI debe distinguir siempre el HCP manual/de juego de cualquier índice oficial. Una futura integración solo podrá etiquetarse como oficial si el proveedor y la autorización correspondientes lo permiten.
 
@@ -148,7 +160,7 @@ Flags de servidor existentes:
 - `AUTH_SOCIAL_ENABLED`
 - `RULES_AI_ENABLED`
 
-Polla Live debe permanecer visible solo como “Próximamente” y deshabilitado en esta iteración. `POLLA_LIVE_ENABLED` falla cerrado: únicamente los valores normalizados `1`, `true`, `on` y `yes` habilitan el backend; ausente, vacío, falso o desconocido impide instanciar también el cliente con service role. `EQUIPMENT_CLOUD_ENABLED` usa el mismo criterio explícito y permanece deshabilitado mientras no exista una base Beta con la migration aplicada. GPS, integraciones de campos/HCP/perfil, pagos, suscripciones y módulos incompletos deben quedar ocultos o protegidos por flags; no deben generar botones muertos.
+Polla Live debe permanecer visible solo como “Próximamente” y deshabilitado en esta iteración. `POLLA_LIVE_ENABLED` falla cerrado: únicamente los valores normalizados `1`, `true`, `on` y `yes` habilitan el backend; ausente, vacío, falso o desconocido impide instanciar también el cliente con service role. `EQUIPMENT_CLOUD_ENABLED` usa el mismo criterio explícito y permanece deshabilitado mientras no exista una base Beta con las migraciones aplicadas. La proximidad local no necesita proveedor ni flag; mapas/geometría, integraciones de campos/HCP/perfil, pagos, suscripciones y módulos incompletos sí permanecen ocultos o protegidos y no generan botones muertos.
 
 ## Flujo de despliegue seguro
 

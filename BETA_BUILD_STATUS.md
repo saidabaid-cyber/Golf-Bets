@@ -18,18 +18,22 @@
 - Perfil autenticado con edición persistente y Cuenta separada. El modo invitado conserva golf/Stats locales sin presentarse falsamente como identidad persistente. Los fallos de validación o guardado se anuncian como errores accesibles.
 - Stats permite elegir una cohorte real de 9H o 18H cuando ambas existen y alternar la gráfica entre Gross y vs Par; todos los promedios, tendencia y rondas recientes respetan esa selección.
 - Perfil de golf ampliado compatible con cachés anteriores: nombre, apellidos, usuario, ubicación, club, tee, mano, bio y privacidad se editan y recuperan localmente sin guardar tokens ni fabricar una identidad para invitado. Nombre/HCP/avatar conservan su escritura cloud existente; los campos nuevos quedan honestamente marcados como locales hasta disponer de esquema Beta aislado.
+- “Mi juego” amplía ese mismo perfil con score típico, distancia y banda de velocidad de driver, trayectoria, tendencia, greens habituales, prioridad de juego y sensibilidad al precio. Todo es opcional; HCP y mano reutilizan los campos existentes y no se crea una segunda identidad.
 - Onboarding de equipo posterior al perfil básico, sólo para cuentas nuevas y completamente opcional: permite agregar bastones, omitir la bolsa, elegir/no fijar/omitir bola y aceptar o rechazar el Ball Fit sin bloquear la entrada a la app. Las cuentas existentes no son obligadas a repetir onboarding y encuentran el módulo dentro de Perfil.
 - Perfil de equipo unido al mismo `userId` autenticado: “Mi bolsa” permite catálogo o marca/modelo manual, múltiples maderas/híbridos/wedges, composición de set de hierros, specs opcionales, edición, eliminación y cambio entre actual/anterior. “Mi bola” permite catálogo o captura manual, edición, eliminación, historial y reactivar una bola anterior.
-- The Backyard Ball Fit rápido conserva borrador por identidad, precarga HCP/bola cuando existen y produce hasta tres recomendaciones ordenadas con Match Score, cobertura de datos, motivos, comparación contra la bola actual y atributos verificados. Los datos no confirmados se muestran como “Sin dato verificado” y el resultado se identifica expresamente como orientativo, no oficial de una marca.
+- The Backyard Ball Fit rápido conserva borrador por identidad, precarga HCP/bola cuando existen y produce hasta tres recomendaciones ordenadas con Match Score, cobertura de datos, motivos, comparación contra la bola actual y atributos verificados. El endpoint stateless evalúa el catálogo activo completo hasta un techo explícito de 2,000 candidatos, devuelve sólo actual/Top 3 y falla cerrado sin ranking parcial si excede el alcance; ningún `userId` real viaja en la solicitud.
 - Captura opcional de launch monitor preparada para Driver, hierro 7, pitching wedge y medio wedge: admite múltiples golpes, excluir/reactivar golpes y resume muestras válidas mediante medianas y promedio resistente. Estos datos se conservan como contexto; todavía no alteran el ranking mediante ventanas propietarias.
 - Catálogos estructurados fuera de React e importables: 11 marcas/11 modelos de bolas, 15 marcas/17 modelos de bastones y 5 marcas/5 familias de shafts. Cada modelo incluido conserva URL oficial y fecha de verificación; compresión u otros atributos ausentes permanecen `null`.
+- Los selectores de bola, bastón y shaft consultan una API server-only con búsqueda acotada, debounce, paginación y resolución de selecciones históricas archivadas. Los seeds no cruzan completos al bundle cliente y una respuesta de una consulta anterior no puede anexarse a la búsqueda actual.
+- “Distancias” permite registrar carry/total manual por el mismo `PlayerClub`, con unidad, fuente, muestras y confianza preparados para GPS, ronda, launch monitor o importación futura.
 - Tarjeta con captura `Rápida` (score y putts exigidos por apuestas) o `Estadísticas` opcionales. Fairway, GIR y penalidades se guardan sin cambiar scores ni motores de apuestas; Stats e Histórico muestran únicamente datos capturados, sin completar huecos.
 - Actividad personal derivada sólo de rondas y grupos guardados. No se presenta como un feed compartido ni se publica a terceros.
 - El centro de actividad permite marcar cada aviso local como leído/no leído, conserva pulsaciones consecutivas y deduplica eventos exactos para que el badge no se infle. Los controles funcionan tanto para avisos navegables como informativos.
 - Biblioteca de campos con búsqueda tolerante a acentos, favoritos, recientes, creación/edición manual y selección explícita. Editar catálogo no cambia silenciosamente el campo del draft.
 - Preferencias de campos aisladas por identidad y eliminadas al borrar la cuenta local.
-- Contratos tipados `CourseDataProvider`, `HandicapProvider`, `GolfProfileProvider`, `GolfMapProvider` y `DistanceProvider`; el único proveedor activo busca sin red sobre `Course[]` existentes.
-- Read model formal y validado para `courses`, `tees`, `holes` y yardajes por tee. IDs, Par, numeración y SI ambiguos fallan cerrados; rating, slope y yardaje sólo se muestran cuando provienen de datos válidos capturados.
+- Contratos tipados `CourseDataProvider`, `HandicapProvider`, `GolfProfileProvider`, `GolfMapProvider` y `DistanceProvider`; `InternalCourseProvider` implementa búsqueda, cercanía, detalle, tees, hoyos y geo-features sobre el catálogo interno sin depender de una API privada.
+- Directorio formal provider-neutral con `GolfClub`, `GolfCourse`, `GolfCourseTee`, `GolfHole`, yardajes y `GolfHoleGeoFeature`. El seed QA contiene 4 clubs, 4 courses, 7 tees y 72 hoyos derivados del catálogo legacy/con fuentes; las coordenadas no verificadas se conservan en `null`.
+- Nueva Ronda ofrece Cerca de mí, Recientes, Favoritos, Buscar y Mis campos. La geolocalización se solicita únicamente al tocar “Usar mi ubicación”, explica su finalidad y conserva búsqueda manual al negar permiso; Haversine y orden por distancia están probados con coordenadas sintéticas.
 - Minimum Putts usa la duración explícita de ronda: H1–9 y H10–18 liquidan correctamente en rondas de 9; snapshots válidos de 18 conservan su comportamiento.
 - Importes ordinarios de apuestas se limitan a cero o más en captura; Manuales conserva deliberadamente importes firmados.
 - Las configuraciones activas de apuestas pasan por un validador puro compartido y fail-closed antes de guardar, iniciar o liquidar: participantes, equipos, bases HCP, carry/press, IDs y valores no finitos quedan bloqueados con reparación explícita, sin convertir una configuración inválida en un resultado de `$0`.
@@ -40,18 +44,19 @@
 - Grupos locales preservan la identidad estable de cuentas vinculadas y reparan duplicados por cuenta o nombre antes de crear jugadores de ronda; el editor falla cerrado y muestra un error explícito.
 - Scorecard en vivo muestra Par, SI, yardaje y tee únicamente cuando el campo los contiene. Cada jugador recibe una vista previa determinística de golpes de HCP y neto al guardar; HCP/score ausentes permanecen pendientes y las bases propias de apuestas no se reinterpretan.
 - Polla Live falla cerrada también ante valores desconocidos del flag: sólo `1`, `true`, `on` o `yes` pueden habilitar su backend. En esta iteración permanece deshabilitada y no se instancian sus clientes, incluida la service role, con el flag ausente o falso.
-- QA integral más reciente del código de este milestone: lint sin errores, TypeScript de app/tests correcto, 931/931 tests y build Next.js 16.3.3 correcto con 19/19 rutas.
+- Administración básica en `/admin` para marcas, bolas, bastones, shafts, clubs, courses, tees y hoyos. La API revalida el JWT y autoriza sólo `app_metadata.role = admin`; sin flag/base Beta falla cerrada, no ofrece `DELETE` y archiva con `active=false`.
+- QA integral más reciente del código de este milestone: lint sin errores, TypeScript de app/tests correcto, 998/998 tests y build Next.js 16.3.3 correcto con todas las rutas generadas, incluidas las nuevas APIs de catálogo/Ball Fit/admin.
 
 ## PARTIAL — útil, pero todavía no cumple el modelo final
 
 - Perfil ampliado ya es persistente y recuperable en el dispositivo. Su sincronización multi-dispositivo, unicidad de username y aplicación remota de privacidad siguen pendientes de esquema Beta/RLS; favoritos permanecen en la biblioteca de campos y Stats se deriva del histórico en vez de duplicarse en el perfil.
 - Grupos son plantillas privadas robustas con identidad estable, creación/edición/sorteo/carga a ronda; todavía no son comunidades remotas con admin, invitaciones y membresías.
-- Campos conservan persistencia legacy `Course` por tee. El read model formal ya separa entidades en memoria, pero su persistencia normalizada requiere una migración aditiva en una base Beta aislada.
+- Campos conservan persistencia legacy `Course` por tee para no romper rondas. El directorio formal y su puente legacy ya funcionan en memoria; la persistencia normalizada está preparada, pero requiere aplicar la migración aditiva en una base Beta aislada.
 - Social es un feed y centro de avisos privado local con estado leído; amigos, solicitudes, bloqueo, feed compartido y reacciones requieren backend multiusuario.
 - Live score y sync multi-dispositivo funcionan para el workspace de una misma cuenta; faltan participantes con permisos individuales y edición por jugador.
 - El histórico conserva snapshots completos y ya normaliza estados `draft/live/completed/cancelled` localmente; el lifecycle cloud todavía no los expone como entidades colaborativas consultables porque falta el esquema Beta aislado.
 - Equipo, bola y Ball Fit funcionan local-first en el dispositivo. La ruta autenticada `/api/equipment`, el contrato de sincronización, compare-and-swap y resolución explícita de conflicto están implementados, pero la réplica multi-dispositivo permanece deshabilitada hasta aplicar la migración en una base Beta aislada y activar deliberadamente `EQUIPMENT_CLOUD_ENABLED` sólo allí.
-- Los catálogos se administran hoy como seeds versionados e importables. La migración autoriza alta/actualización/desactivación a un rol admin emitido en `app_metadata`, pero todavía no existe una pantalla administrativa ni se han cargado esos seeds a una base remota.
+- Los catálogos se administran hoy como seeds versionados e importables y ya existe UI/API administrativa protegida. Todavía no se han cargado a una base remota porque no hay un Supabase Beta aislado.
 - El launch monitor ya captura y resume datos robustamente; todavía no utiliza esas mediciones para modificar el Top 3, por lo que se presenta como preparación/contexto y no como fitting avanzado de precisión.
 
 ## BLOCKED — sin detener el trabajo no dependiente
@@ -60,19 +65,22 @@
 - Amigos persistentes, solicitudes, bloqueo, grupos sociales con membresías/admin, feed compartido y notificaciones: requieren esquema, grants, RLS y pruebas de aislamiento multiusuario en una base Beta.
 - Edición multi-dispositivo de rondas privadas: requiere permisos por participante y una política de conflictos probada en backend.
 - Integraciones TheGrint, GHIN u otros proveedores: no hay autorización, contrato ni credenciales. No se hará scraping ni uso de APIs privadas.
-- GPS/mapa/distancias: no existe una fuente autorizada de geometría o coordenadas. Solo puede prepararse el contrato y un flag oculto.
+- GPS de proximidad ya tiene permiso explícito, servicio Haversine y UX funcional; los cuatro campos QA no aparecen como cercanos porque no se inventaron coordenadas. Mapa de hoyo, hazards y distancias front/center/back siguen bloqueados por falta de geometría autorizada.
 - Pagos, planes y suscripciones: requieren decisión comercial/proveedor; no se activarán ni se inventarán precios.
 - Aplicación de nuevas variables o migrations en Beta: pendiente de un entorno de datos aislado. Variables Production quedan fuera de alcance.
 - Persistencia cloud de equipo y bola: la migración aditiva está lista, pero aplicarla al único proyecto Supabase disponible podría escribir sobre el entorno compartido/producción. El flag permanece ausente y falla cerrado.
 
 ## Base de datos en esta iteración
 
-- Migración aditiva creada: `supabase/migrations/20260906193435_equipment_ball_fitting.sql`.
-- Migraciones aplicadas remotamente: ninguna. La migración de equipo **no fue aplicada** porque no existe una base Supabase Beta aislada.
+- Migraciones aditivas creadas: `supabase/migrations/20260906193435_equipment_ball_fitting.sql` y `supabase/migrations/20260906211937_golf_profile_course_architecture.sql`.
+- Migraciones aplicadas remotamente: ninguna. **No fueron aplicadas** porque no existe una base Supabase Beta aislada.
 - Tablas preparadas (9): `golf_ball_catalog`, `golf_club_catalog`, `golf_shaft_catalog`, `player_equipment_profiles`, `player_clubs`, `player_balls`, `ball_fit_sessions`, `ball_fit_recommendations` y `launch_monitor_shots`.
 - RLS preparada: las 9 tablas habilitan RLS y la migración declara 27 policies. Los catálogos permiten lectura autenticada y escritura únicamente al rol admin en `app_metadata`; las seis entidades de jugador permiten `select/insert/update` sólo al propio `auth.uid()`.
 - Grants preparados: `anon` no recibe privilegios; clientes autenticados no reciben `DELETE`; `service_role` recibe sólo `select/insert/update` explícitos para que las rutas server-only funcionen también con el opt-in de Data API de Supabase 2026. El historial se conserva mediante estados/filas actuales y los borrados deliberados se resuelven desde el snapshot canónico cuando la nube llegue a habilitarse.
 - Prueba SQL de aislamiento creada: `supabase/tests/equipment_ball_fitting_rls.sql`; pruebas de contrato verifican RLS, grants, owner checks y ausencia de autorización mediante `user_metadata`.
+- La segunda migración añade 12 tablas: `golf_ball_brands`, `golf_club_brands`, `golf_ball_test_results`, `player_club_distances`, `golf_clubs`, `golf_courses`, `golf_course_tees`, `golf_holes`, `golf_tee_hole_yardages`, `golf_hole_geo_features`, `player_favorite_courses` y `player_recent_courses`; también extiende aditivamente `profiles`, catálogos/equipo existentes y el puente `courses_cloud`.
+- Esa migración declara 37 policies y 40 índices, incluidos búsqueda trigram, marca/modelo, proveedor/ID externo, recencia y coordenadas. `anon` queda revocado, entidades privadas se limitan al owner y catálogos globales sólo admiten escritura de admin por `app_metadata`.
+- `supabase/tests/golf_profile_course_architecture_rls.sql` contiene casos conductuales A/B/admin dentro de una transacción. Su contrato fue revisado estáticamente; no se ejecutó contra PostgreSQL real porque este workspace no dispone de Supabase local, `psql` o Docker ni de una base Beta segura.
 - Cambios al proyecto Supabase alojado: ninguno.
 
 La ausencia de una base Beta separada se trata como barrera de seguridad, no como motivo para modificar el proyecto compartido.
@@ -101,6 +109,12 @@ Corregidos:
 - Un cierre de Ball Fit podía afirmar que guardó aunque `localStorage` fallara; ahora mantiene el flujo abierto y muestra un error recuperable.
 - Una recuperación técnica de equipo podía sobrevivir a la eliminación local de la cuenta; ahora utiliza una llave determinista que también se elimina.
 - La escritura cloud podía aceptar campos truncados durante normalización; ahora exige equivalencia canónica completa y rechaza la operación.
+- Un `loadMore` iniciado para una búsqueda de catálogo anterior podía anexarse después de cambiar texto/categoría; ahora usa cancelación y generaciones de consulta.
+- Una respuesta cloud iniciada antes de refrescar el token podía actualizar refs/UI de la sesión nueva del mismo usuario; ahora toda cola y cada respuesta validan generación, usuario y token después de cada espera asíncrona.
+- Cambiar el modelo actual de un bastón o bola podía borrar su identidad histórica; ahora se archiva el registro anterior y se crea la nueva etapa con fechas de uso.
+- Limpiar un shaft seleccionado podía reponer el snapshot anterior aunque `shaftId` quedara vacío; ahora sólo hay fallback si el ID vigente coincide exactamente.
+- Ball Fit podía rankear únicamente la primera página del catálogo; ahora el ranking ocurre server-side sobre un alcance completo o no entrega resultado.
+- Una carga/guardado/archivado anterior del admin podía completar después de cambiar recurso o búsqueda; ahora usa cancelación, generación y contexto de recurso, además de ligar la edición a su recurso original.
 
 Pendientes y aislados para un milestone colaborativo:
 
@@ -110,12 +124,14 @@ Pendientes y aislados para un milestone colaborativo:
 ## Despliegue
 
 - Rama objetivo: `beta`.
-- El último SHA publicado y verificado anterior a este milestone es `8023cee7928ca47963c296ad5a7e780a0896de4d`.
+- SHA funcional publicado de esta fase: `42bac5f` (cierre de concurrencia/privacidad), precedido por `19c048c` (esquema/RLS/admin), `e60d172` (perfil/equipo/Ball Fit) y `6187d8e` (campos/GPS).
 - El Preview anterior verificado es `https://golf-bets-1ps4i70si-saha8.vercel.app`, deployment `dpl_ByuS4LnsGYXFv8Pn3nsH1TNjh7py`, READY, target Preview, source Git, ref `beta` y SHA exacto `8023cee7928ca47963c296ad5a7e780a0896de4d`.
 - Commit funcional del milestone: `c8b285e5212d568558cc5b1d11bf78d6df34dea2` — `feat(beta): add equipment profile and Backyard Ball Fit`.
 - Corrección de verificación: `76fba0b301b58da2effbd14faaaf4af18ca0f637` — `fix(beta): enforce Polla Live release lock`. Un valor Preview obsoleto ya no puede sacar Polla Live de “Próximamente”.
 - Preview del código verificado: `https://golf-bets-ipomcf91t-saha8.vercel.app`, deployment `dpl_FSBVHoEiBbRgx6aEu35LTGBvQBhH`, READY, target Preview, ref `beta` y SHA exacto `76fba0b301b58da2effbd14faaaf4af18ca0f637`.
 - Alias Preview de rama: `https://golf-bets-git-beta-saha8.vercel.app`.
+- Verificación de esta fase: GitHub/Vercel marcó `success` para el SHA `42bac5f` (`Deployment has completed`). El alias Preview de rama responde 200, sirve `/api/ball-fitting` y conserva `equipmentCloudEnabled=false`/`pollaLiveEnabled=false`.
+- `https://beta.thebackyard.com.mx` responde 200, pero no contiene la nueva ruta `/api/ball-fitting` (404), por lo que no se presenta como el deployment actual. Reasociarlo a `beta` queda bloqueado por falta de credenciales Vercel; no se tocó DNS ni Production.
 - El HTML remoto responde 200, referencia los assets del build, incluye `viewport-fit=cover` y el bundle publicado contiene Inicio, Jugar, Grupos, Social, Perfil, Nueva ronda, Continuar ronda, Histórico, Stats, Amigos, Reglas y Balances.
 - No se hizo merge, promoción a Production, despliegue `--prod` ni cambio de variables Production.
 
@@ -124,26 +140,27 @@ Pendientes y aislados para un milestone colaborativo:
 - `eslint .`: correcto, cero errores.
 - `tsc --noEmit`: correcto.
 - `tsc -p tsconfig.test.json`: correcto.
-- `node --test .test-dist/tests/*.test.js`: 931 tests, 931 pass, 0 fail/skip/todo.
-- `next build`: correcto; 19 rutas estáticas/dinámicas generadas sin error, incluida `/api/equipment`.
+- `node --test .test-dist/tests/*.test.js`: 998 tests, 998 pass, 0 fail/skip/todo.
+- `next build`: correcto; todas las rutas estáticas/dinámicas se generaron sin error, incluidas `/admin`, `/api/admin/golf-catalog`, `/api/ball-fitting`, `/api/catalog/equipment` y `/api/equipment`.
 - Pruebas nuevas cubren normalización/persistencia de equipo por usuario, club manual y bolsa completa, bola fija/no fija, borrador de Ball Fit, ranking Top 3, datos incompletos, catálogo/fuentes, seguridad de sync/CAS, contrato de UI y migración/RLS.
 - Browser QA local: Home a 320/375/390/430 y Jugar/Campos/Setup/Grupos/Social/Perfil/Stats a 390; cero overflow y cero errores de consola.
 - Cobertura existente conservada: Auth, guests, grupos locales, ronda 9/18, HCP 0, score/edit/save/reopen, apuestas, histórico, IndexedDB/outbox/reconnect, PWA y reglas.
+- Smoke test local: `/` 200, búsqueda `Pro V` 200, `/api/ball-fitting` 200 evaluando 11 candidatos y devolviendo Top 3; una identidad real en el transporte es rechazada con 400. `/api/admin/golf-catalog` y `/api/equipment` responden 503 privado/no-store mientras el entorno Beta de datos/flag no exista.
 - Preview remoto funcional: estado READY para `76fba0b`; `/` y el manifest responden 200, el HTML contiene `viewport-fit=cover`, `/api/features` confirma Google listo, `equipmentCloudEnabled=false` y `pollaLiveEnabled=false`. `/api/equipment` falla cerrado con 503 mientras la base Beta no exista. El service worker usa `/` como fallback offline y evita cachear APIs.
-- El pase visual automatizado de este milestone no pudo abrir una superficie de navegador en este host; se conservan las verificaciones móviles registradas previamente y no se afirma una nueva certificación de Mi bolsa/Ball Fit en Safari o iPhone físico.
+- El pase visual automatizado de este milestone no pudo abrir una superficie de navegador: ni el ejecutable `agent-browser` ni Chrome/Edge/IAB estaban disponibles en el host. Se conservan las verificaciones móviles registradas previamente y no se afirma una nueva certificación de Mi bolsa/Ball Fit en Safari o iPhone físico.
 
 ## NEXT — diez trabajos recomendados
 
 1. Crear una branch/proyecto Supabase exclusivo para Beta y verificar su ref antes de cualquier DDL.
-2. Corregir ACL/grants y drift del esquema en esa base, aplicar `20260906193435_equipment_ball_fitting.sql` y ejecutar su prueba RLS con al menos dos usuarios y un admin.
-3. Importar los tres seeds verificados de equipo/bola/shafts y habilitar `EQUIPMENT_CLOUD_ENABLED` únicamente en Preview/Beta después de validar rollback y aislamiento.
-4. Añadir administración protegida para alta, corrección y desactivación de modelos sin borrar equipos antiguos.
+2. Corregir ACL/grants y drift del esquema en esa base, aplicar las dos migraciones de esta fase y ejecutar ambas pruebas RLS con al menos dos usuarios y un admin.
+3. Importar los seeds verificados de equipo/bola/shafts/campos y habilitar `EQUIPMENT_CLOUD_ENABLED` únicamente en Preview/Beta después de validar rollback y aislamiento.
+4. Verificar el CRUD de `/admin` contra esa base aislada, incluidos renombre canónico de marca y archivado sin pérdida histórica.
 5. Incorporar las mediciones robustas de launch monitor al recomendador sólo cuando exista una heurística pública, documentada y validable.
 6. Diseñar la semántica explícita de abandono/DNF sin inventar score de golf.
 7. Diseñar y migrar amistades con unicidad, estados, bloqueo y una proyección pública mínima de perfil.
 8. Convertir plantillas de grupos en grupos sociales persistentes sin romper compatibilidad local.
 9. Modelar invitaciones, roles, permisos de score y conflictos multi-dispositivo por participante.
-10. Verificar onboarding, Mi bolsa, Ball Fit, instalación PWA y recuperación local en iPhone/Android físicos.
+10. Verificar onboarding, Mi bolsa, Mi bola, Ball Fit, proximidad, instalación PWA y recuperación local en iPhone/Android físicos.
 
 Punto exacto de continuidad: provisionar y verificar primero una branch/proyecto Supabase exclusivo para Beta. Allí se debe aplicar y probar la migración de equipo, cargar los seeds y validar sincronización multi-dispositivo antes de activar el flag. Hasta entonces el módulo funciona honestamente local-first y no declara sincronización remota.
 
