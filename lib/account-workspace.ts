@@ -3,6 +3,7 @@ import { CLOUD_LOCAL_META_KEY, CLOUD_TOMBSTONES_KEY } from "./cloud-sync";
 import { PHOTO_QUEUE_KEY } from "./photo-sync-queue";
 import { coursePreferenceStorageKey } from "./course-preferences";
 import { cloudProfileRevisionKey, forgetProfileWriteClock, pendingProfileWriteKey } from "./profile-sync";
+import { internalNotificationStorageKey } from "./internal-notifications";
 
 export const WORKSPACE_OWNER_KEY = "backyard-local-workspace-owner-v1";
 export const CLOUD_CONFLICTS_KEY = "backyard-cloud-conflicts-v1";
@@ -55,6 +56,7 @@ export function discardAccountWorkspace(storage: WorkspaceStorage, userId: strin
   storage.removeItem(`backyard-local-migration-decision-v1:${userId}`);
   storage.removeItem(coursePreferenceStorageKey("favorites", userId));
   storage.removeItem(coursePreferenceStorageKey("recents", userId));
+  storage.removeItem(internalNotificationStorageKey(userId));
 }
 
 export function preserveDraftConflict(storage: Pick<Storage, "getItem" | "setItem">, draft: unknown) {

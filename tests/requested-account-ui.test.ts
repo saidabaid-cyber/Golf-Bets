@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 
 const page = readFileSync("app/page.tsx", "utf8");
 const account = readFileSync("app/components/account-panel.tsx", "utf8");
+const social = readFileSync("app/components/social-feed.tsx", "utf8");
 
 test("Resultados usa el encabezado seguro Gastos sin interpolar una identidad ausente", () => {
   assert.match(page, /ResultAccordion id="expenses" title="Gastos"/);
@@ -53,4 +54,21 @@ test("Perfil muestra estadísticas reales y deja ausentes como guion", () => {
   }
   assert.match(account, /golfInsights\.scoredRounds \? golfInsights\.pars : "—"/);
   assert.match(account, /Promedios con \{golfInsights\.scoreSampleRounds\}/);
+});
+
+test("Cuenta permite activar avisos internos sin prometer push del dispositivo", () => {
+  assert.match(account, /Avisos dentro de la app/);
+  assert.match(account, /type="checkbox" checked=\{notificationsEnabled\}/);
+  assert.match(account, /onNotificationsEnabledChange\(event\.target\.checked\)/);
+  assert.match(account, /no activa notificaciones push ni permisos del (teléfono|dispositivo)/i);
+  assert.doesNotMatch(account, /<span>Notificaciones<\/span><select value="future" disabled>/);
+  assert.doesNotMatch(`${page}\n${account}\n${social}`, /Notification\.requestPermission/);
+});
+
+test("Social separa actividad y avisos, con lectura explícita y estado desactivado", () => {
+  assert.match(social, />Actividad<\/button>/);
+  assert.match(social, />Avisos/);
+  assert.match(social, /Marcar todo como leído/);
+  assert.match(social, /Avisos internos desactivados/);
+  assert.match(social, /onNotificationsEnabledChange\(true\)/);
 });

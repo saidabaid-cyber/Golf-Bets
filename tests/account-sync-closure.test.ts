@@ -9,6 +9,7 @@ import { STORAGE_KEYS } from "../lib/round-utils";
 import { legalReturnDestination, preserveLegalReturn } from "../lib/legal-navigation";
 import { coursePreferenceStorageKey } from "../lib/course-preferences";
 import { cloudProfileRevisionKey, pendingProfileWriteKey } from "../lib/profile-sync";
+import { internalNotificationStorageKey } from "../lib/internal-notifications";
 
 class MemoryStorage {
   data = new Map<string, string>();
@@ -61,6 +62,8 @@ test("eliminar cuenta local descarta solo A y conserva invitado y B", () => {
   storage.setItem(cloudProfileRevisionKey("user-a"), "2026-09-06T12:00:00.000Z");
   storage.setItem(coursePreferenceStorageKey("favorites", "user-a"), '["course-a"]');
   storage.setItem(coursePreferenceStorageKey("recents", "user-a"), '["course-a"]');
+  storage.setItem(internalNotificationStorageKey("user-a"), '{"version":1,"readEventKeys":["round-a"]}');
+  storage.setItem(internalNotificationStorageKey("user-b"), '{"version":1,"readEventKeys":["round-b"]}');
   switchAccountWorkspace(storage, "user-b");
   storage.setItem(STORAGE_KEYS.history, "b-history");
   switchAccountWorkspace(storage, "user-a");
@@ -73,6 +76,8 @@ test("eliminar cuenta local descarta solo A y conserva invitado y B", () => {
   assert.equal(storage.getItem(cloudProfileRevisionKey("user-a")), null);
   assert.equal(storage.getItem(coursePreferenceStorageKey("favorites", "user-a")), null);
   assert.equal(storage.getItem(coursePreferenceStorageKey("recents", "user-a")), null);
+  assert.equal(storage.getItem(internalNotificationStorageKey("user-a")), null);
+  assert.equal(storage.getItem(internalNotificationStorageKey("user-b")), '{"version":1,"readEventKeys":["round-b"]}');
   switchAccountWorkspace(storage, "user-b");
   assert.equal(storage.getItem(STORAGE_KEYS.history), "b-history");
   switchAccountWorkspace(storage, "user-a");

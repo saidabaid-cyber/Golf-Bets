@@ -1,4 +1,4 @@
-import { CLOUD_TOMBSTONES_KEY, cloudDataFingerprint, collectLocalCloudData, mergeLocalAndCloud, persistCloudMetadata, restoreLocalRoundUi, type CloudDataBundle } from "./cloud-sync";
+import { CLOUD_TOMBSTONES_KEY, cloudDataFingerprint, collectLocalCloudData, hasLocalCloudPreferenceState, mergeLocalAndCloud, persistCloudMetadata, restoreLocalRoundUi, type CloudDataBundle } from "./cloud-sync";
 import { serializeFrequentGroups } from "./frequent-templates";
 import { STORAGE_KEYS } from "./round-utils";
 
@@ -204,6 +204,7 @@ export function writeCloudBundleToStorage(storage: Pick<Storage, "getItem" | "se
   storage.setItem(STORAGE_KEYS.frequentPlayers, JSON.stringify(bundle.frequentPlayers));
   storage.setItem(STORAGE_KEYS.frequentGroups, serializeFrequentGroups(bundle.frequentGroups));
   storage.setItem(STORAGE_KEYS.contrast, String(bundle.preferences.highContrast));
+  storage.setItem(STORAGE_KEYS.notifications, String(bundle.preferences.notificationsEnabled));
   let localDraft: unknown = null;
   try { localDraft = JSON.parse(storage.getItem(STORAGE_KEYS.draft) || "null") as unknown; } catch { /* invalid legacy cache is replaced */ }
   storage.setItem(STORAGE_KEYS.draft, JSON.stringify(restoreLocalRoundUi(bundle.activeDraft, localDraft)));
@@ -216,7 +217,7 @@ export function writeCloudBundleToStorage(storage: Pick<Storage, "getItem" | "se
 export async function restoreOfflineWorkspace(ownerId: string, storage: Storage, defaultHandicap: number | null) {
   const saved = await readOfflineBundle(ownerId);
   if (!saved) return null;
-  const local = collectLocalCloudData(storage, defaultHandicap, storage.getItem(STORAGE_KEYS.contrast) !== null);
+  const local = collectLocalCloudData(storage, defaultHandicap, hasLocalCloudPreferenceState(storage));
   const recovered = mergeLocalAndCloud(local, saved.bundle);
   writeCloudBundleToStorage(storage, recovered);
   return recovered;

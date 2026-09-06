@@ -17,6 +17,7 @@ export const STORAGE_KEYS = {
   frequentPlayers: "golfbets-frequent-players-v1",
   frequentGroups: "golfbets-frequent-groups-v1",
   contrast: "golfbets-high-contrast-v1",
+  notifications: "golfbets-internal-notifications-enabled-v1",
 } as const;
 
 export function readStoredJson<T>(

@@ -59,6 +59,11 @@ export type CloudDataConflict = {
 
 type ReadableStorage = Pick<Storage, "getItem">;
 
+export function hasLocalCloudPreferenceState(storage: ReadableStorage) {
+  return storage.getItem(STORAGE_KEYS.contrast) !== null
+    || storage.getItem(STORAGE_KEYS.notifications) !== null;
+}
+
 function arrayOrEmpty<T>(value: unknown): T[] {
   return Array.isArray(value) ? value as T[] : [];
 }
@@ -94,7 +99,7 @@ function parseDraftBase(value: string | undefined) {
   try { return JSON.parse(value) as unknown; } catch { return undefined; }
 }
 
-export function collectLocalCloudData(storage: ReadableStorage, defaultHandicap: number | null = null, hasLocalPreferenceState = storage.getItem(STORAGE_KEYS.contrast) !== null): CloudDataBundle {
+export function collectLocalCloudData(storage: ReadableStorage, defaultHandicap: number | null = null, hasLocalPreferenceState = hasLocalCloudPreferenceState(storage)): CloudDataBundle {
   const meta = readStoredJson<{ draftAt?: string; preferencesAt?: string; cloudDraftAt?: string; cloudDraftFingerprint?: string }>(storage, CLOUD_LOCAL_META_KEY, {});
   const draft = stripLocalRoundUi(readStoredJson<unknown | null>(storage, STORAGE_KEYS.draft, null));
   return {
@@ -107,7 +112,7 @@ export function collectLocalCloudData(storage: ReadableStorage, defaultHandicap:
     preferences: {
       highContrast: storage.getItem(STORAGE_KEYS.contrast) !== "false",
       language: "es-MX",
-      notificationsEnabled: false,
+      notificationsEnabled: storage.getItem(STORAGE_KEYS.notifications) === "true",
       defaultHandicap,
       hasLocalState: hasLocalPreferenceState,
       updatedAt: meta.preferencesAt,

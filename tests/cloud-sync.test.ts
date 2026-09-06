@@ -6,6 +6,7 @@ import {
   CloudSyncHttpError,
   cloudDataFingerprint,
   collectLocalCloudData,
+  hasLocalCloudPreferenceState,
   mergeLocalAndCloud,
   findAmbiguousCloudConflicts,
   resolveAmbiguousCloudConflicts,
@@ -61,6 +62,22 @@ test("un dispositivo sin preferencia inicia alto contraste activado", () => {
   assert.equal(explicit.preferences.hasLocalState, true);
 });
 
+test("la preferencia de avisos internos se detecta y se incluye en el snapshot local", () => {
+  const storage = new MemoryStorage();
+  assert.equal(hasLocalCloudPreferenceState(storage as unknown as Storage), false);
+
+  storage.setItem(STORAGE_KEYS.notifications, "true");
+  const enabled = collectLocalCloudData(storage as unknown as Storage);
+  assert.equal(hasLocalCloudPreferenceState(storage as unknown as Storage), true);
+  assert.equal(enabled.preferences.notificationsEnabled, true);
+  assert.equal(enabled.preferences.hasLocalState, true);
+
+  storage.setItem(STORAGE_KEYS.notifications, "false");
+  const disabled = collectLocalCloudData(storage as unknown as Storage);
+  assert.equal(disabled.preferences.notificationsEnabled, false);
+  assert.equal(disabled.preferences.hasLocalState, true, "false explícito sigue siendo una preferencia local");
+});
+
 test("merge local/cloud es idempotente, evita duplicados y conserva la versión más reciente", () => {
   const oldPlayer = { id: "p1", name: "Viejo", handicap: 9, uses: 1, updatedAt: "2026-09-01T10:00:00Z" };
   const newPlayer = { ...oldPlayer, name: "Nuevo", updatedAt: "2026-09-02T10:00:00Z" };
@@ -72,11 +89,15 @@ test("merge local/cloud es idempotente, evita duplicados y conserva la versión 
 });
 
 test("un dispositivo nuevo recibe preferencias cloud y uno ya configurado conserva su elección local", () => {
-  const cloud = bundle({ preferences: { highContrast: true, language: "es-MX", notificationsEnabled: false, defaultHandicap: 8, hasLocalState: true } });
+  const cloud = bundle({ preferences: { highContrast: true, language: "es-MX", notificationsEnabled: true, defaultHandicap: 8, hasLocalState: true } });
   const newDevice = bundle({ preferences: { highContrast: false, language: "es-MX", notificationsEnabled: false, defaultHandicap: null, hasLocalState: false } });
-  assert.equal(mergeLocalAndCloud(newDevice, cloud).preferences.highContrast, true);
+  const restored = mergeLocalAndCloud(newDevice, cloud).preferences;
+  assert.equal(restored.highContrast, true);
+  assert.equal(restored.notificationsEnabled, true);
   const configured = bundle({ preferences: { ...newDevice.preferences, highContrast: false, hasLocalState: true } });
-  assert.equal(mergeLocalAndCloud(configured, cloud).preferences.highContrast, false);
+  const preserved = mergeLocalAndCloud(configured, cloud).preferences;
+  assert.equal(preserved.highContrast, false);
+  assert.equal(preserved.notificationsEnabled, false);
 });
 
 test("borrados cloud persisten y un dispositivo desactualizado no revive registros", () => {

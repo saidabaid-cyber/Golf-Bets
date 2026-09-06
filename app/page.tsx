@@ -101,7 +101,7 @@ import { buildHoleSummary, clearActiveRoundStorage, hasRoundProgress, historical
 import { monkeyHoleSummary, personalHoleSummary } from "../lib/personal-summary";
 import { downloadRoundCsv, downloadRoundImage, downloadRoundPdf, shareRound } from "../lib/round-export";
 import { deleteScorecardPhoto, deleteScorecardPhotoCloud, readScorecardPhoto, readScorecardPhotoCloud, saveScorecardPhoto, uploadScorecardPhotoCloud } from "../lib/scorecard-photo";
-import { actionableCloudConflicts, CLOUD_TOMBSTONES_KEY, cloudDataFingerprint, collectLocalCloudData, downloadCloudData, findAmbiguousCloudConflicts, isCloudFieldConflict, mergeLocalAndCloud, persistCloudMetadata, resolveAmbiguousCloudConflicts, restoreLocalRoundUi, stableValue, trackLocalCloudEdits, type CloudDataBundle, type CloudDataConflict, recordCloudDeletion, uploadCloudData, withCloudAuthRetry } from "../lib/cloud-sync";
+import { actionableCloudConflicts, CLOUD_TOMBSTONES_KEY, cloudDataFingerprint, collectLocalCloudData, downloadCloudData, findAmbiguousCloudConflicts, hasLocalCloudPreferenceState, isCloudFieldConflict, mergeLocalAndCloud, persistCloudMetadata, resolveAmbiguousCloudConflicts, restoreLocalRoundUi, stableValue, trackLocalCloudEdits, type CloudDataBundle, type CloudDataConflict, recordCloudDeletion, uploadCloudData, withCloudAuthRetry } from "../lib/cloud-sync";
 import { describeCloudConflict } from "../lib/cloud-conflict-display";
 import { ownsLocalWorkspace, preserveDataConflicts, preserveDraftConflict } from "../lib/account-workspace";
 import { accountPrimaryPlayerId, accountPrimaryRoundPlayer, syncAccountPrimaryFrequentPlayer, syncLinkedRoundPlayerName } from "../lib/account-primary-player";
@@ -512,6 +512,7 @@ function GolfBetsApp() {
   const [openResultSections, setOpenResultSections] = useState<Record<string, boolean>>({ "golf-result": true, "final-player-summary": true, "general-summary": true });
   const [pendingResultScroll, setPendingResultScroll] = useState<string | null>(null);
   const [highContrast, setHighContrast] = useState(true);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [roundClosed, setRoundClosed] = useState(false);
   const [roundReviewPending, setRoundReviewPending] = useState(false);
   const [showRoundFinishedNotice, setShowRoundFinishedNotice] = useState(false);
@@ -619,6 +620,14 @@ function GolfBetsApp() {
   const liveIdentity = useRef(identity);
   useEffect(() => { liveIdentity.current = identity; }, [identity]);
   const hadLocalPreferences = useRef(false);
+  const changeHighContrast = useCallback((value: boolean) => {
+    hadLocalPreferences.current = true;
+    setHighContrast(value);
+  }, []);
+  const changeNotifications = useCallback((value: boolean) => {
+    hadLocalPreferences.current = true;
+    setNotificationsEnabled(value);
+  }, []);
 
   const order = useMemo(() => playOrder(startHole).slice(0, roundHoles), [startHole, roundHoles]);
   const holeNumber = order[currentIndex];
@@ -773,7 +782,7 @@ function GolfBetsApp() {
         if (!cancelled) setSaveStatus("error");
       }
       if (cancelled || !ownsLocalWorkspace(localStorage, identity.userId)) return;
-      hadLocalPreferences.current = localStorage.getItem(STORAGE_KEYS.contrast) !== null;
+      hadLocalPreferences.current = hasLocalCloudPreferenceState(localStorage);
       const savedCourses = readStoredJson<unknown>(localStorage, STORAGE_KEYS.courses, null);
       const savedHistory = readStoredJson<unknown>(localStorage, STORAGE_KEYS.history, null);
       const savedRivals = readStoredJson<unknown>(localStorage, STORAGE_KEYS.rivals, null);
@@ -792,6 +801,7 @@ function GolfBetsApp() {
         if (Array.isArray(savedFrequentPlayers)) setFrequentPlayers(savedFrequentPlayers);
         setFrequentGroups(savedFrequentGroups);
         setHighContrast(localStorage.getItem(STORAGE_KEYS.contrast) !== "false");
+        setNotificationsEnabled(localStorage.getItem(STORAGE_KEYS.notifications) === "true");
         setDraftAvailable(hasRoundProgress(draft));
         applyDraft(draft);
       } catch { /* keep safe defaults for structurally invalid legacy data */ }
@@ -813,13 +823,14 @@ function GolfBetsApp() {
       try {
         const draft = withDerivedRoundLifecycle({ version: 9, course, courseSelected, startHole, roundHoles, handicapBasis: roundHandicapBasis, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, scoreCaptureMode, advancedStats, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, startedAt: roundStartedAt ?? undefined, currentIndex, reviewPending: roundReviewPending });
         const activeDraft = roundClosed ? null : draft;
-        trackLocalCloudEdits(localStorage, activeDraft, { highContrast, language: "es-MX", notificationsEnabled: false, defaultHandicap: identity.defaultHandicap });
+        trackLocalCloudEdits(localStorage, activeDraft, { highContrast, language: "es-MX", notificationsEnabled, defaultHandicap: identity.defaultHandicap });
         localStorage.setItem(STORAGE_KEYS.courses, JSON.stringify(courses));
         localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(history));
         localStorage.setItem(STORAGE_KEYS.rivals, JSON.stringify(savedPersonalRivals));
         localStorage.setItem(STORAGE_KEYS.frequentPlayers, JSON.stringify(frequentPlayers));
         localStorage.setItem(STORAGE_KEYS.frequentGroups, serializeFrequentGroups(frequentGroups));
         localStorage.setItem(STORAGE_KEYS.contrast, String(highContrast));
+        localStorage.setItem(STORAGE_KEYS.notifications, String(notificationsEnabled));
         localStorage.setItem(coursePreferenceStorageKey("favorites", identity.userId), JSON.stringify(favoriteCourseIds));
         localStorage.setItem(coursePreferenceStorageKey("recents", identity.userId), JSON.stringify(recentCourseIds));
         localStorage.setItem(STORAGE_KEYS.draft, JSON.stringify(!roundClosed && hasRoundProgress(draft) ? draft : null));
@@ -838,7 +849,7 @@ function GolfBetsApp() {
     flushLocalState.current = persist;
     const timer = window.setTimeout(persist, 250);
     return () => window.clearTimeout(timer);
-  }, [hydrated, identity.userId, identity.mode, identity.defaultHandicap, cloudLinked, courses, favoriteCourseIds, recentCourseIds, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, roundClosed, roundReviewPending, course, courseSelected, startHole, roundHoles, roundHandicapBasis, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, scoreCaptureMode, advancedStats, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, roundStartedAt, currentIndex]);
+  }, [hydrated, identity.userId, identity.mode, identity.defaultHandicap, cloudLinked, courses, favoriteCourseIds, recentCourseIds, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, notificationsEnabled, roundClosed, roundReviewPending, course, courseSelected, startHole, roundHoles, roundHandicapBasis, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, scoreCaptureMode, advancedStats, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, roundStartedAt, currentIndex]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -886,6 +897,7 @@ function GolfBetsApp() {
     if (changed(local.frequentPlayers, reconciled.frequentPlayers)) setFrequentPlayers(reconciled.frequentPlayers);
     if (changed(local.frequentGroups, reconciled.frequentGroups)) setFrequentGroups(reconciled.frequentGroups);
     setHighContrast(reconciled.preferences.highContrast);
+    setNotificationsEnabled(reconciled.preferences.notificationsEnabled);
     applyCloudPreferences(reconciled.preferences);
     localStorage.setItem(STORAGE_KEYS.courses, JSON.stringify(mergedCourses));
     localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(reconciled.history));
@@ -893,6 +905,7 @@ function GolfBetsApp() {
     localStorage.setItem(STORAGE_KEYS.frequentPlayers, JSON.stringify(reconciled.frequentPlayers));
     localStorage.setItem(STORAGE_KEYS.frequentGroups, serializeFrequentGroups(reconciled.frequentGroups));
     localStorage.setItem(STORAGE_KEYS.contrast, String(reconciled.preferences.highContrast));
+    localStorage.setItem(STORAGE_KEYS.notifications, String(reconciled.preferences.notificationsEnabled));
     const localDraftWithNavigation = restoreLocalRoundUi(reconciled.activeDraft, { currentIndex: currentIndexRef.current });
     localStorage.setItem(STORAGE_KEYS.draft, JSON.stringify(localDraftWithNavigation));
     localStorage.setItem(CLOUD_TOMBSTONES_KEY, JSON.stringify(reconciled.tombstones));
@@ -1064,7 +1077,7 @@ function GolfBetsApp() {
 
   useEffect(() => {
     requestCloudSync.current?.();
-  }, [courses, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, course, courseSelected, startHole, roundHoles, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, scoreCaptureMode, advancedStats, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, roundStartedAt, identity.defaultHandicap]);
+  }, [courses, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, notificationsEnabled, course, courseSelected, startHole, roundHoles, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, scoreCaptureMode, advancedStats, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, roundStartedAt, identity.defaultHandicap]);
 
   function resolveCloudConflict(choice: "local" | "cloud") {
     if (!pendingCloudConflict) return;
@@ -1084,6 +1097,7 @@ function GolfBetsApp() {
     setFrequentPlayers(resolved.frequentPlayers);
     setFrequentGroups(resolved.frequentGroups);
     setHighContrast(resolved.preferences.highContrast);
+    setNotificationsEnabled(resolved.preferences.notificationsEnabled);
     applyCloudPreferences(resolved.preferences);
     applyDraft(resolved.activeDraft, { preserveLocalUi: true });
     setPendingCloudConflict(null);
@@ -1631,7 +1645,7 @@ function GolfBetsApp() {
   function persistReviewBeforeLeavingRound(savedScores: Record<number, HoleScore>, savedEdits: ScoreRows, savedBets: BetConfig, savedIndex: number, startedAt?: string | null) {
     try {
       const pendingDraft = roundDraftPayload({ scores: savedScores, scoreEdits: savedEdits, bets: savedBets, currentIndex: savedIndex, reviewPending: true, startedAt });
-      trackLocalCloudEdits(localStorage, { ...pendingDraft, reviewPending: true, lifecycleState: "completed" }, { highContrast, language: "es-MX", notificationsEnabled: false, defaultHandicap: identity.defaultHandicap });
+      trackLocalCloudEdits(localStorage, { ...pendingDraft, reviewPending: true, lifecycleState: "completed" }, { highContrast, language: "es-MX", notificationsEnabled, defaultHandicap: identity.defaultHandicap });
       persistPendingRoundReview(window.localStorage, pendingDraft);
       setRoundReviewPending(true);
       setDraftAvailable(true);
@@ -1652,7 +1666,7 @@ function GolfBetsApp() {
   function persistCommittedHoleBeforeAdvance(savedScores: Record<number, HoleScore>, savedEdits: ScoreRows, savedBets: BetConfig, savedIndex: number, startedAt?: string | null) {
     try {
       const draft = roundDraftPayload({ scores: savedScores, scoreEdits: savedEdits, bets: savedBets, currentIndex: savedIndex, reviewPending: false, startedAt });
-      trackLocalCloudEdits(localStorage, draft, { highContrast, language: "es-MX", notificationsEnabled: false, defaultHandicap: identity.defaultHandicap });
+      trackLocalCloudEdits(localStorage, draft, { highContrast, language: "es-MX", notificationsEnabled, defaultHandicap: identity.defaultHandicap });
       persistRoundDraftCheckpoint(window.localStorage, draft);
       setDraftAvailable(true);
       setSaveStatus("saved");
@@ -1866,7 +1880,7 @@ function GolfBetsApp() {
 
   function deleteActiveRound() {
     flushLocalState.current = null;
-    trackLocalCloudEdits(localStorage, null, { highContrast, language: "es-MX", notificationsEnabled: false, defaultHandicap: identity.defaultHandicap });
+    trackLocalCloudEdits(localStorage, null, { highContrast, language: "es-MX", notificationsEnabled, defaultHandicap: identity.defaultHandicap });
     clearActiveRoundStorage(window.localStorage);
     setPlayers([]); setOwnerId("");
     setScores({}); setScoreEdits({}); setPutts({}); setScoreCaptureMode("quick"); setAdvancedStats({}); setUnitEvents([]); setCounterBetEvents([]); setCounterBetKeepers(emptyCounterBetKeepers()); setLobaHoles({}); setBallFriendSetup({}); setPersonalBets([]); setSupplementalBets([]); setManualBets([]); setShowFullScorecard(false); setExpenses(emptyExpenses);
@@ -2638,7 +2652,7 @@ function GolfBetsApp() {
   return <main className={`app ${highContrast ? "highContrast" : ""} ${tab === "results" ? "compactResults" : ""}`}>
     {tab !== "rules" && <header className="topbar">
       <button className="brandHomeButton" onClick={() => setTab("welcome")} aria-label="Ir a Inicio"><BrandLockup compact /></button>
-      <div className="topActions"><span className={`saveIndicator ${saveStatus}`}>{saveStatus === "saving" ? "Guardando…" : saveStatus === "error" ? "Error de guardado" : identity.mode !== "authenticated" || !cloudLinked ? "Guardado en este dispositivo" : cloudStatus === "synced" ? "Guardado en la nube ✓" : cloudStatus === "syncing" ? "Sincronizando…" : cloudStatus === "offline" ? "Sin conexión · pendiente" : cloudStatus === "error" ? "Error de sincronización" : "Pendiente de sincronizar"}</span><button className="contrastButton" onClick={() => setHighContrast((value) => !value)} aria-pressed={highContrast}>{contrastToggleLabel(highContrast)}</button><button className="accountButton" onClick={() => setTab("profile")} aria-label="Abrir perfil y cuenta">{identity.mode === "guest" ? <svg className="guestAvatar" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4.5 21c.5-5 3-7.5 7.5-7.5s7 2.5 7.5 7.5"/></svg> : (identity.displayName.trim()[0] || "S").toUpperCase()}</button></div>
+      <div className="topActions"><span className={`saveIndicator ${saveStatus}`}>{saveStatus === "saving" ? "Guardando…" : saveStatus === "error" ? "Error de guardado" : identity.mode !== "authenticated" || !cloudLinked ? "Guardado en este dispositivo" : cloudStatus === "synced" ? "Guardado en la nube ✓" : cloudStatus === "syncing" ? "Sincronizando…" : cloudStatus === "offline" ? "Sin conexión · pendiente" : cloudStatus === "error" ? "Error de sincronización" : "Pendiente de sincronizar"}</span><button className="contrastButton" onClick={() => changeHighContrast(!highContrast)} aria-pressed={highContrast}>{contrastToggleLabel(highContrast)}</button><button className="accountButton" onClick={() => setTab("profile")} aria-label="Abrir perfil y cuenta">{identity.mode === "guest" ? <svg className="guestAvatar" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4.5 21c.5-5 3-7.5 7.5-7.5s7 2.5 7.5 7.5"/></svg> : (identity.displayName.trim()[0] || "S").toUpperCase()}</button></div>
     </header>}
 
     {tab === "welcome" && <HomeDashboard
@@ -2682,7 +2696,7 @@ function GolfBetsApp() {
       onOpenResults={() => setTab("results")}
     />}
 
-    {tab === "social" && <SocialFeed activity={personalActivity} onOpenRound={openHistoricalRound} onOpenGroup={() => setTab("groups")} onCreateRound={requestNewRound} onOpenGroups={() => setTab("groups")} />}
+    {tab === "social" && <SocialFeed activity={personalActivity} identityUserId={identity.userId} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} onOpenRound={openHistoricalRound} onOpenGroup={() => setTab("groups")} onCreateRound={requestNewRound} onOpenGroups={() => setTab("groups")} />}
     {tab === "balances" && <BalanceLedgerPanel history={history} currentUserId={identity.mode === "authenticated" ? identity.userId : undefined} />}
     {tab === "stats" && <StatsDashboard insights={betaGolfInsights} onOpenHistory={() => setTab("history")} onOpenRound={openHistoricalRound} />}
     {tab === "courseLibrary" && <CourseLibrary courses={courses} favoriteCourseIds={favoriteCourseIds} recentCourseIds={recentCourseIds} selectedCourseId={courseSelected ? course.id : null} onToggleFavorite={(courseId) => setFavoriteCourseIds((current) => toggleFavoriteCourse(current, courseId))} onSelectCourse={(nextCourse) => selectRoundCourse(nextCourse, true)} onCreateCourse={startNewCourse} onEditCourse={editCourseFromLibrary} />}
@@ -2698,7 +2712,7 @@ function GolfBetsApp() {
     {tab === "historyDetail" && (() => { const saved = history.find(round => round.id === historyDetailId); return saved ? <HistoricalRoundDetail round={saved} onEdit={() => editHistoricalRound(saved)} onPhoto={() => viewScorecardPhoto(saved)} /> : <div className="empty">La ronda ya no está disponible.</div>; })()}
     {tab === "groups" && <GroupBuilder frequentPlayers={frequentPlayers} frequentGroups={frequentGroups} onBack={() => setTab("welcome")} onPlay={startRoundWithGeneratedGroup} onSaveFrequentGroup={saveGeneratedFrequentGroup} onEditFrequentGroup={beginEditFrequentGroup} onDeleteFrequentGroup={setFrequentGroupToDelete} />}
 
-    {(tab === "account" || tab === "profile") && <AccountPanel highContrast={highContrast} onHighContrastChange={setHighContrast} golfInsights={betaGolfInsights} onOpenStats={() => setTab("stats")} />}
+    {(tab === "account" || tab === "profile") && <AccountPanel highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} golfInsights={betaGolfInsights} onOpenStats={() => setTab("stats")} />}
 
     {tab === "setup" && <>
       <section className="hero setupHero">

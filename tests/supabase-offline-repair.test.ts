@@ -6,10 +6,11 @@ import { cloudAccountErrorMessage, ensureCloudProfile } from "../lib/cloud-accou
 import { findAmbiguousCloudConflicts, resolveAmbiguousCloudConflicts, stableValue, type CloudDataBundle } from "../lib/cloud-sync";
 import { runCloudSyncCycle, type SyncStatus } from "../lib/cloud-sync-cycle";
 import { readCloudBundle, writeCloudBundle } from "../lib/cloud-sync-service";
-import { offlineRetryDelayMs, outboxAcknowledged } from "../lib/offline-store";
+import { offlineRetryDelayMs, outboxAcknowledged, writeCloudBundleToStorage } from "../lib/offline-store";
 import { CloudDb } from "./helpers/cloud-db";
 import { ACCOUNT_STORAGE_KEYS, readOfflineAuthenticatedProfile } from "../lib/account-state";
 import { clearPendingLegalSync, legalSyncErrorMessage, markLegalSyncFailed, queueLegalSync, readPendingLegalSync } from "../lib/legal-sync-queue";
+import { STORAGE_KEYS } from "../lib/round-utils";
 
 const at = "2026-09-03T12:00:00.000Z";
 function bundle(data: Partial<CloudDataBundle> = {}): CloudDataBundle {
@@ -116,6 +117,19 @@ test("modo avión restaura el workspace autenticado sin guardar tokens", () => {
   assert.equal(profile?.defaultHandicap, 8.4);
   assert.equal("accessToken" in (profile || {}), false);
   assert.equal(readOfflineAuthenticatedProfile({ getItem: key => values.get(key) ?? null }, "guest"), null);
+});
+
+test("restaurar un bundle cloud conserva la preferencia de avisos internos", () => {
+  const values = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => { values.set(key, value); },
+  };
+  writeCloudBundleToStorage(storage as unknown as Storage, bundle({
+    preferences: { highContrast: false, language: "es-MX", notificationsEnabled: true, defaultHandicap: 8, hasLocalState: true },
+  }));
+  assert.equal(storage.getItem(STORAGE_KEYS.contrast), "false");
+  assert.equal(storage.getItem(STORAGE_KEYS.notifications), "true");
 });
 
 test("offline-first usa IndexedDB y una sola operación por cuenta", () => {

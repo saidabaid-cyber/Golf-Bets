@@ -10,6 +10,8 @@ import { useBackyardAccount } from "./account-provider";
 type AccountPanelProps = {
   highContrast: boolean;
   onHighContrastChange: (value: boolean) => void;
+  notificationsEnabled: boolean;
+  onNotificationsEnabledChange: (value: boolean) => void;
   golfInsights?: GolfInsights;
   onOpenStats?: () => void;
 };
@@ -50,7 +52,7 @@ function profileDetailsDraft(profile: BackyardProfile): ProfileDetailsDraft {
   };
 }
 
-export function AccountPanel({ highContrast, onHighContrastChange, golfInsights, onOpenStats }: AccountPanelProps) {
+export function AccountPanel({ highContrast, onHighContrastChange, notificationsEnabled, onNotificationsEnabledChange, golfInsights, onOpenStats }: AccountPanelProps) {
   const { identity, updateProfile, logout, finishAccountDeletion, openAccess, acceptances, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, requestCloudLink, lastCloudSync, cloudIssues, retryCloudSync } = useBackyardAccount();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(identity.displayName);
@@ -194,7 +196,7 @@ export function AccountPanel({ highContrast, onHighContrastChange, golfInsights,
 
     {identity.mode === "authenticated" && <section className="card"><h2>Métodos de acceso</h2><div className="accessMethodList">{["google", "email"].map((provider) => <span key={provider}>{provider === "google" ? "Google" : "Correo"}<b>{identity.providers.includes(provider) || (provider === "email" && Boolean(identity.email)) ? "✓" : "—"}</b></span>)}</div><p className="hint">Tu cuenta conserva el mismo perfil tanto con Google como con código por correo.</p></section>}
 
-    <section className="card"><h2>Preferencias</h2><label className="preferenceRow"><span>Alto contraste</span><input type="checkbox" checked={highContrast} onChange={(event) => onHighContrastChange(event.target.checked)} /></label><label className="preferenceRow"><span>Idioma</span><select value="es" disabled><option value="es">Español</option></select></label><label className="preferenceRow"><span>Notificaciones</span><select value="future" disabled><option value="future">Próximamente</option></select></label></section>
+    <section className="card"><h2>Preferencias</h2><label className="preferenceRow"><span>Alto contraste</span><input type="checkbox" checked={highContrast} onChange={(event) => onHighContrastChange(event.target.checked)} /></label><label className="preferenceRow"><span>Idioma</span><select value="es" disabled><option value="es">Español</option></select></label><label className="preferenceRow"><span><b>Avisos dentro de la app</b><small className="preferenceDescription">Notificaciones de actividad nueva en Social. No activa notificaciones push ni permisos del teléfono.</small></span><input type="checkbox" checked={notificationsEnabled} onChange={(event) => onNotificationsEnabledChange(event.target.checked)} aria-label="Activar avisos dentro de la app" /></label></section>
 
     <section className="card accountContactCard"><h2>Contacto</h2><div className="accountContacts"><a href={`mailto:${legalConfig.supportEmail}`}><span>Soporte</span><b>{legalConfig.supportEmail}</b></a><a href={`mailto:${legalConfig.privacyEmail}`}><span>Privacidad y ARCO</span><b>{legalConfig.privacyEmail}</b></a></div></section>
 
