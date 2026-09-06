@@ -4,7 +4,7 @@ import type { RulesAiProviderName, RulesAiTextProvider } from "./rules-ai-provid
 
 export const DEFAULT_GEMINI_RULES_MODEL = "gemini-3.5-flash-lite";
 export const DEFAULT_OPENAI_RULES_MODEL = "gpt-5.4-mini";
-export const DEFAULT_RULES_AI_PROVIDER: RulesAiProviderName = "gemini";
+export const DEFAULT_RULES_AI_PROVIDER: RulesAiProviderName = "openai";
 export const RULES_AI_UNCERTAIN_MESSAGE = "No encontré suficiente fundamento en las reglas disponibles para responder con seguridad.";
 
 type RulesAiEnvironment = Record<string, string | undefined>;
@@ -12,7 +12,9 @@ type RulesAiEnvironment = Record<string, string | undefined>;
 export function rulesAiConfig(env: RulesAiEnvironment) {
   const configuredProvider = env.RULES_AI_PROVIDER?.trim().toLowerCase();
   const providerSupported = !configuredProvider || configuredProvider === "gemini" || configuredProvider === "openai";
-  const provider: RulesAiProviderName = configuredProvider === "openai" ? "openai" : DEFAULT_RULES_AI_PROVIDER;
+  const provider: RulesAiProviderName = configuredProvider === "gemini" || configuredProvider === "openai"
+    ? configuredProvider
+    : DEFAULT_RULES_AI_PROVIDER;
   const hasApiKey = provider === "gemini" ? Boolean(env.GEMINI_API_KEY?.trim()) : Boolean(env.OPENAI_API_KEY?.trim());
   const enabled = env.RULES_AI_ENABLED === "true";
   return {

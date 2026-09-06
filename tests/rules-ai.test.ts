@@ -7,7 +7,9 @@ import {
   buildRulesQuestionContext,
   cleanRulesAiAnswer,
   classifyRulesAiFailure,
+  DEFAULT_RULES_AI_PROVIDER,
   DEFAULT_GEMINI_RULES_MODEL,
+  DEFAULT_OPENAI_RULES_MODEL,
   isLaVistaRulesContext,
   publicRulesAiStatus,
   RULES_AI_UNCERTAIN_MESSAGE,
@@ -22,19 +24,27 @@ import {
 } from "../lib/rules-ai-providers";
 import { retrieveRulesEvidence } from "../lib/rules-evidence";
 
-test("Rules AI defaults to Gemini and reports configuration without exposing secrets", () => {
-  assert.equal(rulesAiConfig({ RULES_AI_ENABLED: "false", GEMINI_API_KEY: "secret" }).ready, false);
-  const status = publicRulesAiStatus({ RULES_AI_ENABLED: "true", GEMINI_API_KEY: "secret" });
+test("Rules AI defaults to OpenAI and reports configuration without exposing secrets", () => {
+  assert.equal(DEFAULT_RULES_AI_PROVIDER, "openai");
+  assert.equal(rulesAiConfig({ RULES_AI_ENABLED: "false", OPENAI_API_KEY: "secret" }).ready, false);
+  const status = publicRulesAiStatus({ RULES_AI_ENABLED: "true", OPENAI_API_KEY: "secret" });
   assert.deepEqual(status, { enabled: true, configured: true, state: "ready" });
   assert.equal("apiKey" in status, false);
-  assert.equal(rulesAiConfig({ RULES_AI_ENABLED: "true", GEMINI_API_KEY: "secret" }).model, DEFAULT_GEMINI_RULES_MODEL);
-  assert.equal(rulesAiConfig({ RULES_AI_ENABLED: "true", RULES_AI_PROVIDER: "otro", GEMINI_API_KEY: "secret" }).ready, false);
+  assert.equal(rulesAiConfig({ RULES_AI_ENABLED: "true", OPENAI_API_KEY: "secret" }).model, DEFAULT_OPENAI_RULES_MODEL);
+  assert.equal(rulesAiConfig({ RULES_AI_ENABLED: "true", RULES_AI_PROVIDER: "otro", OPENAI_API_KEY: "secret" }).ready, false);
 });
 
-test("OpenAI remains selectable without depending on its vector store", () => {
+test("OpenAI remains explicitly selectable without depending on its vector store", () => {
   const config = rulesAiConfig({ RULES_AI_ENABLED: "true", RULES_AI_PROVIDER: "openai", OPENAI_API_KEY: "secret", OPENAI_RULES_MODEL: "gpt-test" });
   assert.equal(config.provider, "openai");
   assert.equal(config.model, "gpt-test");
+  assert.equal(config.ready, true);
+});
+
+test("Gemini remains explicitly selectable", () => {
+  const config = rulesAiConfig({ RULES_AI_ENABLED: "true", RULES_AI_PROVIDER: "gemini", GEMINI_API_KEY: "secret" });
+  assert.equal(config.provider, "gemini");
+  assert.equal(config.model, DEFAULT_GEMINI_RULES_MODEL);
   assert.equal(config.ready, true);
 });
 
@@ -113,7 +123,7 @@ test("Rules AI does not call any provider when local retrieval finds no evidence
   assert.equal(retrieveRulesEvidence({ question, courseName: "" }).sufficient, false);
   const answer = await askRulesWithProvider({
     provider,
-    env: { RULES_AI_ENABLED: "true", GEMINI_API_KEY: "secret" },
+    env: { RULES_AI_ENABLED: "true", RULES_AI_PROVIDER: "gemini", GEMINI_API_KEY: "secret" },
     question,
     courseName: "",
   });
