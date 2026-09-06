@@ -1681,7 +1681,7 @@ function GolfBetsApp() {
     if (order.some(number => players.some(player => Object.hasOwn(scoreEdits[number] || {}, player.id)))) { setFeedback("Hay scores editados sin guardar. Guarda cada hoyo modificado desde Tarjeta antes de archivar."); return; }
     const abandonedPressurePlayers = abandonedPressurePlayersWithMissingScores(order, players, scores, supplementalBets);
     if (abandonedPressurePlayers.length) {
-      setFeedback(`El score máximo de ${abandonedPressurePlayers.map((player) => player.name.trim() || "Sin nombre").join(", ")} solo liquida Presiones por pareja. Esta versión todavía no archiva tarjetas DNF: conserva la ronda abierta y no captures scores ficticios.`);
+      setFeedback(`El score máximo de ${abandonedPressurePlayers.map((player) => player.name.trim() || "Sin nombre").join(", ")} solo se usa para calcular Presiones por pareja. Esta versión todavía no archiva tarjetas DNF: conserva la ronda abierta y no captures scores ficticios.`);
       return;
     }
     if (order.some(number => players.some(player => typeof scores[number]?.[player.id] !== "number"))) {
@@ -2383,6 +2383,20 @@ function GolfBetsApp() {
       return;
     }
     const missingPutts = players.filter((player) => activePuttPlayerIds.has(player.id) && typeof putts[holeNumber]?.[player.id] !== "number").map((player) => player.name || "Sin nombre");
+    const capturedScoreCandidates = {
+      ...scores,
+      [holeNumber]: {
+        ...(scores[holeNumber] || {}),
+        ...Object.fromEntries(players.flatMap((player) => {
+          const edited = scoreEdits[holeNumber]?.[player.id];
+          return typeof edited === "number" ? [[player.id, edited]] : [];
+        })),
+      },
+    };
+    const abandonedHere = abandonedPressurePlayersWithMissingScores([holeNumber], players, capturedScoreCandidates, supplementalBets);
+    const withdrawalErrors = abandonedHere.length ? [
+      `El score máximo de ${abandonedHere.map((player) => player.name.trim() || "Sin nombre").join(", ")} solo se usa para calcular Presiones por pareja; esta versión no admite terminar una tarjeta con jugador retirado (DNF). Conserva la ronda abierta y no captures scores ficticios.`,
+    ] : [];
     const validationErrors = collectHoleValidationErrors({
       scoreCaptureComplete,
       holeNumber,
@@ -2406,6 +2420,7 @@ function GolfBetsApp() {
         ...betConfigurationIssues.map((issue) => issue.message),
       ],
     });
+    validationErrors.unshift(...withdrawalErrors);
     if (validationErrors.length) {
       setFeedback("");
       setHoleValidationErrors(validationErrors);

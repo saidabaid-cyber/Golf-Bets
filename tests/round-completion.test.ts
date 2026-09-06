@@ -109,10 +109,19 @@ test("the DNF explanation runs before the generic missing-score archive guard", 
   const genericGuard = page.indexOf("Faltan scores por confirmar", saveStart);
   assert.ok(saveStart >= 0 && specificGuard > saveStart && genericGuard > specificGuard);
   assert.match(page.slice(specificGuard, genericGuard), /no captures scores ficticios/);
+  assert.match(page.slice(specificGuard, genericGuard), /solo se usa para calcular Presiones/);
+
+  const liveStart = page.indexOf("function saveAndAdvance()");
+  const liveGuard = page.indexOf("abandonedPressurePlayersWithMissingScores([holeNumber]", liveStart);
+  const liveValidation = page.indexOf("collectHoleValidationErrors", liveStart);
+  const liveCommit = page.indexOf("commitHoleCapture", liveStart);
+  assert.ok(liveStart >= 0 && liveGuard > liveStart && liveValidation > liveGuard && liveCommit > liveValidation);
+  assert.match(page.slice(liveStart, liveGuard), /scoreEdits\[holeNumber\]/);
+  assert.match(page.slice(liveGuard, liveCommit), /jugador retirado \(DNF\)/);
 
   const editor = readFileSync("app/components/supplemental-bets-editor.tsx", "utf8");
   assert.match(editor, /Score máximo \(solo apuesta\)/);
-  assert.match(editor, /no completa la tarjeta DNF/);
+  assert.match(editor, /la tarjeta sigue incompleta/);
 });
 
 test("the history action applies the supplemental settlement guard before persisting", () => {
