@@ -2,7 +2,7 @@ import type { Course, FrequentGroup, FrequentPlayer, RoundSnapshot, SavedPersona
 import { STORAGE_KEYS, hasRoundProgress, readStoredJson } from "./round-utils";
 import { parseFrequentGroups } from "./frequent-templates";
 import { fetchWithTimeout } from "./network-timeout";
-import { withDerivedRoundLifecycle } from "./round-lifecycle";
+import { normalizeRoundStartedAt, withDerivedRoundLifecycle } from "./round-lifecycle";
 
 export const CLOUD_SYNC_VERSION = 1;
 export const CLOUD_TOMBSTONES_KEY = "backyard-cloud-tombstones-v1";
@@ -213,6 +213,30 @@ export function mergeCloudCollection<T>(
   return Array.from(merged.values());
 }
 
+function mergeRoundHistory(local: RoundSnapshot[], cloud: RoundSnapshot[]) {
+  const localById = new Map(local.map(round => [round.id, round]));
+  const cloudById = new Map(cloud.map(round => [round.id, round]));
+  return mergeCloudCollection(local, cloud, round => round.id, round => round.updatedAt || round.completedAt || round.date)
+    .map(round => {
+      const startedAt = earliestHistoricalStartedAt(localById.get(round.id), cloudById.get(round.id));
+      return startedAt ? { ...round, startedAt } : round;
+    });
+}
+
+function earliestHistoricalStartedAt(...rounds: Array<RoundSnapshot | undefined>) {
+  return rounds
+    .map(round => normalizeRoundStartedAt(round?.startedAt))
+    .filter((value): value is string => Boolean(value))
+    .sort()[0];
+}
+
+function reconcileHistoricalStartedAt(local: RoundSnapshot, cloud: RoundSnapshot) {
+  const startedAt = earliestHistoricalStartedAt(local, cloud);
+  return startedAt
+    ? [{ ...local, startedAt }, { ...cloud, startedAt }] as const
+    : [local, cloud] as const;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -235,14 +259,33 @@ function scoreConflictDetails(parts: string[]) {
   return { playerId: parts[2], hole: Number.isInteger(hole) ? hole : undefined };
 }
 
+function roundIdOf(value: unknown) {
+  return isRecord(value) && typeof value.roundId === "string" && value.roundId.trim() ? value.roundId : undefined;
+}
+
+function sharedRoundStartedAt(base: unknown, local: unknown, cloud: unknown) {
+  const localRoundId = roundIdOf(local);
+  const cloudRoundId = roundIdOf(cloud);
+  if (!localRoundId || localRoundId !== cloudRoundId) return undefined;
+  const candidates = [local, cloud, ...(roundIdOf(base) === localRoundId ? [base] : [])]
+    .map(value => isRecord(value) ? normalizeRoundStartedAt(value.startedAt) : undefined)
+    .filter((value): value is string => Boolean(value));
+  return candidates.sort()[0];
+}
+
+function withSharedRoundStartedAt(value: unknown, startedAt: string | undefined) {
+  return startedAt && isRecord(value) ? { ...value, startedAt } : value;
+}
+
 function mergeDraftNode(
   base: unknown,
   local: unknown,
   cloud: unknown,
   parts: string[],
-  context: Pick<CloudDataBundle, "deviceId" | "activeDraftUpdatedAt"> & { cloudDeviceId?: string; cloudUpdatedAt?: string },
+  context: Pick<CloudDataBundle, "deviceId" | "activeDraftUpdatedAt"> & { cloudDeviceId?: string; cloudUpdatedAt?: string; sharedStartedAt?: string },
   conflicts: CloudDataConflict[],
 ): unknown {
+  if (context.sharedStartedAt && parts.length === 1 && parts[0] === "startedAt") return context.sharedStartedAt;
   if (sameValue(local, cloud)) return structuredClone(local);
   if (sameValue(local, base)) return structuredClone(cloud);
   if (sameValue(cloud, base)) return structuredClone(local);
@@ -290,7 +333,7 @@ function mergeDraftNode(
 }
 
 function hasLifecycleMetadata(value: unknown) {
-  return isRecord(value) && Object.hasOwn(value, "lifecycleState");
+  return isRecord(value) && (Object.hasOwn(value, "lifecycleState") || Boolean(normalizeRoundStartedAt(value.startedAt)));
 }
 
 /** `draft`/`live`/`completed` are projections of durable round facts, not an
@@ -317,18 +360,23 @@ export function mergeActiveDraftGranular(local: CloudDataBundle, cloud: CloudDat
   const localDraft = withoutDerivedLifecycle(local.activeDraft);
   const cloudDraft = withoutDerivedLifecycle(cloud.activeDraft);
   const baseDraft = withoutDerivedLifecycle(base);
+  // A round can be started independently while two devices are offline. Start
+  // is monotonic for one round id, so keep the earliest valid instant. Never
+  // carry it across a replacement round with a different id.
+  const sharedStartedAt = sharedRoundStartedAt(baseDraft, localDraft, cloudDraft);
+  const restore = (value: unknown) => restoreMergedLifecycle(withSharedRoundStartedAt(value, sharedStartedAt), lifecycleAware);
   if (!hasBase) {
-    if (sameValue(localDraft, cloudDraft)) return { value: restoreMergedLifecycle(localDraft, lifecycleAware), conflicts };
+    if (sameValue(localDraft, cloudDraft)) return { value: restore(localDraft), conflicts };
     if (localDraft === null || cloudDraft === null) {
       const localAt = timestamp(local.activeDraftUpdatedAt);
       const cloudAt = timestamp(cloud.activeDraftUpdatedAt);
-      if (localAt || cloudAt) return { value: restoreMergedLifecycle(localAt >= cloudAt ? localDraft : cloudDraft, lifecycleAware), conflicts };
+      if (localAt || cloudAt) return { value: restore(localAt >= cloudAt ? localDraft : cloudDraft), conflicts };
     }
     const localHasProgress = hasRoundProgress(localDraft);
     const cloudHasProgress = hasRoundProgress(cloudDraft);
-    if (!localHasProgress || !cloudHasProgress) return { value: restoreMergedLifecycle(localHasProgress ? localDraft : cloudDraft, lifecycleAware), conflicts };
+    if (!localHasProgress || !cloudHasProgress) return { value: restore(localHasProgress ? localDraft : cloudDraft), conflicts };
     if (timestamp(local.activeDraftUpdatedAt) !== timestamp(cloud.activeDraftUpdatedAt)) {
-      return { value: restoreMergedLifecycle(chooseLocalVersion(local.activeDraftUpdatedAt, cloud.activeDraftUpdatedAt, localHasProgress) ? localDraft : cloudDraft, lifecycleAware), conflicts };
+      return { value: restore(chooseLocalVersion(local.activeDraftUpdatedAt, cloud.activeDraftUpdatedAt, localHasProgress) ? localDraft : cloudDraft), conflicts };
     }
   }
   const value = mergeDraftNode(baseDraft, localDraft, cloudDraft, [], {
@@ -336,9 +384,10 @@ export function mergeActiveDraftGranular(local: CloudDataBundle, cloud: CloudDat
     activeDraftUpdatedAt: local.activeDraftUpdatedAt,
     cloudDeviceId: cloud.deviceId,
     cloudUpdatedAt: cloud.activeDraftUpdatedAt,
+    sharedStartedAt,
   }, conflicts);
   return {
-    value: restoreMergedLifecycle(value, lifecycleAware),
+    value: restore(value),
     conflicts,
   };
 }
@@ -362,7 +411,7 @@ export function mergeLocalAndCloud(local: CloudDataBundle, cloud: CloudDataBundl
   return {
     version: CLOUD_SYNC_VERSION,
     deviceId: local.deviceId || cloud.deviceId,
-    history: mergeCloudCollection(local.history, cloud.history, (round) => round.id, (round) => round.updatedAt || round.completedAt || round.date).filter((round) => !deleted.has(`round:${round.id}`)),
+    history: mergeRoundHistory(local.history, cloud.history).filter((round) => !deleted.has(`round:${round.id}`)),
     frequentPlayers: mergeCloudCollection(local.frequentPlayers, cloud.frequentPlayers, (player) => player.id, (player) => player.updatedAt).filter((player) => !deleted.has(`frequent_player:${player.id}`)),
     frequentGroups: mergeCloudCollection(local.frequentGroups, cloud.frequentGroups, (group) => group.id, (group) => group.updatedAt).filter((group) => !deleted.has(`frequent_group:${group.id}`)),
     rivals: mergeCloudCollection(local.rivals, cloud.rivals, (rival) => rival.id, (rival) => rival.updatedAt).filter((rival) => !deleted.has(`rival:${rival.id}`)),
@@ -396,8 +445,11 @@ export function findAmbiguousCloudConflicts(local: CloudDataBundle, cloud: Cloud
       if (!other) continue;
       const localAt = "updatedAt" in item ? item.updatedAt : undefined;
       const cloudAt = "updatedAt" in other ? other.updatedAt : undefined;
-      if (timestamp(localAt) > 0 && timestamp(localAt) === timestamp(cloudAt) && !sameValue(item, other)) {
-        conflicts.push({ collection, localId: item.id, localValue: item, cloudValue: other, updatedAt: localAt, localDeviceId: local.deviceId, cloudDeviceId: cloud.deviceId });
+      const [localValue, cloudValue] = collection === "history"
+        ? reconcileHistoricalStartedAt(item as RoundSnapshot, other as RoundSnapshot)
+        : [item, other];
+      if (timestamp(localAt) > 0 && timestamp(localAt) === timestamp(cloudAt) && !sameValue(localValue, cloudValue)) {
+        conflicts.push({ collection, localId: item.id, localValue, cloudValue, updatedAt: localAt, localDeviceId: local.deviceId, cloudDeviceId: cloud.deviceId });
       }
     }
   }
@@ -430,7 +482,10 @@ export function resolveAmbiguousCloudConflicts(local: CloudDataBundle, cloud: Cl
       resolved.preferences = { ...(selected as CloudPreferences), updatedAt: now, hasLocalState: true };
     } else {
       const collection = resolved[conflict.collection] as Array<{ id: string; updatedAt?: string }>;
-      const updated = { ...(selected as { id: string }), updatedAt: now };
+      const historicalStartedAt = conflict.collection === "history"
+        ? earliestHistoricalStartedAt(conflict.localValue as RoundSnapshot, conflict.cloudValue as RoundSnapshot)
+        : undefined;
+      const updated = { ...(selected as { id: string }), ...(historicalStartedAt ? { startedAt: historicalStartedAt } : {}), updatedAt: now };
       const index = collection.findIndex((item) => item.id === conflict.localId);
       if (index >= 0) collection[index] = updated as typeof collection[number];
       else collection.push(updated as typeof collection[number]);

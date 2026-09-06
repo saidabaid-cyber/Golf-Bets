@@ -3,6 +3,7 @@ import type { RoundLifecycleState } from "./types";
 type LifecycleRecord = Record<string, unknown> & {
   lifecycleState?: unknown;
   reviewPending?: unknown;
+  startedAt?: unknown;
   scores?: unknown;
 };
 
@@ -18,12 +19,21 @@ function hasConfirmedScore(value: unknown) {
   });
 }
 
+/** Round start is a durable user action. Normalize it once so malformed local
+ * or cloud payloads cannot promote a configured draft to a live round. */
+export function normalizeRoundStartedAt(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.test(value)) return undefined;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : undefined;
+}
+
 /** Derive lifecycle only from durable round facts. Temporary score edits do not
  * make a draft live until the hole itself has been confirmed in `scores`. */
 export function deriveRoundLifecycleState(draft: LifecycleRecord): RoundLifecycleState {
   if (draft.lifecycleState === "cancelled") return "cancelled";
   if (draft.reviewPending === true) return "completed";
-  return hasConfirmedScore(draft.scores) ? "live" : "draft";
+  return normalizeRoundStartedAt(draft.startedAt) || hasConfirmedScore(draft.scores) ? "live" : "draft";
 }
 
 export function withDerivedRoundLifecycle<T extends LifecycleRecord>(draft: T): T & { lifecycleState: RoundLifecycleState } {

@@ -34,6 +34,7 @@ function snapshot(id = "round-qa"): RoundSnapshot {
     teeName: course.teeName,
     roundHoles: 18,
     startHole: 1,
+    startedAt: "2026-09-04T08:00:00.000Z",
     betResult: 0,
     expenseTotal: 0,
     netResult: 0,
@@ -79,9 +80,12 @@ test("Guardar → persistencia local/IndexedDB → Histórico → reload conserv
   const reloaded = readStoredJson<RoundSnapshot[]>(storage as unknown as Storage, STORAGE_KEYS.history, []);
   assert.deepEqual(reloaded.map((round) => round.id), ["round-qa", "round-anterior"]);
   assert.equal(Object.values(reloaded[0].scores || {}).flatMap((row) => Object.values(row)).length, 72);
+  assert.equal(reloaded[0].startedAt, "2026-09-04T08:00:00.000Z");
   assert.equal(saved.history[0].photoId, "photo-qa");
+  assert.equal(saved.history[0].startedAt, "2026-09-04T08:00:00.000Z");
   assert.equal(offlineBundles[0].activeDraft, null);
   assert.equal(offlineBundles[0].history.length, 2);
+  assert.equal(offlineBundles[0].history[0].startedAt, "2026-09-04T08:00:00.000Z");
   assert.equal(queued, true);
   assert.deepEqual(readStoredJson<any[]>(storage as unknown as Storage, CLOUD_TOMBSTONES_KEY, []).map((item) => item.localId), ["otra"]);
   assert.ok(storage.getItem(STORAGE_KEYS.draft), "el flujo de página limpia el draft solo después de esta confirmación");
@@ -97,7 +101,7 @@ test("reintentar guardado o corregir usa el mismo ID, conserva foto y crea una s
     fingerprints.push(fingerprint);
     return fingerprint;
   };
-  const corrected = { ...snapshot(), photoId: undefined, updatedAt: "2026-09-04T13:00:00.000Z" };
+  const corrected = { ...snapshot(), photoId: undefined, startedAt: undefined, updatedAt: "2026-09-04T13:00:00.000Z" };
   const options = { storage: storage as unknown as Storage, ownerId: "account-1", snapshot: corrected, deviceId: "device-a", defaultHandicap: null, hasLocalPreferenceState: false, queueForCloud: true, persistOffline };
 
   await saveRoundHistoryLocalFirst(options);
@@ -107,6 +111,7 @@ test("reintentar guardado o corregir usa el mismo ID, conserva foto y crea una s
   assert.equal(reloaded.length, 1);
   assert.equal(reloaded[0].id, original.id);
   assert.equal(reloaded[0].photoId, original.photoId);
+  assert.equal(reloaded[0].startedAt, original.startedAt);
   assert.equal(reloaded[0].updatedAt, corrected.updatedAt);
   assert.equal(new Set(fingerprints).size, 1);
 });

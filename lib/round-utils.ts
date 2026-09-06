@@ -7,6 +7,7 @@ import type { Course, HoleScore, Player, RoundSnapshot } from "./types";
 import type { FrequentPlayer } from "./types";
 import { hasValidRoundHandicap } from "./handicap-base";
 import { normalizeAdvancedStats, normalizeScoreCaptureMode } from "./advanced-stats";
+import { normalizeRoundStartedAt } from "./round-lifecycle";
 
 export const STORAGE_KEYS = {
   courses: "golfbets-courses",
@@ -61,6 +62,7 @@ export function normalizeRoundDraft(value: unknown, resolvedOwnerId?: string) {
   const course = recordValue(source.course) && Array.isArray(source.course.holes) && source.course.holes.length === 18 ? source.course : undefined;
   const draft = {
     ...source,
+    startedAt: normalizeRoundStartedAt(source.startedAt),
     ...(course ? { course } : { course: undefined }),
     courseSelected: typeof source.courseSelected === "boolean" ? source.courseSelected && Boolean(course) : Boolean(course),
     players,
@@ -182,6 +184,7 @@ export function mergeCoursesPreservingEdits(defaults: Course[], saved: Course[] 
 
 export function hasRoundProgress(draft: any) {
   if (!draft || typeof draft !== "object") return false;
+  const started = Boolean(normalizeRoundStartedAt(draft.startedAt));
   const namedPlayers = Array.isArray(draft.players) && draft.players.some((player: Player) => player.name?.trim());
   const scoreRows = recordValue(draft.scores);
   const enteredScores = scoreRows && Object.values(scoreRows).some((row) => {
@@ -195,7 +198,7 @@ export function hasRoundProgress(draft: any) {
     && JSON.stringify(draft.bets) !== JSON.stringify(initialBets(playerIds));
   const configuredInstance = [draft.personalBets, draft.supplementalBets, draft.manualBets]
     .some((items) => Array.isArray(items) && items.length > 0);
-  return Boolean(namedPlayers || enteredScores || draft.currentIndex > 0 || configuredGroupBet || configuredInstance);
+  return Boolean(started || namedPlayers || enteredScores || draft.currentIndex > 0 || configuredGroupBet || configuredInstance);
 }
 
 export function migrateDraftPressures(draft: any) {

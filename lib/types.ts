@@ -431,6 +431,8 @@ export type RoundSnapshot = {
   id: string;
   /** Missing in legacy history is normalized to completed without rewriting storage. */
   lifecycleState?: RoundLifecycleState;
+  /** Durable instant when the organizer explicitly started the round. */
+  startedAt?: string;
   /** Missing in legacy rounds preserves the former score-only capture. */
   scoreCaptureMode?: ScoreCaptureMode;
   date: string;

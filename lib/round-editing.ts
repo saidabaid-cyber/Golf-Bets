@@ -8,6 +8,7 @@ import { normalizeAdvancedStats, normalizeScoreCaptureMode } from "./advanced-st
 export function upsertRoundSnapshot(history: RoundSnapshot[], next: RoundSnapshot) {
   const previous = history.find(round => round.id === next.id);
   const saved = structuredClone({ ...next, photoId: next.photoId ?? previous?.photoId,
+    startedAt: previous?.startedAt ?? next.startedAt,
     completedAt: previous?.completedAt ?? next.completedAt });
   return [saved, ...history.filter(round => round.id !== next.id)];
 }

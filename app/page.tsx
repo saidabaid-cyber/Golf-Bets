@@ -118,7 +118,7 @@ import { calculateSupplementalBets, normalizeSupplementalBets, supplementalBetsF
 import { isPersonalSupplementalType, setRememberedCategoryEnabled } from "../lib/bet-activation";
 import { buildPersonalOpponentResults } from "../lib/personal-opponents";
 import { persistPendingRoundReview, ROUND_REVIEW_NOTICE } from "../lib/round-review";
-import { markRoundDraftCancelled, normalizeHistoricalRoundLifecycle, withDerivedRoundLifecycle } from "../lib/round-lifecycle";
+import { markRoundDraftCancelled, normalizeHistoricalRoundLifecycle, normalizeRoundStartedAt, withDerivedRoundLifecycle } from "../lib/round-lifecycle";
 import { normalizeAdvancedStats, normalizeScoreCaptureMode, updateAdvancedHoleStat } from "../lib/advanced-stats";
 import { BetHelpButton, SupplementalBetsEditor, SupplementalBetResults } from "./components/supplemental-bets-editor";
 import { buildGeneralResultsTable, pollaDetailBalance, pollaDetailBalances, pollaPositionLabels, summarizeNetUnitQuantities, type ResultCategoryColumn } from "../lib/result-breakdown";
@@ -484,6 +484,7 @@ function GolfBetsApp() {
   const [history, setHistory] = useState<RoundSnapshot[]>([]);
   const [roundId, setRoundId] = useState(makeId());
   const [roundDate, setRoundDate] = useState(localDateMexico());
+  const [roundStartedAt, setRoundStartedAt] = useState<string | null>(null);
   const [quickPars, setQuickPars] = useState("");
   const [quickStroke, setQuickStroke] = useState("");
   const [hydrated, setHydrated] = useState(false);
@@ -566,6 +567,14 @@ function GolfBetsApp() {
       || supplementalBets.some((bet) => bet.enabled !== false)
       || manualBets.some((bet) => bet.enabled !== false)
       || Object.values(expenses).some((value) => value !== 0);
+  }
+  function ensureRoundStarted() {
+    if (roundStartedAt || roundReviewPending) return roundStartedAt;
+    const hasConfirmedScore = Object.values(scores).some((row) => Object.values(row).some((score) => typeof score === "number"));
+    if (hasConfirmedScore) return null;
+    const startedAt = new Date().toISOString();
+    setRoundStartedAt(current => current ?? startedAt);
+    return startedAt;
   }
   useEffect(() => {
     currentIndexRef.current = currentIndex;
@@ -662,6 +671,7 @@ function GolfBetsApp() {
     const draftRoundHoles: 9 | 18 = draftCore?.roundHoles ?? 18;
     setRoundClosed(false);
     setRoundReviewPending(Boolean(draft?.reviewPending));
+    setRoundStartedAt(normalizeRoundStartedAt(draft?.startedAt) ?? null);
     setDraftAvailable(hasRoundProgress(draft));
     if (!draft) {
       setPlayers([]); setOwnerId(""); setScores({}); setScoreEdits({}); setUnitEvents([]); setCounterBetEvents([]); setCounterBetKeepers(emptyCounterBetKeepers()); setLobaHoles({}); setBallFriendSetup({});
@@ -669,7 +679,7 @@ function GolfBetsApp() {
       setStartHole(1); setRoundHoles(18); setRoundHandicapBasis("relative"); setSegments(segmentDefinitions(playOrder(1), 6));
       setCourseSelected(false); setCourseSelectionError(false);
       if (!options.preserveLocalUi) setCurrentIndex(0);
-      setRoundId(makeId()); setRoundDate(localDateMexico());
+      setRoundId(makeId()); setRoundDate(localDateMexico()); setRoundStartedAt(null);
     }
     if (draft && draftCore) {
         setCourse(draft.course ? withDefaultLaVistaRules(draft.course) : laVista);
@@ -794,7 +804,7 @@ function GolfBetsApp() {
       if (revision !== localPersistRevision.current) return false;
       if (!ownsLocalWorkspace(localStorage, identity.userId)) return false;
       try {
-        const draft = withDerivedRoundLifecycle({ version: 9, course, courseSelected, startHole, roundHoles, handicapBasis: roundHandicapBasis, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, scoreCaptureMode, advancedStats, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, currentIndex, reviewPending: roundReviewPending });
+        const draft = withDerivedRoundLifecycle({ version: 9, course, courseSelected, startHole, roundHoles, handicapBasis: roundHandicapBasis, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, scoreCaptureMode, advancedStats, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, startedAt: roundStartedAt ?? undefined, currentIndex, reviewPending: roundReviewPending });
         const activeDraft = roundClosed ? null : draft;
         trackLocalCloudEdits(localStorage, activeDraft, { highContrast, language: "es-MX", notificationsEnabled: false, defaultHandicap: identity.defaultHandicap });
         localStorage.setItem(STORAGE_KEYS.courses, JSON.stringify(courses));
@@ -821,7 +831,7 @@ function GolfBetsApp() {
     flushLocalState.current = persist;
     const timer = window.setTimeout(persist, 250);
     return () => window.clearTimeout(timer);
-  }, [hydrated, identity.userId, identity.mode, identity.defaultHandicap, cloudLinked, courses, favoriteCourseIds, recentCourseIds, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, roundClosed, roundReviewPending, course, courseSelected, startHole, roundHoles, roundHandicapBasis, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, scoreCaptureMode, advancedStats, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, currentIndex]);
+  }, [hydrated, identity.userId, identity.mode, identity.defaultHandicap, cloudLinked, courses, favoriteCourseIds, recentCourseIds, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, roundClosed, roundReviewPending, course, courseSelected, startHole, roundHoles, roundHandicapBasis, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, scoreCaptureMode, advancedStats, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, roundStartedAt, currentIndex]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -1047,7 +1057,7 @@ function GolfBetsApp() {
 
   useEffect(() => {
     requestCloudSync.current?.();
-  }, [courses, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, course, courseSelected, startHole, roundHoles, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, scoreCaptureMode, advancedStats, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, identity.defaultHandicap]);
+  }, [courses, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, course, courseSelected, startHole, roundHoles, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, scoreCaptureMode, advancedStats, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, roundStartedAt, identity.defaultHandicap]);
 
   function resolveCloudConflict(choice: "local" | "cloud") {
     if (!pendingCloudConflict) return;
@@ -1586,7 +1596,7 @@ function GolfBetsApp() {
       fish: bets.fish,
     });
     return structuredClone({
-      id: roundId, lifecycleState: "completed", scoreCaptureMode, date: roundDate, courseName: course.name, teeName: course.teeName,
+      id: roundId, lifecycleState: "completed", startedAt: roundStartedAt ?? undefined, scoreCaptureMode, date: roundDate, courseName: course.name, teeName: course.teeName,
       snapshotVersion: 2, ownerId: owner.id, handicapBasis: roundHandicapBasis, segments, playerBalances: allBetBalances,
       categoryBalances: { Conejos: rabbitBalances, Skins: skinBalances, Unidades: units.balances, Monkey: monkey.balances, Foursome: foursomes.balances, "Bola Amiga": ballFriend.balances, "Polla 1ª vuelta": pollaFirstBalances, "Polla 2ª vuelta": pollaSecondBalances, "Polla Nassau": pollaNassauBalances, "Mini Polla": miniPollaComponentBalances, "🐍 Víboras": vipers.balances, "🐫 Camellos": camels.balances, "🐟 Peces": fish.balances, "🐺 Loba": loba.balances, ...Object.fromEntries(supplementalGeneralResults.map((result, index) => [`${result.label}${supplementalGeneralResults.length > 1 ? ` ${index + 1}` : ""}`, result.balances])), Personales: personalCombinedBalances, Manuales: manual.balances },
       resultDetails: { rabbits, skins, units, monkey, foursomes, ballFriend, polla, miniPolla, vipers, camels, fish, loba, supplemental, settlementTransfers, settlementDifference, personals, manual },
@@ -1600,20 +1610,20 @@ function GolfBetsApp() {
     });
   }
 
-  function roundDraftPayload(overrides: { scores?: Record<number, HoleScore>; scoreEdits?: ScoreRows; bets?: BetConfig; currentIndex?: number; reviewPending?: boolean } = {}) {
+  function roundDraftPayload(overrides: { scores?: Record<number, HoleScore>; scoreEdits?: ScoreRows; bets?: BetConfig; currentIndex?: number; reviewPending?: boolean; startedAt?: string | null } = {}) {
     return withDerivedRoundLifecycle({
       version: 9, course, courseSelected, startHole, roundHoles, handicapBasis: roundHandicapBasis, players, ownerId,
       bets: overrides.bets || bets, segments, personalBets, supplementalBets, manualBets,
       scores: overrides.scores || scores, scoreEdits: overrides.scoreEdits || scoreEdits, putts, scoreCaptureMode, advancedStats, unitEvents, counterBetEvents,
-      counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate,
+      counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, startedAt: normalizeRoundStartedAt(overrides.startedAt) ?? roundStartedAt ?? undefined,
       currentIndex: overrides.currentIndex ?? currentIndex,
       reviewPending: overrides.reviewPending ?? roundReviewPending,
     });
   }
 
-  function persistReviewBeforeLeavingRound(savedScores: Record<number, HoleScore>, savedEdits: ScoreRows, savedBets: BetConfig, savedIndex: number) {
+  function persistReviewBeforeLeavingRound(savedScores: Record<number, HoleScore>, savedEdits: ScoreRows, savedBets: BetConfig, savedIndex: number, startedAt?: string | null) {
     try {
-      const draft = persistPendingRoundReview(window.localStorage, roundDraftPayload({ scores: savedScores, scoreEdits: savedEdits, bets: savedBets, currentIndex: savedIndex, reviewPending: true }));
+      const draft = persistPendingRoundReview(window.localStorage, roundDraftPayload({ scores: savedScores, scoreEdits: savedEdits, bets: savedBets, currentIndex: savedIndex, reviewPending: true, startedAt }));
       trackLocalCloudEdits(localStorage, draft, { highContrast, language: "es-MX", notificationsEnabled: false, defaultHandicap: identity.defaultHandicap });
       setRoundReviewPending(true);
       setDraftAvailable(true);
@@ -1725,7 +1735,7 @@ function GolfBetsApp() {
     if (!restored) return;
     const restoredRoundHoles: 9 | 18 = restored.roundHoles || (restored.order!.length === 9 ? 9 : 18);
     setPendingRoundAction({ message: "¿Corregir esta ronda terminada? Se abrirá una copia editable en lugar de la ronda activa. El histórico permanecerá intacto hasta confirmar Guardar; se reutilizará el ID y se conservará la foto.", run: () => {
-    setRoundId(restored.id); setRoundDate(restored.date); setCourse(restored.courseSnapshot!); setCourseSelected(true); setCourseSelectionError(false);
+    setRoundId(restored.id); setRoundDate(restored.date); setRoundStartedAt(normalizeRoundStartedAt(restored.startedAt) ?? null); setCourse(restored.courseSnapshot!); setCourseSelected(true); setCourseSelectionError(false);
     setPlayers(restored.players!); setOwnerId(restored.ownerId); setScores(restored.scores!); setScoreEdits({});
     setStartHole(restored.startHole || (restored.order![0] === 10 ? 10 : 1)); setRoundHoles(restoredRoundHoles);
     setRoundHandicapBasis(normalizeRoundHandicapBasis(restored.handicapBasis));
@@ -1754,7 +1764,7 @@ function GolfBetsApp() {
     setPlayers(nextPlayers); setOwnerId(principal?.id || "");
     setScores({}); setScoreEdits({}); setPutts({}); setScoreCaptureMode("quick"); setAdvancedStats({}); setUnitEvents([]); setCounterBetEvents([]); setCounterBetKeepers(emptyCounterBetKeepers()); setLobaHoles({}); setBallFriendSetup({}); setPersonalBets([]); setSupplementalBets([]); setManualBets([]); setShowFullScorecard(false); setExpenses(emptyExpenses);
     setBets(initialBets(nextPlayers.map((player) => player.id))); setRoundHandicapBasis("relative"); setSegments(segmentDefinitions(playOrder(startHole).slice(0, roundHoles), 6)); setCourseSelected(false); setCourseSelectionError(false);
-    setCurrentIndex(0); setRoundId(makeId()); setRoundDate(localDateMexico()); setDraftAvailable(false); setHoleSummary([]); setShowDeleteRoundConfirm(false); setShowNewRoundConfirm(false); setNewRoundBackupError(""); undoStack.current = []; setUndoCount(0); setTab("setup");
+    setCurrentIndex(0); setRoundId(makeId()); setRoundDate(localDateMexico()); setRoundStartedAt(null); setDraftAvailable(false); setHoleSummary([]); setShowDeleteRoundConfirm(false); setShowNewRoundConfirm(false); setNewRoundBackupError(""); undoStack.current = []; setUndoCount(0); setTab("setup");
     if (nextFeedback) setFeedback(nextFeedback);
   }
 
@@ -1789,7 +1799,7 @@ function GolfBetsApp() {
     setPlayers([]); setOwnerId("");
     setScores({}); setScoreEdits({}); setPutts({}); setScoreCaptureMode("quick"); setAdvancedStats({}); setUnitEvents([]); setCounterBetEvents([]); setCounterBetKeepers(emptyCounterBetKeepers()); setLobaHoles({}); setBallFriendSetup({}); setPersonalBets([]); setSupplementalBets([]); setManualBets([]); setShowFullScorecard(false); setExpenses(emptyExpenses);
     setBets(initialBets([])); setRoundHandicapBasis("relative"); setSegments(segmentDefinitions(playOrder(startHole).slice(0, roundHoles), 6)); setCourseSelected(false); setCourseSelectionError(false);
-    setCurrentIndex(0); setRoundId(makeId()); setRoundDate(localDateMexico()); setRoundClosed(false); setRoundReviewPending(false); setDraftAvailable(false); setHoleSummary([]); setShowDeleteRoundConfirm(false); setShowRoundFinishedNotice(false); undoStack.current = []; setUndoCount(0); setSaveStatus("saved"); setTab("welcome");
+    setCurrentIndex(0); setRoundId(makeId()); setRoundDate(localDateMexico()); setRoundStartedAt(null); setRoundClosed(false); setRoundReviewPending(false); setDraftAvailable(false); setHoleSummary([]); setShowDeleteRoundConfirm(false); setShowRoundFinishedNotice(false); undoStack.current = []; setUndoCount(0); setSaveStatus("saved"); setTab("welcome");
   }
 
   function startNewCourse() {
@@ -2352,6 +2362,7 @@ function GolfBetsApp() {
     setHoleValidationErrors([]);
     setFeedback("");
     checkpoint();
+    const startedAt = ensureRoundStarted();
     // Also covers entering Tarjeta directly without pressing Iniciar ronda.
     const savedBets = freezeRoundHandicapBases(bets, players, roundHandicapBasis);
     setBets(savedBets);
@@ -2437,7 +2448,7 @@ function GolfBetsApp() {
       if (changes.length && navigator.onLine) import("../lib/polla-offline").then(({ flushPollaScoreQueue }) => flushPollaScoreQueue(privatePollaLink.accessToken, { tournamentId: privatePollaLink.tournamentId, groupId: privatePollaLink.groupId })).catch(() => undefined);
     }
     const savedIndex = currentIndex;
-    if (savedIndex === order.length - 1 && !persistReviewBeforeLeavingRound(savedScores, committed.edits, savedBets, savedIndex)) return;
+    if (savedIndex === order.length - 1 && !persistReviewBeforeLeavingRound(savedScores, committed.edits, savedBets, savedIndex, startedAt)) return;
     setHoleSummary(buildHoleSummary(holeNumber, players, savedScores, extras));
     holeSummarySession.current = createHoleSummarySession({
       now: () => window.performance.now(),
@@ -2472,7 +2483,7 @@ function GolfBetsApp() {
   );
   const activeRoundSummary = useMemo<ActiveRoundSummary | null>(() => {
     if (!draftAvailable || roundClosed) return null;
-    const scoreStarted = currentIndex > 0 || Object.values(scores).some((row) => Object.values(row).some((value) => typeof value === "number"));
+    const scoreStarted = Boolean(roundStartedAt) || currentIndex > 0 || Object.values(scores).some((row) => Object.values(row).some((value) => typeof value === "number"));
     const status: ActiveRoundSummary["status"] = resolveActiveRoundStatus({ reviewPending: roundReviewPending, courseSelected, playerCount: players.length, scoreStarted });
     return {
       courseName: courseSelected ? course.name : "Campo por elegir",
@@ -2483,7 +2494,7 @@ function GolfBetsApp() {
       playedHoles: completedHoles.size,
       playerCount: players.length,
     };
-  }, [draftAvailable, roundClosed, roundReviewPending, courseSelected, course.name, roundDate, roundHoles, order, currentIndex, completedHoles, players.length, scores]);
+  }, [draftAvailable, roundClosed, roundReviewPending, courseSelected, course.name, roundDate, roundStartedAt, roundHoles, order, currentIndex, completedHoles, players.length, scores]);
   const openActiveRound = () => {
     if (betConfigurationIssues.length) {
       setShowBetSetupErrors(true);
@@ -2792,7 +2803,7 @@ function GolfBetsApp() {
           return;
         }
         setShowBetSetupErrors(false);
-        const start = () => { setBets(current => freezeRoundHandicapBases(current, players, roundHandicapBasis)); if (!editingRound) setCurrentIndex(0); setEditingRound(false); setTab("round"); };
+        const start = () => { ensureRoundStarted(); setBets(current => freezeRoundHandicapBases(current, players, roundHandicapBasis)); if (!editingRound) setCurrentIndex(0); setEditingRound(false); setTab("round"); };
         if (hasActiveBettingConfiguration()) runAfterBettingConsent(start); else start();
       }}>{editingRound ? "Guardar configuración y continuar →" : "Iniciar ronda →"}</button>
     </>}

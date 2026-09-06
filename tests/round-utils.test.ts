@@ -47,6 +47,8 @@ test("draft pressure migration preserves a corrupt legacy flag for validation", 
 
 test("draft progress distinguishes an empty new round from a resumable round", () => {
   assert.equal(hasRoundProgress({ players: [], scores: {}, currentIndex: 0 }), false);
+  assert.equal(hasRoundProgress({ startedAt: "2026-09-06T12:00:00.000Z", players: [], scores: {}, currentIndex: 0 }), true);
+  assert.equal(hasRoundProgress({ startedAt: "invalid", players: [], scores: {}, currentIndex: 0 }), false);
   assert.equal(hasRoundProgress({ players: [{ id: "a", name: "Said", handicap: null }], scores: {}, currentIndex: 0 }), true);
   assert.equal(hasRoundProgress({ players: [], scores: { 1: { a: 4 } }, currentIndex: 0 }), true);
   assert.equal(hasRoundProgress({ players: [], bets: initialBets([]), scores: {}, currentIndex: 0 }), false);
@@ -144,6 +146,11 @@ test("estructura vieja o parcialmente corrupta conserva scores y descarta solo b
   assert.deepEqual(normalized?.personalBets, []);
   assert.deepEqual(normalized?.counterBetEvents, []);
   assert.equal(normalized?.bets?.rabbits.enabled, true);
+});
+
+test("normalización conserva únicamente un inicio de ronda válido", () => {
+  assert.equal(normalizeRoundDraft({ startedAt: "2026-09-06T06:00:00-06:00" })?.startedAt, "2026-09-06T12:00:00.000Z");
+  assert.equal(normalizeRoundDraft({ startedAt: "ayer" })?.startedAt, undefined);
 });
 
 test("normalización descarta elementos primitivos antes de migrar apuestas persistidas", () => {

@@ -89,8 +89,8 @@ test("Terminar → serializar → recargar → abrir conserva configuración com
   assert.equal(history[0].players![0].handicap,36);assert.equal(history[0].scores![1].said,5);assert.equal(history[0].segments![0].basePair[0],"a");
 });
 test("Corregir reutiliza ID, conserva foto/fecha original y actualiza sin duplicar",()=>{
-  const old=snapshot(), updated={...snapshot(),photoId:undefined,updatedAt:"2026-09-03T12:00:00Z",completedAt:"2026-09-03T12:00:00Z"};
-  const saved=upsertRoundSnapshot([old],updated);assert.equal(saved.length,1);assert.equal(saved[0].photoId,"photo");assert.equal(saved[0].completedAt,old.completedAt);assert.equal(saved[0].updatedAt,updated.updatedAt);
+  const old={...snapshot(),startedAt:"2026-09-02T13:00:00Z"}, updated={...snapshot(),photoId:undefined,startedAt:undefined,updatedAt:"2026-09-03T12:00:00Z",completedAt:"2026-09-03T12:00:00Z"};
+  const saved=upsertRoundSnapshot([old],updated);assert.equal(saved.length,1);assert.equal(saved[0].photoId,"photo");assert.equal(saved[0].startedAt,old.startedAt);assert.equal(saved[0].completedAt,old.completedAt);assert.equal(saved[0].updatedAt,updated.updatedAt);
   assert.equal(canEditSnapshot({...old,segments:undefined}),false);
 });
 test("Corregir un snapshot parcial completa modos ausentes sin mutar el histórico",()=>{
