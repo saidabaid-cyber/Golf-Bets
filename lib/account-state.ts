@@ -157,6 +157,29 @@ export function validateProfileDraft(name: string, handicapInput: string): Profi
   return { ok: true, displayName, defaultHandicap };
 }
 
+export type ProfileAvatarValidation =
+  | { ok: true; avatarUrl: string }
+  | { ok: false; message: string };
+
+/** Remote profile images must be transport-secure and must not carry embedded
+ * credentials. An empty string is intentional: it removes a previously saved
+ * avatar without allowing an OAuth fallback to revive it on the next sync. */
+export function validateProfileAvatarUrl(input: string): ProfileAvatarValidation {
+  const avatarUrl = input.trim();
+  if (!avatarUrl) return { ok: true, avatarUrl: "" };
+  const message = "Usa una URL HTTPS válida o deja el campo vacío.";
+  if (avatarUrl.length > 2048) return { ok: false, message };
+  try {
+    const parsed = new URL(avatarUrl);
+    if (parsed.protocol !== "https:" || !parsed.hostname || parsed.username || parsed.password) {
+      return { ok: false, message };
+    }
+    return { ok: true, avatarUrl };
+  } catch {
+    return { ok: false, message };
+  }
+}
+
 export const ACCOUNT_STORAGE_KEYS = {
   mode: "backyard-account-mode-v1",
   acceptances: "backyard-legal-acceptances-v1",

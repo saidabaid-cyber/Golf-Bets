@@ -120,7 +120,7 @@ export async function saveCloudProfile(
   try {
     const preferenceRow = { user_id: userId, default_handicap: profile.defaultHandicap, updated_at: writeTimestamp };
     await writeVerifiedProfileRow(client, "user_preferences", { user_id: userId }, preferenceRow, ["default_handicap"]);
-    const profileRow = { id: userId, name: profile.displayName, display_name: profile.displayName, default_handicap: profile.defaultHandicap, avatar_url: profile.avatarUrl || null, onboarding_completed_at: writeTimestamp, updated_at: writeTimestamp };
+    const profileRow = { id: userId, name: profile.displayName, display_name: profile.displayName, default_handicap: profile.defaultHandicap, avatar_url: profile.avatarUrl, onboarding_completed_at: writeTimestamp, updated_at: writeTimestamp };
     await writeVerifiedProfileRow(client, "profiles", { id: userId }, profileRow, ["name", "display_name", "default_handicap", "avatar_url", "onboarding_completed_at"]);
     return { updatedAt: writeTimestamp };
   } catch (error) {

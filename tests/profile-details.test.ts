@@ -6,6 +6,7 @@ import {
   mergeBackyardProfile,
   normalizeBackyardProfileCache,
   readOfflineAuthenticatedProfile,
+  validateProfileAvatarUrl,
   type BackyardProfile,
 } from "../lib/account-state";
 
@@ -86,4 +87,21 @@ test("Sin indicar elimina una mano guardada previamente", () => {
     handedness: "",
   });
   assert.equal(cleared.handedness, "");
+});
+
+test("avatar de perfil acepta sólo HTTPS sin credenciales y permite quitarlo", () => {
+  assert.deepEqual(validateProfileAvatarUrl("   "), { ok: true, avatarUrl: "" });
+  assert.deepEqual(validateProfileAvatarUrl("  https://images.example.test/me.webp  "), { ok: true, avatarUrl: "https://images.example.test/me.webp" });
+  for (const invalid of [
+    "http://images.example.test/me.webp",
+    "data:image/png;base64,abc",
+    "javascript:alert(1)",
+    "https://user:secret@images.example.test/me.webp",
+    "not-a-url",
+    `https://images.example.test/${"a".repeat(2050)}`,
+  ]) {
+    const result = validateProfileAvatarUrl(invalid);
+    assert.equal(result.ok, false, invalid);
+    if (!result.ok) assert.match(result.message, /URL HTTPS/);
+  }
 });

@@ -28,3 +28,19 @@ test("Configuración explica cómo agregar jugadores y grupos guardados", () => 
   assert.match(page, /Toca aquí para agregar un jugador/);
   assert.match(page, /Toca aquí para agregar un grupo/);
 });
+
+test("Perfil permite una foto HTTPS removible sin filtrar referrer", () => {
+  assert.match(account, /validateProfileAvatarUrl\(avatarUrl\)/);
+  assert.match(account, /type="url" inputMode="url" autoComplete="url" maxLength=\{2048\}/);
+  assert.match(account, /Quitar foto/);
+  assert.match(account, /no modifica tu foto de Google/);
+  assert.match(account, /referrerPolicy="no-referrer"/);
+});
+
+test("Perfil muestra estadísticas reales y deja ausentes como guion", () => {
+  for (const field of ["pars", "birdies", "bogeys", "doublesOrWorse", "last5Average", "last10Average", "averageVsPar"]) {
+    assert.match(account, new RegExp(`golfInsights\\.${field}`));
+  }
+  assert.match(account, /golfInsights\.scoredRounds \? golfInsights\.pars : "—"/);
+  assert.match(account, /Promedios con \{golfInsights\.scoreSampleRounds\}/);
+});

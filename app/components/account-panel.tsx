@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { LEGAL_DOCUMENT_VERSIONS, legalConfig } from "../../lib/legal-config";
-import { BETTING_DATA_CONSENT_TYPE, emptyBackyardProfileDetails, profileHandicapInput, profileHandicapLabel, validateProfileDraft, type BackyardProfile, type BackyardProfileDetails } from "../../lib/account-state";
+import { BETTING_DATA_CONSENT_TYPE, emptyBackyardProfileDetails, profileHandicapInput, profileHandicapLabel, validateProfileAvatarUrl, validateProfileDraft, type BackyardProfile, type BackyardProfileDetails } from "../../lib/account-state";
 import type { GolfInsights } from "../../lib/golf-insights";
 import { useBackyardAccount } from "./account-provider";
 
@@ -18,6 +18,17 @@ function profileMoney(value: number) {
   const rounded = Math.round(value);
   if (rounded === 0) return "$0";
   return `${rounded > 0 ? "+" : "−"}$${Math.abs(rounded).toLocaleString("es-MX")}`;
+}
+
+function profileDecimal(value: number | undefined) {
+  return value === undefined ? "—" : value.toFixed(1);
+}
+
+function profileRelative(value: number | undefined) {
+  if (value === undefined) return "—";
+  const rounded = Math.round(value * 10) / 10;
+  if (rounded === 0) return "E";
+  return `${rounded > 0 ? "+" : ""}${rounded.toFixed(1)}`;
 }
 
 type ProfileDetailsDraft = BackyardProfileDetails;
@@ -44,6 +55,7 @@ export function AccountPanel({ highContrast, onHighContrastChange, golfInsights,
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(identity.displayName);
   const [handicap, setHandicap] = useState(profileHandicapInput(identity.defaultHandicap));
+  const [avatarUrl, setAvatarUrl] = useState(identity.avatarUrl);
   const [profileDetails, setProfileDetails] = useState<ProfileDetailsDraft>(() => profileDetailsDraft(identity));
   const [message, setMessage] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -56,6 +68,7 @@ export function AccountPanel({ highContrast, onHighContrastChange, golfInsights,
     if (!editing) {
       setName(identity.displayName);
       setHandicap(profileHandicapInput(identity.defaultHandicap));
+      setAvatarUrl(identity.avatarUrl);
       setProfileDetails(profileDetailsDraft(identity));
     }
   }, [identity, editing]);
@@ -73,9 +86,11 @@ export function AccountPanel({ highContrast, onHighContrastChange, golfInsights,
   async function saveProfile() {
     const validation = validateProfileDraft(name, handicap);
     if (!validation.ok) { setMessage(validation.message); return; }
+    const avatarValidation = validateProfileAvatarUrl(avatarUrl);
+    if (!avatarValidation.ok) { setMessage(avatarValidation.message); return; }
     setSavingProfile(true); setMessage("");
     try {
-      const result = await updateProfile({ displayName: validation.displayName, defaultHandicap: validation.defaultHandicap, avatarUrl: identity.avatarUrl, ...profileDetails });
+      const result = await updateProfile({ displayName: validation.displayName, defaultHandicap: validation.defaultHandicap, avatarUrl: avatarValidation.avatarUrl, ...profileDetails });
       setEditing(false);
       setMessage(result === "cloud" ? "Nombre, avatar y HCP sincronizados. Los datos ampliados se guardaron en este dispositivo." : "Perfil actualizado en este dispositivo. Los datos ampliados quedan pendientes de sincronización Beta.");
     } catch { setMessage("No se confirmó el guardado del perfil. Conservamos lo que escribiste; reintenta."); }
@@ -110,10 +125,15 @@ export function AccountPanel({ highContrast, onHighContrastChange, golfInsights,
     {identity.mode === "authenticated" && !cloudLinked && <section className="card"><h2>Sincronización</h2><p>Tus datos siguen seguros en este dispositivo. Puedes vincularlos a tu cuenta cuando la nube esté configurada.</p><button className="primary" onClick={requestCloudLink}>Vincular datos locales</button></section>}
 
     {identity.mode === "authenticated" && <section className="card profileCard">
-      <div className="sectionTitle"><div className="profileIdentity"><div className="accountAvatar">{identity.avatarUrl ? <img src={identity.avatarUrl} alt="Avatar" /> : (identity.displayName.trim()[0] || "J").toUpperCase()}</div><div><h2>{identity.displayName}</h2><p>{identity.email || "Sin correo"}</p></div></div><button className="secondary" onClick={() => setEditing((value) => !value)}>{editing ? "Cancelar" : "Editar"}</button></div>
+      <div className="sectionTitle"><div className="profileIdentity"><div className="accountAvatar">{identity.avatarUrl ? <img src={identity.avatarUrl} alt="Avatar" referrerPolicy="no-referrer" /> : (identity.displayName.trim()[0] || "J").toUpperCase()}</div><div><h2>{identity.displayName}</h2><p>{identity.email || "Sin correo"}</p></div></div><button className="secondary" onClick={() => setEditing((value) => !value)}>{editing ? "Cancelar" : "Editar"}</button></div>
       {editing && <div className="profileForm profileFormExpanded">
         <label>Nombre visible<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Tu nombre" /></label>
         <label>HCP Index (opcional)<input type="text" inputMode="text" value={handicap} onChange={(event) => setHandicap(event.target.value)} placeholder="Ej. 8.4 o +1.2" /></label>
+        <div className="profileAvatarEditor">
+          <label>Foto de perfil (URL HTTPS)<input type="url" inputMode="url" autoComplete="url" maxLength={2048} value={avatarUrl} onChange={(event) => setAvatarUrl(event.target.value)} placeholder="https://…" /></label>
+          <button type="button" className="secondary" disabled={!avatarUrl} onClick={() => setAvatarUrl("")}>Quitar foto</button>
+          <p className="hint">Quitarla en The Backyard no modifica tu foto de Google.</p>
+        </div>
         <label>Nombre(s)<input value={profileDetails.givenName} onChange={(event) => setProfileDetails((current) => ({ ...current, givenName: event.target.value }))} autoComplete="given-name" /></label>
         <label>Apellidos<input value={profileDetails.familyName} onChange={(event) => setProfileDetails((current) => ({ ...current, familyName: event.target.value }))} autoComplete="family-name" /></label>
         <label>Usuario<input value={profileDetails.username} onChange={(event) => setProfileDetails((current) => ({ ...current, username: event.target.value }))} placeholder="sin @" autoComplete="username" /></label>
@@ -143,11 +163,24 @@ export function AccountPanel({ highContrast, onHighContrastChange, golfInsights,
       <div className="sectionTitle"><div><h2>Mi golf</h2><p>Resumen calculado sólo con tu histórico disponible.</p></div>{onOpenStats && <button type="button" className="textButton" onClick={onOpenStats}>Ver Stats</button>}</div>
       <div className="betaProfileGolfStats">
         <span><small>Rondas</small><b>{golfInsights.rounds}</b></span>
-        <span><small>Promedio{golfInsights.scoreScopeHoles ? ` · ${golfInsights.scoreScopeHoles}H` : ""}</small><b>{golfInsights.averageScore === undefined ? "—" : golfInsights.averageScore.toFixed(1)}</b></span>
+        <span><small>Promedio{golfInsights.scoreScopeHoles ? ` · ${golfInsights.scoreScopeHoles}H` : ""}</small><b>{profileDecimal(golfInsights.averageScore)}</b></span>
         <span><small>Mejor score{golfInsights.scoreScopeHoles ? ` · ${golfInsights.scoreScopeHoles}H` : ""}</small><b>{golfInsights.bestScore ?? "—"}</b></span>
         <span><small>Apuestas</small><b className={golfInsights.betBalance >= 0 ? "good" : "bad"}>{profileMoney(golfInsights.betBalance)}</b></span>
       </div>
-      {!golfInsights.scoredRounds && <p className="hint">Las rondas sin tarjeta completa se conservan, pero no generan promedios.</p>}
+      <div className="betaProfileGolfStats betaProfileScoringStats">
+        <span><small>Pars</small><b>{golfInsights.scoredRounds ? golfInsights.pars : "—"}</b></span>
+        <span><small>Birdies</small><b>{golfInsights.scoredRounds ? golfInsights.birdies : "—"}</b></span>
+        <span><small>Bogeys</small><b>{golfInsights.scoredRounds ? golfInsights.bogeys : "—"}</b></span>
+        <span><small>Dobles+</small><b>{golfInsights.scoredRounds ? golfInsights.doublesOrWorse : "—"}</b></span>
+      </div>
+      <div className="betaAverageStrip">
+        <span>Últimas 5 <b>{profileDecimal(golfInsights.last5Average)}</b></span>
+        <span>Últimas 10 <b>{profileDecimal(golfInsights.last10Average)}</b></span>
+        <span>Promedio vs par <b>{profileRelative(golfInsights.averageVsPar)}</b></span>
+      </div>
+      {golfInsights.scoreScopeHoles
+        ? <p className="hint">Promedios con {golfInsights.scoreSampleRounds} {golfInsights.scoreSampleRounds === 1 ? "tarjeta completa" : "tarjetas completas"} de {golfInsights.scoreScopeHoles} hoyos; el resultado por hoyo considera {golfInsights.scoredRounds} {golfInsights.scoredRounds === 1 ? "ronda completa" : "rondas completas"}.</p>
+        : <p className="hint">Las rondas sin tarjeta completa se conservan, pero no generan promedios.</p>}
     </section>}
 
     <section className="card"><h2>Documentos y consentimiento</h2><div className="documentConsentList">

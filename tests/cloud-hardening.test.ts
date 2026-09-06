@@ -9,7 +9,7 @@ import { adoptGuestPhotoJobs, queuePhoto, photoJobs, flushPhotoQueue } from "../
 import { STORAGE_KEYS } from "../lib/round-utils";
 import { OtpSendGate, otpRetrySeconds, authIdentityChanged, closeAuthSession, type AuthFlowClient } from "../lib/auth-flow";
 import { authErrorMessage } from "../lib/account-state";
-import { saveCloudProfile } from "../lib/cloud-account";
+import { ensureCloudProfile, saveCloudProfile } from "../lib/cloud-account";
 
 class MemoryStorage {
   data = new Map<string, string>();
@@ -190,6 +190,14 @@ test("perfil cloud conserva HCP Index opcional como null", async () => {
   assert.equal(db.rows("profiles")[0].default_handicap, null);
   assert.equal(db.rows("user_preferences")[0].default_handicap, null);
   assert.equal(db.rows("profiles")[0].name, "Said");
+});
+test("quitar avatar persiste la decisión y no revive el fallback de Google", async () => {
+  const db = new CloudDb();
+  await saveCloudProfile(db.client, "a", { displayName: "Said", defaultHandicap: 7, avatarUrl: "https://images.example.test/google.webp" }, earlier);
+  await saveCloudProfile(db.client, "a", { displayName: "Said", defaultHandicap: 7, avatarUrl: "" }, later);
+  assert.equal(db.rows("profiles")[0].avatar_url, "");
+  const restored = await ensureCloudProfile(db.client, "a", { displayName: "Said", defaultHandicap: 7, avatarUrl: "https://images.example.test/google.webp" });
+  assert.equal(restored.avatar_url, "");
 });
 test("perfil usa CAS y una escritura vieja no pisa otro dispositivo", async () => {
   const db = new CloudDb();
