@@ -22,6 +22,50 @@ test("Histórico filtra mes/año sin modificar datos ni perder años disponibles
   assert.deepEqual(history, before);
 });
 
+test("Histórico valida el calendario, conserva fechas dañadas solo sin filtro y no lanza con entradas malformadas", () => {
+  const malformed = [
+    { id: "valid-leap", date: "2024-02-29", updatedAt: "2024-03-01T00:00:00.000Z" },
+    { id: "bad-leap", date: "2025-02-29", updatedAt: "2025-03-01T00:00:00.000Z" },
+    { id: "bad-month", date: "2026-13-01" },
+    { id: "bad-day", date: "2026-04-31" },
+    { id: "timestamp-not-date", date: "2026-09-03T12:00:00Z" },
+    { id: "missing-date" },
+    null,
+    "round",
+    { date: "2026-09-03" },
+  ] as unknown as RoundSnapshot[];
+  const before = [...malformed];
+
+  assert.doesNotThrow(() => historyYears(malformed));
+  assert.deepEqual(historyYears(malformed), ["2024"]);
+  assert.deepEqual(filterHistory(malformed, "", "").map((round) => round.id).sort(), [
+    "bad-day",
+    "bad-leap",
+    "bad-month",
+    "missing-date",
+    "timestamp-not-date",
+    "valid-leap",
+  ]);
+  assert.deepEqual(filterHistory(malformed, "2024", "02").map((round) => round.id), ["valid-leap"]);
+  assert.deepEqual(filterHistory(malformed, "2025", "02"), []);
+  assert.deepEqual(filterHistory(malformed, "", "13"), []);
+  assert.deepEqual(malformed, before);
+});
+
+test("Histórico usa la corrección más reciente por id y desempata con la entrada posterior", () => {
+  const snapshots = [
+    { id: "same", date: "2025-05-01", updatedAt: "2026-01-01T12:00:00.000Z", courseName: "Anterior" },
+    { id: "other", date: "2026-01-01", updatedAt: "2026-01-01T12:00:00.000Z" },
+    { id: "same", date: "2026-02-01", updatedAt: "2026-01-01T12:00:00.000Z", courseName: "Corregida" },
+  ] as unknown as RoundSnapshot[];
+
+  const filtered = filterHistory(snapshots, "", "");
+  assert.deepEqual(filtered.map((round) => round.id), ["same", "other"]);
+  assert.equal(filtered[0], snapshots[2]);
+  assert.deepEqual(historyYears(snapshots), ["2026"]);
+  assert.deepEqual(filterHistory(snapshots, "2025", "05"), []);
+});
+
 test("estado previo usa exclusivamente eventos guardados y expresa carry", () => {
   assert.deepEqual(priorRabbitStatus([{ hole: 2, type: "hold", playerId: "juan" }], 1, 100, () => "Juan"), ["Juan trae el Conejo", "En juego $100"]);
   assert.deepEqual(priorRabbitStatus([], 2, 100, () => "—"), ["Conejo libre", "Acumula $200"]);
