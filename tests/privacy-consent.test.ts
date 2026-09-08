@@ -23,8 +23,8 @@ class MemoryStorage {
 
 test("el aviso publicado coincide íntegramente con el contenido aprobado", () => {
   const text = privacyPublishedPlainText();
-  assert.equal(createHash("sha256").update(text).digest("hex"), "af74adf0fb7bb96e73cfdcb56317080c44e1c9112de5fd995e5b43662da2743b");
-  assert.equal(PRIVACY_CONTENT_ID, "2026-09-02-v2+sha256-af74adf0fb7bb96e");
+  assert.equal(createHash("sha256").update(text).digest("hex"), "5376b615664b10d98027aa86cacc533206c424ff13806d33c18cdcedbb1dfcc6");
+  assert.equal(PRIVACY_CONTENT_ID, "2026-09-08-v3+sha256-5376b615664b10d9");
   assert.deepEqual(PRIVACY_SECTIONS.map((section) => section.number), Array.from({ length: 16 }, (_, index) => index + 1));
   for (const removed of [
     "Su contenido no sustituye asesoría jurídica individual.",
@@ -36,7 +36,7 @@ test("el aviso publicado coincide íntegramente con el contenido aprobado", () =
 
 test("una aceptación antigua o genérica no equivale al consentimiento expreso", () => {
   const generic = buildLegalAcceptances("guest", "2026-09-05T06:00:00.000Z");
-  const collision = { ...generic[0], type: "privacy" as const, documentVersion: "2026-09-02-v2" };
+  const collision = { ...generic[0], type: "privacy" as const, documentVersion: "2026-09-08-v3" };
   assert.equal(hasCurrentBettingDataConsent([...generic, collision], "guest"), false);
   assert.notEqual(BETTING_DATA_CONSENT_VERSION, collision.documentVersion);
 });

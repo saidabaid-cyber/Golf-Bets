@@ -1,10 +1,9 @@
-export const PRIVACY_LEGAL_VERSION = "2026-09-02-v2";
-export const PRIVACY_EFFECTIVE_DATE = "2 de septiembre de 2026";
+export const PRIVACY_LEGAL_VERSION = "2026-09-08-v3";
+export const PRIVACY_EFFECTIVE_DATE = "8 de septiembre de 2026";
 
-// The legal version was already used by a different draft in this repository.
-// Consent evidence therefore uses a content-specific id while the published
-// legal version and effective date remain exactly as approved.
-export const PRIVACY_CONTENT_ID = "2026-09-02-v2+sha256-af74adf0fb7bb96e";
+// The content digest is part of the acceptance evidence. Update it whenever
+// any published paragraph changes so an earlier acceptance cannot be reused.
+export const PRIVACY_CONTENT_ID = "2026-09-08-v3+sha256-5376b615664b10d9";
 
 export const PRIVACY_INTRO = "Este Aviso describe el tratamiento de datos personales conforme al estado actual de The Backyard.";
 
@@ -23,9 +22,9 @@ export const PRIVACY_SECTIONS = [
     number: 2,
     title: "Datos personales que podemos tratar",
     paragraphs: [
-      "Según las funciones que decidas utilizar, podemos tratar nombre; correo electrónico; proveedor de acceso; avatar o fotografía de perfil si la proporcionas; HCP; scores; campos; rondas e histórico; torneos y grupos; información de Polla Live; apuestas registradas, resultados y gastos; rivales; fotografías de scorecards cuando las agregas; consultas de reglas y el texto enviado a la IA; preferencias; datos técnicos estrictamente necesarios (como dirección IP, identificadores de dispositivo y navegador, y registros de acceso); información de sesión, sincronización y seguridad.",
+      "Según las funciones que decidas utilizar, podemos tratar nombre; correo electrónico; proveedor de acceso; avatar o fotografía de perfil si la proporcionas; HCP; scores; campos; rondas e histórico; torneos y grupos; información de Polla Live; apuestas registradas, resultados y gastos; rivales; instrucciones de configuración de ronda, incluidos nombres de jugadores, campo, modalidades y montos; fotografías de scorecards; consultas de reglas; correcciones y preferencias que decidas guardar; datos técnicos estrictamente necesarios (como dirección IP, identificadores de dispositivo y navegador, y registros de acceso); información de sesión, sincronización y seguridad.",
       "Los datos relativos a apuestas registradas, resultados y gastos pueden tener el carácter de datos financieros o patrimoniales, por lo que su tratamiento requiere tu consentimiento expreso. Dicho consentimiento se recabará mediante una manifestación afirmativa (casilla de aceptación no premarcada) al activar por primera vez Polla Live o el registro de apuestas.",
-      "La versión actual no solicita ubicación precisa. Si una función futura la necesitara, se informaría su finalidad y se solicitaría el permiso correspondiente.",
+      "La función opcional “Cerca de mí” solicita al navegador acceso a tu ubicación sólo cuando la activas. La coordenada se usa en el dispositivo para ordenar el catálogo local por distancia y no se incluye en las solicitudes de Backyard AI. Puedes negar el permiso y buscar el campo manualmente.",
     ],
   },
   {
@@ -39,7 +38,7 @@ export const PRIVACY_SECTIONS = [
     number: 4,
     title: "Finalidades primarias",
     paragraphs: [
-      "Usamos los datos necesarios para crear y autenticar una cuenta; mantener perfiles; administrar rondas, campos y grupos; calcular y liquidar matemáticamente resultados; conservar el histórico elegido; ofrecer reglas y consultas mediante IA; habilitar sincronización cuando la nube esté activa; operar Polla Live; brindar soporte; proteger cuentas y prevenir abuso. Las finalidades descritas en este apartado son necesarias para la existencia, mantenimiento y cumplimiento de la relación jurídica entre el titular y el responsable, por lo que no requieren tu consentimiento adicional. Cualquier finalidad distinta de las previstas en este Aviso requerirá recabar nuevamente tu consentimiento.",
+      "Usamos los datos necesarios para crear y autenticar una cuenta; mantener perfiles; administrar rondas, campos y grupos; interpretar una configuración de ronda solicitada; extraer y validar scores de una tarjeta; calcular y liquidar matemáticamente resultados mediante el motor de la aplicación; conservar el histórico elegido; ofrecer reglas y consultas mediante IA; habilitar sincronización cuando la nube esté activa; operar Polla Live; brindar soporte; proteger cuentas y prevenir abuso. Las finalidades descritas en este apartado son necesarias para la existencia, mantenimiento y cumplimiento de la relación jurídica entre el titular y el responsable, por lo que no requieren tu consentimiento adicional, salvo cuando la aplicación solicite una autorización específica o la ley exija consentimiento. Cualquier finalidad distinta de las previstas en este Aviso requerirá recabar nuevamente tu consentimiento.",
     ],
   },
   {
@@ -53,7 +52,7 @@ export const PRIVACY_SECTIONS = [
     number: 6,
     title: "Proveedores y transferencias",
     paragraphs: [
-      "Para prestar determinadas funciones podemos apoyarnos en encargados o proveedores tecnológicos como Vercel (alojamiento), Supabase (autenticación y datos en nube), OpenAI (procesamiento de consultas al asistente de reglas) y Google (autenticación cuando el usuario elige ese método). La información compartida se limita a la necesaria para la función solicitada. Con estos proveedores hemos celebrado o aceptado términos que los obligan a tratar los datos personales únicamente conforme a nuestras instrucciones, con fines limitados a la función solicitada y con medidas de seguridad adecuadas. El procesamiento puede realizarse en servidores ubicados fuera de México.",
+      "Para prestar determinadas funciones podemos apoyarnos en proveedores tecnológicos como Vercel (alojamiento), Supabase (autenticación, limitación de uso y datos en nube), OpenAI (consultas de reglas, interpretación de configuración de ronda y lectura de scorecards) y Google (autenticación cuando el usuario elige ese método). La información compartida se limita a la necesaria para la función solicitada. Las condiciones, ubicaciones de procesamiento y conservación aplicables dependen de la configuración y los términos vigentes con cada proveedor; el procesamiento puede realizarse en servidores ubicados fuera de México.",
       "Las transferencias o comunicaciones de datos se realizarán cuando sean necesarias para las finalidades descritas, exista una relación con un encargado, lo requiera una autoridad competente o exista otra base jurídica aplicable.",
     ],
   },
@@ -61,21 +60,23 @@ export const PRIVACY_SECTIONS = [
     number: 7,
     title: "Inteligencia artificial",
     paragraphs: [
-      "Al usar “Preguntar a IA”, el texto de tu consulta y el contexto de reglas estrictamente necesario pueden enviarse al proveedor de IA para generar una respuesta. No enviamos intencionalmente el histórico completo, apuestas privadas ni información personal que no sea necesaria. Evita escribir datos personales de terceros.",
+      "La interpretación local de una ronda no envía la instrucción a un proveedor de IA. Si activas de forma afirmativa la autorización mostrada en esa pantalla, se envían a OpenAI la instrucción que escribas y los nombres, campo, modalidades y montos incluidos en ella, únicamente para interpretarla. No se envían la memoria personal ni el histórico completo.",
+      "Si activas de forma afirmativa la autorización de Backyard Card AI, las fotografías seleccionadas se envían a OpenAI junto con el nombre del campo y los nombres de los jugadores esperados, únicamente para extraer y relacionar los scores. La aplicación valida la respuesta y el motor determinista, no el modelo de IA, calcula los resultados económicos.",
+      "Las autorizaciones de proveedor son específicas para cada uso y no activan entrenamiento global. Las correcciones y preferencias sólo se guardan en la memoria privada del dispositivo cuando habilitas por separado esa opción. En esta fase no existe exportación automática a un conjunto global de entrenamiento ni actualización automática de modelos. Evita incluir datos personales innecesarios o datos de terceros sin contar con una base legítima para hacerlo.",
     ],
   },
   {
     number: 8,
     title: "Cookies, sesión y almacenamiento local",
     paragraphs: [
-      "La aplicación utiliza almacenamiento del navegador, incluido localStorage e IndexedDB cuando corresponde, para autosave, ronda e histórico local, jugadores, grupos, preferencias, fotografías y consentimientos de invitado. Supabase puede usar almacenamiento o cookies estrictamente técnicas para conservar la sesión. No utilizamos cookies publicitarias en esta versión.",
+      "La aplicación utiliza almacenamiento del navegador, incluido localStorage e IndexedDB cuando corresponde, para autosave, ronda e histórico local, jugadores, grupos, fotografías, métricas técnicas agregadas, consentimientos y, sólo si la habilitas, memoria personal con preferencias y correcciones verificadas. La memoria queda separada por propietario, marcada como excluida de entrenamiento global y puede desactivarse. Supabase puede usar almacenamiento o cookies estrictamente técnicas para conservar la sesión. No utilizamos cookies publicitarias en esta versión.",
     ],
   },
   {
     number: 9,
     title: "Conservación y eliminación",
     paragraphs: [
-      "Conservamos los datos mientras sean necesarios para prestar las funciones solicitadas, mantener el histórico elegido por el usuario, atender obligaciones legales, seguridad o controversias. Los datos locales permanecen en el dispositivo hasta que el usuario los elimina, borra el almacenamiento del navegador o desinstala los datos de la PWA. Cuando la nube esté activa, podrán solicitarse la eliminación de cuenta y datos, sujeto a obligaciones legales de conservación.",
+      "Conservamos los datos mientras sean necesarios para prestar las funciones solicitadas, mantener el histórico elegido por el usuario, atender obligaciones legales, seguridad o controversias. Los datos locales permanecen en el dispositivo hasta que el usuario los elimina, elimina su cuenta, borra el almacenamiento del navegador o desinstala los datos de la PWA. Las fotos de scorecard guardadas por la aplicación están vinculadas a su propietario y se eliminan con la ronda o cuenta cuando técnicamente procede. Cuando la nube esté activa, podrá solicitarse la eliminación de cuenta y datos, sujeto a obligaciones legales de conservación.",
     ],
   },
   {

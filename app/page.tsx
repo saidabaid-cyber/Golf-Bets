@@ -10,6 +10,7 @@ import { SetupBetCard } from "./components/setup-bet-card";
 import { BET_PRESENTATION, betDisplayLabel, historicalBetDisplayLabel, SUPPLEMENTAL_BET_PRESENTATION, supplementalBetDisplayLabel } from "../lib/bet-catalog";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import {
   AdvancedStatsByHole,
   BallFriendHole,
@@ -71,13 +72,15 @@ import { NumericCaptureInput } from "./components/numeric-capture-input";
 import { SignedMoneyInput } from "./components/signed-money-input";
 import { AccountProvider, useBackyardAccount } from "./components/account-provider";
 import { resolveRoundDraftCore, resolvedOwnerIdForRoundDraft } from "./draft-restoration";
-import { ACCOUNT_STORAGE_KEYS, hasCurrentBettingDataConsent, parseLegalAcceptances } from "../lib/account-state";
+import { accountDeletionMarkerKey, ACCOUNT_STORAGE_KEYS, hasCurrentBettingDataConsent, parseLegalAcceptances } from "../lib/account-state";
 import { AccountPanel } from "./components/account-panel";
 import { BrandLockup } from "./components/brand-lockup";
 import { GroupBuilder } from "./components/group-builder";
 import { AppBottomNav } from "./components/app-bottom-nav";
 import { HomeDashboard, type ActiveRoundSummary } from "./components/home-dashboard";
 import { PlayHub } from "./components/play-hub";
+import type { AiRoundSetupTelemetry } from "./components/backyard-ai/ai-round-setup";
+import { RoundFinalResult } from "./components/backyard-ai/round-final-result";
 import { SocialFeed } from "./components/social-feed";
 import { StatsDashboard } from "./components/stats-dashboard";
 import { BalanceLedgerPanel } from "./components/balance-ledger-panel";
@@ -85,7 +88,7 @@ import { CourseLibrary } from "./components/course-library";
 import { PersonalHistoryPanel } from "./components/personal-history-panel";
 import { PersonalOpponentResults } from "./components/personal-opponent-results";
 import { useScreenNavigation } from "./components/use-screen-navigation";
-import { commitHoleCapture, editCapturedScore, holeCapture, isHoleCaptureComplete, type ScoreRows } from "../lib/score-capture";
+import { applyPendingScoreEdits, commitHoleCapture, editCapturedScore, holeCapture, isHoleCaptureComplete, type ScoreRows } from "../lib/score-capture";
 import { foursomePressure, setFoursomePressure } from "../lib/foursome-config";
 import { FoursomeLive } from "./components/foursome-live";
 import { ResultAccordion } from "./components/result-accordion";
@@ -102,14 +105,25 @@ import { createHoleSummarySession, nextHoleDestination, type HoleSummarySession 
 import { buildHoleSummary, clearActiveRoundStorage, hasRoundProgress, mergeCoursesPreservingEdits, normalizeRoundDraft, persistRoundHistory, privateLeaderboard, pushUndoState, readStoredJson, resolveHistoricalRoundDeletion, resolvePersonalHistoryDeletion, STORAGE_KEYS, upsertFrequentPlayers } from "../lib/round-utils";
 import { monkeyHoleSummary, personalHoleSummary } from "../lib/personal-summary";
 import { downloadRoundCsv, downloadRoundImage, downloadRoundPdf, shareRound } from "../lib/round-export";
-import { deleteScorecardPhoto, deleteScorecardPhotoCloud, readScorecardPhoto, readScorecardPhotoCloud, saveScorecardPhoto, uploadScorecardPhotoCloud } from "../lib/scorecard-photo";
+import { adoptScorecardPhotos, deleteScorecardPhoto, deleteScorecardPhotoCloud, markScorecardPhotosCommitted, readScorecardPhoto, readScorecardPhotoCloud, saveScorecardPhoto, uploadScorecardPhotoCloud } from "../lib/scorecard-photo";
+import { createRoundSetupDraft, type RoundSetupDraft } from "../lib/backyard-ai/schemas/round-setup";
+import type { ScorecardValidationOverrides, ScorecardValidationResult } from "../lib/backyard-ai/schemas/scorecard";
+import { buildDeterministicRoundRecap } from "../lib/backyard-ai/recap/round-recap";
+import { recordRoundCompletionMetric, recordRoundSetupMetrics, recordScorecardMetrics, recordScorecardOutcomeMetrics, updateBackyardAiMetrics } from "../lib/backyard-ai/observability/metrics";
+import type { ScorecardCorrectionEvidence } from "../lib/backyard-ai/observability/scorecard-telemetry";
+import { BACKYARD_AI_MEMORY_POLICY_VERSION, appendLearningRecord, createPersonalLearningEvent, createScorecardCorrection, readLearningConsent, scorecardCorrectionLearningEvent } from "../lib/backyard-ai/memory/learning-events";
+import { buildRoundSetupCorrectionRecords } from "../lib/backyard-ai/memory/setup-learning";
+import { persistUserPreference } from "../lib/backyard-ai/memory/personal-memory";
+import { persistGroupPreference } from "../lib/backyard-ai/memory/group-memory";
+import type { GroupPreference, UserPreference } from "../lib/backyard-ai/memory/types";
+import { normalizeMexicanSpanish } from "../lib/backyard-ai/runtime/intent-parser";
 import { actionableCloudConflicts, CLOUD_TOMBSTONES_KEY, cloudDataFingerprint, cloudSyncPayloadFingerprint, collectLocalCloudData, downloadCloudData, findActiveDraftOwnershipConflicts, findAmbiguousCloudConflicts, hasLocalCloudPreferenceState, isCloudFieldConflict, mergeLocalFirstActiveDraft, persistCloudMetadata, resolveAmbiguousCloudConflicts, restoreLocalRoundUi, stableValue, trackLocalCloudCheckpoint, trackLocalCloudEdits, type CloudDataBundle, type CloudDataConflict, recordCloudDeletion, uploadCloudData, withCloudAuthRetry } from "../lib/cloud-sync";
 import { describeCloudConflict } from "../lib/cloud-conflict-display";
 import { ownsLocalWorkspace, preserveDataConflicts, preserveDraftConflict } from "../lib/account-workspace";
 import { accountPrimaryPlayerId, accountPrimaryRoundPlayer, syncAccountPrimaryFrequentPlayer, syncLinkedRoundPlayerName } from "../lib/account-primary-player";
 import { runCloudSyncCycle } from "../lib/cloud-sync-cycle";
 import { CloudSyncGate, cloudSyncErrorMessage, syncStatusAfterSkip, type CloudSyncTrigger } from "../lib/cloud-sync-gate";
-import { adoptGuestPhotoJobs, flushPhotoQueue, queuePhoto, photoJobs } from "../lib/photo-sync-queue";
+import { adoptGuestPhotoJobs, flushPhotoQueue, queuePhoto, photoJobs, roundScorecardPhotoIds } from "../lib/photo-sync-queue";
 import { acknowledgeOfflineBundle, getOfflineDeviceId, markOfflineAttempt, offlineRetryDelayMs, persistOfflineBundle, restoreOfflineWorkspace, writeCloudBundleToStorage } from "../lib/offline-store";
 import { PRIVATE_POLLA_LINK_KEY, parsePrivatePollaLink, privatePollaScoreChanges } from "../lib/polla-private-link";
 import { enqueuePollaScore } from "../lib/polla-offline";
@@ -173,6 +187,8 @@ import {
 import { hasDuplicateGroupPlayers } from "../lib/group-generator";
 import { createGroupGameTemplate, frequentGroupTemplateSummary, instantiateGroupGameTemplate, normalizeRoundTemplateOrigin, updateGroupTemplateFromRound, type RoundTemplateOrigin } from "../lib/group-game-template";
 
+const AiRoundSetup = dynamic(() => import("./components/backyard-ai/ai-round-setup").then((module) => module.AiRoundSetup), { ssr: false });
+const ScorecardScanner = dynamic(() => import("./components/backyard-ai/scorecard-scanner").then((module) => module.ScorecardScanner), { ssr: false });
 const makeId = () => Math.random().toString(36).slice(2, 10);
 const money = (n: number) => `${n < 0 ? "-" : ""}$${Math.abs(Math.round(n)).toLocaleString("es-MX")}`;
 const signedMoney = (n: number) => `${n > 0 ? "+" : ""}${money(n)}`;
@@ -339,6 +355,7 @@ function MoneyInput({ label, value, onChange }: { label: string; value: number; 
 
 type NewRoundIntent =
   | { kind: "blank" }
+  | { kind: "ai" }
   | { kind: "players"; players: Player[] }
   | { kind: "group"; group: FrequentGroup };
 
@@ -380,6 +397,8 @@ function GolfBetsApp() {
   const [showFullScorecard, setShowFullScorecard] = useState(false);
   const [scores, setScores] = useState<Record<number, HoleScore>>({});
   const [scoreEdits, setScoreEdits] = useState<ScoreRows>({});
+  const [scorecardPhotoIds, setScorecardPhotoIds] = useState<string[]>([]);
+  const [scorecardScanStartedAt, setScorecardScanStartedAt] = useState<number | null>(null);
   const [scorecardScale, setScorecardScale] = useState(100);
   const [unitEvents, setUnitEvents] = useState<UnitEvent[]>([]);
   const [counterBetEvents, setCounterBetEvents] = useState<CounterBetEvent[]>([]);
@@ -533,6 +552,10 @@ function GolfBetsApp() {
   }, []);
 
   const order = useMemo(() => playOrder(startHole).slice(0, roundHoles), [startHole, roundHoles]);
+  const protectedScorecardPhotoIds = useMemo(() => [...new Set([
+    ...scorecardPhotoIds,
+    ...history.flatMap(roundScorecardPhotoIds),
+  ])], [history, scorecardPhotoIds]);
   const holeNumber = order[currentIndex];
   const hole = course.holes.find((h) => h.number === holeNumber) ?? course.holes[0];
   const courseOptions = useMemo(() => [...courses].sort((left, right) => (
@@ -596,7 +619,7 @@ function GolfBetsApp() {
     setRoundTemplateOrigin(normalizeRoundTemplateOrigin(draft?.templateOrigin));
     setDraftAvailable(hasRoundProgress(draft));
     if (!draft) {
-      setPlayers([]); setOwnerId(""); setScores({}); setScoreEdits({}); setUnitEvents([]); setCounterBetEvents([]); setCounterBetKeepers(emptyCounterBetKeepers()); setLobaHoles({}); setBallFriendSetup({});
+      setPlayers([]); setOwnerId(""); setScores({}); setScoreEdits({}); setScorecardPhotoIds([]); setUnitEvents([]); setCounterBetEvents([]); setCounterBetKeepers(emptyCounterBetKeepers()); setLobaHoles({}); setBallFriendSetup({});
       setPersonalBets([]); setManualBets([]); setSupplementalBets([]); setPutts({}); setScoreCaptureMode("quick"); setAdvancedStats({}); setExpenses(emptyExpenses); setBets(initialBets([]));
       setStartHole(1); setRoundHoles(18); setRoundHandicapBasis("relative"); setSegments(segmentDefinitions(playOrder(1), 6));
       setCourseSelected(false); setCourseSelectionError(false);
@@ -661,6 +684,7 @@ function GolfBetsApp() {
         setAdvancedStats(normalizeAdvancedStats(draft.advancedStats));
         if (draft.scores) setScores(draft.scores);
         setScoreEdits(draft.scoreEdits || {});
+        setScorecardPhotoIds(Array.isArray(draft.scorecardPhotoIds) ? draft.scorecardPhotoIds.filter((id: unknown): id is string => typeof id === "string" && Boolean(id.trim())) : []);
         if (draft.unitEvents) setUnitEvents(draft.unitEvents);
         setCounterBetEvents(normalizeCounterBetEvents(draft.counterBetEvents));
         setCounterBetKeepers({ ...emptyCounterBetKeepers(), ...(draft.counterBetKeepers || {}) });
@@ -724,9 +748,10 @@ function GolfBetsApp() {
     const revision = localPersistRevision.current;
     const persist = () => {
       if (revision !== localPersistRevision.current) return false;
+      if (localStorage.getItem(accountDeletionMarkerKey(identity.userId))) return false;
       if (!ownsLocalWorkspace(localStorage, identity.userId)) return false;
       try {
-        const draft = withDerivedRoundLifecycle({ version: 9, course, courseSelected, startHole, roundHoles, handicapBasis: roundHandicapBasis, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, scoreCaptureMode, advancedStats, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, startedAt: roundStartedAt ?? undefined, currentIndex, reviewPending: roundReviewPending, templateOrigin: roundTemplateOrigin ?? undefined });
+        const draft = withDerivedRoundLifecycle({ version: 9, course, courseSelected, startHole, roundHoles, handicapBasis: roundHandicapBasis, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, scorecardPhotoIds, scoreCaptureMode, advancedStats, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, startedAt: roundStartedAt ?? undefined, currentIndex, reviewPending: roundReviewPending, templateOrigin: roundTemplateOrigin ?? undefined });
         const activeDraft = roundClosed ? null : draft;
         trackLocalCloudEdits(localStorage, activeDraft, { highContrast, language: "es-MX", notificationsEnabled, defaultHandicap: identity.defaultHandicap });
         localStorage.setItem(STORAGE_KEYS.courses, JSON.stringify(courses));
@@ -754,7 +779,7 @@ function GolfBetsApp() {
     flushLocalState.current = persist;
     const timer = window.setTimeout(persist, 250);
     return () => window.clearTimeout(timer);
-  }, [hydrated, identity.userId, identity.mode, identity.defaultHandicap, cloudLinked, courses, favoriteCourseIds, recentCourseIds, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, notificationsEnabled, roundClosed, roundReviewPending, course, courseSelected, startHole, roundHoles, roundHandicapBasis, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, scoreCaptureMode, advancedStats, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, roundStartedAt, roundTemplateOrigin, currentIndex]);
+  }, [hydrated, identity.userId, identity.mode, identity.defaultHandicap, cloudLinked, courses, favoriteCourseIds, recentCourseIds, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, notificationsEnabled, roundClosed, roundReviewPending, course, courseSelected, startHole, roundHoles, roundHandicapBasis, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, scorecardPhotoIds, putts, scoreCaptureMode, advancedStats, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, roundStartedAt, roundTemplateOrigin, currentIndex]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -833,7 +858,7 @@ function GolfBetsApp() {
     const debug = (event: string, trigger?: CloudSyncTrigger) => {
       if (process.env.NODE_ENV === "development") console.info("[cloud-sync]", event, { trigger });
     };
-    const current = () => !cancelled && ownsLocalWorkspace(localStorage, userId) && liveIdentity.current.userId === userId && Boolean(liveIdentity.current.accessToken);
+    const current = () => !cancelled && !localStorage.getItem(accountDeletionMarkerKey(userId)) && ownsLocalWorkspace(localStorage, userId) && liveIdentity.current.userId === userId && Boolean(liveIdentity.current.accessToken);
     const read = () => {
       if (!flushLocalState.current?.()) throw new Error("No se pudo guardar el estado local; no se enviaron datos incompletos.");
       const data = collectLocalCloudData(localStorage, liveIdentity.current.defaultHandicap, hadLocalPreferences.current);
@@ -884,18 +909,26 @@ function GolfBetsApp() {
             return true;
           },
           media: async data => {
+            const importedPhotoIds = [...new Set([
+              ...data.history.flatMap(roundScorecardPhotoIds),
+              ...roundScorecardPhotoIds((data.activeDraft || {}) as { photoId?: unknown; scorecardPhotoIds?: unknown }),
+            ])];
+            await adoptScorecardPhotos(importedPhotoIds, "guest", userId);
+            if (!current()) throw new Error("Sync cancelled");
             adoptGuestPhotoJobs(localStorage, userId);
-            for (const round of data.history.filter(item => item.photoId)) {
+            for (const round of data.history.filter(item => roundScorecardPhotoIds(item).length)) {
               if (!current()) throw new Error("Sync cancelled");
-              const marker = `backyard-photo-uploaded-v1:${userId}:${round.photoId}`;
-              if (!localStorage.getItem(marker) && !photoJobs(localStorage).some(job => job.userId === userId && job.roundId === round.id)) {
-                const blob = await readScorecardPhoto(round.photoId!);
-                if (!current()) throw new Error("Sync cancelled");
-                if (blob) queuePhoto(localStorage, { userId, roundId: round.id, photoId: round.photoId!, operation: "upload", revision: makeId() });
+              for (const photoId of roundScorecardPhotoIds(round)) {
+                const marker = `backyard-photo-uploaded-v1:${userId}:${photoId}`;
+                if (!localStorage.getItem(marker) && !photoJobs(localStorage).some(job => job.userId === userId && job.roundId === round.id && job.photoId === photoId)) {
+                  const blob = await readScorecardPhoto(photoId, userId, { adoptLegacy: true });
+                  if (!current()) throw new Error("Sync cancelled");
+                  if (blob) queuePhoto(localStorage, { userId, roundId: round.id, photoId, operation: "upload", revision: makeId() });
+                }
               }
             }
             await flushPhotoQueue(localStorage, userId, data, {
-              read: readScorecardPhoto,
+              read: photoId => readScorecardPhoto(photoId, userId, { adoptLegacy: true }),
               upload: async (roundId, photoId, blob) => {
                 const result = await uploadScorecardPhotoCloud(userId, roundId, blob, photoId);
                 if (result && current()) localStorage.setItem(`backyard-photo-uploaded-v1:${userId}:${photoId}`, "true");
@@ -1180,6 +1213,21 @@ function GolfBetsApp() {
     const external = personalBets.find((b) => personalRivalKey(b) === id);
     return external?.rivalName || "—";
   };
+  const finalResultPlayers = settlementIds.map((id) => {
+    const leaderboard = privateBoard.find((row) => row.playerId === id);
+    return {
+      id,
+      name: playerName(id),
+      ...(leaderboard?.finished ? { gross: leaderboard.gross, ...(leaderboard.net === null ? {} : { net: leaderboard.net }) } : {}),
+    };
+  });
+  const finalRoundRecap = buildDeterministicRoundRecap({
+    players: settlementIds.map((id) => ({ id, name: playerName(id) })),
+    balances: allBetBalances,
+    skinsWon: skins.won,
+    rabbitsWon: rabbits.won,
+    transfers: settlementTransfers,
+  });
 
   function resultAccordionProps(id: string) {
     return {
@@ -1530,6 +1578,7 @@ function GolfBetsApp() {
       ownerName: owner.name, roundHoles, startHole, betResult: ownerBetResult, expenses, expenseTotal: ownerExpenseTotal,
       netResult: ownerNet, categoryResults, players: structuredClone(players), scores: structuredClone(scores),
       courseSnapshot: structuredClone(course), order: [...order], completedAt: timestamp, updatedAt: timestamp,
+      ...(scorecardPhotoIds.length ? { photoId: scorecardPhotoIds[0], scorecardPhotoIds: [...scorecardPhotoIds] } : {}),
       betConfig: structuredClone(bets), unitEvents: structuredClone(unitEvents), counterBetEvents: structuredClone(finalizedCounterBetEvents), counterBetKeepers: structuredClone(counterBetKeepers), lobaHoles: structuredClone(lobaHoles), personalBets: structuredClone(personalBets),
       supplementalBets: structuredClone(supplementalBets), putts: structuredClone(putts), advancedStats: structuredClone(advancedStats), manualBets: structuredClone(manualBets), ballFriendSetup: structuredClone(ballFriendSetup),
       personalResults: personals.results.map((r) => snapshotPersonalResult(personalBets.find((bet) => bet.id === r.betId)!, r, players)),
@@ -1537,7 +1586,7 @@ function GolfBetsApp() {
     });
   }
 
-  function roundDraftPayload(overrides: { scores?: Record<number, HoleScore>; scoreEdits?: ScoreRows; bets?: BetConfig; currentIndex?: number; reviewPending?: boolean; startedAt?: string | null } = {}) {
+  function roundDraftPayload(overrides: { scores?: Record<number, HoleScore>; scoreEdits?: ScoreRows; bets?: BetConfig; currentIndex?: number; reviewPending?: boolean; startedAt?: string | null; scorecardPhotoIds?: string[] } = {}) {
     return withDerivedRoundLifecycle({
       version: 9, course, courseSelected, startHole, roundHoles, handicapBasis: roundHandicapBasis, players, ownerId,
       bets: overrides.bets || bets, segments, personalBets, supplementalBets, manualBets,
@@ -1545,14 +1594,16 @@ function GolfBetsApp() {
       counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, startedAt: normalizeRoundStartedAt(overrides.startedAt) ?? roundStartedAt ?? undefined,
       currentIndex: overrides.currentIndex ?? currentIndex,
       reviewPending: overrides.reviewPending ?? roundReviewPending,
+      scorecardPhotoIds: overrides.scorecardPhotoIds ?? scorecardPhotoIds,
       templateOrigin: roundTemplateOrigin ?? undefined,
     });
   }
 
-  function persistReviewBeforeLeavingRound(savedScores: Record<number, HoleScore>, savedEdits: ScoreRows, savedBets: BetConfig, savedIndex: number, startedAt?: string | null) {
+  function persistReviewBeforeLeavingRound(savedScores: Record<number, HoleScore>, savedEdits: ScoreRows, savedBets: BetConfig, savedIndex: number, startedAt?: string | null, savedPhotoIds?: string[]) {
     try {
+      if (localStorage.getItem(accountDeletionMarkerKey(identity.userId))) return false;
       const previousDraft = readStoredJson<unknown>(window.localStorage, STORAGE_KEYS.draft, null);
-      const draft = persistPendingRoundReview(window.localStorage, roundDraftPayload({ scores: savedScores, scoreEdits: savedEdits, bets: savedBets, currentIndex: savedIndex, reviewPending: true, startedAt }));
+      const draft = persistPendingRoundReview(window.localStorage, roundDraftPayload({ scores: savedScores, scoreEdits: savedEdits, bets: savedBets, currentIndex: savedIndex, reviewPending: true, startedAt, scorecardPhotoIds: savedPhotoIds }));
       trackLocalCloudCheckpoint(localStorage, draft, { highContrast, language: "es-MX", notificationsEnabled, defaultHandicap: identity.defaultHandicap }, previousDraft);
       setRoundReviewPending(true);
       setDraftAvailable(true);
@@ -1571,10 +1622,11 @@ function GolfBetsApp() {
     }
   }
 
-  function persistCommittedHoleBeforeAdvance(savedScores: Record<number, HoleScore>, savedEdits: ScoreRows, savedBets: BetConfig, savedIndex: number, startedAt?: string | null) {
+  function persistCommittedHoleBeforeAdvance(savedScores: Record<number, HoleScore>, savedEdits: ScoreRows, savedBets: BetConfig, savedIndex: number, startedAt?: string | null, savedPhotoIds?: string[]) {
     try {
+      if (localStorage.getItem(accountDeletionMarkerKey(identity.userId))) return false;
       const previousDraft = readStoredJson<unknown>(window.localStorage, STORAGE_KEYS.draft, null);
-      const draft = roundDraftPayload({ scores: savedScores, scoreEdits: savedEdits, bets: savedBets, currentIndex: savedIndex, reviewPending: false, startedAt });
+      const draft = roundDraftPayload({ scores: savedScores, scoreEdits: savedEdits, bets: savedBets, currentIndex: savedIndex, reviewPending: false, startedAt, scorecardPhotoIds: savedPhotoIds });
       // localStorage is the synchronous durability boundary used by Safari/PWA.
       // Metadata and the offline outbox are created only after exact readback.
       persistRoundDraftCheckpoint(window.localStorage, draft);
@@ -1692,6 +1744,7 @@ function GolfBetsApp() {
       setRoundClosed(true);
       setRoundReviewPending(false);
       setDraftAvailable(false);
+      updateBackyardAiMetrics(localStorage, identity.userId, (current) => recordRoundCompletionMetric(current, true));
       const timestamp = new Date().toISOString();
       setFrequentPlayers((current) => upsertFrequentPlayers(current, players, timestamp));
       setSaveStatus("saved");
@@ -1706,6 +1759,7 @@ function GolfBetsApp() {
       }
       setTab("results");
     } catch {
+      updateBackyardAiMetrics(localStorage, identity.userId, (current) => recordRoundCompletionMetric(current, false));
       setSaveStatus("error");
       setFeedback("No se pudo comprobar la ronda en este dispositivo. El borrador sigue seguro; libera espacio y vuelve a intentar.");
     } finally {
@@ -1724,7 +1778,7 @@ function GolfBetsApp() {
     setPendingRoundAction({ message: "¿Corregir esta ronda terminada? Se abrirá una copia editable en lugar de la ronda activa. El histórico permanecerá intacto hasta confirmar Guardar; se reutilizará el ID y se conservará la foto.", run: () => {
     setRoundId(restored.id); setRoundDate(restored.date); setRoundStartedAt(normalizeRoundStartedAt(restored.startedAt) ?? null); setCourse(restored.courseSnapshot!); setCourseSelected(true); setCourseSelectionError(false);
     setRoundTemplateOrigin(null);
-    setPlayers(restored.players!); setOwnerId(restored.ownerId); setScores(restored.scores!); setScoreEdits({});
+    setPlayers(restored.players!); setOwnerId(restored.ownerId); setScores(restored.scores!); setScoreEdits({}); setScorecardPhotoIds(restored.scorecardPhotoIds || (restored.photoId ? [restored.photoId] : []));
     setStartHole(restored.startHole || (restored.order![0] === 10 ? 10 : 1)); setRoundHoles(restoredRoundHoles);
     setRoundHandicapBasis(normalizeRoundHandicapBasis(restored.handicapBasis));
     setBets(restored.betConfig!); setSegments(normalizeFoursomeSegments(restored.segments, restored.order!, restored.betConfig!.foursome.segmentSize));
@@ -1751,7 +1805,7 @@ function GolfBetsApp() {
     setEditingRound(false); setRoundClosed(false); setRoundReviewPending(false); setShowRoundFinishedNotice(false); setFeedback("");
     setRoundTemplateOrigin(null);
     setPlayers(nextPlayers); setOwnerId(principal?.id || "");
-    setScores({}); setScoreEdits({}); setPutts({}); setScoreCaptureMode("quick"); setAdvancedStats({}); setUnitEvents([]); setCounterBetEvents([]); setCounterBetKeepers(emptyCounterBetKeepers()); setLobaHoles({}); setBallFriendSetup({}); setPersonalBets([]); setSupplementalBets([]); setManualBets([]); setShowFullScorecard(false); setExpenses(emptyExpenses);
+    setScores({}); setScoreEdits({}); setScorecardPhotoIds([]); setScorecardScanStartedAt(null); setPutts({}); setScoreCaptureMode("quick"); setAdvancedStats({}); setUnitEvents([]); setCounterBetEvents([]); setCounterBetKeepers(emptyCounterBetKeepers()); setLobaHoles({}); setBallFriendSetup({}); setPersonalBets([]); setSupplementalBets([]); setManualBets([]); setShowFullScorecard(false); setExpenses(emptyExpenses);
     setBets(initialBets(nextPlayers.map((player) => player.id))); setRoundHandicapBasis("relative"); setSegments(segmentDefinitions(playOrder(startHole).slice(0, roundHoles), 6)); setCourseSelected(false); setCourseSelectionError(false);
     setCurrentIndex(0); setRoundId(makeId()); setRoundDate(localDateMexico()); setRoundStartedAt(null); setDraftAvailable(false); setHoleSummary([]); setShowDeleteRoundConfirm(false); setShowNewRoundConfirm(false); setNewRoundBackupError(""); setPendingNewRoundIntent(null); undoStack.current = []; setUndoCount(0); setTab("setup");
     if (nextFeedback) setFeedback(nextFeedback);
@@ -1760,6 +1814,7 @@ function GolfBetsApp() {
   function applyNewRoundIntent(intent: NewRoundIntent, nextFeedback = "") {
     resetRound(nextFeedback);
     if (intent.kind === "blank") return;
+    if (intent.kind === "ai") { setTab("aiSetup"); return; }
     if (intent.kind === "group") {
       applyFrequentGroupToDraft(intent.group);
       return;
@@ -1790,6 +1845,290 @@ function GolfBetsApp() {
     requestNewRoundIntent({ kind: "blank" });
   }
 
+  function requestAiRound() {
+    requestNewRoundIntent({ kind: "ai" });
+  }
+
+  function aiDraftHasActiveBets(draft: RoundSetupDraft) {
+    return [
+      draft.bets.rabbits, draft.bets.skins, draft.bets.units, draft.bets.foursome, draft.bets.ballFriend,
+      draft.bets.monkey, draft.bets.polla.first9, draft.bets.polla.second9, draft.bets.polla.total18,
+      draft.bets.miniPolla, draft.bets.vipers, draft.bets.camels, draft.bets.fish, draft.bets.loba,
+    ].some((config) => Boolean(config?.enabled))
+      || draft.personalBets.some((bet) => bet.enabled !== false)
+      || draft.supplementalBets.some((bet) => bet.enabled !== false)
+      || draft.manualBets.some((bet) => bet.enabled !== false);
+  }
+
+  function applyAiDraftToRound(draft: RoundSetupDraft, start: boolean) {
+    if (!draft.course) return;
+    setCourse(withDefaultLaVistaRules(draft.course));
+    setCourseSelected(draft.courseSelected);
+    setCourseSelectionError(false);
+    setRoundDate(draft.date);
+    setPlayers(structuredClone(draft.players));
+    setOwnerId(draft.ownerId);
+    setStartHole(draft.startHole);
+    setRoundHoles(draft.roundHoles);
+    setRoundHandicapBasis(draft.handicapBasis);
+    setBets(start ? freezeRoundHandicapBases(structuredClone(draft.bets), draft.players, draft.handicapBasis) : structuredClone(draft.bets));
+    setSegments(structuredClone(draft.segments));
+    setPersonalBets(structuredClone(draft.personalBets));
+    setSupplementalBets(structuredClone(draft.supplementalBets));
+    setManualBets(structuredClone(draft.manualBets));
+    setBallFriendSetup(structuredClone(draft.ballFriendSetup));
+    setRoundTemplateOrigin(draft.templateOrigin ?? null);
+    setEditingRound(!start);
+    setRoundClosed(false);
+    setRoundReviewPending(false);
+    setDraftAvailable(true);
+    setCurrentIndex(0);
+    if (start) {
+      setRoundStartedAt((current) => current ?? new Date().toISOString());
+      setFeedback("Ronda configurada con Backyard AI. El motor determinista queda a cargo de todos los cálculos.");
+      setTab("round");
+    } else {
+      setFeedback("Configuración de Backyard AI cargada en el modo manual avanzado.");
+      setTab("setup");
+    }
+  }
+
+  function persistConfirmedAiParticipationPreferences(plan: AiRoundSetupTelemetry["plan"], draft: RoundSetupDraft) {
+    const consent = readLearningConsent(localStorage, identity.userId, BACKYARD_AI_MEMORY_POLICY_VERSION).consent;
+    if (!plan.canConfirm || !hasPersistedBettingConsent() || !consent.personalMemoryEnabled || !/\bnunca\b/.test(normalizeMexicanSpanish(plan.interpretation.input))) return;
+    const now = new Date().toISOString();
+    for (const action of plan.interpretation.actions) {
+      const gameKey = action.type === "configure_core_bet" ? action.bet
+        : action.type === "configure_group_nassau" ? "nassau"
+          : action.type === "configure_ball_friend" ? "ballFriend"
+            : null;
+      if (!gameKey || !("excludedPlayerNames" in action)) continue;
+      const participantIds = action.type === "configure_core_bet" ? draft.bets[action.bet]?.participantIds
+        : action.type === "configure_group_nassau" ? draft.bets.polla.first9.participantIds
+          : draft.bets.ballFriend.participantIds;
+      for (const playerName of action.excludedPlayerNames || []) {
+        const player = draft.players.find((candidate) => normalizeMexicanSpanish(candidate.name) === normalizeMexicanSpanish(playerName));
+        if (!player || participantIds?.includes(player.id)) continue;
+        const common = {
+          schemaVersion: 1 as const,
+          id: makeId(),
+          key: "bet.participation",
+          value: { playerName: player.name, participates: false },
+          context: { region: "MX", gameKey },
+          origin: "CORRECTION" as const,
+          status: "CONFIRMED" as const,
+          confidence: 1,
+          createdAt: now,
+          updatedAt: now,
+          confirmedAt: now,
+          useCount: 0,
+          dataScope: "PERSONAL" as const,
+          trainingUse: "EXCLUDED" as const,
+        };
+        const groupId = draft.templateOrigin?.groupId;
+        if (groupId) {
+          const preference: GroupPreference = { ...common, recordType: "GROUP_PREFERENCE", ownerId: identity.userId, groupId };
+          persistGroupPreference(localStorage, preference, now);
+        } else {
+          const preference: UserPreference = { ...common, recordType: "USER_PREFERENCE", ownerId: identity.userId };
+          persistUserPreference(localStorage, preference, now);
+        }
+      }
+    }
+  }
+
+  function confirmAiRound(draft: RoundSetupDraft, plan: AiRoundSetupTelemetry["plan"]) {
+    const start = () => {
+      applyAiDraftToRound(draft, true);
+      persistConfirmedAiParticipationPreferences(plan, draft);
+      const consent = readLearningConsent(localStorage, identity.userId, BACKYARD_AI_MEMORY_POLICY_VERSION).consent;
+      if (!consent.personalMemoryEnabled) return;
+      const event = createPersonalLearningEvent({
+        id: makeId(), ownerId: identity.userId, eventType: "SETUP_ACCEPTED", verified: true,
+        occurredAt: new Date().toISOString(), locale: draft.locale, region: "MX",
+        payload: { success: true, roundHoles: draft.roundHoles, startHole: draft.startHole },
+      });
+      if (event) appendLearningRecord(localStorage, identity.userId, event);
+    };
+    if (aiDraftHasActiveBets(draft)) runAfterBettingConsent(start); else start();
+  }
+
+  function editAiRoundManually(draft: RoundSetupDraft) {
+    const edit = () => applyAiDraftToRound(draft, false);
+    if (aiDraftHasActiveBets(draft)) runAfterBettingConsent(edit); else edit();
+  }
+
+  function recordAiRoundPlan(event: AiRoundSetupTelemetry) {
+    updateBackyardAiMetrics(localStorage, identity.userId, (current) => recordRoundSetupMetrics(current, {
+      success: event.success,
+      corrections: event.isCorrection ? 1 : 0,
+      questionCount: event.questionCount,
+      durationMs: event.durationMs,
+      confidence: event.confidence,
+    }));
+    if (!event.isCorrection) return;
+    const consent = readLearningConsent(localStorage, identity.userId, BACKYARD_AI_MEMORY_POLICY_VERSION).consent;
+    if (!consent.personalMemoryEnabled) return;
+    const evidence = buildRoundSetupCorrectionRecords({
+      ownerId: identity.userId,
+      previousDraft: event.previousDraft,
+      plan: event.plan,
+      confidence: event.confidence,
+      durationMs: event.durationMs,
+      usedModel: event.usedModel,
+      idFactory: makeId,
+    });
+    for (const record of evidence.records) appendLearningRecord(localStorage, identity.userId, record);
+  }
+
+  function openScorecardScanner() {
+    setScorecardScanStartedAt(performance.now());
+    setHoleValidationErrors([]);
+    setTab("scorecardScan");
+  }
+
+  function recordScorecardResultReached() {
+    if (scorecardScanStartedAt === null) return;
+    updateBackyardAiMetrics(localStorage, identity.userId, (current) => recordScorecardOutcomeMetrics(current, {
+      outcome: "result",
+      photoToResultMs: Math.max(0, performance.now() - scorecardScanStartedAt),
+    }));
+    setScorecardScanStartedAt(null);
+  }
+
+  function applyScannedScorecard(
+    result: ScorecardValidationResult,
+    photoIds: string[],
+    overrides: ScorecardValidationOverrides,
+    corrections: ScorecardCorrectionEvidence[],
+  ) {
+    if (!result.ready) return false;
+    const nextScores = applyPendingScoreEdits(scores, scoreEdits);
+    for (const cell of result.acceptedCells) {
+      nextScores[cell.hole] = { ...(nextScores[cell.hole] || {}), [cell.playerId]: cell.value };
+    }
+    const savedBets = freezeRoundHandicapBases(bets, players, roundHandicapBasis);
+    const startedAt = roundStartedAt ?? new Date().toISOString();
+    const incomplete = firstIncompleteRoundCapture({
+      order,
+      players,
+      scores: nextScores,
+      bets: savedBets,
+      segments,
+      supplementalBets,
+      putts,
+      counterBetKeepers,
+      counterBetEvents,
+      lobaHoles,
+      ballFriendSetup,
+    });
+    const savedIndex = incomplete?.index ?? Math.max(0, order.length - 1);
+    const persisted = incomplete
+      ? persistCommittedHoleBeforeAdvance(nextScores, {}, savedBets, savedIndex, startedAt, photoIds)
+      : persistReviewBeforeLeavingRound(nextScores, {}, savedBets, savedIndex, startedAt, photoIds);
+    if (!persisted) return false;
+
+    checkpoint();
+    setScores(nextScores);
+    setScoreEdits({});
+    setBets(savedBets);
+    setScorecardPhotoIds(photoIds);
+    setRoundStartedAt(startedAt);
+    if (ownsLocalWorkspace(localStorage, identity.userId)) {
+      try {
+        const replacingPhotos = scorecardPhotoIds.some((photoId) => !photoIds.includes(photoId));
+        photoIds.forEach((photoId, index) => queuePhoto(localStorage, {
+          userId: identity.userId,
+          roundId,
+          photoId,
+          operation: replacingPhotos && index === 0 ? "replace" : "upload",
+          revision: makeId(),
+        }));
+        requestCloudSync.current?.();
+      } catch {
+        // The durable round already references these local blobs. Keep them
+        // committed even when the optional cloud outbox cannot be written.
+        setCloudStatus("error");
+      }
+    }
+    scorecardPhotoIds.filter((photoId) => !photoIds.includes(photoId)).forEach((photoId) => {
+      void deleteScorecardPhoto(photoId).catch(() => undefined);
+    });
+
+    const averageConfidence = result.evidence.averageCellConfidence;
+    updateBackyardAiMetrics(localStorage, identity.userId, (current) => recordScorecardMetrics(current, {
+      detectedCells: result.evidence.detectedCellCount,
+      correctedCells: corrections.length,
+      averageConfidence,
+    }));
+
+    const consent = readLearningConsent(localStorage, identity.userId, BACKYARD_AI_MEMORY_POLICY_VERSION).consent;
+    if (consent.personalMemoryEnabled) {
+      const interactionId = `${roundId}-scorecard-${makeId()}`;
+      const createdAt = new Date().toISOString();
+      for (const evidence of corrections) {
+        const correction = createScorecardCorrection({
+          id: makeId(),
+          ownerId: identity.userId,
+          interactionId,
+          roundId,
+          roundPlayerId: evidence.playerId,
+          hole: evidence.hole,
+          extractedScore: evidence.extractedScore,
+          correctedScore: evidence.correctedScore,
+          confidence: evidence.confidence,
+          source: evidence.source,
+          ...(evidence.photoId && photoIds.includes(evidence.photoId) ? { imageReference: evidence.photoId } : {}),
+          reason: evidence.reason,
+          createdAt,
+        });
+        if (!correction) continue;
+        appendLearningRecord(localStorage, identity.userId, correction);
+        const learning = scorecardCorrectionLearningEvent(correction, makeId());
+        if (learning) appendLearningRecord(localStorage, identity.userId, learning);
+      }
+      const accepted = createPersonalLearningEvent({
+        id: makeId(),
+        ownerId: identity.userId,
+        eventType: "SCORECARD_ACCEPTED",
+        verified: true,
+        occurredAt: createdAt,
+        locale: "es-MX",
+        region: "MX",
+        payload: { cellCount: result.evidence.detectedCellCount, acceptedScoreCount: result.acceptedCells.length, confidence: averageConfidence, source: "VISION" },
+      });
+      if (accepted) appendLearningRecord(localStorage, identity.userId, accepted);
+      const matchCorrections = (overrides.playerMappings?.length ?? 0) + (overrides.acceptCourseMismatch ? 1 : 0);
+      if (matchCorrections) {
+        const matchEvent = createPersonalLearningEvent({
+          id: makeId(),
+          ownerId: identity.userId,
+          eventType: "MATCH_CORRECTED",
+          verified: true,
+          occurredAt: createdAt,
+          locale: "es-MX",
+          region: "MX",
+          payload: { correctedValue: matchCorrections, source: "VISION" },
+        });
+        if (matchEvent) appendLearningRecord(localStorage, identity.userId, matchEvent);
+      }
+    }
+
+    if (incomplete) {
+      setCurrentIndex(incomplete.index);
+      setHoleValidationErrors(incomplete.errors);
+      setFeedback("Los scores de la foto ya están guardados. Falta confirmar únicamente la información especial de esta apuesta.");
+      setTab("round");
+      return true;
+    }
+
+    recordScorecardResultReached();
+    setFeedback("Tarjeta confirmada. El motor determinista calculó el resultado y la ronda se está guardando en Histórico.");
+    setTab("results");
+    window.setTimeout(() => latestSaveRound.current(), 0);
+    return true;
+  }
+
   function confirmNewRound() {
     setNewRoundBackupError("");
     try {
@@ -1803,12 +2142,18 @@ function GolfBetsApp() {
   }
 
   function deleteActiveRound() {
+    const photosToDelete = [...scorecardPhotoIds];
+    if (photosToDelete.length && ownsLocalWorkspace(localStorage, identity.userId)) {
+      queuePhoto(localStorage, { userId: identity.userId, roundId, photoId: photosToDelete[0], operation: "delete", revision: makeId() });
+      requestCloudSync.current?.();
+    }
+    photosToDelete.forEach((photoId) => { void deleteScorecardPhoto(photoId).catch(() => undefined); });
     flushLocalState.current = null;
     trackLocalCloudEdits(localStorage, null, { highContrast, language: "es-MX", notificationsEnabled, defaultHandicap: identity.defaultHandicap });
     clearActiveRoundStorage(window.localStorage);
     setRoundTemplateOrigin(null);
     setPlayers([]); setOwnerId("");
-    setScores({}); setScoreEdits({}); setPutts({}); setScoreCaptureMode("quick"); setAdvancedStats({}); setUnitEvents([]); setCounterBetEvents([]); setCounterBetKeepers(emptyCounterBetKeepers()); setLobaHoles({}); setBallFriendSetup({}); setPersonalBets([]); setSupplementalBets([]); setManualBets([]); setShowFullScorecard(false); setExpenses(emptyExpenses);
+    setScores({}); setScoreEdits({}); setScorecardPhotoIds([]); setScorecardScanStartedAt(null); setPutts({}); setScoreCaptureMode("quick"); setAdvancedStats({}); setUnitEvents([]); setCounterBetEvents([]); setCounterBetKeepers(emptyCounterBetKeepers()); setLobaHoles({}); setBallFriendSetup({}); setPersonalBets([]); setSupplementalBets([]); setManualBets([]); setShowFullScorecard(false); setExpenses(emptyExpenses);
     setBets(initialBets([])); setRoundHandicapBasis("relative"); setSegments(segmentDefinitions(playOrder(startHole).slice(0, roundHoles), 6)); setCourseSelected(false); setCourseSelectionError(false);
     setCurrentIndex(0); setRoundId(makeId()); setRoundDate(localDateMexico()); setRoundStartedAt(null); setRoundClosed(false); setRoundReviewPending(false); setDraftAvailable(false); setHoleSummary([]); setShowDeleteRoundConfirm(false); setShowRoundFinishedNotice(false); undoStack.current = []; setUndoCount(0); setSaveStatus("saved"); setTab("welcome");
   }
@@ -2076,19 +2421,27 @@ function GolfBetsApp() {
     if (!file) return;
     const photoId = `${round.id}-${makeId()}`;
     try {
-      await saveScorecardPhoto(photoId, file);
-      if (!ownsLocalWorkspace(localStorage, identity.userId)) return;
-      queuePhoto(localStorage, { userId: identity.userId, roundId: round.id, photoId, operation: "upload", revision: makeId() });
-      setHistory(rounds => rounds.map(item => item.id === round.id ? { ...item, photoId, updatedAt: new Date().toISOString() } : item));
+      await saveScorecardPhoto(photoId, file, identity.userId);
+      if (!ownsLocalWorkspace(localStorage, identity.userId)) { await deleteScorecardPhoto(photoId); return; }
+      const priorPhotoIds = roundScorecardPhotoIds(round);
+      queuePhoto(localStorage, { userId: identity.userId, roundId: round.id, photoId, operation: priorPhotoIds.length ? "replace" : "upload", revision: makeId() });
+      const nextHistory = history.map(item => item.id === round.id ? { ...item, photoId, scorecardPhotoIds: [photoId], updatedAt: new Date().toISOString() } : item);
+      persistRoundHistory(localStorage, nextHistory);
+      setHistory(nextHistory);
+      await markScorecardPhotosCommitted([photoId], identity.userId).catch(() => undefined);
+      await Promise.allSettled(priorPhotoIds.filter((priorId) => priorId !== photoId).map(deleteScorecardPhoto));
       setFeedback(cloudLinked ? "Foto guardada en este dispositivo · sincronización pendiente." : "Foto guardada en este dispositivo.");
-    } catch { setFeedback("No se pudo guardar la foto. Conserva el original y vuelve a intentarlo."); }
+    } catch {
+      await deleteScorecardPhoto(photoId).catch(() => undefined);
+      setFeedback("No se pudo guardar la foto. Conserva el original y vuelve a intentarlo.");
+    }
   }
 
   async function viewScorecardPhoto(round: RoundSnapshot) {
     const preview = window.open("about:blank", "_blank");
     if (preview) preview.opener = null;
     try {
-      let blob = await readScorecardPhoto(round.photoId || round.id);
+      let blob = await readScorecardPhoto(round.photoId || round.id, identity.userId, { adoptLegacy: true });
       if (!blob && identity.mode === "authenticated" && cloudLinked) blob = await readScorecardPhotoCloud(identity.userId, round.id, round.photoId);
       if (!blob) throw new Error("Photo unavailable");
       const url = URL.createObjectURL(blob);
@@ -2110,8 +2463,8 @@ function GolfBetsApp() {
       queuePhoto(localStorage, { userId: identity.userId, roundId: target.id, photoId: target.photoId || target.id, operation: "delete", revision: makeId() });
       persistRoundHistory(window.localStorage, next);
       setHistory(next); setHistoricalRoundToDelete(null);
-      if (target.photoId) {
-        try { await deleteScorecardPhoto(target.photoId); } catch { /* Cloud cleanup remains independently retryable. */ }
+      for (const photoId of roundScorecardPhotoIds(target)) {
+        try { await deleteScorecardPhoto(photoId); } catch { /* Cloud cleanup remains independently retryable. */ }
       }
     } catch { setFeedback("No se pudo guardar la eliminación. Reintenta; no se confirmó la sincronización."); }
   }
@@ -2518,7 +2871,7 @@ function GolfBetsApp() {
         setHoleSummary([]);
         const destination = nextHoleDestination(order, savedIndex);
         if (destination.kind === "hole") goToHoleIndex(destination.index);
-        else { setTab("results"); setShowRoundFinishedNotice(true); window.scrollTo({ top: 0, behavior: "smooth" }); }
+        else { recordScorecardResultReached(); setTab("results"); setShowRoundFinishedNotice(true); window.scrollTo({ top: 0, behavior: "smooth" }); }
       },
     });
   }
@@ -2585,7 +2938,6 @@ function GolfBetsApp() {
     || supplementalBets.some((bet) => bet.enabled !== false && isPersonalSupplementalType(bet.type));
   const resultNavigationItems = [
     { id: "golf-result", label: "Golf", visible: true },
-    { id: "final-player-summary", label: "Resultado final", visible: true },
     { id: "bet-values", label: "Valores de apuesta", visible: true },
     { id: "general-summary", label: "Resumen General", visible: true },
     { id: "rabbits", label: betDisplayLabel("rabbits"), visible: bets.rabbits.enabled },
@@ -2606,7 +2958,6 @@ function GolfBetsApp() {
     { id: "manuals", label: betDisplayLabel("manuals"), visible: manualBets.some((bet) => bet.enabled !== false) },
     { id: "personals", label: betDisplayLabel("personals"), visible: personalModesActive },
     { id: "expenses", label: "Gastos", visible: true },
-    { id: "settlement", label: "Liquidación final", visible: true },
   ].filter((item) => item.visible);
 
   return <main className={`app ${highContrast ? "highContrast" : ""} ${tab === "results" ? "compactResults" : ""}`}>
@@ -2625,6 +2976,7 @@ function GolfBetsApp() {
       groupCount={frequentGroups.length}
       activity={personalActivity}
       onContinueRound={continueActiveRound}
+      onAiRound={requestAiRound}
       onNewRound={requestNewRound}
       onOpenProfile={() => setTab("profile")}
       onOpenHistory={() => setTab("history")}
@@ -2644,6 +2996,7 @@ function GolfBetsApp() {
       activeRound={activeRoundSummary}
       onContinueRound={continueActiveRound}
       onEditRound={activeRoundSummary ? editActiveRound : undefined}
+      onAiRound={requestAiRound}
       onNewRound={requestNewRound}
       onOpenHistory={() => setTab("history")}
       onOpenBalances={() => setTab("balances")}
@@ -2654,6 +3007,55 @@ function GolfBetsApp() {
       onOpenRules={openRulesForRound}
       onOpenStandings={() => setTab("standings")}
       onOpenResults={() => setTab("results")}
+    />}
+
+    {tab === "aiSetup" && <AiRoundSetup
+      initialDraft={createRoundSetupDraft({
+        locale: "es-MX",
+        date: roundDate,
+        course,
+        courseSelected,
+        players,
+        ownerId,
+        startHole,
+        roundHoles,
+        handicapBasis: roundHandicapBasis,
+        bets,
+        segments,
+        personalBets,
+        supplementalBets,
+        manualBets,
+        ballFriendSetup,
+        templateOrigin: roundTemplateOrigin ?? undefined,
+      })}
+      memoryContext={{ profile: identity, frequentPlayers, frequentGroups, history, courses, today: roundDate, idFactory: makeId }}
+      onConfirm={confirmAiRound}
+      onManualEdit={editAiRoundManually}
+      onCancel={() => setTab("welcome")}
+      bettingConsentGranted={bettingConsentGranted}
+      onRequireBettingConsent={runAfterBettingConsent}
+      onPlanned={recordAiRoundPlan}
+    />}
+
+    {tab === "scorecardScan" && <ScorecardScanner
+      storageOwnerId={identity.userId}
+      protectedPhotoIds={protectedScorecardPhotoIds}
+      round={{
+        roundId,
+        players: players.map((player) => ({ id: player.id, name: player.name })),
+        course: {
+          id: course.id,
+          name: course.name,
+          aliases: [course.clubName].filter((name): name is string => Boolean(name?.trim())),
+          holes: course.holes.map((candidate) => ({ number: candidate.number, par: candidate.par })),
+        },
+        startHole,
+        roundHoles,
+        digitalScores: applyPendingScoreEdits(scores, scoreEdits),
+      }}
+      onApply={applyScannedScorecard}
+      onManualFallback={() => { setScorecardScanStartedAt(null); setTab("round"); }}
+      onCancel={() => { setScorecardScanStartedAt(null); setTab("round"); }}
     />}
 
     {tab === "social" && <SocialFeed activity={personalActivity} identityUserId={identity.userId} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} onOpenRound={openHistoricalRound} onOpenGroup={() => setTab("groups")} onCreateRound={requestNewRound} onOpenGroups={() => setTab("groups")} />}
@@ -2886,7 +3288,7 @@ function GolfBetsApp() {
       </section>
       <div className="holeNav">{order.map((h, i) => <button key={h} className={i === currentIndex ? "active" : scores[h] ? "done" : ""} onClick={() => goToHoleIndex(i)}>{h}</button>)}</div>
 
-      <div className="scorecardToggle row"><button className="secondary" onClick={() => setShowFullScorecard((v) => !v)}>{showFullScorecard ? "Ocultar tarjeta completa" : "Ver tarjeta completa"}</button><button className="secondary" onClick={() => setTab("standings")}>CÓMO VAMOS</button><button className="secondary" onClick={undoLastAction} disabled={undoCount === 0}>↶ Deshacer</button></div>
+      <div className="scorecardToggle row"><button className="primary" onClick={openScorecardScanner}>📸 ESCANEAR TARJETA</button><button className="secondary" onClick={() => setShowFullScorecard((v) => !v)}>{showFullScorecard ? "Ocultar tarjeta completa" : "Ver tarjeta completa"}</button><button className="secondary" onClick={() => setTab("standings")}>CÓMO VAMOS</button><button className="secondary" onClick={undoLastAction} disabled={undoCount === 0}>↶ Deshacer</button></div>
 
       {showFullScorecard && <FullScorecard course={course} players={players} scores={scores} order={order} scale={scorecardScale} onScale={setScorecardScale} />}
 
@@ -2994,7 +3396,9 @@ function GolfBetsApp() {
     </>}
 
     {tab === "results" && <>
-      <section className="hero resultHero"><div><div className="eyebrow">RESULTADO DEL DÍA</div><h1 className={ownerNet >= 0 ? "good" : "bad"}>{money(ownerNet)}</h1><p>{owner?.name}: apuestas {money(ownerBetResult)} · gastos {money(-ownerExpenseTotal)}</p>{roundReviewPending && <small>Pendiente de revisión · aún no está en Histórico</small>}</div>{roundClosed ? <button className="secondary" onClick={() => setTab("history")}>Ver ronda guardada</button> : <button className="secondary" onClick={openActiveRound}>Editar tarjeta</button>}</section>
+      {roundReviewPending || roundClosed
+        ? <RoundFinalResult players={finalResultPlayers} balances={allBetBalances} transfers={settlementTransfers} recap={finalRoundRecap} />
+        : <section className="hero resultHero"><div><div className="eyebrow">EN JUEGO</div><h1>RESULTADOS PROVISIONALES</h1><p>La ronda sigue abierta. Estos datos pueden cambiar hasta confirmar todos los hoyos.</p></div></section>}
 
       <nav className="resultJumpNav" aria-label="Ir a un resultado">
         {resultNavigationItems.map((item) => <button type="button" key={item.id} aria-pressed={Boolean(openResultSections[item.id])} onClick={() => openResultSection(item.id)}>{item.label}</button>)}
@@ -3002,19 +3406,6 @@ function GolfBetsApp() {
 
       <ResultAccordion id="golf-result" title="Resultado de golf" className="golfResult" {...resultAccordionProps("golf-result")}>
         <GolfLeaderboard rows={privateBoard} mode={privateBoardMode} onModeChange={setPrivateBoardMode} context="results" />
-      </ResultAccordion>
-
-      <ResultAccordion id="final-player-summary" title="Resultado final por jugador" className="finalPlayerSummary" {...resultAccordionProps("final-player-summary")}>
-        <p className="muted">Cuánto gana o pierde exactamente cada persona en todas las apuestas.</p>
-        {settlementIds.map((id) => {
-          const total = allBetBalances[id] ?? 0;
-          return <div className="transfer" key={id}><span><b>{playerName(id)}</b></span><strong className={total > 0 ? "good" : total < 0 ? "bad" : ""}>{total > 0 ? "+" : ""}{money(total)}</strong></div>;
-        })}
-        {(bets.rabbits.enabled || bets.skins.enabled || bets.units.enabled) && <div className="roundStats" aria-label="Conteos globales de la ronda">
-          {bets.rabbits.enabled && <div className="stat"><span>🐇 Conejos · Jugados</span><b>{totalRabbitsWon}</b><small>realmente cobrados</small></div>}
-          {bets.skins.enabled && <div className="stat"><span>⛳ Skins · Jugados</span><b>{totalSkinsWon}</b><small>sin carry final</small></div>}
-          {bets.units.enabled && <div className="stat"><span>📏 Unidades · Netas</span><b>{unitQuantitySummary.total > 0 ? "+" : ""}{unitQuantitySummary.total}</b><small>suma del neto mostrado</small></div>}
-        </div>}
       </ResultAccordion>
 
       <ResultAccordion id="bet-values" title="Valores de apuesta" className="betValues" {...resultAccordionProps("bet-values")}><div className="valueGrid">
@@ -3099,13 +3490,8 @@ function GolfBetsApp() {
         <div className="totalStrip"><span>Total gastos</span><b>{money(ownerExpenseTotal)}</b></div>
       </ResultAccordion>
 
-      <ResultAccordion id="settlement" title="Liquidación final" className={`settlementCard ${Math.abs(settlementDifference) < 0.001 ? "" : "settlementError"}`} {...resultAccordionProps("settlement")}>
-        <div className="row between"><p className="muted">Pagos mínimos sugeridos después de netear todas las apuestas.</p><b>{Math.abs(settlementDifference) < 0.001 ? "✓ Suma $0" : `Inconsistencia ${signedMoney(settlementDifference)}`}</b></div>
-        {settlementTransfers.length ? settlementTransfers.map((transfer, index) => <div className="transfer" key={`${transfer.fromPlayerId}-${transfer.toPlayerId}-${index}`}><span><b>{playerName(transfer.fromPlayerId)}</b> paga a {playerName(transfer.toPlayerId)}</span><strong>{money(transfer.amount)}</strong></div>) : <div className="empty">No hay pagos pendientes.</div>}
-      </ResultAccordion>
-
       <section className="card summaryCard"><div><span>Apuestas</span><b className={ownerBetResult >= 0 ? "good" : "bad"}>{money(ownerBetResult)}</b></div><div><span>Gastos</span><b className="bad">{money(-ownerExpenseTotal)}</b></div><div className="grand"><span>NETO DEL DÍA</span><b className={ownerNet >= 0 ? "good" : "bad"}>{money(ownerNet)}</b></div></section>
-      <div className="roundActions"><button className="secondary big" onClick={async () => { const snapshot = currentSnapshot(); if (snapshot) await shareRound(snapshot); }}>Compartir ronda</button>{!roundReviewPending && <button className="secondary big" onClick={requestNewRound}>Nueva ronda</button>}{roundClosed ? <button className="primary big" onClick={() => setTab("history")}>Abrir Histórico</button> : roundReviewPending ? <button className="primary big" disabled={saveStatus === "saving"} onPointerDown={commitFocusedNumericCapture} onClick={requestRoundHistorySave}>Guardar en Histórico</button> : <button className="primary big" onClick={openActiveRound}>Volver a la ronda</button>}</div>
+      <div className="roundActions">{(roundReviewPending || roundClosed) && <button className="secondary big" onClick={async () => { const snapshot = currentSnapshot(); if (snapshot) await shareRound(snapshot); }}>Compartir ronda</button>}{!roundReviewPending && <button className="secondary big" onClick={requestNewRound}>Nueva ronda</button>}{roundClosed ? <button className="primary big" onClick={() => setTab("history")}>Abrir Histórico</button> : roundReviewPending ? <button className="primary big" disabled={saveStatus === "saving"} onPointerDown={commitFocusedNumericCapture} onClick={requestRoundHistorySave}>Guardar en Histórico</button> : <button className="primary big" onClick={openActiveRound}>Volver a la ronda</button>}</div>
     </>}
 
     {tab === "history" && <>

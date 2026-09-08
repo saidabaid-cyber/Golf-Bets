@@ -481,6 +481,8 @@ export type RoundSnapshot = {
   completedAt?: string;
   updatedAt?: string;
   photoId?: string;
+  /** Card AI supports several private originals while photoId remains the legacy primary image. */
+  scorecardPhotoIds?: string[];
   betConfig?: BetConfig;
   unitEvents?: UnitEvent[];
   counterBetEvents?: CounterBetEvent[];

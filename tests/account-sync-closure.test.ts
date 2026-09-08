@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { ACCOUNT_OWNED_ROWS, ACCOUNT_REFERENCE_COLUMNS, deleteAccountGraph, type AccountDeletionGateway } from "../lib/account-deletion";
-import { discardAccountWorkspace, switchAccountWorkspace, WORKSPACE_OWNER_KEY } from "../lib/account-workspace";
+import { activeWorkspaceScorecardPhotoIds, discardAccountWorkspace, switchAccountWorkspace, WORKSPACE_OWNER_KEY } from "../lib/account-workspace";
 import { CloudSyncGate, cloudSyncErrorMessage, syncStatusAfterSkip } from "../lib/cloud-sync-gate";
 import { STORAGE_KEYS } from "../lib/round-utils";
 import { legalReturnDestination, preserveLegalReturn } from "../lib/legal-navigation";
@@ -12,6 +12,10 @@ import { cloudProfileRevisionKey, pendingProfileWriteKey } from "../lib/profile-
 import { internalNotificationStorageKey } from "../lib/internal-notifications";
 import { equipmentProfileRecoveryStorageKey, equipmentProfileStorageKey } from "../lib/golf-equipment";
 import { ballFitDraftStorageKey } from "../lib/ball-fitting-storage";
+import { learningRecordsStorageKey } from "../lib/backyard-ai/memory/learning-events";
+import { userPreferenceStorageKey } from "../lib/backyard-ai/memory/personal-memory";
+import { backyardAiMetricsStorageKey } from "../lib/backyard-ai/observability/metrics";
+import { ACCOUNT_STORAGE_KEYS, accountDeletionMarkerKey, bettingConsentPromptStorageKey } from "../lib/account-state";
 
 class MemoryStorage {
   data = new Map<string, string>();
@@ -91,6 +95,11 @@ test("eliminar cuenta local descarta solo A y conserva invitado y B", () => {
   storage.setItem(equipmentProfileStorageKey("user-a")!, "equipment");
   storage.setItem(equipmentProfileRecoveryStorageKey("user-a")!, "equipment-recovery");
   storage.setItem(ballFitDraftStorageKey("user-a")!, "fit-draft");
+  storage.setItem(learningRecordsStorageKey("user-a")!, "ai-learning");
+  storage.setItem(userPreferenceStorageKey("user-a")!, "ai-preferences");
+  storage.setItem(backyardAiMetricsStorageKey("user-a")!, "ai-metrics");
+  storage.setItem(bettingConsentPromptStorageKey("user-a"), "shown");
+  storage.setItem(accountDeletionMarkerKey("user-a"), "pending");
   switchAccountWorkspace(storage, "user-b");
   storage.setItem(STORAGE_KEYS.history, "b-history");
   switchAccountWorkspace(storage, "user-a");
@@ -107,11 +116,22 @@ test("eliminar cuenta local descarta solo A y conserva invitado y B", () => {
   assert.equal(storage.getItem(equipmentProfileStorageKey("user-a")!), null);
   assert.equal(storage.getItem(equipmentProfileRecoveryStorageKey("user-a")!), null);
   assert.equal(storage.getItem(ballFitDraftStorageKey("user-a")!), null);
+  assert.equal(storage.getItem(learningRecordsStorageKey("user-a")!), null);
+  assert.equal(storage.getItem(userPreferenceStorageKey("user-a")!), null);
+  assert.equal(storage.getItem(backyardAiMetricsStorageKey("user-a")!), null);
+  assert.equal(storage.getItem(bettingConsentPromptStorageKey("user-a")), null);
+  assert.equal(storage.getItem(accountDeletionMarkerKey("user-a")), "pending");
   assert.equal(storage.getItem(internalNotificationStorageKey("user-b")), '{"version":1,"readEventKeys":["round-b"]}');
   switchAccountWorkspace(storage, "user-b");
   assert.equal(storage.getItem(STORAGE_KEYS.history), "b-history");
   switchAccountWorkspace(storage, "user-a");
   assert.equal(storage.getItem(STORAGE_KEYS.history), null);
+
+  storage.setItem(ACCOUNT_STORAGE_KEYS.mode, "authenticated");
+  switchAccountWorkspace(storage, "user-b");
+  discardAccountWorkspace(storage, "user-a");
+  assert.equal(storage.getItem(WORKSPACE_OWNER_KEY), "user-b");
+  assert.equal(storage.getItem(ACCOUNT_STORAGE_KEYS.mode), "authenticated");
 });
 
 function deletionGateway(options: { failStorage?: boolean } = {}) {
@@ -173,4 +193,53 @@ test("Cuenta y acceso presentan Apple solo cuando está disponible y usan el ori
   assert.match(provider, /disabled=\{busy \|\| !appleAvailable\}/);
   assert.doesNotMatch(account, />Apple</);
   assert.match(provider, /`\$\{window\.location\.origin\}\/auth\/callback`/);
+});
+
+test("la importación explícita sólo selecciona fotos del workspace activo", () => {
+  const storage = new MemoryStorage();
+  storage.setItem(STORAGE_KEYS.history, JSON.stringify([{ scorecardPhotoIds: ["guest-card-1"] }]));
+  storage.setItem(STORAGE_KEYS.draft, JSON.stringify({ photoId: "guest-card-2" }));
+  switchAccountWorkspace(storage, "user-a");
+  assert.deepEqual(activeWorkspaceScorecardPhotoIds(storage, "user-a"), ["guest-card-1", "guest-card-2"]);
+  assert.deepEqual(activeWorkspaceScorecardPhotoIds(storage, "user-b"), []);
+});
+
+test("el consentimiento de apuestas se monta como overlay sin destruir la acción pendiente", () => {
+  const provider = readFileSync("app/components/account-provider.tsx", "utf8");
+  const dialog = readFileSync("app/components/betting-consent-dialog.tsx", "utf8");
+  const css = readFileSync("app/globals.css", "utf8");
+  assert.doesNotMatch(provider, /if \(bettingConsentOpen\) return/);
+  assert.match(provider, /<Fragment key=\{identity\.userId\}>\{children\}<\/Fragment>[\s\S]*\{bettingConsentDialog\}/);
+  assert.match(provider, /<BetaOnboardingFlow[\s\S]*\{bettingConsentDialog\}[\s\S]*<\/AccountContext\.Provider>/);
+  assert.match(dialog, /className="modalBackdrop bettingConsentAccess"/);
+  assert.match(css, /\.bettingConsentDialog\{position:relative/);
+});
+
+test("una eliminación interrumpida conserva el barrier y ofrece reintento sin montar la app", () => {
+  const provider = readFileSync("app/components/account-provider.tsx", "utf8");
+  const panel = readFileSync("app/components/account-panel.tsx", "utf8");
+  assert.match(provider, /startsWith\(ACCOUNT_DELETION_MARKER_PREFIX\)/);
+  assert.match(provider, /if \(marker\.state === "completed" \|\| marker\.state === "pending_confirmation"\) continue/);
+  assert.match(provider, /marker\.state === "completed_cleanup_pending"\s*\? "completed_cleanup_pending"/);
+  assert.match(provider, /clearDeletedAuthSessionForUser\(supabase\.auth, userId\)/);
+  assert.match(provider, /clearDeletedAuthSessionForUser\(supabase\.auth, session\.user\.id\)/);
+  assert.match(provider, /deletionMarker === "completed"[\s\S]*"completed_cleanup_pending"/);
+  assert.match(provider, /const deletesActiveAccount = activeUserId\.current === deletedUserId \|\| ownsLocalWorkspace/);
+  assert.match(provider, /if \(deletesActiveAccount\) \{[\s\S]*localStorage\.removeItem\(ACCOUNT_STORAGE_KEYS\.mode\)/);
+  const purgeBody = provider.match(/async function purgeDeletedAccountLocal[\s\S]+?(?=\n  async function finishAccountDeletion)/)?.[0] || "";
+  const firstAsyncCleanup = purgeBody.indexOf("await clearDeletedAuthSession");
+  assert.ok(firstAsyncCleanup > 0);
+  assert.ok(purgeBody.indexOf("setIdentity(null)") < firstAsyncCleanup, "la identidad eliminada se cierra antes del primer await");
+  assert.doesNotMatch(purgeBody.slice(firstAsyncCleanup), /setIdentity\(null\)|removeItem\(ACCOUNT_STORAGE_KEYS\.mode\)/, "una cuenta nueva no puede borrarse por un flag capturado antes de await");
+  assert.match(provider, /trackPending: false/);
+  assert.match(provider, /setPendingLocalDeletionOwner\(nextPendingLocalDeletionOwner\(localStorage\)\)/);
+  assert.match(provider, /setPendingDeletionSession\(session\)/);
+  assert.match(provider, /if \(pendingDeletionSession\) return[\s\S]*Reintentar eliminación/);
+  assert.match(provider, /serverDeletionConfirmed \? "completed_cleanup_pending" : "pending_confirmation"/);
+  assert.match(provider, /if \(pendingLocalDeletionOwner\) return[\s\S]*Reintentar limpieza/);
+  assert.match(panel, /serverDeletionConfirmed/);
+  assert.match(panel, /localStorage\.getItem\(deletionMarker\) !== requestedAt/);
+  assert.match(panel, /No pudimos preparar la eliminación de forma segura/);
+  assert.match(panel, /responseStatus === null \|\| serverDeletionConfirmed \|\| responseStatus >= 500/);
+  assert.match(panel, /"completed_cleanup_pending"/);
 });

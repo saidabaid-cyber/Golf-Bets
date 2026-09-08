@@ -1,6 +1,7 @@
 import { CLOUD_TOMBSTONES_KEY, cloudDataFingerprint, collectLocalCloudData, hasLocalCloudPreferenceState, mergeLocalAndCloud, persistCloudMetadata, restoreLocalRoundUi, type CloudDataBundle } from "./cloud-sync";
 import { serializeFrequentGroups } from "./frequent-templates";
 import { STORAGE_KEYS } from "./round-utils";
+import { accountDeletionMarkerKey } from "./account-state";
 
 const DB_NAME = "the-backyard-offline-v1";
 const DB_VERSION = 1;
@@ -69,6 +70,12 @@ function openOfflineDb() {
 function browserStorage() {
   try { return typeof localStorage === "undefined" ? null : localStorage; }
   catch { return null; }
+}
+
+function accountWriteAllowed(ownerId: string) {
+  if (!ownerId || ownerId === "guest") return true;
+  const storage = browserStorage();
+  return !storage || storage.getItem(accountDeletionMarkerKey(ownerId)) === null;
 }
 
 function readFallback<T>(prefix: string, ownerId: string): T | null {
@@ -178,6 +185,7 @@ export async function getOfflineDeviceId() {
 /** One durable snapshot and one idempotent outbox item per account. Repeated
  * edits replace the pending snapshot instead of creating duplicate operations. */
 export async function persistOfflineBundle(ownerId: string, bundle: CloudDataBundle, queueForCloud: boolean) {
+  if (!accountWriteAllowed(ownerId)) throw new Error("Account deletion in progress");
   const fingerprint = cloudDataFingerprint(bundle);
   const now = nextOfflineTimestamp(ownerId);
   const workspace = { ownerId, bundle, fingerprint, savedAt: now } satisfies OfflineWorkspace;
@@ -185,18 +193,31 @@ export async function persistOfflineBundle(ownerId: string, bundle: CloudDataBun
   try {
     const db = await openOfflineDb();
     if (!db) throw new Error("IndexedDB no está disponible");
+    if (!accountWriteAllowed(ownerId)) throw new Error("Account deletion in progress");
     const tx = db.transaction(queueForCloud ? [WORKSPACES, OUTBOX] : [WORKSPACES], "readwrite");
     tx.objectStore(WORKSPACES).put(workspace);
     if (outbox) tx.objectStore(OUTBOX).put(outbox);
     await transactionDone(tx);
+    if (!accountWriteAllowed(ownerId)) {
+      try { await deleteOfflineAccountData(ownerId); } catch { /* deletion cleanup will retry */ }
+      throw new Error("Account deletion in progress");
+    }
     removeFallbackIfSuperseded(FALLBACK_WORKSPACE_PREFIX, ownerId, workspace, record => record.savedAt);
     // A local-only save must not erase a previously queued cloud mutation.
     if (outbox) removeFallbackIfSuperseded(FALLBACK_OUTBOX_PREFIX, ownerId, outbox, record => record.queuedAt);
-  } catch {
+  } catch (error) {
+    if (!accountWriteAllowed(ownerId)) {
+      try { await deleteOfflineAccountData(ownerId); } catch { /* preserve the marker and fail closed */ }
+      throw error;
+    }
     // Safari private mode and storage pressure can reject IndexedDB while
     // localStorage is still durable. Keep one idempotent, verified fallback
     // snapshot/outbox so refresh and reconnect do not lose the pending round.
     writeFallback(ownerId, workspace, outbox);
+    if (!accountWriteAllowed(ownerId)) {
+      try { await deleteOfflineAccountData(ownerId); } catch { /* preserve the marker and fail closed */ }
+      throw new Error("Account deletion in progress");
+    }
   }
   if (outbox) clearAcknowledgement(ownerId);
   return fingerprint;
@@ -226,6 +247,86 @@ export async function readOfflineOutbox(ownerId: string) {
     readFallback<OfflineOutbox>(FALLBACK_OUTBOX_PREFIX, ownerId),
     readFallback<OfflineAcknowledgement>(FALLBACK_ACK_PREFIX, ownerId),
   );
+}
+
+/** Enumerates the newest durable records so account cleanup can avoid deleting
+ * a media blob still referenced by guest or another account on this device. */
+export async function readAllOfflineAccountRecords() {
+  let indexedDbWorkspaces: OfflineWorkspace[] = [];
+  let indexedDbOutboxes: OfflineOutbox[] = [];
+  let db: IDBDatabase | null = null;
+  try {
+    db = await openOfflineDb();
+    if (db) {
+      [indexedDbWorkspaces, indexedDbOutboxes] = await Promise.all([
+        requestResult(db.transaction(WORKSPACES, "readonly").objectStore(WORKSPACES).getAll()) as Promise<OfflineWorkspace[]>,
+        requestResult(db.transaction(OUTBOX, "readonly").objectStore(OUTBOX).getAll()) as Promise<OfflineOutbox[]>,
+      ]);
+    }
+  } finally {
+    db?.close();
+  }
+
+  const ownerIds = new Set<string>([
+    ...indexedDbWorkspaces.map(record => record?.ownerId),
+    ...indexedDbOutboxes.map(record => record?.ownerId),
+  ].filter((ownerId): ownerId is string => typeof ownerId === "string" && Boolean(ownerId)));
+  const storage = browserStorage();
+  if (storage) {
+    for (let index = 0; index < storage.length; index += 1) {
+      const key = storage.key(index);
+      for (const prefix of [FALLBACK_WORKSPACE_PREFIX, FALLBACK_OUTBOX_PREFIX, FALLBACK_ACK_PREFIX]) {
+        if (key?.startsWith(prefix) && key.length > prefix.length) ownerIds.add(key.slice(prefix.length));
+      }
+    }
+  }
+
+  const workspaces = new Map(indexedDbWorkspaces.filter(record => typeof record?.ownerId === "string").map(record => [record.ownerId, record]));
+  const outboxes = new Map(indexedDbOutboxes.filter(record => typeof record?.ownerId === "string").map(record => [record.ownerId, record]));
+  return [...ownerIds].flatMap(ownerId => {
+    const workspace = selectNewestOfflineWorkspace(workspaces.get(ownerId) || null, readFallback<OfflineWorkspace>(FALLBACK_WORKSPACE_PREFIX, ownerId));
+    const outbox = selectPendingOfflineOutbox(
+      outboxes.get(ownerId) || null,
+      readFallback<OfflineOutbox>(FALLBACK_OUTBOX_PREFIX, ownerId),
+      readFallback<OfflineAcknowledgement>(FALLBACK_ACK_PREFIX, ownerId),
+    );
+    return [workspace, outbox].filter((record): record is OfflineWorkspace | OfflineOutbox => record !== null);
+  });
+}
+
+/** Permanently removes the durable offline snapshot/outbox for one deleted
+ * authenticated account. Guest and every other owner key remain untouched. */
+export async function deleteOfflineAccountData(ownerId: string) {
+  if (!ownerId || ownerId === "guest") return false;
+  let databaseError: unknown = null;
+  let db: IDBDatabase | null = null;
+  try {
+    db = await openOfflineDb();
+    if (db) {
+      const tx = db.transaction([WORKSPACES, OUTBOX], "readwrite");
+      tx.objectStore(WORKSPACES).delete(ownerId);
+      tx.objectStore(OUTBOX).delete(ownerId);
+      await transactionDone(tx);
+    }
+  } catch (error) {
+    databaseError = error;
+  } finally {
+    db?.close();
+  }
+
+  let fallbackError: unknown = null;
+  const storage = browserStorage();
+  if (storage) {
+    try {
+      storage.removeItem(`${FALLBACK_WORKSPACE_PREFIX}${ownerId}`);
+      storage.removeItem(`${FALLBACK_OUTBOX_PREFIX}${ownerId}`);
+      storage.removeItem(`${FALLBACK_ACK_PREFIX}${ownerId}`);
+    } catch (error) {
+      fallbackError = error;
+    }
+  }
+  if (databaseError || fallbackError) throw databaseError || fallbackError;
+  return true;
 }
 
 export function outboxAcknowledged(outbox: Pick<OfflineOutbox, "fingerprint"> | null, fingerprint: string) {

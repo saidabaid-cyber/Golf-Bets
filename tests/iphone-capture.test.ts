@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
-import { commitHoleCapture, editCapturedScore, holeCapture, isHoleCaptureComplete, type ScoreRows } from "../lib/score-capture";
+import { applyPendingScoreEdits, commitHoleCapture, editCapturedScore, holeCapture, isHoleCaptureComplete, type ScoreRows } from "../lib/score-capture";
 import { foursomeHoleConfigurationError, foursomePressure, setFoursomePressure } from "../lib/foursome-config";
 import { calculateFoursomes, calculatePersonalBets, opponentPairs, playOrder } from "../lib/engine";
 import { pdfPixelRatio, withPdfDeadline } from "../lib/pdf-viewer-utils";
@@ -60,6 +60,15 @@ test("editar hoyo guardado conserva los resultados hasta Guardar, y nunca modifi
   assert.equal(committed.edits[2].cuau, 7);
   assert.equal(holeCapture(committed.scores, committed.edits, course.holes[0], players).said, 1);
   assert.deepEqual(JSON.parse(JSON.stringify({ scores: committed.scores, scoreEdits: committed.edits })), { scores: committed.scores, scoreEdits: committed.edits });
+});
+
+test("Card AI materializa edits pendientes y respeta un borrado explícito", () => {
+  const scores: ScoreRows = { 18: { said: 4, cuau: 5 } };
+  const edits: ScoreRows = { 18: { said: 6, cuau: null }, 17: { armando: 3 } };
+  const materialized = applyPendingScoreEdits(scores, edits);
+  assert.deepEqual(materialized, { 17: { armando: 3 }, 18: { said: 6 } });
+  assert.deepEqual(scores, { 18: { said: 4, cuau: 5 } });
+  assert.deepEqual(edits, { 18: { said: 6, cuau: null }, 17: { armando: 3 } });
 });
 
 for (const start of [1, 10] as const) for (const count of [9, 18]) test(`captura completa ${count} hoyos salida H${start}: no adelanta scores`, () => {

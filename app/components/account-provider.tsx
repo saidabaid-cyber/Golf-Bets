@@ -6,7 +6,9 @@ import { Fragment, createContext, useCallback, useContext, useEffect, useRef, us
 import type { Session, User } from "@supabase/supabase-js";
 import {
   ACCOUNT_STORAGE_KEYS,
+  ACCOUNT_DELETION_MARKER_PREFIX,
   BETTING_DATA_CONSENT_TYPE,
+  accountDeletionMarkerKey,
   authErrorMessage,
   bettingConsentPromptStorageKey,
   buildLegalAcceptances,
@@ -34,9 +36,12 @@ import {
   type LegalAcceptance,
 } from "../../lib/account-state";
 import { getSupabaseBrowser } from "../../lib/supabase/client";
-import { AuthSessionRecoveryError, authIdentityChanged, clearDeletedAuthSession, closeAuthSession, isAccountSession, recoverAuthSession, requireCloudWrites, restoreAuthSession, sendEmailOtp, startSocialOAuth, verifyEmailOtp, OtpSendGate, otpRetrySeconds, OTP_COOLDOWN_KEY } from "../../lib/auth-flow";
-import { discardAccountWorkspace, ownsLocalWorkspace, switchAccountWorkspace, WORKSPACE_OWNER_KEY } from "../../lib/account-workspace";
+import { AuthSessionRecoveryError, authIdentityChanged, clearDeletedAuthSessionForUser, closeAuthSession, isAccountSession, recoverAuthSession, requireCloudWrites, restoreAuthSession, sendEmailOtp, startSocialOAuth, verifyEmailOtp, OtpSendGate, otpRetrySeconds, OTP_COOLDOWN_KEY } from "../../lib/auth-flow";
+import { activeWorkspaceScorecardPhotoIds, discardAccountWorkspace, ownsLocalWorkspace, selectAccountScorecardPhotoIds, switchAccountWorkspace, WORKSPACE_OWNER_KEY } from "../../lib/account-workspace";
 import { CLOUD_LOCAL_META_KEY, type CloudPreferences } from "../../lib/cloud-sync";
+import { deleteOfflineAccountData, readAllOfflineAccountRecords } from "../../lib/offline-store";
+import { adoptScorecardPhotos, deleteScorecardPhotos, scorecardPhotoIdsForOwner } from "../../lib/scorecard-photo";
+import { adoptGuestPhotoJobs } from "../../lib/photo-sync-queue";
 import { clearPendingLegalSync, legalSyncErrorMessage, markLegalSyncFailed, queueLegalSync, readPendingLegalSync } from "../../lib/legal-sync-queue";
 import type { AuthProviderStatus } from "../../lib/auth-provider-status";
 import { cloudIssueFromError, cloudIssuePriority, type CloudIssue, type CloudIssueDomain } from "../../lib/cloud-issues";
@@ -60,7 +65,7 @@ type AccountContextValue = {
   identity: BackyardIdentity;
   updateProfile: (profile: BackyardProfileUpdate) => Promise<"local" | "cloud">;
   logout: () => Promise<void>;
-  finishAccountDeletion: () => Promise<void>;
+  finishAccountDeletion: () => Promise<boolean>;
   openAccess: () => void;
   acceptances: LegalAcceptance[];
   bettingConsentGranted: boolean;
@@ -127,6 +132,19 @@ function guestProfile(): BackyardProfile {
     return guestBackyardProfile(saved);
   } catch { /* keep safe guest defaults */ }
   return guestBackyardProfile();
+}
+
+function nextPendingLocalDeletionOwner(storage: Pick<Storage, "getItem" | "key" | "length">) {
+  for (let index = 0; index < storage.length; index += 1) {
+    const key = storage.key(index);
+    if (!key?.startsWith(ACCOUNT_DELETION_MARKER_PREFIX)) continue;
+    const state = storage.getItem(key);
+    if (state === "cleanup_pending" || state === "completed_cleanup_pending") {
+      const userId = key.slice(ACCOUNT_DELETION_MARKER_PREFIX.length);
+      if (userId && userId !== "guest") return userId;
+    }
+  }
+  return "";
 }
 
 function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () => void | Promise<void>; onAuthenticated: (session: Session) => void; sessionError: string }) {
@@ -368,6 +386,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const [equipmentOnboardingRequired, setEquipmentOnboardingRequired] = useState(false);
   const [betaOnboardingRequired, setBetaOnboardingRequired] = useState(false);
   const [profileChecked, setProfileChecked] = useState(false);
+  const [pendingDeletionSession, setPendingDeletionSession] = useState<Session | null>(null);
+  const [deletionRecoveryBusy, setDeletionRecoveryBusy] = useState(false);
+  const [deletionRecoveryError, setDeletionRecoveryError] = useState("");
+  const [pendingLocalDeletionOwner, setPendingLocalDeletionOwner] = useState("");
   const activeUserId = useRef<string | null>(null);
   const sessionRecovery = useRef<{ userId: string; promise: Promise<string> } | null>(null);
   const bettingConsentRequest = useRef<{ userId: string; promise: Promise<boolean>; resolve: (accepted: boolean) => void } | null>(null);
@@ -454,6 +476,30 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
 
   const activateSession = useCallback((session: Session, options: { rehydrate?: boolean } = {}) => {
     if (!isAccountSession(session)) throw new Error("account_session_missing");
+    const deletionMarker = localStorage.getItem(accountDeletionMarkerKey(session.user.id));
+    if (deletionMarker === "completed") {
+      // A stale cached token from an older/interrupted client must be verified
+      // before we keep claiming cleanup is complete.
+      localStorage.setItem(accountDeletionMarkerKey(session.user.id), "completed_cleanup_pending");
+      activeUserId.current = null;
+      setIdentity(null);
+      setPendingDeletionSession(session);
+      setPendingLocalDeletionOwner(session.user.id);
+      setDeletionRecoveryError("");
+      setReady(true);
+      return;
+    }
+    if (deletionMarker) {
+      // Preserve the verified session only in memory so the user can retry an
+      // interrupted deletion. No app data or sync surface is mounted.
+      activeUserId.current = null;
+      setIdentity(null);
+      setPendingDeletionSession(session);
+      setDeletionRecoveryError("");
+      setReady(true);
+      return;
+    }
+    setPendingDeletionSession(null);
     if (!authIdentityChanged(activeUserId.current, session.user.id)) {
       setIdentity((current) => current ? { ...current, accessToken: session.access_token, email: session.user.email || current.email } : current);
       setCloudIssue("auth", null);
@@ -489,6 +535,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
 
   const activateOfflineWorkspace = useCallback(() => {
     const ownerId = localStorage.getItem(WORKSPACE_OWNER_KEY) || "";
+    if (ownerId && localStorage.getItem(accountDeletionMarkerKey(ownerId))) return false;
     const profile = readOfflineAuthenticatedProfile(localStorage, ownerId);
     if (!profile || !ownsLocalWorkspace(localStorage, profile.userId)) return false;
     activeUserId.current = profile.userId;
@@ -514,7 +561,29 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     const supabase = getSupabaseBrowser();
     let mounted = true;
     let authEventRevision = 0;
-    if (supabase) restoreAuthSession(supabase.auth).then((session) => {
+    const restoreAfterLocalDeletionCleanup = async () => {
+      const markers: Array<{ userId: string; state: string }> = [];
+      for (let index = 0; index < localStorage.length; index += 1) {
+        const key = localStorage.key(index);
+        if (!key?.startsWith(ACCOUNT_DELETION_MARKER_PREFIX)) continue;
+        const userId = key.slice(ACCOUNT_DELETION_MARKER_PREFIX.length);
+        const state = userId ? localStorage.getItem(key) : null;
+        if (userId && userId !== "guest" && state) markers.push({ userId, state });
+      }
+      for (const marker of markers) {
+        if (marker.state === "completed" || marker.state === "pending_confirmation") continue;
+        const locallyComplete = await purgeDeletedAccountLocal(marker.userId, { clearAuth: false, trackPending: false });
+        // Server-confirmed deletion remains pending until Auth cache cleanup is
+        // verified. Local files alone are insufficient to mark it complete.
+        const nextMarker = marker.state === "completed_cleanup_pending"
+          ? "completed_cleanup_pending"
+          : locallyComplete ? "pending_confirmation" : "cleanup_pending";
+        localStorage.setItem(accountDeletionMarkerKey(marker.userId), nextMarker);
+      }
+      setPendingLocalDeletionOwner(nextPendingLocalDeletionOwner(localStorage));
+      return supabase ? restoreAuthSession(supabase.auth) : null;
+    };
+    void restoreAfterLocalDeletionCleanup().then((session) => {
       if (!mounted || authEventRevision !== 0) return;
       if (session) activateSession(session);
       else if (!navigator.onLine && activateOfflineWorkspace()) return;
@@ -531,14 +600,6 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       else setCloudIssue("auth", issue);
       setReady(true);
     });
-    if (!supabase) {
-      if (localStorage.getItem(ACCOUNT_STORAGE_KEYS.mode) === "guest") {
-        const profile = guestProfile();
-        setIdentity({ ...profile, mode: "guest", providers: [], accessToken: null });
-        setCloudConsentChecked(true);
-      }
-      setReady(true);
-    }
     const listener = supabase?.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
       authEventRevision += 1;
@@ -582,6 +643,9 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     };
     window.addEventListener("online", restoreWhenOnline);
     return () => { mounted = false; listener?.data.subscription.unsubscribe(); window.removeEventListener("online", restoreWhenOnline); };
+    // Cleanup reads current storage and uses only stable setters/refs; rerunning
+    // this bootstrap effect after every render would race auth restoration.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activateSession, activateOfflineWorkspace, setCloudIssue, setCloudStatus]);
 
   const authenticatedUserId = identity?.mode === "authenticated" ? identity.userId : "";
@@ -932,28 +996,157 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  async function finishAccountDeletion() {
-    if (!identity || identity.mode !== "authenticated") return;
-    const deletedUserId = identity.userId;
-    // Invalidate every in-flight sync before touching the local Supabase cache.
-    activeUserId.current = null;
+  async function purgeDeletedAccountLocal(deletedUserId: string, options: { clearAuth?: boolean; trackPending?: boolean } = {}) {
+    const deletesActiveAccount = activeUserId.current === deletedUserId || ownsLocalWorkspace(localStorage, deletedUserId);
+    const failedCleanupSteps: string[] = [];
+    // If this is the active account, close every app/sync surface before the
+    // first asynchronous cleanup step. A concurrent auth event may activate a
+    // different account later; no stale flag is allowed to clear that account.
+    if (deletesActiveAccount) {
+      activeUserId.current = null;
+      if (options.trackPending !== false) setPendingLocalDeletionOwner(deletedUserId);
+      try { localStorage.removeItem(ACCOUNT_STORAGE_KEYS.mode); }
+      catch { failedCleanupSteps.push("account_mode"); }
+      setIdentity(null);
+      setEquipmentOnboardingRequired(false);
+      setBetaOnboardingRequired(false);
+      setAccessRequested(false);
+      setCloudLinked(false);
+      setCloudStatus("local");
+      setLastCloudSync(null);
+      setCloudIssuesByDomain({});
+      setShowMigration(false);
+      if (options.clearAuth !== false) {
+        const supabase = getSupabaseBrowser();
+        try { if (supabase) await clearDeletedAuthSessionForUser(supabase.auth, deletedUserId); }
+        catch { failedCleanupSteps.push("auth_cache"); }
+      }
+    }
     profileWriteCoordinators.current.delete(deletedUserId);
-    discardAccountWorkspace(localStorage, deletedUserId);
-    localStorage.removeItem(ACCOUNT_STORAGE_KEYS.mode);
-    const remainingAcceptances = clearLegalAcceptancesForUser(acceptances, deletedUserId);
-    localStorage.setItem(ACCOUNT_STORAGE_KEYS.acceptances, JSON.stringify(remainingAcceptances));
+    let offlineRecords: Awaited<ReturnType<typeof readAllOfflineAccountRecords>> = [];
+    let ownedPhotoIds: string[] = [];
+    try { offlineRecords = await readAllOfflineAccountRecords(); }
+    catch { failedCleanupSteps.push("offline_photo_reference_scan"); }
+    try { ownedPhotoIds = await scorecardPhotoIdsForOwner(deletedUserId); }
+    catch { failedCleanupSteps.push("photo_owner_index_scan"); }
+    const scorecardPhotoIds = selectAccountScorecardPhotoIds(localStorage, deletedUserId, offlineRecords, ownedPhotoIds);
+    try { await deleteScorecardPhotos(scorecardPhotoIds); }
+    catch { failedCleanupSteps.push("scorecard_photos"); }
+    try { await deleteOfflineAccountData(deletedUserId); }
+    catch { failedCleanupSteps.push("offline_store"); }
+    try {
+      const uploadedMarkerPrefix = `backyard-photo-uploaded-v1:${deletedUserId}:`;
+      for (let index = localStorage.length - 1; index >= 0; index -= 1) {
+        const key = localStorage.key(index);
+        if (key?.startsWith(uploadedMarkerPrefix)) localStorage.removeItem(key);
+      }
+    } catch { failedCleanupSteps.push("upload_markers"); }
+    try { discardAccountWorkspace(localStorage, deletedUserId); }
+    catch { failedCleanupSteps.push("local_workspace"); }
+    const storedAcceptances = parseLegalAcceptances(localStorage.getItem(ACCOUNT_STORAGE_KEYS.acceptances));
+    const remainingAcceptances = clearLegalAcceptancesForUser(storedAcceptances, deletedUserId);
+    try { localStorage.setItem(ACCOUNT_STORAGE_KEYS.acceptances, JSON.stringify(remainingAcceptances)); }
+    catch { failedCleanupSteps.push("legal_acceptances"); }
     setAcceptances(remainingAcceptances);
+    // Local cleanup remains retryable whether server deletion was confirmed or
+    // its response was lost. The marker controls the next recovery step.
+    if (failedCleanupSteps.length) {
+      console.warn("Deleted account local cleanup was incomplete", { failedSteps: failedCleanupSteps });
+    }
+    if (options.trackPending !== false) setPendingLocalDeletionOwner(failedCleanupSteps.length ? deletedUserId : nextPendingLocalDeletionOwner(localStorage));
+    return failedCleanupSteps.length === 0;
+  }
+
+  async function finishAccountDeletion() {
+    if (!identity || identity.mode !== "authenticated") return false;
+    return purgeDeletedAccountLocal(identity.userId);
+  }
+
+  async function retryPendingAccountDeletion() {
+    const session = pendingDeletionSession;
+    if (!session || deletionRecoveryBusy) return;
+    if (!navigator.onLine) {
+      setDeletionRecoveryError("Conéctate a internet para comprobar y terminar la eliminación.");
+      return;
+    }
+    const markerKey = accountDeletionMarkerKey(session.user.id);
+    setDeletionRecoveryBusy(true);
+    setDeletionRecoveryError("");
+    let serverDeletionConfirmed = localStorage.getItem(markerKey) === "completed_cleanup_pending"
+      || localStorage.getItem(markerKey) === "completed";
+    try {
+      if (!serverDeletionConfirmed) {
+        const response = await fetch("/api/account/delete", {
+          method: "DELETE",
+          headers: { authorization: `Bearer ${session.access_token}`, "content-type": "application/json" },
+          body: JSON.stringify({ confirmation: "ELIMINAR" }),
+        });
+        if (!response.ok) {
+          const result = await response.json().catch(() => null) as { error?: string } | null;
+          throw new Error(result?.error || "El servidor aún no confirmó la eliminación.");
+        }
+        serverDeletionConfirmed = true;
+      }
+      const locallyComplete = await purgeDeletedAccountLocal(session.user.id, { clearAuth: false, trackPending: false });
+      if (!locallyComplete) throw new Error("El servidor eliminó la cuenta, pero falta limpiar datos de este dispositivo. Reintenta.");
+      const supabase = getSupabaseBrowser();
+      if (supabase) await clearDeletedAuthSessionForUser(supabase.auth, session.user.id);
+      localStorage.setItem(markerKey, "completed");
+      setPendingLocalDeletionOwner(nextPendingLocalDeletionOwner(localStorage));
+      setPendingDeletionSession(null);
+    } catch (error) {
+      // The barrier remains in place. A retry cannot mount the account or
+      // resume writes until the server confirms the destructive request.
+      localStorage.setItem(markerKey, serverDeletionConfirmed ? "completed_cleanup_pending" : "pending_confirmation");
+      if (serverDeletionConfirmed) setPendingLocalDeletionOwner(session.user.id);
+      setDeletionRecoveryError(error instanceof Error ? error.message : "No pudimos confirmar la eliminación. Reintenta.");
+    } finally {
+      setDeletionRecoveryBusy(false);
+    }
+  }
+
+  async function closePendingDeletionSession() {
+    const session = pendingDeletionSession;
+    if (!session) return;
     const supabase = getSupabaseBrowser();
-    if (supabase) await clearDeletedAuthSession(supabase.auth);
-    setIdentity(null);
-    setEquipmentOnboardingRequired(false);
-    setBetaOnboardingRequired(false);
-    setAccessRequested(false);
-    setCloudLinked(false);
-    setCloudStatus("local");
-    setLastCloudSync(null);
-    setCloudIssuesByDomain({});
-    setShowMigration(false);
+    try { if (supabase) await clearDeletedAuthSessionForUser(supabase.auth, session.user.id); }
+    catch {
+      setDeletionRecoveryError("No pudimos cerrar de forma segura la sesión eliminada. Reintenta.");
+      return;
+    }
+    setPendingDeletionSession(null);
+    setDeletionRecoveryError("");
+  }
+
+  async function retryPendingLocalDeletionCleanup() {
+    const userId = pendingLocalDeletionOwner;
+    if (!userId || deletionRecoveryBusy) return;
+    const markerKey = accountDeletionMarkerKey(userId);
+    const markerState = localStorage.getItem(markerKey) || "cleanup_pending";
+    setDeletionRecoveryBusy(true);
+    setDeletionRecoveryError("");
+    try {
+      const locallyComplete = await purgeDeletedAccountLocal(userId, { clearAuth: false, trackPending: false });
+      if (!locallyComplete) {
+        localStorage.setItem(markerKey, markerState === "completed_cleanup_pending" ? "completed_cleanup_pending" : "cleanup_pending");
+        setPendingLocalDeletionOwner(userId);
+        setDeletionRecoveryError("Todavía no pudimos limpiar todos los datos locales. Libera espacio o cierra otras pestañas y reintenta.");
+        return;
+      }
+      if (markerState === "completed_cleanup_pending") {
+        const supabase = getSupabaseBrowser();
+        if (supabase) await clearDeletedAuthSessionForUser(supabase.auth, userId);
+        if (pendingDeletionSession?.user.id === userId) setPendingDeletionSession(null);
+      }
+      localStorage.setItem(markerKey, markerState === "completed_cleanup_pending" ? "completed" : "pending_confirmation");
+      setPendingLocalDeletionOwner(nextPendingLocalDeletionOwner(localStorage));
+    } catch (error) {
+      localStorage.setItem(markerKey, markerState === "completed_cleanup_pending" ? "completed_cleanup_pending" : "cleanup_pending");
+      setPendingLocalDeletionOwner(userId);
+      setDeletionRecoveryError(error instanceof Error ? error.message : "Todavía no pudimos completar la limpieza local. Reintenta.");
+    } finally {
+      setDeletionRecoveryBusy(false);
+    }
   }
 
   async function keepLocalDataForAccount() {
@@ -983,6 +1176,17 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     // Approval enables the same guarded sync cycle as all later syncs. Do not
     // blindly upload before downloading/merging the account's existing data.
     if (!ownsLocalWorkspace(localStorage, identity.userId)) return;
+    try {
+      const importedPhotoIds = activeWorkspaceScorecardPhotoIds(localStorage, identity.userId);
+      await adoptScorecardPhotos(importedPhotoIds, "guest", identity.userId);
+      if (activeUserId.current !== identity.userId || !ownsLocalWorkspace(localStorage, identity.userId)) return;
+      adoptGuestPhotoJobs(localStorage, identity.userId);
+    } catch {
+      setMigrationError("No pudimos vincular las fotos locales. Tus datos siguen intactos; reintenta.");
+      setMigrationBusy(false);
+      setCloudStatus("error");
+      return;
+    }
     localStorage.setItem(migrationDecisionStorageKey(identity.userId), "linked");
     setCloudLinked(true);
     setCloudStatus("pending");
@@ -1061,8 +1265,30 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     {migrationError && <div className="notice bad" role="alert">{migrationError}</div>}
     <div className="migrationActions"><button className="primary" disabled={migrationBusy} onClick={keepLocalDataForAccount}>{migrationBusy ? "Vinculando…" : "Vincular a mi cuenta"}</button><button className="secondary" disabled={migrationBusy} onClick={() => { if (identity) localStorage.setItem(migrationDecisionStorageKey(identity.userId), "skip"); setCloudLinked(false); setCloudStatus("local"); setShowMigration(false); }}>Ahora no</button></div>
   </section></div>;
+  const bettingConsentDialog = bettingConsentOpen
+    ? <BettingConsentDialog onDismiss={() => closeBettingConsent(false)} onAccept={acceptBettingConsent} />
+    : null;
 
   if (!ready) return <main className="accessScreen"><div className="accessLoading">Cargando The Backyard…</div></main>;
+  if (pendingLocalDeletionOwner) return <main className="accessScreen"><section className="accessCard" aria-labelledby="local-deletion-recovery-title">
+    <BrandLockup />
+    <div className="eyebrow">LIMPIEZA LOCAL PENDIENTE</div>
+    <h1 id="local-deletion-recovery-title">Termina de borrar los datos de este dispositivo</h1>
+    <p>The Backyard no abrirá rondas ni sincronización de esa cuenta hasta verificar la limpieza local.</p>
+    {deletionRecoveryError && <div className="accessMessage" role="alert">{deletionRecoveryError}</div>}
+    <button type="button" className="primary big" disabled={deletionRecoveryBusy} onClick={() => void retryPendingLocalDeletionCleanup()}>{deletionRecoveryBusy ? "Limpiando…" : "Reintentar limpieza"}</button>
+  </section></main>;
+  if (pendingDeletionSession) return <main className="accessScreen"><section className="accessCard" aria-labelledby="deletion-recovery-title">
+    <BrandLockup />
+    <div className="eyebrow">ELIMINACIÓN PENDIENTE</div>
+    <h1 id="deletion-recovery-title">Termina la eliminación de tu cuenta</h1>
+    <p>No abriremos tus rondas ni reanudaremos la sincronización hasta que el servidor confirme la solicitud anterior.</p>
+    {deletionRecoveryError && <div className="accessMessage" role="alert">{deletionRecoveryError}</div>}
+    <div className="accessActions">
+      <button type="button" className="primary big" disabled={deletionRecoveryBusy} onClick={() => void retryPendingAccountDeletion()}>{deletionRecoveryBusy ? "Comprobando…" : "Reintentar eliminación"}</button>
+      <button type="button" className="secondary" disabled={deletionRecoveryBusy} onClick={() => void closePendingDeletionSession()}>Cerrar sesión</button>
+    </div>
+  </section></main>;
   if (!identity || accessRequested) return <AccessScreen onGuest={async () => {
     if (activeUserId.current) {
       const supabase = getSupabaseBrowser();
@@ -1090,13 +1316,16 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   }
   if (identity.mode === "authenticated" && !profileChecked) return <main className="accessScreen"><div className="accessLoading">Preparando tu perfil…</div></main>;
   if (identity.mode === "authenticated" && profileSetupRequired) return <>{accountCloudError && <div role="alert" className="notice bad">{accountCloudError}</div>}<ProfileSetupScreen identity={identity} onSave={saveInitialProfile} onBack={logout} /></>;
-  if (bettingConsentOpen) return <AccountContext.Provider value={context!}><BettingConsentDialog onDismiss={() => closeBettingConsent(false)} onAccept={acceptBettingConsent} /></AccountContext.Provider>;
-  if (identity.mode === "authenticated" && betaOnboardingRequired) return <BetaOnboardingFlow profile={identity} accessToken={identity.accessToken} onUpdateProfile={updateProfile} bettingConsentGranted={bettingConsentGranted} requestBettingConsent={requestBettingConsent} onComplete={finishBetaOnboarding} />;
+  if (identity.mode === "authenticated" && betaOnboardingRequired) return <AccountContext.Provider value={context!}>
+    <BetaOnboardingFlow profile={identity} accessToken={identity.accessToken} onUpdateProfile={updateProfile} bettingConsentGranted={bettingConsentGranted} requestBettingConsent={requestBettingConsent} onComplete={finishBetaOnboarding} />
+    {bettingConsentDialog}
+  </AccountContext.Provider>;
   if (identity.mode === "authenticated" && equipmentOnboardingRequired) return <EquipmentOnboarding userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={identity.defaultHandicap} ballFitDefaults={ballFitDefaultsFromProfile(identity)} onComplete={finishEquipmentOnboarding} />;
 
   return <AccountContext.Provider value={context!}>
     {blockingCloudIssues.map((issue) => <div className="notice bad" role="alert" key={issue.domain}>{issue.message}<button onClick={() => setAccessRequested(true)}>Volver a iniciar sesión</button></div>)}
     <Fragment key={identity.userId}>{children}</Fragment>
     {migrationDialog}
+    {bettingConsentDialog}
   </AccountContext.Provider>;
 }

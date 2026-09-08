@@ -302,6 +302,8 @@ export const ACCOUNT_STORAGE_KEYS = {
   migrationDecision: "backyard-local-migration-decision-v1",
 } as const;
 
+export const ACCOUNT_DELETION_MARKER_PREFIX = "backyard-account-deletion-v1:";
+
 type OfflineProfileStorage = Pick<Storage, "getItem">;
 
 /** Restore only non-sensitive display data for an already selected local
@@ -331,6 +333,11 @@ export function migrationDecisionStorageKey(userId: string) {
  * presentation state only; it never counts as consent. */
 export function bettingConsentPromptStorageKey(userId: string) {
   return `backyard-betting-consent-prompt-v1:${userId}:${BETTING_DATA_CONSENT_VERSION}`;
+}
+
+/** Synchronous local barrier checked by every cloud/media sync before deletion. */
+export function accountDeletionMarkerKey(userId: string) {
+  return `${ACCOUNT_DELETION_MARKER_PREFIX}${userId}`;
 }
 
 export const REQUIRED_CONSENTS = Object.keys(LEGAL_DOCUMENT_VERSIONS) as GeneralConsentType[];

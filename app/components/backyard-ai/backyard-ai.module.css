@@ -1,0 +1,405 @@
+.screen {
+  display: grid;
+  gap: 13px;
+}
+
+.hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 24px;
+  padding: clamp(20px, 5vw, 34px);
+  color: #fff;
+  background:
+    radial-gradient(circle at 85% 10%, rgba(215, 179, 90, .28), transparent 35%),
+    linear-gradient(145deg, #102f20, #1f5737);
+}
+
+.hero::after {
+  position: absolute;
+  right: -34px;
+  bottom: -68px;
+  width: 190px;
+  height: 190px;
+  border: 1px solid rgba(255, 255, 255, .13);
+  border-radius: 50%;
+  content: "";
+}
+
+.hero h1 {
+  position: relative;
+  z-index: 1;
+  max-width: 620px;
+  margin: 5px 0 8px;
+  font-size: clamp(28px, 7vw, 44px);
+  letter-spacing: -1.5px;
+  line-height: 1.02;
+}
+
+.hero p {
+  position: relative;
+  z-index: 1;
+  max-width: 610px;
+  margin: 0;
+  color: #dce8df;
+  line-height: 1.5;
+}
+
+.composer {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 19px;
+  padding: 14px;
+  background: var(--card);
+  box-shadow: 0 12px 32px rgba(19, 63, 42, .07);
+}
+
+.composer textarea {
+  min-height: 118px;
+  resize: vertical;
+  border: 0;
+  padding: 5px;
+  font-size: 17px;
+  line-height: 1.45;
+  box-shadow: none;
+}
+
+.composerActions,
+.reviewActions,
+.photoActions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.voiceButton {
+  min-width: 52px;
+  border: 1px solid #c7d8cb;
+  border-radius: 13px;
+  background: var(--green2);
+  color: var(--green);
+  font-weight: 900;
+}
+
+.voiceButton[data-listening="true"] {
+  background: #fff0ef;
+  color: var(--bad);
+}
+
+.suggestions {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.suggestions button {
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 10px;
+  background: var(--soft);
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.contextNote,
+.privacyNote,
+.legalNote {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.consent {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.consent input {
+  width: auto;
+  margin-top: 2px;
+}
+
+.question {
+  border-left: 4px solid #c39129;
+  border-radius: 0 14px 14px 0;
+  padding: 12px 14px;
+  background: #fff7df;
+}
+
+.question b,
+.question span {
+  display: block;
+}
+
+.question span {
+  margin-top: 3px;
+  color: #665329;
+  font-size: 12px;
+}
+
+.review {
+  display: grid;
+  gap: 12px;
+}
+
+.reviewHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.reviewHeader h2 {
+  margin: 3px 0 0;
+  font-size: 25px;
+  letter-spacing: -.6px;
+}
+
+.confidence {
+  border-radius: 999px;
+  padding: 6px 9px;
+  background: var(--green2);
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.reviewGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.reviewItem {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  padding: 11px;
+  background: var(--soft);
+}
+
+.reviewItem[data-wide="true"] {
+  grid-column: 1 / -1;
+}
+
+.reviewItem span,
+.reviewItem strong,
+.reviewItem small {
+  display: block;
+}
+
+.betReviewList {
+  display: grid;
+  gap: 7px;
+  margin-top: 7px;
+}
+
+.betReviewRow {
+  border-top: 1px solid var(--line);
+  padding-top: 7px;
+}
+
+.betReviewRow:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.betReviewRow strong {
+  margin-top: 0;
+}
+
+.reviewItem span {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .8px;
+  text-transform: uppercase;
+}
+
+.reviewItem strong {
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.reviewItem small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.issues {
+  display: grid;
+  gap: 8px;
+}
+
+.issue {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(88px, 120px);
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #e6d8ae;
+  border-radius: 13px;
+  padding: 11px;
+  background: #fffbef;
+}
+
+.issue b,
+.issue small {
+  display: block;
+}
+
+.issue small {
+  margin-top: 4px;
+  color: var(--muted);
+}
+
+.issueControl {
+  display: grid;
+  gap: 6px;
+}
+
+.issueControl button {
+  min-height: 38px;
+  padding: 7px 9px;
+  font-size: 11px;
+}
+
+.photoGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.photo {
+  position: relative;
+  overflow: hidden;
+  min-height: 110px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--soft);
+}
+
+.photo img {
+  width: 100%;
+  height: 130px;
+  object-fit: cover;
+}
+
+.photo button {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(15, 30, 20, .78);
+  color: #fff;
+}
+
+.progress {
+  display: grid;
+  place-items: center;
+  min-height: 120px;
+  border: 1px dashed #afc2b4;
+  border-radius: 16px;
+  color: var(--green);
+  text-align: center;
+}
+
+.scoreReviewTableWrap {
+  overflow-x: auto;
+  margin: 10px 0;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+}
+
+.scoreReviewTable {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  text-align: center;
+}
+
+.scoreReviewTable th,
+.scoreReviewTable td {
+  min-width: 38px;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 8px 6px;
+}
+
+.scoreReviewTable th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 96px;
+  background: var(--card);
+  text-align: left;
+}
+
+.scoreReviewTable thead th {
+  background: var(--soft);
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: .3px;
+}
+
+.scoreReviewTable tr:last-child th,
+.scoreReviewTable tr:last-child td {
+  border-bottom: 0;
+}
+
+.recap {
+  border: 1px solid #bed5c4;
+  border-radius: 17px;
+  padding: 15px;
+  background: linear-gradient(135deg, #f5faf6, #edf6ef);
+}
+
+.recap h2,
+.recap p {
+  margin: 0;
+}
+
+.recap p {
+  margin-top: 7px;
+  line-height: 1.45;
+}
+
+.recap ul {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: #415048;
+  font-size: 12px;
+}
+
+@media (max-width: 560px) {
+  .reviewGrid,
+  .photoGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .composerActions,
+  .reviewActions,
+  .photoActions {
+    grid-template-columns: 1fr;
+  }
+
+  .voiceButton {
+    min-height: 46px;
+  }
+}
