@@ -210,3 +210,51 @@ test("aclarar monto de Polla conserva porcentaje y redondeo", () => {
   assert.equal(resolved.draft.bets.polla.first9.decimals, "partial");
   assert.equal(resolved.canConfirm, true);
 });
+
+test("la aclaración de Nassau individual incompleto conserva monto y nunca crea Nassau grupal", () => {
+  const first = planRoundSetup("Nassau individual de 500.", context());
+  const question = first.questions.find((candidate) => candidate.field === "supplementalBets.individual_nassau.players");
+  assert.ok(question);
+
+  const command = roundSetupAnswerCommand(question, "Said y Pedro", first, "Nassau individual de 500.");
+  const resolved = planRoundSetup(command, context(first.draft));
+
+  assert.equal(command, "Nassau individual Said contra Pedro de 500. Nassau individual de 500.");
+  assert.equal(resolved.draft.personalBets.length, 1);
+  assert.equal(resolved.draft.personalBets[0].rivalPlayerId, "pedro");
+  assert.equal(resolved.draft.personalBets[0].baseValue, 500);
+  assert.equal(resolved.draft.bets.polla.first9.enabled, false);
+  assert.equal(resolved.canConfirm, true);
+});
+
+test("la aclaración de cuál Nassau personal cambiar modifica sólo la pareja elegida", () => {
+  const first = planRoundSetup("Nassau Said contra Pedro de 500.", context());
+  const second = planRoundSetup("Nassau Said contra Juan de 400.", context(first.draft));
+  const ambiguous = planRoundSetup("Mejor Nassau de 300.", context(second.draft));
+  const question = ambiguous.questions.find((candidate) => candidate.field === "supplementalBets.individual_nassau.instance");
+  assert.ok(question);
+
+  const command = roundSetupAnswerCommand(question, "Said y Pedro", ambiguous, "Mejor Nassau de 300.");
+  const resolved = planRoundSetup(command, context(ambiguous.draft));
+  const pedro = resolved.draft.personalBets.find((bet) => bet.rivalPlayerId === "pedro");
+  const juan = resolved.draft.personalBets.find((bet) => bet.rivalPlayerId === "juan");
+
+  assert.equal(pedro?.baseValue, 300);
+  assert.equal(juan?.baseValue, 400);
+  assert.equal(resolved.draft.bets.polla.first9.enabled, false);
+  assert.equal(resolved.canConfirm, true);
+});
+
+test("la aclaración de presión de Peces conserva el monto y aplica el multiplicador real", () => {
+  const first = planRoundSetup("Peces de 100 con presión.", context());
+  const question = first.questions.find((candidate) => candidate.field === "bets.fish.secondNineMultiplier");
+  assert.ok(question);
+
+  const command = roundSetupAnswerCommand(question, "3", first, "Peces de 100 con presión.");
+  const resolved = planRoundSetup(command, context(first.draft));
+
+  assert.equal(resolved.draft.bets.fish.value, 100);
+  assert.equal(resolved.draft.bets.fish.secondNinePressed, true);
+  assert.equal(resolved.draft.bets.fish.secondNineMultiplier, 3);
+  assert.equal(resolved.canConfirm, true);
+});

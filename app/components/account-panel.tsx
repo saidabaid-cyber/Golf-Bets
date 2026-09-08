@@ -8,6 +8,7 @@ import { ballFitDefaultsFromProfile } from "../../lib/ball-fitting";
 import type { GolfInsights } from "../../lib/golf-insights";
 import { useBackyardAccount } from "./account-provider";
 import { EquipmentProfilePanel } from "./equipment-profile-panel";
+import { AiProcessingConsentSettings } from "./backyard-ai/ai-processing-consent";
 
 type AccountPanelProps = {
   view: "profile" | "account";
@@ -334,6 +335,8 @@ export function AccountPanel({ view, highContrast, onHighContrastChange, notific
       <div><span>Datos de apuestas, resultados y gastos</span><b>{bettingAcceptanceLabel}</b></div>
     </div></section>
     {!bettingConsentGranted && <section className="card"><h2>Funciones de apuestas</h2><p className="muted">Para activar o registrar apuestas, resultados y gastos necesitas otorgar el consentimiento específico. Las demás funciones y tus datos anteriores siguen disponibles.</p><button type="button" className="secondary" onClick={() => void requestBettingConsent()}>Revisar consentimiento específico</button></section>}
+
+    <AiProcessingConsentSettings userId={identity.userId} accessToken={identity.accessToken} requiresRemoteConsent={identity.mode === "authenticated"} />
 
     {identity.mode === "authenticated" && <section className="card"><h2>Métodos de acceso</h2><div className="accessMethodList">{["google", "email"].map((provider) => <span key={provider}>{provider === "google" ? "Google" : "Correo"}<b>{identity.providers.includes(provider) || (provider === "email" && Boolean(identity.email)) ? "✓" : "—"}</b></span>)}</div><p className="hint">Tu cuenta conserva el mismo perfil tanto con Google como con código por correo.</p></section>}
 

@@ -1,10 +1,23 @@
 import type { ScorecardExtraction, ScorecardObservationSource } from "../schemas/scorecard";
+import {
+  MAX_SCORECARD_DATA_URL_LENGTH,
+  MAX_SCORECARD_IMAGE_BYTES,
+  MAX_SCORECARD_PHOTO_ID_LENGTH,
+  MAX_SCORECARD_PHOTOS,
+  MAX_SCORECARD_TOTAL_DATA_URL_LENGTH,
+  MAX_SCORECARD_TOTAL_IMAGE_BYTES,
+} from "../scorecard/limits";
 import { hasOnlyKeys } from "./http-security";
 
-export const MAX_SCORECARD_PHOTOS = 4;
-export const MAX_SCORECARD_DATA_URL_LENGTH = 4_500_000;
-export const MAX_SCORECARD_IMAGE_BYTES = 3_300_000;
-export const MAX_SCORECARD_PHOTO_ID_LENGTH = 180;
+export {
+  MAX_SCORECARD_DATA_URL_LENGTH,
+  MAX_SCORECARD_IMAGE_BYTES,
+  MAX_SCORECARD_PHOTO_ID_LENGTH,
+  MAX_SCORECARD_PHOTOS,
+  MAX_SCORECARD_REQUEST_BYTES,
+  MAX_SCORECARD_TOTAL_DATA_URL_LENGTH,
+  MAX_SCORECARD_TOTAL_IMAGE_BYTES,
+} from "../scorecard/limits";
 
 export type ScorecardPhotoRequest = {
   /** Caller-controlled identifier, returned locally but never sent to the provider. */
@@ -70,10 +83,34 @@ function parsePhoto(value: unknown, index: number): ScorecardPhotoRequest | null
 
 export function parseScorecardPhotos(value: unknown): ScorecardPhotoRequest[] | null {
   if (!Array.isArray(value) || value.length < 1 || value.length > MAX_SCORECARD_PHOTOS) return null;
+  if (scorecardPhotoPayloadExceedsAggregateLimit(value)) return null;
   const photos = value.map(parsePhoto);
   if (photos.some((photo) => photo === null)) return null;
   const valid = photos as ScorecardPhotoRequest[];
+  if (valid.reduce((sum, photo) => sum + photo.byteLength, 0) > MAX_SCORECARD_TOTAL_IMAGE_BYTES) return null;
   return new Set(valid.map((photo) => photo.id)).size === valid.length ? valid : null;
+}
+
+/** Classifies an otherwise shape-checked JSON payload as too large before
+ * decoding every base64 image. Malformed fields remain the invalid-photo path. */
+export function scorecardPhotoPayloadExceedsAggregateLimit(value: unknown) {
+  if (!Array.isArray(value)) return false;
+  let totalLength = 0;
+  let estimatedImageBytes = 0;
+  for (const photo of value) {
+    if (!photo || typeof photo !== "object" || Array.isArray(photo)) continue;
+    const dataUrl = (photo as Record<string, unknown>).dataUrl;
+    if (typeof dataUrl !== "string") continue;
+    totalLength += dataUrl.length;
+    if (totalLength > MAX_SCORECARD_TOTAL_DATA_URL_LENGTH) return true;
+    const encoded = /^data:image\/(?:jpeg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$/i.exec(dataUrl)?.[1];
+    if (encoded && encoded.length % 4 === 0) {
+      const padding = encoded.endsWith("==") ? 2 : encoded.endsWith("=") ? 1 : 0;
+      estimatedImageBytes += (encoded.length / 4) * 3 - padding;
+      if (estimatedImageBytes > MAX_SCORECARD_TOTAL_IMAGE_BYTES) return true;
+    }
+  }
+  return false;
 }
 
 function safeLabel(value: unknown, maxLength: number) {

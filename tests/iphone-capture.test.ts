@@ -10,6 +10,7 @@ import { fullRoundBets, fullRoundCourse as course, fullRoundPlayers as players, 
 import { realCases, realCourse, realOrder, realPersonal, realPlayers, realScores } from "./fixtures/personals-real";
 
 const app = readFileSync("app/page.tsx", "utf8");
+const roundCapture = readFileSync("app/components/round-capture-v2.tsx", "utf8");
 const rules = readFileSync("app/components/rules-panel.tsx", "utf8");
 const css = readFileSync("app/functional-ux.css", "utf8");
 const cfg = { ...fullRoundBets.foursome, handicapMethod: "excel" as const };
@@ -144,12 +145,14 @@ test("Live compacto conserva ambas perspectivas exactamente una vez y detalle pl
 });
 
 test("captura conecta controles, PAR y Guardar, no Confirmar Par global; resumen separa jugadores", () => {
-  assert.doesNotMatch(app,/Confirmar Par|confirmSuggestedScores/);
-  assert.match(app,/onClick=\{\(\) => setScore\(p.id, hole.par\)\}/);
+  assert.doesNotMatch(`${app}\n${roundCapture}`,/Confirmar Par|confirmSuggestedScores/);
+  assert.match(roundCapture,/onClick=\{\(\) => props\.onScoreChange\(owner\.id, hole\.par\)\}>PAR<\/button>/);
+  assert.match(app,/onScoreChange=\{setScore\}/);
   assert.match(app,/setScoreEdits\(prev => editCapturedScore/);
   assert.match(app,/setScores\(committed.scores\)/);
   assert.match(app,/setFeedback\(""\);\s*checkpoint\(\)/);
-  assert.match(app,/persistReviewBeforeLeavingRound\(committed\.scores, committed\.edits, savedBets, savedIndex, startedAt\)/);
+  assert.match(app,/latestSaveRound\.current\(\{ prepareReview: true \}\)/);
+  assert.match(app,/persistReviewBeforeLeavingRound\(scores, scoreEdits, bets, currentIndex, roundStartedAt, scorecardPhotoIds\)/);
   assert.match(app,/persistCommittedHoleBeforeAdvance\(committed\.scores, committed\.edits, savedBets, savedIndex, startedAt\)/);
   assert.match(app,/holeSummaryClose/);
   assert.match(app,/Cerrar resumen y avanzar/);

@@ -3,7 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 
 import { requestBackyardAi } from "../../../lib/backyard-ai/client-api";
-import { backyardAiProviderConsent } from "../../../lib/backyard-ai/privacy";
+import { resolveAuthoritativeAiProcessingConsent } from "../../../lib/backyard-ai/consent-client";
+import {
+  browserAiProcessingConsentStorage,
+  hasActiveAiProcessingConsent,
+} from "../../../lib/backyard-ai/processing-consent";
+import { AI_PROVIDER_PROCESSING_CONSENT, backyardAiProviderConsent } from "../../../lib/backyard-ai/privacy";
 import { readGroupPreferences } from "../../../lib/backyard-ai/memory/group-memory";
 import { BACKYARD_AI_MEMORY_POLICY_VERSION, readLearningConsent, writeLearningConsent } from "../../../lib/backyard-ai/memory/learning-events";
 import { readUserPreferences } from "../../../lib/backyard-ai/memory/personal-memory";
@@ -12,9 +17,11 @@ import { validateCanonicalRoundCommand } from "../../../lib/backyard-ai/runtime/
 import type { RoundSetupMemoryContext } from "../../../lib/backyard-ai/runtime/context-resolver";
 import { roundSetupAnswerCommand } from "../../../lib/backyard-ai/runtime/answer-command";
 import { planRoundSetup, type RoundSetupPlan } from "../../../lib/backyard-ai/runtime/round-setup";
+import type { RoundSetupQuestion } from "../../../lib/backyard-ai/schemas/actions";
 import type { RoundSetupDraft } from "../../../lib/backyard-ai/schemas/round-setup";
 import { createDictationSession, DICTATION_FALLBACK, speechRecognitionConstructor } from "../../../lib/speech-dictation";
 import type { FrequentPlayer } from "../../../lib/types";
+import { AiProcessingConsentPrompt } from "./ai-processing-consent";
 import { AiRoundReview } from "./ai-round-review";
 import styles from "./backyard-ai.module.css";
 
@@ -39,11 +46,11 @@ export type AiRoundSetupTelemetry = {
 export type AiRoundSetupProps = {
   initialDraft: RoundSetupDraft;
   memoryContext: Omit<RoundSetupMemoryContext, "activeDraft">;
+  accessToken?: string | null;
+  requiresRemoteConsent: boolean;
   onConfirm: (draft: RoundSetupDraft, plan: RoundSetupPlan) => void;
   onManualEdit: (draft: RoundSetupDraft) => void;
   onCancel: () => void;
-  bettingConsentGranted: boolean;
-  onRequireBettingConsent: (resume: () => void) => void;
   onPlanned?: (event: AiRoundSetupTelemetry) => void;
 };
 
@@ -56,11 +63,17 @@ const EXAMPLES = [
 
 const MIN_MODEL_CONFIRMATION_CONFIDENCE = 0.7;
 
-export function AiRoundSetup({ initialDraft, memoryContext, onConfirm, onManualEdit, onCancel, bettingConsentGranted, onRequireBettingConsent, onPlanned }: AiRoundSetupProps) {
+function validHandicapInput(value: string) {
+  const normalized = value.trim().replace(",", ".");
+  const numeric = Number(normalized);
+  const handicap = normalized.startsWith("+") ? -Math.abs(numeric) : numeric;
+  return Number.isFinite(handicap) && handicap >= -15 && handicap <= 54;
+}
+
+export function AiRoundSetup({ initialDraft, memoryContext, accessToken, requiresRemoteConsent, onConfirm, onManualEdit, onCancel, onPlanned }: AiRoundSetupProps) {
   const [input, setInput] = useState("");
   const [draft, setDraft] = useState(initialDraft);
   const [plan, setPlan] = useState<RoundSetupPlan | null>(null);
-  const [confidence, setConfidence] = useState(0);
   const [lastCommand, setLastCommand] = useState("");
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -68,13 +81,20 @@ export function AiRoundSetup({ initialDraft, memoryContext, onConfirm, onManualE
   const [listening, setListening] = useState(false);
   const [dictationStatus, setDictationStatus] = useState("");
   const [dictationSupported, setDictationSupported] = useState(false);
-  const [providerConsent, setProviderConsent] = useState(false);
+  const [showProviderConsent, setShowProviderConsent] = useState(false);
+  const [pendingProviderInput, setPendingProviderInput] = useState("");
+  const [localInterpreterOnly, setLocalInterpreterOnly] = useState(false);
+  const [consentStorageWarning, setConsentStorageWarning] = useState("");
   const [personalMemoryEnabled, setPersonalMemoryEnabled] = useState(() => {
     const ownerId = memoryContext.profile?.userId;
-    return Boolean(ownerId && typeof window !== "undefined" && readLearningConsent(window.localStorage, ownerId, BACKYARD_AI_MEMORY_POLICY_VERSION).consent.personalMemoryEnabled);
+    return Boolean(ownerId && typeof window !== "undefined" && readLearningConsent(browserAiProcessingConsentStorage(), ownerId, BACKYARD_AI_MEMORY_POLICY_VERSION).consent.personalMemoryEnabled);
   });
   const [sessionPlayers, setSessionPlayers] = useState<FrequentPlayer[]>([]);
+  const [handicapAnswers, setHandicapAnswers] = useState<Record<string, string>>({});
   const recognitionRef = useRef<ReturnType<typeof createDictationSession> | null>(null);
+  const composerRef = useRef<HTMLElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const handicapInputRef = useRef<HTMLInputElement | null>(null);
   const dictationPrefix = useRef("");
   const mounted = useRef(true);
   const submissionGeneration = useRef(0);
@@ -90,9 +110,37 @@ export function AiRoundSetup({ initialDraft, memoryContext, onConfirm, onManualE
     };
   }, []);
 
+  useEffect(() => {
+    if (!editing) return;
+    const frame = requestAnimationFrame(() => {
+      composerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      textareaRef.current?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [editing]);
+
   function changeInput(next: string) {
     setInput(next);
-    setProviderConsent(false);
+  }
+
+  function resolveQuestion(selected: RoundSetupQuestion) {
+    setPlan((current) => {
+      if (!current) return current;
+      const selectedIndex = current.questions.findIndex((question) => question === selected
+        || (question.code === selected.code && question.field === selected.field));
+      if (selectedIndex <= 0) return current;
+      const questions = [...current.questions];
+      const [question] = questions.splice(selectedIndex, 1);
+      return { ...current, questions: [question, ...questions] };
+    });
+    setEditing(false);
+    setInput("");
+    setHandicapAnswers({});
+    requestAnimationFrame(() => {
+      composerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      if (selected.code === "missing_player_handicaps") handicapInputRef.current?.focus({ preventScroll: true });
+      else textareaRef.current?.focus({ preventScroll: true });
+    });
   }
 
   function toggleDictation() {
@@ -111,19 +159,50 @@ export function AiRoundSetup({ initialDraft, memoryContext, onConfirm, onManualE
     session.start();
   }
 
-  async function submit(consentAlreadyGranted = false) {
-    const raw = input.trim();
+  async function submit(submittedInput?: string, providerConsentJustAccepted = false, useLocalInterpreter = false) {
+    if (!mounted.current) return;
+    const raw = (submittedInput ?? input).trim();
     if (raw.length < 2 || busy) return;
-    if (!consentAlreadyGranted && !bettingConsentGranted) {
-      onRequireBettingConsent(() => { void submit(true); });
+    const processingConsentOwnerId = memoryContext.profile?.userId || initialDraft.ownerId;
+    const remoteConsentUnavailable = requiresRemoteConsent && !accessToken;
+    let allowProvider = providerConsentJustAccepted && !remoteConsentUnavailable;
+    if (!allowProvider && !remoteConsentUnavailable && !localInterpreterOnly && !useLocalInterpreter && processingConsentOwnerId && typeof window !== "undefined") {
+      if (accessToken) {
+        setBusy(true);
+        setNotice("Verificando tu autorización de IA…");
+        try {
+          const authority = await resolveAuthoritativeAiProcessingConsent({
+            accessToken,
+            storage: browserAiProcessingConsentStorage(),
+            userId: processingConsentOwnerId,
+            scope: AI_PROVIDER_PROCESSING_CONSENT,
+          });
+          if (!mounted.current) return;
+          allowProvider = !authority.discarded && authority.active && !authority.pendingLocalRevocation;
+        } catch {
+          allowProvider = false;
+        } finally {
+          setBusy(false);
+          setNotice("");
+        }
+      } else {
+        try {
+          allowProvider = hasActiveAiProcessingConsent(browserAiProcessingConsentStorage(), processingConsentOwnerId, AI_PROVIDER_PROCESSING_CONSENT);
+        } catch {
+          allowProvider = false;
+        }
+      }
+    }
+    if (!mounted.current) return;
+    if (!allowProvider && !remoteConsentUnavailable && !localInterpreterOnly && !useLocalInterpreter && processingConsentOwnerId) {
+      setPendingProviderInput(raw);
+      setShowProviderConsent(true);
       return;
     }
-    const allowProvider = providerConsent;
-    setProviderConsent(false);
     recognitionRef.current?.dispose();
     recognitionRef.current = null;
     setListening(false);
-    const focusedQuestion = plan?.questions[0];
+    const focusedQuestion = editing ? undefined : plan?.questions[0];
     const clarifiedPlayer = parseUnknownPlayerClarification(focusedQuestion, raw);
     if (focusedQuestion?.code === "unknown_player" && !clarifiedPlayer) {
       setNotice("Escribe el handicap entre +15 y 54. Ejemplo: “Carlos HCP 18”.");
@@ -140,7 +219,7 @@ export function AiRoundSetup({ initialDraft, memoryContext, onConfirm, onManualE
     let usedModel = false;
     if (!clarifiedPlayer && allowProvider) {
       try {
-        const response = await requestBackyardAi<RoundSetupAiResponse>("/api/backyard-ai/round-setup", { input: command, consent: backyardAiProviderConsent() });
+        const response = await requestBackyardAi<RoundSetupAiResponse>("/api/backyard-ai/round-setup", { input: command, consent: backyardAiProviderConsent(AI_PROVIDER_PROCESSING_CONSENT) }, 30_000, accessToken);
         if (!mounted.current || generation !== submissionGeneration.current) return;
         const integrity = validateCanonicalRoundCommand(command, response.canonicalCommand);
         if (integrity.ok) {
@@ -155,11 +234,11 @@ export function AiRoundSetup({ initialDraft, memoryContext, onConfirm, onManualE
       } catch {
         if (!mounted.current || generation !== submissionGeneration.current) return;
         setNotice("Continuamos con el intérprete local seguro. Puedes usar el modo manual en cualquier momento.");
-      } finally {
-        if (mounted.current && generation === submissionGeneration.current) setProviderConsent(false);
       }
     } else if (!clarifiedPlayer) {
-      setNotice("Interpretación local activa: esta instrucción no se envió al proveedor de IA.");
+      setNotice(remoteConsentUnavailable
+        ? "Tu cuenta necesita recuperar la sesión para usar el proveedor. Esta instrucción no se envió y continuamos con el intérprete local seguro."
+        : "Interpretación local activa: esta instrucción no se envió al proveedor de IA.");
     }
     const nextSessionPlayers = clarifiedPlayer ? [...sessionPlayers, {
       id: `ai-session-${typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`}`,
@@ -169,13 +248,14 @@ export function AiRoundSetup({ initialDraft, memoryContext, onConfirm, onManualE
       updatedAt: new Date().toISOString(),
     }] : sessionPlayers;
     const ownerId = memoryContext.profile?.userId;
-    const consent = ownerId ? readLearningConsent(localStorage, ownerId, BACKYARD_AI_MEMORY_POLICY_VERSION).consent : null;
+    const clientStorage = browserAiProcessingConsentStorage();
+    const consent = ownerId ? readLearningConsent(clientStorage, ownerId, BACKYARD_AI_MEMORY_POLICY_VERSION).consent : null;
     const personalMemoryEnabled = Boolean(ownerId && consent?.personalMemoryEnabled);
     const userPreferences = personalMemoryEnabled
-      ? readUserPreferences(localStorage, ownerId!).document.items
+      ? readUserPreferences(clientStorage, ownerId!).document.items
       : [];
     const groupPreferences = personalMemoryEnabled
-      ? readGroupPreferences(localStorage, ownerId!).document.items
+      ? readGroupPreferences(clientStorage, ownerId!).document.items
       : [];
     const next = planRoundSetup(canonicalCommand, {
       ...memoryContext,
@@ -205,10 +285,10 @@ export function AiRoundSetup({ initialDraft, memoryContext, onConfirm, onManualE
         : next;
     setPlan(planned);
     setDraft(planned.draft);
-    setConfidence(modelConfidence ?? planned.interpretation.confidence);
     setLastCommand(canonicalCommand);
     if (clarifiedPlayer) setSessionPlayers(nextSessionPlayers);
     setInput("");
+    setHandicapAnswers({});
     setEditing(false);
     setBusy(false);
     onPlanned?.({ input: raw, previousDraft: draft, success: planned.canConfirm, questionCount: planned.questions.length, durationMs: Math.round(performance.now() - started), usedModel, confidence: modelConfidence ?? planned.interpretation.confidence, isCorrection: Boolean(plan || editing), plan: planned });
@@ -223,7 +303,8 @@ export function AiRoundSetup({ initialDraft, memoryContext, onConfirm, onManualE
   function changePersonalMemory(enabled: boolean) {
     const ownerId = memoryContext.profile?.userId;
     if (!ownerId) { setNotice("No hay una identidad local donde guardar esta preferencia."); return; }
-    const current = readLearningConsent(localStorage, ownerId, BACKYARD_AI_MEMORY_POLICY_VERSION).consent;
+    const clientStorage = browserAiProcessingConsentStorage();
+    const current = readLearningConsent(clientStorage, ownerId, BACKYARD_AI_MEMORY_POLICY_VERSION).consent;
     const now = new Date().toISOString();
     const previousGrantedAt = current.grantedAt;
     const base = { ...current };
@@ -232,12 +313,16 @@ export function AiRoundSetup({ initialDraft, memoryContext, onConfirm, onManualE
     const next = enabled
       ? { ...base, personalMemoryEnabled: true, updatedAt: now, grantedAt: previousGrantedAt ?? now }
       : { ...base, personalMemoryEnabled: false, updatedAt: now, revokedAt: now };
-    const result = writeLearningConsent(localStorage, next);
+    const result = writeLearningConsent(clientStorage, next);
     if (!result.ok) { setNotice("No pude guardar la preferencia de memoria en este dispositivo."); return; }
     setPersonalMemoryEnabled(enabled);
   }
 
   const question = plan?.questions[0];
+  const handicapTargets = question?.code === "missing_player_handicaps" ? question.playerTargets ?? [] : [];
+  const handicapAnswer = handicapTargets.map((target) => `${target.label} HCP ${handicapAnswers[target.id] ?? ""}`).join(", ");
+  const handicapAnswerReady = handicapTargets.length > 0 && handicapTargets.every((target) => validHandicapInput(handicapAnswers[target.id] ?? ""));
+  const usesHandicapForm = handicapTargets.length > 0;
   const showComposer = !plan || editing || Boolean(question);
   return <section className={styles.screen} aria-labelledby="backyard-ai-setup-title">
     <section className={styles.hero}>
@@ -248,26 +333,52 @@ export function AiRoundSetup({ initialDraft, memoryContext, onConfirm, onManualE
 
     {question && <section className={styles.question}><b>Una sola pregunta</b><span role="status">{question.prompt}</span>{question.candidates?.length ? <div className={styles.suggestions}>{question.candidates.map((candidate) => <button type="button" key={candidate.id} disabled={busy} onClick={() => changeInput(candidate.label)}>{candidate.label}</button>)}</div> : null}</section>}
 
-    {showComposer && <section className={styles.composer}>
-      <textarea autoFocus aria-label="Describe la ronda" placeholder={question ? "Responde sólo este dato…" : "Ej. Hoy jugamos Said, Pedro, Juan y Carlos en La Vista. Skins de $200 y Nassau de $500…"} value={input} maxLength={2_400} disabled={busy} onChange={(event) => changeInput(event.target.value)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") void submit(); }} />
+    {showComposer && <section className={styles.composer} ref={composerRef}>
+      {editing && <h2 className={styles.composerTitle}>¿Qué quieres cambiar?</h2>}
+      {usesHandicapForm ? <div className={styles.handicapGrid}>
+        {handicapTargets.map((target, index) => <label key={target.id}><span>{target.label}</span><input ref={index === 0 ? handicapInputRef : undefined} autoFocus={index === 0} aria-label={`HCP de ${target.label}`} inputMode="decimal" placeholder="HCP" value={handicapAnswers[target.id] ?? ""} disabled={busy} onChange={(event) => setHandicapAnswers((current) => ({ ...current, [target.id]: event.target.value }))} /></label>)}
+      </div> : <textarea ref={textareaRef} autoFocus aria-label={editing ? "¿Qué quieres cambiar?" : "Describe la ronda"} placeholder={question ? "Responde sólo este dato…" : "Ej. Hoy jugamos Said, Pedro, Juan y Carlos en La Vista. Skins de $200 y Nassau de $500…"} value={input} maxLength={2_400} disabled={busy} onChange={(event) => changeInput(event.target.value)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") void submit(); }} />}
       {!plan && <div className={styles.suggestions}>{EXAMPLES.map((example) => <button type="button" key={example} disabled={busy} onClick={() => changeInput(example)}>{example}</button>)}</div>}
       <div className={styles.composerActions}>
-        <button type="button" className="primary big" disabled={busy || input.trim().length < 2} onClick={() => void submit()}>{busy ? "Entendiendo…" : question ? "Confirmar respuesta" : editing ? "Aplicar cambio" : "Preparar mi ronda"}</button>
-        <button type="button" className={styles.voiceButton} data-listening={listening} disabled={busy || (!dictationSupported && Boolean(dictationStatus))} onClick={toggleDictation}>{listening ? "■ Detener" : "🎙 Hablar"}</button>
+        <button type="button" className="primary big" disabled={busy || (usesHandicapForm ? !handicapAnswerReady : input.trim().length < 2)} onClick={() => void submit(usesHandicapForm ? handicapAnswer : undefined)}>{busy ? "Entendiendo…" : question ? "Confirmar respuesta" : editing ? "Aplicar cambio" : "Preparar mi ronda"}</button>
+        {!usesHandicapForm && <button type="button" className={styles.voiceButton} data-listening={listening} disabled={busy || (!dictationSupported && Boolean(dictationStatus))} onClick={toggleDictation}>{listening ? "■ Detener" : "🎙 Hablar"}</button>}
       </div>
-      <label className={styles.consent}><input type="checkbox" checked={providerConsent} disabled={busy} onChange={(event) => setProviderConsent(event.target.checked)} /><span>Autorizo enviar esta instrucción a OpenAI, incluidos los nombres, campo, modalidades y montos que yo escriba, únicamente para interpretarla.</span></label>
       <label className={styles.consent}><input type="checkbox" checked={personalMemoryEnabled} disabled={busy} onChange={(event) => changePersonalMemory(event.target.checked)} /><span>Recordar en mi espacio privado las preferencias que confirme para facilitar rondas futuras. Esto no habilita training global.</span></label>
       {dictationStatus && <p className={styles.contextNote} role="status">{dictationStatus}</p>}
       {notice && <p className={styles.contextNote} role="status">{notice}</p>}
-      <p className={styles.privacyNote}>Sin esta autorización se usa el intérprete local. Nunca se envían tu histórico ni tus memorias personales; esos datos se resuelven en el dispositivo.</p>
+      <p className={styles.privacyNote}>La autorización para procesar instrucciones con IA se solicita una sola vez y puede revocarse en Perfil → Privacidad / IA. Nunca se envían tu histórico ni tus memorias personales; esos datos se resuelven en el dispositivo.</p>
     </section>}
 
     {plan && <>
       {plan.memory.length > 0 && <p className={styles.contextNote}>Usé contexto existente: {plan.memory.map((item) => item.label).join(" · ")}.</p>}
-      <AiRoundReview draft={draft} confidence={confidence} issues={plan.configurationIssues} canConfirm={plan.canConfirm} busy={busy} onConfirm={() => onConfirm(draft, plan)} onConversationalChange={() => { setEditing(true); changeInput(""); }} onManualEdit={() => onManualEdit(draft)} />
+      <AiRoundReview draft={draft} questions={plan.questions} issues={plan.configurationIssues} canConfirm={plan.canConfirm} busy={busy} onConfirm={() => onConfirm(draft, plan)} onConversationalChange={() => { setEditing(true); changeInput(""); }} onResolveQuestion={resolveQuestion} onManualEdit={() => onManualEdit(draft)} />
     </>}
+
+    {consentStorageWarning && <p className={styles.contextNote} role="status">{consentStorageWarning}</p>}
 
     {!plan && <button type="button" className="secondary" disabled={busy} onClick={() => onManualEdit(draft)}>Configurar manualmente</button>}
     <button type="button" className="textButton" onClick={cancel}>Cancelar</button>
+    {showProviderConsent && (memoryContext.profile?.userId || initialDraft.ownerId) && <AiProcessingConsentPrompt
+      userId={memoryContext.profile?.userId || initialDraft.ownerId}
+      accessToken={accessToken}
+      requiresRemoteConsent={requiresRemoteConsent}
+      scope={AI_PROVIDER_PROCESSING_CONSENT}
+      onAccepted={(_consent, persistence) => {
+        setShowProviderConsent(false);
+        setLocalInterpreterOnly(false);
+        if (!persistence.localPersisted) {
+          setConsentStorageWarning(persistence.accountPersisted
+            ? "La autorización está guardada en tu cuenta, pero este navegador no permitió guardar una copia local. Puedes continuar."
+            : "Este navegador no permitió guardar la autorización; estará vigente sólo durante esta sesión.");
+        }
+        void submit(pendingProviderInput, true);
+      }}
+      onCancel={() => {
+        setShowProviderConsent(false);
+        setLocalInterpreterOnly(true);
+        setNotice("Continuamos con el intérprete local seguro; puedes habilitar el procesamiento con IA después desde Perfil → Privacidad / IA.");
+        void submit(pendingProviderInput, false, true);
+      }}
+    />}
   </section>;
 }

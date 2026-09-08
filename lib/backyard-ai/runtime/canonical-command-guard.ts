@@ -64,6 +64,8 @@ function actionFingerprint(action: ParsedRoundSetupAction) {
         normalizedNames(action.excludedPlayerNames),
         action.allPlayers ?? false,
         action.skinsMode ?? null,
+        action.secondNinePressed ?? null,
+        action.secondNineMultiplier ?? null,
       ];
     case "configure_group_nassau":
       return [
@@ -74,6 +76,7 @@ function actionFingerprint(action: ParsedRoundSetupAction) {
         action.allPlayers ?? false,
         action.hcpPct ?? null,
         action.decimals ?? null,
+        action.modificationOnly ?? false,
       ];
     case "configure_polla_component":
       return [

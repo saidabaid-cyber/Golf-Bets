@@ -5,6 +5,8 @@ import { BET_HELP, type BetHelpKind } from "../lib/bet-help";
 import { finalizeNumericCapture } from "../lib/numeric-input";
 
 const page = readFileSync("app/page.tsx", "utf8");
+const roundCapture = readFileSync("app/components/round-capture-v2.tsx", "utf8");
+const roundCaptureLogic = readFileSync("lib/round-capture.ts", "utf8");
 const editor = readFileSync("app/components/supplemental-bets-editor.tsx", "utf8");
 const catalog = readFileSync("lib/bet-catalog.ts", "utf8");
 const styles = readFileSync("app/components/supplemental-bets.module.css", "utf8");
@@ -94,10 +96,12 @@ test("importes ordinarios tienen mínimo cero y Manuales conserva captura firmad
 });
 
 test("Minimum Putts capture stays inside the existing score card and persists in draft/history", () => {
-  const scoreCard = page.indexOf('<section className="card scoreCard">');
-  const putts = page.indexOf('className="puttsCapture"');
+  const scoreCard = page.indexOf("<RoundCaptureV2");
   const previousBets = page.indexOf('aria-label="Estado antes de este hoyo"');
-  assert.ok(scoreCard >= 0 && putts > scoreCard && previousBets > putts);
+  assert.ok(scoreCard >= 0 && previousBets > scoreCard);
+  assert.match(roundCapture, /fields\.includes\("putts"\)[\s\S]*aria-label=\{`Putts \$\{player\.name\}`\}/);
+  assert.match(roundCaptureLogic, /bet\.type === "minimum_putts"/);
+  assert.match(roundCaptureLogic, /bet\.participantIds\.includes\(playerId\)/);
   assert.match(page, /supplementalBets, manualBets, scores, scoreEdits, putts,/);
   assert.match(page, /supplementalBets: structuredClone\(supplementalBets\), putts: structuredClone\(putts\)/);
   assert.match(page, /setSupplementalBets\(normalizeSupplementalBets\(restored\.supplementalBets, restoredRoundHoles\)\); setPutts\(restored\.putts \|\| \{\}\)/);

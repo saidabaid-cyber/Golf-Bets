@@ -14,6 +14,8 @@ La app usa Supabase Auth con PKCE y restaura la sesión. Sin Supabase conserva L
 
 - Local: `http://localhost:3000/auth/callback`
 - Beta `codex-dev`: `https://beta.thebackyard.com.mx/auth/callback`
+- Preview `ai-first-phase1`: `https://golf-bets-git-ai-first-phase1-saha8.vercel.app/auth/callback`
+- Preview futuros del mismo proyecto: `https://golf-bets-*-saha8.vercel.app/auth/callback`
 - Futuro, todavía no activar: `https://thebackyard.com.mx/auth/callback`
 - Futuro, todavía no activar: `https://www.thebackyard.com.mx/auth/callback`
 

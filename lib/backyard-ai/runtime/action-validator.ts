@@ -81,6 +81,13 @@ export function validateRoundSetupAction(action: RoundSetupAction, draft: RoundS
         && action.handicap <= 54
         ? { valid: true }
         : { valid: false, code: "player-handicap", message: "El handicap debe pertenecer a un jugador de la ronda y estar entre -15 y 54." };
+    case "identify_course":
+      return action.courseName.trim()
+        && action.candidateCourseIds.length > 1
+        && action.candidateCourseIds.every(validId)
+        && new Set(action.candidateCourseIds).size === action.candidateCourseIds.length
+        ? { valid: true }
+        : { valid: false, code: "course", message: "La identidad del campo o sus tees disponibles no son válidos." };
     case "select_course": {
       const holes = action.course.holes;
       if (!validId(action.course.id) || !action.course.name.trim() || !Array.isArray(holes) || holes.length !== 18) {
@@ -112,8 +119,32 @@ export function validateRoundSetupAction(action: RoundSetupAction, draft: RoundS
       if (action.type === "configure_core_bet" && action.skinsMode !== undefined && action.bet !== "skins") {
         return { valid: false, code: "skins-mode", message: "El modo acumulable sólo corresponde a Skins." };
       }
+      if (action.type === "configure_core_bet") {
+        const hasCounterPressure = action.secondNinePressed !== undefined || action.secondNineMultiplier !== undefined;
+        const isCounterBet = action.bet === "vipers" || action.bet === "camels" || action.bet === "fish";
+        const validPressedPressure = action.secondNinePressed === true
+          && Number.isInteger(action.secondNineMultiplier)
+          && (action.secondNineMultiplier ?? 0) >= 2
+          && (action.secondNineMultiplier ?? 0) <= 5;
+        const validNoPressure = action.secondNinePressed === false && action.secondNineMultiplier === undefined;
+        if (hasCounterPressure && (!isCounterBet || (!validPressedPressure && !validNoPressure))) {
+          return { valid: false, code: "counter-pressure", message: "La presión sólo corresponde a Viboritas, Camellos o Peces y necesita un multiplicador entero entre 2x y 5x." };
+        }
+      }
       if (!participantsBelongToDraft(action.participantIds, draft)) {
         return { valid: false, code: "participants", message: "La acción contiene participantes ajenos a la ronda o repetidos." };
+      }
+      if (action.type === "configure_group_nassau"
+        && Object.values(action.participantIdsByComponent ?? {}).some((ids) => !participantsBelongToDraft(ids, draft))) {
+        return { valid: false, code: "participants", message: "La acción de Nassau contiene participantes ajenos a la ronda o repetidos." };
+      }
+      if (action.type === "configure_group_nassau" && action.componentScope !== undefined) {
+        const allowedComponents = new Set(["first9", "second9", "total18"]);
+        if (!action.componentScope.length
+          || new Set(action.componentScope).size !== action.componentScope.length
+          || action.componentScope.some((component) => !allowedComponents.has(component))) {
+          return { valid: false, code: "polla-components", message: "El alcance de componentes de Nassau no es válido." };
+        }
       }
       if (action.type === "configure_ball_friend" && action.teamA) {
         const selected = new Set(action.participantIds ?? draft.players.map((player) => player.id));

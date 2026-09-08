@@ -170,6 +170,9 @@ button:disabled{cursor:not-allowed;opacity:.5}.app{padding-top:calc(14px + env(s
 .sideBetBalances > span b { flex: 0 0 auto; white-space: nowrap; }
 .counterBetTotal { min-width: 0; margin-top: 4px; padding-top: 12px; border-top: 2px solid var(--line); }
 .counterBetTotal h3 { margin: 0 0 8px; font-size: 12px; letter-spacing: .3px; }
+.finishWithCardAi{display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,.8fr);gap:14px;align-items:center;border-color:#bad8c1;background:linear-gradient(135deg,#f8fcf9,#edf7ef)}
+.finishWithCardAi h2{margin:3px 0 4px}.finishWithCardAi p{margin:0;color:var(--muted);font-size:12px}.finishWithCardAi .primary{width:100%}
+@media(max-width:600px){.finishWithCardAi{grid-template-columns:1fr;padding-bottom:calc(13px + env(safe-area-inset-bottom))}}
 
 @media(max-width:430px) {
   .sideBetHalfMetrics { grid-template-columns: minmax(0, 1fr); }

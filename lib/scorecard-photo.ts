@@ -1,7 +1,69 @@
+import { MAX_SCORECARD_IMAGE_BYTES } from "./backyard-ai/scorecard/limits";
+
 const DB_NAME = "golfbets-media-v1";
 const STORE = "scorecards";
 const CLOUD_BUCKET = "scorecard-photos";
 const TEMPORARY_PHOTO_MAX_AGE_MS = 24 * 60 * 60 * 1_000;
+const LOCAL_DATABASE_TIMEOUT_MS = 4_000;
+const IMAGE_DECODE_TIMEOUT_MS = 15_000;
+const IMAGE_ENCODE_TIMEOUT_MS = 15_000;
+
+export type ScorecardPhotoErrorCode =
+  | "photo_open_failed"
+  | "photo_compression_failed"
+  | "photo_too_large"
+  | "photo_storage_unavailable";
+
+export class ScorecardPhotoError extends Error {
+  readonly code: ScorecardPhotoErrorCode;
+
+  constructor(code: ScorecardPhotoErrorCode, message: string) {
+    super(message);
+    this.name = "ScorecardPhotoError";
+    this.code = code;
+  }
+}
+
+export type DecodedScorecardPhoto = {
+  source: CanvasImageSource;
+  width: number;
+  height: number;
+  release: () => void;
+};
+
+export type ScorecardPhotoDecoders = {
+  bitmap?: (file: Blob) => Promise<DecodedScorecardPhoto>;
+  imageElement: (file: Blob) => Promise<DecodedScorecardPhoto>;
+};
+
+export type ScorecardPhotoCompressionOptions = {
+  decoders?: ScorecardPhotoDecoders;
+  createCanvas?: () => HTMLCanvasElement;
+  maxBytes?: number;
+};
+
+function uniquePhotoIds(photoIds: readonly string[]) {
+  return [...new Set(photoIds.filter((photoId) => typeof photoId === "string" && Boolean(photoId.trim())))];
+}
+
+/** Resolves the durable evidence attached to a scorecard confirmation. A new
+ * in-memory analysis may succeed even when every IndexedDB write fails; that
+ * case must retain the prior committed photo instead of deleting it. */
+export function resolveScorecardPhotoCommit(
+  previousPhotoIds: readonly string[],
+  newlyPersistedPhotoIds: readonly string[],
+) {
+  const previous = uniquePhotoIds(previousPhotoIds);
+  const newlyDurable = uniquePhotoIds(newlyPersistedPhotoIds);
+  const usesPreviousFallback = newlyDurable.length === 0;
+  const durablePhotoIds = usesPreviousFallback ? previous : newlyDurable;
+  return {
+    durablePhotoIds,
+    newlyDurablePhotoIds: newlyDurable,
+    removedPhotoIds: usesPreviousFallback ? [] : previous.filter((photoId) => !newlyDurable.includes(photoId)),
+    usesPreviousFallback,
+  };
+}
 
 type StoredScorecardPhoto = {
   schemaVersion: 1;
@@ -30,10 +92,39 @@ function cloudPath(userId: string, roundId: string, photoId = roundId) {
 
 function database() {
   return new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
+    const factory = globalThis.indexedDB;
+    if (!factory) {
+      reject(new ScorecardPhotoError("photo_storage_unavailable", "El almacenamiento local de fotos no está disponible."));
+      return;
+    }
+    let settled = false;
+    const finish = (action: () => void) => {
+      if (settled) return;
+      settled = true;
+      globalThis.clearTimeout(timer);
+      action();
+    };
+    const timer = globalThis.setTimeout(() => finish(() => reject(new ScorecardPhotoError(
+      "photo_storage_unavailable",
+      "El almacenamiento local de fotos tardó demasiado.",
+    ))), LOCAL_DATABASE_TIMEOUT_MS);
+    const request = factory.open(DB_NAME, 1);
     request.onupgradeneeded = () => request.result.createObjectStore(STORE);
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      if (settled) {
+        request.result.close();
+        return;
+      }
+      finish(() => resolve(request.result));
+    };
+    request.onerror = () => finish(() => reject(request.error || new ScorecardPhotoError(
+      "photo_storage_unavailable",
+      "No se pudo abrir el almacenamiento local de fotos.",
+    )));
+    request.onblocked = () => finish(() => reject(new ScorecardPhotoError(
+      "photo_storage_unavailable",
+      "El almacenamiento local de fotos está bloqueado.",
+    )));
   });
 }
 
@@ -50,21 +141,171 @@ async function putStoredScorecardPhoto(photoId: string, record: StoredScorecardP
   } finally { db.close(); }
 }
 
-export async function compressScorecardPhoto(file: File) {
-  const bitmap = await createImageBitmap(file);
-  const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(bitmap.width * scale);
-  canvas.height = Math.round(bitmap.height * scale);
-  canvas.getContext("2d")?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  bitmap.close();
-  return new Promise<Blob>((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("No se pudo comprimir la foto.")), "image/jpeg", 0.82));
+function browserScorecardPhotoDecoders(): ScorecardPhotoDecoders {
+  const bitmapFactory = globalThis.createImageBitmap;
+  return {
+    ...(typeof bitmapFactory === "function" ? {
+      bitmap: async (file: Blob) => {
+        const bitmap = await bitmapFactory(file, { imageOrientation: "from-image" });
+        return {
+          source: bitmap,
+          width: bitmap.width,
+          height: bitmap.height,
+          release: () => bitmap.close(),
+        };
+      },
+    } : {}),
+    imageElement: async (file: Blob) => {
+      const ImageConstructor = globalThis.Image;
+      const objectUrl = globalThis.URL?.createObjectURL?.(file);
+      if (!ImageConstructor || !objectUrl) throw new Error("HTML image decoding unavailable");
+      const image = new ImageConstructor();
+      image.decoding = "async";
+      try {
+        await new Promise<void>((resolve, reject) => {
+          let settled = false;
+          const finish = (action: () => void) => {
+            if (settled) return;
+            settled = true;
+            globalThis.clearTimeout(timer);
+            image.onload = null;
+            image.onerror = null;
+            action();
+          };
+          const timer = globalThis.setTimeout(
+            () => finish(() => reject(new Error("Image decoding timed out"))),
+            IMAGE_DECODE_TIMEOUT_MS,
+          );
+          image.onload = () => finish(resolve);
+          image.onerror = () => finish(() => reject(new Error("Image decoding failed")));
+          image.src = objectUrl;
+        });
+        if (!image.naturalWidth || !image.naturalHeight) throw new Error("Image has no dimensions");
+        return {
+          source: image,
+          width: image.naturalWidth,
+          height: image.naturalHeight,
+          release: () => {
+            image.src = "";
+            globalThis.URL.revokeObjectURL(objectUrl);
+          },
+        };
+      } catch (error) {
+        image.src = "";
+        globalThis.URL.revokeObjectURL(objectUrl);
+        throw error;
+      }
+    },
+  };
+}
+
+/** Uses createImageBitmap when it is reliable and falls back to the browser's
+ * native HTMLImageElement decoder, which also honours iPhone EXIF orientation. */
+export async function decodeScorecardPhoto(
+  file: Blob,
+  decoders: ScorecardPhotoDecoders = browserScorecardPhotoDecoders(),
+) {
+  if (decoders.bitmap) {
+    try {
+      const decoded = await decoders.bitmap(file);
+      if (decoded.width > 0 && decoded.height > 0) return decoded;
+      decoded.release();
+    } catch {
+      // Safari has shipped createImageBitmap implementations that reject some
+      // otherwise displayable camera files. The element path is authoritative.
+    }
+  }
+  try {
+    const decoded = await decoders.imageElement(file);
+    if (decoded.width > 0 && decoded.height > 0) return decoded;
+    decoded.release();
+  } catch {
+    // The caller receives a stable, user-facing error instead of a DOMException.
+  }
+  throw new ScorecardPhotoError("photo_open_failed", "No pude abrir la foto.");
+}
+
+function canvasBlob(canvas: HTMLCanvasElement, quality: number) {
+  return new Promise<Blob>((resolve, reject) => {
+    let settled = false;
+    const finish = (action: () => void) => {
+      if (settled) return;
+      settled = true;
+      globalThis.clearTimeout(timer);
+      action();
+    };
+    const timer = globalThis.setTimeout(
+      () => finish(() => reject(new ScorecardPhotoError("photo_compression_failed", "No pude comprimir la foto."))),
+      IMAGE_ENCODE_TIMEOUT_MS,
+    );
+    try {
+      canvas.toBlob(
+        (blob) => finish(() => blob?.size
+          ? resolve(blob)
+          : reject(new ScorecardPhotoError("photo_compression_failed", "No pude comprimir la foto."))),
+        "image/jpeg",
+        quality,
+      );
+    } catch {
+      finish(() => reject(new ScorecardPhotoError("photo_compression_failed", "No pude comprimir la foto.")));
+    }
+  });
+}
+
+const COMPRESSION_ATTEMPTS = [
+  { maxDimension: 1_600, quality: 0.82 },
+  { maxDimension: 1_440, quality: 0.76 },
+  { maxDimension: 1_280, quality: 0.7 },
+  { maxDimension: 1_024, quality: 0.66 },
+] as const;
+
+export async function compressScorecardPhoto(file: File, options: ScorecardPhotoCompressionOptions = {}) {
+  const decoded = await decodeScorecardPhoto(file, options.decoders);
+  const createCanvas = options.createCanvas || (() => document.createElement("canvas"));
+  const maxBytes = Number.isFinite(options.maxBytes) && (options.maxBytes as number) > 0
+    ? Math.floor(options.maxBytes as number)
+    : MAX_SCORECARD_IMAGE_BYTES;
+  try {
+    for (const attempt of COMPRESSION_ATTEMPTS) {
+      const scale = Math.min(1, attempt.maxDimension / Math.max(decoded.width, decoded.height));
+      const canvas = createCanvas();
+      canvas.width = Math.max(1, Math.round(decoded.width * scale));
+      canvas.height = Math.max(1, Math.round(decoded.height * scale));
+      const context = canvas.getContext("2d");
+      if (!context) throw new ScorecardPhotoError("photo_compression_failed", "No pude comprimir la foto.");
+      try {
+        context.drawImage(decoded.source, 0, 0, canvas.width, canvas.height);
+      } catch {
+        throw new ScorecardPhotoError("photo_compression_failed", "No pude comprimir la foto.");
+      }
+      const blob = await canvasBlob(canvas, attempt.quality);
+      if (blob.size <= maxBytes) return blob;
+    }
+    throw new ScorecardPhotoError("photo_too_large", "La foto supera el tamaño permitido.");
+  } catch (error) {
+    if (error instanceof ScorecardPhotoError) throw error;
+    throw new ScorecardPhotoError("photo_compression_failed", "No pude comprimir la foto.");
+  } finally {
+    decoded.release();
+  }
 }
 
 export async function saveScorecardPhoto(roundId: string, file: File, ownerId = "guest") {
   const blob = await compressScorecardPhoto(file);
-  await putStoredScorecardPhoto(roundId, { schemaVersion: 1, blob, ownerId, state: "temporary", createdAt: Date.now() });
+  await saveCompressedScorecardPhoto(roundId, blob, ownerId);
   return roundId;
+}
+
+/** Persists an already-prepared image. Card AI uses this as a best-effort side
+ * effect so a storage failure can never prevent the provider request. */
+export async function saveCompressedScorecardPhoto(photoId: string, blob: Blob, ownerId = "guest") {
+  try {
+    await putStoredScorecardPhoto(photoId, { schemaVersion: 1, blob, ownerId, state: "temporary", createdAt: Date.now() });
+    return photoId;
+  } catch (error) {
+    if (error instanceof ScorecardPhotoError) throw error;
+    throw new ScorecardPhotoError("photo_storage_unavailable", "No pude guardar una copia local de esta foto.");
+  }
 }
 
 export async function readScorecardPhoto(roundId: string, expectedOwnerId?: string, options: { adoptLegacy?: boolean } = {}) {

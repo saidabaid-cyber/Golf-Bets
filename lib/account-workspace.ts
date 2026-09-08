@@ -9,6 +9,7 @@ import { ballFitDraftStorageKey } from "./ball-fitting-storage";
 import { betaOnboardingDraftStorageKey, betaOnboardingStorageKey } from "./beta-onboarding";
 import { deletePersonalAiData, readLearningRecords } from "./backyard-ai/memory/learning-events";
 import { bettingConsentPromptStorageKey } from "./account-state";
+import { deleteAiProcessingConsents } from "./backyard-ai/processing-consent";
 
 export const WORKSPACE_OWNER_KEY = "backyard-local-workspace-owner-v1";
 export const CLOUD_CONFLICTS_KEY = "backyard-cloud-conflicts-v1";
@@ -191,6 +192,7 @@ export function discardAccountWorkspace(storage: WorkspaceStorage, userId: strin
   storage.removeItem(betaOnboardingStorageKey(userId));
   storage.removeItem(betaOnboardingDraftStorageKey(userId));
   deletePersonalAiData(storage, userId);
+  deleteAiProcessingConsents(storage, userId);
 }
 
 export function preserveDraftConflict(storage: Pick<Storage, "getItem" | "setItem">, draft: unknown) {

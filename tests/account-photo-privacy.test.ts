@@ -164,7 +164,7 @@ test("purga offline fallback es idempotente y elimina sólo las claves del owner
   }
 });
 
-test("toda lectura local de scorecard exige owner y sólo adopta legacy desde referencias owner-scoped", () => {
+test("toda lectura local de scorecard exige owner; Card AI analiza en memoria sin releer IndexedDB", () => {
   const storage = readFileSync("lib/scorecard-photo.ts", "utf8");
   const page = readFileSync("app/page.tsx", "utf8");
   const scanner = readFileSync("app/components/backyard-ai/scorecard-scanner.tsx", "utf8");
@@ -174,5 +174,6 @@ test("toda lectura local de scorecard exige owner y sólo adopta legacy desde re
   assert.match(storage, /ownerId: toOwnerId/);
   assert.match(page, /readScorecardPhoto\(photoId, userId, \{ adoptLegacy: true \}\)/);
   assert.match(page, /readScorecardPhoto\(round\.photoId \|\| round\.id, identity\.userId, \{ adoptLegacy: true \}\)/);
-  assert.match(scanner, /readScorecardPhoto\(photo\.id, storageOwnerId\)/);
+  assert.doesNotMatch(scanner, /readScorecardPhoto/);
+  assert.match(scanner, /runScorecardPhotoAnalysis\(photosForScan, storageOwnerId/);
 });

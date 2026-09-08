@@ -150,6 +150,19 @@ test("si sólo 2 de 72 celdas son dudosas devuelve exactamente esas dos y los ov
   assert.equal(confirmed.acceptedCells.filter((cell) => cell.acceptedFrom === "user_override").length, 2);
 });
 
+test("extracción parcial 63/72 devuelve únicamente las 9 celdas dudosas", () => {
+  const raw = payload();
+  const doubtful = raw.cells.slice(0, 9);
+  doubtful.forEach((cell) => { cell.confidence = 0.61; });
+  const result = validateScorecardExtraction(extraction(raw), round);
+
+  assert.equal(result.ready, false);
+  assert.equal(result.acceptedCells.length, 63);
+  assert.equal(result.issues.length, 9);
+  assert.ok(result.issues.every((current) => current.code === "low_confidence_score" && current.resolution === "cell_value"));
+  assert.deepEqual(result.issues.map((current) => [current.playerId, current.hole]), doubtful.map((cell) => [cell.playerName.toLocaleLowerCase("es-MX"), cell.hole]));
+});
+
 test("tarjeta parcialmente ilegible pide únicamente la celda ilegible", () => {
   const raw = payload();
   const unreadable = raw.cells.find((cell) => cell.playerName === "Carlos" && cell.hole === 3)!;

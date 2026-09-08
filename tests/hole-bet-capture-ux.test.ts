@@ -45,13 +45,13 @@ const ballFriendConfig: BetConfig["ballFriend"] = {
 };
 const ballFriendHole = { teamA: ["said", "abel"], restPlayerId: "daniel" };
 
-test("la tarjeta de scores queda antes del estado previo y contiene accesos compactos sin paneles grandes", () => {
+test("la captura V2 queda antes del estado previo y conserva editores en modal", () => {
   const page = readFileSync("app/page.tsx", "utf8");
-  const scorecard = page.indexOf('<section className="card scoreCard">');
+  const scorecard = page.indexOf("<RoundCaptureV2");
   const priorStatus = page.indexOf('<section className="card compact priorBetStatus"');
   const editor = page.indexOf('{holeBetEditor && <div className="modalBackdrop');
   assert.ok(scorecard >= 0 && priorStatus > scorecard && editor > priorStatus);
-  assert.match(page.slice(scorecard, priorStatus), /scoreBetQuickSetup/);
+  assert.match(page.slice(scorecard, priorStatus), /ballFriendLabel/);
   assert.equal((page.match(/<LobaHolePanel config=/g) || []).length, 1);
   assert.equal((page.match(/<BallFriendHolePanel config=/g) || []).length, 1);
   assert.doesNotMatch(page.slice(0, scorecard), /<LobaHolePanel|<BallFriendHolePanel/);

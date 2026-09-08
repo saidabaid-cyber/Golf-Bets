@@ -1,10 +1,11 @@
 import { LEGAL_DOCUMENT_VERSIONS } from "./legal-config";
-import { PRIVACY_CONTENT_ID } from "./privacy-content";
 import { normalizePlanId, type PlanId } from "./plans";
 
 export type AccountMode = "undecided" | "guest" | "authenticated";
 export const BETTING_DATA_CONSENT_TYPE = "betting_financial" as const;
-export const BETTING_DATA_CONSENT_VERSION = `${PRIVACY_CONTENT_ID}:express-betting-data`;
+// AI/privacy copy can evolve without revoking the independently accepted
+// betting-data agreement. Change this only when that agreement itself changes.
+export const BETTING_DATA_CONSENT_VERSION = "2026-09-08-v3+sha256-5376b615664b10d9:express-betting-data";
 
 export type GeneralConsentType = keyof typeof LEGAL_DOCUMENT_VERSIONS;
 export type ConsentType = GeneralConsentType | typeof BETTING_DATA_CONSENT_TYPE;

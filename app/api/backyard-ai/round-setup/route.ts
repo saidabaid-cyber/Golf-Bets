@@ -5,7 +5,7 @@ import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 
 import { backyardAiConfig, publicBackyardAiStatus } from "../../../../lib/backyard-ai/server/config";
-import { parseBackyardAiProviderConsent } from "../../../../lib/backyard-ai/privacy";
+import { AI_PROVIDER_PROCESSING_CONSENT, parseBackyardAiProviderConsent } from "../../../../lib/backyard-ai/privacy";
 import { validateCanonicalRoundCommand } from "../../../../lib/backyard-ai/runtime/canonical-command-guard";
 import {
   BACKYARD_AI_PRIVATE_HEADERS,
@@ -17,6 +17,7 @@ import {
 } from "../../../../lib/backyard-ai/server/http-security";
 import { classifyBackyardAiFailure, generateBackyardAiJson, type BackyardOpenAiClient } from "../../../../lib/backyard-ai/server/openai-structured";
 import { consumeBackyardAiLimit } from "../../../../lib/backyard-ai/server/rate-limit";
+import { verifyStoredAiProcessingConsent } from "../../../../lib/backyard-ai/server/processing-consent";
 import { consumePersistentRulesAiLimit } from "../../../../lib/rules-ai-rate-limit";
 import { getSupabaseAdmin } from "../../../../lib/supabase/server";
 
@@ -67,6 +68,23 @@ function modelRoundSetup(value: unknown): ModelRoundSetup | null {
   return { canonicalCommand, confidence, clarification: typeof clarification === "string" ? clarification.trim() : null };
 }
 
+function logRoundSetupProvider(input: {
+  model: string;
+  status: "success" | "error";
+  latencyMs: number;
+  errorCode: string | null;
+}) {
+  const event = {
+    provider: "openai",
+    model: input.model,
+    status: input.status,
+    latencyMs: Math.max(0, Math.round(input.latencyMs)),
+    errorCode: input.errorCode,
+  };
+  if (input.status === "error") console.error("Backyard Round Setup AI provider", event);
+  else console.info("Backyard Round Setup AI provider", event);
+}
+
 function instructions() {
   return [
     "You interpret Mexican Spanish golf round setup commands for The Backyard.",
@@ -97,11 +115,13 @@ export async function POST(request: NextRequest) {
   }
   const source = parsedBody.value && typeof parsedBody.value === "object" && !Array.isArray(parsedBody.value) ? parsedBody.value as Record<string, unknown> : null;
   if (!source || !hasOnlyKeys(source, ["input", "consent"])) return json({ error: "Solicitud inválida.", code: "invalid_request" }, { status: 400 });
-  if (!parseBackyardAiProviderConsent(source.consent)) return json({ error: "Autoriza el procesamiento por IA para continuar.", code: "consent_required" }, { status: 403 });
+  if (!parseBackyardAiProviderConsent(source.consent, AI_PROVIDER_PROCESSING_CONSENT)) return json({ error: "Autoriza el procesamiento por IA para continuar.", code: "consent_required" }, { status: 403 });
   if (typeof source.input !== "string") return json({ error: "Dime cómo juegan hoy.", code: "missing_input" }, { status: 400 });
   const input = source.input.trim();
   if (input.length < 2) return json({ error: "Dime cómo juegan hoy.", code: "missing_input" }, { status: 400 });
   if (input.length > MAX_INPUT_LENGTH) return json({ error: "La instrucción es demasiado grande.", code: "input_too_long" }, { status: 413 });
+  const storedConsent = await verifyStoredAiProcessingConsent(request, AI_PROVIDER_PROCESSING_CONSENT);
+  if (!storedConsent.ok) return json({ error: storedConsent.error, code: storedConsent.code }, { status: storedConsent.status });
 
   // Invalid or non-consented requests are bounded by the cheap IP burst gate
   // above, but cannot consume the shared provider budget.
@@ -118,6 +138,7 @@ export async function POST(request: NextRequest) {
   }
 
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 25_000, maxRetries: 1 }) as unknown as BackyardOpenAiClient;
+  const providerStartedAt = Date.now();
   try {
     const rawResult = await generateBackyardAiJson<unknown>({
       client,
@@ -128,13 +149,20 @@ export async function POST(request: NextRequest) {
       maxOutputTokens: 1_200,
     });
     const result = modelRoundSetup(rawResult);
-    if (!result) return json({ error: "Backyard AI no pudo interpretar la instrucción.", code: "invalid_interpretation" }, { status: 502 });
+    if (!result) {
+      logRoundSetupProvider({ model: config.roundSetupModel, status: "error", latencyMs: Date.now() - providerStartedAt, errorCode: "invalid_interpretation" });
+      return json({ error: "Backyard AI no pudo interpretar la instrucción.", code: "invalid_interpretation" }, { status: 502 });
+    }
     const integrity = validateCanonicalRoundCommand(input, result.canonicalCommand);
-    if (!integrity.ok) return json({ error: "La interpretación remota no conservó la instrucción original.", code: "canonical_integrity" }, { status: 502 });
+    if (!integrity.ok) {
+      logRoundSetupProvider({ model: config.roundSetupModel, status: "error", latencyMs: Date.now() - providerStartedAt, errorCode: "canonical_integrity" });
+      return json({ error: "La interpretación remota no conservó la instrucción original.", code: "canonical_integrity" }, { status: 502 });
+    }
+    logRoundSetupProvider({ model: config.roundSetupModel, status: "success", latencyMs: Date.now() - providerStartedAt, errorCode: null });
     return json(result);
   } catch (error) {
     const failure = classifyBackyardAiFailure(error);
-    console.error("Backyard Round Setup AI failed", { code: failure.code, status: failure.status });
+    logRoundSetupProvider({ model: config.roundSetupModel, status: "error", latencyMs: Date.now() - providerStartedAt, errorCode: failure.code });
     return json({ error: failure.message, code: failure.code }, { status: failure.status });
   }
 }

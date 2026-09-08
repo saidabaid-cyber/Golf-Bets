@@ -23,8 +23,8 @@ class MemoryStorage {
 
 test("el aviso publicado coincide íntegramente con el contenido aprobado", () => {
   const text = privacyPublishedPlainText();
-  assert.equal(createHash("sha256").update(text).digest("hex"), "5376b615664b10d98027aa86cacc533206c424ff13806d33c18cdcedbb1dfcc6");
-  assert.equal(PRIVACY_CONTENT_ID, "2026-09-08-v3+sha256-5376b615664b10d9");
+  assert.equal(createHash("sha256").update(text).digest("hex"), "1e142e72a5d6e764fb9fe413c4d399e07b83b8a704a1da7ea698ebb831056bb6");
+  assert.equal(PRIVACY_CONTENT_ID, "2026-09-08-v4+sha256-1e142e72a5d6e764");
   assert.deepEqual(PRIVACY_SECTIONS.map((section) => section.number), Array.from({ length: 16 }, (_, index) => index + 1));
   for (const removed of [
     "Su contenido no sustituye asesoría jurídica individual.",

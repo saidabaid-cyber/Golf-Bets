@@ -5,7 +5,7 @@ import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 
 import { normalizeScorecardPhotoExtractions } from "../../../../lib/backyard-ai/scorecard/extractor";
-import { parseBackyardAiProviderConsent } from "../../../../lib/backyard-ai/privacy";
+import { AI_IMAGE_PROCESSING_CONSENT, parseBackyardAiProviderConsent } from "../../../../lib/backyard-ai/privacy";
 import { backyardAiConfig, publicBackyardAiStatus } from "../../../../lib/backyard-ai/server/config";
 import {
   BACKYARD_AI_PRIVATE_HEADERS,
@@ -17,19 +17,21 @@ import {
 } from "../../../../lib/backyard-ai/server/http-security";
 import { classifyBackyardAiFailure, generateBackyardAiJson, type BackyardOpenAiClient } from "../../../../lib/backyard-ai/server/openai-structured";
 import { consumeBackyardAiLimit } from "../../../../lib/backyard-ai/server/rate-limit";
+import { verifyStoredAiProcessingConsent } from "../../../../lib/backyard-ai/server/processing-consent";
 import { consumePersistentRulesAiLimit } from "../../../../lib/rules-ai-rate-limit";
 import { getSupabaseAdmin } from "../../../../lib/supabase/server";
 import {
+  MAX_SCORECARD_REQUEST_BYTES,
   parseScorecardPhotos,
   parseScorecardRoundHint,
   restoreCallerPhotoIds,
+  scorecardPhotoPayloadExceedsAggregateLimit,
   type ScorecardPhotoRequest,
 } from "../../../../lib/backyard-ai/server/scorecard-request";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const MAX_REQUEST_BYTES = 18_000_000;
 const RATE_LIMIT = 6;
 const RATE_WINDOW_MS = 60_000;
 const PHOTO_CALL_RATE_LIMIT = 12;
@@ -129,6 +131,28 @@ function json(body: unknown, init: ResponseInit = {}) {
   return NextResponse.json(body, { ...init, headers: BACKYARD_AI_PRIVATE_HEADERS });
 }
 
+function logScorecardProvider(input: {
+  model: string;
+  status: "success" | "partial_success" | "error";
+  latencyMs: number;
+  errorCode: string | null;
+  photoCount: number;
+  successfulPhotoCount: number;
+}) {
+  const event = {
+    provider: "openai",
+    model: input.model,
+    status: input.status,
+    latencyMs: Math.max(0, Math.round(input.latencyMs)),
+    errorCode: input.errorCode,
+    photoCount: input.photoCount,
+    successfulPhotoCount: input.successfulPhotoCount,
+  };
+  if (input.status === "error") console.error("Backyard Card AI provider", event);
+  else if (input.status === "partial_success") console.warn("Backyard Card AI provider", event);
+  else console.info("Backyard Card AI provider", event);
+}
+
 function scorecardInstructions() {
   return [
     "You are Backyard Card AI, an evidence extractor for handwritten or printed golf scorecards.",
@@ -154,14 +178,17 @@ export async function POST(request: NextRequest) {
   const persistentLimiter = getSupabaseAdmin("cloud");
   if (!persistentLimiter) return json({ error: "El control de uso de Backyard AI necesita configuración del servidor.", code: "rate_limit_config" }, { status: 503 });
 
-  const parsedBody = await readJsonBodyWithLimit(request, MAX_REQUEST_BYTES);
+  const parsedBody = await readJsonBodyWithLimit(request, MAX_SCORECARD_REQUEST_BYTES);
   if (!parsedBody.ok) {
     if (parsedBody.reason === "too_large") return json({ error: "Las fotos superan el tamaño permitido.", code: "request_too_large" }, { status: 413 });
     return json({ error: "Solicitud de tarjeta inválida.", code: "invalid_request" }, { status: 400 });
   }
   const source = parsedBody.value && typeof parsedBody.value === "object" && !Array.isArray(parsedBody.value) ? parsedBody.value as Record<string, unknown> : null;
   if (!source || !hasOnlyKeys(source, ["photos", "round", "consent"])) return json({ error: "Solicitud de tarjeta inválida.", code: "invalid_request" }, { status: 400 });
-  if (!parseBackyardAiProviderConsent(source.consent)) return json({ error: "Autoriza el procesamiento de la tarjeta por IA para continuar.", code: "consent_required" }, { status: 403 });
+  if (scorecardPhotoPayloadExceedsAggregateLimit(source.photos)) return json({ error: "Las fotos superan el tamaño permitido.", code: "request_too_large" }, { status: 413 });
+  if (!parseBackyardAiProviderConsent(source.consent, AI_IMAGE_PROCESSING_CONSENT)) return json({ error: "Autoriza el procesamiento de la tarjeta por IA para continuar.", code: "consent_required" }, { status: 403 });
+  const storedConsent = await verifyStoredAiProcessingConsent(request, AI_IMAGE_PROCESSING_CONSENT);
+  if (!storedConsent.ok) return json({ error: storedConsent.error, code: storedConsent.code }, { status: storedConsent.status });
   const photos = parseScorecardPhotos(source.photos);
   if (!photos) return json({ error: "Agrega de una a cuatro fotos JPEG, PNG o WebP válidas.", code: "invalid_photos" }, { status: 400 });
   const roundHint = parseScorecardRoundHint(source.round);
@@ -186,8 +213,9 @@ export async function POST(request: NextRequest) {
   }
 
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 45_000, maxRetries: 1 }) as unknown as BackyardOpenAiClient;
+  const providerStartedAt = Date.now();
   try {
-    const payloads = await Promise.all((photos as ScorecardPhotoRequest[]).map(async (photo) => ({
+    const settledPayloads = await Promise.allSettled((photos as ScorecardPhotoRequest[]).map(async (photo) => ({
       photoId: photo.providerId,
       payload: await generateBackyardAiJson<unknown>({
         client,
@@ -204,14 +232,46 @@ export async function POST(request: NextRequest) {
         maxOutputTokens: 8_000,
       }),
     })));
+    const payloads = settledPayloads
+      .filter((result): result is PromiseFulfilledResult<{ photoId: string; payload: unknown }> => result.status === "fulfilled")
+      .map((result) => result.value);
+    const providerFailures = settledPayloads.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+    if (!payloads.length) throw providerFailures[0]?.reason || new Error("No scorecard provider response");
     const normalized = normalizeScorecardPhotoExtractions(payloads);
     if (!normalized.ok) {
+      logScorecardProvider({
+        model: config.scorecardModel,
+        status: "error",
+        latencyMs: Date.now() - providerStartedAt,
+        errorCode: "invalid_extraction",
+        photoCount: photos.length,
+        successfulPhotoCount: payloads.length,
+      });
       return json({ error: "La lectura de la tarjeta no superó la validación estructural.", code: "invalid_extraction", issues: normalized.issues }, { status: 502 });
     }
-    return json({ extraction: restoreCallerPhotoIds(normalized.extraction, photos) });
+    const partialFailure = providerFailures[0] ? classifyBackyardAiFailure(providerFailures[0].reason) : null;
+    logScorecardProvider({
+      model: config.scorecardModel,
+      status: partialFailure ? "partial_success" : "success",
+      latencyMs: Date.now() - providerStartedAt,
+      errorCode: partialFailure?.code ?? null,
+      photoCount: photos.length,
+      successfulPhotoCount: payloads.length,
+    });
+    return json({
+      extraction: restoreCallerPhotoIds(normalized.extraction, photos),
+      ...(providerFailures.length ? { partial: { failedPhotoCount: providerFailures.length } } : {}),
+    });
   } catch (error) {
     const failure = classifyBackyardAiFailure(error);
-    console.error("Backyard Card AI failed", { code: failure.code, status: failure.status });
+    logScorecardProvider({
+      model: config.scorecardModel,
+      status: "error",
+      latencyMs: Date.now() - providerStartedAt,
+      errorCode: failure.code,
+      photoCount: photos.length,
+      successfulPhotoCount: 0,
+    });
     return json({ error: failure.message, code: failure.code }, { status: failure.status });
   }
 }

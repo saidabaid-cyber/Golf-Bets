@@ -3,6 +3,10 @@ export const DEFAULT_SCORECARD_AI_MODEL = "gpt-5.4-mini";
 
 export type BackyardAiEnvironment = Record<string, string | undefined>;
 
+export type AiProcessingConsentLedgerAccess =
+  | { allowed: true; reason: "guest" | "not_preview" | "preview_bound" }
+  | { allowed: false; reason: "preview_binding_missing" | "preview_binding_mismatch" };
+
 function enabledFlag(value: string | undefined) {
   return ["1", "true", "on", "enabled"].includes(value?.trim().toLocaleLowerCase("en-US") || "");
 }
@@ -14,6 +18,44 @@ function enabledByDefault(value: string | undefined) {
 function modelId(value: string | undefined) {
   const clean = value?.trim() || "";
   return clean.length <= 120 && /^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/.test(clean) ? clean : "";
+}
+
+function normalizedOrigin(value: string | undefined) {
+  const clean = value?.trim() || "";
+  if (!clean) return "";
+  try {
+    const url = new URL(clean);
+    if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) return "";
+    if (url.pathname !== "/" && url.pathname !== "") return "";
+    return url.origin;
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Authenticated Preview traffic must deliberately bind the new consent ledger
+ * to the isolated Supabase URL configured for that Preview. This prevents an
+ * inherited cloud URL from silently writing the ledger in Production. Guest
+ * processing has no server ledger and therefore does not need this binding.
+ */
+export function aiProcessingConsentLedgerAccess(
+  env: BackyardAiEnvironment,
+  authenticated: boolean,
+): AiProcessingConsentLedgerAccess {
+  if (!authenticated) return { allowed: true, reason: "guest" };
+  if (env.VERCEL_ENV?.trim().toLocaleLowerCase("en-US") !== "preview") {
+    return { allowed: true, reason: "not_preview" };
+  }
+  const activeOrigin = normalizedOrigin(env.NEXT_PUBLIC_SUPABASE_URL);
+  const expectedPreviewOrigin = normalizedOrigin(env.BACKYARD_AI_CONSENT_PREVIEW_SUPABASE_URL);
+  if (!activeOrigin || !expectedPreviewOrigin) {
+    return { allowed: false, reason: "preview_binding_missing" };
+  }
+  if (activeOrigin !== expectedPreviewOrigin) {
+    return { allowed: false, reason: "preview_binding_mismatch" };
+  }
+  return { allowed: true, reason: "preview_bound" };
 }
 
 export function backyardAiConfig(env: BackyardAiEnvironment) {

@@ -15,14 +15,14 @@ const CORE_ALIASES: ReadonlyArray<{ bet: CoreRoundBetKey; aliases: readonly stri
   { bet: "foursome", aliases: ["foursomes", "foursome"] },
   { bet: "vipers", aliases: ["viboritas", "viborita", "viboras", "vibora"] },
   { bet: "camels", aliases: ["camellos", "camello"] },
-  { bet: "fish", aliases: ["peces", "pez"] },
+  { bet: "fish", aliases: ["peces/agua", "peces", "pez"] },
   { bet: "loba", aliases: ["loba"] },
   { bet: "monkey", aliases: ["monkey"] },
 ];
 
 const BET_TERMS = [
   "bola amiga", "mini polla", "nassau", "skins", "skin", "conejos", "conejo", "unidades", "copas", "copa",
-  "foursomes", "foursome", "viboritas", "viborita", "viboras", "vibora", "camellos", "camello", "peces", "pez",
+  "foursomes", "foursome", "viboritas", "viborita", "viboras", "vibora", "camellos", "camello", "peces/agua", "peces", "pez",
   "loba", "monkey", "presses", "press", "presion", "presiones", "polla", "personales", "oyes",
   "dollar a stroke", "dolar a stroke", "chicago", "vegas", "minimo de putts", "menos putts",
 ];
@@ -39,6 +39,7 @@ export function normalizeMexicanSpanish(value: string) {
     .toLocaleLowerCase("es-MX")
     .replace(/[“”]/g, '"')
     .replace(/[’]/g, "'")
+    .replace(/\s*\/\s*/g, "/")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -74,8 +75,53 @@ function splitNames(value: string) {
 }
 
 function amountAfterAlias(normalized: string, alias: string) {
-  const expression = new RegExp(`\\b${escapeRegExp(alias)}\\b\\s*(?:(?:de|a|por|en)\\s*)?\\$?\\s*([\\d][\\d.,]*)`, "i");
+  const expression = new RegExp(`\\b${escapeRegExp(alias)}\\b\\s*(?:(?:mejor|ahora)\\s+)?(?:(?:de|a|por|en)\\s*)?\\$?\\s*([\\d][\\d.,]*)`, "i");
   return parseMexicanMoney(expression.exec(normalized)?.[1]);
+}
+
+const COUNTER_BETS = new Set<CoreRoundBetKey>(["vipers", "camels", "fish"]);
+const COUNTER_PRESSURE_TERM = /\b(?:presion(?:ada|adas|es)?|press(?:es)?)\b/i;
+const NASSAU_ADVANCED_TERM = /\b(?:carry|multiplicador|presion(?:ada|adas|es)?|press(?:es)?)\b|\b\d+\s*x\b/i;
+
+function counterPressureFromClause(clause: string) {
+  if (!COUNTER_PRESSURE_TERM.test(clause)) return { mentioned: false } as const;
+  const withoutPressure = /\bsin\s+(?:presion(?:ada|adas|es)?|press(?:es)?)\b/i.test(clause);
+  const rawMultiplier = /\b(\d+)\s*x\b/i.exec(clause)?.[1];
+  const multiplier = rawMultiplier === undefined ? undefined : Number(rawMultiplier);
+  if (withoutPressure) {
+    return multiplier !== undefined && multiplier > 1
+      ? { mentioned: true } as const
+      : { mentioned: true, secondNinePressed: false } as const;
+  }
+  if (multiplier !== undefined && Number.isInteger(multiplier) && multiplier >= 2 && multiplier <= 5) {
+    return { mentioned: true, secondNinePressed: true, secondNineMultiplier: multiplier } as const;
+  }
+  return { mentioned: true } as const;
+}
+
+function scopedCounterPressureClause(normalized: string, alias: string) {
+  const pressure = "(?:presion(?:ada|adas|es)?|press(?:es)?)";
+  const optionalAmount = "(?:\\s*(?:(?:mejor|ahora)\\s+)?(?:(?:de|a|por|en)\\s*)?\\$?\\s*[\\d][\\d.,]*)?";
+  return new RegExp(`\\b${escapeRegExp(alias)}\\b${optionalAmount}\\s+(?:con\\s+)?(?:sin\\s+)?${pressure}(?:\\s+(?:de|a|por))?\\s*(?:\\d+\\s*x)?`, "i")
+    .exec(normalized)?.[0] ?? "";
+}
+
+function scopedGroupNassauAdvancedClause(normalized: string) {
+  const optionalAmount = "(?:\\s*(?:(?:mejor|ahora)\\s+)?(?:(?:de|a|por|en)\\s*)?\\$?\\s*[\\d][\\d.,]*)?";
+  const advanced = "(?:(?:sin|con)\\s+carry|(?:con\\s+)?(?:presion(?:ada|adas|es)?|press(?:es)?)(?:\\s+(?:de|a|por))?\\s*(?:\\d+\\s*x)?|(?:con\\s+)?multiplicador(?:\\s+de)?\\s*\\d+\\s*x|\\d+\\s*x)";
+  return new RegExp(`\\bnassau\\b${optionalAmount}\\s+${advanced}`, "i").exec(normalized)?.[0] ?? "";
+}
+
+/** "Agua" is a real local alias for Peces only in an explicit betting clause.
+ * This prevents course names or ordinary mentions of water from activating it. */
+function explicitFishWaterAlias(normalized: string) {
+  if (!/\bagua\b/i.test(normalized)) return undefined;
+  const clause = clauseContaining(normalized, /\bagua\b/i);
+  const hasAmount = amountAfterAlias(clause, "agua") !== undefined;
+  const explicitRemoval = hasRemovalNearAlias(normalized, "agua");
+  const explicitCommand = /(?:^|[.;]\s*|\by\s+|,\s*)(?:(?:agrega|pon|activa|jugamos|juguemos|todos\s+juegan)\s+)(?:la\s+|el\s+|los\s+)?agua\b/i.test(normalized);
+  const standaloneClause = /(?:^|[.;]\s*|,\s*)agua\s*(?:[.;]|$)/i.test(normalized);
+  return hasAmount || explicitRemoval || explicitCommand || standaloneClause ? "agua" : undefined;
 }
 
 function hasRemovalNearAlias(normalized: string, alias: string) {
@@ -157,10 +203,13 @@ function parseRoster(input: string): ParsedRoundSetupAction | undefined {
     let roster = match[1].trim();
     const normalizedRoster = normalizeMexicanSpanish(roster);
     if (/^(?:los mismos|lo mismo|como|solo|solamente)\b/.test(normalizedRoster)) continue;
+    const explicitWaterBetIndex = explicitFishWaterAlias(normalizedRoster)
+      ? normalizedRoster.search(/\bagua\b/i)
+      : -1;
     const firstBetIndex = BET_TERMS.reduce((lowest, term) => {
       const index = normalizedRoster.search(new RegExp(`\\b${escapeRegExp(term)}\\b`, "i"));
       return index >= 0 && (lowest < 0 || index < lowest) ? index : lowest;
-    }, -1);
+    }, explicitWaterBetIndex);
     if (firstBetIndex === 0) continue;
     if (firstBetIndex > 0) roster = roster.slice(0, firstBetIndex);
     // Course and round options belong to later structured fields, even when
@@ -251,8 +300,14 @@ function ballFriend(normalized: string): ParsedRoundSetupAction | undefined {
 }
 
 function groupNassau(normalized: string, individual?: ParsedRoundSetupAction): ParsedRoundSetupAction | undefined {
-  if (!/\bnassau\b/i.test(normalized) || individual?.type === "configure_individual_nassau") return undefined;
+  if (!/\bnassau\b/i.test(normalized)
+    || /\bnassau\s+individual\b/i.test(normalized)
+    || individual?.type === "configure_individual_nassau") return undefined;
   const clause = clauseContaining(normalized, /\bnassau\b/i);
+  const advancedClause = scopedGroupNassauAdvancedClause(normalized);
+  const nassauIndex = normalized.search(/\bnassau\b/i);
+  const modificationOnly = nassauIndex >= 0
+    && /(?:^|[.;]\s*|\by\s+)(?:mejor|cambia(?:mos)?|ajusta(?:mos)?|modifica(?:mos)?)\s*$/i.test(normalized.slice(0, nassauIndex));
   return {
     type: "configure_group_nassau",
     enabled: !hasRemovalNearAlias(normalized, "nassau"),
@@ -261,8 +316,9 @@ function groupNassau(normalized: string, individual?: ParsedRoundSetupAction): P
     allPlayers: allPlayersFor(normalized, "nassau"),
     ...(hcpPercentageFromClause(clause) !== undefined ? { hcpPct: hcpPercentageFromClause(clause) } : {}),
     ...(pollaDecimalModeFromClause(clause) ? { decimals: pollaDecimalModeFromClause(clause) } : {}),
+    ...(modificationOnly ? { modificationOnly: true } : {}),
     confidence: 0.97,
-    evidence: clause || "nassau",
+    evidence: advancedClause || clause || "nassau",
   };
 }
 
@@ -555,20 +611,25 @@ function supplementalActions(normalized: string): ParsedRoundSetupAction[] {
 function coreActions(normalized: string): ParsedRoundSetupAction[] {
   const actions: ParsedRoundSetupAction[] = [];
   for (const definition of CORE_ALIASES) {
-    const alias = definition.aliases.find((candidate) => new RegExp(`\\b${escapeRegExp(candidate)}\\b`, "i").test(normalized));
+    const alias = definition.aliases.find((candidate) => new RegExp(`\\b${escapeRegExp(candidate)}\\b`, "i").test(normalized))
+      ?? (definition.bet === "fish" ? explicitFishWaterAlias(normalized) : undefined);
     if (!alias) continue;
     const clause = clauseContaining(normalized, new RegExp(`\\b${escapeRegExp(alias)}\\b`, "i"));
+    const pressureClause = COUNTER_BETS.has(definition.bet) ? scopedCounterPressureClause(normalized, alias) : "";
+    const pressure = counterPressureFromClause(pressureClause);
     actions.push({
       type: "configure_core_bet",
       bet: definition.bet,
       enabled: !hasRemovalNearAlias(normalized, alias),
-      value: amountAfterAlias(clause, alias),
+      value: amountAfterAlias(pressureClause || clause, alias),
       excludedPlayerNames: scopedExcludedNames(normalized, clause, alias),
       allPlayers: allPlayersFor(normalized, alias),
       ...(definition.bet === "skins" && /\b(?:sin\s+carry|no\s+acumulables?)\b/i.test(clause) ? { skinsMode: "no_carry" as const } : {}),
       ...(definition.bet === "skins" && /\b(?:con\s+carry|acumulables?)\b/i.test(clause) && !/\bno\s+acumulables?\b/i.test(clause) ? { skinsMode: "carry" as const } : {}),
+      ...(pressure.secondNinePressed !== undefined ? { secondNinePressed: pressure.secondNinePressed } : {}),
+      ...(pressure.secondNineMultiplier !== undefined ? { secondNineMultiplier: pressure.secondNineMultiplier } : {}),
       confidence: 0.96,
-      evidence: clause || alias,
+      evidence: pressureClause || clause || alias,
     });
   }
   return actions;
@@ -576,11 +637,25 @@ function coreActions(normalized: string): ParsedRoundSetupAction[] {
 
 function parserQuestions(normalized: string, parsedActions: ParsedRoundSetupAction[]): RoundSetupQuestion[] {
   const questions: RoundSetupQuestion[] = [];
-  if (/\b(?:press|presses|presiones)\b/i.test(normalized) && !/\b(?:individuales?|parejas|equipos|foursome)\b/i.test(normalized)) {
+  const requestedIndividualNassau = /\bnassau\s+individual\b/i.test(normalized);
+  const hasIndividualNassau = parsedActions.some((action) => action.type === "configure_individual_nassau");
+  const scopedCounterPressure = parsedActions.some((action) => action.type === "configure_core_bet"
+    && COUNTER_BETS.has(action.bet)
+    && COUNTER_PRESSURE_TERM.test(action.evidence));
+  const scopedNassauPressure = parsedActions.some((action) => action.type === "configure_group_nassau"
+    && COUNTER_PRESSURE_TERM.test(action.evidence));
+  if (COUNTER_PRESSURE_TERM.test(normalized) && !scopedCounterPressure && !scopedNassauPressure && !/\b(?:individuales?|parejas|equipos|foursome)\b/i.test(normalized)) {
     questions.push({
       code: "ambiguous_bet",
       field: "bets.pressures",
       prompt: "¿Quieres Presiones individuales o Presiones por parejas? Las presiones internas de Foursome/Nassau se editan en modo manual avanzado.",
+    });
+  }
+  if (requestedIndividualNassau && !hasIndividualNassau) {
+    questions.push({
+      code: "missing_players",
+      field: "supplementalBets.individual_nassau.players",
+      prompt: "¿Qué dos jugadores juegan el Nassau individual? Indica exactamente “Jugador A contra Jugador B” y no lo aplicaré como Nassau grupal.",
     });
   }
   if (/\boyes\b/i.test(normalized)) {
@@ -628,6 +703,16 @@ function parserQuestions(normalized: string, parsedActions: ParsedRoundSetupActi
           prompt: `La configuración real de ${action.evidence} no admite ese redondeo en este flujo. Quita ese ajuste o revísalo en la edición manual avanzada.`,
         });
       }
+      if (action.type === "configure_core_bet" && COUNTER_BETS.has(action.bet) && COUNTER_PRESSURE_TERM.test(clause)) {
+        const pressure = counterPressureFromClause(clause);
+        if (pressure.secondNinePressed === undefined) {
+          questions.push({
+            code: "invalid_action",
+            field: `${field}.secondNineMultiplier`,
+            prompt: `En ${action.bet === "fish" ? "Peces / agua" : action.bet === "vipers" ? "Viboritas" : "Camellos"}, indica “sin presión” o una presión válida de 2x a 5x para la segunda vuelta.`,
+          });
+        }
+      }
       continue;
     }
     if (action.type === "configure_group_nassau" || action.type === "configure_polla_component") {
@@ -637,6 +722,13 @@ function parserQuestions(normalized: string, parsedActions: ParsedRoundSetupActi
       }
       if (hasRoundingConfiguration(clause) && action.decimals === undefined) {
         questions.push({ code: "ambiguous_bet", field: `${field}.decimals`, prompt: "En Polla, indica exactamente si los decimales cuentan o si se redondea a entero." });
+      }
+      if (action.type === "configure_group_nassau" && NASSAU_ADVANCED_TERM.test(clause)) {
+        questions.push({
+          code: "invalid_action",
+          field: "bets.polla.advanced",
+          prompt: "El Nassau grupal no modela carry, presses ni multiplicadores en este flujo. Quita ese ajuste o revísalo explícitamente en la edición manual avanzada; no aplicaré un valor por defecto.",
+        });
       }
       continue;
     }
@@ -710,7 +802,8 @@ function parserQuestions(normalized: string, parsedActions: ParsedRoundSetupActi
   const monetaryClause = /(?:^|[.;,]|\by\b)\s*(?:(?:agrega|pon|jugamos|juguemos)\s+)?(?:(?:la|el|los|las)\s+)?([a-zñ][a-z0-9ñ ]{0,40}?)\s+(?:de|a|por)\s+\$?\s*[\d][\d.,]*/gi;
   for (const match of normalized.matchAll(monetaryClause)) {
     const comparable = cleanName(match[1]);
-    const known = BET_TERMS.some((term) => new RegExp(`\\b${escapeRegExp(term)}\\b`, "i").test(comparable));
+    const known = BET_TERMS.some((term) => new RegExp(`\\b${escapeRegExp(term)}\\b`, "i").test(comparable))
+      || normalizeMexicanSpanish(comparable) === "agua";
     if (!known) {
       questions.push({
         code: "unknown_bet",
@@ -722,7 +815,8 @@ function parserQuestions(normalized: string, parsedActions: ParsedRoundSetupActi
   const unsupportedCommand = /\b(?:agrega|pon)\s+(?:(?:la|el|los|las)\s+)?([a-zñ][a-z0-9ñ ]{1,40}?)(?=[.;]|$)/i.exec(normalized)?.[1];
   if (unsupportedCommand) {
     const comparable = cleanName(unsupportedCommand).replace(/\s+(?:de|a|por)\s+\$?[\d.,]+$/i, "");
-    const known = BET_TERMS.some((term) => new RegExp(`\\b${escapeRegExp(term)}\\b`, "i").test(comparable));
+    const known = BET_TERMS.some((term) => new RegExp(`\\b${escapeRegExp(term)}\\b`, "i").test(comparable))
+      || normalizeMexicanSpanish(comparable) === "agua";
     if (!known && !parsedActions.length) {
       questions.push({
         code: "unknown_bet",

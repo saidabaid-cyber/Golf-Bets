@@ -1,9 +1,9 @@
-export const PRIVACY_LEGAL_VERSION = "2026-09-08-v3";
+export const PRIVACY_LEGAL_VERSION = "2026-09-08-v4";
 export const PRIVACY_EFFECTIVE_DATE = "8 de septiembre de 2026";
 
 // The content digest is part of the acceptance evidence. Update it whenever
 // any published paragraph changes so an earlier acceptance cannot be reused.
-export const PRIVACY_CONTENT_ID = "2026-09-08-v3+sha256-5376b615664b10d9";
+export const PRIVACY_CONTENT_ID = "2026-09-08-v4+sha256-1e142e72a5d6e764";
 
 export const PRIVACY_INTRO = "Este Aviso describe el tratamiento de datos personales conforme al estado actual de The Backyard.";
 
@@ -62,7 +62,7 @@ export const PRIVACY_SECTIONS = [
     paragraphs: [
       "La interpretación local de una ronda no envía la instrucción a un proveedor de IA. Si activas de forma afirmativa la autorización mostrada en esa pantalla, se envían a OpenAI la instrucción que escribas y los nombres, campo, modalidades y montos incluidos en ella, únicamente para interpretarla. No se envían la memoria personal ni el histórico completo.",
       "Si activas de forma afirmativa la autorización de Backyard Card AI, las fotografías seleccionadas se envían a OpenAI junto con el nombre del campo y los nombres de los jugadores esperados, únicamente para extraer y relacionar los scores. La aplicación valida la respuesta y el motor determinista, no el modelo de IA, calcula los resultados económicos.",
-      "Las autorizaciones de proveedor son específicas para cada uso y no activan entrenamiento global. Las correcciones y preferencias sólo se guardan en la memoria privada del dispositivo cuando habilitas por separado esa opción. En esta fase no existe exportación automática a un conjunto global de entrenamiento ni actualización automática de modelos. Evita incluir datos personales innecesarios o datos de terceros sin contar con una base legítima para hacerlo.",
+      "Las autorizaciones para procesar instrucciones y fotografías son independientes, versionadas y se conservan hasta que las revoques en Perfil → Privacidad / IA o cambie la política aplicable. Ninguna de ellas autoriza el registro de datos de apuestas, la memoria personal ni el entrenamiento global. Las correcciones y preferencias sólo se guardan en la memoria privada del dispositivo cuando habilitas por separado esa opción. En esta fase no existe exportación automática a un conjunto global de entrenamiento ni actualización automática de modelos. Evita incluir datos personales innecesarios o datos de terceros sin contar con una base legítima para hacerlo.",
     ],
   },
   {

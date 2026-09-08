@@ -1,6 +1,8 @@
 import { opponentPairs } from "./engine";
 import type { calculatePersonalBets } from "./engine";
 import { collectHoleValidationErrors } from "./hole-validation";
+import { roundCaptureFieldsForPlayer } from "./round-capture";
+import { counterCaptureIsConfirmed } from "./side-bets";
 import type { SupplementalBetResult } from "./supplemental-bets";
 import type {
   BallFriendHole,
@@ -196,17 +198,45 @@ export type RoundCaptureCompletionInput = {
   ballFriendSetup: Record<number, BallFriendHole>;
 };
 
+type RequiredRoundCaptureFactsInput = Pick<
+  RoundCaptureCompletionInput,
+  "players" | "bets" | "supplementalBets" | "putts" | "counterBetEvents"
+>;
+
+/** Completeness contract shared by live digital capture and Card AI. A score
+ * photo is not evidence that a bunker or water event was zero. */
+export function requiredRoundCaptureFactErrors(
+  input: RequiredRoundCaptureFactsInput,
+  playedHoleIndex: number,
+  holeNumber: number,
+) {
+  const missingPutts: string[] = [];
+  const missingCamels: string[] = [];
+  const missingFish: string[] = [];
+  for (const player of input.players) {
+    const fields = roundCaptureFieldsForPlayer({
+      mode: "quick",
+      playerId: player.id,
+      playedHoleIndex,
+      bets: input.bets,
+      supplementalBets: input.supplementalBets,
+    });
+    const name = player.name.trim() || "Sin nombre";
+    if (fields.includes("putts") && !Number.isInteger(input.putts[holeNumber]?.[player.id])) missingPutts.push(name);
+    if (fields.includes("bunker") && !counterCaptureIsConfirmed(input.counterBetEvents, "camels", holeNumber, player.id)) missingCamels.push(name);
+    if (fields.includes("fish") && !counterCaptureIsConfirmed(input.counterBetEvents, "fish", holeNumber, player.id)) missingFish.push(name);
+  }
+  return [
+    ...(missingPutts.length ? [`Captura los putts de ${missingPutts.join(", ")} antes de continuar.`] : []),
+    ...(missingCamels.length ? [`Confirma Camellos (bunker) de ${missingCamels.join(", ")}; usa 0 cuando no hubo.`] : []),
+    ...(missingFish.length ? [`Confirma Peces (agua) de ${missingFish.join(", ")}; usa 0 cuando no hubo.`] : []),
+  ];
+}
+
 /** Revalidates every played hole before archiving. This catches capture-driven
  * wagers enabled while correcting a round, after their original hole passed. */
 export function firstIncompleteRoundCapture(input: RoundCaptureCompletionInput) {
   for (const [index, holeNumber] of input.order.entries()) {
-    const puttPlayerIds = new Set(input.supplementalBets.flatMap((bet) =>
-      bet.enabled !== false && bet.type === "minimum_putts" && index < bet.holes
-        ? Array.isArray(bet.participantIds) ? bet.participantIds : []
-        : []));
-    const missingPutts = input.players
-      .filter((player) => puttPlayerIds.has(player.id) && !Number.isInteger(input.putts[holeNumber]?.[player.id]))
-      .map((player) => player.name.trim() || "Sin nombre");
     const errors = collectHoleValidationErrors({
       scoreCaptureComplete: input.players.length > 0 && input.players.every((player) => Number.isInteger(input.scores[holeNumber]?.[player.id]) && (input.scores[holeNumber]?.[player.id] as number) >= 1),
       holeNumber,
@@ -225,7 +255,7 @@ export function firstIncompleteRoundCapture(input: RoundCaptureCompletionInput) 
       order: input.order,
       ballFriendConfig: input.bets.ballFriend,
       ballFriendSetup: input.ballFriendSetup[holeNumber],
-      extraErrors: missingPutts.length ? [`Captura los putts de ${missingPutts.join(", ")} antes de continuar.`] : [],
+      extraErrors: requiredRoundCaptureFactErrors(input, index, holeNumber),
     });
     if (errors.length) return { index, holeNumber, errors };
   }

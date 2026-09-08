@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 import {
   calculateCounterBet,
   calculateLoba,
+  confirmCounterQuantity,
+  counterCaptureQuantity,
   counterQuantity,
   emptyCounterBetKeepers,
   isZeroSum,
@@ -156,8 +158,64 @@ test("configuración anterior sin presión explícita conserva 1x o infiere su m
     { id: "old-h9", kind: "fish", hole: 9, playerId: ids[0], quantity: 1 },
     { id: "old-h10", kind: "fish", hole: 10, playerId: ids[1], quantity: 1 },
   ];
-  assert.deepEqual(calculateCounterBet("fish", players, noMultiplier, eventRows, emptyCounterBetKeepers(), order, new Set(order)).halves.map(half => half.value), [100, 100]);
+  const legacyRound = calculateCounterBet("fish", players, noMultiplier, eventRows, emptyCounterBetKeepers(), order, new Set(order));
+  assert.deepEqual(legacyRound.halves.map(half => half.value), [100]);
+  assert.equal(legacyRound.totalBagValue, 200);
   assert.deepEqual(calculateCounterBet("fish", players, savedMultiplier, eventRows, emptyCounterBetKeepers(), order, new Set(order)).halves.map(half => half.value), [100, 300]);
+});
+
+test("snapshot legacy settlementMode round conserva una bolsa, presión y cero confirmado no económico", () => {
+  const savedConfig: CounterBetConfig = {
+    enabled: true,
+    settlementMode: "round",
+    value: 100,
+    secondNineMultiplier: 3,
+    participantIds: ids,
+  };
+  let events: CounterBetEvent[] = [
+    { id: "camel-first", kind: "camels", hole: 2, playerId: ids[0], quantity: 1 },
+    { id: "camel-second", kind: "camels", hole: 11, playerId: ids[1], quantity: 2 },
+  ];
+  events = confirmCounterQuantity(events, "camels", 3, ids[2], 0, "camel-explicit-zero");
+  const snapshot = JSON.parse(JSON.stringify({
+    config: savedConfig,
+    events: snapshotCounterBetEvents(events, { vipers: savedConfig, camels: savedConfig, fish: savedConfig }, order),
+    keepers: emptyCounterBetKeepers(),
+  })) as { config: CounterBetConfig; events: CounterBetEvent[]; keepers: ReturnType<typeof emptyCounterBetKeepers> };
+  const restoredConfig = restoreCounterBetConfig(initialBets(ids).camels, snapshot.config);
+  const restored = calculateCounterBet("camels", players, restoredConfig, snapshot.events, snapshot.keepers, order, new Set(order));
+
+  assert.equal(restoredConfig.settlementMode, "round");
+  assert.equal(restoredConfig.secondNinePressed, undefined);
+  assert.equal(restored.settlementMode, "round");
+  assert.equal(restored.halves.length, 1);
+  assert.equal(restored.halves[0].nine, "round");
+  assert.equal(restored.totalQuantity, 3);
+  assert.equal(restored.totalBagValue, 700);
+  assert.equal(restored.halves[0].events.length, 2);
+  assert.equal(restored.halves[0].events.some((event) => event.id === "camel-explicit-zero"), false);
+  assert.equal(restored.transfers.length, players.length - 1);
+  assert.ok(restored.transfers.every((transfer) => transfer.amount === 700 && transfer.metadata?.period === "round"));
+  assert.equal(Object.values(restored.balances).reduce((sum, amount) => sum + amount, 0), 0);
+
+  const panel = readFileSync("app/components/side-bet-panels.tsx", "utf8");
+  assert.match(panel, /half\.nine === "round" \? "Ronda completa"/);
+  assert.doesNotMatch(panel, /half\.holes\.length && half\.nine !== "round"/);
+});
+
+test("legacy round resuelve un empate sólo al cierre con el keeper de ronda", () => {
+  const config: CounterBetConfig = { ...counterConfig(1), settlementMode: "round" };
+  const events: CounterBetEvent[] = [
+    { id: "round-a", kind: "camels", hole: 18, playerId: ids[0], quantity: 1 },
+    { id: "round-b", kind: "camels", hole: 18, playerId: ids[1], quantity: 1 },
+  ];
+  const enabled = [{ kind: "camels" as const, config }];
+  const keepers = emptyCounterBetKeepers();
+  assert.equal(requiredSideBetCapture(9, enabled, keepers, { enabled: false, participantIds: [] }, undefined, events, order), "");
+  assert.match(requiredSideBetCapture(18, enabled, keepers, { enabled: false, participantIds: [] }, undefined, events, order), /Selecciona quién/);
+  const selected = updateCounterBetKeeper(keepers, "camels", "round", ids[1], order);
+  assert.equal(requiredSideBetCapture(18, enabled, selected, { enabled: false, participantIds: [] }, undefined, events, order), "");
+  assert.equal(calculateCounterBet("camels", players, config, events, selected, order, new Set(order)).halves[0].keeperId, ids[1]);
 });
 
 test("Víboras desempata por menor distancia dentro de cada vuelta y conserva la distancia al editar", () => {
@@ -219,8 +277,19 @@ test("restaurar borradores conserva datos antiguos y las rondas nuevas nacen por
   const saved: CounterBetConfig = { enabled: true, value: 75, secondNineMultiplier: 3, participantIds: ids.slice(0, 4) };
   const restored = restoreCounterBetConfig(fresh, saved);
   assert.equal(restored.settlementMode, undefined);
+  assert.equal(restored.secondNinePressed, undefined);
   assert.equal(restored.secondNineMultiplier, 3);
   assert.equal(restored.value, 75);
+  const legacyPressureResult = calculateCounterBet("camels", players, restored, [
+    { id: "legacy-first", kind: "camels", hole: 9, playerId: ids[0], quantity: 1 },
+    { id: "legacy-second", kind: "camels", hole: 18, playerId: ids[1], quantity: 1 },
+  ], emptyCounterBetKeepers(), order, new Set(order));
+  assert.deepEqual(legacyPressureResult.halves.map((half) => half.multiplier), [1, 3]);
+  assert.deepEqual(legacyPressureResult.halves.map((half) => half.bagValue), [75, 225]);
+
+  const savedWithoutPressureFields: CounterBetConfig = { enabled: true, value: 75, participantIds: ids.slice(0, 4) };
+  const restoredWithoutPressureFields = restoreCounterBetConfig(fresh, savedWithoutPressureFields);
+  assert.equal(restoredWithoutPressureFields.secondNinePressed, false);
   assert.deepEqual(restoreCounterBetConfig(fresh).settlementMode, "halves");
 });
 
@@ -232,6 +301,26 @@ test("contadores rápidos conservan cantidad numérica, permiten borrar y no dup
   assert.equal(counterQuantity(state, "vipers", 4, "said"), 5);
   state = setCounterQuantity(state, "vipers", 4, "said", 0);
   assert.deepEqual(state, []);
+});
+
+test("captura UX V2 distingue cero confirmado de dato ausente y restaura eventos legacy sin inventar ceros", () => {
+  let state: CounterBetEvent[] = [];
+  assert.equal(counterCaptureQuantity(state, "camels", 1, "said"), undefined);
+  state = confirmCounterQuantity(state, "camels", 1, "said", 0, "explicit-zero");
+  assert.equal(counterCaptureQuantity(state, "camels", 1, "said"), 0);
+  assert.equal(state[0].captureConfirmed, true);
+
+  const restored = JSON.parse(JSON.stringify(state)) as CounterBetEvent[];
+  assert.equal(counterCaptureQuantity(restored, "camels", 1, "said"), 0);
+  assert.equal(counterQuantity(restored, "camels", 1, "said"), 0);
+
+  const positiveLegacy: CounterBetEvent[] = [{ id: "legacy-positive", kind: "fish", hole: 1, playerId: "said", quantity: 2 }];
+  const zeroLegacy: CounterBetEvent[] = [{ id: "legacy-zero", kind: "fish", hole: 1, playerId: "said", quantity: 0 }];
+  assert.equal(counterCaptureQuantity(positiveLegacy, "fish", 1, "said"), 2);
+  assert.equal(counterCaptureQuantity(zeroLegacy, "fish", 1, "said"), undefined);
+
+  state = confirmCounterQuantity(state, "camels", 1, "said", null);
+  assert.equal(counterCaptureQuantity(state, "camels", 1, "said"), undefined);
 });
 
 test("eventos corruptos no rompen captura y no vuelven al snapshot", () => {

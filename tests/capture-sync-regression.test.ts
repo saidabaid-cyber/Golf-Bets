@@ -41,8 +41,8 @@ test("$100 y 80% se confirman completos; signo, punto y coma usan teclado de tex
   assert.match(input, /inputMode="text"/);
   assert.match(input, /flushSync\(\(\) => onValueChange\(finalized\.value\)\)/);
   assert.doesNotMatch(input, /onValueChange\([^\n]*event\.target\.value/);
-  const page = readFileSync("app/page.tsx", "utf8");
-  assert.match(page, /commitUnchanged placeholder=\{String\(hole\.par\)\}/);
+  const capture = readFileSync("app/components/round-capture-v2.tsx", "utf8");
+  assert.match(capture, /commitUnchanged placeholder=\{String\(hole\.par\)\}/);
 });
 
 test("el último carácter del score se confirma antes de guardar, sin microtask ni render intermedio", () => {
@@ -258,9 +258,12 @@ test("Bola Amiga usa el resultado guardado una sola vez y expresa el monto por j
 
 test("scores siguen arriba y Personales queda fuera del Resumen General sin duplicarse", () => {
   const page = readFileSync("app/page.tsx", "utf8");
-  const scorecard = page.indexOf('<section className="card scoreCard">');
+  const capture = readFileSync("app/components/round-capture-v2.tsx", "utf8");
+  const scorecard = page.indexOf("<RoundCaptureV2");
   const priorStatus = page.indexOf('<section className="card compact priorBetStatus"');
   assert.ok(scorecard >= 0 && priorStatus > scorecard);
+  assert.ok(capture.indexOf("styles.primaryPlayer") < capture.indexOf("styles.groupTitle"));
+  assert.match(capture, /aria-label=\{`Score \$\{owner\.name\} hoyo \$\{hole\.number\}`\}/);
   assert.match(page, /generalBetBalances = useMemo\(\(\) => mergeBalances\(players,[^\n]+manual\.balances/);
   assert.doesNotMatch(page.match(/const generalBetBalances[^\n]+/)?.[0] || "", /personals\.balances/);
   assert.match(page, /title={<SetupModeTitle icon=\{BET_PRESENTATION\.personals\.icon\} title=\{BET_PRESENTATION\.personals\.title\}/);

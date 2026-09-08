@@ -15,6 +15,8 @@ import { ballFitDraftStorageKey } from "../lib/ball-fitting-storage";
 import { learningRecordsStorageKey } from "../lib/backyard-ai/memory/learning-events";
 import { userPreferenceStorageKey } from "../lib/backyard-ai/memory/personal-memory";
 import { backyardAiMetricsStorageKey } from "../lib/backyard-ai/observability/metrics";
+import { acceptAiProcessingConsent, hasActiveAiProcessingConsent } from "../lib/backyard-ai/processing-consent";
+import { AI_PROVIDER_PROCESSING_CONSENT } from "../lib/backyard-ai/privacy";
 import { ACCOUNT_STORAGE_KEYS, accountDeletionMarkerKey, bettingConsentPromptStorageKey } from "../lib/account-state";
 
 class MemoryStorage {
@@ -98,6 +100,7 @@ test("eliminar cuenta local descarta solo A y conserva invitado y B", () => {
   storage.setItem(learningRecordsStorageKey("user-a")!, "ai-learning");
   storage.setItem(userPreferenceStorageKey("user-a")!, "ai-preferences");
   storage.setItem(backyardAiMetricsStorageKey("user-a")!, "ai-metrics");
+  assert.equal(acceptAiProcessingConsent(storage as unknown as Storage, "user-a", AI_PROVIDER_PROCESSING_CONSENT).ok, true);
   storage.setItem(bettingConsentPromptStorageKey("user-a"), "shown");
   storage.setItem(accountDeletionMarkerKey("user-a"), "pending");
   switchAccountWorkspace(storage, "user-b");
@@ -119,6 +122,7 @@ test("eliminar cuenta local descarta solo A y conserva invitado y B", () => {
   assert.equal(storage.getItem(learningRecordsStorageKey("user-a")!), null);
   assert.equal(storage.getItem(userPreferenceStorageKey("user-a")!), null);
   assert.equal(storage.getItem(backyardAiMetricsStorageKey("user-a")!), null);
+  assert.equal(hasActiveAiProcessingConsent(storage, "user-a", AI_PROVIDER_PROCESSING_CONSENT), false);
   assert.equal(storage.getItem(bettingConsentPromptStorageKey("user-a")), null);
   assert.equal(storage.getItem(accountDeletionMarkerKey("user-a")), "pending");
   assert.equal(storage.getItem(internalNotificationStorageKey("user-b")), '{"version":1,"readEventKeys":["round-b"]}');
@@ -192,7 +196,7 @@ test("Cuenta y acceso presentan Apple solo cuando está disponible y usan el ori
   assert.match(provider, /appleAvailable \? "Continuar con Apple" : "Apple · Próximamente"/);
   assert.match(provider, /disabled=\{busy \|\| !appleAvailable\}/);
   assert.doesNotMatch(account, />Apple</);
-  assert.match(provider, /`\$\{window\.location\.origin\}\/auth\/callback`/);
+  assert.match(provider, /authCallbackUrl\(window\.location\.origin\)/);
 });
 
 test("la importación explícita sólo selecciona fotos del workspace activo", () => {

@@ -47,6 +47,15 @@ export async function sendEmailOtp(auth: AuthFlowClient, email: string, redirect
   throwIfError(result.error);
 }
 
+/** Keeps PKCE on the exact browser origin that initiated access. Supabase must
+ * also include this URL (or a deliberately scoped Preview wildcard) in its
+ * Redirect URLs allow-list. */
+export function authCallbackUrl(origin: string) {
+  const parsed = new URL(origin);
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") throw new Error("invalid_auth_origin");
+  return new URL("/auth/callback", `${parsed.protocol}//${parsed.host}`).toString();
+}
+
 export async function verifyEmailOtp(auth: AuthFlowClient, email: string, token: string) {
   if (!/^\d{8}$/.test(token)) throw new Error("invalid otp");
   const result = await auth.verifyOtp({ email: email.trim(), token, type: "email" });

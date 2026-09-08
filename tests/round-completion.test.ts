@@ -3,11 +3,11 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { calculatePersonalBets } from "../lib/engine";
-import { emptyCounterBetKeepers } from "../lib/side-bets";
+import { confirmCounterQuantity, counterCaptureQuantity, emptyCounterBetKeepers } from "../lib/side-bets";
 import { initialBets } from "../lib/new-round-bets";
 import { createSupplementalBet } from "../lib/supplemental-bets";
 import { abandonedPressurePlayersWithMissingScores, firstIncompleteRoundCapture, incompleteCoreBetSettlements, incompleteExternalPersonalBets, unsettledSupplementalBetResults } from "../lib/round-completion";
-import type { Course, PersonalBet, Player, PuttsByHole, SupplementalBet } from "../lib/types";
+import type { CounterBetEvent, Course, PersonalBet, Player, PuttsByHole, SupplementalBet } from "../lib/types";
 
 const players: Player[] = [{ id: "owner", name: "Said", handicap: 8 }];
 const order = Array.from({ length: 18 }, (_, index) => index + 1);
@@ -104,7 +104,7 @@ test("a team-pressure abandonment substitute never completes the canonical DNF c
 
 test("the DNF explanation runs before the generic missing-score archive guard", () => {
   const page = readFileSync("app/page.tsx", "utf8");
-  const saveStart = page.indexOf("function saveRound()");
+  const saveStart = page.indexOf("function saveRound(");
   const specificGuard = page.indexOf("abandonedPressurePlayersWithMissingScores", saveStart);
   const genericGuard = page.indexOf("Faltan scores por confirmar", saveStart);
   assert.ok(saveStart >= 0 && specificGuard > saveStart && genericGuard > specificGuard);
@@ -126,7 +126,7 @@ test("the DNF explanation runs before the generic missing-score archive guard", 
 
 test("the history action applies the supplemental settlement guard before persisting", () => {
   const page = readFileSync("app/page.tsx", "utf8");
-  const saveStart = page.indexOf("function saveRound()");
+  const saveStart = page.indexOf("function saveRound(");
   const persistStart = page.indexOf("void saveConfirmedRound(snapshot)", saveStart);
   const guardStart = page.indexOf("unsettledSupplementalBetResults(supplemental.results)", saveStart);
   assert.ok(saveStart >= 0 && guardStart > saveStart && persistStart > guardStart);
@@ -305,4 +305,182 @@ test("archive rechecks Minimum Putts across prior holes and only its configured 
 
   const firstNinePutts = Object.fromEntries(order.slice(0, 9).map((hole) => [hole, { owner: 2 }])) as PuttsByHole;
   assert.equal(firstIncompleteRoundCapture({ ...base, putts: firstNinePutts }), null);
+});
+
+test("Card AI cannot liquidate Viboritas from scores alone and routes to compact putts capture", () => {
+  const roundPlayers: Player[] = [
+    { id: "owner", name: "Said", handicap: 8 },
+    { id: "friend", name: "Pedro", handicap: 12 },
+  ];
+  const bets = initialBets(roundPlayers.map((player) => player.id));
+  bets.vipers.enabled = true;
+  bets.vipers.participantIds = roundPlayers.map((player) => player.id);
+  const completeScores = Object.fromEntries(order.map((hole) => [hole, { owner: 4, friend: 5 }]));
+  const base = {
+    order,
+    players: roundPlayers,
+    scores: completeScores,
+    bets,
+    segments: [],
+    supplementalBets: [],
+    putts: {} as PuttsByHole,
+    counterBetKeepers: emptyCounterBetKeepers(),
+    counterBetEvents: [],
+    lobaHoles: {},
+    ballFriendSetup: {},
+  };
+
+  const pending = firstIncompleteRoundCapture(base);
+  assert.equal(pending?.holeNumber, 1);
+  assert.match(pending?.errors.join(" ") ?? "", /putts de Said, Pedro/);
+
+  const completePutts = Object.fromEntries(order.map((hole) => [hole, { owner: 2, friend: 2 }])) as PuttsByHole;
+  assert.equal(firstIncompleteRoundCapture({ ...base, putts: completePutts }), null);
+
+  const page = readFileSync("app/page.tsx", "utf8");
+  const applyStart = page.indexOf("function applyScannedScorecard(");
+  const applyEnd = page.indexOf("function confirmNewRound()", applyStart);
+  const applyFlow = page.slice(applyStart, applyEnd);
+  const captureGuard = applyFlow.indexOf("firstIncompleteRoundCapture");
+  const historySave = applyFlow.indexOf("latestSaveRound.current({ prepareReview: true })");
+  assert.ok(captureGuard >= 0 && historySave > captureGuard);
+  assert.match(applyFlow.slice(captureGuard, historySave), /setTab\("round"\)/);
+  assert.doesNotMatch(applyFlow, /setTab\("results"\)/);
+});
+
+test("Card AI reusa las puertas finales y no muestra resultados con una Personal externa pendiente", () => {
+  const page = readFileSync("app/page.tsx", "utf8");
+  const applyStart = page.indexOf("function applyScannedScorecard(");
+  const applyEnd = page.indexOf("function confirmNewRound()", applyStart);
+  const applyFlow = page.slice(applyStart, applyEnd);
+  assert.match(applyFlow, /persistCommittedHoleBeforeAdvance/);
+  assert.doesNotMatch(applyFlow, /persistReviewBeforeLeavingRound/);
+  assert.match(applyFlow, /latestSaveRound\.current\(\{ prepareReview: true \}\)/);
+  assert.doesNotMatch(applyFlow, /setTab\("results"\)/);
+  assert.doesNotMatch(applyFlow, /recordScorecardResultReached\(\)/);
+
+  const committedStart = page.indexOf("function persistCommittedHoleBeforeAdvance(");
+  const committedEnd = page.indexOf("function saveRound(", committedStart);
+  const committedFlow = page.slice(committedStart, committedEnd);
+  assert.match(committedFlow, /reviewPending: false/);
+  assert.match(committedFlow, /setRoundReviewPending\(false\)/);
+  assert.match(page, /\{roundReviewPending \|\| roundClosed\s*\? <RoundFinalResult/);
+  assert.match(page, /\{\(roundReviewPending \|\| roundClosed\) && <button className="secondary big"[\s\S]*?>Compartir ronda<\/button>/);
+
+  const saveStart = page.indexOf("function saveRound(");
+  const saveEnd = page.indexOf("async function saveConfirmedRound", saveStart);
+  const saveFlow = page.slice(saveStart, saveEnd);
+  const externalGuard = saveFlow.indexOf("unresolvedExternalPersonalBets.length");
+  const snapshot = saveFlow.indexOf("currentSnapshot()");
+  assert.ok(externalGuard >= 0 && snapshot > externalGuard);
+  const guardFlow = saveFlow.slice(externalGuard, snapshot);
+  assert.match(guardFlow, /setPersonalSetupOpen\(true\)/);
+  assert.match(guardFlow, /setExpandedPersonalId\(firstPendingPersonal\.id\)/);
+  assert.match(guardFlow, /pendingPersonalFocus\.current = firstPendingPersonal\.id/);
+  assert.match(guardFlow, /setTab\("setup"\)/);
+  assert.match(guardFlow, /return;/);
+
+  const confirmedStart = page.indexOf("async function saveConfirmedRound", saveStart);
+  const confirmedEnd = page.indexOf("useLayoutEffect", confirmedStart);
+  const confirmedFlow = page.slice(confirmedStart, confirmedEnd);
+  assert.ok(confirmedFlow.indexOf("saveRoundHistoryLocalFirst") < confirmedFlow.indexOf("recordScorecardResultReached()"));
+  assert.ok(confirmedFlow.indexOf("recordScorecardResultReached()") < confirmedFlow.indexOf('setTab("results")'));
+});
+
+test("el último hoyo digital conserva el borrador vivo y pasa todas las puertas antes de promover revisión", () => {
+  const page = readFileSync("app/page.tsx", "utf8");
+  const liveStart = page.indexOf("function saveAndAdvance()");
+  const liveEnd = page.indexOf("useLayoutEffect(() => { latestSaveAndAdvance", liveStart);
+  const liveFlow = page.slice(liveStart, liveEnd);
+  assert.ok(liveStart >= 0 && liveEnd > liveStart);
+  assert.match(liveFlow, /const checkpointPersisted = persistCommittedHoleBeforeAdvance\(committed\.scores, committed\.edits, savedBets, savedIndex, startedAt\)/);
+  assert.doesNotMatch(liveFlow, /persistReviewBeforeLeavingRound/);
+  assert.match(liveFlow, /else latestSaveRound\.current\(\{ prepareReview: true \}\)/);
+  assert.doesNotMatch(liveFlow, /else \{ recordScorecardResultReached\(\); setTab\("results"\)/);
+
+  const committedStart = page.indexOf("function persistCommittedHoleBeforeAdvance(");
+  const committedEnd = page.indexOf("function saveRound(", committedStart);
+  const committedFlow = page.slice(committedStart, committedEnd);
+  assert.match(committedFlow, /reviewPending: false/);
+  assert.match(committedFlow, /setRoundReviewPending\(false\)/);
+  assert.match(committedFlow, /setShowRoundFinishedNotice\(false\)/);
+
+  const saveStart = page.indexOf("function saveRound(");
+  const saveEnd = page.indexOf("async function saveConfirmedRound", saveStart);
+  const saveFlow = page.slice(saveStart, saveEnd);
+  const externalGuard = saveFlow.indexOf("unresolvedExternalPersonalBets.length");
+  const prepareReview = saveFlow.indexOf("if (preparingReview)");
+  const persistReview = saveFlow.indexOf("persistReviewBeforeLeavingRound", prepareReview);
+  const resultsTab = saveFlow.indexOf('setTab("results")', prepareReview);
+  assert.ok(saveStart >= 0 && saveEnd > saveStart);
+  assert.match(saveFlow, /const preparingReview = options\.prepareReview === true/);
+  assert.match(saveFlow, /if \(!roundReviewPending && !preparingReview\)/);
+  assert.ok(externalGuard >= 0 && prepareReview > externalGuard && persistReview > prepareReview && resultsTab > persistReview);
+  const externalFlow = saveFlow.slice(externalGuard, prepareReview);
+  assert.match(externalFlow, /setPersonalSetupOpen\(true\)/);
+  assert.match(externalFlow, /setExpandedPersonalId\(firstPendingPersonal\.id\)/);
+  assert.match(externalFlow, /pendingPersonalFocus\.current = firstPendingPersonal\.id/);
+  assert.match(externalFlow, /setTab\("setup"\)/);
+  assert.match(externalFlow, /return;/);
+});
+
+test("Card AI requires explicit Camellos and Peces facts instead of assuming absent events are zero", () => {
+  const roundPlayers: Player[] = [
+    { id: "owner", name: "Said", handicap: 8 },
+    { id: "friend", name: "Pedro", handicap: 12 },
+  ];
+  const bets = initialBets(roundPlayers.map((player) => player.id));
+  for (const kind of ["camels", "fish"] as const) {
+    bets[kind].enabled = true;
+    bets[kind].participantIds = roundPlayers.map((player) => player.id);
+  }
+  const completeScores = Object.fromEntries(order.map((hole) => [hole, { owner: 4, friend: 5 }]));
+  const base = {
+    order,
+    players: roundPlayers,
+    scores: completeScores,
+    bets,
+    segments: [],
+    supplementalBets: [],
+    putts: {} as PuttsByHole,
+    counterBetKeepers: emptyCounterBetKeepers(),
+    counterBetEvents: [],
+    lobaHoles: {},
+    ballFriendSetup: {},
+  };
+
+  const pending = firstIncompleteRoundCapture(base);
+  assert.equal(pending?.holeNumber, 1);
+  assert.match(pending?.errors.join(" ") ?? "", /Camellos \(bunker\) de Said, Pedro/);
+  assert.match(pending?.errors.join(" ") ?? "", /Peces \(agua\) de Said, Pedro/);
+
+  let confirmedEvents: CounterBetEvent[] = base.counterBetEvents;
+  for (const hole of order) {
+    for (const player of roundPlayers) {
+      confirmedEvents = confirmCounterQuantity(confirmedEvents, "camels", hole, player.id, 0);
+      confirmedEvents = confirmCounterQuantity(confirmedEvents, "fish", hole, player.id, 0);
+    }
+  }
+  assert.equal(counterCaptureQuantity(confirmedEvents, "camels", 1, "owner"), 0);
+  assert.equal(counterCaptureQuantity(confirmedEvents, "fish", 1, "friend"), 0);
+  assert.equal(firstIncompleteRoundCapture({ ...base, counterBetEvents: confirmedEvents }), null);
+});
+
+test("live digital capture uses the same Camellos and Peces completeness gate before committing a hole", () => {
+  const page = readFileSync("app/page.tsx", "utf8");
+  const liveStart = page.indexOf("function saveAndAdvance()");
+  const liveEnd = page.indexOf("const savedRabbits", liveStart);
+  const liveFlow = page.slice(liveStart, liveEnd);
+  const factGuard = liveFlow.indexOf("requiredRoundCaptureFactErrors");
+  const validation = liveFlow.indexOf("collectHoleValidationErrors");
+  const commit = liveFlow.indexOf("commitHoleCapture");
+  assert.ok(liveStart >= 0 && factGuard > 0 && validation > factGuard && commit > validation);
+
+  const captureStart = page.indexOf("<RoundCaptureV2");
+  const captureEnd = page.indexOf("/>", captureStart);
+  const captureWiring = page.slice(captureStart, captureEnd);
+  assert.match(captureWiring, /counterCaptureQuantity\(counterBetEvents, "camels"/);
+  assert.match(captureWiring, /counterCaptureQuantity\(counterBetEvents, "fish"/);
+  assert.match(captureWiring, /onCounterChange=\{confirmCounterBetCapture\}/);
+  assert.match(page, /setCounterBetEvents\(events => confirmCounterQuantity\(events, kind, holeNumber, playerId, quantity/);
 });

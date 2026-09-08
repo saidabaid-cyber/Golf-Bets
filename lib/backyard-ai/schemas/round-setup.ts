@@ -2,6 +2,7 @@ import { collectBetConfigurationIssues, type BetConfigurationIssue, type RoundBe
 import { normalizeFoursomeSegments, playOrder, segmentDefinitions } from "../../engine";
 import type { RoundTemplateOrigin } from "../../group-game-template";
 import { restoreBetConfig } from "../../new-round-bets";
+import { personalNassauBetsForRoundHoles } from "../../personal-nassau";
 import { normalizeSupplementalBets } from "../../supplemental-bets";
 import type {
   BallFriendHole,
@@ -12,11 +13,20 @@ import type {
   PersonalBet,
   Player,
   RoundHandicapBasis,
+  RoundPresentation,
   RoundSnapshot,
   SupplementalBet,
 } from "../../types";
 
 export const ROUND_SETUP_DRAFT_VERSION = 1 as const;
+
+export type RoundSetupCourseIdentity = {
+  name: string;
+  catalogCourseId?: string;
+  candidateCourseIds: string[];
+};
+
+export type RoundSetupPresentation = RoundPresentation;
 
 export type RoundSetupDraft = {
   version: typeof ROUND_SETUP_DRAFT_VERSION;
@@ -24,6 +34,8 @@ export type RoundSetupDraft = {
   date: string;
   course: Course | null;
   courseSelected: boolean;
+  /** A resolved course whose tee is still pending. Never consumed by the engine. */
+  courseIdentity?: RoundSetupCourseIdentity;
   players: Player[];
   ownerId: string;
   startHole: 1 | 10;
@@ -35,6 +47,8 @@ export type RoundSetupDraft = {
   supplementalBets: SupplementalBet[];
   manualBets: ManualBet[];
   ballFriendSetup: Record<number, BallFriendHole>;
+  /** User-facing terminology kept separate from the deterministic engine model. */
+  presentation?: RoundSetupPresentation;
   templateOrigin?: RoundTemplateOrigin;
   /** Kept only as provenance; runtime score/result fields never enter this draft. */
   basedOnRoundId?: RoundSnapshot["id"];
@@ -45,6 +59,7 @@ export type CreateRoundSetupDraftInput = {
   date: string;
   course?: Course | null;
   courseSelected?: boolean;
+  courseIdentity?: RoundSetupCourseIdentity;
   players?: Player[];
   ownerId?: string;
   startHole?: 1 | 10;
@@ -56,12 +71,13 @@ export type CreateRoundSetupDraftInput = {
   supplementalBets?: SupplementalBet[];
   manualBets?: ManualBet[];
   ballFriendSetup?: Record<number, BallFriendHole>;
+  presentation?: RoundSetupPresentation;
   templateOrigin?: RoundTemplateOrigin;
   basedOnRoundId?: string;
 };
 
 export type RoundSetupDraftIssue = BetConfigurationIssue | {
-  code: "round-course" | "round-players" | "round-owner";
+  code: "round-course" | "round-tee" | "round-players" | "round-owner";
   sectionId: "round-course" | "round-players";
   message: string;
 };
@@ -100,6 +116,13 @@ export function createRoundSetupDraft(input: CreateRoundSetupDraftInput): RoundS
     date: input.date,
     course,
     courseSelected: selected,
+    ...(input.courseIdentity ? { courseIdentity: clone(input.courseIdentity) } : selected && course ? {
+      courseIdentity: {
+        name: course.name,
+        ...(course.catalogCourseId ? { catalogCourseId: course.catalogCourseId } : {}),
+        candidateCourseIds: [course.id],
+      },
+    } : {}),
     players,
     ownerId,
     startHole,
@@ -107,10 +130,11 @@ export function createRoundSetupDraft(input: CreateRoundSetupDraftInput): RoundS
     handicapBasis,
     bets,
     segments,
-    personalBets: clone(input.personalBets ?? []),
+    personalBets: personalNassauBetsForRoundHoles(clone(input.personalBets ?? []), roundHoles),
     supplementalBets: normalizeSupplementalBets(clone(input.supplementalBets ?? []), roundHoles),
     manualBets: clone(input.manualBets ?? []),
     ballFriendSetup: clone(input.ballFriendSetup ?? {}),
+    ...(input.presentation ? { presentation: clone(input.presentation) } : {}),
     ...(input.templateOrigin ? { templateOrigin: clone(input.templateOrigin) } : {}),
     ...(input.basedOnRoundId ? { basedOnRoundId: input.basedOnRoundId } : {}),
   };
@@ -138,7 +162,9 @@ export function roundBetConfigurationFromDraft(draft: RoundSetupDraft): RoundBet
 export function validateRoundSetupDraft(draft: RoundSetupDraft): RoundSetupDraftIssue[] {
   const issues: RoundSetupDraftIssue[] = [];
   if (!draft.courseSelected || !validCourse(draft.course)) {
-    issues.push({ code: "round-course", sectionId: "round-course", message: "Selecciona un campo y tee reales antes de iniciar." });
+    issues.push(draft.courseIdentity
+      ? { code: "round-tee", sectionId: "round-course", message: `Selecciona el tee de ${draft.courseIdentity.name} antes de iniciar.` }
+      : { code: "round-course", sectionId: "round-course", message: "Selecciona un campo antes de iniciar." });
   }
   if (!draft.players.length) {
     issues.push({ code: "round-players", sectionId: "round-players", message: "Agrega al menos un jugador a la ronda." });

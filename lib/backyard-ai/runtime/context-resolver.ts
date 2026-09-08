@@ -6,6 +6,8 @@ import {
   type GroupTemplateDraftSource,
 } from "../../group-game-template";
 import { restoreBetConfig } from "../../new-round-bets";
+import { missingHandicapsForActiveBets } from "../../handicap-base";
+import { playOrder } from "../../engine";
 import { createSupplementalBet } from "../../supplemental-bets";
 import type {
   Course,
@@ -61,6 +63,9 @@ type PlayerCandidate = {
   label: string;
   player: Pick<Player, "name" | "handicap" | "accountUserId">;
   rank: number;
+  aliases: string[];
+  profileGivenName?: string;
+  isProfile: boolean;
 };
 
 function localDate(date = new Date()) {
@@ -88,16 +93,33 @@ function playerIdentity(player: Pick<Player, "name" | "accountUserId">) {
 
 function candidatePool(draft: RoundSetupDraft, context: RoundSetupMemoryContext): PlayerCandidate[] {
   const candidates: PlayerCandidate[] = [];
-  const push = (player: Pick<Player, "name" | "handicap" | "accountUserId">, rank: number, key?: string) => {
+  const push = (
+    player: Pick<Player, "name" | "handicap" | "accountUserId">,
+    rank: number,
+    key?: string,
+    options: { aliases?: string[]; profileGivenName?: string; isProfile?: boolean } = {},
+  ) => {
     if (!player.name?.trim()) return;
-    candidates.push({ key: key ?? playerIdentity(player), label: cleanLabel(player.name), player, rank });
+    candidates.push({
+      key: key ?? playerIdentity(player),
+      label: cleanLabel(player.name),
+      player,
+      rank,
+      aliases: [...new Set([player.name, ...(options.aliases ?? [])].map(cleanLabel).filter(Boolean))],
+      ...(options.profileGivenName?.trim() ? { profileGivenName: cleanLabel(options.profileGivenName) } : {}),
+      isProfile: options.isProfile === true,
+    });
   };
-  draft.players.forEach((player) => push(player, 0, `round:${player.id}`));
   if (context.profile?.displayName.trim()) push({
     name: context.profile.displayName,
     handicap: context.profile.defaultHandicap,
     accountUserId: context.profile.userId,
-  }, 1);
+  }, 0, undefined, {
+    aliases: [context.profile.givenName ?? "", context.profile.username ?? ""],
+    profileGivenName: context.profile.givenName,
+    isProfile: true,
+  });
+  draft.players.forEach((player) => push(player, 1, `round:${player.id}`));
   context.frequentPlayers?.forEach((player) => push(player, 2));
   context.frequentGroups?.forEach((group) => group.players.forEach((member) => push(member, 3)));
   context.history?.forEach((round) => round.players?.forEach((player) => push(player, 4)));
@@ -106,24 +128,46 @@ function candidatePool(draft: RoundSetupDraft, context: RoundSetupMemoryContext)
   for (const candidate of candidates) {
     const identity = candidate.key.startsWith("round:") ? playerIdentity(candidate.player) : candidate.key;
     const current = best.get(identity);
-    if (!current || candidate.rank < current.rank) best.set(identity, candidate);
+    if (!current) best.set(identity, { ...candidate, key: identity });
+    else {
+      const preferred = candidate.rank < current.rank || (candidate.isProfile && !current.isProfile) ? candidate : current;
+      best.set(identity, {
+        ...preferred,
+        key: identity,
+        aliases: [...new Set([...current.aliases, ...candidate.aliases])],
+      });
+    }
   }
   return [...best.values()];
 }
 
 function playerMatches(query: string, candidates: PlayerCandidate[]) {
   const comparable = normalizeMexicanSpanish(query);
-  const exact = candidates.filter((candidate) => normalizeMexicanSpanish(candidate.label) === comparable);
-  if (exact.length) return exact;
-  return candidates.filter((candidate) => {
+  const scored = candidates.map((candidate) => {
     const label = normalizeMexicanSpanish(candidate.label);
-    return label.startsWith(`${comparable} `) || label.split(" ").some((part) => part === comparable);
-  });
+    const aliases = candidate.aliases.map(normalizeMexicanSpanish);
+    const profileNameMatch = candidate.isProfile && (
+      normalizeMexicanSpanish(candidate.profileGivenName ?? "") === comparable
+      || label.startsWith(`${comparable} `)
+      || label.split(" ").some((part) => part === comparable)
+    );
+    const score = candidate.isProfile && label === comparable ? 0
+      : profileNameMatch ? 1
+        : label === comparable ? 2
+          : aliases.includes(comparable) ? 3
+            : label.startsWith(`${comparable} `) || label.split(" ").some((part) => part === comparable) ? 4
+              : Number.POSITIVE_INFINITY;
+    return { candidate, score };
+  }).filter((entry) => Number.isFinite(entry.score));
+  const best = Math.min(...scored.map((entry) => entry.score));
+  return scored.filter((entry) => entry.score === best).map((entry) => entry.candidate);
 }
 
 function runtimePlayer(candidate: PlayerCandidate, draft: RoundSetupDraft, idFactory: () => string): Player {
   const current = draft.players.find((player) => playerIdentity(player) === playerIdentity(candidate.player));
-  if (current) return structuredClone(current);
+  if (current) return candidate.isProfile
+    ? { ...structuredClone(current), name: candidate.player.name, accountUserId: candidate.player.accountUserId }
+    : structuredClone(current);
   const id = candidate.player.accountUserId ? accountPrimaryPlayerId(candidate.player.accountUserId) : idFactory();
   return {
     id,
@@ -150,6 +194,12 @@ function matchingCourses(query: string, context: RoundSetupMemoryContext) {
     if (teeMatches.length === 1) return teeMatches;
   }
   return matches;
+}
+
+function sharedCatalogCourse(matches: readonly Course[]) {
+  const catalogCourseId = matches[0]?.catalogCourseId;
+  if (!catalogCourseId || matches.length < 2 || !matches.every((course) => course.catalogCourseId === catalogCourseId)) return null;
+  return { catalogCourseId, name: matches[0].name, candidateCourseIds: matches.map((course) => course.id) };
 }
 
 function sortedHistory(context: RoundSetupMemoryContext) {
@@ -238,8 +288,14 @@ function draftFromGroup(group: FrequentGroup, current: RoundSetupDraft, date: st
 function draftFromHistory(snapshot: RoundSnapshot, current: RoundSetupDraft, date: string, idFactory: () => string, context: RoundSetupMemoryContext) {
   const sourcePlayers = snapshot.players ?? [];
   if (!sourcePlayers.length) return null;
-  const startHole = snapshot.startHole === 10 ? 10 : 1;
-  const roundHoles = snapshot.roundHoles === 9 ? 9 : 18;
+  const storedOrder = Array.isArray(snapshot.order) ? snapshot.order : [];
+  const storedStart = storedOrder[0] === 10 ? 10 : storedOrder[0] === 1 ? 1 : undefined;
+  const storedLength = storedOrder.length === 9 ? 9 : storedOrder.length === 18 ? 18 : undefined;
+  const expectedOrder = storedStart === undefined ? [] : playOrder(storedStart).slice(0, storedLength ?? 0);
+  const orderIsValid = storedLength !== undefined
+    && storedOrder.every((hole, index) => Number.isInteger(hole) && hole === expectedOrder[index]);
+  const startHole: 1 | 10 = orderIsValid ? storedStart! : snapshot.startHole === 10 ? 10 : 1;
+  const roundHoles: 9 | 18 = orderIsValid ? storedLength : snapshot.roundHoles === 9 ? 9 : 18;
   const memberIdByPlayerId = Object.fromEntries(sourcePlayers.map((player, index) => [player.id, `history-member-${index + 1}`]));
   const source: GroupTemplateDraftSource = {
     ownerId: sourcePlayers.some((player) => player.id === snapshot.ownerId)
@@ -290,6 +346,7 @@ function draftFromHistory(snapshot: RoundSnapshot, current: RoundSetupDraft, dat
     personalBets: loaded.personalBets,
     supplementalBets: loaded.supplementalBets,
     manualBets: loaded.manualBets,
+    presentation: snapshot.presentation,
     templateOrigin: loaded.origin,
     basedOnRoundId: snapshot.id,
   });
@@ -364,6 +421,15 @@ function questionForCourse(name: string, matches: Course[]): RoundSetupQuestion 
         field: "course",
         prompt: `No encontré “${name}” en tus campos disponibles. ¿Qué campo y tee quieres usar?`,
       };
+}
+
+function questionForTee(name: string, matches: Course[]): RoundSetupQuestion {
+  return {
+    code: "missing_tee",
+    field: "course.tee",
+    prompt: `¿Qué tee juegan hoy en ${name}?`,
+    candidates: matches.map((course) => ({ id: course.id, label: course.teeName })),
+  };
 }
 
 function isCoreEnabled(draft: RoundSetupDraft, bet: Extract<ParsedRoundSetupAction, { type: "configure_core_bet" }>["bet"]) {
@@ -480,7 +546,6 @@ export function resolveRoundSetupContext(
   const hasCoreAmount = (bet: Extract<ParsedRoundSetupAction, { type: "configure_core_bet" }>["bet"]) => interpretation.actions.some((action) => action.type === "configure_core_bet" && action.bet === bet && action.value !== undefined);
   const hasGroupNassauAmount = () => interpretation.actions.some((action) => action.type === "configure_group_nassau" && action.value !== undefined);
   const hasPollaAmount = (component: Extract<ParsedRoundSetupAction, { type: "configure_polla_component" }>["component"]) => interpretation.actions.some((action) => action.type === "configure_polla_component" && action.component === component && action.value !== undefined);
-  const hasBallFriendAmount = () => interpretation.actions.some((action) => action.type === "configure_ball_friend" && action.value !== undefined);
   const hasIndividualNassauAmount = (playerAName: string, playerBName: string) => interpretation.actions.some((action) => action.type === "configure_individual_nassau"
     && action.value !== undefined
     && new Set([normalizeMexicanSpanish(action.playerAName), normalizeMexicanSpanish(action.playerBName)]).has(normalizeMexicanSpanish(playerAName))
@@ -508,8 +573,8 @@ export function resolveRoundSetupContext(
       for (const name of parsed.playerNames) {
         const matches = playerMatches(name, pool);
         const explicitHandicap = explicitPlayerHandicaps.get(normalizeMexicanSpanish(name));
-        if (matches.length === 0 && explicitHandicap !== undefined) {
-          players.push({ id: idFactory(), name: cleanLabel(name), handicap: explicitHandicap });
+        if (matches.length === 0) {
+          players.push({ id: idFactory(), name: cleanLabel(name), handicap: explicitHandicap ?? null });
           continue;
         }
         if (matches.length !== 1) {
@@ -532,12 +597,17 @@ export function resolveRoundSetupContext(
     }
     if (parsed.type === "select_course") {
       const matches = matchingCourses(parsed.courseName, context);
-      if (matches.length !== 1) questions.push(questionForCourse(parsed.courseName, matches));
-      else record({ type: "select_course", course: matches[0], source: "explicit", confidence: parsed.confidence, evidence: parsed.evidence });
+      const shared = sharedCatalogCourse(matches);
+      if (matches.length === 1) record({ type: "select_course", course: matches[0], source: "explicit", confidence: parsed.confidence, evidence: parsed.evidence });
+      else if (shared) {
+        record({ type: "identify_course", courseName: shared.name, catalogCourseId: shared.catalogCourseId, candidateCourseIds: shared.candidateCourseIds, source: "explicit", confidence: parsed.confidence, evidence: parsed.evidence });
+        questions.push(questionForTee(shared.name, matches));
+      } else questions.push(questionForCourse(parsed.courseName, matches));
       continue;
     }
     if (parsed.type === "select_tee") {
-      const sameCourseQuery = preview.course ? `${preview.course.name} ${parsed.teeName}` : parsed.teeName;
+      const pendingCourseName = preview.courseIdentity?.name;
+      const sameCourseQuery = preview.course?.name || pendingCourseName ? `${preview.course?.name ?? pendingCourseName} ${parsed.teeName}` : parsed.teeName;
       const matches = matchingCourses(sameCourseQuery, context);
       if (matches.length !== 1) questions.push(questionForCourse(sameCourseQuery, matches));
       else record({ type: "select_course", course: matches[0], source: "explicit", confidence: parsed.confidence, evidence: parsed.evidence });
@@ -585,7 +655,8 @@ export function resolveRoundSetupContext(
         questions.push({ code: "invalid_action", field: "bets.monkey.participantIds", prompt: "Monkey necesita exactamente tres jugadores. ¿Quiénes participan?" });
         continue;
       }
-      if (parsed.enabled && parsed.value === undefined && !hasCoreAmount(parsed.bet) && !isCoreEnabled(preview, parsed.bet)) {
+      const mayUseExistingDomainDefault = parsed.bet === "vipers";
+      if (parsed.enabled && parsed.value === undefined && !hasCoreAmount(parsed.bet) && !isCoreEnabled(preview, parsed.bet) && !mayUseExistingDomainDefault) {
         questions.push(amountQuestion(`bets.${parsed.bet}.value`, parsed.bet === "skins" ? "Skins" : parsed.evidence));
         continue;
       }
@@ -602,6 +673,8 @@ export function resolveRoundSetupContext(
         ...(parsed.value !== undefined ? { value: parsed.value } : {}),
         ...(participantIds ? { participantIds } : {}),
         ...(parsed.skinsMode ? { skinsMode: parsed.skinsMode } : {}),
+        ...(parsed.secondNinePressed !== undefined ? { secondNinePressed: parsed.secondNinePressed } : {}),
+        ...(parsed.secondNineMultiplier !== undefined ? { secondNineMultiplier: parsed.secondNineMultiplier } : {}),
         source: "explicit",
         confidence: parsed.confidence,
         evidence: parsed.evidence,
@@ -609,30 +682,85 @@ export function resolveRoundSetupContext(
       continue;
     }
     if (parsed.type === "configure_group_nassau") {
+      const groupNassauComponents = (["first9", "second9", "total18"] as const)
+        .filter((component) => preview.bets.polla[component].enabled);
+      const currentEnabled = groupNassauComponents.length > 0;
+      if (parsed.modificationOnly && !currentEnabled) {
+        const playerName = (id: string) => preview.players.find((player) => player.id === id)?.name ?? "Jugador";
+        const candidates = new Map<string, { id: string; playerAId?: string; playerBId?: string; label: string }>();
+        for (const bet of preview.personalBets.filter((candidate) => candidate.enabled !== false)) {
+          if (bet.rivalMode === "group" && bet.rivalPlayerId) {
+            const pair = [preview.ownerId, bet.rivalPlayerId].sort();
+            candidates.set(pair.join(":"), {
+              id: bet.id,
+              playerAId: preview.ownerId,
+              playerBId: bet.rivalPlayerId,
+              label: `${playerName(preview.ownerId)} vs ${playerName(bet.rivalPlayerId)}`,
+            });
+          } else {
+            candidates.set(`external:${bet.id}`, { id: bet.id, label: `${playerName(preview.ownerId)} vs ${bet.rivalName}` });
+          }
+        }
+        for (const bet of preview.supplementalBets.filter((candidate): candidate is Extract<SupplementalBet, { type: "individual_nassau" }> => candidate.type === "individual_nassau" && candidate.enabled)) {
+          const pair = [bet.playerAId, bet.playerBId].sort();
+          if (!candidates.has(pair.join(":"))) candidates.set(pair.join(":"), {
+            id: bet.id,
+            playerAId: bet.playerAId,
+            playerBId: bet.playerBId,
+            label: `${playerName(bet.playerAId)} vs ${playerName(bet.playerBId)}`,
+          });
+        }
+        const available = [...candidates.values()];
+        const only = available.length === 1 ? available[0] : undefined;
+        if (only?.playerAId && only.playerBId) {
+          record({
+            type: "configure_individual_nassau",
+            id: only.id,
+            enabled: parsed.enabled,
+            playerAId: only.playerAId,
+            playerBId: only.playerBId,
+            ...(parsed.value !== undefined ? { value: parsed.value } : {}),
+            source: "explicit",
+            confidence: parsed.confidence,
+            evidence: parsed.evidence,
+          });
+        } else {
+          questions.push({
+            code: "ambiguous_bet",
+            field: "supplementalBets.individual_nassau.instance",
+            prompt: available.length
+              ? "¿Qué Nassau individual quieres cambiar? Indica la pareja exacta."
+              : "No hay un Nassau grupal activo para cambiar. ¿Quieres crear uno grupal o cuál pareja juega Nassau individual?",
+            ...(available.length ? { candidates: available.map((candidate) => ({ id: candidate.id, label: candidate.label })) } : {}),
+          });
+        }
+        continue;
+      }
       if (!parsed.enabled) {
         record({ type: "remove_nassau", source: "explicit", confidence: parsed.confidence, evidence: parsed.evidence });
         continue;
       }
       const excluded = resolveNames(parsed.excludedPlayerNames);
       if (!excluded.complete) continue;
-      const currentEnabled = [preview.bets.polla.first9, preview.bets.polla.second9, preview.bets.polla.total18]
-        .some((component) => component.enabled);
       if (parsed.value === undefined && !hasGroupNassauAmount() && !currentEnabled) {
         questions.push(amountQuestion("bets.polla", "Nassau grupal"));
         continue;
       }
       const allPlayerIds = preview.players.map((player) => player.id);
-      const currentParticipantIds = [preview.bets.polla.first9, preview.bets.polla.second9, preview.bets.polla.total18]
-        .find((component) => component.enabled)?.participantIds ?? preview.bets.polla.first9.participantIds;
-      const participantIds = parsed.excludedPlayerNames?.length
-        ? (parsed.allPlayers ? allPlayerIds : currentParticipantIds).filter((id) => !excluded.ids.includes(id))
-        : parsed.allPlayers ? preview.players.map((player) => player.id) : undefined;
+      const participantIdsByComponent = parsed.excludedPlayerNames?.length ? {
+        first9: (parsed.allPlayers ? allPlayerIds : preview.bets.polla.first9.participantIds).filter((id) => !excluded.ids.includes(id)),
+        second9: (parsed.allPlayers ? allPlayerIds : preview.bets.polla.second9.participantIds).filter((id) => !excluded.ids.includes(id)),
+        total18: (parsed.allPlayers ? allPlayerIds : preview.bets.polla.total18.participantIds).filter((id) => !excluded.ids.includes(id)),
+      } : undefined;
+      const participantIds = !parsed.excludedPlayerNames?.length && parsed.allPlayers ? allPlayerIds : undefined;
       const participationOnly = Boolean(parsed.excludedPlayerNames?.length && parsed.value === undefined && currentEnabled);
       record({
         type: "configure_group_nassau",
-        enabled: participationOnly ? undefined : true,
+        enabled: participationOnly || parsed.modificationOnly ? undefined : true,
+        ...(parsed.modificationOnly ? { componentScope: groupNassauComponents } : {}),
         ...(parsed.value !== undefined ? { value: parsed.value } : {}),
         ...(participantIds ? { participantIds } : {}),
+        ...(participantIdsByComponent ? { participantIdsByComponent } : {}),
         ...(parsed.hcpPct !== undefined ? { hcpPct: parsed.hcpPct } : {}),
         ...(parsed.decimals ? { decimals: parsed.decimals } : {}),
         source: "explicit",
@@ -711,10 +839,9 @@ export function resolveRoundSetupContext(
         questions.push({ code: "invalid_action", field: "bets.ballFriend.teams", prompt: "Bola Amiga necesita dos parejas distintas de dos jugadores." });
         continue;
       }
-      if (parsed.enabled && parsed.value === undefined && !hasBallFriendAmount() && !preview.bets.ballFriend.enabled) {
-        questions.push(amountQuestion("bets.ballFriend.value", "Bola Amiga"));
-        continue;
-      }
+      // Bola Amiga already has a complete catalog-backed new-round value. A
+      // bare activation keeps that visible domain default instead of inventing
+      // a value or blocking the rest of the setup.
       const allPlayerIds = preview.players.map((player) => player.id);
       const participantIds = hasTeams
         ? [...teamA.ids, ...teamB.ids]
@@ -976,7 +1103,7 @@ export function resolveRoundSetupContext(
     record({ type: "configure_ball_friend", participantIds: ballFriendPreference.participantIds, source, confidence: Math.min(...ballFriendPreference.used.map((entry) => entry.preference.confidence)), evidence: "Participantes de Bola Amiga recuperados de una preferencia confirmada" });
   }
 
-  if (!preview.courseSelected) {
+  if (!preview.courseSelected && !preview.courseIdentity) {
     const homeCourse = context.profile?.homeClub ? matchingCourses(context.profile.homeClub, context) : [];
     if (homeCourse.length === 1) {
       if (record({ type: "select_course", course: homeCourse[0], source: "personal_memory", confidence: 0.88, evidence: "Campo local del perfil" })) {
@@ -992,6 +1119,14 @@ export function resolveRoundSetupContext(
     }
   }
   if (!preview.players.length) questions.push({ code: "missing_players", field: "players", prompt: "¿Quiénes juegan hoy?" });
+  const missingHandicaps = missingHandicapsForActiveBets(preview.players, preview.bets, preview.supplementalBets);
+  if (missingHandicaps.length) questions.push({
+    code: "missing_player_handicaps",
+    field: "players.handicaps",
+    prompt: `Me faltan los HCP de ${missingHandicaps.map((player) => player.name).join(", ")}.`,
+    playerTargets: missingHandicaps.map((player) => ({ id: player.id, label: player.name })),
+  });
 
-  return { baseDraft, actions: resolvedActions, questions: uniqueQuestions(questions), memory };
+  const currentQuestions = questions.filter((question) => !(question.field === "course.tee" && preview.courseSelected));
+  return { baseDraft, actions: resolvedActions, questions: uniqueQuestions(currentQuestions), memory };
 }

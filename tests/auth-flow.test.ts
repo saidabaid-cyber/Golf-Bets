@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { Session } from "@supabase/supabase-js";
 
-import { AuthSessionRecoveryError, clearDeletedAuthSession, clearDeletedAuthSessionForUser, closeAuthSession, isAccountSession, recoverAuthSession, restoreAuthSession, sendEmailOtp, startSocialOAuth, verifyEmailOtp, type AuthFlowClient } from "../lib/auth-flow";
+import { AuthSessionRecoveryError, authCallbackUrl, clearDeletedAuthSession, clearDeletedAuthSessionForUser, closeAuthSession, isAccountSession, recoverAuthSession, restoreAuthSession, sendEmailOtp, startSocialOAuth, verifyEmailOtp, type AuthFlowClient } from "../lib/auth-flow";
 import { readFileSync } from "node:fs";
 
 function authMock(overrides: Partial<AuthFlowClient> = {}) {
@@ -47,7 +47,15 @@ test("Google y Apple usan OAuth mock con callback, nunca proveedor real", async 
   assert.deepEqual(calls.map((call) => call.method), ["oauth", "oauth"]);
   assert.deepEqual(calls.map((call) => (call.input as { provider: string }).provider), ["google", "apple"]);
   assert.deepEqual((calls[0].input as { options: { queryParams: Record<string, string> } }).options.queryParams, { prompt: "select_account" });
+  assert.equal((calls[0].input as { options: { redirectTo: string } }).options.redirectTo, "https://golf-bets-psi.vercel.app/auth/callback");
   assert.equal((calls[1].input as { options: { queryParams?: Record<string, string> } }).options.queryParams, undefined);
+});
+
+test("OAuth conserva exactamente el origen del Preview que inició PKCE", () => {
+  const preview = "https://golf-bets-git-ai-first-phase1-saha8.vercel.app";
+  assert.equal(authCallbackUrl(preview), `${preview}/auth/callback`);
+  assert.equal(authCallbackUrl("http://localhost:3000"), "http://localhost:3000/auth/callback");
+  assert.throws(() => authCallbackUrl("javascript:alert(1)"), /invalid_auth_origin/);
 });
 
 test("restauración y logout usan el cliente mock", async () => {

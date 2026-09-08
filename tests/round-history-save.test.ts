@@ -229,7 +229,7 @@ test("el botón finaliza solo después de persistir local/IndexedDB y nunca pide
   assert.ok(persist >= 0 && persist < clearDraft);
   assert.ok(clearDraft < closeRound);
   assert.ok(closeRound < queueCloud);
-  assert.doesNotMatch(page.slice(page.indexOf("function saveRound()"), saveEnd), /cloudStatus\s*!==\s*["']synced["']/);
+  assert.doesNotMatch(page.slice(page.indexOf("function saveRound("), saveEnd), /cloudStatus\s*!==\s*["']synced["']/);
 });
 
 test("Guardar → nube atrasada → aplicar respuesta → Histórico → reload nunca pierde la ronda", async () => {

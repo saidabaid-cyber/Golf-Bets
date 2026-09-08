@@ -1,6 +1,7 @@
 import { normalizeFoursomeSegments, playOrder } from "../../engine";
 import { migrateSupplementalNassau } from "../../nassau-migration";
 import { initialBets } from "../../new-round-bets";
+import { personalNassauBetsForRoundHoles, personalNassauComponentsForRoundHoles } from "../../personal-nassau";
 import { createSupplementalBet, supplementalBetsForRoundHoles } from "../../supplemental-bets";
 import type { BetConfig } from "../../types";
 import type { RoundSetupAction } from "../schemas/actions";
@@ -42,6 +43,20 @@ function patchValueConfig<T extends { enabled: boolean; value: number; participa
   };
 }
 
+function patchCounterBet(
+  current: BetConfig["fish"],
+  action: Extract<RoundSetupAction, { type: "configure_core_bet" }>,
+  allPlayerIds: string[],
+) {
+  return {
+    ...patchValueConfig(current, action, allPlayerIds),
+    ...definedPatch({
+      secondNinePressed: action.secondNinePressed,
+      secondNineMultiplier: action.secondNineMultiplier,
+    }),
+  };
+}
+
 function patchCoreBet(draft: RoundSetupDraft, action: Extract<RoundSetupAction, { type: "configure_core_bet" }>) {
   const ids = draft.players.map((player) => player.id);
   switch (action.bet) {
@@ -72,13 +87,13 @@ function patchCoreBet(draft: RoundSetupDraft, action: Extract<RoundSetupAction, 
       draft.bets.miniPolla = patchValueConfig(draft.bets.miniPolla, action, ids);
       return;
     case "vipers":
-      draft.bets.vipers = patchValueConfig(draft.bets.vipers, action, ids);
+      draft.bets.vipers = patchCounterBet(draft.bets.vipers, action, ids);
       return;
     case "camels":
-      draft.bets.camels = patchValueConfig(draft.bets.camels, action, ids);
+      draft.bets.camels = patchCounterBet(draft.bets.camels, action, ids);
       return;
     case "fish":
-      draft.bets.fish = patchValueConfig(draft.bets.fish, action, ids);
+      draft.bets.fish = patchCounterBet(draft.bets.fish, action, ids);
       return;
     case "loba":
       draft.bets.loba = patchValueConfig(draft.bets.loba, action, ids);
@@ -144,9 +159,23 @@ export function executeRoundSetupActions(draft: RoundSetupDraft, actions: readon
           ? { ...player, handicap: action.handicap }
           : player);
         break;
+      case "identify_course":
+        next.course = null;
+        next.courseSelected = false;
+        next.courseIdentity = {
+          name: action.courseName,
+          ...(action.catalogCourseId ? { catalogCourseId: action.catalogCourseId } : {}),
+          candidateCourseIds: [...action.candidateCourseIds],
+        };
+        break;
       case "select_course":
         next.course = structuredClone(action.course);
         next.courseSelected = true;
+        next.courseIdentity = {
+          name: action.course.name,
+          ...(action.course.catalogCourseId ? { catalogCourseId: action.course.catalogCourseId } : {}),
+          candidateCourseIds: [action.course.id],
+        };
         break;
       case "set_start_hole":
         next.startHole = action.startHole;
@@ -158,6 +187,7 @@ export function executeRoundSetupActions(draft: RoundSetupDraft, actions: readon
         break;
       case "set_round_holes": {
         next.roundHoles = action.roundHoles;
+        next.personalBets = personalNassauBetsForRoundHoles(next.personalBets, action.roundHoles);
         next.supplementalBets = supplementalBetsForRoundHoles(next.supplementalBets, action.roundHoles);
         if (action.roundHoles === 9) {
           next.bets.polla = {
@@ -182,7 +212,12 @@ export function executeRoundSetupActions(draft: RoundSetupDraft, actions: readon
         break;
       case "configure_group_nassau": {
         const ids = next.players.map((player) => player.id);
-        const patch = <T extends BetConfig["polla"]["first9"]>(current: T, available: boolean) => ({
+        const componentScope = action.componentScope ? new Set(action.componentScope) : undefined;
+        const patch = <T extends BetConfig["polla"]["first9"]>(
+          current: T,
+          available: boolean,
+          component: "first9" | "second9" | "total18",
+        ) => componentScope && !componentScope.has(component) ? current : ({
           ...current,
           ...definedPatch({
             enabled: action.enabled === undefined ? undefined : action.enabled && available,
@@ -190,13 +225,20 @@ export function executeRoundSetupActions(draft: RoundSetupDraft, actions: readon
             hcpPct: action.hcpPct,
             decimals: action.decimals,
           }),
-          participantIds: configuredParticipants(current.participantIds, action.participantIds, ids),
+          participantIds: configuredParticipants(
+            current.participantIds,
+            action.participantIdsByComponent?.[component] ?? action.participantIds,
+            ids,
+          ),
         });
         next.bets.polla = {
-          first9: patch(next.bets.polla.first9, true),
-          second9: patch(next.bets.polla.second9, next.roundHoles === 18),
-          total18: patch(next.bets.polla.total18, next.roundHoles === 18),
+          first9: patch(next.bets.polla.first9, true, "first9"),
+          second9: patch(next.bets.polla.second9, next.roundHoles === 18, "second9"),
+          total18: patch(next.bets.polla.total18, next.roundHoles === 18, "total18"),
         };
+        if (action.source === "explicit") {
+          next.presentation = { version: 1, ...next.presentation, groupNassauTerm: "nassau" };
+        }
         break;
       }
       case "configure_polla_component": {
@@ -210,6 +252,9 @@ export function executeRoundSetupActions(draft: RoundSetupDraft, actions: readon
             participantIds: configuredParticipants(current.participantIds, action.participantIds, ids),
           },
         };
+        if (action.source === "explicit") {
+          next.presentation = { version: 1, ...next.presentation, groupNassauTerm: "polla" };
+        }
         break;
       }
       case "configure_individual_nassau": {
@@ -219,9 +264,11 @@ export function executeRoundSetupActions(draft: RoundSetupDraft, actions: readon
           ? next.personalBets.findIndex((bet) => bet.rivalMode === "group" && bet.rivalPlayerId === rivalId)
           : -1;
         if (personalIndex >= 0) {
+          const current = next.personalBets[personalIndex];
           next.personalBets[personalIndex] = {
-            ...next.personalBets[personalIndex],
+            ...current,
             ...definedPatch({ enabled: action.enabled, baseValue: action.value }),
+            components: personalNassauComponentsForRoundHoles(current.components, next.roundHoles),
           };
           break;
         }
@@ -238,6 +285,7 @@ export function executeRoundSetupActions(draft: RoundSetupDraft, actions: readon
               ...definedPatch({ enabled: action.enabled, value: action.value }),
               playerAId: action.playerAId,
               playerBId: action.playerBId,
+              components: personalNassauComponentsForRoundHoles(current.components, next.roundHoles),
             };
           }
         } else if (action.enabled !== false) {

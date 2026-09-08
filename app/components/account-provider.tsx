@@ -36,7 +36,7 @@ import {
   type LegalAcceptance,
 } from "../../lib/account-state";
 import { getSupabaseBrowser } from "../../lib/supabase/client";
-import { AuthSessionRecoveryError, authIdentityChanged, clearDeletedAuthSessionForUser, closeAuthSession, isAccountSession, recoverAuthSession, requireCloudWrites, restoreAuthSession, sendEmailOtp, startSocialOAuth, verifyEmailOtp, OtpSendGate, otpRetrySeconds, OTP_COOLDOWN_KEY } from "../../lib/auth-flow";
+import { AuthSessionRecoveryError, authCallbackUrl, authIdentityChanged, clearDeletedAuthSessionForUser, closeAuthSession, isAccountSession, recoverAuthSession, requireCloudWrites, restoreAuthSession, sendEmailOtp, startSocialOAuth, verifyEmailOtp, OtpSendGate, otpRetrySeconds, OTP_COOLDOWN_KEY } from "../../lib/auth-flow";
 import { activeWorkspaceScorecardPhotoIds, discardAccountWorkspace, ownsLocalWorkspace, selectAccountScorecardPhotoIds, switchAccountWorkspace, WORKSPACE_OWNER_KEY } from "../../lib/account-workspace";
 import { CLOUD_LOCAL_META_KEY, type CloudPreferences } from "../../lib/cloud-sync";
 import { deleteOfflineAccountData, readAllOfflineAccountRecords } from "../../lib/offline-store";
@@ -193,7 +193,7 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
     }
     setBusy(true); setMessage("");
     try {
-      await startSocialOAuth(supabase.auth, provider, `${window.location.origin}/auth/callback`);
+      await startSocialOAuth(supabase.auth, provider, authCallbackUrl(window.location.origin));
     } catch (error) {
       setMessage(authErrorMessage(error, provider));
       setBusy(false);
@@ -211,7 +211,7 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
     setRetrySeconds(otpRetrySeconds(sendGate.current.nextSendAt));
     setBusy(true); setMessage("");
     try {
-      await sendEmailOtp(supabase.auth, email, `${window.location.origin}/auth/callback`);
+      await sendEmailOtp(supabase.auth, email, authCallbackUrl(window.location.origin));
       setCodeSent(true);
       setMessage("Código enviado. Revisa tu correo.");
     } catch (error) {

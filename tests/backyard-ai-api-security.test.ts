@@ -17,13 +17,17 @@ import {
   resetBackyardAiLimitsForTests,
 } from "../lib/backyard-ai/server/rate-limit";
 import {
+  MAX_SCORECARD_REQUEST_BYTES,
   MAX_SCORECARD_PHOTO_ID_LENGTH,
+  MAX_SCORECARD_TOTAL_DATA_URL_LENGTH,
+  MAX_SCORECARD_TOTAL_IMAGE_BYTES,
   parseScorecardPhotos,
   parseScorecardRoundHint,
   restoreCallerPhotoIds,
+  scorecardPhotoPayloadExceedsAggregateLimit,
 } from "../lib/backyard-ai/server/scorecard-request";
 import type { ScorecardExtraction } from "../lib/backyard-ai/schemas/scorecard";
-import { BACKYARD_AI_PROVIDER_CONSENT_VERSION, parseBackyardAiProviderConsent } from "../lib/backyard-ai/privacy";
+import { AI_IMAGE_PROCESSING_CONSENT, AI_PROVIDER_PROCESSING_CONSENT, BACKYARD_AI_PROVIDER_CONSENT_VERSION, parseBackyardAiProviderConsent } from "../lib/backyard-ai/privacy";
 
 function jsonRequest(body: string, headers: Record<string, string> = {}) {
   return new Request("https://app.example/api/backyard-ai/test", {
@@ -35,6 +39,13 @@ function jsonRequest(body: string, headers: Record<string, string> = {}) {
 
 function jpegDataUrl() {
   return `data:image/jpeg;base64,${Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0xff, 0xd9]).toString("base64")}`;
+}
+
+function jpegDataUrlWithByteLength(byteLength: number) {
+  const bytes = Buffer.alloc(Math.max(6, byteLength));
+  bytes.set([0xff, 0xd8, 0xff, 0xe0], 0);
+  bytes.set([0xff, 0xd9], bytes.length - 2);
+  return `data:image/jpeg;base64,${bytes.toString("base64")}`;
 }
 
 test("bounded JSON reader accepts UTF-8 JSON and enforces the streamed byte limit", async () => {
@@ -83,6 +94,30 @@ test("scorecard photos require canonical base64 and a MIME-matching file signatu
   assert.equal(parseScorecardPhotos([{ id: "x".repeat(MAX_SCORECARD_PHOTO_ID_LENGTH + 1), dataUrl: jpegDataUrl() }]), null);
 });
 
+test("Card AI reserva margen bajo 4.5 MB y rechaza exceso agregado antes del proveedor", () => {
+  assert.ok(MAX_SCORECARD_REQUEST_BYTES < 4_500_000);
+  assert.ok(MAX_SCORECARD_TOTAL_DATA_URL_LENGTH < MAX_SCORECARD_REQUEST_BYTES);
+
+  const perPhotoBytes = Math.floor(MAX_SCORECARD_TOTAL_IMAGE_BYTES / 4) + 1;
+  const aggregate = Array.from({ length: 4 }, (_, index) => ({
+    id: `photo-${index + 1}`,
+    dataUrl: jpegDataUrlWithByteLength(perPhotoBytes),
+  }));
+  assert.equal(scorecardPhotoPayloadExceedsAggregateLimit(aggregate), true);
+  assert.equal(parseScorecardPhotos(aggregate), null);
+
+  const oversizedDataUrls = [
+    { id: "photo-1", dataUrl: "x".repeat(Math.floor(MAX_SCORECARD_TOTAL_DATA_URL_LENGTH / 2) + 1) },
+    { id: "photo-2", dataUrl: "x".repeat(Math.floor(MAX_SCORECARD_TOTAL_DATA_URL_LENGTH / 2) + 1) },
+  ];
+  assert.equal(scorecardPhotoPayloadExceedsAggregateLimit(oversizedDataUrls), true);
+
+  const route = readFileSync("app/api/backyard-ai/scorecard/route.ts", "utf8");
+  assert.match(route, /readJsonBodyWithLimit\(request, MAX_SCORECARD_REQUEST_BYTES\)/);
+  assert.match(route, /scorecardPhotoPayloadExceedsAggregateLimit\(source\.photos\)[\s\S]*?request_too_large/);
+  assert.doesNotMatch(route, /MAX_REQUEST_BYTES\s*=\s*18_000_000/);
+});
+
 test("scorecard round hints allow only the minimum recognition context", () => {
   assert.deepEqual(parseScorecardRoundHint({
     courseName: "La Vista",
@@ -99,13 +134,16 @@ test("scorecard round hints allow only the minimum recognition context", () => {
 });
 
 test("el boundary AI exige consentimiento afirmativo y versionado", () => {
-  assert.deepEqual(parseBackyardAiProviderConsent({ granted: true, version: BACKYARD_AI_PROVIDER_CONSENT_VERSION }), {
+  assert.deepEqual(parseBackyardAiProviderConsent({ granted: true, version: BACKYARD_AI_PROVIDER_CONSENT_VERSION, scope: AI_PROVIDER_PROCESSING_CONSENT }, AI_PROVIDER_PROCESSING_CONSENT), {
     granted: true,
     version: BACKYARD_AI_PROVIDER_CONSENT_VERSION,
+    scope: AI_PROVIDER_PROCESSING_CONSENT,
   });
-  assert.equal(parseBackyardAiProviderConsent({ granted: false, version: BACKYARD_AI_PROVIDER_CONSENT_VERSION }), null);
-  assert.equal(parseBackyardAiProviderConsent({ granted: true, version: "anterior" }), null);
-  assert.equal(parseBackyardAiProviderConsent({ granted: true, version: BACKYARD_AI_PROVIDER_CONSENT_VERSION, extra: true }), null);
+  assert.equal(parseBackyardAiProviderConsent({ granted: true, version: BACKYARD_AI_PROVIDER_CONSENT_VERSION }, AI_PROVIDER_PROCESSING_CONSENT), null);
+  assert.equal(parseBackyardAiProviderConsent({ granted: true, version: BACKYARD_AI_PROVIDER_CONSENT_VERSION, scope: AI_PROVIDER_PROCESSING_CONSENT }, AI_IMAGE_PROCESSING_CONSENT), null);
+  assert.equal(parseBackyardAiProviderConsent({ granted: false, version: BACKYARD_AI_PROVIDER_CONSENT_VERSION, scope: AI_PROVIDER_PROCESSING_CONSENT }, AI_PROVIDER_PROCESSING_CONSENT), null);
+  assert.equal(parseBackyardAiProviderConsent({ granted: true, version: "anterior", scope: AI_PROVIDER_PROCESSING_CONSENT }, AI_PROVIDER_PROCESSING_CONSENT), null);
+  assert.equal(parseBackyardAiProviderConsent({ granted: true, version: BACKYARD_AI_PROVIDER_CONSENT_VERSION, scope: AI_PROVIDER_PROCESSING_CONSENT, extra: true }, AI_PROVIDER_PROCESSING_CONSENT), null);
 });
 
 test("provider receives opaque photo ordinals and response evidence restores caller IDs", () => {
@@ -155,6 +193,10 @@ test("AI routes retain stateless strict-output and no-money boundary contracts",
   assert.match(scorecardRoute, /runtime\s*=\s*"nodejs"/);
   assert.match(roundRoute, /Never calculate scores, handicaps, bets, balances, money results or settlement/);
   assert.match(scorecardRoute, /Never calculate bets, money, handicaps, net scores/);
+  assert.match(roundRoute, /parseBackyardAiProviderConsent\(source\.consent, AI_PROVIDER_PROCESSING_CONSENT\)/);
+  assert.match(scorecardRoute, /parseBackyardAiProviderConsent\(source\.consent, AI_IMAGE_PROCESSING_CONSENT\)/);
+  assert.match(roundRoute, /verifyStoredAiProcessingConsent\(request, AI_PROVIDER_PROCESSING_CONSENT\)/);
+  assert.match(scorecardRoute, /verifyStoredAiProcessingConsent\(request, AI_IMAGE_PROCESSING_CONSENT\)/);
   assert.doesNotMatch(scorecardRoute, /digitalScores|handicap[s]?\s*:/i);
   assert.doesNotMatch(scorecardRoute, /extraction:\s*normalized\.extraction,\s*model:/);
   assert.doesNotMatch(roundRoute, /from\s+["'][^"']*engine["']/);
@@ -187,14 +229,23 @@ test("AI routes enforce global call budgets and count every scorecard photo befo
   assert.ok(roundRoute.indexOf("parseBackyardAiProviderConsent") < roundRoute.indexOf("round-setup:global-budget"));
 });
 
-test("AI consent is single-use in the UI and changing photos revokes the prior authorization", () => {
+test("AI consent is persistent, owner-scoped and independent for instructions and photos", () => {
   const setup = readFileSync("app/components/backyard-ai/ai-round-setup.tsx", "utf8");
   const scorecard = readFileSync("app/components/backyard-ai/scorecard-scanner.tsx", "utf8");
-  assert.match(setup, /finally \{[\s\S]*setProviderConsent\(false\)/);
-  assert.match(setup, /function changeInput\(next: string\)[\s\S]*setProviderConsent\(false\)/);
-  assert.match(setup, /const allowProvider = providerConsent;\s*setProviderConsent\(false\)/);
-  assert.doesNotMatch(setup, /onChange=\{\(event\) => setInput\(event\.target\.value\)\}/);
-  assert.ok((scorecard.match(/setConsent\(false\)/g) || []).length >= 3);
+  const consentModule = readFileSync("lib/backyard-ai/processing-consent.ts", "utf8");
+  assert.match(setup, /hasActiveAiProcessingConsent/);
+  assert.match(setup, /AiProcessingConsentPrompt/);
+  assert.match(setup, /AI_PROVIDER_PROCESSING_CONSENT/);
+  assert.doesNotMatch(setup, /setProviderConsent\(false\)/);
+  assert.match(scorecard, /hasActiveAiProcessingConsent/);
+  assert.match(scorecard, /AiProcessingConsentPrompt/);
+  assert.match(scorecard, /AI_IMAGE_PROCESSING_CONSENT/);
+  assert.doesNotMatch(scorecard, /setConsent\(false\)/);
+  assert.match(consentModule, /userId: string/);
+  assert.match(consentModule, /policyVersion: string/);
+  assert.match(consentModule, /acceptedAt: string/);
+  assert.match(consentModule, /revokedAt: string \| null/);
+  assert.match(consentModule, /scope: BackyardAiProcessingConsentScope/);
 });
 
 test("OpenAI adapter sends a stateless strict request and rejects incomplete responses", () => {

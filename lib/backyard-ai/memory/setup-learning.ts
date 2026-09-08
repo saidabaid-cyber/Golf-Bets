@@ -39,6 +39,7 @@ function actionTargetPath(action: RoundSetupAction) {
   switch (action.type) {
     case "replace_players": return "/players";
     case "set_player_handicap": return `/players/${pointerSegment(action.playerId)}/handicap`;
+    case "identify_course": return "/courseIdentity";
     case "select_course": return "/course";
     case "set_start_hole": return "/startHole";
     case "set_round_holes": return "/roundHoles";
@@ -60,6 +61,8 @@ function draftValueForAction(draft: RoundSetupDraft, action: RoundSetupAction): 
     case "set_player_handicap": {
       return jsonValue(draft.players.find((player) => player.id === action.playerId)?.handicap);
     }
+    case "identify_course":
+      return jsonValue(draft.courseIdentity ?? null);
     case "select_course":
       return jsonValue(draft.course ? { id: draft.course.id, name: draft.course.name, teeName: draft.course.teeName } : null);
     case "set_start_hole":

@@ -116,7 +116,7 @@ test("logo oficial usa SVG vectorial primero, PNG transparente como fallback y h
 });
 
 test("configuración legal real es única, completa y usa la versión solicitada", () => {
-  assert.match(LEGAL_DOCUMENT_VERSIONS.privacy, /^2026-09-08-v3\+sha256-/);
+  assert.match(LEGAL_DOCUMENT_VERSIONS.privacy, /^2026-09-08-v4\+sha256-/);
   assert.equal(legalConfig.responsibleName, "Said Abaid Taja");
   assert.match(legalConfig.responsibleAddress, /Calle 1 Retorno Osa Menor/);
   assert.match(legalConfig.responsibleAddress, /Periférico Ecológico/);

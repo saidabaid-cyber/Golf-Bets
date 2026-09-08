@@ -125,7 +125,9 @@ export function roundSetupAnswerCommand(
 ) {
   if (!question) return answer;
   if (question.field === "course") return `Jugamos en ${answer}`;
+  if (question.field === "course.tee") return withPriorCommand(lastCommand, `Tee ${answer}`);
   if (question.field === "players") return `Jugamos ${answer}`;
+  if (question.field === "players.handicaps") return withPriorCommand(lastCommand, answer);
   if (question.field.startsWith("players.")) {
     const unknown = question.field.slice("players.".length);
     const roster = plan?.interpretation.actions.find((action) => action.type === "replace_players");
@@ -179,6 +181,14 @@ export function roundSetupAnswerCommand(
     const nassau = plan?.interpretation.actions.find((action) => action.type === "configure_individual_nassau");
     if (nassau?.type === "configure_individual_nassau") return withPriorCommand(lastCommand, `Nassau ${nassau.playerAName} contra ${nassau.playerBName} de ${answer}`);
   }
+  if (question.field === "supplementalBets.individual_nassau.players") {
+    const amount = amountIn(lastCommand);
+    return withPriorCommand(lastCommand, `Nassau individual ${matchupAnswer(answer)}${amount ? ` de ${amount}` : ""}`);
+  }
+  if (question.field === "supplementalBets.individual_nassau.instance") {
+    const amount = amountIn(lastCommand);
+    return withPriorCommand(lastCommand, `Nassau individual ${matchupAnswer(answer)}${amount ? ` de ${amount}` : ""}`);
+  }
   if (question.field === "supplementalBets.dollar_stroke.players") {
     const action = plan?.interpretation.actions.find((candidate) => candidate.type === "configure_supplemental_bet" && candidate.betType === "dollar_stroke");
     const value = action?.type === "configure_supplemental_bet" ? action.value : undefined;
@@ -215,6 +225,17 @@ export function roundSetupAnswerCommand(
       const holes = action.betType === "minimum_putts" && action.holes ? ` a ${action.holes} hoyos` : "";
       return withPriorCommand(lastCommand, `${allPlayers}${supplementalLabel(action.betType)}${pair}${teams}${participants} de ${answer}${exclusions}${carry}${holes}${advanced}`);
     }
+  }
+  const counterPressure = /^bets\.(vipers|camels|fish)\.secondNineMultiplier$/.exec(question.field)?.[1];
+  if (counterPressure) {
+    const labels: Record<string, string> = { vipers: "Viboritas", camels: "Camellos", fish: "Peces" };
+    const action = plan?.interpretation.actions.find((candidate) => candidate.type === "configure_core_bet" && candidate.bet === counterPressure);
+    const amount = action?.type === "configure_core_bet" && action.value !== undefined ? ` de ${action.value}` : "";
+    const normalizedAnswer = /^\d+$/.test(answer) ? `${answer}x` : answer;
+    const pressure = /^sin\s+(?:presion|press)/i.test(normalizedAnswer)
+      ? normalizedAnswer
+      : `con presión ${normalizedAnswer}`;
+    return withPriorCommand(lastCommand, `${labels[counterPressure]}${amount} ${pressure}`);
   }
   if (question.field.endsWith(".value")) {
     const labels: Record<string, string> = {

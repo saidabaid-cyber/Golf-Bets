@@ -34,6 +34,7 @@ export type CoreRoundBetKey =
 export type RoundSetupAction =
   | ({ type: "replace_players"; players: Player[]; ownerId: string } & ActionEvidence)
   | ({ type: "set_player_handicap"; playerId: string; handicap: number } & ActionEvidence)
+  | ({ type: "identify_course"; courseName: string; catalogCourseId?: string; candidateCourseIds: string[] } & ActionEvidence)
   | ({ type: "select_course"; course: Course } & ActionEvidence)
   | ({ type: "set_start_hole"; startHole: 1 | 10 } & ActionEvidence)
   | ({ type: "set_round_holes"; roundHoles: 9 | 18 } & ActionEvidence)
@@ -45,12 +46,19 @@ export type RoundSetupAction =
       value?: number;
       participantIds?: string[];
       skinsMode?: SkinsMode;
+      /** Second played half pressure used only by Viboritas, Camellos and Peces. */
+      secondNinePressed?: boolean;
+      secondNineMultiplier?: number;
     } & ActionEvidence)
   | ({
       type: "configure_group_nassau";
       enabled?: boolean;
       value?: number;
       participantIds?: string[];
+      /** Limits an incremental edit to existing components without creating the other Nassau legs. */
+      componentScope?: Array<"first9" | "second9" | "total18">;
+      /** Preserves intentionally different rosters across front/back/total. */
+      participantIdsByComponent?: Partial<Record<"first9" | "second9" | "total18", string[]>>;
       hcpPct?: number;
       decimals?: DecimalMode;
     } & ActionEvidence)
@@ -85,9 +93,11 @@ export type RoundSetupAction =
 export type RoundSetupQuestionCode =
   | "missing_context"
   | "missing_players"
+  | "missing_player_handicaps"
   | "unknown_player"
   | "ambiguous_player"
   | "missing_course"
+  | "missing_tee"
   | "unknown_course"
   | "ambiguous_course"
   | "missing_amount"
@@ -100,6 +110,7 @@ export type RoundSetupQuestion = {
   field: string;
   prompt: string;
   candidates?: Array<{ id: string; label: string }>;
+  playerTargets?: Array<{ id: string; label: string }>;
 };
 
 export type RoundMemoryReference =
@@ -126,6 +137,9 @@ export type ParsedRoundSetupAction =
       excludedPlayerNames?: string[];
       allPlayers?: boolean;
       skinsMode?: SkinsMode;
+      /** Parsed only for the catalog-backed counter bets. */
+      secondNinePressed?: boolean;
+      secondNineMultiplier?: number;
       confidence: number;
       evidence: string;
     }
@@ -137,6 +151,8 @@ export type ParsedRoundSetupAction =
       allPlayers?: boolean;
       hcpPct?: number;
       decimals?: DecimalMode;
+      /** A contextual edit such as "Mejor Nassau" must not create a new category. */
+      modificationOnly?: boolean;
       confidence: number;
       evidence: string;
     }

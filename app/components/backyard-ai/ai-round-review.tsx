@@ -1,17 +1,20 @@
 "use client";
 
 import type { SupplementalBet } from "../../../lib/types";
+import type { RoundSetupQuestion } from "../../../lib/backyard-ai/schemas/actions";
 import type { RoundSetupDraft, RoundSetupDraftIssue } from "../../../lib/backyard-ai/schemas/round-setup";
+import { groupNassauReviewItems } from "../../../lib/backyard-ai/round-review/group-nassau";
 import styles from "./backyard-ai.module.css";
 
 export type AiRoundReviewProps = {
   draft: RoundSetupDraft;
-  confidence: number;
+  questions: RoundSetupQuestion[];
   issues: RoundSetupDraftIssue[];
   canConfirm: boolean;
   busy?: boolean;
   onConfirm: () => void;
   onConversationalChange: () => void;
+  onResolveQuestion: (question: RoundSetupQuestion) => void;
   onManualEdit: () => void;
 };
 
@@ -81,11 +84,23 @@ function activeBetReviews(draft: RoundSetupDraft) {
     const pairings = [...new Set(Object.entries(draft.ballFriendSetup).map(([hole, setup]) => `H${hole}: ${pairNames(draft, setup.teamA)}${setup.restPlayerId ? ` · descansa ${pairNames(draft, [setup.restPlayerId])}` : ""}`))];
     add("ball-friend", `Bola Amiga · ${money(draft.bets.ballFriend.value)} · ${participants(draft, draft.bets.ballFriend.participantIds)}`, [pairings.slice(0, 4).join(" · "), pairings.length > 4 ? `${pairings.length} rotaciones configuradas` : "", hcpDetail(draft.bets.ballFriend.hcpPct, draft.bets.ballFriend.decimals), draft.bets.ballFriend.baseMode === "moving" ? "Base móvil" : "Base fija", `Máximo ${draft.bets.ballFriend.maxScore}`].filter(Boolean).join(" · "));
   }
-  for (const [id, label, config] of [
+  const pollaComponents = [
     ["polla-first", "Polla · primera vuelta", draft.bets.polla.first9],
     ["polla-second", "Polla · segunda vuelta", draft.bets.polla.second9],
     ["polla-total", "Polla · total 18", draft.bets.polla.total18],
-  ] as const) if (config.enabled) add(id, `${label} · ${money(config.value)} · ${participants(draft, config.participantIds)}`, hcpDetail(config.hcpPct, config.decimals));
+  ] as const;
+  if (draft.presentation?.groupNassauTerm === "nassau") {
+    for (const item of groupNassauReviewItems(draft.bets.polla)) {
+      const collapsed = item.id === "nassau";
+      add(
+        item.id,
+        `${item.label} · ${money(item.config.value)}${collapsed ? "" : ` · ${participants(draft, item.config.participantIds)}`}`,
+        [collapsed ? item.componentLabels.join(" · ") : "", collapsed ? participants(draft, item.config.participantIds) : "", hcpDetail(item.config.hcpPct, item.config.decimals)].filter(Boolean).join(" · "),
+      );
+    }
+  } else {
+    for (const [id, label, config] of pollaComponents) if (config.enabled) add(id, `${label} · ${money(config.value)} · ${participants(draft, config.participantIds)}`, hcpDetail(config.hcpPct, config.decimals));
+  }
   core("mini-polla", draft.bets.miniPolla.enabled, "Mini Polla", draft.bets.miniPolla.value, draft.bets.miniPolla.participantIds, [hcpDetail(draft.bets.miniPolla.hcpPct, draft.bets.miniPolla.decimals)]);
   for (const [id, label, config] of [
     ["vipers", "Viboritas", draft.bets.vipers],
@@ -128,23 +143,46 @@ function teamSummary(draft: RoundSetupDraft) {
   return "Sin equipos fijos";
 }
 
-export function AiRoundReview({ draft, confidence, issues, canConfirm, busy, onConfirm, onConversationalChange, onManualEdit }: AiRoundReviewProps) {
+function missingItems(draft: RoundSetupDraft, questions: RoundSetupQuestion[], issues: RoundSetupDraftIssue[]) {
+  const items = new Map<string, { label: string; detail: string; question?: RoundSetupQuestion }>();
+  const add = (key: string, label: string, detail: string, question?: RoundSetupQuestion) => { if (!items.has(key)) items.set(key, { label, detail, question }); };
+  for (const question of questions) {
+    if (question.field === "course.tee") add("tee", "Tee", question.prompt, question);
+    else if (question.field === "course") add("course", "Campo", question.prompt, question);
+    else if (question.field === "players.handicaps" && question.playerTargets?.length) {
+      question.playerTargets.forEach((player) => add(`hcp:${player.id}`, `${player.label} HCP`, question.prompt, question));
+    } else if (question.field === "players") add("players", "Jugadores", question.prompt, question);
+    else add(`question:${question.field}`, question.prompt, "Respóndelo en la conversación.", question);
+  }
+  for (const issue of issues) {
+    if (issue.code === "round-course") add("course", "Campo", issue.message);
+    else if (issue.code === "round-tee") add("tee", "Tee", issue.message);
+    else if (issue.code === "active-bet-handicaps" && [...items.keys()].some((key) => key.startsWith("hcp:"))) continue;
+    else add(`issue:${issue.code}`, issue.message, "También puedes resolverlo en la edición manual.");
+  }
+  if (!draft.players.length) add("players", "Jugadores", "Agrega los participantes de la ronda.");
+  return [...items.values()];
+}
+
+export function AiRoundReview({ draft, questions, issues, canConfirm, busy, onConfirm, onConversationalChange, onResolveQuestion, onManualEdit }: AiRoundReviewProps) {
   const bets = activeBetReviews(draft);
-  const percentage = Math.round(Math.max(0, Math.min(1, confidence)) * 100);
+  const pending = missingItems(draft, questions, issues);
+  const courseName = draft.course?.name ?? draft.courseIdentity?.name;
+  const readiness = canConfirm ? "LISTO" : courseName && draft.players.length && pending.every((item) => item.label === "Tee" || item.label.endsWith(" HCP")) ? "CASI LISTO" : "FALTA INFORMACIÓN";
   return <section className={`card ${styles.review}`} aria-labelledby="ai-round-review-title">
     <header className={styles.reviewHeader}>
       <div><span className="eyebrow">REVISA Y CONFIRMA</span><h2 id="ai-round-review-title">TU RONDA</h2></div>
-      <span className={styles.confidence}>{percentage}% interpretado</span>
+      <span className={styles.confidence} data-ready={canConfirm}>{readiness}</span>
     </header>
     <div className={styles.reviewGrid}>
-      <div className={styles.reviewItem}><span>Campo</span><strong>{draft.course?.name || "Por confirmar"}</strong><small>{draft.course?.teeName || "Tee por confirmar"}</small></div>
+      <div className={styles.reviewItem}><span>Campo</span><strong>{courseName || "Por confirmar"}</strong><small>{draft.courseSelected && draft.course?.teeName ? draft.course.teeName : "Tee por confirmar"}</small></div>
       <div className={styles.reviewItem}><span>Fecha y salida</span><strong>{draft.date}</strong><small>{draft.roundHoles} hoyos · salida por el {draft.startHole}</small></div>
       <div className={styles.reviewItem} data-wide="true"><span>Jugadores</span><strong>{draft.players.map((player) => player.name).join(" · ") || "Por confirmar"}</strong><small>{draft.players.map((player) => `${player.name}: HCP ${player.handicap ?? "—"}`).join(" · ")}</small></div>
       <div className={styles.reviewItem}><span>Ventajas</span><strong>{draft.handicapBasis === "relative" ? "Entre jugadores" : "Sobre campo"}</strong><small>El motor conserva el HCP de cada modalidad.</small></div>
       <div className={styles.reviewItem}><span>Equipos</span><strong>{teamSummary(draft)}</strong><small>Editable antes de iniciar.</small></div>
       <div className={styles.reviewItem} data-wide="true"><span>Apuestas, montos y configuración</span>{bets.length ? <div className={styles.betReviewList}>{bets.map((bet) => <div className={styles.betReviewRow} key={bet.id}><strong>{bet.title}</strong><small>{bet.detail}</small></div>)}</div> : <strong>Sólo score</strong>}<small>{bets.length ? "Los cálculos se harán únicamente con el motor determinista." : "No se activó ninguna apuesta."}</small></div>
     </div>
-    {issues.length > 0 && <div className={styles.question} role="alert"><b>Falta confirmar {issues.length === 1 ? "un dato" : `${issues.length} datos`}.</b><span>{issues[0].message}</span></div>}
+    {pending.length > 0 && <div className={styles.missingList} role="alert"><b>FALTA COMPLETAR</b><ul>{pending.map((item) => <li key={`${item.label}:${item.detail}`}><button type="button" disabled={busy} onClick={() => item.question ? onResolveQuestion(item.question) : onManualEdit()}><span aria-hidden="true">☐</span><span><strong>{item.label}</strong><small>{item.detail}</small></span></button></li>)}</ul></div>}
     <div className={styles.reviewActions}>
       <button type="button" className="primary big" disabled={busy || !canConfirm} onClick={onConfirm}>INICIAR RONDA</button>
       <button type="button" className="secondary big" disabled={busy} onClick={onConversationalChange}>CAMBIAR ALGO</button>

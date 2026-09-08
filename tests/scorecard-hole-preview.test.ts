@@ -61,11 +61,14 @@ test("el encabezado usa solo yardage y tee realmente disponibles", () => {
 
 test("la tarjeta activa integra contexto, neto previo y una aclaración separada de apuestas", () => {
   const page = readFileSync("app/page.tsx", "utf8");
+  const capture = readFileSync("app/components/round-capture-v2.tsx", "utf8");
   const start = page.indexOf('{tab === "round"');
   const end = page.indexOf('{tab === "standings"', start);
   const round = page.slice(start, end);
-  assert.match(round, /<ScorecardHoleContext hole=\{hole\} teeName=\{course\.teeName\}/);
-  assert.match(round, /<ScorecardHoleNetPreview player=\{p\} hole=\{hole\} gross=\{scoreFor\(p\.id\)\}/);
-  assert.match(round, /El neto de tarjeta usa el HCP de ronda al 100%/);
+  assert.match(round, /<RoundCaptureV2/);
+  assert.match(capture, /<span>Par \{hole\.par\}<\/span>/);
+  assert.match(capture, /<span>\{hole\.yards \? `\$\{hole\.yards\} yd` : "Yardas —"\}<\/span>/);
+  assert.match(capture, /<span>SI \{hole\.strokeIndex\}<\/span>/);
+  assert.match(capture, /<ScorecardHoleNetPreview player=\{owner\} hole=\{hole\} gross=\{scores\[owner\.id\]\} \/>/);
   assert.match(readFileSync("app/functional-ux.css", "utf8"), /\.scorecardNetPreview/);
 });

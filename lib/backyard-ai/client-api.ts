@@ -10,14 +10,29 @@ export class BackyardAiRequestError extends Error {
   }
 }
 
-export async function requestBackyardAi<T>(path: string, payload: unknown, timeoutMs = 30_000) {
-  const response = await fetch(path, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(payload),
-    cache: "no-store",
-    signal: AbortSignal.timeout(timeoutMs),
-  });
+export async function requestBackyardAi<T>(path: string, payload: unknown, timeoutMs = 30_000, accessToken?: string | null) {
+  const controller = new AbortController();
+  const timeout = globalThis.setTimeout(() => controller.abort(), Math.max(1, timeoutMs));
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body: JSON.stringify(payload),
+      cache: "no-store",
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new BackyardAiRequestError(504, "El análisis tardó demasiado.", "timeout");
+    }
+    throw error;
+  } finally {
+    globalThis.clearTimeout(timeout);
+  }
   const body = await response.json().catch(() => null) as { error?: unknown; code?: unknown } | null;
   if (!response.ok) {
     throw new BackyardAiRequestError(

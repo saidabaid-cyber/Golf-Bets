@@ -169,7 +169,7 @@ test("service worker cachea shell pero nunca APIs ni datos privados", () => {
     assert.equal(png.readUInt32BE(16), Number(icon.sizes.split("x")[0]));
     assert.equal(png.readUInt32BE(20), Number(icon.sizes.split("x")[1]));
   }
-  assert.match(worker, /the-backyard-shell-v5/);
+  assert.match(worker, /the-backyard-shell-v6/);
   assert.doesNotMatch(worker, /skipWaiting|SKIP_WAITING/);
   assert.match(worker, /credentials: "omit"/);
   assert.match(worker, /redirect: "error"/);

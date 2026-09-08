@@ -15,6 +15,8 @@ export type ScorecardCorrectionProps = {
   round: ActiveScorecardRound;
   issues: ScorecardValidationIssue[];
   overrides: ScorecardValidationOverrides;
+  recognizedScoreCount?: number;
+  expectedScoreCount?: number;
   onChange: (overrides: ScorecardValidationOverrides) => void;
 };
 
@@ -67,9 +69,12 @@ function ScoreCellCorrectionControl({
   </div>;
 }
 
-export function ScorecardCorrection({ round, issues, overrides, onChange }: ScorecardCorrectionProps) {
+export function ScorecardCorrection({ round, issues, overrides, recognizedScoreCount, expectedScoreCount, onChange }: ScorecardCorrectionProps) {
+  const progress = typeof recognizedScoreCount === "number" && typeof expectedScoreCount === "number"
+    ? `${recognizedScoreCount}/${expectedScoreCount} scores reconocidos. ${recognizedScoreCount < expectedScoreCount ? "La tarjeta fue leída parcialmente. " : ""}Confirma ${issues.length}.`
+    : `${issues.length} duda${issues.length === 1 ? "" : "s"}; el resto de la tarjeta permanece oculto porque ya pasó la validación.`;
   return <section className={`card ${styles.issues}`} aria-labelledby="scorecard-doubts-title">
-    <div className="sectionTitle"><div><h2 id="scorecard-doubts-title">Sólo necesito confirmar esto</h2><p>{issues.length} duda{issues.length === 1 ? "" : "s"}; el resto de la tarjeta permanece oculto porque ya pasó la validación.</p></div></div>
+    <div className="sectionTitle"><div><h2 id="scorecard-doubts-title">Sólo necesito confirmar esto</h2><p>{progress}</p></div></div>
     {issues.map((current) => {
       if (current.resolution === "cell_value" && current.playerId && current.hole) {
         const saved = overrides.cells?.find((item) => item.playerId === current.playerId && item.hole === current.hole)?.value;

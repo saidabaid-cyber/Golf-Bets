@@ -79,15 +79,36 @@ test("analizar una tarjeta no registra éxito ni PHOTO_TO_RESULT hasta alcanzar 
   assert.equal(summarizeBackyardAiMetrics(result).aiFailureRate, 0);
 });
 
-test("Card AI conserva el reloj ante capturas especiales y lo cierra sólo al entrar a Resultados", () => {
+test("Card AI conserva el reloj ante cualquier puerta final y lo cierra sólo tras guardar Histórico", () => {
   const page = readFileSync("app/page.tsx", "utf8");
   const applyStart = page.indexOf("function applyScannedScorecard(");
   const applyEnd = page.indexOf("function confirmNewRound()", applyStart);
   const apply = page.slice(applyStart, applyEnd);
   assert.ok(applyStart >= 0 && applyEnd > applyStart);
-  assert.ok(apply.indexOf("if (incomplete)") < apply.indexOf("recordScorecardResultReached();"));
-  assert.doesNotMatch(apply.slice(0, apply.indexOf("if (incomplete)")), /recordScorecardResultReached\(\)/);
-  assert.match(page, /else \{ recordScorecardResultReached\(\); setTab\("results"\)/);
+  assert.match(apply, /latestSaveRound\.current\(\{ prepareReview: true \}\)/);
+  assert.doesNotMatch(apply, /recordScorecardResultReached\(\)/);
+  assert.doesNotMatch(apply, /setTab\("results"\)/);
+  const saveStart = page.indexOf("async function saveConfirmedRound");
+  const saveEnd = page.indexOf("useLayoutEffect", saveStart);
+  const save = page.slice(saveStart, saveEnd);
+  assert.ok(save.indexOf("saveRoundHistoryLocalFirst") < save.indexOf("recordScorecardResultReached();"));
+  assert.ok(save.indexOf("recordScorecardResultReached();") < save.indexOf('setTab("results")'));
+  assert.match(page, /else latestSaveRound\.current\(\{ prepareReview: true \}\)/);
   assert.match(page, /onManualFallback=\{\(\) => \{ setScorecardScanStartedAt\(null\); setTab\("round"\); \}\}/);
   assert.match(page, /onCancel=\{\(\) => \{ setScorecardScanStartedAt\(null\); setTab\("round"\); \}\}/);
+});
+
+test("los endpoints AI registran proveedor, modelo, estado, latencia y código sin payload sensible", () => {
+  const setupRoute = readFileSync("app/api/backyard-ai/round-setup/route.ts", "utf8");
+  const scorecardRoute = readFileSync("app/api/backyard-ai/scorecard/route.ts", "utf8");
+
+  for (const route of [setupRoute, scorecardRoute]) {
+    assert.match(route, /provider:\s*"openai"/);
+    assert.match(route, /model:/);
+    assert.match(route, /status:/);
+    assert.match(route, /latencyMs:/);
+    assert.match(route, /errorCode:/);
+  }
+  assert.doesNotMatch(setupRoute.slice(setupRoute.indexOf("function logRoundSetupProvider"), setupRoute.indexOf("function instructions")), /canonicalCommand|rawInput|userInput/);
+  assert.doesNotMatch(scorecardRoute.slice(scorecardRoute.indexOf("function logScorecardProvider"), scorecardRoute.indexOf("function scorecardInstructions")), /dataUrl|image_url|playerName/);
 });

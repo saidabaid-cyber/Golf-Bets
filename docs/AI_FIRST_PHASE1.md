@@ -23,7 +23,7 @@ flowchart LR
   A --> D[RoundSetupDraft canónico]
   D --> R[Tu ronda: revisión y confirmación]
   R --> X[Round y captura existentes]
-  F[1-4 fotos con autorización por uso] --> V[Extracción visual con evidencia]
+  F[1-4 fotos con autorización visual versionada] --> V[Extracción visual con evidencia]
   V --> S[Normalizer y Scorecard Validator]
   X --> S
   S --> Q[Dudas mínimas editables]
@@ -50,7 +50,7 @@ No existe un camino `usuario → LLM → dinero`. Los endpoints AI no importan e
 - El parser determinista `es-MX` reconoce lenguaje coloquial, montos mexicanos, roster, HCP, campo/tee, salida 1/10, 9/18 hoyos, ventajas sobre campo/entre jugadores, participantes, exclusiones, parejas, carry y configuraciones compatibles con el catálogo real.
 - El proveedor remoto es opcional. Sólo normaliza la instrucción a `canonicalCommand`, `confidence` y una aclaración bajo JSON Schema estricto. Un guard canónico descarta cambios detectables en los hechos explícitos que el parser local puede representar, incluidos cifras, roster, exclusiones, equipos y modalidades.
 - Ante indisponibilidad o rechazo del proveedor, continúa el parser local. La edición manual nunca queda bloqueada.
-- Una autorización de proveedor sirve para una sola instrucción y se revoca si cambia el texto, dictado o sugerencia.
+- El procesamiento remoto de instrucciones usa una aceptación owner-scoped y versionada que permanece vigente hasta revocación. Para cuentas autenticadas, `ai_processing_consents` es la autoridad remota y el endpoint vuelve a verificarla antes de llamar al proveedor; el navegador sólo conserva una copia. En invitado existe persistencia local y fallback volátil de la sesión si Safari bloquea storage. Es independiente del consentimiento visual, apuestas, memoria personal y training global.
 
 El parser llena los modelos reales para las modalidades representables: Skins, Conejos, Unidades/Copas, Foursome, Mini Polla, Viboritas, Camellos, Peces, Loba, Monkey, Bola Amiga, Polla/Nassau grupal, Nassau individual, Dollar a Stroke, Presiones individuales, Presiones por parejas, Chicago, Vegas y Mínimo de Putts. Las variantes o ajustes no representables se preguntan o pasan a edición manual; no se crean modalidades ficticias. Algunos multiplicadores y configuraciones avanzadas —por ejemplo, presiones internas de Foursome/Personales o multiplicadores específicos de segunda vuelta— sólo se heredan de un template/histórico compatible o se editan manualmente en Phase 1.
 
@@ -78,13 +78,14 @@ La revisión muestra campo, tee, fecha, salida, duración, jugadores, handicaps,
 ### 4. Backyard Card AI
 
 - Permite cámara o selección de una a cuatro fotos JPEG, PNG o WebP.
-- Reutiliza `lib/scorecard-photo.ts` e IndexedDB; las copias se guardan localmente y quedan ligadas al propietario.
+- El camino crítico es `File → compresión en memoria → Data URL → API`. Guardar una copia local owner-scoped en IndexedDB ocurre en paralelo y es best effort: si falla, el análisis continúa y la UI muestra una advertencia no bloqueante.
+- La compresión intenta `createImageBitmap` y cae a `HTMLImageElement + objectURL + canvas` cuando no existe o falla, incluida la ruta Safari. El presupuesto se adapta de una a cuatro fotos y deja margen bajo el límite de request de Vercel.
 - Cada observación normalizada conserva `value`, `confidence` y `source.photoId`. Los tipos internos están preparados para región y fragmento OCR breve, pero el JSON Schema del proveedor actual no los solicita todavía.
 - Extrae evidencia de campo, jugadores, hoyos, par, OUT, IN y TOTAL. No completa scores ausentes.
 - El validador cruza ronda activa, campo, jugadores esperados, salida, 9/18 hoyos, par, scores digitales, rangos, subtotales y total.
 - Si 70 de 72 celdas son confiables y no existen otras inconsistencias de jugador, campo, foto o totales, sólo las dos dudosas son editables. Cuando no quedan dudas, muestra la tabla completa de scores extraídos para una confirmación explícita antes de tocar la ronda.
 - Un conflicto entre fotos, un score digital diferente, un campo dudoso, un total incoherente o un valor fuera de rango nunca se resuelve silenciosamente.
-- La autorización de fotos también es de un solo uso y se revoca al agregar, quitar o escanear.
+- La autorización visual es independiente, versionada y se solicita una sola vez por política. No se revoca al agregar, quitar o volver a escanear; puede revocarse en **Perfil → Privacidad / IA**.
 
 Las capturas especiales de modalidades como Viboritas, Camellos, Peces, Loba, Unidades o Bola Amiga permanecen en los controles existentes. Una foto de scores no inventa esos eventos. Si faltan, la app guarda los scores y regresa a la ronda para completarlos antes del resultado.
 
@@ -128,14 +129,14 @@ La rama no agrega todavía una fuente licenciada, miles de campos mexicanos, imp
 
 ## Privacidad, consentimiento y seguridad
 
-- El Aviso de Privacidad `2026-09-08-v3` ya describe Round Setup AI, Card AI, memoria privada opt-in, OpenAI, Supabase y la geolocalización opcional “Cerca de mí”. Su cambio fuerza nueva aceptación, pero requiere revisión jurídica mexicana antes de lanzamiento.
-- Cada llamada remota exige consentimiento afirmativo y versionado por solicitud: `{ granted: true, version }`. Esta prueba protege el boundary de la solicitud, pero no se persiste server-side como evidencia auditable de cuenta.
+- El Aviso de Privacidad `2026-09-08-v4` ya describe Round Setup AI, Card AI, memoria privada opt-in, OpenAI, Supabase y la geolocalización opcional “Cerca de mí”. Su cambio fuerza nueva aceptación, pero requiere revisión jurídica mexicana antes de lanzamiento.
+- Cada llamada remota conserva una afirmación estricta y versionada con `scope` en el boundary. Las cuentas autenticadas requieren además una aceptación activa en el ledger dedicado `ai_processing_consents`; su revocación actualiza `revoked_at` sin borrar la evidencia original. Texto e imagen son scopes separados. El consentimiento de apuestas, memoria personal y eventual uso global permanecen independientes.
 - `OPENAI_API_KEY` y las claves Supabase privilegiadas son server-only. Ninguna usa `NEXT_PUBLIC_`.
 - Las respuestas son `private, no-store`; el adapter usa salida estricta, `store: false`, timeout y límites de tamaño. Esto no sustituye la revisión contractual de retención, residencia, subprocessors y uso de datos de OpenAI.
 - Setup: 2,400 caracteres, 16 KB, 20 solicitudes/minuto por IP/origen y 100/minuto global.
-- Card AI: 1–4 fotos, 18 MB totales, 6 requests/minuto por IP/origen, 12 fotos/minuto por IP/origen y 100 fotos/minuto global.
+- Card AI: 1–4 fotos, request JSON máximo de 4.25 MB, payload de imágenes máximo de 3.95 MB y binario estimado máximo de 2.95 MB; 6 requests/minuto por IP/origen, 12 fotos/minuto por IP/origen y 100 fotos/minuto global.
 - Los límites combinan un mapa local acotado con el RPC atómico y persistente `consume_rules_ai_rate_limit`; las llaves usan HMAC y no guardan la IP en claro.
-- Los endpoints aún no tienen autenticación ni cuotas por cuenta/dispositivo/día. El limiter depende de IP/global y su tabla requiere política explícita de TTL/retención/cleanup.
+- En cuentas autenticadas los endpoints validan JWT y consentimiento remoto; invitado conserva el flujo local explícito. Aún no existen cuotas por cuenta/dispositivo/día. El limiter depende de IP/global y su tabla requiere política explícita de TTL/retención/cleanup.
 - Los flujos de lectura y selección de IDs para borrado de fotos son owner-scoped; el primitivo final borra los IDs ya seleccionados. La vinculación guest→cuenta adopta sólo blobs referenciados antes del ciclo cloud y puede reintentarse idempotentemente.
 - El borrado server-side recorre Storage, el grafo fijo de tablas/referencias y Auth en ese orden. En el dispositivo actual coloca primero un marker local que bloquea los flujos instrumentados de autosave/offline/cloud, cubre referencias activas, archivadas, offline, learning e índice de propietario, y ofrece reintento si la respuesta quedó pendiente. El cleanup local sigue siendo best-effort; una prueba real de RLS/Storage con dos cuentas y carreras entre dispositivos permanece pendiente.
 - No existe entrenamiento ni exportación automática.
@@ -152,6 +153,8 @@ La interpretación local y el modo manual no requieren proveedor. Las llamadas r
 | `SUPABASE_SECRET_KEY` o `SUPABASE_SERVICE_ROLE_KEY` | Credencial server-only del limiter. |
 | `CLOUD_ENABLED` | No debe estar explícitamente apagado. |
 | `consume_rules_ai_rate_limit` | Debe estar aplicado desde `supabase/migrations/20260904104145_rules_ai_rate_limit.sql` y validado en Beta aislada. |
+| `ai_processing_consents` | Debe crearse con `supabase/migrations/20260908134650_ai_processing_consents.sql` en un Supabase aislado de Production antes de probar cuentas autenticadas. |
+| `BACKYARD_AI_CONSENT_PREVIEW_SUPABASE_URL` | Binding server-only y exclusivo de Preview. Debe coincidir con el origen Supabase aislado; ausente o distinto bloquea el ledger autenticado antes de abrir el cliente. Invitado no usa este ledger. |
 | `OPENAI_BACKYARD_MODEL` | Override opcional; default `gpt-5.4-mini`. |
 | `OPENAI_SCORECARD_MODEL` | Override visual opcional; hereda el modelo general. |
 
@@ -164,7 +167,8 @@ También se necesita autorización del navegador para dictado/cámara y una revi
 | Setup texto local, contexto, draft, revisión y cambios parciales | Implementado y cubierto por tests/QA local | Corpus real mexicano y calibración de preguntas. |
 | Setup remoto | Boundary implementado, fail-closed | OpenAI + limiter Supabase Beta y QA real. |
 | Dictado | Integrado con infraestructura existente | QA físico por navegador/dispositivo y permisos. |
-| Card AI 1–4 fotos | UI, storage, contrato, normalización y validación implementados | Proveedor real, tarjetas físicas variadas y calibración OCR/confidence. |
+| Captura móvil UX V2 | Rápida/Estadísticas, columnas según apuestas activas, grupo compacto, acceso secundario a cámara y CTA final | QA físico en iPhone/Safari. |
+| Card AI 1–4 fotos | Pipeline en memoria independiente de IndexedDB, fallback Safari, UI, contrato, normalización y validación | Proveedor real, tarjetas físicas variadas y calibración OCR/confidence. |
 | Foto → scores → engine | Integrado | E2E físico; capturas especiales siguen manuales. |
 | Resultado/settlement/recap | Implementado sobre motor existente | QA de ronda física de todas las variantes. |
 | Memoria personal | Local, opt-in y owner-scoped | Sync multi-device, UI de inspección/borrado granular. |
@@ -181,12 +185,13 @@ Los resultados finales deben corresponder al último árbol de la rama, no a una
 
 | Comprobación | Estado | Evidencia |
 | --- | --- | --- |
-| Suite completa | `PASS` | `npm test` equivalente (`pnpm dlx npm@11.6.0 test`), exit 0: 1,185/1,185 tests. |
+| Suite completa | `PASS` | `npm test` equivalente (`pnpm dlx npm@11.6.0 test`), exit 0: 1,267/1,267 tests. |
 | Lint | `PASS` | `npm run lint` equivalente (`pnpm dlx npm@11.6.0 run lint`), exit 0, sin errores ni warnings. |
-| Build Next.js | `PASS` | `npm run build` equivalente (`pnpm dlx npm@11.6.0 run build`), exit 0; Next.js 16.3.3/Turbopack, TypeScript y 20/20 páginas estáticas. |
-| Setup local | `PASS_LOCAL_QA` | 8-sep-2026, Codex in-app browser en `localhost:3000`. Prompt: “Hoy jugamos Said HCP 10, Pedro HCP 12, Juan HCP 18 y Carlos HCP 20 en La Vista, salimos por el 1, 18 hoyos. Skins de $200, Nassau de $500 y Bola Amiga Said/Juan contra Pedro/Carlos. Ventajas entre jugadores.” Observado: roster/HCP/campo/salida/duración/apuestas correctos y sólo “¿Con qué tee de La Vista juegan?”; se eligió Blancas. “Mejor skins de 300” conservó Polla en 500 e inició ronda. |
+| Build Next.js | `PASS` | `npm run build` equivalente (`pnpm dlx npm@11.6.0 run build`), exit 0; Next.js 16.3.3/Turbopack, TypeScript y 21/21 páginas estáticas. |
+| Setup local | `PASS_LOCAL_QA` | 8-sep-2026, viewport iPhone 15 en `localhost:3000`. Prompt: “Hoy jugamos Said, Pedro, Juan y Carlos en La Vista. Skins de $200, Nassau de $500, Bola Amiga y Viboritas. Ventajas entre jugadores.” Observado: La Vista, roster, ventajas y apuestas correctos; tee y HCP agrupados como pendientes. “Skins mejor a $300” conservó Nassau en $500; la edición manual abrió con el draft incompleto, permitió elegir Blancas/capturar HCP e inició ronda. |
 | Card entry + manual fallback | `PASS_LOCAL_QA` | QA de UI/DOM: selector/cámara, límite 0–4, consentimiento y CTA visibles; regreso a captura manual verificado. No equivale a prueba de cámara física ni extracción real. |
-| Setup con proveedor real | `PENDING_EXTERNAL_QA` | Requiere configuración anterior. |
+| Setup con proveedor real | `PENDING_EXTERNAL_QA` | En la auditoría del Preview de esta rama faltaban `BACKYARD_AI_ENABLED=true` y `OPENAI_API_KEY`; `ai_processing_consents` tampoco está aplicada en un Supabase Preview aislado. Los overrides de modelo son opcionales y el default fue confirmado en la cuenta. |
+| Google OAuth del mismo Preview | `PENDING_EXTERNAL_QA` | El callback exact-origin está implementado y Google está habilitado en Supabase; falta permitir el callback de esta rama en Auth URL Configuration y completar un login real. No se cambió el Site URL compartido/Production. |
 | Dictado en dispositivo | `PENDING_DEVICE_QA` | No sustituido por tests. |
 | Tarjetas físicas 9/18 y 1–4 fotos | `PENDING_EXTERNAL_QA` | No sustituido por fixtures. |
 | Scores → capturas especiales → resultado → histórico | `PENDING_E2E_QA` | Falta ronda física integral. |
@@ -198,13 +203,13 @@ Los resultados finales deben corresponder al último árbol de la rama, no a una
 
 1. La calidad del proveedor no se puede inferir de tests estructurales; necesita un corpus de frases y scorecards físicos con gold labels.
 2. El parser local es amplio pero deliberadamente conservador y sólo está optimizado para `es-MX`; variantes regionales ambiguas van a pregunta/manual.
-3. Fotos nítidas aún pueden fallar por formato, letra, sombras o varias tarjetas; no hay recorte progresivo, reintento por celda ni OCR especializado.
+3. Fotos legibles aún pueden fallar por letra, sombras o varias tarjetas; no hay recorte progresivo, reintento por celda ni OCR especializado.
 4. Las capturas especiales impiden que toda ronda sea literalmente “foto → resultado” hasta que sus eventos se capturen o una fase futura los extraiga con evidencia propia.
 5. Memoria y métricas sólo viven en este dispositivo. Global Knowledge y Learning Dataset son arquitectura, no servicios operativos.
-6. El límite distribuido ya existe, pero falta identidad, cuotas por cuenta/día, TTL, WAF, presupuesto y validación multi-instancia.
-7. El consentimiento de proveedor es transaccional, no una constancia server-side atribuible. Faltan controles de consentimiento global y borrado granular de memoria.
+6. El límite distribuido ya existe, pero faltan cuotas por cuenta/dispositivo/día, TTL, WAF, presupuesto y validación multi-instancia.
+7. El ledger server-side de consentimiento ya está diseñado, pero la migración debe aplicarse en el entorno Supabase correcto antes de que funcione con cuentas autenticadas. El consentimiento global permanece desactivado y falta borrado granular de memoria.
 8. El borrado está endurecido en el dispositivo actual, pero no tiene una validación de carrera cross-device/Storage/RLS con dos cuentas reales.
-9. El Aviso v3, tratamiento financiero/patrimonial, transferencias y términos de proveedor requieren revisión jurídica antes de cualquier lanzamiento.
+9. El Aviso v4, tratamiento financiero/patrimonial, transferencias y términos de proveedor requieren revisión jurídica antes de cualquier lanzamiento.
 10. No hay fuente licenciada ni pipeline operativo para miles de campos mexicanos.
 
 ## Recomendación concreta para Phase 2

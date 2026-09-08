@@ -725,7 +725,7 @@ test("the setup gate renders every issue before consent, HCP freezing or round n
   const navigation = page.indexOf('setTab("round")', gate);
   assert.ok(gate > setupGateRegion && blockedReturn > gate && start > blockedReturn && consent > start && navigation > start);
   assert.match(page, /extraErrors:\s*\[[\s\S]*betConfigurationIssues\.map\(\(issue\) => issue\.message\)/);
-  assert.match(page, /function saveRound\(\) \{\s*if \(betConfigurationIssues\.length\)[\s\S]*?setTab\("setup"\);[\s\S]*?return;/);
+  assert.match(page, /function saveRound\([^)]*\) \{\s*const preparingReview[\s\S]*?if \(betConfigurationIssues\.length\)[\s\S]*?setTab\("setup"\);[\s\S]*?return;/);
   assert.match(page, /activeBetSafeDestination\(next, draftAvailable && !roundClosed && betConfigurationIssues\.length > 0\)/);
   assert.match(page, /activeBetSafeDestination\(tab, draftAvailable && !roundClosed && betConfigurationIssues\.length > 0\)/);
   assert.match(page, /handicapBasis: roundHandicapBasis/);

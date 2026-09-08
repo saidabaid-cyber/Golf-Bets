@@ -3,6 +3,7 @@ import test from "node:test";
 
 import type { BackyardProfile } from "../lib/account-state";
 import { createGroupGameTemplate } from "../lib/group-game-template";
+import { DEFAULT_COURSES } from "../lib/golf-course-directory";
 import { initialBets } from "../lib/new-round-bets";
 import { createSupplementalBet } from "../lib/supplemental-bets";
 import type { Course, FrequentGroup, FrequentPlayer, Player, RoundSnapshot } from "../lib/types";
@@ -116,6 +117,203 @@ test("interpreta roster, Skins y Nassau grupal hacia el modelo real de Pollas", 
   assert.equal(plan.canConfirm, true);
 });
 
+test("Peces modela su presión real 3x sin convertirla en Presiones independientes", () => {
+  const plan = planRoundSetup(
+    "Peces de 100 con presión 3x.",
+    context({ activeDraft: activeDraft() }),
+  );
+
+  assert.equal(plan.draft.bets.fish.enabled, true);
+  assert.equal(plan.draft.bets.fish.value, 100);
+  assert.equal(plan.draft.bets.fish.secondNinePressed, true);
+  assert.equal(plan.draft.bets.fish.secondNineMultiplier, 3);
+  assert.equal(plan.draft.supplementalBets.some((bet) => bet.type === "individual_pressures" || bet.type === "team_pressures"), false);
+  assert.equal(plan.questions.some((question) => question.field === "bets.pressures"), false);
+  assert.equal(plan.canConfirm, true);
+});
+
+test("Peces bloquea una presión incompleta o fuera del rango real en vez de ignorarla", () => {
+  for (const input of ["Peces de 100 con presión.", "Peces de 100 con presión 7x.", "Peces de 100 sin presión 3x."]) {
+    const plan = planRoundSetup(input, context({ activeDraft: activeDraft() }));
+    assert.equal(plan.draft.bets.fish.value, 100);
+    assert.equal(plan.canConfirm, false, input);
+    assert.ok(plan.questions.some((question) => question.field === "bets.fish.secondNineMultiplier"), input);
+  }
+});
+
+test("Agua y Peces/agua sólo activan Peces en una cláusula de apuesta explícita", () => {
+  for (const [input, value] of [["Peces / agua de 100.", 100], ["Agua de 125.", 125]] as const) {
+    const plan = planRoundSetup(input, context({ activeDraft: activeDraft() }));
+    assert.equal(plan.draft.bets.fish.enabled, true, input);
+    assert.equal(plan.draft.bets.fish.value, value, input);
+    assert.equal(plan.questions.some((question) => question.code === "unknown_bet"), false, input);
+    assert.equal(plan.canConfirm, true, input);
+  }
+
+  const ordinaryWater = parseRoundSetupIntent("Jugamos Said y Pedro en Agua Caliente.");
+  assert.equal(ordinaryWater.actions.some((action) => action.type === "configure_core_bet" && action.bet === "fish"), false);
+  assert.deepEqual(
+    ordinaryWater.actions.find((action) => action.type === "replace_players")?.playerNames,
+    ["Said", "Pedro"],
+  );
+  assert.equal(
+    ordinaryWater.actions.find((action) => action.type === "select_course")?.courseName,
+    "Agua Caliente",
+  );
+});
+
+test("TEST A: Said y La Vista se resuelven; jugadores nuevos sólo piden tee y HCP agrupados", () => {
+  const saidAbaid: BackyardProfile = {
+    ...profile,
+    displayName: "Said Abaid",
+    givenName: "Said",
+    familyName: "Abaid",
+    username: "saidabaid",
+    homeClub: "",
+    preferredTee: "",
+  };
+  const plan = planRoundSetup(
+    "Hoy jugamos Said, Pedro, Juan y Carlos en La Vista. Skins de $200, Nassau de $500, Bola Amiga y Viboritas. Ventajas entre jugadores.",
+    context({ profile: saidAbaid, frequentPlayers: [], courses: DEFAULT_COURSES }),
+  );
+
+  assert.deepEqual(plan.draft.players.map((player) => player.name), ["Said Abaid", "Pedro", "Juan", "Carlos"]);
+  assert.equal(plan.draft.players[0]?.accountUserId, saidAbaid.userId);
+  assert.deepEqual(plan.draft.players.slice(1).map((player) => player.handicap), [null, null, null]);
+  assert.equal(plan.draft.course, null, "la identidad del campo no debe inventar un tee");
+  assert.equal(plan.draft.courseIdentity?.name, "La Vista");
+  assert.equal(plan.draft.courseIdentity?.catalogCourseId, "course-la-vista");
+  assert.equal(plan.draft.handicapBasis, "relative");
+  assert.equal(plan.draft.bets.skins.enabled, true);
+  assert.equal(plan.draft.bets.skins.value, 200);
+  assert.deepEqual(
+    [plan.draft.bets.polla.first9, plan.draft.bets.polla.second9, plan.draft.bets.polla.total18]
+      .map((component) => [component.enabled, component.value]),
+    [[true, 500], [true, 500], [true, 500]],
+  );
+  assert.equal(plan.draft.presentation?.groupNassauTerm, "nassau");
+  assert.equal(plan.draft.bets.ballFriend.enabled, true);
+  assert.equal(plan.draft.bets.ballFriend.value, initialBets([]).ballFriend.value);
+  assert.equal(plan.draft.bets.vipers.enabled, true);
+  assert.equal(plan.draft.bets.vipers.value, initialBets([]).vipers.value);
+  assert.deepEqual(plan.questions.map((question) => question.field).sort(), ["course.tee", "players.handicaps"]);
+  const handicaps = plan.questions.find((question) => question.code === "missing_player_handicaps");
+  assert.deepEqual(handicaps?.playerTargets?.map((player) => player.label), ["Pedro", "Juan", "Carlos"]);
+  assert.equal(plan.configurationIssues.some((issue) => issue.code === "round-course"), false);
+  assert.ok(plan.configurationIssues.some((issue) => issue.code === "round-tee"));
+  assert.equal(plan.canConfirm, false);
+});
+
+test("el perfil autenticado por givenName tiene prioridad sobre un homónimo frecuente exacto", () => {
+  const saidAbaid: BackyardProfile = { ...profile, displayName: "Said Abaid", givenName: "Said" };
+  const plan = planRoundSetup("Jugamos Said y Pedro en La Vista. Skins de 100.", context({
+    profile: saidAbaid,
+    frequentPlayers: [
+      { id: "frequent-said", name: "Said", handicap: 22, uses: 20, updatedAt: "2026-09-07" },
+      ...frequentPlayers,
+    ],
+  }));
+
+  assert.equal(plan.draft.players[0]?.name, "Said Abaid");
+  assert.equal(plan.draft.players[0]?.accountUserId, saidAbaid.userId);
+  assert.equal(plan.draft.players[0]?.handicap, saidAbaid.defaultHandicap);
+
+  const withoutGivenName = planRoundSetup("Jugamos Said y Pedro en La Vista. Skins de 100.", context({
+    profile: { ...saidAbaid, givenName: "" },
+    frequentPlayers: [
+      { id: "frequent-said", name: "Said", handicap: 22, uses: 20, updatedAt: "2026-09-07" },
+      ...frequentPlayers,
+    ],
+  }));
+  assert.equal(withoutGivenName.draft.players[0]?.name, "Said Abaid");
+  assert.equal(withoutGivenName.draft.players[0]?.accountUserId, saidAbaid.userId);
+});
+
+test("tee y HCP completan el draft identificado sin perder campo, roster ni apuestas", () => {
+  const saidAbaid: BackyardProfile = {
+    ...profile,
+    displayName: "Said Abaid",
+    givenName: "Said",
+    homeClub: "",
+    preferredTee: "",
+  };
+  const first = planRoundSetup("Jugamos Said y Pedro en La Vista. Skins de $200.", context({
+    profile: saidAbaid,
+    frequentPlayers: [],
+    courses: DEFAULT_COURSES,
+  }));
+  const completed = planRoundSetup("Tee Blancas. Pedro HCP 12.", context({
+    profile: saidAbaid,
+    frequentPlayers: [],
+    courses: DEFAULT_COURSES,
+    activeDraft: first.draft,
+  }));
+
+  assert.equal(completed.draft.course?.id, "lavista-blancas");
+  assert.equal(completed.draft.courseIdentity?.catalogCourseId, "course-la-vista");
+  assert.equal(completed.draft.players.find((player) => player.name === "Pedro")?.handicap, 12);
+  assert.equal(completed.draft.bets.skins.value, 200);
+  assert.deepEqual(completed.questions, []);
+  assert.equal(completed.canConfirm, true);
+});
+
+test("TEST B: cambiar únicamente Skins conserva el resto del draft y la terminología Nassau", () => {
+  const draft = activeDraft();
+  draft.bets.skins = { ...draft.bets.skins, enabled: true, value: 200 };
+  draft.bets.polla.first9 = { ...draft.bets.polla.first9, enabled: true, value: 500 };
+  draft.bets.polla.second9 = { ...draft.bets.polla.second9, enabled: true, value: 500 };
+  draft.bets.polla.total18 = { ...draft.bets.polla.total18, enabled: true, value: 500 };
+  draft.presentation = { groupNassauTerm: "nassau" };
+  draft.bets.ballFriend = { ...draft.bets.ballFriend, enabled: true };
+  draft.bets.vipers = { ...draft.bets.vipers, enabled: true };
+  const before = structuredClone(draft);
+  const plan = planRoundSetup("Skins mejor a $300.", context({ activeDraft: draft }));
+
+  assert.equal(plan.draft.bets.skins.value, 300);
+  assert.deepEqual(plan.draft.bets.polla, before.bets.polla);
+  assert.deepEqual(plan.draft.bets.ballFriend, before.bets.ballFriend);
+  assert.deepEqual(plan.draft.bets.vipers, before.bets.vipers);
+  assert.deepEqual(plan.draft.players, before.players);
+  assert.deepEqual(plan.draft.course, before.course);
+  assert.equal(plan.draft.presentation?.groupNassauTerm, "nassau");
+});
+
+test("‘Mejor Nassau de 300’ actualiza sólo los componentes grupales activos", () => {
+  const draft = activeDraft();
+  draft.bets.polla.first9 = { ...draft.bets.polla.first9, enabled: true, value: 100 };
+  draft.bets.polla.second9 = { ...draft.bets.polla.second9, enabled: false, value: 175 };
+  draft.bets.polla.total18 = { ...draft.bets.polla.total18, enabled: false, value: 250 };
+  draft.presentation = { groupNassauTerm: "nassau" };
+  const original = structuredClone(draft);
+
+  const changed = planRoundSetup("Mejor Nassau de 300.", context({ activeDraft: draft }));
+
+  assert.deepEqual(
+    [changed.draft.bets.polla.first9.enabled, changed.draft.bets.polla.first9.value],
+    [true, 300],
+  );
+  assert.deepEqual(changed.draft.bets.polla.second9, original.bets.polla.second9);
+  assert.deepEqual(changed.draft.bets.polla.total18, original.bets.polla.total18);
+  assert.deepEqual(draft.bets.polla, original.bets.polla, "el cambio no muta el draft de entrada");
+  assert.equal(changed.draft.presentation?.groupNassauTerm, "nassau");
+  assert.deepEqual(
+    changed.actions.find((action) => action.type === "configure_group_nassau")?.componentScope,
+    ["first9"],
+  );
+  assert.equal(changed.canConfirm, true);
+
+  const explicitlyCreated = planRoundSetup("Nassau de 300.", context({ activeDraft: draft }));
+  assert.deepEqual(
+    [
+      explicitlyCreated.draft.bets.polla.first9,
+      explicitlyCreated.draft.bets.polla.second9,
+      explicitlyCreated.draft.bets.polla.total18,
+    ].map((component) => [component.enabled, component.value]),
+    [[true, 300], [true, 300], [true, 300]],
+    "una instrucción de creación explícita sí configura el Nassau completo de 18 hoyos",
+  );
+});
+
 test("separa roster, handicaps, campo y salida cuando llegan en una sola frase", () => {
   const parsed = parseRoundSetupIntent(
     "Hoy jugamos Said HCP 10, Pedro HCP 12, Juan HCP 18 y Carlos HCP 20 en La Vista, salimos por el 1, 18 hoyos. Skins de $200.",
@@ -195,6 +393,19 @@ test("‘como la semana pasada’ copia configuración limpia con IDs remapeados
   assert.ok(plan.draft.players.every((player) => player.accountUserId || player.id.startsWith("history-")));
   assert.deepEqual(new Set(plan.draft.bets.skins.participantIds), new Set(plan.draft.players.map((player) => player.id)));
   assert.equal("scores" in plan.draft, false);
+});
+
+test("memoria legacy deriva salida por H10 y nueve hoyos desde un order válido", () => {
+  const prior = snapshot("legacy-h10-nine", "2026-09-03");
+  prior.order = Array.from({ length: 9 }, (_, index) => index + 10);
+  delete prior.startHole;
+  delete prior.roundHoles;
+
+  const plan = planRoundSetup("Como la semana pasada.", context({ history: [prior], idFactory: ids("legacy") }));
+
+  assert.equal(plan.draft.basedOnRoundId, prior.id);
+  assert.equal(plan.draft.startHole, 10);
+  assert.equal(plan.draft.roundHoles, 9);
 });
 
 test("Bola Amiga usa participantes y BallFriendHole reales para parejas explícitas", () => {
@@ -345,7 +556,8 @@ test("pregunta únicamente por nombres y campos desconocidos o ambiguos", () => 
   assert.ok(ambiguousPlayer.questions.some((question) => question.code === "ambiguous_player"));
 
   const unknownPlayer = planRoundSetup("Jugamos Said y Roberto.", context());
-  assert.ok(unknownPlayer.questions.some((question) => question.code === "unknown_player"));
+  assert.equal(unknownPlayer.questions.some((question) => question.code === "unknown_player"), false);
+  assert.deepEqual(unknownPlayer.draft.players.map((player) => [player.name, player.handicap]), [["Said", 8], ["Roberto", null]]);
 
   const ambiguousCourse = planRoundSetup(
     "Jugamos Said y Pedro en La Vista.",
@@ -357,21 +569,24 @@ test("pregunta únicamente por nombres y campos desconocidos o ambiguos", () => 
   assert.ok(unknownCourse.questions.some((question) => question.code === "unknown_course"));
 });
 
-test("una aclaración de jugador nuevo agrega sólo un candidato temporal y permite replanear", () => {
+test("un jugador nuevo queda temporal y su HCP se completa sin rehacer la ronda", () => {
   const first = planRoundSetup("Jugamos Said, Pedro y Roberto. Skins de 100.", context());
-  const question = first.questions.find((candidate) => candidate.code === "unknown_player");
-  assert.ok(question);
-  assert.deepEqual(parseUnknownPlayerClarification(question, "Roberto HCP 18.4"), { name: "Roberto", handicap: 18.4 });
-  assert.deepEqual(parseUnknownPlayerClarification(question, "Roberto HCP +2.4"), { name: "Roberto", handicap: -2.4 });
-  assert.deepEqual(parseUnknownPlayerClarification(question, "18"), { name: "Roberto", handicap: 18 });
-  assert.equal(parseUnknownPlayerClarification(question, "Roberto"), null);
-  assert.equal(parseUnknownPlayerClarification(question, "Roberto HCP 80"), null);
+  const question = first.questions.find((candidate) => candidate.code === "missing_player_handicaps");
+  assert.deepEqual(question?.playerTargets?.map((player) => player.label), ["Roberto"]);
+  assert.deepEqual(first.draft.players.map((player) => player.name), ["Said", "Pedro", "Roberto"]);
+  assert.equal(first.draft.players.find((player) => player.name === "Roberto")?.handicap, null);
 
-  const replay = planRoundSetup("Jugamos Said, Pedro y Roberto. Skins de 100.", context({
+  const syntheticUnknown = { code: "unknown_player" as const, field: "players.Roberto", prompt: "¿Quién es Roberto y qué HCP juega?" };
+  assert.deepEqual(parseUnknownPlayerClarification(syntheticUnknown, "Roberto HCP 18.4"), { name: "Roberto", handicap: 18.4 });
+  assert.deepEqual(parseUnknownPlayerClarification(syntheticUnknown, "Roberto HCP +2.4"), { name: "Roberto", handicap: -2.4 });
+  assert.deepEqual(parseUnknownPlayerClarification(syntheticUnknown, "18"), { name: "Roberto", handicap: 18 });
+  assert.equal(parseUnknownPlayerClarification(syntheticUnknown, "Roberto"), null);
+  assert.equal(parseUnknownPlayerClarification(syntheticUnknown, "Roberto HCP 80"), null);
+
+  const replay = planRoundSetup("Roberto HCP 18.4.", context({
     activeDraft: first.draft,
-    frequentPlayers: [...frequentPlayers, { id: "session-roberto", name: "Roberto", handicap: 18.4, uses: 0, updatedAt: "2026-09-07" }],
   }));
-  assert.equal(replay.questions.some((candidate) => candidate.code === "unknown_player"), false);
+  assert.equal(replay.questions.some((candidate) => candidate.code === "missing_player_handicaps"), false);
   assert.deepEqual(replay.draft.players.map((player) => player.name), ["Said", "Pedro", "Roberto"]);
   assert.equal(replay.draft.players.find((player) => player.name === "Roberto")?.handicap, 18.4);
   assert.equal(replay.draft.bets.skins.value, 100);
@@ -415,6 +630,32 @@ test("Nassau con el principal usa PersonalBet canónica; otra pareja conserva la
   assert.ok(supplemental && supplemental.type === "individual_nassau");
   assert.deepEqual(new Set([supplemental.playerAId, supplemental.playerBId]), new Set(["pedro", "juan"]));
   assert.equal(supplemental.value, 300);
+});
+
+test("‘Mejor Nassau’ actualiza la única instancia personal activa sin crear Nassau grupal", () => {
+  const configured = planRoundSetup("Nassau Said contra Pedro de 500.", context({ activeDraft: activeDraft() }));
+  const changed = planRoundSetup("Mejor Nassau de 300.", context({ activeDraft: configured.draft }));
+
+  assert.equal(changed.draft.personalBets.length, 1);
+  assert.equal(changed.draft.personalBets[0].rivalPlayerId, "pedro");
+  assert.equal(changed.draft.personalBets[0].baseValue, 300);
+  assert.deepEqual([
+    changed.draft.bets.polla.first9.enabled,
+    changed.draft.bets.polla.second9.enabled,
+    changed.draft.bets.polla.total18.enabled,
+  ], [false, false, false]);
+  assert.equal(changed.canConfirm, true);
+});
+
+test("‘Mejor Nassau’ pregunta la pareja si existen varias instancias personales", () => {
+  const first = planRoundSetup("Nassau Said contra Pedro de 500.", context({ activeDraft: activeDraft() }));
+  const second = planRoundSetup("Nassau Said contra Juan de 400.", context({ activeDraft: first.draft }));
+  const changed = planRoundSetup("Mejor Nassau de 300.", context({ activeDraft: second.draft }));
+
+  assert.deepEqual(changed.draft.personalBets.map((bet) => bet.baseValue), [500, 400]);
+  assert.equal(changed.draft.bets.polla.first9.enabled, false);
+  assert.ok(changed.questions.some((question) => question.field === "supplementalBets.individual_nassau.instance"));
+  assert.equal(changed.canConfirm, false);
 });
 
 test("configura una sola Polla explícita sin convertirla en Nassau grupal", () => {
@@ -651,6 +892,44 @@ test("Polla y Nassau grupal aplican su porcentaje y redondeo propios", () => {
   );
   assert.equal(ambiguous.canConfirm, false);
   assert.ok(ambiguous.questions.some((question) => question.field === "bets.polla.first9.decimals"));
+});
+
+test("Nassau individual incompleto nunca cae silenciosamente en Nassau grupal", () => {
+  const plan = planRoundSetup("Nassau individual de 500.", context({ activeDraft: activeDraft() }));
+
+  assert.equal(plan.interpretation.actions.some((action) => action.type === "configure_group_nassau"), false);
+  assert.equal(plan.draft.bets.polla.first9.enabled, false);
+  assert.equal(plan.draft.bets.polla.second9.enabled, false);
+  assert.equal(plan.draft.bets.polla.total18.enabled, false);
+  assert.ok(plan.questions.some((question) => question.field === "supplementalBets.individual_nassau.players"));
+  assert.equal(plan.canConfirm, false);
+});
+
+test("una exclusión de Nassau conserva por separado los rosters divergentes de cada componente", () => {
+  const draft = activeDraft();
+  draft.bets.polla.first9 = { ...draft.bets.polla.first9, enabled: true, value: 100, participantIds: ["said", "pedro", "juan", "carlos"] };
+  draft.bets.polla.second9 = { ...draft.bets.polla.second9, enabled: true, value: 200, participantIds: ["said", "pedro", "juan"] };
+  draft.bets.polla.total18 = { ...draft.bets.polla.total18, enabled: true, value: 300, participantIds: ["said", "pedro", "carlos"] };
+
+  const plan = planRoundSetup("Carlos hoy no juega Nassau.", context({ activeDraft: draft }));
+
+  assert.deepEqual(plan.draft.bets.polla.first9.participantIds, ["said", "pedro", "juan"]);
+  assert.deepEqual(plan.draft.bets.polla.second9.participantIds, ["said", "pedro", "juan"]);
+  assert.deepEqual(plan.draft.bets.polla.total18.participantIds, ["said", "pedro"]);
+  assert.deepEqual(
+    [plan.draft.bets.polla.first9.value, plan.draft.bets.polla.second9.value, plan.draft.bets.polla.total18.value],
+    [100, 200, 300],
+  );
+});
+
+test("Nassau grupal con carry, press o multiplicador no confirma con defaults inventados", () => {
+  for (const input of ["Nassau de 500 con carry.", "Nassau de 500 con presión 3x.", "Nassau de 500 con multiplicador 2x."]) {
+    const plan = planRoundSetup(input, context({ activeDraft: activeDraft() }));
+    assert.equal(plan.draft.bets.polla.first9.value, 500, input);
+    assert.ok(plan.questions.some((question) => question.field === "bets.polla.advanced"), input);
+    assert.equal(plan.questions.some((question) => question.field === "bets.pressures"), false, input);
+    assert.equal(plan.canConfirm, false, input);
+  }
 });
 
 test("una suplementaria incompleta pregunta sólo el dato faltante", () => {
