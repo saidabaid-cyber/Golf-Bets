@@ -94,11 +94,11 @@ test("feature flags de servidor gobiernan nube, Polla y login social", () => {
 
 test("consentimientos cloud reintentan de forma idempotente sin bloquear la copia local", () => {
   assert.match(accountProvider, /currentConsent/);
-  assert.match(accountProvider, /legal_acceptances"\)\.upsert/);
-  assert.match(accountProvider, /ignoreDuplicates: true/);
-  assert.match(accountProvider, /queueLegalSync/);
-  assert.match(accountProvider, /clearPendingLegalSync/);
-  assert.match(accountProvider, /flushLegalAcceptances/);
+  assert.match(accountProvider, /\/api\/legal\/evidence/);
+  assert.match(accountProvider, /pendingLegalEvidence/);
+  assert.match(accountProvider, /markLegalEvidenceFailed/);
+  assert.match(accountProvider, /markLegalEvidenceSynced/);
+  assert.match(accountProvider, /syncLegalEvidence/);
 });
 
 test("env example contiene nombres requeridos pero ningún secreto real", () => {

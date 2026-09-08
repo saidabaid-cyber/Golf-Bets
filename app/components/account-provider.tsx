@@ -6,18 +6,12 @@ import { Fragment, createContext, useCallback, useContext, useEffect, useMemo, u
 import type { Session, User } from "@supabase/supabase-js";
 import {
   ACCOUNT_STORAGE_KEYS,
-  BETTING_DATA_CONSENT_TYPE,
   authErrorMessage,
-  bettingConsentPromptStorageKey,
-  buildLegalAcceptances,
   clearLegalAcceptancesForUser,
-  hasCurrentLegalConsent,
-  hasCurrentBettingDataConsent,
   hasLocalGolfData,
   guestBackyardProfile,
   isValidEmail,
   mergeLegalAcceptances,
-  markLegalAcceptancesSynced,
   mergeBackyardProfile,
   migrationDecisionStorageKey,
   normalizeBackyardProfileCache,
@@ -31,15 +25,36 @@ import {
   type LegalAcceptance,
 } from "../../lib/account-state";
 import { getSupabaseBrowser } from "../../lib/supabase/client";
-import { AuthSessionRecoveryError, authIdentityChanged, clearDeletedAuthSession, closeAuthSession, isAccountSession, recoverAuthSession, requireCloudWrites, restoreAuthSession, sendEmailOtp, startSocialOAuth, verifyEmailOtp, OtpSendGate, otpRetrySeconds, OTP_COOLDOWN_KEY } from "../../lib/auth-flow";
+import { AuthSessionRecoveryError, authIdentityChanged, clearDeletedAuthSession, closeAuthSession, isAccountSession, recoverAuthSession, restoreAuthSession, sendEmailOtp, startSocialOAuth, verifyEmailOtp, OtpSendGate, otpRetrySeconds, OTP_COOLDOWN_KEY } from "../../lib/auth-flow";
 import { discardAccountWorkspace, ownsLocalWorkspace, switchAccountWorkspace, WORKSPACE_OWNER_KEY } from "../../lib/account-workspace";
 import { CLOUD_LOCAL_META_KEY, type CloudPreferences } from "../../lib/cloud-sync";
-import { clearPendingLegalSync, legalSyncErrorMessage, markLegalSyncFailed, queueLegalSync, readPendingLegalSync } from "../../lib/legal-sync-queue";
 import type { AuthProviderStatus } from "../../lib/auth-provider-status";
 import { cloudIssueFromError, cloudIssuePriority, type CloudIssue, type CloudIssueDomain } from "../../lib/cloud-issues";
 import { BrandLockup } from "./brand-lockup";
 import { BettingConsentDialog } from "./betting-consent-dialog";
-import { persistBettingDataConsent } from "../../lib/betting-consent";
+import { LegalConsentScreen, type LegalCeremonyChoices } from "./legal-consent-screen";
+import {
+  hasCurrentCoreLegalChoices,
+  hasCurrentFinancialConsent,
+  hasCurrentMarketingConsent,
+  legalActorForIdentity,
+  legalClientEnvironment,
+  legalEvidenceStateKey,
+  legalEvidenceRequestBody,
+  latestLegalEvidence,
+  markLegalEvidenceFailed,
+  markLegalEvidenceSynced,
+  mergeServerLegalEvidence,
+  pendingLegalEvidence,
+  readLegalEvidence,
+  recordLocalLegalEvidence,
+  replaceLegalEvidence,
+  type LegalEvidenceEvent,
+  type LegalEnvironment,
+  type LegalEvidenceServerRow,
+} from "../../lib/legal-choice-state";
+import type { LegalEvidenceAction, LegalEvidenceSubject } from "../../lib/legal-documents";
+import { buildLocalAccountExport } from "../../lib/account-data-export";
 
 export type BackyardIdentity = BackyardProfile & {
   mode: Exclude<AccountMode, "undecided">;
@@ -54,9 +69,12 @@ type AccountContextValue = {
   finishAccountDeletion: () => Promise<void>;
   openAccess: () => void;
   acceptances: LegalAcceptance[];
+  legalEvents: LegalEvidenceEvent[];
   bettingConsentGranted: boolean;
   bettingConsentResolved: boolean;
   requestBettingConsent: () => Promise<boolean>;
+  marketingConsentGranted: boolean;
+  recordLegalChoice: (subject: LegalEvidenceSubject, action: LegalEvidenceAction, origin?: "account_privacy" | "financial_gate") => Promise<void>;
   cloudLinked: boolean;
   cloudStatus: "local" | "saving" | "offline" | "syncing" | "synced" | "pending" | "error";
   setCloudStatus: (status: AccountContextValue["cloudStatus"]) => void;
@@ -220,35 +238,13 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
       {socialEnabled && providers?.status === "ready" && !providers.google && <p className="hint">Google · Pendiente de configuración.</p>}
       {(message || sessionError) && <div className="accessMessage" role="status">{message || sessionError}</div>}
       <p className="hint">Invitado es un acceso independiente: no inicia sesión ni sincroniza tus datos con una cuenta.</p>
-      <p className="legalLead">Al continuar aceptas los <Link href="/legal/terms?returnTo=access">Términos de Uso</Link> y el <Link href="/legal/privacy?returnTo=access">Aviso de Privacidad</Link>.</p>
+      <div className="legalLead accessLegalNotice">
+        <b>Aviso de Privacidad Simplificado</b>
+        <p>Antes de proporcionar datos puedes consultar cómo los trata The Backyard. Continuar al acceso no acepta automáticamente Términos, marketing ni tratamiento económico.</p>
+        <p><Link href="/legal/privacy-simplified?returnTo=access">Leer Aviso Simplificado</Link> · <Link href="/legal/privacy?returnTo=access">Aviso Integral</Link> · <Link href="/legal/terms?returnTo=access">Términos y Condiciones</Link></p>
+      </div>
     </section>
   </main>;
-}
-
-function ConsentScreen({ onAccept, onBack }: { onAccept: (includeBettingConsent: boolean) => Promise<void>; onBack: () => Promise<void> }) {
-  const [terms, setTerms] = useState(false);
-  const [privacy, setPrivacy] = useState(false);
-  const [rules, setRules] = useState(false);
-  const [age, setAge] = useState(false);
-  const [betting, setBetting] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  return <main className="consentScreen"><section className="consentCard">
-    <BrandLockup compact />
-    <div className="eyebrow">PRIMER ACCESO</div>
-    <h1>Antes de la primera controversia</h1>
-    <p>The Backyard incorpora un asistente de reglas basado en las Reglas de Golf, aclaraciones y reglas locales disponibles.</p>
-    <p>Cuando un grupo acuerde utilizar el Árbitro de Reglas de The Backyard como criterio para resolver una situación durante una partida, sus jugadores aceptan aplicar la resolución mostrada salvo que exista una decisión oficial de un Comité, árbitro autorizado o autoridad competente de la competencia.</p>
-    <div className="officialPriority">En una competencia oficial, el Comité o árbitro oficial tiene siempre la decisión final. La IA no es un árbitro oficial USGA.</div>
-    <label className="consentCheck"><input type="checkbox" checked={terms} onChange={(event) => setTerms(event.target.checked)} /><span>Acepto los <Link href="/legal/terms?returnTo=onboarding">Términos de Uso</Link>.</span></label>
-    <label className="consentCheck"><input type="checkbox" checked={privacy} onChange={(event) => setPrivacy(event.target.checked)} /><span>He leído y acepto el <Link href="/legal/privacy?returnTo=onboarding">Aviso de Privacidad</Link>.</span></label>
-    <label className="consentCheck"><input type="checkbox" checked={rules} onChange={(event) => setRules(event.target.checked)} /><span>Entiendo el alcance del Árbitro de Reglas y acepto utilizar sus resoluciones como referencia acordada entre los participantes cuando corresponda.</span></label>
-    <label className="consentCheck"><input type="checkbox" checked={age} onChange={(event) => setAge(event.target.checked)} /><span>Confirmo que tengo 18 años o más.</span></label>
-    <label className="consentCheck expressConsentCheck"><input type="checkbox" checked={betting} onChange={(event) => setBetting(event.target.checked)} /><span>Consiento expresamente el tratamiento de los datos relativos a apuestas registradas, resultados y gastos, conforme al <Link href="/legal/privacy?returnTo=onboarding">Aviso de Privacidad</Link>. Esta autorización es específica y opcional para continuar a funciones que no registran esos datos.</span></label>
-    {error && <p role="alert">{error}</p>}
-    <button className="primary big" disabled={!terms || !privacy || !rules || !age || busy} onClick={async () => { setBusy(true); setError(""); try { await onAccept(betting); } catch { setError("No pudimos guardar tu aceptación en este dispositivo. Libera espacio y vuelve a intentar."); } finally { setBusy(false); } }}>{busy ? "Guardando…" : "Continuar"}</button>
-    <button className="textButton consentBack" disabled={busy} onClick={onBack}>← Volver al acceso</button>
-  </section></main>;
 }
 
 function ProfileSetupScreen({ identity, onSave, onBack }: {
@@ -287,10 +283,64 @@ function ProfileSetupScreen({ identity, onSave, onBack }: {
   </section></main>;
 }
 
+function downloadLocalData(identity: BackyardIdentity) {
+  const payload = buildLocalAccountExport(localStorage, identity);
+  const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `the-backyard-datos-${new Date().toISOString().slice(0, 10)}.json`;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function LegalRestrictedScreen({ identity, onReview, onLogout, onDeleted }: {
+  identity: BackyardIdentity;
+  onReview: () => void;
+  onLogout: () => Promise<void>;
+  onDeleted: () => Promise<void>;
+}) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  async function deleteAccount() {
+    if (identity.mode !== "authenticated" || !identity.accessToken) return;
+    setBusy(true); setMessage("");
+    try {
+      const response = await fetch("/api/account/delete", { method: "DELETE", headers: { authorization: `Bearer ${identity.accessToken}`, "content-type": "application/json" }, body: JSON.stringify({ confirmation: "ELIMINAR" }) });
+      const result = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(result.error || "No se completó la eliminación.");
+      await onDeleted();
+    } catch (error) { setMessage(error instanceof Error ? error.message : "No se completó la eliminación. La cuenta sigue activa."); }
+    finally { setBusy(false); }
+  }
+  return <main className="consentScreen legalRestrictedScreen"><section className="consentCard">
+    <BrandLockup compact />
+    <div className="eyebrow">LEGAL Y PRIVACIDAD</div>
+    <h1>Acceso deportivo en pausa</h1>
+    <p>No aceptaste o revocaste los Términos vigentes. Tu información no se borró y conservas acceso a los documentos, tus derechos, exportación y eliminación.</p>
+    <div className="legalDocumentSummary">
+      <Link href="/legal/privacy-simplified?returnTo=access">Aviso Simplificado</Link>
+      <Link href="/legal/privacy?returnTo=access">Aviso Integral</Link>
+      <Link href="/legal/terms?returnTo=access">Términos y Condiciones</Link>
+      <a href="mailto:privacidad@thebackyard.com.mx">Privacidad, ARCO y revocación</a>
+    </div>
+    <button className="primary big" onClick={onReview}>Revisar mis elecciones</button>
+    <button className="secondary big" onClick={() => downloadLocalData(identity)}>Exportar copia local</button>
+    {identity.mode === "authenticated" && <button className="dangerButton big" onClick={() => setConfirmDelete(true)}>Eliminar cuenta y datos</button>}
+    <button className="textButton" onClick={() => void onLogout()}>Cerrar sesión</button>
+    {message && <p className="notice bad" role="alert">{message}</p>}
+    {confirmDelete && <div className="modalBackdrop"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="restricted-delete-title"><h2 id="restricted-delete-title">Eliminar cuenta y datos</h2><p>Esta acción es definitiva. La evidencia legal se elimina junto con la cuenta cuando corresponda.</p><div className="dialogActions"><button className="secondary" disabled={busy} onClick={() => setConfirmDelete(false)}>Cancelar</button><button className="dangerButton" disabled={busy} onClick={deleteAccount}>{busy ? "Eliminando…" : "Eliminar definitivamente"}</button></div></section></div>}
+  </section></main>;
+}
+
 export function AccountProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [identity, setIdentity] = useState<BackyardIdentity | null>(null);
   const [acceptances, setAcceptances] = useState<LegalAcceptance[]>([]);
+  const [legalEvents, setLegalEvents] = useState<LegalEvidenceEvent[]>([]);
+  const [legalEnvironment, setLegalEnvironment] = useState<LegalEnvironment>("development");
+  const [legalReconsidering, setLegalReconsidering] = useState(false);
+  const [legalUpdateDeferred, setLegalUpdateDeferred] = useState(false);
   const [bettingConsentOpen, setBettingConsentOpen] = useState(false);
   const [accessRequested, setAccessRequested] = useState(false);
   const [showMigration, setShowMigration] = useState(false);
@@ -348,30 +398,34 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       ? { ...current, defaultHandicap: preferences.defaultHandicap }
       : current);
   }, []);
-  const flushLegalAcceptances = useCallback(async (userId: string, current: LegalAcceptance[]) => {
-    const supabase = getSupabaseBrowser();
-    if (!supabase) throw new Error("Supabase unavailable");
-    const rulesAcceptance = current.find((item) => item.type === "rules_referee");
-    const writes = [supabase.from("legal_acceptances").upsert(current.map((item) => ({
-      user_id: item.userId,
-      type: item.type,
-      version: item.documentVersion,
-      accepted_at: item.acceptedAt,
-      locale: item.locale,
-    })), { onConflict: "user_id,type,version", ignoreDuplicates: true })];
-    if (rulesAcceptance) writes.push(supabase.from("rules_referee_acceptances").upsert({
-      user_id: rulesAcceptance.userId,
-      document_version: rulesAcceptance.documentVersion,
-      accepted_at: rulesAcceptance.acceptedAt,
-      locale: rulesAcceptance.locale,
-    }, { onConflict: "user_id,document_version", ignoreDuplicates: true }));
-    await requireCloudWrites(writes);
-    const confirmation = await supabase.from("legal_acceptances").select("type,version").eq("user_id", userId);
-    if (confirmation.error) throw confirmation.error;
-    const confirmed = new Set((confirmation.data || []).map((item) => `${item.type}:${item.version}`));
-    if (current.some((item) => !confirmed.has(`${item.type}:${item.documentVersion}`))) throw new Error("legal_acceptance_not_confirmed");
-    if (activeUserId.current !== userId) throw new Error("Session changed");
+  const readIdentityLegalEvents = useCallback((nextIdentity: Pick<BackyardIdentity, "mode" | "userId">) => {
+    const nextEnvironment = legalClientEnvironment();
+    setLegalEnvironment(nextEnvironment);
+    const actor = legalActorForIdentity(localStorage, nextIdentity);
+    return readLegalEvidence(localStorage, actor.actorKey, nextEnvironment);
   }, []);
+
+  const syncLegalEvidence = useCallback(async (userId: string, accessToken: string, current: LegalEvidenceEvent[]) => {
+    const queued = pendingLegalEvidence(current);
+    if (!queued.length) return current;
+    try {
+      const response = await fetch("/api/legal/evidence", {
+        method: "POST",
+        headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
+        body: JSON.stringify({ events: queued.map(legalEvidenceRequestBody) }),
+      });
+      const result = await response.json().catch(() => ({})) as { error?: string; receipts?: Array<{ idempotencyKey: string; serverReceivedAt: string }> };
+      if (!response.ok || !Array.isArray(result.receipts)) throw new Error(result.error || "No pudimos confirmar tus elecciones legales en el servidor.");
+      const synced = markLegalEvidenceSynced(current, result.receipts);
+      if (activeUserId.current !== userId) throw new Error("La sesión cambió antes de confirmar tus elecciones.");
+      replaceLegalEvidence(localStorage, `account:${userId}`, legalEnvironment, synced);
+      return synced;
+    } catch (error) {
+      const failed = markLegalEvidenceFailed(current, queued.map((event) => event.idempotencyKey));
+      replaceLegalEvidence(localStorage, `account:${userId}`, legalEnvironment, failed);
+      throw error;
+    }
+  }, [legalEnvironment]);
   useEffect(() => {
     if (identity?.mode === "authenticated") {
       const { displayName, defaultHandicap, avatarUrl, email } = identity;
@@ -398,7 +452,9 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     setLastCloudSync(localStorage.getItem(`backyard-last-sync-v1:${session.user.id}`));
     setCloudIssuesByDomain({});
     const profile = profileFromUser(session.user);
-    setIdentity({ ...profile, mode: "authenticated", providers: session.user.app_metadata?.providers || [session.user.app_metadata?.provider].filter((value): value is string => Boolean(value)), accessToken: session.access_token });
+    const authenticatedIdentity = { ...profile, mode: "authenticated" as const, providers: session.user.app_metadata?.providers || [session.user.app_metadata?.provider].filter((value): value is string => Boolean(value)), accessToken: session.access_token };
+    setIdentity(authenticatedIdentity);
+    setLegalEvents(readIdentityLegalEvents(authenticatedIdentity));
     localStorage.setItem(ACCOUNT_STORAGE_KEYS.mode, "authenticated");
     setCloudConsentChecked(false);
     setProfileChecked(false);
@@ -408,7 +464,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     setCloudLinked(migrationDecision === "linked" || !localDataExists);
     setCloudStatus(migrationDecision === "linked" || !localDataExists ? "pending" : "local");
     setShowMigration(localDataExists && !migrationDecision);
-  }, [setCloudIssue, setCloudStatus]);
+  }, [readIdentityLegalEvents, setCloudIssue, setCloudStatus]);
 
   const activateOfflineWorkspace = useCallback(() => {
     const ownerId = localStorage.getItem(WORKSPACE_OWNER_KEY) || "";
@@ -416,7 +472,9 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     if (!profile || !ownsLocalWorkspace(localStorage, profile.userId)) return false;
     activeUserId.current = profile.userId;
     const linked = localStorage.getItem(migrationDecisionStorageKey(profile.userId)) === "linked";
-    setIdentity({ ...profile, mode: "authenticated", providers: [], accessToken: null });
+    const offlineIdentity = { ...profile, mode: "authenticated" as const, providers: [], accessToken: null };
+    setIdentity(offlineIdentity);
+    setLegalEvents(readIdentityLegalEvents(offlineIdentity));
     setCloudLinked(linked);
     setCloudStatus("offline");
     setLastCloudSync(localStorage.getItem(`backyard-last-sync-v1:${profile.userId}`));
@@ -425,7 +483,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     setProfileSetupRequired(localStorage.getItem(`backyard-profile-ready-v1:${profile.userId}`) !== "true");
     setReady(true);
     return true;
-  }, [setCloudStatus]);
+  }, [readIdentityLegalEvents, setCloudStatus]);
 
   useEffect(() => {
     const localAcceptances = parseLegalAcceptances(localStorage.getItem(ACCOUNT_STORAGE_KEYS.acceptances));
@@ -439,7 +497,9 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       else if (!navigator.onLine && activateOfflineWorkspace()) return;
       else if (localStorage.getItem(ACCOUNT_STORAGE_KEYS.mode) === "guest") {
         const profile = guestProfile();
-        setIdentity({ ...profile, mode: "guest", providers: [], accessToken: null });
+        const guestIdentity = { ...profile, mode: "guest" as const, providers: [], accessToken: null };
+        setIdentity(guestIdentity);
+        setLegalEvents(readIdentityLegalEvents(guestIdentity));
         setCloudConsentChecked(true);
       }
       setReady(true);
@@ -453,7 +513,9 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     if (!supabase) {
       if (localStorage.getItem(ACCOUNT_STORAGE_KEYS.mode) === "guest") {
         const profile = guestProfile();
-        setIdentity({ ...profile, mode: "guest", providers: [], accessToken: null });
+        const guestIdentity = { ...profile, mode: "guest" as const, providers: [], accessToken: null };
+        setIdentity(guestIdentity);
+        setLegalEvents(readIdentityLegalEvents(guestIdentity));
         setCloudConsentChecked(true);
       }
       setReady(true);
@@ -473,7 +535,9 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
             if (!navigator.onLine && activateOfflineWorkspace()) return;
             activeUserId.current = null;
             if (localStorage.getItem(ACCOUNT_STORAGE_KEYS.mode) === "guest") {
-              setIdentity({ ...guestProfile(), mode: "guest", providers: [], accessToken: null });
+              const guestIdentity = { ...guestProfile(), mode: "guest" as const, providers: [], accessToken: null };
+              setIdentity(guestIdentity);
+              setLegalEvents(readIdentityLegalEvents(guestIdentity));
               setCloudConsentChecked(true);
             } else { switchAccountWorkspace(localStorage, "guest"); setIdentity(null); }
             setCloudLinked(false); setCloudStatus("local"); setLastCloudSync(null);
@@ -501,7 +565,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     };
     window.addEventListener("online", restoreWhenOnline);
     return () => { mounted = false; listener?.data.subscription.unsubscribe(); window.removeEventListener("online", restoreWhenOnline); };
-  }, [activateSession, activateOfflineWorkspace, setCloudIssue, setCloudStatus]);
+  }, [activateSession, activateOfflineWorkspace, readIdentityLegalEvents, setCloudIssue, setCloudStatus]);
 
   useEffect(() => {
     if (identity?.mode !== "authenticated" || !identity.accessToken) return;
@@ -547,144 +611,201 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         // without onboarding_completed_at may open profile setup.
         setProfileSetupRequired(false);
       }
-      if (legalResult.error) setCloudIssue("legal", cloudIssueFromError("legal", legalResult.error, navigator.onLine));
-      else setCloudIssue("legal", null);
       if (preferencesResult.error) setCloudIssue("profile", cloudIssueFromError("profile", preferencesResult.error, navigator.onLine));
       else if (profileResult.status === "fulfilled") setCloudIssue("profile", null);
-    }).catch((error) => { if (mounted) setCloudIssue("profile", cloudIssueFromError("profile", error, navigator.onLine)); }).finally(() => { if (mounted) { setCloudConsentChecked(true); setProfileChecked(true); } });
+    }).catch((error) => { if (mounted) setCloudIssue("profile", cloudIssueFromError("profile", error, navigator.onLine)); }).finally(() => { if (mounted) setProfileChecked(true); });
     return () => { mounted = false; };
   }, [identity?.mode, identity?.userId, identity?.accessToken, cloudProfileFallback, accountReloadRevision, issueWithMessage, setCloudIssue]);
 
-  const currentConsent = identity ? hasCurrentLegalConsent(acceptances, identity.userId) : false;
-  const bettingConsentGranted = identity ? hasCurrentBettingDataConsent(acceptances, identity.userId) : false;
+  useEffect(() => {
+    if (identity?.mode !== "authenticated" || !identity.accessToken) return;
+    const userId = identity.userId;
+    const accessToken = identity.accessToken;
+    const actorKey = `account:${userId}`;
+    let mounted = true;
+    setCloudConsentChecked(false);
+    const local = readLegalEvidence(localStorage, actorKey, legalEnvironment);
+    void fetch("/api/legal/evidence", { headers: { authorization: `Bearer ${accessToken}` }, cache: "no-store" })
+      .then(async (response) => {
+        const result = await response.json().catch(() => ({})) as { error?: string; events?: LegalEvidenceServerRow[] };
+        if (!response.ok || !Array.isArray(result.events)) throw new Error(result.error || "No pudimos consultar tus elecciones legales.");
+        const merged = mergeServerLegalEvidence(local, result.events, userId, legalEnvironment);
+        replaceLegalEvidence(localStorage, actorKey, legalEnvironment, merged);
+        return syncLegalEvidence(userId, accessToken, merged);
+      })
+      .then((next) => {
+        if (!mounted || activeUserId.current !== userId) return;
+        setLegalEvents(next);
+        setCloudIssue("legal", null);
+      })
+      .catch((error) => {
+        if (!mounted || activeUserId.current !== userId) return;
+        setLegalEvents(readLegalEvidence(localStorage, actorKey, legalEnvironment));
+        setCloudIssue("legal", {
+          ...cloudIssueFromError("legal", error, navigator.onLine),
+          message: navigator.onLine
+            ? (error instanceof Error ? error.message : "No pudimos verificar tus elecciones legales.")
+            : "Sin conexión · tus elecciones locales quedan pendientes de sincronizar.",
+        });
+      })
+      .finally(() => { if (mounted && activeUserId.current === userId) setCloudConsentChecked(true); });
+    return () => { mounted = false; };
+  }, [identity?.mode, identity?.userId, identity?.accessToken, legalEnvironment, legalRetryRevision, setCloudIssue, syncLegalEvidence]);
+
+  const currentConsent = hasCurrentCoreLegalChoices(legalEvents);
+  const bettingConsentGranted = hasCurrentFinancialConsent(legalEvents);
+  const marketingConsentGranted = hasCurrentMarketingConsent(legalEvents);
   const bettingConsentResolved = Boolean(identity && (identity.mode === "guest" || cloudConsentChecked));
+  const priorLegalHistory = Boolean(identity && (
+    legalEvents.length
+    || acceptances.some((item) => item.userId === identity.userId)
+  ));
+  const termsRejected = latestLegalEvidence(legalEvents, "terms")?.action === "rejected"
+    || latestLegalEvidence(legalEvents, "terms")?.action === "revoked";
+
+  useEffect(() => {
+    if (!identity || currentConsent || !priorLegalHistory || latestLegalEvidence(legalEvents, "terms")) {
+      setLegalUpdateDeferred(false);
+      return;
+    }
+    let hasActiveDraft = false;
+    try {
+      const draft = localStorage.getItem("golfbets-draft-v1");
+      hasActiveDraft = Boolean(draft && draft !== "null" && draft !== "{}");
+    } catch { /* The update remains visible if storage cannot be inspected. */ }
+    setLegalUpdateDeferred(hasActiveDraft);
+    if (!hasActiveDraft) window.dispatchEvent(new Event("backyard-before-legal-navigation"));
+  }, [identity, currentConsent, priorLegalHistory, legalEvents]);
+
+  useEffect(() => {
+    const safePoint = () => {
+      window.dispatchEvent(new Event("backyard-before-legal-navigation"));
+      setLegalUpdateDeferred(false);
+    };
+    window.addEventListener("backyard-legal-safe-point", safePoint);
+    return () => window.removeEventListener("backyard-legal-safe-point", safePoint);
+  }, []);
+
+  useEffect(() => {
+    const beforeLegalLink = (event: MouseEvent) => {
+      const anchor = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>("a[href]") : null;
+      if (!anchor) return;
+      try {
+        const destination = new URL(anchor.href, window.location.href);
+        if (destination.origin === window.location.origin && destination.pathname.startsWith("/legal/")) {
+          window.dispatchEvent(new Event("backyard-before-legal-navigation"));
+        }
+      } catch { /* Invalid links are not treated as legal navigation. */ }
+    };
+    document.addEventListener("click", beforeLegalLink, true);
+    return () => document.removeEventListener("click", beforeLegalLink, true);
+  }, []);
 
   const closeBettingConsent = useCallback((accepted: boolean) => {
     const pending = bettingConsentRequest.current;
-    const pendingUserId = pending?.userId || identity?.userId || activeUserId.current;
-    if (!accepted && pendingUserId) {
-      try { localStorage.setItem(bettingConsentPromptStorageKey(pendingUserId), "seen"); }
-      catch { /* This marker is not consent and must never prevent dismissal. */ }
-    }
     bettingConsentRequest.current = null;
     setBettingConsentOpen(false);
     pending?.resolve(accepted);
-  }, [identity?.userId]);
+  }, []);
 
   const requestBettingConsent = useCallback(() => {
     if (!identity) return Promise.resolve(false);
-    if (hasCurrentBettingDataConsent(acceptances, identity.userId)) return Promise.resolve(true);
+    if (hasCurrentFinancialConsent(legalEvents)) return Promise.resolve(true);
     if (bettingConsentRequest.current?.userId === identity.userId) return bettingConsentRequest.current.promise;
     let resolveRequest!: (accepted: boolean) => void;
     const promise = new Promise<boolean>((resolve) => { resolveRequest = resolve; });
     bettingConsentRequest.current = { userId: identity.userId, promise, resolve: resolveRequest };
     if (identity.mode === "guest" || cloudConsentChecked) setBettingConsentOpen(true);
     return promise;
-  }, [acceptances, identity, cloudConsentChecked]);
-
-  useEffect(() => {
-    const pending = bettingConsentRequest.current;
-    if (!pending || !identity || pending.userId !== identity.userId || (identity.mode === "authenticated" && !cloudConsentChecked)) return;
-    if (hasCurrentBettingDataConsent(acceptances, identity.userId)) closeBettingConsent(true);
-    else setBettingConsentOpen(true);
-  }, [acceptances, identity, cloudConsentChecked, closeBettingConsent]);
+  }, [identity, legalEvents, cloudConsentChecked]);
 
   useEffect(() => {
     const pending = bettingConsentRequest.current;
     if (pending && pending.userId !== identity?.userId) closeBettingConsent(false);
   }, [identity?.userId, closeBettingConsent]);
 
-  useEffect(() => {
-    if (!identity || !currentConsent || !bettingConsentResolved || bettingConsentGranted || showMigration) return;
-    if (identity.mode === "authenticated" && (!profileChecked || profileSetupRequired)) return;
-    if (localStorage.getItem(bettingConsentPromptStorageKey(identity.userId)) === "seen") return;
-    setBettingConsentOpen(true);
-  }, [identity, currentConsent, bettingConsentResolved, bettingConsentGranted, showMigration, profileChecked, profileSetupRequired]);
-
-  useEffect(() => {
-    if (identity?.mode !== "authenticated" || !identity.accessToken || !currentConsent) return;
-    const saved = acceptances.filter((item) => item.userId === identity.userId);
-    const pending = readPendingLegalSync(localStorage, identity.userId);
-    const current = pending?.acceptances.length ? pending.acceptances : saved;
-    queueLegalSync(localStorage, identity.userId, current);
-    let mounted = true;
-    void flushLegalAcceptances(identity.userId, current).then(() => {
-      if (!mounted) return;
-      clearPendingLegalSync(localStorage, identity.userId);
-      setAcceptances((saved) => {
-        const synced = markLegalAcceptancesSynced(saved, current);
-        if (synced !== saved) localStorage.setItem(ACCOUNT_STORAGE_KEYS.acceptances, JSON.stringify(synced));
-        return synced;
+  async function recordChoiceBatch(
+    choices: Array<{ subject: LegalEvidenceSubject; action: LegalEvidenceAction }>,
+    origin: "onboarding" | "existing_user_update" | "financial_gate" | "account_privacy",
+  ) {
+    if (!identity) throw new Error("No se pudo identificar el contexto de esta elección.");
+    window.dispatchEvent(new Event("backyard-before-legal-navigation"));
+    const actor = legalActorForIdentity(localStorage, identity);
+    let next = readLegalEvidence(localStorage, actor.actorKey, legalEnvironment);
+    for (const choice of choices) {
+      const latest = latestLegalEvidence(next, choice.subject);
+      if (latest?.action === choice.action) continue;
+      recordLocalLegalEvidence(localStorage, identity, {
+        environment: legalEnvironment,
+        subject: choice.subject,
+        action: choice.action,
+        origin,
       });
-      setCloudIssue("legal", null);
-    }).catch((error) => {
-      markLegalSyncFailed(localStorage, identity.userId, error);
-      if (mounted) setCloudIssue("legal", {
-        ...cloudIssueFromError("legal", error, navigator.onLine),
-        message: legalSyncErrorMessage(error, navigator.onLine),
-      });
-    });
-    return () => { mounted = false; };
-  }, [identity?.mode, identity?.userId, identity?.accessToken, currentConsent, acceptances, legalRetryRevision, flushLegalAcceptances, issueWithMessage, setCloudIssue]);
-
-  async function acceptConsent(includeBettingConsent: boolean) {
-    if (!identity) return;
-    const next = buildLegalAcceptances(identity.userId, new Date().toISOString());
-    let merged = mergeLegalAcceptances(acceptances, next);
-    localStorage.setItem(ACCOUNT_STORAGE_KEYS.acceptances, JSON.stringify(merged));
-    if (includeBettingConsent) {
-      merged = persistBettingDataConsent(localStorage, identity.userId, identity.mode === "authenticated" ? "pending" : "local_only").acceptances;
-    } else {
-      localStorage.setItem(bettingConsentPromptStorageKey(identity.userId), "seen");
+      next = readLegalEvidence(localStorage, actor.actorKey, legalEnvironment);
     }
-    setAcceptances(merged);
-    if (identity.mode === "authenticated") {
-      const accountAcceptances = merged.filter((item) => item.userId === identity.userId);
-      queueLegalSync(localStorage, identity.userId, accountAcceptances);
-      try {
-        await flushLegalAcceptances(identity.userId, accountAcceptances);
-        clearPendingLegalSync(localStorage, identity.userId);
-        const synced = markLegalAcceptancesSynced(merged, accountAcceptances);
-        localStorage.setItem(ACCOUNT_STORAGE_KEYS.acceptances, JSON.stringify(synced));
-        setAcceptances(synced);
-        setCloudIssue("legal", null);
-      } catch (error) {
-        markLegalSyncFailed(localStorage, identity.userId, error);
-        setCloudIssue("legal", {
-          ...cloudIssueFromError("legal", error, navigator.onLine),
-          message: legalSyncErrorMessage(error, navigator.onLine),
-        });
-      }
+    if (identity.mode === "guest") {
+      setLegalEvents(next);
+      setCloudIssue("legal", null);
+      return;
+    }
+    if (!identity.accessToken || !navigator.onLine) {
+      setLegalEvents(next);
+      setCloudIssue("legal", {
+        domain: "legal",
+        kind: "offline",
+        message: "Sin conexión · tus elecciones están guardadas en este dispositivo y pendientes de recepción del servidor.",
+        retryable: true,
+      });
+      return;
+    }
+    try {
+      const synced = await syncLegalEvidence(identity.userId, identity.accessToken, next);
+      setLegalEvents(synced);
+      setCloudIssue("legal", null);
+    } catch (error) {
+      setCloudIssue("legal", {
+        ...cloudIssueFromError("legal", error, navigator.onLine),
+        message: error instanceof Error ? error.message : "No pudimos confirmar tus elecciones legales.",
+      });
+      throw error;
     }
   }
 
+  async function acceptConsent(choices: LegalCeremonyChoices) {
+    const origin = priorLegalHistory ? "existing_user_update" : "onboarding";
+    await recordChoiceBatch([
+      { subject: "privacy_notice", action: "presented" },
+      { subject: "terms", action: "accepted" },
+      { subject: "age_declaration", action: "accepted" },
+      { subject: "financial_data", action: choices.financial },
+      { subject: "marketing", action: choices.marketing },
+    ], origin);
+    setLegalReconsidering(false);
+    setLegalUpdateDeferred(false);
+  }
+
+  async function rejectTerms() {
+    const origin = priorLegalHistory ? "existing_user_update" : "onboarding";
+    await recordChoiceBatch([
+      { subject: "privacy_notice", action: "presented" },
+      { subject: "terms", action: "rejected" },
+    ], origin);
+    setLegalReconsidering(false);
+    setLegalUpdateDeferred(false);
+  }
+
+  async function recordLegalChoice(subject: LegalEvidenceSubject, action: LegalEvidenceAction, origin: "account_privacy" | "financial_gate" = "account_privacy") {
+    await recordChoiceBatch([{ subject, action }], origin);
+  }
+
   async function acceptBettingConsent() {
-    if (!identity) throw new Error("No se pudo identificar el contexto de esta aceptación.");
-    const persisted = persistBettingDataConsent(
-      localStorage,
-      identity.userId,
-      identity.mode === "authenticated" ? "pending" : "local_only",
-    );
-    setAcceptances(persisted.acceptances);
-    localStorage.removeItem(bettingConsentPromptStorageKey(identity.userId));
-    if (identity.mode === "authenticated") {
-      const pending = queueLegalSync(localStorage, identity.userId, [persisted.acceptance]);
-      try {
-        await flushLegalAcceptances(identity.userId, pending.acceptances);
-        clearPendingLegalSync(localStorage, identity.userId);
-        const synced = markLegalAcceptancesSynced(persisted.acceptances, pending.acceptances);
-        localStorage.setItem(ACCOUNT_STORAGE_KEYS.acceptances, JSON.stringify(synced));
-        setAcceptances(synced);
-        setCloudIssue("legal", null);
-      } catch (error) {
-        markLegalSyncFailed(localStorage, identity.userId, error);
-        setCloudIssue("legal", {
-          ...cloudIssueFromError("legal", error, navigator.onLine),
-          message: legalSyncErrorMessage(error, navigator.onLine),
-        });
-      }
-    }
+    await recordChoiceBatch([{ subject: "financial_data", action: "accepted" }], "financial_gate");
     closeBettingConsent(true);
+  }
+
+  async function rejectBettingConsent() {
+    await recordChoiceBatch([{ subject: "financial_data", action: "rejected" }], "financial_gate");
+    closeBettingConsent(false);
   }
 
   async function updateProfile(profile: Pick<BackyardProfile, "displayName" | "defaultHandicap" | "avatarUrl">) {
@@ -734,10 +855,12 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     // Invalidate every in-flight sync before touching the local Supabase cache.
     activeUserId.current = null;
     discardAccountWorkspace(localStorage, deletedUserId);
+    localStorage.removeItem(legalEvidenceStateKey(`account:${deletedUserId}`, legalEnvironment));
     localStorage.removeItem(ACCOUNT_STORAGE_KEYS.mode);
     const remainingAcceptances = clearLegalAcceptancesForUser(acceptances, deletedUserId);
     localStorage.setItem(ACCOUNT_STORAGE_KEYS.acceptances, JSON.stringify(remainingAcceptances));
     setAcceptances(remainingAcceptances);
+    setLegalEvents([]);
     const supabase = getSupabaseBrowser();
     if (supabase) await clearDeletedAuthSession(supabase.auth);
     setIdentity(null);
@@ -752,27 +875,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   async function keepLocalDataForAccount() {
     if (!identity || identity.mode !== "authenticated" || !identity.accessToken) return;
     setMigrationBusy(true); setMigrationError(""); setCloudStatus("pending");
-    // Generic onboarding consent may follow a deliberate workspace import;
-    // express betting consent never changes identity or context implicitly.
-    const guestConsent = acceptances.filter((item) => item.userId === "guest" && item.type !== BETTING_DATA_CONSENT_TYPE);
-    if (guestConsent.length && !hasCurrentLegalConsent(acceptances, identity.userId)) {
-      const migrated = guestConsent.map((item) => ({ ...item, userId: identity.userId }));
-      const merged = mergeLegalAcceptances(acceptances, migrated);
-      if (identity.mode === "authenticated") {
-        const supabase = getSupabaseBrowser();
-        if (!supabase) { setMigrationError("Nube no disponible. Reintenta más tarde."); setMigrationBusy(false); return; }
-        if (supabase) {
-          const rulesAcceptance = migrated.find((item) => item.type === "rules_referee");
-          const writes = [supabase.from("legal_acceptances").upsert(migrated.map((item) => ({ user_id: item.userId, type: item.type, version: item.documentVersion, accepted_at: item.acceptedAt, locale: item.locale })), { onConflict: "user_id,type,version", ignoreDuplicates: true })];
-          if (rulesAcceptance) writes.push(supabase.from("rules_referee_acceptances").upsert({ user_id: rulesAcceptance.userId, document_version: rulesAcceptance.documentVersion, accepted_at: rulesAcceptance.acceptedAt, locale: rulesAcceptance.locale }, { onConflict: "user_id,document_version", ignoreDuplicates: true }));
-          try { await requireCloudWrites(writes); }
-          catch { setMigrationError("No pudimos guardar los consentimientos. Nada se marcó como sincronizado; reintenta."); setMigrationBusy(false); setCloudStatus("error"); return; }
-          if (activeUserId.current !== identity.userId) return;
-          localStorage.setItem(ACCOUNT_STORAGE_KEYS.acceptances, JSON.stringify(merged));
-          setAcceptances(merged);
-        }
-      }
-    }
+    // Legal evidence is identity-bound and is never reassigned from a guest
+    // merely because the user imports that guest's golf workspace.
     // Approval enables the same guarded sync cycle as all later syncs. Do not
     // blindly upload before downloading/merging the account's existing data.
     if (!ownsLocalWorkspace(localStorage, identity.userId)) return;
@@ -842,7 +946,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const cloudIssues = Object.values(cloudIssuesByDomain).filter((issue): issue is CloudIssue => Boolean(issue)).sort((left, right) => cloudIssuePriority(left) - cloudIssuePriority(right));
   const blockingCloudIssues = cloudIssues.filter((issue) => issue.kind === "session_expired");
   const effectiveCloudStatus: AccountContextValue["cloudStatus"] = cloudIssues.some((issue) => issue.kind === "offline") ? "offline" : cloudIssues.some((issue) => issue.kind === "conflict") ? "pending" : cloudIssues.length ? "error" : cloudStatus;
-  const context = identity ? ({ identity, updateProfile, logout, finishAccountDeletion, openAccess: () => setAccessRequested(true), acceptances, bettingConsentGranted, bettingConsentResolved, requestBettingConsent, cloudLinked, cloudStatus: effectiveCloudStatus, setCloudStatus, lastCloudSync, cloudIssues, applyCloudPreferences,
+  const context = identity ? ({ identity, updateProfile, logout, finishAccountDeletion, openAccess: () => setAccessRequested(true), acceptances, legalEvents, bettingConsentGranted, bettingConsentResolved, requestBettingConsent, marketingConsentGranted, recordLegalChoice, cloudLinked, cloudStatus: effectiveCloudStatus, setCloudStatus, lastCloudSync, cloudIssues, applyCloudPreferences,
     reportCloudSyncError,
     clearCloudSyncError,
     retryCloudSync: retryAllCloud,
@@ -864,28 +968,28 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     }
     switchAccountWorkspace(localStorage, "guest");
     activeUserId.current = null;
-    const withoutPreviousGuestConsent = clearLegalAcceptancesForUser(acceptances, "guest");
-    localStorage.setItem(ACCOUNT_STORAGE_KEYS.acceptances, JSON.stringify(withoutPreviousGuestConsent));
-    setAcceptances(withoutPreviousGuestConsent);
     const profile = guestProfile();
+    const guestIdentity = { ...profile, mode: "guest" as const, providers: [], accessToken: null };
     localStorage.setItem(ACCOUNT_STORAGE_KEYS.mode, "guest");
-    setIdentity({ ...profile, mode: "guest", providers: [], accessToken: null });
+    setIdentity(guestIdentity);
+    setLegalEvents(readIdentityLegalEvents(guestIdentity));
     setCloudConsentChecked(true);
     setAccessRequested(false);
     setCloudIssuesByDomain({}); setCloudStatus("local"); setCloudLinked(false); setLastCloudSync(null); setShowMigration(false);
   }} sessionError={accountCloudError} onAuthenticated={(session) => { activateSession(session); setAccessRequested(false); }} />;
   if (identity.mode === "authenticated" && !currentConsent && !cloudConsentChecked) return <main className="accessScreen"><div className="accessLoading">Verificando tus consentimientos…</div></main>;
-  if (!currentConsent) {
-    if (migrationDialog && hasCurrentLegalConsent(acceptances, "guest")) return <main className="accessScreen">{migrationDialog}</main>;
-    return <>{accountCloudError && <div role="alert" className="notice bad">{accountCloudError}</div>}<ConsentScreen onAccept={acceptConsent} onBack={logout} /></>;
-  }
+  if (!currentConsent && !priorLegalHistory) return <>{accountCloudError && <div role="alert" className="notice bad">{accountCloudError}</div>}<LegalConsentScreen mode="first_access" onSubmit={acceptConsent} onRejectTerms={rejectTerms} /></>;
   if (identity.mode === "authenticated" && !profileChecked) return <main className="accessScreen"><div className="accessLoading">Preparando tu perfil…</div></main>;
   if (identity.mode === "authenticated" && profileSetupRequired) return <>{accountCloudError && <div role="alert" className="notice bad">{accountCloudError}</div>}<ProfileSetupScreen identity={identity} onSave={updateProfile} onBack={logout} /></>;
-  if (bettingConsentOpen) return <AccountContext.Provider value={context!}><BettingConsentDialog onDismiss={() => closeBettingConsent(false)} onAccept={acceptBettingConsent} /></AccountContext.Provider>;
 
   return <AccountContext.Provider value={context!}>
     {blockingCloudIssues.map((issue) => <div className="notice bad" role="alert" key={issue.domain}>{issue.message}<button onClick={() => setAccessRequested(true)}>Volver a iniciar sesión</button></div>)}
     <Fragment key={identity.userId}>{children}</Fragment>
     {migrationDialog}
+    {!currentConsent && legalUpdateDeferred && !termsRejected && <div className="legalUpdateBanner" role="status"><span>Actualización legal pendiente · tu ronda actual sigue disponible.</span><button type="button" onClick={() => { window.dispatchEvent(new Event("backyard-before-legal-navigation")); setLegalUpdateDeferred(false); }}>Revisar ahora</button></div>}
+    {!currentConsent && !legalUpdateDeferred && !termsRejected && <div className="legalModalLayer"><LegalConsentScreen mode="update" onSubmit={acceptConsent} onRejectTerms={rejectTerms} /></div>}
+    {!currentConsent && termsRejected && !legalReconsidering && <div className="legalModalLayer"><LegalRestrictedScreen identity={identity} onReview={() => setLegalReconsidering(true)} onLogout={logout} onDeleted={finishAccountDeletion} /></div>}
+    {!currentConsent && termsRejected && legalReconsidering && <div className="legalModalLayer"><LegalConsentScreen mode="update" onSubmit={acceptConsent} onRejectTerms={rejectTerms} /></div>}
+    {bettingConsentOpen && <div className="legalModalLayer"><BettingConsentDialog onDismiss={() => closeBettingConsent(false)} onReject={rejectBettingConsent} onAccept={acceptBettingConsent} /></div>}
   </AccountContext.Provider>;
 }

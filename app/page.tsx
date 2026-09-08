@@ -37,7 +37,7 @@ import {
   PuttsByHole,
   UnitEvent,
 } from "../lib/types";
-import { BOTTOM_NAV_TARGETS, contrastToggleLabel, rulesContextForRound, type AppTab } from "../lib/app-navigation";
+import { appTabFromValue, BOTTOM_NAV_TARGETS, contrastToggleLabel, rulesContextForRound, type AppTab } from "../lib/app-navigation";
 import {
   calculateBallFriend,
   calculateFoursomes,
@@ -66,7 +66,6 @@ import { RulesPanel } from "./components/rules-panel";
 import { NumericCaptureInput } from "./components/numeric-capture-input";
 import { SignedMoneyInput } from "./components/signed-money-input";
 import { AccountProvider, useBackyardAccount } from "./components/account-provider";
-import { ACCOUNT_STORAGE_KEYS, hasCurrentBettingDataConsent, parseLegalAcceptances } from "../lib/account-state";
 import { AccountPanel } from "./components/account-panel";
 import { BrandLockup } from "./components/brand-lockup";
 import { GroupBuilder } from "./components/group-builder";
@@ -98,6 +97,7 @@ import { adoptGuestPhotoJobs, flushPhotoQueue, queuePhoto, photoJobs } from "../
 import { acknowledgeOfflineBundle, getOfflineDeviceId, markOfflineAttempt, offlineRetryDelayMs, persistOfflineBundle, restoreOfflineWorkspace, writeCloudBundleToStorage } from "../lib/offline-store";
 import { PRIVATE_POLLA_LINK_KEY, parsePrivatePollaLink, privatePollaScoreChanges } from "../lib/polla-private-link";
 import { enqueuePollaScore } from "../lib/polla-offline";
+import { LEGAL_APP_RETURN_KEY } from "../lib/legal-navigation";
 import { cloneLaVistaLocalRules, isLaVistaCourse, LA_VISTA_LOCAL_RULES_UPDATED_AT, withDefaultLaVistaRules } from "../lib/local-rules";
 import { filterHistory, historyYears, MONTH_LABELS } from "../lib/history-filters";
 import { priorRabbitStatus, priorSkinsStatus } from "../lib/prior-hole-status";
@@ -507,10 +507,7 @@ function GolfBetsApp() {
   const latestSaveRound = useRef<() => void>(() => undefined);
   const roundSaveInFlight = useRef(false);
   const bettingActionPending = useRef(false);
-  const hasPersistedBettingConsent = () => bettingConsentGranted || hasCurrentBettingDataConsent(
-    parseLegalAcceptances(localStorage.getItem(ACCOUNT_STORAGE_KEYS.acceptances)),
-    identity.userId,
-  );
+  const hasPersistedBettingConsent = () => bettingConsentGranted;
   const runAfterBettingConsent = (action: () => void) => {
     if (hasPersistedBettingConsent()) { action(); return; }
     if (bettingActionPending.current) return;
@@ -690,7 +687,8 @@ function GolfBetsApp() {
         applyDraft(draft);
       } catch { /* keep safe defaults for structurally invalid legacy data */ }
       const entry = new URLSearchParams(window.location.search);
-      if (entry.get("screen") === "account") setTab("account");
+      const requestedScreen = appTabFromValue(entry.get("screen"));
+      if (requestedScreen) setTab(requestedScreen);
       setHydrated(true);
     };
     void hydrate();
@@ -739,12 +737,24 @@ function GolfBetsApp() {
       if (document.visibilityState === "hidden") flush();
     };
     window.addEventListener("pagehide", flush);
+    window.addEventListener("backyard-before-legal-navigation", flush);
     document.addEventListener("visibilitychange", flushWhenHidden);
     return () => {
       window.removeEventListener("pagehide", flush);
+      window.removeEventListener("backyard-before-legal-navigation", flush);
       document.removeEventListener("visibilitychange", flushWhenHidden);
     };
   }, [hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    try { sessionStorage.setItem(LEGAL_APP_RETURN_KEY, JSON.stringify({ screen: tab, scrollY: window.scrollY })); }
+    catch { /* Legal return still falls back safely to Home. */ }
+  }, [hydrated, tab]);
+
+  useEffect(() => {
+    if (hydrated && roundClosed) window.dispatchEvent(new Event("backyard-legal-safe-point"));
+  }, [hydrated, roundClosed]);
 
   useEffect(() => {
     if (!hydrated || identity.mode !== "authenticated" || !identity.displayName.trim()) return;

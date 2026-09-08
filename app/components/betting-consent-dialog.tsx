@@ -2,9 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { LEGAL_EVIDENCE_DEFINITIONS } from "../../lib/legal-documents";
 
-export function BettingConsentDialog({ onAccept, onDismiss }: {
+const financialStatements = LEGAL_EVIDENCE_DEFINITIONS.financial_data.statements;
+
+export function BettingConsentDialog({ onAccept, onReject, onDismiss }: {
   onAccept: () => Promise<void>;
+  onReject: () => Promise<void>;
   onDismiss: () => void;
 }) {
   const [checked, setChecked] = useState(false);
@@ -35,14 +39,20 @@ export function BettingConsentDialog({ onAccept, onDismiss }: {
       <button type="button" className="modalClose" aria-label="Cerrar consentimiento" disabled={busy} onClick={onDismiss}>×</button>
       <div className="eyebrow">CONSENTIMIENTO EXPRESO</div>
       <h2 id="betting-consent-title">Apuestas, resultados y gastos</h2>
-       <p id="betting-consent-description">Para registrar estos datos necesitamos tu autorización específica. Puedes seguir usando las funciones que no dependan de este tratamiento si eliges “Ahora no”.</p>
+       <p id="betting-consent-description">Para registrar apuestas privadas, saldos, gastos y resultados económicos necesitamos tu autorización específica. Puedes seguir usando las funciones deportivas que no dependan de este tratamiento si eliges no autorizar.</p>
       <label className="consentCheck bettingConsentCheck">
         <input ref={checkboxRef} type="checkbox" checked={checked} onChange={(event) => setChecked(event.target.checked)} />
-        <span>Consiento expresamente el tratamiento de los datos relativos a apuestas registradas, resultados y gastos, conforme al <Link href="/legal/privacy?returnTo=app">Aviso de Privacidad</Link>.</span>
+        <span>{financialStatements.accepted} Consulta el <Link href="/legal/privacy?returnTo=app">Aviso de Privacidad Integral</Link>.</span>
       </label>
+      <p className="hint">Si eliges “No autorizar”, se registrará: “{financialStatements.rejected}”</p>
       {error && <p className="notice bad" role="alert">{error}</p>}
       <div className="confirmActions">
-        <button type="button" className="secondary" disabled={busy} onClick={onDismiss}>Ahora no</button>
+        <button type="button" className="secondary" disabled={busy} onClick={async () => {
+          setBusy(true); setError("");
+          try { await onReject(); }
+          catch (rejectError) { setError(rejectError instanceof Error ? rejectError.message : "No se pudo guardar el rechazo."); }
+          finally { setBusy(false); }
+        }}>No autorizar</button>
         <button type="button" className="primary" disabled={!checked || busy} onClick={async () => {
           setBusy(true); setError("");
           try { await onAccept(); }

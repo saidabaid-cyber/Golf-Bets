@@ -2,12 +2,15 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { LEGAL_DOCUMENT_VERSIONS, legalConfig } from "../../lib/legal-config";
-import { BETTING_DATA_CONSENT_TYPE, profileHandicapInput, profileHandicapLabel, validateProfileDraft } from "../../lib/account-state";
+import { legalConfig } from "../../lib/legal-config";
+import { profileHandicapInput, profileHandicapLabel, validateProfileDraft } from "../../lib/account-state";
+import { latestLegalEvidence } from "../../lib/legal-choice-state";
+import { buildLocalAccountExport } from "../../lib/account-data-export";
+import { LEGAL_EVIDENCE_DEFINITIONS } from "../../lib/legal-documents";
 import { useBackyardAccount } from "./account-provider";
 
 export function AccountPanel({ highContrast, onHighContrastChange }: { highContrast: boolean; onHighContrastChange: (value: boolean) => void }) {
-  const { identity, updateProfile, logout, finishAccountDeletion, openAccess, acceptances, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, requestCloudLink, lastCloudSync, cloudIssues, retryCloudSync } = useBackyardAccount();
+  const { identity, updateProfile, logout, finishAccountDeletion, openAccess, legalEvents, bettingConsentGranted, requestBettingConsent, marketingConsentGranted, recordLegalChoice, cloudLinked, cloudStatus, requestCloudLink, lastCloudSync, cloudIssues, retryCloudSync } = useBackyardAccount();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(identity.displayName);
   const [handicap, setHandicap] = useState(profileHandicapInput(identity.defaultHandicap));
@@ -19,16 +22,16 @@ export function AccountPanel({ highContrast, onHighContrastChange }: { highContr
   const sessionExpired = cloudIssues.some((issue) => issue.kind === "session_expired");
 
   useEffect(() => { if (!editing) { setName(identity.displayName); setHandicap(profileHandicapInput(identity.defaultHandicap)); } }, [identity.displayName, identity.defaultHandicap, editing]);
-  const userAcceptances = useMemo(() => acceptances.filter((item) => item.userId === identity.userId), [acceptances, identity.userId]);
-  const acceptance = (type: keyof typeof LEGAL_DOCUMENT_VERSIONS) => userAcceptances.find((item) => item.type === type);
-  const acceptedLabel = (type: keyof typeof LEGAL_DOCUMENT_VERSIONS) => {
-    const record = acceptance(type);
-    return record ? `v. ${record.documentVersion} · ${new Date(record.acceptedAt).toLocaleDateString("es-MX")}` : "Pendiente";
-  };
-  const bettingAcceptance = userAcceptances.find((item) => item.type === BETTING_DATA_CONSENT_TYPE);
-  const bettingAcceptanceLabel = bettingAcceptance
-    ? `${new Date(bettingAcceptance.acceptedAt).toLocaleDateString("es-MX")} · ${bettingAcceptance.syncStatus === "synced" ? "Sincronizada" : bettingAcceptance.syncStatus === "pending" ? "Local; nube pendiente" : "En este dispositivo"}`
-    : "No otorgado";
+  const legalStatus = useMemo(() => ({
+    privacy: latestLegalEvidence(legalEvents, "privacy_notice"),
+    terms: latestLegalEvidence(legalEvents, "terms"),
+    age: latestLegalEvidence(legalEvents, "age_declaration"),
+    financial: latestLegalEvidence(legalEvents, "financial_data"),
+    marketing: latestLegalEvidence(legalEvents, "marketing"),
+  }), [legalEvents]);
+  const evidenceLabel = (event: typeof legalStatus.terms) => event
+    ? `${event.action === "presented" ? "Presentado" : event.action === "accepted" ? "Aceptado" : event.action === "rejected" ? "Rechazado" : "Revocado"} · ${event.syncStatus === "synced" ? "Servidor" : event.syncStatus === "local_only" ? "Este dispositivo" : "Recepción pendiente"}`
+    : "Pendiente";
 
   async function saveProfile() {
     const validation = validateProfileDraft(name, handicap);
@@ -53,6 +56,26 @@ export function AccountPanel({ highContrast, onHighContrastChange }: { highContr
     finally { setDeletingAccount(false); }
   }
 
+  function exportLocalData() {
+    const payload = buildLocalAccountExport(localStorage, identity);
+    const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `the-backyard-datos-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+
+  async function changeLegalChoice(subject: "terms" | "financial_data" | "marketing", action: "accepted" | "rejected" | "revoked") {
+    setMessage("");
+    try {
+      await recordLegalChoice(subject, action);
+      setMessage(action === "revoked" ? "Revocación guardada." : "Elección guardada.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No se confirmó la elección. Reintenta.");
+    }
+  }
+
   return <>
     <section className="hero accountHero"><div><div className="eyebrow">THE BACKYARD ACCOUNT</div><h1>Mi Cuenta</h1>{identity.mode === "authenticated" && <p>Tu identidad para los juegos y futuros deportes de The Backyard.</p>}</div></section>
 
@@ -74,14 +97,26 @@ export function AccountPanel({ highContrast, onHighContrastChange }: { highContr
       {!editing && <div className="profileMeta"><span>HCP Index</span><b>{profileHandicapLabel(identity.defaultHandicap)}</b></div>}
     </section>}
 
-    <section className="card"><h2>Documentos y consentimiento</h2><div className="documentConsentList">
-      <Link href="/legal/terms?returnTo=account"><span>Términos de Uso</span><b>{acceptedLabel("terms")}</b></Link>
-      <Link href="/legal/privacy?returnTo=account"><span>Aviso de Privacidad</span><b>{acceptedLabel("privacy")}</b></Link>
-      <Link href="/legal/terms?returnTo=account#rules-referee"><span>Árbitro de Reglas</span><b>{acceptedLabel("rules_referee")}</b></Link>
-      <div><span>Edad 18+</span><b>{acceptance("age_confirmation") ? "Confirmada" : "Pendiente"}</b></div>
-      <div><span>Datos de apuestas, resultados y gastos</span><b>{bettingAcceptanceLabel}</b></div>
-    </div></section>
-    {!bettingConsentGranted && <section className="card"><h2>Funciones de apuestas</h2><p className="muted">Para activar o registrar apuestas, resultados y gastos necesitas otorgar el consentimiento específico. Las demás funciones y tus datos anteriores siguen disponibles.</p><button type="button" className="secondary" onClick={() => void requestBettingConsent()}>Revisar consentimiento específico</button></section>}
+    <section className="card legalPrivacyCard"><h2>Legal y privacidad</h2><div className="documentConsentList">
+      <Link href="/legal/privacy-simplified?returnTo=account"><span>Aviso de Privacidad Simplificado</span><b>2026-09-08-v6</b></Link>
+      <Link href="/legal/privacy?returnTo=account"><span>Aviso de Privacidad Integral</span><b>{evidenceLabel(legalStatus.privacy)}</b></Link>
+      <Link href="/legal/terms?returnTo=account"><span>Términos y Condiciones</span><b>{evidenceLabel(legalStatus.terms)}</b></Link>
+      <div><span>Declaración de mayoría de edad</span><b>{evidenceLabel(legalStatus.age)}</b></div>
+      <div><span>Datos financieros o patrimoniales</span><b>{evidenceLabel(legalStatus.financial)}</b></div>
+      <div><span>Marketing opcional</span><b>{evidenceLabel(legalStatus.marketing)}</b></div>
+    </div>
+      <div className="accountInlineActions legalChoiceActions">
+        {bettingConsentGranted
+          ? <div className="legalChoiceAction"><p>{LEGAL_EVIDENCE_DEFINITIONS.financial_data.statements.revoked}</p><button type="button" className="secondary" onClick={() => void changeLegalChoice("financial_data", "revoked")}>Confirmar revocación económica</button></div>
+          : <button type="button" className="secondary" onClick={() => void requestBettingConsent()}>Revisar tratamiento económico</button>}
+        {marketingConsentGranted
+          ? <div className="legalChoiceAction"><p>{LEGAL_EVIDENCE_DEFINITIONS.marketing.statements.revoked}</p><button type="button" className="secondary" onClick={() => void changeLegalChoice("marketing", "revoked")}>Confirmar revocación de marketing</button></div>
+          : <div className="legalChoiceAction"><p>{LEGAL_EVIDENCE_DEFINITIONS.marketing.statements.accepted}</p><button type="button" className="secondary" onClick={() => void changeLegalChoice("marketing", "accepted")}>Autorizar marketing opcional</button></div>}
+        <div className="legalChoiceAction"><p>{LEGAL_EVIDENCE_DEFINITIONS.terms.statements.revoked}</p><button type="button" className="secondary" onClick={() => void changeLegalChoice("terms", "revoked")}>Confirmar revocación de Términos</button></div>
+        <button type="button" className="secondary" onClick={exportLocalData}>Exportar copia local</button>
+      </div>
+      <p className="hint">No hay campañas ni rastreo de marketing activos en esta versión. Las revocaciones no tienen efectos retroactivos.</p>
+    </section>
 
     {identity.mode === "authenticated" && <section className="card"><h2>Métodos de acceso</h2><div className="accessMethodList">{["google", "email"].map((provider) => <span key={provider}>{provider === "google" ? "Google" : "Correo"}<b>{identity.providers.includes(provider) || (provider === "email" && Boolean(identity.email)) ? "✓" : "—"}</b></span>)}</div><p className="hint">Tu cuenta conserva el mismo perfil tanto con Google como con código por correo.</p></section>}
 

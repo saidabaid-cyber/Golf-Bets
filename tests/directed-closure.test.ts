@@ -116,7 +116,8 @@ test("logo oficial usa SVG vectorial primero, PNG transparente como fallback y h
 });
 
 test("configuración legal real es única, completa y usa la versión solicitada", () => {
-  assert.match(LEGAL_DOCUMENT_VERSIONS.privacy, /^2026-09-02-v2\+sha256-/);
+  assert.match(LEGAL_DOCUMENT_VERSIONS.privacy, /^2026-09-08-v6\+sha256-/);
+  assert.equal(LEGAL_DOCUMENT_VERSIONS.terms, "2026-09-08-v2");
   assert.equal(legalConfig.responsibleName, "Said Abaid Taja");
   assert.match(legalConfig.responsibleAddress, /Calle 1 Retorno Osa Menor/);
   assert.match(legalConfig.responsibleAddress, /Periférico Ecológico/);
@@ -129,10 +130,10 @@ test("configuración legal real es única, completa y usa la versión solicitada
 test("Aviso y Términos consumen legalConfig y mantienen los límites económicos", () => {
   const privacy = read("app/legal/privacy/page.tsx");
   const terms = read("app/legal/terms/page.tsx");
-  assert.match(privacy, /PRIVACY_LEGAL_VERSION/);
-  assert.match(privacy, /PRIVACY_SECTIONS/);
-  assert.match(terms, /THE BACKYARD/);
-  assert.match(terms, /No recibe,[^;]*ni procesa dinero/i);
-  assert.match(terms, /legalConfig\.contactEmail/);
-  assert.match(terms, /legalConfig\.privacyEmail/);
+  const documents = read("lib/legal-documents.ts");
+  assert.match(privacy, /documentKey="privacy_integral"/);
+  assert.match(terms, /documentKey="terms"/);
+  assert.match(documents, /The Backyard/i);
+  assert.match(documents, /no recibe,[^;]*ni paga dinero apostado/i);
+  assert.match(documents, /privacidad@thebackyard\.com\.mx/);
 });

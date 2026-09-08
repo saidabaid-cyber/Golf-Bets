@@ -18,8 +18,8 @@ test("consentimiento guarda usuario, versión, fecha y locale", () => {
   const accepted = buildLegalAcceptances("guest", "2026-09-01T12:00:00.000Z");
   assert.equal(accepted.length, 4);
   assert.equal(hasCurrentLegalConsent(accepted, "guest"), true);
-  assert.match(accepted.find((item) => item.type === "privacy")?.documentVersion || "", /^2026-09-02-v2\+sha256-/);
-  assert.equal(accepted.find((item) => item.type === "age_confirmation")?.documentVersion, "2026-09-01-v1");
+  assert.match(accepted.find((item) => item.type === "privacy")?.documentVersion || "", /^2026-09-08-v6\+sha256-/);
+  assert.equal(accepted.find((item) => item.type === "age_confirmation")?.documentVersion, "2026-09-08-v2:age-declaration");
   assert.equal(accepted.find((item) => item.type === "age_confirmation")?.acceptedAt, "2026-09-01T12:00:00.000Z");
 });
 

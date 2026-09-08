@@ -9,6 +9,8 @@ const account = read("app/components/account-panel.tsx");
 const page = read("app/page.tsx");
 const privacy = read("app/legal/privacy/page.tsx");
 const terms = read("app/legal/terms/page.tsx");
+const legalDocuments = read("lib/legal-documents.ts");
+const legalConsent = read("app/components/legal-consent-screen.tsx");
 const callback = read("app/auth/callback/page.tsx");
 const migration = read("supabase/migrations/202609010002_backyard_accounts_legal.sql");
 
@@ -40,7 +42,8 @@ test("Google usa OAuth real sin credenciales inventadas", () => {
 
 test("Supabase sin configurar mantiene fallback e invitado", () => {
   assert.match(auth, /pendiente de configuración/);
-  assert.match(auth, /setIdentity\(\{ \.\.\.profile, mode: "guest"/);
+  assert.match(auth, /mode: "guest"/);
+  assert.match(auth, /onGuest/);
 });
 
 test("restauración y cierre de sesión no borran los datos locales de The Backyard", () => {
@@ -57,13 +60,14 @@ test("callback intercambia código y siempre ofrece regreso seguro", () => {
   assert.match(callback, /Volver a The Backyard/);
 });
 
-test("consentimiento exige Árbitro y 18+ antes de continuar", () => {
-  assert.match(auth, /checked=\{terms\}/);
-  assert.match(auth, /checked=\{privacy\}/);
-  assert.match(auth, /checked=\{rules\}/);
-  assert.match(auth, /checked=\{age\}/);
-  assert.match(auth, /disabled=\{!terms \|\| !privacy \|\| !rules \|\| !age \|\| busy\}/);
-  assert.match(auth, /no es un árbitro oficial USGA/);
+test("consentimiento separa aviso, Términos, 18+, tratamiento económico y marketing", () => {
+  assert.match(legalConsent, /checked=\{privacyPresented\}/);
+  assert.match(legalConsent, /checked=\{terms\}/);
+  assert.match(legalConsent, /checked=\{age\}/);
+  assert.match(legalConsent, /checked=\{financial\}/);
+  assert.match(legalConsent, /checked=\{marketing\}/);
+  assert.match(legalConsent, /disabled=\{!ready \|\| busy\}/);
+  assert.match(`${legalConsent}\n${legalDocuments}`, /no constituye verificación documental/i);
 });
 
 test("links legales existen tanto en acceso como en consentimiento", () => {
@@ -72,7 +76,7 @@ test("links legales existen tanto en acceso como en consentimiento", () => {
 });
 
 test("Mi Cuenta muestra perfil, documentos, métodos, preferencias y cierre", () => {
-  for (const text of ["Mi Cuenta", "Documentos y consentimiento", "Métodos de acceso", "Preferencias", "Cerrar sesión"]) assert.match(account, new RegExp(text));
+  for (const text of ["Mi Cuenta", "Legal y privacidad", "Métodos de acceso", "Preferencias", "Cerrar sesión"]) assert.match(account, new RegExp(text));
 });
 
 test("perfil permite nombre y HCP Index opcional vacío", () => {
@@ -88,22 +92,24 @@ test("eliminar cuenta requiere confirmación fuerte y nunca usa secret en client
   assert.doesNotMatch(account, /SERVICE_ROLE|SUPABASE_SECRET/);
 });
 
-test("Mi Cuenta no expone una exportación indiscriminada ni tokens de Polla Live", () => {
-  assert.doesNotMatch(account, /Descargar mis datos/);
+test("Mi Cuenta ofrece exportación local acotada y no expone tokens de Polla Live", () => {
+  assert.match(account, /Exportar copia local/);
+  assert.match(account, /buildLocalAccountExport/);
   assert.doesNotMatch(account, /Object\.keys\(localStorage\)|access_token/);
   assert.match(account, /Notificaciones/);
 });
 
 test("Aviso Integral contiene finalidades, IA, ARCO, menores y seguridad", () => {
-  const privacyContent = read("lib/privacy-content.ts");
-  assert.match(privacy, /PRIVACY_SECTIONS/);
-  for (const text of ["Finalidades primarias", "Inteligencia artificial", "Derechos ARCO", "Menores de edad", "Seguridad", "localStorage"]) assert.match(privacyContent, new RegExp(text, "i"));
+  assert.match(privacy, /documentKey="privacy_integral"/);
+  for (const text of ["Finalidades primarias", "IA: tratamiento", "Derechos ARCO", "Personas menores de edad", "Seguridad", "localStorage"]) assert.match(legalDocuments, new RegExp(text, "i"));
 });
 
 test("Términos aclaran que The Backyard no recibe ni procesa dinero", () => {
-  assert.match(terms, /No recibe,[^;]*ni procesa dinero/i);
-  assert.match(terms, /no actúa como casa de apuestas/i);
-  assert.match(terms, /Comité o árbitro autorizado/i);
+  assert.match(terms, /documentKey="terms"/);
+  assert.match(legalDocuments, /no recibe,[^;]*ni paga dinero apostado/i);
+  assert.match(legalDocuments, /no recibe, concentra, custodia, transfiere ni paga dinero apostado/i);
+  assert.match(legalDocuments, /operar una casa o negocio de apuestas/i);
+  assert.match(legalDocuments, /Comité, al árbitro/i);
 });
 
 test("Home ofrece generador independiente y Mi Cuenta sin séptima pestaña", () => {
@@ -162,12 +168,11 @@ test("aceptaciones son insert-only para conservar auditoría", () => {
 });
 
 test("invitado conserva consentimiento local y una cuenta no oculta fallos al sincronizarlo", () => {
-  assert.match(auth, /if \(identity.mode === "authenticated"\)/);
-  assert.match(auth, /await requireCloudWrites\(writes\)/);
-  assert.match(auth, /queueLegalSync/);
-  assert.match(auth, /markLegalSyncFailed/);
-  assert.match(auth, /clearPendingLegalSync/);
-  assert.match(auth, /rules_referee_acceptances/);
+  assert.match(auth, /identity\.mode === "authenticated"/);
+  assert.match(auth, /recordLocalLegalEvidence/);
+  assert.match(auth, /markLegalEvidenceFailed/);
+  assert.match(auth, /pendingLegalEvidence/);
+  assert.match(auth, /syncLegalEvidence/);
   assert.match(auth, /migrationDecisionStorageKey\(identity\.userId\)/);
 });
 
