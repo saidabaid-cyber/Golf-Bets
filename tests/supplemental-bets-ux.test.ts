@@ -99,7 +99,8 @@ test("Minimum Putts capture stays inside the existing score card and persists in
   const scoreCard = page.indexOf("<RoundCaptureV2");
   const previousBets = page.indexOf('aria-label="Estado antes de este hoyo"');
   assert.ok(scoreCard >= 0 && previousBets > scoreCard);
-  assert.match(roundCapture, /fields\.includes\("putts"\)[\s\S]*aria-label=\{`Putts \$\{player\.name\}`\}/);
+  assert.match(roundCapture, /fields\.includes\("putts"\)[\s\S]*CompactStepper label=\{`Putts \$\{player\.name\}`\}/);
+  assert.match(roundCapture, /function CompactStepper[\s\S]*aria-label=\{label\}/);
   assert.match(roundCaptureLogic, /bet\.type === "minimum_putts"/);
   assert.match(roundCaptureLogic, /bet\.participantIds\.includes\(playerId\)/);
   assert.match(page, /supplementalBets, manualBets, scores, scoreEdits, putts,/);

@@ -239,6 +239,42 @@ export type FoursomeSegment = {
   startIndex: number;
   endIndex: number;
   basePair: string[];
+  /** Configuration provenance only; the deterministic engine ignores it. */
+  generatedByBackyard?: boolean;
+};
+
+export type PlayerTeeAssignmentSnapshot = {
+  playerId: string;
+  courseId: string;
+  layoutId?: string;
+  teeId: string;
+  teeName: string;
+  rating?: number;
+  slope?: number;
+  yards?: number;
+  source: "catalog" | "manual" | "preference" | "legacy";
+  capturedAt: string;
+};
+
+export type PersonalAdvantageMode = "manual" | "current_index" | "sliding";
+export type PersonalIndexSource = "GHIN_OFFICIAL" | "BACKYARD_WHS" | "PROFILE_FALLBACK";
+
+export type PersonalIndexSnapshot = {
+  indexValue: number;
+  indexSource: PersonalIndexSource;
+  effectiveAt: string;
+  verifiedAt?: string;
+  provisional?: boolean;
+};
+
+export type PersonalSlidingAdjustment = {
+  betId: string;
+  rivalKey: string;
+  previousAdvantage: number;
+  result: "owner_win" | "rival_win" | "tie";
+  newAdvantage: number;
+  roundId: string;
+  updatedAt: string;
 };
 
 export type BallFriendHole = {
@@ -265,6 +301,10 @@ export type SavedPersonalRival = {
   pressureMultiplier?: PressureMultiplier;
   pressureNine?: PhysicalNine;
   carryEnabled?: boolean;
+  mode?: PersonalAdvantageMode;
+  /** Signed value: positive means the rival receives; negative means the owner receives. */
+  slidingAdvantage?: number;
+  components?: PersonalBetComponents;
   updatedAt?: string;
 };
 
@@ -284,6 +324,11 @@ export type PersonalBet = {
   // `none` remains accepted only to migrate old drafts. New UI never offers Scratch.
   advantageReceiver: "none" | "owner" | "rival";
   advantageStrokes: number;
+  advantageMode?: PersonalAdvantageMode;
+  ownerIndexSnapshot?: PersonalIndexSnapshot;
+  rivalIndexSnapshot?: PersonalIndexSnapshot;
+  /** Frozen signed advantage for this round. Positive means the rival receives. */
+  slidingAdvantage?: number;
   /** @deprecated V2.5 compatibility. New rounds use pressureMultiplier/pressureNine. */
   back9Multiplier: number;
   pressureMultiplier?: PressureMultiplier;
@@ -497,6 +542,8 @@ export type RoundSnapshot = {
   players?: Player[];
   scores?: Record<number, HoleScore>;
   courseSnapshot?: Course;
+  /** Immutable tee metadata used when the round was played. */
+  playerTeeAssignments?: PlayerTeeAssignmentSnapshot[];
   order?: number[];
   completedAt?: string;
   updatedAt?: string;
@@ -509,6 +556,7 @@ export type RoundSnapshot = {
   counterBetKeepers?: CounterBetKeepers;
   lobaHoles?: Record<number, LobaHole>;
   personalBets?: PersonalBet[];
+  personalSlidingAdjustments?: PersonalSlidingAdjustment[];
   manualBets?: ManualBet[];
   supplementalBets?: SupplementalBet[];
   putts?: PuttsByHole;

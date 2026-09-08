@@ -144,7 +144,9 @@ test("Perfil expone scopes separados y sólo el prompt hace aceptación remota e
   const setup = readFileSync("app/components/backyard-ai/ai-round-setup.tsx", "utf8");
   const scanner = readFileSync("app/components/backyard-ai/scorecard-scanner.tsx", "utf8");
   const account = readFileSync("app/components/account-panel.tsx", "utf8");
-  assert.match(account, /AiProcessingConsentSettings/);
+  const manager = readFileSync("app/components/legal-consent-manager.tsx", "utf8");
+  assert.match(account, /LegalConsentManager/);
+  assert.match(manager, /AiProcessingConsentSettings/);
   assert.match(settings, /Privacidad \/ IA/);
   assert.match(settings, /Instrucciones de ronda/);
   assert.match(settings, /Fotografías de scorecard/);
@@ -160,13 +162,15 @@ test("Perfil expone scopes separados y sólo el prompt hace aceptación remota e
 test("una cuenta autenticada sin token nunca degrada su consentimiento al modo invitado", () => {
   const page = readFileSync("app/page.tsx", "utf8");
   const account = readFileSync("app/components/account-panel.tsx", "utf8");
+  const manager = readFileSync("app/components/legal-consent-manager.tsx", "utf8");
   const prompt = readFileSync("app/components/backyard-ai/ai-processing-consent.tsx", "utf8");
   const setup = readFileSync("app/components/backyard-ai/ai-round-setup.tsx", "utf8");
   const scanner = readFileSync("app/components/backyard-ai/scorecard-scanner.tsx", "utf8");
   const verifier = readFileSync("lib/backyard-ai/server/processing-consent.ts", "utf8");
 
   assert.match(page, /requiresRemoteConsent=\{identity\.mode === "authenticated"\}/);
-  assert.match(account, /requiresRemoteConsent=\{identity\.mode === "authenticated"\}/);
+  assert.match(account, /authenticated=\{identity\.mode === "authenticated"\}/);
+  assert.match(manager, /requiresRemoteConsent=\{authenticated\}/);
   assert.match(prompt, /requiresRemoteConsent && !accessToken/);
   assert.match(setup, /remoteConsentUnavailable = requiresRemoteConsent && !accessToken/);
   assert.match(scanner, /else if \(requiresRemoteConsent\)[\s\S]*No se envió ninguna foto/);

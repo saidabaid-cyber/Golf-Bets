@@ -8,6 +8,7 @@ import type {
   CounterBetKind,
   Hole,
   Player,
+  PlayerTeeAssignmentSnapshot,
   ScoreCaptureMode,
   SupplementalBet,
 } from "../../lib/types";
@@ -26,6 +27,7 @@ export type RoundCaptureV2Props = {
   currentIndex: number;
   completedHoles: ReadonlySet<number>;
   players: Player[];
+  playerTeeAssignments?: PlayerTeeAssignmentSnapshot[];
   ownerId: string;
   ownerAvatarUrl?: string;
   mode: ScoreCaptureMode;
@@ -60,6 +62,28 @@ function initials(name: string) {
   return name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "BY";
 }
 
+function CompactStepper({ label, value, fallback = 0, min = 0, max = 99, onChange }: { label: string; value: number | null | undefined; fallback?: number; min?: number; max?: number; onChange: (value: number) => void }) {
+  const current = typeof value === "number" && Number.isFinite(value) ? value : fallback;
+  return <div className={styles.stepper} role="group" aria-label={label}>
+    <button type="button" aria-label={`Restar en ${label}`} disabled={current <= min} onClick={() => onChange(Math.max(min, current - 1))}>−</button>
+    <button type="button" className={styles.stepperValue} aria-label={`Confirmar ${label}: ${current}`} aria-pressed={typeof value === "number"} data-pending={typeof value !== "number"} onClick={() => onChange(current)}>{current}</button>
+    <button type="button" aria-label={`Sumar en ${label}`} disabled={current >= max} onClick={() => onChange(Math.min(max, current + 1))}>+</button>
+  </div>;
+}
+
+function TapCounter({ label, icon, value, max = 20, onChange }: { label: string; icon: string; value: number | null | undefined; max?: number; onChange: (value: number) => void }) {
+  const confirmed = typeof value === "number" && Number.isFinite(value);
+  const current = typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
+  return <div className={styles.tapCounter} role="group" aria-label={label}>
+    <button type="button" className={styles.counterAdd} aria-label={`Agregar ${label}`} disabled={current >= max} onClick={() => onChange(Math.min(max, current + 1))}><span aria-hidden="true">{icon}</span><b>{current || ""}</b></button>
+    {current > 0
+      ? <button type="button" className={styles.counterSubtract} aria-label={`Restar ${label}`} onClick={() => onChange(current - 1)}>−</button>
+      : !confirmed
+        ? <button type="button" className={styles.counterSubtract} aria-label={`Confirmar cero en ${label}`} onClick={() => onChange(0)}>0</button>
+        : <span className={styles.counterConfirmed} aria-label={`${label}: cero confirmado`}>✓</span>}
+  </div>;
+}
+
 function DynamicInputs({ player, fields, putts, counters, onPutts, onCounter }: {
   player: Player;
   fields: ReturnType<typeof roundCaptureFieldsForPlayer>;
@@ -70,9 +94,9 @@ function DynamicInputs({ player, fields, putts, counters, onPutts, onCounter }: 
 }) {
   if (!fields.length) return null;
   return <div className={styles.dynamicFields}>
-    {fields.includes("putts") && <label>Putts<NumericCaptureInput aria-label={`Putts ${player.name}`} min={0} max={20} step={1} value={putts} emptyWhenZero={false} placeholder="—" onValueChange={onPutts} /></label>}
-    {fields.includes("bunker") && <label>Bnk<NumericCaptureInput aria-label={`Bunker ${player.name}`} min={0} max={20} step={1} value={counters.camels} emptyWhenZero={false} placeholder="—" onValueChange={(value) => onCounter("camels", value)} /></label>}
-    {fields.includes("fish") && <label>Pez · agua<NumericCaptureInput aria-label={`Peces por agua de ${player.name}`} min={0} max={20} step={1} value={counters.fish} emptyWhenZero={false} placeholder="—" onValueChange={(value) => onCounter("fish", value)} /></label>}
+    {fields.includes("putts") && <div className={styles.compactField}><span>Putts</span><CompactStepper label={`Putts ${player.name}`} value={putts} fallback={2} min={0} max={20} onChange={onPutts} /></div>}
+    {fields.includes("bunker") && <div className={styles.compactField}><span>Bnk</span><TapCounter label={`Bunker ${player.name}`} icon="🐫" value={counters.camels} onChange={(value) => onCounter("camels", value)} /></div>}
+    {fields.includes("fish") && <div className={styles.compactField}><span>Pez · agua</span><TapCounter label={`Peces por agua de ${player.name}`} icon="🐟" value={counters.fish} onChange={(value) => onCounter("fish", value)} /></div>}
   </div>;
 }
 
@@ -84,8 +108,8 @@ function BinaryChoice({ label, value, onChange }: { label: string; value?: boole
 }
 
 function AdvancedPlayer({ player, stat, onChange }: { player: Player; stat: AdvancedHoleStat; onChange: (patch: Partial<AdvancedHoleStat>) => void }) {
-  return <details className={styles.advancedPlayer}>
-    <summary>{player.name} · estadísticas opcionales</summary>
+  return <section className={styles.advancedPlayer}>
+    <h4>{player.name} · estadísticas opcionales</h4>
     <div className={styles.advancedGrid}>
       <label>Dirección de salida<select value={stat.teeDirection || ""} onChange={(event) => onChange({ teeDirection: (event.target.value || undefined) as AdvancedHoleStat["teeDirection"] })}><option value="">Sin capturar</option><option value="left">Izquierda</option><option value="center">Centro</option><option value="right">Derecha</option></select></label>
       <label>Lie de llegada<select value={stat.landingLie || ""} onChange={(event) => onChange({ landingLie: (event.target.value || undefined) as AdvancedHoleStat["landingLie"] })}><option value="">Sin capturar</option><option value="fairway">Fairway</option><option value="rough">Rough</option><option value="bunker">Bunker</option><option value="water_ob">Agua / OB</option></select></label>
@@ -93,15 +117,15 @@ function AdvancedPlayer({ player, stat, onChange }: { player: Player; stat: Adva
       <label>Distancia<NumericCaptureInput aria-label={`Distancia de salida ${player.name}`} min={0} max={600} step={1} value={stat.teeDistance} emptyWhenZero={false} placeholder="yd" onValueChange={(value) => onChange({ teeDistance: value === null ? undefined : value })} /></label>
       <BinaryChoice label="Fairway" value={stat.fairwayHit} onChange={(fairwayHit) => onChange({ fairwayHit })} />
       <BinaryChoice label="Green en regulación" value={stat.greenInRegulation} onChange={(greenInRegulation) => onChange({ greenInRegulation })} />
-      <label>Penalidades<NumericCaptureInput aria-label={`Golpes de penalidad ${player.name}`} min={0} max={50} step={1} value={stat.penaltyStrokes} emptyWhenZero={false} placeholder="—" onValueChange={(value) => onChange({ penaltyStrokes: value === null ? undefined : Math.max(0, Math.trunc(value)) })} /></label>
+      <div className={styles.compactField}><span>Penalidades</span><TapCounter label={`Golpes de penalidad ${player.name}`} icon="⚠️" max={50} value={stat.penaltyStrokes} onChange={(value) => onChange({ penaltyStrokes: value })} /></div>
       <BinaryChoice label="Fuera de límites" value={stat.outOfBounds} onChange={(outOfBounds) => onChange({ outOfBounds })} />
     </div>
-  </details>;
+  </section>;
 }
 
 export function RoundCaptureV2(props: RoundCaptureV2Props) {
   const {
-    course, hole, order, currentIndex, completedHoles, players, ownerId, ownerAvatarUrl, mode, bets,
+    course, hole, order, currentIndex, completedHoles, players, playerTeeAssignments = [], ownerId, ownerAvatarUrl, mode, bets,
     supplementalBets, scores, putts, advancedStats, counterQuantities, groupNassauLabel, ballFriendLabel, lobaLabel,
   } = props;
   const [gpsState, setGpsState] = useState<"idle" | "loading" | "ready" | "error">("idle");
@@ -110,6 +134,7 @@ export function RoundCaptureV2(props: RoundCaptureV2Props) {
   const group = players.filter((player) => player.id !== owner?.id);
   const fields = (playerId: string) => roundCaptureFieldsForPlayer({ mode, playerId, playedHoleIndex: currentIndex, bets, supplementalBets });
   const allGroupFields = new Set(group.flatMap((player) => fields(player.id)));
+  const teeLabel = (playerId: string) => playerTeeAssignments.find((assignment) => assignment.playerId === playerId)?.teeName || course.teeName;
 
   function requestGps() {
     if (!("geolocation" in navigator)) {
@@ -186,7 +211,7 @@ export function RoundCaptureV2(props: RoundCaptureV2Props) {
         {ownerAvatarUrl ? <img className={styles.avatar} alt="" src={ownerAvatarUrl} /> : <span className={styles.avatar} aria-hidden="true">{initials(owner.name)}</span>}
         <div>
           <div className={styles.playerHeading}>
-            <div><b>{owner.name || "Jugador principal"}</b><small>HCP {owner.handicap ?? "—"} · Jugador principal</small></div>
+            <div><b>{owner.name || "Jugador principal"}</b><small>HCP {owner.handicap ?? "—"} · Tee {teeLabel(owner.id)} · Jugador principal</small></div>
             <span className={styles.toPar}>{scoreToParLabel(scores[owner.id], hole.par)}</span>
           </div>
           <ScorecardHoleNetPreview player={owner} hole={hole} gross={scores[owner.id]} />
@@ -204,16 +229,18 @@ export function RoundCaptureV2(props: RoundCaptureV2Props) {
       {group.length > 0 && <>
         <h3 className={styles.groupTitle}>JUGADORES DEL GRUPO</h3>
         <div className={styles.groupTableWrap}><table className={styles.groupTable}>
-          <thead><tr><th>Jugador</th><th>Score</th>{allGroupFields.has("putts") && <th>Putts</th>}{allGroupFields.has("bunker") && <th>Bnk</th>}{allGroupFields.has("fish") && <th>Pez</th>}</tr></thead>
+          <thead><tr><th>Jugador</th><th>Score</th>{allGroupFields.has("putts") && <th>Putts</th>}{allGroupFields.has("bunker") && <th>Bnk</th>}{allGroupFields.has("fish") && <th>Pez</th>}{allGroupFields.has("penalties") && <th>Pen</th>}{allGroupFields.has("ob") && <th>OB</th>}</tr></thead>
           <tbody>{group.map((player) => {
             const playerFields = fields(player.id);
             const counters = countersFor(player.id);
             return <tr key={player.id}>
-              <td className={styles.groupName}><b>{player.name || "Sin nombre"}</b><small>HCP {player.handicap ?? "—"} · {scoreToParLabel(scores[player.id], hole.par)}</small></td>
-              <td><NumericCaptureInput aria-label={`Score ${player.name} hoyo ${hole.number}`} min={1} step={1} value={scores[player.id]} emptyWhenZero={false} commitUnchanged placeholder={String(hole.par)} onValueChange={(value) => props.onScoreChange(player.id, value)} /></td>
-              {allGroupFields.has("putts") && <td>{playerFields.includes("putts") ? <NumericCaptureInput aria-label={`Putts ${player.name} hoyo ${hole.number}`} min={0} max={20} step={1} value={putts[player.id]} emptyWhenZero={false} placeholder="—" onValueChange={(value) => props.onPuttsChange(player.id, value)} /> : "—"}</td>}
-              {allGroupFields.has("bunker") && <td>{playerFields.includes("bunker") ? <NumericCaptureInput aria-label={`Bunker ${player.name} hoyo ${hole.number}`} min={0} max={20} step={1} value={counters.camels} emptyWhenZero={false} placeholder="—" onValueChange={(value) => props.onCounterChange("camels", player.id, value)} /> : "—"}</td>}
-              {allGroupFields.has("fish") && <td>{playerFields.includes("fish") ? <NumericCaptureInput aria-label={`Peces por agua de ${player.name} hoyo ${hole.number}`} min={0} max={20} step={1} value={counters.fish} emptyWhenZero={false} placeholder="—" onValueChange={(value) => props.onCounterChange("fish", player.id, value)} /> : "—"}</td>}
+              <td className={styles.groupName}><b>{player.name || "Sin nombre"}</b><small>HCP {player.handicap ?? "—"} · {teeLabel(player.id)} · {scoreToParLabel(scores[player.id], hole.par)}</small></td>
+              <td><CompactStepper label={`Score ${player.name} hoyo ${hole.number}`} value={scores[player.id]} fallback={hole.par} min={1} onChange={(value) => props.onScoreChange(player.id, value)} /></td>
+              {allGroupFields.has("putts") && <td>{playerFields.includes("putts") ? <CompactStepper label={`Putts ${player.name} hoyo ${hole.number}`} value={putts[player.id]} fallback={2} min={0} max={20} onChange={(value) => props.onPuttsChange(player.id, value)} /> : "—"}</td>}
+              {allGroupFields.has("bunker") && <td>{playerFields.includes("bunker") ? <TapCounter label={`Bunker ${player.name} hoyo ${hole.number}`} icon="🐫" value={counters.camels} onChange={(value) => props.onCounterChange("camels", player.id, value)} /> : "—"}</td>}
+              {allGroupFields.has("fish") && <td>{playerFields.includes("fish") ? <TapCounter label={`Peces por agua de ${player.name} hoyo ${hole.number}`} icon="🐟" value={counters.fish} onChange={(value) => props.onCounterChange("fish", player.id, value)} /> : "—"}</td>}
+              {allGroupFields.has("penalties") && <td>{playerFields.includes("penalties") ? <TapCounter label={`Penalidades ${player.name} hoyo ${hole.number}`} icon="⚠️" value={advancedStats[player.id]?.penaltyStrokes} onChange={(value) => props.onAdvancedChange(player.id, { penaltyStrokes: value })} /> : "—"}</td>}
+              {allGroupFields.has("ob") && <td>{playerFields.includes("ob") ? <button type="button" className={styles.obToggle} data-active={advancedStats[player.id]?.outOfBounds === true} aria-pressed={advancedStats[player.id]?.outOfBounds === true} onClick={() => props.onAdvancedChange(player.id, { outOfBounds: advancedStats[player.id]?.outOfBounds === true ? undefined : true })}>OB</button> : "—"}</td>}
             </tr>;
           })}</tbody>
         </table></div>

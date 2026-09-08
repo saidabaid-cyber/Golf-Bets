@@ -8,7 +8,7 @@ import { ballFitDefaultsFromProfile } from "../../lib/ball-fitting";
 import type { GolfInsights } from "../../lib/golf-insights";
 import { useBackyardAccount } from "./account-provider";
 import { EquipmentProfilePanel } from "./equipment-profile-panel";
-import { AiProcessingConsentSettings } from "./backyard-ai/ai-processing-consent";
+import { LegalConsentManager } from "./legal-consent-manager";
 
 type AccountPanelProps = {
   view: "profile" | "account";
@@ -129,6 +129,7 @@ export function AccountPanel({ view, highContrast, onHighContrastChange, notific
   const [deleteText, setDeleteText] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [managingConsents, setManagingConsents] = useState(false);
   const sessionExpired = cloudIssues.some((issue) => issue.kind === "session_expired");
 
   useEffect(() => {
@@ -221,6 +222,16 @@ export function AccountPanel({ view, highContrast, onHighContrastChange, notific
     }
     finally { setDeletingAccount(false); }
   }
+
+  if (view === "account" && managingConsents) return <LegalConsentManager
+    userId={identity.userId}
+    accessToken={identity.accessToken}
+    authenticated={identity.mode === "authenticated"}
+    acceptances={acceptances}
+    bettingConsentGranted={bettingConsentGranted}
+    requestBettingConsent={requestBettingConsent}
+    onBack={() => setManagingConsents(false)}
+  />;
 
   return <>
     <section className="hero accountHero"><div><div className="eyebrow">{view === "profile" ? "THE BACKYARD · GOLFISTA" : "THE BACKYARD ACCOUNT"}</div><h1>{view === "profile" ? "Mi Perfil" : "Cuenta y privacidad"}</h1><p>{view === "profile" ? "Tu identidad de golf, HCP capturado y estadísticas reales." : "Acceso, sincronización, consentimientos y preferencias de tu cuenta."}</p></div></section>
@@ -327,17 +338,14 @@ export function AccountPanel({ view, highContrast, onHighContrastChange, notific
 
     {view === "profile" && <section className="card"><div className="sectionTitle"><div><h2>Cuenta y privacidad</h2><p>Acceso, sincronización, documentos, preferencias y cierre de sesión.</p></div></div><button type="button" className="secondary big" onClick={onOpenAccount}>Abrir configuración de cuenta</button></section>}
 
-    {view === "account" && <><section className="card"><h2>Documentos y consentimiento</h2><div className="documentConsentList">
+    {view === "account" && <><section className="card"><h2>Legal y privacidad</h2><div className="documentConsentList">
       <Link href="/legal/terms?returnTo=account"><span>Términos de Uso</span><b>{acceptedLabel("terms")}</b></Link>
       <Link href="/legal/privacy-simplified?returnTo=account"><span>Aviso de Privacidad Simplificado</span><b>2026-09-08-v6</b></Link>
       <Link href="/legal/privacy?returnTo=account"><span>Aviso de Privacidad</span><b>{acceptedLabel("privacy")}</b></Link>
       <Link href="/legal/terms?returnTo=account#rules-referee"><span>Árbitro de Reglas</span><b>{acceptedLabel("rules_referee")}</b></Link>
       <div><span>Edad 18+</span><b>{acceptance("age_confirmation") ? "Confirmada" : "Pendiente"}</b></div>
       <div><span>Datos de apuestas, resultados y gastos</span><b>{bettingAcceptanceLabel}</b></div>
-    </div></section>
-    {!bettingConsentGranted && <section className="card"><h2>Funciones de apuestas</h2><p className="muted">Para activar o registrar apuestas, resultados y gastos necesitas otorgar el consentimiento específico. Las demás funciones y tus datos anteriores siguen disponibles.</p><button type="button" className="secondary" onClick={() => void requestBettingConsent()}>Revisar consentimiento específico</button></section>}
-
-    <AiProcessingConsentSettings userId={identity.userId} accessToken={identity.accessToken} requiresRemoteConsent={identity.mode === "authenticated"} />
+    </div><button type="button" className="primary big" onClick={() => setManagingConsents(true)}>GESTIONAR CONSENTIMIENTOS</button><p className="hint">Procesamiento IA, imágenes, memoria personal y marketing se administran por separado.</p></section>
 
     {identity.mode === "authenticated" && <section className="card"><h2>Métodos de acceso</h2><div className="accessMethodList">{["google", "email"].map((provider) => <span key={provider}>{provider === "google" ? "Google" : "Correo"}<b>{identity.providers.includes(provider) || (provider === "email" && Boolean(identity.email)) ? "✓" : "—"}</b></span>)}</div><p className="hint">Tu cuenta conserva el mismo perfil tanto con Google como con código por correo.</p></section>}
 

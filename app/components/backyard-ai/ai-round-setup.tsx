@@ -19,8 +19,9 @@ import { roundSetupAnswerCommand } from "../../../lib/backyard-ai/runtime/answer
 import { planRoundSetup, type RoundSetupPlan } from "../../../lib/backyard-ai/runtime/round-setup";
 import type { RoundSetupQuestion } from "../../../lib/backyard-ai/schemas/actions";
 import type { RoundSetupDraft } from "../../../lib/backyard-ai/schemas/round-setup";
+import { frequentPersonalSuggestions, personalBetFromFrequentTemplate } from "../../../lib/personal-modes";
 import { createDictationSession, DICTATION_FALLBACK, speechRecognitionConstructor } from "../../../lib/speech-dictation";
-import type { FrequentPlayer } from "../../../lib/types";
+import type { FrequentPlayer, SavedPersonalRival } from "../../../lib/types";
 import { AiProcessingConsentPrompt } from "./ai-processing-consent";
 import { AiRoundReview } from "./ai-round-review";
 import styles from "./backyard-ai.module.css";
@@ -48,6 +49,7 @@ export type AiRoundSetupProps = {
   memoryContext: Omit<RoundSetupMemoryContext, "activeDraft">;
   accessToken?: string | null;
   requiresRemoteConsent: boolean;
+  savedPersonalRivals?: SavedPersonalRival[];
   onConfirm: (draft: RoundSetupDraft, plan: RoundSetupPlan) => void;
   onManualEdit: (draft: RoundSetupDraft) => void;
   onCancel: () => void;
@@ -70,7 +72,7 @@ function validHandicapInput(value: string) {
   return Number.isFinite(handicap) && handicap >= -15 && handicap <= 54;
 }
 
-export function AiRoundSetup({ initialDraft, memoryContext, accessToken, requiresRemoteConsent, onConfirm, onManualEdit, onCancel, onPlanned }: AiRoundSetupProps) {
+export function AiRoundSetup({ initialDraft, memoryContext, accessToken, requiresRemoteConsent, savedPersonalRivals = [], onConfirm, onManualEdit, onCancel, onPlanned }: AiRoundSetupProps) {
   const [input, setInput] = useState("");
   const [draft, setDraft] = useState(initialDraft);
   const [plan, setPlan] = useState<RoundSetupPlan | null>(null);
@@ -90,6 +92,7 @@ export function AiRoundSetup({ initialDraft, memoryContext, accessToken, require
     return Boolean(ownerId && typeof window !== "undefined" && readLearningConsent(browserAiProcessingConsentStorage(), ownerId, BACKYARD_AI_MEMORY_POLICY_VERSION).consent.personalMemoryEnabled);
   });
   const [sessionPlayers, setSessionPlayers] = useState<FrequentPlayer[]>([]);
+  const [dismissedPersonalSuggestions, setDismissedPersonalSuggestions] = useState<string[]>([]);
   const [handicapAnswers, setHandicapAnswers] = useState<Record<string, string>>({});
   const recognitionRef = useRef<ReturnType<typeof createDictationSession> | null>(null);
   const composerRef = useRef<HTMLElement | null>(null);
@@ -318,12 +321,30 @@ export function AiRoundSetup({ initialDraft, memoryContext, accessToken, require
     setPersonalMemoryEnabled(enabled);
   }
 
+  function addFrequentPersonal(template: SavedPersonalRival) {
+    const rival = draft.players.find((player) => player.name.trim().toLocaleLowerCase("es-MX") === template.name.trim().toLocaleLowerCase("es-MX"));
+    if (!rival) return draft;
+    const owner = draft.players.find((player) => player.id === draft.ownerId);
+    const personalBetId = memoryContext.idFactory?.() ?? `personal-${template.id}-${draft.personalBets.length + 1}`;
+    const personalBet = personalBetFromFrequentTemplate({ template, owner, rival, id: personalBetId, effectiveAt: draft.date });
+    const nextDraft = { ...draft, personalBets: [...draft.personalBets, personalBet] };
+    setDraft(nextDraft);
+    setPlan((current) => current ? { ...current, draft: nextDraft } : current);
+    setDismissedPersonalSuggestions((current) => [...new Set([...current, template.id])]);
+    setNotice(`Personal frecuente con ${template.name} agregada. Revísala antes de iniciar.`);
+    return nextDraft;
+  }
+
   const question = plan?.questions[0];
   const handicapTargets = question?.code === "missing_player_handicaps" ? question.playerTargets ?? [] : [];
   const handicapAnswer = handicapTargets.map((target) => `${target.label} HCP ${handicapAnswers[target.id] ?? ""}`).join(", ");
   const handicapAnswerReady = handicapTargets.length > 0 && handicapTargets.every((target) => validHandicapInput(handicapAnswers[target.id] ?? ""));
   const usesHandicapForm = handicapTargets.length > 0;
   const showComposer = !plan || editing || Boolean(question);
+  const personalSuggestions = frequentPersonalSuggestions(savedPersonalRivals, draft.players).filter(({ template }) => (
+    !dismissedPersonalSuggestions.includes(template.id)
+    && !draft.personalBets.some((bet) => bet.enabled !== false && (bet.externalRivalId === template.id || bet.rivalName.trim().toLocaleLowerCase("es-MX") === template.name.trim().toLocaleLowerCase("es-MX")))
+  ));
   return <section className={styles.screen} aria-labelledby="backyard-ai-setup-title">
     <section className={styles.hero}>
       <span className="eyebrow">BACKYARD AI · MÉXICO</span>
@@ -351,6 +372,7 @@ export function AiRoundSetup({ initialDraft, memoryContext, accessToken, require
 
     {plan && <>
       {plan.memory.length > 0 && <p className={styles.contextNote}>Usé contexto existente: {plan.memory.map((item) => item.label).join(" · ")}.</p>}
+      {personalSuggestions.map(({ template, message }) => <section className={styles.question} key={template.id}><b>Personal frecuente</b><span>{message}</span><div className={styles.suggestions}><button type="button" onClick={() => addFrequentPersonal(template)}>SÍ</button><button type="button" onClick={() => setDismissedPersonalSuggestions((current) => [...new Set([...current, template.id])])}>NO</button><button type="button" onClick={() => onManualEdit(addFrequentPersonal(template))}>EDITAR</button></div></section>)}
       <AiRoundReview draft={draft} questions={plan.questions} issues={plan.configurationIssues} canConfirm={plan.canConfirm} busy={busy} onConfirm={() => onConfirm(draft, plan)} onConversationalChange={() => { setEditing(true); changeInput(""); }} onResolveQuestion={resolveQuestion} onManualEdit={() => onManualEdit(draft)} />
     </>}
 

@@ -1,6 +1,6 @@
 import type { BetConfig, ScoreCaptureMode, SupplementalBet } from "./types";
 
-export type RoundCaptureField = "putts" | "bunker" | "fish";
+export type RoundCaptureField = "putts" | "bunker" | "fish" | "penalties" | "ob";
 
 type CaptureBetContext = Pick<BetConfig, "vipers" | "camels" | "fish">;
 
@@ -32,6 +32,7 @@ export function roundCaptureFieldsForPlayer(input: {
   if (mode === "advanced" || minimumPuttsNeedsPlayer || participates(bets.vipers.enabled, bets.vipers.participantIds, playerId)) {
     fields.add("putts");
   }
+  if (mode === "advanced") { fields.add("penalties"); fields.add("ob"); }
   if (participates(bets.camels.enabled, bets.camels.participantIds, playerId)) fields.add("bunker");
   if (participates(bets.fish.enabled, bets.fish.participantIds, playerId)) fields.add("fish");
   return [...fields];

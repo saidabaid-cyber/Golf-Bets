@@ -228,6 +228,19 @@
 
 .dynamicFields label { margin: 0; }
 .dynamicFields input { min-height: 39px; padding: 7px; text-align: center; }
+.compactField { display: grid; gap: 5px; align-content: start; font-size: 9px; font-weight: 850; color: var(--muted); }
+
+.stepper { display: inline-grid; grid-template-columns: 40px minmax(30px, auto) 40px; align-items: center; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #fff; }
+.stepper button { min-height: 40px; border: 0; background: #f2f5f2; color: var(--green); font-size: 18px; font-weight: 900; }
+.stepper .stepperValue { min-width: 30px; padding: 0 4px; text-align: center; background: #fff; color: var(--ink); font-size: 14px; font-weight: 900; }
+.stepper .stepperValue[data-pending="true"] { color: var(--muted); }
+.tapCounter { display: inline-flex; align-items: stretch; min-height: 40px; }
+.tapCounter button { border: 1px solid var(--line); background: #fff; font-weight: 900; }
+.counterAdd { min-width: 48px; border-radius: 10px !important; display: inline-flex; justify-content: center; align-items: center; gap: 4px; }
+.counterSubtract { width: 40px; margin-left: 3px; border-radius: 10px !important; color: var(--green); }
+.counterConfirmed { display: inline-grid; place-items: center; width: 40px; margin-left: 3px; border: 1px solid var(--line); border-radius: 10px; color: var(--green); background: #f2f5f2; font-weight: 900; }
+.obToggle { min-width: 44px; min-height: 40px; border: 1px solid var(--line); border-radius: 10px; background: #fff; font-size: 10px; font-weight: 900; }
+.obToggle[data-active="true"] { background: var(--green); color: #fff; border-color: var(--green); }
 
 .groupTitle {
   margin: 13px 0 6px;
@@ -247,7 +260,7 @@
 
 .advancedList { margin-top: 12px; display: grid; gap: 7px; }
 .advancedPlayer { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
-.advancedPlayer summary { cursor: pointer; padding: 10px; font-size: 11px; font-weight: 900; background: #f8faf8; }
+.advancedPlayer h4 { margin: 0; padding: 10px; font-size: 11px; font-weight: 900; background: #f8faf8; }
 .advancedGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 10px; }
 .advancedGrid label { margin: 0; }
 .advancedGrid select, .advancedGrid input { min-height: 39px; padding: 7px; }

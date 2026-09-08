@@ -69,6 +69,7 @@ export function normalizeRoundDraft(value: unknown, resolvedOwnerId?: string) {
     ...(course ? { course } : { course: undefined }),
     courseSelected: typeof source.courseSelected === "boolean" ? source.courseSelected && Boolean(course) : Boolean(course),
     players,
+    playerTeeAssignments: Array.isArray(source.playerTeeAssignments) ? source.playerTeeAssignments.filter((item) => Boolean(recordValue(item))) : [],
     bets: recordValue(source.bets),
     segments: Array.isArray(source.segments) ? source.segments : [],
     personalBets: Array.isArray(source.personalBets) ? source.personalBets.filter((item) => Boolean(recordValue(item))) : [],

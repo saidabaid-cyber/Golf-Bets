@@ -230,6 +230,9 @@ export function applySavedPersonalRivalTemplate(bet: PersonalBet, template: Save
     pressureMultiplier: template.pressureMultiplier ?? bet.pressureMultiplier,
     pressureNine: template.pressureNine ?? bet.pressureNine,
     carryEnabled: template.carryEnabled ?? bet.carryEnabled ?? false,
+    advantageMode: template.mode ?? bet.advantageMode ?? "current_index",
+    slidingAdvantage: template.slidingAdvantage ?? bet.slidingAdvantage,
+    components: template.components ? { ...template.components } : bet.components,
     back9Multiplier: 1,
   };
 }
@@ -250,6 +253,9 @@ export function personalRivalTemplateFromBet(
     pressureMultiplier: bet.pressureMultiplier ?? 1,
     pressureNine: bet.pressureNine ?? "holes_10_18",
     carryEnabled: bet.carryEnabled ?? false,
+    mode: bet.advantageMode ?? "current_index",
+    ...(bet.advantageMode === "sliding" ? { slidingAdvantage: bet.slidingAdvantage ?? (bet.advantageReceiver === "rival" ? bet.advantageStrokes : bet.advantageReceiver === "owner" ? -bet.advantageStrokes : 0) } : {}),
+    components: { ...bet.components },
     updatedAt,
   };
 }

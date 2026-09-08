@@ -23,9 +23,9 @@ class MemoryStorage {
 
 test("el aviso publicado coincide íntegramente con el contenido aprobado", () => {
   const text = privacyPublishedPlainText();
-  assert.equal(createHash("sha256").update(text).digest("hex"), "1e142e72a5d6e764fb9fe413c4d399e07b83b8a704a1da7ea698ebb831056bb6");
-  assert.equal(PRIVACY_CONTENT_ID, "2026-09-08-v4+sha256-1e142e72a5d6e764");
-  assert.deepEqual(PRIVACY_SECTIONS.map((section) => section.number), Array.from({ length: 16 }, (_, index) => index + 1));
+  assert.equal(createHash("sha256").update(text).digest("hex"), "c441091d44899e8b84e6dff1edd68e99cf377c60ddf9c824ff046a9a8aa78780");
+  assert.equal(PRIVACY_CONTENT_ID, "2026-09-08-v6+sha256-c441091d44899e8b");
+  assert.deepEqual(PRIVACY_SECTIONS.map((section) => section.number), Array.from({ length: 20 }, (_, index) => index + 1));
   for (const removed of [
     "Su contenido no sustituye asesoría jurídica individual.",
     "Sus condiciones, ubicaciones de procesamiento y plazos pueden depender de la configuración y términos aplicables; no afirmamos condiciones contractuales o de retención que no hayan sido confirmadas.",

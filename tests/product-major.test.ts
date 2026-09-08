@@ -73,7 +73,7 @@ test("links legales existen tanto en acceso como en consentimiento", () => {
 });
 
 test("Cuenta y privacidad conserva documentos, métodos, preferencias y cierre", () => {
-  for (const text of ["Cuenta y privacidad", "Documentos y consentimiento", "Métodos de acceso", "Preferencias", "Cerrar sesión"]) assert.match(account, new RegExp(text));
+  for (const text of ["Cuenta y privacidad", "Legal y privacidad", "GESTIONAR CONSENTIMIENTOS", "Métodos de acceso", "Preferencias", "Cerrar sesión"]) assert.match(account, new RegExp(text));
 });
 
 test("perfil permite nombre y HCP manual opcional vacío", () => {
@@ -96,15 +96,17 @@ test("Mi Cuenta no expone una exportación indiscriminada ni tokens de Polla Liv
 });
 
 test("Aviso Integral contiene finalidades, IA, ARCO, menores y seguridad", () => {
-  const privacyContent = read("lib/privacy-content.ts");
-  assert.match(privacy, /PRIVACY_SECTIONS/);
-  for (const text of ["Finalidades primarias", "Inteligencia artificial", "Derechos ARCO", "Menores de edad", "Seguridad", "localStorage"]) assert.match(privacyContent, new RegExp(text, "i"));
+  const privacyContent = read("lib/legal-documents.ts");
+  assert.match(privacy, /LegalDocument documentKey="privacy_integral"/);
+  for (const text of ["Finalidades primarias", "IA: tratamiento, entrenamiento y límites", "Derechos ARCO", "Personas menores de edad", "Seguridad", "localStorage"]) assert.match(privacyContent, new RegExp(text, "i"));
 });
 
 test("Términos aclaran que The Backyard no recibe ni procesa dinero", () => {
-  assert.match(terms, /No recibe,[^;]*ni procesa dinero/i);
-  assert.match(terms, /no actúa como casa de apuestas/i);
-  assert.match(terms, /Comité o árbitro autorizado/i);
+  const termsContent = read("lib/legal-documents.ts");
+  assert.match(terms, /LegalDocument documentKey="terms"/);
+  assert.match(termsContent, /no recibe, concentra, custodia, transfiere ni paga dinero apostado/i);
+  assert.match(termsContent, /operar una casa o negocio de apuestas/i);
+  assert.match(termsContent, /No sustituye al Comité, al árbitro/i);
 });
 
 test("Home conecta grupos y perfil dentro de cinco destinos principales", () => {

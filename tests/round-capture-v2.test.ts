@@ -62,3 +62,17 @@ test("UX V2 separa jugador principal, tabla móvil, cámara secundaria y CTA fin
   assert.match(page, /ESCANEAR TARJETA PARA FINALIZAR/);
   assert.match(page, /<RoundCaptureV2/);
 });
+
+test("Capture V2.2 usa más/menos, contadores por tap y estadísticas inline", () => {
+  const bets = initialBets(["said"]);
+  assert.deepEqual(roundCaptureFieldsForPlayer({ mode: "advanced", playerId: "said", playedHoleIndex: 0, bets, supplementalBets: [] }), ["putts", "penalties", "ob"]);
+  const component = readFileSync("app/components/round-capture-v2.tsx", "utf8");
+  assert.match(component, /function CompactStepper/);
+  assert.match(component, /function TapCounter/);
+  assert.match(component, /Restar en/);
+  assert.match(component, /Agregar \$\{label\}/);
+  assert.match(component, /Confirmar cero en \$\{label\}/);
+  assert.match(component, /Confirmar \$\{label\}/);
+  assert.match(component, /<section className=\{styles\.advancedPlayer\}>/);
+  assert.doesNotMatch(component, /<details className=\{styles\.advancedPlayer\}>/);
+});
