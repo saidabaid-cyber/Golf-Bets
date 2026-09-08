@@ -12,12 +12,13 @@ const terms = read("app/legal/terms/page.tsx");
 const callback = read("app/auth/callback/page.tsx");
 const migration = read("supabase/migrations/202609010002_backyard_accounts_legal.sql");
 
-test("login muestra identidad, Google, correo e invitado sin exponer Apple", () => {
+test("login muestra identidad, Google, correo e invitado y mantiene Apple cerrado si no está disponible", () => {
   const accessSource = auth + read("app/components/brand-lockup.tsx");
   for (const text of ["THE BACKYARD", "Google", "Continuar con correo", "Continuar como invitado"]) assert.match(accessSource, new RegExp(text));
-  assert.doesNotMatch(accessSource, /Continuar con Apple|Apple · pendiente/);
+  assert.match(accessSource, /appleAvailable \? "Continuar con Apple" : "Apple · Próximamente"/);
+  assert.match(accessSource, /disabled=\{busy \|\| !appleAvailable\}/);
   assert.match(accessSource, /Continuar con Google/);
-  assert.match(accessSource, /disabled=\{busy \|\| !available\}/);
+  assert.match(accessSource, /disabled=\{busy \|\| !googleAvailable\}/);
 });
 
 test("correo implementa OTP de ocho dígitos, reenviar y cambiar correo", () => {
@@ -116,7 +117,7 @@ test("Home conecta grupos y perfil dentro de cinco destinos principales", () => 
 
 test("grupo generado puede compartirse, guardarse y cargarse a una ronda", () => {
   assert.match(page, /startRoundWithGeneratedGroup/);
-  assert.match(page, /requestNewRoundIntent\(\{ kind: "group", players: structuredClone\(groupPlayers\) \}\)/);
+  assert.match(page, /requestNewRoundIntent\(\{ kind: "players", players: structuredClone\(groupPlayers\) \}\)/);
   assert.match(page, /saveGeneratedFrequentGroup/);
   const builder = read("app/components/group-builder.tsx");
   assert.match(builder, /navigator\.share/);

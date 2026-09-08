@@ -206,7 +206,8 @@ test("pantalla OTP tiene captura, regreso y separación explícita de invitado",
   assert.match(ui, /onAuthenticated\(await verifyEmailOtp/);
   assert.match(ui, /Todavía no has iniciado sesión/);
   assert.match(ui, /Regresar al acceso/);
-  assert.match(ui, /disabled=\{busy \|\| !available\}/);
+  assert.match(ui, /disabled=\{busy \|\| !googleAvailable\}/);
+  assert.match(ui, /disabled=\{busy \|\| !appleAvailable\}/);
   assert.match(ui, /pendiente de configuración/);
   assert.match(ui, /restoreAuthSession\(supabase.auth\)/);
 });

@@ -38,6 +38,16 @@ export type GroupTemplateRoundDraft = GroupTemplateDraftSource & {
   origin: RoundTemplateOrigin;
 };
 
+export function normalizeRoundTemplateOrigin(value: unknown): RoundTemplateOrigin | null {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Partial<RoundTemplateOrigin>;
+  if (!validId(raw.groupId) || typeof raw.basedOnUpdatedAt !== "string" || !raw.roundPlayerIdByMemberId || typeof raw.roundPlayerIdByMemberId !== "object") return null;
+  const entries = Object.entries(raw.roundPlayerIdByMemberId)
+    .filter(([memberId, playerId]) => validId(memberId) && validId(playerId));
+  if (!entries.length) return null;
+  return { groupId: raw.groupId!, basedOnUpdatedAt: raw.basedOnUpdatedAt, roundPlayerIdByMemberId: Object.fromEntries(entries) };
+}
+
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
@@ -101,7 +111,8 @@ function remapPersonalBets(
     if (!candidate || typeof candidate !== "object") return [];
     const raw = clone(candidate as PersonalBet);
     if (!validId(raw.id) || typeof raw.rivalName !== "string" || !raw.components || typeof raw.components !== "object") return [];
-    const { enabledBeforeCategoryOff: _transient, ...cleaned } = raw;
+    const cleaned = { ...raw };
+    delete cleaned.enabledBeforeCategoryOff;
     const rivalPlayerId = raw.rivalMode === "group" ? mapId(raw.rivalPlayerId, ids) : undefined;
     return [{
       ...cleaned,
@@ -119,7 +130,8 @@ function remapSupplementalBets(
   idFactory?: () => string,
 ): SupplementalBet[] {
   return normalizeSupplementalBets(value, roundHoles).map((raw): SupplementalBet => {
-    const { enabledBeforeCategoryOff: _transient, ...base } = clone(raw);
+    const base = clone(raw);
+    delete base.enabledBeforeCategoryOff;
     const id = idFactory ? idFactory() : base.id;
     if (base.type === "individual_nassau" || base.type === "dollar_stroke") {
       const advantageReceiverId = mapId(base.advantageReceiverId, ids);
@@ -158,7 +170,8 @@ function remapManualBets(value: unknown, destinationPlayerIds: string[], idFacto
     if (!candidate || typeof candidate !== "object") return [];
     const raw = clone(candidate as ManualBet);
     if (!validId(raw.id) || typeof raw.name !== "string" || !raw.name.trim()) return [];
-    const { enabledBeforeCategoryOff: _transient, ...cleaned } = raw;
+    const cleaned = { ...raw };
+    delete cleaned.enabledBeforeCategoryOff;
     return [{
       ...cleaned,
       id: idFactory ? idFactory() : cleaned.id,
@@ -320,10 +333,17 @@ export function updateGroupTemplateFromRound(
   const memberIdByPlayerId = Object.fromEntries(
     Object.entries(origin.roundPlayerIdByMemberId).map(([memberId, playerId]) => [playerId, memberId]),
   );
+  const roundPlayerByMemberId = new Map(Object.entries(origin.roundPlayerIdByMemberId).flatMap(([memberId, playerId]) => {
+    const player = source.players.find((candidate) => candidate.id === playerId);
+    return player ? [[memberId, player] as const] : [];
+  }));
   return {
     status: "updated",
     group: {
       ...group,
+      players: group.players.map((member) => member.memberId && roundPlayerByMemberId.has(member.memberId)
+        ? { ...member, handicap: roundPlayerByMemberId.get(member.memberId)!.handicap }
+        : member),
       gameTemplate: createGroupGameTemplate(source, memberIdByPlayerId),
       updatedAt,
     },

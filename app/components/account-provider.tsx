@@ -26,6 +26,7 @@ import {
   parseLegalAcceptances,
   profileHandicapInput,
   readOfflineAuthenticatedProfile,
+  validateProfileAvatarUrl,
   validateProfileDraft,
   type AccountMode,
   type BackyardProfile,
@@ -46,6 +47,8 @@ import { acknowledgePendingProfileWrite, cloudProfileFields, cloudProfileRevisio
 import { createEmptyEquipmentProfile, loadEquipmentProfile, saveEquipmentProfile } from "../../lib/golf-equipment";
 import { ballFitDefaultsFromProfile } from "../../lib/ball-fitting";
 import { EquipmentOnboarding } from "./equipment-onboarding";
+import { BetaOnboardingFlow } from "./beta-onboarding-flow";
+import { betaOnboardingIsActive, createBetaOnboardingProgress, persistBetaOnboardingProgress, readBetaOnboardingProgress } from "../../lib/beta-onboarding";
 
 export type BackyardIdentity = BackyardProfile & {
   mode: Exclude<AccountMode, "undecided">;
@@ -127,6 +130,8 @@ function guestProfile(): BackyardProfile {
 }
 
 function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () => void | Promise<void>; onAuthenticated: (session: Session) => void; sessionError: string }) {
+  const [stage, setStage] = useState<"splash" | "methods">("splash");
+  const [intent, setIntent] = useState<"create" | "login">("create");
   const [emailMode, setEmailMode] = useState(false);
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
@@ -154,25 +159,25 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
     return () => { active = false; };
   }, []);
 
-  async function social() {
+  async function social(provider: "google" | "apple") {
     if (!providers || providers.status === "unavailable") {
       setMessage("No pudimos comprobar el proveedor de acceso. Revisa tu conexión y vuelve a intentar.");
       return;
     }
-    if (!socialEnabled || !providers.google) {
-      setMessage("Acceso con Google pendiente de configuración.");
+    if (!socialEnabled || !providers[provider]) {
+      setMessage(`Acceso con ${provider === "google" ? "Google" : "Apple"} pendiente de configuración.`);
       return;
     }
     const supabase = getSupabaseBrowser();
     if (!supabase) {
-      setMessage("Acceso con Google pendiente de configuración.");
+      setMessage(`Acceso con ${provider === "google" ? "Google" : "Apple"} pendiente de configuración.`);
       return;
     }
     setBusy(true); setMessage("");
     try {
-      await startSocialOAuth(supabase.auth, "google", `${window.location.origin}/auth/callback`);
+      await startSocialOAuth(supabase.auth, provider, `${window.location.origin}/auth/callback`);
     } catch (error) {
-      setMessage(authErrorMessage(error, "google"));
+      setMessage(authErrorMessage(error, provider));
       setBusy(false);
     }
   }
@@ -208,17 +213,27 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
     } finally { setBusy(false); }
   }
 
+  const googleAvailable = Boolean(socialEnabled && providers?.status === "ready" && providers.google);
+  const appleAvailable = Boolean(socialEnabled && providers?.status === "ready" && providers.apple);
   return <main className="accessScreen">
-    <section className="accessCard">
+    <section className={`accessCard ${stage === "splash" ? "splashCard" : ""}`}>
       <BrandLockup />
-      <p className="accessPromise">Tu juego. Tus grupos. Tus reglas. Tu historia.</p>
+      <p className="accessTagline">Golf · Friends · More</p>
+      <p className="accessPromise">Tu juego, tu grupo habitual y todo lo que pasa después del último putt.</p>
+      {stage === "splash" ? <div className="accessActions splashActions">
+        <button className="primary big" onClick={() => { setIntent("create"); setStage("methods"); }}>Crear cuenta</button>
+        <button className="secondary big" onClick={() => { setIntent("login"); setStage("methods"); }}>Iniciar sesión</button>
+        <button className="guestButton" disabled={busy} onClick={async () => {
+          setBusy(true); setMessage("");
+          try { await onGuest(); } catch { setMessage("No pudimos abrir el modo invitado. Inténtalo nuevamente."); }
+          finally { setBusy(false); }
+        }}>Continuar como invitado</button>
+      </div> : <>
+      <div className="accessIntent"><button className="textButton" onClick={() => { setStage("splash"); setEmailMode(false); setMessage(""); }}>← Inicio</button><span>{intent === "create" ? "CREAR CUENTA" : "INICIAR SESIÓN"}</span></div>
       {!emailMode ? <div className="accessActions">
-        {(() => {
-          const available = socialEnabled && providers?.status === "ready" && providers.google;
-          const label = !providers ? "Google · comprobando acceso…" : providers.status === "unavailable" ? "Google · acceso no disponible" : !available ? "Google · pendiente de configuración" : "Continuar con Google";
-          return <button className="oauthButton google" disabled={busy || !available} onClick={social}>{label}</button>;
-        })()}
-        <button className="secondary big" disabled={busy} onClick={() => { setEmailMode(true); setMessage(""); }}>Continuar con correo</button>
+        <button className="oauthButton google" disabled={busy || !googleAvailable} onClick={() => social("google")}>{!providers ? "Google · comprobando acceso…" : googleAvailable ? "Continuar con Google" : "Google · pendiente de configuración"}</button>
+        <button className="oauthButton apple" disabled={busy || !appleAvailable} onClick={() => social("apple")}>{appleAvailable ? "Continuar con Apple" : "Apple · Próximamente"}</button>
+        <button className="secondary big" disabled={busy} onClick={() => { setEmailMode(true); setMessage(""); }}>{intent === "create" ? "Registro con email" : "Continuar con correo"}</button>
         <button className="guestButton" disabled={busy} onClick={async () => {
           setBusy(true); setMessage("");
           try { await onGuest(); } catch { setMessage("No pudimos salir de la sesión anterior. Reintenta antes de continuar como invitado."); }
@@ -241,12 +256,12 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
           <div className="otpLinks"><button className="textButton" disabled={busy || retrySeconds > 0} onClick={sendCode}>{retrySeconds ? `Reenviar en ${retrySeconds}s` : "Reenviar código"}</button><button className="textButton" disabled={busy} onClick={() => { setCodeSent(false); setOtp(""); setMessage(""); }}>Cambiar correo</button></div>
           <button className="textButton" disabled={busy} onClick={() => { setEmailMode(false); setMessage(""); }}>← Regresar al acceso</button>
         </>}
-      </div>}
+      </div>}</>}
       {!socialEnabled && <p id="social-auth-status" className="hint">Google · Pendiente de configuración</p>}
       {socialEnabled && providers?.status === "ready" && !providers.google && <p className="hint">Google · Pendiente de configuración.</p>}
       {(message || sessionError) && <div className="accessMessage" role="status">{message || sessionError}</div>}
       <p className="hint">Invitado es un acceso independiente: no inicia sesión ni sincroniza tus datos con una cuenta.</p>
-      <p className="legalLead">Al continuar aceptas los <Link href="/legal/terms?returnTo=access">Términos de Uso</Link> y el <Link href="/legal/privacy?returnTo=access">Aviso de Privacidad</Link>.</p>
+      <p className="legalLead">Consulta los <Link href="/legal/terms?returnTo=access">Términos de Uso</Link> y el <Link href="/legal/privacy?returnTo=access">Aviso de Privacidad</Link>. La aceptación explícita ocurre antes de crear el perfil.</p>
     </section>
   </main>;
 }
@@ -282,30 +297,53 @@ function ProfileSetupScreen({ identity, onSave, onBack }: {
   onSave: (profile: BackyardProfileUpdate) => Promise<"local" | "cloud">;
   onBack: () => Promise<void>;
 }) {
-  const [name, setName] = useState(identity.displayName === "Jugador" ? "" : identity.displayName);
+  const fallbackNames = identity.displayName === "Jugador" ? [] : identity.displayName.trim().split(/\s+/);
+  const [givenName, setGivenName] = useState(identity.givenName || fallbackNames[0] || "");
+  const [familyName, setFamilyName] = useState(identity.familyName || fallbackNames.slice(1).join(" "));
+  const [country, setCountry] = useState(identity.country || "México");
+  const [city, setCity] = useState(identity.city || "");
+  const [handedness, setHandedness] = useState<"right" | "left">(identity.handedness === "left" ? "left" : "right");
+  const [avatarUrl, setAvatarUrl] = useState(identity.avatarUrl || "");
   const [handicap, setHandicap] = useState(profileHandicapInput(identity.defaultHandicap));
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const validation = validateProfileDraft(name, handicap);
+    const displayName = [givenName.trim(), familyName.trim()].filter(Boolean).join(" ");
+    const validation = validateProfileDraft(displayName, handicap);
     if (!validation.ok) { setMessage(validation.message); return; }
+    const avatarValidation = validateProfileAvatarUrl(avatarUrl);
+    if (!avatarValidation.ok) { setMessage(avatarValidation.message); return; }
     setBusy(true); setMessage("");
-    try { await onSave({ displayName: validation.displayName, defaultHandicap: validation.defaultHandicap, avatarUrl: identity.avatarUrl }); }
+    try { await onSave({
+      displayName: validation.displayName,
+      defaultHandicap: validation.defaultHandicap,
+      avatarUrl: avatarValidation.avatarUrl,
+      givenName: givenName.trim(),
+      familyName: familyName.trim(),
+      country: country.trim(),
+      city: city.trim(),
+      handedness,
+      golfProfileUpdatedAt: new Date().toISOString(),
+    }); }
     catch { setMessage("No pudimos completar el perfil. Revisa tu conexión e intenta nuevamente."); }
     finally { setBusy(false); }
   }
   return <main className="consentScreen profileSetupScreen"><section className="consentCard profileSetupCard">
     <BrandLockup compact />
-    <div className="eyebrow">THE BACKYARD ACCOUNT</div>
-    <h1>Completa tu perfil</h1>
-    <p>Solo necesitamos lo esencial para identificarte en tus rondas.</p>
+    <div className="eyebrow">GOLF PROFILE</div>
+    <h1>Cuéntanos de ti</h1>
+    <p>Lo esencial para reconocerte en el grupo. La foto y la ciudad son opcionales.</p>
     <form className="profileSetupForm" onSubmit={saveProfile} noValidate>
-      <label htmlFor="profile-setup-name">Nombre</label>
-      <input id="profile-setup-name" autoComplete="name" enterKeyHint="next" value={name} onChange={(event) => setName(event.target.value)} placeholder="Tu nombre" />
+      <div className="grid2"><label htmlFor="profile-setup-given">Nombre<input id="profile-setup-given" autoComplete="given-name" enterKeyHint="next" value={givenName} onChange={(event) => setGivenName(event.target.value)} placeholder="Tu nombre" /></label><label htmlFor="profile-setup-family">Apellidos<input id="profile-setup-family" autoComplete="family-name" enterKeyHint="next" value={familyName} onChange={(event) => setFamilyName(event.target.value)} placeholder="Tus apellidos" /></label></div>
+      <label htmlFor="profile-setup-avatar">Foto / avatar opcional</label>
+      <input id="profile-setup-avatar" type="url" inputMode="url" autoComplete="url" value={avatarUrl} onChange={(event) => setAvatarUrl(event.target.value)} placeholder="https://…" aria-describedby="profile-avatar-help" />
+      <small id="profile-avatar-help" className="profileFieldHelp">Puedes pegar una URL HTTPS o dejarla vacía.</small>
+      <div className="grid2"><label htmlFor="profile-setup-country">País<input id="profile-setup-country" autoComplete="country-name" value={country} onChange={(event) => setCountry(event.target.value)} placeholder="México" /></label><label htmlFor="profile-setup-city">Ciudad opcional<input id="profile-setup-city" autoComplete="address-level2" value={city} onChange={(event) => setCity(event.target.value)} placeholder="Puebla" /></label></div>
       <label htmlFor="profile-setup-hcp">HCP capturado manualmente (opcional)</label>
       <input id="profile-setup-hcp" type="text" inputMode="text" enterKeyHint="done" autoComplete="off" value={handicap} onChange={(event) => setHandicap(event.target.value)} placeholder="Ej. 8.4 o +1.2" aria-describedby="profile-setup-hcp-help" />
       <small id="profile-setup-hcp-help" className="profileFieldHelp">Puedes dejarlo vacío. No es una emisión oficial; el HCP de juego se define por separado en cada ronda.</small>
+      <fieldset className="handednessChoice"><legend>Mano dominante</legend><label><input type="radio" name="handedness" checked={handedness === "right"} onChange={() => setHandedness("right")} />Derecha</label><label><input type="radio" name="handedness" checked={handedness === "left"} onChange={() => setHandedness("left")} />Izquierda</label></fieldset>
       {message && <div className="accessMessage" role="alert">{message}</div>}
       <button type="submit" className="primary big" disabled={busy}>{busy ? "Guardando…" : "Guardar y continuar"}</button>
     </form>
@@ -328,6 +366,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const [migrationError, setMigrationError] = useState("");
   const [profileSetupRequired, setProfileSetupRequired] = useState(false);
   const [equipmentOnboardingRequired, setEquipmentOnboardingRequired] = useState(false);
+  const [betaOnboardingRequired, setBetaOnboardingRequired] = useState(false);
   const [profileChecked, setProfileChecked] = useState(false);
   const activeUserId = useRef<string | null>(null);
   const sessionRecovery = useRef<{ userId: string; promise: Promise<string> } | null>(null);
@@ -439,6 +478,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     setProfileChecked(false);
     const equipmentRead = loadEquipmentProfile(localStorage, session.user.id);
     setEquipmentOnboardingRequired(Boolean(equipmentRead.ok && equipmentRead.profile && localStorage.getItem(equipmentOnboardingReadyKey(session.user.id)) !== "true"));
+    setBetaOnboardingRequired(betaOnboardingIsActive(readBetaOnboardingProgress(localStorage, session.user.id)));
     const migrationDecision = localStorage.getItem(migrationDecisionStorageKey(session.user.id));
     const localDataExists = hasLocalGolfData(localStorage);
     if (!localDataExists && !migrationDecision) localStorage.setItem(migrationDecisionStorageKey(session.user.id), "linked");
@@ -463,6 +503,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     setProfileSetupRequired(localStorage.getItem(`backyard-profile-ready-v1:${profile.userId}`) !== "true");
     const equipmentRead = loadEquipmentProfile(localStorage, profile.userId);
     setEquipmentOnboardingRequired(Boolean(equipmentRead.ok && equipmentRead.profile && localStorage.getItem(equipmentOnboardingReadyKey(profile.userId)) !== "true"));
+    setBetaOnboardingRequired(betaOnboardingIsActive(readBetaOnboardingProgress(localStorage, profile.userId)));
     setReady(true);
     return true;
   }, [equipmentOnboardingReadyKey, setCloudStatus]);
@@ -690,10 +731,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!identity || !currentConsent || !bettingConsentResolved || bettingConsentGranted || showMigration) return;
-    if (identity.mode === "authenticated" && (!profileChecked || profileSetupRequired || equipmentOnboardingRequired)) return;
+    if (identity.mode === "authenticated" && (!profileChecked || profileSetupRequired || equipmentOnboardingRequired || betaOnboardingRequired)) return;
     if (localStorage.getItem(bettingConsentPromptStorageKey(identity.userId)) === "seen") return;
     setBettingConsentOpen(true);
-  }, [identity, currentConsent, bettingConsentResolved, bettingConsentGranted, showMigration, profileChecked, profileSetupRequired, equipmentOnboardingRequired]);
+  }, [identity, currentConsent, bettingConsentResolved, bettingConsentGranted, showMigration, profileChecked, profileSetupRequired, equipmentOnboardingRequired, betaOnboardingRequired]);
 
   useEffect(() => {
     if (identity?.mode !== "authenticated" || !identity.accessToken || !currentConsent) return;
@@ -841,7 +882,11 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       // Re-opening the basic setup must never erase an existing (or unreadable)
       // equipment profile. Only a genuinely new optional profile enters this
       // onboarding flow.
-      setEquipmentOnboardingRequired(Boolean(emptyEquipment));
+      const existingProgress = readBetaOnboardingProgress(localStorage, identity.userId);
+      const betaProgress = existingProgress || createBetaOnboardingProgress(identity.userId);
+      persistBetaOnboardingProgress(localStorage, betaProgress);
+      setBetaOnboardingRequired(true);
+      setEquipmentOnboardingRequired(false);
     }
     return updateProfile(profile);
   }
@@ -852,6 +897,15 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       catch { /* An optional local marker must never block entry into the app. */ }
     }
     setEquipmentOnboardingRequired(false);
+  }
+
+  function finishBetaOnboarding() {
+    if (identity?.mode === "authenticated") {
+      try { localStorage.setItem(equipmentOnboardingReadyKey(identity.userId), "true"); }
+      catch { /* Completion remains stored in the versioned Beta progress. */ }
+    }
+    setEquipmentOnboardingRequired(false);
+    setBetaOnboardingRequired(false);
   }
 
   async function logout() {
@@ -869,6 +923,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       activeUserId.current = null;
       setIdentity(null);
       setEquipmentOnboardingRequired(false);
+      setBetaOnboardingRequired(false);
       setAccessRequested(false);
       setCloudLinked(false);
       setCloudStatus("local");
@@ -892,6 +947,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     if (supabase) await clearDeletedAuthSession(supabase.auth);
     setIdentity(null);
     setEquipmentOnboardingRequired(false);
+    setBetaOnboardingRequired(false);
     setAccessRequested(false);
     setCloudLinked(false);
     setCloudStatus("local");
@@ -1022,6 +1078,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(ACCOUNT_STORAGE_KEYS.mode, "guest");
     setIdentity({ ...profile, mode: "guest", providers: [], accessToken: null });
     setEquipmentOnboardingRequired(false);
+    setBetaOnboardingRequired(false);
     setCloudConsentChecked(true);
     setAccessRequested(false);
     setCloudIssuesByDomain({}); setCloudStatus("local"); setCloudLinked(false); setLastCloudSync(null); setShowMigration(false);
@@ -1033,8 +1090,9 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   }
   if (identity.mode === "authenticated" && !profileChecked) return <main className="accessScreen"><div className="accessLoading">Preparando tu perfil…</div></main>;
   if (identity.mode === "authenticated" && profileSetupRequired) return <>{accountCloudError && <div role="alert" className="notice bad">{accountCloudError}</div>}<ProfileSetupScreen identity={identity} onSave={saveInitialProfile} onBack={logout} /></>;
-  if (identity.mode === "authenticated" && equipmentOnboardingRequired) return <EquipmentOnboarding userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={identity.defaultHandicap} ballFitDefaults={ballFitDefaultsFromProfile(identity)} onComplete={finishEquipmentOnboarding} />;
   if (bettingConsentOpen) return <AccountContext.Provider value={context!}><BettingConsentDialog onDismiss={() => closeBettingConsent(false)} onAccept={acceptBettingConsent} /></AccountContext.Provider>;
+  if (identity.mode === "authenticated" && betaOnboardingRequired) return <BetaOnboardingFlow profile={identity} accessToken={identity.accessToken} onUpdateProfile={updateProfile} bettingConsentGranted={bettingConsentGranted} requestBettingConsent={requestBettingConsent} onComplete={finishBetaOnboarding} />;
+  if (identity.mode === "authenticated" && equipmentOnboardingRequired) return <EquipmentOnboarding userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={identity.defaultHandicap} ballFitDefaults={ballFitDefaultsFromProfile(identity)} onComplete={finishEquipmentOnboarding} />;
 
   return <AccountContext.Provider value={context!}>
     {blockingCloudIssues.map((issue) => <div className="notice bad" role="alert" key={issue.domain}>{issue.message}<button onClick={() => setAccessRequested(true)}>Volver a iniciar sesión</button></div>)}

@@ -20,7 +20,7 @@ test("Nueva ronda pide confirmación exacta y conserva respaldo antes de reempla
 });
 
 test("Jugar con un grupo usa el mismo respaldo seguro que Nueva ronda", () => {
-  assert.match(page, /function startRoundWithGeneratedGroup\(groupPlayers: Player\[\]\) \{\s*requestNewRoundIntent\(\{ kind: "group", players: structuredClone\(groupPlayers\) \}\);\s*\}/);
+  assert.match(page, /function startRoundWithGeneratedGroup\(groupPlayers: Player\[\]\) \{\s*requestNewRoundIntent\(\{ kind: "players", players: structuredClone\(groupPlayers\) \}\);\s*\}/);
   assert.doesNotMatch(page, /function startRoundWithGeneratedGroup[\s\S]{0,220}resetRound\(\)/);
   assert.match(page, /setPendingNewRoundIntent\(intent\);\s*setShowNewRoundConfirm\(true\)/);
   assert.match(page, /if \(!roundClosed && hasRoundProgress\(roundDraftPayload\(\)\)\)/);

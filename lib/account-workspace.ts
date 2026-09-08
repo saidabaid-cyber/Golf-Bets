@@ -6,6 +6,7 @@ import { cloudProfileRevisionKey, forgetProfileWriteClock, pendingProfileWriteKe
 import { internalNotificationStorageKey } from "./internal-notifications";
 import { equipmentProfileRecoveryStorageKey, equipmentProfileStorageKey } from "./golf-equipment";
 import { ballFitDraftStorageKey } from "./ball-fitting-storage";
+import { betaOnboardingDraftStorageKey, betaOnboardingStorageKey } from "./beta-onboarding";
 
 export const WORKSPACE_OWNER_KEY = "backyard-local-workspace-owner-v1";
 export const CLOUD_CONFLICTS_KEY = "backyard-cloud-conflicts-v1";
@@ -66,6 +67,8 @@ export function discardAccountWorkspace(storage: WorkspaceStorage, userId: strin
   if (equipmentRecoveryKey) storage.removeItem(equipmentRecoveryKey);
   if (fittingKey) storage.removeItem(fittingKey);
   storage.removeItem(`the-backyard:equipment-onboarding-ready:v1:${encodeURIComponent(userId)}`);
+  storage.removeItem(betaOnboardingStorageKey(userId));
+  storage.removeItem(betaOnboardingDraftStorageKey(userId));
 }
 
 export function preserveDraftConflict(storage: Pick<Storage, "getItem" | "setItem">, draft: unknown) {

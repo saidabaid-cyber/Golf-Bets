@@ -160,7 +160,6 @@ import {
   moveFrequentGroupMember,
   parseFrequentGroups,
   personalRivalTemplateFromBet,
-  playersFromFrequentGroup,
   removeFrequentGroupMember,
   removeFrequentPlayerTemplate,
   removeSavedPersonalRivalTemplate,
@@ -172,6 +171,7 @@ import {
   updateSavedPersonalRivalTemplate,
 } from "../lib/frequent-templates";
 import { hasDuplicateGroupPlayers } from "../lib/group-generator";
+import { createGroupGameTemplate, frequentGroupTemplateSummary, instantiateGroupGameTemplate, normalizeRoundTemplateOrigin, updateGroupTemplateFromRound, type RoundTemplateOrigin } from "../lib/group-game-template";
 
 const makeId = () => Math.random().toString(36).slice(2, 10);
 const money = (n: number) => `${n < 0 ? "-" : ""}$${Math.abs(Math.round(n)).toLocaleString("es-MX")}`;
@@ -339,7 +339,8 @@ function MoneyInput({ label, value, onChange }: { label: string; value: number; 
 
 type NewRoundIntent =
   | { kind: "blank" }
-  | { kind: "group"; players: Player[] };
+  | { kind: "players"; players: Player[] }
+  | { kind: "group"; group: FrequentGroup };
 
 function GolfBetsApp() {
   const { identity, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, setCloudStatus, applyCloudPreferences, reportCloudSyncError, clearCloudSyncError, refreshCloudSession } = useBackyardAccount();
@@ -421,6 +422,7 @@ function GolfBetsApp() {
   const [historyMonth, setHistoryMonth] = useState("");
   const [frequentPlayers, setFrequentPlayers] = useState<FrequentPlayer[]>([]);
   const [frequentGroups, setFrequentGroups] = useState<FrequentGroup[]>([]);
+  const [roundTemplateOrigin, setRoundTemplateOrigin] = useState<RoundTemplateOrigin | null>(null);
   const [groupName, setGroupName] = useState("");
   const [frequentGroupDraft, setFrequentGroupDraft] = useState<FrequentGroup | null>(null);
   const [frequentGroupEditError, setFrequentGroupEditError] = useState("");
@@ -591,6 +593,7 @@ function GolfBetsApp() {
     setRoundClosed(false);
     setRoundReviewPending(Boolean(draft?.reviewPending));
     setRoundStartedAt(normalizeRoundStartedAt(draft?.startedAt) ?? null);
+    setRoundTemplateOrigin(normalizeRoundTemplateOrigin(draft?.templateOrigin));
     setDraftAvailable(hasRoundProgress(draft));
     if (!draft) {
       setPlayers([]); setOwnerId(""); setScores({}); setScoreEdits({}); setUnitEvents([]); setCounterBetEvents([]); setCounterBetKeepers(emptyCounterBetKeepers()); setLobaHoles({}); setBallFriendSetup({});
@@ -723,7 +726,7 @@ function GolfBetsApp() {
       if (revision !== localPersistRevision.current) return false;
       if (!ownsLocalWorkspace(localStorage, identity.userId)) return false;
       try {
-        const draft = withDerivedRoundLifecycle({ version: 9, course, courseSelected, startHole, roundHoles, handicapBasis: roundHandicapBasis, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, scoreCaptureMode, advancedStats, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, startedAt: roundStartedAt ?? undefined, currentIndex, reviewPending: roundReviewPending });
+        const draft = withDerivedRoundLifecycle({ version: 9, course, courseSelected, startHole, roundHoles, handicapBasis: roundHandicapBasis, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, scoreCaptureMode, advancedStats, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, startedAt: roundStartedAt ?? undefined, currentIndex, reviewPending: roundReviewPending, templateOrigin: roundTemplateOrigin ?? undefined });
         const activeDraft = roundClosed ? null : draft;
         trackLocalCloudEdits(localStorage, activeDraft, { highContrast, language: "es-MX", notificationsEnabled, defaultHandicap: identity.defaultHandicap });
         localStorage.setItem(STORAGE_KEYS.courses, JSON.stringify(courses));
@@ -751,7 +754,7 @@ function GolfBetsApp() {
     flushLocalState.current = persist;
     const timer = window.setTimeout(persist, 250);
     return () => window.clearTimeout(timer);
-  }, [hydrated, identity.userId, identity.mode, identity.defaultHandicap, cloudLinked, courses, favoriteCourseIds, recentCourseIds, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, notificationsEnabled, roundClosed, roundReviewPending, course, courseSelected, startHole, roundHoles, roundHandicapBasis, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, scoreCaptureMode, advancedStats, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, roundStartedAt, currentIndex]);
+  }, [hydrated, identity.userId, identity.mode, identity.defaultHandicap, cloudLinked, courses, favoriteCourseIds, recentCourseIds, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, notificationsEnabled, roundClosed, roundReviewPending, course, courseSelected, startHole, roundHoles, roundHandicapBasis, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, scoreCaptureMode, advancedStats, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, roundStartedAt, roundTemplateOrigin, currentIndex]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -1542,6 +1545,7 @@ function GolfBetsApp() {
       counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, startedAt: normalizeRoundStartedAt(overrides.startedAt) ?? roundStartedAt ?? undefined,
       currentIndex: overrides.currentIndex ?? currentIndex,
       reviewPending: overrides.reviewPending ?? roundReviewPending,
+      templateOrigin: roundTemplateOrigin ?? undefined,
     });
   }
 
@@ -1719,6 +1723,7 @@ function GolfBetsApp() {
     const restoredRoundHoles: 9 | 18 = restored.roundHoles || (restored.order!.length === 9 ? 9 : 18);
     setPendingRoundAction({ message: "¿Corregir esta ronda terminada? Se abrirá una copia editable en lugar de la ronda activa. El histórico permanecerá intacto hasta confirmar Guardar; se reutilizará el ID y se conservará la foto.", run: () => {
     setRoundId(restored.id); setRoundDate(restored.date); setRoundStartedAt(normalizeRoundStartedAt(restored.startedAt) ?? null); setCourse(restored.courseSnapshot!); setCourseSelected(true); setCourseSelectionError(false);
+    setRoundTemplateOrigin(null);
     setPlayers(restored.players!); setOwnerId(restored.ownerId); setScores(restored.scores!); setScoreEdits({});
     setStartHole(restored.startHole || (restored.order![0] === 10 ? 10 : 1)); setRoundHoles(restoredRoundHoles);
     setRoundHandicapBasis(normalizeRoundHandicapBasis(restored.handicapBasis));
@@ -1744,6 +1749,7 @@ function GolfBetsApp() {
     const principal = identity.mode === "authenticated" ? accountPrimaryRoundPlayer(identity) : null;
     const nextPlayers = principal ? [principal] : [];
     setEditingRound(false); setRoundClosed(false); setRoundReviewPending(false); setShowRoundFinishedNotice(false); setFeedback("");
+    setRoundTemplateOrigin(null);
     setPlayers(nextPlayers); setOwnerId(principal?.id || "");
     setScores({}); setScoreEdits({}); setPutts({}); setScoreCaptureMode("quick"); setAdvancedStats({}); setUnitEvents([]); setCounterBetEvents([]); setCounterBetKeepers(emptyCounterBetKeepers()); setLobaHoles({}); setBallFriendSetup({}); setPersonalBets([]); setSupplementalBets([]); setManualBets([]); setShowFullScorecard(false); setExpenses(emptyExpenses);
     setBets(initialBets(nextPlayers.map((player) => player.id))); setRoundHandicapBasis("relative"); setSegments(segmentDefinitions(playOrder(startHole).slice(0, roundHoles), 6)); setCourseSelected(false); setCourseSelectionError(false);
@@ -1753,11 +1759,21 @@ function GolfBetsApp() {
 
   function applyNewRoundIntent(intent: NewRoundIntent, nextFeedback = "") {
     resetRound(nextFeedback);
-    if (intent.kind !== "group") return;
+    if (intent.kind === "blank") return;
+    if (intent.kind === "group") {
+      applyFrequentGroupToDraft(intent.group);
+      return;
+    }
     const loaded = intent.players.map((player) => ({ ...player, id: player.accountUserId ? accountPrimaryPlayerId(player.accountUserId) : makeId() }));
-    setPlayers(loaded);
-    setOwnerId(loaded.find((player) => player.accountUserId === identity.userId)?.id || loaded[0]?.id || "");
-    setBets(initialBets(loaded.map((player) => player.id)));
+    setPlayers(loaded); setOwnerId(loaded.find((player) => player.accountUserId === identity.userId)?.id || loaded[0]?.id || ""); setBets(initialBets(loaded.map((player) => player.id)));
+  }
+
+  function applyFrequentGroupToDraft(group: FrequentGroup) {
+    const loaded = instantiateGroupGameTemplate(group, makeId);
+    setPlayers(loaded.players); setOwnerId(loaded.ownerId); setStartHole(loaded.startHole); setRoundHoles(loaded.roundHoles); setRoundHandicapBasis(loaded.roundHandicapBasis);
+    setBets(loaded.bets); setSegments(loaded.segments); setPersonalBets(loaded.personalBets); setSupplementalBets(loaded.supplementalBets); setManualBets(loaded.manualBets);
+    setRoundTemplateOrigin(loaded.origin);
+    setUnitEvents([]); setCounterBetEvents([]); setCounterBetKeepers(emptyCounterBetKeepers()); setLobaHoles({}); setBallFriendSetup({}); setPutts({}); setAdvancedStats({}); setScoreEdits({});
   }
 
   function requestNewRoundIntent(intent: NewRoundIntent) {
@@ -1790,6 +1806,7 @@ function GolfBetsApp() {
     flushLocalState.current = null;
     trackLocalCloudEdits(localStorage, null, { highContrast, language: "es-MX", notificationsEnabled, defaultHandicap: identity.defaultHandicap });
     clearActiveRoundStorage(window.localStorage);
+    setRoundTemplateOrigin(null);
     setPlayers([]); setOwnerId("");
     setScores({}); setScoreEdits({}); setPutts({}); setScoreCaptureMode("quick"); setAdvancedStats({}); setUnitEvents([]); setCounterBetEvents([]); setCounterBetKeepers(emptyCounterBetKeepers()); setLobaHoles({}); setBallFriendSetup({}); setPersonalBets([]); setSupplementalBets([]); setManualBets([]); setShowFullScorecard(false); setExpenses(emptyExpenses);
     setBets(initialBets([])); setRoundHandicapBasis("relative"); setSegments(segmentDefinitions(playOrder(startHole).slice(0, roundHoles), 6)); setCourseSelected(false); setCourseSelectionError(false);
@@ -1931,31 +1948,46 @@ function GolfBetsApp() {
 
   function saveFrequentGroup() {
     const name = groupName.trim();
-    const groupPlayers = players.filter((player) => player.name.trim()).map((player) => ({ name: player.name.trim(), handicap: player.handicap, ...(player.accountUserId ? { accountUserId: player.accountUserId } : {}) }));
-    if (!name || !groupPlayers.length) return;
-    setFrequentGroups((groups) => [{ id: makeId(), name, players: groupPlayers, uses: 0, updatedAt: new Date().toISOString() }, ...groups.filter((group) => group.name.toLocaleLowerCase("es-MX") !== name.toLocaleLowerCase("es-MX"))]);
+    if (!name || !players.some((player) => player.name.trim())) return;
+    if (frequentGroups.some((group) => group.name.trim().toLocaleLowerCase("es-MX") === name.toLocaleLowerCase("es-MX"))) { setFeedback("Ya existe un grupo con ese nombre."); return; }
+    const groupId = makeId();
+    const mapped = players.filter((player) => player.name.trim()).map((player) => ({ player, memberId: `member-${makeId()}` }));
+    const groupPlayers = mapped.map(({ player, memberId }) => ({ memberId, kind: player.accountUserId ? "account" as const : "guest" as const, name: player.name.trim(), handicap: player.handicap, ...(player.accountUserId ? { accountUserId: player.accountUserId } : {}) }));
+    const gameTemplate = createGroupGameTemplate({ ownerId, players, startHole, roundHoles, roundHandicapBasis, bets, segments, personalBets, supplementalBets, manualBets }, Object.fromEntries(mapped.map(({ player, memberId }) => [player.id, memberId])));
+    setFrequentGroups((groups) => [{ id: groupId, name, privacy: "private", players: groupPlayers, gameTemplate, uses: 0, updatedAt: new Date().toISOString() }, ...groups]);
     setGroupName("");
+    setFeedback(`${name} guardado con sus apuestas habituales.`);
   }
 
   function saveGeneratedFrequentGroup(name: string, groupPlayers: Array<Pick<Player, "name" | "handicap" | "accountUserId">>) {
     const normalized = name.trim().toLocaleLowerCase("es-MX");
     if (!normalized || frequentGroups.some((group) => group.name.trim().toLocaleLowerCase("es-MX") === normalized)) return false;
-    setFrequentGroups((groups) => [{ id: makeId(), name: name.trim(), players: structuredClone(groupPlayers), uses: 0, updatedAt: new Date().toISOString() }, ...groups]);
+    setFrequentGroups((groups) => [{ id: makeId(), name: name.trim(), privacy: "private", players: structuredClone(groupPlayers).map((player) => ({ ...player, memberId: `member-${makeId()}`, kind: player.accountUserId ? "account" as const : "guest" as const })), uses: 0, updatedAt: new Date().toISOString() }, ...groups]);
     return true;
   }
 
   function startRoundWithGeneratedGroup(groupPlayers: Player[]) {
-    requestNewRoundIntent({ kind: "group", players: structuredClone(groupPlayers) });
+    requestNewRoundIntent({ kind: "players", players: structuredClone(groupPlayers) });
   }
 
   function loadFrequentGroup(group: FrequentGroup) {
     confirmRoundChange("Cargar el grupo reemplazará los jugadores y apuestas actuales. Los scores anteriores quedarán conservados, pero no se asignarán automáticamente a nuevos jugadores.", () => {
-    const loaded = playersFromFrequentGroup(group, makeId);
-    setPlayers(loaded);
-    setOwnerId(loaded.find((player) => player.accountUserId === identity.userId)?.id || loaded[0]?.id || "");
-    setBets(initialBets(loaded.map((player) => player.id)));
-    setFrequentGroups((groups) => groups.map((item) => item.id === group.id ? { ...item, uses: item.uses + 1, updatedAt: new Date().toISOString() } : item));
+      applyFrequentGroupToDraft(group);
+      setFeedback(`${group.name} cargado. Las apuestas se editarán solo para esta ronda.`);
     });
+  }
+
+  function saveRoundAsFrequentGroupTemplate() {
+    if (!roundTemplateOrigin) return;
+    if (betConfigurationIssues.length) { setShowBetSetupErrors(true); setFeedback("Corrige las apuestas activas antes de actualizar la configuración habitual."); return; }
+    const group = frequentGroups.find((candidate) => candidate.id === roundTemplateOrigin.groupId);
+    if (!group) { setFeedback("El grupo original ya no existe. Guarda esta ronda como un grupo nuevo si quieres conservar la configuración."); return; }
+    const updatedAt = new Date().toISOString();
+    const result = updateGroupTemplateFromRound(group, roundTemplateOrigin, { ownerId, players, startHole, roundHoles, roundHandicapBasis, bets, segments, personalBets, supplementalBets, manualBets }, updatedAt);
+    if (result.status === "stale") { setFeedback("El grupo cambió en otro momento. Ábrelo de nuevo antes de reemplazar su configuración habitual."); return; }
+    setFrequentGroups((groups) => groups.map((candidate) => candidate.id === group.id ? result.group : candidate));
+    setRoundTemplateOrigin({ ...roundTemplateOrigin, basedOnUpdatedAt: updatedAt });
+    setFeedback(`Configuración habitual de ${group.name} actualizada explícitamente.`);
   }
 
   function resetFrequentGroupEditor() {
@@ -2649,6 +2681,8 @@ function GolfBetsApp() {
         <div className="heroDate"><input aria-label="Fecha de la ronda" className="dateInput" type="date" value={roundDate} onChange={(e) => setRoundDate(e.target.value)} /></div>
       </section>
 
+      {roundTemplateOrigin && (() => { const sourceGroup = frequentGroups.find((group) => group.id === roundTemplateOrigin.groupId); return sourceGroup ? <section className="roundTemplateNotice" role="status"><div><span>PLANTILLA CARGADA</span><b>{sourceGroup.name}</b><p>Los cambios de HCP y apuestas pertenecen únicamente a esta ronda.</p></div><button className="secondary" onClick={saveRoundAsFrequentGroupTemplate}>Guardar estos cambios como configuración habitual</button></section> : null; })()}
+
       <section className="card">
         <div className="sectionTitle"><div><h2>1. Campo y tee</h2><p>Elige el campo y la salida; Par y Ventaja/SI se conservan por hoyo.</p></div><div className="courseSetupActions"><button className="textButton" onClick={() => setTab("courseLibrary")}>Buscar / cerca</button><button className="textButton" onClick={startNewCourse}>+ Campo</button></div></div>
         <div className="grid2">
@@ -2674,7 +2708,7 @@ function GolfBetsApp() {
         <div className="hint">★ marca al jugador principal para estadísticas y gastos.</div>
         {(frequentGroups.length > 0 || frequentPlayers.length > 0) && <div className="frequentBox">
           {frequentGroups.length > 0 && <details className="frequentDisclosure"><summary><span>Grupos guardados ({frequentGroups.length})<small>Toca aquí para agregar un grupo</small></span></summary><div className="frequentGroupList">{frequentGroups.map((group) => <div className="templateRow groupTemplateRow" key={group.id}>
-            <button className="templateLoad" onClick={() => loadFrequentGroup(group)} aria-label={`Cargar grupo ${group.name} a la ronda`}><b>{group.name}</b><span>{group.players.map((member) => member.name).join(" · ")}<br />Toca el nombre para cargar este grupo</span></button>
+            <button className="templateLoad" onClick={() => loadFrequentGroup(group)} aria-label={`Cargar grupo ${group.name} a la ronda`}><b>{group.name}</b><span>{group.players.map((member) => member.name).join(" · ")}<br />{frequentGroupTemplateSummary(group)} · Toca para cargar</span></button>
             <div className="templateActions"><button className="secondary" onClick={() => beginEditFrequentGroup(group)}>✏ Editar</button><button className="dangerGhost" onClick={() => setFrequentGroupToDelete(group)}>🗑 Eliminar</button></div>
           </div>)}</div></details>}
           {frequentPlayers.length > 0 && <details className="frequentDisclosure"><summary><span>Jugadores frecuentes ({frequentPlayers.length})<small>Toca aquí para agregar un jugador</small></span></summary><div className="frequentTemplateList">{frequentPlayers.map((saved) => editingFrequentPlayerId === saved.id ? <div className="templateEditor" key={saved.id}>

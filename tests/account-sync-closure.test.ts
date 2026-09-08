@@ -165,10 +165,12 @@ test("documentos legales regresan al origen y conservan contexto entre documento
   assert.equal(preserveLegalReturn("/legal/privacy#contact", "account"), "/legal/privacy?returnTo=account#contact");
 });
 
-test("Cuenta y acceso no presentan Apple y usan el origin real para Google", () => {
+test("Cuenta y acceso presentan Apple solo cuando está disponible y usan el origin real para OAuth", () => {
   const provider = readFileSync("app/components/account-provider.tsx", "utf8");
   const account = readFileSync("app/components/account-panel.tsx", "utf8");
-  assert.doesNotMatch(provider, /Continuar con Apple|Apple · pendiente/);
+  assert.match(provider, /const appleAvailable = Boolean\(socialEnabled && providers\?\.status === "ready" && providers\.apple\)/);
+  assert.match(provider, /appleAvailable \? "Continuar con Apple" : "Apple · Próximamente"/);
+  assert.match(provider, /disabled=\{busy \|\| !appleAvailable\}/);
   assert.doesNotMatch(account, />Apple</);
   assert.match(provider, /`\$\{window\.location\.origin\}\/auth\/callback`/);
 });

@@ -70,7 +70,8 @@ test("perfil completado conserva nombre y HCP Index null o decimal al recargar",
 test("pantalla de perfil usa labels, estado vacío y validación compartida", () => {
   const provider = read("app/components/account-provider.tsx");
   const account = read("app/components/account-panel.tsx");
-  assert.match(provider, /<label htmlFor="profile-setup-name">Nombre<\/label>/);
+  assert.match(provider, /<label htmlFor="profile-setup-given">Nombre<input id="profile-setup-given"/);
+  assert.match(provider, /<label htmlFor="profile-setup-family">Apellidos<input id="profile-setup-family"/);
   assert.match(provider, /placeholder="Tu nombre"/);
   assert.match(provider, /<label htmlFor="profile-setup-hcp">HCP capturado manualmente \(opcional\)<\/label>/);
   assert.match(provider, /No es una emisión oficial/);
