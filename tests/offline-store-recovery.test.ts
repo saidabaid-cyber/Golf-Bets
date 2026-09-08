@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { CloudDataBundle } from "../lib/cloud-sync";
+import { accountDeletionMarkerKey } from "../lib/account-state";
 import {
   acknowledgeOfflineBundle,
   persistOfflineBundle,
@@ -124,6 +125,25 @@ test("un guardado sólo local actualiza el workspace sin borrar una mutación cl
     await persistOfflineBundle("account-1", bundle("local-workspace-only"), false);
 
     assert.equal((await readOfflineOutbox("account-1"))?.fingerprint, pendingFingerprint);
+  } finally {
+    if (localStorageDescriptor) Object.defineProperty(globalThis, "localStorage", localStorageDescriptor);
+    else delete (globalThis as { localStorage?: unknown }).localStorage;
+    if (indexedDbDescriptor) Object.defineProperty(globalThis, "indexedDB", indexedDbDescriptor);
+    else delete (globalThis as { indexedDB?: unknown }).indexedDB;
+  }
+});
+
+test("el marker de eliminación bloquea cualquier nuevo workspace u outbox offline", async () => {
+  const storage = new MemoryStorage();
+  const localStorageDescriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  const indexedDbDescriptor = Object.getOwnPropertyDescriptor(globalThis, "indexedDB");
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, value: storage });
+  Object.defineProperty(globalThis, "indexedDB", { configurable: true, value: undefined });
+  try {
+    storage.setItem(accountDeletionMarkerKey("account-1"), "pending");
+    await assert.rejects(persistOfflineBundle("account-1", bundle("must-not-return"), true), /deletion in progress/i);
+    assert.equal(storage.getItem("backyard-offline-workspace-fallback-v1:account-1"), null);
+    assert.equal(storage.getItem("backyard-offline-outbox-fallback-v1:account-1"), null);
   } finally {
     if (localStorageDescriptor) Object.defineProperty(globalThis, "localStorage", localStorageDescriptor);
     else delete (globalThis as { localStorage?: unknown }).localStorage;

@@ -15,7 +15,7 @@ La fuente única usada por la aplicación es `lib/legal-config.ts`.
 ## Documentos y versiones
 
 - Términos: `2026-09-02-v2`.
-- Aviso de Privacidad Integral: `2026-09-02-v2`.
+- Aviso de Privacidad Integral: `2026-09-08-v3` (requiere revisión legal por la ampliación AI First).
 - Consentimiento Árbitro de Reglas: `2026-09-01-v1`.
 - Confirmación 18+: `2026-09-01-v1`.
 - Fecha de entrada en vigor: 2 de septiembre de 2026.

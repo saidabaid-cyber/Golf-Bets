@@ -90,7 +90,7 @@ function Counter({ label, value, onChange, max }: { label: string; value: number
   return <div className="quickCounter" aria-label={label}><button type="button" aria-label={`Restar ${label}`} onClick={() => onChange(Math.max(0, value - 1))}>−</button><strong aria-live="polite">{value}</strong><button type="button" aria-label={`Sumar ${label}`} onClick={() => onChange(Math.min(max ?? Number.POSITIVE_INFINITY, value + 1))}>+</button></div>;
 }
 
-export function CounterBetHolePanel({ kind, config, players, events, hole, order, keepers, onQuantity, onDistance, onKeeper }: {
+export function CounterBetHolePanel({ kind, config, players, events, hole, order, keepers, onQuantity, onDistance, onKeeper, resolutionOnly = false }: {
   kind: CounterBetKind;
   config: CounterBetConfig;
   players: Player[];
@@ -101,6 +101,7 @@ export function CounterBetHolePanel({ kind, config, players, events, hole, order
   onQuantity: (playerId: string, value: number) => void;
   onDistance: (eventHole: number, playerId: string, value: number | null) => void;
   onKeeper: (playerId: string, period: CounterBetPeriod) => void;
+  resolutionOnly?: boolean;
 }) {
   if (config.enabled !== true) return null;
   const meta = COUNTER_BET_META[kind];
@@ -108,20 +109,22 @@ export function CounterBetHolePanel({ kind, config, players, events, hole, order
   const participants = players.filter(player => participantIds.includes(player.id));
   const roundHalf = roundHalfForHole(hole, order);
   if (!roundHalf) return null;
-  const periodOrder = roundHalfHoles(order, roundHalf);
-  const legacyNine = physicalNineForPlayedHalf(order, roundHalf);
+  const period: CounterBetPeriod = config.settlementMode === "round" ? "round" : roundHalf;
+  const periodOrder = period === "round" ? order : roundHalfHoles(order, roundHalf);
+  const legacyNine = period === "round" ? undefined : physicalNineForPlayedHalf(order, roundHalf);
   const latest = latestCounterBetCandidates(kind, participantIds, events, periodOrder);
   const atPeriodEnd = periodOrder.length > 0 && hole === periodOrder.at(-1);
   const tieCandidates = atPeriodEnd && latest.candidates.length > 1 ? latest.candidates : [];
   const asksKeeper = kind !== "vipers" && tieCandidates.length > 1;
+  if (resolutionOnly && tieCandidates.length <= 1) return null;
   return <section className="card compact sideEventCard">
-    <div className="sectionTitle"><div><h2>{meta.emoji} {meta.plural}</h2><p>{kind === "vipers" ? "Marca una si hizo 3 putts o más." : "Registra todas las del hoyo."}</p></div><span className="eventValue">{money(counterBetEffectiveUnitValue(config, hole, order))} c/u</span></div>
+    {!resolutionOnly && <><div className="sectionTitle"><div><h2>{meta.emoji} {meta.plural}</h2><p>{kind === "vipers" ? "Marca una si hizo 3 putts o más." : "Registra todas las del hoyo."}</p></div><span className="eventValue">{money(counterBetEffectiveUnitValue(config, hole, order))} c/u</span></div>
     <div className="quickCounterList">{participants.map(player => {
       const quantity = counterQuantity(events, kind, hole, player.id);
       return <div key={player.id}><b>{player.name}</b><Counter label={`${meta.plural} de ${player.name}`} value={quantity} max={kind === "vipers" ? 1 : undefined} onChange={value => onQuantity(player.id, value)} /></div>;
-    })}</div>
-    {kind === "vipers" && tieCandidates.length > 1 && <fieldset className="counterTieBreak"><legend>Distancia de la última Víbora · H{latest.hole}</legend><p>Captura centímetros; la bola más cercana al hoyo se queda con la bolsa de esta vuelta.</p>{tieCandidates.map(candidate => <label key={candidate.playerId}>{players.find(player => player.id === candidate.playerId)?.name || "Sin nombre"}<NumericCaptureInput inputMode="decimal" min={0} step={1} placeholder="cm" value={candidate.distanceToHole} onValueChange={value => onDistance(latest.hole as number, candidate.playerId, value)} /></label>)}</fieldset>}
-    {asksKeeper && <label className="keeperSelect">Varios jugadores generaron el último {meta.singular} en H{latest.hole}. Selecciona quién lo generó al final:<select value={keepers[kind]?.[roundHalf] || (legacyNine ? keepers[kind]?.[legacyNine] : "") || ""} onChange={event => onKeeper(event.target.value, roundHalf)}><option value="">Seleccionar…</option>{tieCandidates.map(candidate => <option key={candidate.playerId} value={candidate.playerId}>{players.find(player => player.id === candidate.playerId)?.name || "Sin nombre"}</option>)}</select></label>}
+    })}</div></>}
+    {kind === "vipers" && tieCandidates.length > 1 && <fieldset className="counterTieBreak"><legend>Distancia de la última Víbora · H{latest.hole}</legend><p>Captura centímetros; la bola más cercana al hoyo se queda con la bolsa de {period === "round" ? "la ronda" : "esta vuelta"}.</p>{tieCandidates.map(candidate => <label key={candidate.playerId}>{players.find(player => player.id === candidate.playerId)?.name || "Sin nombre"}<NumericCaptureInput inputMode="decimal" min={0} step={1} placeholder="cm" value={candidate.distanceToHole} onValueChange={value => onDistance(latest.hole as number, candidate.playerId, value)} /></label>)}</fieldset>}
+    {asksKeeper && <label className="keeperSelect">Varios jugadores generaron el último {meta.singular} en H{latest.hole}. Selecciona quién lo generó al final:<select value={keepers[kind]?.[period] || (legacyNine ? keepers[kind]?.[legacyNine] : "") || ""} onChange={event => onKeeper(event.target.value, period)}><option value="">Seleccionar…</option>{tieCandidates.map(candidate => <option key={candidate.playerId} value={candidate.playerId}>{players.find(player => player.id === candidate.playerId)?.name || "Sin nombre"}</option>)}</select></label>}
   </section>;
 }
 
@@ -257,7 +260,7 @@ export function CounterBetResults({ title, halves, playerName, id: explicitId, o
   const displayTitle = presentationKey ? betDisplayLabel(presentationKey) : title;
   const meta = presentationKey ? COUNTER_BET_META[presentationKey] : undefined;
   const id = explicitId || displayTitle.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "").toLowerCase();
-  const visibleHalves = halves.filter(half => half.holes.length && half.nine !== "round");
+  const visibleHalves = halves.filter(half => half.holes.length);
   const totalBalances = visibleHalves.reduce<Record<string, number>>((totals, half) => {
     for (const [playerId, amount] of Object.entries(half.balances)) totals[playerId] = (totals[playerId] || 0) + amount;
     return totals;
@@ -265,8 +268,9 @@ export function CounterBetResults({ title, halves, playerName, id: explicitId, o
   return <ResultAccordion id={id} title={displayTitle} open={open} onOpenChange={onOpenChange} className="sideBetResult">
     {visibleHalves.map((half, index) => {
       const playedHalf = half.roundHalf ?? (index === 0 ? "first_half" : "second_half");
+      const periodLabel = half.nine === "round" ? "Ronda completa" : playedHalfLabel(playedHalf);
       return <section className="sideBetHalf" key={`${half.nine}-${index}`}>
-      <div className="sideBetHalfHeader"><div><b>{playedHalfLabel(playedHalf)}</b><span>H{half.holes[0]}–H{half.holes.at(-1)}</span></div>{half.pressed && <strong>Presión {half.multiplier}x</strong>}</div>
+      <div className="sideBetHalfHeader"><div><b>{periodLabel}</b><span>H{half.holes[0]}–H{half.holes.at(-1)}</span></div>{half.nine !== "round" && half.pressed && <strong>Presión {half.multiplier}x</strong>}</div>
       <div className="sideBetHalfMetrics"><div><span>Eventos</span><b>{half.quantity}</b></div><div><span>Valor por evento</span><b>{money(half.value)}</b></div><div><span>Bolsa</span><b>{money(half.bagValue)}</b></div></div>
       <p className="sideBetKeeper">{half.keeperId ? half.settled ? <><b>Se {meta?.article === "las" ? "las" : "los"} queda: {playerName(half.keeperId)}</b><span>{playerName(half.keeperId)} paga {money(half.bagValue)} a cada rival.</span></> : <><b>Último evento: {playerName(half.keeperId)}</b><span>Liquidación pendiente de completar la vuelta.</span></> : half.quantity === 0 ? <span>Sin eventos en esta vuelta.</span> : half.needsTieBreak ? <span>Desempate pendiente.</span> : <span>Pendiente de completar la vuelta.</span>}</p>
       {half.events.length > 0 && <div className="sideBetEventBreakdown">{half.events.map(event => <article key={event.id}><b>H{event.hole} · {playerName(event.playerId)}</b><span>{event.quantity} {event.quantity === 1 ? meta?.singular || "evento" : meta?.plural || "eventos"} × {money(event.effectiveUnitValue)} = <strong>{money(event.effectiveTotalValue)}</strong></span></article>)}</div>}

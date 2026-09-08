@@ -23,6 +23,7 @@ export type HomeDashboardProps = {
   groupCount: number;
   activity: PersonalActivity[];
   onContinueRound: () => void;
+  onAiRound: () => void;
   onNewRound: () => void;
   onOpenProfile: () => void;
   onOpenHistory: () => void;
@@ -92,6 +93,7 @@ export function HomeDashboard({
   groupCount,
   activity,
   onContinueRound,
+  onAiRound,
   onNewRound,
   onOpenProfile,
   onOpenHistory,
@@ -127,10 +129,10 @@ export function HomeDashboard({
         <p>{activeRound ? `${activeRoundLabel(activeRound)} · ${activeRound.playerCount} jugador${activeRound.playerCount === 1 ? "" : "es"}` : "Campo, jugadores, HCP y apuestas en un flujo rápido."}</p>
       </div>
       <div className="betaRoundCommandActions">
-        <button type="button" className="primary big" onClick={activeRound ? onContinueRound : onNewRound}>
-          {activeRound?.status === "review" ? "Revisar ronda" : activeRound ? "Continuar ronda" : "Nueva ronda"}
+        <button type="button" className="primary big" onClick={activeRound ? onContinueRound : onAiRound}>
+          {activeRound?.status === "review" ? "Revisar ronda" : activeRound ? "Continuar ronda" : "✨ CONFIGURAR CON BACKYARD AI"}
         </button>
-        {activeRound && <button type="button" className="secondary" onClick={onNewRound}>Nueva ronda</button>}
+        <button type="button" className="secondary" onClick={activeRound ? onAiRound : onNewRound}>{activeRound ? "Nueva ronda con AI" : "Configurar manualmente"}</button>
       </div>
     </section>
 
@@ -144,7 +146,8 @@ export function HomeDashboard({
     <section className="card betaQuickCard">
       <div className="sectionTitle"><div><h2>Accesos rápidos</h2><p>Todo a un toque.</p></div></div>
       <div className="betaQuickGrid">
-        <button type="button" onClick={onNewRound}><span aria-hidden="true">＋</span><b>Nueva ronda</b></button>
+        <button type="button" onClick={onAiRound}><span aria-hidden="true">✦</span><b>Backyard AI</b></button>
+        <button type="button" onClick={onNewRound}><span aria-hidden="true">＋</span><b>Ronda manual</b></button>
         <button type="button" onClick={onOpenHistory}><span aria-hidden="true">↺</span><b>Histórico</b></button>
         <button type="button" onClick={onOpenBalances}><span aria-hidden="true">$</span><b>Balances</b></button>
         <button type="button" onClick={onOpenStats}><span aria-hidden="true">↗</span><b>Stats</b></button>
@@ -162,7 +165,7 @@ export function HomeDashboard({
         <span><small>Neto</small><strong>{latestRound.net ?? "—"}</strong></span>
         <span><small>Apuestas</small><strong className={latestRound.betResult === undefined ? "" : latestRound.betResult >= 0 ? "good" : "bad"}>{latestRound.betResult === undefined ? "—" : signedMoney(latestRound.betResult)}</strong></span>
       </button>
-    </section> : <section className="card betaHomeEmptyRound"><h2>{insights.rounds ? "Tus rondas siguen en Histórico." : "Tu primera tarjeta empieza aquí."}</h2><p>{insights.rounds ? "Aún no hay una tarjeta completa para mostrar score y estadísticas confiables en Inicio." : "Cuando cierres una ronda, verás aquí score, campo y resultado de apuestas."}</p><button type="button" className="primary" onClick={insights.rounds ? onOpenHistory : onNewRound}>{insights.rounds ? "Revisar histórico" : "Crear primera ronda"}</button></section>}
+    </section> : <section className="card betaHomeEmptyRound"><h2>{insights.rounds ? "Tus rondas siguen en Histórico." : "Tu primera tarjeta empieza aquí."}</h2><p>{insights.rounds ? "Aún no hay una tarjeta completa para mostrar score y estadísticas confiables en Inicio." : "Cuando cierres una ronda, verás aquí score, campo y resultado de apuestas."}</p><button type="button" className="primary" onClick={insights.rounds ? onOpenHistory : onAiRound}>{insights.rounds ? "Revisar histórico" : "✨ Configurar con Backyard AI"}</button></section>}
 
     <section className="card betaHomeActivity">
       <div className="sectionTitle"><div><h2>Actividad reciente</h2><p>Rondas y grupos de tu espacio.</p></div><button type="button" className="textButton" onClick={onOpenSocial}>Ver todo</button></div>

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { Session } from "@supabase/supabase-js";
 
-import { AuthSessionRecoveryError, closeAuthSession, isAccountSession, recoverAuthSession, restoreAuthSession, sendEmailOtp, startSocialOAuth, verifyEmailOtp, type AuthFlowClient } from "../lib/auth-flow";
+import { AuthSessionRecoveryError, authCallbackUrl, clearDeletedAuthSession, clearDeletedAuthSessionForUser, closeAuthSession, isAccountSession, recoverAuthSession, restoreAuthSession, sendEmailOtp, startSocialOAuth, verifyEmailOtp, type AuthFlowClient } from "../lib/auth-flow";
 import { readFileSync } from "node:fs";
 
 function authMock(overrides: Partial<AuthFlowClient> = {}) {
@@ -47,7 +47,15 @@ test("Google y Apple usan OAuth mock con callback, nunca proveedor real", async 
   assert.deepEqual(calls.map((call) => call.method), ["oauth", "oauth"]);
   assert.deepEqual(calls.map((call) => (call.input as { provider: string }).provider), ["google", "apple"]);
   assert.deepEqual((calls[0].input as { options: { queryParams: Record<string, string> } }).options.queryParams, { prompt: "select_account" });
+  assert.equal((calls[0].input as { options: { redirectTo: string } }).options.redirectTo, "https://golf-bets-psi.vercel.app/auth/callback");
   assert.equal((calls[1].input as { options: { queryParams?: Record<string, string> } }).options.queryParams, undefined);
+});
+
+test("OAuth conserva exactamente el origen del Preview que inició PKCE", () => {
+  const preview = "https://golf-bets-git-ai-first-phase1-saha8.vercel.app";
+  assert.equal(authCallbackUrl(preview), `${preview}/auth/callback`);
+  assert.equal(authCallbackUrl("http://localhost:3000"), "http://localhost:3000/auth/callback");
+  assert.throws(() => authCallbackUrl("javascript:alert(1)"), /invalid_auth_origin/);
 });
 
 test("restauración y logout usan el cliente mock", async () => {
@@ -55,6 +63,39 @@ test("restauración y logout usan el cliente mock", async () => {
   assert.equal(await restoreAuthSession(auth), session);
   await closeAuthSession(auth);
   assert.deepEqual(calls.map((call) => call.method), ["restore", "user", "logout"]);
+});
+
+test("la limpieza Auth de una cuenta eliminada verifica que no quede una sesión local", async () => {
+  const base = authMock();
+  let stored: Session | null = base.session;
+  base.auth.signOut = async () => { stored = null; return { error: null }; };
+  base.auth.getSession = async () => ({ data: { session: stored }, error: null });
+  await clearDeletedAuthSession(base.auth);
+
+  const stale = authMock({
+    signOut: async () => ({ error: new Error("storage locked") }),
+  });
+  await assert.rejects(() => clearDeletedAuthSession(stale.auth), /storage locked/);
+
+  const alreadyGone = authMock({
+    signOut: async () => ({ error: new Error("user missing") }),
+    getSession: async () => ({ data: { session: null }, error: null }),
+  });
+  await clearDeletedAuthSession(alreadyGone.auth);
+});
+
+test("la limpieza Auth nunca cierra otra cuenta iniciada durante el borrado", async () => {
+  const base = authMock();
+  let stored: Session | null = { ...base.session, user: { ...base.session.user, id: "user-b" } } as Session;
+  let signOuts = 0;
+  base.auth.getSession = async () => ({ data: { session: stored }, error: null });
+  base.auth.signOut = async () => { signOuts += 1; stored = null; return { error: null }; };
+
+  assert.equal(await clearDeletedAuthSessionForUser(base.auth, "user-a"), "different_account");
+  assert.equal(signOuts, 0);
+  stored = { ...base.session, user: { ...base.session.user, id: "user-a" } } as Session;
+  assert.equal(await clearDeletedAuthSessionForUser(base.auth, "user-a"), "cleared");
+  assert.equal(signOuts, 1);
 });
 
 for (const provider of ["google", "apple"] as const) test(`${provider} fallido no autentica ni consulta una sesión inventada`, async () => {

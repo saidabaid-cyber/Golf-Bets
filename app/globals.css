@@ -170,6 +170,9 @@ button:disabled{cursor:not-allowed;opacity:.5}.app{padding-top:calc(14px + env(s
 .sideBetBalances > span b { flex: 0 0 auto; white-space: nowrap; }
 .counterBetTotal { min-width: 0; margin-top: 4px; padding-top: 12px; border-top: 2px solid var(--line); }
 .counterBetTotal h3 { margin: 0 0 8px; font-size: 12px; letter-spacing: .3px; }
+.finishWithCardAi{display:grid;grid-template-columns:minmax(0,1fr) minmax(220px,.8fr);gap:14px;align-items:center;border-color:#bad8c1;background:linear-gradient(135deg,#f8fcf9,#edf7ef)}
+.finishWithCardAi h2{margin:3px 0 4px}.finishWithCardAi p{margin:0;color:var(--muted);font-size:12px}.finishWithCardAi .primary{width:100%}
+@media(max-width:600px){.finishWithCardAi{grid-template-columns:1fr;padding-bottom:calc(13px + env(safe-area-inset-bottom))}}
 
 @media(max-width:430px) {
   .sideBetHalfMetrics { grid-template-columns: minmax(0, 1fr); }
@@ -241,3 +244,9 @@ button:disabled{cursor:not-allowed;opacity:.5}.app{padding-top:calc(14px + env(s
 
 /* Beta first-run access and golfer profile. */
 .splashCard{background:linear-gradient(180deg,rgba(255,255,255,.98),rgba(247,250,247,.97));box-shadow:0 30px 90px rgba(14,48,29,.2)}.accessTagline{text-align:center;margin:13px 0 0;color:#a07826;font-size:11px;font-weight:950;letter-spacing:1.7px;text-transform:uppercase}.splashActions{margin-top:28px}.accessIntent{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 13px;border-bottom:1px solid var(--line);padding-bottom:10px}.accessIntent span{color:var(--green);font-size:10px;font-weight:950;letter-spacing:1.3px}.oauthButton:disabled{opacity:.55}.handednessChoice{display:flex;gap:10px;margin:2px 0 5px;border:0;padding:0}.handednessChoice legend{margin-bottom:7px;color:var(--muted);font-size:11px;font-weight:750}.handednessChoice label{display:flex;flex:1;align-items:center;gap:8px;border:1px solid var(--line);border-radius:12px;padding:11px;color:var(--ink);font-size:12px}.handednessChoice input{width:18px;height:18px}
+
+/* AI-first entry point; the manual round flow remains visible beside it. */
+.betaPlayHeroActions{display:grid;min-width:min(280px,100%);gap:7px}.betaPlayHeroActions .secondary{background:rgba(255,255,255,.12);color:#fff}.betaNoOpenRound>.textButton{display:block;margin:9px auto 0}
+
+/* Keep transaction-specific consent above the live app without unmounting it. */
+.bettingConsentAccess{overflow:auto}.bettingConsentDialog{position:relative;width:min(100%,640px);max-height:calc(100svh - 40px);overflow:auto}

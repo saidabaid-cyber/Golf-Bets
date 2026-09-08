@@ -30,7 +30,7 @@ export function BettingConsentDialog({ onAccept, onDismiss }: {
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
   }
 
-  return <main className="consentScreen bettingConsentAccess">
+  return <div className="modalBackdrop bettingConsentAccess">
     <section ref={dialogRef} className="consentCard bettingConsentDialog" role="dialog" aria-modal="true" aria-labelledby="betting-consent-title" aria-describedby="betting-consent-description" onKeyDown={handleKeyDown}>
       <button type="button" className="modalClose" aria-label="Cerrar consentimiento" disabled={busy} onClick={onDismiss}>×</button>
       <div className="eyebrow">CONSENTIMIENTO EXPRESO</div>
@@ -51,5 +51,5 @@ export function BettingConsentDialog({ onAccept, onDismiss }: {
         }}>{busy ? "Guardando…" : "Aceptar y continuar"}</button>
       </div>
      </section>
-   </main>;
+   </div>;
 }

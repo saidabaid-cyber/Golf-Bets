@@ -10,6 +10,12 @@ export type PressureMultiplier = 1 | 2 | 3 | 4 | 5;
 export type RabbitMode = "continuous" | "three_hole_blocks";
 export type SkinsMode = "carry" | "no_carry";
 export type RoundLifecycleState = "draft" | "live" | "completed" | "cancelled";
+
+/** Presentation-only terminology for engine-backed round concepts. */
+export type RoundPresentation = {
+  version?: 1;
+  groupNassauTerm?: "nassau" | "polla";
+};
 export type ScoreCaptureMode = "quick" | "advanced";
 
 export type Player = {
@@ -96,6 +102,8 @@ export type CounterBetEvent = {
   hole: number;
   playerId: string;
   quantity: number;
+  /** True when the player explicitly confirmed this capture, including zero. */
+  captureConfirmed?: boolean;
   /** Centimetres from the hole; requested only for a same-hole Viper tie. */
   distanceToHole?: number;
   /** Derived audit fields persisted in finalized snapshots; calculation remains config-driven. */
@@ -404,6 +412,16 @@ export type AdvancedHoleStat = {
   greenInRegulation?: boolean;
   /** Missing means not captured; zero is an explicit no-penalty result. */
   penaltyStrokes?: number;
+  /** Optional direction of the tee shot; never required for settlement. */
+  teeDirection?: "left" | "center" | "right";
+  /** Optional landing area selected by the golfer. */
+  landingLie?: "fairway" | "rough" | "bunker" | "water_ob";
+  /** Free-form club label because My Bag catalogs can evolve independently. */
+  teeClub?: string;
+  /** Optional distance in yards. */
+  teeDistance?: number;
+  /** Explicit out-of-bounds observation; missing means not captured. */
+  outOfBounds?: boolean;
 };
 
 export type AdvancedStatsByHole = Record<number, Record<string, AdvancedHoleStat>>;
@@ -466,6 +484,8 @@ export type RoundSnapshot = {
   startHole?: 1 | 10;
   /** Missing on legacy snapshots preserves the previous player-relative behavior. */
   handicapBasis?: RoundHandicapBasis;
+  /** Never consumed by the betting engine; preserves the user's terminology. */
+  presentation?: RoundPresentation;
   betResult: number;
   expenses: Expense;
   expenseTotal: number;
@@ -481,6 +501,8 @@ export type RoundSnapshot = {
   completedAt?: string;
   updatedAt?: string;
   photoId?: string;
+  /** Card AI supports several private originals while photoId remains the legacy primary image. */
+  scorecardPhotoIds?: string[];
   betConfig?: BetConfig;
   unitEvents?: UnitEvent[];
   counterBetEvents?: CounterBetEvent[];

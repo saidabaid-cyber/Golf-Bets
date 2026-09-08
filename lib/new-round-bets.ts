@@ -10,6 +10,9 @@ export function restoreCounterBetConfig(fallback: CounterBetConfig, saved?: Coun
   if (!saved) return fallback;
   const restored = { ...fallback, ...saved };
   if (saved.settlementMode === undefined) delete restored.settlementMode;
+  if (!Object.hasOwn(saved, "secondNinePressed") && Object.hasOwn(saved, "secondNineMultiplier")) {
+    delete restored.secondNinePressed;
+  }
   return restored;
 }
 

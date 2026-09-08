@@ -191,12 +191,12 @@ export function HistoricalRoundDetail({ round, onEdit, onPhoto }: {
     {recap.categoryBalances?.length ? <section className="card historicalCategories" aria-labelledby="historical-categories-title">
       <div className="sectionTitle"><div><h2 id="historical-categories-title">Desglose por modalidad</h2><p>Balances por jugador tal como quedaron guardados.</p></div></div>
       <div className="historicalCategoryList">{recap.categoryBalances.map((category) => <article key={category.category}>
-        <h3>{historicalBetDisplayLabel(category.category)}</h3>
+        <h3>{historicalBetDisplayLabel(category.category, round.presentation)}</h3>
         {category.balances.map((balance) => <div className="historicalBalanceRow" key={`${category.category}-${balance.playerId}`}><span>{settlementName(balance.name, balance.playerId)}</span><b className={tone(balance.amount)}>{money(balance.amount)}</b></div>)}
       </article>)}</div>
     </section> : canShowLegacyCategories && legacyCategories.length ? <section className="card historicalLegacyCategories">
       <div className="sectionTitle"><div><h2>Balance por modalidad de {recap.meta.ownerName || "la persona organizadora"}</h2><p>Registro anterior: conserva la perspectiva del dueño, pero no identifica contrapartes.</p></div></div>
-      {legacyCategories.map((category) => <div className="historicalBalanceRow" key={category.category}><span>{historicalBetDisplayLabel(category.category)}</span><b className={tone(category.amount)}>{money(category.amount)}</b></div>)}
+      {legacyCategories.map((category) => <div className="historicalBalanceRow" key={category.category}><span>{historicalBetDisplayLabel(category.category, round.presentation)}</span><b className={tone(category.amount)}>{money(category.amount)}</b></div>)}
     </section> : null}
 
     {recap.personalOpponents?.length ? <section className="card historicalPersonalOpponents" aria-labelledby="historical-personal-title">

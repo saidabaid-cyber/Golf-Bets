@@ -99,7 +99,10 @@ test("Editar ronda concentra Personales/Manuales y Resultados conserva navegaciÃ
   assert.match(standings, /<GolfLeaderboard/);
   assert.match(results, /className="resultJumpNav"/);
   assert.match(page, /\{ id: "golf-result", label: "Golf", visible: true \}/);
-  assert.ok(results.indexOf('id="golf-result"') < results.indexOf('id="final-player-summary"'));
+  assert.ok(results.indexOf("<RoundFinalResult") < results.indexOf('id="golf-result"'));
+  assert.match(results, /roundReviewPending \|\| roundClosed/);
+  assert.match(results, /RESULTADOS PROVISIONALES/);
+  assert.match(results, /recap=\{finalRoundRecap\}/);
   assert.match(results, /openResultSection\(item\.id\)/);
   assert.match(results, /renderManualBetResults\(\)/);
   assert.doesNotMatch(results, /renderManualBetsEditor/);
