@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { findAmbiguousCloudConflicts, mergeLocalAndCloud, stableValue, type CloudDataBundle, type CloudEntityType, type CloudTombstone } from "./cloud-sync";
 import { writeVersionedRow } from "./cloud-write";
+import { parseFrequentGroups } from "./frequent-templates";
 
 export { writeVersionedRow } from "./cloud-write";
 
@@ -164,7 +165,7 @@ export async function readCloudBundle(client: SupabaseClient, userId: string, ex
     version: 1,
     history: (rounds.data || []).map((row) => row.snapshot).filter(Boolean),
     frequentPlayers: (players.data || []).map((row) => row.snapshot).filter(Boolean),
-    frequentGroups: (groups.data || []).map((row) => row.snapshot).filter(Boolean),
+    frequentGroups: parseFrequentGroups(JSON.stringify((groups.data || []).map((row) => row.snapshot).filter(Boolean))),
     rivals: (rivals.data || []).map((row) => row.snapshot).filter(Boolean),
     courses: (courses.data || []).map((row) => row.snapshot).filter(Boolean),
     preferences: {

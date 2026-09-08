@@ -508,10 +508,37 @@ export type FrequentPlayer = {
   updatedAt: string;
 };
 
+export type FrequentGroupMember = Pick<Player, "name" | "handicap" | "accountUserId"> & {
+  /** Stable identity inside the group template. New groups always include it. */
+  memberId?: string;
+  kind?: "account" | "friend" | "invited" | "guest";
+  username?: string;
+  email?: string;
+};
+
+export type GroupGameTemplate = {
+  version: 1;
+  ownerMemberId: string;
+  roundDefaults: {
+    startHole: 1 | 10;
+    roundHoles: 9 | 18;
+    handicapBasis: RoundHandicapBasis;
+  };
+  betConfig: BetConfig;
+  foursomeSegments: FoursomeSegment[];
+  personalBets: PersonalBet[];
+  supplementalBets: SupplementalBet[];
+  manualBets: ManualBet[];
+};
+
 export type FrequentGroup = {
   id: string;
   name: string;
-  players: Array<Pick<Player, "name" | "handicap" | "accountUserId">>;
+  imageUrl?: string;
+  privacy?: "private" | "invite_only";
+  players: FrequentGroupMember[];
+  /** Missing means a legacy roster-only group and remains fully supported. */
+  gameTemplate?: GroupGameTemplate;
   uses: number;
   updatedAt: string;
 };
