@@ -1,4 +1,5 @@
-import type { SupplementalBet } from "./types";
+import type { RoundPresentation, SupplementalBet } from "./types";
+import { groupNassauHistoricalLabel } from "./round-presentation";
 
 export const BET_PRESENTATION = {
   rabbits: { icon: "🐇", title: "Conejos" },
@@ -80,8 +81,8 @@ const HISTORICAL_BET_ICONS = [...new Set(HISTORICAL_BET_PRESENTATIONS.map((entry
  * Legacy labels and numbered supplemental instances resolve through the same
  * metadata used by Configuración and Resultados. Unknown custom labels are
  * kept verbatim so old or manual data is never hidden. */
-export function historicalBetDisplayLabel(label: string) {
-  const original = label.trim();
+export function historicalBetDisplayLabel(label: string, roundPresentation?: RoundPresentation) {
+  const original = groupNassauHistoricalLabel(label.trim(), roundPresentation);
   const leadingIcon = HISTORICAL_BET_ICONS.find((icon) => original.startsWith(icon));
   const undecorated = leadingIcon ? original.slice(leadingIcon.length).trimStart() : original;
   const comparable = undecorated.toLocaleLowerCase("es-MX");

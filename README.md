@@ -24,6 +24,6 @@ La ronda privada funciona sin cuentas, OpenAI ni Supabase. Copia `.env.example` 
 - Se conservan las claves históricas `golfbets-courses`, `golfbets-history`, `golfbets-personal-rivals` y `golfbets-draft-v1`.
 - Los borradores V2.x migran presiones cronológicas a H1–9/H10–18 al cargarse.
 - Cada ronda terminada guarda snapshot de campo, jugadores y scores para que futuras ediciones no alteren el histórico.
-- Fotos de tarjetas se comprimen y guardan localmente en IndexedDB.
+- Card AI comprime y analiza las fotos en memoria. La copia local en IndexedDB es best effort: si el navegador la rechaza, el análisis puede continuar.
 
 Consulta [configuración de Supabase](docs/SETUP_SUPABASE.md), [Reglas con IA](docs/SETUP_RULES_AI.md) y [alcance técnico V3](docs/V3_ARCHITECTURE.md).

@@ -6,6 +6,7 @@ export type PlayHubProps = {
   activeRound?: ActiveRoundSummary | null;
   onContinueRound: () => void;
   onEditRound?: () => void;
+  onAiRound: () => void;
   onNewRound: () => void;
   onOpenHistory: () => void;
   onOpenBalances: () => void;
@@ -26,11 +27,11 @@ function roundProgress(round: ActiveRoundSummary) {
   return `${current}${progress}`;
 }
 
-export function PlayHub({ activeRound, onContinueRound, onEditRound, onNewRound, onOpenHistory, onOpenBalances, onOpenPersonalHistory, onOpenStats, onOpenCourses, onOpenGroups, onOpenRules, onOpenStandings, onOpenResults }: PlayHubProps) {
+export function PlayHub({ activeRound, onContinueRound, onEditRound, onAiRound, onNewRound, onOpenHistory, onOpenBalances, onOpenPersonalHistory, onOpenStats, onOpenCourses, onOpenGroups, onOpenRules, onOpenStandings, onOpenResults }: PlayHubProps) {
   return <section className="betaPlayHub" aria-labelledby="beta-play-title">
     <section className="hero betaPlayHero">
       <div><span className="eyebrow">THE BACKYARD · JUGAR</span><h1 id="beta-play-title">Tu próxima salida.</h1><p>Empieza rápido o regresa exactamente a la ronda que dejaste abierta.</p></div>
-      <button type="button" className="primary big" onClick={onNewRound}>Nueva ronda</button>
+      <div className="betaPlayHeroActions"><button type="button" className="primary big" onClick={onAiRound}>✨ Configurar con Backyard AI</button><button type="button" className="secondary" onClick={onNewRound}>Manual</button></div>
     </section>
 
     {activeRound ? <section className="card betaOpenRoundCard">
@@ -41,7 +42,7 @@ export function PlayHub({ activeRound, onContinueRound, onEditRound, onNewRound,
       <div className="betaOpenRoundActions"><button type="button" className="primary big" onClick={onContinueRound}>{activeRound.status === "review" ? "Revisar resultados" : activeRound.status === "setup" ? "Continuar configuración" : "Volver al hoyo"}</button>{onEditRound && activeRound.status !== "setup" && <button type="button" className="secondary big" onClick={onEditRound}>Editar configuración</button>}</div>
       {activeRound.status === "live" && <nav className="betaRoundShortcuts" aria-label="Atajos de la ronda activa"><button type="button" onClick={onContinueRound}>Tarjeta</button><button type="button" onClick={onOpenStandings}>Cómo vamos</button><button type="button" onClick={onOpenResults}>Resultados</button><button type="button" onClick={onOpenRules}>Reglas</button></nav>}
     </section> : <section className="card betaNoOpenRound">
-      <span className="betaEmptyFlag" aria-hidden="true">⚑</span><h2>No hay una ronda abierta.</h2><p>Elige un campo, agrega jugadores y decide si hoy sólo capturas score o también juegas apuestas.</p><button type="button" className="primary big" onClick={onNewRound}>Crear nueva ronda</button>
+      <span className="betaEmptyFlag" aria-hidden="true">⚑</span><h2>No hay una ronda abierta.</h2><p>Dime quién juega, dónde y qué modalidades usan. Backyard preparará la misma ronda que el modo manual.</p><button type="button" className="primary big" onClick={onAiRound}>✨ Configurar con Backyard AI</button><button type="button" className="textButton" onClick={onNewRound}>Prefiero configurar manualmente</button>
     </section>}
 
     <section className="betaPlayTools" aria-labelledby="beta-play-tools-title">

@@ -1,10 +1,11 @@
 import { LEGAL_DOCUMENT_VERSIONS } from "./legal-config";
-import { PRIVACY_CONTENT_ID } from "./privacy-content";
 import { normalizePlanId, type PlanId } from "./plans";
 
 export type AccountMode = "undecided" | "guest" | "authenticated";
 export const BETTING_DATA_CONSENT_TYPE = "betting_financial" as const;
-export const BETTING_DATA_CONSENT_VERSION = `${PRIVACY_CONTENT_ID}:express-betting-data`;
+// AI/privacy copy can evolve without revoking the independently accepted
+// betting-data agreement. Change this only when that agreement itself changes.
+export const BETTING_DATA_CONSENT_VERSION = "2026-09-08-v3+sha256-5376b615664b10d9:express-betting-data";
 
 export type GeneralConsentType = keyof typeof LEGAL_DOCUMENT_VERSIONS;
 export type ConsentType = GeneralConsentType | typeof BETTING_DATA_CONSENT_TYPE;
@@ -302,6 +303,8 @@ export const ACCOUNT_STORAGE_KEYS = {
   migrationDecision: "backyard-local-migration-decision-v1",
 } as const;
 
+export const ACCOUNT_DELETION_MARKER_PREFIX = "backyard-account-deletion-v1:";
+
 type OfflineProfileStorage = Pick<Storage, "getItem">;
 
 /** Restore only non-sensitive display data for an already selected local
@@ -331,6 +334,11 @@ export function migrationDecisionStorageKey(userId: string) {
  * presentation state only; it never counts as consent. */
 export function bettingConsentPromptStorageKey(userId: string) {
   return `backyard-betting-consent-prompt-v1:${userId}:${BETTING_DATA_CONSENT_VERSION}`;
+}
+
+/** Synchronous local barrier checked by every cloud/media sync before deletion. */
+export function accountDeletionMarkerKey(userId: string) {
+  return `${ACCOUNT_DELETION_MARKER_PREFIX}${userId}`;
 }
 
 export const REQUIRED_CONSENTS = Object.keys(LEGAL_DOCUMENT_VERSIONS) as GeneralConsentType[];

@@ -10,6 +10,12 @@ export type PressureMultiplier = 1 | 2 | 3 | 4 | 5;
 export type RabbitMode = "continuous" | "three_hole_blocks";
 export type SkinsMode = "carry" | "no_carry";
 export type RoundLifecycleState = "draft" | "live" | "completed" | "cancelled";
+
+/** Presentation-only terminology for engine-backed round concepts. */
+export type RoundPresentation = {
+  version?: 1;
+  groupNassauTerm?: "nassau" | "polla";
+};
 export type ScoreCaptureMode = "quick" | "advanced";
 
 export type Player = {
@@ -96,6 +102,8 @@ export type CounterBetEvent = {
   hole: number;
   playerId: string;
   quantity: number;
+  /** True when the player explicitly confirmed this capture, including zero. */
+  captureConfirmed?: boolean;
   /** Centimetres from the hole; requested only for a same-hole Viper tie. */
   distanceToHole?: number;
   /** Derived audit fields persisted in finalized snapshots; calculation remains config-driven. */
@@ -231,6 +239,42 @@ export type FoursomeSegment = {
   startIndex: number;
   endIndex: number;
   basePair: string[];
+  /** Configuration provenance only; the deterministic engine ignores it. */
+  generatedByBackyard?: boolean;
+};
+
+export type PlayerTeeAssignmentSnapshot = {
+  playerId: string;
+  courseId: string;
+  layoutId?: string;
+  teeId: string;
+  teeName: string;
+  rating?: number;
+  slope?: number;
+  yards?: number;
+  source: "catalog" | "manual" | "preference" | "legacy";
+  capturedAt: string;
+};
+
+export type PersonalAdvantageMode = "manual" | "current_index" | "sliding";
+export type PersonalIndexSource = "GHIN_OFFICIAL" | "BACKYARD_WHS" | "PROFILE_FALLBACK";
+
+export type PersonalIndexSnapshot = {
+  indexValue: number;
+  indexSource: PersonalIndexSource;
+  effectiveAt: string;
+  verifiedAt?: string;
+  provisional?: boolean;
+};
+
+export type PersonalSlidingAdjustment = {
+  betId: string;
+  rivalKey: string;
+  previousAdvantage: number;
+  result: "owner_win" | "rival_win" | "tie";
+  newAdvantage: number;
+  roundId: string;
+  updatedAt: string;
 };
 
 export type BallFriendHole = {
@@ -257,6 +301,10 @@ export type SavedPersonalRival = {
   pressureMultiplier?: PressureMultiplier;
   pressureNine?: PhysicalNine;
   carryEnabled?: boolean;
+  mode?: PersonalAdvantageMode;
+  /** Signed value: positive means the rival receives; negative means the owner receives. */
+  slidingAdvantage?: number;
+  components?: PersonalBetComponents;
   updatedAt?: string;
 };
 
@@ -276,6 +324,11 @@ export type PersonalBet = {
   // `none` remains accepted only to migrate old drafts. New UI never offers Scratch.
   advantageReceiver: "none" | "owner" | "rival";
   advantageStrokes: number;
+  advantageMode?: PersonalAdvantageMode;
+  ownerIndexSnapshot?: PersonalIndexSnapshot;
+  rivalIndexSnapshot?: PersonalIndexSnapshot;
+  /** Frozen signed advantage for this round. Positive means the rival receives. */
+  slidingAdvantage?: number;
   /** @deprecated V2.5 compatibility. New rounds use pressureMultiplier/pressureNine. */
   back9Multiplier: number;
   pressureMultiplier?: PressureMultiplier;
@@ -404,6 +457,16 @@ export type AdvancedHoleStat = {
   greenInRegulation?: boolean;
   /** Missing means not captured; zero is an explicit no-penalty result. */
   penaltyStrokes?: number;
+  /** Optional direction of the tee shot; never required for settlement. */
+  teeDirection?: "left" | "center" | "right";
+  /** Optional landing area selected by the golfer. */
+  landingLie?: "fairway" | "rough" | "bunker" | "water_ob";
+  /** Free-form club label because My Bag catalogs can evolve independently. */
+  teeClub?: string;
+  /** Optional distance in yards. */
+  teeDistance?: number;
+  /** Explicit out-of-bounds observation; missing means not captured. */
+  outOfBounds?: boolean;
 };
 
 export type AdvancedStatsByHole = Record<number, Record<string, AdvancedHoleStat>>;
@@ -466,6 +529,8 @@ export type RoundSnapshot = {
   startHole?: 1 | 10;
   /** Missing on legacy snapshots preserves the previous player-relative behavior. */
   handicapBasis?: RoundHandicapBasis;
+  /** Never consumed by the betting engine; preserves the user's terminology. */
+  presentation?: RoundPresentation;
   betResult: number;
   expenses: Expense;
   expenseTotal: number;
@@ -477,16 +542,21 @@ export type RoundSnapshot = {
   players?: Player[];
   scores?: Record<number, HoleScore>;
   courseSnapshot?: Course;
+  /** Immutable tee metadata used when the round was played. */
+  playerTeeAssignments?: PlayerTeeAssignmentSnapshot[];
   order?: number[];
   completedAt?: string;
   updatedAt?: string;
   photoId?: string;
+  /** Card AI supports several private originals while photoId remains the legacy primary image. */
+  scorecardPhotoIds?: string[];
   betConfig?: BetConfig;
   unitEvents?: UnitEvent[];
   counterBetEvents?: CounterBetEvent[];
   counterBetKeepers?: CounterBetKeepers;
   lobaHoles?: Record<number, LobaHole>;
   personalBets?: PersonalBet[];
+  personalSlidingAdjustments?: PersonalSlidingAdjustment[];
   manualBets?: ManualBet[];
   supplementalBets?: SupplementalBet[];
   putts?: PuttsByHole;

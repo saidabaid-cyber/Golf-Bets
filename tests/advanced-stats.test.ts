@@ -30,6 +30,16 @@ test("advanced normalization preserves explicit false and zero but rejects corru
   });
 });
 
+test("advanced normalization keeps the optional UX V2 shot fields without affecting score", () => {
+  const normalized = normalizeAdvancedStats({
+    1: { owner: { teeDirection: "left", landingLie: "rough", teeClub: " Driver ", teeDistance: 271, outOfBounds: false } },
+    2: { owner: { teeDirection: "diagonal", landingLie: "cart", teeClub: "", teeDistance: 900, outOfBounds: "no" } },
+  });
+  assert.deepEqual(normalized, {
+    1: { owner: { teeDirection: "left", landingLie: "rough", teeClub: "Driver", teeDistance: 271, outOfBounds: false } },
+  });
+});
+
 test("editing one optional stat is immutable and clearing the last value removes its empty row", () => {
   const source = { 1: { owner: { fairwayHit: true } } };
   const withPenalty = updateAdvancedHoleStat(source, 1, "owner", { penaltyStrokes: 2 });

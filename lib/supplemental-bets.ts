@@ -23,6 +23,7 @@ import type {
 } from "./types";
 import { SUPPLEMENTAL_BET_PRESENTATION } from "./bet-catalog";
 import { playersMissingRoundHandicap } from "./handicap-base";
+import { personalNassauComponentsForRoundHoles } from "./personal-nassau";
 
 const EPS = 1e-9;
 
@@ -740,7 +741,18 @@ export function createSupplementalBet(type: SupplementalBet["type"], players: Pl
   const ids = players.map((player) => player.id);
   const headToHead = { playerAId: ids[0] ?? "", playerBId: ids[1] ?? "", advantageStrokes: 0 };
   switch (type) {
-    case "individual_nassau": return { id, type, enabled: true, ...headToHead, value: 100, carryEnabled: false, components: { match1: true, medal1: true, match2: true, medal2: true, match18: true, medal18: true } };
+    case "individual_nassau": return {
+      id,
+      type,
+      enabled: true,
+      ...headToHead,
+      value: 100,
+      carryEnabled: false,
+      components: personalNassauComponentsForRoundHoles(
+        { match1: true, medal1: true, match2: true, medal2: true, match18: true, medal18: true },
+        roundHoles,
+      ),
+    };
     case "dollar_stroke": return { id, type, enabled: true, ...headToHead, valuePerStroke: 10 };
     case "individual_pressures": return { id, type, enabled: true, participantIds: ids, value: 100, hcpPct: 100, decimals: "half_up", carryEnabled: true, matchPlayEnabled: false };
     case "team_pressures": return { id, type, enabled: true, participantIds: ids.slice(0, ids.length === 3 ? 3 : 4), abandonedPlayerIds: [], teamA: ids.slice(0, 2), metric: "low_high", virtualMode: ids.length === 3 ? "mudo" : "standard", value: 100, hcpPct: 100, decimals: "half_up", carryEnabled: true, abandonedMaxScore: 9 };
@@ -757,9 +769,13 @@ export function createSupplementalBet(type: SupplementalBet["type"], players: Pl
  */
 export function supplementalBetsForRoundHoles(bets: SupplementalBet[], roundHoles: 9 | 18) {
   if (roundHoles === 18) return bets;
-  return bets.map((bet): SupplementalBet => bet.type === "minimum_putts" && bet.holes !== 9
-    ? { ...bet, holes: 9 }
-    : bet);
+  return bets.map((bet): SupplementalBet => {
+    if (bet.type === "minimum_putts" && bet.holes !== 9) return { ...bet, holes: 9 };
+    if (bet.type === "individual_nassau") {
+      return { ...bet, components: personalNassauComponentsForRoundHoles(bet.components, roundHoles) };
+    }
+    return bet;
+  });
 }
 
 export function normalizeSupplementalBets(value: unknown, roundHoles?: 9 | 18): SupplementalBet[] {

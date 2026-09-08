@@ -1,0 +1,304 @@
+.screen {
+  display: grid;
+  gap: 10px;
+}
+
+.hero {
+  background: linear-gradient(135deg, #173d28, #24613e);
+  border-radius: 22px;
+  color: #fff;
+  padding: 16px 18px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.heroTitle {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: 30px;
+  letter-spacing: -1px;
+}
+
+.holeFacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 7px;
+}
+
+.holeFacts span,
+.gpsButton {
+  border: 1px solid rgba(255, 255, 255, .25);
+  background: rgba(255, 255, 255, .12);
+  color: #fff;
+  border-radius: 999px;
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.gpsButton[data-state="ready"] { background: rgba(226, 255, 232, .22); }
+.gpsButton[data-state="error"] { background: rgba(255, 225, 222, .18); }
+
+.progress {
+  font-size: 29px;
+  font-weight: 950;
+  white-space: nowrap;
+}
+
+.progress span { font-size: 12px; opacity: .75; }
+
+.holeNav {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding: 1px 1px 5px;
+}
+
+.holeNav::-webkit-scrollbar { display: none; }
+
+.holeNav button {
+  min-width: 38px;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: #fff;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.holeNav button[data-active="true"] { background: var(--green); color: #fff; border-color: var(--green); }
+.holeNav button[data-done="true"]:not([data-active="true"]) { background: #edf5ef; border-color: #b7d1bd; }
+
+.toolbar {
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.toolbar button {
+  flex: 0 0 auto;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  border-radius: 11px;
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.toolbar .camera { width: 42px; padding-inline: 0; font-size: 17px; }
+
+.captureCard {
+  margin: 0;
+  padding: 13px;
+}
+
+.modeHeader {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.modeHeader h2 { margin: 0; font-size: 16px; }
+.modeHeader p { margin: 2px 0 0; color: var(--muted); font-size: 11px; }
+
+.modeSwitch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: #edf1ee;
+  padding: 3px;
+  border-radius: 11px;
+}
+
+.modeSwitch button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 9px;
+  padding: 8px 10px;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.modeSwitch button[data-active="true"] { background: #fff; color: var(--green); box-shadow: 0 1px 5px rgba(20, 50, 30, .08); }
+
+.teamContext,
+.betContext {
+  border: 1px solid #cfe2d3;
+  background: #f2f8f3;
+  color: var(--green);
+  border-radius: 12px;
+  padding: 9px 10px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.teamContext b { letter-spacing: .5px; }
+.betContext b { letter-spacing: .5px; }
+.betContext + .teamContext { margin-top: 7px; }
+
+.primaryPlayer {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 11px;
+  align-items: center;
+  border: 1px solid var(--line);
+  background: #fbfcfb;
+  border-radius: 16px;
+  padding: 11px;
+  margin-top: 10px;
+}
+
+.avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: grid;
+  place-items: center;
+  background: #dcece1;
+  color: var(--green);
+  font-weight: 950;
+  font-size: 16px;
+}
+
+.playerHeading {
+  min-width: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+.playerHeading b,
+.playerHeading small { display: block; }
+.playerHeading b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.playerHeading small { color: var(--muted); font-size: 10px; margin-top: 2px; }
+
+.toPar {
+  background: #e9f4ec;
+  color: var(--green);
+  border-radius: 999px;
+  padding: 6px 8px;
+  font-size: 11px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.mainScore {
+  display: grid;
+  grid-template-columns: 40px minmax(52px, 1fr) 40px auto;
+  min-height: 42px;
+  margin-top: 9px;
+}
+
+.mainScore button,
+.mainScore input {
+  border: 1px solid var(--line);
+  border-radius: 0;
+}
+
+.mainScore button:first-child { border-radius: 10px 0 0 10px; }
+.mainScore .par { border-radius: 0 10px 10px 0; background: #edf1ee; font-size: 10px; font-weight: 900; padding: 0 9px; }
+.mainScore input { text-align: center; background: #fff; }
+
+.dynamicFields {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 9px;
+}
+
+.dynamicFields label { margin: 0; }
+.dynamicFields input { min-height: 39px; padding: 7px; text-align: center; }
+.compactField { display: grid; gap: 5px; align-content: start; font-size: 9px; font-weight: 850; color: var(--muted); }
+
+.stepper { display: inline-grid; grid-template-columns: 40px minmax(30px, auto) 40px; align-items: center; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #fff; }
+.stepper button { min-height: 40px; border: 0; background: #f2f5f2; color: var(--green); font-size: 18px; font-weight: 900; }
+.stepper .stepperValue { min-width: 30px; padding: 0 4px; text-align: center; background: #fff; color: var(--ink); font-size: 14px; font-weight: 900; }
+.stepper .stepperValue[data-pending="true"] { color: var(--muted); }
+.tapCounter { display: inline-flex; align-items: stretch; min-height: 40px; }
+.tapCounter button { border: 1px solid var(--line); background: #fff; font-weight: 900; }
+.counterAdd { min-width: 48px; border-radius: 10px !important; display: inline-flex; justify-content: center; align-items: center; gap: 4px; }
+.counterSubtract { width: 40px; margin-left: 3px; border-radius: 10px !important; color: var(--green); }
+.counterConfirmed { display: inline-grid; place-items: center; width: 40px; margin-left: 3px; border: 1px solid var(--line); border-radius: 10px; color: var(--green); background: #f2f5f2; font-weight: 900; }
+.obToggle { min-width: 44px; min-height: 40px; border: 1px solid var(--line); border-radius: 10px; background: #fff; font-size: 10px; font-weight: 900; }
+.obToggle[data-active="true"] { background: var(--green); color: #fff; border-color: var(--green); }
+
+.groupTitle {
+  margin: 13px 0 6px;
+  font-size: 10px;
+  letter-spacing: 1.1px;
+  color: var(--muted);
+  font-weight: 950;
+}
+
+.groupTableWrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 13px; }
+.groupTable { min-width: 100%; width: max-content; font-size: 10px; }
+.groupTable th, .groupTable td { padding: 6px; }
+.groupTable th:first-child, .groupTable td:first-child { position: sticky; left: 0; background: #fff; z-index: 1; min-width: 112px; }
+.groupTable input { width: 54px; min-height: 36px; padding: 5px; text-align: center; }
+.groupName b, .groupName small { display: block; }
+.groupName small { color: var(--muted); margin-top: 2px; }
+
+.advancedList { margin-top: 12px; display: grid; gap: 7px; }
+.advancedPlayer { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.advancedPlayer h4 { margin: 0; padding: 10px; font-size: 11px; font-weight: 900; background: #f8faf8; }
+.advancedGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 10px; }
+.advancedGrid label { margin: 0; }
+.advancedGrid select, .advancedGrid input { min-height: 39px; padding: 7px; }
+.wide { grid-column: 1 / -1; }
+
+.binary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+.binary button {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fff;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.binary button[data-active="true"] { background: var(--green); border-color: var(--green); color: #fff; }
+.gpsStatus { grid-column: 1 / -1; color: #dce8df; font-size: 10px; margin: 0; }
+
+@media (max-width: 600px) {
+  .hero { padding: 14px; }
+  .hero h1 { font-size: 27px; }
+  .modeHeader { grid-template-columns: 1fr; }
+  .primaryPlayer { grid-template-columns: 42px minmax(0, 1fr); padding: 9px; }
+  .avatar { width: 42px; height: 42px; }
+  .dynamicFields { grid-template-columns: repeat(3, minmax(56px, 1fr)); }
+  .advancedGrid { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 390px) {
+  .hero { grid-template-columns: 1fr auto; }
+  .holeFacts span, .gpsButton { padding: 4px 6px; font-size: 9px; }
+  .progress { font-size: 24px; }
+  .mainScore { grid-template-columns: 38px minmax(45px, 1fr) 38px auto; }
+  .advancedGrid { grid-template-columns: 1fr; }
+  .wide { grid-column: auto; }
+}

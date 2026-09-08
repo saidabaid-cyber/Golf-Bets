@@ -8,6 +8,7 @@ import type { FrequentPlayer } from "./types";
 import { hasValidRoundHandicap } from "./handicap-base";
 import { normalizeAdvancedStats, normalizeScoreCaptureMode } from "./advanced-stats";
 import { normalizeRoundStartedAt } from "./round-lifecycle";
+import { normalizeRoundPresentation } from "./round-presentation";
 
 export const STORAGE_KEYS = {
   courses: "golfbets-courses",
@@ -64,9 +65,11 @@ export function normalizeRoundDraft(value: unknown, resolvedOwnerId?: string) {
   const draft = {
     ...source,
     startedAt: normalizeRoundStartedAt(source.startedAt),
+    ...(source.presentation === undefined ? {} : { presentation: normalizeRoundPresentation(source.presentation) }),
     ...(course ? { course } : { course: undefined }),
     courseSelected: typeof source.courseSelected === "boolean" ? source.courseSelected && Boolean(course) : Boolean(course),
     players,
+    playerTeeAssignments: Array.isArray(source.playerTeeAssignments) ? source.playerTeeAssignments.filter((item) => Boolean(recordValue(item))) : [],
     bets: recordValue(source.bets),
     segments: Array.isArray(source.segments) ? source.segments : [],
     personalBets: Array.isArray(source.personalBets) ? source.personalBets.filter((item) => Boolean(recordValue(item))) : [],

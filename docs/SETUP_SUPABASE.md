@@ -27,6 +27,13 @@ Aplica estos archivos **en orden**:
 1. `supabase/migrations/202609010001_golf_bets_v3.sql`
 2. `supabase/migrations/202609010002_backyard_accounts_legal.sql`
 3. `supabase/migrations/202609020001_cloud_sync_polla_hardening.sql`
+4. `supabase/migrations/202609030001_function_privileges.sql`
+5. `supabase/migrations/20260904013601_repair_cloud_profiles_and_permissions.sql`
+6. `supabase/migrations/20260904104145_rules_ai_rate_limit.sql`
+7. `supabase/migrations/20260905060434_add_express_betting_consent.sql`
+8. `supabase/migrations/20260906193435_equipment_ball_fitting.sql`
+9. `supabase/migrations/20260906211937_golf_profile_course_architecture.sql`
+10. `supabase/migrations/20260908134650_ai_processing_consents.sql`
 
 Opción SQL Editor: pega y ejecuta cada archivo por separado, revisando que termine sin error antes del siguiente.
 
@@ -39,7 +46,17 @@ supabase db push --dry-run
 supabase db push
 ```
 
-No se ejecutó `db push` durante esta fase porque el repositorio local no tiene credenciales ni enlace verificable al proyecto externo.
+No se ejecutó `db push` durante esta fase: el único proyecto Supabase accesible está compartido con Production y esta entrega prohíbe modificarlo. La migración 10 es requisito para consentimiento AI autenticado en Preview; debe aplicarse únicamente a un proyecto/branch Supabase aislado y después enlazar a él las variables Preview de Vercel.
+
+### Protección del ledger AI en Preview
+
+Vercel define `VERCEL_ENV=preview` automáticamente. En ese entorno, el ledger autenticado queda bloqueado antes de crear un cliente Supabase salvo que se configure, con alcance **Preview** (idealmente restringido a la rama), esta vinculación server-only:
+
+```dotenv
+BACKYARD_AI_CONSENT_PREVIEW_SUPABASE_URL=https://TU_PROJECT_REF_AISLADO.supabase.co
+```
+
+El valor debe coincidir exactamente con el origen de `NEXT_PUBLIC_SUPABASE_URL` del Preview y sólo debe agregarse después de aplicar y verificar la migración 10 en ese proyecto aislado. No copies aquí la URL compartida con Production. Si falta o no coincide, las cuentas autenticadas reciben `consent_environment_blocked` y no se consulta Auth ni `ai_processing_consents`; Invitado continúa local porque no usa el ledger server-side. Los cambios de variables sólo afectan deployments nuevos, por lo que se debe redesplegar el Preview.
 
 ## 3. Verificar base y RLS
 
@@ -70,10 +87,14 @@ La migración crea el bucket privado `scorecard-photos`, máximo 8 MB, JPEG/PNG/
 
 Configura **Authentication → URL Configuration**:
 
-- Site URL de beta: `https://beta.thebackyard.com.mx`
+- Conserva el Site URL actual si este proyecto Supabase está compartido con Production. Usa `https://beta.thebackyard.com.mx` como Site URL únicamente en un proyecto o branch Supabase aislado para beta.
 - Redirect local: `http://localhost:3000/auth/callback`
 - Redirect beta: `https://beta.thebackyard.com.mx/auth/callback`
+- Redirect Preview actual: `https://golf-bets-git-ai-first-phase1-saha8.vercel.app/auth/callback`
+- Wildcard restringido para Preview futuros del proyecto: `https://golf-bets-*-saha8.vercel.app/auth/callback`
 - Redirects futuros, solo cuando los dominios existan: `https://thebackyard.com.mx/auth/callback` y `https://www.thebackyard.com.mx/auth/callback`
+
+Agregar Redirect URLs no requiere ni autoriza cambiar el Site URL de Production.
 
 Continúa con [Email OTP](./SETUP_EMAIL_OTP.md), [Google](./SETUP_GOOGLE_AUTH.md) y [Apple](./SETUP_APPLE_AUTH.md).
 

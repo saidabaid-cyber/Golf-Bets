@@ -47,6 +47,15 @@ export async function sendEmailOtp(auth: AuthFlowClient, email: string, redirect
   throwIfError(result.error);
 }
 
+/** Keeps PKCE on the exact browser origin that initiated access. Supabase must
+ * also include this URL (or a deliberately scoped Preview wildcard) in its
+ * Redirect URLs allow-list. */
+export function authCallbackUrl(origin: string) {
+  const parsed = new URL(origin);
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") throw new Error("invalid_auth_origin");
+  return new URL("/auth/callback", `${parsed.protocol}//${parsed.host}`).toString();
+}
+
 export async function verifyEmailOtp(auth: AuthFlowClient, email: string, token: string) {
   if (!/^\d{8}$/.test(token)) throw new Error("invalid otp");
   const result = await auth.verifyOtp({ email: email.trim(), token, type: "email" });
@@ -153,9 +162,32 @@ export async function closeAuthSession(auth: AuthFlowClient) {
 }
 
 /** The Auth user has already been deleted server-side. This local cleanup must
- * not fail just because that now-invalid token can no longer reach Auth. */
+ * not fail just because that now-invalid token can no longer reach Auth. It
+ * does fail when the client still exposes a cached session after the attempt. */
 export async function clearDeletedAuthSession(auth: AuthFlowClient) {
-  try { await auth.signOut({ scope: "local" }); } catch { /* local state still clears in the provider */ }
+  let signOutFailure: unknown = null;
+  try {
+    const result = await auth.signOut({ scope: "local" });
+    signOutFailure = result.error;
+  } catch (error) {
+    signOutFailure = error;
+  }
+  let remaining: Awaited<ReturnType<AuthFlowClient["getSession"]>>;
+  try { remaining = await auth.getSession(); }
+  catch (error) { throw signOutFailure || error; }
+  if (remaining.error) throw remaining.error;
+  if (remaining.data.session) throw signOutFailure || new Error("account_session_not_cleared");
+}
+
+/** Clears only the deleted user's cached session. A different account may have
+ * signed in from another tab while deletion cleanup was awaiting I/O. */
+export async function clearDeletedAuthSessionForUser(auth: AuthFlowClient, deletedUserId: string) {
+  const current = await auth.getSession();
+  if (current.error) throw current.error;
+  if (!current.data.session) return "absent" as const;
+  if (current.data.session.user.id !== deletedUserId) return "different_account" as const;
+  await clearDeletedAuthSession(auth);
+  return "cleared" as const;
 }
 
 export const OTP_COOLDOWN_KEY = "backyard-otp-next-send-v1";

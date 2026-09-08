@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { LEGAL_DOCUMENT_VERSIONS, legalConfig } from "../../lib/legal-config";
-import { BETTING_DATA_CONSENT_TYPE, emptyBackyardProfileDetails, profileHandicapInput, profileHandicapLabel, validateProfileAvatarUrl, validateProfileDraft, type BackyardProfile, type BackyardProfileDetails } from "../../lib/account-state";
+import { accountDeletionMarkerKey, BETTING_DATA_CONSENT_TYPE, emptyBackyardProfileDetails, profileHandicapInput, profileHandicapLabel, validateProfileAvatarUrl, validateProfileDraft, type BackyardProfile, type BackyardProfileDetails } from "../../lib/account-state";
 import { ballFitDefaultsFromProfile } from "../../lib/ball-fitting";
 import type { GolfInsights } from "../../lib/golf-insights";
 import { useBackyardAccount } from "./account-provider";
 import { EquipmentProfilePanel } from "./equipment-profile-panel";
+import { LegalConsentManager } from "./legal-consent-manager";
 
 type AccountPanelProps = {
   view: "profile" | "account";
@@ -128,6 +129,7 @@ export function AccountPanel({ view, highContrast, onHighContrastChange, notific
   const [deleteText, setDeleteText] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [managingConsents, setManagingConsents] = useState(false);
   const sessionExpired = cloudIssues.some((issue) => issue.kind === "session_expired");
 
   useEffect(() => {
@@ -174,15 +176,62 @@ export function AccountPanel({ view, highContrast, onHighContrastChange, notific
 
   async function deleteAccount() {
     if (identity.mode === "guest") { setMessageKind("success"); setMessage("El modo invitado no tiene una cuenta de nube. Puedes borrar cada ronda e histórico desde la app o los datos del sitio desde el navegador."); setDeleteOpen(false); return; }
+    if (cloudStatus === "syncing" || cloudStatus === "saving") { setMessageKind("error"); setMessage("Espera a que termine el guardado en curso antes de eliminar la cuenta."); return; }
     setDeletingAccount(true); setMessageKind("success"); setMessage("");
+    const deletionMarker = accountDeletionMarkerKey(identity.userId);
+    try {
+      const requestedAt = new Date().toISOString();
+      localStorage.setItem(deletionMarker, requestedAt);
+      if (localStorage.getItem(deletionMarker) !== requestedAt) throw new Error("deletion_marker_not_persisted");
+    } catch {
+      setMessageKind("error");
+      setMessage("No pudimos preparar la eliminación de forma segura en este dispositivo. Libera espacio o revisa el almacenamiento del navegador y reintenta.");
+      setDeletingAccount(false);
+      return;
+    }
+    let responseStatus: number | null = null;
+    let serverDeletionConfirmed = false;
     try {
       const response = await fetch("/api/account/delete", { method: "DELETE", headers: { authorization: `Bearer ${identity.accessToken}`, "content-type": "application/json" }, body: JSON.stringify({ confirmation: "ELIMINAR" }) });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "delete failed");
-      await finishAccountDeletion();
-    } catch (error) { setMessageKind("error"); setMessage(error instanceof Error ? error.message : "No se completó la eliminación. La cuenta sigue activa; reintenta."); setDeleteOpen(false); }
+      responseStatus = response.status;
+      if (!response.ok) {
+        const result = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(result?.error || "No se completó la eliminación en el servidor.");
+      }
+      serverDeletionConfirmed = true;
+      const locallyComplete = await finishAccountDeletion();
+      localStorage.setItem(deletionMarker, locallyComplete ? "completed" : "completed_cleanup_pending");
+    } catch (error) {
+      if (responseStatus === null || serverDeletionConfirmed || responseStatus >= 500) {
+        // A lost response is ambiguous: honor the destructive request locally,
+        // A confirmed response followed by a local failure has the same safe
+        // recovery path. Keep the barrier so stale work cannot revive data.
+        let locallyComplete = false;
+        try { locallyComplete = await finishAccountDeletion(); }
+        finally {
+          localStorage.setItem(deletionMarker, serverDeletionConfirmed
+            ? locallyComplete ? "completed" : "completed_cleanup_pending"
+            : locallyComplete ? "pending_confirmation" : "cleanup_pending");
+        }
+      } else {
+        localStorage.removeItem(deletionMarker);
+        setMessageKind("error");
+        setMessage(error instanceof Error ? error.message : "No se completó la eliminación en el servidor. Reintenta.");
+        setDeleteOpen(false);
+      }
+    }
     finally { setDeletingAccount(false); }
   }
+
+  if (view === "account" && managingConsents) return <LegalConsentManager
+    userId={identity.userId}
+    accessToken={identity.accessToken}
+    authenticated={identity.mode === "authenticated"}
+    acceptances={acceptances}
+    bettingConsentGranted={bettingConsentGranted}
+    requestBettingConsent={requestBettingConsent}
+    onBack={() => setManagingConsents(false)}
+  />;
 
   return <>
     <section className="hero accountHero"><div><div className="eyebrow">{view === "profile" ? "THE BACKYARD · GOLFISTA" : "THE BACKYARD ACCOUNT"}</div><h1>{view === "profile" ? "Mi Perfil" : "Cuenta y privacidad"}</h1><p>{view === "profile" ? "Tu identidad de golf, HCP capturado y estadísticas reales." : "Acceso, sincronización, consentimientos y preferencias de tu cuenta."}</p></div></section>
@@ -289,15 +338,14 @@ export function AccountPanel({ view, highContrast, onHighContrastChange, notific
 
     {view === "profile" && <section className="card"><div className="sectionTitle"><div><h2>Cuenta y privacidad</h2><p>Acceso, sincronización, documentos, preferencias y cierre de sesión.</p></div></div><button type="button" className="secondary big" onClick={onOpenAccount}>Abrir configuración de cuenta</button></section>}
 
-    {view === "account" && <><section className="card"><h2>Documentos y consentimiento</h2><div className="documentConsentList">
+    {view === "account" && <><section className="card"><h2>Legal y privacidad</h2><div className="documentConsentList">
       <Link href="/legal/terms?returnTo=account"><span>Términos de Uso</span><b>{acceptedLabel("terms")}</b></Link>
       <Link href="/legal/privacy-simplified?returnTo=account"><span>Aviso de Privacidad Simplificado</span><b>2026-09-08-v6</b></Link>
       <Link href="/legal/privacy?returnTo=account"><span>Aviso de Privacidad</span><b>{acceptedLabel("privacy")}</b></Link>
       <Link href="/legal/terms?returnTo=account#rules-referee"><span>Árbitro de Reglas</span><b>{acceptedLabel("rules_referee")}</b></Link>
       <div><span>Edad 18+</span><b>{acceptance("age_confirmation") ? "Confirmada" : "Pendiente"}</b></div>
       <div><span>Datos de apuestas, resultados y gastos</span><b>{bettingAcceptanceLabel}</b></div>
-    </div></section>
-    {!bettingConsentGranted && <section className="card"><h2>Funciones de apuestas</h2><p className="muted">Para activar o registrar apuestas, resultados y gastos necesitas otorgar el consentimiento específico. Las demás funciones y tus datos anteriores siguen disponibles.</p><button type="button" className="secondary" onClick={() => void requestBettingConsent()}>Revisar consentimiento específico</button></section>}
+    </div><button type="button" className="primary big" onClick={() => setManagingConsents(true)}>GESTIONAR CONSENTIMIENTOS</button><p className="hint">Procesamiento IA, imágenes, memoria personal y marketing se administran por separado.</p></section>
 
     {identity.mode === "authenticated" && <section className="card"><h2>Métodos de acceso</h2><div className="accessMethodList">{["google", "email"].map((provider) => <span key={provider}>{provider === "google" ? "Google" : "Correo"}<b>{identity.providers.includes(provider) || (provider === "email" && Boolean(identity.email)) ? "✓" : "—"}</b></span>)}</div><p className="hint">Tu cuenta conserva el mismo perfil tanto con Google como con código por correo.</p></section>}
 
@@ -308,7 +356,7 @@ export function AccountPanel({ view, highContrast, onHighContrastChange, notific
     <section className={`card accountSessionCard ${identity.mode === "guest" ? "single" : ""}`}><button className="secondary big" onClick={logout}>{identity.mode === "guest" ? "Salir del modo invitado" : "Cerrar sesión"}</button>{identity.mode === "authenticated" && <button className="dangerButton" onClick={() => setDeleteOpen(true)}>Eliminar cuenta</button>}</section>
     {message && <div className={messageKind === "error" ? "notice bad" : "notice"} role={messageKind === "error" ? "alert" : "status"}>{message}</div>}
 
-    {deleteOpen && <div className="modalBackdrop"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="delete-account-title"><h2 id="delete-account-title">Eliminar mi cuenta y mis datos</h2><p>Se eliminarán definitivamente tu usuario, datos de nube y fotos. También se limpiará el workspace local de esta cuenta; los datos de invitado y de otras cuentas no se tocarán. Escribe <b>ELIMINAR</b> para confirmar.</p><input aria-label="Confirmación de eliminación" value={deleteText} onChange={(event) => setDeleteText(event.target.value)} placeholder="ELIMINAR" autoComplete="off" /><div className="dialogActions"><button className="secondary" disabled={deletingAccount} onClick={() => { setDeleteOpen(false); setDeleteText(""); }}>Cancelar</button><button className="dangerButton" disabled={deleteText !== "ELIMINAR" || deletingAccount} onClick={deleteAccount}>{deletingAccount ? "Eliminando…" : "Eliminar definitivamente"}</button></div></section></div>}
+    {deleteOpen && <div className="modalBackdrop"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="delete-account-title"><h2 id="delete-account-title">Eliminar mi cuenta y mis datos</h2><p>Se eliminarán definitivamente tu usuario, datos de nube y fotos. También se limpiará el workspace local de esta cuenta; los datos de invitado y de otras cuentas no se tocarán. Escribe <b>ELIMINAR</b> para confirmar.</p>{(cloudStatus === "syncing" || cloudStatus === "saving") && <p role="status">Terminando el guardado actual antes de permitir la eliminación…</p>}<input aria-label="Confirmación de eliminación" value={deleteText} onChange={(event) => setDeleteText(event.target.value)} placeholder="ELIMINAR" autoComplete="off" /><div className="dialogActions"><button className="secondary" disabled={deletingAccount} onClick={() => { setDeleteOpen(false); setDeleteText(""); }}>Cancelar</button><button className="dangerButton" disabled={deleteText !== "ELIMINAR" || deletingAccount || cloudStatus === "syncing" || cloudStatus === "saving"} onClick={deleteAccount}>{deletingAccount ? "Eliminando…" : "Eliminar definitivamente"}</button></div></section></div>}
     </>}
   </>;
 }

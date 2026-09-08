@@ -42,7 +42,9 @@ test("Perfil separa el golf de la configuración sensible de Cuenta", () => {
   assert.match(page, /<AccountPanel view="profile"/);
   assert.match(page, /<AccountPanel view="account"/);
   assert.match(account, /view === "profile" && golfInsights/);
-  assert.match(account, /view === "account" && <><section className="card"><h2>Documentos y consentimiento/);
+  assert.match(account, /view === "account" && <><section className="card"><h2>Legal y privacidad/);
+  assert.match(account, /GESTIONAR CONSENTIMIENTOS/);
+  assert.match(account, /managingConsents[\s\S]*LegalConsentManager/);
   assert.match(account, /Abrir configuración de cuenta/);
   assert.match(account, /no emite ni certifica un handicap oficial/);
 });

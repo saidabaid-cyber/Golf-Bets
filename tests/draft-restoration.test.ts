@@ -42,7 +42,9 @@ test("draft application wires resolved values through unconditional setters", ()
   const page = readFileSync("app/page.tsx", "utf8");
   assert.match(page, /const draftCore = draft \? resolveRoundDraftCore\(draft, identity\.userId\) : null/);
   assert.match(page, /setStartHole\(draftCore\.startHole\);\s+setRoundHoles\(draftCore\.roundHoles\)/);
-  assert.match(page, /setPlayers\(draftCore\.players\);\s+setOwnerId\(draftCore\.ownerId\)/);
+  assert.match(page, /setPlayers\(draftCore\.players\)/);
+  assert.match(page, /setPlayerTeeAssignments\(reconcilePlayerTeeAssignments\(draft\.playerTeeAssignments, draftCore\.players/);
+  assert.match(page, /setOwnerId\(draftCore\.ownerId\)/);
   assert.doesNotMatch(page, /if \(draft\.startHole\) setStartHole/);
   assert.doesNotMatch(page, /if \(draft\.ownerId\) setOwnerId/);
   assert.match(page, /Math\.min\(draftRoundHoles - 1, draft\.currentIndex\)/);

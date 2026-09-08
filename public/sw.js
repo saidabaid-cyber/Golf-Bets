@@ -1,5 +1,5 @@
 // Bump this version whenever the deploy changes the app shell.
-const CACHE = "the-backyard-shell-v5";
+const CACHE = "the-backyard-shell-v6";
 const OPTIONAL_SHELL = ["/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/maskable-192.png", "/icons/maskable-512.png", "/apple-icon.png"];
 
 function shellRequest(path) {

@@ -3,11 +3,14 @@ import { migrateSupplementalNassau } from "./nassau-migration";
 import { migratePersonalNassau } from "./personal-nassau";
 import { restoreBetConfig } from "./new-round-bets";
 import { normalizeAdvancedStats, normalizeScoreCaptureMode } from "./advanced-stats";
+import { normalizeRoundPresentation } from "./round-presentation";
 
 /** Never merge mutable draft objects into an existing historical object. */
 export function upsertRoundSnapshot(history: RoundSnapshot[], next: RoundSnapshot) {
   const previous = history.find(round => round.id === next.id);
   const saved = structuredClone({ ...next, photoId: next.photoId ?? previous?.photoId,
+    scorecardPhotoIds: next.scorecardPhotoIds ?? previous?.scorecardPhotoIds,
+    presentation: next.presentation ?? previous?.presentation,
     startedAt: previous?.startedAt ?? next.startedAt,
     completedAt: previous?.completedAt ?? next.completedAt });
   return [saved, ...history.filter(round => round.id !== next.id)];
@@ -25,6 +28,7 @@ export function restoreRoundSnapshot(round: RoundSnapshot) {
   const roundHoles: 9 | 18 = copy.order!.length === 9 ? 9 : copy.order!.length === 18 ? 18 : copy.roundHoles === 9 ? 9 : 18;
   const restored = {
     ...copy,
+    ...(copy.presentation === undefined ? {} : { presentation: normalizeRoundPresentation(copy.presentation) }),
     ownerId: copy.ownerId || copy.players!.find(player => player.name === copy.ownerName)?.id || copy.players![0].id,
     betConfig: restoreBetConfig(copy.betConfig, copy.players!.map((player) => player.id), { startHole, roundHoles }),
   };

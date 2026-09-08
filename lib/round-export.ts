@@ -1,10 +1,11 @@
 import type { RoundSnapshot } from "./types";
 import { roundSnapshotToCsv } from "./round-utils";
+import { historicalBetDisplayLabel } from "./bet-catalog";
 
 const signed = (value: number) => `${value > 0 ? "+" : value < 0 ? "−" : ""}$${Math.abs(Math.round(value)).toLocaleString("es-MX")}`;
 
 export function roundShareText(round: RoundSnapshot) {
-  const categories = Object.entries(round.categoryResults).filter(([, value]) => value !== 0).map(([name, value]) => `${name}: ${signed(value)}`).join(" · ");
+  const categories = Object.entries(round.categoryResults).filter(([, value]) => value !== 0).map(([name, value]) => `${historicalBetDisplayLabel(name, round.presentation)}: ${signed(value)}`).join(" · ");
   return `THE BACKYARD\nPlay. Compete. Bet. Settle.\n${round.courseName} · ${round.date}\n${round.ownerName}: ${signed(round.betResult)} en apuestas\nGastos: $${round.expenseTotal.toLocaleString("es-MX")}\nNeto: ${signed(round.netResult)}${categories ? `\n${categories}` : ""}`;
 }
 
@@ -51,7 +52,7 @@ export async function roundCardBlob(round: RoundSnapshot) {
   let y = 740;
   context.font = "600 30px system-ui";
   for (const [name, value] of Object.entries(round.categoryResults).filter(([, value]) => value !== 0).slice(0, 8)) {
-    context.fillText(name, 80, y);
+    context.fillText(historicalBetDisplayLabel(name, round.presentation), 80, y);
     context.textAlign = "right";
     context.fillText(signed(value), 1000, y);
     context.textAlign = "left";

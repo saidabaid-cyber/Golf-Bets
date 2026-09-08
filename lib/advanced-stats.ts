@@ -26,6 +26,11 @@ export function normalizeAdvancedStats(value: unknown): AdvancedStatsByHole {
       if (typeof stat.penaltyStrokes === "number" && Number.isInteger(stat.penaltyStrokes) && stat.penaltyStrokes >= 0 && stat.penaltyStrokes <= 50) {
         next.penaltyStrokes = stat.penaltyStrokes;
       }
+      if (stat.teeDirection === "left" || stat.teeDirection === "center" || stat.teeDirection === "right") next.teeDirection = stat.teeDirection;
+      if (stat.landingLie === "fairway" || stat.landingLie === "rough" || stat.landingLie === "bunker" || stat.landingLie === "water_ob") next.landingLie = stat.landingLie;
+      if (typeof stat.teeClub === "string" && stat.teeClub.trim()) next.teeClub = stat.teeClub.trim().slice(0, 40);
+      if (typeof stat.teeDistance === "number" && Number.isFinite(stat.teeDistance) && stat.teeDistance >= 0 && stat.teeDistance <= 600) next.teeDistance = stat.teeDistance;
+      if (typeof stat.outOfBounds === "boolean") next.outOfBounds = stat.outOfBounds;
       if (Object.keys(next).length) nextPlayers[playerId] = next;
     }
     if (Object.keys(nextPlayers).length) normalized[hole] = nextPlayers;
