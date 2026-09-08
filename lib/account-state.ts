@@ -1,5 +1,6 @@
 import { LEGAL_DOCUMENT_VERSIONS } from "./legal-config";
 import { PRIVACY_CONTENT_ID } from "./privacy-content";
+import { normalizePlanId, type PlanId } from "./plans";
 
 export type AccountMode = "undecided" | "guest" | "authenticated";
 export const BETTING_DATA_CONSENT_TYPE = "betting_financial" as const;
@@ -46,6 +47,32 @@ export type GamePriority = (typeof GAME_PRIORITIES)[number] | "";
 export const PRICE_IMPORTANCE_LEVELS = ["LOW", "MID", "HIGH"] as const;
 export type PriceImportance = (typeof PRICE_IMPORTANCE_LEVELS)[number] | "";
 
+export const GOLF_IMPROVEMENT_GOALS = [
+  "DRIVER",
+  "IRONS",
+  "APPROACH",
+  "SHORT_GAME",
+  "BUNKER",
+  "PUTTING",
+  "CONSISTENCY",
+  "COURSE_STRATEGY",
+  "MENTAL_CONFIDENCE",
+  "LOWER_HANDICAP",
+] as const;
+export type GolfImprovementGoal = (typeof GOLF_IMPROVEMENT_GOALS)[number];
+
+export const GOLF_PRIMARY_GOALS = [
+  "LOWER_HANDICAP",
+  "MORE_CONSISTENT",
+  "SPECIFIC_AREA",
+  "ENJOY_MORE",
+  "COMPETE_TOURNAMENTS",
+] as const;
+export type GolfPrimaryGoal = (typeof GOLF_PRIMARY_GOALS)[number] | "";
+
+export const GHIN_LINK_STATUSES = ["NOT_CONNECTED", "SKIPPED", "COMING_SOON"] as const;
+export type GhinLinkStatus = (typeof GHIN_LINK_STATUSES)[number];
+
 export type BackyardProfileDetails = {
   givenName: string;
   familyName: string;
@@ -64,6 +91,11 @@ export type BackyardProfileDetails = {
   greenSpeed: GreenSpeed;
   gamePriority: GamePriority;
   priceImportance: PriceImportance;
+  improvementGoals: GolfImprovementGoal[];
+  primaryGoal: GolfPrimaryGoal;
+  targetHandicap: number | null;
+  planId: PlanId;
+  ghinLinkStatus: GhinLinkStatus;
   golfProfileUpdatedAt: string | null;
   bio: string;
   profileVisibility: "private" | "friends";
@@ -90,6 +122,11 @@ const EMPTY_PROFILE_DETAILS: BackyardProfileDetails = {
   greenSpeed: "",
   gamePriority: "",
   priceImportance: "",
+  improvementGoals: [],
+  primaryGoal: "",
+  targetHandicap: null,
+  planId: "free",
+  ghinLinkStatus: "NOT_CONNECTED",
   golfProfileUpdatedAt: null,
   bio: "",
   profileVisibility: "private",
@@ -122,6 +159,13 @@ function profileTimestamp(value: unknown, fallback: string | null | undefined) {
   return typeof value === "string" && !Number.isNaN(Date.parse(value)) ? value : fallback ?? null;
 }
 
+function profileImprovementGoals(value: unknown, fallback: GolfImprovementGoal[] | undefined) {
+  if (!Array.isArray(value)) return [...(fallback || [])];
+  return [...new Set(value.filter((item): item is GolfImprovementGoal => (
+    typeof item === "string" && (GOLF_IMPROVEMENT_GOALS as readonly string[]).includes(item)
+  )))];
+}
+
 function profileDetails(candidate: Partial<BackyardProfile>, fallback?: BackyardProfile) {
   return {
     givenName: profileText(candidate.givenName, fallback?.givenName, 80),
@@ -145,6 +189,13 @@ function profileDetails(candidate: Partial<BackyardProfile>, fallback?: Backyard
     greenSpeed: profileChoice(candidate.greenSpeed, GREEN_SPEEDS, fallback?.greenSpeed),
     gamePriority: profileChoice(candidate.gamePriority, GAME_PRIORITIES, fallback?.gamePriority),
     priceImportance: profileChoice(candidate.priceImportance, PRICE_IMPORTANCE_LEVELS, fallback?.priceImportance),
+    improvementGoals: profileImprovementGoals(candidate.improvementGoals, fallback?.improvementGoals),
+    primaryGoal: profileChoice(candidate.primaryGoal, GOLF_PRIMARY_GOALS, fallback?.primaryGoal),
+    targetHandicap: optionalProfileNumber(candidate.targetHandicap, fallback?.targetHandicap, -15, 54),
+    planId: normalizePlanId(candidate.planId ?? fallback?.planId),
+    ghinLinkStatus: candidate.ghinLinkStatus === "NOT_CONNECTED" || candidate.ghinLinkStatus === "SKIPPED" || candidate.ghinLinkStatus === "COMING_SOON"
+      ? candidate.ghinLinkStatus
+      : fallback?.ghinLinkStatus || "NOT_CONNECTED",
     golfProfileUpdatedAt: profileTimestamp(candidate.golfProfileUpdatedAt, fallback?.golfProfileUpdatedAt),
     bio: profileText(candidate.bio, fallback?.bio, 280),
     profileVisibility: candidate.profileVisibility === "friends" || candidate.profileVisibility === "private"

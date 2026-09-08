@@ -84,6 +84,7 @@ function profileCachePayload(profile: BackyardProfile) {
     username, city, state, country, homeClub, preferredTee, handedness,
     typicalScore, driverDistanceYards, driverSwingSpeedBand, usualTrajectory,
     shotTendency, greenSpeed, gamePriority, priceImportance, golfProfileUpdatedAt,
+    improvementGoals, primaryGoal, targetHandicap, planId, ghinLinkStatus,
     bio, profileVisibility,
   } = profile;
   return {
@@ -91,6 +92,7 @@ function profileCachePayload(profile: BackyardProfile) {
     username, city, state, country, homeClub, preferredTee, handedness,
     typicalScore, driverDistanceYards, driverSwingSpeedBand, usualTrajectory,
     shotTendency, greenSpeed, gamePriority, priceImportance, golfProfileUpdatedAt,
+    improvementGoals, primaryGoal, targetHandicap, planId, ghinLinkStatus,
     bio, profileVisibility,
   };
 }
