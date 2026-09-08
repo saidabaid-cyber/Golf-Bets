@@ -1,7 +1,8 @@
 import { PRIVACY_CONTENT_ID, PRIVACY_EFFECTIVE_DATE, PRIVACY_LEGAL_VERSION } from "./privacy-content";
+import { TERMS_LEGAL_VERSION } from "./legal-documents";
 
 export const LEGAL_DOCUMENT_VERSIONS = {
-  terms: "2026-09-02-v2",
+  terms: TERMS_LEGAL_VERSION,
   privacy: PRIVACY_CONTENT_ID,
   rules_referee: "2026-09-01-v1",
   age_confirmation: "2026-09-01-v1",

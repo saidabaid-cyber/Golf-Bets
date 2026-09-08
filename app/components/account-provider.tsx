@@ -261,7 +261,7 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
       {socialEnabled && providers?.status === "ready" && !providers.google && <p className="hint">Google · Pendiente de configuración.</p>}
       {(message || sessionError) && <div className="accessMessage" role="status">{message || sessionError}</div>}
       <p className="hint">Invitado es un acceso independiente: no inicia sesión ni sincroniza tus datos con una cuenta.</p>
-      <p className="legalLead">Consulta los <Link href="/legal/terms?returnTo=access">Términos de Uso</Link> y el <Link href="/legal/privacy?returnTo=access">Aviso de Privacidad</Link>. La aceptación explícita ocurre antes de crear el perfil.</p>
+      <p className="legalLead">Consulta el <Link href="/legal/privacy-simplified?returnTo=access">Aviso de Privacidad Simplificado</Link>, el <Link href="/legal/privacy?returnTo=access">Aviso de Privacidad Integral</Link> y los <Link href="/legal/terms?returnTo=access">Términos y Condiciones</Link>. La aceptación explícita ocurre antes de crear el perfil.</p>
     </section>
   </main>;
 }
@@ -282,7 +282,7 @@ function ConsentScreen({ onAccept, onBack }: { onAccept: (includeBettingConsent:
     <p>Cuando un grupo acuerde utilizar el Árbitro de Reglas de The Backyard como criterio para resolver una situación durante una partida, sus jugadores aceptan aplicar la resolución mostrada salvo que exista una decisión oficial de un Comité, árbitro autorizado o autoridad competente de la competencia.</p>
     <div className="officialPriority">En una competencia oficial, el Comité o árbitro oficial tiene siempre la decisión final. La IA no es un árbitro oficial USGA.</div>
     <label className="consentCheck"><input type="checkbox" checked={terms} onChange={(event) => setTerms(event.target.checked)} /><span>Acepto los <Link href="/legal/terms?returnTo=onboarding">Términos de Uso</Link>.</span></label>
-    <label className="consentCheck"><input type="checkbox" checked={privacy} onChange={(event) => setPrivacy(event.target.checked)} /><span>He leído y acepto el <Link href="/legal/privacy?returnTo=onboarding">Aviso de Privacidad</Link>.</span></label>
+    <label className="consentCheck"><input type="checkbox" checked={privacy} onChange={(event) => setPrivacy(event.target.checked)} /><span>He leído el <Link href="/legal/privacy-simplified?returnTo=onboarding">Aviso de Privacidad Simplificado</Link> y el <Link href="/legal/privacy?returnTo=onboarding">Aviso de Privacidad Integral</Link>.</span></label>
     <label className="consentCheck"><input type="checkbox" checked={rules} onChange={(event) => setRules(event.target.checked)} /><span>Entiendo el alcance del Árbitro de Reglas y acepto utilizar sus resoluciones como referencia acordada entre los participantes cuando corresponda.</span></label>
     <label className="consentCheck"><input type="checkbox" checked={age} onChange={(event) => setAge(event.target.checked)} /><span>Confirmo que tengo 18 años o más.</span></label>
     <label className="consentCheck expressConsentCheck"><input type="checkbox" checked={betting} onChange={(event) => setBetting(event.target.checked)} /><span>Consiento expresamente el tratamiento de los datos relativos a apuestas registradas, resultados y gastos, conforme al <Link href="/legal/privacy?returnTo=onboarding">Aviso de Privacidad</Link>. Esta autorización es específica y opcional para continuar a funciones que no registran esos datos.</span></label>

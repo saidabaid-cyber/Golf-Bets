@@ -291,6 +291,7 @@ export function AccountPanel({ view, highContrast, onHighContrastChange, notific
 
     {view === "account" && <><section className="card"><h2>Documentos y consentimiento</h2><div className="documentConsentList">
       <Link href="/legal/terms?returnTo=account"><span>Términos de Uso</span><b>{acceptedLabel("terms")}</b></Link>
+      <Link href="/legal/privacy-simplified?returnTo=account"><span>Aviso de Privacidad Simplificado</span><b>2026-09-08-v6</b></Link>
       <Link href="/legal/privacy?returnTo=account"><span>Aviso de Privacidad</span><b>{acceptedLabel("privacy")}</b></Link>
       <Link href="/legal/terms?returnTo=account#rules-referee"><span>Árbitro de Reglas</span><b>{acceptedLabel("rules_referee")}</b></Link>
       <div><span>Edad 18+</span><b>{acceptance("age_confirmation") ? "Confirmada" : "Pendiente"}</b></div>
