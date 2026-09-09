@@ -54,12 +54,15 @@ test("Configuración explica cómo agregar jugadores y grupos guardados", () => 
   assert.match(page, /Toca aquí para agregar un grupo/);
 });
 
-test("Perfil permite una foto HTTPS removible sin filtrar referrer", () => {
+test("Perfil usa selector de foto o avatar sin pedir URLs manuales", () => {
+  const picker = readFileSync("app/components/profile-image-picker.tsx", "utf8");
   assert.match(account, /validateProfileAvatarUrl\(avatarUrl\)/);
-  assert.match(account, /type="url" inputMode="url" autoComplete="url" maxLength=\{2048\}/);
-  assert.match(account, /Quitar foto/);
+  assert.match(account, /<ProfileImagePicker value=\{avatarUrl\} onChange=\{setAvatarUrl\} \/>/);
+  assert.doesNotMatch(account, /type="url" inputMode="url"/);
+  assert.match(picker, /type="file" accept="image\/jpeg,image\/png,image\/webp"/);
+  assert.match(picker, /Dejar sin imagen/);
   assert.match(account, /no modifica tu foto de Google/);
-  assert.match(account, /referrerPolicy="no-referrer"/);
+  assert.match(picker, /No necesitas pegar enlaces/);
 });
 
 test("Perfil y Cuenta anuncian errores como alertas sin disfrazarlos de éxito", () => {

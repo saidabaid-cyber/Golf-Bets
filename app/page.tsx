@@ -1158,7 +1158,6 @@ function GolfBetsApp() {
   const loba = useMemo(() => calculateLoba(course, scores, players, bets.loba, lobaHoles, order, completedHoles, roundHandicapBasis), [course, scores, players, bets.loba, lobaHoles, order, completedHoles, roundHandicapBasis]);
   const liveRabbits = useMemo(() => calculateRabbits(course, liveScores, players, bets.rabbits, order, roundHandicapBasis), [course, liveScores, players, bets.rabbits, order, roundHandicapBasis]);
   const liveSkins = useMemo(() => calculateSkins(course, liveScores, players, bets.skins, order, roundHandicapBasis), [course, liveScores, players, bets.skins, order, roundHandicapBasis]);
-  const liveUnits = useMemo(() => calculateUnits(players, unitEvents, bets.units, course, liveScores, order), [players, unitEvents, bets.units, course, liveScores, order]);
   const liveMonkey = useMemo(() => calculateMonkey(course, liveScores, players, bets.monkey, order, roundHandicapBasis), [course, liveScores, players, bets.monkey, order, roundHandicapBasis]);
   const liveFoursomes = useMemo(() => calculateFoursomes(course, liveScores, players, bets.foursome, segments, order, roundHandicapBasis), [course, liveScores, players, bets.foursome, segments, order, roundHandicapBasis]);
   const liveBallFriend = useMemo(() => calculateBallFriend(course, liveScores, players, bets.ballFriend, ballFriendSetup, order, roundHandicapBasis), [course, liveScores, players, bets.ballFriend, ballFriendSetup, order, roundHandicapBasis]);
@@ -1402,10 +1401,6 @@ function GolfBetsApp() {
 
   function editActiveRound() { setRoundClosed(false); setEditingRound(true); setTab("setup"); }
 
-  function changeScore(playerId: string, delta: number) {
-    setScore(playerId, Number(scoreFor(playerId) ?? hole.par) + delta);
-  }
-
   function goToHoleIndex(index: number) {
     setCurrentIndex(Math.max(0, Math.min(order.length - 1, index)));
     window.setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 0);
@@ -1509,14 +1504,6 @@ function GolfBetsApp() {
   function setLobaHole(next: LobaHole) {
     checkpoint();
     setLobaHoles(current => ({ ...current, [holeNumber]: next }));
-  }
-
-  function undoLastUnit(playerId: string) {
-    checkpoint();
-    setUnitEvents((events) => {
-      const idx = [...events].map((e, i) => ({ e, i })).reverse().find((x) => x.e.hole === holeNumber && x.e.playerId === playerId)?.i;
-      return idx === undefined ? events : events.filter((_, i) => i !== idx);
-    });
   }
 
   function toggleBasePair(segmentId: string, playerId: string) {
@@ -2657,7 +2644,7 @@ function GolfBetsApp() {
         <div className="frequentTemplateList">{savedPersonalRivals.map((saved) => editingSavedRivalId === saved.id && savedRivalDraft ? <div className="templateEditor rivalTemplateEditor" key={saved.id}>
           <div className="grid3">
             <div><label>Nombre</label><input value={savedRivalDraft.name} onChange={(event) => setSavedRivalDraft((draft) => draft ? { ...draft, name: event.target.value } : draft)} /></div>
-            <div><label>HCP predeterminado</label><NumericCaptureInput inputMode="decimal" step={0.1} min={-15} max={54} placeholder="HCP" value={savedRivalDraft.handicap} emptyWhenZero={false} onValueChange={(handicap) => setSavedRivalDraft((draft) => draft ? { ...draft, handicap } : draft)} /></div>
+            <div><label>HCP predeterminado</label><NumericCaptureInput inputMode="decimal" step={0.1} min={-15} max={36} placeholder="HCP" value={savedRivalDraft.handicap} emptyWhenZero={false} onValueChange={(handicap) => setSavedRivalDraft((draft) => draft ? { ...draft, handicap } : draft)} /></div>
             <MoneyInput label="Valor base" value={savedRivalDraft.baseValue ?? 100} onChange={(value) => setSavedRivalDraft((draft) => draft ? { ...draft, baseValue: value } : draft)} />
             <div><label>Quién recibe ventaja</label><select value={savedRivalDraft.advantageReceiver ?? "rival"} onChange={(event) => setSavedRivalDraft((draft) => draft ? { ...draft, advantageReceiver: event.target.value as "owner" | "rival" } : draft)}><option value="owner">Jugador principal</option><option value="rival">Rival</option></select></div>
             <NumberField label="Golpes que recibe" value={savedRivalDraft.advantageStrokes ?? 0} onChange={(value) => setSavedRivalDraft((draft) => draft ? { ...draft, advantageStrokes: Math.max(0, value) } : draft)} />
@@ -2854,8 +2841,6 @@ function GolfBetsApp() {
     : undefined;
   const currentSkin = liveSkins.events.find((e) => e.hole === holeNumber);
   const unitHoleManual = (id: string) => unitEvents.filter((e) => e.hole === holeNumber && e.playerId === id).reduce((a, e) => a + e.amount, 0);
-  const unitHoleAuto = (id: string) => liveUnits.autoByHole[holeNumber]?.[id] ?? 0;
-  const unitHoleNet = (id: string) => unitHoleManual(id) + unitHoleAuto(id);
   const bfSetup = ballFriendSetup[holeNumber] ?? { teamA: [] };
   const bfDetail = liveBallFriend.details.find((d) => d.hole === holeNumber);
   const savedBfDetail = ballFriend.details.find((d) => d.hole === holeNumber);
@@ -3273,13 +3258,13 @@ function GolfBetsApp() {
     {tab === "setup" && <>
       <section className="hero setupHero">
         <div className="setupHeroCopy"><div className="eyebrow">NUEVA JUGADA</div><h1>Configura y juega.</h1><p>La app calcula lo automático; tú solo capturas score y eventos especiales.</p></div>
-        <div className="heroDate"><input aria-label="Fecha de la ronda" className="dateInput" type="date" value={roundDate} onChange={(e) => setRoundDate(e.target.value)} /></div>
+        <div className="heroDate"><input aria-label="Fecha de la ronda" className="dateInput" type="date" value={roundDate} onChange={(e) => setRoundDate(e.target.value)} /><button type="button" className="secondary" onClick={() => { setEditingRound(false); setFeedback("Tu configuración quedó guardada como borrador."); setTab("welcome"); }}>Guardar y salir</button></div>
       </section>
 
       {roundTemplateOrigin && (() => { const sourceGroup = frequentGroups.find((group) => group.id === roundTemplateOrigin.groupId); return sourceGroup ? <section className="roundTemplateNotice" role="status"><div><span>PLANTILLA CARGADA</span><b>{sourceGroup.name}</b><p>Los cambios de HCP y apuestas pertenecen únicamente a esta ronda.</p></div><button className="secondary" onClick={saveRoundAsFrequentGroupTemplate}>Guardar estos cambios como configuración habitual</button></section> : null; })()}
 
       <section className="card">
-        <div className="sectionTitle"><div><h2>1. Campo y tee</h2><p>Elige el campo y la salida; Par y Ventaja/SI se conservan por hoyo.</p></div><div className="courseSetupActions"><button className="textButton" onClick={() => setTab("courseLibrary")}>Buscar / cerca</button><button className="textButton" onClick={startNewCourse}>+ Campo</button></div></div>
+        <div className="sectionTitle"><div><h2>1. Campo y tee inicial</h2><p>Elige una salida como punto de partida. Después puedes asignar un tee distinto a cada jugador.</p></div><div className="courseSetupActions"><button className="textButton" onClick={() => setTab("courseLibrary")}>Buscar / cerca</button><button className="textButton" onClick={startNewCourse}>+ Campo</button></div></div>
         {!courseSelected && pendingCourseIdentity && <div className="notice" id="round-course-ai-focus" role="status"><b>Campo reconocido: {pendingCourseIdentity.name}</b><br />{pendingCourseCandidates.length ? "Elige uno de sus tees destacados primero, o selecciona otro campo." : "No encontré un tee exacto en el catálogo actual. Selecciona cualquier campo y tee para continuar."}</div>}
         <div className="grid2">
           <div className={`courseSelectionField ${courseSelectionError ? "isMissing" : ""}`}><label htmlFor="round-course">Campo · Tee</label><select id="round-course" value={courseSelected ? course.id : ""} aria-invalid={courseSelectionError} aria-describedby={[!courseSelected && pendingCourseIdentity ? "round-course-ai-focus" : "", courseSelectionError ? "round-course-error" : ""].filter(Boolean).join(" ") || undefined} onChange={(e) => {
@@ -3308,7 +3293,7 @@ function GolfBetsApp() {
         {!players.length && <div className="empty">Agrega los jugadores de esta ronda.</div>}
         {players.map((p) => <div className="playerEdit" key={p.id}>
           <input placeholder="Nombre" value={p.name} onChange={(e) => updatePlayer(p.id, { name: e.target.value })} />
-          <div className={`roundHcpField ${typeof p.handicap === "number" && Number.isFinite(p.handicap) ? "" : "isMissing"}`}><NumericCaptureInput className="hcpInput" inputMode="decimal" step={0.1} min={-15} max={54} placeholder="HCP" value={p.handicap} emptyWhenZero={false} aria-invalid={typeof p.handicap !== "number" || !Number.isFinite(p.handicap)} aria-describedby={typeof p.handicap !== "number" || !Number.isFinite(p.handicap) ? `round-hcp-error-${p.id}` : undefined} onValueChange={(handicap) => updatePlayer(p.id, { handicap })} />{(typeof p.handicap !== "number" || !Number.isFinite(p.handicap)) && <span className="roundHcpError" id={`round-hcp-error-${p.id}`}>Completa el HCP</span>}</div>
+          <div className={`roundHcpField ${typeof p.handicap === "number" && Number.isFinite(p.handicap) ? "" : "isMissing"}`}><NumericCaptureInput className="hcpInput" inputMode="decimal" step={0.1} min={-15} max={36} placeholder="HCP" value={p.handicap} emptyWhenZero={false} aria-invalid={typeof p.handicap !== "number" || !Number.isFinite(p.handicap)} aria-describedby={typeof p.handicap !== "number" || !Number.isFinite(p.handicap) ? `round-hcp-error-${p.id}` : undefined} onValueChange={(handicap) => updatePlayer(p.id, { handicap })} />{(typeof p.handicap !== "number" || !Number.isFinite(p.handicap)) && <span className="roundHcpError" id={`round-hcp-error-${p.id}`}>Completa el HCP</span>}</div>
           <button className={`ownerDot ${ownerId === p.id ? "active" : ""}`} onClick={() => setOwnerId(p.id)} title="Jugador principal">★</button>
           <button className="remove" aria-label={`Quitar a ${p.name || "jugador"}`} onClick={() => { confirmRoundChange(`Quitar a ${p.name} lo excluye de las apuestas y parejas actuales.`, () => setPlayers((ps) => ps.filter((x) => x.id !== p.id))); }}>×</button>
         </div>)}
@@ -3321,7 +3306,7 @@ function GolfBetsApp() {
           </div>)}</div></details>}
           {frequentPlayers.length > 0 && <details className="frequentDisclosure"><summary><span>Jugadores frecuentes ({frequentPlayers.length})<small>Toca aquí para agregar un jugador</small></span></summary><div className="frequentTemplateList">{frequentPlayers.map((saved) => editingFrequentPlayerId === saved.id ? <div className="templateEditor" key={saved.id}>
             <input aria-label="Nombre frecuente" value={frequentPlayerDraft.name} onChange={(event) => setFrequentPlayerDraft((draft) => ({ ...draft, name: event.target.value }))} />
-            <NumericCaptureInput aria-label="HCP frecuente" className="hcpInput" inputMode="decimal" step={0.1} min={-15} max={54} placeholder="HCP" value={frequentPlayerDraft.handicap} emptyWhenZero={false} onValueChange={(handicap) => setFrequentPlayerDraft((draft) => ({ ...draft, handicap }))} />
+            <NumericCaptureInput aria-label="HCP frecuente" className="hcpInput" inputMode="decimal" step={0.1} min={-15} max={36} placeholder="HCP" value={frequentPlayerDraft.handicap} emptyWhenZero={false} onValueChange={(handicap) => setFrequentPlayerDraft((draft) => ({ ...draft, handicap }))} />
             <div className="templateActions"><button className="primary" disabled={!frequentPlayerDraft.name.trim()} onClick={saveFrequentPlayerEdit}>Guardar</button><button className="secondary" onClick={() => setEditingFrequentPlayerId(null)}>Cancelar</button></div>
           </div> : <div className="templateRow" key={saved.id}>
             <button className="templateLoad" onClick={() => appendPlayer(saved.name, saved.handicap, saved.accountUserId)}><b>{saved.name}</b><span>HCP {saved.handicap ?? "—"} · + Agregar</span></button>
@@ -3515,6 +3500,7 @@ function GolfBetsApp() {
           camels: Object.fromEntries(players.map((player) => [player.id, counterCaptureQuantity(counterBetEvents, "camels", holeNumber, player.id)])),
           fish: Object.fromEntries(players.map((player) => [player.id, counterCaptureQuantity(counterBetEvents, "fish", holeNumber, player.id)])),
         }}
+        unitQuantities={Object.fromEntries(players.map((player) => [player.id, unitHoleManual(player.id)]))}
         groupNassauLabel={bets.polla.first9.enabled || bets.polla.second9.enabled || bets.polla.total18.enabled ? groupNassauLabels.summary : undefined}
         ballFriendLabel={ballFriendSetupChipLabel(bfSetup, players, bets.ballFriend.participantIds)}
         lobaLabel={lobaSetupChipLabel(lobaHoles[holeNumber], players)}
@@ -3522,9 +3508,9 @@ function GolfBetsApp() {
         onNavigateHole={goToHoleIndex}
         onModeChange={setScoreCaptureMode}
         onScoreChange={setScore}
-        onScoreDelta={changeScore}
         onPuttsChange={setPutt}
         onCounterChange={confirmCounterBetCapture}
+        onUnitDelta={(playerId, delta) => addUnit(playerId, delta, delta > 0 ? "Captura rápida positiva" : "Captura rápida negativa")}
         onAdvancedChange={setAdvancedStat}
         onOpenLoba={() => setHoleBetEditor("loba")}
         onOpenBallFriend={() => setHoleBetEditor("ballFriend")}
@@ -3567,22 +3553,6 @@ function GolfBetsApp() {
         <CounterBetHolePanel resolutionOnly kind="camels" config={bets.camels} players={players} events={counterBetEvents} hole={holeNumber} order={order} keepers={counterBetKeepers} onQuantity={(playerId, value) => changeCounterBet("camels", playerId, value)} onDistance={(eventHole, playerId, value) => changeCounterBetDistance("camels", eventHole, playerId, value)} onKeeper={(playerId, period) => setCounterBetKeeper("camels", playerId, period)} />
         <CounterBetHolePanel resolutionOnly kind="fish" config={bets.fish} players={players} events={counterBetEvents} hole={holeNumber} order={order} keepers={counterBetKeepers} onQuantity={(playerId, value) => changeCounterBet("fish", playerId, value)} onDistance={(eventHole, playerId, value) => changeCounterBetDistance("fish", eventHole, playerId, value)} onKeeper={(playerId, period) => setCounterBetKeeper("fish", playerId, period)} />
       </>}
-
-      {scoreCaptureComplete && bets.units.enabled && <section className="card">
-        <div className="sectionTitle"><div><h2>📏 Unidades / Copas</h2><p>Birdie/Águila/Albatros/HIO se detectan solos. Marca aquí solo las especiales.</p></div></div>
-        {playersByIds(players, bets.units.participantIds).map((p) => <div className="eventRow unitEventRow" key={p.id}>
-          <div><b>{p.name}</b><span className="muted">Auto {unitHoleAuto(p.id) >= 0 ? "+" : ""}{unitHoleAuto(p.id)} · Manual {unitHoleManual(p.id) >= 0 ? "+" : ""}{unitHoleManual(p.id)} · Neto <b>{unitHoleNet(p.id) >= 0 ? "+" : ""}{unitHoleNet(p.id)}</b></span></div>
-          <div className="unitButtons">
-            <button onClick={() => addUnit(p.id, 1, "Sandy Par")}>+ Sandy</button>
-            <button onClick={() => addUnit(p.id, 1, "Oyes")}>+ Oyes</button>
-            <button onClick={() => addUnit(p.id, 1, "Hole Out")}>+ Hole Out</button>
-            <button onClick={() => addUnit(p.id, 1, "Otra positiva")}>+ Otra</button>
-            <button onClick={() => addUnit(p.id, -1, "Copa")}>− Copa</button>
-            <button onClick={() => addUnit(p.id, -1, "Otra negativa")}>− Otra</button>
-            <button className="undo" onClick={() => undoLastUnit(p.id)}>↶</button>
-          </div>
-        </div>)}
-      </section>}
 
       {scoreCaptureComplete && bets.foursome.enabled && <section className="card compact">
         <h3>🤝 Foursome actual</h3>
@@ -3750,14 +3720,14 @@ function GolfBetsApp() {
       <div className="groupEditorSectionTitle"><h3>Integrantes</h3><span>{frequentGroupDraft.players.length}</span></div>
       <div className="groupMemberList">{frequentGroupDraft.players.map((member, index) => <div className="groupMemberEditor" key={index}>
         <label>Jugador {index + 1}<input aria-label={`Nombre del integrante ${index + 1}`} value={member.name} onChange={(event) => editFrequentGroupMember(index, { name: event.target.value })} /></label>
-        <label>HCP predeterminado<NumericCaptureInput aria-label={`HCP del integrante ${index + 1}`} inputMode="decimal" step={0.1} min={-15} max={54} placeholder="HCP" value={member.handicap} emptyWhenZero={false} onValueChange={(handicap) => editFrequentGroupMember(index, { handicap })} /></label>
+        <label>HCP predeterminado<NumericCaptureInput aria-label={`HCP del integrante ${index + 1}`} inputMode="decimal" step={0.1} min={-15} max={36} placeholder="HCP" value={member.handicap} emptyWhenZero={false} onValueChange={(handicap) => editFrequentGroupMember(index, { handicap })} /></label>
         <div className="groupMemberActions"><button className="secondary" aria-label={`Subir a ${member.name}`} disabled={index === 0} onClick={() => setFrequentGroupDraft((group) => group ? moveFrequentGroupMember(group, index, -1) : group)}>↑</button><button className="secondary" aria-label={`Bajar a ${member.name}`} disabled={index === frequentGroupDraft.players.length - 1} onClick={() => setFrequentGroupDraft((group) => group ? moveFrequentGroupMember(group, index, 1) : group)}>↓</button><button className="dangerGhost" onClick={() => removeMemberFromFrequentGroup(index)}>Quitar</button></div>
       </div>)}</div>
       {!frequentGroupDraft.players.length && <div className="empty">Agrega al menos un integrante para guardar el grupo.</div>}
       <div className="groupMemberAdd"><div className="groupEditorSectionTitle"><h3>Agregar integrante</h3></div>
         <div className="segmented"><button className={groupMemberSource === "frequent" ? "active" : ""} disabled={!frequentPlayers.length} onClick={() => setGroupMemberSource("frequent")}>Jugador frecuente</button><button className={groupMemberSource === "new" ? "active" : ""} onClick={() => setGroupMemberSource("new")}>Jugador nuevo</button></div>
         {groupMemberSource === "frequent" && frequentPlayers.length > 0 && <div className="groupMemberAddRow"><label>Elegir jugador<select value={selectedGroupFrequentPlayerId} onChange={(event) => setSelectedGroupFrequentPlayerId(event.target.value)}>{frequentPlayers.map((player) => <option key={player.id} value={player.id}>{player.name} · HCP {player.handicap ?? "—"}</option>)}</select></label><button className="secondary" disabled={!selectedGroupFrequentPlayerId} onClick={addExistingPlayerToFrequentGroup}>Agregar</button></div>}
-        {groupMemberSource === "new" && <><div className="groupMemberNewRow"><label>Nombre<input placeholder="Nombre del jugador" value={newGroupMember.name} onChange={(event) => setNewGroupMember((member) => ({ ...member, name: event.target.value }))} /></label><label>HCP predeterminado<NumericCaptureInput inputMode="decimal" step={0.1} min={-15} max={54} placeholder="HCP" value={newGroupMember.handicap} emptyWhenZero={false} onValueChange={(handicap) => setNewGroupMember((member) => ({ ...member, handicap }))} /></label></div><label className="checkRow"><input type="checkbox" checked={saveNewGroupMemberAsFrequent} onChange={(event) => setSaveNewGroupMemberAsFrequent(event.target.checked)} />Guardar como jugador frecuente</label><button className="secondary groupMemberAddButton" disabled={!newGroupMember.name.trim()} onClick={addNewPlayerToFrequentGroup}>Agregar jugador nuevo</button></>}
+        {groupMemberSource === "new" && <><div className="groupMemberNewRow"><label>Nombre<input placeholder="Nombre del jugador" value={newGroupMember.name} onChange={(event) => setNewGroupMember((member) => ({ ...member, name: event.target.value }))} /></label><label>HCP predeterminado<NumericCaptureInput inputMode="decimal" step={0.1} min={-15} max={36} placeholder="HCP" value={newGroupMember.handicap} emptyWhenZero={false} onValueChange={(handicap) => setNewGroupMember((member) => ({ ...member, handicap }))} /></label></div><label className="checkRow"><input type="checkbox" checked={saveNewGroupMemberAsFrequent} onChange={(event) => setSaveNewGroupMemberAsFrequent(event.target.checked)} />Guardar como jugador frecuente</label><button className="secondary groupMemberAddButton" disabled={!newGroupMember.name.trim()} onClick={addNewPlayerToFrequentGroup}>Agregar jugador nuevo</button></>}
       </div>
       {frequentGroupEditError && <div className="notice bad" role="alert">{frequentGroupEditError}</div>}
       <div className="dialogActions"><button className="secondary" onClick={resetFrequentGroupEditor}>Cancelar</button><button className="primary" disabled={!frequentGroupDraft.name.trim() || !frequentGroupDraft.players.length || frequentGroupDraft.players.some((member) => !member.name.trim())} onClick={saveFrequentGroupEdit}>Guardar</button></div>

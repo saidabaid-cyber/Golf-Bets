@@ -14,7 +14,6 @@ import type {
 } from "../../lib/types";
 import { haversineDistanceKm, isValidGeographicPoint } from "../../lib/course-distance";
 import { roundCaptureFieldsForPlayer, scoreToParLabel } from "../../lib/round-capture";
-import { NumericCaptureInput } from "./numeric-capture-input";
 import { ScorecardHoleNetPreview } from "./scorecard-hole-preview";
 import styles from "./round-capture-v2.module.css";
 
@@ -31,12 +30,13 @@ export type RoundCaptureV2Props = {
   ownerId: string;
   ownerAvatarUrl?: string;
   mode: ScoreCaptureMode;
-  bets: Pick<BetConfig, "vipers" | "camels" | "fish" | "loba" | "ballFriend">;
+  bets: Pick<BetConfig, "vipers" | "camels" | "fish" | "loba" | "ballFriend" | "units">;
   supplementalBets: SupplementalBet[];
   scores: Record<string, number | null | undefined>;
   putts: Record<string, number | null | undefined>;
   advancedStats: Record<string, AdvancedHoleStat | undefined>;
   counterQuantities: CounterQuantities;
+  unitQuantities: Record<string, number>;
   groupNassauLabel?: string;
   ballFriendLabel?: string;
   lobaLabel?: string;
@@ -44,9 +44,9 @@ export type RoundCaptureV2Props = {
   onNavigateHole: (index: number) => void;
   onModeChange: (mode: ScoreCaptureMode) => void;
   onScoreChange: (playerId: string, value: number | null) => void;
-  onScoreDelta: (playerId: string, delta: number) => void;
   onPuttsChange: (playerId: string, value: number | null) => void;
   onCounterChange: (kind: CounterBetKind, playerId: string, value: number | null) => void;
+  onUnitDelta: (playerId: string, delta: number) => void;
   onAdvancedChange: (playerId: string, patch: Partial<AdvancedHoleStat>) => void;
   onOpenLoba: () => void;
   onOpenBallFriend: () => void;
@@ -62,20 +62,29 @@ function initials(name: string) {
   return name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "BY";
 }
 
-function CompactStepper({ label, value, fallback = 0, min = 0, max = 99, onChange }: { label: string; value: number | null | undefined; fallback?: number; min?: number; max?: number; onChange: (value: number) => void }) {
-  const current = typeof value === "number" && Number.isFinite(value) ? value : fallback;
-  return <div className={styles.stepper} role="group" aria-label={label}>
+function CompactStepper({ label, value, fallback = 0, min = 0, max = 99, onChange, large = false }: { label: string; value: number | null | undefined; fallback?: number; min?: number; max?: number; onChange: (value: number) => void; large?: boolean }) {
+  const confirmed = typeof value === "number" && Number.isFinite(value);
+  const current = confirmed ? value : fallback;
+  return <div className={`${styles.stepper} ${large ? styles.stepperLarge : ""}`} role="group" aria-label={label}>
     <button type="button" aria-label={`Restar en ${label}`} disabled={current <= min} onClick={() => onChange(Math.max(min, current - 1))}>−</button>
-    <button type="button" className={styles.stepperValue} aria-label={`Confirmar ${label}: ${current}`} aria-pressed={typeof value === "number"} data-pending={typeof value !== "number"} onClick={() => onChange(current)}>{current}</button>
+    <button type="button" className={styles.stepperValue} aria-label={`Confirmar ${label}: ${current}`} aria-pressed={confirmed} data-pending={!confirmed} onClick={() => onChange(current)}>{current}</button>
     <button type="button" aria-label={`Sumar en ${label}`} disabled={current >= max} onClick={() => onChange(Math.min(max, current + 1))}>+</button>
   </div>;
 }
 
-function TapCounter({ label, icon, value, max = 20, onChange }: { label: string; icon: string; value: number | null | undefined; max?: number; onChange: (value: number) => void }) {
+function SignedStepper({ label, value, onDelta }: { label: string; value: number; onDelta: (delta: number) => void }) {
+  return <div className={styles.signedStepper} role="group" aria-label={label}>
+    <button type="button" aria-label={`Restar ${label}`} onClick={() => onDelta(-1)}>−</button>
+    <span aria-live="polite">{value > 0 ? "+" : ""}{value}</span>
+    <button type="button" aria-label={`Sumar ${label}`} onClick={() => onDelta(1)}>+</button>
+  </div>;
+}
+
+function TapCounter({ label, icon, value, max = 20, onChange, compact = false }: { label: string; icon: string; value: number | null | undefined; max?: number; onChange: (value: number) => void; compact?: boolean }) {
   const confirmed = typeof value === "number" && Number.isFinite(value);
-  const current = typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
-  return <div className={styles.tapCounter} role="group" aria-label={label}>
-    <button type="button" className={styles.counterAdd} aria-label={`Agregar ${label}`} disabled={current >= max} onClick={() => onChange(Math.min(max, current + 1))}><span aria-hidden="true">{icon}</span><b>{current || ""}</b></button>
+  const current = confirmed ? Math.max(0, Math.trunc(value)) : 0;
+  return <div className={`${styles.tapCounter} ${compact ? styles.tapCounterCompact : ""}`} role="group" aria-label={label}>
+    <button type="button" className={styles.counterAdd} aria-label={`Agregar ${label}`} disabled={current >= max} onClick={() => onChange(Math.min(max, current + 1))}><span aria-hidden="true">{icon}</span><span>{label}</span>{current > 0 && <b>{current}</b>}</button>
     {current > 0
       ? <button type="button" className={styles.counterSubtract} aria-label={`Restar ${label}`} onClick={() => onChange(current - 1)}>−</button>
       : !confirmed
@@ -84,41 +93,53 @@ function TapCounter({ label, icon, value, max = 20, onChange }: { label: string;
   </div>;
 }
 
-function DynamicInputs({ player, fields, putts, counters, onPutts, onCounter }: {
+function ToggleChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return <button type="button" className={styles.toggleChip} data-active={active} aria-pressed={active} onClick={onClick}>{label}</button>;
+}
+
+function GroupRequiredInputs({ player, fields, putts, counters, unitsActive, units, onPutts, onCounter, onUnitDelta }: {
   player: Player;
   fields: ReturnType<typeof roundCaptureFieldsForPlayer>;
   putts: number | null | undefined;
   counters: Record<CounterBetKind, number | undefined>;
+  unitsActive: boolean;
+  units: number;
   onPutts: (value: number | null) => void;
   onCounter: (kind: CounterBetKind, value: number | null) => void;
+  onUnitDelta: (delta: number) => void;
 }) {
-  if (!fields.length) return null;
-  return <div className={styles.dynamicFields}>
+  if (!fields.length && !unitsActive) return null;
+  return <div className={styles.groupRequired}>
     {fields.includes("putts") && <div className={styles.compactField}><span>Putts</span><CompactStepper label={`Putts ${player.name}`} value={putts} fallback={2} min={0} max={20} onChange={onPutts} /></div>}
-    {fields.includes("bunker") && <div className={styles.compactField}><span>Bnk</span><TapCounter label={`Bunker ${player.name}`} icon="🐫" value={counters.camels} onChange={(value) => onCounter("camels", value)} /></div>}
-    {fields.includes("fish") && <div className={styles.compactField}><span>Pez · agua</span><TapCounter label={`Peces por agua de ${player.name}`} icon="🐟" value={counters.fish} onChange={(value) => onCounter("fish", value)} /></div>}
+    {fields.includes("bunker") && <TapCounter compact label="Bunker" icon="⛱" value={counters.camels} onChange={(value) => onCounter("camels", value)} />}
+    {fields.includes("fish") && <TapCounter compact label="Agua" icon="💧" value={counters.fish} onChange={(value) => onCounter("fish", value)} />}
+    {unitsActive && <div className={styles.compactField}><span>Unidades</span><SignedStepper label={`Unidades ${player.name}`} value={units} onDelta={onUnitDelta} /></div>}
   </div>;
 }
 
-function BinaryChoice({ label, value, onChange }: { label: string; value?: boolean; onChange: (value: boolean | undefined) => void }) {
-  return <div><label>{label}</label><div className={styles.binary}>
-    <button type="button" data-active={value === true} aria-pressed={value === true} onClick={() => onChange(value === true ? undefined : true)}>Sí</button>
-    <button type="button" data-active={value === false} aria-pressed={value === false} onClick={() => onChange(value === false ? undefined : false)}>No</button>
-  </div></div>;
-}
+const TEE_CLUBS = ["Driver", "Madera", "Híbrido", "Hierro"] as const;
 
-function AdvancedPlayer({ player, stat, onChange }: { player: Player; stat: AdvancedHoleStat; onChange: (patch: Partial<AdvancedHoleStat>) => void }) {
-  return <section className={styles.advancedPlayer}>
-    <h4>{player.name} · estadísticas opcionales</h4>
-    <div className={styles.advancedGrid}>
-      <label>Dirección de salida<select value={stat.teeDirection || ""} onChange={(event) => onChange({ teeDirection: (event.target.value || undefined) as AdvancedHoleStat["teeDirection"] })}><option value="">Sin capturar</option><option value="left">Izquierda</option><option value="center">Centro</option><option value="right">Derecha</option></select></label>
-      <label>Lie de llegada<select value={stat.landingLie || ""} onChange={(event) => onChange({ landingLie: (event.target.value || undefined) as AdvancedHoleStat["landingLie"] })}><option value="">Sin capturar</option><option value="fairway">Fairway</option><option value="rough">Rough</option><option value="bunker">Bunker</option><option value="water_ob">Agua / OB</option></select></label>
-      <label>Palo de salida<input value={stat.teeClub || ""} maxLength={40} placeholder="Driver" onChange={(event) => onChange({ teeClub: event.target.value.trimStart() || undefined })} /></label>
-      <label>Distancia<NumericCaptureInput aria-label={`Distancia de salida ${player.name}`} min={0} max={600} step={1} value={stat.teeDistance} emptyWhenZero={false} placeholder="yd" onValueChange={(value) => onChange({ teeDistance: value === null ? undefined : value })} /></label>
-      <BinaryChoice label="Fairway" value={stat.fairwayHit} onChange={(fairwayHit) => onChange({ fairwayHit })} />
-      <BinaryChoice label="Green en regulación" value={stat.greenInRegulation} onChange={(greenInRegulation) => onChange({ greenInRegulation })} />
-      <div className={styles.compactField}><span>Penalidades</span><TapCounter label={`Golpes de penalidad ${player.name}`} icon="⚠️" max={50} value={stat.penaltyStrokes} onChange={(value) => onChange({ penaltyStrokes: value })} /></div>
-      <BinaryChoice label="Fuera de límites" value={stat.outOfBounds} onChange={(outOfBounds) => onChange({ outOfBounds })} />
+function OwnerStatistics({ player, stat, onChange }: { player: Player; stat: AdvancedHoleStat; onChange: (patch: Partial<AdvancedHoleStat>) => void }) {
+  return <section className={styles.ownerStatistics} aria-label={`Estadísticas opcionales de ${player.name}`}>
+    <div className={styles.statsHeading}><div><span className="eyebrow">SÓLO TÚ</span><h3>Estadísticas del hoyo</h3></div><small>Todo es opcional</small></div>
+
+    <div className={styles.statBlock}>
+      <span className={styles.statLabel}>Salida</span>
+      <div className={styles.choiceRow} role="group" aria-label="Dirección de salida">
+        {([["left", "← Izq"], ["center", "Centro"], ["right", "Der →"]] as const).map(([value, label]) => <ToggleChip key={value} label={label} active={stat.teeDirection === value} onClick={() => onChange({ teeDirection: stat.teeDirection === value ? undefined : value, fairwayHit: stat.teeDirection === value ? undefined : value === "center" })} />)}
+      </div>
+    </div>
+
+    <div className={styles.statBlock}>
+      <span className={styles.statLabel}>Palo de salida</span>
+      <div className={styles.choiceRow}>{TEE_CLUBS.map((club) => <ToggleChip key={club} label={club} active={stat.teeClub === club} onClick={() => onChange({ teeClub: stat.teeClub === club ? undefined : club })} />)}</div>
+    </div>
+
+    <div className={styles.statsGrid}>
+      <div className={styles.compactField}><span>Distancia 1er putt · ft</span><CompactStepper label={`Distancia del primer putt ${player.name}`} value={stat.firstPuttDistanceFeet} fallback={0} min={0} max={300} onChange={(value) => onChange({ firstPuttDistanceFeet: value })} /></div>
+      <div className={styles.compactField}><span>Green en regulación</span><div className={styles.choiceRow}><ToggleChip label="GIR" active={stat.greenInRegulation === true} onClick={() => onChange({ greenInRegulation: stat.greenInRegulation === true ? undefined : true })} /><ToggleChip label="No GIR" active={stat.greenInRegulation === false} onClick={() => onChange({ greenInRegulation: stat.greenInRegulation === false ? undefined : false })} /></div></div>
+      <TapCounter label="Penalidad" icon="⚠" max={50} value={stat.penaltyStrokes} onChange={(value) => onChange({ penaltyStrokes: value })} />
+      <ToggleChip label="OB" active={stat.outOfBounds === true} onClick={() => onChange({ outOfBounds: stat.outOfBounds === true ? undefined : true })} />
     </div>
   </section>;
 }
@@ -126,15 +147,15 @@ function AdvancedPlayer({ player, stat, onChange }: { player: Player; stat: Adva
 export function RoundCaptureV2(props: RoundCaptureV2Props) {
   const {
     course, hole, order, currentIndex, completedHoles, players, playerTeeAssignments = [], ownerId, ownerAvatarUrl, mode, bets,
-    supplementalBets, scores, putts, advancedStats, counterQuantities, groupNassauLabel, ballFriendLabel, lobaLabel,
+    supplementalBets, scores, putts, advancedStats, counterQuantities, unitQuantities, groupNassauLabel, ballFriendLabel, lobaLabel,
   } = props;
   const [gpsState, setGpsState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [gpsMessage, setGpsMessage] = useState("");
   const owner = players.find((player) => player.id === ownerId) || players[0];
   const group = players.filter((player) => player.id !== owner?.id);
-  const fields = (playerId: string) => roundCaptureFieldsForPlayer({ mode, playerId, playedHoleIndex: currentIndex, bets, supplementalBets });
-  const allGroupFields = new Set(group.flatMap((player) => fields(player.id)));
+  const quickFields = (playerId: string) => roundCaptureFieldsForPlayer({ mode: "quick", playerId, playedHoleIndex: currentIndex, bets, supplementalBets });
   const teeLabel = (playerId: string) => playerTeeAssignments.find((assignment) => assignment.playerId === playerId)?.teeName || course.teeName;
+  const unitParticipates = (playerId: string) => bets.units.enabled && bets.units.participantIds.includes(playerId);
 
   function requestGps() {
     if (!("geolocation" in navigator)) {
@@ -168,10 +189,22 @@ export function RoundCaptureV2(props: RoundCaptureV2Props) {
     fish: counterQuantities.fish[playerId],
   });
 
+  function setOwnerBunker(value: number) {
+    if (!owner) return;
+    props.onAdvancedChange(owner.id, { bunkerCount: value });
+    if (quickFields(owner.id).includes("bunker")) props.onCounterChange("camels", owner.id, value);
+  }
+
+  function setOwnerPenaltyArea(value: number) {
+    if (!owner) return;
+    props.onAdvancedChange(owner.id, { penaltyAreaCount: value });
+    if (quickFields(owner.id).includes("fish")) props.onCounterChange("fish", owner.id, value);
+  }
+
   return <div className={styles.screen}>
     <section className={styles.hero}>
       <div>
-        <div className="eyebrow">{course.name} · {course.teeName}</div>
+        <div className="eyebrow">{course.name}</div>
         <div className={styles.heroTitle}><h1>Hoyo {hole.number}</h1></div>
         <div className={styles.holeFacts}>
           <span>Par {hole.par}</span><span>{hole.yards ? `${hole.yards} yd` : "Yardas —"}</span><span>SI {hole.strokeIndex}</span>
@@ -186,17 +219,17 @@ export function RoundCaptureV2(props: RoundCaptureV2Props) {
 
     <div className={styles.toolbar}>
       <button type="button" className={styles.camera} aria-label="Escanear tarjeta" title="Escanear tarjeta" onClick={props.onOpenScanner}>📷</button>
-      <button type="button" onClick={props.onToggleFullCard}>{props.fullCardVisible ? "Ocultar tarjeta" : "Tarjeta completa"}</button>
+      <button type="button" onClick={props.onToggleFullCard}>{props.fullCardVisible ? "Ocultar tarjeta" : "Tarjeta"}</button>
       <button type="button" onClick={props.onOpenStandings}>Cómo vamos</button>
       <button type="button" disabled={props.undoDisabled} onClick={props.onUndo}>↶ Deshacer</button>
     </div>
 
     <section className={`card ${styles.captureCard}`}>
       <header className={styles.modeHeader}>
-        <div><h2>Captura del hoyo</h2><p>En Rápida sólo aparecen datos que necesita una apuesta activa.</p></div>
+        <div><h2>Captura del hoyo</h2><p>Primero score y putts. Lo demás aparece sólo cuando aporta.</p></div>
         <div className={styles.modeSwitch} role="group" aria-label="Modo de captura">
-          <button type="button" data-active={mode === "quick"} aria-pressed={mode === "quick"} onClick={() => props.onModeChange("quick")}>RÁPIDA</button>
-          <button type="button" data-active={mode === "advanced"} aria-pressed={mode === "advanced"} onClick={() => props.onModeChange("advanced")}>ESTADÍSTICAS</button>
+          <button type="button" data-active={mode === "quick"} aria-pressed={mode === "quick"} onClick={() => props.onModeChange("quick")}>SIN ESTADÍSTICA</button>
+          <button type="button" data-active={mode === "advanced"} aria-pressed={mode === "advanced"} onClick={() => props.onModeChange("advanced")}>CON ESTADÍSTICA</button>
         </div>
       </header>
 
@@ -207,46 +240,45 @@ export function RoundCaptureV2(props: RoundCaptureV2Props) {
         {bets.ballFriend.enabled && <button type="button" onClick={props.onOpenBallFriend}>{ballFriendLabel || "⚪🤝 Elegir Bola Amiga"}</button>}
       </div>}
 
-      {owner && <article className={styles.primaryPlayer}>
-        {ownerAvatarUrl ? <img className={styles.avatar} alt="" src={ownerAvatarUrl} /> : <span className={styles.avatar} aria-hidden="true">{initials(owner.name)}</span>}
-        <div>
-          <div className={styles.playerHeading}>
-            <div><b>{owner.name || "Jugador principal"}</b><small>HCP {owner.handicap ?? "—"} · Tee {teeLabel(owner.id)} · Jugador principal</small></div>
-            <span className={styles.toPar}>{scoreToParLabel(scores[owner.id], hole.par)}</span>
-          </div>
+      {owner && <>
+        <article className={styles.primaryPlayer}>
+          <header className={styles.primaryHeader}>
+            {ownerAvatarUrl ? <img className={styles.avatar} alt="" src={ownerAvatarUrl} /> : <span className={styles.avatar} aria-hidden="true">{initials(owner.name)}</span>}
+            <div className={styles.playerHeading}>
+              <div><b>{owner.name || "Jugador principal"}</b><small>HCP de juego {owner.handicap ?? "—"} · {teeLabel(owner.id)}</small></div>
+              <span className={styles.toPar}>{scoreToParLabel(scores[owner.id], hole.par)}</span>
+            </div>
+          </header>
           <ScorecardHoleNetPreview player={owner} hole={hole} gross={scores[owner.id]} />
-          <div className={styles.mainScore}>
-            <button type="button" aria-label={`Restar golpe a ${owner.name}`} onClick={() => props.onScoreDelta(owner.id, -1)}>−</button>
-            <NumericCaptureInput aria-label={`Score ${owner.name} hoyo ${hole.number}`} min={1} step={1} value={scores[owner.id]} emptyWhenZero={false} commitUnchanged placeholder={String(hole.par)} onValueChange={(value) => props.onScoreChange(owner.id, value)} />
-            <button type="button" aria-label={`Sumar golpe a ${owner.name}`} onClick={() => props.onScoreDelta(owner.id, 1)}>+</button>
-            <button type="button" className={styles.par} onClick={() => props.onScoreChange(owner.id, hole.par)}>PAR</button>
+
+          <div className={styles.primaryControls}>
+            <div className={styles.primaryControl}><span>SCORE</span><CompactStepper large label={`Score ${owner.name} hoyo ${hole.number}`} value={scores[owner.id]} fallback={hole.par} min={1} onChange={(value) => props.onScoreChange(owner.id, value)} /><button type="button" className={styles.parButton} onClick={() => props.onScoreChange(owner.id, hole.par)}>PAR</button></div>
+            <div className={styles.primaryControl}><span>PUTTS</span><CompactStepper large label={`Putts ${owner.name} hoyo ${hole.number}`} value={putts[owner.id]} fallback={2} min={0} max={20} onChange={(value) => props.onPuttsChange(owner.id, value)} /></div>
+          </div>
+
+          <div className={styles.quickFacts} aria-label="Eventos rápidos del jugador principal">
+            {(mode === "advanced" || quickFields(owner.id).includes("bunker")) && <TapCounter label="Bunker" icon="⛱" value={quickFields(owner.id).includes("bunker") ? countersFor(owner.id).camels : advancedStats[owner.id]?.bunkerCount} onChange={setOwnerBunker} />}
+            {(mode === "advanced" || quickFields(owner.id).includes("fish")) && <TapCounter label="Agua / drop" icon="💧" value={quickFields(owner.id).includes("fish") ? countersFor(owner.id).fish : advancedStats[owner.id]?.penaltyAreaCount} onChange={setOwnerPenaltyArea} />}
+            {unitParticipates(owner.id) && <div className={styles.compactField}><span>Unidades</span><SignedStepper label={`Unidades ${owner.name}`} value={unitQuantities[owner.id] || 0} onDelta={(delta) => props.onUnitDelta(owner.id, delta)} /></div>}
           </div>
           {props.playerIndicators(owner.id).length > 0 && <span className="playerHoleBetBadges">{props.playerIndicators(owner.id).map((indicator) => <i key={indicator}>{indicator}</i>)}</span>}
-        </div>
-        <DynamicInputs player={owner} fields={fields(owner.id)} putts={putts[owner.id]} counters={countersFor(owner.id)} onPutts={(value) => props.onPuttsChange(owner.id, value)} onCounter={(kind, value) => props.onCounterChange(kind, owner.id, value)} />
-      </article>}
+        </article>
 
-      {group.length > 0 && <>
-        <h3 className={styles.groupTitle}>JUGADORES DEL GRUPO</h3>
-        <div className={styles.groupTableWrap}><table className={styles.groupTable}>
-          <thead><tr><th>Jugador</th><th>Score</th>{allGroupFields.has("putts") && <th>Putts</th>}{allGroupFields.has("bunker") && <th>Bnk</th>}{allGroupFields.has("fish") && <th>Pez</th>}{allGroupFields.has("penalties") && <th>Pen</th>}{allGroupFields.has("ob") && <th>OB</th>}</tr></thead>
-          <tbody>{group.map((player) => {
-            const playerFields = fields(player.id);
-            const counters = countersFor(player.id);
-            return <tr key={player.id}>
-              <td className={styles.groupName}><b>{player.name || "Sin nombre"}</b><small>HCP {player.handicap ?? "—"} · {teeLabel(player.id)} · {scoreToParLabel(scores[player.id], hole.par)}</small></td>
-              <td><CompactStepper label={`Score ${player.name} hoyo ${hole.number}`} value={scores[player.id]} fallback={hole.par} min={1} onChange={(value) => props.onScoreChange(player.id, value)} /></td>
-              {allGroupFields.has("putts") && <td>{playerFields.includes("putts") ? <CompactStepper label={`Putts ${player.name} hoyo ${hole.number}`} value={putts[player.id]} fallback={2} min={0} max={20} onChange={(value) => props.onPuttsChange(player.id, value)} /> : "—"}</td>}
-              {allGroupFields.has("bunker") && <td>{playerFields.includes("bunker") ? <TapCounter label={`Bunker ${player.name} hoyo ${hole.number}`} icon="🐫" value={counters.camels} onChange={(value) => props.onCounterChange("camels", player.id, value)} /> : "—"}</td>}
-              {allGroupFields.has("fish") && <td>{playerFields.includes("fish") ? <TapCounter label={`Peces por agua de ${player.name} hoyo ${hole.number}`} icon="🐟" value={counters.fish} onChange={(value) => props.onCounterChange("fish", player.id, value)} /> : "—"}</td>}
-              {allGroupFields.has("penalties") && <td>{playerFields.includes("penalties") ? <TapCounter label={`Penalidades ${player.name} hoyo ${hole.number}`} icon="⚠️" value={advancedStats[player.id]?.penaltyStrokes} onChange={(value) => props.onAdvancedChange(player.id, { penaltyStrokes: value })} /> : "—"}</td>}
-              {allGroupFields.has("ob") && <td>{playerFields.includes("ob") ? <button type="button" className={styles.obToggle} data-active={advancedStats[player.id]?.outOfBounds === true} aria-pressed={advancedStats[player.id]?.outOfBounds === true} onClick={() => props.onAdvancedChange(player.id, { outOfBounds: advancedStats[player.id]?.outOfBounds === true ? undefined : true })}>OB</button> : "—"}</td>}
-            </tr>;
-          })}</tbody>
-        </table></div>
+        {mode === "advanced" && <OwnerStatistics player={owner} stat={advancedStats[owner.id] || {}} onChange={(patch) => props.onAdvancedChange(owner.id, patch)} />}
       </>}
 
-      {mode === "advanced" && <div className={styles.advancedList}>{players.map((player) => <AdvancedPlayer key={player.id} player={player} stat={advancedStats[player.id] || {}} onChange={(patch) => props.onAdvancedChange(player.id, patch)} />)}</div>}
+      {group.length > 0 && <>
+        <div className={styles.groupTitle}><div><span>JUGADORES DEL GRUPO</span><small>Sólo score y datos necesarios para las apuestas</small></div></div>
+        <div className={styles.groupList}>{group.map((player) => {
+          const playerFields = quickFields(player.id);
+          const counters = countersFor(player.id);
+          return <article className={styles.groupPlayer} key={player.id}>
+            <div className={styles.groupIdentity}><div><b>{player.name || "Sin nombre"}</b><small>HCP {player.handicap ?? "—"} · {teeLabel(player.id)}</small></div><span>{scoreToParLabel(scores[player.id], hole.par)}</span></div>
+            <div className={styles.groupScore}><span>SCORE</span><CompactStepper label={`Score ${player.name} hoyo ${hole.number}`} value={scores[player.id]} fallback={hole.par} min={1} onChange={(value) => props.onScoreChange(player.id, value)} /></div>
+            <GroupRequiredInputs player={player} fields={playerFields} putts={putts[player.id]} counters={counters} unitsActive={unitParticipates(player.id)} units={unitQuantities[player.id] || 0} onPutts={(value) => props.onPuttsChange(player.id, value)} onCounter={(kind, value) => props.onCounterChange(kind, player.id, value)} onUnitDelta={(delta) => props.onUnitDelta(player.id, delta)} />
+          </article>;
+        })}</div>
+      </>}
     </section>
   </div>;
 }

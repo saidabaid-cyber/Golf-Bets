@@ -78,7 +78,7 @@ export function validateRoundSetupAction(action: RoundSetupAction, draft: RoundS
         && draft.players.some((player) => player.id === action.playerId)
         && Number.isFinite(action.handicap)
         && action.handicap >= -15
-        && action.handicap <= 54
+        && action.handicap <= 36
         ? { valid: true }
         : { valid: false, code: "player-handicap", message: "El handicap debe pertenecer a un jugador de la ronda y estar entre -15 y 54." };
     case "set_player_tees": {

@@ -42,7 +42,8 @@ test("$100 y 80% se confirman completos; signo, punto y coma usan teclado de tex
   assert.match(input, /flushSync\(\(\) => onValueChange\(finalized\.value\)\)/);
   assert.doesNotMatch(input, /onValueChange\([^\n]*event\.target\.value/);
   const capture = readFileSync("app/components/round-capture-v2.tsx", "utf8");
-  assert.match(capture, /commitUnchanged placeholder=\{String\(hole\.par\)\}/);
+  assert.match(capture, /<CompactStepper large label=\{`Score \$\{owner\.name\} hoyo \$\{hole\.number\}`\}/);
+  assert.match(capture, /fallback=\{hole\.par\} min=\{1\}/);
 });
 
 test("el último carácter del score se confirma antes de guardar, sin microtask ni render intermedio", () => {
@@ -263,7 +264,7 @@ test("scores siguen arriba y Personales queda fuera del Resumen General sin dupl
   const priorStatus = page.indexOf('<section className="card compact priorBetStatus"');
   assert.ok(scorecard >= 0 && priorStatus > scorecard);
   assert.ok(capture.indexOf("styles.primaryPlayer") < capture.indexOf("styles.groupTitle"));
-  assert.match(capture, /aria-label=\{`Score \$\{owner\.name\} hoyo \$\{hole\.number\}`\}/);
+  assert.match(capture, /label=\{`Score \$\{owner\.name\} hoyo \$\{hole\.number\}`\}/);
   assert.match(page, /generalBetBalances = useMemo\(\(\) => mergeBalances\(players,[^\n]+manual\.balances/);
   assert.doesNotMatch(page.match(/const generalBetBalances[^\n]+/)?.[0] || "", /personals\.balances/);
   assert.match(page, /title={<SetupModeTitle icon=\{BET_PRESENTATION\.personals\.icon\} title=\{BET_PRESENTATION\.personals\.title\}/);

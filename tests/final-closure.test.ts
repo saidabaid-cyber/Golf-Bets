@@ -51,6 +51,7 @@ test("HCP Index conserva decimales y notación plus sin convertir vacío a cero"
   assert.deepEqual(validateProfileDraft("Said", "8.4"), { ok: true, displayName: "Said", defaultHandicap: 8.4 });
   assert.deepEqual(validateProfileDraft("Said", "12,7"), { ok: true, displayName: "Said", defaultHandicap: 12.7 });
   assert.deepEqual(validateProfileDraft("Said", "+1.2"), { ok: true, displayName: "Said", defaultHandicap: -1.2 });
+  assert.deepEqual(validateProfileDraft("Said", "48"), { ok: true, displayName: "Said", defaultHandicap: 36 });
   assert.equal(profileHandicapInput(null), "");
   assert.equal(profileHandicapInput(-1.2), "+1.2");
   assert.equal(profileHandicapLabel(null), "Sin capturar");
@@ -73,11 +74,12 @@ test("pantalla de perfil usa labels, estado vacío y validación compartida", ()
   assert.match(provider, /<label htmlFor="profile-setup-given">Nombre<input id="profile-setup-given"/);
   assert.match(provider, /<label htmlFor="profile-setup-family">Apellidos<input id="profile-setup-family"/);
   assert.match(provider, /placeholder="Tu nombre"/);
-  assert.match(provider, /<label htmlFor="profile-setup-hcp">HCP capturado manualmente \(opcional\)<\/label>/);
-  assert.match(provider, /No es una emisión oficial/);
+  assert.match(provider, /<label htmlFor="profile-setup-hcp">HCP index<\/label>/);
+  assert.match(provider, /HCP manual \(máximo 36\)/);
+  assert.match(provider, /Vincular GHIN estará disponible sólo mediante una integración oficial/);
   assert.match(provider, /disabled=\{busy\}/);
   assert.doesNotMatch(provider, /disabled=\{busy \|\| !name\.trim\(\) \|\| handicap === ""\}/);
-  assert.match(account, /<span>HCP capturado manualmente<\/span>/);
+  assert.match(account, /<span>HCP index<\/span>/);
   assert.match(account, /validateProfileDraft\(name, handicap\)/);
 });
 

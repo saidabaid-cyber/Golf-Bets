@@ -157,9 +157,11 @@ test("Sin indicar elimina una mano guardada previamente", () => {
   assert.equal(cleared.handedness, "");
 });
 
-test("avatar de perfil acepta sólo HTTPS sin credenciales y permite quitarlo", () => {
+test("avatar de perfil acepta foto preparada, preset interno o HTTPS legacy sin credenciales", () => {
   assert.deepEqual(validateProfileAvatarUrl("   "), { ok: true, avatarUrl: "" });
   assert.deepEqual(validateProfileAvatarUrl("  https://images.example.test/me.webp  "), { ok: true, avatarUrl: "https://images.example.test/me.webp" });
+  assert.deepEqual(validateProfileAvatarUrl("/avatars/golf-ball.svg"), { ok: true, avatarUrl: "/avatars/golf-ball.svg" });
+  assert.deepEqual(validateProfileAvatarUrl("data:image/png;base64,aGVsbG8="), { ok: true, avatarUrl: "data:image/png;base64,aGVsbG8=" });
   for (const invalid of [
     "http://images.example.test/me.webp",
     "data:image/png;base64,abc",
@@ -170,6 +172,6 @@ test("avatar de perfil acepta sólo HTTPS sin credenciales y permite quitarlo", 
   ]) {
     const result = validateProfileAvatarUrl(invalid);
     assert.equal(result.ok, false, invalid);
-    if (!result.ok) assert.match(result.message, /URL HTTPS/);
+    if (!result.ok) assert.match(result.message, /foto o avatar válido/);
   }
 });

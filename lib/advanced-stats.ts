@@ -30,6 +30,9 @@ export function normalizeAdvancedStats(value: unknown): AdvancedStatsByHole {
       if (stat.landingLie === "fairway" || stat.landingLie === "rough" || stat.landingLie === "bunker" || stat.landingLie === "water_ob") next.landingLie = stat.landingLie;
       if (typeof stat.teeClub === "string" && stat.teeClub.trim()) next.teeClub = stat.teeClub.trim().slice(0, 40);
       if (typeof stat.teeDistance === "number" && Number.isFinite(stat.teeDistance) && stat.teeDistance >= 0 && stat.teeDistance <= 600) next.teeDistance = stat.teeDistance;
+      if (typeof stat.firstPuttDistanceFeet === "number" && Number.isFinite(stat.firstPuttDistanceFeet) && stat.firstPuttDistanceFeet >= 0 && stat.firstPuttDistanceFeet <= 300) next.firstPuttDistanceFeet = stat.firstPuttDistanceFeet;
+      if (typeof stat.bunkerCount === "number" && Number.isInteger(stat.bunkerCount) && stat.bunkerCount >= 0 && stat.bunkerCount <= 20) next.bunkerCount = stat.bunkerCount;
+      if (typeof stat.penaltyAreaCount === "number" && Number.isInteger(stat.penaltyAreaCount) && stat.penaltyAreaCount >= 0 && stat.penaltyAreaCount <= 20) next.penaltyAreaCount = stat.penaltyAreaCount;
       if (typeof stat.outOfBounds === "boolean") next.outOfBounds = stat.outOfBounds;
       if (Object.keys(next).length) nextPlayers[playerId] = next;
     }
@@ -98,6 +101,9 @@ export function summarizePlayerAdvancedStats(
     if (typeof value.penaltyStrokes === "number") {
       penaltyStrokes += value.penaltyStrokes;
       penaltyHoles += 1;
+      captured.add(hole);
+    }
+    if (typeof value.firstPuttDistanceFeet === "number" || typeof value.bunkerCount === "number" || typeof value.penaltyAreaCount === "number" || typeof value.teeDirection === "string" || typeof value.teeClub === "string" || typeof value.outOfBounds === "boolean") {
       captured.add(hole);
     }
   }

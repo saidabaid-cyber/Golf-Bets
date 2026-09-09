@@ -164,7 +164,7 @@ function parseHandicap(value: string) {
   const normalized = value.replace(",", ".");
   const numeric = Number(normalized);
   const handicap = normalized.trim().startsWith("+") ? -Math.abs(numeric) : numeric;
-  return Number.isFinite(handicap) && handicap >= -15 && handicap <= 54 ? handicap : undefined;
+  return Number.isFinite(handicap) && handicap >= -15 && handicap <= 36 ? handicap : undefined;
 }
 
 function parsePlayerHandicaps(input: string): ParsedRoundSetupAction[] {

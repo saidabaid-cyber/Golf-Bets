@@ -1,9 +1,13 @@
 "use client";
 
-import type { Dispatch, SetStateAction } from "react";
+import { useState, type Dispatch, type SetStateAction } from "react";
+import { playOrder, segmentDefinitions } from "../../lib/engine";
+import { defaultMaxBaseAppearances, generateAutomaticFoursomes, markFoursomeSegmentEdited } from "../../lib/foursome-generator";
+import { configureCurrentIndexPersonal, configureSlidingPersonal } from "../../lib/personal-modes";
 import { createSupplementalBet, SUPPLEMENTAL_BET_LABELS } from "../../lib/supplemental-bets";
 import type { GroupGameTemplate, PersonalBet, Player, SupplementalBet } from "../../lib/types";
 import { SupplementalBetsEditor } from "./supplemental-bets-editor";
+import { NumericCaptureInput } from "./numeric-capture-input";
 import styles from "./group-bet-template-editor.module.css";
 
 type CoreKey = "monkey" | "rabbits" | "skins" | "units" | "foursome" | "ballFriend" | "pollaFirst" | "pollaSecond" | "pollaTotal" | "miniPolla" | "vipers" | "camels" | "fish" | "loba";
@@ -48,7 +52,7 @@ function coreConfig(template: GroupGameTemplate, key: CoreKey) {
 }
 
 function Field({ label, value, onChange, min = 0, max, step = 1 }: { label: string; value: number | undefined; onChange: (value: number) => void; min?: number; max?: number; step?: number }) {
-  return <label className={styles.field}>{label}<input type="number" inputMode="decimal" min={min} max={max} step={step} value={Number.isFinite(value) ? value : 0} onChange={(event) => onChange(Number(event.target.value))} /></label>;
+  return <label className={styles.field}>{label}<NumericCaptureInput inputMode="decimal" min={min} max={max} step={step} value={Number.isFinite(value) ? value : null} emptyWhenZero onValueChange={(next) => onChange(next ?? 0)} /></label>;
 }
 
 function Participants({ players, selected, onChange }: { players: Player[]; selected: string[]; onChange: (ids: string[]) => void }) {
@@ -63,8 +67,9 @@ function Switch({ checked, label, onChange, disabled }: { checked: boolean; labe
 }
 
 function personalDefault(players: Player[], ownerId: string, template: GroupGameTemplate): PersonalBet {
+  const owner = players.find((player) => player.id === ownerId);
   const rival = players.find((player) => player.id !== ownerId) || players[0];
-  return {
+  const base: PersonalBet = {
     id: makeId("personal"),
     enabled: true,
     rivalMode: "group",
@@ -81,6 +86,7 @@ function personalDefault(players: Player[], ownerId: string, template: GroupGame
     carryEnabled: false,
     components: { match1: true, medal1: true, match2: true, medal2: true, match18: true, medal18: true },
   };
+  return configureCurrentIndexPersonal(base, owner, rival, new Date().toISOString());
 }
 
 export function GroupBetTemplateEditor({ value, players, ownerId, mode, onChange, locked = false, requestActivation }: {
@@ -92,6 +98,8 @@ export function GroupBetTemplateEditor({ value, players, ownerId, mode, onChange
   locked?: boolean;
   requestActivation?: () => Promise<boolean>;
 }) {
+  const [foursomeMaxBaseAppearances, setFoursomeMaxBaseAppearances] = useState(() => defaultMaxBaseAppearances(value.betConfig.foursome.segmentSize));
+  const [foursomeMessage, setFoursomeMessage] = useState("");
   const runActivation = (action: () => void) => {
     if (!requestActivation) { action(); return; }
     void requestActivation().then((accepted) => { if (accepted) action(); });
@@ -142,26 +150,56 @@ export function GroupBetTemplateEditor({ value, players, ownerId, mode, onChange
     }));
     if (!manualEnabled) runActivation(apply); else apply();
   };
+  const roundOrder = playOrder(value.roundDefaults.startHole).slice(0, value.roundDefaults.roundHoles);
+  const setFoursomeSegmentSize = (segmentSize: 3 | 6 | 9 | 18) => {
+    setFoursomeMaxBaseAppearances(defaultMaxBaseAppearances(segmentSize));
+    setFoursomeMessage("");
+    onChange((current) => ({
+      ...current,
+      betConfig: { ...current.betConfig, foursome: { ...current.betConfig.foursome, segmentSize } },
+      foursomeSegments: segmentDefinitions(playOrder(current.roundDefaults.startHole).slice(0, current.roundDefaults.roundHoles), segmentSize),
+    }));
+  };
+  const generateFoursomes = () => {
+    const generated = generateAutomaticFoursomes({
+      participantIds: value.betConfig.foursome.participantIds,
+      order: roundOrder,
+      segmentSize: value.betConfig.foursome.segmentSize,
+      maxBaseAppearances: foursomeMaxBaseAppearances,
+      idFactory: () => makeId("foursome"),
+    });
+    if (!generated.ok) { setFoursomeMessage(generated.message); return; }
+    onChange((current) => ({ ...current, foursomeSegments: generated.segments }));
+    setFoursomeMessage("Parejas generadas por Backyard. Puedes editar cualquier tramo.");
+  };
+  const updatePersonal = (id: string, patcher: (bet: PersonalBet) => PersonalBet) => onChange((current) => ({
+    ...current,
+    personalBets: current.personalBets.map((bet) => bet.id === id ? patcher(bet) : bet),
+  }));
 
   if (mode === "selection") return <div className={styles.selection}>
     <p className={styles.intro}>Activa solo lo que este grupo juega habitualmente. Todo se podrá cambiar para una ronda sin modificar la plantilla.</p>
     <div className={styles.modeGrid}>
       {CORE_MODES.map((item) => <article className={styles.modeCard} key={item.key}><span className={styles.modeIcon}>{item.icon}</span><span><b>{item.label}</b><small>{item.detail}</small></span><Switch checked={Boolean(coreConfig(value, item.key)?.enabled)} label={item.label} disabled={locked} onChange={() => toggleCore(item.key)} /></article>)}
-      <article className={styles.modeCard}><span className={styles.modeIcon}>🏌️</span><span><b>Nassau individual</b><small>Match y medal contra un rival</small></span><Switch checked={personalEnabled} label="Nassau individual" disabled={locked} onChange={togglePersonal} /></article>
+      <article className={styles.modeCard}><span className={styles.modeIcon}>🏌️</span><span><b>Personales</b><small>Índice actual o Sliding contra un rival</small></span><Switch checked={personalEnabled} label="Personales" disabled={locked} onChange={togglePersonal} /></article>
       {SUPPLEMENTAL_MODES.map((item) => <article className={styles.modeCard} key={item.type}><span className={styles.modeIcon}>{item.icon}</span><span><b>{SUPPLEMENTAL_BET_LABELS[item.type]}</b><small>Modalidad existente</small></span><Switch checked={value.supplementalBets.some((bet) => bet.type === item.type && bet.enabled)} label={SUPPLEMENTAL_BET_LABELS[item.type]} disabled={locked} onChange={() => toggleSupplemental(item.type)} /></article>)}
       <article className={styles.modeCard}><span className={styles.modeIcon}>✍️</span><span><b>Manuales</b><small>Nombre habitual; importes por ronda</small></span><Switch checked={manualEnabled} label="Manuales" disabled={locked} onChange={toggleManual} /></article>
     </div>
   </div>;
 
   return <div className={styles.details}>
-    <p className={styles.intro}>Valores y participantes de la plantilla. Los resultados nunca se guardan aquí.</p>
+    <p className={styles.intro}>Toca una apuesta para editarla. Los resultados nunca se guardan aquí.</p>
+    <section className={styles.basisCard}><div><b>Base de ventajas</b><small>Aplica a las modalidades que usan HCP.</small></div><div className={styles.chips}><button type="button" className={value.roundDefaults.handicapBasis === "relative" ? styles.chipActive : styles.chip} onClick={() => onChange((current) => ({ ...current, roundDefaults: { ...current.roundDefaults, handicapBasis: "relative" } }))}>Entre jugadores</button><button type="button" className={value.roundDefaults.handicapBasis === "course" ? styles.chipActive : styles.chip} onClick={() => onChange((current) => ({ ...current, roundDefaults: { ...current.roundDefaults, handicapBasis: "course" } }))}>Sobre campo</button></div></section>
     {CORE_MODES.filter((item) => Boolean(coreConfig(value, item.key)?.enabled)).map((item) => {
       const config = coreConfig(value, item.key)!;
-      return <details className={styles.detailCard} key={item.key} open><summary><span>{item.icon} {item.label}</span><small>{item.detail}</small></summary><fieldset disabled={locked}>
+      return <details className={styles.detailCard} key={item.key}><summary><span>{item.icon} {item.label}</span><small>{item.detail} · Editar</small></summary><fieldset disabled={locked}>
+        <button type="button" className={styles.removeBet} onClick={() => updateCore(item.key, { enabled: false })}>Quitar esta apuesta</button>
         {"value" in config && <Field label="Valor" value={config.value} onChange={(next) => updateCore(item.key, { value: next })} />}
         {"hcpPct" in config && <Field label="HCP %" value={config.hcpPct} min={0} max={100} onChange={(next) => updateCore(item.key, { hcpPct: next })} />}
+        {item.key === "rabbits" && <><label className={styles.field}>Formato<select value={value.betConfig.rabbits.mode || "continuous"} onChange={(event) => updateCore(item.key, { mode: event.target.value })}><option value="continuous">Sube / baja continuo</option><option value="three_hole_blocks">Bloques de 3 hoyos</option></select></label><label className={styles.check}><input type="checkbox" checked={value.betConfig.rabbits.accumulate} onChange={(event) => updateCore(item.key, { accumulate: event.target.checked })} />Acumular cuando queda libre</label></>}
+        {item.key === "skins" && <label className={styles.check}><input type="checkbox" checked={(value.betConfig.skins.mode || "carry") === "carry"} onChange={(event) => updateCore(item.key, { mode: event.target.checked ? "carry" : "no_carry", accumulate: event.target.checked })} />Carry al siguiente hoyo</label>}
         {item.key === "units" && <Field label="Valor de Copa" value={value.betConfig.units.copaValue ?? value.betConfig.units.value} onChange={(copaValue) => updateCore(item.key, { copaValue })} />}
-        {item.key === "foursome" && <div className={styles.fieldsRow}><Field label="Valor fijo" value={value.betConfig.foursome.fixedValue} onChange={(fixedValue) => updateCore(item.key, { fixedValue })} /><Field label="Valor por punto" value={value.betConfig.foursome.pointValue} onChange={(pointValue) => updateCore(item.key, { pointValue })} /><label className={styles.field}>Tramos<select value={value.betConfig.foursome.segmentSize} onChange={(event) => updateCore(item.key, { segmentSize: Number(event.target.value) })}><option value="3">3 hoyos</option><option value="6">6 hoyos</option><option value="9">9 hoyos</option><option value="18">18 hoyos</option></select></label></div>}
+        {item.key === "foursome" && <><div className={styles.fieldsRow}><Field label="Valor fijo" value={value.betConfig.foursome.fixedValue} onChange={(fixedValue) => updateCore(item.key, { fixedValue })} /><Field label="Valor por punto" value={value.betConfig.foursome.pointValue} onChange={(pointValue) => updateCore(item.key, { pointValue })} /><label className={styles.field}>Tramos<select value={value.betConfig.foursome.segmentSize} onChange={(event) => setFoursomeSegmentSize(Number(event.target.value) as 3 | 6 | 9 | 18)}><option value="3">3 hoyos</option><option value="6">6 hoyos</option><option value="9">9 hoyos</option><option value="18">18 hoyos</option></select></label><Field label="Máximo en pareja base" value={foursomeMaxBaseAppearances} min={1} max={18} onChange={(next) => setFoursomeMaxBaseAppearances(Math.max(1, Math.trunc(next)))} /></div><button type="button" className="secondary" onClick={generateFoursomes}>Generar foursomes automáticamente</button>{foursomeMessage && <small className={styles.editorMessage} role="status">{foursomeMessage}</small>}<div className={styles.segmentList}>{value.foursomeSegments.map((segment) => <article key={segment.id}><div><b>H{roundOrder[segment.startIndex]}–{roundOrder[segment.endIndex]}</b><small>{segment.generatedByBackyard ? "Generada por Backyard" : "Editada manualmente"}</small></div><Participants players={players.filter((player) => value.betConfig.foursome.participantIds.includes(player.id))} selected={segment.basePair} onChange={(basePair) => onChange((current) => ({ ...current, foursomeSegments: current.foursomeSegments.map((item) => item.id === segment.id ? markFoursomeSegmentEdited({ ...item, basePair: basePair.slice(-2) }) : item) }))} /></article>)}</div></>}
         {item.key === "ballFriend" && <Field label="Score máximo" value={value.betConfig.ballFriend.maxScore} min={1} max={20} onChange={(maxScore) => updateCore(item.key, { maxScore })} />}
         {(item.key === "vipers" || item.key === "camels" || item.key === "fish") && <label className={styles.check}><input type="checkbox" checked={Boolean(value.betConfig[item.key].secondNinePressed)} onChange={(event) => updateCore(item.key, { secondNinePressed: event.target.checked })} />Presión en segunda vuelta</label>}
         {item.key === "loba" && <><Field label="Valor de unidad" value={value.betConfig.loba.unitValue} onChange={(unitValue) => updateCore(item.key, { unitValue })} /><label className={styles.check}><input type="checkbox" checked={value.betConfig.loba.unitsEnabled} onChange={(event) => updateCore(item.key, { unitsEnabled: event.target.checked })} />Unidades activas</label></>}
@@ -169,12 +207,18 @@ export function GroupBetTemplateEditor({ value, players, ownerId, mode, onChange
       </fieldset></details>;
     })}
 
-    {value.personalBets.some((bet) => bet.enabled !== false) && <section className={styles.collection}><h3>Nassau individual</h3>{value.personalBets.map((bet, index) => <article className={styles.instance} key={bet.id}>
-      <div className={styles.instanceHead}><b>Nassau {index + 1}</b><button type="button" className="textButton" onClick={() => onChange((current) => ({ ...current, personalBets: current.personalBets.filter((item) => item.id !== bet.id) }))}>Quitar</button></div>
-      <label className={styles.field}>Rival<select value={bet.rivalPlayerId || ""} onChange={(event) => { const rival = players.find((player) => player.id === event.target.value); onChange((current) => ({ ...current, personalBets: current.personalBets.map((item) => item.id === bet.id ? { ...item, rivalMode: "group", rivalPlayerId: rival?.id, rivalName: rival?.name || "Rival" } : item) })); }}><option value="">Seleccionar…</option>{players.filter((player) => player.id !== ownerId).map((player) => <option value={player.id} key={player.id}>{player.name}</option>)}</select></label>
-      <div className={styles.fieldsRow}><Field label="Valor por componente" value={bet.baseValue} onChange={(baseValue) => onChange((current) => ({ ...current, personalBets: current.personalBets.map((item) => item.id === bet.id ? { ...item, baseValue } : item) }))} /><Field label="Golpes de ventaja" value={bet.advantageStrokes} onChange={(advantageStrokes) => onChange((current) => ({ ...current, personalBets: current.personalBets.map((item) => item.id === bet.id ? { ...item, advantageStrokes } : item) }))} /></div>
-      <label className={styles.check}><input type="checkbox" checked={Boolean(bet.carryEnabled)} onChange={(event) => onChange((current) => ({ ...current, personalBets: current.personalBets.map((item) => item.id === bet.id ? { ...item, carryEnabled: event.target.checked } : item) }))} />Carry</label>
-    </article>)}<button type="button" className="secondary" onClick={() => runActivation(() => onChange((current) => ({ ...current, personalBets: [...current.personalBets, personalDefault(players, ownerId, current)] })))}>+ Otro Nassau</button></section>}
+    {value.personalBets.some((bet) => bet.enabled !== false) && <section className={styles.collection}><h3>Personales</h3>{value.personalBets.map((bet, index) => {
+      const owner = players.find((player) => player.id === ownerId);
+      const rival = players.find((player) => player.id === bet.rivalPlayerId);
+      const signedAdvantage = bet.slidingAdvantage ?? (bet.advantageReceiver === "owner" ? -bet.advantageStrokes : bet.advantageReceiver === "rival" ? bet.advantageStrokes : 0);
+      return <article className={styles.instance} key={bet.id}>
+        <div className={styles.instanceHead}><b>Personal {index + 1}</b><button type="button" className="textButton" onClick={() => onChange((current) => ({ ...current, personalBets: current.personalBets.filter((item) => item.id !== bet.id) }))}>Quitar</button></div>
+        <label className={styles.field}>Rival<select value={bet.rivalPlayerId || ""} onChange={(event) => { const nextRival = players.find((player) => player.id === event.target.value); updatePersonal(bet.id, (currentBet) => { const selected = { ...currentBet, rivalMode: "group" as const, rivalPlayerId: nextRival?.id, rivalName: nextRival?.name || "Rival" }; return (currentBet.advantageMode || "current_index") === "sliding" ? configureSlidingPersonal(selected, signedAdvantage) : configureCurrentIndexPersonal(selected, owner, nextRival, new Date().toISOString()); }); }}><option value="">Seleccionar…</option>{players.filter((player) => player.id !== ownerId).map((player) => <option value={player.id} key={player.id}>{player.name}</option>)}</select></label>
+        <label className={styles.field}>Modo<select value={(bet.advantageMode || "current_index") === "sliding" ? "sliding" : "current_index"} onChange={(event) => updatePersonal(bet.id, (currentBet) => event.target.value === "sliding" ? configureSlidingPersonal(currentBet, signedAdvantage) : configureCurrentIndexPersonal(currentBet, owner, rival, new Date().toISOString()))}><option value="current_index">Índice actual</option><option value="sliding">Sliding</option></select></label>
+        <div className={styles.fieldsRow}><Field label="Valor por componente" value={bet.baseValue} onChange={(baseValue) => updatePersonal(bet.id, (currentBet) => ({ ...currentBet, baseValue }))} />{(bet.advantageMode || "current_index") === "sliding" ? <Field label="Ventaja firmada" value={signedAdvantage} min={-54} max={54} onChange={(next) => updatePersonal(bet.id, (currentBet) => configureSlidingPersonal(currentBet, next))} /> : <label className={styles.field}>Ventaja desde índices<input value={bet.ownerIndexSnapshot && bet.rivalIndexSnapshot ? `${bet.advantageReceiver === "owner" ? "Dueño" : bet.advantageReceiver === "rival" ? "Rival" : "Nadie"} recibe ${bet.advantageStrokes}` : "Falta HCP/index"} readOnly /></label>}<Field label="Presión" value={bet.pressureMultiplier ?? 1} min={1} max={5} onChange={(pressureMultiplier) => updatePersonal(bet.id, (currentBet) => ({ ...currentBet, pressureMultiplier: pressureMultiplier as 1 | 2 | 3 | 4 | 5 }))} /></div>
+        <label className={styles.check}><input type="checkbox" checked={Boolean(bet.carryEnabled)} onChange={(event) => updatePersonal(bet.id, (currentBet) => ({ ...currentBet, carryEnabled: event.target.checked }))} />Carry</label>
+      </article>;
+    })}<button type="button" className="secondary" onClick={() => runActivation(() => onChange((current) => ({ ...current, personalBets: [...current.personalBets, personalDefault(players, ownerId, current)] })))}>+ Otra Personal</button></section>}
 
     <SupplementalBetsEditor bets={value.supplementalBets} players={players} onChange={setSupplementalBets} requestActivation={requestActivation} locked={locked} types={["team_pressures", "chicago", "vegas", "minimum_putts"]} roundHoles={value.roundDefaults.roundHoles} />
     <SupplementalBetsEditor bets={value.supplementalBets} players={players} onChange={setSupplementalBets} requestActivation={requestActivation} locked={locked} types={["dollar_stroke", "individual_pressures"]} roundHoles={value.roundDefaults.roundHoles} />

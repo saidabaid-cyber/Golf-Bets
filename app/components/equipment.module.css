@@ -874,3 +874,4 @@
     grid-template-columns: 1fr;
   }
 }
+.onboardingTop,.onboardingFooter{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.onboardingFooter{margin-top:12px}.onboardingTop>button,.onboardingFooter>button{min-height:40px}

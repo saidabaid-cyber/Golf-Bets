@@ -465,6 +465,12 @@ export type AdvancedHoleStat = {
   teeClub?: string;
   /** Optional distance in yards. */
   teeDistance?: number;
+  /** Optional distance of the first putt, in feet. */
+  firstPuttDistanceFeet?: number;
+  /** Golf fact captured independently from the Camellos settlement event. */
+  bunkerCount?: number;
+  /** Penalty-area / water entries, independent from the Peces settlement event. */
+  penaltyAreaCount?: number;
   /** Explicit out-of-bounds observation; missing means not captured. */
   outOfBounds?: boolean;
 };

@@ -12,6 +12,7 @@ import {
   authErrorMessage,
   bettingConsentPromptStorageKey,
   buildLegalAcceptances,
+  clampBackyardHandicap,
   clearLegalAcceptancesForUser,
   emptyBackyardProfileDetails,
   hasCurrentLegalConsent,
@@ -35,7 +36,7 @@ import {
   type BackyardProfileUpdate,
   type LegalAcceptance,
 } from "../../lib/account-state";
-import { getSupabaseBrowser } from "../../lib/supabase/client";
+import { authSessionPersistence, getSupabaseBrowser, setAuthSessionPersistence } from "../../lib/supabase/client";
 import { AuthSessionRecoveryError, authCallbackUrl, authIdentityChanged, clearDeletedAuthSessionForUser, closeAuthSession, isAccountSession, recoverAuthSession, requireCloudWrites, restoreAuthSession, sendEmailOtp, startSocialOAuth, verifyEmailOtp, OtpSendGate, otpRetrySeconds, OTP_COOLDOWN_KEY } from "../../lib/auth-flow";
 import { activeWorkspaceScorecardPhotoIds, discardAccountWorkspace, ownsLocalWorkspace, selectAccountScorecardPhotoIds, switchAccountWorkspace, WORKSPACE_OWNER_KEY } from "../../lib/account-workspace";
 import { CLOUD_LOCAL_META_KEY, type CloudPreferences } from "../../lib/cloud-sync";
@@ -46,6 +47,7 @@ import { clearPendingLegalSync, legalSyncErrorMessage, markLegalSyncFailed, queu
 import type { AuthProviderStatus } from "../../lib/auth-provider-status";
 import { cloudIssueFromError, cloudIssuePriority, type CloudIssue, type CloudIssueDomain } from "../../lib/cloud-issues";
 import { BrandLockup } from "./brand-lockup";
+import { ProfileImagePicker } from "./profile-image-picker";
 import { BettingConsentDialog } from "./betting-consent-dialog";
 import { persistBettingDataConsent } from "../../lib/betting-consent";
 import { acknowledgePendingProfileWrite, cloudProfileFields, cloudProfileRevisionIsNewer, cloudProfileRevisionKey, createProfileWriteCoordinator, queuePendingProfileWrite, readPendingProfileWrite, recordCloudProfileRevision, retimePendingProfileWrite, type CloudProfileFields, type ProfileWriteCoordinator } from "../../lib/profile-sync";
@@ -92,7 +94,7 @@ function profileCachePayload(profile: BackyardProfile) {
     username, city, state, country, homeClub, preferredTee, handedness,
     typicalScore, driverDistanceYards, driverSwingSpeedBand, usualTrajectory,
     shotTendency, greenSpeed, gamePriority, priceImportance, golfProfileUpdatedAt,
-    improvementGoals, primaryGoal, targetHandicap, planId, ghinLinkStatus,
+    improvementGoals, primaryGoals, primaryGoal, targetHandicap, planId, ghinLinkStatus,
     bio, profileVisibility,
   } = profile;
   return {
@@ -100,7 +102,7 @@ function profileCachePayload(profile: BackyardProfile) {
     username, city, state, country, homeClub, preferredTee, handedness,
     typicalScore, driverDistanceYards, driverSwingSpeedBand, usualTrajectory,
     shotTendency, greenSpeed, gamePriority, priceImportance, golfProfileUpdatedAt,
-    improvementGoals, primaryGoal, targetHandicap, planId, ghinLinkStatus,
+    improvementGoals, primaryGoals, primaryGoal, targetHandicap, planId, ghinLinkStatus,
     bio, profileVisibility,
   };
 }
@@ -117,7 +119,7 @@ function profileFromUser(user: User): BackyardProfile {
     displayName: String(user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split("@")[0] || "Jugador"),
     email: user.email || "",
     avatarUrl: String(user.user_metadata?.avatar_url || user.user_metadata?.picture || ""),
-    defaultHandicap: typeof user.user_metadata?.default_handicap === "number" ? user.user_metadata.default_handicap : null,
+    defaultHandicap: typeof user.user_metadata?.default_handicap === "number" ? clampBackyardHandicap(user.user_metadata.default_handicap) : null,
     ...emptyBackyardProfileDetails(),
   };
   try {
@@ -158,9 +160,11 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
   const [message, setMessage] = useState("");
   const [socialEnabled, setSocialEnabled] = useState(true);
   const [providers, setProviders] = useState<AuthProviderStatus | null>(null);
+  const [rememberSession, setRememberSession] = useState(true);
   const sendGate = useRef(new OtpSendGate());
   const [retrySeconds, setRetrySeconds] = useState(0);
   useEffect(() => {
+    setRememberSession(authSessionPersistence());
     try { sendGate.current.nextSendAt = Number(sessionStorage.getItem(OTP_COOLDOWN_KEY)) || 0; }
     catch { /* Private-mode storage may be unavailable; the in-memory cooldown still applies. */ }
     const tick = () => setRetrySeconds(otpRetrySeconds(sendGate.current.nextSendAt));
@@ -191,6 +195,7 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
       setMessage(`Acceso con ${provider === "google" ? "Google" : "Apple"} pendiente de configuración.`);
       return;
     }
+    setAuthSessionPersistence(rememberSession);
     setBusy(true); setMessage("");
     try {
       await startSocialOAuth(supabase.auth, provider, authCallbackUrl(window.location.origin));
@@ -202,6 +207,7 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
 
   async function sendCode() {
     if (!isValidEmail(email)) { setMessage("Escribe un correo electrónico válido."); return; }
+    setAuthSessionPersistence(rememberSession);
     const supabase = getSupabaseBrowser();
     if (!supabase) { setMessage("Acceso con correo pendiente de configuración."); return; }
     if (providers?.status === "ready" && !providers.email) { setMessage("Acceso con correo pendiente de configuración."); return; }
@@ -221,6 +227,7 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
 
   async function verifyCode() {
     if (otp.length !== 8) { setMessage("Introduce los 8 dígitos del código."); return; }
+    setAuthSessionPersistence(rememberSession);
     const supabase = getSupabaseBrowser();
     if (!supabase) { setMessage("Acceso con correo pendiente de configuración."); return; }
     setBusy(true); setMessage("");
@@ -248,6 +255,7 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
         }}>Continuar como invitado</button>
       </div> : <>
       <div className="accessIntent"><button className="textButton" onClick={() => { setStage("splash"); setEmailMode(false); setMessage(""); }}>← Inicio</button><span>{intent === "create" ? "CREAR CUENTA" : "INICIAR SESIÓN"}</span></div>
+      <label className="consentCheck"><input type="checkbox" checked={rememberSession} onChange={(event) => { setRememberSession(event.target.checked); setAuthSessionPersistence(event.target.checked); }} /><span>Mantener sesión iniciada en este dispositivo.</span></label>
       {!emailMode ? <div className="accessActions">
         <button className="oauthButton google" disabled={busy || !googleAvailable} onClick={() => social("google")}>{!providers ? "Google · comprobando acceso…" : googleAvailable ? "Continuar con Google" : "Google · pendiente de configuración"}</button>
         <button className="oauthButton apple" disabled={busy || !appleAvailable} onClick={() => social("apple")}>{appleAvailable ? "Continuar con Apple" : "Apple · Próximamente"}</button>
@@ -315,9 +323,8 @@ function ProfileSetupScreen({ identity, onSave, onBack }: {
   onSave: (profile: BackyardProfileUpdate) => Promise<"local" | "cloud">;
   onBack: () => Promise<void>;
 }) {
-  const fallbackNames = identity.displayName === "Jugador" ? [] : identity.displayName.trim().split(/\s+/);
-  const [givenName, setGivenName] = useState(identity.givenName || fallbackNames[0] || "");
-  const [familyName, setFamilyName] = useState(identity.familyName || fallbackNames.slice(1).join(" "));
+  const [givenName, setGivenName] = useState(identity.givenName || "");
+  const [familyName, setFamilyName] = useState(identity.familyName || "");
   const [country, setCountry] = useState(identity.country || "México");
   const [city, setCity] = useState(identity.city || "");
   const [handedness, setHandedness] = useState<"right" | "left">(identity.handedness === "left" ? "left" : "right");
@@ -354,13 +361,12 @@ function ProfileSetupScreen({ identity, onSave, onBack }: {
     <p>Lo esencial para reconocerte en el grupo. La foto y la ciudad son opcionales.</p>
     <form className="profileSetupForm" onSubmit={saveProfile} noValidate>
       <div className="grid2"><label htmlFor="profile-setup-given">Nombre<input id="profile-setup-given" autoComplete="given-name" enterKeyHint="next" value={givenName} onChange={(event) => setGivenName(event.target.value)} placeholder="Tu nombre" /></label><label htmlFor="profile-setup-family">Apellidos<input id="profile-setup-family" autoComplete="family-name" enterKeyHint="next" value={familyName} onChange={(event) => setFamilyName(event.target.value)} placeholder="Tus apellidos" /></label></div>
-      <label htmlFor="profile-setup-avatar">Foto / avatar opcional</label>
-      <input id="profile-setup-avatar" type="url" inputMode="url" autoComplete="url" value={avatarUrl} onChange={(event) => setAvatarUrl(event.target.value)} placeholder="https://…" aria-describedby="profile-avatar-help" />
-      <small id="profile-avatar-help" className="profileFieldHelp">Puedes pegar una URL HTTPS o dejarla vacía.</small>
+      <label>Foto / avatar opcional</label>
+      <ProfileImagePicker value={avatarUrl} onChange={setAvatarUrl} />
       <div className="grid2"><label htmlFor="profile-setup-country">País<input id="profile-setup-country" autoComplete="country-name" value={country} onChange={(event) => setCountry(event.target.value)} placeholder="México" /></label><label htmlFor="profile-setup-city">Ciudad opcional<input id="profile-setup-city" autoComplete="address-level2" value={city} onChange={(event) => setCity(event.target.value)} placeholder="Puebla" /></label></div>
-      <label htmlFor="profile-setup-hcp">HCP capturado manualmente (opcional)</label>
+      <label htmlFor="profile-setup-hcp">HCP index</label>
       <input id="profile-setup-hcp" type="text" inputMode="text" enterKeyHint="done" autoComplete="off" value={handicap} onChange={(event) => setHandicap(event.target.value)} placeholder="Ej. 8.4 o +1.2" aria-describedby="profile-setup-hcp-help" />
-      <small id="profile-setup-hcp-help" className="profileFieldHelp">Puedes dejarlo vacío. No es una emisión oficial; el HCP de juego se define por separado en cada ronda.</small>
+      <small id="profile-setup-hcp-help" className="profileFieldHelp">Ingresa tu HCP manual (máximo 36) o déjalo vacío si no tienes. Vincular GHIN estará disponible sólo mediante una integración oficial.</small>
       <fieldset className="handednessChoice"><legend>Mano dominante</legend><label><input type="radio" name="handedness" checked={handedness === "right"} onChange={() => setHandedness("right")} />Derecha</label><label><input type="radio" name="handedness" checked={handedness === "left"} onChange={() => setHandedness("left")} />Izquierda</label></fieldset>
       {message && <div className="accessMessage" role="alert">{message}</div>}
       <button type="submit" className="primary big" disabled={busy}>{busy ? "Guardando…" : "Guardar y continuar"}</button>
@@ -1320,7 +1326,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     <BetaOnboardingFlow profile={identity} accessToken={identity.accessToken} onUpdateProfile={updateProfile} bettingConsentGranted={bettingConsentGranted} requestBettingConsent={requestBettingConsent} onComplete={finishBetaOnboarding} />
     {bettingConsentDialog}
   </AccountContext.Provider>;
-  if (identity.mode === "authenticated" && equipmentOnboardingRequired) return <EquipmentOnboarding userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={identity.defaultHandicap} ballFitDefaults={ballFitDefaultsFromProfile(identity)} onComplete={finishEquipmentOnboarding} />;
+  if (identity.mode === "authenticated" && equipmentOnboardingRequired) return <EquipmentOnboarding userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={identity.defaultHandicap} ballFitDefaults={ballFitDefaultsFromProfile(identity)} onComplete={finishEquipmentOnboarding} onBack={finishEquipmentOnboarding} onSaveAndExit={finishEquipmentOnboarding} />;
 
   return <AccountContext.Provider value={context!}>
     {blockingCloudIssues.map((issue) => <div className="notice bad" role="alert" key={issue.domain}>{issue.message}<button onClick={() => setAccessRequested(true)}>Volver a iniciar sesión</button></div>)}

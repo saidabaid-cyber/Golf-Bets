@@ -7,6 +7,7 @@ import {
   betaOnboardingStorageKey,
   completeBetaOnboarding,
   createBetaOnboardingProgress,
+  navigateBetaOnboarding,
   normalizeBetaOnboardingProgress,
   persistBetaOnboardingProgress,
   readBetaOnboardingProgress,
@@ -59,6 +60,7 @@ test("áreas de mejora, objetivo HCP y plan forman un solo Golf Profile", () => 
     avatarUrl: "",
     defaultHandicap: 8,
     improvementGoals: ["DRIVER", "PUTTING", "LOWER_HANDICAP"],
+    primaryGoals: ["LOWER_HANDICAP", "MORE_CONSISTENT"],
     primaryGoal: "LOWER_HANDICAP",
     targetHandicap: 5,
     planId: "free",
@@ -66,6 +68,7 @@ test("áreas de mejora, objetivo HCP y plan forman un solo Golf Profile", () => 
   });
   assert.deepEqual(merged.improvementGoals, ["DRIVER", "PUTTING", "LOWER_HANDICAP"]);
   assert.equal(merged.primaryGoal, "LOWER_HANDICAP");
+  assert.deepEqual(merged.primaryGoals, ["LOWER_HANDICAP", "MORE_CONSISTENT"]);
   assert.equal(merged.targetHandicap, 5);
   assert.equal(merged.planId, "free");
   assert.equal(merged.ghinLinkStatus, "SKIPPED");
@@ -99,4 +102,13 @@ test("estado inválido o de otra cuenta no puede completar onboarding", () => {
   assert.equal(normalizeBetaOnboardingProgress({ version: 1, userId: "other", status: "complete", step: "complete" }, "user-1"), null);
   const started = createBetaOnboardingProgress("user-1", "2026-09-07T12:00:00.000Z");
   assert.equal(advanceBetaOnboarding(started, "ghin").step, "ghin");
+});
+
+test("onboarding puede volver y conservar el avance sin marcar pasos inventados", () => {
+  const started = createBetaOnboardingProgress("user-1", "2026-09-07T12:00:00.000Z");
+  const players = advanceBetaOnboarding(started, "players", { now: "2026-09-07T12:01:00.000Z" });
+  const group = navigateBetaOnboarding(players, "group", "2026-09-07T12:02:00.000Z");
+  assert.equal(group.step, "group");
+  assert.equal(group.status, "in_progress");
+  assert.deepEqual(group.completedSteps, ["ghin"]);
 });

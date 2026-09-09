@@ -50,6 +50,12 @@ const FLEX_LABELS: Record<ShaftFlex, string> = {
 };
 
 const COMPOSITION = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "PW", "UW", "GW", "AW", "SW", "LW"];
+const IRON_SET_PACKAGES = [
+  { label: "4–P", clubs: ["4", "5", "6", "7", "8", "9", "PW"] },
+  { label: "4–AW", clubs: ["4", "5", "6", "7", "8", "9", "PW", "AW"] },
+  { label: "5–P", clubs: ["5", "6", "7", "8", "9", "PW"] },
+  { label: "5–AW", clubs: ["5", "6", "7", "8", "9", "PW", "AW"] },
+] as const;
 
 function uid(prefix: string) {
   return globalThis.crypto?.randomUUID?.() || `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -299,26 +305,27 @@ export function ClubEditor({ userId, catalog, shafts, existing, onCancel, onSave
 
         {category === "IRON_SET" && <fieldset className={styles.choiceFieldset}>
           <legend>Composición del set (opcional)</legend>
+          <div className={styles.choiceGrid}>{IRON_SET_PACKAGES.map((set) => <button type="button" className={styles.manualToggle} key={set.label} onClick={() => setComposition([...set.clubs])}>{set.label}</button>)}</div>
           <div className={styles.choiceGrid}>{COMPOSITION.map((club) => <label key={club}><input type="checkbox" checked={composition.includes(club)} onChange={(event) => setComposition((current) => event.target.checked ? [...current, club] : current.filter((item) => item !== club))} />{club}</label>)}</div>
         </fieldset>}
 
-        {!shaftManual ? <><label className={styles.fullField}>Buscar shaft (opcional)
+        {!shaftManual ? <><label className={styles.fullField}>Buscar varilla (opcional)
           <input type="search" value={shaftQuery} maxLength={120} onChange={(event) => setShaftQuery(event.target.value)} placeholder="Ej. Ventus Blue" autoComplete="off" />
-          <span className={styles.subtle} role="status">{shaftSearch.status === "loading" ? "Buscando…" : shaftSearch.status === "error" ? "Sin conexión: puedes capturar el shaft manualmente." : `${activeShafts.length} resultado(s)`}</span>
-        </label><label className={styles.fullField}>Shaft (opcional)
+          <span className={styles.subtle} role="status">{shaftSearch.status === "loading" ? "Buscando…" : shaftSearch.status === "error" ? "Sin conexión: puedes capturar la varilla manualmente." : `${activeShafts.length} resultado(s)`}</span>
+        </label><label className={styles.fullField}>Varilla (opcional)
           <select value={shaftId} onChange={(event) => { setShaftId(event.target.value); const selected = activeShafts.find((shaft) => shaft.id === event.target.value); if (selected?.weight) setShaftWeight(String(selected.weight)); if (selected?.flex.length === 1) setFlex(selected.flex[0]); }}>
             <option value="">No lo sé / sin indicar</option>
             {shaftId && !selectedShaft && <option value={shaftId}>{[existing?.customShaftBrand, existing?.customShaftModel || existing?.customShaft].filter(Boolean).join(" ") || "Shaft guardado"}</option>}
             {activeShafts.map((shaft) => <option key={shaft.id} value={shaft.id}>{shaft.brand} {shaft.model}</option>)}
           </select>
-        </label>{shaftSearch.hasMore && <button className={styles.manualToggle} type="button" onClick={() => void shaftSearch.loadMore()}>Cargar más shafts</button>}</> : <>
-          <label>Marca de shaft (opcional)<input value={customShaftBrand} maxLength={100} onChange={(event) => setCustomShaftBrand(event.target.value)} placeholder="Ej. Fujikura" /></label>
-          <label>Modelo de shaft (opcional)<input value={customShaftModel} maxLength={140} onChange={(event) => setCustomShaftModel(event.target.value)} placeholder="Ej. Ventus Blue" /></label>
+        </label>{shaftSearch.hasMore && <button className={styles.manualToggle} type="button" onClick={() => void shaftSearch.loadMore()}>Cargar más varillas</button>}</> : <>
+          <label>Marca de varilla (opcional)<input value={customShaftBrand} maxLength={100} onChange={(event) => setCustomShaftBrand(event.target.value)} placeholder="Ej. Fujikura" /></label>
+          <label>Modelo de varilla (opcional)<input value={customShaftModel} maxLength={140} onChange={(event) => setCustomShaftModel(event.target.value)} placeholder="Ej. Ventus Blue" /></label>
         </>}
-        <button type="button" className={styles.manualToggle} onClick={() => { setShaftManual((value) => !value); setShaftId(""); }}>{shaftManual ? "Elegir shaft del catálogo" : "Mi shaft no aparece"}</button>
+        <button type="button" className={styles.manualToggle} onClick={() => { setShaftManual((value) => !value); setShaftId(""); }}>{shaftManual ? "Elegir varilla del catálogo" : "Mi varilla no aparece"}</button>
 
         <label>Flex (opcional)<select value={flex} onChange={(event) => setFlex(event.target.value as ShaftFlex | "")}><option value="">No lo sé</option>{Object.entries(FLEX_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-        <label>Peso shaft g (opcional)<input type="number" inputMode="decimal" min={1} max={300} step="0.1" value={shaftWeight} onChange={(event) => setShaftWeight(event.target.value)} /></label>
+        <label>Peso de varilla g (opcional)<input type="number" inputMode="decimal" min={1} max={300} step="0.1" value={shaftWeight} onChange={(event) => setShaftWeight(event.target.value)} /></label>
         <label>Longitud in (opcional)<input type="number" inputMode="decimal" min={10} max={60} step="0.125" value={length} onChange={(event) => setLength(event.target.value)} /></label>
         <label>Lie ° (opcional)<input type="number" inputMode="decimal" min={30} max={90} step="0.1" value={lie} onChange={(event) => setLie(event.target.value)} /></label>
         <label className={styles.fullField}>Grip (opcional)<input value={grip} maxLength={180} onChange={(event) => setGrip(event.target.value)} /></label>

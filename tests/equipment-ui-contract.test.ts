@@ -32,8 +32,9 @@ test("el onboarding de equipo ocurre después del perfil básico y siempre se pu
 test("Mi bolsa permite catálogo, captura manual, múltiples categorías, edición e histórico", () => {
   for (const label of ["Driver", "Mini Driver", "Maderas", "Híbridos", "Utility / Driving Iron", "Hierros", "Wedges", "Putter"]) assert.match(editors, new RegExp(label.replace("/", "\\/")));
   assert.match(editors, /Mi bastón no aparece/);
-  assert.match(editors, /Mi shaft no aparece/);
-  for (const field of ["Marca", "Modelo", "Generación", "Loft", "Mano", "Shaft", "Flex", "Peso shaft", "Longitud", "Lie", "Grip", "Notas"]) assert.match(editors, new RegExp(field));
+  assert.match(editors, /Mi varilla no aparece/);
+  for (const field of ["Marca", "Modelo", "Generación", "Loft", "Mano", "Varilla", "Flex", "Peso de varilla", "Longitud", "Lie", "Grip", "Notas"]) assert.match(editors, new RegExp(field));
+  for (const set of ["4–P", "4–AW", "5–P", "5–AW"]) assert.match(editors, new RegExp(set));
   assert.match(panel, /Mi bolsa/);
   assert.match(panel, /Editar/);
   assert.match(panel, /Mover a anterior/);
@@ -56,9 +57,10 @@ test("Mi juego y las distancias manuales son opcionales y usan el mismo perfil",
 });
 
 test("bola y Ball Fit exponen el flujo completo sin presentar una verdad oficial", () => {
-  assert.match(onboarding, /¿Qué bola juegas normalmente\?/);
-  assert.match(onboarding, /No tengo una bola fija/);
-  assert.match(onboarding, /¿Quieres descubrir qué tipo de bola puede ajustarse mejor a tu juego\?/);
+  assert.match(onboarding, /Encuentra bolas que se ajusten a tu juego/);
+  assert.match(onboarding, /El fitting usa tu HCP, velocidad, vuelo, spin, control y sensación/);
+  assert.match(onboarding, /Hacer Ball Fit/);
+  assert.match(onboarding, /Registrar mi bola actual/);
   assert.match(panel, /The Backyard Ball Fit/);
   assert.match(panel, /Tu grupo recomendado/);
   assert.match(wizard, /Tu mejor grupo de bolas/);

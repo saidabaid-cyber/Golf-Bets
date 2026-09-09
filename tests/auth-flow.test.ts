@@ -251,4 +251,6 @@ test("pantalla OTP tiene captura, regreso y separación explícita de invitado",
   assert.match(ui, /disabled=\{busy \|\| !appleAvailable\}/);
   assert.match(ui, /pendiente de configuración/);
   assert.match(ui, /restoreAuthSession\(supabase.auth\)/);
+  assert.match(ui, /Mantener sesión iniciada/);
+  assert.match(ui, /setAuthSessionPersistence\(rememberSession\)/);
 });

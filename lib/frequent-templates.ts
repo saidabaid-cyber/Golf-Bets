@@ -83,7 +83,7 @@ export function parseFrequentGroups(raw: string | null | undefined): FrequentGro
         : [];
       if (!players.length) return [];
       const gameTemplate = normalizeGroupGameTemplate(templateCandidate, players);
-      const imageUrl = typeof group.imageUrl === "string" ? group.imageUrl.trim().slice(0, 2000) : "";
+      const imageUrl = typeof group.imageUrl === "string" ? group.imageUrl.trim().slice(0, 180_000) : "";
       return [{
         id: group.id,
         name,
@@ -119,7 +119,7 @@ export function updateFrequentGroupTemplate(
     name,
     players,
     ...(patch.imageUrl !== undefined
-      ? patch.imageUrl.trim() ? { imageUrl: patch.imageUrl.trim().slice(0, 2000) } : { imageUrl: undefined }
+      ? patch.imageUrl.trim() ? { imageUrl: patch.imageUrl.trim().slice(0, 180_000) } : { imageUrl: undefined }
       : {}),
     ...(patch.privacy ? { privacy: patch.privacy === "invite_only" ? "invite_only" : "private" } : {}),
     ...(patch.gameTemplate ? { gameTemplate: normalizeGroupGameTemplate(patch.gameTemplate, players) } : {}),

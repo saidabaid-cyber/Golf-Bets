@@ -32,11 +32,11 @@ test("advanced normalization preserves explicit false and zero but rejects corru
 
 test("advanced normalization keeps the optional UX V2 shot fields without affecting score", () => {
   const normalized = normalizeAdvancedStats({
-    1: { owner: { teeDirection: "left", landingLie: "rough", teeClub: " Driver ", teeDistance: 271, outOfBounds: false } },
-    2: { owner: { teeDirection: "diagonal", landingLie: "cart", teeClub: "", teeDistance: 900, outOfBounds: "no" } },
+    1: { owner: { teeDirection: "left", landingLie: "rough", teeClub: " Driver ", teeDistance: 271, firstPuttDistanceFeet: 18, bunkerCount: 2, penaltyAreaCount: 1, outOfBounds: false } },
+    2: { owner: { teeDirection: "diagonal", landingLie: "cart", teeClub: "", teeDistance: 900, firstPuttDistanceFeet: -2, bunkerCount: 99, penaltyAreaCount: "one", outOfBounds: "no" } },
   });
   assert.deepEqual(normalized, {
-    1: { owner: { teeDirection: "left", landingLie: "rough", teeClub: "Driver", teeDistance: 271, outOfBounds: false } },
+    1: { owner: { teeDirection: "left", landingLie: "rough", teeClub: "Driver", teeDistance: 271, firstPuttDistanceFeet: 18, bunkerCount: 2, penaltyAreaCount: 1, outOfBounds: false } },
   });
 });
 

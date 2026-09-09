@@ -134,6 +134,17 @@ export function advanceBetaOnboarding(
   };
 }
 
+/** Moves within an unfinished onboarding without fabricating completed steps.
+ * Draft data is persisted separately, so Back/Resume never loses prior input. */
+export function navigateBetaOnboarding(
+  progress: BetaOnboardingProgress,
+  nextStep: Exclude<BetaOnboardingStep, "complete">,
+  now = new Date().toISOString(),
+): BetaOnboardingProgress {
+  if (progress.status === "complete" || !(BETA_ONBOARDING_STEPS as readonly string[]).includes(nextStep)) return progress;
+  return { ...progress, step: nextStep, updatedAt: now };
+}
+
 export function completeBetaOnboarding(
   progress: BetaOnboardingProgress,
   options: { groupId?: string; now?: string } = {},

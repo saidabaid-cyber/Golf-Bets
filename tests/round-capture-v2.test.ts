@@ -36,8 +36,8 @@ test("Putts traduce Víboras al evento determinista existente", () => {
 
 test("Peces pide un evento de agua explícito y no reutiliza penalidad u OB genéricos", () => {
   const component = readFileSync("app/components/round-capture-v2.tsx", "utf8");
-  assert.match(component, /Pez · agua/);
-  assert.match(component, /Peces por agua/);
+  assert.match(component, /Agua \/ drop/);
+  assert.match(component, /onCounterChange\("fish"/);
   assert.doesNotMatch(component, /Pen \/ OB<NumericCaptureInput/);
 });
 
@@ -48,13 +48,13 @@ test("estado respecto al par nunca inventa un score", () => {
   assert.equal(scoreToParLabel(6, 4), "+2");
 });
 
-test("UX V2 separa jugador principal, tabla móvil, cámara secundaria y CTA final", () => {
+test("UX V2 separa jugador principal, grupo ligero, cámara secundaria y CTA final", () => {
   const component = readFileSync("app/components/round-capture-v2.tsx", "utf8");
   const page = readFileSync("app/page.tsx", "utf8");
   assert.match(component, /Jugador principal/);
   assert.match(component, /JUGADORES DEL GRUPO/);
-  assert.match(component, /RÁPIDA/);
-  assert.match(component, /ESTADÍSTICAS/);
+  assert.match(component, /SIN ESTADÍSTICA/);
+  assert.match(component, /CON ESTADÍSTICA/);
   assert.match(component, /aria-label="Escanear tarjeta"/);
   assert.match(component, /BOLA AMIGA/);
   assert.match(component, /haversineDistanceKm/);
@@ -73,6 +73,12 @@ test("Capture V2.2 usa más/menos, contadores por tap y estadísticas inline", (
   assert.match(component, /Agregar \$\{label\}/);
   assert.match(component, /Confirmar cero en \$\{label\}/);
   assert.match(component, /Confirmar \$\{label\}/);
-  assert.match(component, /<section className=\{styles\.advancedPlayer\}>/);
-  assert.doesNotMatch(component, /<details className=\{styles\.advancedPlayer\}>/);
+  assert.match(component, /<section className=\{styles\.ownerStatistics\}/);
+  assert.doesNotMatch(component, /players\.map\(\(player\) => <AdvancedPlayer/);
+  assert.doesNotMatch(component, /<details/);
+  assert.doesNotMatch(component, /Lie de llegada/);
+  assert.match(component, /Distancia 1er putt/);
+  assert.match(component, /label="Bunker"/);
+  assert.doesNotMatch(component, /icon="🐫"/);
+  assert.match(component, /unitQuantities/);
 });

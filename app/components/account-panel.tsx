@@ -9,6 +9,7 @@ import type { GolfInsights } from "../../lib/golf-insights";
 import { useBackyardAccount } from "./account-provider";
 import { EquipmentProfilePanel } from "./equipment-profile-panel";
 import { LegalConsentManager } from "./legal-consent-manager";
+import { ProfileImagePicker } from "./profile-image-picker";
 
 type AccountPanelProps = {
   view: "profile" | "account";
@@ -61,6 +62,7 @@ function profileDetailsDraft(profile: BackyardProfile): ProfileDetailsDraft {
     gamePriority: profile.gamePriority || defaults.gamePriority,
     priceImportance: profile.priceImportance || defaults.priceImportance,
     improvementGoals: [...(profile.improvementGoals || defaults.improvementGoals)],
+    primaryGoals: [...(profile.primaryGoals || defaults.primaryGoals)],
     primaryGoal: profile.primaryGoal || defaults.primaryGoal,
     targetHandicap: profile.targetHandicap ?? defaults.targetHandicap,
     planId: profile.planId || defaults.planId,
@@ -234,7 +236,7 @@ export function AccountPanel({ view, highContrast, onHighContrastChange, notific
   />;
 
   return <>
-    <section className="hero accountHero"><div><div className="eyebrow">{view === "profile" ? "THE BACKYARD · GOLFISTA" : "THE BACKYARD ACCOUNT"}</div><h1>{view === "profile" ? "Mi Perfil" : "Cuenta y privacidad"}</h1><p>{view === "profile" ? "Tu identidad de golf, HCP capturado y estadísticas reales." : "Acceso, sincronización, consentimientos y preferencias de tu cuenta."}</p></div></section>
+    <section className="hero accountHero"><div><div className="eyebrow">{view === "profile" ? "THE BACKYARD · GOLFISTA" : "THE BACKYARD ACCOUNT"}</div><h1>{view === "profile" ? "Mi Perfil" : "Cuenta y privacidad"}</h1><p>{view === "profile" ? "Tu identidad de golf, HCP index y estadísticas reales." : "Acceso, sincronización, consentimientos y preferencias de tu cuenta."}</p></div></section>
 
     {view === "account" && identity.mode === "guest" && <section className="card guestAccountCard"><h2>Modo invitado · Los datos permanecen en este dispositivo</h2><div className="accountInlineActions"><button className="primary" onClick={openAccess}>Crear cuenta</button><button className="secondary" onClick={openAccess}>Iniciar sesión</button></div></section>}
 
@@ -258,10 +260,10 @@ export function AccountPanel({ view, highContrast, onHighContrastChange, notific
       <div className="sectionTitle"><div className="profileIdentity"><div className="accountAvatar">{identity.avatarUrl ? <img src={identity.avatarUrl} alt={`Avatar de ${identity.displayName}`} referrerPolicy="no-referrer" /> : (identity.displayName.trim()[0] || "J").toUpperCase()}</div><div><h2>{identity.displayName}</h2><p>{identity.email || "Perfil local en este dispositivo"}</p></div></div><button className="secondary" onClick={() => setEditing((value) => !value)}>{editing ? "Cancelar" : "Editar perfil"}</button></div>
       {editing && <div className="profileForm profileFormExpanded">
         <label>Nombre visible<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Tu nombre" /></label>
-        <label>HCP capturado manualmente (opcional)<input type="text" inputMode="text" value={handicap} onChange={(event) => setHandicap(event.target.value)} placeholder="Ej. 8.4 o +1.2" /></label>
+        <label>HCP index (opcional)<input type="text" inputMode="text" value={handicap} onChange={(event) => setHandicap(event.target.value)} placeholder="Ej. 8.4 o +1.2" /></label>
         <div className="profileAvatarEditor">
-          <label>Foto de perfil (URL HTTPS)<input type="url" inputMode="url" autoComplete="url" maxLength={2048} value={avatarUrl} onChange={(event) => setAvatarUrl(event.target.value)} placeholder="https://…" /></label>
-          <button type="button" className="secondary" disabled={!avatarUrl} onClick={() => setAvatarUrl("")}>Quitar foto</button>
+          <label>Foto o avatar</label>
+          <ProfileImagePicker value={avatarUrl} onChange={setAvatarUrl} />
           <p className="hint">Quitarla en The Backyard no modifica tu foto de Google.</p>
         </div>
         <label>Nombre(s)<input value={profileDetails.givenName} onChange={(event) => setProfileDetails((current) => ({ ...current, givenName: event.target.value }))} autoComplete="given-name" /></label>
@@ -288,7 +290,7 @@ export function AccountPanel({ view, highContrast, onHighContrastChange, notific
         <button className="primary profileSaveButton" disabled={savingProfile} onClick={saveProfile}>{savingProfile ? "Guardando…" : "Guardar perfil"}</button>
       </div>}
       {!editing && <div className="profileMetaList">
-        <div className="profileMeta"><span>HCP capturado manualmente</span><b>{profileHandicapLabel(identity.defaultHandicap)}</b></div>
+        <div className="profileMeta"><span>HCP index</span><b>{profileHandicapLabel(identity.defaultHandicap)}</b></div>
         {identity.username && <div className="profileMeta"><span>Usuario</span><b>@{identity.username}</b></div>}
         {identity.homeClub && <div className="profileMeta"><span>Club</span><b>{identity.homeClub}</b></div>}
         {(identity.city || identity.state || identity.country) && <div className="profileMeta"><span>Ubicación</span><b>{[identity.city, identity.state, identity.country].filter(Boolean).join(", ")}</b></div>}

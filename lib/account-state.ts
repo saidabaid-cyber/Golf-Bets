@@ -70,6 +70,7 @@ export const GOLF_PRIMARY_GOALS = [
   "COMPETE_TOURNAMENTS",
 ] as const;
 export type GolfPrimaryGoal = (typeof GOLF_PRIMARY_GOALS)[number] | "";
+export const MAX_BACKYARD_HANDICAP = 36;
 
 export const GHIN_LINK_STATUSES = ["NOT_CONNECTED", "SKIPPED", "COMING_SOON"] as const;
 export type GhinLinkStatus = (typeof GHIN_LINK_STATUSES)[number];
@@ -93,6 +94,7 @@ export type BackyardProfileDetails = {
   gamePriority: GamePriority;
   priceImportance: PriceImportance;
   improvementGoals: GolfImprovementGoal[];
+  primaryGoals: Exclude<GolfPrimaryGoal, "">[];
   primaryGoal: GolfPrimaryGoal;
   targetHandicap: number | null;
   planId: PlanId;
@@ -124,6 +126,7 @@ const EMPTY_PROFILE_DETAILS: BackyardProfileDetails = {
   gamePriority: "",
   priceImportance: "",
   improvementGoals: [],
+  primaryGoals: [],
   primaryGoal: "",
   targetHandicap: null,
   planId: "free",
@@ -167,6 +170,18 @@ function profileImprovementGoals(value: unknown, fallback: GolfImprovementGoal[]
   )))];
 }
 
+function profilePrimaryGoals(value: unknown, legacyValue: unknown, fallback: Exclude<GolfPrimaryGoal, "">[] | undefined) {
+  const source = Array.isArray(value) ? value : legacyValue ? [legacyValue] : fallback || [];
+  return [...new Set(source.filter((item): item is Exclude<GolfPrimaryGoal, ""> => (
+    typeof item === "string" && (GOLF_PRIMARY_GOALS as readonly string[]).includes(item)
+  )))];
+}
+
+export function clampBackyardHandicap(value: number | null) {
+  if (value === null || !Number.isFinite(value)) return null;
+  return Math.min(MAX_BACKYARD_HANDICAP, Math.max(-15, value));
+}
+
 function profileDetails(candidate: Partial<BackyardProfile>, fallback?: BackyardProfile) {
   return {
     givenName: profileText(candidate.givenName, fallback?.givenName, 80),
@@ -191,8 +206,9 @@ function profileDetails(candidate: Partial<BackyardProfile>, fallback?: Backyard
     gamePriority: profileChoice(candidate.gamePriority, GAME_PRIORITIES, fallback?.gamePriority),
     priceImportance: profileChoice(candidate.priceImportance, PRICE_IMPORTANCE_LEVELS, fallback?.priceImportance),
     improvementGoals: profileImprovementGoals(candidate.improvementGoals, fallback?.improvementGoals),
-    primaryGoal: profileChoice(candidate.primaryGoal, GOLF_PRIMARY_GOALS, fallback?.primaryGoal),
-    targetHandicap: optionalProfileNumber(candidate.targetHandicap, fallback?.targetHandicap, -15, 54),
+    primaryGoals: profilePrimaryGoals(candidate.primaryGoals, candidate.primaryGoal, fallback?.primaryGoals),
+    primaryGoal: profileChoice(candidate.primaryGoal ?? (Array.isArray(candidate.primaryGoals) ? candidate.primaryGoals[0] : undefined), GOLF_PRIMARY_GOALS, fallback?.primaryGoal),
+    targetHandicap: optionalProfileNumber(candidate.targetHandicap, fallback?.targetHandicap, -15, MAX_BACKYARD_HANDICAP),
     planId: normalizePlanId(candidate.planId ?? fallback?.planId),
     ghinLinkStatus: candidate.ghinLinkStatus === "NOT_CONNECTED" || candidate.ghinLinkStatus === "SKIPPED" || candidate.ghinLinkStatus === "COMING_SOON"
       ? candidate.ghinLinkStatus
@@ -214,7 +230,7 @@ export function guestBackyardProfile(value: unknown = null): BackyardProfile {
     displayName: "",
     email: "",
     avatarUrl: "",
-    defaultHandicap: typeof candidate.defaultHandicap === "number" && Number.isFinite(candidate.defaultHandicap) ? candidate.defaultHandicap : null,
+    defaultHandicap: typeof candidate.defaultHandicap === "number" && Number.isFinite(candidate.defaultHandicap) ? clampBackyardHandicap(candidate.defaultHandicap) : null,
     ...EMPTY_PROFILE_DETAILS,
   };
 }
@@ -227,7 +243,7 @@ export function normalizeBackyardProfileCache(value: unknown, fallback: Backyard
     email: fallback.email,
     displayName: typeof candidate.displayName === "string" && candidate.displayName.trim() ? candidate.displayName.trim() : fallback.displayName,
     avatarUrl: typeof candidate.avatarUrl === "string" ? candidate.avatarUrl : fallback.avatarUrl,
-    defaultHandicap: candidate.defaultHandicap === null || (typeof candidate.defaultHandicap === "number" && Number.isFinite(candidate.defaultHandicap)) ? candidate.defaultHandicap : fallback.defaultHandicap,
+    defaultHandicap: candidate.defaultHandicap === null || (typeof candidate.defaultHandicap === "number" && Number.isFinite(candidate.defaultHandicap)) ? clampBackyardHandicap(candidate.defaultHandicap) : fallback.defaultHandicap,
     ...profileDetails(candidate, fallback),
   };
 }
@@ -238,6 +254,7 @@ export function mergeBackyardProfile<T extends BackyardProfile>(current: T, patc
     ...patch,
     displayName: patch.displayName.trim(),
     avatarUrl: patch.avatarUrl.trim(),
+    defaultHandicap: clampBackyardHandicap(patch.defaultHandicap),
     ...profileDetails(patch, current),
   };
 }
@@ -263,14 +280,14 @@ export function validateProfileDraft(name: string, handicapInput: string): Profi
   const normalized = handicapInput.trim().replace(",", ".");
   if (!normalized) return { ok: true, displayName, defaultHandicap: null };
   if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(normalized)) {
-    return { ok: false, message: "Escribe un HCP Index válido entre +15.0 y 54.0." };
+    return { ok: false, message: "Escribe un HCP index válido entre +15.0 y 36.0." };
   }
   const numeric = Number(normalized);
   const defaultHandicap = normalized.startsWith("+") ? -Math.abs(numeric) : numeric;
-  if (!Number.isFinite(defaultHandicap) || defaultHandicap < -15 || defaultHandicap > 54) {
-    return { ok: false, message: "Escribe un HCP Index válido entre +15.0 y 54.0." };
+  if (!Number.isFinite(defaultHandicap) || defaultHandicap < -15) {
+    return { ok: false, message: "Escribe un HCP index válido entre +15.0 y 36.0." };
   }
-  return { ok: true, displayName, defaultHandicap };
+  return { ok: true, displayName, defaultHandicap: clampBackyardHandicap(defaultHandicap) };
 }
 
 export type ProfileAvatarValidation =
@@ -283,7 +300,9 @@ export type ProfileAvatarValidation =
 export function validateProfileAvatarUrl(input: string): ProfileAvatarValidation {
   const avatarUrl = input.trim();
   if (!avatarUrl) return { ok: true, avatarUrl: "" };
-  const message = "Usa una URL HTTPS válida o deja el campo vacío.";
+  const message = "Elige una foto o avatar válido, o deja el campo vacío.";
+  if (/^\/avatars\/[a-z0-9-]+\.svg$/i.test(avatarUrl)) return { ok: true, avatarUrl };
+  if (/^data:image\/(?:jpeg|png|webp);base64,(?:[a-z0-9+/]{4})*(?:[a-z0-9+/]{2}==|[a-z0-9+/]{3}=)?$/i.test(avatarUrl) && avatarUrl.length <= 180_000) return { ok: true, avatarUrl };
   if (avatarUrl.length > 2048) return { ok: false, message };
   try {
     const parsed = new URL(avatarUrl);

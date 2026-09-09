@@ -69,7 +69,7 @@ function validHandicapInput(value: string) {
   const normalized = value.trim().replace(",", ".");
   const numeric = Number(normalized);
   const handicap = normalized.startsWith("+") ? -Math.abs(numeric) : numeric;
-  return Number.isFinite(handicap) && handicap >= -15 && handicap <= 54;
+  return Number.isFinite(handicap) && handicap >= -15 && handicap <= 36;
 }
 
 export function AiRoundSetup({ initialDraft, memoryContext, accessToken, requiresRemoteConsent, savedPersonalRivals = [], onConfirm, onManualEdit, onCancel, onPlanned }: AiRoundSetupProps) {
