@@ -9,6 +9,7 @@ import { restoreBetConfig } from "../../new-round-bets";
 import { missingHandicapsForActiveBets } from "../../handicap-base";
 import { playOrder } from "../../engine";
 import { createSupplementalBet } from "../../supplemental-bets";
+import { teeAssignmentSnapshot } from "../../player-tee-assignments";
 import type {
   Course,
   FrequentGroup,
@@ -271,6 +272,7 @@ function draftFromGroup(group: FrequentGroup, current: RoundSetupDraft, date: st
     course: current.course,
     courseSelected: current.courseSelected,
     players: loaded.players,
+    playerTeeAssignments: current.playerTeeAssignments,
     ownerId: loaded.ownerId,
     startHole: loaded.startHole,
     roundHoles: loaded.roundHoles,
@@ -326,6 +328,11 @@ function draftFromHistory(snapshot: RoundSnapshot, current: RoundSetupDraft, dat
     updatedAt: snapshot.updatedAt || snapshot.completedAt || snapshot.date,
   };
   const loaded = instantiateGroupGameTemplate(memoryGroup, idFactory);
+  const playerTeeAssignments = snapshot.playerTeeAssignments?.flatMap((assignment) => {
+    const sourceIndex = sourcePlayers.findIndex((player) => player.id === assignment.playerId);
+    const playerId = loaded.players[sourceIndex]?.id;
+    return playerId ? [{ ...assignment, playerId }] : [];
+  });
   let course = snapshot.courseSnapshot ?? null;
   if (!course) {
     const candidates = matchingCourses(`${snapshot.courseName} ${snapshot.teeName}`.trim(), context);
@@ -337,6 +344,7 @@ function draftFromHistory(snapshot: RoundSnapshot, current: RoundSetupDraft, dat
     course,
     courseSelected: Boolean(course),
     players: loaded.players,
+    playerTeeAssignments,
     ownerId: loaded.ownerId,
     startHole: loaded.startHole,
     roundHoles: loaded.roundHoles,
@@ -611,6 +619,76 @@ export function resolveRoundSetupContext(
       const matches = matchingCourses(sameCourseQuery, context);
       if (matches.length !== 1) questions.push(questionForCourse(sameCourseQuery, matches));
       else record({ type: "select_course", course: matches[0], source: "explicit", confidence: parsed.confidence, evidence: parsed.evidence });
+      continue;
+    }
+    if (parsed.type === "set_player_tees") {
+      const courseName = preview.course?.name ?? preview.courseIdentity?.name;
+      if (!courseName) {
+        questions.push({ code: "missing_course", field: "course", prompt: "Selecciona el campo antes de asignar tees por jugador." });
+        continue;
+      }
+      const resolvedPlayers = new Map<string, string>();
+      let complete = true;
+      for (const assignment of parsed.assignments) {
+        const matches = playerMatches(assignment.playerName, candidatePool(preview, context))
+          .filter((candidate) => preview.players.some((player) => playerIdentity(player) === playerIdentity(candidate.player)));
+        if (matches.length !== 1) {
+          questions.push(questionForPlayer(assignment.playerName, matches));
+          complete = false;
+          continue;
+        }
+        const player = preview.players.find((candidate) => playerIdentity(candidate) === playerIdentity(matches[0].player));
+        if (player) resolvedPlayers.set(player.id, assignment.teeName);
+      }
+      const resolveTee = (teeName: string) => matchingCourses(`${courseName} ${teeName}`, context);
+      const teeNames = new Set([
+        ...parsed.assignments.map((assignment) => assignment.teeName),
+        ...(parsed.defaultTeeName ? [parsed.defaultTeeName] : []),
+      ]);
+      const teeByName = new Map<string, Course>();
+      for (const teeName of teeNames) {
+        const matches = resolveTee(teeName);
+        if (matches.length !== 1) {
+          questions.push({
+            code: matches.length ? "ambiguous_course" : "missing_tee",
+            field: "players.tees",
+            prompt: matches.length
+              ? `Encontré varias opciones para el tee ${teeName} en ${courseName}. ¿Cuál quieres usar?`
+              : `No encontré el tee ${teeName} en ${courseName}. ¿Cuál tee quieres usar?`,
+            ...(matches.length ? { candidates: matches.map((course) => ({ id: course.id, label: course.teeName })) } : {}),
+          });
+          complete = false;
+          continue;
+        }
+        teeByName.set(normalizeMexicanSpanish(teeName), matches[0]);
+      }
+      if (!complete) continue;
+      const defaultCourse = parsed.defaultTeeName
+        ? teeByName.get(normalizeMexicanSpanish(parsed.defaultTeeName))
+        : preview.course;
+      if (!defaultCourse) {
+        questions.push(questionForTee(courseName, matchingCourses(courseName, context)));
+        continue;
+      }
+      if (!preview.course || preview.course.id !== defaultCourse.id) record({
+        type: "select_course",
+        course: defaultCourse,
+        source: "explicit",
+        confidence: parsed.confidence,
+        evidence: parsed.evidence,
+      });
+      const capturedAt = `${today}T12:00:00.000Z`;
+      const assignments = preview.players.map((player) => {
+        const teeName = resolvedPlayers.get(player.id) ?? parsed.defaultTeeName;
+        const tee = teeName ? teeByName.get(normalizeMexicanSpanish(teeName)) : undefined;
+        const existing = preview.playerTeeAssignments.find((assignment) => assignment.playerId === player.id);
+        return tee ? teeAssignmentSnapshot(player.id, tee, capturedAt) : existing;
+      }).filter((assignment): assignment is NonNullable<typeof assignment> => Boolean(assignment));
+      if (assignments.length !== preview.players.length) {
+        questions.push({ code: "missing_tee", field: "players.tees", prompt: "Me falta el tee de uno o más jugadores." });
+        continue;
+      }
+      record({ type: "set_player_tees", assignments, source: "explicit", confidence: parsed.confidence, evidence: parsed.evidence });
       continue;
     }
     if (parsed.type === "set_start_hole" || parsed.type === "set_round_holes" || parsed.type === "set_handicap_basis") {

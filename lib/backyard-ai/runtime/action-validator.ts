@@ -81,6 +81,22 @@ export function validateRoundSetupAction(action: RoundSetupAction, draft: RoundS
         && action.handicap <= 54
         ? { valid: true }
         : { valid: false, code: "player-handicap", message: "El handicap debe pertenecer a un jugador de la ronda y estar entre -15 y 54." };
+    case "set_player_tees": {
+      const playerIds = new Set(draft.players.map((player) => player.id));
+      const assignmentIds = action.assignments.map((assignment) => assignment.playerId);
+      const courseId = draft.course?.catalogCourseId || draft.course?.id;
+      const validAssignments = action.assignments.length > 0
+        && assignmentIds.length === new Set(assignmentIds).size
+        && action.assignments.every((assignment) => playerIds.has(assignment.playerId)
+          && validId(assignment.courseId)
+          && validId(assignment.teeId)
+          && Boolean(assignment.teeName.trim())
+          && assignment.courseId === courseId
+          && Number.isFinite(Date.parse(assignment.capturedAt)));
+      return validAssignments
+        ? { valid: true }
+        : { valid: false, code: "player-tees", message: "Los tees por jugador no corresponden al campo y roster actuales." };
+    }
     case "identify_course":
       return action.courseName.trim()
         && action.candidateCourseIds.length > 1

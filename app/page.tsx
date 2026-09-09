@@ -2013,7 +2013,9 @@ function GolfBetsApp() {
     if (nextCourse) {
       const normalizedCourse = withDefaultLaVistaRules(nextCourse);
       setCourse(normalizedCourse);
-      setPlayerTeeAssignments(assignTeeToEveryPlayer(draft.players, normalizedCourse, new Date().toISOString()));
+      setPlayerTeeAssignments(reconcilePlayerTeeAssignments(draft.playerTeeAssignments, draft.players, normalizedCourse, new Date().toISOString()));
+    } else {
+      setPlayerTeeAssignments([]);
     }
     setCourseSelected(manualCourseState?.courseSelected ?? draft.courseSelected);
     setPendingCourseIdentity(manualCourseState?.pendingIdentity ?? null);
@@ -3200,6 +3202,7 @@ function GolfBetsApp() {
         courseSelected,
         courseIdentity: courseSelected ? undefined : pendingCourseIdentity ?? undefined,
         players,
+        playerTeeAssignments,
         ownerId,
         startHole,
         roundHoles,

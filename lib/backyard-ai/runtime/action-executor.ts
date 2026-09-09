@@ -2,6 +2,7 @@ import { normalizeFoursomeSegments, playOrder } from "../../engine";
 import { migrateSupplementalNassau } from "../../nassau-migration";
 import { initialBets } from "../../new-round-bets";
 import { personalNassauBetsForRoundHoles, personalNassauComponentsForRoundHoles } from "../../personal-nassau";
+import { assignTeeToEveryPlayer } from "../../player-tee-assignments";
 import { createSupplementalBet, supplementalBetsForRoundHoles } from "../../supplemental-bets";
 import type { BetConfig } from "../../types";
 import type { RoundSetupAction } from "../schemas/actions";
@@ -29,6 +30,10 @@ function configuredParticipants(current: string[], requested: string[] | undefin
   const available = new Set(allPlayerIds);
   const retained = current.filter((id) => available.has(id));
   return retained.length ? retained : [...allPlayerIds];
+}
+
+function draftCapturedAt(draft: RoundSetupDraft) {
+  return `${draft.date}T12:00:00.000Z`;
 }
 
 function patchValueConfig<T extends { enabled: boolean; value: number; participantIds: string[] }>(
@@ -143,6 +148,9 @@ export function executeRoundSetupActions(draft: RoundSetupDraft, actions: readon
         next.players = structuredClone(action.players);
         next.ownerId = action.ownerId;
         if (!sameIdentities) {
+          next.playerTeeAssignments = next.course
+            ? assignTeeToEveryPlayer(action.players, next.course, draftCapturedAt(next))
+            : [];
           next.bets = initialBets(nextIds);
           next.personalBets = [];
           next.supplementalBets = [];
@@ -159,9 +167,17 @@ export function executeRoundSetupActions(draft: RoundSetupDraft, actions: readon
           ? { ...player, handicap: action.handicap }
           : player);
         break;
+      case "set_player_tees": {
+        const updates = new Map(action.assignments.map((assignment) => [assignment.playerId, structuredClone(assignment)]));
+        next.playerTeeAssignments = next.players.map((player) => updates.get(player.id)
+          ?? next.playerTeeAssignments.find((assignment) => assignment.playerId === player.id))
+          .filter((assignment): assignment is NonNullable<typeof assignment> => Boolean(assignment));
+        break;
+      }
       case "identify_course":
         next.course = null;
         next.courseSelected = false;
+        next.playerTeeAssignments = [];
         next.courseIdentity = {
           name: action.courseName,
           ...(action.catalogCourseId ? { catalogCourseId: action.catalogCourseId } : {}),
@@ -171,6 +187,7 @@ export function executeRoundSetupActions(draft: RoundSetupDraft, actions: readon
       case "select_course":
         next.course = structuredClone(action.course);
         next.courseSelected = true;
+        next.playerTeeAssignments = assignTeeToEveryPlayer(next.players, action.course, draftCapturedAt(next));
         next.courseIdentity = {
           name: action.course.name,
           ...(action.course.catalogCourseId ? { catalogCourseId: action.course.catalogCourseId } : {}),

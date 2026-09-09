@@ -168,6 +168,10 @@ export function AiRoundReview({ draft, questions, issues, canConfirm, busy, onCo
   const bets = activeBetReviews(draft);
   const pending = missingItems(draft, questions, issues);
   const courseName = draft.course?.name ?? draft.courseIdentity?.name;
+  const teeByPlayer = new Map(draft.playerTeeAssignments.map((assignment) => [assignment.playerId, assignment.teeName]));
+  const teeSummary = draft.courseSelected && draft.course
+    ? draft.players.map((player) => `${player.name}: ${teeByPlayer.get(player.id) ?? draft.course?.teeName}`).join(" · ")
+    : "Tee por confirmar";
   const readiness = canConfirm ? "LISTO" : courseName && draft.players.length && pending.every((item) => item.label === "Tee" || item.label.endsWith(" HCP")) ? "CASI LISTO" : "FALTA INFORMACIÓN";
   return <section className={`card ${styles.review}`} aria-labelledby="ai-round-review-title">
     <header className={styles.reviewHeader}>
@@ -175,7 +179,7 @@ export function AiRoundReview({ draft, questions, issues, canConfirm, busy, onCo
       <span className={styles.confidence} data-ready={canConfirm}>{readiness}</span>
     </header>
     <div className={styles.reviewGrid}>
-      <div className={styles.reviewItem}><span>Campo</span><strong>{courseName || "Por confirmar"}</strong><small>{draft.courseSelected && draft.course?.teeName ? draft.course.teeName : "Tee por confirmar"}</small></div>
+      <div className={styles.reviewItem}><span>Campo y tees</span><strong>{courseName || "Por confirmar"}</strong><small>{teeSummary}</small></div>
       <div className={styles.reviewItem}><span>Fecha y salida</span><strong>{draft.date}</strong><small>{draft.roundHoles} hoyos · salida por el {draft.startHole}</small></div>
       <div className={styles.reviewItem} data-wide="true"><span>Jugadores</span><strong>{draft.players.map((player) => player.name).join(" · ") || "Por confirmar"}</strong><small>{draft.players.map((player) => `${player.name}: HCP ${player.handicap ?? "—"}`).join(" · ")}</small></div>
       <div className={styles.reviewItem}><span>Ventajas</span><strong>{draft.handicapBasis === "relative" ? "Entre jugadores" : "Sobre campo"}</strong><small>El motor conserva el HCP de cada modalidad.</small></div>

@@ -8,6 +8,7 @@ import { initialBets } from "../lib/new-round-bets";
 import { createSupplementalBet } from "../lib/supplemental-bets";
 import type { Course, FrequentGroup, FrequentPlayer, Player, RoundSnapshot } from "../lib/types";
 import { createRoundSetupDraft } from "../lib/backyard-ai/schemas/round-setup";
+import { assignTeeToEveryPlayer, updatePlayerTeeAssignment } from "../lib/player-tee-assignments";
 import { parseUnknownPlayerClarification } from "../lib/backyard-ai/runtime/clarification";
 import { parseRoundSetupIntent } from "../lib/backyard-ai/runtime/intent-parser";
 import { planRoundSetup } from "../lib/backyard-ai/runtime/round-setup";
@@ -23,6 +24,8 @@ function course(id: string, name = "La Vista", teeName = "Azules"): Course {
 }
 
 const laVista = course("la-vista-azules");
+const laVistaWhite: Course = { ...course("la-vista-blancas", "La Vista", "Blancas"), catalogCourseId: "la-vista", catalogTeeId: "white" };
+const laVistaBlue: Course = { ...laVista, catalogCourseId: "la-vista", catalogTeeId: "blue" };
 const profile: BackyardProfile = {
   userId: "user-said",
   displayName: "Said",
@@ -276,6 +279,47 @@ test("TEST B: cambiar únicamente Skins conserva el resto del draft y la termino
   assert.deepEqual(plan.draft.players, before.players);
   assert.deepEqual(plan.draft.course, before.course);
   assert.equal(plan.draft.presentation?.groupNassauTerm, "nassau");
+});
+
+test("ediciones AI conservan tees individuales y el cambio explícito actualiza sólo los tees", () => {
+  const draft = createRoundSetupDraft({
+    date: "2026-09-07",
+    course: laVistaWhite,
+    players: roundPlayers,
+    ownerId: "said",
+    playerTeeAssignments: updatePlayerTeeAssignment(
+      assignTeeToEveryPlayer(roundPlayers, laVistaWhite, "2026-09-07T12:00:00.000Z"),
+      "juan",
+      laVistaBlue,
+      "2026-09-07T12:00:00.000Z",
+    ),
+  });
+  draft.bets.skins = { ...draft.bets.skins, enabled: true, value: 200 };
+  draft.bets.polla.first9 = { ...draft.bets.polla.first9, enabled: true, value: 500 };
+  draft.bets.polla.second9 = { ...draft.bets.polla.second9, enabled: true, value: 500 };
+  draft.bets.polla.total18 = { ...draft.bets.polla.total18, enabled: true, value: 500 };
+  draft.bets.ballFriend = { ...draft.bets.ballFriend, enabled: true };
+  draft.bets.vipers = { ...draft.bets.vipers, enabled: true };
+
+  const skins = planRoundSetup("Cambia únicamente los Skins a $300.", context({ activeDraft: draft, courses: [laVistaWhite, laVistaBlue] }));
+  assert.equal(skins.draft.bets.skins.value, 300);
+  assert.deepEqual(skins.draft.playerTeeAssignments, draft.playerTeeAssignments);
+
+  const withoutVipers = planRoundSetup("Quita Viboritas y deja todo lo demás igual.", context({ activeDraft: skins.draft, courses: [laVistaWhite, laVistaBlue] }));
+  assert.equal(withoutVipers.draft.bets.vipers.enabled, false);
+  assert.deepEqual(withoutVipers.draft.playerTeeAssignments, draft.playerTeeAssignments);
+
+  const tees = planRoundSetup("Juan juega azules y los demás blancas.", context({ activeDraft: withoutVipers.draft, courses: [laVistaWhite, laVistaBlue] }));
+  assert.deepEqual(
+    tees.draft.playerTeeAssignments.map((assignment) => [assignment.playerId, assignment.teeName]),
+    [["said", "Blancas"], ["pedro", "Blancas"], ["juan", "Azules"], ["carlos", "Blancas"]],
+  );
+  assert.equal(tees.draft.course?.id, laVistaWhite.id);
+  assert.equal(tees.draft.bets.skins.value, 300);
+  assert.equal(tees.draft.bets.polla.first9.value, 500);
+  assert.equal(tees.draft.bets.ballFriend.enabled, true);
+  assert.equal(tees.draft.bets.vipers.enabled, false);
+  assert.deepEqual(tees.draft.players, draft.players);
 });
 
 test("‘Mejor Nassau de 300’ actualiza sólo los componentes grupales activos", () => {

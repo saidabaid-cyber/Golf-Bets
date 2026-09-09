@@ -82,6 +82,26 @@ test("conserva la partición de equipos aunque cambie el orden dentro de cada pa
   if (!mixed.ok) assert.ok(mixed.issues.some((issue) => issue.code === "explicit_actions_changed"));
 });
 
+test("protege asignaciones de tee por jugador y no confunde juegos con colores", () => {
+  assert.equal(
+    validateCanonicalRoundCommand(
+      "Juan juega azules y los demás blancas.",
+      "Juan juega tee azules y los demás juegan blancas.",
+    ).ok,
+    true,
+  );
+  const changed = validateCanonicalRoundCommand(
+    "Juan juega azules y los demás blancas.",
+    "Juan juega blancas y los demás azules.",
+  );
+  assert.equal(changed.ok, false);
+  if (!changed.ok) assert.ok(changed.issues.some((issue) => issue.code === "explicit_actions_changed"));
+  assert.equal(
+    validateCanonicalRoundCommand("Juan juega Skins y los demás Nassau.", "Juan juega Skins y los demás Nassau.").ok,
+    true,
+  );
+});
+
 test("rechaza agregar otra modalidad aunque reutilice la misma cifra", () => {
   const result = validateCanonicalRoundCommand("Skins de 100.", "Skins de 100 y Conejos de 100.");
   assert.equal(result.ok, false);

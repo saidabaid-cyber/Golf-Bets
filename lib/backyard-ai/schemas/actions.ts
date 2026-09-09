@@ -4,6 +4,7 @@ import type {
   DecimalMode,
   HandicapMode,
   Player,
+  PlayerTeeAssignmentSnapshot,
   RoundHandicapBasis,
   SkinsMode,
   SupplementalBet,
@@ -34,6 +35,7 @@ export type CoreRoundBetKey =
 export type RoundSetupAction =
   | ({ type: "replace_players"; players: Player[]; ownerId: string } & ActionEvidence)
   | ({ type: "set_player_handicap"; playerId: string; handicap: number } & ActionEvidence)
+  | ({ type: "set_player_tees"; assignments: PlayerTeeAssignmentSnapshot[] } & ActionEvidence)
   | ({ type: "identify_course"; courseName: string; catalogCourseId?: string; candidateCourseIds: string[] } & ActionEvidence)
   | ({ type: "select_course"; course: Course } & ActionEvidence)
   | ({ type: "set_start_hole"; startHole: 1 | 10 } & ActionEvidence)
@@ -124,6 +126,13 @@ export type RoundMemoryReference =
 export type ParsedRoundSetupAction =
   | { type: "replace_players"; playerNames: string[]; confidence: number; evidence: string }
   | { type: "set_player_handicap"; playerName: string; handicap: number; confidence: number; evidence: string }
+  | {
+      type: "set_player_tees";
+      assignments: Array<{ playerName: string; teeName: string }>;
+      defaultTeeName?: string;
+      confidence: number;
+      evidence: string;
+    }
   | { type: "select_course"; courseName: string; confidence: number; evidence: string }
   | { type: "select_tee"; teeName: string; confidence: number; evidence: string }
   | { type: "set_start_hole"; startHole: 1 | 10; confidence: number; evidence: string }

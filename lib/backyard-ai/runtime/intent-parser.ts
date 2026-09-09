@@ -193,6 +193,23 @@ function parseTee(input: string): ParsedRoundSetupAction | undefined {
   return teeName ? { type: "select_tee", teeName, confidence: 0.98, evidence: match![0].trim() } : undefined;
 }
 
+function parsePlayerTees(input: string): ParsedRoundSetupAction | undefined {
+  const teeColor = "(?:blancas?|azules?|negras?|doradas?|rojas?|verdes?|amarillas?)";
+  const match = new RegExp(`\\b([a-záéíóúüñ][a-záéíóúüñ '\\-]{0,60}?)\\s+juega(?:\\s+(?:desde|de|el|tee))?\\s+(${teeColor})\\s+y\\s+(?:los\\s+)?dem[aá]s(?:\\s+juegan)?\\s+(${teeColor})(?=[.;]|$)`, "i").exec(input);
+  if (!match) return undefined;
+  const playerName = cleanName(match[1]);
+  const teeName = cleanName(match[2]).replace(/^tee\s+/i, "");
+  const defaultTeeName = cleanName(match[3]).replace(/^tee\s+/i, "");
+  if (!playerName || !teeName || !defaultTeeName) return undefined;
+  return {
+    type: "set_player_tees",
+    assignments: [{ playerName, teeName }],
+    defaultTeeName,
+    confidence: 0.99,
+    evidence: match[0].trim(),
+  };
+}
+
 function parseRoster(input: string): ParsedRoundSetupAction | undefined {
   // A decimal point is protected only when it has a digit on both sides.
   // Sentence punctuation after a numeric HCP must still end the roster.
@@ -846,6 +863,8 @@ export function parseRoundSetupIntent(input: string): RoundSetupInterpretation {
   if (roster) actions.push(roster);
   const course = parseCourse(input, normalizedInput, reference);
   if (course) actions.push(course);
+  const playerTees = parsePlayerTees(input);
+  if (playerTees) actions.push(playerTees);
   const tee = parseTee(input);
   if (tee) actions.push(tee);
   actions.push(...parsePlayerHandicaps(input));

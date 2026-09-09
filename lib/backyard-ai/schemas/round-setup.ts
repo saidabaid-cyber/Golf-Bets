@@ -4,6 +4,7 @@ import type { RoundTemplateOrigin } from "../../group-game-template";
 import { restoreBetConfig } from "../../new-round-bets";
 import { personalNassauBetsForRoundHoles } from "../../personal-nassau";
 import { normalizeSupplementalBets } from "../../supplemental-bets";
+import { reconcilePlayerTeeAssignments } from "../../player-tee-assignments";
 import type {
   BallFriendHole,
   BetConfig,
@@ -12,6 +13,7 @@ import type {
   ManualBet,
   PersonalBet,
   Player,
+  PlayerTeeAssignmentSnapshot,
   RoundHandicapBasis,
   RoundPresentation,
   RoundSnapshot,
@@ -37,6 +39,8 @@ export type RoundSetupDraft = {
   /** A resolved course whose tee is still pending. Never consumed by the engine. */
   courseIdentity?: RoundSetupCourseIdentity;
   players: Player[];
+  /** Tee metadata frozen per player so conversational edits cannot collapse a mixed-tee round. */
+  playerTeeAssignments: PlayerTeeAssignmentSnapshot[];
   ownerId: string;
   startHole: 1 | 10;
   roundHoles: 9 | 18;
@@ -61,6 +65,7 @@ export type CreateRoundSetupDraftInput = {
   courseSelected?: boolean;
   courseIdentity?: RoundSetupCourseIdentity;
   players?: Player[];
+  playerTeeAssignments?: PlayerTeeAssignmentSnapshot[];
   ownerId?: string;
   startHole?: 1 | 10;
   roundHoles?: 9 | 18;
@@ -109,6 +114,9 @@ export function createRoundSetupDraft(input: CreateRoundSetupDraftInput): RoundS
   const ownerId = players.some((player) => player.id === input.ownerId)
     ? input.ownerId!
     : players[0]?.id ?? "";
+  const playerTeeAssignments = course
+    ? reconcilePlayerTeeAssignments(input.playerTeeAssignments, players, course, `${input.date}T12:00:00.000Z`)
+    : [];
 
   return {
     version: ROUND_SETUP_DRAFT_VERSION,
@@ -124,6 +132,7 @@ export function createRoundSetupDraft(input: CreateRoundSetupDraftInput): RoundS
       },
     } : {}),
     players,
+    playerTeeAssignments,
     ownerId,
     startHole,
     roundHoles,

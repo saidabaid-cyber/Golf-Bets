@@ -45,6 +45,14 @@ function actionFingerprint(action: ParsedRoundSetupAction) {
       return [action.type, normalizedNames(action.playerNames, true)];
     case "set_player_handicap":
       return [action.type, normalizedName(action.playerName), action.handicap];
+    case "set_player_tees":
+      return [
+        action.type,
+        action.assignments
+          .map((assignment) => [normalizedName(assignment.playerName), normalizedName(assignment.teeName)])
+          .sort(([left], [right]) => left.localeCompare(right)),
+        action.defaultTeeName ? normalizedName(action.defaultTeeName) : null,
+      ];
     case "select_course":
       return [action.type, normalizedName(action.courseName)];
     case "select_tee":
