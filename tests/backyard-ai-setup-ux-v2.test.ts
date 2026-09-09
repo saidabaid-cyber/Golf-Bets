@@ -14,6 +14,8 @@ test("CAMBIAR ALGO lleva al composer, lo enfoca y anuncia el modo de edición", 
   assert.match(setup, /textareaRef\.current\?\.focus\(\{ preventScroll: true \}\)/);
   assert.match(setup, /¿Qué quieres cambiar\?/);
   assert.match(setup, /setEditing\(true\)/);
+  assert.match(setup, /const usesHandicapForm = !editing && handicapTargets\.length > 0/);
+  assert.match(setup, /busy \? "Entendiendo…" : editing \? "Aplicar cambio" : question \? "Confirmar respuesta"/);
 });
 
 test("los HCP faltantes se capturan juntos y Confirmar respuesta da feedback visible", () => {
@@ -22,7 +24,7 @@ test("los HCP faltantes se capturan juntos y Confirmar respuesta da feedback vis
   assert.match(setup, /className=\{styles\.handicapGrid\}/);
   assert.match(setup, /HCP de \$\{target\.label\}/);
   assert.match(setup, /handicapAnswerReady/);
-  assert.match(setup, /busy \? "Entendiendo…" : question \? "Confirmar respuesta"/);
+  assert.match(setup, /question \? "Confirmar respuesta" : "Preparar mi ronda"/);
 });
 
 test("TU RONDA usa estados honestos y checklist, nunca porcentaje de completitud", () => {

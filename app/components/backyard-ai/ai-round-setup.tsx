@@ -339,7 +339,7 @@ export function AiRoundSetup({ initialDraft, memoryContext, accessToken, require
   const handicapTargets = question?.code === "missing_player_handicaps" ? question.playerTargets ?? [] : [];
   const handicapAnswer = handicapTargets.map((target) => `${target.label} HCP ${handicapAnswers[target.id] ?? ""}`).join(", ");
   const handicapAnswerReady = handicapTargets.length > 0 && handicapTargets.every((target) => validHandicapInput(handicapAnswers[target.id] ?? ""));
-  const usesHandicapForm = handicapTargets.length > 0;
+  const usesHandicapForm = !editing && handicapTargets.length > 0;
   const showComposer = !plan || editing || Boolean(question);
   const personalSuggestions = frequentPersonalSuggestions(savedPersonalRivals, draft.players).filter(({ template }) => (
     !dismissedPersonalSuggestions.includes(template.id)
@@ -361,7 +361,7 @@ export function AiRoundSetup({ initialDraft, memoryContext, accessToken, require
       </div> : <textarea ref={textareaRef} autoFocus aria-label={editing ? "¿Qué quieres cambiar?" : "Describe la ronda"} placeholder={question ? "Responde sólo este dato…" : "Ej. Hoy jugamos Said, Pedro, Juan y Carlos en La Vista. Skins de $200 y Nassau de $500…"} value={input} maxLength={2_400} disabled={busy} onChange={(event) => changeInput(event.target.value)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") void submit(); }} />}
       {!plan && <div className={styles.suggestions}>{EXAMPLES.map((example) => <button type="button" key={example} disabled={busy} onClick={() => changeInput(example)}>{example}</button>)}</div>}
       <div className={styles.composerActions}>
-        <button type="button" className="primary big" disabled={busy || (usesHandicapForm ? !handicapAnswerReady : input.trim().length < 2)} onClick={() => void submit(usesHandicapForm ? handicapAnswer : undefined)}>{busy ? "Entendiendo…" : question ? "Confirmar respuesta" : editing ? "Aplicar cambio" : "Preparar mi ronda"}</button>
+        <button type="button" className="primary big" disabled={busy || (usesHandicapForm ? !handicapAnswerReady : input.trim().length < 2)} onClick={() => void submit(usesHandicapForm ? handicapAnswer : undefined)}>{busy ? "Entendiendo…" : editing ? "Aplicar cambio" : question ? "Confirmar respuesta" : "Preparar mi ronda"}</button>
         {!usesHandicapForm && <button type="button" className={styles.voiceButton} data-listening={listening} disabled={busy || (!dictationSupported && Boolean(dictationStatus))} onClick={toggleDictation}>{listening ? "■ Detener" : "🎙 Hablar"}</button>}
       </div>
       <label className={styles.consent}><input type="checkbox" checked={personalMemoryEnabled} disabled={busy} onChange={(event) => changePersonalMemory(event.target.checked)} /><span>Recordar en mi espacio privado las preferencias que confirme para facilitar rondas futuras. Esto no habilita training global.</span></label>
