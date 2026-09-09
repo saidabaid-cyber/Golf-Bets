@@ -80,6 +80,7 @@ export function ScorecardScanner({ round, storageOwnerId, accessToken, requiresR
   const selectedPhotoIds = useRef(new Set<string>());
   const committedPhotoIds = useRef(new Set<string>());
   const protectedPhotoIdsRef = useRef<readonly string[]>(protectedPhotoIds);
+  const scanButtonRef = useRef<HTMLButtonElement>(null);
   const scanGeneration = useRef(0);
   const scanInFlight = useRef(false);
   const consentCheckInFlight = useRef(false);
@@ -96,6 +97,15 @@ export function ScorecardScanner({ round, storageOwnerId, accessToken, requiresR
     protectedPhotoIdsRef.current = protectedPhotoIds;
     void deleteStaleTemporaryScorecardPhotos(storageOwnerId, Date.now(), protectedPhotoIds).catch(() => undefined);
   }, [protectedPhotoIds, storageOwnerId]);
+
+  useEffect(() => {
+    if (!photos.length) return;
+    const frame = window.requestAnimationFrame(() => {
+      scanButtonRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      scanButtonRef.current?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [photos.length]);
 
   useEffect(() => {
     mounted.current = true;
@@ -356,7 +366,7 @@ export function ScorecardScanner({ round, storageOwnerId, accessToken, requiresR
         <label className="uploadButton" aria-disabled={busy || applying || photos.length >= MAX_SCORECARD_PHOTOS}>Elegir fotografía<input type="file" accept="image/jpeg,image/png,image/webp" multiple disabled={busy || applying || photos.length >= MAX_SCORECARD_PHOTOS} onChange={(event) => { addPhotos(event.target.files); event.target.value = ""; }} /></label>
       </div>
       <p className={styles.privacyNote}>Las fotos se comprimen en memoria para el análisis. Guardar una copia local es opcional y nunca bloquea Card AI. No se usan automáticamente para training global.</p>
-      <button type="button" className="primary big" disabled={!photos.length || busy || applying} onClick={() => { void scan(); }}>{busy ? progressMessage || "Leyendo tarjeta…" : "ESCANEAR TARJETA"}</button>
+      <button ref={scanButtonRef} type="button" className="primary big" disabled={!photos.length || busy || applying} onClick={() => { void scan(); }}>{busy ? progressMessage || "Leyendo tarjeta…" : "ESCANEAR TARJETA"}</button>
       {error && <div className="notice bad" role="alert">{error}</div>}
       {storageWarning && <div className="notice" role="status">{storageWarning}</div>}
       {photoWarning && <div className="notice" role="status">{photoWarning}</div>}

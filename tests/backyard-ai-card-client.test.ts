@@ -202,7 +202,7 @@ test("requestBackyardAi implementa timeout sin depender de AbortSignal.timeout",
   }
 });
 
-test("scanner no depende de IndexedDB y expone fallback manual, progreso parcial y consentimiento visual persistente", () => {
+test("scanner no depende de IndexedDB y mantiene el CTA visible sobre la navegación móvil", () => {
   const scanner = readFileSync("app/components/backyard-ai/scorecard-scanner.tsx", "utf8");
   const correction = readFileSync("app/components/backyard-ai/scorecard-correction.tsx", "utf8");
   assert.match(scanner, /runScorecardPhotoAnalysis\(photosForScan, storageOwnerId/);
@@ -210,6 +210,8 @@ test("scanner no depende de IndexedDB y expone fallback manual, progreso parcial
   assert.doesNotMatch(scanner, /await saveScorecardPhoto/);
   assert.match(scanner, /AI_IMAGE_PROCESSING_CONSENT/);
   assert.match(scanner, /CAPTURAR MANUALMENTE/);
+  assert.match(scanner, /scanButtonRef\.current\?\.scrollIntoView\(\{ behavior: "smooth", block: "center" \}\)/);
+  assert.match(scanner, /ref=\{scanButtonRef\}/);
   assert.match(correction, /recognizedScoreCount[\s\S]*expectedScoreCount[\s\S]*scores reconocidos/);
 });
 
