@@ -8,6 +8,7 @@ Phase 2 keeps the existing `profiles`, `rounds_cloud`, cloud-sync payloads, equi
 
 1. `202609100001_phase2_social_groups_memberships.sql`
    - Social profiles, friend requests/friendships/blocks/recent players.
+   - Minimal authenticated username discovery; direct HCP/club profile reads require self or accepted friendship.
    - Groups, memberships, deterministic memories, group/round invites and verified guest claims.
    - Membership assignments, usage counters and explicit admin identities.
 2. `202609100002_phase2_course_handicap_gps.sql`
@@ -27,4 +28,3 @@ Each file has an RLS contract test under `supabase/tests`. Anonymous access is d
 - Before apply, identify an isolated Preview Supabase project, review all migrations in order, run the paired RLS tests, then execute authenticated negative tests with two non-admin users and one explicit admin.
 - If Preview shares Production, do not apply these files as part of a Preview deployment. Provision an isolated project or schedule a separately approved, backed-up, forward-only apply.
 - Rollback is forward-fix. The application flags can disable Phase 2 modules without dropping tables or historical data.
-

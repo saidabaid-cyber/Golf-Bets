@@ -14,10 +14,11 @@ Last updated: 2026-09-10 (America/Mexico_City)
 | Full quality gate | `phase2/full-platform` / `53fbdc1` | PASS | 1,350 passed, 0 failed, 0 skipped; lint PASS; Next production build PASS (28 routes) | Push Preview branch |
 | Preview deploy | `phase2/full-platform` / `f5726d7` | PASS | Vercel Preview completed successfully; GitHub deployment `6373173612`, Vercel deployment `8nM82BgRwgz4wnaXVdKnuDSiW89C`, branch alias HTTP 200 | Runtime QA |
 | Runtime QA | `phase2/full-platform` / `f5726d7` | PASS | Live GETs and real OpenAI POSTs pass for Round Setup, Card AI, Launch Monitor AI, Insights and deterministic live questions; expected unauthenticated 401/405 contracts verified | Controlled DB apply and human/device QA remain gated |
+| Security closeout | `phase2/full-platform` / `17a3a66` | PASS | Username discovery returns only minimal identity fields; full HCP/club profile rows require self or accepted friendship. Full 1,350-test suite, lint and build pass | Final Preview deploy |
 
 ## Migration ledger
 
-- `202609100001_phase2_social_groups_memberships.sql` created with RLS, grants, indexes and secure hashed-invite storage.
+- `202609100001_phase2_social_groups_memberships.sql` created with RLS, grants, indexes, secure hashed-invite storage and a minimal authenticated username-discovery RPC.
 - `phase2_social_groups_rls.sql` created.
 - `202609100002_phase2_course_handicap_gps.sql` and `phase2_course_handicap_rls.sql` created for player/course tee preferences and immutable Course Handicap snapshots.
 - `202609100003_phase2_live_rounds_notifications.sql` and `phase2_live_rounds_rls.sql` created for private participants, immutable operations, activity and notification preferences/events.
