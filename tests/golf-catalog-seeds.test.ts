@@ -13,7 +13,15 @@ import {
   QUALITATIVE_LEVELS,
   SHAFT_FLEXES,
 } from "../lib/golf-equipment";
-import { equipmentCatalogDatabaseSeed } from "../lib/golf-equipment-catalog";
+import {
+  equipmentCatalogDatabaseSeed,
+  golfBallBrands,
+  golfBallCatalog,
+  golfClubBrands,
+  golfClubCatalog,
+  golfShaftBrands,
+  golfShaftCatalog,
+} from "../lib/golf-equipment-catalog";
 
 const VERIFIED_AT = "2026-09-06T00:00:00.000Z";
 const FILES = {
@@ -261,10 +269,16 @@ test("los loaders del dominio importan todos los modelos sin descartes silencios
 
 test("cada catálogo tiene una proyección completa e idempotente para Supabase Beta", () => {
   const projected = equipmentCatalogDatabaseSeed();
-  assert.equal(projected.balls.length, readSeed(FILES.balls).models.length);
-  assert.equal(projected.clubs.length, readSeed(FILES.clubs).models.length);
-  assert.equal(projected.shafts.length, readSeed(FILES.shafts).models.length);
-  assert.equal(projected.ballBrands.length, REQUIRED_BALL_BRANDS.length);
+  assert.equal(projected.balls.length, golfBallCatalog.length);
+  assert.equal(projected.clubs.length, golfClubCatalog.length);
+  assert.equal(projected.shafts.length, golfShaftCatalog.length);
+  assert.equal(projected.ballBrands.length, golfBallBrands.length);
+  assert.equal(projected.clubBrands.length, golfClubBrands.length);
+  assert.ok(golfBallCatalog.length >= 30, "Beta necesita un catálogo útil de bolas");
+  assert.ok(golfClubCatalog.length >= 60, "Beta necesita un catálogo útil de bastones");
+  assert.ok(golfShaftCatalog.length >= 40, "Beta necesita un catálogo útil de varillas");
+  assert.ok(golfBallBrands.length >= 12);
+  assert.ok(golfShaftBrands.length >= 10);
   assert.ok(projected.clubBrands.length >= REQUIRED_CLUB_BRANDS.length);
   assert.equal(new Set(projected.ballBrands.map((row) => row.id)).size, projected.ballBrands.length);
   assert.ok(projected.balls.every((row) => projected.ballBrands.some((brand) => brand.id === row.brand_id)));

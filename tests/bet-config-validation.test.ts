@@ -359,13 +359,13 @@ test("fixed handicap bases reject corrupted snapshots but allow the legacy missi
   assert.equal(currentCodes.includes("foursome-fixed-base"), false);
   assert.equal(currentCodes.includes("ball-friend-fixed-base"), false);
 
-  input.bets.foursome.fixedBaseHandicap = 54.1;
+  input.bets.foursome.fixedBaseHandicap = 36.1;
   input.bets.ballFriend.fixedBaseHandicap = -15.1;
   currentCodes = codes(input);
   assert.ok(currentCodes.includes("foursome-fixed-base"));
   assert.ok(currentCodes.includes("ball-friend-fixed-base"));
 
-  input.bets.foursome.fixedBaseHandicap = 54;
+  input.bets.foursome.fixedBaseHandicap = 36;
   input.bets.ballFriend.fixedBaseHandicap = -15;
   currentCodes = codes(input);
   assert.equal(currentCodes.includes("foursome-fixed-base"), false);

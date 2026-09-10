@@ -2,13 +2,15 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { BET_HELP, type BetHelpKind } from "../lib/bet-help";
+import { BET_DEFINITION_BY_ID } from "../lib/bets/registry";
 import { finalizeNumericCapture } from "../lib/numeric-input";
 
 const page = readFileSync("app/page.tsx", "utf8");
 const roundCapture = readFileSync("app/components/round-capture-v2.tsx", "utf8");
 const roundCaptureLogic = readFileSync("lib/round-capture.ts", "utf8");
+const captureRequirements = readFileSync("lib/bets/capture-requirements.ts", "utf8");
 const editor = readFileSync("app/components/supplemental-bets-editor.tsx", "utf8");
-const catalog = readFileSync("lib/bet-catalog.ts", "utf8");
+const captureControls = readFileSync("app/components/bet-fields/capture-controls.tsx", "utf8");
 const styles = readFileSync("app/components/supplemental-bets.module.css", "utf8");
 const sideBets = readFileSync("app/components/side-bet-panels.tsx", "utf8");
 
@@ -60,15 +62,10 @@ test("la configuración usa las descripciones compactas solicitadas y alinea ayu
     "Agua · el último jugador paga la bolsa",
     "El Lobo elige pareja o juega solo",
   ]) assert.match(sideBets, new RegExp(description.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  for (const description of [
-    "Jugador vs jugador · ida, vuelta y total",
-    "Diferencia de golpes netos · pago por golpe",
-    "Duelo hoyo por hoyo · al perder se abre nueva presión",
-    "Low Ball / High Ball por equipos · con presiones",
-    "Puntos contra cuota según handicap",
-    "Scores de pareja concatenados · diferencia por unidad",
-    "Menos putts de la ronda gana el ante",
-  ]) assert.ok(catalog.includes(description));
+  for (const type of ["individual_nassau", "dollar_stroke", "individual_pressures", "team_pressures", "chicago", "vegas", "minimum_putts"] as const) {
+    const definition = BET_DEFINITION_BY_ID.get(type);
+    assert.ok(definition?.description.trim(), `${type} necesita descripción canónica`);
+  }
   assert.match(styles, /\.itemActions\{display:flex;align-items:center/);
 });
 
@@ -100,9 +97,10 @@ test("Minimum Putts capture stays inside the existing score card and persists in
   const previousBets = page.indexOf('aria-label="Estado antes de este hoyo"');
   assert.ok(scoreCard >= 0 && previousBets > scoreCard);
   assert.match(roundCapture, /fields\.includes\("putts"\)[\s\S]*CompactStepper label=\{`Putts \$\{player\.name\}`\}/);
-  assert.match(roundCapture, /function CompactStepper[\s\S]*aria-label=\{label\}/);
-  assert.match(roundCaptureLogic, /bet\.type === "minimum_putts"/);
-  assert.match(roundCaptureLogic, /bet\.participantIds\.includes\(playerId\)/);
+  assert.match(captureControls, /function CompactStepper[\s\S]*aria-label=\{`Restar \$\{label\}`\}/);
+  assert.match(roundCaptureLogic, /captureRequirementsForPlayer/);
+  assert.match(captureRequirements, /bet\.type === "minimum_putts"/);
+  assert.match(captureRequirements, /bet\.participantIds\.includes\(input\.playerId\)/);
   assert.match(page, /supplementalBets, manualBets, scores, scoreEdits, putts,/);
   assert.match(page, /supplementalBets: structuredClone\(supplementalBets\), putts: structuredClone\(putts\)/);
   assert.match(page, /setSupplementalBets\(normalizeSupplementalBets\(restored\.supplementalBets, restoredRoundHoles\)\); setPutts\(restored\.putts \|\| \{\}\)/);

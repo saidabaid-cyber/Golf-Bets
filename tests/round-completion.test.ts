@@ -3,11 +3,11 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { calculatePersonalBets } from "../lib/engine";
-import { confirmCounterQuantity, counterCaptureQuantity, emptyCounterBetKeepers } from "../lib/side-bets";
+import { emptyCounterBetKeepers } from "../lib/side-bets";
 import { initialBets } from "../lib/new-round-bets";
 import { createSupplementalBet } from "../lib/supplemental-bets";
 import { abandonedPressurePlayersWithMissingScores, firstIncompleteRoundCapture, incompleteCoreBetSettlements, incompleteExternalPersonalBets, unsettledSupplementalBetResults } from "../lib/round-completion";
-import type { CounterBetEvent, Course, PersonalBet, Player, PuttsByHole, SupplementalBet } from "../lib/types";
+import type { Course, PersonalBet, Player, PuttsByHole, SupplementalBet } from "../lib/types";
 
 const players: Player[] = [{ id: "owner", name: "Said", handicap: 8 }];
 const order = Array.from({ length: 18 }, (_, index) => index + 1);
@@ -424,7 +424,7 @@ test("el último hoyo digital conserva el borrador vivo y pasa todas las puertas
   assert.match(externalFlow, /return;/);
 });
 
-test("Card AI requires explicit Camellos and Peces facts instead of assuming absent events are zero", () => {
+test("Card AI treats untouched Camellos and Peces facts as zero optional events", () => {
   const roundPlayers: Player[] = [
     { id: "owner", name: "Said", handicap: 8 },
     { id: "friend", name: "Pedro", handicap: 12 },
@@ -449,24 +449,10 @@ test("Card AI requires explicit Camellos and Peces facts instead of assuming abs
     ballFriendSetup: {},
   };
 
-  const pending = firstIncompleteRoundCapture(base);
-  assert.equal(pending?.holeNumber, 1);
-  assert.match(pending?.errors.join(" ") ?? "", /Camellos \(bunker\) de Said, Pedro/);
-  assert.match(pending?.errors.join(" ") ?? "", /Peces \(agua\) de Said, Pedro/);
-
-  let confirmedEvents: CounterBetEvent[] = base.counterBetEvents;
-  for (const hole of order) {
-    for (const player of roundPlayers) {
-      confirmedEvents = confirmCounterQuantity(confirmedEvents, "camels", hole, player.id, 0);
-      confirmedEvents = confirmCounterQuantity(confirmedEvents, "fish", hole, player.id, 0);
-    }
-  }
-  assert.equal(counterCaptureQuantity(confirmedEvents, "camels", 1, "owner"), 0);
-  assert.equal(counterCaptureQuantity(confirmedEvents, "fish", 1, "friend"), 0);
-  assert.equal(firstIncompleteRoundCapture({ ...base, counterBetEvents: confirmedEvents }), null);
+  assert.equal(firstIncompleteRoundCapture(base), null);
 });
 
-test("live digital capture uses the same Camellos and Peces completeness gate before committing a hole", () => {
+test("live digital capture derives Camellos and Peces but only gates required facts", () => {
   const page = readFileSync("app/page.tsx", "utf8");
   const liveStart = page.indexOf("function saveAndAdvance()");
   const liveEnd = page.indexOf("const savedRabbits", liveStart);

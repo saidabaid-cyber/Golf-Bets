@@ -35,6 +35,7 @@ test("Mi bolsa permite catálogo, captura manual, múltiples categorías, edici�
   assert.match(editors, /Mi varilla no aparece/);
   for (const field of ["Marca", "Modelo", "Generación", "Loft", "Mano", "Varilla", "Flex", "Peso de varilla", "Longitud", "Lie", "Grip", "Notas"]) assert.match(editors, new RegExp(field));
   for (const set of ["4–P", "4–AW", "5–P", "5–AW"]) assert.match(editors, new RegExp(set));
+  assert.match(editors, /Personalizar set/);
   assert.match(panel, /Mi bolsa/);
   assert.match(panel, /Editar/);
   assert.match(panel, /Mover a anterior/);
@@ -68,6 +69,7 @@ test("bola y Ball Fit exponen el flujo completo sin presentar una verdad oficial
   assert.match(wizard, /Sin dato verificado/);
   assert.match(wizard, /Comparar bolas recomendadas/);
   for (const row of ["Construcción", "Cubierta", "Compresión"]) assert.match(wizard, new RegExp(row));
+  assert.match(wizard, /optionalHandicap/);
   assert.match(wizard, /BACKYARD_BALL_FIT_DISCLAIMER/);
   assert.match(fitting, /No es un fitting oficial/);
   assert.doesNotMatch(wizard, /fitting oficial de (Titleist|Callaway|Bridgestone)/i);

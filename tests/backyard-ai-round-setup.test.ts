@@ -625,7 +625,7 @@ test("un jugador nuevo queda temporal y su HCP se completa sin rehacer la ronda"
   assert.deepEqual(parseUnknownPlayerClarification(syntheticUnknown, "Roberto HCP +2.4"), { name: "Roberto", handicap: -2.4 });
   assert.deepEqual(parseUnknownPlayerClarification(syntheticUnknown, "18"), { name: "Roberto", handicap: 18 });
   assert.equal(parseUnknownPlayerClarification(syntheticUnknown, "Roberto"), null);
-  assert.equal(parseUnknownPlayerClarification(syntheticUnknown, "Roberto HCP 80"), null);
+  assert.deepEqual(parseUnknownPlayerClarification(syntheticUnknown, "Roberto HCP 80"), { name: "Roberto", handicap: 36 });
 
   const replay = planRoundSetup("Roberto HCP 18.4.", context({
     activeDraft: first.draft,

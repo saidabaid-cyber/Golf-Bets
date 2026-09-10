@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { calculateMonkey, calculatePersonalBets, settleBalances } from "../lib/engine";
-import { emptyBackyardProfileDetails, normalizeBackyardProfileCache, profileHandicapInput, profileHandicapLabel, validateProfileDraft } from "../lib/account-state";
+import { emptyBackyardProfileDetails, normalizeBackyardProfileCache, profileHandicapInput, profileHandicapLabel, usernameFromEmail, validateProfileDraft } from "../lib/account-state";
 import { buildGeneralResultsTable } from "../lib/result-breakdown";
 import { resultSummaryText } from "../lib/round-editing";
 import { COUNTER_BET_META } from "../lib/side-bets";
@@ -83,9 +83,14 @@ test("pantalla de perfil usa labels, estado vacío y validación compartida", ()
   assert.match(account, /validateProfileDraft\(name, handicap\)/);
 });
 
-test("alta social prellena el nombre disponible y exige perfil incompleto para cualquier sesión", () => {
+test("alta social separa username automático de nombre visible y exige perfil incompleto", () => {
   const provider = read("app/components/account-provider.tsx");
-  assert.match(provider, /user\.user_metadata\?\.full_name \|\| user\.user_metadata\?\.name/);
+  assert.equal(usernameFromEmail("said_aba@hotmail.com"), "said_aba");
+  assert.equal(usernameFromEmail("Juan Pérez+golf@gmail.com"), "juan_perez_golf");
+  assert.equal(usernameFromEmail("said_aba@hotmail.com", ["said_aba"]), "said_aba_2");
+  assert.match(provider, /displayName: ""/);
+  assert.match(provider, /usernameFromEmail\(email\)/);
+  assert.doesNotMatch(provider, /displayName:.*user\.user_metadata\?\.full_name/);
   assert.match(provider, /identity\.mode === "authenticated" && profileSetupRequired/);
   assert.match(provider, /queuePendingProfileWrite\(localStorage, identity\.userId, next, updatedAt\)/);
   assert.match(provider, /profileWriteCoordinator\.run\(async \(\) =>/);

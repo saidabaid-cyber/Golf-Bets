@@ -37,18 +37,19 @@ const profile: BackyardProfile = {
   ...emptyBackyardProfileDetails(),
 };
 
-test("registro inicia un onboarding versionado y reanudable en GHIN", () => {
+test("registro inicia un onboarding versionado y reanudable eligiendo ruta rápida o completa", () => {
   const storage = memoryStorage();
   const started = createBetaOnboardingProgress("user-1", "2026-09-07T12:00:00.000Z");
   persistBetaOnboardingProgress(storage, started);
-  assert.equal(started.step, "ghin");
+  assert.equal(started.step, "welcome");
   assert.equal(betaOnboardingIsActive(readBetaOnboardingProgress(storage, "user-1")), true);
   assert.match(betaOnboardingStorageKey("user-1"), /user-1$/);
 });
 
 test("GHIN, equipo y Ball Fit pueden omitirse sin bloquear el onboarding", () => {
   const started = createBetaOnboardingProgress("user-1", "2026-09-07T12:00:00.000Z");
-  const equipment = advanceBetaOnboarding(started, "equipment", { skipped: true, now: "2026-09-07T12:01:00.000Z" });
+  const ghin = advanceBetaOnboarding(started, "ghin", { now: "2026-09-07T12:00:30.000Z" });
+  const equipment = advanceBetaOnboarding(ghin, "equipment", { skipped: true, now: "2026-09-07T12:01:00.000Z" });
   const improvements = advanceBetaOnboarding(equipment, "improvements", { skipped: true, now: "2026-09-07T12:02:00.000Z" });
   assert.deepEqual(improvements.skippedSteps, ["ghin", "equipment"]);
   assert.equal(improvements.step, "improvements");
@@ -110,5 +111,5 @@ test("onboarding puede volver y conservar el avance sin marcar pasos inventados"
   const group = navigateBetaOnboarding(players, "group", "2026-09-07T12:02:00.000Z");
   assert.equal(group.step, "group");
   assert.equal(group.status, "in_progress");
-  assert.deepEqual(group.completedSteps, ["ghin"]);
+  assert.deepEqual(group.completedSteps, ["welcome"]);
 });

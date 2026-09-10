@@ -25,6 +25,13 @@ test("perfil pendiente conserva HCP plus y normaliza texto antes del retry", () 
   assert.deepEqual(readPendingProfileWrite(storage, "user-a"), pending);
 });
 
+test("perfil pendiente limita cualquier HCP nuevo a 36 antes de sincronizar", () => {
+  const storage = new MemoryStorage();
+  const pending = queuePendingProfileWrite(storage, "user-max", { displayName: "Jugador", defaultHandicap: 48, avatarUrl: "" });
+  assert.equal(pending.profile.defaultHandicap, 36);
+  assert.equal(readPendingProfileWrite(storage, "user-max")?.profile.defaultHandicap, 36);
+});
+
 test("ack tardío no borra una edición de perfil más nueva", () => {
   const storage = new MemoryStorage();
   const first = queuePendingProfileWrite(storage, "user-a", { displayName: "Primero", defaultHandicap: 8, avatarUrl: "" }, "2026-09-06T12:00:00.000Z", "revision-a");

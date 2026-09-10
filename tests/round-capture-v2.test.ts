@@ -34,11 +34,13 @@ test("Putts traduce Víboras al evento determinista existente", () => {
   assert.equal(viperQuantityFromPutts(4), 1);
 });
 
-test("Peces pide un evento de agua explícito y no reutiliza penalidad u OB genéricos", () => {
+test("Peces deriva del hecho canónico Penalty/Hazard sin duplicar Agua, Peces u OB", () => {
   const component = readFileSync("app/components/round-capture-v2.tsx", "utf8");
-  assert.match(component, /Agua \/ drop/);
-  assert.match(component, /onCounterChange\("fish"/);
-  assert.doesNotMatch(component, /Pen \/ OB<NumericCaptureInput/);
+  assert.match(component, /Penalty \/ Hazard/);
+  assert.match(component, /onGolfFact\("penaltyAreaCount"/);
+  assert.match(component, /onCounterChange\("fish", playerId, value\)/);
+  assert.doesNotMatch(component, /label="Peces"/);
+  assert.doesNotMatch(component, /Agua \/ drop/);
 });
 
 test("estado respecto al par nunca inventa un score", () => {
@@ -53,8 +55,8 @@ test("UX V2 separa jugador principal, grupo ligero, cámara secundaria y CTA fin
   const page = readFileSync("app/page.tsx", "utf8");
   assert.match(component, /Jugador principal/);
   assert.match(component, /JUGADORES DEL GRUPO/);
-  assert.match(component, /SIN ESTADÍSTICA/);
-  assert.match(component, /CON ESTADÍSTICA/);
+  assert.match(component, /RÁPIDA/);
+  assert.match(component, /ESTADÍSTICAS/);
   assert.match(component, /aria-label="Escanear tarjeta"/);
   assert.match(component, /BOLA AMIGA/);
   assert.match(component, /haversineDistanceKm/);
@@ -67,18 +69,19 @@ test("Capture V2.2 usa más/menos, contadores por tap y estadísticas inline", (
   const bets = initialBets(["said"]);
   assert.deepEqual(roundCaptureFieldsForPlayer({ mode: "advanced", playerId: "said", playedHoleIndex: 0, bets, supplementalBets: [] }), ["putts", "penalties", "ob"]);
   const component = readFileSync("app/components/round-capture-v2.tsx", "utf8");
-  assert.match(component, /function CompactStepper/);
-  assert.match(component, /function TapCounter/);
-  assert.match(component, /Restar en/);
-  assert.match(component, /Agregar \$\{label\}/);
-  assert.match(component, /Confirmar cero en \$\{label\}/);
-  assert.match(component, /Confirmar \$\{label\}/);
+  const controls = readFileSync("app/components/bet-fields/capture-controls.tsx", "utf8");
+  assert.match(controls, /function CompactStepper/);
+  assert.match(controls, /function TapCounter/);
+  assert.match(controls, /Restar \$\{label\}/);
+  assert.match(controls, /Agregar \$\{label\}/);
+  assert.doesNotMatch(controls, /Confirmar cero/);
   assert.match(component, /<section className=\{styles\.ownerStatistics\}/);
   assert.doesNotMatch(component, /players\.map\(\(player\) => <AdvancedPlayer/);
   assert.doesNotMatch(component, /<details/);
   assert.doesNotMatch(component, /Lie de llegada/);
   assert.match(component, /Distancia 1er putt/);
-  assert.match(component, /label="Bunker"/);
-  assert.doesNotMatch(component, /icon="🐫"/);
+  assert.match(component, /label="Green Side Bunker" icon="🐫"/);
+  assert.match(component, /label="Fairway Bunker" icon="🐫"/);
+  assert.doesNotMatch(component, />GIR</);
   assert.match(component, /unitQuantities/);
 });

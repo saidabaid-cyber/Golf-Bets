@@ -90,7 +90,7 @@ test("cero explícito es válido; vacío no entra como base ni produce un result
   assert.equal(strokeAllowanceForHole(20.5, 2, "decimal"), 2);
 });
 
-test("el dominio de HCP de ronda acepta -15..54, incluido cero y plus negativos", () => {
+test("el dominio de HCP de ronda acepta -15..36, incluido cero y plus negativos", () => {
   const boundaryPlayers: Player[] = [
     { id: "plus-limit", name: "Plus límite", handicap: MIN_ROUND_HANDICAP },
     { id: "plus", name: "Plus", handicap: -2.4 },
@@ -102,13 +102,13 @@ test("el dominio de HCP de ronda acepta -15..54, incluido cero y plus negativos"
     "plus-limit": -15,
     plus: -2.4,
     scratch: 0,
-    "high-limit": 54,
+    "high-limit": 36,
   });
   assert.deepEqual(roundHandicapBases(boundaryPlayers, "relative"), {
     "plus-limit": 0,
     plus: 12.6,
     scratch: 15,
-    "high-limit": 69,
+    "high-limit": 51,
   });
 });
 
@@ -144,7 +144,7 @@ test("leaderboard y motores legacy aplican HCP plus sobre el campo", () => {
   assert.equal(result.events[0].winnerId, "scratch");
 });
 
-test("un HCP fuera de -15..54 se considera faltante y no genera bases", () => {
+test("un HCP fuera de -15..36 se considera faltante y no genera bases", () => {
   const below: Player = { id: "below", name: "Fuera bajo", handicap: MIN_ROUND_HANDICAP - 0.1 };
   const above: Player = { id: "above", name: "Fuera alto", handicap: MAX_ROUND_HANDICAP + 0.1 };
   assert.equal(hasValidRoundHandicap(below), false);
