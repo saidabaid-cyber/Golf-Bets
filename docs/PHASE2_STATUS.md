@@ -12,8 +12,8 @@ Last updated: 2026-09-10 (America/Mexico_City)
 | Phase 2D | `phase2/full-platform` / `8939035` | PASS | 1,350 tests, lint and build pass; optional shot lifecycle, immutable bag snapshots, GPS accuracy guard, club sample thresholds, filters/trends, aggregate-only AI insights, deterministic live questions, analytics and admin aggregates | Transversal QA |
 | Transversal QA | `phase2/full-platform` / `53fbdc1` | PASS | Cross-domain contract/regression tests plus local HTTP smoke: Home, Membership, Legal, features, course pagination, PWA and unauthorized Social/Admin behavior | Push Preview branch |
 | Full quality gate | `phase2/full-platform` / `53fbdc1` | PASS | 1,350 passed, 0 failed, 0 skipped; lint PASS; Next production build PASS (28 routes) | Push Preview branch |
-| Preview deploy | `phase2/full-platform` | PENDING | Not started | Push and wait for READY |
-| Runtime QA | `phase2/full-platform` | PENDING | Not started | Browser/API/data/UI verification |
+| Preview deploy | `phase2/full-platform` / `f5726d7` | PASS | Vercel Preview completed successfully; GitHub deployment `6373173612`, Vercel deployment `8nM82BgRwgz4wnaXVdKnuDSiW89C`, branch alias HTTP 200 | Runtime QA |
+| Runtime QA | `phase2/full-platform` / `f5726d7` | PASS | Live GETs and real OpenAI POSTs pass for Round Setup, Card AI, Launch Monitor AI, Insights and deterministic live questions; expected unauthenticated 401/405 contracts verified | Controlled DB apply and human/device QA remain gated |
 
 ## Migration ledger
 
@@ -39,4 +39,4 @@ These dependencies do not block local contracts, adapters, fixtures, feature fla
 
 ## Resume point
 
-Commit the QA record and external/database gates, push only `phase2/full-platform`, wait for a READY Preview, then verify real routes, APIs and runtime behavior. Browser/device-only checks remain `PENDING_DEVICE_QA` or `PENDING_INTERACTIVE_QA` until actually exercised.
+Phase 2 code and server/API Preview QA are complete. Apply the four migrations only after confirming an isolated Preview Supabase project, then execute authenticated multi-user/RLS QA. Browser/device-only checks remain `PENDING_DEVICE_QA` or `PENDING_INTERACTIVE_QA` until actually exercised. Do not promote or connect a custom domain before those controlled gates are approved.

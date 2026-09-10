@@ -47,9 +47,33 @@ The application was started with the existing local environment; no environment 
 
 ## Verification that still requires the final Preview
 
-- Preview deployment and runtime route inventory.
-- Real OpenAI POSTs using Preview credentials.
 - Authenticated Social/Groups/Live persistence after controlled migration apply.
 - Google OAuth and camera/GPS permission prompts.
 - Physical Safari iPhone/PWA/shot-GPS behavior.
 
+## Vercel Preview runtime QA
+
+- Branch alias: `https://golf-bets-git-phase2-full-platform-saha8.vercel.app`
+- Deployed commit: `f5726d7ee9c525006b954e0f8ce830bcdee7b640`
+- Deployment state: PASS — Vercel/GitHub deployment completed successfully.
+- Home, Membership, Legal V6/V2, Simplified Privacy, PWA manifest and service worker: HTTP 200.
+- Phase 2 feature registry: HTTP 200; internal Preview modules enabled and external score-export/push/wearable/rangefinder flags disabled.
+- Course search: HTTP 200 with provider-backed paginated results.
+- Round Setup, Card AI, Insights, Live Question and Launch Monitor status: `enabled=true`, `configured=true`, `state=ready`.
+- Unauthenticated Social search and Admin metrics: HTTP 401 as designed.
+- Analytics GET: HTTP 405 as designed because the ingestion contract is POST-only.
+
+### Real provider requests
+
+All image fixtures were generated temporarily for QA, contained no personal data and were not committed.
+
+| Request | Result | Evidence |
+| --- | --- | --- |
+| Round Setup AI | PASS | HTTP 200 in 3,990 ms; exact Spanish input returned a schema-valid, canonical command with no fallback path |
+| Card AI, readable 9-hole card | PASS | HTTP 200 in 9,035 ms; 4 players, 36 score cells and 9 par cells extracted |
+| Card AI, partially obscured card | PASS | HTTP 200 in 9,236 ms; 33 confident cells preserved and exactly 3 ambiguous cells retained for review |
+| Launch Monitor AI | PASS | HTTP 200 in 3,499 ms; two images yielded two schema-valid shots |
+| Golf Insights | PASS | HTTP 200 in 2,530 ms; schema-valid explanation from privacy-minimized aggregates |
+| Live round question | PASS | HTTP 200 in 4,361 ms; schema-valid explanation from precomputed deterministic facts |
+
+The provider path is OpenAI-only and contains no local semantic fallback. The effective model identifier is intentionally not exposed by public endpoints; code defaults to `gpt-5.4-mini` unless an approved Preview override is present. Direct Vercel runtime-log access was unavailable in this execution environment, so the exact override value was not asserted.
