@@ -131,7 +131,7 @@ function canonicalEquipmentText(value: string) {
 
 const CANONICAL_BRAND_LABELS = new Map([
   ["cobra", "Cobra"],
-  ["labgolf", "L.A.B. Golf"],
+  ["lab", "L.A.B. Golf"],
 ]);
 
 function canonicalBrandLabel(value: string) {

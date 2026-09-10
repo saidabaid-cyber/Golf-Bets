@@ -74,6 +74,12 @@ test("field merge preserves stronger existing evidence and retains every provena
   assert.ok(merged[0].provenance.some((source) => source.sourceName === "secondary archive"));
 });
 
+test("brand aliases collapse without changing model identity", () => {
+  assert.equal(golfClubCatalog.some((club) => club.brand === "COBRA" || club.brand === "LAB Golf"), false);
+  assert.ok(golfClubCatalog.some((club) => club.brand === "Cobra"));
+  assert.ok(golfClubCatalog.some((club) => club.brand === "L.A.B. Golf"));
+});
+
 test("historical equipment is searchable through bounded paginated provider", async () => {
   for (const query of ["910D3", "910 D3", "Vapor Fly", "G425", "Stealth 2 Plus", "SM7", "Black Ops", "Qi10", "Qi4D", "GTS2"]) {
     const page = await provider.search({ kind: "CLUB", query, includeArchived: true, limit: 5 });
