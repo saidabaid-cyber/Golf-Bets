@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ModalCloseButton } from "../modal-shell";
 
 import {
   acceptRemoteAiProcessingConsent,
@@ -223,6 +224,7 @@ export function AiProcessingConsentPrompt({ userId, accessToken, requiresRemoteC
   const copy = SCOPE_COPY[scope];
   return <div className="modalBackdrop">
     <section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="ai-processing-consent-title" aria-busy={checking || busy}>
+      <ModalCloseButton onClose={onCancel} disabled={busy} />
       <h2 id="ai-processing-consent-title">Autorizar procesamiento con IA</h2>
       <p><b>{copy.title}.</b> {copy.detail}</p>
       <p>El proveedor procesa únicamente el contenido que envíes al usar esta función. No autoriza datos de apuestas, memoria personal ni uso para entrenamiento global.</p>

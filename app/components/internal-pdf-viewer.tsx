@@ -4,6 +4,7 @@ import { type FormEvent, type RefObject, useCallback, useEffect, useMemo, useRef
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import type { OfficialRulesDocument } from "../../lib/rules-documents";
 import { countPdfTextMatches, pdfPixelRatio, withPdfDeadline } from "../../lib/pdf-viewer-utils";
+import { ModalCloseButton } from "./modal-shell";
 
 type SearchMatch = { page: number; count: number; excerpt?: string };
 
@@ -211,6 +212,7 @@ export function InternalPdfViewer({ document, initialPage = 1, onBack }: { docum
   }
 
   return <section className="pdfInternalViewer" role="dialog" aria-modal="true" aria-label={document.title}>
+    <ModalCloseButton onClose={onBack} />
     <header className="pdfInternalHeader">
       <div className="pdfHeaderTop"><button autoFocus className="secondary" onClick={onBack}>← Regresar a Reglas</button><div><h2>{document.title}</h2>{pdf && <small>Página visible {currentPage} de {logicalPageCount}</small>}</div></div>
       {pdf && <div className="pdfToolbar"><button className="secondary" aria-label="Reducir zoom" disabled={zoom <= .75} onClick={() => setZoom((value) => Math.max(.75, value - .25))}>−</button><b>{Math.round(zoom * 100)}%</b><button className="secondary" aria-label="Ampliar zoom" disabled={zoom >= 2} onClick={() => setZoom((value) => Math.min(2, value + .25))}>+</button><form className="pdfSearch" onSubmit={searchDocument}><label className="srOnly" htmlFor="pdf-search">Buscar en documento</label><input id="pdf-search" type="search" value={search} placeholder="Buscar en documento" onChange={(event) => { setSearch(event.target.value); setSearchCompleted(false); }} /><button className="primary" disabled={searching || !search.trim()}>{searching ? `${searchProgress}/${logicalPageCount}` : "Buscar"}</button></form></div>}

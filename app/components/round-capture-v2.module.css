@@ -61,7 +61,6 @@
 .primaryControl > span,
 .compactField > span,
 .statLabel { color: var(--muted); font-size: 9px; font-weight: 950; letter-spacing: .55px; text-transform: uppercase; }
-.parButton { min-height: 32px; border: 0; border-radius: 9px; background: #e8efea; color: var(--green); font-size: 10px; font-weight: 950; }
 
 .stepper { display: inline-grid; grid-template-columns: 40px minmax(32px, 1fr) 40px; align-items: stretch; border: 1px solid var(--line); border-radius: 11px; overflow: hidden; background: #fff; }
 .stepper button { min-height: 42px; border: 0; background: #eef4ef; color: var(--green); font-size: 20px; font-weight: 900; touch-action: manipulation; }
@@ -118,9 +117,8 @@
 .groupIdentity b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .groupIdentity small { color: var(--muted); margin-top: 2px; font-size: 9px; }
 .groupIdentity > span { display: none; color: var(--green); font-size: 10px; font-weight: 900; }
-.groupScore { display: grid; grid-template-columns: auto minmax(112px, 1fr) auto; gap: 6px; align-items: center; }
+.groupScore { display: grid; grid-template-columns: auto minmax(112px, 1fr); gap: 6px; align-items: center; }
 .groupScore > span { color: var(--muted); font-size: 8px; font-weight: 950; }
-.groupPar{min-height:38px;border:0;border-radius:9px;background:#e8efea;color:var(--green);font-size:9px;font-weight:950;padding:0 8px}
 .groupRequired { grid-column: 1 / -1; border-top: 1px solid #edf1ee; padding-top: 6px; display: grid; grid-template-columns:repeat(auto-fit,minmax(112px,1fr)); gap: 6px; align-items: end; }
 
 @media (min-width: 660px) {
@@ -144,11 +142,8 @@
   .progress { font-size: 24px; }
   .modeSwitch button { font-size: 8px; }
   .primaryControls { grid-template-columns: 1fr; }
-  .primaryControl:first-child { grid-template-columns: minmax(0, 1fr) 52px; }
-  .primaryControl:first-child > span { grid-column: 1 / -1; }
-  .primaryControl:first-child .parButton { min-height: 56px; }
   .groupPlayer { grid-template-columns: minmax(82px, .72fr) minmax(134px, 1.28fr); }
-  .groupScore { grid-template-columns: minmax(112px, 1fr) auto; }
+  .groupScore { grid-template-columns: minmax(112px, 1fr); }
   .groupScore > span { display: none; }
   .groupIdentity > span { display: block; }
   .statsGrid { grid-template-columns: 1fr; }.quickFacts{grid-template-columns:1fr}.groupRequired{grid-template-columns:repeat(2,minmax(0,1fr))}

@@ -14,6 +14,7 @@ import {
   type GroupTarget,
 } from "../../lib/group-generator";
 import { NumericCaptureInput } from "./numeric-capture-input";
+import { ModalCloseButton } from "./modal-shell";
 
 const id = () => globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2, 10);
 
@@ -157,6 +158,7 @@ export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, 
     </section>}
 
     {saveAllOpen && <div className="modalBackdrop"><section className="confirmDialog saveGroupsDialog" role="dialog" aria-modal="true" aria-labelledby="save-groups-title">
+      <ModalCloseButton onClose={() => { setSaveAllOpen(false); setSaveAllNames([]); }} />
       <h2 id="save-groups-title">Guardar grupos frecuentes</h2>
       <p>Asigna un nombre distinto a cada grupo. Esto no inicia ni modifica una ronda.</p>
       <div className="saveAllGroupNames">{groups.map((group, index) => <label key={`save-${index}`}>Grupo {index + 1} · {group.length} jugadores<input value={saveAllNames[index] || ""} onChange={(event) => setSaveAllNames((current) => current.map((name, itemIndex) => itemIndex === index ? event.target.value : name))} placeholder={`Nombre del Grupo ${index + 1}`} /></label>)}</div>

@@ -16,6 +16,7 @@ import { resolveCatalogShaftSelection } from "../../lib/equipment-editor-selecti
 import styles from "./equipment.module.css";
 import { useEquipmentCatalogSearch } from "./use-equipment-catalog-search";
 import { useModalDialog } from "./use-modal-dialog";
+import { ModalCloseButton } from "./modal-shell";
 
 export const CLUB_CATEGORY_LABELS: Record<ClubCategory, string> = {
   DRIVER: "Driver",
@@ -257,6 +258,7 @@ export function ClubEditor({ userId, catalog, shafts, existing, onCancel, onSave
 
   return <div className={styles.editorBackdrop} role="presentation">
     <section ref={dialogRef} tabIndex={-1} className={styles.editorSheet} role="dialog" aria-modal="true" aria-labelledby="club-editor-title">
+      <ModalCloseButton onClose={onCancel} />
       <div className={styles.sheetHandle} />
       <h2 id="club-editor-title">{existing ? "Editar bastón" : "Agregar a mi bolsa"}</h2>
       <p>Marca + modelo es suficiente. Las especificaciones son opcionales.</p>
@@ -421,6 +423,7 @@ export function BallEditor({ userId, catalog, existing, onCancel, onSave }: Ball
 
   return <div className={styles.editorBackdrop} role="presentation">
     <section ref={dialogRef} tabIndex={-1} className={styles.editorSheet} role="dialog" aria-modal="true" aria-labelledby="ball-editor-title">
+      <ModalCloseButton onClose={onCancel} />
       <div className={styles.sheetHandle} />
       <h2 id="ball-editor-title">{existing ? "Cambiar mi bola" : "Elegir mi bola"}</h2>
       <p>El catálogo conserva la generación y la fuente. El color es opcional.</p>
@@ -500,6 +503,7 @@ export function ClubDistanceEditor({ userId, clubId, clubLabel, existing, onCanc
 
   return <div className={styles.editorBackdrop} role="presentation">
     <section ref={dialogRef} tabIndex={-1} className={styles.editorSheet} role="dialog" aria-modal="true" aria-labelledby="distance-editor-title">
+      <ModalCloseButton onClose={onCancel} />
       <div className={styles.sheetHandle} />
       <h2 id="distance-editor-title">Distancia de {clubLabel}</h2>
       <p>Captura lo que conoces. Es una referencia manual y podrás corregirla cuando quieras.</p>

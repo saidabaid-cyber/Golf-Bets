@@ -291,7 +291,7 @@ export function RoundCaptureV2(props: RoundCaptureV2Props) {
           <ScorecardHoleNetPreview player={owner} hole={hole} gross={scores[owner.id]} />
 
           <div className={styles.primaryControls}>
-            <div className={styles.primaryControl}><span>SCORE</span><CompactStepper large label={`Score ${owner.name} hoyo ${hole.number}`} value={scores[owner.id]} fallback={hole.par} min={1} onChange={(value) => props.onScoreChange(owner.id, value)} /><button type="button" className={styles.parButton} onClick={() => props.onScoreChange(owner.id, hole.par)}>PAR</button></div>
+            <div className={styles.primaryControl}><span>SCORE</span><CompactStepper large label={`Score ${owner.name} hoyo ${hole.number}`} value={scores[owner.id]} fallback={hole.par} min={1} onChange={(value) => props.onScoreChange(owner.id, value)} /></div>
             <div className={styles.primaryControl}><span>PUTTS {typeof putts[owner.id] === "number" && (putts[owner.id] as number) >= 3 ? "🐍" : ""}</span><CompactStepper large label={`Putts ${owner.name} hoyo ${hole.number}`} value={putts[owner.id]} fallback={2} min={0} max={20} onChange={(value) => props.onPuttsChange(owner.id, value)} /></div>
           </div>
 
@@ -324,7 +324,7 @@ export function RoundCaptureV2(props: RoundCaptureV2Props) {
           const playerFields = quickFields(player.id);
           return <article className={styles.groupPlayer} key={player.id}>
             <div className={styles.groupIdentity}><div><b>{player.name || "Sin nombre"}</b><small>HCP {player.handicap ?? "—"} · {teeLabel(player.id)}</small></div><span>{scoreToParLabel(scores[player.id], hole.par)}</span></div>
-            <div className={styles.groupScore}><span>SCORE</span><CompactStepper label={`Score ${player.name} hoyo ${hole.number}`} value={scores[player.id]} fallback={hole.par} min={1} onChange={(value) => props.onScoreChange(player.id, value)} /><button type="button" className={styles.groupPar} onClick={() => props.onScoreChange(player.id, hole.par)}>PAR</button></div>
+            <div className={styles.groupScore}><span>SCORE</span><CompactStepper label={`Score ${player.name} hoyo ${hole.number}`} value={scores[player.id]} fallback={hole.par} min={1} onChange={(value) => props.onScoreChange(player.id, value)} /></div>
             <GroupRequiredInputs player={player} fields={playerFields} putts={putts[player.id]} stat={advancedStats[player.id] || {}} unitsActive={unitParticipates(player.id)} units={unitQuantities[player.id] || 0} onPutts={(value) => props.onPuttsChange(player.id, value)} onGolfFact={(kind, value) => setGolfFact(player.id, kind, value)} onUnitDelta={(delta) => props.onUnitDelta(player.id, delta)} />
           </article>;
         })}</div>
