@@ -272,6 +272,39 @@ for (const kind of ["camels", "fish"] as CounterBetKind[]) {
   });
 }
 
+for (const kind of ["camels", "fish"] as CounterBetKind[]) {
+  test(`${kind}: la bolsa conserva el último evento del periodo y sólo pide desempate al cierre`, () => {
+    const config = counterConfig();
+    const firstWithoutNine: CounterBetEvent[] = [{ id: `${kind}-h8`, kind, hole: 8, playerId: ids[0], quantity: 1 }];
+    const h8 = calculateCounterBet(kind, players, config, firstWithoutNine, emptyCounterBetKeepers(), order, new Set(order.slice(0, 9)));
+    assert.equal(h8.halves[0].lastEventHole, 8);
+    assert.equal(h8.halves[0].keeperId, ids[0]);
+
+    const latestNine = [...firstWithoutNine, { id: `${kind}-h9`, kind, hole: 9, playerId: ids[1], quantity: 1 }];
+    assert.equal(calculateCounterBet(kind, players, config, latestNine, emptyCounterBetKeepers(), order, new Set(order.slice(0, 9))).halves[0].keeperId, ids[1]);
+
+    for (const candidateCount of [2, 3]) {
+      const tie = ids.slice(0, candidateCount).map((playerId, index) => ({ id: `${kind}-tie-${index}`, kind, hole: 9, playerId, quantity: 1 })) satisfies CounterBetEvent[];
+      const unresolved = calculateCounterBet(kind, players, config, tie, emptyCounterBetKeepers(), order, new Set(order.slice(0, 9)));
+      assert.equal(unresolved.halves[0].needsTieBreak, true);
+      assert.equal(unresolved.halves[0].keeperId, undefined);
+      assert.equal(requiredSideBetCapture(8, [{ kind, config }], emptyCounterBetKeepers(), { enabled: false, participantIds: [] }, undefined, tie, order), "");
+      assert.match(requiredSideBetCapture(9, [{ kind, config }], emptyCounterBetKeepers(), { enabled: false, participantIds: [] }, undefined, tie, order), /Selecciona quién/);
+    }
+
+    const secondHalf: CounterBetEvent[] = [{ id: `${kind}-h17`, kind, hole: 17, playerId: ids[2], quantity: 1 }];
+    const second = calculateCounterBet(kind, players, config, secondHalf, emptyCounterBetKeepers(), order, new Set(order));
+    assert.equal(second.halves[1].lastEventHole, 17);
+    assert.equal(second.halves[1].keeperId, ids[2]);
+    assert.equal(second.zeroSum, true);
+
+    const legacy = calculateCounterBet(kind, players, { ...config, settlementMode: "round" }, [...firstWithoutNine, ...secondHalf], emptyCounterBetKeepers(), order, new Set(order));
+    assert.equal(legacy.halves[0].lastEventHole, 17);
+    assert.equal(legacy.halves[0].keeperId, ids[2]);
+    assert.equal(Object.values(legacy.balances).reduce((sum, value) => sum + value, 0), 0);
+  });
+}
+
 test("restaurar borradores conserva datos antiguos y las rondas nuevas nacen por vueltas", () => {
   const fresh = initialBets(ids).vipers;
   const saved: CounterBetConfig = { enabled: true, value: 75, secondNineMultiplier: 3, participantIds: ids.slice(0, 4) };

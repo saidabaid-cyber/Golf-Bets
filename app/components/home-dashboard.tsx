@@ -2,6 +2,7 @@
 
 import type { GolfInsights, PersonalActivity, ScoredRoundInsight } from "../../lib/golf-insights";
 import { profileHandicapLabel } from "../../lib/account-state";
+import { ProfileAvatarMedia } from "./profile-avatar-media";
 
 export type ActiveRoundSummary = {
   courseName: string;
@@ -113,7 +114,7 @@ export function HomeDashboard({
     <section className="betaHomeHero">
       <div className="betaHomeIdentity">
         <button type="button" className="betaHomeAvatar" onClick={onOpenProfile} aria-label="Abrir mi perfil">
-          {avatarUrl ? <img src={avatarUrl} alt="" referrerPolicy="no-referrer" /> : initial}
+          <ProfileAvatarMedia value={avatarUrl} fallback={initial} />
         </button>
         <div><span className="eyebrow">THE BACKYARD · GOLF</span><h1 id="beta-home-title">Hola, {safeName}.</h1><p>Tu golf, tu grupo y las cuentas claras.</p></div>
       </div>

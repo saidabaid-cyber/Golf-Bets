@@ -63,6 +63,7 @@ export type GolfBallCatalog = {
 
 export type GolfClubCatalog = {
   id: string;
+  externalId: string | null;
   brand: string;
   model: string;
   generation: string | null;
@@ -76,8 +77,14 @@ export type GolfClubCatalog = {
   standardLength: number | null;
   lie: number | null;
   headVolume: number | null;
+  setMakeup: string | null;
+  stockShafts: string[];
+  stockFlexes: ShaftFlex[];
   officialUrl: string | null;
   sourceName: string | null;
+  sourceUrl: string | null;
+  sourceCheckedAt: string | null;
+  license: string | null;
   verifiedAt: string;
   createdAt: string | null;
   updatedAt: string | null;
@@ -327,7 +334,10 @@ export type EquipmentStorageResult =
 
 type UnknownRecord = Record<string, unknown>;
 
-const SET_COMPOSITION = new Set(["1", "2", "3", "4", "5", "6", "7", "8", "9", "PW", "UW", "GW", "AW", "SW", "LW"]);
+const SET_COMPOSITION = new Set([
+  "1", "2", "3", "4", "5", "6", "7", "8", "9", "P", "PW", "UW", "GW", "AW", "SW", "LW",
+  "46°", "48°", "50°", "52°", "54°", "56°", "58°", "60°", "62°", "64°",
+]);
 
 function record(value: unknown): UnknownRecord | null {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value as UnknownRecord : null;
@@ -501,6 +511,7 @@ export function normalizeGolfClubCatalog(value: unknown): GolfClubCatalog | null
 
   return {
     id,
+    externalId: identifier(source.externalId),
     brand,
     model,
     generation: text(source.generation),
@@ -514,8 +525,14 @@ export function normalizeGolfClubCatalog(value: unknown): GolfClubCatalog | null
     standardLength: nullableNumber(source.standardLength, 10, 60),
     lie: nullableNumber(source.lie, 30, 90),
     headVolume: nullableNumber(source.headVolume, 1, 1_000),
+    setMakeup: text(source.setMakeup, 500),
+    stockShafts: uniqueTextArray(source.stockShafts, 50),
+    stockFlexes: SHAFT_FLEXES.filter((candidate) => Array.isArray(source.stockFlexes) && source.stockFlexes.includes(candidate)),
     officialUrl: httpsUrl(source.officialUrl),
     sourceName: text(source.sourceName),
+    sourceUrl: httpsUrl(source.sourceUrl),
+    sourceCheckedAt: isoDate(source.sourceCheckedAt),
+    license: text(source.license, 100),
     verifiedAt,
     ...optionalTimestampFields(source),
   };

@@ -39,6 +39,7 @@ test("edición ampliada conserva campos, normaliza usuario y no cambia email", (
     state: " Puebla ",
     country: " México ",
     homeClub: " La Vista ",
+    homeClubId: " club-la-vista ",
     preferredTee: " Azules ",
     handedness: "right",
     typicalScore: 82,
@@ -58,6 +59,7 @@ test("edición ampliada conserva campos, normaliza usuario y no cambia email", (
   assert.equal(edited.defaultHandicap, -1.2);
   assert.equal(edited.username, "said.golf");
   assert.equal(edited.homeClub, "La Vista");
+  assert.equal(edited.homeClubId, "club-la-vista");
   assert.equal(edited.typicalScore, 82);
   assert.equal(edited.driverDistanceYards, 245);
   assert.equal(edited.driverSwingSpeedBand, "FROM_95_TO_105");
@@ -162,6 +164,7 @@ test("avatar de perfil acepta foto preparada, preset interno o HTTPS legacy sin 
   assert.deepEqual(validateProfileAvatarUrl("  https://images.example.test/me.webp  "), { ok: true, avatarUrl: "https://images.example.test/me.webp" });
   assert.deepEqual(validateProfileAvatarUrl("/avatars/golf-ball.svg"), { ok: true, avatarUrl: "/avatars/golf-ball.svg" });
   assert.deepEqual(validateProfileAvatarUrl("data:image/png;base64,aGVsbG8="), { ok: true, avatarUrl: "data:image/png;base64,aGVsbG8=" });
+  assert.deepEqual(validateProfileAvatarUrl("🐺"), { ok: true, avatarUrl: "🐺" });
   for (const invalid of [
     "http://images.example.test/me.webp",
     "data:image/png;base64,abc",

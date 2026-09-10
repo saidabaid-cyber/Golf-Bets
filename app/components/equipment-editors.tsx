@@ -49,12 +49,12 @@ const FLEX_LABELS: Record<ShaftFlex, string> = {
   OTHER: "Otro",
 };
 
-const COMPOSITION = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "PW", "UW", "GW", "AW", "SW", "LW"];
+export const CUSTOM_IRON_COMPOSITION = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "P", "PW", "AW", "GW", "UW", "SW", "LW", "46°", "48°", "50°", "52°", "54°", "56°", "58°", "60°"] as const;
 const IRON_SET_PACKAGES = [
-  { label: "4–P", clubs: ["4", "5", "6", "7", "8", "9", "PW"] },
-  { label: "4–AW", clubs: ["4", "5", "6", "7", "8", "9", "PW", "AW"] },
-  { label: "5–P", clubs: ["5", "6", "7", "8", "9", "PW"] },
-  { label: "5–AW", clubs: ["5", "6", "7", "8", "9", "PW", "AW"] },
+  { label: "4–P", clubs: ["4", "5", "6", "7", "8", "9", "P"] },
+  { label: "4–AW", clubs: ["4", "5", "6", "7", "8", "9", "P", "AW"] },
+  { label: "5–P", clubs: ["5", "6", "7", "8", "9", "P"] },
+  { label: "5–AW", clubs: ["5", "6", "7", "8", "9", "P", "AW"] },
 ] as const;
 
 function uid(prefix: string) {
@@ -307,7 +307,7 @@ export function ClubEditor({ userId, catalog, shafts, existing, onCancel, onSave
           <legend>Composición del set (opcional)</legend>
           <div className={styles.choiceGrid}>{IRON_SET_PACKAGES.map((set) => <button type="button" className={styles.manualToggle} key={set.label} onClick={() => setComposition([...set.clubs])}>{set.label}</button>)}</div>
           <p className={styles.subtle}>Personalizar set</p>
-          <div className={styles.choiceGrid}>{COMPOSITION.map((club) => <label key={club}><input type="checkbox" checked={composition.includes(club)} onChange={(event) => setComposition((current) => event.target.checked ? [...current, club] : current.filter((item) => item !== club))} />{club}</label>)}</div>
+          <div className={styles.choiceGrid}>{CUSTOM_IRON_COMPOSITION.map((club) => <label key={club}><input type="checkbox" checked={composition.includes(club)} onChange={(event) => setComposition((current) => event.target.checked ? [...current, club] : current.filter((item) => item !== club))} />{club}</label>)}</div>
         </fieldset>}
 
         {!shaftManual ? <><label className={styles.fullField}>Buscar varilla (opcional)
@@ -331,6 +331,11 @@ export function ClubEditor({ userId, catalog, shafts, existing, onCancel, onSave
         <label>Lie ° (opcional)<input type="number" inputMode="decimal" min={30} max={90} step="0.1" value={lie} onChange={(event) => setLie(event.target.value)} /></label>
         <label className={styles.fullField}>Grip (opcional)<input value={grip} maxLength={180} onChange={(event) => setGrip(event.target.value)} /></label>
         <label className={styles.fullField}>Notas (opcional)<textarea value={notes} maxLength={1000} rows={3} onChange={(event) => setNotes(event.target.value)} /></label>
+        {selectedCatalogClub && <p className={`${styles.subtle} ${styles.fullField}`}>
+          Datos verificados el {new Date(selectedCatalogClub.verifiedAt).toLocaleDateString("es-MX")} · {selectedCatalogClub.sourceName}
+          {selectedCatalogClub.sourceUrl && <> · <a href={selectedCatalogClub.sourceUrl} target="_blank" rel="noreferrer">Ver fuente</a></>}
+          {selectedCatalogClub.license && <> · {selectedCatalogClub.license}</>}
+        </p>}
         {message && <div className={styles.formMessage} role="alert">{message}</div>}
         <div className={styles.formActions}><button type="button" className="secondary" onClick={onCancel}>Cancelar</button><button type="submit" className="primary">Guardar bastón</button></div>
       </form>

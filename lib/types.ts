@@ -556,6 +556,8 @@ export type RoundSnapshot = {
   courseSnapshot?: Course;
   /** Immutable tee metadata used when the round was played. */
   playerTeeAssignments?: PlayerTeeAssignmentSnapshot[];
+  /** Labels of the principal player's active bag when the round closed. */
+  ownerBagSnapshot?: string[];
   order?: number[];
   completedAt?: string;
   updatedAt?: string;

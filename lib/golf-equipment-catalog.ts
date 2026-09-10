@@ -2,6 +2,7 @@ import golfBallSeed from "../data/golf-ball-catalog.seed.json";
 import golfClubSeed from "../data/golf-club-catalog.seed.json";
 import golfShaftSeed from "../data/golf-shaft-catalog.seed.json";
 import golfEquipmentExpansionSeed from "../data/golf-equipment-catalog.expansion.seed.json";
+import forgivingGolfSnapshot from "../data/forgiving-golf-equipment.snapshot.json";
 import {
   normalizeGolfBallCatalogEntries,
   normalizeGolfClubCatalogEntries,
@@ -89,6 +90,7 @@ const expansionSeed = golfEquipmentExpansionSeed as {
   clubs?: unknown;
   shafts?: unknown;
 };
+const forgivingSeed = forgivingGolfSnapshot as SeedEnvelope & { importedAt?: unknown; license?: unknown; sourceUrl?: unknown };
 
 function expandedSeed(seed: SeedEnvelope, expansion: unknown): SeedEnvelope {
   return {
@@ -101,15 +103,32 @@ function expandedSeed(seed: SeedEnvelope, expansion: unknown): SeedEnvelope {
 }
 
 const combinedBallSeed = expandedSeed(rawBallSeed, expansionSeed.balls);
-const combinedClubSeed = expandedSeed(rawClubSeed, expansionSeed.clubs);
+const combinedClubSeed = expandedSeed(expandedSeed(rawClubSeed, expansionSeed.clubs), forgivingSeed.models);
 const combinedShaftSeed = expandedSeed(rawShaftSeed, expansionSeed.shafts);
 
 export const golfBallCatalog: readonly GolfBallCatalog[] = Object.freeze(
   normalizeGolfBallCatalogEntries(combinedBallSeed),
 );
 
+function canonicalEquipmentText(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[®™]/g, "").toLocaleLowerCase("en-US").replace(/\bgolf\b/g, "").replace(/[^a-z0-9]+/g, "");
+}
+
+export function canonicalClubIdentity(club: Pick<GolfClubCatalog, "brand" | "model" | "category">) {
+  return `${club.category}:${canonicalEquipmentText(club.brand)}:${canonicalEquipmentText(club.model)}`;
+}
+
+export function dedupeGolfClubCatalog(models: readonly GolfClubCatalog[]) {
+  const unique = new Map<string, GolfClubCatalog>();
+  for (const model of models) {
+    const key = canonicalClubIdentity(model);
+    if (!unique.has(key)) unique.set(key, model);
+  }
+  return [...unique.values()];
+}
+
 export const golfClubCatalog: readonly GolfClubCatalog[] = Object.freeze(
-  normalizeGolfClubCatalogEntries(combinedClubSeed),
+  dedupeGolfClubCatalog(normalizeGolfClubCatalogEntries(combinedClubSeed)),
 );
 
 export const golfShaftCatalog: readonly GolfShaftCatalog[] = Object.freeze(
@@ -135,6 +154,7 @@ export const golfCatalogDiagnostics = Object.freeze({
     declaredBrands: golfClubBrands.length,
     sourceModels: seedCount(combinedClubSeed),
     usableModels: golfClubCatalog.length,
+    importedModels: seedCount(forgivingSeed),
   },
   shafts: {
     declaredBrands: golfShaftBrands.length,

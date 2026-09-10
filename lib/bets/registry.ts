@@ -3,6 +3,12 @@ import type { SupplementalBet } from "../types";
 export type GolfCaptureFact = "score" | "putts" | "green_side_bunker" | "fairway_bunker" | "penalty_area" | "out_of_bounds" | "units";
 export type BetConfigCapability = "money" | "participants" | "handicap_percentage" | "handicap_basis" | "carry" | "pressure" | "segments" | "teams" | "mode";
 export type BetRegistryCategory = "group" | "counter" | "team" | "personal" | "supplemental" | "manual";
+export type GroupTemplateCoreKey = "monkey" | "rabbits" | "skins" | "units" | "foursome" | "ballFriend" | "pollaFirst" | "pollaSecond" | "pollaTotal" | "miniPolla" | "vipers" | "camels" | "fish" | "loba";
+export type BetTemplateEditor =
+  | { kind: "core"; key: GroupTemplateCoreKey; selection: true; sortOrder: number; section: "core" }
+  | { kind: "personal"; selection: true; sortOrder: number; section: "personal" }
+  | { kind: "supplemental"; type: SupplementalBet["type"]; selection: boolean; sortOrder: number; section: "supplemental" }
+  | { kind: "manual"; selection: true; sortOrder: number; section: "manual" };
 
 export type BetDefinition = {
   id: string;
@@ -11,6 +17,7 @@ export type BetDefinition = {
   description: string;
   icon: string;
   category: BetRegistryCategory;
+  templateEditor: BetTemplateEditor;
   configPath: string;
   configCapabilities: readonly BetConfigCapability[];
   validation: "canonical" | "manual-zero-sum";
@@ -25,7 +32,27 @@ export type BetDefinition = {
   historyVersion: 1;
 };
 
-const definition = (value: BetDefinition) => value;
+type BetDefinitionInput = Omit<BetDefinition, "templateEditor">;
+let registrySortOrder = 0;
+
+function coreTemplateKey(configPath: string): GroupTemplateCoreKey {
+  if (configPath === "bets.polla.first9") return "pollaFirst";
+  if (configPath === "bets.polla.second9") return "pollaSecond";
+  if (configPath === "bets.polla.total18") return "pollaTotal";
+  return configPath.replace(/^bets\./, "") as GroupTemplateCoreKey;
+}
+
+const definition = (value: BetDefinitionInput): BetDefinition => {
+  const sortOrder = registrySortOrder += 10;
+  const templateEditor: BetTemplateEditor = value.category === "supplemental"
+    ? { kind: "supplemental", type: value.id as SupplementalBet["type"], selection: value.id !== "individual_nassau", sortOrder, section: "supplemental" }
+    : value.category === "personal"
+      ? { kind: "personal", selection: true, sortOrder, section: "personal" }
+      : value.category === "manual"
+        ? { kind: "manual", selection: true, sortOrder, section: "manual" }
+        : { kind: "core", key: coreTemplateKey(value.configPath), selection: true, sortOrder, section: "core" };
+  return { ...value, templateEditor };
+};
 
 /**
  * Canonical semantic registry. Calculations remain in the existing deterministic
@@ -67,4 +94,24 @@ export function supplementalBetDefinition(type: SupplementalBet["type"]) {
 
 export function betAiAliasCatalog() {
   return BET_REGISTRY.flatMap((bet) => bet.aiAliases.map((alias) => ({ alias, betId: bet.id })));
+}
+
+export function groupTemplateSelectionDefinitions() {
+  return BET_REGISTRY.filter((bet) => bet.templateEditor.selection).toSorted((left, right) => left.templateEditor.sortOrder - right.templateEditor.sortOrder);
+}
+
+export function groupTemplateCoreDefinitions() {
+  return BET_REGISTRY.filter((bet): bet is typeof bet & { templateEditor: Extract<BetTemplateEditor, { kind: "core" }> } => bet.templateEditor.kind === "core");
+}
+
+export function groupTemplateSupplementalTypes() {
+  return BET_REGISTRY.flatMap((bet) => bet.templateEditor.kind === "supplemental" ? [bet.templateEditor.type] : []);
+}
+
+export function groupTemplateSelectableSupplementalTypes() {
+  return BET_REGISTRY.flatMap((bet) => bet.templateEditor.kind === "supplemental" && bet.templateEditor.selection ? [bet.templateEditor.type] : []);
+}
+
+export function groupTemplateEmbeddedSupplementalTypes() {
+  return BET_REGISTRY.flatMap((bet) => bet.templateEditor.kind === "supplemental" && !bet.templateEditor.selection ? [bet.templateEditor.type] : []);
 }

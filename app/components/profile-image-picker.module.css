@@ -2,12 +2,19 @@
 .preview { width: 72px; height: 72px; overflow: hidden; border: 1px solid var(--line); border-radius: 16px; background: #e5f0e8; display: grid; place-items: center; font-size: 26px; }
 .preview img { width: 100%; height: 100%; object-fit: cover; object-position: center; }
 .controls { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
+.tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; padding: 3px; border-radius: 12px; background: #edf1ee; }
+.tabs button { min-height: 38px; border: 0; border-radius: 9px; background: transparent; color: var(--muted); font-weight: 900; }
+.tabs button[data-active="true"] { background: #fff; color: var(--green); box-shadow: 0 1px 5px rgba(20, 50, 30, .08); }
 .file { display: none; }
 .presets { grid-column: 1 / -1; display: flex; gap: 8px; }
 .presets button { position: relative; isolation: isolate; width: 48px; height: 48px; padding: 0; overflow: visible; border: 2px solid transparent; border-radius: 50%; background: #edf3ef; cursor: pointer; touch-action: manipulation; pointer-events: auto; }
 .presets button[data-active="true"] { border-color: var(--green); box-shadow: 0 0 0 2px #dcece1; }
 .presets img { display: block; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; object-position: center; pointer-events: none; }
 .presets button span { position: absolute; z-index: 2; right: -3px; bottom: -3px; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; background: var(--green); color: #fff; font-size: 11px; font-weight: 900; pointer-events: none; }
+.emojis { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(6, minmax(42px, 1fr)); gap: 7px; }
+.emojis button { position: relative; min-height: 46px; border: 2px solid transparent; border-radius: 12px; background: #edf3ef; font-size: 23px; touch-action: manipulation; }
+.emojis button[data-active="true"] { border-color: var(--green); background: #fff; }
+.emojis button span { position: absolute; right: 2px; bottom: 1px; color: var(--green); font-size: 10px; font-weight: 950; }
 .help, .error { grid-column: 1 / -1; font-size: 10px; }
 .help { color: var(--muted); }
 .error { color: #8f281f; }

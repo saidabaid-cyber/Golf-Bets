@@ -39,9 +39,11 @@ export function reconcilePlayerTeeAssignments(
   course: Course,
   capturedAt: string,
 ) {
+  const courseId = course.catalogCourseId || course.id;
   const options = new Map<string, PlayerTeeAssignmentSnapshot>();
   for (const assignment of assignments || []) {
     if (!assignment || typeof assignment.playerId !== "string" || typeof assignment.teeName !== "string") continue;
+    if (assignment.courseId !== courseId && assignment.layoutId !== courseId) continue;
     options.set(assignment.playerId, { ...assignment });
   }
   return players.map((player) => options.get(player.id) || teeAssignmentSnapshot(player.id, course, capturedAt, "legacy"));

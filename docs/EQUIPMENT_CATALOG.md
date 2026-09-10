@@ -6,9 +6,13 @@ La UI consume `EquipmentCatalogProvider`; no importa archivos seed directamente.
 
 - `data/golf-club-catalog.seed.json`, `data/golf-shaft-catalog.seed.json` y `data/golf-ball-catalog.seed.json`: catálogo base.
 - `data/golf-equipment-catalog.expansion.seed.json`: expansión verificada de Beta.
+- `data/forgiving-golf-equipment.snapshot.json`: snapshot importado con licencia y procedencia por registro.
+- `scripts/import-equipment-source.mjs`: importador validado, normalizador y deduplicable de fuentes externas autorizadas.
 - `lib/golf-equipment-catalog.ts`: normalización y proyección idempotente.
 - `lib/equipment-catalog-provider.ts`: contrato de búsqueda, paginación y alcance del Ball Fit.
 - `/api/catalog/equipment`: endpoint de lectura para los selectores.
+
+La matriz de licencias, cobertura y actualización está en `docs/EQUIPMENT_SOURCES.md`.
 
 ## Agregar un bastón, varilla o bola
 
@@ -22,7 +26,7 @@ La UI consume `EquipmentCatalogProvider`; no importa archivos seed directamente.
 
 ## Reglas de UX
 
-Los selectores siguen Categoría → Marca → Modelo → Varilla. Siempre ofrecen “No sé”, “Mi bastón no aparece” y “Omitir”. Para sets de fierros se conservan paquetes 4–P, 4–AW, 5–P y 5–AW más personalización.
+Los selectores siguen Categoría → Marca → Modelo → Varilla. Siempre ofrecen “No sé”, “Mi bastón no aparece” y “Omitir”. Para sets de fierros se conservan paquetes rápidos y una composición libre de 3 a LW, incluidos wedges por grados.
 
 Las tarjetas de bola muestran sólo atributos verificados y dicen “Sin dato verificado” cuando falta evidencia. El Ball Fit evalúa el catálogo activo completo en servidor; nunca rankea silenciosamente una primera página incompleta.
 

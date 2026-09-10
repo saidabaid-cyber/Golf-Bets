@@ -126,6 +126,7 @@ import { describeCloudConflict } from "../lib/cloud-conflict-display";
 import { ownsLocalWorkspace, preserveDataConflicts, preserveDraftConflict } from "../lib/account-workspace";
 import { accountPrimaryPlayerId, accountPrimaryRoundPlayer, syncAccountPrimaryFrequentPlayer, syncLinkedRoundPlayerName } from "../lib/account-primary-player";
 import { runCloudSyncCycle } from "../lib/cloud-sync-cycle";
+import { CloudConflictResolutionBuffer } from "../lib/cloud-conflict-resolution";
 import { CloudSyncGate, cloudSyncErrorMessage, syncStatusAfterSkip, type CloudSyncTrigger } from "../lib/cloud-sync-gate";
 import { adoptGuestPhotoJobs, flushPhotoQueue, queuePhoto, photoJobs, roundScorecardPhotoIds } from "../lib/photo-sync-queue";
 import { acknowledgeOfflineBundle, getOfflineDeviceId, markOfflineAttempt, offlineRetryDelayMs, persistOfflineBundle, restoreOfflineWorkspace, writeCloudBundleToStorage } from "../lib/offline-store";
@@ -133,6 +134,7 @@ import { PRIVATE_POLLA_LINK_KEY, parsePrivatePollaLink, privatePollaScoreChanges
 import { enqueuePollaScore } from "../lib/polla-offline";
 import { isLaVistaCourse, withDefaultLaVistaRules } from "../lib/local-rules";
 import { DEFAULT_COURSES, DEFAULT_LA_VISTA_COURSE } from "../lib/golf-course-directory";
+import { captureClubLabels } from "../lib/bag-capture";
 import { filterHistory, historyYears, MONTH_LABELS } from "../lib/history-filters";
 import { priorRabbitStatus, priorSkinsStatus } from "../lib/prior-hole-status";
 import { ballFriendScoreResult, ballFriendSetupChipLabel, lobaSetupChipLabel, playerHoleBetLabels, skinHoleNotice } from "../lib/hole-bet-display";
@@ -198,7 +200,7 @@ import { createGroupGameTemplate, frequentGroupTemplateSummary, instantiateGroup
 import { assignTeeToEveryPlayer, reconcilePlayerTeeAssignments, teeOptionsForCourse, updatePlayerTeeAssignment } from "../lib/player-tee-assignments";
 import { defaultMaxBaseAppearances, generateAutomaticFoursomes, markFoursomeSegmentEdited } from "../lib/foursome-generator";
 import { advantageFieldsFromSigned, configureCurrentIndexPersonal, configureSlidingPersonal, frequentPersonalSuggestions, slidingAdjustment } from "../lib/personal-modes";
-import { loadEquipmentProfile, type PlayerClub } from "../lib/golf-equipment";
+import { loadEquipmentProfile } from "../lib/golf-equipment";
 
 const AiRoundSetup = dynamic(() => import("./components/backyard-ai/ai-round-setup").then((module) => module.AiRoundSetup), { ssr: false });
 const ScorecardScanner = dynamic(() => import("./components/backyard-ai/scorecard-scanner").then((module) => module.ScorecardScanner), { ssr: false });
@@ -237,19 +239,6 @@ const SKINS_MODE_OPTIONS: ReadonlyArray<{ value: SkinsMode; label: string; descr
   { value: "carry", label: "Acumulables", description: "Los skins sin ganador pasan al siguiente hoyo." },
   { value: "no_carry", label: "No acumulables", description: "Cada hoyo vale 1 skin; los empates no se acumulan." },
 ];
-
-function captureClubLabel(club: PlayerClub) {
-  if (club.customModel) return club.customModel;
-  const category = club.category === "DRIVER" ? "Driver"
-    : club.category === "MINI_DRIVER" ? "Mini Driver"
-      : club.category === "FAIRWAY_WOOD" ? "Madera"
-        : club.category === "HYBRID" ? "Híbrido"
-          : club.category === "UTILITY_IRON" ? "Utility"
-            : club.category === "IRON_SET" ? "Hierro"
-              : club.category === "WEDGE" ? "Wedge"
-                : "Putter";
-  return club.loft ? `${category} ${club.loft}°` : category;
-}
 
 function normalizeExpenses(raw: any): Expense {
   return {
@@ -393,7 +382,7 @@ function GolfBetsApp() {
     if (typeof window === "undefined" || tab !== "round") return [];
     const loaded = loadEquipmentProfile(localStorage, identity.userId);
     if (!loaded.ok || !loaded.profile) return [];
-    return [...new Set(loaded.profile.clubs.filter((club) => club.isCurrent).map(captureClubLabel))];
+    return [...new Set(loaded.profile.clubs.filter((club) => club.isCurrent).flatMap(captureClubLabels))];
   }, [identity.userId, tab]);
   const [rulesVisited, setRulesVisited] = useState(false);
   useEffect(() => { if (tab === "rules") setRulesVisited(true); }, [tab]);
@@ -513,6 +502,7 @@ function GolfBetsApp() {
   const flushLocalState = useRef<(() => boolean) | null>(null);
   const localPersistRevision = useRef(0);
   const requestCloudSync = useRef<(() => void) | null>(null);
+  const cloudConflictResolution = useRef(new CloudConflictResolutionBuffer());
   const latestSaveAndAdvance = useRef<() => void>(() => undefined);
   const latestSaveRound = useRef<(options?: { prepareReview?: boolean }) => void>(() => undefined);
   const roundSaveInFlight = useRef(false);
@@ -601,18 +591,21 @@ function GolfBetsApp() {
   const courseOptions = useMemo(() => [...courses].sort((left, right) => (
     left.name.localeCompare(right.name, "es-MX") || left.teeName.localeCompare(right.teeName, "es-MX")
   )), [courses]);
+  const courseNameOptions = useMemo(() => {
+    const names = new Map<string, Course>();
+    for (const candidate of courseOptions) {
+      const key = candidate.name.trim().toLocaleLowerCase("es-MX");
+      const current = names.get(key);
+      const preferred = candidate.teeName.localeCompare(identity.preferredTee || "", "es-MX", { sensitivity: "base" }) === 0;
+      const commonWhite = /blanc|white/i.test(candidate.teeName);
+      if (!current || preferred || (commonWhite && !/blanc|white/i.test(current.teeName))) names.set(key, candidate);
+    }
+    return [...names.values()];
+  }, [courseOptions, identity.preferredTee]);
   const teeOptions = useMemo(() => courseSelected ? teeOptionsForCourse(course, courseOptions) : [], [course, courseOptions, courseSelected]);
   const pendingCourseCandidates = useMemo(
     () => coursesForPendingIdentity(courseOptions, pendingCourseIdentity),
     [courseOptions, pendingCourseIdentity],
-  );
-  const pendingCourseCandidateIds = useMemo(
-    () => new Set(pendingCourseCandidates.map((candidate) => candidate.id)),
-    [pendingCourseCandidates],
-  );
-  const otherCourseOptions = useMemo(
-    () => courseOptions.filter((candidate) => !pendingCourseCandidateIds.has(candidate.id)),
-    [courseOptions, pendingCourseCandidateIds],
   );
   const privateBoard = useMemo(() => privateLeaderboard(course, players, scores, order), [course, players, scores, order]);
   const completedHoles = useMemo(() => new Set(order.filter(number => players.length > 0 && players.every(player => typeof scores[number]?.[player.id] === "number"))), [order, players, scores]);
@@ -922,12 +915,13 @@ function GolfBetsApp() {
       if (process.env.NODE_ENV === "development") console.info("[cloud-sync]", event, { trigger });
     };
     const current = () => !cancelled && !localStorage.getItem(accountDeletionMarkerKey(userId)) && ownsLocalWorkspace(localStorage, userId) && liveIdentity.current.userId === userId && Boolean(liveIdentity.current.accessToken);
-    const read = () => {
+    const readStoredState = () => {
       if (!flushLocalState.current?.()) throw new Error("No se pudo guardar el estado local; no se enviaron datos incompletos.");
       const data = collectLocalCloudData(localStorage, liveIdentity.current.defaultHandicap, hadLocalPreferences.current);
       data.deviceId = offlineDeviceId.current;
       return data;
     };
+    const read = () => cloudConflictResolution.current.read(readStoredState);
     const schedule = (trigger: CloudSyncTrigger = "local") => {
       if (!current()) return;
       clearTimeout(timer);
@@ -1000,7 +994,10 @@ function GolfBetsApp() {
               remove: roundId => deleteScorecardPhotoCloud(userId, roundId),
             }, current);
           },
-          apply: (data: CloudDataBundle) => { appliedFingerprint = applyCloudBundle(data, read()); },
+          apply: (data: CloudDataBundle) => {
+            appliedFingerprint = applyCloudBundle(data, read());
+            cloudConflictResolution.current.clear();
+          },
           retry: () => { queued = "local"; },
         });
         if (completed) {
@@ -1093,6 +1090,7 @@ function GolfBetsApp() {
     const mergedCourses = mergeDefaultCourses(resolved.courses);
     resolved.courses = mergedCourses;
     writeCloudBundleToStorage(localStorage, resolved);
+    cloudConflictResolution.current.stage(resolved);
     setCourses(mergedCourses);
     setHistory(resolved.history.map(normalizeHistorySnapshot));
     setSavedPersonalRivals(resolved.rivals);
@@ -1708,7 +1706,7 @@ function GolfBetsApp() {
       resultDetails: { rabbits, skins, units, monkey, foursomes, ballFriend, polla, miniPolla, vipers, camels, fish, loba, supplemental, settlementTransfers, settlementDifference, personals, manual },
       ownerName: owner.name, roundHoles, startHole, betResult: ownerBetResult, expenses, expenseTotal: ownerExpenseTotal,
       netResult: ownerNet, categoryResults, players: structuredClone(players), scores: structuredClone(scores),
-      courseSnapshot: structuredClone(course), playerTeeAssignments: structuredClone(playerTeeAssignments), order: [...order], completedAt: timestamp, updatedAt: timestamp,
+      courseSnapshot: structuredClone(course), playerTeeAssignments: structuredClone(playerTeeAssignments), ownerBagSnapshot: [...ownerClubChoices], order: [...order], completedAt: timestamp, updatedAt: timestamp,
       ...(scorecardPhotoIds.length ? { photoId: scorecardPhotoIds[0], scorecardPhotoIds: [...scorecardPhotoIds] } : {}),
       betConfig: structuredClone(bets), unitEvents: structuredClone(unitEvents), counterBetEvents: structuredClone(finalizedCounterBetEvents), counterBetKeepers: structuredClone(counterBetKeepers), lobaHoles: structuredClone(lobaHoles), personalBets: structuredClone(personalBets),
       supplementalBets: structuredClone(supplementalBets), putts: structuredClone(putts), advancedStats: structuredClone(advancedStats), manualBets: structuredClone(manualBets), ballFriendSetup: structuredClone(ballFriendSetup),
@@ -3284,16 +3282,16 @@ function GolfBetsApp() {
       {roundTemplateOrigin && (() => { const sourceGroup = frequentGroups.find((group) => group.id === roundTemplateOrigin.groupId); return sourceGroup ? <section className="roundTemplateNotice" role="status"><div><span>PLANTILLA CARGADA</span><b>{sourceGroup.name}</b><p>Los cambios de HCP y apuestas pertenecen únicamente a esta ronda.</p></div><button className="secondary" onClick={saveRoundAsFrequentGroupTemplate}>Guardar estos cambios como configuración habitual</button></section> : null; })()}
 
       <section className="card">
-        <div className="sectionTitle"><div><h2>1. Campo y tee inicial</h2><p>Elige una salida como punto de partida. Después puedes asignar un tee distinto a cada jugador.</p></div><div className="courseSetupActions"><button className="textButton" onClick={() => setTab("courseLibrary")}>Buscar / cerca</button><button className="textButton" onClick={startNewCourse}>+ Campo</button></div></div>
-        {!courseSelected && pendingCourseIdentity && <div className="notice" id="round-course-ai-focus" role="status"><b>Campo reconocido: {pendingCourseIdentity.name}</b><br />{pendingCourseCandidates.length ? "Elige uno de sus tees destacados primero, o selecciona otro campo." : "No encontré un tee exacto en el catálogo actual. Selecciona cualquier campo y tee para continuar."}</div>}
+        <div className="sectionTitle"><div><h2>1. Campo y tees por jugador</h2><p>Elige el campo una vez. Después ajusta el tee de cada jugador sin mezclar ambos conceptos.</p></div><div className="courseSetupActions"><button className="textButton" onClick={() => setTab("courseLibrary")}>Buscar / cerca</button><button className="textButton" onClick={startNewCourse}>+ Campo</button></div></div>
+        {!courseSelected && pendingCourseIdentity && <div className="notice" id="round-course-ai-focus" role="status"><b>Campo reconocido: {pendingCourseIdentity.name}</b><br />{pendingCourseCandidates.length ? "Selecciona el campo; luego podrás ajustar los tees por jugador." : "No encontré ese campo exacto en el catálogo actual. Selecciona otro o crea uno manual."}</div>}
         <div className="grid2">
-          <div className={`courseSelectionField ${courseSelectionError ? "isMissing" : ""}`}><label htmlFor="round-course">Campo · Tee</label><select id="round-course" value={courseSelected ? course.id : ""} aria-invalid={courseSelectionError} aria-describedby={[!courseSelected && pendingCourseIdentity ? "round-course-ai-focus" : "", courseSelectionError ? "round-course-error" : ""].filter(Boolean).join(" ") || undefined} onChange={(e) => {
-            const next = courses.find((candidate) => candidate.id === e.target.value); if (next) selectRoundCourse(next);
-          }}><option value="" disabled>{pendingCourseIdentity ? `Selecciona tee de ${pendingCourseIdentity.name}` : "Selecciona campo y tee"}</option>{pendingCourseIdentity ? <>{pendingCourseCandidates.length > 0 && <optgroup label={`Tees de ${pendingCourseIdentity.name}`}>{pendingCourseCandidates.map((option) => <option key={option.id} value={option.id}>{option.name} · {option.teeName}</option>)}</optgroup>}{otherCourseOptions.length > 0 && <optgroup label="Otros campos y tees">{otherCourseOptions.map((option) => <option key={option.id} value={option.id}>{option.name} · {option.teeName}</option>)}</optgroup>}</> : courseOptions.map((option) => <option key={option.id} value={option.id}>{option.name} · {option.teeName}</option>)}</select>{courseSelectionError && <span id="round-course-error" className="courseSelectionError" role="alert">Selecciona un campo para continuar.</span>}</div>
+          <div className={`courseSelectionField ${courseSelectionError ? "isMissing" : ""}`}><label htmlFor="round-course">Campo</label><select id="round-course" value={courseSelected ? course.name : ""} aria-invalid={courseSelectionError} aria-describedby={[!courseSelected && pendingCourseIdentity ? "round-course-ai-focus" : "", courseSelectionError ? "round-course-error" : ""].filter(Boolean).join(" ") || undefined} onChange={(e) => {
+            const next = courseNameOptions.find((candidate) => candidate.name === e.target.value); if (next) selectRoundCourse(next);
+          }}><option value="" disabled>{pendingCourseIdentity ? `Selecciona ${pendingCourseIdentity.name}` : "Selecciona campo"}</option>{courseNameOptions.map((option) => <option key={option.name} value={option.name}>{option.name}</option>)}</select>{courseSelectionError && <span id="round-course-error" className="courseSelectionError" role="alert">Selecciona un campo para continuar.</span>}</div>
           <div><label>Inicio de ronda</label><select value={startHole} onChange={(e) => { const next = Number(e.target.value) as 1 | 10; confirmRoundChange("Cambiar la salida cambia el orden Nassau y los segmentos de Foursome.", () => { setStartHole(next); setCurrentIndex(0); }); }}><option value={1}>Hoyo 1</option><option value={10}>Hoyo 10</option></select></div>
           <div><label>Hoyos a jugar</label><select value={roundHoles} onChange={(e) => { const next = Number(e.target.value) as 9 | 18; confirmRoundChange("Cambiar la duración excluye del cálculo los hoyos fuera de la nueva vuelta, sin borrar sus scores.", () => { setRoundHoles(next); setSupplementalBets((current) => supplementalBetsForRoundHoles(current, next)); setCurrentIndex(0); }); }}><option value={18}>18 hoyos</option><option value={9}>9 hoyos</option></select></div>
         </div>
-        {courseSelected && <div className="courseMeta"><span>{course.holes.length} hoyos configurados</span><span>Tee {course.teeName}</span>{course.updatedAt && <span>Última actualización: {course.updatedAt}</span>}<button onClick={() => { setCourseEditorSelectOnSave(true); setCourseDraft(withDefaultLaVistaRules(course)); setTab("courses"); }}>{course.name === "La Vista Temporal" ? "Editar campo temporal" : "Editar campo"}</button>{isLaVistaCourse(course.name) && <button onClick={() => { setRulesCourseContext(course.name); setTab("rules"); }}>Ver Reglas Locales</button>}</div>}
+        {courseSelected && <div className="courseMeta"><span>{course.holes.length} hoyos configurados</span><span>{teeOptions.length} tee{teeOptions.length === 1 ? "" : "s"} disponible{teeOptions.length === 1 ? "" : "s"}</span>{course.updatedAt && <span>Última actualización: {course.updatedAt}</span>}<button onClick={() => { setCourseEditorSelectOnSave(true); setCourseDraft(withDefaultLaVistaRules(course)); setTab("courses"); }}>{course.name === "La Vista Temporal" ? "Editar campo temporal" : "Editar campo"}</button>{isLaVistaCourse(course.name) && <button onClick={() => { setRulesCourseContext(course.name); setTab("rules"); }}>Ver Reglas Locales</button>}</div>}
         {courseSelected && players.length > 0 && <div className="playerTeeAssignments">
           <div className="row between"><div><b>TEES</b><small>Se guarda un snapshot por jugador para esta ronda.</small></div><button type="button" className="secondary" onClick={() => setPlayerTeeAssignments(assignTeeToEveryPlayer(players, course, new Date().toISOString()))}>TODOS IGUAL</button></div>
           <div className="playerTeeGrid">{players.map((player) => {
@@ -3538,12 +3536,11 @@ function GolfBetsApp() {
         onOpenScanner={openScorecardScanner}
         onToggleFullCard={() => setShowFullScorecard((visible) => !visible)}
         fullCardVisible={showFullScorecard}
+        fullCardContent={<FullScorecard course={course} players={players} scores={scores} order={order} scale={scorecardScale} onScale={setScorecardScale} />}
         onOpenStandings={() => setTab("standings")}
         onUndo={undoLastAction}
         undoDisabled={undoCount === 0}
       />
-      {showFullScorecard && <FullScorecard course={course} players={players} scores={scores} order={order} scale={scorecardScale} onScale={setScorecardScale} />}
-
       {scoreCaptureComplete && <div className="liveBadges">
           {currentRabbitEvents.map((e, i) => <span className="badge" key={`${e.type}-${i}`}>🐇 {e.type === "grab" ? "Agarra" : e.type === "hold" ? "Mantiene" : e.type === "win" ? `Gana ×${e.count}` : e.type === "lose" ? "Pierde / libre" : e.type === "accumulate" ? `Acumula → ${e.count}` : "Libre"} {e.playerId ? playerName(e.playerId) : ""}</span>)}
           {rabbitMode === "three_hole_blocks" && currentRabbitEvents.length === 0 && currentRabbitBlockWinner?.playerId && <span className="badge">🐇 Conejo {currentRabbitNumber} ya ganado por {playerName(currentRabbitBlockWinner.playerId)}</span>}

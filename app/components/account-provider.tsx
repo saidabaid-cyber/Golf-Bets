@@ -92,7 +92,7 @@ const AccountContext = createContext<AccountContextValue | null>(null);
 function profileCachePayload(profile: BackyardProfile) {
   const {
     userId, displayName, email, avatarUrl, defaultHandicap, givenName, familyName,
-    username, city, state, country, homeClub, preferredTee, handedness,
+    username, city, state, country, homeClub, homeClubId, preferredTee, handedness,
     typicalScore, driverDistanceYards, driverSwingSpeedBand, usualTrajectory,
     shotTendency, greenSpeed, gamePriority, priceImportance, golfProfileUpdatedAt,
     improvementGoals, primaryGoals, primaryGoal, targetHandicap, planId, ghinLinkStatus,
@@ -100,7 +100,7 @@ function profileCachePayload(profile: BackyardProfile) {
   } = profile;
   return {
     userId, displayName, email, avatarUrl, defaultHandicap, givenName, familyName,
-    username, city, state, country, homeClub, preferredTee, handedness,
+    username, city, state, country, homeClub, homeClubId, preferredTee, handedness,
     typicalScore, driverDistanceYards, driverSwingSpeedBand, usualTrajectory,
     shotTendency, greenSpeed, gamePriority, priceImportance, golfProfileUpdatedAt,
     improvementGoals, primaryGoals, primaryGoal, targetHandicap, planId, ghinLinkStatus,

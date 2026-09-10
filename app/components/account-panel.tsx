@@ -10,6 +10,8 @@ import { useBackyardAccount } from "./account-provider";
 import { EquipmentProfilePanel } from "./equipment-profile-panel";
 import { LegalConsentManager } from "./legal-consent-manager";
 import { ProfileImagePicker } from "./profile-image-picker";
+import { ProfileAvatarMedia } from "./profile-avatar-media";
+import { ProfileClubPicker } from "./profile-club-picker";
 
 type AccountPanelProps = {
   view: "profile" | "account";
@@ -51,6 +53,7 @@ function profileDetailsDraft(profile: BackyardProfile): ProfileDetailsDraft {
     state: profile.state || defaults.state,
     country: profile.country || defaults.country,
     homeClub: profile.homeClub || defaults.homeClub,
+    homeClubId: profile.homeClubId || defaults.homeClubId,
     preferredTee: profile.preferredTee || defaults.preferredTee,
     handedness: profile.handedness || defaults.handedness,
     typicalScore: profile.typicalScore ?? defaults.typicalScore,
@@ -257,7 +260,7 @@ export function AccountPanel({ view, highContrast, onHighContrastChange, notific
     </section>}
 
     {view === "profile" && identity.mode === "authenticated" && <section className="card profileCard">
-      <div className="sectionTitle"><div className="profileIdentity"><div className="accountAvatar">{identity.avatarUrl ? <img src={identity.avatarUrl} alt={`Avatar de ${identity.displayName}`} referrerPolicy="no-referrer" /> : (identity.displayName.trim()[0] || "J").toUpperCase()}</div><div><h2>{identity.displayName}</h2><p>{identity.email || "Perfil local en este dispositivo"}</p></div></div><button className="secondary" onClick={() => setEditing((value) => !value)}>{editing ? "Cancelar" : "Editar perfil"}</button></div>
+      <div className="sectionTitle"><div className="profileIdentity"><div className="accountAvatar"><ProfileAvatarMedia value={identity.avatarUrl} fallback={(identity.displayName.trim()[0] || "J").toUpperCase()} alt={`Avatar de ${identity.displayName}`} /></div><div><h2>{identity.displayName}</h2><p>{identity.email || "Perfil local en este dispositivo"}</p></div></div><button className="secondary" onClick={() => setEditing((value) => !value)}>{editing ? "Cancelar" : "Editar perfil"}</button></div>
       {editing && <div className="profileForm profileFormExpanded">
         <label>Nombre visible<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Tu nombre" /></label>
         <label>HCP index (opcional)<input type="text" inputMode="text" value={handicap} onChange={(event) => setHandicap(event.target.value)} placeholder="Ej. 8.4 o +1.2" /></label>
@@ -269,7 +272,7 @@ export function AccountPanel({ view, highContrast, onHighContrastChange, notific
         <label>Nombre(s)<input value={profileDetails.givenName} onChange={(event) => setProfileDetails((current) => ({ ...current, givenName: event.target.value }))} autoComplete="given-name" /></label>
         <label>Apellidos<input value={profileDetails.familyName} onChange={(event) => setProfileDetails((current) => ({ ...current, familyName: event.target.value }))} autoComplete="family-name" /></label>
         <label>Usuario<input value={profileDetails.username} onChange={(event) => setProfileDetails((current) => ({ ...current, username: event.target.value }))} placeholder="sin @" autoComplete="username" /></label>
-        <label>Club<input value={profileDetails.homeClub} onChange={(event) => setProfileDetails((current) => ({ ...current, homeClub: event.target.value }))} /></label>
+        <ProfileClubPicker value={profileDetails.homeClub} clubId={profileDetails.homeClubId} onChange={({ name: homeClub, id: homeClubId }) => setProfileDetails((current) => ({ ...current, homeClub, homeClubId }))} />
         <label>Ciudad<input value={profileDetails.city} onChange={(event) => setProfileDetails((current) => ({ ...current, city: event.target.value }))} autoComplete="address-level2" /></label>
         <label>Estado<input value={profileDetails.state} onChange={(event) => setProfileDetails((current) => ({ ...current, state: event.target.value }))} autoComplete="address-level1" /></label>
         <label>País<input value={profileDetails.country} onChange={(event) => setProfileDetails((current) => ({ ...current, country: event.target.value }))} autoComplete="country-name" /></label>

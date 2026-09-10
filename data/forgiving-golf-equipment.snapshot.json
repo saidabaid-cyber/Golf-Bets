@@ -1,0 +1,3250 @@
+{
+  "schemaVersion": 1,
+  "source": "forgiving.golf",
+  "sourceUrl": "https://forgiving.golf/api/v1/latest.json",
+  "attributionUrl": "https://forgiving.golf/data",
+  "license": "CC BY 4.0",
+  "generatedAt": "2026-09-06T20:03:34Z",
+  "importedAt": "2026-09-10T10:05:15.432Z",
+  "sourceCount": 91,
+  "supportedCount": 64,
+  "models": [
+    {
+      "id": "forgiving-golf-cleveland-hb-soft-2-model-11-putter",
+      "externalId": "cleveland-hb-soft-2-model-11-putter",
+      "brand": "Cleveland",
+      "model": "HB SOFT 2 Putter - Model 11",
+      "generation": null,
+      "year": null,
+      "category": "PUTTER",
+      "subCategory": "mallet",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [],
+      "stockFlexes": [],
+      "officialUrl": "https://us.dunlopsports.com/cleveland-golf/clubs/putters/hb-soft-2/hb-soft-2-putter-model-11/MHBSOFT2-11.html",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://us.dunlopsports.com/cleveland-golf/clubs/putters/hb-soft-2/hb-soft-2-putter-model-11/MHBSOFT2-11.html",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-tour-edge-hot-launch-max-d-hybrid",
+      "externalId": "tour-edge-hot-launch-max-d-hybrid",
+      "brand": "Tour Edge",
+      "model": "Hot Launch Max D",
+      "generation": null,
+      "year": null,
+      "category": "HYBRID",
+      "subCategory": "max-forgiveness",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [
+        19,
+        22,
+        25,
+        28
+      ],
+      "variants": [
+        {
+          "loft": 19,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 22,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 25,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 28,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        }
+      ],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [
+        "Aldila Ascent"
+      ],
+      "stockFlexes": [
+        "SENIOR",
+        "REGULAR",
+        "STIFF"
+      ],
+      "officialUrl": "https://www.touredge.com/products/hot-launch-max-d-hybrid",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.touredge.com/products/hot-launch-max-d-hybrid",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-tour-edge-hot-launch-max-d-fairway",
+      "externalId": "tour-edge-hot-launch-max-d-fairway",
+      "brand": "Tour Edge",
+      "model": "Hot Launch Max D",
+      "generation": null,
+      "year": null,
+      "category": "FAIRWAY_WOOD",
+      "subCategory": "max-forgiveness",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [
+        16,
+        20,
+        23,
+        25,
+        27
+      ],
+      "variants": [
+        {
+          "loft": 16,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 20,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 23,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 25,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 27,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        }
+      ],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [
+        "Aldila Ascent"
+      ],
+      "stockFlexes": [
+        "SENIOR",
+        "REGULAR",
+        "STIFF"
+      ],
+      "officialUrl": "https://www.touredge.com/products/hot-launch-max-d-fairway",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.touredge.com/products/hot-launch-max-d-fairway",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-odyssey-ai-dual-7-db-putter",
+      "externalId": "odyssey-ai-dual-7-db-putter",
+      "brand": "Odyssey",
+      "model": "Ai-DUAL #7 DB",
+      "generation": null,
+      "year": 2026,
+      "category": "PUTTER",
+      "subCategory": "mallet",
+      "active": true,
+      "handedness": [
+        "RH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [
+        "Odyssey Ai-DUAL SL 90 Stepless Steel"
+      ],
+      "stockFlexes": [],
+      "officialUrl": "https://odyssey.callawaygolf.com/putters/putters-2026-ai-dual-7-db.html",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://odyssey.callawaygolf.com/putters/putters-2026-ai-dual-7-db.html",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-ping-g440-hybrid",
+      "externalId": "ping-g440-hybrid",
+      "brand": "PING",
+      "model": "G440",
+      "generation": null,
+      "year": null,
+      "category": "HYBRID",
+      "subCategory": "max-forgiveness",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [
+        17,
+        20,
+        23,
+        26,
+        30,
+        34
+      ],
+      "variants": [
+        {
+          "loft": 17,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 20,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 23,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 26,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 30,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 34,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        }
+      ],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [
+        "PING ALTA CB Blue 70",
+        "PING Tour 2.0 Black 90",
+        "PING Tour 2.0 Chrome 85",
+        "Mitsubishi Tensei 1K Black 85",
+        "Project X Denali Red 70",
+        "Project X Denali Red 80",
+        "PING ALTA Quick (HL build)"
+      ],
+      "stockFlexes": [
+        "SENIOR",
+        "REGULAR",
+        "STIFF",
+        "X_STIFF"
+      ],
+      "officialUrl": "https://ping.com/en-us/golf-clubs/hybrids/g440-hybrid",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://ping.com/en-us/golf-clubs/hybrids/g440-hybrid",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-ping-g440-max-fairway",
+      "externalId": "ping-g440-max-fairway",
+      "brand": "PING",
+      "model": "G440 MAX",
+      "generation": null,
+      "year": null,
+      "category": "FAIRWAY_WOOD",
+      "subCategory": "max-forgiveness",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [
+        15,
+        17,
+        19,
+        21,
+        24
+      ],
+      "variants": [
+        {
+          "loft": 15,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 17,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 19,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 21,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 24,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        }
+      ],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [
+        "PING ALTA CB Blue 65",
+        "PING Tour 2.0 Chrome 65",
+        "PING Tour 2.0 Black 65",
+        "PING Tour 2.0 Chrome 75",
+        "PING Tour 2.0 Black 75",
+        "Mitsubishi Tensei 1K Black 75",
+        "Project X Denali Red 60",
+        "Project X Denali Red 70",
+        "PING ALTA Quick (HL build)"
+      ],
+      "stockFlexes": [
+        "SENIOR",
+        "REGULAR",
+        "STIFF",
+        "X_STIFF"
+      ],
+      "officialUrl": "https://ping.com/en-us/golf-clubs/fairways/g440-max-fairway",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://ping.com/en-us/golf-clubs/fairways/g440-max-fairway",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-ping-g440-sft-fairway",
+      "externalId": "ping-g440-sft-fairway",
+      "brand": "PING",
+      "model": "G440 SFT",
+      "generation": null,
+      "year": null,
+      "category": "FAIRWAY_WOOD",
+      "subCategory": "max-forgiveness",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [
+        16,
+        19,
+        22
+      ],
+      "variants": [
+        {
+          "loft": 16,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 19,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 22,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        }
+      ],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [
+        "PING ALTA CB Blue 65",
+        "PING Tour 2.0 Chrome 65",
+        "PING Tour 2.0 Black 65",
+        "PING Tour 2.0 Chrome 75",
+        "PING Tour 2.0 Black 75",
+        "Mitsubishi Tensei 1K Black 75",
+        "Project X Denali Red 60",
+        "Project X Denali Red 70",
+        "PING ALTA Quick (HL build)"
+      ],
+      "stockFlexes": [
+        "SENIOR",
+        "REGULAR",
+        "STIFF",
+        "X_STIFF"
+      ],
+      "officialUrl": "https://ping.com/en-us/golf-clubs/fairways/g440-sft-fairway",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://ping.com/en-us/golf-clubs/fairways/g440-sft-fairway",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-odyssey-ai-dual-square-2-square-max-half-ball-putter",
+      "externalId": "odyssey-ai-dual-square-2-square-max-half-ball-putter",
+      "brand": "Odyssey",
+      "model": "Ai-DUAL Square 2 Square MAX 1/2 Ball Center Shaft",
+      "generation": null,
+      "year": 2026,
+      "category": "PUTTER",
+      "subCategory": "zero-torque",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [
+        "Odyssey S2S SL120 Stepless Black Steel"
+      ],
+      "stockFlexes": [],
+      "officialUrl": "https://odyssey.callawaygolf.com/putters/putters-2026-square-to-square-ai-dual-max-1-2-ball.html",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://odyssey.callawaygolf.com/putters/putters-2026-square-to-square-ai-dual-max-1-2-ball.html",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-taylormade-qi4d-max-rescue",
+      "externalId": "taylormade-qi4d-max-rescue",
+      "brand": "TaylorMade",
+      "model": "Qi4D Max Rescue",
+      "generation": null,
+      "year": null,
+      "category": "HYBRID",
+      "subCategory": "max-forgiveness",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [
+        20,
+        23,
+        26,
+        30,
+        34
+      ],
+      "variants": [
+        {
+          "loft": 20,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 23,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 26,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 30,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 34,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        }
+      ],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [
+        "REAX HL 50 by KBS"
+      ],
+      "stockFlexes": [
+        "SENIOR",
+        "REGULAR",
+        "STIFF"
+      ],
+      "officialUrl": "https://www.taylormadegolf.com/Qi4D-Max-Rescue/DW-TC458.html",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.taylormadegolf.com/Qi4D-Max-Rescue/DW-TC458.html",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-tour-edge-hot-launch-max-d-driver",
+      "externalId": "tour-edge-hot-launch-max-d-driver",
+      "brand": "Tour Edge",
+      "model": "Hot Launch Max D",
+      "generation": null,
+      "year": null,
+      "category": "DRIVER",
+      "subCategory": "max-forgiveness",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [
+        10.5,
+        12,
+        15
+      ],
+      "variants": [
+        {
+          "loft": 10.5,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 12,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 15,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        }
+      ],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [
+        "Aldila Ascent"
+      ],
+      "stockFlexes": [
+        "SENIOR",
+        "REGULAR",
+        "STIFF"
+      ],
+      "officialUrl": "https://www.touredge.com/products/hot-launch-max-d-driver",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.touredge.com/products/hot-launch-max-d-driver",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-tour-edge-hot-launch-max-driver",
+      "externalId": "tour-edge-hot-launch-max-driver",
+      "brand": "Tour Edge",
+      "model": "Hot Launch Max",
+      "generation": null,
+      "year": null,
+      "category": "DRIVER",
+      "subCategory": "game-improvement",
+      "active": true,
+      "handedness": [
+        "RH"
+      ],
+      "lofts": [
+        9,
+        10.5,
+        12
+      ],
+      "variants": [
+        {
+          "loft": 9,
+          "handedness": [
+            "RH"
+          ]
+        },
+        {
+          "loft": 10.5,
+          "handedness": [
+            "RH"
+          ]
+        },
+        {
+          "loft": 12,
+          "handedness": [
+            "RH"
+          ]
+        }
+      ],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [
+        "Aldila Ascent"
+      ],
+      "stockFlexes": [
+        "SENIOR",
+        "REGULAR",
+        "STIFF"
+      ],
+      "officialUrl": "https://www.touredge.com/products/hot-launch-max-driver",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.touredge.com/products/hot-launch-max-driver",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-callaway-quantum-max-os-hybrid",
+      "externalId": "callaway-quantum-max-os-hybrid",
+      "brand": "Callaway",
+      "model": "Quantum Max OS",
+      "generation": null,
+      "year": 2026,
+      "category": "HYBRID",
+      "subCategory": "max-forgiveness",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [
+        18,
+        20,
+        23,
+        26,
+        29,
+        32
+      ],
+      "variants": [
+        {
+          "loft": 18,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 20,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 23,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 26,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 29,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 32,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        }
+      ],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [
+        "Mitsubishi Vanquish 50",
+        "Project X Denali Silver 60 IR / Denali Frost Silver"
+      ],
+      "stockFlexes": [
+        "REGULAR",
+        "STIFF"
+      ],
+      "officialUrl": "https://www.callawaygolf.com/golf-clubs/hybrids/hybrids-2026-quantum-max-os.html",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.callawaygolf.com/golf-clubs/hybrids/hybrids-2026-quantum-max-os.html",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-cobra-optm-hybrid",
+      "externalId": "cobra-optm-hybrid",
+      "brand": "Cobra",
+      "model": "OPTM",
+      "generation": null,
+      "year": 2026,
+      "category": "HYBRID",
+      "subCategory": "max-forgiveness",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [
+        18,
+        21,
+        24,
+        28
+      ],
+      "variants": [
+        {
+          "loft": 18,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 21,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 24,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 28,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        }
+      ],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [
+        "KBS PGH 85 (S)",
+        "KBS PGH 75 (R)",
+        "KBS PGH 65 (A)"
+      ],
+      "stockFlexes": [
+        "SENIOR",
+        "REGULAR",
+        "STIFF"
+      ],
+      "officialUrl": "https://www.cobragolf.com/products/optm-hybrid",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.cobragolf.com/products/optm-hybrid",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-titleist-gt2-hybrid",
+      "externalId": "titleist-gt2-hybrid",
+      "brand": "Titleist",
+      "model": "GT2",
+      "generation": null,
+      "year": null,
+      "category": "HYBRID",
+      "subCategory": "max-forgiveness",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [
+        18,
+        21,
+        24
+      ],
+      "variants": [
+        {
+          "loft": 18,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 21,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 24,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        }
+      ],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [
+        "Mitsubishi Tensei 1K Blue HY (65/75/85)",
+        "Mitsubishi Tensei 1K Black HY (85/95)",
+        "Project X HZRDUS Black 5G HY (80/90)",
+        "Project X DENALI Red HY (50/60/70)",
+        "Graphite Design Tour AD DI HY (premium)",
+        "Graphite Design Tour AD VF HY (premium)"
+      ],
+      "stockFlexes": [
+        "SENIOR",
+        "REGULAR",
+        "STIFF",
+        "X_STIFF"
+      ],
+      "officialUrl": "https://www.titleist.com/product/gt2-hybrid/675C.html",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.titleist.com/product/gt2-hybrid/675C.html",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-cobra-optm-max-fairway",
+      "externalId": "cobra-optm-max-fairway",
+      "brand": "Cobra",
+      "model": "OPTM MAX",
+      "generation": null,
+      "year": 2026,
+      "category": "FAIRWAY_WOOD",
+      "subCategory": "max-forgiveness",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [
+        15.5,
+        18.5,
+        21.5,
+        24.5
+      ],
+      "variants": [
+        {
+          "loft": 15.5,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 18.5,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 21.5,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 24.5,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        }
+      ],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [
+        "MCA Kai'li Dark Waves Red 50"
+      ],
+      "stockFlexes": [
+        "SENIOR",
+        "REGULAR",
+        "STIFF"
+      ],
+      "officialUrl": "https://www.cobragolf.com/products/optm-max-fairway",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.cobragolf.com/products/optm-max-fairway",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-cobra-3dp-tour-agera-putter",
+      "externalId": "cobra-3dp-tour-agera-putter",
+      "brand": "COBRA",
+      "model": "3DP TOUR AGERA",
+      "generation": null,
+      "year": null,
+      "category": "PUTTER",
+      "subCategory": "mallet",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [
+        "KBS CT Tour"
+      ],
+      "stockFlexes": [],
+      "officialUrl": "https://www.cobragolf.com/products/3dp-tour-agera-putter",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.cobragolf.com/products/3dp-tour-agera-putter",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-taylormade-qi4d-max-fairway",
+      "externalId": "taylormade-qi4d-max-fairway",
+      "brand": "TaylorMade",
+      "model": "Qi4D Max",
+      "generation": null,
+      "year": null,
+      "category": "FAIRWAY_WOOD",
+      "subCategory": "max-forgiveness",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [
+        15,
+        18,
+        21,
+        24
+      ],
+      "variants": [
+        {
+          "loft": 15,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 18,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 21,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 24,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        }
+      ],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [
+        "Mitsubishi REAX 55 FW",
+        "Mitsubishi REAX 40 FW (L flex)"
+      ],
+      "stockFlexes": [
+        "LADIES",
+        "SENIOR",
+        "REGULAR",
+        "STIFF"
+      ],
+      "officialUrl": "https://www.taylormadegolf.com/Qi4D-Max-Fairway/DW-TC455.html",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.taylormadegolf.com/Qi4D-Max-Fairway/DW-TC455.html",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-ping-scottsdale-tec-ketsch-onset-putter",
+      "externalId": "ping-scottsdale-tec-ketsch-onset-putter",
+      "brand": "PING",
+      "model": "Scottsdale TEC Ketsch Onset",
+      "generation": null,
+      "year": 2026,
+      "category": "PUTTER",
+      "subCategory": "mallet",
+      "active": true,
+      "handedness": [
+        "RH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [
+        "Matte-black stepless steel"
+      ],
+      "stockFlexes": [],
+      "officialUrl": "https://ping.com/en-us/golf-clubs/putters/scottsdale-tec-ketsch-onset-putter",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://ping.com/en-us/golf-clubs/putters/scottsdale-tec-ketsch-onset-putter",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-lab-golf-df3-stock-putter",
+      "externalId": "lab-golf-df3-stock-putter",
+      "brand": "LAB Golf",
+      "model": "DF3 Stock",
+      "generation": null,
+      "year": null,
+      "category": "PUTTER",
+      "subCategory": "zero-torque",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [],
+      "stockFlexes": [],
+      "officialUrl": "https://www.labgolf.com/products/df3-stock",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.labgolf.com/products/df3-stock",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-titleist-gts2-fairway",
+      "externalId": "titleist-gts2-fairway",
+      "brand": "Titleist",
+      "model": "GTS2",
+      "generation": null,
+      "year": null,
+      "category": "FAIRWAY_WOOD",
+      "subCategory": "max-forgiveness",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [
+        13.5,
+        15,
+        16.5,
+        18,
+        21
+      ],
+      "variants": [
+        {
+          "loft": 13.5,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 15,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 16.5,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 18,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 21,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        }
+      ],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [
+        "Mitsubishi Tensei 1K White RIP",
+        "Mitsubishi Tensei 1K Blue RIP",
+        "Mitsubishi Tensei 1K Red RIP",
+        "Project X Titan Black",
+        "Graphite Design Tour AD DI (premium)",
+        "Graphite Design Tour AD VF (premium)",
+        "Graphite Design Tour AD FI (premium)"
+      ],
+      "stockFlexes": [
+        "SENIOR",
+        "REGULAR",
+        "STIFF",
+        "X_STIFF"
+      ],
+      "officialUrl": "https://www.titleist.com/product/gts2-fairway/681C.html",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.titleist.com/product/gts2-fairway/681C.html",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-callaway-quantum-max-fairway",
+      "externalId": "callaway-quantum-max-fairway",
+      "brand": "Callaway",
+      "model": "Quantum Max",
+      "generation": null,
+      "year": 2026,
+      "category": "FAIRWAY_WOOD",
+      "subCategory": "game-improvement",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [
+        15,
+        16.5,
+        18,
+        20,
+        21,
+        24,
+        27
+      ],
+      "variants": [
+        {
+          "loft": 15,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 16.5,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 18,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 20,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 21,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 24,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 27,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        }
+      ],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [
+        "Project X Denali Frost Silver 60",
+        "Mitsubishi Vanquish 40/50"
+      ],
+      "stockFlexes": [
+        "REGULAR",
+        "STIFF",
+        "X_STIFF"
+      ],
+      "officialUrl": "https://www.callawaygolf.com/golf-clubs/woods/fwoods-2026-quantum-max.html",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.callawaygolf.com/golf-clubs/woods/fwoods-2026-quantum-max.html",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-srixon-zxi-max-driver",
+      "externalId": "srixon-zxi-max-driver",
+      "brand": "Srixon",
+      "model": "ZXi MAX",
+      "generation": null,
+      "year": null,
+      "category": "DRIVER",
+      "subCategory": "max-forgiveness",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [
+        9,
+        10.5,
+        12
+      ],
+      "variants": [
+        {
+          "loft": 9,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 10.5,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 12,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        }
+      ],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [
+        "Mitsubishi Kai'li Dark Waves Red CB 50 (stock in the configurator)",
+        "Project X Denali Red 5 (shaft published in the Specs table)"
+      ],
+      "stockFlexes": [
+        "SENIOR",
+        "REGULAR",
+        "STIFF"
+      ],
+      "officialUrl": "https://us.dunlopsports.com/srixon/clubs/drivers/zxi-max-driver/zxi-max-driver/MZXIMAXDRV.html",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://us.dunlopsports.com/srixon/clubs/drivers/zxi-max-driver/zxi-max-driver/MZXIMAXDRV.html",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-ping-g440-max-driver",
+      "externalId": "ping-g440-max-driver",
+      "brand": "PING",
+      "model": "G440 MAX",
+      "generation": null,
+      "year": null,
+      "category": "DRIVER",
+      "subCategory": "max-forgiveness",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [
+        9,
+        10.5,
+        12
+      ],
+      "variants": [
+        {
+          "loft": 9,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 10.5,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 12,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        }
+      ],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [
+        "PING ALTA CB Blue 50",
+        "PING Tour 2.0 Chrome 65",
+        "PING Tour 2.0 Black 65",
+        "Mitsubishi Tensei 1K Black 65",
+        "Project X Denali Red 50",
+        "Project X Denali Red 60",
+        "PING ALTA Quick (HL build)"
+      ],
+      "stockFlexes": [
+        "SENIOR",
+        "REGULAR",
+        "STIFF",
+        "X_STIFF"
+      ],
+      "officialUrl": "https://ping.com/en-us/golf-clubs/drivers/g440-max-driver",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://ping.com/en-us/golf-clubs/drivers/g440-max-driver",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-ping-g440-sft-driver",
+      "externalId": "ping-g440-sft-driver",
+      "brand": "PING",
+      "model": "G440 SFT",
+      "generation": null,
+      "year": null,
+      "category": "DRIVER",
+      "subCategory": "max-forgiveness",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [
+        9,
+        10.5
+      ],
+      "variants": [
+        {
+          "loft": 9,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 10.5,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        }
+      ],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [
+        "PING ALTA CB Blue 50",
+        "PING Tour 2.0 Black 65",
+        "PING Tour 2.0 Chrome 65",
+        "Mitsubishi Tensei 1K Black 65",
+        "Project X Denali Red 50",
+        "Project X Denali Red 60",
+        "PING ALTA Quick (HL build)"
+      ],
+      "stockFlexes": [
+        "SENIOR",
+        "REGULAR",
+        "STIFF",
+        "X_STIFF"
+      ],
+      "officialUrl": "https://ping.com/en-us/golf-clubs/drivers/g440-sft-driver",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://ping.com/en-us/golf-clubs/drivers/g440-sft-driver",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-evnroll-zero-z1cs-mallet-putter",
+      "externalId": "evnroll-zero-z1cs-mallet-putter",
+      "brand": "Evnroll",
+      "model": "ZERO Z1cs Mallet",
+      "generation": null,
+      "year": null,
+      "category": "PUTTER",
+      "subCategory": "zero-torque",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [],
+      "stockFlexes": [],
+      "officialUrl": "https://www.evnroll.com/products/zero-z1-center-shaft-mallet-putter",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.evnroll.com/products/zero-z1-center-shaft-mallet-putter",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-taylormade-spider-zt-max-putter",
+      "externalId": "taylormade-spider-zt-max-putter",
+      "brand": "TaylorMade",
+      "model": "Spider ZT Max",
+      "generation": null,
+      "year": 2026,
+      "category": "PUTTER",
+      "subCategory": "zero-torque",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [
+        "KBS CT Putter 120 Steel Stepless Black PVD (120g)"
+      ],
+      "stockFlexes": [],
+      "officialUrl": "https://www.taylormadegolf.com/Spider-ZT-Max/DW-TE630.html",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.taylormadegolf.com/Spider-ZT-Max/DW-TE630.html",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-scotty-cameron-phantom-11r-oc-putter",
+      "externalId": "scotty-cameron-phantom-11r-oc-putter",
+      "brand": "Scotty Cameron",
+      "model": "Phantom 11R OC",
+      "generation": null,
+      "year": null,
+      "category": "PUTTER",
+      "subCategory": "zero-torque",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [
+        "KBS x Scotty Cameron custom black shaft"
+      ],
+      "stockFlexes": [],
+      "officialUrl": "https://www.scottycameron.com/putters/phantom/phantom-11r-oc/",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.scottycameron.com/putters/phantom/phantom-11r-oc/",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-tour-edge-hot-launch-c524-irons",
+      "externalId": "tour-edge-hot-launch-c524-irons",
+      "brand": "Tour Edge",
+      "model": "Hot Launch C524",
+      "generation": null,
+      "year": null,
+      "category": "IRON_SET",
+      "subCategory": "game-improvement",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": "4-PW, 5-PW/AW or 5-PW/SW (set options on the page)",
+      "stockShafts": [
+        "True Temper Elevate MPH 95",
+        "Aldila Ascent PL Graphite"
+      ],
+      "stockFlexes": [
+        "LADIES",
+        "SENIOR",
+        "REGULAR",
+        "STIFF"
+      ],
+      "officialUrl": "https://www.touredge.com/products/hot-launch-c524-irons",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.touredge.com/products/hot-launch-c524-irons",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-cobra-optm-max-k-driver",
+      "externalId": "cobra-optm-max-k-driver",
+      "brand": "Cobra",
+      "model": "OPTM MAX-K",
+      "generation": null,
+      "year": 2026,
+      "category": "DRIVER",
+      "subCategory": "max-forgiveness",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [
+        9,
+        10.5,
+        12
+      ],
+      "variants": [
+        {
+          "loft": 9,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 10.5,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 12,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        }
+      ],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [
+        "MCA Kai'li Dark Waves Blue 60",
+        "MCA Kai'li Dark Waves White 60",
+        "MCA Kai'li Dark Waves Red 50",
+        "Project X Denali Blue 60 Frost CB 60"
+      ],
+      "stockFlexes": [
+        "SENIOR",
+        "REGULAR",
+        "STIFF",
+        "X_STIFF"
+      ],
+      "officialUrl": "https://www.cobragolf.com/products/optm-max-k-driver",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.cobragolf.com/products/optm-max-k-driver",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-cobra-optm-max-d-driver",
+      "externalId": "cobra-optm-max-d-driver",
+      "brand": "Cobra",
+      "model": "OPTM MAX-D",
+      "generation": null,
+      "year": 2026,
+      "category": "DRIVER",
+      "subCategory": "max-forgiveness",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [
+        10.5,
+        12
+      ],
+      "variants": [
+        {
+          "loft": 10.5,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 12,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        }
+      ],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [
+        "MCA Kai'li Dark Waves Red 50",
+        "MCA Vanquish 40"
+      ],
+      "stockFlexes": [
+        "SENIOR",
+        "REGULAR",
+        "STIFF",
+        "X_STIFF"
+      ],
+      "officialUrl": "https://www.cobragolf.com/products/optm-max-d-driver",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.cobragolf.com/products/optm-max-d-driver",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-callaway-quantum-max-d-driver",
+      "externalId": "callaway-quantum-max-d-driver",
+      "brand": "Callaway",
+      "model": "Quantum Max D",
+      "generation": null,
+      "year": 2026,
+      "category": "DRIVER",
+      "subCategory": "max-forgiveness",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [
+        9,
+        10.5,
+        12
+      ],
+      "variants": [
+        {
+          "loft": 9,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 10.5,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 12,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        }
+      ],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [
+        "Project X Denali Frost Silver 50",
+        "Mitsubishi Vanquish 40"
+      ],
+      "stockFlexes": [
+        "REGULAR",
+        "STIFF"
+      ],
+      "officialUrl": "https://www.callawaygolf.com/golf-clubs/drivers/drivers-2026-quantum-max-d.html",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.callawaygolf.com/golf-clubs/drivers/drivers-2026-quantum-max-d.html",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-callaway-quantum-max-driver",
+      "externalId": "callaway-quantum-max-driver",
+      "brand": "Callaway",
+      "model": "Quantum Max",
+      "generation": null,
+      "year": 2026,
+      "category": "DRIVER",
+      "subCategory": "game-improvement",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [
+        9,
+        10.5,
+        12
+      ],
+      "variants": [
+        {
+          "loft": 9,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 10.5,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 12,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        }
+      ],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [
+        "Project X Denali Frost Silver 50/60",
+        "Mitsubishi Vanquish 40"
+      ],
+      "stockFlexes": [
+        "REGULAR",
+        "STIFF",
+        "X_STIFF"
+      ],
+      "officialUrl": "https://www.callawaygolf.com/golf-clubs/drivers/drivers-2026-quantum-max.html",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.callawaygolf.com/golf-clubs/drivers/drivers-2026-quantum-max.html",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-ping-g440-k-driver",
+      "externalId": "ping-g440-k-driver",
+      "brand": "PING",
+      "model": "G440 K",
+      "generation": null,
+      "year": null,
+      "category": "DRIVER",
+      "subCategory": "max-forgiveness",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [
+        9,
+        10.5,
+        12
+      ],
+      "variants": [
+        {
+          "loft": 9,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 10.5,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 12,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        }
+      ],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [
+        "PING ALTA CB Blue 50",
+        "PING Tour 2.0 Chrome 65",
+        "PING Tour 2.0 Black 65",
+        "Mitsubishi Tensei 1K Black 65",
+        "Project X Denali Red 50",
+        "Project X Denali Red 60",
+        "PING ALTA Quick (HL build)"
+      ],
+      "stockFlexes": [
+        "SENIOR",
+        "REGULAR",
+        "STIFF",
+        "X_STIFF"
+      ],
+      "officialUrl": "https://ping.com/en-us/golf-clubs/drivers/g440-k-driver",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://ping.com/en-us/golf-clubs/drivers/g440-k-driver",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-taylormade-qi4d-max-driver",
+      "externalId": "taylormade-qi4d-max-driver",
+      "brand": "TaylorMade",
+      "model": "Qi4D Max",
+      "generation": null,
+      "year": null,
+      "category": "DRIVER",
+      "subCategory": "max-forgiveness",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [
+        9,
+        10.5,
+        12
+      ],
+      "variants": [
+        {
+          "loft": 9,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 10.5,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 12,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        }
+      ],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [
+        "Mitsubishi REAX 50 High Rotation Red",
+        "Mitsubishi REAX 50 Mid Rotation Blue",
+        "Mitsubishi REAX 60 Low Rotation White"
+      ],
+      "stockFlexes": [
+        "SENIOR",
+        "REGULAR",
+        "STIFF",
+        "X_STIFF"
+      ],
+      "officialUrl": "https://www.taylormadegolf.com/Qi4D-Max-Driver/DW-TC451.html",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.taylormadegolf.com/Qi4D-Max-Driver/DW-TC451.html",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-titleist-gts2-driver",
+      "externalId": "titleist-gts2-driver",
+      "brand": "Titleist",
+      "model": "GTS2",
+      "generation": null,
+      "year": null,
+      "category": "DRIVER",
+      "subCategory": "max-forgiveness",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [
+        8,
+        9,
+        10,
+        11
+      ],
+      "variants": [
+        {
+          "loft": 8,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 9,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 10,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        },
+        {
+          "loft": 11,
+          "handedness": [
+            "RH",
+            "LH"
+          ]
+        }
+      ],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": null,
+      "stockShafts": [
+        "Mitsubishi Tensei 1K White RIP (65/75/85)",
+        "Mitsubishi Tensei 1K Blue RIP (55/65/75)",
+        "Mitsubishi Tensei 1K Red RIP (45/55/65)",
+        "Project X Titan Black (60/70/80)",
+        "Graphite Design Tour AD DI (premium)",
+        "Graphite Design Tour AD VF (premium)",
+        "Graphite Design Tour AD FI (premium)"
+      ],
+      "stockFlexes": [
+        "SENIOR",
+        "REGULAR",
+        "STIFF",
+        "X_STIFF"
+      ],
+      "officialUrl": "https://www.titleist.com/product/gts2-driver/678C.html",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.titleist.com/product/gts2-driver/678C.html",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-tour-edge-hot-launch-max-irons",
+      "externalId": "tour-edge-hot-launch-max-irons",
+      "brand": "Tour Edge",
+      "model": "Hot Launch Max",
+      "generation": null,
+      "year": null,
+      "category": "IRON_SET",
+      "subCategory": "game-improvement",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": "#4-PW or #5-PW & AW (set options on the page)",
+      "stockShafts": [
+        "KBS Max MT 85",
+        "Aldila Ascent 55A",
+        "Aldila Ascent 55R",
+        "Aldila Ascent 60S"
+      ],
+      "stockFlexes": [
+        "SENIOR",
+        "REGULAR",
+        "STIFF"
+      ],
+      "officialUrl": "https://www.touredge.com/products/hot-launch-max-irons",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.touredge.com/products/hot-launch-max-irons",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-tour-edge-hot-launch-max-d-ironwoods",
+      "externalId": "tour-edge-hot-launch-max-d-ironwoods",
+      "brand": "Tour Edge",
+      "model": "Hot Launch Max D Ironwoods",
+      "generation": null,
+      "year": null,
+      "category": "IRON_SET",
+      "subCategory": "super-game-improvement",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": "#4-PW (7 clubs); singles 4-20°, 5-23°, 6-26°, 7-29°, 8-33°, 9-38°, PW, AW",
+      "stockShafts": [
+        "KBS Max MT85",
+        "Aldila Ascent 55A",
+        "Aldila Ascent 55R",
+        "Aldila Ascent 60S"
+      ],
+      "stockFlexes": [
+        "SENIOR",
+        "REGULAR",
+        "STIFF"
+      ],
+      "officialUrl": "https://www.touredge.com/products/hot-launch-max-d-ironwoods",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.touredge.com/products/hot-launch-max-d-ironwoods",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-wilson-dynapwr-max-steel-irons",
+      "externalId": "wilson-dynapwr-max-steel-irons",
+      "brand": "Wilson",
+      "model": "DYNAPWR Max (Steel)",
+      "generation": null,
+      "year": null,
+      "category": "IRON_SET",
+      "subCategory": "super-game-improvement",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": "5-PW, GW",
+      "stockShafts": [
+        "KBS MAX HL"
+      ],
+      "stockFlexes": [
+        "REGULAR",
+        "STIFF"
+      ],
+      "officialUrl": "https://www.wilson.com/en-us/product/dynapwr-max-stl-wg1p0379",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.wilson.com/en-us/product/dynapwr-max-stl-wg1p0379",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-wilson-dynapwr-max-graphite-lite-irons",
+      "externalId": "wilson-dynapwr-max-graphite-lite-irons",
+      "brand": "Wilson",
+      "model": "DYNAPWR Max Graphite Lite",
+      "generation": null,
+      "year": null,
+      "category": "IRON_SET",
+      "subCategory": "super-game-improvement",
+      "active": true,
+      "handedness": [
+        "RH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": "6-PW, GW, SW",
+      "stockShafts": [
+        "KBS MAX Graphite"
+      ],
+      "stockFlexes": [
+        "LADIES"
+      ],
+      "officialUrl": "https://www.wilson.com/en-us/product/dynapwr-max-gra-lite-1-wg1p0381",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.wilson.com/en-us/product/dynapwr-max-gra-lite-1-wg1p0381",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-ping-g440-irons",
+      "externalId": "ping-g440-irons",
+      "brand": "PING",
+      "model": "G440",
+      "generation": null,
+      "year": null,
+      "category": "IRON_SET",
+      "subCategory": "game-improvement",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": "sold by the club; page publishes specs for 4-9, PW, UW, 52, 56",
+      "stockShafts": [
+        "PING AWT 3.0",
+        "True Temper Dynamic Gold",
+        "True Temper Dynamic Gold 120",
+        "True Temper Dynamic Gold Mid 100",
+        "KBS Tour",
+        "Nippon N.S. Pro Modus 3 Tour 105",
+        "True Temper Elevate MPH 95",
+        "PING ALTA CB Blue",
+        "PING ALTA Quick"
+      ],
+      "stockFlexes": [
+        "SENIOR",
+        "REGULAR",
+        "STIFF",
+        "X_STIFF"
+      ],
+      "officialUrl": "https://ping.com/en-us/golf-clubs/irons/g440-iron",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://ping.com/en-us/golf-clubs/irons/g440-iron",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-cobra-king-max-irons",
+      "externalId": "cobra-king-max-irons",
+      "brand": "Cobra",
+      "model": "KING MAX",
+      "generation": null,
+      "year": null,
+      "category": "IRON_SET",
+      "subCategory": "super-game-improvement",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": "Stock set comps: steel 5-GW; graphite 5-PW, GW (7 clubs)",
+      "stockShafts": [
+        "KBS Tour Lite",
+        "KBS PGI 85",
+        "KBS PGI 75",
+        "KBS PGI 65"
+      ],
+      "stockFlexes": [
+        "SENIOR",
+        "REGULAR",
+        "STIFF",
+        "X_STIFF"
+      ],
+      "officialUrl": "https://www.cobragolf.com/products/king-max-irons",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.cobragolf.com/products/king-max-irons",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-cobra-king-tec-irons",
+      "externalId": "cobra-king-tec-irons",
+      "brand": "Cobra",
+      "model": "KING TEC",
+      "generation": null,
+      "year": null,
+      "category": "IRON_SET",
+      "subCategory": "players-distance",
+      "active": true,
+      "handedness": [
+        "RH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": "Stock set composition - 7 clubs, steel 4-PW",
+      "stockShafts": [],
+      "stockFlexes": [
+        "REGULAR",
+        "STIFF"
+      ],
+      "officialUrl": "https://www.cobragolf.com/products/king-tec-irons",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.cobragolf.com/products/king-tec-irons",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-cobra-womens-king-max-irons",
+      "externalId": "cobra-womens-king-max-irons",
+      "brand": "Cobra",
+      "model": "Women's KING MAX",
+      "generation": null,
+      "year": null,
+      "category": "IRON_SET",
+      "subCategory": "super-game-improvement",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": "Stock set comp: graphite 6-PW; page also offers 5-PW, SW and 6-PW, SW",
+      "stockShafts": [
+        "KBS PGI BK SV 55"
+      ],
+      "stockFlexes": [
+        "LADIES"
+      ],
+      "officialUrl": "https://www.cobragolf.com/products/womens-king-max-irons",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.cobragolf.com/products/womens-king-max-irons",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-callaway-quantum-max-os-irons",
+      "externalId": "callaway-quantum-max-os-irons",
+      "brand": "Callaway",
+      "model": "Quantum Max OS",
+      "generation": null,
+      "year": 2026,
+      "category": "IRON_SET",
+      "subCategory": "super-game-improvement",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": "RH/LH - 4-9, PW, AW, GW, SW",
+      "stockShafts": [
+        "True Temper Elevate Black 85",
+        "True Temper Denali Frost Silver 60/70",
+        "Mitsubishi Chemical Vanquish 50"
+      ],
+      "stockFlexes": [
+        "REGULAR",
+        "STIFF"
+      ],
+      "officialUrl": "https://www.callawaygolf.com/golf-clubs/irons/irons-2026-quantum-max-os.html",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.callawaygolf.com/golf-clubs/irons/irons-2026-quantum-max-os.html",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-srixon-zxir-irons",
+      "externalId": "srixon-zxir-irons",
+      "brand": "Srixon",
+      "model": "ZXiR",
+      "generation": null,
+      "year": null,
+      "category": "IRON_SET",
+      "subCategory": "game-improvement",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": "4-PW, 5-PW, 5-PW+AW or 6-PW+AW (set options on the page)",
+      "stockShafts": [
+        "KBS Tour Lite (stock)",
+        "KBS PGI 80 (stock)",
+        "KBS PGI 60 (stock)"
+      ],
+      "stockFlexes": [
+        "SENIOR",
+        "REGULAR",
+        "STIFF"
+      ],
+      "officialUrl": "https://us.dunlopsports.com/srixon/clubs/irons/zxir-irons/zxir-irons/MZXIRIRN.html",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://us.dunlopsports.com/srixon/clubs/irons/zxir-irons/zxir-irons/MZXIRIRN.html",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-srixon-zxir-hl-irons",
+      "externalId": "srixon-zxir-hl-irons",
+      "brand": "Srixon",
+      "model": "ZXiR HL",
+      "generation": null,
+      "year": null,
+      "category": "IRON_SET",
+      "subCategory": "super-game-improvement",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": "5-PW, 5-PW+AW or 6-PW+AW (set options on the page)",
+      "stockShafts": [
+        "KBS 80 HL (stock)",
+        "KBS MAX 55 (stock)",
+        "KBS MAX 50 (stock)"
+      ],
+      "stockFlexes": [
+        "SENIOR",
+        "REGULAR",
+        "STIFF"
+      ],
+      "officialUrl": "https://us.dunlopsports.com/srixon/clubs/irons/zxir-hl-irons/zxir-hl-irons/MZXIRHLIRN.html",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://us.dunlopsports.com/srixon/clubs/irons/zxir-hl-irons/zxir-hl-irons/MZXIRHLIRN.html",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-callaway-quantum-max-irons",
+      "externalId": "callaway-quantum-max-irons",
+      "brand": "Callaway",
+      "model": "Quantum Max",
+      "generation": null,
+      "year": 2026,
+      "category": "IRON_SET",
+      "subCategory": "game-improvement",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": "RH/LH - 4-9, PW, AW, GW, SW",
+      "stockShafts": [
+        "KBS MAX 90",
+        "True Temper Denali Frost Silver 60/70",
+        "Mitsubishi Chemical Vanquish 50"
+      ],
+      "stockFlexes": [
+        "REGULAR",
+        "STIFF"
+      ],
+      "officialUrl": "https://www.callawaygolf.com/golf-clubs/irons/irons-2026-quantum-max.html",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.callawaygolf.com/golf-clubs/irons/irons-2026-quantum-max.html",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-taylormade-qi-max-irons",
+      "externalId": "taylormade-qi-max-irons",
+      "brand": "TaylorMade",
+      "model": "Qi Max",
+      "generation": null,
+      "year": null,
+      "category": "IRON_SET",
+      "subCategory": "game-improvement",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": "4-PW or 5-PW, AW (set options on the page)",
+      "stockShafts": [
+        "KBS Max 85 MT",
+        "REAX by KBS 75 / 65 / 55"
+      ],
+      "stockFlexes": [
+        "SENIOR",
+        "REGULAR",
+        "STIFF"
+      ],
+      "officialUrl": "https://www.taylormadegolf.com/Qi-Max-Irons/DW-TC675.html",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.taylormadegolf.com/Qi-Max-Irons/DW-TC675.html",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-taylormade-qi-max-hl-irons",
+      "externalId": "taylormade-qi-max-hl-irons",
+      "brand": "TaylorMade",
+      "model": "Qi Max HL",
+      "generation": null,
+      "year": null,
+      "category": "IRON_SET",
+      "subCategory": "super-game-improvement",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": "5-PW, AW or 6-PW, AW (set options on the page)",
+      "stockShafts": [
+        "KBS Max Lite",
+        "REAX HL 50 by KBS",
+        "REAX HL 45 by KBS"
+      ],
+      "stockFlexes": [
+        "LADIES",
+        "SENIOR",
+        "REGULAR",
+        "STIFF"
+      ],
+      "officialUrl": "https://www.taylormadegolf.com/Qi-Max-HL-Irons/DW-TC680.html",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.taylormadegolf.com/Qi-Max-HL-Irons/DW-TC680.html",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-ping-g740-irons",
+      "externalId": "ping-g740-irons",
+      "brand": "PING",
+      "model": "G740",
+      "generation": null,
+      "year": null,
+      "category": "IRON_SET",
+      "subCategory": "super-game-improvement",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": "Available 5-9, PW, UW, 50°, 56°",
+      "stockShafts": [
+        "PING AWT 3.0",
+        "True Temper Dynamic Gold Mid 100",
+        "True Temper Dynamic Gold",
+        "True Temper Dynamic Gold 120",
+        "KBS Tour",
+        "Nippon N.S. Pro Modus 3 Tour 105",
+        "Nippon N.S. Pro Modus 3 Tour 115",
+        "True Temper Elevate MPH 95",
+        "PING ALTA CB Blue",
+        "PING ALTA Quick",
+        "UST Recoil Dart"
+      ],
+      "stockFlexes": [
+        "SENIOR",
+        "REGULAR",
+        "STIFF",
+        "X_STIFF"
+      ],
+      "officialUrl": "https://ping.com/en-us/golf-clubs/irons/g740-iron",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://ping.com/en-us/golf-clubs/irons/g740-iron",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-mizuno-jpx925-hot-metal-irons",
+      "externalId": "mizuno-jpx925-hot-metal-irons",
+      "brand": "Mizuno",
+      "model": "JPX925 Hot Metal",
+      "generation": null,
+      "year": null,
+      "category": "IRON_SET",
+      "subCategory": "game-improvement",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": "5-GW or 4-PW (7-piece set); an 8-piece set is a separate SKU",
+      "stockShafts": [
+        "Nippon NS Pro 950 NEO",
+        "UST Recoil Dart ESX 60 F3"
+      ],
+      "stockFlexes": [
+        "REGULAR",
+        "STIFF"
+      ],
+      "officialUrl": "https://usa.mizuno.com/golf-jpx925-hot-metal-7pc",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://usa.mizuno.com/golf-jpx925-hot-metal-7pc",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-mizuno-jpx925-hot-metal-hl-irons",
+      "externalId": "mizuno-jpx925-hot-metal-hl-irons",
+      "brand": "Mizuno",
+      "model": "JPX925 Hot Metal HL",
+      "generation": null,
+      "year": null,
+      "category": "IRON_SET",
+      "subCategory": "super-game-improvement",
+      "active": true,
+      "handedness": [
+        "RH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": "5-GW or 4-PW (7-piece set); an HL combo set and a ladies HL combo set are separate SKUs",
+      "stockShafts": [
+        "True Temper Dynamic Gold 95",
+        "UST Recoil Dart ESX 60 F3"
+      ],
+      "stockFlexes": [],
+      "officialUrl": "https://usa.mizuno.com/golf-jpx925-hot-metal-hl-7pc",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://usa.mizuno.com/golf-jpx925-hot-metal-hl-7pc",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-srixon-womens-zxir-hl-irons",
+      "externalId": "srixon-womens-zxir-hl-irons",
+      "brand": "Srixon",
+      "model": "Women's ZXiR HL",
+      "generation": null,
+      "year": null,
+      "category": "IRON_SET",
+      "subCategory": "super-game-improvement",
+      "active": true,
+      "handedness": [
+        "RH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": "5-PW, 5-PW+AW or 6-PW+AW (set options on the page)",
+      "stockShafts": [
+        "KBS MAX 45 L (stock)"
+      ],
+      "stockFlexes": [
+        "LADIES"
+      ],
+      "officialUrl": "https://us.dunlopsports.com/srixon/clubs/irons/womens-zxir-hl-irons/womens-zxir-hl-irons/MWZXIRHLIRN.html",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://us.dunlopsports.com/srixon/clubs/irons/womens-zxir-hl-irons/womens-zxir-hl-irons/MWZXIRHLIRN.html",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-callaway-quantum-max-fast-irons",
+      "externalId": "callaway-quantum-max-fast-irons",
+      "brand": "Callaway",
+      "model": "Quantum Max Fast",
+      "generation": null,
+      "year": 2026,
+      "category": "IRON_SET",
+      "subCategory": "super-game-improvement",
+      "active": true,
+      "handedness": [
+        "RH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": "RH - 5-9, PW, AW, GW, SW",
+      "stockShafts": [
+        "Mitsubishi Chemical Vanquish 40"
+      ],
+      "stockFlexes": [],
+      "officialUrl": "https://www.callawaygolf.com/golf-clubs/irons/irons-2026-quantum-max-fast.html",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.callawaygolf.com/golf-clubs/irons/irons-2026-quantum-max-fast.html",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-ping-g-le4-irons",
+      "externalId": "ping-g-le4-irons",
+      "brand": "PING",
+      "model": "G Le4",
+      "generation": null,
+      "year": null,
+      "category": "IRON_SET",
+      "subCategory": "game-improvement",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": "iron/hybrid combo; page publishes specs for 5H, 6H, 7H, 8H and 6-9, W, UW, SW",
+      "stockShafts": [
+        "PING ALTA Le i (irons)",
+        "PING ALTA Le H (hybrids)"
+      ],
+      "stockFlexes": [
+        "SENIOR"
+      ],
+      "officialUrl": "https://ping.com/en-us/golf-clubs/irons/g-le4-iron",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://ping.com/en-us/golf-clubs/irons/g-le4-iron",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-srixon-zxi4-irons",
+      "externalId": "srixon-zxi4-irons",
+      "brand": "Srixon",
+      "model": "ZXi4",
+      "generation": null,
+      "year": null,
+      "category": "IRON_SET",
+      "subCategory": "players-distance",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": "4-PW, 5-PW or 5-PW+AW (set options on the page); SW sold separately",
+      "stockShafts": [
+        "KBS Tour Lite (stock)",
+        "KBS TGI Tour Graphite Iron (stock)",
+        "UST Mamiya Recoil Dart 65 (stock)"
+      ],
+      "stockFlexes": [
+        "SENIOR",
+        "REGULAR",
+        "STIFF"
+      ],
+      "officialUrl": "https://us.dunlopsports.com/srixon/clubs/irons/zxi4-irons/zxi4-irons/MZXI4IRN.html",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://us.dunlopsports.com/srixon/clubs/irons/zxi4-irons/zxi4-irons/MZXI4IRN.html",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-titleist-t350-irons",
+      "externalId": "titleist-t350-irons",
+      "brand": "Titleist",
+      "model": "T350",
+      "generation": null,
+      "year": null,
+      "category": "IRON_SET",
+      "subCategory": "game-improvement",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": "Available irons 4, 5, 6, 7, 8, 9, P, W, W2; sold by the club",
+      "stockShafts": [
+        "True Temper AMT Red",
+        "True Temper AMT Tour White",
+        "True Temper AMT Tour Silver",
+        "True Temper AMT Black",
+        "Mitsubishi MMT AMC Red",
+        "Mitsubishi MMT AMC Blue"
+      ],
+      "stockFlexes": [
+        "REGULAR",
+        "STIFF"
+      ],
+      "officialUrl": "https://www.titleist.com/product/t350/563C.html",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.titleist.com/product/t350/563C.html",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-titleist-t250-irons",
+      "externalId": "titleist-t250-irons",
+      "brand": "Titleist",
+      "model": "T250",
+      "generation": null,
+      "year": null,
+      "category": "IRON_SET",
+      "subCategory": "players-distance",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": "Available irons 2, 3, 4, 5, 6, 7, 8, 9, P, W; sold by the club",
+      "stockShafts": [
+        "True Temper AMT Black",
+        "True Temper AMT Tour White",
+        "True Temper AMT Tour Silver",
+        "True Temper AMT Red",
+        "Mitsubishi MMT AMC Blue",
+        "Mitsubishi MMT AMC Red"
+      ],
+      "stockFlexes": [
+        "REGULAR",
+        "STIFF"
+      ],
+      "officialUrl": "https://www.titleist.com/product/t250/561C.html",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.titleist.com/product/t250/561C.html",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-titleist-t250-launch-spec-irons",
+      "externalId": "titleist-t250-launch-spec-irons",
+      "brand": "Titleist",
+      "model": "T250 Launch Spec",
+      "generation": null,
+      "year": null,
+      "category": "IRON_SET",
+      "subCategory": "players-distance",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": "Available irons 5, 6, 7, 8, 9, P, W; sold by the club",
+      "stockShafts": [
+        "Nippon NS 750GH Neo",
+        "Mitsubishi MMT AMC Red"
+      ],
+      "stockFlexes": [
+        "REGULAR",
+        "STIFF"
+      ],
+      "officialUrl": "https://www.titleist.com/product/t250-launch-spec/562C.html",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://www.titleist.com/product/t250-launch-spec/562C.html",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-xxio-14-irons",
+      "externalId": "xxio-14-irons",
+      "brand": "XXIO",
+      "model": "XXIO 14",
+      "generation": null,
+      "year": null,
+      "category": "IRON_SET",
+      "subCategory": "super-game-improvement",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": "5-PW, SW or 6-PW (set options on the page)",
+      "stockShafts": [
+        "Nippon 850 GH neo DST",
+        "XXIO MP1400"
+      ],
+      "stockFlexes": [
+        "SENIOR",
+        "REGULAR",
+        "STIFF"
+      ],
+      "officialUrl": "https://us.dunlopsports.com/xxio/clubs/irons/xxio-14-irons/xxio-14-irons/MX14IRN.html",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://us.dunlopsports.com/xxio/clubs/irons/xxio-14-irons/xxio-14-irons/MX14IRN.html",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-xxio-14-ladies-irons",
+      "externalId": "xxio-14-ladies-irons",
+      "brand": "XXIO",
+      "model": "XXIO 14 Ladies",
+      "generation": null,
+      "year": null,
+      "category": "IRON_SET",
+      "subCategory": "super-game-improvement",
+      "active": true,
+      "handedness": [
+        "RH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": "6-PW or 7-SW (set options on the page)",
+      "stockShafts": [
+        "XXIO MP-1400L Carbon",
+        "Speeder NX DST for XXIO W (custom LR flex)"
+      ],
+      "stockFlexes": [
+        "LADIES",
+        "SENIOR"
+      ],
+      "officialUrl": "https://us.dunlopsports.com/xxio/clubs/irons/xxio-14-irons/xxio-14-ladies-irons/MX14LIRN.html",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://us.dunlopsports.com/xxio/clubs/irons/xxio-14-irons/xxio-14-ladies-irons/MX14LIRN.html",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-ping-i540-irons",
+      "externalId": "ping-i540-irons",
+      "brand": "PING",
+      "model": "i540",
+      "generation": null,
+      "year": null,
+      "category": "IRON_SET",
+      "subCategory": "players-distance",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": "Available 4-9, PW, UW",
+      "stockShafts": [],
+      "stockFlexes": [],
+      "officialUrl": "https://ping.com/en-us/golf-clubs/irons/i540-iron",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://ping.com/en-us/golf-clubs/irons/i540-iron",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-xxio-prime-irons",
+      "externalId": "xxio-prime-irons",
+      "brand": "XXIO",
+      "model": "XXIO Prime",
+      "generation": null,
+      "year": null,
+      "category": "IRON_SET",
+      "subCategory": "super-game-improvement",
+      "active": true,
+      "handedness": [
+        "RH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": "7-PW or 7-PW+AW (set options on the page); 5-iron special order only",
+      "stockShafts": [
+        "XXIO Prime SP-1300"
+      ],
+      "stockFlexes": [
+        "SENIOR",
+        "REGULAR"
+      ],
+      "officialUrl": "https://us.dunlopsports.com/xxio/clubs/irons/xxio-prime-irons/xxio-prime-irons/MXXIOP13IRN.html",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://us.dunlopsports.com/xxio/clubs/irons/xxio-prime-irons/xxio-prime-irons/MXXIOP13IRN.html",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    },
+    {
+      "id": "forgiving-golf-ping-g440-hl-irons",
+      "externalId": "ping-g440-hl-irons",
+      "brand": "PING",
+      "model": "G440 HL",
+      "generation": null,
+      "year": null,
+      "category": "IRON_SET",
+      "subCategory": "game-improvement",
+      "active": true,
+      "handedness": [
+        "RH",
+        "LH"
+      ],
+      "lofts": [],
+      "variants": [],
+      "standardLength": null,
+      "lie": null,
+      "headVolume": null,
+      "setMakeup": "sold by the club; page publishes specs for 4-9, PW, UW, 52, 56",
+      "stockShafts": [
+        "PING ALTA Quick"
+      ],
+      "stockFlexes": [],
+      "officialUrl": "https://ping.com/en-us/golf-clubs/irons/g440-hl-iron",
+      "sourceName": "forgiving.golf · fabricante",
+      "sourceUrl": "https://ping.com/en-us/golf-clubs/irons/g440-hl-iron",
+      "sourceCheckedAt": "2026-09-06",
+      "verifiedAt": "2026-09-06",
+      "license": "CC BY 4.0",
+      "createdAt": null,
+      "updatedAt": null
+    }
+  ]
+}

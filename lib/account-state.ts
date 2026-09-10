@@ -1,5 +1,6 @@
 import { LEGAL_DOCUMENT_VERSIONS } from "./legal-config";
 import { normalizePlanId, type PlanId } from "./plans";
+import { isProfileEmojiAvatar } from "./profile-avatar";
 
 export type AccountMode = "undecided" | "guest" | "authenticated";
 export const BETTING_DATA_CONSENT_TYPE = "betting_financial" as const;
@@ -83,6 +84,7 @@ export type BackyardProfileDetails = {
   state: string;
   country: string;
   homeClub: string;
+  homeClubId: string;
   preferredTee: string;
   handedness: "right" | "left" | "ambidextrous" | "";
   typicalScore: number | null;
@@ -115,6 +117,7 @@ const EMPTY_PROFILE_DETAILS: BackyardProfileDetails = {
   state: "",
   country: "",
   homeClub: "",
+  homeClubId: "",
   preferredTee: "",
   handedness: "",
   typicalScore: null,
@@ -210,6 +213,7 @@ function profileDetails(candidate: Partial<BackyardProfile>, fallback?: Backyard
     state: profileText(candidate.state, fallback?.state, 100),
     country: profileText(candidate.country, fallback?.country, 100),
     homeClub: profileText(candidate.homeClub, fallback?.homeClub, 120),
+    homeClubId: profileText(candidate.homeClubId, fallback?.homeClubId, 120),
     preferredTee: profileText(candidate.preferredTee, fallback?.preferredTee, 80),
     handedness: candidate.handedness === ""
       ? ""
@@ -320,6 +324,7 @@ export function validateProfileAvatarUrl(input: string): ProfileAvatarValidation
   const avatarUrl = input.trim();
   if (!avatarUrl) return { ok: true, avatarUrl: "" };
   const message = "Elige una foto o avatar válido, o deja el campo vacío.";
+  if (isProfileEmojiAvatar(avatarUrl)) return { ok: true, avatarUrl };
   if (/^\/avatars\/[a-z0-9-]+\.svg$/i.test(avatarUrl)) return { ok: true, avatarUrl };
   if (/^data:image\/(?:jpeg|png|webp);base64,(?:[a-z0-9+/]{4})*(?:[a-z0-9+/]{2}==|[a-z0-9+/]{3}=)?$/i.test(avatarUrl) && avatarUrl.length <= 180_000) return { ok: true, avatarUrl };
   if (avatarUrl.length > 2048) return { ok: false, message };

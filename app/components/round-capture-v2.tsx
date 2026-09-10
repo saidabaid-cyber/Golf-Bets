@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type {
   AdvancedHoleStat,
   BetConfig,
@@ -16,6 +16,7 @@ import { haversineDistanceKm, isValidGeographicPoint } from "../../lib/course-di
 import { roundCaptureFieldsForPlayer, scoreToParLabel } from "../../lib/round-capture";
 import { ScorecardHoleNetPreview } from "./scorecard-hole-preview";
 import { CompactStepper, SignedStepper, TapCounter } from "./bet-fields/capture-controls";
+import { ProfileAvatarMedia } from "./profile-avatar-media";
 import styles from "./round-capture-v2.module.css";
 
 type CounterQuantities = Record<CounterBetKind, Record<string, number | undefined>>;
@@ -55,6 +56,7 @@ export type RoundCaptureV2Props = {
   onOpenScanner: () => void;
   onToggleFullCard: () => void;
   fullCardVisible: boolean;
+  fullCardContent?: ReactNode;
   onOpenStandings: () => void;
   onUndo: () => void;
   undoDisabled: boolean;
@@ -76,13 +78,13 @@ function GroupRequiredInputs({ player, fields, putts, stat, unitsActive, units, 
   unitsActive: boolean;
   units: number;
   onPutts: (value: number | null) => void;
-  onGolfFact: (kind: "greenSideBunkerCount" | "fairwayBunkerCount" | "penaltyAreaCount", value: number) => void;
+  onGolfFact: (kind: "bunkerCount" | "penaltyAreaCount", value: number) => void;
   onUnitDelta: (delta: number) => void;
 }) {
   if (!fields.length && !unitsActive) return null;
   return <div className={styles.groupRequired}>
     {fields.includes("putts") && <div className={styles.compactField}><span>Putts {typeof putts === "number" && putts >= 3 ? "🐍" : ""}</span><CompactStepper label={`Putts ${player.name}`} value={putts} fallback={2} min={0} max={20} onChange={onPutts} /></div>}
-    {fields.includes("bunker") && <><TapCounter compact label="GS Bunker" icon="🐫" value={stat.greenSideBunkerCount} onChange={(value) => onGolfFact("greenSideBunkerCount", value)} /><TapCounter compact label="FW Bunker" icon="🐫" value={stat.fairwayBunkerCount} onChange={(value) => onGolfFact("fairwayBunkerCount", value)} /></>}
+    {fields.includes("bunker") && <TapCounter compact label="Bunker" icon="🐫" value={stat.bunkerCount} onChange={(value) => onGolfFact("bunkerCount", value)} />}
     {fields.includes("fish") && <TapCounter compact label="Penalty / Hazard" icon="🐟" value={stat.penaltyAreaCount} onChange={(value) => onGolfFact("penaltyAreaCount", value)} />}
     {unitsActive && <div className={styles.compactField}><span>🪙 Unidades</span><SignedStepper label={`Unidades ${player.name}`} value={units} onDelta={onUnitDelta} /></div>}
   </div>;
@@ -153,11 +155,16 @@ export function RoundCaptureV2(props: RoundCaptureV2Props) {
     );
   }
 
-  function setGolfFact(playerId: string, kind: "greenSideBunkerCount" | "fairwayBunkerCount" | "penaltyAreaCount", value: number) {
+  function setGolfFact(playerId: string, kind: "greenSideBunkerCount" | "fairwayBunkerCount" | "bunkerCount" | "penaltyAreaCount", value: number) {
     const stat = advancedStats[playerId] || {};
     if (kind === "penaltyAreaCount") {
       props.onAdvancedChange(playerId, { penaltyAreaCount: value });
       if (quickFields(playerId).includes("fish")) props.onCounterChange("fish", playerId, value);
+      return;
+    }
+    if (kind === "bunkerCount") {
+      props.onAdvancedChange(playerId, { bunkerCount: value });
+      if (quickFields(playerId).includes("bunker")) props.onCounterChange("camels", playerId, value);
       return;
     }
     const greenSide = kind === "greenSideBunkerCount" ? value : stat.greenSideBunkerCount || 0;
@@ -191,6 +198,8 @@ export function RoundCaptureV2(props: RoundCaptureV2Props) {
       <button type="button" disabled={props.undoDisabled} onClick={props.onUndo}>↶ Deshacer</button>
     </div>
 
+    {props.fullCardVisible && props.fullCardContent}
+
     <section className={`card ${styles.captureCard}`}>
       <header className={styles.modeHeader}>
         <div><h2>Captura del hoyo</h2><p>Score primero. Los eventos opcionales empiezan en cero.</p></div>
@@ -210,7 +219,7 @@ export function RoundCaptureV2(props: RoundCaptureV2Props) {
       {owner && <>
         <article className={styles.primaryPlayer}>
           <header className={styles.primaryHeader}>
-            {ownerAvatarUrl ? <img className={styles.avatar} alt="" src={ownerAvatarUrl} /> : <span className={styles.avatar} aria-hidden="true">{initials(owner.name)}</span>}
+            <ProfileAvatarMedia className={styles.avatar} value={ownerAvatarUrl} fallback={initials(owner.name)} />
             <div className={styles.playerHeading}>
               <div><b>{owner.name || "Jugador principal"}</b><small>HCP de juego {owner.handicap ?? "—"} · {teeLabel(owner.id)}</small></div>
               <span className={styles.toPar}>{scoreToParLabel(scores[owner.id], hole.par)}</span>
@@ -223,7 +232,7 @@ export function RoundCaptureV2(props: RoundCaptureV2Props) {
             <div className={styles.primaryControl}><span>PUTTS {typeof putts[owner.id] === "number" && (putts[owner.id] as number) >= 3 ? "🐍" : ""}</span><CompactStepper large label={`Putts ${owner.name} hoyo ${hole.number}`} value={putts[owner.id]} fallback={2} min={0} max={20} onChange={(value) => props.onPuttsChange(owner.id, value)} /></div>
           </div>
 
-          <div className={styles.quickFacts} aria-label="Eventos rápidos del jugador principal">
+          <div className={styles.quickFacts} role="group" aria-label="Eventos rápidos del jugador principal">
             {(mode === "advanced" || quickFields(owner.id).includes("bunker")) && <TapCounter label="Green Side Bunker" icon="🐫" value={advancedStats[owner.id]?.greenSideBunkerCount} onChange={(value) => setGolfFact(owner.id, "greenSideBunkerCount", value)} />}
             {(mode === "advanced" || quickFields(owner.id).includes("bunker")) && <TapCounter label="Fairway Bunker" icon="🐫" value={advancedStats[owner.id]?.fairwayBunkerCount} onChange={(value) => setGolfFact(owner.id, "fairwayBunkerCount", value)} />}
             {(mode === "advanced" || quickFields(owner.id).includes("fish")) && <TapCounter label="Penalty / Hazard" icon="🐟" value={advancedStats[owner.id]?.penaltyAreaCount} onChange={(value) => setGolfFact(owner.id, "penaltyAreaCount", value)} />}

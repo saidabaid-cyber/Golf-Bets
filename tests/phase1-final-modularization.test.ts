@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { usernameFromEmail } from "../lib/account-state";
-import { BET_REGISTRY, betAiAliasCatalog } from "../lib/bets/registry";
+import { BET_REGISTRY, betAiAliasCatalog, groupTemplateSelectionDefinitions } from "../lib/bets/registry";
 import { captureRequirementsForPlayer } from "../lib/bets/capture-requirements";
 import { createInternalEquipmentCatalogProvider } from "../lib/equipment-catalog-provider";
 import { golfBallCatalog, golfClubCatalog, golfShaftCatalog } from "../lib/golf-equipment-catalog";
@@ -31,6 +31,7 @@ test("registro de apuestas tiene IDs, historia, adaptador y aliases canÃ³nicos Ã
     assert.equal(bet.captureRequirements.requiresScore, true);
     assert.ok(bet.historyVersion >= 1);
     assert.ok(bet.aiAliases.length > 0);
+    assert.ok(bet.templateEditor.sortOrder > 0);
   }
   const aliases = new Map<string, Set<string>>();
   for (const entry of betAiAliasCatalog()) {
@@ -43,6 +44,13 @@ test("registro de apuestas tiene IDs, historia, adaptador y aliases canÃ³nicos Ã
   for (const id of ["rabbits", "skins", "units", "foursome", "ball_friend", "vipers", "camels", "fish", "loba", "personals"]) {
     assert.ok(BET_REGISTRY.some((bet) => bet.id === id), `Falta ${id}`);
   }
+});
+
+test("selector de plantilla deriva todas sus modalidades visibles del registry", () => {
+  const editor = readFileSync("app/components/group-bet-template-editor.tsx", "utf8");
+  assert.doesNotMatch(editor, /CORE_MODES|SUPPLEMENTAL_MODES/);
+  assert.match(editor, /groupTemplateSelectionDefinitions\(\)\.map/);
+  assert.equal(groupTemplateSelectionDefinitions().length, BET_REGISTRY.filter((bet) => bet.id !== "individual_nassau").length);
 });
 
 test("capture requirements sÃ³lo obliga score y putts cuando la apuesta los consume", () => {
