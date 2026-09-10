@@ -1,6 +1,7 @@
 import golfBallSeed from "../data/golf-ball-catalog.seed.json";
 import golfClubSeed from "../data/golf-club-catalog.seed.json";
 import golfShaftSeed from "../data/golf-shaft-catalog.seed.json";
+import golfEquipmentExpansionSeed from "../data/golf-equipment-catalog.expansion.seed.json";
 import {
   normalizeGolfBallCatalogEntries,
   normalizeGolfClubCatalogEntries,
@@ -81,22 +82,43 @@ function ballFeelProfile(value: GolfBallCatalog["feel"]) {
 const rawBallSeed = golfBallSeed as SeedEnvelope;
 const rawClubSeed = golfClubSeed as SeedEnvelope;
 const rawShaftSeed = golfShaftSeed as SeedEnvelope;
+const expansionSeed = golfEquipmentExpansionSeed as {
+  schemaVersion?: unknown;
+  verifiedAt?: unknown;
+  balls?: unknown;
+  clubs?: unknown;
+  shafts?: unknown;
+};
+
+function expandedSeed(seed: SeedEnvelope, expansion: unknown): SeedEnvelope {
+  return {
+    ...seed,
+    models: [
+      ...(Array.isArray(seed.models) ? seed.models : []),
+      ...(Array.isArray(expansion) ? expansion : []),
+    ],
+  };
+}
+
+const combinedBallSeed = expandedSeed(rawBallSeed, expansionSeed.balls);
+const combinedClubSeed = expandedSeed(rawClubSeed, expansionSeed.clubs);
+const combinedShaftSeed = expandedSeed(rawShaftSeed, expansionSeed.shafts);
 
 export const golfBallCatalog: readonly GolfBallCatalog[] = Object.freeze(
-  normalizeGolfBallCatalogEntries(rawBallSeed),
+  normalizeGolfBallCatalogEntries(combinedBallSeed),
 );
 
 export const golfClubCatalog: readonly GolfClubCatalog[] = Object.freeze(
-  normalizeGolfClubCatalogEntries(rawClubSeed),
+  normalizeGolfClubCatalogEntries(combinedClubSeed),
 );
 
 export const golfShaftCatalog: readonly GolfShaftCatalog[] = Object.freeze(
-  normalizeGolfShaftCatalogEntries(rawShaftSeed),
+  normalizeGolfShaftCatalogEntries(combinedShaftSeed),
 );
 
-export const golfBallBrands = Object.freeze(catalogBrands(rawBallSeed, golfBallCatalog));
-export const golfClubBrands = Object.freeze(catalogBrands(rawClubSeed, golfClubCatalog));
-export const golfShaftBrands = Object.freeze(catalogBrands(rawShaftSeed, golfShaftCatalog));
+export const golfBallBrands = Object.freeze(catalogBrands(combinedBallSeed, golfBallCatalog));
+export const golfClubBrands = Object.freeze(catalogBrands(combinedClubSeed, golfClubCatalog));
+export const golfShaftBrands = Object.freeze(catalogBrands(combinedShaftSeed, golfShaftCatalog));
 
 export const golfCatalogDiagnostics = Object.freeze({
   schemaVersion: 1,
@@ -106,17 +128,17 @@ export const golfCatalogDiagnostics = Object.freeze({
     .at(0) ?? null,
   balls: {
     declaredBrands: golfBallBrands.length,
-    sourceModels: seedCount(rawBallSeed),
+    sourceModels: seedCount(combinedBallSeed),
     usableModels: golfBallCatalog.length,
   },
   clubs: {
     declaredBrands: golfClubBrands.length,
-    sourceModels: seedCount(rawClubSeed),
+    sourceModels: seedCount(combinedClubSeed),
     usableModels: golfClubCatalog.length,
   },
   shafts: {
     declaredBrands: golfShaftBrands.length,
-    sourceModels: seedCount(rawShaftSeed),
+    sourceModels: seedCount(combinedShaftSeed),
     usableModels: golfShaftCatalog.length,
   },
 });

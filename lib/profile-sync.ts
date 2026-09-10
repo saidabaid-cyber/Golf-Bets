@@ -1,4 +1,4 @@
-import type { BackyardProfile } from "./account-state";
+import { clampBackyardHandicap, type BackyardProfile } from "./account-state";
 
 export type CloudProfileFields = Pick<BackyardProfile, "displayName" | "defaultHandicap" | "avatarUrl">;
 
@@ -80,7 +80,7 @@ export function cloudProfileFields(profile: CloudProfileFields): CloudProfileFie
   return {
     displayName: profile.displayName.trim(),
     defaultHandicap: profile.defaultHandicap === null || (typeof profile.defaultHandicap === "number" && Number.isFinite(profile.defaultHandicap))
-      ? profile.defaultHandicap
+      ? clampBackyardHandicap(profile.defaultHandicap)
       : null,
     avatarUrl: profile.avatarUrl.trim(),
   };

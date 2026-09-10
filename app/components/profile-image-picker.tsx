@@ -28,7 +28,10 @@ export function ProfileImagePicker({ value, onChange, kind = "profile" }: { valu
       <button type="button" className="secondary" disabled={busy} onClick={() => inputRef.current?.click()}>{busy ? "Preparando…" : kind === "profile" ? "Subir foto" : "Subir imagen del grupo"}</button>
       {value && <button type="button" className="textButton" disabled={busy} onClick={() => { onChange(""); setMessage(""); }}>Dejar sin imagen</button>}
     </div>
-    {kind === "profile" && <div className={styles.presets} aria-label="Avatares disponibles">{AVATARS.map((avatar) => <button type="button" key={avatar.src} data-active={value === avatar.src} aria-pressed={value === avatar.src} aria-label={`Elegir ${avatar.label}`} onClick={() => { onChange(avatar.src); setMessage(""); }}><img src={avatar.src} alt="" /></button>)}</div>}
+    {kind === "profile" && <div className={styles.presets} aria-label="Avatares disponibles">{AVATARS.map((avatar) => {
+      const selected = value === avatar.src;
+      return <button type="button" key={avatar.src} data-active={selected} aria-pressed={selected} aria-label={`Elegir ${avatar.label}`} onClick={() => { onChange(avatar.src); setMessage(""); }}><img src={avatar.src} alt="" /><span aria-hidden="true">{selected ? "✓" : ""}</span></button>;
+    })}</div>}
     {message && <small className={styles.error} role="alert">{message}</small>}
     <small className={styles.help}>Puedes cambiarla después. No necesitas pegar enlaces.</small>
   </div>;

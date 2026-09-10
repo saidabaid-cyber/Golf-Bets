@@ -12,9 +12,12 @@ import {
   type LaunchMonitorShot,
 } from "../../lib/golf-equipment";
 import styles from "./equipment.module.css";
+import { LaunchMonitorCamera } from "./launch-monitor-camera";
 
 type LaunchMonitorCaptureProps = {
   userId: string;
+  accessToken?: string | null;
+  requiresRemoteConsent?: boolean;
   value: LaunchMonitorSession | null;
   onChange: (session: LaunchMonitorSession | null) => void;
 };
@@ -107,7 +110,7 @@ function summaryMetric(value: number, metric: LaunchMonitorMetric) {
   return `${value.toLocaleString("es-MX", { maximumFractionDigits: decimals })} ${field.unit}`;
 }
 
-export function LaunchMonitorCapture({ userId, value, onChange }: LaunchMonitorCaptureProps) {
+export function LaunchMonitorCapture({ userId, accessToken, requiresRemoteConsent = false, value, onChange }: LaunchMonitorCaptureProps) {
   const session = useMemo(
     () => value?.userId === userId.trim() ? value : null,
     [userId, value],
@@ -211,8 +214,21 @@ export function LaunchMonitorCapture({ userId, value, onChange }: LaunchMonitorC
     >
       <summary>Fitting con launch monitor</summary>
       <p className={styles.subtle} id="launch-monitor-help">
-        Si ya tienes datos de TrackMan, FlightScope, Garmin u otro launch monitor, agrégalos para dar más contexto a tu recomendación. La captura es opcional y no conecta automáticamente con esos equipos.
+        Si ya tienes datos de TrackMan, FlightScope, Garmin u otro launch monitor, usa cámara o captura manual. Nada se guarda hasta que revises y confirmes.
       </p>
+
+      <LaunchMonitorCamera
+        userId={userId}
+        accessToken={accessToken}
+        requiresRemoteConsent={requiresRemoteConsent}
+        onConfirm={(source, shots) => {
+          const now = new Date().toISOString();
+          const current = session || { id: createId("launch-session"), userId: userId.trim(), source: null, startedAt: now, completedAt: null, shots: [] };
+          onChange({ ...current, source: source || current.source, completedAt: null, shots: [...current.shots, ...shots].slice(0, MAX_LAUNCH_MONITOR_SHOTS_PER_CLUB * LAUNCH_MONITOR_CLUBS.length) });
+        }}
+      />
+
+      <div className={styles.manualDivider}><span>o captura manualmente</span></div>
 
       {!session ? (
         <div className={styles.fitIntro}>

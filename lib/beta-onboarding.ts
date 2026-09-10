@@ -1,6 +1,7 @@
 export const BETA_ONBOARDING_VERSION = 1 as const;
 
 export const BETA_ONBOARDING_STEPS = [
+  "welcome",
   "ghin",
   "equipment",
   "improvements",
@@ -62,7 +63,7 @@ export function createBetaOnboardingProgress(userId: string, now = new Date().to
     version: BETA_ONBOARDING_VERSION,
     userId,
     status: "in_progress",
-    step: "ghin",
+    step: "welcome",
     completedSteps: [],
     skippedSteps: [],
     startedAt: now,
@@ -80,7 +81,7 @@ export function normalizeBetaOnboardingProgress(
   if (candidate.version !== BETA_ONBOARDING_VERSION || candidate.userId !== userId) return null;
   const step = typeof candidate.step === "string" && (BETA_ONBOARDING_STEPS as readonly string[]).includes(candidate.step)
     ? candidate.step as BetaOnboardingStep
-    : "ghin";
+    : "welcome";
   const status = candidate.status === "complete" || step === "complete" ? "complete" : "in_progress";
   const completedAt = status === "complete" ? timestamp(candidate.completedAt, timestamp(candidate.updatedAt, now)) : undefined;
   return {

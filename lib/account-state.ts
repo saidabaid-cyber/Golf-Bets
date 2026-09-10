@@ -144,6 +144,25 @@ function profileText(value: unknown, fallback = "", maxLength = 120) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : fallback;
 }
 
+/** A username suggestion is identity metadata, never the golfer's visible name. */
+export function usernameFromEmail(email: string, existing: readonly string[] = []) {
+  const localPart = email.trim().toLocaleLowerCase("en-US").split("@")[0] || "golfer";
+  const normalized = localPart
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9._]+/g, "_")
+    .replace(/[._]{2,}/g, (match) => match[0])
+    .replace(/^[._]+|[._]+$/g, "")
+    .slice(0, 32) || "golfer";
+  const occupied = new Set(existing.map((value) => value.trim().replace(/^@+/, "").toLocaleLowerCase("en-US")));
+  if (!occupied.has(normalized)) return normalized;
+  for (let suffix = 2; suffix <= 999; suffix += 1) {
+    const candidate = `${normalized.slice(0, Math.max(1, 32 - String(suffix).length - 1))}_${suffix}`;
+    if (!occupied.has(candidate)) return candidate;
+  }
+  return `${normalized.slice(0, 23)}_${Math.abs(email.length * 2654435761).toString(36).slice(0, 8)}`;
+}
+
 function optionalProfileNumber(value: unknown, fallback: number | null | undefined, minimum: number, maximum: number) {
   if (value === null) return null;
   return typeof value === "number" && Number.isFinite(value) && value >= minimum && value <= maximum
@@ -339,7 +358,7 @@ export function readOfflineAuthenticatedProfile(storage: OfflineProfileStorage, 
       displayName,
       email: typeof cached.email === "string" ? cached.email : "",
       avatarUrl: typeof cached.avatarUrl === "string" ? cached.avatarUrl : "",
-      defaultHandicap: cached.defaultHandicap === null || (typeof cached.defaultHandicap === "number" && Number.isFinite(cached.defaultHandicap)) ? cached.defaultHandicap : null,
+      defaultHandicap: cached.defaultHandicap === null || (typeof cached.defaultHandicap === "number" && Number.isFinite(cached.defaultHandicap)) ? clampBackyardHandicap(cached.defaultHandicap) : null,
       ...profileDetails(cached),
     };
   } catch { return null; }

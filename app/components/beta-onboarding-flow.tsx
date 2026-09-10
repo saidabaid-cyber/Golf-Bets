@@ -177,7 +177,7 @@ function activeBetCount(template: GroupGameTemplate) {
 }
 
 function Shell({ progress, eyebrow, title, description, children, actions, onBack, onSaveAndExit }: { progress: BetaOnboardingProgress; eyebrow: string; title: string; description?: string; children: React.ReactNode; actions: React.ReactNode; onBack?: () => void; onSaveAndExit?: () => void }) {
-  const visibleSteps: BetaOnboardingStep[] = ["ghin", "equipment", "improvements", "objective", "plan", "group", "players", "handicaps", "bets", "bet_details", "ready"];
+  const visibleSteps: BetaOnboardingStep[] = ["welcome", "ghin", "equipment", "improvements", "objective", "plan", "group", "players", "handicaps", "bets", "bet_details", "ready"];
   const index = Math.max(0, visibleSteps.indexOf(progress.step));
   return <main className={styles.screen}><section className={styles.card}>
     <header className={styles.header}><BrandLockup compact /><span className={styles.step}>PASO {index + 1} DE {visibleSteps.length}</span></header>
@@ -248,7 +248,7 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, bett
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
   const previousByStep: Partial<Record<BetaOnboardingStep, Exclude<BetaOnboardingStep, "complete">>> = {
-    equipment: "ghin", improvements: "equipment", objective: "improvements", plan: "objective",
+    ghin: "welcome", equipment: "ghin", improvements: "equipment", objective: "improvements", plan: "objective",
     group: "plan", players: "group", handicaps: "players", bets: "handicaps",
     bet_details: "bets", ready: "bet_details",
   };
@@ -264,6 +264,13 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, bett
     const prior = current.group.template || initialTemplate(current.group.members);
     return { ...current, group: { ...current.group, template: typeof action === "function" ? action(prior) : action } };
   });
+
+  if (progress.step === "welcome") return <Shell progress={progress} {...navigationProps} eyebrow="EMPIEZA A TU MANERA" title="Tu Backyard, sin fricción" description="Puedes entrar rápido o completar tu perfil para personalizar mejor rondas, estadísticas, equipo, fitting e IA." actions={<div className={styles.entryChoices}><button type="button" className="primary big" onClick={() => advance("ghin")}>CONFIGURACIÓN COMPLETA</button><button type="button" className="secondary big" onClick={() => finish()}>CONFIGURACIÓN RÁPIDA</button></div>}>
+    <div className={styles.entryGrid}>
+      <article><span aria-hidden="true">⚡</span><div><b>Rápida</b><p>Entra con el perfil básico que acabas de guardar. Equipo, fitting y grupos quedan disponibles para después.</p></div></article>
+      <article><span aria-hidden="true">⛳</span><div><b>Completa</b><p>Configura HCP, bolsa, objetivos y tu primer grupo para recibir una experiencia más personalizada.</p></div></article>
+    </div>
+  </Shell>;
 
   if (progress.step === "equipment") return <EquipmentOnboarding
     userId={profile.userId}

@@ -306,6 +306,7 @@ export function ClubEditor({ userId, catalog, shafts, existing, onCancel, onSave
         {category === "IRON_SET" && <fieldset className={styles.choiceFieldset}>
           <legend>Composición del set (opcional)</legend>
           <div className={styles.choiceGrid}>{IRON_SET_PACKAGES.map((set) => <button type="button" className={styles.manualToggle} key={set.label} onClick={() => setComposition([...set.clubs])}>{set.label}</button>)}</div>
+          <p className={styles.subtle}>Personalizar set</p>
           <div className={styles.choiceGrid}>{COMPOSITION.map((club) => <label key={club}><input type="checkbox" checked={composition.includes(club)} onChange={(event) => setComposition((current) => event.target.checked ? [...current, club] : current.filter((item) => item !== club))} />{club}</label>)}</div>
         </fieldset>}
 

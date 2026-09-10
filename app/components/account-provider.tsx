@@ -29,6 +29,7 @@ import {
   parseLegalAcceptances,
   profileHandicapInput,
   readOfflineAuthenticatedProfile,
+  usernameFromEmail,
   validateProfileAvatarUrl,
   validateProfileDraft,
   type AccountMode,
@@ -114,13 +115,17 @@ export function useBackyardAccount() {
 }
 
 function profileFromUser(user: User): BackyardProfile {
+  const email = user.email || "";
   const base = {
     userId: user.id,
-    displayName: String(user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split("@")[0] || "Jugador"),
-    email: user.email || "",
+    // New accounts explicitly capture their golfer name. An email/username is
+    // never silently promoted to the visible name.
+    displayName: "",
+    email,
     avatarUrl: String(user.user_metadata?.avatar_url || user.user_metadata?.picture || ""),
     defaultHandicap: typeof user.user_metadata?.default_handicap === "number" ? clampBackyardHandicap(user.user_metadata.default_handicap) : null,
     ...emptyBackyardProfileDetails(),
+    username: String(user.user_metadata?.username || usernameFromEmail(email)),
   };
   try {
     const cached = JSON.parse(localStorage.getItem(`backyard-profile-cache-v1:${user.id}`) || "null");
@@ -729,7 +734,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
           const avatarUrl = typeof cloudProfile.avatar_url === "string" ? cloudProfile.avatar_url : current.avatarUrl;
           // Existing preference clocks belong to the full sync merge. Updating
           // just HCP here would masquerade as a local edit on the next autosave.
-          const defaultHandicap = preferencesResult.error || localStorage.getItem(CLOUD_LOCAL_META_KEY) ? current.defaultHandicap : preferencesResult.data ? preferencesResult.data.default_handicap : cloudProfile.default_handicap ?? null;
+          const cloudHandicap = preferencesResult.data ? preferencesResult.data.default_handicap : cloudProfile.default_handicap ?? null;
+          const defaultHandicap = preferencesResult.error || localStorage.getItem(CLOUD_LOCAL_META_KEY) ? current.defaultHandicap : clampBackyardHandicap(cloudHandicap);
           if (current.displayName === displayName && current.avatarUrl === avatarUrl && current.defaultHandicap === defaultHandicap) return current;
           return { ...current, displayName, avatarUrl, defaultHandicap };
         });
@@ -924,6 +930,17 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       if (!acknowledged) {
         issueWithMessage("profile", "Hay una edición de perfil más reciente pendiente de sincronizar.", "pending");
         return "local";
+      }
+      if (next.username) {
+        const metadataWrite = await supabase.auth.updateUser({ data: {
+          username: next.username,
+          given_name: next.givenName || null,
+          family_name: next.familyName || null,
+        } });
+        if (metadataWrite.error) {
+          issueWithMessage("profile", "Perfil guardado; el usuario se conservará en este dispositivo hasta la próxima sincronización.", "pending");
+          return "local";
+        }
       }
       setCloudIssue("profile", null);
       return "cloud";

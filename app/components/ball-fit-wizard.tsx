@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { clampBackyardHandicap } from "../../lib/account-state";
 import {
   APPROACH_BEHAVIORS,
   BACKYARD_BALL_FIT_DISCLAIMER,
@@ -95,6 +96,12 @@ function optionalNumber(value: string, minimum: number, maximum: number) {
   return Number.isFinite(number) && number >= minimum && number <= maximum ? number : null;
 }
 
+function optionalHandicap(value: string) {
+  if (!value.trim()) return null;
+  const number = Number(value.replace(",", "."));
+  return Number.isFinite(number) ? clampBackyardHandicap(number) : null;
+}
+
 function OptionGrid<T extends string>({ values, labels, selected, onSelect }: {
   values: readonly T[];
   labels: Record<T, string>;
@@ -106,6 +113,7 @@ function OptionGrid<T extends string>({ values, labels, selected, onSelect }: {
 
 type BallFitWizardProps = {
   userId: string;
+  accessToken?: string | null;
   defaultHandicap: number | null;
   profileDefaults?: BallFitProfileDefaults;
   currentBall: PlayerBall | null;
@@ -114,7 +122,7 @@ type BallFitWizardProps = {
   onComplete: (result: BallFitResult, input: BallFitInput) => boolean | void;
 };
 
-export function BallFitWizard({ userId, defaultHandicap, profileDefaults, currentBall, catalog, onCancel, onComplete }: BallFitWizardProps) {
+export function BallFitWizard({ userId, accessToken, defaultHandicap, profileDefaults, currentBall, catalog, onCancel, onComplete }: BallFitWizardProps) {
   const [input, setInput] = useState<BallFitInput>(() => defaultInput(userId, defaultHandicap, currentBall?.catalogBallId || null, profileDefaults));
   const [step, setStep] = useState(0);
   const [hydrated, setHydrated] = useState(false);
@@ -283,17 +291,14 @@ export function BallFitWizard({ userId, defaultHandicap, profileDefaults, curren
     {!result && step === 0 && <section className={styles.questionBlock}>
       <h3>Tu juego actual</h3>
       <p>Usamos tu HCP capturado si existe. No lo interpretamos como un índice oficial.</p>
-      {currentBall && <div className={styles.ballHero}><span className={styles.ballGlyph}>●</span><div><h3>{currentBall.ballBrand} {currentBall.ballModel}</h3><p>Bola actual guardada{currentBall.catalogBallId ? " · disponible para comparación verificada" : " · modelo manual"}</p></div></div>}
-      <label>Bola actual para comparar (opcional)<select value={input.currentBallId || ""} onChange={(event) => patchInput({ currentBallId: event.target.value || null })}><option value="">Sin bola fija / no aparece</option>{activeBalls.map((ball) => <option key={ball.id} value={ball.id}>{ball.brand} {ball.model}{ball.generation ? ` · ${ball.generation}` : ""}</option>)}</select></label>
-      <p className={styles.subtle}>Esta lista es sólo para indicar tu bola actual. Al calcular, el servidor evalúa el catálogo activo completo o cancela sin mostrar un ranking parcial.</p>
-      <div className="grid2"><label>HCP manual (opcional)<input type="number" inputMode="decimal" min={-15} max={36} step="0.1" value={input.handicap ?? ""} onChange={(event) => patchInput({ handicap: optionalNumber(event.target.value, -15, 36) })} placeholder="8.4" /></label><label>Score típico (opcional)<input type="number" inputMode="numeric" min={40} max={200} value={input.typicalScore ?? ""} onChange={(event) => patchInput({ typicalScore: optionalNumber(event.target.value, 40, 200) })} placeholder="86" /></label></div>
+      <div className="grid2"><label>HCP manual (opcional)<input type="number" inputMode="decimal" min={-15} max={36} step="0.1" value={input.handicap ?? ""} onChange={(event) => patchInput({ handicap: optionalHandicap(event.target.value) })} placeholder="8.4" /></label><label>Score típico (opcional)<input type="number" inputMode="numeric" min={40} max={200} value={input.typicalScore ?? ""} onChange={(event) => patchInput({ typicalScore: optionalNumber(event.target.value, 40, 200) })} placeholder="86" /></label></div>
     </section>}
 
     {!result && step === 1 && <section className={styles.questionBlock}>
       <h3>Driver</h3><p>La velocidad es opcional. Nunca inferimos una compresión no publicada a partir de este dato.</p>
       <label>¿Cuánto pegas aproximadamente con driver? (yardas, opcional)<input type="number" inputMode="numeric" min={50} max={500} value={input.driverDistanceYards ?? ""} onChange={(event) => patchInput({ driverDistanceYards: optionalNumber(event.target.value, 50, 500) })} placeholder="Ej. 245" /></label>
       <h4>Velocidad de swing con driver</h4><OptionGrid values={SWING_SPEED_BANDS} labels={SPEED_LABELS} selected={input.swingSpeedBand} onSelect={(value) => patchInput({ swingSpeedBand: value })} />
-      <LaunchMonitorCapture userId={userId} value={input.launchMonitorSession} onChange={(launchMonitorSession) => patchInput({ launchMonitorSession })} />
+      <LaunchMonitorCapture userId={userId} accessToken={accessToken} requiresRemoteConsent={Boolean(accessToken)} value={input.launchMonitorSession} onChange={(launchMonitorSession) => patchInput({ launchMonitorSession })} />
     </section>}
 
     {!result && step === 2 && <section className={styles.questionBlock}>
@@ -320,6 +325,10 @@ export function BallFitWizard({ userId, defaultHandicap, profileDefaults, curren
       <h3>Precio y color</h3><p>Último paso. Estas preferencias no reemplazan el desempeño que priorizaste.</p>
       <h4>¿Qué tanto importa el precio?</h4><OptionGrid values={BALL_FIT_PRICE_PREFERENCES} labels={PRICE_LABELS} selected={input.pricePreference} onSelect={(value) => patchInput({ pricePreference: value })} />
       <h4>Color preferido</h4><OptionGrid values={BALL_COLOR_PREFERENCES} labels={COLOR_LABELS} selected={input.colorPreference} onSelect={(value) => patchInput({ colorPreference: value })} />
+      <h4>Comparación opcional</h4>
+      {currentBall && <div className={styles.ballHero}><span className={styles.ballGlyph}>●</span><div><h3>{currentBall.ballBrand} {currentBall.ballModel}</h3><p>Bola actual guardada{currentBall.catalogBallId ? " · disponible para comparación verificada" : " · modelo manual"}</p></div></div>}
+      <label>Bola actual para comparar (opcional)<select value={input.currentBallId || ""} onChange={(event) => patchInput({ currentBallId: event.target.value || null })}><option value="">Sin bola fija / no aparece</option>{activeBalls.map((ball) => <option key={ball.id} value={ball.id}>{ball.brand} {ball.model}{ball.generation ? ` · ${ball.generation}` : ""}</option>)}</select></label>
+      <p className={styles.subtle}>Primero recomendamos con tus datos de juego. Esta selección sólo agrega una comparación contra tu bola actual.</p>
       <p className={styles.subtle}>Completitud de respuestas: {completeness}%. El recomendador puede dar una coincidencia parcial, pero necesita al menos dos preferencias comparables.</p>
     </section>}
 
@@ -364,6 +373,9 @@ export function BallFitResults({ result, catalog, current, catalogScope = null }
           <span>Spin hierros<b>{fact(recommendation.attributes.ironSpin)}</b></span>
           <span>Spin short game<b>{fact(recommendation.attributes.shortGameSpin)}</b></span>
           <span>Precio<b>{recommendation.attributes.priceTier ? PRICE_RESULT_LABELS[recommendation.attributes.priceTier] : "Sin dato verificado"}</b></span>
+          <span>Construcción<b>{technicalFact(catalogBall?.construction)}</b></span>
+          <span>Cubierta<b>{technicalFact(catalogBall?.coverMaterial)}</b></span>
+          <span>Compresión<b>{technicalFact(catalogBall?.compression)}</b></span>
         </div>
         <p className={styles.comparisonNote}><b>Frente a tu bola actual:</b> {recommendation.comparisonToCurrent.join(" ")}</p>
         {catalogBall?.officialUrl && <a className="textButton" href={catalogBall.officialUrl} target="_blank" rel="noreferrer">Ver ficha oficial ↗</a>}
