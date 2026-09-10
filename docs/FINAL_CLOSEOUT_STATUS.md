@@ -106,3 +106,18 @@ Supabase → organization `wrogzsycxchwakaglbpm` → project `The Backyard` → 
 Then resume at **Migration execution plan, step 1**. Do not promote to Beta or Production. The post-legal-gate product flow and Google OAuth remain human-interactive checks; never accept age, arbitration or data-processing declarations on a user's behalf just to traverse the gate.
 
 For private Vercel log verification: Vercel → Team `saha8` → Project `golf-bets` → Deployment for SHA `1dc3ea1c76d6ce4a8e3d4cc8dd5f410e59b2a2f5` → Runtime Logs, or authenticate the CLI with a project-scoped read token and run `vercel logs https://golf-bets-g93tm5rny-saha8.vercel.app --level error --since 1h`.
+
+## Priority UX correction — 2026-09-10
+
+- Starting SHA: `e141fce206a3b81f758d189a609af032f86ae2f0`.
+- Guided Mi Bolsa flow now separates category, brand, model, manufacturer shaft options, specifications and review; Ball and Shaft selection use the same anchored, server-paginated interaction and retain manual fallbacks.
+- A reusable accessible anchored search now serves profile club, round course, equipment and social discovery. Results stay attached to the active input and do not load a complete catalog client-side.
+- Onboarding keeps one Quick/Complete decision, starts group names blank and explains Private versus Invite-only. Invite-link UI is deliberately disabled until the isolated Preview DB can enforce hashed tokens, identity, expiry and revocation.
+- Linked/profile players receive immutable WHS Course Handicap snapshots from Index, tee, slope, rating and par; Guest/manual HCP remains manual. Missing verified tee inputs never produce an invented handicap.
+- Group bet templates retain decimal amounts, HCP rounding, Foursome modes/segments/presses and existing Personal editors; no Phase 1 engine arithmetic changed.
+- Account deletion now requires an explicit all-data checkbox plus `ELIMINAR` and describes server-confirmed deletion versus referential anonymization.
+- Existing native emoji avatar, visible disabled GHIN action, unconfirmed score/putt controls, Ball Fit exit and modal close behavior were re-audited rather than duplicated.
+
+Final local gate at code SHA `ecae2d790e67131db4b15788b5cb40dc5fd8cad7`: 1,379/1,379 npm tests passed, 0 failed/skipped; lint passed; Next production build passed with 28 pages. Local HTTP checks returned paginated TaylorMade drivers, Ventus shafts, Pro V1 2025 balls and La Vista courses. Browser automation at 390 and 430 CSS pixels found no horizontal expansion or JavaScript errors on the public shell.
+
+Remaining gates are intentionally separate: `PENDING_CONTROLLED_DB_APPLY` for authenticated cloud deletion, group invitations and persistence; `PENDING_INTERACTIVE_QA` for post-consent tap-through; `PENDING_DEVICE_QA` for physical iPhone keyboard/safe-area behavior; `BLOCKED_EXTERNAL` for official GHIN and private Vercel logs. Shared Supabase was not written.
