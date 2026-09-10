@@ -10,8 +10,8 @@ Last updated: 2026-09-10 (America/Mexico_City)
 | Phase 2B | `phase2/full-platform` / `97c768b` | PASS | 1,329 tests and lint pass; provider search, tee precedence, Course Handicap snapshots, GPS targets/fallbacks, map/export/device boundaries | Phase 2C |
 | Phase 2C | `phase2/full-platform` / `27106fb` | PASS | 1,337 tests and lint pass; participant permissions, provider-neutral realtime, idempotent offline queue, cell conflicts, canonical provisional scoreboard, activity and notification foundations | Phase 2D |
 | Phase 2D | `phase2/full-platform` / `8939035` | PASS | 1,350 tests, lint and build pass; optional shot lifecycle, immutable bag snapshots, GPS accuracy guard, club sample thresholds, filters/trends, aggregate-only AI insights, deterministic live questions, analytics and admin aggregates | Transversal QA |
-| Transversal QA | `phase2/full-platform` | PENDING | Not started | Full product flow and permission checks |
-| Full quality gate | `phase2/full-platform` | PENDING | Not started | Full tests, lint and build |
+| Transversal QA | `phase2/full-platform` / `53fbdc1` | PASS | Cross-domain contract/regression tests plus local HTTP smoke: Home, Membership, Legal, features, course pagination, PWA and unauthorized Social/Admin behavior | Push Preview branch |
+| Full quality gate | `phase2/full-platform` / `53fbdc1` | PASS | 1,350 passed, 0 failed, 0 skipped; lint PASS; Next production build PASS (28 routes) | Push Preview branch |
 | Preview deploy | `phase2/full-platform` | PENDING | Not started | Push and wait for READY |
 | Runtime QA | `phase2/full-platform` | PENDING | Not started | Browser/API/data/UI verification |
 
@@ -39,4 +39,4 @@ These dependencies do not block local contracts, adapters, fixtures, feature fla
 
 ## Resume point
 
-Begin transversal QA from commit `8939035`: exercise the complete cross-module flow, rerun the full quality gate, document external/legal gates, push only `phase2/full-platform`, wait for a READY Preview, then verify real routes, APIs and runtime behavior.
+Commit the QA record and external/database gates, push only `phase2/full-platform`, wait for a READY Preview, then verify real routes, APIs and runtime behavior. Browser/device-only checks remain `PENDING_DEVICE_QA` or `PENDING_INTERACTIVE_QA` until actually exercised.

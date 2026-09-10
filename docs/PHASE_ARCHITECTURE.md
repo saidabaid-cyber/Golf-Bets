@@ -41,3 +41,14 @@ git cherry-pick <hotfix-sha>
 - If Preview shares Production Supabase, migration files and tests are delivered as `PENDING_CONTROLLED_DB_APPLY`.
 - Provider-backed capabilities remain behind feature flags until their data source, credentials and legal terms are verified.
 
+## Phase 2 module boundaries
+
+- `features/social`, `groups`, `invites`: identity-safe relationships, roles, templates and deterministic memory.
+- `features/courses`, `handicap`, `gps`, `score-export`: provider contracts, tee precedence, versioned Course Handicap and fail-soft location.
+- `features/live-rounds`, `notifications`: provider-neutral realtime, operation permissions, offline idempotency, conflicts and private activity.
+- `features/shots`, `stats`, `ai`, `analytics`, `admin`: optional shot facts, filtered aggregates, explanation-only AI and aggregate-only administration.
+- `features/feature-flags`, `memberships`: centralized runtime flags and FREE/PRO/BETA_PRO entitlements.
+
+`app/page.tsx` was approximately 3,549 lines at the Phase 1 baseline and 3,582 lines after Phase 2D (net +33). The Phase 2 domain implementation lives outside that file; it only owns integration state and composes extracted components. Responsibilities extracted include social connections, course search, GPS status, shot controls, filtered stats/AI insights and live-round questions. A destructive page rewrite was deliberately avoided to preserve Phase 1 behavior.
+
+The Next.js type/build graph completes without circular-import failures. Shared domain modules do not import React components or database provider internals; UI depends on explicit domain contracts and server routes depend on server-only adapters.
