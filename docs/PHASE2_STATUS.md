@@ -16,9 +16,9 @@ Last updated: 2026-09-10 (America/Mexico_City)
 | Runtime QA | `phase2/full-platform` / `f5726d7` | PASS | Live GETs and real OpenAI POSTs pass for Round Setup, Card AI, Launch Monitor AI, Insights and deterministic live questions; expected unauthenticated 401/405 contracts verified | Controlled DB apply and human/device QA remain gated |
 | Security closeout | `phase2/full-platform` / `17a3a66` | PASS | Username discovery returns only minimal identity fields; full HCP/club profile rows require self or accepted friendship. Full 1,350-test suite, lint and build pass | Final Preview deploy |
 | Hard closeout baseline | `phase2/full-platform` / `ed21c7dbdfd898def114ba322b0ece6bb8858dce` | PASS | Clean tree; remote refs fetched; attached ZIP validated (SHA-256 `570D46614DB1213E71EF126710C736A7B3876EBFB28B95523F0AC59AD3D1BD36`) | Import Equipment master |
-| Equipment master 2010–2026 | `phase2/full-platform` / working tree | PASS | 1,202 club and 285 ball source rows accepted; merged provider has 1,277 clubs, 310 balls and 48 shafts; historical search, pagination, generation and Plus-variant tests pass | Hard-closeout UX |
-| Hard-closeout UX | `phase2/full-platform` / working tree | PASS | Server-side club search; native emoji avatar; disabled GHIN provider UI; single onboarding choice; explicit score/putt confirmation; shared modal close control and audit | Final quality gate |
-| Hard-closeout quality gate | `phase2/full-platform` / working tree | PASS | 1,357 passed, 0 failed, 0 skipped; lint PASS; Next production build PASS (28 pages) | Commit, push and Preview QA |
+| Equipment master 2010–2026 | `phase2/full-platform` / `d3facee` | PASS | 1,202 club and 285 ball source rows accepted; merged provider has 1,277 clubs, 310 balls and 48 shafts; historical search, pagination, generation and Plus-variant tests pass | Hard-closeout UX |
+| Hard-closeout UX | `phase2/full-platform` / `a6ef0ea` | PASS | Server-side club search; native emoji avatar; disabled GHIN provider UI; single onboarding choice; explicit score/putt confirmation; shared modal close control and audit | Final quality gate |
+| Hard-closeout quality gate | `phase2/full-platform` / `c8c8291` | PASS | 1,357 passed, 0 failed, 0 skipped; lint PASS; Next production build PASS (28 pages) | Push and Preview QA |
 
 ## Migration ledger
 
@@ -44,4 +44,4 @@ These dependencies do not block local contracts, adapters, fixtures, feature fla
 
 ## Resume point
 
-Commit and push the hard-closeout changes, wait for the branch Preview, then execute runtime catalog/search and mobile browser QA. Apply the four existing migrations only after confirming an isolated Preview Supabase project, then execute authenticated multi-user/RLS QA. Browser/device-only checks remain `PENDING_DEVICE_QA` or `PENDING_INTERACTIVE_QA` until actually exercised. Do not promote or connect a custom domain before those controlled gates are approved.
+Push the four hard-closeout commits (`d3facee`, `563fd84`, `a6ef0ea`, `c8c8291`), wait for the branch Preview, then execute runtime catalog/search and mobile browser QA. Apply the four existing migrations only after confirming an isolated Preview Supabase project, then execute authenticated multi-user/RLS QA. Browser/device-only checks remain `PENDING_DEVICE_QA` or `PENDING_INTERACTIVE_QA` until actually exercised. Do not promote or connect a custom domain before those controlled gates are approved.
