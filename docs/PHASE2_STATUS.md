@@ -21,6 +21,7 @@ Last updated: 2026-09-10 (America/Mexico_City)
 | Hard-closeout quality gate | `phase2/full-platform` / `f34077c` | PASS | 1,358 passed, 0 failed, 0 skipped; lint PASS; Next production build PASS (28 pages) | Push and final Preview QA |
 | Hard-closeout Preview | `phase2/full-platform` / `d24f4b4` | PASS | Vercel deployment `62oHsFfJnZVxFo2DacfmAf75G3RM`, GitHub deployment `6376800017`, immutable URL HTTP 200 and READY | Runtime QA |
 | Hard-closeout runtime QA | `phase2/full-platform` / `d24f4b4` | PASS | Historical club/ball searches and zero-overlap pagination pass; club search returns La Vista; Ball Fit evaluates all 71 eligible candidates and returns Top 3; AI GET endpoints ready; 390/430px shell has no horizontal expansion or browser errors | Push brand-alias follow-up and verify final Preview |
+| Hard-closeout final verification | `phase2/full-platform` / `50d551e` | PASS | Vercel deployment `QYbSSEMgDxruaXWgLkXCV43SMMur`, GitHub deployment `6377074955`, immutable Preview `golf-bets-reh350k2l-saha8.vercel.app`; Home/branch alias 200, catalog and Ball Fit smoke pass, AI GET endpoints ready, 390px browser runtime has no JS errors | Human/device review |
 
 ## Migration ledger
 
@@ -46,4 +47,4 @@ These dependencies do not block local contracts, adapters, fixtures, feature fla
 
 ## Resume point
 
-Push the brand-alias follow-up (`f34077c`) and this status update, then verify the final immutable Preview and branch alias. Apply the four existing migrations only after confirming an isolated Preview Supabase project, then execute authenticated multi-user/RLS QA. Ball Fit/capture/profile interactions behind the unaccepted guest legal gate and physical iPhone checks remain `PENDING_INTERACTIVE_QA` or `PENDING_DEVICE_QA`. Do not promote or connect a custom domain before those controlled gates are approved.
+Hard closeout is ready for human review. Apply the four existing migrations only after confirming an isolated Preview Supabase project, then execute authenticated multi-user/RLS QA. Ball Fit/capture/profile interactions behind the unaccepted guest legal gate and physical iPhone checks remain `PENDING_INTERACTIVE_QA` or `PENDING_DEVICE_QA`. Do not promote or connect a custom domain before those controlled gates are approved.
