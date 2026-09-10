@@ -309,6 +309,10 @@ export function golfCourseSelectionToLegacyCourse(
       par: hole.par,
       strokeIndex: hole.strokeIndex,
       ...(yardages.get(hole.holeNumber) !== undefined ? { yards: yardages.get(hole.holeNumber) } : {}),
+      ...(hole.teeLatitude !== undefined ? { teeLatitude: hole.teeLatitude, teeLongitude: hole.teeLongitude } : {}),
+      ...(hole.greenFrontLatitude !== undefined ? { greenFrontLatitude: hole.greenFrontLatitude, greenFrontLongitude: hole.greenFrontLongitude } : {}),
+      ...(hole.greenCenterLatitude !== undefined ? { greenCenterLatitude: hole.greenCenterLatitude, greenCenterLongitude: hole.greenCenterLongitude } : {}),
+      ...(hole.greenBackLatitude !== undefined ? { greenBackLatitude: hole.greenBackLatitude, greenBackLongitude: hole.greenBackLongitude } : {}),
     }));
   if (holes.length !== golfCourse.holes) return null;
   const point = golfCourse.latitude !== undefined && golfCourse.longitude !== undefined

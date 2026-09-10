@@ -31,6 +31,15 @@ export type Hole = {
   par: number;
   strokeIndex: number;
   yards?: number;
+  /** Optional provider-owned GPS targets. Missing values must never be invented. */
+  teeLatitude?: number;
+  teeLongitude?: number;
+  greenFrontLatitude?: number;
+  greenFrontLongitude?: number;
+  greenCenterLatitude?: number;
+  greenCenterLongitude?: number;
+  greenBackLatitude?: number;
+  greenBackLongitude?: number;
 };
 
 export type LocalRule = {

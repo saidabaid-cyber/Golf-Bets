@@ -13,6 +13,7 @@ import type {
   SupplementalBet,
 } from "../../lib/types";
 import { haversineDistanceKm, isValidGeographicPoint } from "../../lib/course-distance";
+import { calculateGreenDistances, gpsFallbackMessage } from "../../features/gps/domain";
 import { roundCaptureFieldsForPlayer, scoreToParLabel } from "../../lib/round-capture";
 import { ScorecardHoleNetPreview } from "./scorecard-hole-preview";
 import { CompactStepper, SignedStepper, TapCounter } from "./bet-fields/capture-controls";
@@ -140,7 +141,13 @@ export function RoundCaptureV2(props: RoundCaptureV2Props) {
     navigator.geolocation.getCurrentPosition(
       (position) => {
         setGpsState("ready");
-        const userPoint = { latitude: position.coords.latitude, longitude: position.coords.longitude };
+        const userPoint = { latitude: position.coords.latitude, longitude: position.coords.longitude, accuracyMeters: position.coords.accuracy, capturedAt: new Date(position.timestamp).toISOString() };
+        const green = calculateGreenDistances(userPoint, hole);
+        const greenParts = [green.frontYards !== undefined ? `Frente ${green.frontYards}` : "", green.centerYards !== undefined ? `Centro ${green.centerYards}` : "", green.backYards !== undefined ? `Fondo ${green.backYards}` : ""].filter(Boolean);
+        if (greenParts.length) {
+          setGpsMessage(`${greenParts.join(" · ")} yd${green.accuracyMeters !== undefined ? ` · precisión ±${Math.round(green.accuracyMeters)} m` : ""}`);
+          return;
+        }
         const coursePoint = { latitude: course.latitude, longitude: course.longitude };
         const distanceKm = isValidGeographicPoint(coursePoint) ? haversineDistanceKm(userPoint, coursePoint) : null;
         if (distanceKm === null) {
@@ -150,7 +157,10 @@ export function RoundCaptureV2(props: RoundCaptureV2Props) {
         const distance = distanceKm < 1 ? `${Math.round(distanceKm * 1_000)} m` : `${distanceKm.toFixed(distanceKm < 10 ? 1 : 0)} km`;
         setGpsMessage(`Ubicación obtenida · a ${distance} del punto registrado de ${course.name}.`);
       },
-      () => { setGpsState("error"); setGpsMessage("No se pudo activar GPS. Puedes seguir capturando."); },
+      (error) => {
+        setGpsState("error");
+        setGpsMessage(gpsFallbackMessage(error.code === error.PERMISSION_DENIED ? "DENIED" : error.code === error.TIMEOUT ? "TIMEOUT" : "UNAVAILABLE"));
+      },
       { enableHighAccuracy: true, timeout: 8_000, maximumAge: 20_000 },
     );
   }
