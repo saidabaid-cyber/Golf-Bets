@@ -1,0 +1,14 @@
+begin;
+select plan(10);
+select has_table('public', 'round_participants_v2', 'round participants exists');
+select has_table('public', 'live_round_operations_v2', 'live operations exists');
+select has_table('public', 'round_activity_v2', 'round activity exists');
+select has_table('public', 'notification_preferences_v2', 'notification preferences exists');
+select has_table('public', 'notification_events_v2', 'notification events exists');
+select row_security_active('public.round_participants_v2', 'participants RLS');
+select row_security_active('public.live_round_operations_v2', 'operations RLS');
+select row_security_active('public.round_activity_v2', 'activity RLS');
+select row_security_active('public.notification_preferences_v2', 'preferences RLS');
+select row_security_active('public.notification_events_v2', 'events RLS');
+select * from finish();
+rollback;
