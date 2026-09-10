@@ -680,6 +680,34 @@
   line-height: 1.5;
 }
 
+.flowProgress { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; margin-top: 14px; }
+.flowProgress span { height: 4px; border-radius: 999px; background: #dfe6e1; }
+.flowProgress span[data-active="true"], .flowProgress span[data-complete="true"] { background: var(--green); }
+.flowScreen { grid-column: 1 / -1; display: grid; min-width: 0; gap: 12px; }
+.flowScreen > h3, .flowScreen > p { margin: 0; }
+.flowScreen > h3 { font-family: Georgia, "Times New Roman", serif; font-size: 24px; }
+.flowScreen > p { color: var(--muted); font-size: 12px; line-height: 1.45; }
+.flowBack, .selectedBrand { justify-self: start; min-height: 44px; border: 0; border-radius: 11px; background: var(--green2); padding: 8px 12px; color: var(--green); font-weight: 850; }
+.catalogChoiceGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.catalogChoiceGrid button { display: grid; grid-template-columns: 38px minmax(0, 1fr); min-height: 58px; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); padding: 9px 12px; color: var(--ink); text-align: left; }
+.catalogChoiceGrid button > span { display: grid; width: 38px; height: 38px; place-items: center; border-radius: 11px; background: var(--green2); color: var(--green); font-weight: 950; }
+.catalogChoiceGrid button:hover, .catalogChoiceGrid button:focus-visible { border-color: var(--green); background: var(--green2); }
+.productPreview { display: grid; grid-template-columns: 66px minmax(0, 1fr); align-items: center; gap: 12px; border: 1px solid var(--line); border-radius: 16px; background: linear-gradient(135deg, var(--green2), var(--card)); padding: 12px; }
+.productPreview > span { display: grid; width: 64px; height: 64px; place-items: center; border-radius: 15px; background: #fff; color: var(--green); font-size: 22px; font-weight: 950; box-shadow: inset 0 0 0 1px var(--line); }
+.productPreview b, .productPreview small { display: block; overflow-wrap: anywhere; }
+.productPreview small { margin-top: 4px; color: var(--muted); font-size: 11px; line-height: 1.35; }
+.ballProductPreview > span { border-radius: 50%; font-size: 17px; }
+.inlineFields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.inlineFields > label { min-width: 0; }
+.inlineFields input, .inlineFields select, .inlineFields textarea { width: 100%; min-width: 0; }
+.flowActions { display: grid; grid-template-columns: 1fr 1.2fr; gap: 8px; }
+.flowActions button { min-height: 48px; }
+.ballFacts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.ballFacts span { min-width: 0; border: 1px solid var(--line); border-radius: 11px; background: var(--soft); padding: 9px; }
+.ballFacts small, .ballFacts b { display: block; overflow-wrap: anywhere; }
+.ballFacts small { color: var(--muted); font-size: 10px; text-transform: uppercase; }
+.ballFacts b { margin-top: 3px; font-size: 12px; }
+
 .cameraCapture {
   display: grid;
   gap: 12px;
@@ -871,7 +899,9 @@
   }
 
   .formGrid,
-  .optionGrid {
+  .optionGrid,
+  .inlineFields,
+  .flowActions {
     grid-template-columns: 1fr;
   }
 
@@ -905,5 +935,9 @@
   .verifiedFacts {
     grid-template-columns: 1fr;
   }
+
+  .catalogChoiceGrid { grid-template-columns: 1fr; }
+  .productPreview { grid-template-columns: 54px minmax(0, 1fr); }
+  .productPreview > span { width: 52px; height: 52px; }
 }
 .onboardingTop,.onboardingFooter{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.onboardingFooter{margin-top:12px}.onboardingTop>button,.onboardingFooter>button{min-height:40px}

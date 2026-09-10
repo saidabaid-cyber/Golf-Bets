@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { AnchoredSearch, AnchoredSearchOption } from "./anchored-search";
 
 type ClubResult = { id: string; name: string; city?: string; stateRegion?: string; country?: string };
 type ClubPage = { clubs?: ClubResult[]; hasMore?: boolean; nextCursor?: string | null };
@@ -42,22 +43,27 @@ export function ProfileClubPicker({ value, clubId, onChange }: {
   }, [clubId, value]);
   const showResults = results.length > 0 && !clubId;
   return <div className="profileClubPicker">
-    <label htmlFor="profile-home-club">Club</label>
-    <input id="profile-home-club" value={value} onChange={(event) => onChange({ name: event.target.value, id: "" })} placeholder="Busca tu club o escríbelo" autoComplete="off" role="combobox" aria-expanded={showResults} aria-controls="profile-club-results" aria-autocomplete="list" />
-    {status === "loading" && <small className="hint" role="status">Buscando clubs…</small>}
-    {showResults && <div id="profile-club-results" className="profileClubResults" role="listbox" aria-label="Clubs encontrados">{results.map((club) => <button type="button" role="option" aria-selected={false} key={club.id} onClick={() => onChange({ name: club.name, id: club.id })}><b>{club.name}</b><small>{[club.city, club.stateRegion].filter(Boolean).join(", ")}</small></button>)}</div>}
-    {showResults && hasMore && nextCursor && <button type="button" className="textButton" disabled={status === "loading"} onClick={async () => {
-      setStatus("loading");
-      try {
-        const payload = await loadClubPage(value.trim(), nextCursor);
-        setResults((current) => [...new Map([...current, ...(payload.clubs || [])].map((club) => [club.id, club])).values()]);
-        setHasMore(payload.hasMore === true);
-        setNextCursor(typeof payload.nextCursor === "string" ? payload.nextCursor : null);
-        setStatus("ready");
-      } catch { setStatus("error"); }
-    }}>Más resultados</button>}
+    <AnchoredSearch
+      label="Club"
+      value={value}
+      onChange={(name) => onChange({ name, id: "" })}
+      placeholder="Busca tu club o escríbelo"
+      expanded={showResults}
+      status={status === "loading" ? "Buscando clubs…" : status === "error" ? "No pudimos consultar el catálogo. Puedes guardar el nombre manualmente." : undefined}
+    >
+      {results.map((club) => <AnchoredSearchOption key={club.id} onSelect={() => onChange({ name: club.name, id: club.id })}><b>{club.name}</b><small>{[club.city, club.stateRegion].filter(Boolean).join(", ")}</small></AnchoredSearchOption>)}
+      {hasMore && nextCursor && <button type="button" role="option" aria-selected="false" className="textButton" disabled={status === "loading"} onClick={async () => {
+        setStatus("loading");
+        try {
+          const payload = await loadClubPage(value.trim(), nextCursor);
+          setResults((current) => [...new Map([...current, ...(payload.clubs || [])].map((club) => [club.id, club])).values()]);
+          setHasMore(payload.hasMore === true);
+          setNextCursor(typeof payload.nextCursor === "string" ? payload.nextCursor : null);
+          setStatus("ready");
+        } catch { setStatus("error"); }
+      }}>Más resultados</button>}
+    </AnchoredSearch>
     {clubId && <small className="hint">Club del catálogo ✓</small>}
-    {status === "error" && <small className="hint">No pudimos consultar el catálogo. Puedes guardar el nombre manualmente.</small>}
     {!clubId && value.trim() && <small className="hint">Nombre manual; no se mezcla con campo ni tee.</small>}
   </div>;
 }

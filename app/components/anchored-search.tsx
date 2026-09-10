@@ -1,0 +1,57 @@
+"use client";
+
+import { useId, type ReactNode } from "react";
+import styles from "./anchored-search.module.css";
+
+export function AnchoredSearch({
+  label,
+  value,
+  onChange,
+  children,
+  placeholder,
+  status,
+  expanded,
+  onFocus,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  children?: ReactNode;
+  placeholder?: string;
+  status?: ReactNode;
+  expanded: boolean;
+  onFocus?: () => void;
+}) {
+  const inputId = useId();
+  const listId = `${inputId}-results`;
+  return <div className={styles.root}>
+    <label htmlFor={inputId}>{label}</label>
+    <div className={styles.anchor}>
+      <input
+        id={inputId}
+        type="search"
+        value={value}
+        maxLength={120}
+        placeholder={placeholder}
+        autoComplete="off"
+        role="combobox"
+        aria-autocomplete="list"
+        aria-expanded={expanded}
+        aria-controls={listId}
+        onFocus={onFocus}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      {expanded && <div id={listId} className={styles.results} role="listbox">{children}</div>}
+    </div>
+    {status && <div className={styles.status} role="status">{status}</div>}
+  </div>;
+}
+
+export function AnchoredSearchOption({ children, onSelect, selected = false, label }: {
+  children: ReactNode;
+  onSelect: () => void;
+  selected?: boolean;
+  label?: string;
+}) {
+  return <button type="button" role="option" aria-selected={selected} aria-label={label} onClick={onSelect}>{children}</button>;
+}
