@@ -9,7 +9,7 @@ Last updated: 2026-09-10 (America/Mexico_City)
 | Phase 2A | `phase2/full-platform` / `58842c9` | PASS | 1,322 tests and lint pass; social/group/invite domains, Preview UI, memberships and flags implemented | Phase 2B |
 | Phase 2B | `phase2/full-platform` / `97c768b` | PASS | 1,329 tests and lint pass; provider search, tee precedence, Course Handicap snapshots, GPS targets/fallbacks, map/export/device boundaries | Phase 2C |
 | Phase 2C | `phase2/full-platform` / `27106fb` | PASS | 1,337 tests and lint pass; participant permissions, provider-neutral realtime, idempotent offline queue, cell conflicts, canonical provisional scoreboard, activity and notification foundations | Phase 2D |
-| Phase 2D | `phase2/full-platform` | PENDING | Not started | Shots, stats, AI insights, benefits and admin analytics |
+| Phase 2D | `phase2/full-platform` / `8939035` | PASS | 1,350 tests, lint and build pass; optional shot lifecycle, immutable bag snapshots, GPS accuracy guard, club sample thresholds, filters/trends, aggregate-only AI insights, deterministic live questions, analytics and admin aggregates | Transversal QA |
 | Transversal QA | `phase2/full-platform` | PENDING | Not started | Full product flow and permission checks |
 | Full quality gate | `phase2/full-platform` | PENDING | Not started | Full tests, lint and build |
 | Preview deploy | `phase2/full-platform` | PENDING | Not started | Push and wait for READY |
@@ -21,6 +21,7 @@ Last updated: 2026-09-10 (America/Mexico_City)
 - `phase2_social_groups_rls.sql` created.
 - `202609100002_phase2_course_handicap_gps.sql` and `phase2_course_handicap_rls.sql` created for player/course tee preferences and immutable Course Handicap snapshots.
 - `202609100003_phase2_live_rounds_notifications.sql` and `phase2_live_rounds_rls.sql` created for private participants, immutable operations, activity and notification preferences/events.
+- `202609100004_phase2_shots_analytics.sql` and `phase2_shots_analytics_rls.sql` created for private shot snapshots, privacy-minimized idempotent usage events and explicit-admin aggregate metrics.
 - Applied: no. Status: `PENDING_CONTROLLED_DB_APPLY` until an isolated Preview Supabase project is confirmed.
 
 ## Feature flag ledger
@@ -38,4 +39,4 @@ These dependencies do not block local contracts, adapters, fixtures, feature fla
 
 ## Resume point
 
-Begin Phase 2D from commit `27106fb`: add optional shot tracking, club-distance thresholds, stats/trends, structured AI insights/live questions and admin aggregate analytics.
+Begin transversal QA from commit `8939035`: exercise the complete cross-module flow, rerun the full quality gate, document external/legal gates, push only `phase2/full-platform`, wait for a READY Preview, then verify real routes, APIs and runtime behavior.
