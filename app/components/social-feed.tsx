@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PersonalActivity } from "../../lib/golf-insights";
+import type { SocialProfile } from "../../features/social/domain";
 import {
   deriveInternalNotifications,
   emptyInternalNotificationReadState,
@@ -12,10 +13,13 @@ import {
   type InternalNotification,
   type InternalNotificationReadState,
 } from "../../lib/internal-notifications";
+import { SocialConnectionsPanel } from "./social-connections-panel";
 
 export type SocialFeedProps = {
   activity: PersonalActivity[];
   identityUserId: string;
+  accessToken?: string;
+  knownProfiles: SocialProfile[];
   notificationsEnabled: boolean;
   onNotificationsEnabledChange: (value: boolean) => void;
   onOpenRound: (roundId: string) => void;
@@ -79,8 +83,8 @@ export function InternalNotificationList({ notifications, onOpen, onReadChange }
   </ol></section>;
 }
 
-export function SocialFeed({ activity, identityUserId, notificationsEnabled, onNotificationsEnabledChange, onOpenRound, onOpenGroup, onCreateRound, onOpenGroups }: SocialFeedProps) {
-  const [view, setView] = useState<"activity" | "notifications">("activity");
+export function SocialFeed({ activity, identityUserId, accessToken, knownProfiles, notificationsEnabled, onNotificationsEnabledChange, onOpenRound, onOpenGroup, onCreateRound, onOpenGroups }: SocialFeedProps) {
+  const [view, setView] = useState<"activity" | "friends" | "notifications">("activity");
   const [readState, setReadState] = useState<InternalNotificationReadState>(emptyInternalNotificationReadState);
   const readStateRef = useRef<InternalNotificationReadState>(emptyInternalNotificationReadState());
   const [readStatus, setReadStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -152,8 +156,11 @@ export function SocialFeed({ activity, identityUserId, notificationsEnabled, onN
 
     <nav className="socialViewTabs" aria-label="Vistas de Social">
       <button type="button" className={`socialViewTab ${view === "activity" ? "active" : ""}`} aria-pressed={view === "activity"} onClick={() => setView("activity")}>Actividad</button>
+      <button type="button" className={`socialViewTab ${view === "friends" ? "active" : ""}`} aria-pressed={view === "friends"} onClick={() => setView("friends")}>Amigos</button>
       <button type="button" className={`socialViewTab ${view === "notifications" ? "active" : ""}`} aria-pressed={view === "notifications"} onClick={() => setView("notifications")}>Avisos{unreadCount > 0 && <span className="socialUnreadBadge" aria-label={`${unreadCount} sin leer`}>{unreadCount > 99 ? "99+" : unreadCount}</span>}</button>
     </nav>
+
+    {view === "friends" && <SocialConnectionsPanel ownerId={identityUserId} accessToken={accessToken} directory={knownProfiles} />}
 
     {view === "activity" && (activity.length ? <section className="card betaFeedCard" aria-label="Actividad reciente">
       <ol className="betaFeedList">
