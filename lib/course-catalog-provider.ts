@@ -12,12 +12,14 @@ import type { ProviderResult } from "./golf-providers";
 export type ClubSearchResult = {
   clubs: GolfClub[];
   total: number;
+  hasMore: boolean;
+  nextCursor: string | null;
 };
 
 export interface CourseCatalogProvider {
   readonly id: string;
   readonly kind: "internal" | "external";
-  searchClubs(query: string, limit?: number): Promise<ProviderResult<ClubSearchResult>>;
+  searchClubs(query: string, limit?: number, cursor?: string): Promise<ProviderResult<ClubSearchResult>>;
   getCourses(clubId: string): Promise<ProviderResult<GolfCourse[]>>;
   getTees(courseId: string): Promise<ProviderResult<GolfCourseTee[]>>;
   getHoles(courseId: string): Promise<ProviderResult<GolfHole[]>>;
@@ -33,10 +35,16 @@ function catalogProvider(catalog: GolfCourseCatalog, providerId = "backyard-cour
   return {
     id: providerId,
     kind,
-    async searchClubs(query, limit = 20) {
+    async searchClubs(query, limit = 20, cursor) {
       const tokens = searchable(query).split(/\s+/).filter(Boolean);
-      const clubs = catalog.clubs.filter((club) => club.active && tokens.every((token) => searchable([club.name, club.city, club.stateRegion, club.country].filter(Boolean).join(" ")).includes(token))).slice(0, Math.max(1, Math.min(100, limit)));
-      return success({ clubs, total: clubs.length });
+      const matches = catalog.clubs
+        .filter((club) => club.active && tokens.every((token) => searchable([club.name, club.city, club.stateRegion, club.country].filter(Boolean).join(" ")).includes(token)))
+        .sort((left, right) => left.name.localeCompare(right.name, "es-MX") || left.id.localeCompare(right.id));
+      const pageSize = Math.max(1, Math.min(50, limit));
+      const offset = cursor && /^\d+$/.test(cursor) ? Math.max(0, Number(cursor)) : 0;
+      const clubs = matches.slice(offset, offset + pageSize);
+      const nextOffset = offset + clubs.length;
+      return success({ clubs, total: matches.length, hasMore: nextOffset < matches.length, nextCursor: nextOffset < matches.length ? String(nextOffset) : null });
     },
     async getCourses(clubId) {
       const rows = catalog.courses.filter((course) => course.active && course.clubId === clubId);
@@ -127,7 +135,7 @@ export function createGolfApiCourseCatalogProvider(options: { apiKey?: string; l
   };
   return {
     id: "golfapi", kind: "external",
-    async searchClubs(query, limit) { const provider = await loadProvider(); return provider ? provider.searchClubs(query, limit) : notConfigured(); },
+    async searchClubs(query, limit, cursor) { const provider = await loadProvider(); return provider ? provider.searchClubs(query, limit, cursor) : notConfigured(); },
     async getCourses(clubId) { const provider = await loadProvider(); return provider ? provider.getCourses(clubId) : notConfigured(); },
     async getTees(courseId) { const provider = await loadProvider(); return provider ? provider.getTees(courseId) : notConfigured(); },
     async getHoles(courseId) { const provider = await loadProvider(); return provider ? provider.getHoles(courseId) : notConfigured(); },

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DEFAULT_COURSES } from "../../../../lib/golf-course-directory";
 import { internalCourseDataProvider } from "../../../../lib/golf-providers";
+import { internalCourseCatalogProvider } from "../../../../lib/course-catalog-provider";
 import { serverPhase2FeatureFlags } from "../../../../features/feature-flags/server";
 
 export async function GET(request: NextRequest) {
@@ -11,6 +12,18 @@ export async function GET(request: NextRequest) {
   const cursor = request.nextUrl.searchParams.get("cursor")?.slice(0, 180) || undefined;
   const requestedLimit = Number(request.nextUrl.searchParams.get("limit") ?? 20);
   const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(50, Math.trunc(requestedLimit))) : 20;
+  if (request.nextUrl.searchParams.get("scope") === "clubs") {
+    const result = await internalCourseCatalogProvider.searchClubs(query, limit, cursor);
+    if (!result.ok) return NextResponse.json({ error: result.code }, { status: 503, headers: { "cache-control": "no-store" } });
+    return NextResponse.json({
+      provider: result.providerId,
+      query,
+      total: result.data.total,
+      hasMore: result.data.hasMore,
+      nextCursor: result.data.nextCursor,
+      clubs: result.data.clubs.map((club) => ({ id: club.id, name: club.name, city: club.city, stateRegion: club.stateRegion, country: club.country })),
+    }, { headers: { "cache-control": "public, s-maxage=300, stale-while-revalidate=1800" } });
+  }
   const result = await internalCourseDataProvider.searchCourses({ courses: DEFAULT_COURSES, query, cursor, limit });
   if (!result.ok) return NextResponse.json({ error: result.code }, { status: 503, headers: { "cache-control": "no-store" } });
   return NextResponse.json({

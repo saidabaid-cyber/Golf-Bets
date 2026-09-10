@@ -3,6 +3,7 @@ import { cloudAccountErrorMessage, ensureCloudProfile, saveCloudProfile } from "
 
 import Link from "next/link";
 import { Fragment, createContext, useCallback, useContext, useEffect, useRef, useState, type FormEvent } from "react";
+import { ModalCloseButton } from "./modal-shell";
 import type { Session, User } from "@supabase/supabase-js";
 import {
   ACCOUNT_STORAGE_KEYS,
@@ -49,6 +50,7 @@ import type { AuthProviderStatus } from "../../lib/auth-provider-status";
 import { cloudIssueFromError, cloudIssuePriority, type CloudIssue, type CloudIssueDomain } from "../../lib/cloud-issues";
 import { BrandLockup } from "./brand-lockup";
 import { ProfileImagePicker } from "./profile-image-picker";
+import { GhinPlaceholder } from "./ghin-placeholder";
 import { BettingConsentDialog } from "./betting-consent-dialog";
 import { persistBettingDataConsent } from "../../lib/betting-consent";
 import { acknowledgePendingProfileWrite, cloudProfileFields, cloudProfileRevisionIsNewer, cloudProfileRevisionKey, createProfileWriteCoordinator, queuePendingProfileWrite, readPendingProfileWrite, recordCloudProfileRevision, retimePendingProfileWrite, type CloudProfileFields, type ProfileWriteCoordinator } from "../../lib/profile-sync";
@@ -371,6 +373,7 @@ function ProfileSetupScreen({ identity, onSave, onBack }: {
       <div className="grid2"><label htmlFor="profile-setup-country">País<input id="profile-setup-country" autoComplete="country-name" value={country} onChange={(event) => setCountry(event.target.value)} placeholder="México" /></label><label htmlFor="profile-setup-city">Ciudad opcional<input id="profile-setup-city" autoComplete="address-level2" value={city} onChange={(event) => setCity(event.target.value)} placeholder="Puebla" /></label></div>
       <label htmlFor="profile-setup-hcp">HCP index</label>
       <input id="profile-setup-hcp" type="text" inputMode="text" enterKeyHint="done" autoComplete="off" value={handicap} onChange={(event) => setHandicap(event.target.value)} placeholder="Ej. 8.4 o +1.2" aria-describedby="profile-setup-hcp-help" />
+      <GhinPlaceholder />
       <small id="profile-setup-hcp-help" className="profileFieldHelp">Ingresa tu HCP manual (máximo 36) o déjalo vacío si no tienes. Vincular GHIN estará disponible sólo mediante una integración oficial.</small>
       <fieldset className="handednessChoice"><legend>Mano dominante</legend><label><input type="radio" name="handedness" checked={handedness === "right"} onChange={() => setHandedness("right")} />Derecha</label><label><input type="radio" name="handedness" checked={handedness === "left"} onChange={() => setHandedness("left")} />Izquierda</label></fieldset>
       {message && <div className="accessMessage" role="alert">{message}</div>}
@@ -1283,6 +1286,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     refreshCloudSession,
     requestCloudLink: () => { setMigrationError(""); setShowMigration(true); } }) : null;
   const migrationDialog = showMigration && <div className="modalBackdrop"><section className="confirmDialog migrationDialog" role="dialog" aria-modal="true" aria-labelledby="migration-title">
+    <ModalCloseButton onClose={() => setShowMigration(false)} disabled={migrationBusy} />
     <h2 id="migration-title">Encontramos datos de The Backyard en este dispositivo.</h2>
     <p>Nada se borrará de este dispositivo. La importación usa los mismos identificadores para poder reintentarse sin duplicar rondas.</p>
     {migrationError && <div className="notice bad" role="alert">{migrationError}</div>}

@@ -35,6 +35,7 @@ import { BrandLockup } from "./brand-lockup";
 import { EquipmentOnboarding } from "./equipment-onboarding";
 import { GroupBetTemplateEditor } from "./group-bet-template-editor";
 import { ProfileImagePicker } from "./profile-image-picker";
+import { GhinPlaceholder } from "./ghin-placeholder";
 import styles from "./beta-onboarding-flow.module.css";
 
 const IMPROVEMENT_LABELS: Record<GolfImprovementGoal, string> = {
@@ -201,6 +202,7 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, bett
   const [playerMode, setPlayerMode] = useState<"local" | "guest" | "invite">("local");
   const [localPlayerId, setLocalPlayerId] = useState("");
   const [newPlayer, setNewPlayer] = useState({ name: "", email: "", handicap: "" });
+  const [entryMode, setEntryMode] = useState<"quick" | "complete" | null>(null);
   const frequentPlayers = useMemo(() => typeof window === "undefined" ? [] : readStoredJson<FrequentPlayer[]>(localStorage, STORAGE_KEYS.frequentPlayers, []), []);
 
   useEffect(() => {
@@ -265,10 +267,10 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, bett
     return { ...current, group: { ...current.group, template: typeof action === "function" ? action(prior) : action } };
   });
 
-  if (progress.step === "welcome") return <Shell progress={progress} {...navigationProps} eyebrow="EMPIEZA A TU MANERA" title="Tu Backyard, sin fricción" description="Puedes entrar rápido o completar tu perfil para personalizar mejor rondas, estadísticas, equipo, fitting e IA." actions={<div className={styles.entryChoices}><button type="button" className="primary big" onClick={() => advance("ghin")}>CONFIGURACIÓN COMPLETA</button><button type="button" className="secondary big" onClick={() => finish()}>CONFIGURACIÓN RÁPIDA</button></div>}>
+  if (progress.step === "welcome") return <Shell progress={progress} {...navigationProps} eyebrow="EMPIEZA A TU MANERA" title="Tu Backyard, sin fricción" description="Puedes entrar rápido o completar tu perfil para personalizar mejor rondas, estadísticas, equipo, fitting e IA." actions={<button type="button" className="primary big" disabled={!entryMode} onClick={() => entryMode === "complete" ? advance("ghin") : finish()}>CONTINUAR</button>}>
     <div className={styles.entryGrid}>
-      <article><span aria-hidden="true">⚡</span><div><b>Rápida</b><p>Entra con el perfil básico que acabas de guardar. Equipo, fitting y grupos quedan disponibles para después.</p></div></article>
-      <article><span aria-hidden="true">⛳</span><div><b>Completa</b><p>Configura HCP, bolsa, objetivos y tu primer grupo para recibir una experiencia más personalizada.</p></div></article>
+      <button type="button" className={entryMode === "quick" ? styles.entrySelected : styles.entryChoice} aria-pressed={entryMode === "quick"} onClick={() => setEntryMode("quick")}><span aria-hidden="true">⚡</span><div><b>Rápida</b><p>Entra con el perfil básico que acabas de guardar. Equipo, fitting y grupos quedan disponibles para después.</p></div></button>
+      <button type="button" className={entryMode === "complete" ? styles.entrySelected : styles.entryChoice} aria-pressed={entryMode === "complete"} onClick={() => setEntryMode("complete")}><span aria-hidden="true">⛳</span><div><b>Completa</b><p>Configura HCP, bolsa, objetivos y tu primer grupo para recibir una experiencia más personalizada.</p></div></button>
     </div>
   </Shell>;
 
@@ -284,7 +286,7 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, bett
 
   if (progress.step === "ghin") return <Shell progress={progress} {...navigationProps} eyebrow="HANDICAP" title="Configura tu HCP index" description="Puedes usar un valor manual, indicar que aún no tienes HCP o vincular GHIN cuando exista una integración oficial." actions={<button className="primary big" onClick={async () => { await onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: profile.defaultHandicap, ghinLinkStatus: "SKIPPED" }); advance("equipment", true); }}>Continuar</button>}>
     <div className={styles.benefitList}><span>✓ Sincronizar tu índice</span><span>✓ Mantener el HCP actualizado</span><span>✓ Mejorar la precisión de estadísticas</span><span>✓ Preparar futuras funciones oficiales</span></div>
-    <div className={styles.goalList}><button type="button" className={styles.goalActive}>Ingresar HCP manual <span>{profile.defaultHandicap ?? "Sin capturar"}</span></button><button className={styles.comingSoon} disabled>Vincular GHIN <b>PRÓXIMAMENTE</b></button><button type="button" className={styles.goal} onClick={async () => { await onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: null, ghinLinkStatus: "SKIPPED" }); advance("equipment", true); }}>No tengo HCP</button></div>
+    <div className={styles.goalList}><button type="button" className={styles.goalActive}>Ingresar HCP manual <span>{profile.defaultHandicap ?? "Sin capturar"}</span></button><GhinPlaceholder /><button type="button" className={styles.goal} onClick={async () => { await onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: null, ghinLinkStatus: "SKIPPED" }); advance("equipment", true); }}>No tengo HCP</button></div>
     <p className={styles.trust}>No usamos scraping, APIs privadas ni simulamos una conexión. La arquitectura ya acepta un HandicapProvider autorizado cuando esté disponible.</p>
   </Shell>;
 

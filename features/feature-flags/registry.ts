@@ -16,6 +16,7 @@ export const PHASE2_FEATURE_FLAG_IDS = [
   "wearable_v1",
   "rangefinder_v1",
   "admin_v1",
+  "ghin_integration",
 ] as const;
 
 export type Phase2FeatureFlagId = (typeof PHASE2_FEATURE_FLAG_IDS)[number];
@@ -62,6 +63,7 @@ export const PHASE2_FEATURE_FLAGS: readonly FeatureFlagDefinition[] = [
   external("wearable_v1", "Integración con smartwatch.", "SDK de wearable"),
   external("rangefinder_v1", "Integración con rangefinder.", "SDK/API de rangefinder"),
   internal("admin_v1", "Métricas agregadas con autorización explícita."),
+  external("ghin_integration", "Vinculación oficial con GHIN.", "Acceso y autorización oficial de GHIN"),
 ] as const;
 
 export type FeatureFlagOverrides = Partial<Record<Phase2FeatureFlagId, boolean>>;
@@ -100,4 +102,3 @@ export function parseFeatureFlagOverrides(source: Record<string, string | undefi
   }
   return overrides;
 }
-

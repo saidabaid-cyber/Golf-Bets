@@ -11,10 +11,11 @@
 .presets button[data-active="true"] { border-color: var(--green); box-shadow: 0 0 0 2px #dcece1; }
 .presets img { display: block; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; object-position: center; pointer-events: none; }
 .presets button span { position: absolute; z-index: 2; right: -3px; bottom: -3px; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; background: var(--green); color: #fff; font-size: 11px; font-weight: 900; pointer-events: none; }
-.emojis { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(6, minmax(42px, 1fr)); gap: 7px; }
-.emojis button { position: relative; min-height: 46px; border: 2px solid transparent; border-radius: 12px; background: #edf3ef; font-size: 23px; touch-action: manipulation; }
-.emojis button[data-active="true"] { border-color: var(--green); background: #fff; }
-.emojis button span { position: absolute; right: 2px; bottom: 1px; color: var(--green); font-size: 10px; font-weight: 950; }
+.emojiInput { grid-column: 1 / -1; display: grid; gap: 6px; }
+.emojiInput > label { color: var(--ink); font-size: 11px; font-weight: 900; }
+.emojiInput > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; }
+.emojiInput input { min-width: 0; font-size: 20px; }
+.emojiInput small { color: var(--muted); font-size: 10px; }
 .help, .error { grid-column: 1 / -1; font-size: 10px; }
 .help { color: var(--muted); }
 .error { color: #8f281f; }
