@@ -27,6 +27,8 @@ Last updated: 2026-09-10 (America/Mexico_City)
 | Shaft Preview QA | `phase2/full-platform` / `2d093b104529af80a9b9fc775ed371b50fcd843b` | PASS | 1,367 passed, 0 failed, 0 skipped; lint/build pass; deployment `3JjVwEZtBa86eAxThWXorBSnKW1E` completed; required historical/current queries and zero-overlap pagination pass on the branch alias; 390px shell has no horizontal expansion or browser errors | Human Mi Bolsa review after the user accepts the legal gate |
 | Final closeout baseline | `phase2/full-platform` / `59132620c603369d9ad0cbacc91d0882c9374578` | PASS | Clean/synced branch; Phase 1 refs intact; 1,367 tests passed, 0 failed/skipped; lint and build pass | Audit real Supabase without writes |
 | Final closeout database audit | `phase2/full-platform` / `59132620c603369d9ad0cbacc91d0882c9374578` | PENDING_CONTROLLED_DB_APPLY | Only shared project `zhqmlpljloumldaczcfp` exists; no branches; 11 users and real data; all seven Phase 1/2 closeout migrations absent. Branch cost is USD 0.01344/hour, so no DDL or QA users were created without approval | Finish independent security/quality/Preview QA; after approval create isolated branch and resume migration step 1 |
+| Final closeout authorization | `phase2/full-platform` / `a3766b0` | PASS | Membership lookup fails closed; friendship acceptance/blocking and invite transitions are server-enforced; live participants get canonical read-only round access; eight-file Preview-only SQL/RLS runner includes behavioral USER_A/USER_B/ADMIN_TEST QA | Final Preview deploy |
+| Final closeout local quality | `phase2/full-platform` / `a3766b0` | PASS | 1,370 passed, 0 failed/skipped; lint/build pass; 1,277 clubs, 310 balls, 474 shafts, 71 Ball Fit candidates; PWA assets 200; public shell has no overflow/errors at 390/430 px and 0 automated WCAG violations | Push only `phase2/full-platform`, wait READY and repeat runtime QA |
 
 ## Migration ledger
 
@@ -52,4 +54,4 @@ These dependencies do not block local contracts, adapters, fixtures, feature fla
 
 ## Resume point
 
-Shaft master closeout is ready for human review. The versioned provider and API are verified on Preview; complete the Mi Bolsa touch flow only after the user accepts the legal gate, and verify the physical selector on an iPhone as `PENDING_INTERACTIVE_QA` / `PENDING_DEVICE_QA`. Apply the four existing migrations only after confirming an isolated Preview Supabase project. Do not promote or connect a custom domain before those controlled gates are approved.
+Push only `phase2/full-platform`, wait for the immutable Vercel Preview at the documentation commit, then repeat public/API/AI/runtime checks. The complete post-legal-gate flow remains `PENDING_INTERACTIVE_QA`, physical iPhone remains `PENDING_DEVICE_QA`, and all eight SQL/RLS/multiuser checks remain `PENDING_CONTROLLED_DB_APPLY` until a distinct Supabase Preview project ref is approved. Do not promote or connect a custom domain.

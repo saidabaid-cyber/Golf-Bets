@@ -9,7 +9,8 @@ Last updated: 2026-09-10 (America/Mexico_City)
 - Phase 1 frozen SHA: `5c278d7d27bcf68883108341503eaff6cf95fe24`
 - Frozen references: annotated tag `phase1-final` and remote branch `archive/phase1-final` both peel/resolve to the frozen SHA.
 - Baseline: 1,367 npm tests passed, 0 failed, 0 skipped; lint passed; production build passed with 28 generated routes.
-- Current stage: independent security/quality closeout. Next gated stage is isolated Preview database provisioning.
+- Current code SHA before the final documentation commit: `a3766b0`.
+- Current stage: independent security/quality and local runtime closeout completed. Next action is the final Preview push/runtime pass; the database stage remains gated on isolated-branch approval.
 
 ## Real Supabase audit
 
@@ -70,6 +71,11 @@ The shared project currently records 13 migrations through `20260908195537_legal
 | Gate | Status | Evidence / next action |
 | --- | --- | --- |
 | Repository baseline | PASS | 1,367/1,367 tests, lint and build |
+| Final repository gate | PASS | 1,370/1,370 tests, 0 failed/skipped; lint and build passed |
+| Equipment provider | PASS | 1,277 clubs, 310 balls and 474 shafts; required current/historical searches and zero-overlap pagination passed locally |
+| Ball Fit engine/API | PASS | Complete 71-candidate universe evaluated; Top 3 returned; no partial ranking |
+| PWA public assets | PASS | Manifest, service worker, offline page, 192/512 icons and Apple icon returned HTTP 200 |
+| 390/430 px public shell | PASS | No horizontal expansion, browser errors or automated WCAG violations; physical iPhone remains separately gated |
 | Phase 1 frozen refs | PASS | Tag and archive resolve to frozen SHA |
 | Shared Supabase audit | PASS | Live read-only project, branch, migration, table and advisor queries |
 | Isolated Preview database | PENDING_CONTROLLED_DB_APPLY | Approve USD 0.01344/hour branch creation |
@@ -89,4 +95,4 @@ The shared project currently records 13 migrations through `20260908195537_legal
 
 Supabase → organization `wrogzsycxchwakaglbpm` → project `The Backyard` → Branching → create a persistent development branch named `The Backyard Preview` → approve USD 0.01344/hour → provide/record the new branch project ref. Do not seed Production user data into the branch.
 
-Then resume at **Migration execution plan, step 1**. Do not promote to Beta or Production.
+Then resume at **Migration execution plan, step 1**. Do not promote to Beta or Production. The post-legal-gate product flow and Google OAuth remain human-interactive checks; never accept age, arbitration or data-processing declarations on a user's behalf just to traverse the gate.
