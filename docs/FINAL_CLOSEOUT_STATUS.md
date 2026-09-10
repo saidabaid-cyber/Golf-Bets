@@ -9,8 +9,8 @@ Last updated: 2026-09-10 (America/Mexico_City)
 - Phase 1 frozen SHA: `5c278d7d27bcf68883108341503eaff6cf95fe24`
 - Frozen references: annotated tag `phase1-final` and remote branch `archive/phase1-final` both peel/resolve to the frozen SHA.
 - Baseline: 1,367 npm tests passed, 0 failed, 0 skipped; lint passed; production build passed with 28 generated routes.
-- Current code SHA before the final documentation commit: `a3766b0`.
-- Current stage: independent security/quality and local runtime closeout completed. Next action is the final Preview push/runtime pass; the database stage remains gated on isolated-branch approval.
+- Verified code SHA before this status update: `1dc3ea1c76d6ce4a8e3d4cc8dd5f410e59b2a2f5`.
+- Current stage: independent security/quality and Preview runtime closeout completed. The database stage remains gated on isolated-branch approval; post-consent account flows remain human-interactive.
 
 ## Real Supabase audit
 
@@ -71,11 +71,19 @@ The shared project currently records 13 migrations through `20260908195537_legal
 | Gate | Status | Evidence / next action |
 | --- | --- | --- |
 | Repository baseline | PASS | 1,367/1,367 tests, lint and build |
-| Final repository gate | PASS | 1,370/1,370 tests, 0 failed/skipped; lint and build passed |
-| Equipment provider | PASS | 1,277 clubs, 310 balls and 474 shafts; required current/historical searches and zero-overlap pagination passed locally |
+| Final repository gate | PASS | 1,371/1,371 tests, 0 failed/skipped; lint and build passed after the stable-ID pagination fix |
+| Equipment provider | PASS | Preview API exhaustively returned 1,276/1,276 unique clubs, 310/310 balls and 474/474 shafts; required current/historical searches passed. Two sourced SM11 rows shared one stable ID and are now merged field-by-field instead of making cursor pagination ambiguous. |
 | Ball Fit engine/API | PASS | Complete 71-candidate universe evaluated; Top 3 returned; no partial ranking |
 | PWA public assets | PASS | Manifest, service worker, offline page, 192/512 icons and Apple icon returned HTTP 200 |
-| 390/430 px public shell | PASS | No horizontal expansion, browser errors or automated WCAG violations; physical iPhone remains separately gated |
+| 390/430 px public shell | PASS | No horizontal expansion, browser errors or console errors; semantic interactive snapshot is intact. Physical iPhone remains separately gated. |
+| Vercel code Preview | PASS | GitHub deployment `6379963652`; immutable URL `https://golf-bets-g93tm5rny-saha8.vercel.app`; SHA `1dc3ea1c76d6ce4a8e3d4cc8dd5f410e59b2a2f5`; completed successfully. Branch alias and immutable API response hashes match. |
+| Preview AI status | PASS | Round Setup, Card AI, Launch Monitor AI, Insights and Live Question all report `enabled=true`, `configured=true`, `state=ready`; Phase 2 AI flags are enabled. |
+| Card AI real POST | PASS | Synthetic no-PII PNG: HTTP 200, 2 players, 18 cells and 9 pars extracted through vision/Structured Output. |
+| Launch Monitor real POST | PASS | Two synthetic no-PII images: HTTP 200 and 2 structured shots. |
+| AI Insights / live question real POST | PASS | Synthetic aggregates and deterministic facts each returned HTTP 200 with validated structured output. |
+| Round Setup requested real POST | PENDING_INTERACTIVE_QA | The automated execution environment rejected sending the requested names and game amounts to an external AI provider. GET readiness and all local structured/canonical tests pass; execute this exact user-authorized payload interactively from the Preview. |
+| Preview HTTP runtime | PASS | Home, Legal V6/V2, simplified privacy, feature registry, catalogs, course search, PWA assets and AI routes returned expected statuses; negative contracts returned 400/401/403/404/422 with no unexpected 5xx. |
+| Private Vercel Runtime Logs | BLOCKED_EXTERNAL | No Vercel CLI session/token is available on this machine. Public GitHub/Vercel deployment metadata and HTTP runtime are verified, but the private log stream cannot be queried. |
 | Phase 1 frozen refs | PASS | Tag and archive resolve to frozen SHA |
 | Shared Supabase audit | PASS | Live read-only project, branch, migration, table and advisor queries |
 | Isolated Preview database | PENDING_CONTROLLED_DB_APPLY | Approve USD 0.01344/hour branch creation |
@@ -96,3 +104,5 @@ The shared project currently records 13 migrations through `20260908195537_legal
 Supabase → organization `wrogzsycxchwakaglbpm` → project `The Backyard` → Branching → create a persistent development branch named `The Backyard Preview` → approve USD 0.01344/hour → provide/record the new branch project ref. Do not seed Production user data into the branch.
 
 Then resume at **Migration execution plan, step 1**. Do not promote to Beta or Production. The post-legal-gate product flow and Google OAuth remain human-interactive checks; never accept age, arbitration or data-processing declarations on a user's behalf just to traverse the gate.
+
+For private Vercel log verification: Vercel → Team `saha8` → Project `golf-bets` → Deployment for SHA `1dc3ea1c76d6ce4a8e3d4cc8dd5f410e59b2a2f5` → Runtime Logs, or authenticate the CLI with a project-scoped read token and run `vercel logs https://golf-bets-g93tm5rny-saha8.vercel.app --level error --since 1h`.
