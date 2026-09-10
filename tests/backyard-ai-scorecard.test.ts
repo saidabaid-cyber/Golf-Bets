@@ -110,6 +110,25 @@ test("tarjeta completa de 18 hoyos acepta 72 scores y no expone campos correctos
   assert.ok(result.acceptedCells.every((cell) => cell.acceptedFrom === "extraction"));
 });
 
+test("filas estructurales PAR/HCP duplicadas por visión no se tratan como jugadores ni dudas", () => {
+  const raw = payload();
+  raw.players!.push({ playerName: "PAR", confidence: 0.99 });
+  raw.cells.push(...holes.map((hole) => ({
+    playerName: "PAR",
+    hole,
+    value: round.course.holes.find((candidate) => candidate.number === hole)!.par,
+    confidence: 0.99,
+  })));
+  raw.totals!.push({ playerName: "PAR", kind: "TOTAL", value: 72, confidence: 0.99 });
+
+  const result = validateScorecardExtraction(extraction(raw), round);
+  assert.equal(result.ready, true);
+  assert.deepEqual(result.issues, []);
+  assert.equal(result.acceptedCells.length, 72);
+  assert.equal(result.evidence.detectedCellCount, 72);
+  assert.equal(result.evidence.numericCellCount, 72);
+});
+
 test("un nombre o campo exacto con baja confianza visual todavía exige confirmación", () => {
   const raw = payload();
   raw.players = raw.players!.map((player) => player.playerName === "Juan" ? { ...player, confidence: 0.36 } : player);

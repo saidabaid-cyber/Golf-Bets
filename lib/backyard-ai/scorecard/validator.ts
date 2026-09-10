@@ -25,6 +25,21 @@ export type ScorecardValidationOptions = {
 
 type AcceptedByKey = Map<string, AcceptedScorecardCell>;
 
+const SCORECARD_STRUCTURAL_ROW_LABELS = new Set([
+  "par",
+  "hcp",
+  "hdcp",
+  "handicap",
+  "si",
+  "stroke index",
+  "hole",
+  "hoyo",
+]);
+
+function isScorecardStructuralRow(playerName: string) {
+  return SCORECARD_STRUCTURAL_ROW_LABELS.has(normalizeScorecardMatchText(playerName));
+}
+
 function cellKey(playerId: string, hole: number) {
   return `${playerId}:${hole}`;
 }
@@ -163,6 +178,16 @@ export function validateScorecardExtraction(
 
   const expectedHoles = playOrder(round.startHole).slice(0, round.roundHoles);
   const expectedHoleSet = new Set(expectedHoles);
+  const expectedPlayerLabels = new Set(round.players.flatMap((player) => [player.name, ...(player.aliases || [])])
+    .map((name) => normalizeScorecardMatchText(name)));
+  const isUnexpectedStructuralRow = (playerName: string) => isScorecardStructuralRow(playerName)
+    && !expectedPlayerLabels.has(normalizeScorecardMatchText(playerName));
+  // Vision models occasionally duplicate the printed PAR/HCP rows into `cells`
+  // even when they also return the dedicated `pars` collection. Those rows are
+  // scorecard structure, not unknown players and must never create corrections.
+  const scoreCells = extraction.cells.filter((cell) => !isUnexpectedStructuralRow(cell.playerName));
+  const scorePlayers = extraction.players.filter((player) => !isUnexpectedStructuralRow(player.playerName));
+  const scoreTotals = extraction.totals.filter((total) => !isUnexpectedStructuralRow(total.playerName));
   const holeByNumber = new Map(round.course.holes.map((hole) => [hole.number, hole]));
   const missingCourseHoles = expectedHoles.filter((hole) => {
     const courseHole = holeByNumber.get(hole);
@@ -178,7 +203,7 @@ export function validateScorecardExtraction(
       message: `El campo activo no tiene Par válido para H${missingCourseHoles.join(", H")}.`,
     }));
   }
-  if (!extraction.cells.length) {
+  if (!scoreCells.length) {
     issues.push(issue({
       id: "extraction:no-cells",
       code: "no_scorecard_evidence",
@@ -190,12 +215,12 @@ export function validateScorecardExtraction(
 
   const mappingOverrides = validMappingOverrides(overrides.playerMappings || [], round, issues);
   const extractedNames = [
-    ...extraction.players.map((player) => player.playerName),
-    ...extraction.cells.map((cell) => cell.playerName),
-    ...extraction.totals.map((total) => total.playerName),
+    ...scorePlayers.map((player) => player.playerName),
+    ...scoreCells.map((cell) => cell.playerName),
+    ...scoreTotals.map((total) => total.playerName),
   ];
   const playerObservationConfidence = new Map<string, number>();
-  for (const player of extraction.players) {
+  for (const player of scorePlayers) {
     const key = normalizeScorecardMatchText(player.playerName);
     playerObservationConfidence.set(key, Math.max(playerObservationConfidence.get(key) ?? 0, player.confidence));
   }
@@ -280,7 +305,7 @@ export function validateScorecardExtraction(
     return match;
   };
   const cellsByKey = new Map<string, ScorecardCellObservation[]>();
-  for (const cell of extraction.cells) {
+  for (const cell of scoreCells) {
     if (!expectedHoleSet.has(cell.hole)) continue;
     const match = usableMatch(cell.playerName);
     if (!match?.playerId) continue;
@@ -325,7 +350,7 @@ export function validateScorecardExtraction(
   }
 
   const acceptedByKey: AcceptedByKey = new Map();
-  const unresolvedCellNames = extraction.cells.some((cell) => expectedHoleSet.has(cell.hole) && !usableMatch(cell.playerName));
+  const unresolvedCellNames = scoreCells.some((cell) => expectedHoleSet.has(cell.hole) && !usableMatch(cell.playerName));
   for (const player of round.players) {
     for (const hole of expectedHoles) {
       const key = cellKey(player.id, hole);
@@ -538,7 +563,7 @@ export function validateScorecardExtraction(
 
   const acceptedTotalOverrides = new Set((overrides.acceptTotalMismatches || []).map((entry) => totalKey(entry.playerId, entry.kind)));
   const totalsByKey = new Map<string, typeof extraction.totals>();
-  for (const total of extraction.totals) {
+  for (const total of scoreTotals) {
     const match = usableMatch(total.playerName);
     if (!match?.playerId) continue;
     const key = totalKey(match.playerId, total.kind);
@@ -602,9 +627,9 @@ export function validateScorecardExtraction(
   for (const cell of acceptedCells) acceptedScores[cell.hole] = { ...(acceptedScores[cell.hole] || {}), [cell.playerId]: cell.value };
   const uniqueIssues = [...new Map(issues.map((entry) => [entry.id, entry])).values()];
   const expectedCellCount = round.players.length * expectedHoles.length;
-  const numericCellCount = extraction.cells.filter((cell) => cell.value !== null).length;
-  const averageCellConfidence = extraction.cells.length
-    ? extraction.cells.reduce((sum, cell) => sum + cell.confidence, 0) / extraction.cells.length
+  const numericCellCount = scoreCells.filter((cell) => cell.value !== null).length;
+  const averageCellConfidence = scoreCells.length
+    ? scoreCells.reduce((sum, cell) => sum + cell.confidence, 0) / scoreCells.length
     : 0;
   return {
     ready: uniqueIssues.length === 0 && acceptedCells.length === expectedCellCount,
@@ -615,7 +640,7 @@ export function validateScorecardExtraction(
     playerMatches,
     courseMatch,
     evidence: {
-      detectedCellCount: extraction.cells.length,
+      detectedCellCount: scoreCells.length,
       numericCellCount,
       averageCellConfidence,
       sourcePhotoCount: new Set(extraction.sourceIds).size,
