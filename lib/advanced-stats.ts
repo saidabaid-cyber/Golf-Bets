@@ -26,14 +26,17 @@ export function normalizeAdvancedStats(value: unknown): AdvancedStatsByHole {
       if (typeof stat.penaltyStrokes === "number" && Number.isInteger(stat.penaltyStrokes) && stat.penaltyStrokes >= 0 && stat.penaltyStrokes <= 50) {
         next.penaltyStrokes = stat.penaltyStrokes;
       }
-      if (stat.teeDirection === "left" || stat.teeDirection === "center" || stat.teeDirection === "right") next.teeDirection = stat.teeDirection;
+      if (stat.teeDirection === "far_left" || stat.teeDirection === "left" || stat.teeDirection === "center" || stat.teeDirection === "right" || stat.teeDirection === "far_right") next.teeDirection = stat.teeDirection;
       if (stat.landingLie === "fairway" || stat.landingLie === "rough" || stat.landingLie === "bunker" || stat.landingLie === "water_ob") next.landingLie = stat.landingLie;
       if (typeof stat.teeClub === "string" && stat.teeClub.trim()) next.teeClub = stat.teeClub.trim().slice(0, 40);
       if (typeof stat.teeDistance === "number" && Number.isFinite(stat.teeDistance) && stat.teeDistance >= 0 && stat.teeDistance <= 600) next.teeDistance = stat.teeDistance;
       if (typeof stat.firstPuttDistanceFeet === "number" && Number.isFinite(stat.firstPuttDistanceFeet) && stat.firstPuttDistanceFeet >= 0 && stat.firstPuttDistanceFeet <= 300) next.firstPuttDistanceFeet = stat.firstPuttDistanceFeet;
       if (typeof stat.bunkerCount === "number" && Number.isInteger(stat.bunkerCount) && stat.bunkerCount >= 0 && stat.bunkerCount <= 20) next.bunkerCount = stat.bunkerCount;
+      if (typeof stat.greenSideBunkerCount === "number" && Number.isInteger(stat.greenSideBunkerCount) && stat.greenSideBunkerCount >= 0 && stat.greenSideBunkerCount <= 20) next.greenSideBunkerCount = stat.greenSideBunkerCount;
+      if (typeof stat.fairwayBunkerCount === "number" && Number.isInteger(stat.fairwayBunkerCount) && stat.fairwayBunkerCount >= 0 && stat.fairwayBunkerCount <= 20) next.fairwayBunkerCount = stat.fairwayBunkerCount;
       if (typeof stat.penaltyAreaCount === "number" && Number.isInteger(stat.penaltyAreaCount) && stat.penaltyAreaCount >= 0 && stat.penaltyAreaCount <= 20) next.penaltyAreaCount = stat.penaltyAreaCount;
       if (typeof stat.outOfBounds === "boolean") next.outOfBounds = stat.outOfBounds;
+      if (typeof stat.outOfBoundsCount === "number" && Number.isInteger(stat.outOfBoundsCount) && stat.outOfBoundsCount >= 0 && stat.outOfBoundsCount <= 20) next.outOfBoundsCount = stat.outOfBoundsCount;
       if (Object.keys(next).length) nextPlayers[playerId] = next;
     }
     if (Object.keys(nextPlayers).length) normalized[hole] = nextPlayers;
@@ -72,6 +75,15 @@ export type PlayerAdvancedStatsSummary = {
   penaltyHoles: number;
 };
 
+/** GIR is a deterministic golf fact when both score and putts are known. */
+export function derivedGreenInRegulation(score: number | null | undefined, putts: number | null | undefined, par: number) {
+  if (!Number.isInteger(score) || !Number.isInteger(putts) || !Number.isInteger(par) || (score as number) < 1 || (putts as number) < 0 || par < 1) return null;
+  // Zero putts means the ball was holed from outside the putting green. It is
+  // valid capture, but cannot be counted as a green reached in regulation.
+  if (putts === 0) return false;
+  return (score as number) - (putts as number) <= par - 2;
+}
+
 export function summarizePlayerAdvancedStats(
   stats: AdvancedStatsByHole | null | undefined,
   playerId: string,
@@ -103,7 +115,7 @@ export function summarizePlayerAdvancedStats(
       penaltyHoles += 1;
       captured.add(hole);
     }
-    if (typeof value.firstPuttDistanceFeet === "number" || typeof value.bunkerCount === "number" || typeof value.penaltyAreaCount === "number" || typeof value.teeDirection === "string" || typeof value.teeClub === "string" || typeof value.outOfBounds === "boolean") {
+    if (typeof value.firstPuttDistanceFeet === "number" || typeof value.bunkerCount === "number" || typeof value.greenSideBunkerCount === "number" || typeof value.fairwayBunkerCount === "number" || typeof value.penaltyAreaCount === "number" || typeof value.teeDirection === "string" || typeof value.teeClub === "string" || typeof value.outOfBounds === "boolean" || typeof value.outOfBoundsCount === "number") {
       captured.add(hole);
     }
   }

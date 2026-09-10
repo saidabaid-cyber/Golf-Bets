@@ -6,26 +6,32 @@ import type {
   RoundSetupQuestion,
 } from "../schemas/actions";
 import type { DecimalMode, HandicapMode } from "../../types";
+import { BET_DEFINITION_BY_ID, BET_REGISTRY } from "../../bets/registry";
 
-const CORE_ALIASES: ReadonlyArray<{ bet: CoreRoundBetKey; aliases: readonly string[] }> = [
-  { bet: "miniPolla", aliases: ["mini polla"] },
-  { bet: "rabbits", aliases: ["conejos", "conejo"] },
-  { bet: "skins", aliases: ["skins", "skin"] },
-  { bet: "units", aliases: ["unidades", "copas", "copa"] },
-  { bet: "foursome", aliases: ["foursomes", "foursome"] },
-  { bet: "vipers", aliases: ["viboritas", "viborita", "viboras", "vibora"] },
-  { bet: "camels", aliases: ["camellos", "camello"] },
-  { bet: "fish", aliases: ["peces/agua", "peces", "pez"] },
-  { bet: "loba", aliases: ["loba"] },
-  { bet: "monkey", aliases: ["monkey"] },
+const CORE_REGISTRY_IDS: ReadonlyArray<{ bet: CoreRoundBetKey; registryId: string }> = [
+  { bet: "miniPolla", registryId: "mini_polla" },
+  { bet: "rabbits", registryId: "rabbits" },
+  { bet: "skins", registryId: "skins" },
+  { bet: "units", registryId: "units" },
+  { bet: "foursome", registryId: "foursome" },
+  { bet: "vipers", registryId: "vipers" },
+  { bet: "camels", registryId: "camels" },
+  { bet: "fish", registryId: "fish" },
+  { bet: "loba", registryId: "loba" },
+  { bet: "monkey", registryId: "monkey" },
 ];
 
-const BET_TERMS = [
-  "bola amiga", "mini polla", "nassau", "skins", "skin", "conejos", "conejo", "unidades", "copas", "copa",
-  "foursomes", "foursome", "viboritas", "viborita", "viboras", "vibora", "camellos", "camello", "peces/agua", "peces", "pez",
-  "loba", "monkey", "presses", "press", "presion", "presiones", "polla", "personales", "oyes",
-  "dollar a stroke", "dolar a stroke", "chicago", "vegas", "minimo de putts", "menos putts",
-];
+const CORE_ALIASES: ReadonlyArray<{ bet: CoreRoundBetKey; aliases: readonly string[] }> = CORE_REGISTRY_IDS.map(({ bet, registryId }) => ({
+  bet,
+  // Plain “agua” is intentionally handled by explicitFishWaterAlias so a
+  // course or an ordinary water reference cannot activate Peces.
+  aliases: (BET_DEFINITION_BY_ID.get(registryId)?.aiAliases ?? []).filter((alias) => alias !== "agua" && alias !== "penalty area"),
+}));
+
+const BET_TERMS = [...new Set([
+  ...BET_REGISTRY.flatMap((definition) => definition.aiAliases).filter((alias) => alias !== "agua" && alias !== "penalty area"),
+  "nassau", "presses", "press", "presion", "presiones", "oyes",
+])];
 
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -164,7 +170,7 @@ function parseHandicap(value: string) {
   const normalized = value.replace(",", ".");
   const numeric = Number(normalized);
   const handicap = normalized.trim().startsWith("+") ? -Math.abs(numeric) : numeric;
-  return Number.isFinite(handicap) && handicap >= -15 && handicap <= 36 ? handicap : undefined;
+  return Number.isFinite(handicap) && handicap >= -15 ? Math.min(36, handicap) : undefined;
 }
 
 function parsePlayerHandicaps(input: string): ParsedRoundSetupAction[] {
@@ -178,11 +184,12 @@ function parsePlayerHandicaps(input: string): ParsedRoundSetupAction[] {
     seen.add(key);
     actions.push({ type: "set_player_handicap", playerName: name, handicap, confidence: 0.99, evidence });
   };
+  const isPercentage = (match: RegExpMatchArray) => /^\s*%/.test(input.slice((match.index ?? 0) + match[0].length));
   for (const match of input.matchAll(/(?:^|[,.;]|\s+y\s+|\s+e\s+)\s*([^,.;]+?)\s+(?:hcp|handicap)\s*(?:de\s*)?([+-]?\d+(?:[.,]\d+)?)/gi)) {
-    add(match[1], match[2], match[0].trim());
+    if (!isPercentage(match)) add(match[1], match[2], match[0].trim());
   }
   for (const leading of input.matchAll(/(?:^|[,.;]|\s+y\s+|\s+e\s+)\s*(?:hcp|handicap)\s+de\s+([^,.;]+?)\s+(?:es\s+|=\s*)?([+-]?\d+(?:[.,]\d+)?)/gi)) {
-    add(leading[1], leading[2], leading[0].trim());
+    if (!isPercentage(leading)) add(leading[1], leading[2], leading[0].trim());
   }
   return actions;
 }

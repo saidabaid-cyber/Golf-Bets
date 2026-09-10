@@ -2,7 +2,6 @@ import { opponentPairs } from "./engine";
 import type { calculatePersonalBets } from "./engine";
 import { collectHoleValidationErrors } from "./hole-validation";
 import { roundCaptureFieldsForPlayer } from "./round-capture";
-import { counterCaptureIsConfirmed } from "./side-bets";
 import type { SupplementalBetResult } from "./supplemental-bets";
 import type {
   BallFriendHole,
@@ -203,16 +202,15 @@ type RequiredRoundCaptureFactsInput = Pick<
   "players" | "bets" | "supplementalBets" | "putts" | "counterBetEvents"
 >;
 
-/** Completeness contract shared by live digital capture and Card AI. A score
- * photo is not evidence that a bunker or water event was zero. */
+/** Completeness contract shared by live digital capture and Card AI. Score is
+ * handled by the caller; putts are required only by an active wager. Optional
+ * golf events that were not tapped are canonically zero, never "missing". */
 export function requiredRoundCaptureFactErrors(
   input: RequiredRoundCaptureFactsInput,
   playedHoleIndex: number,
   holeNumber: number,
 ) {
   const missingPutts: string[] = [];
-  const missingCamels: string[] = [];
-  const missingFish: string[] = [];
   for (const player of input.players) {
     const fields = roundCaptureFieldsForPlayer({
       mode: "quick",
@@ -223,13 +221,9 @@ export function requiredRoundCaptureFactErrors(
     });
     const name = player.name.trim() || "Sin nombre";
     if (fields.includes("putts") && !Number.isInteger(input.putts[holeNumber]?.[player.id])) missingPutts.push(name);
-    if (fields.includes("bunker") && !counterCaptureIsConfirmed(input.counterBetEvents, "camels", holeNumber, player.id)) missingCamels.push(name);
-    if (fields.includes("fish") && !counterCaptureIsConfirmed(input.counterBetEvents, "fish", holeNumber, player.id)) missingFish.push(name);
   }
   return [
     ...(missingPutts.length ? [`Captura los putts de ${missingPutts.join(", ")} antes de continuar.`] : []),
-    ...(missingCamels.length ? [`Confirma Camellos (bunker) de ${missingCamels.join(", ")}; usa 0 cuando no hubo.`] : []),
-    ...(missingFish.length ? [`Confirma Peces (agua) de ${missingFish.join(", ")}; usa 0 cuando no hubo.`] : []),
   ];
 }
 

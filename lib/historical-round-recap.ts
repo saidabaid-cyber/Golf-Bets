@@ -1,5 +1,5 @@
 import { profileHandicapLabel } from "./account-state";
-import { summarizePlayerAdvancedStats } from "./advanced-stats";
+import { derivedGreenInRegulation, summarizePlayerAdvancedStats } from "./advanced-stats";
 import { buildBalanceLedger } from "./balance-ledger";
 import { isValidRoundHandicapValue } from "./handicap-base";
 import { privateLeaderboard } from "./round-utils";
@@ -452,11 +452,22 @@ function optionalPlayerStats(
       player.id,
       order.filter((holeNumber) => course.holes.find((hole) => hole.number === holeNumber)?.par !== 3),
     );
-    const advanced: HistoricalAdvancedStatsRecap | undefined = summary.capturedHoles
+    let derivedGirAttempts = 0;
+    let derivedGirHits = 0;
+    const puttsSource = record(source.putts);
+    for (const holeNumber of order) {
+      const puttRow = puttsSource ? record(puttsSource[String(holeNumber)]) : undefined;
+      const hole = course.holes.find((candidate) => candidate.number === holeNumber);
+      const gir = hole ? derivedGreenInRegulation(scores[holeNumber]?.[player.id], puttRow?.[player.id] as number | undefined, hole.par) : null;
+      if (gir === null) continue;
+      derivedGirAttempts += 1;
+      if (gir) derivedGirHits += 1;
+    }
+    const advanced: HistoricalAdvancedStatsRecap | undefined = summary.capturedHoles || derivedGirAttempts
       ? {
-          capturedHoles: summary.capturedHoles,
+          capturedHoles: Math.max(summary.capturedHoles, derivedGirAttempts),
           ...(fairwaySummary.fairwayAttempts ? { fairways: { hit: fairwaySummary.fairwaysHit, attempts: fairwaySummary.fairwayAttempts } } : {}),
-          ...(summary.greenAttempts ? { greensInRegulation: { hit: summary.greensInRegulation, attempts: summary.greenAttempts } } : {}),
+          ...(derivedGirAttempts ? { greensInRegulation: { hit: derivedGirHits, attempts: derivedGirAttempts } } : summary.greenAttempts ? { greensInRegulation: { hit: summary.greensInRegulation, attempts: summary.greenAttempts } } : {}),
           ...(summary.penaltyHoles ? { penalties: { strokes: summary.penaltyStrokes, capturedHoles: summary.penaltyHoles } } : {}),
         }
       : undefined;

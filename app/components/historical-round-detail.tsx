@@ -9,6 +9,7 @@ import type { PrivateLeaderboardRow } from "../../lib/round-utils";
 import type { Course, HoleScore, Player, RoundSnapshot } from "../../lib/types";
 import { FullScorecard } from "./full-scorecard";
 import { GolfLeaderboard, type GolfLeaderboardMode } from "./golf-leaderboard";
+import { RoundStatsCard } from "./round-stats-card";
 
 const money = (value: number) => `${value > 0 ? "+" : value < 0 ? "−" : ""}$${Math.abs(value).toLocaleString("es-MX", { maximumFractionDigits: 2 })}`;
 const tone = (value: number) => value > 0 ? "good" : value < 0 ? "bad" : "";
@@ -227,6 +228,8 @@ export function HistoricalRoundDetail({ round, onEdit, onPhoto }: {
         </div>
       </article>)}</div>
     </section> : null}
+
+    {recap.meta.ownerId && <RoundStatsCard round={round} playerId={recap.meta.ownerId} />}
 
     {issueCopy.length > 0 && <section className="card historicalDataWarning" role="status">
       <h2>Datos históricos limitados</h2>

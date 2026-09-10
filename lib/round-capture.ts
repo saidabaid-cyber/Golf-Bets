@@ -1,12 +1,9 @@
 import type { BetConfig, ScoreCaptureMode, SupplementalBet } from "./types";
+import { captureRequirementsForPlayer } from "./bets/capture-requirements";
 
 export type RoundCaptureField = "putts" | "bunker" | "fish" | "penalties" | "ob";
 
-type CaptureBetContext = Pick<BetConfig, "vipers" | "camels" | "fish">;
-
-function participates(enabled: boolean, participantIds: readonly string[], playerId: string) {
-  return enabled && participantIds.includes(playerId);
-}
+type CaptureBetContext = Pick<BetConfig, "vipers" | "camels" | "fish" | "units">;
 
 /**
  * The capture screen asks only for facts consumed by an active deterministic
@@ -22,19 +19,14 @@ export function roundCaptureFieldsForPlayer(input: {
   const fields = new Set<RoundCaptureField>();
   const { mode, playerId, playedHoleIndex, bets, supplementalBets } = input;
 
-  const minimumPuttsNeedsPlayer = supplementalBets.some((bet) => (
-    bet.enabled !== false
-      && bet.type === "minimum_putts"
-      && playedHoleIndex < bet.holes
-      && bet.participantIds.includes(playerId)
-  ));
+  const requirements = captureRequirementsForPlayer({ playerId, playedHoleIndex, bets, supplementalBets });
 
-  if (mode === "advanced" || minimumPuttsNeedsPlayer || participates(bets.vipers.enabled, bets.vipers.participantIds, playerId)) {
+  if (mode === "advanced" || requirements.required.includes("putts")) {
     fields.add("putts");
   }
   if (mode === "advanced") { fields.add("penalties"); fields.add("ob"); }
-  if (participates(bets.camels.enabled, bets.camels.participantIds, playerId)) fields.add("bunker");
-  if (participates(bets.fish.enabled, bets.fish.participantIds, playerId)) fields.add("fish");
+  if (requirements.optional.some((field) => field === "green_side_bunker" || field === "fairway_bunker")) fields.add("bunker");
+  if (requirements.optional.includes("penalty_area")) fields.add("fish");
   return [...fields];
 }
 

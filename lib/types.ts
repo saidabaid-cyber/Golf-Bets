@@ -458,7 +458,7 @@ export type AdvancedHoleStat = {
   /** Missing means not captured; zero is an explicit no-penalty result. */
   penaltyStrokes?: number;
   /** Optional direction of the tee shot; never required for settlement. */
-  teeDirection?: "left" | "center" | "right";
+  teeDirection?: "far_left" | "left" | "center" | "right" | "far_right";
   /** Optional landing area selected by the golfer. */
   landingLie?: "fairway" | "rough" | "bunker" | "water_ob";
   /** Free-form club label because My Bag catalogs can evolve independently. */
@@ -469,10 +469,16 @@ export type AdvancedHoleStat = {
   firstPuttDistanceFeet?: number;
   /** Golf fact captured independently from the Camellos settlement event. */
   bunkerCount?: number;
+  /** Greenside bunker entries. New capture derives legacy bunkerCount from both bunker facts. */
+  greenSideBunkerCount?: number;
+  /** Fairway bunker entries. */
+  fairwayBunkerCount?: number;
   /** Penalty-area / water entries, independent from the Peces settlement event. */
   penaltyAreaCount?: number;
   /** Explicit out-of-bounds observation; missing means not captured. */
   outOfBounds?: boolean;
+  /** New capture uses a counter while retaining outOfBounds for old snapshots. */
+  outOfBoundsCount?: number;
 };
 
 export type AdvancedStatsByHole = Record<number, Record<string, AdvancedHoleStat>>;

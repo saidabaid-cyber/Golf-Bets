@@ -65,11 +65,11 @@ const EXAMPLES = [
 
 const MIN_MODEL_CONFIRMATION_CONFIDENCE = 0.7;
 
-function validHandicapInput(value: string) {
+function parsedHandicapInput(value: string) {
   const normalized = value.trim().replace(",", ".");
   const numeric = Number(normalized);
   const handicap = normalized.startsWith("+") ? -Math.abs(numeric) : numeric;
-  return Number.isFinite(handicap) && handicap >= -15 && handicap <= 36;
+  return Number.isFinite(handicap) && handicap >= -15 ? Math.min(36, handicap) : null;
 }
 
 export function AiRoundSetup({ initialDraft, memoryContext, accessToken, requiresRemoteConsent, savedPersonalRivals = [], onConfirm, onManualEdit, onCancel, onPlanned }: AiRoundSetupProps) {
@@ -208,7 +208,7 @@ export function AiRoundSetup({ initialDraft, memoryContext, accessToken, require
     const focusedQuestion = editing ? undefined : plan?.questions[0];
     const clarifiedPlayer = parseUnknownPlayerClarification(focusedQuestion, raw);
     if (focusedQuestion?.code === "unknown_player" && !clarifiedPlayer) {
-      setNotice("Escribe el handicap entre +15 y 54. Ejemplo: “Carlos HCP 18”.");
+      setNotice("Escribe el handicap entre +15 y 36. Si capturas más de 36, lo ajustaremos a 36.");
       return;
     }
     const generation = ++submissionGeneration.current;
@@ -337,8 +337,8 @@ export function AiRoundSetup({ initialDraft, memoryContext, accessToken, require
 
   const question = plan?.questions[0];
   const handicapTargets = question?.code === "missing_player_handicaps" ? question.playerTargets ?? [] : [];
-  const handicapAnswer = handicapTargets.map((target) => `${target.label} HCP ${handicapAnswers[target.id] ?? ""}`).join(", ");
-  const handicapAnswerReady = handicapTargets.length > 0 && handicapTargets.every((target) => validHandicapInput(handicapAnswers[target.id] ?? ""));
+  const handicapAnswer = handicapTargets.map((target) => `${target.label} HCP ${parsedHandicapInput(handicapAnswers[target.id] ?? "") ?? ""}`).join(", ");
+  const handicapAnswerReady = handicapTargets.length > 0 && handicapTargets.every((target) => parsedHandicapInput(handicapAnswers[target.id] ?? "") !== null);
   const usesHandicapForm = !editing && handicapTargets.length > 0;
   const showComposer = !plan || editing || Boolean(question);
   const personalSuggestions = frequentPersonalSuggestions(savedPersonalRivals, draft.players).filter(({ template }) => (
@@ -357,7 +357,7 @@ export function AiRoundSetup({ initialDraft, memoryContext, accessToken, require
     {showComposer && <section className={styles.composer} ref={composerRef}>
       {editing && <h2 className={styles.composerTitle}>¿Qué quieres cambiar?</h2>}
       {usesHandicapForm ? <div className={styles.handicapGrid}>
-        {handicapTargets.map((target, index) => <label key={target.id}><span>{target.label}</span><input ref={index === 0 ? handicapInputRef : undefined} autoFocus={index === 0} aria-label={`HCP de ${target.label}`} inputMode="decimal" placeholder="HCP" value={handicapAnswers[target.id] ?? ""} disabled={busy} onChange={(event) => setHandicapAnswers((current) => ({ ...current, [target.id]: event.target.value }))} /></label>)}
+        {handicapTargets.map((target, index) => <label key={target.id}><span>{target.label}</span><input ref={index === 0 ? handicapInputRef : undefined} autoFocus={index === 0} aria-label={`HCP de ${target.label}`} inputMode="decimal" placeholder="HCP" value={handicapAnswers[target.id] ?? ""} disabled={busy} onChange={(event) => setHandicapAnswers((current) => ({ ...current, [target.id]: event.target.value }))} onBlur={() => { const value = parsedHandicapInput(handicapAnswers[target.id] ?? ""); if (value !== null) setHandicapAnswers((current) => ({ ...current, [target.id]: String(value) })); }} /></label>)}
       </div> : <textarea ref={textareaRef} autoFocus aria-label={editing ? "¿Qué quieres cambiar?" : "Describe la ronda"} placeholder={question ? "Responde sólo este dato…" : "Ej. Hoy jugamos Said, Pedro, Juan y Carlos en La Vista. Skins de $200 y Nassau de $500…"} value={input} maxLength={2_400} disabled={busy} onChange={(event) => changeInput(event.target.value)} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key === "Enter") void submit(); }} />}
       {!plan && <div className={styles.suggestions}>{EXAMPLES.map((example) => <button type="button" key={example} disabled={busy} onClick={() => changeInput(example)}>{example}</button>)}</div>}
       <div className={styles.composerActions}>

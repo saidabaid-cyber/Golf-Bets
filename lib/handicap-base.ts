@@ -2,7 +2,7 @@ import type { BetConfig, HandicapBaseConfig, Player, RoundHandicapBasis, Supplem
 
 export const DEFAULT_ROUND_HANDICAP_BASIS: RoundHandicapBasis = "relative";
 export const MIN_ROUND_HANDICAP = -15;
-export const MAX_ROUND_HANDICAP = 54;
+export const MAX_ROUND_HANDICAP = 36;
 
 export function normalizeRoundHandicapBasis(value: unknown): RoundHandicapBasis {
   return value === "course" ? "course" : DEFAULT_ROUND_HANDICAP_BASIS;

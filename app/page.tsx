@@ -198,6 +198,7 @@ import { createGroupGameTemplate, frequentGroupTemplateSummary, instantiateGroup
 import { assignTeeToEveryPlayer, reconcilePlayerTeeAssignments, teeOptionsForCourse, updatePlayerTeeAssignment } from "../lib/player-tee-assignments";
 import { defaultMaxBaseAppearances, generateAutomaticFoursomes, markFoursomeSegmentEdited } from "../lib/foursome-generator";
 import { advantageFieldsFromSigned, configureCurrentIndexPersonal, configureSlidingPersonal, frequentPersonalSuggestions, slidingAdjustment } from "../lib/personal-modes";
+import { loadEquipmentProfile, type PlayerClub } from "../lib/golf-equipment";
 
 const AiRoundSetup = dynamic(() => import("./components/backyard-ai/ai-round-setup").then((module) => module.AiRoundSetup), { ssr: false });
 const ScorecardScanner = dynamic(() => import("./components/backyard-ai/scorecard-scanner").then((module) => module.ScorecardScanner), { ssr: false });
@@ -236,6 +237,19 @@ const SKINS_MODE_OPTIONS: ReadonlyArray<{ value: SkinsMode; label: string; descr
   { value: "carry", label: "Acumulables", description: "Los skins sin ganador pasan al siguiente hoyo." },
   { value: "no_carry", label: "No acumulables", description: "Cada hoyo vale 1 skin; los empates no se acumulan." },
 ];
+
+function captureClubLabel(club: PlayerClub) {
+  if (club.customModel) return club.customModel;
+  const category = club.category === "DRIVER" ? "Driver"
+    : club.category === "MINI_DRIVER" ? "Mini Driver"
+      : club.category === "FAIRWAY_WOOD" ? "Madera"
+        : club.category === "HYBRID" ? "Híbrido"
+          : club.category === "UTILITY_IRON" ? "Utility"
+            : club.category === "IRON_SET" ? "Hierro"
+              : club.category === "WEDGE" ? "Wedge"
+                : "Putter";
+  return club.loft ? `${category} ${club.loft}°` : category;
+}
 
 function normalizeExpenses(raw: any): Expense {
   return {
@@ -375,6 +389,12 @@ type NewRoundIntent =
 function GolfBetsApp() {
   const { identity, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, setCloudStatus, applyCloudPreferences, reportCloudSyncError, clearCloudSyncError, refreshCloudSession } = useBackyardAccount();
   const { tab, setTab, goBack, setNavigationGuard } = useScreenNavigation();
+  const ownerClubChoices = useMemo(() => {
+    if (typeof window === "undefined" || tab !== "round") return [];
+    const loaded = loadEquipmentProfile(localStorage, identity.userId);
+    if (!loaded.ok || !loaded.profile) return [];
+    return [...new Set(loaded.profile.clubs.filter((club) => club.isCurrent).map(captureClubLabel))];
+  }, [identity.userId, tab]);
   const [rulesVisited, setRulesVisited] = useState(false);
   useEffect(() => { if (tab === "rules") setRulesVisited(true); }, [tab]);
   const [personalDetailId] = useState<string | null>(null);
@@ -3489,6 +3509,7 @@ function GolfBetsApp() {
         playerTeeAssignments={playerTeeAssignments}
         ownerId={ownerId}
         ownerAvatarUrl={identity.avatarUrl}
+        ownerClubChoices={ownerClubChoices}
         mode={scoreCaptureMode}
         bets={bets}
         supplementalBets={supplementalBets}

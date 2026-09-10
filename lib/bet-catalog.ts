@@ -1,23 +1,36 @@
 import type { RoundPresentation, SupplementalBet } from "./types";
 import { groupNassauHistoricalLabel } from "./round-presentation";
+import { BET_DEFINITION_BY_ID } from "./bets/registry";
+
+function presentation(id: string) {
+  const definition = BET_DEFINITION_BY_ID.get(id);
+  if (!definition) throw new Error(`Falta definición canónica de apuesta: ${id}`);
+  return { icon: definition.icon, title: definition.label };
+}
+
+function supplementalPresentation(id: SupplementalBet["type"]) {
+  const definition = BET_DEFINITION_BY_ID.get(id);
+  if (!definition) throw new Error(`Falta definición canónica suplementaria: ${id}`);
+  return { icon: definition.icon, title: definition.label, description: definition.description };
+}
 
 export const BET_PRESENTATION = {
-  rabbits: { icon: "🐇", title: "Conejos" },
-  skins: { icon: "⛳", title: "Skins" },
-  units: { icon: "📏", title: "Unidades / Copas" },
-  foursome: { icon: "🤝", title: "Foursome" },
-  ball_friend: { icon: "⚪🤝", title: "Bola Amiga" },
-  monkey: { icon: "🐒", title: "Monkey" },
-  polla_first: { icon: "🥈", title: "Polla 1ª vuelta" },
-  polla_second: { icon: "🥈", title: "Polla 2ª vuelta" },
-  polla_total: { icon: "🏆", title: "Polla 18 hoyos" },
-  mini_polla: { icon: "⚡", title: "Mini Polla" },
-  vipers: { icon: "🐍", title: "Víboras" },
-  camels: { icon: "🐫", title: "Camellos" },
-  fish: { icon: "🐟", title: "Peces" },
-  loba: { icon: "🐺", title: "Loba" },
-  manuals: { icon: "✍️", title: "Apuestas Manuales" },
-  personals: { icon: "↔", title: "Personales" },
+  rabbits: presentation("rabbits"),
+  skins: presentation("skins"),
+  units: presentation("units"),
+  foursome: presentation("foursome"),
+  ball_friend: presentation("ball_friend"),
+  monkey: presentation("monkey"),
+  polla_first: presentation("polla_first"),
+  polla_second: presentation("polla_second"),
+  polla_total: presentation("polla_total"),
+  mini_polla: presentation("mini_polla"),
+  vipers: presentation("vipers"),
+  camels: presentation("camels"),
+  fish: presentation("fish"),
+  loba: presentation("loba"),
+  manuals: presentation("manuals"),
+  personals: presentation("personals"),
 } as const;
 
 export type BetPresentationKey = keyof typeof BET_PRESENTATION;
@@ -28,13 +41,13 @@ export function betDisplayLabel(kind: BetPresentationKey, title: string = BET_PR
 }
 
 export const SUPPLEMENTAL_BET_PRESENTATION: Record<SupplementalBet["type"], { icon: string; title: string; description: string }> = {
-  individual_nassau: { icon: "🏌️", title: "Nassau individual", description: "Jugador vs jugador · ida, vuelta y total" },
-  dollar_stroke: { icon: "💵", title: "Dollar a Stroke", description: "Diferencia de golpes netos · pago por golpe" },
-  individual_pressures: { icon: "⚡", title: "Presiones individuales", description: "Duelo hoyo por hoyo · al perder se abre nueva presión" },
-  team_pressures: { icon: "🤝", title: "Presiones por parejas", description: "Low Ball / High Ball por equipos · con presiones" },
-  chicago: { icon: "🌆", title: "Chicago", description: "Puntos contra cuota según handicap" },
-  vegas: { icon: "🎲", title: "Vegas", description: "Scores de pareja concatenados · diferencia por unidad" },
-  minimum_putts: { icon: "⛳", title: "Mínimo de Putts", description: "Menos putts de la ronda gana el ante" },
+  individual_nassau: supplementalPresentation("individual_nassau"),
+  dollar_stroke: supplementalPresentation("dollar_stroke"),
+  individual_pressures: supplementalPresentation("individual_pressures"),
+  team_pressures: supplementalPresentation("team_pressures"),
+  chicago: supplementalPresentation("chicago"),
+  vegas: supplementalPresentation("vegas"),
+  minimum_putts: supplementalPresentation("minimum_putts"),
 };
 
 export function supplementalBetDisplayLabel(type: SupplementalBet["type"], title = SUPPLEMENTAL_BET_PRESENTATION[type].title) {

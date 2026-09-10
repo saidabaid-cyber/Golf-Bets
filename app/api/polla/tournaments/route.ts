@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
         p_tournament_id: tournament.id,
         p_group_id: group.id,
         p_name: String(player.name || "").trim().slice(0, 120),
-        p_handicap: Math.min(54, Math.max(-15, Number(player.handicap) || 0)),
+        p_handicap: Math.min(36, Math.max(-15, Number(player.handicap) || 0)),
         p_pin: pin,
         p_is_scorer: index === 0,
       });

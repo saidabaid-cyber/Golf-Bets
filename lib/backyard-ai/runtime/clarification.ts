@@ -6,7 +6,7 @@ export type UnknownPlayerClarification = {
 };
 
 const MIN_HANDICAP = -15;
-const MAX_HANDICAP = 54;
+const MAX_HANDICAP = 36;
 
 function originalPlayerName(question: RoundSetupQuestion) {
   const quoted = /[“"]([^”"]+)[”"]/.exec(question.prompt)?.[1]?.trim();
@@ -29,7 +29,7 @@ export function parseUnknownPlayerClarification(
   const normalizedHandicap = handicapMatch[0].replace(",", ".");
   const numericHandicap = Number(normalizedHandicap);
   const handicap = normalizedHandicap.startsWith("+") ? -Math.abs(numericHandicap) : numericHandicap;
-  if (!Number.isFinite(handicap) || handicap < MIN_HANDICAP || handicap > MAX_HANDICAP) return null;
+  if (!Number.isFinite(handicap) || handicap < MIN_HANDICAP) return null;
 
   const prefix = answer.slice(0, handicapMatch.index)
     .replace(/\b(?:con\s+)?(?:hcp|handicap)(?:\s+(?:de|es))?\s*[:=]?\s*$/i, "")
@@ -40,5 +40,5 @@ export function parseUnknownPlayerClarification(
     .trim();
   const name = prefix || originalPlayerName(question);
   if (!name || name.length > 120 || /[\r\n]/.test(name)) return null;
-  return { name, handicap };
+  return { name, handicap: Math.min(MAX_HANDICAP, handicap) };
 }

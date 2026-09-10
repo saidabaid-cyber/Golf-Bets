@@ -20,6 +20,7 @@ import { consumeBackyardAiLimit } from "../../../../lib/backyard-ai/server/rate-
 import { verifyStoredAiProcessingConsent } from "../../../../lib/backyard-ai/server/processing-consent";
 import { consumePersistentRulesAiLimit } from "../../../../lib/rules-ai-rate-limit";
 import { getSupabaseAdmin } from "../../../../lib/supabase/server";
+import { BET_REGISTRY } from "../../../../lib/bets/registry";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -86,10 +87,11 @@ function logRoundSetupProvider(input: {
 }
 
 function instructions() {
+  const catalog = BET_REGISTRY.map((definition) => definition.label).join(", ");
   return [
     "You interpret Mexican Spanish golf round setup commands for The Backyard.",
     "Rewrite the user's request as one concise canonical Spanish command while preserving every explicit player name, course, tee, start hole, hole count, handicap basis, stake, participant exclusion, team and rule exactly.",
-    "Supported catalog concepts include Skins, Nassau grupal, Nassau individual, Bola Amiga, Conejos, Viboritas, Camellos, Peces, Unidades/Copas, Foursome, Monkey, Loba, Mini Polla, Polla components, Dollar a Stroke, Presiones individuales, Presiones por parejas, Chicago, Vegas and Menos Putts.",
+    `Supported catalog concepts are: ${catalog}.`,
     "Never add a game, amount, player, team, course, handicap, press, carry, multiplier or exclusion that was not explicit.",
     "Never calculate scores, handicaps, bets, balances, money results or settlement.",
     "Preserve memory references such as los mismos del domingo, de siempre, la semana pasada, or la última vez; do not resolve them.",
