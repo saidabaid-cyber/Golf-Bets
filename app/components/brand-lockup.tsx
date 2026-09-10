@@ -5,7 +5,7 @@ import { useState } from "react";
 
 export function BrandLockup({ compact = false }: { compact?: boolean }) {
   const [assetFallback, setAssetFallback] = useState<"svg" | "png" | "wordmark">("svg");
-  return <div className={`backyardBrand ${compact ? "compact" : ""}`} aria-label="The Backyard">
+  return <div className={`backyardBrand ${compact ? "compact" : ""}`}>
     {assetFallback !== "wordmark" && <picture className="backyardLogoPicture">
       {assetFallback === "svg" && <source srcSet="/brand/the-backyard-logo.svg" type="image/svg+xml" />}
       <Image className="backyardLogo" src="/brand/the-backyard-logo.png" alt="THE BACKYARD" width={2290} height={1892} priority={!compact} onError={() => setAssetFallback((current) => current === "svg" ? "png" : "wordmark")} />

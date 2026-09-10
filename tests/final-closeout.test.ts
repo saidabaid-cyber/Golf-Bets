@@ -31,3 +31,9 @@ test("membership lookup fails closed unless BETA_PRO is explicitly assigned", as
   assert.equal(membership.canUseFeature(undefined, "SHOT_TRACKING"), false);
   assert.equal(membership.canUseFeature("BETA_PRO", "SHOT_TRACKING"), true);
 });
+
+test("brand lockup relies on real image/text semantics instead of invalid ARIA on a div", () => {
+  const lockup = readFileSync(`${root}/app/components/brand-lockup.tsx`, "utf8");
+  assert.match(lockup, /alt="THE BACKYARD"/);
+  assert.doesNotMatch(lockup, /className=\{`backyardBrand[^\n]+aria-label/);
+});
