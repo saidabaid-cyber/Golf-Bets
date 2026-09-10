@@ -98,7 +98,7 @@ function freshDraft(profile: BackyardProfile): BetaDraft {
     planId: selectablePlanId(profile.planId),
     group: {
       groupId: makeId("group"),
-      name: "Domingos",
+      name: "",
       imageUrl: "",
       privacy: "private",
       members: [ownerMember(profile)],
@@ -268,6 +268,7 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, bett
   });
 
   if (progress.step === "welcome") return <Shell progress={progress} {...navigationProps} eyebrow="EMPIEZA A TU MANERA" title="Tu Backyard, sin fricción" description="Puedes entrar rápido o completar tu perfil para personalizar mejor rondas, estadísticas, equipo, fitting e IA." actions={<button type="button" className="primary big" disabled={!entryMode} onClick={() => entryMode === "complete" ? advance("ghin") : finish()}>CONTINUAR</button>}>
+    <div className={styles.welcomeHero} aria-hidden="true"><span className={styles.heroFlag}>⛳</span><div><b>Tu golf, en un solo lugar</b><small>Rondas rápidas · amigos · equipo · estadísticas</small></div><span className={styles.heroBall}>●</span></div>
     <div className={styles.entryGrid}>
       <button type="button" className={entryMode === "quick" ? styles.entrySelected : styles.entryChoice} aria-pressed={entryMode === "quick"} onClick={() => setEntryMode("quick")}><span aria-hidden="true">⚡</span><div><b>Rápida</b><p>Entra con el perfil básico que acabas de guardar. Equipo, fitting y grupos quedan disponibles para después.</p></div></button>
       <button type="button" className={entryMode === "complete" ? styles.entrySelected : styles.entryChoice} aria-pressed={entryMode === "complete"} onClick={() => setEntryMode("complete")}><span aria-hidden="true">⛳</span><div><b>Completa</b><p>Configura HCP, bolsa, objetivos y tu primer grupo para recibir una experiencia más personalizada.</p></div></button>
@@ -310,7 +311,8 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, bett
   </Shell>;
 
   if (progress.step === "group") return <Shell progress={progress} {...navigationProps} eyebrow="TU PRIMER GRUPO" title="Configura tu primer grupo" description="Será una plantilla habitual: jugadores, HCP y apuestas listas para reutilizar." actions={<><button className="primary big" disabled={!draft.group.name.trim()} onClick={() => advance("players")}>Crear grupo</button><button className={styles.skip} onClick={() => finish()}>Omitir por ahora</button></>}>
-    <div className={styles.groupIdentity}><label>Nombre del grupo<input maxLength={80} value={draft.group.name} onChange={(event) => updateGroup({ name: event.target.value })} placeholder="Ej. Domingos" /></label><ProfileImagePicker kind="group" value={draft.group.imageUrl} onChange={(imageUrl) => updateGroup({ imageUrl })} /><label>Privacidad<select value={draft.group.privacy} onChange={(event) => updateGroup({ privacy: event.target.value === "invite_only" ? "invite_only" : "private" })}><option value="private">Privado · sólo visible para integrantes</option><option value="invite_only">Por invitación · se entra con link o invitación</option></select></label></div>
+    <div className={styles.groupIdentity}><label>Nombre del grupo<input maxLength={80} value={draft.group.name} onChange={(event) => updateGroup({ name: event.target.value })} placeholder="Ej. Domingos" autoComplete="off" /></label><ProfileImagePicker kind="group" value={draft.group.imageUrl} onChange={(imageUrl) => updateGroup({ imageUrl })} /></div>
+    <fieldset className={styles.privacyChoices}><legend>Privacidad</legend><button type="button" className={draft.group.privacy === "private" ? styles.privacySelected : styles.privacyChoice} aria-pressed={draft.group.privacy === "private"} onClick={() => updateGroup({ privacy: "private" })}><b>Privado</b><span>Sólo los integrantes que agregues pueden ver el grupo.</span></button><button type="button" className={draft.group.privacy === "invite_only" ? styles.privacySelected : styles.privacyChoice} aria-pressed={draft.group.privacy === "invite_only"} onClick={() => updateGroup({ privacy: "invite_only" })}><b>Por invitación</b><span>Permite sumar personas con una invitación segura o un link revocable.</span></button></fieldset>
     {message && <div className={styles.error} role="alert">{message}</div>}
   </Shell>;
 
@@ -352,7 +354,7 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, bett
       updateGroup({ template: normalizedTemplate });
       advance("ready", false, group.id);
     };
-    return <Shell progress={progress} {...navigationProps} eyebrow="DETALLES" title={activeBetCount(template) ? "Ajusta los detalles habituales" : "Sin apuestas habituales"} description={activeBetCount(template) ? "Valores, participantes, equipos, HCP y demás preferencias se guardarán en Domingos; nunca resultados." : "Puedes guardar el grupo solo con sus jugadores y agregar apuestas después."} actions={<button className="primary big" onClick={saveGroup}>Guardar grupo</button>}>
+    return <Shell progress={progress} {...navigationProps} eyebrow="DETALLES" title={activeBetCount(template) ? "Ajusta los detalles habituales" : "Sin apuestas habituales"} description={activeBetCount(template) ? `Valores, participantes, equipos, HCP y demás preferencias se guardarán en ${draft.group.name.trim() || "este grupo"}; nunca resultados.` : "Puedes guardar el grupo solo con sus jugadores y agregar apuestas después."} actions={<button className="primary big" onClick={saveGroup}>Guardar grupo</button>}>
       {activeBetCount(template) ? <GroupBetTemplateEditor value={template} players={players} ownerId={template.ownerMemberId} mode="details" onChange={setTemplate} requestActivation={bettingConsentGranted ? undefined : requestBettingConsent} /> : <div className={styles.emptyState}><span>⛳</span><b>Grupo básico listo</b><p>La plantilla abrirá con las apuestas desactivadas.</p></div>}
       {message && <div className={styles.error} role="alert">{message}</div>}
     </Shell>;
@@ -360,6 +362,7 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, bett
 
   if (progress.step === "ready") return <Shell progress={progress} {...navigationProps} eyebrow="GRUPO LISTO" title="¡Listo!" description={`Tu grupo ${draft.group.name.trim()} ha sido creado correctamente.`} actions={<><button className="primary big" onClick={() => finish(progress.groupId)}>Ir al inicio</button><button className="secondary big" onClick={() => { const nextDraft = freshDraft(profile); setDraft(nextDraft); const next = { ...progress, status: "in_progress" as const, step: "group" as const, groupId: undefined, updatedAt: new Date().toISOString() }; persistBetaOnboardingProgress(localStorage, next); setProgress(next); }}>Crear otro grupo</button></>}>
     <div className={styles.readyMark}>✓</div><div className={styles.readySummary}><span>{draft.group.members.length} jugadores</span><span>{activeBetCount(template)} apuestas habituales</span><span>{draft.group.privacy === "private" ? "Privado" : "Solo invitación"}</span></div>
+    {draft.group.privacy === "invite_only" && <div className={styles.inviteFoundation}><b>Compartir invitación</b><p>El enlace se generará desde la vista del grupo cuando haya una base Preview aislada. No creamos tokens locales inseguros ni fingimos haber enviado invitaciones.</p><button type="button" className="secondary" disabled>Generar link seguro · pendiente de Preview DB</button></div>}
   </Shell>;
 
   return null;
