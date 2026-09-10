@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { serverPhase2FeatureFlags } from "../../../../../features/feature-flags/server";
-import { normalizeUsernameSearch } from "../../../../../features/social/domain";
-import { authenticatedRequest } from "../../../../../lib/server-auth";
+import { serverPhase2FeatureFlags } from "../../../../features/feature-flags/server";
+import { normalizeUsernameSearch } from "../../../../features/social/domain";
+import { authenticatedRequest } from "../../../../lib/server-auth";
 
 const PRIVATE = { "cache-control": "private, no-store" };
 
@@ -25,4 +25,3 @@ export async function GET(request: NextRequest) {
   }
   return NextResponse.json({ data: data ?? [] }, { headers: PRIVATE });
 }
-

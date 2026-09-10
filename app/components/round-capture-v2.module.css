@@ -88,6 +88,12 @@
 .signedStepper span { display: grid; place-items: center; padding: 0 6px; font-size: 13px; font-weight: 950; }
 
 .ownerStatistics { margin-top: 9px; border: 1px solid var(--line); border-radius: 16px; background: #fff; padding: 11px; display: grid; gap: 11px; }
+.shotTracker { margin-top: 9px; border: 1px solid #cfe2d3; border-radius: 16px; background: #f6faf7; padding: 11px; display: grid; gap: 10px; }
+.shotActions { display: flex; gap: 7px; flex-wrap: wrap; }
+.shotActions button { min-height: 42px; }
+.shotList { display: flex; flex-wrap: wrap; gap: 5px; }
+.shotList span { border-radius: 999px; background: #e7f1e9; color: var(--green); padding: 5px 8px; font-size: 10px; font-weight: 800; }
+.shotStatus { margin: 0; color: var(--muted); font-size: 10px; }
 .statsHeading { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .statsHeading h3 { margin: 1px 0 0; font-size: 14px; }
 .statsHeading small { color: var(--muted); font-size: 10px; }

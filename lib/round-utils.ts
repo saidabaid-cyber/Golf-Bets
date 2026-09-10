@@ -80,6 +80,10 @@ export function normalizeRoundDraft(value: unknown, resolvedOwnerId?: string) {
     putts: validPuttRows(source.putts),
     scoreCaptureMode: normalizeScoreCaptureMode(source.scoreCaptureMode),
     advancedStats: normalizeAdvancedStats(source.advancedStats),
+    shots: Array.isArray(source.shots) ? source.shots.filter((item) => {
+      const shot = recordValue(item);
+      return Boolean(shot && typeof shot.id === "string" && typeof shot.roundId === "string" && typeof shot.playerId === "string" && Number.isInteger(shot.hole) && shot.hole >= 1 && shot.hole <= 18 && Number.isInteger(shot.sequence) && shot.sequence >= 1 && typeof shot.clubLabel === "string" && typeof shot.startedAt === "string");
+    }) : [],
     unitEvents: Array.isArray(source.unitEvents) ? source.unitEvents : [],
     counterBetEvents: Array.isArray(source.counterBetEvents) ? source.counterBetEvents : [],
     counterBetKeepers: recordValue(source.counterBetKeepers),

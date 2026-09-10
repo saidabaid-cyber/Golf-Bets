@@ -262,6 +262,9 @@ button:disabled{cursor:not-allowed;opacity:.5}.app{padding-top:calc(14px + env(s
 .betaHomeStats>button:active{transform:translateY(1px)}
 .betaHomeStats span,.betaStatTiles span{font-size:10px}.betaHomeStats small,.betaStatTiles small{font-size:10px}.betaProfileGolfStats small{font-size:9px}.betaDataNote{font-size:10px}
 .betaStatsScreen .scopeFilters button,.sectionTitle>.textButton{min-height:44px}.betaTrendDates span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px}
+.betaStatsFilters{display:grid;gap:10px}.betaStatsFilterSelects{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.betaStatsFilterSelects label{display:grid;gap:5px;font-size:10px;font-weight:800;color:var(--muted)}.betaTrendFacts{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}.betaTrendFacts>span{display:grid;gap:2px;padding:7px 9px;border-radius:10px;background:#f1f6f2;font-size:11px}.betaTrendFacts small{color:var(--muted);font-size:9px}@media(max-width:420px){.betaStatsFilterSelects{grid-template-columns:1fr}}
+.betaAiInsight>div:last-child{display:grid;gap:8px}.betaAiInsight ul{margin:0;padding-left:20px}.betaAiInsight p,.betaAiInsight small{color:var(--muted)}
+.liveRoundQuestion{display:grid;gap:12px}.liveQuestionSuggestions{display:flex;flex-wrap:wrap;gap:8px}.liveQuestionComposer{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}.liveQuestionComposer input{min-width:0}.liveQuestionAnswer{margin:0;padding:12px 14px;border-radius:14px;background:color-mix(in srgb,var(--green) 9%,var(--surface));font-weight:700;line-height:1.45}@media(max-width:520px){.liveQuestionComposer{grid-template-columns:1fr}.liveQuestionComposer button{width:100%}}
 @media(hover:hover){.betaHomeStats>button:hover{border-color:#aac8b1;background:#fbfdfb}}
 @media(max-width:340px){.betaHomeStats>button,.betaStatTiles article{padding:10px}}
 

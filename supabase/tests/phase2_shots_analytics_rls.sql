@@ -1,0 +1,14 @@
+begin;
+select plan(10);
+select has_table('public', 'round_shots_v2');
+select has_table('public', 'product_usage_events_v2');
+select row_security_active('public', 'round_shots_v2');
+select row_security_active('public', 'product_usage_events_v2');
+select policies_are('public', 'round_shots_v2', array['round shots participant read','round shots authorized insert','round shots owner update','round shots owner delete']);
+select policies_are('public', 'product_usage_events_v2', array['usage events self insert']);
+select has_index('public', 'round_shots_v2', 'round_shots_v2_round_player_idx');
+select has_index('public', 'product_usage_events_v2', 'product_usage_events_v2_name_time_idx');
+select function_returns('public', 'phase2_admin_aggregate_metrics', array[]::text[], 'jsonb');
+select function_privs_are('public', 'phase2_admin_aggregate_metrics', array[]::text[], 'authenticated', array['EXECUTE']);
+select * from finish();
+rollback;

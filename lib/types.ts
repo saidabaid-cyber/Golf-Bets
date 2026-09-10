@@ -492,6 +492,24 @@ export type AdvancedHoleStat = {
 
 export type AdvancedStatsByHole = Record<number, Record<string, AdvancedHoleStat>>;
 
+export type RoundShotSnapshot = {
+  id: string;
+  roundId: string;
+  playerId: string;
+  hole: number;
+  sequence: number;
+  clubId?: string;
+  clubLabel: string;
+  /** Frozen at capture time; later bag edits never rewrite this value. */
+  clubSnapshot: { id?: string; label: string; category?: string; model?: string };
+  startLocation?: { latitude: number; longitude: number; accuracyMeters?: number };
+  endLocation?: { latitude: number; longitude: number; accuracyMeters?: number };
+  distanceYards?: number;
+  startedAt: string;
+  endedAt?: string;
+  source: "MANUAL" | "GPS" | "WATCH" | "RANGEFINDER" | "IMPORT";
+};
+
 export type Expense = {
   caddie: number;
   food: number;
@@ -584,6 +602,8 @@ export type RoundSnapshot = {
   supplementalBets?: SupplementalBet[];
   putts?: PuttsByHole;
   advancedStats?: AdvancedStatsByHole;
+  /** Optional principal-player shots with immutable club snapshots. */
+  shots?: RoundShotSnapshot[];
   ballFriendSetup?: Record<number, BallFriendHole>;
   segments?: FoursomeSegment[];
   playerBalances?: Record<string, number>;

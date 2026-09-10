@@ -1,11 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import type { GolfInsights, ScoredRoundInsight } from "../../lib/golf-insights";
+import type { RoundSnapshot } from "../../lib/types";
+import { buildFilteredGolfInsights, buildGolfTrends, filterStatsRounds, type StatsWindow } from "../../features/stats/domain";
+import { structuredGolfInsightInput, type GolfInsightExplanation } from "../../features/ai/insights";
+import { requestBackyardAi } from "../../lib/backyard-ai/client-api";
+import { browserAiProcessingConsentStorage, hasActiveAiProcessingConsent } from "../../lib/backyard-ai/processing-consent";
+import { AI_PROVIDER_PROCESSING_CONSENT, backyardAiProviderConsent } from "../../lib/backyard-ai/privacy";
+import { recordProductEvent } from "../../features/analytics/client";
 
 export type StatsDashboardProps = {
   insights: GolfInsights;
+  rounds?: RoundSnapshot[];
+  consentOwnerId?: string;
+  accessToken?: string | null;
   onOpenHistory: () => void;
   onOpenRound: (roundId: string) => void;
 };
@@ -82,9 +92,34 @@ function TrendChart({ rounds, mode }: { rounds: ScoredRoundInsight[]; mode: Tren
   </div>;
 }
 
-export function StatsDashboard({ insights, onOpenHistory, onOpenRound }: StatsDashboardProps) {
+export function StatsDashboard({ insights: suppliedInsights, rounds = [], consentOwnerId, accessToken, onOpenHistory, onOpenRound }: StatsDashboardProps) {
   const [requestedScope, setRequestedScope] = useState<9 | 18>();
   const [trendMode, setTrendMode] = useState<TrendMode>("gross");
+  const [statsWindow, setStatsWindow] = useState<StatsWindow>(10);
+  const [courseFilter, setCourseFilter] = useState("");
+  const [teeFilter, setTeeFilter] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiMessage, setAiMessage] = useState("");
+  const [aiExplanation, setAiExplanation] = useState<GolfInsightExplanation | null>(null);
+  const filters = useMemo(() => ({ window: statsWindow, ...(courseFilter ? { courseName: courseFilter } : {}), ...(teeFilter ? { teeName: teeFilter } : {}) }), [courseFilter, statsWindow, teeFilter]);
+  const filteredRounds = useMemo(() => rounds.length ? filterStatsRounds(rounds, filters) : [], [filters, rounds]);
+  const insights = useMemo(() => rounds.length ? buildFilteredGolfInsights(rounds, filters) : suppliedInsights, [filters, rounds, suppliedInsights]);
+  const metricTrends = useMemo(() => buildGolfTrends(filteredRounds, Math.min(5, Math.max(3, Math.floor(filteredRounds.length / 2)))), [filteredRounds]);
+  const courseOptions = useMemo(() => [...new Set(rounds.map((round) => round.courseName).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es-MX")), [rounds]);
+  const teeOptions = useMemo(() => [...new Set(rounds.flatMap((round) => [round.teeName, ...(round.playerTeeAssignments?.map((tee) => tee.teeName) ?? [])]).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es-MX")), [rounds]);
+  const insightInput = useMemo(() => structuredGolfInsightInput(insights, metricTrends), [insights, metricTrends]);
+  async function requestAiInsight() {
+    if (!consentOwnerId || !hasActiveAiProcessingConsent(browserAiProcessingConsentStorage(), consentOwnerId, AI_PROVIDER_PROCESSING_CONSENT)) {
+      setAiMessage("Activa Procesamiento IA en Mi Cuenta para pedir una explicación."); return;
+    }
+    setAiBusy(true); setAiMessage(""); setAiExplanation(null);
+    try {
+      setAiExplanation(await requestBackyardAi<GolfInsightExplanation>("/api/backyard-ai/insights", { aggregates: insightInput, consent: backyardAiProviderConsent(AI_PROVIDER_PROCESSING_CONSENT) }, 30_000, accessToken));
+      void recordProductEvent({ eventId: `ai-insight-${crypto.randomUUID()}`, eventName: "ai_insight_viewed", accessToken, metadata: { source: "stats", quantity: 1 } });
+    }
+    catch { setAiMessage("No pude explicar esta muestra ahora. Tus estadísticas calculadas siguen intactas."); }
+    finally { setAiBusy(false); }
+  }
   const scoreScopes = ([9, 18] as const).filter((holes) => Boolean(insights.scoreCohorts[holes]));
   const preferredScope = requestedScope && insights.scoreCohorts[requestedScope]
     ? requestedScope
@@ -97,7 +132,7 @@ export function StatsDashboard({ insights, onOpenHistory, onOpenRound }: StatsDa
   if (!insights.scoredRounds || !selectedCohort) {
     return <section className="betaStatsScreen" aria-labelledby="beta-stats-title">
       <section className="hero betaStatsHero"><div><span className="eyebrow">THE BACKYARD · STATS</span><h1 id="beta-stats-title">Tu juego, con datos reales.</h1><p>Las estadísticas se calculan únicamente con tarjetas completas.</p></div></section>
-      <section className="card betaStatsEmpty"><span className="betaEmptyFlag" aria-hidden="true">↗</span><h2>Todavía no hay scores completos.</h2><p>{insights.rounds ? "Tus rondas guardadas siguen disponibles, pero aún no contienen una tarjeta completa para calcular estadísticas confiables." : "Cierra y guarda tu primera ronda para empezar a medir tu juego."}</p><button type="button" className="primary" onClick={onOpenHistory}>{insights.rounds ? "Revisar histórico" : "Abrir histórico"}</button></section>
+      <section className="card betaStatsEmpty"><span className="betaEmptyFlag" aria-hidden="true">↗</span><h2>{rounds.length && (courseFilter || teeFilter) ? "No hay rondas con estos filtros." : "Todavía no hay scores completos."}</h2><p>{rounds.length && (courseFilter || teeFilter) ? "Tu histórico no cambió. Limpia los filtros para volver a ver toda la muestra." : insights.rounds ? "Tus rondas guardadas siguen disponibles, pero aún no contienen una tarjeta completa para calcular estadísticas confiables." : "Cierra y guarda tu primera ronda para empezar a medir tu juego."}</p>{rounds.length && (courseFilter || teeFilter) ? <button type="button" className="primary" onClick={() => { setCourseFilter(""); setTeeFilter(""); }}>Limpiar filtros</button> : <button type="button" className="primary" onClick={onOpenHistory}>{insights.rounds ? "Revisar histórico" : "Abrir histórico"}</button>}</section>
     </section>;
   }
 
@@ -119,6 +154,12 @@ export function StatsDashboard({ insights, onOpenHistory, onOpenRound }: StatsDa
   return <section className="betaStatsScreen" aria-labelledby="beta-stats-title">
     <section className="hero betaStatsHero"><div><span className="eyebrow">THE BACKYARD · STATS</span><h1 id="beta-stats-title">Así viene tu juego.</h1><p>Scores comparables con {selectedCohort.rounds} tarjeta{selectedCohort.rounds === 1 ? "" : "s"} completa{selectedCohort.rounds === 1 ? "" : "s"} de {scopeLabel}. Resultado por hoyo considera las {insights.scoredRounds} completas.</p></div><button type="button" className="secondary" onClick={onOpenHistory}>Ver histórico</button></section>
 
+    {rounds.length > 0 && <section className="card betaStatsFilters" aria-label="Filtros de estadísticas">
+      <div className="segmented scopeFilters" role="group" aria-label="Ventana de rondas">{([[5, "Últimas 5"], [10, "Últimas 10"], [20, "Últimas 20"], ["SEASON", "Temporada"], ["ALL", "Todo"]] as const).map(([value, label]) => <button type="button" key={value} className={statsWindow === value ? "active" : ""} aria-pressed={statsWindow === value} onClick={() => setStatsWindow(value)}>{label}</button>)}</div>
+      <div className="betaStatsFilterSelects"><label>Campo<select value={courseFilter} onChange={(event) => setCourseFilter(event.target.value)}><option value="">Todos</option>{courseOptions.map((course) => <option key={course} value={course}>{course}</option>)}</select></label><label>Tee<select value={teeFilter} onChange={(event) => setTeeFilter(event.target.value)}><option value="">Todos</option>{teeOptions.map((tee) => <option key={tee} value={tee}>{tee}</option>)}</select></label></div>
+      <small>{filteredRounds.length} ronda{filteredRounds.length === 1 ? "" : "s"} en la muestra. Los filtros no alteran tu histórico.</small>
+    </section>}
+
     {scoreScopes.length === 2 && <div className="segmented scopeFilters" role="group" aria-label="Formato de ronda para comparar">
       {scoreScopes.map((holes) => <button type="button" key={holes} className={selectedCohort.holeCount === holes ? "active" : ""} aria-pressed={selectedCohort.holeCount === holes} onClick={() => setRequestedScope(holes)}>{holes} hoyos <small>· {insights.scoreCohorts[holes]?.rounds}</small></button>)}
     </div>}
@@ -138,6 +179,13 @@ export function StatsDashboard({ insights, onOpenHistory, onOpenRound }: StatsDa
       </div>
       <TrendChart rounds={comparableRounds} mode={trendMode} />
       <div className="betaAverageStrip"><span>Últimas 5 <b>{decimal(selectedCohort.last5Average)}</b></span><span>Últimas 10 <b>{decimal(selectedCohort.last10Average)}</b></span><span>Mejor vs par <b>{relative(selectedCohort.bestVsPar)}</b></span></div>
+      {metricTrends.length > 0 && <div className="betaTrendFacts" aria-label="Tendencias comparables">{metricTrends.map((trend) => <span key={trend.metric}><b>{trend.metric === "score" ? "Score" : trend.metric === "putts" ? "Putts" : "Fairways"}</b> {trend.previous.toFixed(trend.metric === "fairways" ? 2 : 1)} → {trend.current.toFixed(trend.metric === "fairways" ? 2 : 1)} <small>n={trend.sampleSize} por periodo</small></span>)}</div>}
+    </section>
+
+    <section className="card betaAiInsight">
+      <div className="sectionTitle"><div><h2>Backyard AI Insights</h2><p>La IA recibe únicamente estos agregados; no recalcula scores, HCP, ganadores ni dinero.</p></div><button type="button" className="secondary" disabled={aiBusy || insightInput.sampleRounds < 1} onClick={requestAiInsight}>{aiBusy ? "Analizando…" : "Explicar mi juego"}</button></div>
+      {aiExplanation && <div><b>{aiExplanation.summary}</b><ul>{aiExplanation.observations.map((observation) => <li key={observation}>{observation}</li>)}</ul><small>{aiExplanation.caveat}</small></div>}
+      {aiMessage && <p role="status">{aiMessage}</p>}
     </section>
 
     <section className="card betaScoringCard">

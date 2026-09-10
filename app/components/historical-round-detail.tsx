@@ -10,6 +10,7 @@ import type { Course, HoleScore, Player, RoundSnapshot } from "../../lib/types";
 import { FullScorecard } from "./full-scorecard";
 import { GolfLeaderboard, type GolfLeaderboardMode } from "./golf-leaderboard";
 import { RoundStatsCard } from "./round-stats-card";
+import { summarizeClubDistances } from "../../features/shots/domain";
 
 const money = (value: number) => `${value > 0 ? "+" : value < 0 ? "−" : ""}$${Math.abs(value).toLocaleString("es-MX", { maximumFractionDigits: 2 })}`;
 const tone = (value: number) => value > 0 ? "good" : value < 0 ? "bad" : "";
@@ -68,6 +69,7 @@ export function HistoricalRoundDetail({ round, onEdit, onPhoto }: {
   const [showScorecard, setShowScorecard] = useState(false);
   const recap = useMemo(() => buildHistoricalRoundRecap(round), [round]);
   const legacyCategories = useMemo(() => legacyOwnerCategories(round), [round]);
+  const clubDistances = useMemo(() => summarizeClubDistances(round.shots || []), [round.shots]);
   const canShowLegacyCategories = round.playerBalances === undefined && round.categoryBalances === undefined;
   const issueCopy = [...new Set(recap.issues.map((issue) => issueMessages[issue.code]))];
   const safelyEditable = Boolean(recap.golf)
@@ -230,6 +232,8 @@ export function HistoricalRoundDetail({ round, onEdit, onPhoto }: {
     </section> : null}
 
     {recap.meta.ownerId && <RoundStatsCard round={round} playerId={recap.meta.ownerId} />}
+
+    {round.shots?.length ? <section className="card" aria-labelledby="historical-shots-title"><div className="sectionTitle"><div><h2 id="historical-shots-title">Shot Tracking</h2><p>{round.shots.length} golpe{round.shots.length === 1 ? "" : "s"} opcional{round.shots.length === 1 ? "" : "es"} con snapshot del palo usado.</p></div></div><div className="historicalStatRows">{clubDistances.map((club) => <span key={club.clubLabel}><small>{club.clubLabel}</small><b>{club.averageYards === null ? "Muestra insuficiente" : `${club.averageYards} yd`}</b><em>n={club.sampleCount} · {club.confidence === "RELIABLE" ? "confiable" : club.confidence === "EARLY" ? "temprano" : "sin promedio"}</em></span>)}</div></section> : null}
 
     {issueCopy.length > 0 && <section className="card historicalDataWarning" role="status">
       <h2>Datos históricos limitados</h2>

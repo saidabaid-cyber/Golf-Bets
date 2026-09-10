@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import type {
   AdvancedHoleStat,
   BetConfig,
@@ -9,11 +9,13 @@ import type {
   Hole,
   Player,
   PlayerTeeAssignmentSnapshot,
+  RoundShotSnapshot,
   ScoreCaptureMode,
   SupplementalBet,
 } from "../../lib/types";
 import { haversineDistanceKm, isValidGeographicPoint } from "../../lib/course-distance";
 import { calculateGreenDistances, gpsFallbackMessage } from "../../features/gps/domain";
+import { cancelShot, closeShot, startShot, type ShotLocation } from "../../features/shots/domain";
 import { roundCaptureFieldsForPlayer, scoreToParLabel } from "../../lib/round-capture";
 import { ScorecardHoleNetPreview } from "./scorecard-hole-preview";
 import { CompactStepper, SignedStepper, TapCounter } from "./bet-fields/capture-controls";
@@ -39,6 +41,8 @@ export type RoundCaptureV2Props = {
   scores: Record<string, number | null | undefined>;
   putts: Record<string, number | null | undefined>;
   advancedStats: Record<string, AdvancedHoleStat | undefined>;
+  roundId: string;
+  shots: RoundShotSnapshot[];
   counterQuantities: CounterQuantities;
   unitQuantities: Record<string, number>;
   groupNassauLabel?: string;
@@ -52,6 +56,7 @@ export type RoundCaptureV2Props = {
   onCounterChange: (kind: CounterBetKind, playerId: string, value: number | null) => void;
   onUnitDelta: (playerId: string, delta: number) => void;
   onAdvancedChange: (playerId: string, patch: Partial<AdvancedHoleStat>) => void;
+  onShotsChange: (shots: RoundShotSnapshot[]) => void;
   onOpenLoba: () => void;
   onOpenBallFriend: () => void;
   onOpenScanner: () => void;
@@ -93,6 +98,26 @@ function GroupRequiredInputs({ player, fields, putts, stat, unitsActive, units, 
 
 const FALLBACK_TEE_CLUBS = ["Driver", "Madera", "Híbrido", "Hierro", "Otro", "No sé"] as const;
 
+function shotId() {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  const values = crypto.getRandomValues(new Uint8Array(16));
+  values[6] = (values[6] & 0x0f) | 0x40;
+  values[8] = (values[8] & 0x3f) | 0x80;
+  const hex = Array.from(values, (value) => value.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+function currentLocation(): Promise<ShotLocation> {
+  return new Promise((resolve, reject) => {
+    if (!("geolocation" in navigator)) { reject(new Error("GPS_UNAVAILABLE")); return; }
+    navigator.geolocation.getCurrentPosition(
+      (position) => resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude, accuracyMeters: position.coords.accuracy }),
+      reject,
+      { enableHighAccuracy: true, timeout: 8_000, maximumAge: 5_000 },
+    );
+  });
+}
+
 function OwnerStatistics({ player, stat, teeClubs, onChange }: { player: Player; stat: AdvancedHoleStat; teeClubs: readonly string[]; onChange: (patch: Partial<AdvancedHoleStat>) => void }) {
   return <section className={styles.ownerStatistics} aria-label={`Estadísticas opcionales de ${player.name}`}>
     <div className={styles.statsHeading}><div><span className="eyebrow">SÓLO TÚ</span><h3>Estadísticas del hoyo</h3></div><small>Todo es opcional</small></div>
@@ -124,11 +149,16 @@ export function RoundCaptureV2(props: RoundCaptureV2Props) {
   } = props;
   const [gpsState, setGpsState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [gpsMessage, setGpsMessage] = useState("");
+  const [shotBusy, setShotBusy] = useState(false);
+  const [shotMessage, setShotMessage] = useState("");
+  const [shotClub, setShotClub] = useState("");
   const owner = players.find((player) => player.id === ownerId) || players[0];
   const group = players.filter((player) => player.id !== owner?.id);
   const quickFields = (playerId: string) => roundCaptureFieldsForPlayer({ mode: "quick", playerId, playedHoleIndex: currentIndex, bets, supplementalBets });
   const teeLabel = (playerId: string) => playerTeeAssignments.find((assignment) => assignment.playerId === playerId)?.teeName || course.teeName;
   const unitParticipates = (playerId: string) => bets.units.enabled && bets.units.participantIds.includes(playerId);
+  const currentHoleShots = useMemo(() => props.shots.filter((shot) => shot.playerId === owner?.id && shot.hole === hole.number), [hole.number, owner?.id, props.shots]);
+  const openShot = currentHoleShots.find((shot) => !shot.endedAt);
 
   function requestGps() {
     if (!("geolocation" in navigator)) {
@@ -163,6 +193,29 @@ export function RoundCaptureV2(props: RoundCaptureV2Props) {
       },
       { enableHighAccuracy: true, timeout: 8_000, maximumAge: 20_000 },
     );
+  }
+
+  async function beginShot() {
+    if (!owner || !shotClub || shotBusy) return;
+    setShotBusy(true);
+    let location: ShotLocation | undefined;
+    try { location = await currentLocation(); }
+    catch { setShotMessage("GPS no disponible: el golpe se guardará manualmente, sin inventar distancia."); }
+    const next = startShot({ id: shotId(), roundId: props.roundId, playerId: owner.id, hole: hole.number, clubLabel: shotClub, location, startedAt: new Date().toISOString(), existing: props.shots });
+    props.onShotsChange([...props.shots, next]);
+    setShotMessage(location ? `Golpe ${next.sequence} iniciado con ${shotClub}.` : `Golpe ${next.sequence} guardado; falta cerrar su distancia.`);
+    setShotBusy(false);
+  }
+
+  async function finishShot() {
+    if (!openShot || shotBusy) return;
+    setShotBusy(true);
+    let location: ShotLocation | undefined;
+    try { location = await currentLocation(); } catch { /* Manual close deliberately has no distance. */ }
+    const closed = closeShot(openShot, location, new Date().toISOString());
+    props.onShotsChange(props.shots.map((shot) => shot.id === openShot.id ? closed : shot));
+    setShotMessage(closed.distanceYards !== undefined ? `Golpe cerrado: ${closed.distanceYards} yd.` : "Golpe cerrado sin distancia confiable.");
+    setShotBusy(false);
   }
 
   function setGolfFact(playerId: string, kind: "greenSideBunkerCount" | "fairwayBunkerCount" | "bunkerCount" | "penaltyAreaCount", value: number) {
@@ -251,7 +304,18 @@ export function RoundCaptureV2(props: RoundCaptureV2Props) {
           {props.playerIndicators(owner.id).length > 0 && <span className="playerHoleBetBadges">{props.playerIndicators(owner.id).map((indicator) => <i key={indicator}>{indicator}</i>)}</span>}
         </article>
 
-        {mode === "advanced" && <OwnerStatistics player={owner} stat={advancedStats[owner.id] || {}} teeClubs={ownerTeeClubs} onChange={(patch) => props.onAdvancedChange(owner.id, patch)} />}
+        {mode === "advanced" && <>
+          <OwnerStatistics player={owner} stat={advancedStats[owner.id] || {}} teeClubs={ownerTeeClubs} onChange={(patch) => props.onAdvancedChange(owner.id, patch)} />
+          <section className={styles.shotTracker} aria-label="Shot Tracking opcional">
+            <div className={styles.statsHeading}><div><span className="eyebrow">OPCIONAL</span><h3>Registrar golpe</h3></div><small>GPS sólo si es confiable</small></div>
+            <div className={styles.choiceRow}>{ownerTeeClubs.map((club) => <ToggleChip key={club} label={club} active={shotClub === club} onClick={() => setShotClub(shotClub === club ? "" : club)} />)}</div>
+            <div className={styles.shotActions}>
+              {openShot ? <><button type="button" className="primary" disabled={shotBusy} onClick={finishShot}>{shotBusy ? "Midiendo…" : "Terminar golpe"}</button><button type="button" className="secondary" disabled={shotBusy} onClick={() => { props.onShotsChange(cancelShot(props.shots, openShot.id)); setShotMessage("Golpe cancelado."); }}>Cancelar</button></> : <button type="button" className="primary" disabled={!shotClub || shotBusy} onClick={beginShot}>{shotBusy ? "Ubicando…" : "Iniciar golpe"}</button>}
+            </div>
+            {currentHoleShots.some((shot) => Boolean(shot.endedAt)) && <div className={styles.shotList}>{currentHoleShots.filter((shot) => shot.endedAt).map((shot) => <span key={shot.id}>{shot.sequence}. {shot.clubLabel}{shot.distanceYards !== undefined ? ` · ${shot.distanceYards} yd` : " · sin distancia"}</span>)}</div>}
+            {shotMessage && <p className={styles.shotStatus} role="status">{shotMessage}</p>}
+          </section>
+        </>}
       </>}
 
       {group.length > 0 && <>
