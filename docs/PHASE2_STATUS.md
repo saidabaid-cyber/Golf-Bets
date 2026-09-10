@@ -22,6 +22,9 @@ Last updated: 2026-09-10 (America/Mexico_City)
 | Hard-closeout Preview | `phase2/full-platform` / `d24f4b4` | PASS | Vercel deployment `62oHsFfJnZVxFo2DacfmAf75G3RM`, GitHub deployment `6376800017`, immutable URL HTTP 200 and READY | Runtime QA |
 | Hard-closeout runtime QA | `phase2/full-platform` / `d24f4b4` | PASS | Historical club/ball searches and zero-overlap pagination pass; club search returns La Vista; Ball Fit evaluates all 71 eligible candidates and returns Top 3; AI GET endpoints ready; 390/430px shell has no horizontal expansion or browser errors | Push brand-alias follow-up and verify final Preview |
 | Hard-closeout final verification | `phase2/full-platform` / `50d551e` | PASS | Vercel deployment `QYbSSEMgDxruaXWgLkXCV43SMMur`, GitHub deployment `6377074955`, immutable Preview `golf-bets-reh350k2l-saha8.vercel.app`; Home/branch alias 200, catalog and Ball Fit smoke pass, AI GET endpoints ready, 390px browser runtime has no JS errors | Human/device review |
+| Shaft master baseline | `phase2/full-platform` / `2d82fb085e0102c434b3459e79bafb6217c20d12` | PASS | Clean tree and synced remote; attached ZIP integrity and JSON/CSV/XLSX consistency verified: 467 rows, 21 brands, 80 fit-eligible and 13 OEM-stock | Import and merge shaft master |
+| Shaft master 2010–2026 | `phase2/full-platform` / `2d093b104529af80a9b9fc775ed371b50fcd843b` | PASS | Field-level merge retains legacy IDs and source priority; provider has 474 shafts, 21 brands, 41 aliases, 203 current, 271 historical and 80 fit-eligible; Mi Bolsa supports remote search, manufacturer flex/weight selection and manual fallback | Preview/runtime verification |
+| Shaft Preview QA | `phase2/full-platform` / `2d093b104529af80a9b9fc775ed371b50fcd843b` | PASS | 1,367 passed, 0 failed, 0 skipped; lint/build pass; deployment `3JjVwEZtBa86eAxThWXorBSnKW1E` completed; required historical/current queries and zero-overlap pagination pass on the branch alias; 390px shell has no horizontal expansion or browser errors | Human Mi Bolsa review after the user accepts the legal gate |
 
 ## Migration ledger
 
@@ -47,4 +50,4 @@ These dependencies do not block local contracts, adapters, fixtures, feature fla
 
 ## Resume point
 
-Hard closeout is ready for human review. Apply the four existing migrations only after confirming an isolated Preview Supabase project, then execute authenticated multi-user/RLS QA. Ball Fit/capture/profile interactions behind the unaccepted guest legal gate and physical iPhone checks remain `PENDING_INTERACTIVE_QA` or `PENDING_DEVICE_QA`. Do not promote or connect a custom domain before those controlled gates are approved.
+Shaft master closeout is ready for human review. The versioned provider and API are verified on Preview; complete the Mi Bolsa touch flow only after the user accepts the legal gate, and verify the physical selector on an iPhone as `PENDING_INTERACTIVE_QA` / `PENDING_DEVICE_QA`. Apply the four existing migrations only after confirming an isolated Preview Supabase project. Do not promote or connect a custom domain before those controlled gates are approved.
