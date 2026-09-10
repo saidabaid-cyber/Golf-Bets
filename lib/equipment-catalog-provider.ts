@@ -95,13 +95,19 @@ function page<T extends EquipmentCatalogItem>(items: readonly T[], input: Equipm
   const query = searchable(input.query || "").slice(0, 120);
   const tokens = query.split(" ").filter(Boolean);
   const candidates = items
+    .filter((item) => ("bagEligible" in item ? item.bagEligible : true))
     .filter((item) => input.includeArchived || item.active)
     .filter((item) => input.kind !== "CLUB" || !input.category || (item as GolfClubCatalog).category === input.category)
     .filter((item) => {
       if (!tokens.length) return true;
       const generation = "generation" in item ? item.generation : "";
-      const haystack = searchable(`${item.brand} ${item.model} ${generation || ""}`);
-      return tokens.every((token) => haystack.includes(token));
+      const aliases = "aliases" in item && Array.isArray(item.aliases) ? item.aliases.join(" ") : "";
+      const year = "year" in item ? item.year : "";
+      const haystack = searchable(`${item.brand} ${item.model} ${generation || ""} ${year || ""} ${aliases}`)
+        .replace(/([a-z])\s+(\d)/g, "$1$2")
+        .replace(/(\d)\s+([a-z])/g, "$1$2");
+      const compactTokens = tokens.map((token) => token.replace(/\s+/g, ""));
+      return compactTokens.every((token) => haystack.includes(token));
     })
     .sort((left, right) => rank(left, query) - rank(right, query)
       || left.brand.localeCompare(right.brand, "es-MX")
@@ -147,7 +153,7 @@ export function createInternalEquipmentCatalogProvider(catalogs: {
     },
     async loadBallFitCatalog(input) {
       const maximumCandidates = safeBallFitMaximum(input.maximumCandidates);
-      const active = catalogs.balls.filter((ball) => ball.active);
+      const active = catalogs.balls.filter((ball) => ball.active && ball.fitEligible);
       if (maximumCandidates === 0 || active.length > maximumCandidates) {
         return {
           items: [],

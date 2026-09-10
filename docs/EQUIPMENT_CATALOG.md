@@ -7,7 +7,9 @@ La UI consume `EquipmentCatalogProvider`; no importa archivos seed directamente.
 - `data/golf-club-catalog.seed.json`, `data/golf-shaft-catalog.seed.json` y `data/golf-ball-catalog.seed.json`: catálogo base.
 - `data/golf-equipment-catalog.expansion.seed.json`: expansión verificada de Beta.
 - `data/forgiving-golf-equipment.snapshot.json`: snapshot importado con licencia y procedencia por registro.
+- `data/backyard-equipment-master-2010-2026.snapshot.json`: master histórico entregado por producto, importado y validado (1,202 bastones, 285 bolas).
 - `scripts/import-equipment-source.mjs`: importador validado, normalizador y deduplicable de fuentes externas autorizadas.
+- `scripts/import-equipment-master-2010-2026.mjs`: importador reproducible del paquete histórico, con validación de alcance, procedencia y elegibilidad separada para bolsa/fitting.
 - `lib/golf-equipment-catalog.ts`: normalización y proyección idempotente.
 - `lib/equipment-catalog-provider.ts`: contrato de búsqueda, paginación y alcance del Ball Fit.
 - `/api/catalog/equipment`: endpoint de lectura para los selectores.
@@ -26,9 +28,9 @@ La matriz de licencias, cobertura y actualización está en `docs/EQUIPMENT_SOUR
 
 ## Reglas de UX
 
-Los selectores siguen Categoría → Marca → Modelo → Varilla. Siempre ofrecen “No sé”, “Mi bastón no aparece” y “Omitir”. Para sets de fierros se conservan paquetes rápidos y una composición libre de 3 a LW, incluidos wedges por grados.
+Los selectores siguen Categoría → Marca → Modelo → Varilla. La búsqueda se ejecuta en servidor con debounce, límite y cursor; el navegador no recibe las 1,000+ filas de una sola vez. Una búsqueda explícita incluye modelos anteriores y muestra su generación. Siempre ofrece “No sé”, “Mi bastón no aparece” y “Omitir”. Para sets de fierros se conservan paquetes rápidos y una composición libre de 3 a LW, incluidos wedges por grados.
 
-Las tarjetas de bola muestran sólo atributos verificados y dicen “Sin dato verificado” cuando falta evidencia. El Ball Fit evalúa el catálogo activo completo en servidor; nunca rankea silenciosamente una primera página incompleta.
+Las tarjetas de bola muestran sólo atributos verificados y dicen “Sin dato verificado” cuando falta evidencia. `bagEligible` y `fitEligible` son decisiones distintas: Ball Fit evalúa únicamente modelos activos con cobertura técnica trazable y nunca rankea silenciosamente una primera página incompleta.
 
 ## Cambio de proveedor
 

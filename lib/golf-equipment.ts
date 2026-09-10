@@ -33,15 +33,28 @@ export type BallPriceTier = (typeof BALL_PRICE_TIERS)[number];
 export const BALL_COMPRESSION_TYPES = ["MANUFACTURER", "INDEPENDENT_MEASURED", "ESTIMATED", "UNKNOWN"] as const;
 export type BallCompressionType = (typeof BALL_COMPRESSION_TYPES)[number];
 
+export type EquipmentCatalogProvenance = {
+  sourceType: string;
+  sourceName: string;
+  sourceUrl: string;
+  verifiedAt: string;
+  license: string | null;
+  confidence: string | null;
+};
+
 export type GolfBallCatalog = {
   id: string;
+  aliases: string[];
   brand: string;
   model: string;
   generation: string | null;
   year: number | null;
   active: boolean;
+  bagEligible: boolean;
+  fitEligible: boolean;
   coverMaterial: string | null;
   construction: string | null;
+  constructionPieces: number | null;
   compression: number | null;
   compressionType: BallCompressionType;
   compressionSource: string | null;
@@ -56,6 +69,11 @@ export type GolfBallCatalog = {
   targetProfile: string[];
   officialUrl: string | null;
   sourceName: string;
+  sourceUrl: string | null;
+  sourceType: string | null;
+  confidence: string | null;
+  license: string | null;
+  provenance: EquipmentCatalogProvenance[];
   verifiedAt: string;
   createdAt: string;
   updatedAt: string;
@@ -63,6 +81,7 @@ export type GolfBallCatalog = {
 
 export type GolfClubCatalog = {
   id: string;
+  aliases: string[];
   externalId: string | null;
   brand: string;
   model: string;
@@ -71,6 +90,8 @@ export type GolfClubCatalog = {
   category: ClubCategory;
   subCategory: string | null;
   active: boolean;
+  bagEligible: boolean;
+  fitEligible: boolean;
   handedness: ClubHandedness[];
   lofts: number[];
   variants: GolfClubCatalogVariant[];
@@ -84,7 +105,10 @@ export type GolfClubCatalog = {
   sourceName: string | null;
   sourceUrl: string | null;
   sourceCheckedAt: string | null;
+  sourceType: string | null;
+  confidence: string | null;
   license: string | null;
+  provenance: EquipmentCatalogProvenance[];
   verifiedAt: string;
   createdAt: string | null;
   updatedAt: string | null;
@@ -390,6 +414,42 @@ function uniqueTextArray(value: unknown, maximumItems = 30): string[] {
   return result;
 }
 
+function normalizeCatalogProvenance(value: unknown): EquipmentCatalogProvenance[] {
+  if (!Array.isArray(value)) return [];
+  const normalized = value.flatMap((candidate) => {
+    const source = record(candidate);
+    const sourceType = source ? text(source.sourceType, 80) : null;
+    const sourceName = source ? text(source.sourceName, 300) : null;
+    const sourceUrl = source ? httpsUrl(source.sourceUrl) : null;
+    const verifiedAt = source ? isoDate(source.verifiedAt) : null;
+    if (!sourceType || !sourceName || !sourceUrl || !verifiedAt) return [];
+    return [{
+      sourceType,
+      sourceName,
+      sourceUrl,
+      verifiedAt,
+      license: text(source?.license, 100),
+      confidence: text(source?.confidence, 40),
+    }];
+  });
+  return [...new Map(normalized.map((source) => [`${source.sourceType}:${source.sourceUrl}:${source.verifiedAt}`, source])).values()];
+}
+
+function catalogProvenanceOrFallback(source: UnknownRecord, sourceName: string, verifiedAt: string, officialUrl: string | null) {
+  const normalized = normalizeCatalogProvenance(source.provenance);
+  if (normalized.length) return normalized;
+  const sourceUrl = httpsUrl(source.sourceUrl) || officialUrl;
+  if (!sourceUrl) return [];
+  return [{
+    sourceType: text(source.sourceType, 80) || "OEM_OFFICIAL",
+    sourceName,
+    sourceUrl,
+    verifiedAt,
+    license: text(source.license, 100),
+    confidence: text(source.confidence, 40),
+  }];
+}
+
 function httpsUrl(value: unknown): string | null {
   const cleaned = text(value, 2_048);
   if (!cleaned) return null;
@@ -432,15 +492,24 @@ export function normalizeGolfBallCatalog(value: unknown): GolfBallCatalog | null
     : compressionType !== null && compressionType !== "UNKNOWN" && compressionSource !== null && compressionSourceUrl !== null;
   if (!id || !brand || !model || active === null || !sourceName || !verifiedAt || !createdAt || !updatedAt || !compressionType || !compressionIsSourced) return null;
 
+  const technicalFacts = [source.flight, source.feel, source.driverSpin, source.ironSpin, source.shortGameSpin, source.coverMaterial, source.construction]
+    .filter((candidate) => candidate !== null && candidate !== undefined && candidate !== "").length;
+  const explicitFitEligible = boolean(source.fitEligible);
+  const officialUrl = httpsUrl(source.officialUrl);
+
   return {
     id,
+    aliases: uniqueTextArray(source.aliases, 50),
     brand,
     model,
     generation: text(source.generation),
     year: nullableInteger(source.year, 1900, 2200),
     active,
+    bagEligible: boolean(source.bagEligible) ?? true,
+    fitEligible: explicitFitEligible === null ? technicalFacts >= 3 : explicitFitEligible && technicalFacts >= 3,
     coverMaterial: text(source.coverMaterial),
     construction: text(source.construction),
+    constructionPieces: nullableInteger(source.constructionPieces, 1, 8),
     compression,
     compressionType,
     compressionSource,
@@ -453,8 +522,13 @@ export function normalizeGolfBallCatalog(value: unknown): GolfBallCatalog | null
     colors: uniqueTextArray(source.colors, 12),
     priceTier: memberOf(source.priceTier, BALL_PRICE_TIERS),
     targetProfile: uniqueTextArray(source.targetProfile),
-    officialUrl: httpsUrl(source.officialUrl),
+    officialUrl,
     sourceName,
+    sourceUrl: httpsUrl(source.sourceUrl) || httpsUrl(source.officialUrl),
+    sourceType: text(source.sourceType, 80),
+    confidence: text(source.confidence, 40),
+    license: text(source.license, 100),
+    provenance: catalogProvenanceOrFallback(source, sourceName, verifiedAt, officialUrl),
     verifiedAt,
     createdAt,
     updatedAt,
@@ -507,10 +581,13 @@ export function normalizeGolfClubCatalog(value: unknown): GolfClubCatalog | null
   const active = boolean(source.active);
   const handedness = normalizeHandednessList(source.handedness);
   const verifiedAt = isoDate(source.verifiedAt);
-  if (!id || !brand || !model || !category || active === null || handedness.length === 0 || !verifiedAt) return null;
+  if (!id || !brand || !model || !category || active === null || !verifiedAt) return null;
 
+  const officialUrl = httpsUrl(source.officialUrl);
+  const sourceName = text(source.sourceName) || "Fuente de catálogo verificada";
   return {
     id,
+    aliases: uniqueTextArray(source.aliases, 50),
     externalId: identifier(source.externalId),
     brand,
     model,
@@ -519,6 +596,8 @@ export function normalizeGolfClubCatalog(value: unknown): GolfClubCatalog | null
     category,
     subCategory: text(source.subCategory),
     active,
+    bagEligible: boolean(source.bagEligible) ?? true,
+    fitEligible: boolean(source.fitEligible) ?? false,
     handedness,
     lofts: uniqueNumbers(source.lofts, 0, 90),
     variants: normalizeGolfClubVariants(source.variants),
@@ -528,11 +607,14 @@ export function normalizeGolfClubCatalog(value: unknown): GolfClubCatalog | null
     setMakeup: text(source.setMakeup, 500),
     stockShafts: uniqueTextArray(source.stockShafts, 50),
     stockFlexes: SHAFT_FLEXES.filter((candidate) => Array.isArray(source.stockFlexes) && source.stockFlexes.includes(candidate)),
-    officialUrl: httpsUrl(source.officialUrl),
+    officialUrl,
     sourceName: text(source.sourceName),
     sourceUrl: httpsUrl(source.sourceUrl),
     sourceCheckedAt: isoDate(source.sourceCheckedAt),
+    sourceType: text(source.sourceType, 80),
+    confidence: text(source.confidence, 40),
     license: text(source.license, 100),
+    provenance: catalogProvenanceOrFallback(source, sourceName, verifiedAt, officialUrl),
     verifiedAt,
     ...optionalTimestampFields(source),
   };

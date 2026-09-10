@@ -24,13 +24,15 @@ export async function GET(request: NextRequest) {
     .map((value) => value.trim())
     .filter(Boolean)
     .slice(0, 25);
+  const query = request.nextUrl.searchParams.get("q") || "";
+  const includeArchivedParam = request.nextUrl.searchParams.get("includeArchived");
   const page = await internalEquipmentCatalogProvider.search({
     kind: typeValue as EquipmentCatalogKind,
-    query: request.nextUrl.searchParams.get("q") || "",
+    query,
     category: categoryValue as ClubCategory | null,
     cursor: request.nextUrl.searchParams.get("cursor"),
     limit: Number.isFinite(limitValue) ? limitValue : 20,
-    includeArchived: false,
+    includeArchived: includeArchivedParam === "true" || (includeArchivedParam !== "false" && query.trim().length > 0),
     pinnedIds,
   });
   return NextResponse.json({ provider: internalEquipmentCatalogProvider.id, ...page }, {

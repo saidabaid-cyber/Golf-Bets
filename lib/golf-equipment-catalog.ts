@@ -3,6 +3,7 @@ import golfClubSeed from "../data/golf-club-catalog.seed.json";
 import golfShaftSeed from "../data/golf-shaft-catalog.seed.json";
 import golfEquipmentExpansionSeed from "../data/golf-equipment-catalog.expansion.seed.json";
 import forgivingGolfSnapshot from "../data/forgiving-golf-equipment.snapshot.json";
+import equipmentMasterSnapshot from "../data/backyard-equipment-master-2010-2026.snapshot.json";
 import {
   normalizeGolfBallCatalogEntries,
   normalizeGolfClubCatalogEntries,
@@ -91,6 +92,14 @@ const expansionSeed = golfEquipmentExpansionSeed as {
   shafts?: unknown;
 };
 const forgivingSeed = forgivingGolfSnapshot as SeedEnvelope & { importedAt?: unknown; license?: unknown; sourceUrl?: unknown };
+const masterSeed = equipmentMasterSnapshot as {
+  schemaVersion?: unknown;
+  sourceCounts?: { balls?: unknown; clubs?: unknown };
+  acceptedCounts?: { balls?: unknown; clubs?: unknown };
+  rejectedCounts?: { balls?: unknown; clubs?: unknown };
+  balls?: unknown;
+  clubs?: unknown;
+};
 
 function expandedSeed(seed: SeedEnvelope, expansion: unknown): SeedEnvelope {
   return {
@@ -102,33 +111,137 @@ function expandedSeed(seed: SeedEnvelope, expansion: unknown): SeedEnvelope {
   };
 }
 
-const combinedBallSeed = expandedSeed(rawBallSeed, expansionSeed.balls);
-const combinedClubSeed = expandedSeed(expandedSeed(rawClubSeed, expansionSeed.clubs), forgivingSeed.models);
+const combinedBallSeed = expandedSeed(expandedSeed(rawBallSeed, expansionSeed.balls), masterSeed.balls);
+const combinedClubSeed = expandedSeed(expandedSeed(expandedSeed(rawClubSeed, expansionSeed.clubs), forgivingSeed.models), masterSeed.clubs);
 const combinedShaftSeed = expandedSeed(rawShaftSeed, expansionSeed.shafts);
 
-export const golfBallCatalog: readonly GolfBallCatalog[] = Object.freeze(
-  normalizeGolfBallCatalogEntries(combinedBallSeed),
-);
-
 function canonicalEquipmentText(value: string) {
-  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[®™]/g, "").toLocaleLowerCase("en-US").replace(/\bgolf\b/g, "").replace(/[^a-z0-9]+/g, "");
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[®™]/g, "")
+    .replace(/\+/g, " plus ")
+    .toLocaleLowerCase("en-US")
+    .replace(/\bgolf\b/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\b(plus)(?:\s+plus)+\b/g, "plus")
+    .replace(/\s+/g, "");
 }
 
-export function canonicalClubIdentity(club: Pick<GolfClubCatalog, "brand" | "model" | "category">) {
-  return `${club.category}:${canonicalEquipmentText(club.brand)}:${canonicalEquipmentText(club.model)}`;
+const CANONICAL_BRAND_LABELS = new Map([
+  ["cobra", "Cobra"],
+  ["labgolf", "L.A.B. Golf"],
+]);
+
+function canonicalBrandLabel(value: string) {
+  return CANONICAL_BRAND_LABELS.get(canonicalEquipmentText(value)) || value;
 }
 
-export function dedupeGolfClubCatalog(models: readonly GolfClubCatalog[]) {
-  const unique = new Map<string, GolfClubCatalog>();
-  for (const model of models) {
-    const key = canonicalClubIdentity(model);
-    if (!unique.has(key)) unique.set(key, model);
+function canonicalizeBrand<T extends { brand: string }>(item: T): T {
+  const brand = canonicalBrandLabel(item.brand);
+  return brand === item.brand ? item : { ...item, brand };
+}
+
+function modelWithoutRedundantCategory(model: string, category: GolfClubCatalog["category"]) {
+  const suffixes: Partial<Record<GolfClubCatalog["category"], RegExp>> = {
+    DRIVER: /\s+driver$/i,
+    MINI_DRIVER: /\s+mini\s+driver$/i,
+    FAIRWAY_WOOD: /\s+(?:fairway|fairway\s+wood|wood)$/i,
+    HYBRID: /\s+(?:hybrid|rescue)$/i,
+    UTILITY_IRON: /\s+(?:utility|utility\s+iron|driving\s+iron)$/i,
+    IRON_SET: /\s+(?:irons?|iron\s+set)$/i,
+    WEDGE: /\s+wedge$/i,
+    PUTTER: /\s+putter$/i,
+  };
+  return model.replace(suffixes[category] || /$^/, "").trim();
+}
+
+function generationKey(item: { generation: string | null; year: number | null }) {
+  return item.year ? String(item.year) : canonicalEquipmentText(item.generation || "unknown");
+}
+
+function clubBaseIdentity(club: Pick<GolfClubCatalog, "brand" | "model" | "category">) {
+  return `${club.category}:${canonicalEquipmentText(club.brand)}:${canonicalEquipmentText(modelWithoutRedundantCategory(club.model, club.category))}`;
+}
+
+export function canonicalClubIdentity(club: Pick<GolfClubCatalog, "brand" | "model" | "category" | "generation" | "year">) {
+  return `${clubBaseIdentity(club)}:${generationKey(club)}`;
+}
+
+export function canonicalBallIdentity(ball: Pick<GolfBallCatalog, "brand" | "model" | "generation" | "year">) {
+  return `${canonicalEquipmentText(ball.brand)}:${canonicalEquipmentText(ball.model)}:${generationKey(ball)}`;
+}
+
+function sourcePriority(item: { sourceType?: string | null; sourceName?: string | null }) {
+  if (!item.sourceType && !item.sourceName?.startsWith("forgiving.golf")) return 500;
+  if (item.sourceType === "OEM_OFFICIAL" || item.sourceType === "USGA_OFFICIAL") return 400;
+  if (item.sourceName?.startsWith("forgiving.golf")) return 320;
+  if (item.sourceType === "OPEN_DATA_CC_BY_4_0") return 300;
+  if (item.sourceType === "SECONDARY_TECHNICAL") return 250;
+  return 200;
+}
+
+function populated<T>(primary: T, fallback: T): T {
+  if (primary === null || primary === undefined || primary === "") return fallback;
+  if (Array.isArray(primary) && primary.length === 0) return fallback;
+  return primary;
+}
+
+function isBallRecord(value: GolfClubCatalog | GolfBallCatalog): value is GolfBallCatalog {
+  return "compression" in value;
+}
+
+function mergeRecords<T extends GolfClubCatalog | GolfBallCatalog>(primary: T, fallback: T): T {
+  const merged = { ...fallback, ...primary } as T;
+  for (const key of Object.keys(merged) as Array<keyof T>) merged[key] = populated(primary[key], fallback[key]);
+  if (isBallRecord(merged) && isBallRecord(primary) && isBallRecord(fallback)) {
+    const compressionOwner = primary.compression === null && fallback.compression !== null ? fallback : primary;
+    merged.compression = compressionOwner.compression;
+    merged.compressionType = compressionOwner.compressionType;
+    merged.compressionSource = compressionOwner.compressionSource;
+    merged.compressionSourceUrl = compressionOwner.compressionSourceUrl;
+  }
+  merged.active = primary.active;
+  merged.bagEligible = primary.bagEligible || fallback.bagEligible;
+  merged.fitEligible = primary.fitEligible || fallback.fitEligible;
+  merged.aliases = [...new Set([...primary.aliases, ...fallback.aliases, ...(primary.id === fallback.id ? [] : [fallback.id])])];
+  merged.provenance = [...new Map([...primary.provenance, ...fallback.provenance]
+    .map((source) => [`${source.sourceType}:${source.sourceUrl}:${source.verifiedAt}`, source])).values()];
+  return merged;
+}
+
+function dedupeCatalog<T extends GolfClubCatalog | GolfBallCatalog>(models: readonly T[], identity: (item: T) => string, baseIdentity: (item: T) => string) {
+  const unique = new Map<string, T>();
+  const keyByBase = new Map<string, string[]>();
+  const sorted = [...models].sort((left, right) => sourcePriority(right) - sourcePriority(left));
+  for (const model of sorted) {
+    const exactKey = identity(model);
+    const base = baseIdentity(model);
+    const known = keyByBase.get(base) || [];
+    let key = exactKey;
+    if (!unique.has(key) && generationKey(model) === "unknown" && known.length === 1) key = known[0];
+    const current = unique.get(key);
+    unique.set(key, current ? mergeRecords(current, model) : model);
+    if (!current) keyByBase.set(base, [...known, key]);
   }
   return [...unique.values()];
 }
 
+export function dedupeGolfClubCatalog(models: readonly GolfClubCatalog[]) {
+  return dedupeCatalog(models, canonicalClubIdentity, clubBaseIdentity);
+}
+
+export function dedupeGolfBallCatalog(models: readonly GolfBallCatalog[]) {
+  return dedupeCatalog(models, canonicalBallIdentity, (ball) => `${canonicalEquipmentText(ball.brand)}:${canonicalEquipmentText(ball.model)}`);
+}
+
+export const golfBallCatalog: readonly GolfBallCatalog[] = Object.freeze(
+  dedupeGolfBallCatalog(normalizeGolfBallCatalogEntries(combinedBallSeed).map(canonicalizeBrand)),
+);
+
 export const golfClubCatalog: readonly GolfClubCatalog[] = Object.freeze(
-  dedupeGolfClubCatalog(normalizeGolfClubCatalogEntries(combinedClubSeed)),
+  dedupeGolfClubCatalog(normalizeGolfClubCatalogEntries(combinedClubSeed).map(canonicalizeBrand)),
 );
 
 export const golfShaftCatalog: readonly GolfShaftCatalog[] = Object.freeze(
@@ -149,12 +262,17 @@ export const golfCatalogDiagnostics = Object.freeze({
     declaredBrands: golfBallBrands.length,
     sourceModels: seedCount(combinedBallSeed),
     usableModels: golfBallCatalog.length,
+    masterSourceModels: typeof masterSeed.sourceCounts?.balls === "number" ? masterSeed.sourceCounts.balls : 0,
+    fitEligibleModels: golfBallCatalog.filter((ball) => ball.fitEligible && ball.active).length,
+    bagEligibleModels: golfBallCatalog.filter((ball) => ball.bagEligible).length,
   },
   clubs: {
     declaredBrands: golfClubBrands.length,
     sourceModels: seedCount(combinedClubSeed),
     usableModels: golfClubCatalog.length,
     importedModels: seedCount(forgivingSeed),
+    masterSourceModels: typeof masterSeed.sourceCounts?.clubs === "number" ? masterSeed.sourceCounts.clubs : 0,
+    bagEligibleModels: golfClubCatalog.filter((club) => club.bagEligible).length,
   },
   shafts: {
     declaredBrands: golfShaftBrands.length,
@@ -163,8 +281,9 @@ export const golfCatalogDiagnostics = Object.freeze({
   },
 });
 
-function requiredCatalogSource(model: { id: string; officialUrl: string | null; sourceName: string | null; verifiedAt: string | null }) {
-  if (!model.officialUrl || !model.sourceName || !model.verifiedAt) {
+function requiredCatalogSource(model: { id: string; officialUrl: string | null; sourceName: string | null; sourceUrl?: string | null; verifiedAt: string | null }) {
+  const evidenceUrl = model.officialUrl || model.sourceUrl || null;
+  if (!evidenceUrl || !model.sourceName || !model.verifiedAt) {
     throw new Error(`El modelo ${model.id} no tiene evidencia suficiente para importarse al catálogo.`);
   }
   return {
@@ -172,7 +291,7 @@ function requiredCatalogSource(model: { id: string; officialUrl: string | null; 
     source_name: model.sourceName,
     // Until a second independent source is recorded, the official manufacturer
     // page is both the product link and the provenance link expected by SQL.
-    source_url: model.officialUrl,
+    source_url: evidenceUrl,
     verified_at: model.verifiedAt,
   };
 }
