@@ -12,6 +12,8 @@ export function AnchoredSearch({
   status,
   expanded,
   onFocus,
+  invalid,
+  describedBy,
 }: {
   label: string;
   value: string;
@@ -21,6 +23,8 @@ export function AnchoredSearch({
   status?: ReactNode;
   expanded: boolean;
   onFocus?: () => void;
+  invalid?: boolean;
+  describedBy?: string;
 }) {
   const inputId = useId();
   const listId = `${inputId}-results`;
@@ -38,6 +42,8 @@ export function AnchoredSearch({
         aria-autocomplete="list"
         aria-expanded={expanded}
         aria-controls={listId}
+        aria-invalid={invalid || undefined}
+        aria-describedby={describedBy}
         onFocus={onFocus}
         onChange={(event) => onChange(event.target.value)}
       />

@@ -24,6 +24,7 @@
 .socialProfileResults, .socialPendingList { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 8px; }
 .socialProfileResults li, .socialPendingList li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px; border: 1px solid var(--line); border-radius: 14px; }
 .socialProfileResults small { display: block; color: var(--muted); overflow-wrap: anywhere; }
+.socialSearchOption{display:grid;grid-template-columns:36px minmax(0,1fr) auto;align-items:center;gap:9px}.socialSearchOption .socialProfileAvatar{display:grid;width:36px;height:36px;place-items:center;overflow:hidden;border-radius:50%;background:var(--soft);font-size:18px}.socialSearchOption .socialProfileAvatar>*{width:100%;height:100%;object-fit:cover}.socialSearchOption>strong{color:var(--green);font-size:10px}
 .socialProfileAvatar { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; background: var(--accent); color: var(--ink); font-weight: 800; overflow: hidden; }
 .socialPendingList li { grid-template-columns: minmax(0, 1fr) auto; }
 @media (max-width: 430px) { .socialSearchRow { grid-template-columns: 1fr; } }

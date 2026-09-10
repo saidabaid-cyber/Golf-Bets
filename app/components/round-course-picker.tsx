@@ -96,7 +96,7 @@ export function RoundCoursePicker({
   const visibleResults = useMemo(() => mergeCourseResults([], results), [results]);
   const expanded = !selectedCourseId && (visibleResults.length > 0 || status === "loading" || status === "error");
 
-  return <div className={`courseSelectionField ${invalid ? "isMissing" : ""}`} aria-describedby={describedBy}>
+  return <div className={`courseSelectionField ${invalid ? "isMissing" : ""}`}>
     <AnchoredSearch
       label="Campo"
       value={query}
@@ -105,6 +105,8 @@ export function RoundCoursePicker({
         setSelectedCourseId("");
       }}
       placeholder={pendingName ? `Busca ${pendingName}` : "Busca campo o club"}
+      invalid={invalid}
+      describedBy={describedBy}
       expanded={expanded}
       status={status === "loading"
         ? "Buscando campos…"

@@ -42,16 +42,6 @@ export const CLUB_CATEGORY_ICONS: Record<ClubCategory, string> = {
   PUTTER: "P",
 };
 
-const FLEX_LABELS: Record<ShaftFlex, string> = {
-  LADIES: "Ladies",
-  SENIOR: "Senior",
-  REGULAR: "Regular",
-  STIFF: "Stiff",
-  X_STIFF: "X-Stiff",
-  TX: "TX",
-  OTHER: "Otro",
-};
-
 const LEGACY_FLEX_TO_LABEL: Partial<Record<ShaftFlex, string>> = {
   LADIES: "L", SENIOR: "A", REGULAR: "R", STIFF: "S", X_STIFF: "X", TX: "TX",
 };
@@ -474,7 +464,7 @@ export function BallEditor({ userId, catalog, existing, onCancel, onSave }: Ball
         </AnchoredSearch>{catalogSearch.hasMore && <button type="button" className="secondary" onClick={() => void catalogSearch.loadMore()}>Cargar más modelos</button>}</div>}
         {step === "details" && <div className={styles.flowScreen}><button type="button" className={styles.flowBack} onClick={() => { if (manual) setManual(false); setStep(manual ? "brand" : "model"); }}>← {manual ? "Catálogo" : "Modelos"}</button><h3>Variante final</h3><div className={`${styles.productPreview} ${styles.ballProductPreview}`}><span>●</span><div><b>{[selected?.brand || brand, selected?.model || customModel].filter(Boolean).join(" ") || "Bola manual"}</b><small>{[generation || selected?.generation, year || selected?.year, selected && (selected.active ? "Actual" : "Modelo anterior")].filter(Boolean).join(" · ") || "Completa sólo lo que conozcas"}</small></div></div>
           {manual && <div className={styles.inlineFields}><label>Marca<input value={brand} maxLength={100} onChange={(event) => setBrand(event.target.value)} /></label><label>Modelo<input value={customModel} maxLength={140} onChange={(event) => setCustomModel(event.target.value)} /></label></div>}
-          <div className={styles.inlineFields}><label>Generación (opcional)<input value={generation} maxLength={100} onChange={(event) => setGeneration(event.target.value)} /></label><label>Año (opcional)<input type="number" inputMode="numeric" min={1900} max={2200} value={year} onChange={(event) => setYear(event.target.value)} /></label>{colorOptions.length ? <label>Color (opcional)<select value={color} onChange={(event) => setColor(event.target.value)}><option value="">Sin indicar</option>{colorOptions.map((value) => <option key={value} value={value}>{value}</option>)}</select></label> : <label>Color (opcional)<input value={color} maxLength={80} onChange={(event) => setColor(event.target.value)} /></label><label>Notas (opcional)<textarea value={notes} maxLength={1000} rows={3} onChange={(event) => setNotes(event.target.value)} /></label></div>
+          <div className={styles.inlineFields}><label>Generación (opcional)<input value={generation} maxLength={100} onChange={(event) => setGeneration(event.target.value)} /></label><label>Año (opcional)<input type="number" inputMode="numeric" min={1900} max={2200} value={year} onChange={(event) => setYear(event.target.value)} /></label>{colorOptions.length ? <label>Color (opcional)<select value={color} onChange={(event) => setColor(event.target.value)}><option value="">Sin indicar</option>{colorOptions.map((value) => <option key={value} value={value}>{value}</option>)}</select></label> : <label>Color (opcional)<input value={color} maxLength={80} onChange={(event) => setColor(event.target.value)} /></label>}<label>Notas (opcional)<textarea value={notes} maxLength={1000} rows={3} onChange={(event) => setNotes(event.target.value)} /></label></div>
           {selected && <div className={styles.ballFacts}>{[["Vuelo", selected.flight], ["Driver spin", selected.driverSpin], ["Greenside", selected.shortGameSpin], ["Sensación", selected.feel], ["Construcción", selected.construction], ["Compresión", selected.compression]].map(([label, value]) => <span key={label}><small>{label}</small><b>{value ?? "Sin dato verificado"}</b></span>)}</div>}
           {selected && <p className={styles.subtle}>Datos verificados · {selected.sourceName} · {new Date(selected.verifiedAt).toLocaleDateString("es-MX")}</p>}
           {message && <div className={styles.formMessage} role="alert">{message}</div>}<div className={styles.formActions}><button type="button" className="secondary" onClick={onCancel}>Cancelar</button><button type="submit" className="primary">Guardar como actual</button></div>
