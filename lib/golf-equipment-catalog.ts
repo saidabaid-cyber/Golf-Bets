@@ -257,7 +257,19 @@ function dedupeCatalog<T extends GolfClubCatalog | GolfBallCatalog>(models: read
     unique.set(key, current ? mergeRecords(current, model) : model);
     if (!current) keyByBase.set(base, [...known, key]);
   }
-  return [...unique.values()];
+  // A stable catalog ID is also a hard identity boundary. Two sourced rows can
+  // legitimately spell a model/generation differently (for example an OEM
+  // marketing name versus a year-based archive label) while still carrying
+  // the same preserved ID. Leaving both rows in the result makes cursor
+  // pagination ambiguous because a cursor can only identify one of them.
+  // Merge those rows field-by-field after semantic dedupe so saved bags and
+  // historical snapshots keep resolving to the original stable ID.
+  const byStableId = new Map<string, T>();
+  for (const model of unique.values()) {
+    const current = byStableId.get(model.id);
+    byStableId.set(model.id, current ? mergeRecords(current, model) : model);
+  }
+  return [...byStableId.values()];
 }
 
 export function dedupeGolfClubCatalog(models: readonly GolfClubCatalog[]) {

@@ -41,10 +41,32 @@ test("club identity preserves plus variants and model generations", () => {
     assert.notEqual(canonicalClubIdentity(first!), canonicalClubIdentity(second!));
   }
   assert.equal(new Set(golfClubCatalog.map(canonicalClubIdentity)).size, golfClubCatalog.length);
+  assert.equal(new Set(golfClubCatalog.map((club) => club.id)).size, golfClubCatalog.length);
+  assert.equal(golfClubCatalog.filter((club) => club.id === "titleist-vokey-sm11-wedge-2026").length, 1);
   assert.notEqual(
     canonicalBallIdentity(golfBallCatalog.find((ball) => ball.brand === "Titleist" && ball.model === "Pro V1" && ball.year === 2017)!),
     canonicalBallIdentity(golfBallCatalog.find((ball) => ball.brand === "Titleist" && ball.model === "Pro V1" && ball.year === 2025)!),
   );
+});
+
+test("cursor pagination returns every stable catalog ID exactly once", async () => {
+  for (const [kind, catalog] of [
+    ["CLUB", golfClubCatalog],
+    ["BALL", golfBallCatalog],
+    ["SHAFT", golfShaftCatalog],
+  ] as const) {
+    const ids: string[] = [];
+    let cursor: string | null = null;
+    do {
+      const result = await provider.search({ kind, includeArchived: true, limit: 50, cursor });
+      ids.push(...result.items.map((item) => item.id));
+      cursor = result.nextCursor;
+      if (!result.hasMore) break;
+      assert.ok(cursor, `${kind} pagination must expose a cursor while more rows exist`);
+    } while (cursor);
+    assert.equal(ids.length, catalog.length, `${kind} pagination lost a sourced model`);
+    assert.equal(new Set(ids).size, catalog.length, `${kind} pagination returned a duplicate stable ID`);
+  }
 });
 
 test("field merge preserves stronger existing evidence and retains every provenance source", () => {
