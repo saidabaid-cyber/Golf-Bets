@@ -17,7 +17,6 @@ No pre-existing Phase 1 regression was detected. The baseline is clean; failures
 
 ## Baseline observations
 
-- `app/page.tsx`: approximately 3,549 lines.
+- `app/page.tsx`: 3,772 lines at the immutable Phase 1 tag (counted from the Git object).
 - Existing reusable foundations include the deterministic betting engines, cloud/offline sync, per-player tees, course/equipment providers, AI boundaries, consent handling, membership vocabulary and Home dashboard.
 - Phase 2 must preserve all 1,313 existing tests and keep monetary outcomes inside the deterministic engines.
-

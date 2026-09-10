@@ -49,6 +49,6 @@ git cherry-pick <hotfix-sha>
 - `features/shots`, `stats`, `ai`, `analytics`, `admin`: optional shot facts, filtered aggregates, explanation-only AI and aggregate-only administration.
 - `features/feature-flags`, `memberships`: centralized runtime flags and FREE/PRO/BETA_PRO entitlements.
 
-`app/page.tsx` was approximately 3,549 lines at the Phase 1 baseline and 3,582 lines after Phase 2D (net +33). The Phase 2 domain implementation lives outside that file; it only owns integration state and composes extracted components. Responsibilities extracted include social connections, course search, GPS status, shot controls, filtered stats/AI insights and live-round questions. A destructive page rewrite was deliberately avoided to preserve Phase 1 behavior.
+`app/page.tsx` was 3,772 lines at the Phase 1 tag and is 3,805 lines after Phase 2D (net +33, counted from the corresponding Git objects). The Phase 2 domain implementation lives outside that file; it only owns integration state and composes extracted components. Responsibilities extracted include social connections, course search, GPS status, shot controls, filtered stats/AI insights and live-round questions. A destructive page rewrite was deliberately avoided to preserve Phase 1 behavior.
 
 The Next.js type/build graph completes without circular-import failures. Shared domain modules do not import React components or database provider internals; UI depends on explicit domain contracts and server routes depend on server-only adapters.
