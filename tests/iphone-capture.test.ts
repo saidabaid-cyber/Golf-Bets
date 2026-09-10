@@ -144,9 +144,10 @@ test("Live compacto conserva ambas perspectivas exactamente una vez y detalle pl
   assert.match(personal,/personalLiveCompact/);
 });
 
-test("captura conecta controles, PAR y Guardar, no Confirmar Par global; resumen separa jugadores", () => {
+test("captura conecta score sugerido-confirmable y Guardar sin botón PAR; resumen separa jugadores", () => {
   assert.doesNotMatch(`${app}\n${roundCapture}`,/Confirmar Par|confirmSuggestedScores/);
-  assert.match(roundCapture,/onClick=\{\(\) => props\.onScoreChange\(owner\.id, hole\.par\)\}>PAR<\/button>/);
+  assert.doesNotMatch(roundCapture,/>PAR<\/button>/);
+  assert.match(roundCapture,/value=\{scores\[owner\.id\]\} fallback=\{hole\.par\}/);
   assert.match(app,/onScoreChange=\{setScore\}/);
   assert.match(app,/setScoreEdits\(prev => editCapturedScore/);
   assert.match(app,/setScores\(committed.scores\)/);

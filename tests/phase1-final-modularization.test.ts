@@ -75,9 +75,9 @@ test("proveedor interno devuelve modelos reales por categoría, marca y varilla"
     const page = await provider.search({ kind, query, category, limit: 50 });
     assert.ok(page.items.length > 0, `${kind} ${query} ${category || ""} debe devolver resultados`);
   }
-  assert.ok(golfClubCatalog.every((item) => item.officialUrl && item.sourceName && item.verifiedAt));
+  assert.ok(golfClubCatalog.every((item) => (item.officialUrl || item.sourceUrl) && item.sourceName && item.verifiedAt));
   assert.ok(golfShaftCatalog.every((item) => item.officialUrl && item.sourceName && item.verifiedAt));
-  assert.ok(golfBallCatalog.every((item) => item.officialUrl && item.sourceName && item.verifiedAt));
+  assert.ok(golfBallCatalog.every((item) => (item.officialUrl || item.sourceUrl) && item.sourceName && item.verifiedAt));
 });
 
 test("visión de launch monitor conserva evidencia parcial y rechaza rangos inventados", () => {

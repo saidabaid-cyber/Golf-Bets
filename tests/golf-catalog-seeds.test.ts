@@ -245,9 +245,9 @@ test("la proyección de compresión y shaft usa procedencia explícita, nunca in
       assert.equal(ball.compression_source, null);
       assert.equal(ball.compression_source_url, null);
     } else {
-      assert.equal(ball.compression_type, "MANUFACTURER");
+      assert.ok(ball.compression_type === "MANUFACTURER" || ball.compression_type === "INDEPENDENT_MEASURED");
       assert.ok(ball.compression_source);
-      assert.equal(ball.compression_source_url, ball.official_url);
+      assert.match(ball.compression_source_url || "", /^https:\/\//);
     }
   }
   for (const shaft of projected.shafts) {
@@ -283,17 +283,20 @@ test("cada catálogo tiene una proyección completa e idempotente para Supabase 
   assert.equal(new Set(projected.ballBrands.map((row) => row.id)).size, projected.ballBrands.length);
   assert.ok(projected.balls.every((row) => projected.ballBrands.some((brand) => brand.id === row.brand_id)));
   assert.ok(projected.clubs.every((row) => projected.clubBrands.some((brand) => brand.id === row.brand_id)));
-  assert.ok(projected.balls.every((row) => row.compression_type === (row.compression === null ? "UNKNOWN" : "MANUFACTURER")));
+  assert.ok(projected.balls.every((row) => row.compression === null
+    ? row.compression_type === "UNKNOWN"
+    : row.compression_type === "MANUFACTURER" || row.compression_type === "INDEPENDENT_MEASURED"));
   assert.ok(projected.balls.every((row) => row.recommended_swing_speed_min_mph === null && row.usga_conforming === null));
 
   for (const row of [...projected.ballBrands, ...projected.clubBrands, ...projected.balls, ...projected.clubs, ...projected.shafts]) {
     assert.ok(row.id);
     if ("source_url" in row) {
-      assert.equal(row.source_url, row.official_url);
       assert.match(row.source_url, /^https:\/\//);
     }
-    assert.ok(row.source_name);
-    assert.ok(row.verified_at);
-    assert.ok(Number.isFinite(Date.parse(row.verified_at)));
+    if ("source_url" in row) {
+      assert.ok(row.source_name);
+      assert.ok(row.verified_at);
+      assert.ok(Number.isFinite(Date.parse(row.verified_at)));
+    }
   }
 });

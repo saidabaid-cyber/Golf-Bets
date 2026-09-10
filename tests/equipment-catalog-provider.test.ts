@@ -61,6 +61,8 @@ test("Ball Fit recibe el catálogo activo completo aunque la búsqueda normal te
     ...golfBallCatalog[index % golfBallCatalog.length],
     id: `expanded-ball-${index}`,
     brand: `Brand ${index}`,
+    active: true,
+    fitEligible: true,
   }));
   const archivedCurrent = { ...golfBallCatalog[0], id: "archived-current", active: false };
   const provider = createInternalEquipmentCatalogProvider({
@@ -84,6 +86,8 @@ test("Ball Fit falla cerrado cuando el catálogo rebasa el máximo; nunca entreg
   const expandedBalls = Array.from({ length: 51 }, (_, index) => ({
     ...golfBallCatalog[index % golfBallCatalog.length],
     id: `bounded-ball-${index}`,
+    active: true,
+    fitEligible: true,
   }));
   const provider = createInternalEquipmentCatalogProvider({
     balls: expandedBalls,

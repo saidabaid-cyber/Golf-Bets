@@ -10,15 +10,16 @@ import { MEMBERSHIP_CAPABILITIES, membershipEntitlement, normalizeMembershipPlan
 import { PROFILE_EMOJI_AVATARS, isProfileEmojiAvatar } from "../lib/profile-avatar";
 import { reconcilePlayerTeeAssignments } from "../lib/player-tee-assignments";
 
-test("emoji es un avatar tipado, seleccionable y no una URL", () => {
+test("emoji libre usa el teclado nativo, conserva presets existentes y no acepta una URL", () => {
   assert.ok(PROFILE_EMOJI_AVATARS.length >= 12);
   for (const emoji of PROFILE_EMOJI_AVATARS) assert.equal(isProfileEmojiAvatar(emoji), true);
   assert.equal(isProfileEmojiAvatar("https://example.test/avatar.png"), false);
   const picker = readFileSync("app/components/profile-image-picker.tsx", "utf8");
   assert.match(picker, />Foto<\/button>/);
-  assert.match(picker, />Avatares<\/button>/);
   assert.match(picker, />Emoji<\/button>/);
-  assert.match(picker, /aria-pressed=\{value === emoji\}/);
+  assert.match(picker, />Crear avatar<\/button>/);
+  assert.match(picker, /normalizeProfileEmojiAvatar/);
+  assert.match(picker, /Emoji de avatar/);
 });
 
 test("club del perfil consume CourseCatalogProvider y conserva captura manual", async () => {
@@ -31,7 +32,8 @@ test("club del perfil consume CourseCatalogProvider y conserva captura manual", 
   assert.equal(courses.ok, true);
   if (courses.ok) assert.ok(courses.data.some((course) => course.name === "La Vista"));
   const picker = readFileSync("app/components/profile-club-picker.tsx", "utf8");
-  assert.match(picker, /internalCourseCatalogProvider\.searchClubs/);
+  assert.match(picker, /\/api\/courses\/search\?scope=clubs/);
+  assert.match(picker, /window\.setTimeout/);
   assert.match(picker, /Nombre manual/);
 });
 
@@ -77,9 +79,9 @@ test("snapshot forgiving.golf es útil, trazable, licenciado y se deduplica", ()
   assert.ok(snapshot.models.length >= 60);
   assert.ok(snapshot.models.every((model) => model.externalId && model.sourceUrl.startsWith("https://") && model.sourceCheckedAt && model.license === "CC BY 4.0"));
   assert.equal(golfCatalogDiagnostics.clubs.importedModels, snapshot.models.length);
-  const identities = golfClubCatalog.map((club) => `${club.category}:${club.brand.toLowerCase()}:${club.model.toLowerCase()}`);
+  const identities = golfClubCatalog.map((club) => `${club.category}:${club.brand.toLowerCase()}:${club.model.toLowerCase()}:${club.year ?? club.generation ?? "unknown"}`);
   assert.equal(new Set(identities).size, identities.length);
-  assert.ok(golfClubCatalog.filter((club) => club.sourceName?.startsWith("forgiving.golf")).length >= 50);
+  assert.ok(golfClubCatalog.filter((club) => club.provenance.some((source) => source.sourceName.startsWith("forgiving.golf"))).length >= 50);
 });
 
 test("set de fierros libre alimenta la lista táctil y el snapshot histórico", () => {

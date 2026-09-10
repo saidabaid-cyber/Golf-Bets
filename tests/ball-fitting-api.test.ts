@@ -71,15 +71,16 @@ test("el transporte stateless sustituye identidades sin mutar la sesión local",
 });
 
 test("normaliza una respuesta exhaustiva y sólo exige detalles de recomendaciones", () => {
-  const result = runBackyardBallFit(golfBallCatalog, input);
+  const eligibleCatalog = golfBallCatalog.filter((ball) => ball.active && ball.fitEligible);
+  const result = runBackyardBallFit(eligibleCatalog, input);
   const selectedIds = new Set([input.currentBallId, ...result.recommendations.map((item) => item.catalogBallId)]);
   const catalog = golfBallCatalog.filter((ball) => selectedIds.has(ball.id));
   const normalized = normalizeBallFitApiSuccess({
     provider: "test-provider",
     scope: {
       complete: true,
-      activeCandidateCount: golfBallCatalog.filter((ball) => ball.active).length,
-      evaluatedCandidateCount: golfBallCatalog.filter((ball) => ball.active).length,
+      activeCandidateCount: eligibleCatalog.length,
+      evaluatedCandidateCount: eligibleCatalog.length,
       maximumCandidates: 2_000,
     },
     result,
