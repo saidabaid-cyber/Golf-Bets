@@ -32,6 +32,7 @@ Last updated: 2026-09-10 (America/Mexico_City)
 | Final closeout Preview/runtime | `phase2/full-platform` / `1dc3ea1` | PASS | GitHub deployment `6379963652`, immutable Preview `golf-bets-g93tm5rny-saha8.vercel.app`; exhaustive catalog pagination, Ball Fit, Card AI, Launch Monitor AI, Insights, Live Question, Legal, PWA and expected negative HTTP contracts pass with no unexpected 5xx | Controlled DB apply and human/device gates remain |
 | Priority UX correction baseline | `phase2/full-platform` / `e141fce206a3b81f758d189a609af032f86ae2f0` | PASS | Clean branch after fetch; protected refs recorded; shared Supabase left read-only | Guided equipment, anchored search, onboarding/groups, HCP and bet configuration |
 | Priority UX correction local gate | `phase2/full-platform` / `ecae2d790e67131db4b15788b5cb40dc5fd8cad7` | PASS | 1,379 passed, 0 failed/skipped; lint PASS; Next production build PASS (28 pages); catalog/course APIs return paginated results; public shell has no overflow or browser errors at 390/430 px | Commit this checkpoint, deploy Preview and repeat public runtime smoke |
+| Priority UX correction Preview | `phase2/full-platform` / `18846cc71e8fd149d5a0e3eabd76cc2fa0d29db1` | PASS | Branch alias HTTP 200; deployed bundle contains the new HCP, group-privacy and deletion UX; equipment/course APIs and AI readiness return 200; no browser/console errors or horizontal expansion at 390/430 px | Human post-consent and physical-device review; isolated DB gate remains |
 
 ## Migration ledger
 
@@ -57,4 +58,4 @@ These dependencies do not block local contracts, adapters, fixtures, feature fla
 
 ## Resume point
 
-The priority UX correction is locally verified. Push only `phase2/full-platform`, wait for the resulting Preview, then verify the branch alias, paginated equipment/course search and public 390/430 px shell. The complete post-legal-gate tap-through remains `PENDING_INTERACTIVE_QA`; physical iPhone/keyboard behavior remains `PENDING_DEVICE_QA`; cloud deletion, secure invitations and authenticated persistence remain `PENDING_CONTROLLED_DB_APPLY`; private Vercel Runtime Logs remain `BLOCKED_EXTERNAL`. Do not promote or connect a custom domain.
+The priority UX correction Preview is verified on the branch alias. The complete post-legal-gate tap-through remains `PENDING_INTERACTIVE_QA`; physical iPhone/keyboard behavior remains `PENDING_DEVICE_QA`; cloud deletion, secure invitations and authenticated persistence remain `PENDING_CONTROLLED_DB_APPLY`; private Vercel Runtime Logs remain `BLOCKED_EXTERNAL`. Do not promote or connect a custom domain.
