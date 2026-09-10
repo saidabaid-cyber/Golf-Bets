@@ -153,6 +153,28 @@ function canonicalizeBrand<T extends { brand: string }>(item: T): T {
   return brand === item.brand ? item : { ...item, brand };
 }
 
+// These verified legacy rows predate the explicit shaft-usage field. Keeping
+// the mapping by stable catalog ID preserves saved references while preventing
+// an unscoped iron shaft from appearing in a wood selector (and vice versa).
+const LEGACY_SHAFT_USAGE_BY_ID: Readonly<Record<string, NonNullable<GolfShaftCatalog["usage"]>>> = Object.freeze({
+  "mitsubishi-diamana-wb": "WOOD",
+  "mitsubishi-diamana-rb": "WOOD",
+  "mitsubishi-diamana-bb": "WOOD",
+  "mitsubishi-tensei-1k-pro-red": "WOOD",
+  "mitsubishi-grand-bassara": "WOOD",
+  "kbs-max-graphite-iron": "IRON",
+  "kbs-pgi": "IRON",
+  "true-temper-dynamic-gold-mid": "IRON",
+  "project-x-denali-black": "WOOD",
+  "ust-mamiya-recoil-dart": "IRON",
+});
+
+function withVerifiedLegacyShaftUsage(shaft: GolfShaftCatalog): GolfShaftCatalog {
+  if (shaft.usage) return shaft;
+  const usage = LEGACY_SHAFT_USAGE_BY_ID[shaft.id];
+  return usage ? { ...shaft, usage } : shaft;
+}
+
 function modelWithoutRedundantCategory(model: string, category: GolfClubCatalog["category"]) {
   const suffixes: Partial<Record<GolfClubCatalog["category"], RegExp>> = {
     DRIVER: /\s+driver$/i,
@@ -323,7 +345,7 @@ export const golfClubCatalog: readonly GolfClubCatalog[] = Object.freeze(
 
 export const golfShaftCatalog: readonly GolfShaftCatalog[] = Object.freeze(
   dedupeGolfShaftCatalog(
-    normalizeGolfShaftCatalogEntries(legacyCombinedShaftSeed).map(canonicalizeBrand),
+    normalizeGolfShaftCatalogEntries(legacyCombinedShaftSeed).map(canonicalizeBrand).map(withVerifiedLegacyShaftUsage),
     normalizeGolfShaftCatalogEntries(masterShaftSeed).map(canonicalizeBrand),
   ),
 );

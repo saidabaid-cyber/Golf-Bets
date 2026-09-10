@@ -102,6 +102,9 @@ test("buscador server-side encuentra familias actuales e históricas por peso y 
 });
 
 test("paginación es estable, no repite filas y filtra usage sin cargar todo", async () => {
+  assert.ok(golfShaftCatalog.every((item) => item.usage !== null), "cada varilla debe tener uso explícito");
+  assert.equal(golfShaftCatalog.find((item) => item.id === "mitsubishi-diamana-wb")?.usage, "WOOD");
+  assert.equal(golfShaftCatalog.find((item) => item.id === "kbs-max-graphite-iron")?.usage, "IRON");
   const first = await provider.search({ kind: "SHAFT", query: "", limit: 20 });
   assert.equal(first.items.length, 20);
   assert.equal(first.hasMore, true);
