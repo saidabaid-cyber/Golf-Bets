@@ -18,7 +18,9 @@ Last updated: 2026-09-10 (America/Mexico_City)
 | Hard closeout baseline | `phase2/full-platform` / `ed21c7dbdfd898def114ba322b0ece6bb8858dce` | PASS | Clean tree; remote refs fetched; attached ZIP validated (SHA-256 `570D46614DB1213E71EF126710C736A7B3876EBFB28B95523F0AC59AD3D1BD36`) | Import Equipment master |
 | Equipment master 2010–2026 | `phase2/full-platform` / `d3facee` | PASS | 1,202 club and 285 ball source rows accepted; merged provider has 1,277 clubs, 310 balls and 48 shafts; historical search, pagination, generation and Plus-variant tests pass | Hard-closeout UX |
 | Hard-closeout UX | `phase2/full-platform` / `a6ef0ea` | PASS | Server-side club search; native emoji avatar; disabled GHIN provider UI; single onboarding choice; explicit score/putt confirmation; shared modal close control and audit | Final quality gate |
-| Hard-closeout quality gate | `phase2/full-platform` / `c8c8291` | PASS | 1,357 passed, 0 failed, 0 skipped; lint PASS; Next production build PASS (28 pages) | Push and Preview QA |
+| Hard-closeout quality gate | `phase2/full-platform` / `f34077c` | PASS | 1,358 passed, 0 failed, 0 skipped; lint PASS; Next production build PASS (28 pages) | Push and final Preview QA |
+| Hard-closeout Preview | `phase2/full-platform` / `d24f4b4` | PASS | Vercel deployment `62oHsFfJnZVxFo2DacfmAf75G3RM`, GitHub deployment `6376800017`, immutable URL HTTP 200 and READY | Runtime QA |
+| Hard-closeout runtime QA | `phase2/full-platform` / `d24f4b4` | PASS | Historical club/ball searches and zero-overlap pagination pass; club search returns La Vista; Ball Fit evaluates all 71 eligible candidates and returns Top 3; AI GET endpoints ready; 390/430px shell has no horizontal expansion or browser errors | Push brand-alias follow-up and verify final Preview |
 
 ## Migration ledger
 
@@ -44,4 +46,4 @@ These dependencies do not block local contracts, adapters, fixtures, feature fla
 
 ## Resume point
 
-Push the four hard-closeout commits (`d3facee`, `563fd84`, `a6ef0ea`, `c8c8291`), wait for the branch Preview, then execute runtime catalog/search and mobile browser QA. Apply the four existing migrations only after confirming an isolated Preview Supabase project, then execute authenticated multi-user/RLS QA. Browser/device-only checks remain `PENDING_DEVICE_QA` or `PENDING_INTERACTIVE_QA` until actually exercised. Do not promote or connect a custom domain before those controlled gates are approved.
+Push the brand-alias follow-up (`f34077c`) and this status update, then verify the final immutable Preview and branch alias. Apply the four existing migrations only after confirming an isolated Preview Supabase project, then execute authenticated multi-user/RLS QA. Ball Fit/capture/profile interactions behind the unaccepted guest legal gate and physical iPhone checks remain `PENDING_INTERACTIVE_QA` or `PENDING_DEVICE_QA`. Do not promote or connect a custom domain before those controlled gates are approved.
