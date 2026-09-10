@@ -70,10 +70,26 @@ create table if not exists public.notification_events_v2 (
 );
 create index if not exists notification_events_v2_recipient_idx on public.notification_events_v2(recipient_id, created_at desc);
 
+create or replace function private.has_round_participation(target_round_id uuid)
+returns boolean language sql security definer stable set search_path = '' as $$
+  select exists(
+    select 1 from public.round_participants_v2
+    where round_id = target_round_id and user_id = (select auth.uid())
+  );
+$$;
 create or replace function private.is_round_participant(target_round_id uuid)
 returns boolean language sql security definer stable set search_path = '' as $$
   select exists(select 1 from public.rounds_cloud where id = target_round_id and owner_id = (select auth.uid()))
-    or exists(select 1 from public.round_participants_v2 where round_id = target_round_id and user_id = (select auth.uid()));
+    or private.has_round_participation(target_round_id);
+$$;
+create or replace function private.can_read_round_player(target_round_player_id uuid)
+returns boolean language sql security definer stable set search_path = '' as $$
+  select exists(
+    select 1
+    from public.round_players_cloud player
+    where player.id = target_round_player_id
+      and private.is_round_participant(player.round_id)
+  );
 $$;
 create or replace function private.can_edit_round_player(target_round_id uuid, target_player_key text, settings_operation boolean)
 returns boolean language sql security definer stable set search_path = '' as $$
@@ -84,8 +100,8 @@ returns boolean language sql security definer stable set search_path = '' as $$
         and (role = 'SCOREKEEPER' or (not settings_operation and role = 'PLAYER' and player_key = target_player_key))
     );
 $$;
-revoke all on function private.is_round_participant(uuid), private.can_edit_round_player(uuid, text, boolean) from public, anon;
-grant execute on function private.is_round_participant(uuid), private.can_edit_round_player(uuid, text, boolean) to authenticated;
+revoke all on function private.has_round_participation(uuid), private.is_round_participant(uuid), private.can_read_round_player(uuid), private.can_edit_round_player(uuid, text, boolean) from public, anon;
+grant execute on function private.has_round_participation(uuid), private.is_round_participant(uuid), private.can_read_round_player(uuid), private.can_edit_round_player(uuid, text, boolean) to authenticated;
 
 alter table public.round_participants_v2 enable row level security;
 alter table public.live_round_operations_v2 enable row level security;
@@ -115,6 +131,15 @@ create policy "notification preferences self update" on public.notification_pref
 create policy "notification preferences self delete" on public.notification_preferences_v2 for delete to authenticated using (user_id = (select auth.uid()));
 create policy "notification events recipient select" on public.notification_events_v2 for select to authenticated using (recipient_id = (select auth.uid()));
 create policy "notification events recipient update" on public.notification_events_v2 for update to authenticated using (recipient_id = (select auth.uid())) with check (recipient_id = (select auth.uid()));
+
+-- Existing Phase 1 round rows stay owner-writable. Authorized participants get
+-- read-only access to the canonical snapshot/card that backs the live feed.
+create policy "rounds participant read v2" on public.rounds_cloud for select to authenticated
+  using (private.has_round_participation(id));
+create policy "round players participant read v2" on public.round_players_cloud for select to authenticated
+  using (private.has_round_participation(round_id));
+create policy "round scores participant read v2" on public.round_scores_cloud for select to authenticated
+  using (private.can_read_round_player(round_player_id));
 
 comment on table public.live_round_operations_v2 is 'Immutable idempotent operations. Realtime transport is provider-neutral and private.';
 comment on table public.notification_events_v2 is 'Private event references only; push delivery is separately configured and disabled by default.';

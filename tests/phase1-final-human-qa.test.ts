@@ -103,8 +103,10 @@ test("set de fierros libre alimenta la lista táctil y el snapshot histórico", 
   assert.match(editor, /Personalizar set/);
 });
 
-test("BETA_PRO tiene todos los entitlements pero no existe gating en Phase 1", () => {
-  assert.equal(normalizeMembershipPlanId(undefined), "BETA_PRO");
+test("BETA_PRO explícito habilita Beta y una asignación ausente falla cerrado a FREE", () => {
+  assert.equal(normalizeMembershipPlanId(undefined), "FREE");
+  assert.equal(normalizeMembershipPlanId("tampered-plan"), "FREE");
+  assert.equal(normalizeMembershipPlanId("BETA_PRO"), "BETA_PRO");
   for (const capability of MEMBERSHIP_CAPABILITIES) assert.equal(membershipEntitlement("BETA_PRO", capability), "AVAILABLE");
   assert.match(readFileSync("docs/MEMBERSHIP_PHASE2.md", "utf8"), /no activa pagos, límites, paywalls ni precios/i);
 });

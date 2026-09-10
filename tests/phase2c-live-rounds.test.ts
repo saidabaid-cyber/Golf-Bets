@@ -92,5 +92,10 @@ test("Phase 2C migration is private, idempotent and never exposes realtime publi
     assert.match(migration, new RegExp(`create table if not exists public\\.${table}`));
     assert.match(migration, new RegExp(`alter table public\\.${table} enable row level security`));
   }
+  assert.match(migration, /private\.has_round_participation/);
+  assert.match(migration, /private\.can_read_round_player/);
+  assert.match(migration, /rounds participant read v2/);
+  assert.match(migration, /round players participant read v2/);
+  assert.match(migration, /round scores participant read v2/);
   assert.doesNotMatch(migration, /alter publication|drop table|truncate table/i);
 });

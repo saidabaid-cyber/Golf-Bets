@@ -91,6 +91,8 @@ test("BETA_PRO never blocks while Free allowances are registry-driven", () => {
   const counter = { used: 1, window: "monthly" as const, windowKey: "2026-09" };
   assert.equal(consumeAllowance("FREE", "CARD_AI", counter).used, 2);
   assert.equal(canUseFeature("FREE", "CARD_AI", { ...counter, used: 2 }), false);
+  assert.equal(canUseFeature(undefined, "SHOT_TRACKING"), false);
+  assert.equal(canUseFeature("tampered-plan", "SHOT_TRACKING"), false);
 });
 
 test("Phase 2A migration is additive, RLS protected and stores only hashed invite tokens", () => {
@@ -101,6 +103,15 @@ test("Phase 2A migration is additive, RLS protected and stores only hashed invit
   }
   assert.match(migration, /token_hash text not null unique/);
   assert.match(migration, /search_social_profiles_v2/);
+  assert.match(migration, /private\.can_send_friend_request/);
+  assert.match(migration, /insert into public\.friendships/);
+  assert.match(migration, /blocked_connection_cleanup/);
+  assert.match(migration, /group_invite_transition_guard/);
+  assert.match(migration, /round_invite_transition_guard/);
+  assert.match(migration, /handle_phase2_user_bootstrap/);
+  assert.match(migration, /name = ''/);
+  assert.match(migration, /username_candidate/);
+  assert.match(migration, /values \(new\.id, 'BETA_PRO'/);
   assert.match(migration, /returns table\(user_id uuid, username text, display_name text, avatar_url text\)/);
   assert.match(migration, /social_profiles_self_or_friend/);
   assert.doesNotMatch(migration, /using \(user_id = \(select auth\.uid\(\)\) or privacy = 'FRIENDS'\)/);

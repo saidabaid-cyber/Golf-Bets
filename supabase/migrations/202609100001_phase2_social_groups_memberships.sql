@@ -191,6 +191,61 @@ create table if not exists public.app_admins (
   granted_by uuid references auth.users(id) on delete set null
 );
 
+create or replace function public.handle_phase2_user_bootstrap()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare
+  username_base text;
+  username_candidate text;
+begin
+  username_base := regexp_replace(
+    lower(split_part(coalesce(new.email, ''), '@', 1)),
+    '[^a-z0-9._]+', '', 'g'
+  );
+  username_base := regexp_replace(username_base, '^[^a-z0-9]+', '');
+  if length(username_base) < 2 then
+    username_base := 'golfista_' || substr(replace(new.id::text, '-', ''), 1, 8);
+  end if;
+  username_candidate := left(username_base, 40);
+  if exists(select 1 from public.social_profiles where lower(username) = lower(username_candidate)) then
+    username_candidate := left(username_base, 33) || '_' || substr(md5(new.id::text), 1, 6);
+  end if;
+
+  insert into public.profiles(id, name, display_name, avatar_url, username, social_privacy)
+  values (
+    new.id,
+    '',
+    '',
+    coalesce(new.raw_user_meta_data ->> 'avatar_url', new.raw_user_meta_data ->> 'picture'),
+    username_candidate,
+    'PRIVATE'
+  )
+  on conflict (id) do update set
+    name = '',
+    display_name = '',
+    username = coalesce(public.profiles.username, excluded.username),
+    social_privacy = coalesce(public.profiles.social_privacy, 'PRIVATE');
+
+  insert into public.social_profiles(user_id, username, display_name, avatar_url, privacy)
+  values (
+    new.id,
+    username_candidate,
+    'Golfista',
+    coalesce(new.raw_user_meta_data ->> 'avatar_url', new.raw_user_meta_data ->> 'picture'),
+    'PRIVATE'
+  )
+  on conflict (user_id) do nothing;
+
+  insert into public.feature_entitlements(user_id, plan_id, metadata)
+  values (new.id, 'BETA_PRO', jsonb_build_object('source', 'preview_beta_bootstrap'))
+  on conflict (user_id) do nothing;
+  return new;
+end;
+$$;
+drop trigger if exists on_auth_user_created_phase2 on auth.users;
+create trigger on_auth_user_created_phase2
+after insert on auth.users for each row execute function public.handle_phase2_user_bootstrap();
+revoke all on function public.handle_phase2_user_bootstrap() from public, anon, authenticated;
+
 create or replace function private.is_group_member(target_group_id uuid)
 returns boolean language sql security definer stable set search_path = '' as $$
   select exists(select 1 from public.groups_v2 where id = target_group_id and owner_id = (select auth.uid()))
@@ -209,12 +264,55 @@ revoke all on function private.is_group_member(uuid), private.is_group_manager(u
 grant usage on schema private to authenticated;
 grant execute on function private.is_group_member(uuid), private.is_group_manager(uuid), private.is_app_admin() to authenticated;
 
+create or replace function private.can_send_friend_request(target_user_id uuid)
+returns boolean language sql security definer stable set search_path = '' as $$
+  select (select auth.uid()) is not null
+    and target_user_id is not null
+    and target_user_id <> (select auth.uid())
+    and not exists (
+      select 1 from public.blocked_connections blocked
+      where (blocked.owner_id = (select auth.uid()) and blocked.blocked_user_id = target_user_id)
+         or (blocked.owner_id = target_user_id and blocked.blocked_user_id = (select auth.uid()))
+    )
+    and not exists (
+      select 1 from public.friendships friendship
+      where (friendship.user_a_id = least((select auth.uid()), target_user_id)
+         and friendship.user_b_id = greatest((select auth.uid()), target_user_id))
+    )
+    and not exists (
+      select 1 from public.friend_requests request
+      where request.state = 'PENDING'
+        and least(request.requester_id, request.addressee_id) = least((select auth.uid()), target_user_id)
+        and greatest(request.requester_id, request.addressee_id) = greatest((select auth.uid()), target_user_id)
+    );
+$$;
+revoke all on function private.can_send_friend_request(uuid) from public, anon;
+grant execute on function private.can_send_friend_request(uuid) to authenticated;
+
 create or replace function private.friend_request_transition()
-returns trigger language plpgsql security invoker set search_path = '' as $$
+returns trigger language plpgsql security definer set search_path = '' as $$
 begin
+  if coalesce(current_setting('request.jwt.claim.role', true), '') = 'service_role' then return new; end if;
   if old.state <> 'PENDING' then raise exception 'friend request is final'; end if;
-  if new.requester_id <> old.requester_id or new.addressee_id <> old.addressee_id then raise exception 'friend identities are immutable'; end if;
-  if (select auth.uid()) = old.addressee_id and new.state in ('ACCEPTED', 'REJECTED') then return new; end if;
+  if new.requester_id <> old.requester_id
+    or new.addressee_id <> old.addressee_id
+    or new.operation_id <> old.operation_id
+    or new.created_at <> old.created_at then
+    raise exception 'friend request identity is immutable';
+  end if;
+  if new.state = 'BLOCKED' and exists (
+    select 1 from public.blocked_connections blocked
+    where (blocked.owner_id = old.requester_id and blocked.blocked_user_id = old.addressee_id)
+       or (blocked.owner_id = old.addressee_id and blocked.blocked_user_id = old.requester_id)
+  ) then return new; end if;
+  if (select auth.uid()) = old.addressee_id and new.state in ('ACCEPTED', 'REJECTED') then
+    if new.state = 'ACCEPTED' then
+      insert into public.friendships(user_a_id, user_b_id, request_id)
+      values (least(old.requester_id, old.addressee_id), greatest(old.requester_id, old.addressee_id), old.id)
+      on conflict (user_a_id, user_b_id) do nothing;
+    end if;
+    return new;
+  end if;
   if (select auth.uid()) = old.requester_id and new.state = 'CANCELLED' then return new; end if;
   raise exception 'invalid friend request transition';
 end;
@@ -222,6 +320,84 @@ $$;
 drop trigger if exists friend_request_transition_guard on public.friend_requests;
 create trigger friend_request_transition_guard before update on public.friend_requests for each row execute function private.friend_request_transition();
 revoke all on function private.friend_request_transition() from public, anon, authenticated;
+
+create or replace function private.blocked_connection_cleanup()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  delete from public.friendships
+  where user_a_id = least(new.owner_id, new.blocked_user_id)
+    and user_b_id = greatest(new.owner_id, new.blocked_user_id);
+  update public.friend_requests
+    set state = 'BLOCKED', updated_at = now()
+    where state = 'PENDING'
+      and least(requester_id, addressee_id) = least(new.owner_id, new.blocked_user_id)
+      and greatest(requester_id, addressee_id) = greatest(new.owner_id, new.blocked_user_id);
+  return new;
+end;
+$$;
+drop trigger if exists blocked_connection_cleanup on public.blocked_connections;
+create trigger blocked_connection_cleanup after insert on public.blocked_connections for each row execute function private.blocked_connection_cleanup();
+revoke all on function private.blocked_connection_cleanup() from public, anon, authenticated;
+
+create or replace function private.group_invite_transition()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if current_user = 'service_role' or coalesce(current_setting('request.jwt.claim.role', true), '') = 'service_role' then return new; end if;
+  if old.state <> 'PENDING' then raise exception 'group invite is final'; end if;
+  if new.group_id <> old.group_id or new.inviter_id <> old.inviter_id
+    or new.invitee_id is distinct from old.invitee_id or new.token_hash <> old.token_hash
+    or new.expires_at <> old.expires_at or new.created_at <> old.created_at then
+    raise exception 'group invite identity is immutable';
+  end if;
+  if (select auth.uid()) = old.inviter_id and new.state = 'REVOKED' then
+    new.revoked_at := coalesce(new.revoked_at, now());
+    return new;
+  end if;
+  if old.invitee_id = (select auth.uid()) and old.expires_at > now() and new.state in ('ACCEPTED', 'DECLINED') then
+    if new.state = 'ACCEPTED' then
+      new.accepted_at := coalesce(new.accepted_at, now());
+      insert into public.group_memberships_v2(group_id, user_id, role, display_name_snapshot)
+      values (
+        old.group_id,
+        old.invitee_id,
+        'MEMBER',
+        coalesce((select display_name from public.social_profiles where user_id = old.invitee_id), 'Golfista')
+      )
+      on conflict (group_id, user_id) where user_id is not null do nothing;
+    end if;
+    return new;
+  end if;
+  raise exception 'invalid group invite transition';
+end;
+$$;
+drop trigger if exists group_invite_transition_guard on public.group_invites_v2;
+create trigger group_invite_transition_guard before update on public.group_invites_v2 for each row execute function private.group_invite_transition();
+revoke all on function private.group_invite_transition() from public, anon, authenticated;
+
+create or replace function private.round_invite_transition()
+returns trigger language plpgsql security invoker set search_path = '' as $$
+begin
+  if current_user = 'service_role' or coalesce(current_setting('request.jwt.claim.role', true), '') = 'service_role' then return new; end if;
+  if old.state <> 'PENDING' then raise exception 'round invite is final'; end if;
+  if new.round_id <> old.round_id or new.inviter_id <> old.inviter_id
+    or new.invitee_id is distinct from old.invitee_id or new.token_hash <> old.token_hash
+    or new.expires_at <> old.expires_at or new.created_at <> old.created_at then
+    raise exception 'round invite identity is immutable';
+  end if;
+  if (select auth.uid()) = old.inviter_id and new.state = 'REVOKED' then
+    new.revoked_at := coalesce(new.revoked_at, now());
+    return new;
+  end if;
+  if old.invitee_id = (select auth.uid()) and old.expires_at > now() and new.state in ('ACCEPTED', 'DECLINED') then
+    if new.state = 'ACCEPTED' then new.accepted_at := coalesce(new.accepted_at, now()); end if;
+    return new;
+  end if;
+  raise exception 'invalid round invite transition';
+end;
+$$;
+drop trigger if exists round_invite_transition_guard on public.round_invites_v2;
+create trigger round_invite_transition_guard before update on public.round_invites_v2 for each row execute function private.round_invite_transition();
+revoke all on function private.round_invite_transition() from public, anon, authenticated;
 
 -- Username discovery intentionally returns only the public identity card. Full
 -- social profile rows (HCP/club) remain restricted to the owner and accepted
@@ -286,7 +462,7 @@ create policy social_profiles_self_update on public.social_profiles for update t
 create policy friend_requests_participant_read on public.friend_requests for select to authenticated
 using ((select auth.uid()) in (requester_id, addressee_id));
 create policy friend_requests_self_insert on public.friend_requests for insert to authenticated
-with check (requester_id = (select auth.uid()) and requester_id <> addressee_id and state = 'PENDING');
+with check (requester_id = (select auth.uid()) and state = 'PENDING' and private.can_send_friend_request(addressee_id));
 create policy friend_requests_participant_update on public.friend_requests for update to authenticated
 using ((select auth.uid()) in (requester_id, addressee_id)) with check ((select auth.uid()) in (requester_id, addressee_id));
 

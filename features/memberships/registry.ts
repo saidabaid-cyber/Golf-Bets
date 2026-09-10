@@ -52,12 +52,12 @@ export type UsageCounter = { used: number; window: AllowanceWindow; windowKey: s
 export function normalizeMembershipPlanId(value: unknown): MembershipPlanId {
   return typeof value === "string" && MEMBERSHIP_PLAN_IDS.includes(value as MembershipPlanId)
     ? value as MembershipPlanId
-    : "BETA_PRO";
+    : "FREE";
 }
 
 export function membershipDefinition(value: unknown) {
   const id = normalizeMembershipPlanId(value);
-  return MEMBERSHIP_DEFINITIONS.find((definition) => definition.id === id) ?? MEMBERSHIP_DEFINITIONS[2];
+  return MEMBERSHIP_DEFINITIONS.find((definition) => definition.id === id) ?? MEMBERSHIP_DEFINITIONS[0];
 }
 
 export function membershipEntitlement(plan: unknown, capability: MembershipCapability): EntitlementValue {
@@ -84,4 +84,3 @@ export function consumeAllowance(plan: unknown, capability: MembershipCapability
   if (!allowance || allowance.limit === null) return counter;
   return { ...counter, used: counter.used + 1 };
 }
-
