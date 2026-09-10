@@ -3,6 +3,7 @@ import type {
   GolfBallCatalog,
   GolfClubCatalog,
   GolfShaftCatalog,
+  ShaftUsage,
 } from "./golf-equipment";
 import type { GolfCatalogPage } from "./golf-catalog-domain";
 
@@ -14,6 +15,7 @@ export type EquipmentCatalogSearchInput = {
   kind: EquipmentCatalogKind;
   query?: string;
   category?: ClubCategory | null;
+  shaftUsage?: ShaftUsage | null;
   cursor?: string | null;
   limit?: number;
   includeArchived?: boolean;
@@ -48,9 +50,27 @@ function searchable(value: string) {
   return value
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[®™]/g, "")
+    .replace(/\+/g, " plus ")
+    .replace(/\bgeneration\s*(\d+)/gi, " g$1 ")
+    .replace(/\bgen\s*(\d+)/gi, " g$1 ")
     .replace(/\s+/g, " ")
     .trim()
     .toLocaleLowerCase("es-MX");
+}
+
+function shaftSearchFacts(item: GolfShaftCatalog) {
+  const weightFlexAliases = item.weightOptions.flatMap((weight) => item.flexOptions.flatMap((flex) => {
+    const weightBand = Math.max(1, Math.floor(weight / 10));
+    return [`${weight} ${flex}`, `${weight}${flex}`, `${weightBand}${flex}`];
+  }));
+  return [
+    item.usage || "",
+    item.oemStockOrAftermarket || "",
+    ...item.weightOptions.map(String),
+    ...item.flexOptions,
+    ...weightFlexAliases,
+  ].join(" ");
 }
 
 function safeLimit(value: number | undefined) {
@@ -98,12 +118,14 @@ function page<T extends EquipmentCatalogItem>(items: readonly T[], input: Equipm
     .filter((item) => ("bagEligible" in item ? item.bagEligible : true))
     .filter((item) => input.includeArchived || item.active)
     .filter((item) => input.kind !== "CLUB" || !input.category || (item as GolfClubCatalog).category === input.category)
+    .filter((item) => input.kind !== "SHAFT" || !input.shaftUsage || (item as GolfShaftCatalog).usage === input.shaftUsage)
     .filter((item) => {
       if (!tokens.length) return true;
       const generation = "generation" in item ? item.generation : "";
       const aliases = "aliases" in item && Array.isArray(item.aliases) ? item.aliases.join(" ") : "";
       const year = "year" in item ? item.year : "";
-      const haystack = searchable(`${item.brand} ${item.model} ${generation || ""} ${year || ""} ${aliases}`)
+      const shaftFacts = input.kind === "SHAFT" ? shaftSearchFacts(item as GolfShaftCatalog) : "";
+      const haystack = searchable(`${item.brand} ${item.model} ${generation || ""} ${year || ""} ${aliases} ${shaftFacts}`)
         .replace(/([a-z])\s+(\d)/g, "$1$2")
         .replace(/(\d)\s+([a-z])/g, "$1$2");
       const compactTokens = tokens.map((token) => token.replace(/\s+/g, ""));

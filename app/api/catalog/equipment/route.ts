@@ -5,7 +5,12 @@ import {
   type EquipmentCatalogKind,
 } from "../../../../lib/equipment-catalog-provider";
 import { internalEquipmentCatalogProvider } from "../../../../lib/equipment-catalog-provider.server";
-import { CLUB_CATEGORIES, type ClubCategory } from "../../../../lib/golf-equipment";
+import {
+  CLUB_CATEGORIES,
+  SHAFT_USAGES,
+  type ClubCategory,
+  type ShaftUsage,
+} from "../../../../lib/golf-equipment";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +22,10 @@ export async function GET(request: NextRequest) {
   const categoryValue = request.nextUrl.searchParams.get("category")?.toUpperCase() || null;
   if (categoryValue && !(CLUB_CATEGORIES as readonly string[]).includes(categoryValue)) {
     return NextResponse.json({ error: "Categoría de bastón inválida." }, { status: 400 });
+  }
+  const shaftUsageValue = request.nextUrl.searchParams.get("usage")?.toUpperCase() || null;
+  if (shaftUsageValue && !(SHAFT_USAGES as readonly string[]).includes(shaftUsageValue)) {
+    return NextResponse.json({ error: "Uso de varilla inválido." }, { status: 400 });
   }
   const limitValue = Number(request.nextUrl.searchParams.get("limit") || "20");
   const pinnedIds = (request.nextUrl.searchParams.get("ids") || "")
@@ -30,6 +39,7 @@ export async function GET(request: NextRequest) {
     kind: typeValue as EquipmentCatalogKind,
     query,
     category: categoryValue as ClubCategory | null,
+    shaftUsage: shaftUsageValue as ShaftUsage | null,
     cursor: request.nextUrl.searchParams.get("cursor"),
     limit: Number.isFinite(limitValue) ? limitValue : 20,
     includeArchived: includeArchivedParam === "true" || (includeArchivedParam !== "false" && query.trim().length > 0),

@@ -4,6 +4,7 @@ import golfShaftSeed from "../data/golf-shaft-catalog.seed.json";
 import golfEquipmentExpansionSeed from "../data/golf-equipment-catalog.expansion.seed.json";
 import forgivingGolfSnapshot from "../data/forgiving-golf-equipment.snapshot.json";
 import equipmentMasterSnapshot from "../data/backyard-equipment-master-2010-2026.snapshot.json";
+import shaftMasterSnapshot from "../data/backyard-shaft-master-2010-2026.snapshot.json";
 import {
   normalizeGolfBallCatalogEntries,
   normalizeGolfClubCatalogEntries,
@@ -100,6 +101,13 @@ const masterSeed = equipmentMasterSnapshot as {
   balls?: unknown;
   clubs?: unknown;
 };
+const masterShaftSeed = shaftMasterSnapshot as SeedEnvelope & {
+  sourceCount?: unknown;
+  acceptedCount?: unknown;
+  rejectedCount?: unknown;
+  declaredFitEligibleCount?: unknown;
+  acceptedFitEligibleCount?: unknown;
+};
 
 function expandedSeed(seed: SeedEnvelope, expansion: unknown): SeedEnvelope {
   return {
@@ -113,7 +121,8 @@ function expandedSeed(seed: SeedEnvelope, expansion: unknown): SeedEnvelope {
 
 const combinedBallSeed = expandedSeed(expandedSeed(rawBallSeed, expansionSeed.balls), masterSeed.balls);
 const combinedClubSeed = expandedSeed(expandedSeed(expandedSeed(rawClubSeed, expansionSeed.clubs), forgivingSeed.models), masterSeed.clubs);
-const combinedShaftSeed = expandedSeed(rawShaftSeed, expansionSeed.shafts);
+const legacyCombinedShaftSeed = expandedSeed(rawShaftSeed, expansionSeed.shafts);
+const combinedShaftSeed = expandedSeed(legacyCombinedShaftSeed, masterShaftSeed.models);
 
 function canonicalEquipmentText(value: string) {
   return value
@@ -132,6 +141,7 @@ function canonicalEquipmentText(value: string) {
 const CANONICAL_BRAND_LABELS = new Map([
   ["cobra", "Cobra"],
   ["lab", "L.A.B. Golf"],
+  ["nippon", "Nippon Shaft"],
 ]);
 
 function canonicalBrandLabel(value: string) {
@@ -236,6 +246,73 @@ export function dedupeGolfBallCatalog(models: readonly GolfBallCatalog[]) {
   return dedupeCatalog(models, canonicalBallIdentity, (ball) => `${canonicalEquipmentText(ball.brand)}:${canonicalEquipmentText(ball.model)}`);
 }
 
+function canonicalShaftModel(model: string) {
+  const reorderedHzrdus = model.replace(/^HZRDUS\s+Gen\s+(\d+)\s+(.+)$/i, "HZRDUS $2 Gen $1");
+  return canonicalEquipmentText(reorderedHzrdus);
+}
+
+function shaftBaseIdentity(shaft: Pick<GolfShaftCatalog, "brand" | "model">) {
+  return `${canonicalEquipmentText(shaft.brand)}:${canonicalShaftModel(shaft.model)}`;
+}
+
+function shaftVariantIdentity(shaft: Pick<GolfShaftCatalog, "usage" | "oemStockOrAftermarket">) {
+  return `${shaft.usage || "unknown"}:${shaft.oemStockOrAftermarket || "unknown"}`;
+}
+
+export function canonicalShaftIdentity(shaft: Pick<GolfShaftCatalog, "brand" | "model" | "generation" | "year" | "usage" | "oemStockOrAftermarket">) {
+  return `${shaftBaseIdentity(shaft)}:${shaftVariantIdentity(shaft)}:${generationKey(shaft)}`;
+}
+
+function mergeShaftRecords(primary: GolfShaftCatalog, fallback: GolfShaftCatalog): GolfShaftCatalog {
+  const merged = { ...fallback, ...primary };
+  for (const key of Object.keys(merged) as Array<keyof GolfShaftCatalog>) {
+    merged[key] = populated(primary[key], fallback[key]) as never;
+  }
+  merged.active = primary.active;
+  merged.bagEligible = primary.bagEligible || fallback.bagEligible;
+  merged.fitEligible = primary.fitEligible || fallback.fitEligible;
+  merged.aliases = [...new Set([...primary.aliases, ...fallback.aliases, ...(primary.id === fallback.id ? [] : [fallback.id])])];
+  merged.provenance = [...new Map([...primary.provenance, ...fallback.provenance]
+    .map((source) => [`${source.sourceType}:${source.sourceUrl}:${source.verifiedAt}`, source])).values()];
+  // Legacy rows store only coarse flex categories. The master retains exact
+  // manufacturer nomenclature and therefore wins this one field when present.
+  if (!primary.sourceType && fallback.flexOptions.length) merged.flexOptions = [...fallback.flexOptions];
+  if (!primary.weightOptions.length && fallback.weightOptions.length) merged.weightOptions = [...fallback.weightOptions];
+  if (!primary.torqueRange.length && fallback.torqueRange.length) merged.torqueRange = [...fallback.torqueRange];
+  return merged;
+}
+
+function matchingCurrentMaster(legacy: GolfShaftCatalog, master: readonly GolfShaftCatalog[]) {
+  const candidates = master.filter((candidate) => shaftBaseIdentity(candidate) === shaftBaseIdentity(legacy));
+  const compatible = candidates.filter((candidate) => (!legacy.usage || candidate.usage === legacy.usage)
+    && (!legacy.oemStockOrAftermarket || candidate.oemStockOrAftermarket === legacy.oemStockOrAftermarket));
+  const current = compatible.filter((candidate) => candidate.active && /CURRENT/i.test(candidate.generation || ""));
+  if (current.length === 1) return current[0];
+  const active = compatible.filter((candidate) => candidate.active);
+  if (active.length === 1) return active[0];
+  return compatible.length === 1 ? compatible[0] : null;
+}
+
+export function dedupeGolfShaftCatalog(legacyModels: readonly GolfShaftCatalog[], masterModels: readonly GolfShaftCatalog[]) {
+  const consumedMasterIds = new Set<string>();
+  const preservedLegacy = legacyModels.map((legacy) => {
+    const match = matchingCurrentMaster(legacy, masterModels);
+    if (!match) return legacy;
+    consumedMasterIds.add(match.id);
+    // Existing IDs are deliberately primary so saved bags and historical
+    // snapshots keep resolving after the catalog expansion.
+    return mergeShaftRecords(legacy, match);
+  });
+  const unique = new Map<string, GolfShaftCatalog>();
+  for (const shaft of [...preservedLegacy, ...masterModels.filter((shaft) => !consumedMasterIds.has(shaft.id))]
+    .sort((left, right) => sourcePriority(right) - sourcePriority(left))) {
+    const key = canonicalShaftIdentity(shaft);
+    const current = unique.get(key);
+    unique.set(key, current ? mergeShaftRecords(current, shaft) : shaft);
+  }
+  return [...unique.values()];
+}
+
 export const golfBallCatalog: readonly GolfBallCatalog[] = Object.freeze(
   dedupeGolfBallCatalog(normalizeGolfBallCatalogEntries(combinedBallSeed).map(canonicalizeBrand)),
 );
@@ -245,7 +322,10 @@ export const golfClubCatalog: readonly GolfClubCatalog[] = Object.freeze(
 );
 
 export const golfShaftCatalog: readonly GolfShaftCatalog[] = Object.freeze(
-  normalizeGolfShaftCatalogEntries(combinedShaftSeed),
+  dedupeGolfShaftCatalog(
+    normalizeGolfShaftCatalogEntries(legacyCombinedShaftSeed).map(canonicalizeBrand),
+    normalizeGolfShaftCatalogEntries(masterShaftSeed).map(canonicalizeBrand),
+  ),
 );
 
 export const golfBallBrands = Object.freeze(catalogBrands(combinedBallSeed, golfBallCatalog));
@@ -278,6 +358,14 @@ export const golfCatalogDiagnostics = Object.freeze({
     declaredBrands: golfShaftBrands.length,
     sourceModels: seedCount(combinedShaftSeed),
     usableModels: golfShaftCatalog.length,
+    masterSourceModels: typeof masterShaftSeed.sourceCount === "number" ? masterShaftSeed.sourceCount : 0,
+    masterAcceptedModels: typeof masterShaftSeed.acceptedCount === "number" ? masterShaftSeed.acceptedCount : 0,
+    masterRejectedModels: typeof masterShaftSeed.rejectedCount === "number" ? masterShaftSeed.rejectedCount : 0,
+    fitEligibleModels: golfShaftCatalog.filter((shaft) => shaft.fitEligible).length,
+    bagEligibleModels: golfShaftCatalog.filter((shaft) => shaft.bagEligible).length,
+    activeModels: golfShaftCatalog.filter((shaft) => shaft.active).length,
+    historicalModels: golfShaftCatalog.filter((shaft) => !shaft.active).length,
+    aliases: golfShaftCatalog.reduce((sum, shaft) => sum + shaft.aliases.length, 0),
   },
 });
 
@@ -376,7 +464,7 @@ export function equipmentCatalogDatabaseSeed() {
       brand: shaft.brand,
       model: shaft.model,
       generation: shaft.generation,
-      year: null,
+      year: shaft.year,
       torque_degrees: shaft.torque,
       tip_diameter_inches: shaft.tipDiameter,
       butt_diameter_inches: shaft.buttDiameter,
@@ -403,4 +491,8 @@ export function activeGolfClubs(): readonly GolfClubCatalog[] {
 
 export function activeGolfShafts(): readonly GolfShaftCatalog[] {
   return golfShaftCatalog.filter((shaft) => shaft.active);
+}
+
+export function fitEligibleGolfShafts(): readonly GolfShaftCatalog[] {
+  return golfShaftCatalog.filter((shaft) => shaft.fitEligible);
 }

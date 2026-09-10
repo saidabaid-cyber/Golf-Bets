@@ -27,6 +27,15 @@ export type ClubHandedness = (typeof CLUB_HANDEDNESS)[number];
 export const SHAFT_FLEXES = ["LADIES", "SENIOR", "REGULAR", "STIFF", "X_STIFF", "TX", "OTHER"] as const;
 export type ShaftFlex = (typeof SHAFT_FLEXES)[number];
 
+export const SHAFT_USAGES = ["WOOD", "FAIRWAY", "HYBRID", "UTILITY", "IRON", "WEDGE", "PUTTER"] as const;
+export type ShaftUsage = (typeof SHAFT_USAGES)[number];
+
+export const SHAFT_MARKET_TYPES = ["AFTERMARKET", "OEM_STOCK"] as const;
+export type ShaftMarketType = (typeof SHAFT_MARKET_TYPES)[number];
+
+export const SHAFT_PROFILES = [...QUALITATIVE_LEVELS, "VARIABLE"] as const;
+export type ShaftProfile = (typeof SHAFT_PROFILES)[number];
+
 export const BALL_PRICE_TIERS = ["ECONOMY", "MID", "PREMIUM"] as const;
 export type BallPriceTier = (typeof BALL_PRICE_TIERS)[number];
 
@@ -121,20 +130,37 @@ export type GolfClubCatalogVariant = {
 
 export type GolfShaftCatalog = {
   id: string;
+  aliases: string[];
   brand: string;
   model: string;
   generation: string | null;
+  year: number | null;
+  usage: ShaftUsage | null;
   active: boolean;
+  bagEligible: boolean;
+  fitEligible: boolean;
+  oemStockOrAftermarket: ShaftMarketType | null;
+  weightOptions: number[];
+  /** Manufacturer nomenclature is authoritative: 5.5, F4, M4 and SF505
+   * must not be destructively translated to a generic flex. */
+  flexOptions: string[];
   weight: number | null;
+  /** Legacy coarse flex categories retained for existing consumers. */
   flex: ShaftFlex[];
-  launch: QualitativeLevel | null;
-  spin: QualitativeLevel | null;
+  launch: ShaftProfile | null;
+  spin: ShaftProfile | null;
   material: string | null;
+  torqueRange: number[];
   torque: number | null;
   tipDiameter: number | null;
   buttDiameter: number | null;
   officialUrl: string | null;
   sourceName: string | null;
+  sourceUrl: string | null;
+  sourceType: string | null;
+  confidence: string | null;
+  license: string | null;
+  provenance: EquipmentCatalogProvenance[];
   verifiedAt: string | null;
   createdAt: string | null;
   updatedAt: string | null;
@@ -157,6 +183,9 @@ export type PlayerClub = {
   /** Legacy combined field retained so existing v1 profiles remain readable. */
   customShaft: string | null;
   flex: ShaftFlex | null;
+  /** Exact manufacturer label selected from the catalog (for example 5.5,
+   * F4, M4 or SF505). Optional for backward compatibility with v1/v2 data. */
+  shaftFlexLabel?: string | null;
   shaftWeightGrams: number | null;
   lengthInches: number | null;
   lieDegrees: number | null;
@@ -635,26 +664,74 @@ export function normalizeGolfShaftCatalog(value: unknown): GolfShaftCatalog | nu
   const model = text(source.model);
   const active = boolean(source.active);
   if (!id || !brand || !model || active === null) return null;
+  const aliases = uniqueTextArray(source.aliases, 50);
+  const year = nullableInteger(source.year, 1900, 2200);
+  const usage = memberOf(source.usage, SHAFT_USAGES);
+  const oemStockOrAftermarket = memberOf(source.oemStockOrAftermarket, SHAFT_MARKET_TYPES);
+  const weightOptions = uniqueNumbers(source.weightOptions, 1, 300);
+  const flexOptions = uniqueTextArray(source.flexOptions, 40);
   const rawFlex = Array.isArray(source.flex) ? source.flex : [source.flex];
-  const flex = SHAFT_FLEXES.filter((candidate) => rawFlex.includes(candidate));
+  const flexFromManufacturerLabels: Partial<Record<string, ShaftFlex>> = {
+    L: "LADIES", A: "SENIOR", SR: "SENIOR", R2: "SENIOR", R1: "REGULAR",
+    R: "REGULAR", S: "STIFF", X: "X_STIFF", TX: "TX",
+  };
+  const flex = SHAFT_FLEXES.filter((candidate) => rawFlex.includes(candidate)
+    || flexOptions.some((label) => flexFromManufacturerLabels[label.toUpperCase()] === candidate));
+  const legacyFlexOptions: Partial<Record<ShaftFlex, string>> = {
+    LADIES: "L", SENIOR: "A", REGULAR: "R", STIFF: "S", X_STIFF: "X", TX: "TX",
+  };
+  const exactFlexOptions = flexOptions.length
+    ? flexOptions
+    : flex.flatMap((candidate) => legacyFlexOptions[candidate] ? [legacyFlexOptions[candidate] as string] : []);
+  const launch = memberOf(source.launch, SHAFT_PROFILES);
+  const spin = memberOf(source.spin, SHAFT_PROFILES);
+  const torqueRange = uniqueNumbers(source.torqueRange, 0, 30).slice(0, 2);
+  const weight = nullableNumber(source.weight, 1, 250) ?? (weightOptions.length === 1 ? weightOptions[0] : null);
+  const torque = nullableNumber(source.torque, 0, 30) ?? (torqueRange.length === 1 ? torqueRange[0] : null);
+  const officialUrl = httpsUrl(source.officialUrl);
+  const sourceName = text(source.sourceName);
+  const verifiedAt = isoDate(source.verifiedAt);
+  const provenance = sourceName && verifiedAt
+    ? catalogProvenanceOrFallback(source, sourceName, verifiedAt, officialUrl)
+    : normalizeCatalogProvenance(source.provenance);
+  const explicitFitEligible = boolean(source.fitEligible);
+  const technicallyTraceable = weightOptions.length > 0
+    && exactFlexOptions.length > 0
+    && launch !== null
+    && spin !== null
+    && provenance.length > 0;
 
   return {
     id,
+    aliases,
     brand,
     model,
     generation: text(source.generation),
+    year,
+    usage,
     active,
-    weight: nullableNumber(source.weight, 1, 250),
+    bagEligible: boolean(source.bagEligible) ?? true,
+    fitEligible: explicitFitEligible === true && technicallyTraceable,
+    oemStockOrAftermarket,
+    weightOptions: weightOptions.length ? weightOptions : weight === null ? [] : [weight],
+    flexOptions: exactFlexOptions,
+    weight,
     flex,
-    launch: memberOf(source.launch, QUALITATIVE_LEVELS),
-    spin: memberOf(source.spin, QUALITATIVE_LEVELS),
+    launch,
+    spin,
     material: text(source.material),
-    torque: nullableNumber(source.torque, 0, 30),
+    torqueRange: torqueRange.length ? torqueRange : torque === null ? [] : [torque],
+    torque,
     tipDiameter: nullableNumber(source.tipDiameter, 0.1, 2),
     buttDiameter: nullableNumber(source.buttDiameter, 0.1, 2),
-    officialUrl: httpsUrl(source.officialUrl),
-    sourceName: text(source.sourceName),
-    verifiedAt: isoDate(source.verifiedAt),
+    officialUrl,
+    sourceName,
+    sourceUrl: httpsUrl(source.sourceUrl) || officialUrl,
+    sourceType: text(source.sourceType, 80),
+    confidence: text(source.confidence, 40),
+    license: text(source.license, 100),
+    provenance,
+    verifiedAt,
     ...optionalTimestampFields(source),
   };
 }
@@ -703,6 +780,7 @@ export function normalizePlayerClub(value: unknown, expectedUserId?: string): Pl
     customShaftModel: text(source.customShaftModel),
     customShaft: text(source.customShaft),
     flex: memberOf(source.flex, SHAFT_FLEXES),
+    shaftFlexLabel: text(source.shaftFlexLabel, 40),
     shaftWeightGrams: nullableNumber(source.shaftWeightGrams, 1, 300),
     lengthInches: nullableNumber(source.lengthInches, 10, 60),
     lieDegrees: nullableNumber(source.lieDegrees, 30, 90),

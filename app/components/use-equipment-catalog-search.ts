@@ -11,6 +11,7 @@ import {
   type GolfBallCatalog,
   type GolfClubCatalog,
   type GolfShaftCatalog,
+  type ShaftUsage,
 } from "../../lib/golf-equipment";
 
 type CatalogIdentity = { id: string; brand: string; model: string; active: boolean };
@@ -54,6 +55,7 @@ async function fetchCatalogPage({
   kind,
   query,
   category,
+  shaftUsage,
   pinnedKey,
   cursor,
   signal,
@@ -61,12 +63,14 @@ async function fetchCatalogPage({
   kind: EquipmentCatalogKind;
   query: string;
   category?: ClubCategory;
+  shaftUsage?: ShaftUsage;
   pinnedKey: string;
   cursor?: string | null;
   signal?: AbortSignal;
 }): Promise<CatalogPage> {
   const params = new URLSearchParams({ type: kind, q: query, limit: "50" });
   if (category) params.set("category", category);
+  if (shaftUsage) params.set("usage", shaftUsage);
   if (pinnedKey) params.set("ids", pinnedKey);
   if (cursor) params.set("cursor", cursor);
   const response = await fetch(`/api/catalog/equipment?${params}`, { signal });
@@ -100,6 +104,7 @@ type SearchArgs<T extends CatalogIdentity, K extends EquipmentCatalogKind> = {
   kind: K;
   query: string;
   category?: ClubCategory;
+  shaftUsage?: ShaftUsage;
   fallback?: readonly T[];
   pinnedIds?: readonly string[];
 };
@@ -111,6 +116,7 @@ export function useEquipmentCatalogSearch({
   kind,
   query,
   category,
+  shaftUsage,
   fallback = EMPTY_IDENTITIES,
   pinnedIds = EMPTY_IDS,
 }: SearchArgs<CatalogItem, EquipmentCatalogKind>): CatalogSearchResult<CatalogItem> {
@@ -141,7 +147,7 @@ export function useEquipmentCatalogSearch({
     const timer = window.setTimeout(async () => {
       setStatus("loading");
       try {
-        const page = await fetchCatalogPage({ kind, query, category, pinnedKey, signal: controller.signal });
+        const page = await fetchCatalogPage({ kind, query, category, shaftUsage, pinnedKey, signal: controller.signal });
         if (controller.signal.aborted || requestGenerationRef.current !== generation) return;
         setItems(page.items);
         setHasMore(page.hasMore);
@@ -161,7 +167,7 @@ export function useEquipmentCatalogSearch({
       loadMoreControllerRef.current = null;
       if (requestGenerationRef.current === generation) requestGenerationRef.current += 1;
     };
-  }, [category, kind, local, pinnedKey, query, revision]);
+  }, [category, kind, local, pinnedKey, query, revision, shaftUsage]);
 
   const loadMore = useCallback(async () => {
     if (!hasMore || !nextCursor || status === "loading") return;
@@ -171,7 +177,7 @@ export function useEquipmentCatalogSearch({
     loadMoreControllerRef.current = controller;
     setStatus("loading");
     try {
-      const page = await fetchCatalogPage({ kind, query, category, pinnedKey, cursor: nextCursor, signal: controller.signal });
+      const page = await fetchCatalogPage({ kind, query, category, shaftUsage, pinnedKey, cursor: nextCursor, signal: controller.signal });
       if (controller.signal.aborted || requestGenerationRef.current !== generation) return;
       setItems((current) => [...new Map([...current, ...page.items].map((item) => [item.id, item])).values()]);
       setHasMore(page.hasMore);
@@ -183,7 +189,7 @@ export function useEquipmentCatalogSearch({
     } finally {
       if (loadMoreControllerRef.current === controller) loadMoreControllerRef.current = null;
     }
-  }, [category, hasMore, kind, nextCursor, pinnedKey, query, status]);
+  }, [category, hasMore, kind, nextCursor, pinnedKey, query, shaftUsage, status]);
 
   const retry = useCallback(() => setRevision((value) => value + 1), []);
 

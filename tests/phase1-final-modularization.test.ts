@@ -76,7 +76,7 @@ test("proveedor interno devuelve modelos reales por categoría, marca y varilla"
     assert.ok(page.items.length > 0, `${kind} ${query} ${category || ""} debe devolver resultados`);
   }
   assert.ok(golfClubCatalog.every((item) => (item.officialUrl || item.sourceUrl) && item.sourceName && item.verifiedAt));
-  assert.ok(golfShaftCatalog.every((item) => item.officialUrl && item.sourceName && item.verifiedAt));
+  assert.ok(golfShaftCatalog.every((item) => (item.officialUrl || item.sourceUrl) && item.sourceName && item.verifiedAt && item.provenance.length > 0));
   assert.ok(golfBallCatalog.every((item) => (item.officialUrl || item.sourceUrl) && item.sourceName && item.verifiedAt));
 });
 
