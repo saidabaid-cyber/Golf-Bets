@@ -167,7 +167,12 @@ export function playersFromFrequentGroup(group: FrequentGroup, idFactory: () => 
     id: member.accountUserId ? accountPrimaryPlayerId(member.accountUserId) : idFactory(),
     name: member.name,
     handicap: member.handicap,
-    ...(member.accountUserId ? { accountUserId: member.accountUserId } : {}),
+    ...(member.accountUserId ? {
+      accountUserId: member.accountUserId,
+      handicapIndex: member.handicap,
+      handicapSource: "profile_index" as const,
+      handicapIndexSource: "BACKYARD_MANUAL" as const,
+    } : {}),
   }));
 }
 

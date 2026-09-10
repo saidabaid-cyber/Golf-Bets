@@ -21,9 +21,31 @@ export type ScoreCaptureMode = "quick" | "advanced";
 export type Player = {
   id: string;
   name: string;
+  /** Handicap applied by the deterministic round engine. */
   handicap: number | null;
   /** Stable account link for the signed-in user's principal player. */
   accountUserId?: string;
+  /** Profile/provider Index kept separate from the Playing Handicap. */
+  handicapIndex?: number | null;
+  handicapSource?: "profile_index" | "manual";
+  handicapIndexSource?: "BACKYARD_MANUAL" | "BACKYARD_WHS_FUTURE" | "GHIN_OFFICIAL_FUTURE";
+  /** Immutable inputs and result used to calculate this round's Playing Handicap. */
+  courseHandicapSnapshot?: PlayerCourseHandicapSnapshot;
+};
+
+export type PlayerCourseHandicapSnapshot = {
+  index: number;
+  indexSource: "BACKYARD_MANUAL" | "BACKYARD_WHS_FUTURE" | "GHIN_OFFICIAL_FUTURE";
+  teeId: string;
+  teeName: string;
+  slope: number;
+  courseRating: number;
+  par: number;
+  courseHandicap: number;
+  appliedHandicap: number;
+  formulaVersion: "WHS-2024-COURSE-HANDICAP-V1";
+  effectiveAt: string;
+  calculatedAt: string;
 };
 
 export type Hole = {

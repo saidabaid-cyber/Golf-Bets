@@ -25,6 +25,9 @@ test("la cuenta autenticada crea un jugador principal estable y el invitado no c
     accountUserId: profile.userId,
     name: "Said Abaid",
     handicap: 7.4,
+    handicapIndex: 7.4,
+    handicapSource: "profile_index",
+    handicapIndexSource: "BACKYARD_MANUAL",
   });
   assert.equal(accountPrimaryRoundPlayer({ ...profile, userId: "guest", displayName: "" }), null);
 });
@@ -82,6 +85,19 @@ test("guardar una ronda vuelve a usar la identidad estable aunque cambie el nomb
   assert.equal(updated[0].name, "Said A.");
   assert.equal(updated[0].uses, 1);
   assert.equal(updated[0].accountUserId, profile.userId);
+});
+
+test("guardar una cuenta frecuente conserva el Index, no el HCP de juego de una ronda", () => {
+  const updated = upsertFrequentPlayers([], [{
+    id: accountPrimaryPlayerId(profile.userId),
+    accountUserId: profile.userId,
+    name: "Said",
+    handicap: 9,
+    handicapIndex: 7.4,
+    handicapSource: "profile_index",
+    handicapIndexSource: "BACKYARD_MANUAL",
+  }], "saved");
+  assert.equal(updated[0].handicap, 7.4);
 });
 
 test("grupos guardados conservan el vínculo del principal y lo recuperan con el ID estable", () => {

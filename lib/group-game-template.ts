@@ -342,7 +342,7 @@ export function updateGroupTemplateFromRound(
     group: {
       ...group,
       players: group.players.map((member) => member.memberId && roundPlayerByMemberId.has(member.memberId)
-        ? { ...member, handicap: roundPlayerByMemberId.get(member.memberId)!.handicap }
+        ? { ...member, handicap: roundPlayerByMemberId.get(member.memberId)!.handicapIndex ?? roundPlayerByMemberId.get(member.memberId)!.handicap }
         : member),
       gameTemplate: createGroupGameTemplate(source, memberIdByPlayerId),
       updatedAt,

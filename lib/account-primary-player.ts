@@ -16,6 +16,9 @@ export function accountPrimaryRoundPlayer(profile: BackyardProfile): Player | nu
     accountUserId: profile.userId,
     name: profile.displayName.trim(),
     handicap: profile.defaultHandicap,
+    handicapIndex: profile.defaultHandicap,
+    handicapSource: "profile_index",
+    handicapIndexSource: "BACKYARD_MANUAL",
   };
 }
 
@@ -49,7 +52,7 @@ export function syncAccountPrimaryFrequentPlayer(
     id: existing?.id || stableId,
     accountUserId: profile.userId,
     name: principal.name,
-    handicap: principal.handicap,
+    handicap: principal.handicapIndex ?? principal.handicap,
     uses: existing?.uses ?? 0,
     updatedAt,
   };

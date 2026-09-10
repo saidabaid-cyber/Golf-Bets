@@ -77,6 +77,7 @@ import { AccountProvider, useBackyardAccount } from "./components/account-provid
 import { resolveRoundDraftCore, resolvedOwnerIdForRoundDraft } from "./draft-restoration";
 import { accountDeletionMarkerKey, ACCOUNT_STORAGE_KEYS, hasCurrentBettingDataConsent, parseLegalAcceptances } from "../lib/account-state";
 import { AccountPanel } from "./components/account-panel";
+import { RoundCoursePicker } from "./components/round-course-picker";
 import { BrandLockup } from "./components/brand-lockup";
 import { ModalCloseButton } from "./components/modal-shell";
 import { GroupBuilder } from "./components/group-builder";
@@ -206,6 +207,7 @@ import { assignTeeToEveryPlayer, reconcilePlayerTeeAssignments, teeOptionsForCou
 import { defaultMaxBaseAppearances, generateAutomaticFoursomes, markFoursomeSegmentEdited } from "../lib/foursome-generator";
 import { advantageFieldsFromSigned, configureCurrentIndexPersonal, configureSlidingPersonal, frequentPersonalSuggestions, slidingAdjustment } from "../lib/personal-modes";
 import { loadEquipmentProfile } from "../lib/golf-equipment";
+import { applyRoundCourseHandicaps } from "../features/handicap/round-player-handicap";
 
 const AiRoundSetup = dynamic(() => import("./components/backyard-ai/ai-round-setup").then((module) => module.AiRoundSetup), { ssr: false });
 const ScorecardScanner = dynamic(() => import("./components/backyard-ai/scorecard-scanner").then((module) => module.ScorecardScanner), { ssr: false });
@@ -638,6 +640,10 @@ function GolfBetsApp() {
     if (!courseSelected) { setPlayerTeeAssignments([]); return; }
     setPlayerTeeAssignments((current) => reconcilePlayerTeeAssignments(current, players, course, new Date().toISOString()));
   }, [course, courseSelected, players]);
+  useEffect(() => {
+    if (!courseSelected) return;
+    setPlayers((current) => applyRoundCourseHandicaps(current, playerTeeAssignments, course, new Date().toISOString()));
+  }, [course, courseSelected, playerTeeAssignments]);
   useEffect(() => {
     setNavigationGuard((next) => {
       const safeDestination = activeBetSafeDestination(next, draftAvailable && !roundClosed && betConfigurationIssues.length > 0);
@@ -1388,7 +1394,7 @@ function GolfBetsApp() {
       return;
     }
     const id = accountUserId ? accountPrimaryPlayerId(accountUserId) : makeId();
-    const p: Player = { id, name, handicap, ...(accountUserId ? { accountUserId } : {}) };
+    const p: Player = { id, name, handicap, ...(accountUserId ? { accountUserId, handicapIndex: handicap, handicapSource: "profile_index", handicapIndexSource: "BACKYARD_MANUAL" } : { handicapSource: "manual" }) };
     setPlayers((ps) => [...ps, p]);
     if (!players.length) setOwnerId(id);
     setBets((b) => ({
@@ -2498,7 +2504,7 @@ function GolfBetsApp() {
     if (frequentGroups.some((group) => group.name.trim().toLocaleLowerCase("es-MX") === name.toLocaleLowerCase("es-MX"))) { setFeedback("Ya existe un grupo con ese nombre."); return; }
     const groupId = makeId();
     const mapped = players.filter((player) => player.name.trim()).map((player) => ({ player, memberId: `member-${makeId()}` }));
-    const groupPlayers = mapped.map(({ player, memberId }) => ({ memberId, kind: player.accountUserId ? "account" as const : "guest" as const, name: player.name.trim(), handicap: player.handicap, ...(player.accountUserId ? { accountUserId: player.accountUserId } : {}) }));
+    const groupPlayers = mapped.map(({ player, memberId }) => ({ memberId, kind: player.accountUserId ? "account" as const : "guest" as const, name: player.name.trim(), handicap: player.handicapIndex ?? player.handicap, ...(player.accountUserId ? { accountUserId: player.accountUserId } : {}) }));
     const gameTemplate = createGroupGameTemplate({ ownerId, players, startHole, roundHoles, roundHandicapBasis, bets, segments, personalBets, supplementalBets, manualBets }, Object.fromEntries(mapped.map(({ player, memberId }) => [player.id, memberId])));
     setFrequentGroups((groups) => [{ id: groupId, name, privacy: "private", players: groupPlayers, gameTemplate, uses: 0, updatedAt: new Date().toISOString() }, ...groups]);
     setGroupName("");
@@ -3314,9 +3320,13 @@ function GolfBetsApp() {
         <div className="sectionTitle"><div><h2>1. Campo y tees por jugador</h2><p>Elige el campo una vez. Después ajusta el tee de cada jugador sin mezclar ambos conceptos.</p></div><div className="courseSetupActions"><button className="textButton" onClick={() => setTab("courseLibrary")}>Buscar / cerca</button><button className="textButton" onClick={startNewCourse}>+ Campo</button></div></div>
         {!courseSelected && pendingCourseIdentity && <div className="notice" id="round-course-ai-focus" role="status"><b>Campo reconocido: {pendingCourseIdentity.name}</b><br />{pendingCourseCandidates.length ? "Selecciona el campo; luego podrás ajustar los tees por jugador." : "No encontré ese campo exacto en el catálogo actual. Selecciona otro o crea uno manual."}</div>}
         <div className="grid2">
-          <div className={`courseSelectionField ${courseSelectionError ? "isMissing" : ""}`}><label htmlFor="round-course">Campo</label><select id="round-course" value={courseSelected ? course.name : ""} aria-invalid={courseSelectionError} aria-describedby={[!courseSelected && pendingCourseIdentity ? "round-course-ai-focus" : "", courseSelectionError ? "round-course-error" : ""].filter(Boolean).join(" ") || undefined} onChange={(e) => {
-            const next = courseNameOptions.find((candidate) => candidate.name === e.target.value); if (next) selectRoundCourse(next);
-          }}><option value="" disabled>{pendingCourseIdentity ? `Selecciona ${pendingCourseIdentity.name}` : "Selecciona campo"}</option>{courseNameOptions.map((option) => <option key={option.name} value={option.name}>{option.name}</option>)}</select>{courseSelectionError && <span id="round-course-error" className="courseSelectionError" role="alert">Selecciona un campo para continuar.</span>}</div>
+          <RoundCoursePicker selectedName={courseSelected ? course.name : ""} selectedId={courseSelected ? (course.catalogCourseId ?? course.id) : ""} pendingName={pendingCourseIdentity?.name} invalid={courseSelectionError} describedBy={[!courseSelected && pendingCourseIdentity ? "round-course-ai-focus" : "", courseSelectionError ? "round-course-error" : ""].filter(Boolean).join(" ") || undefined} onSelect={(selection) => {
+            const matchingCourse = courseNameOptions.find((candidate) => candidate.catalogCourseId === selection.courseId)
+              ?? courseNameOptions.find((candidate) => candidate.id === selection.id)
+              ?? courseNameOptions.find((candidate) => candidate.name === selection.name);
+            if (matchingCourse) selectRoundCourse(matchingCourse);
+          }} />
+          {courseSelectionError && <span id="round-course-error" className="courseSelectionError" role="alert">Selecciona un campo para continuar.</span>}
           <div><label>Inicio de ronda</label><select value={startHole} onChange={(e) => { const next = Number(e.target.value) as 1 | 10; confirmRoundChange("Cambiar la salida cambia el orden Nassau y los segmentos de Foursome.", () => { setStartHole(next); setCurrentIndex(0); }); }}><option value={1}>Hoyo 1</option><option value={10}>Hoyo 10</option></select></div>
           <div><label>Hoyos a jugar</label><select value={roundHoles} onChange={(e) => { const next = Number(e.target.value) as 9 | 18; confirmRoundChange("Cambiar la duración excluye del cálculo los hoyos fuera de la nueva vuelta, sin borrar sus scores.", () => { setRoundHoles(next); setSupplementalBets((current) => supplementalBetsForRoundHoles(current, next)); setCurrentIndex(0); }); }}><option value={18}>18 hoyos</option><option value={9}>9 hoyos</option></select></div>
         </div>
@@ -3331,16 +3341,16 @@ function GolfBetsApp() {
               if (nextTee) setPlayerTeeAssignments((current) => updatePlayerTeeAssignment(current, player.id, nextTee, new Date().toISOString()));
             }}>{teeOptions.map((option) => <option key={option.id} value={option.id}>{option.teeName}{typeof option.rating === "number" ? ` · ${option.rating}/${option.slope ?? "—"}` : ""}</option>)}</select></label>;
           })}</div>
-          <p className="hint">EDITAR POR JUGADOR está siempre disponible. El HCP capturado sigue siendo el valor canónico de la ronda; no se inventa un índice a partir del tee.</p>
+          <p className="hint">EDITAR POR JUGADOR está siempre disponible. Para una cuenta con Index, el tee calcula y congela su HCP de juego; un Guest conserva captura manual.</p>
         </div>}
       </section>
 
       <section className="card" id="round-players">
-        <div className="sectionTitle"><div><h2>2. Jugadores</h2><p>Captura el HCP original de cada jugador para esta ronda.</p></div><button className="textButton" onClick={addPlayer}>+ Jugador</button></div>
+        <div className="sectionTitle"><div><h2>2. Jugadores</h2><p>Las cuentas usan Index + tee; los Guests conservan HCP manual.</p></div><button className="textButton" onClick={addPlayer}>+ Jugador</button></div>
         {!players.length && <div className="empty">Agrega los jugadores de esta ronda.</div>}
         {players.map((p) => <div className="playerEdit" key={p.id}>
           <input placeholder="Nombre" value={p.name} onChange={(e) => updatePlayer(p.id, { name: e.target.value })} />
-          <div className={`roundHcpField ${typeof p.handicap === "number" && Number.isFinite(p.handicap) ? "" : "isMissing"}`}><NumericCaptureInput className="hcpInput" inputMode="decimal" step={0.1} min={-15} max={36} placeholder="HCP" value={p.handicap} emptyWhenZero={false} aria-invalid={typeof p.handicap !== "number" || !Number.isFinite(p.handicap)} aria-describedby={typeof p.handicap !== "number" || !Number.isFinite(p.handicap) ? `round-hcp-error-${p.id}` : undefined} onValueChange={(handicap) => updatePlayer(p.id, { handicap })} />{(typeof p.handicap !== "number" || !Number.isFinite(p.handicap)) && <span className="roundHcpError" id={`round-hcp-error-${p.id}`}>Completa el HCP</span>}</div>
+          {(p.handicapSource === "profile_index" || p.handicapIndex !== undefined) ? <div className={`roundHcpField roundPlayingHcp ${typeof p.handicap === "number" && Number.isFinite(p.handicap) ? "" : "isMissing"}`}><small>INDEX {p.handicapIndex ?? "—"}</small><b>HCP JUEGO {p.handicap ?? "—"}</b>{p.courseHandicapSnapshot ? <span>{p.courseHandicapSnapshot.teeName} · {p.courseHandicapSnapshot.courseRating}/{p.courseHandicapSnapshot.slope}{p.courseHandicapSnapshot.courseHandicap !== p.courseHandicapSnapshot.appliedHandicap ? ` · cálculo ${p.courseHandicapSnapshot.courseHandicap}, tope Backyard ${p.courseHandicapSnapshot.appliedHandicap}` : ""}</span> : <span>Elige un tee con Rating y Slope</span>}</div> : <div className={`roundHcpField ${typeof p.handicap === "number" && Number.isFinite(p.handicap) ? "" : "isMissing"}`}><NumericCaptureInput className="hcpInput" inputMode="decimal" step={0.1} min={-15} max={36} placeholder="HCP manual" value={p.handicap} emptyWhenZero={false} aria-invalid={typeof p.handicap !== "number" || !Number.isFinite(p.handicap)} aria-describedby={typeof p.handicap !== "number" || !Number.isFinite(p.handicap) ? `round-hcp-error-${p.id}` : undefined} onValueChange={(handicap) => updatePlayer(p.id, { handicap, handicapSource: "manual", handicapIndex: undefined, courseHandicapSnapshot: undefined })} />{(typeof p.handicap !== "number" || !Number.isFinite(p.handicap)) && <span className="roundHcpError" id={`round-hcp-error-${p.id}`}>Completa el HCP manual</span>}</div>}
           <button className={`ownerDot ${ownerId === p.id ? "active" : ""}`} onClick={() => setOwnerId(p.id)} title="Jugador principal">★</button>
           <button className="remove" aria-label={`Quitar a ${p.name || "jugador"}`} onClick={() => { confirmRoundChange(`Quitar a ${p.name} lo excluye de las apuestas y parejas actuales.`, () => setPlayers((ps) => ps.filter((x) => x.id !== p.id))); }}>×</button>
         </div>)}
