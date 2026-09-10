@@ -137,7 +137,7 @@ import { PRIVATE_POLLA_LINK_KEY, parsePrivatePollaLink, privatePollaScoreChanges
 import { enqueuePollaScore } from "../lib/polla-offline";
 import { isLaVistaCourse, withDefaultLaVistaRules } from "../lib/local-rules";
 import { DEFAULT_COURSES, DEFAULT_LA_VISTA_COURSE } from "../lib/golf-course-directory";
-import { captureClubLabels } from "../lib/bag-capture";
+import { captureClubChoices } from "../lib/bag-capture";
 import { filterHistory, historyYears, MONTH_LABELS } from "../lib/history-filters";
 import { priorRabbitStatus, priorSkinsStatus } from "../lib/prior-hole-status";
 import { ballFriendScoreResult, ballFriendSetupChipLabel, lobaSetupChipLabel, playerHoleBetLabels, skinHoleNotice } from "../lib/hole-bet-display";
@@ -387,7 +387,10 @@ function GolfBetsApp() {
     if (typeof window === "undefined" || tab !== "round") return [];
     const loaded = loadEquipmentProfile(localStorage, identity.userId);
     if (!loaded.ok || !loaded.profile) return [];
-    return [...new Set(loaded.profile.clubs.filter((club) => club.isCurrent).flatMap(captureClubLabels))];
+    const byLabel = new Map(loaded.profile.clubs.filter((club) => club.isCurrent)
+      .flatMap(captureClubChoices)
+      .map((choice) => [choice.label, choice]));
+    return [...byLabel.values()];
   }, [identity.userId, tab]);
   const [rulesVisited, setRulesVisited] = useState(false);
   useEffect(() => { if (tab === "rules") setRulesVisited(true); }, [tab]);
@@ -1731,7 +1734,7 @@ function GolfBetsApp() {
       resultDetails: { rabbits, skins, units, monkey, foursomes, ballFriend, polla, miniPolla, vipers, camels, fish, loba, supplemental, settlementTransfers, settlementDifference, personals, manual },
       ownerName: owner.name, roundHoles, startHole, betResult: ownerBetResult, expenses, expenseTotal: ownerExpenseTotal,
       netResult: ownerNet, categoryResults, players: structuredClone(players), scores: structuredClone(scores),
-      courseSnapshot: structuredClone(course), playerTeeAssignments: structuredClone(playerTeeAssignments), ownerBagSnapshot: [...ownerClubChoices], shots: structuredClone(shots), order: [...order], completedAt: timestamp, updatedAt: timestamp,
+      courseSnapshot: structuredClone(course), playerTeeAssignments: structuredClone(playerTeeAssignments), ownerBagSnapshot: ownerClubChoices.map((club) => club.label), shots: structuredClone(shots), order: [...order], completedAt: timestamp, updatedAt: timestamp,
       ...(scorecardPhotoIds.length ? { photoId: scorecardPhotoIds[0], scorecardPhotoIds: [...scorecardPhotoIds] } : {}),
       betConfig: structuredClone(bets), unitEvents: structuredClone(unitEvents), counterBetEvents: structuredClone(finalizedCounterBetEvents), counterBetKeepers: structuredClone(counterBetKeepers), lobaHoles: structuredClone(lobaHoles), personalBets: structuredClone(personalBets),
       supplementalBets: structuredClone(supplementalBets), putts: structuredClone(putts), advancedStats: structuredClone(advancedStats), manualBets: structuredClone(manualBets), ballFriendSetup: structuredClone(ballFriendSetup),

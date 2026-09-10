@@ -2,6 +2,23 @@ import { haversineDistanceKm, isValidGeographicPoint } from "../../lib/course-di
 import type { RoundShotSnapshot } from "../../lib/types";
 
 export type ShotLocation = { latitude: number; longitude: number; accuracyMeters?: number };
+export type ShotShaftSnapshot = NonNullable<RoundShotSnapshot["clubSnapshot"]["shaft"]>;
+
+function buildClubSnapshot(input: {
+  clubId?: string;
+  clubLabel: string;
+  category?: string;
+  model?: string;
+  shaft?: ShotShaftSnapshot | null;
+}): RoundShotSnapshot["clubSnapshot"] {
+  return {
+    ...(input.clubId ? { id: input.clubId } : {}),
+    label: input.clubLabel.trim(),
+    ...(input.category ? { category: input.category } : {}),
+    ...(input.model ? { model: input.model } : {}),
+    ...(input.shaft ? { shaft: structuredClone(input.shaft) } : {}),
+  };
+}
 
 export function startShot(input: {
   id: string;
@@ -12,6 +29,7 @@ export function startShot(input: {
   clubLabel: string;
   category?: string;
   model?: string;
+  shaft?: ShotShaftSnapshot | null;
   location?: ShotLocation;
   startedAt: string;
   existing: readonly RoundShotSnapshot[];
@@ -27,7 +45,7 @@ export function startShot(input: {
     sequence,
     ...(input.clubId ? { clubId: input.clubId } : {}),
     clubLabel: input.clubLabel.trim(),
-    clubSnapshot: { ...(input.clubId ? { id: input.clubId } : {}), label: input.clubLabel.trim(), ...(input.category ? { category: input.category } : {}), ...(input.model ? { model: input.model } : {}) },
+    clubSnapshot: buildClubSnapshot(input),
     ...(input.location && isValidGeographicPoint(input.location) ? { startLocation: { ...input.location } } : {}),
     startedAt: input.startedAt,
     source: input.location ? "GPS" : "MANUAL",
@@ -47,9 +65,9 @@ export function cancelShot(shots: readonly RoundShotSnapshot[], shotId: string) 
   return shots.filter((shot) => shot.id !== shotId);
 }
 
-export function updateShotClub(shot: RoundShotSnapshot, input: { clubId?: string; label: string; category?: string; model?: string }) {
+export function updateShotClub(shot: RoundShotSnapshot, input: { clubId?: string; label: string; category?: string; model?: string; shaft?: ShotShaftSnapshot | null }) {
   if (!input.label.trim()) return shot;
-  return { ...shot, clubId: input.clubId, clubLabel: input.label.trim(), clubSnapshot: { ...(input.clubId ? { id: input.clubId } : {}), label: input.label.trim(), ...(input.category ? { category: input.category } : {}), ...(input.model ? { model: input.model } : {}) } };
+  return { ...shot, clubId: input.clubId, clubLabel: input.label.trim(), clubSnapshot: buildClubSnapshot({ ...input, clubLabel: input.label }) };
 }
 
 export type ClubDistanceSummary = { clubLabel: string; averageYards: number | null; sampleCount: number; confidence: "INSUFFICIENT" | "EARLY" | "RELIABLE" };

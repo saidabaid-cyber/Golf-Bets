@@ -43,6 +43,28 @@ Validar un archivo descargado sin red:
 node scripts/import-equipment-source.mjs --input ruta/al/latest.json
 ```
 
+## Backyard Shaft Master 2010–2026
+
+- Paquete recibido: `backyard_shaft_catalog_package_2010_2026.zip`
+- SHA-256 del paquete: `5D7A7D1A3FD834CBEE66CDFB1750F3ECDDF8822CEF62F9CC76E2F5804F79DBE2`
+- Fuente canónica del paquete: `backyard_shafts_2010_2026.json`
+- SHA-256 de la fuente JSON: `C42503B43030A0E3C44333A531481EF21E239ACCDF09BA07D1D07BD865AB1AB1`
+- Snapshot: `data/backyard-shaft-master-2010-2026.snapshot.json`
+- Pipeline: `scripts/import-shaft-master-2010-2026.mjs`
+- Cobertura aceptada: 467 familias, 21 marcas, 188 actuales y 279 históricas; 13 referencias OEM stock y 454 aftermarket.
+- Elegibilidad: las 467 son visibles en Mi Bolsa; sólo 80 conservan `fitEligible=true` porque incluyen peso, flex, lanzamiento, spin y procedencia trazable.
+- Fuentes declaradas por fila: archivos y fichas oficiales de Fujikura, Mitsubishi Chemical, UST Mamiya, Aldila, KBS, Nippon, ACCRA, LA Golf, AutoFlex, BGT, Kinetixx y True Temper/Project X; Pro's Choice como distribuidor autorizado de Graphite Design; GolfWorks para listas técnicas y reemplazos OEM. Cada fila conserva `sourceType`, `sourceName`, `sourceUrl`, `verifiedAt` y `confidence`.
+- Licencia: el paquete no concede una licencia abierta global. Cada registro conserva su fuente y no se le atribuye una licencia inexistente. Las fuentes OEM/distribuidor sirven como procedencia técnica; su contenido no se republica como ficha editorial.
+- Limitaciones: las familias históricas incompletas siguen buscables, pero sus campos desconocidos permanecen `null` y no alimentan recomendaciones técnicas.
+
+Importar desde una copia local verificada:
+
+```text
+node scripts/import-shaft-master-2010-2026.mjs <ruta/backyard_shafts_2010_2026.json> data/backyard-shaft-master-2010-2026.snapshot.json
+```
+
+La identidad de deduplicación de varillas conserva marca, modelo, uso, origen OEM/aftermarket y generación/año. No colapsa `VeloCore` con `VeloCore+`, generaciones de `HZRDUS Black`, ni una versión OEM made-for con su homónima aftermarket. Cuando una fila existente coincide con el master, se conserva el ID existente y el ID entrante queda como alias.
+
 ## Seeds internos con fuente oficial
 
 - `data/golf-club-catalog.seed.json`

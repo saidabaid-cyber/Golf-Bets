@@ -14,6 +14,7 @@ import type {
   SupplementalBet,
 } from "../../lib/types";
 import { haversineDistanceKm, isValidGeographicPoint } from "../../lib/course-distance";
+import type { CapturedBagClubChoice } from "../../lib/bag-capture";
 import { calculateGreenDistances, gpsFallbackMessage } from "../../features/gps/domain";
 import { cancelShot, closeShot, startShot, type ShotLocation } from "../../features/shots/domain";
 import { roundCaptureFieldsForPlayer, scoreToParLabel } from "../../lib/round-capture";
@@ -34,7 +35,7 @@ export type RoundCaptureV2Props = {
   playerTeeAssignments?: PlayerTeeAssignmentSnapshot[];
   ownerId: string;
   ownerAvatarUrl?: string;
-  ownerClubChoices?: string[];
+  ownerClubChoices?: CapturedBagClubChoice[];
   mode: ScoreCaptureMode;
   bets: Pick<BetConfig, "vipers" | "camels" | "fish" | "loba" | "ballFriend" | "units">;
   supplementalBets: SupplementalBet[];
@@ -96,7 +97,13 @@ function GroupRequiredInputs({ player, fields, putts, stat, unitsActive, units, 
   </div>;
 }
 
-const FALLBACK_TEE_CLUBS = ["Driver", "Madera", "Híbrido", "Hierro", "Otro", "No sé"] as const;
+const FALLBACK_TEE_CLUBS: readonly CapturedBagClubChoice[] = ["Driver", "Madera", "Híbrido", "Hierro", "Otro", "No sé"].map((label) => ({
+  id: `fallback-${label.toLocaleLowerCase("es-MX")}`,
+  label,
+  category: null,
+  model: null,
+  shaft: null,
+}));
 
 function shotId() {
   if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
@@ -201,7 +208,29 @@ export function RoundCaptureV2(props: RoundCaptureV2Props) {
     let location: ShotLocation | undefined;
     try { location = await currentLocation(); }
     catch { setShotMessage("GPS no disponible: el golpe se guardará manualmente, sin inventar distancia."); }
-    const next = startShot({ id: shotId(), roundId: props.roundId, playerId: owner.id, hole: hole.number, clubLabel: shotClub, location, startedAt: new Date().toISOString(), existing: props.shots });
+    const availableClubs = props.ownerClubChoices?.length ? props.ownerClubChoices : FALLBACK_TEE_CLUBS;
+    const selectedClub = availableClubs.find((club) => club.label === shotClub);
+    const next = startShot({
+      id: shotId(),
+      roundId: props.roundId,
+      playerId: owner.id,
+      hole: hole.number,
+      clubId: selectedClub?.id,
+      clubLabel: shotClub,
+      category: selectedClub?.category || undefined,
+      model: selectedClub?.model || undefined,
+      shaft: selectedClub?.shaft ? {
+        ...(selectedClub.shaft.id ? { id: selectedClub.shaft.id } : {}),
+        ...(selectedClub.shaft.brand ? { brand: selectedClub.shaft.brand } : {}),
+        ...(selectedClub.shaft.model ? { model: selectedClub.shaft.model } : {}),
+        ...(selectedClub.shaft.flex ? { flex: selectedClub.shaft.flex } : {}),
+        ...(selectedClub.shaft.weightGrams !== null ? { weightGrams: selectedClub.shaft.weightGrams } : {}),
+        ...(selectedClub.shaft.source ? { source: selectedClub.shaft.source } : {}),
+      } : null,
+      location,
+      startedAt: new Date().toISOString(),
+      existing: props.shots,
+    });
     props.onShotsChange([...props.shots, next]);
     setShotMessage(location ? `Golpe ${next.sequence} iniciado con ${shotClub}.` : `Golpe ${next.sequence} guardado; falta cerrar su distancia.`);
     setShotBusy(false);
@@ -236,7 +265,8 @@ export function RoundCaptureV2(props: RoundCaptureV2Props) {
     if (quickFields(playerId).includes("bunker")) props.onCounterChange("camels", playerId, greenSide + fairway);
   }
 
-  const ownerTeeClubs = props.ownerClubChoices?.length ? props.ownerClubChoices : FALLBACK_TEE_CLUBS;
+  const ownerTeeClubChoices = props.ownerClubChoices?.length ? props.ownerClubChoices : FALLBACK_TEE_CLUBS;
+  const ownerTeeClubs = ownerTeeClubChoices.map((club) => club.label);
 
   return <div className={styles.screen}>
     <section className={styles.hero}>

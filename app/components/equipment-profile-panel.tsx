@@ -64,7 +64,8 @@ function clubFacts(playerClub: PlayerClub, shafts: readonly GolfShaftCatalog[]) 
     playerClub.loft === null ? null : `${playerClub.loft}°`,
     playerClub.handedness,
     shaftName(playerClub, shafts),
-    playerClub.flex?.replace("_", "-"),
+    playerClub.shaftFlexLabel || playerClub.flex?.replace("_", "-"),
+    playerClub.shaftWeightGrams === null ? null : `${playerClub.shaftWeightGrams} g`,
     playerClub.setComposition.length ? playerClub.setComposition.join("–") : null,
   ].filter((value): value is string => Boolean(value));
 }

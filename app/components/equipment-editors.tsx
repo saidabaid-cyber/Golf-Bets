@@ -11,6 +11,7 @@ import type {
   PlayerClub,
   PlayerClubDistance,
   ShaftFlex,
+  ShaftUsage,
 } from "../../lib/golf-equipment";
 import { resolveCatalogShaftSelection } from "../../lib/equipment-editor-selection";
 import styles from "./equipment.module.css";
@@ -49,6 +50,32 @@ const FLEX_LABELS: Record<ShaftFlex, string> = {
   TX: "TX",
   OTHER: "Otro",
 };
+
+const LEGACY_FLEX_TO_LABEL: Partial<Record<ShaftFlex, string>> = {
+  LADIES: "L", SENIOR: "A", REGULAR: "R", STIFF: "S", X_STIFF: "X", TX: "TX",
+};
+
+function shaftUsageForCategory(category: ClubCategory): ShaftUsage {
+  if (category === "DRIVER" || category === "MINI_DRIVER") return "WOOD";
+  if (category === "FAIRWAY_WOOD") return "FAIRWAY";
+  if (category === "HYBRID") return "HYBRID";
+  if (category === "UTILITY_IRON") return "UTILITY";
+  if (category === "WEDGE") return "WEDGE";
+  if (category === "PUTTER") return "PUTTER";
+  return "IRON";
+}
+
+function legacyFlexFromManufacturerLabel(value: string): ShaftFlex | null {
+  const normalized = value.trim().toUpperCase();
+  if (!normalized) return null;
+  if (normalized === "L" || /\(L\)$/.test(normalized)) return "LADIES";
+  if (["A", "SR", "R2"].includes(normalized) || /\(A\)$/.test(normalized)) return "SENIOR";
+  if (["R", "R1"].includes(normalized) || /\(R\)$/.test(normalized)) return "REGULAR";
+  if (normalized === "S" || /\(S\)$/.test(normalized)) return "STIFF";
+  if (normalized === "X" || /\(X\)$/.test(normalized)) return "X_STIFF";
+  if (normalized === "TX") return "TX";
+  return "OTHER";
+}
 
 export const CUSTOM_IRON_COMPOSITION = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "P", "PW", "AW", "GW", "UW", "SW", "LW", "46°", "48°", "50°", "52°", "54°", "56°", "58°", "60°"] as const;
 const IRON_SET_PACKAGES = [
@@ -111,6 +138,7 @@ export function ClubEditor({ userId, catalog, shafts, existing, onCancel, onSave
   const [customShaftBrand, setCustomShaftBrand] = useState(existing?.customShaftBrand || "");
   const [customShaftModel, setCustomShaftModel] = useState(existing?.customShaftModel || existing?.customShaft || "");
   const [flex, setFlex] = useState<ShaftFlex | "">(existing?.flex || "");
+  const [shaftFlexLabel, setShaftFlexLabel] = useState(existing?.shaftFlexLabel || (existing?.flex ? LEGACY_FLEX_TO_LABEL[existing.flex] || "" : ""));
   const [shaftWeight, setShaftWeight] = useState(existing?.shaftWeightGrams === null || existing?.shaftWeightGrams === undefined ? "" : String(existing.shaftWeightGrams));
   const [length, setLength] = useState(existing?.lengthInches === null || existing?.lengthInches === undefined ? "" : String(existing.lengthInches));
   const [lie, setLie] = useState(existing?.lieDegrees === null || existing?.lieDegrees === undefined ? "" : String(existing.lieDegrees));
@@ -135,9 +163,11 @@ export function ClubEditor({ userId, catalog, shafts, existing, onCancel, onSave
   const effectiveBrand = brand || selectedCatalogClub?.brand || "";
   const brands = useMemo(() => [...new Set(selectableCatalog.map((club) => club.brand))].sort((a, b) => a.localeCompare(b, "es-MX")), [selectableCatalog]);
   const models = selectableCatalog.filter((club) => sameBrand(club.brand, effectiveBrand));
-  const shaftFallback = useMemo(() => shafts.filter((shaft) => shaft.active || shaft.id === existingShaft?.id), [existingShaft?.id, shafts]);
+  const shaftUsage = shaftUsageForCategory(category);
+  const shaftFallback = useMemo(() => shafts.filter((shaft) => (shaft.active || shaft.id === existingShaft?.id)
+    && (!shaft.usage || shaft.usage === shaftUsage)), [existingShaft?.id, shaftUsage, shafts]);
   const pinnedShaftIds = useMemo(() => shaftId ? [shaftId] : [], [shaftId]);
-  const shaftSearch = useEquipmentCatalogSearch({ kind: "SHAFT", query: shaftQuery, fallback: shaftFallback, pinnedIds: pinnedShaftIds });
+  const shaftSearch = useEquipmentCatalogSearch({ kind: "SHAFT", query: shaftQuery, shaftUsage, fallback: shaftFallback, pinnedIds: pinnedShaftIds });
   const activeShafts = useMemo(() => {
     const byId = new Map(shaftSearch.items.map((shaft) => [shaft.id, shaft]));
     if (existingShaft) byId.set(existingShaft.id, existingShaft);
@@ -156,6 +186,11 @@ export function ClubEditor({ userId, catalog, shafts, existing, onCancel, onSave
     setYear("");
     setLoft("");
     setCatalogQuery("");
+    setShaftId("");
+    setShaftQuery("");
+    setShaftWeight("");
+    setShaftFlexLabel("");
+    setFlex("");
     if (value !== "IRON_SET") setComposition([]);
   }
 
@@ -241,7 +276,8 @@ export function ClubEditor({ userId, catalog, shafts, existing, onCancel, onSave
       customShaftBrand: savedShaftBrand || null,
       customShaftModel: savedShaftModel || null,
       customShaft: legacyCustomShaft,
-      flex: flex || null,
+      flex: shaftFlexLabel ? legacyFlexFromManufacturerLabel(shaftFlexLabel) : flex || null,
+      shaftFlexLabel: shaftFlexLabel.trim() || null,
       shaftWeightGrams: parsedWeight ?? null,
       lengthInches: parsedLength ?? null,
       lieDegrees: parsedLie ?? null,
@@ -316,19 +352,33 @@ export function ClubEditor({ userId, catalog, shafts, existing, onCancel, onSave
           <input type="search" value={shaftQuery} maxLength={120} onChange={(event) => setShaftQuery(event.target.value)} placeholder="Ej. Ventus Blue" autoComplete="off" />
           <span className={styles.subtle} role="status">{shaftSearch.status === "loading" ? "Buscando…" : shaftSearch.status === "error" ? "Sin conexión: puedes capturar la varilla manualmente." : `${activeShafts.length} resultado(s)`}</span>
         </label><label className={styles.fullField}>Varilla (opcional)
-          <select value={shaftId} onChange={(event) => { setShaftId(event.target.value); const selected = activeShafts.find((shaft) => shaft.id === event.target.value); if (selected?.weight) setShaftWeight(String(selected.weight)); if (selected?.flex.length === 1) setFlex(selected.flex[0]); }}>
+          <select value={shaftId} onChange={(event) => {
+            setShaftId(event.target.value);
+            const selected = activeShafts.find((shaft) => shaft.id === event.target.value);
+            setShaftWeight(selected?.weightOptions.length === 1 ? String(selected.weightOptions[0]) : "");
+            const exactFlex = selected?.flexOptions.length === 1 ? selected.flexOptions[0] : "";
+            setShaftFlexLabel(exactFlex);
+            setFlex(exactFlex ? legacyFlexFromManufacturerLabel(exactFlex) || "" : "");
+          }}>
             <option value="">No lo sé / sin indicar</option>
             {shaftId && !selectedShaft && <option value={shaftId}>{[existing?.customShaftBrand, existing?.customShaftModel || existing?.customShaft].filter(Boolean).join(" ") || "Shaft guardado"}</option>}
-            {activeShafts.map((shaft) => <option key={shaft.id} value={shaft.id}>{shaft.brand} {shaft.model}</option>)}
+            {activeShafts.map((shaft) => <option key={shaft.id} value={shaft.id}>{shaft.brand} {shaft.model}{shaft.generation ? ` · ${shaft.generation}` : ""}{shaft.active ? "" : " · anterior"}{shaft.oemStockOrAftermarket === "OEM_STOCK" ? " · OEM" : ""}</option>)}
           </select>
         </label>{shaftSearch.hasMore && <button className={styles.manualToggle} type="button" onClick={() => void shaftSearch.loadMore()}>Cargar más varillas</button>}</> : <>
           <label>Marca de varilla (opcional)<input value={customShaftBrand} maxLength={100} onChange={(event) => setCustomShaftBrand(event.target.value)} placeholder="Ej. Fujikura" /></label>
           <label>Modelo de varilla (opcional)<input value={customShaftModel} maxLength={140} onChange={(event) => setCustomShaftModel(event.target.value)} placeholder="Ej. Ventus Blue" /></label>
         </>}
-        <button type="button" className={styles.manualToggle} onClick={() => { setShaftManual((value) => !value); setShaftId(""); }}>{shaftManual ? "Elegir varilla del catálogo" : "Mi varilla no aparece"}</button>
+        <button type="button" className={styles.manualToggle} onClick={() => { setShaftManual((value) => !value); setShaftId(""); setShaftWeight(""); setShaftFlexLabel(""); setFlex(""); }}>{shaftManual ? "Elegir varilla del catálogo" : "Mi varilla no aparece"}</button>
 
-        <label>Flex (opcional)<select value={flex} onChange={(event) => setFlex(event.target.value as ShaftFlex | "")}><option value="">No lo sé</option>{Object.entries(FLEX_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-        <label>Peso de varilla g (opcional)<input type="number" inputMode="decimal" min={1} max={300} step="0.1" value={shaftWeight} onChange={(event) => setShaftWeight(event.target.value)} /></label>
+        {selectedShaft?.flexOptions.length ? <label>Flex (opcional)<select value={shaftFlexLabel} onChange={(event) => { setShaftFlexLabel(event.target.value); setFlex(legacyFlexFromManufacturerLabel(event.target.value) || ""); }}><option value="">No lo sé</option>{selectedShaft.flexOptions.map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
+          : shaftManual ? <label>Flex (opcional)<input value={shaftFlexLabel} maxLength={40} onChange={(event) => { setShaftFlexLabel(event.target.value); setFlex(legacyFlexFromManufacturerLabel(event.target.value) || ""); }} placeholder="Ej. 5.5, F4 o S" /></label>
+            : <label>Flex (opcional)<select value={flex} onChange={(event) => { const next = event.target.value as ShaftFlex | ""; setFlex(next); setShaftFlexLabel(next ? LEGACY_FLEX_TO_LABEL[next] || "" : ""); }}><option value="">No lo sé</option>{Object.entries(FLEX_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>}
+        {selectedShaft?.weightOptions.length ? <label>Peso de varilla g (opcional)<select value={shaftWeight} onChange={(event) => setShaftWeight(event.target.value)}><option value="">No lo sé</option>{selectedShaft.weightOptions.map((value) => <option key={value} value={value}>{value} g</option>)}</select></label>
+          : <label>Peso de varilla g (opcional)<input type="number" inputMode="decimal" min={1} max={300} step="0.1" value={shaftWeight} onChange={(event) => setShaftWeight(event.target.value)} /></label>}
+        {selectedShaft && <p className={`${styles.subtle} ${styles.fullField}`}>
+          {[selectedShaft.brand, selectedShaft.model, selectedShaft.generation, selectedShaft.active ? "Actual" : "Modelo anterior", selectedShaft.oemStockOrAftermarket === "OEM_STOCK" ? "OEM stock" : "Aftermarket"].filter(Boolean).join(" · ")}
+          {selectedShaft.sourceUrl && <> · <a href={selectedShaft.sourceUrl} target="_blank" rel="noreferrer">Ver fuente</a></>}
+        </p>}
         <label>Longitud in (opcional)<input type="number" inputMode="decimal" min={10} max={60} step="0.125" value={length} onChange={(event) => setLength(event.target.value)} /></label>
         <label>Lie ° (opcional)<input type="number" inputMode="decimal" min={30} max={90} step="0.1" value={lie} onChange={(event) => setLie(event.target.value)} /></label>
         <label className={styles.fullField}>Grip (opcional)<input value={grip} maxLength={180} onChange={(event) => setGrip(event.target.value)} /></label>
@@ -337,6 +387,12 @@ export function ClubEditor({ userId, catalog, shafts, existing, onCancel, onSave
           Datos verificados el {new Date(selectedCatalogClub.verifiedAt).toLocaleDateString("es-MX")} · {selectedCatalogClub.sourceName}
           {selectedCatalogClub.sourceUrl && <> · <a href={selectedCatalogClub.sourceUrl} target="_blank" rel="noreferrer">Ver fuente</a></>}
           {selectedCatalogClub.license && <> · {selectedCatalogClub.license}</>}
+        </p>}
+        {selectedShaft && <p className={`${styles.subtle} ${styles.fullField}`}>
+          {selectedShaft.brand} {selectedShaft.model}{selectedShaft.generation ? ` · ${selectedShaft.generation}` : ""}
+          {selectedShaft.weightOptions.length ? ` · ${selectedShaft.weightOptions.join("/")} g` : ""}
+          {selectedShaft.flexOptions.length ? ` · ${selectedShaft.flexOptions.join("/")}` : ""}
+          {selectedShaft.sourceUrl && <> · <a href={selectedShaft.sourceUrl} target="_blank" rel="noreferrer">Ver fuente</a></>}
         </p>}
         {message && <div className={styles.formMessage} role="alert">{message}</div>}
         <div className={styles.formActions}><button type="button" className="secondary" onClick={onCancel}>Cancelar</button><button type="submit" className="primary">Guardar bastón</button></div>

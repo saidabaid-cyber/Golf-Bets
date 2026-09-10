@@ -501,7 +501,21 @@ export type RoundShotSnapshot = {
   clubId?: string;
   clubLabel: string;
   /** Frozen at capture time; later bag edits never rewrite this value. */
-  clubSnapshot: { id?: string; label: string; category?: string; model?: string };
+  clubSnapshot: {
+    id?: string;
+    label: string;
+    category?: string;
+    model?: string;
+    /** Frozen independently from the live equipment catalog. */
+    shaft?: {
+      id?: string;
+      brand?: string;
+      model?: string;
+      flex?: string;
+      weightGrams?: number;
+      source?: "CATALOG" | "USER_ENTERED";
+    };
+  };
   startLocation?: { latitude: number; longitude: number; accuracyMeters?: number };
   endLocation?: { latitude: number; longitude: number; accuracyMeters?: number };
   distanceYards?: number;
