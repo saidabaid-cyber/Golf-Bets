@@ -23,10 +23,13 @@ test("username search normalizes @, case, accents and never searches email", () 
   assert.equal(normalizeUsernameSearch("  @Sáíd_Aba  "), "said_aba");
   assert.equal(normalizeUsernameSearch("said+mail@example.com"), "saidmailexample.com");
   const profiles: SocialProfile[] = [
-    { userId: "u2", username: "said_aba", displayName: "Said", privacy: "FRIENDS" },
+    { userId: "u2", username: "said_aba", displayName: "Said", privacy: "FRIENDS", handicap: 8, clubName: "Privado" },
     { userId: "u3", username: "said_private", displayName: "Private", privacy: "PRIVATE" },
   ];
-  assert.deepEqual(searchSocialProfiles(profiles, "@SAID_ABA", "u1", []), [profiles[0]]);
+  const discovery = searchSocialProfiles(profiles, "@SAID_ABA", "u1", []);
+  assert.deepEqual(discovery, [{ userId: "u2", username: "said_aba", displayName: "Said", avatar: null, privacy: "FRIENDS" }]);
+  assert.equal(discovery[0]?.handicap, undefined);
+  assert.deepEqual(searchSocialProfiles(profiles, "@SAID_ABA", "u1", [{ id: "f1", userIds: ["u1", "u2"], createdAt: "2026-09-10T00:00:00Z" }]), [profiles[0]]);
 });
 
 test("friend requests are duplicate-safe and only the addressee can accept", () => {
@@ -97,6 +100,10 @@ test("Phase 2A migration is additive, RLS protected and stores only hashed invit
     assert.match(migration, new RegExp(`alter table public\\.${table} enable row level security`));
   }
   assert.match(migration, /token_hash text not null unique/);
+  assert.match(migration, /search_social_profiles_v2/);
+  assert.match(migration, /returns table\(user_id uuid, username text, display_name text, avatar_url text\)/);
+  assert.match(migration, /social_profiles_self_or_friend/);
+  assert.doesNotMatch(migration, /using \(user_id = \(select auth\.uid\(\)\) or privacy = 'FRIENDS'\)/);
   assert.doesNotMatch(migration, /\btoken\s+text\b/);
   assert.doesNotMatch(migration, /drop table|truncate table|user_metadata/i);
 });
@@ -107,7 +114,8 @@ test("Social UI, server search, memberships and Home V2 remain reachable", () =>
   const membership = readFileSync(`${root}/app/components/membership-benefits.tsx`, "utf8");
   const home = readFileSync(`${root}/app/components/home-dashboard.tsx`, "utf8");
   assert.match(social, /Amigos/);
-  assert.match(search, /social_profiles/);
+  assert.match(search, /search_social_profiles_v2/);
+  assert.doesNotMatch(search, /handicap|club_name/);
   assert.match(membership, /BETA PRO/);
   assert.match(home, /RONDA ABIERTA/);
   assert.match(home, /CONFIGURAR CON BACKYARD AI/);

@@ -39,8 +39,12 @@ begin
     or has_table_privilege('authenticated', 'public.feature_entitlements', 'UPDATE') then
     raise exception 'plan assignments must remain server-managed';
   end if;
+  if to_regprocedure('public.search_social_profiles_v2(text,integer)') is null
+    or has_function_privilege('anon', 'public.search_social_profiles_v2(text,integer)', 'EXECUTE')
+    or not has_function_privilege('authenticated', 'public.search_social_profiles_v2(text,integer)', 'EXECUTE') then
+    raise exception 'username discovery must be authenticated and exposed only through its minimal RPC';
+  end if;
 end;
 $$;
 
 rollback;
-

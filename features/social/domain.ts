@@ -72,7 +72,16 @@ export function searchSocialProfiles(
       const rightExact = normalizeUsernameSearch(right.username) === normalized ? 0 : 1;
       return leftExact - rightExact || left.username.localeCompare(right.username);
     })
-    .slice(0, Math.max(1, Math.min(50, Math.trunc(limit))));
+    .slice(0, Math.max(1, Math.min(50, Math.trunc(limit))))
+    .map((profile) => socialProfileVisibleTo(profile, viewerId, friendships)
+      ? profile
+      : {
+        userId: profile.userId,
+        username: profile.username,
+        displayName: profile.displayName,
+        avatar: profile.avatar ?? null,
+        privacy: profile.privacy,
+      });
 }
 
 function pairKey(first: string, second: string) {
@@ -155,4 +164,3 @@ export function frequentFriends(graph: SocialGraph, limit = 8) {
 export function emptySocialGraph(ownerId: string): SocialGraph {
   return { ownerId, requests: [], friendships: [], blockedUserIds: [], recentPlayers: [] };
 }
-

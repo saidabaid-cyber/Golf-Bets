@@ -1,4 +1,4 @@
-import { CONNECTION_STATES, SOCIAL_PRIVACY_LEVELS, emptySocialGraph, type SocialGraph, type SocialProfile } from "./domain";
+import { CONNECTION_STATES, emptySocialGraph, searchSocialProfiles, type SocialGraph, type SocialProfile } from "./domain";
 
 const KEY_PREFIX = "backyard:phase2:social:";
 
@@ -34,13 +34,8 @@ export function createLocalSocialRepository(storage: Storage, directory: readonl
       storage.setItem(`${KEY_PREFIX}${graph.ownerId}`, JSON.stringify(graph));
     },
     async searchProfiles(query, viewerId, limit = 20) {
-      const normalized = query.trim().replace(/^@+/, "").toLowerCase();
-      if (!normalized) return [];
-      return directory
-        .filter((profile) => profile.userId !== viewerId && SOCIAL_PRIVACY_LEVELS.includes(profile.privacy))
-        .filter((profile) => profile.username.toLowerCase().includes(normalized))
-        .slice(0, Math.max(1, Math.min(50, limit)));
+      const graph = parseGraph(storage.getItem(`${KEY_PREFIX}${viewerId}`), viewerId);
+      return searchSocialProfiles(directory, query, viewerId, graph.friendships, limit);
     },
   };
 }
-

@@ -223,6 +223,38 @@ drop trigger if exists friend_request_transition_guard on public.friend_requests
 create trigger friend_request_transition_guard before update on public.friend_requests for each row execute function private.friend_request_transition();
 revoke all on function private.friend_request_transition() from public, anon, authenticated;
 
+-- Username discovery intentionally returns only the public identity card. Full
+-- social profile rows (HCP/club) remain restricted to the owner and accepted
+-- friends by RLS below.
+create or replace function public.search_social_profiles_v2(search_username text, result_limit integer default 20)
+returns table(user_id uuid, username text, display_name text, avatar_url text)
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  with query as (
+    select lower(regexp_replace(trim(coalesce(search_username, '')), '^@+', '')) as value
+  )
+  select profile.user_id, profile.username, profile.display_name, profile.avatar_url
+  from public.social_profiles profile
+  cross join query
+  where (select auth.uid()) is not null
+    and profile.user_id <> (select auth.uid())
+    and profile.privacy = 'FRIENDS'
+    and length(query.value) >= 2
+    and lower(profile.username) like '%' || query.value || '%'
+    and not exists (
+      select 1 from public.blocked_connections blocked
+      where (blocked.owner_id = (select auth.uid()) and blocked.blocked_user_id = profile.user_id)
+        or (blocked.owner_id = profile.user_id and blocked.blocked_user_id = (select auth.uid()))
+    )
+  order by case when lower(profile.username) = query.value then 0 else 1 end, profile.username
+  limit least(greatest(coalesce(result_limit, 20), 1), 20);
+$$;
+revoke all on function public.search_social_profiles_v2(text, integer) from public, anon;
+grant execute on function public.search_social_profiles_v2(text, integer) to authenticated;
+
 alter table public.social_profiles enable row level security;
 alter table public.friend_requests enable row level security;
 alter table public.friendships enable row level security;
@@ -239,8 +271,15 @@ alter table public.feature_entitlements enable row level security;
 alter table public.feature_usage_counters enable row level security;
 alter table public.app_admins enable row level security;
 
-create policy social_profiles_discovery on public.social_profiles for select to authenticated
-using (user_id = (select auth.uid()) or privacy = 'FRIENDS');
+create policy social_profiles_self_or_friend on public.social_profiles for select to authenticated
+using (
+  user_id = (select auth.uid())
+  or exists (
+    select 1 from public.friendships friendship
+    where (friendship.user_a_id = (select auth.uid()) and friendship.user_b_id = social_profiles.user_id)
+       or (friendship.user_b_id = (select auth.uid()) and friendship.user_a_id = social_profiles.user_id)
+  )
+);
 create policy social_profiles_self_insert on public.social_profiles for insert to authenticated with check (user_id = (select auth.uid()));
 create policy social_profiles_self_update on public.social_profiles for update to authenticated using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
 

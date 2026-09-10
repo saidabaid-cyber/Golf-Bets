@@ -11,11 +11,10 @@ export async function GET(request: NextRequest) {
   if (!account.ok) return NextResponse.json({ error: account.error, code: account.code }, { status: account.status, headers: PRIVATE });
   const username = normalizeUsernameSearch(request.nextUrl.searchParams.get("username"));
   if (username.length < 2) return NextResponse.json({ data: [] }, { headers: PRIVATE });
-  const { data, error } = await account.client.from("social_profiles")
-    .select("user_id,username,display_name,avatar_url,handicap,club_name,privacy")
-    .ilike("username", `%${username}%`)
-    .neq("user_id", account.userId)
-    .limit(20);
+  const { data, error } = await account.client.rpc("search_social_profiles_v2", {
+    search_username: username,
+    result_limit: 20,
+  });
   if (error) {
     const schemaMissing = ["42P01", "PGRST204", "PGRST205"].includes(error.code || "");
     return NextResponse.json({
