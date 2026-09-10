@@ -22,7 +22,7 @@ function sameSnapshot(left: PlayerCourseHandicapSnapshot | undefined, right: Omi
  * result remains auditable while Backyard's round cap is applied explicitly.
  */
 export function applyRoundCourseHandicaps(
-  players: readonly Player[],
+  players: Player[],
   assignments: readonly PlayerTeeAssignmentSnapshot[],
   course: Course,
   calculatedAt: string,

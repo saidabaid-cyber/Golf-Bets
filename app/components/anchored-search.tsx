@@ -1,7 +1,6 @@
 "use client";
 
 import { useId, type ReactNode } from "react";
-import styles from "./anchored-search.module.css";
 
 export function AnchoredSearch({
   label,
@@ -28,9 +27,9 @@ export function AnchoredSearch({
 }) {
   const inputId = useId();
   const listId = `${inputId}-results`;
-  return <div className={styles.root}>
+  return <div className="anchoredSearch">
     <label htmlFor={inputId}>{label}</label>
-    <div className={styles.anchor}>
+    <div className="anchoredSearchAnchor">
       <input
         id={inputId}
         type="search"
@@ -47,9 +46,9 @@ export function AnchoredSearch({
         onFocus={onFocus}
         onChange={(event) => onChange(event.target.value)}
       />
-      {expanded && <div id={listId} className={styles.results} role="listbox">{children}</div>}
+      {expanded && <div id={listId} className="anchoredSearchResults" role="listbox">{children}</div>}
     </div>
-    {status && <div className={styles.status} role="status">{status}</div>}
+    {status && <div className="anchoredSearchStatus" role="status">{status}</div>}
   </div>;
 }
 

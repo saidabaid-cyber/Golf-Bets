@@ -155,6 +155,54 @@ test("club search, onboarding, capture and modal safety expose the hard-closeout
   assert.match(modalShell, /event\.key !== "Escape"/);
 });
 
+test("priority UX keeps searches anchored and avoids loading a round course dropdown", () => {
+  const anchored = readFileSync("app/components/anchored-search.tsx", "utf8");
+  const anchoredStyles = readFileSync("app/globals.css", "utf8");
+  const roundPicker = readFileSync("app/components/round-course-picker.tsx", "utf8");
+  const page = readFileSync("app/page.tsx", "utf8");
+  const social = readFileSync("app/components/social-connections-panel.tsx", "utf8");
+  assert.match(anchored, /role="combobox"/);
+  assert.match(anchored, /role="listbox"/);
+  assert.match(anchoredStyles, /position:\s*absolute/);
+  assert.match(anchoredStyles, /top:\s*calc\(100% \+ 4px\)/);
+  assert.match(roundPicker, /setTimeout/);
+  assert.match(roundPicker, /limit: "12"/);
+  assert.match(roundPicker, /Más resultados/);
+  assert.match(page, /<RoundCoursePicker/);
+  assert.doesNotMatch(page, /<select id="round-course"/);
+  assert.match(social, /<AnchoredSearch label="Username"/);
+  assert.match(social, /setTimeout/);
+  assert.doesNotMatch(social, /className="socialSearchRow"/);
+});
+
+test("onboarding, groups and account deletion expose explicit safe choices", () => {
+  const onboarding = readFileSync("app/components/beta-onboarding-flow.tsx", "utf8");
+  const account = readFileSync("app/components/account-panel.tsx", "utf8");
+  assert.match(onboarding, /name: ""/);
+  assert.match(onboarding, /<b>Privado<\/b>/);
+  assert.match(onboarding, /<b>Por invitación<\/b>/);
+  assert.match(onboarding, /No creamos tokens locales inseguros/);
+  assert.match(readFileSync("app/page.tsx", "utf8"), /El dominio de invitaciones seguras ya valida token, identidad, expiración y revocación/);
+  assert.match(account, /¿Deseas borrar toda tu información\?/);
+  assert.match(account, /deleteAllConfirmed/);
+  assert.match(account, /desvinculan o anonimizan/);
+  assert.match(account, /deleteText !== "ELIMINAR" \|\| !deleteAllConfirmed/);
+});
+
+test("group bet templates retain advanced configuration instead of flattened numbers", () => {
+  const editor = readFileSync("app/components/group-bet-template-editor.tsx", "utf8");
+  assert.match(editor, /Redondeo HCP/);
+  assert.match(editor, /Mantener decimales/);
+  assert.match(editor, /Modalidad/);
+  assert.match(editor, /Fijo \+ Patada/);
+  assert.match(editor, /Presión · segunda vuelta/);
+  assert.match(editor, /3 hoyos/);
+  assert.match(editor, /18 hoyos/);
+  assert.match(editor, /Ventaja desde índices/);
+  assert.match(editor, /Ventaja firmada/);
+  assert.match(editor, /step=\{0\.01\}/);
+});
+
 test("GHIN is an explicit disabled external provider foundation", () => {
   const flags = readFileSync("features/feature-flags/registry.ts", "utf8");
   const placeholder = readFileSync("app/components/ghin-placeholder.tsx", "utf8");

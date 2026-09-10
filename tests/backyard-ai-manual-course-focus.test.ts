@@ -85,7 +85,7 @@ test("pending course identity is normalized, persisted, and wired into the visib
   assert.match(page, /courseIdentity: courseSelected \? undefined : pendingCourseIdentity \?\? undefined/);
   assert.match(page, /course: courseSelected \? course : null/);
   assert.match(page, /Campo reconocido: \{pendingCourseIdentity\.name\}/);
-  assert.match(page, /<label htmlFor="round-course">Campo<\/label>/);
+  assert.match(page, /<RoundCoursePicker[\s\S]{0,400}pendingName=\{pendingCourseIdentity\?\.name\}/);
   assert.match(page, /<b>TEES<\/b>/);
   assert.match(page, /playerTeeAssignments\.find\(\(item\) => item\.playerId === player\.id\)/);
   assert.match(page, /setPendingCourseIdentity\(null\)[\s\S]{0,120}setCourseSelectionError\(false\)/);

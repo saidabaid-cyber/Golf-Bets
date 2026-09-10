@@ -32,11 +32,13 @@ test("la búsqueda usa debounce, estados accesibles y paginación sin cargar el 
   assert.match(courseLibrary, /onToggleFavorite\(chosen\.id\)/, "favoritos conserva el id exacto de la selección\/tee");
 });
 
-test("Nueva Ronda separa Campo de Tees por jugador sin cambiar selectRoundCourse", () => {
-  assert.match(page, /value=\{courseSelected \? course\.name : ""\}/);
-  assert.match(page, /courseNameOptions\.find\(\(candidate\) => candidate\.name === (?:e|event)\.target\.value\)/);
-  assert.match(page, /option key=\{option\.name\} value=\{option\.name\}>\{option\.name\}/);
-  assert.doesNotMatch(page, /<option[^>]+>\{option\.name\} · \{option\.teeName\}/);
+test("Nueva Ronda busca Campo de forma paginada y mantiene Tees por jugador", () => {
+  const picker = readFileSync("app/components/round-course-picker.tsx", "utf8");
+  assert.match(page, /<RoundCoursePicker/);
+  assert.match(picker, /\/api\/courses\/search/);
+  assert.match(picker, /setTimeout/);
+  assert.match(picker, /Más resultados/);
+  assert.doesNotMatch(page, /<select id="round-course"/);
   assert.match(page, /<b>TEES<\/b>/);
   assert.match(page, /updatePlayerTeeAssignment/);
   assert.match(page, /function selectRoundCourse\(nextCourse: Course, returnToSetup = false\)/);
