@@ -35,6 +35,24 @@ export async function GET(request: NextRequest) {
     .slice(0, 25);
   const query = request.nextUrl.searchParams.get("q") || "";
   const includeArchivedParam = request.nextUrl.searchParams.get("includeArchived");
+  const facet = request.nextUrl.searchParams.get("facet");
+  if (facet && facet !== "brands") {
+    return NextResponse.json({ error: "Faceta de catálogo inválida." }, { status: 400 });
+  }
+  if (facet === "brands") {
+    const page = await internalEquipmentCatalogProvider.brandFacets({
+      kind: typeValue as EquipmentCatalogKind,
+      query,
+      category: categoryValue as ClubCategory | null,
+      shaftUsage: shaftUsageValue as ShaftUsage | null,
+      cursor: request.nextUrl.searchParams.get("cursor"),
+      limit: Number.isFinite(limitValue) ? limitValue : 20,
+      includeArchived: includeArchivedParam !== "false",
+    });
+    return NextResponse.json({ provider: internalEquipmentCatalogProvider.id, facet: "brands", ...page }, {
+      headers: { "cache-control": "public, max-age=60, stale-while-revalidate=300" },
+    });
+  }
   const page = await internalEquipmentCatalogProvider.search({
     kind: typeValue as EquipmentCatalogKind,
     query,

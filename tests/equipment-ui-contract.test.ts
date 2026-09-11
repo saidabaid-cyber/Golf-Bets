@@ -94,12 +94,14 @@ test("Ball Fit evalúa el catálogo completo en servidor y falla cerrado antes d
 
 test("los selectores buscan catálogo en servidor con debounce, límite y fallback offline", () => {
   assert.match(editors, /useEquipmentCatalogSearch/);
-  assert.match(editors, /Buscar bastón/);
+  assert.match(editors, /Buscar marca/);
   assert.match(editors, /Buscar bola/);
+  assert.match(editors, /useEquipmentBrandFacets/);
   assert.match(catalogSearchHook, /window\.setTimeout/);
   assert.match(catalogSearchHook, /250/);
   assert.match(editors, /Sin conexión/);
   assert.match(catalogRoute, /internalEquipmentCatalogProvider\.search/);
+  assert.match(catalogRoute, /internalEquipmentCatalogProvider\.brandFacets/);
   assert.match(catalogRoute, /limit/);
   assert.match(catalogRoute, /cache-control/);
   assert.match(catalogRoute, /pinnedIds/);

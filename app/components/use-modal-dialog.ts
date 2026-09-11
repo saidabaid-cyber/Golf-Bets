@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 
 const FOCUSABLE = "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
 
@@ -20,8 +20,9 @@ export function useModalDialog(active: boolean, onClose: () => void) {
     const priorOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const frame = requestAnimationFrame(() => {
+      if (dialogRef.current) dialogRef.current.scrollTop = 0;
       const first = dialogRef.current?.querySelector<HTMLElement>(FOCUSABLE);
-      (first || dialogRef.current)?.focus();
+      (first || dialogRef.current)?.focus({ preventScroll: true });
     });
 
     function onKeyDown(event: KeyboardEvent) {
@@ -47,9 +48,20 @@ export function useModalDialog(active: boolean, onClose: () => void) {
       cancelAnimationFrame(frame);
       document.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = priorOverflow;
-      if (priorFocus?.isConnected) priorFocus.focus();
+      if (priorFocus?.isConnected) priorFocus.focus({ preventScroll: true });
     };
   }, [active]);
 
   return dialogRef;
+}
+
+/** Keeps multi-step sheets at their own top without moving the page behind the
+ * modal. The container receives focus without summoning the mobile keyboard. */
+export function useWizardStepNavigation(dialogRef: RefObject<HTMLElement | null>, step: string) {
+  useLayoutEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    dialog.scrollTop = 0;
+    dialog.focus({ preventScroll: true });
+  }, [dialogRef, step]);
 }

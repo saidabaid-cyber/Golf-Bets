@@ -24,6 +24,16 @@ export type EquipmentCatalogSearchInput = {
   pinnedIds?: readonly string[];
 };
 
+export type EquipmentCatalogBrandFacet = {
+  brand: string;
+  count: number;
+  currentCount: number;
+  historicalCount: number;
+};
+
+export type EquipmentCatalogBrandFacetInput = Pick<EquipmentCatalogSearchInput,
+  "kind" | "query" | "category" | "shaftUsage" | "cursor" | "limit" | "includeArchived">;
+
 export type EquipmentBallFitCatalogInput = {
   /** An archived current ball may be included only as a comparison baseline. */
   currentBallId?: string | null;
@@ -43,6 +53,7 @@ export type EquipmentBallFitCatalogScope = {
 export interface EquipmentCatalogProvider {
   readonly id: string;
   search(input: EquipmentCatalogSearchInput): Promise<GolfCatalogPage<EquipmentCatalogItem>>;
+  brandFacets(input: EquipmentCatalogBrandFacetInput): Promise<GolfCatalogPage<EquipmentCatalogBrandFacet>>;
   loadBallFitCatalog(input: EquipmentBallFitCatalogInput): Promise<EquipmentBallFitCatalogScope>;
 }
 
@@ -156,6 +167,41 @@ function page<T extends EquipmentCatalogItem>(items: readonly T[], input: Equipm
   };
 }
 
+function facetPage<T extends EquipmentCatalogItem>(items: readonly T[], input: EquipmentCatalogBrandFacetInput): GolfCatalogPage<EquipmentCatalogBrandFacet> {
+  const query = searchable(input.query || "").slice(0, 120);
+  const source = items
+    .filter((item) => ("bagEligible" in item ? item.bagEligible : true))
+    .filter((item) => input.includeArchived || item.active)
+    .filter((item) => input.kind !== "CLUB" || !input.category || (item as GolfClubCatalog).category === input.category)
+    .filter((item) => input.kind !== "SHAFT" || !input.shaftUsage || (item as GolfShaftCatalog).usage === input.shaftUsage)
+    .filter((item) => !query || searchable(item.brand).includes(query));
+  const grouped = new Map<string, EquipmentCatalogBrandFacet>();
+  for (const item of source) {
+    const key = searchable(item.brand);
+    const current = grouped.get(key) || { brand: item.brand, count: 0, currentCount: 0, historicalCount: 0 };
+    current.count += 1;
+    if (item.active) current.currentCount += 1;
+    else current.historicalCount += 1;
+    grouped.set(key, current);
+  }
+  const candidates = [...grouped.values()].sort((left, right) => {
+    const leftMatch = query && searchable(left.brand) === query ? 0 : 1;
+    const rightMatch = query && searchable(right.brand) === query ? 0 : 1;
+    return leftMatch - rightMatch || left.brand.localeCompare(right.brand, "es-MX");
+  });
+  const cursorBrand = decodeCursor(input.cursor);
+  const cursorIndex = cursorBrand ? candidates.findIndex((item) => searchable(item.brand) === cursorBrand) : -1;
+  const start = cursorIndex >= 0 ? cursorIndex + 1 : 0;
+  const limit = safeLimit(input.limit);
+  const selected = candidates.slice(start, start + limit);
+  const hasMore = start + selected.length < candidates.length;
+  return {
+    items: selected,
+    hasMore,
+    nextCursor: hasMore && selected.length ? encodeURIComponent(searchable(selected[selected.length - 1].brand)) : null,
+  };
+}
+
 /**
  * Small QA provider backed by versioned, sourced seed files. UI consumes this
  * through a server route so replacing it with a paginated Supabase provider
@@ -172,6 +218,11 @@ export function createInternalEquipmentCatalogProvider(catalogs: {
       if (input.kind === "BALL") return page(catalogs.balls, input);
       if (input.kind === "CLUB") return page(catalogs.clubs, input);
       return page(catalogs.shafts, input);
+    },
+    async brandFacets(input) {
+      if (input.kind === "BALL") return facetPage(catalogs.balls, input);
+      if (input.kind === "CLUB") return facetPage(catalogs.clubs, input);
+      return facetPage(catalogs.shafts, input);
     },
     async loadBallFitCatalog(input) {
       const maximumCandidates = safeBallFitMaximum(input.maximumCandidates);

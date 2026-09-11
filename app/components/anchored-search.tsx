@@ -43,7 +43,11 @@ export function AnchoredSearch({
         aria-controls={listId}
         aria-invalid={invalid || undefined}
         aria-describedby={describedBy}
-        onFocus={onFocus}
+        onFocus={(event) => {
+          const input = event.currentTarget;
+          onFocus?.();
+          requestAnimationFrame(() => input.scrollIntoView({ block: "nearest", inline: "nearest" }));
+        }}
         onChange={(event) => onChange(event.target.value)}
       />
       {expanded && <div id={listId} className="anchoredSearchResults" role="listbox">{children}</div>}

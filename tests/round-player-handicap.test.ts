@@ -71,3 +71,12 @@ test("el tope Backyard queda explícito sin ocultar el resultado bruto de la fó
   assert.equal(applied[0].courseHandicapSnapshot?.appliedHandicap, 36);
   assert.equal(applied[0].handicap, 36);
 });
+
+test("una ronda iniciada congela su HCP aplicado aunque cambie el tee vivo", () => {
+  const player: Player = { id: "account:user-a", accountUserId: "user-a", name: "Said", handicap: 10, handicapIndex: 10, handicapSource: "profile_index" };
+  const applied = applyRoundCourseHandicaps([player], [tee], course, "2026-09-10T11:00:00.000Z");
+  const locked = applyRoundCourseHandicaps(applied, [{ ...tee, teeId: "vista-blue", teeName: "Azules", rating: 74, slope: 140 }], course, "2026-09-11T11:00:00.000Z", true);
+  assert.strictEqual(locked, applied);
+  assert.equal(locked[0].courseHandicapSnapshot?.teeId, "vista-white");
+  assert.equal(locked[0].handicap, applied[0].handicap);
+});

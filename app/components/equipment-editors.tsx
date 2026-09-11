@@ -13,12 +13,13 @@ import type {
   ShaftFlex,
   ShaftUsage,
 } from "../../lib/golf-equipment";
-import { resolveCatalogShaftSelection } from "../../lib/equipment-editor-selection";
+import { isClubHandednessAllowed, resolveCatalogShaftSelection, verifiedClubHandedness } from "../../lib/equipment-editor-selection";
 import styles from "./equipment.module.css";
-import { useEquipmentCatalogSearch } from "./use-equipment-catalog-search";
-import { useModalDialog } from "./use-modal-dialog";
+import { useEquipmentBrandFacets, useEquipmentCatalogSearch } from "./use-equipment-catalog-search";
+import { useModalDialog, useWizardStepNavigation } from "./use-modal-dialog";
 import { ModalCloseButton } from "./modal-shell";
 import { AnchoredSearch, AnchoredSearchOption } from "./anchored-search";
+import { CatalogProductMedia } from "./catalog-product-media";
 
 export const CLUB_CATEGORY_LABELS: Record<ClubCategory, string> = {
   DRIVER: "Driver",
@@ -141,11 +142,13 @@ export function ClubEditor({ userId, catalog, shafts, existing, onCancel, onSave
   const [shaftQuery, setShaftQuery] = useState("");
   const [message, setMessage] = useState("");
   const [step, setStep] = useState<"category" | "brand" | "model" | "specs" | "shaft" | "finish">(existing ? "finish" : "category");
+  useWizardStepNavigation(dialogRef, step);
 
-  const categoryCatalog = useMemo(() => catalog.filter((club) => club.category === category && (club.active || club.id === existingCatalog?.id)), [catalog, category, existingCatalog?.id]);
+  const categoryCatalog = useMemo(() => catalog.filter((club) => club.category === category), [catalog, category]);
   const pinnedClubIds = useMemo(() => catalogClubId ? [catalogClubId] : [], [catalogClubId]);
   const clubSearchQuery = step === "model" && brand ? `${brand} ${catalogQuery}`.trim() : catalogQuery;
-  const catalogSearch = useEquipmentCatalogSearch({ kind: "CLUB", query: clubSearchQuery, category, fallback: categoryCatalog, pinnedIds: pinnedClubIds });
+  const catalogSearch = useEquipmentCatalogSearch({ kind: "CLUB", query: clubSearchQuery, category, fallback: categoryCatalog, pinnedIds: pinnedClubIds, includeArchived: true });
+  const clubBrandFacets = useEquipmentBrandFacets({ kind: "CLUB", query: step === "brand" ? catalogQuery : "", category });
   const selectableCatalog = useMemo(() => {
     const byId = new Map(catalogSearch.items.map((club) => [club.id, club]));
     if (existingCatalog?.category === category) byId.set(existingCatalog.id, existingCatalog);
@@ -155,24 +158,24 @@ export function ClubEditor({ userId, catalog, shafts, existing, onCancel, onSave
     || catalog.find((club) => club.id === catalogClubId)
     || null;
   const effectiveBrand = brand || selectedCatalogClub?.brand || "";
-  const brands = useMemo(() => [...new Set(selectableCatalog.map((club) => club.brand))].sort((a, b) => a.localeCompare(b, "es-MX")), [selectableCatalog]);
+  const brands = clubBrandFacets.items;
   const models = selectableCatalog.filter((club) => sameBrand(club.brand, effectiveBrand));
   const shaftUsage = shaftUsageForCategory(category);
-  const shaftFallback = useMemo(() => shafts.filter((shaft) => (shaft.active || shaft.id === existingShaft?.id)
-    && (!shaft.usage || shaft.usage === shaftUsage)), [existingShaft?.id, shaftUsage, shafts]);
+  const shaftFallback = useMemo(() => shafts.filter((shaft) => !shaft.usage || shaft.usage === shaftUsage), [shaftUsage, shafts]);
   const pinnedShaftIds = useMemo(() => shaftId ? [shaftId] : [], [shaftId]);
   const shaftSearchQuery = shaftBrand ? `${shaftBrand} ${shaftQuery}`.trim() : shaftQuery;
-  const shaftSearch = useEquipmentCatalogSearch({ kind: "SHAFT", query: shaftSearchQuery, shaftUsage, fallback: shaftFallback, pinnedIds: pinnedShaftIds });
+  const shaftSearch = useEquipmentCatalogSearch({ kind: "SHAFT", query: shaftSearchQuery, shaftUsage, fallback: shaftFallback, pinnedIds: pinnedShaftIds, includeArchived: true });
+  const shaftBrandFacets = useEquipmentBrandFacets({ kind: "SHAFT", query: !shaftBrand ? shaftQuery : "", shaftUsage });
   const activeShafts = useMemo(() => {
     const byId = new Map(shaftSearch.items.map((shaft) => [shaft.id, shaft]));
     if (existingShaft) byId.set(existingShaft.id, existingShaft);
     return [...byId.values()];
   }, [existingShaft, shaftSearch.items]);
   const selectedShaft = resolveCatalogShaftSelection(shaftId, activeShafts, existingShaft);
-  const shaftBrands = useMemo(() => [...new Set(activeShafts.map((shaft) => shaft.brand))].sort((a, b) => a.localeCompare(b, "es-MX")), [activeShafts]);
+  const shaftBrands = shaftBrandFacets.items;
   const shaftModels = activeShafts.filter((shaft) => sameBrand(shaft.brand, shaftBrand));
   const selectedVariant = selectedCatalogClub?.variants.find((variant) => Math.abs(variant.loft - Number(loft)) < 0.001) || null;
-  const availableHands = selectedVariant?.handedness || selectedCatalogClub?.handedness || (["RH", "LH"] as ClubHandedness[]);
+  const availableHands = verifiedClubHandedness(selectedCatalogClub, selectedVariant) || (["RH", "LH"] as ClubHandedness[]);
 
   function chooseCategory(value: ClubCategory) {
     setCategory(value);
@@ -201,7 +204,8 @@ export function ClubEditor({ userId, catalog, shafts, existing, onCancel, onSave
       setGeneration(selected.generation || "");
       setYear(selected.year ? String(selected.year) : "");
       setLoft(selected.lofts.length === 1 ? String(selected.lofts[0]) : "");
-      if (!selected.handedness.includes(handedness)) setHandedness(selected.handedness[0] || "RH");
+      const verifiedHands = verifiedClubHandedness(selected);
+      if (verifiedHands && !verifiedHands.includes(handedness)) setHandedness(verifiedHands[0]);
       setBrand(selected.brand);
       setCustomModel(selected.model);
       setStep("specs");
@@ -212,7 +216,8 @@ export function ClubEditor({ userId, catalog, shafts, existing, onCancel, onSave
     setLoft(value);
     const selected = selectableCatalog.find((club) => club.id === catalogClubId) || catalog.find((club) => club.id === catalogClubId);
     const variant = selected?.variants.find((item) => Math.abs(item.loft - Number(value)) < 0.001);
-    if (variant && !variant.handedness.includes(handedness)) setHandedness(variant.handedness[0] || "RH");
+    const verifiedHands = verifiedClubHandedness(selected, variant);
+    if (verifiedHands && !verifiedHands.includes(handedness)) setHandedness(verifiedHands[0]);
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -235,12 +240,12 @@ export function ClubEditor({ userId, catalog, shafts, existing, onCancel, onSave
       setMessage("Revisa año, loft, peso, longitud y lie. Puedes dejarlos vacíos si no los conoces.");
       return;
     }
-    if (selectedClub && !selectedClub.handedness.includes(handedness)) {
+    if (selectedClub && !isClubHandednessAllowed(handedness, selectedClub)) {
       setMessage("La mano elegida no está verificada para este modelo. Usa ‘Mi bastón no aparece’ para guardar una configuración manual.");
       return;
     }
     const verifiedVariant = selectedClub?.variants.find((variant) => parsedLoft !== null && Math.abs(variant.loft - parsedLoft) < 0.001);
-    if (verifiedVariant && !verifiedVariant.handedness.includes(handedness)) {
+    if (verifiedVariant && !isClubHandednessAllowed(handedness, selectedClub, verifiedVariant)) {
       setMessage(`El loft ${parsedLoft}° no aparece en mano ${handedness} en la ficha verificada. Puedes elegir otra variante o capturarlo manualmente.`);
       return;
     }
@@ -312,18 +317,18 @@ export function ClubEditor({ userId, catalog, shafts, existing, onCancel, onSave
 
         {step === "brand" && <div className={styles.flowScreen}>
           <button type="button" className={styles.flowBack} onClick={() => setStep("category")}>← Categorías</button>
-          <h3>Select Brand</h3><p>{CLUB_CATEGORY_LABELS[category]} · escribe para filtrar el catálogo completo, incluidos modelos anteriores.</p>
-          <AnchoredSearch label="Buscar bastón por marca" value={catalogQuery} onChange={setCatalogQuery} placeholder="Ej. TaylorMade" expanded={brands.length > 0} status={catalogSearch.status === "loading" ? "Buscando…" : catalogSearch.status === "error" ? "Sin conexión; usa la captura manual." : `${brands.length} marcas en estos resultados`}>
-            {brands.map((value) => <AnchoredSearchOption key={value} onSelect={() => { setBrand(value); setCatalogQuery(""); setStep("model"); }}><b>{value}</b><small>{selectableCatalog.filter((club) => sameBrand(club.brand, value)).length} modelos en esta página</small></AnchoredSearchOption>)}
+          <h3>Selecciona marca</h3><p>{CLUB_CATEGORY_LABELS[category]} · escribe para filtrar todo el catálogo, incluidos modelos anteriores.</p>
+          <AnchoredSearch label="Buscar marca" value={catalogQuery} onChange={setCatalogQuery} placeholder="Ej. TaylorMade" expanded={brands.length > 0} status={clubBrandFacets.status === "loading" ? "Buscando…" : clubBrandFacets.status === "error" ? "Sin conexión o catálogo no disponible; puedes usar captura manual." : `${brands.length} marcas`}>
+            {brands.map((item) => <AnchoredSearchOption key={item.brand} onSelect={() => { setBrand(item.brand); setCatalogQuery(""); setStep("model"); }}><b>{item.brand}</b><small>{item.count} modelos · {item.currentCount} actuales · {item.historicalCount} anteriores</small></AnchoredSearchOption>)}
           </AnchoredSearch>
-          {catalogSearch.hasMore && <button className="secondary" type="button" onClick={() => void catalogSearch.loadMore()}>Más marcas</button>}
+          {clubBrandFacets.hasMore && <button className="secondary" type="button" onClick={() => void clubBrandFacets.loadMore()}>Más marcas</button>}
           <button className={styles.manualToggle} type="button" onClick={() => { setManual(true); setBrand(""); setCustomModel(""); setStep("specs"); }}>Mi bastón no aparece</button>
         </div>}
 
         {step === "model" && <div className={styles.flowScreen}>
           <button type="button" className={styles.flowBack} onClick={() => { setBrand(""); setCatalogQuery(""); setStep("brand"); }}>← Marcas</button>
-          <h3>Select Model</h3><p>{effectiveBrand} · actuales y anteriores se conservan en Mi Bolsa.</p>
-          <AnchoredSearch label="Buscar modelo" value={catalogQuery} onChange={setCatalogQuery} placeholder="Ej. Stealth 2 Plus" expanded={models.length > 0} status={catalogSearch.status === "loading" ? "Buscando…" : catalogSearch.status === "error" ? "No se pudo consultar el catálogo." : `${models.length} modelos encontrados`}>
+          <h3>Selecciona modelo</h3><p>{effectiveBrand} · actuales y anteriores se conservan en Mi Bolsa.</p>
+          <AnchoredSearch label="Buscar modelo" value={catalogQuery} onChange={setCatalogQuery} placeholder="Ej. Stealth 2 Plus" expanded={models.length > 0} status={catalogSearch.status === "loading" ? "Buscando…" : catalogSearch.status === "error" ? "Sin conexión o catálogo no disponible." : `${models.length} modelos encontrados`}>
             {models.map((club) => <AnchoredSearchOption key={club.id} onSelect={() => chooseModel(club.id)}><b>{club.model}</b><small>{[club.generation, club.year, club.active ? "Actual" : "Modelo anterior", club.subCategory].filter(Boolean).join(" · ")}</small></AnchoredSearchOption>)}
           </AnchoredSearch>
           {catalogSearch.hasMore && <button className="secondary" type="button" onClick={() => void catalogSearch.loadMore()}>Cargar más modelos</button>}
@@ -332,7 +337,7 @@ export function ClubEditor({ userId, catalog, shafts, existing, onCancel, onSave
         {step === "specs" && <div className={styles.flowScreen}>
           <button type="button" className={styles.flowBack} onClick={() => { if (manual) setManual(false); setStep(manual ? "brand" : "model"); }}>← {manual ? "Catálogo" : "Modelos"}</button>
           <h3>Tipo y especificación</h3>
-          <div className={styles.productPreview}><span>{CLUB_CATEGORY_ICONS[category]}</span><div><b>{manual ? [brand, customModel].filter(Boolean).join(" ") || "Bastón manual" : `${selectedCatalogClub?.brand || effectiveBrand} ${selectedCatalogClub?.model || ""}`}</b><small>{selectedCatalogClub ? [selectedCatalogClub.generation, selectedCatalogClub.year, selectedCatalogClub.active ? "Actual" : "Modelo anterior"].filter(Boolean).join(" · ") : "La imagen estará disponible cuando exista una fuente autorizada."}</small></div></div>
+          <div className={styles.productPreview}><CatalogProductMedia item={selectedCatalogClub} fallback={CLUB_CATEGORY_ICONS[category]} /><div><b>{manual ? [brand, customModel].filter(Boolean).join(" ") || "Bastón manual" : `${selectedCatalogClub?.brand || effectiveBrand} ${selectedCatalogClub?.model || ""}`}</b><small>{selectedCatalogClub ? [selectedCatalogClub.generation, selectedCatalogClub.year, selectedCatalogClub.active ? "Actual" : "Modelo anterior"].filter(Boolean).join(" · ") : "Sin imagen con licencia verificada."}</small></div></div>
           {manual && <div className={styles.inlineFields}><label>Marca<input value={brand} maxLength={100} onChange={(event) => setBrand(event.target.value)} placeholder="Marca" /></label><label>Modelo<input value={customModel} maxLength={140} onChange={(event) => setCustomModel(event.target.value)} placeholder="Modelo" /></label></div>}
           <div className={styles.inlineFields}><label>Generación (opcional)<input value={generation} maxLength={100} onChange={(event) => setGeneration(event.target.value)} /></label><label>Año (opcional)<input type="number" inputMode="numeric" min={1900} max={2200} value={year} onChange={(event) => setYear(event.target.value)} /></label><label>Loft ° (opcional)<input type="number" inputMode="decimal" min={0} max={90} step="0.1" list="verified-club-lofts" value={loft} onChange={(event) => changeLoft(event.target.value)} /><datalist id="verified-club-lofts">{selectedCatalogClub?.lofts.map((value) => <option key={value} value={value} />)}</datalist></label><label>Mano<select value={handedness} onChange={(event) => setHandedness(event.target.value as ClubHandedness)}>{availableHands.includes("RH") && <option value="RH">Derecha</option>}{availableHands.includes("LH") && <option value="LH">Izquierda</option>}</select></label></div>
           {category === "IRON_SET" && <fieldset className={styles.choiceFieldset}><legend>Composición del set</legend><div className={styles.choiceGrid}>{IRON_SET_PACKAGES.map((set) => <button type="button" key={set.label} onClick={() => setComposition([...set.clubs])}>{set.label}</button>)}</div><p className={styles.subtle}>Personalizar set</p><div className={styles.choiceGrid}>{CUSTOM_IRON_COMPOSITION.map((club) => <label key={club}><input type="checkbox" checked={composition.includes(club)} onChange={(event) => setComposition((current) => event.target.checked ? [...current, club] : current.filter((item) => item !== club))} />{club}</label>)}</div></fieldset>}
@@ -342,8 +347,8 @@ export function ClubEditor({ userId, catalog, shafts, existing, onCancel, onSave
         {step === "shaft" && <div className={styles.flowScreen}>
           <button type="button" className={styles.flowBack} onClick={() => setStep("specs")}>← Especificaciones</button>
           <h3>Selecciona varilla</h3><p>Busca por marca, modelo, peso o flex. Las varillas anteriores siguen disponibles.</p>
-          {!shaftManual && !shaftBrand && <AnchoredSearch label="Buscar varilla por marca" value={shaftQuery} onChange={setShaftQuery} placeholder="Ej. Fujikura" expanded={shaftBrands.length > 0} status={shaftSearch.status === "loading" ? "Buscando…" : `${shaftBrands.length} marcas`}>
-            {shaftBrands.map((value) => <AnchoredSearchOption key={value} onSelect={() => { setShaftBrand(value); setShaftQuery(""); }}><b>{value}</b><small>{activeShafts.filter((shaft) => sameBrand(shaft.brand, value)).length} familias en esta página</small></AnchoredSearchOption>)}
+          {!shaftManual && !shaftBrand && <AnchoredSearch label="Buscar varilla por marca" value={shaftQuery} onChange={setShaftQuery} placeholder="Ej. Fujikura" expanded={shaftBrands.length > 0} status={shaftBrandFacets.status === "loading" ? "Buscando…" : shaftBrandFacets.status === "error" ? "Sin conexión o catálogo no disponible." : `${shaftBrands.length} marcas`}>
+            {shaftBrands.map((item) => <AnchoredSearchOption key={item.brand} onSelect={() => { setShaftBrand(item.brand); setShaftQuery(""); }}><b>{item.brand}</b><small>{item.count} familias · {item.historicalCount} anteriores</small></AnchoredSearchOption>)}
           </AnchoredSearch>}
           {!shaftManual && shaftBrand && <><button type="button" className={styles.selectedBrand} onClick={() => { setShaftBrand(""); setShaftQuery(""); }}>Marca: {shaftBrand} · cambiar</button><AnchoredSearch label="Buscar modelo / peso / flex" value={shaftQuery} onChange={setShaftQuery} placeholder="Ej. Ventus Blue 6S" expanded={shaftModels.length > 0} status={shaftSearch.status === "loading" ? "Buscando…" : `${shaftModels.length} varillas encontradas`}>
             {shaftModels.map((shaft) => <AnchoredSearchOption key={shaft.id} onSelect={() => { setShaftId(shaft.id); setShaftWeight(shaft.weightOptions.length === 1 ? String(shaft.weightOptions[0]) : ""); const exactFlex = shaft.flexOptions.length === 1 ? shaft.flexOptions[0] : ""; setShaftFlexLabel(exactFlex); setFlex(exactFlex ? legacyFlexFromManufacturerLabel(exactFlex) || "" : ""); setStep("finish"); }}><b>{shaft.model}{shaft.generation ? ` · ${shaft.generation}` : ""}</b><small>{[shaft.active ? "Actual" : "Modelo anterior", shaft.oemStockOrAftermarket === "OEM_STOCK" ? "OEM stock" : "Aftermarket", shaft.weightOptions.length ? `${shaft.weightOptions.join("/")} g` : null, shaft.flexOptions.join("/")].filter(Boolean).join(" · ")}</small></AnchoredSearchOption>)}
@@ -355,7 +360,7 @@ export function ClubEditor({ userId, catalog, shafts, existing, onCancel, onSave
         {step === "finish" && <div className={styles.flowScreen}>
           <button type="button" className={styles.flowBack} onClick={() => setStep("shaft")}>← Varilla</button>
           <h3>Revisa y agrega</h3>
-          <div className={styles.productPreview}><span>{CLUB_CATEGORY_ICONS[category]}</span><div><b>{[effectiveBrand, selectedCatalogClub?.model || customModel].filter(Boolean).join(" ")}</b><small>{selectedShaft ? `${selectedShaft.brand} ${selectedShaft.model}` : shaftManual ? [customShaftBrand, customShaftModel].filter(Boolean).join(" ") || "Varilla manual" : "Sin varilla indicada"}</small></div></div>
+          <div className={styles.productPreview}><CatalogProductMedia item={selectedCatalogClub} fallback={CLUB_CATEGORY_ICONS[category]} /><div><b>{[effectiveBrand, selectedCatalogClub?.model || customModel].filter(Boolean).join(" ")}</b><small>{selectedShaft ? `${selectedShaft.brand} ${selectedShaft.model}` : shaftManual ? [customShaftBrand, customShaftModel].filter(Boolean).join(" ") || "Varilla manual" : "Sin varilla indicada"}</small></div></div>
           <div className={styles.inlineFields}>
             {selectedShaft?.flexOptions.length ? <label>Flex<select value={shaftFlexLabel} onChange={(event) => { setShaftFlexLabel(event.target.value); setFlex(legacyFlexFromManufacturerLabel(event.target.value) || ""); }}><option value="">No lo sé</option>{selectedShaft.flexOptions.map((value) => <option key={value} value={value}>{value}</option>)}</select></label> : <label>Flex (opcional)<input value={shaftFlexLabel} maxLength={40} onChange={(event) => { setShaftFlexLabel(event.target.value); setFlex(legacyFlexFromManufacturerLabel(event.target.value) || ""); }} placeholder="5.5, F4, M4, S…" /></label>}
             {selectedShaft?.weightOptions.length ? <label>Peso de varilla<select value={shaftWeight} onChange={(event) => setShaftWeight(event.target.value)}><option value="">No lo sé</option>{selectedShaft.weightOptions.map((value) => <option key={value} value={value}>{value} g</option>)}</select></label> : <label>Peso de varilla g (opcional)<input type="number" inputMode="decimal" min={1} max={300} step="0.1" value={shaftWeight} onChange={(event) => setShaftWeight(event.target.value)} /></label>}
@@ -392,16 +397,18 @@ export function BallEditor({ userId, catalog, existing, onCancel, onSave }: Ball
   const [catalogQuery, setCatalogQuery] = useState("");
   const [message, setMessage] = useState("");
   const [step, setStep] = useState<"brand" | "model" | "details">(existing ? "details" : "brand");
-  const activeCatalog = useMemo(() => catalog.filter((ball) => ball.active || ball.id === existingCatalog?.id), [catalog, existingCatalog?.id]);
+  useWizardStepNavigation(dialogRef, step);
+  const activeCatalog = useMemo(() => [...catalog], [catalog]);
   const pinnedBallIds = useMemo(() => catalogBallId ? [catalogBallId] : [], [catalogBallId]);
   const ballSearchQuery = step === "model" && brand ? `${brand} ${catalogQuery}`.trim() : catalogQuery;
-  const catalogSearch = useEquipmentCatalogSearch({ kind: "BALL", query: ballSearchQuery, fallback: activeCatalog, pinnedIds: pinnedBallIds });
+  const catalogSearch = useEquipmentCatalogSearch({ kind: "BALL", query: ballSearchQuery, fallback: activeCatalog, pinnedIds: pinnedBallIds, includeArchived: true });
+  const ballBrandFacets = useEquipmentBrandFacets({ kind: "BALL", query: step === "brand" ? catalogQuery : "" });
   const selectableCatalog = useMemo(() => {
     const byId = new Map(catalogSearch.items.map((ball) => [ball.id, ball]));
     if (existingCatalog) byId.set(existingCatalog.id, existingCatalog);
     return [...byId.values()];
   }, [catalogSearch.items, existingCatalog]);
-  const brands = useMemo(() => [...new Set(selectableCatalog.map((ball) => ball.brand))].sort((a, b) => a.localeCompare(b, "es-MX")), [selectableCatalog]);
+  const brands = ballBrandFacets.items;
   const selected = selectableCatalog.find((ball) => ball.id === catalogBallId)
     || catalog.find((ball) => ball.id === catalogBallId)
     || null;
@@ -456,13 +463,13 @@ export function BallEditor({ userId, catalog, existing, onCancel, onSave }: Ball
       <p>El catálogo conserva la generación y la fuente. El color es opcional.</p>
       <div className={styles.flowProgress}>{(["brand", "model", "details"] as const).map((item, index) => <span key={item} data-active={item === step} data-complete={index < ["brand", "model", "details"].indexOf(step)} />)}</div>
       <form className={styles.formGrid} onSubmit={submit} noValidate>
-        {step === "brand" && <div className={styles.flowScreen}><h3>Selecciona marca</h3><p>Busca dentro de las generaciones actuales y anteriores.</p><AnchoredSearch label="Buscar bola por marca" value={catalogQuery} onChange={setCatalogQuery} placeholder="Ej. Titleist" expanded={brands.length > 0} status={catalogSearch.status === "loading" ? "Buscando…" : `${brands.length} marcas`}>
-          {brands.map((value) => <AnchoredSearchOption key={value} onSelect={() => { setBrand(value); setCatalogQuery(""); setStep("model"); }}><b>{value}</b><small>{selectableCatalog.filter((ball) => sameBrand(ball.brand, value)).length} modelos en esta página</small></AnchoredSearchOption>)}
-        </AnchoredSearch>{catalogSearch.hasMore && <button type="button" className="secondary" onClick={() => void catalogSearch.loadMore()}>Más marcas</button>}<button type="button" className={styles.manualToggle} onClick={() => { setManual(true); setBrand(""); setCustomModel(""); setStep("details"); }}>Mi bola no aparece</button></div>}
+        {step === "brand" && <div className={styles.flowScreen}><h3>Selecciona marca</h3><p>Busca dentro de todas las generaciones actuales y anteriores.</p><AnchoredSearch label="Buscar bola por marca" value={catalogQuery} onChange={setCatalogQuery} placeholder="Ej. Titleist" expanded={brands.length > 0} status={ballBrandFacets.status === "loading" ? "Buscando…" : ballBrandFacets.status === "error" ? "Sin conexión o catálogo no disponible." : `${brands.length} marcas`}>
+          {brands.map((item) => <AnchoredSearchOption key={item.brand} onSelect={() => { setBrand(item.brand); setCatalogQuery(""); setStep("model"); }}><b>{item.brand}</b><small>{item.count} modelos · {item.historicalCount} anteriores</small></AnchoredSearchOption>)}
+        </AnchoredSearch>{ballBrandFacets.hasMore && <button type="button" className="secondary" onClick={() => void ballBrandFacets.loadMore()}>Más marcas</button>}<button type="button" className={styles.manualToggle} onClick={() => { setManual(true); setBrand(""); setCustomModel(""); setStep("details"); }}>Mi bola no aparece</button></div>}
         {step === "model" && <div className={styles.flowScreen}><button type="button" className={styles.flowBack} onClick={() => { setBrand(""); setCatalogQuery(""); setStep("brand"); }}>← Marcas</button><h3>Selecciona modelo</h3><p>{effectiveBrand} · la generación elegida queda guardada.</p><AnchoredSearch label="Buscar modelo" value={catalogQuery} onChange={setCatalogQuery} placeholder="Ej. Pro V1 2025" expanded={models.length > 0} status={catalogSearch.status === "loading" ? "Buscando…" : `${models.length} modelos encontrados`}>
           {models.map((ball) => <AnchoredSearchOption key={ball.id} onSelect={() => { setCatalogBallId(ball.id); setBrand(ball.brand); setCustomModel(ball.model); setGeneration(ball.generation || ""); setYear(ball.year ? String(ball.year) : ""); setColor(""); setStep("details"); }}><b>{ball.model}</b><small>{[ball.generation, ball.year, ball.active ? "Actual" : "Modelo anterior", ball.fitEligible ? "Apta para Ball Fit" : "Sólo Mi Bola"].filter(Boolean).join(" · ")}</small></AnchoredSearchOption>)}
         </AnchoredSearch>{catalogSearch.hasMore && <button type="button" className="secondary" onClick={() => void catalogSearch.loadMore()}>Cargar más modelos</button>}</div>}
-        {step === "details" && <div className={styles.flowScreen}><button type="button" className={styles.flowBack} onClick={() => { if (manual) setManual(false); setStep(manual ? "brand" : "model"); }}>← {manual ? "Catálogo" : "Modelos"}</button><h3>Variante final</h3><div className={`${styles.productPreview} ${styles.ballProductPreview}`}><span>●</span><div><b>{[selected?.brand || brand, selected?.model || customModel].filter(Boolean).join(" ") || "Bola manual"}</b><small>{[generation || selected?.generation, year || selected?.year, selected && (selected.active ? "Actual" : "Modelo anterior")].filter(Boolean).join(" · ") || "Completa sólo lo que conozcas"}</small></div></div>
+        {step === "details" && <div className={styles.flowScreen}><button type="button" className={styles.flowBack} onClick={() => { if (manual) setManual(false); setStep(manual ? "brand" : "model"); }}>← {manual ? "Catálogo" : "Modelos"}</button><h3>Variante final</h3><div className={`${styles.productPreview} ${styles.ballProductPreview}`}><CatalogProductMedia item={selected} fallback="●" /><div><b>{[selected?.brand || brand, selected?.model || customModel].filter(Boolean).join(" ") || "Bola manual"}</b><small>{[generation || selected?.generation, year || selected?.year, selected && (selected.active ? "Actual" : "Modelo anterior")].filter(Boolean).join(" · ") || "Completa sólo lo que conozcas"}</small></div></div>
           {manual && <div className={styles.inlineFields}><label>Marca<input value={brand} maxLength={100} onChange={(event) => setBrand(event.target.value)} /></label><label>Modelo<input value={customModel} maxLength={140} onChange={(event) => setCustomModel(event.target.value)} /></label></div>}
           <div className={styles.inlineFields}><label>Generación (opcional)<input value={generation} maxLength={100} onChange={(event) => setGeneration(event.target.value)} /></label><label>Año (opcional)<input type="number" inputMode="numeric" min={1900} max={2200} value={year} onChange={(event) => setYear(event.target.value)} /></label>{colorOptions.length ? <label>Color (opcional)<select value={color} onChange={(event) => setColor(event.target.value)}><option value="">Sin indicar</option>{colorOptions.map((value) => <option key={value} value={value}>{value}</option>)}</select></label> : <label>Color (opcional)<input value={color} maxLength={80} onChange={(event) => setColor(event.target.value)} /></label>}<label>Notas (opcional)<textarea value={notes} maxLength={1000} rows={3} onChange={(event) => setNotes(event.target.value)} /></label></div>
           {selected && <div className={styles.ballFacts}>{[["Vuelo", selected.flight], ["Driver spin", selected.driverSpin], ["Greenside", selected.shortGameSpin], ["Sensación", selected.feel], ["Construcción", selected.construction], ["Compresión", selected.compression]].map(([label, value]) => <span key={label}><small>{label}</small><b>{value ?? "Sin dato verificado"}</b></span>)}</div>}

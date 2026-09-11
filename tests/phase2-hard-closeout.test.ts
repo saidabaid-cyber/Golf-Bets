@@ -126,7 +126,7 @@ test("profile accepts one native Unicode emoji grapheme and keeps legacy avatar 
   const picker = readFileSync("app/components/profile-image-picker.tsx", "utf8");
   assert.match(picker, /Foto<\/button>/);
   assert.match(picker, /Emoji<\/button>/);
-  assert.match(picker, /Crear avatar<\/button>/);
+  assert.match(picker, /Elegir avatar<\/button>/);
   assert.match(picker, /\/avatars\/golfer-green\.svg/);
 });
 

@@ -76,6 +76,10 @@ export type GolfBallCatalog = {
   colors: string[];
   priceTier: BallPriceTier | null;
   targetProfile: string[];
+  imageUrl?: string | null;
+  imageAlt?: string | null;
+  imageSourceUrl?: string | null;
+  imageLicense?: string | null;
   officialUrl: string | null;
   sourceName: string;
   sourceUrl: string | null;
@@ -110,6 +114,10 @@ export type GolfClubCatalog = {
   setMakeup: string | null;
   stockShafts: string[];
   stockFlexes: ShaftFlex[];
+  imageUrl?: string | null;
+  imageAlt?: string | null;
+  imageSourceUrl?: string | null;
+  imageLicense?: string | null;
   officialUrl: string | null;
   sourceName: string | null;
   sourceUrl: string | null;
@@ -154,6 +162,10 @@ export type GolfShaftCatalog = {
   torque: number | null;
   tipDiameter: number | null;
   buttDiameter: number | null;
+  imageUrl?: string | null;
+  imageAlt?: string | null;
+  imageSourceUrl?: string | null;
+  imageLicense?: string | null;
   officialUrl: string | null;
   sourceName: string | null;
   sourceUrl: string | null;
@@ -551,6 +563,10 @@ export function normalizeGolfBallCatalog(value: unknown): GolfBallCatalog | null
     colors: uniqueTextArray(source.colors, 12),
     priceTier: memberOf(source.priceTier, BALL_PRICE_TIERS),
     targetProfile: uniqueTextArray(source.targetProfile),
+    imageUrl: httpsUrl(source.imageUrl),
+    imageAlt: text(source.imageAlt, 180),
+    imageSourceUrl: httpsUrl(source.imageSourceUrl),
+    imageLicense: text(source.imageLicense, 100),
     officialUrl,
     sourceName,
     sourceUrl: httpsUrl(source.sourceUrl) || httpsUrl(source.officialUrl),
@@ -636,6 +652,10 @@ export function normalizeGolfClubCatalog(value: unknown): GolfClubCatalog | null
     setMakeup: text(source.setMakeup, 500),
     stockShafts: uniqueTextArray(source.stockShafts, 50),
     stockFlexes: SHAFT_FLEXES.filter((candidate) => Array.isArray(source.stockFlexes) && source.stockFlexes.includes(candidate)),
+    imageUrl: httpsUrl(source.imageUrl),
+    imageAlt: text(source.imageAlt, 180),
+    imageSourceUrl: httpsUrl(source.imageSourceUrl),
+    imageLicense: text(source.imageLicense, 100),
     officialUrl,
     sourceName: text(source.sourceName),
     sourceUrl: httpsUrl(source.sourceUrl),
@@ -724,6 +744,10 @@ export function normalizeGolfShaftCatalog(value: unknown): GolfShaftCatalog | nu
     torque,
     tipDiameter: nullableNumber(source.tipDiameter, 0.1, 2),
     buttDiameter: nullableNumber(source.buttDiameter, 0.1, 2),
+    imageUrl: httpsUrl(source.imageUrl),
+    imageAlt: text(source.imageAlt, 180),
+    imageSourceUrl: httpsUrl(source.imageSourceUrl),
+    imageLicense: text(source.imageLicense, 100),
     officialUrl,
     sourceName,
     sourceUrl: httpsUrl(source.sourceUrl) || officialUrl,

@@ -1,4 +1,4 @@
-import type { GolfShaftCatalog } from "./golf-equipment";
+import type { ClubHandedness, GolfClubCatalog, GolfClubCatalogVariant, GolfShaftCatalog } from "./golf-equipment";
 
 /**
  * Resolve the shaft currently selected by the editor.
@@ -16,4 +16,23 @@ export function resolveCatalogShaftSelection(
 
   return availableShafts.find((shaft) => shaft.id === shaftId)
     || (existingShaft?.id === shaftId ? existingShaft : null);
+}
+
+/** Empty handedness arrays mean that the source did not verify a restriction;
+ * they must not make a historical club impossible to save. */
+export function verifiedClubHandedness(
+  club: Pick<GolfClubCatalog, "handedness"> | null | undefined,
+  variant?: Pick<GolfClubCatalogVariant, "handedness"> | null,
+): readonly ClubHandedness[] | null {
+  if (variant?.handedness.length) return variant.handedness;
+  if (club?.handedness.length) return club.handedness;
+  return null;
+}
+
+export function isClubHandednessAllowed(
+  selected: ClubHandedness,
+  club: Pick<GolfClubCatalog, "handedness"> | null | undefined,
+  variant?: Pick<GolfClubCatalogVariant, "handedness"> | null,
+) {
+  return verifiedClubHandedness(club, variant)?.includes(selected) ?? true;
 }

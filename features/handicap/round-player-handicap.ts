@@ -26,7 +26,11 @@ export function applyRoundCourseHandicaps(
   assignments: readonly PlayerTeeAssignmentSnapshot[],
   course: Course,
   calculatedAt: string,
+  locked = false,
 ) {
+  // The round snapshot becomes immutable when play starts. Profile or catalog
+  // changes after that point belong to a future round, never its history.
+  if (locked) return players;
   const par = course.holes.reduce((total, hole) => total + hole.par, 0);
   let changed = false;
   const next = players.map((player) => {

@@ -642,8 +642,8 @@ function GolfBetsApp() {
   }, [course, courseSelected, players]);
   useEffect(() => {
     if (!courseSelected) return;
-    setPlayers((current) => applyRoundCourseHandicaps(current, playerTeeAssignments, course, new Date().toISOString()));
-  }, [course, courseSelected, playerTeeAssignments]);
+    setPlayers((current) => applyRoundCourseHandicaps(current, playerTeeAssignments, course, new Date().toISOString(), Boolean(roundStartedAt || roundReviewPending)));
+  }, [course, courseSelected, playerTeeAssignments, roundReviewPending, roundStartedAt]);
   useEffect(() => {
     setNavigationGuard((next) => {
       const safeDestination = activeBetSafeDestination(next, draftAvailable && !roundClosed && betConfigurationIssues.length > 0);
