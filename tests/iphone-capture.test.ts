@@ -147,7 +147,7 @@ test("Live compacto conserva ambas perspectivas exactamente una vez y detalle pl
 test("captura conecta score sugerido-confirmable y Guardar sin botón PAR; resumen separa jugadores", () => {
   assert.doesNotMatch(`${app}\n${roundCapture}`,/Confirmar Par|confirmSuggestedScores/);
   assert.doesNotMatch(roundCapture,/>PAR<\/button>/);
-  assert.match(roundCapture,/value=\{scores\[owner\.id\]\} fallback=\{hole\.par\}/);
+  assert.match(roundCapture,/value=\{scores\[activePlayer\.id\]\} fallback=\{hole\.par\}/);
   assert.match(app,/onScoreChange=\{setScore\}/);
   assert.match(app,/setScoreEdits\(prev => editCapturedScore/);
   assert.match(app,/setScores\(committed.scores\)/);
@@ -157,6 +157,8 @@ test("captura conecta score sugerido-confirmable y Guardar sin botón PAR; resum
   assert.match(app,/persistCommittedHoleBeforeAdvance\(committed\.scores, committed\.edits, savedBets, savedIndex, startedAt\)/);
   assert.match(app,/holeSummaryClose/);
   assert.match(app,/Cerrar resumen y avanzar/);
+  assert.match(app,/onSaveAndAdvance=\{requestSaveAndAdvance\}/);
+  assert.match(roundCapture,/onClick=\{props\.onSaveAndAdvance\}>\{props\.saveLabel\}/);
   assert.match(css,/holeSummaryScores span:not\(:last-child\)::after\{content:" · "/);
   assert.match(css,/\.holeSummaryBets p\{white-space:pre-line/);
 });

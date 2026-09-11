@@ -779,11 +779,36 @@ async function qaAnimalGameScreen(client, width, label, enabledAnimals) {
     assert.equal(animalText.includes("🐫"), enabledAnimals.includes("camels"), `${label}: camel visibility mismatch.`);
     assert.equal(animalText.includes("🐟"), enabledAnimals.includes("fish"), `${label}: fish visibility mismatch.`);
     assert.equal(animalText.includes("Penalty / Hazard"), true, `${label}: canonical penalty control missing.`);
-    assert.equal(await evaluate(client, sessionId, "[...document.querySelectorAll('[role=\"group\"]')].some((node) => node.getAttribute('aria-label')?.startsWith('OB '))"), true, `${label}: independent OB counter missing.`);
+    assert.equal(animalText.includes("Resultado de la bola"), false, `${label}: redundant ball-result section remains.`);
+    assert.equal(await evaluate(client, sessionId, "[...document.querySelectorAll('button')].some((node) => ['Fairway', 'Rough'].includes(node.textContent?.trim() || ''))"), false, `${label}: redundant Fairway/Rough buttons remain.`);
+    assert.equal(await evaluate(client, sessionId, "['Green Side Bunker','Fairway Bunker','Penalty / Hazard','OB'].every((name) => { const group = document.querySelector(`[role=\\\"group\\\"][aria-label=\\\"${name}\\\"]`); return group && group.querySelector('[aria-label^=\\\"Restar\\\"]') && group.querySelector('[aria-label^=\\\"Sumar\\\"]'); })"), true, `${label}: a situation is missing its plus/minus counter.`);
+    assert.equal(await evaluate(client, sessionId, "document.querySelector('[data-situation=\"OB\"]')?.textContent?.includes('≋') === false"), true, `${label}: OB uses the hazard symbol.`);
+    assert.equal(await evaluate(client, sessionId, "Math.abs((document.querySelector('[aria-label^=\"Score Golfista hoyo\"]')?.getBoundingClientRect().top || 0) - (document.querySelector('[aria-label^=\"Putts Golfista hoyo\"]')?.getBoundingClientRect().top || 100)) < 8"), true, `${label}: Score and Putts are not horizontal.`);
+    assert.equal(await evaluate(client, sessionId, "document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1"), true, `${label}: horizontal overflow detected.`);
     const destination = path.join(outputDirectory, `master-game-${label}-${width}.png`);
     await screenshot(client, sessionId, destination, true);
+
+    let gpsOpenScreenshot = null;
+    if (label === "all-animals" && width === 390) {
+      await clickContaining(client, sessionId, "VER VISTA GPS");
+      await waitFor(client, sessionId, "document.querySelector('#round-hole-map') !== null && document.querySelector('[aria-controls=\"round-hole-map\"]')?.getAttribute('aria-expanded') === 'true'", "expanded GPS view");
+      gpsOpenScreenshot = path.join(outputDirectory, `master-game-gps-open-${width}.png`);
+      await screenshot(client, sessionId, gpsOpenScreenshot, true);
+    }
+
+    if (label === "all-animals" && width === 390) {
+      await evaluate(client, sessionId, "document.querySelector('[role=\"group\"][aria-label=\"Green Side Bunker\"] [aria-label^=\"Sumar\"]')?.click()");
+      await waitFor(client, sessionId, "document.querySelector('[role=\"group\"][aria-label=\"Green Side Bunker\"]')?.textContent?.includes('1')", "owner bunker persistence seed");
+      await clickAriaLabel(client, sessionId, "Cambiar jugador");
+      await clickAriaLabel(client, sessionId, "Cambiar jugador");
+      assert.equal(await evaluate(client, sessionId, "document.querySelector('[role=\"group\"][aria-label=\"Green Side Bunker\"]')?.textContent?.includes('1')"), true, "Player switch lost captured bunker data.");
+      await evaluate(client, sessionId, "[...document.querySelectorAll('nav[aria-label=\"Hoyos de la ronda\"] button')].find((button) => button.textContent?.trim() === '2')?.click()");
+      await waitFor(client, sessionId, "document.body?.innerText.includes('Hoyo 2')", "navigate to hole 2");
+      await evaluate(client, sessionId, "[...document.querySelectorAll('nav[aria-label=\"Hoyos de la ronda\"] button')].find((button) => button.textContent?.trim() === '1')?.click()");
+      await waitFor(client, sessionId, "document.body?.innerText.includes('Hoyo 1') && document.querySelector('[role=\"group\"][aria-label=\"Green Side Bunker\"]')?.textContent?.includes('1')", "return to persisted hole 1");
+    }
     assert.deepEqual(errors, [], `${label} game console errors: ${errors.join(" | ")}`);
-    return { width, label, screenshot: destination, consoleErrors: errors };
+    return { width, label, screenshot: destination, gpsOpenScreenshot, consoleErrors: errors };
   } finally {
     await closeMobileSession(client, session);
   }
@@ -831,6 +856,13 @@ try {
   const activeRound = scenario === "all" ? await qaActiveRoundAction(client, 390) : null;
   const gameScreens = scenario === "all" ? [
     await qaAnimalGameScreen(client, 390, "none", []),
+    await qaAnimalGameScreen(client, 390, "vipers", ["vipers"]),
+    await qaAnimalGameScreen(client, 390, "camels", ["camels"]),
+    await qaAnimalGameScreen(client, 390, "fish", ["fish"]),
+    await qaAnimalGameScreen(client, 390, "all-animals", ["vipers", "camels", "fish"]),
+  ] : scenario === "game" ? [
+    await qaAnimalGameScreen(client, 390, "none", []),
+    await qaAnimalGameScreen(client, 430, "none", []),
     await qaAnimalGameScreen(client, 390, "vipers", ["vipers"]),
     await qaAnimalGameScreen(client, 390, "camels", ["camels"]),
     await qaAnimalGameScreen(client, 390, "fish", ["fish"]),

@@ -88,7 +88,7 @@ test("Phase 2D UI wires shot tracking, bag clubs, filtered stats and determinist
   const capture = readFileSync(`${root}/app/components/round-capture-v2.tsx`, "utf8");
   const stats = readFileSync(`${root}/app/components/stats-dashboard.tsx`, "utf8");
   assert.match(capture, /Registrar golpe/);
-  assert.match(capture, /ownerTeeClubs\.map/);
+  assert.match(capture, /activeTeeClubs\.map/);
   assert.match(capture, /sin inventar distancia/);
   assert.match(stats, /Últimas 5/);
   assert.match(stats, /no recalcula scores, HCP, ganadores ni dinero/);

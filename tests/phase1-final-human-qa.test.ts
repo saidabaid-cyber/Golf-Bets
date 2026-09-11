@@ -112,15 +112,16 @@ test("BETA_PRO explícito habilita Beta y una asignación ausente falla cerrado 
   assert.match(readFileSync("docs/MEMBERSHIP_PHASE2.md", "utf8"), /no activa pagos, límites, paywalls ni precios/i);
 });
 
-test("scorecard ordena Tarjeta completa antes de Captura del hoyo y grupo usa un solo bunker", () => {
+test("scorecard ordena Tarjeta completa antes de Captura y usa situaciones naturales sin duplicar animales", () => {
   const capture = readFileSync("app/components/round-capture-v2.tsx", "utf8");
   const globalCss = readFileSync("app/globals.css", "utf8");
-  const groupInputs = capture.slice(capture.indexOf("function GroupRequiredInputs"), capture.indexOf("const FALLBACK_TEE_CLUBS"));
   assert.ok(capture.indexOf("props.fullCardVisible") < capture.indexOf("styles.captureCard"));
-  assert.match(capture, /compact label="Bunker" icon=\{animals\.camel \? "🐫" : undefined\}/);
-  assert.doesNotMatch(groupInputs, /greenSideBunkerCount|fairwayBunkerCount/);
+  assert.match(capture, /<SituationCounter label="Green Side Bunker"/);
+  assert.match(capture, /<SituationCounter label="Fairway Bunker"/);
   assert.match(capture, /Penalty \/ Hazard/);
-  assert.match(capture, /className=\{styles\.ballResult\} role="group" aria-label="Resultado de la bola"/);
+  assert.match(capture, /<SituationCounter label="OB"/);
+  assert.doesNotMatch(capture, /Resultado de la bola/);
+  assert.doesNotMatch(capture, /label="Camello"|label="Víbora"|label="Pez"/);
   assert.match(globalCss, /\.fullScorecard\{[^}]*min-width:0[^}]*max-width:100%[^}]*overflow:hidden/);
   assert.match(globalCss, /\.scorecardTable\{[^}]*width:100%[^}]*max-width:100%[^}]*overflow:auto/);
 });

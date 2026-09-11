@@ -47,11 +47,12 @@ test("Game Screen usa controles naturales y nunca crea inputs animales independi
   const controls = readFileSync("app/components/bet-fields/capture-controls.tsx", "utf8");
   assert.match(capture, /data-game-screen="approved-compact-v1"/);
   assert.match(capture, /Penalty \/ Hazard/);
-  assert.match(capture, /<CounterStepper label=\{`OB/);
-  assert.match(capture, /ownerAnimals\.viper/);
-  assert.match(capture, /ownerAnimals\.camel/);
-  assert.match(capture, /ownerAnimals\.fish/);
+  assert.match(capture, /<SituationCounter label="OB"/);
+  assert.match(capture, /activeAnimals\.viper/);
+  assert.match(capture, /activeAnimals\.camel/);
+  assert.match(capture, /activeAnimals\.fish/);
   assert.doesNotMatch(capture, /label="Camello"|label="Víbora"|label="Pez"/);
+  assert.doesNotMatch(capture, /Resultado de la bola/);
   assert.match(controls, /Optional non-negative fact/);
 });
 

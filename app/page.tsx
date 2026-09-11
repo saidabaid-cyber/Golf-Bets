@@ -3195,7 +3195,7 @@ function GolfBetsApp() {
   ].filter((item) => item.visible);
 
   return <main className={`app ${highContrast ? "highContrast" : ""} ${tab === "results" ? "compactResults" : ""}`}>
-    {tab !== "rules" && tab !== "welcome" && <header className="topbar">
+    {tab !== "rules" && tab !== "welcome" && tab !== "round" && <header className="topbar">
       <button className="brandHomeButton" onClick={() => setTab("welcome")} aria-label="Ir a Inicio"><BrandLockup compact /></button>
       <div className="topActions"><span className={`saveIndicator ${saveStatus}`}>{saveStatus === "saving" ? "Guardando…" : saveStatus === "error" ? "Error de guardado" : identity.mode !== "authenticated" || !cloudLinked ? "Guardado en este dispositivo" : cloudStatus === "synced" ? "Guardado en la nube ✓" : cloudStatus === "syncing" ? "Sincronizando…" : cloudStatus === "offline" ? "Sin conexión · pendiente" : cloudStatus === "error" ? "Error de sincronización" : "Pendiente de sincronizar"}</span><button className="contrastButton" onClick={() => changeHighContrast(!highContrast)} aria-pressed={highContrast}>{contrastToggleLabel(highContrast)}</button><button className="accountButton" onClick={() => { setProfileFocus("profile"); setTab("profile"); }} aria-label="Abrir perfil y cuenta">{identity.mode === "guest" ? <svg className="guestAvatar" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4.5 21c.5-5 3-7.5 7.5-7.5s7 2.5 7.5 7.5"/></svg> : (identity.displayName.trim()[0] || "S").toUpperCase()}</button></div>
     </header>}
@@ -3220,7 +3220,7 @@ function GolfBetsApp() {
       onOpenRules={openRulesForRound}
     />}
 
-    {!(["welcome", "more", "play", "groups", "social", "profile"] as AppTab[]).includes(tab) && tab !== "rules" && <button className="secondary pageBack" onClick={handlePageBack}>← Regresar</button>}
+    {!(["welcome", "more", "play", "groups", "social", "profile", "round"] as AppTab[]).includes(tab) && tab !== "rules" && <button className="secondary pageBack" onClick={handlePageBack}>← Regresar</button>}
 
     {tab === "more" && <MoreHub
       hasActiveRound={Boolean(activeRoundSummary)}
@@ -3614,6 +3614,9 @@ function GolfBetsApp() {
         onOpenStandings={() => setTab("standings")}
         onUndo={undoLastAction}
         undoDisabled={undoCount === 0}
+        onSaveAndAdvance={requestSaveAndAdvance}
+        saveDisabled={holeSummary.length > 0}
+        saveLabel={currentIndex < order.length - 1 ? "Guardar y siguiente" : "Terminar ronda"}
       />
       {scoreCaptureComplete && <div className="liveBadges">
           {currentRabbitEvents.map((e, i) => <span className="badge" key={`${e.type}-${i}`}>🐇 {e.type === "grab" ? "Agarra" : e.type === "hold" ? "Mantiene" : e.type === "win" ? `Gana ×${e.count}` : e.type === "lose" ? "Pierde / libre" : e.type === "accumulate" ? `Acumula → ${e.count}` : "Libre"} {e.playerId ? playerName(e.playerId) : ""}</span>)}
@@ -3666,7 +3669,6 @@ function GolfBetsApp() {
         <div><span className="eyebrow">CAMINO ALTERNATIVO</span><h2>¿Jugaste con tarjeta física?</h2><p>Fotografía la tarjeta y Backyard confirmará únicamente las celdas dudosas antes de ejecutar el motor.</p></div>
         <button type="button" className="primary big" onClick={openScorecardScanner}>📸 ESCANEAR TARJETA PARA FINALIZAR</button>
       </section>}
-      <div className="roundActions"><button className="secondary big" disabled={currentIndex === 0 || holeSummary.length > 0} onClick={() => goToHoleIndex(currentIndex - 1)}>← Anterior</button><button className="primary big" disabled={holeSummary.length > 0} onPointerDown={commitFocusedNumericCapture} onClick={requestSaveAndAdvance}>{currentIndex < order.length - 1 ? "Guardar y siguiente hoyo →" : "Terminar ronda"}</button></div>
       {holeSummary.length > 0 && <div className="holeSummaryBackdrop" onClick={(event) => event.stopPropagation()}><div className={`holeSummary ${holeSummaryPaused ? "paused" : ""}`} role="dialog" aria-modal="true" aria-label={`Resumen del hoyo ${holeNumber}`} onPointerDown={(event) => { holeSummaryPointerStart.current = { x: event.clientX, y: event.clientY }; }} onClick={handleHoleSummaryTap}><button type="button" className="holeSummaryClose" aria-label="Cerrar resumen y avanzar" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); holeSummaryPointerStart.current = null; holeSummarySession.current?.finish(); }}>×</button><div className="holeSummaryContent" role="status" aria-live="polite"><h2>{holeSummary[0]} ✓</h2><p className="holeSummaryScores">{holeSummary.slice(1, players.length + 1).map((line, index) => <span key={index}>{line}</span>)}</p><div className="holeSummaryBets">{holeSummary.slice(players.length + 1).map((line, index) => <p key={index}>{line}</p>)}</div><small className="holeSummaryHoldHint">{holeSummaryPaused ? "Pausado · toca una zona libre para reanudar" : "Toca una zona libre para pausar"}</small></div><div className="holeSummaryTimer" aria-hidden="true" /></div></div>}
     </>}
 
@@ -3842,7 +3844,7 @@ function GolfBetsApp() {
 
     {savedRivalToDelete && <div className="modalBackdrop" role="presentation"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="delete-rival-title" aria-describedby="delete-rival-description"><ModalCloseButton onClose={() => setSavedRivalToDelete(null)} /><h2 id="delete-rival-title">¿Eliminar rival guardado?</h2><p id="delete-rival-description">Esto solamente lo eliminará de tu lista de rivales para futuras apuestas personales. No afectará rondas ni resultados anteriores.</p><div className="dialogActions"><button className="secondary" onClick={() => setSavedRivalToDelete(null)}>Cancelar</button><button className="dangerButton" onClick={() => { recordCloudDeletion(localStorage, "rival", savedRivalToDelete.id); setSavedPersonalRivals((templates) => removeSavedPersonalRivalTemplate(templates, savedRivalToDelete.id)); if (editingSavedRivalId === savedRivalToDelete.id) { setEditingSavedRivalId(null); setSavedRivalDraft(null); } setSavedRivalToDelete(null); }}>Eliminar</button></div></section></div>}
 
-    <AppBottomNav activeTab={tab} onNavigate={navigateFromBottomBar} />
+    {tab !== "round" && <AppBottomNav activeTab={tab} onNavigate={navigateFromBottomBar} />}
   </main>;
 }
 

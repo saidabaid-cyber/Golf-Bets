@@ -37,7 +37,7 @@ test("Putts traduce Víboras al evento determinista existente", () => {
 test("Peces deriva del hecho canónico Penalty/Hazard sin duplicar Agua, Peces u OB", () => {
   const component = readFileSync("app/components/round-capture-v2.tsx", "utf8");
   assert.match(component, /Penalty \/ Hazard/);
-  assert.match(component, /onGolfFact\("penaltyAreaCount"/);
+  assert.match(component, /setGolfFact\(activePlayer\.id, "penaltyAreaCount"/);
   assert.match(component, /onCounterChange\("fish", playerId, value\)/);
   assert.doesNotMatch(component, /label="Peces"/);
   assert.doesNotMatch(component, /Agua \/ drop/);
@@ -59,11 +59,11 @@ test("estado respecto al par nunca inventa un score", () => {
   assert.equal(scoreToParLabel(6, 4), "+2");
 });
 
-test("UX V2 separa jugador principal, grupo ligero, cámara secundaria y CTA final", () => {
+test("UX V2 captura un jugador a la vez, conserva cámara y CTA final", () => {
   const component = readFileSync("app/components/round-capture-v2.tsx", "utf8");
   const page = readFileSync("app/page.tsx", "utf8");
-  assert.match(component, /Jugador principal/);
-  assert.match(component, /JUGADORES DEL GRUPO/);
+  assert.match(component, /HCP de juego/);
+  assert.match(component, /aria-label="Cambiar jugador"/);
   assert.match(component, /RÁPIDA/);
   assert.match(component, /ESTADÍSTICAS/);
   assert.match(component, /aria-label="Escanear tarjeta"/);
@@ -84,17 +84,18 @@ test("Capture V2.2 usa más/menos, contadores por tap y estadísticas inline", (
   assert.match(controls, /Restar \$\{label\}/);
   assert.match(controls, /Agregar \$\{label\}/);
   assert.doesNotMatch(controls, /Confirmar cero/);
-  assert.match(component, /<section className=\{styles\.ownerStatistics\}/);
+  assert.match(component, /<section className=\{styles\.situations\}/);
   assert.doesNotMatch(component, /players\.map\(\(player\) => <AdvancedPlayer/);
   assert.doesNotMatch(component, /<details/);
   assert.doesNotMatch(component, /Lie de llegada/);
-  assert.match(component, /Distancia 1er putt/);
-  assert.match(component, /label="Green Side Bunker" icon=\{camelActive \? "🐫" : undefined\}/);
-  assert.match(component, /label="Bunker" icon=\{ownerAnimals\.camel \? "🐫" : undefined\}/);
-  assert.match(component, /icon=\{ownerAnimals\.fish \? "🐟" : undefined\}/);
-  assert.match(component, /<CounterStepper label=\{`OB/);
+  assert.match(component, /Distancia del primer putt/);
+  assert.match(component, /label="Green Side Bunker" icon=\{activeAnimals\.camel \? "🐫" : "◯"\}/);
+  assert.match(component, /label="Fairway Bunker" icon=\{activeAnimals\.camel \? "🐫" : "◯"\}/);
+  assert.match(component, /label="Penalty \/ Hazard" icon=\{activeAnimals\.fish \? "🐟" : "≋"\}/);
+  assert.match(component, /<SituationCounter label="OB" icon="‖"/);
   assert.match(component, /Score"\], \["tee", "Tee Shot"\], \["approach", "Approach"\], \["around", "Alrededor"\], \["summary", "Resumen"\]/);
   assert.match(component, /RoundCaddieCard/);
+  assert.match(component, /aria-expanded=\{gpsOpen\}/);
   assert.doesNotMatch(component, />GIR</);
   assert.match(component, /unitQuantities/);
 });

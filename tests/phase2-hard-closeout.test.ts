@@ -148,7 +148,7 @@ test("club search, onboarding, capture and modal safety expose the hard-closeout
   assert.equal((onboarding.match(/CONFIGURACIÓN RÁPIDA/g) || []).length, 0);
   assert.equal((onboarding.match(/CONFIGURACIÓN COMPLETA/g) || []).length, 0);
   assert.doesNotMatch(capture, />PAR<\/button>/);
-  assert.match(capture, /value=\{scores\[owner\.id\]\} fallback=\{hole\.par\}/);
+  assert.match(capture, /value=\{scores\[activePlayer\.id\]\} fallback=\{hole\.par\}/);
   assert.match(controls, /data-pending=\{!confirmed\}/);
   assert.match(controls, /onClick=\{\(\) => onChange\(current\)\}/);
   assert.match(equipmentPanel, /ModalCloseButton onClose=\{\(\) => setFitOpen\(false\)\}/);

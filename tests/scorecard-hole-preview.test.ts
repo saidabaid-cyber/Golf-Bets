@@ -66,9 +66,7 @@ test("la tarjeta activa integra contexto, neto previo y una aclaración separada
   const end = page.indexOf('{tab === "standings"', start);
   const round = page.slice(start, end);
   assert.match(round, /<RoundCaptureV2/);
-  assert.match(capture, /<span>Par \{hole\.par\}<\/span>/);
-  assert.match(capture, /<span>\{hole\.yards \? `\$\{hole\.yards\} yd` : "Yardas —"\}<\/span>/);
-  assert.match(capture, /<span>SI \{hole\.strokeIndex\}<\/span>/);
-  assert.match(capture, /<ScorecardHoleNetPreview player=\{owner\} hole=\{hole\} gross=\{scores\[owner\.id\]\} \/>/);
+  assert.match(capture, /Par \{hole\.par\}\{hole\.yards \? ` · \$\{hole\.yards\} yd` : ""\} · SI \{hole\.strokeIndex\}/);
+  assert.match(capture, /<ScorecardHoleNetPreview player=\{activePlayer\} hole=\{hole\} gross=\{scores\[activePlayer\.id\]\} \/>/);
   assert.match(readFileSync("app/functional-ux.css", "utf8"), /\.scorecardNetPreview/);
 });
