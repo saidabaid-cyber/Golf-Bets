@@ -41,13 +41,13 @@ test("los wizards reinician su propio scroll y conservan el contexto detrás", (
 
 test("Home aplicada mantiene una única acción principal y sus contratos de navegación", () => {
   const home = read("app/components/home-dashboard.tsx");
-  assert.match(home, /data-home-version="calm-v1"/);
-  assert.match(home, /activeRound \? onContinueRound : onAiRound/);
+  assert.match(home, /data-home-version="play-first-v2"/);
+  assert.match(home, /activeRound \? onContinueRound : onNewRound/);
   assert.match(home, /onOpenGroups/);
   assert.match(home, /onOpenHistory/);
   assert.match(home, /onOpenStats/);
   assert.match(home, /onOpenCourses/);
-  assert.equal((home.match(/onAiRound/g) || []).length, 3, "prop, destructuring y única acción AI esperadas");
+  assert.equal((home.match(/onAiRound/g) || []).length, 3, "prop, destructuring y una única acción AI esperadas");
   assert.doesNotMatch(home, /estadísticas vacías|primera ronda/i);
 });
 
@@ -63,4 +63,3 @@ test("onboarding y editor de ronda conservan configuración avanzada de apuestas
   assert.match(round, /Foursome/);
   assert.match(round, /Personales/);
 });
-

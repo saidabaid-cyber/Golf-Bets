@@ -385,6 +385,7 @@ type NewRoundIntent =
 function GolfBetsApp() {
   const { identity, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, setCloudStatus, applyCloudPreferences, reportCloudSyncError, clearCloudSyncError, refreshCloudSession } = useBackyardAccount();
   const { tab, setTab, goBack, setNavigationGuard } = useScreenNavigation();
+  const [profileFocus, setProfileFocus] = useState<"profile" | "equipment">("profile");
   const ownerClubChoices = useMemo(() => {
     if (typeof window === "undefined" || tab !== "round") return [];
     const loaded = loadEquipmentProfile(localStorage, identity.userId);
@@ -1460,6 +1461,7 @@ function GolfBetsApp() {
 
   function navigateFromBottomBar(target: AppTab) {
     setFeedback("");
+    if (target === "profile") setProfileFocus("profile");
     if (target === "rules") setRulesCourseContext(rulesContextForRound(hasRoundProgress({ players, scores, currentIndex }) && courseSelected, course.name));
     if (roundClosed && (target === "round" || target === "standings")) {
       setTab("history");
@@ -3120,6 +3122,12 @@ function GolfBetsApp() {
     if (!draftAvailable || roundClosed) return null;
     const scoreStarted = Boolean(roundStartedAt) || currentIndex > 0 || Object.values(scores).some((row) => Object.values(row).some((value) => typeof value === "number"));
     const status: ActiveRoundSummary["status"] = resolveActiveRoundStatus({ reviewPending: roundReviewPending, courseSelected, playerCount: players.length, scoreStarted });
+    const ownerScore = order.reduce((summary, candidateHole) => {
+      const value = scores[candidateHole]?.[ownerId];
+      if (typeof value !== "number") return summary;
+      const par = course.holes.find((candidate) => candidate.number === candidateHole)?.par;
+      return { gross: summary.gross + value, par: summary.par + (typeof par === "number" ? par : 0), count: summary.count + 1 };
+    }, { gross: 0, par: 0, count: 0 });
     return {
       courseName: courseSelected ? course.name : pendingCourseIdentity ? `${pendingCourseIdentity.name} · tee por elegir` : "Campo por elegir",
       roundDate,
@@ -3128,8 +3136,10 @@ function GolfBetsApp() {
       currentHole: status === "live" ? order[currentIndex] : undefined,
       playedHoles: completedHoles.size,
       playerCount: players.length,
+      partialGross: ownerScore.count > 0 ? ownerScore.gross : undefined,
+      partialToPar: ownerScore.count > 0 ? ownerScore.gross - ownerScore.par : undefined,
     };
-  }, [draftAvailable, roundClosed, roundReviewPending, courseSelected, course.name, pendingCourseIdentity, roundDate, roundStartedAt, roundHoles, order, currentIndex, completedHoles, players.length, scores]);
+  }, [draftAvailable, roundClosed, roundReviewPending, courseSelected, course.name, course.holes, pendingCourseIdentity, roundDate, roundStartedAt, roundHoles, order, currentIndex, completedHoles, players.length, scores, ownerId]);
   const openActiveRound = () => {
     if (betConfigurationIssues.length) {
       setShowBetSetupErrors(true);
@@ -3184,13 +3194,14 @@ function GolfBetsApp() {
   ].filter((item) => item.visible);
 
   return <main className={`app ${highContrast ? "highContrast" : ""} ${tab === "results" ? "compactResults" : ""}`}>
-    {tab !== "rules" && <header className="topbar">
+    {tab !== "rules" && tab !== "welcome" && <header className="topbar">
       <button className="brandHomeButton" onClick={() => setTab("welcome")} aria-label="Ir a Inicio"><BrandLockup compact /></button>
-      <div className="topActions"><span className={`saveIndicator ${saveStatus}`}>{saveStatus === "saving" ? "Guardando…" : saveStatus === "error" ? "Error de guardado" : identity.mode !== "authenticated" || !cloudLinked ? "Guardado en este dispositivo" : cloudStatus === "synced" ? "Guardado en la nube ✓" : cloudStatus === "syncing" ? "Sincronizando…" : cloudStatus === "offline" ? "Sin conexión · pendiente" : cloudStatus === "error" ? "Error de sincronización" : "Pendiente de sincronizar"}</span><button className="contrastButton" onClick={() => changeHighContrast(!highContrast)} aria-pressed={highContrast}>{contrastToggleLabel(highContrast)}</button><button className="accountButton" onClick={() => setTab("profile")} aria-label="Abrir perfil y cuenta">{identity.mode === "guest" ? <svg className="guestAvatar" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4.5 21c.5-5 3-7.5 7.5-7.5s7 2.5 7.5 7.5"/></svg> : (identity.displayName.trim()[0] || "S").toUpperCase()}</button></div>
+      <div className="topActions"><span className={`saveIndicator ${saveStatus}`}>{saveStatus === "saving" ? "Guardando…" : saveStatus === "error" ? "Error de guardado" : identity.mode !== "authenticated" || !cloudLinked ? "Guardado en este dispositivo" : cloudStatus === "synced" ? "Guardado en la nube ✓" : cloudStatus === "syncing" ? "Sincronizando…" : cloudStatus === "offline" ? "Sin conexión · pendiente" : cloudStatus === "error" ? "Error de sincronización" : "Pendiente de sincronizar"}</span><button className="contrastButton" onClick={() => changeHighContrast(!highContrast)} aria-pressed={highContrast}>{contrastToggleLabel(highContrast)}</button><button className="accountButton" onClick={() => { setProfileFocus("profile"); setTab("profile"); }} aria-label="Abrir perfil y cuenta">{identity.mode === "guest" ? <svg className="guestAvatar" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4.5 21c.5-5 3-7.5 7.5-7.5s7 2.5 7.5 7.5"/></svg> : (identity.displayName.trim()[0] || "S").toUpperCase()}</button></div>
     </header>}
 
     {tab === "welcome" && <HomeDashboard
       displayName={identity.displayName}
+      username={identity.username}
       avatarUrl={identity.avatarUrl}
       handicap={identity.defaultHandicap}
       activeRound={activeRoundSummary}
@@ -3201,7 +3212,9 @@ function GolfBetsApp() {
       onContinueRound={continueActiveRound}
       onAiRound={requestAiRound}
       onNewRound={requestNewRound}
-      onOpenProfile={() => setTab("profile")}
+      onOpenPlay={() => setTab("play")}
+      onOpenEquipment={() => { setProfileFocus("equipment"); setTab("profile"); }}
+      onOpenProfile={() => { setProfileFocus("profile"); setTab("profile"); }}
       onOpenHistory={() => setTab("history")}
       onOpenBalances={() => setTab("balances")}
       onOpenStats={() => setTab("stats")}
@@ -3305,7 +3318,7 @@ function GolfBetsApp() {
     {tab === "historyDetail" && (() => { const saved = history.find(round => round.id === historyDetailId); return saved ? <HistoricalRoundDetail round={saved} onEdit={() => editHistoricalRound(saved)} onPhoto={() => viewScorecardPhoto(saved)} /> : <div className="empty">La ronda ya no está disponible.</div>; })()}
     {tab === "groups" && <GroupBuilder frequentPlayers={frequentPlayers} frequentGroups={frequentGroups} onBack={() => setTab("welcome")} onPlay={startRoundWithGeneratedGroup} onSaveFrequentGroup={saveGeneratedFrequentGroup} onEditFrequentGroup={beginEditFrequentGroup} onDeleteFrequentGroup={setFrequentGroupToDelete} />}
 
-    {tab === "profile" && <AccountPanel view="profile" highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} golfInsights={betaGolfInsights} onOpenStats={() => setTab("stats")} onOpenAccount={() => setTab("account")} />}
+    {tab === "profile" && <AccountPanel view="profile" focusSection={profileFocus} highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} golfInsights={betaGolfInsights} onOpenStats={() => setTab("stats")} onOpenAccount={() => setTab("account")} />}
     {tab === "account" && <AccountPanel view="account" highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} golfInsights={betaGolfInsights} onOpenStats={() => setTab("stats")} />}
 
     {tab === "setup" && <>

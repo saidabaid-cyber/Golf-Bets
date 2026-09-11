@@ -34,7 +34,7 @@ test("el invitado conserva su golf local sin presentar un perfil falso como pers
   assert.match(account, /view === "profile" && identity\.mode === "guest"/);
   assert.match(account, /Las rondas, grupos y estadísticas locales siguen disponibles/);
   assert.match(account, /perfil persistente con nombre, avatar y preferencias/);
-  assert.match(account, /view === "profile" && identity\.mode === "authenticated" && <section className="card profileCard">/);
+  assert.match(account, /view === "profile" && identity\.mode === "authenticated" && <section ref=\{profileSectionRef\} className="card profileCard">/);
   assert.doesNotMatch(account, /Sin correo · Invitado/);
 });
 

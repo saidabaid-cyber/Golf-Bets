@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { LEGAL_DOCUMENT_VERSIONS, legalConfig } from "../../lib/legal-config";
 import { accountDeletionMarkerKey, BETTING_DATA_CONSENT_TYPE, emptyBackyardProfileDetails, profileHandicapInput, profileHandicapLabel, validateProfileAvatarUrl, validateProfileDraft, type BackyardProfile, type BackyardProfileDetails } from "../../lib/account-state";
 import { ballFitDefaultsFromProfile } from "../../lib/ball-fitting";
@@ -17,6 +17,7 @@ import { ModalCloseButton } from "./modal-shell";
 
 type AccountPanelProps = {
   view: "profile" | "account";
+  focusSection?: "profile" | "equipment";
   highContrast: boolean;
   onHighContrastChange: (value: boolean) => void;
   notificationsEnabled: boolean;
@@ -123,7 +124,7 @@ function gameProfileChanged(profile: BackyardProfile, draft: ProfileDetailsDraft
   ]);
 }
 
-export function AccountPanel({ view, highContrast, onHighContrastChange, notificationsEnabled, onNotificationsEnabledChange, golfInsights, onOpenStats, onOpenAccount }: AccountPanelProps) {
+export function AccountPanel({ view, focusSection = "profile", highContrast, onHighContrastChange, notificationsEnabled, onNotificationsEnabledChange, golfInsights, onOpenStats, onOpenAccount }: AccountPanelProps) {
   const { identity, updateProfile, logout, finishAccountDeletion, openAccess, acceptances, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, requestCloudLink, lastCloudSync, cloudIssues, retryCloudSync } = useBackyardAccount();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(identity.displayName);
@@ -138,6 +139,8 @@ export function AccountPanel({ view, highContrast, onHighContrastChange, notific
   const [savingProfile, setSavingProfile] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [managingConsents, setManagingConsents] = useState(false);
+  const profileSectionRef = useRef<HTMLElement>(null);
+  const equipmentSectionRef = useRef<HTMLDivElement>(null);
   const sessionExpired = cloudIssues.some((issue) => issue.kind === "session_expired");
 
   useEffect(() => {
@@ -148,6 +151,14 @@ export function AccountPanel({ view, highContrast, onHighContrastChange, notific
       setProfileDetails(profileDetailsDraft(identity));
     }
   }, [identity, editing]);
+  useEffect(() => {
+    if (view !== "profile") return;
+    const frame = window.requestAnimationFrame(() => {
+      const target = focusSection === "equipment" ? equipmentSectionRef.current : profileSectionRef.current;
+      target?.scrollIntoView({ block: "start", behavior: "auto" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [focusSection, view]);
   const userAcceptances = useMemo(() => acceptances.filter((item) => item.userId === identity.userId), [acceptances, identity.userId]);
   const acceptance = (type: keyof typeof LEGAL_DOCUMENT_VERSIONS) => userAcceptances.find((item) => item.type === type);
   const acceptedLabel = (type: keyof typeof LEGAL_DOCUMENT_VERSIONS) => {
@@ -262,7 +273,7 @@ export function AccountPanel({ view, highContrast, onHighContrastChange, notific
       <div className="accountInlineActions"><button className="primary" onClick={openAccess}>Crear cuenta</button><button className="secondary" onClick={openAccess}>Iniciar sesión</button></div>
     </section>}
 
-    {view === "profile" && identity.mode === "authenticated" && <section className="card profileCard">
+    {view === "profile" && identity.mode === "authenticated" && <section ref={profileSectionRef} className="card profileCard">
       <div className="sectionTitle"><div className="profileIdentity"><div className="accountAvatar"><ProfileAvatarMedia value={identity.avatarUrl} fallback={(identity.displayName.trim()[0] || "J").toUpperCase()} alt={`Avatar de ${identity.displayName}`} /></div><div><h2>{identity.displayName}</h2><p>{identity.email || "Perfil local en este dispositivo"}</p></div></div><button className="secondary" onClick={() => setEditing((value) => !value)}>{editing ? "Cancelar" : "Editar perfil"}</button></div>
       {editing && <div className="profileForm profileFormExpanded">
         <label>Nombre visible<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Tu nombre" /></label>
@@ -297,6 +308,7 @@ export function AccountPanel({ view, highContrast, onHighContrastChange, notific
       </div>}
       {!editing && <div className="profileMetaList">
         <div className="profileMeta"><span>HCP index</span><b>{profileHandicapLabel(identity.defaultHandicap)}</b></div>
+        <div className="profileGhinAction"><GhinPlaceholder /></div>
         {identity.username && <div className="profileMeta"><span>Usuario</span><b>@{identity.username}</b></div>}
         {identity.homeClub && <div className="profileMeta"><span>Club</span><b>{identity.homeClub}</b></div>}
         {(identity.city || identity.state || identity.country) && <div className="profileMeta"><span>Ubicación</span><b>{[identity.city, identity.state, identity.country].filter(Boolean).join(", ")}</b></div>}
@@ -318,7 +330,7 @@ export function AccountPanel({ view, highContrast, onHighContrastChange, notific
 
     {view === "profile" && identity.mode === "authenticated" && message && <div className={messageKind === "error" ? "notice bad" : "notice"} role={messageKind === "error" ? "alert" : "status"}>{message}</div>}
 
-    {view === "profile" && identity.mode === "authenticated" && <EquipmentProfilePanel userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={identity.defaultHandicap} ballFitDefaults={ballFitDefaultsFromProfile(identity)} />}
+    {view === "profile" && identity.mode === "authenticated" && <div ref={equipmentSectionRef} id="equipment-bag"><EquipmentProfilePanel userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={identity.defaultHandicap} ballFitDefaults={ballFitDefaultsFromProfile(identity)} /></div>}
 
     {view === "profile" && golfInsights && <section className="card betaProfileGolfCard">
       <div className="sectionTitle"><div><h2>Mi golf</h2><p>Resumen calculado sólo con tu histórico disponible.</p></div>{onOpenStats && <button type="button" className="textButton" onClick={onOpenStats}>Ver Stats</button>}</div>
