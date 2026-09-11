@@ -1,8 +1,9 @@
 "use client";
 
+import Image from "next/image";
 import type { GolfInsights, PersonalActivity, ScoredRoundInsight } from "../../lib/golf-insights";
-import { profileHandicapLabel } from "../../lib/account-state";
 import { ProfileAvatarMedia } from "./profile-avatar-media";
+import styles from "./home-dashboard-clean.module.css";
 
 export type ActiveRoundSummary = {
   courseName: string;
@@ -38,139 +39,89 @@ export type HomeDashboardProps = {
   onOpenActivity: (activity: PersonalActivity) => void;
 };
 
-function signedMoney(value: number) {
-  const rounded = Math.round(value);
-  if (rounded === 0) return "$0";
-  return `${rounded > 0 ? "+" : "−"}$${Math.abs(rounded).toLocaleString("es-MX")}`;
-}
-
-function formatAverage(value: number | undefined) {
-  return value === undefined ? "—" : value.toFixed(1);
-}
-
-function formatRelative(value: number) {
-  if (value === 0) return "E";
-  return `${value > 0 ? "+" : ""}${value}`;
-}
-
 function shortDate(value: string) {
   const date = new Date(value.length === 10 ? `${value}T12:00:00-06:00` : value);
-  if (Number.isNaN(date.getTime())) return value;
+  if (Number.isNaN(date.getTime())) return "Fecha sin indicar";
   return new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short", timeZone: "America/Mexico_City" }).format(date);
 }
 
+function relativeLabel(value: number) {
+  return value === 0 ? "Par" : `${value > 0 ? "+" : ""}${value} vs par`;
+}
+
+function balanceLabel(value: number) {
+  return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 2 }).format(value);
+}
+
 function activeRoundLabel(round: ActiveRoundSummary) {
-  if (round.status === "review") return "Lista para revisar";
-  if (round.status === "setup") return "Configuración pendiente";
+  if (round.status === "review") return "Tu tarjeta está lista para revisar.";
+  if (round.status === "setup") return "Retoma donde te quedaste.";
   const played = round.playedHoles;
   const current = round.currentHole;
-  const playedHoles = typeof played === "number" && Number.isInteger(played) && played >= 0 && played <= round.totalHoles
-    ? played
-    : undefined;
-  const currentHole = typeof current === "number" && Number.isInteger(current) && current >= 1 && current <= 18
-    ? current
-    : undefined;
-  const progress = playedHoles === undefined
-    ? "Ronda en juego"
-    : `${playedHoles} de ${round.totalHoles} hoyos capturados`;
-  return currentHole === undefined ? progress : `${progress} · Editando hoyo ${currentHole}`;
+  const validPlayed = typeof played === "number" && Number.isInteger(played) && played >= 0 && played <= round.totalHoles;
+  const validCurrent = typeof current === "number" && Number.isInteger(current) && current >= 1 && current <= 18;
+  return [validPlayed ? `${played} de ${round.totalHoles} hoyos capturados` : "Ronda en juego", validCurrent ? `Hoyo ${current}` : null].filter(Boolean).join(" · ");
 }
 
-function ActivityPreview({ item, onOpen }: { item: PersonalActivity; onOpen: () => void }) {
-  return <button type="button" className="betaActivityPreview" onClick={onOpen}>
-    <span className={`betaActivityMark ${item.kind}`} aria-hidden="true">{item.kind === "round" ? "旗" : "●"}</span>
-    <span><b>{item.title}</b><small>{item.detail}</small></span>
-    <time dateTime={item.occurredAt}>{shortDate(item.occurredAt)}</time>
-  </button>;
+function Icon({ name }: { name: "groups" | "rounds" | "stats" | "course" | "arrow" }) {
+  const path = {
+    groups: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M22 21v-2a4 4 0 0 0-3-3.87M15 3.13a4 4 0 0 1 0 7.75M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0",
+    rounds: "M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2M7 14h3M7 18h7",
+    stats: "M4 20h16M7 16v-5M12 16V4M17 16V8",
+    course: "M5 21V3M5 3c5-4 9 4 14 0v10c-5 4-9-4-14 0",
+    arrow: "M5 12h14M13 6l6 6-6 6",
+  }[name];
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d={path} /></svg>;
 }
 
+/** Home is a launch point, not the full statistics or settings screen. */
 export function HomeDashboard({
-  displayName,
-  avatarUrl,
-  handicap,
-  activeRound,
-  latestRound,
-  insights,
-  groupCount,
-  activity,
-  onContinueRound,
-  onAiRound,
-  onNewRound,
-  onOpenProfile,
-  onOpenHistory,
-  onOpenBalances,
-  onOpenStats,
-  onOpenGroups,
-  onOpenSocial,
-  onOpenCourses,
-  onOpenRules,
-  onOpenRound,
-  onOpenActivity,
+  displayName, avatarUrl, activeRound, latestRound, insights, groupCount, activity,
+  onContinueRound, onAiRound, onNewRound, onOpenProfile, onOpenHistory, onOpenBalances,
+  onOpenStats, onOpenGroups, onOpenSocial, onOpenCourses, onOpenRules, onOpenRound, onOpenActivity,
 }: HomeDashboardProps) {
-  const safeName = displayName.trim() || "Golfista";
-  const initial = safeName[0]?.toLocaleUpperCase("es-MX") || "G";
+  const firstName = displayName.trim().split(/\s+/)[0] || "Golfista";
+  const initial = firstName[0]?.toLocaleUpperCase("es-MX") || "G";
+  const primaryLabel = activeRound?.status === "review" ? "Revisar ronda" : activeRound?.status === "setup" ? "Continuar configuración" : activeRound ? "Continuar ronda" : "Jugar una ronda";
+  const hasAverage = insights.scoredRounds > 0 && typeof insights.averageScore === "number" && Number.isFinite(insights.averageScore);
+  const played = activeRound?.playedHoles;
+  const progress = activeRound?.status === "live" && typeof played === "number" && Number.isInteger(played) && played >= 0 && played <= activeRound.totalHoles
+    ? Math.round(played / activeRound.totalHoles * 100) : null;
+  const links = [
+    { icon: "groups" as const, title: "Mis grupos", subtitle: groupCount > 0 ? `${groupCount} grupo${groupCount === 1 ? "" : "s"} guardado${groupCount === 1 ? "" : "s"}` : "Juega con los tuyos", action: onOpenGroups },
+    { icon: "rounds" as const, title: "Mis rondas", subtitle: insights.rounds > 0 ? `${insights.rounds} ronda${insights.rounds === 1 ? "" : "s"} guardada${insights.rounds === 1 ? "" : "s"}` : "Tu historial de juego", action: onOpenHistory },
+    { icon: "stats" as const, title: "Estadísticas", subtitle: "Conoce tu juego", action: onOpenStats },
+    { icon: "course" as const, title: "Campos", subtitle: "Encuentra dónde jugar", action: onOpenCourses },
+  ];
 
-  return <section className="betaHomeScreen" aria-labelledby="beta-home-title">
-    <section className="betaHomeHero">
-      <div className="betaHomeIdentity">
-        <button type="button" className="betaHomeAvatar" onClick={onOpenProfile} aria-label="Abrir mi perfil">
-          <ProfileAvatarMedia value={avatarUrl} fallback={initial} />
-        </button>
-        <div><span className="eyebrow">THE BACKYARD · GOLF</span><h1 id="beta-home-title">Hola, {safeName}.</h1><p>Tu golf, tu grupo y las cuentas claras.</p></div>
+  return <section className={styles.home} aria-labelledby="beta-home-title" data-home-version="calm-v1">
+    <header className={styles.greeting}>
+      <div><h1 id="beta-home-title">Hola, {firstName}.</h1><p>Tu golf. Tu gente. A jugar.</p></div>
+      <button type="button" className={styles.avatar} onClick={onOpenProfile} aria-label="Abrir mi perfil"><ProfileAvatarMedia value={avatarUrl} fallback={initial} /></button>
+    </header>
+
+    <section className={styles.playCard} aria-label={activeRound ? "Ronda abierta" : "Nueva ronda"}>
+      <div className={styles.landscape}>
+        <Image src="/brand/backyard-fairway-scene.svg" alt="" aria-hidden="true" fill sizes="(max-width: 760px) 100vw, 760px" priority />
+        <div className={styles.heroCopy}><span className={styles.eyebrow}>{activeRound ? "TU RONDA" : "NOS VEMOS EN EL CAMPO"}</span><h2>{activeRound ? activeRound.courseName || "Tu ronda" : <>Más golf.<br />Más buenos momentos.</>}</h2><p>{activeRound ? activeRoundLabel(activeRound) : "Tú pones el grupo. Backyard te ayuda con el resto."}</p></div>
       </div>
-      <button type="button" className="betaHcpBadge" onClick={onOpenProfile} aria-label="Abrir perfil para consultar o editar handicap">
-        <span>HCP manual</span><strong>{handicap === null ? "—" : profileHandicapLabel(handicap)}</strong>
-      </button>
-    </section>
-
-    <section className={`betaRoundCommand ${activeRound ? "active" : "new"}`} aria-label={activeRound ? "Ronda abierta" : "Nueva ronda"}>
-      <div>
-        <span className="eyebrow">{activeRound ? "RONDA ABIERTA" : "LISTO PARA JUGAR"}</span>
-        <h2>{activeRound ? activeRound.courseName : "Arma tu siguiente ronda"}</h2>
-        <p>{activeRound ? `${activeRoundLabel(activeRound)} · ${activeRound.playerCount} jugador${activeRound.playerCount === 1 ? "" : "es"}` : "Campo, jugadores, HCP y apuestas en un flujo rápido."}</p>
-      </div>
-      <div className="betaRoundCommandActions">
-        <button type="button" className="primary big" onClick={activeRound ? onContinueRound : onAiRound}>
-          {activeRound?.status === "review" ? "Revisar ronda" : activeRound ? "Continuar ronda" : "✨ CONFIGURAR CON BACKYARD AI"}
-        </button>
-        <button type="button" className="secondary" onClick={activeRound ? onAiRound : onNewRound}>{activeRound ? "Nueva ronda con AI" : "Configurar manualmente"}</button>
-      </div>
-    </section>
-
-    <section className="betaHomeStats" aria-label="Resumen y accesos de golf">
-      <button type="button" className="stat" onClick={onOpenHistory} aria-label={`Abrir histórico: ${insights.rounds} ronda${insights.rounds === 1 ? "" : "s"} guardada${insights.rounds === 1 ? "" : "s"}`}><span>Rondas</span><b>{insights.rounds}</b><small>{insights.scoredRounds} con score completo</small></button>
-      <button type="button" className="stat" onClick={onOpenStats} aria-label={insights.averageScore === undefined ? "Abrir estadísticas: promedio no disponible" : `Abrir estadísticas: promedio bruto ${formatAverage(insights.averageScore)}`}><span>Promedio</span><b>{formatAverage(insights.averageScore)}</b><small>{insights.scoreScopeHoles ? `score bruto · ${insights.scoreScopeHoles} hoyos` : "score bruto"}</small></button>
-      <button type="button" className="stat" onClick={onOpenBalances} aria-label={insights.betBalance === undefined ? "Abrir balances: sin resultado de apuestas verificable" : `Abrir balances: ${signedMoney(insights.betBalance)}`}><span>Apuestas</span><b className={insights.betBalance === undefined ? "" : insights.betBalance >= 0 ? "good" : "bad"}>{insights.betBalance === undefined ? "—" : signedMoney(insights.betBalance)}</b><small>{insights.betRounds ? `${insights.betRounds} resultado${insights.betRounds === 1 ? "" : "s"} verificado${insights.betRounds === 1 ? "" : "s"}` : "sin resultado verificable"}</small></button>
-      <button type="button" className="stat" onClick={onOpenGroups} aria-label={`Abrir grupos: ${groupCount} grupo${groupCount === 1 ? "" : "s"} guardado${groupCount === 1 ? "" : "s"}`}><span>Grupos</span><b>{groupCount}</b><small>guardados</small></button>
-    </section>
-
-    <section className="card betaQuickCard">
-      <div className="sectionTitle"><div><h2>Accesos rápidos</h2><p>Todo a un toque.</p></div></div>
-      <div className="betaQuickGrid">
-        <button type="button" onClick={onAiRound}><span aria-hidden="true">✦</span><b>Backyard AI</b></button>
-        <button type="button" onClick={onNewRound}><span aria-hidden="true">＋</span><b>Ronda manual</b></button>
-        <button type="button" onClick={onOpenHistory}><span aria-hidden="true">↺</span><b>Histórico</b></button>
-        <button type="button" onClick={onOpenBalances}><span aria-hidden="true">$</span><b>Balances</b></button>
-        <button type="button" onClick={onOpenStats}><span aria-hidden="true">↗</span><b>Stats</b></button>
-        <button type="button" onClick={onOpenGroups}><span aria-hidden="true">◎</span><b>Grupos</b></button>
-        <button type="button" onClick={onOpenCourses}><span aria-hidden="true">⚑</span><b>Campos</b></button>
-        <button type="button" onClick={onOpenRules}><span aria-hidden="true">?</span><b>Reglas</b></button>
+      <div className={styles.command}>
+        {progress !== null && <div className={styles.progress} role="progressbar" aria-label="Progreso de la ronda" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}><span style={{ width: `${progress}%` }} /></div>}
+        <button type="button" className={styles.primary} onClick={activeRound ? onContinueRound : onAiRound}>{primaryLabel}<Icon name="arrow" /></button>
+        {activeRound ? <p className={styles.helper}>{activeRound.playerCount} jugador{activeRound.playerCount === 1 ? "" : "es"} · Retoma tu tarjeta.</p> : <><p className={styles.helper}>Con ayuda de Backyard AI, paso a paso.</p><button type="button" className={styles.manual} onClick={onNewRound}>Prefiero configurar a mano</button></>}
       </div>
     </section>
 
-    {latestRound ? <section className="card betaLatestRound">
-      <div className="sectionTitle"><div><span className="eyebrow">ÚLTIMA TARJETA COMPLETA</span><h2>{latestRound.courseName}</h2><p>{shortDate(latestRound.date)} · {latestRound.holeCount} hoyos · {latestRound.teeName || "Tee sin nombre"}</p></div><button type="button" className="textButton" onClick={onOpenHistory}>Ver histórico</button></div>
-      <button type="button" className="betaLatestRoundBody" onClick={() => onOpenRound(latestRound.id)} aria-label={`Abrir ronda en ${latestRound.courseName}`}>
-        <span><small>Score</small><strong>{latestRound.gross}</strong></span>
-        <span><small>vs par</small><strong>{formatRelative(latestRound.relativeToPar)}</strong></span>
-        <span><small>Neto</small><strong>{latestRound.net ?? "—"}</strong></span>
-        <span><small>Apuestas</small><strong className={latestRound.betResult === undefined ? "" : latestRound.betResult >= 0 ? "good" : "bad"}>{latestRound.betResult === undefined ? "—" : signedMoney(latestRound.betResult)}</strong></span>
-      </button>
-    </section> : <section className="card betaHomeEmptyRound"><h2>{insights.rounds ? "Tus rondas siguen en Histórico." : "Tu primera tarjeta empieza aquí."}</h2><p>{insights.rounds ? "Aún no hay una tarjeta completa para mostrar score y estadísticas confiables en Inicio." : "Cuando cierres una ronda, verás aquí score, campo y resultado de apuestas."}</p><button type="button" className="primary" onClick={insights.rounds ? onOpenHistory : onAiRound}>{insights.rounds ? "Revisar histórico" : "✨ Configurar con Backyard AI"}</button></section>}
+    <nav className={styles.links} aria-label="Explorar mi golf">{links.map((link) => <button type="button" className={styles.link} key={link.title} onClick={link.action}><span className={styles.linkIcon}><Icon name={link.icon} /></span><span><b>{link.title}</b><small>{link.subtitle}</small></span></button>)}</nav>
 
-    <section className="card betaHomeActivity">
-      <div className="sectionTitle"><div><h2>Actividad reciente</h2><p>Rondas y grupos de tu espacio.</p></div><button type="button" className="textButton" onClick={onOpenSocial}>Ver todo</button></div>
-      {activity.length ? <div className="betaActivityPreviewList">{activity.slice(0, 3).map((item) => <ActivityPreview key={item.id} item={item} onOpen={() => onOpenActivity(item)} />)}</div> : <div className="empty">Todavía no hay actividad. Crea una ronda o guarda un grupo para empezar.</div>}
-    </section>
+    {latestRound && <section className={styles.section} aria-labelledby="home-latest-title">
+      <div className={styles.sectionHead}><h2 id="home-latest-title">Tu última ronda</h2><button type="button" className={styles.textLink} onClick={onOpenHistory}>Ver todas</button></div>
+      <button type="button" className={styles.lastRound} onClick={() => onOpenRound(latestRound.id)} aria-label={`Abrir ronda en ${latestRound.courseName}`}><span><b>{latestRound.courseName}</b><small>{shortDate(latestRound.date)} · {latestRound.holeCount} hoyos{latestRound.teeName ? ` · ${latestRound.teeName}` : ""}</small></span><span className={styles.lastScore}><strong>{latestRound.gross}</strong><small>{relativeLabel(latestRound.relativeToPar)}</small></span></button>
+      {hasAverage && <p className={styles.statsLine}><span><strong>{insights.averageScore!.toFixed(1)}</strong> promedio bruto{insights.scoreScopeHoles ? ` · ${insights.scoreScopeHoles} hoyos` : ""}</span><span>{insights.scoredRounds} tarjeta{insights.scoredRounds === 1 ? "" : "s"} completa{insights.scoredRounds === 1 ? "" : "s"}</span></p>}
+    </section>}
+
+    {activity.length > 0 && <section className={styles.section} aria-labelledby="home-activity-title"><div className={styles.sectionHead}><h2 id="home-activity-title">Actividad reciente</h2><button type="button" className={styles.textLink} onClick={onOpenSocial}>Ver actividad</button></div><div className={styles.activityList}>{activity.slice(0, 2).map((item) => <button type="button" className={styles.activity} key={item.id} onClick={() => onOpenActivity(item)}><span><b>{item.title}</b><small>{item.detail}</small></span><time dateTime={item.occurredAt}>{shortDate(item.occurredAt)}</time></button>)}</div></section>}
+
+    <details className={styles.more}><summary>Más de Backyard</summary><div className={styles.moreLinks}><button type="button" onClick={onOpenBalances}><span>Balances de mis juegos</span>{typeof insights.betBalance === "number" && Number.isFinite(insights.betBalance) && <strong>{balanceLabel(insights.betBalance)}</strong>}</button><button type="button" onClick={onOpenRules}>Reglas de golf <span aria-hidden="true">→</span></button><button type="button" onClick={onOpenSocial}>Amigos y actividad <span aria-hidden="true">→</span></button></div></details>
   </section>;
 }
