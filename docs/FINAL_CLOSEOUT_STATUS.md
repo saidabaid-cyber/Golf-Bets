@@ -123,3 +123,15 @@ Final local gate at code SHA `ecae2d790e67131db4b15788b5cb40dc5fd8cad7`: 1,379/1
 Remaining gates are intentionally separate: `PENDING_CONTROLLED_DB_APPLY` for authenticated cloud deletion, group invitations and persistence; `PENDING_INTERACTIVE_QA` for post-consent tap-through; `PENDING_DEVICE_QA` for physical iPhone keyboard/safe-area behavior; `BLOCKED_EXTERNAL` for official GHIN and private Vercel logs. Shared Supabase was not written.
 
 The resulting branch Preview at `https://golf-bets-git-phase2-full-platform-saha8.vercel.app` returned HTTP 200. Its public bundles contain the new playing-HCP, group-privacy and account-deletion behavior; catalog, course and AI readiness endpoints passed. Browser automation on the deployed alias repeated the 390/430 px no-overflow check with no page or console errors. No custom domain was changed.
+
+## Delivered Home and owner pending list — 2026-09-11
+
+- Starting SHA: `a68b1b1a21af7d756c4cb479f7fce1002795bb96`.
+- The delivered ZIP was validated at SHA-256 `F686C63E5FDA3A3476970274038DD032C8CCD766CFC170AC5C858165371B478A`. Its expected Home blob matched the branch before applying the three declared app files.
+- Home is integrated in commit `9a6ca04`: one context-aware primary action, active-round priority, no empty metrics/activity/duplicate first-round prompt and all existing navigation contracts preserved.
+- Equipment pickers now obtain brand facets over the complete catalog rather than inferring them from the first 50 models. Historical items are included from the first screen, and missing handedness is treated as unknown instead of impossible.
+- Catalog media accepts only explicit HTTPS URLs with optional source/license metadata. Current licensed-image coverage is zero, so clean fallbacks are used and E04 is `BLOCKED_EXTERNAL` pending a licensed image manifest.
+- Linked-player Course Handicap snapshots now freeze when play starts; Guest/manual HCP remains unchanged.
+- Wizard/modal steps reset their own scroll, avoid keyboard focus jumps and restore the opening context. Eleven dialog-bearing components were audited for an explicit close action.
+- Detailed acceptance evidence and remaining gates are maintained in `docs/OWNER_QA_CHECKLIST.md`.
+- Local quality gate after the closeout implementation: 1,391/1,391 npm tests passed with no failures or skips; lint passed; Next 16.3.3 production build passed with 28 generated pages.
