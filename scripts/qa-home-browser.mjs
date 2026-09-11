@@ -370,6 +370,29 @@ function authenticatedFixtureSource() {
   `;
 }
 
+function authenticatedActiveRoundFixtureSource() {
+  const userId = "qa-visible-user";
+  const holes = Array.from({ length: 18 }, (_, index) => ({ number: index + 1, par: 4, strokeIndex: index + 1 }));
+  const round = {
+    version: 11,
+    roundId: "qa-approved-home-active-round",
+    roundDate: "2026-09-11",
+    startedAt: "2026-09-11T15:00:00.000Z",
+    players: [{ id: userId, accountUserId: userId, name: "Said", handicap: 8 }],
+    ownerId: userId,
+    startHole: 1,
+    roundHoles: 18,
+    course: { id: "qa-course", name: "La Vista", teeName: "Blancas", rating: 72, slope: 113, holes },
+    courseSelected: true,
+    scores: { 1: { [userId]: 4 }, 2: { [userId]: 5 } },
+    scoreEdits: { 1: { [userId]: 4 }, 2: { [userId]: 5 } },
+    currentIndex: 2,
+  };
+  return `${authenticatedFixtureSource()}
+    localStorage.setItem('golfbets-draft-v1', ${JSON.stringify(JSON.stringify(round))});
+  `;
+}
+
 async function qaState(client, width, state, options) {
   const viewportHeight = width >= 430 ? 932 : 844;
   const { browserContextId } = await client.send("Target.createBrowserContext");
@@ -467,6 +490,16 @@ async function qaApprovedHome(client, width) {
   });
 }
 
+async function qaApprovedActiveHome(client, width) {
+  return qaState(client, width, "approved Home with active round", {
+    fixture: authenticatedActiveRoundFixtureSource(),
+    assertion: "document.body?.innerText.includes('RONDA ACTIVA') && document.body?.innerText.includes('La Vista') && document.body?.innerText.includes('H3') && document.body?.innerText.includes('CONTINUAR RONDA')",
+    afterReady: "(() => { Object.defineProperty(Navigator.prototype, 'onLine', { configurable: true, get: () => true }); window.dispatchEvent(new Event('online')); return true; })()",
+    filename: (value) => `home-approved-active-${value}.png`,
+    fullPage: false,
+  });
+}
+
 async function openMobileSession(client, width, fixture) {
   const viewportHeight = width >= 430 ? 932 : 844;
   const { browserContextId } = await client.send("Target.createBrowserContext");
@@ -517,7 +550,7 @@ async function qaAuthenticatedFlows(client, width) {
   try {
     await waitFor(client, sessionId, "document.body?.innerText.includes('Said') && document.body?.innerText.includes('PLAY WITH IT')", "authenticated identity and approved actions");
     const navLabels = await evaluate(client, sessionId, "[...document.querySelectorAll('.betaBottomNav .betaNavLabel')].map((node) => node.textContent?.trim())");
-    assert.deepEqual(navLabels, ["Inicio", "Social", "Más", "Cuenta"], "Bottom navigation does not match the approved four destinations.");
+    assert.deepEqual(navLabels, ["Inicio", "Social", "Más", "Perfil"], "Bottom navigation does not match the approved four destinations.");
     const homeDestination = path.join(outputDirectory, `phase2-home-auth-${width}.png`);
     await screenshot(client, sessionId, homeDestination, true);
     evidence[`phase2-home-auth-${width}.png`] = homeDestination;
@@ -569,7 +602,7 @@ async function qaAuthenticatedFlows(client, width) {
     await waitFor(client, sessionId, "document.body?.innerText.includes('Tu equipo y herramientas de golf')", "More bottom destination");
     await returnHome("More tab");
 
-    await clickAriaLabel(client, sessionId, "Cuenta");
+    await clickAriaLabel(client, sessionId, "Perfil");
     await waitFor(client, sessionId, "document.body?.innerText.includes('Said') && document.body?.innerText.includes('VINCULAR GHIN')", "profile with GHIN placeholder");
     await clickText(client, sessionId, "Editar perfil");
     await clickText(client, sessionId, "EMOJI");
@@ -759,6 +792,7 @@ try {
   const results = [];
   if (scenario === "all") for (const width of widths) results.push(await qaViewport(client, width));
   if (scenario === "home") for (const width of widths) results.push(await qaApprovedHome(client, width));
+  const approvedActiveRound = scenario === "home" ? await qaApprovedActiveHome(client, 390) : null;
   const authenticated = scenario === "all" || scenario === "authenticated" ? await qaAuthenticatedFlows(client, 390) : null;
   const history = scenario === "all" ? await qaHistoryScreen(client, 390) : null;
   const activeRound = scenario === "all" ? await qaActiveRoundAction(client, 390) : null;
@@ -770,7 +804,7 @@ try {
     await qaAnimalGameScreen(client, 390, "all-animals", ["vipers", "camels", "fish"]),
   ] : null;
   client.close();
-  console.log(JSON.stringify({ origin, status: "PASS", results, authenticated, history, activeRound, gameScreens }, null, 2));
+  console.log(JSON.stringify({ origin, status: "PASS", results, approvedActiveRound, authenticated, history, activeRound, gameScreens }, null, 2));
 } finally {
   if (chrome?.exitCode === null) {
     chrome.kill();

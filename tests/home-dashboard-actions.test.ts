@@ -4,6 +4,7 @@ import test from "node:test";
 
 const source = readFileSync("app/components/home-dashboard.tsx", "utf8");
 const bottomNav = readFileSync("lib/app-navigation.ts", "utf8");
+const bottomNavComponent = readFileSync("app/components/app-bottom-nav.tsx", "utf8");
 const moreHub = readFileSync("app/components/more-hub.tsx", "utf8");
 
 test("approved Home separates the manual ball from the AI action", () => {
@@ -56,6 +57,9 @@ test("bottom navigation is exactly Inicio, Social, Más and Perfil", () => {
   for (const label of ["Inicio", "Social", "Más", "Perfil"]) assert.match(block, new RegExp(label));
   for (const removed of ["Jugar", "Grupos"]) assert.doesNotMatch(block, new RegExp(removed));
   assert.equal((block.match(/:\s*"/g) || []).length, 4);
+  assert.match(bottomNavComponent, /aria-label=\{label\}/);
+  assert.match(bottomNavComponent, /betaNavLabel">\{label\}/);
+  assert.doesNotMatch(bottomNavComponent, /label === "Perfil" \? "Cuenta"/);
 });
 
 test("Más is a real scalable tool container", () => {

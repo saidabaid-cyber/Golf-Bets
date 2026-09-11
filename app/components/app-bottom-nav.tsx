@@ -39,17 +39,16 @@ export function AppBottomNav({ activeTab, onNavigate }: AppBottomNavProps) {
   return <nav className={`bottomNav betaBottomNav ${isHome ? "homeBottomNav" : ""}`} aria-label="Navegación principal">
     {NAV_ITEMS.map(([label, target]) => {
       const active = activeSection === label;
-      const visibleLabel = isHome && label === "Perfil" ? "Cuenta" : label;
       return <button
         key={label}
         type="button"
         className={active ? "active" : ""}
         aria-current={active ? "page" : undefined}
-        aria-label={visibleLabel}
+        aria-label={label}
         onClick={() => onNavigate(target)}
       >
         <span className="betaNavIcon"><NavIcon section={label} /></span>
-        <span className="betaNavLabel">{visibleLabel}</span>
+        <span className="betaNavLabel">{label}</span>
       </button>;
     })}
   </nav>;
