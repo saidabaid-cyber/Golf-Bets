@@ -41,7 +41,7 @@ test("los wizards reinician su propio scroll y conservan el contexto detrás", (
 
 test("Home aprobada mantiene acciones manual y AI separadas y sus contratos reales", () => {
   const home = read("app/components/home-dashboard.tsx");
-  assert.match(home, /data-home-version="approved-golf-home-v1"/);
+  assert.match(home, /data-home-version="approved-golf-home-v2"/);
   assert.match(home, /const playAction = activeRound \? onContinueRound : onNewRound/);
   assert.match(home, /onOpenGroups/);
   assert.match(home, /onOpenHistory/);

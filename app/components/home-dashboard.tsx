@@ -37,22 +37,20 @@ export type HomeDashboardProps = {
   onOpenRules: () => void;
 };
 
-type IconName = "bell" | "settings" | "stats" | "history" | "rules" | "swing" | "trend" | "balance" | "groups" | "arrow";
+type IconName = "bell" | "settings" | "stats" | "history" | "rules" | "balance" | "groups" | "chevron";
 
 function Icon({ name }: { name: IconName }) {
-  const paths: Record<IconName, string> = {
-    bell: "M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4",
-    settings: "M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.86 2.86-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21H9.5v-.08A1.7 1.7 0 0 0 8 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.86-2.86.06-.06A1.7 1.7 0 0 0 3.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H2V9.5h.08A1.7 1.7 0 0 0 3.6 8a1.7 1.7 0 0 0-.34-1.88l-.06-.06L6.06 3.2l.06.06A1.7 1.7 0 0 0 8 3.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V2h4.1v.08A1.7 1.7 0 0 0 15 3.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.86 2.86-.06.06A1.7 1.7 0 0 0 19.4 8c.12.4.33.75.6 1 .3.28.69.42 1.1.4h.1v4.1h-.08a1.7 1.7 0 0 0-1.72 1.5",
-    stats: "M4 20h16M7 16v-5M12 16V4M17 16V8",
-    history: "M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2",
-    rules: "M6 3h12v18H6zM9 7h6M9 11h6M9 15h4",
-    swing: "M5 20c4-2 6-6 7-10M10 4l3 6 6-3M7 20h10",
-    trend: "M3 18l6-6 4 3 8-9M16 6h5v5",
-    balance: "M4 7h16M7 7l-3 7h6L7 7m10 0-3 7h6l-3-7M12 4v16M8 20h8",
-    groups: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M22 21v-2a4 4 0 0 0-3-3.87M15 3.13a4 4 0 0 1 0 7.75M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0",
-    arrow: "M5 12h14M13 6l6 6-6 6",
+  const paths: Record<IconName, string[]> = {
+    bell: ["M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9", "M10 21h4"],
+    settings: ["M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7", "M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.86 2.86-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21H9.5v-.08A1.7 1.7 0 0 0 8 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.86-2.86.06-.06A1.7 1.7 0 0 0 3.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H2V9.5h.08A1.7 1.7 0 0 0 3.6 8a1.7 1.7 0 0 0-.34-1.88l-.06-.06L6.06 3.2l.06.06A1.7 1.7 0 0 0 8 3.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V2h4.1v.08A1.7 1.7 0 0 0 15 3.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.86 2.86-.06.06A1.7 1.7 0 0 0 19.4 8c.12.4.33.75.6 1 .3.28.69.42 1.1.4h.1v4.1h-.08a1.7 1.7 0 0 0-1.72 1.5"],
+    stats: ["M4 20h16", "M7 16v-5M12 16V4M17 16V8", "M5 8h4M10 6h4M15 10h4"],
+    history: ["M3 12a9 9 0 1 0 3-6.7L3 8", "M3 3v5h5", "M12 7v5l3 2"],
+    rules: ["M6 3h12v18H6z", "M9 7h6M9 11h6M9 15h4", "M15 18h.01"],
+    balance: ["M4 8.5h14.5A2.5 2.5 0 0 1 21 11v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a3 3 0 0 1 3-3h11", "M16 13h5v4h-5a2 2 0 0 1 0-4z"],
+    groups: ["M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2", "M22 21v-2a4 4 0 0 0-3-3.87", "M15 3.13a4 4 0 0 1 0 7.75", "M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0"],
+    chevron: ["m9 18 6-6-6-6"],
   };
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false"><path d={paths[name]} /></svg>;
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">{paths[name].map((path) => <path d={path} key={path} />)}</svg>;
 }
 
 function relativeLabel(value: number) {
@@ -64,105 +62,115 @@ function balanceLabel(value: number) {
 }
 
 function activeRoundLabel(round: ActiveRoundSummary) {
-  if (round.status === "review") return "Tarjeta lista para revisar";
+  if (round.status === "review") return "Tarjeta por revisar";
   if (round.status === "setup") return "Configuración guardada";
-  return typeof round.playedHoles === "number" ? `${round.playedHoles} de ${round.totalHoles} hoyos` : "Ronda en juego";
+  return typeof round.playedHoles === "number" ? `${round.playedHoles}/${round.totalHoles} hoyos` : "En juego";
 }
 
-function BackyardBallMark() {
-  return <span className={styles.ballMark} aria-hidden="true">
-    <Image className={styles.ballLogo} src="/brand/the-backyard-logo.svg" alt="" width={763} height={631} priority />
-    <span className={styles.playTriangle} />
-  </span>;
+function BackyardBallAction({ activeRound, onClick }: { activeRound?: ActiveRoundSummary | null; onClick: () => void }) {
+  return <button
+    type="button"
+    className={styles.ballButton}
+    onClick={onClick}
+    aria-label={activeRound ? "Continuar ronda" : "Configurar ronda manualmente"}
+  >
+    <span className={styles.ballLogoCrop} aria-hidden="true">
+      <Image className={styles.ballLogo} src="/brand/the-backyard-logo.svg" alt="" width={763} height={631} preload />
+    </span>
+    <span className={styles.playCircle} aria-hidden="true"><span /></span>
+  </button>;
 }
 
-/** Approved post-onboarding Home: two play paths, three daily shortcuts and no duplicated navigation. */
+function QuickCard({ icon, title, copy, onClick }: { icon: "stats" | "history" | "rules"; title: string; copy: string; onClick: () => void }) {
+  return <button type="button" className={styles.quickCard} onClick={onClick}>
+    <span className={styles.quickIcon}><Icon name={icon} /></span>
+    <span className={styles.quickCopy}><b>{title}</b><small>{copy}</small></span>
+    <span className={styles.cardChevron}><Icon name="chevron" /></span>
+  </button>;
+}
+
+/** Pixel-matched post-onboarding Home. Existing callbacks remain the only navigation contract. */
 export function HomeDashboard({
-  displayName, username, avatarUrl, activeRound, insights, groupCount,
+  displayName, avatarUrl, activeRound, insights, groupCount,
   onContinueRound, onAiRound, onNewRound, onOpenProfile, onOpenSettings, onOpenNotifications,
   onOpenHistory, onOpenBalances, onOpenStats, onOpenGroups, onOpenRules,
 }: HomeDashboardProps) {
   const firstName = displayName.trim().split(/\s+/)[0] || "Golfista";
   const initial = firstName[0]?.toLocaleUpperCase("es-MX") || "G";
-  const normalizedUsername = username?.trim().replace(/^@/, "");
   const hasScoringInsight = insights.scoredRounds > 0 && typeof insights.averageScore === "number" && Number.isFinite(insights.averageScore);
   const hasBalance = typeof insights.betBalance === "number" && Number.isFinite(insights.betBalance);
   const playAction = activeRound ? onContinueRound : onNewRound;
 
-  return <section className={styles.home} aria-labelledby="approved-home-title" data-home-version="approved-golf-home-v1">
-    <header className={styles.header}>
-      <button type="button" className={styles.identity} onClick={onOpenProfile} aria-label="Abrir mi perfil">
-        <span className={styles.avatar}><ProfileAvatarMedia value={avatarUrl} fallback={initial} alt={`Avatar de ${displayName}`} /></span>
-        <span className={styles.identityCopy}>
-          <small>BIENVENIDO</small>
-          <strong>{displayName.trim() || firstName}</strong>
-          {normalizedUsername && <span>@{normalizedUsername}</span>}
-        </span>
-      </button>
-      <div className={styles.headerActions}>
-        <button type="button" onClick={onOpenNotifications} aria-label="Abrir notificaciones"><Icon name="bell" /></button>
-        <button type="button" onClick={onOpenSettings} aria-label="Abrir Configuración"><Icon name="settings" /></button>
-      </div>
-    </header>
+  return <section className={styles.home} aria-labelledby="approved-home-title" data-home-version="approved-golf-home-v2">
+    <section className={styles.hero} aria-label={activeRound ? "Ronda activa" : "Jugar con The Backyard"}>
+      <Image className={styles.heroPhoto} src="/brand/home-hero-sunrise.jpg" alt="Campo de golf al amanecer" fill sizes="(max-width: 760px) 100vw, 760px" preload />
+      <span className={styles.heroShade} aria-hidden="true" />
 
-    <section className={styles.golfHero} aria-label={activeRound ? "Ronda activa" : "Jugar con The Backyard"}>
-      <div className={styles.heroLandscape}>
-        <Image src="/brand/backyard-fairway-scene.svg" alt="" aria-hidden="true" fill sizes="(max-width: 760px) 100vw, 760px" priority />
-        <div className={styles.heroShade} />
-        <div className={styles.heroCopy}>
-          <span>THE BACKYARD</span>
-          <h1 id="approved-home-title">Buen golf hoy, {firstName}.</h1>
-          <p>{activeRound ? "Tu ronda sigue lista cuando tú lo estés." : "Tu ronda, tus amigos y tus juegos en un solo lugar."}</p>
-          <strong>GOOD GOLF · BETTER FRIENDS</strong>
+      <header className={styles.header}>
+        <button type="button" className={styles.identity} onClick={onOpenProfile} aria-label="Abrir mi perfil">
+          <span className={styles.avatar}><ProfileAvatarMedia value={avatarUrl} fallback={initial} alt={`Avatar de ${displayName}`} /></span>
+          <span className={styles.identityCopy}><strong>{displayName.trim() || firstName}</strong><small>Listo para jugar 💪</small></span>
+        </button>
+        <div className={styles.headerActions}>
+          <button type="button" className={styles.notificationButton} onClick={onOpenNotifications} aria-label="Abrir notificaciones"><Icon name="bell" /><span /></button>
+          <button type="button" onClick={onOpenSettings} aria-label="Abrir Configuración"><Icon name="settings" /></button>
         </div>
+      </header>
+
+      <div className={styles.heroCopy}>
+        <span className={styles.eyebrow}>THE BACKYARD <i /></span>
+        <h1 id="approved-home-title">Buen golf<br /><span>hoy, <em>{firstName}</em></span></h1>
+        <p>Rondas más simples.<br />Mejores amigos. Más golf.</p>
       </div>
 
-      <div className={styles.playDeck}>
-        {activeRound && <button type="button" className={styles.activeRound} onClick={onContinueRound}>
-          <span><small>RONDA ACTIVA</small><b>{activeRound.courseName || "Tu ronda"}</b><em>{activeRoundLabel(activeRound)}</em></span>
-          <span className={styles.activeRoundFacts}>
-            {typeof activeRound.currentHole === "number" && <span><small>HOYO</small><b>{activeRound.currentHole}</b></span>}
-            {typeof activeRound.partialGross === "number" && <span><small>SCORE</small><b>{activeRound.partialGross}</b></span>}
-            {typeof activeRound.partialToPar === "number" && <span><small>VS PAR</small><b>{relativeLabel(activeRound.partialToPar)}</b></span>}
-          </span>
-        </button>}
+      <BackyardBallAction activeRound={activeRound} onClick={playAction} />
+      <span className={styles.friendScript} aria-hidden="true">Good<br />Golf<br />Better<br />Friends</span>
 
-        <button type="button" className={styles.ballButton} onClick={playAction} aria-label={activeRound ? "Continuar ronda" : "Configurar ronda manualmente"}>
-          <BackyardBallMark />
-          <span className={styles.ballActionLabel}>{activeRound ? "CONTINUAR RONDA" : "CONFIGURAR RONDA"}</span>
-          <small>{activeRound ? "Retoma tu tarjeta" : "Manual"}</small>
-        </button>
+      {activeRound && <button type="button" className={styles.activeRound} onClick={onContinueRound}>
+        <span><small>RONDA ACTIVA</small><b>{activeRound.courseName || "Tu ronda"}</b></span>
+        <span>{typeof activeRound.currentHole === "number" ? `H${activeRound.currentHole}` : activeRoundLabel(activeRound)}{typeof activeRound.partialToPar === "number" ? ` · ${relativeLabel(activeRound.partialToPar)}` : ""}</span>
+        <strong>CONTINUAR RONDA</strong>
+      </button>}
 
-        <button type="button" className={styles.aiButton} onClick={onAiRound}>
-          <span className={styles.aiLockup}><b>THE BACKYARD</b><strong>IA</strong></span>
-          <span className={styles.aiPlay}>PLAY WITH IT <Icon name="arrow" /></span>
-        </button>
-      </div>
-    </section>
-
-    <nav className={styles.quickActions} aria-label="Accesos rápidos">
-      <button type="button" onClick={onOpenStats}><span><Icon name="stats" /></span><b>ESTADÍSTICAS</b></button>
-      <button type="button" onClick={onOpenHistory}><span><Icon name="history" /></span><b>HISTORIAL</b></button>
-      <button type="button" onClick={onOpenRules}><span><Icon name="rules" /></span><b>REGLAS DE GOLF</b></button>
-    </nav>
-
-    <section className={styles.improveGrid} aria-label="Mejora tu golf">
-      <article className={styles.comingSoon}>
-        <span><Icon name="swing" /></span>
-        <div><small>PRÓXIMAMENTE</small><b>ANÁLISIS DE SWING</b><p>Tu movimiento, cuando la herramienta esté lista.</p></div>
-      </article>
-      <button type="button" className={styles.improvement} onClick={onOpenStats}>
-        <span><Icon name="trend" /></span>
-        <div><small>TU PROGRESO</small><b>SIGUE MEJORANDO</b>{hasScoringInsight ? <p>Promedio {insights.averageScore!.toFixed(1)} · {insights.scoredRounds} tarjeta{insights.scoredRounds === 1 ? "" : "s"}</p> : <p>Tus tendencias aparecerán al guardar tarjetas completas.</p>}</div>
+      <button type="button" className={styles.aiButton} onClick={onAiRound} aria-label="Armar ronda con The Backyard IA">
+        <span className={styles.aiBrand}>THE BACKYARD</span><span className={styles.aiBadge}>IA</span>
+        <span className={styles.aiPlay}><i />PLAY WITH IT<i /></span>
       </button>
+      <span className={styles.heroFade} aria-hidden="true" />
     </section>
 
-    <section className={styles.moreBackyard} aria-labelledby="more-backyard-title">
-      <div className={styles.sectionTitle}><span /><h2 id="more-backyard-title">MÁS DE THE BACKYARD</h2><span /></div>
-      <div className={styles.moreGrid}>
-        <button type="button" onClick={onOpenBalances}><span><Icon name="balance" /></span><div><b>BALANCES</b><small>{hasBalance ? balanceLabel(insights.betBalance!) : "Resultados entre amigos"}</small></div><strong>›</strong></button>
-        <button type="button" onClick={onOpenGroups}><span><Icon name="groups" /></span><div><b>GRUPOS</b><small>{groupCount > 0 ? `${groupCount} grupo${groupCount === 1 ? "" : "s"}` : "Juega con los tuyos"}</small></div><strong>›</strong></button>
-      </div>
-    </section>
+    <div className={styles.content}>
+      <section className={styles.quickSection} aria-labelledby="quick-title">
+        <div className={styles.sectionHeading}><h2 id="quick-title">Accesos rápidos</h2><button type="button" onClick={onOpenStats}>Ver todo <span>›</span></button></div>
+        <nav className={styles.quickActions} aria-label="Accesos rápidos">
+          <QuickCard icon="stats" title="Estadísticas" copy="Tu rendimiento en el campo" onClick={onOpenStats} />
+          <QuickCard icon="history" title="Historial" copy="Todas tus rondas" onClick={onOpenHistory} />
+          <QuickCard icon="rules" title="Reglas de golf" copy="Respuestas rápidas" onClick={onOpenRules} />
+        </nav>
+      </section>
+
+      <section className={styles.promoGrid} aria-label="Mejora tu golf">
+        <article className={`${styles.promoCard} ${styles.swingCard}`}>
+          <Image src="/brand/home-swing.jpg" alt="Golfista terminando su swing" fill sizes="(max-width: 760px) 50vw, 360px" />
+          <span className={styles.promoShade} />
+          <div><b>Análisis<br />de swing</b><small className={styles.soonBadge}>PRÓXIMAMENTE</small><p>Mejora tu juego con IA.</p></div>
+          <span className={styles.promoChevron}>›</span>
+        </article>
+        <button type="button" className={`${styles.promoCard} ${styles.progressCard}`} onClick={onOpenStats}>
+          <Image src="/brand/home-golf-ball.jpg" alt="Pelota de golf sobre el césped" fill sizes="(max-width: 760px) 50vw, 360px" />
+          <span className={styles.promoShade} />
+          <div><b>Sigue<br />mejorando</b>{hasScoringInsight ? <p>Promedio {insights.averageScore!.toFixed(1)}<br />en {insights.scoredRounds} ronda{insights.scoredRounds === 1 ? "" : "s"}.</p> : <p>Tips, insights<br />y más golf.</p>}</div>
+          <span className={styles.promoChevron}>›</span>
+        </button>
+      </section>
+
+      <section className={styles.moreBackyard} aria-labelledby="more-backyard-title">
+        <h2 id="more-backyard-title">Más de The Backyard</h2>
+        <div className={styles.moreGrid}>
+          <button type="button" onClick={onOpenBalances}><span className={styles.moreIcon}><Icon name="balance" /></span><span><b>Balances</b><small>{hasBalance ? balanceLabel(insights.betBalance!) : "Tus cuentas y liquidaciones"}</small></span><i><Icon name="chevron" /></i></button>
+          <button type="button" onClick={onOpenGroups}><span className={styles.moreIcon}><Icon name="groups" /></span><span><b>Grupos</b><small>{groupCount > 0 ? `${groupCount} grupo${groupCount === 1 ? "" : "s"}` : "Juega con los tuyos"}</small></span><i><Icon name="chevron" /></i></button>
+        </div>
+      </section>
+    </div>
   </section>;
 }

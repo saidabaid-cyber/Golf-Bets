@@ -27,27 +27,29 @@ function NavIcon({ section }: { section: PrimaryAppSection }): ReactNode {
     return <IconFrame><path d="M4 5.5h16v11H9l-5 4z" /><path d="M8 10h8M8 13h5" /></IconFrame>;
   }
   if (section === "Más") {
-    return <IconFrame><circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none" /></IconFrame>;
+    return <IconFrame>{[6, 12, 18].flatMap((y) => [6, 12, 18].map((x) => <circle cx={x} cy={y} r="1.55" fill="currentColor" stroke="none" key={`${x}-${y}`} />))}</IconFrame>;
   }
   return <IconFrame><circle cx="12" cy="8" r="4" /><path d="M4.5 21c.5-5 3-7.5 7.5-7.5s7 2.5 7.5 7.5" /></IconFrame>;
 }
 
 export function AppBottomNav({ activeTab, onNavigate }: AppBottomNavProps) {
   const activeSection = primarySectionForTab(activeTab);
+  const isHome = activeTab === "welcome";
 
-  return <nav className="bottomNav betaBottomNav" aria-label="Navegación principal">
+  return <nav className={`bottomNav betaBottomNav ${isHome ? "homeBottomNav" : ""}`} aria-label="Navegación principal">
     {NAV_ITEMS.map(([label, target]) => {
       const active = activeSection === label;
+      const visibleLabel = isHome && label === "Perfil" ? "Cuenta" : label;
       return <button
         key={label}
         type="button"
         className={active ? "active" : ""}
         aria-current={active ? "page" : undefined}
-        aria-label={label}
+        aria-label={visibleLabel}
         onClick={() => onNavigate(target)}
       >
         <span className="betaNavIcon"><NavIcon section={label} /></span>
-        <span className="betaNavLabel">{label}</span>
+        <span className="betaNavLabel">{visibleLabel}</span>
       </button>;
     })}
   </nav>;

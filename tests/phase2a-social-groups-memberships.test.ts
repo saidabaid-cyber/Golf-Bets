@@ -128,9 +128,9 @@ test("Social UI, server search, memberships and Home V2 remain reachable", () =>
   assert.match(search, /search_social_profiles_v2/);
   assert.doesNotMatch(search, /handicap|club_name/);
   assert.match(membership, /BETA PRO/);
-  assert.match(home, /data-home-version="approved-golf-home-v1"/);
-  assert.match(home, /CONFIGURAR RONDA/);
+  assert.match(home, /data-home-version="approved-golf-home-v2"/);
+  assert.match(home, /Configurar ronda manualmente/);
   assert.match(home, /CONTINUAR RONDA/);
-  assert.match(home, /MÁS DE THE BACKYARD/);
+  assert.match(home, /Más de The Backyard/);
   assert.doesNotMatch(home, /CONFIGURAR CON BACKYARD AI/);
 });

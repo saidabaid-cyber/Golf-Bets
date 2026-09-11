@@ -225,7 +225,7 @@ async function assertNoHorizontalOverflow(client, sessionId, width, state) {
     clientWidth: document.documentElement.clientWidth,
     scrollWidth: document.documentElement.scrollWidth,
     horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
-    homeDashboard: Boolean(document.querySelector('[data-home-version="approved-golf-home-v1"]')),
+    homeDashboard: Boolean(document.querySelector('[data-home-version="approved-golf-home-v2"]')),
     headings: [...document.querySelectorAll('h1,h2')].map((node) => node.textContent?.trim()).filter(Boolean),
     primaryLabels: [...document.querySelectorAll('button,a')].map((node) => node.textContent?.replace(/\\s+/g, ' ').trim()).filter(Boolean).slice(0, 40),
   }))()`);
@@ -329,9 +329,9 @@ function authenticatedFixtureSource() {
   ];
   const profile = {
     userId,
-    displayName: "Said QA",
+    displayName: "Said",
     email: "said.qa@example.test",
-    avatarUrl: "⛳️",
+    avatarUrl: "😎",
     defaultHandicap: 8.4,
     givenName: "Said",
     familyName: "QA",
@@ -371,6 +371,7 @@ function authenticatedFixtureSource() {
 }
 
 async function qaState(client, width, state, options) {
+  const viewportHeight = width >= 430 ? 932 : 844;
   const { browserContextId } = await client.send("Target.createBrowserContext");
   const { targetId } = await client.send("Target.createTarget", { url: "about:blank", browserContextId });
   const { sessionId } = await client.send("Target.attachToTarget", { targetId, flatten: true });
@@ -379,11 +380,11 @@ async function qaState(client, width, state, options) {
   await client.send("Log.enable", {}, sessionId);
   await client.send("Emulation.setDeviceMetricsOverride", {
     width,
-    height: 844,
+    height: viewportHeight,
     deviceScaleFactor: 1,
     mobile: true,
     screenWidth: width,
-    screenHeight: 844,
+    screenHeight: viewportHeight,
   }, sessionId);
   await client.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 }, sessionId);
   const errors = [];
@@ -415,7 +416,11 @@ async function qaState(client, width, state, options) {
     assert.equal(requiredChecked, true, "Required local QA consents could not be selected.");
     await clickText(client, sessionId, "Continuar");
   }
-  await waitFor(client, sessionId, "document.querySelector('[data-home-version=\"approved-golf-home-v1\"]') !== null", "guest Home dashboard");
+  await waitFor(client, sessionId, "document.querySelector('[data-home-version=\"approved-golf-home-v2\"]') !== null", "approved Home dashboard");
+  if (options.afterReady) {
+    await evaluate(client, sessionId, options.afterReady);
+    await delay(250);
+  }
   await waitFor(client, sessionId, options.assertion, state);
   await delay(500);
   const metrics = await assertNoHorizontalOverflow(client, sessionId, width, state);
@@ -432,19 +437,19 @@ async function qaViewport(client, width) {
     width,
     states: {
       newAccount: await qaState(client, width, "new account", {
-        assertion: "document.body?.innerText.includes('CONFIGURAR RONDA') && document.body?.innerText.includes('PLAY WITH IT') && document.body?.innerText.includes('REGLAS DE GOLF') && !document.body?.innerText.includes('Tu última ronda')",
+        assertion: "document.body?.innerText.includes('Buen golf') && document.body?.innerText.includes('PLAY WITH IT') && document.body?.innerText.includes('Reglas de golf') && !document.body?.innerText.includes('Tu última ronda')",
         filename: (value) => `home-preview-${value}.png`,
         fullPage: true,
       }),
       activeRound: await qaState(client, width, "active round", {
         fixture: activeRoundFixture,
-        assertion: "document.body?.innerText.includes('CONTINUAR RONDA') && document.body?.innerText.includes('La Vista') && document.body?.innerText.includes('HOYO') && document.body?.innerText.includes('SCORE') && document.body?.innerText.includes('VS PAR')",
+        assertion: "document.body?.innerText.includes('CONTINUAR RONDA') && document.body?.innerText.includes('La Vista') && document.body?.innerText.includes('H3')",
         filename: (value) => `home-preview-active-${value}.png`,
         fullPage: true,
       }),
       history: await qaState(client, width, "history", {
         fixture: historyFixture,
-        assertion: "document.body?.innerText.includes('CONFIGURAR RONDA') && document.body?.innerText.includes('Promedio') && document.body?.innerText.includes('SIGUE MEJORANDO')",
+        assertion: "document.body?.innerText.includes('Buen golf') && document.body?.innerText.includes('Promedio') && document.body?.innerText.includes('Sigue') && document.body?.innerText.includes('mejorando')",
         filename: (value) => `home-preview-history-${value}.png`,
         fullPage: true,
       }),
@@ -452,7 +457,18 @@ async function qaViewport(client, width) {
   };
 }
 
+async function qaApprovedHome(client, width) {
+  return qaState(client, width, "approved Home", {
+    fixture: authenticatedFixtureSource(),
+    assertion: "document.body?.innerText.includes('Buen golf') && document.body?.innerText.includes('hoy, Said') && document.body?.innerText.includes('PLAY WITH IT') && document.body?.innerText.includes('Accesos rápidos') && document.body?.innerText.includes('Más de The Backyard')",
+    afterReady: "(() => { Object.defineProperty(Navigator.prototype, 'onLine', { configurable: true, get: () => true }); window.dispatchEvent(new Event('online')); return true; })()",
+    filename: (value) => `home-approved-${value}.png`,
+    fullPage: false,
+  });
+}
+
 async function openMobileSession(client, width, fixture) {
+  const viewportHeight = width >= 430 ? 932 : 844;
   const { browserContextId } = await client.send("Target.createBrowserContext");
   const { targetId } = await client.send("Target.createTarget", { url: "about:blank", browserContextId });
   const { sessionId } = await client.send("Target.attachToTarget", { targetId, flatten: true });
@@ -461,11 +477,11 @@ async function openMobileSession(client, width, fixture) {
   await client.send("Log.enable", {}, sessionId);
   await client.send("Emulation.setDeviceMetricsOverride", {
     width,
-    height: 844,
+    height: viewportHeight,
     deviceScaleFactor: 1,
     mobile: true,
     screenWidth: width,
-    screenHeight: 844,
+    screenHeight: viewportHeight,
   }, sessionId);
   await client.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 }, sessionId);
   await client.send("Page.addScriptToEvaluateOnNewDocument", {
@@ -479,7 +495,7 @@ async function openMobileSession(client, width, fixture) {
   const loaded = client.once("Page.loadEventFired", sessionId);
   await client.send("Page.navigate", { url: origin }, sessionId);
   await loaded;
-  await waitFor(client, sessionId, "document.querySelector('[data-home-version=\"approved-golf-home-v1\"]') !== null", "authenticated Home dashboard");
+  await waitFor(client, sessionId, "document.querySelector('[data-home-version=\"approved-golf-home-v2\"]') !== null", "authenticated Home dashboard");
   return { browserContextId, targetId, sessionId, errors };
 }
 
@@ -499,16 +515,16 @@ async function qaAuthenticatedFlows(client, width) {
   };
 
   try {
-    await waitFor(client, sessionId, "document.body?.innerText.includes('@said_qa') && document.body?.innerText.includes('PLAY WITH IT')", "authenticated identity and approved actions");
+    await waitFor(client, sessionId, "document.body?.innerText.includes('Said') && document.body?.innerText.includes('PLAY WITH IT')", "authenticated identity and approved actions");
     const navLabels = await evaluate(client, sessionId, "[...document.querySelectorAll('.betaBottomNav .betaNavLabel')].map((node) => node.textContent?.trim())");
-    assert.deepEqual(navLabels, ["Inicio", "Social", "Más", "Perfil"], "Bottom navigation does not match the approved four destinations.");
+    assert.deepEqual(navLabels, ["Inicio", "Social", "Más", "Cuenta"], "Bottom navigation does not match the approved four destinations.");
     const homeDestination = path.join(outputDirectory, `phase2-home-auth-${width}.png`);
     await screenshot(client, sessionId, homeDestination, true);
     evidence[`phase2-home-auth-${width}.png`] = homeDestination;
 
     const returnHome = async (label) => {
       await clickAriaLabel(client, sessionId, "Inicio");
-      await waitFor(client, sessionId, "document.querySelector('[data-home-version=\"approved-golf-home-v1\"]') !== null", `Home after ${label}`);
+      await waitFor(client, sessionId, "document.querySelector('[data-home-version=\"approved-golf-home-v2\"]') !== null", `Home after ${label}`);
     };
 
     await clickAriaLabel(client, sessionId, "Abrir notificaciones");
@@ -523,25 +539,25 @@ async function qaAuthenticatedFlows(client, width) {
     await waitFor(client, sessionId, "document.body?.innerText.includes('Dime cómo juegan.')", "Backyard AI round setup");
     await capture(`master-round-ai-${width}.png`);
     await clickText(client, sessionId, "Cancelar");
-    await waitFor(client, sessionId, "document.querySelector('[data-home-version=\"approved-golf-home-v1\"]') !== null", "Home after AI setup");
+    await waitFor(client, sessionId, "document.querySelector('[data-home-version=\"approved-golf-home-v2\"]') !== null", "Home after AI setup");
 
-    await clickText(client, sessionId, "ESTADÍSTICAS");
+    await clickContaining(client, sessionId, "Estadísticas");
     await waitFor(client, sessionId, "document.body?.innerText.includes('Tu juego, con datos reales.')", "statistics shortcut");
     await returnHome("statistics");
 
-    await clickText(client, sessionId, "HISTORIAL");
+    await clickContaining(client, sessionId, "Historial");
     await waitFor(client, sessionId, "document.body?.innerText.includes('HISTÓRICO')", "history shortcut");
     await returnHome("history");
 
-    await clickText(client, sessionId, "REGLAS DE GOLF");
+    await clickContaining(client, sessionId, "Reglas de golf");
     await waitFor(client, sessionId, "document.body?.innerText.includes('Reglas de Golf')", "rules shortcut");
     await returnHome("rules");
 
-    await clickContaining(client, sessionId, "BALANCES");
+    await clickContaining(client, sessionId, "Balances");
     await waitFor(client, sessionId, "document.querySelector('h1')?.textContent?.includes('Balances')", "balances shortcut");
     await returnHome("balances");
 
-    await clickContaining(client, sessionId, "GRUPOS");
+    await clickContaining(client, sessionId, "Grupos");
     await waitFor(client, sessionId, "document.body?.innerText.includes('Armar grupos')", "groups shortcut");
     await returnHome("groups");
 
@@ -553,8 +569,8 @@ async function qaAuthenticatedFlows(client, width) {
     await waitFor(client, sessionId, "document.body?.innerText.includes('Tu equipo y herramientas de golf')", "More bottom destination");
     await returnHome("More tab");
 
-    await clickText(client, sessionId, "Perfil");
-    await waitFor(client, sessionId, "document.body?.innerText.includes('Said QA') && document.body?.innerText.includes('VINCULAR GHIN')", "profile with GHIN placeholder");
+    await clickAriaLabel(client, sessionId, "Cuenta");
+    await waitFor(client, sessionId, "document.body?.innerText.includes('Said') && document.body?.innerText.includes('VINCULAR GHIN')", "profile with GHIN placeholder");
     await clickText(client, sessionId, "Editar perfil");
     await clickText(client, sessionId, "EMOJI");
     await fillLabel(client, sessionId, "Emoji de avatar", "🐶");
@@ -571,7 +587,7 @@ async function qaAuthenticatedFlows(client, width) {
     await waitFor(client, sessionId, "!document.querySelector('[role=\"dialog\"]')", "closed GHIN dialog");
 
     await clickAriaLabel(client, sessionId, "Inicio");
-    await waitFor(client, sessionId, "document.querySelector('[data-home-version=\"approved-golf-home-v1\"]') !== null && document.body?.innerText.includes('@said_qa')", "Home after avatar save");
+    await waitFor(client, sessionId, "document.querySelector('[data-home-version=\"approved-golf-home-v2\"]') !== null && document.body?.innerText.includes('Said')", "Home after avatar save");
     assert.equal(await evaluate(client, sessionId, "document.body?.innerText.includes('🐶')"), true, "Saved emoji did not render on Home.");
 
     await clickAriaLabel(client, sessionId, "Más");
@@ -630,14 +646,14 @@ async function qaAuthenticatedFlows(client, width) {
     await waitFor(client, sessionId, "!document.querySelector('[role=\"dialog\"][aria-label=\"The Backyard Ball Fit\"]')", "closed Ball Fit");
 
     await client.send("Page.reload", {}, sessionId);
-    await waitFor(client, sessionId, "document.querySelector('[data-home-version=\"approved-golf-home-v1\"]') !== null", "Home after reload");
+    await waitFor(client, sessionId, "document.querySelector('[data-home-version=\"approved-golf-home-v2\"]') !== null", "Home after reload");
     await clickAriaLabel(client, sessionId, "Más");
     await clickContaining(client, sessionId, "Mi Bolsa");
     await waitFor(client, sessionId, "document.body?.innerText.includes('Titleist 910D3') && document.body?.innerText.includes('Pro V1')", "equipment restored after reload");
     await capture(`phase2-equipment-restored-${width}.png`);
 
     await clickAriaLabel(client, sessionId, "Inicio");
-    await waitFor(client, sessionId, "document.querySelector('[data-home-version=\"approved-golf-home-v1\"]') !== null", "Home before round setup");
+    await waitFor(client, sessionId, "document.querySelector('[data-home-version=\"approved-golf-home-v2\"]') !== null", "Home before round setup");
     await clickAriaLabel(client, sessionId, "Configurar ronda manualmente");
     await waitFor(client, sessionId, "document.body?.innerText.includes('1. Campo') && document.body?.innerText.includes('FALTA COMPLETAR')", "round setup");
     await capture(`master-round-field-nearby-${width}.png`);
@@ -662,7 +678,7 @@ async function qaHistoryScreen(client, width) {
   const session = await openMobileSession(client, width, historyFixture);
   const { sessionId, errors } = session;
   try {
-    await clickText(client, sessionId, "HISTORIAL");
+    await clickContaining(client, sessionId, "Historial");
     await waitFor(client, sessionId, "document.body?.innerText.includes('La Vista') && document.body?.innerText.includes('Abrir ronda')", "completed-round history");
     const destination = path.join(outputDirectory, `phase2-history-completed-${width}.png`);
     await screenshot(client, sessionId, destination);
@@ -742,6 +758,7 @@ try {
   const client = new CdpClient(version.webSocketDebuggerUrl);
   const results = [];
   if (scenario === "all") for (const width of widths) results.push(await qaViewport(client, width));
+  if (scenario === "home") for (const width of widths) results.push(await qaApprovedHome(client, width));
   const authenticated = scenario === "all" || scenario === "authenticated" ? await qaAuthenticatedFlows(client, 390) : null;
   const history = scenario === "all" ? await qaHistoryScreen(client, 390) : null;
   const activeRound = scenario === "all" ? await qaActiveRoundAction(client, 390) : null;
