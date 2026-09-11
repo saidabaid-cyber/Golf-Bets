@@ -116,11 +116,11 @@ test("scorecard ordena Tarjeta completa antes de Captura del hoyo y grupo usa un
   const capture = readFileSync("app/components/round-capture-v2.tsx", "utf8");
   const globalCss = readFileSync("app/globals.css", "utf8");
   const groupInputs = capture.slice(capture.indexOf("function GroupRequiredInputs"), capture.indexOf("const FALLBACK_TEE_CLUBS"));
-  assert.ok(capture.indexOf("props.fullCardVisible") < capture.indexOf("Captura del hoyo"));
-  assert.match(capture, /compact label="Bunker" icon="🐫"/);
+  assert.ok(capture.indexOf("props.fullCardVisible") < capture.indexOf("styles.captureCard"));
+  assert.match(capture, /compact label="Bunker" icon=\{animals\.camel \? "🐫" : undefined\}/);
   assert.doesNotMatch(groupInputs, /greenSideBunkerCount|fairwayBunkerCount/);
   assert.match(capture, /Penalty \/ Hazard/);
-  assert.match(capture, /className=\{styles\.quickFacts\} role="group" aria-label="Eventos rápidos del jugador principal"/);
+  assert.match(capture, /className=\{styles\.ballResult\} role="group" aria-label="Resultado de la bola"/);
   assert.match(globalCss, /\.fullScorecard\{[^}]*min-width:0[^}]*max-width:100%[^}]*overflow:hidden/);
   assert.match(globalCss, /\.scorecardTable\{[^}]*width:100%[^}]*max-width:100%[^}]*overflow:auto/);
 });

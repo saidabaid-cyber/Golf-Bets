@@ -510,6 +510,8 @@ export type AdvancedHoleStat = {
   outOfBounds?: boolean;
   /** New capture uses a counter while retaining outOfBounds for old snapshots. */
   outOfBoundsCount?: number;
+  /** Optional private note for this player/hole. */
+  notes?: string;
 };
 
 export type AdvancedStatsByHole = Record<number, Record<string, AdvancedHoleStat>>;

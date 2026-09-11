@@ -2,6 +2,7 @@
 import "./functional-ux.css";
 import { initialBets, restoreBetConfig } from "../lib/new-round-bets";
 import { collectBetConfigurationIssues } from "../lib/bet-config-validation";
+import { collectRoundSetupPreflightIssues } from "../lib/round-setup-preflight";
 import { isFiniteZeroSum } from "../lib/settlement-integrity";
 import { freezeRoundHandicapBases, missingHandicapsForActiveBets, normalizeRoundHandicapBasis } from "../lib/handicap-base";
 import { HandicapBaseControl } from "./components/handicap-base-control";
@@ -639,6 +640,11 @@ function GolfBetsApp() {
     startHole,
     handicapBasis: roundHandicapBasis,
   }), [players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, roundHoles, startHole, roundHandicapBasis]);
+  const roundSetupPreflight = useMemo(() => collectRoundSetupPreflightIssues({
+    courseSelected,
+    players,
+    betIssues: betConfigurationIssues,
+  }), [courseSelected, players, betConfigurationIssues]);
   useEffect(() => {
     if (!courseSelected) { setPlayerTeeAssignments([]); return; }
     setPlayerTeeAssignments((current) => reconcilePlayerTeeAssignments(current, players, course, new Date().toISOString()));
@@ -2084,8 +2090,8 @@ function GolfBetsApp() {
       setFeedback(manualCourseState?.courseSelected
         ? "Configuración de Backyard AI cargada en el modo manual avanzado."
         : manualCourseState?.pendingIdentity
-          ? `Abrí la edición manual con lo que ya entendí. Elige el tee de ${manualCourseState.pendingIdentity.name} para continuar.`
-          : "Abrí la edición manual con lo que ya entendí. Elige campo y tee para continuar.");
+          ? `Abrí la edición manual con lo que ya entendí. Selecciona ${manualCourseState.pendingIdentity.name} para continuar.`
+          : "Abrí la edición manual con lo que ya entendí. Elige el campo para continuar.");
       setTab("setup");
     }
   }
@@ -3326,9 +3332,9 @@ function GolfBetsApp() {
 
       {roundTemplateOrigin && (() => { const sourceGroup = frequentGroups.find((group) => group.id === roundTemplateOrigin.groupId); return sourceGroup ? <section className="roundTemplateNotice" role="status"><div><span>PLANTILLA CARGADA</span><b>{sourceGroup.name}</b><p>Los cambios de HCP y apuestas pertenecen únicamente a esta ronda.</p></div><button className="secondary" onClick={saveRoundAsFrequentGroupTemplate}>Guardar estos cambios como configuración habitual</button></section> : null; })()}
 
-      <section className="card">
-        <div className="sectionTitle"><div><h2>1. Campo y tees por jugador</h2><p>Elige el campo una vez. Después ajusta el tee de cada jugador sin mezclar ambos conceptos.</p></div><div className="courseSetupActions"><button className="textButton" onClick={() => setTab("courseLibrary")}>Buscar / cerca</button><button className="textButton" onClick={startNewCourse}>+ Campo</button></div></div>
-        {!courseSelected && pendingCourseIdentity && <div className="notice" id="round-course-ai-focus" role="status"><b>Campo reconocido: {pendingCourseIdentity.name}</b><br />{pendingCourseCandidates.length ? "Selecciona el campo; luego podrás ajustar los tees por jugador." : "No encontré ese campo exacto en el catálogo actual. Selecciona otro o crea uno manual."}</div>}
+      <section className="card" id="round-course">
+        <div className="sectionTitle"><div><h2>1. Campo</h2><p>Busca por nombre o usa tu ubicación. El tee habitual se resuelve sin estorbar este flujo.</p></div><div className="courseSetupActions"><button className="textButton" onClick={() => setTab("courseLibrary")}>Ver campos</button><button className="textButton" onClick={startNewCourse}>+ Campo</button></div></div>
+        {!courseSelected && pendingCourseIdentity && <div className="notice" id="round-course-ai-focus" role="status"><b>Campo reconocido: {pendingCourseIdentity.name}</b><br />{pendingCourseCandidates.length ? "Selecciona el campo para continuar." : "No encontré ese campo exacto en el catálogo actual. Selecciona otro o crea uno manual."}</div>}
         <div className="grid2">
           <RoundCoursePicker selectedName={courseSelected ? course.name : ""} selectedId={courseSelected ? (course.catalogCourseId ?? course.id) : ""} pendingName={pendingCourseIdentity?.name} invalid={courseSelectionError} describedBy={[!courseSelected && pendingCourseIdentity ? "round-course-ai-focus" : "", courseSelectionError ? "round-course-error" : ""].filter(Boolean).join(" ") || undefined} onSelect={(selection) => {
             const matchingCourse = courseNameOptions.find((candidate) => candidate.catalogCourseId === selection.courseId)
@@ -3341,7 +3347,9 @@ function GolfBetsApp() {
           <div><label>Hoyos a jugar</label><select value={roundHoles} onChange={(e) => { const next = Number(e.target.value) as 9 | 18; confirmRoundChange("Cambiar la duración excluye del cálculo los hoyos fuera de la nueva vuelta, sin borrar sus scores.", () => { setRoundHoles(next); setSupplementalBets((current) => supplementalBetsForRoundHoles(current, next)); setCurrentIndex(0); }); }}><option value={18}>18 hoyos</option><option value={9}>9 hoyos</option></select></div>
         </div>
         {courseSelected && <div className="courseMeta"><span>{course.holes.length} hoyos configurados</span><span>{teeOptions.length} tee{teeOptions.length === 1 ? "" : "s"} disponible{teeOptions.length === 1 ? "" : "s"}</span>{course.updatedAt && <span>Última actualización: {course.updatedAt}</span>}<button onClick={() => { setCourseEditorSelectOnSave(true); setCourseDraft(withDefaultLaVistaRules(course)); setTab("courses"); }}>{course.name === "La Vista Temporal" ? "Editar campo temporal" : "Editar campo"}</button>{isLaVistaCourse(course.name) && <button onClick={() => { setRulesCourseContext(course.name); setTab("rules"); }}>Ver Reglas Locales</button>}</div>}
-        {courseSelected && players.length > 0 && <div className="playerTeeAssignments">
+        {courseSelected && players.length > 0 && <details className="playerTeeAssignments optionalTeeSetup">
+          <summary><span><b>Ajustar tee y HCP de juego</b><small>Opcional · abre sólo si necesitas otro tee o datos de Rating/Slope.</small></span></summary>
+          <div className="optionalTeeSetupBody">
           <div className="row between"><div><b>TEES</b><small>Se guarda un snapshot por jugador para esta ronda.</small></div><button type="button" className="secondary" onClick={() => setPlayerTeeAssignments(assignTeeToEveryPlayer(players, course, new Date().toISOString()))}>TODOS IGUAL</button></div>
           <div className="playerTeeGrid">{players.map((player) => {
             const assignment = playerTeeAssignments.find((item) => item.playerId === player.id);
@@ -3352,7 +3360,8 @@ function GolfBetsApp() {
             }}>{teeOptions.map((option) => <option key={option.id} value={option.id}>{option.teeName}{typeof option.rating === "number" ? ` · ${option.rating}/${option.slope ?? "—"}` : ""}</option>)}</select></label>;
           })}</div>
           <p className="hint">EDITAR POR JUGADOR está siempre disponible. Para una cuenta con Index, el tee calcula y congela su HCP de juego; un Guest conserva captura manual.</p>
-        </div>}
+          </div>
+        </details>}
       </section>
 
       <section className="card" id="round-players">
@@ -3520,15 +3529,21 @@ function GolfBetsApp() {
         <ul>{betConfigurationIssues.map((issue) => <li key={`${issue.code}:${issue.sectionId}`}>{issue.message}</li>)}</ul>
       </div>}
 
-      <button className="primary big" disabled={!players.length || players.some((player) => !player.name.trim())} onClick={() => {
-        if (!courseSelected) {
-          setCourseSelectionError(true);
-          document.getElementById("round-course")?.scrollIntoView({ behavior: "smooth", block: "center" });
-          return;
-        }
-        if (betConfigurationIssues.length) {
-          setShowBetSetupErrors(true);
-          requestAnimationFrame(() => document.getElementById("round-bet-validation")?.scrollIntoView({ behavior: "smooth", block: "center" }));
+      {roundSetupPreflight.length > 0 && <section className="setupPreflight" aria-labelledby="round-preflight-title">
+        <div><span>ANTES DE INICIAR</span><h2 id="round-preflight-title">FALTA COMPLETAR</h2><p>Toca cada punto para ir directamente a corregirlo.</p></div>
+        <div className="setupPreflightList">{roundSetupPreflight.map((issue) => <button type="button" key={issue.id} onClick={() => {
+          if (issue.kind === "course") setCourseSelectionError(true);
+          if (issue.kind === "bets") setShowBetSetupErrors(true);
+          requestAnimationFrame(() => document.getElementById(issue.targetId)?.scrollIntoView({ behavior: "smooth", block: "center" }));
+        }}><b>⚠ {issue.label}</b><small>{issue.detail}</small><span aria-hidden="true">›</span></button>)}</div>
+      </section>}
+
+      <button className="primary big" onClick={() => {
+        const firstIssue = roundSetupPreflight[0];
+        if (firstIssue) {
+          if (firstIssue.kind === "course") setCourseSelectionError(true);
+          if (firstIssue.kind === "bets") setShowBetSetupErrors(true);
+          requestAnimationFrame(() => document.getElementById(firstIssue.targetId)?.scrollIntoView({ behavior: "smooth", block: "center" }));
           return;
         }
         setShowBetSetupErrors(false);
@@ -3557,6 +3572,7 @@ function GolfBetsApp() {
         ownerId={ownerId}
         ownerAvatarUrl={identity.avatarUrl}
         ownerClubChoices={ownerClubChoices}
+        caddiePlanId={identity.planId ?? "free"}
         mode={scoreCaptureMode}
         bets={bets}
         supplementalBets={supplementalBets}

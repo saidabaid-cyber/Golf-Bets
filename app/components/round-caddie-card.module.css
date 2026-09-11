@@ -1,0 +1,4 @@
+.locked,.active{border-radius:18px;padding:14px;display:flex;gap:12px;align-items:center;min-width:0;background:#111512;color:#fff;box-shadow:0 10px 26px rgba(10,18,12,.15)}
+.monogram{width:46px;height:46px;border:1px solid #6d735d;border-radius:50%;display:grid;place-items:center;color:#d6bd72;font-family:Georgia,serif;font-size:25px;flex:0 0 auto}
+.locked span,.active span{display:block;color:#b9c1bb;font-size:9px;font-weight:900;letter-spacing:1.5px}.locked b,.active b{display:block;color:#d8bd6b;font-size:19px;letter-spacing:2px}.locked p,.active p{margin:3px 0 1px;font-size:13px;font-weight:800}.locked small,.active small{display:block;color:#b9c1bb;font-size:10px;line-height:1.4}
+.active{display:grid}.active header{display:flex;align-items:center;justify-content:space-between;gap:10px}.active em{border:1px solid #5d654f;border-radius:999px;padding:5px 8px;color:#ded3aa;font-size:9px;font-style:normal;font-weight:900}

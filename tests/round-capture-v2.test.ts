@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { initialBets } from "../lib/new-round-bets";
-import { roundCaptureFieldsForPlayer, scoreToParLabel, viperQuantityFromPutts } from "../lib/round-capture";
+import { captureAnimalVisibility, roundCaptureFieldsForPlayer, scoreToParLabel, viperQuantityFromPutts } from "../lib/round-capture";
 
 test("Rápida muestra únicamente datos consumidos por apuestas activas", () => {
   const bets = initialBets(["said", "pedro"]);
@@ -43,6 +43,15 @@ test("Peces deriva del hecho canónico Penalty/Hazard sin duplicar Agua, Peces u
   assert.doesNotMatch(component, /Agua \/ drop/);
 });
 
+test("los animales visuales pertenecen sólo a apuestas activas del jugador", () => {
+  const bets = initialBets(["said", "pedro"]);
+  bets.vipers = { ...bets.vipers, enabled: true, participantIds: ["said"] };
+  bets.camels = { ...bets.camels, enabled: true, participantIds: ["pedro"] };
+  bets.fish = { ...bets.fish, enabled: true, participantIds: ["said", "pedro"] };
+  assert.deepEqual(captureAnimalVisibility(bets, "said"), { viper: true, camel: false, fish: true });
+  assert.deepEqual(captureAnimalVisibility(bets, "pedro"), { viper: false, camel: true, fish: true });
+});
+
 test("estado respecto al par nunca inventa un score", () => {
   assert.equal(scoreToParLabel(undefined, 4), "Sin score");
   assert.equal(scoreToParLabel(3, 4), "-1");
@@ -80,8 +89,12 @@ test("Capture V2.2 usa más/menos, contadores por tap y estadísticas inline", (
   assert.doesNotMatch(component, /<details/);
   assert.doesNotMatch(component, /Lie de llegada/);
   assert.match(component, /Distancia 1er putt/);
-  assert.match(component, /label="Green Side Bunker" icon="🐫"/);
-  assert.match(component, /label="Fairway Bunker" icon="🐫"/);
+  assert.match(component, /label="Green Side Bunker" icon=\{camelActive \? "🐫" : undefined\}/);
+  assert.match(component, /label="Bunker" icon=\{ownerAnimals\.camel \? "🐫" : undefined\}/);
+  assert.match(component, /icon=\{ownerAnimals\.fish \? "🐟" : undefined\}/);
+  assert.match(component, /<CounterStepper label=\{`OB/);
+  assert.match(component, /Score"\], \["tee", "Tee Shot"\], \["approach", "Approach"\], \["around", "Alrededor"\], \["summary", "Resumen"\]/);
+  assert.match(component, /RoundCaddieCard/);
   assert.doesNotMatch(component, />GIR</);
   assert.match(component, /unitQuantities/);
 });

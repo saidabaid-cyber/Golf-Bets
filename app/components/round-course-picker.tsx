@@ -10,6 +10,7 @@ type CourseResult = {
   name: string;
   clubName?: string;
   city?: string;
+  distanceKm?: number;
   tee?: { id: string; name: string; rating?: number; slope?: number; yards?: number };
 };
 
@@ -24,6 +25,13 @@ async function loadCoursePage(query: string, cursor?: string | null, signal?: Ab
   if (cursor) params.set("cursor", cursor);
   const response = await fetch(`/api/courses/search?${params}`, { signal });
   if (!response.ok) throw new Error("course-search-failed");
+  return response.json() as Promise<CoursePage>;
+}
+
+async function loadNearbyCoursePage(latitude: number, longitude: number, signal?: AbortSignal): Promise<CoursePage> {
+  const params = new URLSearchParams({ nearby: "1", lat: String(latitude), lng: String(longitude), limit: "12" });
+  const response = await fetch(`/api/courses/search?${params}`, { signal, cache: "no-store" });
+  if (!response.ok) throw new Error("nearby-course-search-failed");
   return response.json() as Promise<CoursePage>;
 }
 
@@ -54,6 +62,7 @@ export function RoundCoursePicker({
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [hasMore, setHasMore] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [nearbyStatus, setNearbyStatus] = useState<"idle" | "locating" | "empty" | "denied" | "error">("idle");
 
   useEffect(() => {
     if (selectedId && selectedName) {
@@ -96,6 +105,31 @@ export function RoundCoursePicker({
   const visibleResults = useMemo(() => mergeCourseResults([], results), [results]);
   const expanded = !selectedCourseId && (visibleResults.length > 0 || status === "loading" || status === "error");
 
+  function requestNearbyCourses() {
+    if (!navigator.geolocation) {
+      setNearbyStatus("error");
+      return;
+    }
+    setSelectedCourseId("");
+    setNearbyStatus("locating");
+    navigator.geolocation.getCurrentPosition((position) => {
+      void loadNearbyCoursePage(position.coords.latitude, position.coords.longitude).then((page) => {
+        const next = mergeCourseResults([], page.courses ?? []);
+        setResults(next);
+        setHasMore(false);
+        setNextCursor(null);
+        setStatus("ready");
+        setNearbyStatus(next.length ? "idle" : "empty");
+      }).catch(() => {
+        setResults([]);
+        setStatus("idle");
+        setNearbyStatus("error");
+      });
+    }, (error) => {
+      setNearbyStatus(error.code === error.PERMISSION_DENIED ? "denied" : "error");
+    }, { enableHighAccuracy: false, timeout: 8_000, maximumAge: 300_000 });
+  }
+
   return <div className={`courseSelectionField ${invalid ? "isMissing" : ""}`}>
     <AnchoredSearch
       label="Campo"
@@ -114,14 +148,14 @@ export function RoundCoursePicker({
           ? "No pudimos consultar el catálogo. Usa Buscar / cerca o crea el campo manualmente."
           : selectedCourseId
             ? "Campo seleccionado ✓"
-            : "Escribe al menos dos letras. Los tees se eligen después por jugador."}
+            : "Escribe al menos dos letras para buscar por nombre."}
     >
       {visibleResults.map((course) => <AnchoredSearchOption key={course.courseId} label={`Seleccionar ${course.name}`} onSelect={() => {
         setQuery(course.name);
         setSelectedCourseId(course.courseId);
         setResults([]);
         onSelect(course);
-      }}><b>{course.name}</b><small>{[course.clubName && course.clubName !== course.name ? course.clubName : "", course.city].filter(Boolean).join(" · ") || "Catálogo Backyard"}</small></AnchoredSearchOption>)}
+      }}><b>{course.name}</b><small>{[course.clubName && course.clubName !== course.name ? course.clubName : "", course.city, typeof course.distanceKm === "number" ? `${course.distanceKm.toFixed(1)} km` : ""].filter(Boolean).join(" · ") || "Catálogo Backyard"}</small></AnchoredSearchOption>)}
       {hasMore && nextCursor && <button type="button" role="option" aria-selected="false" className="textButton" disabled={status === "loading"} onClick={async () => {
         setStatus("loading");
         try {
@@ -135,5 +169,9 @@ export function RoundCoursePicker({
         }
       }}>Más resultados</button>}
     </AnchoredSearch>
+    <button type="button" className="roundCourseLocation secondary" disabled={nearbyStatus === "locating"} onClick={requestNearbyCourses} aria-label="Buscar campos cercanos con mi ubicación"><span aria-hidden="true">➤</span>{nearbyStatus === "locating" ? "Buscando cerca…" : "Campos cercanos"}</button>
+    {nearbyStatus === "denied" && <p className="roundCourseLocationStatus" role="status">No diste permiso de ubicación. Puedes seguir usando la búsqueda por nombre.</p>}
+    {nearbyStatus === "empty" && <p className="roundCourseLocationStatus" role="status">No hay campos con coordenadas verificadas cerca en el catálogo actual. La búsqueda manual sigue disponible.</p>}
+    {nearbyStatus === "error" && <p className="roundCourseLocationStatus" role="status">No pude obtener campos cercanos. La búsqueda por nombre sigue disponible.</p>}
   </div>;
 }

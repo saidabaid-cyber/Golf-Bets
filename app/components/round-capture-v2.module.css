@@ -33,6 +33,13 @@
 .toolbar .camera { width: 44px; padding-inline: 0; font-size: 17px; }
 
 .captureCard { margin: 0; padding: 13px; min-width: 0; }
+.captureTabs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 3px; margin: 11px -4px 0; padding: 3px; border-radius: 12px; background: #edf2ee; overflow-x: auto; }
+.captureTabs button { min-width: 0; min-height: 38px; border: 0; border-radius: 9px; padding: 6px 3px; background: transparent; color: #68736b; font-size: 8px; font-weight: 900; white-space: nowrap; }
+.captureTabs button[data-active="true"] { background: #fff; color: var(--green); box-shadow: 0 1px 5px rgba(20,50,30,.09); }
+.captureSection { scroll-margin-top: 72px; }
+.sectionLabel { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 13px 0 6px; }
+.sectionLabel span { color: var(--ink); font-size: 10px; font-weight: 950; letter-spacing: .8px; }
+.sectionLabel small { color: var(--muted); font-size: 9px; }
 .modeHeader { display: grid; gap: 9px; margin-bottom: 10px; }
 .modeHeader h2 { margin: 0; font-size: 17px; }
 .modeHeader p { margin: 2px 0 0; color: var(--muted); font-size: 11px; }
@@ -57,7 +64,7 @@
 .toPar { background: #e4f1e7; color: var(--green); border-radius: 999px; padding: 6px 8px; font-size: 11px; font-weight: 900; white-space: nowrap; }
 
 .primaryControls { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 9px; margin-top: 10px; }
-.primaryControl { display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; align-content: start; }
+.primaryControl { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; align-content: start; min-width: 0; }
 .primaryControl > span,
 .compactField > span,
 .statLabel { color: var(--muted); font-size: 9px; font-weight: 950; letter-spacing: .55px; text-transform: uppercase; }
@@ -72,6 +79,16 @@
 .stepperLarge .stepperValue { font-size: 24px; }
 
 .quickFacts { display: grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap: 7px; margin-top: 10px; }
+.animalMarker { position: absolute; right: 3px; bottom: -16px; width: 26px; height: 26px; display: grid; place-items: center; border-radius: 50%; background: #f1f7ed; border: 1px solid #cadbc5; font-size: 17px; font-style: normal; z-index: 2; }
+.animalMarker[data-triggered="true"] { background: #fff3bf; border-color: #dfc85c; box-shadow: 0 0 0 2px rgba(223,200,92,.18); }
+.ballResult { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; align-items: stretch; }
+.ballResult > * { min-width: 0; }
+.ballResult > button { border-radius: 13px; }
+.clubDistanceGrid { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; margin-top: 11px; align-items: end; }
+.clubDistanceGrid .statBlock { min-width: 0; }
+.clubDistanceGrid .choiceRow { max-height: 88px; overflow-y: auto; overscroll-behavior: contain; }
+.ownerUnits { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; padding-top: 9px; border-top: 1px solid #e6eee8; }
+.ownerUnits > span { color: var(--muted); font-size: 9px; font-weight: 950; letter-spacing: .5px; }
 .compactField { display: grid; gap: 5px; align-content: start; min-width: 0; }
 .tapCounter { display: inline-flex; align-items: stretch; min-height: 42px; }
 .tapCounter button { border: 1px solid var(--line); background: #fff; font-weight: 900; touch-action: manipulation; }
@@ -101,6 +118,11 @@
 .teeDirection{display:grid;grid-template-columns:repeat(5,1fr)}.teeDirection .toggleChip{border-radius:12px;padding-inline:6px;font-size:19px}.directionLegend{color:var(--muted);font-size:9px;text-align:center}
 .toggleChip { min-height: 40px; border: 1px solid var(--line); border-radius: 999px; background: #fff; color: var(--ink); padding: 8px 12px; font-size: 10px; font-weight: 900; touch-action: manipulation; }
 .toggleChip[data-active="true"] { background: var(--green); color: #fff; border-color: var(--green); }
+.directionButton { min-width: 0; min-height: 52px; border: 1px solid var(--line); border-radius: 12px; background: #fff; color: var(--ink); display: grid; place-items: center; align-content: center; gap: 1px; padding: 4px 2px; touch-action: manipulation; }
+.directionButton b { font-size: 19px; line-height: 1; }
+.directionButton small { color: var(--muted); font-size: 7px; font-weight: 800; }
+.directionButton[data-active="true"] { background: var(--green); color: #fff; border-color: var(--green); }
+.directionButton[data-active="true"] small { color: #e1efe5; }
 .statsGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; align-items: end; }
 .statsGrid > * { min-width: 0; }
 
@@ -120,6 +142,16 @@
 .groupScore { display: grid; grid-template-columns: auto minmax(112px, 1fr); gap: 6px; align-items: center; }
 .groupScore > span { color: var(--muted); font-size: 8px; font-weight: 950; }
 .groupRequired { grid-column: 1 / -1; border-top: 1px solid #edf1ee; padding-top: 6px; display: grid; grid-template-columns:repeat(auto-fit,minmax(112px,1fr)); gap: 6px; align-items: end; }
+
+.holeMap { border: 1px solid #ccd9cf; border-radius: 18px; background: linear-gradient(145deg,#edf5ee,#f8fbf8); padding: 13px; min-height: 104px; display: grid; align-content: center; }
+.holeMap header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.holeMap span { color: var(--green); font-size: 9px; font-weight: 950; letter-spacing: 1px; }
+.holeMap h2 { margin: 1px 0 0; font-size: 16px; }
+.holeMap p { margin: 8px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.gpsButtonLight { min-height: 42px; border: 1px solid #b9cfbe; border-radius: 12px; background: #fff; color: var(--green); padding: 8px 10px; font-size: 9px; font-weight: 900; }
+.notes { display: grid; gap: 5px; }
+.notes > span { color: var(--muted); font-size: 9px; font-weight: 950; letter-spacing: .8px; }
+.notes textarea { min-height: 74px; resize: vertical; border-radius: 15px; }
 
 @media (min-width: 660px) {
   .modeHeader { grid-template-columns: 1fr auto; align-items: center; }
@@ -141,12 +173,15 @@
   .gpsButton { padding: 4px 6px; font-size: 9px; }
   .progress { font-size: 24px; }
   .modeSwitch button { font-size: 8px; }
-  .primaryControls { grid-template-columns: 1fr; }
+  .primaryControls { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; }
+  .captureTabs { margin-inline: -6px; }
+  .clubDistanceGrid { grid-template-columns: 1fr 1fr; }
+  .clubDistanceGrid .statBlock { grid-column: 1 / -1; }
   .groupPlayer { grid-template-columns: minmax(82px, .72fr) minmax(134px, 1.28fr); }
   .groupScore { grid-template-columns: minmax(112px, 1fr); }
   .groupScore > span { display: none; }
   .groupIdentity > span { display: block; }
-  .statsGrid { grid-template-columns: 1fr; }.quickFacts{grid-template-columns:1fr}.groupRequired{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .statsGrid { grid-template-columns: 1fr 1fr; }.quickFacts{grid-template-columns:1fr}.groupRequired{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 
 @media (max-width: 350px) {

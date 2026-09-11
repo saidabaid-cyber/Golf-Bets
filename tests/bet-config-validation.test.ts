@@ -718,12 +718,14 @@ test("the setup gate renders every issue before consent, HCP freezing or round n
   assert.match(page, /collectBetConfigurationIssues\(\{/);
   assert.match(page, /id="round-bet-validation" className="notice bad" role="alert"/);
   const setupGateRegion = page.indexOf('id="round-bet-validation"');
-  const gate = page.indexOf("if (betConfigurationIssues.length)", setupGateRegion);
+  const gate = page.indexOf("const firstIssue = roundSetupPreflight[0]", setupGateRegion);
   const blockedReturn = page.indexOf("return;", gate);
   const start = page.indexOf("const start = () =>", gate);
   const consent = page.indexOf("runAfterBettingConsent(start)", gate);
   const navigation = page.indexOf('setTab("round")', gate);
   assert.ok(gate > setupGateRegion && blockedReturn > gate && start > blockedReturn && consent > start && navigation > start);
+  assert.match(page, /FALTA COMPLETAR/);
+  assert.match(page, /document\.getElementById\(firstIssue\.targetId\)/);
   assert.match(page, /extraErrors:\s*\[[\s\S]*betConfigurationIssues\.map\(\(issue\) => issue\.message\)/);
   assert.match(page, /function saveRound\([^)]*\) \{\s*const preparingReview[\s\S]*?if \(betConfigurationIssues\.length\)[\s\S]*?setTab\("setup"\);[\s\S]*?return;/);
   assert.match(page, /activeBetSafeDestination\(next, draftAvailable && !roundClosed && betConfigurationIssues\.length > 0\)/);

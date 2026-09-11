@@ -5,6 +5,28 @@ export type RoundCaptureField = "putts" | "bunker" | "fish" | "penalties" | "ob"
 
 type CaptureBetContext = Pick<BetConfig, "vipers" | "camels" | "fish" | "units">;
 
+export type CaptureAnimalVisibility = {
+  viper: boolean;
+  camel: boolean;
+  fish: boolean;
+};
+
+function activeForPlayer(config: { enabled: boolean; participantIds: string[] }, playerId: string) {
+  return config.enabled === true && config.participantIds.includes(playerId);
+}
+
+/** Animal marks are contextual affordances, never standalone inputs. */
+export function captureAnimalVisibility(
+  bets: Pick<BetConfig, "vipers" | "camels" | "fish">,
+  playerId: string,
+): CaptureAnimalVisibility {
+  return {
+    viper: activeForPlayer(bets.vipers, playerId),
+    camel: activeForPlayer(bets.camels, playerId),
+    fish: activeForPlayer(bets.fish, playerId),
+  };
+}
+
 /**
  * The capture screen asks only for facts consumed by an active deterministic
  * game, unless the golfer explicitly selects the optional statistics mode.

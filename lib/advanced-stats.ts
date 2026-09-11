@@ -37,6 +37,7 @@ export function normalizeAdvancedStats(value: unknown): AdvancedStatsByHole {
       if (typeof stat.penaltyAreaCount === "number" && Number.isInteger(stat.penaltyAreaCount) && stat.penaltyAreaCount >= 0 && stat.penaltyAreaCount <= 20) next.penaltyAreaCount = stat.penaltyAreaCount;
       if (typeof stat.outOfBounds === "boolean") next.outOfBounds = stat.outOfBounds;
       if (typeof stat.outOfBoundsCount === "number" && Number.isInteger(stat.outOfBoundsCount) && stat.outOfBoundsCount >= 0 && stat.outOfBoundsCount <= 20) next.outOfBoundsCount = stat.outOfBoundsCount;
+      if (typeof stat.notes === "string" && stat.notes.trim()) next.notes = stat.notes.trim().slice(0, 500);
       if (Object.keys(next).length) nextPlayers[playerId] = next;
     }
     if (Object.keys(nextPlayers).length) normalized[hole] = nextPlayers;
@@ -115,7 +116,7 @@ export function summarizePlayerAdvancedStats(
       penaltyHoles += 1;
       captured.add(hole);
     }
-    if (typeof value.firstPuttDistanceFeet === "number" || typeof value.bunkerCount === "number" || typeof value.greenSideBunkerCount === "number" || typeof value.fairwayBunkerCount === "number" || typeof value.penaltyAreaCount === "number" || typeof value.teeDirection === "string" || typeof value.teeClub === "string" || typeof value.outOfBounds === "boolean" || typeof value.outOfBoundsCount === "number") {
+    if (typeof value.firstPuttDistanceFeet === "number" || typeof value.bunkerCount === "number" || typeof value.greenSideBunkerCount === "number" || typeof value.fairwayBunkerCount === "number" || typeof value.penaltyAreaCount === "number" || typeof value.teeDirection === "string" || typeof value.teeClub === "string" || typeof value.outOfBounds === "boolean" || typeof value.outOfBoundsCount === "number" || typeof value.notes === "string") {
       captured.add(hole);
     }
   }

@@ -18,6 +18,7 @@ export const FEATURE_IDS = [
   "expanded_coach_ai",
   "future_video_analysis",
   "premium_insights",
+  "caddie_ai",
 ] as const;
 
 export type FeatureId = (typeof FEATURE_IDS)[number];

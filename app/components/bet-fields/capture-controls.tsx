@@ -20,11 +20,21 @@ export function SignedStepper({ label, value, onDelta }: { label: string; value:
   </div>;
 }
 
+/** Optional non-negative fact. Zero is its untouched state, not a required confirmation. */
+export function CounterStepper({ label, value, min = 0, max = 20, onChange }: { label: string; value: number | null | undefined; min?: number; max?: number; onChange: (value: number) => void }) {
+  const current = typeof value === "number" && Number.isFinite(value) ? Math.max(min, Math.min(max, Math.trunc(value))) : min;
+  return <div className={styles.stepper} role="group" aria-label={label}>
+    <button type="button" aria-label={`Restar en ${label}`} disabled={current <= min} onClick={() => onChange(Math.max(min, current - 1))}>−</button>
+    <span className={styles.value} aria-live="polite">{current}</span>
+    <button type="button" aria-label={`Sumar en ${label}`} disabled={current >= max} onClick={() => onChange(Math.min(max, current + 1))}>+</button>
+  </div>;
+}
+
 /** Untouched and zero are equivalent for optional golf facts; no confirm-zero UI. */
-export function TapCounter({ label, icon, value, max = 20, onChange, compact = false }: { label: string; icon: string; value: number | null | undefined; max?: number; onChange: (value: number) => void; compact?: boolean }) {
+export function TapCounter({ label, icon, value, max = 20, onChange, compact = false }: { label: string; icon?: string; value: number | null | undefined; max?: number; onChange: (value: number) => void; compact?: boolean }) {
   const current = typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
   return <div className={`${styles.counter} ${compact ? styles.counterCompact : ""}`} role="group" aria-label={label}>
-    <button type="button" className={styles.counterAdd} aria-label={`Agregar ${label}`} disabled={current >= max} onClick={() => onChange(Math.min(max, current + 1))}><span aria-hidden="true">{icon}</span><span>{label}</span>{current > 0 && <b>{current}</b>}</button>
+    <button type="button" className={styles.counterAdd} aria-label={`Agregar ${label}`} disabled={current >= max} onClick={() => onChange(Math.min(max, current + 1))}>{icon ? <span aria-hidden="true">{icon}</span> : null}<span>{label}</span>{current > 0 && <b>{current}</b>}</button>
     {current > 0 && <button type="button" className={styles.counterSubtract} aria-label={`Restar ${label}`} onClick={() => onChange(current - 1)}>−</button>}
   </div>;
 }

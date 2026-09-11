@@ -24,6 +24,29 @@ export async function GET(request: NextRequest) {
       clubs: result.data.clubs.map((club) => ({ id: club.id, name: club.name, city: club.city, stateRegion: club.stateRegion, country: club.country })),
     }, { headers: { "cache-control": "public, s-maxage=300, stale-while-revalidate=1800" } });
   }
+  if (request.nextUrl.searchParams.get("nearby") === "1") {
+    const latitude = Number(request.nextUrl.searchParams.get("lat"));
+    const longitude = Number(request.nextUrl.searchParams.get("lng"));
+    if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+      return NextResponse.json({ error: "invalid_location" }, { status: 400, headers: { "cache-control": "no-store" } });
+    }
+    const result = await internalCourseDataProvider.nearbyCourses({ courses: DEFAULT_COURSES, origin: { latitude, longitude }, limit, radiusKm: 250 });
+    if (!result.ok) return NextResponse.json({ error: result.code }, { status: 503, headers: { "cache-control": "no-store" } });
+    return NextResponse.json({
+      provider: result.providerId,
+      total: result.data.total,
+      courses: result.data.matches.map(({ course, distanceKm }) => ({
+        id: course.id,
+        courseId: course.catalogCourseId ?? course.id,
+        clubId: course.catalogClubId,
+        name: course.name,
+        clubName: course.clubName,
+        city: course.city,
+        distanceKm: Math.round(distanceKm * 10) / 10,
+        tee: { id: course.catalogTeeId ?? course.id, name: course.teeName, rating: course.rating, slope: course.slope, yards: course.totalYards },
+      })),
+    }, { headers: { "cache-control": "private, no-store" } });
+  }
   const result = await internalCourseDataProvider.searchCourses({ courses: DEFAULT_COURSES, query, cursor, limit });
   if (!result.ok) return NextResponse.json({ error: result.code }, { status: 503, headers: { "cache-control": "no-store" } });
   return NextResponse.json({
