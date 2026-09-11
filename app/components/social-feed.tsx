@@ -16,6 +16,7 @@ import {
 import { SocialConnectionsPanel } from "./social-connections-panel";
 
 export type SocialFeedProps = {
+  initialView?: "activity" | "friends" | "notifications";
   activity: PersonalActivity[];
   identityUserId: string;
   accessToken?: string;
@@ -83,8 +84,8 @@ export function InternalNotificationList({ notifications, onOpen, onReadChange }
   </ol></section>;
 }
 
-export function SocialFeed({ activity, identityUserId, accessToken, knownProfiles, notificationsEnabled, onNotificationsEnabledChange, onOpenRound, onOpenGroup, onCreateRound, onOpenGroups }: SocialFeedProps) {
-  const [view, setView] = useState<"activity" | "friends" | "notifications">("activity");
+export function SocialFeed({ initialView = "activity", activity, identityUserId, accessToken, knownProfiles, notificationsEnabled, onNotificationsEnabledChange, onOpenRound, onOpenGroup, onCreateRound, onOpenGroups }: SocialFeedProps) {
+  const [view, setView] = useState<"activity" | "friends" | "notifications">(initialView);
   const [readState, setReadState] = useState<InternalNotificationReadState>(emptyInternalNotificationReadState);
   const readStateRef = useRef<InternalNotificationReadState>(emptyInternalNotificationReadState());
   const [readStatus, setReadStatus] = useState<"loading" | "ready" | "error">("loading");

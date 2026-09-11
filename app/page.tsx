@@ -84,6 +84,7 @@ import { GroupBuilder } from "./components/group-builder";
 import { AppBottomNav } from "./components/app-bottom-nav";
 import { HomeDashboard, type ActiveRoundSummary } from "./components/home-dashboard";
 import { PlayHub } from "./components/play-hub";
+import { MoreHub } from "./components/more-hub";
 import type { AiRoundSetupTelemetry } from "./components/backyard-ai/ai-round-setup";
 import { RoundFinalResult } from "./components/backyard-ai/round-final-result";
 import { SocialFeed } from "./components/social-feed";
@@ -156,7 +157,7 @@ import { buildLiveScoreboard } from "../features/live-rounds/domain";
 import { BetHelpButton, SupplementalBetsEditor, SupplementalBetResults } from "./components/supplemental-bets-editor";
 import { buildGeneralResultsTable, pollaDetailBalance, pollaDetailBalances, pollaPositionLabels, summarizeNetUnitQuantities, type ResultCategoryColumn } from "../lib/result-breakdown";
 import { collectHoleValidationErrors } from "../lib/hole-validation";
-import { buildGolfInsights, buildPersonalActivity, type PersonalActivity } from "../lib/golf-insights";
+import { buildGolfInsights, buildPersonalActivity } from "../lib/golf-insights";
 import { buildHistoricalRoundRecap } from "../lib/historical-round-recap";
 import { coursePreferenceStorageKey, normalizeCourseIds, rememberRecentCourse, toggleFavoriteCourse } from "../lib/course-preferences";
 import {
@@ -386,6 +387,7 @@ function GolfBetsApp() {
   const { identity, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, setCloudStatus, applyCloudPreferences, reportCloudSyncError, clearCloudSyncError, refreshCloudSession } = useBackyardAccount();
   const { tab, setTab, goBack, setNavigationGuard } = useScreenNavigation();
   const [profileFocus, setProfileFocus] = useState<"profile" | "equipment">("profile");
+  const [socialInitialView, setSocialInitialView] = useState<"activity" | "friends" | "notifications">("activity");
   const ownerClubChoices = useMemo(() => {
     if (typeof window === "undefined" || tab !== "round") return [];
     const loaded = loadEquipmentProfile(localStorage, identity.userId);
@@ -1462,6 +1464,7 @@ function GolfBetsApp() {
   function navigateFromBottomBar(target: AppTab) {
     setFeedback("");
     if (target === "profile") setProfileFocus("profile");
+    if (target === "social") setSocialInitialView("activity");
     if (target === "rules") setRulesCourseContext(rulesContextForRound(hasRoundProgress({ players, scores, currentIndex }) && courseSelected, course.name));
     if (roundClosed && (target === "round" || target === "standings")) {
       setTab("history");
@@ -1480,14 +1483,6 @@ function GolfBetsApp() {
   function openHistoricalRound(roundToOpenId: string) {
     setHistoryDetailId(roundToOpenId);
     setTab("historyDetail");
-  }
-
-  function openPersonalActivity(item: PersonalActivity) {
-    if (item.roundId) {
-      openHistoricalRound(item.roundId);
-      return;
-    }
-    if (item.groupId) setTab("groups");
   }
 
   function newManualBet() {
@@ -3203,30 +3198,32 @@ function GolfBetsApp() {
       displayName={identity.displayName}
       username={identity.username}
       avatarUrl={identity.avatarUrl}
-      handicap={identity.defaultHandicap}
       activeRound={activeRoundSummary}
-      latestRound={betaGolfInsights.recentRounds[0] || null}
       insights={betaGolfInsights}
       groupCount={frequentGroups.length}
-      activity={personalActivity}
       onContinueRound={continueActiveRound}
       onAiRound={requestAiRound}
       onNewRound={requestNewRound}
-      onOpenPlay={() => setTab("play")}
-      onOpenEquipment={() => { setProfileFocus("equipment"); setTab("profile"); }}
       onOpenProfile={() => { setProfileFocus("profile"); setTab("profile"); }}
+      onOpenSettings={() => setTab("account")}
+      onOpenNotifications={() => { setSocialInitialView("notifications"); setTab("social"); }}
       onOpenHistory={() => setTab("history")}
       onOpenBalances={() => setTab("balances")}
       onOpenStats={() => setTab("stats")}
       onOpenGroups={() => setTab("groups")}
-      onOpenSocial={() => setTab("social")}
-      onOpenCourses={() => setTab("courseLibrary")}
       onOpenRules={openRulesForRound}
-      onOpenRound={openHistoricalRound}
-      onOpenActivity={openPersonalActivity}
     />}
 
-    {!(["welcome", "play", "groups", "social", "profile"] as AppTab[]).includes(tab) && tab !== "rules" && <button className="secondary pageBack" onClick={handlePageBack}>← Regresar</button>}
+    {!(["welcome", "more", "play", "groups", "social", "profile"] as AppTab[]).includes(tab) && tab !== "rules" && <button className="secondary pageBack" onClick={handlePageBack}>← Regresar</button>}
+
+    {tab === "more" && <MoreHub
+      hasActiveRound={Boolean(activeRoundSummary)}
+      onOpenCourses={() => setTab("courseLibrary")}
+      onOpenEquipment={() => { setProfileFocus("equipment"); setTab("profile"); }}
+      onOpenHandicap={() => { setProfileFocus("profile"); setTab("profile"); }}
+      onOpenFitting={() => { setProfileFocus("equipment"); setTab("profile"); }}
+      onOpenGps={() => activeRoundSummary ? continueActiveRound() : setTab("courseLibrary")}
+    />}
 
     {tab === "play" && <PlayHub
       activeRound={activeRoundSummary}
@@ -3302,7 +3299,7 @@ function GolfBetsApp() {
       onCancel={() => { setScorecardScanStartedAt(null); setTab("round"); }}
     />}
 
-    {tab === "social" && <SocialFeed activity={personalActivity} identityUserId={identity.userId || "guest"} accessToken={identity.accessToken || undefined} knownProfiles={frequentPlayers.filter((player) => Boolean(player.accountUserId)).map((player) => ({ userId: player.accountUserId as string, username: player.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9._]+/g, ".").replace(/^\.|\.$/g, ""), displayName: player.name, handicap: player.handicap, privacy: "FRIENDS" as const }))} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} onOpenRound={openHistoricalRound} onOpenGroup={() => setTab("groups")} onCreateRound={requestNewRound} onOpenGroups={() => setTab("groups")} />}
+    {tab === "social" && <SocialFeed initialView={socialInitialView} activity={personalActivity} identityUserId={identity.userId || "guest"} accessToken={identity.accessToken || undefined} knownProfiles={frequentPlayers.filter((player) => Boolean(player.accountUserId)).map((player) => ({ userId: player.accountUserId as string, username: player.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9._]+/g, ".").replace(/^\.|\.$/g, ""), displayName: player.name, handicap: player.handicap, privacy: "FRIENDS" as const }))} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} onOpenRound={openHistoricalRound} onOpenGroup={() => setTab("groups")} onCreateRound={requestNewRound} onOpenGroups={() => setTab("groups")} />}
     {tab === "balances" && <BalanceLedgerPanel history={history} currentUserId={identity.mode === "authenticated" ? identity.userId : undefined} />}
     {tab === "stats" && <StatsDashboard insights={betaGolfInsights} rounds={history} consentOwnerId={identity.userId || undefined} accessToken={identity.accessToken} onOpenHistory={() => setTab("history")} onOpenRound={openHistoricalRound} />}
     {tab === "courseLibrary" && <CourseLibrary courses={courses} favoriteCourseIds={favoriteCourseIds} recentCourseIds={recentCourseIds} selectedCourseId={courseSelected ? course.id : null} onToggleFavorite={(courseId) => setFavoriteCourseIds((current) => toggleFavoriteCourse(current, courseId))} onSelectCourse={(nextCourse) => selectRoundCourse(nextCourse, true)} onCreateCourse={startNewCourse} onEditCourse={editCourseFromLibrary} />}

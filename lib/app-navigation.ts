@@ -1,10 +1,9 @@
-export type AppTab = "welcome" | "play" | "aiSetup" | "setup" | "round" | "scorecardScan" | "standings" | "personals" | "personalDetail" | "historyDetail" | "results" | "history" | "balances" | "stats" | "courseLibrary" | "courses" | "rules" | "pollaLive" | "account" | "profile" | "groups" | "social";
+export type AppTab = "welcome" | "more" | "play" | "aiSetup" | "setup" | "round" | "scorecardScan" | "standings" | "personals" | "personalDetail" | "historyDetail" | "results" | "history" | "balances" | "stats" | "courseLibrary" | "courses" | "rules" | "pollaLive" | "account" | "profile" | "groups" | "social";
 
 export const BOTTOM_NAV_TARGETS = {
   Inicio: "welcome",
-  Jugar: "play",
-  Grupos: "groups",
   Social: "social",
+  Más: "more",
   Perfil: "profile",
 } as const satisfies Record<string, AppTab>;
 
@@ -17,10 +16,10 @@ const PLAY_TABS = new Set<AppTab>([
 ]);
 
 export function primarySectionForTab(tab: AppTab): PrimaryAppSection {
-  if (tab === "groups") return "Grupos";
-  if (tab === "social") return "Social";
+  if (tab === "social" || tab === "groups") return "Social";
+  if (tab === "more" || tab === "courseLibrary" || tab === "courses") return "Más";
   if (tab === "profile" || tab === "account" || tab === "stats") return "Perfil";
-  if (PLAY_TABS.has(tab)) return "Jugar";
+  if (PLAY_TABS.has(tab)) return "Inicio";
   return "Inicio";
 }
 
