@@ -124,10 +124,11 @@ test("profile accepts one native Unicode emoji grapheme and keeps legacy avatar 
   assert.equal(isProfileEmojiAvatar("texto"), false);
   assert.equal(isProfileEmojiAvatar("🦅🐟"), false);
   const picker = readFileSync("app/components/profile-image-picker.tsx", "utf8");
-  assert.match(picker, /Foto<\/button>/);
-  assert.match(picker, /Emoji<\/button>/);
-  assert.match(picker, /Elegir avatar<\/button>/);
-  assert.match(picker, /\/avatars\/golfer-green\.svg/);
+  const media = readFileSync("app/components/profile-avatar-media.tsx", "utf8");
+  assert.match(picker, /FOTO<\/button>/);
+  assert.match(picker, /EMOJI<\/button>/);
+  assert.doesNotMatch(picker, /Elegir avatar<\/button>/);
+  assert.match(media, /if \(value\) return <img/);
 });
 
 test("club search, onboarding, capture and modal safety expose the hard-closeout contracts", () => {
@@ -211,4 +212,10 @@ test("GHIN is an explicit disabled external provider foundation", () => {
   assert.match(placeholder, /PRÓXIMAMENTE/);
   assert.match(placeholder, /sin scraping/);
   assert.match(placeholder, /ModalShell/);
+});
+
+test("ball editor keeps an explicitly selected generation after its paginated result page changes", () => {
+  const editor = readFileSync("app/components/equipment-editors.tsx", "utf8");
+  assert.match(editor, /setCustomModel\(ball\.model\)/);
+  assert.match(editor, /selected\?\.model \|\| customModel\.trim\(\)/);
 });

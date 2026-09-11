@@ -420,7 +420,10 @@ export function BallEditor({ userId, catalog, existing, onCancel, onSave }: Ball
     event.preventDefault();
     setMessage("");
     const cleanBrand = (selected?.brand || effectiveBrand).trim();
-    const cleanModel = manual ? customModel.trim() : selected?.model || (catalogBallId === existing?.catalogBallId ? existing.ballModel : "");
+    // Keep the explicit selection independent from the current paginated page.
+    // Advancing the wizard can replace the search results, while customModel is
+    // populated only when the user chooses a catalog model.
+    const cleanModel = manual ? customModel.trim() : selected?.model || customModel.trim() || (catalogBallId === existing?.catalogBallId ? existing.ballModel : "");
     if (!cleanBrand || !cleanModel || (!manual && !catalogBallId)) {
       setMessage(manual ? "Escribe marca y modelo de la bola." : "Selecciona una marca y un modelo del catálogo.");
       return;
