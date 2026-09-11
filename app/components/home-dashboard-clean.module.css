@@ -20,7 +20,15 @@
   color: #fff;
 }
 
-.heroPhoto { z-index: 0; object-fit: cover; object-position: 52% 51%; }
+.heroPhoto {
+  z-index: 0;
+  right: auto !important;
+  left: -12% !important;
+  width: 112% !important;
+  max-width: none;
+  object-fit: cover;
+  object-position: 50% 51%;
+}
 .heroShade {
   position: absolute;
   z-index: 1;
@@ -102,21 +110,21 @@
 .ballButton {
   position: absolute;
   z-index: 4;
-  top: 46.5%;
-  left: 59%;
-  width: 126px;
-  height: 126px;
+  top: 64%;
+  left: 50%;
+  width: 118px;
+  height: 118px;
   border: 0;
   border-radius: 50%;
   background: transparent;
   padding: 0;
   transform: translate(-50%, -50%);
 }
-.ballButton::after { content: ""; position: absolute; inset: 5px; border-radius: 50%; box-shadow: 0 9px 24px rgba(0, 0, 0, .18); }
-.ballLogoCrop { position: absolute; z-index: 2; top: 54px; left: 15px; width: 96px; height: 89px; overflow: hidden; filter: drop-shadow(0 1px 1px rgba(255, 255, 255, .35)); }
-.ballLogo { position: absolute; top: -20px; left: 50%; width: 190px; max-width: none; height: auto; transform: translateX(-50%); }
-.playCircle { position: absolute; z-index: 3; top: 89px; left: 50px; width: 31px; height: 31px; display: grid; place-items: center; border: 1px solid rgba(255, 255, 255, .72); border-radius: 50%; background: rgba(7, 50, 23, .78); box-shadow: 0 3px 11px rgba(0, 0, 0, .28); }
-.playCircle span { width: 0; height: 0; margin-left: 3px; border-top: 6px solid transparent; border-bottom: 6px solid transparent; border-left: 9px solid #fff; }
+.ballButton::after { content: ""; position: absolute; inset: 9px; border-radius: 50%; box-shadow: 0 9px 24px rgba(0, 0, 0, .17); }
+.ballLogoFull { position: absolute; z-index: 2; top: 7px; left: 50%; width: 112px; filter: drop-shadow(0 2px 2px rgba(255, 255, 255, .38)) drop-shadow(0 3px 5px rgba(0, 0, 0, .16)); transform: translateX(-50%); }
+.ballLogo { position: relative; width: 100%; max-width: none; height: auto; display: block; }
+.playCircle { position: absolute; z-index: 3; top: 42px; left: 47px; width: 25px; height: 25px; display: grid; place-items: center; border: 1px solid rgba(255, 255, 255, .8); border-radius: 50%; background: rgba(7, 50, 23, .82); box-shadow: 0 3px 11px rgba(0, 0, 0, .28); }
+.playCircle span { width: 0; height: 0; margin-left: 2px; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 8px solid #fff; }
 .ballButton:active { transform: translate(-50%, -50%) scale(.97); }
 
 .friendScript { position: absolute; z-index: 3; top: 204px; right: 18px; color: #fff; font-family: "Segoe Print", "Bradley Hand", "Brush Script MT", cursive; font-size: 18px; font-weight: 500; line-height: .88; text-align: left; text-shadow: 0 2px 6px rgba(0, 0, 0, .58); transform: rotate(-4deg); }
@@ -124,7 +132,7 @@
 .activeRound {
   position: absolute;
   z-index: 5;
-  bottom: 77px;
+  bottom: 20px;
   left: 18px;
   display: grid;
   max-width: 176px;
@@ -144,23 +152,16 @@
 .activeRound > span:nth-child(2) { font-size: 8px; }
 .activeRound strong { margin-top: 2px; font-size: 7px; letter-spacing: .6px; }
 
-.aiButton {
-  position: absolute;
-  z-index: 6;
-  right: 12.5%;
-  bottom: 27px;
-  width: 53%;
-  height: 48px;
+.aiIdentity {
+  width: min(100%, 215px);
   display: grid;
   grid-template-columns: minmax(0, 1fr) 34px;
   grid-template-rows: 26px 14px;
   align-items: center;
-  border: 1px solid rgba(224, 229, 219, .85);
-  border-radius: 11px;
-  background: rgba(255, 255, 255, .97);
+  border-radius: 10px;
+  background: #fff;
   padding: 3px 8px 4px 10px;
   color: #0c371d;
-  box-shadow: 0 8px 22px rgba(0, 0, 0, .2);
 }
 .aiBrand { align-self: end; font-family: "Trebuchet MS", Arial, sans-serif; font-size: 13px; font-weight: 500; letter-spacing: .2px; white-space: nowrap; }
 .aiBadge { width: 31px; height: 25px; display: grid; place-items: center; align-self: end; border-radius: 5px; background: #69b91e; color: #fff; font-size: 14px; font-weight: 800; }
@@ -168,7 +169,7 @@
 .aiPlay i { height: 1px; display: block; background: #19492e; }
 .heroFade { position: absolute; z-index: 5; right: 0; bottom: -1px; left: 0; height: 23px; pointer-events: none; background: linear-gradient(180deg, rgba(247, 250, 247, 0), #f7faf7 92%); filter: blur(.3px); }
 
-.content { display: grid; gap: 8px; padding: 8px 18px 108px; background: linear-gradient(180deg, #f7faf7, #f2f6f2); }
+.content { display: grid; gap: 8px; padding: 8px 18px calc(92px + env(safe-area-inset-bottom)); background: linear-gradient(180deg, #f7faf7, #f2f6f2); }
 .quickSection { display: grid; gap: 8px; }
 .sectionHeading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .sectionHeading h2, .moreBackyard h2 { margin: 0; color: #0b321d; font-size: 16px; font-weight: 800; letter-spacing: -.35px; }
@@ -236,16 +237,52 @@
 .moreGrid i { width: 13px; height: 13px; color: #175d38; }
 .moreGrid i svg { width: 13px; height: 13px; }
 
+.roundChoiceDialog {
+  position: relative;
+  width: min(100%, 370px);
+  border: 1px solid rgba(20, 63, 35, .1);
+  border-radius: 24px;
+  background: linear-gradient(180deg, #fff, #f4f8f4);
+  padding: 20px;
+  color: #0b321d;
+  box-shadow: 0 28px 90px rgba(3, 24, 13, .34);
+}
+.roundChoiceHeader { padding: 3px 48px 16px 2px; }
+.roundChoiceHeader small { display: block; margin-bottom: 5px; color: #4f795e; font-size: 9px; font-weight: 900; letter-spacing: 1.6px; }
+.roundChoiceHeader h2 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 23px; line-height: 1.03; letter-spacing: -.6px; }
+.roundChoices { display: grid; gap: 10px; }
+.roundChoices > button {
+  position: relative;
+  width: 100%;
+  min-height: 78px;
+  display: grid;
+  align-items: center;
+  gap: 11px;
+  border: 1px solid rgba(19, 73, 40, .1);
+  border-radius: 16px;
+  background: #fff;
+  padding: 12px 36px 12px 12px;
+  color: #0b321d;
+  text-align: left;
+  box-shadow: 0 7px 20px rgba(16, 50, 28, .06);
+}
+.manualChoice { grid-template-columns: 40px minmax(0, 1fr); }
+.choiceMark { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; background: #e7f2e6; color: #176039; font-size: 12px; font-weight: 950; }
+.manualChoice > span:nth-child(2) { display: grid; gap: 4px; }
+.roundChoices strong { font-size: 11px; letter-spacing: .25px; }
+.roundChoices button > small, .manualChoice small { color: #547060; font-size: 10px; line-height: 1.35; }
+.aiChoice { grid-template-columns: minmax(0, 1fr); }
+.aiChoiceLabel { color: #174a2c; font-size: 9px; letter-spacing: .75px; }
+.aiChoice > small { display: block; max-width: 255px; margin-top: -5px; }
+.choiceChevron { position: absolute; top: 50%; right: 13px; color: #1b6b40; font-size: 25px; font-weight: 500; line-height: 1; transform: translateY(-50%); }
+
 @media (min-width: 701px) {
   .home { margin-top: -14px; margin-right: auto; margin-left: auto; border-radius: 0 0 30px 30px; }
   .heroCopy { top: 138px; }
   .friendScript { top: 300px; right: 50px; font-size: 27px; }
-  .ballButton { width: 180px; height: 180px; }
-  .ballLogoCrop { top: 28px; left: 23px; width: 136px; height: 144px; }
-  .ballLogo { top: -28px; width: 270px; }
-  .playCircle { top: 76px; left: 72px; width: 38px; height: 38px; }
-  .aiButton { right: 13%; height: 62px; }
-  .aiBrand { font-size: 19px; }
+  .ballButton { width: 165px; height: 165px; }
+  .ballLogoFull { top: 8px; width: 158px; }
+  .playCircle { top: 58px; left: 66px; width: 34px; height: 34px; }
   .quickCard { min-height: 110px; }
   .promoCard { min-height: 132px; }
 }
@@ -259,10 +296,9 @@
   .header { right: 17px; left: 17px; }
   .heroCopy { top: 99px; left: 24px; }
   .heroCopy h1 { font-size: 40px; }
-  .ballButton { top: 48%; }
+  .ballButton { top: 64%; }
   .friendScript { top: 205px; right: 14px; font-size: 17px; }
-  .aiButton { right: 11.5%; width: 55%; }
-  .activeRound { bottom: 75px; left: 14px; max-width: 158px; }
+  .activeRound { bottom: 20px; left: 14px; max-width: 175px; }
 }
 
 @media (max-width: 370px) {
@@ -280,4 +316,4 @@
 }
 
 @media (prefers-reduced-motion: reduce) { .home *, .home *::before, .home *::after { scroll-behavior: auto !important; transition: none !important; } }
-@media (forced-colors: active) { .heroShade, .promoShade { display: none; } .heroCopy, .header, .friendScript { color: CanvasText; } .quickCard, .moreGrid button, .aiButton { border: 1px solid CanvasText; } }
+@media (forced-colors: active) { .heroShade, .promoShade { display: none; } .heroCopy, .header, .friendScript { color: CanvasText; } .quickCard, .moreGrid button, .roundChoices > button { border: 1px solid CanvasText; } }

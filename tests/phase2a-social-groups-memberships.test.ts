@@ -129,7 +129,8 @@ test("Social UI, server search, memberships and Home V2 remain reachable", () =>
   assert.doesNotMatch(search, /handicap|club_name/);
   assert.match(membership, /BETA PRO/);
   assert.match(home, /data-home-version="approved-golf-home-v2"/);
-  assert.match(home, /Configurar ronda manualmente/);
+  assert.match(home, /CONFIGURAR MANUALMENTE/);
+  assert.match(home, /ARMAR CON BACKYARD AI/);
   assert.match(home, /CONTINUAR RONDA/);
   assert.match(home, /Más de The Backyard/);
   assert.doesNotMatch(home, /CONFIGURAR CON BACKYARD AI/);

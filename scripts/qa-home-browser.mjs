@@ -394,7 +394,7 @@ function authenticatedActiveRoundFixtureSource() {
 }
 
 async function qaState(client, width, state, options) {
-  const viewportHeight = width >= 430 ? 932 : 844;
+  const viewportHeight = options.viewportHeight ?? (width >= 430 ? 932 : 844);
   const { browserContextId } = await client.send("Target.createBrowserContext");
   const { targetId } = await client.send("Target.createTarget", { url: "about:blank", browserContextId });
   const { sessionId } = await client.send("Target.attachToTarget", { targetId, flatten: true });
@@ -449,6 +449,10 @@ async function qaState(client, width, state, options) {
   const metrics = await assertNoHorizontalOverflow(client, sessionId, width, state);
   const destination = path.join(outputDirectory, options.filename(width));
   await screenshot(client, sessionId, destination, Boolean(options.fullPage));
+  if (options.afterCapture) {
+    await evaluate(client, sessionId, options.afterCapture);
+    await waitFor(client, sessionId, options.afterCaptureAssertion, `${state} after capture`);
+  }
   assert.deepEqual(errors, [], `Browser console errors at ${width}px: ${errors.join(" | ")}`);
   await client.send("Target.closeTarget", { targetId });
   await client.send("Target.disposeBrowserContext", { browserContextId });
@@ -460,7 +464,7 @@ async function qaViewport(client, width) {
     width,
     states: {
       newAccount: await qaState(client, width, "new account", {
-        assertion: "document.body?.innerText.includes('Buen golf') && document.body?.innerText.includes('PLAY WITH IT') && document.body?.innerText.includes('Reglas de golf') && !document.body?.innerText.includes('Tu última ronda')",
+        assertion: "document.body?.innerText.includes('Buen golf') && Boolean(document.querySelector('[aria-label=\"Elegir cómo armar tu ronda\"]')) && !document.body?.innerText.includes('PLAY WITH IT') && document.body?.innerText.includes('Reglas de golf') && !document.body?.innerText.includes('Tu última ronda')",
         filename: (value) => `home-preview-${value}.png`,
         fullPage: true,
       }),
@@ -483,9 +487,32 @@ async function qaViewport(client, width) {
 async function qaApprovedHome(client, width) {
   return qaState(client, width, "approved Home", {
     fixture: authenticatedFixtureSource(),
-    assertion: "document.body?.innerText.includes('Buen golf') && document.body?.innerText.includes('hoy, Said') && document.body?.innerText.includes('PLAY WITH IT') && document.body?.innerText.includes('Accesos rápidos') && document.body?.innerText.includes('Más de The Backyard')",
+    assertion: "document.body?.innerText.includes('Buen golf') && document.body?.innerText.includes('hoy, Said') && !document.body?.innerText.includes('PLAY WITH IT') && Boolean(document.querySelector('[aria-label=\"Elegir cómo armar tu ronda\"]')) && document.body?.innerText.includes('Accesos rápidos') && document.body?.innerText.includes('Más de The Backyard') && (() => { const nav = document.querySelector('.homeBottomNav'); if (!nav) return false; const rect = nav.getBoundingClientRect(); return getComputedStyle(nav).position === 'fixed' && Math.abs(rect.bottom - window.innerHeight) < 2; })()",
     afterReady: "(() => { Object.defineProperty(Navigator.prototype, 'onLine', { configurable: true, get: () => true }); window.dispatchEvent(new Event('online')); return true; })()",
     filename: (value) => `home-approved-${value}.png`,
+    fullPage: false,
+  });
+}
+
+async function qaApprovedScrolledHome(client, width) {
+  return qaState(client, width, "approved Home scrolled with fixed navigation", {
+    fixture: authenticatedFixtureSource(),
+    viewportHeight: 667,
+    assertion: "(() => { const nav = document.querySelector('.homeBottomNav'); const groups = [...document.querySelectorAll('button')].find((node) => node.textContent?.includes('Grupos') && !node.closest('.homeBottomNav')); if (!nav || !groups) return false; const navRect = nav.getBoundingClientRect(); return window.scrollY > 0 && getComputedStyle(nav).position === 'fixed' && Math.abs(navRect.bottom - window.innerHeight) < 2 && groups.getBoundingClientRect().bottom <= navRect.top + 1; })()",
+    afterReady: "(() => { Object.defineProperty(Navigator.prototype, 'onLine', { configurable: true, get: () => true }); window.dispatchEvent(new Event('online')); window.scrollTo(0, document.documentElement.scrollHeight); return true; })()",
+    filename: (value) => `home-approved-scrolled-${value}.png`,
+    fullPage: false,
+  });
+}
+
+async function qaRoundChoiceDialog(client, width) {
+  return qaState(client, width, "round setup choice dialog", {
+    fixture: authenticatedFixtureSource(),
+    assertion: "document.querySelector('[role=\"dialog\"]')?.textContent?.includes('¿CÓMO QUIERES ARMAR TU RONDA?') && document.body?.innerText.includes('CONFIGURAR MANUALMENTE') && document.body?.innerText.includes('ARMAR CON BACKYARD AI') && document.body?.innerText.includes('PLAY WITH IT') && Boolean(document.querySelector('[role=\"dialog\"] [aria-label=\"Cerrar\"]'))",
+    afterReady: "(() => { Object.defineProperty(Navigator.prototype, 'onLine', { configurable: true, get: () => true }); window.dispatchEvent(new Event('online')); document.querySelector('[aria-label=\"Elegir cómo armar tu ronda\"]')?.click(); return true; })()",
+    afterCapture: "(() => { document.querySelector('[role=\"dialog\"] [aria-label=\"Cerrar\"]')?.click(); return true; })()",
+    afterCaptureAssertion: "!document.querySelector('[role=\"dialog\"]')",
+    filename: (value) => `home-round-choice-${value}.png`,
     fullPage: false,
   });
 }
@@ -548,7 +575,7 @@ async function qaAuthenticatedFlows(client, width) {
   };
 
   try {
-    await waitFor(client, sessionId, "document.body?.innerText.includes('Said') && document.body?.innerText.includes('PLAY WITH IT')", "authenticated identity and approved actions");
+    await waitFor(client, sessionId, "document.body?.innerText.includes('Said') && Boolean(document.querySelector('[aria-label=\"Elegir cómo armar tu ronda\"]')) && !document.body?.innerText.includes('PLAY WITH IT')", "authenticated identity and approved action");
     const navLabels = await evaluate(client, sessionId, "[...document.querySelectorAll('.betaBottomNav .betaNavLabel')].map((node) => node.textContent?.trim())");
     assert.deepEqual(navLabels, ["Inicio", "Social", "Más", "Perfil"], "Bottom navigation does not match the approved four destinations.");
     const homeDestination = path.join(outputDirectory, `phase2-home-auth-${width}.png`);
@@ -568,7 +595,9 @@ async function qaAuthenticatedFlows(client, width) {
     await waitFor(client, sessionId, "document.body?.innerText.includes('Cuenta y privacidad') && document.body?.innerText.includes('Cerrar sesión')", "settings screen");
     await returnHome("settings");
 
-    await clickContaining(client, sessionId, "PLAY WITH IT");
+    await clickAriaLabel(client, sessionId, "Elegir cómo armar tu ronda");
+    await waitFor(client, sessionId, "document.querySelector('[role=\"dialog\"]')?.textContent?.includes('ARMAR CON BACKYARD AI')", "round choice dialog");
+    await clickContaining(client, sessionId, "ARMAR CON BACKYARD AI");
     await waitFor(client, sessionId, "document.body?.innerText.includes('Dime cómo juegan.')", "Backyard AI round setup");
     await capture(`master-round-ai-${width}.png`);
     await clickText(client, sessionId, "Cancelar");
@@ -687,7 +716,9 @@ async function qaAuthenticatedFlows(client, width) {
 
     await clickAriaLabel(client, sessionId, "Inicio");
     await waitFor(client, sessionId, "document.querySelector('[data-home-version=\"approved-golf-home-v2\"]') !== null", "Home before round setup");
-    await clickAriaLabel(client, sessionId, "Configurar ronda manualmente");
+    await clickAriaLabel(client, sessionId, "Elegir cómo armar tu ronda");
+    await waitFor(client, sessionId, "document.querySelector('[role=\"dialog\"]')?.textContent?.includes('CONFIGURAR MANUALMENTE')", "round choice dialog before manual setup");
+    await clickContaining(client, sessionId, "CONFIGURAR MANUALMENTE");
     await waitFor(client, sessionId, "document.body?.innerText.includes('1. Campo') && document.body?.innerText.includes('FALTA COMPLETAR')", "round setup");
     await capture(`master-round-field-nearby-${width}.png`);
     await scrollTextIntoView(client, sessionId, "FALTA COMPLETAR");
@@ -792,6 +823,8 @@ try {
   const results = [];
   if (scenario === "all") for (const width of widths) results.push(await qaViewport(client, width));
   if (scenario === "home") for (const width of widths) results.push(await qaApprovedHome(client, width));
+  const approvedScrolled = scenario === "home" ? await qaApprovedScrolledHome(client, 390) : null;
+  const roundChoice = scenario === "home" ? await qaRoundChoiceDialog(client, 390) : null;
   const approvedActiveRound = scenario === "home" ? await qaApprovedActiveHome(client, 390) : null;
   const authenticated = scenario === "all" || scenario === "authenticated" ? await qaAuthenticatedFlows(client, 390) : null;
   const history = scenario === "all" ? await qaHistoryScreen(client, 390) : null;
@@ -804,7 +837,7 @@ try {
     await qaAnimalGameScreen(client, 390, "all-animals", ["vipers", "camels", "fish"]),
   ] : null;
   client.close();
-  console.log(JSON.stringify({ origin, status: "PASS", results, approvedActiveRound, authenticated, history, activeRound, gameScreens }, null, 2));
+  console.log(JSON.stringify({ origin, status: "PASS", results, approvedScrolled, roundChoice, approvedActiveRound, authenticated, history, activeRound, gameScreens }, null, 2));
 } finally {
   if (chrome?.exitCode === null) {
     chrome.kill();

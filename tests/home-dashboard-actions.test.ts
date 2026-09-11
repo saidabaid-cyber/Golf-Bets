@@ -5,14 +5,21 @@ import test from "node:test";
 const source = readFileSync("app/components/home-dashboard.tsx", "utf8");
 const bottomNav = readFileSync("lib/app-navigation.ts", "utf8");
 const bottomNavComponent = readFileSync("app/components/app-bottom-nav.tsx", "utf8");
+const homeStyles = readFileSync("app/components/home-dashboard-clean.module.css", "utf8");
+const globalStyles = readFileSync("app/globals.css", "utf8");
 const moreHub = readFileSync("app/components/more-hub.tsx", "utf8");
 
-test("approved Home separates the manual ball from the AI action", () => {
+test("approved Home uses one ball action and offers manual or AI setup in a closable choice dialog", () => {
   assert.match(source, /data-home-version="approved-golf-home-v2"/);
-  assert.match(source, /const playAction = activeRound \? onContinueRound : onNewRound/);
-  assert.match(source, /aria-label=\{activeRound \? "Continuar ronda" : "Configurar ronda manualmente"\}/);
+  assert.match(source, /const playAction = activeRound \? onContinueRound : \(\) => setRoundChoiceOpen\(true\)/);
+  assert.match(source, /aria-label=\{activeRound \? "Continuar ronda" : "Elegir cómo armar tu ronda"\}/);
   assert.match(source, /<BackyardBallAction activeRound=\{activeRound\} onClick=\{playAction\} \/>/);
-  assert.match(source, /onClick=\{onAiRound\}/);
+  assert.match(source, /<ModalShell open=\{roundChoiceOpen\}/);
+  assert.match(source, /CONFIGURAR MANUALMENTE/);
+  assert.match(source, /ARMAR CON BACKYARD AI/);
+  assert.match(source, /chooseRoundSetup\("manual"\)/);
+  assert.match(source, /chooseRoundSetup\("ai"\)/);
+  assert.doesNotMatch(source, /className=\{styles\.aiButton\}/);
   assert.match(source, /THE BACKYARD/);
   assert.match(source, /PLAY WITH IT/);
 });
@@ -60,6 +67,9 @@ test("bottom navigation is exactly Inicio, Social, Más and Perfil", () => {
   assert.match(bottomNavComponent, /aria-label=\{label\}/);
   assert.match(bottomNavComponent, /betaNavLabel">\{label\}/);
   assert.doesNotMatch(bottomNavComponent, /label === "Perfil" \? "Cuenta"/);
+  assert.match(globalStyles, /\.bottomNav\.homeBottomNav\{[^}]*bottom:0[^}]*left:0/);
+  assert.match(globalStyles, /\.bottomNav\.homeBottomNav\{[^}]*safe-area-inset-bottom/);
+  assert.match(homeStyles, /\.content \{[^}]*padding:[^}]*safe-area-inset-bottom/);
 });
 
 test("Más is a real scalable tool container", () => {

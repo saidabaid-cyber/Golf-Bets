@@ -1,7 +1,9 @@
 "use client";
 
 import Image from "next/image";
+import { useState } from "react";
 import type { GolfInsights } from "../../lib/golf-insights";
+import { ModalShell } from "./modal-shell";
 import { ProfileAvatarMedia } from "./profile-avatar-media";
 import styles from "./home-dashboard-clean.module.css";
 
@@ -72,13 +74,20 @@ function BackyardBallAction({ activeRound, onClick }: { activeRound?: ActiveRoun
     type="button"
     className={styles.ballButton}
     onClick={onClick}
-    aria-label={activeRound ? "Continuar ronda" : "Configurar ronda manualmente"}
+    aria-label={activeRound ? "Continuar ronda" : "Elegir cómo armar tu ronda"}
   >
-    <span className={styles.ballLogoCrop} aria-hidden="true">
+    <span className={styles.ballLogoFull} aria-hidden="true">
       <Image className={styles.ballLogo} src="/brand/the-backyard-logo.svg" alt="" width={763} height={631} preload />
     </span>
     <span className={styles.playCircle} aria-hidden="true"><span /></span>
   </button>;
+}
+
+function BackyardAiIdentity() {
+  return <span className={styles.aiIdentity} aria-hidden="true">
+    <span className={styles.aiBrand}>THE BACKYARD</span><span className={styles.aiBadge}>IA</span>
+    <span className={styles.aiPlay}><i />PLAY WITH IT<i /></span>
+  </span>;
 }
 
 function QuickCard({ icon, title, copy, onClick }: { icon: "stats" | "history" | "rules"; title: string; copy: string; onClick: () => void }) {
@@ -99,9 +108,15 @@ export function HomeDashboard({
   const initial = firstName[0]?.toLocaleUpperCase("es-MX") || "G";
   const hasScoringInsight = insights.scoredRounds > 0 && typeof insights.averageScore === "number" && Number.isFinite(insights.averageScore);
   const hasBalance = typeof insights.betBalance === "number" && Number.isFinite(insights.betBalance);
-  const playAction = activeRound ? onContinueRound : onNewRound;
+  const [roundChoiceOpen, setRoundChoiceOpen] = useState(false);
+  const playAction = activeRound ? onContinueRound : () => setRoundChoiceOpen(true);
+  const chooseRoundSetup = (mode: "manual" | "ai") => {
+    setRoundChoiceOpen(false);
+    if (mode === "manual") onNewRound();
+    else onAiRound();
+  };
 
-  return <section className={styles.home} aria-labelledby="approved-home-title" data-home-version="approved-golf-home-v2">
+  return <><section className={styles.home} aria-labelledby="approved-home-title" data-home-version="approved-golf-home-v2">
     <section className={styles.hero} aria-label={activeRound ? "Ronda activa" : "Jugar con The Backyard"}>
       <Image className={styles.heroPhoto} src="/brand/home-hero-sunrise.jpg" alt="Campo de golf al amanecer" fill sizes="(max-width: 760px) 100vw, 760px" preload />
       <span className={styles.heroShade} aria-hidden="true" />
@@ -132,10 +147,6 @@ export function HomeDashboard({
         <strong>CONTINUAR RONDA</strong>
       </button>}
 
-      <button type="button" className={styles.aiButton} onClick={onAiRound} aria-label="Armar ronda con The Backyard IA">
-        <span className={styles.aiBrand}>THE BACKYARD</span><span className={styles.aiBadge}>IA</span>
-        <span className={styles.aiPlay}><i />PLAY WITH IT<i /></span>
-      </button>
       <span className={styles.heroFade} aria-hidden="true" />
     </section>
 
@@ -172,5 +183,25 @@ export function HomeDashboard({
         </div>
       </section>
     </div>
-  </section>;
+  </section>
+
+  <ModalShell open={roundChoiceOpen} onClose={() => setRoundChoiceOpen(false)} labelledBy="round-choice-title" className={styles.roundChoiceDialog}>
+    <header className={styles.roundChoiceHeader}>
+      <small>JUGAR</small>
+      <h2 id="round-choice-title">¿CÓMO QUIERES ARMAR TU RONDA?</h2>
+    </header>
+    <div className={styles.roundChoices}>
+      <button type="button" className={styles.manualChoice} onClick={() => chooseRoundSetup("manual")}>
+        <span className={styles.choiceMark} aria-hidden="true">01</span>
+        <span><strong>CONFIGURAR MANUALMENTE</strong><small>Arma tu ronda paso a paso.</small></span>
+        <span className={styles.choiceChevron} aria-hidden="true">›</span>
+      </button>
+      <button type="button" className={styles.aiChoice} onClick={() => chooseRoundSetup("ai")}>
+        <strong className={styles.aiChoiceLabel}>ARMAR CON BACKYARD AI</strong>
+        <BackyardAiIdentity />
+        <small>Dinos cómo quieren jugar y Backyard AI la configura.</small>
+        <span className={styles.choiceChevron} aria-hidden="true">›</span>
+      </button>
+    </div>
+  </ModalShell></>;
 }
