@@ -42,27 +42,27 @@ function round(overrides: Partial<RoundSnapshot> = {}): RoundSnapshot {
   };
 }
 
-test("the primary mobile navigation has five stable product areas", () => {
+test("the approved primary mobile navigation has four stable product areas", () => {
   assert.deepEqual(BOTTOM_NAV_TARGETS, {
     Inicio: "welcome",
-    Jugar: "play",
-    Grupos: "groups",
     Social: "social",
+    Más: "more",
     Perfil: "profile",
   });
 
   const expectations: Array<[AppTab, ReturnType<typeof primarySectionForTab>]> = [
     ["welcome", "Inicio"],
-    ["play", "Jugar"],
-    ["setup", "Jugar"],
-    ["round", "Jugar"],
-    ["results", "Jugar"],
-    ["history", "Jugar"],
-    ["balances", "Jugar"],
-    ["courseLibrary", "Jugar"],
-    ["rules", "Jugar"],
-    ["groups", "Grupos"],
+    ["play", "Inicio"],
+    ["setup", "Inicio"],
+    ["round", "Inicio"],
+    ["results", "Inicio"],
+    ["history", "Inicio"],
+    ["balances", "Inicio"],
+    ["courseLibrary", "Más"],
+    ["rules", "Inicio"],
+    ["groups", "Social"],
     ["social", "Social"],
+    ["more", "Más"],
     ["profile", "Perfil"],
     ["account", "Perfil"],
     ["stats", "Perfil"],
@@ -86,7 +86,7 @@ test("an invalid active bet draft can only be opened in setup, without blocking 
     assert.equal(activeBetSafeDestination(tab, true), "setup");
     assert.equal(activeBetSafeDestination(tab, false), tab);
   }
-  for (const tab of ["welcome", "play", "personals", "history", "historyDetail", "balances", "stats", "groups", "social", "profile"] as AppTab[]) {
+  for (const tab of ["welcome", "more", "play", "personals", "history", "historyDetail", "balances", "stats", "groups", "social", "profile"] as AppTab[]) {
     assert.equal(activeBetSafeDestination(tab, true), tab);
   }
 });

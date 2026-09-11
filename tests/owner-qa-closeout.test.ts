@@ -39,14 +39,15 @@ test("los wizards reinician su propio scroll y conservan el contexto detrás", (
   assert.match(onboarding, /titleRef\.current\?\.focus\(\{ preventScroll: true \}\)/);
 });
 
-test("Home aplicada mantiene una única acción principal y sus contratos de navegación", () => {
+test("Home aprobada mantiene acciones manual y AI separadas y sus contratos reales", () => {
   const home = read("app/components/home-dashboard.tsx");
-  assert.match(home, /data-home-version="play-first-v2"/);
-  assert.match(home, /activeRound \? onContinueRound : onNewRound/);
+  assert.match(home, /data-home-version="approved-golf-home-v1"/);
+  assert.match(home, /const playAction = activeRound \? onContinueRound : onNewRound/);
   assert.match(home, /onOpenGroups/);
   assert.match(home, /onOpenHistory/);
   assert.match(home, /onOpenStats/);
-  assert.match(home, /onOpenCourses/);
+  assert.match(home, /onOpenSettings/);
+  assert.match(home, /onOpenNotifications/);
   assert.equal((home.match(/onAiRound/g) || []).length, 3, "prop, destructuring y una única acción AI esperadas");
   assert.doesNotMatch(home, /estadísticas vacías|primera ronda/i);
 });
