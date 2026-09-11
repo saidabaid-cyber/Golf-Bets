@@ -66,6 +66,10 @@ class CdpClient {
       const listeners = this.events.get(`${message.sessionId || "browser"}:${message.method}`) || [];
       for (const listener of listeners) listener(message.params || {});
     });
+    this.socket.addEventListener("close", () => {
+      for (const pending of this.pending.values()) pending.reject(new Error("Chrome DevTools connection closed."));
+      this.pending.clear();
+    });
   }
 
   async send(method, params = {}, sessionId) {
@@ -238,6 +242,7 @@ function guestFixtureSource(stateSource = "") {
     { userId: "guest", type: "privacy", documentVersion: "2026-09-08-v6+sha256-c441091d44899e8b", acceptedAt, locale: "es-MX" },
     { userId: "guest", type: "rules_referee", documentVersion: "2026-09-01-v1", acceptedAt, locale: "es-MX" },
     { userId: "guest", type: "age_confirmation", documentVersion: "2026-09-01-v1", acceptedAt, locale: "es-MX" },
+    { userId: "guest", type: "betting_financial", documentVersion: "2026-09-08-v3+sha256-5376b615664b10d9:express-betting-data", acceptedAt, locale: "es-MX" },
   ];
   return `
     localStorage.setItem('backyard-account-mode-v1', 'guest');
@@ -269,6 +274,34 @@ const activeRoundFixture = guestFixtureSource(`(() => {
   }));
 })();`);
 
+function animalRoundFixture(enabledAnimals) {
+  const enabled = new Set(enabledAnimals);
+  return guestFixtureSource(`(() => {
+    const players = [{ id: 'qa-owner', name: 'Golfista', handicap: 8 }, { id: 'qa-bruno', name: 'Bruno', handicap: 12 }];
+    const ids = players.map((player) => player.id);
+    const holes = Array.from({ length: 18 }, (_, index) => ({ number: index + 1, par: index === 1 ? 3 : 4, strokeIndex: index + 1, yards: index === 0 ? 421 : 165 }));
+    const counter = (enabled) => ({ enabled, value: 100, secondNinePressed: false, secondNineMultiplier: 2, settlementMode: 'halves', participantIds: ids });
+    localStorage.setItem('golfbets-draft-v1', JSON.stringify({
+      version: 11,
+      roundId: 'qa-game-${[...enabled].join("-") || "none"}',
+      roundDate: '2026-09-11',
+      startedAt: '2026-09-11T15:00:00.000Z',
+      players,
+      ownerId: 'qa-owner',
+      startHole: 1,
+      roundHoles: 18,
+      course: { id: 'qa-course', name: 'La Vista', teeName: 'Blancas', rating: 72, slope: 113, holes },
+      courseSelected: true,
+      scores: {}, scoreEdits: {}, putts: {}, advancedStats: {}, currentIndex: 0,
+      bets: {
+        vipers: counter(${enabled.has("vipers")}),
+        camels: counter(${enabled.has("camels")}),
+        fish: counter(${enabled.has("fish")})
+      }
+    }));
+  })();`);
+}
+
 const historyFixture = guestFixtureSource(`(() => {
   const holes = Array.from({ length: 18 }, (_, index) => ({ number: index + 1, par: 4, strokeIndex: index + 1 }));
   const order = Array.from({ length: 9 }, (_, index) => index + 1);
@@ -292,6 +325,7 @@ function authenticatedFixtureSource() {
     { userId, type: "privacy", documentVersion: "2026-09-08-v6+sha256-c441091d44899e8b", acceptedAt, locale: "es-MX" },
     { userId, type: "rules_referee", documentVersion: "2026-09-01-v1", acceptedAt, locale: "es-MX" },
     { userId, type: "age_confirmation", documentVersion: "2026-09-01-v1", acceptedAt, locale: "es-MX" },
+    { userId, type: "betting_financial", documentVersion: "2026-09-08-v3+sha256-5376b615664b10d9:express-betting-data", acceptedAt, locale: "es-MX" },
   ];
   const profile = {
     userId,
@@ -487,6 +521,7 @@ async function qaAuthenticatedFlows(client, width) {
 
     await clickContaining(client, sessionId, "PLAY WITH IT");
     await waitFor(client, sessionId, "document.body?.innerText.includes('Dime cómo juegan.')", "Backyard AI round setup");
+    await capture(`master-round-ai-${width}.png`);
     await clickText(client, sessionId, "Cancelar");
     await waitFor(client, sessionId, "document.querySelector('[data-home-version=\"approved-golf-home-v1\"]') !== null", "Home after AI setup");
 
@@ -604,10 +639,14 @@ async function qaAuthenticatedFlows(client, width) {
     await clickAriaLabel(client, sessionId, "Inicio");
     await waitFor(client, sessionId, "document.querySelector('[data-home-version=\"approved-golf-home-v1\"]') !== null", "Home before round setup");
     await clickAriaLabel(client, sessionId, "Configurar ronda manualmente");
-    await waitFor(client, sessionId, "document.body?.innerText.includes('1. Campo y tees por jugador')", "round setup");
+    await waitFor(client, sessionId, "document.body?.innerText.includes('1. Campo') && document.body?.innerText.includes('FALTA COMPLETAR')", "round setup");
+    await scrollTextIntoView(client, sessionId, "FALTA COMPLETAR");
+    await capture(`master-round-manual-preflight-${width}.png`);
+    await scrollTextIntoView(client, sessionId, "1. Campo");
     await fillLabel(client, sessionId, "Campo", "La Vi");
     await waitFor(client, sessionId, "[...document.querySelectorAll('[role=\"option\"]')].some((node) => node.textContent?.includes('La Vista'))", "La Vista course result");
     await capture(`phase2-course-search-${width}.png`);
+    assert.equal(await evaluate(client, sessionId, "Boolean(document.querySelector('[aria-label=\"Buscar campos cercanos con mi ubicación\"]'))"), true, "Nearby course action is missing.");
 
     const overflow = await evaluate(client, sessionId, "document.documentElement.scrollWidth > document.documentElement.clientWidth + 1");
     assert.equal(overflow, false, "Authenticated flow has horizontal overflow.");
@@ -638,9 +677,30 @@ async function qaActiveRoundAction(client, width) {
   const { sessionId, errors } = session;
   try {
     await clickAriaLabel(client, sessionId, "Continuar ronda");
-    await waitFor(client, sessionId, "document.body?.innerText.includes('Captura del hoyo') && document.body?.innerText.includes('Hoyo 3')", "active round continuation");
+    await waitFor(client, sessionId, "document.querySelector('[data-game-screen=\"approved-compact-v1\"]') !== null && document.body?.innerText.includes('Hoyo 3')", "active round continuation");
     assert.deepEqual(errors, [], `Active-round continuation console errors: ${errors.join(" | ")}`);
     return { width, destination: "round-hole-3", consoleErrors: errors };
+  } finally {
+    await closeMobileSession(client, session);
+  }
+}
+
+async function qaAnimalGameScreen(client, width, label, enabledAnimals) {
+  const session = await openMobileSession(client, width, animalRoundFixture(enabledAnimals));
+  const { sessionId, errors } = session;
+  try {
+    await clickAriaLabel(client, sessionId, "Continuar ronda");
+    await waitFor(client, sessionId, "document.querySelector('[data-game-screen=\"approved-compact-v1\"]') !== null", `${label} game screen`);
+    const animalText = await evaluate(client, sessionId, "document.querySelector('[data-game-screen=\"approved-compact-v1\"]')?.innerText || ''");
+    assert.equal(animalText.includes("🐍"), enabledAnimals.includes("vipers"), `${label}: snake visibility mismatch.`);
+    assert.equal(animalText.includes("🐫"), enabledAnimals.includes("camels"), `${label}: camel visibility mismatch.`);
+    assert.equal(animalText.includes("🐟"), enabledAnimals.includes("fish"), `${label}: fish visibility mismatch.`);
+    assert.equal(animalText.includes("Penalty / Hazard"), true, `${label}: canonical penalty control missing.`);
+    assert.equal(await evaluate(client, sessionId, "[...document.querySelectorAll('[role=\"group\"]')].some((node) => node.getAttribute('aria-label')?.startsWith('OB '))"), true, `${label}: independent OB counter missing.`);
+    const destination = path.join(outputDirectory, `master-game-${label}-${width}.png`);
+    await screenshot(client, sessionId, destination, true);
+    assert.deepEqual(errors, [], `${label} game console errors: ${errors.join(" | ")}`);
+    return { width, label, screenshot: destination, consoleErrors: errors };
   } finally {
     await closeMobileSession(client, session);
   }
@@ -649,6 +709,7 @@ async function qaActiveRoundAction(client, width) {
 await mkdir(outputDirectory, { recursive: true });
 const userDataDirectory = await mkdtemp(path.join(os.tmpdir(), "backyard-home-qa-"));
 const port = await unusedPort();
+const processKeepAlive = setInterval(() => {}, 1_000);
 let chrome;
 try {
   const chromePath = chromeCandidates[0];
@@ -656,12 +717,24 @@ try {
   chrome = spawn(chromePath, [
     "--headless=new",
     "--disable-gpu",
+    "--no-sandbox",
+    "--disable-breakpad",
+    "--disable-crash-reporter",
     "--no-first-run",
     "--no-default-browser-check",
+    "--remote-allow-origins=*",
+    `--crash-dumps-dir=${userDataDirectory}`,
     `--remote-debugging-port=${port}`,
     `--user-data-dir=${userDataDirectory}`,
     "about:blank",
-  ], { stdio: "ignore", windowsHide: true });
+  ], { stdio: ["ignore", "ignore", "pipe"], windowsHide: true });
+  let chromeStderr = "";
+  chrome.stderr?.on("data", (chunk) => {
+    chromeStderr += String(chunk);
+  });
+  chrome.once("exit", (code) => {
+    if (code && chromeStderr.trim()) process.stderr.write(chromeStderr);
+  });
   const version = await waitForJson(`http://127.0.0.1:${port}/json/version`);
   const client = new CdpClient(version.webSocketDebuggerUrl);
   const results = [];
@@ -669,8 +742,15 @@ try {
   const authenticated = scenario === "all" || scenario === "authenticated" ? await qaAuthenticatedFlows(client, 390) : null;
   const history = scenario === "all" ? await qaHistoryScreen(client, 390) : null;
   const activeRound = scenario === "all" ? await qaActiveRoundAction(client, 390) : null;
+  const gameScreens = scenario === "all" ? [
+    await qaAnimalGameScreen(client, 390, "none", []),
+    await qaAnimalGameScreen(client, 390, "vipers", ["vipers"]),
+    await qaAnimalGameScreen(client, 390, "camels", ["camels"]),
+    await qaAnimalGameScreen(client, 390, "fish", ["fish"]),
+    await qaAnimalGameScreen(client, 390, "all-animals", ["vipers", "camels", "fish"]),
+  ] : null;
   client.close();
-  console.log(JSON.stringify({ origin, status: "PASS", results, authenticated, history, activeRound }, null, 2));
+  console.log(JSON.stringify({ origin, status: "PASS", results, authenticated, history, activeRound, gameScreens }, null, 2));
 } finally {
   if (chrome?.exitCode === null) {
     chrome.kill();
@@ -680,4 +760,5 @@ try {
     ]);
   }
   await rm(userDataDirectory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+  clearInterval(processKeepAlive);
 }

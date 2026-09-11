@@ -7,6 +7,7 @@ import { ModalCloseButton } from "../modal-shell";
 import {
   acceptRemoteAiProcessingConsent,
   beginAiProcessingConsentMutation,
+  RemoteAiProcessingConsentError,
   resolveAuthoritativeAiProcessingConsent,
   revokeRemoteAiProcessingConsent,
 } from "../../../lib/backyard-ai/consent-client";
@@ -87,6 +88,24 @@ function ephemeralConsent(
     revokedAt: null,
     scope,
   };
+}
+
+export function aiProcessingConsentFailureMessage(reason: unknown, authenticated: boolean) {
+  if (reason instanceof RemoteAiProcessingConsentError) {
+    if (reason.code === "consent_environment_blocked") {
+      return "Este Preview no tiene un registro de autorizaciones aislado conectado. No se envió ningún contenido a la IA.";
+    }
+    if (reason.code === "consent_store_unavailable" || reason.code === "missing_config") {
+      return "El registro seguro de autorizaciones no está disponible en este Preview. No se envió ningún contenido a la IA.";
+    }
+    if (reason.status === 401 || reason.code === "auth_required") {
+      return "Tu sesión terminó antes de guardar la autorización. Vuelve a iniciar sesión; no se envió ningún contenido a la IA.";
+    }
+    return `${reason.message} No se envió ningún contenido a la IA.`;
+  }
+  return authenticated
+    ? "No pude guardar la autorización en tu cuenta. No se envió ningún contenido; inténtalo de nuevo."
+    : "No pude guardar la autorización en este dispositivo. Revisa el almacenamiento privado del navegador; no se envió ningún contenido.";
 }
 
 export type AiProcessingConsentPromptProps = {
@@ -212,9 +231,7 @@ export function AiProcessingConsentPrompt({ userId, accessToken, requiresRemoteC
       acceptedCallback.current(local.consent, { accountPersisted: false, localPersisted: local.persisted });
     } catch (reason: unknown) {
       if (!isCurrent() || (reason instanceof DOMException && reason.name === "AbortError")) return;
-      setError(accessToken
-        ? "No pude guardar la autorización en tu cuenta. No se envió ningún contenido; inténtalo de nuevo."
-        : "No pude guardar la autorización en este dispositivo. Revisa el almacenamiento privado del navegador e inténtalo de nuevo.");
+      setError(aiProcessingConsentFailureMessage(reason, Boolean(accessToken)));
       setBusy(false);
     } finally {
       if (acceptAbort.current === controller) acceptAbort.current = null;
