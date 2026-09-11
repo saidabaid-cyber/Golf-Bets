@@ -135,3 +135,12 @@ The resulting branch Preview at `https://golf-bets-git-phase2-full-platform-saha
 - Wizard/modal steps reset their own scroll, avoid keyboard focus jumps and restore the opening context. Eleven dialog-bearing components were audited for an explicit close action.
 - Detailed acceptance evidence and remaining gates are maintained in `docs/OWNER_QA_CHECKLIST.md`.
 - Local quality gate after the closeout implementation: 1,391/1,391 npm tests passed with no failures or skips; lint passed; Next 16.3.3 production build passed with 28 generated pages.
+
+### Delivered Home Preview evidence
+
+- Preview deployment: GitHub `6388079614`, environment `Preview`, production flag `false`, SHA `8a023491d0624b71329b9c11c98ea75aa8177afb`.
+- Immutable URL: `https://golf-bets-9y6y7g80q-saha8.vercel.app`.
+- Browser QA: isolated synthetic guest contexts for new account, active setup and completed history at 390 and 430 CSS px. All six states hydrated, matched their context CTA, had no horizontal overflow and produced no console errors.
+- Runtime contracts: 910D3, Stealth 2 Plus, Nike Vapor Fly, Pro V1 2025, VENTUS Blue VeloCore+ and PING Alta CB searches returned results from `backyard-equipment-seed`; the Driver facet returned 13 brands; La Vista returned five internal course/tee matches; Round Setup and Card AI reported `enabled=true`, `configured=true`, `state=ready`.
+- Reproducible command: `node scripts/qa-home-browser.mjs <immutable-preview-url> <artifact-directory>`.
+- Screenshots are stored outside the repository in the requested evidence workspace as `home-preview-{390,430}.png`, `home-preview-active-{390,430}.png` and `home-preview-history-{390,430}.png`.

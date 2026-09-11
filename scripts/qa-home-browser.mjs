@@ -134,8 +134,73 @@ async function screenshot(client, sessionId, destination) {
   await writeFile(destination, Buffer.from(result.data, "base64"));
 }
 
-async function qaViewport(client, width) {
-  const { targetId } = await client.send("Target.createTarget", { url: "about:blank" });
+async function assertNoHorizontalOverflow(client, sessionId, width, state) {
+  const metrics = await evaluate(client, sessionId, `(() => ({
+    innerWidth: window.innerWidth,
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+    horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+    homeDashboard: Boolean(document.querySelector('[data-home-version="calm-v1"]')),
+    headings: [...document.querySelectorAll('h1,h2')].map((node) => node.textContent?.trim()).filter(Boolean),
+    primaryLabels: [...document.querySelectorAll('button,a')].map((node) => node.textContent?.replace(/\\s+/g, ' ').trim()).filter(Boolean).slice(0, 40),
+  }))()`);
+  assert.equal(metrics.innerWidth, width, `Viewport override failed at ${width}px (${state}).`);
+  assert.equal(metrics.horizontalOverflow, false, `Horizontal overflow found at ${width}px (${state}).`);
+  assert.equal(metrics.homeDashboard, true, `Home dashboard marker missing at ${width}px (${state}).`);
+  return metrics;
+}
+
+function guestFixtureSource(stateSource = "") {
+  const acceptedAt = "2026-09-11T00:00:00.000Z";
+  const acceptances = [
+    { userId: "guest", type: "terms", documentVersion: "2026-09-08-v2", acceptedAt, locale: "es-MX" },
+    { userId: "guest", type: "privacy", documentVersion: "2026-09-08-v6+sha256-c441091d44899e8b", acceptedAt, locale: "es-MX" },
+    { userId: "guest", type: "rules_referee", documentVersion: "2026-09-01-v1", acceptedAt, locale: "es-MX" },
+    { userId: "guest", type: "age_confirmation", documentVersion: "2026-09-01-v1", acceptedAt, locale: "es-MX" },
+  ];
+  return `
+    localStorage.setItem('backyard-account-mode-v1', 'guest');
+    localStorage.setItem('backyard-local-workspace-owner-v1', 'guest');
+    localStorage.setItem('backyard-legal-acceptances-v1', ${JSON.stringify(JSON.stringify(acceptances))});
+    localStorage.setItem('backyard-betting-consent-prompt-v1:guest:2026-09-08-v3+sha256-5376b615664b10d9:express-betting-data', 'seen');
+    localStorage.setItem('golfbets-draft-v1', 'null');
+    localStorage.setItem('golfbets-history', '[]');
+    ${stateSource}
+  `;
+}
+
+const activeRoundFixture = guestFixtureSource(`localStorage.setItem('golfbets-draft-v1', JSON.stringify({
+  version: 11,
+  roundId: 'qa-active-round',
+  roundDate: '2026-09-11',
+  players: [{ id: 'qa-owner', name: 'Golfista', handicap: 8 }],
+  ownerId: 'qa-owner',
+  startHole: 1,
+  roundHoles: 18,
+  courseSelected: false,
+  scores: {},
+  scoreEdits: {},
+  currentIndex: 0,
+}));`);
+
+const historyFixture = guestFixtureSource(`(() => {
+  const holes = Array.from({ length: 18 }, (_, index) => ({ number: index + 1, par: 4, strokeIndex: index + 1 }));
+  const order = Array.from({ length: 9 }, (_, index) => index + 1);
+  const scores = Object.fromEntries(order.map((hole) => [hole, { 'qa-owner': 4 }]));
+  localStorage.setItem('golfbets-history', JSON.stringify([{
+    id: 'qa-history-round', date: '2026-09-10', courseName: 'La Vista', teeName: 'Blancas',
+    ownerName: 'Golfista', ownerId: 'qa-owner', roundHoles: 9, startHole: 1,
+    lifecycleState: 'completed', betResult: 0, expenses: { caddie: 0, food: 0, drinks: 0, greenFee: 0, cartRental: 0, other: 0 },
+    expenseTotal: 0, netResult: 0, categoryResults: {},
+    players: [{ id: 'qa-owner', name: 'Golfista', handicap: 8 }],
+    courseSnapshot: { id: 'qa-course', name: 'La Vista', teeName: 'Blancas', holes },
+    order, scores, completedAt: '2026-09-10T18:00:00.000Z', updatedAt: '2026-09-10T18:00:00.000Z',
+  }]));
+})();`);
+
+async function qaState(client, width, state, options) {
+  const { browserContextId } = await client.send("Target.createBrowserContext");
+  const { targetId } = await client.send("Target.createTarget", { url: "about:blank", browserContextId });
   const { sessionId } = await client.send("Target.attachToTarget", { targetId, flatten: true });
   await client.send("Page.enable", {}, sessionId);
   await client.send("Runtime.enable", {}, sessionId);
@@ -157,12 +222,17 @@ async function qaViewport(client, width) {
     if (["error", "warning"].includes(event.entry?.level)) errors.push(`${event.entry.level}: ${event.entry.text}`);
   }]);
 
+  if (options.fixture) {
+    await client.send("Page.addScriptToEvaluateOnNewDocument", {
+      source: `try { ${options.fixture} } catch { /* QA fixture storage unavailable. */ }`,
+    }, sessionId);
+  }
+
   const loaded = client.once("Page.loadEventFired", sessionId);
   await client.send("Page.navigate", { url: origin }, sessionId);
   await loaded;
-  await waitFor(client, sessionId, "document.readyState === 'complete' && (document.body?.innerText.includes('Continuar como invitado') || Boolean(document.querySelector('[data-home-version=\"calm-v1\"]'))) ", "hydrated access or Home screen");
-  const alreadyHome = await evaluate(client, sessionId, "Boolean(document.querySelector('[data-home-version=\"calm-v1\"]'))");
-  if (!alreadyHome) {
+  if (!options.fixture) {
+    await waitFor(client, sessionId, "document.readyState === 'complete' && document.body?.innerText.includes('Continuar como invitado')", "hydrated access screen");
     await clickText(client, sessionId, "Continuar como invitado");
     await waitFor(client, sessionId, "document.body?.innerText.includes('Antes de la primera controversia')", "guest consent screen");
     const requiredChecked = await evaluate(client, sessionId, `(() => {
@@ -174,26 +244,37 @@ async function qaViewport(client, width) {
     await clickText(client, sessionId, "Continuar");
   }
   await waitFor(client, sessionId, "document.querySelector('[data-home-version=\"calm-v1\"]') !== null", "guest Home dashboard");
+  await waitFor(client, sessionId, options.assertion, state);
   await delay(500);
-
-  const metrics = await evaluate(client, sessionId, `(() => ({
-    innerWidth: window.innerWidth,
-    clientWidth: document.documentElement.clientWidth,
-    scrollWidth: document.documentElement.scrollWidth,
-    horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
-    homeDashboard: Boolean(document.querySelector('[data-home-version="calm-v1"]')),
-    headings: [...document.querySelectorAll('h1,h2')].map((node) => node.textContent?.trim()).filter(Boolean),
-    primaryLabels: [...document.querySelectorAll('button,a')].map((node) => node.textContent?.replace(/\\s+/g, ' ').trim()).filter(Boolean).slice(0, 40),
-  }))()`);
-  assert.equal(metrics.innerWidth, width, `Viewport override failed at ${width}px.`);
-  assert.equal(metrics.horizontalOverflow, false, `Horizontal overflow found at ${width}px.`);
-  assert.equal(metrics.homeDashboard, true, `Home dashboard marker missing at ${width}px.`);
-  assert.deepEqual(errors, [], `Browser console errors at ${width}px: ${errors.join(" | ")}`);
-
-  const destination = path.join(outputDirectory, `home-preview-${width}.png`);
+  const metrics = await assertNoHorizontalOverflow(client, sessionId, width, state);
+  const destination = path.join(outputDirectory, options.filename(width));
   await screenshot(client, sessionId, destination);
+  assert.deepEqual(errors, [], `Browser console errors at ${width}px: ${errors.join(" | ")}`);
   await client.send("Target.closeTarget", { targetId });
-  return { width, screenshot: destination, metrics, consoleErrors: errors };
+  await client.send("Target.disposeBrowserContext", { browserContextId });
+  return { screenshot: destination, metrics, consoleErrors: errors };
+}
+
+async function qaViewport(client, width) {
+  return {
+    width,
+    states: {
+      newAccount: await qaState(client, width, "new account", {
+        assertion: "document.body?.innerText.includes('Jugar una ronda') && !document.body?.innerText.includes('Tu última ronda')",
+        filename: (value) => `home-preview-${value}.png`,
+      }),
+      activeRound: await qaState(client, width, "active round", {
+        fixture: activeRoundFixture,
+        assertion: "document.body?.innerText.includes('Continuar configuración') && document.body?.innerText.includes('Campo por elegir')",
+        filename: (value) => `home-preview-active-${value}.png`,
+      }),
+      history: await qaState(client, width, "history", {
+        fixture: historyFixture,
+        assertion: "document.body?.innerText.includes('Jugar una ronda') && document.body?.innerText.includes('Tu última ronda') && document.body?.innerText.includes('La Vista')",
+        filename: (value) => `home-preview-history-${value}.png`,
+      }),
+    },
+  };
 }
 
 await mkdir(outputDirectory, { recursive: true });

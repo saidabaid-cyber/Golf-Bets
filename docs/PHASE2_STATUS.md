@@ -36,6 +36,7 @@ Last updated: 2026-09-10 (America/Mexico_City)
 | Delivered Home baseline | `phase2/full-platform` / `a68b1b1a21af7d756c4cb479f7fce1002795bb96` | PASS | Clean synced branch; package SHA-256 `F686C63E5FDA3A3476970274038DD032C8CCD766CFC170AC5C858165371B478A`; 1,379 npm tests, lint and build pass | Apply package with installer-equivalent guards |
 | Delivered Home integration | `phase2/full-platform` / `9a6ca04` | PASS | Delivered Home/CSS/artwork applied without changing callback contracts; package QA 20/20 and Home regression 13/13 pass | Close H02–DB01 |
 | Owner closeout local implementation | `phase2/full-platform` / `6e01a10` | PASS | Full-catalog brand facets, current+historical pickers, unknown-handedness repair, sourced-image contract/fallback, modal/wizard scroll behavior and frozen post-start Course Handicap snapshot; 1,391 npm tests, lint and build pass | Commit evidence, push, Preview and runtime/browser QA |
+| Delivered Home final Preview QA | `phase2/full-platform` / `8a023491d0624b71329b9c11c98ea75aa8177afb` | PASS | GitHub deployment `6388079614`, immutable Preview `golf-bets-9y6y7g80q-saha8.vercel.app`; catalog/current+historical searches, La Vista course search and AI readiness pass. Isolated hydrated Home fixtures for new account, active round and history pass at 390/430 px with no overflow or console errors | Commit reproducible browser evidence; final docs-only redeploy, then Product Owner/device/isolated-DB gates |
 
 ## Migration ledger
 
