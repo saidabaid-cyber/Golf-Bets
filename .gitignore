@@ -10,6 +10,7 @@ rules-source/
 rules-sources/
 brand-source/
 tmp/
+.qa-artifacts/
 
 .vercel
 supabase/.temp/

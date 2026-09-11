@@ -9,6 +9,7 @@ import path from "node:path";
 
 const origin = new URL(process.argv[2] || "http://127.0.0.1:3000").origin;
 const outputDirectory = path.resolve(process.argv[3] || path.join(process.cwd(), ".qa-artifacts"));
+const scenario = process.argv[4] || "all";
 const widths = [390, 430];
 const chromeCandidates = [
   process.env.CHROME_PATH,
@@ -111,7 +112,14 @@ async function waitFor(client, sessionId, expression, label) {
     if (await evaluate(client, sessionId, expression)) return;
     await delay(100);
   }
-  const state = await evaluate(client, sessionId, `({ url: location.href, readyState: document.readyState, text: document.body?.innerText?.slice(0, 500) })`);
+  const state = await evaluate(client, sessionId, `(() => { const text = document.body?.innerText || ''; return {
+    url: location.href,
+    readyState: document.readyState,
+    text: text.slice(0, 900),
+    textTail: text.slice(-900),
+    dialogs: [...document.querySelectorAll('[role="dialog"],[role="alertdialog"]')].map((node) => node.textContent?.slice(0, 300)),
+    equipmentStorage: Array.from({ length: localStorage.length }, (_, index) => [localStorage.key(index), localStorage.getItem(localStorage.key(index))]).filter(([key]) => key?.includes('equipment-profile')).map(([key, value]) => [key, value?.slice(0, 500)]),
+  }; })()`);
   throw new Error(`Timed out waiting for ${label}: ${JSON.stringify(state)}.`);
 }
 
@@ -123,6 +131,57 @@ async function clickText(client, sessionId, text) {
     return true;
   })()`);
   assert.equal(clicked, true, `Missing action: ${text}`);
+}
+
+async function clickContaining(client, sessionId, text, selector = "button, a") {
+  const clicked = await evaluate(client, sessionId, `(() => {
+    const normalize = (value) => value?.replace(/\\s+/g, ' ').trim() || '';
+    const target = [...document.querySelectorAll(${JSON.stringify(selector)})].find((element) => normalize(element.textContent).includes(${JSON.stringify(text)}));
+    if (!target) return false;
+    target.click();
+    return true;
+  })()`);
+  assert.equal(clicked, true, `Missing action containing: ${text}`);
+}
+
+async function clickAriaLabel(client, sessionId, label) {
+  const clicked = await evaluate(client, sessionId, `(() => {
+    const target = [...document.querySelectorAll('[aria-label]')].find((element) => element.getAttribute('aria-label') === ${JSON.stringify(label)});
+    if (!target) return false;
+    target.click();
+    return true;
+  })()`);
+  assert.equal(clicked, true, `Missing aria-label action: ${label}`);
+}
+
+async function fillLabel(client, sessionId, label, value) {
+  const filled = await evaluate(client, sessionId, `(() => {
+    const normalize = (value) => value?.replace(/\\s+/g, ' ').trim() || '';
+    const direct = [...document.querySelectorAll('input,textarea')].find((element) => element.getAttribute('aria-label') === ${JSON.stringify(label)});
+    const labelled = [...document.querySelectorAll('label')].find((element) => normalize(element.textContent) === ${JSON.stringify(label)} || normalize(element.textContent).startsWith(${JSON.stringify(label)}));
+    const linked = labelled?.htmlFor ? document.getElementById(labelled.htmlFor) : null;
+    const target = direct || linked || labelled?.querySelector('input,textarea');
+    if (!target) return false;
+    const prototype = target instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(prototype, 'value').set.call(target, ${JSON.stringify(value)});
+    target.dispatchEvent(new Event('input', { bubbles: true }));
+    target.dispatchEvent(new Event('change', { bubbles: true }));
+    target.focus();
+    return true;
+  })()`);
+  assert.equal(filled, true, `Missing input labelled: ${label}`);
+}
+
+async function scrollTextIntoView(client, sessionId, text) {
+  const scrolled = await evaluate(client, sessionId, `(() => {
+    const normalize = (value) => value?.replace(/\\s+/g, ' ').trim() || '';
+    const target = [...document.querySelectorAll('h1,h2,h3,button,label')].find((element) => normalize(element.textContent).includes(${JSON.stringify(text)}));
+    if (!target) return false;
+    target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' });
+    return true;
+  })()`);
+  assert.equal(scrolled, true, `Missing element to scroll: ${text}`);
+  await delay(150);
 }
 
 async function screenshot(client, sessionId, destination) {
@@ -140,7 +199,7 @@ async function assertNoHorizontalOverflow(client, sessionId, width, state) {
     clientWidth: document.documentElement.clientWidth,
     scrollWidth: document.documentElement.scrollWidth,
     horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
-    homeDashboard: Boolean(document.querySelector('[data-home-version="calm-v1"]')),
+    homeDashboard: Boolean(document.querySelector('[data-home-version="play-first-v2"]')),
     headings: [...document.querySelectorAll('h1,h2')].map((node) => node.textContent?.trim()).filter(Boolean),
     primaryLabels: [...document.querySelectorAll('button,a')].map((node) => node.textContent?.replace(/\\s+/g, ' ').trim()).filter(Boolean).slice(0, 40),
   }))()`);
@@ -198,6 +257,58 @@ const historyFixture = guestFixtureSource(`(() => {
   }]));
 })();`);
 
+function authenticatedFixtureSource() {
+  const userId = "qa-visible-user";
+  const acceptedAt = "2026-09-11T00:00:00.000Z";
+  const acceptances = [
+    { userId, type: "terms", documentVersion: "2026-09-08-v2", acceptedAt, locale: "es-MX" },
+    { userId, type: "privacy", documentVersion: "2026-09-08-v6+sha256-c441091d44899e8b", acceptedAt, locale: "es-MX" },
+    { userId, type: "rules_referee", documentVersion: "2026-09-01-v1", acceptedAt, locale: "es-MX" },
+    { userId, type: "age_confirmation", documentVersion: "2026-09-01-v1", acceptedAt, locale: "es-MX" },
+  ];
+  const profile = {
+    userId,
+    displayName: "Said QA",
+    email: "said.qa@example.test",
+    avatarUrl: "⛳️",
+    defaultHandicap: 8.4,
+    givenName: "Said",
+    familyName: "QA",
+    username: "said_qa",
+    city: "San Andrés Cholula",
+    state: "Puebla",
+    country: "México",
+    homeClub: "La Vista Country Club",
+    homeClubId: "club-la-vista",
+    preferredTee: "Blancas",
+    handedness: "right",
+    typicalScore: 86,
+    driverDistanceYards: 245,
+    improvementGoals: [],
+    primaryGoals: [],
+    primaryGoal: "",
+    targetHandicap: null,
+    planId: "BETA_PRO",
+    ghinLinkStatus: "COMING_SOON",
+    golfProfileUpdatedAt: acceptedAt,
+    bio: "",
+    profileVisibility: "private",
+  };
+  return `
+    Object.defineProperty(Navigator.prototype, 'onLine', { configurable: true, get: () => false });
+    localStorage.setItem('backyard-account-mode-v1', 'authenticated');
+    localStorage.setItem('backyard-local-workspace-owner-v1', ${JSON.stringify(userId)});
+    localStorage.setItem('backyard-profile-cache-v1:${userId}', ${JSON.stringify(JSON.stringify(profile))});
+    localStorage.setItem('backyard-profile-ready-v1:${userId}', 'true');
+    localStorage.setItem('the-backyard:equipment-onboarding-ready:v1:${userId}', 'true');
+    localStorage.setItem('backyard-local-migration-decision-v1:${userId}', 'linked');
+    localStorage.setItem('backyard-legal-acceptances-v1', ${JSON.stringify(JSON.stringify(acceptances))});
+    localStorage.setItem('backyard-betting-consent-prompt-v1:${userId}:2026-09-08-v3+sha256-5376b615664b10d9:express-betting-data', 'seen');
+    localStorage.setItem('golfbets-draft-v1', 'null');
+    localStorage.setItem('golfbets-history', '[]');
+  `;
+}
+
 async function qaState(client, width, state, options) {
   const { browserContextId } = await client.send("Target.createBrowserContext");
   const { targetId } = await client.send("Target.createTarget", { url: "about:blank", browserContextId });
@@ -243,7 +354,7 @@ async function qaState(client, width, state, options) {
     assert.equal(requiredChecked, true, "Required local QA consents could not be selected.");
     await clickText(client, sessionId, "Continuar");
   }
-  await waitFor(client, sessionId, "document.querySelector('[data-home-version=\"calm-v1\"]') !== null", "guest Home dashboard");
+  await waitFor(client, sessionId, "document.querySelector('[data-home-version=\"play-first-v2\"]') !== null", "guest Home dashboard");
   await waitFor(client, sessionId, options.assertion, state);
   await delay(500);
   const metrics = await assertNoHorizontalOverflow(client, sessionId, width, state);
@@ -260,21 +371,183 @@ async function qaViewport(client, width) {
     width,
     states: {
       newAccount: await qaState(client, width, "new account", {
-        assertion: "document.body?.innerText.includes('Jugar una ronda') && !document.body?.innerText.includes('Tu última ronda')",
+        assertion: "document.body?.innerText.includes('JUGAR') && document.body?.innerText.includes('Mi Bolsa') && !document.body?.innerText.includes('Tu última ronda')",
         filename: (value) => `home-preview-${value}.png`,
       }),
       activeRound: await qaState(client, width, "active round", {
         fixture: activeRoundFixture,
-        assertion: "document.body?.innerText.includes('Continuar configuración') && document.body?.innerText.includes('Campo por elegir')",
+        assertion: "document.body?.innerText.includes('CONTINUAR RONDA') && document.body?.innerText.includes('Campo por elegir')",
         filename: (value) => `home-preview-active-${value}.png`,
       }),
       history: await qaState(client, width, "history", {
         fixture: historyFixture,
-        assertion: "document.body?.innerText.includes('Jugar una ronda') && document.body?.innerText.includes('Tu última ronda') && document.body?.innerText.includes('La Vista')",
+        assertion: "document.body?.innerText.includes('JUGAR') && document.body?.innerText.includes('Tu última ronda') && document.body?.innerText.includes('La Vista')",
         filename: (value) => `home-preview-history-${value}.png`,
       }),
     },
   };
+}
+
+async function openMobileSession(client, width, fixture) {
+  const { browserContextId } = await client.send("Target.createBrowserContext");
+  const { targetId } = await client.send("Target.createTarget", { url: "about:blank", browserContextId });
+  const { sessionId } = await client.send("Target.attachToTarget", { targetId, flatten: true });
+  await client.send("Page.enable", {}, sessionId);
+  await client.send("Runtime.enable", {}, sessionId);
+  await client.send("Log.enable", {}, sessionId);
+  await client.send("Emulation.setDeviceMetricsOverride", {
+    width,
+    height: 844,
+    deviceScaleFactor: 1,
+    mobile: true,
+    screenWidth: width,
+    screenHeight: 844,
+  }, sessionId);
+  await client.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 }, sessionId);
+  await client.send("Page.addScriptToEvaluateOnNewDocument", {
+    source: `try { ${fixture} } catch { /* QA fixture storage unavailable. */ }`,
+  }, sessionId);
+  const errors = [];
+  client.events.set(`${sessionId}:Runtime.exceptionThrown`, [(event) => errors.push(event.exceptionDetails?.text || "runtime exception")]);
+  client.events.set(`${sessionId}:Log.entryAdded`, [(event) => {
+    if (event.entry?.level === "error") errors.push(`error: ${event.entry.text}`);
+  }]);
+  const loaded = client.once("Page.loadEventFired", sessionId);
+  await client.send("Page.navigate", { url: origin }, sessionId);
+  await loaded;
+  await waitFor(client, sessionId, "document.querySelector('[data-home-version=\"play-first-v2\"]') !== null", "authenticated Home dashboard");
+  return { browserContextId, targetId, sessionId, errors };
+}
+
+async function closeMobileSession(client, session) {
+  await client.send("Target.closeTarget", { targetId: session.targetId });
+  await client.send("Target.disposeBrowserContext", { browserContextId: session.browserContextId });
+}
+
+async function qaAuthenticatedFlows(client, width) {
+  const session = await openMobileSession(client, width, authenticatedFixtureSource());
+  const { sessionId, errors } = session;
+  const evidence = {};
+  const capture = async (name) => {
+    const destination = path.join(outputDirectory, name);
+    await screenshot(client, sessionId, destination);
+    evidence[name] = destination;
+  };
+
+  try {
+    await waitFor(client, sessionId, "document.body?.innerText.includes('@said_qa') && document.body?.innerText.includes('Mi Bolsa')", "authenticated identity and quick links");
+    await capture(`phase2-home-auth-${width}.png`);
+
+    await clickText(client, sessionId, "Perfil");
+    await waitFor(client, sessionId, "document.body?.innerText.includes('Said QA') && document.body?.innerText.includes('VINCULAR GHIN')", "profile with GHIN placeholder");
+    await clickText(client, sessionId, "Editar perfil");
+    await clickText(client, sessionId, "EMOJI");
+    await fillLabel(client, sessionId, "Emoji de avatar", "🐶");
+    await clickText(client, sessionId, "Usar emoji");
+    await clickText(client, sessionId, "Guardar perfil");
+    await waitFor(client, sessionId, "document.body?.innerText.includes('🐶') && ![...document.querySelectorAll('button')].some((node) => node.textContent?.trim() === 'Guardar perfil')", "local profile save confirmation");
+    await scrollTextIntoView(client, sessionId, "VINCULAR GHIN");
+    await capture(`phase2-profile-emoji-ghin-${width}.png`);
+
+    await clickContaining(client, sessionId, "VINCULAR GHIN");
+    await waitFor(client, sessionId, "document.querySelector('[role=\"dialog\"]')?.textContent?.includes('Integración GHIN')", "GHIN information dialog");
+    await capture(`phase2-modal-ghin-close-${width}.png`);
+    await clickAriaLabel(client, sessionId, "Cerrar");
+    await waitFor(client, sessionId, "!document.querySelector('[role=\"dialog\"]')", "closed GHIN dialog");
+
+    await clickAriaLabel(client, sessionId, "Inicio");
+    await waitFor(client, sessionId, "document.querySelector('[data-home-version=\"play-first-v2\"]') !== null && document.body?.innerText.includes('@said_qa')", "Home after avatar save");
+    assert.equal(await evaluate(client, sessionId, "document.body?.innerText.includes('🐶')"), true, "Saved emoji did not render on Home.");
+
+    await clickText(client, sessionId, "Mi Bolsa");
+    await waitFor(client, sessionId, "document.body?.innerText.includes('Mi bolsa') && document.body?.innerText.includes('The Backyard Ball Fit')", "equipment profile");
+    await scrollTextIntoView(client, sessionId, "Mi bolsa");
+    await capture(`phase2-equipment-bag-${width}.png`);
+
+    await clickContaining(client, sessionId, "Agregar mi primer bastón");
+    await waitFor(client, sessionId, "document.querySelector('[role=\"dialog\"]')?.textContent?.includes('Selecciona categoría')", "club category step");
+    await clickContaining(client, sessionId, "Driver");
+    await waitFor(client, sessionId, "document.body?.innerText.includes('Selecciona marca')", "club brand step");
+    await fillLabel(client, sessionId, "Buscar marca", "Titleist");
+    await waitFor(client, sessionId, "[...document.querySelectorAll('[role=\"option\"]')].some((node) => node.textContent?.includes('Titleist'))", "Titleist brand result");
+    await clickContaining(client, sessionId, "Titleist", "[role=\"option\"]");
+    await waitFor(client, sessionId, "document.body?.innerText.includes('Selecciona modelo')", "club model step");
+    await fillLabel(client, sessionId, "Buscar modelo", "910D3");
+    await waitFor(client, sessionId, "[...document.querySelectorAll('[role=\"option\"]')].some((node) => node.textContent?.includes('910D3'))", "Titleist 910D3 result");
+    await capture(`phase2-equipment-club-search-${width}.png`);
+    await clickContaining(client, sessionId, "910D3", "[role=\"option\"]");
+    await waitFor(client, sessionId, "document.body?.innerText.includes('Tipo y especificación')", "club specifications step");
+    await clickText(client, sessionId, "Elegir varilla");
+    await waitFor(client, sessionId, "document.body?.innerText.includes('Selecciona varilla')", "shaft brand step");
+    await fillLabel(client, sessionId, "Buscar varilla por marca", "Fujikura");
+    await waitFor(client, sessionId, "[...document.querySelectorAll('[role=\"option\"]')].some((node) => node.textContent?.includes('Fujikura'))", "Fujikura brand result");
+    await clickContaining(client, sessionId, "Fujikura", "[role=\"option\"]");
+    await fillLabel(client, sessionId, "Buscar modelo / peso / flex", "VENTUS Blue VeloCore+");
+    await waitFor(client, sessionId, "[...document.querySelectorAll('[role=\"option\"]')].some((node) => node.textContent?.includes('VENTUS Blue VeloCore+'))", "VENTUS Blue VeloCore+ result");
+    await capture(`phase2-equipment-shaft-search-${width}.png`);
+    await clickContaining(client, sessionId, "VENTUS Blue VeloCore+", "[role=\"option\"]");
+    await waitFor(client, sessionId, "document.body?.innerText.includes('Revisa y agrega')", "club final review");
+    await capture(`phase2-equipment-shaft-assigned-${width}.png`);
+    await clickText(client, sessionId, "Guardar bastón");
+    await waitFor(client, sessionId, "!document.querySelector('[role=\"dialog\"]') && document.body?.innerText.includes('Titleist 910D3')", "saved club in bag");
+
+    await scrollTextIntoView(client, sessionId, "Mi bola");
+    await clickText(client, sessionId, "Elegir bola");
+    await waitFor(client, sessionId, "document.querySelector('[role=\"dialog\"]')?.textContent?.includes('Selecciona marca')", "ball brand step");
+    await fillLabel(client, sessionId, "Buscar bola por marca", "Titleist");
+    await waitFor(client, sessionId, "[...document.querySelectorAll('[role=\"option\"]')].some((node) => node.textContent?.includes('Titleist'))", "Titleist ball brand result");
+    await clickContaining(client, sessionId, "Titleist", "[role=\"option\"]");
+    await fillLabel(client, sessionId, "Buscar modelo", "Pro V1 2025");
+    await waitFor(client, sessionId, "[...document.querySelectorAll('[role=\"option\"]')].some((node) => node.textContent?.includes('Pro V1') && node.textContent?.includes('2025'))", "Pro V1 2025 result");
+    await capture(`phase2-equipment-ball-search-${width}.png`);
+    await clickContaining(client, sessionId, "Pro V1", "[role=\"option\"]");
+    await waitFor(client, sessionId, "document.body?.innerText.includes('Variante final')", "ball details step");
+    await clickText(client, sessionId, "Guardar como actual");
+    await waitFor(client, sessionId, "!document.querySelector('[role=\"dialog\"]') && Array.from({ length: localStorage.length }, (_, index) => [localStorage.key(index), localStorage.getItem(localStorage.key(index))]).some(([key, value]) => key?.includes('equipment-profile') && value?.includes('Pro V1'))", "saved ball");
+
+    await scrollTextIntoView(client, sessionId, "The Backyard Ball Fit");
+    await clickText(client, sessionId, "Hacer Ball Fit");
+    await waitFor(client, sessionId, "document.querySelector('[role=\"dialog\"][aria-label=\"The Backyard Ball Fit\"]') !== null", "Ball Fit dialog");
+    await capture(`phase2-ball-fit-close-${width}.png`);
+    await clickAriaLabel(client, sessionId, "Cerrar");
+    await waitFor(client, sessionId, "!document.querySelector('[role=\"dialog\"][aria-label=\"The Backyard Ball Fit\"]')", "closed Ball Fit");
+
+    await client.send("Page.reload", {}, sessionId);
+    await waitFor(client, sessionId, "document.querySelector('[data-home-version=\"play-first-v2\"]') !== null", "Home after reload");
+    await clickText(client, sessionId, "Mi Bolsa");
+    await waitFor(client, sessionId, "document.body?.innerText.includes('Titleist 910D3') && document.body?.innerText.includes('Pro V1')", "equipment restored after reload");
+    await capture(`phase2-equipment-restored-${width}.png`);
+
+    await clickAriaLabel(client, sessionId, "Inicio");
+    await waitFor(client, sessionId, "document.querySelector('[data-home-version=\"play-first-v2\"]') !== null", "Home before round setup");
+    await clickText(client, sessionId, "JUGAR");
+    await waitFor(client, sessionId, "document.body?.innerText.includes('1. Campo y tees por jugador')", "round setup");
+    await fillLabel(client, sessionId, "Campo", "La Vi");
+    await waitFor(client, sessionId, "[...document.querySelectorAll('[role=\"option\"]')].some((node) => node.textContent?.includes('La Vista'))", "La Vista course result");
+    await capture(`phase2-course-search-${width}.png`);
+
+    const overflow = await evaluate(client, sessionId, "document.documentElement.scrollWidth > document.documentElement.clientWidth + 1");
+    assert.equal(overflow, false, "Authenticated flow has horizontal overflow.");
+    assert.deepEqual(errors, [], `Authenticated flow console errors: ${errors.join(" | ")}`);
+    return { width, screenshots: evidence, consoleErrors: errors };
+  } finally {
+    await closeMobileSession(client, session);
+  }
+}
+
+async function qaHistoryScreen(client, width) {
+  const session = await openMobileSession(client, width, historyFixture);
+  const { sessionId, errors } = session;
+  try {
+    await clickText(client, sessionId, "Historial");
+    await waitFor(client, sessionId, "document.body?.innerText.includes('La Vista') && document.body?.innerText.includes('Abrir ronda')", "completed-round history");
+    const destination = path.join(outputDirectory, `phase2-history-completed-${width}.png`);
+    await screenshot(client, sessionId, destination);
+    assert.deepEqual(errors, [], `History flow console errors: ${errors.join(" | ")}`);
+    return { width, screenshot: destination, consoleErrors: errors };
+  } finally {
+    await closeMobileSession(client, session);
+  }
 }
 
 await mkdir(outputDirectory, { recursive: true });
@@ -296,9 +569,11 @@ try {
   const version = await waitForJson(`http://127.0.0.1:${port}/json/version`);
   const client = new CdpClient(version.webSocketDebuggerUrl);
   const results = [];
-  for (const width of widths) results.push(await qaViewport(client, width));
+  if (scenario === "all") for (const width of widths) results.push(await qaViewport(client, width));
+  const authenticated = scenario === "all" || scenario === "authenticated" ? await qaAuthenticatedFlows(client, 390) : null;
+  const history = scenario === "all" ? await qaHistoryScreen(client, 390) : null;
   client.close();
-  console.log(JSON.stringify({ origin, status: "PASS", results }, null, 2));
+  console.log(JSON.stringify({ origin, status: "PASS", results, authenticated, history }, null, 2));
 } finally {
   if (chrome?.exitCode === null) {
     chrome.kill();
