@@ -676,6 +676,7 @@ async function qaActiveRoundAction(client, width) {
   const session = await openMobileSession(client, width, activeRoundFixture);
   const { sessionId, errors } = session;
   try {
+    await waitFor(client, sessionId, "document.querySelector('[aria-label=\"Continuar ronda\"]') !== null", "active-round action hydration");
     await clickAriaLabel(client, sessionId, "Continuar ronda");
     await waitFor(client, sessionId, "document.querySelector('[data-game-screen=\"approved-compact-v1\"]') !== null && document.body?.innerText.includes('Hoyo 3')", "active round continuation");
     assert.deepEqual(errors, [], `Active-round continuation console errors: ${errors.join(" | ")}`);
@@ -689,6 +690,7 @@ async function qaAnimalGameScreen(client, width, label, enabledAnimals) {
   const session = await openMobileSession(client, width, animalRoundFixture(enabledAnimals));
   const { sessionId, errors } = session;
   try {
+    await waitFor(client, sessionId, "document.querySelector('[aria-label=\"Continuar ronda\"]') !== null", `${label} active-round hydration`);
     await clickAriaLabel(client, sessionId, "Continuar ronda");
     await waitFor(client, sessionId, "document.querySelector('[data-game-screen=\"approved-compact-v1\"]') !== null", `${label} game screen`);
     const animalText = await evaluate(client, sessionId, "document.querySelector('[data-game-screen=\"approved-compact-v1\"]')?.innerText || ''");
