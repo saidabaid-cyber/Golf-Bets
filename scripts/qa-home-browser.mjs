@@ -250,19 +250,24 @@ function guestFixtureSource(stateSource = "") {
   `;
 }
 
-const activeRoundFixture = guestFixtureSource(`localStorage.setItem('golfbets-draft-v1', JSON.stringify({
-  version: 11,
-  roundId: 'qa-active-round',
-  roundDate: '2026-09-11',
-  players: [{ id: 'qa-owner', name: 'Golfista', handicap: 8 }],
-  ownerId: 'qa-owner',
-  startHole: 1,
-  roundHoles: 18,
-  courseSelected: false,
-  scores: {},
-  scoreEdits: {},
-  currentIndex: 0,
-}));`);
+const activeRoundFixture = guestFixtureSource(`(() => {
+  const holes = Array.from({ length: 18 }, (_, index) => ({ number: index + 1, par: 4, strokeIndex: index + 1 }));
+  localStorage.setItem('golfbets-draft-v1', JSON.stringify({
+    version: 11,
+    roundId: 'qa-active-round',
+    roundDate: '2026-09-11',
+    startedAt: '2026-09-11T15:00:00.000Z',
+    players: [{ id: 'qa-owner', name: 'Golfista', handicap: 8 }],
+    ownerId: 'qa-owner',
+    startHole: 1,
+    roundHoles: 18,
+    course: { id: 'qa-course', name: 'La Vista', teeName: 'Blancas', rating: 72, slope: 113, holes },
+    courseSelected: true,
+    scores: { 1: { 'qa-owner': 4 }, 2: { 'qa-owner': 5 } },
+    scoreEdits: { 1: { 'qa-owner': 4 }, 2: { 'qa-owner': 5 } },
+    currentIndex: 2,
+  }));
+})();`);
 
 const historyFixture = guestFixtureSource(`(() => {
   const holes = Array.from({ length: 18 }, (_, index) => ({ number: index + 1, par: 4, strokeIndex: index + 1 }));
@@ -399,7 +404,7 @@ async function qaViewport(client, width) {
       }),
       activeRound: await qaState(client, width, "active round", {
         fixture: activeRoundFixture,
-        assertion: "document.body?.innerText.includes('CONTINUAR RONDA') && document.body?.innerText.includes('Campo por elegir')",
+        assertion: "document.body?.innerText.includes('CONTINUAR RONDA') && document.body?.innerText.includes('La Vista') && document.body?.innerText.includes('HOYO') && document.body?.innerText.includes('SCORE') && document.body?.innerText.includes('VS PAR')",
         filename: (value) => `home-preview-active-${value}.png`,
         fullPage: true,
       }),
@@ -633,9 +638,9 @@ async function qaActiveRoundAction(client, width) {
   const { sessionId, errors } = session;
   try {
     await clickAriaLabel(client, sessionId, "Continuar ronda");
-    await waitFor(client, sessionId, "document.body?.innerText.includes('1. Campo y tees por jugador')", "active round continuation");
+    await waitFor(client, sessionId, "document.body?.innerText.includes('Captura del hoyo') && document.body?.innerText.includes('Hoyo 3')", "active round continuation");
     assert.deepEqual(errors, [], `Active-round continuation console errors: ${errors.join(" | ")}`);
-    return { width, destination: "setup", consoleErrors: errors };
+    return { width, destination: "round-hole-3", consoleErrors: errors };
   } finally {
     await closeMobileSession(client, session);
   }
