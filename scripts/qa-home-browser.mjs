@@ -640,6 +640,7 @@ async function qaAuthenticatedFlows(client, width) {
     await waitFor(client, sessionId, "document.querySelector('[data-home-version=\"approved-golf-home-v1\"]') !== null", "Home before round setup");
     await clickAriaLabel(client, sessionId, "Configurar ronda manualmente");
     await waitFor(client, sessionId, "document.body?.innerText.includes('1. Campo') && document.body?.innerText.includes('FALTA COMPLETAR')", "round setup");
+    await capture(`master-round-field-nearby-${width}.png`);
     await scrollTextIntoView(client, sessionId, "FALTA COMPLETAR");
     await capture(`master-round-manual-preflight-${width}.png`);
     await scrollTextIntoView(client, sessionId, "1. Campo");
