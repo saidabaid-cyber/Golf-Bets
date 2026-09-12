@@ -27,6 +27,20 @@ test("approved Home uses one ball action and offers manual or AI setup in a clos
   assert.match(source, /src="\/brand\/home-swing\.jpg"/);
   assert.match(source, /src="\/brand\/home-golf-ball\.jpg"/);
   assert.match(homeStyles, /\.ballLogoFull \{[^}]*overflow: hidden/);
+  assert.match(source, /data-home-logo/);
+  assert.match(source, /data-home-play/);
+  assert.match(homeStyles, /\.ballLogoFull \{[^}]*position: relative/);
+  assert.match(homeStyles, /\.playCircle \{[^}]*left: 50%[^}]*transform: translate\(-50%, -50%\)/);
+});
+
+test("Home keeps dynamic full names in a responsive, non-overlapping headline zone", () => {
+  assert.match(source, /const resolvedDisplayName = displayName\.trim\(\) \|\| "Golfista"/);
+  assert.match(source, /data-name-size=\{heroNameSize\}/);
+  assert.match(source, /data-home-headline/);
+  assert.match(source, /<em>\{resolvedDisplayName\}<\/em>/);
+  assert.match(homeStyles, /\.heroCopy\[data-name-size="long"\]/);
+  assert.match(homeStyles, /\.heroCopy\[data-name-size="extended"\]/);
+  assert.match(homeStyles, /white-space: normal/);
 });
 
 test("approved Home has exactly three quick actions and only two More Backyard actions", () => {

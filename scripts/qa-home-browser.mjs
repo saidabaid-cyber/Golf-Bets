@@ -346,7 +346,7 @@ const historyFixture = guestFixtureSource(`(() => {
   }]));
 })();`);
 
-function authenticatedFixtureSource() {
+function authenticatedFixtureSource(displayName = "Said") {
   const userId = "qa-visible-user";
   const acceptedAt = "2026-09-11T00:00:00.000Z";
   const acceptances = [
@@ -358,11 +358,11 @@ function authenticatedFixtureSource() {
   ];
   const profile = {
     userId,
-    displayName: "Said",
+    displayName,
     email: "said.qa@example.test",
     avatarUrl: "😎",
     defaultHandicap: 8.4,
-    givenName: "Said",
+    givenName: displayName.split(/\s+/)[0] || "Golfista",
     familyName: "QA",
     username: "said_qa",
     city: "San Andrés Cholula",
@@ -518,9 +518,44 @@ async function qaApprovedHome(client, viewport) {
   return qaState(client, width, "approved Home", {
     fixture: authenticatedFixtureSource(),
     viewportHeight: height,
-    assertion: "document.body?.innerText.includes('Buen golf') && document.body?.innerText.includes('hoy, Said') && !document.body?.innerText.includes('PLAY WITH IT') && !document.body?.innerText.includes('THE BACKYARD CLUB') && Boolean(document.querySelector('[aria-label=\"Elegir cómo armar tu ronda\"]')) && document.body?.innerText.includes('Accesos rápidos') && document.body?.innerText.includes('Más de The Backyard') && (() => { const nav = document.querySelector('.homeBottomNav'); const logoFrame = document.querySelector('[aria-label=\"Elegir cómo armar tu ronda\"] > span'); if (!nav || !logoFrame) return false; const rect = nav.getBoundingClientRect(); return getComputedStyle(nav).position === 'fixed' && Math.abs(rect.bottom - window.innerHeight) < 2 && getComputedStyle(logoFrame).overflow === 'hidden'; })()",
+    assertion: "document.body?.innerText.includes('Buen golf') && document.body?.innerText.includes('hoy, Said') && !document.body?.innerText.includes('PLAY WITH IT') && !document.body?.innerText.includes('THE BACKYARD CLUB') && Boolean(document.querySelector('[aria-label=\"Elegir cómo armar tu ronda\"]')) && document.body?.innerText.includes('Accesos rápidos') && document.body?.innerText.includes('Más de The Backyard') && (() => { const nav = document.querySelector('.homeBottomNav'); const logo = document.querySelector('[data-home-logo]'); const play = document.querySelector('[data-home-play]'); if (!nav || !logo || !play) return false; const navRect = nav.getBoundingClientRect(); const logoRect = logo.getBoundingClientRect(); const playRect = play.getBoundingClientRect(); return getComputedStyle(nav).position === 'fixed' && Math.abs(navRect.bottom - window.innerHeight) < 2 && Math.abs((logoRect.left + logoRect.width / 2) - (playRect.left + playRect.width / 2)) < 1 && getComputedStyle(logo.querySelector('img')).objectFit === 'contain'; })()",
     afterReady: "(() => { Object.defineProperty(Navigator.prototype, 'onLine', { configurable: true, get: () => true }); window.dispatchEvent(new Event('online')); return true; })()",
     filename: () => `home-final-${width}x${height}.png`,
+    fullPage: false,
+  });
+}
+
+async function qaResponsiveHomeName(client, viewport, displayName) {
+  const { width, height } = viewport;
+  const fileName = displayName.toLocaleLowerCase("es-MX").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return qaState(client, width, `Home responsive name ${displayName}`, {
+    fixture: authenticatedFixtureSource(displayName),
+    viewportHeight: height,
+    assertion: `(() => {
+      const headline = document.querySelector('[data-home-headline]');
+      const logo = document.querySelector('[data-home-logo]');
+      const play = document.querySelector('[data-home-play]');
+      const ball = document.querySelector('[aria-label="Elegir cómo armar tu ronda"]');
+      if (!headline || !logo || !play || !ball) return false;
+      const headlineRect = headline.getBoundingClientRect();
+      const logoRect = logo.getBoundingClientRect();
+      const playRect = play.getBoundingClientRect();
+      const ballRect = ball.getBoundingClientRect();
+      const style = getComputedStyle(headline);
+      const lineCount = Math.round(headlineRect.height / Number.parseFloat(style.lineHeight));
+      return document.body?.innerText.includes(${JSON.stringify(displayName)})
+        && headlineRect.left >= 0
+        && headlineRect.right <= innerWidth
+        && headlineRect.bottom <= ballRect.top + 1
+        && lineCount <= 3
+        && Math.abs((logoRect.left + logoRect.width / 2) - (playRect.left + playRect.width / 2)) < 1
+        && logoRect.left >= ballRect.left
+        && logoRect.right <= ballRect.right
+        && playRect.top > logoRect.top + logoRect.height * .42
+        && playRect.bottom < logoRect.top + logoRect.height * .75;
+    })()`,
+    afterReady: "(() => { Object.defineProperty(Navigator.prototype, 'onLine', { configurable: true, get: () => true }); window.dispatchEvent(new Event('online')); return true; })()",
+    filename: () => `home-name-${fileName}-${width}x${height}.png`,
     fullPage: false,
   });
 }
@@ -868,6 +903,14 @@ try {
   const results = [];
   if (scenario === "all") for (const width of widths) results.push(await qaViewport(client, width));
   if (scenario === "home") for (const viewport of approvedHomeViewports) results.push(await qaApprovedHome(client, viewport));
+  if (scenario === "home-layout") {
+    for (const displayName of ["Golfista", "Francisco Javier Martínez"]) {
+      for (const viewport of approvedHomeViewports) results.push(await qaResponsiveHomeName(client, viewport, displayName));
+    }
+    for (const displayName of ["Said", "Alejandro Rodríguez"]) {
+      for (const viewport of [approvedHomeViewports[0], approvedHomeViewports[3]]) results.push(await qaResponsiveHomeName(client, viewport, displayName));
+    }
+  }
   const roundChoice = scenario === "home" ? await qaRoundChoiceDialog(client, 390) : null;
   const approvedActiveRound = scenario === "home" ? await qaApprovedActiveHome(client, 390) : null;
   const authenticated = scenario === "all" || scenario === "authenticated" ? await qaAuthenticatedFlows(client, 390) : null;

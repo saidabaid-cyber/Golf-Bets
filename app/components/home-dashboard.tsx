@@ -76,10 +76,12 @@ function BackyardBallAction({ activeRound, onClick }: { activeRound?: ActiveRoun
     onClick={onClick}
     aria-label={activeRound ? "Continuar ronda" : "Elegir cómo armar tu ronda"}
   >
-    <span className={styles.ballLogoFull} aria-hidden="true">
-      <Image className={styles.ballLogo} src="/brand/the-backyard-logo.svg" alt="" width={763} height={631} preload />
+    <span className={styles.ballLogoStage} aria-hidden="true" data-home-logo>
+      <span className={styles.ballLogoFull}>
+        <Image className={styles.ballLogo} src="/brand/the-backyard-logo.svg" alt="" width={763} height={631} preload />
+        <span className={styles.playCircle} data-home-play><span /></span>
+      </span>
     </span>
-    <span className={styles.playCircle} aria-hidden="true"><span /></span>
   </button>;
 }
 
@@ -104,7 +106,10 @@ export function HomeDashboard({
   onContinueRound, onAiRound, onNewRound, onOpenProfile, onOpenSettings, onOpenNotifications,
   onOpenHistory, onOpenBalances, onOpenStats, onOpenGroups, onOpenRules,
 }: HomeDashboardProps) {
-  const firstName = displayName.trim().split(/\s+/)[0] || "Golfista";
+  const resolvedDisplayName = displayName.trim() || "Golfista";
+  const firstName = resolvedDisplayName.split(/\s+/)[0];
+  const heroNameLength = Array.from(resolvedDisplayName).length;
+  const heroNameSize = heroNameLength > 20 ? "extended" : heroNameLength > 10 ? "long" : "short";
   const initial = firstName[0]?.toLocaleUpperCase("es-MX") || "G";
   const hasScoringInsight = insights.scoredRounds > 0 && typeof insights.averageScore === "number" && Number.isFinite(insights.averageScore);
   const hasBalance = typeof insights.betBalance === "number" && Number.isFinite(insights.betBalance);
@@ -124,7 +129,7 @@ export function HomeDashboard({
       <header className={styles.header}>
         <button type="button" className={styles.identity} onClick={onOpenProfile} aria-label="Abrir mi perfil">
           <span className={styles.avatar}><ProfileAvatarMedia value={avatarUrl} fallback={initial} alt={`Avatar de ${displayName}`} /></span>
-          <span className={styles.identityCopy}><strong>{displayName.trim() || firstName}</strong><small>Listo para jugar 💪</small></span>
+          <span className={styles.identityCopy}><strong>{resolvedDisplayName}</strong><small>Listo para jugar 💪</small></span>
         </button>
         <div className={styles.headerActions}>
           <button type="button" className={styles.notificationButton} onClick={onOpenNotifications} aria-label="Abrir notificaciones"><Icon name="bell" /><span /></button>
@@ -132,9 +137,9 @@ export function HomeDashboard({
         </div>
       </header>
 
-      <div className={styles.heroCopy}>
+      <div className={styles.heroCopy} data-name-size={heroNameSize}>
         <span className={styles.eyebrow}>THE BACKYARD <i /></span>
-        <h1 id="approved-home-title">Buen golf<br /><span>hoy, <em>{firstName}</em></span></h1>
+        <h1 id="approved-home-title" data-home-headline>Buen golf<br /><span>hoy, <em>{resolvedDisplayName}</em></span></h1>
         <p>Rondas más simples.<br />Mejores amigos. Más golf.</p>
       </div>
 
