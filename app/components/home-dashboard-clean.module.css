@@ -104,15 +104,15 @@
 .headerActions svg { width: 21px; height: 21px; }
 .notificationButton > span { position: absolute; top: 2px; right: 3px; width: 9px; height: 9px; border: 1.5px solid rgba(255, 255, 255, .65); border-radius: 50%; background: #ff3d3d; }
 
-.heroCopy { position: absolute; z-index: 3; top: 104px; left: 25px; width: min(56vw, 218px); max-width: 218px; text-shadow: 0 2px 12px rgba(0, 0, 0, .36); }
+.heroCopy { position: absolute; z-index: 3; top: 104px; left: 25px; width: min(54vw, 210px); max-width: 210px; text-shadow: 0 2px 12px rgba(0, 0, 0, .36); }
 .eyebrow { display: flex; align-items: center; gap: 8px; color: rgba(255, 255, 255, .93); font-size: 8.5px; font-weight: 800; letter-spacing: 1.8px; white-space: nowrap; }
 .eyebrow i { width: 66px; height: 1px; display: block; background: rgba(255, 255, 255, .7); }
 .heroCopy h1 { margin: 7px 0 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(29px, 8.2vw, 33px); font-weight: 600; line-height: .98; letter-spacing: -1.1px; }
-.heroCopy h1 span { white-space: nowrap; }
+.heroCopy h1 span { white-space: normal; }
 .heroCopy h1 em { color: #a6d47b; font-style: normal; }
 .heroCopy p { margin: 9px 0 0; color: #fff; font-size: clamp(10.5px, 2.8vw, 12px); font-weight: 520; line-height: 1.3; }
 .heroCopy[data-name-size="long"],
-.heroCopy[data-name-size="extended"] { top: 94px; width: min(56vw, 218px); max-width: 218px; }
+.heroCopy[data-name-size="extended"] { top: 94px; width: min(54vw, 210px); max-width: 210px; }
 .heroCopy[data-name-size="long"] h1 { max-width: 100%; font-size: clamp(22px, 5.9vw, 25px); line-height: .97; letter-spacing: -.75px; }
 .heroCopy[data-name-size="extended"] h1 { max-width: 100%; font-size: clamp(19px, 5.1vw, 22px); line-height: .96; letter-spacing: -.55px; }
 .heroCopy[data-name-size="long"] h1 span,
@@ -134,10 +134,10 @@
   transform: translate(-50%, -50%);
 }
 .ballButton::after { content: ""; position: absolute; inset: 5px; border-radius: 50%; box-shadow: 0 9px 24px rgba(0, 0, 0, .17); }
-.ballLogoStage { position: absolute; z-index: 2; top: 0; left: 50%; width: 94px; height: 141px; transform: translateX(-50%); }
+.ballLogoStage { position: absolute; z-index: 2; top: 0; left: 50%; width: 94px; height: 142px; transform: translateX(-50%); }
 .ballLogoFull { position: relative; width: 100%; height: 100%; display: block; overflow: hidden; filter: drop-shadow(0 2px 2px rgba(255, 255, 255, .38)) drop-shadow(0 3px 5px rgba(0, 0, 0, .16)); }
 .ballLogo { position: absolute; top: 0; left: 50%; width: 216px; max-width: none; height: auto; display: block; object-fit: contain; transform: translateX(-50%); }
-.playCircle { position: absolute; z-index: 3; top: 64.5%; left: 50%; width: 26px; height: 26px; display: grid; place-items: center; border: 1px solid rgba(255, 255, 255, .86); border-radius: 50%; background: rgba(7, 50, 23, .88); box-shadow: 0 3px 11px rgba(0, 0, 0, .28); transform: translate(-50%, -50%); }
+.playCircle { position: absolute; z-index: 3; top: 58.5%; left: 50%; width: 26px; height: 26px; display: grid; place-items: center; border: 1px solid rgba(255, 255, 255, .86); border-radius: 50%; background: rgba(7, 50, 23, .88); box-shadow: 0 3px 11px rgba(0, 0, 0, .28); transform: translate(-50%, -50%); }
 .playCircle span { width: 0; height: 0; margin-left: 2px; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 8px solid #fff; }
 .ballButton:active { transform: translate(-50%, -50%) scale(.97); }
 
