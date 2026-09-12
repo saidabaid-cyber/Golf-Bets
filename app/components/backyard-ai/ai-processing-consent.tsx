@@ -185,7 +185,7 @@ export function AiProcessingConsentPrompt({ userId, accessToken, requiresRemoteC
       }
     }).catch((reason: unknown) => {
       if (controller.signal.aborted || generation !== checkGeneration.current || (reason instanceof DOMException && reason.name === "AbortError")) return;
-      setError("No pude verificar la autorización guardada. Puedes volver a aceptarla explícitamente para reintentar.");
+      setError(aiProcessingConsentFailureMessage(reason, true));
     }).finally(() => {
       if (!controller.signal.aborted && generation === checkGeneration.current) setChecking(false);
     });

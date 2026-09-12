@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { requestBackyardAi } from "../../../lib/backyard-ai/client-api";
-import { resolveAuthoritativeAiProcessingConsent } from "../../../lib/backyard-ai/consent-client";
+import { RemoteAiProcessingConsentError, resolveAuthoritativeAiProcessingConsent } from "../../../lib/backyard-ai/consent-client";
 import {
   browserAiProcessingConsentStorage,
   hasActiveAiProcessingConsent,
@@ -169,6 +169,7 @@ export function AiRoundSetup({ initialDraft, memoryContext, accessToken, require
     const processingConsentOwnerId = memoryContext.profile?.userId || initialDraft.ownerId;
     const remoteConsentUnavailable = requiresRemoteConsent && !accessToken;
     let allowProvider = providerConsentJustAccepted && !remoteConsentUnavailable;
+    let consentInfrastructureNotice = "";
     if (!allowProvider && !remoteConsentUnavailable && !localInterpreterOnly && !useLocalInterpreter && processingConsentOwnerId && typeof window !== "undefined") {
       if (accessToken) {
         setBusy(true);
@@ -182,8 +183,17 @@ export function AiRoundSetup({ initialDraft, memoryContext, accessToken, require
           });
           if (!mounted.current) return;
           allowProvider = !authority.discarded && authority.active && !authority.pendingLocalRevocation;
-        } catch {
+        } catch (reason: unknown) {
           allowProvider = false;
+          if (reason instanceof RemoteAiProcessingConsentError && [
+            "consent_environment_blocked",
+            "consent_store_unavailable",
+            "missing_config",
+          ].includes(reason.code || "")) {
+            consentInfrastructureNotice = reason.code === "consent_environment_blocked"
+              ? "Este Preview no tiene un registro de autorizaciones aislado conectado. La instrucción no se envió y continuamos con el intérprete local seguro."
+              : "El registro seguro de autorizaciones no está disponible. La instrucción no se envió y continuamos con el intérprete local seguro.";
+          }
         } finally {
           setBusy(false);
           setNotice("");
@@ -197,7 +207,7 @@ export function AiRoundSetup({ initialDraft, memoryContext, accessToken, require
       }
     }
     if (!mounted.current) return;
-    if (!allowProvider && !remoteConsentUnavailable && !localInterpreterOnly && !useLocalInterpreter && processingConsentOwnerId) {
+    if (!allowProvider && !consentInfrastructureNotice && !remoteConsentUnavailable && !localInterpreterOnly && !useLocalInterpreter && processingConsentOwnerId) {
       setPendingProviderInput(raw);
       setShowProviderConsent(true);
       return;
@@ -239,9 +249,9 @@ export function AiRoundSetup({ initialDraft, memoryContext, accessToken, require
         setNotice("Continuamos con el intérprete local seguro. Puedes usar el modo manual en cualquier momento.");
       }
     } else if (!clarifiedPlayer) {
-      setNotice(remoteConsentUnavailable
+      setNotice(consentInfrastructureNotice || (remoteConsentUnavailable
         ? "Tu cuenta necesita recuperar la sesión para usar el proveedor. Esta instrucción no se envió y continuamos con el intérprete local seguro."
-        : "Interpretación local activa: esta instrucción no se envió al proveedor de IA.");
+        : "Interpretación local activa: esta instrucción no se envió al proveedor de IA."));
     }
     const nextSessionPlayers = clarifiedPlayer ? [...sessionPlayers, {
       id: `ai-session-${typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`}`,

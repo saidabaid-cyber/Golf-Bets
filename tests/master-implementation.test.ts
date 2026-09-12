@@ -58,8 +58,13 @@ test("Game Screen usa controles naturales y nunca crea inputs animales independi
 
 test("fallo de consentimiento remoto muestra causa y garantiza que no hubo envío", () => {
   const prompt = readFileSync("app/components/backyard-ai/ai-processing-consent.tsx", "utf8");
+  const setup = readFileSync("app/components/backyard-ai/ai-round-setup.tsx", "utf8");
   assert.match(prompt, /consent_environment_blocked/);
   assert.match(prompt, /registro de autorizaciones aislado/);
   assert.match(prompt, /No se envió ningún contenido a la IA/);
   assert.match(prompt, /aiProcessingConsentFailureMessage\(reason, Boolean\(accessToken\)\)/);
+  assert.match(prompt, /setError\(aiProcessingConsentFailureMessage\(reason, true\)\)/);
+  assert.match(setup, /consentInfrastructureNotice/);
+  assert.match(setup, /La instrucción no se envió y continuamos con el intérprete local seguro/);
+  assert.match(setup, /!consentInfrastructureNotice && !remoteConsentUnavailable/);
 });
