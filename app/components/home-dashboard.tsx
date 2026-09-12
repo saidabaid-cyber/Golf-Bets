@@ -109,7 +109,8 @@ export function HomeDashboard({
   const resolvedDisplayName = displayName.trim() || "Golfista";
   const firstName = resolvedDisplayName.split(/\s+/)[0];
   const heroNameLength = Array.from(resolvedDisplayName).length;
-  const heroNameSize = heroNameLength > 20 ? "extended" : heroNameLength > 10 ? "long" : "short";
+  const heroNameSize = heroNameLength > 16 ? "extended" : heroNameLength > 7 ? "long" : "short";
+  const heroNameCompact = heroNameLength > 27;
   const initial = firstName[0]?.toLocaleUpperCase("es-MX") || "G";
   const hasScoringInsight = insights.scoredRounds > 0 && typeof insights.averageScore === "number" && Number.isFinite(insights.averageScore);
   const hasBalance = typeof insights.betBalance === "number" && Number.isFinite(insights.betBalance);
@@ -137,7 +138,7 @@ export function HomeDashboard({
         </div>
       </header>
 
-      <div className={styles.heroCopy} data-name-size={heroNameSize}>
+      <div className={styles.heroCopy} data-name-size={heroNameSize} data-name-compact={heroNameCompact ? "true" : undefined}>
         <span className={styles.eyebrow}>THE BACKYARD <i /></span>
         <h1 id="approved-home-title" data-home-headline>Buen golf<br /><span>hoy, <em>{resolvedDisplayName}</em></span></h1>
         <p>Rondas más simples.<br />Mejores amigos. Más golf.</p>
