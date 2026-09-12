@@ -22,6 +22,11 @@ test("approved Home uses one ball action and offers manual or AI setup in a clos
   assert.doesNotMatch(source, /className=\{styles\.aiButton\}/);
   assert.match(source, /THE BACKYARD/);
   assert.match(source, /PLAY WITH IT/);
+  assert.match(source, /src="\/brand\/home-hero-sunrise\.jpg"/);
+  assert.match(source, /src="\/brand\/the-backyard-logo\.svg"/);
+  assert.match(source, /src="\/brand\/home-swing\.jpg"/);
+  assert.match(source, /src="\/brand\/home-golf-ball\.jpg"/);
+  assert.match(homeStyles, /\.ballLogoFull \{[^}]*overflow: hidden/);
 });
 
 test("approved Home has exactly three quick actions and only two More Backyard actions", () => {
@@ -69,6 +74,8 @@ test("bottom navigation is exactly Inicio, Social, Más and Perfil", () => {
   assert.doesNotMatch(bottomNavComponent, /label === "Perfil" \? "Cuenta"/);
   assert.match(globalStyles, /\.bottomNav\.homeBottomNav\{[^}]*bottom:0[^}]*left:0/);
   assert.match(globalStyles, /\.bottomNav\.homeBottomNav\{[^}]*safe-area-inset-bottom/);
+  assert.match(globalStyles, /\.app\.homeApp\{[^}]*height:100dvh[^}]*overflow:hidden/);
+  assert.match(homeStyles, /\.home \{[^}]*height: 100%[^}]*grid-template-rows:/);
   assert.match(homeStyles, /\.content \{[^}]*padding:[^}]*safe-area-inset-bottom/);
 });
 

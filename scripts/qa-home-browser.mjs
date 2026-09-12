@@ -11,6 +11,12 @@ const origin = new URL(process.argv[2] || "http://127.0.0.1:3000").origin;
 const outputDirectory = path.resolve(process.argv[3] || path.join(process.cwd(), ".qa-artifacts"));
 const scenario = process.argv[4] || "all";
 const widths = [390, 430];
+const approvedHomeViewports = [
+  { width: 390, height: 844 },
+  { width: 393, height: 852 },
+  { width: 402, height: 874 },
+  { width: 430, height: 932 },
+];
 const chromeCandidates = [
   process.env.CHROME_PATH,
   "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
@@ -222,16 +228,39 @@ async function screenshot(client, sessionId, destination, fullPage = false) {
 async function assertNoHorizontalOverflow(client, sessionId, width, state) {
   const metrics = await evaluate(client, sessionId, `(() => ({
     innerWidth: window.innerWidth,
+    innerHeight: window.innerHeight,
     clientWidth: document.documentElement.clientWidth,
+    clientHeight: document.documentElement.clientHeight,
     scrollWidth: document.documentElement.scrollWidth,
+    scrollHeight: document.documentElement.scrollHeight,
     horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+    verticalOverflow: document.documentElement.scrollHeight > document.documentElement.clientHeight + 1,
     homeDashboard: Boolean(document.querySelector('[data-home-version="approved-golf-home-v2"]')),
+    homeScrollHeight: document.querySelector('[data-home-version="approved-golf-home-v2"]')?.scrollHeight || 0,
+    homeClientHeight: document.querySelector('[data-home-version="approved-golf-home-v2"]')?.clientHeight || 0,
+    navigation: (() => {
+      const node = document.querySelector('.homeBottomNav');
+      if (!node) return null;
+      const rect = node.getBoundingClientRect();
+      return { position: getComputedStyle(node).position, top: rect.top, bottom: rect.bottom };
+    })(),
+    groupsCard: (() => {
+      const node = [...document.querySelectorAll('button')].find((candidate) => candidate.textContent?.includes('Grupos') && !candidate.closest('.homeBottomNav'));
+      if (!node) return null;
+      const rect = node.getBoundingClientRect();
+      return { top: rect.top, bottom: rect.bottom };
+    })(),
     headings: [...document.querySelectorAll('h1,h2')].map((node) => node.textContent?.trim()).filter(Boolean),
     primaryLabels: [...document.querySelectorAll('button,a')].map((node) => node.textContent?.replace(/\\s+/g, ' ').trim()).filter(Boolean).slice(0, 40),
   }))()`);
   assert.equal(metrics.innerWidth, width, `Viewport override failed at ${width}px (${state}).`);
   assert.equal(metrics.horizontalOverflow, false, `Horizontal overflow found at ${width}px (${state}).`);
   assert.equal(metrics.homeDashboard, true, `Home dashboard marker missing at ${width}px (${state}).`);
+  assert.equal(metrics.verticalOverflow, false, `Vertical overflow found at ${width}x${metrics.innerHeight} (${state}).`);
+  assert.ok(metrics.homeScrollHeight <= metrics.homeClientHeight + 1, `Home content overflows at ${width}x${metrics.innerHeight} (${state}).`);
+  assert.equal(metrics.navigation?.position, "fixed", `Bottom navigation is not fixed at ${width}px (${state}).`);
+  assert.ok(Math.abs((metrics.navigation?.bottom || 0) - metrics.innerHeight) < 2, `Bottom navigation is not attached to the viewport at ${width}px (${state}).`);
+  assert.ok((metrics.groupsCard?.bottom || 0) <= (metrics.navigation?.top || 0) + 1, `Balances/Groups are covered by navigation at ${width}px (${state}): ${JSON.stringify({ groupsCard: metrics.groupsCard, navigation: metrics.navigation })}.`);
   return metrics;
 }
 
@@ -484,23 +513,14 @@ async function qaViewport(client, width) {
   };
 }
 
-async function qaApprovedHome(client, width) {
+async function qaApprovedHome(client, viewport) {
+  const { width, height } = viewport;
   return qaState(client, width, "approved Home", {
     fixture: authenticatedFixtureSource(),
-    assertion: "document.body?.innerText.includes('Buen golf') && document.body?.innerText.includes('hoy, Said') && !document.body?.innerText.includes('PLAY WITH IT') && Boolean(document.querySelector('[aria-label=\"Elegir cómo armar tu ronda\"]')) && document.body?.innerText.includes('Accesos rápidos') && document.body?.innerText.includes('Más de The Backyard') && (() => { const nav = document.querySelector('.homeBottomNav'); if (!nav) return false; const rect = nav.getBoundingClientRect(); return getComputedStyle(nav).position === 'fixed' && Math.abs(rect.bottom - window.innerHeight) < 2; })()",
+    viewportHeight: height,
+    assertion: "document.body?.innerText.includes('Buen golf') && document.body?.innerText.includes('hoy, Said') && !document.body?.innerText.includes('PLAY WITH IT') && !document.body?.innerText.includes('THE BACKYARD CLUB') && Boolean(document.querySelector('[aria-label=\"Elegir cómo armar tu ronda\"]')) && document.body?.innerText.includes('Accesos rápidos') && document.body?.innerText.includes('Más de The Backyard') && (() => { const nav = document.querySelector('.homeBottomNav'); const logoFrame = document.querySelector('[aria-label=\"Elegir cómo armar tu ronda\"] > span'); if (!nav || !logoFrame) return false; const rect = nav.getBoundingClientRect(); return getComputedStyle(nav).position === 'fixed' && Math.abs(rect.bottom - window.innerHeight) < 2 && getComputedStyle(logoFrame).overflow === 'hidden'; })()",
     afterReady: "(() => { Object.defineProperty(Navigator.prototype, 'onLine', { configurable: true, get: () => true }); window.dispatchEvent(new Event('online')); return true; })()",
-    filename: (value) => `home-approved-${value}.png`,
-    fullPage: false,
-  });
-}
-
-async function qaApprovedScrolledHome(client, width) {
-  return qaState(client, width, "approved Home scrolled with fixed navigation", {
-    fixture: authenticatedFixtureSource(),
-    viewportHeight: 667,
-    assertion: "(() => { const nav = document.querySelector('.homeBottomNav'); const groups = [...document.querySelectorAll('button')].find((node) => node.textContent?.includes('Grupos') && !node.closest('.homeBottomNav')); if (!nav || !groups) return false; const navRect = nav.getBoundingClientRect(); return window.scrollY > 0 && getComputedStyle(nav).position === 'fixed' && Math.abs(navRect.bottom - window.innerHeight) < 2 && groups.getBoundingClientRect().bottom <= navRect.top + 1; })()",
-    afterReady: "(() => { Object.defineProperty(Navigator.prototype, 'onLine', { configurable: true, get: () => true }); window.dispatchEvent(new Event('online')); window.scrollTo(0, document.documentElement.scrollHeight); return true; })()",
-    filename: (value) => `home-approved-scrolled-${value}.png`,
+    filename: () => `home-final-${width}x${height}.png`,
     fullPage: false,
   });
 }
@@ -847,8 +867,7 @@ try {
   const client = new CdpClient(version.webSocketDebuggerUrl);
   const results = [];
   if (scenario === "all") for (const width of widths) results.push(await qaViewport(client, width));
-  if (scenario === "home") for (const width of widths) results.push(await qaApprovedHome(client, width));
-  const approvedScrolled = scenario === "home" ? await qaApprovedScrolledHome(client, 390) : null;
+  if (scenario === "home") for (const viewport of approvedHomeViewports) results.push(await qaApprovedHome(client, viewport));
   const roundChoice = scenario === "home" ? await qaRoundChoiceDialog(client, 390) : null;
   const approvedActiveRound = scenario === "home" ? await qaApprovedActiveHome(client, 390) : null;
   const authenticated = scenario === "all" || scenario === "authenticated" ? await qaAuthenticatedFlows(client, 390) : null;
@@ -869,7 +888,7 @@ try {
     await qaAnimalGameScreen(client, 390, "all-animals", ["vipers", "camels", "fish"]),
   ] : null;
   client.close();
-  console.log(JSON.stringify({ origin, status: "PASS", results, approvedScrolled, roundChoice, approvedActiveRound, authenticated, history, activeRound, gameScreens }, null, 2));
+  console.log(JSON.stringify({ origin, status: "PASS", results, roundChoice, approvedActiveRound, authenticated, history, activeRound, gameScreens }, null, 2));
 } finally {
   if (chrome?.exitCode === null) {
     chrome.kill();
