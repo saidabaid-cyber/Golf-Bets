@@ -77,7 +77,9 @@ function activeBetReviews(draft: RoundSetupDraft) {
   if (draft.bets.foursome.enabled) {
     const mode = draft.bets.foursome.mode === "match" ? `Match · Primera / Segunda / Total ${money(draft.bets.foursome.fixedValue)}` : draft.bets.foursome.mode === "points" ? `Puntos ${money(draft.bets.foursome.pointValue)}` : draft.bets.foursome.mode === "fixed_points" ? `Fijo ${money(draft.bets.foursome.fixedValue)} + puntos ${money(draft.bets.foursome.pointValue)}` : `Fijo ${money(draft.bets.foursome.fixedValue)}`;
     const segmentPairs = draft.segments.map((segment) => `H${segment.startIndex + 1}–H${segment.endIndex + 1}: ${pairNames(draft, segment.basePair)}`).join(" · ");
-    const pressure = (draft.bets.foursome.pressureMultiplier ?? 1) > 1 ? `Presión ${draft.bets.foursome.pressureMultiplier}x` : "Sin presión";
+    const pressure = draft.bets.foursome.mode === "match" && draft.bets.foursome.matchPresses?.length
+      ? `${draft.bets.foursome.matchPresses.length} presionada(s): ${draft.bets.foursome.matchPresses.map((press) => `${press.scope === "first" ? "Primera" : press.scope === "second" ? "Segunda" : "Total"} desde H${press.startHole} ${press.multiplier}x`).join(" · ")}`
+      : (draft.bets.foursome.pressureMultiplier ?? 1) > 1 ? `Presión ${draft.bets.foursome.pressureMultiplier}x` : "Sin presión";
     add("foursome", `Foursome · ${mode} · ${participants(draft, draft.bets.foursome.participantIds)}`, [`Segmentos de ${draft.bets.foursome.segmentSize}`, segmentPairs, hcpDetail(draft.bets.foursome.hcpPct, draft.bets.foursome.decimals), draft.bets.foursome.baseMode === "moving" ? "Base móvil" : "Base fija", pressure].filter(Boolean).join(" · "));
   }
   if (draft.bets.ballFriend.enabled) {

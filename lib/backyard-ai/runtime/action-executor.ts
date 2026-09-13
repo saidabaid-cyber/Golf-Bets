@@ -56,6 +56,7 @@ function patchCounterBet(
   return {
     ...patchValueConfig(current, action, allPlayerIds),
     ...(action.enabled === true ? {
+      settlementMode: "round" as const,
       determinationMode: current.determinationMode ?? "last_event" as const,
       mostEventsTieRule: current.mostEventsTieRule ?? "tied_players_pay" as const,
     } : {}),
@@ -109,16 +110,28 @@ function patchCoreBet(draft: RoundSetupDraft, action: Extract<RoundSetupAction, 
       return;
     case "foursome": {
       const current = draft.bets.foursome;
+      const nextMode = action.foursomeMode ?? current.mode;
+      const order = playOrder(draft.startHole).slice(0, draft.roundHoles);
       const moneyPatch: Partial<BetConfig["foursome"]> = action.value === undefined
         ? {}
-        : (action.foursomeMode ?? current.mode) === "points" ? { pointValue: action.value } : { fixedValue: action.value };
+        : nextMode === "points" ? { pointValue: action.value } : { fixedValue: action.value };
+      const aiPressId = `ai-second-${order[9] ?? 0}`;
+      const matchPressure = action.foursomePressureMultiplier && action.foursomePressureMultiplier > 1
+        ? action.foursomePressureMultiplier as 2 | 3 | 4 | 5
+        : undefined;
+      const matchPresses = nextMode === "match" && matchPressure && order[9]
+        ? [
+            ...(current.matchPresses ?? []).filter((press) => press.id !== aiPressId),
+            { id: aiPressId, scope: "second" as const, startHole: order[9], multiplier: matchPressure },
+          ]
+        : current.matchPresses;
       draft.bets.foursome = {
         ...current,
         ...definedPatch({ enabled: action.enabled }),
         ...moneyPatch,
         ...(action.foursomeMode ? { mode: action.foursomeMode } : {}),
         ...(action.foursomeMode === "match" ? { segmentSize: 18 as const } : {}),
-        ...(action.foursomePressureMultiplier ? { pressureMultiplier: action.foursomePressureMultiplier, pressSecond9: false } : {}),
+        ...(nextMode === "match" ? { pressureMultiplier: 1 as const, pressSecond9: false, matchPresses } : action.foursomePressureMultiplier ? { pressureMultiplier: action.foursomePressureMultiplier, pressSecond9: false } : {}),
         participantIds: configuredParticipants(current.participantIds, action.participantIds, ids),
       };
       draft.segments = normalizeFoursomeSegments(

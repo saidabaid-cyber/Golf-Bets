@@ -245,6 +245,27 @@ test("Foursome Match liquida Primera, Segunda y Total como tres resultados indep
   assert.equal(Object.values(result.balances).reduce((sum, amount) => sum + amount, 0), 0);
 });
 
+test("Foursome Match puede dar Primera a B, Segunda a A y Total a A", () => {
+  const four = zeroHcpPlayers.slice(0, 4);
+  const order = playOrder(1);
+  const scores = scoresFor(order, { said: 4, cuau: 4, armando: 4, jesus: 4 });
+  for (const hole of [1, 2]) scores[hole] = { said: 4, cuau: 4, armando: 3, jesus: 3 };
+  for (const hole of [10, 11, 12]) scores[hole] = { said: 3, cuau: 3, armando: 4, jesus: 4 };
+  const config = {
+    ...betConfig(four.map((player) => player.id)).foursome,
+    mode: "match" as const,
+    segmentSize: 18 as const,
+    fixedValue: 250,
+  };
+  const result = calculateFoursomes(makeCourse(), scores, four, config, [{ ...segmentDefinitions(order, 18)[0], basePair: ["said", "cuau"] }], order);
+  const legs = result.matches[0].matchLegs!;
+
+  assert.deepEqual([legs.first.pointDiff, legs.second.pointDiff, legs.total.pointDiff], [-2, 3, 1]);
+  assert.deepEqual([legs.first.money, legs.second.money, legs.total.money], [-250, 250, 250]);
+  assert.equal(result.matches[0].totalMoney, 250);
+  assert.deepEqual(result.balances, { said: 250, cuau: 250, armando: -250, jesus: -250 });
+});
+
 test("Foursome Match aplica la presión a la segunda vuelta jugada, incluso saliendo por H10", () => {
   const four = zeroHcpPlayers.slice(0, 4);
   const order = playOrder(10);
@@ -297,6 +318,74 @@ test("Foursome Match conserva AS y cero dinero en empates independientes", () =>
 
   assert.deepEqual(Object.values(result.matches[0].matchLegs!).map((leg) => [leg.status, leg.money]), [["AS", 0], ["AS", 0], ["AS", 0]]);
   assert.deepEqual(result.balances, { said: 0, cuau: 0, armando: 0, jesus: 0 });
+});
+
+test("Foursome Match permite múltiples presionadas independientes y las suma al resultado", () => {
+  const four = zeroHcpPlayers.slice(0, 4);
+  const order = playOrder(1);
+  const scores = scoresFor(order, { said: 4, cuau: 4, armando: 4, jesus: 4 });
+  for (const hole of [1, 2]) scores[hole] = { said: 3, cuau: 3, armando: 4, jesus: 4 };
+  for (const hole of [10, 11, 12]) scores[hole] = { said: 4, cuau: 4, armando: 3, jesus: 3 };
+  const config = {
+    ...betConfig(four.map((player) => player.id)).foursome,
+    mode: "match" as const,
+    segmentSize: 18 as const,
+    fixedValue: 500,
+    pressureMultiplier: 1 as const,
+    matchPresses: [
+      { id: "press-first", scope: "first" as const, startHole: 3, multiplier: 2 as const },
+      { id: "press-second", scope: "second" as const, startHole: 12, multiplier: 2 as const },
+      { id: "press-total", scope: "total" as const, startHole: 10, multiplier: 3 as const },
+    ],
+  };
+  const result = calculateFoursomes(makeCourse(), scores, four, config, [{ ...segmentDefinitions(order, 18)[0], basePair: ["said", "cuau"] }], order);
+  const match = result.matches[0];
+
+  assert.deepEqual(match.matchPresses?.map((press) => [press.id, press.pointDiff, press.multiplier, press.money]), [
+    ["press-first", 0, 2, 0],
+    ["press-second", -1, 2, -1000],
+    ["press-total", -3, 3, -1500],
+  ]);
+  assert.equal(match.totalMoney, -3000);
+  assert.deepEqual(result.balances, { said: -3000, cuau: -3000, armando: 3000, jesus: 3000 });
+});
+
+test("Foursome Match aplica HCP configurado al 100% y no lo inventa al 0%", () => {
+  const four = zeroHcpPlayers.slice(0, 4).map((player) => player.id === "said" ? { ...player, handicap: 18 } : player);
+  const order = playOrder(1);
+  const scores = scoresFor(order, { said: 4, cuau: 4, armando: 4, jesus: 4 });
+  const segment = [{ ...segmentDefinitions(order, 18)[0], basePair: ["said", "cuau"] }];
+  const base = { ...betConfig(four.map((player) => player.id)).foursome, mode: "match" as const, segmentSize: 18 as const, fixedValue: 100, handicapMethod: "configured" as const };
+  const atHundred = calculateFoursomes(makeCourse(), scores, four, { ...base, hcpPct: 100 }, segment, order);
+  const atZero = calculateFoursomes(makeCourse(), scores, four, { ...base, hcpPct: 0 }, segment, order);
+
+  assert.deepEqual(Object.values(atHundred.matches[0].matchLegs!).map((leg) => leg.money), [100, 100, 100]);
+  assert.deepEqual(atHundred.balances, { said: 300, cuau: 300, armando: -300, jesus: -300 });
+  assert.deepEqual(Object.values(atZero.matches[0].matchLegs!).map((leg) => [leg.status, leg.money]), [["AS", 0], ["AS", 0], ["AS", 0]]);
+});
+
+test("Foursome Match interpreta Primera y Segunda por orden de juego para presiones saliendo por H10", () => {
+  const four = zeroHcpPlayers.slice(0, 4);
+  const order = playOrder(10);
+  const scores = scoresFor(order, { said: 4, cuau: 4, armando: 4, jesus: 4 });
+  scores[10] = { said: 3, cuau: 3, armando: 4, jesus: 4 };
+  scores[1] = { said: 4, cuau: 4, armando: 3, jesus: 3 };
+  const config = {
+    ...betConfig(four.map((player) => player.id)).foursome,
+    mode: "match" as const,
+    segmentSize: 18 as const,
+    fixedValue: 200,
+    matchPresses: [
+      { id: "first-from-ten", scope: "first" as const, startHole: 10, multiplier: 2 as const },
+      { id: "second-from-one", scope: "second" as const, startHole: 1, multiplier: 4 as const },
+    ],
+  };
+  const result = calculateFoursomes(makeCourse(), scores, four, config, [{ ...segmentDefinitions(order, 18)[0], basePair: ["said", "cuau"] }], order);
+
+  assert.deepEqual(result.matches[0].matchPresses?.map((press) => [press.scope, press.startHole, press.pointDiff, press.money]), [
+    ["first", 10, 1, 400],
+    ["second", 1, -1, -800],
+  ]);
 });
 
 test("Foursome Match falla cerrado fuera de 18 hoyos o sin dos parejas exactas", () => {

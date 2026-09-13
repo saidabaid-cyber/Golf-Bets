@@ -918,6 +918,16 @@ test("hidden persisted main-bet fields follow the runtime fail-closed contract",
   const explicitPressure = configuration();
   explicitPressure.bets.foursome = { ...explicitPressure.bets.foursome, enabled: true, pressureMultiplier: 2, pressSecond9: "ignored" as unknown as boolean };
   assert.equal(codes(explicitPressure).includes("foursome-press-second-nine"), false);
+
+  const validMatchPress = configuration();
+  validMatchPress.bets.foursome = { ...validMatchPress.bets.foursome, enabled: true, mode: "match", segmentSize: 18, matchPresses: [{ id: "press-1", scope: "second", startHole: 10, multiplier: 3 }] };
+  validMatchPress.segments = [{ ...segmentDefinitions(order, 18)[0], basePair: ["a", "b"] }];
+  assert.equal(codes(validMatchPress).some((code) => code.startsWith("foursome-match-press-")), false);
+
+  const invalidMatchPress = configuration();
+  invalidMatchPress.bets.foursome = { ...invalidMatchPress.bets.foursome, enabled: true, mode: "match", segmentSize: 18, matchPresses: [{ id: "press-1", scope: "second", startHole: 2, multiplier: 3 }] };
+  invalidMatchPress.segments = [{ ...segmentDefinitions(order, 18)[0], basePair: ["a", "b"] }];
+  assert.ok(codes(invalidMatchPress).includes("foursome-match-press-0"));
 });
 
 test("round player identities reject blank, padded and internal whitespace", () => {

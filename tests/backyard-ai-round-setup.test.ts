@@ -132,7 +132,8 @@ test("AI estructura Foursome Match con dos parejas, valor y presiones sin calcul
   assert.equal(plan.draft.bets.foursome.mode, "match");
   assert.equal(plan.draft.bets.foursome.segmentSize, 18);
   assert.equal(plan.draft.bets.foursome.fixedValue, 500);
-  assert.equal(plan.draft.bets.foursome.pressureMultiplier, 2);
+  assert.equal(plan.draft.bets.foursome.pressureMultiplier, 1);
+  assert.deepEqual(plan.draft.bets.foursome.matchPresses, [{ id: "ai-second-10", scope: "second", startHole: 10, multiplier: 2 }]);
   assert.deepEqual(plan.draft.bets.foursome.participantIds, [byName.Said, byName.Pedro, byName.Juan, byName["Andrés"]]);
   assert.deepEqual(plan.draft.segments[0]?.basePair, [byName.Said, byName.Pedro]);
   assert.equal(plan.questions.some((question) => question.field === "bets.foursome.teams"), false);

@@ -7,6 +7,17 @@ export type FoursomeMode = "fixed" | "fixed_points" | "points" | "match";
 export type PhysicalNine = "holes_1_9" | "holes_10_18";
 export type RoundHalf = "first_half" | "second_half";
 export type PressureMultiplier = 1 | 2 | 3 | 4 | 5;
+export type FoursomeMatchPressScope = "first" | "second" | "total";
+export type FoursomeMatchPress = {
+  /** Stable identifier so multiple independent presses can coexist and persist. */
+  id: string;
+  /** The parent Match leg whose final hole closes this independent press. */
+  scope: FoursomeMatchPressScope;
+  /** Physical hole where this press begins; interpreted using the saved play order. */
+  startHole: number;
+  /** Stake multiplier applied only to this independent press. */
+  multiplier: Exclude<PressureMultiplier, 1>;
+};
 export type RabbitMode = "continuous" | "three_hole_blocks";
 export type SkinsMode = "carry" | "no_carry";
 export type RoundLifecycleState = "draft" | "live" | "completed" | "cancelled";
@@ -232,6 +243,8 @@ export type BetConfig = {
     pressSecond9?: boolean;
     pressureMultiplier?: PressureMultiplier;
     pressureNine?: PhysicalNine;
+    /** Independent Match presses. Missing preserves the legacy second-nine multiplier. */
+    matchPresses?: FoursomeMatchPress[];
   };
   ballFriend: ParticipantConfig & HandicapBaseConfig & {
     enabled: boolean;

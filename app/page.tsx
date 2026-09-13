@@ -24,6 +24,7 @@ import {
   Expense,
   FrequentGroup,
   FrequentPlayer,
+  FoursomeMatchPress,
   FoursomeSegment,
   HandicapMode,
   HoleScore,
@@ -1568,6 +1569,41 @@ function GolfBetsApp() {
       const exists = pair.includes(playerId);
       const next = exists ? pair.filter((id) => id !== playerId) : pair.length < 2 ? [...pair, playerId] : [pair[1], playerId];
       return markFoursomeSegmentEdited({ ...s, basePair: next });
+    }));
+  }
+
+  function addFoursomeMatchPress() {
+    const press: FoursomeMatchPress = {
+      id: makeId(),
+      scope: "second",
+      startHole: order[9] ?? order[0],
+      multiplier: 2,
+    };
+    setBets((current) => ({
+      ...current,
+      foursome: {
+        ...current.foursome,
+        pressureMultiplier: 1,
+        pressSecond9: false,
+        matchPresses: [...(current.foursome.matchPresses ?? []), press],
+      },
+    }));
+  }
+
+  function updateFoursomeMatchPress(id: string, patch: Partial<FoursomeMatchPress>) {
+    setBets((current) => ({
+      ...current,
+      foursome: {
+        ...current.foursome,
+        matchPresses: (current.foursome.matchPresses ?? []).map((press) => press.id === id ? { ...press, ...patch } : press),
+      },
+    }));
+  }
+
+  function removeFoursomeMatchPress(id: string) {
+    setBets((current) => ({
+      ...current,
+      foursome: { ...current.foursome, matchPresses: (current.foursome.matchPresses ?? []).filter((press) => press.id !== id) },
     }));
   }
 
@@ -3409,15 +3445,28 @@ function GolfBetsApp() {
           <>
             {roundHandicapBasis === "relative" && <HandicapBaseControl name="Foursome" config={bets.foursome} fallback="moving" onChange={baseMode => setBets({ ...bets, foursome: { ...bets.foursome, handicapMethod: "configured", baseMode, fixedBaseHandicap: undefined } })} />}
             <div className="grid3">
-              <div><label>Modalidad</label><select value={bets.foursome.mode} onChange={(e) => { const mode = e.target.value as BetConfig["foursome"]["mode"]; setBets({ ...bets, foursome: { ...bets.foursome, mode, ...(mode === "match" ? { segmentSize: 18 } : {}) } }); }}><option value="fixed">Fijo</option><option value="fixed_points">Fijo + Patada</option><option value="points">Solo puntos</option><option value="match">Match · Primera / Segunda / Total</option></select></div>
+              <div><label>Modalidad</label><select value={bets.foursome.mode} onChange={(e) => { const mode = e.target.value as BetConfig["foursome"]["mode"]; setBets({ ...bets, foursome: { ...bets.foursome, mode, ...(mode === "match" ? { segmentSize: 18, pressureMultiplier: 1, pressSecond9: false, matchPresses: bets.foursome.matchPresses ?? [] } : { matchPresses: undefined }) } }); }}><option value="fixed">Fijo</option><option value="fixed_points">Fijo + Patada</option><option value="points">Solo puntos</option><option value="match">Match · Primera / Segunda / Total</option></select></div>
               <div><label>{bets.foursome.mode === "match" ? "Parejas" : "Cambia parejas"}</label><select disabled={bets.foursome.mode === "match"} value={bets.foursome.mode === "match" ? 18 : bets.foursome.segmentSize} onChange={(e) => setBets({ ...bets, foursome: { ...bets.foursome, segmentSize: Number(e.target.value) as 3 | 6 | 9 | 18 } })}><option value={3}>Cada 3</option><option value={6}>Cada 6</option><option value={9}>Cada 9</option><option value={18}>{bets.foursome.mode === "match" ? "Fijas · 18 hoyos" : "18 hoyos"}</option></select></div>
               <HcpPercentInput value={bets.foursome.hcpPct} onChange={(v) => setBets({ ...bets, foursome: { ...bets.foursome, handicapMethod: "configured", hcpPct: v } })} />
               {(bets.foursome.mode === "fixed" || bets.foursome.mode === "fixed_points" || bets.foursome.mode === "match") && <MoneyInput label={bets.foursome.mode === "match" ? "Valor por Match" : "Foursome fijo"} value={bets.foursome.fixedValue} onChange={(v) => setBets({ ...bets, foursome: { ...bets.foursome, fixedValue: v } })} />}
               {(bets.foursome.mode === "points" || bets.foursome.mode === "fixed_points") && <MoneyInput label="Valor punto / patada" value={bets.foursome.pointValue} onChange={(v) => setBets({ ...bets, foursome: { ...bets.foursome, pointValue: v } })} />}
               <DecimalModeSelect label="Decimales Foursome" value={bets.foursome.decimals} onChange={(decimals) => setBets({ ...bets, foursome: { ...bets.foursome, handicapMethod: "configured", decimals } })} />
             </div>
-            {bets.foursome.mode === "match" && <p className="hint">Dos parejas fijas · tres resultados independientes: Primera, Segunda y Total. La presión multiplica la Segunda jugada.</p>}
-            {roundHoles === 18 && <div className="pressureOption pressureGrid">
+            {bets.foursome.mode === "match" && <div className="foursomeMatchPressureEditor">
+              <div className="foursomeMatchPressureHeader"><div><b>Presionadas Match</b><span>Cada presión es un partido independiente desde el hoyo elegido hasta el cierre de Primera, Segunda o Total.</span></div><button type="button" className="secondary" onClick={addFoursomeMatchPress}>+ Agregar presión</button></div>
+              {(bets.foursome.matchPresses ?? []).length === 0 && <p className="hint">Sin presionadas. Primera, Segunda y Total conservan el valor base.</p>}
+              {(bets.foursome.matchPresses ?? []).map((press, index) => {
+                const scopeHoles = press.scope === "first" ? order.slice(0, 9) : press.scope === "second" ? order.slice(9) : order;
+                return <div className="foursomeMatchPressureRow" key={press.id}>
+                  <strong>Presión {index + 1}</strong>
+                  <label>Partido<select value={press.scope} onChange={(event) => { const scope = event.target.value as FoursomeMatchPress["scope"]; const holes = scope === "first" ? order.slice(0, 9) : scope === "second" ? order.slice(9) : order; updateFoursomeMatchPress(press.id, { scope, startHole: holes[0] }); }}><option value="first">Primera</option><option value="second">Segunda</option><option value="total">Total</option></select></label>
+                  <label>Empieza<select value={press.startHole} onChange={(event) => updateFoursomeMatchPress(press.id, { startHole: Number(event.target.value) })}>{scopeHoles.map((hole) => <option value={hole} key={hole}>Hoyo {hole}</option>)}</select></label>
+                  <label>Valor<select value={press.multiplier} onChange={(event) => updateFoursomeMatchPress(press.id, { multiplier: Number(event.target.value) as FoursomeMatchPress["multiplier"] })}>{([2, 3, 4, 5] as const).map((value) => <option value={value} key={value}>{value}x</option>)}</select></label>
+                  <button type="button" className="remove" aria-label={`Eliminar presión ${index + 1}`} onClick={() => removeFoursomeMatchPress(press.id)}>×</button>
+                </div>;
+              })}
+            </div>}
+            {roundHoles === 18 && bets.foursome.mode !== "match" && <div className="pressureOption pressureGrid">
               <div><b>Presión Foursome</b><span>Se aplica siempre a la segunda vuelta jugada.</span></div>
               <div><label>Presión</label><select value={bets.foursome.pressureMultiplier ?? (bets.foursome.pressSecond9 ? 2 : 1)} onChange={(event) => setBets({ ...bets, foursome: { ...bets.foursome, ...setFoursomePressure(bets.foursome, Number(event.target.value) as 1 | 2 | 3 | 4 | 5) } })}><option value={1}>Sin presión</option>{[2,3,4,5].map((value) => <option key={value} value={value}>{value}x</option>)}</select></div>
               {foursomePressure(bets.foursome) > 1 && <div><label>Vuelta presionada</label><strong>2ª jugada · H{order[9]}–H{order.at(-1)}</strong></div>}
@@ -3702,14 +3751,14 @@ function GolfBetsApp() {
         {bets.rabbits.enabled && <span><b>🐇 Conejos</b>{money(bets.rabbits.value)} c/u</span>}
         {bets.skins.enabled && <span><b>⛳ Skins</b>{money(bets.skins.value)} c/u</span>}
         {bets.units.enabled && <span><b>📏 Unidades / Copas</b>{money(bets.units.value)} por unidad · {money(bets.units.copaValue ?? bets.units.value)} por Copa</span>}
-        {bets.foursome.enabled && <span><b>🤝 Foursome</b>{bets.foursome.mode === "match" ? `${money(bets.foursome.fixedValue)} · Match Primera / Segunda / Total` : `${(bets.foursome.mode === "fixed" || bets.foursome.mode === "fixed_points") ? `${money(bets.foursome.fixedValue)} fijo` : ""}${bets.foursome.mode === "fixed_points" ? " · " : ""}${(bets.foursome.mode === "points" || bets.foursome.mode === "fixed_points") ? `${money(bets.foursome.pointValue)} punto` : ""}`}{roundHoles === 18 && (bets.foursome.pressureMultiplier || 1) > 1 ? ` · 2ª vuelta H${order[9]}–H${order.at(-1)} ${bets.foursome.pressureMultiplier}x` : ""}</span>}
+        {bets.foursome.enabled && <span><b>🤝 Foursome</b>{bets.foursome.mode === "match" ? `${money(bets.foursome.fixedValue)} · Match Primera / Segunda / Total · ${(bets.foursome.matchPresses ?? []).length} presionada(s)` : `${(bets.foursome.mode === "fixed" || bets.foursome.mode === "fixed_points") ? `${money(bets.foursome.fixedValue)} fijo` : ""}${bets.foursome.mode === "fixed_points" ? " · " : ""}${(bets.foursome.mode === "points" || bets.foursome.mode === "fixed_points") ? `${money(bets.foursome.pointValue)} punto` : ""}`}{bets.foursome.mode !== "match" && roundHoles === 18 && (bets.foursome.pressureMultiplier || 1) > 1 ? ` · 2ª vuelta H${order[9]}–H${order.at(-1)} ${bets.foursome.pressureMultiplier}x` : ""}</span>}
         {bets.ballFriend.enabled && <span><b>⚪🤝 Bola Amiga</b>{money(bets.ballFriend.value)} por punto</span>}
         {bets.monkey?.enabled && <span><b>🐒 Monkey</b>{money(bets.monkey.value)} por punto · HCP {bets.monkey.hcpPct ?? 100}%</span>}
         {polla.details.map((detail) => <span key={detail.key}><b>{detail.key === "total18" ? "🏆" : "🥈"} {groupNassauLabels.resultComponent(detail.key)}</b>{money(detail.value)}</span>)}
         {bets.miniPolla.enabled && <span><b>⚡ Mini Polla</b>{money(bets.miniPolla.value)}</span>}
-        {bets.vipers.enabled && <span><b>🐍 Víboras</b>{money(bets.vipers.value)} por evento · dos bolsas · {roundHoles === 18 && counterBetSecondNinePressed(bets.vipers) ? `2ª vuelta H${order[9]}–H${order.at(-1)} presionada ${counterBetSecondNineMultiplier(bets.vipers)}x` : "sin presión"}</span>}
-        {bets.camels.enabled && <span><b>🐫 Camellos</b>{money(bets.camels.value)} por evento · dos bolsas · {roundHoles === 18 && counterBetSecondNinePressed(bets.camels) ? `2ª vuelta H${order[9]}–H${order.at(-1)} presionada ${counterBetSecondNineMultiplier(bets.camels)}x` : "sin presión"}</span>}
-        {bets.fish.enabled && <span><b>🐟 Peces</b>{money(bets.fish.value)} por evento · dos bolsas · {roundHoles === 18 && counterBetSecondNinePressed(bets.fish) ? `2ª vuelta H${order[9]}–H${order.at(-1)} presionada ${counterBetSecondNineMultiplier(bets.fish)}x` : "sin presión"}</span>}
+        {bets.vipers.enabled && <span><b>🐍 Víboras</b>{money(bets.vipers.value)} por evento · ronda completa · {roundHoles === 18 && counterBetSecondNinePressed(bets.vipers) ? `eventos de 2ª vuelta H${order[9]}–H${order.at(-1)} a ${counterBetSecondNineMultiplier(bets.vipers)}x` : "sin presión"}</span>}
+        {bets.camels.enabled && <span><b>🐫 Camellos</b>{money(bets.camels.value)} por evento · ronda completa · {roundHoles === 18 && counterBetSecondNinePressed(bets.camels) ? `eventos de 2ª vuelta H${order[9]}–H${order.at(-1)} a ${counterBetSecondNineMultiplier(bets.camels)}x` : "sin presión"}</span>}
+        {bets.fish.enabled && <span><b>🐟 Peces</b>{money(bets.fish.value)} por evento · ronda completa · {roundHoles === 18 && counterBetSecondNinePressed(bets.fish) ? `eventos de 2ª vuelta H${order[9]}–H${order.at(-1)} a ${counterBetSecondNineMultiplier(bets.fish)}x` : "sin presión"}</span>}
         {bets.loba.enabled && <span><b>🐺 Loba</b>{money(bets.loba.value)} base · HCP {bets.loba.hcpPct ?? 100}%{bets.loba.unitsEnabled ? ` · 📏 ${money(bets.loba.unitValue)}` : ""}</span>}
         {supplementalBets.filter((bet) => bet.enabled !== false).map((bet) => <span key={bet.id}><b>{supplementalBetDisplayLabel(bet.type)}</b>{money(supplementalBetValue(bet))}</span>)}
         {personalBets.filter((bet) => bet.enabled !== false).map((bet) => <span key={bet.id}><b>🏌️ Nassau Individual · {owner?.name} vs {bet.rivalMode === "group" ? playerName(bet.rivalPlayerId) : bet.rivalName}</b>{money(bet.baseValue)} base{roundHoles === 18 && (bet.pressureMultiplier || 1) > 1 ? ` · 2ª jugada ${bet.pressureMultiplier}x` : ""} · Carry {bet.carryEnabled ? "Sí" : "No"}</span>)}
@@ -3750,7 +3799,16 @@ function GolfBetsApp() {
       {bets.loba.enabled && <ResultAccordion id="loba" title="🐺 Loba" className="sideBetResult" {...resultAccordionProps("loba")}>{loba.details.length ? loba.details.map(detail => <div className="lobaResultHole" key={detail.hole}><div><b>H{detail.hole} · 🔥{detail.fireMultiplier}x · HCP {detail.hcpPct}%</b><span>{detail.lobaTeam.map(playerName).join(" + ")} {detail.lobaBestNet} neto vs {detail.opponents.map(playerName).join(" + ")} {detail.opponentBestNet} neto</span><span>{detail.winner === "tie" ? "Empate" : detail.winner === "loba_team" ? "Ganó equipo 🐺" : "Ganaron contrarios"}</span></div><strong>{money(detail.effectiveValue)}</strong><small>📏 Equipos {detail.lobaUnits} vs {detail.opponentUnits} · unidad efectiva {money(detail.effectiveUnitValue)}</small><div className="lobaResultUnits">{Object.entries(detail.playerUnits).map(([id, unitDetail]) => <span key={id}>{playerName(id)} · Auto +{unitDetail.automatic} · Manual +{unitDetail.manual} · Total +{unitDetail.total}</span>)}</div><div className="sideBetBalances">{Object.entries(detail.balances).filter(([, amount]) => amount !== 0).map(([id, amount]) => <span key={id}>{playerName(id)} <b className={amount > 0 ? "good" : "bad"}>{signedMoney(amount)}</b></span>)}</div></div>) : <div className="empty">Sin hoyos completos.</div>}</ResultAccordion>}
 
       {bets.foursome.enabled && <ResultAccordion id="foursome" title="🤝 Foursome" {...resultAccordionProps("foursome")}>
-        {foursomes.matches.map((m, i) => <div className="matchLine foursomeResultLine" key={i}><div><b>H{m.startHole}–{m.endHole}: {playerName(m.basePair[0])}/{playerName(m.basePair[1])}</b><span>vs {playerName(m.opponentPair[0])}/{playerName(m.opponentPair[1])}</span></div><div className="matchNums">{m.matchLegs ? ([m.matchLegs.first, m.matchLegs.second, m.matchLegs.total] as const).map((leg) => <span key={leg.key}><b>{leg.key === "first" ? "PRIMERA" : leg.key === "second" ? "SEGUNDA" : "TOTAL"}</b> · {leg.status} · {leg.pointDiff === 0 ? "AS" : `${leg.pointDiff > 0 ? playerName(m.basePair[0]) + "/" + playerName(m.basePair[1]) : playerName(m.opponentPair[0]) + "/" + playerName(m.opponentPair[1])} +${Math.abs(leg.pointDiff)}`} · {signedMoney(m.complete ? leg.money : leg.provisionalMoney)}</span>) : <><span>Resultado: {m.pointDiff > 0 ? "+" : ""}{m.pointDiff} pts{m.pressureMultiplier > 1 ? ` · 1ª H${order[0]}–H${order[8]} ${m.first9PointDiff >= 0 ? "+" : ""}${m.first9PointDiff} · 2ª H${order[9]}–H${order.at(-1)} ${m.second9PointDiff >= 0 ? "+" : ""}${m.second9PointDiff} x${m.pressureMultiplier}` : ""}</span><small>{m.complete ? "Fijo" : "Fijo provisional"}: {signedMoney(m.complete ? m.fixedMoney : m.provisionalFixedMoney)} · {m.complete ? "Puntos/patada" : "Puntos/patada provisional"}: {signedMoney(m.complete ? m.pointMoney : m.provisionalPointMoney)}</small></>}<b className={(m.complete ? m.totalMoney : m.provisionalTotalMoney) > 0 ? "good" : (m.complete ? m.totalMoney : m.provisionalTotalMoney) < 0 ? "bad" : ""}>{m.complete ? `Resultado económico: ${signedMoney(m.totalMoney)}` : `Provisional: ${signedMoney(m.provisionalTotalMoney)}`}</b></div></div>)}
+        {foursomes.matches.map((m, i) => <div className="matchLine foursomeResultLine" key={i}>
+          <div><b>H{m.startHole}–{m.endHole}: {playerName(m.basePair[0])}/{playerName(m.basePair[1])}</b><span>vs {playerName(m.opponentPair[0])}/{playerName(m.opponentPair[1])}</span></div>
+          <div className="matchNums">
+            {m.matchLegs ? <>
+              {([m.matchLegs.first, m.matchLegs.second, m.matchLegs.total] as const).map((leg) => <span key={leg.key}><b>{leg.key === "first" ? "PRIMERA" : leg.key === "second" ? "SEGUNDA" : "TOTAL"}</b> · {leg.status} · {leg.pointDiff === 0 ? "AS" : `${leg.pointDiff > 0 ? playerName(m.basePair[0]) + "/" + playerName(m.basePair[1]) : playerName(m.opponentPair[0]) + "/" + playerName(m.opponentPair[1])} +${Math.abs(leg.pointDiff)}`} · {signedMoney(m.complete ? leg.money : leg.provisionalMoney)}</span>)}
+              {Boolean(m.matchPresses?.length) && <div className="foursomeResultPresses"><b>PRESIONES</b>{m.matchPresses!.map((press, pressIndex) => <span key={press.id}>#{pressIndex + 1} · {press.scope === "first" ? "Primera" : press.scope === "second" ? "Segunda" : "Total"} desde H{press.startHole} · {press.status} · {press.multiplier}x · {signedMoney(m.complete ? press.money : press.provisionalMoney)}</span>)}</div>}
+            </> : <><span>Resultado: {m.pointDiff > 0 ? "+" : ""}{m.pointDiff} pts{m.pressureMultiplier > 1 ? ` · 1ª H${order[0]}–H${order[8]} ${m.first9PointDiff >= 0 ? "+" : ""}${m.first9PointDiff} · 2ª H${order[9]}–H${order.at(-1)} ${m.second9PointDiff >= 0 ? "+" : ""}${m.second9PointDiff} x${m.pressureMultiplier}` : ""}</span><small>{m.complete ? "Fijo" : "Fijo provisional"}: {signedMoney(m.complete ? m.fixedMoney : m.provisionalFixedMoney)} · {m.complete ? "Puntos/patada" : "Puntos/patada provisional"}: {signedMoney(m.complete ? m.pointMoney : m.provisionalPointMoney)}</small></>}
+            <b className={(m.complete ? m.totalMoney : m.provisionalTotalMoney) > 0 ? "good" : (m.complete ? m.totalMoney : m.provisionalTotalMoney) < 0 ? "bad" : ""}>{m.complete ? `Resultado económico: ${signedMoney(m.totalMoney)}` : `Provisional: ${signedMoney(m.provisionalTotalMoney)}`}</b>
+          </div>
+        </div>)}
       </ResultAccordion>}
 
       {bets.polla.first9.enabled && <ResultAccordion id="polla-first9" title={`🥈 ${groupNassauLabels.component("first9")}`} {...resultAccordionProps("polla-first9")}>{pollaFirstDetail ? renderPollaResult(pollaFirstDetail) : <div className="empty">Pendiente de completar los hoyos configurados.</div>}</ResultAccordion>}

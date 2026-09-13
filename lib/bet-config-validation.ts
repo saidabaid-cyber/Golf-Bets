@@ -363,6 +363,25 @@ function validateMainBets(input: RoundBetConfiguration, issues: BetConfiguration
     if (roundHoles === 18 && Number.isFinite(pressureMultiplier) && pressureMultiplier > 1 && bets.foursome.pressureNine !== undefined && bets.foursome.pressureNine !== "holes_1_9" && bets.foursome.pressureNine !== "holes_10_18") {
       issues.push({ code: "foursome-pressure-nine", sectionId: "setup-foursome", message: "Foursome: selecciona una vuelta válida para la presión." });
     }
+    if (bets.foursome.matchPresses !== undefined) {
+      if (bets.foursome.mode !== "match" || !Array.isArray(bets.foursome.matchPresses)) {
+        issues.push({ code: "foursome-match-presses-mode", sectionId: "setup-foursome", message: "Foursome: las presionadas por hoyo sólo están disponibles en modalidad Match." });
+      } else {
+        const order = input.startHole === 10
+          ? [...Array.from({ length: 9 }, (_, index) => index + 10), ...Array.from({ length: 9 }, (_, index) => index + 1)]
+          : Array.from({ length: 18 }, (_, index) => index + 1);
+        const ids = new Set<string>();
+        bets.foursome.matchPresses.forEach((press, index) => {
+          const scopeHoles = press?.scope === "first" ? order.slice(0, 9)
+            : press?.scope === "second" ? order.slice(9)
+              : press?.scope === "total" ? order : [];
+          if (!press || typeof press.id !== "string" || !press.id.trim() || ids.has(press.id) || !scopeHoles.includes(press.startHole) || ![2, 3, 4, 5].includes(press.multiplier)) {
+            issues.push({ code: `foursome-match-press-${index}`, sectionId: "setup-foursome", message: `Foursome Match: corrige la presionada ${index + 1}; debe tener partido, hoyo inicial y multiplicador 2x–5x válidos.` });
+          }
+          if (press?.id) ids.add(press.id);
+        });
+      }
+    }
   }
 
   if (bets.ballFriend.enabled) {
