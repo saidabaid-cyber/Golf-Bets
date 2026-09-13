@@ -27,7 +27,12 @@ export function collectRoundSetupPreflightIssues(input: {
     const key = `${issue.sectionId}:${issue.code}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    issues.push({ id: `bet:${key}`, label: "Configuración necesaria", detail: issue.message, targetId: issue.sectionId || "round-bet-validation", kind: "bets" });
+    const label = /hcp|handicap/i.test(issue.code) ? "HCP"
+      : /participant|player/i.test(issue.code) ? "Jugadores"
+        : /pair|team|pareja|equipo/i.test(issue.code) ? "Parejas / equipos"
+          : /stake|value|price|amount/i.test(issue.code) ? "Precio"
+            : "Configuración de apuesta";
+    issues.push({ id: `bet:${key}`, label, detail: issue.message, targetId: issue.sectionId || "round-bet-validation", kind: "bets" });
   }
   return issues;
 }

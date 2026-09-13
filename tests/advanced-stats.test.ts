@@ -139,3 +139,49 @@ test("draft normalization persists mode and valid stats while old drafts stay co
   assert.equal(legacy?.scoreCaptureMode, "quick");
   assert.deepEqual(legacy?.advancedStats, {});
 });
+
+test("captura compacta sobrevive round-trip por hoyo y jugador sin mezclar datos", () => {
+  let stats = {};
+  stats = updateAdvancedHoleStat(stats, 1, "said", {
+    teeDirection: "center",
+    teeClub: "D (Driver)",
+    teeDistance: 272,
+    greenSideBunkerCount: 1,
+    fairwayBunkerCount: 2,
+    penaltyAreaCount: 1,
+    outOfBoundsCount: 0,
+    notes: "Viento contra",
+  });
+  stats = updateAdvancedHoleStat(stats, 1, "pedro", {
+    teeDirection: "left",
+    teeClub: "3W",
+    outOfBoundsCount: 1,
+  });
+  stats = updateAdvancedHoleStat(stats, 2, "said", {
+    teeDirection: "far_right",
+    fairwayBunkerCount: 1,
+  });
+
+  const restored = normalizeRoundDraft(JSON.parse(JSON.stringify({
+    roundId: "compact-capture",
+    players: [{ id: "said", name: "Said" }, { id: "pedro", name: "Pedro" }],
+    scoreCaptureMode: "advanced",
+    scores: { 1: { said: 4, pedro: 5 }, 2: { said: 3, pedro: 4 } },
+    putts: { 1: { said: 2, pedro: 3 }, 2: { said: 1, pedro: 2 } },
+    advancedStats: stats,
+  })));
+
+  assert.deepEqual(restored?.putts, { 1: { said: 2, pedro: 3 }, 2: { said: 1, pedro: 2 } });
+  assert.deepEqual(restored?.advancedStats?.[1]?.said, {
+    teeDirection: "center",
+    teeClub: "D (Driver)",
+    teeDistance: 272,
+    greenSideBunkerCount: 1,
+    fairwayBunkerCount: 2,
+    penaltyAreaCount: 1,
+    outOfBoundsCount: 0,
+    notes: "Viento contra",
+  });
+  assert.deepEqual(restored?.advancedStats?.[1]?.pedro, { teeDirection: "left", teeClub: "3W", outOfBoundsCount: 1 });
+  assert.deepEqual(restored?.advancedStats?.[2]?.said, { teeDirection: "far_right", fairwayBunkerCount: 1 });
+});

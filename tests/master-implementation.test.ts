@@ -14,6 +14,7 @@ test("preflight explica faltantes y cada uno conserva un destino accionable", ()
   });
   assert.deepEqual(issues.map((issue) => issue.kind), ["course", "players", "bets"]);
   assert.deepEqual(issues.map((issue) => issue.targetId), ["round-course", "round-players", "result-section-setup-skins"]);
+  assert.deepEqual(issues.map((issue) => issue.label), ["Campo", "Nombre de jugadores", "Configuración de apuesta"]);
 });
 
 test("Caddie AI es exclusivo de Backyard Black y no inventa contexto faltante", () => {
@@ -87,4 +88,15 @@ test("plantillas de grupo conservan Foursome Match y las reglas explícitas de a
   assert.match(editor, /¿Cómo se define quién se queda el animal\?/);
   assert.match(editor, /Los empatados lo pagan/);
   assert.match(editor, /El último de los empatados en hacerlo/);
+  assert.match(editor, /settlementMode: "round"/);
+});
+
+test("Foursome Match expone presiones independientes sin reutilizar el multiplicador legacy", () => {
+  const page = readFileSync("app/page.tsx", "utf8");
+  const engine = readFileSync("lib/engine.ts", "utf8");
+  assert.match(page, /Presionadas Match/);
+  assert.match(page, /\+ Agregar presión/);
+  assert.match(page, /matchPresses/);
+  assert.match(engine, /FoursomeMatchPressResult/);
+  assert.match(engine, /pressProvisionalMoney/);
 });
