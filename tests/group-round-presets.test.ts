@@ -9,11 +9,14 @@ const css = readFileSync("app/functional-ux.css", "utf8");
 const migration = readFileSync("supabase/migrations/20260913175810_group_round_presets.sql", "utf8");
 
 test("la tarjeta móvil separa nombre, HCP y acciones sin widths rígidos", () => {
-  assert.match(css, /\.playerEdit\{[^}]*grid-template-columns:minmax\(0,1fr\) minmax\(132px,\.8fr\) 44px 44px/);
-  assert.match(css, /grid-template-areas:"name hcp owner remove"/);
-  assert.match(css, /@media\(max-width:700px\)[\s\S]*grid-template-areas:"name owner remove" "hcp hcp hcp"/);
+  assert.match(css, /\.playerEdit\{[^}]*grid-template-columns:minmax\(0,1fr\) 44px 44px/);
+  assert.match(css, /grid-template-areas:"name name name" "hcp owner remove"/);
+  assert.match(css, /\.playerEdit>\.playerNameField\{grid-area:name[^}]*max-height:66px/);
   assert.match(css, /\.playerEdit>\.ownerDot\{grid-area:owner/);
   assert.match(css, /\.playerEdit>\.remove\{grid-area:remove/);
+  assert.match(css, /\.manualRoundHcp \.roundHcpLabel/);
+  assert.match(page, /<textarea className="playerNameField" rows=\{1\}/);
+  assert.match(page, /<span className="roundHcpLabel">HCP<\/span>/);
 });
 
 test("Grupos expone roster, apuestas y el inicio de ronda desde la misma tarjeta", () => {

@@ -209,18 +209,19 @@
 .roundStatsCard{min-width:0}.roundStatsTableWrap{width:100%;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}.roundStatsTableWrap table{min-width:650px;border-collapse:collapse;width:100%;font-size:.78rem}.roundStatsTableWrap th,.roundStatsTableWrap td{padding:.55rem .45rem;border-bottom:1px solid var(--line);text-align:center}.roundStatsTableWrap th:first-child{position:sticky;left:0;background:var(--card);z-index:1;text-align:left}.roundStatsTableWrap th small{display:block;color:var(--muted);font-weight:500}.roundStatsTotal{font-weight:800}.roundStatsSummary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.55rem;margin-top:.8rem}.roundStatsSummary span{display:grid;gap:.15rem;padding:.65rem;border:1px solid var(--line);border-radius:12px;text-align:center}.roundStatsSummary small{color:var(--muted)}.roundStatsSummary b{font-size:1.05rem}@media(max-width:430px){.roundStatsSummary{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .roundPlayingHcp{display:grid;gap:2px;min-width:132px;border:1px solid var(--line);border-radius:12px;background:var(--soft);padding:7px 9px}.roundPlayingHcp small{color:var(--muted);font-size:9px;font-weight:850;letter-spacing:.06em}.roundPlayingHcp b{color:var(--green);font-size:13px}.roundPlayingHcp span{color:var(--muted);font-size:9px;line-height:1.25}
 
-/* Round players: actions always keep their own columns while long names and
-   playing-HCP metadata use minmax(0,1fr) and wrap on a second mobile row. */
-.playerEdit{display:grid;grid-template-columns:minmax(0,1fr) minmax(132px,.8fr) 44px 44px;grid-template-areas:"name hcp owner remove";align-items:stretch;gap:8px;min-width:0;margin-bottom:9px}
-.playerEdit>input:first-child{grid-area:name;min-width:0}
+/* Round players: the editable name owns the first row; HCP and actions share
+   the second row without competing for width, even at the narrowest iPhone. */
+.playerEdit{display:grid;grid-template-columns:minmax(0,1fr) 44px 44px;grid-template-areas:"name name name" "hcp owner remove";align-items:stretch;gap:7px 8px;min-width:0;margin-bottom:9px;border:1px solid var(--line);border-radius:14px;background:var(--soft);padding:9px}
+.playerEdit>.playerNameField{grid-area:name;width:100%;min-width:0;min-height:44px;max-height:66px;field-sizing:content;overflow-y:auto;resize:none;line-height:1.3;white-space:pre-wrap;overflow-wrap:anywhere}
 .playerEdit>.roundHcpField{grid-area:hcp;min-width:0;width:100%}
 .playerEdit>.ownerDot{grid-area:owner;min-width:44px;min-height:44px}
 .playerEdit>.remove{grid-area:remove;min-width:44px;min-height:44px}
 .playerEdit .roundPlayingHcp{min-width:0;overflow-wrap:anywhere}
-@media(max-width:700px){
-  .playerEdit{grid-template-columns:minmax(0,1fr) 44px 44px;grid-template-areas:"name owner remove" "hcp hcp hcp"}
-  .playerEdit>.roundHcpField{min-height:44px}
-}
+.manualRoundHcp{display:flex;min-height:44px;align-items:center;gap:7px;flex-wrap:wrap;border:1px solid var(--line);border-radius:11px;background:var(--card);padding:4px 9px}
+.manualRoundHcp.isMissing{border-color:var(--bad)}
+.manualRoundHcp .roundHcpLabel{flex:0 0 auto;color:var(--muted);font-size:11px;font-weight:900;letter-spacing:.04em}
+.manualRoundHcp .hcpInput{width:74px;min-width:52px;border:0;background:transparent;padding:7px 3px;text-align:left;font-weight:900;box-shadow:none}
+.manualRoundHcp .roundHcpError{flex:1 0 100%;margin:-2px 0 2px;text-align:left}
 
 /* Group presets are rosters of any size; only the per-round picker is capped. */
 .groupsHeroActions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
