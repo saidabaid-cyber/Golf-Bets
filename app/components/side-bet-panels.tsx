@@ -45,15 +45,31 @@ export function CounterBetConfigPanel({ kind, config, players, onChange, request
 }) {
   const meta = COUNTER_BET_META[kind];
   const description = kind === "vipers"
-    ? "3 putts · el último jugador que la tenga paga"
+    ? "3 putts · una captura alimenta estadística y apuesta"
     : kind === "camels"
-      ? "Bunker · el último jugador paga la bolsa"
-      : "Agua · el último jugador paga la bolsa";
+      ? "Bunkers · una captura alimenta estadística y apuesta"
+      : "Penalty / Hazard · una captura alimenta estadística y apuesta";
   const presentation = BET_PRESENTATION[kind];
   const secondNinePressed = counterBetSecondNinePressed(config);
   const configuredMultiplier = counterBetConfiguredSecondNineMultiplier(config);
-  return <SetupBetCard id={kind} icon={presentation.icon} title={presentation.title} description={description} help={kind} enabled={config.enabled} locked={locked} requestActivation={requestActivation} onEnabledChange={(enabled) => onChange({ ...config, enabled })}>
+  const determinationMode = config.determinationMode ?? "last_event";
+  const tieRule = config.mostEventsTieRule ?? "tied_players_pay";
+  return <SetupBetCard id={kind} icon={presentation.icon} title={presentation.title} description={description} help={kind} enabled={config.enabled} locked={locked} requestActivation={requestActivation} onEnabledChange={(enabled) => onChange({ ...config, enabled, determinationMode, mostEventsTieRule: tieRule })}>
     <>
+      <div className="betModeControl counterBetOwnerMode">
+        <span className="miniLabel">¿Cómo se define quién se queda el animal?</span>
+        <div className="segmented" role="group" aria-label={`Cómo se define quién se queda ${meta.plural}`}>
+          <button type="button" className={determinationMode === "last_event" ? "active" : ""} aria-pressed={determinationMode === "last_event"} onClick={() => onChange({ ...config, determinationMode: "last_event", mostEventsTieRule: tieRule })}>El último en hacerlo</button>
+          <button type="button" className={determinationMode === "most_events" ? "active" : ""} aria-pressed={determinationMode === "most_events"} onClick={() => onChange({ ...config, determinationMode: "most_events", mostEventsTieRule: tieRule })}>El que más hizo</button>
+        </div>
+      </div>
+      {determinationMode === "most_events" && <div className="betModeControl counterBetTieMode">
+        <span className="miniLabel">Si hay empate, ¿qué pasa?</span>
+        <div className="segmented" role="group" aria-label={`Desempate de ${meta.plural}`}>
+          <button type="button" className={tieRule === "tied_players_pay" ? "active" : ""} aria-pressed={tieRule === "tied_players_pay"} onClick={() => onChange({ ...config, determinationMode, mostEventsTieRule: "tied_players_pay" })}>Los empatados lo pagan</button>
+          <button type="button" className={tieRule === "latest_tied_event" ? "active" : ""} aria-pressed={tieRule === "latest_tied_event"} onClick={() => onChange({ ...config, determinationMode, mostEventsTieRule: "latest_tied_event" })}>El último empatado en hacerlo</button>
+        </div>
+      </div>}
       <div className="grid2 counterBetConfigGrid">
         <div><label>Valor por evento</label><div className="moneyField"><span>$</span><NumericCaptureInput inputMode="decimal" value={config.value} onValueChange={value => onChange({ ...config, value: Math.max(0, value ?? 0) })} /></div></div>
         <div className="betModeControl counterBetPressure"><span className="miniLabel">Presión en segunda vuelta</span><div className="segmented" role="group" aria-label={`Presión en segunda vuelta de ${meta.plural}`}><button type="button" className={!secondNinePressed ? "active" : ""} aria-pressed={!secondNinePressed} onClick={() => onChange({ ...config, settlementMode: "halves", secondNinePressed: false })}>No</button><button type="button" className={secondNinePressed ? "active" : ""} aria-pressed={secondNinePressed} onClick={() => onChange({ ...config, settlementMode: "halves", secondNinePressed: true, secondNineMultiplier: configuredMultiplier })}>Sí</button></div></div>
@@ -104,6 +120,7 @@ export function CounterBetHolePanel({ kind, config, players, events, hole, order
   resolutionOnly?: boolean;
 }) {
   if (config.enabled !== true) return null;
+  if (resolutionOnly && (config.determinationMode === "last_event" || config.determinationMode === "most_events")) return null;
   const meta = COUNTER_BET_META[kind];
   const participantIds = Array.isArray(config.participantIds) ? config.participantIds : [];
   const participants = players.filter(player => participantIds.includes(player.id));
@@ -272,7 +289,7 @@ export function CounterBetResults({ title, halves, playerName, id: explicitId, o
       return <section className="sideBetHalf" key={`${half.nine}-${index}`}>
       <div className="sideBetHalfHeader"><div><b>{periodLabel}</b><span>H{half.holes[0]}–H{half.holes.at(-1)}</span></div>{half.nine !== "round" && half.pressed && <strong>Presión {half.multiplier}x</strong>}</div>
       <div className="sideBetHalfMetrics"><div><span>Eventos</span><b>{half.quantity}</b></div><div><span>Valor por evento</span><b>{money(half.value)}</b></div><div><span>Bolsa</span><b>{money(half.bagValue)}</b></div></div>
-      <p className="sideBetKeeper">{half.keeperId ? half.settled ? <><b>Se {meta?.article === "las" ? "las" : "los"} queda: {playerName(half.keeperId)}</b><span>{playerName(half.keeperId)} paga {money(half.bagValue)} a cada rival.</span></> : <><b>Último evento: {playerName(half.keeperId)}</b><span>Liquidación pendiente de completar la vuelta.</span></> : half.quantity === 0 ? <span>Sin eventos en esta vuelta.</span> : half.needsTieBreak ? <span>Desempate pendiente.</span> : <span>Pendiente de completar la vuelta.</span>}</p>
+      <p className="sideBetKeeper">{half.keeperIds && half.keeperIds.length > 1 ? <><b>Empatados que pagan: {half.keeperIds.map(playerName).join(" · ")}</b><span>Regla configurada: los empatados con más eventos pagan a los demás jugadores.</span></> : half.keeperId ? half.settled ? <><b>Se {meta?.article === "las" ? "las" : "los"} queda: {playerName(half.keeperId)}</b><span>{playerName(half.keeperId)} paga {money(half.bagValue)} a cada rival.</span></> : <><b>Último evento: {playerName(half.keeperId)}</b><span>Liquidación pendiente de completar la vuelta.</span></> : half.quantity === 0 ? <span>Sin eventos en esta vuelta.</span> : half.needsTieBreak ? <span>Desempate pendiente.</span> : <span>Pendiente de completar la vuelta.</span>}</p>
       {half.events.length > 0 && <div className="sideBetEventBreakdown">{half.events.map(event => <article key={event.id}><b>H{event.hole} · {playerName(event.playerId)}</b><span>{event.quantity} {event.quantity === 1 ? meta?.singular || "evento" : meta?.plural || "eventos"} × {money(event.effectiveUnitValue)} = <strong>{money(event.effectiveTotalValue)}</strong></span></article>)}</div>}
       {half.settled && <div className="sideBetBalances">{Object.entries(half.balances).map(([playerId, amount]) => <span key={playerId}>{playerName(playerId)} <b className={amount > 0 ? "good" : amount < 0 ? "bad" : ""}>{signedMoney(amount)}</b></span>)}</div>}
     </section>})}

@@ -729,6 +729,14 @@ export function resolveRoundSetupContext(
     if (parsed.type === "configure_core_bet") {
       const excluded = resolveNames(parsed.excludedPlayerNames);
       if (!excluded.complete) continue;
+      const foursomeTeamA = resolveNames(parsed.foursomeTeamAPlayerNames);
+      const foursomeTeamB = resolveNames(parsed.foursomeTeamBPlayerNames);
+      if (!foursomeTeamA.complete || !foursomeTeamB.complete) continue;
+      const explicitFoursomeTeams = foursomeTeamA.ids.length === 2 && foursomeTeamB.ids.length === 2;
+      if (parsed.foursomeMode === "match" && !explicitFoursomeTeams && preview.segments[0]?.basePair.length !== 2) {
+        questions.push({ code: "missing_players", field: "bets.foursome.teams", prompt: "Foursome Match necesita dos parejas. Indica “Jugador A y Jugador B contra Jugador C y Jugador D”." });
+        continue;
+      }
       if (parsed.bet === "monkey" && parsed.enabled && !parsed.excludedPlayerNames?.length && preview.players.length !== 3) {
         questions.push({ code: "invalid_action", field: "bets.monkey.participantIds", prompt: "Monkey necesita exactamente tres jugadores. ¿Quiénes participan?" });
         continue;
@@ -741,7 +749,9 @@ export function resolveRoundSetupContext(
       const allPlayerIds = preview.players.map((player) => player.id);
       const currentParticipantIds = (preview.bets[parsed.bet]?.participantIds ?? allPlayerIds)
         .filter((id) => allPlayerIds.includes(id));
-      const participantIds = parsed.excludedPlayerNames?.length
+      const participantIds = explicitFoursomeTeams
+        ? [...foursomeTeamA.ids, ...foursomeTeamB.ids]
+        : parsed.excludedPlayerNames?.length
         ? (parsed.allPlayers ? allPlayerIds : currentParticipantIds).filter((id) => !excluded.ids.includes(id))
         : parsed.allPlayers ? preview.players.map((player) => player.id) : undefined;
       record({
@@ -753,6 +763,9 @@ export function resolveRoundSetupContext(
         ...(parsed.skinsMode ? { skinsMode: parsed.skinsMode } : {}),
         ...(parsed.secondNinePressed !== undefined ? { secondNinePressed: parsed.secondNinePressed } : {}),
         ...(parsed.secondNineMultiplier !== undefined ? { secondNineMultiplier: parsed.secondNineMultiplier } : {}),
+        ...(parsed.foursomeMode ? { foursomeMode: parsed.foursomeMode } : {}),
+        ...(explicitFoursomeTeams ? { foursomeBasePair: foursomeTeamA.ids as [string, string] } : {}),
+        ...(parsed.foursomePressureMultiplier ? { foursomePressureMultiplier: parsed.foursomePressureMultiplier } : {}),
         source: "explicit",
         confidence: parsed.confidence,
         evidence: parsed.evidence,

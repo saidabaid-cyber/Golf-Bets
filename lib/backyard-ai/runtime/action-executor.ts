@@ -55,6 +55,10 @@ function patchCounterBet(
 ) {
   return {
     ...patchValueConfig(current, action, allPlayerIds),
+    ...(action.enabled === true ? {
+      determinationMode: current.determinationMode ?? "last_event" as const,
+      mostEventsTieRule: current.mostEventsTieRule ?? "tied_players_pay" as const,
+    } : {}),
     ...definedPatch({
       secondNinePressed: action.secondNinePressed,
       secondNineMultiplier: action.secondNineMultiplier,
@@ -107,11 +111,14 @@ function patchCoreBet(draft: RoundSetupDraft, action: Extract<RoundSetupAction, 
       const current = draft.bets.foursome;
       const moneyPatch: Partial<BetConfig["foursome"]> = action.value === undefined
         ? {}
-        : current.mode === "points" ? { pointValue: action.value } : { fixedValue: action.value };
+        : (action.foursomeMode ?? current.mode) === "points" ? { pointValue: action.value } : { fixedValue: action.value };
       draft.bets.foursome = {
         ...current,
         ...definedPatch({ enabled: action.enabled }),
         ...moneyPatch,
+        ...(action.foursomeMode ? { mode: action.foursomeMode } : {}),
+        ...(action.foursomeMode === "match" ? { segmentSize: 18 as const } : {}),
+        ...(action.foursomePressureMultiplier ? { pressureMultiplier: action.foursomePressureMultiplier, pressSecond9: false } : {}),
         participantIds: configuredParticipants(current.participantIds, action.participantIds, ids),
       };
       draft.segments = normalizeFoursomeSegments(
@@ -119,6 +126,8 @@ function patchCoreBet(draft: RoundSetupDraft, action: Extract<RoundSetupAction, 
         playOrder(draft.startHole).slice(0, draft.roundHoles),
         draft.bets.foursome.segmentSize,
       );
+      if (action.foursomeBasePair && draft.segments[0]) draft.segments[0] = { ...draft.segments[0], basePair: [...action.foursomeBasePair] };
+      return;
     }
   }
 }

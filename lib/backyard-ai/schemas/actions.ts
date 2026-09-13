@@ -2,9 +2,11 @@ import type {
   ChicagoBet,
   Course,
   DecimalMode,
+  FoursomeMode,
   HandicapMode,
   Player,
   PlayerTeeAssignmentSnapshot,
+  PressureMultiplier,
   RoundHandicapBasis,
   SkinsMode,
   SupplementalBet,
@@ -51,6 +53,9 @@ export type RoundSetupAction =
       /** Second played half pressure used only by Viboritas, Camellos and Peces. */
       secondNinePressed?: boolean;
       secondNineMultiplier?: number;
+      foursomeMode?: FoursomeMode;
+      foursomeBasePair?: [string, string];
+      foursomePressureMultiplier?: PressureMultiplier;
     } & ActionEvidence)
   | ({
       type: "configure_group_nassau";
@@ -149,6 +154,10 @@ export type ParsedRoundSetupAction =
       /** Parsed only for the catalog-backed counter bets. */
       secondNinePressed?: boolean;
       secondNineMultiplier?: number;
+      foursomeMode?: FoursomeMode;
+      foursomeTeamAPlayerNames?: string[];
+      foursomeTeamBPlayerNames?: string[];
+      foursomePressureMultiplier?: PressureMultiplier;
       confidence: number;
       evidence: string;
     }

@@ -57,11 +57,16 @@ test("la configuración usa las descripciones compactas solicitadas y alinea ayu
     "Los 2 jugadores de la derecha vs los 2 de la izquierda",
   ]) assert.match(page, new RegExp(description.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   for (const description of [
-    "3 putts · el último jugador que la tenga paga",
-    "Bunker · el último jugador paga la bolsa",
-    "Agua · el último jugador paga la bolsa",
+    "3 putts · una captura alimenta estadística y apuesta",
+    "Bunkers · una captura alimenta estadística y apuesta",
+    "Penalty / Hazard · una captura alimenta estadística y apuesta",
     "El Lobo elige pareja o juega solo",
   ]) assert.match(sideBets, new RegExp(description.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(sideBets, /¿Cómo se define quién se queda el animal\?/);
+  assert.match(sideBets, /El último en hacerlo/);
+  assert.match(sideBets, /El que más hizo/);
+  assert.match(sideBets, /Los empatados lo pagan/);
+  assert.match(sideBets, /El último empatado en hacerlo/);
   for (const type of ["individual_nassau", "dollar_stroke", "individual_pressures", "team_pressures", "chicago", "vegas", "minimum_putts"] as const) {
     const definition = BET_DEFINITION_BY_ID.get(type);
     assert.ok(definition?.description.trim(), `${type} necesita descripción canónica`);

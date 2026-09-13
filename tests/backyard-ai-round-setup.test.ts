@@ -120,6 +120,25 @@ test("interpreta roster, Skins y Nassau grupal hacia el modelo real de Pollas", 
   assert.equal(plan.canConfirm, true);
 });
 
+test("AI estructura Foursome Match con dos parejas, valor y presiones sin calcular resultados", () => {
+  const andres: FrequentPlayer = { id: "fp-andres", name: "Andrés", handicap: 16, uses: 5, updatedAt: "2026-09-06T12:00:00Z" };
+  const plan = planRoundSetup(
+    "Somos Said, Pedro, Juan y Andrés. Said y Pedro contra Juan y Andrés. Foursome Match de 500. Handicaps normales y presiones.",
+    context({ frequentPlayers: [...frequentPlayers, andres], activeDraft: activeDraft() }),
+  );
+  const byName = Object.fromEntries(plan.draft.players.map((player) => [player.name, player.id]));
+
+  assert.equal(plan.draft.bets.foursome.enabled, true);
+  assert.equal(plan.draft.bets.foursome.mode, "match");
+  assert.equal(plan.draft.bets.foursome.segmentSize, 18);
+  assert.equal(plan.draft.bets.foursome.fixedValue, 500);
+  assert.equal(plan.draft.bets.foursome.pressureMultiplier, 2);
+  assert.deepEqual(plan.draft.bets.foursome.participantIds, [byName.Said, byName.Pedro, byName.Juan, byName["Andrés"]]);
+  assert.deepEqual(plan.draft.segments[0]?.basePair, [byName.Said, byName.Pedro]);
+  assert.equal(plan.questions.some((question) => question.field === "bets.foursome.teams"), false);
+  assert.equal(plan.canConfirm, true);
+});
+
 test("Peces modela su presión real 3x sin convertirla en Presiones independientes", () => {
   const plan = planRoundSetup(
     "Peces de 100 con presión 3x.",

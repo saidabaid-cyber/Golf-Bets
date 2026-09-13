@@ -146,6 +146,19 @@ export function validateRoundSetupAction(action: RoundSetupAction, draft: RoundS
         if (hasCounterPressure && (!isCounterBet || (!validPressedPressure && !validNoPressure))) {
           return { valid: false, code: "counter-pressure", message: "La presión sólo corresponde a Viboritas, Camellos o Peces y necesita un multiplicador entero entre 2x y 5x." };
         }
+        const hasFoursomeFields = action.foursomeMode !== undefined || action.foursomeBasePair !== undefined || action.foursomePressureMultiplier !== undefined;
+        if (hasFoursomeFields && action.bet !== "foursome") {
+          return { valid: false, code: "foursome-match", message: "La modalidad, parejas y presión Match sólo corresponden a Foursome." };
+        }
+        if (action.foursomeMode !== undefined && !["fixed", "fixed_points", "points", "match"].includes(action.foursomeMode)) {
+          return { valid: false, code: "foursome-match", message: "La modalidad de Foursome no es válida." };
+        }
+        if (action.foursomeBasePair && (action.foursomeBasePair.length !== 2 || new Set(action.foursomeBasePair).size !== 2 || !participantsBelongToDraft(action.foursomeBasePair, draft))) {
+          return { valid: false, code: "foursome-match-team", message: "Foursome Match necesita una pareja base válida dentro de la ronda." };
+        }
+        if (action.foursomePressureMultiplier !== undefined && (!Number.isInteger(action.foursomePressureMultiplier) || action.foursomePressureMultiplier < 2 || action.foursomePressureMultiplier > 5)) {
+          return { valid: false, code: "foursome-match-pressure", message: "La presión de Foursome Match debe estar entre 2x y 5x." };
+        }
       }
       if (!participantsBelongToDraft(action.participantIds, draft)) {
         return { valid: false, code: "participants", message: "La acción contiene participantes ajenos a la ronda o repetidos." };

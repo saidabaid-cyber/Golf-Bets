@@ -67,7 +67,7 @@ function cleanName(value: string) {
   return value
     .replace(/^[\s,'"-]+|[\s,'"-]+$/g, "")
     .replace(/^(?:los jugadores|jugadores)\s+/i, "")
-    .replace(/^(?:hoy\s+)?jugamos\s+/i, "")
+    .replace(/^(?:(?:hoy\s+)?jugamos|somos)\s+/i, "")
     .replace(/\s+(?:hcp|handicap)\s*(?:de\s*)?[+-]?\d+(?:[.,]\d+)?$/i, "")
     .replace(/\s+/g, " ")
     .trim();
@@ -173,6 +173,22 @@ function parseHandicap(value: string) {
   return Number.isFinite(handicap) && handicap >= -15 ? Math.min(36, handicap) : undefined;
 }
 
+function foursomeMatchupFromCommand(normalized: string, alias: string, clause: string) {
+  const aliasIndex = normalized.search(new RegExp(`\\b${escapeRegExp(alias)}\\b`, "i"));
+  const precedingClauses = aliasIndex > 0
+    ? normalized.slice(0, aliasIndex).split(/[.;]/).map((item) => item.trim()).filter(Boolean).reverse()
+    : [];
+  for (const candidate of [clause, ...precedingClauses]) {
+    const withoutAlias = candidate.replace(new RegExp(`^\\s*${escapeRegExp(alias)}s?\\s+(?:match\\s+)?`, "i"), "");
+    const match = /(.+?)\s+(?:contra|vs\.?|versus)\s+(.+?)(?=\s+(?:de|a|por)\s+\$?\d|$)/i.exec(withoutAlias);
+    if (!match) continue;
+    const left = splitNames(match[1]);
+    const right = splitNames(match[2]);
+    if (left.length === 2 && right.length === 2) return { left, right };
+  }
+  return null;
+}
+
 function parsePlayerHandicaps(input: string): ParsedRoundSetupAction[] {
   const actions: ParsedRoundSetupAction[] = [];
   const seen = new Set<string>();
@@ -222,7 +238,7 @@ function parseRoster(input: string): ParsedRoundSetupAction | undefined {
   // Sentence punctuation after a numeric HCP must still end the roster.
   const sentences = input.split(/;|\n|(?<!\d)\.|\.(?!\d)/);
   for (const sentence of sentences) {
-    const match = /^(?:\s*hoy\s+)?\s*jugamos\s+(.+)$/i.exec(sentence.trim());
+    const match = /^(?:(?:\s*hoy\s+)?\s*jugamos|\s*somos)\s+(.+)$/i.exec(sentence.trim());
     if (!match) continue;
     let roster = match[1].trim();
     const normalizedRoster = normalizeMexicanSpanish(roster);
@@ -641,17 +657,27 @@ function coreActions(normalized: string): ParsedRoundSetupAction[] {
     const clause = clauseContaining(normalized, new RegExp(`\\b${escapeRegExp(alias)}\\b`, "i"));
     const pressureClause = COUNTER_BETS.has(definition.bet) ? scopedCounterPressureClause(normalized, alias) : "";
     const pressure = counterPressureFromClause(pressureClause);
+    const foursomeMatch = definition.bet === "foursome" && /\bmatch\b/i.test(clause);
+    const foursomeMatchup = foursomeMatch ? foursomeMatchupFromCommand(normalized, alias, clause) : null;
+    const foursomeTail = foursomeMatch ? normalized.slice(normalized.search(/\bfoursomes?\b/i)) : "";
+    const foursomePressureText = foursomeMatch ? /\b(?:presion(?:ada|adas|es)?|press(?:es)?)\b[^.;]*/i.exec(foursomeTail)?.[0] : undefined;
+    const foursomePressureValue = foursomePressureText
+      ? Number(/\b([2-5])\s*x\b/i.exec(foursomePressureText)?.[1] ?? 2)
+      : undefined;
     actions.push({
       type: "configure_core_bet",
       bet: definition.bet,
       enabled: !hasRemovalNearAlias(normalized, alias),
-      value: amountAfterAlias(pressureClause || clause, alias),
+      value: foursomeMatch ? trailingAmount(clause) ?? amountAfterAlias(clause, alias) : amountAfterAlias(pressureClause || clause, alias),
       excludedPlayerNames: scopedExcludedNames(normalized, clause, alias),
       allPlayers: allPlayersFor(normalized, alias),
       ...(definition.bet === "skins" && /\b(?:sin\s+carry|no\s+acumulables?)\b/i.test(clause) ? { skinsMode: "no_carry" as const } : {}),
       ...(definition.bet === "skins" && /\b(?:con\s+carry|acumulables?)\b/i.test(clause) && !/\bno\s+acumulables?\b/i.test(clause) ? { skinsMode: "carry" as const } : {}),
       ...(pressure.secondNinePressed !== undefined ? { secondNinePressed: pressure.secondNinePressed } : {}),
       ...(pressure.secondNineMultiplier !== undefined ? { secondNineMultiplier: pressure.secondNineMultiplier } : {}),
+      ...(foursomeMatch ? { foursomeMode: "match" as const } : {}),
+      ...(foursomeMatchup ? { foursomeTeamAPlayerNames: foursomeMatchup.left, foursomeTeamBPlayerNames: foursomeMatchup.right } : {}),
+      ...(foursomePressureValue ? { foursomePressureMultiplier: foursomePressureValue as 2 | 3 | 4 | 5 } : {}),
       confidence: 0.96,
       evidence: pressureClause || clause || alias,
     });

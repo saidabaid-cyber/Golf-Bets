@@ -68,3 +68,23 @@ test("fallo de consentimiento remoto muestra causa y garantiza que no hubo enví
   assert.match(setup, /La instrucción no se envió y continuamos con el intérprete local seguro/);
   assert.match(setup, /!consentInfrastructureNotice && !remoteConsentUnavailable/);
 });
+
+test("Más concentra herramientas, ayuda y configuración sin duplicar Perfil", () => {
+  const more = readFileSync("app/components/more-hub.tsx", "utf8");
+  const page = readFileSync("app/page.tsx", "utf8");
+  for (const label of ["Campos", "Mi Bolsa", "Handicap / GHIN", "Fitting", "GPS / Hole Map", "Ayuda", "Configuración adicional"]) {
+    assert.match(more, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+  assert.doesNotMatch(more, /title: "Perfil"/);
+  assert.match(page, /onOpenHelp=\{openRulesForRound\}/);
+  assert.match(page, /onOpenSettings=\{\(\) => setTab\("account"\)\}/);
+});
+
+test("plantillas de grupo conservan Foursome Match y las reglas explícitas de animales", () => {
+  const editor = readFileSync("app/components/group-bet-template-editor.tsx", "utf8");
+  assert.match(editor, /<option value="match">Match · Primera \/ Segunda \/ Total<\/option>/);
+  assert.match(editor, /mode === "match" \? \{ segmentSize: 18 \}/);
+  assert.match(editor, /¿Cómo se define quién se queda el animal\?/);
+  assert.match(editor, /Los empatados lo pagan/);
+  assert.match(editor, /El último de los empatados en hacerlo/);
+});
