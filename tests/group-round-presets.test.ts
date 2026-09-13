@@ -20,9 +20,11 @@ test("la tarjeta móvil separa nombre, HCP y acciones sin widths rígidos", () =
 });
 
 test("Grupos expone roster, apuestas y el inicio de ronda desde la misma tarjeta", () => {
-  for (const copy of ["Crear grupo", "Apuestas del grupo", "Editar jugadores y apuestas", "Iniciar ronda"]) {
+  for (const copy of ["Mis grupos", "Invitaciones", "Crear grupo", "Apuestas del grupo", "Editar jugadores y apuestas", "Iniciar ronda"]) {
     assert.match(builder, new RegExp(copy));
   }
+  assert.match(builder, /frequentGroupTemplateDetails/);
+  assert.match(builder, /PENDING_CONTROLLED_DB_APPLY/);
   assert.match(page, /<GroupBetTemplateEditor/);
   assert.match(page, /createEmptyGroupGameTemplate/);
 });
@@ -36,8 +38,8 @@ test("el selector muestra todos los miembros, contador 5 y bloqueo explícito de
 });
 
 test("editar una ronda basada en grupo distingue sólo esta ronda de actualizar plantilla", () => {
-  assert.match(page, /Aplicar sólo esta ronda/);
-  assert.match(page, /Actualizar plantilla del grupo/);
+  assert.match(page, /Sólo esta ronda/);
+  assert.match(page, /Guardar también en Grupo/);
   assert.match(page, /Agregar también al grupo/);
   assert.match(page, /saveRoundAsFrequentGroupTemplate/);
   assert.match(page, /addRoundOnlyPlayersToSourceGroup/);

@@ -12,7 +12,9 @@ import {
   createRoundGroupSnapshot,
   defaultGroupRoundSelection,
   createGroupGameTemplate,
+  frequentGroupTemplateDetails,
   instantiateGroupGameTemplate,
+  normalizeGroupGameTemplate,
   updateGroupTemplateFromRound,
   validateGroupRoundSelection,
   type GroupTemplateDraftSource,
@@ -208,6 +210,16 @@ test("guest, invitación y cuenta vinculada previenen duplicados y permiten revi
   assert.equal(group.players[1].handicap, 10);
 });
 
+test("quitar un integrante de la plantilla elimina sus participantes y parejas sin tocar rondas previas", () => {
+  const original = configuredGroup();
+  const edited = { ...original, players: original.players.filter((member) => member.memberId !== "member-carlos") };
+  const normalized = normalizeGroupGameTemplate(edited.gameTemplate, edited.players);
+  assert.ok(normalized);
+  assert.equal(normalized.betConfig.foursome.participantIds.includes("member-carlos"), false);
+  assert.equal(normalized.foursomeSegments.some((segment) => segment.basePair.includes("member-carlos")), false);
+  assert.equal(original.gameTemplate?.betConfig.foursome.participantIds.includes("member-carlos"), true);
+});
+
 test("un grupo de ocho conserva su roster y crea una ronda sólo con los cuatro seleccionados", () => {
   const group: FrequentGroup = {
     ...configuredGroup(),
@@ -227,6 +239,24 @@ test("un grupo de ocho conserva su roster y crea una ronda sólo con los cuatro 
   assert.equal(draft.players.length, 4);
   assert.deepEqual(draft.players.map((player) => player.name), ["Said", "Pedro", "Juan", "Carlos"]);
   assert.equal(Object.keys(draft.origin.roundPlayerIdByMemberId).length, 4);
+});
+
+test("un grupo grande permite seleccionar exactamente cinco sin alterar el roster", () => {
+  const group: FrequentGroup = {
+    ...configuredGroup(),
+    players: [...configuredGroup().players,
+      { memberId: "member-five", kind: "guest", name: "Cinco", handicap: 5 },
+      { memberId: "member-six", kind: "guest", name: "Seis", handicap: 6 },
+      { memberId: "member-seven", kind: "guest", name: "Siete", handicap: 7 },
+      { memberId: "member-eight", kind: "guest", name: "Ocho", handicap: 8 }],
+  };
+  const selected = group.players.slice(0, 5).map((member) => member.memberId!);
+  const validation = validateGroupRoundSelection(group, selected);
+  assert.equal(validation.ok, true);
+  let sequence = 0;
+  const draft = instantiateGroupGameTemplate(group, () => `five-${++sequence}`, selected);
+  assert.equal(group.players.length, 8);
+  assert.equal(draft.players.length, 5);
 });
 
 test("el sexto jugador se bloquea y una identidad ajena nunca entra a la ronda", () => {
@@ -255,6 +285,61 @@ test("participantes ausentes dejan la apuesta inválida para que Preflight oblig
   const issues = collectBetConfigurationIssues(draft);
   assert.ok(issues.some((issue) => issue.code === "foursome-match-participants"));
   assert.match(issues.map((issue) => issue.message).join("\n"), /exactamente 4 jugadores|pareja base válida/i);
+});
+
+test("la ronda filtra participantes presentes y precarga Foursome Match y reglas de animales", () => {
+  const source = configuredSource();
+  source.bets.foursome = {
+    ...source.bets.foursome,
+    enabled: true,
+    mode: "match",
+    fixedValue: 500,
+    participantIds: roundPlayers.map((player) => player.id),
+  };
+  source.bets.vipers = { ...source.bets.vipers, enabled: true, value: 100, determinationMode: "most_events", mostEventsTieRule: "latest_tied_event" };
+  source.bets.camels = { ...source.bets.camels, enabled: true, value: 125, determinationMode: "last_event" };
+  source.bets.fish = { ...source.bets.fish, enabled: true, value: 150, determinationMode: "most_events", mostEventsTieRule: "tied_players_pay" };
+  source.segments = segmentDefinitions(playOrder(1), 18).map((segment) => ({ ...segment, basePair: ["round-owner", "round-pedro"] }));
+  const group = { ...configuredGroup(), gameTemplate: createGroupGameTemplate(source, memberIdByPlayerId) };
+  let sequence = 0;
+  const draft = instantiateGroupGameTemplate(group, () => `autoload-${++sequence}`, ["member-owner", "member-pedro", "member-juan", "member-carlos"]);
+
+  assert.equal(draft.bets.foursome.enabled, true);
+  assert.equal(draft.bets.foursome.mode, "match");
+  assert.equal(draft.bets.foursome.fixedValue, 500);
+  assert.deepEqual(draft.segments[0].basePair, draft.players.slice(0, 2).map((player) => player.id));
+  assert.deepEqual([draft.bets.vipers.value, draft.bets.camels.value, draft.bets.fish.value], [100, 125, 150]);
+  assert.equal(draft.bets.vipers.determinationMode, "most_events");
+  assert.equal(draft.bets.vipers.mostEventsTieRule, "latest_tied_event");
+  assert.equal(draft.bets.camels.determinationMode, "last_event");
+  assert.equal(draft.bets.fish.mostEventsTieRule, "tied_players_pay");
+  assert.deepEqual(draft.bets.skins.participantIds, draft.players.map((player) => player.id));
+});
+
+test("agregar un jugador sólo a la ronda no muta el grupo y agregarlo explícitamente sí", () => {
+  const group = configuredGroup();
+  let sequence = 0;
+  const draft = instantiateGroupGameTemplate(group, () => `guest-${++sequence}`);
+  draft.players.push({ id: "round-new", name: "Nuevo", handicap: 17 });
+  assert.equal(group.players.some((member) => member.name === "Nuevo"), false);
+
+  const updated = addFrequentGroupMember(group, { memberId: "member-new", kind: "guest", name: "Nuevo", handicap: 17 });
+  assert.notEqual(updated, group);
+  assert.equal(updated.players.some((member) => member.name === "Nuevo"), true);
+  assert.equal(group.players.some((member) => member.name === "Nuevo"), false);
+});
+
+test("el resumen de la tarjeta enumera apuestas, modalidades y precios reales", () => {
+  const source = configuredSource();
+  source.bets.foursome = { ...source.bets.foursome, enabled: true, mode: "match", fixedValue: 500 };
+  source.bets.camels = { ...source.bets.camels, enabled: true, value: 100 };
+  source.bets.fish = { ...source.bets.fish, enabled: true, value: 125 };
+  const group = { ...configuredGroup(), gameTemplate: createGroupGameTemplate(source, memberIdByPlayerId) };
+  const details = frequentGroupTemplateDetails(group);
+  assert.ok(details.includes("Foursome Match $500"));
+  assert.ok(details.includes("Víboras $75"));
+  assert.ok(details.includes("Camellos $100"));
+  assert.ok(details.includes("Peces $125"));
 });
 
 test("el snapshot de origen conserva nombre y selección aunque la plantilla se edite después", () => {
