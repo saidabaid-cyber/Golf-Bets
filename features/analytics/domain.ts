@@ -15,6 +15,8 @@ export const PRODUCT_EVENT_NAMES = [
   "round_invite_accepted",
   "membership_benefits_viewed",
   "ai_insight_viewed",
+  "stats_deleted",
+  "account_delete_requested",
 ] as const;
 
 export type ProductEventName = (typeof PRODUCT_EVENT_NAMES)[number];
@@ -23,7 +25,7 @@ export type ProductEventMetadata = Record<string, string | number | boolean | nu
 const SAFE_METADATA_KEYS = new Set([
   "source", "surface", "feature", "gameId", "courseId", "roundHoles", "playerCount",
   "result", "status", "errorCode", "provider", "model", "latencyMs", "quantity",
-  "planId", "environment", "window", "deviceClass", "offline", "version",
+  "planId", "environment", "window", "deviceClass", "offline", "version", "strategy",
 ]);
 const SENSITIVE_KEY = /(email|name|prompt|image|photo|latitude|longitude|address|phone|token|secret|scorecard)/i;
 

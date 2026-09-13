@@ -15,6 +15,14 @@ export async function DELETE(request: Request) {
   const { data, error } = await userClient.auth.getUser(token);
   if (error || !data.user) return Response.json({ error: "Sesión no válida." }, { status: 401 });
   try {
+    const audit = await userClient.from("product_usage_events_v2").insert({
+      id: `account-delete-${crypto.randomUUID().replaceAll("-", "")}`,
+      owner_id: data.user.id,
+      event_name: "account_delete_requested",
+      metadata: {},
+      occurred_at: new Date().toISOString(),
+    });
+    if (audit.error) return Response.json({ error: "No se pudo registrar de forma segura la solicitud. La cuenta sigue activa." }, { status: 503 });
     const deleted = await deleteAccountGraph(supabaseAccountDeletionGateway(admin), data.user.id);
     return Response.json({ ok: true, deleted });
   } catch {

@@ -10,6 +10,7 @@ import { betaOnboardingDraftStorageKey, betaOnboardingStorageKey } from "./beta-
 import { deletePersonalAiData, readLearningRecords } from "./backyard-ai/memory/learning-events";
 import { bettingConsentPromptStorageKey } from "./account-state";
 import { deleteAiProcessingConsents } from "./backyard-ai/processing-consent";
+import { statisticsResetStorageKey } from "./statistics-reset";
 
 export const WORKSPACE_OWNER_KEY = "backyard-local-workspace-owner-v1";
 export const CLOUD_CONFLICTS_KEY = "backyard-cloud-conflicts-v1";
@@ -182,6 +183,7 @@ export function discardAccountWorkspace(storage: WorkspaceStorage, userId: strin
   storage.removeItem(coursePreferenceStorageKey("favorites", userId));
   storage.removeItem(coursePreferenceStorageKey("recents", userId));
   storage.removeItem(internalNotificationStorageKey(userId));
+  storage.removeItem(statisticsResetStorageKey(userId));
   const equipmentKey = equipmentProfileStorageKey(userId);
   const equipmentRecoveryKey = equipmentProfileRecoveryStorageKey(userId);
   const fittingKey = ballFitDraftStorageKey(userId);
