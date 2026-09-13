@@ -1,5 +1,6 @@
 "use client";
 import "./functional-ux.css";
+import "./profile-account.css";
 import { initialBets, restoreBetConfig } from "../lib/new-round-bets";
 import { collectBetConfigurationIssues } from "../lib/bet-config-validation";
 import { collectRoundSetupPreflightIssues } from "../lib/round-setup-preflight";
@@ -79,7 +80,7 @@ import { SignedMoneyInput } from "./components/signed-money-input";
 import { AccountProvider, useBackyardAccount } from "./components/account-provider";
 import { resolveRoundDraftCore, resolvedOwnerIdForRoundDraft } from "./draft-restoration";
 import { accountDeletionMarkerKey, ACCOUNT_STORAGE_KEYS, hasCurrentBettingDataConsent, parseLegalAcceptances } from "../lib/account-state";
-import { AccountPanel } from "./components/account-panel";
+import { ProfileAccountPanel } from "./components/profile-account-panel";
 import { RoundCoursePicker } from "./components/round-course-picker";
 import { BrandLockup } from "./components/brand-lockup";
 import { ModalCloseButton } from "./components/modal-shell";
@@ -163,6 +164,7 @@ import { BetHelpButton, SupplementalBetsEditor, SupplementalBetResults } from ".
 import { buildGeneralResultsTable, pollaDetailBalance, pollaDetailBalances, pollaPositionLabels, summarizeNetUnitQuantities, type ResultCategoryColumn } from "../lib/result-breakdown";
 import { collectHoleValidationErrors } from "../lib/hole-validation";
 import { buildGolfInsights, buildPersonalActivity } from "../lib/golf-insights";
+import { fetchStatisticsReset, persistStatisticsReset, readStatisticsReset, roundsEligibleForStatistics, type StatisticsResetRecord } from "../lib/statistics-reset";
 import { buildHistoricalRoundRecap } from "../lib/historical-round-recap";
 import { coursePreferenceStorageKey, normalizeCourseIds, rememberRecentCourse, toggleFavoriteCourse } from "../lib/course-preferences";
 import {
@@ -457,6 +459,7 @@ function GolfBetsApp() {
   const currentIndexRef = useRef(0);
   const [expenses, setExpenses] = useState<Expense>(emptyExpenses);
   const [history, setHistory] = useState<RoundSnapshot[]>([]);
+  const [statisticsResetAt, setStatisticsResetAt] = useState<string | null>(null);
   const [roundId, setRoundId] = useState(makeId());
   const [roundDate, setRoundDate] = useState(localDateMexico());
   const [roundStartedAt, setRoundStartedAt] = useState<string | null>(null);
@@ -603,6 +606,26 @@ function GolfBetsApp() {
     hadLocalPreferences.current = true;
     setNotificationsEnabled(value);
   }, []);
+
+  const applyStatisticsReset = useCallback((reset: StatisticsResetRecord) => {
+    if (identity.mode !== "authenticated") throw new Error("Inicia sesión para eliminar tus estadísticas.");
+    persistStatisticsReset(localStorage, identity.userId, reset);
+    setStatisticsResetAt(reset.resetAt);
+  }, [identity.mode, identity.userId]);
+
+  const statisticsAccessToken = identity.accessToken;
+  useEffect(() => {
+    if (!hydrated || identity.mode !== "authenticated") { setStatisticsResetAt(null); return; }
+    const local = readStatisticsReset(localStorage, identity.userId);
+    setStatisticsResetAt(local?.resetAt || null);
+    let current = true;
+    void fetchStatisticsReset(statisticsAccessToken).then((remote) => {
+      if (!current || !remote) return;
+      persistStatisticsReset(localStorage, identity.userId, remote);
+      setStatisticsResetAt(remote.resetAt);
+    });
+    return () => { current = false; };
+  }, [hydrated, identity.mode, identity.userId, statisticsAccessToken]);
 
   const order = useMemo(() => playOrder(startHole).slice(0, roundHoles), [startHole, roundHoles]);
   const protectedScorecardPhotoIds = useMemo(() => [...new Set([
@@ -3244,14 +3267,15 @@ function GolfBetsApp() {
   const todayMx = localDateMexico();
   const currentMonth = todayMx.slice(0, 7);
   const currentYear = todayMx.slice(0, 4);
-  const betaGolfInsights = useMemo(() => buildGolfInsights(history), [history]);
+  const statisticsHistory = useMemo(() => roundsEligibleForStatistics(history, statisticsResetAt), [history, statisticsResetAt]);
+  const betaGolfInsights = useMemo(() => buildGolfInsights(statisticsHistory), [statisticsHistory]);
   const monthGolfInsights = useMemo(
-    () => buildGolfInsights(history.filter((round) => typeof round.date === "string" && round.date.startsWith(currentMonth))),
-    [history, currentMonth],
+    () => buildGolfInsights(statisticsHistory.filter((round) => typeof round.date === "string" && round.date.startsWith(currentMonth))),
+    [statisticsHistory, currentMonth],
   );
   const yearGolfInsights = useMemo(
-    () => buildGolfInsights(history.filter((round) => typeof round.date === "string" && round.date.startsWith(currentYear))),
-    [history, currentYear],
+    () => buildGolfInsights(statisticsHistory.filter((round) => typeof round.date === "string" && round.date.startsWith(currentYear))),
+    [statisticsHistory, currentYear],
   );
   const personalActivity = useMemo(
     () => buildPersonalActivity(history, frequentGroups, identity.displayName),
@@ -3447,7 +3471,7 @@ function GolfBetsApp() {
 
     {tab === "social" && <SocialFeed initialView={socialInitialView} activity={personalActivity} identityUserId={identity.userId || "guest"} accessToken={identity.accessToken || undefined} knownProfiles={frequentPlayers.filter((player) => Boolean(player.accountUserId)).map((player) => ({ userId: player.accountUserId as string, username: player.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9._]+/g, ".").replace(/^\.|\.$/g, ""), displayName: player.name, handicap: player.handicap, privacy: "FRIENDS" as const }))} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} onOpenRound={openHistoricalRound} onOpenGroup={() => setTab("groups")} onCreateRound={requestNewRound} onOpenGroups={() => setTab("groups")} />}
     {tab === "balances" && <BalanceLedgerPanel history={history} currentUserId={identity.mode === "authenticated" ? identity.userId : undefined} />}
-    {tab === "stats" && <StatsDashboard insights={betaGolfInsights} rounds={history} consentOwnerId={identity.userId || undefined} accessToken={identity.accessToken} onOpenHistory={() => setTab("history")} onOpenRound={openHistoricalRound} />}
+    {tab === "stats" && <StatsDashboard insights={betaGolfInsights} rounds={statisticsHistory} consentOwnerId={identity.userId || undefined} accessToken={identity.accessToken} onOpenHistory={() => setTab("history")} onOpenRound={openHistoricalRound} />}
     {tab === "courseLibrary" && <CourseLibrary courses={courses} favoriteCourseIds={favoriteCourseIds} recentCourseIds={recentCourseIds} selectedCourseId={courseSelected ? course.id : null} onToggleFavorite={(courseId) => setFavoriteCourseIds((current) => toggleFavoriteCourse(current, courseId))} onSelectCourse={(nextCourse) => selectRoundCourse(nextCourse, true)} onCreateCourse={startNewCourse} onEditCourse={editCourseFromLibrary} />}
 
     {feedback && <div className="notice" role="status">{feedback}<button className="textButton" aria-label="Cerrar mensaje" onClick={() => setFeedback("")}>×</button></div>}
@@ -3461,8 +3485,8 @@ function GolfBetsApp() {
     {tab === "historyDetail" && (() => { const saved = history.find(round => round.id === historyDetailId); return saved ? <HistoricalRoundDetail round={saved} onEdit={() => editHistoricalRound(saved)} onPhoto={() => viewScorecardPhoto(saved)} /> : <div className="empty">La ronda ya no está disponible.</div>; })()}
     {tab === "groups" && <GroupBuilder frequentPlayers={frequentPlayers} frequentGroups={frequentGroups} onBack={() => setTab("welcome")} onPlay={startRoundWithGeneratedGroup} onSaveFrequentGroup={saveGeneratedFrequentGroup} onCreateFrequentGroup={beginCreateFrequentGroup} onStartFrequentGroup={loadFrequentGroup} onEditFrequentGroup={beginEditFrequentGroup} onDeleteFrequentGroup={setFrequentGroupToDelete} />}
 
-    {tab === "profile" && <AccountPanel view="profile" focusSection={profileFocus} highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} golfInsights={betaGolfInsights} onOpenStats={() => setTab("stats")} onOpenAccount={() => setTab("account")} />}
-    {tab === "account" && <AccountPanel view="account" highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} golfInsights={betaGolfInsights} onOpenStats={() => setTab("stats")} />}
+    {tab === "profile" && <ProfileAccountPanel view="profile" focusSection={profileFocus} highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} golfInsights={betaGolfInsights} statisticsResetAt={statisticsResetAt} onStatisticsReset={applyStatisticsReset} onOpenStats={() => setTab("stats")} onOpenAccount={() => setTab("account")} />}
+    {tab === "account" && <ProfileAccountPanel view="account" highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} golfInsights={betaGolfInsights} statisticsResetAt={statisticsResetAt} onStatisticsReset={applyStatisticsReset} onOpenStats={() => setTab("stats")} />}
 
     {tab === "setup" && <>
       <section className="hero setupHero">
