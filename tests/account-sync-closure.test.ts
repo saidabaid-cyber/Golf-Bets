@@ -4,6 +4,7 @@ import test from "node:test";
 
 import { ACCOUNT_OWNED_ROWS, ACCOUNT_REFERENCE_COLUMNS, deleteAccountGraph, type AccountDeletionGateway } from "../lib/account-deletion";
 import { activeWorkspaceScorecardPhotoIds, discardAccountWorkspace, switchAccountWorkspace, WORKSPACE_OWNER_KEY } from "../lib/account-workspace";
+import { statisticsResetStorageKey } from "../lib/statistics-reset";
 import { CloudSyncGate, cloudSyncErrorMessage, syncStatusAfterSkip } from "../lib/cloud-sync-gate";
 import { STORAGE_KEYS } from "../lib/round-utils";
 import { legalReturnDestination, preserveLegalReturn } from "../lib/legal-navigation";
@@ -103,6 +104,7 @@ test("eliminar cuenta local descarta solo A y conserva invitado y B", () => {
   assert.equal(acceptAiProcessingConsent(storage as unknown as Storage, "user-a", AI_PROVIDER_PROCESSING_CONSENT).ok, true);
   storage.setItem(bettingConsentPromptStorageKey("user-a"), "shown");
   storage.setItem(accountDeletionMarkerKey("user-a"), "pending");
+  storage.setItem(statisticsResetStorageKey("user-a"), '{"resetAt":"2026-09-13T20:00:00.000Z","strategy":"RESET_FROM_DATE"}');
   switchAccountWorkspace(storage, "user-b");
   storage.setItem(STORAGE_KEYS.history, "b-history");
   switchAccountWorkspace(storage, "user-a");
@@ -124,6 +126,7 @@ test("eliminar cuenta local descarta solo A y conserva invitado y B", () => {
   assert.equal(storage.getItem(backyardAiMetricsStorageKey("user-a")!), null);
   assert.equal(hasActiveAiProcessingConsent(storage, "user-a", AI_PROVIDER_PROCESSING_CONSENT), false);
   assert.equal(storage.getItem(bettingConsentPromptStorageKey("user-a")), null);
+  assert.equal(storage.getItem(statisticsResetStorageKey("user-a")), null);
   assert.equal(storage.getItem(accountDeletionMarkerKey("user-a")), "pending");
   assert.equal(storage.getItem(internalNotificationStorageKey("user-b")), '{"version":1,"readEventKeys":["round-b"]}');
   switchAccountWorkspace(storage, "user-b");

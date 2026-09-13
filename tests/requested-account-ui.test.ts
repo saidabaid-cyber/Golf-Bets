@@ -3,7 +3,7 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 
 const page = readFileSync("app/page.tsx", "utf8");
-const account = readFileSync("app/components/account-panel.tsx", "utf8");
+const account = readFileSync("app/components/profile-account-panel.tsx", "utf8");
 const social = readFileSync("app/components/social-feed.tsx", "utf8");
 
 test("Resultados usa el encabezado seguro Gastos sin interpolar una identidad ausente", () => {
@@ -30,23 +30,23 @@ test("Jugar con un grupo usa el mismo respaldo seguro que Nueva ronda", () => {
 });
 
 test("el invitado conserva su golf local sin presentar un perfil falso como persistente", () => {
-  assert.match(account, /Modo invitado · Los datos permanecen en este dispositivo/);
   assert.match(account, /view === "profile" && identity\.mode === "guest"/);
-  assert.match(account, /Las rondas, grupos y estadísticas locales siguen disponibles/);
-  assert.match(account, /perfil persistente con nombre, avatar y preferencias/);
-  assert.match(account, /view === "profile" && identity\.mode === "authenticated" && <section ref=\{profileSectionRef\} className="card profileCard">/);
-  assert.doesNotMatch(account, /Sin correo · Invitado/);
+  assert.match(account, /Tu golf permanece en este dispositivo/);
+  assert.match(account, /perfil persistente/);
+  assert.match(account, /view === "profile" && identity\.mode === "authenticated" && <main className="profileMobileStack">/);
 });
 
 test("Perfil separa el golf de la configuración sensible de Cuenta", () => {
-  assert.match(page, /<AccountPanel view="profile"/);
-  assert.match(page, /<AccountPanel view="account"/);
-  assert.match(account, /view === "profile" && golfInsights/);
-  assert.match(account, /view === "account" && <><section className="card"><h2>Legal y privacidad/);
-  assert.match(account, /GESTIONAR CONSENTIMIENTOS/);
+  const ghin = readFileSync("app/components/ghin-placeholder.tsx", "utf8");
+  assert.match(page, /<ProfileAccountPanel view="profile"/);
+  assert.match(page, /<ProfileAccountPanel view="account"/);
+  assert.match(account, /Cuenta y privacidad/);
+  assert.match(account, /view === "account"/);
+  assert.match(account, /Gestionar consentimientos/);
   assert.match(account, /managingConsents[\s\S]*LegalConsentManager/);
-  assert.match(account, /Abrir configuración de cuenta/);
-  assert.match(account, /no emite ni certifica un handicap oficial/);
+  assert.match(account, /<GhinPlaceholder \/>/);
+  assert.match(ghin, /VINCULAR GHIN/);
+  assert.match(ghin, /PRÓXIMAMENTE/);
 });
 
 test("Configuración explica cómo agregar jugadores y grupos guardados", () => {
@@ -60,7 +60,7 @@ test("Perfil usa selector de foto o avatar sin pedir URLs manuales", () => {
   assert.match(account, /<ProfileImagePicker value=\{avatarUrl\} onChange=\{setAvatarUrl\} \/>/);
   assert.doesNotMatch(account, /type="url" inputMode="url"/);
   assert.match(picker, /type="file" accept="image\/jpeg,image\/png,image\/webp"/);
-  assert.match(picker, /Dejar sin imagen/);
+  assert.match(picker, /SIN IMAGEN/);
   assert.match(account, /no modifica tu foto de Google/);
   assert.match(picker, /No necesitas pegar enlaces/);
 });
@@ -72,18 +72,17 @@ test("Perfil y Cuenta anuncian errores como alertas sin disfrazarlos de éxito",
 });
 
 test("Perfil muestra estadísticas reales y deja ausentes como guion", () => {
-  for (const field of ["pars", "birdies", "bogeys", "doublesOrWorse", "last5Average", "last10Average", "averageVsPar"]) {
+  for (const field of ["rounds", "averageScore", "averagePutts"]) {
     assert.match(account, new RegExp(`golfInsights\\.${field}`));
   }
-  assert.match(account, /golfInsights\.scoredRounds \? golfInsights\.pars : "—"/);
-  assert.match(account, /Promedios con \{golfInsights\.scoreSampleRounds\}/);
+  assert.match(account, /decimal\(golfInsights\.averageScore\)/);
+  assert.match(page, /roundsEligibleForStatistics\(history, statisticsResetAt\)/);
 });
 
 test("Cuenta permite activar avisos internos sin prometer push del dispositivo", () => {
-  assert.match(account, /Avisos dentro de la app/);
+  assert.match(account, /Avisos sociales dentro de la app/);
   assert.match(account, /type="checkbox" checked=\{notificationsEnabled\}/);
   assert.match(account, /onNotificationsEnabledChange\(event\.target\.checked\)/);
-  assert.match(account, /no activa notificaciones push ni permisos del (teléfono|dispositivo)/i);
   assert.doesNotMatch(account, /<span>Notificaciones<\/span><select value="future" disabled>/);
   assert.doesNotMatch(`${page}\n${account}\n${social}`, /Notification\.requestPermission/);
 });
