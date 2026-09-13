@@ -97,6 +97,9 @@ test("Foursome Match expone presiones independientes sin reutilizar el multiplic
   assert.match(page, /Presionadas Match/);
   assert.match(page, /\+ Agregar presión/);
   assert.match(page, /matchPresses/);
+  assert.match(page, /Foursome — Match/);
+  assert.match(page, /Resultados Foursome Match/);
+  assert.match(page, /TOTAL A PAGAR/);
   assert.match(engine, /FoursomeMatchPressResult/);
   assert.match(engine, /pressProvisionalMoney/);
 });

@@ -3798,15 +3798,25 @@ function GolfBetsApp() {
       {bets.fish.enabled && <CounterBetResults id="fish" title="🐟 Peces" halves={fish.halves} playerName={playerName} {...resultAccordionProps("fish")} />}
       {bets.loba.enabled && <ResultAccordion id="loba" title="🐺 Loba" className="sideBetResult" {...resultAccordionProps("loba")}>{loba.details.length ? loba.details.map(detail => <div className="lobaResultHole" key={detail.hole}><div><b>H{detail.hole} · 🔥{detail.fireMultiplier}x · HCP {detail.hcpPct}%</b><span>{detail.lobaTeam.map(playerName).join(" + ")} {detail.lobaBestNet} neto vs {detail.opponents.map(playerName).join(" + ")} {detail.opponentBestNet} neto</span><span>{detail.winner === "tie" ? "Empate" : detail.winner === "loba_team" ? "Ganó equipo 🐺" : "Ganaron contrarios"}</span></div><strong>{money(detail.effectiveValue)}</strong><small>📏 Equipos {detail.lobaUnits} vs {detail.opponentUnits} · unidad efectiva {money(detail.effectiveUnitValue)}</small><div className="lobaResultUnits">{Object.entries(detail.playerUnits).map(([id, unitDetail]) => <span key={id}>{playerName(id)} · Auto +{unitDetail.automatic} · Manual +{unitDetail.manual} · Total +{unitDetail.total}</span>)}</div><div className="sideBetBalances">{Object.entries(detail.balances).filter(([, amount]) => amount !== 0).map(([id, amount]) => <span key={id}>{playerName(id)} <b className={amount > 0 ? "good" : "bad"}>{signedMoney(amount)}</b></span>)}</div></div>) : <div className="empty">Sin hoyos completos.</div>}</ResultAccordion>}
 
-      {bets.foursome.enabled && <ResultAccordion id="foursome" title="🤝 Foursome" {...resultAccordionProps("foursome")}>
+      {bets.foursome.enabled && <ResultAccordion id="foursome" title={bets.foursome.mode === "match" ? "🤝 Foursome — Match" : "🤝 Foursome"} {...resultAccordionProps("foursome")}>
         {foursomes.matches.map((m, i) => <div className="matchLine foursomeResultLine" key={i}>
           <div><b>H{m.startHole}–{m.endHole}: {playerName(m.basePair[0])}/{playerName(m.basePair[1])}</b><span>vs {playerName(m.opponentPair[0])}/{playerName(m.opponentPair[1])}</span></div>
           <div className="matchNums">
-            {m.matchLegs ? <>
-              {([m.matchLegs.first, m.matchLegs.second, m.matchLegs.total] as const).map((leg) => <span key={leg.key}><b>{leg.key === "first" ? "PRIMERA" : leg.key === "second" ? "SEGUNDA" : "TOTAL"}</b> · {leg.status} · {leg.pointDiff === 0 ? "AS" : `${leg.pointDiff > 0 ? playerName(m.basePair[0]) + "/" + playerName(m.basePair[1]) : playerName(m.opponentPair[0]) + "/" + playerName(m.opponentPair[1])} +${Math.abs(leg.pointDiff)}`} · {signedMoney(m.complete ? leg.money : leg.provisionalMoney)}</span>)}
+            {m.matchLegs ? <div className="foursomeMatchResults" aria-label="Resultados Foursome Match">
+              {([m.matchLegs.first, m.matchLegs.second, m.matchLegs.total] as const).map((leg) => {
+                const teamA = `${playerName(m.basePair[0])} / ${playerName(m.basePair[1])}`;
+                const teamB = `${playerName(m.opponentPair[0])} / ${playerName(m.opponentPair[1])}`;
+                const winningTeam = leg.pointDiff > 0 ? teamA : leg.pointDiff < 0 ? teamB : "Empate";
+                return <span className="foursomeMatchResult" key={leg.key}>
+                  <b>{leg.key === "first" ? "PRIMERA" : leg.key === "second" ? "SEGUNDA" : "TOTAL"}</b>
+                  <small>{winningTeam}</small>
+                  <strong>{leg.status}</strong>
+                  <i>{signedMoney(m.complete ? leg.money : leg.provisionalMoney)}</i>
+                </span>;
+              })}
               {Boolean(m.matchPresses?.length) && <div className="foursomeResultPresses"><b>PRESIONES</b>{m.matchPresses!.map((press, pressIndex) => <span key={press.id}>#{pressIndex + 1} · {press.scope === "first" ? "Primera" : press.scope === "second" ? "Segunda" : "Total"} desde H{press.startHole} · {press.status} · {press.multiplier}x · {signedMoney(m.complete ? press.money : press.provisionalMoney)}</span>)}</div>}
-            </> : <><span>Resultado: {m.pointDiff > 0 ? "+" : ""}{m.pointDiff} pts{m.pressureMultiplier > 1 ? ` · 1ª H${order[0]}–H${order[8]} ${m.first9PointDiff >= 0 ? "+" : ""}${m.first9PointDiff} · 2ª H${order[9]}–H${order.at(-1)} ${m.second9PointDiff >= 0 ? "+" : ""}${m.second9PointDiff} x${m.pressureMultiplier}` : ""}</span><small>{m.complete ? "Fijo" : "Fijo provisional"}: {signedMoney(m.complete ? m.fixedMoney : m.provisionalFixedMoney)} · {m.complete ? "Puntos/patada" : "Puntos/patada provisional"}: {signedMoney(m.complete ? m.pointMoney : m.provisionalPointMoney)}</small></>}
-            <b className={(m.complete ? m.totalMoney : m.provisionalTotalMoney) > 0 ? "good" : (m.complete ? m.totalMoney : m.provisionalTotalMoney) < 0 ? "bad" : ""}>{m.complete ? `Resultado económico: ${signedMoney(m.totalMoney)}` : `Provisional: ${signedMoney(m.provisionalTotalMoney)}`}</b>
+            </div> : <><span>Resultado: {m.pointDiff > 0 ? "+" : ""}{m.pointDiff} pts{m.pressureMultiplier > 1 ? ` · 1ª H${order[0]}–H${order[8]} ${m.first9PointDiff >= 0 ? "+" : ""}${m.first9PointDiff} · 2ª H${order[9]}–H${order.at(-1)} ${m.second9PointDiff >= 0 ? "+" : ""}${m.second9PointDiff} x${m.pressureMultiplier}` : ""}</span><small>{m.complete ? "Fijo" : "Fijo provisional"}: {signedMoney(m.complete ? m.fixedMoney : m.provisionalFixedMoney)} · {m.complete ? "Puntos/patada" : "Puntos/patada provisional"}: {signedMoney(m.complete ? m.pointMoney : m.provisionalPointMoney)}</small></>}
+            <b className={(m.complete ? m.totalMoney : m.provisionalTotalMoney) > 0 ? "good" : (m.complete ? m.totalMoney : m.provisionalTotalMoney) < 0 ? "bad" : ""}>{m.complete ? `TOTAL A PAGAR · ${playerName(m.basePair[0])} / ${playerName(m.basePair[1])}: ${signedMoney(m.totalMoney)}` : `PROVISIONAL · ${playerName(m.basePair[0])} / ${playerName(m.basePair[1])}: ${signedMoney(m.provisionalTotalMoney)}`}</b>
           </div>
         </div>)}
       </ResultAccordion>}
