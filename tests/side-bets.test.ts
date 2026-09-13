@@ -218,6 +218,83 @@ test("legacy round resuelve un empate sólo al cierre con el keeper de ronda", (
   assert.equal(calculateCounterBet("camels", players, config, events, selected, order, new Set(order)).halves[0].keeperId, ids[1]);
 });
 
+for (const kind of ["vipers", "camels", "fish"] as CounterBetKind[]) {
+  test(`${kind}: último en hacerlo usa cronología persistida sin pedir una segunda captura`, () => {
+    const participantIds = ids.slice(0, 3);
+    const config: CounterBetConfig = {
+      enabled: true,
+      settlementMode: "round",
+      value: 100,
+      participantIds,
+      determinationMode: "last_event",
+      mostEventsTieRule: "tied_players_pay",
+    };
+    const events: CounterBetEvent[] = [
+      { id: `${kind}-first`, kind, hole: 18, playerId: participantIds[0], quantity: 1, captureOrder: 1, capturedAt: "2026-09-13T10:00:00.000Z" },
+      { id: `${kind}-latest`, kind, hole: 18, playerId: participantIds[2], quantity: 2, captureOrder: 2, capturedAt: "2026-09-13T10:01:00.000Z" },
+    ];
+    const result = calculateCounterBet(kind, players, config, events, emptyCounterBetKeepers(), order, new Set(order));
+
+    assert.equal(result.halves[0].keeperId, participantIds[2]);
+    assert.deepEqual(result.halves[0].keeperIds, [participantIds[2]]);
+    assert.equal(result.halves[0].needsTieBreak, false);
+    assert.equal(result.halves[0].bagValue, 300);
+    assert.deepEqual(result.balances, { [participantIds[0]]: 300, [participantIds[1]]: 300, [participantIds[2]]: -600 });
+    assert.equal(requiredSideBetCapture(18, [{ kind, config }], emptyCounterBetKeepers(), { enabled: false, participantIds: [] }, undefined, events, order), "");
+  });
+}
+
+test("el que más hizo conserva a todos los empatados como pagadores cuando así se configuró", () => {
+  const participantIds = ids.slice(0, 3);
+  const config: CounterBetConfig = {
+    enabled: true,
+    settlementMode: "round",
+    value: 100,
+    participantIds,
+    determinationMode: "most_events",
+    mostEventsTieRule: "tied_players_pay",
+  };
+  const events: CounterBetEvent[] = [
+    { id: "v-said-1", kind: "vipers", hole: 2, playerId: participantIds[0], quantity: 2, captureOrder: 1 },
+    { id: "v-juan", kind: "vipers", hole: 3, playerId: participantIds[1], quantity: 3, captureOrder: 2 },
+    { id: "v-said-2", kind: "vipers", hole: 18, playerId: participantIds[0], quantity: 1, captureOrder: 3 },
+  ];
+  const result = calculateCounterBet("vipers", players, config, events, emptyCounterBetKeepers(), order, new Set(order));
+
+  assert.deepEqual(result.halves[0].candidateIds, participantIds.slice(0, 2));
+  assert.deepEqual(result.halves[0].keeperIds, participantIds.slice(0, 2));
+  assert.equal(result.halves[0].keeperId, undefined);
+  assert.equal(result.halves[0].bagValue, 600);
+  assert.deepEqual(result.balances, { [participantIds[0]]: -600, [participantIds[1]]: -600, [participantIds[2]]: 1200 });
+  assert.equal(isZeroSum(result.balances), true);
+});
+
+test("el que más hizo desempata por el último evento de los empatados y persiste su orden", () => {
+  const participantIds = ids.slice(0, 3);
+  const config: CounterBetConfig = {
+    enabled: true,
+    settlementMode: "round",
+    value: 100,
+    participantIds,
+    determinationMode: "most_events",
+    mostEventsTieRule: "latest_tied_event",
+  };
+  let events: CounterBetEvent[] = [];
+  events = setCounterQuantity(events, "camels", 2, participantIds[0], 2);
+  events = setCounterQuantity(events, "camels", 3, participantIds[1], 3);
+  events = setCounterQuantity(events, "camels", 18, participantIds[0], 1);
+  const stored = JSON.parse(JSON.stringify({ config, events })) as { config: CounterBetConfig; events: CounterBetEvent[] };
+  const normalized = normalizeCounterBetEvents(stored.events);
+  const result = calculateCounterBet("camels", players, stored.config, normalized, emptyCounterBetKeepers(), order, new Set(order));
+
+  assert.deepEqual(normalized.map((event) => event.captureOrder), [1, 2, 3]);
+  assert.ok(normalized.every((event) => typeof event.capturedAt === "string"));
+  assert.equal(result.halves[0].keeperId, participantIds[0]);
+  assert.deepEqual(result.halves[0].keeperIds, [participantIds[0]]);
+  assert.deepEqual(result.balances, { [participantIds[0]]: -1200, [participantIds[1]]: 600, [participantIds[2]]: 600 });
+  assert.equal(isZeroSum(result.balances), true);
+});
+
 test("Víboras desempata por menor distancia dentro de cada vuelta y conserva la distancia al editar", () => {
   let eventRows: CounterBetEvent[] = [
     { id: "v-9-a", kind: "vipers", hole: 9, playerId: ids[0], quantity: 1 },

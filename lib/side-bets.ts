@@ -44,6 +44,9 @@ function isValidCounterConfig(players: Player[], config: CounterBetConfig | unde
   const multiplierIsRelevant = config.secondNinePressed !== false;
   return hasCleanParticipants(players, config.participantIds, 2)
     && isFiniteNonNegative(config.value)
+    && (config.determinationMode === undefined || config.determinationMode === "last_event" || config.determinationMode === "most_events")
+    && (config.mostEventsTieRule === undefined || config.mostEventsTieRule === "tied_players_pay" || config.mostEventsTieRule === "latest_tied_event")
+    && (config.determinationMode !== "most_events" || config.mostEventsTieRule === "tied_players_pay" || config.mostEventsTieRule === "latest_tied_event")
     && (config.secondNinePressed === undefined || typeof config.secondNinePressed === "boolean")
     && (!multiplierIsRelevant || multiplier === undefined || (Number.isInteger(multiplier) && multiplier >= 1 && multiplier <= 5));
 }
@@ -76,8 +79,14 @@ export function normalizeCounterBetEvents(value: unknown): CounterBetEvent[] {
     const normalized = { ...event, quantity: safeCounterQuantity(event.quantity) };
     if (normalized.captureConfirmed !== true) delete normalized.captureConfirmed;
     if (normalized.distanceToHole !== undefined && !isFiniteNonNegative(normalized.distanceToHole)) delete normalized.distanceToHole;
+    if (!Number.isInteger(normalized.captureOrder) || (normalized.captureOrder ?? 0) < 1) delete normalized.captureOrder;
+    if (typeof normalized.capturedAt !== "string" || !Number.isFinite(Date.parse(normalized.capturedAt))) delete normalized.capturedAt;
     return normalized;
   });
+}
+
+function nextCounterCaptureOrder(events: CounterBetEvent[]) {
+  return events.reduce((maximum, event) => Math.max(maximum, event.captureOrder ?? 0), 0) + 1;
 }
 
 export function updateCounterBetKeeper(
@@ -159,7 +168,16 @@ export function setCounterQuantity(
   const nextQuantity = Math.max(0, Math.trunc(Number.isFinite(quantity) ? quantity : 0));
   const existing = validEvents.find(event => event.kind === kind && event.hole === hole && event.playerId === playerId);
   const remaining = validEvents.filter(event => !(event.kind === kind && event.hole === hole && event.playerId === playerId));
-  return nextQuantity > 0 ? [...remaining, { ...existing, id: existing?.id ?? id, kind, hole, playerId, quantity: nextQuantity }] : remaining;
+  return nextQuantity > 0 ? [...remaining, {
+    ...existing,
+    id: existing?.id ?? id,
+    kind,
+    hole,
+    playerId,
+    quantity: nextQuantity,
+    captureOrder: nextCounterCaptureOrder(validEvents),
+    capturedAt: new Date().toISOString(),
+  }] : remaining;
 }
 
 /** Records a deliberate capture from the round UI. Unlike the legacy event
@@ -185,6 +203,7 @@ export function confirmCounterQuantity(
     playerId,
     quantity: Math.max(0, Math.trunc(quantity)),
     captureConfirmed: true,
+    ...(quantity > 0 ? { captureOrder: nextCounterCaptureOrder(validEvents), capturedAt: new Date().toISOString() } : {}),
   }];
 }
 
@@ -244,9 +263,13 @@ export type CounterBetHalfResult = {
   bagValue: number;
   events: CounterBetValuedEvent[];
   keeperId?: string;
+  /** One payer normally; multiple when the configured most-events tie rule says all tied players pay. */
+  keeperIds?: string[];
   lastEventHole?: number;
   candidateIds?: string[];
   needsTieBreak?: boolean;
+  determinationMode?: CounterBetConfig["determinationMode"];
+  tieRule?: CounterBetConfig["mostEventsTieRule"];
   settled: boolean;
   balances: Record<string, number>;
   transfers: Transfer[];
@@ -307,6 +330,90 @@ function viperKeeper(candidates: CounterBetEvent[]) {
   return closestCandidates.length === 1 ? closestCandidates[0].playerId : undefined;
 }
 
+type CounterBetOwnerResolution = {
+  keeperId?: string;
+  keeperIds: string[];
+  candidateIds: string[];
+  lastEventHole?: number;
+  needsTieBreak: boolean;
+};
+
+function latestChronologicalEvent(events: CounterBetEvent[], holes: readonly number[]) {
+  const holeIndex = new Map(holes.map((hole, index) => [hole, index]));
+  return events
+    .map((event, index) => ({ event, index }))
+    .sort((left, right) => {
+      const byHole = (holeIndex.get(left.event.hole) ?? -1) - (holeIndex.get(right.event.hole) ?? -1);
+      if (byHole) return byHole;
+      const byCaptureOrder = (left.event.captureOrder ?? 0) - (right.event.captureOrder ?? 0);
+      if (byCaptureOrder) return byCaptureOrder;
+      const leftTime = left.event.capturedAt ? Date.parse(left.event.capturedAt) : 0;
+      const rightTime = right.event.capturedAt ? Date.parse(right.event.capturedAt) : 0;
+      if (leftTime !== rightTime) return leftTime - rightTime;
+      return left.index - right.index;
+    })
+    .at(-1)?.event;
+}
+
+/** Resolves the explicit V2 animal rules without asking for duplicate capture.
+ * Missing determinationMode deliberately stays on the legacy tie-resolution path. */
+function explicitCounterBetOwner(
+  config: CounterBetConfig | undefined,
+  events: CounterBetEvent[],
+  participantIds: string[],
+  holes: readonly number[],
+): CounterBetOwnerResolution | null {
+  if (config?.determinationMode !== "last_event" && config?.determinationMode !== "most_events") return null;
+  const relevant = events.filter((event) => participantIds.includes(event.playerId) && holes.includes(event.hole) && safeCounterQuantity(event.quantity) > 0);
+  if (!relevant.length) return { keeperIds: [], candidateIds: [], needsTieBreak: false };
+
+  if (config.determinationMode === "last_event") {
+    const latest = latestChronologicalEvent(relevant, holes);
+    return latest ? {
+      keeperId: latest.playerId,
+      keeperIds: [latest.playerId],
+      candidateIds: [latest.playerId],
+      lastEventHole: latest.hole,
+      needsTieBreak: false,
+    } : { keeperIds: [], candidateIds: [], needsTieBreak: false };
+  }
+
+  const totals = new Map(participantIds.map((playerId) => [playerId, 0]));
+  for (const event of relevant) totals.set(event.playerId, (totals.get(event.playerId) ?? 0) + safeCounterQuantity(event.quantity));
+  const maximum = Math.max(...totals.values());
+  const candidateIds = participantIds.filter((playerId) => totals.get(playerId) === maximum && maximum > 0);
+  const tiedEvents = relevant.filter((event) => candidateIds.includes(event.playerId));
+  const latest = latestChronologicalEvent(tiedEvents, holes);
+  const keeperIds = candidateIds.length > 1 && config.mostEventsTieRule === "tied_players_pay"
+    ? candidateIds
+    : latest ? [latest.playerId] : candidateIds.slice(0, 1);
+  return {
+    ...(keeperIds.length === 1 ? { keeperId: keeperIds[0] } : {}),
+    keeperIds,
+    candidateIds,
+    lastEventHole: latest?.hole,
+    needsTieBreak: false,
+  };
+}
+
+function addCounterBetPayments(
+  keeperIds: string[],
+  participants: Player[],
+  amount: number,
+  halfTransfers: Transfer[],
+  halfBalances: Record<string, number>,
+  transfers: Transfer[],
+  balances: Record<string, number>,
+  details: Pick<Transfer, "betType" | "hole" | "metadata">,
+) {
+  const payers = new Set(keeperIds);
+  const recipients = participants.filter((player) => !payers.has(player.id));
+  for (const keeperId of keeperIds) for (const recipient of recipients) {
+    addTransfer(halfTransfers, halfBalances, keeperId, recipient.id, amount, details);
+    if (halfTransfers !== transfers || halfBalances !== balances) addTransfer(transfers, balances, keeperId, recipient.id, amount, details);
+  }
+}
+
 /** Compatibility path for snapshots created before counter bets moved to one
  * independent bag per played half. New rounds never select this mode. */
 function roundCounterBetResult(
@@ -330,37 +437,42 @@ function roundCounterBetResult(
   const { hole: lastEventHole, candidates } = latestCounterBetCandidates(kind, participantIds, relevant, order);
   const candidateIds = candidates.map(candidate => candidate.playerId);
   const manuallySelected = keepers?.[kind]?.round;
-  const keeperId = kind === "vipers"
+  const legacyKeeperId = kind === "vipers"
     ? viperKeeper(candidates)
     : candidates.length === 1
       ? candidates[0].playerId
       : manuallySelected && candidateIds.includes(manuallySelected) ? manuallySelected : undefined;
-  const needsTieBreak = candidates.length > 1 && !keeperId;
+  const explicitOwner = explicitCounterBetOwner(config, relevant, participantIds, order);
+  const keeperId = explicitOwner ? explicitOwner.keeperId : legacyKeeperId;
+  const keeperIds = explicitOwner?.keeperIds ?? (keeperId ? [keeperId] : []);
+  const resolvedCandidateIds = explicitOwner?.candidateIds ?? candidateIds;
+  const resolvedLastEventHole = explicitOwner?.lastEventHole ?? lastEventHole;
+  const needsTieBreak = explicitOwner?.needsTieBreak ?? (candidates.length > 1 && !keeperId);
   const complete = order.length > 0 && (!completedHoles || order.every(hole => completedHoles.has(hole)));
   const value = roundMoney(isFiniteNonNegative(config?.value) ? config.value : 0);
-  const settled = Boolean(config?.enabled === true && complete && quantity > 0 && keeperId);
-  if (settled && keeperId) {
+  const settled = Boolean(config?.enabled === true && complete && quantity > 0 && keeperIds.length > 0);
+  if (settled) {
     const firstNineQuantity = relevant
       .filter(event => roundHalfForHole(event.hole, order) === "first_half")
       .reduce((sum, event) => sum + safeCounterQuantity(event.quantity), 0);
     const secondNineQuantity = quantity - firstNineQuantity;
-    for (const player of participants) {
-      if (player.id === keeperId) continue;
-      addTransfer(transfers, balances, keeperId, player.id, bagValue, {
-        betType: kind,
-        hole: lastEventHole,
-        metadata: {
-          period: "round",
-          quantity,
-          unitValue: value,
-          secondNineMultiplier: counterBetSecondNineMultiplier(config),
-          firstNineQuantity,
-          secondNineQuantity,
-          bagValue,
-          lastEventHole: lastEventHole ?? null,
-        },
-      });
-    }
+    addCounterBetPayments(keeperIds, participants, bagValue, transfers, balances, transfers, balances, {
+      betType: kind,
+      hole: resolvedLastEventHole,
+      metadata: {
+        period: "round",
+        quantity,
+        unitValue: value,
+        secondNineMultiplier: counterBetSecondNineMultiplier(config),
+        firstNineQuantity,
+        secondNineQuantity,
+        bagValue,
+        lastEventHole: resolvedLastEventHole ?? null,
+        determinationMode: config?.determinationMode ?? "legacy",
+        tieRule: config?.mostEventsTieRule ?? null,
+        payerIds: keeperIds.join(","),
+      },
+    });
   }
   const round: CounterBetHalfResult = {
     nine: "round",
@@ -372,9 +484,12 @@ function roundCounterBetResult(
     bagValue,
     events: relevant,
     keeperId,
-    lastEventHole,
-    candidateIds,
+    keeperIds,
+    lastEventHole: resolvedLastEventHole,
+    candidateIds: resolvedCandidateIds,
     needsTieBreak,
+    determinationMode: config?.determinationMode,
+    tieRule: config?.mostEventsTieRule,
     settled,
     balances,
     transfers,
@@ -425,33 +540,30 @@ export function calculateCounterBet(
     const { hole: lastEventHole, candidates } = latestCounterBetCandidates(kind, [...participantIds], valuedEvents, holes);
     const candidateIds = candidates.map(candidate => candidate.playerId);
     const manuallySelected = keepers?.[kind]?.[roundHalf] ?? (legacyNine ? keepers?.[kind]?.[legacyNine] : undefined);
-    const keeperId = kind === "vipers"
+    const legacyKeeperId = kind === "vipers"
       ? viperKeeper(candidates)
       : candidates.length === 1
         ? candidates[0].playerId
         : manuallySelected && candidateIds.includes(manuallySelected) ? manuallySelected : undefined;
-    const needsTieBreak = candidates.length > 1 && !keeperId;
+    const explicitOwner = explicitCounterBetOwner(config, valuedEvents, [...participantIds], holes);
+    const keeperId = explicitOwner ? explicitOwner.keeperId : legacyKeeperId;
+    const keeperIds = explicitOwner?.keeperIds ?? (keeperId ? [keeperId] : []);
+    const resolvedCandidateIds = explicitOwner?.candidateIds ?? candidateIds;
+    const resolvedLastEventHole = explicitOwner?.lastEventHole ?? lastEventHole;
+    const needsTieBreak = explicitOwner?.needsTieBreak ?? (candidates.length > 1 && !keeperId);
     const complete = holes.length > 0 && (!completedHoles || holes.every(hole => completedHoles.has(hole)));
-    const settled = Boolean(configIsValid && config?.enabled === true && complete && quantity > 0 && keeperId);
+    const settled = Boolean(configIsValid && config?.enabled === true && complete && quantity > 0 && keeperIds.length > 0);
     const halfBalances = Object.fromEntries(participants.map(player => [player.id, 0])) as Record<string, number>;
     const halfTransfers: Transfer[] = [];
-    if (settled && keeperId && quantity > 0) {
+    if (settled && quantity > 0) {
       const amount = bagValue;
-      for (const player of participants) {
-        if (player.id === keeperId) continue;
-        addTransfer(halfTransfers, halfBalances, keeperId, player.id, amount, {
-          betType: kind,
-          hole: lastEventHole,
-          metadata: { nine: roundHalf, quantity, unitValue: value, pressed, multiplier, bagValue, lastEventHole: lastEventHole ?? null },
-        });
-        addTransfer(transfers, balances, keeperId, player.id, amount, {
-          betType: kind,
-          hole: lastEventHole,
-          metadata: { nine: roundHalf, quantity, unitValue: value, pressed, multiplier, bagValue, lastEventHole: lastEventHole ?? null },
-        });
-      }
+      addCounterBetPayments(keeperIds, participants, amount, halfTransfers, halfBalances, transfers, balances, {
+        betType: kind,
+        hole: resolvedLastEventHole,
+        metadata: { nine: roundHalf, quantity, unitValue: value, pressed, multiplier, bagValue, lastEventHole: resolvedLastEventHole ?? null, determinationMode: config?.determinationMode ?? "legacy", tieRule: config?.mostEventsTieRule ?? null, payerIds: keeperIds.join(",") },
+      });
     }
-    return { nine: roundHalf, roundHalf, holes, quantity, pressed, multiplier, value, bagValue, events: valuedEvents, keeperId, lastEventHole, candidateIds, needsTieBreak, settled, balances: halfBalances, transfers: halfTransfers };
+    return { nine: roundHalf, roundHalf, holes, quantity, pressed, multiplier, value, bagValue, events: valuedEvents, keeperId, keeperIds, lastEventHole: resolvedLastEventHole, candidateIds: resolvedCandidateIds, needsTieBreak, determinationMode: config?.determinationMode, tieRule: config?.mostEventsTieRule, settled, balances: halfBalances, transfers: halfTransfers };
   });
   return { kind, halves, balances, transfers, totalQuantity: halves.reduce((sum, half) => sum + half.quantity, 0), totalBagValue: roundMoney(halves.reduce((sum, half) => sum + half.bagValue, 0)), zeroSum: isZeroSum(balances), settlementMode: "halves" as const };
 }
@@ -623,6 +735,9 @@ export function requiredSideBetCaptures(
   const errors: string[] = [];
   for (const { kind, config } of enabledCounterBets) {
     if (config.enabled !== true) continue;
+    // Explicit V2 rules are fully deterministic from the captured event order;
+    // the user must never capture the same animal a second time in a tie modal.
+    if (config.determinationMode === "last_event" || config.determinationMode === "most_events") continue;
     const roundHalf = roundHalfForHole(holeNumber, order);
     if (!roundHalf) continue;
     const period: CounterBetPeriod = config.settlementMode === "round" ? "round" : roundHalf;

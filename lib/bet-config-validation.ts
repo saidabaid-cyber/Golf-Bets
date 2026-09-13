@@ -265,6 +265,12 @@ function validateMainBets(input: RoundBetConfiguration, issues: BetConfiguration
     [bets.fish, "fish", "setup-fish", "Peces"],
   ] as const) {
     if (!config.enabled) continue;
+    if (config.determinationMode !== undefined && config.determinationMode !== "last_event" && config.determinationMode !== "most_events") {
+      issues.push({ code: `${code}-determination-mode`, sectionId, message: `${label}: selecciona cómo se define quién se queda el animal.` });
+    }
+    if (config.determinationMode === "most_events" && config.mostEventsTieRule !== "tied_players_pay" && config.mostEventsTieRule !== "latest_tied_event") {
+      issues.push({ code: `${code}-tie-rule`, sectionId, message: `${label}: selecciona qué pasa si hay empate en el total de eventos.` });
+    }
     if (config.secondNinePressed !== undefined && typeof config.secondNinePressed !== "boolean") {
       issues.push({ code: `${code}-second-nine-pressed`, sectionId, message: `${label}: vuelve a confirmar si hay presión en la segunda vuelta.` });
     }
@@ -306,14 +312,19 @@ function validateMainBets(input: RoundBetConfiguration, issues: BetConfiguration
       issues.push({ code: "foursome-press-second-nine", sectionId: "setup-foursome", message: "Foursome: vuelve a confirmar la presión de la segunda vuelta." });
     }
     const participantIds = currentParticipantIds(players, bets.foursome.participantIds);
-    if (!["fixed", "fixed_points", "points"].includes(bets.foursome.mode)) {
+    if (!["fixed", "fixed_points", "points", "match"].includes(bets.foursome.mode)) {
       issues.push({ code: "foursome-mode", sectionId: "setup-foursome", message: "Foursome: selecciona una modalidad válida." });
     }
     const segmentSizeIsValid = [3, 6, 9, 18].includes(bets.foursome.segmentSize);
     if (!segmentSizeIsValid) {
       issues.push({ code: "foursome-segment-size", sectionId: "setup-foursome", message: "Foursome: selecciona un tamaño de tramo válido." });
     }
-    if (participantIds.length < 3) {
+    if (bets.foursome.mode === "match" && roundHoles !== 18) {
+      issues.push({ code: "foursome-match-holes", sectionId: "setup-foursome", message: "Foursome Match necesita una ronda de 18 hoyos para liquidar Primera, Segunda y Total." });
+    }
+    if (bets.foursome.mode === "match" && participantIds.length !== 4) {
+      issues.push({ code: "foursome-match-participants", sectionId: "setup-foursome", message: "Foursome Match necesita exactamente 4 jugadores en dos parejas." });
+    } else if (participantIds.length < 3) {
       issues.push({ code: "foursome-participants", sectionId: "setup-foursome", message: "Foursome: selecciona al menos 3 jugadores." });
     } else if (segmentSizeIsValid) {
       const selected = new Set(participantIds);
@@ -329,7 +340,10 @@ function validateMainBets(input: RoundBetConfiguration, issues: BetConfiguration
         issues.push({ code: "foursome-pairs", sectionId: "setup-foursome", message: "Foursome: elige una pareja base válida para cada tramo." });
       }
     }
-    if (bets.foursome.mode === "fixed" || bets.foursome.mode === "fixed_points") {
+    if (bets.foursome.mode === "match" && bets.foursome.segmentSize !== 18) {
+      issues.push({ code: "foursome-match-segment", sectionId: "setup-foursome", message: "Foursome Match conserva las mismas parejas durante Primera, Segunda y Total." });
+    }
+    if (bets.foursome.mode === "fixed" || bets.foursome.mode === "fixed_points" || bets.foursome.mode === "match") {
       stakeIssue(issues, true, bets.foursome.fixedValue, "foursome-fixed-stake", "setup-foursome", "Foursome fijo");
     }
     if (bets.foursome.mode === "points" || bets.foursome.mode === "fixed_points") {

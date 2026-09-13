@@ -576,6 +576,22 @@ export function opponentPairs(participantIds: string[] | undefined, basePair: st
 
 export const FOURSOME_GHOST_ID = "__foursome_ghost__";
 
+export type FoursomeMatchLegResult = {
+  key: "first" | "second" | "total";
+  startHole: number;
+  endHole: number;
+  holes: number[];
+  completedHoles: number;
+  pointDiff: number;
+  status: string;
+  dormie: boolean;
+  closed: boolean;
+  complete: boolean;
+  multiplier: number;
+  provisionalMoney: number;
+  money: number;
+};
+
 export type FoursomeMatchResult = {
   segmentId: string;
   startHole: number;
@@ -598,6 +614,8 @@ export type FoursomeMatchResult = {
   completedHoles: number;
   complete: boolean;
   holePoints: { hole: number; points: number; netA?: number[]; netB?: number[] }[];
+  /** Present only for Foursome MATCH: three independent Primera/Segunda/Total results. */
+  matchLegs?: { first: FoursomeMatchLegResult; second: FoursomeMatchLegResult; total: FoursomeMatchLegResult };
 };
 
 /** Cálculos AB194/AB211 and AC195:AC196. Percentage/whole rounding controls
@@ -614,6 +632,66 @@ function teamHolePoints(teamA: number[], teamB: number[]) {
   const low = a[0] < b[0] ? 1 : a[0] > b[0] ? -1 : 0;
   const high = a[1] < b[1] ? 1 : a[1] > b[1] ? -1 : 0;
   return low + high;
+}
+
+function matchLeg(
+  key: FoursomeMatchLegResult["key"],
+  holes: number[],
+  holePoints: { hole: number; points: number }[],
+  value: number,
+  multiplier: number,
+  settle: boolean,
+): FoursomeMatchLegResult {
+  const played = holePoints.filter((item) => holes.includes(item.hole));
+  const pointDiff = played.reduce((total, item) => total + Math.sign(item.points), 0);
+  const remaining = Math.max(0, holes.length - played.length);
+  const margin = Math.abs(pointDiff);
+  const closed = margin > remaining;
+  const dormie = !closed && remaining > 0 && margin === remaining;
+  const complete = holes.length > 0 && played.length === holes.length;
+  const baseStatus = pointDiff === 0 ? "AS" : `${margin} UP`;
+  const status = closed ? `${baseStatus} · CLOSED` : dormie ? `${baseStatus} · DORMIE` : baseStatus;
+  const provisionalMoney = Math.sign(pointDiff) * value * multiplier;
+  return {
+    key,
+    startHole: holes[0] ?? 0,
+    endHole: holes.at(-1) ?? 0,
+    holes,
+    completedHoles: played.length,
+    pointDiff,
+    status,
+    dormie,
+    closed,
+    complete,
+    multiplier,
+    provisionalMoney,
+    money: settle ? provisionalMoney : 0,
+  };
+}
+
+function foursomeMatchEconomics(
+  holePoints: { hole: number; points: number }[],
+  segmentHoles: number[],
+  cfg: BetConfig["foursome"],
+  pressureMultiplier: number,
+  roundOrder: number[],
+  settle: boolean,
+) {
+  const firstHoles = segmentHoles.filter((hole) => roundHalfForHole(hole, roundOrder) === "first_half");
+  const secondHoles = segmentHoles.filter((hole) => roundHalfForHole(hole, roundOrder) === "second_half");
+  const first = matchLeg("first", firstHoles, holePoints, cfg.fixedValue, 1, settle);
+  const second = matchLeg("second", secondHoles, holePoints, cfg.fixedValue, pressureMultiplier, settle);
+  const total = matchLeg("total", segmentHoles, holePoints, cfg.fixedValue, 1, settle);
+  const provisionalTotalMoney = first.provisionalMoney + second.provisionalMoney + total.provisionalMoney;
+  return {
+    fixedMoney: settle ? first.money + second.money + total.money : 0,
+    pointMoney: 0,
+    totalMoney: settle ? provisionalTotalMoney : 0,
+    provisionalFixedMoney: provisionalTotalMoney,
+    provisionalPointMoney: 0,
+    provisionalTotalMoney,
+    matchLegs: { first, second, total },
+  };
 }
 
 function foursomeEconomics(
@@ -659,11 +737,11 @@ export function calculateFoursomes(
   const provisionalBalances = zeroBalances(participants);
   const matches: FoursomeMatchResult[] = [];
   const missingHandicapPlayerIds = playersMissingRoundHandicap(participants).map((player) => player.id);
-  const modeIsValid = cfg?.mode === "fixed" || cfg?.mode === "fixed_points" || cfg?.mode === "points";
+  const modeIsValid = cfg?.mode === "fixed" || cfg?.mode === "fixed_points" || cfg?.mode === "points" || cfg?.mode === "match";
   const methodIsValid = cfg?.handicapMethod === undefined || cfg.handicapMethod === "excel" || cfg.handicapMethod === "configured";
   const baseModeIsValid = basis === "course" || cfg?.baseMode === undefined || cfg.baseMode === "fixed" || cfg.baseMode === "moving";
   const usesConfiguredHandicap = cfg?.handicapMethod !== "excel";
-  const usesFixedValue = cfg?.mode === "fixed" || cfg?.mode === "fixed_points";
+  const usesFixedValue = cfg?.mode === "fixed" || cfg?.mode === "fixed_points" || cfg?.mode === "match";
   const usesPointValue = cfg?.mode === "points" || cfg?.mode === "fixed_points";
   const savedPressureMultiplier = cfg?.pressureMultiplier;
   const effectivePressureMultiplier = savedPressureMultiplier ?? (cfg?.pressSecond9 ? 2 : 1);
@@ -684,6 +762,7 @@ export function calculateFoursomes(
     && (!usesConfiguredHandicap || (isValidHcpPct(cfg.hcpPct) && isValidDecimalMode(cfg.decimals)))
     && (basis === "course" || cfg.baseMode !== "fixed" || cfg.fixedBaseHandicap === undefined || isValidRoundHandicapValue(cfg.fixedBaseHandicap))
     && pressureIsValid
+    && (cfg.mode !== "match" || (participants.length === 4 && order.length === 18 && cfg.segmentSize === 18))
   );
   if (cfg?.enabled !== true || !configIsValid || participants.length < 3 || missingHandicapPlayerIds.length) return { balances, provisionalBalances, matches, missingHandicapPlayerIds };
 
@@ -738,7 +817,8 @@ export function calculateFoursomes(
           return adjusted(row[scoreId] as number, id);
         },
         );
-        const points = teamHolePoints(aScores, bScores);
+        const rawPoints = teamHolePoints(aScores, bScores);
+        const points = cfg.mode === "match" ? Math.sign(rawPoints) : rawPoints;
         pointDiff += points;
         holePoints.push({ hole, points, netA: aScores, netB: bScores });
       }
@@ -746,17 +826,21 @@ export function calculateFoursomes(
       const first9PointDiff = holePoints.filter(({ hole }) => roundHalfForHole(hole, order) === "first_half").reduce((total, item) => total + item.points, 0);
       const second9PointDiff = holePoints.filter(({ hole }) => roundHalfForHole(hole, order) === "second_half").reduce((total, item) => total + item.points, 0);
       const second9Pressed = pressureMultiplier > 1;
-      const provisional = foursomeEconomics(holePoints, holes, cfg, pressureMultiplier, order);
+      const matchEconomics = cfg.mode === "match"
+        ? foursomeMatchEconomics(holePoints, holes, cfg, pressureMultiplier, order, complete)
+        : null;
+      const provisional = matchEconomics ?? foursomeEconomics(holePoints, holes, cfg, pressureMultiplier, order);
       const fixedMoney = complete ? provisional.fixedMoney : 0;
       const pointMoney = complete ? provisional.pointMoney : 0;
       const totalMoney = complete ? provisional.totalMoney : 0;
+      const provisionalEconomicTotal = matchEconomics?.provisionalTotalMoney ?? provisional.totalMoney;
 
       for (const id of basePair as [string, string]) {
-        provisionalBalances[id] = (provisionalBalances[id] ?? 0) + provisional.totalMoney;
+        provisionalBalances[id] = (provisionalBalances[id] ?? 0) + provisionalEconomicTotal;
       }
       const provisionalRealOpponents = opponent.filter((id) => id !== FOURSOME_GHOST_ID);
       const provisionalOpponentShare = provisionalRealOpponents.length
-        ? provisional.totalMoney * 2 / provisionalRealOpponents.length
+        ? provisionalEconomicTotal * 2 / provisionalRealOpponents.length
         : 0;
       for (const id of provisionalRealOpponents) {
         provisionalBalances[id] = (provisionalBalances[id] ?? 0) - provisionalOpponentShare;
@@ -785,12 +869,13 @@ export function calculateFoursomes(
         fixedMoney,
         pointMoney,
         totalMoney,
-        provisionalFixedMoney: provisional.fixedMoney,
-        provisionalPointMoney: provisional.pointMoney,
-        provisionalTotalMoney: provisional.totalMoney,
+        provisionalFixedMoney: matchEconomics ? matchEconomics.provisionalFixedMoney : provisional.fixedMoney,
+        provisionalPointMoney: matchEconomics ? matchEconomics.provisionalPointMoney : provisional.pointMoney,
+        provisionalTotalMoney: matchEconomics ? matchEconomics.provisionalTotalMoney : provisional.totalMoney,
         completedHoles: holePoints.length,
         complete,
         holePoints,
+        ...(matchEconomics ? { matchLegs: matchEconomics.matchLegs } : {}),
       });
     }
   }

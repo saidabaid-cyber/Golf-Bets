@@ -3,7 +3,7 @@ export type DecimalMode = "partial" | "round";
 export type HandicapMode = DecimalMode | "decimal" | "half_up" | "half_down" | "six_up" | "four_down";
 /** How original round handicaps are converted into the base consumed by bets. */
 export type RoundHandicapBasis = "relative" | "course";
-export type FoursomeMode = "fixed" | "fixed_points" | "points";
+export type FoursomeMode = "fixed" | "fixed_points" | "points" | "match";
 export type PhysicalNine = "holes_1_9" | "holes_10_18";
 export type RoundHalf = "first_half" | "second_half";
 export type PressureMultiplier = 1 | 2 | 3 | 4 | 5;
@@ -115,6 +115,8 @@ export type ParticipantConfig = {
 
 export type CounterBetKind = "vipers" | "camels" | "fish";
 export type CounterBetSettlementMode = "halves" | "round" | "legacy_halves";
+export type CounterBetDeterminationMode = "last_event" | "most_events";
+export type CounterBetTieRule = "tied_players_pay" | "latest_tied_event";
 
 export type CounterBetConfig = ParticipantConfig & {
   enabled: boolean;
@@ -125,6 +127,10 @@ export type CounterBetConfig = ParticipantConfig & {
   secondNinePressed?: boolean;
   /** Second played half pressure multiplier. Missing/non-pressed is effectively 1x. */
   secondNineMultiplier?: number;
+  /** How the owner/payer of the animal is determined inside each configured bag. */
+  determinationMode?: CounterBetDeterminationMode;
+  /** Required by the UI when determinationMode is most_events. */
+  mostEventsTieRule?: CounterBetTieRule;
 };
 
 export type CounterBetEvent = {
@@ -137,6 +143,10 @@ export type CounterBetEvent = {
   captureConfirmed?: boolean;
   /** Centimetres from the hole; requested only for a same-hole Viper tie. */
   distanceToHole?: number;
+  /** Monotonic capture order used to resolve same-hole chronology without guessing. */
+  captureOrder?: number;
+  /** Audit timestamp for the latest positive capture of this player/hole event. */
+  capturedAt?: string;
   /** Derived audit fields persisted in finalized snapshots; calculation remains config-driven. */
   effectiveUnitValue?: number;
   effectiveTotalValue?: number;

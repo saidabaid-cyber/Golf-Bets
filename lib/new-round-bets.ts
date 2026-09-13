@@ -144,7 +144,7 @@ export function restoreBetConfig(
     "mode",
     ...(foursome.handicapMethod === "excel" ? [] : ["decimals"] as Array<keyof typeof foursome>),
     ...(foursome.handicapMethod === "excel" ? [] : ["hcpPct"] as Array<keyof typeof foursome>),
-    ...(foursome.mode === "fixed" || foursome.mode === "fixed_points" ? ["fixedValue"] as Array<keyof typeof foursome> : []),
+    ...(foursome.mode === "fixed" || foursome.mode === "fixed_points" || foursome.mode === "match" ? ["fixedValue"] as Array<keyof typeof foursome> : []),
     ...(foursome.mode === "points" || foursome.mode === "fixed_points" ? ["pointValue"] as Array<keyof typeof foursome> : []),
   ]);
   const ballFriend = requireActiveFields(mergeLegacyBase(defaults.ballFriend, source.ballFriend), source.ballFriend, ["value", "hcpPct", "decimals", "maxScore"]);

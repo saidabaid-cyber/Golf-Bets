@@ -220,6 +220,102 @@ test("Foursome pressure always uses the second played half when starting on H10"
   assert.deepEqual(savedAsSecondPhysical.matches[0], savedAsFirstPhysical.matches[0]);
 });
 
+test("Foursome Match liquida Primera, Segunda y Total como tres resultados independientes", () => {
+  const four = zeroHcpPlayers.slice(0, 4);
+  const order = playOrder(1);
+  const scores = scoresFor(order, { said: 4, cuau: 4, armando: 4, jesus: 4 });
+  for (const hole of [1, 2, 3]) scores[hole] = { said: 3, cuau: 3, armando: 4, jesus: 4 };
+  for (const hole of [10, 11, 12, 13]) scores[hole] = { said: 4, cuau: 4, armando: 3, jesus: 3 };
+  const config = {
+    ...betConfig(four.map((player) => player.id)).foursome,
+    mode: "match" as const,
+    segmentSize: 18 as const,
+    fixedValue: 500,
+    pressureMultiplier: 1 as const,
+  };
+  const segments = [{ ...segmentDefinitions(order, 18)[0], basePair: ["said", "cuau"] }];
+  const result = calculateFoursomes(makeCourse(), scores, four, config, segments, order);
+  const legs = result.matches[0].matchLegs!;
+
+  assert.deepEqual([legs.first.pointDiff, legs.second.pointDiff, legs.total.pointDiff], [3, -4, -1]);
+  assert.deepEqual([legs.first.status, legs.second.status, legs.total.status], ["3 UP · CLOSED", "4 UP · CLOSED", "1 UP · CLOSED"]);
+  assert.deepEqual([legs.first.money, legs.second.money, legs.total.money], [500, -500, -500]);
+  assert.equal(result.matches[0].totalMoney, -500);
+  assert.deepEqual(result.balances, { said: -500, cuau: -500, armando: 500, jesus: 500 });
+  assert.equal(Object.values(result.balances).reduce((sum, amount) => sum + amount, 0), 0);
+});
+
+test("Foursome Match aplica la presión a la segunda vuelta jugada, incluso saliendo por H10", () => {
+  const four = zeroHcpPlayers.slice(0, 4);
+  const order = playOrder(10);
+  const scores = scoresFor(order, { said: 4, cuau: 4, armando: 4, jesus: 4 });
+  for (const hole of order.slice(0, 2)) scores[hole] = { said: 3, cuau: 3, armando: 4, jesus: 4 };
+  for (const hole of order.slice(9, 12)) scores[hole] = { said: 4, cuau: 4, armando: 3, jesus: 3 };
+  const config = {
+    ...betConfig(four.map((player) => player.id)).foursome,
+    mode: "match" as const,
+    segmentSize: 18 as const,
+    fixedValue: 500,
+    pressSecond9: true,
+    pressureMultiplier: 3 as const,
+    pressureNine: "holes_1_9" as const,
+  };
+  const result = calculateFoursomes(
+    makeCourse(),
+    scores,
+    four,
+    config,
+    [{ ...segmentDefinitions(order, 18)[0], basePair: ["said", "cuau"] }],
+    order,
+  );
+  const legs = result.matches[0].matchLegs!;
+
+  assert.deepEqual([legs.first.pointDiff, legs.second.pointDiff, legs.total.pointDiff], [2, -3, -1]);
+  assert.deepEqual([legs.first.multiplier, legs.second.multiplier, legs.total.multiplier], [1, 3, 1]);
+  assert.deepEqual([legs.first.money, legs.second.money, legs.total.money], [500, -1500, -500]);
+  assert.equal(result.matches[0].totalMoney, -1500);
+  assert.equal(result.matches[0].pressureNine, "holes_1_9");
+});
+
+test("Foursome Match conserva AS y cero dinero en empates independientes", () => {
+  const four = zeroHcpPlayers.slice(0, 4);
+  const order = playOrder(1);
+  const config = {
+    ...betConfig(four.map((player) => player.id)).foursome,
+    mode: "match" as const,
+    segmentSize: 18 as const,
+    fixedValue: 500,
+  };
+  const result = calculateFoursomes(
+    makeCourse(),
+    scoresFor(order, { said: 4, cuau: 4, armando: 4, jesus: 4 }),
+    four,
+    config,
+    [{ ...segmentDefinitions(order, 18)[0], basePair: ["said", "cuau"] }],
+    order,
+  );
+
+  assert.deepEqual(Object.values(result.matches[0].matchLegs!).map((leg) => [leg.status, leg.money]), [["AS", 0], ["AS", 0], ["AS", 0]]);
+  assert.deepEqual(result.balances, { said: 0, cuau: 0, armando: 0, jesus: 0 });
+});
+
+test("Foursome Match falla cerrado fuera de 18 hoyos o sin dos parejas exactas", () => {
+  const four = zeroHcpPlayers.slice(0, 4);
+  const nine = playOrder(1).slice(0, 9);
+  const invalidNine = {
+    ...betConfig(four.map((player) => player.id)).foursome,
+    mode: "match" as const,
+    segmentSize: 9 as const,
+    fixedValue: 500,
+  };
+  assert.deepEqual(calculateFoursomes(makeCourse(), scoresFor(nine, { said: 4, cuau: 4, armando: 4, jesus: 4 }), four, invalidNine, [{ ...segmentDefinitions(nine, 9)[0], basePair: ["said", "cuau"] }], nine).matches, []);
+
+  const three = four.slice(0, 3);
+  const order = playOrder(1);
+  const invalidRoster = { ...invalidNine, participantIds: three.map((player) => player.id), segmentSize: 18 as const };
+  assert.deepEqual(calculateFoursomes(makeCourse(), {}, three, invalidRoster, [{ ...segmentDefinitions(order, 18)[0], basePair: ["said", "cuau"] }], order).matches, []);
+});
+
 test("Foursome ignores residual pressure settings in a standalone nine-hole round", () => {
   const four = zeroHcpPlayers.slice(0, 4);
   const order = playOrder(1).slice(0, 9);
