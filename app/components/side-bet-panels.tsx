@@ -54,28 +54,28 @@ export function CounterBetConfigPanel({ kind, config, players, onChange, request
   const configuredMultiplier = counterBetConfiguredSecondNineMultiplier(config);
   const determinationMode = config.determinationMode ?? "last_event";
   const tieRule = config.mostEventsTieRule ?? "tied_players_pay";
-  return <SetupBetCard id={kind} icon={presentation.icon} title={presentation.title} description={description} help={kind} enabled={config.enabled} locked={locked} requestActivation={requestActivation} onEnabledChange={(enabled) => onChange({ ...config, enabled, determinationMode, mostEventsTieRule: tieRule })}>
+  return <SetupBetCard id={kind} icon={presentation.icon} title={presentation.title} description={description} help={kind} enabled={config.enabled} locked={locked} requestActivation={requestActivation} onEnabledChange={(enabled) => onChange({ ...config, enabled, settlementMode: "round", determinationMode, mostEventsTieRule: tieRule })}>
     <>
       <div className="betModeControl counterBetOwnerMode">
         <span className="miniLabel">¿Cómo se define quién se queda el animal?</span>
         <div className="segmented" role="group" aria-label={`Cómo se define quién se queda ${meta.plural}`}>
-          <button type="button" className={determinationMode === "last_event" ? "active" : ""} aria-pressed={determinationMode === "last_event"} onClick={() => onChange({ ...config, determinationMode: "last_event", mostEventsTieRule: tieRule })}>El último en hacerlo</button>
-          <button type="button" className={determinationMode === "most_events" ? "active" : ""} aria-pressed={determinationMode === "most_events"} onClick={() => onChange({ ...config, determinationMode: "most_events", mostEventsTieRule: tieRule })}>El que más hizo</button>
+          <button type="button" className={determinationMode === "last_event" ? "active" : ""} aria-pressed={determinationMode === "last_event"} onClick={() => onChange({ ...config, settlementMode: "round", determinationMode: "last_event", mostEventsTieRule: tieRule })}>El último en hacerlo</button>
+          <button type="button" className={determinationMode === "most_events" ? "active" : ""} aria-pressed={determinationMode === "most_events"} onClick={() => onChange({ ...config, settlementMode: "round", determinationMode: "most_events", mostEventsTieRule: tieRule })}>El que más hizo</button>
         </div>
       </div>
       {determinationMode === "most_events" && <div className="betModeControl counterBetTieMode">
         <span className="miniLabel">Si hay empate, ¿qué pasa?</span>
         <div className="segmented" role="group" aria-label={`Desempate de ${meta.plural}`}>
-          <button type="button" className={tieRule === "tied_players_pay" ? "active" : ""} aria-pressed={tieRule === "tied_players_pay"} onClick={() => onChange({ ...config, determinationMode, mostEventsTieRule: "tied_players_pay" })}>Los empatados lo pagan</button>
-          <button type="button" className={tieRule === "latest_tied_event" ? "active" : ""} aria-pressed={tieRule === "latest_tied_event"} onClick={() => onChange({ ...config, determinationMode, mostEventsTieRule: "latest_tied_event" })}>El último empatado en hacerlo</button>
+          <button type="button" className={tieRule === "tied_players_pay" ? "active" : ""} aria-pressed={tieRule === "tied_players_pay"} onClick={() => onChange({ ...config, settlementMode: "round", determinationMode, mostEventsTieRule: "tied_players_pay" })}>Los empatados lo pagan</button>
+          <button type="button" className={tieRule === "latest_tied_event" ? "active" : ""} aria-pressed={tieRule === "latest_tied_event"} onClick={() => onChange({ ...config, settlementMode: "round", determinationMode, mostEventsTieRule: "latest_tied_event" })}>El último empatado en hacerlo</button>
         </div>
       </div>}
       <div className="grid2 counterBetConfigGrid">
         <div><label>Valor por evento</label><div className="moneyField"><span>$</span><NumericCaptureInput inputMode="decimal" value={config.value} onValueChange={value => onChange({ ...config, value: Math.max(0, value ?? 0) })} /></div></div>
-        <div className="betModeControl counterBetPressure"><span className="miniLabel">Presión en segunda vuelta</span><div className="segmented" role="group" aria-label={`Presión en segunda vuelta de ${meta.plural}`}><button type="button" className={!secondNinePressed ? "active" : ""} aria-pressed={!secondNinePressed} onClick={() => onChange({ ...config, settlementMode: "halves", secondNinePressed: false })}>No</button><button type="button" className={secondNinePressed ? "active" : ""} aria-pressed={secondNinePressed} onClick={() => onChange({ ...config, settlementMode: "halves", secondNinePressed: true, secondNineMultiplier: configuredMultiplier })}>Sí</button></div></div>
+        <div className="betModeControl counterBetPressure"><span className="miniLabel">Presión en segunda vuelta</span><div className="segmented" role="group" aria-label={`Presión en segunda vuelta de ${meta.plural}`}><button type="button" className={!secondNinePressed ? "active" : ""} aria-pressed={!secondNinePressed} onClick={() => onChange({ ...config, settlementMode: "round", secondNinePressed: false })}>No</button><button type="button" className={secondNinePressed ? "active" : ""} aria-pressed={secondNinePressed} onClick={() => onChange({ ...config, settlementMode: "round", secondNinePressed: true, secondNineMultiplier: configuredMultiplier })}>Sí</button></div></div>
       </div>
-      {secondNinePressed && <div className="betModeControl counterBetMultiplier"><span className="miniLabel">Multiplicador segunda vuelta</span><div className="segmented" role="group" aria-label={`Multiplicador segunda vuelta de ${meta.plural}`}>{([2, 3, 4, 5] as const).map(value => <button type="button" key={value} className={configuredMultiplier === value ? "active" : ""} aria-pressed={configuredMultiplier === value} onClick={() => onChange({ ...config, settlementMode: "halves", secondNinePressed: true, secondNineMultiplier: value })}>{value}x</button>)}</div></div>}
-      <p className="hint">La primera y segunda vuelta jugadas se liquidan por separado. {secondNinePressed ? `La segunda vuelta jugada usa ${configuredMultiplier}x por evento.` : "Sin presión, ambas vueltas usan el valor base."}</p>
+      {secondNinePressed && <div className="betModeControl counterBetMultiplier"><span className="miniLabel">Multiplicador segunda vuelta</span><div className="segmented" role="group" aria-label={`Multiplicador segunda vuelta de ${meta.plural}`}>{([2, 3, 4, 5] as const).map(value => <button type="button" key={value} className={configuredMultiplier === value ? "active" : ""} aria-pressed={configuredMultiplier === value} onClick={() => onChange({ ...config, settlementMode: "round", secondNinePressed: true, secondNineMultiplier: value })}>{value}x</button>)}</div></div>}
+      <p className="hint">El animal se asigna al terminar la ronda. {secondNinePressed ? `Los eventos de la segunda vuelta jugada valen ${configuredMultiplier}x.` : "Todos los eventos usan el valor base."}</p>
       <label className="miniLabel">Participan</label><PlayerChips players={players} selected={config.participantIds} onChange={participantIds => onChange({ ...config, participantIds })} />
     </>
   </SetupBetCard>;

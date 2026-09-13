@@ -295,6 +295,31 @@ test("el que más hizo desempata por el último evento de los empatados y persis
   assert.equal(isZeroSum(result.balances), true);
 });
 
+test("Víboras, Camellos y Peces se capturan y liquidan simultáneamente sin eventos duplicados", () => {
+  const participantIds = ids.slice(0, 3);
+  let events: CounterBetEvent[] = [];
+  events = confirmCounterQuantity(events, "vipers", 4, participantIds[0], 1);
+  events = confirmCounterQuantity(events, "camels", 7, participantIds[1], 2);
+  events = confirmCounterQuantity(events, "fish", 12, participantIds[2], 1);
+  const restored = normalizeCounterBetEvents(JSON.parse(JSON.stringify(events)));
+  const config = (determinationMode: "last_event" | "most_events"): CounterBetConfig => ({
+    enabled: true,
+    settlementMode: "round",
+    value: 100,
+    participantIds,
+    determinationMode,
+    mostEventsTieRule: "latest_tied_event",
+  });
+  const results = (["vipers", "camels", "fish"] as CounterBetKind[]).map((kind) =>
+    calculateCounterBet(kind, players, config(kind === "vipers" ? "last_event" : "most_events"), restored, emptyCounterBetKeepers(), order, new Set(order)),
+  );
+
+  assert.equal(restored.length, 3);
+  assert.deepEqual(results.map((result) => result.halves[0].keeperId), participantIds);
+  assert.ok(results.every((result) => result.halves[0].settled && result.zeroSum));
+  assert.deepEqual(results.map((result) => result.totalQuantity), [1, 2, 1]);
+});
+
 test("Víboras desempata por menor distancia dentro de cada vuelta y conserva la distancia al editar", () => {
   let eventRows: CounterBetEvent[] = [
     { id: "v-9-a", kind: "vipers", hole: 9, playerId: ids[0], quantity: 1 },
@@ -382,7 +407,7 @@ for (const kind of ["camels", "fish"] as CounterBetKind[]) {
   });
 }
 
-test("restaurar borradores conserva datos antiguos y las rondas nuevas nacen por vueltas", () => {
+test("restaurar borradores conserva datos antiguos y las apuestas nuevas de animales cierran por ronda", () => {
   const fresh = initialBets(ids).vipers;
   const saved: CounterBetConfig = { enabled: true, value: 75, secondNineMultiplier: 3, participantIds: ids.slice(0, 4) };
   const restored = restoreCounterBetConfig(fresh, saved);
@@ -400,7 +425,8 @@ test("restaurar borradores conserva datos antiguos y las rondas nuevas nacen por
   const savedWithoutPressureFields: CounterBetConfig = { enabled: true, value: 75, participantIds: ids.slice(0, 4) };
   const restoredWithoutPressureFields = restoreCounterBetConfig(fresh, savedWithoutPressureFields);
   assert.equal(restoredWithoutPressureFields.secondNinePressed, false);
-  assert.deepEqual(restoreCounterBetConfig(fresh).settlementMode, "halves");
+  assert.deepEqual(restoreCounterBetConfig(fresh).settlementMode, "round");
+  assert.deepEqual(restoreCounterBetConfig(fresh).determinationMode, "last_event");
 });
 
 test("contadores rápidos conservan cantidad numérica, permiten borrar y no duplican la llave", () => {

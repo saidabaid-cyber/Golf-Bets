@@ -93,7 +93,7 @@ export function GroupBetTemplateEditor({ value, players, ownerId, mode, onChange
   const toggleCore = (key: GroupTemplateCoreKey) => {
     const enabled = Boolean(coreConfig(value, key)?.enabled);
     const counterDefaults = !enabled && (key === "vipers" || key === "camels" || key === "fish")
-      ? { determinationMode: "last_event", mostEventsTieRule: "tied_players_pay" }
+      ? { settlementMode: "round", determinationMode: "last_event", mostEventsTieRule: "tied_players_pay" }
       : {};
     const apply = () => updateCore(key, { enabled: !enabled, ...counterDefaults });
     if (!enabled) runActivation(apply); else apply();
@@ -215,8 +215,8 @@ export function GroupBetTemplateEditor({ value, players, ownerId, mode, onChange
         {key === "ballFriend" && <Field label="Score máximo" value={value.betConfig.ballFriend.maxScore} min={1} max={20} onChange={(maxScore) => updateCore(key, { maxScore })} />}
         {(key === "vipers" || key === "camels" || key === "fish") && <label className={styles.check}><input type="checkbox" checked={Boolean(value.betConfig[key].secondNinePressed)} onChange={(event) => updateCore(key, { secondNinePressed: event.target.checked })} />Presión en segunda vuelta</label>}
         {(key === "vipers" || key === "camels" || key === "fish") && <>
-          <label className={styles.field}>¿Cómo se define quién se queda el animal?<select value={value.betConfig[key].determinationMode ?? "last_event"} onChange={(event) => updateCore(key, { determinationMode: event.target.value })}><option value="last_event">El último en hacerlo</option><option value="most_events">El que más hizo</option></select></label>
-          {(value.betConfig[key].determinationMode ?? "last_event") === "most_events" && <label className={styles.field}>Si hay empate, ¿qué pasa?<select value={value.betConfig[key].mostEventsTieRule ?? "tied_players_pay"} onChange={(event) => updateCore(key, { mostEventsTieRule: event.target.value })}><option value="tied_players_pay">Los empatados lo pagan</option><option value="latest_tied_event">El último de los empatados en hacerlo</option></select></label>}
+          <label className={styles.field}>¿Cómo se define quién se queda el animal?<select value={value.betConfig[key].determinationMode ?? "last_event"} onChange={(event) => updateCore(key, { settlementMode: "round", determinationMode: event.target.value })}><option value="last_event">El último en hacerlo</option><option value="most_events">El que más hizo</option></select></label>
+          {(value.betConfig[key].determinationMode ?? "last_event") === "most_events" && <label className={styles.field}>Si hay empate, ¿qué pasa?<select value={value.betConfig[key].mostEventsTieRule ?? "tied_players_pay"} onChange={(event) => updateCore(key, { settlementMode: "round", mostEventsTieRule: event.target.value })}><option value="tied_players_pay">Los empatados lo pagan</option><option value="latest_tied_event">El último de los empatados en hacerlo</option></select></label>}
         </>}
         {key === "loba" && <><Field label="Valor de unidad" value={value.betConfig.loba.unitValue} onChange={(unitValue) => updateCore(key, { unitValue })} /><label className={styles.check}><input type="checkbox" checked={value.betConfig.loba.unitsEnabled} onChange={(event) => updateCore(key, { unitsEnabled: event.target.checked })} />Unidades activas</label></>}
         <span className={styles.fieldLabel}>Participantes</span><Participants players={players} selected={config.participantIds || []} onChange={(participantIds) => updateCore(key, { participantIds })} />
