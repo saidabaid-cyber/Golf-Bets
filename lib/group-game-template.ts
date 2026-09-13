@@ -12,6 +12,7 @@ import type {
   PersonalBet,
   Player,
   RoundHandicapBasis,
+  RoundSnapshot,
   SupplementalBet,
 } from "./types";
 
@@ -30,6 +31,8 @@ export type GroupTemplateDraftSource = {
 
 export type RoundTemplateOrigin = {
   groupId: string;
+  /** Immutable label shown by active/history views even if the group is renamed. */
+  groupNameSnapshot?: string;
   basedOnUpdatedAt: string;
   roundPlayerIdByMemberId: Record<string, string>;
 };
@@ -45,8 +48,20 @@ export function normalizeRoundTemplateOrigin(value: unknown): RoundTemplateOrigi
   const entries = Object.entries(raw.roundPlayerIdByMemberId)
     .filter(([memberId, playerId]) => validId(memberId) && validId(playerId));
   if (!entries.length) return null;
-  return { groupId: raw.groupId!, basedOnUpdatedAt: raw.basedOnUpdatedAt, roundPlayerIdByMemberId: Object.fromEntries(entries) };
+  const groupNameSnapshot = typeof raw.groupNameSnapshot === "string" ? raw.groupNameSnapshot.trim().slice(0, 100) : "";
+  return {
+    groupId: raw.groupId!,
+    ...(groupNameSnapshot ? { groupNameSnapshot } : {}),
+    basedOnUpdatedAt: raw.basedOnUpdatedAt,
+    roundPlayerIdByMemberId: Object.fromEntries(entries),
+  };
 }
+
+export const MAX_ROUND_GROUP_PLAYERS = 5;
+
+export type GroupRoundSelectionValidation =
+  | { ok: true; selectedMemberIds: string[] }
+  | { ok: false; code: "empty" | "too_many" | "unknown_member"; message: string };
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -54,6 +69,50 @@ function clone<T>(value: T): T {
 
 function validId(value: unknown) {
   return typeof value === "string" && Boolean(value) && !/\s/.test(value) && value.length <= 200;
+}
+
+export function stableGroupMemberId(group: Pick<FrequentGroup, "id">, member: FrequentGroupMember, index: number) {
+  return validId(member.memberId) ? member.memberId! : `member-${group.id}-${index + 1}`;
+}
+
+/** Legacy roster-only groups receive deterministic IDs before becoming a bet template. */
+export function withStableGroupMemberIds(group: FrequentGroup): FrequentGroup {
+  return {
+    ...group,
+    players: group.players.map((member, index) => ({
+      ...member,
+      memberId: stableGroupMemberId(group, member, index),
+    })),
+  };
+}
+
+export function validateGroupRoundSelection(group: FrequentGroup, selectedMemberIds: readonly string[]): GroupRoundSelectionValidation {
+  const available = new Set(group.players.map((member, index) => stableGroupMemberId(group, member, index)));
+  const selected = [...new Set(selectedMemberIds)];
+  if (!selected.length) return { ok: false, code: "empty", message: "Selecciona al menos un jugador para esta ronda." };
+  if (selected.length > MAX_ROUND_GROUP_PLAYERS) return { ok: false, code: "too_many", message: "MÁXIMO 5 JUGADORES POR GRUPO DE SALIDA" };
+  if (selected.some((memberId) => !available.has(memberId))) return { ok: false, code: "unknown_member", message: "El grupo cambió. Vuelve a elegir sus jugadores." };
+  return { ok: true, selectedMemberIds: selected };
+}
+
+export function defaultGroupRoundSelection(group: FrequentGroup) {
+  const preferredCount = group.players.length <= MAX_ROUND_GROUP_PLAYERS ? group.players.length : 4;
+  return group.players.slice(0, preferredCount).map((member, index) => stableGroupMemberId(group, member, index));
+}
+
+export function createRoundGroupSnapshot(origin: RoundTemplateOrigin | null | undefined, players: readonly Player[]): RoundSnapshot["groupOrigin"] {
+  if (!origin) return undefined;
+  const selectedMembers = Object.entries(origin.roundPlayerIdByMemberId).flatMap(([memberId, roundPlayerId]) => {
+    const player = players.find((candidate) => candidate.id === roundPlayerId);
+    return player ? [{ memberId, roundPlayerId, name: player.name }] : [];
+  });
+  if (!selectedMembers.length) return undefined;
+  return {
+    groupId: origin.groupId,
+    groupName: origin.groupNameSnapshot || "Grupo",
+    basedOnUpdatedAt: origin.basedOnUpdatedAt,
+    selectedMembers,
+  };
 }
 
 function mapId(value: unknown, ids: ReadonlyMap<string, string>) {
@@ -264,24 +323,66 @@ export function normalizeGroupGameTemplate(value: unknown, members: FrequentGrou
   }, mapping, memberIds, roundDefaults);
 }
 
-function runtimePlayers(group: FrequentGroup, idFactory: () => string) {
+export function groupTemplatePlayers(group: FrequentGroup): Player[] {
   return group.players.map((member, index) => ({
-    memberId: member.memberId || `legacy-${group.id}-${index}`,
-    player: {
-      id: member.accountUserId ? accountPrimaryPlayerId(member.accountUserId) : idFactory(),
-      name: member.name,
-      handicap: member.handicap,
-      ...(member.accountUserId ? { accountUserId: member.accountUserId } : {}),
-    } satisfies Player,
+    id: stableGroupMemberId(group, member, index),
+    name: member.name,
+    handicap: member.handicap,
+    ...(member.accountUserId ? {
+      accountUserId: member.accountUserId,
+      handicapIndex: member.handicap,
+      handicapSource: "profile_index" as const,
+      handicapIndexSource: "BACKYARD_MANUAL" as const,
+    } : { handicapSource: "manual" as const }),
   }));
 }
 
-export function instantiateGroupGameTemplate(group: FrequentGroup, idFactory: () => string): GroupTemplateRoundDraft {
-  const runtime = runtimePlayers(group, idFactory);
+export function createEmptyGroupGameTemplate(group: FrequentGroup): GroupGameTemplate {
+  const stableGroup = withStableGroupMemberIds(group);
+  const players = groupTemplatePlayers(stableGroup);
+  const startHole = 1 as const;
+  const roundHoles = 18 as const;
+  return createGroupGameTemplate({
+    ownerId: players[0]?.id || "",
+    players,
+    startHole,
+    roundHoles,
+    roundHandicapBasis: "relative",
+    bets: initialBets(players.map((player) => player.id)),
+    segments: segmentDefinitions(playOrder(startHole).slice(0, roundHoles), 6),
+    personalBets: [],
+    supplementalBets: [],
+    manualBets: [],
+  }, Object.fromEntries(players.map((player) => [player.id, player.id])));
+}
+
+function runtimePlayers(group: FrequentGroup, idFactory: () => string, selectedMemberIds?: readonly string[]) {
+  const selected = selectedMemberIds ? new Set(selectedMemberIds) : null;
+  return group.players.flatMap((member, index) => {
+    const memberId = stableGroupMemberId(group, member, index);
+    if (selected && !selected.has(memberId)) return [];
+    return [{
+      memberId,
+      player: {
+        id: member.accountUserId ? accountPrimaryPlayerId(member.accountUserId) : idFactory(),
+        name: member.name,
+        handicap: member.handicap,
+        ...(member.accountUserId ? { accountUserId: member.accountUserId } : {}),
+      } satisfies Player,
+    }];
+  });
+}
+
+export function instantiateGroupGameTemplate(group: FrequentGroup, idFactory: () => string, selectedMemberIds?: readonly string[]): GroupTemplateRoundDraft {
+  const stableGroup = withStableGroupMemberIds(group);
+  const selection = selectedMemberIds ?? defaultGroupRoundSelection(stableGroup);
+  const validation = validateGroupRoundSelection(stableGroup, selection);
+  if (!validation.ok) throw new Error(validation.message);
+  const runtime = runtimePlayers(stableGroup, idFactory, validation.selectedMemberIds);
   const players = runtime.map(({ player }) => player);
   const roundPlayerIdByMemberId = Object.fromEntries(runtime.map(({ memberId, player }) => [memberId, player.id]));
-  const origin = { groupId: group.id, basedOnUpdatedAt: group.updatedAt, roundPlayerIdByMemberId };
-  if (!group.gameTemplate) {
+  const origin = { groupId: stableGroup.id, groupNameSnapshot: stableGroup.name, basedOnUpdatedAt: stableGroup.updatedAt, roundPlayerIdByMemberId };
+  if (!stableGroup.gameTemplate) {
     const startHole = 1 as const;
     const roundHoles = 18 as const;
     return {
@@ -298,7 +399,7 @@ export function instantiateGroupGameTemplate(group: FrequentGroup, idFactory: ()
       manualBets: [],
     };
   }
-  const template = group.gameTemplate;
+  const template = stableGroup.gameTemplate;
   const mapping = new Map(Object.entries(roundPlayerIdByMemberId));
   const cleaned = cleanTemplate({
     ownerId: template.ownerMemberId,

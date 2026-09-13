@@ -1,0 +1,65 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { readFileSync } from "node:fs";
+
+const page = readFileSync("app/page.tsx", "utf8");
+const builder = readFileSync("app/components/group-builder.tsx", "utf8");
+const selector = readFileSync("app/components/group-round-selector.tsx", "utf8");
+const css = readFileSync("app/functional-ux.css", "utf8");
+const migration = readFileSync("supabase/migrations/20260913175810_group_round_presets.sql", "utf8");
+
+test("la tarjeta móvil separa nombre, HCP y acciones sin widths rígidos", () => {
+  assert.match(css, /\.playerEdit\{[^}]*grid-template-columns:minmax\(0,1fr\) minmax\(132px,\.8fr\) 44px 44px/);
+  assert.match(css, /grid-template-areas:"name hcp owner remove"/);
+  assert.match(css, /@media\(max-width:700px\)[\s\S]*grid-template-areas:"name owner remove" "hcp hcp hcp"/);
+  assert.match(css, /\.playerEdit>\.ownerDot\{grid-area:owner/);
+  assert.match(css, /\.playerEdit>\.remove\{grid-area:remove/);
+});
+
+test("Grupos expone roster, apuestas y el inicio de ronda desde la misma tarjeta", () => {
+  for (const copy of ["Crear grupo", "Apuestas del grupo", "Editar jugadores y apuestas", "Iniciar ronda"]) {
+    assert.match(builder, new RegExp(copy));
+  }
+  assert.match(page, /<GroupBetTemplateEditor/);
+  assert.match(page, /createEmptyGroupGameTemplate/);
+});
+
+test("el selector muestra todos los miembros, contador 5 y bloqueo explícito del sexto", () => {
+  assert.match(selector, /group\.players\.map/);
+  assert.match(selector, /selectedMemberIds\.length/);
+  assert.match(selector, /MAX_ROUND_GROUP_PLAYERS/);
+  assert.match(selector, /MÁXIMO 5 JUGADORES POR GRUPO DE SALIDA/);
+  assert.match(selector, /El grupo original y sus integrantes no cambian/);
+});
+
+test("editar una ronda basada en grupo distingue sólo esta ronda de actualizar plantilla", () => {
+  assert.match(page, /Aplicar sólo esta ronda/);
+  assert.match(page, /Actualizar plantilla del grupo/);
+  assert.match(page, /Agregar también al grupo/);
+  assert.match(page, /saveRoundAsFrequentGroupTemplate/);
+  assert.match(page, /addRoundOnlyPlayersToSourceGroup/);
+});
+
+test("el histórico persiste un snapshot del grupo en vez de releer la plantilla mutable", () => {
+  assert.match(page, /createRoundGroupSnapshot\(roundTemplateOrigin, players\)/);
+  assert.match(page, /\.\.\.\(groupOrigin \? \{ groupOrigin \} : \{\}\)/);
+  const detail = readFileSync("app/components/historical-round-detail.tsx", "utf8");
+  assert.match(detail, /Grupo \$\{round\.groupOrigin\.groupName\}/);
+});
+
+test("la migración separa plantillas relacionales del snapshot inmutable y cierra acceso anónimo", () => {
+  for (const table of [
+    "group_bet_templates_v2",
+    "group_bet_template_participants_v2",
+    "group_team_templates_v2",
+    "group_team_template_members_v2",
+    "round_group_snapshots_v2",
+    "round_group_snapshot_players_v2",
+  ]) {
+    assert.match(migration, new RegExp(`create table if not exists public\\.${table}`));
+    assert.match(migration, new RegExp(`alter table public\\.${table} enable row level security`));
+  }
+  assert.match(migration, /selected_player_count smallint not null check \(selected_player_count between 1 and 5\)/);
+  assert.match(migration, /revoke all on table[\s\S]*from anon/);
+  assert.doesNotMatch(migration, /round_group_snapshots_v2[^;]*for (update|delete)/i);
+});

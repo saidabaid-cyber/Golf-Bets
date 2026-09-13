@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import type { FrequentGroup, FrequentPlayer, Player } from "../../lib/types";
+import { frequentGroupTemplateSummary } from "../../lib/group-game-template";
 import {
   appendUniquePlayer,
   generateBalancedGroups,
@@ -18,12 +19,14 @@ import { ModalCloseButton } from "./modal-shell";
 
 const id = () => globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2, 10);
 
-export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, onSaveFrequentGroup, onEditFrequentGroup, onDeleteFrequentGroup }: {
+export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, onSaveFrequentGroup, onCreateFrequentGroup, onStartFrequentGroup, onEditFrequentGroup, onDeleteFrequentGroup }: {
   frequentPlayers: FrequentPlayer[];
   frequentGroups: FrequentGroup[];
   onBack: () => void;
   onPlay: (players: Player[]) => void;
   onSaveFrequentGroup: (name: string, players: Array<Pick<Player, "name" | "handicap" | "accountUserId">>) => boolean;
+  onCreateFrequentGroup: () => void;
+  onStartFrequentGroup: (group: FrequentGroup) => void;
   onEditFrequentGroup: (group: FrequentGroup) => void;
   onDeleteFrequentGroup: (group: FrequentGroup) => void;
 }) {
@@ -133,7 +136,13 @@ export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, 
   }
 
   return <>
-    <section className="hero groupsHero"><div><div className="eyebrow">THE BACKYARD · GOLF</div><h1>Armar grupos</h1><p>Sortea foursomes sin iniciar una ronda. Nadie queda fuera.</p></div><button className="secondary" onClick={onBack}>← Volver a Inicio</button></section>
+    <section className="hero groupsHero"><div><div className="eyebrow">THE BACKYARD · GOLF</div><h1>Grupos</h1><p>Guarda jugadores y apuestas habituales; elige hasta 5 para cada salida.</p></div><div className="groupsHeroActions"><button className="secondary" onClick={onBack}>← Inicio</button><button className="primary" onClick={onCreateFrequentGroup}>Crear grupo</button></div></section>
+    {frequentGroups.length > 0 && <section className="card groupPresetLibrary"><div className="sectionTitle"><div><h2>Mis grupos</h2><p>Plantillas mutables; cada ronda conserva su propio snapshot.</p></div></div><div className="groupPresetGrid">{frequentGroups.map((group) => <article className="groupPresetCard" key={`preset-${group.id}`}>
+      <div><span className="templateSectionLabel">GRUPO</span><h3>{group.name}</h3><p>{group.players.length} miembros</p></div>
+      <div className="groupPresetMembers" aria-label={`Jugadores de ${group.name}`}>{group.players.slice(0, 6).map((member, index) => <span key={member.memberId || `${member.name}-${index}`}>{member.name}</span>)}{group.players.length > 6 && <span>+{group.players.length - 6}</span>}</div>
+      <div className="groupPresetBetSummary"><b>Apuestas del grupo</b><span>{frequentGroupTemplateSummary(group)}</span></div>
+      <div className="groupPresetActions"><button type="button" className="secondary" onClick={() => onEditFrequentGroup(group)}>Editar jugadores y apuestas</button><button type="button" className="primary" onClick={() => onStartFrequentGroup(group)}>Iniciar ronda</button></div>
+    </article>)}</div></section>}
     <section className="card groupCapture"><div className="sectionTitle"><div><h2>Jugadores</h2><p>Frecuentes, grupos guardados o captura manual.</p></div><strong className="playerCounter">{players.length} jugadores</strong></div>
       {frequentPlayers.length > 0 && <details className="frequentDisclosure groupBuilderDisclosure"><summary><span>Jugadores frecuentes ({frequentPlayers.length})<small>Toca aquí para agregar un jugador</small></span></summary><div className="chips">{frequentPlayers.map((player) => <button className="chipButton" key={player.id} onClick={() => add({ id: id(), name: player.name, handicap: player.handicap, ...(player.accountUserId ? { accountUserId: player.accountUserId } : {}) })}>+ {player.name}{typeof player.handicap === "number" ? ` · HCP ${player.handicap}` : ""}</button>)}</div></details>}
       {frequentGroups.length > 0 && <details className="frequentDisclosure groupBuilderDisclosure"><summary><span>Grupos guardados ({frequentGroups.length})<small>Toca aquí para agregar un grupo</small></span></summary><div className="savedGroupManager">{frequentGroups.map((group) => <div className="savedGroupItem" key={group.id}>

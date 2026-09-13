@@ -670,6 +670,13 @@ export type RoundSnapshot = {
   playerBalances?: Record<string, number>;
   categoryBalances?: Record<string, Record<string, number>>;
   resultDetails?: Record<string, unknown>;
+  /** Immutable provenance only. Players, bets and teams above remain the playable snapshot. */
+  groupOrigin?: {
+    groupId: string;
+    groupName: string;
+    basedOnUpdatedAt: string;
+    selectedMembers: Array<{ memberId: string; roundPlayerId: string; name: string }>;
+  };
 };
 
 export type FrequentPlayer = {

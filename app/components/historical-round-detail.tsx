@@ -125,6 +125,7 @@ export function HistoricalRoundDetail({ round, onEdit, onPhoto }: {
   }, [recap.golf, recap.meta.courseName, recap.meta.roundId, recap.meta.teeName]);
 
   const metaParts = [
+    round.groupOrigin?.groupName ? `Grupo ${round.groupOrigin.groupName}` : undefined,
     recap.meta.ownerName ? `Organizó ${recap.meta.ownerName}` : undefined,
     recap.meta.holeCount ? `${recap.meta.holeCount} hoyos` : "Hoyos no registrados",
     recap.meta.startHole ? `Salida H${recap.meta.startHole}` : undefined,

@@ -208,4 +208,40 @@
 @media(max-width:430px){.foursomeMatchResults{grid-template-columns:1fr}.foursomeMatchResults>.foursomeResultPresses{grid-column:1}}
 .roundStatsCard{min-width:0}.roundStatsTableWrap{width:100%;max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}.roundStatsTableWrap table{min-width:650px;border-collapse:collapse;width:100%;font-size:.78rem}.roundStatsTableWrap th,.roundStatsTableWrap td{padding:.55rem .45rem;border-bottom:1px solid var(--line);text-align:center}.roundStatsTableWrap th:first-child{position:sticky;left:0;background:var(--card);z-index:1;text-align:left}.roundStatsTableWrap th small{display:block;color:var(--muted);font-weight:500}.roundStatsTotal{font-weight:800}.roundStatsSummary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.55rem;margin-top:.8rem}.roundStatsSummary span{display:grid;gap:.15rem;padding:.65rem;border:1px solid var(--line);border-radius:12px;text-align:center}.roundStatsSummary small{color:var(--muted)}.roundStatsSummary b{font-size:1.05rem}@media(max-width:430px){.roundStatsSummary{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .roundPlayingHcp{display:grid;gap:2px;min-width:132px;border:1px solid var(--line);border-radius:12px;background:var(--soft);padding:7px 9px}.roundPlayingHcp small{color:var(--muted);font-size:9px;font-weight:850;letter-spacing:.06em}.roundPlayingHcp b{color:var(--green);font-size:13px}.roundPlayingHcp span{color:var(--muted);font-size:9px;line-height:1.25}
+
+/* Round players: actions always keep their own columns while long names and
+   playing-HCP metadata use minmax(0,1fr) and wrap on a second mobile row. */
+.playerEdit{display:grid;grid-template-columns:minmax(0,1fr) minmax(132px,.8fr) 44px 44px;grid-template-areas:"name hcp owner remove";align-items:stretch;gap:8px;min-width:0;margin-bottom:9px}
+.playerEdit>input:first-child{grid-area:name;min-width:0}
+.playerEdit>.roundHcpField{grid-area:hcp;min-width:0;width:100%}
+.playerEdit>.ownerDot{grid-area:owner;min-width:44px;min-height:44px}
+.playerEdit>.remove{grid-area:remove;min-width:44px;min-height:44px}
+.playerEdit .roundPlayingHcp{min-width:0;overflow-wrap:anywhere}
+@media(max-width:700px){
+  .playerEdit{grid-template-columns:minmax(0,1fr) 44px 44px;grid-template-areas:"name owner remove" "hcp hcp hcp"}
+  .playerEdit>.roundHcpField{min-height:44px}
+}
+
+/* Group presets are rosters of any size; only the per-round picker is capped. */
+.groupsHeroActions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.groupPresetGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.groupPresetCard{display:grid;gap:11px;min-width:0;border:1px solid var(--line);border-radius:17px;background:var(--soft);padding:13px}
+.groupPresetCard h3,.groupPresetCard p{margin:0}.groupPresetCard h3{margin-top:3px;font-size:18px}.groupPresetCard p{color:var(--muted);font-size:11px}
+.groupPresetMembers{display:flex;gap:5px;flex-wrap:wrap}.groupPresetMembers span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid var(--line);border-radius:999px;background:var(--card);padding:5px 8px;font-size:10px;font-weight:800}
+.groupPresetBetSummary{display:grid;gap:3px;border-top:1px solid var(--line);padding-top:10px}.groupPresetBetSummary b{font-size:11px}.groupPresetBetSummary span{color:var(--muted);font-size:10px}
+.groupPresetActions{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px}.groupPresetActions button{min-height:44px;padding:9px 11px;font-size:10px}
+.groupEditorTabs{margin:14px 0}.groupTemplateEditorPanel{display:grid;gap:15px}.groupTemplateEditorPanel>.groupEditorSectionTitle span{width:auto;padding-inline:9px;text-transform:none}
+.roundTemplateActions{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}.roundTemplateActions button{min-height:42px}
+.roundTemplateNotice small{display:block;margin-top:5px;color:var(--muted);font-size:10px}
+
+.groupRoundSelector{position:relative;width:min(100%,560px);max-height:calc(100dvh - 24px);overflow-y:auto;border-radius:22px;background:var(--card);padding:22px;box-shadow:0 24px 80px rgba(0,0,0,.35)}
+.groupRoundSelector h2{margin:4px 0 5px;font-size:24px}.groupRoundSelector>p{margin:0 42px 14px 0;color:var(--muted);font-size:12px;line-height:1.45}
+.groupRoundSelectionCount{display:flex;align-items:baseline;gap:6px;margin-bottom:10px;color:var(--green)}.groupRoundSelectionCount b{font-size:18px}.groupRoundSelectionCount span{font-size:11px;font-weight:800}
+.groupRoundMemberGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.groupRoundMemberGrid button{display:grid;grid-template-columns:28px minmax(0,1fr);align-items:center;gap:8px;min-width:0;min-height:58px;border:1px solid var(--line);border-radius:13px;background:var(--soft);padding:9px;text-align:left;color:var(--ink)}
+.groupRoundMemberGrid button>span:first-child{display:grid;place-items:center;width:28px;height:28px;border:1px solid var(--line);border-radius:50%;background:var(--card);color:#fff;font-weight:900}.groupRoundMemberGrid button.selected{border-color:var(--green);background:var(--green2)}.groupRoundMemberGrid button.selected>span:first-child{border-color:var(--green);background:var(--green)}
+.groupRoundMemberGrid button>span:last-child{display:grid;min-width:0;gap:2px}.groupRoundMemberGrid b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}.groupRoundMemberGrid small{color:var(--muted);font-size:9px}
+.groupRoundTemplateNotice{margin:12px 0;border:1px solid var(--line);border-radius:13px;background:var(--soft);padding:11px}.groupRoundTemplateNotice b{font-size:11px}.groupRoundTemplateNotice p{margin:4px 0 0;color:var(--muted);font-size:10px;line-height:1.4}
+@media(max-width:700px){.groupPresetGrid{grid-template-columns:1fr}.groupsHeroActions{width:100%;justify-content:stretch}.groupsHeroActions button{flex:1}.roundTemplateActions{width:100%;justify-content:stretch}.roundTemplateActions button{flex:1}}
+@media(max-width:430px){.groupPresetActions,.groupRoundMemberGrid{grid-template-columns:1fr}.groupRoundSelector{width:100%;max-height:calc(100dvh - 12px);padding:18px}.groupRoundSelector>.dialogActions{position:sticky;bottom:-18px;margin:12px -18px -18px;padding:12px 18px calc(12px + env(safe-area-inset-bottom));background:var(--card);border-top:1px solid var(--line)}}
 .groupPrivacyChoices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0;border:0;padding:0}.groupPrivacyChoices legend{margin-bottom:6px;color:var(--muted);font-size:11px;font-weight:850}.groupPrivacyChoices button{display:grid;min-height:68px;gap:4px;border:1px solid var(--line);border-radius:13px;background:var(--soft);padding:10px;text-align:left}.groupPrivacyChoices button[aria-pressed=true]{border-color:var(--green);background:var(--green2);color:var(--green)}.groupPrivacyChoices small{color:var(--muted);font-size:10px;line-height:1.35}.groupInviteFoundation{display:grid;gap:7px;margin:10px 0 14px;border:1px dashed #9fb7a5;border-radius:13px;background:#f5faf6;padding:12px}.groupInviteFoundation p{margin:0;color:var(--muted);font-size:11px;line-height:1.45}@media(max-width:430px){.groupPrivacyChoices{grid-template-columns:1fr}}

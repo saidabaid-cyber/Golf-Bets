@@ -9,11 +9,15 @@ import {
   updateFrequentGroupMember,
 } from "../lib/frequent-templates";
 import {
+  createRoundGroupSnapshot,
+  defaultGroupRoundSelection,
   createGroupGameTemplate,
   instantiateGroupGameTemplate,
   updateGroupTemplateFromRound,
+  validateGroupRoundSelection,
   type GroupTemplateDraftSource,
 } from "../lib/group-game-template";
+import { collectBetConfigurationIssues } from "../lib/bet-config-validation";
 import { playOrder, segmentDefinitions } from "../lib/engine";
 import { initialBets } from "../lib/new-round-bets";
 import { createSupplementalBet } from "../lib/supplemental-bets";
@@ -202,4 +206,85 @@ test("guest, invitación y cuenta vinculada previenen duplicados y permiten revi
   assert.equal(unchangedByAccount, group);
   group = updateFrequentGroupMember(group, 1, { handicap: 10 });
   assert.equal(group.players[1].handicap, 10);
+});
+
+test("un grupo de ocho conserva su roster y crea una ronda sólo con los cuatro seleccionados", () => {
+  const group: FrequentGroup = {
+    ...configuredGroup(),
+    players: [
+      ...configuredGroup().players,
+      { memberId: "member-javier", kind: "guest", name: "Javier", handicap: 14 },
+      { memberId: "member-roberto", kind: "guest", name: "Roberto", handicap: 16 },
+      { memberId: "member-miguel", kind: "guest", name: "Miguel", handicap: 19 },
+      { memberId: "member-andres", kind: "guest", name: "Andrés", handicap: 21 },
+    ],
+  };
+  const selected = defaultGroupRoundSelection(group);
+  assert.deepEqual(selected, ["member-owner", "member-pedro", "member-juan", "member-carlos"]);
+  let sequence = 0;
+  const draft = instantiateGroupGameTemplate(group, () => `selected-${++sequence}`, selected);
+  assert.equal(group.players.length, 8);
+  assert.equal(draft.players.length, 4);
+  assert.deepEqual(draft.players.map((player) => player.name), ["Said", "Pedro", "Juan", "Carlos"]);
+  assert.equal(Object.keys(draft.origin.roundPlayerIdByMemberId).length, 4);
+});
+
+test("el sexto jugador se bloquea y una identidad ajena nunca entra a la ronda", () => {
+  const group: FrequentGroup = {
+    ...configuredGroup(),
+    players: [...configuredGroup().players,
+      { memberId: "member-five", name: "Cinco", handicap: 5 },
+      { memberId: "member-six", name: "Seis", handicap: 6 }],
+  };
+  const tooMany = validateGroupRoundSelection(group, group.players.map((member) => member.memberId!));
+  assert.deepEqual(tooMany, { ok: false, code: "too_many", message: "MÁXIMO 5 JUGADORES POR GRUPO DE SALIDA" });
+  const unknown = validateGroupRoundSelection(group, ["member-owner", "not-in-group"]);
+  assert.equal(unknown.ok, false);
+  assert.throws(() => instantiateGroupGameTemplate(group, () => "x", group.players.map((member) => member.memberId!)), /MÁXIMO 5/);
+});
+
+test("participantes ausentes dejan la apuesta inválida para que Preflight obligue a revisarla", () => {
+  const source = configuredSource();
+  source.bets.foursome.mode = "match";
+  source.bets.foursome.segmentSize = 18;
+  source.bets.foursome.fixedValue = 500;
+  source.segments = segmentDefinitions(playOrder(1), 18).map((segment) => ({ ...segment, basePair: ["round-owner", "round-pedro"] }));
+  const group = { ...configuredGroup(), gameTemplate: createGroupGameTemplate(source, memberIdByPlayerId) };
+  let sequence = 0;
+  const draft = instantiateGroupGameTemplate(group, () => `missing-${++sequence}`, ["member-owner", "member-pedro", "member-juan"]);
+  const issues = collectBetConfigurationIssues(draft);
+  assert.ok(issues.some((issue) => issue.code === "foursome-match-participants"));
+  assert.match(issues.map((issue) => issue.message).join("\n"), /exactamente 4 jugadores|pareja base válida/i);
+});
+
+test("el snapshot de origen conserva nombre y selección aunque la plantilla se edite después", () => {
+  let sequence = 0;
+  const group = configuredGroup();
+  const draft = instantiateGroupGameTemplate(group, () => `snapshot-${++sequence}`, ["member-owner", "member-pedro", "member-juan", "member-carlos"]);
+  const snapshot = structuredClone(createRoundGroupSnapshot(draft.origin, draft.players));
+  const edited = { ...group, name: "Domingos editado", players: group.players.slice(0, 2), updatedAt: "2026-09-08T12:00:00.000Z" };
+  assert.equal(edited.name, "Domingos editado");
+  assert.equal(snapshot?.groupName, "Domingos");
+  assert.equal(snapshot?.selectedMembers.length, 4);
+});
+
+test("el snapshot histórico contiene una copia profunda de jugadores y apuestas de la ronda", () => {
+  let sequence = 0;
+  const group = configuredGroup();
+  const draft = instantiateGroupGameTemplate(group, () => `history-${++sequence}`, ["member-owner", "member-pedro", "member-juan", "member-carlos"]);
+  const snapshot = structuredClone({
+    groupOrigin: createRoundGroupSnapshot(draft.origin, draft.players),
+    players: draft.players,
+    betConfig: draft.bets,
+    segments: draft.segments,
+  });
+
+  group.name = "Grupo renombrado";
+  group.players[0].name = "Nombre nuevo";
+  if (group.gameTemplate) group.gameTemplate.betConfig.rabbits.value = 999;
+
+  assert.equal(snapshot.groupOrigin?.groupName, "Domingos");
+  assert.equal(snapshot.players[0].name, "Said");
+  assert.equal(snapshot.betConfig.rabbits.value, 175);
+  assert.deepEqual(snapshot.segments[0].basePair, draft.segments[0].basePair);
 });
