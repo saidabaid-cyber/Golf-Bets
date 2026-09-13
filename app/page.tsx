@@ -208,7 +208,7 @@ import {
   updateSavedPersonalRivalTemplate,
 } from "../lib/frequent-templates";
 import { hasDuplicateGroupPlayers } from "../lib/group-generator";
-import { createEmptyGroupGameTemplate, createGroupGameTemplate, createRoundGroupSnapshot, frequentGroupTemplateSummary, groupTemplatePlayers, instantiateGroupGameTemplate, normalizeRoundTemplateOrigin, updateGroupTemplateFromRound, withStableGroupMemberIds, type RoundTemplateOrigin } from "../lib/group-game-template";
+import { createEmptyGroupGameTemplate, createGroupGameTemplate, createRoundGroupSnapshot, frequentGroupTemplateSummary, groupTemplatePlayers, instantiateGroupGameTemplate, normalizeGroupGameTemplate, normalizeRoundTemplateOrigin, updateGroupTemplateFromRound, withStableGroupMemberIds, type RoundTemplateOrigin } from "../lib/group-game-template";
 import { assignTeeToEveryPlayer, reconcilePlayerTeeAssignments, teeOptionsForCourse, updatePlayerTeeAssignment } from "../lib/player-tee-assignments";
 import { defaultMaxBaseAppearances, generateAutomaticFoursomes, markFoursomeSegmentEdited } from "../lib/foursome-generator";
 import { advantageFieldsFromSigned, configureCurrentIndexPersonal, configureSlidingPersonal, frequentPersonalSuggestions, slidingAdjustment } from "../lib/personal-modes";
@@ -2747,7 +2747,8 @@ function GolfBetsApp() {
     }
     const now = new Date().toISOString();
     const stableDraft = withStableGroupMemberIds(frequentGroupDraft);
-    const savedDraft = { ...stableDraft, gameTemplate: stableDraft.gameTemplate ?? createEmptyGroupGameTemplate(stableDraft), updatedAt: now };
+    const gameTemplate = normalizeGroupGameTemplate(stableDraft.gameTemplate, stableDraft.players) ?? createEmptyGroupGameTemplate(stableDraft);
+    const savedDraft = { ...stableDraft, gameTemplate, updatedAt: now };
     if (frequentGroups.some((group) => group.id !== savedDraft.id && group.name.trim().toLocaleLowerCase("es-MX") === savedDraft.name.trim().toLocaleLowerCase("es-MX"))) {
       setFrequentGroupEditError("Ya existe un grupo con ese nombre.");
       return;
@@ -3473,7 +3474,14 @@ function GolfBetsApp() {
         const sourceGroup = frequentGroups.find((group) => group.id === roundTemplateOrigin.groupId);
         const mappedPlayerIds = new Set(Object.values(roundTemplateOrigin.roundPlayerIdByMemberId));
         const roundOnlyPlayers = players.filter((player) => !mappedPlayerIds.has(player.id));
-        return sourceGroup ? <section className="roundTemplateNotice" role="status"><div><span>PLANTILLA CARGADA</span><b>{sourceGroup.name}</b><p>Los cambios de HCP, parejas y apuestas pertenecen únicamente a esta ronda hasta que elijas actualizar la plantilla.</p>{roundOnlyPlayers.length > 0 && <small>{roundOnlyPlayers.map((player) => player.name).join(", ")} {roundOnlyPlayers.length === 1 ? "está" : "están"} sólo en esta ronda.</small>}</div><div className="roundTemplateActions"><button className="secondary" onClick={() => setFeedback("Cambios conservados sólo para esta ronda. La plantilla del grupo permanece igual.")}>Aplicar sólo esta ronda</button>{roundOnlyPlayers.length > 0 && <button className="secondary" onClick={addRoundOnlyPlayersToSourceGroup}>Agregar también al grupo</button>}<button className="primary" onClick={saveRoundAsFrequentGroupTemplate}>Actualizar plantilla del grupo</button></div></section> : null;
+        return sourceGroup ? <section className="roundTemplateNotice" role="status">
+          <div><span>PLANTILLA CARGADA</span><b>{sourceGroup.name}</b><p>Esta ronda ya tiene una copia editable de jugadores, parejas y apuestas. Nada actualiza el grupo automáticamente.</p></div>
+          <div className="roundTemplateDecision">
+            <b>¿Guardar los cambios de apuestas y parejas en el grupo?</b>
+            <div className="roundTemplateActions"><button className="secondary" onClick={() => setFeedback("Cambios conservados sólo para esta ronda. La plantilla del grupo permanece igual.")}>Sólo esta ronda</button><button className="primary" onClick={saveRoundAsFrequentGroupTemplate}>Guardar también en Grupo</button></div>
+          </div>
+          {roundOnlyPlayers.length > 0 && <div className="roundTemplateDecision"><small>{roundOnlyPlayers.map((player) => player.name).join(", ")} {roundOnlyPlayers.length === 1 ? "está" : "están"} sólo en esta ronda.</small><b>¿Agregar también al grupo?</b><div className="roundTemplateActions"><button className="secondary" onClick={() => setFeedback("El jugador permanece sólo en esta ronda.")}>Sólo esta ronda</button><button className="primary" onClick={addRoundOnlyPlayersToSourceGroup}>Agregar también al grupo</button></div></div>}
+        </section> : null;
       })()}
 
       <section className="card" id="round-course">

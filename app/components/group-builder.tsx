@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import type { FrequentGroup, FrequentPlayer, Player } from "../../lib/types";
-import { frequentGroupTemplateSummary } from "../../lib/group-game-template";
+import { frequentGroupTemplateDetails, frequentGroupTemplateSummary } from "../../lib/group-game-template";
 import {
   appendUniquePlayer,
   generateBalancedGroups,
@@ -18,6 +18,13 @@ import { NumericCaptureInput } from "./numeric-capture-input";
 import { ModalCloseButton } from "./modal-shell";
 
 const id = () => globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2, 10);
+
+function GroupPresetBetSummary({ group }: { group: FrequentGroup }) {
+  const details = frequentGroupTemplateDetails(group);
+  return <div className="groupPresetBetSummary"><b>Apuestas del grupo</b>{details.length
+    ? <ul>{details.map((detail, index) => <li key={`${detail}-${index}`}>{detail}</li>)}</ul>
+    : <span>{frequentGroupTemplateSummary(group)}</span>}</div>;
+}
 
 export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, onSaveFrequentGroup, onCreateFrequentGroup, onStartFrequentGroup, onEditFrequentGroup, onDeleteFrequentGroup }: {
   frequentPlayers: FrequentPlayer[];
@@ -45,6 +52,7 @@ export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, 
   const [saveAllOpen, setSaveAllOpen] = useState(false);
   const [saveAllNames, setSaveAllNames] = useState<string[]>([]);
   const [openSavedGroupMenu, setOpenSavedGroupMenu] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState<"groups" | "invitations">("groups");
   const drawSequence = useRef(0);
   const allHaveHcp = players.length > 0 && players.every((player) => typeof player.handicap === "number" && Number.isFinite(player.handicap));
   const playerOptions = useMemo(() => groups.flat(), [groups]);
@@ -137,10 +145,21 @@ export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, 
 
   return <>
     <section className="hero groupsHero"><div><div className="eyebrow">THE BACKYARD · GOLF</div><h1>Grupos</h1><p>Guarda jugadores y apuestas habituales; elige hasta 5 para cada salida.</p></div><div className="groupsHeroActions"><button className="secondary" onClick={onBack}>← Inicio</button><button className="primary" onClick={onCreateFrequentGroup}>Crear grupo</button></div></section>
+    <div className="groupsLibraryTabs" role="tablist" aria-label="Secciones de Grupos">
+      <button type="button" role="tab" aria-selected={activeSection === "groups"} className={activeSection === "groups" ? "active" : ""} onClick={() => setActiveSection("groups")}>Mis grupos</button>
+      <button type="button" role="tab" aria-selected={activeSection === "invitations"} className={activeSection === "invitations" ? "active" : ""} onClick={() => setActiveSection("invitations")}>Invitaciones</button>
+    </div>
+    {activeSection === "invitations" && <section className="card groupInvitationsState" role="tabpanel">
+      <span aria-hidden="true">✉️</span><h2>Invitaciones</h2>
+      <p>Las invitaciones seguras requieren el esquema de Grupos en una base Preview aislada. No mostramos invitaciones simuladas ni generamos links locales inseguros.</p>
+      <strong>PENDING_CONTROLLED_DB_APPLY</strong>
+    </section>}
+    <div hidden={activeSection !== "groups"} role="tabpanel">
+    {frequentGroups.length === 0 && <section className="card groupPresetEmpty"><h2>Mis grupos</h2><p>Todavía no tienes grupos guardados. Crea uno con tus jugadores y apuestas habituales.</p><button type="button" className="primary" onClick={onCreateFrequentGroup}>Crear grupo</button></section>}
     {frequentGroups.length > 0 && <section className="card groupPresetLibrary"><div className="sectionTitle"><div><h2>Mis grupos</h2><p>Plantillas mutables; cada ronda conserva su propio snapshot.</p></div></div><div className="groupPresetGrid">{frequentGroups.map((group) => <article className="groupPresetCard" key={`preset-${group.id}`}>
       <div><span className="templateSectionLabel">GRUPO</span><h3>{group.name}</h3><p>{group.players.length} miembros</p></div>
       <div className="groupPresetMembers" aria-label={`Jugadores de ${group.name}`}>{group.players.slice(0, 6).map((member, index) => <span key={member.memberId || `${member.name}-${index}`}>{member.name}</span>)}{group.players.length > 6 && <span>+{group.players.length - 6}</span>}</div>
-      <div className="groupPresetBetSummary"><b>Apuestas del grupo</b><span>{frequentGroupTemplateSummary(group)}</span></div>
+      <GroupPresetBetSummary group={group} />
       <div className="groupPresetActions"><button type="button" className="secondary" onClick={() => onEditFrequentGroup(group)}>Editar jugadores y apuestas</button><button type="button" className="primary" onClick={() => onStartFrequentGroup(group)}>Iniciar ronda</button></div>
     </article>)}</div></section>}
     <section className="card groupCapture"><div className="sectionTitle"><div><h2>Jugadores</h2><p>Frecuentes, grupos guardados o captura manual.</p></div><strong className="playerCounter">{players.length} jugadores</strong></div>
@@ -173,5 +192,6 @@ export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, 
       <div className="saveAllGroupNames">{groups.map((group, index) => <label key={`save-${index}`}>Grupo {index + 1} · {group.length} jugadores<input value={saveAllNames[index] || ""} onChange={(event) => setSaveAllNames((current) => current.map((name, itemIndex) => itemIndex === index ? event.target.value : name))} placeholder={`Nombre del Grupo ${index + 1}`} /></label>)}</div>
       <div className="dialogActions"><button className="secondary" onClick={() => { setSaveAllOpen(false); setSaveAllNames([]); }}>Cancelar</button><button className="primary" onClick={saveAllGroups}>Guardar todos</button></div>
     </section></div>}
+    </div>
   </>;
 }

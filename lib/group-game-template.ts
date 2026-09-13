@@ -475,3 +475,44 @@ export function frequentGroupTemplateSummary(group: FrequentGroup) {
   const total = core + instances;
   return total ? `${total} ${total === 1 ? "modalidad habitual" : "modalidades habituales"}` : "Sin apuestas habituales";
 }
+
+function groupStake(value: number | undefined) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? `$${value.toLocaleString("es-MX", { maximumFractionDigits: 2 })}`
+    : "";
+}
+
+/** Human-readable, calculation-free summary for the group library. */
+export function frequentGroupTemplateDetails(group: FrequentGroup) {
+  const template = group.gameTemplate;
+  if (!template) return [];
+  const bets = template.betConfig;
+  const details: string[] = [];
+  const add = (enabled: boolean | undefined, label: string, value?: number) => {
+    if (!enabled) return;
+    const stake = groupStake(value);
+    details.push(`${label}${stake ? ` ${stake}` : ""}`);
+  };
+
+  add(bets.monkey?.enabled, "Monkey", bets.monkey?.value);
+  add(bets.rabbits.enabled, "Conejos", bets.rabbits.value);
+  add(bets.skins.enabled, "Skins", bets.skins.value);
+  add(bets.units.enabled, "Unidades", bets.units.value);
+  add(bets.foursome.enabled, `Foursome${bets.foursome.mode === "match" ? " Match" : ""}`, bets.foursome.mode === "fixed" || bets.foursome.mode === "match" ? bets.foursome.fixedValue : bets.foursome.pointValue);
+  add(bets.ballFriend.enabled, "Bola Amiga", bets.ballFriend.value);
+  add(bets.polla.first9.enabled, "Nassau · primera", bets.polla.first9.value);
+  add(bets.polla.second9.enabled, "Nassau · segunda", bets.polla.second9.value);
+  add(bets.polla.total18.enabled, "Nassau · total", bets.polla.total18.value);
+  add(bets.miniPolla.enabled, "Mini Polla", bets.miniPolla.value);
+  add(bets.vipers.enabled, "Víboras", bets.vipers.value);
+  add(bets.camels.enabled, "Camellos", bets.camels.value);
+  add(bets.fish.enabled, "Peces", bets.fish.value);
+  add(bets.loba.enabled, "Loba", bets.loba.value);
+  for (const bet of template.personalBets) add(bet.enabled !== false, `Nassau individual · ${bet.rivalName}`, bet.baseValue);
+  for (const bet of template.supplementalBets) {
+    const label = "label" in bet && typeof bet.label === "string" && bet.label.trim() ? bet.label : bet.type.replaceAll("_", " ");
+    add(bet.enabled !== false, label, "value" in bet && typeof bet.value === "number" ? bet.value : undefined);
+  }
+  for (const bet of template.manualBets) add(bet.enabled !== false, bet.name);
+  return details;
+}
