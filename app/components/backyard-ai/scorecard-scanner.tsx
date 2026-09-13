@@ -408,10 +408,14 @@ export function ScorecardScanner({ round, storageOwnerId, accessToken, requiresR
       onCancel={() => setShowConsentPrompt(false)}
       onAccepted={(_consent, persistence) => {
         setShowConsentPrompt(false);
+        if (!persistence.accountPersisted && !persistence.localPersisted) {
+          setError("No pude guardar la autorización de Card AI. No se envió ninguna foto.");
+          return;
+        }
         if (!persistence.localPersisted) {
           setStorageWarning(persistence.accountPersisted
             ? "La autorización está guardada en tu cuenta, pero este navegador no permitió guardar una copia local. Puedes continuar."
-            : "Este navegador no permitió guardar la autorización; estará vigente sólo durante esta sesión.");
+            : "No se pudo guardar una copia local de la autorización.");
         }
         void scanWithConsent();
       }}

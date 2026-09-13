@@ -9,6 +9,7 @@ import {
 import { AI_PROCESSING_CONSENT_TABLE, parseAiProcessingConsentScope } from "../lib/backyard-ai/consent-record";
 import {
   acceptAiProcessingConsent,
+  aiProcessingConsentAllowsTransport,
   deleteAiProcessingConsents,
   hasActiveAiProcessingConsent,
   readAiProcessingConsent,
@@ -70,6 +71,12 @@ test("Safari Private puede continuar en memoria y la revocación queda fail-clos
   assert.equal(revoked.ok, true);
   assert.equal(revoked.persisted, false);
   assert.equal(hasActiveAiProcessingConsent(throwingStorage, "safari-private", AI_IMAGE_PROCESSING_CONSENT), false);
+});
+
+test("el transporte AI exige persistencia local o una cuenta confirmada", () => {
+  assert.equal(aiProcessingConsentAllowsTransport({ accountPersisted: false, localPersisted: false }), false);
+  assert.equal(aiProcessingConsentAllowsTransport({ accountPersisted: false, localPersisted: true }), true);
+  assert.equal(aiProcessingConsentAllowsTransport({ accountPersisted: true, localPersisted: false }), true);
 });
 
 test("estado remoto revocado invalida aceptación local y nunca la elimina", () => {

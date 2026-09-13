@@ -398,10 +398,15 @@ export function AiRoundSetup({ initialDraft, memoryContext, accessToken, require
       onAccepted={(_consent, persistence) => {
         setShowProviderConsent(false);
         setLocalInterpreterOnly(false);
+        if (!persistence.accountPersisted && !persistence.localPersisted) {
+          setLocalInterpreterOnly(true);
+          setNotice("No pude guardar la autorización. La instrucción no se envió; puedes continuar con el intérprete local seguro.");
+          return;
+        }
         if (!persistence.localPersisted) {
           setConsentStorageWarning(persistence.accountPersisted
             ? "La autorización está guardada en tu cuenta, pero este navegador no permitió guardar una copia local. Puedes continuar."
-            : "Este navegador no permitió guardar la autorización; estará vigente sólo durante esta sesión.");
+            : "No se pudo guardar una copia local de la autorización.");
         }
         void submit(pendingProviderInput, true);
       }}

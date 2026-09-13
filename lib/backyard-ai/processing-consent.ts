@@ -135,6 +135,17 @@ export function hasActiveAiProcessingConsent(
   return readAiProcessingConsent(storage, userId, scope, policyVersion)?.revokedAt === null;
 }
 
+/** Provider transport is allowed only after the acceptance survives the
+ * current interaction. An authenticated account can use its confirmed server
+ * record even when the browser cache is unavailable; a local/guest session
+ * must have a durable browser write. */
+export function aiProcessingConsentAllowsTransport(result: {
+  accountPersisted: boolean;
+  localPersisted: boolean;
+}) {
+  return result.accountPersisted || result.localPersisted;
+}
+
 export function acceptAiProcessingConsent(
   storage: Pick<Storage, "getItem" | "setItem">,
   userId: string,

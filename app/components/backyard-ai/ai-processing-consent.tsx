@@ -13,6 +13,7 @@ import {
 } from "../../../lib/backyard-ai/consent-client";
 import {
   acceptAiProcessingConsent,
+  aiProcessingConsentAllowsTransport,
   AI_PROCESSING_CONSENT_UPDATED_EVENT,
   browserAiProcessingConsentStorage,
   readAiProcessingConsent,
@@ -228,7 +229,15 @@ export function AiProcessingConsentPrompt({ userId, accessToken, requiresRemoteC
       const local = acceptAiProcessingConsent(browserAiProcessingConsentStorage(), userId, scope);
       if (!local.ok) throw new Error(local.error);
       if (!isCurrent()) return;
-      acceptedCallback.current(local.consent, { accountPersisted: false, localPersisted: local.persisted });
+      const persistence = { accountPersisted: false, localPersisted: local.persisted };
+      if (!aiProcessingConsentAllowsTransport(persistence)) {
+        // acceptAiProcessingConsent intentionally keeps an in-memory record so
+        // settings can explain private-mode failures. Revoke that volatile
+        // record here: transport consent itself must fail closed.
+        revokeAiProcessingConsent(browserAiProcessingConsentStorage(), userId, scope);
+        throw new Error("local_consent_not_persisted");
+      }
+      acceptedCallback.current(local.consent, persistence);
     } catch (reason: unknown) {
       if (!isCurrent() || (reason instanceof DOMException && reason.name === "AbortError")) return;
       setError(aiProcessingConsentFailureMessage(reason, Boolean(accessToken)));
