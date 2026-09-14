@@ -1,6 +1,7 @@
 import { accountPrimaryPlayerId } from "./account-primary-player";
 import { normalizeFoursomeSegments, playOrder, segmentDefinitions } from "./engine";
 import { initialBets, restoreBetConfig } from "./new-round-bets";
+import { MAX_ROUND_PLAYERS, ROUND_PLAYER_LIMIT_MESSAGE } from "./round-player-limit";
 import { normalizeSupplementalBets } from "./supplemental-bets";
 import type {
   BetConfig,
@@ -57,7 +58,7 @@ export function normalizeRoundTemplateOrigin(value: unknown): RoundTemplateOrigi
   };
 }
 
-export const MAX_ROUND_GROUP_PLAYERS = 5;
+export const MAX_ROUND_GROUP_PLAYERS = MAX_ROUND_PLAYERS;
 
 export type GroupRoundSelectionValidation =
   | { ok: true; selectedMemberIds: string[] }
@@ -90,7 +91,7 @@ export function validateGroupRoundSelection(group: FrequentGroup, selectedMember
   const available = new Set(group.players.map((member, index) => stableGroupMemberId(group, member, index)));
   const selected = [...new Set(selectedMemberIds)];
   if (!selected.length) return { ok: false, code: "empty", message: "Selecciona al menos un jugador para esta ronda." };
-  if (selected.length > MAX_ROUND_GROUP_PLAYERS) return { ok: false, code: "too_many", message: "MÁXIMO 5 JUGADORES POR GRUPO DE SALIDA" };
+  if (selected.length > MAX_ROUND_GROUP_PLAYERS) return { ok: false, code: "too_many", message: ROUND_PLAYER_LIMIT_MESSAGE };
   if (selected.some((memberId) => !available.has(memberId))) return { ok: false, code: "unknown_member", message: "El grupo cambió. Vuelve a elegir sus jugadores." };
   return { ok: true, selectedMemberIds: selected };
 }

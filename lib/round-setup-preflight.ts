@@ -1,4 +1,5 @@
 import type { BetConfigurationIssue } from "./bet-config-validation";
+import { MAX_ROUND_PLAYERS, ROUND_PLAYER_LIMIT_MESSAGE, roundPlayerLimitExceeded } from "./round-player-limit";
 
 export type RoundSetupPreflightIssue = {
   id: string;
@@ -19,8 +20,13 @@ export function collectRoundSetupPreflightIssues(input: {
   }
   if (!input.players.length) {
     issues.push({ id: "players", label: "Jugadores", detail: "Agrega al menos un jugador.", targetId: "round-players", kind: "players" });
-  } else if (input.players.some((player) => !player.name.trim())) {
-    issues.push({ id: "player-names", label: "Nombre de jugadores", detail: "Completa los nombres vacíos.", targetId: "round-players", kind: "players" });
+  } else {
+    if (roundPlayerLimitExceeded(input.players.length)) {
+      issues.push({ id: "player-limit", label: "Jugadores", detail: `${ROUND_PLAYER_LIMIT_MESSAGE}. Quita ${input.players.length - MAX_ROUND_PLAYERS} para continuar.`, targetId: "round-players", kind: "players" });
+    }
+    if (input.players.some((player) => !player.name.trim())) {
+      issues.push({ id: "player-names", label: "Nombre de jugadores", detail: "Completa los nombres vacíos.", targetId: "round-players", kind: "players" });
+    }
   }
   const seen = new Set<string>();
   for (const issue of input.betIssues) {

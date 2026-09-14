@@ -259,6 +259,25 @@ test("un grupo grande permite seleccionar exactamente cinco sin alterar el roste
   assert.equal(draft.players.length, 5);
 });
 
+test("un grupo social de veinte conserva a todos sus miembros y sigue creando salidas de máximo cinco", () => {
+  const group: FrequentGroup = {
+    ...configuredGroup(),
+    players: Array.from({ length: 20 }, (_, index) => ({
+      memberId: `member-${index + 1}`,
+      kind: "guest" as const,
+      name: `Jugador ${index + 1}`,
+      handicap: index,
+    })),
+  };
+  const [restored] = parseFrequentGroups(serializeFrequentGroups([group]));
+  assert.equal(restored.players.length, 20);
+  const selected = restored.players.slice(0, 5).map((member) => member.memberId!);
+  let sequence = 0;
+  const draft = instantiateGroupGameTemplate(restored, () => `twenty-${++sequence}`, selected);
+  assert.equal(draft.players.length, 5);
+  assert.equal(restored.players.length, 20);
+});
+
 test("el sexto jugador se bloquea y una identidad ajena nunca entra a la ronda", () => {
   const group: FrequentGroup = {
     ...configuredGroup(),

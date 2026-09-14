@@ -5,6 +5,7 @@ import test from "node:test";
 import { buildCaddieHoleContext, missingCaddieInputs } from "../features/caddie/domain";
 import { planHasFeature } from "../lib/plans";
 import { collectRoundSetupPreflightIssues } from "../lib/round-setup-preflight";
+import { MAX_ROUND_PLAYERS, ROUND_PLAYER_LIMIT_MESSAGE, roundPlayerLimitExceeded } from "../lib/round-player-limit";
 
 test("preflight explica faltantes y cada uno conserva un destino accionable", () => {
   const issues = collectRoundSetupPreflightIssues({
@@ -15,6 +16,27 @@ test("preflight explica faltantes y cada uno conserva un destino accionable", ()
   assert.deepEqual(issues.map((issue) => issue.kind), ["course", "players", "bets"]);
   assert.deepEqual(issues.map((issue) => issue.targetId), ["round-course", "round-players", "result-section-setup-skins"]);
   assert.deepEqual(issues.map((issue) => issue.label), ["Campo", "Nombre de jugadores", "Configuración de apuesta"]);
+});
+
+test("el límite de cinco pertenece a toda ronda y Preflight bloquea borradores legacy con seis", () => {
+  assert.equal(MAX_ROUND_PLAYERS, 5);
+  assert.equal(roundPlayerLimitExceeded(5), false);
+  assert.equal(roundPlayerLimitExceeded(6), true);
+  const issues = collectRoundSetupPreflightIssues({
+    courseSelected: true,
+    players: Array.from({ length: 6 }, (_, index) => ({ id: `p${index}`, name: `Jugador ${index + 1}` })),
+    betIssues: [],
+  });
+  assert.deepEqual(issues, [{
+    id: "player-limit",
+    label: "Jugadores",
+    detail: `${ROUND_PLAYER_LIMIT_MESSAGE}. Quita 1 para continuar.`,
+    targetId: "round-players",
+    kind: "players",
+  }]);
+  const page = readFileSync("app/page.tsx", "utf8");
+  assert.match(page, /players\.length >= MAX_ROUND_PLAYERS/);
+  assert.match(page, /5 \/ 5 jugadores · máximo por grupo de salida/);
 });
 
 test("Caddie AI es exclusivo de Backyard Black y no inventa contexto faltante", () => {

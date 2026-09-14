@@ -4,6 +4,7 @@ import "./profile-account.css";
 import { initialBets, restoreBetConfig } from "../lib/new-round-bets";
 import { collectBetConfigurationIssues } from "../lib/bet-config-validation";
 import { collectRoundSetupPreflightIssues } from "../lib/round-setup-preflight";
+import { MAX_ROUND_PLAYERS, ROUND_PLAYER_LIMIT_MESSAGE } from "../lib/round-player-limit";
 import { isFiniteZeroSum } from "../lib/settlement-integrity";
 import { freezeRoundHandicapBases, missingHandicapsForActiveBets, normalizeRoundHandicapBasis } from "../lib/handicap-base";
 import { HandicapBaseControl } from "./components/handicap-base-control";
@@ -1428,6 +1429,10 @@ function GolfBetsApp() {
   }
 
   function appendPlayer(name = "", handicap: number | null = null, accountUserId?: string) {
+    if (players.length >= MAX_ROUND_PLAYERS) {
+      setFeedback(ROUND_PLAYER_LIMIT_MESSAGE);
+      return;
+    }
     if (accountUserId && players.some((player) => player.accountUserId === accountUserId || player.id === accountPrimaryPlayerId(accountUserId))) {
       setFeedback("Ese jugador principal ya está en la ronda.");
       return;
@@ -2079,6 +2084,10 @@ function GolfBetsApp() {
   }
 
   function applyNewRoundIntent(intent: NewRoundIntent, nextFeedback = "") {
+    if (intent.kind === "players" && intent.players.length > MAX_ROUND_PLAYERS) {
+      setFeedback(ROUND_PLAYER_LIMIT_MESSAGE);
+      return;
+    }
     resetRound(nextFeedback);
     if (intent.kind === "blank") return;
     if (intent.kind === "ai") { setTab("aiSetup"); return; }
@@ -3541,7 +3550,8 @@ function GolfBetsApp() {
       </section>
 
       <section className="card" id="round-players">
-        <div className="sectionTitle"><div><h2>2. Jugadores</h2><p>Las cuentas usan Index + tee; los Guests conservan HCP manual.</p></div><button className="textButton" onClick={addPlayer}>+ Jugador</button></div>
+        <div className="sectionTitle"><div><h2>2. Jugadores</h2><p>Las cuentas usan Index + tee; los Guests conservan HCP manual.</p></div><button className="textButton" disabled={players.length >= MAX_ROUND_PLAYERS} title={players.length >= MAX_ROUND_PLAYERS ? ROUND_PLAYER_LIMIT_MESSAGE : undefined} onClick={addPlayer}>+ Jugador</button></div>
+        {players.length >= MAX_ROUND_PLAYERS && <div className="hint" role="status">5 / 5 jugadores · máximo por grupo de salida.</div>}
         {!players.length && <div className="empty">Agrega los jugadores de esta ronda.</div>}
         {players.map((p) => <div className="playerEdit" key={p.id}>
           <textarea className="playerNameField" rows={1} aria-label={`Nombre de ${p.name || "jugador"}`} placeholder="Nombre" value={p.name} onKeyDown={(event) => { if (event.key === "Enter") event.preventDefault(); }} onChange={(event) => updatePlayer(p.id, { name: event.target.value.replace(/\s*[\r\n]+\s*/g, " ") })} />
