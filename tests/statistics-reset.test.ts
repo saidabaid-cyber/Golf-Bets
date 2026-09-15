@@ -5,11 +5,14 @@ import {
   isStatisticsDeleteConfirmation,
   fetchStatisticsResetStatus,
   parseStatisticsReset,
+  persistStatisticsReset,
   preserveRoundStatisticsOrigin,
+  readStatisticsReset,
   requestStatisticsReset,
   roundsEligibleForStatistics,
 } from "../lib/statistics-reset";
-import type { RoundSnapshot } from "../lib/types";
+import { buildGolfInsights } from "../lib/golf-insights";
+import type { Course, RoundSnapshot } from "../lib/types";
 
 const round = (id: string, completedAt: string) => ({ id, completedAt, date: completedAt.slice(0, 10) }) as RoundSnapshot;
 
@@ -60,6 +63,43 @@ test("corrección histórica conserva instante original aunque save cree complet
 test("sin reset todas las rondas siguen alimentando Stats", () => {
   const history = [round("one", "2026-01-01T12:00:00.000Z")];
   assert.deepEqual(roundsEligibleForStatistics(history, null), history);
+});
+
+test("0 Stats tras reset y reload local: capturas deportivas desaparecen, Histórico/balances permanecen", () => {
+  const course: Course = { id: "reset-qa", name: "Campo QA", teeName: "Azules",
+    holes: Array.from({ length: 9 }, (_, index) => ({ number: index + 1, par: 4, strokeIndex: index + 1 })) };
+  const old: RoundSnapshot = {
+    id: "historical-qa", lifecycleState: "completed", date: "2026-01-01", completedAt: "2026-01-01T18:00:00.000Z",
+    courseName: course.name, teeName: course.teeName, ownerName: "Said", ownerId: "owner", roundHoles: 9,
+    betResult: 100, expenses: { caddie: 0, food: 0, drinks: 0, greenFee: 0, cartRental: 0, other: 0 },
+    expenseTotal: 0, netResult: 100, categoryResults: {},
+    players: [{ id: "owner", name: "Said", handicap: 0 }], order: course.holes.map((hole) => hole.number), courseSnapshot: course,
+    scores: Object.fromEntries(course.holes.map((hole) => [hole.number, { owner: 4 }])),
+    putts: Object.fromEntries(course.holes.map((hole) => [hole.number, { owner: 2 }])),
+    advancedStats: { 1: { owner: { greenSideBunkerCount: 1, teeDirection: "left", outOfBoundsCount: 1 } } },
+  };
+  const history = [old];
+  const before = buildGolfInsights(history);
+  assert.equal(before.scoredRounds, 1);
+  assert.equal(before.averagePutts, 18);
+  assert.equal(before.capture?.greenSideBunkers, 1);
+  assert.equal(before.betBalance, 100);
+
+  const values = new Map<string, string>();
+  const storage = { getItem: (key: string) => values.get(key) || null, setItem: (key: string, value: string) => { values.set(key, value); } };
+  persistStatisticsReset(storage, "owner-account", { resetAt: "2026-02-01T00:00:00.000Z", strategy: "RESET_FROM_DATE" });
+  const reloaded = readStatisticsReset(storage, "owner-account");
+  assert.ok(reloaded);
+  const sports = buildGolfInsights(roundsEligibleForStatistics(history, reloaded.resetAt));
+  assert.equal(sports.rounds, 0);
+  assert.equal(sports.scoredRounds, 0);
+  assert.equal(sports.averageScore, undefined);
+  assert.equal(sports.averagePutts, undefined);
+  assert.equal(sports.capture?.greenSideBunkers, 0);
+  assert.equal(sports.capture?.outOfBounds, 0);
+  assert.equal(sports.betBalance, undefined);
+  assert.deepEqual(history, [old], "el histórico financiero y la captura original no se mutan");
+  assert.equal(buildGolfInsights(history).betBalance, 100);
 });
 
 test("el cliente nunca envía userId y valida sesión antes del request", async () => {

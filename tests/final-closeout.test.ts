@@ -15,6 +15,7 @@ test("Preview SQL runner rejects a shared Production target and covers every clo
     "phase2_course_handicap_rls.sql",
     "phase2_live_rounds_rls.sql",
     "phase2_shots_analytics_rls.sql",
+    "user_statistics_reset_rls.sql",
     "phase2_multiuser_authorization_rls.sql",
   ]) assert.match(runner, new RegExp(file.replaceAll(".", "\\.")));
   assert.match(runner, /Preview and Production project refs are identical/);
