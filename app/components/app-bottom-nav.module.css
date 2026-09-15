@@ -1,0 +1,6 @@
+.withRound:global(.bottomNav.betaBottomNav) { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; }
+.withRound:global(.bottomNav) .resume { color: #fff; background: #135638; border: 2px solid #d7bf77; border-radius: 18px; min-height: 52px; box-shadow: 0 2px 8px rgba(12, 57, 36, .2); }
+.withRound:global(.bottomNav) .resume:active { background: #0a3b27; }
+.withRound:global(.bottomNav) .resume:focus-visible { outline: 3px solid #cc9f32; outline-offset: -4px; }
+.withRound:global(.bottomNav) .resume svg { width: 24px; height: 24px; }
+.withRound:global(.bottomNav) .resume::before { display: none; }

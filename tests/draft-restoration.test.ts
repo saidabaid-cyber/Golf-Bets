@@ -47,14 +47,22 @@ test("draft application wires resolved values through unconditional setters", ()
   assert.match(page, /setOwnerId\(draftCore\.ownerId\)/);
   assert.doesNotMatch(page, /if \(draft\.startHole\) setStartHole/);
   assert.doesNotMatch(page, /if \(draft\.ownerId\) setOwnerId/);
-  assert.match(page, /Math\.min\(draftRoundHoles - 1, draft\.currentIndex\)/);
+  assert.match(page, /normalizeRoundResumeContext\(savedContext \|\| \{ roundId: restoredRoundId, currentIndex: draft\.currentIndex \}, restoredRoundId, draftPlayerIds, draftCore\.ownerId, draftRoundHoles\)/);
+  assert.match(page, /setCurrentIndex\(restoredContext\.currentIndex\)/);
   assert.match(page, /setCourse\(draft\.course \? withDefaultLaVistaRules\(draft\.course\) : laVista\)/);
   assert.match(page, /setExpenses\(draft\.expenses \? normalizeExpenses\(draft\.expenses\) : emptyExpenses\)/);
-  assert.match(page, /setRoundId\(typeof draft\.roundId === "string" && draft\.roundId\.trim\(\) \? draft\.roundId : makeId\(\)\)/);
+  assert.match(page, /const restoredRoundId = typeof draft\.roundId === "string" && draft\.roundId\.trim\(\) \? draft\.roundId : makeId\(\)/);
+  assert.match(page, /setRoundId\(restoredRoundId\)/);
   assert.match(page, /setRoundDate\(typeof draft\.roundDate === "string" && draft\.roundDate\.trim\(\) \? draft\.roundDate : localDateMexico\(\)\)/);
   assert.doesNotMatch(page, /if \(draft\.expenses\) setExpenses/);
   assert.match(page, /id: b\.id,\s+enabled: b\.enabled/);
   assert.match(page, /advantageReceiver: b\.nassauVersion === 2\s+\? b\.advantageReceiver/);
+});
+
+test("completed cloud drafts remain review-only until history acknowledgement", () => {
+  const page = readFileSync("app/page.tsx", "utf8");
+  assert.match(page, /setRoundReviewPending\(Boolean\(draft\?\.reviewPending\) \|\| draft\?\.lifecycleState === "completed"\)/);
+  assert.match(page, /draft: \{ roundId, startedAt: roundStartedAt, reviewPending: roundReviewPending/);
 });
 
 test("legacy Nassau migration resolves the authenticated owner before becoming Personal", () => {

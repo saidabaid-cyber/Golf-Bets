@@ -184,6 +184,8 @@ export function discardAccountWorkspace(storage: WorkspaceStorage, userId: strin
   storage.removeItem(coursePreferenceStorageKey("recents", userId));
   storage.removeItem(internalNotificationStorageKey(userId));
   storage.removeItem(statisticsResetStorageKey(userId));
+  storage.removeItem(`backyard-round-resume-v1:${userId}`);
+  storage.removeItem(`backyard-index-enabled-v1:${userId}`);
   const equipmentKey = equipmentProfileStorageKey(userId);
   const equipmentRecoveryKey = equipmentProfileRecoveryStorageKey(userId);
   const fittingKey = ballFitDraftStorageKey(userId);

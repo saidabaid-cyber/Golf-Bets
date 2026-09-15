@@ -112,7 +112,8 @@ test("logo oficial usa SVG vectorial primero, PNG transparente como fallback y h
   assert.match(brand, /src="\/brand\/the-backyard-logo\.png"/);
   assert.match(brand, /current === "svg" \? "png" : "wordmark"/);
   assert.doesNotMatch(page, />V3<\/span>/);
-  assert.match(page, /identity\.mode === "guest" \? <svg className="guestAvatar"/);
+  assert.match(page, /<ProfileNavigationButton avatarUrl=\{identity\.avatarUrl\} displayName=\{identity\.displayName\} onClick=\{openProfileRoot\}/);
+  assert.match(read("app/components/profile-navigation-button.tsx"), /<ProfileAvatarMedia value=\{avatarUrl\} fallback=/);
 });
 
 test("configuración legal real es única, completa y usa la versión solicitada", () => {

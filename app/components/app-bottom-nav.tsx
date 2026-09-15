@@ -1,6 +1,7 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
+import styles from "./app-bottom-nav.module.css";
 import {
   BOTTOM_NAV_TARGETS,
   primarySectionForTab,
@@ -11,6 +12,7 @@ import {
 export type AppBottomNavProps = {
   activeTab: AppTab;
   onNavigate: (tab: AppTab) => void;
+  onResumeRound?: () => void;
 };
 
 const NAV_ITEMS = Object.entries(BOTTOM_NAV_TARGETS) as Array<[PrimaryAppSection, AppTab]>;
@@ -32,15 +34,14 @@ function NavIcon({ section }: { section: PrimaryAppSection }): ReactNode {
   return <IconFrame><circle cx="12" cy="8" r="4" /><path d="M4.5 21c.5-5 3-7.5 7.5-7.5s7 2.5 7.5 7.5" /></IconFrame>;
 }
 
-export function AppBottomNav({ activeTab, onNavigate }: AppBottomNavProps) {
+export function AppBottomNav({ activeTab, onNavigate, onResumeRound }: AppBottomNavProps) {
   const activeSection = primarySectionForTab(activeTab);
   const isHome = activeTab === "welcome";
 
-  return <nav className={`bottomNav betaBottomNav ${isHome ? "homeBottomNav" : ""}`} aria-label="Navegación principal">
+  return <nav className={`bottomNav betaBottomNav ${isHome ? "homeBottomNav" : ""} ${onResumeRound ? styles.withRound : ""}`} aria-label="Navegación principal">
     {NAV_ITEMS.map(([label, target]) => {
       const active = activeSection === label;
-      return <button
-        key={label}
+      return <Fragment key={label}><button
         type="button"
         className={active ? "active" : ""}
         aria-current={active ? "page" : undefined}
@@ -49,7 +50,10 @@ export function AppBottomNav({ activeTab, onNavigate }: AppBottomNavProps) {
       >
         <span className="betaNavIcon"><NavIcon section={label} /></span>
         <span className="betaNavLabel">{label}</span>
-      </button>;
+      </button>{label === "Social" && onResumeRound && <button type="button" className={styles.resume} onClick={onResumeRound} aria-label="Volver a la ronda activa">
+        <span className="betaNavIcon"><IconFrame><path d="M7 21V3m0 1c4-3 6 3 11 0v9c-5 3-7-3-11 0" /></IconFrame></span>
+        <span className="betaNavLabel">JUGAR</span>
+      </button>}</Fragment>;
     })}
   </nav>;
 }

@@ -24,6 +24,7 @@ import { CompactStepper, CounterStepper, SignedStepper } from "./bet-fields/capt
 import { ProfileAvatarMedia } from "./profile-avatar-media";
 import { RoundCaddieCard } from "./round-caddie-card";
 import styles from "./round-capture-v2.module.css";
+import type { RoundCaptureStage } from "../../lib/active-round-navigation";
 
 type CounterQuantities = Record<CounterBetKind, Record<string, number | undefined>>;
 
@@ -32,6 +33,8 @@ export type RoundCaptureV2Props = {
   hole: Hole;
   order: number[];
   currentIndex: number;
+  captureContext?: { playerId: string; stage: RoundCaptureStage };
+  onCaptureContextChange?: (context: { playerId: string; stage: RoundCaptureStage }) => void;
   completedHoles: ReadonlySet<number>;
   players: Player[];
   playerTeeAssignments?: PlayerTeeAssignmentSnapshot[];
@@ -149,9 +152,11 @@ export function RoundCaptureV2(props: RoundCaptureV2Props) {
   const [shotBusy, setShotBusy] = useState(false);
   const [shotMessage, setShotMessage] = useState("");
   const [shotClub, setShotClub] = useState("");
-  const [captureStage, setCaptureStage] = useState<"score" | "tee" | "approach" | "around" | "summary">("score");
+  const [localCaptureStage, setCaptureStage] = useState<RoundCaptureStage>("score");
+  const captureStage = props.captureContext?.stage ?? localCaptureStage;
   const owner = players.find((player) => player.id === ownerId) || players[0];
-  const [activePlayerId, setActivePlayerId] = useState(owner?.id ?? "");
+  const [localActivePlayerId, setActivePlayerId] = useState(owner?.id ?? "");
+  const activePlayerId = props.captureContext?.playerId ?? localActivePlayerId;
   const activePlayer = players.find((player) => player.id === activePlayerId) || owner;
   const quickFields = (playerId: string) => roundCaptureFieldsForPlayer({ mode: "quick", playerId, playedHoleIndex: currentIndex, bets, supplementalBets });
   const teeLabel = (playerId: string) => playerTeeAssignments.find((assignment) => assignment.playerId === playerId)?.teeName || course.teeName;
@@ -166,6 +171,7 @@ export function RoundCaptureV2(props: RoundCaptureV2Props) {
 
   function focusStage(stage: typeof captureStage) {
     setCaptureStage(stage);
+    props.onCaptureContextChange?.({ playerId: activePlayer?.id || ownerId, stage });
     document.getElementById(`capture-${stage}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
 
@@ -283,7 +289,9 @@ export function RoundCaptureV2(props: RoundCaptureV2Props) {
   function changePlayer() {
     if (!activePlayer || players.length < 2) return;
     const index = players.findIndex((player) => player.id === activePlayer.id);
-    setActivePlayerId(players[(index + 1) % players.length]?.id ?? owner?.id ?? "");
+    const playerId = players[(index + 1) % players.length]?.id ?? owner?.id ?? "";
+    setActivePlayerId(playerId);
+    props.onCaptureContextChange?.({ playerId, stage: captureStage });
     setShotClub("");
   }
 
