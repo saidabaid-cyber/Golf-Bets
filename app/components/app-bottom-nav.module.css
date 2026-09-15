@@ -4,3 +4,5 @@
 .withRound:global(.bottomNav) .resume:focus-visible { outline: 3px solid #cc9f32; outline-offset: -4px; }
 .withRound:global(.bottomNav) .resume svg { width: 24px; height: 24px; }
 .withRound:global(.bottomNav) .resume::before { display: none; }
+.withRound:global(.bottomNav) .resume .resumeLabel { display: grid; gap: 0; min-width: 0; font-size: 9px; line-height: 1.1; letter-spacing: .15px; text-align: center; }
+.withRound:global(.bottomNav) .resume .resumeLabel span { display: block; margin: 0; font-size: 9px; line-height: 1.1; }

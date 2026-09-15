@@ -50,9 +50,9 @@ export function AppBottomNav({ activeTab, onNavigate, onResumeRound }: AppBottom
       >
         <span className="betaNavIcon"><NavIcon section={label} /></span>
         <span className="betaNavLabel">{label}</span>
-      </button>{label === "Social" && onResumeRound && <button type="button" className={styles.resume} onClick={onResumeRound} aria-label="Volver a la ronda activa">
+      </button>{label === "Social" && onResumeRound && <button type="button" className={styles.resume} onClick={onResumeRound} aria-label="Continuar la ronda activa">
         <span className="betaNavIcon"><IconFrame><path d="M7 21V3m0 1c4-3 6 3 11 0v9c-5 3-7-3-11 0" /></IconFrame></span>
-        <span className="betaNavLabel">JUGAR</span>
+        <span className={`betaNavLabel ${styles.resumeLabel}`}><span>CONTINUAR</span><span>RONDA</span></span>
       </button>}</Fragment>;
     })}
   </nav>;
