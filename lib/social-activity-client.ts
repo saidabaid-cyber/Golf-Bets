@@ -40,7 +40,7 @@ export async function socialRequest<T>(path: string, accessToken: string, option
 
 export function socialErrorMessage(error: unknown) {
   if (error instanceof SocialActivityError) return ["PENDING_CONTROLLED_DB_APPLY", "SOCIAL_SCHEMA_PENDING"].includes(error.code)
-    ? "PENDING_CONTROLLED_DB_APPLY · Social necesita la migración en una DB Preview aislada. No se guardó ni publicó ningún cambio."
+    ? "Social no está disponible en este momento. No se confirmó el cambio; intenta más tarde."
     : error.message;
   if (error instanceof Error && error.name === "AbortError") return "La solicitud tardó demasiado. Revisa la conexión y vuelve a intentar.";
   return "No se pudo conectar con Social. No se confirmó el cambio.";

@@ -1,5 +1,6 @@
 import "server-only";
 import { authUserFailure } from "./auth-errors";
+import { accountAccessFailure } from "./account-access.server";
 import { getSupabaseAdmin, getSupabaseForUser } from "./supabase/server";
 import { socialPreviewEnabled } from "./social-preview-gate";
 import type { SocialContext } from "./social-activity.server";
@@ -32,20 +33,22 @@ export async function socialHttp(request: Request, operation: (context: SocialCo
   try {
     const token = /^Bearer\s+(\S+)$/i.exec(request.headers.get("authorization") || "")?.[1];
     if (!token) return Response.json({ code: "AUTH_REQUIRED", error: "Inicia sesión para usar Social." }, { status: 401, headers });
-    if (!socialPreviewEnabled()) return Response.json({ code: "PENDING_CONTROLLED_DB_APPLY", error: "Social requiere la migración y habilitación en una DB Preview aislada." }, { status: 503, headers });
+    if (!socialPreviewEnabled()) return Response.json({ code: "PENDING_CONTROLLED_DB_APPLY", error: "Social no está disponible en este momento. Intenta más tarde." }, { status: 503, headers });
     const client = getSupabaseForUser(token); const admin = getSupabaseAdmin("cloud");
     if (!client || !admin) return Response.json({ code: "CLOUD_UNAVAILABLE", error: "La conexión de Social no está configurada." }, { status: 503, headers });
     const { data, error } = await client.auth.getUser(token);
     const failure = authUserFailure(error, !error && Boolean(data.user));
     if (failure) return Response.json(failure, { status: failure.status, headers });
     if (!data.user || data.user.is_anonymous) return Response.json({ code: "AUTH_REQUIRED", error: "Necesitas una cuenta vinculada para usar Social." }, { status: 401, headers });
+    const accountFailure = await accountAccessFailure(client);
+    if (accountFailure) return Response.json(accountFailure, { status: accountFailure.status, headers });
     const result = await operation({ client, admin, userId: data.user.id });
     return Response.json(result, { headers });
   } catch (error) {
     const safe = error && typeof error === "object" ? error as { code?: unknown; status?: unknown; message?: unknown } : {};
     const code = typeof safe.code === "string" && /^[A-Z_]{3,64}$/.test(safe.code) ? safe.code : "MUTATION_FAILED";
     const status = typeof safe.status === "number" && [400, 401, 403, 404, 409, 413, 415, 429, 503].includes(safe.status) ? safe.status : 503;
-    const message = code === "SOCIAL_SCHEMA_PENDING" ? "PENDING_CONTROLLED_DB_APPLY · Falta aplicar Social en la DB Preview aislada."
+    const message = code === "SOCIAL_SCHEMA_PENDING" ? "Social no está disponible en este momento. Intenta más tarde."
       : status === 409 ? "La tarjeta cambió o esta acción ya fue registrada. Actualiza para revisar la versión actual."
       : status === 403 ? "Tu cuenta no tiene permiso para esta acción."
       : status === 404 ? "Esta tarjeta ya no está disponible para tu cuenta."

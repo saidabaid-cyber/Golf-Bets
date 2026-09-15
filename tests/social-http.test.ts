@@ -7,7 +7,8 @@ import { authUserFailure } from "../lib/auth-errors";
 
 type HttpModule = typeof import("../lib/social-http.server");
 /** Execute the real HTTP adapter, substituting only network/config boundaries. No live account writes. */
-function harness({ enabled = true, user = { id: "verified-account", is_anonymous: false } as { id: string; is_anonymous: boolean } | null, error = null as unknown } = {}) {
+function harness({ enabled = true, user = { id: "verified-account", is_anonymous: false } as { id: string; is_anonymous: boolean } | null, error = null as unknown,
+  accountFailure = null as { status: number; code: string; error: string } | null } = {}) {
   let authCalls = 0;
   const exports: Record<string, unknown> = {};
   const source = readFileSync("lib/social-http.server.ts", "utf8");
@@ -19,6 +20,7 @@ function harness({ enabled = true, user = { id: "verified-account", is_anonymous
     require: (id: string) => {
       if (id === "server-only") return {};
       if (id === "./auth-errors") return { authUserFailure };
+      if (id === "./account-access.server") return { accountAccessFailure: async () => accountFailure };
       if (id === "./social-preview-gate") return { socialPreviewEnabled: () => enabled };
       if (id === "./supabase/server") return { getSupabaseForUser: () => client, getSupabaseAdmin: () => admin };
       throw new Error(`Unexpected boundary: ${id}`);
@@ -29,6 +31,17 @@ function harness({ enabled = true, user = { id: "verified-account", is_anonymous
 const request = (body?: unknown) => new Request("https://preview.invalid/api/social/activity", {
   method: body ? "POST" : "GET", headers: { authorization: "Bearer test-token", "content-type": "application/json" },
   ...(body ? { body: JSON.stringify(body) } : {}),
+});
+
+test("Social HTTP rejects archived or deleting accounts before privileged service operations", async () => {
+  let operations = 0;
+  for (const code of ["ACCOUNT_ARCHIVED", "ACCOUNT_DELETION_PENDING"]) {
+    const { api } = harness({ accountFailure: { status: 403, code, error: "Cuenta no disponible." } });
+    const response = await api.socialHttp(request(), async () => { operations++; return {}; });
+    assert.equal(response.status, 403);
+    assert.equal((await response.json()).code, code);
+  }
+  assert.equal(operations, 0);
 });
 
 test("Social HTTP refuses missing/anonymous/rejected sessions before executing any operation", async () => {
@@ -48,7 +61,9 @@ test("Social HTTP isolated-DB gate fails closed without network or mutation", as
   const { api, authCalls } = harness({ enabled: false });
   const response = await api.socialHttp(request(), async () => { throw new Error("must not run"); });
   assert.equal(response.status, 503);
-  assert.equal((await response.json()).code, "PENDING_CONTROLLED_DB_APPLY");
+  const body = await response.json();
+  assert.equal(body.code, "PENDING_CONTROLLED_DB_APPLY");
+  assert.doesNotMatch(body.error, /migraci[oó]n|DB|Preview|schema/i);
   assert.equal(authCalls(), 0);
 });
 
@@ -73,4 +88,10 @@ test("Social HTTP validates bounded JSON, identifiers and does not leak service 
   const response = await api.socialHttp(request(), async () => { throw new Error("private SQL/credential must not leak"); });
   assert.equal(response.status, 503);
   assert.equal((await response.text()).includes("credential"), false);
+  const pending = await api.socialHttp(request(), async () => {
+    throw { code: "SOCIAL_SCHEMA_PENDING", status: 503, message: "SQL migration pending on secret DB" };
+  });
+  const body = await pending.json();
+  assert.equal(body.code, "SOCIAL_SCHEMA_PENDING");
+  assert.doesNotMatch(body.error, /migraci[oó]n|DB|Preview|schema|SQL/i);
 });

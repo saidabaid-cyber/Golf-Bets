@@ -326,9 +326,13 @@ async function participantStatus(ctx: SocialContext, row: ActivityRow, source: R
   const matches = round?.players?.filter(player => player.accountUserId === ctx.userId) || [];
   if (matches.length !== 1 || !matches[0].id) return { canAttest: false, requiresParticipantConfirmation: false, participantPlayerKey: null };
   const playerKey = matches[0].id;
+  // The organizer's account is already linked by the canonical round-write
+  // trigger. It cannot self-confirm (nor should it need to) to attest a peer.
+  const verifiedBy = source.owner_id === ctx.userId && round?.ownerId === playerKey
+    ? "ROUND_OWNER" : "SELF_CONFIRMED";
   const confirmed = await ctx.admin.from("social_round_account_links_v3").select("player_key,verified_by")
     .eq("round_id", source.id).eq("user_id", ctx.userId).eq("player_key", playerKey)
-    .eq("verified_by", "SELF_CONFIRMED").maybeSingle();
+    .eq("verified_by", verifiedBy).maybeSingle();
   if (confirmed.error) dbError(confirmed.error);
   return {
     canAttest: Boolean(confirmed.data) && !isAttestedByMe,

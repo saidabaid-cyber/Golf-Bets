@@ -31,6 +31,7 @@ try {
   await db.exec(`
     create role anon;
     create role authenticated;
+    create role service_role bypassrls;
     create schema auth;
     create schema private;
     create table auth.users(id uuid primary key);
@@ -40,6 +41,8 @@ try {
       id uuid primary key references auth.users(id),
       social_privacy text not null default 'PRIVATE'
     );
+    create table public.social_profiles(user_id uuid primary key);
+    create table public.user_statistics_resets(user_id uuid primary key,reset_at timestamptz);
     create table public.friendships(
       user_a_id uuid not null, user_b_id uuid not null,
       primary key(user_a_id,user_b_id)
@@ -87,6 +90,18 @@ try {
   `);
   const migration = readFileSync("supabase/migrations/20260915183026_social_activity_v3.sql", "utf8");
   await db.exec(migration);
+  await db.exec(readFileSync("supabase/migrations/20260915203550_social_service_privileges.sql", "utf8"));
+  await db.exec("set role service_role");
+  assert.equal((await run("select count(*) as n from public.social_activities_v3")).rows[0].n,0,
+    "server reconciliation can read Social without project default grants");
+  await run("select id,snapshot from public.rounds_cloud limit 1");
+  await run("select user_id from public.social_activity_preferences_v3 limit 1");
+  await run("select player_key from public.social_round_account_links_v3 limit 1");
+  await expectError(() => run("delete from public.social_activities_v3"),["42501"],
+    "reconciliation role gains no unnecessary activity DELETE privilege");
+  await expectError(() => run("delete from public.social_comments_v3"),["42501"],
+    "social grants do not authorize elevated comment deletion");
+  await admin();
 
   const snapshot = JSON.stringify({
     id: "local-round-1",ownerId: "owner-player",lifecycleState: "completed",
@@ -493,7 +508,34 @@ try {
   assert.equal((await run(`select count(*) as n from public.notification_events_v2
     where recipient_id='${FRIEND}' and event_type='equipment'`)).rows[0].n,1,
     "revocation filters direct recipient reads without destructively deleting the audit event");
-  console.log("isolated SocialActivity PostgreSQL QA passed: 3 self-confirmed attesters, blocked/nonparticipant/anon, immutable comments, notifications, definitive SHA, revision advisory, equipment, privacy/revoke");
+
+  // Reverse direction is equally valid: the canonical organizer participated
+  // and can attest a peer. ROUND_OWNER never needs a SELF_CONFIRMED insert.
+  await run(`update public.social_activity_preferences_v3 set share_rounds=true
+    where user_id='${FRIEND}'`);
+  await run(`update public.social_activities_v3 set material_hash='${HASH}'
+    where id='${friendCard.id}' and source_version=5`);
+  assert.equal((await run(`select verified_by from public.social_round_account_links_v3
+    where round_id='${ROUND}' and user_id='${OWNER}'`)).rows[0].verified_by,"ROUND_OWNER");
+  await role(OWNER);
+  const reverseAttest = (await run(`insert into public.social_round_attestations_v3(
+    activity_id,round_id,attester_id,target_user_id,expected_version,expected_hash)
+    values('${friendCard.id}','${ROUND}','${OWNER}','${FRIEND}',5,'${HASH}')
+    returning attester_id,target_user_id`)).rows[0];
+  assert.equal(reverseAttest.attester_id,OWNER);
+  assert.equal(reverseAttest.target_user_id,FRIEND);
+  await admin();
+  await db.exec("set role service_role");
+  assert.equal((await run(`update public.social_activities_v3 set material_hash=material_hash
+    where id='${friendCard.id}' returning id`)).rows[0].id,friendCard.id,
+    "server reconciliation has an explicit real UPDATE grant");
+  assert.equal((await run(`insert into public.social_activities_v3(
+    author_id,event_kind,source_round_id,local_round_id,source_version,material_hash,audience)
+    values('${OWNER}','ACHIEVEMENT','${ROUND}','local-round-1',5,'${NEXT_HASH}','OWNER')
+    returning author_id`)).rows[0].author_id,OWNER,
+    "server reconciliation has an explicit real INSERT grant for derived summary references");
+  await admin();
+  console.log("isolated SocialActivity PostgreSQL QA passed: 3 self-confirmed attesters + organizer attests peer, blocked/nonparticipant/anon, immutable comments, notifications, definitive SHA, revision advisory, equipment, privacy/revoke");
 } catch (error) {
   console.error(`${error.code ?? "ERROR"}: ${error.message}; position=${error.position ?? "?"}; detail=${error.detail ?? "?"}; queryLength=${error.query?.length ?? "?"}`);
   if (error.code === "ERR_ASSERTION") console.error(error.stack);
