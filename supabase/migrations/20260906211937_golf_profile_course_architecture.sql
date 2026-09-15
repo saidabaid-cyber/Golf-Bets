@@ -155,7 +155,7 @@ alter table public.golf_ball_catalog
     check (year_to is null or year_from is null or year_to >= year_from),
   add constraint golf_ball_catalog_compression_range_check
     check (compression_max is null or compression_min is null or compression_max >= compression_min),
-  add constraint golf_ball_catalog_compression_average_check
+  add constraint golf_ball_catalog_compression_average_range_check
     check (
       compression_average is null
       or ((compression_min is null or compression_average >= compression_min)

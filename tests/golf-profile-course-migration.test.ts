@@ -105,7 +105,7 @@ test("catálogos enriquecidos conservan fuente y desconocidos como null", () => 
 
   assert.match(sql, /compression_type is null or compression_type in \('MANUFACTURER', 'INDEPENDENT_MEASURED', 'ESTIMATED', 'UNKNOWN'\)/);
   assert.doesNotMatch(sql, /compression_type text[^;]*default\s+'(?:ESTIMATED|MANUFACTURER)'/i);
-  assert.match(sql, /golf_ball_catalog_compression_average_check/);
+  assert.match(sql, /golf_ball_catalog_compression_average_range_check/);
   assert.match(sql, /golf_ball_catalog_compression_provenance_check[\s\S]*compression_type is not null[\s\S]*compression_type in \('MANUFACTURER', 'INDEPENDENT_MEASURED', 'ESTIMATED'\)[\s\S]*compression_source is not null[\s\S]*compression_source_url is not null[\s\S]*not valid/);
   assert.match(sql, /create or replace function public\.canonicalize_golf_catalog_brand\(\)/);
   assert.match(sql, /if new\.brand_id is null[\s\S]*if tg_op = 'INSERT'[\s\S]*elsif old\.brand_id is not null[\s\S]*elsif new\.brand is distinct from old\.brand/);
