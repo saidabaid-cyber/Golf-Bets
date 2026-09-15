@@ -14,9 +14,41 @@
   margin: 0;
 }
 
-.manualInput {
+.inputShell {
+  position: relative;
+  min-width: 0;
+}
+
+.input,
+.inputWithFlag {
   width: 100%;
   min-width: 0;
+  font-size: 16px;
+}
+
+.inputWithFlag {
+  padding-left: 42px;
+}
+
+.flag {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 12px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  font-size: 21px;
+  line-height: 1;
+}
+
+.mexicoFlag {
+  display: block;
+  width: 27px;
+  height: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(35, 52, 39, .18);
+  border-radius: 3px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .08);
 }
 
 .hint,
@@ -40,4 +72,74 @@
   padding: 12px;
   color: var(--muted);
   font-size: 12px;
+}
+
+.popover {
+  position: fixed;
+  z-index: 1200;
+  display: grid;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid color-mix(in srgb, var(--green) 28%, var(--line));
+  border-radius: 14px;
+  background: var(--card);
+  padding: 5px;
+  box-shadow: 0 18px 40px rgba(10, 34, 20, .2);
+}
+
+.option,
+.optionWithFlag {
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  min-height: 48px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 9px;
+  background: transparent;
+  padding: 9px 10px;
+  color: var(--ink);
+  text-align: left;
+}
+
+.optionWithFlag {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.option:last-of-type,
+.optionWithFlag:last-of-type {
+  border-bottom: 0;
+}
+
+.option:hover,
+.option:focus-visible,
+.option[data-active="true"],
+.option[aria-selected="true"],
+.optionWithFlag:hover,
+.optionWithFlag:focus-visible,
+.optionWithFlag[data-active="true"],
+.optionWithFlag[aria-selected="true"] {
+  background: var(--green2);
+  color: var(--green);
+}
+
+.option b,
+.optionWithFlag b {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.option small,
+.optionWithFlag small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.optionFlag {
+  font-size: 19px;
+  line-height: 1;
 }

@@ -51,6 +51,14 @@ export function profileCountryByCode(countryCode: string): ProfileGeoOption | un
   return countryByCode.get(safeText(countryCode).trim().toUpperCase());
 }
 
+export function profileCountryFlagEmoji(countryCode: string): string {
+  const country = profileCountryByCode(countryCode);
+  if (!country) return "";
+  return [...country.code].map(
+    (letter) => String.fromCodePoint(0x1f1e6 + letter.charCodeAt(0) - 65),
+  ).join("");
+}
+
 export function profileSubdivisionsForCountry(countryCode: string): readonly ProfileGeoOption[] {
   return subdivisionByCountry.get(safeText(countryCode).trim().toUpperCase()) ?? [];
 }
@@ -63,6 +71,21 @@ export function profileSubdivisionByCode(countryCode: string, stateCode: string)
 
 const POPULAR_COUNTRY_CODES = ["MX", "US", "CA", "GB", "ES", "AR", "CO"] as const;
 
+const COUNTRY_SEARCH_ALIASES: Readonly<Record<string, readonly string[]>> = {
+  MX: ["mejico"],
+  US: ["usa", "eeuu", "ee uu", "estados unidos de america", "united states"],
+  GB: ["uk", "united kingdom", "gran bretana"],
+  AE: ["eau", "uae", "emiratos arabes unidos", "united arab emirates"],
+};
+
+function countrySearchTerms(country: ProfileGeoOption): string[] {
+  return [
+    normalizeGeoSearchText(country.displayName),
+    normalizeGeoSearchText(country.code),
+    ...(COUNTRY_SEARCH_ALIASES[country.code] ?? []).map(normalizeGeoSearchText),
+  ];
+}
+
 export function searchProfileCountries(query: string, limit = 12): ProfileGeoOption[] {
   const safeLimit = Math.max(0, Math.floor(limit));
   const needle = normalizeGeoSearchText(query);
@@ -72,11 +95,10 @@ export function searchProfileCountries(query: string, limit = 12): ProfileGeoOpt
       .slice(0, safeLimit);
   }
   return PROFILE_COUNTRIES.filter(
-    (country) => normalizeGeoSearchText(country.displayName).includes(needle)
-      || country.code.toLocaleLowerCase("es").includes(needle),
+    (country) => countrySearchTerms(country).some((term) => term.includes(needle)),
   ).sort((a, b) => {
-    const aStarts = normalizeGeoSearchText(a.displayName).startsWith(needle) ? 0 : 1;
-    const bStarts = normalizeGeoSearchText(b.displayName).startsWith(needle) ? 0 : 1;
+    const aStarts = countrySearchTerms(a).some((term) => term.startsWith(needle)) ? 0 : 1;
+    const bStarts = countrySearchTerms(b).some((term) => term.startsWith(needle)) ? 0 : 1;
     return aStarts - bStarts || a.displayName.localeCompare(b.displayName, "es");
   }).slice(0, safeLimit);
 }
@@ -98,10 +120,17 @@ const COUNTRY_NAME_ALIASES: Readonly<Record<string, string>> = {
   "united states of america": "US",
   usa: "US",
   "u s a": "US",
+  eeuu: "US",
+  "ee uu": "US",
   "united kingdom": "GB",
   uk: "GB",
+  "gran bretana": "GB",
   canada: "CA",
   mexico: "MX",
+  mejico: "MX",
+  uae: "AE",
+  eau: "AE",
+  "united arab emirates": "AE",
 };
 
 function findCountryByName(name: string): ProfileGeoOption | undefined {

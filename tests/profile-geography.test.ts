@@ -5,6 +5,7 @@ import {
   normalizeGeoSearchText,
   normalizeManualRegion,
   normalizeProfileLocation,
+  profileCountryFlagEmoji,
   profileSubdivisionsForCountry,
   searchProfileCountries,
   searchProfileSubdivisions,
@@ -34,6 +35,15 @@ test("búsqueda española ignora acentos y encuentra países Unidos/Unido", () =
   const united = searchProfileCountries("Uni", 249).map(({ code }) => code);
   for (const code of ["US", "GB", "AE"]) assert.ok(united.includes(code), code);
   assert.equal(searchProfileCountries("CA", 249).some(({ code }) => code === "CA"), true);
+  assert.equal(searchProfileCountries("Mx")[0]?.code, "MX");
+  assert.equal(searchProfileCountries("EE.UU.").some(({ code }) => code === "US"), true);
+  assert.equal(searchProfileCountries("USA").some(({ code }) => code === "US"), true);
+  assert.equal(searchProfileCountries("UK").some(({ code }) => code === "GB"), true);
+  assert.equal(searchProfileCountries("EAU").some(({ code }) => code === "AE"), true);
+  assert.equal(searchProfileCountries("Mejico").some(({ code }) => code === "MX"), true);
+  assert.equal(searchProfileCountries("").some(({ code }) => code === "MX"), true);
+  assert.equal(profileCountryFlagEmoji("mx"), "🇲🇽");
+  assert.equal(profileCountryFlagEmoji("ZZ"), "");
 });
 
 test("cambio de país elimina código y texto de región sin mutar valor previo", () => {
