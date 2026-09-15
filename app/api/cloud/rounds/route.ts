@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseForUser } from "../../../../lib/supabase/server";
 import { authUserFailure } from "../../../../lib/auth-errors";
+import { scheduleSocialPublication } from "../../../../lib/social-publication.server";
 
 async function account(request: NextRequest) {
   const token = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
@@ -33,6 +34,7 @@ export async function POST(request: NextRequest) {
   if (existing) return NextResponse.json({ duplicate: true }, { status: 409 });
   const { data, error } = await supabase.from("rounds_cloud").insert({ owner_id: userId, local_round_id: body.round.id, local_id: body.round.id, snapshot: body.round }).select("id").single();
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  scheduleSocialPublication(userId, "round");
   return NextResponse.json({ roundId: data.id }, { status: 201 });
 }
 

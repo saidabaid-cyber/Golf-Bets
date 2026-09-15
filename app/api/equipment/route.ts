@@ -3,6 +3,7 @@ import { authUserFailure } from "../../../lib/auth-errors";
 import { equipmentCloudServerEnabled } from "../../../lib/feature-flags";
 import { normalizeEquipmentProfile, normalizeEquipmentProfileStrict } from "../../../lib/golf-equipment";
 import { getSupabaseAdmin, getSupabaseForUser } from "../../../lib/supabase/server";
+import { scheduleSocialPublication } from "../../../lib/social-publication.server";
 
 const MAX_BODY_BYTES = 1_000_000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -176,6 +177,7 @@ export async function PUT(request: NextRequest) {
     }
     const data = responseRecord(saved, authenticated.userId);
     if (!data) throw new Error("invalid_equipment_record");
+    scheduleSocialPublication(authenticated.userId, "equipment");
     return json({ data });
   } catch (error) {
     logFailure("write", error);
