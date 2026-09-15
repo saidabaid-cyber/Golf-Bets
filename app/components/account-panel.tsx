@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { LEGAL_DOCUMENT_VERSIONS, legalConfig } from "../../lib/legal-config";
 import { accountDeletionMarkerKey, BETTING_DATA_CONSENT_TYPE, emptyBackyardProfileDetails, profileHandicapInput, profileHandicapLabel, validateProfileAvatarUrl, validateProfileDraft, type BackyardProfile, type BackyardProfileDetails } from "../../lib/account-state";
+import { settleAccountDeletionClient } from "../../lib/account-deletion-client";
 import { ballFitDefaultsFromProfile } from "../../lib/ball-fitting";
 import type { GolfInsights } from "../../lib/golf-insights";
 import { useBackyardAccount } from "./account-provider";
@@ -218,24 +219,26 @@ export function AccountPanel({ view, focusSection = "profile", highContrast, onH
         throw new Error(result?.error || "No se completó la eliminación en el servidor.");
       }
       serverDeletionConfirmed = true;
-      const locallyComplete = await finishAccountDeletion();
-      localStorage.setItem(deletionMarker, locallyComplete ? "completed" : "completed_cleanup_pending");
+      await settleAccountDeletionClient(localStorage, deletionMarker, responseStatus, serverDeletionConfirmed, finishAccountDeletion);
     } catch (error) {
-      if (responseStatus === null || serverDeletionConfirmed || responseStatus >= 500) {
-        // A lost response is ambiguous: honor the destructive request locally,
-        // A confirmed response followed by a local failure has the same safe
-        // recovery path. Keep the barrier so stale work cannot revive data.
-        let locallyComplete = false;
-        try { locallyComplete = await finishAccountDeletion(); }
-        finally {
-          localStorage.setItem(deletionMarker, serverDeletionConfirmed
-            ? locallyComplete ? "completed" : "completed_cleanup_pending"
-            : locallyComplete ? "pending_confirmation" : "cleanup_pending");
-        }
-      } else {
-        localStorage.removeItem(deletionMarker);
+      if (serverDeletionConfirmed) {
+        // The confirmed cleanup already ran (or failed) once. Its durable
+        // marker lets reload resume; retrying here could purge twice.
         setMessageKind("error");
-        setMessage(error instanceof Error ? error.message : "No se completó la eliminación en el servidor. Reintenta.");
+        setMessage("El servidor confirmó la eliminación, pero falta limpiar este dispositivo. Recarga para reintentar la limpieza.");
+        setDeleteOpen(false);
+        return;
+      }
+      try {
+        const outcome = await settleAccountDeletionClient(localStorage, deletionMarker, responseStatus, serverDeletionConfirmed, finishAccountDeletion);
+        setMessageKind("error");
+        setMessage(outcome === "pending_confirmation"
+          ? `${responseStatus !== null && error instanceof Error ? `${error.message} ` : "No pudimos confirmar la eliminación. "}Conservamos tus datos en este dispositivo y pausamos la sincronización. Al recargar podrás reintentar o comprobar que tu cuenta sigue activa.`
+          : error instanceof Error ? error.message : "No se completó la eliminación en el servidor. Reintenta.");
+        setDeleteOpen(false);
+      } catch {
+        setMessageKind("error");
+        setMessage("No pudimos confirmar la eliminación ni guardar el estado de recuperación. Conservamos tus datos; no cierres esta pestaña y contacta soporte.");
         setDeleteOpen(false);
       }
     }

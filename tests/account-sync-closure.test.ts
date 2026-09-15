@@ -226,8 +226,8 @@ test("una eliminación interrumpida conserva el barrier y ofrece reintento sin m
   const provider = readFileSync("app/components/account-provider.tsx", "utf8");
   const panel = readFileSync("app/components/account-panel.tsx", "utf8");
   assert.match(provider, /startsWith\(ACCOUNT_DELETION_MARKER_PREFIX\)/);
-  assert.match(provider, /if \(marker\.state === "completed" \|\| marker\.state === "pending_confirmation"\) continue/);
-  assert.match(provider, /marker\.state === "completed_cleanup_pending"\s*\? "completed_cleanup_pending"/);
+  assert.match(provider, /const action = accountDeletionRecoveryAction\(marker\.state\)/);
+  assert.match(provider, /if \(action === "normalize_pending"\) \{[\s\S]*"pending_confirmation"[\s\S]*continue/);
   assert.match(provider, /clearDeletedAuthSessionForUser\(supabase\.auth, userId\)/);
   assert.match(provider, /clearDeletedAuthSessionForUser\(supabase\.auth, session\.user\.id\)/);
   assert.match(provider, /deletionMarker === "completed"[\s\S]*"completed_cleanup_pending"/);
@@ -247,6 +247,6 @@ test("una eliminación interrumpida conserva el barrier y ofrece reintento sin m
   assert.match(panel, /serverDeletionConfirmed/);
   assert.match(panel, /localStorage\.getItem\(deletionMarker\) !== requestedAt/);
   assert.match(panel, /No pudimos preparar la eliminación de forma segura/);
-  assert.match(panel, /responseStatus === null \|\| serverDeletionConfirmed \|\| responseStatus >= 500/);
-  assert.match(panel, /"completed_cleanup_pending"/);
+  assert.match(panel, /settleAccountDeletionClient\(localStorage, deletionMarker, responseStatus, serverDeletionConfirmed, finishAccountDeletion\)/);
+  assert.match(provider, /Conservar mi cuenta/);
 });

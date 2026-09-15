@@ -6,6 +6,8 @@ const profile = readFileSync("app/components/profile-account-panel.tsx", "utf8")
 const picker = readFileSync("app/components/profile-image-picker.tsx", "utf8");
 const pickerCss = readFileSync("app/components/profile-image-picker.module.css", "utf8");
 const css = readFileSync("app/profile-account.css", "utf8");
+const more = readFileSync("app/components/more-hub.tsx", "utf8");
+const page = readFileSync("app/page.tsx", "utf8");
 const statisticsRoute = readFileSync("app/api/account/statistics/route.ts", "utf8");
 const deletionRoute = readFileSync("app/api/account/delete/route.ts", "utf8");
 const migration = readFileSync("supabase/migrations/20260913205122_user_statistics_reset.sql", "utf8");
@@ -26,6 +28,25 @@ test("Foto, Emoji y Sin imagen son tres opciones responsive sin solaparse", () =
   for (const option of ["FOTO", "EMOJI", "SIN IMAGEN"]) assert.match(picker, new RegExp(option));
   assert.match(pickerCss, /grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/);
   assert.match(pickerCss, /@media \(max-width: 430px\)/);
+  assert.match(picker, /kind === "profile" \? styles\.profilePreview : ""/);
+  assert.match(pickerCss, /\.profilePreview \{ border-radius: 50%; \}/);
+});
+
+test("Perfil enlaza Mi equipo, Preferencias y Notificaciones a controles existentes", () => {
+  assert.match(profile, /aria-label="Secciones de Mi Perfil"/);
+  for (const section of ["Mi equipo", "Preferencias", "Cuenta y privacidad", "Notificaciones"]) assert.match(profile, new RegExp(`<b>${section}</b>`));
+  assert.match(profile, /onClick=\{onOpenEquipment\}[\s\S]*?<b>Mi equipo<\/b>/);
+  assert.match(profile, /onBackToProfile/);
+  assert.match(page, /onOpenEquipment=\{\(\) => setProfileFocus\("equipment"\)\}/);
+  assert.match(page, /onBackToProfile=\{\(\) => setProfileFocus\("profile"\)\}/);
+  assert.match(css, /\.profileNavigationList\{display:grid;min-width:0/);
+});
+
+test("Más ofrece Reglas de golf como acceso explícito sin duplicar Perfil", () => {
+  assert.match(more, /title: "Reglas de golf"/);
+  assert.match(more, /action: onOpenRules/);
+  assert.match(page, /onOpenRules=\{openRulesForRound\}/);
+  assert.doesNotMatch(more, /title: "Perfil"/);
 });
 
 test("Cuenta y privacidad separa ambos controles destructivos", () => {

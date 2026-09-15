@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  createFriendRequest,
   emptySocialGraph,
   normalizeUsernameSearch,
   removeFriend,
@@ -55,7 +54,7 @@ export function SocialConnectionsPanel({ ownerId, accessToken, directory }: {
           })).filter((profile) => profile.userId && profile.username));
           setLoading(false); return;
         }
-        setStatus(body?.error || "La búsqueda cloud no está disponible; revisé tus jugadores vinculados.");
+        setStatus(body?.error || "La búsqueda cloud no está disponible. No se mostrarán perfiles sin username y privacidad verificados.");
       }
       const local = await repository?.searchProfiles(normalized, ownerId, 20) ?? [];
       setResults(local);
@@ -75,16 +74,7 @@ export function SocialConnectionsPanel({ ownerId, accessToken, directory }: {
   }, [accessToken, ownerId, query, repository]);
 
   function request(profile: SocialProfile) {
-    const next = createFriendRequest(graph, {
-      requesterId: ownerId,
-      addresseeId: profile.userId,
-      id: crypto.randomUUID(),
-      operationId: crypto.randomUUID(),
-      now: new Date().toISOString(),
-    });
-    if (next === graph) { setStatus("Ya existe una amistad o solicitud con este jugador."); return; }
-    void persist(next); setStatus(`Solicitud preparada para @${profile.username}. Se sincronizará cuando el esquema Social esté disponible.`);
-    setResults((current) => current.filter((candidate) => candidate.userId !== profile.userId));
+    setStatus(`No se envió una solicitud a @${profile.username}. Invitar amigos requiere el servicio Social seguro en Preview.`);
   }
 
   const friendIds = new Set(graph.friendships.flatMap((friendship) => friendship.userIds).filter((id) => id !== ownerId));
@@ -94,7 +84,7 @@ export function SocialConnectionsPanel({ ownerId, accessToken, directory }: {
   return <section className="socialConnections" aria-label="Amigos de Backyard">
     <section className="card socialSearchCard"><div className="sectionTitle"><div><h2>Buscar amigos</h2><p>Busca por username. El correo nunca es público.</p></div></div>
       <AnchoredSearch label="Username" value={query} onChange={(value) => { setQuery(value); if (normalizeUsernameSearch(value).length < 2) { setResults([]); setLoading(false); } }} placeholder="@usuario" expanded={results.length > 0} status={loading ? "Buscando…" : query.trim().length > 0 && normalizeUsernameSearch(query).length < 2 ? "Escribe al menos dos caracteres." : undefined}>
-        {results.map((profile) => <AnchoredSearchOption key={profile.userId} label={`Agregar a @${profile.username}`} onSelect={() => request(profile)}><span className="socialSearchOption"><span className="socialProfileAvatar"><ProfileAvatarMedia value={profile.avatar} fallback={profile.displayName[0] || "G"} /></span><span><b>{profile.displayName}</b><small>@{profile.username}{profile.clubName ? ` · ${profile.clubName}` : ""}</small></span><strong>Agregar</strong></span></AnchoredSearchOption>)}
+        {results.map((profile) => <AnchoredSearchOption key={profile.userId} label={`Consultar disponibilidad de invitación para @${profile.username}`} onSelect={() => request(profile)}><span className="socialSearchOption"><span className="socialProfileAvatar"><ProfileAvatarMedia value={profile.avatar} fallback={profile.displayName[0] || "G"} /></span><span><b>{profile.displayName}</b><small>@{profile.username}{profile.clubName ? ` · ${profile.clubName}` : ""}</small></span><strong>Próximamente</strong></span></AnchoredSearchOption>)}
       </AnchoredSearch>
       {status && <p className="hint" role="status">{status}</p>}
     </section>

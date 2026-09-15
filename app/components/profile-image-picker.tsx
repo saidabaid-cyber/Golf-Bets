@@ -26,7 +26,7 @@ export function ProfileImagePicker({ value, onChange, kind = "profile" }: { valu
     finally { setBusy(false); if (inputRef.current) inputRef.current.value = ""; }
   }
   return <div className={styles.picker}>
-    <div className={styles.preview}>{isProfileEmojiAvatar(value) ? <span role="img" aria-label="Emoji seleccionado">{value}</span> : value ? <img src={value} alt={kind === "profile" ? "Avatar seleccionado" : "Imagen del grupo"} referrerPolicy="no-referrer" /> : <span aria-hidden="true">{kind === "profile" ? "⛳" : "👥"}</span>}</div>
+    <div className={`${styles.preview} ${kind === "profile" ? styles.profilePreview : ""}`}>{isProfileEmojiAvatar(value) ? <span role="img" aria-label="Emoji seleccionado">{value}</span> : value ? <img src={value} alt={kind === "profile" ? "Avatar seleccionado" : "Imagen del grupo"} referrerPolicy="no-referrer" /> : <span aria-hidden="true">{kind === "profile" ? "⛳" : "👥"}</span>}</div>
     {kind === "profile" && <div className={styles.tabs} role="tablist" aria-label="Tipo de avatar"><button type="button" role="tab" aria-selected={mode === "photo"} data-active={mode === "photo"} onClick={() => setMode("photo")}>FOTO</button><button type="button" role="tab" aria-selected={mode === "emoji"} data-active={mode === "emoji"} onClick={() => setMode("emoji")}>EMOJI</button><button type="button" role="tab" aria-selected={mode === "none"} data-active={mode === "none"} onClick={() => { setMode("none"); onChange(""); setMessage(""); }}>SIN IMAGEN</button></div>}
     {(kind === "group" || mode === "photo") && <div className={styles.controls}>
       <input ref={inputRef} className={styles.file} type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => void chooseFile(event.target.files?.[0])} />

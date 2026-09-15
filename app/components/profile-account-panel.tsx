@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { LEGAL_DOCUMENT_VERSIONS, legalConfig } from "../../lib/legal-config";
 import { accountDeletionMarkerKey, profileHandicapInput, profileHandicapLabel, validateProfileAvatarUrl, validateProfileDraft, type BackyardProfileDetails } from "../../lib/account-state";
+import { settleAccountDeletionClient } from "../../lib/account-deletion-client";
 import { ballFitDefaultsFromProfile } from "../../lib/ball-fitting";
 import type { GolfInsights } from "../../lib/golf-insights";
 import { isStatisticsDeleteConfirmation, requestStatisticsReset, type StatisticsResetRecord } from "../../lib/statistics-reset";
@@ -29,6 +30,8 @@ type ProfileAccountPanelProps = {
   onStatisticsReset?: (reset: StatisticsResetRecord) => void;
   onOpenStats?: () => void;
   onOpenAccount?: () => void;
+  onOpenEquipment: () => void;
+  onBackToProfile: () => void;
 };
 
 type EditDraft = Pick<BackyardProfileDetails, "givenName" | "familyName" | "username" | "homeClub" | "homeClubId" | "preferredTee" | "profileVisibility">;
@@ -49,7 +52,7 @@ function decimal(value: number | undefined) {
   return value === undefined ? "—" : value.toFixed(1);
 }
 
-export function ProfileAccountPanel({ view, focusSection = "profile", highContrast, onHighContrastChange, notificationsEnabled, onNotificationsEnabledChange, golfInsights, statisticsResetAt, onStatisticsReset, onOpenStats, onOpenAccount }: ProfileAccountPanelProps) {
+export function ProfileAccountPanel({ view, focusSection = "profile", highContrast, onHighContrastChange, notificationsEnabled, onNotificationsEnabledChange, golfInsights, statisticsResetAt, onStatisticsReset, onOpenStats, onOpenAccount, onOpenEquipment, onBackToProfile }: ProfileAccountPanelProps) {
   const { identity, updateProfile, logout, finishAccountDeletion, openAccess, acceptances, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, requestCloudLink, cloudIssues, retryCloudSync } = useBackyardAccount();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(identity.displayName);
@@ -142,21 +145,26 @@ export function ProfileAccountPanel({ view, focusSection = "profile", highContra
         throw new Error(result?.error || "No se completó la eliminación en el servidor.");
       }
       serverDeletionConfirmed = true;
-      const locallyComplete = await finishAccountDeletion();
-      localStorage.setItem(marker, locallyComplete ? "completed" : "completed_cleanup_pending");
+      await settleAccountDeletionClient(localStorage, marker, responseStatus, serverDeletionConfirmed, finishAccountDeletion);
     } catch (error) {
-      if (responseStatus === null || serverDeletionConfirmed || responseStatus >= 500) {
-        let locallyComplete = false;
-        try { locallyComplete = await finishAccountDeletion(); }
-        finally {
-          localStorage.setItem(marker, serverDeletionConfirmed
-            ? locallyComplete ? "completed" : "completed_cleanup_pending"
-            : locallyComplete ? "pending_confirmation" : "cleanup_pending");
-        }
-      } else {
-        localStorage.removeItem(marker);
+      if (serverDeletionConfirmed) {
+        // The confirmed cleanup already ran (or failed) once. Its durable
+        // marker lets reload resume; retrying here could purge twice.
         setMessageKind("error");
-        setMessage(error instanceof Error ? error.message : "No se completó la eliminación en el servidor. Reintenta.");
+        setMessage("El servidor confirmó la eliminación, pero falta limpiar este dispositivo. Recarga para reintentar la limpieza.");
+        setDeleteAccountOpen(false);
+        return;
+      }
+      try {
+        const outcome = await settleAccountDeletionClient(localStorage, marker, responseStatus, serverDeletionConfirmed, finishAccountDeletion);
+        setMessageKind("error");
+        setMessage(outcome === "pending_confirmation"
+          ? `${responseStatus !== null && error instanceof Error ? `${error.message} ` : "No pudimos confirmar la eliminación. "}Conservamos tus datos en este dispositivo y pausamos la sincronización. Al recargar podrás reintentar o comprobar que tu cuenta sigue activa.`
+          : error instanceof Error ? error.message : "No se completó la eliminación en el servidor. Reintenta.");
+        setDeleteAccountOpen(false);
+      } catch {
+        setMessageKind("error");
+        setMessage("No pudimos confirmar la eliminación ni guardar el estado de recuperación. Conservamos tus datos; no cierres esta pestaña y contacta soporte.");
         setDeleteAccountOpen(false);
       }
     } finally { setDeletingAccount(false); }
@@ -164,7 +172,7 @@ export function ProfileAccountPanel({ view, focusSection = "profile", highContra
 
   if (managingConsents) return <LegalConsentManager userId={identity.userId} accessToken={identity.accessToken} authenticated={identity.mode === "authenticated"} acceptances={acceptances} bettingConsentGranted={bettingConsentGranted} requestBettingConsent={requestBettingConsent} onBack={() => setManagingConsents(false)} />;
 
-  if (view === "profile" && identity.mode === "authenticated" && focusSection === "equipment") return <><header className="profileMobileHeader"><div><span>MI PERFIL</span><h1>Mi Bolsa</h1></div></header><div id="equipment-bag"><EquipmentProfilePanel userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={identity.defaultHandicap} ballFitDefaults={ballFitDefaultsFromProfile(identity)} /></div></>;
+  if (view === "profile" && identity.mode === "authenticated" && focusSection === "equipment") return <><header className="profileMobileHeader profileEditHeader"><button type="button" className="textButton" onClick={onBackToProfile}>← Mi Perfil</button><div><span>MI PERFIL</span><h1>Mi Bolsa</h1></div></header><div id="equipment-bag"><EquipmentProfilePanel userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={identity.defaultHandicap} ballFitDefaults={ballFitDefaultsFromProfile(identity)} /></div></>;
 
   if (view === "profile" && identity.mode === "authenticated" && editing) return <>
     <header className="profileMobileHeader profileEditHeader"><button type="button" className="textButton" onClick={() => setEditing(false)}>← Mi Perfil</button><div><span>MI PERFIL</span><h1>Editar perfil</h1></div></header>
@@ -191,7 +199,12 @@ export function ProfileAccountPanel({ view, focusSection = "profile", highContra
       <section className="card profileCompactCard"><div className="profileCompactHeading"><div><span>INFORMACIÓN DE GOLF</span><h2>Tu juego</h2></div><button type="button" className="textButton" onClick={() => setEditing(true)}>Editar</button></div><div className="profileCompactRows"><div><span>HCP / Index</span><b>{profileHandicapLabel(identity.defaultHandicap)}</b></div><div><span>Home Club</span><b>{identity.homeClub || "Sin indicar"}</b></div><div><span>Tee habitual</span><b>{identity.preferredTee || "Sin indicar"}</b></div></div><GhinPlaceholder /></section>
       <section className="card profileCompactCard"><div className="profileCompactHeading"><div><span>FOTO / AVATAR</span><h2>{identity.avatarUrl ? "Avatar configurado" : "Sin imagen"}</h2></div><button type="button" className="textButton" onClick={() => setEditing(true)}>Cambiar</button></div><div className="profileAvatarSummary"><div className="profileAvatarMini"><ProfileAvatarMedia value={identity.avatarUrl} fallback={(identity.displayName.trim()[0] || "J").toUpperCase()} alt={`Avatar actual de ${identity.displayName}`} /></div><p>Foto, emoji del teclado o sin imagen.</p></div></section>
       {golfInsights && <section className="card profileCompactCard"><div className="profileCompactHeading"><div><span>ACTIVIDAD</span><h2>Resumen personal</h2></div>{onOpenStats && <button type="button" className="textButton" onClick={onOpenStats}>Ver Stats</button>}</div><div className="profileActivityGrid"><div><span>Rondas</span><b>{golfInsights.rounds}</b></div><div><span>Promedio</span><b>{decimal(golfInsights.averageScore)}</b></div><div><span>Putts</span><b>{decimal(golfInsights.averagePutts)}</b></div></div></section>}
-      <button type="button" className="card profileNavigationCard" onClick={onOpenAccount}><span><b>Cuenta y privacidad</b><small>Email, acceso, consentimientos y datos</small></span><strong aria-hidden="true">›</strong></button>{notice}
+      <nav className="card profileNavigationList" aria-label="Secciones de Mi Perfil">
+        <button type="button" className="profileNavigationCard" onClick={onOpenEquipment}><span><b>Mi equipo</b><small>Mi Bolsa, bastones y bola</small></span><strong aria-hidden="true">›</strong></button>
+        <button type="button" className="profileNavigationCard" onClick={onOpenAccount}><span><b>Preferencias</b><small>Privacidad y alto contraste</small></span><strong aria-hidden="true">›</strong></button>
+        <button type="button" className="profileNavigationCard" onClick={onOpenAccount}><span><b>Cuenta y privacidad</b><small>Email, acceso, consentimientos y datos</small></span><strong aria-hidden="true">›</strong></button>
+        <button type="button" className="profileNavigationCard" onClick={onOpenAccount}><span><b>Notificaciones</b><small>Avisos sociales dentro de la app</small></span><strong aria-hidden="true">›</strong></button>
+      </nav>{notice}
     </main>}
 
     {view === "account" && identity.mode === "guest" && <section className="card guestAccountCard"><h2>Modo invitado</h2><p>Inicia sesión para administrar datos de una cuenta.</p><div className="accountInlineActions"><button className="primary" onClick={openAccess}>Crear cuenta</button><button className="secondary" onClick={openAccess}>Iniciar sesión</button></div></section>}

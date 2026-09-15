@@ -91,6 +91,51 @@ test("Guardar → persistencia local/IndexedDB → Histórico → reload conserv
   assert.ok(storage.getItem(STORAGE_KEYS.draft), "el flujo de página limpia el draft solo después de esta confirmación");
 });
 
+test("captura por jugador y hoyo conserva putts, situaciones, OB, animales, notas y palo al guardar y recargar", async () => {
+  const storage = new MemoryStorage();
+  const captured: RoundSnapshot = {
+    ...snapshot("round-capture-completa"),
+    putts: { 1: { said: 3, abel: 1 }, 2: { said: 2, abel: 2 } },
+    advancedStats: {
+      1: {
+        said: { teeDirection: "left", teeClub: "Driver", teeDistance: 248, greenSideBunkerCount: 1, fairwayBunkerCount: 0, penaltyAreaCount: 2, outOfBoundsCount: 1, notes: "Bola provisional" },
+        abel: { teeDirection: "center", teeClub: "Hierro 3", greenSideBunkerCount: 0, fairwayBunkerCount: 1, penaltyAreaCount: 0, outOfBoundsCount: 0 },
+      },
+      2: { said: { teeDirection: "right", greenSideBunkerCount: 0, fairwayBunkerCount: 0, penaltyAreaCount: 0, outOfBoundsCount: 0 } },
+    },
+    counterBetEvents: [
+      { id: "viper-said-h1", kind: "vipers", hole: 1, playerId: "said", quantity: 1, captureOrder: 1, capturedAt: "2026-09-04T08:15:00.000Z" },
+      { id: "camel-abel-h1", kind: "camels", hole: 1, playerId: "abel", quantity: 1, captureOrder: 2, capturedAt: "2026-09-04T08:17:00.000Z" },
+      { id: "fish-said-h1", kind: "fish", hole: 1, playerId: "said", quantity: 2, captureOrder: 3, capturedAt: "2026-09-04T08:20:00.000Z" },
+    ],
+    shots: [{ id: "shot-said-h1", roundId: "round-capture-completa", playerId: "said", hole: 1, sequence: 1, clubLabel: "Driver", clubSnapshot: { id: "driver-1", label: "Driver", category: "DRIVER", shaft: { brand: "Fujikura", model: "Ventus Blue", flex: "S" } }, distanceYards: 248, startedAt: "2026-09-04T08:10:00.000Z", source: "MANUAL" }],
+    groupOrigin: { groupId: "group-viernes", groupName: "Viernes", basedOnUpdatedAt: "2026-09-03T00:00:00.000Z", selectedMembers: [{ memberId: "member-said", roundPlayerId: "said", name: "Said" }, { memberId: "member-abel", roundPlayerId: "abel", name: "Abel" }] },
+  };
+  const queuedBundles: CloudDataBundle[] = [];
+  await saveRoundHistoryLocalFirst({
+    storage: storage as unknown as Storage,
+    ownerId: "account-1",
+    snapshot: captured,
+    deviceId: "device-a",
+    defaultHandicap: null,
+    hasLocalPreferenceState: false,
+    queueForCloud: true,
+    persistOffline: async (_ownerId, bundle) => { queuedBundles.push(structuredClone(bundle)); return "capture-fingerprint"; },
+  });
+
+  const [reloaded] = readStoredJson<RoundSnapshot[]>(storage as unknown as Storage, STORAGE_KEYS.history, []);
+  assert.deepEqual(reloaded.putts, captured.putts);
+  assert.deepEqual(reloaded.advancedStats, captured.advancedStats);
+  assert.deepEqual(reloaded.counterBetEvents, captured.counterBetEvents);
+  assert.deepEqual(reloaded.shots, captured.shots);
+  assert.deepEqual(reloaded.groupOrigin, captured.groupOrigin);
+  assert.equal(reloaded.advancedStats?.[1]?.said?.outOfBoundsCount, 1);
+  assert.equal(reloaded.advancedStats?.[1]?.abel?.fairwayBunkerCount, 1);
+  assert.equal(reloaded.advancedStats?.[2]?.said?.teeDirection, "right");
+  assert.deepEqual(queuedBundles[0]?.history[0].advancedStats, captured.advancedStats);
+  assert.deepEqual(queuedBundles[0]?.history[0].groupOrigin, captured.groupOrigin);
+});
+
 test("reintentar guardado o corregir usa el mismo ID, conserva foto y crea una sola operación idempotente", async () => {
   const storage = new MemoryStorage();
   const original = snapshot();

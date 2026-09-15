@@ -2,6 +2,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 const SCORECARD_BUCKET = "scorecard-photos";
 
+/** The legacy saga cannot safely handle Phase 2's shared groups, round
+ * participants and RESTRICT audit references. Data API errors cannot prove
+ * these tables absent, so this route stays disabled until the replacement
+ * graph is implemented and verified on an isolated Preview database. */
+export const ACCOUNT_DELETION_CONTROLLED_DB_APPLY_PENDING = true;
+
 export const ACCOUNT_OWNED_ROWS = [
   ["account_data_migrations", "user_id"],
   ["rules_referee_acceptances", "user_id"],

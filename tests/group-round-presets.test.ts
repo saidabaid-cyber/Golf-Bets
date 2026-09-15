@@ -11,12 +11,21 @@ const migration = readFileSync("supabase/migrations/20260913175810_group_round_p
 test("la tarjeta móvil separa nombre, HCP y acciones sin widths rígidos", () => {
   assert.match(css, /\.playerEdit\{[^}]*grid-template-columns:minmax\(0,1fr\) 44px 44px/);
   assert.match(css, /grid-template-areas:"name name name" "hcp owner remove"/);
-  assert.match(css, /\.playerEdit>\.playerNameField\{grid-area:name[^}]*max-height:66px/);
+  assert.match(css, /\.playerEdit>\.playerNameField\{grid-area:name[^}]*max-height:calc\(2\.6em \+ 24px\)/);
   assert.match(css, /\.playerEdit>\.ownerDot\{grid-area:owner/);
   assert.match(css, /\.playerEdit>\.remove\{grid-area:remove/);
   assert.match(css, /\.manualRoundHcp \.roundHcpLabel/);
   assert.match(page, /<textarea className="playerNameField" rows=\{1\}/);
   assert.match(page, /<span className="roundHcpLabel">HCP<\/span>/);
+});
+
+test("Index y HCP permanecen compactos; tee y Rating/Slope se consultan al expandir", () => {
+  assert.match(page, /<details className=\{`roundHcpField roundPlayingHcp compactPlayingHcp/);
+  assert.match(page, /<summary aria-label=\{`Ver tee y cálculo de HCP/);
+  assert.match(page, /INDEX \{p\.handicapIndex \?\? "—"\} · HCP \{p\.handicap \?\? "—"\}/);
+  assert.match(page, /<div className="roundPlayingHcpDetail">/);
+  assert.match(css, /\.playerEdit \.compactPlayingHcp\{display:block;min-height:44px/);
+  assert.match(css, /\.compactPlayingHcp summary\{display:flex;[^}]*min-height:44px/);
 });
 
 test("Grupos expone roster, apuestas y el inicio de ronda desde la misma tarjeta", () => {

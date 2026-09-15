@@ -1,5 +1,5 @@
 import { getSupabaseAdmin, getSupabaseForUser } from "../../../../lib/supabase/server";
-import { deleteAccountGraph, supabaseAccountDeletionGateway } from "../../../../lib/account-deletion";
+import { ACCOUNT_DELETION_CONTROLLED_DB_APPLY_PENDING, deleteAccountGraph, supabaseAccountDeletionGateway } from "../../../../lib/account-deletion";
 
 export async function DELETE(request: Request) {
   const authorization = request.headers.get("authorization") || "";
@@ -14,6 +14,9 @@ export async function DELETE(request: Request) {
   if (!userClient || !admin) return Response.json({ error: "La eliminación segura de cuentas está pendiente de configuración del servidor." }, { status: 503 });
   const { data, error } = await userClient.auth.getUser(token);
   if (error || !data.user) return Response.json({ error: "Sesión no válida." }, { status: 401 });
+  // This guard precedes the audit insert and all media/data deletions. The
+  // current saga would otherwise strand an active account at an FK RESTRICT.
+  if (ACCOUNT_DELETION_CONTROLLED_DB_APPLY_PENDING) return Response.json({ error: "La eliminación segura de cuentas requiere un grafo transaccional y QA en una base Preview aislada. No se borró ningún dato.", code: "account_deletion_controlled_apply_pending", noDataDeleted: true }, { status: 503 });
   try {
     const audit = await userClient.from("product_usage_events_v2").insert({
       id: `account-delete-${crypto.randomUUID().replaceAll("-", "")}`,

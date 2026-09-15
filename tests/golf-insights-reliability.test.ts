@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { buildGolfInsights, buildPersonalActivity, scoredRoundInsight } from "../lib/golf-insights";
+import { roundsEligibleForStatistics } from "../lib/statistics-reset";
 import type { Course, HoleScore, Player, RoundSnapshot } from "../lib/types";
 
 const course: Course = {
@@ -54,6 +55,19 @@ function savedRound(overrides: Partial<RoundSnapshot> = {}): RoundSnapshot {
     ...overrides,
   };
 }
+
+test("reiniciar estadísticas no borra el conteo histórico ni liquidaciones anteriores", () => {
+  const old = savedRound({ id: "old", date: "2026-01-01", completedAt: "2026-01-01T18:00:00.000Z", betResult: 125, netResult: 125 });
+  const recent = savedRound({ id: "recent", date: "2026-03-01", completedAt: "2026-03-01T18:00:00.000Z", betResult: -25, netResult: -25 });
+  const history = [old, recent];
+  const sports = buildGolfInsights(roundsEligibleForStatistics(history, "2026-02-01T12:00:00.000Z"));
+  const historical = buildGolfInsights(history);
+  assert.equal(sports.rounds, 1);
+  assert.equal(historical.rounds, 2);
+  assert.equal(sports.betBalance, -25);
+  assert.equal(historical.betBalance, 100);
+  assert.equal(historical.netResult, 100);
+});
 
 test("historical insights fail closed instead of throwing on malformed runtime snapshots", () => {
   const malformed = [

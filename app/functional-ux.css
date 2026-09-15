@@ -212,11 +212,19 @@
 /* Round players: the editable name owns the first row; HCP and actions share
    the second row without competing for width, even at the narrowest iPhone. */
 .playerEdit{display:grid;grid-template-columns:minmax(0,1fr) 44px 44px;grid-template-areas:"name name name" "hcp owner remove";align-items:stretch;gap:7px 8px;min-width:0;margin-bottom:9px;border:1px solid var(--line);border-radius:14px;background:var(--soft);padding:9px}
-.playerEdit>.playerNameField{grid-area:name;width:100%;min-width:0;min-height:44px;max-height:66px;field-sizing:content;overflow-y:auto;resize:none;line-height:1.3;white-space:pre-wrap;overflow-wrap:anywhere}
+.playerEdit>.playerNameField{grid-area:name;width:100%;min-width:0;min-height:44px;max-height:calc(2.6em + 24px);field-sizing:content;overflow-y:auto;resize:none;line-height:1.3;white-space:pre-wrap;overflow-wrap:anywhere}
 .playerEdit>.roundHcpField{grid-area:hcp;min-width:0;width:100%}
 .playerEdit>.ownerDot{grid-area:owner;min-width:44px;min-height:44px}
 .playerEdit>.remove{grid-area:remove;min-width:44px;min-height:44px}
 .playerEdit .roundPlayingHcp{min-width:0;overflow-wrap:anywhere}
+.playerEdit .compactPlayingHcp{display:block;min-height:44px;padding:0;overflow:visible}
+.compactPlayingHcp summary{display:flex;align-items:center;justify-content:space-between;gap:5px;min-width:0;min-height:44px;padding:6px 8px;list-style:none;cursor:pointer}
+.compactPlayingHcp summary::-webkit-details-marker{display:none}
+.compactPlayingHcp summary span:first-child{min-width:0;color:var(--green);font-size:11px;font-weight:900;line-height:1.25;overflow-wrap:anywhere}
+.compactPlayingHcp summary span:last-child{flex:0 0 auto;color:var(--muted);font-size:15px}
+.compactPlayingHcp[open] summary span:last-child{transform:rotate(180deg)}
+.roundPlayingHcpDetail{display:grid;gap:3px;border-top:1px solid var(--line);padding:7px 8px 9px}
+.roundPlayingHcpDetail b{font-size:11px}.roundPlayingHcpDetail span{color:var(--muted);font-size:10px;line-height:1.35;overflow-wrap:anywhere}
 .manualRoundHcp{display:flex;min-height:44px;align-items:center;gap:7px;flex-wrap:wrap;border:1px solid var(--line);border-radius:11px;background:var(--card);padding:4px 9px}
 .manualRoundHcp.isMissing{border-color:var(--bad)}
 .manualRoundHcp .roundHcpLabel{flex:0 0 auto;color:var(--muted);font-size:11px;font-weight:900;letter-spacing:.04em}
