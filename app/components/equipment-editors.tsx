@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useLayoutEffect, useMemo, useState, type FormEvent } from "react";
 import type {
   ClubCategory,
   ClubHandedness,
@@ -106,12 +106,14 @@ type ClubEditorProps = {
   catalog: readonly GolfClubCatalog[];
   shafts: readonly GolfShaftCatalog[];
   existing?: PlayerClub | null;
+  presentation?: "sheet" | "page";
+  onSelectBall?: () => void;
   onCancel: () => void;
-  onSave: (club: PlayerClub) => void;
+  onSave: (club: PlayerClub) => boolean | void;
 };
 
-export function ClubEditor({ userId, catalog, shafts, existing, onCancel, onSave }: ClubEditorProps) {
-  const dialogRef = useModalDialog(true, onCancel);
+export function ClubEditor({ userId, catalog, shafts, existing, presentation = "sheet", onSelectBall, onCancel, onSave }: ClubEditorProps) {
+  const dialogRef = useModalDialog(presentation === "sheet", onCancel);
   const existingCatalog = existing?.catalogClubId ? catalog.find((club) => club.id === existing.catalogClubId) : null;
   const [category, setCategory] = useState<ClubCategory>(existing?.category || "DRIVER");
   const [manual, setManual] = useState(Boolean(existing && !existing.catalogClubId));
@@ -143,6 +145,7 @@ export function ClubEditor({ userId, catalog, shafts, existing, onCancel, onSave
   const [message, setMessage] = useState("");
   const [step, setStep] = useState<"category" | "brand" | "model" | "specs" | "shaft" | "finish">(existing ? "finish" : "category");
   useWizardStepNavigation(dialogRef, step);
+  useLayoutEffect(() => { if (presentation === "page") window.scrollTo(0, 0); }, [presentation, step]);
 
   const categoryCatalog = useMemo(() => catalog.filter((club) => club.category === category), [catalog, category]);
   const pinnedClubIds = useMemo(() => catalogClubId ? [catalogClubId] : [], [catalogClubId]);
@@ -266,7 +269,7 @@ export function ClubEditor({ userId, catalog, shafts, existing, onCancel, onSave
       || !sameIdentityText(existing.generation, savedGeneration)
       || existing.year !== savedYear
     ));
-    onSave({
+    const saved = onSave({
       id: identityChanged ? uid("club") : existing?.id || uid("club"),
       userId,
       category,
@@ -298,21 +301,21 @@ export function ClubEditor({ userId, catalog, shafts, existing, onCancel, onSave
       createdAt: identityChanged ? now : existing?.createdAt || now,
       updatedAt: now,
     });
+    if (saved === false) setMessage("No se confirmó el guardado en este dispositivo. Vuelve a intentar.");
   }
 
-  return <div className={styles.editorBackdrop} role="presentation">
-    <section ref={dialogRef} tabIndex={-1} className={styles.editorSheet} role="dialog" aria-modal="true" aria-labelledby="club-editor-title">
-      <ModalCloseButton onClose={onCancel} />
-      <div className={styles.sheetHandle} />
-      <h2 id="club-editor-title">{existing ? "Editar bastón" : "Agregar a mi bolsa"}</h2>
+  return <div className={presentation === "page" ? styles.editorPageShell : styles.editorBackdrop} role={presentation === "sheet" ? "presentation" : undefined}>
+    <section ref={dialogRef} tabIndex={-1} className={presentation === "page" ? styles.editorPage : styles.editorSheet} role={presentation === "sheet" ? "dialog" : undefined} aria-modal={presentation === "sheet" ? "true" : undefined} aria-labelledby="club-editor-title">
+      {presentation === "sheet" ? <><ModalCloseButton onClose={onCancel} /><div className={styles.sheetHandle} /></> : <button type="button" className={styles.pageBack} onClick={onCancel}>← Volver a Mi Bolsa</button>}
+      <h2 id="club-editor-title">{existing ? "Editar bastón" : step === "category" ? "Agregar a mi bolsa" : `Agregar ${CLUB_CATEGORY_LABELS[category]}`}</h2>
       <p>Marca + modelo es suficiente. Las especificaciones son opcionales.</p>
       <div className={styles.flowProgress} aria-label="Progreso de selección">
         {(["category", "brand", "model", "specs", "shaft", "finish"] as const).map((item, index) => <span key={item} data-active={item === step} data-complete={index < ["category", "brand", "model", "specs", "shaft", "finish"].indexOf(step)} />)}
       </div>
       <form className={styles.formGrid} onSubmit={submit} noValidate>
         {step === "category" && <div className={styles.flowScreen}>
-          <h3>Selecciona categoría</h3><p>Primero el tipo de bastón; después marca, modelo y configuración.</p>
-          <div className={styles.catalogChoiceGrid}>{Object.entries(CLUB_CATEGORY_LABELS).map(([value, label]) => <button type="button" key={value} onClick={() => chooseCategory(value as ClubCategory)}><span>{CLUB_CATEGORY_ICONS[value as ClubCategory]}</span><b>{label}</b></button>)}</div>
+          <h3>Selecciona categoría</h3><p>Elige un tipo de bastón o bola; después marca, modelo y configuración.</p>
+          <div className={styles.catalogChoiceGrid}>{Object.entries(CLUB_CATEGORY_LABELS).map(([value, label]) => <button type="button" key={value} onClick={() => chooseCategory(value as ClubCategory)}><span>{CLUB_CATEGORY_ICONS[value as ClubCategory]}</span><b>{label}</b></button>)}{onSelectBall && <button type="button" onClick={onSelectBall}><span>●</span><b>Bola</b></button>}</div>
         </div>}
 
         {step === "brand" && <div className={styles.flowScreen}>
@@ -336,7 +339,8 @@ export function ClubEditor({ userId, catalog, shafts, existing, onCancel, onSave
 
         {step === "specs" && <div className={styles.flowScreen}>
           <button type="button" className={styles.flowBack} onClick={() => { if (manual) setManual(false); setStep(manual ? "brand" : "model"); }}>← {manual ? "Catálogo" : "Modelos"}</button>
-          <h3>Tipo y especificación</h3>
+          <h3>{CLUB_CATEGORY_LABELS[category]} · especificaciones</h3>
+          <p>{category === "IRON_SET" ? "Elige los hierros que juegas: paquete rápido o composición libre, incluidos wedges por grado." : category === "WEDGE" ? "Indica loft en grados si lo conoces; varilla y demás medidas son opcionales." : category === "PUTTER" ? "Mano, longitud, lie y grip pueden guardarse sin inventar especificaciones." : "Loft y mano cuando los conozcas; la varilla se elige después o se omite."}</p>
           <div className={styles.productPreview}><CatalogProductMedia item={selectedCatalogClub} fallback={CLUB_CATEGORY_ICONS[category]} /><div><b>{manual ? [brand, customModel].filter(Boolean).join(" ") || "Bastón manual" : `${selectedCatalogClub?.brand || effectiveBrand} ${selectedCatalogClub?.model || ""}`}</b><small>{selectedCatalogClub ? [selectedCatalogClub.generation, selectedCatalogClub.year, selectedCatalogClub.active ? "Actual" : "Modelo anterior"].filter(Boolean).join(" · ") : "Sin imagen con licencia verificada."}</small></div></div>
           {manual && <div className={styles.inlineFields}><label>Marca<input value={brand} maxLength={100} onChange={(event) => setBrand(event.target.value)} placeholder="Marca" /></label><label>Modelo<input value={customModel} maxLength={140} onChange={(event) => setCustomModel(event.target.value)} placeholder="Modelo" /></label></div>}
           <div className={styles.inlineFields}><label>Generación (opcional)<input value={generation} maxLength={100} onChange={(event) => setGeneration(event.target.value)} /></label><label>Año (opcional)<input type="number" inputMode="numeric" min={1900} max={2200} value={year} onChange={(event) => setYear(event.target.value)} /></label><label>Loft ° (opcional)<input type="number" inputMode="decimal" min={0} max={90} step="0.1" list="verified-club-lofts" value={loft} onChange={(event) => changeLoft(event.target.value)} /><datalist id="verified-club-lofts">{selectedCatalogClub?.lofts.map((value) => <option key={value} value={value} />)}</datalist></label><label>Mano<select value={handedness} onChange={(event) => setHandedness(event.target.value as ClubHandedness)}>{availableHands.includes("RH") && <option value="RH">Derecha</option>}{availableHands.includes("LH") && <option value="LH">Izquierda</option>}</select></label></div>
@@ -379,12 +383,13 @@ type BallEditorProps = {
   userId: string;
   catalog: readonly GolfBallCatalog[];
   existing?: PlayerBall | null;
+  presentation?: "sheet" | "page";
   onCancel: () => void;
-  onSave: (ball: PlayerBall) => void;
+  onSave: (ball: PlayerBall) => boolean | void;
 };
 
-export function BallEditor({ userId, catalog, existing, onCancel, onSave }: BallEditorProps) {
-  const dialogRef = useModalDialog(true, onCancel);
+export function BallEditor({ userId, catalog, existing, presentation = "sheet", onCancel, onSave }: BallEditorProps) {
+  const dialogRef = useModalDialog(presentation === "sheet", onCancel);
   const existingCatalog = existing?.catalogBallId ? catalog.find((ball) => ball.id === existing.catalogBallId) : null;
   const [manual, setManual] = useState(Boolean(existing && !existing.catalogBallId));
   const [brand, setBrand] = useState(existingCatalog?.brand || existing?.ballBrand || "");
@@ -398,6 +403,7 @@ export function BallEditor({ userId, catalog, existing, onCancel, onSave }: Ball
   const [message, setMessage] = useState("");
   const [step, setStep] = useState<"brand" | "model" | "details">(existing ? "details" : "brand");
   useWizardStepNavigation(dialogRef, step);
+  useLayoutEffect(() => { if (presentation === "page") window.scrollTo(0, 0); }, [presentation, step]);
   const activeCatalog = useMemo(() => [...catalog], [catalog]);
   const pinnedBallIds = useMemo(() => catalogBallId ? [catalogBallId] : [], [catalogBallId]);
   const ballSearchQuery = step === "model" && brand ? `${brand} ${catalogQuery}`.trim() : catalogQuery;
@@ -440,7 +446,7 @@ export function BallEditor({ userId, catalog, existing, onCancel, onSave }: Ball
       || !sameIdentityText(existing.generation, savedGeneration)
       || existing.year !== savedYear
     ));
-    onSave({
+    const saved = onSave({
       id: identityChanged ? uid("ball") : existing?.id || uid("ball"),
       userId,
       catalogBallId: manual ? null : catalogBallId || null,
@@ -456,12 +462,12 @@ export function BallEditor({ userId, catalog, existing, onCancel, onSave }: Ball
       createdAt: identityChanged ? now : existing?.createdAt || now,
       updatedAt: now,
     });
+    if (saved === false) setMessage("No se confirmó el guardado en este dispositivo. Vuelve a intentar.");
   }
 
-  return <div className={styles.editorBackdrop} role="presentation">
-    <section ref={dialogRef} tabIndex={-1} className={styles.editorSheet} role="dialog" aria-modal="true" aria-labelledby="ball-editor-title">
-      <ModalCloseButton onClose={onCancel} />
-      <div className={styles.sheetHandle} />
+  return <div className={presentation === "page" ? styles.editorPageShell : styles.editorBackdrop} role={presentation === "sheet" ? "presentation" : undefined}>
+    <section ref={dialogRef} tabIndex={-1} className={presentation === "page" ? styles.editorPage : styles.editorSheet} role={presentation === "sheet" ? "dialog" : undefined} aria-modal={presentation === "sheet" ? "true" : undefined} aria-labelledby="ball-editor-title">
+      {presentation === "sheet" ? <><ModalCloseButton onClose={onCancel} /><div className={styles.sheetHandle} /></> : <button type="button" className={styles.pageBack} onClick={onCancel}>← Volver a Mi Bolsa</button>}
       <h2 id="ball-editor-title">{existing ? "Cambiar mi bola" : "Elegir mi bola"}</h2>
       <p>El catálogo conserva la generación y la fuente. El color es opcional.</p>
       <div className={styles.flowProgress}>{(["brand", "model", "details"] as const).map((item, index) => <span key={item} data-active={item === step} data-complete={index < ["brand", "model", "details"].indexOf(step)} />)}</div>
@@ -489,12 +495,14 @@ type ClubDistanceEditorProps = {
   clubId: string;
   clubLabel: string;
   existing?: PlayerClubDistance | null;
+  presentation?: "sheet" | "page";
   onCancel: () => void;
-  onSave: (distance: PlayerClubDistance) => void;
+  onSave: (distance: PlayerClubDistance) => boolean | void;
 };
 
-export function ClubDistanceEditor({ userId, clubId, clubLabel, existing, onCancel, onSave }: ClubDistanceEditorProps) {
-  const dialogRef = useModalDialog(true, onCancel);
+export function ClubDistanceEditor({ userId, clubId, clubLabel, existing, presentation = "sheet", onCancel, onSave }: ClubDistanceEditorProps) {
+  const dialogRef = useModalDialog(presentation === "sheet", onCancel);
+  useLayoutEffect(() => { if (presentation === "page") window.scrollTo(0, 0); }, [presentation]);
   const [carry, setCarry] = useState(existing?.carryDistance === null || existing?.carryDistance === undefined ? "" : String(existing.carryDistance));
   const [total, setTotal] = useState(existing?.totalDistance === null || existing?.totalDistance === undefined ? "" : String(existing.totalDistance));
   const [unit, setUnit] = useState<"YD" | "M">(existing?.unit || "YD");
@@ -518,7 +526,7 @@ export function ClubDistanceEditor({ userId, clubId, clubLabel, existing, onCanc
       return;
     }
     const now = new Date().toISOString();
-    onSave({
+    const saved = onSave({
       id: existing?.id || uid("club-distance"),
       userId,
       playerClubId: clubId,
@@ -530,12 +538,12 @@ export function ClubDistanceEditor({ userId, clubId, clubLabel, existing, onCanc
       confidence: existing?.source === "MANUAL" ? existing.confidence : null,
       updatedAt: now,
     });
+    if (saved === false) setMessage("No se confirmó el guardado en este dispositivo. Vuelve a intentar.");
   }
 
-  return <div className={styles.editorBackdrop} role="presentation">
-    <section ref={dialogRef} tabIndex={-1} className={styles.editorSheet} role="dialog" aria-modal="true" aria-labelledby="distance-editor-title">
-      <ModalCloseButton onClose={onCancel} />
-      <div className={styles.sheetHandle} />
+  return <div className={presentation === "page" ? styles.editorPageShell : styles.editorBackdrop} role={presentation === "sheet" ? "presentation" : undefined}>
+    <section ref={dialogRef} tabIndex={-1} className={presentation === "page" ? styles.editorPage : styles.editorSheet} role={presentation === "sheet" ? "dialog" : undefined} aria-modal={presentation === "sheet" ? "true" : undefined} aria-labelledby="distance-editor-title">
+      {presentation === "sheet" ? <><ModalCloseButton onClose={onCancel} /><div className={styles.sheetHandle} /></> : <button type="button" className={styles.pageBack} onClick={onCancel}>← Volver a Mi Bolsa</button>}
       <h2 id="distance-editor-title">Distancia de {clubLabel}</h2>
       <p>Captura lo que conoces. Es una referencia manual y podrás corregirla cuando quieras.</p>
       <form className={styles.formGrid} onSubmit={submit} noValidate>

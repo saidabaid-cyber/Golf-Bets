@@ -134,6 +134,9 @@
   font-size: 14px;
 }
 
+.itemTitleButton { min-height: 44px; border: 0; background: transparent; padding: 3px 0; color: var(--ink); font: inherit; font-weight: 900; text-align: left; overflow-wrap: anywhere; }
+.itemTitleButton:focus-visible { outline: 3px solid #cc9f32; outline-offset: 2px; border-radius: 4px; }
+
 .badgeRow,
 .priorityList,
 .verifiedFacts {
@@ -679,6 +682,58 @@
   font-size: 11px;
   line-height: 1.5;
 }
+
+.fullPageFlow,
+.editorPageShell {
+  min-width: 0;
+  width: 100%;
+}
+
+.editorPageShell {
+  min-height: calc(100dvh - 160px);
+  background: radial-gradient(circle at 88% 0, rgba(210, 170, 63, .12), transparent 30%);
+}
+
+.editorPage,
+.flowDecision {
+  display: grid;
+  min-width: 0;
+  width: min(100%, 720px);
+  min-height: calc(100dvh - 160px);
+  align-content: start;
+  margin: 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--card);
+  padding: clamp(16px, 4vw, 26px);
+  box-shadow: 0 12px 36px rgba(20, 58, 34, .07);
+}
+
+.editorPage > h2,
+.editorPage > p { margin: 0; }
+.editorPage > h2 { margin-top: 10px; }
+.editorPage > p { margin-top: 5px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.editorPage .formActions { bottom: 0; margin-bottom: 0; padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+
+.pageBack {
+  justify-self: start;
+  min-height: 44px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--green2);
+  padding: 9px 13px;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.flowDecision { gap: 13px; }
+.flowDecision h2 { margin: 0; overflow-wrap: anywhere; color: var(--ink); font-family: Georgia, "Times New Roman", serif; font-size: clamp(26px, 6vw, 34px); line-height: 1.12; }
+.flowDecision p { max-width: 55ch; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.flowEyebrow { color: var(--green); font-size: 10px; font-weight: 900; letter-spacing: 1px; }
+.successMark { display: grid; width: 62px; height: 62px; place-items: center; border-radius: 50%; background: var(--green2); color: var(--green); font-size: 32px; font-weight: 900; }
+.flowDecisionActions { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 8px; margin-top: 12px; }
+.flowDecisionActions button { min-height: 48px; }
 
 .flowProgress { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; margin-top: 14px; }
 .flowProgress span { height: 4px; border-radius: 999px; background: #dfe6e1; }

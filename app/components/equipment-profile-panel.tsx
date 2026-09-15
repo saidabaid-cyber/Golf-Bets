@@ -38,7 +38,19 @@ type EquipmentProfilePanelProps = {
   accessToken: string | null;
   defaultHandicap: number | null;
   ballFitDefaults?: BallFitProfileDefaults;
+  onBackToProfile?: () => void;
 };
+
+type EquipmentFlowSuccess = {
+  kind: "club" | "ball" | "distance" | "delete";
+  name: string;
+  verb: "agregado" | "agregada" | "actualizado" | "actualizada" | "eliminado" | "eliminada";
+};
+
+type EquipmentDeleteIntent =
+  | { kind: "club"; club: PlayerClub; name: string }
+  | { kind: "ball"; ball: PlayerBall; name: string }
+  | { kind: "distance"; distance: PlayerClubDistance; name: string };
 
 function catalogClub(playerClub: PlayerClub, catalog: readonly GolfClubCatalog[]) {
   return playerClub.catalogClubId ? catalog.find((club) => club.id === playerClub.catalogClubId) || null : null;
@@ -74,11 +86,13 @@ function savedFitId() {
   return globalThis.crypto?.randomUUID?.() || `fit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, ballFitDefaults }: EquipmentProfilePanelProps) {
+export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, ballFitDefaults, onBackToProfile }: EquipmentProfilePanelProps) {
   const { profile, status, message, update, retry, resolveConflict, recoverLocalProfile } = useEquipmentProfile(userId, accessToken);
   const [clubEditor, setClubEditor] = useState<PlayerClub | "new" | null>(null);
   const [ballEditor, setBallEditor] = useState<PlayerBall | "new" | null>(null);
   const [distanceEditor, setDistanceEditor] = useState<{ club: PlayerClub; distance: PlayerClubDistance | null } | null>(null);
+  const [flowSuccess, setFlowSuccess] = useState<EquipmentFlowSuccess | null>(null);
+  const [deleteIntent, setDeleteIntent] = useState<EquipmentDeleteIntent | null>(null);
   const [fitOpen, setFitOpen] = useState(false);
   const [savedFitOpen, setSavedFitOpen] = useState(false);
   const fitDialogRef = useModalDialog(fitOpen, () => setFitOpen(false));
@@ -112,22 +126,29 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, ba
         : upsertPlayerClub(current, club);
       return withClub ? setEquipmentOnboardingStatus(withClub, "COMPLETED") : null;
     });
-    if (saved) setClubEditor(null);
+    if (saved) {
+      setClubEditor(null);
+      setFlowSuccess({ kind: "club", name: clubName(club, clubCatalog.items), verb: previous ? "actualizado" : "agregado" });
+    }
+    return saved;
   }
 
   function deleteClub(club: PlayerClub) {
-    if (!window.confirm(`¿Eliminar ${clubName(club, clubCatalog.items)} de tu perfil?`)) return;
-    update((current) => removePlayerClub(current, club.id));
+    setDeleteIntent({ kind: "club", club, name: clubName(club, clubCatalog.items) });
   }
 
   function saveDistance(distance: PlayerClubDistance) {
     const saved = update((current) => upsertPlayerClubDistance(current, distance));
-    if (saved) setDistanceEditor(null);
+    if (saved) {
+      const previous = distanceEditor?.distance;
+      setDistanceEditor(null);
+      setFlowSuccess({ kind: "distance", name: distanceEditor ? `Distancia de ${clubName(distanceEditor.club, clubCatalog.items)}` : "Distancia", verb: previous ? "actualizada" : "agregada" });
+    }
+    return saved;
   }
 
   function deleteDistance(distance: PlayerClubDistance, club: PlayerClub) {
-    if (!window.confirm(`¿Borrar la distancia guardada de ${clubName(club, clubCatalog.items)}?`)) return;
-    update((current) => removePlayerClubDistance(current, distance.id));
+    setDeleteIntent({ kind: "distance", distance, name: `distancia de ${clubName(club, clubCatalog.items)}` });
   }
 
   function saveBall(ball: PlayerBall) {
@@ -138,12 +159,28 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, ba
         : upsertPlayerBall(current, ball);
       return withBall ? setBallOnboardingStatus(withBall, "COMPLETED") : null;
     });
-    if (saved) setBallEditor(null);
+    if (saved) {
+      setBallEditor(null);
+      setFlowSuccess({ kind: "ball", name: `${ball.ballBrand} ${ball.ballModel}`, verb: previous ? "actualizada" : "agregada" });
+    }
+    return saved;
   }
 
   function deleteBall(ball: PlayerBall) {
-    if (!window.confirm(`¿Eliminar ${ball.ballBrand} ${ball.ballModel} de tu perfil?`)) return;
-    update((current) => removePlayerBall(current, ball.id));
+    setDeleteIntent({ kind: "ball", ball, name: `${ball.ballBrand} ${ball.ballModel}` });
+  }
+
+  function confirmDelete() {
+    if (!deleteIntent) return;
+    const saved = update((current) => {
+      if (deleteIntent.kind === "club") return removePlayerClub(current, deleteIntent.club.id);
+      if (deleteIntent.kind === "ball") return removePlayerBall(current, deleteIntent.ball.id);
+      return removePlayerClubDistance(current, deleteIntent.distance.id);
+    });
+    if (saved) {
+      setFlowSuccess({ kind: "delete", name: deleteIntent.name, verb: deleteIntent.kind === "club" ? "eliminado" : "eliminada" });
+      setDeleteIntent(null);
+    }
   }
 
   function completeFit(result: BallFitResult, input: BallFitInput) {
@@ -163,6 +200,35 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, ba
       setSavedFitOpen(false);
     }
   }
+
+  if (clubEditor) return <div className={styles.fullPageFlow} data-equipment-screen="club-editor">
+    <ClubEditor userId={userId} catalog={clubCatalog.items} shafts={shaftCatalog.items} existing={clubEditor === "new" ? null : clubEditor} presentation="page" onSelectBall={() => { setClubEditor(null); setBallEditor("new"); }} onCancel={() => setClubEditor(null)} onSave={saveClub} />
+  </div>;
+  if (ballEditor) return <div className={styles.fullPageFlow} data-equipment-screen="ball-editor">
+    <BallEditor userId={userId} catalog={ballCatalog.items} existing={ballEditor === "new" ? null : ballEditor} presentation="page" onCancel={() => setBallEditor(null)} onSave={saveBall} />
+  </div>;
+  if (distanceEditor) return <div className={styles.fullPageFlow} data-equipment-screen="distance-editor">
+    <ClubDistanceEditor userId={userId} clubId={distanceEditor.club.id} clubLabel={clubName(distanceEditor.club, clubCatalog.items)} existing={distanceEditor.distance} presentation="page" onCancel={() => setDistanceEditor(null)} onSave={saveDistance} />
+  </div>;
+  if (deleteIntent) return <section className={styles.flowDecision} data-equipment-screen="delete-confirm" aria-labelledby="equipment-delete-title">
+    <button type="button" className={styles.pageBack} onClick={() => setDeleteIntent(null)}>← Volver a Mi Bolsa</button>
+    <span className={styles.flowEyebrow}>MI BOLSA · CONFIRMAR</span>
+    <h2 id="equipment-delete-title">¿Eliminar {deleteIntent.name}?</h2>
+    <p>Se quitará de tu perfil de equipo. {deleteIntent.kind === "club" && "Sus distancias manuales en Mi Bolsa también se quitarán. "}Las rondas históricas conservan sus propios snapshots y no cambian.</p>
+    <div className={styles.flowDecisionActions}><button type="button" className="secondary" onClick={() => setDeleteIntent(null)}>Cancelar</button><button type="button" className={styles.dangerButton} onClick={confirmDelete}>Eliminar de Mi Bolsa</button></div>
+    {status === "error" && <p role="alert" className={styles.errorState}>{message || "No se confirmó el borrado."}</p>}
+  </section>;
+  if (flowSuccess) return <section className={styles.flowDecision} data-equipment-screen="success" aria-labelledby="equipment-success-title">
+    <span className={styles.successMark} aria-hidden="true">✓</span>
+    <span className={styles.flowEyebrow}>MI BOLSA · GUARDADO</span>
+    <h2 id="equipment-success-title">{flowSuccess.name} {flowSuccess.verb}</h2>
+    <p>El cambio quedó guardado en este dispositivo. {equipmentStatusLabel(status)}.</p>
+    <div className={styles.flowDecisionActions}>
+      <button type="button" className="primary" onClick={() => { setFlowSuccess(null); setClubEditor("new"); }}>Agregar otro</button>
+      <button type="button" className="secondary" onClick={() => setFlowSuccess(null)}>Volver a Mi Bolsa</button>
+      {onBackToProfile && <button type="button" className="secondary" onClick={onBackToProfile}>Volver a Perfil</button>}
+    </div>
+  </section>;
 
   return <div className={styles.stack}>
     <section className={`card ${styles.section}`}>
@@ -218,9 +284,6 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, ba
       </div>}
     </div>
 
-    {clubEditor && <ClubEditor userId={userId} catalog={clubCatalog.items} shafts={shaftCatalog.items} existing={clubEditor === "new" ? null : clubEditor} onCancel={() => setClubEditor(null)} onSave={saveClub} />}
-    {ballEditor && <BallEditor userId={userId} catalog={ballCatalog.items} existing={ballEditor === "new" ? null : ballEditor} onCancel={() => setBallEditor(null)} onSave={saveBall} />}
-    {distanceEditor && <ClubDistanceEditor userId={userId} clubId={distanceEditor.club.id} clubLabel={clubName(distanceEditor.club, clubCatalog.items)} existing={distanceEditor.distance} onCancel={() => setDistanceEditor(null)} onSave={saveDistance} />}
     {fitOpen && <div className={styles.editorBackdrop} role="presentation"><section ref={fitDialogRef} tabIndex={-1} className={styles.editorSheet} role="dialog" aria-modal="true" aria-label="The Backyard Ball Fit"><ModalCloseButton onClose={() => setFitOpen(false)} /><div className={styles.sheetHandle} /><BallFitWizard userId={userId} accessToken={accessToken} defaultHandicap={defaultHandicap} profileDefaults={ballFitDefaults} currentBall={currentBall} catalog={ballCatalog.items} onCancel={() => setFitOpen(false)} onComplete={completeFit} /></section></div>}
     {savedFitOpen && restoredFit && <div className={styles.editorBackdrop} role="presentation"><section ref={savedFitDialogRef} tabIndex={-1} className={styles.editorSheet} role="dialog" aria-modal="true" aria-label="Resultado guardado de The Backyard Ball Fit"><ModalCloseButton onClose={() => setSavedFitOpen(false)} /><div className={styles.sheetHandle} /><div className={styles.wizardHeader}><div><div className="eyebrow">RESULTADO GUARDADO</div><h2>Tu mejor grupo de bolas</h2></div></div><BallFitResults result={restoredFit.result} catalog={ballCatalog.items} current={restoredFit.input.currentBallId ? ballCatalog.items.find((ball) => ball.id === restoredFit.input.currentBallId) || null : null} /></section></div>}
   </div>;
@@ -230,7 +293,7 @@ function ClubItem({ club, catalog: catalogItems, shafts, onEdit, onToggle, onDel
   const catalog = catalogClub(club, catalogItems);
   const facts = clubFacts(club, shafts);
   return <article className={`${styles.equipmentItem} ${club.isCurrent ? "" : styles.archived}`}>
-    <div className={styles.itemHeader}><div className={styles.itemIdentity}><span className={styles.categoryIcon}>{CLUB_CATEGORY_ICONS[club.category]}</span><div><h3>{clubName(club, catalogItems)}</h3><p>{catalog?.generation || club.generation || CLUB_CATEGORY_LABELS[club.category]}</p></div></div>{club.isCurrent && <span className={styles.currentBadge}>Actual</span>}</div>
+    <div className={styles.itemHeader}><div className={styles.itemIdentity}><span className={styles.categoryIcon}>{CLUB_CATEGORY_ICONS[club.category]}</span><div><h3><button type="button" className={styles.itemTitleButton} onClick={onEdit}>{clubName(club, catalogItems)}</button></h3><p>{catalog?.generation || club.generation || CLUB_CATEGORY_LABELS[club.category]}</p></div></div>{club.isCurrent && <span className={styles.currentBadge}>Actual</span>}</div>
     <div className={styles.badgeRow}>{facts.map((value) => <span className={styles.badge} key={value}>{value}</span>)}</div>
     {club.notes && <p className={styles.subtle}>{club.notes}</p>}
     <div className={styles.itemActions}><button type="button" className="secondary" onClick={onEdit}>Editar</button><button type="button" className="secondary" onClick={onToggle}>{club.isCurrent ? "Mover a anterior" : "Marcar actual"}</button><button type="button" className={styles.dangerButton} onClick={onDelete}>Eliminar</button></div>
