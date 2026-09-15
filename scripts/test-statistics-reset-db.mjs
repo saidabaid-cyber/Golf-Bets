@@ -53,6 +53,9 @@ try {
       id text primary key, owner_id uuid, event_name text,
       metadata jsonb, occurred_at timestamptz
     );
+    create table public.profiles (id uuid primary key references auth.users(id), display_name text);
+    create table public.frequent_groups_cloud (id text primary key, owner_id uuid references auth.users(id), payload jsonb);
+    create table public.rounds_cloud (id text primary key, owner_id uuid references auth.users(id), payload jsonb);
     create function public.reset_my_statistics(text) returns timestamptz
       language sql as $$select now()$$;
     insert into auth.users(id) values ('${OWNER}'), ('${OTHER}');
@@ -72,6 +75,7 @@ try {
   results.push("strong confirmation; legacy RPC/direct marker inserts revoked");
 
   const first = await call(FIRST);
+  assert.ok(Number.isFinite(first.valueOf()), "zero-stat account can persist its first reset without history or aggregate rows");
   const duplicate = await call(FIRST);
   assert.equal(first.valueOf(), duplicate.valueOf());
   await admin();
@@ -106,6 +110,40 @@ try {
   assert.equal(await count("user_statistics_reset_requests"), 2);
   assert.equal(await count("product_usage_events_v2"), 2);
   results.push("transaction rollback preserves idempotency/audit consistency");
+
+  // A second QA user has captured rounds and private account/group data.
+  // RESET_FROM_DATE changes only the authoritative ledger; history stays byte
+  // equivalent and new completed rounds can feed fresh derived statistics.
+  await db.exec(`
+    insert into public.profiles values ('${OTHER}', 'Stats QA');
+    insert into public.frequent_groups_cloud values ('qa-group', '${OTHER}', '{"name":"QA group","members":["player-qa"]}');
+    insert into public.rounds_cloud values ('qa-history', '${OTHER}', '{"id":"qa-history","completedAt":"2026-01-01T12:00:00.000Z","scores":{"1":{"player-qa":4}},"putts":{"1":{"player-qa":2}},"netResult":100}');
+  `);
+  const historyBefore = (await query("select payload from public.rounds_cloud where id = 'qa-history'")).rows[0].payload;
+  await role(OTHER);
+  const populatedReset = await call(FIRST);
+  const ownLedger = (await query("select reset_at from public.user_statistics_resets")).rows;
+  assert.equal(ownLedger.length, 1);
+  assert.equal(ownLedger[0].reset_at.valueOf(), populatedReset.valueOf());
+  await admin();
+  assert.equal(Number((await query("select count(*) as n from auth.users")).rows[0].n), 2, "accounts remain");
+  assert.equal(await count("profiles"), 1);
+  assert.equal(await count("frequent_groups_cloud"), 1);
+  assert.deepEqual((await query("select payload from public.rounds_cloud where id = 'qa-history'")).rows[0].payload, historyBefore);
+  assert.ok(Date.parse(historyBefore.completedAt) < populatedReset.valueOf());
+  await db.exec(`insert into public.rounds_cloud values ('qa-new', '${OTHER}', jsonb_build_object(
+    'id','qa-new','completedAt',to_char('${populatedReset.toISOString()}'::timestamptz + interval '1 day','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+    'scores',jsonb_build_object('1',jsonb_build_object('player-qa',5))
+  ));`);
+  await role(OTHER); // new request context simulates a subsequent authenticated read
+  const reloadedReset = (await query("select reset_at from public.user_statistics_resets")).rows[0].reset_at;
+  assert.equal(reloadedReset.valueOf(), populatedReset.valueOf());
+  await admin();
+  const sportEligible = (await query(`select id from public.rounds_cloud
+    where owner_id = '${OTHER}' and (payload->>'completedAt')::timestamptz > '${reloadedReset.toISOString()}'::timestamptz`)).rows;
+  assert.deepEqual(sportEligible.map(item => item.id), ["qa-new"]);
+  assert.equal(await count("rounds_cloud"), 2, "old history and new round both remain stored");
+  results.push("empty account reset; populated account reset; authoritative reload; account/group/history preservation; new-round cutoff");
 
   // A single PGlite connection serializes statements; true multi-connection
   // race/load testing remains required against an isolated Preview Postgres.

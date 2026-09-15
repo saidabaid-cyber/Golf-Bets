@@ -12,6 +12,7 @@ import {
   roundsEligibleForStatistics,
 } from "../lib/statistics-reset";
 import { buildGolfInsights } from "../lib/golf-insights";
+import { executeStatisticsReset, statisticsResetStatus, type StatisticsResetGateway } from "../lib/statistics-reset-execution";
 import type { Course, RoundSnapshot } from "../lib/types";
 
 const round = (id: string, completedAt: string) => ({ id, completedAt, date: completedAt.slice(0, 10) }) as RoundSnapshot;
@@ -144,4 +145,34 @@ test("timeout o corte de red no se interpreta como ausencia de reset", async () 
 test("respuestas de reset malformadas se rechazan", () => {
   assert.equal(parseStatisticsReset({ resetAt: "bad", strategy: "RESET_FROM_DATE" }), null);
   assert.equal(parseStatisticsReset({ resetAt: "2026-09-13T20:00:00.000Z", strategy: "DELETE_ROUNDS" }), null);
+});
+
+test("reset confirmado, reload sin caché local y nueva ronda mantienen el límite del servidor", async () => {
+  const boundary = "2026-09-15T13:00:00.000Z";
+  let saved: string | null = null;
+  const gateway: StatisticsResetGateway = {
+    canonical: async () => ({ data: saved ? { reset_at: saved, strategy: "RESET_FROM_DATE" } : null, error: null }),
+    request: async () => ({ data: saved ? { reset_at: saved } : null, error: null }),
+    execute: async () => { saved = boundary; return { data: boundary, error: null }; },
+  };
+  const history = [round("old", "2026-09-14T18:00:00.000Z")];
+  const historicalBefore = JSON.stringify(history);
+  const requestId = "11111111-1111-4111-8111-111111111111";
+  const reset = await requestStatisticsReset("verified-token", "ELIMINAR", async (_request, init) => {
+    const result = await executeStatisticsReset(JSON.parse(String(init?.body)), gateway, "owner");
+    return Response.json(result.body, { status: result.status });
+  }, requestId);
+  assert.deepEqual(roundsEligibleForStatistics(history, reset.resetAt), []);
+  assert.equal(JSON.stringify(history), historicalBefore);
+  // No browser cache is provided: this is a fresh authoritative GET after reload.
+  const reloaded = await fetchStatisticsResetStatus("verified-token", async () => {
+    const result = await statisticsResetStatus(gateway, "owner");
+    return Response.json(result.body, { status: result.status });
+  });
+  assert.equal(reloaded.state, "ready");
+  if (reloaded.state !== "ready" || !reloaded.reset) throw new Error("reset did not persist");
+  assert.deepEqual(roundsEligibleForStatistics(history, reloaded.reset.resetAt), []);
+  history.push(round("new", "2026-09-16T18:00:00.000Z"));
+  assert.deepEqual(roundsEligibleForStatistics(history, reloaded.reset.resetAt).map(item => item.id), ["new"]);
+  assert.deepEqual(history.map(item => item.id), ["old", "new"]);
 });

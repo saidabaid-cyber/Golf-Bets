@@ -24,16 +24,18 @@ export function parseStatisticsResetRequest(value: unknown) {
 }
 
 function schemaPending(error: StatisticsStoreError | null) {
-  return ["42P01", "42703", "PGRST202", "PGRST204", "PGRST205"].includes(error?.code || "")
-    || /reset_my_statistics|user_statistics_resets|user_statistics_reset_requests|schema cache/i.test(error?.message || "");
+  if (error?.code) return ["42P01", "42703", "PGRST202", "PGRST204", "PGRST205"].includes(error.code);
+  return /schema cache|(?:relation|function).*(?:does not exist|could not find)/i.test(error?.message || "");
 }
 
 function unavailable(error: StatisticsStoreError | null, attempted: boolean): StatisticsApiResult {
   return schemaPending(error)
-    ? { status: 503, body: { code: "PENDING_CONTROLLED_DB_APPLY", error: "El reset transaccional requiere las migraciones aditivas en una base Preview aislada.", ...(attempted ? {} : { noDataDeleted: true }) } }
+    ? { status: 503, body: { code: "PENDING_CONTROLLED_DB_APPLY", error: attempted
+      ? "No pudimos confirmar el reinicio de tus estadísticas. Reintenta la misma solicitud; tu histórico se conserva."
+      : "El reinicio de estadísticas no está disponible en este momento. Intenta de nuevo más tarde; tu histórico se conserva.", ...(attempted ? {} : { noDataDeleted: true }) } }
     : { status: 503, body: { code: attempted ? "RESET_CONFIRMATION_PENDING" : "STATISTICS_STORE_UNAVAILABLE", error: attempted
       ? "No pude confirmar el reset. Reintenta con la misma solicitud; tu histórico no se borró."
-      : "No pude consultar el estado autoritativo de tus estadísticas." } };
+      : "No pudimos consultar tus estadísticas. Intenta de nuevo cuando haya conexión." } };
 }
 
 function canonicalRecord(value: { reset_at: string; strategy: string } | null) {
@@ -47,7 +49,7 @@ export async function statisticsResetStatus(gateway: StatisticsResetGateway, use
   catch { return unavailable(null, false); }
   if (result.error) return unavailable(result.error, false);
   const reset = canonicalRecord(result.data);
-  if (result.data && !reset) return { status: 503, body: { code: "STATISTICS_STORE_INVALID", error: "El estado de reset no pasó validación." } };
+  if (result.data && !reset) return { status: 503, body: { code: "STATISTICS_STORE_INVALID", error: "No pudimos confirmar el estado de tus estadísticas. Intenta de nuevo; tu histórico se conserva." } };
   return { status: 200, body: reset || { resetAt: null, strategy: STATISTICS_RESET_STRATEGY } };
 }
 
@@ -73,7 +75,7 @@ export async function executeStatisticsReset(value: unknown, gateway: Statistics
   if (state.error) return unavailable(state.error, false);
   if (prior.data) {
     const completed = confirmed(prior.data, state.data, body.requestId);
-    return completed || { status: 503, body: { code: "RESET_CONFIRMATION_PENDING", error: "La solicitud existe, pero el límite de estadísticas aún no pudo confirmarse." } };
+    return completed || { status: 503, body: { code: "RESET_CONFIRMATION_PENDING", error: "No pudimos confirmar el reinicio de tus estadísticas. Reintenta la misma solicitud; tu histórico se conserva." } };
   }
 
   let rpc: StatisticsQuery<unknown> | null = null;

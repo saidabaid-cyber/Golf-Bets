@@ -50,7 +50,40 @@ test("stats reset: un esquema ausente no ejecuta ningún RPC ni afirma reset", a
   assert.equal(result.status, 503);
   assert.equal(result.body.code, "PENDING_CONTROLLED_DB_APPLY");
   assert.equal(result.body.noDataDeleted, true);
+  assert.doesNotMatch(String(result.body.error), /migracion|migración|transaccional|Preview|schema|PGRST/i);
   assert.equal(executions, 0);
+});
+
+test("stats reset: cuenta nueva sin estadísticas escribe y vuelve a leer su límite", async () => {
+  const fixture = inMemoryGateway();
+  assert.deepEqual((await statisticsResetStatus(fixture.gateway, OWNER)).body, { resetAt: null, strategy: "RESET_FROM_DATE" });
+  const reset = await executeStatisticsReset(body(), fixture.gateway, OWNER);
+  assert.equal(reset.status, 200);
+  assert.equal(reset.body.resetAt, firstTime);
+  assert.deepEqual((await statisticsResetStatus(fixture.gateway, OWNER)).body, { resetAt: firstTime, strategy: "RESET_FROM_DATE" });
+  assert.equal((await executeStatisticsReset(body(), fixture.gateway, OWNER)).status, 200);
+  assert.equal(fixture.rpcCalls(), 1, "no stats count or aggregate row is required to complete a reset");
+});
+
+test("stats reset: errores de permisos no se confunden con migración ni revelan SQL", async () => {
+  const fixture = inMemoryGateway();
+  fixture.gateway.canonical = async () => ({ data: null, error: { code: "42501", message: "permission denied for user_statistics_resets" } });
+  const result = await executeStatisticsReset(body(), fixture.gateway, OWNER);
+  assert.equal(result.status, 503);
+  assert.equal(result.body.code, "STATISTICS_STORE_UNAVAILABLE");
+  assert.doesNotMatch(String(result.body.error), /permission|user_statistics|42501|autoritativo/);
+  assert.equal(fixture.rpcCalls(), 0);
+});
+
+test("stats reset: mutation route is Preview isolated while status lookup remains read-only", () => {
+  const source = readFileSync("app/api/account/statistics/route.ts", "utf8");
+  const deletion = source.slice(source.indexOf("export async function DELETE"));
+  assert.ok(deletion.indexOf("isolatedPreviewDatabaseEnabled()") < deletion.indexOf("executeStatisticsReset("));
+  assert.match(deletion, /code: "PREVIEW_DATABASE_REQUIRED"/);
+  const lookup = source.slice(source.indexOf("export async function GET"), source.indexOf("export async function DELETE"));
+  assert.doesNotMatch(lookup, /executeStatisticsReset/);
+  assert.match(source, /console\.warn\("\[statistics-reset\]", \{ operation, code: result\.body\.code \}\)/);
+  assert.doesNotMatch(source, /console\.(?:warn|error)\([^\n]*(?:userId|token|read\.value)/);
 });
 
 test("stats reset: servidor no acepta owner payload, confirmación floja ni requestId inválido", async () => {
