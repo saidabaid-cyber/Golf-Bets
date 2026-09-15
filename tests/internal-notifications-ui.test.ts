@@ -3,7 +3,7 @@ import test from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { InternalNotificationList } from "../app/components/social-feed";
+import { InternalNotificationList } from "../app/components/internal-notification-list";
 import type { InternalNotification } from "../lib/internal-notifications";
 
 function notice(overrides: Partial<InternalNotification>): InternalNotification {

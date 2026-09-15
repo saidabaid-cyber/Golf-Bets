@@ -14,6 +14,8 @@ import {
   type InternalNotificationReadState,
 } from "../../lib/internal-notifications";
 import { SocialConnectionsPanel } from "./social-connections-panel";
+import { CloudSocialActivity, CloudSocialNotifications } from "./cloud-social-activity";
+import { InternalNotificationList } from "./internal-notification-list";
 
 export type SocialFeedProps = {
   initialView?: "activity" | "friends" | "notifications";
@@ -48,40 +50,6 @@ function openActivity(item: PersonalActivity, onOpenRound: (id: string) => void,
 
 function canOpenActivity(item: PersonalActivity) {
   return (item.kind === "round" && Boolean(item.roundId)) || (item.kind === "group" && Boolean(item.groupId));
-}
-
-function InternalNotificationContent({ item }: { item: InternalNotification }) {
-  return <>
-    <span className="internalNotificationDot" aria-hidden="true" />
-    <div><b>{item.title}</b><small>{item.detail}</small><time dateTime={item.occurredAt}>{activityDate(item.occurredAt)}</time></div>
-    {canOpenActivity(item) && <strong className="betaFeedChevron" aria-hidden="true">›</strong>}
-  </>;
-}
-
-type InternalNotificationListProps = {
-  notifications: InternalNotification[];
-  onOpen: (item: InternalNotification) => void;
-  onReadChange: (item: InternalNotification, read: boolean) => void;
-};
-
-export function InternalNotificationList({ notifications, onOpen, onReadChange }: InternalNotificationListProps) {
-  return <section className="card" aria-label="Avisos internos"><ol className="internalNotificationList">
-    {notifications.map((item) => <li key={item.eventKey}>
-      {canOpenActivity(item)
-        ? <button type="button" className={`internalNotificationItem ${item.unread ? "unread" : ""}`} onClick={() => onOpen(item)} aria-label={`${item.unread ? "Nuevo: " : ""}${item.title} Abrir`}><InternalNotificationContent item={item} /></button>
-        : <article className={`internalNotificationItem ${item.unread ? "unread" : ""}`}><InternalNotificationContent item={item} /></article>}
-      <div className="internalNotificationActions">
-        <button
-          type="button"
-          className="secondary"
-          onClick={() => onReadChange(item, item.unread)}
-          aria-label={`Marcar “${item.title}” como ${item.unread ? "leído" : "no leído"}`}
-        >
-          {item.unread ? "Marcar como leído" : "Marcar como no leído"}
-        </button>
-      </div>
-    </li>)}
-  </ol></section>;
 }
 
 export function SocialFeed({ initialView = "activity", activity, identityUserId, accessToken, knownProfiles, notificationsEnabled, onNotificationsEnabledChange, onOpenRound, onOpenGroup, onCreateRound, onOpenGroups }: SocialFeedProps) {
@@ -151,9 +119,9 @@ export function SocialFeed({ initialView = "activity", activity, identityUserId,
   }
 
   return <section className="betaSocialScreen" aria-labelledby="beta-social-title">
-    <section className="hero betaSocialHero"><div><span className="eyebrow">THE BACKYARD · SOCIAL</span><h1 id="beta-social-title">Social</h1><p>Tu actividad y avisos privados, basados sólo en datos guardados.</p></div></section>
+    <section className="hero betaSocialHero"><div><span className="eyebrow">THE BACKYARD · SOCIAL</span><h1 id="beta-social-title">Social</h1><p>Rondas, logros y compañeros. Tú eliges qué compartir.</p></div></section>
 
-    <aside className="betaPrivacyNotice"><span aria-hidden="true">●</span><p><b>Visible sólo en tu espacio.</b> Esta versión no publica actividad ni resultados a otros usuarios.</p></aside>
+    <aside className="betaPrivacyNotice"><span aria-hidden="true">●</span><p><b>Privado por defecto.</b> Las publicaciones respetan tus preferencias y la privacidad del perfil. La actividad local sigue visible sólo en tu espacio.</p></aside>
 
     <nav className="socialViewTabs" aria-label="Vistas de Social">
       <button type="button" className={`socialViewTab ${view === "activity" ? "active" : ""}`} aria-pressed={view === "activity"} onClick={() => setView("activity")}>Actividad</button>
@@ -162,6 +130,9 @@ export function SocialFeed({ initialView = "activity", activity, identityUserId,
     </nav>
 
     {view === "friends" && <SocialConnectionsPanel ownerId={identityUserId} accessToken={accessToken} directory={knownProfiles} />}
+
+    {view === "activity" && <CloudSocialActivity key={identityUserId} viewerId={identityUserId} accessToken={accessToken} />}
+    {view === "notifications" && <CloudSocialNotifications key={identityUserId} viewerId={identityUserId} accessToken={accessToken} />}
 
     {view === "activity" && (activity.length ? <section className="card betaFeedCard" aria-label="Actividad reciente">
       <ol className="betaFeedList">
