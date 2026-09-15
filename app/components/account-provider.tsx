@@ -31,6 +31,7 @@ import {
   parseLegalAcceptances,
   profileHandicapInput,
   readOfflineAuthenticatedProfile,
+  safeProfileAvatarValue,
   usernameFromEmail,
   validateProfileAvatarUrl,
   validateProfileDraft,
@@ -51,6 +52,10 @@ import type { AuthProviderStatus } from "../../lib/auth-provider-status";
 import { cloudIssueFromError, cloudIssuePriority, type CloudIssue, type CloudIssueDomain } from "../../lib/cloud-issues";
 import { BrandLockup } from "./brand-lockup";
 import { ProfileImagePicker } from "./profile-image-picker";
+import { ProfileLocationPicker } from "./profile-location-picker";
+import { normalizeProfileLocation, validateProfileLocation } from "../../lib/profile-geography";
+import { parseStoredProfileLocation, readProfileLocationMetadata, PROFILE_LOCATION_METADATA_KEY } from "../../lib/profile-location-sync";
+import { syncExistingSocialProfileAvatar } from "../../lib/profile-avatar-sync";
 import { GhinPlaceholder } from "./ghin-placeholder";
 import { BettingConsentDialog } from "./betting-consent-dialog";
 import { persistBettingDataConsent } from "../../lib/betting-consent";
@@ -95,7 +100,7 @@ const AccountContext = createContext<AccountContextValue | null>(null);
 function profileCachePayload(profile: BackyardProfile) {
   const {
     userId, displayName, email, avatarUrl, defaultHandicap, givenName, familyName,
-    username, city, state, country, homeClub, homeClubId, preferredTee, handedness,
+    username, city, state, stateCode, country, countryCode, locationUpdatedAt, homeClub, homeClubId, preferredTee, handedness,
     typicalScore, driverDistanceYards, driverSwingSpeedBand, usualTrajectory,
     shotTendency, greenSpeed, gamePriority, priceImportance, golfProfileUpdatedAt,
     improvementGoals, primaryGoals, primaryGoal, targetHandicap, planId, ghinLinkStatus,
@@ -103,7 +108,7 @@ function profileCachePayload(profile: BackyardProfile) {
   } = profile;
   return {
     userId, displayName, email, avatarUrl, defaultHandicap, givenName, familyName,
-    username, city, state, country, homeClub, homeClubId, preferredTee, handedness,
+    username, city, state, stateCode, country, countryCode, locationUpdatedAt, homeClub, homeClubId, preferredTee, handedness,
     typicalScore, driverDistanceYards, driverSwingSpeedBand, usualTrajectory,
     shotTendency, greenSpeed, gamePriority, priceImportance, golfProfileUpdatedAt,
     improvementGoals, primaryGoals, primaryGoal, targetHandicap, planId, ghinLinkStatus,
@@ -119,20 +124,26 @@ export function useBackyardAccount() {
 
 function profileFromUser(user: User): BackyardProfile {
   const email = user.email || "";
+  const location = parseStoredProfileLocation(user.user_metadata?.[PROFILE_LOCATION_METADATA_KEY]);
   const base = {
     userId: user.id,
     // New accounts explicitly capture their golfer name. An email/username is
     // never silently promoted to the visible name.
     displayName: "",
     email,
-    avatarUrl: String(user.user_metadata?.avatar_url || user.user_metadata?.picture || ""),
+    avatarUrl: safeProfileAvatarValue(user.user_metadata?.avatar_url || user.user_metadata?.picture),
     defaultHandicap: typeof user.user_metadata?.default_handicap === "number" ? clampBackyardHandicap(user.user_metadata.default_handicap) : null,
     ...emptyBackyardProfileDetails(),
+    ...(location ? { ...normalizeProfileLocation(location), locationUpdatedAt: location.updatedAt } : {}),
     username: String(user.user_metadata?.username || usernameFromEmail(email)),
   };
   try {
     const cached = JSON.parse(localStorage.getItem(`backyard-profile-cache-v1:${user.id}`) || "null");
-    return normalizeBackyardProfileCache(cached, base);
+    const restored = normalizeBackyardProfileCache(cached, base);
+    if (location && !readPendingProfileWrite(localStorage, user.id)?.profile.location && Date.parse(location.updatedAt) > (Date.parse(restored.locationUpdatedAt || "") || 0)) {
+      return { ...restored, ...normalizeProfileLocation(location), locationUpdatedAt: location.updatedAt };
+    }
+    return restored;
   } catch { return base; }
 }
 
@@ -333,20 +344,24 @@ function ProfileSetupScreen({ identity, onSave, onBack }: {
 }) {
   const [givenName, setGivenName] = useState(identity.givenName || "");
   const [familyName, setFamilyName] = useState(identity.familyName || "");
-  const [country, setCountry] = useState(identity.country || "México");
+  const [location, setLocation] = useState(() => normalizeProfileLocation(identity.country || identity.countryCode ? identity : { countryCode: "MX" }));
   const [city, setCity] = useState(identity.city || "");
   const [handedness, setHandedness] = useState<"right" | "left">(identity.handedness === "left" ? "left" : "right");
   const [avatarUrl, setAvatarUrl] = useState(identity.avatarUrl || "");
+  const [avatarBusy, setAvatarBusy] = useState(false);
   const [handicap, setHandicap] = useState(profileHandicapInput(identity.defaultHandicap));
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (avatarBusy) return;
     const displayName = [givenName.trim(), familyName.trim()].filter(Boolean).join(" ");
     const validation = validateProfileDraft(displayName, handicap);
     if (!validation.ok) { setMessage(validation.message); return; }
     const avatarValidation = validateProfileAvatarUrl(avatarUrl);
     if (!avatarValidation.ok) { setMessage(avatarValidation.message); return; }
+    const locationValidation = validateProfileLocation(location);
+    if (!locationValidation.valid) { setMessage(locationValidation.errors.country || locationValidation.errors.state || "Revisa tu país y región."); return; }
     setBusy(true); setMessage("");
     try { await onSave({
       displayName: validation.displayName,
@@ -354,7 +369,7 @@ function ProfileSetupScreen({ identity, onSave, onBack }: {
       avatarUrl: avatarValidation.avatarUrl,
       givenName: givenName.trim(),
       familyName: familyName.trim(),
-      country: country.trim(),
+      ...location,
       city: city.trim(),
       handedness,
       golfProfileUpdatedAt: new Date().toISOString(),
@@ -370,15 +385,16 @@ function ProfileSetupScreen({ identity, onSave, onBack }: {
     <form className="profileSetupForm" onSubmit={saveProfile} noValidate>
       <div className="grid2"><label htmlFor="profile-setup-given">Nombre<input id="profile-setup-given" autoComplete="given-name" enterKeyHint="next" value={givenName} onChange={(event) => setGivenName(event.target.value)} placeholder="Tu nombre" /></label><label htmlFor="profile-setup-family">Apellidos<input id="profile-setup-family" autoComplete="family-name" enterKeyHint="next" value={familyName} onChange={(event) => setFamilyName(event.target.value)} placeholder="Tus apellidos" /></label></div>
       <label>Foto / avatar opcional</label>
-      <ProfileImagePicker value={avatarUrl} onChange={setAvatarUrl} />
-      <div className="grid2"><label htmlFor="profile-setup-country">País<input id="profile-setup-country" autoComplete="country-name" value={country} onChange={(event) => setCountry(event.target.value)} placeholder="México" /></label><label htmlFor="profile-setup-city">Ciudad opcional<input id="profile-setup-city" autoComplete="address-level2" value={city} onChange={(event) => setCity(event.target.value)} placeholder="Puebla" /></label></div>
+      <ProfileImagePicker value={avatarUrl} onChange={setAvatarUrl} onBusyChange={setAvatarBusy} />
+      <ProfileLocationPicker value={location} onChange={setLocation} />
+      <label htmlFor="profile-setup-city">Ciudad opcional<input id="profile-setup-city" autoComplete="address-level2" value={city} onChange={(event) => setCity(event.target.value)} placeholder="Puebla" /></label>
       <label htmlFor="profile-setup-hcp">HCP index</label>
       <input id="profile-setup-hcp" type="text" inputMode="text" enterKeyHint="done" autoComplete="off" value={handicap} onChange={(event) => setHandicap(event.target.value)} placeholder="Ej. 8.4 o +1.2" aria-describedby="profile-setup-hcp-help" />
       <GhinPlaceholder />
       <small id="profile-setup-hcp-help" className="profileFieldHelp">Ingresa tu HCP manual (máximo 36) o déjalo vacío si no tienes. Vincular GHIN estará disponible sólo mediante una integración oficial.</small>
       <fieldset className="handednessChoice"><legend>Mano dominante</legend><label><input type="radio" name="handedness" checked={handedness === "right"} onChange={() => setHandedness("right")} />Derecha</label><label><input type="radio" name="handedness" checked={handedness === "left"} onChange={() => setHandedness("left")} />Izquierda</label></fieldset>
       {message && <div className="accessMessage" role="alert">{message}</div>}
-      <button type="submit" className="primary big" disabled={busy}>{busy ? "Guardando…" : "Guardar y continuar"}</button>
+      <button type="submit" className="primary big" disabled={busy || avatarBusy}>{busy ? "Guardando…" : avatarBusy ? "Preparando imagen…" : "Guardar y continuar"}</button>
     </form>
     <button className="textButton" disabled={busy} onClick={onBack}>← Volver al acceso</button>
   </section></main>;
@@ -696,8 +712,14 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     const pendingProfile = readPendingProfileWrite(localStorage, authenticatedUserId);
     const pendingProfileAttempt = pendingProfile
       ? profileWriteCoordinator.run(async () => {
-          const saved = await saveCloudProfile(supabase, authenticatedUserId, pendingProfile.profile, pendingProfile.updatedAt);
-          if (mounted && activeUserId.current === authenticatedUserId) {
+          // Auth metadata emits USER_UPDATED while a profile save is in flight.
+          // A queued reload must not replay a mutation already acknowledged.
+          const currentPending = readPendingProfileWrite(localStorage, authenticatedUserId);
+          if (!currentPending || currentPending.revision !== pendingProfile.revision) return;
+          const saved = await saveCloudProfile(supabase, authenticatedUserId, currentPending.profile, currentPending.updatedAt);
+          if (activeUserId.current !== authenticatedUserId) return;
+          await syncExistingSocialProfileAvatar(supabase, authenticatedUserId, currentPending.profile.avatarUrl);
+          if (activeUserId.current === authenticatedUserId) {
             recordCloudProfileRevision(localStorage, authenticatedUserId, saved.updatedAt);
             acknowledgePendingProfileWrite(localStorage, authenticatedUserId, pendingProfile.revision);
           }
@@ -711,12 +733,16 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       .then((value) => ({ status: "fulfilled" as const, value }))
       .catch((reason: unknown) => ({ status: "rejected" as const, reason })));
     const preferencesRead = pendingProfileAttempt.then(() => supabase.from("user_preferences").select("default_handicap,updated_at").eq("user_id", authenticatedUserId).maybeSingle());
+    const locationRead = pendingProfileAttempt.then(() => readProfileLocationMetadata(supabase, authenticatedUserId)
+      .then((value) => ({ status: "fulfilled" as const, value }))
+      .catch((reason: unknown) => ({ status: "rejected" as const, reason })));
     Promise.all([
       supabase.from("legal_acceptances").select("user_id,type,version,accepted_at,locale").eq("user_id", authenticatedUserId),
       profileRead,
       preferencesRead,
       pendingProfileAttempt,
-    ]).then(([legalResult, profileResult, preferencesResult, pendingResult]) => {
+      locationRead,
+    ]).then(([legalResult, profileResult, preferencesResult, pendingResult, locationResult]) => {
       if (!mounted || activeUserId.current !== authenticatedUserId) return;
       if (!legalResult.error && Array.isArray(legalResult.data)) {
         const cloud = parseLegalAcceptances(JSON.stringify(legalResult.data.map((item) => ({ userId: item.user_id, type: item.type, documentVersion: item.version, acceptedAt: item.accepted_at, locale: item.locale, persistenceStatus: "persisted", syncStatus: "synced" }))));
@@ -744,13 +770,17 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
           if (!current || current.mode !== "authenticated" || current.userId !== authenticatedUserId) return current;
           if (keepLocalProfile) return current;
           const displayName = typeof cloudProfile.display_name === "string" && cloudProfile.display_name.trim() ? cloudProfile.display_name : current.displayName;
-          const avatarUrl = typeof cloudProfile.avatar_url === "string" ? cloudProfile.avatar_url : current.avatarUrl;
+          const avatarUrl = safeProfileAvatarValue(cloudProfile.avatar_url, current.avatarUrl);
           // Existing preference clocks belong to the full sync merge. Updating
           // just HCP here would masquerade as a local edit on the next autosave.
           const cloudHandicap = preferencesResult.data ? preferencesResult.data.default_handicap : cloudProfile.default_handicap ?? null;
           const defaultHandicap = preferencesResult.error || localStorage.getItem(CLOUD_LOCAL_META_KEY) ? current.defaultHandicap : clampBackyardHandicap(cloudHandicap);
-          if (current.displayName === displayName && current.avatarUrl === avatarUrl && current.defaultHandicap === defaultHandicap) return current;
-          return { ...current, displayName, avatarUrl, defaultHandicap };
+          const savedLocation = locationResult.status === "fulfilled" ? locationResult.value : null;
+          const locationPatch = savedLocation && Date.parse(savedLocation.updatedAt) >= (Date.parse(current.locationUpdatedAt || "") || 0)
+            ? { ...normalizeProfileLocation(savedLocation), locationUpdatedAt: savedLocation.updatedAt }
+            : {};
+          if (current.displayName === displayName && current.avatarUrl === avatarUrl && current.defaultHandicap === defaultHandicap && Object.entries(locationPatch).every(([key, value]) => current[key as keyof BackyardProfile] === value)) return current;
+          return { ...current, displayName, avatarUrl, defaultHandicap, ...locationPatch };
         });
         if (!keepLocalProfile) {
           if (completeResponseAt) recordCloudProfileRevision(localStorage, authenticatedUserId, completeResponseAt);
@@ -770,6 +800,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       else setCloudIssue("legal", null);
       if (pendingResult.status === "rejected") setCloudIssue("profile", cloudIssueFromError("profile", pendingResult.reason, navigator.onLine));
       else if (preferencesResult.error) setCloudIssue("profile", cloudIssueFromError("profile", preferencesResult.error, navigator.onLine));
+      else if (locationResult.status === "rejected") setCloudIssue("profile", cloudIssueFromError("profile", locationResult.reason, navigator.onLine));
       else if (profileResult.status === "fulfilled" && !keepLocalProfile) setCloudIssue("profile", null);
     }).catch((error) => {
       if (mounted && activeUserId.current === authenticatedUserId) setCloudIssue("profile", cloudIssueFromError("profile", error, navigator.onLine));
@@ -913,14 +944,20 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
 
   async function updateProfile(profile: BackyardProfileUpdate): Promise<"local" | "cloud"> {
     if (!identity) return "local";
+    const includesLocation = ["countryCode", "country", "stateCode", "state"].some((key) => Object.hasOwn(profile, key));
+    if (includesLocation && !validateProfileLocation({ ...identity, ...profile }).valid) throw new Error("Selecciona un país y una región válidos antes de guardar.");
     const next = mergeBackyardProfile(identity, profile);
+    const locationChanged = includesLocation && (!identity.locationUpdatedAt || ["countryCode", "country", "stateCode", "state"].some((key) => next[key as keyof BackyardProfile] !== identity[key as keyof BackyardProfile]));
+    const location = locationChanged ? normalizeProfileLocation(next) : undefined;
     if (identity.mode === "guest") {
       setIdentity(next);
       localStorage.setItem(ACCOUNT_STORAGE_KEYS.guestProfile, JSON.stringify(profile));
       return "local";
     }
     const updatedAt = new Date().toISOString();
-    const pending = queuePendingProfileWrite(localStorage, identity.userId, next, updatedAt);
+    const locationUpdatedAt = new Date(Math.max(Date.parse(updatedAt), (Date.parse(identity.locationUpdatedAt || "") || 0) + 1)).toISOString();
+    const pending = queuePendingProfileWrite(localStorage, identity.userId, { ...cloudProfileFields(next), ...(location ? { location, locationUpdatedAt } : {}) }, updatedAt);
+    if (location) next.locationUpdatedAt = pending.profile.locationUpdatedAt || locationUpdatedAt;
     cloudProfileFallbackRef.current = { userId: identity.userId, profile: pending.profile };
     setIdentity(next);
     localStorage.setItem(`backyard-profile-cache-v1:${identity.userId}`, JSON.stringify(profileCachePayload(next)));
@@ -935,6 +972,11 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       const profileWriteCoordinator = profileWriterFor(identity.userId);
       const acknowledged = await profileWriteCoordinator.run(async () => {
         const saved = await saveCloudProfile(supabase, identity.userId, pending.profile, pending.updatedAt, { rebaseOnServerClock: true });
+        if (activeUserId.current !== identity.userId) return false;
+        // The profile row is canonical; Social receives only its avatar, never
+        // a privacy change or a new synthetic social identity.
+        retimePendingProfileWrite(localStorage, identity.userId, pending.revision, saved.updatedAt);
+        await syncExistingSocialProfileAvatar(supabase, identity.userId, pending.profile.avatarUrl);
         if (activeUserId.current !== identity.userId) return false;
         recordCloudProfileRevision(localStorage, identity.userId, saved.updatedAt);
         return acknowledgePendingProfileWrite(localStorage, identity.userId, pending.revision);

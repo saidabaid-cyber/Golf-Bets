@@ -1,6 +1,7 @@
 import { LEGAL_DOCUMENT_VERSIONS } from "./legal-config";
 import { normalizePlanId, type PlanId } from "./plans";
 import { isProfileEmojiAvatar } from "./profile-avatar";
+import { normalizeProfileLocation } from "./profile-geography";
 
 export type AccountMode = "undecided" | "guest" | "authenticated";
 export const BETTING_DATA_CONSENT_TYPE = "betting_financial" as const;
@@ -82,7 +83,10 @@ export type BackyardProfileDetails = {
   username: string;
   city: string;
   state: string;
+  stateCode: string;
   country: string;
+  countryCode: string;
+  locationUpdatedAt: string | null;
   homeClub: string;
   homeClubId: string;
   preferredTee: string;
@@ -115,7 +119,10 @@ const EMPTY_PROFILE_DETAILS: BackyardProfileDetails = {
   username: "",
   city: "",
   state: "",
+  stateCode: "",
   country: "",
+  countryCode: "",
+  locationUpdatedAt: null,
   homeClub: "",
   homeClubId: "",
   preferredTee: "",
@@ -205,13 +212,28 @@ export function clampBackyardHandicap(value: number | null) {
 }
 
 function profileDetails(candidate: Partial<BackyardProfile>, fallback?: BackyardProfile) {
+  const countryNameChanged = candidate.country !== undefined && candidate.country !== fallback?.country;
+  const countryCodeChanged = candidate.countryCode !== undefined && candidate.countryCode !== fallback?.countryCode;
+  const country = profileText(candidate.country, countryCodeChanged ? "" : fallback?.country, 100);
+  const countryCode = profileText(candidate.countryCode, countryNameChanged ? "" : fallback?.countryCode, 2).toUpperCase();
+  const countryChanged = Boolean(fallback && (
+    (candidate.countryCode !== undefined && countryCode !== (fallback.countryCode || ""))
+    || (candidate.country !== undefined && country !== (fallback.country || ""))
+  ));
+  const state = profileText(candidate.state, countryChanged ? "" : fallback?.state, 100);
+  const stateNameChanged = candidate.state !== undefined && candidate.state !== fallback?.state;
+  const stateCode = profileText(candidate.stateCode, countryChanged || stateNameChanged ? "" : fallback?.stateCode, 12).toUpperCase();
+  const location = normalizeProfileLocation({ countryCode, country, stateCode, state });
   return {
     givenName: profileText(candidate.givenName, fallback?.givenName, 80),
     familyName: profileText(candidate.familyName, fallback?.familyName, 100),
     username: profileText(candidate.username, fallback?.username, 40).replace(/^@+/, ""),
     city: profileText(candidate.city, fallback?.city, 100),
-    state: profileText(candidate.state, fallback?.state, 100),
-    country: profileText(candidate.country, fallback?.country, 100),
+    state: location.countryCode ? location.state : state,
+    stateCode: location.stateCode,
+    country: location.countryCode ? location.country : country,
+    countryCode: location.countryCode,
+    locationUpdatedAt: profileTimestamp(candidate.locationUpdatedAt, fallback?.locationUpdatedAt),
     homeClub: profileText(candidate.homeClub, fallback?.homeClub, 120),
     homeClubId: profileText(candidate.homeClubId, fallback?.homeClubId, 120),
     preferredTee: profileText(candidate.preferredTee, fallback?.preferredTee, 80),
@@ -265,18 +287,20 @@ export function normalizeBackyardProfileCache(value: unknown, fallback: Backyard
     userId: fallback.userId,
     email: fallback.email,
     displayName: typeof candidate.displayName === "string" && candidate.displayName.trim() ? candidate.displayName.trim() : fallback.displayName,
-    avatarUrl: typeof candidate.avatarUrl === "string" ? candidate.avatarUrl : fallback.avatarUrl,
+    avatarUrl: safeProfileAvatarValue(candidate.avatarUrl, fallback.avatarUrl),
     defaultHandicap: candidate.defaultHandicap === null || (typeof candidate.defaultHandicap === "number" && Number.isFinite(candidate.defaultHandicap)) ? clampBackyardHandicap(candidate.defaultHandicap) : fallback.defaultHandicap,
     ...profileDetails(candidate, fallback),
   };
 }
 
 export function mergeBackyardProfile<T extends BackyardProfile>(current: T, patch: BackyardProfileUpdate): T {
+  const avatar = validateProfileAvatarUrl(patch.avatarUrl);
+  if (!avatar.ok) throw new Error(avatar.message);
   return {
     ...current,
     ...patch,
     displayName: patch.displayName.trim(),
-    avatarUrl: patch.avatarUrl.trim(),
+    avatarUrl: avatar.avatarUrl,
     defaultHandicap: clampBackyardHandicap(patch.defaultHandicap),
     ...profileDetails(patch, current),
   };
@@ -339,6 +363,15 @@ export function validateProfileAvatarUrl(input: string): ProfileAvatarValidation
   }
 }
 
+export function safeProfileAvatarValue(value: unknown, fallback = ""): string {
+  if (typeof value === "string") {
+    const validated = validateProfileAvatarUrl(value);
+    if (validated.ok) return validated.avatarUrl;
+  }
+  const validatedFallback = validateProfileAvatarUrl(fallback);
+  return validatedFallback.ok ? validatedFallback.avatarUrl : "";
+}
+
 export const ACCOUNT_STORAGE_KEYS = {
   mode: "backyard-account-mode-v1",
   acceptances: "backyard-legal-acceptances-v1",
@@ -362,7 +395,7 @@ export function readOfflineAuthenticatedProfile(storage: OfflineProfileStorage, 
       userId,
       displayName,
       email: typeof cached.email === "string" ? cached.email : "",
-      avatarUrl: typeof cached.avatarUrl === "string" ? cached.avatarUrl : "",
+      avatarUrl: safeProfileAvatarValue(cached.avatarUrl),
       defaultHandicap: cached.defaultHandicap === null || (typeof cached.defaultHandicap === "number" && Number.isFinite(cached.defaultHandicap)) ? clampBackyardHandicap(cached.defaultHandicap) : null,
       ...profileDetails(cached),
     };

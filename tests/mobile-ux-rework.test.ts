@@ -35,7 +35,8 @@ test("perfil y grupos usan archivos o avatares, nunca placeholders URL", () => {
   const picker = read("app/components/profile-image-picker.tsx");
   const provider = read("app/components/account-provider.tsx");
   const group = read("app/components/beta-onboarding-flow.tsx");
-  assert.match(picker, /accept="image\/jpeg,image\/png,image\/webp"/);
+  assert.match(picker, /accept="image\/jpeg,image\/png,image\/webp,image\/heic,image\/heif/);
+  assert.match(picker, /\.heic,\.heif"/);
   assert.match(picker, /Subir foto/);
   assert.match(picker, /Emoji de avatar/);
   assert.match(picker, /normalizeProfileEmojiAvatar/);

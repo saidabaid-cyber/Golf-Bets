@@ -57,9 +57,10 @@ test("Configuración explica cómo agregar jugadores y grupos guardados", () => 
 test("Perfil usa selector de foto o avatar sin pedir URLs manuales", () => {
   const picker = readFileSync("app/components/profile-image-picker.tsx", "utf8");
   assert.match(account, /validateProfileAvatarUrl\(avatarUrl\)/);
-  assert.match(account, /<ProfileImagePicker value=\{avatarUrl\} onChange=\{setAvatarUrl\} \/>/);
+  assert.match(account, /<ProfileImagePicker value=\{avatarUrl\} onChange=\{setAvatarUrl\} onBusyChange=\{setAvatarBusy\} \/>/);
+  assert.match(account, /if \(avatarBusy \|\| saving\) return/);
   assert.doesNotMatch(account, /type="url" inputMode="url"/);
-  assert.match(picker, /type="file" accept="image\/jpeg,image\/png,image\/webp"/);
+  assert.match(picker, /type="file" aria-label=\{kind === "profile" \? "Seleccionar foto o imagen de avatar" : "Seleccionar imagen del grupo"\} accept="image\/jpeg,image\/png,image\/webp,image\/heic,image\/heif/);
   assert.match(picker, /SIN IMAGEN/);
   assert.match(account, /no modifica tu foto de Google/);
   assert.match(picker, /No necesitas pegar enlaces/);

@@ -1,6 +1,11 @@
 import { clampBackyardHandicap, type BackyardProfile } from "./account-state";
+import { normalizeProfileLocation, validateProfileLocation, type ProfileLocationValue } from "./profile-geography";
 
-export type CloudProfileFields = Pick<BackyardProfile, "displayName" | "defaultHandicap" | "avatarUrl">;
+export type CloudProfileFields = Pick<BackyardProfile, "displayName" | "defaultHandicap" | "avatarUrl"> & {
+  location?: ProfileLocationValue;
+  /** Clock of the explicit geography edit; unrelated profile writes must not renew it. */
+  locationUpdatedAt?: string;
+};
 
 export type PendingProfileWrite = {
   profile: CloudProfileFields;
@@ -76,14 +81,37 @@ function createProfileWriteRevision(updatedAt: string) {
   return `${updatedAt}:${random}`;
 }
 
-export function cloudProfileFields(profile: CloudProfileFields): CloudProfileFields {
+export function cloudProfileFields(profile: Omit<CloudProfileFields, "locationUpdatedAt"> & { locationUpdatedAt?: string | null }): CloudProfileFields {
+  if (profile.location !== undefined && !validateProfileLocation(profile.location).valid) throw new Error("profile_location_invalid");
+  const location = profile.location === undefined ? undefined : normalizeProfileLocation(profile.location);
+  const locationUpdatedAt = location && profile.locationUpdatedAt != null
+    ? normalizedProfileTimestamp(profile.locationUpdatedAt)
+    : undefined;
+  if (location && profile.locationUpdatedAt != null && !locationUpdatedAt) throw new Error("profile_location_timestamp_invalid");
   return {
     displayName: profile.displayName.trim(),
     defaultHandicap: profile.defaultHandicap === null || (typeof profile.defaultHandicap === "number" && Number.isFinite(profile.defaultHandicap))
       ? clampBackyardHandicap(profile.defaultHandicap)
       : null,
     avatarUrl: profile.avatarUrl.trim(),
+    ...(location ? { location } : {}),
+    ...(locationUpdatedAt ? { locationUpdatedAt } : {}),
   };
+}
+
+function normalizedProfileTimestamp(value: string): string | null {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(value)) return null;
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) return null;
+  const canonical = new Date(parsed).toISOString();
+  return canonical.startsWith(value.replace(/(?:\.\d{1,3})?Z$/, "")) ? canonical : null;
+}
+
+function nextLocationUpdatedAt(previous: PendingProfileWrite | null, requested: string | undefined, queueAt: string): string {
+  const explicit = requested === undefined ? queueAt : normalizedProfileTimestamp(requested);
+  if (!explicit) throw new Error("profile_location_timestamp_invalid");
+  const previousAt = Date.parse(previous?.profile.locationUpdatedAt || "") || 0;
+  return new Date(Math.max(Date.parse(explicit), Date.parse(queueAt), previousAt + 1)).toISOString();
 }
 
 export function queuePendingProfileWrite(
@@ -93,9 +121,14 @@ export function queuePendingProfileWrite(
   updatedAt = new Date().toISOString(),
   revision?: string,
 ): PendingProfileWrite {
+  const previous = readPendingProfileWrite(storage, userId);
   const monotonicUpdatedAt = nextProfileWriteTimestamp(storage, userId, updatedAt);
+  const location = profile.location ?? previous?.profile.location;
+  const locationUpdatedAt = profile.location !== undefined
+    ? nextLocationUpdatedAt(previous, profile.locationUpdatedAt, monotonicUpdatedAt)
+    : previous?.profile.locationUpdatedAt ?? (previous?.profile.location ? previous.updatedAt : undefined);
   const pending = {
-    profile: cloudProfileFields(profile),
+    profile: cloudProfileFields({ ...profile, ...(location ? { location, locationUpdatedAt } : {}) }),
     updatedAt: monotonicUpdatedAt,
     revision: revision?.trim() || createProfileWriteRevision(monotonicUpdatedAt),
   };
@@ -115,7 +148,11 @@ export function readPendingProfileWrite(storage: Pick<Storage, "getItem">, userI
     const revision = typeof candidate.revision === "string" && candidate.revision.trim()
       ? candidate.revision
       : candidate.updatedAt; // safe recovery for a pending write created before revisions existed
-    return { profile: cloudProfileFields(profile as CloudProfileFields), updatedAt: candidate.updatedAt, revision };
+    return {
+      profile: cloudProfileFields({ ...profile, ...(profile.location && profile.locationUpdatedAt === undefined ? { locationUpdatedAt: candidate.updatedAt } : {}) } as CloudProfileFields),
+      updatedAt: candidate.updatedAt,
+      revision,
+    };
   } catch {
     return null;
   }

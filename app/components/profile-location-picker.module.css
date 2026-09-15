@@ -1,0 +1,43 @@
+.root {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+}
+
+.field {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.label {
+  margin: 0;
+}
+
+.manualInput {
+  width: 100%;
+  min-width: 0;
+}
+
+.hint,
+.legacyHint {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.legacyHint {
+  margin: 0;
+}
+
+.error {
+  color: #b42c37;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.noResults {
+  padding: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}

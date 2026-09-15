@@ -125,9 +125,11 @@ test("profile accepts one native Unicode emoji grapheme and keeps legacy avatar 
   assert.equal(isProfileEmojiAvatar("🦅🐟"), false);
   const picker = readFileSync("app/components/profile-image-picker.tsx", "utf8");
   const media = readFileSync("app/components/profile-avatar-media.tsx", "utf8");
-  assert.match(picker, /FOTO<\/button>/);
-  assert.match(picker, /EMOJI<\/button>/);
+  assert.match(picker, /\["photo", "FOTO"\]/);
+  assert.match(picker, /\["emoji", "EMOJI"\]/);
+  assert.match(picker, /aria-pressed=\{mode === option\}/);
   assert.doesNotMatch(picker, /Elegir avatar<\/button>/);
+  assert.match(media, /if \(isProfileEmojiAvatar\(value\)\)/);
   assert.match(media, /if \(value\) return <img/);
 });
 

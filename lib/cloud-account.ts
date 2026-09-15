@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BackyardProfile } from "./account-state";
 import { writeVersionedRow } from "./cloud-write";
+import type { CloudProfileFields } from "./profile-sync";
+import { saveProfileLocationMetadata } from "./profile-location-sync";
 
 export type CloudProfileRow = {
   display_name: string | null;
@@ -108,7 +110,7 @@ async function latestProfileTimestamp(client: SupabaseClient, userId: string) {
 export async function saveCloudProfile(
   client: SupabaseClient,
   userId: string,
-  profile: Pick<BackyardProfile, "displayName" | "defaultHandicap" | "avatarUrl">,
+  profile: CloudProfileFields,
   updatedAt: string,
   options: { rebaseOnServerClock?: boolean } = {},
 ) {
@@ -118,6 +120,9 @@ export async function saveCloudProfile(
     ? new Date(serverTimestamp + 1).toISOString()
     : updatedAt;
   try {
+    // Location has its own edit clock. Retrying an avatar/HCP write must not
+    // make an older pending location look newer than another device's edit.
+    if (profile.location) await saveProfileLocationMetadata(client, userId, profile.location, profile.locationUpdatedAt || updatedAt);
     const preferenceRow = { user_id: userId, default_handicap: profile.defaultHandicap, updated_at: writeTimestamp };
     await writeVerifiedProfileRow(client, "user_preferences", { user_id: userId }, preferenceRow, ["default_handicap"]);
     const profileRow = { id: userId, name: profile.displayName, display_name: profile.displayName, default_handicap: profile.defaultHandicap, avatar_url: profile.avatarUrl, onboarding_completed_at: writeTimestamp, updated_at: writeTimestamp };

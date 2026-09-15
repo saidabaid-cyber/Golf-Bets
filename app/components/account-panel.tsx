@@ -11,6 +11,8 @@ import { useBackyardAccount } from "./account-provider";
 import { EquipmentProfilePanel } from "./equipment-profile-panel";
 import { LegalConsentManager } from "./legal-consent-manager";
 import { ProfileImagePicker } from "./profile-image-picker";
+import { ProfileLocationPicker } from "./profile-location-picker";
+import { normalizeProfileLocation, validateProfileLocation } from "../../lib/profile-geography";
 import { ProfileAvatarMedia } from "./profile-avatar-media";
 import { ProfileClubPicker } from "./profile-club-picker";
 import { GhinPlaceholder } from "./ghin-placeholder";
@@ -54,8 +56,8 @@ function profileDetailsDraft(profile: BackyardProfile): ProfileDetailsDraft {
     familyName: profile.familyName || defaults.familyName,
     username: profile.username || defaults.username,
     city: profile.city || defaults.city,
-    state: profile.state || defaults.state,
-    country: profile.country || defaults.country,
+    ...normalizeProfileLocation(profile),
+    locationUpdatedAt: profile.locationUpdatedAt || defaults.locationUpdatedAt,
     homeClub: profile.homeClub || defaults.homeClub,
     homeClubId: profile.homeClubId || defaults.homeClubId,
     preferredTee: profile.preferredTee || defaults.preferredTee,
@@ -138,6 +140,7 @@ export function AccountPanel({ view, focusSection = "profile", highContrast, onH
   const [deleteText, setDeleteText] = useState("");
   const [deleteAllConfirmed, setDeleteAllConfirmed] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [avatarBusy, setAvatarBusy] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [managingConsents, setManagingConsents] = useState(false);
   const profileSectionRef = useRef<HTMLElement>(null);
@@ -172,6 +175,9 @@ export function AccountPanel({ view, focusSection = "profile", highContrast, onH
     : "No otorgado";
 
   async function saveProfile() {
+    if (avatarBusy || savingProfile) return;
+    const locationValidation = validateProfileLocation(profileDetails);
+    if (!locationValidation.valid) { setMessageKind("error"); setMessage(locationValidation.errors.country || locationValidation.errors.state || "Revisa tu país y región."); return; }
     const validation = validateProfileDraft(name, handicap);
     if (!validation.ok) { setMessageKind("error"); setMessage(validation.message); return; }
     const avatarValidation = validateProfileAvatarUrl(avatarUrl);
@@ -283,7 +289,7 @@ export function AccountPanel({ view, focusSection = "profile", highContrast, onH
         <label>HCP index (opcional)<input type="text" inputMode="text" value={handicap} onChange={(event) => setHandicap(event.target.value)} placeholder="Ej. 8.4 o +1.2" /><GhinPlaceholder /></label>
         <div className="profileAvatarEditor">
           <label>Foto o avatar</label>
-          <ProfileImagePicker value={avatarUrl} onChange={setAvatarUrl} />
+          <ProfileImagePicker value={avatarUrl} onChange={setAvatarUrl} onBusyChange={setAvatarBusy} />
           <p className="hint">Quitarla en The Backyard no modifica tu foto de Google.</p>
         </div>
         <label>Nombre(s)<input value={profileDetails.givenName} onChange={(event) => setProfileDetails((current) => ({ ...current, givenName: event.target.value }))} autoComplete="given-name" /></label>
@@ -291,8 +297,7 @@ export function AccountPanel({ view, focusSection = "profile", highContrast, onH
         <label>Usuario<input value={profileDetails.username} onChange={(event) => setProfileDetails((current) => ({ ...current, username: event.target.value }))} placeholder="sin @" autoComplete="username" /></label>
         <ProfileClubPicker value={profileDetails.homeClub} clubId={profileDetails.homeClubId} onChange={({ name: homeClub, id: homeClubId }) => setProfileDetails((current) => ({ ...current, homeClub, homeClubId }))} />
         <label>Ciudad<input value={profileDetails.city} onChange={(event) => setProfileDetails((current) => ({ ...current, city: event.target.value }))} autoComplete="address-level2" /></label>
-        <label>Estado<input value={profileDetails.state} onChange={(event) => setProfileDetails((current) => ({ ...current, state: event.target.value }))} autoComplete="address-level1" /></label>
-        <label>País<input value={profileDetails.country} onChange={(event) => setProfileDetails((current) => ({ ...current, country: event.target.value }))} autoComplete="country-name" /></label>
+        <ProfileLocationPicker value={profileDetails} onChange={(location) => setProfileDetails((current) => ({ ...current, ...location }))} />
         <label>Tee preferido<input value={profileDetails.preferredTee} onChange={(event) => setProfileDetails((current) => ({ ...current, preferredTee: event.target.value }))} /></label>
         <label>Mano<select value={profileDetails.handedness} onChange={(event) => setProfileDetails((current) => ({ ...current, handedness: event.target.value as ProfileDetailsDraft["handedness"] }))}><option value="">Sin indicar</option><option value="right">Derecha</option><option value="left">Izquierda</option><option value="ambidextrous">Ambas</option></select></label>
         <div className="profileGameHeading"><div className="eyebrow">MI JUEGO</div><b>Preferencias golfísticas opcionales</b><p className="hint">HCP y mano usan los mismos datos de tu perfil; no necesitas repetirlos. Completa sólo lo que conozcas.</p></div>
@@ -307,7 +312,7 @@ export function AccountPanel({ view, focusSection = "profile", highContrast, onH
         <label>Privacidad<select value={profileDetails.profileVisibility} onChange={(event) => setProfileDetails((current) => ({ ...current, profileVisibility: event.target.value as ProfileDetailsDraft["profileVisibility"] }))}><option value="private">Privado</option><option value="friends">Amigos</option></select></label>
         <label className="profileBioField">Bio<textarea value={profileDetails.bio} onChange={(event) => setProfileDetails((current) => ({ ...current, bio: event.target.value }))} maxLength={280} rows={3} /></label>
         <p className="hint profileLocalDetail">Los datos ampliados se conservan en este dispositivo. Su réplica multi-dispositivo se habilitará sólo con el esquema aislado de Beta.</p>
-        <button className="primary profileSaveButton" disabled={savingProfile} onClick={saveProfile}>{savingProfile ? "Guardando…" : "Guardar perfil"}</button>
+        <button className="primary profileSaveButton" disabled={savingProfile || avatarBusy} onClick={saveProfile}>{savingProfile ? "Guardando…" : avatarBusy ? "Preparando imagen…" : "Guardar perfil"}</button>
       </div>}
       {!editing && <div className="profileMetaList">
         <div className="profileMeta"><span>HCP index</span><b>{profileHandicapLabel(identity.defaultHandicap)}</b></div>

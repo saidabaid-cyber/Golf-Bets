@@ -16,6 +16,8 @@ import { ModalCloseButton } from "./modal-shell";
 import { ProfileAvatarMedia } from "./profile-avatar-media";
 import { ProfileClubPicker } from "./profile-club-picker";
 import { ProfileImagePicker } from "./profile-image-picker";
+import { ProfileLocationPicker } from "./profile-location-picker";
+import { normalizeProfileLocation, validateProfileLocation } from "../../lib/profile-geography";
 import { useBackyardAccount } from "./account-provider";
 
 type ProfileAccountPanelProps = {
@@ -34,13 +36,14 @@ type ProfileAccountPanelProps = {
   onBackToProfile: () => void;
 };
 
-type EditDraft = Pick<BackyardProfileDetails, "givenName" | "familyName" | "username" | "homeClub" | "homeClubId" | "preferredTee" | "profileVisibility">;
+type EditDraft = Pick<BackyardProfileDetails, "givenName" | "familyName" | "username" | "homeClub" | "homeClubId" | "preferredTee" | "profileVisibility" | "countryCode" | "country" | "stateCode" | "state">;
 
 function draftFromIdentity(identity: ReturnType<typeof useBackyardAccount>["identity"]): EditDraft {
   return {
     givenName: identity.givenName || "",
     familyName: identity.familyName || "",
     username: identity.username || "",
+    ...normalizeProfileLocation(identity),
     homeClub: identity.homeClub || "",
     homeClubId: identity.homeClubId || "",
     preferredTee: identity.preferredTee || "",
@@ -62,6 +65,7 @@ export function ProfileAccountPanel({ view, focusSection = "profile", highContra
   const [message, setMessage] = useState("");
   const [messageKind, setMessageKind] = useState<"success" | "error">("success");
   const [saving, setSaving] = useState(false);
+  const [avatarBusy, setAvatarBusy] = useState(false);
   const [managingConsents, setManagingConsents] = useState(false);
   const [deleteStatsOpen, setDeleteStatsOpen] = useState(false);
   const [deleteStatsText, setDeleteStatsText] = useState("");
@@ -82,14 +86,17 @@ export function ProfileAccountPanel({ view, focusSection = "profile", highContra
   const notice = message ? <div className={messageKind === "error" ? "notice bad" : "notice"} role={messageKind === "error" ? "alert" : "status"}>{message}</div> : null;
 
   async function saveProfile() {
+    if (avatarBusy || saving) return;
     const validated = validateProfileDraft(name, handicap);
     if (!validated.ok) { setMessageKind("error"); setMessage(validated.message); return; }
     const avatar = validateProfileAvatarUrl(avatarUrl);
     if (!avatar.ok) { setMessageKind("error"); setMessage(avatar.message); return; }
+    const locationValidation = validateProfileLocation(draft);
+    if (!locationValidation.valid) { setMessageKind("error"); setMessage(locationValidation.errors.country || locationValidation.errors.state || "Revisa tu país y región."); return; }
     setSaving(true); setMessage("");
     try {
-      await updateProfile({ displayName: validated.displayName, defaultHandicap: validated.defaultHandicap, avatarUrl: avatar.avatarUrl, ...draft });
-      setMessageKind("success"); setMessage("Perfil guardado."); setEditing(false);
+      const result = await updateProfile({ displayName: validated.displayName, defaultHandicap: validated.defaultHandicap, avatarUrl: avatar.avatarUrl, ...draft });
+      setMessageKind("success"); setMessage(result === "cloud" ? "Perfil guardado y sincronizado." : "Perfil guardado en este dispositivo. Sincronización pendiente."); setEditing(false);
     } catch { setMessageKind("error"); setMessage("No se confirmó el guardado. Conservamos lo que escribiste; reintenta."); }
     finally { setSaving(false); }
   }
@@ -183,9 +190,10 @@ export function ProfileAccountPanel({ view, focusSection = "profile", highContra
       <label>Username<input value={draft.username} onChange={(event) => setDraft((current) => ({ ...current, username: event.target.value.replace(/^@+/, "") }))} placeholder="sin @" autoComplete="username" /></label>
       <label>HCP / Index<input type="text" inputMode="text" value={handicap} onChange={(event) => setHandicap(event.target.value)} placeholder="Ej. 8.4 o +1.2" /></label>
     </div></section>
-    <section className="card profileEditCard"><h2>Foto / Avatar</h2><ProfileImagePicker value={avatarUrl} onChange={setAvatarUrl} /><p className="hint">Quitarla en The Backyard no modifica tu foto de Google.</p></section>
+    <section className="card profileEditCard"><h2>Foto / Avatar</h2><ProfileImagePicker value={avatarUrl} onChange={setAvatarUrl} onBusyChange={setAvatarBusy} /><p className="hint">Quitarla en The Backyard no modifica tu foto de Google.</p></section>
+    <section className="card profileEditCard"><h2>País y región</h2><ProfileLocationPicker value={draft} onChange={(location) => setDraft((current) => ({ ...current, ...location }))} /><p className="hint">Estos datos de perfil no se publican automáticamente. No usamos GPS.</p></section>
     <section className="card profileEditCard"><div className="sectionTitle"><div><h2>Información de golf</h2><p>Opcional</p></div></div><div className="profileEditGrid"><ProfileClubPicker value={draft.homeClub} clubId={draft.homeClubId} onChange={({ name: homeClub, id: homeClubId }) => setDraft((current) => ({ ...current, homeClub, homeClubId }))} /><label>Tee habitual<input value={draft.preferredTee} onChange={(event) => setDraft((current) => ({ ...current, preferredTee: event.target.value }))} /></label></div></section>
-    {notice}<div className="profileEditActions"><button type="button" className="secondary" disabled={saving} onClick={() => setEditing(false)}>Cancelar</button><button type="button" className="primary" disabled={saving} onClick={() => void saveProfile()}>{saving ? "Guardando…" : "Guardar perfil"}</button></div>
+    {notice}<div className="profileEditActions"><button type="button" className="secondary" disabled={saving} onClick={() => setEditing(false)}>Cancelar</button><button type="button" className="primary" disabled={saving || avatarBusy} onClick={() => void saveProfile()}>{saving ? "Guardando…" : avatarBusy ? "Preparando imagen…" : "Guardar perfil"}</button></div>
   </>;
 
   const userAcceptances = acceptances.filter((item) => item.userId === identity.userId);

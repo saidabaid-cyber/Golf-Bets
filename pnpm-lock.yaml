@@ -11,6 +11,9 @@ importers:
       '@supabase/supabase-js':
         specifier: ^2.57.4
         version: 2.112.4
+      emoji-regex:
+        specifier: 10.6.0
+        version: 10.6.0
       jspdf:
         specifier: ^3.0.3
         version: 3.0.4
@@ -1055,6 +1058,9 @@ packages:
 
   electron-to-chromium@1.5.417:
     resolution: {integrity: sha512-4T+DTDWuMPM4aHlHwWdAVCVWwp7LDilnhzkj+c/Lbj91XSQrLuOmZSLtS9Q4iIqjlPUbPOnC624zDVVHCHaolQ==}
+
+  emoji-regex@10.6.0:
+    resolution: {integrity: sha512-toUI84YS5YmxW219erniWD0CIVOo46xGKColeNQRgOzDorgBi1v4D71/OFzgD9GO2UGKIv1C3Sp8DAn0+j5w7A==}
 
   emoji-regex@8.0.0:
     resolution: {integrity: sha512-MSjYzcWNOA0ewAHpz0MxpYFvwg6yjy1NG3xteoqz644VCo/RPgnr1/GGt+ic3iJTzQ8Eu3TdM14SawnVUmGE6A==}
@@ -3138,6 +3144,8 @@ snapshots:
       gopd: 1.2.0
 
   electron-to-chromium@1.5.417: {}
+
+  emoji-regex@10.6.0: {}
 
   emoji-regex@8.0.0: {}
 
