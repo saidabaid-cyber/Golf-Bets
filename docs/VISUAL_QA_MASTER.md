@@ -10,6 +10,7 @@ This file records owner-controlled visual gates. A technical test or successful 
 | MORE | PENDING_VISUAL_QA | Owner review required | Tool hierarchy and mobile density. |
 | PROFILE | PENDING_VISUAL_QA | Owner review required | Profile/account separation and settings discoverability. |
 | SOCIAL | PENDING_VISUAL_QA | Owner review required | Empty state, friends and private activity/notification navigation. |
+| MI BOLSA V2 | PENDING_VISUAL_QA | Owner review required | Full-page category, equipment editor, success and delete confirmation; local 390/393/430 evidence, real authenticated Preview pending. |
 
 ## Frozen Home contract
 
@@ -31,3 +32,11 @@ HOME remains VISUAL_APPROVED / NO TOUCH. Owner explicitly requested only the act
 `CONTINUAR / RONDA` in the existing conditional shared tab. Home hero/component/CSS/assets are
 unchanged. Local 390/393/430 browser evidence covers that label and the Index help/card, not an
 owner approval. See `INDEX_COURSE_CLOSEOUT.md`; Stats reset cloud remains `PENDING_CONTROLLED_DB_APPLY`.
+
+## 2026-09-15 — Mi Bolsa / Social / logros / attest
+
+HOME remains VISUAL_APPROVED / NO TOUCH. Home components, CSS, assets and shared navigation are unchanged.
+Mi Bolsa full-page flows and real Social components were exercised locally at 390×844, 393×852 and
+430×932 using clearly labelled synthetic fixtures. This is not authenticated Preview or owner approval.
+Social needs isolated Supabase Preview migration/application and multiuser Auth QA before activation.
+See `BAG_SOCIAL_ATTEST_CLOSEOUT.md` for the evidence boundary and exact outstanding work.
