@@ -104,6 +104,7 @@ export function StatsDashboard({ insights: suppliedInsights, rounds = [], consen
   const filters = useMemo(() => ({ window: statsWindow, ...(courseFilter ? { courseName: courseFilter } : {}), ...(teeFilter ? { teeName: teeFilter } : {}) }), [courseFilter, statsWindow, teeFilter]);
   const filteredRounds = useMemo(() => rounds.length ? filterStatsRounds(rounds, filters) : [], [filters, rounds]);
   const insights = useMemo(() => rounds.length ? buildFilteredGolfInsights(rounds, filters) : suppliedInsights, [filters, rounds, suppliedInsights]);
+  const capture = insights.capture;
   const metricTrends = useMemo(() => buildGolfTrends(filteredRounds, Math.min(5, Math.max(3, Math.floor(filteredRounds.length / 2)))), [filteredRounds]);
   const courseOptions = useMemo(() => [...new Set(rounds.map((round) => round.courseName).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es-MX")), [rounds]);
   const teeOptions = useMemo(() => [...new Set(rounds.flatMap((round) => [round.teeName, ...(round.playerTeeAssignments?.map((tee) => tee.teeName) ?? [])]).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es-MX")), [rounds]);
@@ -208,6 +209,21 @@ export function StatsDashboard({ insights: suppliedInsights, rounds = [], consen
         <article><span>GIR</span><b>{percentage(insights.greensInRegulation, insights.greenAttempts)}</b><small>{insights.greensInRegulation} de {insights.greenAttempts} capturados</small></article>
         <article><span>Penalidades</span><b>{insights.penaltyStrokes}</b><small>golpes registrados</small></article>
       </div>
+      {capture && (capture.greenSideBunkerHoles || capture.fairwayBunkerHoles || capture.unclassifiedBunkerHoles || capture.outOfBoundsHoles) > 0 && <section aria-label="Bunkers y OB capturados">
+        <h3>Bunkers y OB</h3><p className="hint">Solo se cuentan eventos explícitos en los hoyos jugados. OB no se suma a penalidades.</p>
+        <div className="betaStatTiles" aria-label="Eventos de bunker y fuera de límites">
+          <article><span>Green-side bunker</span><b>{capture.greenSideBunkerHoles ? capture.greenSideBunkers : "—"}</b><small>{capture.greenSideBunkerHoles ? `en ${capture.greenSideBunkerHoles} hoyos capturados` : "Sin captura por ubicación"}</small></article>
+          <article><span>Fairway bunker</span><b>{capture.fairwayBunkerHoles ? capture.fairwayBunkers : "—"}</b><small>{capture.fairwayBunkerHoles ? `en ${capture.fairwayBunkerHoles} hoyos capturados` : "Sin captura por ubicación"}</small></article>
+          {capture.unclassifiedBunkerHoles > 0 && <article><span>Bunker sin clasificar</span><b>{capture.unclassifiedBunkers}</b><small>snapshot anterior · {capture.unclassifiedBunkerHoles} hoyos</small></article>}
+          <article><span>OB</span><b>{capture.outOfBoundsHoles ? capture.outOfBounds : "—"}</b><small>{capture.outOfBoundsHoles ? `en ${capture.outOfBoundsHoles} hoyos capturados` : "Sin OB capturado"}</small></article>
+        </div>
+      </section>}
+      {capture && capture.teeShotHoles > 0 && <section aria-label="Dirección de Tee Shot capturada">
+        <h3>Tee Shot</h3><p className="hint">Dirección de {capture.teeShotHoles} salida{capture.teeShotHoles === 1 ? "" : "s"} capturada{capture.teeShotHoles === 1 ? "" : "s"}; no se estiman hoyos sin dato.</p>
+        <div className="betaStatTiles" aria-label="Distribución de dirección de Tee Shot">
+          {([["far_left", "Muy izquierda"], ["left", "Izquierda"], ["center", "HIT"], ["right", "Derecha"], ["far_right", "Muy derecha"]] as const).map(([direction, label]) => <article key={direction}><span>{label}</span><b>{capture.teeShots[direction]}</b><small>de {capture.teeShotHoles} capturadas</small></article>)}
+        </div>
+      </section>}
     </section>}
 
     <section className="card betaRecentScores">

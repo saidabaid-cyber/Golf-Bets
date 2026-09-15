@@ -1,9 +1,10 @@
 import { deduplicateRoundSnapshots } from "./balance-ledger";
+import { normalizeAdvancedStats } from "./advanced-stats";
 import {
   buildHistoricalRoundRecap,
   type HistoricalRoundRecap,
 } from "./historical-round-recap";
-import type { Expense, FrequentGroup, RoundSnapshot } from "./types";
+import type { AdvancedHoleStat, Expense, FrequentGroup, RoundSnapshot } from "./types";
 
 const STRUCTURAL_GOLF_ISSUES: ReadonlySet<string> = new Set([
   "invalid_snapshot",
@@ -14,6 +15,74 @@ const STRUCTURAL_GOLF_ISSUES: ReadonlySet<string> = new Set([
 ] as const);
 const FINANCIAL_EPSILON = 1e-9;
 const EXPENSE_KEYS = ["caddie", "food", "drinks", "greenFee", "cartRental", "other"] as const;
+const TEE_SHOT_DIRECTIONS = ["far_left", "left", "center", "right", "far_right"] as const;
+
+export type TeeShotDirection = NonNullable<AdvancedHoleStat["teeDirection"]>;
+export type RecordedCaptureCounts = {
+  greenSideBunkers: number;
+  greenSideBunkerHoles: number;
+  fairwayBunkers: number;
+  fairwayBunkerHoles: number;
+  unclassifiedBunkers: number;
+  unclassifiedBunkerHoles: number;
+  teeShots: Record<TeeShotDirection, number>;
+  teeShotHoles: number;
+  outOfBounds: number;
+  outOfBoundsHoles: number;
+};
+
+function emptyCaptureCounts(): RecordedCaptureCounts {
+  return {
+    greenSideBunkers: 0, greenSideBunkerHoles: 0,
+    fairwayBunkers: 0, fairwayBunkerHoles: 0,
+    unclassifiedBunkers: 0, unclassifiedBunkerHoles: 0,
+    teeShots: { far_left: 0, left: 0, center: 0, right: 0, far_right: 0 }, teeShotHoles: 0,
+    outOfBounds: 0, outOfBoundsHoles: 0,
+  };
+}
+
+function recordedCaptureForOwner(round: RoundSnapshot, ownerId: string, order: readonly number[]): RecordedCaptureCounts {
+  const facts = normalizeAdvancedStats(round.advancedStats);
+  const result = emptyCaptureCounts();
+  for (const hole of order) {
+    const fact = facts[hole]?.[ownerId];
+    if (!fact) continue;
+    const hasGreenSide = typeof fact.greenSideBunkerCount === "number";
+    const hasFairway = typeof fact.fairwayBunkerCount === "number";
+    if (hasGreenSide || hasFairway) {
+      if (typeof fact.greenSideBunkerCount === "number") { result.greenSideBunkers += fact.greenSideBunkerCount; result.greenSideBunkerHoles += 1; }
+      if (typeof fact.fairwayBunkerCount === "number") { result.fairwayBunkers += fact.fairwayBunkerCount; result.fairwayBunkerHoles += 1; }
+    } else if (typeof fact.bunkerCount === "number") {
+      // Older captures have only a total; its location cannot be inferred.
+      result.unclassifiedBunkers += fact.bunkerCount;
+      result.unclassifiedBunkerHoles += 1;
+    }
+    if (fact.teeDirection) { result.teeShots[fact.teeDirection] += 1; result.teeShotHoles += 1; }
+    if (typeof fact.outOfBoundsCount === "number") {
+      result.outOfBounds += fact.outOfBoundsCount;
+      result.outOfBoundsHoles += 1;
+    } else if (typeof fact.outOfBounds === "boolean") {
+      // Counter wins when both representations exist; boolean is legacy only.
+      result.outOfBounds += fact.outOfBounds ? 1 : 0;
+      result.outOfBoundsHoles += 1;
+    }
+  }
+  return result;
+}
+
+function addRecordedCapture(target: RecordedCaptureCounts, source: RecordedCaptureCounts) {
+  target.greenSideBunkers += source.greenSideBunkers;
+  target.greenSideBunkerHoles += source.greenSideBunkerHoles;
+  target.fairwayBunkers += source.fairwayBunkers;
+  target.fairwayBunkerHoles += source.fairwayBunkerHoles;
+  target.unclassifiedBunkers += source.unclassifiedBunkers;
+  target.unclassifiedBunkerHoles += source.unclassifiedBunkerHoles;
+  target.teeShotHoles += source.teeShotHoles;
+  target.outOfBounds += source.outOfBounds;
+  target.outOfBoundsHoles += source.outOfBoundsHoles;
+  for (const direction of TEE_SHOT_DIRECTIONS) target.teeShots[direction] += source.teeShots[direction];
+  return target;
+}
 
 export type ScoredRoundInsight = {
   id: string;
@@ -36,6 +105,8 @@ export type ScoredRoundInsight = {
   greenAttempts: number;
   penaltyStrokes: number;
   advancedHoles: number;
+  /** Counts only explicit facts on played holes for this snapshot's owner. */
+  capture?: RecordedCaptureCounts;
   /** Omitted when the persisted owner result is absent or fails validation. */
   betResult?: number;
   holeCount: 9 | 18;
@@ -96,6 +167,8 @@ export type GolfInsights = {
   greensInRegulation: number;
   greenAttempts: number;
   penaltyStrokes: number;
+  /** May be absent in older typed consumers; built snapshots always provide it. */
+  capture?: RecordedCaptureCounts;
   coursesPlayed: number;
   /** Omitted instead of pretending that an unavailable balance is zero. */
   betBalance?: number;
@@ -228,6 +301,7 @@ function insightFromRecap(round: RoundSnapshot, recap: HistoricalRoundRecap): Sc
     greenAttempts: advanced?.greensInRegulation?.attempts || 0,
     penaltyStrokes: advanced?.penalties?.strokes || 0,
     advancedHoles: advanced?.capturedHoles || 0,
+    capture: recordedCaptureForOwner(round, owner.playerId, golf.order),
     ...(betResult === undefined ? {} : { betResult }),
     holeCount: golf.holeCount,
   };
@@ -320,6 +394,7 @@ export function buildGolfInsights(rounds: readonly RoundSnapshot[]): GolfInsight
   const primary = cohort18 || cohort9;
   const puttRounds = primary?.recentRounds.filter((round) => round.putts !== null) || [];
   const advancedRounds = chronological.filter((round) => round.advancedHoles > 0);
+  const capture = chronological.reduce((total, round) => addRecordedCapture(total, round.capture || emptyCaptureCounts()), emptyCaptureCounts());
 
   const betValues: number[] = [];
   const expenseValues: number[] = [];
@@ -377,6 +452,7 @@ export function buildGolfInsights(rounds: readonly RoundSnapshot[]): GolfInsight
     greensInRegulation: advancedRounds.reduce((total, round) => total + round.greensInRegulation, 0),
     greenAttempts: advancedRounds.reduce((total, round) => total + round.greenAttempts, 0),
     penaltyStrokes: advancedRounds.reduce((total, round) => total + round.penaltyStrokes, 0),
+    capture,
     coursesPlayed: new Set(chronological.map((round) => round.courseName)).size,
     ...(betValues.length ? { betBalance: betValues.reduce((total, value) => total + value, 0) } : {}),
     betRounds: betValues.length,
