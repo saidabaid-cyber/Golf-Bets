@@ -310,6 +310,73 @@ export type PlayerTeeAssignmentSnapshot = {
   capturedAt: string;
 };
 
+/** External evidence for one officially rated tee. Internal/manual catalog data alone never qualifies. */
+export type BackyardIndexRatedTeeEvidence = {
+  kind: "OFFICIAL_RATED_TEE";
+  authority: string;
+  sourceUrl: string;
+  verifiedAt: string;
+  courseId: string;
+  teeId: string;
+  courseRating: number;
+  slopeRating: number;
+};
+
+/** An unknown PCC is not silently converted to zero. The second variant is an explicit local-only assumption. */
+export type BackyardIndexPccEvidence =
+  | { kind: "PUBLISHED_PCC"; value: -1 | 0 | 1 | 2 | 3; appliesToDate: string; authority: string; verifiedAt: string }
+  | { kind: "DECLARED_LOCAL_ZERO"; value: 0; declaredAt: string; declaredByAccountUserId: string };
+
+export type BackyardIndexIneligibilityReason =
+  | "MISSING_INDEX_SNAPSHOT"
+  | "INVALID_INDEX_SNAPSHOT"
+  | "ROUND_NOT_COMPLETED"
+  | "INVALID_PLAYED_DATE"
+  | "PLAYER_NOT_LINKED"
+  | "NOT_COMPLETE_18_HOLES"
+  | "MISSING_COURSE_SNAPSHOT"
+  | "MISSING_HOLE_DEFINITIONS"
+  | "MISSING_HOLE_SCORES"
+  | "INVALID_HOLE_SCORES"
+  | "MISSING_TEE_ASSIGNMENT"
+  | "MISSING_OFFICIAL_TEE_RATING"
+  | "INVALID_OFFICIAL_TEE_RATING"
+  | "TEE_RATING_MISMATCH"
+  | "MISSING_COURSE_HANDICAP_FOR_ADJUSTMENT"
+  | "COURSE_HANDICAP_TEE_MISMATCH"
+  | "MISSING_ADJUSTED_GROSS_SCORE"
+  | "MISSING_PCC_EVIDENCE"
+  | "INVALID_PCC_EVIDENCE";
+
+export type BackyardIndexHoleAdjustment = {
+  hole: number;
+  par: number;
+  strokeIndex: number;
+  gross: number;
+  maximum: number;
+  adjusted: number;
+};
+
+/** Immutable scoring evidence; a Backyard Index is local and never a WHS/GHIN Handicap Index. */
+export type BackyardIndexRoundSnapshot = {
+  version: 1;
+  roundId: string;
+  accountUserId: string;
+  playerId: string;
+  playedAt: string;
+  capturedAt: string;
+  eligible: boolean;
+  reasons: BackyardIndexIneligibilityReason[];
+  grossScore?: number;
+  adjustedGrossScore?: number;
+  adjustmentMethod?: "INITIAL_PAR_PLUS_FIVE" | "NET_DOUBLE_BOGEY";
+  unrestrictedCourseHandicap?: number;
+  holeAdjustments?: BackyardIndexHoleAdjustment[];
+  ratedTeeEvidence?: BackyardIndexRatedTeeEvidence;
+  pccEvidence?: BackyardIndexPccEvidence;
+  scoreDifferential?: number;
+};
+
 export type PersonalAdvantageMode = "manual" | "current_index" | "sliding";
 export type PersonalIndexSource = "GHIN_OFFICIAL" | "BACKYARD_WHS" | "PROFILE_FALLBACK";
 
@@ -644,6 +711,8 @@ export type RoundSnapshot = {
   courseSnapshot?: Course;
   /** Immutable tee metadata used when the round was played. */
   playerTeeAssignments?: PlayerTeeAssignmentSnapshot[];
+  /** Optional, account-linked local scoring evidence. Never interpreted as official WHS/GHIN. */
+  backyardIndexSnapshots?: BackyardIndexRoundSnapshot[];
   /** Labels of the principal player's active bag when the round closed. */
   ownerBagSnapshot?: string[];
   order?: number[];

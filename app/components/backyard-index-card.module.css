@@ -1,0 +1,228 @@
+.card {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--card);
+  padding: 18px;
+  box-shadow: 0 8px 28px rgba(20, 58, 34, .06);
+}
+
+.heading {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.heading h2 {
+  margin: 4px 0 0;
+  color: var(--ink);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(20px, 5vw, 27px);
+  line-height: 1.15;
+}
+
+.eyebrow {
+  color: var(--green);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 1.2px;
+}
+
+.badge {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #f7edcf;
+  padding: 6px 8px;
+  color: #795a14;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .5px;
+  white-space: nowrap;
+}
+
+.intro,
+.note,
+.method,
+.caution,
+.separation {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.activate {
+  min-height: 46px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--green);
+  padding: 10px 14px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .5px;
+}
+
+.hero {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #183e29, #286447);
+  padding: 16px;
+  color: #fff;
+}
+
+.hero > div:first-child {
+  display: grid;
+  min-width: 0;
+}
+
+.heroLabel {
+  color: #dbeee1;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
+
+.hero strong {
+  font-size: 44px;
+  line-height: 1;
+  letter-spacing: -2px;
+}
+
+.hero small {
+  margin-top: 6px;
+  color: #dbeee1;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.progress {
+  display: grid;
+  flex: 0 0 auto;
+  justify-items: center;
+  gap: 2px;
+  border: 1px solid rgba(255, 255, 255, .28);
+  border-radius: 12px;
+  padding: 10px;
+  text-align: center;
+}
+
+.progress b {
+  font-size: 21px;
+  line-height: 1;
+}
+
+.progress span {
+  max-width: 65px;
+  color: #dbeee1;
+  font-size: 9px;
+  line-height: 1.25;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.metrics span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--soft);
+  padding: 10px;
+}
+
+.metrics b {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.metrics small {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.3;
+}
+
+.caution {
+  border-left: 3px solid #bd922b;
+  border-radius: 4px;
+  background: #fff7e2;
+  padding: 9px 11px;
+  color: #654b13;
+}
+
+.details {
+  min-width: 0;
+  border-top: 1px solid var(--line);
+  padding-top: 11px;
+}
+
+.details summary {
+  cursor: pointer;
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: .5px;
+}
+
+.details ul {
+  display: grid;
+  max-height: 300px;
+  gap: 0;
+  overflow-y: auto;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.details li {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  border-top: 1px solid var(--line);
+  padding: 9px 0;
+}
+
+.details li b {
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-size: 11px;
+}
+
+.details li span {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.disable {
+  justify-self: start;
+  border: 0;
+  background: transparent;
+  padding: 5px 0;
+  color: var(--green);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.separation {
+  border-top: 1px solid var(--line);
+  padding-top: 11px;
+  font-size: 10px;
+}
+
+@media (max-width: 380px) {
+  .heading { flex-wrap: wrap; }
+  .badge { order: -1; }
+  .hero strong { font-size: 38px; }
+}
