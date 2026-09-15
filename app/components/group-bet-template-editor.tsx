@@ -2,6 +2,7 @@
 
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { playOrder, segmentDefinitions } from "../../lib/engine";
+import { defaultFoursomeMatchPress } from "../../lib/foursome-config";
 import { defaultMaxBaseAppearances, generateAutomaticFoursomes, markFoursomeSegmentEdited } from "../../lib/foursome-generator";
 import { configureCurrentIndexPersonal, configureSlidingPersonal } from "../../lib/personal-modes";
 import {
@@ -12,7 +13,7 @@ import {
   type GroupTemplateCoreKey,
 } from "../../lib/bets/registry";
 import { createSupplementalBet } from "../../lib/supplemental-bets";
-import type { GroupGameTemplate, PersonalBet, Player, SupplementalBet } from "../../lib/types";
+import type { FoursomeMatchPress, GroupGameTemplate, PersonalBet, Player, SupplementalBet } from "../../lib/types";
 import { SupplementalBetsEditor } from "./supplemental-bets-editor";
 import { NumericCaptureInput } from "./numeric-capture-input";
 import styles from "./group-bet-template-editor.module.css";
@@ -142,6 +143,21 @@ export function GroupBetTemplateEditor({ value, players, ownerId, mode, onChange
       foursomeSegments: segmentDefinitions(playOrder(current.roundDefaults.startHole).slice(0, current.roundDefaults.roundHoles), segmentSize),
     }));
   };
+  const addFoursomeMatchPress = () => onChange((current) => {
+    const existing = current.betConfig.foursome.matchPresses ?? [];
+    if (current.betConfig.foursome.mode !== "match" || existing.length >= 18) return current;
+    const press = defaultFoursomeMatchPress(makeId("match-press"), current.roundDefaults.startHole, current.roundDefaults.roundHoles);
+    if (!press) return current;
+    return { ...current, betConfig: { ...current.betConfig, foursome: { ...current.betConfig.foursome, pressureMultiplier: 1, pressSecond9: false, matchPresses: [...existing, press] } } };
+  });
+  const updateFoursomeMatchPress = (id: string, patch: Partial<FoursomeMatchPress>) => onChange((current) => ({
+    ...current,
+    betConfig: { ...current.betConfig, foursome: { ...current.betConfig.foursome, matchPresses: (current.betConfig.foursome.matchPresses ?? []).map((press) => press.id === id ? { ...press, ...patch } : press) } },
+  }));
+  const removeFoursomeMatchPress = (id: string) => onChange((current) => ({
+    ...current,
+    betConfig: { ...current.betConfig, foursome: { ...current.betConfig.foursome, matchPresses: (current.betConfig.foursome.matchPresses ?? []).filter((press) => press.id !== id) } },
+  }));
   const generateFoursomes = () => {
     const generated = generateAutomaticFoursomes({
       participantIds: value.betConfig.foursome.participantIds,
@@ -199,16 +215,31 @@ export function GroupBetTemplateEditor({ value, players, ownerId, mode, onChange
           <div className={styles.fieldsRow}>
             <label className={styles.field}>Modalidad<select value={value.betConfig.foursome.mode} onChange={(event) => {
               const mode = event.target.value as GroupGameTemplate["betConfig"]["foursome"]["mode"];
-              updateCore(key, { mode, ...(mode === "match" ? { segmentSize: 18 } : {}) });
+              updateCore(key, { mode, ...(mode === "match" ? { segmentSize: 18, pressureMultiplier: 1, pressSecond9: false, matchPresses: value.betConfig.foursome.matchPresses ?? [] } : { matchPresses: undefined }) });
               if (mode === "match") setFoursomeSegmentSize(18);
-            }}><option value="fixed">Fijo</option><option value="fixed_points">Fijo + Patada</option><option value="points">Solo puntos / patada</option><option value="match">Match · Primera / Segunda / Total</option></select></label>
+            }}><option value="fixed">Fijo</option><option value="fixed_points">Fijo + Patada</option><option value="points">Solo puntos / patada</option><option value="match" disabled={value.roundDefaults.roundHoles !== 18}>Match · Primera / Segunda / Total</option></select></label>
             {(value.betConfig.foursome.mode === "fixed" || value.betConfig.foursome.mode === "fixed_points" || value.betConfig.foursome.mode === "match") && <Field label={value.betConfig.foursome.mode === "match" ? "Valor por Match" : "Valor fijo"} value={value.betConfig.foursome.fixedValue} step={0.01} onChange={(fixedValue) => updateCore(key, { fixedValue })} />}
             {(value.betConfig.foursome.mode === "points" || value.betConfig.foursome.mode === "fixed_points") && <Field label="Valor por punto / patada" value={value.betConfig.foursome.pointValue} step={0.01} onChange={(pointValue) => updateCore(key, { pointValue })} />}
             <label className={styles.field}>Tramos<select disabled={value.betConfig.foursome.mode === "match"} value={value.betConfig.foursome.mode === "match" ? 18 : value.betConfig.foursome.segmentSize} onChange={(event) => setFoursomeSegmentSize(Number(event.target.value) as 3 | 6 | 9 | 18)}><option value="3">3 hoyos</option><option value="6">6 hoyos</option><option value="9">9 hoyos</option><option value="18">18 hoyos</option></select></label>
             {value.betConfig.foursome.mode !== "match" && <Field label="Máximo en pareja base" value={foursomeMaxBaseAppearances} min={1} max={18} onChange={(next) => setFoursomeMaxBaseAppearances(Math.max(1, Math.trunc(next)))} />}
-            {value.roundDefaults.roundHoles === 18 && <label className={styles.field}>Presión · segunda vuelta<select value={value.betConfig.foursome.pressureMultiplier ?? (value.betConfig.foursome.pressSecond9 ? 2 : 1)} onChange={(event) => updateCore(key, { pressureMultiplier: Number(event.target.value), pressSecond9: Number(event.target.value) > 1 })}><option value="1">Sin presión</option><option value="2">2x</option><option value="3">3x</option><option value="4">4x</option><option value="5">5x</option></select></label>}
+            {value.roundDefaults.roundHoles === 18 && value.betConfig.foursome.mode !== "match" && <label className={styles.field}>Presión · segunda vuelta<select value={value.betConfig.foursome.pressureMultiplier ?? (value.betConfig.foursome.pressSecond9 ? 2 : 1)} onChange={(event) => updateCore(key, { pressureMultiplier: Number(event.target.value), pressSecond9: Number(event.target.value) > 1 })}><option value="1">Sin presión</option><option value="2">2x</option><option value="3">3x</option><option value="4">4x</option><option value="5">5x</option></select></label>}
           </div>
           {value.betConfig.foursome.mode === "match" ? <p className={styles.editorMessage}>Parejas fijas · Primera, Segunda y Total se liquidan por separado.</p> : <button type="button" className="secondary" onClick={generateFoursomes}>Generar foursomes automáticamente</button>}
+          {value.roundDefaults.roundHoles !== 18 && <p className={styles.matchPressureEmpty} role="status">Foursome Match y sus presionadas requieren 18 hoyos; esta salida es de 9. Las otras modalidades pueden guardarse.</p>}
+          {value.betConfig.foursome.mode === "match" && value.roundDefaults.roundHoles === 18 && <section className={styles.matchPressureEditor} aria-label="Presionadas Match habituales">
+            <div className={styles.matchPressureHeader}><div><b>Presionadas Match</b><small>Cada presión abre un partido independiente desde el hoyo elegido hasta el cierre de Primera, Segunda o Total.</small></div><button type="button" className="secondary" disabled={(value.betConfig.foursome.matchPresses ?? []).length >= 18} onClick={addFoursomeMatchPress}>+ Agregar presión</button></div>
+            {(value.betConfig.foursome.matchPresses ?? []).length === 0 && <p className={styles.matchPressureEmpty}>Sin presionadas. Primera, Segunda y Total conservan el valor base.</p>}
+            {(value.betConfig.foursome.matchPresses ?? []).map((press, index) => {
+              const scopeHoles = press.scope === "first" ? roundOrder.slice(0, 9) : press.scope === "second" ? roundOrder.slice(9) : roundOrder;
+              return <div className={styles.matchPressureRow} key={press.id}>
+                <strong>Presión {index + 1}</strong>
+                <label className={styles.field}>Partido<select value={press.scope} onChange={(event) => { const scope = event.target.value as FoursomeMatchPress["scope"]; const holes = scope === "first" ? roundOrder.slice(0, 9) : scope === "second" ? roundOrder.slice(9) : roundOrder; updateFoursomeMatchPress(press.id, { scope, startHole: holes[0] }); }}><option value="first">Primera</option><option value="second">Segunda</option><option value="total">Total</option></select></label>
+                <label className={styles.field}>Empieza<select value={press.startHole} onChange={(event) => updateFoursomeMatchPress(press.id, { startHole: Number(event.target.value) })}>{scopeHoles.map((hole) => <option value={hole} key={hole}>Hoyo {hole}</option>)}</select></label>
+                <label className={styles.field}>Valor<select value={press.multiplier} onChange={(event) => updateFoursomeMatchPress(press.id, { multiplier: Number(event.target.value) as FoursomeMatchPress["multiplier"] })}>{([2, 3, 4, 5] as const).map((multiplier) => <option value={multiplier} key={multiplier}>{multiplier}x</option>)}</select></label>
+                <button type="button" className={styles.matchPressureRemove} aria-label={`Eliminar presión ${index + 1}`} onClick={() => removeFoursomeMatchPress(press.id)}>×</button>
+              </div>;
+            })}
+          </section>}
           {foursomeMessage && <small className={styles.editorMessage} role="status">{foursomeMessage}</small>}
           <div className={styles.segmentList}>{value.foursomeSegments.map((segment) => <article key={segment.id}><div><b>H{roundOrder[segment.startIndex]}–{roundOrder[segment.endIndex]}</b><small>{segment.generatedByBackyard ? "Generada por Backyard" : "Editada manualmente"}</small></div><Participants players={players.filter((player) => value.betConfig.foursome.participantIds.includes(player.id))} selected={segment.basePair} onChange={(basePair) => onChange((current) => ({ ...current, foursomeSegments: current.foursomeSegments.map((segmentItem) => segmentItem.id === segment.id ? markFoursomeSegmentEdited({ ...segmentItem, basePair: basePair.slice(-2) }) : segmentItem) }))} /></article>)}</div>
         </>}

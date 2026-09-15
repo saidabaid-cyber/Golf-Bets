@@ -21,6 +21,7 @@ import {
 } from "../lib/group-game-template";
 import { collectBetConfigurationIssues } from "../lib/bet-config-validation";
 import { playOrder, segmentDefinitions } from "../lib/engine";
+import { defaultFoursomeMatchPress } from "../lib/foursome-config";
 import { initialBets } from "../lib/new-round-bets";
 import { createSupplementalBet } from "../lib/supplemental-bets";
 import type { FrequentGroup, ManualBet, PersonalBet, Player } from "../lib/types";
@@ -333,6 +334,50 @@ test("la ronda filtra participantes presentes y precarga Foursome Match y reglas
   assert.equal(draft.bets.camels.determinationMode, "last_event");
   assert.equal(draft.bets.fish.mostEventsTieRule, "tied_players_pay");
   assert.deepEqual(draft.bets.skins.participantIds, draft.players.map((player) => player.id));
+});
+
+test("presionadas Foursome Match habituales sobreviven guardar, recargar y precargar desde H10", () => {
+  const source = configuredSource();
+  source.startHole = 10;
+  source.bets.foursome = {
+    ...source.bets.foursome,
+    enabled: true,
+    mode: "match",
+    segmentSize: 18,
+    fixedValue: 500,
+    pressureMultiplier: 1,
+    pressSecond9: false,
+    participantIds: roundPlayers.map((player) => player.id),
+    matchPresses: [
+      { id: "first-from-ten", scope: "first", startHole: 10, multiplier: 2 },
+      { id: "second-from-one", scope: "second", startHole: 1, multiplier: 5 },
+      { id: "total-from-thirteen", scope: "total", startHole: 13, multiplier: 3 },
+    ],
+  };
+  source.segments = segmentDefinitions(playOrder(10), 18).map((segment) => ({ ...segment, basePair: ["round-owner", "round-pedro"] }));
+
+  const group: FrequentGroup = { ...configuredGroup(), gameTemplate: createGroupGameTemplate(source, memberIdByPlayerId) };
+  const [restored] = parseFrequentGroups(serializeFrequentGroups([group]));
+  assert.equal(restored.gameTemplate?.roundDefaults.startHole, 10);
+  assert.deepEqual(restored.gameTemplate?.betConfig.foursome.matchPresses, source.bets.foursome.matchPresses);
+
+  let sequence = 0;
+  const draft = instantiateGroupGameTemplate(restored, () => `match-round-${++sequence}`, ["member-owner", "member-pedro", "member-juan", "member-carlos"]);
+  assert.equal(draft.startHole, 10);
+  assert.equal(draft.bets.foursome.mode, "match");
+  assert.deepEqual(draft.bets.foursome.matchPresses, source.bets.foursome.matchPresses);
+  assert.equal(draft.bets.foursome.pressureMultiplier, 1);
+  assert.equal(collectBetConfigurationIssues(draft).some((issue) => issue.code.startsWith("foursome-match")), false);
+
+  draft.bets.foursome.matchPresses![1].multiplier = 4;
+  assert.equal(restored.gameTemplate?.betConfig.foursome.matchPresses?.[1].multiplier, 5, "editar la ronda no modifica la plantilla");
+});
+
+test("una plantilla de 9 hoyos no puede crear presión Segunda y H10 inicia Segunda en H1", () => {
+  assert.equal(defaultFoursomeMatchPress("nine", 1, 9), null);
+  assert.equal(defaultFoursomeMatchPress("nine-from-ten", 10, 9), null);
+  assert.deepEqual(defaultFoursomeMatchPress("from-one", 1, 18), { id: "from-one", scope: "second", startHole: 10, multiplier: 2 });
+  assert.deepEqual(defaultFoursomeMatchPress("from-ten", 10, 18), { id: "from-ten", scope: "second", startHole: 1, multiplier: 2 });
 });
 
 test("agregar un jugador sólo a la ronda no muta el grupo y agregarlo explícitamente sí", () => {

@@ -105,8 +105,9 @@ test("Más concentra herramientas, ayuda y configuración sin duplicar Perfil", 
 
 test("plantillas de grupo conservan Foursome Match y las reglas explícitas de animales", () => {
   const editor = readFileSync("app/components/group-bet-template-editor.tsx", "utf8");
-  assert.match(editor, /<option value="match">Match · Primera \/ Segunda \/ Total<\/option>/);
-  assert.match(editor, /mode === "match" \? \{ segmentSize: 18 \}/);
+  assert.match(editor, /<option value="match" disabled=\{value\.roundDefaults\.roundHoles !== 18\}>Match · Primera \/ Segunda \/ Total<\/option>/);
+  assert.match(editor, /mode === "match" \? \{ segmentSize: 18, pressureMultiplier: 1, pressSecond9: false/);
+  assert.match(editor, /Presionadas Match/);
   assert.match(editor, /¿Cómo se define quién se queda el animal\?/);
   assert.match(editor, /Los empatados lo pagan/);
   assert.match(editor, /El último de los empatados en hacerlo/);
