@@ -24,3 +24,10 @@ This file records owner-controlled visual gates. A technical test or successful 
 ## 2026-09-15 — Perfil / ronda / Index
 
 HOME remains VISUAL_APPROVED / NO TOUCH. No hero, Home component, Home CSS or asset edits. Owner explicitly authorized only a conditional central JUGAR destination in the shared tab bar while a recoverable active round exists; the four-destination inactive layout remains unchanged. Profile/manual avatar, destructive dialogs and the active navigation require owner visual review. See `PROFILE_ROUND_INDEX_CLOSEOUT.md` for local browser evidence and outstanding isolated cloud/legal verification.
+
+## 2026-09-15 — Index / course data follow-up
+
+HOME remains VISUAL_APPROVED / NO TOUCH. Owner explicitly requested only the active-round label
+`CONTINUAR / RONDA` in the existing conditional shared tab. Home hero/component/CSS/assets are
+unchanged. Local 390/393/430 browser evidence covers that label and the Index help/card, not an
+owner approval. See `INDEX_COURSE_CLOSEOUT.md`; Stats reset cloud remains `PENDING_CONTROLLED_DB_APPLY`.
