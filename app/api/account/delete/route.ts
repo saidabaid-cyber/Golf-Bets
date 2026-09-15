@@ -1,34 +1,42 @@
-import { getSupabaseAdmin, getSupabaseForUser } from "../../../../lib/supabase/server";
-import { ACCOUNT_DELETION_CONTROLLED_DB_APPLY_PENDING, deleteAccountGraph, supabaseAccountDeletionGateway } from "../../../../lib/account-deletion";
+import "server-only";
 
-export async function DELETE(request: Request) {
-  const authorization = request.headers.get("authorization") || "";
-  const token = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
-  if (!token) return Response.json({ error: "Sesión requerida." }, { status: 401 });
-  let body: { confirmation?: string } = {};
-  try { body = await request.json(); } catch { return Response.json({ error: "Solicitud inválida." }, { status: 400 }); }
-  if (body.confirmation !== "ELIMINAR") return Response.json({ error: "Falta confirmación fuerte." }, { status: 400 });
+import { NextRequest, NextResponse } from "next/server";
 
-  const userClient = getSupabaseForUser(token);
-  const admin = getSupabaseAdmin();
-  if (!userClient || !admin) return Response.json({ error: "La eliminación segura de cuentas está pendiente de configuración del servidor." }, { status: 503 });
-  const { data, error } = await userClient.auth.getUser(token);
-  if (error || !data.user) return Response.json({ error: "Sesión no válida." }, { status: 401 });
-  // This guard precedes the audit insert and all media/data deletions. The
-  // current saga would otherwise strand an active account at an FK RESTRICT.
-  if (ACCOUNT_DELETION_CONTROLLED_DB_APPLY_PENDING) return Response.json({ error: "La eliminación segura de cuentas requiere un grafo transaccional y QA en una base Preview aislada. No se borró ningún dato.", code: "account_deletion_controlled_apply_pending", noDataDeleted: true }, { status: 503 });
-  try {
-    const audit = await userClient.from("product_usage_events_v2").insert({
-      id: `account-delete-${crypto.randomUUID().replaceAll("-", "")}`,
-      owner_id: data.user.id,
-      event_name: "account_delete_requested",
-      metadata: {},
-      occurred_at: new Date().toISOString(),
-    });
-    if (audit.error) return Response.json({ error: "No se pudo registrar de forma segura la solicitud. La cuenta sigue activa." }, { status: 503 });
-    const deleted = await deleteAccountGraph(supabaseAccountDeletionGateway(admin), data.user.id);
-    return Response.json({ ok: true, deleted });
-  } catch {
-    return Response.json({ error: "No se completó la eliminación. La cuenta sigue activa; reintenta o contacta soporte." }, { status: 500 });
+import { parseAccountDeletionChoice } from "../../../../lib/account-deletion";
+import { authenticatedRequest } from "../../../../lib/server-auth";
+import { BACKYARD_AI_PRIVATE_HEADERS, isCrossSiteRequest, isJsonRequest, readJsonBodyWithLimit } from "../../../../lib/backyard-ai/server/http-security";
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
+function json(body: unknown, status = 200) {
+  return NextResponse.json(body, { status, headers: BACKYARD_AI_PRIVATE_HEADERS });
+}
+
+/** Both choices are validated before any audit, storage, database or Auth
+ * mutation. Neither can be represented as completed until its independent
+ * safety boundary is actually certified on an isolated Preview database. */
+export async function DELETE(request: NextRequest) {
+  if (isCrossSiteRequest(request)) return json({ code: "CROSS_SITE", error: "Solicitud no permitida." }, 403);
+  const account = await authenticatedRequest(request);
+  if (!account.ok) return json({ error: account.error, code: account.code }, account.status);
+  if (!isJsonRequest(request)) return json({ code: "UNSUPPORTED_MEDIA_TYPE", error: "La solicitud debe usar JSON." }, 415);
+  const read = await readJsonBodyWithLimit(request, 1_024);
+  if (!read.ok) return json({ code: read.reason === "too_large" ? "REQUEST_TOO_LARGE" : "INVALID_REQUEST", error: "La solicitud no es válida." }, read.reason === "too_large" ? 413 : 400);
+  const choice = parseAccountDeletionChoice(read.value);
+  if (!choice) return json({ code: "INVALID_ACCOUNT_DELETE_CHOICE", error: "Confirma escribiendo ELIMINAR y selecciona qué hacer con tus datos de golf." }, 400);
+
+  if (choice.dataPolicy === "retain_history") {
+    return json({
+      code: "LEGAL_REVIEW_REQUIRED",
+      error: "Conservar el histórico requiere una política legal de retención y recuperación, más aislamiento de sesiones y datos. No se archivó la cuenta ni se borró ningún dato.",
+      noDataDeleted: true,
+    }, 503);
   }
+
+  return json({
+    code: "PENDING_CONTROLLED_DB_APPLY",
+    error: "La eliminación irreversible requiere un grafo transaccional y QA en una base Preview aislada. No se borró ningún dato.",
+    noDataDeleted: true,
+  }, 503);
 }

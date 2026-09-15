@@ -2,6 +2,19 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 const SCORECARD_BUCKET = "scorecard-photos";
 
+export const ACCOUNT_DATA_POLICIES = ["delete_golf_data", "retain_history"] as const;
+export type AccountDataPolicy = (typeof ACCOUNT_DATA_POLICIES)[number];
+const REQUEST_UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function parseAccountDeletionChoice(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const source = value as Record<string, unknown>;
+  if (!Object.keys(source).every(key => ["confirmation", "dataPolicy", "requestId"].includes(key))) return null;
+  return source.confirmation === "ELIMINAR" && ACCOUNT_DATA_POLICIES.includes(source.dataPolicy as AccountDataPolicy)
+    && typeof source.requestId === "string" && REQUEST_UUID_V4.test(source.requestId)
+    ? { dataPolicy: source.dataPolicy as AccountDataPolicy, requestId: source.requestId } : null;
+}
+
 /** The legacy saga cannot safely handle Phase 2's shared groups, round
  * participants and RESTRICT audit references. Data API errors cannot prove
  * these tables absent, so this route stays disabled until the replacement

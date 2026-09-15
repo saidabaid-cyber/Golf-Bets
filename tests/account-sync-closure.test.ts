@@ -178,11 +178,16 @@ test("un fallo de Storage impide afirmar eliminación o borrar Auth", async () =
 });
 
 test("endpoint deriva user id del token y nunca acepta userId del body", () => {
-  const source = readFileSync("app/api/account/delete/route.ts", "utf8");
-  assert.match(source, /auth\.getUser\(token\)/);
-  assert.match(source, /data\.user\.id/);
-  assert.doesNotMatch(source, /body\.userId|userId\s*:\s*body/);
-  assert.match(source, /confirmation !== "ELIMINAR"/);
+  const route = readFileSync("app/api/account/delete/route.ts", "utf8");
+  const auth = readFileSync("lib/server-auth.ts", "utf8");
+  const deletion = readFileSync("lib/account-deletion.ts", "utf8");
+  assert.match(route, /authenticatedRequest\(request\)/);
+  assert.match(auth, /client\.auth\.getUser\(token\)/);
+  assert.match(auth, /userId: data\.user\.id/);
+  assert.match(route, /parseAccountDeletionChoice\(read\.value\)/);
+  assert.match(deletion, /\["confirmation", "dataPolicy", "requestId"\]\.includes\(key\)/);
+  assert.match(deletion, /source\.confirmation === "ELIMINAR"/);
+  assert.doesNotMatch(route, /body\.userId|userId\s*:\s*body|request\.json\(\)/);
 });
 
 test("documentos legales regresan al origen y conservan contexto entre documentos", () => {

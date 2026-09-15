@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { accountDeletionRecoveryAction, settleAccountDeletionClient } from "../lib/account-deletion-client";
+import { accountDeletionRecoveryAction, accountDeletionIntentKey, clearAccountDeletionIntent, persistAccountDeletionIntent, readAccountDeletionIntent, settleAccountDeletionClient } from "../lib/account-deletion-client";
 
 class MemoryStorage {
   values = new Map<string, string>();
@@ -10,6 +10,28 @@ class MemoryStorage {
   removeItem(key: string) { this.values.delete(key); }
   getItem(key: string) { return this.values.get(key) ?? null; }
 }
+
+test("elección de borrado se guarda por owner antes de marker y retry usa misma key", () => {
+  const storage = new MemoryStorage();
+  const intent = { dataPolicy: "retain_history" as const, requestId: "11111111-1111-4111-8111-111111111111" };
+  assert.deepEqual(persistAccountDeletionIntent(storage, "user-a", intent), intent);
+  assert.deepEqual(readAccountDeletionIntent(storage, "user-a"), intent);
+  assert.equal(readAccountDeletionIntent(storage, "user-b"), null);
+  assert.match(storage.getItem(accountDeletionIntentKey("user-a"))!, /"userId":"user-a"/);
+  clearAccountDeletionIntent(storage, "user-a");
+  assert.equal(readAccountDeletionIntent(storage, "user-a"), null);
+});
+
+test("storage no durable, formato corrupto o policy inválida nunca permiten retry supuesto", () => {
+  const storage = new MemoryStorage();
+  const intent = { dataPolicy: "delete_golf_data" as const, requestId: "11111111-1111-4111-8111-111111111111" };
+  assert.throws(() => persistAccountDeletionIntent({ setItem: () => {}, getItem: () => null }, "user-a", intent), /No pudimos guardar/);
+  assert.throws(() => persistAccountDeletionIntent(storage, "user-a", { ...intent, requestId: "bad" }), /no es válida/);
+  storage.setItem(accountDeletionIntentKey("user-a"), JSON.stringify({ version: 1, userId: "user-b", ...intent }));
+  assert.equal(readAccountDeletionIntent(storage, "user-a"), null);
+  storage.setItem(accountDeletionIntentKey("user-a"), "{not-json");
+  assert.equal(readAccountDeletionIntent(storage, "user-a"), null);
+});
 
 test("HTTP 500 con Auth todavía activo no purga datos locales", async () => {
   const storage = new MemoryStorage();
@@ -77,7 +99,7 @@ test("fallo de cleanup tras 2xx no repite purge en catch del panel", async () =>
   assert.equal(storage.getItem("deletion:user-a"), "completed_cleanup_pending");
   for (const path of ["app/components/account-panel.tsx", "app/components/profile-account-panel.tsx"]) {
     const panel = readFileSync(path, "utf8");
-    assert.match(panel, /catch \(error\) \{\s*if \(serverDeletionConfirmed\) \{[\s\S]*return;\s*\}\s*try \{\s*const outcome = await settleAccountDeletionClient/);
+    assert.match(panel, /catch \(error\) \{[\s\S]*if \(serverDeletionConfirmed\) \{[\s\S]*return;\s*\}\s*try \{\s*const outcome = await settleAccountDeletionClient/);
   }
 });
 
@@ -115,9 +137,13 @@ test("ambos paneles usan la misma política fail-closed", () => {
 test("Conservar mi cuenta sólo aparece tras Auth activo y revalida al pulsar", () => {
   const provider = readFileSync("app/components/account-provider.tsx", "utf8");
   const route = readFileSync("app/api/account/delete/route.ts", "utf8");
-  assert.match(route, /ACCOUNT_DELETION_CONTROLLED_DB_APPLY_PENDING\) return Response\.json\(\{[\s\S]*noDataDeleted: true \}, \{ status: 503 \}\)/);
-  assert.ok(route.indexOf("noDataDeleted: true") < route.indexOf('from("product_usage_events_v2").insert'));
-  assert.match(provider, /if \(!response\.ok\) \{[\s\S]*if \(result\?\.noDataDeleted === true\) \{[\s\S]*auth\.getUser\(session\.access_token\)[\s\S]*verified\.data\.user\?\.id === session\.user\.id\) setPendingDeletionAccountActive\(true\)/);
+  assert.match(route, /code: "PENDING_CONTROLLED_DB_APPLY"[\s\S]*noDataDeleted: true/);
+  assert.match(route, /code: "LEGAL_REVIEW_REQUIRED"[\s\S]*noDataDeleted: true/);
+  assert.doesNotMatch(route, /from\("product_usage_events_v2"\)\.insert|deleteAccountGraph\(/);
+  assert.match(provider, /const intent = readAccountDeletionIntent\(localStorage, session\.user\.id\);[\s\S]*if \(!intent\) throw new Error\([\s\S]*body: JSON\.stringify\(\{ confirmation: "ELIMINAR", dataPolicy: intent\.dataPolicy, requestId: intent\.requestId \}\)/);
+  assert.match(provider, /if \(!intent\) throw new Error\("PENDING_MANUAL_ACCOUNT_RECOVERY:/);
+  assert.match(provider, /Contactar soporte/);
+  assert.match(provider, /response\.status === 503 && result\?\.noDataDeleted === true &&[\s\S]*"PENDING_CONTROLLED_DB_APPLY", "LEGAL_REVIEW_REQUIRED"[\s\S]*auth\.getUser\(session\.access_token\)[\s\S]*verified\.data\.user\?\.id === session\.user\.id\) setPendingDeletionAccountActive\(true\)/);
   assert.match(provider, /if \(!session \|\| !pendingDeletionAccountActive \|\| deletionRecoveryBusy\) return/);
   assert.match(provider, /const verified = await supabase\.auth\.getUser\(session\.access_token\);[\s\S]*verified\.data\.user\?\.id !== session\.user\.id\)[\s\S]*localStorage\.removeItem\(accountDeletionMarkerKey\(session\.user\.id\)\)/);
   assert.match(provider, /\{pendingDeletionAccountActive && <button[\s\S]*Conservar mi cuenta<\/button>\}/);
