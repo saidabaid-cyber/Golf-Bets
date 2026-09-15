@@ -1,18 +1,21 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { ACCOUNT_DELETION_CONTROLLED_DB_APPLY_PENDING, parseAccountDeletionChoice } from "../lib/account-deletion";
+import { parseAccountDeletionChoice } from "../lib/account-deletion";
+import { accountLifecycleEnabled } from "../lib/account-lifecycle";
 
-test("el grafo destructivo antiguo permanece cerrado hasta QA de DB aislada", () => {
-  assert.equal(ACCOUNT_DELETION_CONTROLLED_DB_APPLY_PENDING, true);
+test("ciclo de cuentas exige feature flag y DB Preview aislada", () => {
+  assert.equal(accountLifecycleEnabled({}), false);
+  assert.equal(accountLifecycleEnabled({ ACCOUNT_LIFECYCLE_ENABLED: "true", PREVIEW_DB_REF: "zhqmlpljloumldaczcfp", NEXT_PUBLIC_SUPABASE_URL: "https://zhqmlpljloumldaczcfp.supabase.co", VERCEL_ENV: "preview" }), false);
 });
 
-test("ambas elecciones tienen barrera explícita pre-write y no borran nada", () => {
+test("ambas elecciones usan saga real sólo después de confirmación y aislamiento", () => {
   const route = readFileSync("app/api/account/delete/route.ts", "utf8");
-  assert.match(route, /authenticatedRequest\(request\)/);
+  assert.match(route, /authenticatedRequest\(request, \{ allowLifecycleRecovery: true \}\)/);
   assert.match(route, /readJsonBodyWithLimit\(request, 1_024\)/);
-  assert.match(route, /code: "LEGAL_REVIEW_REQUIRED"/);
-  assert.match(route, /code: "PENDING_CONTROLLED_DB_APPLY"/);
+  assert.match(route, /legalReview: "LEGAL_REVIEW_REQUIRED"/);
+  assert.match(route, /code: "CONTROLLED_DB_ACTION_REQUIRED"/);
+  assert.match(route, /await executeAccountLifecycle\(/);
   assert.equal((route.match(/noDataDeleted: true/g) || []).length, 2);
   assert.doesNotMatch(route, /deleteAccountGraph\(|\.insert\(|\.delete\(|\.remove\(|deleteUser\(/);
 });

@@ -2,6 +2,8 @@ import { randomBytes, randomInt } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin, getSupabaseForUser } from "../../../../lib/supabase/server";
 import { normalizePollaHcpPercentage } from "../../../../lib/polla-live";
+import { accountAccessFailure } from "../../../../lib/account-access.server";
+import { authUserFailure } from "../../../../lib/auth-errors";
 
 function bearer(request: NextRequest) {
   const value = request.headers.get("authorization") || "";
@@ -12,8 +14,12 @@ export async function GET(request: NextRequest) {
   const token = bearer(request);
   const supabase = token ? getSupabaseForUser(token, "polla") : null;
   if (!supabase) return NextResponse.json({ error: "Polla Live requiere configuración de nube o sesión." }, { status: 503 });
-  const { data: authData } = await supabase.auth.getUser(token);
-  if (!authData.user) return NextResponse.json({ error: "Sesión inválida." }, { status: 401 });
+  const { data: authData, error: authError } = await supabase.auth.getUser(token);
+  const failure = authUserFailure(authError, !authError && Boolean(authData.user));
+  if (failure) return NextResponse.json(failure, { status: failure.status });
+  if (!authData.user || authData.user.is_anonymous) return NextResponse.json({ error: "Sesión inválida." }, { status: 401 });
+  const accessFailure = await accountAccessFailure(supabase);
+  if (accessFailure) return NextResponse.json(accessFailure, { status: accessFailure.status });
   const selection = "id,public_id,short_code,name,tournament_date,course_name,status,format,holes,created_by";
   const [owned, delegatedAccess] = await Promise.all([
     supabase.from("tournaments").select(selection).eq("created_by", authData.user.id).order("tournament_date", { ascending: false }),
@@ -35,8 +41,12 @@ export async function POST(request: NextRequest) {
   const userClient = token ? getSupabaseForUser(token, "polla") : null;
   const admin = getSupabaseAdmin("polla");
   if (!userClient || !admin) return NextResponse.json({ error: "Polla Live requiere configuración de nube." }, { status: 503 });
-  const { data: authData } = await userClient.auth.getUser(token);
-  if (!authData.user) return NextResponse.json({ error: "Inicia sesión para crear una Polla." }, { status: 401 });
+  const { data: authData, error: authError } = await userClient.auth.getUser(token);
+  const failure = authUserFailure(authError, !authError && Boolean(authData.user));
+  if (failure) return NextResponse.json(failure, { status: failure.status });
+  if (!authData.user || authData.user.is_anonymous) return NextResponse.json({ error: "Inicia sesión para crear una Polla." }, { status: 401 });
+  const accessFailure = await accountAccessFailure(userClient);
+  if (accessFailure) return NextResponse.json(accessFailure, { status: accessFailure.status });
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   if (!body || typeof body.name !== "string" || !body.name.trim() || typeof body.courseName !== "string" || !body.courseName.trim()) {
     return NextResponse.json({ error: "Nombre y campo son obligatorios." }, { status: 400 });

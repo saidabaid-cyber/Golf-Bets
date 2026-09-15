@@ -15,7 +15,9 @@ import {
   readJsonBodyWithLimit,
 } from "../../../../lib/backyard-ai/server/http-security";
 import { aiProcessingConsentLedgerAccess } from "../../../../lib/backyard-ai/server/config";
-import { getSupabaseAdmin } from "../../../../lib/supabase/server";
+import { getSupabaseAdmin, getSupabaseForUser } from "../../../../lib/supabase/server";
+import { accountAccessFailure } from "../../../../lib/account-access.server";
+import { authUserFailure } from "../../../../lib/auth-errors";
 
 const PRIVATE_HEADERS = { "cache-control": "private, no-store", pragma: "no-cache" };
 const MAX_REQUEST_BYTES = 1_000;
@@ -45,9 +47,14 @@ async function account(request: Request) {
     };
   }
   const admin = getSupabaseAdmin();
-  if (!admin) return { ok: false as const, status: 503, code: "missing_config", error: "No pude conectar el registro seguro de autorizaciones." };
-  const { data, error } = await admin.auth.getUser(token);
-  if (error || !data.user) return { ok: false as const, status: 401, code: "auth_required", error: "La sesión terminó. Vuelve a iniciar sesión." };
+  const userClient = getSupabaseForUser(token);
+  if (!admin || !userClient) return { ok: false as const, status: 503, code: "missing_config", error: "No pude conectar el registro seguro de autorizaciones." };
+  const { data, error } = await userClient.auth.getUser(token);
+  const failure = authUserFailure(error, !error && Boolean(data.user));
+  if (failure) return { ok: false as const, ...failure };
+  if (!data.user || data.user.is_anonymous) return { ok: false as const, status: 401, code: "auth_required", error: "La sesión terminó. Vuelve a iniciar sesión." };
+  const accessFailure = await accountAccessFailure(userClient);
+  if (accessFailure) return { ok: false as const, ...accessFailure };
   return { ok: true as const, admin, userId: data.user.id };
 }
 

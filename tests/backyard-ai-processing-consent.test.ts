@@ -210,7 +210,8 @@ test("ledger dedicado conserva auditoría, RLS y niega DELETE ordinario", () => 
   const verifier = readFileSync("lib/backyard-ai/server/processing-consent.ts", "utf8");
   const migration = readFileSync("supabase/migrations/20260908134650_ai_processing_consents.sql", "utf8");
   const rlsContract = readFileSync("supabase/tests/ai_processing_consents_rls.sql", "utf8");
-  assert.match(route, /admin\.auth\.getUser\(token\)/);
+  assert.match(route, /userClient\.auth\.getUser\(token\)/);
+  assert.match(route, /accountAccessFailure\(userClient\)/);
   assert.match(route, /aiProcessingConsentLedgerAccess\(process\.env, true\)/);
   assert.match(route, /AI_PROCESSING_CONSENT_TABLE/);
   assert.match(route, /export async function PATCH/);

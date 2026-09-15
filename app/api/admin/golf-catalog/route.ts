@@ -14,6 +14,8 @@ import {
 } from "../../../../lib/golf-catalog-admin-contract";
 import { equipmentCloudServerEnabled } from "../../../../lib/feature-flags";
 import { getSupabaseAdmin, getSupabaseForUser } from "../../../../lib/supabase/server";
+import { accountAccessFailure } from "../../../../lib/account-access.server";
+import { authUserFailure } from "../../../../lib/auth-errors";
 
 export const dynamic = "force-dynamic";
 
@@ -71,7 +73,11 @@ async function requireAdmin(request: NextRequest): Promise<AdminAccess> {
     return { ok: false, response: json({ error: "La administración del catálogo no está configurada en este entorno.", code: "ADMIN_UNAVAILABLE" }, 503) };
   }
   const { data, error } = await userClient.auth.getUser(token);
-  if (error || !data.user) return { ok: false, response: json({ error: "La sesión terminó. Vuelve a iniciar sesión.", code: "AUTH_REQUIRED" }, 401) };
+  const failure = authUserFailure(error, !error && Boolean(data.user));
+  if (failure) return { ok: false, response: json(failure, failure.status) };
+  if (!data.user || data.user.is_anonymous) return { ok: false, response: json({ error: "La sesión terminó. Vuelve a iniciar sesión.", code: "AUTH_REQUIRED" }, 401) };
+  const accessFailure = await accountAccessFailure(userClient);
+  if (accessFailure) return { ok: false, response: json(accessFailure, accessFailure.status) };
   if (!hasImmutableAdminRole(data.user.app_metadata)) {
     return { ok: false, response: json({ error: "Tu cuenta no tiene permiso para administrar catálogos.", code: "ADMIN_REQUIRED" }, 403) };
   }

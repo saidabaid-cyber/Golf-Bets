@@ -2,6 +2,8 @@ import { randomInt } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin, getSupabaseForUser } from "../../../../../lib/supabase/server";
 import { hasPollaScoreConflict } from "../../../../../lib/polla-live";
+import { accountAccessFailure } from "../../../../../lib/account-access.server";
+import { authUserFailure } from "../../../../../lib/auth-errors";
 
 function bearer(request: NextRequest) {
   return (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
@@ -12,8 +14,12 @@ async function authorize(request: NextRequest, tournamentId: string) {
   const userClient = token ? getSupabaseForUser(token, "polla") : null;
   const admin = getSupabaseAdmin("polla");
   if (!userClient || !admin) return { error: "Polla Live requiere configuración de nube.", status: 503 } as const;
-  const { data: authData } = await userClient.auth.getUser(token);
-  if (!authData.user) return { error: "Sesión inválida.", status: 401 } as const;
+  const { data: authData, error: authError } = await userClient.auth.getUser(token);
+  const failure = authUserFailure(authError, !authError && Boolean(authData.user));
+  if (failure) return failure;
+  if (!authData.user || authData.user.is_anonymous) return { error: "Sesión inválida.", status: 401 } as const;
+  const accessFailure = await accountAccessFailure(userClient);
+  if (accessFailure) return accessFailure;
   const { data: tournament } = await admin.from("tournaments").select("id,created_by,public_id,short_code,name,course_name,status,format,holes,start_hole,course_snapshot,oyes_holes").eq("id", tournamentId).single();
   if (!tournament) return { error: "Polla no encontrada.", status: 404 } as const;
   const { data: delegated } = tournament.created_by === authData.user.id ? { data: null } : await admin.from("tournament_access").select("id,expires_at").eq("tournament_id", tournamentId).eq("user_id", authData.user.id).eq("role", "admin").is("revoked_at", null).maybeSingle();

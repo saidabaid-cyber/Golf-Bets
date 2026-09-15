@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authUserFailure } from "../../../lib/auth-errors";
+import { accountAccessFailure } from "../../../lib/account-access.server";
 import { equipmentCloudServerEnabled } from "../../../lib/feature-flags";
 import { normalizeEquipmentProfile, normalizeEquipmentProfileStrict } from "../../../lib/golf-equipment";
 import { getSupabaseAdmin, getSupabaseForUser } from "../../../lib/supabase/server";
@@ -25,9 +26,11 @@ async function account(request: NextRequest) {
   const admin = getSupabaseAdmin("cloud");
   if (!supabase || !admin) return { error: "La nube no está configurada.", code: "CLOUD_UNAVAILABLE", status: 503 } as const;
   const { data, error } = await supabase.auth.getUser(token);
-  const failure = authUserFailure(error, Boolean(data.user));
+  const failure = authUserFailure(error, !error && Boolean(data.user));
   if (failure) return failure;
-  if (!data.user) return { error: "La sesión terminó. Vuelve a iniciar sesión.", code: "AUTH_REQUIRED", status: 401 } as const;
+  if (!data.user || data.user.is_anonymous) return { error: "La sesión terminó. Vuelve a iniciar sesión.", code: "AUTH_REQUIRED", status: 401 } as const;
+  const accessFailure = await accountAccessFailure(supabase);
+  if (accessFailure) return accessFailure;
   return { supabase, admin, userId: data.user.id } as const;
 }
 

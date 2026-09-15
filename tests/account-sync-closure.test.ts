@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { ACCOUNT_OWNED_ROWS, ACCOUNT_REFERENCE_COLUMNS, deleteAccountGraph, type AccountDeletionGateway } from "../lib/account-deletion";
+import { executeAccountLifecycle, type AccountLifecycleGateway, type AccountLifecycleJob } from "../lib/account-lifecycle";
 import { activeWorkspaceScorecardPhotoIds, discardAccountWorkspace, switchAccountWorkspace, WORKSPACE_OWNER_KEY } from "../lib/account-workspace";
 import { statisticsResetStorageKey } from "../lib/statistics-reset";
 import { CloudSyncGate, cloudSyncErrorMessage, syncStatusAfterSkip } from "../lib/cloud-sync-gate";
@@ -147,49 +147,43 @@ test("eliminar cuenta local descarta solo A y conserva invitado y B", () => {
 
 function deletionGateway(options: { failStorage?: boolean } = {}) {
   const calls: string[] = [];
-  const folders: Record<string, Array<{ name: string; isFolder: boolean }>> = {
-    "user-a": [{ name: "round-1", isFolder: true }, { name: "root.webp", isFolder: false }],
-    "user-a/round-1": [{ name: "card.jpg", isFolder: false }],
-  };
-  const gateway: AccountDeletionGateway = {
-    listStorage: async (prefix, offset) => { calls.push(`list:${prefix}:${offset}`); return offset ? [] : folders[prefix] || []; },
-    removeStorage: async paths => { calls.push(`storage:${paths.sort().join(",")}`); if (options.failStorage) throw new Error("storage unavailable"); },
-    ownedTournaments: async userId => { calls.push(`tournaments:${userId}`); return [{ id: "t-1", publicId: "public-1" }, { id: "t-2", publicId: "public-2" }]; },
-    deleteWhere: async (table, column, value) => { calls.push(`delete:${table}:${column}:${value}`); },
-    deleteWhereIn: async (table, column, values) => { calls.push(`delete-in:${table}:${column}:${values.join(",")}`); },
-    clearReference: async (table, column, userId) => { calls.push(`clear:${table}:${column}:${userId}`); },
-    deleteAuthUser: async userId => { calls.push(`auth:${userId}`); },
+  const job: AccountLifecycleJob = { request_id: "request", user_id: "user-a", data_policy: "delete_golf_data", stage: "requested", lease_token: "lease", completed_at: null };
+  let hasPhotos = true;
+  const gateway: AccountLifecycleGateway = {
+    acquire: async () => { calls.push("acquire"); return job; },
+    storageBatch: async () => hasPhotos ? [{ bucket_id: "scorecard-photos", name: "user-a/round-1/card.jpg" }] : [],
+    removeStorage: async () => { calls.push("storage"); if (options.failStorage) throw new Error("storage unavailable"); hasPhotos = false; },
+    prepare: async () => { calls.push("transaction"); return { ...job, stage: "data_prepared" }; },
+    revokeAndBan: async () => { calls.push("revoke"); },
+    deleteAuth: async () => { calls.push("auth"); },
+    complete: async () => { calls.push("complete"); return { ...job, stage: "completed" }; },
+    release: async () => { calls.push("release"); },
   };
   return { gateway, calls };
 }
 
-test("eliminación server-side limpia media/datos/referencias y Auth al final", async () => {
+test("eliminación server-side usa transacción y Auth antes de confirmar", async () => {
   const { gateway, calls } = deletionGateway();
-  const result = await deleteAccountGraph(gateway, "user-a");
-  assert.deepEqual(result, { deletedPhotoCount: 2, deletedTournamentCount: 2 });
-  assert.ok(calls.indexOf("storage:user-a/round-1/card.jpg,user-a/root.webp") < calls.indexOf("auth:user-a"));
-  assert.equal(calls.at(-1), "auth:user-a");
-  for (const [table, column] of ACCOUNT_OWNED_ROWS) assert.ok(calls.includes(`delete:${table}:${column}:user-a`), `${table} no se eliminó`);
-  for (const [table, column] of ACCOUNT_REFERENCE_COLUMNS) assert.ok(calls.includes(`clear:${table}:${column}:user-a`), `${table}.${column} no se limpió`);
-  assert.ok(calls.includes("delete-in:score_audit_log:tournament_id:t-1,t-2"));
-  assert.ok(calls.includes("delete-in:polla_join_attempts:public_id:public-1,public-2"));
+  const result = await executeAccountLifecycle(gateway);
+  assert.equal(result.stage, "completed");
+  assert.deepEqual(calls, ["acquire", "storage", "transaction", "revoke", "auth", "complete", "release"]);
 });
 
 test("un fallo de Storage impide afirmar eliminación o borrar Auth", async () => {
   const { gateway, calls } = deletionGateway({ failStorage: true });
-  await assert.rejects(deleteAccountGraph(gateway, "user-a"), /storage unavailable/);
-  assert.equal(calls.some(call => call.startsWith("auth:")), false);
+  await assert.rejects(executeAccountLifecycle(gateway), /storage unavailable/);
+  assert.deepEqual(calls, ["acquire", "storage", "release"]);
 });
 
 test("endpoint deriva user id del token y nunca acepta userId del body", () => {
   const route = readFileSync("app/api/account/delete/route.ts", "utf8");
   const auth = readFileSync("lib/server-auth.ts", "utf8");
   const deletion = readFileSync("lib/account-deletion.ts", "utf8");
-  assert.match(route, /authenticatedRequest\(request\)/);
+  assert.match(route, /authenticatedRequest\(request, \{ allowLifecycleRecovery: true \}\)/);
   assert.match(auth, /client\.auth\.getUser\(token\)/);
   assert.match(auth, /userId: data\.user\.id/);
   assert.match(route, /parseAccountDeletionChoice\(read\.value\)/);
-  assert.match(deletion, /\["confirmation", "dataPolicy", "requestId"\]\.includes\(key\)/);
+  assert.match(deletion, /\["confirmation", "dataPolicy", "requestId", "recoveryToken"\]\.includes\(key\)/);
   assert.match(deletion, /source\.confirmation === "ELIMINAR"/);
   assert.doesNotMatch(route, /body\.userId|userId\s*:\s*body|request\.json\(\)/);
 });
@@ -250,7 +244,7 @@ test("una eliminación interrumpida conserva el barrier y ofrece reintento sin m
   assert.match(provider, /trackPending: false/);
   assert.match(provider, /setPendingLocalDeletionOwner\(nextPendingLocalDeletionOwner\(localStorage\)\)/);
   assert.match(provider, /setPendingDeletionSession\(session\)/);
-  assert.match(provider, /if \(pendingDeletionSession\) return[\s\S]*Reintentar eliminación/);
+  assert.match(provider, /if \(pendingDeletionSession \|\| pendingDeletionOwner\) return[\s\S]*Continuar cierre de cuenta/);
   assert.match(provider, /serverDeletionConfirmed \? "completed_cleanup_pending" : "pending_confirmation"/);
   assert.match(provider, /if \(pendingLocalDeletionOwner\) return[\s\S]*Reintentar limpieza/);
   assert.match(panel, /serverDeletionConfirmed/);

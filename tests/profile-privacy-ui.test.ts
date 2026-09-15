@@ -78,11 +78,11 @@ test("reset de estadísticas deriva ownership de sesión, usa RLS y deja auditor
   assert.match(migration, /'RESET_FROM_DATE'/);
 });
 
-test("elección de borrar o archivar cuenta queda bloqueada antes de audit/datos compartidos", () => {
-  assert.match(deletionRoute, /authenticatedRequest\(request\)/);
+test("elección de borrar o archivar cuenta pasa por saga aislada y Auth verificado", () => {
+  assert.match(deletionRoute, /authenticatedRequest\(request, \{ allowLifecycleRecovery: true \}\)/);
   assert.match(deletionRoute, /parseAccountDeletionChoice\(read\.value\)/);
-  assert.match(deletionRoute, /code: "PENDING_CONTROLLED_DB_APPLY"/);
-  assert.match(deletionRoute, /code: "LEGAL_REVIEW_REQUIRED"/);
+  assert.match(deletionRoute, /code: "CONTROLLED_DB_ACTION_REQUIRED"/);
+  assert.match(deletionRoute, /legalReview: "LEGAL_REVIEW_REQUIRED"/);
   assert.doesNotMatch(deletionRoute, /event_name: "account_delete_requested"|deleteAccountGraph\(/);
   assert.doesNotMatch(deletionRoute, /stats_deleted/);
   assert.match(migration, /'account_delete_requested'/);
