@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AnchoredSearch, AnchoredSearchOption } from "./anchored-search";
 
 type CourseResult = {
@@ -63,16 +63,21 @@ export function RoundCoursePicker({
   const [hasMore, setHasMore] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [nearbyStatus, setNearbyStatus] = useState<"idle" | "locating" | "empty" | "denied" | "error">("idle");
+  const [resultMode, setResultMode] = useState<"name" | "nearby">("name");
+  const nearbyRequestRef = useRef(0);
 
   useEffect(() => {
     if (selectedId && selectedName) {
+      ++nearbyRequestRef.current;
       setSelectedCourseId(selectedId);
       setQuery(selectedName);
+      setResultMode("name");
     }
   }, [selectedId, selectedName]);
 
   useEffect(() => {
     const normalized = query.trim();
+    if (resultMode === "nearby") return;
     if (selectedCourseId || normalized.length < 2) {
       setResults([]);
       setStatus("idle");
@@ -85,6 +90,7 @@ export function RoundCoursePicker({
       setStatus("loading");
       try {
         const page = await loadCoursePage(normalized, null, controller.signal);
+        if (controller.signal.aborted) return;
         setResults(mergeCourseResults([], page.courses ?? []));
         setHasMore(page.hasMore === true);
         setNextCursor(typeof page.nextCursor === "string" ? page.nextCursor : null);
@@ -100,20 +106,31 @@ export function RoundCoursePicker({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [query, selectedCourseId]);
+  }, [query, selectedCourseId, resultMode]);
 
   const visibleResults = useMemo(() => mergeCourseResults([], results), [results]);
   const expanded = !selectedCourseId && (visibleResults.length > 0 || status === "loading" || status === "error");
 
   function requestNearbyCourses() {
     if (!navigator.geolocation) {
+      setResultMode("name");
       setNearbyStatus("error");
       return;
     }
+    const requestId = ++nearbyRequestRef.current;
+    // Switching modes aborts the pending name search. Otherwise its delayed
+    // response could replace the distance-sorted nearby results.
+    setResultMode("nearby");
     setSelectedCourseId("");
+    setResults([]);
+    setStatus("idle");
+    setHasMore(false);
+    setNextCursor(null);
     setNearbyStatus("locating");
     navigator.geolocation.getCurrentPosition((position) => {
+      if (requestId !== nearbyRequestRef.current) return;
       void loadNearbyCoursePage(position.coords.latitude, position.coords.longitude).then((page) => {
+        if (requestId !== nearbyRequestRef.current) return;
         const next = mergeCourseResults([], page.courses ?? []);
         setResults(next);
         setHasMore(false);
@@ -121,11 +138,15 @@ export function RoundCoursePicker({
         setStatus("ready");
         setNearbyStatus(next.length ? "idle" : "empty");
       }).catch(() => {
+        if (requestId !== nearbyRequestRef.current) return;
         setResults([]);
         setStatus("idle");
+        setResultMode("name");
         setNearbyStatus("error");
       });
     }, (error) => {
+      if (requestId !== nearbyRequestRef.current) return;
+      setResultMode("name");
       setNearbyStatus(error.code === error.PERMISSION_DENIED ? "denied" : "error");
     }, { enableHighAccuracy: false, timeout: 8_000, maximumAge: 300_000 });
   }
@@ -135,8 +156,11 @@ export function RoundCoursePicker({
       label="Campo"
       value={query}
       onChange={(value) => {
+        ++nearbyRequestRef.current;
         setQuery(value);
         setSelectedCourseId("");
+        setResultMode("name");
+        setNearbyStatus("idle");
       }}
       placeholder={pendingName ? `Busca ${pendingName}` : "Busca campo o club"}
       invalid={invalid}
@@ -148,11 +172,16 @@ export function RoundCoursePicker({
           ? "No pudimos consultar el catálogo. Usa Buscar / cerca o crea el campo manualmente."
           : selectedCourseId
             ? "Campo seleccionado ✓"
+            : resultMode === "nearby" && visibleResults.length
+              ? "Campos cercanos del catálogo, ordenados por distancia. También puedes escribir para buscar por nombre."
             : "Escribe al menos dos letras para buscar por nombre."}
     >
       {visibleResults.map((course) => <AnchoredSearchOption key={course.courseId} label={`Seleccionar ${course.name}`} onSelect={() => {
+        ++nearbyRequestRef.current;
         setQuery(course.name);
         setSelectedCourseId(course.courseId);
+        setResultMode("name");
+        setNearbyStatus("idle");
         setResults([]);
         onSelect(course);
       }}><b>{course.name}</b><small>{[course.clubName && course.clubName !== course.name ? course.clubName : "", course.city, typeof course.distanceKm === "number" ? `${course.distanceKm.toFixed(1)} km` : ""].filter(Boolean).join(" · ") || "Catálogo Backyard"}</small></AnchoredSearchOption>)}
