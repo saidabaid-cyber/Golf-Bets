@@ -38,8 +38,8 @@ test("el invitado conserva su golf local sin presentar un perfil falso como pers
 
 test("Perfil separa el golf de la configuración sensible de Cuenta", () => {
   const ghin = readFileSync("app/components/ghin-placeholder.tsx", "utf8");
-  assert.match(page, /<ProfileAccountPanel view="profile"/);
-  assert.match(page, /<ProfileAccountPanel view="account"/);
+  assert.match(page, /<ProfileAccountPanel key=\{identity.userId\} view="profile"/);
+  assert.match(page, /<ProfileAccountPanel key=\{identity.userId\} view="account"/);
   assert.match(account, /Cuenta y privacidad/);
   assert.match(account, /view === "account"/);
   assert.match(account, /Gestionar consentimientos/);
@@ -57,7 +57,9 @@ test("Configuración explica cómo agregar jugadores y grupos guardados", () => 
 test("Perfil usa selector de foto o avatar sin pedir URLs manuales", () => {
   const picker = readFileSync("app/components/profile-image-picker.tsx", "utf8");
   assert.match(account, /validateProfileAvatarUrl\(avatarUrl\)/);
-  assert.match(account, /<ProfileImagePicker value=\{avatarUrl\} onChange=\{setAvatarUrl\} onBusyChange=\{setAvatarBusy\} accessToken=\{identity.accessToken\} userId=\{identity.userId\} \/>/);
+  assert.match(account, /<ProfileImagePicker value=\{avatarUrl\} onChange=\{setAvatarUrl\} onSaveAvatar=\{async \(value\) =>/);
+  assert.match(account, /await updateProfile\(\{ displayName: identity.displayName, defaultHandicap: identity.defaultHandicap, avatarUrl: value \}\)/);
+  assert.match(account, /onBusyChange=\{setAvatarBusy\} accessToken=\{identity.accessToken\} userId=\{identity.userId\}/);
   assert.match(account, /if \(avatarBusy \|\| saving\) return/);
   assert.doesNotMatch(account, /type="url" inputMode="url"/);
   assert.match(picker, /type="file" aria-label=\{kind === "profile" \? "Seleccionar foto o imagen de avatar" : "Seleccionar imagen del grupo"\} accept="image\/jpeg,image\/png,image\/webp,image\/heic,image\/heif/);

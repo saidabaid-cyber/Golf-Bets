@@ -28,7 +28,7 @@ test("Foto, Emoji, Crear avatar y Sin imagen son cuatro opciones 2×2 responsive
   for (const [mode, label] of [["photo", "FOTO"], ["emoji", "EMOJI"], ["create", "CREAR AVATAR"], ["none", "SIN IMAGEN"]]) {
     assert.match(picker, new RegExp(`\\["${mode}", "${label}"\\]`));
   }
-  assert.match(picker, /aria-pressed=\{mode === option\}/);
+  assert.match(picker, /aria-pressed=\{mode === option \|\| \(mode === "custom" && option === "create"\)\}/);
   assert.match(pickerCss, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(pickerCss, /@media \(max-width: 430px\)/);
   assert.match(picker, /kind === "profile" \? styles\.profilePreview : ""/);
@@ -41,7 +41,9 @@ test("Perfil enlaza Mi equipo, Preferencias y Notificaciones a controles existen
   assert.match(profile, /onClick=\{onOpenEquipment\}[\s\S]*?<b>Mi equipo<\/b>/);
   assert.match(profile, /onBackToProfile/);
   assert.match(page, /onOpenEquipment=\{\(\) => setProfileFocus\("equipment"\)\}/);
-  assert.match(page, /onBackToProfile=\{\(\) => setProfileFocus\("profile"\)\}/);
+  assert.match(page, /onBackToProfile=\{openProfileRoot\}/);
+  assert.match(page, /setProfileRootRevision\(\(value\) => value \+ 1\)/);
+  assert.match(profile, /setEditing\(false\); setManagingConsents\(false\)/);
   assert.match(css, /\.profileNavigationList\{display:grid;min-width:0/);
 });
 
@@ -56,9 +58,12 @@ test("Cuenta y privacidad separa ambos controles destructivos", () => {
   assert.match(profile, /Cuenta y privacidad/);
   assert.match(profile, /Eliminar estadísticas/);
   assert.match(profile, /Eliminar cuenta/);
-  assert.match(profile, /id="delete-stats-title"/);
-  assert.match(profile, /id="delete-account-title"/);
-  assert.match(profile, /Tu cuenta seguirá existiendo/);
+  const dialogs = readFileSync("app/components/profile-data-dialogs.tsx", "utf8");
+  assert.match(dialogs, /id="delete-stats-title"/);
+  assert.match(dialogs, /id="delete-account-title"/);
+  assert.match(dialogs, /Tu cuenta seguirá existiendo/);
+  assert.match(profile, /<StatisticsResetDialog[^\n]*onConfirm=\{\(\) => void deleteStatistics\(\)\}/);
+  assert.match(profile, /<AccountDataDialog[^\n]*onConfirm=\{\(\) => void deleteAccount\(\)\}/);
   assert.match(profile, /deleteStatsText/);
   assert.match(profile, /deleteAccountText/);
 });
@@ -73,9 +78,12 @@ test("reset de estadísticas deriva ownership de sesión, usa RLS y deja auditor
   assert.match(migration, /'RESET_FROM_DATE'/);
 });
 
-test("solicitud de eliminar cuenta tiene auditoría propia y separada", () => {
-  assert.match(deletionRoute, /event_name: "account_delete_requested"/);
-  assert.match(deletionRoute, /deleteAccountGraph/);
+test("elección de borrar o archivar cuenta queda bloqueada antes de audit/datos compartidos", () => {
+  assert.match(deletionRoute, /authenticatedRequest\(request\)/);
+  assert.match(deletionRoute, /parseAccountDeletionChoice\(read\.value\)/);
+  assert.match(deletionRoute, /code: "PENDING_CONTROLLED_DB_APPLY"/);
+  assert.match(deletionRoute, /code: "LEGAL_REVIEW_REQUIRED"/);
+  assert.doesNotMatch(deletionRoute, /event_name: "account_delete_requested"|deleteAccountGraph\(/);
   assert.doesNotMatch(deletionRoute, /stats_deleted/);
   assert.match(migration, /'account_delete_requested'/);
 });

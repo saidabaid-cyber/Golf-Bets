@@ -1,18 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { LEGAL_DOCUMENT_VERSIONS, legalConfig } from "../../lib/legal-config";
 import { accountDeletionMarkerKey, profileHandicapInput, profileHandicapLabel, validateProfileAvatarUrl, validateProfileDraft, type BackyardProfileDetails } from "../../lib/account-state";
-import { settleAccountDeletionClient } from "../../lib/account-deletion-client";
+import { clearAccountDeletionIntent, persistAccountDeletionIntent, settleAccountDeletionClient } from "../../lib/account-deletion-client";
 import { ballFitDefaultsFromProfile } from "../../lib/ball-fitting";
 import type { GolfInsights } from "../../lib/golf-insights";
 import { isStatisticsDeleteConfirmation, requestStatisticsReset, type StatisticsResetRecord } from "../../lib/statistics-reset";
 import { EquipmentProfilePanel } from "./equipment-profile-panel";
 import { GhinPlaceholder } from "./ghin-placeholder";
 import { LegalConsentManager } from "./legal-consent-manager";
-import { ModalCloseButton } from "./modal-shell";
+import { AccountDataDialog, StatisticsResetDialog, type AccountDataPolicy } from "./profile-data-dialogs";
+import { BackyardIndexCard } from "./backyard-index-card";
+import type { RoundSnapshot } from "../../lib/types";
 import { ProfileAvatarMedia } from "./profile-avatar-media";
 import { ProfileClubPicker } from "./profile-club-picker";
 import { ProfileImagePicker } from "./profile-image-picker";
@@ -22,6 +24,8 @@ import { useBackyardAccount } from "./account-provider";
 
 type ProfileAccountPanelProps = {
   view: "profile" | "account";
+  rootNavigationKey?: number;
+  history?: RoundSnapshot[];
   focusSection?: "profile" | "equipment";
   highContrast: boolean;
   onHighContrastChange: (value: boolean) => void;
@@ -55,7 +59,7 @@ function decimal(value: number | undefined) {
   return value === undefined ? "—" : value.toFixed(1);
 }
 
-export function ProfileAccountPanel({ view, focusSection = "profile", highContrast, onHighContrastChange, notificationsEnabled, onNotificationsEnabledChange, golfInsights, statisticsResetAt, onStatisticsReset, onOpenStats, onOpenAccount, onOpenEquipment, onBackToProfile }: ProfileAccountPanelProps) {
+export function ProfileAccountPanel({ view, rootNavigationKey = 0, history = [], focusSection = "profile", highContrast, onHighContrastChange, notificationsEnabled, onNotificationsEnabledChange, golfInsights, statisticsResetAt, onStatisticsReset, onOpenStats, onOpenAccount, onOpenEquipment, onBackToProfile }: ProfileAccountPanelProps) {
   const { identity, updateProfile, logout, finishAccountDeletion, openAccess, acceptances, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, requestCloudLink, cloudIssues, retryCloudSync } = useBackyardAccount();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(identity.displayName);
@@ -72,8 +76,28 @@ export function ProfileAccountPanel({ view, focusSection = "profile", highContra
   const [deletingStatistics, setDeletingStatistics] = useState(false);
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
   const [deleteAccountText, setDeleteAccountText] = useState("");
-  const [deleteAccountChecked, setDeleteAccountChecked] = useState(false);
+  const [deleteAccountPolicy, setDeleteAccountPolicy] = useState<AccountDataPolicy | null>(null);
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const statsInFlight = useRef(false);
+  const statsRequestId = useRef<string | undefined>(undefined);
+  const accountInFlight = useRef(false);
+  const accountRequestId = useRef<string | undefined>(undefined);
+  const [destructiveError, setDestructiveError] = useState("");
+  const seenRootNavigation = useRef(rootNavigationKey);
+  const [indexEnabled, setIndexEnabled] = useState(false);
+  const liveOwner = useRef(identity.userId);
+  const mounted = useRef(true);
+  useLayoutEffect(() => { liveOwner.current = identity.userId; }, [identity.userId]);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  useEffect(() => {
+    try { setIndexEnabled(localStorage.getItem(`backyard-index-enabled-v1:${identity.userId}`) === "true"); }
+    catch { setIndexEnabled(false); }
+  }, [identity.userId]);
+  useEffect(() => {
+    if (seenRootNavigation.current === rootNavigationKey || saving || deletingStatistics || deletingAccount) return;
+    seenRootNavigation.current = rootNavigationKey;
+    setEditing(false); setManagingConsents(false); setDeleteStatsOpen(false); setDeleteAccountOpen(false); setDestructiveError("");
+  }, [rootNavigationKey, saving, deletingStatistics, deletingAccount]);
 
   useEffect(() => {
     if (editing) return;
@@ -115,24 +139,31 @@ export function ProfileAccountPanel({ view, focusSection = "profile", highContra
   }
 
   async function deleteStatistics() {
-    if (identity.mode !== "authenticated" || !isStatisticsDeleteConfirmation(deleteStatsText)) return;
-    setDeletingStatistics(true); setMessage("");
+    if (statsInFlight.current || identity.mode !== "authenticated" || !isStatisticsDeleteConfirmation(deleteStatsText)) return;
+    statsInFlight.current = true;
+    statsRequestId.current ??= crypto.randomUUID();
+    setDeletingStatistics(true); setMessage(""); setDestructiveError("");
     try {
-      const reset = await requestStatisticsReset(identity.accessToken, deleteStatsText);
+      const reset = await requestStatisticsReset(identity.accessToken, deleteStatsText, fetch, statsRequestId.current);
+      if (!mounted.current || liveOwner.current !== identity.userId) return;
       onStatisticsReset?.(reset);
       setDeleteStatsOpen(false); setDeleteStatsText("");
+      statsRequestId.current = undefined;
       setMessageKind("success"); setMessage("Tus estadísticas se reiniciaron. Tu cuenta, grupos y rondas históricas siguen disponibles.");
     } catch (error) {
-      setMessageKind("error"); setMessage(error instanceof Error ? error.message : "No se eliminaron las estadísticas. Reintenta.");
-    } finally { setDeletingStatistics(false); }
+      if (mounted.current && liveOwner.current === identity.userId) setDestructiveError(error instanceof Error ? error.message : "No se eliminaron las estadísticas. Reintenta.");
+    } finally { statsInFlight.current = false; if (mounted.current && liveOwner.current === identity.userId) setDeletingStatistics(false); }
   }
 
   async function deleteAccount() {
-    if (identity.mode !== "authenticated" || deleteAccountText !== "ELIMINAR" || !deleteAccountChecked) return;
+    if (accountInFlight.current || identity.mode !== "authenticated" || deleteAccountText !== "ELIMINAR" || !deleteAccountPolicy) return;
     if (cloudStatus === "syncing" || cloudStatus === "saving") { setMessageKind("error"); setMessage("Espera a que termine el guardado actual."); return; }
-    setDeletingAccount(true); setMessage("");
+    accountInFlight.current = true;
+    accountRequestId.current ??= crypto.randomUUID();
+    setDeletingAccount(true); setMessage(""); setDestructiveError("");
     const marker = accountDeletionMarkerKey(identity.userId);
     try {
+      persistAccountDeletionIntent(localStorage, identity.userId, { dataPolicy: deleteAccountPolicy, requestId: accountRequestId.current });
       const requestedAt = new Date().toISOString();
       localStorage.setItem(marker, requestedAt);
       if (localStorage.getItem(marker) !== requestedAt) throw new Error("deletion_marker_not_persisted");
@@ -140,20 +171,34 @@ export function ProfileAccountPanel({ view, focusSection = "profile", highContra
       setMessageKind("error");
       setMessage("No pudimos preparar la eliminación de forma segura en este dispositivo. Revisa el almacenamiento del navegador y reintenta.");
       setDeletingAccount(false);
+      accountInFlight.current = false;
+      setDestructiveError("No pudimos preparar la acción de forma segura. Revisa el almacenamiento del navegador y reintenta.");
       return;
     }
     let responseStatus: number | null = null;
     let serverDeletionConfirmed = false;
+    let serverRejectionConfirmed = false;
     try {
-      const response = await fetch("/api/account/delete", { method: "DELETE", headers: { authorization: `Bearer ${identity.accessToken}`, "content-type": "application/json" }, body: JSON.stringify({ confirmation: "ELIMINAR" }) });
+      const response = await fetch("/api/account/delete", { method: "DELETE", headers: { authorization: `Bearer ${identity.accessToken}`, "content-type": "application/json" }, body: JSON.stringify({ confirmation: "ELIMINAR", dataPolicy: deleteAccountPolicy, requestId: accountRequestId.current }), signal: AbortSignal.timeout(25_000) });
       responseStatus = response.status;
+      if (!mounted.current || liveOwner.current !== identity.userId) {
+        // Keep recovery proof for the original owner; never purge the workspace
+        // of a different account through a stale provider callback.
+        localStorage.setItem(marker, response.ok ? "completed_cleanup_pending" : "pending_confirmation");
+        return;
+      }
       if (!response.ok) {
-        const result = await response.json().catch(() => null) as { error?: string } | null;
+        const result = await response.json().catch(() => null) as { error?: string; code?: string; noDataDeleted?: boolean } | null;
+        serverRejectionConfirmed = response.status === 503 && result?.noDataDeleted === true && ["PENDING_CONTROLLED_DB_APPLY", "LEGAL_REVIEW_REQUIRED", "account_deletion_controlled_apply_pending"].includes(result.code || "");
         throw new Error(result?.error || "No se completó la eliminación en el servidor.");
       }
       serverDeletionConfirmed = true;
       await settleAccountDeletionClient(localStorage, marker, responseStatus, serverDeletionConfirmed, finishAccountDeletion);
     } catch (error) {
+      if (!mounted.current || liveOwner.current !== identity.userId) {
+        if (!serverDeletionConfirmed) localStorage.setItem(marker, "pending_confirmation");
+        return;
+      }
       if (serverDeletionConfirmed) {
         // The confirmed cleanup already ran (or failed) once. Its durable
         // marker lets reload resume; retrying here could purge twice.
@@ -163,18 +208,20 @@ export function ProfileAccountPanel({ view, focusSection = "profile", highContra
         return;
       }
       try {
-        const outcome = await settleAccountDeletionClient(localStorage, marker, responseStatus, serverDeletionConfirmed, finishAccountDeletion);
+        const outcome = await settleAccountDeletionClient(localStorage, marker, serverRejectionConfirmed ? 400 : responseStatus, serverDeletionConfirmed, finishAccountDeletion);
+        if (outcome === "rejected") { clearAccountDeletionIntent(localStorage, identity.userId); accountRequestId.current = undefined; }
         setMessageKind("error");
         setMessage(outcome === "pending_confirmation"
           ? `${responseStatus !== null && error instanceof Error ? `${error.message} ` : "No pudimos confirmar la eliminación. "}Conservamos tus datos en este dispositivo y pausamos la sincronización. Al recargar podrás reintentar o comprobar que tu cuenta sigue activa.`
           : error instanceof Error ? error.message : "No se completó la eliminación en el servidor. Reintenta.");
-        setDeleteAccountOpen(false);
+        if (outcome === "pending_confirmation") setDeleteAccountOpen(false);
       } catch {
         setMessageKind("error");
         setMessage("No pudimos confirmar la eliminación ni guardar el estado de recuperación. Conservamos tus datos; no cierres esta pestaña y contacta soporte.");
         setDeleteAccountOpen(false);
       }
-    } finally { setDeletingAccount(false); }
+      setDestructiveError(error instanceof Error ? error.message : "No pudimos confirmar la acción. Tus datos no se borraron localmente.");
+    } finally { accountInFlight.current = false; if (mounted.current && liveOwner.current === identity.userId) setDeletingAccount(false); }
   }
 
   if (managingConsents) return <LegalConsentManager userId={identity.userId} accessToken={identity.accessToken} authenticated={identity.mode === "authenticated"} acceptances={acceptances} bettingConsentGranted={bettingConsentGranted} requestBettingConsent={requestBettingConsent} onBack={() => setManagingConsents(false)} />;
@@ -190,7 +237,10 @@ export function ProfileAccountPanel({ view, focusSection = "profile", highContra
       <label>Username<input value={draft.username} onChange={(event) => setDraft((current) => ({ ...current, username: event.target.value.replace(/^@+/, "") }))} placeholder="sin @" autoComplete="username" /></label>
       <label>HCP / Index<input type="text" inputMode="text" value={handicap} onChange={(event) => setHandicap(event.target.value)} placeholder="Ej. 8.4 o +1.2" /></label>
     </div></section>
-    <section className="card profileEditCard"><h2>Foto / Avatar</h2><ProfileImagePicker value={avatarUrl} onChange={setAvatarUrl} onBusyChange={setAvatarBusy} accessToken={identity.accessToken} userId={identity.userId} /><p className="hint">Quitarla en The Backyard no modifica tu foto de Google.</p></section>
+    <section className="card profileEditCard"><h2>Foto / Avatar</h2><ProfileImagePicker value={avatarUrl} onChange={setAvatarUrl} onSaveAvatar={async (value) => {
+      const result = await updateProfile({ displayName: identity.displayName, defaultHandicap: identity.defaultHandicap, avatarUrl: value });
+      setMessageKind("success"); setMessage(result === "cloud" ? "Avatar guardado y sincronizado." : "Avatar guardado en este dispositivo. Sincronización pendiente.");
+    }} onBusyChange={setAvatarBusy} accessToken={identity.accessToken} userId={identity.userId} /><p className="hint">Quitarla en The Backyard no modifica tu foto de Google.</p></section>
     <section className="card profileEditCard"><h2>País y región</h2><ProfileLocationPicker value={draft} onChange={(location) => setDraft((current) => ({ ...current, ...location }))} /><p className="hint">Estos datos de perfil no se publican automáticamente. No usamos GPS.</p></section>
     <section className="card profileEditCard"><div className="sectionTitle"><div><h2>Información de golf</h2><p>Opcional</p></div></div><div className="profileEditGrid"><ProfileClubPicker value={draft.homeClub} clubId={draft.homeClubId} onChange={({ name: homeClub, id: homeClubId }) => setDraft((current) => ({ ...current, homeClub, homeClubId }))} /><label>Tee habitual<input value={draft.preferredTee} onChange={(event) => setDraft((current) => ({ ...current, preferredTee: event.target.value }))} /></label></div></section>
     {notice}<div className="profileEditActions"><button type="button" className="secondary" disabled={saving} onClick={() => setEditing(false)}>Cancelar</button><button type="button" className="primary" disabled={saving || avatarBusy} onClick={() => void saveProfile()}>{saving ? "Guardando…" : avatarBusy ? "Preparando imagen…" : "Guardar perfil"}</button></div>
@@ -205,7 +255,11 @@ export function ProfileAccountPanel({ view, focusSection = "profile", highContra
     {view === "profile" && identity.mode === "authenticated" && <main className="profileMobileStack">
       <section className="card profileOverviewCard"><div className="profileOverviewIdentity"><div className="profileOverviewAvatar"><ProfileAvatarMedia value={identity.avatarUrl} fallback={(identity.displayName.trim()[0] || "J").toUpperCase()} alt={`Avatar de ${identity.displayName}`} /></div><div><h2>{identity.displayName}</h2><p>{identity.username ? `@${identity.username}` : "Sin username"}</p><span>HCP / Index <b>{profileHandicapLabel(identity.defaultHandicap)}</b></span></div></div><button type="button" className="primary profileEditButton" onClick={() => setEditing(true)}>Editar perfil</button></section>
       <section className="card profileCompactCard"><div className="profileCompactHeading"><div><span>INFORMACIÓN DE GOLF</span><h2>Tu juego</h2></div><button type="button" className="textButton" onClick={() => setEditing(true)}>Editar</button></div><div className="profileCompactRows"><div><span>HCP / Index</span><b>{profileHandicapLabel(identity.defaultHandicap)}</b></div><div><span>Home Club</span><b>{identity.homeClub || "Sin indicar"}</b></div><div><span>Tee habitual</span><b>{identity.preferredTee || "Sin indicar"}</b></div></div><GhinPlaceholder /></section>
-      <section className="card profileCompactCard"><div className="profileCompactHeading"><div><span>FOTO / AVATAR</span><h2>{identity.avatarUrl ? "Avatar configurado" : "Sin imagen"}</h2></div><button type="button" className="textButton" onClick={() => setEditing(true)}>Cambiar</button></div><div className="profileAvatarSummary"><div className="profileAvatarMini"><ProfileAvatarMedia value={identity.avatarUrl} fallback={(identity.displayName.trim()[0] || "J").toUpperCase()} alt={`Avatar actual de ${identity.displayName}`} /></div><p>Foto, emoji del teclado o sin imagen.</p></div></section>
+      <BackyardIndexCard history={history} userId={identity.userId} enabled={indexEnabled} onEnabledChange={(enabled) => {
+        try { localStorage.setItem(`backyard-index-enabled-v1:${identity.userId}`, String(enabled)); setIndexEnabled(enabled); }
+        catch { setMessageKind("error"); setMessage("No pudimos guardar la preferencia del Índice en este dispositivo."); }
+      }} />
+      <section className="card profileCompactCard"><div className="profileCompactHeading"><div><span>FOTO / AVATAR</span><h2>{identity.avatarUrl ? "Avatar configurado" : "Sin imagen"}</h2></div><button type="button" className="textButton" onClick={() => setEditing(true)}>Cambiar</button></div><div className="profileAvatarSummary"><div className="profileAvatarMini"><ProfileAvatarMedia value={identity.avatarUrl} fallback={(identity.displayName.trim()[0] || "J").toUpperCase()} alt={`Avatar actual de ${identity.displayName}`} /></div><p>Foto, emoji, avatar manual o sin imagen.</p></div></section>
       {golfInsights && <section className="card profileCompactCard"><div className="profileCompactHeading"><div><span>ACTIVIDAD</span><h2>Resumen personal</h2></div>{onOpenStats && <button type="button" className="textButton" onClick={onOpenStats}>Ver Stats</button>}</div><div className="profileActivityGrid"><div><span>Rondas</span><b>{golfInsights.rounds}</b></div><div><span>Promedio</span><b>{decimal(golfInsights.averageScore)}</b></div><div><span>Putts</span><b>{decimal(golfInsights.averagePutts)}</b></div></div></section>}
       <nav className="card profileNavigationList" aria-label="Secciones de Mi Perfil">
         <button type="button" className="profileNavigationCard" onClick={onOpenEquipment}><span><b>Mi equipo</b><small>Mi Bolsa, bastones y bola</small></span><strong aria-hidden="true">›</strong></button>
@@ -221,11 +275,11 @@ export function ProfileAccountPanel({ view, focusSection = "profile", highContra
       <section className="card accountCompactCard"><h2>Cuenta</h2><div className="accountCompactRows"><div><span>Email</span><b>{identity.email || "Sin email"}</b></div><div><span>Métodos de acceso</span><b>{identity.mode === "authenticated" ? identity.providers.map((provider) => provider === "google" ? "Google" : provider === "email" ? "Correo" : provider).join(" · ") || "Correo" : "Modo invitado"}</b></div></div></section>
       <section className="card accountCompactCard"><h2>Privacidad y preferencias</h2><label className="accountSettingRow"><span><b>Privacidad</b><small>Quién puede ver tu perfil</small></span><select value={draft.profileVisibility} disabled={identity.mode !== "authenticated"} onChange={(event) => void updateVisibility(event.target.value as EditDraft["profileVisibility"])}><option value="private">Privado</option><option value="friends">Amigos</option></select></label><button type="button" className="accountChevronRow" onClick={() => setManagingConsents(true)}><span><b>Consentimiento IA</b><small>Revisar permisos de procesamiento</small></span><strong>›</strong></button><label className="accountSettingRow"><span><b>Notificaciones</b><small>Avisos sociales dentro de la app</small></span><input type="checkbox" checked={notificationsEnabled} onChange={(event) => onNotificationsEnabledChange(event.target.checked)} aria-label="Activar avisos dentro de la app" /></label><label className="accountSettingRow"><span><b>Alto contraste</b><small>Preferencia visual</small></span><input type="checkbox" checked={highContrast} onChange={(event) => onHighContrastChange(event.target.checked)} /></label></section>
       <section className="card accountCompactCard"><h2>Legal</h2><div className="documentConsentList compactConsentList"><Link href="/legal/terms?returnTo=account"><span>Términos de Uso</span><b>{accepted("terms")}</b></Link><Link href="/legal/privacy-simplified?returnTo=account"><span>Aviso simplificado</span><b>Ver</b></Link><Link href="/legal/privacy?returnTo=account"><span>Aviso de Privacidad</span><b>{accepted("privacy")}</b></Link></div><button type="button" className="textButton accountConsentButton" onClick={() => setManagingConsents(true)}>Gestionar consentimientos</button></section>
-      {identity.mode === "authenticated" && <section className="card accountDangerZone"><div><span>TUS DATOS</span><h2>Controles de privacidad</h2></div><button type="button" className="dangerOutlineButton" onClick={() => setDeleteStatsOpen(true)}>Eliminar estadísticas</button><p>Reinicia promedios y rendimiento desde hoy. Tu cuenta, grupos y rondas históricas se conservan.</p>{statisticsResetAt && <small>Último reset: {new Date(statisticsResetAt).toLocaleString("es-MX")}</small>}<button type="button" className="dangerButton" onClick={() => setDeleteAccountOpen(true)}>Eliminar cuenta</button><p>Elimina la cuenta y solicita borrar o anonimizar su información permitida.</p></section>}
+      {identity.mode === "authenticated" && <section className="card accountDangerZone"><div><span>TUS DATOS</span><h2>Controles de privacidad</h2></div><button type="button" className="dangerOutlineButton" onClick={() => { setDestructiveError(""); setDeleteStatsText(""); statsRequestId.current = undefined; setDeleteStatsOpen(true); }}>Eliminar estadísticas</button><p>Reinicia promedios y rendimiento desde hoy. Tu cuenta, grupos y rondas históricas se conservan.</p>{statisticsResetAt && <small>Último reset: {new Date(statisticsResetAt).toLocaleString("es-MX")}</small>}<button type="button" className="dangerButton" onClick={() => { setDestructiveError(""); setDeleteAccountPolicy(null); setDeleteAccountText(""); setDeleteAccountOpen(true); }}>Eliminar cuenta</button><p>Elimina la cuenta y solicita borrar o anonimizar su información permitida.</p></section>}
       <section className="card accountContactCard"><h2>Ayuda y privacidad</h2><div className="accountContacts"><a href={`mailto:${legalConfig.supportEmail}`}><span>Soporte</span><b>{legalConfig.supportEmail}</b></a><a href={`mailto:${legalConfig.privacyEmail}`}><span>Privacidad y ARCO</span><b>{legalConfig.privacyEmail}</b></a></div></section>
       <section className="card accountSessionCard single"><button className="secondary big" onClick={logout}>{identity.mode === "guest" ? "Salir del modo invitado" : "Cerrar sesión"}</button></section>{notice}
-      {deleteStatsOpen && <div className="modalBackdrop"><section className="confirmDialog destructiveDialog" role="dialog" aria-modal="true" aria-labelledby="delete-stats-title"><ModalCloseButton onClose={() => { setDeleteStatsOpen(false); setDeleteStatsText(""); }} disabled={deletingStatistics} /><span className="destructiveEyebrow">ESTADÍSTICAS</span><h2 id="delete-stats-title">¿Eliminar tus estadísticas?</h2><p>Esto eliminará permanentemente tus estadísticas deportivas y datos derivados de rendimiento. Tu cuenta seguirá existiendo. Esta acción no se puede deshacer.</p><ul><li>Promedios, putts, fairways y GIR</li><li>Bunkers, penalties y tendencias</li><li>Estadísticas agregadas y derivadas de rondas</li></ul><div className="resetStrategyNote"><b>Tu histórico se conserva</b><span>Las rondas anteriores dejan de alimentar Stats. Los nuevos datos comenzarán desde este reset.</span></div><label>Escribe <b>ELIMINAR</b> para confirmar<input aria-label="Confirmación para eliminar estadísticas" value={deleteStatsText} onChange={(event) => setDeleteStatsText(event.target.value)} placeholder="ELIMINAR" autoComplete="off" /></label><div className="dialogActions"><button type="button" className="secondary" disabled={deletingStatistics} onClick={() => { setDeleteStatsOpen(false); setDeleteStatsText(""); }}>Cancelar</button><button type="button" className="dangerButton" disabled={!isStatisticsDeleteConfirmation(deleteStatsText) || deletingStatistics} onClick={() => void deleteStatistics()}>{deletingStatistics ? "Eliminando…" : "Eliminar estadísticas"}</button></div></section></div>}
-      {deleteAccountOpen && <div className="modalBackdrop"><section className="confirmDialog destructiveDialog" role="dialog" aria-modal="true" aria-labelledby="delete-account-title"><ModalCloseButton onClose={() => { setDeleteAccountOpen(false); setDeleteAccountText(""); setDeleteAccountChecked(false); }} disabled={deletingAccount} /><span className="destructiveEyebrow">CUENTA COMPLETA</span><h2 id="delete-account-title">¿Eliminar tu cuenta?</h2><p>La eliminación incluye perfil, bolsa, preferencias, estadísticas, fotos e historial personal. Los registros compartidos necesarios se desvinculan o anonimizan.</p><label className="checkRow"><input type="checkbox" checked={deleteAccountChecked} onChange={(event) => setDeleteAccountChecked(event.target.checked)} />Sí, quiero eliminar o anonimizar toda la información permitida de esta cuenta.</label><label>Escribe <b>ELIMINAR</b> para confirmar<input aria-label="Confirmación de eliminación de cuenta" value={deleteAccountText} onChange={(event) => setDeleteAccountText(event.target.value)} placeholder="ELIMINAR" autoComplete="off" /></label><div className="dialogActions"><button type="button" className="secondary" disabled={deletingAccount} onClick={() => { setDeleteAccountOpen(false); setDeleteAccountText(""); setDeleteAccountChecked(false); }}>Cancelar</button><button type="button" className="dangerButton" disabled={deleteAccountText !== "ELIMINAR" || !deleteAccountChecked || deletingAccount || cloudStatus === "syncing" || cloudStatus === "saving"} onClick={() => void deleteAccount()}>{deletingAccount ? "Eliminando…" : "Eliminar cuenta"}</button></div></section></div>}
+      {deleteStatsOpen && <StatisticsResetDialog confirmation={deleteStatsText} onConfirmation={setDeleteStatsText} busy={deletingStatistics} error={destructiveError} onClose={() => { setDeleteStatsOpen(false); statsRequestId.current = undefined; setDeleteStatsText(""); setDestructiveError(""); }} onConfirm={() => void deleteStatistics()} />}
+      {deleteAccountOpen && <AccountDataDialog confirmation={deleteAccountText} onConfirmation={setDeleteAccountText} policy={deleteAccountPolicy} onPolicy={(policy) => { setDeleteAccountPolicy(policy); setDeleteAccountText(""); setDestructiveError(""); accountRequestId.current = undefined; }} busy={deletingAccount} syncBusy={cloudStatus === "syncing" || cloudStatus === "saving"} error={destructiveError} onClose={() => { setDeleteAccountOpen(false); setDeleteAccountText(""); setDeleteAccountPolicy(null); setDestructiveError(""); }} onConfirm={() => void deleteAccount()} />}
     </>}
   </>;
 }

@@ -1,0 +1,5 @@
+.button:global(.accountButton) { width: 44px; min-width: 44px; height: 44px; min-height: 44px; padding: 0; cursor: pointer; touch-action: manipulation; overflow: hidden; }
+.button > span { display: grid; place-items: center; width: 100%; height: 100%; border-radius: 50%; overflow: hidden; }
+.button img { width: 100%; height: 100%; object-fit: cover; }
+.button:active { filter: brightness(.85); }
+.button:focus-visible { outline: 3px solid #c39e49; outline-offset: 2px; }
