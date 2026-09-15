@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { accountDeletionRecoveryAction, accountDeletionIntentKey, clearAccountDeletionIntent, persistAccountDeletionIntent, readAccountDeletionIntent, settleAccountDeletionClient } from "../lib/account-deletion-client";
+import { accountDeletionRecoveryAction, accountDeletionIntentKey, accountDeletionPrewriteRejected, accountDeletionRequestBody, accountDeletionResponseConfirmed, clearAccountDeletionIntent, persistAccountDeletionIntent, prepareAccountDeletionIntent, readAccountDeletionIntent, settleAccountDeletionClient } from "../lib/account-deletion-client";
 
 class MemoryStorage {
   values = new Map<string, string>();
@@ -10,6 +10,51 @@ class MemoryStorage {
   removeItem(key: string) { this.values.delete(key); }
   getItem(key: string) { return this.values.get(key) ?? null; }
 }
+
+test("recovery secret is durable and reload retries the original owner/policy/request", () => {
+  const storage = new MemoryStorage();
+  const original = prepareAccountDeletionIntent(storage, "user-a", "retain_history", "11111111-1111-4111-8111-111111111111");
+  assert.match(original.recoveryToken!, /^[a-f0-9]{64}$/);
+  const reloaded = prepareAccountDeletionIntent(storage, "user-a", "retain_history", "22222222-2222-4222-8222-222222222222");
+  assert.deepEqual(reloaded, original);
+  assert.deepEqual(readAccountDeletionIntent(storage, "user-a"), original);
+  assert.equal(readAccountDeletionIntent(storage, "user-b"), null);
+  assert.throws(() => prepareAccountDeletionIntent(storage, "user-a", "delete_golf_data", "22222222-2222-4222-8222-222222222222"), /solicitud/);
+  assert.deepEqual(accountDeletionRequestBody(original), { confirmation: "ELIMINAR", ...original });
+  assert.equal("userId" in accountDeletionRequestBody(original), false);
+  storage.setItem(accountDeletionIntentKey("user-a"), JSON.stringify({ version: "2", userId: "user-a", ...original }));
+  assert.equal(readAccountDeletionIntent(storage, "user-a"), null);
+});
+
+test("success requires exact selected data policy; unrelated or malformed 2xx cannot purge", () => {
+  const deleted = { ok: true, deleted: true, archived: false, accountStatus: "deleted" };
+  const archived = { ok: true, deleted: false, archived: true, accountStatus: "archived" };
+  assert.equal(accountDeletionResponseConfirmed(deleted, "delete_golf_data"), true);
+  assert.equal(accountDeletionResponseConfirmed(archived, "retain_history"), true);
+  assert.equal(accountDeletionResponseConfirmed(deleted, "retain_history"), false);
+  assert.equal(accountDeletionResponseConfirmed(archived, "delete_golf_data"), false);
+  for (const value of [null, {}, { ok: true }, { ...deleted, deleted: false }, { ...archived, accountStatus: "deleted" }]) {
+    assert.equal(accountDeletionResponseConfirmed(value, "delete_golf_data"), false);
+    assert.equal(accountDeletionResponseConfirmed(value, "retain_history"), false);
+  }
+});
+
+test("prewrite refusal releases sync only when server explicitly confirms no mutation", () => {
+  assert.equal(accountDeletionPrewriteRejected(503, { code: "CONTROLLED_DB_ACTION_REQUIRED", noDataDeleted: true }), true);
+  assert.equal(accountDeletionPrewriteRejected(503, { code: "ACCOUNT_OPERATION_PENDING", noDataDeleted: true }), false);
+  assert.equal(accountDeletionPrewriteRejected(503, { code: "CONTROLLED_DB_ACTION_REQUIRED" }), false);
+  assert.equal(accountDeletionPrewriteRejected(200, { code: "CONTROLLED_DB_ACTION_REQUIRED", noDataDeleted: true }), false);
+});
+
+test("recovery UI remains available after Auth session is revoked without exposing another owner", () => {
+  const provider = readFileSync("app/components/account-provider.tsx", "utf8");
+  assert.match(provider, /session\?\.user\.id \|\| pendingDeletionOwner/);
+  assert.match(provider, /pendingDeletionSession \|\| pendingDeletionOwner/);
+  assert.match(provider, /readAccountDeletionIntent\(localStorage, marker\.userId\)\?\.recoveryToken/);
+  assert.match(provider, /accountDeletionResponseConfirmed\(result, intent\.dataPolicy\)/);
+  assert.match(provider, /clearDeletedAuthSessionForUser\(supabase\.auth, userId\)/);
+  assert.match(provider, /if \(pendingDeletionOwner === userId\) setPendingDeletionOwner\(""\)/);
+});
 
 test("elección de borrado se guarda por owner antes de marker y retry usa misma key", () => {
   const storage = new MemoryStorage();
@@ -103,7 +148,7 @@ test("fallo de cleanup tras 2xx no repite purge en catch del panel", async () =>
   }
 });
 
-test("respuesta perdida mantiene datos y un 4xx libera el barrier sin purga", async () => {
+test("respuesta perdida/Auth expirado/conflicto conservan barrier; rechazo prewrite lo libera", async () => {
   const storage = new MemoryStorage();
   storage.setItem("deletion:user-a", "requested-at");
   storage.setItem("round:user-a", "ronda-viva");
@@ -111,7 +156,9 @@ test("respuesta perdida mantiene datos y un 4xx libera el barrier sin purga", as
   const finish = async () => { finishCalls += 1; return true; };
   assert.equal(await settleAccountDeletionClient(storage, "deletion:user-a", null, false, finish), "pending_confirmation");
   assert.equal(storage.getItem("round:user-a"), "ronda-viva");
-  assert.equal(await settleAccountDeletionClient(storage, "deletion:user-a", 401, false, finish), "rejected");
+  assert.equal(await settleAccountDeletionClient(storage, "deletion:user-a", 401, false, finish), "pending_confirmation");
+  assert.equal(await settleAccountDeletionClient(storage, "deletion:user-a", 409, false, finish), "pending_confirmation");
+  assert.equal(await settleAccountDeletionClient(storage, "deletion:user-a", 400, false, finish), "rejected");
   assert.equal(storage.getItem("deletion:user-a"), null);
   assert.equal(finishCalls, 0);
 });
@@ -137,13 +184,12 @@ test("ambos paneles usan la misma política fail-closed", () => {
 test("Conservar mi cuenta sólo aparece tras Auth activo y revalida al pulsar", () => {
   const provider = readFileSync("app/components/account-provider.tsx", "utf8");
   const route = readFileSync("app/api/account/delete/route.ts", "utf8");
-  assert.match(route, /code: "PENDING_CONTROLLED_DB_APPLY"[\s\S]*noDataDeleted: true/);
-  assert.match(route, /code: "LEGAL_REVIEW_REQUIRED"[\s\S]*noDataDeleted: true/);
+  assert.match(route, /code: "CONTROLLED_DB_ACTION_REQUIRED"[\s\S]*noDataDeleted: true/);
   assert.doesNotMatch(route, /from\("product_usage_events_v2"\)\.insert|deleteAccountGraph\(/);
-  assert.match(provider, /const intent = readAccountDeletionIntent\(localStorage, session\.user\.id\);[\s\S]*if \(!intent\) throw new Error\([\s\S]*body: JSON\.stringify\(\{ confirmation: "ELIMINAR", dataPolicy: intent\.dataPolicy, requestId: intent\.requestId \}\)/);
-  assert.match(provider, /if \(!intent\) throw new Error\("PENDING_MANUAL_ACCOUNT_RECOVERY:/);
+  assert.match(provider, /const intent = readAccountDeletionIntent\(localStorage, userId\);[\s\S]*body: JSON\.stringify\(accountDeletionRequestBody\(intent\)\)/);
+  assert.match(provider, /if \(!intent \|\| \(!session && !intent\.recoveryToken\)\) throw new Error/);
   assert.match(provider, /Contactar soporte/);
-  assert.match(provider, /response\.status === 503 && result\?\.noDataDeleted === true &&[\s\S]*"PENDING_CONTROLLED_DB_APPLY", "LEGAL_REVIEW_REQUIRED"[\s\S]*auth\.getUser\(session\.access_token\)[\s\S]*verified\.data\.user\?\.id === session\.user\.id\) setPendingDeletionAccountActive\(true\)/);
+  assert.match(provider, /session && accountDeletionPrewriteRejected\(response\.status, result\)[\s\S]*auth\.getUser\(session\.access_token\)[\s\S]*verified\.data\.user\?\.id === session\.user\.id\) setPendingDeletionAccountActive\(true\)/);
   assert.match(provider, /if \(!session \|\| !pendingDeletionAccountActive \|\| deletionRecoveryBusy\) return/);
   assert.match(provider, /const verified = await supabase\.auth\.getUser\(session\.access_token\);[\s\S]*verified\.data\.user\?\.id !== session\.user\.id\)[\s\S]*localStorage\.removeItem\(accountDeletionMarkerKey\(session\.user\.id\)\)/);
   assert.match(provider, /\{pendingDeletionAccountActive && <button[\s\S]*Conservar mi cuenta<\/button>\}/);

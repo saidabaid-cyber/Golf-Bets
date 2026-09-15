@@ -5,7 +5,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { LEGAL_DOCUMENT_VERSIONS, legalConfig } from "../../lib/legal-config";
 import { accountDeletionMarkerKey, profileHandicapInput, profileHandicapLabel, validateProfileAvatarUrl, validateProfileDraft, type BackyardProfileDetails } from "../../lib/account-state";
-import { clearAccountDeletionIntent, persistAccountDeletionIntent, settleAccountDeletionClient } from "../../lib/account-deletion-client";
+import { accountDeletionPrewriteRejected, accountDeletionRequestBody, accountDeletionResponseConfirmed, clearAccountDeletionIntent, prepareAccountDeletionIntent, settleAccountDeletionClient, type AccountDeletionIntent } from "../../lib/account-deletion-client";
 import { ballFitDefaultsFromProfile } from "../../lib/ball-fitting";
 import type { GolfInsights } from "../../lib/golf-insights";
 import { isStatisticsDeleteConfirmation, requestStatisticsReset, type StatisticsResetRecord } from "../../lib/statistics-reset";
@@ -159,8 +159,9 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, history = [],
     accountRequestId.current ??= crypto.randomUUID();
     setDeletingAccount(true); setMessage(""); setDestructiveError("");
     const marker = accountDeletionMarkerKey(identity.userId);
+    let intent: AccountDeletionIntent;
     try {
-      persistAccountDeletionIntent(localStorage, identity.userId, { dataPolicy: deleteAccountPolicy, requestId: accountRequestId.current });
+      intent = prepareAccountDeletionIntent(localStorage, identity.userId, deleteAccountPolicy, accountRequestId.current);
       const requestedAt = new Date().toISOString();
       localStorage.setItem(marker, requestedAt);
       if (localStorage.getItem(marker) !== requestedAt) throw new Error("deletion_marker_not_persisted");
@@ -176,20 +177,21 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, history = [],
     let serverDeletionConfirmed = false;
     let serverRejectionConfirmed = false;
     try {
-      const response = await fetch("/api/account/delete", { method: "DELETE", headers: { authorization: `Bearer ${identity.accessToken}`, "content-type": "application/json" }, body: JSON.stringify({ confirmation: "ELIMINAR", dataPolicy: deleteAccountPolicy, requestId: accountRequestId.current }), signal: AbortSignal.timeout(25_000) });
+      const response = await fetch("/api/account/delete", { method: "DELETE", headers: { authorization: `Bearer ${identity.accessToken}`, "content-type": "application/json" }, body: JSON.stringify(accountDeletionRequestBody(intent)), signal: AbortSignal.timeout(25_000), redirect: "error" });
       responseStatus = response.status;
+      const result = await response.json().catch(() => null) as { error?: string; code?: string; noDataDeleted?: boolean } | null;
+      serverDeletionConfirmed = response.ok && accountDeletionResponseConfirmed(result, intent.dataPolicy);
       if (!mounted.current || liveOwner.current !== identity.userId) {
         // Keep recovery proof for the original owner; never purge the workspace
         // of a different account through a stale provider callback.
-        localStorage.setItem(marker, response.ok ? "completed_cleanup_pending" : "pending_confirmation");
+        localStorage.setItem(marker, serverDeletionConfirmed ? "completed_cleanup_pending" : "pending_confirmation");
         return;
       }
       if (!response.ok) {
-        const result = await response.json().catch(() => null) as { error?: string; code?: string; noDataDeleted?: boolean } | null;
-        serverRejectionConfirmed = response.status === 503 && result?.noDataDeleted === true && ["PENDING_CONTROLLED_DB_APPLY", "LEGAL_REVIEW_REQUIRED", "account_deletion_controlled_apply_pending"].includes(result.code || "");
+        serverRejectionConfirmed = accountDeletionPrewriteRejected(response.status, result);
         throw new Error(result?.error || "No se completó la eliminación en el servidor.");
       }
-      serverDeletionConfirmed = true;
+      if (!serverDeletionConfirmed) { responseStatus = null; throw new Error("El servidor no confirmó el cierre. Reintenta la misma solicitud."); }
       await settleAccountDeletionClient(localStorage, marker, responseStatus, serverDeletionConfirmed, finishAccountDeletion);
     } catch (error) {
       if (!mounted.current || liveOwner.current !== identity.userId) {

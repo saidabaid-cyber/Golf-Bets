@@ -181,15 +181,20 @@ test("priority UX keeps searches anchored and avoids loading a round course drop
 test("onboarding, groups and account deletion expose explicit safe choices", () => {
   const onboarding = readFileSync("app/components/beta-onboarding-flow.tsx", "utf8");
   const account = readFileSync("app/components/account-panel.tsx", "utf8");
+  const accountDialog = readFileSync("app/components/profile-data-dialogs.tsx", "utf8");
   assert.match(onboarding, /name: ""/);
   assert.match(onboarding, /<b>Privado<\/b>/);
   assert.match(onboarding, /<b>Por invitación<\/b>/);
   assert.match(onboarding, /No creamos tokens locales inseguros/);
   assert.match(readFileSync("app/page.tsx", "utf8"), /El dominio de invitaciones seguras ya valida token, identidad, expiración y revocación/);
-  assert.match(account, /¿Deseas borrar toda tu información\?/);
-  assert.match(account, /deleteAllConfirmed/);
-  assert.match(account, /desvinculan o anonimizan/);
-  assert.match(account, /deleteText !== "ELIMINAR" \|\| !deleteAllConfirmed/);
+  assert.match(account, /<AccountDataDialog[^\n]*policy=\{deletePolicy\}[^\n]*onPolicy=\{setDeletePolicy\}/);
+  assert.match(accountDialog, /¿Qué quieres hacer con tus datos de golf\?/);
+  assert.match(accountDialog, /ELIMINAR TAMBIÉN MIS DATOS/);
+  assert.match(accountDialog, /CONSERVAR MI HISTORIAL PARA RECUPERARLO SI REGRESO/);
+  assert.match(accountDialog, /disabled=\{!props\.policy \|\| props\.confirmation !== "ELIMINAR"/);
+  assert.match(account, /deleteText !== "ELIMINAR" \|\| !deletePolicy/);
+  assert.match(account, /accountDeletionRequestBody\(intent\)/);
+  assert.match(account, /accountDeletionResponseConfirmed\(result, intent\.dataPolicy\)/);
 });
 
 test("group bet templates retain advanced configuration instead of flattened numbers", () => {

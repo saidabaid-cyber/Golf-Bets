@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Fragment, createContext, useCallback, useContext, useEffect, useRef, useState, type FormEvent } from "react";
 import { ModalCloseButton } from "./modal-shell";
 import type { Session, User } from "@supabase/supabase-js";
-import { accountDeletionRecoveryAction, clearAccountDeletionIntent, readAccountDeletionIntent } from "../../lib/account-deletion-client";
+import { accountDeletionPrewriteRejected, accountDeletionRecoveryAction, accountDeletionRequestBody, accountDeletionResponseConfirmed, clearAccountDeletionIntent, readAccountDeletionIntent } from "../../lib/account-deletion-client";
 import { legalConfig } from "../../lib/legal-config";
 import {
   ACCOUNT_STORAGE_KEYS,
@@ -419,6 +419,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const [betaOnboardingRequired, setBetaOnboardingRequired] = useState(false);
   const [profileChecked, setProfileChecked] = useState(false);
   const [pendingDeletionSession, setPendingDeletionSession] = useState<Session | null>(null);
+  const [pendingDeletionOwner, setPendingDeletionOwner] = useState("");
   const [pendingDeletionAccountActive, setPendingDeletionAccountActive] = useState(false);
   const [deletionRecoveryBusy, setDeletionRecoveryBusy] = useState(false);
   const [deletionRecoveryError, setDeletionRecoveryError] = useState("");
@@ -608,6 +609,9 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       }
       for (const marker of markers) {
         const action = accountDeletionRecoveryAction(marker.state);
+        if (marker.state !== "completed" && action !== "purge" && readAccountDeletionIntent(localStorage, marker.userId)?.recoveryToken) {
+          setPendingDeletionOwner(current => current || marker.userId);
+        }
         if (action === "wait") continue;
         if (action === "normalize_pending") {
           // A request timestamp (or an older ambiguous cleanup marker) does
@@ -1147,12 +1151,13 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
 
   async function retryPendingAccountDeletion() {
     const session = pendingDeletionSession;
-    if (!session || deletionRecoveryBusy) return;
+    const userId = session?.user.id || pendingDeletionOwner;
+    if (!userId || deletionRecoveryBusy) return;
     if (!navigator.onLine) {
       setDeletionRecoveryError("Conéctate a internet para comprobar y terminar la eliminación.");
       return;
     }
-    const markerKey = accountDeletionMarkerKey(session.user.id);
+    const markerKey = accountDeletionMarkerKey(userId);
     setDeletionRecoveryBusy(true);
     setDeletionRecoveryError("");
     setPendingDeletionAccountActive(false);
@@ -1160,24 +1165,24 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       || localStorage.getItem(markerKey) === "completed";
     try {
       if (!serverDeletionConfirmed) {
-        const intent = readAccountDeletionIntent(localStorage, session.user.id);
+        const intent = readAccountDeletionIntent(localStorage, userId);
         // A legacy timestamp/pending marker may follow a partially completed
         // older saga. Today's gated endpoint cannot prove THAT older attempt
         // changed no data. Never invent a policy or release the sync barrier
         // from Auth being live alone: this needs manual account recovery.
-        if (!intent) throw new Error("PENDING_MANUAL_ACCOUNT_RECOVERY: No encontramos la elección original de esta solicitud. Conservamos tus datos y la pausa de sincronización; contacta soporte para verificar la cuenta.");
+        if (!intent || (!session && !intent.recoveryToken)) throw new Error("No encontramos el comprobante original de esta solicitud. Conservamos tus datos y la pausa de sincronización; contacta soporte para verificar la cuenta.");
         const response = await fetch("/api/account/delete", {
           method: "DELETE",
-          headers: { authorization: `Bearer ${session.access_token}`, "content-type": "application/json" },
-          body: JSON.stringify({ confirmation: "ELIMINAR", dataPolicy: intent.dataPolicy, requestId: intent.requestId }),
+          headers: { ...(session ? { authorization: `Bearer ${session.access_token}` } : {}), "content-type": "application/json" },
+          body: JSON.stringify(accountDeletionRequestBody(intent)),
           signal: AbortSignal.timeout(25_000),
+          redirect: "error",
         });
+        const result = await response.json().catch(() => null) as { error?: string; code?: string; noDataDeleted?: boolean } | null;
         if (!response.ok) {
-          const result = await response.json().catch(() => null) as { error?: string; code?: string; noDataDeleted?: boolean } | null;
           // Auth being live alone does not rule out a partially failed saga.
           // Only an explicit pre-write server refusal can release the barrier.
-          if (response.status === 503 && result?.noDataDeleted === true &&
-            ["PENDING_CONTROLLED_DB_APPLY", "LEGAL_REVIEW_REQUIRED", "account_deletion_controlled_apply_pending"].includes(result.code || "")) {
+          if (session && accountDeletionPrewriteRejected(response.status, result)) {
             const supabase = getSupabaseBrowser();
             if (supabase) {
               const verified = await supabase.auth.getUser(session.access_token).catch(() => null);
@@ -1186,21 +1191,23 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
           }
           throw new Error(result?.error || "El servidor aún no confirmó la eliminación.");
         }
+        if (!accountDeletionResponseConfirmed(result, intent.dataPolicy)) throw new Error("El servidor aún no confirmó el cierre de la cuenta.");
         serverDeletionConfirmed = true;
         localStorage.setItem(markerKey, "completed_cleanup_pending");
       }
-      const locallyComplete = await purgeDeletedAccountLocal(session.user.id, { clearAuth: false, trackPending: false });
+      const locallyComplete = await purgeDeletedAccountLocal(userId, { clearAuth: false, trackPending: false });
       if (!locallyComplete) throw new Error("El servidor eliminó la cuenta, pero falta limpiar datos de este dispositivo. Reintenta.");
       const supabase = getSupabaseBrowser();
-      if (supabase) await clearDeletedAuthSessionForUser(supabase.auth, session.user.id);
+      if (supabase) await clearDeletedAuthSessionForUser(supabase.auth, userId);
       localStorage.setItem(markerKey, "completed");
       setPendingLocalDeletionOwner(nextPendingLocalDeletionOwner(localStorage));
       setPendingDeletionSession(null);
+      setPendingDeletionOwner("");
     } catch (error) {
       // The barrier remains in place. A retry cannot mount the account or
       // resume writes until the server confirms the destructive request.
       localStorage.setItem(markerKey, serverDeletionConfirmed ? "completed_cleanup_pending" : "pending_confirmation");
-      if (serverDeletionConfirmed) setPendingLocalDeletionOwner(session.user.id);
+      if (serverDeletionConfirmed) setPendingLocalDeletionOwner(userId);
       setDeletionRecoveryError(error instanceof Error ? error.message : "No pudimos confirmar la eliminación. Reintenta.");
     } finally {
       setDeletionRecoveryBusy(false);
@@ -1226,6 +1233,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       if (verified.error || verified.data.user?.id !== session.user.id) throw new Error("La cuenta no se pudo verificar como activa. Conservamos tus datos y la pausa de sincronización.");
       clearAccountDeletionIntent(localStorage, session.user.id);
       localStorage.removeItem(accountDeletionMarkerKey(session.user.id));
+      setPendingDeletionOwner("");
       activateSession(session);
       setPendingDeletionAccountActive(false);
     } catch (error) {
@@ -1237,7 +1245,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
 
   async function closePendingDeletionSession() {
     const session = pendingDeletionSession;
-    if (!session) return;
+    if (!session) { setPendingDeletionOwner(""); setDeletionRecoveryError(""); return; }
     const supabase = getSupabaseBrowser();
     try { if (supabase) await clearDeletedAuthSessionForUser(supabase.auth, session.user.id); }
     catch {
@@ -1245,6 +1253,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     setPendingDeletionSession(null);
+    setPendingDeletionOwner("");
     setDeletionRecoveryError("");
   }
 
@@ -1267,6 +1276,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         const supabase = getSupabaseBrowser();
         if (supabase) await clearDeletedAuthSessionForUser(supabase.auth, userId);
         if (pendingDeletionSession?.user.id === userId) setPendingDeletionSession(null);
+        if (pendingDeletionOwner === userId) setPendingDeletionOwner("");
       }
       localStorage.setItem(markerKey, markerState === "completed_cleanup_pending" ? "completed" : "pending_confirmation");
       setPendingLocalDeletionOwner(nextPendingLocalDeletionOwner(localStorage));
@@ -1409,14 +1419,14 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     {deletionRecoveryError && <div className="accessMessage" role="alert">{deletionRecoveryError}</div>}
     <button type="button" className="primary big" disabled={deletionRecoveryBusy} onClick={() => void retryPendingLocalDeletionCleanup()}>{deletionRecoveryBusy ? "Limpiando…" : "Reintentar limpieza"}</button>
   </section></main>;
-  if (pendingDeletionSession) return <main className="accessScreen"><section className="accessCard" aria-labelledby="deletion-recovery-title">
+  if (pendingDeletionSession || pendingDeletionOwner) return <main className="accessScreen"><section className="accessCard" aria-labelledby="deletion-recovery-title">
     <BrandLockup />
-    <div className="eyebrow">ELIMINACIÓN PENDIENTE</div>
-    <h1 id="deletion-recovery-title">Termina la eliminación de tu cuenta</h1>
+    <div className="eyebrow">CIERRE DE CUENTA PENDIENTE</div>
+    <h1 id="deletion-recovery-title">Termina el cierre de tu cuenta</h1>
     <p>No abriremos tus rondas ni reanudaremos la sincronización hasta que el servidor confirme la solicitud anterior.</p>
     {deletionRecoveryError && <div className="accessMessage" role="alert">{deletionRecoveryError}</div>}
     <div className="accessActions">
-      <button type="button" className="primary big" disabled={deletionRecoveryBusy} onClick={() => void retryPendingAccountDeletion()}>{deletionRecoveryBusy ? "Comprobando…" : "Reintentar eliminación"}</button>
+      <button type="button" className="primary big" disabled={deletionRecoveryBusy} onClick={() => void retryPendingAccountDeletion()}>{deletionRecoveryBusy ? "Comprobando…" : "Continuar cierre de cuenta"}</button>
       {pendingDeletionAccountActive && <button type="button" className="secondary" disabled={deletionRecoveryBusy} onClick={() => void keepAccountAfterFailedDeletion()}>Conservar mi cuenta</button>}
       <button type="button" className="secondary" disabled={deletionRecoveryBusy} onClick={() => void closePendingDeletionSession()}>Cerrar sesión</button>
     </div>

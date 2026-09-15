@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { LEGAL_DOCUMENT_VERSIONS, legalConfig } from "../../lib/legal-config";
 import { accountDeletionMarkerKey, BETTING_DATA_CONSENT_TYPE, emptyBackyardProfileDetails, profileHandicapInput, profileHandicapLabel, validateProfileAvatarUrl, validateProfileDraft, type BackyardProfile, type BackyardProfileDetails } from "../../lib/account-state";
-import { settleAccountDeletionClient } from "../../lib/account-deletion-client";
+import { accountDeletionPrewriteRejected, accountDeletionRequestBody, accountDeletionResponseConfirmed, clearAccountDeletionIntent, prepareAccountDeletionIntent, settleAccountDeletionClient, type AccountDeletionIntent } from "../../lib/account-deletion-client";
 import { ballFitDefaultsFromProfile } from "../../lib/ball-fitting";
 import type { GolfInsights } from "../../lib/golf-insights";
 import { useBackyardAccount } from "./account-provider";
@@ -16,7 +16,7 @@ import { normalizeProfileLocation, validateProfileLocation } from "../../lib/pro
 import { ProfileAvatarMedia } from "./profile-avatar-media";
 import { ProfileClubPicker } from "./profile-club-picker";
 import { GhinPlaceholder } from "./ghin-placeholder";
-import { ModalCloseButton } from "./modal-shell";
+import { AccountDataDialog, type AccountDataPolicy } from "./profile-data-dialogs";
 
 type AccountPanelProps = {
   view: "profile" | "account";
@@ -138,14 +138,22 @@ export function AccountPanel({ view, focusSection = "profile", highContrast, onH
   const [messageKind, setMessageKind] = useState<"success" | "error">("success");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteText, setDeleteText] = useState("");
-  const [deleteAllConfirmed, setDeleteAllConfirmed] = useState(false);
+  const [deletePolicy, setDeletePolicy] = useState<AccountDataPolicy | null>(null);
+  const [deleteError, setDeleteError] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [managingConsents, setManagingConsents] = useState(false);
+  const accountInFlight = useRef(false);
+  const accountRequestId = useRef<string | undefined>(undefined);
+  const liveOwner = useRef(identity.userId);
+  const mounted = useRef(true);
   const profileSectionRef = useRef<HTMLElement>(null);
   const equipmentSectionRef = useRef<HTMLDivElement>(null);
   const sessionExpired = cloudIssues.some((issue) => issue.kind === "session_expired");
+
+  useLayoutEffect(() => { liveOwner.current = identity.userId; }, [identity.userId]);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
   useEffect(() => {
     if (!editing) {
@@ -201,11 +209,15 @@ export function AccountPanel({ view, focusSection = "profile", highContrast, onH
   }
 
   async function deleteAccount() {
-    if (identity.mode === "guest") { setMessageKind("success"); setMessage("El modo invitado no tiene una cuenta de nube. Puedes borrar cada ronda e histórico desde la app o los datos del sitio desde el navegador."); setDeleteOpen(false); return; }
+    if (accountInFlight.current || identity.mode !== "authenticated" || deleteText !== "ELIMINAR" || !deletePolicy) return;
     if (cloudStatus === "syncing" || cloudStatus === "saving") { setMessageKind("error"); setMessage("Espera a que termine el guardado en curso antes de eliminar la cuenta."); return; }
-    setDeletingAccount(true); setMessageKind("success"); setMessage("");
+    accountInFlight.current = true;
+    accountRequestId.current ??= crypto.randomUUID();
+    setDeletingAccount(true); setMessageKind("success"); setMessage(""); setDeleteError("");
     const deletionMarker = accountDeletionMarkerKey(identity.userId);
+    let intent: AccountDeletionIntent;
     try {
+      intent = prepareAccountDeletionIntent(localStorage, identity.userId, deletePolicy, accountRequestId.current);
       const requestedAt = new Date().toISOString();
       localStorage.setItem(deletionMarker, requestedAt);
       if (localStorage.getItem(deletionMarker) !== requestedAt) throw new Error("deletion_marker_not_persisted");
@@ -213,20 +225,35 @@ export function AccountPanel({ view, focusSection = "profile", highContrast, onH
       setMessageKind("error");
       setMessage("No pudimos preparar la eliminación de forma segura en este dispositivo. Libera espacio o revisa el almacenamiento del navegador y reintenta.");
       setDeletingAccount(false);
+      accountInFlight.current = false;
+      setDeleteError("No pudimos preparar la acción de forma segura. Revisa el almacenamiento del navegador y reintenta.");
       return;
     }
     let responseStatus: number | null = null;
     let serverDeletionConfirmed = false;
+    let serverRejectionConfirmed = false;
     try {
-      const response = await fetch("/api/account/delete", { method: "DELETE", headers: { authorization: `Bearer ${identity.accessToken}`, "content-type": "application/json" }, body: JSON.stringify({ confirmation: "ELIMINAR" }) });
+      const response = await fetch("/api/account/delete", { method: "DELETE", headers: { authorization: `Bearer ${identity.accessToken}`, "content-type": "application/json" }, body: JSON.stringify(accountDeletionRequestBody(intent)), signal: AbortSignal.timeout(25_000), redirect: "error" });
       responseStatus = response.status;
+      const result = await response.json().catch(() => null) as { error?: string; code?: string; noDataDeleted?: boolean } | null;
+      serverDeletionConfirmed = response.ok && accountDeletionResponseConfirmed(result, intent.dataPolicy);
+      if (!mounted.current || liveOwner.current !== identity.userId) {
+        // Preserve the original account's recovery state, never purge the
+        // workspace of another account through a stale provider callback.
+        localStorage.setItem(deletionMarker, serverDeletionConfirmed ? "completed_cleanup_pending" : "pending_confirmation");
+        return;
+      }
       if (!response.ok) {
-        const result = await response.json().catch(() => null) as { error?: string } | null;
+        serverRejectionConfirmed = accountDeletionPrewriteRejected(response.status, result);
         throw new Error(result?.error || "No se completó la eliminación en el servidor.");
       }
-      serverDeletionConfirmed = true;
+      if (!serverDeletionConfirmed) { responseStatus = null; throw new Error("El servidor no confirmó el cierre. Reintenta la misma solicitud."); }
       await settleAccountDeletionClient(localStorage, deletionMarker, responseStatus, serverDeletionConfirmed, finishAccountDeletion);
     } catch (error) {
+      if (!mounted.current || liveOwner.current !== identity.userId) {
+        if (!serverDeletionConfirmed) localStorage.setItem(deletionMarker, "pending_confirmation");
+        return;
+      }
       if (serverDeletionConfirmed) {
         // The confirmed cleanup already ran (or failed) once. Its durable
         // marker lets reload resume; retrying here could purge twice.
@@ -236,19 +263,21 @@ export function AccountPanel({ view, focusSection = "profile", highContrast, onH
         return;
       }
       try {
-        const outcome = await settleAccountDeletionClient(localStorage, deletionMarker, responseStatus, serverDeletionConfirmed, finishAccountDeletion);
+        const outcome = await settleAccountDeletionClient(localStorage, deletionMarker, serverRejectionConfirmed ? 400 : responseStatus, serverDeletionConfirmed, finishAccountDeletion);
+        if (outcome === "rejected") { clearAccountDeletionIntent(localStorage, identity.userId); accountRequestId.current = undefined; }
         setMessageKind("error");
         setMessage(outcome === "pending_confirmation"
           ? `${responseStatus !== null && error instanceof Error ? `${error.message} ` : "No pudimos confirmar la eliminación. "}Conservamos tus datos en este dispositivo y pausamos la sincronización. Al recargar podrás reintentar o comprobar que tu cuenta sigue activa.`
           : error instanceof Error ? error.message : "No se completó la eliminación en el servidor. Reintenta.");
-        setDeleteOpen(false);
+        if (outcome === "pending_confirmation") setDeleteOpen(false);
       } catch {
         setMessageKind("error");
         setMessage("No pudimos confirmar la eliminación ni guardar el estado de recuperación. Conservamos tus datos; no cierres esta pestaña y contacta soporte.");
         setDeleteOpen(false);
       }
+      setDeleteError(error instanceof Error ? error.message : "No pudimos confirmar la acción. Tus datos no se borraron localmente.");
     }
-    finally { setDeletingAccount(false); }
+    finally { accountInFlight.current = false; if (mounted.current && liveOwner.current === identity.userId) setDeletingAccount(false); }
   }
 
   if (view === "account" && managingConsents) return <LegalConsentManager
@@ -383,10 +412,10 @@ export function AccountPanel({ view, focusSection = "profile", highContrast, onH
 
     <section className="card accountContactCard"><h2>Contacto</h2><div className="accountContacts"><a href={`mailto:${legalConfig.supportEmail}`}><span>Soporte</span><b>{legalConfig.supportEmail}</b></a><a href={`mailto:${legalConfig.privacyEmail}`}><span>Privacidad y ARCO</span><b>{legalConfig.privacyEmail}</b></a></div></section>
 
-    <section className={`card accountSessionCard ${identity.mode === "guest" ? "single" : ""}`}><button className="secondary big" onClick={logout}>{identity.mode === "guest" ? "Salir del modo invitado" : "Cerrar sesión"}</button>{identity.mode === "authenticated" && <button className="dangerButton" onClick={() => setDeleteOpen(true)}>Eliminar cuenta</button>}</section>
+    <section className={`card accountSessionCard ${identity.mode === "guest" ? "single" : ""}`}><button className="secondary big" onClick={logout}>{identity.mode === "guest" ? "Salir del modo invitado" : "Cerrar sesión"}</button>{identity.mode === "authenticated" && <button className="dangerButton" onClick={() => { setDeleteText(""); setDeletePolicy(null); setDeleteError(""); setDeleteOpen(true); }}>Eliminar cuenta</button>}</section>
     {message && <div className={messageKind === "error" ? "notice bad" : "notice"} role={messageKind === "error" ? "alert" : "status"}>{message}</div>}
 
-    {deleteOpen && <div className="modalBackdrop"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="delete-account-title"><ModalCloseButton onClose={() => { setDeleteOpen(false); setDeleteText(""); setDeleteAllConfirmed(false); }} disabled={deletingAccount} /><h2 id="delete-account-title">¿Deseas borrar toda tu información?</h2><p>La eliminación incluye perfil, bolsa y bola, preferencias, estadísticas, fotos, historial personal y relaciones de tu cuenta. Los registros compartidos que deban conservarse por integridad se desvinculan o anonimizan; no afirmamos que se borraron si el servidor no lo confirma.</p><label className="checkRow"><input type="checkbox" checked={deleteAllConfirmed} onChange={(event) => setDeleteAllConfirmed(event.target.checked)} />Sí, quiero eliminar o anonimizar toda la información permitida de esta cuenta.</label><p>Escribe <b>ELIMINAR</b> para la confirmación final.</p>{(cloudStatus === "syncing" || cloudStatus === "saving") && <p role="status">Terminando el guardado actual antes de permitir la eliminación…</p>}<input aria-label="Confirmación de eliminación" value={deleteText} onChange={(event) => setDeleteText(event.target.value)} placeholder="ELIMINAR" autoComplete="off" /><div className="dialogActions"><button className="secondary" disabled={deletingAccount} onClick={() => { setDeleteOpen(false); setDeleteText(""); setDeleteAllConfirmed(false); }}>Cancelar</button><button className="dangerButton" disabled={deleteText !== "ELIMINAR" || !deleteAllConfirmed || deletingAccount || cloudStatus === "syncing" || cloudStatus === "saving"} onClick={deleteAccount}>{deletingAccount ? "Eliminando…" : "Eliminar definitivamente"}</button></div></section></div>}
+    {deleteOpen && <AccountDataDialog confirmation={deleteText} onConfirmation={setDeleteText} policy={deletePolicy} onPolicy={setDeletePolicy} busy={deletingAccount} syncBusy={cloudStatus === "syncing" || cloudStatus === "saving"} error={deleteError} onClose={() => { setDeleteOpen(false); setDeleteText(""); setDeletePolicy(null); setDeleteError(""); }} onConfirm={() => void deleteAccount()} />}
     </>}
   </>;
 }

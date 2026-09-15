@@ -7,6 +7,7 @@ const read = (path: string) => readFileSync(path, "utf8");
 test("todos los archivos con diálogos interactivos exponen una salida visible", () => {
   const files = [
     "app/components/account-panel.tsx",
+    "app/components/profile-account-panel.tsx",
     "app/components/account-provider.tsx",
     "app/components/backyard-ai/ai-processing-consent.tsx",
     "app/components/betting-consent-dialog.tsx",
@@ -20,7 +21,17 @@ test("todos los archivos con diálogos interactivos exponen una salida visible",
   ];
   for (const file of files) {
     const source = read(file);
-    assert.match(source, /ModalCloseButton|modalClose|helpClose|holeSummaryClose/, `${file} no expone cierre`);
+    if (file.endsWith("/account-panel.tsx") || file.endsWith("/profile-account-panel.tsx")) {
+      // Account screens delegate their interactive modal to the canonical
+      // dialog: follow the handler through that component, not a name-only opt-out.
+      assert.match(source, /<AccountDataDialog[^\n]*onClose=\{\(\) => \{ setDelete(?:Account)?Open\(false\)/, `${file} no conecta cierre`);
+      const dialog = read("app/components/profile-data-dialogs.tsx");
+      assert.match(dialog, /<Dialog titleId="delete-account-title" busy=\{props\.busy\} onClose=\{props\.onClose\}/);
+      assert.match(dialog, /<ModalCloseButton onClose=\{onClose\} disabled=\{busy\}/);
+      assert.match(dialog, /disabled=\{props\.busy\} onClick=\{props\.onClose\}>Cancelar<\/button>/);
+    } else {
+      assert.match(source, /ModalCloseButton|modalClose|helpClose|holeSummaryClose/, `${file} no expone cierre`);
+    }
   }
   const globalStyles = read("app/globals.css");
   assert.match(globalStyles, /\.modalCloseButton\{[^}]*width:44px[^}]*height:44px/);
