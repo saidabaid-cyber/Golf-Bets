@@ -385,7 +385,7 @@ function ProfileSetupScreen({ identity, onSave, onBack }: {
     <form className="profileSetupForm" onSubmit={saveProfile} noValidate>
       <div className="grid2"><label htmlFor="profile-setup-given">Nombre<input id="profile-setup-given" autoComplete="given-name" enterKeyHint="next" value={givenName} onChange={(event) => setGivenName(event.target.value)} placeholder="Tu nombre" /></label><label htmlFor="profile-setup-family">Apellidos<input id="profile-setup-family" autoComplete="family-name" enterKeyHint="next" value={familyName} onChange={(event) => setFamilyName(event.target.value)} placeholder="Tus apellidos" /></label></div>
       <label>Foto / avatar opcional</label>
-      <ProfileImagePicker value={avatarUrl} onChange={setAvatarUrl} onBusyChange={setAvatarBusy} />
+      <ProfileImagePicker value={avatarUrl} onChange={setAvatarUrl} onBusyChange={setAvatarBusy} accessToken={identity.accessToken} userId={identity.userId} />
       <ProfileLocationPicker value={location} onChange={setLocation} />
       <label htmlFor="profile-setup-city">Ciudad opcional<input id="profile-setup-city" autoComplete="address-level2" value={city} onChange={(event) => setCity(event.target.value)} placeholder="Puebla" /></label>
       <label htmlFor="profile-setup-hcp">HCP index</label>
@@ -950,8 +950,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     const locationChanged = includesLocation && (!identity.locationUpdatedAt || ["countryCode", "country", "stateCode", "state"].some((key) => next[key as keyof BackyardProfile] !== identity[key as keyof BackyardProfile]));
     const location = locationChanged ? normalizeProfileLocation(next) : undefined;
     if (identity.mode === "guest") {
+      // Persist the merged profile, not a partial editor patch: changing an
+      // optional avatar must not erase the previously selected country/region.
+      localStorage.setItem(ACCOUNT_STORAGE_KEYS.guestProfile, JSON.stringify(profileCachePayload(next)));
       setIdentity(next);
-      localStorage.setItem(ACCOUNT_STORAGE_KEYS.guestProfile, JSON.stringify(profile));
       return "local";
     }
     const updatedAt = new Date().toISOString();

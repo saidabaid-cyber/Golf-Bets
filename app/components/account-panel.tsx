@@ -289,7 +289,7 @@ export function AccountPanel({ view, focusSection = "profile", highContrast, onH
         <label>HCP index (opcional)<input type="text" inputMode="text" value={handicap} onChange={(event) => setHandicap(event.target.value)} placeholder="Ej. 8.4 o +1.2" /><GhinPlaceholder /></label>
         <div className="profileAvatarEditor">
           <label>Foto o avatar</label>
-          <ProfileImagePicker value={avatarUrl} onChange={setAvatarUrl} onBusyChange={setAvatarBusy} />
+          <ProfileImagePicker value={avatarUrl} onChange={setAvatarUrl} onBusyChange={setAvatarBusy} accessToken={identity.accessToken} userId={identity.userId} />
           <p className="hint">Quitarla en The Backyard no modifica tu foto de Google.</p>
         </div>
         <label>Nombre(s)<input value={profileDetails.givenName} onChange={(event) => setProfileDetails((current) => ({ ...current, givenName: event.target.value }))} autoComplete="given-name" /></label>

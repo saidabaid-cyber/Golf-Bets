@@ -1,0 +1,22 @@
+.panel { grid-column: 1 / -1; display: grid; gap: 10px; min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 16px; background: var(--soft); }
+.panel header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.panel h3 { margin: 0; font-size: 14px; color: var(--green); }
+.panel header button { flex: 0 0 44px; width: 44px; min-height: 44px; border: 1px solid var(--line); border-radius: 50%; background: var(--card); font-size: 24px; }
+.panel button { min-width: 0; min-height: 44px; white-space: normal; }
+.panel textarea { box-sizing: border-box; width: 100%; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 10px; resize: vertical; font: inherit; font-size: 16px; }
+.panel > label { margin: 0; font-size: 12px; font-weight: 700; }
+.sources { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.sources button { padding: 9px 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--green); font-size: 11px; font-weight: 800; }
+.sources button[aria-pressed="true"] { border-color: var(--green); background: #e3efe6; }
+.photo, .result { display: grid; gap: 9px; min-width: 0; }
+.photo img, .result img { display: block; width: min(100%, 180px); aspect-ratio: 1; height: auto; margin: 0 auto; object-fit: contain; border-radius: 50%; }
+.photo img { width: 96px; }
+.panel small { display: block; font-size: 11px; line-height: 1.45; color: var(--muted); overflow-wrap: anywhere; }
+.styles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; margin: 0; padding: 8px; border: 1px solid var(--line); border-radius: 10px; min-width: 0; }
+.styles legend { font-size: 12px; font-weight: 700; }
+.styles label { display: flex; align-items: center; gap: 5px; min-height: 44px; margin: 0; font-size: 12px; }
+.styles input, .panel .consent input { flex: 0 0 20px; width: 20px; height: 20px; margin: 0; }
+.panel .consent { display: flex; gap: 8px; align-items: flex-start; margin: 0; font-size: 12px; font-weight: 400; line-height: 1.45; }
+.notice { display: grid; gap: 4px; border-radius: 10px; padding: 9px; background: #fff4d9; font-size: 12px; line-height: 1.4; margin: 0; overflow-wrap: anywhere; }
+.error { margin: 0; color: #8f281f; font-size: 12px; line-height: 1.4; }
+.panel button:disabled { opacity: .55; cursor: not-allowed; }

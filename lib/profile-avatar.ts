@@ -9,7 +9,6 @@ export type ProfileAvatarType = "photo" | "emoji" | "generated_avatar" | "none";
 export type AvatarCreationRequest =
   | { source: "description"; description: string }
   | { source: "photo"; photo: File; description?: string };
-export const AVATAR_IMAGE_GENERATION_AVAILABLE = false;
 
 export function profileAvatarGraphemes(value: string): string[] {
   const normalized = value.trim();
@@ -34,11 +33,20 @@ export function isProfileEmojiAvatar(value: unknown): boolean {
   return normalizeProfileEmojiAvatar(value) !== null;
 }
 
-/** avatarUrl remains the single persisted value used by every existing view.
- * Generated image provenance can be supplied by a future connected provider;
- * selecting the unavailable creator never creates or persists a fake avatar. */
+/** The immutable generated asset path preserves the discriminator across
+ * profile/cache/cloud round-trips, without a second independently stored avatar.
+ * This is display metadata only, NEVER an authorization or asset ownership check. */
+export function isGeneratedProfileAvatarUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && !url.username && !url.password
+      && /^\/storage\/v1\/object\/public\/[^/]+\/generated-avatar\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.(?:webp|png|jpeg)$/.test(url.pathname);
+  } catch { return false; }
+}
+
+/** avatarUrl remains the single persisted value used by every existing view. */
 export function profileAvatarType(value: string | null | undefined, generated = false): ProfileAvatarType {
   if (!value?.trim()) return "none";
   if (isProfileEmojiAvatar(value)) return "emoji";
-  return generated ? "generated_avatar" : "photo";
+  return generated || isGeneratedProfileAvatarUrl(value) ? "generated_avatar" : "photo";
 }

@@ -4,11 +4,18 @@ import { useEffect, useId, useRef, useState } from "react";
 import { profileImageErrorMessage, profileImageFromFile } from "../../lib/profile-image";
 import { isProfileEmojiAvatar, normalizeProfileEmojiAvatar, profileAvatarType } from "../../lib/profile-avatar";
 import styles from "./profile-image-picker.module.css";
+import { AvatarCreationPanel } from "./avatar-creation-panel";
 
 type AvatarMode = "photo" | "emoji" | "create" | "none";
 const QUICK_EMOJIS = ["😎", "🏌️", "⛳", "🔥", "🤠", "🦁"];
+function modeFromValue(value: string): AvatarMode {
+  const type = profileAvatarType(value);
+  // A saved generated image is an existing avatar, not a new generation draft.
+  // Only an explicit tap on CREAR AVATAR opens the provider flow.
+  return type === "generated_avatar" ? "photo" : type;
+}
 
-export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyChange }: { value: string; onChange: (value: string) => void; kind?: "profile" | "group"; onBusyChange?: (busy: boolean) => void }) {
+export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyChange, accessToken, userId }: { value: string; onChange: (value: string) => void; kind?: "profile" | "group"; onBusyChange?: (busy: boolean) => void; accessToken?: string | null; userId?: string }) {
   const fieldId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const requestRef = useRef(0);
@@ -18,8 +25,8 @@ export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyCh
   const [emojiInput, setEmojiInput] = useState({ source: value, text: isProfileEmojiAvatar(value) ? value : "" });
   const emojiDraft = emojiInput.source === value ? emojiInput.text : isProfileEmojiAvatar(value) ? value : "";
   function setEmojiDraft(text: string) { setEmojiInput({ source: value, text }); }
-  const [selection, setSelection] = useState<{ mode: AvatarMode; value: string }>({ mode: profileAvatarType(value) as AvatarMode, value });
-  const mode = selection.value === value ? selection.mode : profileAvatarType(value) as AvatarMode;
+  const [selection, setSelection] = useState<{ mode: AvatarMode; value: string }>({ mode: modeFromValue(value), value });
+  const mode = selection.value === value ? selection.mode : modeFromValue(value);
   useEffect(() => () => { requestRef.current += 1; onBusyChange?.(false); }, [onBusyChange]);
 
   function selectMode(next: AvatarMode) {
@@ -62,11 +69,9 @@ export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyCh
       <small>Fotos, stickers o imágenes de avatar. Hasta 20 MB de origen; se recortan al centro y se optimizan antes de guardar. HEIC/HEIF depende de la compatibilidad de tu navegador.</small>
     </div>}
     {kind === "profile" && mode === "emoji" && <div className={styles.emojiInput}><label htmlFor={`${fieldId}-emoji`}>Emoji de avatar</label><div><input id={`${fieldId}-emoji`} type="text" value={emojiDraft} maxLength={64} inputMode="text" autoComplete="off" autoCapitalize="off" spellCheck={false} enterKeyHint="done" placeholder="Elige un emoji del teclado" aria-label="Emoji de avatar" onKeyDown={(event) => { if (event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); applyEmoji(); } }} onChange={(event) => { setEmojiDraft(event.target.value); setMessage(""); setStatus(""); }} /><button type="button" className="secondary" onClick={applyEmoji}>USAR EMOJI</button></div><div className={styles.quickEmojis} aria-label="Emojis sugeridos">{QUICK_EMOJIS.map((emoji) => <button key={emoji} type="button" aria-label={`Elegir ${emoji}`} aria-pressed={emojiDraft === emoji} onClick={() => { setEmojiDraft(emoji); setMessage(""); setStatus(""); }}>{emoji}</button>)}</div><small>También puedes usar el teclado de tu teléfono, incluidos tonos de piel y combinaciones Unicode.</small></div>}
-    {kind === "profile" && mode === "create" && <section className={styles.creator} aria-labelledby={`${fieldId}-creator`}>
-      <div><h3 id={`${fieldId}-creator`}>CREAR AVATAR</h3><span>PRÓXIMAMENTE</span></div><p>Crea una imagen para tu perfil.</p>
-      <ul><li><b>Desde una descripción</b><small>Por ejemplo: golfista con gorra verde, estilo caricatura.</small></li><li><b>A partir de tu foto</b><small>Usaremos sólo la foto que tú elijas para esta función.</small></li></ul>
-      <small>La creación con IA todavía no está disponible. Puedes usar Foto o Emoji ahora.</small>
-    </section>}
+    {kind === "profile" && mode === "create" && <AvatarCreationPanel key={userId || "guest"} accessToken={accessToken} userId={userId} onBusyChange={onBusyChange} onCancel={() => selectMode("photo")} onUse={(url) => {
+      onChange(url); setSelection({ mode: "photo", value: url }); setStatus("Avatar generado guardado como imagen. Guarda tu perfil para usarlo en la app.");
+    }} />}
     {message && <small className={styles.error} role="alert">{message}</small>}
     {status && <small className={styles.help} role="status">{status}</small>}
     <small className={styles.help}>Puedes cambiarla después. No necesitas pegar enlaces.</small>
