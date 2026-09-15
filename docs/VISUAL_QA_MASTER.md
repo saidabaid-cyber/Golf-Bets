@@ -20,3 +20,7 @@ This file records owner-controlled visual gates. A technical test or successful 
 ## Verification rule
 
 `PENDING_VISUAL_QA` means the implementation may be testable, but the owner has not accepted its visual result. Only the owner can change those rows to `VISUAL_APPROVED`.
+
+## 2026-09-15 — Perfil / ronda / Index
+
+HOME remains VISUAL_APPROVED / NO TOUCH. No hero, Home component, Home CSS or asset edits. Owner explicitly authorized only a conditional central JUGAR destination in the shared tab bar while a recoverable active round exists; the four-destination inactive layout remains unchanged. Profile/manual avatar, destructive dialogs and the active navigation require owner visual review. See `PROFILE_ROUND_INDEX_CLOSEOUT.md` for local browser evidence and outstanding isolated cloud/legal verification.
