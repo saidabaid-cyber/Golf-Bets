@@ -127,10 +127,10 @@ test("profile accepts one native Unicode emoji grapheme and keeps legacy avatar 
   const media = readFileSync("app/components/profile-avatar-media.tsx", "utf8");
   assert.match(picker, /\["photo", "FOTO"\]/);
   assert.match(picker, /\["emoji", "EMOJI"\]/);
-  assert.match(picker, /aria-pressed=\{mode === option\}/);
+  assert.match(picker, /aria-pressed=\{mode === option \|\| \(mode === "custom" && option === "create"\)\}/);
   assert.doesNotMatch(picker, /Elegir avatar<\/button>/);
   assert.match(media, /if \(isProfileEmojiAvatar\(value\)\)/);
-  assert.match(media, /if \(value\) return <img/);
+  assert.match(media, /safeProfileAvatarValue\(value\)/);
 });
 
 test("club search, onboarding, capture and modal safety expose the hard-closeout contracts", () => {

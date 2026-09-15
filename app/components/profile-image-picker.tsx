@@ -5,17 +5,16 @@ import { profileImageErrorMessage, profileImageFromFile } from "../../lib/profil
 import { isProfileEmojiAvatar, normalizeProfileEmojiAvatar, profileAvatarType } from "../../lib/profile-avatar";
 import styles from "./profile-image-picker.module.css";
 import { AvatarCreationPanel } from "./avatar-creation-panel";
+import { parseManualAvatarUrl } from "../../lib/manual-avatar";
 
-type AvatarMode = "photo" | "emoji" | "create" | "none";
+type AvatarMode = "photo" | "emoji" | "create" | "custom" | "none";
 const QUICK_EMOJIS = ["😎", "🏌️", "⛳", "🔥", "🤠", "🦁"];
 function modeFromValue(value: string): AvatarMode {
   const type = profileAvatarType(value);
-  // A saved generated image is an existing avatar, not a new generation draft.
-  // Only an explicit tap on CREAR AVATAR opens the provider flow.
-  return type === "generated_avatar" ? "photo" : type;
+  return type === "custom_avatar" ? "custom" : type;
 }
 
-export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyChange, accessToken, userId }: { value: string; onChange: (value: string) => void; kind?: "profile" | "group"; onBusyChange?: (busy: boolean) => void; accessToken?: string | null; userId?: string }) {
+export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyChange, onSaveAvatar }: { value: string; onChange: (value: string) => void; kind?: "profile" | "group"; onBusyChange?: (busy: boolean) => void; onSaveAvatar?: (avatarUrl: string) => Promise<void>; accessToken?: string | null; userId?: string }) {
   const fieldId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const requestRef = useRef(0);
@@ -62,15 +61,17 @@ export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyCh
   }
   return <div className={styles.picker}>
     <div className={`${styles.preview} ${kind === "profile" ? styles.profilePreview : ""}`}>{isProfileEmojiAvatar(value) ? <span role="img" aria-label="Emoji seleccionado">{value}</span> : value ? <img src={value} alt={kind === "profile" ? "Avatar seleccionado" : "Imagen del grupo"} referrerPolicy="no-referrer" /> : <span aria-hidden="true">{kind === "profile" ? "⛳" : "👥"}</span>}</div>
-    {kind === "profile" && <div className={styles.tabs} role="group" aria-label="Tipo de avatar">{([["photo", "FOTO"], ["emoji", "EMOJI"], ["create", "CREAR AVATAR"], ["none", "SIN IMAGEN"]] as const).map(([option, label]) => <button key={option} type="button" aria-pressed={mode === option} data-active={mode === option} onClick={() => selectMode(option)}>{label}</button>)}</div>}
+    {kind === "profile" && <div className={styles.tabs} role="group" aria-label="Tipo de avatar">{([["photo", "FOTO"], ["emoji", "EMOJI"], ["create", "CREAR AVATAR"], ["none", "SIN IMAGEN"]] as const).map(([option, label]) => <button key={option} type="button" aria-pressed={mode === option || (mode === "custom" && option === "create")} data-active={mode === option || (mode === "custom" && option === "create")} onClick={() => selectMode(option)}>{label}</button>)}</div>}
     {(kind === "group" || mode === "photo") && <div className={styles.controls}>
       <input ref={inputRef} className={styles.file} type="file" aria-label={kind === "profile" ? "Seleccionar foto o imagen de avatar" : "Seleccionar imagen del grupo"} accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif" onChange={(event) => void chooseFile(event.target.files?.[0])} />
       <button type="button" className="secondary" disabled={busy} onClick={() => inputRef.current?.click()}>{busy ? "Preparando…" : kind === "profile" ? "Subir foto" : "Subir imagen del grupo"}</button>
       <small>Fotos, stickers o imágenes de avatar. Hasta 20 MB de origen; se recortan al centro y se optimizan antes de guardar. HEIC/HEIF depende de la compatibilidad de tu navegador.</small>
     </div>}
     {kind === "profile" && mode === "emoji" && <div className={styles.emojiInput}><label htmlFor={`${fieldId}-emoji`}>Emoji de avatar</label><div><input id={`${fieldId}-emoji`} type="text" value={emojiDraft} maxLength={64} inputMode="text" autoComplete="off" autoCapitalize="off" spellCheck={false} enterKeyHint="done" placeholder="Elige un emoji del teclado" aria-label="Emoji de avatar" onKeyDown={(event) => { if (event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); applyEmoji(); } }} onChange={(event) => { setEmojiDraft(event.target.value); setMessage(""); setStatus(""); }} /><button type="button" className="secondary" onClick={applyEmoji}>USAR EMOJI</button></div><div className={styles.quickEmojis} aria-label="Emojis sugeridos">{QUICK_EMOJIS.map((emoji) => <button key={emoji} type="button" aria-label={`Elegir ${emoji}`} aria-pressed={emojiDraft === emoji} onClick={() => { setEmojiDraft(emoji); setMessage(""); setStatus(""); }}>{emoji}</button>)}</div><small>También puedes usar el teclado de tu teléfono, incluidos tonos de piel y combinaciones Unicode.</small></div>}
-    {kind === "profile" && mode === "create" && <AvatarCreationPanel key={userId || "guest"} accessToken={accessToken} userId={userId} onBusyChange={onBusyChange} onCancel={() => selectMode("photo")} onUse={(url) => {
-      onChange(url); setSelection({ mode: "photo", value: url }); setStatus("Avatar generado guardado como imagen. Guarda tu perfil para usarlo en la app.");
+    {kind === "profile" && mode === "custom" && <div className={styles.manualSummary}><span>Avatar creado por ti</span><button type="button" className="secondary" onClick={() => selectMode("create")}>EDITAR RASGOS</button></div>}
+    {kind === "profile" && mode === "create" && <AvatarCreationPanel initialValue={parseManualAvatarUrl(value) ? value : undefined} staged={!onSaveAvatar} onBusyChange={onBusyChange} onCancel={() => selectMode(modeFromValue(value))} onUse={async (url) => {
+      if (onSaveAvatar) await onSaveAvatar(url);
+      onChange(url); setSelection({ mode: "custom", value: url }); setStatus(onSaveAvatar ? "Avatar guardado en tu perfil." : "Avatar listo. Se guardará al completar tu perfil.");
     }} />}
     {message && <small className={styles.error} role="alert">{message}</small>}
     {status && <small className={styles.help} role="status">{status}</small>}

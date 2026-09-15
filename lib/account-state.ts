@@ -1,6 +1,7 @@
 import { LEGAL_DOCUMENT_VERSIONS } from "./legal-config";
 import { normalizePlanId, type PlanId } from "./plans";
 import { isProfileEmojiAvatar } from "./profile-avatar";
+import { parseManualAvatarUrl } from "./manual-avatar";
 import { normalizeProfileLocation } from "./profile-geography";
 
 export type AccountMode = "undecided" | "guest" | "authenticated";
@@ -349,6 +350,7 @@ export function validateProfileAvatarUrl(input: string): ProfileAvatarValidation
   if (!avatarUrl) return { ok: true, avatarUrl: "" };
   const message = "Elige una foto o avatar válido, o deja el campo vacío.";
   if (isProfileEmojiAvatar(avatarUrl)) return { ok: true, avatarUrl };
+  if (parseManualAvatarUrl(avatarUrl)) return { ok: true, avatarUrl };
   if (/^\/avatars\/[a-z0-9-]+\.svg$/i.test(avatarUrl)) return { ok: true, avatarUrl };
   if (/^data:image\/(?:jpeg|png|webp);base64,(?:[a-z0-9+/]{4})*(?:[a-z0-9+/]{2}==|[a-z0-9+/]{3}=)?$/i.test(avatarUrl) && avatarUrl.length <= 180_000) return { ok: true, avatarUrl };
   if (avatarUrl.length > 2048) return { ok: false, message };

@@ -1,126 +1,75 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
-import { avatarGenerationAvailability, generateProfileAvatar, commitGeneratedProfileAvatar, type AvatarGenerationAvailability, type AvatarGenerationPreview, type AvatarStyle } from "../../lib/avatar-generation-client";
-import { profileImageErrorMessage, profileImageFromFile } from "../../lib/profile-image";
+import { useId, useRef, useState } from "react";
+import { DEFAULT_MANUAL_AVATAR, MANUAL_AVATAR_OPTIONS, MANUAL_AVATAR_SWATCHES, manualAvatarUrl, parseManualAvatarUrl, randomManualAvatarConfig, type ManualAvatarConfig } from "../../lib/manual-avatar";
 import styles from "./avatar-creation-panel.module.css";
 
-const STYLE_LABELS: [AvatarStyle, string][] = [["realistic", "Realista"], ["illustrated", "Ilustrado"], ["cartoon", "Caricatura"], ["minimalist", "Minimalista"]];
+const LABELS: { [K in keyof typeof MANUAL_AVATAR_OPTIONS]: Record<(typeof MANUAL_AVATAR_OPTIONS)[K][number], string> } = {
+  persona: { golfista: "Golfista", clasico: "Clásico", deportivo: "Deportivo" },
+  rostro: { ovalado: "Ovalado", redondo: "Redondo", cuadrado: "Cuadrado" },
+  piel: { clara: "Clara", media: "Media", morena: "Morena", oscura: "Oscura", profunda: "Profunda" },
+  pelo: { sinPelo: "Sin pelo", rapado: "Rapado", corto: "Corto", medio: "Medio", peinado: "Peinado", ondulado: "Ondulado", rizado: "Rizado", largo: "Largo" },
+  colorPelo: { negro: "Negro", cafeOscuro: "Café oscuro", cafe: "Café", castano: "Castaño", rubio: "Rubio", pelirrojo: "Pelirrojo", gris: "Gris", blanco: "Blanco" },
+  ojos: { redondos: "Redondos", almendrados: "Almendrados", sonrientes: "Sonrientes" },
+  colorOjos: { cafe: "Café", verde: "Verde", azul: "Azul" },
+  cejas: { suaves: "Suaves", marcadas: "Marcadas", arqueadas: "Arqueadas" },
+  nariz: { pequena: "Pequeña", recta: "Recta", ancha: "Ancha" },
+  boca: { sonrisa: "Sonrisa", neutra: "Neutra", amplia: "Amplia" },
+  barba: { ninguna: "Sin barba", sombra: "Sombra", corta: "Corta", media: "Media", completa: "Completa", perilla: "Perilla", bigote: "Bigote", barbaBigote: "Barba + bigote" },
+  accesorio: { ninguno: "Ninguno", lentes: "Lentes", lentesSol: "Lentes de sol", visera: "Visera", gorra: "Gorra", gorraGolf: "Gorra de golf", aretes: "Aretes" },
+};
+const CATEGORIES = [
+  ["persona", "PERSONA"], ["rostro", "ROSTRO"], ["piel", "PIEL"], ["pelo", "PELO"],
+  ["colorPelo", "COLOR DE PELO"], ["ojos", "OJOS"], ["colorOjos", "COLOR DE OJOS"],
+  ["cejas", "CEJAS"], ["nariz", "NARIZ"], ["boca", "BOCA"],
+  ["barba", "BARBA"], ["accesorio", "ACCESORIOS"],
+] as const satisfies readonly (readonly [keyof typeof MANUAL_AVATAR_OPTIONS, string])[];
 
-export function AvatarCreationPanel({ accessToken, userId, onUse, onBusyChange, onCancel }: {
-  accessToken?: string | null;
-  userId?: string;
-  onUse: (avatarUrl: string) => void;
-  onBusyChange?: (busy: boolean) => void;
+function swatchFor(category: keyof typeof MANUAL_AVATAR_OPTIONS, option: string): string | null {
+  if (category === "piel" || category === "colorPelo" || category === "colorOjos") return (MANUAL_AVATAR_SWATCHES[category] as Record<string, string>)[option] || null;
+  return null;
+}
+
+export function AvatarCreationPanel({ initialValue, onUse, onCancel, onBusyChange, staged = false }: {
+  initialValue?: string;
+  onUse: (avatarUrl: string) => void | Promise<void>;
   onCancel: () => void;
+  onBusyChange?: (busy: boolean) => void;
+  staged?: boolean;
 }) {
   const id = useId();
-  const [source, setSource] = useState<"description" | "photo">("description");
-  const [description, setDescription] = useState("");
-  const [style, setStyle] = useState<AvatarStyle>("illustrated");
-  const [photo, setPhoto] = useState("");
-  const [consent, setConsent] = useState(false);
-  const [availability, setAvailability] = useState<AvatarGenerationAvailability | null>(null);
-  const [preview, setPreview] = useState<AvatarGenerationPreview | null>(null);
-  const [busy, setBusy] = useState<"photo" | "generate" | "save" | null>(null);
+  const [config, setConfig] = useState<ManualAvatarConfig>(() => parseManualAvatarUrl(initialValue) || DEFAULT_MANUAL_AVATAR);
+  const [category, setCategory] = useState<keyof typeof MANUAL_AVATAR_OPTIONS>("persona");
+  const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
-  const controller = useRef<AbortController | null>(null);
-  const revision = useRef(0);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const busyCallback = useRef(onBusyChange);
-  useEffect(() => { busyCallback.current = onBusyChange; }, [onBusyChange]);
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const selected = CATEGORIES.find(([key]) => key === category)![1];
+  const preview = manualAvatarUrl(config);
 
-  useEffect(() => {
-    const abort = new AbortController();
-    setAvailability(null); setPreview(null); setConsent(false); setBusy(null); setPhoto(""); setError("");
-    void avatarGenerationAvailability(accessToken, abort.signal).then((value) => { if (!abort.signal.aborted) setAvailability(value); }).catch(() => {
-      if (!abort.signal.aborted) setAvailability({ available: false, error: "No pudimos comprobar el servicio. Cierra y vuelve a intentar." });
-    });
-    return () => { abort.abort(); controller.current?.abort(); revision.current += 1; busyCallback.current?.(false); };
-  }, [accessToken, userId]);
+  function update(key: keyof typeof MANUAL_AVATAR_OPTIONS, value: string) {
+    setConfig((current) => ({ ...current, [key]: value }) as ManualAvatarConfig);
+    setNotice(""); setError("");
+  }
 
-  function invalidate() {
-    controller.current?.abort();
-    revision.current += 1;
-    setBusy(null); busyCallback.current?.(false);
+  async function save() {
+    if (savingRef.current) return;
+    savingRef.current = true; setSaving(true); onBusyChange?.(true); setError("");
+    try { await onUse(preview); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "No se pudo guardar el avatar. Reintenta."); }
+    finally { savingRef.current = false; setSaving(false); onBusyChange?.(false); }
   }
-  function changeSource(next: "description" | "photo") {
-    invalidate(); setSource(next); setConsent(false); setPreview(null); setError("");
-    // A photo selected for a different attempt is never silently reused.
-    setPhoto("");
-  }
-  async function choosePhoto(file?: File) {
-    if (!file) return;
-    invalidate(); const request = revision.current;
-    setBusy("photo"); busyCallback.current?.(true); setError(""); setConsent(false); setPhoto("");
-    try {
-      const data = await profileImageFromFile(file);
-      if (revision.current === request) setPhoto(data);
-    } catch (reason) { if (revision.current === request) setError(profileImageErrorMessage(reason)); }
-    finally {
-      if (revision.current === request) { setBusy(null); busyCallback.current?.(false); }
-      if (fileRef.current) fileRef.current.value = "";
-    }
-  }
-  async function generate() {
-    if (busy || !availability?.available) return;
-    invalidate(); const request = revision.current;
-    const abort = new AbortController(); controller.current = abort;
-    const timeout = window.setTimeout(() => abort.abort(), 100_000);
-    setBusy("generate"); busyCallback.current?.(true); setError("");
-    try {
-      const result = await generateProfileAvatar(accessToken, userId, { source, description, style, ...(source === "photo" ? { photoDataUrl: photo } : {}) }, consent, abort.signal);
-      if (revision.current === request) { setPreview(result); setPhoto(""); }
-    } catch (reason) {
-      if (revision.current === request) setError(abort.signal.aborted ? "La generación tardó demasiado. Tu avatar actual no cambió." : reason instanceof Error ? reason.message : "No se pudo generar. Reintenta.");
-    } finally {
-      clearTimeout(timeout);
-      if (revision.current === request) { setBusy(null); busyCallback.current?.(false); }
-    }
-  }
-  async function applyGeneratedAvatar() {
-    if (busy || !preview) return;
-    invalidate(); const request = revision.current;
-    const abort = new AbortController(); controller.current = abort;
-    const timeout = window.setTimeout(() => abort.abort(), 30_000);
-    setBusy("save"); busyCallback.current?.(true); setError("");
-    try {
-      const url = await commitGeneratedProfileAvatar(accessToken, preview, abort.signal);
-      if (revision.current === request) onUse(url);
-    } catch (reason) {
-      if (revision.current === request) setError(abort.signal.aborted ? "No se confirmó el guardado a tiempo. Puedes reintentar." : reason instanceof Error ? reason.message : "No se pudo guardar. Reintenta.");
-    } finally {
-      clearTimeout(timeout);
-      if (revision.current === request) { setBusy(null); busyCallback.current?.(false); }
-    }
-  }
+
   return <section className={styles.panel} aria-labelledby={`${id}-title`}>
-    <header><h3 id={`${id}-title`}>CREA TU AVATAR</h3><button type="button" aria-label="Cerrar creación de avatar" onClick={() => { invalidate(); onCancel(); }}>×</button></header>
-    {!preview ? <>
-      <div className={styles.sources} role="group" aria-label="Origen del avatar">
-        <button type="button" aria-pressed={source === "description"} disabled={busy === "save"} onClick={() => changeSource("description")}>DESCRIBIR MI AVATAR</button>
-        <button type="button" aria-pressed={source === "photo"} disabled={busy === "save"} onClick={() => changeSource("photo")}>CREAR DESDE MI FOTO</button>
-      </div>
-      {source === "photo" && <div className={styles.photo}>
-        {photo && <img src={photo} alt="Foto elegida sólo para esta creación" />}
-        <input ref={fileRef} hidden type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" aria-label="Foto voluntaria para crear avatar" onChange={(event) => void choosePhoto(event.target.files?.[0])} />
-        <button type="button" className="secondary" disabled={busy !== null} onClick={() => fileRef.current?.click()}>{busy === "photo" ? "Preparando foto…" : "SUBIR FOTO"}</button>
-        <small>Elige una foto para esta función. No usamos tu foto de perfil automáticamente. Hasta 20 MB; se optimiza antes de enviarla.</small>
-      </div>}
-      <label htmlFor={`${id}-description`}>{source === "description" ? "Describe cómo quieres verte" : "Detalles opcionales"}</label>
-      <textarea id={`${id}-description`} value={description} maxLength={1000} rows={3} disabled={busy !== null} placeholder="Golfista con gorra verde, estilo ilustración." onChange={(event) => { setDescription(event.target.value); setConsent(false); }} />
-      <fieldset className={styles.styles}><legend>Estilo</legend>{STYLE_LABELS.map(([value, label]) => <label key={value}><input type="radio" name={`${id}-style`} value={value} checked={style === value} disabled={busy !== null} onChange={() => { setStyle(value); setConsent(false); }} />{label}</label>)}</fieldset>
-      <label className={styles.consent}><input type="checkbox" checked={consent} disabled={busy !== null} onChange={(event) => setConsent(event.target.checked)} /><span>Autorizo enviar esta descripción{source === "photo" ? " y la foto que elegí" : ""} a OpenAI para crear mi avatar.</span></label>
-      {!availability ? <p role="status">Comprobando servicio…</p> : !availability.available ? <div className={styles.notice} role="status"><b>Servicio de generación no disponible</b><span>{availability.error || "Falta configurar el proveedor seguro de imágenes."}</span>{availability.code && <small>{availability.code}</small>}</div> : null}
-      {!accessToken && <p className={styles.notice}>Inicia sesión para generar y guardar un avatar. Foto y Emoji siguen disponibles.</p>}
-      <button type="button" className="primary" disabled={busy !== null || !availability?.available || !accessToken || !consent || (source === "description" ? !description.trim() : !photo)} onClick={() => void generate()}>{busy === "generate" ? "Generando avatar…" : "GENERAR AVATAR"}</button>
-    </> : <div className={styles.result}>
-      <img src={preview.imageDataUrl} alt="Vista previa del avatar generado; aún no guardado" />
-      <small>El avatar actual no cambiará hasta que lo elijas y guardes tu perfil. La imagen elegida se guardará como avatar accesible mediante su enlace.</small>
-      <button type="button" className="primary" disabled={busy !== null} onClick={() => void applyGeneratedAvatar()}>{busy === "save" ? "Guardando imagen…" : "USAR ESTE AVATAR"}</button>
-      <button type="button" className="secondary" disabled={busy !== null} onClick={() => { invalidate(); setPreview(null); setConsent(false); setError(""); }}>GENERAR OTRO</button>
-    </div>}
-    {error && <p className={styles.error} role="alert">{error}</p>}
-    <button type="button" className="textButton" onClick={() => { invalidate(); onCancel(); }}>CANCELAR</button>
+    <header><div><span>HECHO POR TI · SIN IA</span><h3 id={`${id}-title`}>CREA TU AVATAR</h3></div><button type="button" aria-label="Cerrar editor de avatar" disabled={saving} onClick={onCancel}>×</button></header>
+    <div className={styles.hero}><div className={styles.preview}><img src={preview} alt="Vista previa instantánea de tu avatar" /></div><div><strong>Tu estilo, pieza por pieza.</strong><p>Elige rostro, rasgos y accesorios. Todo se crea aquí en tu dispositivo; no se envía ninguna foto ni descripción a un proveedor.</p></div></div>
+    <small className={styles.categoryHint}>DESLIZA PARA ELEGIR UNA PARTE →</small>
+    <div className={styles.categories} role="group" aria-label="Partes del avatar">{CATEGORIES.map(([key, label]) => <button key={key} type="button" aria-pressed={category === key} data-active={category === key} disabled={saving} onClick={() => setCategory(key)}>{label}</button>)}</div>
+    <fieldset className={styles.options}><legend>{selected}</legend><div>{MANUAL_AVATAR_OPTIONS[category].map((option) => <button key={option} type="button" aria-pressed={config[category] === option} data-active={config[category] === option} disabled={saving} onClick={() => update(category, option)}>{swatchFor(category, option) && <span className={styles.swatch} style={{ backgroundColor: swatchFor(category, option)! }} aria-hidden="true" />}{(LABELS[category] as Record<string, string>)[option]}</button>)}</div></fieldset>
+    <div className={styles.actions}><button type="button" className="secondary" disabled={saving} onClick={() => { setConfig(randomManualAvatarConfig()); setNotice("Nueva combinación lista. Puedes seguir editándola."); setError(""); }}>ALEATORIO</button><button type="button" className="primary" disabled={saving} onClick={() => void save()}>{saving ? "GUARDANDO…" : "GUARDAR AVATAR"}</button></div>
+    <button type="button" className="textButton" disabled={saving} onClick={onCancel}>CANCELAR</button>
+    {notice && <small role="status">{notice}</small>}
+    {error && <small className={styles.error} role="alert">{error}</small>}
+    <small>{staged ? "Tu avatar quedará listo y se guardará al completar tu perfil." : "Guardar confirma este avatar para tu perfil; si falla, podrás reintentar sin perder los rasgos elegidos."}</small>
   </section>;
 }

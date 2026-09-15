@@ -18,7 +18,7 @@ test("emoji libre usa el teclado nativo, conserva presets existentes y no acepta
   assert.match(picker, /\["photo", "FOTO"\]/);
   assert.match(picker, /\["emoji", "EMOJI"\]/);
   assert.match(picker, /QUICK_EMOJIS\.map/);
-  assert.match(picker, /aria-pressed=\{mode === option\}/);
+  assert.match(picker, /aria-pressed=\{mode === option \|\| \(mode === "custom" && option === "create"\)\}/);
   assert.doesNotMatch(picker, />Elegir avatar<\/button>/);
   assert.match(picker, /normalizeProfileEmojiAvatar/);
   assert.match(picker, /Emoji de avatar/);
