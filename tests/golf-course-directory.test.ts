@@ -56,12 +56,14 @@ test("las selecciones legacy siguen disponibles por id y el catálogo de lectura
     "campestre-puebla-general",
     "el-cristo-general",
     "cola-de-lagarto-general",
+    "tee-el-cristo-blancas",
+    "tee-el-cristo-azules",
   ]);
   const normalized = buildInternalCourseCatalog(DEFAULT_COURSES);
-  assert.equal(normalized.playableCount, 8);
+  assert.equal(normalized.playableCount, 10);
   assert.equal(normalized.rejectedCount, 0);
   assert.equal(normalized.courses.length, 5, "los cuatro tees La Vista comparten una entidad course");
-  assert.equal(normalized.tees.length, 8);
+  assert.equal(normalized.tees.length, 10);
   assert.equal(normalized.holes.length, 90);
   assert.equal(DEFAULT_COURSES.find((course) => course.id === "el-cristo-general")?.totalYards, 6_698);
 });

@@ -11,6 +11,8 @@ import { FullScorecard } from "./full-scorecard";
 import { GolfLeaderboard, type GolfLeaderboardMode } from "./golf-leaderboard";
 import { RoundStatsCard } from "./round-stats-card";
 import { summarizeClubDistances } from "../../features/shots/domain";
+import { calculateBackyardIndex } from "../../lib/backyard-index";
+import { BACKYARD_INDEX_REASON_LABELS } from "../../lib/backyard-index-labels";
 
 const money = (value: number) => `${value > 0 ? "+" : value < 0 ? "−" : ""}$${Math.abs(value).toLocaleString("es-MX", { maximumFractionDigits: 2 })}`;
 const tone = (value: number) => value > 0 ? "good" : value < 0 ? "bad" : "";
@@ -59,8 +61,9 @@ function legacyOwnerCategories(round: RoundSnapshot) {
   });
 }
 
-export function HistoricalRoundDetail({ round, onEdit, onPhoto }: {
+export function HistoricalRoundDetail({ round, accountUserId, onEdit, onPhoto }: {
   round: RoundSnapshot;
+  accountUserId?: string;
   onEdit: () => void;
   onPhoto: () => void;
 }) {
@@ -68,6 +71,7 @@ export function HistoricalRoundDetail({ round, onEdit, onPhoto }: {
   const [scorecardScale, setScorecardScale] = useState(75);
   const [showScorecard, setShowScorecard] = useState(false);
   const recap = useMemo(() => buildHistoricalRoundRecap(round), [round]);
+  const indexRecord = useMemo(() => accountUserId ? calculateBackyardIndex([round], accountUserId).records[0] : undefined, [round, accountUserId]);
   const legacyCategories = useMemo(() => legacyOwnerCategories(round), [round]);
   const clubDistances = useMemo(() => summarizeClubDistances(round.shots || []), [round.shots]);
   const canShowLegacyCategories = round.playerBalances === undefined && round.categoryBalances === undefined;
@@ -133,6 +137,7 @@ export function HistoricalRoundDetail({ round, onEdit, onPhoto }: {
   ].filter((part): part is string => Boolean(part));
 
   return <div className="historicalDetail">
+    {indexRecord && <section className="card"><details><summary>{indexRecord.eligible ? `ÍNDICE BACKYARD · Diferencial ${indexRecord.scoreDifferential?.toFixed(1)}` : "NO ELEGIBLE PARA ÍNDICE"}</summary><p>{indexRecord.eligible ? "Evidencia congelada al cerrar la ronda. Estimación local, no oficial." : indexRecord.reasons.map((reason) => BACKYARD_INDEX_REASON_LABELS[reason]).join(" ")}</p>{indexRecord.pccKind === "DECLARED_LOCAL_ZERO" && <p>PCC 0 declarado localmente. No es un PCC oficial publicado.</p>}</details></section>}
     <section className="card historicalHero">
       <div>
         <span className="eyebrow">RONDA GUARDADA</span>

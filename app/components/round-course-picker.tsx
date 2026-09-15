@@ -11,7 +11,8 @@ type CourseResult = {
   clubName?: string;
   city?: string;
   distanceKm?: number;
-  tee?: { id: string; name: string; rating?: number; slope?: number; yards?: number };
+  localIndexTeeAvailable?: boolean;
+  tee?: { id: string; name: string; rating?: number; slope?: number; yards?: number; localIndexRated?: boolean };
 };
 
 type CoursePage = {
@@ -37,7 +38,10 @@ async function loadNearbyCoursePage(latitude: number, longitude: number, signal?
 
 function mergeCourseResults(current: CourseResult[], incoming: CourseResult[]) {
   const merged = new Map(current.map((course) => [course.courseId, course]));
-  for (const course of incoming) if (!merged.has(course.courseId)) merged.set(course.courseId, course);
+  for (const course of incoming) {
+    const previous = merged.get(course.courseId);
+    if (!previous || (course.tee?.localIndexRated && !previous.tee?.localIndexRated)) merged.set(course.courseId, course);
+  }
   return [...merged.values()];
 }
 
@@ -184,7 +188,7 @@ export function RoundCoursePicker({
         setNearbyStatus("idle");
         setResults([]);
         onSelect(course);
-      }}><b>{course.name}</b><small>{[course.clubName && course.clubName !== course.name ? course.clubName : "", course.city, typeof course.distanceKm === "number" ? `${course.distanceKm.toFixed(1)} km` : ""].filter(Boolean).join(" · ") || "Catálogo Backyard"}</small></AnchoredSearchOption>)}
+      }}><b>{course.name}</b><small>{[course.clubName && course.clubName !== course.name ? course.clubName : "", course.city, typeof course.distanceKm === "number" ? `${course.distanceKm.toFixed(1)} km` : "", course.localIndexTeeAvailable ? "Tees con Rating/Slope publicados · Index local" : ""].filter(Boolean).join(" · ") || "Catálogo Backyard"}</small></AnchoredSearchOption>)}
       {hasMore && nextCursor && <button type="button" role="option" aria-selected="false" className="textButton" disabled={status === "loading"} onClick={async () => {
         setStatus("loading");
         try {

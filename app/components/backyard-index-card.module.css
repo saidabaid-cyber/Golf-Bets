@@ -25,6 +25,43 @@
   line-height: 1.15;
 }
 
+.headingActions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.helpButton {
+  position: relative;
+  display: grid;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--green);
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.helpButton::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.helpButton:focus-visible { outline: 3px solid #cc9f32; outline-offset: -3px; }
+
 .eyebrow {
   color: var(--green);
   font-size: 9px;
@@ -48,12 +85,15 @@
 .note,
 .method,
 .caution,
+.declaration,
 .separation {
   margin: 0;
   color: var(--muted);
   font-size: 12px;
   line-height: 1.5;
 }
+
+.declaration { border-left: 3px solid #bd922b; padding-left: 10px; color: #654b13; }
 
 .activate {
   min-height: 46px;
@@ -161,6 +201,20 @@
   color: #654b13;
 }
 
+.declarePanel {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #e5d39b;
+  border-radius: 12px;
+  background: #fff8e8;
+  padding: 11px;
+}
+
+.declarePanel p { margin: 0; color: #654b13; font-size: 11px; line-height: 1.45; }
+.declarePanel button { justify-self: start; min-height: 44px; border: 1px solid #bd922b; border-radius: 10px; background: #fff; padding: 8px 12px; color: #654b13; font-size: 10px; font-weight: 900; }
+
+.error { margin: 0; color: var(--bad); font-size: 11px; line-height: 1.4; }
+
 .details {
   min-width: 0;
   border-top: 1px solid var(--line);
@@ -221,8 +275,22 @@
   font-size: 10px;
 }
 
+.helpDialog {
+  display: grid;
+  width: min(100%, 430px);
+  max-height: min(80vh, 620px);
+  gap: 11px;
+  overflow-y: auto;
+  border-radius: 20px;
+  background: var(--card);
+  padding: 24px 20px 20px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .35);
+}
+
+.helpDialog h2 { margin: 0; padding-right: 30px; color: var(--ink); font-family: Georgia, "Times New Roman", serif; font-size: 22px; }
+.helpDialog p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+
 @media (max-width: 380px) {
   .heading { flex-wrap: wrap; }
-  .badge { order: -1; }
   .hero strong { font-size: 38px; }
 }

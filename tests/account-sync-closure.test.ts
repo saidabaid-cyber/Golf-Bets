@@ -103,6 +103,8 @@ test("eliminar cuenta local descarta solo A y conserva invitado y B", () => {
   storage.setItem(backyardAiMetricsStorageKey("user-a")!, "ai-metrics");
   assert.equal(acceptAiProcessingConsent(storage as unknown as Storage, "user-a", AI_PROVIDER_PROCESSING_CONSENT).ok, true);
   storage.setItem(bettingConsentPromptStorageKey("user-a"), "shown");
+  storage.setItem("backyard-index-preference-v1:user-a", "private-index-preference-a");
+  storage.setItem("backyard-index-preference-v1:user-b", "private-index-preference-b");
   storage.setItem(accountDeletionMarkerKey("user-a"), "pending");
   storage.setItem(statisticsResetStorageKey("user-a"), '{"resetAt":"2026-09-13T20:00:00.000Z","strategy":"RESET_FROM_DATE"}');
   switchAccountWorkspace(storage, "user-b");
@@ -126,6 +128,8 @@ test("eliminar cuenta local descarta solo A y conserva invitado y B", () => {
   assert.equal(storage.getItem(backyardAiMetricsStorageKey("user-a")!), null);
   assert.equal(hasActiveAiProcessingConsent(storage, "user-a", AI_PROVIDER_PROCESSING_CONSENT), false);
   assert.equal(storage.getItem(bettingConsentPromptStorageKey("user-a")), null);
+  assert.equal(storage.getItem("backyard-index-preference-v1:user-a"), null);
+  assert.equal(storage.getItem("backyard-index-preference-v1:user-b"), "private-index-preference-b");
   assert.equal(storage.getItem(statisticsResetStorageKey("user-a")), null);
   assert.equal(storage.getItem(accountDeletionMarkerKey("user-a")), "pending");
   assert.equal(storage.getItem(internalNotificationStorageKey("user-b")), '{"version":1,"readEventKeys":["round-b"]}');

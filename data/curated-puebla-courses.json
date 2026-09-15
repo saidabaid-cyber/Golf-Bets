@@ -1,0 +1,139 @@
+{
+  "schemaVersion": 1,
+  "dataVersion": "puebla-primary-2026-09-15.v1",
+  "clubs": [
+    {
+      "id": "club-la-vista",
+      "courseId": "course-la-vista",
+      "name": "La Vista Country Club",
+      "countryCode": "MX",
+      "stateCode": "MX-PUE",
+      "status": "IDENTITY_AND_PAR_VERIFIED_SCORECARD_INCOMPLETE",
+      "holesCount": 18,
+      "par": 72,
+      "source": {
+        "authority": "Asociación de Golf del Sur A.C.",
+        "url": "https://www.golfsur.com.mx/wp-content/uploads/2023-Tarjeta-Oficial-La-Vista.pdf",
+        "publishedAt": "2023-11-17",
+        "verifiedAt": "2026-09-15"
+      },
+      "notes": "Tarjeta de yardajes de evento/edades; no publica stroke index ni Course Rating/Slope. Sus yardajes no reemplazan tees del seed interno."
+    },
+    {
+      "id": "club-campestre-puebla",
+      "courseId": "course-campestre-puebla",
+      "name": "Club Campestre de Puebla",
+      "countryCode": "MX",
+      "stateCode": "MX-PUE",
+      "status": "IDENTITY_AND_PAR_VERIFIED_SCORECARD_INCOMPLETE",
+      "holesCount": 18,
+      "par": 72,
+      "source": {
+        "authority": "Club Campestre de Puebla",
+        "url": "https://clubcampestrepuebla.com/index.php/golf/campo",
+        "verifiedAt": "2026-09-15"
+      },
+      "notes": "El club confirma 18 hoyos/par 72; falta tarjeta machine-readable por tee y fuente de Rating/Slope autorizada."
+    },
+    {
+      "id": "club-el-cristo",
+      "courseId": "course-el-cristo",
+      "name": "Club Campestre El Cristo",
+      "countryCode": "MX",
+      "stateCode": "MX-PUE",
+      "city": "Atlixco",
+      "status": "PRIMARY_CLUB_SCORECARD_VERIFIED_RATING_AUTHORITY_PENDING",
+      "holesCount": 18,
+      "par": 72,
+      "source": {
+        "authority": "Club Campestre El Cristo",
+        "url": "https://elcristo.com.mx/campo-golf",
+        "verifiedAt": "2026-09-15"
+      },
+      "holePars": [5, 3, 4, 4, 4, 4, 3, 4, 5, 5, 3, 4, 4, 4, 5, 4, 3, 4],
+      "holeStrokeIndexes": [4, 18, 12, 14, 6, 8, 16, 2, 10, 5, 15, 3, 9, 11, 13, 1, 17, 7],
+      "notes": "El club publica Rating/Slope junto a la tarjeta, pero falta atestación FMG/USGA de su vigencia para marcar OFFICIAL_RATED_TEE."
+    },
+    {
+      "id": "club-cola-de-lagarto",
+      "courseId": "course-cola-de-lagarto",
+      "name": "Cola de Lagarto",
+      "countryCode": "MX",
+      "stateCode": "MX-PUE",
+      "status": "DEVELOPMENT_REFERENCE_OPERATION_UNCONFIRMED",
+      "holesCount": 18,
+      "source": {
+        "authority": "Cola de Lagarto",
+        "url": "https://coladelagarto.com/",
+        "verifiedAt": "2026-09-15"
+      },
+      "notes": "El sitio del desarrollo describe un proyecto de 18 hoyos; no confirma tarjeta vigente, operación ni ratings. No habilitar como nuevo tee curado."
+    },
+    {
+      "id": "club-las-fuentes",
+      "courseId": "course-las-fuentes",
+      "name": "Club de Golf Las Fuentes",
+      "countryCode": "MX",
+      "stateCode": "MX-PUE",
+      "status": "ASSOCIATION_EVENT_IDENTITY_ONLY",
+      "source": {
+        "authority": "Federación Mexicana de Golf",
+        "url": "https://fmg.org.mx/wp-content/uploads/Convocatoria-II-Copa-Sur-2025-v2-comprimido-comprimido.pdf",
+        "verifiedAt": "2026-09-15"
+      },
+      "notes": "La convocatoria acredita club sede, no tarjeta exacta ni número de hoyos distintos. No inferir 18 del formato del torneo."
+    }
+  ],
+  "tees": [
+    {
+      "id": "tee-el-cristo-azules",
+      "courseId": "course-el-cristo",
+      "name": "Azules",
+      "color": "BLUE",
+      "defaultSelectionPriority": 2,
+      "status": "CLUB_SCORECARD_CONSISTENT_LOCAL_RATING",
+      "clubPublishedRating": 71.2,
+      "clubPublishedSlope": 129,
+      "totalYards": 6698,
+      "holeYards": [511, 173, 369, 308, 408, 404, 179, 403, 531, 500, 231, 407, 427, 389, 462, 433, 167, 396]
+    },
+    {
+      "id": "tee-el-cristo-blancas",
+      "courseId": "course-el-cristo",
+      "name": "Blancas",
+      "color": "WHITE",
+      "defaultSelectionPriority": 1,
+      "status": "CLUB_SCORECARD_CONSISTENT_LOCAL_RATING",
+      "clubPublishedRating": 68.6,
+      "clubPublishedSlope": 125,
+      "totalYards": 6152,
+      "holeYards": [483, 145, 346, 297, 372, 361, 136, 371, 497, 483, 193, 377, 373, 354, 451, 406, 143, 364]
+    },
+    {
+      "id": "tee-el-cristo-doradas",
+      "courseId": "course-el-cristo",
+      "name": "Doradas",
+      "color": "GOLD",
+      "status": "SOURCE_TOTAL_CONFLICT",
+      "publishedFrontYards": 2755,
+      "publishedBackYards": 2947,
+      "clubPublishedRating": 65.9,
+      "clubPublishedSlope": 117,
+      "totalYards": 5702,
+      "holeYards": [443, 109, 327, 281, 349, 325, 114, 344, 463, 468, 171, 328, 353, 343, 430, 384, 342, 342]
+    },
+    {
+      "id": "tee-el-cristo-rojas",
+      "courseId": "course-el-cristo",
+      "name": "Rojas",
+      "color": "RED",
+      "status": "SOURCE_TOTAL_CONFLICT",
+      "publishedFrontYards": 2609,
+      "publishedBackYards": 2653,
+      "clubPublishedRating": 68.8,
+      "clubPublishedSlope": 127,
+      "totalYards": 5262,
+      "holeYards": [443, 106, 313, 230, 332, 320, 102, 333, 440, 372, 138, 287, 334, 312, 406, 338, 330, 330]
+    }
+  ]
+}

@@ -91,7 +91,9 @@ import { GroupRoundSelector } from "./components/group-round-selector";
 import { AppBottomNav } from "./components/app-bottom-nav";
 import { ProfileNavigationButton } from "./components/profile-navigation-button";
 import { canResumeActiveRound, normalizeRoundResumeContext, persistRoundResumeContext, readRoundResumeContext, type RoundResumeContext } from "../lib/active-round-navigation";
-import { snapshotBackyardIndexRound } from "../lib/backyard-index";
+import { captureCompletedRoundIndex } from "../lib/backyard-index-auto-capture";
+import { readIndexPreference } from "../lib/backyard-index-preferences";
+import { useBackyardIndexPreference } from "./components/use-backyard-index-preference";
 import { HomeDashboard, type ActiveRoundSummary } from "./components/home-dashboard";
 import { PlayHub } from "./components/play-hub";
 import { MoreHub } from "./components/more-hub";
@@ -399,6 +401,7 @@ type NewRoundIntent =
 
 function GolfBetsApp() {
   const { identity, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, setCloudStatus, applyCloudPreferences, reportCloudSyncError, clearCloudSyncError, refreshCloudSession } = useBackyardAccount();
+  const indexControl = useBackyardIndexPreference(identity.userId, identity.mode === "authenticated");
   const { tab, setTab, goBack, setNavigationGuard } = useScreenNavigation();
   const [profileFocus, setProfileFocus] = useState<"profile" | "equipment">("profile");
   const [profileRootRevision, setProfileRootRevision] = useState(0);
@@ -702,8 +705,8 @@ function GolfBetsApp() {
   }), [courseSelected, players, betConfigurationIssues]);
   useEffect(() => {
     if (!courseSelected) { setPlayerTeeAssignments([]); return; }
-    setPlayerTeeAssignments((current) => reconcilePlayerTeeAssignments(current, players, course, new Date().toISOString()));
-  }, [course, courseSelected, players]);
+    setPlayerTeeAssignments((current) => reconcilePlayerTeeAssignments(current, players, course, new Date().toISOString(), { allowCuratedNewAssignment: !roundStartedAt && !roundReviewPending && !editingRound }));
+  }, [course, courseSelected, players, roundStartedAt, roundReviewPending, editingRound]);
   useEffect(() => {
     if (!courseSelected) return;
     setPlayers((current) => applyRoundCourseHandicaps(current, playerTeeAssignments, course, new Date().toISOString(), Boolean(roundStartedAt || roundReviewPending)));
@@ -2031,7 +2034,7 @@ function GolfBetsApp() {
       const saved = await saveRoundHistoryLocalFirst({
         storage: window.localStorage,
         ownerId: identity.userId,
-        snapshot: snapshotBackyardIndexRound(preserveRoundStatisticsOrigin(snapshot, history.find((round) => round.id === snapshot.id)), identity.userId, { priorRound: history.find((round) => round.id === snapshot.id) }),
+        snapshot: captureCompletedRoundIndex(preserveRoundStatisticsOrigin(snapshot, history.find((round) => round.id === snapshot.id)), identity.userId, readIndexPreference(window.localStorage, identity.userId)?.preference || indexControl.preference, history.find((round) => round.id === snapshot.id)),
         deviceId: offlineDeviceId.current,
         defaultHandicap: identity.defaultHandicap,
         hasLocalPreferenceState: hadLocalPreferences.current,
@@ -3549,11 +3552,11 @@ function GolfBetsApp() {
     {pendingCloudConflict && (() => { const conflict = pendingCloudConflict.conflicts[0]; if (!conflict) return null; const display = describeCloudConflict(conflict, playerName); return <div className="modalBackdrop"><section className="confirmDialog" role="alertdialog" aria-modal="true" aria-labelledby="cloud-conflict-title"><ModalCloseButton onClose={() => setPendingCloudConflict(null)} /><h2 id="cloud-conflict-title">Cambio en dos dispositivos</h2><p>Elige únicamente el dato en conflicto. Los demás cambios compatibles ya se combinaron.</p><div className="cloudConflictField"><b>{display.label}</b><span>Nube: {display.cloudValue}</span><span>Este dispositivo: {display.localValue}</span></div>{pendingCloudConflict.conflicts.length > 1 && <small>Quedan {pendingCloudConflict.conflicts.length} conflictos por revisar.</small>}<div className="dialogActions"><button className="secondary" onClick={() => resolveCloudConflict("cloud")}>Usar nube para este dato</button><button className="primary" onClick={() => resolveCloudConflict("local")}>Usar este dispositivo</button></div></section></div>; })()}
     {holeValidationErrors.length > 0 && <div className="modalBackdrop" role="presentation"><section className="confirmDialog holeValidationDialog" role="alertdialog" aria-modal="true" aria-labelledby="hole-validation-title" aria-describedby="hole-validation-description"><ModalCloseButton onClose={() => setHoleValidationErrors([])} /><h2 id="hole-validation-title">Falta completar este hoyo</h2><p id="hole-validation-description">Revisa todos estos puntos antes de guardar y avanzar:</p><ul>{holeValidationErrors.map(error => <li key={error}>{error}</li>)}</ul><div className="dialogActions"><button autoFocus className="primary" onClick={() => setHoleValidationErrors([])}>Volver y completar</button></div></section></div>}
     {tab === "personalDetail" && renderPersonalLive("Detalle Personal")}
-    {tab === "historyDetail" && (() => { const saved = history.find(round => round.id === historyDetailId); return saved ? <HistoricalRoundDetail round={saved} onEdit={() => editHistoricalRound(saved)} onPhoto={() => viewScorecardPhoto(saved)} /> : <div className="empty">La ronda ya no está disponible.</div>; })()}
+    {tab === "historyDetail" && (() => { const saved = history.find(round => round.id === historyDetailId); return saved ? <HistoricalRoundDetail round={saved} accountUserId={identity.userId} onEdit={() => editHistoricalRound(saved)} onPhoto={() => viewScorecardPhoto(saved)} /> : <div className="empty">La ronda ya no está disponible.</div>; })()}
     {tab === "groups" && <GroupBuilder frequentPlayers={frequentPlayers} frequentGroups={frequentGroups} onBack={() => setTab("welcome")} onPlay={startRoundWithGeneratedGroup} onSaveFrequentGroup={saveGeneratedFrequentGroup} onCreateFrequentGroup={beginCreateFrequentGroup} onStartFrequentGroup={loadFrequentGroup} onEditFrequentGroup={beginEditFrequentGroup} onDeleteFrequentGroup={setFrequentGroupToDelete} />}
 
-    {tab === "profile" && <ProfileAccountPanel key={identity.userId} view="profile" rootNavigationKey={profileRootRevision} history={history} focusSection={profileFocus} highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} golfInsights={betaGolfInsights} statisticsResetAt={statisticsResetAt} onStatisticsReset={applyStatisticsReset} onOpenStats={() => setTab("stats")} onOpenAccount={() => setTab("account")} onOpenEquipment={() => setProfileFocus("equipment")} onBackToProfile={openProfileRoot} />}
-    {tab === "account" && <ProfileAccountPanel key={identity.userId} view="account" rootNavigationKey={profileRootRevision} highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} golfInsights={betaGolfInsights} statisticsResetAt={statisticsResetAt} onStatisticsReset={applyStatisticsReset} onOpenStats={() => setTab("stats")} onOpenEquipment={() => { setProfileFocus("equipment"); setTab("profile"); }} onBackToProfile={openProfileRoot} />}
+    {tab === "profile" && <ProfileAccountPanel key={identity.userId} view="profile" indexControl={indexControl} rootNavigationKey={profileRootRevision} history={history} focusSection={profileFocus} highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} golfInsights={betaGolfInsights} statisticsResetAt={statisticsResetAt} onStatisticsReset={applyStatisticsReset} onOpenStats={() => setTab("stats")} onOpenAccount={() => setTab("account")} onOpenEquipment={() => setProfileFocus("equipment")} onBackToProfile={openProfileRoot} />}
+    {tab === "account" && <ProfileAccountPanel key={identity.userId} view="account" indexControl={indexControl} rootNavigationKey={profileRootRevision} highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} golfInsights={betaGolfInsights} statisticsResetAt={statisticsResetAt} onStatisticsReset={applyStatisticsReset} onOpenStats={() => setTab("stats")} onOpenEquipment={() => { setProfileFocus("equipment"); setTab("profile"); }} onBackToProfile={openProfileRoot} />}
 
     {tab === "setup" && <>
       <section className="hero setupHero">

@@ -1,4 +1,5 @@
 import type { Course, Player, PlayerTeeAssignmentSnapshot } from "./types";
+import { getCuratedIndexRatedTeeEvidenceForCourse } from "./curated-puebla-course-data";
 
 function sameLayout(first: Course, second: Course) {
   if (first.catalogCourseId && second.catalogCourseId) return first.catalogCourseId === second.catalogCourseId;
@@ -15,6 +16,11 @@ export function teeAssignmentSnapshot(
   capturedAt: string,
   source: PlayerTeeAssignmentSnapshot["source"] = course.catalogTeeId ? "catalog" : "manual",
 ): PlayerTeeAssignmentSnapshot {
+  const par = (course.holes.length === 9 || course.holes.length === 18)
+    && course.holes.every((hole) => Number.isInteger(hole.par) && hole.par >= 3 && hole.par <= 6)
+    ? course.holes.reduce((total, hole) => total + hole.par, 0)
+    : null;
+  const indexRatingEvidence = source === "catalog" ? getCuratedIndexRatedTeeEvidenceForCourse(course) : null;
   return {
     playerId,
     courseId: course.catalogCourseId || course.id,
@@ -24,8 +30,14 @@ export function teeAssignmentSnapshot(
     ...(typeof course.rating === "number" ? { rating: course.rating } : {}),
     ...(typeof course.slope === "number" ? { slope: course.slope } : {}),
     ...(typeof course.totalYards === "number" ? { yards: course.totalYards } : {}),
+    ...(par !== null ? { par } : {}),
     source,
     capturedAt,
+    ...(course.sourceAuthority ? { sourceAuthority: course.sourceAuthority } : {}),
+    ...(course.sourceUrl ? { sourceUrl: course.sourceUrl } : {}),
+    ...(course.verifiedAt ? { verifiedAt: course.verifiedAt } : {}),
+    ...(course.dataVersion ? { dataVersion: course.dataVersion } : {}),
+    ...(indexRatingEvidence ? { indexRatingEvidence: { ...indexRatingEvidence } } : {}),
   };
 }
 
@@ -38,15 +50,20 @@ export function reconcilePlayerTeeAssignments(
   players: readonly Player[],
   course: Course,
   capturedAt: string,
+  options: { allowCuratedNewAssignment?: boolean } = {},
 ) {
   const courseId = course.catalogCourseId || course.id;
-  const options = new Map<string, PlayerTeeAssignmentSnapshot>();
+  const byPlayerId = new Map<string, PlayerTeeAssignmentSnapshot>();
   for (const assignment of assignments || []) {
     if (!assignment || typeof assignment.playerId !== "string" || typeof assignment.teeName !== "string") continue;
     if (assignment.courseId !== courseId && assignment.layoutId !== courseId) continue;
-    options.set(assignment.playerId, { ...assignment });
+    byPlayerId.set(assignment.playerId, {
+      ...assignment,
+      ...(assignment.indexRatingEvidence ? { indexRatingEvidence: { ...assignment.indexRatingEvidence } } : {}),
+    });
   }
-  return players.map((player) => options.get(player.id) || teeAssignmentSnapshot(player.id, course, capturedAt, "legacy"));
+  const missingSource = options.allowCuratedNewAssignment && getCuratedIndexRatedTeeEvidenceForCourse(course) ? "catalog" : "legacy";
+  return players.map((player) => byPlayerId.get(player.id) || teeAssignmentSnapshot(player.id, course, capturedAt, missingSource));
 }
 
 export function updatePlayerTeeAssignment(

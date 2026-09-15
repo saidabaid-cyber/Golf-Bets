@@ -14,6 +14,7 @@ import { GhinPlaceholder } from "./ghin-placeholder";
 import { LegalConsentManager } from "./legal-consent-manager";
 import { AccountDataDialog, StatisticsResetDialog, type AccountDataPolicy } from "./profile-data-dialogs";
 import { BackyardIndexCard } from "./backyard-index-card";
+import type { BackyardIndexPreferenceController } from "./use-backyard-index-preference";
 import type { RoundSnapshot } from "../../lib/types";
 import { ProfileAvatarMedia } from "./profile-avatar-media";
 import { ProfileClubPicker } from "./profile-club-picker";
@@ -26,6 +27,7 @@ type ProfileAccountPanelProps = {
   view: "profile" | "account";
   rootNavigationKey?: number;
   history?: RoundSnapshot[];
+  indexControl: BackyardIndexPreferenceController;
   focusSection?: "profile" | "equipment";
   highContrast: boolean;
   onHighContrastChange: (value: boolean) => void;
@@ -59,7 +61,7 @@ function decimal(value: number | undefined) {
   return value === undefined ? "—" : value.toFixed(1);
 }
 
-export function ProfileAccountPanel({ view, rootNavigationKey = 0, history = [], focusSection = "profile", highContrast, onHighContrastChange, notificationsEnabled, onNotificationsEnabledChange, golfInsights, statisticsResetAt, onStatisticsReset, onOpenStats, onOpenAccount, onOpenEquipment, onBackToProfile }: ProfileAccountPanelProps) {
+export function ProfileAccountPanel({ view, rootNavigationKey = 0, history = [], indexControl, focusSection = "profile", highContrast, onHighContrastChange, notificationsEnabled, onNotificationsEnabledChange, golfInsights, statisticsResetAt, onStatisticsReset, onOpenStats, onOpenAccount, onOpenEquipment, onBackToProfile }: ProfileAccountPanelProps) {
   const { identity, updateProfile, logout, finishAccountDeletion, openAccess, acceptances, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, requestCloudLink, cloudIssues, retryCloudSync } = useBackyardAccount();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(identity.displayName);
@@ -84,15 +86,10 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, history = [],
   const accountRequestId = useRef<string | undefined>(undefined);
   const [destructiveError, setDestructiveError] = useState("");
   const seenRootNavigation = useRef(rootNavigationKey);
-  const [indexEnabled, setIndexEnabled] = useState(false);
   const liveOwner = useRef(identity.userId);
   const mounted = useRef(true);
   useLayoutEffect(() => { liveOwner.current = identity.userId; }, [identity.userId]);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  useEffect(() => {
-    try { setIndexEnabled(localStorage.getItem(`backyard-index-enabled-v1:${identity.userId}`) === "true"); }
-    catch { setIndexEnabled(false); }
-  }, [identity.userId]);
   useEffect(() => {
     if (seenRootNavigation.current === rootNavigationKey || saving || deletingStatistics || deletingAccount) return;
     seenRootNavigation.current = rootNavigationKey;
@@ -255,10 +252,8 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, history = [],
     {view === "profile" && identity.mode === "authenticated" && <main className="profileMobileStack">
       <section className="card profileOverviewCard"><div className="profileOverviewIdentity"><div className="profileOverviewAvatar"><ProfileAvatarMedia value={identity.avatarUrl} fallback={(identity.displayName.trim()[0] || "J").toUpperCase()} alt={`Avatar de ${identity.displayName}`} /></div><div><h2>{identity.displayName}</h2><p>{identity.username ? `@${identity.username}` : "Sin username"}</p><span>HCP / Index <b>{profileHandicapLabel(identity.defaultHandicap)}</b></span></div></div><button type="button" className="primary profileEditButton" onClick={() => setEditing(true)}>Editar perfil</button></section>
       <section className="card profileCompactCard"><div className="profileCompactHeading"><div><span>INFORMACIÓN DE GOLF</span><h2>Tu juego</h2></div><button type="button" className="textButton" onClick={() => setEditing(true)}>Editar</button></div><div className="profileCompactRows"><div><span>HCP / Index</span><b>{profileHandicapLabel(identity.defaultHandicap)}</b></div><div><span>Home Club</span><b>{identity.homeClub || "Sin indicar"}</b></div><div><span>Tee habitual</span><b>{identity.preferredTee || "Sin indicar"}</b></div></div><GhinPlaceholder /></section>
-      <BackyardIndexCard history={history} userId={identity.userId} enabled={indexEnabled} onEnabledChange={(enabled) => {
-        try { localStorage.setItem(`backyard-index-enabled-v1:${identity.userId}`, String(enabled)); setIndexEnabled(enabled); }
-        catch { setMessageKind("error"); setMessage("No pudimos guardar la preferencia del Índice en este dispositivo."); }
-      }} />
+      <BackyardIndexCard history={history} userId={identity.userId} enabled={indexControl.preference?.enabled === true} onEnabledChange={indexControl.change} saving={indexControl.saving || !indexControl.ready} error={indexControl.error} localPccZeroDeclared={Boolean(indexControl.preference?.localPccZeroDeclaredAt)} onDeclareLocalPccZero={indexControl.declareLocalZero} />
+      {indexControl.error && <button type="button" className="textButton" onClick={() => void indexControl.retry()}>Reintentar sincronización del Índice</button>}
       <section className="card profileCompactCard"><div className="profileCompactHeading"><div><span>FOTO / AVATAR</span><h2>{identity.avatarUrl ? "Avatar configurado" : "Sin imagen"}</h2></div><button type="button" className="textButton" onClick={() => setEditing(true)}>Cambiar</button></div><div className="profileAvatarSummary"><div className="profileAvatarMini"><ProfileAvatarMedia value={identity.avatarUrl} fallback={(identity.displayName.trim()[0] || "J").toUpperCase()} alt={`Avatar actual de ${identity.displayName}`} /></div><p>Foto, emoji, avatar manual o sin imagen.</p></div></section>
       {golfInsights && <section className="card profileCompactCard"><div className="profileCompactHeading"><div><span>ACTIVIDAD</span><h2>Resumen personal</h2></div>{onOpenStats && <button type="button" className="textButton" onClick={onOpenStats}>Ver Stats</button>}</div><div className="profileActivityGrid"><div><span>Rondas</span><b>{golfInsights.rounds}</b></div><div><span>Promedio</span><b>{decimal(golfInsights.averageScore)}</b></div><div><span>Putts</span><b>{decimal(golfInsights.averagePutts)}</b></div></div></section>}
       <nav className="card profileNavigationList" aria-label="Secciones de Mi Perfil">

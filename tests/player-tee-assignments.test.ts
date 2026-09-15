@@ -11,7 +11,7 @@ const players: Player[] = [{ id: "said", name: "Said", handicap: 8 }, { id: "jua
 
 test("tees por jugador conservan rating, slope y yardas en un snapshot", () => {
   const snapshot = teeAssignmentSnapshot("juan", blue, "2026-09-08T12:00:00.000Z");
-  assert.deepEqual(snapshot, { playerId: "juan", courseId: "vista", layoutId: "vista", teeId: "blue", teeName: "Azules", rating: 72.4, slope: 132, yards: 6900, source: "catalog", capturedAt: "2026-09-08T12:00:00.000Z" });
+  assert.deepEqual(snapshot, { playerId: "juan", courseId: "vista", layoutId: "vista", teeId: "blue", teeName: "Azules", rating: 72.4, slope: 132, yards: 6900, par: 72, source: "catalog", capturedAt: "2026-09-08T12:00:00.000Z" });
   blue.rating = 99;
   assert.equal(snapshot.rating, 72.4);
 });

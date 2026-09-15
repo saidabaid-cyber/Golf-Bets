@@ -115,7 +115,11 @@ export type Course = {
   providerExternalId?: string;
   sourceName?: string;
   sourceUrl?: string;
+  sourceAuthority?: string;
   verifiedAt?: string;
+  dataVersion?: string;
+  /** Local source evidence is distinct from an official GHIN/WHS rating. */
+  indexRatingEvidence?: BackyardIndexRatedTeeEvidence;
   localRules?: LocalRule[];
   localRulesUpdatedAt?: string;
 };
@@ -306,16 +310,24 @@ export type PlayerTeeAssignmentSnapshot = {
   rating?: number;
   slope?: number;
   yards?: number;
+  par?: number;
   source: "catalog" | "manual" | "preference" | "legacy";
   capturedAt: string;
+  sourceAuthority?: string;
+  sourceUrl?: string;
+  verifiedAt?: string;
+  dataVersion?: string;
+  /** Frozen at tee selection; never resolved against a mutable catalog at round close. */
+  indexRatingEvidence?: BackyardIndexRatedTeeEvidence;
 };
 
-/** External evidence for one officially rated tee. Internal/manual catalog data alone never qualifies. */
+/** Source evidence for a locally rated tee. CURATED is not GHIN/WHS certification. */
 export type BackyardIndexRatedTeeEvidence = {
-  kind: "OFFICIAL_RATED_TEE";
+  kind: "OFFICIAL_RATED_TEE" | "CURATED_RATED_TEE";
   authority: string;
   sourceUrl: string;
   verifiedAt: string;
+  dataVersion?: string;
   courseId: string;
   teeId: string;
   courseRating: number;
@@ -328,6 +340,7 @@ export type BackyardIndexPccEvidence =
   | { kind: "DECLARED_LOCAL_ZERO"; value: 0; declaredAt: string; declaredByAccountUserId: string };
 
 export type BackyardIndexIneligibilityReason =
+  | "INDEX_NOT_ENABLED"
   | "MISSING_INDEX_SNAPSHOT"
   | "INVALID_INDEX_SNAPSHOT"
   | "ROUND_NOT_COMPLETED"
@@ -375,6 +388,8 @@ export type BackyardIndexRoundSnapshot = {
   ratedTeeEvidence?: BackyardIndexRatedTeeEvidence;
   pccEvidence?: BackyardIndexPccEvidence;
   scoreDifferential?: number;
+  /** Frozen local preference at close; not a GHIN/official eligibility claim. */
+  activation?: { enabled: boolean; preferenceUpdatedAt: string; localPccZeroDeclaredAt: string | null };
 };
 
 export type PersonalAdvantageMode = "manual" | "current_index" | "sliding";

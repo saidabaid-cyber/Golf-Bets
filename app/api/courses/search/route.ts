@@ -4,6 +4,10 @@ import { internalCourseDataProvider } from "../../../../lib/golf-providers";
 import { internalCourseCatalogProvider } from "../../../../lib/course-catalog-provider";
 import { serverPhase2FeatureFlags } from "../../../../features/feature-flags/server";
 
+function hasLocalRatedTee(courseId: string) {
+  return DEFAULT_COURSES.some((course) => (course.catalogCourseId ?? course.id) === courseId && course.indexRatingEvidence?.kind === "CURATED_RATED_TEE");
+}
+
 export async function GET(request: NextRequest) {
   if (!serverPhase2FeatureFlags().course_search) {
     return NextResponse.json({ error: "feature_disabled" }, { status: 404, headers: { "cache-control": "no-store" } });
@@ -43,7 +47,8 @@ export async function GET(request: NextRequest) {
         clubName: course.clubName,
         city: course.city,
         distanceKm: Math.round(distanceKm * 10) / 10,
-        tee: { id: course.catalogTeeId ?? course.id, name: course.teeName, rating: course.rating, slope: course.slope, yards: course.totalYards },
+        localIndexTeeAvailable: hasLocalRatedTee(course.catalogCourseId ?? course.id),
+        tee: { id: course.catalogTeeId ?? course.id, name: course.teeName, rating: course.rating, slope: course.slope, yards: course.totalYards, localIndexRated: course.indexRatingEvidence?.kind === "CURATED_RATED_TEE" },
       })),
     }, { headers: { "cache-control": "private, no-store" } });
   }
@@ -62,7 +67,8 @@ export async function GET(request: NextRequest) {
       name: course.name,
       clubName: course.clubName,
       city: course.city,
-      tee: { id: course.catalogTeeId ?? course.id, name: course.teeName, rating: course.rating, slope: course.slope, yards: course.totalYards },
+      localIndexTeeAvailable: hasLocalRatedTee(course.catalogCourseId ?? course.id),
+      tee: { id: course.catalogTeeId ?? course.id, name: course.teeName, rating: course.rating, slope: course.slope, yards: course.totalYards, localIndexRated: course.indexRatingEvidence?.kind === "CURATED_RATED_TEE" },
     })),
   }, { headers: { "cache-control": "public, s-maxage=300, stale-while-revalidate=1800" } });
 }

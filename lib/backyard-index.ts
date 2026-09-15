@@ -89,7 +89,7 @@ export function backyardScoreDifferential(adjustedGrossScore: number, courseRati
 }
 
 function validRatedTee(evidence: BackyardIndexRatedTeeEvidence | undefined, assignment: PlayerTeeAssignmentSnapshot | undefined, round: RoundSnapshot) {
-  if (!evidence || !assignment || evidence.kind !== "OFFICIAL_RATED_TEE") return false;
+  if (!evidence || !assignment || !["OFFICIAL_RATED_TEE", "CURATED_RATED_TEE"].includes(evidence.kind)) return false;
   const courseId = round.courseSnapshot?.catalogCourseId || round.courseSnapshot?.id;
   return assignment.source === "catalog"
     && Boolean(text(evidence.authority).trim())

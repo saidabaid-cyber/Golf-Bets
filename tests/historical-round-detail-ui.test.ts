@@ -141,6 +141,10 @@ test("el recap histórico conserva controles táctiles y contención horizontal 
   assert.match(css, /\.historicalDetail \.tableWrap\{max-width:100%;/);
   assert.match(component, /<FullScorecard/);
   assert.match(component, /context="history"/);
-  assert.doesNotMatch(component, /calculate|buildPersonalOpponentHistory|resultDetails/);
+  // Stored Index evidence can be validated for its new historical eligibility
+  // message. Financial results must still never invoke the mutable bet engine.
+  assert.doesNotMatch(component, /\bcalculate\s*\(|buildPersonalOpponentHistory|resultDetails/);
+  assert.doesNotMatch(component, /from ["'][^"']*\/engine["']/);
+  assert.match(component, /calculateBackyardIndex\(\[round\], accountUserId\)/);
   assert.doesNotMatch(recap, /resultDetails\s*(?:\.|\[)/);
 });

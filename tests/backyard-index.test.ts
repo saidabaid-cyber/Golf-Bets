@@ -187,6 +187,21 @@ function eligibleRound(id: string, date: string, differential: number): RoundSna
   });
 }
 
+for (const [count, used, value] of [
+  [0, 0, null], [1, 0, null], [2, 0, null], [3, 1, -1], [4, 1, 0], [5, 1, 1],
+  [6, 2, 0.5], [8, 2, 1.5], [10, 3, 2], [14, 4, 2.5], [16, 5, 3],
+  [18, 6, 3.5], [19, 7, 4], [20, 8, 4.5], [21, 8, 5.5],
+] as const) {
+  test(`A–O: ${count} scores · ${used} seleccionados · índice ${value ?? "sin valor"}`, () => {
+    const records = Array.from({ length: count }, (_, index) => eligibleRound(`progress-${index}`, `2026-02-${String(index + 1).padStart(2, "0")}`, index + 1));
+    const result = calculateBackyardIndex(records, accountUserId);
+    assert.equal(result.value, value);
+    assert.equal(result.usedCount, used);
+    assert.equal(result.recentRoundCount, Math.min(count, 20));
+    if (count === 21) assert.equal(result.usedRoundIds.includes("progress-0"), false);
+  });
+}
+
 test("3 elegibles usan menor diferencial -2 y 20 últimos usan mejores 8", () => {
   const three = [eligibleRound("a", "2026-01-01", 14), eligibleRound("b", "2026-01-02", 12),
     eligibleRound("c", "2026-01-03", 10)];

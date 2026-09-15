@@ -1,5 +1,6 @@
 import courseSeedJson from "../data/golf-course-catalog.seed.json";
 import { withDefaultLaVistaRules } from "./local-rules";
+import { curatedPueblaCourseProvider } from "./curated-puebla-course-data";
 import type { Course } from "./types";
 
 export type CourseDataProvenance = {
@@ -379,9 +380,11 @@ const preferredOrder = [
   "cola-de-lagarto-general",
 ];
 
-export const DEFAULT_COURSES: Course[] = preferredOrder.map((id) => (
-  selectionById.get(id) ?? legacySelections.find((selection) => selection.id === id)
-)).filter((selection): selection is Course => Boolean(selection));
+export const DEFAULT_COURSES: Course[] = [
+  ...preferredOrder.map((id) => selectionById.get(id) ?? legacySelections.find((selection) => selection.id === id))
+    .filter((selection): selection is Course => Boolean(selection)),
+  ...curatedPueblaCourseProvider.listPlayableSelections(),
+];
 
 export const DEFAULT_LA_VISTA_COURSE = DEFAULT_COURSES.find((course) => course.id === "lavista-blancas")!;
 export const DEFAULT_LA_VISTA_TEMPORAL_COURSE = DEFAULT_COURSES.find((course) => course.id === "lavista-temporal-white")!;
