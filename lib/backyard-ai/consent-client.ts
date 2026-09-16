@@ -166,12 +166,41 @@ function parseRemoteAiConsentDecisions(body: unknown): RemoteAiConsentDecisions 
   return { policyVersion: BACKYARD_AI_PROVIDER_CONSENT_VERSION, decisions, resolved };
 }
 
+export const AI_CONSENT_CHECKPOINT_TIMEOUT_MS = 8_000;
+
+/** A preferences outage must reach recoverable UI even if fetch/body stalls.
+ * Cancelling this request never creates an acceptance or authorizes AI. */
+async function withConsentDecisionDeadline<T>(operation: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal): Promise<T> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let cancel: (() => void) | undefined;
+  try {
+    const stopped = new Promise<never>((_, reject) => {
+      cancel = () => { controller.abort(); reject(new RemoteAiProcessingConsentError(499, "Consulta cancelada.", "consent_cancelled")); };
+      if (signal?.aborted) { cancel(); return; }
+      signal?.addEventListener("abort", cancel, { once: true });
+      timer = setTimeout(() => {
+        controller.abort();
+        reject(new RemoteAiProcessingConsentError(504, "No pudimos consultar tus preferencias de IA a tiempo.", "consent_timeout"));
+      }, AI_CONSENT_CHECKPOINT_TIMEOUT_MS);
+    });
+    return await Promise.race([stopped, Promise.resolve().then(() => {
+      if (controller.signal.aborted) throw new RemoteAiProcessingConsentError(499, "Consulta cancelada.", "consent_cancelled");
+      return operation(controller.signal);
+    })]);
+  } finally {
+    if (timer) clearTimeout(timer);
+    if (cancel) signal?.removeEventListener("abort", cancel);
+  }
+}
+
 async function consentDecisionsRequest(accessToken: string, body?: { decisions: AiConsentDecisionInput[]; source: AiConsentCheckpointSource }, signal?: AbortSignal) {
+  return withConsentDecisionDeadline(async (requestSignal) => {
   const response = await fetch("/api/backyard-ai/consent", {
     method: body ? "POST" : "GET",
     headers: { authorization: `Bearer ${accessToken}`, ...(body ? { "content-type": "application/json" } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}),
-    cache: "no-store", signal,
+    cache: "no-store", signal: requestSignal,
   });
   const result: unknown = await response.json().catch(() => null);
   if (!response.ok) {
@@ -181,6 +210,7 @@ async function consentDecisionsRequest(accessToken: string, body?: { decisions: 
       typeof error?.code === "string" ? error.code : undefined);
   }
   return parseRemoteAiConsentDecisions(result);
+  }, signal);
 }
 
 /** Always reads the server. Neither a local prompt flag nor localStorage can resolve the checkpoint. */

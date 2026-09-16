@@ -56,6 +56,7 @@ function harness(initial = remote(), onboarding = true, options: { failSave?: bo
     settle: async () => { for (let index = 0; index < 4; index++) { render(); await new Promise<void>((resolve) => setImmediate(resolve)); } },
     check: (index: number, checked = true) => { (checkboxes()[index].props.onChange as (event: unknown) => void)({ target: { checked } }); render(); },
     click: () => { (submit().props.onClick as () => void)(); render(); },
+    clickNamed: (label: string) => { const button = nodes().find((node) => node.type === "button" && text(node) === label); assert.ok(button); assert.notEqual(button.props.disabled, true); (button.props.onClick as () => void)(); render(); },
     release: () => release?.(), releaseRead: () => releaseRead?.(), unmount: () => { for (const cleanup of cleanups) cleanup?.(); },
   };
 }
@@ -100,10 +101,13 @@ test("declined and revoked choices already resolved on server never reopen onboa
   for (const state of [remote("declined", "revoked", "declined"), remote("accepted", "accepted", "accepted")]) { const h = harness(state, false); await h.settle(); assert.equal((h.tree() as Node).type, "app"); assert.equal(h.checkboxes().length, 0); }
 });
 
-test("failed server save stays in checkpoint, preserves selection, never accepts legal or enters app", async () => {
+test("failed AI save preserves choices and offers app access without synthesizing AI acceptance", async () => {
   const h = harness(remote(), true, { failSave: true }); await h.settle(); for (const index of [0, 1, 2, 4]) h.check(index);
   h.click(); await h.settle(); assert.notEqual((h.tree() as Node).type, "app"); assert.equal(h.legalCalls(), 0);
-  assert.match(h.text(), /No pudimos guardar todas/); assert.equal(h.checkboxes()[4].props.checked, true); assert.equal(h.submit().props.disabled, false);
+  assert.match(h.text(), /No pudimos guardar tus preferencias de IA/); assert.equal(h.checkboxes()[4].props.checked, true); assert.equal(h.submit().props.disabled, false);
+  h.clickNamed("CONTINUAR A THE BACKYARD"); await h.settle();
+  assert.equal((h.tree() as Node).type, "app"); assert.equal(h.legalCalls(), 1);
+  assert.equal(h.calls.length, 1); assert.equal(h.server().resolved, false);
 });
 
 test("rapid double submit creates one server mutation and disables controls while pending", async () => {
@@ -114,12 +118,56 @@ test("rapid double submit creates one server mutation and disables controls whil
 
 test("legal save failure does not enter app; remote decisions remain durable for retry", async () => {
   const h = harness(remote(), true, { failLegal: true }); await h.settle(); for (const index of [0, 1, 2]) h.check(index);
-  h.click(); await h.settle(); assert.notEqual((h.tree() as Node).type, "app"); assert.equal(h.server().resolved, true); assert.match(h.text(), /No pudimos guardar todas/);
+  h.click(); await h.settle(); assert.notEqual((h.tree() as Node).type, "app"); assert.equal(h.server().resolved, true); assert.match(h.text(), /No pudimos guardar la aceptación de los términos/);
 });
 
-test("failed authoritative read never infers consent from a browser flag", async () => {
-  const h = harness(remote(), false, { failRead: true }); await h.settle(); assert.match(h.text(), /No pudimos consultar tus preferencias/);
+test("failed authoritative read permits app access but never infers consent from a browser flag", async () => {
+  const h = harness(remote(), false, { failRead: true }); await h.settle(); assert.match(h.text(), /Tus preferencias de IA no pudieron cargarse/);
   assert.equal(h.checkboxes().length, 0); assert.equal(h.calls.length, 0); assert.notEqual((h.tree() as Node).type, "app");
+  assert.equal(h.nodes()[0].props["data-checkpoint-state"], "ERROR_RECOVERABLE");
+  assert.equal(h.nodes()[0].props["data-consent-status"], "CONSENT_STATUS_UNKNOWN");
+  h.clickNamed("CONTINUAR A THE BACKYARD"); await h.settle();
+  assert.equal((h.tree() as Node).type, "app"); assert.equal(h.calls.length, 0); assert.equal(h.legalCalls(), 0);
+  h.props.accessToken = "refreshed-token"; await h.settle();
+  assert.equal((h.tree() as Node).type, "app"); assert.equal(h.reads(), 1, "token refresh must not reopen a deferred checkpoint");
+});
+
+test("retrying an unavailable consent service still exposes the non-logout app escape", async () => {
+  const h = harness(remote(), false, { failRead: true }); await h.settle();
+  h.clickNamed("Reintentar consulta"); await h.settle(); assert.equal(h.reads(), 2);
+  h.clickNamed("CONTINUAR A THE BACKYARD"); await h.settle();
+  assert.equal((h.tree() as Node).type, "app"); assert.equal(h.calls.length, 0);
+});
+
+test("existing account can defer a failed save with no additional mutation or legal callback", async () => {
+  const h = harness(remote(), false, { failSave: true }); await h.settle(); h.check(0); h.click(); await h.settle();
+  h.clickNamed("CONTINUAR A THE BACKYARD"); await h.settle();
+  assert.equal((h.tree() as Node).type, "app"); assert.equal(h.calls.length, 1); assert.equal(h.legalCalls(), 0);
+  assert.equal(h.server().resolved, false);
+});
+
+test("AI outage never bypasses the new account's mandatory legal acceptance", async () => {
+  const h = harness(remote(), true, { failRead: true }); await h.settle();
+  assert.equal(h.nodes().find((node) => h.text(node) === "CONTINUAR A THE BACKYARD")?.props.disabled, true);
+  assert.equal(h.checkboxes().length, 4); for (const index of [0, 1, 2]) h.check(index);
+  h.clickNamed("CONTINUAR A THE BACKYARD"); await h.settle();
+  assert.equal((h.tree() as Node).type, "app"); assert.equal(h.legalCalls(), 1); assert.equal(h.calls.length, 0);
+});
+
+test("failed legal save during AI outage remains independent and does not falsely grant app access", async () => {
+  const h = harness(remote(), true, { failRead: true, failLegal: true }); await h.settle();
+  for (const index of [0, 1, 2]) h.check(index);
+  h.clickNamed("CONTINUAR A THE BACKYARD"); await h.settle();
+  assert.notEqual((h.tree() as Node).type, "app"); assert.match(h.text(), /aceptación de los términos/);
+  assert.equal(h.calls.length, 0); assert.equal(h.legalCalls(), 1);
+});
+
+test("UI deferral does not persist consent and a new mount consults the server again", async () => {
+  const first = harness(remote(), false, { failRead: true }); await first.settle();
+  first.clickNamed("CONTINUAR A THE BACKYARD"); await first.settle(); first.unmount();
+  const second = harness(first.server(), false); await second.settle();
+  assert.match(second.text(), /ACTUALIZAMOS TUS PREFERENCIAS/); assert.equal(second.reads(), 1);
+  assert.equal(second.calls.length, 0); assert.ok(second.checkboxes().every((node) => !node.props.checked));
 });
 
 test("account remount discards prior checked choices and provider keys checkpoint by user", async () => {

@@ -1539,7 +1539,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   </AccountContext.Provider>;
   // Account creation ends here, after profile/personalization and before entry
   // into the app. Existing accounts resolve only missing server-side choices.
-  // No localStorage marker may bypass this checkpoint on a new device.
+  // Technical AI-preference failures may defer the prompt, not authorize AI.
+  // No localStorage marker is treated as consent on this or a new device.
   return identity.mode === "authenticated" ? <AccountConsentCheckpoint
     key={identity.userId}
     userId={identity.userId}
