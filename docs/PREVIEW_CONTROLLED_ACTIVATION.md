@@ -2,9 +2,9 @@
 
 ## CONTROLLED_DB_ACTION_REQUIRED
 
-**Única acción del owner necesaria ahora:** responder «Confirmo usar la organización Supabase `wrogzsycxchwakaglbpm` (saidabaid-cyber's Org) para consultar el costo de una rama Preview aislada». Esto autoriza consultar la cotización, **no aceptar un importe desconocido**. Codex debe mostrar el importe real y obtener aprobación del costo antes de crear la rama. La autorización de push ya existe y no debe solicitarse otra vez.
+**Única autorización del owner pendiente ahora:** confirmar la creación de `phase2-full-platform-qa`, sin datos Production, en la organización Supabase `wrogzsycxchwakaglbpm`, por **US$0.01344/h** de cómputo (aproximadamente **US$9.68/30 días**) más consumo adicional de Supabase. Cotización obtenida el 2026-09-16 mediante `get_cost(type="branch")`; no se aceptó el cargo ni se creó una rama sin esa autorización. La autorización de push ya existe y no debe solicitarse otra vez.
 
-Estado auditado el 2026-09-15: sólo es visible el proyecto compartido Supabase **The Backyard**, ref `zhqmlpljloumldaczcfp`; la lista de branches está vacía. No se aplicó SQL remoto. No usar ese proyecto para reset, eliminación de cuentas ni fixtures. Las pruebas PostgreSQL locales no acreditan QA en Supabase Preview.
+Estado auditado el 2026-09-16: sólo es visible el proyecto compartido Supabase **The Backyard**, ref `zhqmlpljloumldaczcfp`; la lista de branches está vacía. El bundle público del Preview remoto `golf-bets-e941m8ejk-saha8.vercel.app` apunta a esa misma ref; **PREVIEW_DB_ISOLATED no está acreditado**. No se aplicó SQL remoto. No usar ese proyecto para reset, eliminación de cuentas ni fixtures. Las pruebas PostgreSQL locales no acreditan QA en Supabase Preview.
 
 Destino Vercel existente: proyecto `golf-bets`, ID `prj_Hin0ieF71l1aSyaOcOPCmu7NzNjn`, equipo `team_8pj0WyTTVhVSw78CAZ0qNLEO`. La CLI está instalada pero no autenticada; el intento anterior de acceso por dispositivo expiró. Si el conector Vercel no permite configurar/desplegar, se debe renovar `vercel login` con el owner, no crear tokens ni reutilizar códigos expirados.
 
@@ -26,7 +26,7 @@ Después de confirmar organización y cotización:
 
 Primero llamar `list_migrations(project_id="<PREVIEW_REF>")`. El ledger antiguo del proyecto padre tiene timestamps distintos a varios archivos históricos locales. **No ejecutar `db push --include-all`, no reparar el ledger a ciegas y no reaplicar las migraciones fundacionales ya heredadas.** La integración Git podría aplicar archivos automáticamente: comparar nombre, definición y dependencias, no sólo timestamp.
 
-Esta es la secuencia aditiva esperada de **14 archivos**. Aplicar cada uno sólo si falta, siempre en la ref nueva:
+Esta es la secuencia aditiva esperada de **15 archivos**. Aplicar cada uno sólo si falta, siempre en la ref nueva:
 
 1. `supabase/migrations/20260906193435_equipment_ball_fitting.sql`
 2. `supabase/migrations/20260906211937_golf_profile_course_architecture.sql`
@@ -42,8 +42,9 @@ Esta es la secuencia aditiva esperada de **14 archivos**. Aplicar cada uno sólo
 12. `supabase/migrations/20260915203125_account_lifecycle_preview.sql`
 13. `supabase/migrations/20260915203550_social_service_privileges.sql`
 14. `supabase/migrations/20260916020557_ai_consent_onboarding_decisions.sql`
+15. `supabase/migrations/20260916084954_profile_visibility_public_friends.sql`
 
-Acción exacta mediante conector, por archivo: leer el SQL completo del archivo local; ejecutar `apply_migration` con `project_id` igual a la **ref nueva**, `name` igual al nombre descriptivo del archivo sin timestamp/extensión y `query` igual al contenido literal completo. Por ejemplo, el paso 10 usa `name="user_statistics_reset_idempotency"`. Volver a listar el ledger tras cada aplicación y registrar su versión efectiva. No concatenar los 14 archivos en una transacción opaca ni continuar después de un fallo.
+Acción exacta mediante conector, por archivo: leer el SQL completo del archivo local; ejecutar `apply_migration` con `project_id` igual a la **ref nueva**, `name` igual al nombre descriptivo del archivo sin timestamp/extensión y `query` igual al contenido literal completo. Por ejemplo, el paso 10 usa `name="user_statistics_reset_idempotency"`. Volver a listar el ledger tras cada aplicación y registrar su versión efectiva. No concatenar los 15 archivos en una transacción opaca ni continuar después de un fallo.
 
 El paso 14 habilita las elecciones explícitas de IA al final del onboarding. Antes de publicar el nuevo checkpoint obligatorio, seguir [AI_CONSENT_ONBOARDING.md](AI_CONSENT_ONBOARDING.md), incluyendo `BACKYARD_AI_CONSENT_PREVIEW_SUPABASE_URL` y QA con cuenta nueva/existente. No publicarlo contra el Preview compartido sin migrar.
 
