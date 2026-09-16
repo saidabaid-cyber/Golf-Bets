@@ -131,10 +131,10 @@ begin
   end loop;
 
   if not exists (
-    select 1 from information_schema.columns
-    where table_schema = 'public'
-      and table_name = 'player_equipment_profiles'
-      and column_name = 'expected_version'
+    select 1 from information_schema.columns as columns
+    where columns.table_schema = 'public'
+      and columns.table_name = 'player_equipment_profiles'
+      and columns.column_name = 'expected_version'
   ) then
     raise exception 'canonical snapshot has no expected_version CAS field';
   end if;

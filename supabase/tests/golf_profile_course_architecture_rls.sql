@@ -102,13 +102,13 @@ begin
   end if;
 
   if not exists (
-    select 1 from information_schema.columns
-    where table_schema = 'public' and table_name = 'golf_ball_test_results'
-      and column_name = 'test_year' and is_nullable = 'YES'
+    select 1 from information_schema.columns as columns
+    where columns.table_schema = 'public' and columns.table_name = 'golf_ball_test_results'
+      and columns.column_name = 'test_year' and columns.is_nullable = 'YES'
   ) or not exists (
-    select 1 from information_schema.columns
-    where table_schema = 'public' and table_name = 'golf_ball_test_results'
-      and column_name = 'peak_height_yards'
+    select 1 from information_schema.columns as columns
+    where columns.table_schema = 'public' and columns.table_name = 'golf_ball_test_results'
+      and columns.column_name = 'peak_height_yards'
   ) then
     raise exception 'ball test unknown-year or peak-height unit contract is missing';
   end if;
