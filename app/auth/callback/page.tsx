@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getSupabaseBrowser } from "../../../lib/supabase/client";
-import { authErrorMessage } from "../../../lib/account-state";
+import { authCallbackError, authErrorMessage } from "../../../lib/account-state";
 import { restoreAuthSession } from "../../../lib/auth-flow";
 import { BrandLockup } from "../../components/brand-lockup";
 
@@ -22,8 +22,8 @@ export default function AuthCallbackPage() {
       if (!supabase) { window.clearTimeout(timeout); setError("El acceso con cuenta todavía no está configurado."); return; }
       try {
         const params = new URLSearchParams(window.location.search);
-        const providerError = params.get("error_description") || params.get("error");
-        if (providerError) throw new Error(providerError);
+        const providerError = authCallbackError(params);
+        if (providerError) throw providerError;
         const code = params.get("code");
         if (code) {
           const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
@@ -33,7 +33,7 @@ export default function AuthCallbackPage() {
         if (!session) throw new Error("account_session_missing");
         if (mounted && !timedOut) window.location.replace("/?auth=complete");
       } catch (callbackError) {
-        if (mounted && !timedOut) setError(authErrorMessage(callbackError));
+        if (mounted && !timedOut) setError(authErrorMessage(callbackError, "callback"));
       } finally {
         window.clearTimeout(timeout);
       }

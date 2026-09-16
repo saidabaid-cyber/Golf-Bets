@@ -513,13 +513,33 @@ export function normalizeOtp(value: string) {
   return value.replace(/\D/g, "").slice(0, 8);
 }
 
-export function authErrorMessage(error: unknown, context: "google" | "apple" | "email" | "otp" | "logout" = "email") {
-  const detail = error && typeof error === "object" ? error as { message?: string; code?: string; status?: number } : null;
-  const message = `${detail?.code || ""} ${detail?.message || String(error || "")}`.toLowerCase();
+/** Preserve the provider's machine-readable code without displaying its raw
+ * description (which can contain URLs, identifiers or email addresses). */
+export function authCallbackError(params: URLSearchParams) {
+  const code = params.get("error_code") || params.get("error");
+  const message = params.get("error_description");
+  return code || message ? { code: code || "", message: message || "" } : null;
+}
+
+export function authErrorMessage(error: unknown, context: "google" | "apple" | "email" | "otp" | "logout" | "callback" = "email") {
+  const detail = error && typeof error === "object" ? error as { message?: string; msg?: string; code?: string; status?: number } : null;
+  const code = typeof detail?.code === "string" ? detail.code.toLowerCase() : "";
+  const message = `${detail?.code || ""} ${detail?.message || detail?.msg || String(error || "")}`.toLowerCase();
+  // Account-existence failures intentionally share one message. This public
+  // screen must not become a directory of registered or archived identities.
+  if (["user_not_found", "user_already_exists", "email_exists", "identity_already_exists", "signup_disabled", "user_banned", "invalid_credentials"].includes(code) || message.includes("signups not allowed for otp")) return "No pudimos completar el acceso. Revisa tus datos o vuelve a Inicio para elegir cómo entrar.";
+  if (code === "email_address_not_authorized") return "El envío de códigos por correo no está habilitado para este entorno. Contacta al administrador.";
+  if (code === "email_address_invalid") return "Revisa el correo electrónico e intenta con una dirección válida.";
+  if (["redirect_uri_mismatch", "invalid_client", "unauthorized_client"].includes(code) || message.includes("redirect_uri_mismatch")) return "El acceso con el proveedor requiere una corrección de configuración. Contacta al administrador.";
+  if (["bad_code_verifier", "flow_state_expired", "flow_state_not_found", "bad_oauth_state", "bad_oauth_callback"].includes(code) || (context === "callback" && message.includes("code verifier"))) return "No pudimos confirmar el regreso del proveedor. Vuelve a Inicio e inicia sesión en este mismo navegador.";
+  if (code === "access_denied") return "El acceso fue cancelado o no autorizado. Puedes intentarlo nuevamente.";
+  if (context === "callback" && message.includes("account_session_missing")) return "No se pudo confirmar tu sesión. Vuelve a Inicio e inicia sesión nuevamente.";
   if (message.includes("account_session_missing")) return "No se pudo confirmar tu sesión. No has iniciado sesión; vuelve a verificar el código o solicita uno nuevo.";
   if (detail?.status === 429) return "Demasiados intentos. Espera un momento antes de solicitar otro código.";
+  if (["email_provider_disabled", "otp_disabled", "provider_disabled", "oauth_provider_not_supported"].includes(code)) return `Acceso con ${context === "google" ? "Google" : context === "apple" ? "Apple" : context === "callback" ? "el proveedor" : "correo"} pendiente de configuración.`;
   if (message.includes("provider") && (message.includes("disabled") || message.includes("not enabled") || message.includes("unsupported"))) return `Acceso con ${context === "google" ? "Google" : context === "apple" ? "Apple" : "correo"} pendiente de configuración.`;
   if (message.includes("rate") || message.includes("too many")) return "Demasiados intentos. Espera un momento antes de intentarlo nuevamente.";
+  if ((detail?.status || 0) >= 500 || code === "unexpected_failure") return "El servicio de acceso no está disponible temporalmente. Intenta nuevamente en unos minutos.";
   if (message.includes("expired")) return "El código expiró. Solicita uno nuevo.";
   if (message.includes("invalid") || message.includes("token")) return context === "otp" ? "El código no es correcto. Revísalo o solicita uno nuevo." : "Revisa la información e intenta nuevamente.";
   if (message.includes("abort") || message.includes("timeout")) return "La conexión tardó demasiado. Revisa tu correo antes de reenviar el código o inténtalo nuevamente.";
@@ -528,6 +548,7 @@ export function authErrorMessage(error: unknown, context: "google" | "apple" | "
   if (context === "apple") return "No pudimos iniciar sesión con Apple.";
   if (context === "otp") return "No pudimos verificar el código.";
   if (context === "logout") return "No pudimos cerrar la sesión. Intenta nuevamente.";
+  if (context === "callback") return "No pudimos completar el acceso. Vuelve a Inicio e inténtalo nuevamente.";
   return "No pudimos enviar el código. Intenta nuevamente.";
 }
 
