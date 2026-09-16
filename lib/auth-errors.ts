@@ -12,6 +12,9 @@ type AuthErrorDetail = {
 export function isDefinitiveAuthFailure(error: unknown) {
   const detail = (error && typeof error === "object" ? error : {}) as AuthErrorDetail;
   const status = Number(detail.status || 0);
+  // Supabase rejects archived/banned accounts with user_banned (often 403).
+  // This is a definitive Auth rejection, not a temporary cloud outage.
+  if (detail.code === "user_banned") return true;
   const text = `${String(detail.code || "")} ${String(detail.message || "")}`.toLowerCase();
   if (status === 401) return true;
   return /refresh_token_(?:not_found|already_used)|invalid refresh token|refresh token.*(?:expired|revoked)|bad_jwt|invalid jwt|user_not_found/.test(text);

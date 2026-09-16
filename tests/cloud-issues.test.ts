@@ -40,3 +40,9 @@ test("el servidor reserva 401 para rechazo real de Auth", () => {
   assert.equal(authUserFailure({ status: 401 }, true), null);
   assert.equal(cloudIssueFromError("auth", new DOMException("This operation was aborted", "AbortError"), true).kind, "offline");
 });
+
+test("una cuenta archivada rechazada por Supabase no se presenta como caída temporal", () => {
+  assert.equal(authUserFailure({ status: 403, code: "user_banned" }, false)?.status, 401);
+  assert.equal(authUserFailure({ status: 403, code: "unexpected_auth_failure" }, false)?.status, 503);
+  assert.equal(authUserFailure({ status: 503, code: "upstream_unavailable" }, false)?.status, 503);
+});
