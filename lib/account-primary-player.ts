@@ -1,5 +1,6 @@
 import type { BackyardProfile } from "./account-state";
 import type { FrequentPlayer, Player } from "./types";
+import type { SelectedHandicapIndex } from "./handicap-source";
 
 export function accountPrimaryPlayerId(userId: string) {
   return `account:${userId}`;
@@ -9,16 +10,16 @@ function validAccountProfile(profile: BackyardProfile) {
   return profile.userId !== "guest" && profile.displayName.trim().length > 0;
 }
 
-export function accountPrimaryRoundPlayer(profile: BackyardProfile): Player | null {
+export function accountPrimaryRoundPlayer(profile: BackyardProfile, index: SelectedHandicapIndex = { source: null, value: null }): Player | null {
   if (!validAccountProfile(profile)) return null;
   return {
     id: accountPrimaryPlayerId(profile.userId),
     accountUserId: profile.userId,
     name: profile.displayName.trim(),
-    handicap: profile.defaultHandicap,
-    handicapIndex: profile.defaultHandicap,
+    handicap: index.value,
+    handicapIndex: index.value,
     handicapSource: "profile_index",
-    handicapIndexSource: "BACKYARD_MANUAL",
+    ...(index.source ? { handicapIndexSource: index.source === "GHIN" ? "GHIN_OFFICIAL_FUTURE" as const : "BACKYARD_INDEX" as const } : {}),
   };
 }
 
@@ -29,8 +30,9 @@ export function syncAccountPrimaryFrequentPlayer(
   players: FrequentPlayer[],
   profile: BackyardProfile,
   updatedAt: string,
+  index?: SelectedHandicapIndex,
 ) {
-  const principal = accountPrimaryRoundPlayer(profile);
+  const principal = accountPrimaryRoundPlayer(profile, index);
   if (!principal) return players;
   const stableId = principal.id;
   let linkedIndexes = players.flatMap((player, index) =>

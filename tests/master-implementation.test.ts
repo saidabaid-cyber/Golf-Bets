@@ -92,15 +92,16 @@ test("fallo de consentimiento remoto muestra causa y garantiza que no hubo enví
   assert.match(setup, /!consentInfrastructureNotice && !remoteConsentUnavailable/);
 });
 
-test("Más concentra herramientas, ayuda y configuración sin duplicar Perfil", () => {
+test("Más concentra herramientas y ayuda sin duplicar Configuración de Perfil", () => {
   const more = readFileSync("app/components/more-hub.tsx", "utf8");
   const page = readFileSync("app/page.tsx", "utf8");
-  for (const label of ["Campos", "Mi Bolsa", "Handicap / GHIN", "Fitting", "GPS / Hole Map", "Ayuda", "Configuración adicional"]) {
+  for (const label of ["Campos", "Mi Bolsa", "Handicap / GHIN", "Fitting", "GPS / Hole Map", "Ayuda"]) {
     assert.match(more, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
   assert.doesNotMatch(more, /title: "Perfil"/);
   assert.match(page, /onOpenHelp=\{openRulesForRound\}/);
-  assert.match(page, /onOpenSettings=\{\(\) => setTab\("account"\)\}/);
+  assert.doesNotMatch(more, /Configuración adicional|onOpenSettings/);
+  assert.doesNotMatch(page, /onOpenSettings/);
 });
 
 test("plantillas de grupo conservan Foursome Match y las reglas explícitas de animales", () => {

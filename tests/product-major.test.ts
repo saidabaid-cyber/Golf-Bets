@@ -76,11 +76,12 @@ test("Cuenta y privacidad conserva documentos, métodos, preferencias y cierre",
   for (const text of ["Cuenta y privacidad", "Legal y privacidad", "GESTIONAR CONSENTIMIENTOS", "Métodos de acceso", "Preferencias", "Cerrar sesión"]) assert.match(account, new RegExp(text));
 });
 
-test("perfil permite nombre y HCP index opcional vacío", () => {
+test("perfil permite nombre y fuente de índice sin captura manual", () => {
   assert.match(account, /displayName/);
   assert.match(account, /defaultHandicap/);
-  assert.match(account, /HCP index \(opcional\)/);
-  assert.match(account, /validateProfileDraft\(name, handicap\)/);
+  assert.match(account, /HandicapSourceSelector/);
+  assert.doesNotMatch(account, /HCP index \(opcional\)/);
+  assert.match(account, /validateProfileDraft\(name, ""\)/);
 });
 
 test("eliminar cuenta requiere confirmación fuerte y nunca usa secret en cliente", () => {

@@ -50,7 +50,7 @@ export function SocialConnectionsPanel({ ownerId, accessToken, directory }: {
             avatar: typeof row.avatar_url === "string" ? row.avatar_url : null,
             handicap: typeof row.handicap === "number" ? row.handicap : null,
             clubName: typeof row.club_name === "string" ? row.club_name : null,
-            privacy: (row.privacy === "FRIENDS" ? "FRIENDS" : "PRIVATE") as SocialProfile["privacy"],
+            privacy: (row.privacy === "PUBLIC" ? "PUBLIC" : row.privacy === "FRIENDS" ? "FRIENDS" : "PRIVATE") as SocialProfile["privacy"],
           })).filter((profile) => profile.userId && profile.username));
           setLoading(false); return;
         }

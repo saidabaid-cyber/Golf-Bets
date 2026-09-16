@@ -108,7 +108,8 @@ export type BackyardProfileDetails = {
   ghinLinkStatus: GhinLinkStatus;
   golfProfileUpdatedAt: string | null;
   bio: string;
-  profileVisibility: "private" | "friends";
+  /** Legacy private is retained until the owner explicitly chooses a new audience. */
+  profileVisibility: "private" | "friends" | "public";
 };
 
 export type BackyardProfileUpdate = Pick<BackyardProfile, "displayName" | "defaultHandicap" | "avatarUrl">
@@ -261,7 +262,7 @@ function profileDetails(candidate: Partial<BackyardProfile>, fallback?: Backyard
       : fallback?.ghinLinkStatus || "NOT_CONNECTED",
     golfProfileUpdatedAt: profileTimestamp(candidate.golfProfileUpdatedAt, fallback?.golfProfileUpdatedAt),
     bio: profileText(candidate.bio, fallback?.bio, 280),
-    profileVisibility: candidate.profileVisibility === "friends" || candidate.profileVisibility === "private"
+    profileVisibility: candidate.profileVisibility === "friends" || candidate.profileVisibility === "private" || candidate.profileVisibility === "public"
       ? candidate.profileVisibility
       : fallback?.profileVisibility || "private",
   } satisfies typeof EMPTY_PROFILE_DETAILS;

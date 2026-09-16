@@ -61,7 +61,7 @@ export function useBackyardIndexPreference(userId: string, authenticated: boolea
     try {
       const previous = readIndexPreference(localStorage, userId)?.preference;
       const now = new Date(Math.max(Date.now(), Date.parse(previous?.updatedAt || "") + 1 || 0)).toISOString();
-      const preference: BackyardIndexPreference = { version: 1, userId, enabled, updatedAt: now,
+      const preference: BackyardIndexPreference = { version: 1, userId, enabled, handicapSource: enabled ? "BACKYARD" : null, updatedAt: now,
         // The activation/reconfirmation UI explicitly explains this local assumption.
         localPccZeroDeclaredAt: enabled ? previous?.localPccZeroDeclaredAt || now : previous?.localPccZeroDeclaredAt || null };
       persistIndexPreference(localStorage, { preference, pending: true });

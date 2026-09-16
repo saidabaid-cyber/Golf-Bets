@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { clampBackyardHandicap } from "../../lib/account-state";
 import {
   APPROACH_BEHAVIORS,
   BACKYARD_BALL_FIT_DISCLAIMER,
@@ -96,12 +95,6 @@ function optionalNumber(value: string, minimum: number, maximum: number) {
   return Number.isFinite(number) && number >= minimum && number <= maximum ? number : null;
 }
 
-function optionalHandicap(value: string) {
-  if (!value.trim()) return null;
-  const number = Number(value.replace(",", "."));
-  return Number.isFinite(number) ? clampBackyardHandicap(number) : null;
-}
-
 function OptionGrid<T extends string>({ values, labels, selected, onSelect }: {
   values: readonly T[];
   labels: Record<T, string>;
@@ -162,7 +155,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
 
   function resumeSavedDraft() {
     if (!savedDraft) return;
-    setInput(savedDraft.input);
+    setInput({ ...savedDraft.input, handicap: defaultHandicap });
     setStep(Math.min(savedDraft.step, 5));
     setResult(null);
     setResultCatalog([]);
@@ -215,7 +208,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
     setCalculating(true);
     setMessage("");
     try {
-      const transportInput = createBallFitTransportInput(input);
+      const transportInput = createBallFitTransportInput({ ...input, handicap: defaultHandicap });
       if (!transportInput) {
         setMessage(FIT_REQUEST_ERROR);
         return;
@@ -294,7 +287,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
     {!result && step === 0 && <section className={styles.questionBlock}>
       <h3>Tu juego actual</h3>
       <p>Usamos tu HCP capturado si existe. No lo interpretamos como un índice oficial.</p>
-      <div className="grid2"><label>HCP manual (opcional)<input type="number" inputMode="decimal" min={-15} max={36} step="0.1" value={input.handicap ?? ""} onChange={(event) => patchInput({ handicap: optionalHandicap(event.target.value) })} placeholder="8.4" /></label><label>Score típico (opcional)<input type="number" inputMode="numeric" min={40} max={200} value={input.typicalScore ?? ""} onChange={(event) => patchInput({ typicalScore: optionalNumber(event.target.value, 40, 200) })} placeholder="86" /></label></div>
+      <div className="grid2"><div><span>Índice de tu cuenta</span><p>{defaultHandicap ?? "En progreso"}</p><small>Se obtiene de la fuente elegida en Perfil; no necesitas capturarlo.</small></div><label>Score típico (opcional)<input type="number" inputMode="numeric" min={40} max={200} value={input.typicalScore ?? ""} onChange={(event) => patchInput({ typicalScore: optionalNumber(event.target.value, 40, 200) })} placeholder="86" /></label></div>
     </section>}
 
     {!result && step === 1 && <section className={styles.questionBlock}>

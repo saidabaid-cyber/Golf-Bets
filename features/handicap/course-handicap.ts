@@ -1,6 +1,6 @@
 export const COURSE_HANDICAP_FORMULA_VERSION = "WHS-2024-COURSE-HANDICAP-V1" as const;
 
-export type HandicapIndexSource = "BACKYARD_MANUAL" | "BACKYARD_WHS_FUTURE" | "GHIN_OFFICIAL_FUTURE";
+export type HandicapIndexSource = "BACKYARD_MANUAL" | "BACKYARD_INDEX" | "BACKYARD_WHS_FUTURE" | "GHIN_OFFICIAL_FUTURE";
 
 export type CourseHandicapInput = {
   playerId: string;

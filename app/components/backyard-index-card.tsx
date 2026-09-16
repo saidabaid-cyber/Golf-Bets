@@ -19,7 +19,7 @@ export function BackyardIndexCard({
 }: {
   history: readonly RoundSnapshot[];
   userId: string;
-  /** Separate, private opt-in. This component never changes the profile's manual HCP. */
+  /** Private opt-in; playing handicaps belong to each round, not this card. */
   enabled: boolean;
   onEnabledChange?: (enabled: boolean) => void | Promise<void>;
   saving?: boolean;
@@ -102,15 +102,15 @@ export function BackyardIndexCard({
     </>}
     {error && <p className={styles.error} role="alert">{error}</p>}
     <p className={styles.separation}>
-      HCP de juego y ventajas de apuestas se calculan por ronda y tee. Tu HCP manual y una futura vinculación
-      GHIN permanecen separados; este Índice no los modifica.
+      HCP de juego y ventajas de apuestas se calculan por ronda y tee. Una futura vinculación
+      GHIN será una fuente separada; conservará tu historial Backyard.
     </p>
     <ModalShell open={helpOpen} onClose={() => setHelpOpen(false)} labelledBy={helpTitleId} className={styles.helpDialog}>
       <span className={styles.eyebrow}>TU JUEGO · ÍNDICE</span>
       <h2 id={helpTitleId}>Cómo funciona el Índice Backyard</h2>
       <p>Backyard Index utiliza tus diferenciales de score. Conforme registras más rondas, utiliza una selección de tus mejores diferenciales. Con 20 rondas utiliza los mejores 8.</p>
       <p>Se necesitan 3 rondas elegibles para empezar. Sólo usa rondas completas con la evidencia necesaria; los números X / 20 y N muestran las rondas recientes y los diferenciales seleccionados.</p>
-      <p>Es una estimación local, no un Handicap Index oficial, GHIN ni tu HCP manual. Si no hay PCC publicado, PCC 0 se declara sólo para esta estimación local.</p>
+      <p>Es una estimación local, no un Handicap Index oficial, GHIN ni tu HCP de juego. Si no hay PCC publicado, PCC 0 se declara sólo para esta estimación local.</p>
     </ModalShell>
   </section>;
 }

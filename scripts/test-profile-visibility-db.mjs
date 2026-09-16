@@ -1,0 +1,66 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { PGlite } from "@electric-sql/pglite";
+
+// Actual local PostgreSQL/RLS/transaction exercise, never a remote database.
+const db = new PGlite();
+const owner = "11111111-1111-4111-8111-111111111111";
+const stranger = "22222222-2222-4222-8222-222222222222";
+try {
+  await db.exec(`
+    create role anon; create role authenticated;
+    create schema auth; create schema private;
+    create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub', true),'')::uuid$$;
+    create table public.profiles(id uuid primary key, profile_visibility text default 'private' constraint profiles_profile_visibility_check check(profile_visibility in ('private','friends')), email text, country text, social_privacy text default 'PRIVATE');
+    create table public.social_profiles(user_id uuid primary key, username text, display_name text, avatar_url text, privacy text default 'PRIVATE' constraint social_profiles_privacy_check check(privacy in ('PRIVATE','FRIENDS')), updated_at timestamptz default now());
+    create table public.blocked_connections(owner_id uuid, blocked_user_id uuid);
+    create function private.account_subject_active(uuid) returns boolean language sql stable as $$select true$$;
+    alter table public.profiles enable row level security;
+    alter table public.social_profiles enable row level security;
+    alter table public.blocked_connections enable row level security;
+    create policy blocked_self on public.blocked_connections for select to authenticated using(owner_id=(select auth.uid()));
+    create policy owner_profiles on public.profiles for all to authenticated using (id=(select auth.uid())) with check (id=(select auth.uid()));
+    create policy owner_social on public.social_profiles for all to authenticated using (user_id=(select auth.uid())) with check(user_id=(select auth.uid()));
+    create policy account_subject_visible on public.social_profiles as restrictive for select to authenticated using(private.account_subject_active(user_id));
+    grant usage on schema public,auth,private to authenticated;
+    grant select,update on public.profiles,public.social_profiles to authenticated;
+    grant select on public.blocked_connections to authenticated;
+    insert into public.profiles values ('${owner}','private','secret@example.test','MX','PRIVATE'),('${stranger}','friends','other@example.test','US','FRIENDS');
+    insert into public.social_profiles(user_id,username,display_name) values ('${owner}','said','Said'),('${stranger}','pedro','Pedro');
+  `);
+  const source = readFileSync("supabase/migrations/202609100001_phase2_social_groups_memberships.sql", "utf8");
+  const originalSearch = source.slice(source.indexOf("create or replace function public.search_social_profiles_v2"), source.indexOf("alter table public.social_profiles enable row level security;"));
+  await db.exec(originalSearch.replace("and profile.user_id <>", "and private.account_subject_active(profile.user_id) and profile.user_id <>"));
+  const migration = readFileSync("supabase/migrations/20260916084954_profile_visibility_public_friends.sql", "utf8");
+  await db.exec(migration); await db.exec(migration);
+  assert.equal((await db.query("select profile_visibility from profiles where id=$1", [owner])).rows[0].profile_visibility, "private");
+  await db.exec(`set role authenticated; set request.jwt.claim.sub='${owner}';`);
+  assert.equal((await db.query("select set_my_profile_visibility('public') as value")).rows[0].value, "public");
+  assert.equal((await db.query("select profile_visibility,social_privacy from profiles where id=$1", [owner])).rows[0].social_privacy, "PRIVATE", "does not publish pre-existing rounds/activity");
+  assert.equal((await db.query("select privacy from social_profiles where user_id=$1", [owner])).rows[0].privacy, "PUBLIC");
+  await assert.rejects(db.query("select set_my_profile_visibility('private')"), /invalid_profile_audience/);
+  await db.exec(`set request.jwt.claim.sub='${stranger}';`);
+  assert.equal((await db.query("select * from profiles where id=$1", [owner])).rows.length, 0, "account/email/location remains owner-only");
+  assert.equal((await db.query("select * from social_profiles where user_id=$1", [owner])).rows.length, 0, "full social row never becomes a public API");
+  const card = (await db.query("select * from search_social_profiles_v2('said')")).rows[0];
+  assert.deepEqual(Object.keys(card).sort(), ["avatar_url", "display_name", "user_id", "username"]);
+  await db.exec(`reset role; insert into blocked_connections values ('${owner}','${stranger}'); set role authenticated;`);
+  assert.equal((await db.query("select * from blocked_connections")).rows.length, 0, "viewer cannot read other account's block row");
+  assert.equal((await db.query("select * from social_profiles where user_id=$1", [owner])).rows.length, 0);
+  assert.equal((await db.query("select * from search_social_profiles_v2('said')")).rows.length, 0);
+  await db.exec(`reset role; delete from blocked_connections; insert into blocked_connections values ('${stranger}','${owner}'); set role authenticated;`);
+  assert.equal((await db.query("select * from search_social_profiles_v2('said')")).rows.length, 0, "reverse block also suppresses discovery");
+  await db.exec(`set request.jwt.claim.sub='${owner}';`);
+  await db.query("select set_my_profile_visibility('friends')");
+  await db.exec(`set request.jwt.claim.sub='${stranger}';`);
+  assert.equal((await db.query("select * from social_profiles where user_id=$1", [owner])).rows.length, 0);
+  await db.exec(`reset role;
+    create function fail_social_write() returns trigger language plpgsql as $$begin raise exception 'qa_failure'; end$$;
+    create trigger qa_fail before update on social_profiles for each row execute function fail_social_write();
+    set role authenticated; set request.jwt.claim.sub='${owner}';`);
+  await assert.rejects(db.query("select set_my_profile_visibility('public')"), /qa_failure/);
+  assert.equal((await db.query("select profile_visibility from profiles where id=$1", [owner])).rows[0].profile_visibility, "friends", "both writes roll back atomically");
+  await db.exec("reset role; set role anon;");
+  await assert.rejects(db.query("select set_my_profile_visibility('public')"), /permission denied/);
+  console.log("PASS: public/friends persistence, legacy protection, owner-only account data, safe public projection, blocked users, transactional rollback, anonymous denial. Local PGlite only.");
+} finally { await db.close(); }

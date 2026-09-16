@@ -71,10 +71,11 @@ test("active round remains inside the approved Home and routes both visible cont
   assert.match(source, /partialToPar/);
 });
 
-test("header actions expose Profile, notifications and Settings without Home duplicates", () => {
+test("header keeps Profile and notifications, with settings only inside Perfil", () => {
   assert.match(source, /aria-label="Abrir mi perfil"/);
   assert.match(source, /aria-label="Abrir notificaciones"/);
-  assert.match(source, /aria-label="Abrir Configuración"/);
+  assert.doesNotMatch(source, /onOpenSettings|Abrir Configuración|name="settings"/);
+  assert.doesNotMatch(moreHub, /onOpenSettings|Configuración adicional|icon: "settings"/);
   assert.match(source, /ProfileAvatarMedia/);
 });
 

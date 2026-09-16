@@ -6,6 +6,8 @@ export type BackyardIndexPreference = {
   version: 1;
   userId: string;
   enabled: boolean;
+  /** Stable source choice; no generic manual profile Index. GHIN remains unlinked. */
+  handicapSource?: "BACKYARD" | "GHIN" | null;
   localPccZeroDeclaredAt: string | null;
   updatedAt: string;
 };
@@ -22,7 +24,9 @@ export function parseIndexPreference(value: unknown, userId: string): BackyardIn
   const item = value as Record<string, unknown>;
   if (item.version !== 1 || item.userId !== userId || typeof item.enabled !== "boolean" || !instant(item.updatedAt)
     || !(item.localPccZeroDeclaredAt === null || instant(item.localPccZeroDeclaredAt))) return null;
-  return { version: 1, userId, enabled: item.enabled, updatedAt: item.updatedAt, localPccZeroDeclaredAt: item.localPccZeroDeclaredAt };
+  if (item.handicapSource !== undefined && item.handicapSource !== null && item.handicapSource !== "BACKYARD" && item.handicapSource !== "GHIN") return null;
+  return { version: 1, userId, enabled: item.enabled, updatedAt: item.updatedAt, localPccZeroDeclaredAt: item.localPccZeroDeclaredAt,
+    ...(item.handicapSource !== undefined ? { handicapSource: item.handicapSource as "BACKYARD" | "GHIN" | null } : {}) };
 }
 
 export function readIndexPreference(storage: StorageLike, userId: string): IndexPreferenceCache | null {

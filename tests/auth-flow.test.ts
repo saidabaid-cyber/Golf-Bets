@@ -254,3 +254,11 @@ test("pantalla OTP tiene captura, regreso y separación explícita de invitado",
   assert.match(ui, /Mantener sesión iniciada/);
   assert.match(ui, /setAuthSessionPersistence\(rememberSession\)/);
 });
+
+test("iniciar sesión por email nunca crea una identidad nueva; alta deja dedup al proveedor y mapping autenticado", async () => {
+  const { auth, calls } = authMock();
+  await sendEmailOtp(auth, "existing@example.com", "http://localhost:3000/auth/callback", "login");
+  await sendEmailOtp(auth, "new@example.com", "http://localhost:3000/auth/callback", "create");
+  assert.equal((calls[0].input as { options: { shouldCreateUser: boolean } }).options.shouldCreateUser, false);
+  assert.equal((calls[1].input as { options: { shouldCreateUser: boolean } }).options.shouldCreateUser, true);
+});

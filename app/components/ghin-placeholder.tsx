@@ -11,7 +11,7 @@ export function GhinPlaceholder() {
     </button>
     <ModalShell open={open} onClose={() => setOpen(false)} labelledBy="ghin-placeholder-title">
       <h2 id="ghin-placeholder-title">Integración GHIN oficial pendiente</h2>
-      <p>The Backyard conservará tu HCP manual. La vinculación se habilitará únicamente mediante un proveedor autorizado, sin scraping ni solicitud de credenciales no oficiales.</p>
+      <p>Tu historial Backyard se conservará al vincular GHIN. La vinculación se habilitará únicamente mediante un proveedor autorizado, sin scraping ni solicitud de credenciales no oficiales.</p>
       <div className="dialogActions"><button type="button" className="primary" onClick={() => setOpen(false)}>Entendido</button></div>
     </ModalShell>
   </>;

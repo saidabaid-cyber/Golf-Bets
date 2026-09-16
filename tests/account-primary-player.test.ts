@@ -24,10 +24,9 @@ test("la cuenta autenticada crea un jugador principal estable y el invitado no c
     id: accountPrimaryPlayerId(profile.userId),
     accountUserId: profile.userId,
     name: "Said Abaid",
-    handicap: 7.4,
-    handicapIndex: 7.4,
+    handicap: null,
+    handicapIndex: null,
     handicapSource: "profile_index",
-    handicapIndexSource: "BACKYARD_MANUAL",
   });
   assert.equal(accountPrimaryRoundPlayer({ ...profile, userId: "guest", displayName: "" }), null);
 });
@@ -51,7 +50,7 @@ test("el jugador principal adopta una plantilla local única y no se duplica al 
     id: "legacy",
     accountUserId: profile.userId,
     name: "Said Abaid",
-    handicap: 7.4,
+    handicap: null,
     uses: 4,
     updatedAt: "created",
   });

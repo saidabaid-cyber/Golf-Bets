@@ -278,6 +278,6 @@ test("tarjeta requiere opt-in, nombra NO OFICIAL y mantiene HCP/ GHIN separados"
   assert.match(card, /LOCAL · NO OFICIAL/);
   assert.match(card, /NO ELEGIBLE/);
   assert.match(card, /HCP de juego y ventajas de apuestas se calculan por ronda y tee/);
-  assert.match(card, /GHIN permanecen separados/);
+  assert.match(card, /GHIN será una fuente separada/);
   assert.doesNotMatch(card, /defaultHandicap\s*=/);
 });

@@ -30,7 +30,6 @@ export type HomeDashboardProps = {
   onAiRound: () => void;
   onNewRound: () => void;
   onOpenProfile: () => void;
-  onOpenSettings: () => void;
   onOpenNotifications: () => void;
   onOpenHistory: () => void;
   onOpenBalances: () => void;
@@ -39,12 +38,11 @@ export type HomeDashboardProps = {
   onOpenRules: () => void;
 };
 
-type IconName = "bell" | "settings" | "stats" | "history" | "rules" | "balance" | "groups" | "chevron";
+type IconName = "bell" | "stats" | "history" | "rules" | "balance" | "groups" | "chevron";
 
 function Icon({ name }: { name: IconName }) {
   const paths: Record<IconName, string[]> = {
     bell: ["M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9", "M10 21h4"],
-    settings: ["M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7", "M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.86 2.86-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21H9.5v-.08A1.7 1.7 0 0 0 8 19.4a1.7 1.7 0 0 0-1.88.34l-.06.06-2.86-2.86.06-.06A1.7 1.7 0 0 0 3.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H2V9.5h.08A1.7 1.7 0 0 0 3.6 8a1.7 1.7 0 0 0-.34-1.88l-.06-.06L6.06 3.2l.06.06A1.7 1.7 0 0 0 8 3.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V2h4.1v.08A1.7 1.7 0 0 0 15 3.6a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.86 2.86-.06.06A1.7 1.7 0 0 0 19.4 8c.12.4.33.75.6 1 .3.28.69.42 1.1.4h.1v4.1h-.08a1.7 1.7 0 0 0-1.72 1.5"],
     stats: ["M4 20h16", "M7 16v-5M12 16V4M17 16V8", "M5 8h4M10 6h4M15 10h4"],
     history: ["M3 12a9 9 0 1 0 3-6.7L3 8", "M3 3v5h5", "M12 7v5l3 2"],
     rules: ["M6 3h12v18H6z", "M9 7h6M9 11h6M9 15h4", "M15 18h.01"],
@@ -103,7 +101,7 @@ function QuickCard({ icon, title, copy, onClick }: { icon: "stats" | "history" |
 /** Pixel-matched post-onboarding Home. Existing callbacks remain the only navigation contract. */
 export function HomeDashboard({
   displayName, avatarUrl, activeRound, insights, groupCount,
-  onContinueRound, onAiRound, onNewRound, onOpenProfile, onOpenSettings, onOpenNotifications,
+  onContinueRound, onAiRound, onNewRound, onOpenProfile, onOpenNotifications,
   onOpenHistory, onOpenBalances, onOpenStats, onOpenGroups, onOpenRules,
 }: HomeDashboardProps) {
   const resolvedDisplayName = displayName.trim() || "Golfista";
@@ -134,7 +132,6 @@ export function HomeDashboard({
         </button>
         <div className={styles.headerActions}>
           <button type="button" className={styles.notificationButton} onClick={onOpenNotifications} aria-label="Abrir notificaciones"><Icon name="bell" /><span /></button>
-          <button type="button" onClick={onOpenSettings} aria-label="Abrir Configuración"><Icon name="settings" /></button>
         </div>
       </header>
 

@@ -94,6 +94,7 @@ import { canResumeActiveRound, normalizeRoundResumeContext, persistRoundResumeCo
 import { captureCompletedRoundIndex } from "../lib/backyard-index-auto-capture";
 import { readIndexPreference } from "../lib/backyard-index-preferences";
 import { useBackyardIndexPreference } from "./components/use-backyard-index-preference";
+import { selectedHandicapIndex } from "../lib/handicap-source";
 import { HomeDashboard, type ActiveRoundSummary } from "./components/home-dashboard";
 import { PlayHub } from "./components/play-hub";
 import { MoreHub } from "./components/more-hub";
@@ -473,6 +474,7 @@ function GolfBetsApp() {
   const [roundResumeContext, setRoundResumeContext] = useState<RoundResumeContext | null>(null);
   const [expenses, setExpenses] = useState<Expense>(emptyExpenses);
   const [history, setHistory] = useState<RoundSnapshot[]>([]);
+  const accountIndex = useMemo(() => selectedHandicapIndex(indexControl.preference, history, identity.userId), [indexControl.preference, history, identity.userId]);
   const [statisticsBoundary, setStatisticsBoundary] = useState<{ userId: string; resetAt: string | null }>({ userId: "", resetAt: null });
   const statisticsResetAt = statisticsBoundary.userId === identity.userId ? statisticsBoundary.resetAt : null;
   const [statisticsAuthority, setStatisticsAuthority] = useState<{ userId: string; state: "loading" | "ready" | "unavailable"; error?: string }>({ userId: "", state: "loading" });
@@ -965,9 +967,9 @@ function GolfBetsApp() {
       defaultHandicap: identity.defaultHandicap,
     };
     const updatedAt = new Date().toISOString();
-    setFrequentPlayers((current) => syncAccountPrimaryFrequentPlayer(current, profile, updatedAt));
+    setFrequentPlayers((current) => syncAccountPrimaryFrequentPlayer(current, profile, updatedAt, accountIndex));
     setPlayers((current) => syncLinkedRoundPlayerName(current, profile));
-  }, [hydrated, identity.mode, identity.userId, identity.displayName, identity.email, identity.avatarUrl, identity.defaultHandicap]);
+  }, [hydrated, identity.mode, identity.userId, identity.displayName, identity.email, identity.avatarUrl, identity.defaultHandicap, accountIndex]);
 
   const applyCloudBundle = useCallback((data: CloudDataBundle, local: CloudDataBundle) => {
     // Cloud responses can arrive after a local-first finalization. Reconcile
@@ -1485,7 +1487,11 @@ function GolfBetsApp() {
       return;
     }
     const id = accountUserId ? accountPrimaryPlayerId(accountUserId) : makeId();
-    const p: Player = { id, name, handicap, ...(accountUserId ? { accountUserId, handicapIndex: handicap, handicapSource: "profile_index", handicapIndexSource: "BACKYARD_MANUAL" } : { handicapSource: "manual" }) };
+    const p: Player = accountUserId === identity.userId && identity.mode === "authenticated"
+      ? accountPrimaryRoundPlayer(identity, accountIndex)!
+      // A legacy saved peer HCP has no verified Index source. Keep it as a
+      // round-declared playing HCP; never promote it to a third profile Index.
+      : { id, name, handicap, handicapSource: "manual", ...(accountUserId ? { accountUserId } : {}) };
     setPlayers((ps) => [...ps, p]);
     if (!players.length) setOwnerId(id);
     setBets((b) => ({
@@ -2118,7 +2124,7 @@ function GolfBetsApp() {
   }
 
   function resetRound(nextFeedback = "") {
-    const principal = identity.mode === "authenticated" ? accountPrimaryRoundPlayer(identity) : null;
+    const principal = identity.mode === "authenticated" ? accountPrimaryRoundPlayer(identity, accountIndex) : null;
     const nextPlayers = principal ? [principal] : [];
     setEditingRound(false); setRoundClosed(false); setRoundReviewPending(false); setShowRoundFinishedNotice(false); setFeedback("");
     setRoundTemplateOrigin(null);
@@ -2729,7 +2735,7 @@ function GolfBetsApp() {
   }
 
   function beginCreateFrequentGroup() {
-    const principal = identity.mode === "authenticated" ? accountPrimaryRoundPlayer(identity) : null;
+    const principal = identity.mode === "authenticated" ? accountPrimaryRoundPlayer(identity, accountIndex) : null;
     const draft = withStableGroupMemberIds({
       id: makeId(),
       name: "",
@@ -3443,7 +3449,6 @@ function GolfBetsApp() {
       onAiRound={requestAiRound}
       onNewRound={requestNewRound}
       onOpenProfile={() => { setProfileFocus("profile"); setTab("profile"); }}
-      onOpenSettings={() => setTab("account")}
       onOpenNotifications={() => { setSocialInitialView("notifications"); setTab("social"); }}
       onOpenHistory={() => setTab("history")}
       onOpenBalances={() => setTab("balances")}
@@ -3463,7 +3468,6 @@ function GolfBetsApp() {
       onOpenGps={() => activeRoundSummary ? continueActiveRound() : setTab("courseLibrary")}
       onOpenRules={openRulesForRound}
       onOpenHelp={openRulesForRound}
-      onOpenSettings={() => setTab("account")}
     />}
 
     {tab === "play" && <PlayHub

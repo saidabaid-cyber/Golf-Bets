@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { LEGAL_DOCUMENT_VERSIONS, legalConfig } from "../../lib/legal-config";
-import { accountDeletionMarkerKey, BETTING_DATA_CONSENT_TYPE, emptyBackyardProfileDetails, profileHandicapInput, profileHandicapLabel, validateProfileAvatarUrl, validateProfileDraft, type BackyardProfile, type BackyardProfileDetails } from "../../lib/account-state";
+import { accountDeletionMarkerKey, BETTING_DATA_CONSENT_TYPE, emptyBackyardProfileDetails, validateProfileAvatarUrl, validateProfileDraft, type BackyardProfile, type BackyardProfileDetails } from "../../lib/account-state";
 import { accountDeletionPrewriteRejected, accountDeletionRequestBody, accountDeletionResponseConfirmed, clearAccountDeletionIntent, prepareAccountDeletionIntent, settleAccountDeletionClient, type AccountDeletionIntent } from "../../lib/account-deletion-client";
 import { ballFitDefaultsFromProfile } from "../../lib/ball-fitting";
 import type { GolfInsights } from "../../lib/golf-insights";
@@ -15,7 +15,8 @@ import { ProfileLocationPicker } from "./profile-location-picker";
 import { normalizeProfileLocation, validateProfileLocation } from "../../lib/profile-geography";
 import { ProfileAvatarMedia } from "./profile-avatar-media";
 import { ProfileClubPicker } from "./profile-club-picker";
-import { GhinPlaceholder } from "./ghin-placeholder";
+import { ProfileVisibilitySettings } from "./profile-visibility-settings";
+import { HandicapSourceSelector } from "./handicap-source-selector";
 import { AccountDataDialog, type AccountDataPolicy } from "./profile-data-dialogs";
 
 type AccountPanelProps = {
@@ -131,7 +132,6 @@ export function AccountPanel({ view, focusSection = "profile", highContrast, onH
   const { identity, updateProfile, logout, finishAccountDeletion, openAccess, acceptances, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, requestCloudLink, lastCloudSync, cloudIssues, retryCloudSync } = useBackyardAccount();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(identity.displayName);
-  const [handicap, setHandicap] = useState(profileHandicapInput(identity.defaultHandicap));
   const [avatarUrl, setAvatarUrl] = useState(identity.avatarUrl);
   const [profileDetails, setProfileDetails] = useState<ProfileDetailsDraft>(() => profileDetailsDraft(identity));
   const [message, setMessage] = useState("");
@@ -158,7 +158,6 @@ export function AccountPanel({ view, focusSection = "profile", highContrast, onH
   useEffect(() => {
     if (!editing) {
       setName(identity.displayName);
-      setHandicap(profileHandicapInput(identity.defaultHandicap));
       setAvatarUrl(identity.avatarUrl);
       setProfileDetails(profileDetailsDraft(identity));
     }
@@ -186,7 +185,7 @@ export function AccountPanel({ view, focusSection = "profile", highContrast, onH
     if (avatarBusy || savingProfile) return;
     const locationValidation = validateProfileLocation(profileDetails);
     if (!locationValidation.valid) { setMessageKind("error"); setMessage(locationValidation.errors.country || locationValidation.errors.state || "Revisa tu país y región."); return; }
-    const validation = validateProfileDraft(name, handicap);
+    const validation = validateProfileDraft(name, "");
     if (!validation.ok) { setMessageKind("error"); setMessage(validation.message); return; }
     const avatarValidation = validateProfileAvatarUrl(avatarUrl);
     if (!avatarValidation.ok) { setMessageKind("error"); setMessage(avatarValidation.message); return; }
@@ -315,7 +314,7 @@ export function AccountPanel({ view, focusSection = "profile", highContrast, onH
       <div className="sectionTitle"><div className="profileIdentity"><div className="accountAvatar"><ProfileAvatarMedia value={identity.avatarUrl} fallback={(identity.displayName.trim()[0] || "J").toUpperCase()} alt={`Avatar de ${identity.displayName}`} /></div><div><h2>{identity.displayName}</h2><p>{identity.email || "Perfil local en este dispositivo"}</p></div></div><button className="secondary" onClick={() => setEditing((value) => !value)}>{editing ? "Cancelar" : "Editar perfil"}</button></div>
       {editing && <div className="profileForm profileFormExpanded">
         <label>Nombre visible<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Tu nombre" /></label>
-        <label>HCP index (opcional)<input type="text" inputMode="text" value={handicap} onChange={(event) => setHandicap(event.target.value)} placeholder="Ej. 8.4 o +1.2" /><GhinPlaceholder /></label>
+        <HandicapSourceSelector userId={identity.userId} authenticated={identity.mode === "authenticated"} />
         <div className="profileAvatarEditor">
           <label>Foto o avatar</label>
           <ProfileImagePicker value={avatarUrl} onChange={setAvatarUrl} onBusyChange={setAvatarBusy} accessToken={identity.accessToken} userId={identity.userId} />
@@ -326,7 +325,7 @@ export function AccountPanel({ view, focusSection = "profile", highContrast, onH
         <label>Usuario<input value={profileDetails.username} onChange={(event) => setProfileDetails((current) => ({ ...current, username: event.target.value }))} placeholder="sin @" autoComplete="username" /></label>
         <ProfileClubPicker value={profileDetails.homeClub} clubId={profileDetails.homeClubId} onChange={({ name: homeClub, id: homeClubId }) => setProfileDetails((current) => ({ ...current, homeClub, homeClubId }))} />
         <label>Ciudad<input value={profileDetails.city} onChange={(event) => setProfileDetails((current) => ({ ...current, city: event.target.value }))} autoComplete="address-level2" /></label>
-        <ProfileLocationPicker value={profileDetails} onChange={(location) => setProfileDetails((current) => ({ ...current, ...location }))} />
+        <ProfileLocationPicker value={profileDetails} onChange={(location) => { setProfileDetails((current) => ({ ...current, ...location })); setMessage(""); }} />
         <label>Tee preferido<input value={profileDetails.preferredTee} onChange={(event) => setProfileDetails((current) => ({ ...current, preferredTee: event.target.value }))} /></label>
         <label>Mano<select value={profileDetails.handedness} onChange={(event) => setProfileDetails((current) => ({ ...current, handedness: event.target.value as ProfileDetailsDraft["handedness"] }))}><option value="">Sin indicar</option><option value="right">Derecha</option><option value="left">Izquierda</option><option value="ambidextrous">Ambas</option></select></label>
         <div className="profileGameHeading"><div className="eyebrow">MI JUEGO</div><b>Preferencias golfísticas opcionales</b><p className="hint">HCP y mano usan los mismos datos de tu perfil; no necesitas repetirlos. Completa sólo lo que conozcas.</p></div>
@@ -338,14 +337,13 @@ export function AccountPanel({ view, focusSection = "profile", highContrast, onH
         <label>Greens habituales<select value={profileDetails.greenSpeed} onChange={(event) => setProfileDetails((current) => ({ ...current, greenSpeed: event.target.value as ProfileDetailsDraft["greenSpeed"] }))}><option value="">Sin indicar</option><option value="SLOW">Lentos</option><option value="MID">Medios</option><option value="FAST">Rápidos</option><option value="VARIABLE">Varía</option></select></label>
         <label>Prioridad de juego<select value={profileDetails.gamePriority} onChange={(event) => setProfileDetails((current) => ({ ...current, gamePriority: event.target.value as ProfileDetailsDraft["gamePriority"] }))}><option value="">Sin indicar</option><option value="DISTANCE">Distancia</option><option value="CONTROL">Control</option><option value="ACCURACY">Precisión</option><option value="FEEL">Sensación</option><option value="SHORT_GAME">Juego corto</option></select></label>
         <label>Importancia del precio<select value={profileDetails.priceImportance} onChange={(event) => setProfileDetails((current) => ({ ...current, priceImportance: event.target.value as ProfileDetailsDraft["priceImportance"] }))}><option value="">Sin indicar</option><option value="LOW">Poca</option><option value="MID">Media</option><option value="HIGH">Alta</option></select></label>
-        <label>Privacidad<select value={profileDetails.profileVisibility} onChange={(event) => setProfileDetails((current) => ({ ...current, profileVisibility: event.target.value as ProfileDetailsDraft["profileVisibility"] }))}><option value="private">Privado</option><option value="friends">Amigos</option></select></label>
+        <ProfileVisibilitySettings userId={identity.userId} accessToken={identity.mode === "authenticated" ? identity.accessToken : undefined} authenticated={identity.mode === "authenticated"} />
         <label className="profileBioField">Bio<textarea value={profileDetails.bio} onChange={(event) => setProfileDetails((current) => ({ ...current, bio: event.target.value }))} maxLength={280} rows={3} /></label>
         <p className="hint profileLocalDetail">Los datos ampliados se conservan en este dispositivo. Su réplica multi-dispositivo se habilitará sólo con el esquema aislado de Beta.</p>
         <button className="primary profileSaveButton" disabled={savingProfile || avatarBusy} onClick={saveProfile}>{savingProfile ? "Guardando…" : avatarBusy ? "Preparando imagen…" : "Guardar perfil"}</button>
       </div>}
       {!editing && <div className="profileMetaList">
-        <div className="profileMeta"><span>HCP index</span><b>{profileHandicapLabel(identity.defaultHandicap)}</b></div>
-        <div className="profileGhinAction"><GhinPlaceholder /></div>
+        <HandicapSourceSelector userId={identity.userId} authenticated={identity.mode === "authenticated"} />
         {identity.username && <div className="profileMeta"><span>Usuario</span><b>@{identity.username}</b></div>}
         {identity.homeClub && <div className="profileMeta"><span>Club</span><b>{identity.homeClub}</b></div>}
         {(identity.city || identity.state || identity.country) && <div className="profileMeta"><span>Ubicación</span><b>{[identity.city, identity.state, identity.country].filter(Boolean).join(", ")}</b></div>}
@@ -361,13 +359,13 @@ export function AccountPanel({ view, focusSection = "profile", highContrast, onH
         {identity.priceImportance && <div className="profileMeta"><span>Importancia del precio</span><b>{PRICE_IMPORTANCE_LABELS[identity.priceImportance]}</b></div>}
         {identity.golfProfileUpdatedAt && <div className="profileMeta"><span>Mi juego actualizado</span><b>{new Date(identity.golfProfileUpdatedAt).toLocaleDateString("es-MX")}</b></div>}
         {identity.bio && <p className="profileBio">{identity.bio}</p>}
-        <p className="hint">The Backyard guarda el valor que capturas; no emite ni certifica un handicap oficial.</p>
+        <p className="hint">Backyard Index se calcula con rondas elegibles; no emite ni certifica un handicap oficial.</p>
       </div>}
     </section>}
 
     {view === "profile" && identity.mode === "authenticated" && message && <div className={messageKind === "error" ? "notice bad" : "notice"} role={messageKind === "error" ? "alert" : "status"}>{message}</div>}
 
-    {view === "profile" && identity.mode === "authenticated" && <div ref={equipmentSectionRef} id="equipment-bag"><EquipmentProfilePanel userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={identity.defaultHandicap} ballFitDefaults={ballFitDefaultsFromProfile(identity)} /></div>}
+    {view === "profile" && identity.mode === "authenticated" && <div ref={equipmentSectionRef} id="equipment-bag"><EquipmentProfilePanel userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={null} ballFitDefaults={ballFitDefaultsFromProfile(identity)} /></div>}
 
     {view === "profile" && golfInsights && <section className="card betaProfileGolfCard">
       <div className="sectionTitle"><div><h2>Mi golf</h2><p>Resumen calculado sólo con tu histórico disponible.</p></div>{onOpenStats && <button type="button" className="textButton" onClick={onOpenStats}>Ver Stats</button>}</div>

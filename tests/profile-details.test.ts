@@ -94,7 +94,7 @@ test("perfil offline autenticado recupera detalles locales y no inventa los ause
 test("datos ampliados inválidos vuelven a defaults seguros", () => {
   const restored = normalizeBackyardProfileCache({
     handedness: "upside-down",
-    profileVisibility: "public",
+    profileVisibility: "invalid-audience",
     bio: 99,
     typicalScore: 12,
     driverDistanceYards: 2_000,

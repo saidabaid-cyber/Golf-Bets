@@ -44,7 +44,7 @@ test("Perfil separa el golf de la configuración sensible de Cuenta", () => {
   assert.match(account, /view === "account"/);
   assert.match(account, /Gestionar consentimientos/);
   assert.match(account, /managingConsents[\s\S]*LegalConsentManager/);
-  assert.match(account, /<GhinPlaceholder \/>/);
+  assert.match(account, /HandicapSourceChoices/);
   assert.match(ghin, /VINCULAR GHIN/);
   assert.match(ghin, /PRÓXIMAMENTE/);
 });

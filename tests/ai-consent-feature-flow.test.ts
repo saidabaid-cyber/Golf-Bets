@@ -6,6 +6,7 @@ import ts from "typescript";
 import * as privacy from "../lib/backyard-ai/privacy";
 import * as security from "../lib/backyard-ai/server/http-security";
 import * as photoRequest from "../lib/backyard-ai/server/scorecard-request";
+import * as handicapSource from "../lib/handicap-source";
 
 type Node = { type: unknown; props: Record<string, unknown> };
 type Handler = (...args: unknown[]) => unknown;
@@ -61,6 +62,7 @@ function featureHarness(file: string, options: { active?: boolean; remoteError?:
     } }) },
     "account-state": { profileHandicapInput: () => "0" },
     "profile-geography": { normalizeProfileLocation: () => ({}) },
+    "handicap-source": handicapSource,
     "./ai-round-review": { AiRoundReview: "Review" },
     "./scorecard-correction": { ScorecardCorrection: "Correction" },
     "./backyard-ai.module.css": { default: {} },
@@ -268,6 +270,7 @@ test("feature privacy navigation opens the compact AI settings directly and cons
   const h = featureHarness("app/components/profile-account-panel.tsx");
   h.props.view = "account";
   h.props.openAiPrivacySettings = true;
+  h.props.indexControl = { preference: null, ready: true, saving: false, error: "" };
   let consumed = 0;
   h.props.onAiPrivacyOpened = () => { consumed++; h.props.openAiPrivacySettings = false; };
   let tree = h.render("ProfileAccountPanel");

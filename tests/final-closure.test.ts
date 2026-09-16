@@ -65,7 +65,7 @@ test("perfil completado conserva nombre y HCP Index null o decimal al recargar",
   assert.deepEqual(normalizeBackyardProfileCache({ displayName: "Said", defaultHandicap: 8.4, avatarUrl: "" }, fallback), {
     ...fallback, ...emptyBackyardProfileDetails(), displayName: "Said", defaultHandicap: 8.4,
   });
-  assert.match(read("app/components/account-provider.tsx"), /setProfileSetupRequired\(!cloudProfile\.onboarding_completed_at\)/);
+  assert.match(read("app/components/account-provider.tsx"), /setProfileSetupRequired\(!accountEntry.existingAccount && !cloudProfile\.onboarding_completed_at\)/);
 });
 
 test("pantalla de perfil usa labels, estado vacío y validación compartida", () => {
@@ -74,13 +74,12 @@ test("pantalla de perfil usa labels, estado vacío y validación compartida", ()
   assert.match(provider, /<label htmlFor="profile-setup-given">Nombre<input id="profile-setup-given"/);
   assert.match(provider, /<label htmlFor="profile-setup-family">Apellidos<input id="profile-setup-family"/);
   assert.match(provider, /placeholder="Tu nombre"/);
-  assert.match(provider, /<label htmlFor="profile-setup-hcp">HCP index<\/label>/);
-  assert.match(provider, /HCP manual \(máximo 36\)/);
-  assert.match(provider, /Vincular GHIN estará disponible sólo mediante una integración oficial/);
+  assert.match(provider, /<HandicapSourceSelector userId=\{identity.userId\}/);
+  assert.doesNotMatch(provider, /profile-setup-hcp|HCP manual \(máximo 36\)/);
   assert.match(provider, /disabled=\{busy\}/);
   assert.doesNotMatch(provider, /disabled=\{busy \|\| !name\.trim\(\) \|\| handicap === ""\}/);
-  assert.match(account, /<span>HCP index<\/span>/);
-  assert.match(account, /validateProfileDraft\(name, handicap\)/);
+  assert.match(account, /<HandicapSourceSelector userId=\{identity.userId\}/);
+  assert.match(account, /validateProfileDraft\(name, ""\)/);
 });
 
 test("alta social separa username automático de nombre visible y exige perfil incompleto", () => {

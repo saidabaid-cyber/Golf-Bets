@@ -60,7 +60,7 @@ test("Home aprobada concentra manual y AI en un selector sin romper sus contrato
   assert.match(home, /onOpenGroups/);
   assert.match(home, /onOpenHistory/);
   assert.match(home, /onOpenStats/);
-  assert.match(home, /onOpenSettings/);
+  assert.doesNotMatch(home, /onOpenSettings/);
   assert.match(home, /onOpenNotifications/);
   assert.equal((home.match(/onAiRound/g) || []).length, 3, "prop, destructuring y una única acción AI dentro del selector esperadas");
   assert.doesNotMatch(home, /estadísticas vacías|primera ronda/i);

@@ -9,7 +9,7 @@ const SECTIONS: Array<{ title: string; rows: Array<{ label: string; capability: 
   { title: "AI", rows: [{ label: "Configurar ronda con AI", capability: "AI_ROUND_SETUP" }, { label: "Card AI", capability: "CARD_AI" }, { label: "Análisis personalizado", capability: "PERSONAL_AI" }] },
   { title: "Equipment", rows: [{ label: "Mi Bolsa", capability: "MY_BAG" }, { label: "Ball Fit", capability: "BALL_FIT" }, { label: "Launch Monitor AI", capability: "LAUNCH_MONITOR_AI" }] },
   { title: "Groups / Social", rows: [{ label: "Grupos", capability: "GROUPS" }, { label: "Funciones avanzadas de grupo", capability: "ADVANCED_GROUPS" }, { label: "Scores de amigos", capability: "FRIENDS_SCORES" }] },
-  { title: "Handicap", rows: [{ label: "HCP manual", capability: "MANUAL_INDEX" }, { label: "Course Handicap", capability: "COURSE_HANDICAP" }, { label: "Integraciones autorizadas futuras", capability: "AUTHORIZED_HANDICAP_INTEGRATIONS" }] },
+  { title: "Handicap", rows: [{ label: "HCP de juego para invitados", capability: "MANUAL_INDEX" }, { label: "Course Handicap", capability: "COURSE_HANDICAP" }, { label: "Integraciones autorizadas futuras", capability: "AUTHORIZED_HANDICAP_INTEGRATIONS" }] },
 ];
 
 function cell(capability: MembershipCapability, plan: "FREE" | "PRO") {
@@ -34,4 +34,3 @@ export function MembershipBenefits() {
     <p className="hint">Registro técnico: {MEMBERSHIP_CAPABILITIES.length} capacidades versionadas. Las integraciones externas se habilitan sólo tras autorización real.</p>
   </main>;
 }
-

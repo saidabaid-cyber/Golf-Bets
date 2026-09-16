@@ -39,14 +39,14 @@ export type Player = {
   /** Profile/provider Index kept separate from the Playing Handicap. */
   handicapIndex?: number | null;
   handicapSource?: "profile_index" | "manual";
-  handicapIndexSource?: "BACKYARD_MANUAL" | "BACKYARD_WHS_FUTURE" | "GHIN_OFFICIAL_FUTURE";
+  handicapIndexSource?: "BACKYARD_MANUAL" | "BACKYARD_INDEX" | "BACKYARD_WHS_FUTURE" | "GHIN_OFFICIAL_FUTURE";
   /** Immutable inputs and result used to calculate this round's Playing Handicap. */
   courseHandicapSnapshot?: PlayerCourseHandicapSnapshot;
 };
 
 export type PlayerCourseHandicapSnapshot = {
   index: number;
-  indexSource: "BACKYARD_MANUAL" | "BACKYARD_WHS_FUTURE" | "GHIN_OFFICIAL_FUTURE";
+  indexSource: "BACKYARD_MANUAL" | "BACKYARD_INDEX" | "BACKYARD_WHS_FUTURE" | "GHIN_OFFICIAL_FUTURE";
   teeId: string;
   teeName: string;
   slope: number;

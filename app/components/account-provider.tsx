@@ -31,7 +31,6 @@ import {
   normalizeBackyardProfileCache,
   normalizeOtp,
   parseLegalAcceptances,
-  profileHandicapInput,
   readOfflineAuthenticatedProfile,
   safeProfileAvatarValue,
   usernameFromEmail,
@@ -58,7 +57,8 @@ import { ProfileLocationPicker } from "./profile-location-picker";
 import { normalizeProfileLocation, validateProfileLocation } from "../../lib/profile-geography";
 import { parseStoredProfileLocation, readProfileLocationMetadata, PROFILE_LOCATION_METADATA_KEY } from "../../lib/profile-location-sync";
 import { syncExistingSocialProfileAvatar } from "../../lib/profile-avatar-sync";
-import { GhinPlaceholder } from "./ghin-placeholder";
+import { HandicapSourceSelector } from "./handicap-source-selector";
+import { consumeAccountEntryIntent, readAccountEntry, readCurrentAccountEntry, rememberAccountEntryIntent, type AccountEntry } from "../../lib/account-entry";
 import { BettingConsentDialog } from "./betting-consent-dialog";
 import { persistBettingDataConsent } from "../../lib/betting-consent";
 import { acknowledgePendingProfileWrite, cloudProfileFields, cloudProfileRevisionIsNewer, cloudProfileRevisionKey, createProfileWriteCoordinator, queuePendingProfileWrite, readPendingProfileWrite, recordCloudProfileRevision, retimePendingProfileWrite, type CloudProfileFields, type ProfileWriteCoordinator } from "../../lib/profile-sync";
@@ -218,6 +218,7 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
       return;
     }
     setAuthSessionPersistence(rememberSession);
+    rememberAccountEntryIntent(sessionStorage, intent);
     setBusy(true); setMessage("");
     try {
       await startSocialOAuth(supabase.auth, provider, authCallbackUrl(window.location.origin));
@@ -239,7 +240,8 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
     setRetrySeconds(otpRetrySeconds(sendGate.current.nextSendAt));
     setBusy(true); setMessage("");
     try {
-      await sendEmailOtp(supabase.auth, email, authCallbackUrl(window.location.origin));
+      rememberAccountEntryIntent(sessionStorage, intent);
+      await sendEmailOtp(supabase.auth, email, authCallbackUrl(window.location.origin), intent);
       setCodeSent(true);
       setMessage("Código enviado. Revisa tu correo.");
     } catch (error) {
@@ -352,14 +354,13 @@ function ProfileSetupScreen({ identity, onSave, onBack }: {
   const [handedness, setHandedness] = useState<"right" | "left">(identity.handedness === "left" ? "left" : "right");
   const [avatarUrl, setAvatarUrl] = useState(identity.avatarUrl || "");
   const [avatarBusy, setAvatarBusy] = useState(false);
-  const [handicap, setHandicap] = useState(profileHandicapInput(identity.defaultHandicap));
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (avatarBusy) return;
     const displayName = [givenName.trim(), familyName.trim()].filter(Boolean).join(" ");
-    const validation = validateProfileDraft(displayName, handicap);
+    const validation = validateProfileDraft(displayName, "");
     if (!validation.ok) { setMessage(validation.message); return; }
     const avatarValidation = validateProfileAvatarUrl(avatarUrl);
     if (!avatarValidation.ok) { setMessage(avatarValidation.message); return; }
@@ -389,12 +390,9 @@ function ProfileSetupScreen({ identity, onSave, onBack }: {
       <div className="grid2"><label htmlFor="profile-setup-given">Nombre<input id="profile-setup-given" autoComplete="given-name" enterKeyHint="next" value={givenName} onChange={(event) => setGivenName(event.target.value)} placeholder="Tu nombre" /></label><label htmlFor="profile-setup-family">Apellidos<input id="profile-setup-family" autoComplete="family-name" enterKeyHint="next" value={familyName} onChange={(event) => setFamilyName(event.target.value)} placeholder="Tus apellidos" /></label></div>
       <label>Foto / avatar opcional</label>
       <ProfileImagePicker value={avatarUrl} onChange={setAvatarUrl} onBusyChange={setAvatarBusy} accessToken={identity.accessToken} userId={identity.userId} />
-      <ProfileLocationPicker value={location} onChange={setLocation} />
+      <ProfileLocationPicker value={location} onChange={(next) => { setLocation(next); setMessage(""); }} />
       <label htmlFor="profile-setup-city">Ciudad opcional<input id="profile-setup-city" autoComplete="address-level2" value={city} onChange={(event) => setCity(event.target.value)} placeholder="Puebla" /></label>
-      <label htmlFor="profile-setup-hcp">HCP index</label>
-      <input id="profile-setup-hcp" type="text" inputMode="text" enterKeyHint="done" autoComplete="off" value={handicap} onChange={(event) => setHandicap(event.target.value)} placeholder="Ej. 8.4 o +1.2" aria-describedby="profile-setup-hcp-help" />
-      <GhinPlaceholder />
-      <small id="profile-setup-hcp-help" className="profileFieldHelp">Ingresa tu HCP manual (máximo 36) o déjalo vacío si no tienes. Vincular GHIN estará disponible sólo mediante una integración oficial.</small>
+      <HandicapSourceSelector userId={identity.userId} authenticated={identity.mode === "authenticated"} />
       <fieldset className="handednessChoice"><legend>Mano dominante</legend><label><input type="radio" name="handedness" checked={handedness === "right"} onChange={() => setHandedness("right")} />Derecha</label><label><input type="radio" name="handedness" checked={handedness === "left"} onChange={() => setHandedness("left")} />Izquierda</label></fieldset>
       {message && <div className="accessMessage" role="alert">{message}</div>}
       <button type="submit" className="primary big" disabled={busy || avatarBusy}>{busy ? "Guardando…" : avatarBusy ? "Preparando imagen…" : "Guardar y continuar"}</button>
@@ -420,6 +418,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const [equipmentOnboardingRequired, setEquipmentOnboardingRequired] = useState(false);
   const [betaOnboardingRequired, setBetaOnboardingRequired] = useState(false);
   const [profileChecked, setProfileChecked] = useState(false);
+  const [accountEntry, setAccountEntry] = useState<AccountEntry | null>(null);
+  const [accountEntryError, setAccountEntryError] = useState("");
+  const [accountEntryRetry, setAccountEntryRetry] = useState(0);
+  const [existingAccountNotice, setExistingAccountNotice] = useState(false);
   const [pendingDeletionSession, setPendingDeletionSession] = useState<Session | null>(null);
   const [pendingDeletionOwner, setPendingDeletionOwner] = useState("");
   const [pendingDeletionAccountActive, setPendingDeletionAccountActive] = useState(false);
@@ -553,6 +555,9 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     if (activeUserId.current) profileWriteCoordinators.current.delete(activeUserId.current);
     switchAccountWorkspace(localStorage, session.user.id);
     activeUserId.current = session.user.id;
+    setAccountEntry(null);
+    setAccountEntryError("");
+    setExistingAccountNotice(false);
     setLastCloudSync(localStorage.getItem(`backyard-last-sync-v1:${session.user.id}`));
     setCloudIssuesByDomain({});
     const profile = profileFromUser(session.user);
@@ -699,6 +704,28 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const authenticatedAccessToken = identity?.mode === "authenticated" ? identity.accessToken : null;
 
   useEffect(() => {
+    if (!authenticatedUserId || !authenticatedAccessToken || accountEntry?.userId === authenticatedUserId) return;
+    const controller = new AbortController();
+    void readCurrentAccountEntry(authenticatedAccessToken, authenticatedUserId, () => activeUserId.current, controller.signal).then((mapping) => {
+      if (!mapping) return;
+      setAccountEntry(mapping);
+      setAccountEntryError("");
+      const intent = consumeAccountEntryIntent(sessionStorage);
+      if (mapping.existingAccount) {
+        // Durable server mapping wins over old/incomplete local setup markers.
+        // New consent versions still pass through AccountConsentCheckpoint.
+        setProfileSetupRequired(false);
+        setBetaOnboardingRequired(false);
+        setEquipmentOnboardingRequired(false);
+        setExistingAccountNotice(intent === "create");
+      }
+    }).catch(error => {
+      if (!controller.signal.aborted && activeUserId.current === authenticatedUserId) setAccountEntryError(error instanceof Error ? error.message : "No pudimos verificar tu cuenta.");
+    });
+    return () => controller.abort();
+  }, [authenticatedUserId, authenticatedAccessToken, accountEntry, accountEntryRetry]);
+
+  useEffect(() => {
     if (!authenticatedUserId) return;
     const revisionKey = cloudProfileRevisionKey(authenticatedUserId);
     const reloadProfileFromAnotherTab = (event: StorageEvent) => {
@@ -710,6 +737,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!authenticatedUserId || !authenticatedAccessToken) return;
+    if (accountEntry?.userId !== authenticatedUserId) return;
     const supabase = getSupabaseBrowser();
     if (!supabase) return;
     const fallback = cloudProfileFallbackRef.current;
@@ -791,7 +819,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         });
         if (!keepLocalProfile) {
           if (completeResponseAt) recordCloudProfileRevision(localStorage, authenticatedUserId, completeResponseAt);
-          setProfileSetupRequired(!cloudProfile.onboarding_completed_at);
+          setProfileSetupRequired(!accountEntry.existingAccount && !cloudProfile.onboarding_completed_at);
           if (cloudProfile.onboarding_completed_at) localStorage.setItem(`backyard-profile-ready-v1:${authenticatedUserId}`, "true");
         }
       } else {
@@ -815,7 +843,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       if (mounted && activeUserId.current === authenticatedUserId) { setCloudConsentChecked(true); setProfileChecked(true); }
     });
     return () => { mounted = false; };
-  }, [authenticatedUserId, authenticatedAccessToken, accountReloadRevision, issueWithMessage, profileWriterFor, setCloudIssue]);
+  }, [authenticatedUserId, authenticatedAccessToken, accountEntry, accountReloadRevision, issueWithMessage, profileWriterFor, setCloudIssue]);
 
   const currentConsent = identity ? hasCurrentLegalConsent(acceptances, identity.userId) : false;
   const bettingConsentGranted = identity ? hasCurrentBettingDataConsent(acceptances, identity.userId) : false;
@@ -1034,6 +1062,19 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
 
   async function saveInitialProfile(profile: BackyardProfileUpdate): Promise<"local" | "cloud"> {
     if (identity?.mode === "authenticated") {
+      // Another device may have completed registration while this form was
+      // open. Never use the stale creation form to overwrite that profile.
+      const mapping = await readAccountEntry(identity.accessToken || "", identity.userId);
+      if (activeUserId.current !== identity.userId) throw new Error("La sesión cambió.");
+      if (mapping.existingAccount) {
+        setAccountEntry(mapping);
+        setProfileSetupRequired(false);
+        setBetaOnboardingRequired(false);
+        setEquipmentOnboardingRequired(false);
+        setExistingAccountNotice(true);
+        setAccountReloadRevision(value => value + 1);
+        return "cloud";
+      }
       const existingEquipment = loadEquipmentProfile(localStorage, identity.userId);
       const emptyEquipment = existingEquipment.ok && existingEquipment.profile === null
         ? createEmptyEquipmentProfile(identity.userId)
@@ -1468,6 +1509,15 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     setAccessRequested(false);
     setCloudIssuesByDomain({}); setCloudStatus("local"); setCloudLinked(false); setLastCloudSync(null); setShowMigration(false);
   }} sessionError={accountCloudError} onAuthenticated={(session) => { activateSession(session); setAccessRequested(false); }} />;
+  if (identity.mode === "authenticated" && identity.accessToken && accountEntry?.userId !== identity.userId) return <main className="accessScreen"><section className="accessCard">
+    <BrandLockup compact /><h1>Verificando tu cuenta…</h1>
+    {accountEntryError && <><p role="alert">{accountEntryError}</p><button className="primary big" onClick={() => { setAccountEntryError(""); setAccountEntryRetry(value => value + 1); }}>Reintentar</button><button className="textButton" onClick={logout}>Volver al acceso</button></>}
+  </section></main>;
+  if (identity.mode === "authenticated" && existingAccountNotice) return <main className="accessScreen"><section className="accessCard">
+    <BrandLockup compact /><h1>YA TIENES UNA CUENTA</h1><p>Esta cuenta ya está registrada en The Backyard.</p>
+    <button className="primary big" onClick={() => setExistingAccountNotice(false)}>CONTINUAR A MI CUENTA</button>
+    <button className="textButton" onClick={logout}>Usar otra cuenta</button>
+  </section></main>;
   if (identity.mode === "authenticated" && !currentConsent && !cloudConsentChecked) return <main className="accessScreen"><div className="accessLoading">Verificando tus consentimientos…</div></main>;
   if (identity.mode === "guest" && !currentConsent) {
     if (migrationDialog && hasCurrentLegalConsent(acceptances, "guest")) return <main className="accessScreen">{migrationDialog}</main>;
@@ -1479,7 +1529,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     <BetaOnboardingFlow profile={identity} accessToken={identity.accessToken} onUpdateProfile={updateProfile} bettingConsentGranted={bettingConsentGranted} requestBettingConsent={requestBettingConsent} onComplete={finishBetaOnboarding} />
     {bettingConsentDialog}
   </AccountContext.Provider>;
-  if (identity.mode === "authenticated" && equipmentOnboardingRequired) return <EquipmentOnboarding userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={identity.defaultHandicap} ballFitDefaults={ballFitDefaultsFromProfile(identity)} onComplete={finishEquipmentOnboarding} onBack={finishEquipmentOnboarding} onSaveAndExit={finishEquipmentOnboarding} />;
+  if (identity.mode === "authenticated" && equipmentOnboardingRequired) return <EquipmentOnboarding userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={null} ballFitDefaults={ballFitDefaultsFromProfile(identity)} onComplete={finishEquipmentOnboarding} onBack={finishEquipmentOnboarding} onSaveAndExit={finishEquipmentOnboarding} />;
 
   const app = <AccountContext.Provider value={context!}>
     {blockingCloudIssues.map((issue) => <div className="notice bad" role="alert" key={issue.domain}>{issue.message}<button onClick={() => setAccessRequested(true)}>Volver a iniciar sesión</button></div>)}

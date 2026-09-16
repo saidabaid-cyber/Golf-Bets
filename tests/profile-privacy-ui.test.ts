@@ -20,7 +20,8 @@ test("Perfil presenta resumen compacto y mueve los inputs a Editar perfil", () =
   assert.match(profile, /Nombre\(s\)/);
   assert.match(profile, /Apellidos/);
   assert.match(profile, /Username/);
-  assert.match(profile, /HCP \/ Index/);
+  assert.match(profile, /HandicapSourceChoices/);
+  assert.doesNotMatch(profile, /value=\{handicap\}/);
   assert.match(css, /\.profileMobileStack\{display:grid/);
 });
 

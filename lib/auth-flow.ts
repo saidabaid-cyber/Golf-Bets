@@ -42,8 +42,8 @@ export async function requireCloudWrites(writes: ArrayLike<PromiseLike<{ error: 
   }
 }
 
-export async function sendEmailOtp(auth: AuthFlowClient, email: string, redirectTo: string) {
-  const result = await auth.signInWithOtp({ email: email.trim(), options: { shouldCreateUser: true, emailRedirectTo: redirectTo } });
+export async function sendEmailOtp(auth: AuthFlowClient, email: string, redirectTo: string, intent: "create" | "login" = "create") {
+  const result = await auth.signInWithOtp({ email: email.trim(), options: { shouldCreateUser: intent === "create", emailRedirectTo: redirectTo } });
   throwIfError(result.error);
 }
 

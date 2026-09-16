@@ -35,7 +35,7 @@ import { BrandLockup } from "./brand-lockup";
 import { EquipmentOnboarding } from "./equipment-onboarding";
 import { GroupBetTemplateEditor } from "./group-bet-template-editor";
 import { ProfileImagePicker } from "./profile-image-picker";
-import { GhinPlaceholder } from "./ghin-placeholder";
+import { HandicapSourceSelector } from "./handicap-source-selector";
 import styles from "./beta-onboarding-flow.module.css";
 
 const IMPROVEMENT_LABELS: Record<GolfImprovementGoal, string> = {
@@ -85,7 +85,7 @@ function ownerMember(profile: BackyardProfile): FrequentGroupMember {
     memberId: `member-${profile.userId}`,
     kind: "account",
     name: profile.displayName || "Jugador",
-    handicap: profile.defaultHandicap,
+    handicap: null,
     accountUserId: profile.userId,
   };
 }
@@ -283,16 +283,15 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, bett
   if (progress.step === "equipment") return <EquipmentOnboarding
     userId={profile.userId}
     accessToken={accessToken}
-    defaultHandicap={profile.defaultHandicap}
+    defaultHandicap={null}
     ballFitDefaults={ballFitDefaultsFromProfile(profile)}
     onComplete={() => advance("improvements")}
     onBack={() => goTo("ghin")}
     onSaveAndExit={onComplete}
   />;
 
-  if (progress.step === "ghin") return <Shell progress={progress} {...navigationProps} eyebrow="HANDICAP" title="Configura tu HCP index" description="Puedes usar un valor manual, indicar que aún no tienes HCP o vincular GHIN cuando exista una integración oficial." actions={<button className="primary big" onClick={async () => { await onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: profile.defaultHandicap, ghinLinkStatus: "SKIPPED" }); advance("equipment", true); }}>Continuar</button>}>
-    <div className={styles.benefitList}><span>✓ Sincronizar tu índice</span><span>✓ Mantener el HCP actualizado</span><span>✓ Mejorar la precisión de estadísticas</span><span>✓ Preparar futuras funciones oficiales</span></div>
-    <div className={styles.goalList}><button type="button" className={styles.goalActive}>Ingresar HCP manual <span>{profile.defaultHandicap ?? "Sin capturar"}</span></button><GhinPlaceholder /><button type="button" className={styles.goal} onClick={async () => { await onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: null, ghinLinkStatus: "SKIPPED" }); advance("equipment", true); }}>No tengo HCP</button></div>
+  if (progress.step === "ghin") return <Shell progress={progress} {...navigationProps} eyebrow="HANDICAP / ÍNDICE" title="Elige tu fuente de índice" description="Puedes activar Backyard Index sin rondas previas. GHIN estará disponible mediante una integración oficial." actions={<button className="primary big" onClick={async () => { await onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: null, ghinLinkStatus: "SKIPPED" }); advance("equipment", true); }}>Continuar</button>}>
+    <HandicapSourceSelector userId={profile.userId} authenticated={Boolean(profile.userId && profile.userId !== "guest")} />
     <p className={styles.trust}>No usamos scraping, APIs privadas ni simulamos una conexión. La arquitectura ya acepta un HandicapProvider autorizado cuando esté disponible.</p>
   </Shell>;
 
@@ -307,7 +306,7 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, bett
     await onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: profile.defaultHandicap, primaryGoals: draft.primaryGoals, primaryGoal: draft.primaryGoals[0] || "", targetHandicap, golfProfileUpdatedAt: new Date().toISOString() }); advance("plan");
   }}>Continuar</button>}>
     <div className={styles.goalList}>{GOLF_PRIMARY_GOALS.map((goal) => { const active = draft.primaryGoals.includes(goal); return <button type="button" key={goal} className={active ? styles.goalActive : styles.goal} aria-pressed={active} onClick={() => setDraft((current) => current ? { ...current, primaryGoals: active ? current.primaryGoals.filter((item) => item !== goal) : [...current.primaryGoals, goal] } : current)}><span>{active ? "✓" : "+"}</span>{GOAL_LABELS[goal]}</button>; })}</div>
-    {draft.primaryGoals.includes("LOWER_HANDICAP") && <div className={styles.hcpGoal}><div><small>HCP ACTUAL</small><strong>{profile.defaultHandicap ?? "—"}</strong></div><label>HCP objetivo<input inputMode="decimal" value={draft.targetHandicap} onChange={(event) => setDraft((current) => current ? { ...current, targetHandicap: event.target.value } : current)} placeholder="Ej. 5.0" /></label></div>}
+    {draft.primaryGoals.includes("LOWER_HANDICAP") && <div className={styles.hcpGoal}><label>Objetivo personal de índice<input inputMode="decimal" value={draft.targetHandicap} onChange={(event) => setDraft((current) => current ? { ...current, targetHandicap: event.target.value } : current)} placeholder="Ej. 5.0" /></label><p className={styles.trust}>Es una meta, no tu índice actual.</p></div>}
     {message && <div className={styles.error} role="alert">{message}</div>}
   </Shell>;
 
@@ -339,7 +338,7 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, bett
   }
 
   if (progress.step === "handicaps") return <Shell progress={progress} {...navigationProps} eyebrow="HANDICAPS" title="Revisa los handicaps" description="Estos valores serán el HCP habitual del grupo. El máximo de captura es 36; el HCP de juego se calcula después con el tee de cada jugador." actions={<button className="primary big" onClick={() => { updateGroup({ template: initialTemplate(draft.group.members) }); advance("bets"); }}>Configurar apuestas</button>}>
-    <div className={styles.hcpList}>{draft.group.members.map((member, index) => <label key={member.memberId || index}><span><b>{member.name}</b><small>{member.kind === "account" ? "Perfil" : "Manual"}</small></span><input inputMode="decimal" value={member.handicap ?? ""} onChange={(event) => { const input = event.target.value; const handicap = input === "" ? null : Number(input); if (handicap !== null && (!Number.isFinite(handicap) || handicap < -15)) return; updateGroup({ members: draft.group.members.map((item, memberIndex) => memberIndex === index ? { ...item, handicap: clampBackyardHandicap(handicap) } : item) }); }} placeholder="HCP" /></label>)}</div>
+    <div className={styles.hcpList}>{draft.group.members.map((member, index) => <label key={member.memberId || index}><span><b>{member.name}</b><small>{member.kind === "account" ? "Índice de la cuenta" : "HCP de juego declarado · Guest"}</small></span>{member.kind === "account" ? <span>Se calcula por ronda y tee</span> : <input inputMode="decimal" value={member.handicap ?? ""} onChange={(event) => { const input = event.target.value; const handicap = input === "" ? null : Number(input); if (handicap !== null && (!Number.isFinite(handicap) || handicap < -15)) return; updateGroup({ members: draft.group.members.map((item, memberIndex) => memberIndex === index ? { ...item, handicap: clampBackyardHandicap(handicap) } : item) }); }} placeholder="HCP de juego" />}</label>)}</div>
   </Shell>;
 
   if (progress.step === "bets") return <Shell progress={progress} {...navigationProps} eyebrow="JUEGO HABITUAL" title="Configura las apuestas habituales" description="Estas son las modalidades reales que ya existen en The Backyard. Puedes activar, quitar y volver a editar sin perder el grupo." actions={<button className="primary big" onClick={() => advance("bet_details")}>{activeBetCount(template) ? "Configurar detalles" : "Continuar sin apuestas"}</button>}>

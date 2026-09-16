@@ -1,4 +1,4 @@
-export const SOCIAL_PRIVACY_LEVELS = ["PRIVATE", "FRIENDS"] as const;
+export const SOCIAL_PRIVACY_LEVELS = ["PRIVATE", "FRIENDS", "PUBLIC"] as const;
 export type SocialPrivacyLevel = (typeof SOCIAL_PRIVACY_LEVELS)[number];
 export const CONNECTION_STATES = ["PENDING", "ACCEPTED", "REJECTED", "BLOCKED", "CANCELLED"] as const;
 export type ConnectionState = (typeof CONNECTION_STATES)[number];
@@ -50,6 +50,7 @@ export function normalizeUsernameSearch(value: unknown) {
 
 export function socialProfileVisibleTo(profile: SocialProfile, viewerId: string, friendships: readonly Friendship[]) {
   if (profile.userId === viewerId) return true;
+  if (profile.privacy === "PUBLIC") return true;
   if (profile.privacy === "PRIVATE") return false;
   return friendships.some((friendship) => friendship.userIds.includes(profile.userId) && friendship.userIds.includes(viewerId));
 }

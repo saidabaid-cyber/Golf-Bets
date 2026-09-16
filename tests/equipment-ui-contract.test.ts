@@ -69,7 +69,8 @@ test("bola y Ball Fit exponen el flujo completo sin presentar una verdad oficial
   assert.match(wizard, /Sin dato verificado/);
   assert.match(wizard, /Comparar bolas recomendadas/);
   for (const row of ["Construcción", "Cubierta", "Compresión"]) assert.match(wizard, new RegExp(row));
-  assert.match(wizard, /optionalHandicap/);
+  assert.doesNotMatch(wizard, /optionalHandicap|HCP manual/);
+  assert.match(wizard, /Índice de tu cuenta/);
   assert.match(wizard, /BACKYARD_BALL_FIT_DISCLAIMER/);
   assert.match(fitting, /No es un fitting oficial/);
   assert.doesNotMatch(wizard, /fitting oficial de (Titleist|Callaway|Bridgestone)/i);
@@ -77,7 +78,7 @@ test("bola y Ball Fit exponen el flujo completo sin presentar una verdad oficial
 
 test("Ball Fit evalúa el catálogo completo en servidor y falla cerrado antes de rankear una página parcial", () => {
   assert.match(wizard, /fetch\("\/api\/ball-fitting"/);
-  assert.match(wizard, /createBallFitTransportInput\(input\)/);
+  assert.match(wizard, /createBallFitTransportInput\(\{ \.\.\.input, handicap: defaultHandicap \}\)/);
   assert.match(wizard, /JSON\.stringify\(\{ input: transportInput \}\)/);
   assert.doesNotMatch(wizard, /runBackyardBallFit\(catalog,/);
   assert.match(wizard, /normalizeBallFitApiSuccess/);
@@ -130,7 +131,7 @@ test("cerrar el Ball Fit no afirma guardar cuando localStorage falla", () => {
 });
 
 test("las doce señales rápidas y las prioridades ordenables están disponibles", () => {
-  for (const copy of ["Bola actual", "HCP manual", "Score típico", "Cuánto pegas", "Velocidad de swing", "Cómo prefieres sentir", "Trayectoria preferida", "Tus greens", "tiros de aproximación", "más control / spin", "Qué tanto importa el precio", "Color preferido"]) assert.match(wizard, new RegExp(copy, "i"));
+  for (const copy of ["Bola actual", "Índice de tu cuenta", "Score típico", "Cuánto pegas", "Velocidad de swing", "Cómo prefieres sentir", "Trayectoria preferida", "Tus greens", "tiros de aproximación", "más control / spin", "Qué tanto importa el precio", "Color preferido"]) assert.match(wizard, new RegExp(copy, "i"));
   for (const priority of ["Distancia con driver", "Menos spin con driver", "Mayor estabilidad / control", "Altura", "Control con hierros", "Poder detener la bola en green", "Spin de wedges", "Sensación alrededor del green", "Sensación con putter"]) assert.ok(wizard.includes(priority));
   assert.match(wizard, /movePriority/);
   assert.match(wizard, /Subir/);
