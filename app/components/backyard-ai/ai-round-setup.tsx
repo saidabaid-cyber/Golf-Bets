@@ -22,7 +22,7 @@ import type { RoundSetupDraft } from "../../../lib/backyard-ai/schemas/round-set
 import { frequentPersonalSuggestions, personalBetFromFrequentTemplate } from "../../../lib/personal-modes";
 import { createDictationSession, DICTATION_FALLBACK, speechRecognitionConstructor } from "../../../lib/speech-dictation";
 import type { FrequentPlayer, SavedPersonalRival } from "../../../lib/types";
-import { AiProcessingConsentPrompt } from "./ai-processing-consent";
+import { AiProcessingConsentPrompt, AiProcessingConsentRequired } from "./ai-processing-consent";
 import { AiRoundReview } from "./ai-round-review";
 import styles from "./backyard-ai.module.css";
 
@@ -53,6 +53,7 @@ export type AiRoundSetupProps = {
   onConfirm: (draft: RoundSetupDraft, plan: RoundSetupPlan) => void;
   onManualEdit: (draft: RoundSetupDraft) => void;
   onCancel: () => void;
+  onOpenPrivacy?: () => void;
   onPlanned?: (event: AiRoundSetupTelemetry) => void;
 };
 
@@ -72,7 +73,7 @@ function parsedHandicapInput(value: string) {
   return Number.isFinite(handicap) && handicap >= -15 ? Math.min(36, handicap) : null;
 }
 
-export function AiRoundSetup({ initialDraft, memoryContext, accessToken, requiresRemoteConsent, savedPersonalRivals = [], onConfirm, onManualEdit, onCancel, onPlanned }: AiRoundSetupProps) {
+export function AiRoundSetup({ initialDraft, memoryContext, accessToken, requiresRemoteConsent, savedPersonalRivals = [], onConfirm, onManualEdit, onCancel, onOpenPrivacy, onPlanned }: AiRoundSetupProps) {
   const [input, setInput] = useState("");
   const [draft, setDraft] = useState(initialDraft);
   const [plan, setPlan] = useState<RoundSetupPlan | null>(null);
@@ -84,6 +85,7 @@ export function AiRoundSetup({ initialDraft, memoryContext, accessToken, require
   const [dictationStatus, setDictationStatus] = useState("");
   const [dictationSupported, setDictationSupported] = useState(false);
   const [showProviderConsent, setShowProviderConsent] = useState(false);
+  const [accountConsentRequired, setAccountConsentRequired] = useState(false);
   const [pendingProviderInput, setPendingProviderInput] = useState("");
   const [localInterpreterOnly, setLocalInterpreterOnly] = useState(false);
   const [consentStorageWarning, setConsentStorageWarning] = useState("");
@@ -101,6 +103,7 @@ export function AiRoundSetup({ initialDraft, memoryContext, accessToken, require
   const dictationPrefix = useRef("");
   const mounted = useRef(true);
   const submissionGeneration = useRef(0);
+  const providerConsentCheckInFlight = useRef(false);
 
   useEffect(() => {
     mounted.current = true;
@@ -146,8 +149,38 @@ export function AiRoundSetup({ initialDraft, memoryContext, accessToken, require
     });
   }
 
-  function toggleDictation() {
+  async function toggleDictation() {
     if (listening) { recognitionRef.current?.stop(); return; }
+    if (busy || providerConsentCheckInFlight.current) return;
+    // Browser dictation can itself use a remote speech service. A revoked or
+    // missing account authorization must block capture, not merely the LLM call.
+    if (requiresRemoteConsent || accessToken) {
+      const ownerId = memoryContext.profile?.userId || initialDraft.ownerId;
+      if (!accessToken || !ownerId) {
+        setNotice("Recupera tu sesión antes de dictar. No se inició el micrófono.");
+        return;
+      }
+      providerConsentCheckInFlight.current = true;
+      setBusy(true);
+      try {
+        const authority = await resolveAuthoritativeAiProcessingConsent({
+          accessToken, storage: browserAiProcessingConsentStorage(), userId: ownerId,
+          scope: AI_PROVIDER_PROCESSING_CONSENT,
+        });
+        if (!mounted.current) return;
+        if (authority.discarded || !authority.active || authority.pendingLocalRevocation) {
+          setAccountConsentRequired(true);
+          return;
+        }
+        setAccountConsentRequired(false);
+      } catch {
+        if (mounted.current) setNotice("No pude verificar tu autorización. No se inició el micrófono; inténtalo de nuevo.");
+        return;
+      } finally {
+        providerConsentCheckInFlight.current = false;
+        if (mounted.current) setBusy(false);
+      }
+    }
     const Recognition = speechRecognitionConstructor(window as typeof window & Parameters<typeof speechRecognitionConstructor>[0]);
     if (!Recognition) { setDictationStatus(DICTATION_FALLBACK); return; }
     recognitionRef.current?.dispose();
@@ -165,13 +198,15 @@ export function AiRoundSetup({ initialDraft, memoryContext, accessToken, require
   async function submit(submittedInput?: string, providerConsentJustAccepted = false, useLocalInterpreter = false) {
     if (!mounted.current) return;
     const raw = (submittedInput ?? input).trim();
-    if (raw.length < 2 || busy) return;
+    if (raw.length < 2 || busy || providerConsentCheckInFlight.current) return;
     const processingConsentOwnerId = memoryContext.profile?.userId || initialDraft.ownerId;
     const remoteConsentUnavailable = requiresRemoteConsent && !accessToken;
+    setAccountConsentRequired(false);
     let allowProvider = providerConsentJustAccepted && !remoteConsentUnavailable;
     let consentInfrastructureNotice = "";
     if (!allowProvider && !remoteConsentUnavailable && !localInterpreterOnly && !useLocalInterpreter && processingConsentOwnerId && typeof window !== "undefined") {
       if (accessToken) {
+        providerConsentCheckInFlight.current = true;
         setBusy(true);
         setNotice("Verificando tu autorización de IA…");
         try {
@@ -195,6 +230,7 @@ export function AiRoundSetup({ initialDraft, memoryContext, accessToken, require
               : "El registro seguro de autorizaciones no está disponible. La instrucción no se envió y continuamos con el intérprete local seguro.";
           }
         } finally {
+          providerConsentCheckInFlight.current = false;
           setBusy(false);
           setNotice("");
         }
@@ -208,6 +244,10 @@ export function AiRoundSetup({ initialDraft, memoryContext, accessToken, require
     }
     if (!mounted.current) return;
     if (!allowProvider && !consentInfrastructureNotice && !remoteConsentUnavailable && !localInterpreterOnly && !useLocalInterpreter && processingConsentOwnerId) {
+      if (requiresRemoteConsent || accessToken) {
+        setAccountConsentRequired(true);
+        return;
+      }
       setPendingProviderInput(raw);
       setShowProviderConsent(true);
       return;
@@ -372,12 +412,13 @@ export function AiRoundSetup({ initialDraft, memoryContext, accessToken, require
       {!plan && <div className={styles.suggestions}>{EXAMPLES.map((example) => <button type="button" key={example} disabled={busy} onClick={() => changeInput(example)}>{example}</button>)}</div>}
       <div className={styles.composerActions}>
         <button type="button" className="primary big" disabled={busy || (usesHandicapForm ? !handicapAnswerReady : input.trim().length < 2)} onClick={() => void submit(usesHandicapForm ? handicapAnswer : undefined)}>{busy ? "Entendiendo…" : editing ? "Aplicar cambio" : question ? "Confirmar respuesta" : "Preparar mi ronda"}</button>
-        {!usesHandicapForm && <button type="button" className={styles.voiceButton} data-listening={listening} disabled={busy || (!dictationSupported && Boolean(dictationStatus))} onClick={toggleDictation}>{listening ? "■ Detener" : "🎙 Hablar"}</button>}
+        {!usesHandicapForm && <button type="button" className={styles.voiceButton} data-listening={listening} disabled={busy || (!dictationSupported && Boolean(dictationStatus))} onClick={() => void toggleDictation()}>{listening ? "■ Detener" : "🎙 Hablar"}</button>}
       </div>
       <label className={styles.consent}><input type="checkbox" checked={personalMemoryEnabled} disabled={busy} onChange={(event) => changePersonalMemory(event.target.checked)} /><span>Recordar en mi espacio privado las preferencias que confirme para facilitar rondas futuras. Esto no habilita training global.</span></label>
       {dictationStatus && <p className={styles.contextNote} role="status">{dictationStatus}</p>}
       {notice && <p className={styles.contextNote} role="status">{notice}</p>}
-      <p className={styles.privacyNote}>La autorización para procesar instrucciones con IA se solicita una sola vez y puede revocarse en Perfil → Privacidad / IA. Nunca se envían tu histórico ni tus memorias personales; esos datos se resuelven en el dispositivo.</p>
+      {accountConsentRequired && <AiProcessingConsentRequired scope={AI_PROVIDER_PROCESSING_CONSENT} onOpenPrivacy={onOpenPrivacy} />}
+      <p className={styles.privacyNote}>Tus autorizaciones se guardan durante el registro y se administran en Perfil → Cuenta y privacidad → Privacidad / IA. Nunca se envían tu histórico ni tus memorias personales; esos datos se resuelven en el dispositivo.</p>
     </section>}
 
     {plan && <>
@@ -390,7 +431,7 @@ export function AiRoundSetup({ initialDraft, memoryContext, accessToken, require
 
     {!plan && <button type="button" className="secondary" disabled={busy} onClick={() => onManualEdit(draft)}>Configurar manualmente</button>}
     <button type="button" className="textButton" onClick={cancel}>Cancelar</button>
-    {showProviderConsent && (memoryContext.profile?.userId || initialDraft.ownerId) && <AiProcessingConsentPrompt
+    {showProviderConsent && !requiresRemoteConsent && !accessToken && (memoryContext.profile?.userId || initialDraft.ownerId) && <AiProcessingConsentPrompt
       userId={memoryContext.profile?.userId || initialDraft.ownerId}
       accessToken={accessToken}
       requiresRemoteConsent={requiresRemoteConsent}

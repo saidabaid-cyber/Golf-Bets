@@ -114,15 +114,18 @@ function OptionGrid<T extends string>({ values, labels, selected, onSelect }: {
 type BallFitWizardProps = {
   userId: string;
   accessToken?: string | null;
+  /** Both current entry points are account-only, even during token refresh. */
+  requiresRemoteConsent?: boolean;
   defaultHandicap: number | null;
   profileDefaults?: BallFitProfileDefaults;
   currentBall: PlayerBall | null;
   catalog: readonly GolfBallCatalog[];
   onCancel: () => void;
+  onOpenPrivacy?: () => void;
   onComplete: (result: BallFitResult, input: BallFitInput) => boolean | void;
 };
 
-export function BallFitWizard({ userId, accessToken, defaultHandicap, profileDefaults, currentBall, catalog, onCancel, onComplete }: BallFitWizardProps) {
+export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = true, defaultHandicap, profileDefaults, currentBall, catalog, onCancel, onComplete, onOpenPrivacy }: BallFitWizardProps) {
   const [input, setInput] = useState<BallFitInput>(() => defaultInput(userId, defaultHandicap, currentBall?.catalogBallId || null, profileDefaults));
   const [step, setStep] = useState(0);
   const [hydrated, setHydrated] = useState(false);
@@ -298,7 +301,7 @@ export function BallFitWizard({ userId, accessToken, defaultHandicap, profileDef
       <h3>Driver</h3><p>La velocidad es opcional. Nunca inferimos una compresión no publicada a partir de este dato.</p>
       <label>¿Cuánto pegas aproximadamente con driver? (yardas, opcional)<input type="number" inputMode="numeric" min={50} max={500} value={input.driverDistanceYards ?? ""} onChange={(event) => patchInput({ driverDistanceYards: optionalNumber(event.target.value, 50, 500) })} placeholder="Ej. 245" /></label>
       <h4>Velocidad de swing con driver</h4><OptionGrid values={SWING_SPEED_BANDS} labels={SPEED_LABELS} selected={input.swingSpeedBand} onSelect={(value) => patchInput({ swingSpeedBand: value })} />
-      <LaunchMonitorCapture userId={userId} accessToken={accessToken} requiresRemoteConsent={Boolean(accessToken)} value={input.launchMonitorSession} onChange={(launchMonitorSession) => patchInput({ launchMonitorSession })} />
+      <LaunchMonitorCapture userId={userId} accessToken={accessToken} requiresRemoteConsent={requiresRemoteConsent} value={input.launchMonitorSession} onChange={(launchMonitorSession) => patchInput({ launchMonitorSession })} onOpenPrivacy={onOpenPrivacy} />
     </section>}
 
     {!result && step === 2 && <section className={styles.questionBlock}>

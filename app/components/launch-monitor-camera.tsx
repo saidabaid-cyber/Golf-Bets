@@ -6,10 +6,10 @@ import { requestBackyardAi } from "../../lib/backyard-ai/client-api";
 import { resolveAuthoritativeAiProcessingConsent } from "../../lib/backyard-ai/consent-client";
 import { prepareLaunchMonitorPhotos, MAX_LAUNCH_MONITOR_PHOTOS } from "../../lib/backyard-ai/launch-monitor/client";
 import { browserAiProcessingConsentStorage, hasActiveAiProcessingConsent } from "../../lib/backyard-ai/processing-consent";
-import { AI_IMAGE_PROCESSING_CONSENT, backyardAiProviderConsent } from "../../lib/backyard-ai/privacy";
+import { AI_LAUNCH_MONITOR_PROCESSING_CONSENT, backyardAiProviderConsent } from "../../lib/backyard-ai/privacy";
 import { LAUNCH_MONITOR_VISION_CONFIDENCE, launchMonitorVisionShotToDraft, normalizeLaunchMonitorVisionExtraction, type LaunchMonitorVisionExtraction } from "../../lib/backyard-ai/schemas/launch-monitor";
 import { LAUNCH_MONITOR_CLUBS, LAUNCH_MONITOR_METRICS, type LaunchMonitorClub, type LaunchMonitorMetric, type LaunchMonitorShot } from "../../lib/golf-equipment";
-import { AiProcessingConsentPrompt } from "./backyard-ai/ai-processing-consent";
+import { AiProcessingConsentPrompt, AiProcessingConsentRequired } from "./backyard-ai/ai-processing-consent";
 import styles from "./equipment.module.css";
 
 type LocalPhoto = { id: string; file: File; previewUrl: string };
@@ -41,22 +41,28 @@ function errorMessage(error: unknown) {
   return "No pude leer las pantallas. Revisa las fotos e intenta de nuevo.";
 }
 
-export function LaunchMonitorCamera({ userId, accessToken, requiresRemoteConsent, onConfirm }: {
+export function LaunchMonitorCamera({ userId, accessToken, requiresRemoteConsent, onConfirm, onOpenPrivacy }: {
   userId: string;
   accessToken?: string | null;
   requiresRemoteConsent: boolean;
   onConfirm: (source: string | null, shots: LaunchMonitorShot[]) => void;
+  onOpenPrivacy?: () => void;
 }) {
   const [photos, setPhotos] = useState<LocalPhoto[]>([]);
   const [extraction, setExtraction] = useState<LaunchMonitorVisionExtraction | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [showConsent, setShowConsent] = useState(false);
+  const [accountConsentRequired, setAccountConsentRequired] = useState(false);
   const urls = useRef(new Set<string>());
+  const inFlight = useRef(false);
+  const mounted = useRef(true);
 
   useEffect(() => {
     const allocated = urls.current;
+    mounted.current = true;
     return () => {
+      mounted.current = false;
       allocated.forEach((url) => URL.revokeObjectURL(url));
       allocated.clear();
     };
@@ -95,33 +101,42 @@ export function LaunchMonitorCamera({ userId, accessToken, requiresRemoteConsent
 
   function hasLocalConsent() {
     try {
-      return hasActiveAiProcessingConsent(browserAiProcessingConsentStorage(), userId, AI_IMAGE_PROCESSING_CONSENT);
+      return hasActiveAiProcessingConsent(browserAiProcessingConsentStorage(), userId, AI_LAUNCH_MONITOR_PROCESSING_CONSENT);
     } catch {
       return false;
     }
   }
 
   async function analyze() {
+    if (inFlight.current) return;
     if (photos.length < 2 || busy) {
       setError("Selecciona de 2 a 4 fotos de la pantalla del launch monitor.");
       return;
     }
-    let allowed = hasLocalConsent();
+    setAccountConsentRequired(false);
+    let allowed = false;
     if (accessToken) {
+      inFlight.current = true;
       setBusy(true);
       try {
-        const result = await resolveAuthoritativeAiProcessingConsent({ accessToken, storage: browserAiProcessingConsentStorage(), userId, scope: AI_IMAGE_PROCESSING_CONSENT });
+        const result = await resolveAuthoritativeAiProcessingConsent({ accessToken, storage: browserAiProcessingConsentStorage(), userId, scope: AI_LAUNCH_MONITOR_PROCESSING_CONSENT });
         allowed = !result.discarded && result.active && !result.pendingLocalRevocation;
       } catch {
-        setError("No pude verificar tu autorización de procesamiento de imágenes.");
+        if (mounted.current) setError("No pude verificar tu autorización de lectura de datos de práctica. No se envió ninguna foto.");
+        return;
       } finally {
-        setBusy(false);
+        inFlight.current = false;
+        if (mounted.current) setBusy(false);
       }
     } else if (requiresRemoteConsent) {
       setError("Recupera tu sesión antes de enviar imágenes.");
       return;
+    } else {
+      allowed = hasLocalConsent();
     }
+    if (!mounted.current) return;
     if (!allowed) {
+      if (requiresRemoteConsent || accessToken) { setAccountConsentRequired(true); return; }
       setShowConsent(true);
       return;
     }
@@ -129,22 +144,26 @@ export function LaunchMonitorCamera({ userId, accessToken, requiresRemoteConsent
   }
 
   async function analyzeWithConsent() {
+    if (!mounted.current || inFlight.current) return;
+    inFlight.current = true;
     setShowConsent(false);
     setBusy(true);
     setError("");
     try {
       const prepared = await prepareLaunchMonitorPhotos(photos);
+      if (!mounted.current) return;
       const response = await requestBackyardAi<{ extraction?: unknown }>("/api/backyard-ai/launch-monitor", {
         photos: prepared,
-        consent: backyardAiProviderConsent(AI_IMAGE_PROCESSING_CONSENT),
+        consent: backyardAiProviderConsent(AI_LAUNCH_MONITOR_PROCESSING_CONSENT),
       }, 60_000, accessToken);
       const normalized = normalizeLaunchMonitorVisionExtraction(response.extraction, prepared.map((photo) => photo.id));
       if (!normalized || !normalized.shots.length) throw new Error("No encontré mediciones legibles en estas fotos.");
-      setExtraction(normalized);
+      if (mounted.current) setExtraction(normalized);
     } catch (caught) {
-      setError(errorMessage(caught));
+      if (mounted.current) setError(errorMessage(caught));
     } finally {
-      setBusy(false);
+      inFlight.current = false;
+      if (mounted.current) setBusy(false);
     }
   }
 
@@ -188,7 +207,8 @@ export function LaunchMonitorCamera({ userId, accessToken, requiresRemoteConsent
     {photos.length > 0 && <div className={styles.launchPhotoGrid}>{photos.map((photo) => <figure key={photo.id}><img src={photo.previewUrl} alt="Pantalla de launch monitor seleccionada" /><button type="button" className="secondary" onClick={() => removePhoto(photo.id)} disabled={busy}>Quitar</button></figure>)}</div>}
     <button type="button" className="primary" onClick={() => void analyze()} disabled={busy || photos.length < 2}>{busy ? "Leyendo mediciones…" : "Analizar fotos"}</button>
     {error && <p className={styles.formMessage} role="alert">{error}</p>}
-    {showConsent && <AiProcessingConsentPrompt userId={userId} accessToken={accessToken} requiresRemoteConsent={requiresRemoteConsent} scope={AI_IMAGE_PROCESSING_CONSENT} onAccepted={() => void analyzeWithConsent()} onCancel={() => setShowConsent(false)} />}
+    {accountConsentRequired && <AiProcessingConsentRequired scope={AI_LAUNCH_MONITOR_PROCESSING_CONSENT} onOpenPrivacy={onOpenPrivacy} />}
+    {showConsent && !requiresRemoteConsent && !accessToken && <AiProcessingConsentPrompt userId={userId} accessToken={accessToken} requiresRemoteConsent={requiresRemoteConsent} scope={AI_LAUNCH_MONITOR_PROCESSING_CONSENT} onAccepted={() => void analyzeWithConsent()} onCancel={() => setShowConsent(false)} />}
     {extraction && <div className={styles.launchReview}>
       <div className={styles.statusRow}><div><h3>Revisa antes de guardar</h3><p>{extraction.shots.length} golpe(s) detectados · {ambiguousCount ? `${ambiguousCount} dato(s) requieren atención` : "lectura clara"}</p></div></div>
       {extraction.shots.map((shot, index) => <article className={styles.equipmentItem} key={shot.id}>

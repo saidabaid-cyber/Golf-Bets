@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ModalCloseButton } from "../modal-shell";
+import styles from "./ai-processing-consent.module.css";
 
 import {
   acceptRemoteAiProcessingConsent,
@@ -13,6 +14,7 @@ import {
 } from "../../../lib/backyard-ai/consent-client";
 import {
   acceptAiProcessingConsent,
+  acknowledgeRemoteAiProcessingConsentRevocation,
   aiProcessingConsentAllowsTransport,
   AI_PROCESSING_CONSENT_UPDATED_EVENT,
   browserAiProcessingConsentStorage,
@@ -22,6 +24,7 @@ import {
 } from "../../../lib/backyard-ai/processing-consent";
 import {
   AI_IMAGE_PROCESSING_CONSENT,
+  AI_LAUNCH_MONITOR_PROCESSING_CONSENT,
   AI_PROVIDER_PROCESSING_CONSENT,
   BACKYARD_AI_PROVIDER_CONSENT_VERSION,
   type BackyardAiProcessingConsentScope,
@@ -30,16 +33,21 @@ import {
 const SCOPES: readonly BackyardAiProcessingConsentScope[] = [
   AI_PROVIDER_PROCESSING_CONSENT,
   AI_IMAGE_PROCESSING_CONSENT,
+  AI_LAUNCH_MONITOR_PROCESSING_CONSENT,
 ];
 
 const SCOPE_COPY: Record<BackyardAiProcessingConsentScope, { title: string; detail: string }> = {
   [AI_PROVIDER_PROCESSING_CONSENT]: {
-    title: "Instrucciones de ronda",
+    title: "Instrucciones Backyard AI",
     detail: "Permite enviar a Backyard AI el texto o dictado que decidas procesar.",
   },
   [AI_IMAGE_PROCESSING_CONSENT]: {
-    title: "Fotografías de scorecard",
+    title: "Lectura de scorecards",
     detail: "Permite enviar al proveedor las fotos que elijas para leer una tarjeta.",
+  },
+  [AI_LAUNCH_MONITOR_PROCESSING_CONSENT]: {
+    title: "Lectura de datos de práctica",
+    detail: "Permite leer las fotos de launch monitor que decidas enviar. Es independiente de tus scorecards.",
   },
 };
 
@@ -119,8 +127,9 @@ export type AiProcessingConsentPromptProps = {
 };
 
 /**
- * The only UI that creates a processing-consent acceptance. Merely mounting,
- * checking or using an already-authorized feature never sends a POST.
+ * Explicit authorization in account settings, or for a guest without an account.
+ * Authenticated feature entry points never render this prompt. Their choices
+ * are collected during onboarding and can subsequently be changed in settings.
  */
 export function AiProcessingConsentPrompt({ userId, accessToken, requiresRemoteConsent, scope, onAccepted, onCancel }: AiProcessingConsentPromptProps) {
   const [confirmed, setConfirmed] = useState(false);
@@ -283,13 +292,18 @@ export function AiProcessingConsentSettings({ userId, accessToken, requiresRemot
     [AI_IMAGE_PROCESSING_CONSENT]: typeof window === "undefined" || accessToken || requiresRemoteConsent
       ? emptyScopeState(Boolean(accessToken))
       : localScopeState(userId, AI_IMAGE_PROCESSING_CONSENT),
+    [AI_LAUNCH_MONITOR_PROCESSING_CONSENT]: typeof window === "undefined" || accessToken || requiresRemoteConsent
+      ? emptyScopeState(Boolean(accessToken))
+      : localScopeState(userId, AI_LAUNCH_MONITOR_PROCESSING_CONSENT),
   }));
   const [busyScope, setBusyScope] = useState<BackyardAiProcessingConsentScope | null>(null);
+  const [authorizingScope, setAuthorizingScope] = useState<BackyardAiProcessingConsentScope | null>(null);
   const [message, setMessage] = useState("");
   const [messageKind, setMessageKind] = useState<"status" | "error">("status");
   const generations = useRef<Record<BackyardAiProcessingConsentScope, number>>({
     [AI_PROVIDER_PROCESSING_CONSENT]: 0,
     [AI_IMAGE_PROCESSING_CONSENT]: 0,
+    [AI_LAUNCH_MONITOR_PROCESSING_CONSENT]: 0,
   });
   const aborts = useRef<Partial<Record<BackyardAiProcessingConsentScope, AbortController>>>({});
 
@@ -399,7 +413,8 @@ export function AiProcessingConsentSettings({ userId, accessToken, requiresRemot
       if (accessToken) {
         const remote = await revokeRemoteAiProcessingConsent(accessToken, userId, scope);
         if (remote.active || !remote.revokedAt) throw new Error("remote_revocation_not_confirmed");
-        revokeAiProcessingConsent(browserAiProcessingConsentStorage(), userId, scope, remote.revokedAt);
+        const acknowledged = acknowledgeRemoteAiProcessingConsentRevocation(browserAiProcessingConsentStorage(), userId, scope, remote);
+        if (!acknowledged.ok) throw new Error("local_revocation_sync_unavailable");
       } else if (requiresRemoteConsent) {
         throw new Error("authenticated_session_missing");
       }
@@ -410,7 +425,7 @@ export function AiProcessingConsentSettings({ userId, accessToken, requiresRemot
       setScopeState(scope, { active: false, acceptedAt: known.acceptedAt, checking: false, pendingRemoteRevocation: Boolean(accessToken) || requiresRemoteConsent });
       setMessageKind("error");
       setMessage(accessToken || requiresRemoteConsent
-        ? "La función quedó bloqueada en este dispositivo, pero no pude confirmar la revocación en tu cuenta. Usa Reintentar revocación cuando recuperes conexión."
+        ? "La función quedó bloqueada en este dispositivo, pero no pude completar la sincronización de esta revocación. Usa Reintentar revocación cuando recuperes conexión."
         : "No pude guardar la revocación en este dispositivo. Inténtalo de nuevo.");
     } finally {
       setBusyScope(null);
@@ -418,21 +433,52 @@ export function AiProcessingConsentSettings({ userId, accessToken, requiresRemot
   }
 
   return <section className="card" aria-labelledby="ai-privacy-settings-title">
-    <div className="sectionTitle"><div><h2 id="ai-privacy-settings-title">Privacidad / IA</h2><p>Autorizaciones versionadas e independientes para procesar instrucciones y fotos.</p></div></div>
-    <div className="documentConsentList">
+    <div className="sectionTitle"><div><h2 id="ai-privacy-settings-title">Privacidad / IA</h2><p>Controla por separado qué contenido decides enviar.</p></div></div>
+    <div className={styles.settingsList}>
       {SCOPES.map((scope) => {
         const state = states[scope];
         const copy = SCOPE_COPY[scope];
-        return <div key={scope}>
-          <span><b>{copy.title}</b><small className="preferenceDescription">{copy.detail}</small></span>
-          <span>
-            <b>{state.checking ? "Verificando…" : state.pendingRemoteRevocation ? "Revocación pendiente" : state.active ? acceptedLabel(state.acceptedAt) : "No autorizada"}</b>
-            {(state.active || state.pendingRemoteRevocation) && <button type="button" className="textButton" disabled={Boolean(busyScope) || state.checking} onClick={() => void revoke(scope)}>{busyScope === scope ? "Revocando…" : state.pendingRemoteRevocation ? "Reintentar revocación" : "Revocar"}</button>}
+        return <div className={styles.setting} key={scope}>
+          <span className={styles.settingCopy}><b>{copy.title}</b><small>{copy.detail}</small></span>
+          <span className={styles.settingActions}>
+            <b>{state.checking ? "Verificando…" : state.active ? "ACTIVADO" : "DESACTIVADO"}</b>
+            {state.active && <small>{acceptedLabel(state.acceptedAt)}</small>}
+            {state.pendingRemoteRevocation && <small>Revocación pendiente de sincronizar</small>}
+            {(state.active || state.pendingRemoteRevocation)
+              ? <button type="button" className="textButton" disabled={Boolean(busyScope) || state.checking} onClick={() => void revoke(scope)}>{busyScope === scope ? "Revocando…" : state.pendingRemoteRevocation ? "Reintentar revocación" : "Revocar"}</button>
+              : <button type="button" className="textButton" disabled={Boolean(busyScope) || state.checking || (requiresRemoteConsent && !accessToken)} onClick={() => { setMessage(""); setAuthorizingScope(scope); }}>Autorizar</button>}
           </span>
         </div>;
       })}
     </div>
     <p className="hint">No autoriza datos de apuestas, memoria personal ni uso para entrenamiento global. Esos permisos son separados y opcionales.</p>
     {message && <div className={messageKind === "error" ? "notice bad" : "notice"} role={messageKind === "error" ? "alert" : "status"}>{message}</div>}
+    {authorizingScope && <AiProcessingConsentPrompt
+      key={`${userId}:${authorizingScope}`}
+      userId={userId}
+      accessToken={accessToken}
+      requiresRemoteConsent={requiresRemoteConsent}
+      scope={authorizingScope}
+      onCancel={() => setAuthorizingScope(null)}
+      onAccepted={(consent, persistence) => {
+        if (!aiProcessingConsentAllowsTransport(persistence)) return;
+        setAuthorizingScope(null);
+        setScopeState(consent.scope, { active: true, acceptedAt: consent.acceptedAt, checking: false, pendingRemoteRevocation: false });
+        setMessageKind("status");
+        setMessage("Autorización guardada. Ya puedes usar esta función sin otra solicitud de permiso.");
+      }}
+    />}
   </section>;
+}
+
+/** No acceptance controls here: account choices belong to onboarding/settings. */
+export function AiProcessingConsentRequired({ scope, onOpenPrivacy }: {
+  scope: BackyardAiProcessingConsentScope;
+  onOpenPrivacy?: () => void;
+}) {
+  return <div className="notice" role="status">
+    <b>{SCOPE_COPY[scope].title} · DESACTIVADO</b>
+    <p>Puedes autorizar esta función en Perfil → Cuenta y privacidad → Privacidad / IA. No se envió ningún contenido.</p>
+    {onOpenPrivacy && <button type="button" className="secondary" onClick={onOpenPrivacy}>Ir a Privacidad / IA</button>}
+  </div>;
 }

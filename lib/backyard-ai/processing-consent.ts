@@ -1,5 +1,6 @@
 import {
   AI_IMAGE_PROCESSING_CONSENT,
+  AI_LAUNCH_MONITOR_PROCESSING_CONSENT,
   AI_PROVIDER_PROCESSING_CONSENT,
   BACKYARD_AI_PROVIDER_CONSENT_VERSION,
   type BackyardAiProcessingConsentScope,
@@ -18,6 +19,7 @@ export const AI_PROCESSING_CONSENT_UPDATED_EVENT = "backyard-ai-processing-conse
 const PROCESSING_SCOPES = new Set<BackyardAiProcessingConsentScope>([
   AI_PROVIDER_PROCESSING_CONSENT,
   AI_IMAGE_PROCESSING_CONSENT,
+  AI_LAUNCH_MONITOR_PROCESSING_CONSENT,
 ]);
 
 // Safari Private Browsing can expose Storage while throwing on read or write.
@@ -55,6 +57,10 @@ export type AiProcessingConsent = {
   acceptedAt: string;
   revokedAt: string | null;
   scope: BackyardAiProcessingConsentScope;
+  /** Monotonic server ledger identity, never a browser timestamp. */
+  serverRecordId?: string;
+  /** Missing on legacy tombstones means pending (fail closed). */
+  revocationSync?: "pending" | "confirmed";
 };
 
 export type AiProcessingConsentWriteResult =
@@ -65,6 +71,7 @@ export type AuthoritativeAiProcessingConsent = {
   active: boolean;
   acceptedAt: string | null;
   revokedAt: string | null;
+  recordId?: string | null;
 };
 
 export type AiProcessingConsentReconcileResult = {
@@ -73,6 +80,10 @@ export type AiProcessingConsentReconcileResult = {
   cachePersisted: boolean;
   pendingLocalRevocation: boolean;
 };
+
+function validServerRecordId(value: unknown): value is string {
+  return typeof value === "string" && /^[1-9]\d{0,19}$/.test(value);
+}
 
 function normalizeAiProcessingConsent(value: unknown): AiProcessingConsent | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -95,6 +106,11 @@ function normalizeAiProcessingConsent(value: unknown): AiProcessingConsent | nul
     acceptedAt: source.acceptedAt,
     revokedAt: source.revokedAt,
     scope: source.scope as BackyardAiProcessingConsentScope,
+    ...(validServerRecordId(source.serverRecordId) ? { serverRecordId: source.serverRecordId } : {}),
+    ...(source.revokedAt !== null ? {
+      revocationSync: source.revocationSync === "confirmed" && validServerRecordId(source.serverRecordId)
+        ? "confirmed" as const : "pending" as const,
+    } : {}),
   };
 }
 
@@ -200,7 +216,7 @@ export function revokeAiProcessingConsent(
   );
   if (!existing) return { ok: false, persisted: false, consent: null, error: "consent_missing" };
   if (existing.revokedAt !== null) return { ok: true, persisted: current.ok && !volatileProcessingConsents.has(key), consent: existing };
-  const consent: AiProcessingConsent = { ...existing, revokedAt: existing.revokedAt ?? now };
+  const consent: AiProcessingConsent = { ...existing, revokedAt: existing.revokedAt ?? now, revocationSync: "pending" };
   const items = current.document.items.filter((item) => item.scope !== scope || item.policyVersion !== policyVersion);
   const written = current.ok
     ? writeMemoryDocument(storage, AI_PROCESSING_CONSENT_NAMESPACE, normalizedUserId, [...items, consent], now)
@@ -209,6 +225,53 @@ export function revokeAiProcessingConsent(
   else volatileProcessingConsents.set(key, consent);
   announceConsentUpdate(consent);
   return { ok: true, persisted: written.ok, consent };
+}
+
+function persistCanonicalConsent(
+  storage: Pick<Storage, "getItem" | "setItem">,
+  consent: AiProcessingConsent,
+): AiProcessingConsentWriteResult {
+  const existing = readAiProcessingConsent(storage, consent.userId, consent.scope, consent.policyVersion);
+  const key = volatileConsentKey(consent.userId, consent.scope, consent.policyVersion);
+  if (existing && existing.acceptedAt === consent.acceptedAt && existing.revokedAt === consent.revokedAt
+    && existing.serverRecordId === consent.serverRecordId && existing.revocationSync === consent.revocationSync) {
+    return { ok: true, persisted: !volatileProcessingConsents.has(key), consent: existing };
+  }
+  const document = readConsentDocument(storage, consent.userId);
+  const items = document.document.items.filter((item) => item.scope !== consent.scope || item.policyVersion !== consent.policyVersion);
+  const written = document.ok
+    ? writeMemoryDocument(storage, AI_PROCESSING_CONSENT_NAMESPACE, consent.userId, [...items, consent], new Date().toISOString())
+    : { ok: false as const };
+  if (written.ok) volatileProcessingConsents.delete(key);
+  else volatileProcessingConsents.set(key, consent);
+  announceConsentUpdate(consent);
+  return { ok: true, persisted: written.ok, consent };
+}
+
+/** Called only after a verified server PATCH/GET reports an actual revocation.
+ * An older ledger row cannot acknowledge a newer local pending revocation. */
+export function acknowledgeRemoteAiProcessingConsentRevocation(
+  storage: Pick<Storage, "getItem" | "setItem">,
+  userId: string,
+  scope: BackyardAiProcessingConsentScope,
+  remote: AuthoritativeAiProcessingConsent,
+  policyVersion = BACKYARD_AI_PROVIDER_CONSENT_VERSION,
+): AiProcessingConsentWriteResult {
+  const owner = cleanMemoryId(userId);
+  const current = readAiProcessingConsent(storage, userId, scope, policyVersion);
+  if (!owner || remote.active || !remote.acceptedAt || !validIsoDate(remote.acceptedAt)
+    || !remote.revokedAt || !validIsoDate(remote.revokedAt)
+    || Date.parse(remote.revokedAt) < Date.parse(remote.acceptedAt)
+    || !validServerRecordId(remote.recordId)
+    || (current?.serverRecordId && BigInt(remote.recordId) < BigInt(current.serverRecordId))
+    || (current?.revokedAt && !current.serverRecordId && current.acceptedAt !== remote.acceptedAt)) {
+    return { ok: false, persisted: false, consent: null, error: "consent_missing" };
+  }
+  return persistCanonicalConsent(storage, {
+    schemaVersion: 1, userId: owner, scope, policyVersion,
+    acceptedAt: remote.acceptedAt, revokedAt: remote.revokedAt,
+    serverRecordId: remote.recordId, revocationSync: "confirmed",
+  });
 }
 
 /**
@@ -227,15 +290,25 @@ export function reconcileAuthoritativeAiProcessingConsent(
 ): AiProcessingConsentReconcileResult {
   const current = readAiProcessingConsent(storage, userId, scope, policyVersion);
   if (remote.active && remote.acceptedAt && validIsoDate(remote.acceptedAt) && remote.revokedAt === null) {
-    // A revocation is a fail-closed tombstone. Clock skew or a stale active GET
-    // must never revive it; only another explicit acceptance may replace it.
+    // Pending local PATCH is fail-closed. Once the server has acknowledged it,
+    // a strictly newer acceptance ledger identity can restore access across
+    // devices. Neither browser wall clocks nor a stale pre-revocation GET suffice.
     if (current?.revokedAt) {
-      return { active: false, consent: current, cachePersisted: !hasVolatileConsent(userId, scope, policyVersion), pendingLocalRevocation: true };
+      const confirmed = current.revocationSync === "confirmed";
+      const newerServerAcceptance = confirmed && validServerRecordId(current.serverRecordId)
+        && validServerRecordId(remote.recordId) && BigInt(remote.recordId) > BigInt(current.serverRecordId);
+      if (!newerServerAcceptance) return { active: false, consent: current, cachePersisted: !hasVolatileConsent(userId, scope, policyVersion), pendingLocalRevocation: !confirmed };
     }
-    if (current?.revokedAt === null && current.acceptedAt === remote.acceptedAt) {
+    if (current?.revokedAt === null && current.acceptedAt === remote.acceptedAt && current.serverRecordId === (remote.recordId ?? undefined)) {
       return { active: true, consent: current, cachePersisted: !hasVolatileConsent(userId, scope, policyVersion), pendingLocalRevocation: false };
     }
-    const accepted = acceptAiProcessingConsent(storage, userId, scope, remote.acceptedAt, policyVersion);
+    if (current?.serverRecordId && validServerRecordId(remote.recordId) && BigInt(remote.recordId) < BigInt(current.serverRecordId)) {
+      return { active: false, consent: current, cachePersisted: !hasVolatileConsent(userId, scope, policyVersion), pendingLocalRevocation: false };
+    }
+    const accepted = persistCanonicalConsent(storage, {
+      schemaVersion: 1, userId, policyVersion, scope, acceptedAt: remote.acceptedAt, revokedAt: null,
+      ...(validServerRecordId(remote.recordId) ? { serverRecordId: remote.recordId } : {}),
+    });
     return accepted.ok
       ? { active: true, consent: accepted.consent, cachePersisted: accepted.persisted, pendingLocalRevocation: false }
       : {
@@ -253,8 +326,12 @@ export function reconcileAuthoritativeAiProcessingConsent(
         };
   }
 
+  if (!remote.active && remote.acceptedAt && remote.revokedAt && validServerRecordId(remote.recordId)) {
+    const acknowledged = acknowledgeRemoteAiProcessingConsentRevocation(storage, userId, scope, remote, policyVersion);
+    if (acknowledged.ok) return { active: false, consent: acknowledged.consent, cachePersisted: acknowledged.persisted, pendingLocalRevocation: false };
+  }
   if (!current) return { active: false, consent: null, cachePersisted: true, pendingLocalRevocation: false };
-  if (current.revokedAt !== null) return { active: false, consent: current, cachePersisted: !hasVolatileConsent(userId, scope, policyVersion), pendingLocalRevocation: false };
+  if (current.revokedAt !== null) return { active: false, consent: current, cachePersisted: !hasVolatileConsent(userId, scope, policyVersion), pendingLocalRevocation: current.revocationSync !== "confirmed" };
   const remoteRevokedAt = remote.revokedAt && validIsoDate(remote.revokedAt) && Date.parse(remote.revokedAt) >= Date.parse(current.acceptedAt)
     ? remote.revokedAt
     : now;

@@ -146,7 +146,7 @@ test("borrar el workspace local elimina sólo el propietario", () => {
   assert.equal(hasActiveAiProcessingConsent(storage, "delete-b", AI_IMAGE_PROCESSING_CONSENT), true);
 });
 
-test("Perfil expone scopes separados y sólo el prompt hace aceptación remota explícita", () => {
+test("Perfil expone scopes separados, autorización explícita y revocación", () => {
   const settings = readFileSync("app/components/backyard-ai/ai-processing-consent.tsx", "utf8");
   const setup = readFileSync("app/components/backyard-ai/ai-round-setup.tsx", "utf8");
   const scanner = readFileSync("app/components/backyard-ai/scorecard-scanner.tsx", "utf8");
@@ -155,8 +155,12 @@ test("Perfil expone scopes separados y sólo el prompt hace aceptación remota e
   assert.match(account, /LegalConsentManager/);
   assert.match(manager, /AiProcessingConsentSettings/);
   assert.match(settings, /Privacidad \/ IA/);
-  assert.match(settings, /Instrucciones de ronda/);
-  assert.match(settings, /Fotografías de scorecard/);
+  assert.match(settings, /Instrucciones Backyard AI/);
+  assert.match(settings, /Lectura de scorecards/);
+  assert.match(settings, /ACTIVADO/);
+  assert.match(settings, /DESACTIVADO/);
+  assert.match(settings, /setAuthorizingScope\(scope\)/);
+  assert.match(settings, /authorizingScope && <AiProcessingConsentPrompt/);
   assert.match(settings, /No autoriza datos de apuestas, memoria personal ni uso para entrenamiento global/);
   assert.match(settings, /acceptRemoteAiProcessingConsent/);
   assert.match(settings, /revokeRemoteAiProcessingConsent/);
@@ -164,6 +168,10 @@ test("Perfil expone scopes separados y sólo el prompt hace aceptación remota e
   assert.match(settings, /generation !== generations\.current\[scope\]/);
   assert.doesNotMatch(setup, /acceptRemoteAiProcessingConsent/);
   assert.doesNotMatch(scanner, /acceptRemoteAiProcessingConsent/);
+  assert.match(setup, /showProviderConsent && !requiresRemoteConsent && !accessToken/);
+  assert.match(scanner, /showConsentPrompt && !requiresRemoteConsent && !accessToken/);
+  assert.match(setup, /AiProcessingConsentRequired scope=\{AI_PROVIDER_PROCESSING_CONSENT\}/);
+  assert.match(scanner, /AiProcessingConsentRequired scope=\{AI_IMAGE_PROCESSING_CONSENT\}/);
 });
 
 test("una cuenta autenticada sin token nunca degrada su consentimiento al modo invitado", () => {
@@ -215,7 +223,7 @@ test("ledger dedicado conserva auditoría, RLS y niega DELETE ordinario", () => 
   assert.match(route, /aiProcessingConsentLedgerAccess\(process\.env, true\)/);
   assert.match(route, /AI_PROCESSING_CONSENT_TABLE/);
   assert.match(route, /export async function PATCH/);
-  assert.match(route, /update\(\{ revoked_at: revokedAt/);
+  assert.match(route, /session\.admin\.rpc\(AI_PROCESSING_CONSENT_DECISIONS_RPC/);
   assert.doesNotMatch(route, /legal_acceptances/);
   assert.doesNotMatch(route, /export async function DELETE/);
   assert.doesNotMatch(route, /\.delete\(/);

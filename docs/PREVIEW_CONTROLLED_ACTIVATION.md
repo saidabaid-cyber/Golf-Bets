@@ -26,7 +26,7 @@ Después de confirmar organización y cotización:
 
 Primero llamar `list_migrations(project_id="<PREVIEW_REF>")`. El ledger antiguo del proyecto padre tiene timestamps distintos a varios archivos históricos locales. **No ejecutar `db push --include-all`, no reparar el ledger a ciegas y no reaplicar las migraciones fundacionales ya heredadas.** La integración Git podría aplicar archivos automáticamente: comparar nombre, definición y dependencias, no sólo timestamp.
 
-Esta es la secuencia aditiva esperada de **13 archivos**. Aplicar cada uno sólo si falta, siempre en la ref nueva:
+Esta es la secuencia aditiva esperada de **14 archivos**. Aplicar cada uno sólo si falta, siempre en la ref nueva:
 
 1. `supabase/migrations/20260906193435_equipment_ball_fitting.sql`
 2. `supabase/migrations/20260906211937_golf_profile_course_architecture.sql`
@@ -41,8 +41,11 @@ Esta es la secuencia aditiva esperada de **13 archivos**. Aplicar cada uno sólo
 11. `supabase/migrations/20260915183026_social_activity_v3.sql`
 12. `supabase/migrations/20260915203125_account_lifecycle_preview.sql`
 13. `supabase/migrations/20260915203550_social_service_privileges.sql`
+14. `supabase/migrations/20260916020557_ai_consent_onboarding_decisions.sql`
 
-Acción exacta mediante conector, por archivo: leer el SQL completo del archivo local; ejecutar `apply_migration` con `project_id` igual a la **ref nueva**, `name` igual al nombre descriptivo del archivo sin timestamp/extensión y `query` igual al contenido literal completo. Por ejemplo, el paso 10 usa `name="user_statistics_reset_idempotency"`. Volver a listar el ledger tras cada aplicación y registrar su versión efectiva. No concatenar los 13 archivos en una transacción opaca ni continuar después de un fallo.
+Acción exacta mediante conector, por archivo: leer el SQL completo del archivo local; ejecutar `apply_migration` con `project_id` igual a la **ref nueva**, `name` igual al nombre descriptivo del archivo sin timestamp/extensión y `query` igual al contenido literal completo. Por ejemplo, el paso 10 usa `name="user_statistics_reset_idempotency"`. Volver a listar el ledger tras cada aplicación y registrar su versión efectiva. No concatenar los 14 archivos en una transacción opaca ni continuar después de un fallo.
+
+El paso 14 habilita las elecciones explícitas de IA al final del onboarding. Antes de publicar el nuevo checkpoint obligatorio, seguir [AI_CONSENT_ONBOARDING.md](AI_CONSENT_ONBOARDING.md), incluyendo `BACKYARD_AI_CONSENT_PREVIEW_SUPABASE_URL` y QA con cuenta nueva/existente. No publicarlo contra el Preview compartido sin migrar.
 
 Antes del paso 12, consultar en la rama:
 

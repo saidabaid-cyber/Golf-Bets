@@ -47,7 +47,7 @@ export async function verifyStoredAiProcessingConsent(
   if (accessFailure) return { ok: false, ...accessFailure };
   const { data, error } = await admin
     .from(AI_PROCESSING_CONSENT_TABLE)
-    .select("accepted_at,revoked_at")
+    .select("decision_status,accepted_at,revoked_at")
     .eq("user_id", authData.user.id)
     .eq("scope", scope)
     .eq("policy_version", BACKYARD_AI_PROVIDER_CONSENT_VERSION)
@@ -55,6 +55,6 @@ export async function verifyStoredAiProcessingConsent(
     .limit(1)
     .maybeSingle();
   if (error) return { ok: false, status: 503, code: "consent_store_unavailable", error: "No pude verificar tu autorización de IA. Inténtalo nuevamente." };
-  if (!data || data.revoked_at !== null) return { ok: false, status: 403, code: "consent_required", error: "Autoriza este procesamiento por IA para continuar." };
+  if (!data || data.decision_status !== "accepted" || !data.accepted_at || data.revoked_at !== null) return { ok: false, status: 403, code: "consent_required", error: "Activa esta autorización en Cuenta y privacidad / IA para continuar." };
   return { ok: true, authenticated: true, userId: authData.user.id };
 }

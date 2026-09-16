@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 
 import {
   AI_PROCESSING_CONSENT_TABLE,
+  AI_PROCESSING_CONSENT_SCOPES,
+  AI_PROCESSING_CONSENT_DECISIONS_RPC,
   parseAiProcessingConsentScope,
+  type AiProcessingConsentRow,
+  type AiConsentDecisionInput,
+  type AiConsentCheckpointSource,
 } from "../../../../lib/backyard-ai/consent-record";
 import {
   BACKYARD_AI_PROVIDER_CONSENT_VERSION,
@@ -22,12 +27,7 @@ import { authUserFailure } from "../../../../lib/auth-errors";
 const PRIVATE_HEADERS = { "cache-control": "private, no-store", pragma: "no-cache" };
 const MAX_REQUEST_BYTES = 1_000;
 
-type ConsentRow = {
-  id: number;
-  policy_version: string;
-  accepted_at: string;
-  revoked_at: string | null;
-};
+const CONSENT_COLUMNS = "id,scope,policy_version,accepted_at,revoked_at,decision_status,source,decided_at";
 
 function json(body: unknown, init: ResponseInit = {}) {
   return NextResponse.json(body, { ...init, headers: { ...PRIVATE_HEADERS, ...init.headers } });
@@ -65,40 +65,53 @@ async function readLatestConsent(
 ) {
   return admin
     .from(AI_PROCESSING_CONSENT_TABLE)
-    .select("id,policy_version,accepted_at,revoked_at")
+    .select(CONSENT_COLUMNS)
     .eq("user_id", userId)
     .eq("scope", scope)
     .eq("policy_version", BACKYARD_AI_PROVIDER_CONSENT_VERSION)
     .order("id", { ascending: false })
     .limit(1)
-    .maybeSingle<ConsentRow>();
+    .maybeSingle<AiProcessingConsentRow>();
 }
 
-async function readActiveConsent(
+async function readAllDecisions(
   admin: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
   userId: string,
-  scope: BackyardAiProcessingConsentScope,
 ) {
-  return admin
+  const { data, error } = await admin
     .from(AI_PROCESSING_CONSENT_TABLE)
-    .select("id,policy_version,accepted_at,revoked_at")
+    .select(CONSENT_COLUMNS)
     .eq("user_id", userId)
-    .eq("scope", scope)
     .eq("policy_version", BACKYARD_AI_PROVIDER_CONSENT_VERSION)
-    .is("revoked_at", null)
-    .maybeSingle<ConsentRow>();
+    .order("id", { ascending: false });
+  return { data: data as AiProcessingConsentRow[] | null, error };
 }
 
-function consentResponse(row: ConsentRow | null) {
+function consentResponse(row: AiProcessingConsentRow | null) {
   return {
-    active: Boolean(row && row.revoked_at === null),
+    recordId: row ? String(row.id) : null,
+    active: Boolean(row && row.decision_status === "accepted" && row.accepted_at && row.revoked_at === null),
+    status: row?.decision_status ?? "missing",
     policyVersion: BACKYARD_AI_PROVIDER_CONSENT_VERSION,
     acceptedAt: row?.accepted_at ?? null,
     revokedAt: row?.revoked_at ?? null,
+    source: row?.source ?? null,
+    decidedAt: row?.decided_at ?? null,
   };
 }
 
-async function mutationScope(request: NextRequest) {
+function allDecisionsResponse(rows: AiProcessingConsentRow[]) {
+  const decisions = AI_PROCESSING_CONSENT_SCOPES.map((scope) => ({
+    ...consentResponse(rows.find((row) => row.scope === scope) ?? null), scope,
+  }));
+  return {
+    policyVersion: BACKYARD_AI_PROVIDER_CONSENT_VERSION,
+    decisions,
+    resolved: decisions.every((decision) => decision.status !== "missing"),
+  };
+}
+
+async function mutationBody(request: NextRequest) {
   if (isCrossSiteRequest(request)) return { ok: false as const, status: 403, code: "cross_site", error: "Solicitud no permitida." };
   if (!isJsonRequest(request)) return { ok: false as const, status: 415, code: "unsupported_media_type", error: "La solicitud debe usar JSON." };
   const parsed = await readJsonBodyWithLimit(request, MAX_REQUEST_BYTES);
@@ -111,15 +124,19 @@ async function mutationScope(request: NextRequest) {
   const body = parsed.value && typeof parsed.value === "object" && !Array.isArray(parsed.value)
     ? parsed.value as Record<string, unknown>
     : null;
-  const scope = parseAiProcessingConsentScope(body?.scope);
-  if (!scope || !body || !hasOnlyKeys(body, ["scope"])) return { ok: false as const, status: 400, code: "invalid_scope", error: "Autorización inválida." };
-  return { ok: true as const, scope };
+  if (!body) return { ok: false as const, status: 400, code: "invalid_request", error: "Autorización inválida." };
+  return { ok: true as const, body };
 }
 
 export async function GET(request: NextRequest) {
   if (isCrossSiteRequest(request)) return json({ error: "Solicitud no permitida.", code: "cross_site" }, { status: 403 });
   const session = await account(request);
   if (!session.ok) return json({ error: session.error, code: session.code }, { status: session.status });
+  if (!request.nextUrl.searchParams.has("scope")) {
+    const { data, error } = await readAllDecisions(session.admin, session.userId);
+    if (error) return json({ error: "No pude consultar tus preferencias de IA. Inténtalo nuevamente.", code: "consent_store_unavailable" }, { status: 503 });
+    return json(allDecisionsResponse(data ?? []));
+  }
   const scope = parseAiProcessingConsentScope(request.nextUrl.searchParams.get("scope"));
   if (!scope) return json({ error: "Scope de autorización inválido.", code: "invalid_scope" }, { status: 400 });
   const { data, error } = await readLatestConsent(session.admin, session.userId, scope);
@@ -127,63 +144,54 @@ export async function GET(request: NextRequest) {
   return json({ ...consentResponse(data), scope });
 }
 
-/** Only an explicit click in AiProcessingConsentPrompt calls this endpoint. */
-export async function POST(request: NextRequest) {
-  const parsed = await mutationScope(request);
+/** An affirmative onboarding/settings action, never a feature-use side effect. */
+async function writeDecisions(request: NextRequest, revoke: boolean) {
+  const parsed = await mutationBody(request);
   if (!parsed.ok) return json({ error: parsed.error, code: parsed.code }, { status: parsed.status });
+  let decisions: AiConsentDecisionInput[];
+  let source: AiConsentCheckpointSource | "settings";
+  const scope = parseAiProcessingConsentScope(parsed.body.scope);
+  if (scope && hasOnlyKeys(parsed.body, ["scope"])) {
+    source = "settings";
+    decisions = [{ scope, accepted: !revoke }];
+  } else {
+    const input = parsed.body.decisions;
+    const checkpointSource = parsed.body.source;
+    if (revoke || !hasOnlyKeys(parsed.body, ["decisions", "source"])
+      || !Array.isArray(input) || input.length < 1 || input.length > AI_PROCESSING_CONSENT_SCOPES.length
+      || (checkpointSource !== "onboarding" && checkpointSource !== "account_update")) {
+      return json({ error: "Autorización inválida.", code: "invalid_request" }, { status: 400 });
+    }
+    decisions = [];
+    for (const value of input) {
+      const item = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
+      const choiceScope = parseAiProcessingConsentScope(item?.scope);
+      if (!item || !choiceScope || !hasOnlyKeys(item, ["scope", "accepted"]) || typeof item.accepted !== "boolean"
+        || decisions.some((decision) => decision.scope === choiceScope)) {
+        return json({ error: "Autorización inválida.", code: "invalid_request" }, { status: 400 });
+      }
+      decisions.push({ scope: choiceScope, accepted: item.accepted });
+    }
+    source = checkpointSource;
+  }
   const session = await account(request);
   if (!session.ok) return json({ error: session.error, code: session.code }, { status: session.status });
-  const existing = await readActiveConsent(session.admin, session.userId, parsed.scope);
-  if (existing.error) return json({ error: "No pude consultar la autorización de IA.", code: "consent_store_unavailable" }, { status: 503 });
-  if (existing.data) return json({ ...consentResponse(existing.data), scope: parsed.scope });
-
-  const acceptedAt = new Date().toISOString();
-  const { data, error } = await session.admin
-    .from(AI_PROCESSING_CONSENT_TABLE)
-    .insert({
-      user_id: session.userId,
-      scope: parsed.scope,
-      policy_version: BACKYARD_AI_PROVIDER_CONSENT_VERSION,
-      accepted_at: acceptedAt,
-      locale: "es-MX",
-      updated_at: acceptedAt,
-    })
-    .select("id,policy_version,accepted_at,revoked_at")
-    .single<ConsentRow>();
-  if (error?.code === "23505") {
-    const raced = await readActiveConsent(session.admin, session.userId, parsed.scope);
-    if (!raced.error && raced.data) return json({ ...consentResponse(raced.data), scope: parsed.scope });
-  }
-  if (error || !data) return json({ error: "No pude guardar la autorización de IA.", code: "consent_store_unavailable" }, { status: 503 });
-  return json({ ...consentResponse(data), scope: parsed.scope });
+  const { data, error } = await session.admin.rpc(AI_PROCESSING_CONSENT_DECISIONS_RPC, {
+    p_user_id: session.userId,
+    p_policy_version: BACKYARD_AI_PROVIDER_CONSENT_VERSION,
+    p_decisions: decisions,
+    p_source: source,
+  });
+  if (error || !Array.isArray(data)) return json({ error: "No pude guardar tus preferencias de IA. Inténtalo nuevamente.", code: "consent_store_unavailable" }, { status: 503 });
+  const rows = data as AiProcessingConsentRow[];
+  return scope ? json({ ...consentResponse(rows.find((row) => row.scope === scope) ?? null), scope }) : json(allDecisionsResponse(rows));
 }
 
-/** Revocation is an auditable update; the acceptance row is never deleted. */
-export async function PATCH(request: NextRequest) {
-  const parsed = await mutationScope(request);
-  if (!parsed.ok) return json({ error: parsed.error, code: parsed.code }, { status: parsed.status });
-  const session = await account(request);
-  if (!session.ok) return json({ error: session.error, code: session.code }, { status: session.status });
-  const existing = await readActiveConsent(session.admin, session.userId, parsed.scope);
-  if (existing.error) return json({ error: "No pude consultar la autorización de IA.", code: "consent_store_unavailable" }, { status: 503 });
-  if (!existing.data) {
-    const latest = await readLatestConsent(session.admin, session.userId, parsed.scope);
-    if (latest.error) return json({ error: "No pude consultar la autorización de IA.", code: "consent_store_unavailable" }, { status: 503 });
-    return json({ ...consentResponse(latest.data), active: false, scope: parsed.scope });
-  }
+export async function POST(request: NextRequest) {
+  return writeDecisions(request, false);
+}
 
-  const revokedAt = new Date().toISOString();
-  const { data, error } = await session.admin
-    .from(AI_PROCESSING_CONSENT_TABLE)
-    .update({ revoked_at: revokedAt, updated_at: revokedAt })
-    .eq("id", existing.data.id)
-    .eq("user_id", session.userId)
-    .is("revoked_at", null)
-    .select("id,policy_version,accepted_at,revoked_at")
-    .maybeSingle<ConsentRow>();
-  if (error) return json({ error: "No pude revocar la autorización de IA.", code: "consent_store_unavailable" }, { status: 503 });
-  if (data) return json({ ...consentResponse(data), scope: parsed.scope });
-  const raced = await readLatestConsent(session.admin, session.userId, parsed.scope);
-  if (raced.error) return json({ error: "No pude confirmar la revocación de IA.", code: "consent_store_unavailable" }, { status: 503 });
-  return json({ ...consentResponse(raced.data), active: false, scope: parsed.scope });
+/** Revocation is an auditable transaction; no acceptance history is deleted. */
+export async function PATCH(request: NextRequest) {
+  return writeDecisions(request, true);
 }

@@ -39,6 +39,7 @@ type EquipmentProfilePanelProps = {
   defaultHandicap: number | null;
   ballFitDefaults?: BallFitProfileDefaults;
   onBackToProfile?: () => void;
+  onOpenPrivacy?: () => void;
 };
 
 type EquipmentFlowSuccess = {
@@ -86,7 +87,7 @@ function savedFitId() {
   return globalThis.crypto?.randomUUID?.() || `fit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, ballFitDefaults, onBackToProfile }: EquipmentProfilePanelProps) {
+export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, ballFitDefaults, onBackToProfile, onOpenPrivacy }: EquipmentProfilePanelProps) {
   const { profile, status, message, update, retry, resolveConflict, recoverLocalProfile } = useEquipmentProfile(userId, accessToken);
   const [clubEditor, setClubEditor] = useState<PlayerClub | "new" | null>(null);
   const [ballEditor, setBallEditor] = useState<PlayerBall | "new" | null>(null);
@@ -284,7 +285,7 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, ba
       </div>}
     </div>
 
-    {fitOpen && <div className={styles.editorBackdrop} role="presentation"><section ref={fitDialogRef} tabIndex={-1} className={styles.editorSheet} role="dialog" aria-modal="true" aria-label="The Backyard Ball Fit"><ModalCloseButton onClose={() => setFitOpen(false)} /><div className={styles.sheetHandle} /><BallFitWizard userId={userId} accessToken={accessToken} defaultHandicap={defaultHandicap} profileDefaults={ballFitDefaults} currentBall={currentBall} catalog={ballCatalog.items} onCancel={() => setFitOpen(false)} onComplete={completeFit} /></section></div>}
+    {fitOpen && <div className={styles.editorBackdrop} role="presentation"><section ref={fitDialogRef} tabIndex={-1} className={styles.editorSheet} role="dialog" aria-modal="true" aria-label="The Backyard Ball Fit"><ModalCloseButton onClose={() => setFitOpen(false)} /><div className={styles.sheetHandle} /><BallFitWizard userId={userId} accessToken={accessToken} defaultHandicap={defaultHandicap} profileDefaults={ballFitDefaults} currentBall={currentBall} catalog={ballCatalog.items} onCancel={() => setFitOpen(false)} onComplete={completeFit} onOpenPrivacy={onOpenPrivacy} /></section></div>}
     {savedFitOpen && restoredFit && <div className={styles.editorBackdrop} role="presentation"><section ref={savedFitDialogRef} tabIndex={-1} className={styles.editorSheet} role="dialog" aria-modal="true" aria-label="Resultado guardado de The Backyard Ball Fit"><ModalCloseButton onClose={() => setSavedFitOpen(false)} /><div className={styles.sheetHandle} /><div className={styles.wizardHeader}><div><div className="eyebrow">RESULTADO GUARDADO</div><h2>Tu mejor grupo de bolas</h2></div></div><BallFitResults result={restoredFit.result} catalog={ballCatalog.items} current={restoredFit.input.currentBallId ? ballCatalog.items.find((ball) => ball.id === restoredFit.input.currentBallId) || null : null} /></section></div>}
   </div>;
 }

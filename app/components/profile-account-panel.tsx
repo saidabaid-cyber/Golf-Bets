@@ -12,6 +12,7 @@ import { isStatisticsDeleteConfirmation, requestStatisticsReset, type Statistics
 import { EquipmentProfilePanel } from "./equipment-profile-panel";
 import { GhinPlaceholder } from "./ghin-placeholder";
 import { LegalConsentManager } from "./legal-consent-manager";
+import { AiProcessingConsentSettings } from "./backyard-ai/ai-processing-consent";
 import { AccountDataDialog, StatisticsResetDialog, type AccountDataPolicy } from "./profile-data-dialogs";
 import { BackyardIndexCard } from "./backyard-index-card";
 import type { BackyardIndexPreferenceController } from "./use-backyard-index-preference";
@@ -26,6 +27,8 @@ import { useBackyardAccount } from "./account-provider";
 type ProfileAccountPanelProps = {
   view: "profile" | "account";
   rootNavigationKey?: number;
+  openAiPrivacySettings?: boolean;
+  onAiPrivacyOpened?: () => void;
   history?: RoundSnapshot[];
   indexControl: BackyardIndexPreferenceController;
   focusSection?: "profile" | "equipment";
@@ -38,6 +41,7 @@ type ProfileAccountPanelProps = {
   onStatisticsReset?: (reset: StatisticsResetRecord) => void;
   onOpenStats?: () => void;
   onOpenAccount?: () => void;
+  onOpenPrivacy?: () => void;
   onOpenEquipment: () => void;
   onBackToProfile: () => void;
 };
@@ -61,7 +65,7 @@ function decimal(value: number | undefined) {
   return value === undefined ? "—" : value.toFixed(1);
 }
 
-export function ProfileAccountPanel({ view, rootNavigationKey = 0, history = [], indexControl, focusSection = "profile", highContrast, onHighContrastChange, notificationsEnabled, onNotificationsEnabledChange, golfInsights, statisticsResetAt, onStatisticsReset, onOpenStats, onOpenAccount, onOpenEquipment, onBackToProfile }: ProfileAccountPanelProps) {
+export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacySettings = false, onAiPrivacyOpened, history = [], indexControl, focusSection = "profile", highContrast, onHighContrastChange, notificationsEnabled, onNotificationsEnabledChange, golfInsights, statisticsResetAt, onStatisticsReset, onOpenStats, onOpenAccount, onOpenPrivacy, onOpenEquipment, onBackToProfile }: ProfileAccountPanelProps) {
   const { identity, updateProfile, logout, finishAccountDeletion, openAccess, acceptances, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, requestCloudLink, cloudIssues, retryCloudSync } = useBackyardAccount();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(identity.displayName);
@@ -73,6 +77,7 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, history = [],
   const [saving, setSaving] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [managingConsents, setManagingConsents] = useState(false);
+  const [managingAiConsents, setManagingAiConsents] = useState(view === "account" && openAiPrivacySettings);
   const [deleteStatsOpen, setDeleteStatsOpen] = useState(false);
   const [deleteStatsText, setDeleteStatsText] = useState("");
   const [deletingStatistics, setDeletingStatistics] = useState(false);
@@ -93,8 +98,14 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, history = [],
   useEffect(() => {
     if (seenRootNavigation.current === rootNavigationKey || saving || deletingStatistics || deletingAccount) return;
     seenRootNavigation.current = rootNavigationKey;
-    setEditing(false); setManagingConsents(false); setDeleteStatsOpen(false); setDeleteAccountOpen(false); setDestructiveError("");
+    setEditing(false); setManagingConsents(false); setManagingAiConsents(false); setDeleteStatsOpen(false); setDeleteAccountOpen(false); setDestructiveError("");
   }, [rootNavigationKey, saving, deletingStatistics, deletingAccount]);
+
+  useEffect(() => {
+    if (view !== "account" || !openAiPrivacySettings) return;
+    setManagingAiConsents(true);
+    onAiPrivacyOpened?.();
+  }, [openAiPrivacySettings, onAiPrivacyOpened, view]);
 
   useEffect(() => {
     if (editing) return;
@@ -223,9 +234,13 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, history = [],
     } finally { accountInFlight.current = false; if (mounted.current && liveOwner.current === identity.userId) setDeletingAccount(false); }
   }
 
+  if (view === "account" && managingAiConsents) return <>
+    <button type="button" className="secondary pageBack" onClick={() => setManagingAiConsents(false)}>← Cuenta y privacidad</button>
+    <AiProcessingConsentSettings userId={identity.userId} accessToken={identity.accessToken} requiresRemoteConsent={identity.mode === "authenticated"} />
+  </>;
   if (managingConsents) return <LegalConsentManager userId={identity.userId} accessToken={identity.accessToken} authenticated={identity.mode === "authenticated"} acceptances={acceptances} bettingConsentGranted={bettingConsentGranted} requestBettingConsent={requestBettingConsent} onBack={() => setManagingConsents(false)} />;
 
-  if (view === "profile" && identity.mode === "authenticated" && focusSection === "equipment") return <><header className="profileMobileHeader profileEditHeader"><button type="button" className="textButton" onClick={onBackToProfile}>← Mi Perfil</button><div><span>MI PERFIL</span><h1>Mi Bolsa</h1></div></header><div id="equipment-bag"><EquipmentProfilePanel userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={identity.defaultHandicap} ballFitDefaults={ballFitDefaultsFromProfile(identity)} onBackToProfile={onBackToProfile} /></div></>;
+  if (view === "profile" && identity.mode === "authenticated" && focusSection === "equipment") return <><header className="profileMobileHeader profileEditHeader"><button type="button" className="textButton" onClick={onBackToProfile}>← Mi Perfil</button><div><span>MI PERFIL</span><h1>Mi Bolsa</h1></div></header><div id="equipment-bag"><EquipmentProfilePanel userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={identity.defaultHandicap} ballFitDefaults={ballFitDefaultsFromProfile(identity)} onBackToProfile={onBackToProfile} onOpenPrivacy={onOpenPrivacy} /></div></>;
 
   if (view === "profile" && identity.mode === "authenticated" && editing) return <>
     <header className="profileMobileHeader profileEditHeader"><button type="button" className="textButton" onClick={() => setEditing(false)}>← Mi Perfil</button><div><span>MI PERFIL</span><h1>Editar perfil</h1></div></header>
@@ -270,7 +285,7 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, history = [],
     {view === "account" && identity.mode === "authenticated" && <section className="card cloudAccountStatus accountCloudCompact" aria-label="Estado de la cuenta"><div><h2>{cloudIssues.some((issue) => issue.kind === "session_expired") ? "Sesión por renovar" : "Cuenta conectada"}</h2><p role="status">{cloudStatus === "synced" ? "Guardado en la nube ✓" : cloudStatus === "syncing" ? "Sincronizando…" : cloudStatus === "saving" ? "Guardando…" : cloudStatus === "offline" ? "Sin conexión" : cloudStatus === "error" ? "Error de sincronización" : cloudLinked ? "Pendiente de sincronizar" : "Nube sin vincular"}</p></div>{cloudLinked ? <button className="textButton" onClick={() => void retryCloudSync()}>Reintentar</button> : <button className="textButton" onClick={requestCloudLink}>Vincular</button>}</section>}
     {view === "account" && <>
       <section className="card accountCompactCard"><h2>Cuenta</h2><div className="accountCompactRows"><div><span>Email</span><b>{identity.email || "Sin email"}</b></div><div><span>Métodos de acceso</span><b>{identity.mode === "authenticated" ? identity.providers.map((provider) => provider === "google" ? "Google" : provider === "email" ? "Correo" : provider).join(" · ") || "Correo" : "Modo invitado"}</b></div></div></section>
-      <section className="card accountCompactCard"><h2>Privacidad y preferencias</h2><label className="accountSettingRow"><span><b>Privacidad</b><small>Quién puede ver tu perfil</small></span><select value={draft.profileVisibility} disabled={identity.mode !== "authenticated"} onChange={(event) => void updateVisibility(event.target.value as EditDraft["profileVisibility"])}><option value="private">Privado</option><option value="friends">Amigos</option></select></label><button type="button" className="accountChevronRow" onClick={() => setManagingConsents(true)}><span><b>Consentimiento IA</b><small>Revisar permisos de procesamiento</small></span><strong>›</strong></button><label className="accountSettingRow"><span><b>Notificaciones</b><small>Avisos sociales dentro de la app</small></span><input type="checkbox" checked={notificationsEnabled} onChange={(event) => onNotificationsEnabledChange(event.target.checked)} aria-label="Activar avisos dentro de la app" /></label><label className="accountSettingRow"><span><b>Alto contraste</b><small>Preferencia visual</small></span><input type="checkbox" checked={highContrast} onChange={(event) => onHighContrastChange(event.target.checked)} /></label></section>
+      <section className="card accountCompactCard"><h2>Privacidad y preferencias</h2><label className="accountSettingRow"><span><b>Privacidad</b><small>Quién puede ver tu perfil</small></span><select value={draft.profileVisibility} disabled={identity.mode !== "authenticated"} onChange={(event) => void updateVisibility(event.target.value as EditDraft["profileVisibility"])}><option value="private">Privado</option><option value="friends">Amigos</option></select></label><button type="button" className="accountChevronRow" onClick={() => setManagingAiConsents(true)}><span><b>Privacidad / IA</b><small>Instrucciones Backyard AI y lectura de scorecards</small></span><strong>›</strong></button><label className="accountSettingRow"><span><b>Notificaciones</b><small>Avisos sociales dentro de la app</small></span><input type="checkbox" checked={notificationsEnabled} onChange={(event) => onNotificationsEnabledChange(event.target.checked)} aria-label="Activar avisos dentro de la app" /></label><label className="accountSettingRow"><span><b>Alto contraste</b><small>Preferencia visual</small></span><input type="checkbox" checked={highContrast} onChange={(event) => onHighContrastChange(event.target.checked)} /></label></section>
       <section className="card accountCompactCard"><h2>Legal</h2><div className="documentConsentList compactConsentList"><Link href="/legal/terms?returnTo=account"><span>Términos de Uso</span><b>{accepted("terms")}</b></Link><Link href="/legal/privacy-simplified?returnTo=account"><span>Aviso simplificado</span><b>Ver</b></Link><Link href="/legal/privacy?returnTo=account"><span>Aviso de Privacidad</span><b>{accepted("privacy")}</b></Link></div><button type="button" className="textButton accountConsentButton" onClick={() => setManagingConsents(true)}>Gestionar consentimientos</button></section>
       {identity.mode === "authenticated" && <section className="card accountDangerZone"><div><span>TUS DATOS</span><h2>Controles de privacidad</h2></div><button type="button" className="dangerOutlineButton" onClick={() => { setDestructiveError(""); setDeleteStatsText(""); statsRequestId.current = undefined; setDeleteStatsOpen(true); }}>Eliminar estadísticas</button><p>Reinicia promedios y rendimiento desde hoy. Tu cuenta, grupos y rondas históricas se conservan.</p>{statisticsResetAt && <small>Último reset: {new Date(statisticsResetAt).toLocaleString("es-MX")}</small>}<button type="button" className="dangerButton" onClick={() => { setDestructiveError(""); setDeleteAccountPolicy(null); setDeleteAccountText(""); setDeleteAccountOpen(true); }}>Eliminar cuenta</button><p>Elimina la cuenta y solicita borrar o anonimizar su información permitida.</p></section>}
       <section className="card accountContactCard"><h2>Ayuda y privacidad</h2><div className="accountContacts"><a href={`mailto:${legalConfig.supportEmail}`}><span>Soporte</span><b>{legalConfig.supportEmail}</b></a><a href={`mailto:${legalConfig.privacyEmail}`}><span>Privacidad y ARCO</span><b>{legalConfig.privacyEmail}</b></a></div></section>

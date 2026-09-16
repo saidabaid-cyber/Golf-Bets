@@ -30,7 +30,7 @@ import type {
 } from "../../../lib/backyard-ai/schemas/scorecard";
 import { runBettingDataActionWithConsent } from "../../../lib/backyard-ai/runtime/betting-consent-boundary";
 import { deleteScorecardPhoto, deleteStaleTemporaryScorecardPhotos, markScorecardPhotosCommitted } from "../../../lib/scorecard-photo";
-import { AiProcessingConsentPrompt } from "./ai-processing-consent";
+import { AiProcessingConsentPrompt, AiProcessingConsentRequired } from "./ai-processing-consent";
 import { ScorecardCorrection } from "./scorecard-correction";
 import styles from "./backyard-ai.module.css";
 
@@ -48,6 +48,7 @@ export type ScorecardScannerProps = {
   onApply: (result: ScorecardValidationResult, photoIds: string[], overrides: ScorecardValidationOverrides, corrections: ScorecardCorrectionEvidence[]) => boolean;
   onManualFallback: () => void;
   onCancel: () => void;
+  onOpenPrivacy?: () => void;
 };
 
 function makePhotoId(roundId: string) {
@@ -62,9 +63,10 @@ function playedHoleOrder(round: ActiveScorecardRound) {
   return Array.from({ length: 18 }, (_, index) => round.startHole === 10 ? (index + 9) % 18 + 1 : index + 1);
 }
 
-export function ScorecardScanner({ round, storageOwnerId, accessToken, requiresRemoteConsent, hasActiveBettingData, requestBettingConsent, protectedPhotoIds = [], onApply, onManualFallback, onCancel }: ScorecardScannerProps) {
+export function ScorecardScanner({ round, storageOwnerId, accessToken, requiresRemoteConsent, hasActiveBettingData, requestBettingConsent, protectedPhotoIds = [], onApply, onManualFallback, onCancel, onOpenPrivacy }: ScorecardScannerProps) {
   const [photos, setPhotos] = useState<LocalPhoto[]>([]);
   const [showConsentPrompt, setShowConsentPrompt] = useState(false);
+  const [accountConsentRequired, setAccountConsentRequired] = useState(false);
   const [busy, setBusy] = useState(false);
   const [applying, setApplying] = useState(false);
   const [progressMessage, setProgressMessage] = useState("");
@@ -173,6 +175,7 @@ export function ScorecardScanner({ round, storageOwnerId, accessToken, requiresR
 
   async function scan() {
     if (!photos.length || busy || applying || scanInFlight.current || consentCheckInFlight.current) return;
+    setAccountConsentRequired(false);
     let allowed = false;
     if (accessToken) {
       consentCheckInFlight.current = true;
@@ -192,6 +195,7 @@ export function ScorecardScanner({ round, storageOwnerId, accessToken, requiresR
         }
       } catch {
         if (mounted.current) setError("No pude verificar la autorización de Card AI en tu cuenta. No se envió ninguna foto.");
+        return;
       } finally {
         consentCheckInFlight.current = false;
         if (mounted.current) {
@@ -207,6 +211,10 @@ export function ScorecardScanner({ round, storageOwnerId, accessToken, requiresR
     }
     if (!mounted.current) return;
     if (!allowed) {
+      if (requiresRemoteConsent || accessToken) {
+        setAccountConsentRequired(true);
+        return;
+      }
       setShowConsentPrompt(true);
       return;
     }
@@ -368,6 +376,7 @@ export function ScorecardScanner({ round, storageOwnerId, accessToken, requiresR
       <p className={styles.privacyNote}>Las fotos se comprimen en memoria para el análisis. Guardar una copia local es opcional y nunca bloquea Card AI. No se usan automáticamente para training global.</p>
       <button ref={scanButtonRef} type="button" className="primary big" disabled={!photos.length || busy || applying} onClick={() => { void scan(); }}>{busy ? progressMessage || "Leyendo tarjeta…" : "ESCANEAR TARJETA"}</button>
       {error && <div className="notice bad" role="alert">{error}</div>}
+      {accountConsentRequired && <AiProcessingConsentRequired scope={AI_IMAGE_PROCESSING_CONSENT} onOpenPrivacy={onOpenPrivacy} />}
       {storageWarning && <div className="notice" role="status">{storageWarning}</div>}
       {photoWarning && <div className="notice" role="status">{photoWarning}</div>}
       {busy && <div className={styles.progress} role="status"><b>{progressMessage || "Backyard está leyendo la tarjeta…"}</b></div>}
@@ -400,7 +409,7 @@ export function ScorecardScanner({ round, storageOwnerId, accessToken, requiresR
     </section>}
 
     <div className={styles.reviewActions}><button type="button" className="secondary" disabled={busy || applying} onClick={() => leave(onCancel)}>Volver a la ronda</button><button type="button" className="textButton" disabled={busy || applying} onClick={() => leave(onManualFallback)}>CAPTURAR MANUALMENTE</button></div>
-    {showConsentPrompt && <AiProcessingConsentPrompt
+    {showConsentPrompt && !requiresRemoteConsent && !accessToken && <AiProcessingConsentPrompt
       userId={storageOwnerId}
       accessToken={accessToken}
       requiresRemoteConsent={requiresRemoteConsent}

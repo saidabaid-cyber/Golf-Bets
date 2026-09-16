@@ -15,6 +15,7 @@ import {
   authErrorMessage,
   bettingConsentPromptStorageKey,
   buildLegalAcceptances,
+  buildBettingDataAcceptance,
   clampBackyardHandicap,
   clearLegalAcceptancesForUser,
   emptyBackyardProfileDetails,
@@ -65,6 +66,7 @@ import { createEmptyEquipmentProfile, loadEquipmentProfile, saveEquipmentProfile
 import { ballFitDefaultsFromProfile } from "../../lib/ball-fitting";
 import { EquipmentOnboarding } from "./equipment-onboarding";
 import { BetaOnboardingFlow } from "./beta-onboarding-flow";
+import { AccountConsentCheckpoint } from "./account-consent-checkpoint";
 import { betaOnboardingIsActive, createBetaOnboardingProgress, persistBetaOnboardingProgress, readBetaOnboardingProgress } from "../../lib/beta-onboarding";
 
 export type BackyardIdentity = BackyardProfile & {
@@ -887,9 +889,23 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     return () => { mounted = false; };
   }, [identity?.mode, identity?.userId, identity?.accessToken, currentConsent, acceptances, legalRetryRevision, flushLegalAcceptances, issueWithMessage, setCloudIssue]);
 
-  async function acceptConsent(includeBettingConsent: boolean) {
+  async function acceptConsent(includeBettingConsent: boolean, requireServerPersistence = false) {
     if (!identity) return;
     const next = buildLegalAcceptances(identity.userId, new Date().toISOString());
+    // Authenticated onboarding cannot finish on a local-only acknowledgement.
+    // Publish the legal state only after the existing server ledger confirms it.
+    if (requireServerPersistence && identity.mode === "authenticated") {
+      if (includeBettingConsent) next.push(buildBettingDataAcceptance(identity.userId, new Date().toISOString(), "pending"));
+      await flushLegalAcceptances(identity.userId, next);
+      if (activeUserId.current !== identity.userId) throw new Error("La sesión cambió antes de guardar las autorizaciones.");
+      const synced = markLegalAcceptancesSynced(mergeLegalAcceptances(acceptances, next), next);
+      localStorage.setItem(ACCOUNT_STORAGE_KEYS.acceptances, JSON.stringify(synced));
+      if (!includeBettingConsent) localStorage.setItem(bettingConsentPromptStorageKey(identity.userId), "seen");
+      clearPendingLegalSync(localStorage, identity.userId);
+      setCloudIssue("legal", null);
+      setAcceptances(synced);
+      return;
+    }
     let merged = mergeLegalAcceptances(acceptances, next);
     localStorage.setItem(ACCOUNT_STORAGE_KEYS.acceptances, JSON.stringify(merged));
     if (includeBettingConsent) {
@@ -1453,7 +1469,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     setCloudIssuesByDomain({}); setCloudStatus("local"); setCloudLinked(false); setLastCloudSync(null); setShowMigration(false);
   }} sessionError={accountCloudError} onAuthenticated={(session) => { activateSession(session); setAccessRequested(false); }} />;
   if (identity.mode === "authenticated" && !currentConsent && !cloudConsentChecked) return <main className="accessScreen"><div className="accessLoading">Verificando tus consentimientos…</div></main>;
-  if (!currentConsent) {
+  if (identity.mode === "guest" && !currentConsent) {
     if (migrationDialog && hasCurrentLegalConsent(acceptances, "guest")) return <main className="accessScreen">{migrationDialog}</main>;
     return <>{accountCloudError && <div role="alert" className="notice bad">{accountCloudError}</div>}<ConsentScreen onAccept={acceptConsent} onBack={logout} /></>;
   }
@@ -1465,10 +1481,21 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   </AccountContext.Provider>;
   if (identity.mode === "authenticated" && equipmentOnboardingRequired) return <EquipmentOnboarding userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={identity.defaultHandicap} ballFitDefaults={ballFitDefaultsFromProfile(identity)} onComplete={finishEquipmentOnboarding} onBack={finishEquipmentOnboarding} onSaveAndExit={finishEquipmentOnboarding} />;
 
-  return <AccountContext.Provider value={context!}>
+  const app = <AccountContext.Provider value={context!}>
     {blockingCloudIssues.map((issue) => <div className="notice bad" role="alert" key={issue.domain}>{issue.message}<button onClick={() => setAccessRequested(true)}>Volver a iniciar sesión</button></div>)}
     <Fragment key={identity.userId}>{children}</Fragment>
     {migrationDialog}
     {bettingConsentDialog}
   </AccountContext.Provider>;
+  // Account creation ends here, after profile/personalization and before entry
+  // into the app. Existing accounts resolve only missing server-side choices.
+  // No localStorage marker may bypass this checkpoint on a new device.
+  return identity.mode === "authenticated" ? <AccountConsentCheckpoint
+    key={identity.userId}
+    userId={identity.userId}
+    accessToken={identity.accessToken}
+    legalRequired={!currentConsent}
+    onAcceptLegal={(betting) => acceptConsent(betting, true)}
+    onBack={logout}
+  >{app}</AccountConsentCheckpoint> : app;
 }

@@ -20,6 +20,7 @@ type LaunchMonitorCaptureProps = {
   requiresRemoteConsent?: boolean;
   value: LaunchMonitorSession | null;
   onChange: (session: LaunchMonitorSession | null) => void;
+  onOpenPrivacy?: () => void;
 };
 
 type MetricField = {
@@ -110,7 +111,7 @@ function summaryMetric(value: number, metric: LaunchMonitorMetric) {
   return `${value.toLocaleString("es-MX", { maximumFractionDigits: decimals })} ${field.unit}`;
 }
 
-export function LaunchMonitorCapture({ userId, accessToken, requiresRemoteConsent = false, value, onChange }: LaunchMonitorCaptureProps) {
+export function LaunchMonitorCapture({ userId, accessToken, requiresRemoteConsent = false, value, onChange, onOpenPrivacy }: LaunchMonitorCaptureProps) {
   const session = useMemo(
     () => value?.userId === userId.trim() ? value : null,
     [userId, value],
@@ -221,6 +222,7 @@ export function LaunchMonitorCapture({ userId, accessToken, requiresRemoteConsen
         userId={userId}
         accessToken={accessToken}
         requiresRemoteConsent={requiresRemoteConsent}
+        onOpenPrivacy={onOpenPrivacy}
         onConfirm={(source, shots) => {
           const now = new Date().toISOString();
           const current = session || { id: createId("launch-session"), userId: userId.trim(), source: null, startedAt: now, completedAt: null, shots: [] };

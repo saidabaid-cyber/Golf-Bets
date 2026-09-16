@@ -1,0 +1,52 @@
+.settingsList {
+  display: grid;
+  gap: 10px;
+}
+
+.setting {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(92px, .7fr);
+  align-items: start;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--soft);
+}
+
+.settingCopy,
+.settingActions {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+  overflow-wrap: anywhere;
+}
+
+.settingCopy b {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.setting small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.settingActions {
+  justify-items: end;
+  text-align: right;
+}
+
+.settingActions b {
+  color: var(--green);
+  font-size: 10px;
+}
+
+.settingActions button {
+  min-height: 44px;
+  max-width: 100%;
+  padding: 6px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

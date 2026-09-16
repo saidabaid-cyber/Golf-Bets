@@ -4,7 +4,7 @@ import { createHmac } from "node:crypto";
 import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 
-import { AI_IMAGE_PROCESSING_CONSENT, parseBackyardAiProviderConsent } from "../../../../lib/backyard-ai/privacy";
+import { AI_LAUNCH_MONITOR_PROCESSING_CONSENT, parseBackyardAiProviderConsent } from "../../../../lib/backyard-ai/privacy";
 import { normalizeLaunchMonitorVisionExtraction } from "../../../../lib/backyard-ai/schemas/launch-monitor";
 import { backyardAiConfig, publicBackyardAiStatus } from "../../../../lib/backyard-ai/server/config";
 import { BACKYARD_AI_PRIVATE_HEADERS, backyardAiClientAddress, hasOnlyKeys, isCrossSiteRequest, isJsonRequest, readJsonBodyWithLimit } from "../../../../lib/backyard-ai/server/http-security";
@@ -80,8 +80,8 @@ export async function POST(request: NextRequest) {
   const source = parsed.value && typeof parsed.value === "object" && !Array.isArray(parsed.value) ? parsed.value as Record<string, unknown> : null;
   if (!source || !hasOnlyKeys(source, ["photos", "consent"])) return json({ error: "Solicitud inválida.", code: "invalid_request" }, { status: 400 });
   if (scorecardPhotoPayloadExceedsAggregateLimit(source.photos)) return json({ error: "Las fotos superan el tamaño permitido.", code: "request_too_large" }, { status: 413 });
-  if (!parseBackyardAiProviderConsent(source.consent, AI_IMAGE_PROCESSING_CONSENT)) return json({ error: "Autoriza el procesamiento de imágenes por IA para continuar.", code: "consent_required" }, { status: 403 });
-  const storedConsent = await verifyStoredAiProcessingConsent(request, AI_IMAGE_PROCESSING_CONSENT);
+  if (!parseBackyardAiProviderConsent(source.consent, AI_LAUNCH_MONITOR_PROCESSING_CONSENT)) return json({ error: "Autoriza la lectura de datos de práctica para continuar.", code: "consent_required" }, { status: 403 });
+  const storedConsent = await verifyStoredAiProcessingConsent(request, AI_LAUNCH_MONITOR_PROCESSING_CONSENT);
   if (!storedConsent.ok) return json({ error: storedConsent.error, code: storedConsent.code }, { status: storedConsent.status });
   const photos = parseScorecardPhotos(source.photos);
   if (!photos || photos.length < 2 || photos.length > 4) return json({ error: "Agrega de dos a cuatro fotos JPEG, PNG o WebP válidas.", code: "invalid_photos" }, { status: 400 });

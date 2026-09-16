@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { GolfInsights, ScoredRoundInsight } from "../../lib/golf-insights";
 import type { RoundSnapshot } from "../../lib/types";
 import { buildFilteredGolfInsights, buildGolfTrends, filterStatsRounds, type StatsWindow } from "../../features/stats/domain";
 import { structuredGolfInsightInput, type GolfInsightExplanation } from "../../features/ai/insights";
 import { requestBackyardAi } from "../../lib/backyard-ai/client-api";
+import { resolveAuthoritativeAiProcessingConsent } from "../../lib/backyard-ai/consent-client";
 import { browserAiProcessingConsentStorage, hasActiveAiProcessingConsent } from "../../lib/backyard-ai/processing-consent";
 import { AI_PROVIDER_PROCESSING_CONSENT, backyardAiProviderConsent } from "../../lib/backyard-ai/privacy";
 import { recordProductEvent } from "../../features/analytics/client";
@@ -16,6 +17,7 @@ export type StatsDashboardProps = {
   rounds?: RoundSnapshot[];
   consentOwnerId?: string;
   accessToken?: string | null;
+  requiresRemoteConsent?: boolean;
   onOpenHistory: () => void;
   onOpenRound: (roundId: string) => void;
 };
@@ -92,7 +94,7 @@ function TrendChart({ rounds, mode }: { rounds: ScoredRoundInsight[]; mode: Tren
   </div>;
 }
 
-export function StatsDashboard({ insights: suppliedInsights, rounds = [], consentOwnerId, accessToken, onOpenHistory, onOpenRound }: StatsDashboardProps) {
+export function StatsDashboard({ insights: suppliedInsights, rounds = [], consentOwnerId, accessToken, requiresRemoteConsent = false, onOpenHistory, onOpenRound }: StatsDashboardProps) {
   const [requestedScope, setRequestedScope] = useState<9 | 18>();
   const [trendMode, setTrendMode] = useState<TrendMode>("gross");
   const [statsWindow, setStatsWindow] = useState<StatsWindow>(10);
@@ -101,6 +103,9 @@ export function StatsDashboard({ insights: suppliedInsights, rounds = [], consen
   const [aiBusy, setAiBusy] = useState(false);
   const [aiMessage, setAiMessage] = useState("");
   const [aiExplanation, setAiExplanation] = useState<GolfInsightExplanation | null>(null);
+  const aiInFlight = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const filters = useMemo(() => ({ window: statsWindow, ...(courseFilter ? { courseName: courseFilter } : {}), ...(teeFilter ? { teeName: teeFilter } : {}) }), [courseFilter, statsWindow, teeFilter]);
   const filteredRounds = useMemo(() => rounds.length ? filterStatsRounds(rounds, filters) : [], [filters, rounds]);
   const insights = useMemo(() => rounds.length ? buildFilteredGolfInsights(rounds, filters) : suppliedInsights, [filters, rounds, suppliedInsights]);
@@ -110,16 +115,26 @@ export function StatsDashboard({ insights: suppliedInsights, rounds = [], consen
   const teeOptions = useMemo(() => [...new Set(rounds.flatMap((round) => [round.teeName, ...(round.playerTeeAssignments?.map((tee) => tee.teeName) ?? [])]).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es-MX")), [rounds]);
   const insightInput = useMemo(() => structuredGolfInsightInput(insights, metricTrends), [insights, metricTrends]);
   async function requestAiInsight() {
-    if (!consentOwnerId || !hasActiveAiProcessingConsent(browserAiProcessingConsentStorage(), consentOwnerId, AI_PROVIDER_PROCESSING_CONSENT)) {
-      setAiMessage("Activa Procesamiento IA en Mi Cuenta para pedir una explicación."); return;
-    }
+    if (aiInFlight.current) return;
+    if (!consentOwnerId) { setAiMessage("Revisa tu autorización en Perfil → Cuenta y privacidad → Privacidad / IA."); return; }
+    aiInFlight.current = true;
     setAiBusy(true); setAiMessage(""); setAiExplanation(null);
     try {
-      setAiExplanation(await requestBackyardAi<GolfInsightExplanation>("/api/backyard-ai/insights", { aggregates: insightInput, consent: backyardAiProviderConsent(AI_PROVIDER_PROCESSING_CONSENT) }, 30_000, accessToken));
+      const authority = accessToken ? await resolveAuthoritativeAiProcessingConsent({
+        accessToken, userId: consentOwnerId, scope: AI_PROVIDER_PROCESSING_CONSENT, storage: browserAiProcessingConsentStorage(),
+      }) : null;
+      if (!mounted.current) return;
+      const allowed = authority
+        ? !authority.discarded && authority.active && !authority.pendingLocalRevocation
+        : !requiresRemoteConsent && hasActiveAiProcessingConsent(browserAiProcessingConsentStorage(), consentOwnerId, AI_PROVIDER_PROCESSING_CONSENT);
+      if (!allowed) { setAiMessage("Instrucciones Backyard AI está desactivado. Puedes autorizarlo en Perfil → Cuenta y privacidad → Privacidad / IA."); return; }
+      const result = await requestBackyardAi<GolfInsightExplanation>("/api/backyard-ai/insights", { aggregates: insightInput, consent: backyardAiProviderConsent(AI_PROVIDER_PROCESSING_CONSENT) }, 30_000, accessToken);
+      if (!mounted.current) return;
+      setAiExplanation(result);
       void recordProductEvent({ eventId: `ai-insight-${crypto.randomUUID()}`, eventName: "ai_insight_viewed", accessToken, metadata: { source: "stats", quantity: 1 } });
     }
-    catch { setAiMessage("No pude explicar esta muestra ahora. Tus estadísticas calculadas siguen intactas."); }
-    finally { setAiBusy(false); }
+    catch { if (mounted.current) setAiMessage("No pude verificar la autorización o explicar esta muestra ahora. Tus estadísticas calculadas siguen intactas."); }
+    finally { aiInFlight.current = false; if (mounted.current) setAiBusy(false); }
   }
   const scoreScopes = ([9, 18] as const).filter((holes) => Boolean(insights.scoreCohorts[holes]));
   const preferredScope = requestedScope && insights.scoreCohorts[requestedScope]
