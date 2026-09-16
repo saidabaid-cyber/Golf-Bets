@@ -158,14 +158,14 @@ function guestProfile(): BackyardProfile {
   return guestBackyardProfile();
 }
 
-function nextPendingLocalDeletionOwner(storage: Pick<Storage, "getItem" | "key" | "length">) {
+function nextPendingLocalDeletionOwner(storage: Pick<Storage, "getItem" | "key" | "length">, cleanedUserId = "") {
   for (let index = 0; index < storage.length; index += 1) {
     const key = storage.key(index);
     if (!key?.startsWith(ACCOUNT_DELETION_MARKER_PREFIX)) continue;
     const state = storage.getItem(key);
     if (state === "completed_cleanup_pending") {
       const userId = key.slice(ACCOUNT_DELETION_MARKER_PREFIX.length);
-      if (userId && userId !== "guest") return userId;
+      if (userId && userId !== "guest" && userId !== cleanedUserId) return userId;
     }
   }
   return "";
@@ -1197,7 +1197,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     if (failedCleanupSteps.length) {
       console.warn("Deleted account local cleanup was incomplete", { failedSteps: failedCleanupSteps });
     }
-    if (options.trackPending !== false) setPendingLocalDeletionOwner(failedCleanupSteps.length ? deletedUserId : nextPendingLocalDeletionOwner(localStorage));
+    // The caller advances this user's durable marker only after this promise
+    // resolves. Do not reselect that same pending marker after successful
+    // cleanup, or the closed account remains stuck on the retry screen.
+    if (options.trackPending !== false) setPendingLocalDeletionOwner(failedCleanupSteps.length ? deletedUserId : nextPendingLocalDeletionOwner(localStorage, deletedUserId));
     return failedCleanupSteps.length === 0;
   }
 
@@ -1319,26 +1322,27 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     if (!userId || deletionRecoveryBusy) return;
     const markerKey = accountDeletionMarkerKey(userId);
     const markerState = localStorage.getItem(markerKey) || "cleanup_pending";
+    const serverConfirmed = markerState === "completed_cleanup_pending" || markerState === "completed";
     setDeletionRecoveryBusy(true);
     setDeletionRecoveryError("");
     try {
       const locallyComplete = await purgeDeletedAccountLocal(userId, { clearAuth: false, trackPending: false });
       if (!locallyComplete) {
-        localStorage.setItem(markerKey, markerState === "completed_cleanup_pending" ? "completed_cleanup_pending" : "cleanup_pending");
+        localStorage.setItem(markerKey, serverConfirmed ? "completed_cleanup_pending" : "cleanup_pending");
         setPendingLocalDeletionOwner(userId);
         setDeletionRecoveryError("Todavía no pudimos limpiar todos los datos locales. Libera espacio o cierra otras pestañas y reintenta.");
         return;
       }
-      if (markerState === "completed_cleanup_pending") {
+      if (serverConfirmed) {
         const supabase = getSupabaseBrowser();
         if (supabase) await clearDeletedAuthSessionForUser(supabase.auth, userId);
         if (pendingDeletionSession?.user.id === userId) setPendingDeletionSession(null);
         if (pendingDeletionOwner === userId) setPendingDeletionOwner("");
       }
-      localStorage.setItem(markerKey, markerState === "completed_cleanup_pending" ? "completed" : "pending_confirmation");
+      localStorage.setItem(markerKey, serverConfirmed ? "completed" : "pending_confirmation");
       setPendingLocalDeletionOwner(nextPendingLocalDeletionOwner(localStorage));
     } catch (error) {
-      localStorage.setItem(markerKey, markerState === "completed_cleanup_pending" ? "completed_cleanup_pending" : "cleanup_pending");
+      localStorage.setItem(markerKey, serverConfirmed ? "completed_cleanup_pending" : "cleanup_pending");
       setPendingLocalDeletionOwner(userId);
       setDeletionRecoveryError(error instanceof Error ? error.message : "Todavía no pudimos completar la limpieza local. Reintenta.");
     } finally {
