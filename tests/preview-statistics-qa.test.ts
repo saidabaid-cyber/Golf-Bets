@@ -86,7 +86,7 @@ test("remote statistics QA runner executes zero/data/reload/cutoff and scoped cl
     const users = new Map([['existing-user',{id:'existing-user',email:'unrelated@example.invalid',app_metadata:{}}]]);
     const rounds=new Map(),markers=new Map(),requests=new Map();
     const logs=[]; let creates=0, resetCalls=0, cleanupCalls=0;
-    const clientFactory=()=>({auth:{admin:{
+    const clientFactory=(url,key)=>({auth:{admin:{
       createUser:async(input)=>{creates++;users.set(input.id,{...input,app_metadata:input.app_metadata});return {data:{user:users.get(input.id)},error:null};},
       getUserById:async(id)=>users.has(id)?{data:{user:users.get(id)},error:null}:{data:{user:null},error:{status:404}},
       deleteUser:async()=>{throw new Error('normal cleanup should use real account endpoint');}
@@ -94,6 +94,7 @@ test("remote statistics QA runner executes zero/data/reload/cutoff and scoped cl
       const user=[...users.values()].find(item=>item.email===email&&item.password===password);
       return user?{data:{user,session:{access_token:'qa-token-'+user.id}},error:null}:{data:{},error:{status:400}};
     }},from:(table)=>{
+      assert.equal(key,env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,'reset readback must use authenticated owner, not admin');
       const filters={};const q={select:()=>q,eq:(key,value)=>{filters[key]=value;return q;},single:async()=>{
         const stamp=table==='user_statistics_resets'?markers.get(filters.user_id):requests.get(filters.user_id+':'+filters.request_id);
         return stamp?{data:{reset_at:stamp,strategy:'RESET_FROM_DATE'},error:null}:{data:null,error:{status:404}};

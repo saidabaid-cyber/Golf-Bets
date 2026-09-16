@@ -180,6 +180,7 @@ export async function runPreviewStatisticsQA(env = process.env, { fetcher = fetc
     const login = checked(await client.auth.signInWithPassword({ email: account.email, password: account.password }), "QA sign-in");
     assertStep(login.user?.id === account.id && login.session?.access_token, "QA session identity");
     account.token = login.session.access_token;
+    account.client = client;
     return account;
   }
 
@@ -187,8 +188,10 @@ export async function runPreviewStatisticsQA(env = process.env, { fetcher = fetc
     const result = await app("/api/account/statistics", account.token, "DELETE", { confirmation: "ELIMINAR", requestId });
     const record = analytics.parseStatisticsReset(result.data);
     assertStep(result.status === 200 && record, "Preview reset response confirmed");
-    const direct = checked(await admin.from("user_statistics_resets").select("reset_at,strategy").eq("user_id", account.id).single(), "Read isolated canonical reset");
-    const ledger = checked(await admin.from("user_statistics_reset_requests").select("reset_at").eq("user_id", account.id).eq("request_id", requestId).single(), "Read isolated reset request");
+    // Read as the actual owner. The request ledger deliberately grants SELECT
+    // to authenticated owners, not the service role used only for QA fixtures.
+    const direct = checked(await account.client.from("user_statistics_resets").select("reset_at,strategy").eq("user_id", account.id).single(), "Read isolated canonical reset");
+    const ledger = checked(await account.client.from("user_statistics_reset_requests").select("reset_at").eq("user_id", account.id).eq("request_id", requestId).single(), "Read isolated reset request");
     assertStep(Date.parse(direct.reset_at) === Date.parse(record.resetAt), "Preview and isolated DB share canonical reset");
     assertStep(Date.parse(ledger.reset_at) <= Date.parse(record.resetAt), "idempotent request committed");
     return { record, requestId };
