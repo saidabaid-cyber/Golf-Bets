@@ -695,6 +695,11 @@ export type PersonalOpponentResult = {
 
 export type RoundSnapshot = {
   id: string;
+  /** Read-only participant history view, never an owned/importable round.
+   * id is namespaced by the canonical DB UUID to avoid cross-owner local-ID collisions. */
+  cloudReadOnly?: true;
+  cloudRoundId?: string;
+  cloudSourceLocalId?: string;
   /** Missing in legacy history is normalized to completed without rewriting storage. */
   lifecycleState?: RoundLifecycleState;
   /** Durable instant when the organizer explicitly started the round. */

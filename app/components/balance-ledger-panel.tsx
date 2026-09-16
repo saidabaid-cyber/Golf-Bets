@@ -45,7 +45,7 @@ export function BalanceLedgerPanel({
   const titleId = useId();
   const leftSelectId = useId();
   const rightSelectId = useId();
-  const ledger = useMemo(() => buildBalanceLedger(history), [history]);
+  const ledger = useMemo(() => buildBalanceLedger(history.filter(round => !round.cloudReadOnly && !round.id.startsWith("shared:"))), [history]);
   const [selectedLeft, setSelectedLeft] = useState("");
   const [selectedRight, setSelectedRight] = useState("");
 

@@ -2851,7 +2851,7 @@ function GolfBetsApp() {
   }
 
   async function attachScorecardPhoto(round: RoundSnapshot, file?: File) {
-    if (!file) return;
+    if (!file || round.cloudReadOnly || round.id.startsWith("shared:")) return;
     const photoId = `${round.id}-${makeId()}`;
     try {
       await saveScorecardPhoto(photoId, file, identity.userId);
@@ -2890,6 +2890,7 @@ function GolfBetsApp() {
   async function confirmHistoricalRoundDeletion() {
     if (!historicalRoundToDelete) return;
     const target = historicalRoundToDelete;
+    if (target.cloudReadOnly || target.id.startsWith("shared:")) { setHistoricalRoundToDelete(null); return; }
     const next = resolveHistoricalRoundDeletion(history, target.id, "delete");
     try {
       recordCloudDeletion(localStorage, "round", target.id);
@@ -4089,7 +4090,8 @@ function GolfBetsApp() {
           const recap = buildHistoricalRoundRecap(r);
           const financials = recap.financials;
           const holeLabel = recap.meta.holeCount ? `${recap.meta.holeCount} hoyos` : "hoyos no registrados";
-          return <div className="historyRound" key={r.id}><div className="historyRow"><div><b>{recap.meta.courseName || "Campo no disponible"}</b><span>{recap.meta.date || "Fecha no disponible"} · {holeLabel} · apuestas {financials?.betResult === undefined ? "—" : money(financials.betResult)} · gastos {financials?.expenseTotal === undefined ? "—" : money(financials.expenseTotal)}</span></div><strong className={financials?.netResult === undefined ? "" : financials.netResult >= 0 ? "good" : "bad"}>{financials?.netResult === undefined ? "—" : money(financials.netResult)}</strong></div><div className="historyActions"><button onClick={() => { setHistoryDetailId(r.id); setTab("historyDetail"); }}>Abrir ronda</button><button onClick={() => downloadRoundCsv(r)}>CSV</button><button onClick={() => downloadRoundPdf(r)}>PDF</button><button onClick={() => downloadRoundImage(r)}>Imagen</button><button onClick={() => shareRound(r)}>Compartir</button><label className="uploadButton">{r.photoId ? "Cambiar foto" : "Agregar foto de tarjeta"}<input type="file" accept="image/*" capture="environment" onChange={(event) => attachScorecardPhoto(r, event.target.files?.[0])} /></label>{r.photoId && <button onClick={() => viewScorecardPhoto(r)}>Ver tarjeta original</button>}<button className="dangerGhost" onClick={() => setHistoricalRoundToDelete(r)}>Eliminar ronda</button></div></div>;
+          const sharedReadOnly = r.cloudReadOnly || r.id.startsWith("shared:");
+          return <div className="historyRound" key={r.id}><div className="historyRow"><div><b>{recap.meta.courseName || "Campo no disponible"}</b><span>{recap.meta.date || "Fecha no disponible"} · {holeLabel} · apuestas {financials?.betResult === undefined ? "—" : money(financials.betResult)} · gastos {financials?.expenseTotal === undefined ? "—" : money(financials.expenseTotal)}</span></div><strong className={financials?.netResult === undefined ? "" : financials.netResult >= 0 ? "good" : "bad"}>{financials?.netResult === undefined ? "—" : money(financials.netResult)}</strong></div><div className="historyActions"><button onClick={() => { setHistoryDetailId(r.id); setTab("historyDetail"); }}>Abrir ronda</button><button onClick={() => downloadRoundCsv(r)}>CSV</button><button onClick={() => downloadRoundPdf(r)}>PDF</button><button onClick={() => downloadRoundImage(r)}>Imagen</button><button onClick={() => shareRound(r)}>Compartir</button>{!sharedReadOnly && <label className="uploadButton">{r.photoId ? "Cambiar foto" : "Agregar foto de tarjeta"}<input type="file" accept="image/*" capture="environment" onChange={(event) => attachScorecardPhoto(r, event.target.files?.[0])} /></label>}{r.photoId && <button onClick={() => viewScorecardPhoto(r)}>Ver tarjeta original</button>}{!sharedReadOnly && <button className="dangerGhost" onClick={() => setHistoricalRoundToDelete(r)}>Eliminar ronda</button>}</div></div>;
         })}
       </section>
     </>}

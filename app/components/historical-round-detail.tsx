@@ -143,7 +143,7 @@ export function HistoricalRoundDetail({ round, priorRounds, accountUserId, acces
 
   return <div className="historicalDetail">
     {accountUserId && <RoundAchievementSummary round={round} priorRounds={priorRounds} accountUserId={accountUserId} />}
-    {accountUserId && accessToken && <details className="card"><summary>Logros y attest de la ronda</summary><CloudSocialActivity key={`${accountUserId}:${round.id}`} viewerId={accountUserId} accessToken={accessToken} localRoundId={round.id} /></details>}
+    {accountUserId && accessToken && <details className="card"><summary>Logros y attest de la ronda</summary><CloudSocialActivity key={`${accountUserId}:${round.id}`} viewerId={accountUserId} accessToken={accessToken} localRoundId={round.cloudSourceLocalId || round.id} /></details>}
     {indexRecord && <section className="card"><details><summary>{indexRecord.eligible ? `ÍNDICE BACKYARD · Diferencial ${indexRecord.scoreDifferential?.toFixed(1)}` : "NO ELEGIBLE PARA ÍNDICE"}</summary><p>{indexRecord.eligible ? "Evidencia congelada al cerrar la ronda. Estimación local, no oficial." : indexRecord.reasons.map((reason) => BACKYARD_INDEX_REASON_LABELS[reason]).join(" ")}</p>{indexRecord.pccKind === "DECLARED_LOCAL_ZERO" && <p>PCC 0 declarado localmente. No es un PCC oficial publicado.</p>}</details></section>}
     <section className="card historicalHero">
       <div>

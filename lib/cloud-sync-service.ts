@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { findAmbiguousCloudConflicts, mergeLocalAndCloud, stableValue, type CloudDataBundle, type CloudEntityType, type CloudTombstone } from "./cloud-sync";
 import { writeVersionedRow } from "./cloud-write";
 import { parseFrequentGroups } from "./frequent-templates";
+import type { RoundSnapshot } from "./types";
 
 export { writeVersionedRow } from "./cloud-write";
 
@@ -55,6 +56,39 @@ async function readOwnedRows(client: SupabaseClient, table: string, userId: stri
     page = result.data || []; rows.push(...page);
   }
   return { data: rows as unknown as Array<{ snapshot: unknown; entity_type: CloudEntityType; local_id: string; deleted_at: string }>, error: null };
+}
+
+/** Participant RLS already permits these canonical cards. Keep them separate
+ * from ownership: a preserved owner-null card must remain visible, but must
+ * never become a new owned row when this account's local history syncs. */
+export async function readCloudRoundHistory(client: SupabaseClient, userId: string): Promise<RoundSnapshot[]> {
+  const owned = await readOwnedRows(client, "rounds_cloud", userId, "snapshot");
+  const history = owned.data.map(row => row.snapshot).filter((snapshot): snapshot is RoundSnapshot =>
+    Boolean(snapshot) && typeof snapshot === "object" && !Array.isArray(snapshot) && Boolean(localId(snapshot)));
+  const participantIds = new Set<string>();
+  for (let offset = 0; ; offset += 500) {
+    const page = await client.from("round_participants_v2").select("round_id").eq("user_id", userId)
+      .order("round_id").range(offset, offset + 499);
+    if (page.error) throw page.error;
+    for (const row of page.data || []) if (typeof row.round_id === "string") participantIds.add(row.round_id);
+    if ((page.data || []).length < 500) break;
+  }
+  const ids = [...participantIds];
+  for (let offset = 0; offset < ids.length; offset += 100) {
+    // This is the authenticated user's client, not an administrative read. Both
+    // the explicit membership AND canonical snapshot RLS must permit access.
+    const result = await client.from("rounds_cloud").select("id,owner_id,local_round_id,snapshot")
+      .in("id", ids.slice(offset, offset + 100)).order("id");
+    if (result.error) throw result.error;
+    for (const row of result.data || []) {
+      if (row.owner_id === userId || typeof row.id !== "string" || !row.snapshot
+        || typeof row.snapshot !== "object" || Array.isArray(row.snapshot) || !localId(row.snapshot)) continue;
+      const source = row.snapshot as RoundSnapshot;
+      history.push({ ...source, id: `shared:${row.id}`, cloudReadOnly: true, cloudRoundId: row.id,
+        cloudSourceLocalId: typeof row.local_round_id === "string" ? row.local_round_id : source.id });
+    }
+  }
+  return history;
 }
 
 async function applyTombstones(client: SupabaseClient, userId: string, tombstones: CloudTombstone[], deviceId: string | null = null, extendedSchema = true) {
@@ -149,7 +183,7 @@ async function projectRoundSnapshots(client: SupabaseClient, userId: string, his
 export async function readCloudBundle(client: SupabaseClient, userId: string, extendedSchema = false): Promise<CloudDataBundle> {
   const stateColumns = extendedSchema ? "active_draft,updated_at,updated_by_device" : "active_draft,updated_at";
   const [rounds, players, groups, rivals, courses, preferences, state, deletions] = await Promise.all([
-    readOwnedRows(client, "rounds_cloud", userId, "snapshot"),
+    readCloudRoundHistory(client, userId).then(data => ({ data, error: null })),
     readOwnedRows(client, "players", userId, "snapshot"),
     readOwnedRows(client, "frequent_groups_cloud", userId, "snapshot"),
     readOwnedRows(client, "personal_rivals_cloud", userId, "snapshot"),
@@ -163,7 +197,7 @@ export async function readCloudBundle(client: SupabaseClient, userId: string, ex
   const stateData = state.data as null | { active_draft?: unknown; updated_at?: string; updated_by_device?: string };
   const data: CloudDataBundle = {
     version: 1,
-    history: (rounds.data || []).map((row) => row.snapshot).filter(Boolean),
+    history: rounds.data,
     frequentPlayers: (players.data || []).map((row) => row.snapshot).filter(Boolean),
     frequentGroups: parseFrequentGroups(JSON.stringify((groups.data || []).map((row) => row.snapshot).filter(Boolean))),
     rivals: (rivals.data || []).map((row) => row.snapshot).filter(Boolean),
@@ -217,7 +251,8 @@ export async function writeCloudBundle(
     const lateConflicts = findAmbiguousCloudConflicts(body.data, currentCloud);
     if (lateConflicts.length) throw Object.assign(new Error("Hay un cambio simultáneo en el mismo dato."), { code: "CLOUD_FIELD_CONFLICT", conflicts: lateConflicts });
     const incoming = mergeLocalAndCloud(body.data, currentCloud);
-    history = safeArray<Record<string, unknown>>(incoming.history, 1000).filter(localId);
+    history = safeArray<Record<string, unknown>>(incoming.history, 1000)
+      .filter(item => localId(item) && item.cloudReadOnly !== true && !localId(item).startsWith("shared:"));
     players = safeArray<Record<string, unknown>>(incoming.frequentPlayers, 500).filter(localId);
     groups = safeArray<Record<string, unknown>>(incoming.frequentGroups, 250).filter(localId);
     rivals = safeArray<Record<string, unknown>>(incoming.rivals, 500).filter(localId);

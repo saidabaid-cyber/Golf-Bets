@@ -17,7 +17,8 @@ export function upsertRoundSnapshot(history: RoundSnapshot[], next: RoundSnapsho
 }
 
 export function canEditSnapshot(round: RoundSnapshot) {
-  return Boolean(round.players?.length && round.courseSnapshot && round.scores && round.betConfig && round.order?.length
+  return Boolean(!round.cloudReadOnly && !round.id.startsWith("shared:")
+    && round.players?.length && round.courseSnapshot && round.scores && round.betConfig && round.order?.length
     && (!round.betConfig.foursome?.enabled || round.segments?.length));
 }
 

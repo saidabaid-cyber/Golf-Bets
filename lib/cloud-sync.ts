@@ -260,8 +260,12 @@ export function mergeCloudCollection<T>(
 function mergeRoundHistory(local: RoundSnapshot[], cloud: RoundSnapshot[]) {
   const localById = new Map(local.map(round => [round.id, round]));
   const cloudById = new Map(cloud.map(round => [round.id, round]));
-  return mergeCloudCollection(local, cloud, round => round.id, round => round.updatedAt || round.completedAt || round.date)
+  // Shared history is a server-owned view. Never resurrect an anonymized name
+  // from a newer browser clock, retain revoked access, or import a local copy.
+  const ownedLocal = local.filter(round => round.cloudReadOnly !== true && !round.id.startsWith("shared:"));
+  return mergeCloudCollection(ownedLocal, cloud, round => round.id, round => round.updatedAt || round.completedAt || round.date)
     .map(round => {
+      if (round.cloudReadOnly) return round;
       const startedAt = earliestHistoricalStartedAt(localById.get(round.id), cloudById.get(round.id));
       return startedAt ? { ...round, startedAt } : round;
     });
@@ -521,6 +525,8 @@ export function findAmbiguousCloudConflicts(local: CloudDataBundle, cloud: Cloud
     for (const item of local[collection]) {
       const other = remote.get(item.id);
       if (!other) continue;
+      if (collection === "history" && ((item as RoundSnapshot).cloudReadOnly || (other as RoundSnapshot).cloudReadOnly
+        || item.id.startsWith("shared:"))) continue;
       const localAt = "updatedAt" in item ? item.updatedAt : undefined;
       const cloudAt = "updatedAt" in other ? other.updatedAt : undefined;
       const [localValue, cloudValue] = collection === "history"

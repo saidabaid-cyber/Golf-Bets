@@ -316,6 +316,11 @@ function canonicalRounds(rounds: readonly RoundSnapshot[]) {
   let nonFinalRounds = 0;
   let invalidRounds = rounds.length - runtimeRounds.length;
   for (const round of unique) {
+    // Shared cards preserve the organizer's frozen owner perspective. They are
+    // visible in history/ledger, but must not count the organizer's score or
+    // expenses as this account's personal performance. Per-player analytics
+    // require a separate proven participant perspective, not an owner rewrite.
+    if (round.cloudReadOnly || round.id.startsWith("shared:")) continue;
     const recap = buildHistoricalRoundRecap(round);
     if (recap.meta.lifecycleState !== "completed") {
       nonFinalRounds += 1;

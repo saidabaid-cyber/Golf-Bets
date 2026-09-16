@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseForUser } from "../../../../lib/supabase/server";
 import { authUserFailure } from "../../../../lib/auth-errors";
 import { scheduleSocialPublication } from "../../../../lib/social-publication.server";
+import { readCloudRoundHistory } from "../../../../lib/cloud-sync-service";
 
 async function account(request: NextRequest) {
   const token = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
@@ -19,17 +20,21 @@ async function account(request: NextRequest) {
 export async function GET(request: NextRequest) {
   const authenticated = await account(request);
   if ("error" in authenticated) return NextResponse.json({ error: authenticated.error, code: authenticated.code || "AUTH_REQUIRED" }, { status: authenticated.status });
-  const { data, error } = await authenticated.supabase.from("rounds_cloud").select("snapshot").eq("owner_id", authenticated.userId).order("updated_at", { ascending: false });
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-  return NextResponse.json({ rounds: (data || []).map((row) => row.snapshot) }, { headers: { "cache-control": "private, no-store" } });
+  try {
+    const rounds = await readCloudRoundHistory(authenticated.supabase, authenticated.userId);
+    return NextResponse.json({ rounds }, { headers: { "cache-control": "private, no-store" } });
+  } catch {
+    return NextResponse.json({ error: "No pudimos consultar tus rondas. Intenta de nuevo." }, { status: 503, headers: { "cache-control": "private, no-store" } });
+  }
 }
 
 export async function POST(request: NextRequest) {
   const authenticated = await account(request);
   if ("error" in authenticated) return NextResponse.json({ error: authenticated.error, code: authenticated.code || "AUTH_REQUIRED" }, { status: authenticated.status });
   const { supabase, userId } = authenticated;
-  const body = await request.json().catch(() => null) as { round?: { id?: string } } | null;
-  if (!body?.round?.id) return NextResponse.json({ error: "Ronda inválida." }, { status: 400 });
+  const body = await request.json().catch(() => null) as { round?: { id?: string; cloudReadOnly?: boolean } } | null;
+  if (typeof body?.round?.id !== "string" || !body.round.id) return NextResponse.json({ error: "Ronda inválida." }, { status: 400 });
+  if (body.round.cloudReadOnly || body.round.id.startsWith("shared:")) return NextResponse.json({ error: "Esta tarjeta compartida es de sólo lectura." }, { status: 403 });
   const { data: existing } = await supabase.from("rounds_cloud").select("id").eq("owner_id", userId).eq("local_round_id", body.round.id).maybeSingle();
   if (existing) return NextResponse.json({ duplicate: true }, { status: 409 });
   const { data, error } = await supabase.from("rounds_cloud").insert({ owner_id: userId, local_round_id: body.round.id, local_id: body.round.id, snapshot: body.round }).select("id").single();

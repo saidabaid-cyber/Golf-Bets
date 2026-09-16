@@ -363,7 +363,10 @@ function roundStartTime(round: RoundSnapshot): number {
 /** Reads only stored frozen evidence; never changes profile manual HCP, Playing HCP, GHIN, or historical rounds. */
 export function calculateBackyardIndex(history: readonly RoundSnapshot[], accountUserId: string): BackyardIndexSummary {
   const rounds = deduplicateRoundSnapshots(history.filter(
-    (round): round is RoundSnapshot => Boolean(round && typeof round.id === "string" && round.id.trim()),
+    // Participant history is a read-only organizer snapshot, not newly eligible
+    // evidence for the viewer. Preserve frozen records without rebinding their
+    // original roundId to the shared UI namespace or double-counting own copies.
+    (round): round is RoundSnapshot => Boolean(round && !round.cloudReadOnly && typeof round.id === "string" && round.id.trim() && !round.id.startsWith("shared:")),
   )).filter((round) => Array.isArray(round.players)
     && round.players.some((player) => player && player.accountUserId === accountUserId))
     .sort((a, b) => playedTime(b) - playedTime(a)
