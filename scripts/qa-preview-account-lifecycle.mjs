@@ -129,7 +129,9 @@ export async function runPreviewAccountQA(env = process.env, { fetcher = fetch, 
     await close(empty, "delete_golf_data");
     step((await ownedAccount(empty)) === null, "Auth user really deleted");
     await noLogin(empty);
+    await app("/api/cloud/rounds", empty, "GET", undefined, [401]);
     passed.push("ACCOUNT_DELETE_EMPTY", "ACCOUNT_DELETE_AUTH", "NO_ARBITRARY_USER_ID");
+    passed.push("DELETED_SESSION_REJECTED");
     // Same proof/request succeeds after Auth removal; it does not start a new job.
     const retry = await app("/api/account/delete", empty, "DELETE", empty.operation, [200], null);
     step(retry.deleted === true, "tokenless durable replay completes idempotently");
@@ -156,6 +158,21 @@ export async function runPreviewAccountQA(env = process.env, { fetcher = fetch, 
     const peerPlayer = preserved.snapshot.players.find(p => p.accountUserId === peer.id);
     step(peerPlayer?.name === peer.displayName, "other participant identity preserved");
     passed.push("ACCOUNT_DELETE_SHARED_ROUND_INTEGRITY", "SHARED_ROUND_PARTICIPANT_RLS");
+    // A preserved SQL row is not sufficient: the application must return it to
+    // the surviving participant, including after a new server-authenticated login.
+    async function sharedHistoryReadback(token) {
+      const history = await app("/api/cloud/rounds", peer, "GET", undefined, [200], token);
+      const round = history.rounds?.find(item => item.cloudRoundId === sharedId);
+      step(round?.cloudReadOnly === true && round.ownerName === "Jugador eliminado", "shared app history is read-only and anonymized");
+      assert.deepEqual(round.scores, shared.scores);
+      step(history.rounds.some(item => item.id === personal.id), "participant owned history also remains visible");
+    }
+    await sharedHistoryReadback(peer.token);
+    const freshPeer = clientFactory(config.supabaseOrigin, config.publicKey, options);
+    const freshLogin = checked(await freshPeer.auth.signInWithPassword({ email: peer.email, password: peer.password }), "Fresh participant login");
+    step(freshLogin.user?.id === peer.id && freshLogin.session?.access_token, "fresh participant identity");
+    await sharedHistoryReadback(freshLogin.session.access_token);
+    passed.push("SHARED_HISTORY_APP_READBACK", "SHARED_HISTORY_FRESH_SESSION");
     // An old browser tab must not resurrect deleted PII through its own copy.
     checked(await peer.client.from("rounds_cloud").update({ snapshot: personal }).eq("id", personalId).eq("owner_id", peer.id), "Resend own stale QA snapshot");
     const restored = await readRound(peer.client, personalId);

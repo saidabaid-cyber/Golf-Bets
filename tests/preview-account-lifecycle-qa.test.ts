@@ -97,14 +97,18 @@ test("account Preview runner executes delete/shared RLS/stale sync/archive and p
         else{deleteCalls++;users.delete(id);deletedIds.add(id);for(const row of rounds.values())scrub(row);}
         const response={ok:true,deleted:!archived,archived};jobs.set(body.requestId,{proof:body.recoveryToken,response});return Response.json(response);
       }
-      assert.ok(id&&users.has(id));
+      if(!id||!users.has(id))return Response.json({code:'AUTH_REQUIRED'},{status:401});
       if(url.pathname==='/api/equipment')return Response.json({code:'ACCOUNT_ARCHIVED'},{status:403});
-      assert.equal(url.pathname,'/api/cloud/rounds');assert.equal(init.method,'POST');
+      assert.equal(url.pathname,'/api/cloud/rounds');
+      if(init.method==='GET')return Response.json({rounds:[...rounds.values()]
+        .filter(row=>row.owner_id===id||participants.get(row.id)===id)
+        .map(row=>row.owner_id===id?row.snapshot:{...row.snapshot,id:'shared:'+row.id,cloudRoundId:row.id,cloudReadOnly:true})});
+      assert.equal(init.method,'POST');
       const roundId=randomUUID();rounds.set(roundId,{id:roundId,owner_id:id,snapshot:body.round});return Response.json({roundId},{status:201});
     };
     const result=await runPreviewAccountQA(env,{fetcher:transport,clientFactory,log:value=>logs.push(JSON.parse(value))});
     assert.equal(creates,3);assert.equal(deleteCalls,2);assert.equal(archiveCalls,1);assert.equal(adminDeletes,0);
-    assert.equal(result.passed.length,11);assert.deepEqual(result.retainedQaUserIds,[]);assert.equal(result.archivedQaFixtures.length,1);
+    assert.equal(result.passed.length,14);assert.deepEqual(result.retainedQaUserIds,[]);assert.equal(result.archivedQaFixtures.length,1);
     assert.equal(users.size,2);assert.ok(users.has('existing-user'));
     assert.equal(logs[0].cleanup,'ONLY_INTENTIONAL_ARCHIVE_FIXTURE_RETAINED');
     assert.equal(result.archivedQaFixtures[0].roundIds.length,2);
