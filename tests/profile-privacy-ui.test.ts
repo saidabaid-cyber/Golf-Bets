@@ -69,6 +69,15 @@ test("Cuenta y privacidad separa ambos controles destructivos", () => {
   assert.match(profile, /deleteAccountText/);
 });
 
+test("destructive dialog headings reserve the complete 44px close target plus gap", () => {
+  const dialogCss = readFileSync("app/components/profile-data-dialogs.module.css", "utf8");
+  const heading = dialogCss.match(/\.dialog h2\s*\{([^}]+)\}/)?.[1] || "";
+  const reserved = Number(heading.match(/padding-right:\s*(\d+)px/)?.[1]);
+  assert.ok(reserved >= 44 + 8, "at 390px the title must wrap before the close button, not underneath it");
+  assert.match(dialogCss, /max-height:calc\(100dvh/);
+  assert.match(dialogCss, /overflow-y:auto/);
+});
+
 test("reset de estadísticas deriva ownership de sesión, usa RLS y deja auditoría", () => {
   assert.match(statisticsRoute, /authenticatedRequest\(request\)/);
   assert.doesNotMatch(statisticsRoute, /body\?\.userId|body\.userId/);

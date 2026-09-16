@@ -1,5 +1,5 @@
 .dialog { position:relative; width:min(100%,430px); max-height:calc(100dvh - 40px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow-y:auto; overscroll-behavior:contain; padding:22px; border-radius:20px; background:var(--card,#fff); color:var(--ink,#153d30); box-shadow:0 24px 80px #0005; }
-.dialog h2 { padding-right:28px; font-size:22px; }
+.dialog h2 { padding-right:52px; font-size:22px; }
 .dialog p,.dialog li { font-size:13px; line-height:1.45; overflow-wrap:anywhere; }
 .dialog label { display:grid; gap:8px; margin-top:14px; }
 .dialog input { min-height:44px; min-width:0; width:100%; font-size:16px; }
