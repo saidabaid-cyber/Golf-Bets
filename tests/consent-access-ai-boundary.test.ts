@@ -10,6 +10,8 @@ import * as security from "../lib/backyard-ai/server/http-security";
 import * as photoRequest from "../lib/backyard-ai/server/scorecard-request";
 import * as records from "../lib/backyard-ai/consent-record";
 import * as canonical from "../lib/backyard-ai/runtime/canonical-command-guard";
+import * as intentParser from "../lib/backyard-ai/runtime/intent-parser";
+import * as providerSetup from "../lib/backyard-ai/runtime/provider-round-setup";
 import { resolveAuthoritativeAiProcessingConsent } from "../lib/backyard-ai/consent-client";
 import { acceptAiProcessingConsent, hasActiveAiProcessingConsent } from "../lib/backyard-ai/processing-consent";
 
@@ -61,7 +63,7 @@ function providerBoundary(outcome: LedgerOutcome) {
     }).outputText;
     runInNewContext(compiled, {
       exports, Request, Response, Date,
-      console: { info() {}, error() {} },
+      console: { info() {}, error() {}, warn() {} },
       process: { env: { OPENAI_API_KEY: "synthetic-no-network-test-key" } },
       require(id: string) {
         if (id === "server-only") return {};
@@ -81,6 +83,8 @@ function providerBoundary(outcome: LedgerOutcome) {
           aiProcessingConsentLedgerAccess: () => ({ allowed: outcome !== "environment_unavailable" }),
         };
         if (id.endsWith("/canonical-command-guard")) return canonical;
+        if (id.endsWith("/intent-parser")) return intentParser;
+        if (id.endsWith("/provider-round-setup")) return providerSetup;
         if (id.endsWith("/bets/registry")) return { BET_REGISTRY: [] };
         if (id.endsWith("/rate-limit")) return { consumeBackyardAiLimit: () => true };
         if (id.endsWith("/rules-ai-rate-limit")) return { consumePersistentRulesAiLimit: async () => true };

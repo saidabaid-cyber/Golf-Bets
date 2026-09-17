@@ -30,6 +30,7 @@ type RoundSetupAiResponse = {
   canonicalCommand: string;
   confidence: number;
   clarification: string | null;
+  mode?: "AI_PROVIDER_CANONICAL" | "SAFE_LOCAL_FALLBACK";
 };
 
 export type AiRoundSetupTelemetry = {
@@ -275,7 +276,7 @@ export function AiRoundSetup({ initialDraft, memoryContext, accessToken, require
         const response = await requestBackyardAi<RoundSetupAiResponse>("/api/backyard-ai/round-setup", { input: command, consent: backyardAiProviderConsent(AI_PROVIDER_PROCESSING_CONSENT) }, 30_000, accessToken);
         if (!mounted.current || generation !== submissionGeneration.current) return;
         const integrity = validateCanonicalRoundCommand(command, response.canonicalCommand);
-        if (integrity.ok) {
+        if (integrity.ok && response.mode !== "SAFE_LOCAL_FALLBACK") {
           canonicalCommand = integrity.command;
           modelConfidence = response.confidence;
           clarification = response.clarification;

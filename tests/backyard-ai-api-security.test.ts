@@ -212,7 +212,8 @@ test("AI routes combine a bounded burst limit with the existing persistent Supab
     assert.match(source, /rate_limit_unavailable/);
     assert.match(source, /parseBackyardAiProviderConsent/);
   }
-  assert.match(readFileSync("app/api/backyard-ai/round-setup/route.ts", "utf8"), /validateCanonicalRoundCommand/);
+  assert.match(readFileSync("app/api/backyard-ai/round-setup/route.ts", "utf8"), /resolveRoundSetupProvider\(input, rawResult, localInterpretation\)/);
+  assert.match(readFileSync("lib/backyard-ai/runtime/provider-round-setup.ts", "utf8"), /validateCanonicalRoundCommand\(original, command\)/);
 });
 
 test("AI routes enforce global call budgets and count every scorecard photo before parallel provider calls", () => {

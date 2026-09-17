@@ -5,6 +5,7 @@ export type CanonicalCommandIntegrityIssueCode =
   | "empty_canonical_command"
   | "explicit_numbers_changed"
   | "explicit_actions_changed"
+  | "pressure_exclusion_changed"
   | "memory_reference_changed"
   | "unknown_catalog_term_changed";
 
@@ -74,6 +75,9 @@ function actionFingerprint(action: ParsedRoundSetupAction) {
         action.skinsMode ?? null,
         action.secondNinePressed ?? null,
         action.secondNineMultiplier ?? null,
+        action.foursomeMode ?? null,
+        teamPartition(action.foursomeTeamAPlayerNames, action.foursomeTeamBPlayerNames),
+        action.foursomePressureMultiplier ?? null,
       ];
     case "configure_group_nassau":
       return [
@@ -231,6 +235,13 @@ export function validateCanonicalRoundCommand(
   const original = parseRoundSetupIntent(originalCommand);
   const proposed = parseRoundSetupIntent(command);
   const issues: CanonicalCommandIntegrityIssue[] = [];
+
+  // A bare "sin presiones" is a constraint, not an add/remove wager action.
+  // Preserve it even when both commands produce the same action list.
+  const noPressures = (text: string) => /\bsin\s+(?:presion(?:es)?|press(?:es)?)\b/.test(normalizeMexicanSpanish(text));
+  if (noPressures(originalCommand) !== noPressures(command)) {
+    issues.push({ code: "pressure_exclusion_changed", message: "La reescritura cambió una exclusión explícita de presiones." });
+  }
 
   if (!sameFacts(numericLiteralFingerprints(originalCommand), numericLiteralFingerprints(command))) {
     issues.push({
