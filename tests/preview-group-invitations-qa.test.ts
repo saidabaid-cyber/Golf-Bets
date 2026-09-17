@@ -43,8 +43,8 @@ test("group QA retains attempted run-owned fixtures on failure and never logs cr
 test("group QA never invokes synthetic email delivery on a configured provider or claims receipt",()=>{
   const source=readFileSync("scripts/qa-preview-group-invitations.mjs","utf8");
   assert.match(source,/assert\.equal\(typeof inbox\.emailDeliveryConfigured,"boolean"\)/);
-  assert.match(source,/emailDeliveryConfigured\?await rpc\(a,"create"/);
+  assert.match(source,/assert\.equal\(invite\.channel,"BACKYARD"\)/);
   assert.match(source,/if\(!emailDeliveryConfigured\)/);
   assert.doesNotMatch(source,/deleteUser\(|\/api\/account\/delete|\.delete\(/);
-  assert.match(source,/emailReceipt:"PENDING_OWNER_ACTION"/);
+  assert.match(source,/emailReceipt:emailDeliveryConfigured\?"PENDING_INTERACTIVE_QA":"BLOCKED_EXTERNAL"/);
 });

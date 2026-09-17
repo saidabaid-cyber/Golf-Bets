@@ -71,6 +71,9 @@ export async function POST(request: NextRequest) {
     if (data?.alreadyMember) return NextResponse.json({ alreadyMember: true }, { headers });
     if (!uuid(data?.invitationId)) return failure({ code: "GROUP_RESPONSE_INVALID" });
     invitationId = data.invitationId;
+    // The authenticated RPC already persisted and authorized the internal inbox
+    // invitation. Selecting a Backyard account must not depend on email delivery.
+    if (uuid(body.targetUserId)) return NextResponse.json({ ...data, channel: "BACKYARD" }, { headers });
   } else if (body.action === "retry" && uuid(body.invitationId)) invitationId = body.invitationId;
   else return NextResponse.json({ error: "Acción inválida." }, { status: 400, headers });
   const admin = getSupabaseAdmin("cloud");

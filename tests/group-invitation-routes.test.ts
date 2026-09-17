@@ -92,6 +92,17 @@ test("existing member and duplicate in-flight send produce no new provider reque
   const member=harness("invitations",{createData:{alreadyMember:true}});assert.equal((await member.run("POST",{action:"create",groupId:GROUP,targetUserId:OTHER})).status,200);assert.equal(member.sendCalls(),0);
   const sending=harness("invitations",{noSend:true});assert.equal((await sending.run("POST",{action:"retry",invitationId:INVITE})).status,200);assert.equal(sending.sendCalls(),0);
 });
+
+test("internal account invitation succeeds without invoking delivery, still authorized by the user RPC",async()=>{
+  const h=harness("invitations",{providerError:"GROUP_EMAIL_NOT_CONFIGURED"});
+  const response=await h.run("POST",{action:"create",groupId:GROUP,targetUserId:OTHER});
+  assert.equal(response.status,200);assert.equal((await response.json()).channel,"BACKYARD");
+  assert.equal(h.sendCalls(),0);assert.equal(h.calls.length,1);assert.equal(h.calls[0].service,false);
+  assert.equal((h.calls[0].args.payload as {targetUserId:string}).targetUserId,OTHER);
+  const denied=harness("invitations",{rpcError:{code:"42501",message:"NOT_AUTHORIZED"}});
+  assert.equal((await denied.run("POST",{action:"create",groupId:GROUP,targetUserId:OTHER})).status,403);
+  assert.equal(denied.sendCalls(),0);
+});
 test("invalid database response or failed acknowledgement cannot report a confirmed send",async()=>{
   const malformed=harness("invitations",{createData:null});assert.equal((await malformed.run("POST",{action:"create",groupId:GROUP,targetUserId:OTHER})).status,503);assert.equal(malformed.sendCalls(),0);
   const failed=harness("invitations",{finishError:true});const response=await failed.run("POST",{action:"retry",invitationId:INVITE});assert.equal(response.status,503);assert.doesNotMatch(await response.text(),/ACCEPTED_BY_PROVIDER|private db/);

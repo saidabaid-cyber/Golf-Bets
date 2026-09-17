@@ -20,7 +20,7 @@ export function invitationStatus(invite: GroupInvitation) {
   if (invite.delivery_status === "FAILED") return "Envío fallido · puedes reintentar";
   if (invite.delivery_status === "SENDING") return "Enviando…";
   if (invite.delivery_status === "ACCEPTED_BY_PROVIDER") return "Pendiente de aceptar · proveedor aceptó el correo; entrega no confirmada";
-  return "Pendiente · correo aún no enviado";
+  return "Pendiente de aceptar · correo no enviado";
 }
 
 export function parseGroupInvitationLink(hash: string) {

@@ -58,7 +58,9 @@ export function GroupInviteManager({ group, accessToken, onAcceptedMembers }: { 
         const ensured = await api(accessToken, { action: "ensure", group });
         result = await api(accessToken, { action: "create", groupId: ensured.groupId, ...target });
       }
-      setMessage(result.alreadyMember ? "Esta cuenta ya es integrante del grupo." : result.deliveryStatus === "ACCEPTED_BY_PROVIDER"
+      setMessage(result.alreadyMember ? "Esta cuenta ya es integrante del grupo." : result.channel === "BACKYARD"
+        ? "Invitación disponible en Backyard, pendiente de aceptar. No se envió correo."
+        : result.deliveryStatus === "ACCEPTED_BY_PROVIDER"
         ? "El proveedor aceptó el correo. La recepción aún no está confirmada; la invitación está pendiente de aceptar."
         : "La invitación está pendiente. Revisa el estado del envío.");
     } catch (error) { setMessage(error instanceof Error ? error.message : "No se confirmó el envío."); }
@@ -75,7 +77,7 @@ export function GroupInviteManager({ group, accessToken, onAcceptedMembers }: { 
         <button type="submit" className="secondary" disabled={busy || !normalizedInvitationEmail(email) || !group.name.trim()}>{busy ? "Procesando…" : "Enviar invitación"}</button>
       </form>
       <p>La persona se incorpora al grupo cuando acepta con su cuenta verificada. Invitación no equivale a integrante.</p>
-      {invitations.length > 0 && <ul className={styles.results}>{invitations.map(invite => <li key={invite.id}><span><b>{invite.recipient_label}</b><small>{invitationStatus(invite)}</small></span>{invite.state === "PENDING" && ["FAILED", "NOT_SENT"].includes(invite.delivery_status) && <button type="button" className="secondary" disabled={busy} onClick={() => void send({ invitationId: invite.id })}>Reintentar</button>}</li>)}</ul>}
+      {invitations.length > 0 && <ul className={styles.results}>{invitations.map(invite => <li key={invite.id}><span><b>{invite.recipient_label}</b><small>{invitationStatus(invite)}</small></span>{invite.state === "PENDING" && ["FAILED", "NOT_SENT"].includes(invite.delivery_status) && <button type="button" className="secondary" disabled={busy} onClick={() => void send({ invitationId: invite.id })}>Reintentar correo</button>}</li>)}</ul>}
       <button type="button" className="textButton" disabled={busy} onClick={() => void reload().catch(error => setMessage(error.message))}>Actualizar invitaciones e integrantes</button>
       {message && <p role="status">{message}</p>}
     </>}

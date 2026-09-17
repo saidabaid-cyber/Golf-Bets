@@ -92,13 +92,19 @@ export async function runPreviewGroupInvitationsQA(env=process.env,{fetcher=fetc
     assert.equal(typeof inbox.emailDeliveryConfigured,"boolean");emailDeliveryConfigured=inbox.emailDeliveryConfigured;
     await app("/api/groups/invitations",a,"POST",{action:"create",groupId,email:"not-an-email"},400);
     await app("/api/groups/invitations",c,"POST",{action:"create",groupId,email:b.email},403);
-    // Never call the delivery path when a credential is enabled. The user has
-    // not authorized a real recipient; SQL-only create cannot send anything.
-    const invite=emailDeliveryConfigured?await rpc(a,"create",{groupId,targetUserId:b.id}):await app("/api/groups/invitations",a,"POST",{action:"create",groupId,targetUserId:b.id},503);
+    // Internal account invitations never invoke delivery; synthetic email-only
+    // failure is tested separately, only when the provider is not configured.
+    const invite=await app("/api/groups/invitations",a,"POST",{action:"create",groupId,targetUserId:b.id});
     assert.ok(invite.invitationId);
+    assert.equal(invite.channel,"BACKYARD");
+    const repeated=await app("/api/groups/invitations",a,"POST",{action:"create",groupId,targetUserId:b.id});
+    assert.equal(repeated.invitationId,invite.invitationId);
+    assert.ok((await app("/api/groups/invitations",b)).invitations.some(item=>item.id===invite.invitationId));
+    passed.push("INTERNAL_INVITE_200_WITHOUT_MAILER","INTERNAL_RETRY_NO_DUPLICATE");
     if(!emailDeliveryConfigured){
-      assert.equal(invite.deliveryStatus,"FAILED");assert.equal(invite.code,"GROUP_EMAIL_NOT_CONFIGURED");
-      const retry=await app("/api/groups/invitations",a,"POST",{action:"retry",invitationId:invite.invitationId},503);assert.equal(retry.invitationId,invite.invitationId);assert.equal(retry.deliveryStatus,"FAILED");
+      const mail=await app("/api/groups/invitations",a,"POST",{action:"create",groupId,email:`qa-mail-only-${runId}@example.invalid`},503);
+      assert.equal(mail.deliveryStatus,"FAILED");assert.equal(mail.code,"GROUP_EMAIL_NOT_CONFIGURED");
+      const retry=await app("/api/groups/invitations",a,"POST",{action:"retry",invitationId:mail.invitationId},503);assert.equal(retry.invitationId,mail.invitationId);assert.equal(retry.deliveryStatus,"FAILED");
       passed.push("MISSING_PROVIDER_REAL_API_FAILED_NOT_SENT","RETRY_NO_DUPLICATE_INVITATION");
     }
     assert.equal((await rpc(a,"create",{groupId,email:b.email})).invitationId,invite.invitationId);
@@ -136,7 +142,7 @@ export async function runPreviewGroupInvitationsQA(env=process.env,{fetcher=fetc
   const report={preview:config.previewOrigin,projectRef:config.projectRef,runId,groupId,passed,emailDeliveryConfigured,
     ...(failure?{failedAt:stage,diagnostic,failureType:failure.name==="AssertionError"?"ASSERTION":"REQUEST"}:{}),
     fixtures:"RETAINED_NO_DELETE_AUTHORIZED",retainedQaUserIds:accounts.map(a=>a.id),
-    emailReceipt:"PENDING_OWNER_ACTION",notCovered:["REAL_EMAIL_DELIVERY_OR_RECEIPT","PHYSICAL_IPHONE","GOOGLE_OR_EXTERNAL_OTP"]};
+    emailReceipt:emailDeliveryConfigured?"PENDING_INTERACTIVE_QA":"BLOCKED_EXTERNAL",notCovered:["REAL_EMAIL_DELIVERY_OR_RECEIPT","PHYSICAL_IPHONE","GOOGLE_OR_EXTERNAL_OTP"]};
   log(JSON.stringify(report));
   if(failure)throw new Error(`Group invitations QA failed at ${stage}. Run ${runId}. Synthetic fixtures retained; no secrets logged.`);
   return report;
