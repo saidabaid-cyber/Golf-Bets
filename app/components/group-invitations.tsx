@@ -22,16 +22,18 @@ export function GroupInviteManager({ group, accessToken, onAcceptedMembers }: { 
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [emailAvailable, setEmailAvailable] = useState(false);
   const inFlight = useRef(false);
   const acceptedCallback = useRef(onAcceptedMembers);
   useEffect(() => { acceptedCallback.current = onAcceptedMembers; }, [onAcceptedMembers]);
   const reload = useCallback(async () => {
     if (!accessToken) return;
     const data = await api(accessToken, undefined, undefined, group.id);
+    setEmailAvailable(data.emailDeliveryConfigured === true);
     setInvitations((data.invitations || []).filter((item: GroupInvitation) => item.outgoing));
     if (data.acceptedMembers?.length) acceptedCallback.current?.(data.acceptedMembers);
   }, [accessToken, group.id]);
-  useEffect(() => { void reload().catch(() => undefined); }, [reload]);
+  useEffect(() => { setEmailAvailable(false); void reload().catch(() => setEmailAvailable(false)); }, [reload]);
   useEffect(() => {
     setUsers([]);
     if (!accessToken || query.trim().length < 2) return;
@@ -42,7 +44,7 @@ export function GroupInviteManager({ group, accessToken, onAcceptedMembers }: { 
         const response = await fetch(`/api/groups/users?q=${encodeURIComponent(query.trim())}`, { headers: { Authorization: `Bearer ${accessToken}` }, signal: controller.signal, cache: "no-store" });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error);
-        if (!controller.signal.aborted) { setUsers(data.users || []); setMessage(data.users?.length ? "" : "Sin coincidencias visibles. Puedes enviar una invitación por correo."); }
+        if (!controller.signal.aborted) { setUsers(data.users || []); setMessage(data.users?.length ? "" : "Sin coincidencias visibles. Revisa el nombre o @usuario."); }
       } catch (error) { if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : "No pudimos buscar usuarios."); }
       finally { if (!controller.signal.aborted) setSearching(false); }
     }, 300);
@@ -50,6 +52,7 @@ export function GroupInviteManager({ group, accessToken, onAcceptedMembers }: { 
   }, [query, accessToken]);
   async function send(target: { email?: string; targetUserId?: string; invitationId?: string }) {
     if (!accessToken || inFlight.current) return;
+    if (!target.targetUserId && !emailAvailable) { setMessage("Invitaciones por correo temporalmente no disponibles en esta versión."); return; }
     inFlight.current = true; setBusy(true); setMessage("");
     try {
       let result;
@@ -67,17 +70,20 @@ export function GroupInviteManager({ group, accessToken, onAcceptedMembers }: { 
     finally { await reload().catch(() => undefined); inFlight.current = false; setBusy(false); }
   }
   return <section className={styles.panel} aria-label="Usuarios Backyard e invitaciones">
-    <h3>Usuarios Backyard</h3><p>Busca nombre, @usuario o correo exacto. Solo aparecen identidades permitidas por su privacidad; no publicamos correos privados.</p>
+    <h3>Usuario Backyard</h3><p>Busca nombre, @usuario o correo exacto. La invitación llega a Backyard, sin depender del correo. Sólo aparecen identidades permitidas por su privacidad.</p>
     {!accessToken ? <p>Inicia sesión para buscar usuarios y enviar invitaciones.</p> : <>
       <label>Buscar usuarios<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Nombre, @usuario o correo exacto" autoComplete="off" /></label>
       {searching && <p role="status">Buscando…</p>}
       <ul className={styles.results}>{users.map(user => <li key={user.user_id}><span><b>{user.display_name}</b><small>@{user.username}{user.is_friend ? " · Amigo" : " · Usuario Backyard"}</small></span><button type="button" className="secondary" disabled={busy || !group.name.trim()} onClick={() => void send({ targetUserId: user.user_id })}>Invitar</button></li>)}</ul>
-      <form onSubmit={event => { event.preventDefault(); const normalized = normalizedInvitationEmail(email); if (normalized) void send({ email: normalized }); }}>
-        <label>Invitar por correo<input type="email" inputMode="email" autoComplete="off" value={email} onChange={event => setEmail(event.target.value)} placeholder="persona@correo.com" /></label>
-        <button type="submit" className="secondary" disabled={busy || !normalizedInvitationEmail(email) || !group.name.trim()}>{busy ? "Procesando…" : "Enviar invitación"}</button>
-      </form>
+      <section className={styles.emailPath} aria-label="Persona sin cuenta Backyard"><h3>Persona sin cuenta Backyard</h3>
+        {!emailAvailable && <p role="status">Invitaciones por correo temporalmente no disponibles en esta versión. Puedes seguir invitando a usuarios Backyard arriba.</p>}
+        <form onSubmit={event => { event.preventDefault(); const normalized = normalizedInvitationEmail(email); if (emailAvailable && normalized) void send({ email: normalized }); }}>
+          <label>Invitar por correo<input disabled={!emailAvailable || busy} type="email" inputMode="email" autoComplete="off" value={email} onChange={event => setEmail(event.target.value)} placeholder="persona@correo.com" /></label>
+          <button type="submit" className="secondary" disabled={!emailAvailable || busy || !normalizedInvitationEmail(email) || !group.name.trim()}>{busy ? "Procesando…" : "Enviar invitación por correo"}</button>
+        </form>
+      </section>
       <p>La persona se incorpora al grupo cuando acepta con su cuenta verificada. Invitación no equivale a integrante.</p>
-      {invitations.length > 0 && <ul className={styles.results}>{invitations.map(invite => <li key={invite.id}><span><b>{invite.recipient_label}</b><small>{invitationStatus(invite)}</small></span>{invite.state === "PENDING" && ["FAILED", "NOT_SENT"].includes(invite.delivery_status) && <button type="button" className="secondary" disabled={busy} onClick={() => void send({ invitationId: invite.id })}>Reintentar correo</button>}</li>)}</ul>}
+      {invitations.length > 0 && <section aria-label="Estado de invitaciones"><h3>Invitaciones e integrantes</h3><ul className={styles.results}>{invitations.map(invite => <li key={invite.id}><span><b>{invite.recipient_label}</b><small>{invitationStatus(invite)}</small></span>{emailAvailable && invite.state === "PENDING" && ["FAILED", "NOT_SENT"].includes(invite.delivery_status) && <button type="button" className="secondary" disabled={busy} onClick={() => void send({ invitationId: invite.id })}>Reintentar correo</button>}</li>)}</ul></section>}
       <button type="button" className="textButton" disabled={busy} onClick={() => void reload().catch(error => setMessage(error.message))}>Actualizar invitaciones e integrantes</button>
       {message && <p role="status">{message}</p>}
     </>}
