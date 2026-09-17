@@ -669,6 +669,10 @@ export async function confirmParticipant(
     if (saved.data === true) break;
     if (attempt === 2) throw new SocialServiceError("STALE_REVISION", 409, "La ronda cambió; reintenta la confirmación.");
   }
+  // The append advances the canonical row version. Restore the owner's strong
+  // material hash before returning, so an immediate attest does not encounter
+  // the trigger's provisional hash/RLS rejection. Index evidence is nonmaterial.
+  await reconcileSocialRoundActivities(ctx.admin, canonical.owner_id);
   await reconcileSocialRoundActivities(ctx.admin, ctx.userId);
   return { data: { confirmed: true, playerKey: request.playerKey } };
 }
