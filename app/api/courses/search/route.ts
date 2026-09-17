@@ -29,9 +29,12 @@ export async function GET(request: NextRequest) {
     }, { headers: { "cache-control": "public, s-maxage=300, stale-while-revalidate=1800" } });
   }
   if (request.nextUrl.searchParams.get("nearby") === "1") {
-    const latitude = Number(request.nextUrl.searchParams.get("lat"));
-    const longitude = Number(request.nextUrl.searchParams.get("lng"));
-    if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+    const latitudeInput = request.nextUrl.searchParams.get("lat");
+    const longitudeInput = request.nextUrl.searchParams.get("lng");
+    const latitude = Number(latitudeInput);
+    const longitude = Number(longitudeInput);
+    // Number(null) and Number("") are zero, not evidence of a real location.
+    if (!latitudeInput?.trim() || !longitudeInput?.trim() || !Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
       return NextResponse.json({ error: "invalid_location" }, { status: 400, headers: { "cache-control": "no-store" } });
     }
     const result = await internalCourseDataProvider.nearbyCourses({ courses: DEFAULT_COURSES, origin: { latitude, longitude }, limit, radiusKm: 250 });
