@@ -3660,11 +3660,11 @@ function GolfBetsApp() {
               if (nextTee) setPlayerTeeAssignments((current) => updatePlayerTeeAssignment(current, player.id, nextTee, new Date().toISOString()));
             }}>{teeOptions.map((option) => <option key={option.id} value={option.id}>{option.teeName}{typeof option.rating === "number" ? ` · ${option.rating}/${option.slope ?? "—"}` : ""}</option>)}</select></label>;
           })}</div>
-          <p className="hint">EDITAR POR JUGADOR está siempre disponible. Para una cuenta con Index, el tee calcula y congela su HCP de juego; un Guest conserva captura manual.</p>
+          <p className="hint">EDITAR POR JUGADOR está siempre disponible. Para una cuenta con Index, el tee calcula y congela su HCP de juego; un invitado conserva captura manual.</p>
           </div>
         </details>}
       <section className="card" id="round-players">
-        <div className="sectionTitle"><div><h2>2. Jugadores</h2><p>Las cuentas usan Index + tee; los Guests conservan HCP manual.</p></div><button className="textButton" disabled={players.length >= MAX_ROUND_PLAYERS} title={players.length >= MAX_ROUND_PLAYERS ? ROUND_PLAYER_LIMIT_MESSAGE : undefined} onClick={addPlayer}>+ Jugador</button></div>
+        <div className="sectionTitle"><div><h2>2. Jugadores</h2><p>Las cuentas usan Index + tee; los invitados conservan HCP manual.</p></div><button className="textButton" disabled={players.length >= MAX_ROUND_PLAYERS} title={players.length >= MAX_ROUND_PLAYERS ? ROUND_PLAYER_LIMIT_MESSAGE : undefined} onClick={addPlayer}>+ Jugador</button></div>
         {players.length >= MAX_ROUND_PLAYERS && <div className="hint" role="status">5 / 5 jugadores · máximo por grupo de salida.</div>}
         {!players.length && <div className="empty">Agrega los jugadores de esta ronda.</div>}
         {players.map((p) => <div className="playerEdit" key={p.id}>
