@@ -3506,7 +3506,8 @@ function GolfBetsApp() {
       groupCount={frequentGroups.length}
       onContinueRound={continueActiveRound}
       onAiRound={requestAiRound}
-      onNewRound={() => setTab("play")}
+      onNewRound={requestNewRound}
+      onPlayOptions={() => setTab("play")}
       onOpenProfile={() => { setProfileFocus("profile"); setTab("profile"); }}
       onOpenNotifications={() => { setSocialInitialView("notifications"); setTab("social"); }}
       onOpenHistory={() => setTab("history")}

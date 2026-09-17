@@ -63,7 +63,7 @@ test("los wizards reinician su propio scroll y conservan el contexto detrás", (
 test("Home aprobada concentra manual y AI en un selector sin romper sus contratos reales", () => {
   const home = read("app/components/home-dashboard.tsx");
   assert.match(home, /data-home-version="approved-golf-home-v2"/);
-  assert.match(home, /const playAction = activeRound \? onContinueRound : \(\) => setRoundChoiceOpen\(true\)/);
+  assert.match(home, /const playAction = activeRound \? onContinueRound : onPlayOptions \|\| \(\(\) => setRoundChoiceOpen\(true\)\)/);
   assert.match(home, /<ModalShell open=\{roundChoiceOpen\}/);
   assert.match(home, /CONFIGURAR MANUALMENTE/);
   assert.match(home, /ARMAR CON BACKYARD AI/);

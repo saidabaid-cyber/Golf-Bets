@@ -29,6 +29,7 @@ export type HomeDashboardProps = {
   onContinueRound: () => void;
   onAiRound: () => void;
   onNewRound: () => void;
+  onPlayOptions?: () => void;
   onOpenProfile: () => void;
   onOpenNotifications: () => void;
   onOpenHistory: () => void;
@@ -101,7 +102,7 @@ function QuickCard({ icon, title, copy, onClick }: { icon: "stats" | "history" |
 /** Pixel-matched post-onboarding Home. Existing callbacks remain the only navigation contract. */
 export function HomeDashboard({
   displayName, avatarUrl, activeRound, insights, groupCount,
-  onContinueRound, onAiRound, onNewRound, onOpenProfile, onOpenNotifications,
+  onContinueRound, onAiRound, onNewRound, onPlayOptions, onOpenProfile, onOpenNotifications,
   onOpenHistory, onOpenBalances, onOpenStats, onOpenGroups, onOpenRules,
 }: HomeDashboardProps) {
   const resolvedDisplayName = displayName.trim() || "Golfista";
@@ -113,7 +114,7 @@ export function HomeDashboard({
   const hasScoringInsight = insights.scoredRounds > 0 && typeof insights.averageScore === "number" && Number.isFinite(insights.averageScore);
   const hasBalance = typeof insights.betBalance === "number" && Number.isFinite(insights.betBalance);
   const [roundChoiceOpen, setRoundChoiceOpen] = useState(false);
-  const playAction = activeRound ? onContinueRound : () => setRoundChoiceOpen(true);
+  const playAction = activeRound ? onContinueRound : onPlayOptions || (() => setRoundChoiceOpen(true));
   const chooseRoundSetup = (mode: "manual" | "ai") => {
     setRoundChoiceOpen(false);
     if (mode === "manual") onNewRound();

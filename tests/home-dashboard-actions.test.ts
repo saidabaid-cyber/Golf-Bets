@@ -11,7 +11,8 @@ const moreHub = readFileSync("app/components/more-hub.tsx", "utf8");
 
 test("approved Home uses one ball action and offers manual or AI setup in a closable choice dialog", () => {
   assert.match(source, /data-home-version="approved-golf-home-v2"/);
-  assert.match(source, /const playAction = activeRound \? onContinueRound : \(\) => setRoundChoiceOpen\(true\)/);
+  assert.match(source, /const playAction = activeRound \? onContinueRound : onPlayOptions \|\| \(\(\) => setRoundChoiceOpen\(true\)\)/);
+  assert.match(readFileSync("app/page.tsx", "utf8"), /onPlayOptions=\{\(\) => setTab\("play"\)\}/);
   assert.match(source, /aria-label=\{activeRound \? "Continuar ronda" : "Elegir cómo armar tu ronda"\}/);
   assert.match(source, /<BackyardBallAction activeRound=\{activeRound\} onClick=\{playAction\} \/>/);
   assert.match(source, /<ModalShell open=\{roundChoiceOpen\}/);
