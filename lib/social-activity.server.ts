@@ -254,7 +254,7 @@ export async function getPreferences(ctx: SocialContext): Promise<SocialPreferen
   const { data, error } = await ctx.client.from("social_activity_preferences_v3")
     .select("*").eq("user_id", ctx.userId).maybeSingle();
   if (error) dbError(error);
-  return { data: prefsFromRow(data) };
+  return { data: { ...prefsFromRow(data), enabledForFriends: await socialPrivacy(ctx.admin, ctx.userId) } };
 }
 export async function updatePreferences(ctx: SocialContext, preferences: unknown): Promise<SocialPreferencesResult> {
   const keys: Array<keyof SocialActivityPreferences> = [
@@ -262,13 +262,21 @@ export async function updatePreferences(ctx: SocialContext, preferences: unknown
     "notifyComment", "notifyAttest", "notifyFriendAchievement", "notifyEquipment",
   ];
   const candidate = preferences && typeof preferences === "object" ? preferences as Record<string, unknown> : null;
-  if (!candidate || keys.some(key => typeof candidate[key] !== "boolean"))
+  if (!candidate || keys.some(key => typeof candidate[key] !== "boolean") || (Object.hasOwn(candidate, "enabledForFriends") && typeof candidate.enabledForFriends !== "boolean"))
     throw new SocialServiceError("INVALID_REQUEST", 400, "Preferencias inválidas.");
   const verified = candidate as SocialActivityPreferences;
   const { data, error } = await ctx.client.from("social_activity_preferences_v3")
     .upsert(prefsToRow(ctx.userId, verified), { onConflict: "user_id" }).select("*").single();
   if (error) dbError(error);
-  return { data: prefsFromRow(data) };
+  // Never infer publication consent from a public directory card. Only an
+  // explicit master choice changes the existing DB-enforced audience gate.
+  if (typeof candidate.enabledForFriends === "boolean") {
+    const audience = candidate.enabledForFriends ? "FRIENDS" : "PRIVATE";
+    const result = await ctx.client.from("profiles").update({ social_privacy: audience }).eq("id", ctx.userId).select("social_privacy").single();
+    if (result.error) dbError(result.error);
+    if (result.data.social_privacy !== audience) throw new SocialServiceError("MUTATION_FAILED", 503, "No se confirmó la audiencia.");
+  }
+  return { data: { ...prefsFromRow(data), enabledForFriends: await socialPrivacy(ctx.admin, ctx.userId) } };
 }
 
 async function sourceRound(ctx: SocialContext, row: ActivityRow): Promise<RoundRow | null> {

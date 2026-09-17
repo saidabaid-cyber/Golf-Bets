@@ -10,7 +10,7 @@ export async function socialRequest<T>(path: string, accessToken: string, option
   fetcher?: typeof fetch;
 } = {}): Promise<T> {
   if (!accessToken) throw new SocialActivityError("Inicia sesión para usar Social.", "AUTH_REQUIRED", 401);
-  if (!path.startsWith("/api/social/") && path !== "/api/account/completion") throw new SocialActivityError("Ruta Social inválida.", "INVALID_PATH", 400);
+  if (!path.startsWith("/api/social/") && path !== "/api/account/completion" && path.split("?")[0] !== "/api/groups/users") throw new SocialActivityError("Ruta Social inválida.", "INVALID_PATH", 400);
   const controller = new AbortController();
   const abort = () => controller.abort();
   if (options.signal?.aborted) abort();

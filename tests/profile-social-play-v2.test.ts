@@ -25,6 +25,7 @@ test("completion uses authenticated transport instead of a local-only percentage
     return Response.json({percent:100});
   } });
   assert.equal(result.percent,100);
+  await socialRequest("/api/groups/users?q=qa", "synthetic-token", { fetcher: async () => Response.json({users:[]}) });
   await assert.rejects(socialRequest("https://untrusted.invalid", "synthetic-token"));
 });
 test("completion is seven equally weighted sections; skipped is not complete", () => {

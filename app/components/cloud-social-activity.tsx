@@ -7,6 +7,7 @@ import { ProfileAvatarMedia } from "./profile-avatar-media";
 import styles from "./cloud-social-activity.module.css";
 
 const preferenceLabels: Array<[keyof Omit<SocialActivityPreferences, "updatedAt">, string]> = [
+  ["enabledForFriends", "Permitir que mis amigos vean la actividad que elija compartir"],
   ["shareRounds", "Compartir rondas terminadas"], ["shareAchievements", "Compartir logros"],
   ["shareEquipment", "Compartir cambios de equipo"], ["shareCourses", "Compartir campos después de jugar"],
   ["notifyLike", "Avisarme de likes"], ["notifyComment", "Avisarme de comentarios"],
@@ -37,7 +38,7 @@ export function SocialSharingPreferences({ accessToken }: { accessToken: string 
     finally { writing.current = false; if (live.current) setBusy(false); }
   }
   return <details className={styles.preferences}><summary>Privacidad y avisos de Social</summary>
-    <p>Compartir es opcional y respeta la privacidad de tu perfil. No publicamos ubicación en tiempo real.</p>
+    <p>Compartir es opcional. Activa el acceso de tus amigos y elige los tipos de actividad. Un perfil público por sí solo no comparte rondas. No publicamos ubicación en tiempo real.</p>
     {prefs ? <fieldset disabled={busy}>{preferenceLabels.map(([key, label]) => <label key={key}><input type="checkbox" checked={prefs[key]} onChange={(event) => void change(key, event.target.checked)} /><span>{label}</span></label>)}</fieldset> : !message && <p role="status">Cargando preferencias…</p>}
     {message && <p role="status">{message}</p>}
   </details>;

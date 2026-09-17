@@ -3,6 +3,8 @@ export type SocialActivityKind = "ROUND_COMPLETED" | "ACHIEVEMENT" | "EQUIPMENT_
 export type SocialActivityAudience = "OWNER" | "FRIENDS";
 
 export type SocialActivityPreferences = {
+  /** Explicit master audience choice, separate from public directory visibility. */
+  enabledForFriends?: boolean;
   shareRounds: boolean;
   shareAchievements: boolean;
   shareEquipment: boolean;

@@ -73,7 +73,7 @@ try {
  assert.deepEqual((await app('/api/social/connections',b)).friends,[a.id]);
  passed.push('QR_SAFE_STABLE_PROFILE','NO_SELF_REQUEST','CONCURRENT_REQUEST_DEDUP','RECIPIENT_ONLY_ACCEPT','ACCEPT_IDEMPOTENT','NOTIFICATION_READ_FRESH_SESSION');
  stage='TOTAL_ONLY_CLOUD_AND_FRIEND_FEED';
- const preferences={shareRounds:true,shareAchievements:true,shareEquipment:false,shareCourses:true,notifyLike:true,notifyComment:true,notifyAttest:true,notifyFriendAchievement:false,notifyEquipment:false};
+ const preferences={enabledForFriends:true,shareRounds:true,shareAchievements:true,shareEquipment:false,shareCourses:true,notifyLike:true,notifyComment:true,notifyAttest:true,notifyFriendAchievement:false,notifyEquipment:false};
  await app('/api/social/preferences',a,'PUT',preferences);
  await app('/api/account/privacy',a,'PATCH',{visibility:'friends'});
  const now=new Date().toISOString();
