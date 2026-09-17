@@ -58,7 +58,7 @@ export function NumericCaptureInput({
     {...inputProps}
     data-numeric-capture="true"
     type="text"
-    inputMode="text"
+    inputMode={inputProps.inputMode ?? "text"}
     enterKeyHint={inputProps.enterKeyHint ?? "done"}
     value={rawValue}
     onFocus={(event) => {

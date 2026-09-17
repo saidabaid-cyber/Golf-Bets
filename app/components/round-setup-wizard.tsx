@@ -4,6 +4,7 @@ import { createContext, useContext, useRef, useState, type ReactNode } from "rea
 import type { RoundSetupPreflightIssue } from "../../lib/round-setup-preflight";
 import { issuesBlockingWizardStep, readWizardStep, wizardEditorId, wizardIssueStep, type WizardBetEntry, type WizardStep } from "../../lib/round-setup-wizard";
 import { WizardBetEditorContext } from "./round-wizard-context";
+import { useViewScrollReset } from "./use-view-scroll-reset";
 import styles from "./round-setup-wizard.module.css";
 
 const STEPS = ["Campo", "Jugadores", "Grupales", "Personales"] as const;
@@ -29,6 +30,7 @@ export function RoundSetupWizard({ storageKey, issues, onStart, onSave, onExit, 
   const [error, setError] = useState("");
   const inFlight = useRef(false);
   const titleRef = useRef<HTMLHeadingElement>(null);
+  useViewScrollReset(step, undefined, !target);
   const blocking = issuesBlockingWizardStep(issues, step);
 
   function save() {
@@ -44,7 +46,7 @@ export function RoundSetupWizard({ storageKey, issues, onStart, onSave, onExit, 
     try { sessionStorage.setItem(storageKey, String(next)); } catch { /* Round data uses the existing draft store. */ }
     requestAnimationFrame(() => {
       const control = issue ? document.getElementById(issue.targetId) ?? document.getElementById(`result-section-${wizardEditorId(issue.targetId)}`) : titleRef.current;
-      control?.scrollIntoView({ block: "start", behavior: "smooth" });
+      if (issue) control?.scrollIntoView({ block: "start", behavior: "instant" });
       if (issue) control?.querySelector<HTMLElement>("input, select, textarea, button")?.focus({ preventScroll: true });
       else titleRef.current?.focus({ preventScroll: true });
     });

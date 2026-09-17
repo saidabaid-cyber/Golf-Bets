@@ -131,7 +131,7 @@ function featureHarness(file: string, options: { active?: boolean; remoteError?:
     performance: { now: () => 0 },
     window: { addEventListener: () => undefined, removeEventListener: () => undefined, requestAnimationFrame: () => 0, cancelAnimationFrame: () => undefined },
     URL: { createObjectURL: () => "blob:qa", revokeObjectURL: () => undefined },
-    require: (id: string) => deps[id] ?? deps[id.split("/").at(-1)!] ?? {},
+    require: (id: string) => id.endsWith("/use-view-scroll-reset") ? { useViewScrollReset() {} } : deps[id] ?? deps[id.split("/").at(-1)!] ?? {},
   });
   const props: Record<string, unknown> = {
     initialDraft: draft, memoryContext: { profile: { userId: "qa-user" } },

@@ -292,3 +292,8 @@ button:disabled{cursor:not-allowed;opacity:.5}.app{padding-top:calc(14px + env(s
 .modalCloseButton{position:sticky;z-index:30;top:max(8px,env(safe-area-inset-top));display:grid;place-items:center;width:44px;min-width:44px;height:44px;margin:0 0 -44px auto;border:1px solid var(--line);border-radius:50%;background:rgba(255,255,255,.96);color:var(--ink);font-size:26px;line-height:1;box-shadow:0 4px 14px rgba(15,35,23,.12);touch-action:manipulation}.modalCloseButton:focus-visible{outline:3px solid #b9d9c1;outline-offset:2px}.modalCloseButton:disabled{opacity:.45}
 .ghinPlaceholderButton{display:inline-flex;align-items:center;justify-content:space-between;gap:10px;width:100%;margin-top:7px}.ghinPlaceholderButton small{border-radius:999px;background:var(--soft);padding:4px 7px;color:var(--muted);font-size:8px;letter-spacing:.5px}
 .profileGhinAction{padding:2px 0 9px}.profileGhinAction .ghinPlaceholderButton{min-height:44px;margin-top:0}
+
+/* Dialogs use the visible viewport (including the iOS keyboard), not an
+   unbounded centered card. The close control remains in the scrolling card. */
+.modalBackdrop{height:var(--visual-viewport-height,100dvh);top:var(--visual-viewport-top,0px);bottom:auto;box-sizing:border-box;overflow:hidden}
+.modalBackdrop>section,.modalBackdrop>[role="dialog"]{min-height:0;max-height:100%;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scroll-padding-top:60px;scroll-padding-bottom:20px}

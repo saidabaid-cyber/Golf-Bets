@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
+import { useEffect, useRef, type RefObject } from "react";
+import { isTopModal, registerModal } from "../../lib/mobile-viewport";
+import { useViewScrollReset } from "./use-view-scroll-reset";
 
 const FOCUSABLE = "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
 
@@ -17,8 +19,9 @@ export function useModalDialog(active: boolean, onClose: () => void) {
   useEffect(() => {
     if (!active) return;
     const priorFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const priorOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const release = registerModal(dialog);
     const frame = requestAnimationFrame(() => {
       if (dialogRef.current) dialogRef.current.scrollTop = 0;
       const first = dialogRef.current?.querySelector<HTMLElement>(FOCUSABLE);
@@ -26,6 +29,7 @@ export function useModalDialog(active: boolean, onClose: () => void) {
     });
 
     function onKeyDown(event: KeyboardEvent) {
+      if (event.defaultPrevented || !isTopModal(dialog!)) return;
       if (event.key === "Escape") {
         event.preventDefault();
         closeRef.current();
@@ -47,7 +51,7 @@ export function useModalDialog(active: boolean, onClose: () => void) {
     return () => {
       cancelAnimationFrame(frame);
       document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = priorOverflow;
+      release();
       if (priorFocus?.isConnected) priorFocus.focus({ preventScroll: true });
     };
   }, [active]);
@@ -58,10 +62,5 @@ export function useModalDialog(active: boolean, onClose: () => void) {
 /** Keeps multi-step sheets at their own top without moving the page behind the
  * modal. The container receives focus without summoning the mobile keyboard. */
 export function useWizardStepNavigation(dialogRef: RefObject<HTMLElement | null>, step: string) {
-  useLayoutEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    dialog.scrollTop = 0;
-    dialog.focus({ preventScroll: true });
-  }, [dialogRef, step]);
+  useViewScrollReset(step, dialogRef);
 }

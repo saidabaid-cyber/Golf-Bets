@@ -34,6 +34,8 @@ function wizard(profileIndex: number | null = null, profileSource: handicap.Ball
     return { ok: true, json: async () => ({ provider: "internal-fixture", scope: { complete: true, activeCandidateCount: 1, evaluatedCandidateCount: 1, maximumCandidates: 2000 }, result, catalog }) };
   }, require: (name: string) => {
     if (name === "react") return react;
+    if (name === "./use-view-scroll-reset") return { useViewScrollReset() {} };
+    if (name === "./numeric-capture-input") return { NumericCaptureInput: (props: Record<string, unknown>) => ({ type: "input", props }) };
     if (name === "react/jsx-runtime") return { jsx, jsxs: jsx, Fragment: "fragment" };
     if (name.endsWith("/ball-fitting")) return fitting;
     if (name.endsWith("/ball-fitting-api")) return api;
@@ -54,7 +56,7 @@ function wizard(profileIndex: number | null = null, profileSource: handicap.Ball
     assert.notEqual(button.props.disabled, true); await (button.props.onClick as () => unknown)(); render();
   }, changeNumber(value: string) {
     const field = nodes(tree).find((node) => node.type === "input" && node.props.min === -20); assert.ok(field);
-    (field.props.onChange as (event: unknown) => void)({ target: { value } }); render();
+    (field.props.onValueChange as (value: number) => void)(Number(value)); render();
   } };
 }
 

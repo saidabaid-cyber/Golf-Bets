@@ -38,7 +38,7 @@ test("$100 y 80% se confirman completos; signo, punto y coma usan teclado de tex
   assert.equal(parseNumericCapture("cien"), null);
   const input = readFileSync("app/components/numeric-capture-input.tsx", "utf8");
   assert.match(input, /type="text"/);
-  assert.match(input, /inputMode="text"/);
+  assert.match(input, /inputMode=\{inputProps.inputMode \?\? "text"\}/);
   assert.match(input, /flushSync\(\(\) => onValueChange\(finalized\.value\)\)/);
   assert.doesNotMatch(input, /onValueChange\([^\n]*event\.target\.value/);
   const capture = readFileSync("app/components/round-capture-v2.tsx", "utf8");

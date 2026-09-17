@@ -1,23 +1,30 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
+import { isTopModal, registerModal } from "../../lib/mobile-viewport";
 
 export function ModalCloseButton({ onClose, disabled = false, label = "Cerrar" }: {
   onClose: () => void;
   disabled?: boolean;
   label?: string;
 }) {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const closeRef = useRef(onClose);
+  const disabledRef = useRef(disabled);
+  useEffect(() => { closeRef.current = onClose; disabledRef.current = disabled; }, [onClose, disabled]);
   useEffect(() => {
-    if (disabled) return;
+    const dialog = buttonRef.current?.closest<HTMLElement>('[role="dialog"], [aria-modal="true"]') ?? buttonRef.current?.parentElement;
+    if (!dialog) return;
+    const release = registerModal(dialog);
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
+      if (disabledRef.current || event.defaultPrevented || event.key !== "Escape" || !isTopModal(dialog)) return;
       event.preventDefault();
-      onClose();
+      closeRef.current();
     };
     document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [disabled, onClose]);
-  return <button type="button" className="modalCloseButton" aria-label={label} title={label} disabled={disabled} onClick={onClose}>×</button>;
+    return () => { release(); document.removeEventListener("keydown", onKeyDown); };
+  }, []);
+  return <button ref={buttonRef} type="button" className="modalCloseButton" aria-label={label} title={label} disabled={disabled} onClick={onClose}>×</button>;
 }
 
 export function ModalShell({ open, onClose, label, labelledBy, describedBy, children, className = "confirmDialog", closeDisabled = false }: {

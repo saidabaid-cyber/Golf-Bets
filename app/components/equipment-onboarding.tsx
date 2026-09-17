@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useViewScrollReset } from "./use-view-scroll-reset";
 import { toEquipmentBallFitSummary, type BallFitInput, type BallFitProfileDefaults, type BallFitResult } from "../../lib/ball-fitting";
 import {
   setBallOnboardingStatus,
@@ -49,6 +50,7 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, ball
   const [initialized, setInitialized] = useState(false);
   const [clubEditorOpen, setClubEditorOpen] = useState(false);
   const [ballEditorOpen, setBallEditorOpen] = useState(false);
+  useViewScrollReset(`${step}:${clubEditorOpen}:${ballEditorOpen}`);
   const currentClubs = useMemo(() => profile?.clubs.filter((club) => club.isCurrent) || [], [profile]);
   const currentBall = profile?.balls.find((ball) => ball.isCurrent) || null;
   const pinnedClubIds = useMemo(() => profile?.clubs.flatMap((club) => club.catalogClubId ? [club.catalogClubId] : []) || [], [profile]);

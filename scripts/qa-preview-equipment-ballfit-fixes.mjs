@@ -63,7 +63,7 @@ try {
   for (const source of ['MANUAL', 'BACKYARD', 'UNKNOWN']) {
     stage = `FIT_${source}`;
     const input = fit.normalizeBallFitInput({ userId: fixture.id, handicap: source === 'UNKNOWN' ? null : source === 'MANUAL' ? 21.3 : 7.2,
-      handicapSource: source, experience: source === 'UNKNOWN' ? 'STARTING' : 'REGULAR', typicalScore: null,
+      handicapSource: source, experience: source === 'UNKNOWN' ? 'STARTING' : 'REGULAR', typicalScore: 82, driverDistanceYards: 245, swingSpeedBand: 'UNKNOWN',
       feelPreference: 'SOFT', trajectoryPreference: 'MID', priorities: ['WEDGE_SPIN'], wantsGreensideSpin: 'YES' });
     assert.ok(input);
     const response = transport.normalizeBallFitApiSuccess(await app('/api/ball-fitting', 'POST', { input: transport.createBallFitTransportInput(input) }));
@@ -77,8 +77,11 @@ try {
     const reloaded = (await app('/api/equipment')).data.profile;
     assert.equal(reloaded.lastBallFit.input.handicapSource, source);
     assert.equal(reloaded.lastBallFit.input.handicap, input.handicap);
+    assert.equal(reloaded.lastBallFit.input.typicalScore, 82);
+    assert.equal(reloaded.lastBallFit.input.driverDistanceYards, 245);
+    assert.equal(reloaded.lastBallFit.input.swingSpeedBand, 'UNKNOWN');
     assert.deepEqual(checked(await client.from('profiles').select('*').eq('id', fixture.id).single(), 'profile after'), canonicalProfileBefore);
-    passed.push(`FIT_${source}_REAL_API`, `FIT_${source}_CLOUD_FRESH_SESSION`, `FIT_${source}_NO_PROFILE_OVERWRITE`);
+    passed.push(`FIT_${source}_REAL_API`, `FIT_${source}_CLOUD_FRESH_SESSION`, `FIT_${source}_NO_PROFILE_OVERWRITE`, `FIT_${source}_SCORE_DISTANCE_UNKNOWN_SPEED_READBACK`);
   }
 } catch (error) { failure = { stage, message: String(error.message).slice(0, 300) }; }
 const report = { runId, preview: config.previewOrigin, ref: config.projectRef, retainedSyntheticAccountId: fixture.id,

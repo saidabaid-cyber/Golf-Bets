@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useViewScrollReset } from "./use-view-scroll-reset";
 import { restoreEquipmentBallFitSummary, toEquipmentBallFitSummary, type BallFitInput, type BallFitProfileDefaults, type BallFitResult } from "../../lib/ball-fitting";
 import { removeBallFitDraft } from "../../lib/ball-fitting-storage";
 import { BALL_FIT_HANDICAP_LABELS, type BallFitHandicapSource } from "../../lib/ball-fit-handicap";
@@ -97,6 +98,7 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
   const [deleteIntent, setDeleteIntent] = useState<EquipmentDeleteIntent | null>(null);
   const [fitOpen, setFitOpen] = useState(initialSection === "fitting");
   const [savedFitOpen, setSavedFitOpen] = useState(false);
+  useViewScrollReset(`${Boolean(clubEditor)}:${Boolean(ballEditor)}:${Boolean(distanceEditor)}:${Boolean(flowSuccess)}:${fitOpen}:${savedFitOpen}`);
   const currentClubs = useMemo(() => profile?.clubs.filter((club) => club.isCurrent) || [], [profile]);
   const historicalClubs = useMemo(() => profile?.clubs.filter((club) => !club.isCurrent) || [], [profile]);
   const currentBall = profile?.balls.find((ball) => ball.isCurrent) || null;

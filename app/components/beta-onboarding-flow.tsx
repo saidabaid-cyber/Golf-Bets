@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useViewScrollReset } from "./use-view-scroll-reset";
 import {
   GOLF_IMPROVEMENT_GOALS,
   GOLF_PRIMARY_GOALS,
@@ -204,6 +205,7 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, bett
   onComplete: () => void;
 }) {
   const [progress, setProgress] = useState<BetaOnboardingProgress | null>(null);
+  useViewScrollReset(progress?.step ?? null);
   const [draft, setDraft] = useState<BetaDraft | null>(null);
   const [message, setMessage] = useState("");
   const [playerMode, setPlayerMode] = useState<"local" | "guest" | "backyard">("backyard");

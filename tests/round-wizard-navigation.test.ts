@@ -60,6 +60,7 @@ function harness(savedStep = "1") {
         if (dependency.endsWith(".module.css")) return { default: new Proxy({}, { get: (_, key) => String(key) }) };
         if (dependency.endsWith("/round-setup-wizard")) return wizardLogic;
         if (dependency === "./round-wizard-context") return load("round-wizard-context");
+        if (dependency === "./use-view-scroll-reset") return { useViewScrollReset() {} };
         throw new Error(`Unexpected component dependency ${dependency}`);
       },
     });

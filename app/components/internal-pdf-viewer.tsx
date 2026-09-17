@@ -1,6 +1,7 @@
 "use client";
 
 import { type FormEvent, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lockModalScroll } from "../../lib/mobile-viewport";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import type { OfficialRulesDocument } from "../../lib/rules-documents";
 import { countPdfTextMatches, pdfPixelRatio, withPdfDeadline } from "../../lib/pdf-viewer-utils";
@@ -132,8 +133,7 @@ export function InternalPdfViewer({ document, initialPage = 1, onBack }: { docum
   }, [document.localUrl, document.officialUrl, document.pageCount, document.pageOffset, initialPage, retry]);
 
   useEffect(() => {
-    const previous = window.document.body.style.overflow;
-    window.document.body.style.overflow = "hidden";
+    const release = lockModalScroll();
     const update = () => setWidth(Math.max(220, (container.current?.clientWidth || window.innerWidth) - 28));
     update();
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
@@ -142,7 +142,7 @@ export function InternalPdfViewer({ document, initialPage = 1, onBack }: { docum
     const escape = (event: KeyboardEvent) => { if (event.key === "Escape") onBack(); };
     window.addEventListener("keydown", escape);
     return () => {
-      window.document.body.style.overflow = previous;
+      release();
       observer?.disconnect();
       window.removeEventListener("resize", update);
       window.removeEventListener("keydown", escape);

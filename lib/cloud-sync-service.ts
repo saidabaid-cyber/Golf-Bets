@@ -204,7 +204,7 @@ export async function readCloudBundle(client: SupabaseClient, userId: string, ex
     courses: (courses.data || []).map((row) => row.snapshot).filter(Boolean),
     preferences: {
       // No cloud row means no preference yet: product default is high contrast.
-      highContrast: preferences.data ? Boolean(preferences.data.high_contrast) : true,
+      highContrast: preferences.data?.high_contrast !== false,
       language: preferences.data?.locale || "es-MX",
       notificationsEnabled: Boolean(preferences.data?.notifications_enabled),
       defaultHandicap: preferences.data?.default_handicap === null || preferences.data?.default_handicap === undefined ? null : Number(preferences.data.default_handicap),
@@ -294,7 +294,7 @@ export async function writeCloudBundle(
     const preferences = incoming.preferences;
     await writeVersionedRow(client, "user_preferences", { user_id: userId }, withDevice({
       user_id: userId,
-      high_contrast: Boolean(preferences?.highContrast),
+      high_contrast: preferences?.highContrast !== false,
       locale: typeof preferences?.language === "string" ? preferences.language.slice(0, 12) : "es-MX",
       notifications_enabled: Boolean(preferences?.notificationsEnabled),
       default_handicap: preferences?.defaultHandicap ?? null,

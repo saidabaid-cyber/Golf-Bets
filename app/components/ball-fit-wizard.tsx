@@ -28,6 +28,8 @@ import { loadBallFitDraft, removeBallFitDraft, saveBallFitDraft, type BallFitDra
 import type { GolfBallCatalog, PlayerBall, QualitativeLevel } from "../../lib/golf-equipment";
 import { BALL_FIT_HANDICAP_LABELS, BALL_FIT_EXPERIENCES, normalizeBallFitHandicap, type BallFitHandicapSource } from "../../lib/ball-fit-handicap";
 import { LaunchMonitorCapture } from "./launch-monitor-capture";
+import { NumericCaptureInput } from "./numeric-capture-input";
+import { useViewScrollReset } from "./use-view-scroll-reset";
 import styles from "./equipment.module.css";
 
 const FEEL_LABELS = {
@@ -91,12 +93,6 @@ function defaultInput(userId: string, handicap: number | null, currentBallId: st
   };
 }
 
-function optionalNumber(value: string, minimum: number, maximum: number) {
-  if (!value.trim()) return null;
-  const number = Number(value);
-  return Number.isFinite(number) && number >= minimum && number <= maximum ? number : null;
-}
-
 function OptionGrid<T extends string>({ values, labels, selected, onSelect }: {
   values: readonly T[];
   labels: Record<T, string>;
@@ -131,6 +127,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
   const [resultCatalog, setResultCatalog] = useState<GolfBallCatalog[]>([]);
   const [catalogScope, setCatalogScope] = useState<BallFitCatalogScope | null>(null);
   const [calculating, setCalculating] = useState(false);
+  useViewScrollReset(`${step}:${draftChoicePending}:${hydrated}`);
   const [message, setMessage] = useState("");
   const requestRef = useRef<AbortController | null>(null);
   const displayCatalog = useMemo(() => [...new Map([...catalog, ...resultCatalog].map((ball) => [ball.id, ball])).values()], [catalog, resultCatalog]);
@@ -300,14 +297,14 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
         <button type="button" className={`${styles.optionButton} ${input.handicapSource === "MANUAL" ? styles.selected : ""}`} aria-pressed={input.handicapSource === "MANUAL"} onClick={() => patchInput({ handicapSource: "MANUAL", handicap: input.handicapSource === "MANUAL" ? input.handicap : null })}>Capturar HCP manual</button>
         <button type="button" className={`${styles.optionButton} ${input.handicapSource === "UNKNOWN" ? styles.selected : ""}`} aria-pressed={input.handicapSource === "UNKNOWN"} onClick={() => patchInput({ handicapSource: "UNKNOWN", handicap: null })}>No conozco mi hándicap / Estoy empezando</button>
       </div>
-      {input.handicapSource === "MANUAL" && <label>HCP manual (sólo este fitting)<input type="number" inputMode="decimal" min={-20} max={54} step="0.1" value={input.handicap ?? ""} onChange={(event) => patchInput({ handicap: optionalNumber(event.target.value, -20, 54) })} placeholder="Ej. 18" /><small>Declarado por ti; no es GHIN ni Backyard Index.</small></label>}
+      {input.handicapSource === "MANUAL" && <label>HCP manual (sólo este fitting)<NumericCaptureInput inputMode="decimal" min={-20} max={54} emptyWhenZero={false} value={input.handicap} onValueChange={(handicap) => patchInput({ handicap })} placeholder="Ej. 18" /><small>Declarado por ti; no es GHIN ni Backyard Index.</small></label>}
       {input.handicapSource === "UNKNOWN" && <><h4>¿Cuánta experiencia tienes?</h4><OptionGrid values={BALL_FIT_EXPERIENCES} labels={{ STARTING: "Estoy empezando", OCCASIONAL: "Juego ocasionalmente", REGULAR: "Juego con regularidad", UNKNOWN: "Prefiero no indicar" }} selected={input.experience || "UNKNOWN"} onSelect={(experience) => patchInput({ experience })} /><p className={styles.subtle}>Esto aporta contexto; no calculamos un hándicap estimado.</p></>}
-      <label>Score típico en 18 hoyos (opcional)<input type="number" inputMode="numeric" min={40} max={200} value={input.typicalScore ?? ""} onChange={(event) => patchInput({ typicalScore: optionalNumber(event.target.value, 40, 200) })} placeholder="Si lo conoces" /></label>
+      <label>Score típico en 18 hoyos (opcional)<NumericCaptureInput inputMode="numeric" min={40} max={200} value={input.typicalScore} onValueChange={(typicalScore) => patchInput({ typicalScore })} placeholder="Si lo conoces" /></label>
     </section>}
 
     {!result && step === 1 && <section className={styles.questionBlock}>
       <h3>Driver</h3><p>La velocidad es opcional. Nunca inferimos una compresión no publicada a partir de este dato.</p>
-      <label>¿Cuánto pegas aproximadamente con driver? (yardas, opcional)<input type="number" inputMode="numeric" min={50} max={500} value={input.driverDistanceYards ?? ""} onChange={(event) => patchInput({ driverDistanceYards: optionalNumber(event.target.value, 50, 500) })} placeholder="Ej. 245" /></label>
+      <label>¿Cuánto pegas aproximadamente con driver? (yardas, opcional)<NumericCaptureInput inputMode="numeric" min={50} max={500} value={input.driverDistanceYards} onValueChange={(driverDistanceYards) => patchInput({ driverDistanceYards })} placeholder="Ej. 245" /></label>
       <h4>Velocidad de swing con driver</h4><OptionGrid values={SWING_SPEED_BANDS} labels={SPEED_LABELS} selected={input.swingSpeedBand} onSelect={(value) => patchInput({ swingSpeedBand: value })} />
       <LaunchMonitorCapture userId={userId} accessToken={accessToken} requiresRemoteConsent={requiresRemoteConsent} value={input.launchMonitorSession} onChange={(launchMonitorSession) => patchInput({ launchMonitorSession })} onOpenPrivacy={onOpenPrivacy} />
     </section>}

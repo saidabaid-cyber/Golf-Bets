@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useViewScrollReset } from "./use-view-scroll-reset";
 
 import { LEGAL_DOCUMENT_VERSIONS, legalConfig } from "../../lib/legal-config";
 import { accountDeletionMarkerKey, profileHandicapLabel, validateProfileAvatarUrl, validateProfileDraft, type BackyardProfileDetails } from "../../lib/account-state";
@@ -84,6 +85,7 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [managingConsents, setManagingConsents] = useState(false);
   const [managingAiConsents, setManagingAiConsents] = useState(view === "account" && openAiPrivacySettings);
+  useViewScrollReset(`${view}:${editing}:${managingConsents}:${managingAiConsents}`, undefined, !completionEditTarget);
   const [deleteStatsOpen, setDeleteStatsOpen] = useState(false);
   const [deleteStatsText, setDeleteStatsText] = useState("");
   const [deletingStatistics, setDeletingStatistics] = useState(false);
