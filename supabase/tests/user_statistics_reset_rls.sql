@@ -1,35 +1,36 @@
--- Run ONLY on a distinct isolated Preview branch after the reset migrations.
--- pgTAP contract is rolled back and creates no user data.
+-- Isolated Preview only. No pgTAP extension/schema changes required.
 begin;
-select plan(16);
-
-select has_table('public', 'user_statistics_resets');
-select has_table('public', 'user_statistics_reset_requests');
--- row_security_active() reflects the *runner's* role and can be false for an
--- owner/bypass role; relrowsecurity is the table's enabled RLS setting.
-select ok((select relrowsecurity from pg_class where oid = 'public.user_statistics_resets'::regclass), 'canonical reset marker has RLS enabled');
-select ok((select relrowsecurity from pg_class where oid = 'public.user_statistics_reset_requests'::regclass), 'idempotency ledger has RLS enabled');
-select policies_are('public', 'user_statistics_resets', array['statistics reset owner read']);
-select policies_are('public', 'user_statistics_reset_requests', array['statistics reset request owner read']);
-select ok(exists (
-  select 1 from pg_constraint c join pg_class t on t.oid = c.conrelid
-  join pg_namespace n on n.oid = t.relnamespace
-  where n.nspname = 'public' and t.relname = 'user_statistics_reset_requests'
-    and c.conname = 'user_statistics_reset_requests_pkey' and c.contype = 'p'
-), 'request key is unique by user and request_id');
-select function_returns('public', 'reset_my_statistics', array['text','uuid'], 'timestamp with time zone');
-select function_privs_are('public', 'reset_my_statistics', array['text','uuid'], 'authenticated', array['EXECUTE']);
-select function_privs_are('public', 'reset_my_statistics', array['text','uuid'], 'anon', array[]::text[]);
-select function_privs_are('public', 'reset_my_statistics', array['text'], 'authenticated', array[]::text[]);
-select ok(has_table_privilege('authenticated', 'public.user_statistics_resets', 'SELECT'), 'owner may read canonical marker');
-select ok(not (has_table_privilege('authenticated', 'public.user_statistics_resets', 'INSERT')
-  or has_table_privilege('authenticated', 'public.user_statistics_resets', 'UPDATE')
-  or has_table_privilege('authenticated', 'public.user_statistics_resets', 'DELETE')), 'REST cannot move marker');
-select ok(has_table_privilege('authenticated', 'public.user_statistics_reset_requests', 'SELECT'), 'owner may read request records');
-select ok(not (has_table_privilege('authenticated', 'public.user_statistics_reset_requests', 'INSERT')
-  or has_table_privilege('authenticated', 'public.user_statistics_reset_requests', 'UPDATE')
-  or has_table_privilege('authenticated', 'public.user_statistics_reset_requests', 'DELETE')), 'REST cannot forge request records');
-select has_table('public', 'product_usage_events_v2');
-
-select * from finish();
+do $$
+declare t text; expected text; actual text[];
+begin
+  foreach t in array array['user_statistics_resets','user_statistics_reset_requests'] loop
+    if not exists(select 1 from pg_class where oid=to_regclass('public.'||t) and relrowsecurity) then
+      raise exception 'missing reset table or RLS: %',t;
+    end if;
+    expected:=case when t='user_statistics_resets' then 'statistics reset owner read' else 'statistics reset request owner read' end;
+    select array_agg(policyname::text order by policyname) into actual from pg_policies
+      where schemaname='public' and tablename=t and permissive='PERMISSIVE';
+    if actual is distinct from array[expected] then raise exception 'unexpected reset granting policies: %',actual; end if;
+    if exists(select 1 from pg_policies where schemaname='public' and tablename=t and permissive='RESTRICTIVE'
+      and (policyname<>'account_active_access' or cmd<>'ALL'
+        or coalesce(qual,'') not like '%account_data_access_allowed()%'
+        or coalesce(with_check,'') not like '%account_data_access_allowed()%')) then
+      raise exception 'unexpected restrictive reset policy';
+    end if;
+    if not has_table_privilege('authenticated','public.'||t,'SELECT')
+      or has_table_privilege('authenticated','public.'||t,'INSERT,UPDATE,DELETE') then
+      raise exception 'reset ledger must be client read-only';
+    end if;
+  end loop;
+  if not exists(select 1 from pg_constraint where conrelid='public.user_statistics_reset_requests'::regclass
+    and conname='user_statistics_reset_requests_pkey' and contype='p') then raise exception 'missing idempotency primary key'; end if;
+  if (select prorettype from pg_proc where oid=to_regprocedure('public.reset_my_statistics(text,uuid)')) is distinct from 'timestamptz'::regtype
+    or not has_function_privilege('authenticated','public.reset_my_statistics(text,uuid)','EXECUTE')
+    or has_function_privilege('anon','public.reset_my_statistics(text,uuid)','EXECUTE')
+    or has_function_privilege('authenticated','public.reset_my_statistics(text)','EXECUTE') then
+    raise exception 'reset RPC must require authenticated session and request id';
+  end if;
+  if to_regclass('public.product_usage_events_v2') is null then raise exception 'missing audit events'; end if;
+end;
+$$;
 rollback;

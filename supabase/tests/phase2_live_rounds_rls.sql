@@ -1,14 +1,17 @@
+-- RLS enabled is a table property, not row_security_active() of a bypass runner.
 begin;
-select plan(10);
-select has_table('public', 'round_participants_v2', 'round participants exists');
-select has_table('public', 'live_round_operations_v2', 'live operations exists');
-select has_table('public', 'round_activity_v2', 'round activity exists');
-select has_table('public', 'notification_preferences_v2', 'notification preferences exists');
-select has_table('public', 'notification_events_v2', 'notification events exists');
-select row_security_active('public.round_participants_v2', 'participants RLS');
-select row_security_active('public.live_round_operations_v2', 'operations RLS');
-select row_security_active('public.round_activity_v2', 'activity RLS');
-select row_security_active('public.notification_preferences_v2', 'preferences RLS');
-select row_security_active('public.notification_events_v2', 'events RLS');
-select * from finish();
+do $$
+declare t text;
+begin
+  foreach t in array array['round_participants_v2','live_round_operations_v2','round_activity_v2',
+    'notification_preferences_v2','notification_events_v2'] loop
+    if not exists(select 1 from pg_class where oid=to_regclass('public.'||t) and relrowsecurity) then
+      raise exception 'missing table or RLS: %',t;
+    end if;
+    if has_table_privilege('anon','public.'||t,'SELECT,INSERT,UPDATE,DELETE') then
+      raise exception 'anonymous access to %',t;
+    end if;
+  end loop;
+end;
+$$;
 rollback;

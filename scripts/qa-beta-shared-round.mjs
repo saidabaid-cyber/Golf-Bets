@@ -18,6 +18,7 @@ const {roundsEligibleForStatistics}=require('../.test-dist/lib/statistics-reset.
 const options={auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},global:{fetch:credentialBoundFetch(config.supabaseOrigin)}};
 const admin=createClient(config.supabaseOrigin,config.secretKey,options),runId=randomUUID(),accounts=[],passed=[];
 let stage='IDENTITY',failure=null;
+const deletedSyntheticAccounts=[];
 function check(result,label){if(result.error)throw Error(`${label}:${result.error.code||result.error.status}`);return result.data;}
 async function app(path,a,method='GET',body,status=200){
  const res=await appFetch(config.previewOrigin+path,{method,cache:'no-store',headers:{authorization:`Bearer ${a.token}`,'content-type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});
@@ -88,6 +89,7 @@ try {
  const removed=await app('/api/account/delete',a,'DELETE',operation);
  assert.equal(removed.deleted,true);
  assert.ok((await admin.auth.admin.getUserById(a.id)).error,'Auth must be deleted');
+ deletedSyntheticAccounts.push(a.id);
  await app('/api/cloud/rounds',a,'GET',null,401);
  await login(b);
  const retained=(await app('/api/cloud/rounds',b)).rounds.find(r=>r.cloudRoundId===roundId);
@@ -103,5 +105,5 @@ try {
  passed.push('OWNER_AUTH_DELETED_OLD_SESSION_DENIED','CONFIRMED_ONLY_SHARED_ROUND_SURVIVES_DELETE','OWNER_ANONYMIZED_PEER_SCORE_BALANCE_INDEX_INTACT');
 } catch(e){failure={stage,message:String(e.message).slice(0,400)};}
 writeFileSync('.qa-artifacts/beta-fixtures.private.json',JSON.stringify(accounts.map(({id,email,password,label})=>({id,email,password,label,runId,ref:config.projectRef,preview:config.previewOrigin}))));
-const report={runId,preview:config.previewOrigin,ref:config.projectRef,passed,failure,retainedSyntheticAccounts:accounts.map(a=>a.id),scope:'Real Preview/Supabase A/B/C HTTP. Synthetic score/rating fixtures, no claim of physical Safari/SMTP/Google or licensed tee verification.'};
+const report={runId,preview:config.previewOrigin,ref:config.projectRef,passed,failure,deletedSyntheticAccounts,retainedSyntheticAccounts:accounts.map(a=>a.id).filter(id=>!deletedSyntheticAccounts.includes(id)),scope:'Real Preview/Supabase A/B/C HTTP. Synthetic score/rating fixtures, no claim of physical Safari/SMTP/Google or licensed tee verification.'};
 writeFileSync('.qa-artifacts/beta-shared-round.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report));if(failure)process.exitCode=1;
