@@ -4,6 +4,8 @@ import "./profile-account.css";
 import { initialBets, restoreBetConfig } from "../lib/new-round-bets";
 import { collectBetConfigurationIssues } from "../lib/bet-config-validation";
 import { collectRoundSetupPreflightIssues } from "../lib/round-setup-preflight";
+import { buildWizardBetCatalog } from "../lib/round-setup-wizard";
+import { RoundSetupWizard, RoundSetupStep, WizardBetCatalog, WizardReviewBlock } from "./components/round-setup-wizard";
 import { MAX_ROUND_PLAYERS, ROUND_PLAYER_LIMIT_MESSAGE } from "../lib/round-player-limit";
 import { isFiniteZeroSum } from "../lib/settlement-integrity";
 import { freezeRoundHandicapBases, missingHandicapsForActiveBets, normalizeRoundHandicapBasis } from "../lib/handicap-base";
@@ -365,8 +367,9 @@ function DecimalModeSelect({
 }
 
 function PollaBetEditor({
-  title, icon, description, config, players, onChange, unavailable, trophy = "gold", requestActivation, locked = false,
+  id, title, icon, description, config, players, onChange, unavailable, trophy = "gold", requestActivation, locked = false,
 }: {
+  id: string;
   title: string;
   icon: string;
   description: string;
@@ -378,7 +381,7 @@ function PollaBetEditor({
   requestActivation?: () => Promise<boolean>;
   locked?: boolean;
 }) {
-  return <SetupBetCard id={title.replace(/\W+/g, "-").toLowerCase()} icon={icon} title={title} description={description} help="polla" enabled={config.enabled} locked={locked} requestActivation={requestActivation} onEnabledChange={(enabled) => onChange({ ...config, enabled })}>
+  return <SetupBetCard id={id} icon={icon} title={title} description={description} help="polla" enabled={config.enabled} locked={locked} requestActivation={requestActivation} onEnabledChange={(enabled) => onChange({ ...config, enabled })}>
       <span className="visuallyHidden"><TrophyIcon tone={trophy} /></span>
       <div className="grid3">
         <MoneyInput label="Valor" value={config.value} onChange={(value) => onChange({ ...config, value })} />
@@ -434,7 +437,7 @@ function GolfBetsApp() {
   const [courseSelected, setCourseSelected] = useState(false);
   const [pendingCourseIdentity, setPendingCourseIdentity] = useState<RoundSetupCourseIdentity | null>(null);
   const [courseSelectionError, setCourseSelectionError] = useState(false);
-  const [showBetSetupErrors, setShowBetSetupErrors] = useState(false);
+  const [, setShowBetSetupErrors] = useState(false);
   const [courseDraft, setCourseDraft] = useState<Course>(laVista);
   const [courseEditorSelectOnSave, setCourseEditorSelectOnSave] = useState(false);
   const [startHole, setStartHole] = useState<1 | 10>(1);
@@ -706,6 +709,7 @@ function GolfBetsApp() {
     players,
     betIssues: betConfigurationIssues,
   }), [courseSelected, players, betConfigurationIssues]);
+  const wizardBets = useMemo(() => buildWizardBetCatalog({ bets, personalBets, supplementalBets, manualBets, players, ownerId }), [bets, personalBets, supplementalBets, manualBets, players, ownerId]);
   useEffect(() => {
     if (!courseSelected) { setPlayerTeeAssignments([]); return; }
     setPlayerTeeAssignments((current) => reconcilePlayerTeeAssignments(current, players, course, new Date().toISOString(), { allowCuratedNewAssignment: !roundStartedAt && !roundReviewPending && !editingRound }));
@@ -3566,12 +3570,22 @@ function GolfBetsApp() {
     {tab === "profile" && <ProfileAccountPanel key={identity.userId} view="profile" indexControl={indexControl} rootNavigationKey={profileRootRevision} history={history} focusSection={profileFocus} highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} golfInsights={betaGolfInsights} statisticsResetAt={statisticsResetAt} onStatisticsReset={applyStatisticsReset} onOpenStats={() => setTab("stats")} onOpenAccount={() => setTab("account")} onOpenPrivacy={() => { setOpenAiPrivacySettings(true); setTab("account"); }} onOpenEquipment={() => setProfileFocus("equipment")} onBackToProfile={openProfileRoot} />}
     {tab === "account" && <ProfileAccountPanel key={identity.userId} view="account" openAiPrivacySettings={openAiPrivacySettings} onAiPrivacyOpened={() => setOpenAiPrivacySettings(false)} indexControl={indexControl} rootNavigationKey={profileRootRevision} highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} golfInsights={betaGolfInsights} statisticsResetAt={statisticsResetAt} onStatisticsReset={applyStatisticsReset} onOpenStats={() => setTab("stats")} onOpenEquipment={() => { setProfileFocus("equipment"); setTab("profile"); }} onBackToProfile={openProfileRoot} />}
 
-    {tab === "setup" && <>
-      <section className="hero setupHero">
-        <div className="setupHeroCopy"><div className="eyebrow">NUEVA JUGADA</div><h1>Configura y juega.</h1><p>La app calcula lo automático; tú solo capturas score y eventos especiales.</p></div>
-        <div className="heroDate"><input aria-label="Fecha de la ronda" className="dateInput" type="date" value={roundDate} onChange={(e) => setRoundDate(e.target.value)} /><button type="button" className="secondary" onClick={() => { setEditingRound(false); setFeedback("Tu configuración quedó guardada como borrador."); setTab("welcome"); }}>Guardar y salir</button></div>
-      </section>
+    {tab === "setup" && <RoundSetupWizard key={`${identity.userId}:${roundId}`} storageKey={`backyard-setup-step-v1:${identity.userId}:${roundId}`} issues={roundSetupPreflight} editing={editingRound}
+      onSave={() => flushLocalState.current?.()}
+      onExit={() => { setEditingRound(false); setFeedback("Tu configuración quedó guardada como borrador."); setTab("welcome"); }}
+      onStart={async () => {
+        if (roundSetupPreflight.length) return false;
+        if (hasActiveBettingConfiguration() && !hasPersistedBettingConsent() && !await requestBettingConsent()) return false;
+        setShowBetSetupErrors(false);
+        ensureRoundStarted();
+        setBets(current => freezeRoundHandicapBases(current, players, roundHandicapBasis));
+        if (!editingRound) setCurrentIndex(0);
+        setEditingRound(false);
+        setTab("round");
+        return true;
+      }}>
 
+      <RoundSetupStep step={5}>
       {roundTemplateOrigin && (() => {
         const sourceGroup = frequentGroups.find((group) => group.id === roundTemplateOrigin.groupId);
         const mappedPlayerIds = new Set(Object.values(roundTemplateOrigin.roundPlayerIdByMemberId));
@@ -3585,11 +3599,14 @@ function GolfBetsApp() {
           {roundOnlyPlayers.length > 0 && <div className="roundTemplateDecision"><small>{roundOnlyPlayers.map((player) => player.name).join(", ")} {roundOnlyPlayers.length === 1 ? "está" : "están"} sólo en esta ronda.</small><b>¿Agregar también al grupo?</b><div className="roundTemplateActions"><button className="secondary" onClick={() => setFeedback("El jugador permanece sólo en esta ronda.")}>Sólo esta ronda</button><button className="primary" onClick={addRoundOnlyPlayersToSourceGroup}>Agregar también al grupo</button></div></div>}
         </section> : null;
       })()}
+      </RoundSetupStep>
 
+      <RoundSetupStep step={1}>
       <section className="card" id="round-course">
         <div className="sectionTitle"><div><h2>1. Campo</h2><p>Busca por nombre o usa tu ubicación. El tee habitual se resuelve sin estorbar este flujo.</p></div><div className="courseSetupActions"><button className="textButton" onClick={() => setTab("courseLibrary")}>Ver campos</button><button className="textButton" onClick={startNewCourse}>+ Campo</button></div></div>
         {!courseSelected && pendingCourseIdentity && <div className="notice" id="round-course-ai-focus" role="status"><b>Campo reconocido: {pendingCourseIdentity.name}</b><br />{pendingCourseCandidates.length ? "Selecciona el campo para continuar." : "No encontré ese campo exacto en el catálogo actual. Selecciona otro o crea uno manual."}</div>}
         <div className="grid2">
+          <div><label htmlFor="wizard-round-date">Fecha de la ronda</label><input id="wizard-round-date" aria-label="Fecha de la ronda" type="date" value={roundDate} onChange={(e) => setRoundDate(e.target.value)} /></div>
           <RoundCoursePicker selectedName={courseSelected ? course.name : ""} selectedId={courseSelected ? (course.catalogCourseId ?? course.id) : ""} pendingName={pendingCourseIdentity?.name} invalid={courseSelectionError} describedBy={[!courseSelected && pendingCourseIdentity ? "round-course-ai-focus" : "", courseSelectionError ? "round-course-error" : ""].filter(Boolean).join(" ") || undefined} onSelect={(selection) => {
             const matchingCourse = courseNameOptions.find((candidate) => candidate.catalogCourseId === selection.courseId)
               ?? courseNameOptions.find((candidate) => candidate.id === selection.id)
@@ -3601,6 +3618,10 @@ function GolfBetsApp() {
           <div><label>Hoyos a jugar</label><select value={roundHoles} onChange={(e) => { const next = Number(e.target.value) as 9 | 18; confirmRoundChange("Cambiar la duración excluye del cálculo los hoyos fuera de la nueva vuelta, sin borrar sus scores.", () => { setRoundHoles(next); setSupplementalBets((current) => supplementalBetsForRoundHoles(current, next)); setCurrentIndex(0); }); }}><option value={18}>18 hoyos</option><option value={9}>9 hoyos</option></select></div>
         </div>
         {courseSelected && <div className="courseMeta"><span>{course.holes.length} hoyos configurados</span><span>{teeOptions.length} tee{teeOptions.length === 1 ? "" : "s"} disponible{teeOptions.length === 1 ? "" : "s"}</span>{course.updatedAt && <span>Última actualización: {course.updatedAt}</span>}<button onClick={() => { setCourseEditorSelectOnSave(true); setCourseDraft(withDefaultLaVistaRules(course)); setTab("courses"); }}>{course.name === "La Vista Temporal" ? "Editar campo temporal" : "Editar campo"}</button>{isLaVistaCourse(course.name) && <button onClick={() => { setRulesCourseContext(course.name); setTab("rules"); }}>Ver Reglas Locales</button>}</div>}
+      </section>
+      </RoundSetupStep>
+
+      <RoundSetupStep step={2}>
         {courseSelected && players.length > 0 && <details className="playerTeeAssignments optionalTeeSetup">
           <summary><span><b>Ajustar tee y HCP de juego</b><small>Opcional · abre sólo si necesitas otro tee o datos de Rating/Slope.</small></span></summary>
           <div className="optionalTeeSetupBody">
@@ -3616,8 +3637,6 @@ function GolfBetsApp() {
           <p className="hint">EDITAR POR JUGADOR está siempre disponible. Para una cuenta con Index, el tee calcula y congela su HCP de juego; un Guest conserva captura manual.</p>
           </div>
         </details>}
-      </section>
-
       <section className="card" id="round-players">
         <div className="sectionTitle"><div><h2>2. Jugadores</h2><p>Las cuentas usan Index + tee; los Guests conservan HCP manual.</p></div><button className="textButton" disabled={players.length >= MAX_ROUND_PLAYERS} title={players.length >= MAX_ROUND_PLAYERS ? ROUND_PLAYER_LIMIT_MESSAGE : undefined} onClick={addPlayer}>+ Jugador</button></div>
         {players.length >= MAX_ROUND_PLAYERS && <div className="hint" role="status">5 / 5 jugadores · máximo por grupo de salida.</div>}
@@ -3649,11 +3668,13 @@ function GolfBetsApp() {
         </div>}
         {players.some((player) => player.name.trim()) && <div className="inlineForm"><input placeholder="Nombre del grupo frecuente" value={groupName} onChange={(event) => setGroupName(event.target.value)} /><button className="secondary" onClick={saveFrequentGroup}>Guardar grupo</button></div>}
       </section>
+      </RoundSetupStep>
 
+      <RoundSetupStep step={3}>
       <section className="card">
         <div className="sectionTitle"><div><h2>3. Apuestas grupales</h2><p>Todas las modalidades del grupo, con su porcentaje y participantes.</p></div></div>
         {!bettingConsentGranted && <div className="notice compactConsentNotice" role="status">Para activar o registrar apuestas, completa el consentimiento específico desde <button type="button" className="textButton" onClick={() => setTab("account")}>Mi Cuenta</button>. Tus datos anteriores se conservan.</div>}
-        <div className="groupedBetSetupList">
+        <WizardBetCatalog entries={wizardBets.group}>
 
         <SetupBetCard id="rabbits" icon="🐇" title="Conejos" description="Gana hoyos · captura y conserva el conejo" help="rabbits" enabled={bets.rabbits.enabled} locked={!bettingConsentGranted} requestActivation={requestBettingConsent} onEnabledChange={(enabled) => setBets((current) => ({ ...current, rabbits: { ...current.rabbits, enabled } }))}><BetModeControl label="conejos" value={rabbitMode} options={RABBIT_MODE_OPTIONS} onChange={(mode) => setBets((current) => ({ ...current, rabbits: { ...current.rabbits, mode, ...(mode === "continuous" ? { accumulate: true } : {}) } }))} /><div className="grid3"><MoneyInput label="Valor" value={bets.rabbits.value} onChange={(v) => setBets({ ...bets, rabbits: { ...bets.rabbits, value: v } })} /><HcpPercentInput value={bets.rabbits.hcpPct} onChange={(v) => setBets({ ...bets, rabbits: { ...bets.rabbits, hcpPct: v } })} /><HandicapModeSelect value={bets.rabbits.decimals} onChange={(decimals) => setBets({ ...bets, rabbits: { ...bets.rabbits, decimals } })} /></div><label className="miniLabel">Participan</label><ParticipantChips players={players} selected={bets.rabbits.participantIds} onChange={(ids) => setBets({ ...bets, rabbits: { ...bets.rabbits, participantIds: ids } })} /></SetupBetCard>
 
@@ -3713,6 +3734,7 @@ function GolfBetsApp() {
         <SetupBetCard id="monkey" icon="🐒" title="Monkey" description="Exactamente tres jugadores · 6 puntos por hoyo" help="monkey" enabled={Boolean(bets.monkey?.enabled)} locked={!bettingConsentGranted} requestActivation={requestBettingConsent} onEnabledChange={(enabled) => setBets((current) => ({ ...current, monkey: { value: 20, hcpPct: 100, participantIds: players.slice(0, 3).map((player) => player.id), ...current.monkey, enabled } }))}><div className="grid2"><MoneyInput label="Valor punto Monkey" value={bets.monkey?.value ?? 20} onChange={value=>setBets(current => ({...current,monkey:{...current.monkey!,value}}))} /><HcpPercentInput value={bets.monkey?.hcpPct ?? 100} onChange={hcpPct=>setBets(current => ({...current,monkey:{...current.monkey!,hcpPct}}))} /></div><ParticipantChips players={players} selected={bets.monkey?.participantIds ?? []} onChange={participantIds=>setBets(current => ({...current,monkey:{...current.monkey!,participantIds}}))} /><p>{monkey.valid ? roundHandicapBasis === "course" ? `HCP sobre el campo · ${bets.monkey?.hcpPct ?? 100}% · sin redondeo.` : `HCP entre estos tres · ${bets.monkey?.hcpPct ?? 100}% · sin redondeo.` : missingActiveHandicapPlayers.length ? "Completa el HCP de los participantes para calcular." : "Selecciona exactamente tres jugadores; no se calcula con otra cantidad."}</p></SetupBetCard>
 
         <PollaBetEditor
+          id="polla-h1-9"
           title={groupNassauLabels.component("first9")}
           icon={BET_PRESENTATION.polla_first.icon}
           trophy="silver"
@@ -3726,6 +3748,7 @@ function GolfBetsApp() {
         />
 
         <PollaBetEditor
+          id="polla-h10-18"
           title={groupNassauLabels.component("second9")}
           icon={BET_PRESENTATION.polla_second.icon}
           trophy="silver"
@@ -3739,6 +3762,7 @@ function GolfBetsApp() {
         />
 
         <PollaBetEditor
+          id="polla-18-hoyos"
           title={groupNassauLabels.component("total18")}
           icon={BET_PRESENTATION.polla_total.icon}
           description="Mejor medal neto de la ronda completa"
@@ -3763,9 +3787,14 @@ function GolfBetsApp() {
         <CounterBetConfigPanel kind="fish" config={bets.fish} players={players} requestActivation={requestBettingConsent} locked={!bettingConsentGranted} onChange={fish => setBets((current) => ({ ...current, fish: { ...current.fish, ...fish } }))} />
         <LobaConfigPanel config={bets.loba} players={players} requestActivation={requestBettingConsent} locked={!bettingConsentGranted} onChange={lobaConfig => setBets((current) => ({ ...current, loba: { ...current.loba, ...lobaConfig } }))} />
         <SupplementalBetsEditor bets={supplementalBets} players={players} onChange={setSupplementalBets} requestActivation={requestBettingConsent} locked={!bettingConsentGranted} roundHoles={roundHoles} />
-        </div>
+        </WizardBetCatalog>
       </section>
+      </RoundSetupStep>
 
+      <RoundSetupStep step={4}>
+      <section className="card"><h2>4. Personales y manuales</h2><p className="hint">Jugador vs jugador y acuerdos manuales, separados de las apuestas grupales.</p>
+      {!bettingConsentGranted && <div className="notice compactConsentNotice">Para activar apuestas, completa el consentimiento específico desde <button type="button" className="textButton" onClick={() => setTab("account")}>Mi Cuenta</button>.</div>}
+      <WizardBetCatalog entries={wizardBets.personal}>
       <ResultAccordion
         id="setup-manuals"
         title={<SetupModeTitle icon={BET_PRESENTATION.manuals.icon} title={BET_PRESENTATION.manuals.title} description="Importes directos por jugador · la suma debe cerrar en $0" />}
@@ -3779,7 +3808,6 @@ function GolfBetsApp() {
         }} /></span>}
       >{manualBets.some((bet) => bet.enabled !== false) && <><div className="setupModeTools"><button type="button" className="textButton" onClick={() => runAfterBettingConsent(newManualBet)}>+ Apuesta</button></div>{renderManualBetsEditor(true)}</>}</ResultAccordion>
 
-      <ResultAccordion id="setup-personals" title={<SetupModeTitle icon={BET_PRESENTATION.personals.icon} title={BET_PRESENTATION.personals.title} description="Nassau, Dollar a Stroke y Presiones individuales" />} open={personalSetupOpen} onOpenChange={setPersonalSetupOpen} className="setupBetsAccordion personalSetupGroup" headerAction={<span className="resultHeaderActions"><BetHelpButton kind="personal_group" /></span>}>
         <ResultAccordion
           id="setup-personal-nassau"
           title={<SetupModeTitle icon={SUPPLEMENTAL_BET_PRESENTATION.individual_nassau.icon} title={SUPPLEMENTAL_BET_PRESENTATION.individual_nassau.title} description={SUPPLEMENTAL_BET_PRESENTATION.individual_nassau.description} />}
@@ -3794,35 +3822,17 @@ function GolfBetsApp() {
         >{personalBets.some((bet) => bet.enabled !== false) && <><div className="setupModeTools"><button type="button" className="textButton" onClick={() => runAfterBettingConsent(() => { newPersonalBet(); setNassauSetupOpen(true); })}>+ Nassau Individual</button></div>{supplementalBets.some((bet) => bet.type === "individual_nassau") && <div className="notice">Se conserva sin reinterpretar una Nassau heredada entre jugadores distintos del principal. Sigue calculándose con su ID, pareja, ventaja y monto originales; no se convirtió automáticamente.</div>}{renderPersonalBetsEditor()}</>}</ResultAccordion>
         {supplementalBets.some((bet) => bet.type === "individual_nassau") && <SupplementalBetsEditor bets={supplementalBets} players={players} onChange={setSupplementalBets} requestActivation={requestBettingConsent} locked={!bettingConsentGranted} types={["individual_nassau"]} roundHoles={roundHoles} allowAdd={false} />}
         <SupplementalBetsEditor bets={supplementalBets} players={players} onChange={setSupplementalBets} requestActivation={requestBettingConsent} locked={!bettingConsentGranted} types={["dollar_stroke", "individual_pressures"]} roundHoles={roundHoles} />
-      </ResultAccordion>
+      </WizardBetCatalog></section>
+      </RoundSetupStep>
 
-      {showBetSetupErrors && betConfigurationIssues.length > 0 && <div id="round-bet-validation" className="notice bad" role="alert">
-        <b>Revisa las apuestas activas antes de iniciar.</b>
-        <ul>{betConfigurationIssues.map((issue) => <li key={`${issue.code}:${issue.sectionId}`}>{issue.message}</li>)}</ul>
-      </div>}
-
-      {roundSetupPreflight.length > 0 && <section className="setupPreflight" aria-labelledby="round-preflight-title">
-        <div><span>ANTES DE INICIAR</span><h2 id="round-preflight-title">FALTA COMPLETAR</h2><p>Toca cada punto para ir directamente a corregirlo.</p></div>
-        <div className="setupPreflightList">{roundSetupPreflight.map((issue) => <button type="button" key={issue.id} onClick={() => {
-          if (issue.kind === "course") setCourseSelectionError(true);
-          if (issue.kind === "bets") setShowBetSetupErrors(true);
-          requestAnimationFrame(() => document.getElementById(issue.targetId)?.scrollIntoView({ behavior: "smooth", block: "center" }));
-        }}><b>⚠ {issue.label}</b><small>{issue.detail}</small><span aria-hidden="true">›</span></button>)}</div>
-      </section>}
-
-      <button className="primary big" onClick={() => {
-        const firstIssue = roundSetupPreflight[0];
-        if (firstIssue) {
-          if (firstIssue.kind === "course") setCourseSelectionError(true);
-          if (firstIssue.kind === "bets") setShowBetSetupErrors(true);
-          requestAnimationFrame(() => document.getElementById(firstIssue.targetId)?.scrollIntoView({ behavior: "smooth", block: "center" }));
-          return;
-        }
-        setShowBetSetupErrors(false);
-        const start = () => { ensureRoundStarted(); setBets(current => freezeRoundHandicapBases(current, players, roundHandicapBasis)); if (!editingRound) setCurrentIndex(0); setEditingRound(false); setTab("round"); };
-        if (hasActiveBettingConfiguration()) runAfterBettingConsent(start); else start();
-      }}>{editingRound ? "Guardar configuración y continuar →" : "Iniciar ronda →"}</button>
-    </>}
+      <RoundSetupStep step={5}>
+        <WizardReviewBlock step={1} title="Campo"><p><b>{courseSelected ? course.name : "Falta seleccionar campo"}</b></p><p>{roundHoles} hoyos · salida H{startHole} · {roundDate}</p>{courseSelected && <p>{course.teeName}</p>}</WizardReviewBlock>
+        <WizardReviewBlock step={2} title={`${players.length} jugadores`}><ul>{players.map(player => <li key={player.id}>{player.name || "Sin nombre"}<small>{player.handicapIndex !== undefined ? `Index ${player.handicapIndex} · ` : ""}HCP {player.handicap ?? "—"}{player.id === ownerId ? " · Principal" : ""}</small></li>)}</ul><p className="hint">{roundHandicapBasis === "course" ? "Ventajas sobre el campo" : "Ventajas entre jugadores"}</p></WizardReviewBlock>
+        <WizardReviewBlock step={3} title="Apuestas grupales">{wizardBets.group.some(entry => entry.enabled) ? <ul>{wizardBets.group.filter(entry => entry.enabled).map(entry => <li key={entry.id}><b>{entry.label}</b><small>{entry.summary}</small></li>)}</ul> : <p>Sin apuestas grupales</p>}</WizardReviewBlock>
+        <WizardReviewBlock step={4} title="Personales y manuales">{wizardBets.personal.some(entry => entry.enabled) ? <ul>{wizardBets.personal.filter(entry => entry.enabled).map(entry => <li key={entry.id}><b>{entry.label}</b><small>{entry.summary}</small></li>)}</ul> : <p>Sin apuestas personales ni manuales</p>}</WizardReviewBlock>
+        <section className="card"><details><summary>Guardar configuración</summary><p className="hint">Guarda jugadores y apuestas como grupo frecuente. No incluye scores, resultados ni balances.</p><div className="inlineForm"><input aria-label="Nombre de la configuración" placeholder="Ej. Polla miércoles" value={groupName} onChange={event => setGroupName(event.target.value)} /><button type="button" className="secondary" disabled={!groupName.trim() || !players.length || roundSetupPreflight.length > 0} onClick={saveFrequentGroup}>Guardar configuración</button></div></details></section>
+      </RoundSetupStep>
+    </RoundSetupWizard>}
 
     {tab === "personals" && <>
       <section className="hero">

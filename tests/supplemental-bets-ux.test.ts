@@ -14,11 +14,13 @@ const captureControls = readFileSync("app/components/bet-fields/capture-controls
 const styles = readFileSync("app/components/supplemental-bets.module.css", "utf8");
 const sideBets = readFileSync("app/components/side-bet-panels.tsx", "utf8");
 
-test("round setup keeps general additions first, Manuals before the final Personales group", () => {
-  const currentPersonals = page.indexOf('id="setup-personals"');
+test("wizard separates general additions from the final personal/manual step", () => {
+  const currentPersonals = page.indexOf('id="setup-personal-nassau"');
   const supplemental = page.indexOf("<SupplementalBetsEditor");
   const manuals = page.indexOf('id="setup-manuals"');
-  assert.ok(supplemental >= 0 && manuals > supplemental && currentPersonals > manuals);
+  const groupStep = page.indexOf("<RoundSetupStep step={3}>");
+  const personalStep = page.indexOf("<RoundSetupStep step={4}>");
+  assert.ok(groupStep >= 0 && supplemental > groupStep && supplemental < personalStep && manuals > personalStep && currentPersonals > manuals);
   assert.match(editor, /const ORDER:[^=]+\= \["team_pressures", "chicago", "vegas", "minimum_putts"\]/);
   assert.match(page, /types=\{\["dollar_stroke", "individual_pressures"\]\}/);
 });

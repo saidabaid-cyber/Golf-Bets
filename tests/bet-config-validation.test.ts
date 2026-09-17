@@ -715,17 +715,20 @@ test("Foursome segment repair preserves valid pairs without sharing mutable arra
 
 test("the setup gate renders every issue before consent, HCP freezing or round navigation", () => {
   const page = readFileSync("app/page.tsx", "utf8");
+  const wizard = readFileSync("app/components/round-setup-wizard.tsx", "utf8");
   assert.match(page, /collectBetConfigurationIssues\(\{/);
-  assert.match(page, /id="round-bet-validation" className="notice bad" role="alert"/);
-  const setupGateRegion = page.indexOf('id="round-bet-validation"');
-  const gate = page.indexOf("const firstIssue = roundSetupPreflight[0]", setupGateRegion);
-  const blockedReturn = page.indexOf("return;", gate);
-  const start = page.indexOf("const start = () =>", gate);
-  const consent = page.indexOf("runAfterBettingConsent(start)", gate);
+  assert.match(page, /<RoundSetupWizard[^>]*issues=\{roundSetupPreflight\}/);
+  const setupGateRegion = page.indexOf("onStart={async () =>");
+  const gate = page.indexOf("if (roundSetupPreflight.length) return false;", setupGateRegion);
+  const consent = page.indexOf("await requestBettingConsent()", gate);
+  const start = page.indexOf("ensureRoundStarted();", gate);
+  const freeze = page.indexOf("freezeRoundHandicapBases(current, players, roundHandicapBasis)", gate);
   const navigation = page.indexOf('setTab("round")', gate);
-  assert.ok(gate > setupGateRegion && blockedReturn > gate && start > blockedReturn && consent > start && navigation > start);
-  assert.match(page, /FALTA COMPLETAR/);
-  assert.match(page, /document\.getElementById\(firstIssue\.targetId\)/);
+  assert.ok(gate > setupGateRegion && consent > gate && start > consent && freeze > start && navigation > freeze);
+  assert.match(wizard, /FALTA COMPLETAR/);
+  assert.match(wizard, /blocking\.map\(\(issue\)/);
+  assert.match(wizard, /document\.getElementById\(issue\.targetId\)/);
+  assert.match(wizard, /if \(issues\.length\) \{ navigate\(wizardIssueStep\(issues\[0\]\), issues\[0\]\); return; \}/);
   assert.match(page, /extraErrors:\s*\[[\s\S]*betConfigurationIssues\.map\(\(issue\) => issue\.message\)/);
   assert.match(page, /function saveRound\([^)]*\) \{\s*const preparingReview[\s\S]*?if \(betConfigurationIssues\.length\)[\s\S]*?setTab\("setup"\);[\s\S]*?return;/);
   assert.match(page, /activeBetSafeDestination\(next, draftAvailable && !roundClosed && betConfigurationIssues\.length > 0\)/);

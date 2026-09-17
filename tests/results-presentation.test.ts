@@ -91,7 +91,9 @@ test("Editar ronda concentra Personales/Manuales y Resultados conserva navegaciÃ
   const standings = page.slice(page.indexOf('{tab === "standings" && <>'), page.indexOf('{tab === "results" && <>'));
   const results = page.slice(page.indexOf('{tab === "results" && <>'), page.indexOf('{tab === "history" && <>'));
 
-  assert.ok(setup.indexOf('id="setup-manuals"') < setup.indexOf('id="setup-personals"'));
+  assert.ok(setup.indexOf('<RoundSetupStep step={4}>') < setup.indexOf('id="setup-manuals"'));
+  assert.ok(setup.indexOf('id="setup-manuals"') < setup.indexOf('id="setup-personal-nassau"'));
+  assert.match(setup, /<WizardBetCatalog entries=\{wizardBets\.personal\}>/);
   assert.match(setup, /renderPersonalBetsEditor\(\)/);
   assert.match(setup, /renderManualBetsEditor\(true\)/);
   assert.match(personals, /<PersonalHistoryPanel/);

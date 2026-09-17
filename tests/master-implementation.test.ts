@@ -55,10 +55,11 @@ test("setup oculta tees avanzados, muestra campo cercano y preflight sin botón 
   const page = readFileSync("app/page.tsx", "utf8");
   const picker = readFileSync("app/components/round-course-picker.tsx", "utf8");
   const route = readFileSync("app/api/courses/search/route.ts", "utf8");
+  const wizard = readFileSync("app/components/round-setup-wizard.tsx", "utf8");
   assert.match(page, /<h2>1\. Campo<\/h2>/);
   assert.match(page, /<details className="playerTeeAssignments optionalTeeSetup">/);
-  assert.match(page, /FALTA COMPLETAR/);
-  assert.match(page, /document\.getElementById\(issue\.targetId\)/);
+  assert.match(wizard, /FALTA COMPLETAR/);
+  assert.match(wizard, /document\.getElementById\(issue\.targetId\)/);
   assert.match(picker, /Buscar campos cercanos con mi ubicación/);
   assert.match(picker, /No diste permiso de ubicación/);
   assert.match(route, /nearbyCourses/);

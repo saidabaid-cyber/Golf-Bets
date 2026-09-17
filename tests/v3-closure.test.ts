@@ -118,14 +118,14 @@ test("document navigation leaves The Backyard available for a safe return", () =
   assert.doesNotMatch(panel, /<iframe src=\{selectedDocument/);
 });
 
-test("the setup date uses a centered responsive wrapper for mobile and desktop", () => {
+test("wizard date stays in Campo with local responsive styling, not the obsolete setup hero", () => {
   const page = readFileSync("app/page.tsx", "utf8");
-  const css = readFileSync("app/globals.css", "utf8");
-  assert.match(page, /className="hero setupHero"/);
-  assert.match(page, /className="heroDate"/);
-  assert.match(css, /\.heroDate\{[^}]*justify-content:center/);
-  assert.match(css, /\.setupHero \.dateInput\{[^}]*margin:0 auto[^}]*text-align:center/);
-  assert.match(css, /@media\(max-width:430px\)[\s\S]*\.setupHero \.heroDate\{[^}]*align-self:center/);
+  const css = readFileSync("app/components/round-setup-wizard.module.css", "utf8");
+  const campo = page.slice(page.indexOf("<RoundSetupStep step={1}>"), page.indexOf("<RoundSetupStep step={2}>"));
+  assert.match(campo, /htmlFor="wizard-round-date"/);
+  assert.match(campo, /id="wizard-round-date" aria-label="Fecha de la ronda" type="date" value=\{roundDate\}/);
+  assert.doesNotMatch(campo, /className="dateInput"|heroDate/);
+  assert.match(css, /\.panel input\[type="?date"?\][^{]*\{[^}]*min-width:\s*0[^}]*min-height:\s*44px/);
 });
 
 test("capture inputs use the empty-safe numeric control and Manuales accept a direct signed amount", () => {

@@ -194,6 +194,13 @@ export function mergeCoursesPreservingEdits(defaults: Course[], saved: Course[] 
 export function hasRoundProgress(draft: any) {
   if (!draft || typeof draft !== "object") return false;
   const started = Boolean(normalizeRoundStartedAt(draft.startedAt));
+  // Selecting the first wizard step is meaningful draft work even before a
+  // guest roster exists. Keep it through the same local/offline/cloud path;
+  // this does not promote the setup draft to a live round.
+  const selectedCourse = recordValue(draft.course);
+  const configuredCourse = draft.courseSelected === true
+    && typeof selectedCourse?.name === "string" && Boolean(selectedCourse.name.trim())
+    && Array.isArray(selectedCourse.holes) && selectedCourse.holes.length >= 9;
   const namedPlayers = Array.isArray(draft.players) && draft.players.some((player: Player) => player.name?.trim());
   const scoreRows = recordValue(draft.scores);
   const enteredScores = scoreRows && Object.values(scoreRows).some((row) => {
@@ -207,7 +214,7 @@ export function hasRoundProgress(draft: any) {
     && JSON.stringify(draft.bets) !== JSON.stringify(initialBets(playerIds));
   const configuredInstance = [draft.personalBets, draft.supplementalBets, draft.manualBets]
     .some((items) => Array.isArray(items) && items.length > 0);
-  return Boolean(started || namedPlayers || enteredScores || draft.currentIndex > 0 || configuredGroupBet || configuredInstance);
+  return Boolean(started || configuredCourse || namedPlayers || enteredScores || draft.currentIndex > 0 || configuredGroupBet || configuredInstance);
 }
 
 export function migrateDraftPressures(draft: any) {
