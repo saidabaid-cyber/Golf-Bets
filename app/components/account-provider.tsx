@@ -1,5 +1,6 @@
 "use client";
 import { cloudAccountErrorMessage, ensureCloudProfile, saveCloudProfile } from "../../lib/cloud-account";
+import { canonicalProfileUsername, normalizeProfileUsername } from "../../lib/profile-username";
 
 import Link from "next/link";
 import { Fragment, createContext, useCallback, useContext, useEffect, useRef, useState, type FormEvent } from "react";
@@ -753,7 +754,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
           if (!currentPending || currentPending.revision !== pendingProfile.revision) return;
           const saved = await saveCloudProfile(supabase, authenticatedUserId, currentPending.profile, currentPending.updatedAt);
           if (activeUserId.current !== authenticatedUserId) return;
-          await syncExistingSocialProfileAvatar(supabase, authenticatedUserId, currentPending.profile.avatarUrl);
+          await syncExistingSocialProfileAvatar(supabase, authenticatedUserId, currentPending.profile.avatarUrl, currentPending.profile.username);
           if (activeUserId.current === authenticatedUserId) {
             recordCloudProfileRevision(localStorage, authenticatedUserId, saved.updatedAt);
             acknowledgePendingProfileWrite(localStorage, authenticatedUserId, pendingProfile.revision);
@@ -806,6 +807,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
           if (keepLocalProfile) return current;
           const displayName = typeof cloudProfile.display_name === "string" && cloudProfile.display_name.trim() ? cloudProfile.display_name : current.displayName;
           const avatarUrl = safeProfileAvatarValue(cloudProfile.avatar_url, current.avatarUrl);
+          const username = canonicalProfileUsername(cloudProfile.username, current.username);
           // Existing preference clocks belong to the full sync merge. Updating
           // just HCP here would masquerade as a local edit on the next autosave.
           const cloudHandicap = preferencesResult.data ? preferencesResult.data.default_handicap : cloudProfile.default_handicap ?? null;
@@ -814,8 +816,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
           const locationPatch = savedLocation && Date.parse(savedLocation.updatedAt) >= (Date.parse(current.locationUpdatedAt || "") || 0)
             ? { ...normalizeProfileLocation(savedLocation), locationUpdatedAt: savedLocation.updatedAt }
             : {};
-          if (current.displayName === displayName && current.avatarUrl === avatarUrl && current.defaultHandicap === defaultHandicap && Object.entries(locationPatch).every(([key, value]) => current[key as keyof BackyardProfile] === value)) return current;
-          return { ...current, displayName, avatarUrl, defaultHandicap, ...locationPatch };
+          if (current.displayName === displayName && current.username === username && current.avatarUrl === avatarUrl && current.defaultHandicap === defaultHandicap && Object.entries(locationPatch).every(([key, value]) => current[key as keyof BackyardProfile] === value)) return current;
+          return { ...current, displayName, username, avatarUrl, defaultHandicap, ...locationPatch };
         });
         if (!keepLocalProfile) {
           if (completeResponseAt) recordCloudProfileRevision(localStorage, authenticatedUserId, completeResponseAt);
@@ -996,6 +998,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     const includesLocation = ["countryCode", "country", "stateCode", "state"].some((key) => Object.hasOwn(profile, key));
     if (includesLocation && !validateProfileLocation({ ...identity, ...profile }).valid) throw new Error("Selecciona un país y una región válidos antes de guardar.");
     const next = mergeBackyardProfile(identity, profile);
+    if (Object.hasOwn(profile, "username")) next.username = normalizeProfileUsername(profile.username) || identity.username;
     const locationChanged = includesLocation && (!identity.locationUpdatedAt || ["countryCode", "country", "stateCode", "state"].some((key) => next[key as keyof BackyardProfile] !== identity[key as keyof BackyardProfile]));
     const location = locationChanged ? normalizeProfileLocation(next) : undefined;
     if (identity.mode === "guest") {
@@ -1024,10 +1027,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       const acknowledged = await profileWriteCoordinator.run(async () => {
         const saved = await saveCloudProfile(supabase, identity.userId, pending.profile, pending.updatedAt, { rebaseOnServerClock: true });
         if (activeUserId.current !== identity.userId) return false;
-        // The profile row is canonical; Social receives only its avatar, never
-        // a privacy change or a new synthetic social identity.
+        // The profile row is canonical; project its public handle/avatar onto
+        // the existing Social row, never privacy or a new synthetic identity.
         retimePendingProfileWrite(localStorage, identity.userId, pending.revision, saved.updatedAt);
-        await syncExistingSocialProfileAvatar(supabase, identity.userId, pending.profile.avatarUrl);
+        await syncExistingSocialProfileAvatar(supabase, identity.userId, pending.profile.avatarUrl, pending.profile.username);
         if (activeUserId.current !== identity.userId) return false;
         recordCloudProfileRevision(localStorage, identity.userId, saved.updatedAt);
         return acknowledgePendingProfileWrite(localStorage, identity.userId, pending.revision);
@@ -1037,9 +1040,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         issueWithMessage("profile", "Hay una edición de perfil más reciente pendiente de sincronizar.", "pending");
         return "local";
       }
-      if (next.username) {
+      // Public handle is acknowledged by the canonical profile + Social writes
+      // above. Auth metadata is legacy display fallback, not its source of truth.
+      if (next.givenName !== identity.givenName || next.familyName !== identity.familyName) {
         const metadataWrite = await supabase.auth.updateUser({ data: {
-          username: next.username,
           given_name: next.givenName || null,
           family_name: next.familyName || null,
         } });

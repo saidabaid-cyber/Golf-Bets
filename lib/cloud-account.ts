@@ -3,8 +3,10 @@ import type { BackyardProfile } from "./account-state";
 import { writeVersionedRow } from "./cloud-write";
 import type { CloudProfileFields } from "./profile-sync";
 import { saveProfileLocationMetadata } from "./profile-location-sync";
+import { normalizeProfileUsername } from "./profile-username";
 
 export type CloudProfileRow = {
+  username?: string | null;
   display_name: string | null;
   avatar_url: string | null;
   default_handicap: number | null;
@@ -12,7 +14,7 @@ export type CloudProfileRow = {
   updated_at: string | null;
 };
 
-type ProfileWriteField = "default_handicap" | "name" | "display_name" | "avatar_url" | "onboarding_completed_at";
+type ProfileWriteField = "default_handicap" | "name" | "display_name" | "avatar_url" | "onboarding_completed_at" | "username";
 type ProfileWriteError = Error & { profileUpdatedAt?: string };
 
 type CloudErrorLike = { code?: string; message?: string; status?: number };
@@ -45,7 +47,7 @@ export async function ensureCloudProfile(
   userId: string,
   fallback: Pick<BackyardProfile, "displayName" | "defaultHandicap" | "avatarUrl">,
 ): Promise<CloudProfileRow> {
-  const columns = "display_name,avatar_url,default_handicap,onboarding_completed_at,updated_at";
+  const columns = "display_name,avatar_url,default_handicap,onboarding_completed_at,updated_at,username";
   const existing = await client.from("profiles").select(columns).eq("id", userId).maybeSingle();
   if (existing.error) throw existing.error;
   if (existing.data) return existing.data as CloudProfileRow;
@@ -115,6 +117,7 @@ export async function saveCloudProfile(
   options: { rebaseOnServerClock?: boolean } = {},
 ) {
   if (!Number.isFinite(Date.parse(updatedAt))) throw new Error("profile_updated_at_invalid");
+  const username = normalizeProfileUsername(profile.username);
   const serverTimestamp = options.rebaseOnServerClock ? await latestProfileTimestamp(client, userId) : 0;
   const writeTimestamp = serverTimestamp
     ? new Date(serverTimestamp + 1).toISOString()
@@ -125,8 +128,8 @@ export async function saveCloudProfile(
     if (profile.location) await saveProfileLocationMetadata(client, userId, profile.location, profile.locationUpdatedAt || updatedAt);
     const preferenceRow = { user_id: userId, default_handicap: profile.defaultHandicap, updated_at: writeTimestamp };
     await writeVerifiedProfileRow(client, "user_preferences", { user_id: userId }, preferenceRow, ["default_handicap"]);
-    const profileRow = { id: userId, name: profile.displayName, display_name: profile.displayName, default_handicap: profile.defaultHandicap, avatar_url: profile.avatarUrl, onboarding_completed_at: writeTimestamp, updated_at: writeTimestamp };
-    await writeVerifiedProfileRow(client, "profiles", { id: userId }, profileRow, ["name", "display_name", "default_handicap", "avatar_url", "onboarding_completed_at"]);
+    const profileRow = { id: userId, name: profile.displayName, display_name: profile.displayName, default_handicap: profile.defaultHandicap, avatar_url: profile.avatarUrl, onboarding_completed_at: writeTimestamp, updated_at: writeTimestamp, ...(username ? { username } : {}) };
+    await writeVerifiedProfileRow(client, "profiles", { id: userId }, profileRow, ["name", "display_name", "default_handicap", "avatar_url", "onboarding_completed_at", ...(username ? ["username" as const] : [])]);
     return { updatedAt: writeTimestamp };
   } catch (error) {
     if (error && typeof error === "object") (error as ProfileWriteError).profileUpdatedAt = writeTimestamp;

@@ -48,7 +48,7 @@ function fakeClient(options: {
             assert.equal(field, "user_id");
             return { maybeSingle: async () => options.selectError
               ? { data: null, error: options.selectError }
-              : { data: row?.user_id === value ? { user_id: row.user_id, avatar_url: row.avatar_url } : null, error: null } };
+              : { data: row?.user_id === value ? { user_id: row.user_id, avatar_url: row.avatar_url, ...(columns.includes("username") ? { username: row.username } : {}) } : null, error: null } };
           } };
         },
         update: (payload: Record<string, unknown>) => {
@@ -60,10 +60,11 @@ function fakeClient(options: {
               return { maybeSingle: async () => {
                 if (updateError) return { data: null, error: updateError };
                 if (!row || row.user_id !== value || options.updateReturnsNoRow) return { data: null, error: null };
-                row = { ...row, avatar_url: payload.avatar_url as string };
+                row = { ...row, avatar_url: payload.avatar_url as string, ...(typeof payload.username === "string" ? { username: payload.username } : {}) };
                 return { data: {
                   user_id: options.updateReturnedOwner ?? row.user_id,
                   avatar_url: options.updateReturnedAvatar === undefined ? row.avatar_url : options.updateReturnedAvatar,
+                  ...(columns.includes("username") ? { username: row.username } : {}),
                 }, error: null };
               } };
             } };
@@ -206,14 +207,53 @@ test("provider proyecta Social antes del ack y retry usa la revisión pending ac
   assert.match(reload, /const currentPending = readPendingProfileWrite\(localStorage, authenticatedUserId\)/);
   assert.match(reload, /currentPending\.revision !== pendingProfile\.revision/);
   assert.match(reload, /saveCloudProfile\(supabase, authenticatedUserId, currentPending\.profile, currentPending\.updatedAt\)/);
-  assert.match(reload, /syncExistingSocialProfileAvatar\(supabase, authenticatedUserId, currentPending\.profile\.avatarUrl\)/);
+  assert.match(reload, /syncExistingSocialProfileAvatar\(supabase, authenticatedUserId, currentPending\.profile\.avatarUrl, currentPending\.profile\.username\)/);
   assert.ok(reload.indexOf("syncExistingSocialProfileAvatar") < reload.indexOf("acknowledgePendingProfileWrite"));
 
   const immediateStart = provider.indexOf("const acknowledged = await profileWriteCoordinator.run");
   const immediateEnd = provider.indexOf("if (activeUserId.current !== identity.userId) return \"local\"", immediateStart);
   const immediate = provider.slice(immediateStart, immediateEnd);
   assert.match(immediate, /retimePendingProfileWrite\(localStorage, identity\.userId, pending\.revision, saved\.updatedAt\)/);
-  assert.match(immediate, /syncExistingSocialProfileAvatar\(supabase, identity\.userId, pending\.profile\.avatarUrl\)/);
+  assert.match(immediate, /syncExistingSocialProfileAvatar\(supabase, identity\.userId, pending\.profile\.avatarUrl, pending\.profile\.username\)/);
   assert.ok(immediate.indexOf("retimePendingProfileWrite") < immediate.indexOf("syncExistingSocialProfileAvatar"));
   assert.ok(immediate.indexOf("syncExistingSocialProfileAvatar") < immediate.indexOf("acknowledgePendingProfileWrite"));
+});
+
+test("username canónico se proyecta sólo al Social propio existente, sin cambiar privacidad", async () => {
+  const fake = fakeClient();
+  assert.equal(await syncExistingSocialProfileAvatar(fake.client, "owner-a", "🐺", " @Said.New "), "updated");
+  assert.deepEqual(fake.updates, [{ avatar_url: "🐺", username: "said.new" }]);
+  assert.equal(fake.row()?.username, "said.new"); assert.equal(fake.row()?.privacy, "PRIVATE");
+  assert.equal(await syncExistingSocialProfileAvatar(fake.client, "owner-a", "🐺", "said.new"), "updated");
+  assert.equal(fake.updates.length, 1);
+  const other = fakeClient({ authId: "owner-b" });
+  await assert.rejects(syncExistingSocialProfileAvatar(other.client, "owner-a", "🐺", "stolen"), { code: "PROFILE_OWNER_MISMATCH" });
+  assert.equal(other.updates.length, 0);
+  const absent = fakeClient({ row: null });
+  assert.equal(await syncExistingSocialProfileAvatar(absent.client, "owner-a", "🐺", "said.new"), "absent");
+  assert.equal(absent.updates.length, 0);
+});
+
+test("conflicto único Social no confirma pending: retry converge sin tocar identidad ajena", async () => {
+  const local = pendingStorage();
+  const pending = queuePendingProfileWrite(local, "owner-a", { displayName: "Said", defaultHandicap: 7, avatarUrl: "🐺", username: "said.new" });
+  const fake = fakeClient({ updateError: Object.assign(new Error("unique conflict"), { code: "23505" }) });
+  const sync = async () => {
+    await syncExistingSocialProfileAvatar(fake.client, "owner-a", pending.profile.avatarUrl, pending.profile.username);
+    return acknowledgePendingProfileWrite(local, "owner-a", pending.revision);
+  };
+  await assert.rejects(sync(), { code: "23505" });
+  assert.equal(readPendingProfileWrite(local, "owner-a")?.profile.username, "said.new");
+  assert.equal(fake.row()?.username, "said"); assert.equal(fake.row()?.privacy, "PRIVATE");
+  fake.setUpdateError(null); assert.equal(await sync(), true);
+  assert.equal(readPendingProfileWrite(local, "owner-a"), null);
+  assert.equal(fake.row()?.username, "said.new"); assert.equal(fake.row()?.privacy, "PRIVATE");
+});
+
+test("rename Social no convierte schema ausente en un guardado confirmado", async () => {
+  for (const code of ["42P01", "PGRST205"]) {
+    const error = Object.assign(new Error("schema unavailable"), { code });
+    await assert.rejects(syncExistingSocialProfileAvatar(fakeClient({ selectError: error }).client, "owner-a", "😎", "said.new"), { code });
+    await assert.rejects(syncExistingSocialProfileAvatar(fakeClient({ updateError: error }).client, "owner-a", "😎", "said.new"), { code });
+  }
 });

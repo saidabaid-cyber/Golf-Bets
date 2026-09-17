@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { validateProfileAvatarUrl } from "./account-state";
+import { normalizeProfileUsername } from "./profile-username";
 
 export type SocialProfileAvatarSyncStatus = "updated" | "absent" | "unavailable";
 
@@ -14,13 +15,16 @@ function requireProfileOwner(userId: string, authenticatedId: unknown): void {
   }
 }
 
-/** `profiles.avatar_url` remains canonical. Project it only onto an existing
+/** Canonical avatar/optional public handle project only onto an existing
  * self-owned Social row; never create a Social identity or change its privacy. */
 export async function syncExistingSocialProfileAvatar(
   client: SupabaseClient,
   userId: string,
   avatarUrl: string,
+  username?: string,
 ): Promise<SocialProfileAvatarSyncStatus> {
+  const handle = normalizeProfileUsername(username);
+  const columns = handle ? "user_id,avatar_url,username" : "user_id,avatar_url";
   const validated = validateProfileAvatarUrl(avatarUrl);
   if (!validated.ok) throw Object.assign(new Error(validated.message), { code: "PROFILE_AVATAR_INVALID" });
 
@@ -28,27 +32,29 @@ export async function syncExistingSocialProfileAvatar(
   if (auth.error) throw auth.error;
   requireProfileOwner(userId, auth.data.user?.id);
 
-  const existing = await client.from("social_profiles").select("user_id,avatar_url").eq("user_id", userId).maybeSingle();
+  const existing = await client.from("social_profiles").select(columns).eq("user_id", userId).maybeSingle();
   if (existing.error) {
-    if (tableUnavailable(existing.error)) return "unavailable";
+    if (!handle && tableUnavailable(existing.error)) return "unavailable";
     throw existing.error;
   }
-  if (!existing.data) return "absent";
-  if (existing.data.user_id !== userId) {
+  const existingRow = existing.data as unknown as { user_id: unknown; avatar_url: unknown; username?: unknown } | null;
+  if (!existingRow) return "absent";
+  if (existingRow.user_id !== userId) {
     throw Object.assign(new Error("Social devolvió un perfil ajeno."), { code: "PROFILE_OWNER_MISMATCH" });
   }
-  if (existing.data.avatar_url === validated.avatarUrl) return "updated"; // confirmed, idempotent retry
+  if (existingRow.avatar_url === validated.avatarUrl && (!handle || existingRow.username === handle)) return "updated"; // confirmed, idempotent retry
 
   const changed = await client.from("social_profiles")
-    .update({ avatar_url: validated.avatarUrl })
+    .update({ avatar_url: validated.avatarUrl, ...(handle ? { username: handle } : {}) })
     .eq("user_id", userId)
-    .select("user_id,avatar_url")
+    .select(columns)
     .maybeSingle();
   if (changed.error) {
-    if (tableUnavailable(changed.error)) return "unavailable";
+    if (!handle && tableUnavailable(changed.error)) return "unavailable";
     throw changed.error;
   }
-  if (!changed.data || changed.data.user_id !== userId || changed.data.avatar_url !== validated.avatarUrl) {
+  const changedRow = changed.data as unknown as { user_id: unknown; avatar_url: unknown; username?: unknown } | null;
+  if (!changedRow || changedRow.user_id !== userId || changedRow.avatar_url !== validated.avatarUrl || (handle && changedRow.username !== handle)) {
     throw Object.assign(new Error("Social no confirmó el avatar. Reintenta la sincronización."), { code: "PROFILE_SOCIAL_AVATAR_UNVERIFIED" });
   }
   return "updated";

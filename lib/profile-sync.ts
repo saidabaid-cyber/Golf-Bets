@@ -1,7 +1,9 @@
 import { clampBackyardHandicap, type BackyardProfile } from "./account-state";
 import { normalizeProfileLocation, validateProfileLocation, type ProfileLocationValue } from "./profile-geography";
+import { normalizeProfileUsername } from "./profile-username";
 
 export type CloudProfileFields = Pick<BackyardProfile, "displayName" | "defaultHandicap" | "avatarUrl"> & {
+  username?: string;
   location?: ProfileLocationValue;
   /** Clock of the explicit geography edit; unrelated profile writes must not renew it. */
   locationUpdatedAt?: string;
@@ -81,7 +83,10 @@ function createProfileWriteRevision(updatedAt: string) {
   return `${updatedAt}:${random}`;
 }
 
-export function cloudProfileFields(profile: Omit<CloudProfileFields, "locationUpdatedAt"> & { locationUpdatedAt?: string | null }): CloudProfileFields {
+export function cloudProfileFields(profile: Omit<CloudProfileFields, "locationUpdatedAt"> & { locationUpdatedAt?: string | null }, strictUsername = false): CloudProfileFields {
+  let username: string | undefined;
+  try { username = normalizeProfileUsername(profile.username); }
+  catch (error) { if (strictUsername) throw error; } // Legacy Auth metadata cannot break session hydration.
   if (profile.location !== undefined && !validateProfileLocation(profile.location).valid) throw new Error("profile_location_invalid");
   const location = profile.location === undefined ? undefined : normalizeProfileLocation(profile.location);
   const locationUpdatedAt = location && profile.locationUpdatedAt != null
@@ -94,6 +99,7 @@ export function cloudProfileFields(profile: Omit<CloudProfileFields, "locationUp
       ? clampBackyardHandicap(profile.defaultHandicap)
       : null,
     avatarUrl: profile.avatarUrl.trim(),
+    ...(username ? { username } : {}),
     ...(location ? { location } : {}),
     ...(locationUpdatedAt ? { locationUpdatedAt } : {}),
   };
@@ -128,7 +134,7 @@ export function queuePendingProfileWrite(
     ? nextLocationUpdatedAt(previous, profile.locationUpdatedAt, monotonicUpdatedAt)
     : previous?.profile.locationUpdatedAt ?? (previous?.profile.location ? previous.updatedAt : undefined);
   const pending = {
-    profile: cloudProfileFields({ ...profile, ...(location ? { location, locationUpdatedAt } : {}) }),
+    profile: cloudProfileFields({ ...profile, username: profile.username ?? previous?.profile.username, ...(location ? { location, locationUpdatedAt } : {}) }, true),
     updatedAt: monotonicUpdatedAt,
     revision: revision?.trim() || createProfileWriteRevision(monotonicUpdatedAt),
   };
