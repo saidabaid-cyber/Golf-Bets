@@ -5,6 +5,7 @@ import type { RoundSetupPreflightIssue } from "../../lib/round-setup-preflight";
 import { issuesBlockingWizardStep, readWizardStep, wizardEditorId, wizardIssueStep, type WizardBetEntry, type WizardStep } from "../../lib/round-setup-wizard";
 import { WizardBetEditorContext } from "./round-wizard-context";
 import { useViewScrollReset } from "./use-view-scroll-reset";
+import { ModalShell } from "./modal-shell";
 import styles from "./round-setup-wizard.module.css";
 
 const STEPS = ["Campo", "Jugadores", "Grupales", "Personales"] as const;
@@ -27,6 +28,7 @@ export function RoundSetupWizard({ storageKey, issues, onStart, onSave, onExit, 
   const [target, setTarget] = useState<{ id: string; revision: number } | null>(null);
   const targetRevision = useRef(0);
   const [starting, setStarting] = useState(false);
+  const [confirmExit, setConfirmExit] = useState(false);
   const [error, setError] = useState("");
   const inFlight = useRef(false);
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -76,7 +78,7 @@ export function RoundSetupWizard({ storageKey, issues, onStart, onSave, onExit, 
   return <WizardContext value={{ step, edit: navigate, target }}><div className={styles.wizard} aria-busy={starting}>
     <header className={styles.header}>
       <div><small>CONFIGURAR Y JUGAR</small><h1 ref={titleRef} tabIndex={-1}>{step === 5 ? "Revisar ronda" : STEPS[step - 1]}</h1></div>
-      <button type="button" className="textButton" disabled={starting} onClick={() => { if (save()) onExit(); }}>Guardar y salir</button>
+      <button type="button" className="textButton" disabled={starting} onClick={() => setConfirmExit(true)}>Guardar y salir</button>
     </header>
     <nav className={styles.stepper} aria-label="Pasos para configurar la ronda">{(scoreOnly ? STEPS.slice(0, 2) : STEPS).map((label, index) => {
       const number = (index + 1) as WizardStep;
@@ -91,6 +93,7 @@ export function RoundSetupWizard({ storageKey, issues, onStart, onSave, onExit, 
       {step < 5 ? <button type="button" className="primary" disabled={blocking.length > 0} onClick={() => advance(scoreOnly && step === 2 ? 5 : (step + 1) as WizardStep)}>{step === 4 || (scoreOnly && step === 2) ? "Revisar y jugar →" : "Continuar →"}</button> : <button type="button" className="primary" disabled={starting || issues.length > 0} onClick={() => void start()}>{starting ? "Iniciando…" : editing ? "Guardar y continuar →" : "Iniciar ronda →"}</button>}
       {visitedReview && step < 4 && <button type="button" className="textButton" disabled={starting} onClick={() => advance(5)}>Volver al resumen</button>}
     </footer>
+    <ModalShell open={confirmExit} onClose={() => setConfirmExit(false)} label="Guardar configuración y salir"><h2>¿Guardar esta configuración y continuar después?</h2><div className="dialogActions"><button type="button" className="secondary" onClick={() => setConfirmExit(false)}>Cancelar</button><button type="button" className="primary" onClick={() => { setConfirmExit(false); if (save()) onExit(); }}>Guardar y salir</button></div></ModalShell>
   </div></WizardContext>;
 }
 

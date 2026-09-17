@@ -16,13 +16,14 @@ test("la tarjeta móvil separa nombre, HCP y acciones sin widths rígidos", () =
   assert.match(css, /\.playerEdit>\.remove\{grid-area:remove/);
   assert.match(css, /\.manualRoundHcp \.roundHcpLabel/);
   assert.match(page, /<textarea className="playerNameField" rows=\{1\}/);
-  assert.match(page, /<span className="roundHcpLabel">HCP<\/span>/);
+  assert.match(page, /<span className="roundHcpLabel">HCP · Invitado<\/span>/);
 });
 
 test("Index y HCP permanecen compactos; tee y Rating/Slope se consultan al expandir", () => {
   assert.match(page, /<details className=\{`roundHcpField roundPlayingHcp compactPlayingHcp/);
   assert.match(page, /<summary aria-label=\{`Ver tee y cálculo de HCP/);
-  assert.match(page, /INDEX \{p\.handicapIndex \?\? "—"\} · HCP \{p\.handicap \?\? "—"\}/);
+  assert.match(page, /playerHandicapSourceLabel\(p\)/);
+  assert.match(page, /!canEditGuestHandicap\(p\)/);
   assert.match(page, /<div className="roundPlayingHcpDetail">/);
   assert.match(css, /\.playerEdit \.compactPlayingHcp\{display:block;min-height:44px/);
   assert.match(css, /\.compactPlayingHcp summary\{display:flex;[^}]*min-height:44px/);

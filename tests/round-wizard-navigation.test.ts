@@ -61,6 +61,7 @@ function harness(savedStep = "1") {
         if (dependency.endsWith("/round-setup-wizard")) return wizardLogic;
         if (dependency === "./round-wizard-context") return load("round-wizard-context");
         if (dependency === "./use-view-scroll-reset") return { useViewScrollReset() {} };
+        if (dependency === "./modal-shell") return { ModalShell: "modal-shell" };
         throw new Error(`Unexpected component dependency ${dependency}`);
       },
     });
@@ -137,10 +138,29 @@ test("failed draft flush cannot advance, exit, or start; next successful flush p
   h.props.onStart = async () => { starts++; return true; };
   click(button(h.wizard(), "← Atrás")); assert.equal(step(h.wizard()), 5);
   click(button(h.wizard(), "Guardar y salir")); assert.equal(exits, 0);
+  const dialog = nodes(h.wizard()).find(node => node.type === "modal-shell")!;
+  assert.equal(dialog.props.open, true);
+  click(button(dialog, "Guardar y salir")); assert.equal(exits, 0);
   click(button(h.wizard(), "Iniciar ronda")); await flush(); assert.equal(starts, 0);
   assert.match(content(h.wizard()), /No pudimos guardar el borrador/);
   h.props.onSave = () => true;
   click(button(h.wizard(), "Iniciar ronda")); await flush(); assert.equal(starts, 1);
+});
+
+test("save/exit requires confirmation, cancellation stays in wizard, confirmation flushes before exit", () => {
+  const h = harness("2"); const events: string[] = [];
+  h.props.onSave = () => { events.push("save"); return true; };
+  h.props.onExit = () => { events.push("exit"); };
+  const dialog = () => nodes(h.wizard()).find(node => node.type === "modal-shell")!;
+  click(button(h.wizard(), "Guardar y salir"));
+  assert.deepEqual(events, []);
+  assert.equal(dialog().props.open, true);
+  click(button(dialog(), "Cancelar"));
+  assert.equal(dialog().props.open, false);
+  assert.equal(step(h.wizard()), 2);
+  click(button(h.wizard(), "Guardar y salir"));
+  click(button(dialog(), "Guardar y salir"));
+  assert.deepEqual(events, ["save", "exit"]);
 });
 
 test("double tap calls existing round creator only once and keeps guard closed through successful navigation", async () => {

@@ -233,6 +233,8 @@ import { defaultMaxBaseAppearances, generateAutomaticFoursomes, markFoursomeSegm
 import { advantageFieldsFromSigned, configureCurrentIndexPersonal, configureSlidingPersonal, frequentPersonalSuggestions, slidingAdjustment } from "../lib/personal-modes";
 import { loadEquipmentProfile } from "../lib/golf-equipment";
 import { applyRoundCourseHandicaps } from "../features/handicap/round-player-handicap";
+import { canEditGuestHandicap, patchEditablePlayer, playerHandicapSourceLabel } from "../lib/player-handicap-edit";
+import { PlayerHandicapControl } from "./components/player-handicap-control";
 
 const AiRoundSetup = dynamic(() => import("./components/backyard-ai/ai-round-setup").then((module) => module.AiRoundSetup), { ssr: false });
 const ScorecardScanner = dynamic(() => import("./components/backyard-ai/scorecard-scanner").then((module) => module.ScorecardScanner), { ssr: false });
@@ -1489,7 +1491,7 @@ function GolfBetsApp() {
   }
 
   function updatePlayer(id: string, patch: Partial<Player>) {
-    const nextPlayers = players.map((player) => player.id === id ? { ...player, ...patch } : player);
+    const nextPlayers = players.map((player) => player.id === id ? patchEditablePlayer(player, patch) : player);
     setPlayers(nextPlayers);
     setPersonalBets((current) => current.map((bet) => {
       if ((bet.advantageMode ?? "current_index") !== "current_index") return bet;
@@ -3707,10 +3709,10 @@ function GolfBetsApp() {
         {!players.length && <div className="empty">Agrega los jugadores de esta ronda.</div>}
         {players.map((p) => <div className="playerEdit" key={p.id}>
           <textarea className="playerNameField" rows={1} aria-label={`Nombre de ${p.name || "jugador"}`} placeholder="Nombre" value={p.name} onKeyDown={(event) => { if (event.key === "Enter") event.preventDefault(); }} onChange={(event) => updatePlayer(p.id, { name: event.target.value.replace(/\s*[\r\n]+\s*/g, " ") })} />
-          {(p.handicapSource === "profile_index" || p.handicapIndex !== undefined) ? <details className={`roundHcpField roundPlayingHcp compactPlayingHcp ${typeof p.handicap === "number" && Number.isFinite(p.handicap) ? "" : "isMissing"}`}>
-            <summary aria-label={`Ver tee y cálculo de HCP de ${p.name || "jugador"}`}><span>INDEX {p.handicapIndex ?? "—"} · HCP {p.handicap ?? "—"}</span><span aria-hidden="true">⌄</span></summary>
-            <div className="roundPlayingHcpDetail"><b>HCP DE JUEGO {p.handicap ?? "—"}</b>{p.courseHandicapSnapshot ? <span>{p.courseHandicapSnapshot.teeName} · Rating {p.courseHandicapSnapshot.courseRating} / Slope {p.courseHandicapSnapshot.slope}{p.courseHandicapSnapshot.courseHandicap !== p.courseHandicapSnapshot.appliedHandicap ? ` · cálculo ${p.courseHandicapSnapshot.courseHandicap}, tope Backyard ${p.courseHandicapSnapshot.appliedHandicap}` : ""}</span> : <span>Para calcularlo desde Index, elige un tee con Rating y Slope en la sección opcional.</span>}</div>
-          </details> : <div className={`roundHcpField manualRoundHcp ${typeof p.handicap === "number" && Number.isFinite(p.handicap) ? "" : "isMissing"}`}><span className="roundHcpLabel">HCP</span><NumericCaptureInput aria-label={`HCP de ${p.name || "jugador"}`} className="hcpInput" inputMode="decimal" step={0.1} min={-15} max={36} placeholder="—" value={p.handicap} emptyWhenZero={false} aria-invalid={typeof p.handicap !== "number" || !Number.isFinite(p.handicap)} aria-describedby={typeof p.handicap !== "number" || !Number.isFinite(p.handicap) ? `round-hcp-error-${p.id}` : undefined} onValueChange={(handicap) => updatePlayer(p.id, { handicap, handicapSource: "manual", handicapIndex: undefined, courseHandicapSnapshot: undefined })} />{(typeof p.handicap !== "number" || !Number.isFinite(p.handicap)) && <span className="roundHcpError" id={`round-hcp-error-${p.id}`}>Completa el HCP manual</span>}</div>}
+          {!canEditGuestHandicap(p) ? <details className={`roundHcpField roundPlayingHcp compactPlayingHcp ${typeof p.handicap === "number" && Number.isFinite(p.handicap) ? "" : "isMissing"}`}>
+            <summary aria-label={`Ver tee y cálculo de HCP de ${p.name || "jugador"}`}><span>🔒 {playerHandicapSourceLabel(p)}</span><span aria-hidden="true">⌄</span></summary>
+            <div className="roundPlayingHcpDetail"><b>HCP DE JUEGO {p.handicap ?? "—"}</b>{p.courseHandicapSnapshot ? <span>{p.courseHandicapSnapshot.teeName} · Rating {p.courseHandicapSnapshot.courseRating} / Slope {p.courseHandicapSnapshot.slope}{p.courseHandicapSnapshot.courseHandicap !== p.courseHandicapSnapshot.appliedHandicap ? ` · cálculo ${p.courseHandicapSnapshot.courseHandicap}, tope Backyard ${p.courseHandicapSnapshot.appliedHandicap}` : ""}</span> : p.handicap === null ? <span>Revisa o activa el Index desde Perfil → Información de golf. No se sustituye por HCP manual.</span> : <span>Para calcularlo desde Index, elige un tee con Rating y Slope en la sección opcional.</span>}</div>
+          </details> : <div className={`roundHcpField manualRoundHcp ${typeof p.handicap === "number" && Number.isFinite(p.handicap) ? "" : "isMissing"}`}><span className="roundHcpLabel">HCP · Invitado</span><NumericCaptureInput aria-label={`HCP de ${p.name || "jugador"}`} className="hcpInput" inputMode="decimal" step={0.1} min={-15} max={36} placeholder="—" value={p.handicap} emptyWhenZero={false} aria-invalid={typeof p.handicap !== "number" || !Number.isFinite(p.handicap)} aria-describedby={typeof p.handicap !== "number" || !Number.isFinite(p.handicap) ? `round-hcp-error-${p.id}` : undefined} onValueChange={(handicap) => updatePlayer(p.id, { handicap, handicapSource: "manual", handicapIndex: undefined, courseHandicapSnapshot: undefined })} />{(typeof p.handicap !== "number" || !Number.isFinite(p.handicap)) && <span className="roundHcpError" id={`round-hcp-error-${p.id}`}>Completa el HCP manual</span>}</div>}
           <button className={`ownerDot ${ownerId === p.id ? "active" : ""}`} onClick={() => setOwnerId(p.id)} title="Jugador principal" aria-label={`Marcar a ${p.name || "jugador"} como jugador principal`} aria-pressed={ownerId === p.id}>★</button>
           <button className="remove" aria-label={`Quitar a ${p.name || "jugador"}`} onClick={() => { confirmRoundChange(`Quitar a ${p.name} lo excluye de las apuestas y parejas actuales.`, () => setPlayers((ps) => ps.filter((x) => x.id !== p.id))); }}>×</button>
         </div>)}
@@ -4197,7 +4199,7 @@ function GolfBetsApp() {
       <div className="groupEditorSectionTitle"><h3>Integrantes</h3><span>{frequentGroupDraft.players.length}</span></div>
       <div className="groupMemberList">{frequentGroupDraft.players.map((member, index) => <div className="groupMemberEditor" key={index}>
         <label>Jugador {index + 1}<input aria-label={`Nombre del integrante ${index + 1}`} value={member.name} onChange={(event) => editFrequentGroupMember(index, { name: event.target.value })} /></label>
-        <label>HCP predeterminado<NumericCaptureInput aria-label={`HCP del integrante ${index + 1}`} inputMode="decimal" step={0.1} min={-15} max={36} placeholder="HCP" value={member.handicap} emptyWhenZero={false} onValueChange={(handicap) => editFrequentGroupMember(index, { handicap })} /></label>
+        <PlayerHandicapControl player={member} onChange={(handicap) => { if (canEditGuestHandicap(member)) editFrequentGroupMember(index, { handicap }); }} />
         <div className="groupMemberActions"><button className="secondary" aria-label={`Subir a ${member.name}`} disabled={index === 0} onClick={() => setFrequentGroupDraft((group) => group ? moveFrequentGroupMember(group, index, -1) : group)}>↑</button><button className="secondary" aria-label={`Bajar a ${member.name}`} disabled={index === frequentGroupDraft.players.length - 1} onClick={() => setFrequentGroupDraft((group) => group ? moveFrequentGroupMember(group, index, 1) : group)}>↓</button><button className="dangerGhost" onClick={() => removeMemberFromFrequentGroup(index)}>Quitar</button></div>
       </div>)}</div>
       {!frequentGroupDraft.players.length && <div className="empty">Agrega al menos un integrante para guardar el grupo.</div>}
