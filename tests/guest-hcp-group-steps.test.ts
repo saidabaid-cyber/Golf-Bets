@@ -79,6 +79,9 @@ test("save/exit separated from primary navigation and email readiness does not g
   assert.doesNotMatch(onboarding, /Guardar y continuar después/);
   assert.match(onboarding, /¿Guardar esta configuración y continuar después\?/);
   assert.match(onboarding, /localStorage.setItem\(betaOnboardingDraftStorageKey/);
+  const groups = readFileSync("app/components/group-builder.tsx", "utf8");
+  assert.match(groups, /Continuar configuración guardada/);
+  assert.match(groups, /if \(resumeDraft\) return <BetaOnboardingFlow/);
   const invite = readFileSync("app/components/group-invitations.tsx", "utf8");
   assert.match(invite, /data.emailDeliveryConfigured === true/);
   assert.match(invite, /!target.targetUserId && !emailAvailable/);
