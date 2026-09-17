@@ -768,7 +768,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
           if (!currentPending || currentPending.revision !== pendingProfile.revision) return;
           const saved = await saveCloudProfile(supabase, authenticatedUserId, currentPending.profile, currentPending.updatedAt);
           if (activeUserId.current !== authenticatedUserId) return;
-          await syncExistingSocialProfileAvatar(supabase, authenticatedUserId, currentPending.profile.avatarUrl, currentPending.profile.username);
+          await syncExistingSocialProfileAvatar(supabase, authenticatedUserId, currentPending.profile.avatarUrl, currentPending.profile.username, currentPending.profile.displayName);
           if (activeUserId.current === authenticatedUserId) {
             recordCloudProfileRevision(localStorage, authenticatedUserId, saved.updatedAt);
             acknowledgePendingProfileWrite(localStorage, authenticatedUserId, pendingProfile.revision);
@@ -1046,7 +1046,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         // The profile row is canonical; project its public handle/avatar onto
         // the existing Social row, never privacy or a new synthetic identity.
         retimePendingProfileWrite(localStorage, identity.userId, pending.revision, saved.updatedAt);
-        await syncExistingSocialProfileAvatar(supabase, identity.userId, pending.profile.avatarUrl, pending.profile.username);
+        await syncExistingSocialProfileAvatar(supabase, identity.userId, pending.profile.avatarUrl, pending.profile.username, pending.profile.displayName);
         if (activeUserId.current !== identity.userId) return false;
         recordCloudProfileRevision(localStorage, identity.userId, saved.updatedAt);
         return acknowledgePendingProfileWrite(localStorage, identity.userId, pending.revision);

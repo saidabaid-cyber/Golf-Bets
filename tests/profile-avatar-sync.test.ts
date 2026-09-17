@@ -48,7 +48,7 @@ function fakeClient(options: {
             assert.equal(field, "user_id");
             return { maybeSingle: async () => options.selectError
               ? { data: null, error: options.selectError }
-              : { data: row?.user_id === value ? { user_id: row.user_id, avatar_url: row.avatar_url, ...(columns.includes("username") ? { username: row.username } : {}) } : null, error: null } };
+              : { data: row?.user_id === value ? { user_id: row.user_id, avatar_url: row.avatar_url, ...(columns.includes("username") ? { username: row.username } : {}), ...(columns.includes("display_name") ? { display_name: row.display_name } : {}) } : null, error: null } };
           } };
         },
         update: (payload: Record<string, unknown>) => {
@@ -60,11 +60,12 @@ function fakeClient(options: {
               return { maybeSingle: async () => {
                 if (updateError) return { data: null, error: updateError };
                 if (!row || row.user_id !== value || options.updateReturnsNoRow) return { data: null, error: null };
-                row = { ...row, avatar_url: payload.avatar_url as string, ...(typeof payload.username === "string" ? { username: payload.username } : {}) };
+                row = { ...row, avatar_url: payload.avatar_url as string, ...(typeof payload.username === "string" ? { username: payload.username } : {}), ...(typeof payload.display_name === "string" ? { display_name: payload.display_name } : {}) };
                 return { data: {
                   user_id: options.updateReturnedOwner ?? row.user_id,
                   avatar_url: options.updateReturnedAvatar === undefined ? row.avatar_url : options.updateReturnedAvatar,
                   ...(columns.includes("username") ? { username: row.username } : {}),
+                  ...(columns.includes("display_name") ? { display_name: row.display_name } : {}),
                 }, error: null };
               } };
             } };
@@ -84,6 +85,17 @@ function pendingStorage() {
     removeItem: (key: string) => { values.delete(key); },
   };
 }
+
+test("public display name projects on save/retry without changing identity or privacy", async () => {
+  const fake=fakeClient();
+  await syncExistingSocialProfileAvatar(fake.client,"owner-a","😎","said","Francisco Javier Beta Sintético");
+  assert.equal(fake.row()?.display_name,"Francisco Javier Beta Sintético");
+  assert.equal(fake.row()?.privacy,"PRIVATE");
+  assert.equal(fake.row()?.user_id,"owner-a");
+  const count=fake.updates.length;
+  await syncExistingSocialProfileAvatar(fake.client,"owner-a","😎","said","Francisco Javier Beta Sintético");
+  assert.equal(fake.updates.length,count);
+});
 
 test("emoji canónico actualiza sólo avatar del perfil Social existente y preserva privacidad", async () => {
   const fake = fakeClient();
@@ -207,14 +219,14 @@ test("provider proyecta Social antes del ack y retry usa la revisión pending ac
   assert.match(reload, /const currentPending = readPendingProfileWrite\(localStorage, authenticatedUserId\)/);
   assert.match(reload, /currentPending\.revision !== pendingProfile\.revision/);
   assert.match(reload, /saveCloudProfile\(supabase, authenticatedUserId, currentPending\.profile, currentPending\.updatedAt\)/);
-  assert.match(reload, /syncExistingSocialProfileAvatar\(supabase, authenticatedUserId, currentPending\.profile\.avatarUrl, currentPending\.profile\.username\)/);
+  assert.match(reload, /syncExistingSocialProfileAvatar\(supabase, authenticatedUserId, currentPending\.profile\.avatarUrl, currentPending\.profile\.username, currentPending\.profile\.displayName\)/);
   assert.ok(reload.indexOf("syncExistingSocialProfileAvatar") < reload.indexOf("acknowledgePendingProfileWrite"));
 
   const immediateStart = provider.indexOf("const acknowledged = await profileWriteCoordinator.run");
   const immediateEnd = provider.indexOf("if (activeUserId.current !== identity.userId) return \"local\"", immediateStart);
   const immediate = provider.slice(immediateStart, immediateEnd);
   assert.match(immediate, /retimePendingProfileWrite\(localStorage, identity\.userId, pending\.revision, saved\.updatedAt\)/);
-  assert.match(immediate, /syncExistingSocialProfileAvatar\(supabase, identity\.userId, pending\.profile\.avatarUrl, pending\.profile\.username\)/);
+  assert.match(immediate, /syncExistingSocialProfileAvatar\(supabase, identity\.userId, pending\.profile\.avatarUrl, pending\.profile\.username, pending\.profile\.displayName\)/);
   assert.ok(immediate.indexOf("retimePendingProfileWrite") < immediate.indexOf("syncExistingSocialProfileAvatar"));
   assert.ok(immediate.indexOf("syncExistingSocialProfileAvatar") < immediate.indexOf("acknowledgePendingProfileWrite"));
 });

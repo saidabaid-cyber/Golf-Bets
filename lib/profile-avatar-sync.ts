@@ -22,9 +22,11 @@ export async function syncExistingSocialProfileAvatar(
   userId: string,
   avatarUrl: string,
   username?: string,
+  displayName?: string,
 ): Promise<SocialProfileAvatarSyncStatus> {
   const handle = normalizeProfileUsername(username);
-  const columns = handle ? "user_id,avatar_url,username" : "user_id,avatar_url";
+  const name = displayName?.trim().slice(0, 120);
+  const columns = `user_id,avatar_url${handle ? ",username" : ""}${name ? ",display_name" : ""}`;
   const validated = validateProfileAvatarUrl(avatarUrl);
   if (!validated.ok) throw Object.assign(new Error(validated.message), { code: "PROFILE_AVATAR_INVALID" });
 
@@ -37,15 +39,15 @@ export async function syncExistingSocialProfileAvatar(
     if (!handle && tableUnavailable(existing.error)) return "unavailable";
     throw existing.error;
   }
-  const existingRow = existing.data as unknown as { user_id: unknown; avatar_url: unknown; username?: unknown } | null;
+  const existingRow = existing.data as unknown as { user_id: unknown; avatar_url: unknown; username?: unknown; display_name?: unknown } | null;
   if (!existingRow) return "absent";
   if (existingRow.user_id !== userId) {
     throw Object.assign(new Error("Social devolvió un perfil ajeno."), { code: "PROFILE_OWNER_MISMATCH" });
   }
-  if (existingRow.avatar_url === validated.avatarUrl && (!handle || existingRow.username === handle)) return "updated"; // confirmed, idempotent retry
+  if (existingRow.avatar_url === validated.avatarUrl && (!handle || existingRow.username === handle) && (!name || existingRow.display_name === name)) return "updated"; // confirmed, idempotent retry
 
   const changed = await client.from("social_profiles")
-    .update({ avatar_url: validated.avatarUrl, ...(handle ? { username: handle } : {}) })
+    .update({ avatar_url: validated.avatarUrl, ...(handle ? { username: handle } : {}), ...(name ? { display_name: name } : {}) })
     .eq("user_id", userId)
     .select(columns)
     .maybeSingle();
@@ -53,8 +55,8 @@ export async function syncExistingSocialProfileAvatar(
     if (!handle && tableUnavailable(changed.error)) return "unavailable";
     throw changed.error;
   }
-  const changedRow = changed.data as unknown as { user_id: unknown; avatar_url: unknown; username?: unknown } | null;
-  if (!changedRow || changedRow.user_id !== userId || changedRow.avatar_url !== validated.avatarUrl || (handle && changedRow.username !== handle)) {
+  const changedRow = changed.data as unknown as { user_id: unknown; avatar_url: unknown; username?: unknown; display_name?: unknown } | null;
+  if (!changedRow || changedRow.user_id !== userId || changedRow.avatar_url !== validated.avatarUrl || (handle && changedRow.username !== handle) || (name && changedRow.display_name !== name)) {
     throw Object.assign(new Error("Social no confirmó el avatar. Reintenta la sincronización."), { code: "PROFILE_SOCIAL_AVATAR_UNVERIFIED" });
   }
   return "updated";

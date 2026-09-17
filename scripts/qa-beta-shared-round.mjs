@@ -79,6 +79,28 @@ try {
  assert.equal((await app('/api/cloud/rounds',b)).rounds.length,history.length);
  assert.equal(buildGolfInsights((await app('/api/cloud/rounds',a)).rounds).averageScore,72);
  passed.push('B_RESET_EXCLUDES_SHARED_PERFORMANCE','RESET_PRESERVES_SHARED_HISTORY','A_STATS_INTACT');
+ stage='DELETE_OWNER_KEEP_CONFIRMED_ONLY_PEER';
+ assert.equal(config.projectRef,'bymeopxkxapfizeeqeyb');
+ const owner=check(await admin.auth.admin.getUserById(a.id),'verify synthetic owner');
+ assert.equal(owner.user.app_metadata.qa_run_id,runId);
+ assert.ok(owner.user.email.endsWith('@example.invalid'));
+ const operation={confirmation:'ELIMINAR',dataPolicy:'delete_golf_data',requestId:randomUUID(),recoveryToken:randomBytes(32).toString('hex')};
+ const removed=await app('/api/account/delete',a,'DELETE',operation);
+ assert.equal(removed.deleted,true);
+ assert.ok((await admin.auth.admin.getUserById(a.id)).error,'Auth must be deleted');
+ await app('/api/cloud/rounds',a,'GET',null,401);
+ await login(b);
+ const retained=(await app('/api/cloud/rounds',b)).rounds.find(r=>r.cloudRoundId===roundId);
+ assert.ok(retained,'Confirmed-only peer keeps the shared round after owner deletion');
+ assert.equal(retained.cloudParticipant.accountUserId,b.id);
+ const erased=retained.players.find(p=>p.id===pa);
+ assert.equal(erased.name,'Jugador eliminado');
+ assert.ok(!erased.accountUserId);
+ assert.ok(!JSON.stringify(retained).includes(a.email));
+ assert.equal(buildGolfInsights([retained]).averageScore,90);
+ assert.equal(buildGolfInsights([retained]).betBalance,-100);
+ assert.equal(calculateBackyardIndex([retained],b.id).records[0].scoreDifferential,18);
+ passed.push('OWNER_AUTH_DELETED_OLD_SESSION_DENIED','CONFIRMED_ONLY_SHARED_ROUND_SURVIVES_DELETE','OWNER_ANONYMIZED_PEER_SCORE_BALANCE_INDEX_INTACT');
 } catch(e){failure={stage,message:String(e.message).slice(0,400)};}
 writeFileSync('.qa-artifacts/beta-fixtures.private.json',JSON.stringify(accounts.map(({id,email,password,label})=>({id,email,password,label,runId,ref:config.projectRef,preview:config.previewOrigin}))));
 const report={runId,preview:config.previewOrigin,ref:config.projectRef,passed,failure,retainedSyntheticAccounts:accounts.map(a=>a.id),scope:'Real Preview/Supabase A/B/C HTTP. Synthetic score/rating fixtures, no claim of physical Safari/SMTP/Google or licensed tee verification.'};
