@@ -44,7 +44,7 @@ test("every existing and new bet type has compact contextual help in a closable 
   assert.match(editor, /REGLAS IMPORTANTES/);
   assert.match(editor, /EJEMPLO SIMPLE/);
   assert.match(editor, /aria-label="Cerrar ayuda"/);
-  assert.match(editor, /headerAction=\{<span className=\{styles\.headerActions\}><BetHelpButton kind=\{type\} \/><Switch/);
+  assert.match(editor, /headerAction=\{<span className=\{styles\.headerActions\}><BetHelpButton kind=\{type\} \/>\{!detailsOnly && <Switch/);
   const itemHeader = editor.slice(editor.indexOf("function ItemShell"), editor.indexOf("const COMPONENT_LABELS"));
   assert.match(itemHeader, /<Switch on=\{bet\.enabled\}/);
   assert.match(itemHeader, /<fieldset disabled=\{locked\} className=\{`\$\{styles\.fields\} bettingEditorFieldset`\}/);

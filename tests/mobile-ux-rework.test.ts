@@ -23,7 +23,8 @@ test("el editor de apuestas permite borrar cero, retirar y editar las reglas rel
 test("onboarding conserva salida, regreso y progreso multiselección", () => {
   const flow = read("app/components/beta-onboarding-flow.tsx");
   const equipment = read("app/components/equipment-onboarding.tsx");
-  assert.match(flow, /Guardar y continuar después/);
+  assert.match(flow, /Guardar y salir/);
+  assert.doesNotMatch(flow, /Guardar y continuar después/);
   assert.match(flow, /← Anterior/);
   assert.match(flow, /primaryGoals/);
   assert.match(flow, /Los usaremos para personalizar recomendaciones/);

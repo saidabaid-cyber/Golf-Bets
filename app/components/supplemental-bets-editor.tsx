@@ -78,13 +78,13 @@ function ParticipantChips({ players, selected, onChange }: { players: Player[]; 
   })}</div>;
 }
 
-function ItemShell({ bet, label, onToggle, onRemove, children, locked }: { bet: SupplementalBet; label: string; onToggle: () => void; onRemove: () => void; children: ReactNode; locked: boolean }) {
+function ItemShell({ bet, label, onToggle, onRemove, children, locked, detailsOnly = false }: { bet: SupplementalBet; label: string; onToggle: () => void; onRemove: () => void; children: ReactNode; locked: boolean; detailsOnly?: boolean }) {
   const meta = SUPPLEMENTAL_BET_PRESENTATION[bet.type];
   return <article data-supplemental-editor={bet.id} className={`${styles.betItem} ${!bet.enabled ? styles.disabled : ""}`}>
     <div className={styles.itemHeader}>
       <div><b>{meta.icon} {label}</b><small>{meta.description}</small>{!bet.enabled && <small>Desactivada · conserva sus datos y no participa</small>}</div>
-      <span className={styles.itemActions}><Switch on={bet.enabled} label={label} disabled={locked} onChange={onToggle} /></span>
-      <button type="button" className="remove" aria-label={`Eliminar ${label}`} onClick={onRemove}>×</button>
+      {!detailsOnly && <span className={styles.itemActions}><Switch on={bet.enabled} label={label} disabled={locked} onChange={onToggle} /></span>}
+      <button type="button" className="remove" disabled={locked} aria-label={`Eliminar ${label}`} onClick={onRemove}>{detailsOnly ? "Quitar esta apuesta" : "×"}</button>
     </div>
     {bet.enabled && <fieldset disabled={locked} className={`${styles.fields} bettingEditorFieldset`}>{children}</fieldset>}
   </article>;
@@ -92,7 +92,7 @@ function ItemShell({ bet, label, onToggle, onRemove, children, locked }: { bet: 
 
 const ORDER: SupplementalBet["type"][] = ["team_pressures", "chicago", "vegas", "minimum_putts"];
 
-export function SupplementalBetsEditor({ bets, players, onChange, requestActivation, locked = false, types = ORDER, roundHoles = 18, allowAdd = true, initiallyExpandActive = false }: { bets: SupplementalBet[]; players: Player[]; onChange: Dispatch<SetStateAction<SupplementalBet[]>>; requestActivation?: () => Promise<boolean>; locked?: boolean; types?: SupplementalBet["type"][]; roundHoles?: 9 | 18; allowAdd?: boolean; initiallyExpandActive?: boolean }) {
+export function SupplementalBetsEditor({ bets, players, onChange, requestActivation, locked = false, types = ORDER, roundHoles = 18, allowAdd = true, initiallyExpandActive = false, detailsOnly = false }: { bets: SupplementalBet[]; players: Player[]; onChange: Dispatch<SetStateAction<SupplementalBet[]>>; requestActivation?: () => Promise<boolean>; locked?: boolean; types?: SupplementalBet["type"][]; roundHoles?: 9 | 18; allowAdd?: boolean; initiallyExpandActive?: boolean; detailsOnly?: boolean }) {
   const [openTypes, setOpenTypes] = useState<Partial<Record<SupplementalBet["type"], boolean>>>(() => initiallyExpandActive ? Object.fromEntries(bets.filter((bet) => bet.enabled).map((bet) => [bet.type, true])) : {});
   const pendingScroll = useRef<string | null>(null);
   const pendingConsentAction = useRef(false);
@@ -144,14 +144,15 @@ export function SupplementalBetsEditor({ bets, players, onChange, requestActivat
 
   const groupLayout = types.length === ORDER.length && types.every((type, index) => type === ORDER[index]);
   return <div ref={editorRef} className={`${styles.editor} ${groupLayout ? styles.groupEditor : ""}`.trim()}>{types.map((type) => {
-    const typeBets = bets.filter((bet) => bet.type === type).map((bet, index) => ({ bet, index })).sort((first, second) => Number(second.bet.enabled) - Number(first.bet.enabled));
+    const typeBets = bets.filter((bet) => bet.type === type && (!detailsOnly || bet.enabled)).map((bet, index) => ({ bet, index })).sort((first, second) => Number(second.bet.enabled) - Number(first.bet.enabled));
     const modeEnabled = typeBets.some(({ bet }) => bet.enabled);
     const label = SUPPLEMENTAL_BET_LABELS[type];
     const title = <span className={styles.modeTitle}><b>{SUPPLEMENTAL_BET_PRESENTATION[type].icon} {label}</b><small>{SUPPLEMENTAL_BET_PRESENTATION[type].description}</small></span>;
-    return <ResultAccordion key={type} id={`setup-${type}`} title={title} open={modeEnabled && Boolean(openTypes[type])} disclosureDisabled={!modeEnabled || locked} onOpenChange={(open) => { if (modeEnabled && !locked) setOpenTypes((current) => ({ ...current, [type]: open })); }} className={`setupBetsAccordion ${groupLayout ? styles.groupModeCard : ""}`.trim()} headerAction={<span className={styles.headerActions}><BetHelpButton kind={type} /><Switch buttonRef={(node) => { switchRefs.current[type] = node; }} on={modeEnabled} label={label} disabled={locked} onChange={() => setTypeEnabled(type, !modeEnabled)} /></span>}>
+    if (detailsOnly && !modeEnabled) return null;
+    return <ResultAccordion key={type} id={`setup-${type}`} title={title} open={modeEnabled && Boolean(openTypes[type])} disclosureDisabled={!modeEnabled || locked} onOpenChange={(open) => { if (modeEnabled && !locked) setOpenTypes((current) => ({ ...current, [type]: open })); }} className={`setupBetsAccordion ${groupLayout ? styles.groupModeCard : ""}`.trim()} headerAction={<span className={styles.headerActions}><BetHelpButton kind={type} />{!detailsOnly && <Switch buttonRef={(node) => { switchRefs.current[type] = node; }} on={modeEnabled} label={label} disabled={locked} onChange={() => setTypeEnabled(type, !modeEnabled)} />}</span>}>
       {modeEnabled && <>
       {allowAdd && <div className={styles.modeTools}><button type="button" className="textButton" onClick={() => add(type)}>+ Agregar</button></div>}
-      {typeBets.map(({ bet, index }) => <ItemShell key={bet.id} bet={bet} locked={locked} label={`${SUPPLEMENTAL_BET_LABELS[type]} ${index + 1}`} onToggle={() => bet.enabled ? update(bet.id, { enabled: false, enabledBeforeCategoryOff: undefined }) : runAfterConsent(() => update(bet.id, { enabled: true, enabledBeforeCategoryOff: undefined }))} onRemove={() => remove(bet.id)}>
+      {typeBets.map(({ bet, index }) => <ItemShell key={bet.id} bet={bet} locked={locked} detailsOnly={detailsOnly} label={`${SUPPLEMENTAL_BET_LABELS[type]} ${index + 1}`} onToggle={() => bet.enabled ? update(bet.id, { enabled: false, enabledBeforeCategoryOff: undefined }) : runAfterConsent(() => update(bet.id, { enabled: true, enabledBeforeCategoryOff: undefined }))} onRemove={() => detailsOnly ? update(bet.id, { enabled: false }) : remove(bet.id)}>
         {bet.type === "individual_nassau" && <>
           <div className="grid2"><PlayerSelect label="Jugador A" value={bet.playerAId} players={players} exclude={bet.playerBId} onChange={(playerAId) => update(bet.id, { playerAId })} /><PlayerSelect label="Jugador B" value={bet.playerBId} players={players} exclude={bet.playerAId} onChange={(playerBId) => update(bet.id, { playerBId })} /></div>
           <div className="grid3"><MoneyField label="Valor por componente" value={bet.value} onChange={(value) => update(bet.id, { value })} /><PlayerSelect label="Quién recibe ventaja" value={bet.advantageReceiverId || ""} players={players.filter((player) => player.id === bet.playerAId || player.id === bet.playerBId)} onChange={(advantageReceiverId) => update(bet.id, { advantageReceiverId: advantageReceiverId || undefined })} /><NumberField label="Golpes" value={bet.advantageStrokes} min={0} onChange={(advantageStrokes) => update(bet.id, { advantageStrokes })} /></div>

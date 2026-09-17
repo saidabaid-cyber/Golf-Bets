@@ -1,6 +1,22 @@
 import { collectBetConfigurationIssues, type BetConfigurationIssue } from "./bet-config-validation";
-import type { GroupTemplateCoreKey } from "./bets/registry";
+import { groupTemplateSelectionDefinitions, type GroupTemplateCoreKey } from "./bets/registry";
 import type { GroupGameTemplate, Player } from "./types";
+
+/** One activation source for the selection step, detail step and summary. */
+export function activeGroupTemplateDefinitions(template: GroupGameTemplate) {
+  return groupTemplateSelectionDefinitions().filter(item => {
+    const editor = item.templateEditor;
+    if (editor.kind === "personal") return template.personalBets.some(bet => bet.enabled !== false)
+      || template.supplementalBets.some(bet => bet.type === "individual_nassau" && bet.enabled);
+    if (editor.kind === "manual") return template.manualBets.some(bet => bet.enabled !== false);
+    if (editor.kind === "supplemental") return template.supplementalBets.some(bet => bet.type === editor.type && bet.enabled);
+    const key = editor.key;
+    if (key === "pollaFirst") return template.betConfig.polla.first9.enabled;
+    if (key === "pollaSecond") return template.betConfig.polla.second9.enabled;
+    if (key === "pollaTotal") return template.betConfig.polla.total18.enabled;
+    return Boolean(template.betConfig[key]?.enabled);
+  });
+}
 
 /** Configuration adapter only. All validation and settlement stay in the round engine. */
 export function patchGroupTemplateCore(template: GroupGameTemplate, key: GroupTemplateCoreKey, patch: Record<string, unknown>): GroupGameTemplate {
