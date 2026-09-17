@@ -92,8 +92,8 @@ function ItemShell({ bet, label, onToggle, onRemove, children, locked }: { bet: 
 
 const ORDER: SupplementalBet["type"][] = ["team_pressures", "chicago", "vegas", "minimum_putts"];
 
-export function SupplementalBetsEditor({ bets, players, onChange, requestActivation, locked = false, types = ORDER, roundHoles = 18, allowAdd = true }: { bets: SupplementalBet[]; players: Player[]; onChange: Dispatch<SetStateAction<SupplementalBet[]>>; requestActivation?: () => Promise<boolean>; locked?: boolean; types?: SupplementalBet["type"][]; roundHoles?: 9 | 18; allowAdd?: boolean }) {
-  const [openTypes, setOpenTypes] = useState<Partial<Record<SupplementalBet["type"], boolean>>>({});
+export function SupplementalBetsEditor({ bets, players, onChange, requestActivation, locked = false, types = ORDER, roundHoles = 18, allowAdd = true, initiallyExpandActive = false }: { bets: SupplementalBet[]; players: Player[]; onChange: Dispatch<SetStateAction<SupplementalBet[]>>; requestActivation?: () => Promise<boolean>; locked?: boolean; types?: SupplementalBet["type"][]; roundHoles?: 9 | 18; allowAdd?: boolean; initiallyExpandActive?: boolean }) {
+  const [openTypes, setOpenTypes] = useState<Partial<Record<SupplementalBet["type"], boolean>>>(() => initiallyExpandActive ? Object.fromEntries(bets.filter((bet) => bet.enabled).map((bet) => [bet.type, true])) : {});
   const pendingScroll = useRef<string | null>(null);
   const pendingConsentAction = useRef(false);
   const editorRef = useRef<HTMLDivElement>(null);
