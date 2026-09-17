@@ -33,7 +33,8 @@ test("Grupos expone roster, apuestas y el inicio de ronda desde la misma tarjeta
     assert.match(builder, new RegExp(copy));
   }
   assert.match(builder, /frequentGroupTemplateDetails/);
-  assert.match(builder, /PENDING_CONTROLLED_DB_APPLY/);
+  assert.match(builder, /<GroupInvitationInbox accessToken=\{identity\.accessToken\} onAccepted=\{retryCloudSync\}/);
+  assert.doesNotMatch(builder, /PENDING_CONTROLLED_DB_APPLY|Invitación local/, "live invitations replace obsolete pending/local placeholders");
   assert.match(page, /<GroupBetTemplateEditor/);
   assert.match(page, /createEmptyGroupGameTemplate/);
 });

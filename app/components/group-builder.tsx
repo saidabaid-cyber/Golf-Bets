@@ -16,6 +16,8 @@ import {
 } from "../../lib/group-generator";
 import { NumericCaptureInput } from "./numeric-capture-input";
 import { ModalCloseButton } from "./modal-shell";
+import { GroupInvitationInbox } from "./group-invitations";
+import { useBackyardAccount } from "./account-provider";
 
 const id = () => globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2, 10);
 
@@ -37,6 +39,7 @@ export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, 
   onEditFrequentGroup: (group: FrequentGroup) => void;
   onDeleteFrequentGroup: (group: FrequentGroup) => void;
 }) {
+  const { identity, retryCloudSync } = useBackyardAccount();
   const [players, setPlayers] = useState<GroupPlayer[]>([]);
   const [manualName, setManualName] = useState("");
   const [manualHandicap, setManualHandicap] = useState<number | null>(null);
@@ -149,11 +152,7 @@ export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, 
       <button type="button" role="tab" aria-selected={activeSection === "groups"} className={activeSection === "groups" ? "active" : ""} onClick={() => setActiveSection("groups")}>Mis grupos</button>
       <button type="button" role="tab" aria-selected={activeSection === "invitations"} className={activeSection === "invitations" ? "active" : ""} onClick={() => setActiveSection("invitations")}>Invitaciones</button>
     </div>
-    {activeSection === "invitations" && <section className="card groupInvitationsState" role="tabpanel">
-      <span aria-hidden="true">✉️</span><h2>Invitaciones</h2>
-      <p>Las invitaciones seguras requieren el esquema de Grupos en una base Preview aislada. No mostramos invitaciones simuladas ni generamos links locales inseguros.</p>
-      <strong>PENDING_CONTROLLED_DB_APPLY</strong>
-    </section>}
+    {activeSection === "invitations" && <div role="tabpanel"><GroupInvitationInbox accessToken={identity.accessToken} onAccepted={retryCloudSync} /></div>}
     <div hidden={activeSection !== "groups"} role="tabpanel">
     {frequentGroups.length === 0 && <section className="card groupPresetEmpty"><h2>Mis grupos</h2><p>Todavía no tienes grupos guardados. Crea uno con tus jugadores y apuestas habituales.</p><button type="button" className="primary" onClick={onCreateFrequentGroup}>Crear grupo</button></section>}
     {frequentGroups.length > 0 && <section className="card groupPresetLibrary"><div className="sectionTitle"><div><h2>Mis grupos</h2><p>Plantillas mutables; cada ronda conserva su propio snapshot.</p></div></div><div className="groupPresetGrid">{frequentGroups.map((group) => <article className="groupPresetCard" key={`preset-${group.id}`}>

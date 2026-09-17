@@ -74,7 +74,10 @@ test("pantalla de perfil usa labels, estado vacío y validación compartida", ()
   assert.match(provider, /<label htmlFor="profile-setup-given">Nombre<input id="profile-setup-given"/);
   assert.match(provider, /<label htmlFor="profile-setup-family">Apellidos<input id="profile-setup-family"/);
   assert.match(provider, /placeholder="Tu nombre"/);
-  assert.match(provider, /<HandicapSourceSelector userId=\{identity.userId\}/);
+  assert.doesNotMatch(provider, /<HandicapSourceSelector/, "identity capture must not duplicate the golf step");
+  const onboarding = read("app/components/beta-onboarding-flow.tsx");
+  assert.equal((onboarding.match(/<HandicapSourceSelector/g) || []).length, 1);
+  assert.match(onboarding, /defaultHandicap: profile\.defaultHandicap/, "removing duplicate UI must preserve saved golf values");
   assert.doesNotMatch(provider, /profile-setup-hcp|HCP manual \(máximo 36\)/);
   assert.match(provider, /disabled=\{busy\}/);
   assert.doesNotMatch(provider, /disabled=\{busy \|\| !name\.trim\(\) \|\| handicap === ""\}/);

@@ -47,7 +47,7 @@ function cleanGroupMember(
 function membersConflict(first: FrequentGroupMember, second: FrequentGroupMember) {
   const firstAccount = accountKey(first.accountUserId);
   const secondAccount = accountKey(second.accountUserId);
-  return memberKey(first.name) === memberKey(second.name)
+  return (!(firstAccount && secondAccount && firstAccount !== secondAccount) && memberKey(first.name) === memberKey(second.name))
     || Boolean(firstAccount && secondAccount && firstAccount === secondAccount)
     || Boolean(first.memberId && second.memberId && first.memberId === second.memberId)
     || Boolean(first.email && second.email && first.email === second.email);

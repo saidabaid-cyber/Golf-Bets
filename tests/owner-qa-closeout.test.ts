@@ -29,6 +29,16 @@ test("todos los archivos con diálogos interactivos exponen una salida visible",
       assert.match(dialog, /<Dialog titleId="delete-account-title" busy=\{props\.busy\} onClose=\{props\.onClose\}/);
       assert.match(dialog, /<ModalCloseButton onClose=\{onClose\} disabled=\{busy\}/);
       assert.match(dialog, /disabled=\{props\.busy\} onClick=\{props\.onClose\}>Cancelar<\/button>/);
+    } else if (file.endsWith("/equipment-profile-panel.tsx")) {
+      // Equipment is now full-page throughout: verify real exits instead of
+      // requiring a modal close icon on a screen which no longer is a modal.
+      assert.doesNotMatch(source, /role="dialog"|styles\.editorBackdrop/);
+      assert.match(source, /data-equipment-screen="ball-fit"[^\n]*onCancel=\{\(\) => setFitOpen\(false\)\}/);
+      assert.match(source, /data-equipment-screen="saved-ball-fit"[^\n]*onClick=\{\(\) => setSavedFitOpen\(false\)\}>← Volver a Mi Bolsa/);
+      for (const editor of ["club", "ball", "distance"]) {
+        assert.match(source, new RegExp(`onCancel=\\{\\(\\) => set${editor[0].toUpperCase() + editor.slice(1)}Editor\\(null\\)\\}`));
+      }
+      assert.match(source, /onClick=\{\(\) => setDeleteIntent\(null\)\}/, "destructive confirmation retains cancel");
     } else {
       assert.match(source, /ModalCloseButton|modalClose|helpClose|holeSummaryClose/, `${file} no expone cierre`);
     }

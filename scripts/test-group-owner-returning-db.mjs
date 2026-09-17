@@ -22,7 +22,7 @@ try {
     create role anon; create role authenticated; create role service_role bypassrls; create role authenticator;
     create publication supabase_realtime;
     create schema auth; create schema storage; create schema extensions;
-    create table auth.users(id uuid primary key,email text,raw_user_meta_data jsonb default '{}',raw_app_meta_data jsonb default '{}',created_at timestamptz default now(),banned_until timestamptz);
+    create table auth.users(id uuid primary key,email text,email_confirmed_at timestamptz,raw_user_meta_data jsonb default '{}',raw_app_meta_data jsonb default '{}',created_at timestamptz default now(),banned_until timestamptz);
     create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
     create function auth.jwt() returns jsonb language sql stable as $$ select '{}'::jsonb $$;
     create function auth.role() returns text language sql stable as $$ select current_user::text $$;
@@ -34,6 +34,7 @@ try {
     create function extensions.crypt(text,text) returns text language sql immutable as $$ select md5($1||$2) $$;
     create function extensions.gen_salt(text) returns text language sql immutable as $$ select $1 $$;
     create function extensions.digest(text,text) returns bytea language sql immutable as $$ select decode(md5($1),'hex') $$;
+    create function extensions.gen_random_bytes(integer) returns bytea language sql volatile as $$ select substring(decode(replace(gen_random_uuid()::text,'-','')||replace(gen_random_uuid()::text,'-',''),'hex') from 1 for $1) $$;
     grant usage on schema auth,storage,extensions to anon,authenticated,service_role;
   `);
   for (const file of readdirSync("supabase/migrations").filter((name) => name.endsWith(".sql") && name !== repair).sort()) {

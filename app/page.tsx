@@ -3,6 +3,8 @@ import "./functional-ux.css";
 import "./profile-account.css";
 import { initialBets, restoreBetConfig } from "../lib/new-round-bets";
 import { collectBetConfigurationIssues } from "../lib/bet-config-validation";
+import { groupTemplateConfigurationIssues } from "../lib/group-template-editor";
+import { mergeAcceptedGroupMembers, saveExplicitGroupSnapshot } from "../lib/group-invitation-sync";
 import { collectRoundSetupPreflightIssues } from "../lib/round-setup-preflight";
 import { buildWizardBetCatalog } from "../lib/round-setup-wizard";
 import { RoundSetupWizard, RoundSetupStep, WizardBetCatalog, WizardReviewBlock } from "./components/round-setup-wizard";
@@ -81,6 +83,7 @@ import { RulesPanel } from "./components/rules-panel";
 import { NumericCaptureInput } from "./components/numeric-capture-input";
 import { SignedMoneyInput } from "./components/signed-money-input";
 import { AccountProvider, useBackyardAccount } from "./components/account-provider";
+import { CaptureGroupInvitationLink, GroupInviteManager, PendingGroupInvitation } from "./components/group-invitations";
 import { resolveRoundDraftCore, resolvedOwnerIdForRoundDraft } from "./draft-restoration";
 import { accountDeletionMarkerKey, ACCOUNT_STORAGE_KEYS, hasCurrentBettingDataConsent, parseLegalAcceptances } from "../lib/account-state";
 import { ProfileAccountPanel } from "./components/profile-account-panel";
@@ -522,6 +525,8 @@ function GolfBetsApp() {
   const [frequentGroupEditorTab, setFrequentGroupEditorTab] = useState<"members" | "bets">("members");
   const [groupRoundSelection, setGroupRoundSelection] = useState<FrequentGroup | null>(null);
   const [frequentGroupEditError, setFrequentGroupEditError] = useState("");
+  const [frequentGroupSaving, setFrequentGroupSaving] = useState(false);
+  const frequentGroupSaveInFlight = useRef(false);
   const [frequentGroupToDelete, setFrequentGroupToDelete] = useState<FrequentGroup | null>(null);
   const [groupMemberSource, setGroupMemberSource] = useState<"frequent" | "new">("frequent");
   const [selectedGroupFrequentPlayerId, setSelectedGroupFrequentPlayerId] = useState("");
@@ -2828,7 +2833,8 @@ function GolfBetsApp() {
     });
   }
 
-  function saveFrequentGroupEdit() {
+  async function saveFrequentGroupEdit() {
+    if (frequentGroupSaveInFlight.current) return;
     if (!frequentGroupDraft?.name.trim() || !frequentGroupDraft.players.length || frequentGroupDraft.players.some((member) => !member.name.trim())) return;
     if (frequentGroupHasDuplicateMembers(frequentGroupDraft)) {
       setFrequentGroupEditError("Hay una cuenta o jugador repetido. Corrige los integrantes antes de guardar.");
@@ -2837,21 +2843,41 @@ function GolfBetsApp() {
     const now = new Date().toISOString();
     const stableDraft = withStableGroupMemberIds(frequentGroupDraft);
     const gameTemplate = normalizeGroupGameTemplate(stableDraft.gameTemplate, stableDraft.players) ?? createEmptyGroupGameTemplate(stableDraft);
+    const templateIssues = groupTemplateConfigurationIssues(gameTemplate, groupTemplatePlayers(stableDraft));
+    if (templateIssues.blocking.length) {
+      setFrequentGroupEditError(templateIssues.blocking.map((issue) => issue.message).join(" "));
+      setFrequentGroupEditorTab("bets");
+      return;
+    }
     const savedDraft = { ...stableDraft, gameTemplate, updatedAt: now };
     if (frequentGroups.some((group) => group.id !== savedDraft.id && group.name.trim().toLocaleLowerCase("es-MX") === savedDraft.name.trim().toLocaleLowerCase("es-MX"))) {
       setFrequentGroupEditError("Ya existe un grupo con ese nombre.");
       return;
     }
-    setFrequentGroups((groups) => frequentGroupDraftIsNew
-      ? [savedDraft, ...groups]
-      : updateFrequentGroupTemplate(groups, savedDraft.id, savedDraft, now));
-    if (pendingGroupFrequentPlayers.length) {
-      setFrequentPlayers((templates) => pendingGroupFrequentPlayers.reduce(
-        (current, member) => addFrequentPlayerTemplate(current, member, makeId(), now),
-        templates,
-      ));
+    frequentGroupSaveInFlight.current = true;
+    setFrequentGroupSaving(true);
+    setFrequentGroupEditError("");
+    const savingUserId = identity.userId;
+    try {
+      const saved = await saveExplicitGroupSnapshot({ group: savedDraft, accessToken: identity.accessToken, authenticated: identity.mode === "authenticated", online: navigator.onLine });
+      if (liveIdentity.current.userId !== savingUserId) return;
+      setFrequentGroups((groups) => frequentGroupDraftIsNew
+        ? [saved.group, ...groups.filter((group) => group.id !== saved.group.id)]
+        : updateFrequentGroupTemplate(groups, saved.group.id, saved.group, now));
+      if (pendingGroupFrequentPlayers.length) {
+        setFrequentPlayers((templates) => pendingGroupFrequentPlayers.reduce(
+          (current, member) => addFrequentPlayerTemplate(current, member, makeId(), now),
+          templates,
+        ));
+      }
+      setFeedback(saved.notice);
+      resetFrequentGroupEditor();
+    } catch (error) {
+      if (liveIdentity.current.userId === savingUserId) setFrequentGroupEditError(error instanceof Error ? error.message : "No pudimos guardar el grupo. Conservamos el borrador.");
+    } finally {
+      frequentGroupSaveInFlight.current = false;
+      setFrequentGroupSaving(false);
     }
-    resetFrequentGroupEditor();
   }
 
   async function attachScorecardPhoto(round: RoundSnapshot, file?: File) {
@@ -4121,13 +4147,14 @@ function GolfBetsApp() {
     {groupRoundSelection && <GroupRoundSelector group={groupRoundSelection} onCancel={() => setGroupRoundSelection(null)} onConfirm={(selectedMemberIds) => confirmFrequentGroupRoundSelection(groupRoundSelection, selectedMemberIds)} />}
 
     {frequentGroupDraft && <div className="modalBackdrop" role="presentation"><section className="groupEditorDialog" role="dialog" aria-modal="true" aria-labelledby="edit-group-title" aria-describedby="edit-group-description">
-      <ModalCloseButton onClose={resetFrequentGroupEditor} />
+      <ModalCloseButton onClose={() => { if (!frequentGroupSaveInFlight.current) resetFrequentGroupEditor(); }} />
       <div className="groupEditorHeader"><h2 id="edit-group-title">{frequentGroupDraftIsNew ? "Crear grupo" : "Editar grupo"}</h2><p id="edit-group-description">Jugadores y apuestas forman una plantilla. Las rondas ya iniciadas o históricas nunca cambian.</p></div>
+      <fieldset disabled={frequentGroupSaving} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
       <label>Nombre del grupo<input value={frequentGroupDraft.name} onChange={(event) => setFrequentGroupDraft((group) => group ? { ...group, name: event.target.value } : group)} /></label>
       <fieldset className="groupPrivacyChoices"><legend>Privacidad</legend><button type="button" aria-pressed={(frequentGroupDraft.privacy || "private") === "private"} onClick={() => setFrequentGroupDraft((group) => group ? { ...group, privacy: "private" } : group)}><b>Privado</b><small>Sólo los integrantes agregados pueden verlo.</small></button><button type="button" aria-pressed={frequentGroupDraft.privacy === "invite_only"} onClick={() => setFrequentGroupDraft((group) => group ? { ...group, privacy: "invite_only" } : group)}><b>Por invitación</b><small>El acceso requiere invitación segura o link revocable.</small></button></fieldset>
       <div className="segmented groupEditorTabs"><button type="button" className={frequentGroupEditorTab === "members" ? "active" : ""} onClick={() => setFrequentGroupEditorTab("members")}>Jugadores</button><button type="button" className={frequentGroupEditorTab === "bets" ? "active" : ""} disabled={!frequentGroupDraft.players.length} onClick={openFrequentGroupBetEditor}>Apuestas del grupo</button></div>
       {frequentGroupEditorTab === "members" ? <>
-      {frequentGroupDraft.privacy === "invite_only" && <div className="groupInviteFoundation"><b>Invitar al grupo</b><p>El dominio de invitaciones seguras ya valida token, identidad, expiración y revocación. Generar o compartir el link queda deshabilitado hasta aplicar el esquema en una base Preview aislada.</p><button type="button" className="secondary" disabled>Generar link seguro · pendiente de Preview DB</button></div>}
+      <GroupInviteManager group={frequentGroupDraft} accessToken={identity.accessToken} onAcceptedMembers={(members) => setFrequentGroupDraft((current) => { if (!current) return current; const players = mergeAcceptedGroupMembers(current.players, members); return players === current.players ? current : { ...current, players }; })} />
       <div className="groupEditorSectionTitle"><h3>Integrantes</h3><span>{frequentGroupDraft.players.length}</span></div>
       <div className="groupMemberList">{frequentGroupDraft.players.map((member, index) => <div className="groupMemberEditor" key={index}>
         <label>Jugador {index + 1}<input aria-label={`Nombre del integrante ${index + 1}`} value={member.name} onChange={(event) => editFrequentGroupMember(index, { name: event.target.value })} /></label>
@@ -4147,19 +4174,13 @@ function GolfBetsApp() {
           value={frequentGroupDraft.gameTemplate}
           players={groupTemplatePlayers(frequentGroupDraft)}
           ownerId={frequentGroupDraft.gameTemplate.ownerMemberId}
-          mode="selection"
-          onChange={updateFrequentGroupGameTemplate}
-        />
-        <GroupBetTemplateEditor
-          value={frequentGroupDraft.gameTemplate}
-          players={groupTemplatePlayers(frequentGroupDraft)}
-          ownerId={frequentGroupDraft.gameTemplate.ownerMemberId}
-          mode="details"
+          mode="complete"
           onChange={updateFrequentGroupGameTemplate}
         />
       </div> : <div className="empty">Agrega integrantes antes de configurar apuestas.</div>}
       {frequentGroupEditError && <div className="notice bad" role="alert">{frequentGroupEditError}</div>}
-      <div className="dialogActions"><button className="secondary" onClick={resetFrequentGroupEditor}>Cancelar</button><button className="primary" disabled={!frequentGroupDraft.name.trim() || !frequentGroupDraft.players.length || frequentGroupDraft.players.some((member) => !member.name.trim())} onClick={saveFrequentGroupEdit}>Guardar</button></div>
+      <div className="dialogActions"><button className="secondary" onClick={resetFrequentGroupEditor}>Cancelar</button><button className="primary" disabled={!frequentGroupDraft.name.trim() || !frequentGroupDraft.players.length || frequentGroupDraft.players.some((member) => !member.name.trim())} onClick={saveFrequentGroupEdit}>{frequentGroupSaving ? "Guardando…" : "Guardar"}</button></div>
+      </fieldset>
     </section></div>}
 
     {showDeleteRoundConfirm && <div className="modalBackdrop" role="presentation"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="delete-round-title" aria-describedby="delete-round-description"><ModalCloseButton onClose={() => setShowDeleteRoundConfirm(false)} /><h2 id="delete-round-title">¿Eliminar esta ronda?</h2><p id="delete-round-description">Se eliminará la ronda en curso y sus datos capturados. Esta acción no se puede deshacer.</p><div className="dialogActions"><button autoFocus className="secondary" onClick={() => setShowDeleteRoundConfirm(false)}>Cancelar</button><button className="dangerButton" onClick={deleteActiveRound}>Eliminar ronda</button></div></section></div>}
@@ -4179,5 +4200,5 @@ function GolfBetsApp() {
 }
 
 export default function Page() {
-  return <AccountProvider><GolfBetsApp /></AccountProvider>;
+  return <><CaptureGroupInvitationLink /><AccountProvider><PendingGroupInvitation /><GolfBetsApp /></AccountProvider></>;
 }
