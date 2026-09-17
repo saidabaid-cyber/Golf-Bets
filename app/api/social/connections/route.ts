@@ -40,7 +40,7 @@ export async function POST(request:Request) { return socialHttp(request,async ct
   if(error) throw error;
  } else if(body.action === "block") {
   const target=socialId(body.target); if(target===ctx.userId) throw Object.assign(new Error(),{code:"INVALID_REQUEST",status:400});
-  const {error}=await ctx.client.from("blocked_connections").upsert({owner_id:ctx.userId,blocked_user_id:target}); if(error) throw error;
+  const {error}=await ctx.client.from("blocked_connections").insert({owner_id:ctx.userId,blocked_user_id:target}); if(error && error.code !== "23505") throw error;
  } else throw Object.assign(new Error(),{code:"INVALID_REQUEST",status:400});
  return graph(ctx);
 }); }
