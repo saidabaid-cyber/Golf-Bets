@@ -1,5 +1,16 @@
 import type { ClubHandedness, GolfClubCatalog, GolfClubCatalogVariant, GolfShaftCatalog } from "./golf-equipment";
 
+/** No generic wedge degree list: only the selected model's published data. */
+export function catalogClubLofts(club: Pick<GolfClubCatalog, "lofts" | "variants"> | null | undefined): number[] {
+  return [...new Set([...(club?.lofts ?? []), ...(club?.variants.map(variant => variant.loft) ?? [])])]
+    .filter(value => Number.isFinite(value) && value >= 0 && value <= 90).sort((a, b) => a - b);
+}
+
+export function isCatalogLoftAllowed(loft: number | null, club: Pick<GolfClubCatalog, "lofts" | "variants"> | null | undefined) {
+  const verified = catalogClubLofts(club);
+  return loft === null || !verified.length || verified.includes(loft);
+}
+
 /**
  * Resolve the shaft currently selected by the editor.
  *

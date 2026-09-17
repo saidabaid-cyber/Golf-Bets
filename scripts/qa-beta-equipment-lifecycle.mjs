@@ -25,6 +25,15 @@ try{
   profile=eq.upsertPlayerBall(profile,{id:ballId,userId:account.id,ballBrand:'Synthetic QA manual ball',ballModel:'QA ball model',color:'WHITE',isCurrent:true,createdAt:at,updatedAt:at},at);
   profile=eq.upsertPlayerClubDistance(profile,{id:distanceId,userId:account.id,playerClubId:clubId,carryDistance:200,totalDistance:220,unit:'YD',source:'MANUAL',sampleCount:null,confidence:null,updatedAt:at},at);
   await save(profile);passed.push('BALL_MANUAL_CREATE_READBACK','SHAFT_MANUAL_CREATE_READBACK','DISTANCE_MANUAL_CREATE_READBACK');
+  stage='WEDGE_LOFT';
+  const wedgeId=randomUUID();
+  profile=eq.upsertPlayerClub(profile,{id:wedgeId,userId:account.id,category:'WEDGE',customBrand:'Synthetic QA manual brand',customModel:'QA Wedge',loft:56,handedness:'RH',isCurrent:true,createdAt:at,updatedAt:at},at);
+  await save(profile);assert.equal(record.profile.clubs.find(club=>club.id===wedgeId).loft,56);
+  await account.client.auth.signOut();await login();assert.equal((await app('/api/equipment')).data.profile.clubs.find(club=>club.id===wedgeId).loft,56);
+  const wedgeChoice=capture.captureClubChoices(profile.clubs.find(club=>club.id===wedgeId))[0];assert.match(wedgeChoice.label,/56°/);
+  profile=eq.upsertPlayerClub(profile,{...profile.clubs.find(club=>club.id===wedgeId),loft:58},new Date().toISOString());await save(profile);
+  assert.equal(record.profile.clubs.find(club=>club.id===wedgeId).loft,58);assert.match(wedgeChoice.label,/56°/);
+  profile=eq.removePlayerClub(profile,wedgeId);await save(profile);passed.push('WEDGE_LOFT_CLOUD_FRESH_SESSION_EDIT_FROZEN_CHOICE');
   stage='FITTING_CREATE';
   let input={userId:account.id,currentBallId:null,handicap:null,typicalScore:90,driverDistanceYards:200,swingSpeedBand:'FROM_85_TO_95',feelPreference:'SOFT',trajectoryPreference:'MID',greenFirmness:'FIRM',priorities:['IRON_CONTROL','GREENSIDE_FEEL'],approachBehavior:'ROLLS_TOO_MUCH',wantsGreensideSpin:'YES',pricePreference:'BEST_FIT',colorPreference:'WHITE',launchMonitorSession:null};
   const requestInput=transport.createBallFitTransportInput(input);assert.ok(requestInput);assert.notEqual(requestInput.userId,account.id);

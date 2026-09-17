@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { captureClubChoices } from "../lib/bag-capture";
 
 import {
   MAX_LAUNCH_MONITOR_SHOTS_PER_CLUB,
@@ -84,6 +85,22 @@ function manualClub(overrides: Record<string, unknown> = {}) {
     updatedAt: UPDATED_AT,
     ...overrides,
   };
+}
+
+for (const catalogClubId of [null, "verified-wedge-fixture"]) {
+  test(`wedge ${catalogClubId ? "catalog" : "manual"} loft save/readback/edit preserves the previous round snapshot`, () => {
+    const initial = required(upsertPlayerClub(emptyProfile(), manualClub({ category: "WEDGE", catalogClubId, loft: 56 }), UPDATED_AT));
+    const restored = required(decodeEquipmentProfile(encodeEquipmentProfile(initial)!, USER_ID));
+    assert.equal(restored.clubs[0].loft, 56);
+    const historical = captureClubChoices(restored.clubs[0]);
+    const before = JSON.stringify(historical);
+    const edited = required(upsertPlayerClub(restored, { ...restored.clubs[0], loft: 58 }, "2026-09-17T12:00:00Z"));
+    assert.equal(edited.clubs[0].loft, 58);
+    assert.equal(initial.clubs[0].loft, 56);
+    assert.equal(JSON.stringify(historical), before);
+    assert.match(historical[0].label, /56°/);
+    assert.match(captureClubChoices(edited.clubs[0])[0].label, /58°/);
+  });
 }
 
 function playerBall(overrides: Record<string, unknown> = {}) {

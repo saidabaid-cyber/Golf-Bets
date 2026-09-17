@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { resolveCatalogShaftSelection } from "../lib/equipment-editor-selection";
+import { catalogClubLofts, isCatalogLoftAllowed, resolveCatalogShaftSelection } from "../lib/equipment-editor-selection";
 import type { GolfShaftCatalog } from "../lib/golf-equipment";
 
 function shaft(id: string, model: string): GolfShaftCatalog {
@@ -40,6 +40,20 @@ function shaft(id: string, model: string): GolfShaftCatalog {
     updatedAt: null,
   };
 }
+
+test("wedge selector uses only selected model lofts/variants, deduplicated, never a generic wedge range", () => {
+  const model = { lofts: [56, 52], variants: [{ loft: 56, handedness: ["RH" as const] }, { loft: 60, handedness: ["RH" as const] }] };
+  assert.deepEqual(catalogClubLofts(model), [52, 56, 60]);
+  assert.equal(isCatalogLoftAllowed(56, model), true);
+  assert.equal(isCatalogLoftAllowed(58, model), false);
+  assert.equal(isCatalogLoftAllowed(null, model), true, "optional unknown stays unknown");
+});
+
+test("manual wedge and catalog without published degrees permit an explicitly declared loft", () => {
+  assert.deepEqual(catalogClubLofts(null), []);
+  assert.equal(isCatalogLoftAllowed(56, null), true);
+  assert.equal(isCatalogLoftAllowed(56, { lofts: [], variants: [] }), true);
+});
 
 test("limpiar un shaft existente produce una selección explícitamente vacía", () => {
   const existing = shaft("shaft-existing", "Ventus Blue");
