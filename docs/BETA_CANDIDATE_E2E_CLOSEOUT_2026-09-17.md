@@ -180,3 +180,96 @@ No se pide nuevo permiso para QA branch, migraciones ya aplicadas o push Preview
 17. LEGAL_REVIEW_REQUIRED: consentimientos/privacidad/retención/archivo/recuperación.
 
 **Respuesta: no todavía para una beta general anunciada como completa. Hay un Preview funcional para continuar QA controlado; la evidencia no autoriza declarar cerrados los pendientes anteriores.**
+
+## FINAL CODEX CLOSEOUT
+
+### Identidad y alcance del cierre quirúrgico
+
+- Inicio real, después de fetch: `99ee515a0a56cb9e1e4666c4e4dd0abdb50b61fc`, local/remoto iguales, worktree limpio; exclusivamente `phase2/full-platform`.
+- Código final de los fixes: `b1d9a68cf5698e440bf48ac5506d237c10c09565`. El SHA **final incluyendo este reporte** se identifica sin autorreferencia imposible con `git log -1 --format=%H -- docs/BETA_CANDIDATE_E2E_CLOSEOUT_2026-09-17.md` y se entrega literalmente en el cierre del chat.
+- Preview inmutable de comprobación de los fixes: `https://golf-bets-cszg9ohzj-saha8.vercel.app`, `dpl_HJnF9qcaqmuaDRjX5BDEWqS4nqCY`, READY, metadata SHA `b1d9a68…`, target no-Production. No se mezcla su evidencia con los deployments históricos de las secciones anteriores.
+- La publicación documental genera otro Preview; el **OFFICIAL_OWNER_QA_PREVIEW** es únicamente la URL inmutable del SHA final entregada en el chat, después de repetir smoke/contratos contra ese deployment. Identidad reproducible: Vercel API `/v6/deployments?projectId=prj_Hin0ieF71l1aSyaOcOPCmu7NzNjn` → filtrar `meta.githubCommitSha` por el SHA final y confirmar `READY` con `/v13/deployments/<id>`. No usar una URL antigua por conveniencia.
+- Supabase: `bymeopxkxapfizeeqeyb`; URL obtenida del servicio y binding del bundle comprobado por cada runner antes de crear fixtures. Ledger33; últimas `20260917134241` y `20260917140234`. **Cero migraciones nuevas/reaplicadas.** SQL/RLS transaccional con rollback.
+- Sin modificaciones a main/beta/Production/shared, Auth/SMTP/OAuth/secretos, Home, motores, custom domains, DNS ni configuración Production.
+
+### Commits lógicos
+
+1. `5615fed` — descartar canonical AI no equivalente y degradar de forma segura.
+2. `ad1261a` — corregir una regresión **nueva y demostrada** de invitaciones internas dependientes del mailer.
+3. `b1d9a68` — comprobar payloads de exportación y aislar fixtures de eventos de campos.
+4. Commit documental de esta sección/evidencias, identificable por el comando anterior; sin cambios de aplicación.
+
+### AI Round Setup: antes y después
+
+Fixture exacto del502 anterior: `Somos Alfa y Bravo. Nassau match de 100, 100 y 200. Salimos por el hoyo 10. Sin presiones.` Son identidades ficticias de QA.
+
+Antes: provider HTTP/schema válido pero reescritura no equivalente → HTTP502 `canonical_integrity`.
+
+Ahora: parser local primero; guard completo; canonical no equivalente **descartado**, no ejecutado. Respuesta200 con input original intacto, `mode=SAFE_LOCAL_FALLBACK`, `integrityIssueCodes=[explicit_actions_changed]`. El guard no perdió comparaciones; se reforzaron negación explícita de presiones y configuración/equipos Foursome. Schema inválido sigue produciendo un error controlado, nunca una configuración inventada.
+
+Se descarta también la aclaración del modelo rechazado. Sólo el planner determinístico formula preguntas. El fixture conserva18H, salida10 y Alfa/Bravo; los tres importes originales se conservan en el comando pero **NO se asignan arbitrariamente a una modalidad Nassau que requiere aclaración**. Review pregunta «¿Cuál es el monto de Nassau grupal?». INICIAR está deshabilitado. No se activa presión ni se crea ronda automáticamente.
+
+Real API/proveedor autorizado: fixture anterior → SAFE_LOCAL_FALLBACK; instrucción explícita18H/H10/Skins100/sin presiones/azules → AI_PROVIDER_CANONICAL; Skins100 simple → AI_PROVIDER_CANONICAL. No se afirma que el proveedor haya interpretado bien el primer caso.
+
+Browser Chromium390/430, cuenta sintética: onboarding México/Puebla, Home, tres entradas Jugar, asistente, fixture exacto, aviso de fallback, Review y aclaración observados. `scrollWidth=innerWidth` en390 y430; INICIAR deshabilitado; errores JS no manejados0. [390px](evidence/beta-2026-09-17/ai-fallback-390.png), [430px](evidence/beta-2026-09-17/ai-fallback-430.png), [Review completa](evidence/beta-2026-09-17/ai-fallback-review-full.png). **No es prueba física Safari.** No se exportó el estado completo del navegador.
+
+Runtime real: evento `canonical_integrity_fallback`, nivel warning, HTTP200, sólo proveedor/modelo/latencia/códigos de issues. No prompt, nombres, PII ni respuesta completa en telemetry. La UI indica explícitamente que se usó el intérprete local.
+
+### Matriz técnica de revalidación
+
+Los archivos `surgical-*-first.jsonl` corresponden sólo al Preview de comprobación `cszg9ohzj`; `surgical-*-final.jsonl` corresponden exclusivamente al Preview final indicado en su propio campo `preview`. No inferir resultados de un SHA diferente. Los runners conservan IDs de ejecución sintéticos para trazabilidad; credenciales no forman parte de esta documentación.
+
+| Área | Estado | Qué se ejecutó / evidencia | Fix / pendiente |
+|---|---|---|---|
+| AI Round Setup | PASS | `scripts/qa-final-ai-safe-fallback.mjs`; provider real, consent revocado403,3 interpretaciones200, guard+planner real; Review browser | SAFE_LOCAL_FALLBACK en fixture anterior; confirmación requerida |
+| Guard AI | PASS |18 tests nuevos +13 anteriores; monto/start/negación/player/teams/memory/unknown/tee/holes/exclusion/schema/local unknown | Ninguna relajación; no fallback a comando del modelo rechazado |
+| Grupos internos | PASS | `qa-preview-group-invitations.mjs`,25 checks reales: directorio,200interno,dedupe,recipient-only,aceptación,accountUserId,template,logout/login | Antes se reprodujo503 con targetUserId en99ee; ahora retorna tras RPC autorizado sin mailer |
+| Grupos email | BLOCKED_EXTERNAL | Dos503 intencionales create/retry email-only; estadoFAILED, no afirmación de envío | Faltan GROUP_INVITES_RESEND_API_KEY y GROUP_INVITES_FROM_EMAIL en Preview branch; no reutilizar SMTPAuth |
+| Perfil/Auth sintético/consent/privacidad | PASS | `qa-preview-profile-cloud.mjs`,22checks, Auth real sintético, México/Puebla,Index,readback,nueva sesión,A/B/RLS/dedupe/revocación | No prueba OTP/Google humano |
+| Reset | PASS | `qa-preview-statistics.mjs`,7checks: vacío,idempotencia,datos,histórico,reload,exclusión anterior,inclusión posterior | No borra históricos |
+| Account lifecycle | PASS | `qa-preview-account-lifecycle.mjs`,14checks:delete/Auth/token viejo/retry/shared/archive | Retención/archivo siguen sujetos a revisión legal |
+| Social/QR identity/play total | PASS | `qa-preview-social-play-v2.mjs`,20checks,2cuentas,amistad/notificación/relogin/bloqueo/total9H/detalle mismoID/noestadísticasinventadas | Cámara/share físico pendiente |
+| Equipment/Ball Fit | PASS | `qa-beta-equipment-lifecycle.mjs`,16checks,catálogo+manual,CRUD,readback,fitting,dedupe,snapshot | No se afirma fitting físico de launch monitor |
+| Shared A/B/C | PASS | `qa-beta-shared-round.mjs`,17checks; Bscore90 no A72,balance−100 una vez,Index18,attest,reset,deleteOwner conserva B anonimizado | Canónico/confirmado/read-only, outsider rechazado |
+| Social/attest | PASS | `.qa-artifacts/qa-social-real.mjs`,35checks reales:likes/unlike/comments/ownership/notificaciones/hash/privacy/attest | 4xx negativos intencionales no son bugs |
+| Nuevo campo | PASS | `qa-beta-course-event.mjs`,5checks reales; IDcanónico/completa/no-repeat/noHomeClub/shareCourses | Runner ahora crea fixtures propias, no intenta autenticar un owner eliminado por otro runner |
+| Export payloads | PASS | `round-export-generation.test.ts`: CSV/BOM, PNG generado realmente, PDF realjsPDF; MIME/nombre/bytes/header/noexcepción; share/clipboard/PNGfallback | No cambios a UX de descarga |
+| Descarga física | PENDING_INTERACTIVE_QA | No reinterpreta `Download was canceled` de automatización como bug del generador | PDF/CSV/imagen en navegador del Owner |
+| RLS real | PASS |9/9 archivos de `REQUIRED_RLS_TESTS` mediante Supabase execute_sql, literal refQA,BEGIN/ROLLBACK | Sin DDL/migraciones |
+| Engine/HCP/pressure/sync | PASS | Suite completa, incluidos capture-sync-regression,round-half-hotfix,two-device-sync; ningún motor modificado | Recorrido visual exhaustivo de modalidades: PENDING_INTERACTIVE_QA |
+| Quality gate | PASS | **2018/2018**,0FAIL,0skipped; npm test,tsc--noEmit,ESLint,Next productionbuild exit0 |+20 tests sobre baseline1998 |
+
+### Alias Preview stale
+
+Evidencia inicial: alias `golf-bets-git-phase2-full-platform-saha8.vercel.app` resolvía `dpl_HvmHoU41YhNhTeJfxFg7VUHRt5xT`, fuenteCLI, SHA5574b002. Deployment Git99ee tenía `automaticAliases` con ese mismo nombre pero `alias=[]` y no se había movido la asociación efectiva. Es una asociación stale demostrada; metadata no demuestra por sí sola qué operación histórica la fijó.
+
+Corrección acotada: `vercel alias set <Preview inmutable final> golf-bets-git-phase2-full-platform-saha8.vercel.app`, verificando después SHA por la API del alias. No cambia custom domains/DNS/Production. Aunque el alias quede correcto, QA del Owner debe usar **sólo la URL inmutable final entregada**, no asumir que futuros Git deploys reubicarán el alias.
+
+### Auditoría exacta de divergencia main (sin merge)
+
+Inicio:241ahead/5behind. Ninguno de los5 commits se aplicó/cherry-pickeó.
+
+| Commit sólo en main | Propósito | Equivalente en Phase2 | Falta | Acción futura |
+|---|---|---|---|---|
+|51d42c010a6df43bc753b7df43f2d8578e05d2fd|score commit/sync race|Sí: numeric-input rawValueRef/flushSync; page latestSaveAndAdvance actualizado useLayoutEffect; durable checkpoint|No regresión demostrada; capture-sync tests verdes|Conservar implementación Phase2, no copiar commit|
+|c0d8eb67bca7e0b32abd5c6987d18270e1786798|hole checkpoint/sync loop|Sí: persistCommittedHoleBeforeAdvance con readback,cloudSyncPayloadFingerprint,shouldUpload sólo cuando payload cambia; test20polls/0POSTsin edición|Nada técnico demostrado|No merge|
+|fec2e569cd50860d7d38fb65f92ebfc2ded39b3b|strict local-first active round|Sí: mergeLocalFirstActiveDraft,findActiveDraftOwnershipConflicts,ACKviejo no sobreescribe score nuevo; conflicto multidevice explícito|No se promete merge automático entre dos instalaciones|Conservar y probar físicamente PWA|
+|940a3902443340497655abcab55ef9b5bf060e96|front/back por play order|Sí: lib/round-half.ts idéntico; engine/side-bets consumen orden; Phase2 añade regresiones Foursome/animales H10|Nada técnico demostrado|No alterar motor|
+|c3c320cc95ade217a5cf446aefba511192e5543f|privacyv6/termsv2|Versiones ya presentes en legal-documents; **no equivalencia legal completa**: age_confirmation fijo2026-09-01-v1 enPhase2 vs terms-version:age-declaration enmain|Reconciliación texto/versión/evidencia jurídica|LEGAL_REVIEW_REQUIRED; no migrar consentimientos sin revisión|
+
+Referencias de implementación: `app/page.tsx` checkpoint/merge/ownership; `lib/cloud-sync.ts`; `app/components/numeric-input.tsx`; `lib/round-half.ts`; `tests/capture-sync-regression.test.ts`; `tests/two-device-sync.test.ts`; `tests/round-half-hotfix.test.ts`. Ningún cambio de motor surgió de esta auditoría.
+
+### Runtime y decisión
+
+Consulta acotada del deployment de comprobación: inesperados5xx=0; dos503 email-only provocados por runner, canonical fallback200 trazado. Ningún502 del escenario corregido. Consent revocado403, unauthorized404/403,duplicados409 y tokeneliminado401 son negativos deliberados. El smoke/runtime final se filtra por el ID de deployment del SHA final, no por «latest» genérico ni Production. No se observó error JS no manejado en Review390/430 ni ciclo anómalo de sync; no se convierte eso en garantía de iPhone físico.
+
+**FAIL técnicos internos conocidos:0**, condicionado a que la revalidación final del mismo código permanezca verde. No implica disponibilidad de integraciones externas ni aprobación legal.
+
+- **PENDING_DEVICE_QA:** Safari iPhone/teclado nativo/emoji/cámaraQR/galería real/WebShare/guardarimagen/PWAinstalar-cerrar-reabrir/background/safeareas.
+- **PENDING_INTERACTIVE_QA:** OTP/emailreal,cuentainexistente con destinatario real,Google selector→callback→Home→logout→Google,recorrido exhaustivo de apuestas/modales,descargas físicas.
+- **BLOCKED_EXTERNAL:** mailergrupos,GHIN,GolfAPI/globallicensedDB,GPSgeometría,imágeneslicenciadas,push,wearable,rangefinder,TheGrint,AIreglas flag noautorizado. No contratados/simulados ni secretos cambiados.
+- **LEGAL_REVIEW_REQUIRED:** privacy/terms/retention/archive-recovery/socialgraph/sharedrounds/AIprocessing/geolocation/notifications/analytics.
+
+**A. Owner QA con dos teléfonos/cuentas: SÍ.** Es precisamente el siguiente paso para resolver pendientes físicos/interactivos.
+
+**B. Testers externos controlados: NO todavía.** Requiere revisión legal aplicable y validación operativa de Auth/recorrido físico con el Owner; correo de grupos sigue no disponible. No se anuncian como PASS esos pendientes.
