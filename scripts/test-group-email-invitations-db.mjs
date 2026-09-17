@@ -143,6 +143,28 @@ try {
   assert.equal(await scalar("select count(*)::integer from private.group_email_invitations where inviter_id=$1",[A]),0);
   assert.equal(await scalar("select count(*)::integer from public.group_memberships_v2 where group_id=$1 and user_id=$2",[groupId,D]),1);
   check("new private FKs cascade deleted identities without deleting surviving shared group/membership");
+  await q("insert into auth.users(id,email,email_confirmed_at) values($1,'new-a@example.invalid',now()),($2,'new-b@example.invalid',now())",[A,B]);
+  await q("update public.social_profiles set privacy='PUBLIC' where user_id in ($1,$2)",[A,B]);
+  await asUser(A);
+  await q("insert into public.profile_completion_choices(user_id,handicap_choice,manual_hcp,not_applicable) values($1,'MANUAL',12,array['equipment','ball','fitting'])",[A]);
+  await denied(()=>q("insert into public.profile_completion_choices(user_id,handicap_choice) values($1,'UNKNOWN')",[B]));
+  await asUser(B);assert.equal(await scalar("select count(*)::integer from public.profile_completion_choices where user_id=$1",[A]),0);
+  assert.equal((await q("update public.profile_completion_choices set manual_hcp=5 where user_id=$1 returning user_id",[A])).rows.length,0);
+  check("completion choices persist owner-only; B cannot read or mutate A");
+  await asUser(A);assert.equal((await q("select * from public.social_profile_card_v1($1)",[B])).rows[0].user_id,B);
+  const req=(await q("insert into public.friend_requests(requester_id,addressee_id,state,operation_id) values($1,$2,'PENDING',gen_random_uuid()) returning id",[A,B])).rows[0].id;
+  await asUser(B);assert.equal(await scalar("select count(*)::integer from public.notification_events_v2 where resource_id=$1",[req]),1);
+  await q("update public.notification_events_v2 set read_at=now() where id=$1",[req]);
+  assert.equal(await scalar("select read_at is not null from public.notification_events_v2 where id=$1",[req]),true);
+  await denied(()=>q("update public.notification_events_v2 set recipient_id=$1 where id=$2",[A,req]));
+  await q("update public.friend_requests set state='ACCEPTED' where id=$1",[req]);
+  assert.equal(await scalar("select count(*)::integer from public.friendships where (user_a_id=$1 and user_b_id=$2) or (user_a_id=$2 and user_b_id=$1)",[A,B]),1);
+  await asUser(A);assert.equal((await q("select * from public.notification_events_v2 where id=$1",[req])).rows.length,0);
+  check("real request/accept creates one friendship; notification read state is owner-only and immutable recipient");
+  await asUser(B);await q("insert into public.blocked_connections(owner_id,blocked_user_id) values($1,$2)",[B,A]);
+  await asUser(A);assert.equal((await q("select * from public.social_profile_card_v1($1)",[B])).rows.length,0);
+  await admin();await db.exec("set role anon; set request.jwt.claim.role='anon';");await denied(()=>q("select * from public.social_profile_card_v1($1)",[B]));
+  check("QR minimal profile respects reciprocal blocks and denies anonymous lookup");
   console.log(`GROUP_INVITATIONS_DB PASS: group invitations PostgreSQL checks ${checks}/${checks}; delivery mocked, not inbox evidence.`);
 } catch(error) {
   console.error(error.code||"ASSERTION",error.message);process.exitCode=1;

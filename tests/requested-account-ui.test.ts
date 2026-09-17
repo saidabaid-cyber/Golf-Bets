@@ -90,10 +90,12 @@ test("Cuenta permite activar avisos internos sin prometer push del dispositivo",
   assert.doesNotMatch(`${page}\n${account}\n${social}`, /Notification\.requestPermission/);
 });
 
-test("Social separa actividad y avisos, con lectura explícita y estado desactivado", () => {
-  assert.match(social, />Actividad<\/button>/);
-  assert.match(social, />Avisos/);
-  assert.match(social, /Marcar todo como leído/);
-  assert.match(social, /Avisos internos desactivados/);
-  assert.match(social, /onNotificationsEnabledChange\(true\)/);
+test("Social separa feed de amigos y avisos; lectura persistida y preferencias explícitas", () => {
+  assert.match(social, /friendsOnly/);
+  assert.match(social, /Notificaciones/);
+  assert.match(social, /SocialSharingPreferences/);
+  assert.doesNotMatch(social, /localStorage/);
+  const cloud = readFileSync("app/components/cloud-social-activity.tsx", "utf8");
+  assert.match(cloud, /method: "PATCH", body: \{ id: item.id, read: true \}/);
+  assert.match(cloud, /Sin leer/);
 });

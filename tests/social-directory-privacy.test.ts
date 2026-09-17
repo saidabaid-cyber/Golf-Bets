@@ -18,6 +18,11 @@ test("un perfil privado no aparece en sugerencias locales sin amistad verificada
 test("la interfaz no fabrica una solicitud de amistad local que nadie recibiría", () => {
   const panel = readFileSync("app/components/social-connections-panel.tsx", "utf8");
   assert.doesNotMatch(panel, /createFriendRequest\(/);
-  assert.match(panel, /No se envió una solicitud/);
-  assert.match(panel, /Próximamente/);
+  assert.match(panel, /socialRequest<ConnectionPage>\("\/api\/social\/connections"/);
+  assert.match(panel, /action:"request",target:selected.user_id/);
+  assert.doesNotMatch(panel, /localStorage/);
+  const api = readFileSync("app/api/social/connections/route.ts", "utf8");
+  assert.match(api, /requester_id:ctx.userId/);
+  assert.match(api, /target === ctx.userId/);
+  assert.match(api, /before.friends.includes\(target\)/);
 });

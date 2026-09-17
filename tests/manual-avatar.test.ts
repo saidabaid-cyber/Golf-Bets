@@ -114,6 +114,6 @@ test("Home, navegación, ronda y Social consumen el mismo media validado; Grupos
   assert.match(home, /<ProfileAvatarMedia value=\{avatarUrl\}/);
   assert.match(navigation, /<ProfileAvatarMedia value=\{avatarUrl\}/);
   assert.match(round, /<ProfileAvatarMedia className=\{styles.avatar\} value=\{activePlayer.id === owner\?\.id \? ownerAvatarUrl : undefined\}/);
-  assert.match(social, /<ProfileAvatarMedia value=\{profile.avatar\}/);
+  assert.match(social, /<ProfileAvatarMedia value=\{p.avatar_url\}/);
   assert.match(group, /<ProfileImagePicker kind="group" value=\{draft.group.imageUrl\}/);
 });
