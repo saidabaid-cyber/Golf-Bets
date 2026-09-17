@@ -52,10 +52,19 @@ test("Puebla bug: invalid typed region then canonical MX-PUE selection clears st
 test("selected Puebla survives profile reload, validates and saves without a manual profile Index", async () => {
   const selected = geo.selectProfileSubdivision(geo.selectProfileCountry("MX"), "MX-PUE");
   const h = setupHarness(JSON.parse(JSON.stringify(selected))); await h.submit();
-  assert.equal(h.saved.length, 1); assert.equal(h.saved[0].defaultHandicap, null);
+  assert.equal(h.saved.length, 1); assert.equal(h.saved[0].defaultHandicap, 7, "identity-only setup must not erase an existing golf value");
   assert.equal(h.nodes().some((node) => node.type === "input" && String(node.props.id).includes("hcp")), false);
-  assert.ok(h.nodes().some((node) => node.type === "source"));
+  assert.equal(h.nodes().some((node) => node.type === "source"), false, "source selection belongs to the next golf step only");
   assert.equal(geo.validateProfileLocation(h.saved[0]).valid, true);
+});
+
+test("initial profile has no duplicated GHIN/Backyard selector and the canonical golf step preserves saved values", () => {
+  const setup = readFileSync("app/components/account-provider.tsx", "utf8").split("function ProfileSetupScreen")[1].split("export function AccountProvider")[0];
+  assert.doesNotMatch(setup, /HandicapSourceSelector|VINCULAR GHIN|ACTIVAR BACKYARD INDEX/);
+  const golf = readFileSync("app/components/beta-onboarding-flow.tsx", "utf8").split('if (progress.step === "ghin")')[1].split('if (progress.step === "improvements")')[0];
+  assert.match(golf, /<HandicapSourceSelector/);
+  assert.match(golf, /defaultHandicap: profile\.defaultHandicap/);
+  assert.match(golf, /ghinLinkStatus: profile\.ghinLinkStatus \|\| "SKIPPED"/);
 });
 
 test("canonical region selection validates immediately; changing country clears region", () => {

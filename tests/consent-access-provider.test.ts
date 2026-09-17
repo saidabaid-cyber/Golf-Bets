@@ -26,15 +26,15 @@ function text(value: unknown): string {
 // The production provider's render branches are executed with a restored,
 // server-verified identity fixture. Bootstrap/cloud effects are not executed:
 // these tests are component integration, not live OAuth or Supabase DB QA.
-function providerHarness(options: { existingNotice?: boolean; newAccount?: boolean } = {}) {
+function providerHarness(options: { existingNotice?: boolean; newAccount?: boolean; mappingPending?: boolean; provider?: "google" | "email" } = {}) {
   const source = readFileSync("app/components/account-provider.tsx", "utf8");
   const providerBody = source.slice(source.indexOf("export function AccountProvider("));
   const stateNames = [...providerBody.matchAll(/const \[(\w+),[^\]]+\] = useState(?:<[^;]+?>)?\(/g)].map((match) => match[1]);
   assert.ok(stateNames.includes("accountEntry") && stateNames.includes("profileChecked"));
-  const identity = { mode: "authenticated", userId: OWNER, accessToken: "verified-token", displayName: "Cuenta existente", email: "qa@example.invalid", providers: ["google"] };
+  const identity = { mode: "authenticated", userId: OWNER, accessToken: "verified-token", displayName: "Cuenta existente", email: "qa@example.invalid", providers: [options.provider || "google"] };
   const initial: Record<string, unknown> = {
     ready: true, identity, cloudConsentChecked: true, profileChecked: true,
-    accountEntry: { userId: OWNER, profileExists: true, existingAccount: !options.newAccount },
+    accountEntry: options.mappingPending ? null : { userId: OWNER, profileExists: true, existingAccount: !options.newAccount },
     existingAccountNotice: Boolean(options.existingNotice), profileSetupRequired: Boolean(options.newAccount),
   };
   const states: unknown[] = []; let stateCursor = 0; let effectCalls = 0;
@@ -103,10 +103,9 @@ function checkpointHarness(props: Record<string, unknown>, readError: Error) {
 for (const failure of ["network unavailable", "HTTP 500", "42P01 missing consent table", "PGRST202 missing consent RPC"]) {
   test(`verified existing account reaches provider children after ${failure} without logout or mutation`, async () => {
     const provider = providerHarness({ existingNotice: true });
-    const notice = provider.render(); assert.match(text(notice), /YA TIENES UNA CUENTA/);
-    const continueExisting = nodes(notice).find((node) => node.type === "button" && /CONTINUAR A MI CUENTA/.test(text(node)));
-    assert.ok(continueExisting); (continueExisting.props.onClick as () => void)();
     const checkpoint = provider.render(); assert.equal(checkpoint.type, provider.checkpointMarker);
+    assert.match(text(checkpoint), /Ya tienes una cuenta\. Vamos a iniciar sesión\./);
+    assert.equal(nodes(checkpoint).some(node => node.type === "button" && /CONTINUAR A MI CUENTA/.test(text(node))), false, "verified accounts continue without another access gate");
     assert.equal(checkpoint.key, OWNER); assert.equal(checkpoint.props.userId, OWNER); assert.equal(checkpoint.props.legalRequired, false);
     const h = checkpointHarness(checkpoint.props, new Error(failure));
     try {
@@ -126,4 +125,26 @@ test("new authenticated account still enters profile onboarding before the conse
   assert.notEqual(screen.type, provider.checkpointMarker);
   assert.ok(nodes(screen).some((node) => typeof node.type === "function" && node.type.name === "ProfileSetupScreen"));
   assert.ok(!nodes(screen).includes(provider.child));
+});
+
+for (const authProvider of ["google", "email"] as const) {
+  test(`${authProvider}: verified existing signup opens the existing app with an informational notice, not a second sign-in gate`, () => {
+    const provider = providerHarness({ existingNotice: true, provider: authProvider });
+    const screen = provider.render();
+    assert.equal(screen.type, provider.checkpointMarker);
+    assert.ok(nodes(screen).includes(provider.child));
+    assert.match(text(screen), /Ya tienes una cuenta\. Vamos a iniciar sesión\./);
+    assert.equal(nodes(screen).some(node => typeof node.type === "function" && node.type.name === "ProfileSetupScreen"), false);
+    const dismiss = nodes(screen).find(node => node.type === "button" && node.props["aria-label"] === "Cerrar aviso de cuenta existente");
+    assert.ok(dismiss); (dismiss.props.onClick as () => void)();
+    assert.ok(nodes(provider.render()).includes(provider.child), "dismissing optional information does not perform login, create data, or close the app");
+  });
+}
+
+test("unresolved authenticated mapping cannot display existing-account information or open account creation", () => {
+  const provider = providerHarness({ mappingPending: true }); const screen = provider.render();
+  assert.match(text(screen), /Verificando tu cuenta/);
+  assert.doesNotMatch(text(screen), /Ya tienes una cuenta/);
+  assert.ok(!nodes(screen).includes(provider.child));
+  assert.equal(nodes(screen).some(node => typeof node.type === "function" && node.type.name === "ProfileSetupScreen"), false);
 });

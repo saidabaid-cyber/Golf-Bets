@@ -107,7 +107,10 @@ test("provider places mapping before cloud writes and creation UI, retains conse
   assert.match(source, /readCurrentAccountEntry\(authenticatedAccessToken, authenticatedUserId, \(\) => activeUserId.current, controller.signal\)/);
   assert.match(source, /setProfileSetupRequired\(!accountEntry.existingAccount && !cloudProfile.onboarding_completed_at\)/);
   assert.match(source, /const mapping = await readAccountEntry\(identity.accessToken \|\| "", identity.userId\)/);
-  assert.match(source, /YA TIENES UNA CUENTA/); assert.match(source, /CONTINUAR A MI CUENTA/); assert.match(source, /return identity.mode === "authenticated" \? <AccountConsentCheckpoint/);
+  assert.match(source, /Ya tienes una cuenta\. Vamos a iniciar sesión\./);
+  assert.doesNotMatch(source, /if \(identity\.mode === "authenticated" && existingAccountNotice\) return/);
+  assert.match(source, /Verifica tu correo para continuar; si ya tienes cuenta, entraremos a ella\./);
+  assert.match(source, /return identity.mode === "authenticated" \? <AccountConsentCheckpoint/);
 });
 
 test("late mapping after logout, account switch, or effect cancellation cannot reopen creation or account UI", async () => {

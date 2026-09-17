@@ -58,7 +58,6 @@ import { ProfileLocationPicker } from "./profile-location-picker";
 import { normalizeProfileLocation, validateProfileLocation } from "../../lib/profile-geography";
 import { parseStoredProfileLocation, readProfileLocationMetadata, PROFILE_LOCATION_METADATA_KEY } from "../../lib/profile-location-sync";
 import { syncExistingSocialProfileAvatar } from "../../lib/profile-avatar-sync";
-import { HandicapSourceSelector } from "./handicap-source-selector";
 import { consumeAccountEntryIntent, readAccountEntry, readCurrentAccountEntry, rememberAccountEntryIntent, type AccountEntry } from "../../lib/account-entry";
 import { BettingConsentDialog } from "./betting-consent-dialog";
 import { persistBettingDataConsent } from "../../lib/betting-consent";
@@ -294,6 +293,7 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
         {!codeSent ? <>
           <label htmlFor="access-email">Correo electrónico</label>
           <input id="access-email" type="email" inputMode="email" autoComplete="email" autoCapitalize="none" spellCheck={false} disabled={busy} value={email} onChange={(event) => setEmail(event.target.value)} placeholder="tu@correo.com" />
+          {intent === "create" && <p className="hint">Verifica tu correo para continuar; si ya tienes cuenta, entraremos a ella.</p>}
           <button className="primary big" disabled={busy || retrySeconds > 0} onClick={sendCode}>{busy ? "Enviando…" : retrySeconds ? `Enviar en ${retrySeconds}s` : "Enviar código"}</button>
           <button className="textButton" disabled={busy} onClick={() => setEmailMode(false)}>← Volver</button>
         </> : <>
@@ -370,7 +370,9 @@ function ProfileSetupScreen({ identity, onSave, onBack }: {
     setBusy(true); setMessage("");
     try { await onSave({
       displayName: validation.displayName,
-      defaultHandicap: validation.defaultHandicap,
+      // This screen edits identity, not the selected index source. Retain any
+      // saved golf value while the source selector lives in the next step.
+      defaultHandicap: identity.defaultHandicap,
       avatarUrl: avatarValidation.avatarUrl,
       givenName: givenName.trim(),
       familyName: familyName.trim(),
@@ -393,7 +395,6 @@ function ProfileSetupScreen({ identity, onSave, onBack }: {
       <ProfileImagePicker value={avatarUrl} onChange={setAvatarUrl} onBusyChange={setAvatarBusy} accessToken={identity.accessToken} userId={identity.userId} />
       <ProfileLocationPicker value={location} onChange={(next) => { setLocation(next); setMessage(""); }} />
       <label htmlFor="profile-setup-city">Ciudad opcional<input id="profile-setup-city" autoComplete="address-level2" value={city} onChange={(event) => setCity(event.target.value)} placeholder="Puebla" /></label>
-      <HandicapSourceSelector userId={identity.userId} authenticated={identity.mode === "authenticated"} />
       <fieldset className="handednessChoice"><legend>Mano dominante</legend><label><input type="radio" name="handedness" checked={handedness === "right"} onChange={() => setHandedness("right")} />Derecha</label><label><input type="radio" name="handedness" checked={handedness === "left"} onChange={() => setHandedness("left")} />Izquierda</label></fieldset>
       {message && <div className="accessMessage" role="alert">{message}</div>}
       <button type="submit" className="primary big" disabled={busy || avatarBusy}>{busy ? "Guardando…" : avatarBusy ? "Preparando imagen…" : "Guardar y continuar"}</button>
@@ -1523,11 +1524,6 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     <BrandLockup compact /><h1>Verificando tu cuenta…</h1>
     {accountEntryError && <><p role="alert">{accountEntryError}</p><button className="primary big" onClick={() => { setAccountEntryError(""); setAccountEntryRetry(value => value + 1); }}>Reintentar</button><button className="textButton" onClick={logout}>Volver al acceso</button></>}
   </section></main>;
-  if (identity.mode === "authenticated" && existingAccountNotice) return <main className="accessScreen"><section className="accessCard">
-    <BrandLockup compact /><h1>YA TIENES UNA CUENTA</h1><p>Esta cuenta ya está registrada en The Backyard.</p>
-    <button className="primary big" onClick={() => setExistingAccountNotice(false)}>CONTINUAR A MI CUENTA</button>
-    <button className="textButton" onClick={logout}>Usar otra cuenta</button>
-  </section></main>;
   if (identity.mode === "authenticated" && !currentConsent && !cloudConsentChecked) return <main className="accessScreen"><div className="accessLoading">Verificando tus consentimientos…</div></main>;
   if (identity.mode === "guest" && !currentConsent) {
     if (migrationDialog && hasCurrentLegalConsent(acceptances, "guest")) return <main className="accessScreen">{migrationDialog}</main>;
@@ -1542,6 +1538,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   if (identity.mode === "authenticated" && equipmentOnboardingRequired) return <EquipmentOnboarding userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={null} ballFitDefaults={ballFitDefaultsFromProfile(identity)} onComplete={finishEquipmentOnboarding} onBack={finishEquipmentOnboarding} onSaveAndExit={finishEquipmentOnboarding} />;
 
   const app = <AccountContext.Provider value={context!}>
+    {existingAccountNotice && <div className="notice" role="status">Ya tienes una cuenta. Vamos a iniciar sesión.<button type="button" className="textButton" aria-label="Cerrar aviso de cuenta existente" onClick={() => setExistingAccountNotice(false)}>Entendido</button></div>}
     {blockingCloudIssues.map((issue) => <div className="notice bad" role="alert" key={issue.domain}>{issue.message}<button onClick={() => setAccessRequested(true)}>Volver a iniciar sesión</button></div>)}
     <Fragment key={identity.userId}>{children}</Fragment>
     {migrationDialog}
