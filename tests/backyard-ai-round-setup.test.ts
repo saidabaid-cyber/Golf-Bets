@@ -75,6 +75,33 @@ function activeDraft() {
   });
 }
 
+test("Preview regression: explicit hoyo 10 and sin presiones keep their meaning", () => {
+  const plan = planRoundSetup("Salimos por el hoyo 10. Sin presiones.", context({ activeDraft: activeDraft() }));
+  assert.equal(plan.draft.startHole, 10);
+  assert.equal(plan.questions.some((question) => question.field.startsWith("bets.pressures")), false);
+  assert.equal(plan.canConfirm, true);
+  const back = planRoundSetup("Empezamos desde el hoyo 1.", context({ activeDraft: plan.draft }));
+  assert.equal(back.draft.startHole, 1);
+});
+
+test("sin presiones never silently approves saved active pressures", () => {
+  const draft = activeDraft();
+  draft.bets.vipers = { ...draft.bets.vipers, enabled: true, secondNinePressed: true, secondNineMultiplier: 3 };
+  const plan = planRoundSetup("Sin presiones.", context({ activeDraft: draft }));
+  assert.equal(plan.draft.bets.vipers.secondNineMultiplier, 3);
+  assert.ok(plan.questions.some((question) => question.field === "bets.pressures.disabled"));
+  assert.equal(plan.canConfirm, false);
+  assert.equal(draft.bets.vipers.secondNinePressed, true);
+});
+
+test("positive or contradictory pressure requests still require clarification", () => {
+  for (const input of ["Con presiones.", "Sin presiones. Con presiones."]) {
+    const plan = planRoundSetup(input, context({ activeDraft: activeDraft() }));
+    assert.ok(plan.questions.some((question) => question.field === "bets.pressures"));
+    assert.equal(plan.canConfirm, false);
+  }
+});
+
 function snapshot(id: string, date: string, mutate?: (bets: ReturnType<typeof initialBets>) => void): RoundSnapshot {
   const bets = initialBets(roundPlayers.map((player) => player.id));
   mutate?.(bets);

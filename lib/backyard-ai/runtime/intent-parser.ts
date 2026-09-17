@@ -687,6 +687,12 @@ function coreActions(normalized: string): ParsedRoundSetupAction[] {
 
 function parserQuestions(normalized: string, parsedActions: ParsedRoundSetupAction[]): RoundSetupQuestion[] {
   const questions: RoundSetupQuestion[] = [];
+  // A standalone exclusion is not a request to add a pressure wager. Keep a
+  // review marker until the planner checks the actual (possibly saved) draft.
+  const withoutStandaloneExclusion = normalized.replace(/(^|[.;]\s*)sin\s+presiones?\s*(?=[.;]|$)/gi, "$1");
+  if (withoutStandaloneExclusion !== normalized) {
+    questions.push({ code: "invalid_action", field: "bets.pressures.disabled", prompt: "Indicaste sin presiones, pero la configuración conserva presiones activas. Desactívalas en la edición manual antes de continuar." });
+  }
   const requestedIndividualNassau = /\bnassau\s+individual\b/i.test(normalized);
   const hasIndividualNassau = parsedActions.some((action) => action.type === "configure_individual_nassau");
   const scopedCounterPressure = parsedActions.some((action) => action.type === "configure_core_bet"
@@ -694,7 +700,7 @@ function parserQuestions(normalized: string, parsedActions: ParsedRoundSetupActi
     && COUNTER_PRESSURE_TERM.test(action.evidence));
   const scopedNassauPressure = parsedActions.some((action) => action.type === "configure_group_nassau"
     && COUNTER_PRESSURE_TERM.test(action.evidence));
-  if (COUNTER_PRESSURE_TERM.test(normalized) && !scopedCounterPressure && !scopedNassauPressure && !/\b(?:individuales?|parejas|equipos|foursome)\b/i.test(normalized)) {
+  if (COUNTER_PRESSURE_TERM.test(withoutStandaloneExclusion) && !scopedCounterPressure && !scopedNassauPressure && !/\b(?:individuales?|parejas|equipos|foursome)\b/i.test(normalized)) {
     questions.push({
       code: "ambiguous_bet",
       field: "bets.pressures",
@@ -902,9 +908,9 @@ export function parseRoundSetupIntent(input: string): RoundSetupInterpretation {
   if (tee) actions.push(tee);
   actions.push(...parsePlayerHandicaps(input));
 
-  if (/\b(?:salimos|salida|empezamos|iniciamos)(?:\s+por|\s+en|\s+desde)?\s+(?:el\s+)?10\b/i.test(normalizedInput)) {
+  if (/\b(?:salimos|salida|empezamos|iniciamos)(?:\s+por|\s+en|\s+desde)?\s+(?:el\s+)?(?:hoyo\s+)?10\b/i.test(normalizedInput)) {
     actions.push({ type: "set_start_hole", startHole: 10, confidence: 0.99, evidence: "salida por el 10" });
-  } else if (/\b(?:salimos|salida|empezamos|iniciamos)(?:\s+por|\s+en|\s+desde)?\s+(?:el\s+)?1\b/i.test(normalizedInput)) {
+  } else if (/\b(?:salimos|salida|empezamos|iniciamos)(?:\s+por|\s+en|\s+desde)?\s+(?:el\s+)?(?:hoyo\s+)?1\b/i.test(normalizedInput)) {
     actions.push({ type: "set_start_hole", startHole: 1, confidence: 0.99, evidence: "salida por el 1" });
   }
 

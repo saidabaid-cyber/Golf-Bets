@@ -15,12 +15,21 @@ export type RoundSetupPlan = {
   interpretation: ReturnType<typeof parseRoundSetupIntent>;
 };
 
+/** Detect saved pressure settings only; never alter wager mathematics here. */
+function hasActivePressures(draft: RoundSetupDraft): boolean {
+  const foursome = draft.bets.foursome;
+  return (foursome.enabled && ((foursome.pressureMultiplier ?? (foursome.pressSecond9 ? 2 : 1)) > 1 || Boolean(foursome.matchPresses?.length)))
+    || [draft.bets.vipers, draft.bets.camels, draft.bets.fish].some((bet) => bet.enabled && (bet.secondNinePressed ?? ((bet.secondNineMultiplier ?? 1) > 1)))
+    || draft.personalBets.some((bet) => bet.enabled !== false && (bet.pressureMultiplier ?? bet.back9Multiplier) > 1)
+    || draft.supplementalBets.some((bet) => bet.enabled && (bet.type === "individual_pressures" || bet.type === "team_pressures"));
+}
+
 /** Full pure pipeline: language -> context -> validated actions -> canonical draft. */
 export function planRoundSetup(input: string, context: RoundSetupMemoryContext): RoundSetupPlan {
   const interpretation = parseRoundSetupIntent(input);
   const resolved = resolveRoundSetupContext(interpretation, context);
   const execution = executeRoundSetupActions(resolved.baseDraft, resolved.actions);
-  const questions = [...resolved.questions];
+  const questions = resolved.questions.filter((question) => question.field !== "bets.pressures.disabled" || hasActivePressures(execution.draft));
   for (const rejection of execution.rejected) {
     questions.push({
       code: "invalid_action",
