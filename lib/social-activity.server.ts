@@ -661,10 +661,12 @@ export async function confirmParticipant(
       throw new SocialServiceError("STALE_REVISION", 409, "La ronda cambió; actualiza antes de confirmar.");
     const enabledBeforeClose = preference && Date.parse(preference.updatedAt) <= Date.parse(snapshot.completedAt || "");
     const captured = captureCompletedRoundIndex(snapshot, ctx.userId, enabledBeforeClose ? preference : null);
-    const saved = await ctx.admin.from("rounds_cloud").update({ snapshot: captured })
-      .eq("id", roundId).eq("version", fresh.data.version).select("id");
+    const saved = await ctx.admin.rpc("append_confirmed_round_index", {
+      p_round_id: roundId, p_account_user_id: ctx.userId, p_expected_version: fresh.data.version,
+      p_record: captured.backyardIndexSnapshots?.find(item => item.accountUserId === ctx.userId),
+    });
     if (saved.error) dbError(saved.error);
-    if (saved.data?.length) break;
+    if (saved.data === true) break;
     if (attempt === 2) throw new SocialServiceError("STALE_REVISION", 409, "La ronda cambió; reintenta la confirmación.");
   }
   await reconcileSocialRoundActivities(ctx.admin, ctx.userId);
