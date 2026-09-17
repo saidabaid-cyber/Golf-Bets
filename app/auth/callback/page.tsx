@@ -22,7 +22,10 @@ export default function AuthCallbackPage() {
       if (!supabase) { window.clearTimeout(timeout); setError("El acceso con cuenta todavía no está configurado."); return; }
       try {
         const params = new URLSearchParams(window.location.search);
-        const providerError = authCallbackError(params);
+        // Supabase may return OAuth failures in the fragment even for PKCE.
+        // Check only error fields, before restoring any previously signed-in user.
+        const providerError = authCallbackError(params)
+          || authCallbackError(new URLSearchParams(window.location.hash.slice(1)));
         if (providerError) throw providerError;
         const code = params.get("code");
         if (code) {

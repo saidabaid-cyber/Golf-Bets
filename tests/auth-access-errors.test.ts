@@ -66,7 +66,7 @@ test("callback parser keeps error_code over generic error, and never treats a su
   assert.equal(authCallbackError(new URLSearchParams("code=one-time-authorization-code")), null);
 });
 
-async function runCallback(search: string, exchangeError?: unknown) {
+async function runCallback(search: string, exchangeError?: unknown, hash = "") {
   const errors: string[] = []; const redirects: string[] = []; const exchanges: string[] = [];
   let effect: (() => void) | undefined; let restores = 0;
   const exports: { default?: () => unknown } = {};
@@ -75,7 +75,7 @@ async function runCallback(search: string, exchangeError?: unknown) {
   }).outputText;
   runInNewContext(source, {
     exports, URLSearchParams,
-    window: { location: { search, replace: (url: string) => redirects.push(url) }, setTimeout: () => 1, clearTimeout: () => {} },
+    window: { location: { search, hash, replace: (url: string) => redirects.push(url) }, setTimeout: () => 1, clearTimeout: () => {} },
     require: (name: string) => {
       if (name === "react") return { useState: () => ["", (value: string) => errors.push(value)], useEffect: (fn: () => void) => { effect = fn; } };
       if (name === "react/jsx-runtime") return { jsx: () => null, jsxs: () => null };
@@ -111,4 +111,28 @@ test("real callback handler still exchanges, validates session and enters app on
   assert.deepEqual(result.exchanges, ["single-use-code"]);
   assert.deepEqual(result.errors, []); assert.equal(result.restores, 1);
   assert.deepEqual(result.redirects, ["/?auth=complete"]);
+});
+
+test("OAuth fragment failure never restores previous account A as successful login for attempted account B", async () => {
+  // The harness has a valid previous session, but a failed provider callback
+  // must not consult it and silently turn account B's failure into success A.
+  const result = await runCallback("", undefined, "#error=server_error&error_code=unexpected_failure&error_description=Unable+to+exchange+external+code");
+  assert.match(result.errors[0], /servicio de acceso.*temporalmente/);
+  assert.deepEqual(result.exchanges, []); assert.equal(result.restores, 0);
+  assert.deepEqual(result.redirects, []);
+});
+
+test("OAuth fragment errors take precedence over authorization code and never consume fragment tokens", async () => {
+  const result = await runCallback("?code=not-a-success", undefined, "#error=access_denied&access_token=private-token&refresh_token=private-refresh");
+  assert.match(result.errors[0], /cancelado o no autorizado/);
+  assert.deepEqual(result.exchanges, []); assert.equal(result.restores, 0);
+  assert.deepEqual(result.redirects, []);
+  assert.doesNotMatch(result.errors[0], /private-token|private-refresh/);
+});
+
+test("query error is preferred consistently when callback also contains an OAuth fragment error", async () => {
+  const result = await runCallback("?error=access_denied", undefined, "#error=server_error&error_code=unexpected_failure");
+  assert.match(result.errors[0], /cancelado o no autorizado/);
+  assert.deepEqual(result.exchanges, []); assert.equal(result.restores, 0);
+  assert.deepEqual(result.redirects, []);
 });
