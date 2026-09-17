@@ -157,7 +157,7 @@ export function HistoricalRoundDetail({ round, priorRounds, accountUserId, acces
       </div>
     </section>
 
-    {recap.financials && <section className="card historicalEconomy" aria-labelledby="historical-economy-title">
+    {round.presentation?.playMode !== "score_only" && recap.financials && <section className="card historicalEconomy" aria-labelledby="historical-economy-title">
       <div className="sectionTitle"><div><h2 id="historical-economy-title">Resultado económico guardado</h2><p>Totales persistidos al cerrar la ronda; no se recalculan.</p></div></div>
       <div className="historicalEconomyGrid">
         {recap.financials.betResult !== undefined && <article><span>Balance de apuestas</span><b className={tone(recap.financials.betResult)}>{money(recap.financials.betResult)}</b></article>}
@@ -190,7 +190,7 @@ export function HistoricalRoundDetail({ round, priorRounds, accountUserId, acces
       <p>Este registro no contiene campo, jugadores y scores suficientes para reconstruir una clasificación confiable.</p>
     </section>}
 
-    {recap.settlement && <section className="card historicalSettlement" aria-labelledby="historical-settlement-title">
+    {round.presentation?.playMode !== "score_only" && recap.settlement && <section className="card historicalSettlement" aria-labelledby="historical-settlement-title">
       <div className="sectionTitle"><div><h2 id="historical-settlement-title">Balance final por jugador</h2><p>Liquidación exacta guardada con la ronda. Los gastos no están incluidos.</p></div></div>
       <div className="historicalBalanceList">{recap.settlement.balances.map((balance) => <div className="historicalBalanceRow" key={balance.identityKey}>
         <span>{settlementName(balance.name, balance.playerId)}</span><b className={tone(balance.amount)}>{money(balance.amount)}</b>
@@ -204,6 +204,7 @@ export function HistoricalRoundDetail({ round, priorRounds, accountUserId, acces
       </div>
     </section>}
 
+    {round.presentation?.playMode !== "score_only" && <>
     {recap.categoryBalances?.length ? <section className="card historicalCategories" aria-labelledby="historical-categories-title">
       <div className="sectionTitle"><div><h2 id="historical-categories-title">Desglose por modalidad</h2><p>Balances por jugador tal como quedaron guardados.</p></div></div>
       <div className="historicalCategoryList">{recap.categoryBalances.map((category) => <article key={category.category}>
@@ -223,6 +224,7 @@ export function HistoricalRoundDetail({ round, priorRounds, accountUserId, acces
       </div>)}</div>
     </section> : null}
 
+    </>}
     {recap.playerStats?.length ? <section className="card historicalStats" aria-labelledby="historical-stats-title">
       <div className="sectionTitle"><div><h2 id="historical-stats-title">Estadísticas de la ronda</h2><p>Derivadas de scores validados; las métricas opcionales aparecen solo cuando fueron capturadas.</p></div></div>
       <div className="historicalStatsGrid">{recap.playerStats.map((player) => <article key={player.playerId}>

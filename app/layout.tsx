@@ -1,6 +1,7 @@
 import "./globals.css";
 import type { Viewport } from "next";
 import { PwaRuntime } from "./components/pwa-runtime";
+import { CaptureSocialProfileLink } from "./components/social-qr";
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -28,5 +29,5 @@ export const metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="es"><body><PwaRuntime />{children}</body></html>;
+  return <html lang="es"><body><PwaRuntime /><CaptureSocialProfileLink />{children}</body></html>;
 }

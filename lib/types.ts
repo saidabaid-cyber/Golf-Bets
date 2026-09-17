@@ -26,6 +26,8 @@ export type RoundLifecycleState = "draft" | "live" | "completed" | "cancelled";
 export type RoundPresentation = {
   version?: 1;
   groupNassauTerm?: "nassau" | "polla";
+  /** Score-only UI; all betting configurations remain disabled. */
+  playMode?: "score_only";
 };
 export type ScoreCaptureMode = "quick" | "advanced";
 
@@ -695,6 +697,8 @@ export type PersonalOpponentResult = {
 
 export type RoundSnapshot = {
   id: string;
+  /** A declared gross total is not a per-hole card or adjusted gross score. */
+  totalScoreCapture?: { version: 1; grossTotal: number; enteredAt: string; holesCompletedAt?: string };
   /** Read-only participant history view, never an owned/importable round.
    * id is namespaced by the canonical DB UUID to avoid cross-owner local-ID collisions. */
   cloudReadOnly?: true;

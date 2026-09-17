@@ -8,6 +8,7 @@ import { mergeAcceptedGroupMembers, saveExplicitGroupSnapshot } from "../lib/gro
 import { collectRoundSetupPreflightIssues } from "../lib/round-setup-preflight";
 import { buildWizardBetCatalog } from "../lib/round-setup-wizard";
 import { RoundSetupWizard, RoundSetupStep, WizardBetCatalog, WizardReviewBlock } from "./components/round-setup-wizard";
+import { TotalScoreEntry, TotalScoreHistory } from "./components/total-score-entry";
 import { MAX_ROUND_PLAYERS, ROUND_PLAYER_LIMIT_MESSAGE } from "../lib/round-player-limit";
 import { isFiniteZeroSum } from "../lib/settlement-integrity";
 import { freezeRoundHandicapBases, missingHandicapsForActiveBets, normalizeRoundHandicapBasis } from "../lib/handicap-base";
@@ -105,7 +106,9 @@ import { PlayHub } from "./components/play-hub";
 import { MoreHub } from "./components/more-hub";
 import type { AiRoundSetupTelemetry } from "./components/backyard-ai/ai-round-setup";
 import { RoundFinalResult } from "./components/backyard-ai/round-final-result";
-import { SocialFeed } from "./components/social-feed";
+import { SocialFeed, type SocialView } from "./components/social-feed";
+import { PENDING_SOCIAL_KEY } from "./components/social-qr";
+import { socialIdFromQr } from "../lib/social-connections";
 import type { SocialProfile } from "../features/social/domain";
 import { StatsDashboard } from "./components/stats-dashboard";
 import { BalanceLedgerPanel } from "./components/balance-ledger-panel";
@@ -402,9 +405,10 @@ function MoneyInput({ label, value, onChange }: { label: string; value: number; 
 
 type NewRoundIntent =
   | { kind: "blank" }
+  | { kind: "scoreOnly" }
   | { kind: "ai" }
   | { kind: "players"; players: Player[] }
-  | { kind: "group"; group: FrequentGroup; selectedMemberIds: string[] };
+  | { kind: "group"; group: FrequentGroup; selectedMemberIds: string[]; scoreOnly?: boolean };
 
 function GolfBetsApp() {
   const { identity, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, setCloudStatus, applyCloudPreferences, reportCloudSyncError, clearCloudSyncError, refreshCloudSession } = useBackyardAccount();
@@ -414,7 +418,14 @@ function GolfBetsApp() {
   const [profileRootRevision, setProfileRootRevision] = useState(0);
   const [openAiPrivacySettings, setOpenAiPrivacySettings] = useState(false);
   const openProfileRoot = () => { setProfileFocus("profile"); setProfileRootRevision((value) => value + 1); setTab("profile"); };
-  const [socialInitialView, setSocialInitialView] = useState<"activity" | "friends" | "notifications">("activity");
+  const [socialInitialView, setSocialInitialView] = useState<SocialView>("activity");
+  const [socialTarget, setSocialTarget] = useState<string | null>(null);
+  useEffect(() => {
+    if (identity.mode !== "authenticated") return;
+    let id = socialIdFromQr(location.href, location.origin);
+    try { id ||= sessionStorage.getItem(PENDING_SOCIAL_KEY); } catch { /* URL remains usable. */ }
+    if (id && /^[0-9a-f-]{36}$/i.test(id)) { setSocialTarget(id); setSocialInitialView("friends"); setTab("social"); }
+  }, [identity.mode, identity.userId, setTab]);
   const ownerClubChoices = useMemo(() => {
     if (typeof window === "undefined" || tab !== "round") return [];
     const loaded = loadEquipmentProfile(localStorage, identity.userId);
@@ -2023,6 +2034,11 @@ function GolfBetsApp() {
       setFeedback("No se guardó la ronda porque la liquidación no suma $0 o contiene un importe inválido. Revisa las apuestas activas.");
       return;
     }
+    if (roundPresentation.playMode === "score_only") {
+      const snapshot = currentSnapshot();
+      if (snapshot) void saveConfirmedRound(snapshot);
+      return;
+    }
     if (preparingReview) {
       if (!persistReviewBeforeLeavingRound(scores, scoreEdits, bets, currentIndex, roundStartedAt, scorecardPhotoIds)) return;
       setFeedback("Ronda terminada. Revisa la liquidación antes de guardarla en Histórico.");
@@ -2084,7 +2100,8 @@ function GolfBetsApp() {
         setFeedback("Ronda guardada ✓");
       }
       recordScorecardResultReached();
-      setTab("results");
+      if (snapshot.presentation?.playMode === "score_only") { setHistoryDetailId(snapshot.id); setTab("historyDetail"); }
+      else setTab("results");
     } catch {
       updateBackyardAiMetrics(localStorage, identity.userId, (current) => recordRoundCompletionMetric(current, false));
       setSaveStatus("error");
@@ -2152,19 +2169,21 @@ function GolfBetsApp() {
     }
     resetRound(nextFeedback);
     if (intent.kind === "blank") return;
+    if (intent.kind === "scoreOnly") { setRoundPresentation({ version: 1, groupNassauTerm: "polla", playMode: "score_only" }); return; }
     if (intent.kind === "ai") { setTab("aiSetup"); return; }
     if (intent.kind === "group") {
-      applyFrequentGroupToDraft(intent.group, intent.selectedMemberIds);
+      if (intent.scoreOnly) setRoundPresentation({ version: 1, groupNassauTerm: "polla", playMode: "score_only" });
+      applyFrequentGroupToDraft(intent.group, intent.selectedMemberIds, intent.scoreOnly === true);
       return;
     }
     const loaded = intent.players.map((player) => ({ ...player, id: player.accountUserId ? accountPrimaryPlayerId(player.accountUserId) : makeId() }));
     setPlayers(loaded); setOwnerId(loaded.find((player) => player.accountUserId === identity.userId)?.id || loaded[0]?.id || ""); setBets(initialBets(loaded.map((player) => player.id)));
   }
 
-  function applyFrequentGroupToDraft(group: FrequentGroup, selectedMemberIds: string[]) {
+  function applyFrequentGroupToDraft(group: FrequentGroup, selectedMemberIds: string[], scoreOnly = false) {
     const loaded = instantiateGroupGameTemplate(group, makeId, selectedMemberIds);
     setPlayers(loaded.players); setOwnerId(loaded.ownerId); setStartHole(loaded.startHole); setRoundHoles(loaded.roundHoles); setRoundHandicapBasis(loaded.roundHandicapBasis);
-    setBets(loaded.bets); setSegments(loaded.segments); setPersonalBets(loaded.personalBets); setSupplementalBets(loaded.supplementalBets); setManualBets(loaded.manualBets);
+    setBets(scoreOnly ? initialBets(loaded.players.map(p => p.id)) : loaded.bets); setSegments(loaded.segments); setPersonalBets(scoreOnly ? [] : loaded.personalBets); setSupplementalBets(scoreOnly ? [] : loaded.supplementalBets); setManualBets(scoreOnly ? [] : loaded.manualBets);
     setRoundTemplateOrigin(loaded.origin);
     setUnitEvents([]); setCounterBetEvents([]); setCounterBetKeepers(emptyCounterBetKeepers()); setLobaHoles({}); setBallFriendSetup({}); setPutts({}); setAdvancedStats({}); setShots([]); setScoreEdits({});
   }
@@ -2672,10 +2691,19 @@ function GolfBetsApp() {
     setGroupRoundSelection(withStableGroupMemberIds(group));
   }
 
+  async function saveTotalHistory(snapshot: RoundSnapshot) {
+    if (snapshot.players?.[0]?.accountUserId !== identity.userId || snapshot.cloudReadOnly) throw new Error("Esta ronda no pertenece a tu cuenta.");
+    const saved = await saveRoundHistoryLocalFirst({ storage: localStorage, ownerId: identity.userId, snapshot: captureCompletedRoundIndex(snapshot, identity.userId, indexControl.preference, history.find(r => r.id === snapshot.id)), deviceId: offlineDeviceId.current, defaultHandicap: identity.defaultHandicap, hasLocalPreferenceState: hadLocalPreferences.current, queueForCloud: identity.mode === "authenticated" && cloudLinked, preserveActiveDraft: true });
+    setHistory(saved.history.map(normalizeHistorySnapshot));
+    requestCloudSync.current?.(); setHistoryDetailId(snapshot.id); setTab("historyDetail");
+    setFeedback("Ronda guardada en el mismo Histórico. Sincronización cloud según conexión.");
+  }
+
   function confirmFrequentGroupRoundSelection(group: FrequentGroup, selectedMemberIds: string[]) {
     setGroupRoundSelection(null);
-    requestNewRoundIntent({ kind: "group", group, selectedMemberIds });
-    setFeedback(`${group.name}: ${selectedMemberIds.length}/5 jugadores listos. Las apuestas se cargarán sólo para esta ronda hasta que elijas actualizar la plantilla.`);
+    const scoreOnly = tab === "setup" && roundPresentation.playMode === "score_only";
+    requestNewRoundIntent({ kind: "group", group, selectedMemberIds, scoreOnly });
+    setFeedback(`${group.name}: ${selectedMemberIds.length}/5 jugadores listos. ${scoreOnly ? "Ronda sin apuestas; la plantilla del grupo no cambia." : "Las apuestas se cargarán sólo para esta ronda hasta que elijas actualizar la plantilla."}`);
   }
 
   function saveRoundAsFrequentGroupTemplate() {
@@ -3478,7 +3506,7 @@ function GolfBetsApp() {
       groupCount={frequentGroups.length}
       onContinueRound={continueActiveRound}
       onAiRound={requestAiRound}
-      onNewRound={requestNewRound}
+      onNewRound={() => setTab("play")}
       onOpenProfile={() => { setProfileFocus("profile"); setTab("profile"); }}
       onOpenNotifications={() => { setSocialInitialView("notifications"); setTab("social"); }}
       onOpenHistory={() => setTab("history")}
@@ -3499,6 +3527,8 @@ function GolfBetsApp() {
       onOpenGps={() => activeRoundSummary ? continueActiveRound() : setTab("courseLibrary")}
       onOpenRules={openRulesForRound}
       onOpenHelp={openRulesForRound}
+      onOpenSocial={view => { setSocialInitialView(view); setTab("social"); }}
+      onOpenPrivacy={() => setTab("account")}
     />}
 
     {tab === "play" && <PlayHub
@@ -3507,6 +3537,8 @@ function GolfBetsApp() {
       onEditRound={activeRoundSummary ? editActiveRound : undefined}
       onAiRound={requestAiRound}
       onNewRound={requestNewRound}
+      onScoreOnly={() => requestNewRoundIntent({ kind: "scoreOnly" })}
+      onTotalScore={() => setTab("totalScore")}
       onOpenHistory={() => setTab("history")}
       onOpenBalances={() => setTab("balances")}
       onOpenPersonalHistory={() => setTab("personals")}
@@ -3517,6 +3549,8 @@ function GolfBetsApp() {
       onOpenStandings={() => setTab("standings")}
       onOpenResults={() => setTab("results")}
     />}
+
+    {tab === "totalScore" && (() => { const principal = accountPrimaryRoundPlayer(identity, accountIndex); return principal ? <TotalScoreEntry key={identity.userId} courses={courseOptions} player={principal} onSave={saveTotalHistory} onBack={() => setTab("play")} /> : <section className="card"><p>Inicia sesión para guardar tu tarjeta.</p><button type="button" onClick={() => setTab("play")}>Volver a Jugar</button></section>; })()}
 
     {tab === "aiSetup" && <AiRoundSetup
       initialDraft={createRoundSetupDraft({
@@ -3577,7 +3611,7 @@ function GolfBetsApp() {
       onOpenPrivacy={() => { setScorecardScanStartedAt(null); setOpenAiPrivacySettings(true); setTab("account"); }}
     />}
 
-    {tab === "social" && <SocialFeed initialView={socialInitialView} activity={personalActivity} identityUserId={identity.userId || "guest"} accessToken={identity.accessToken || undefined} knownProfiles={EMPTY_SOCIAL_DIRECTORY} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} onOpenRound={openHistoricalRound} onOpenGroup={() => setTab("groups")} onCreateRound={requestNewRound} onOpenGroups={() => setTab("groups")} />}
+    {tab === "social" && <SocialFeed key={`${identity.userId}:${socialInitialView}`} initialView={socialInitialView} targetId={socialTarget} onCloseTarget={() => { setSocialTarget(null); try { sessionStorage.removeItem(PENDING_SOCIAL_KEY); } catch {} const url = new URL(location.href); url.searchParams.delete("friend"); window.history.replaceState(window.history.state, "", url); }} onPrivacy={() => setTab("account")} activity={personalActivity} identityUserId={identity.userId || "guest"} accessToken={identity.accessToken || undefined} knownProfiles={EMPTY_SOCIAL_DIRECTORY} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} onOpenRound={openHistoricalRound} onOpenGroup={() => setTab("groups")} onCreateRound={requestNewRound} onOpenGroups={() => setTab("groups")} />}
     {tab === "balances" && <BalanceLedgerPanel history={history} currentUserId={identity.mode === "authenticated" ? identity.userId : undefined} />}
     {tab === "stats" && (statisticsReady ? <StatsDashboard insights={betaGolfInsights} rounds={statisticsHistory} consentOwnerId={identity.userId || undefined} accessToken={identity.accessToken} requiresRemoteConsent={identity.mode === "authenticated"} onOpenHistory={() => setTab("history")} onOpenRound={openHistoricalRound} /> : <section className="card" role="status"><h1>Estadísticas</h1><p>{statisticsAuthority.state === "unavailable" ? statisticsAuthority.error : "Verificando tus estadísticas…"}</p><p>Tu histórico permanece intacto. No mostramos métricas anteriores hasta verificar la fecha de reinicio.</p><button type="button" className="secondary" onClick={() => setStatisticsRetry((value) => value + 1)}>Reintentar</button><button type="button" className="textButton" onClick={() => setTab("history")}>Ver Histórico</button></section>)}
     {tab === "courseLibrary" && <CourseLibrary courses={courses} favoriteCourseIds={favoriteCourseIds} recentCourseIds={recentCourseIds} selectedCourseId={courseSelected ? course.id : null} onToggleFavorite={(courseId) => setFavoriteCourseIds((current) => toggleFavoriteCourse(current, courseId))} onSelectCourse={(nextCourse) => selectRoundCourse(nextCourse, true)} onCreateCourse={startNewCourse} onEditCourse={editCourseFromLibrary} />}
@@ -3590,13 +3624,13 @@ function GolfBetsApp() {
     {pendingCloudConflict && (() => { const conflict = pendingCloudConflict.conflicts[0]; if (!conflict) return null; const display = describeCloudConflict(conflict, playerName); return <div className="modalBackdrop"><section className="confirmDialog" role="alertdialog" aria-modal="true" aria-labelledby="cloud-conflict-title"><ModalCloseButton onClose={() => setPendingCloudConflict(null)} /><h2 id="cloud-conflict-title">Cambio en dos dispositivos</h2><p>Elige únicamente el dato en conflicto. Los demás cambios compatibles ya se combinaron.</p><div className="cloudConflictField"><b>{display.label}</b><span>Nube: {display.cloudValue}</span><span>Este dispositivo: {display.localValue}</span></div>{pendingCloudConflict.conflicts.length > 1 && <small>Quedan {pendingCloudConflict.conflicts.length} conflictos por revisar.</small>}<div className="dialogActions"><button className="secondary" onClick={() => resolveCloudConflict("cloud")}>Usar nube para este dato</button><button className="primary" onClick={() => resolveCloudConflict("local")}>Usar este dispositivo</button></div></section></div>; })()}
     {holeValidationErrors.length > 0 && <div className="modalBackdrop" role="presentation"><section className="confirmDialog holeValidationDialog" role="alertdialog" aria-modal="true" aria-labelledby="hole-validation-title" aria-describedby="hole-validation-description"><ModalCloseButton onClose={() => setHoleValidationErrors([])} /><h2 id="hole-validation-title">Falta completar este hoyo</h2><p id="hole-validation-description">Revisa todos estos puntos antes de guardar y avanzar:</p><ul>{holeValidationErrors.map(error => <li key={error}>{error}</li>)}</ul><div className="dialogActions"><button autoFocus className="primary" onClick={() => setHoleValidationErrors([])}>Volver y completar</button></div></section></div>}
     {tab === "personalDetail" && renderPersonalLive("Detalle Personal")}
-    {tab === "historyDetail" && (() => { const saved = history.find(round => round.id === historyDetailId); return saved ? <HistoricalRoundDetail round={saved} priorRounds={history} accountUserId={identity.userId} accessToken={identity.accessToken || undefined} onEdit={() => editHistoricalRound(saved)} onPhoto={() => viewScorecardPhoto(saved)} /> : <div className="empty">La ronda ya no está disponible.</div>; })()}
+    {tab === "historyDetail" && (() => { const saved = history.find(round => round.id === historyDetailId); return saved?.totalScoreCapture ? <TotalScoreHistory key={saved.id} round={saved} onSave={saveTotalHistory} onBack={() => setTab("history")} /> : saved ? <HistoricalRoundDetail round={saved} priorRounds={history} accountUserId={identity.userId} accessToken={identity.accessToken || undefined} onEdit={() => editHistoricalRound(saved)} onPhoto={() => viewScorecardPhoto(saved)} /> : <div className="empty">La ronda ya no está disponible.</div>; })()}
     {tab === "groups" && <GroupBuilder frequentPlayers={frequentPlayers} frequentGroups={frequentGroups} onBack={() => setTab("welcome")} onPlay={startRoundWithGeneratedGroup} onSaveFrequentGroup={saveGeneratedFrequentGroup} onCreateFrequentGroup={beginCreateFrequentGroup} onStartFrequentGroup={loadFrequentGroup} onEditFrequentGroup={beginEditFrequentGroup} onDeleteFrequentGroup={setFrequentGroupToDelete} />}
 
     {tab === "profile" && <ProfileAccountPanel key={identity.userId} view="profile" indexControl={indexControl} rootNavigationKey={profileRootRevision} history={history} focusSection={profileFocus} highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} golfInsights={betaGolfInsights} statisticsResetAt={statisticsResetAt} onStatisticsReset={applyStatisticsReset} onOpenStats={() => setTab("stats")} onOpenAccount={() => setTab("account")} onOpenPrivacy={() => { setOpenAiPrivacySettings(true); setTab("account"); }} onOpenEquipment={() => setProfileFocus("equipment")} onBackToProfile={openProfileRoot} />}
     {tab === "account" && <ProfileAccountPanel key={identity.userId} view="account" openAiPrivacySettings={openAiPrivacySettings} onAiPrivacyOpened={() => setOpenAiPrivacySettings(false)} indexControl={indexControl} rootNavigationKey={profileRootRevision} highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} golfInsights={betaGolfInsights} statisticsResetAt={statisticsResetAt} onStatisticsReset={applyStatisticsReset} onOpenStats={() => setTab("stats")} onOpenEquipment={() => { setProfileFocus("equipment"); setTab("profile"); }} onBackToProfile={openProfileRoot} />}
 
-    {tab === "setup" && <RoundSetupWizard key={`${identity.userId}:${roundId}`} storageKey={`backyard-setup-step-v1:${identity.userId}:${roundId}`} issues={roundSetupPreflight} editing={editingRound}
+    {tab === "setup" && <RoundSetupWizard key={`${identity.userId}:${roundId}`} storageKey={`backyard-setup-step-v1:${identity.userId}:${roundId}`} issues={roundSetupPreflight} editing={editingRound} scoreOnly={roundPresentation.playMode === "score_only"}
       onSave={() => flushLocalState.current?.()}
       onExit={() => { setEditingRound(false); setFeedback("Tu configuración quedó guardada como borrador."); setTab("welcome"); }}
       onStart={async () => {
@@ -3854,8 +3888,8 @@ function GolfBetsApp() {
       <RoundSetupStep step={5}>
         <WizardReviewBlock step={1} title="Campo"><p><b>{courseSelected ? course.name : "Falta seleccionar campo"}</b></p><p>{roundHoles} hoyos · salida H{startHole} · {roundDate}</p>{courseSelected && <p>{course.teeName}</p>}</WizardReviewBlock>
         <WizardReviewBlock step={2} title={`${players.length} jugadores`}><ul>{players.map(player => <li key={player.id}>{player.name || "Sin nombre"}<small>{player.handicapIndex !== undefined ? `Index ${player.handicapIndex} · ` : ""}HCP {player.handicap ?? "—"}{player.id === ownerId ? " · Principal" : ""}</small></li>)}</ul><p className="hint">{roundHandicapBasis === "course" ? "Ventajas sobre el campo" : "Ventajas entre jugadores"}</p></WizardReviewBlock>
-        <WizardReviewBlock step={3} title="Apuestas grupales">{wizardBets.group.some(entry => entry.enabled) ? <ul>{wizardBets.group.filter(entry => entry.enabled).map(entry => <li key={entry.id}><b>{entry.label}</b><small>{entry.summary}</small></li>)}</ul> : <p>Sin apuestas grupales</p>}</WizardReviewBlock>
-        <WizardReviewBlock step={4} title="Personales y manuales">{wizardBets.personal.some(entry => entry.enabled) ? <ul>{wizardBets.personal.filter(entry => entry.enabled).map(entry => <li key={entry.id}><b>{entry.label}</b><small>{entry.summary}</small></li>)}</ul> : <p>Sin apuestas personales ni manuales</p>}</WizardReviewBlock>
+        {roundPresentation.playMode !== "score_only" && <><WizardReviewBlock step={3} title="Apuestas grupales">{wizardBets.group.some(entry => entry.enabled) ? <ul>{wizardBets.group.filter(entry => entry.enabled).map(entry => <li key={entry.id}><b>{entry.label}</b><small>{entry.summary}</small></li>)}</ul> : <p>Sin apuestas grupales</p>}</WizardReviewBlock>
+        <WizardReviewBlock step={4} title="Personales y manuales">{wizardBets.personal.some(entry => entry.enabled) ? <ul>{wizardBets.personal.filter(entry => entry.enabled).map(entry => <li key={entry.id}><b>{entry.label}</b><small>{entry.summary}</small></li>)}</ul> : <p>Sin apuestas personales ni manuales</p>}</WizardReviewBlock></>}
         <section className="card"><details><summary>Guardar configuración</summary><p className="hint">Guarda jugadores y apuestas como grupo frecuente. No incluye scores, resultados ni balances.</p><div className="inlineForm"><input aria-label="Nombre de la configuración" placeholder="Ej. Polla miércoles" value={groupName} onChange={event => setGroupName(event.target.value)} /><button type="button" className="secondary" disabled={!groupName.trim() || !players.length || roundSetupPreflight.length > 0} onClick={saveFrequentGroup}>Guardar configuración</button></div></details></section>
       </RoundSetupStep>
     </RoundSetupWizard>}
@@ -3925,7 +3959,7 @@ function GolfBetsApp() {
         onToggleFullCard={() => setShowFullScorecard((visible) => !visible)}
         fullCardVisible={showFullScorecard}
         fullCardContent={<FullScorecard course={course} players={players} scores={scores} order={order} scale={scorecardScale} onScale={setScorecardScale} />}
-        onOpenStandings={() => setTab("standings")}
+        onOpenStandings={() => roundPresentation.playMode === "score_only" ? setShowFullScorecard(true) : setTab("standings")}
         onUndo={undoLastAction}
         undoDisabled={undoCount === 0}
         onSaveAndAdvance={requestSaveAndAdvance}
@@ -4127,6 +4161,7 @@ function GolfBetsApp() {
           const financials = recap.financials;
           const holeLabel = recap.meta.holeCount ? `${recap.meta.holeCount} hoyos` : "hoyos no registrados";
           const sharedReadOnly = r.cloudReadOnly || r.id.startsWith("shared:");
+          if (r.presentation?.playMode === "score_only") return <div className="historyRound" key={r.id}><div className="historyRow"><div><b>{recap.meta.courseName || "Campo no disponible"}</b><span>{recap.meta.date} · {holeLabel} · {r.totalScoreCapture && !r.totalScoreCapture.holesCompletedAt ? "Sólo total capturado" : "Scores por hoyo"} · Sin apuestas</span></div>{r.totalScoreCapture && <strong>{r.totalScoreCapture.grossTotal} golpes</strong>}</div><div className="historyActions"><button onClick={() => { setHistoryDetailId(r.id); setTab("historyDetail"); }}>Abrir ronda</button>{!sharedReadOnly && <button className="dangerGhost" onClick={() => setHistoricalRoundToDelete(r)}>Eliminar ronda</button>}</div></div>;
           return <div className="historyRound" key={r.id}><div className="historyRow"><div><b>{recap.meta.courseName || "Campo no disponible"}</b><span>{recap.meta.date || "Fecha no disponible"} · {holeLabel} · apuestas {financials?.betResult === undefined ? "—" : money(financials.betResult)} · gastos {financials?.expenseTotal === undefined ? "—" : money(financials.expenseTotal)}</span></div><strong className={financials?.netResult === undefined ? "" : financials.netResult >= 0 ? "good" : "bad"}>{financials?.netResult === undefined ? "—" : money(financials.netResult)}</strong></div><div className="historyActions"><button onClick={() => { setHistoryDetailId(r.id); setTab("historyDetail"); }}>Abrir ronda</button><button onClick={() => downloadRoundCsv(r)}>CSV</button><button onClick={() => downloadRoundPdf(r)}>PDF</button><button onClick={() => downloadRoundImage(r)}>Imagen</button><button onClick={() => shareRound(r)}>Compartir</button>{!sharedReadOnly && <label className="uploadButton">{r.photoId ? "Cambiar foto" : "Agregar foto de tarjeta"}<input type="file" accept="image/*" capture="environment" onChange={(event) => attachScorecardPhoto(r, event.target.files?.[0])} /></label>}{r.photoId && <button onClick={() => viewScorecardPhoto(r)}>Ver tarjeta original</button>}{!sharedReadOnly && <button className="dangerGhost" onClick={() => setHistoricalRoundToDelete(r)}>Eliminar ronda</button>}</div></div>;
         })}
       </section>

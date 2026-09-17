@@ -21,6 +21,7 @@ export type SaveRoundHistoryOptions = {
   hasLocalPreferenceState: boolean;
   queueForCloud: boolean;
   persistOffline?: PersistOffline;
+  preserveActiveDraft?: boolean;
 };
 
 export type SaveRoundHistoryResult = {
@@ -46,6 +47,7 @@ export async function saveRoundHistoryLocalFirst({
   hasLocalPreferenceState,
   queueForCloud,
   persistOffline = persistOfflineBundle,
+  preserveActiveDraft = false,
 }: SaveRoundHistoryOptions): Promise<SaveRoundHistoryResult> {
   const stored = readStoredJson<unknown>(storage, STORAGE_KEYS.history, []);
   const latestHistory = Array.isArray(stored) ? stored as RoundSnapshot[] : [];
@@ -73,8 +75,10 @@ export async function saveRoundHistoryLocalFirst({
   const bundle = collectLocalCloudData(storage, defaultHandicap, hasLocalPreferenceState);
   bundle.deviceId = deviceId;
   bundle.history = verifiedHistory;
-  bundle.activeDraft = null;
-  bundle.activeDraftUpdatedAt = snapshot.updatedAt || snapshot.completedAt || new Date().toISOString();
+  if (!preserveActiveDraft) {
+    bundle.activeDraft = null;
+    bundle.activeDraftUpdatedAt = snapshot.updatedAt || snapshot.completedAt || new Date().toISOString();
+  }
   let fingerprint: string | null = null;
   let offlinePersisted = false;
   try {

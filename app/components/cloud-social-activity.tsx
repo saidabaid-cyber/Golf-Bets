@@ -90,8 +90,8 @@ export function SocialRoundActivityCard({ card, viewerId, accessToken, onRefresh
     await onRefresh();
   }
   return <article className={styles.card} aria-label={`${card.type === "EQUIPMENT_UPDATED" ? "Equipo" : "Ronda"} de ${card.author.displayName}`}>
-    <header className={styles.author}><ProfileAvatarMedia className={styles.avatar} value={card.author.avatarUrl} fallback={card.author.displayName[0] || "G"} /><div><b>{card.author.displayName}</b><small>{dateLabel(card.round?.date || card.createdAt)} · {card.audience === "OWNER" ? "Privado" : "Amigos"}</small></div></header>
-    {card.round ? <><h3>{card.round.courseName}</h3><p className={styles.score}>{card.round.ownerScore ?? "—"}<span>golpes · {card.round.holesPlayed} hoyos</span></p></> : <h3>{card.type === "EQUIPMENT_UPDATED" ? "Actualizó su bolsa." : "Logros de ronda"}</h3>}
+    <header className={styles.author}><ProfileAvatarMedia className={styles.avatar} value={card.author.avatarUrl} fallback={card.author.displayName[0] || "G"} /><div><b>{card.author.displayName}</b>{card.author.username && <small>@{card.author.username}</small>}<small>{dateLabel(card.round?.date || card.createdAt)} · {card.audience === "OWNER" ? "Privado" : "Amigos"}</small></div></header>
+    {card.round ? <><h3>{card.round.courseName}</h3><p className={styles.score}>{card.round.ownerScore ?? "—"}<span>golpes · {card.round.holesPlayed} hoyos{card.round.totalOnly ? " · Sólo total" : ""}</span></p></> : <h3>{card.type === "EQUIPMENT_UPDATED" ? "Actualizó su bolsa." : "Logros de ronda"}</h3>}
     {card.achievements.length > 0 && <ul className={styles.achievements}>{card.achievements.map((item) => <li key={item}>{item}</li>)}</ul>}
     {card.round && <p className={styles.attest}>{card.attestCount ? `Atestada por ${card.attestCount} ${card.attestCount === 1 ? "jugador" : "jugadores"}` : "Sin atestar"}<small>Confirmación de compañeros. No es certificación GHIN/WHS.</small></p>}
     <div className={styles.actions}>
@@ -112,9 +112,9 @@ export function SocialRoundActivityCard({ card, viewerId, accessToken, onRefresh
   </article>;
 }
 
-const notificationLabels: Record<SocialNotification["type"], string> = { like: "Recibiste un like", comment: "Nuevo comentario", attest: "Un compañero atestó tu tarjeta", friend_achievement: "Un amigo consiguió un logro", equipment: "Un amigo actualizó su bolsa" };
+const notificationLabels: Record<SocialNotification["type"], string> = { like: "Recibiste un like", comment: "Nuevo comentario", attest: "Un compañero atestó tu tarjeta", friend_achievement: "Un amigo consiguió un logro", equipment: "Un amigo actualizó su bolsa", friend_request: "Nueva solicitud de amistad" };
 
-export function CloudSocialNotifications({ viewerId, accessToken }: { viewerId: string; accessToken?: string }) {
+export function CloudSocialNotifications({ viewerId, accessToken, onFriends, onReadChange }: { viewerId: string; accessToken?: string; onFriends?: () => void; onReadChange?: () => void }) {
   const [items, setItems] = useState<SocialNotification[]>([]);
   const [message, setMessage] = useState("");
   const [selected, setSelected] = useState<SocialActivityCard | null>(null);
@@ -132,11 +132,16 @@ export function CloudSocialNotifications({ viewerId, accessToken }: { viewerId: 
     {!message && !items.length && <p>No hay notificaciones sociales nuevas.</p>}
     {items.map((item) => <button type="button" className={styles.notification} disabled={busy} key={item.id} onClick={() => {
       if (busy) return; setBusy(true);
-      void socialRequest<{ data: SocialActivityCard }>(`/api/social/activity/${encodeURIComponent(item.activityId)}`, accessToken)
-        .then((result) => { if (live.current) setSelected(result.data); })
+      void (async () => {
+        const read = await socialRequest<SocialNotificationPage>("/api/social/notifications", accessToken, { method: "PATCH", body: { id: item.id, read: true } });
+        if (live.current) { setItems(read.data); onReadChange?.(); }
+        if (item.type === "friend_request") { onFriends?.(); return; }
+        const result = await socialRequest<{ data: SocialActivityCard }>(`/api/social/activity/${encodeURIComponent(item.activityId)}`, accessToken);
+        if (live.current) setSelected(result.data);
+      })()
         .catch((error) => { if (live.current) setMessage(socialErrorMessage(error)); })
         .finally(() => { if (live.current) setBusy(false); });
-    }}><b>{notificationLabels[item.type]}</b><small>{dateLabel(item.createdAt)}</small></button>)}
+    }}><b>{!item.readAt && "● "}{notificationLabels[item.type]}</b><small>{dateLabel(item.createdAt)} · {item.readAt ? "Leída" : "Sin leer"}</small></button>)}
     {selected && <><button type="button" className="secondary" onClick={() => setSelected(null)}>Cerrar tarjeta</button><SocialRoundActivityCard key={selected.id} card={selected} viewerId={viewerId} accessToken={accessToken} onRefresh={async () => {
       const result = await socialRequest<{ data: SocialActivityCard }>(`/api/social/activity/${encodeURIComponent(selected.id)}`, accessToken);
       if (live.current) setSelected(result.data); await refresh();
@@ -145,7 +150,7 @@ export function CloudSocialNotifications({ viewerId, accessToken }: { viewerId: 
 }
 
 /** Key this component by authenticated identity; never carry another account's feed across login. */
-export function CloudSocialActivity({ viewerId, accessToken, localRoundId }: { viewerId: string; accessToken?: string; localRoundId?: string }) {
+export function CloudSocialActivity({ viewerId, accessToken, localRoundId, friendsOnly = false }: { viewerId: string; accessToken?: string; localRoundId?: string; friendsOnly?: boolean }) {
   const [cards, setCards] = useState<SocialActivityCard[]>([]);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -153,7 +158,7 @@ export function CloudSocialActivity({ viewerId, accessToken, localRoundId }: { v
   const [loadingMore, setLoadingMore] = useState(false);
   const paging = useRef(false);
   const live = useRef(true);
-  const path = `/api/social/activity${localRoundId ? `?localRoundId=${encodeURIComponent(localRoundId)}` : ""}`;
+  const path = `/api/social/activity${localRoundId ? `?localRoundId=${encodeURIComponent(localRoundId)}` : friendsOnly ? "?friendsOnly=true" : ""}`;
   const refresh = useCallback(async (signal?: AbortSignal) => {
     if (!accessToken) return;
     const result = await socialRequest<SocialActivityPage>(path, accessToken, { signal });
@@ -179,7 +184,7 @@ export function CloudSocialActivity({ viewerId, accessToken, localRoundId }: { v
   }, [accessToken, refresh]);
   if (!accessToken) return <section className={styles.empty}><h2>Rondas y amigos</h2><p>Inicia sesión para compartir, comentar o confirmar tarjetas. Tu actividad local sigue siendo privada.</p></section>;
   return <section className={styles.feed} aria-label="Actividad social guardada">
-    {!localRoundId && <SocialSharingPreferences key={viewerId} accessToken={accessToken} />}
+    {!localRoundId && <button type="button" className="secondary" disabled={loading || loadingMore} onClick={() => { setLoading(true); void refresh().catch(error => setMessage(socialErrorMessage(error))).finally(() => setLoading(false)); }}>Actualizar feed</button>}
     {loading && <p role="status">Cargando actividad…</p>}
     {message && <div className={styles.notice} role="status"><p>{message}</p><button type="button" onClick={() => void refresh().catch((error) => setMessage(socialErrorMessage(error)))}>Reintentar</button></div>}
     {!loading && !message && !cards.length && <div className={styles.empty}><h2>{localRoundId ? "Tarjeta social pendiente" : "Aún no hay actividad compartida"}</h2><p>{localRoundId ? "Estará disponible cuando la ronda termine y su sincronización cloud se confirme." : "Tus preferencias controlan qué compartes. No publicamos rondas en tiempo real."}</p></div>}

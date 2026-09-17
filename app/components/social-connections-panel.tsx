@@ -1,98 +1,25 @@
 "use client";
-
-import { useEffect, useMemo, useState } from "react";
-import {
-  emptySocialGraph,
-  normalizeUsernameSearch,
-  removeFriend,
-  type SocialGraph,
-  type SocialProfile,
-} from "../../features/social/domain";
-import { createLocalSocialRepository } from "../../features/social/local-repository";
-import { AnchoredSearch, AnchoredSearchOption } from "./anchored-search";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { SocialProfile } from "../../features/social/domain";
+import { connectionState, type ConnectionPage, type SocialPerson } from "../../lib/social-connections";
+import { socialRequest, socialErrorMessage } from "../../lib/social-activity-client";
 import { ProfileAvatarMedia } from "./profile-avatar-media";
-
-export function SocialConnectionsPanel({ ownerId, accessToken, directory }: {
-  ownerId: string;
-  accessToken?: string;
-  directory: SocialProfile[];
-}) {
-  const repository = useMemo(() => typeof window === "undefined" ? null : createLocalSocialRepository(window.localStorage, directory), [directory]);
-  const [graph, setGraph] = useState<SocialGraph>(() => emptySocialGraph(ownerId));
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<SocialProfile[]>([]);
-  const [status, setStatus] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    void repository?.loadGraph(ownerId).then((loaded) => { if (!cancelled) setGraph(loaded); });
-    return () => { cancelled = true; };
-  }, [ownerId, repository]);
-
-  async function persist(next: SocialGraph) {
-    setGraph(next);
-    try { await repository?.saveGraph(next); }
-    catch { setStatus("El cambio se ve aquí, pero el navegador no permitió guardarlo."); }
-  }
-
-  async function search(searchValue = query, signal?: AbortSignal) {
-    const normalized = normalizeUsernameSearch(searchValue);
-    if (normalized.length < 2) { setResults([]); setStatus(""); return; }
-    setLoading(true); setStatus("");
-    try {
-      if (accessToken) {
-        const response = await fetch(`/api/social/search?username=${encodeURIComponent(normalized)}`, { headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store", signal });
-        const body = await response.json().catch(() => null) as { data?: Array<Record<string, unknown>>; error?: string } | null;
-        if (response.ok && Array.isArray(body?.data)) {
-          setResults(body.data.map((row) => ({
-            userId: String(row.user_id || ""), username: String(row.username || ""), displayName: String(row.display_name || "Golfista"),
-            avatar: typeof row.avatar_url === "string" ? row.avatar_url : null,
-            handicap: typeof row.handicap === "number" ? row.handicap : null,
-            clubName: typeof row.club_name === "string" ? row.club_name : null,
-            privacy: (row.privacy === "PUBLIC" ? "PUBLIC" : row.privacy === "FRIENDS" ? "FRIENDS" : "PRIVATE") as SocialProfile["privacy"],
-          })).filter((profile) => profile.userId && profile.username));
-          setLoading(false); return;
-        }
-        setStatus(body?.error || "La búsqueda cloud no está disponible. No se mostrarán perfiles sin username y privacidad verificados.");
-      }
-      const local = await repository?.searchProfiles(normalized, ownerId, 20) ?? [];
-      setResults(local);
-    } catch (error) {
-      if (!(error instanceof DOMException && error.name === "AbortError")) setStatus("No pudimos completar la búsqueda. Intenta de nuevo.");
-    } finally { if (!signal?.aborted) setLoading(false); }
-  }
-
-  useEffect(() => {
-    const normalized = normalizeUsernameSearch(query);
-    if (normalized.length < 2) return;
-    const controller = new AbortController();
-    const timer = window.setTimeout(() => { void search(query, controller.signal); }, 250);
-    return () => { window.clearTimeout(timer); controller.abort(); };
-    // Search dependencies intentionally describe the directory/provider boundary.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accessToken, ownerId, query, repository]);
-
-  function request(profile: SocialProfile) {
-    setStatus(`No se envió una solicitud a @${profile.username}. Invitar amigos requiere el servicio Social seguro en Preview.`);
-  }
-
-  const friendIds = new Set(graph.friendships.flatMap((friendship) => friendship.userIds).filter((id) => id !== ownerId));
-  const friends = directory.filter((profile) => friendIds.has(profile.userId));
-  const pending = graph.requests.filter((request) => request.state === "PENDING" && request.requesterId === ownerId);
-
-  return <section className="socialConnections" aria-label="Amigos de Backyard">
-    <section className="card socialSearchCard"><div className="sectionTitle"><div><h2>Buscar amigos</h2><p>Busca por username. El correo nunca es público.</p></div></div>
-      <AnchoredSearch label="Username" value={query} onChange={(value) => { setQuery(value); if (normalizeUsernameSearch(value).length < 2) { setResults([]); setLoading(false); } }} placeholder="@usuario" expanded={results.length > 0} status={loading ? "Buscando…" : query.trim().length > 0 && normalizeUsernameSearch(query).length < 2 ? "Escribe al menos dos caracteres." : undefined}>
-        {results.map((profile) => <AnchoredSearchOption key={profile.userId} label={`Consultar disponibilidad de invitación para @${profile.username}`} onSelect={() => request(profile)}><span className="socialSearchOption"><span className="socialProfileAvatar"><ProfileAvatarMedia value={profile.avatar} fallback={profile.displayName[0] || "G"} /></span><span><b>{profile.displayName}</b><small>@{profile.username}{profile.clubName ? ` · ${profile.clubName}` : ""}</small></span><strong>Próximamente</strong></span></AnchoredSearchOption>)}
-      </AnchoredSearch>
-      {status && <p className="hint" role="status">{status}</p>}
-    </section>
-
-    <section className="card"><div className="sectionTitle"><div><h2>Amigos</h2><p>{friends.length ? "Jugadores conectados." : "Todavía no tienes amistades confirmadas."}</p></div><b>{friends.length}</b></div>
-      {friends.length > 0 && <ul className="socialProfileResults">{friends.map((profile) => <li key={profile.userId}><span className="socialProfileAvatar"><ProfileAvatarMedia value={profile.avatar} fallback={profile.displayName[0] || "G"} /></span><span><b>{profile.displayName}</b><small>@{profile.username}</small></span><button type="button" className="dangerGhost" onClick={() => void persist(removeFriend(graph, ownerId, profile.userId))}>Eliminar</button></li>)}</ul>}
-    </section>
-
-    {pending.length > 0 && <section className="card"><h2>Solicitudes enviadas</h2><ul className="socialPendingList">{pending.map((request) => <li key={request.id}><span>{directory.find((profile) => profile.userId === request.addresseeId)?.username || "Usuario"}</span><b>Pendiente</b></li>)}</ul></section>}
-  </section>;
+import { AnchoredSearch, AnchoredSearchOption } from "./anchored-search";
+const EMPTY:ConnectionPage={people:[],requests:[],friends:[],blocked:[]};
+export function SocialConnectionsPanel({ownerId,accessToken,targetId,onCloseTarget,onChanged}: {ownerId:string;accessToken?:string;directory?:SocialProfile[];targetId?:string|null;onCloseTarget?:()=>void;onChanged?:()=>void}) {
+ const [data,setData]=useState<ConnectionPage>(EMPTY),[query,setQuery]=useState(""),[results,setResults]=useState<SocialPerson[]>([]),[selected,setSelected]=useState<SocialPerson|null>(null),[message,setMessage]=useState(""),[busy,setBusy]=useState(false);
+ const lock=useRef(false);
+ const refresh=useCallback(async()=>{if(accessToken)setData(await socialRequest<ConnectionPage>("/api/social/connections",accessToken));},[accessToken]);
+ useEffect(()=>{const controller=new AbortController(); if(accessToken) void socialRequest<ConnectionPage>("/api/social/connections",accessToken,{signal:controller.signal}).then(setData).catch(e=>{if(!controller.signal.aborted)setMessage(socialErrorMessage(e));});return()=>controller.abort();},[accessToken]);
+ useEffect(()=>{const c=new AbortController(); if(targetId&&accessToken) void socialRequest<{person:SocialPerson}>(`/api/social/connections?target=${encodeURIComponent(targetId)}`,accessToken,{signal:c.signal}).then(r=>{setSelected(r.person);setMessage("");}).catch(e=>{if(!c.signal.aborted)setMessage(socialErrorMessage(e));});return()=>c.abort();},[targetId,accessToken]);
+ useEffect(()=>{setResults([]);if(!accessToken||query.trim().length<2)return;const c=new AbortController();const timer=setTimeout(()=>{void socialRequest<{users:SocialPerson[]}>(`/api/groups/users?q=${encodeURIComponent(query.trim())}`,accessToken,{signal:c.signal}).then(r=>setResults(r.users)).catch(e=>{if(!c.signal.aborted)setMessage(socialErrorMessage(e));});},300);return()=>{clearTimeout(timer);c.abort();};},[accessToken,query]);
+ async function action(body:Record<string,unknown>){if(!accessToken||lock.current)return;lock.current=true;setBusy(true);setMessage("");try{setData(await socialRequest<ConnectionPage>("/api/social/connections",accessToken,{method:"POST",body:{...body,operationId:crypto.randomUUID()}}));setMessage("Cambio guardado.");onChanged?.();}catch(e){setMessage(socialErrorMessage(e));}finally{lock.current=false;setBusy(false);}}
+ const person=(id:string)=>data.people.find(p=>p.user_id===id);
+ const label=(p:SocialPerson)=><><span className="socialProfileAvatar"><ProfileAvatarMedia value={p.avatar_url} fallback={p.display_name[0]||"J"}/></span><span><b>{p.display_name}</b><small>@{p.username}</small></span></>;
+ if(!accessToken)return <section className="card"><h2>Amigos</h2><p>Inicia sesión para buscar y enviar solicitudes.</p></section>;
+ return <section className="socialConnections"><section className="card"><h2>Agregar amigos</h2><AnchoredSearch label="Nombre, @usuario o correo exacto" value={query} onChange={setQuery} placeholder="Buscar usuarios Backyard" expanded={query.trim().length>=2&&results.length>0}>{results.map(p=><AnchoredSearchOption key={p.user_id} label={`Ver perfil de ${p.display_name}`} onSelect={()=>{setSelected(p);setQuery("");}}>{label(p)}</AnchoredSearchOption>)}</AnchoredSearch><p className="hint">Los correos no se muestran. La búsqueda respeta privacidad y bloqueos.</p></section>
+ {selected&&<section className="card" aria-label="Perfil social"><button type="button" className="textButton" onClick={()=>{setSelected(null);onCloseTarget?.();}}>Cerrar perfil ×</button><div className="socialProfileResults">{label(selected)}</div>{(()=>{const state=connectionState(data,ownerId,selected.user_id);return state==="NONE"?<button type="button" className="primary" disabled={busy} onClick={()=>void action({action:"request",target:selected.user_id})}>Enviar solicitud de amistad</button>:<p>{state==="SELF"?"Este es tu perfil.":state==="FRIEND"?"Ya son amigos.":state==="INCOMING"?"Tienes una solicitud de esta persona; revísala abajo.":state==="BLOCKED"?"Conexión bloqueada.":"Solicitud enviada · pendiente de aceptación"}</p>;})()}<p className="hint">Ver un QR no acepta una amistad ni modifica tu privacidad.</p></section>}
+ {message&&<p className="notice" role="status">{message}</p>}
+ <section className="card"><h2>Solicitudes</h2>{data.requests.filter(r=>r.state==="PENDING").map(r=>{const incoming=r.addressee_id===ownerId;const p=person(incoming?r.requester_id:r.addressee_id);return <div className="socialPendingList" key={r.id}><p>{p?`${p.display_name} · @${p.username}`:"Usuario no disponible"} · {incoming?"Recibida":"Enviada"}</p>{incoming?<><button type="button" className="primary" disabled={busy} onClick={()=>void action({action:"ACCEPTED",id:r.id})}>Aceptar</button><button type="button" className="secondary" disabled={busy} onClick={()=>void action({action:"REJECTED",id:r.id})}>Rechazar</button></>:<button type="button" disabled={busy} onClick={()=>void action({action:"CANCELLED",id:r.id})}>Cancelar solicitud</button>}</div>;})}{!data.requests.some(r=>r.state==="PENDING")&&<p>No hay solicitudes pendientes.</p>}</section>
+ <section className="card"><h2>Amigos · {data.friends.length}</h2><ul className="socialProfileResults">{data.friends.map(id=>{const p=person(id);return p?<li key={id}>{label(p)}<button type="button" onClick={()=>setSelected(p)}>Ver perfil</button><button type="button" disabled={busy} onClick={()=>{if(confirm("¿Bloquear esta conexión? Se revocará la amistad y el acceso social entre ambos."))void action({action:"block",target:id});}}>Bloquear</button></li>:null;})}</ul>{!data.friends.length&&<p>Busca un compañero o escanea su QR para enviarle una solicitud.</p>}<button type="button" className="textButton" disabled={busy} onClick={()=>void refresh().catch(e=>setMessage(socialErrorMessage(e)))}>Actualizar</button></section></section>;
 }

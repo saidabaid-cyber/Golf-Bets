@@ -31,6 +31,7 @@ export type SocialRoundCard = {
   holesPlayed: number;
   ownerScore: number | null;
   coursePar: number | null;
+  totalOnly?: true;
   /** Only captured, non-financial hole facts are exposed to the eligible audience. */
   scorecard?: Array<{ hole: number; par: number; score: number | null }>;
 };
@@ -67,7 +68,7 @@ export type SocialActivityDetail = { data: SocialActivityCard };
 
 export type SocialNotification = {
   id: string;
-  type: "like" | "comment" | "attest" | "friend_achievement" | "equipment";
+  type: "like" | "comment" | "attest" | "friend_achievement" | "equipment" | "friend_request";
   activityId: string;
   createdAt: string;
   readAt: string | null;

@@ -9,17 +9,18 @@ import styles from "./round-setup-wizard.module.css";
 const STEPS = ["Campo", "Jugadores", "Grupales", "Personales"] as const;
 const WizardContext = createContext<{ step: WizardStep; edit: (step: WizardStep) => void; target: { id: string; revision: number } | null }>({ step: 1, edit: () => {}, target: null });
 
-export function RoundSetupWizard({ storageKey, issues, onStart, onSave, onExit, editing = false, children }: {
+export function RoundSetupWizard({ storageKey, issues, onStart, onSave, onExit, editing = false, scoreOnly = false, children }: {
   storageKey: string;
   issues: readonly RoundSetupPreflightIssue[];
   onStart: () => Promise<boolean>;
   onSave: () => boolean | void;
   onExit: () => void;
   editing?: boolean;
+  scoreOnly?: boolean;
   children: ReactNode;
 }) {
   const [step, setStep] = useState<WizardStep>(() => {
-    try { return readWizardStep(sessionStorage.getItem(storageKey)); } catch { return 1; }
+    try { const saved = readWizardStep(sessionStorage.getItem(storageKey)); return scoreOnly && (saved === 3 || saved === 4) ? 2 : saved; } catch { return 1; }
   });
   const [visitedReview, setVisitedReview] = useState(step === 5);
   const [target, setTarget] = useState<{ id: string; revision: number } | null>(null);
@@ -75,7 +76,7 @@ export function RoundSetupWizard({ storageKey, issues, onStart, onSave, onExit, 
       <div><small>CONFIGURAR Y JUGAR</small><h1 ref={titleRef} tabIndex={-1}>{step === 5 ? "Revisar ronda" : STEPS[step - 1]}</h1></div>
       <button type="button" className="textButton" disabled={starting} onClick={() => { if (save()) onExit(); }}>Guardar y salir</button>
     </header>
-    <nav className={styles.stepper} aria-label="Pasos para configurar la ronda">{STEPS.map((label, index) => {
+    <nav className={styles.stepper} aria-label="Pasos para configurar la ronda">{(scoreOnly ? STEPS.slice(0, 2) : STEPS).map((label, index) => {
       const number = (index + 1) as WizardStep;
       const completed = number < step && !issues.some((issue) => wizardIssueStep(issue) === number);
       return <button type="button" key={label} aria-current={step === number ? "step" : undefined} aria-label={`${number} ${label} · ${step === number ? "actual" : completed ? "completado" : "pendiente"}`} disabled={starting} onClick={() => number < step ? navigate(number) : advance(number)}><span aria-hidden="true">{completed ? "✓" : number}</span><b>{label}</b></button>;
@@ -84,8 +85,8 @@ export function RoundSetupWizard({ storageKey, issues, onStart, onSave, onExit, 
     {blocking.length > 0 && <section className={styles.preflight} aria-label="Falta completar"><h2>FALTA COMPLETAR</h2><p>Toca para corregir. El resto de tu configuración se conserva.</p>{blocking.map((issue) => <button type="button" key={issue.id} onClick={() => navigate(wizardIssueStep(issue), issue)}><b>{issue.label} ›</b><span>{issue.detail}</span></button>)}</section>}
     {error && <p className="notice bad" role="alert">{error}</p>}
     <footer className={styles.controls}>
-      {step > 1 && <button type="button" className="secondary" disabled={starting} onClick={() => navigate((step - 1) as WizardStep)}>← Atrás</button>}
-      {step < 5 ? <button type="button" className="primary" disabled={blocking.length > 0} onClick={() => advance((step + 1) as WizardStep)}>{step === 4 ? "Revisar y jugar →" : "Continuar →"}</button> : <button type="button" className="primary" disabled={starting || issues.length > 0} onClick={() => void start()}>{starting ? "Iniciando…" : editing ? "Guardar y continuar →" : "Iniciar ronda →"}</button>}
+      {step > 1 && <button type="button" className="secondary" disabled={starting} onClick={() => navigate(scoreOnly && step === 5 ? 2 : (step - 1) as WizardStep)}>← Atrás</button>}
+      {step < 5 ? <button type="button" className="primary" disabled={blocking.length > 0} onClick={() => advance(scoreOnly && step === 2 ? 5 : (step + 1) as WizardStep)}>{step === 4 || (scoreOnly && step === 2) ? "Revisar y jugar →" : "Continuar →"}</button> : <button type="button" className="primary" disabled={starting || issues.length > 0} onClick={() => void start()}>{starting ? "Iniciando…" : editing ? "Guardar y continuar →" : "Iniciar ronda →"}</button>}
       {visitedReview && step < 4 && <button type="button" className="textButton" disabled={starting} onClick={() => advance(5)}>Volver al resumen</button>}
     </footer>
   </div></WizardContext>;

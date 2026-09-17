@@ -1,6 +1,7 @@
 import type { RoundPresentation } from "./types";
 
-export const DEFAULT_ROUND_PRESENTATION: Readonly<Required<RoundPresentation>> = {
+type NormalizedPresentation = Required<Pick<RoundPresentation, "version" | "groupNassauTerm">> & Pick<RoundPresentation, "playMode">;
+export const DEFAULT_ROUND_PRESENTATION: Readonly<NormalizedPresentation> = {
   version: 1,
   groupNassauTerm: "polla",
 };
@@ -13,11 +14,12 @@ function runtimeRecord(value: unknown): Record<string, unknown> | undefined {
 
 /** Legacy rounds did not persist presentation metadata and therefore keep the
  * former Polla terminology. Invalid values fail closed to that same behavior. */
-export function normalizeRoundPresentation(value: unknown): Required<RoundPresentation> {
+export function normalizeRoundPresentation(value: unknown): NormalizedPresentation {
   const source = runtimeRecord(value);
   return {
     version: 1,
     groupNassauTerm: source?.groupNassauTerm === "nassau" ? "nassau" : "polla",
+    ...(source?.playMode === "score_only" ? { playMode: "score_only" as const } : {}),
   };
 }
 

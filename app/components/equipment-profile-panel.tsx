@@ -40,6 +40,7 @@ type EquipmentProfilePanelProps = {
   ballFitDefaults?: BallFitProfileDefaults;
   onBackToProfile?: () => void;
   onOpenPrivacy?: () => void;
+  initialSection?: "equipment" | "ball" | "fitting";
 };
 
 type EquipmentFlowSuccess = {
@@ -87,14 +88,14 @@ function savedFitId() {
   return globalThis.crypto?.randomUUID?.() || `fit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, defaultHandicapSource, ballFitDefaults, onBackToProfile, onOpenPrivacy }: EquipmentProfilePanelProps) {
+export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, defaultHandicapSource, ballFitDefaults, onBackToProfile, onOpenPrivacy, initialSection }: EquipmentProfilePanelProps) {
   const { profile, status, message, update, retry, resolveConflict, recoverLocalProfile } = useEquipmentProfile(userId, accessToken);
   const [clubEditor, setClubEditor] = useState<PlayerClub | "new" | null>(null);
-  const [ballEditor, setBallEditor] = useState<PlayerBall | "new" | null>(null);
+  const [ballEditor, setBallEditor] = useState<PlayerBall | "new" | null>(initialSection === "ball" ? "new" : null);
   const [distanceEditor, setDistanceEditor] = useState<{ club: PlayerClub; distance: PlayerClubDistance | null } | null>(null);
   const [flowSuccess, setFlowSuccess] = useState<EquipmentFlowSuccess | null>(null);
   const [deleteIntent, setDeleteIntent] = useState<EquipmentDeleteIntent | null>(null);
-  const [fitOpen, setFitOpen] = useState(false);
+  const [fitOpen, setFitOpen] = useState(initialSection === "fitting");
   const [savedFitOpen, setSavedFitOpen] = useState(false);
   const currentClubs = useMemo(() => profile?.clubs.filter((club) => club.isCurrent) || [], [profile]);
   const historicalClubs = useMemo(() => profile?.clubs.filter((club) => !club.isCurrent) || [], [profile]);

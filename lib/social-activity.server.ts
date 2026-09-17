@@ -437,12 +437,19 @@ async function recoverVisibleSources(ctx: SocialContext) {
 }
 
 export async function listActivity(
-  ctx: SocialContext, query: { localRoundId?: string; limit?: number; cursor?: string } = {},
+  ctx: SocialContext, query: { localRoundId?: string; limit?: number; cursor?: string; friendsOnly?: boolean } = {},
 ): Promise<SocialActivityPage> {
   await recoverVisibleSources(ctx);
   const limit = Math.min(30, Math.max(1, Math.floor(query.limit || 15)));
   let builder = ctx.client.from("social_activities_v3").select("*")
     .eq("active", true).order("created_at", { ascending: false }).order("id", { ascending: false });
+  if (query.friendsOnly) {
+    const friends = await ctx.client.from("friendships").select("user_a_id,user_b_id").or(`user_a_id.eq.${ctx.userId},user_b_id.eq.${ctx.userId}`);
+    if (friends.error) dbError(friends.error);
+    const ids = (friends.data || []).map(row => row.user_a_id === ctx.userId ? row.user_b_id : row.user_a_id);
+    if (!ids.length) return { data: [], nextCursor: null };
+    builder = builder.in("author_id", ids);
+  }
   if (query.localRoundId) {
     if (query.localRoundId.length > 120) throw new SocialServiceError("INVALID_REQUEST", 400, "Ronda inválida.");
     builder = builder.eq("local_round_id", query.localRoundId);
@@ -649,12 +656,18 @@ export async function attestRound(
 export async function listNotifications(ctx: SocialContext): Promise<SocialNotificationPage> {
   const { data, error } = await ctx.client.from("notification_events_v2")
     .select("id,event_type,resource_id,created_at,read_at")
-    .eq("recipient_id", ctx.userId).in("event_type", ["like", "comment", "attest", "friend_achievement", "equipment"])
+    .eq("recipient_id", ctx.userId).in("event_type", ["like", "comment", "attest", "friend_achievement", "equipment", "friend_request"])
     .order("created_at", { ascending: false }).limit(50);
   if (error) dbError(error);
   const visible = [] as SocialNotificationPage["data"];
   for (const event of data || []) {
     if (!UUID.test(event.resource_id)) continue;
+    if (event.event_type === "friend_request") {
+      const request = await ctx.client.from("friend_requests").select("id,state").eq("id", event.resource_id).eq("addressee_id", ctx.userId).maybeSingle();
+      if (request.error) dbError(request.error);
+      if (request.data?.state === "PENDING") visible.push({ id: event.id, type: "friend_request", activityId: event.resource_id, createdAt: event.created_at, readAt: event.read_at });
+      continue;
+    }
     try {
       const activity = await authorizedRow(ctx, event.resource_id);
       if (!SHA256.test(activity.material_hash)) continue;

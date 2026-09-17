@@ -1,166 +1,45 @@
 "use client";
-
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { PersonalActivity } from "../../lib/golf-insights";
 import type { SocialProfile } from "../../features/social/domain";
-import {
-  deriveInternalNotifications,
-  emptyInternalNotificationReadState,
-  persistInternalNotificationReadState,
-  readInternalNotificationReadState,
-  markAllInternalNotificationsReadInStorage,
-  setInternalNotificationRead,
-  type InternalNotification,
-  type InternalNotificationReadState,
-} from "../../lib/internal-notifications";
+import type { SocialNotificationPage } from "../../lib/social-activity-contract";
+import { socialRequest } from "../../lib/social-activity-client";
 import { SocialConnectionsPanel } from "./social-connections-panel";
-import { CloudSocialActivity, CloudSocialNotifications } from "./cloud-social-activity";
-import { InternalNotificationList } from "./internal-notification-list";
-
+import { CloudSocialActivity, CloudSocialNotifications, SocialSharingPreferences } from "./cloud-social-activity";
+import { GroupInvitationInbox } from "./group-invitations";
+import { PersonalQr, SocialQrScanner } from "./social-qr";
+import { useBackyardAccount } from "./account-provider";
+import styles from "./social-feed.module.css";
+export type SocialView = "activity" | "friends" | "notifications" | "qr" | "scan" | "preferences";
 export type SocialFeedProps = {
-  initialView?: "activity" | "friends" | "notifications";
-  activity: PersonalActivity[];
-  identityUserId: string;
-  accessToken?: string;
-  knownProfiles: SocialProfile[];
-  notificationsEnabled: boolean;
-  onNotificationsEnabledChange: (value: boolean) => void;
-  onOpenRound: (roundId: string) => void;
-  onOpenGroup: (groupId: string) => void;
-  onCreateRound: () => void;
-  onOpenGroups: () => void;
+  initialView?: SocialView; targetId?: string | null; onCloseTarget?: () => void;
+  activity: PersonalActivity[]; identityUserId: string; accessToken?: string; knownProfiles: SocialProfile[];
+  notificationsEnabled: boolean; onNotificationsEnabledChange: (value: boolean) => void;
+  onOpenRound: (roundId: string) => void; onOpenGroup: (groupId: string) => void;
+  onCreateRound: () => void; onOpenGroups: () => void; onPrivacy?: () => void;
 };
-
-function activityDate(value: string) {
-  const date = new Date(value.length === 10 ? `${value}T12:00:00-06:00` : value);
-  if (Number.isNaN(date.getTime())) return value;
-  const hasTime = value.includes("T");
-  return new Intl.DateTimeFormat("es-MX", {
-    day: "numeric",
-    month: "short",
-    ...(hasTime ? { hour: "numeric", minute: "2-digit" } : {}),
-    timeZone: "America/Mexico_City",
-  }).format(date);
-}
-
-function openActivity(item: PersonalActivity, onOpenRound: (id: string) => void, onOpenGroup: (id: string) => void) {
-  if (item.kind === "round" && item.roundId) onOpenRound(item.roundId);
-  if (item.kind === "group" && item.groupId) onOpenGroup(item.groupId);
-}
-
-function canOpenActivity(item: PersonalActivity) {
-  return (item.kind === "round" && Boolean(item.roundId)) || (item.kind === "group" && Boolean(item.groupId));
-}
-
-export function SocialFeed({ initialView = "activity", activity, identityUserId, accessToken, knownProfiles, notificationsEnabled, onNotificationsEnabledChange, onOpenRound, onOpenGroup, onCreateRound, onOpenGroups }: SocialFeedProps) {
-  const [view, setView] = useState<"activity" | "friends" | "notifications">(initialView);
-  const [readState, setReadState] = useState<InternalNotificationReadState>(emptyInternalNotificationReadState);
-  const readStateRef = useRef<InternalNotificationReadState>(emptyInternalNotificationReadState());
-  const [readStatus, setReadStatus] = useState<"loading" | "ready" | "error">("loading");
-  const [readMessage, setReadMessage] = useState("");
-
-  useEffect(() => {
-    setReadStatus("loading");
-    setReadMessage("");
-    const result = readInternalNotificationReadState(window.localStorage, identityUserId, activity);
-    readStateRef.current = result.state;
-    setReadState(result.state);
-    if (result.ok) {
-      setReadStatus("ready");
-      if (result.recoveredMalformed) {
-        const repair = persistInternalNotificationReadState(window.localStorage, identityUserId, result.state, activity);
-        if (!repair.ok) {
-          setReadStatus("error");
-          setReadMessage("Restablecimos la lectura de avisos, pero el navegador no permitió conservar el cambio.");
-        }
-      }
-      return;
-    }
-    setReadStatus("error");
-    setReadMessage("No pudimos leer cuáles avisos habías visto. Tu actividad sigue disponible.");
-  }, [activity, identityUserId]);
-
-  const notifications = useMemo(() => deriveInternalNotifications(activity, readState), [activity, readState]);
-  const unreadCount = notificationsEnabled ? notifications.filter((item) => item.unread).length : 0;
-
-  function storeReadState(next: InternalNotificationReadState) {
-    const result = persistInternalNotificationReadState(window.localStorage, identityUserId, next, activity);
-    readStateRef.current = result.state;
-    setReadState(result.state);
-    if (result.ok) {
-      setReadStatus("ready");
-      setReadMessage("");
-      return;
-    }
-    setReadStatus("error");
-    setReadMessage("El aviso cambió en esta vista, pero el navegador no permitió guardar su estado de lectura.");
-  }
-
-  function openNotification(item: InternalNotification) {
-    if (item.unread) storeReadState(setInternalNotificationRead(readStateRef.current, item, true));
-    openActivity(item, onOpenRound, onOpenGroup);
-  }
-
-  function changeNotificationRead(item: InternalNotification, read: boolean) {
-    storeReadState(setInternalNotificationRead(readStateRef.current, item, read));
-  }
-
-  function markAllRead() {
-    const result = markAllInternalNotificationsReadInStorage(window.localStorage, identityUserId, activity);
-    readStateRef.current = result.state;
-    setReadState(result.state);
-    if (result.ok) {
-      setReadStatus("ready");
-      setReadMessage("Todos los avisos quedaron marcados como leídos.");
-      return;
-    }
-    setReadStatus("error");
-    setReadMessage("Los avisos cambiaron en esta vista, pero el navegador no permitió guardar la lectura.");
-  }
-
-  return <section className="betaSocialScreen" aria-labelledby="beta-social-title">
-    <section className="hero betaSocialHero"><div><span className="eyebrow">THE BACKYARD · SOCIAL</span><h1 id="beta-social-title">Social</h1><p>Rondas, logros y compañeros. Tú eliges qué compartir.</p></div></section>
-
-    <aside className="betaPrivacyNotice"><span aria-hidden="true">●</span><p><b>Privado por defecto.</b> Las publicaciones respetan tus preferencias y la privacidad del perfil. La actividad local sigue visible sólo en tu espacio.</p></aside>
-
-    <nav className="socialViewTabs" aria-label="Vistas de Social">
-      <button type="button" className={`socialViewTab ${view === "activity" ? "active" : ""}`} aria-pressed={view === "activity"} onClick={() => setView("activity")}>Actividad</button>
-      <button type="button" className={`socialViewTab ${view === "friends" ? "active" : ""}`} aria-pressed={view === "friends"} onClick={() => setView("friends")}>Amigos</button>
-      <button type="button" className={`socialViewTab ${view === "notifications" ? "active" : ""}`} aria-pressed={view === "notifications"} onClick={() => setView("notifications")}>Avisos{unreadCount > 0 && <span className="socialUnreadBadge" aria-label={`${unreadCount} sin leer`}>{unreadCount > 99 ? "99+" : unreadCount}</span>}</button>
-    </nav>
-
-    {view === "friends" && <SocialConnectionsPanel ownerId={identityUserId} accessToken={accessToken} directory={knownProfiles} />}
-
-    {view === "activity" && <CloudSocialActivity key={identityUserId} viewerId={identityUserId} accessToken={accessToken} />}
-    {view === "notifications" && <CloudSocialNotifications key={identityUserId} viewerId={identityUserId} accessToken={accessToken} />}
-
-    {view === "activity" && (activity.length ? <section className="card betaFeedCard" aria-label="Actividad reciente">
-      <ol className="betaFeedList">
-        {activity.map((item) => {
-          const canOpen = canOpenActivity(item);
-          const content = <>
-            <span className={`betaFeedIcon ${item.kind}`} aria-hidden="true">{item.kind === "round" ? "旗" : "●"}</span>
-            <span className="betaFeedCopy"><b>{item.title}</b><small>{item.detail}</small><time dateTime={item.occurredAt}>{activityDate(item.occurredAt)}</time></span>
-            {canOpen && <strong className="betaFeedChevron" aria-hidden="true">›</strong>}
-          </>;
-          const openLabel = item.kind === "group" ? "Abrir grupos" : "Abrir ronda";
-          return <li key={item.id}>{canOpen ? <button type="button" onClick={() => openActivity(item, onOpenRound, onOpenGroup)} aria-label={`${item.title} ${openLabel}`}>{content}</button> : <div>{content}</div>}</li>;
-        })}
-      </ol>
-    </section> : <section className="card betaSocialEmpty">
-      <span className="betaEmptyFlag" aria-hidden="true">◎</span><h2>Aún no hay actividad.</h2><p>Al guardar una ronda o actualizar un grupo aparecerá aquí, sin publicar nada fuera de tu espacio.</p><div><button type="button" className="primary" onClick={onCreateRound}>Crear una ronda</button><button type="button" className="secondary" onClick={onOpenGroups}>Abrir grupos</button></div>
-    </section>)}
-
-    {view === "notifications" && !notificationsEnabled && <section className="card betaSocialEmpty">
-      <span className="betaEmptyFlag" aria-hidden="true">○</span><h2>Avisos internos desactivados</h2><p>Puedes recibir aquí novedades de tus propias rondas y grupos. No pediremos permisos del teléfono.</p><div><button type="button" className="primary" onClick={() => onNotificationsEnabledChange(true)}>Activar avisos</button></div>
-    </section>}
-
-    {view === "notifications" && notificationsEnabled && <>
-      {readStatus === "loading" ? <section className="card betaSocialEmpty" role="status"><h2>Cargando avisos…</h2><p>Estamos revisando qué actividad ya viste en este dispositivo.</p></section> : <>
-        <div className="internalNotificationActions"><span className="hint" aria-live="polite">{unreadCount ? `${unreadCount} ${unreadCount === 1 ? "aviso nuevo" : "avisos nuevos"}` : "Todo al día"}</span><button type="button" className="secondary" disabled={unreadCount === 0} onClick={markAllRead}>Marcar todo como leído</button></div>
-        {readMessage && <div className={readStatus === "error" ? "notice bad" : "notice"} role={readStatus === "error" ? "alert" : "status"}>{readMessage}</div>}
-        {notifications.length ? <InternalNotificationList notifications={notifications} onOpen={openNotification} onReadChange={changeNotificationRead} /> : <section className="card betaSocialEmpty"><span className="betaEmptyFlag" aria-hidden="true">✓</span><h2>Aún no hay avisos.</h2><p>Cuando guardes una ronda o actualices un grupo, aparecerá aquí sin salir de tu espacio.</p></section>}
-      </>}
-    </>}
+export function SocialFeed({ initialView = "activity", targetId, onCloseTarget, identityUserId, accessToken, onOpenGroups, onPrivacy }: SocialFeedProps) {
+  const { identity, retryCloudSync } = useBackyardAccount();
+  const [view, setView] = useState<SocialView>(initialView), [menu, setMenu] = useState(false), [unread, setUnread] = useState(0), [target, setTarget] = useState(targetId);
+  const refreshUnread = useCallback(async (signal?: AbortSignal) => {
+    if (!accessToken) return;
+    const result = await socialRequest<SocialNotificationPage>("/api/social/notifications", accessToken, { signal });
+    if (!signal?.aborted) setUnread(result.data.filter(item => !item.readAt).length);
+  }, [accessToken]);
+  useEffect(() => { const controller = new AbortController(); void refreshUnread(controller.signal).catch(() => {}); return () => controller.abort(); }, [refreshUnread]);
+  function open(next: SocialView) { setMenu(false); setView(next); }
+  return <section className={styles.screen} aria-labelledby="social-title">
+    <header className={styles.header}><div><span>THE BACKYARD</span><h1 id="social-title">Social</h1></div><div className={styles.actions}>
+      <button type="button" aria-label={`Notificaciones${unread ? ` · ${unread} sin leer` : ""}`} onClick={() => open("notifications")}><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>{unread > 0 && <b className={styles.badge}>{unread > 99 ? "99+" : unread}</b>}<small>Avisos</small></button>
+      <button type="button" aria-label="Agregar amigos y QR" aria-expanded={menu} onClick={() => setMenu(!menu)}>＋</button>
+    </div></header>
+    {menu && <nav className={styles.menu} aria-label="Agregar y compartir"><button type="button" onClick={() => open("friends")}>Agregar amigos</button><button type="button" onClick={() => open("scan")}>Escanear QR</button><button type="button" onClick={() => open("qr")}>Mi QR</button></nav>}
+    {view !== "activity" && <button type="button" className="textButton" onClick={() => open("activity")}>← Feed de amigos</button>}
+    {view === "activity" && <><CloudSocialActivity key={identityUserId} viewerId={identityUserId} accessToken={accessToken} friendsOnly /><div className={styles.links}><button type="button" onClick={() => open("friends")}>Amigos y solicitudes</button><button type="button" onClick={() => open("preferences")}>Qué comparto</button></div></>}
+    {view === "friends" && <SocialConnectionsPanel key={identityUserId} ownerId={identityUserId} accessToken={accessToken} targetId={target} onCloseTarget={() => { setTarget(null); onCloseTarget?.(); }} onChanged={() => void refreshUnread().catch(() => {})} />}
+    {view === "notifications" && <><CloudSocialNotifications key={identityUserId} viewerId={identityUserId} accessToken={accessToken} onFriends={() => open("friends")} onReadChange={() => void refreshUnread().catch(() => {})} /><GroupInvitationInbox accessToken={accessToken} onAccepted={retryCloudSync} /><button type="button" className="secondary" onClick={onOpenGroups}>Ver mis grupos</button></>}
+    {view === "qr" && <PersonalQr userId={identityUserId} name={identity.displayName} username={identity.username || ""} avatar={identity.avatarUrl || ""} onClose={() => open("activity")} />}
+    {view === "scan" && <SocialQrScanner onFound={id => { setTarget(id); open("friends"); }} onClose={() => open("activity")} />}
+    {view === "preferences" && <section className="card"><h2>Privacidad y notificaciones</h2><button type="button" className="secondary" onClick={onPrivacy}>Privacidad del perfil</button>{accessToken && <SocialSharingPreferences accessToken={accessToken} />}</section>}
   </section>;
 }

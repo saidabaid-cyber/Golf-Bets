@@ -1,5 +1,6 @@
 import type { SocialRoundCard } from "./social-activity-contract";
 import type { RoundSnapshot } from "./types";
+import { validTotalOnly } from "./total-score-round";
 
 export type SocialRoundSource = { id: string; local_round_id: string; snapshot: RoundSnapshot };
 
@@ -9,6 +10,12 @@ export function safeSocialRoundCard(
   includeCourseIdentity = true,
 ): SocialRoundCard | null {
   const round = source.snapshot;
+  if (round?.id === source.local_round_id && validTotalOnly(round, accountUserId)) return {
+    roundId: source.id, localRoundId: source.local_round_id, date: round.date,
+    courseName: includeCourseIdentity ? round.courseName : "Campo privado",
+    teeName: includeCourseIdentity ? round.teeName : null,
+    holesPlayed: round.roundHoles!, ownerScore: round.totalScoreCapture!.grossTotal, coursePar: null, totalOnly: true,
+  };
   if (!round || round.lifecycleState !== "completed" || round.id !== source.local_round_id
     || !Array.isArray(round.players) || !Array.isArray(round.order)
     || !round.courseSnapshot?.holes || !round.scores) return null;

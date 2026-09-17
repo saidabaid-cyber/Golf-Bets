@@ -4,6 +4,7 @@ import { canonicalProfileUsername, normalizeProfileUsername } from "../../lib/pr
 
 import Link from "next/link";
 import { Fragment, createContext, useCallback, useContext, useEffect, useRef, useState, type FormEvent } from "react";
+import { emailLoginRecovery } from "../../lib/email-login-recovery";
 import { ModalCloseButton } from "./modal-shell";
 import type { Session, User } from "@supabase/supabase-js";
 import { accountDeletionPrewriteRejected, accountDeletionRecoveryAction, accountDeletionRequestBody, accountDeletionResponseConfirmed, clearAccountDeletionIntent, readAccountDeletionIntent } from "../../lib/account-deletion-client";
@@ -137,6 +138,9 @@ function profileFromUser(user: User): BackyardProfile {
     avatarUrl: safeProfileAvatarValue(user.user_metadata?.avatar_url || user.user_metadata?.picture),
     defaultHandicap: typeof user.user_metadata?.default_handicap === "number" ? clampBackyardHandicap(user.user_metadata.default_handicap) : null,
     ...emptyBackyardProfileDetails(),
+    givenName: typeof user.user_metadata?.given_name === "string" ? user.user_metadata.given_name : "",
+    familyName: typeof user.user_metadata?.family_name === "string" ? user.user_metadata.family_name : "",
+    ...((user.user_metadata?.backyard_golf_profile_v1 && typeof user.user_metadata.backyard_golf_profile_v1 === "object") ? Object.fromEntries(["handedness", "homeClub", "homeClubId", "preferredTee"].map(key => [key, typeof user.user_metadata.backyard_golf_profile_v1[key] === "string" ? user.user_metadata.backyard_golf_profile_v1[key] : ""])) : {}),
     ...(location ? { ...normalizeProfileLocation(location), locationUpdatedAt: location.updatedAt } : {}),
     username: String(user.user_metadata?.username || usernameFromEmail(email)),
   };
@@ -178,6 +182,7 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [codeSent, setCodeSent] = useState(false);
+  const [loginRecovery, setLoginRecovery] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [socialEnabled, setSocialEnabled] = useState(true);
@@ -246,6 +251,7 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
       setMessage("Código enviado. Revisa tu correo.");
     } catch (error) {
       setMessage(authErrorMessage(error, "email"));
+      if (intent === "login") setLoginRecovery(true);
     } finally { sendGate.current.finish(); setBusy(false); }
   }
 
@@ -311,6 +317,13 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
       {!socialEnabled && <p id="social-auth-status" className="hint">Google · Pendiente de configuración</p>}
       {socialEnabled && providers?.status === "ready" && !providers.google && <p className="hint">Google · Pendiente de configuración.</p>}
       {(message || sessionError) && <div className="accessMessage" role="status">{message || sessionError}</div>}
+      {loginRecovery && <div className="modalBackdrop" onKeyDown={(event) => { if (event.key === "Escape") setLoginRecovery(false); }}><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="email-login-recovery-title">
+        <h2 id="email-login-recovery-title">{emailLoginRecovery()}</h2>
+        <p>{message}</p>
+        <div className="dialogActions"><button autoFocus type="button" className="primary" onClick={() => { setLoginRecovery(false); setIntent("create"); setCodeSent(false); setOtp(""); setMessage("Verifica tu correo para continuar; si ya tienes cuenta, entraremos a ella."); }}>Crear cuenta</button>
+          <button type="button" className="secondary" onClick={() => { setLoginRecovery(false); setCodeSent(false); setOtp(""); setMessage(""); requestAnimationFrame(() => document.getElementById("access-email")?.focus()); }}>Cambiar correo</button>
+          <button type="button" className="textButton" onClick={() => setLoginRecovery(false)}>Cancelar</button></div>
+      </section></div>}
       <p className="hint">Invitado es un acceso independiente: no inicia sesión ni sincroniza tus datos con una cuenta.</p>
       <p className="legalLead">Consulta el <Link href="/legal/privacy-simplified?returnTo=access">Aviso de Privacidad Simplificado</Link>, el <Link href="/legal/privacy?returnTo=access">Aviso de Privacidad Integral</Link> y los <Link href="/legal/terms?returnTo=access">Términos y Condiciones</Link>. La aceptación explícita ocurre antes de crear el perfil.</p>
     </section>
@@ -1045,10 +1058,11 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       }
       // Public handle is acknowledged by the canonical profile + Social writes
       // above. Auth metadata is legacy display fallback, not its source of truth.
-      if (next.givenName !== identity.givenName || next.familyName !== identity.familyName) {
+      if (["givenName","familyName","handedness","homeClub","homeClubId","preferredTee"].some(key => Object.hasOwn(profile,key))) {
         const metadataWrite = await supabase.auth.updateUser({ data: {
           given_name: next.givenName || null,
           family_name: next.familyName || null,
+          backyard_golf_profile_v1: { handedness: next.handedness || "", homeClub: next.homeClub || "", homeClubId: next.homeClubId || "", preferredTee: next.preferredTee || "" },
         } });
         if (metadataWrite.error) {
           issueWithMessage("profile", "Perfil guardado; el usuario se conservará en este dispositivo hasta la próxima sincronización.", "pending");

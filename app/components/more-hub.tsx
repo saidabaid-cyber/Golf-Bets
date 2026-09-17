@@ -1,6 +1,7 @@
 "use client";
 
 import styles from "./more-hub.module.css";
+import type { SocialView } from "./social-feed";
 
 type MoreHubProps = {
   hasActiveRound: boolean;
@@ -11,6 +12,8 @@ type MoreHubProps = {
   onOpenGps: () => void;
   onOpenRules: () => void;
   onOpenHelp: () => void;
+  onOpenSocial?: (view: SocialView) => void;
+  onOpenPrivacy?: () => void;
 };
 
 type ToolIcon = "course" | "bag" | "hcp" | "fit" | "gps" | "rules" | "help";
@@ -28,7 +31,7 @@ function Icon({ name }: { name: ToolIcon }) {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name]} /></svg>;
 }
 
-export function MoreHub({ hasActiveRound, onOpenCourses, onOpenEquipment, onOpenHandicap, onOpenFitting, onOpenGps, onOpenRules, onOpenHelp }: MoreHubProps) {
+export function MoreHub({ hasActiveRound, onOpenCourses, onOpenEquipment, onOpenHandicap, onOpenFitting, onOpenGps, onOpenRules, onOpenHelp, onOpenSocial, onOpenPrivacy }: MoreHubProps) {
   const tools = [
     { icon: "course" as const, title: "Campos", copy: "Busca campos, tees y datos guardados.", action: onOpenCourses },
     { icon: "bag" as const, title: "Mi Bolsa", copy: "Bastones, varillas y bola actual.", action: onOpenEquipment },
@@ -46,5 +49,6 @@ export function MoreHub({ hasActiveRound, onOpenCourses, onOpenEquipment, onOpen
       <span className={styles.copy}><b>{tool.title}</b><small>{tool.copy}</small></span>
       <strong aria-hidden="true">›</strong>
     </button>)}</div>
+    {onOpenSocial && <section><h2>Amigos y comunidad</h2><div className={styles.grid}>{([['friends','Amigos y solicitudes'],['friends','Agregar amigos'],['qr','Mi QR'],['scan','Escanear QR'],['preferences','Preferencias de notificaciones']] as const).map(([view,label]) => <button type="button" key={label} onClick={() => onOpenSocial(view)}><span className={styles.copy}><b>{label}</b></span><strong aria-hidden="true">›</strong></button>)}<button type="button" onClick={onOpenPrivacy}><span className={styles.copy}><b>Privacidad</b></span><strong aria-hidden="true">›</strong></button></div></section>}
   </section>;
 }

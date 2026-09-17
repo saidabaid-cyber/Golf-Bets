@@ -1,4 +1,5 @@
 import { derivedGreenInRegulation } from "./advanced-stats";
+import { validTotalOnly } from "./total-score-round";
 import type { AdvancedHoleStat, Player, RoundSnapshot } from "./types";
 
 export type RoundAchievementCode =
@@ -208,6 +209,7 @@ function stableJson(value: unknown, seen = new WeakSet<object>(), depth = 0): st
 
 /** Canonical private material. Never return/log this payload from a social API. */
 export function roundMaterialPayload(round: RoundSnapshot, accountUserId: string): string | null {
+  if (validTotalOnly(round, accountUserId)) return stableJson({ schema: "total-score-material-v1", roundId: round.id, accountUserId, playedAt: round.date, roundHoles: round.roundHoles, order: round.order, courseId: round.courseSnapshot!.id, teeId: round.courseSnapshot!.catalogTeeId || null, total: round.totalScoreCapture!.grossTotal });
   const card = comparableScorecard(round, accountUserId, round.roundHoles === 9 ? 9 : 18);
   if (!card) return null;
   const players = [...round.players!].filter(player => player && typeof player.id === "string" && player.id.trim())

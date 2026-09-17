@@ -1,0 +1,4 @@
+.screen{display:grid;gap:12px;max-width:760px;margin:auto;min-width:0;padding-bottom:env(safe-area-inset-bottom)}
+.header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 4px}.header h1{margin:4px 0;font-size:28px}.header span{font-size:10px;letter-spacing:1.3px;color:var(--muted)}
+.actions{display:flex;gap:8px}.actions button{position:relative;min-width:48px;min-height:48px;border-radius:18px;background:var(--green);color:white;font-size:24px}.actions small{display:block;font-size:10px}.badge{position:absolute;right:-3px;top:-5px;background:#e5c36b;color:#143a27;border-radius:12px;padding:2px 5px;font-size:10px}
+.menu,.links{display:flex;gap:8px;flex-wrap:wrap}.menu{padding:12px;border:1px solid var(--line);border-radius:16px;background:var(--card)}.menu button,.links button{min-height:44px;flex:1 1 100px;border-radius:12px;padding:8px;color:var(--green);background:var(--green2);font-size:12px}.links{padding:12px 0}
