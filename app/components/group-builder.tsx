@@ -40,7 +40,7 @@ export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, 
   onStartFrequentGroup: (group: FrequentGroup) => void;
   onEditFrequentGroup: (group: FrequentGroup) => void;
   onDeleteFrequentGroup: (group: FrequentGroup) => void;
-  onDraftSaved?: () => void;
+  onDraftSaved?: (group: FrequentGroup) => void;
 }) {
   const { identity, retryCloudSync, updateProfile, bettingConsentGranted, requestBettingConsent } = useBackyardAccount();
   const [hasDraft, setHasDraft] = useState(false);
@@ -154,7 +154,7 @@ export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, 
     setSaveAllOpen(false); setSaveAllNames([]); setMessage("Todos los grupos se guardaron como grupos frecuentes.");
   }
 
-  if (resumeDraft) return <BetaOnboardingFlow profile={identity} accessToken={identity.accessToken} onUpdateProfile={updateProfile} bettingConsentGranted={bettingConsentGranted} requestBettingConsent={requestBettingConsent} onComplete={() => { setResumeDraft(false); onDraftSaved?.(); void retryCloudSync(); }} />;
+  if (resumeDraft) return <BetaOnboardingFlow profile={identity} accessToken={identity.accessToken} onUpdateProfile={updateProfile} bettingConsentGranted={bettingConsentGranted} requestBettingConsent={requestBettingConsent} onGroupSaved={onDraftSaved} onComplete={() => { setResumeDraft(false); void retryCloudSync(); }} />;
 
   return <>
     <section className="hero groupsHero"><div><div className="eyebrow">THE BACKYARD · GOLF</div><h1>Grupos</h1><p>Guarda jugadores y apuestas habituales; elige hasta 5 para cada salida.</p></div><div className="groupsHeroActions"><button className="secondary" onClick={onBack}>← Inicio</button><button className="primary" onClick={onCreateFrequentGroup}>Crear grupo</button></div></section>

@@ -200,13 +200,14 @@ function Shell({ progress, eyebrow, title, description, children, actions, onBac
   </section><ModalShell open={confirmExit} onClose={() => setConfirmExit(false)} label="Guardar configuración y salir"><h2>¿Guardar esta configuración y continuar después?</h2><p>Conservaremos el borrador en este dispositivo.</p><div className="dialogActions"><button type="button" className="secondary" onClick={() => setConfirmExit(false)}>Cancelar</button><button type="button" className="primary" onClick={() => { setConfirmExit(false); onSaveAndExit?.(); }}>Guardar y salir</button></div></ModalShell></main>;
 }
 
-export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, bettingConsentGranted, requestBettingConsent, onComplete }: {
+export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, bettingConsentGranted, requestBettingConsent, onComplete, onGroupSaved }: {
   profile: BackyardProfile;
   accessToken: string | null;
   onUpdateProfile: (profile: BackyardProfileUpdate) => Promise<"local" | "cloud">;
   bettingConsentGranted: boolean;
   requestBettingConsent: () => Promise<boolean>;
   onComplete: () => void;
+  onGroupSaved?: (group: FrequentGroup) => void;
 }) {
   const [progress, setProgress] = useState<BetaOnboardingProgress | null>(null);
   useViewScrollReset(progress?.step ?? null);
@@ -388,6 +389,9 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, bett
         // have synchronized while the explicit save was in flight.
         const latest = parseFrequentGroups(localStorage.getItem(STORAGE_KEYS.frequentGroups));
         localStorage.setItem(STORAGE_KEYS.frequentGroups, serializeFrequentGroups([saved.group, ...latest.filter((item) => item.id !== group.id)]));
+        // A resumed flow has an already mounted app writer. Update its state
+        // immediately; otherwise its old collection can overwrite this save.
+        onGroupSaved?.(saved.group);
         updateGroup({ template: normalizedTemplate, members: saved.group.players });
         advance("ready", false, group.id);
         setMessage(saved.notice);

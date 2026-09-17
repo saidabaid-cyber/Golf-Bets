@@ -82,6 +82,9 @@ test("save/exit separated from primary navigation and email readiness does not g
   const groups = readFileSync("app/components/group-builder.tsx", "utf8");
   assert.match(groups, /Continuar configuración guardada/);
   assert.match(groups, /if \(resumeDraft\) return <BetaOnboardingFlow/);
+  assert.match(groups, /onGroupSaved=\{onDraftSaved\}/);
+  assert.match(onboarding, /onGroupSaved\?\.\(saved.group\)/);
+  assert.match(readFileSync("app/page.tsx", "utf8"), /onDraftSaved=\{\(saved\) => setFrequentGroups\(current => \[saved, \.\.\.current.filter/);
   const invite = readFileSync("app/components/group-invitations.tsx", "utf8");
   assert.match(invite, /data.emailDeliveryConfigured === true/);
   assert.match(invite, /!target.targetUserId && !emailAvailable/);

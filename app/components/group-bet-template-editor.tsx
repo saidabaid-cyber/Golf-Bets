@@ -223,7 +223,7 @@ export function GroupBetTemplateEditor({ value, players, ownerId, mode, onChange
     {preferences}
     {activeGroupTemplateDefinitions(value).map(item => <details key={item.id} className={styles.detailCard}>
       <summary><span>{item.icon} {item.label}</span><small>{item.id === "personals" ? "Editar personales" : "Editar"}</small></summary>
-      <div className={styles.inlineEditor}><GroupBetTemplateEditor value={value} players={players} ownerId={value.ownerMemberId} mode="details" onlyBetId={item.id} onChange={onChange} locked={locked} requestActivation={requestActivation} /></div>
+      <fieldset disabled={locked} className={styles.inlineEditor}><GroupBetTemplateEditor value={value} players={players} ownerId={value.ownerMemberId} mode="details" onlyBetId={item.id} onChange={onChange} locked={locked} requestActivation={requestActivation} /></fieldset>
     </details>)}
   </div>;
 
