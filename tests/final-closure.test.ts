@@ -91,7 +91,7 @@ test("alta social separa username automático de nombre visible y exige perfil i
   assert.match(provider, /usernameFromEmail\(email\)/);
   assert.doesNotMatch(provider, /displayName:.*user\.user_metadata\?\.full_name/);
   assert.match(provider, /identity\.mode === "authenticated" && profileSetupRequired/);
-  assert.match(provider, /queuePendingProfileWrite\(localStorage, identity\.userId, \{ \.\.\.cloudProfileFields\(next\), \.\.\.\(location \? \{ location, locationUpdatedAt \} : \{\}\) \}, updatedAt\)/);
+  assert.match(provider, /queuePendingProfileWrite\(localStorage, identity\.userId, \{ \.\.\.cloudProfileFields\(next\), username: Object\.hasOwn\(profile, "username"\) \? next\.username : undefined, \.\.\.\(location \? \{ location, locationUpdatedAt \} : \{\}\) \}, updatedAt\)/);
   assert.match(provider, /profileWriteCoordinator\.run\(async \(\) =>/);
   assert.match(provider, /await saveCloudProfile\(supabase, identity\.userId, pending\.profile, pending\.updatedAt, \{ rebaseOnServerClock: true \}\)/);
   assert.match(provider, /cloudProfileFallbackRef\.current !== fallback/);

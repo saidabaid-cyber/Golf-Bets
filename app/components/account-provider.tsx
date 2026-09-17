@@ -1010,7 +1010,9 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     }
     const updatedAt = new Date().toISOString();
     const locationUpdatedAt = new Date(Math.max(Date.parse(updatedAt), (Date.parse(identity.locationUpdatedAt || "") || 0) + 1)).toISOString();
-    const pending = queuePendingProfileWrite(localStorage, identity.userId, { ...cloudProfileFields(next), ...(location ? { location, locationUpdatedAt } : {}) }, updatedAt);
+    // An avatar-only edit from an older session must not rename the canonical
+    // handle. The queue still preserves an explicit rename already pending.
+    const pending = queuePendingProfileWrite(localStorage, identity.userId, { ...cloudProfileFields(next), username: Object.hasOwn(profile, "username") ? next.username : undefined, ...(location ? { location, locationUpdatedAt } : {}) }, updatedAt);
     if (location) next.locationUpdatedAt = pending.profile.locationUpdatedAt || locationUpdatedAt;
     cloudProfileFallbackRef.current = { userId: identity.userId, profile: pending.profile };
     setIdentity(next);

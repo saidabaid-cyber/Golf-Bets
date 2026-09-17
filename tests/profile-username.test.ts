@@ -68,3 +68,19 @@ test("hidratación usa canonical username dentro del guard de usuario/revisión 
   assert.match(provider, /return \{ \.\.\.current, displayName, username, avatarUrl/);
   assert.doesNotMatch(provider, /username: next\.username,/);
 });
+
+test("edición sólo avatar desde sesión antigua no revierte username canónico remoto", async () => {
+  const db = new CloudDb(), local = storage();
+  await saveCloudProfile(db.client, "A", { ...core, username: "renamed_remotely" }, "2026-09-17T12:00:00Z");
+  const staleIdentity = { ...core, username: "old_cached_handle", avatarUrl: "😎" };
+  const avatarPatch = { avatarUrl: "😎" };
+  const queued = queuePendingProfileWrite(local, "A", {
+    ...cloudProfileFields(staleIdentity),
+    username: Object.hasOwn(avatarPatch, "username") ? staleIdentity.username : undefined,
+  }, "2026-09-17T12:01:00Z");
+  await saveCloudProfile(db.client, "A", queued.profile, queued.updatedAt);
+  assert.equal(db.rows("profiles")[0].username, "renamed_remotely");
+  assert.equal(db.rows("profiles")[0].avatar_url, "😎");
+  const provider = readFileSync("app/components/account-provider.tsx", "utf8");
+  assert.match(provider, /username: Object\.hasOwn\(profile, "username"\) \? next\.username : undefined/);
+});
