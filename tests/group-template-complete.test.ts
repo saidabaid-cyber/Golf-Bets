@@ -5,7 +5,7 @@ import { collectBetConfigurationIssues } from "../lib/bet-config-validation";
 import { createEmptyGroupGameTemplate, createGroupGameTemplate, groupTemplatePlayers, instantiateGroupGameTemplate, normalizeGroupGameTemplate, updateGroupTemplateFromRound } from "../lib/group-game-template";
 import { parseFrequentGroups, serializeFrequentGroups } from "../lib/frequent-templates";
 import { groupTemplateConfigurationIssues, patchGroupTemplateCore } from "../lib/group-template-editor";
-import { calculateFoursomes, playOrder, segmentDefinitions } from "../lib/engine";
+import { calculateFoursomes, calculateManualBets, playOrder, segmentDefinitions } from "../lib/engine";
 import { counterBetEffectiveUnitValue } from "../lib/side-bets";
 import type { FrequentGroup, GroupGameTemplate } from "../lib/types";
 import { evaluateWizardEngineFixture, wizardEngineFixture, type WizardEngineFixture } from "./fixtures/round-wizard-engine";
@@ -16,6 +16,33 @@ function emptyGroup(): FrequentGroup {
     { memberId: "two", name: "Dos", handicap: null },
   ] };
 }
+
+test("explicit manual template defaults persist and reach settlement without copying past results", () => {
+  const group = emptyGroup();
+  group.players = group.players.map(member => ({ ...member, handicap: 0 }));
+  group.gameTemplate = createEmptyGroupGameTemplate(group);
+  group.gameTemplate.manualBets = [{ id: "manual-default", name: "Manual habitual", amounts: { one: 999, two: -999 }, initialAmounts: { one: 125, two: -125 } }];
+  const saved = parseFrequentGroups(serializeFrequentGroups([group]))[0];
+  assert.deepEqual(saved.gameTemplate!.manualBets[0].amounts, { one: 0, two: 0 });
+  assert.deepEqual(saved.gameTemplate!.manualBets[0].initialAmounts, { one: 125, two: -125 });
+  assert.deepEqual(groupTemplateConfigurationIssues(saved.gameTemplate!, groupTemplatePlayers(saved)).blocking, []);
+  let sequence = 0;
+  const round = instantiateGroupGameTemplate(saved, () => `runtime-${++sequence}`);
+  const [a, b] = round.players;
+  assert.deepEqual(round.manualBets[0].amounts, { [a.id]: 125, [b.id]: -125 });
+  assert.deepEqual(calculateManualBets(round.players, round.manualBets).balances, { [a.id]: 125, [b.id]: -125 });
+  round.manualBets[0].amounts[a.id] = 500;
+  assert.equal(saved.gameTemplate!.manualBets[0].initialAmounts!.one, 125);
+  assert.equal(group.gameTemplate.manualBets[0].amounts.one, 999);
+  saved.gameTemplate!.manualBets[0].initialAmounts!.two = -100;
+  assert.ok(groupTemplateConfigurationIssues(saved.gameTemplate!, groupTemplatePlayers(saved)).blocking.some(issue => issue.code.endsWith("-balance")));
+});
+
+test("historical manual amounts never implicitly become group defaults", () => {
+  const fixture = wizardEngineFixture(10, "relative");
+  const template = createGroupGameTemplate({ ...fixture, roundHandicapBasis: fixture.handicapBasis }, Object.fromEntries(fixture.players.map(player => [player.id, player.id])));
+  assert.ok(template.manualBets.every(bet => bet.initialAmounts === undefined && Object.values(bet.amounts).every(amount => amount === 0)));
+});
 
 test("habitual config shares inline selection/detail controls, not toggle-only screens", () => {
   const editor = readFileSync("app/components/group-bet-template-editor.tsx", "utf8");

@@ -804,7 +804,8 @@ export type GroupGameTemplate = {
   foursomeSegments: FoursomeSegment[];
   personalBets: PersonalBet[];
   supplementalBets: SupplementalBet[];
-  manualBets: ManualBet[];
+  /** Explicit template defaults, distinct from captured round settlement results. */
+  manualBets: (ManualBet & { initialAmounts?: Record<string, number> })[];
 };
 
 export type FrequentGroup = {

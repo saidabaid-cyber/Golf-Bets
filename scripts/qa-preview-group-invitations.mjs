@@ -73,6 +73,7 @@ export async function runPreviewGroupInvitationsQA(env=process.env,{fetcher=fetc
     template.roundDefaults.startHole=10;
     template.betConfig.rabbits={...template.betConfig.rabbits,enabled:true,mode:"three_hole_blocks",value:250,hcpPct:80};
     template.betConfig.skins={...template.betConfig.skins,enabled:true,mode:"carry",value:125};
+    template.manualBets=[{id:"qa-manual-defaults",name:"Manual QA",enabled:true,amounts:{},initialAmounts:{[ids[0]]:75,[ids[1]]:-75}}];
     template.betConfig.foursome={...template.betConfig.foursome,enabled:true,mode:"match",segmentSize:18,fixedValue:500,participantIds:ids.slice(0,4),matchPresses:[{id:"qa-second",scope:"second",startHole:1,multiplier:5}]};
     template.foursomeSegments=domain.segmentDefinitions(domain.playOrder(10),18).map(s=>({...s,basePair:ids.slice(0,2)}));
     for(const animal of ["vipers","camels","fish"])template.betConfig[animal]={...template.betConfig[animal],enabled:true,value:100,secondNinePressed:true,secondNineMultiplier:3,determinationMode:"most_events",mostEventsTieRule:"latest_tied_event"};
@@ -85,6 +86,9 @@ export async function runPreviewGroupInvitationsQA(env=process.env,{fetcher=fetc
     assert.deepEqual(stored.gameTemplate,parsed.gameTemplate);
     let sequence=0;const draft=domain.instantiateGroupGameTemplate(stored,()=>`qa-round-${++sequence}`,ids.slice(0,4));
     assert.equal(draft.startHole,10);assert.equal(draft.bets.foursome.fixedValue,500);assert.equal(draft.bets.foursome.matchPresses[0].startHole,1);assert.equal(draft.bets.foursome.matchPresses[0].multiplier,5);assert.equal(draft.bets.rabbits.hcpPct,80);
+    assert.equal(draft.manualBets[0].amounts[draft.players[0].id],75);
+    assert.equal(domain.calculateManualBets(draft.players,draft.manualBets).balances[draft.players[1].id],-75);
+    passed.push("MANUAL_DEFAULTS_REAL_DB_TO_ROUND_SETTLEMENT");
     draft.bets.foursome.fixedValue=650;assert.equal(stored.gameTemplate.betConfig.foursome.fixedValue,500);
     passed.push("GROUP_ENSURE_IDEMPOTENT","FULL_TEMPLATE_REAL_DB_READBACK","ROUND_PRELOAD_H10_PRESSURE_CONFIG","ROUND_ONLY_EDIT_KEEPS_TEMPLATE");
     stage="INVITATION_CREATE_NO_OUTBOUND_MAIL";

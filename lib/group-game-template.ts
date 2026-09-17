@@ -224,19 +224,27 @@ function remapSupplementalBets(
   });
 }
 
-function remapManualBets(value: unknown, destinationPlayerIds: string[], idFactory?: () => string): ManualBet[] {
+function remapManualBets(value: unknown, ids: ReadonlyMap<string, string>, destinationPlayerIds: string[], idFactory?: () => string): GroupGameTemplate["manualBets"] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((candidate) => {
     if (!candidate || typeof candidate !== "object") return [];
-    const raw = clone(candidate as ManualBet);
+    const raw = clone(candidate as GroupGameTemplate["manualBets"][number]);
     if (!validId(raw.id) || typeof raw.name !== "string" || !raw.name.trim()) return [];
     const cleaned = { ...raw };
     delete cleaned.enabledBeforeCategoryOff;
+    delete cleaned.initialAmounts;
+    // Only explicitly edited template defaults survive. Never reuse round results.
+    const initialAmounts = raw.initialAmounts && typeof raw.initialAmounts === "object" && !Array.isArray(raw.initialAmounts)
+      ? Object.fromEntries(Object.entries(raw.initialAmounts).flatMap(([id, amount]) => {
+        const mapped = ids.get(id);
+        return mapped && typeof amount === "number" ? [[mapped, amount]] : [];
+      })) : undefined;
     return [{
       ...cleaned,
       id: idFactory ? idFactory() : cleaned.id,
       name: cleaned.name.trim().slice(0, 80),
       amounts: Object.fromEntries(destinationPlayerIds.map((id) => [id, 0])),
+      ...(initialAmounts ? { initialAmounts } : {}),
     }];
   });
 }
@@ -283,7 +291,7 @@ function cleanTemplate(
     foursomeSegments: remapSegments(value.segments, mapping, roundDefaults, betConfig.foursome.segmentSize),
     personalBets: remapPersonalBets(value.personalBets, mapping, idFactory),
     supplementalBets: remapSupplementalBets(value.supplementalBets, mapping, roundDefaults.roundHoles, idFactory),
-    manualBets: remapManualBets(value.manualBets, destinationPlayerIds, idFactory),
+    manualBets: remapManualBets(value.manualBets, mapping, destinationPlayerIds, idFactory),
   };
 }
 
@@ -421,7 +429,9 @@ export function instantiateGroupGameTemplate(group: FrequentGroup, idFactory: ()
     segments: cleaned.foursomeSegments,
     personalBets: cleaned.personalBets,
     supplementalBets: cleaned.supplementalBets,
-    manualBets: cleaned.manualBets,
+    manualBets: cleaned.manualBets.map(({ initialAmounts, ...bet }) => ({
+      ...bet, amounts: { ...bet.amounts, ...initialAmounts },
+    })),
   };
 }
 

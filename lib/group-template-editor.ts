@@ -53,7 +53,7 @@ export function groupTemplateConfigurationIssues(template: GroupGameTemplate, pl
     segments: template.foursomeSegments,
     personalBets: template.personalBets,
     supplementalBets: template.supplementalBets,
-    manualBets: template.manualBets,
+    manualBets: template.manualBets.map(bet => ({ ...bet, amounts: bet.initialAmounts ?? bet.amounts })),
     roundHoles: template.roundDefaults.roundHoles,
     startHole: template.roundDefaults.startHole,
     handicapBasis: template.roundDefaults.handicapBasis,
