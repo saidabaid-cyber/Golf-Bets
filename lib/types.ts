@@ -704,6 +704,8 @@ export type RoundSnapshot = {
   cloudReadOnly?: true;
   cloudRoundId?: string;
   cloudSourceLocalId?: string;
+  /** Read-side proof from the authenticated cloud reader, never accepted from a snapshot write. */
+  cloudParticipant?: { accountUserId: string; playerId: string };
   /** Missing in legacy history is normalized to completed without rewriting storage. */
   lifecycleState?: RoundLifecycleState;
   /** Durable instant when the organizer explicitly started the round. */

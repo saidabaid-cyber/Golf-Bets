@@ -11,6 +11,8 @@ import { buildBalanceLedger } from "../lib/balance-ledger";
 import { canEditSnapshot, restoreRoundSnapshot } from "../lib/round-editing";
 import { initialBets } from "../lib/new-round-bets";
 import { calculateBackyardIndex } from "../lib/backyard-index";
+import { attributableHistory } from "../lib/participant-history";
+import { roundsEligibleForStatistics } from "../lib/statistics-reset";
 import type { RoundSnapshot } from "../lib/types";
 
 const A = "user-a", B = "user-b", SHARED_DB_ID = "11111111-1111-4111-8111-111111111111";
@@ -119,14 +121,46 @@ test("A72 shared view never becomes B personal score; B90 own card and complete 
   assert.equal(canEditSnapshot({ ...shared, cloudReadOnly: undefined }), false, "reserved namespace cannot be made editable by dropping marker");
 });
 
-test("shared history UI disables photo/delete and excludes shared views only from the personal balance aggregate", () => {
+test("shared history UI disables photo/delete and only confirmed views enter personal balances", () => {
   const page = readFileSync("app/page.tsx", "utf8");
   assert.match(page, /if \(!file \|\| round\.cloudReadOnly \|\| round\.id\.startsWith\("shared:"\)\) return;/);
   assert.match(page, /target\.cloudReadOnly \|\| target\.id\.startsWith\("shared:"\)/);
   assert.match(page, /!sharedReadOnly && <label className="uploadButton"/);
   assert.match(page, /!sharedReadOnly && <button[^\n]*setHistoricalRoundToDelete\(r\)/);
   const balance = readFileSync("app/components/balance-ledger-panel.tsx", "utf8");
-  assert.match(balance, /buildBalanceLedger\(history\.filter\(round => !round\.cloudReadOnly && !round\.id\.startsWith\("shared:"\)\)\)/);
+  assert.match(balance, /buildBalanceLedger\(attributableHistory\(history, currentUserId\)\)/);
+});
+
+test("B confirmation attributes B90 not A72, deduplicates DB identity, preserves immutable source and reset", async () => {
+  const db = fixtures();
+  db.tables.round_participants_v2 = []; // The social confirmation must be sufficient.
+  db.rows("social_round_account_links_v3").push({round_id: SHARED_DB_ID, user_id: B, player_key: "b", verified_by: "SELF_CONFIRMED"});
+  const sourceBefore = structuredClone(db.rows("rounds_cloud")[0]);
+  const history = await readCloudRoundHistory(db.client, B);
+  const shared = history.find(r => r.cloudReadOnly)!;
+  assert.equal(shared.cloudParticipant?.playerId, "b");
+  const insights = buildGolfInsights([shared, structuredClone(shared)]);
+  assert.equal(insights.scoredRounds, 1);
+  assert.equal(insights.averageScore, 90);
+  assert.equal(insights.betBalance, -100);
+  assert.equal(insights.expenseRounds, 0, "organizer expenses are not B's expenses");
+  assert.equal(buildGolfInsights(roundsEligibleForStatistics([shared], "2026-09-17T00:00:00Z")).rounds, 0);
+  const ledger = buildBalanceLedger(attributableHistory([shared, shared], B));
+  assert.equal(ledger.rounds.length, 1);
+  assert.equal(ledger.entries.find(e => e.accountUserId === B)?.balance, -100);
+  assert.equal(attributableHistory([shared], A).length, 0);
+  assert.deepEqual(db.rows("rounds_cloud")[0], sourceBefore);
+  assert.equal(canEditSnapshot(shared), false);
+  db.tables.social_round_account_links_v3 = [];
+  assert.equal((await readCloudRoundHistory(db.client, B)).some(r => r.cloudReadOnly), false);
+});
+
+test("stored forged proof, mismatched player and ambiguous account identity cannot authorize analytics", async () => {
+  const db = fixtures();
+  (db.rows("rounds_cloud")[0].snapshot as RoundSnapshot).cloudParticipant = {accountUserId: B, playerId: "b"};
+  assert.equal(buildGolfInsights((await readCloudRoundHistory(db.client, B)).filter(r => r.cloudReadOnly)).rounds, 0);
+  db.rows("social_round_account_links_v3").push({round_id: SHARED_DB_ID, user_id: B, player_key: "a", verified_by: "SELF_CONFIRMED"});
+  assert.equal(buildGolfInsights((await readCloudRoundHistory(db.client, B)).filter(r => r.cloudReadOnly)).rounds, 0);
 });
 
 test("participant rows paginate and owned participation does not duplicate canonical history", async () => {

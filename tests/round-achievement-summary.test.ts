@@ -59,5 +59,9 @@ test("render no acredita logros a otro accountUserId ni inventa putts/GIR sin ca
 test("detalle histórico conserva CloudSocialActivity y añade resumen local sin exigir token", () => {
   const source = readFileSync(join(process.cwd(), "app/components/historical-round-detail.tsx"), "utf8");
   assert.match(source, /<RoundAchievementSummary round=\{round\} priorRounds=\{priorRounds\} accountUserId=\{accountUserId\}/);
-  assert.match(source, /accountUserId && accessToken && <details[^>]*><summary>Logros y attest de la ronda<\/summary><CloudSocialActivity/);
+  assert.match(source, /accountUserId && accessToken && <RoundSharingPanel/);
+  const sharing = readFileSync("app/components/round-sharing-panel.tsx", "utf8");
+  assert.match(sharing, /Compartir con jugadores/);
+  assert.match(sharing, /<CloudSocialActivity/);
+  assert.match(sharing, /<SocialSharingPreferences/);
 });

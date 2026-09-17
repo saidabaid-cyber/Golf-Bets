@@ -2,6 +2,7 @@
 
 import { useId, useMemo, useState } from "react";
 import { buildBalanceLedger, compareLedgerEntries } from "../../lib/balance-ledger";
+import { attributableHistory } from "../../lib/participant-history";
 import type { LedgerEntry } from "../../lib/balance-ledger";
 import type { RoundSnapshot } from "../../lib/types";
 import styles from "./balance-ledger-panel.module.css";
@@ -45,7 +46,7 @@ export function BalanceLedgerPanel({
   const titleId = useId();
   const leftSelectId = useId();
   const rightSelectId = useId();
-  const ledger = useMemo(() => buildBalanceLedger(history.filter(round => !round.cloudReadOnly && !round.id.startsWith("shared:"))), [history]);
+  const ledger = useMemo(() => buildBalanceLedger(attributableHistory(history, currentUserId)), [history, currentUserId]);
   const [selectedLeft, setSelectedLeft] = useState("");
   const [selectedRight, setSelectedRight] = useState("");
 

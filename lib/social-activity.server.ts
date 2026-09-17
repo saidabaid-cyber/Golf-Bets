@@ -4,6 +4,10 @@ import { deriveRoundAchievements, roundAchievementLabels, roundMaterialFingerpri
 import type { RoundSnapshot } from "./types";
 import { safeSocialRoundCard } from "./social-round-card";
 import { socialActivityAuthor } from "./social-author-profile";
+import { captureCompletedRoundIndex } from "./backyard-index-auto-capture";
+import { BACKYARD_INDEX_METADATA_KEY, parseIndexPreference } from "./backyard-index-preferences";
+import { newCoursePlayedEvent } from "./new-course-activity";
+import { INTERNAL_GOLF_COURSE_CATALOG } from "./golf-course-directory";
 import type {
   SocialActivityAuthor, SocialActivityCard, SocialActivityDetail, SocialActivityPage,
   SocialAttestRequest, SocialComment, SocialCommentRequest, SocialMutationErrorCode,
@@ -24,12 +28,13 @@ type RequestCache = {
   reset: Map<string, Promise<number | null | undefined>>;
   prefs: Map<string, Promise<SocialActivityPreferences>>;
   authors: Map<string, Promise<SocialActivityAuthor>>;
+  homeClubs: Map<string, Promise<string | null>>;
 };
 const requestCaches = new WeakMap<SocialContext, RequestCache>();
 function requestCache(ctx: SocialContext): RequestCache {
   const existing = requestCaches.get(ctx);
   if (existing) return existing;
-  const created = { rounds: new Map(), reset: new Map(), prefs: new Map(), authors: new Map() } as RequestCache;
+  const created = { rounds: new Map(), reset: new Map(), prefs: new Map(), authors: new Map(), homeClubs: new Map() } as RequestCache;
   requestCaches.set(ctx, created);
   return created;
 }
@@ -378,13 +383,26 @@ async function cardFromAuthorizedRow(ctx: SocialContext, row: ActivityRow, inclu
       ? achievementLabelsFor(ctx, source, row.author_id) : Promise.resolve([]),
   ]);
   const status = await participantStatus(ctx, row, source, engagement.isAttestedByMe);
+  let courseEvent;
+  if (source && row.event_kind === "ROUND_COMPLETED" && canShowCourse) {
+    const cache = requestCache(ctx).homeClubs;
+    if (!cache.has(row.author_id)) cache.set(row.author_id, (async () => {
+      const result = await ctx.admin.auth.admin.getUserById(row.author_id);
+      if (result.error) return null; // Missing evidence is not a new-course claim.
+      const id = result.data.user?.user_metadata?.backyard_golf_profile_v1?.homeClubId;
+      return typeof id === "string" ? id : null;
+    })());
+    const [homeClub, history] = await Promise.all([cache.get(row.author_id)!, cachedRounds(ctx, row.author_id)]);
+    if (history.complete) courseEvent = newCoursePlayedEvent(source.snapshot,
+      history.rows.map(r => r.snapshot), row.author_id, homeClub, INTERNAL_GOLF_COURSE_CATALOG) || undefined;
+  }
   return {
     id: row.id, type: row.event_kind, audience: row.audience, author,
     createdAt: row.created_at, sourceVersion: Number(row.source_version), currentHash: row.material_hash,
     roundId: source?.id ?? null,
     round: source && row.event_kind === "ROUND_COMPLETED"
       ? safeSocialRoundCard(source, row.author_id, includeScorecard, canShowCourse) : null,
-    achievements, ...engagement, ...status,
+    achievements, ...(courseEvent ? { courseEvent } : {}), ...engagement, ...status,
     targetUserId: row.event_kind === "ROUND_COMPLETED" ? row.author_id : null,
   };
 }
@@ -627,6 +645,28 @@ export async function confirmParticipant(
     verified_by: "SELF_CONFIRMED",
   });
   if (error && error.code !== "23505") dbError(error);
+  // Capture this participant's evidence once, using only the frozen tee/score
+  // and their own verified Auth preference. Never rewrite the organizer view.
+  const auth = await ctx.client.auth.getUser();
+  if (auth.error || auth.data.user?.id !== ctx.userId)
+    throw new SocialServiceError("AUTH_REQUIRED", 401, "Vuelve a iniciar sesión.");
+  const preference = parseIndexPreference(auth.data.user.user_metadata?.[BACKYARD_INDEX_METADATA_KEY], ctx.userId);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const fresh = await ctx.admin.from("rounds_cloud").select("id,version,snapshot").eq("id", roundId).single();
+    if (fresh.error) dbError(fresh.error);
+    const snapshot = fresh.data.snapshot as RoundSnapshot;
+    if (snapshot.backyardIndexSnapshots?.some(item => item.accountUserId === ctx.userId)) break;
+    const participant = snapshot.players?.filter(p => p.accountUserId === ctx.userId);
+    if (snapshot.lifecycleState !== "completed" || participant?.length !== 1 || participant[0].id !== request.playerKey)
+      throw new SocialServiceError("STALE_REVISION", 409, "La ronda cambió; actualiza antes de confirmar.");
+    const enabledBeforeClose = preference && Date.parse(preference.updatedAt) <= Date.parse(snapshot.completedAt || "");
+    const captured = captureCompletedRoundIndex(snapshot, ctx.userId, enabledBeforeClose ? preference : null);
+    const saved = await ctx.admin.from("rounds_cloud").update({ snapshot: captured })
+      .eq("id", roundId).eq("version", fresh.data.version).select("id");
+    if (saved.error) dbError(saved.error);
+    if (saved.data?.length) break;
+    if (attempt === 2) throw new SocialServiceError("STALE_REVISION", 409, "La ronda cambió; reintenta la confirmación.");
+  }
   await reconcileSocialRoundActivities(ctx.admin, ctx.userId);
   return { data: { confirmed: true, playerKey: request.playerKey } };
 }

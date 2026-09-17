@@ -1,5 +1,6 @@
 import { strokeAllowanceForHole } from "./engine";
 import { deduplicateRoundSnapshots } from "./balance-ledger";
+import { attributableHistory } from "./participant-history";
 import type {
   BackyardIndexHoleAdjustment,
   BackyardIndexIneligibilityReason,
@@ -362,12 +363,9 @@ function roundStartTime(round: RoundSnapshot): number {
 
 /** Reads only stored frozen evidence; never changes profile manual HCP, Playing HCP, GHIN, or historical rounds. */
 export function calculateBackyardIndex(history: readonly RoundSnapshot[], accountUserId: string): BackyardIndexSummary {
-  const rounds = deduplicateRoundSnapshots(history.filter(
-    // Participant history is a read-only organizer snapshot, not newly eligible
-    // evidence for the viewer. Preserve frozen records without rebinding their
-    // original roundId to the shared UI namespace or double-counting own copies.
-    (round): round is RoundSnapshot => Boolean(round && !round.cloudReadOnly && typeof round.id === "string" && round.id.trim() && !round.id.startsWith("shared:")),
-  )).filter((round) => Array.isArray(round.players)
+  const rounds = deduplicateRoundSnapshots(attributableHistory(history.filter(
+    (round): round is RoundSnapshot => Boolean(round && typeof round.id === "string" && round.id.trim()),
+  ), accountUserId)).filter((round) => Array.isArray(round.players)
     && round.players.some((player) => player && player.accountUserId === accountUserId))
     .sort((a, b) => playedTime(b) - playedTime(a)
       || roundStartTime(b) - roundStartTime(a));
@@ -375,7 +373,8 @@ export function calculateBackyardIndex(history: readonly RoundSnapshot[], accoun
     const snapshot = Array.isArray(round.backyardIndexSnapshots)
       ? round.backyardIndexSnapshots.find((candidate) => candidate && candidate.accountUserId === accountUserId)
       : undefined;
-    const valid = validStoredScore(round, snapshot, accountUserId);
+    const evidenceRound = round.cloudReadOnly ? { ...round, id: round.cloudSourceLocalId! } : round;
+    const valid = validStoredScore(evidenceRound, snapshot, accountUserId);
     return {
       roundId: round.id, date: text(round.date), courseName: text(round.courseName), eligible: valid,
       reasons: valid ? [] : !snapshot ? ["MISSING_INDEX_SNAPSHOT"]

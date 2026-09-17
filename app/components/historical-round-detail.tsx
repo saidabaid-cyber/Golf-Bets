@@ -15,7 +15,7 @@ import { summarizeClubDistances } from "../../features/shots/domain";
 import { calculateBackyardIndex } from "../../lib/backyard-index";
 import { BACKYARD_INDEX_REASON_LABELS } from "../../lib/backyard-index-labels";
 import { RoundAchievementSummary } from "./round-achievement-summary";
-const CloudSocialActivity = dynamic(() => import("./cloud-social-activity").then((module) => module.CloudSocialActivity));
+const RoundSharingPanel = dynamic(() => import("./round-sharing-panel").then((module) => module.RoundSharingPanel));
 
 const money = (value: number) => `${value > 0 ? "+" : value < 0 ? "−" : ""}$${Math.abs(value).toLocaleString("es-MX", { maximumFractionDigits: 2 })}`;
 const tone = (value: number) => value > 0 ? "good" : value < 0 ? "bad" : "";
@@ -143,7 +143,7 @@ export function HistoricalRoundDetail({ round, priorRounds, accountUserId, acces
 
   return <div className="historicalDetail">
     {accountUserId && <RoundAchievementSummary round={round} priorRounds={priorRounds} accountUserId={accountUserId} />}
-    {accountUserId && accessToken && <details className="card"><summary>Logros y attest de la ronda</summary><CloudSocialActivity key={`${accountUserId}:${round.id}`} viewerId={accountUserId} accessToken={accessToken} localRoundId={round.cloudSourceLocalId || round.id} /></details>}
+    {accountUserId && accessToken && <RoundSharingPanel key={`${accountUserId}:${round.id}`} round={round} userId={accountUserId} accessToken={accessToken} />}
     {indexRecord && <section className="card"><details><summary>{indexRecord.eligible ? `ÍNDICE BACKYARD · Diferencial ${indexRecord.scoreDifferential?.toFixed(1)}` : "NO ELEGIBLE PARA ÍNDICE"}</summary><p>{indexRecord.eligible ? "Evidencia congelada al cerrar la ronda. Estimación local, no oficial." : indexRecord.reasons.map((reason) => BACKYARD_INDEX_REASON_LABELS[reason]).join(" ")}</p>{indexRecord.pccKind === "DECLARED_LOCAL_ZERO" && <p>PCC 0 declarado localmente. No es un PCC oficial publicado.</p>}</details></section>}
     <section className="card historicalHero">
       <div>

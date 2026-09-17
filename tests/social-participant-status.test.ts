@@ -20,7 +20,7 @@ function harness(links: Link[]) {
   runInNewContext(compiled, {
     exports: moduleExports,
     require: (id: string) => {
-      if (["server-only", "./round-achievements", "./social-round-card", "./social-author-profile"].includes(id)) return {};
+      if (["server-only", "./round-achievements", "./social-round-card", "./social-author-profile", "./backyard-index-auto-capture", "./backyard-index-preferences", "./new-course-activity", "./golf-course-directory"].includes(id)) return {};
       throw new Error(`Unexpected dependency: ${id}`);
     },
   });

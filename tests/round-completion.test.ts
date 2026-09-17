@@ -365,7 +365,7 @@ test("Card AI reusa las puertas finales y no muestra resultados con una Personal
   assert.match(committedFlow, /reviewPending: false/);
   assert.match(committedFlow, /setRoundReviewPending\(false\)/);
   assert.match(page, /\{roundReviewPending \|\| roundClosed\s*\? <RoundFinalResult/);
-  assert.match(page, /\{\(roundReviewPending \|\| roundClosed\) && <button className="secondary big"[\s\S]*?>Compartir ronda<\/button>/);
+  assert.match(page, /\{\(roundReviewPending \|\| roundClosed\) && <button className="secondary big"[\s\S]*?>Compartir resultado<\/button>/);
 
   const saveStart = page.indexOf("function saveRound(");
   const saveEnd = page.indexOf("async function saveConfirmedRound", saveStart);

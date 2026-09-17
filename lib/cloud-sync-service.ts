@@ -63,9 +63,25 @@ async function readOwnedRows(client: SupabaseClient, table: string, userId: stri
  * never become a new owned row when this account's local history syncs. */
 export async function readCloudRoundHistory(client: SupabaseClient, userId: string): Promise<RoundSnapshot[]> {
   const owned = await readOwnedRows(client, "rounds_cloud", userId, "snapshot");
-  const history = owned.data.map(row => row.snapshot).filter((snapshot): snapshot is RoundSnapshot =>
-    Boolean(snapshot) && typeof snapshot === "object" && !Array.isArray(snapshot) && Boolean(localId(snapshot)));
+  const history = owned.data.flatMap(row => {
+    const snapshot = row.snapshot as RoundSnapshot;
+    if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot) || !localId(snapshot)) return [];
+    if (!Object.hasOwn(snapshot, "cloudParticipant")) return [snapshot];
+    const { cloudParticipant: ignored, ...canonical } = snapshot;
+    void ignored;
+    return [canonical];
+  }) as RoundSnapshot[];
   const participantIds = new Set<string>();
+  const confirmations = new Map<string, string>();
+  for (let offset = 0; ; offset += 500) {
+    const page = await client.from("social_round_account_links_v3").select("round_id,player_key")
+      .eq("user_id", userId).eq("verified_by", "SELF_CONFIRMED").order("round_id").range(offset, offset + 499);
+    if (page.error) throw page.error;
+    for (const row of page.data || []) {
+      participantIds.add(row.round_id); confirmations.set(row.round_id, row.player_key);
+    }
+    if ((page.data || []).length < 500) break;
+  }
   for (let offset = 0; ; offset += 500) {
     const page = await client.from("round_participants_v2").select("round_id").eq("user_id", userId)
       .order("round_id").range(offset, offset + 499);
@@ -84,7 +100,11 @@ export async function readCloudRoundHistory(client: SupabaseClient, userId: stri
       if (row.owner_id === userId || typeof row.id !== "string" || !row.snapshot
         || typeof row.snapshot !== "object" || Array.isArray(row.snapshot) || !localId(row.snapshot)) continue;
       const source = row.snapshot as RoundSnapshot;
+      const matches = source.players?.filter(player => player.accountUserId === userId) || [];
+      const player = source.lifecycleState === "completed" && matches.length === 1
+        && matches[0].id === confirmations.get(row.id) ? matches[0] : null;
       history.push({ ...source, id: `shared:${row.id}`, cloudReadOnly: true, cloudRoundId: row.id,
+        cloudParticipant: player ? { accountUserId: userId, playerId: player.id } : undefined,
         cloudSourceLocalId: typeof row.local_round_id === "string" ? row.local_round_id : source.id });
     }
   }

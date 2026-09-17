@@ -144,9 +144,10 @@ export function deduplicateRoundSnapshots(rounds: readonly RoundSnapshot[]) {
   const latest = new Map<string, { round: RoundSnapshot; timestamp: number; index: number }>();
   rounds.forEach((round, index) => {
     const timestamp = snapshotTime(round);
-    const previous = latest.get(round.id);
+    const canonicalKey = round.cloudRoundId ? `cloud:${round.cloudRoundId}` : round.id;
+    const previous = latest.get(canonicalKey);
     if (!previous || timestamp > previous.timestamp || (timestamp === previous.timestamp && index > previous.index)) {
-      latest.set(round.id, { round, timestamp, index });
+      latest.set(canonicalKey, { round, timestamp, index });
     }
   });
   return [...latest.values()]

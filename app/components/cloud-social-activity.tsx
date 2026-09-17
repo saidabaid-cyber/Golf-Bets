@@ -93,6 +93,7 @@ export function SocialRoundActivityCard({ card, viewerId, accessToken, onRefresh
   return <article className={styles.card} aria-label={`${card.type === "EQUIPMENT_UPDATED" ? "Equipo" : "Ronda"} de ${card.author.displayName}`}>
     <header className={styles.author}><ProfileAvatarMedia className={styles.avatar} value={card.author.avatarUrl} fallback={card.author.displayName[0] || "G"} /><div><b>{card.author.displayName}</b>{card.author.username && <small>@{card.author.username}</small>}<small>{dateLabel(card.round?.date || card.createdAt)} · {card.audience === "OWNER" ? "Privado" : "Amigos"}</small></div></header>
     {card.round ? <><h3>{card.round.courseName}</h3><p className={styles.score}>{card.round.ownerScore ?? "—"}<span>golpes · {card.round.holesPlayed} hoyos{card.round.totalOnly ? " · Sólo total" : ""}</span></p></> : <h3>{card.type === "EQUIPMENT_UPDATED" ? "Actualizó su bolsa." : "Logros de ronda"}</h3>}
+    {card.courseEvent && <p>Nuevo campo jugado · fuera de su Home Club</p>}
     {card.achievements.length > 0 && <ul className={styles.achievements}>{card.achievements.map((item) => <li key={item}>{item}</li>)}</ul>}
     {card.round && <p className={styles.attest}>{card.attestCount ? `Atestada por ${card.attestCount} ${card.attestCount === 1 ? "jugador" : "jugadores"}` : "Sin atestar"}<small>Confirmación de compañeros. No es certificación GHIN/WHS.</small></p>}
     <div className={styles.actions}>

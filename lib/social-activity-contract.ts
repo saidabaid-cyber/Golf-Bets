@@ -49,6 +49,7 @@ export type SocialActivityCard = {
   roundId: string | null;
   round: SocialRoundCard | null;
   achievements: string[];
+  courseEvent?: import("./new-course-activity").NewCoursePlayedEvent;
   likesCount: number;
   likedByMe: boolean;
   commentsCount: number;

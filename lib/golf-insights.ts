@@ -1,4 +1,5 @@
 import { deduplicateRoundSnapshots } from "./balance-ledger";
+import { personalRoundPerspective } from "./participant-history";
 import { normalizeAdvancedStats } from "./advanced-stats";
 import {
   buildHistoricalRoundRecap,
@@ -315,12 +316,9 @@ function canonicalRounds(rounds: readonly RoundSnapshot[]) {
   const records: CanonicalRound[] = [];
   let nonFinalRounds = 0;
   let invalidRounds = rounds.length - runtimeRounds.length;
-  for (const round of unique) {
-    // Shared cards preserve the organizer's frozen owner perspective. They are
-    // visible in history/ledger, but must not count the organizer's score or
-    // expenses as this account's personal performance. Per-player analytics
-    // require a separate proven participant perspective, not an owner rewrite.
-    if (round.cloudReadOnly || round.id.startsWith("shared:")) continue;
+  for (const canonical of unique) {
+    const round = personalRoundPerspective(canonical);
+    if (!round) continue;
     const recap = buildHistoricalRoundRecap(round);
     if (recap.meta.lifecycleState !== "completed") {
       nonFinalRounds += 1;

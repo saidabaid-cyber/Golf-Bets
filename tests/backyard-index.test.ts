@@ -66,6 +66,18 @@ function round(id = "round-1", date = playedAt, scoreAbovePar = 18): RoundSnapsh
   } as RoundSnapshot;
 }
 
+test("confirmed shared evidence keeps original round ID, counts once, denies other account and unconfirmed views", () => {
+  const saved = snapshotBackyardIndexRound(round(), accountUserId, { ratedTeeEvidence, pccEvidence: localZero() });
+  const shared: RoundSnapshot = { ...saved, id: "shared:db-id", cloudReadOnly: true,
+    cloudRoundId: "db-id", cloudSourceLocalId: saved.id,
+    cloudParticipant: { accountUserId, playerId: "owner-player" } };
+  assert.equal(calculateBackyardIndex([shared, shared], accountUserId).eligibleRoundCount, 1);
+  assert.equal(calculateBackyardIndex([shared], "other-account").records.length, 0);
+  assert.equal(calculateBackyardIndex([{ ...shared, cloudParticipant: undefined }], accountUserId).records.length, 0);
+  assert.equal(calculateBackyardIndex([shared, { ...saved, cloudRoundId: "db-id" }], accountUserId).eligibleRoundCount, 1);
+  assert.equal(shared.backyardIndexSnapshots?.[0].roundId, saved.id);
+});
+
 test("score differential usa adjusted gross, Rating, Slope y PCC conocidos; redondea .5 hacia arriba", () => {
   assert.equal(backyardScoreDifferential(90, 72, 113, 0), 18);
   assert.equal(backyardScoreDifferential(90, 72, 113, 1), 17);
