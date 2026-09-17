@@ -14,9 +14,9 @@ test("score and distance retain intermediate keystrokes below the final minimum"
   }
   const component = readFileSync("app/components/ball-fit-wizard.tsx", "utf8");
   assert.ok(!component.includes("optionalNumber("));
-  assert.match(component, /NumericCaptureInput inputMode="numeric" min=\{40\}/);
-  assert.match(component, /NumericCaptureInput inputMode="numeric" min=\{50\}/);
-  assert.match(readFileSync("app/components/numeric-capture-input.tsx", "utf8"), /inputMode=\{inputProps.inputMode \?\? "text"\}/);
+  assert.match(component, /NumericCaptureInput keyboardMode="numeric" min=\{40\}/);
+  assert.match(component, /NumericCaptureInput keyboardMode="numeric" min=\{50\}/);
+  assert.match(readFileSync("app/components/numeric-capture-input.tsx", "utf8"), /inputMode=\{keyboardMode \?\? "text"\}/);
 });
 
 test("fitting draft reload and editing preserve independent distance/speed without inventing handicap", () => {

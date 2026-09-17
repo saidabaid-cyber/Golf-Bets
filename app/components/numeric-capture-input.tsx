@@ -9,6 +9,9 @@ type NumericCaptureInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "typ
   onValueChange: (value: number | null) => void;
   emptyWhenZero?: boolean;
   commitUnchanged?: boolean;
+  /** Opt in for unsigned mobile capture. Existing signed bets/HCP retain the
+   * text keyboard because iOS decimal keyboards can omit the minus sign. */
+  keyboardMode?: InputHTMLAttributes<HTMLInputElement>["inputMode"];
 };
 
 export function NumericCaptureInput({
@@ -16,6 +19,7 @@ export function NumericCaptureInput({
   onValueChange,
   emptyWhenZero = true,
   commitUnchanged = false,
+  keyboardMode,
   onBlur,
   onFocus,
   onKeyDown,
@@ -58,7 +62,7 @@ export function NumericCaptureInput({
     {...inputProps}
     data-numeric-capture="true"
     type="text"
-    inputMode={inputProps.inputMode ?? "text"}
+    inputMode={keyboardMode ?? "text"}
     enterKeyHint={inputProps.enterKeyHint ?? "done"}
     value={rawValue}
     onFocus={(event) => {

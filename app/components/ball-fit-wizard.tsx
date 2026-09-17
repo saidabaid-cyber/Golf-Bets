@@ -302,12 +302,12 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
       </div>
       {input.handicapSource === "MANUAL" && <label>HCP manual (sólo este fitting)<NumericCaptureInput inputMode="decimal" min={-20} max={54} emptyWhenZero={false} value={input.handicap} onValueChange={(handicap) => patchInput({ handicap })} placeholder="Ej. 18" /><small>Declarado por ti; no es GHIN ni Backyard Index.</small></label>}
       {input.handicapSource === "UNKNOWN" && <><h4>¿Cuánta experiencia tienes?</h4><OptionGrid values={BALL_FIT_EXPERIENCES} labels={{ STARTING: "Estoy empezando", OCCASIONAL: "Juego ocasionalmente", REGULAR: "Juego con regularidad", UNKNOWN: "Prefiero no indicar" }} selected={input.experience || "UNKNOWN"} onSelect={(experience) => patchInput({ experience })} /><p className={styles.subtle}>Esto aporta contexto; no calculamos un hándicap estimado.</p></>}
-      <label>Score típico en 18 hoyos (opcional)<NumericCaptureInput inputMode="numeric" min={40} max={200} value={input.typicalScore} onValueChange={(typicalScore) => patchInput({ typicalScore })} placeholder="Si lo conoces" /></label>
+      <label>Score típico en 18 hoyos (opcional)<NumericCaptureInput keyboardMode="numeric" min={40} max={200} value={input.typicalScore} onValueChange={(typicalScore) => patchInput({ typicalScore })} placeholder="Si lo conoces" /></label>
     </section>}
 
     {!result && step === 1 && <section className={styles.questionBlock}>
       <h3>Driver</h3><p>La velocidad es opcional. Nunca inferimos una compresión no publicada a partir de este dato.</p>
-      <label>¿Cuánto pegas aproximadamente con driver? (yardas, opcional)<NumericCaptureInput inputMode="numeric" min={50} max={500} value={input.driverDistanceYards} onValueChange={(driverDistanceYards) => patchInput({ driverDistanceYards })} placeholder="Ej. 245" /></label>
+      <label>¿Cuánto pegas aproximadamente con driver? (yardas, opcional)<NumericCaptureInput keyboardMode="numeric" min={50} max={500} value={input.driverDistanceYards} onValueChange={(driverDistanceYards) => patchInput({ driverDistanceYards })} placeholder="Ej. 245" /></label>
       <h4>Velocidad de swing con driver</h4><OptionGrid values={SWING_SPEED_BANDS} labels={SPEED_LABELS} selected={input.swingSpeedBand} onSelect={(value) => patchInput({ swingSpeedBand: value })} />
       <LaunchMonitorCapture userId={userId} accessToken={accessToken} requiresRemoteConsent={requiresRemoteConsent} value={input.launchMonitorSession} onChange={(launchMonitorSession) => patchInput({ launchMonitorSession })} onOpenPrivacy={onOpenPrivacy} />
     </section>}

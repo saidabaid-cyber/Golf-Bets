@@ -141,7 +141,7 @@ test("capture inputs use the empty-safe numeric control and Manuales accept a di
   assert.match(input, /const nextRawValue = normalizeNumericCaptureText\(event\.target\.value\)/);
   assert.match(input, /rawValueRef\.current = nextRawValue/);
   assert.match(input, /type="text"/);
-  assert.match(input, /inputMode=\{inputProps.inputMode \?\? "text"\}/);
+  assert.match(input, /inputMode=\{keyboardMode \?\? "text"\}/);
   assert.doesNotMatch(input, /onValueChange\(parseNumericCapture\(event\.target\.value\)\)/);
   assert.doesNotMatch(`${page}\n${polla}`, /placeholder="0"/);
 });
