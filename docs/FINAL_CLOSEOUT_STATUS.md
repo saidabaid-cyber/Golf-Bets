@@ -1,5 +1,7 @@
 # Phase 1 + Phase 2 final technical closeout
 
+> Historical checkpoint (2026-09-10), not the current deployment/DB status. The isolated QA branch now exists. See [the evidence-based 2026-09-17 closeout](PHASE2_HARD_CLOSEOUT_2026-09-17.md) for current results, regressions and remaining gaps. Do not execute the old migration plan below without checking the current ledger.
+
 Last updated: 2026-09-10 (America/Mexico_City)
 
 ## Resume checkpoint
