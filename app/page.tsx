@@ -3504,7 +3504,7 @@ function GolfBetsApp() {
       displayName={identity.displayName}
       username={identity.username}
       avatarUrl={identity.avatarUrl}
-      activeRound={activeRoundSummary}
+      activeRound={activeRoundSummary?.status === "setup" ? null : activeRoundSummary}
       insights={{ ...betaGolfInsights, betBalance: historicalGolfInsights.betBalance }}
       groupCount={frequentGroups.length}
       onContinueRound={continueActiveRound}

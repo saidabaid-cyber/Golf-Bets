@@ -83,6 +83,16 @@ test("Home balance keeps historical settlements while sports metrics honor stats
   assert.match(page, /historicalGolfInsights = useMemo\(\(\) => buildGolfInsights\(history\)/);
 });
 
+test("an unstarted draft keeps all three Play entries accessible and remains resumable in Play", () => {
+  const page = readFileSync("app/page.tsx", "utf8");
+  const home = page.match(/<HomeDashboard[\s\S]*?\/>/)?.[0] || "";
+  const play = page.match(/<PlayHub[\s\S]*?\/>/)?.[0] || "";
+  assert.match(home, /activeRound=\{activeRoundSummary\?\.status === "setup" \? null : activeRoundSummary\}/);
+  assert.match(home, /onPlayOptions=\{\(\) => setTab\("play"\)\}/);
+  assert.match(play, /activeRound=\{activeRoundSummary\}/);
+  assert.match(play, /onContinueRound=\{continueActiveRound\}/);
+});
+
 test("header keeps Profile and notifications, with settings only inside Perfil", () => {
   assert.match(source, /aria-label="Abrir mi perfil"/);
   assert.match(source, /aria-label="Abrir notificaciones"/);
