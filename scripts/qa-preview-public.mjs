@@ -2,8 +2,10 @@
 // PREVIEW_QA_ACCESS_URL may hold a temporary authorized Vercel share URL.
 import assert from 'node:assert/strict';
 
-const origin = new URL(process.argv[2] || 'https://golf-bets-git-codex-dev-saha8.vercel.app').origin;
-const expectedProject = 'https://zhqmlpljloumldaczcfp.supabase.co';
+assert.ok(process.argv[2], 'Pass the exact immutable Phase 2 Preview URL');
+const origin = new URL(process.argv[2]).origin;
+assert.match(origin, /^https:\/\/golf-bets-[a-z0-9]+-saha8\.vercel\.app$/);
+const expectedProject = 'https://bymeopxkxapfizeeqeyb.supabase.co';
 const cookies = new Map();
 async function previewFetch(path) {
   let url = new URL(path, origin);

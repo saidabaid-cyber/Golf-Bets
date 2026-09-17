@@ -4,6 +4,12 @@ import { upsertRoundSnapshot } from "./round-editing";
 import { persistRoundHistory, readStoredJson, STORAGE_KEYS } from "./round-utils";
 import type { RoundSnapshot } from "./types";
 
+/** Reflect the actual sync ACK; a local-save notice must not stay pending forever. */
+export function roundSaveNotice(message: string, cloudStatus: string): string {
+  return message === "Ronda guardada en este dispositivo · sincronización pendiente." && cloudStatus === "synced"
+    ? "Ronda guardada y sincronizada ✓" : message;
+}
+
 type RoundHistoryStorage = Pick<Storage, "getItem" | "setItem">;
 
 type PersistOffline = (

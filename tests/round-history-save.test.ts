@@ -4,7 +4,14 @@ import test from "node:test";
 
 import { CLOUD_TOMBSTONES_KEY, collectLocalCloudData, mergeLocalAndCloud, type CloudDataBundle } from "../lib/cloud-sync";
 import { acknowledgeOfflineBundle, markOfflineAttempt, persistOfflineBundle, readOfflineBundle, readOfflineOutbox, writeCloudBundleToStorage } from "../lib/offline-store";
-import { saveRoundHistoryLocalFirst } from "../lib/round-history-save";
+import { roundSaveNotice, saveRoundHistoryLocalFirst } from "../lib/round-history-save";
+
+test("local save notice turns synced only after a cloud ACK, never for offline/error/pending", () => {
+  const pending="Ronda guardada en este dispositivo · sincronización pendiente.";
+  for (const status of ["pending","syncing","error","offline"]) assert.equal(roundSaveNotice(pending,status),pending);
+  assert.equal(roundSaveNotice(pending,"synced"),"Ronda guardada y sincronizada ✓");
+  assert.equal(roundSaveNotice("Error de guardado","synced"),"Error de guardado");
+});
 import { readStoredJson, STORAGE_KEYS } from "../lib/round-utils";
 import type { Course, Player, RoundSnapshot } from "../lib/types";
 
