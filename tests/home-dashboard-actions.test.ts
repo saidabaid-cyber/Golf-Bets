@@ -75,6 +75,14 @@ test("active round remains inside the approved Home and routes both visible cont
   assert.match(source, /partialToPar/);
 });
 
+test("Home balance keeps historical settlements while sports metrics honor stats reset", () => {
+  const page = readFileSync("app/page.tsx", "utf8");
+  const home = page.match(/<HomeDashboard[\s\S]*?\/>/)?.[0] || "";
+  assert.match(home, /insights=\{\{ \.\.\.betaGolfInsights, betBalance: historicalGolfInsights\.betBalance \}\}/);
+  assert.match(page, /buildGolfInsights\(statisticsHistory\)/);
+  assert.match(page, /historicalGolfInsights = useMemo\(\(\) => buildGolfInsights\(history\)/);
+});
+
 test("header keeps Profile and notifications, with settings only inside Perfil", () => {
   assert.match(source, /aria-label="Abrir mi perfil"/);
   assert.match(source, /aria-label="Abrir notificaciones"/);
