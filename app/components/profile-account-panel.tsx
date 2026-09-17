@@ -85,7 +85,7 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [managingConsents, setManagingConsents] = useState(false);
   const [managingAiConsents, setManagingAiConsents] = useState(view === "account" && openAiPrivacySettings);
-  useViewScrollReset(`${view}:${editing}:${managingConsents}:${managingAiConsents}`, undefined, !completionEditTarget);
+  useViewScrollReset(`${view}:${focusSection}:${rootNavigationKey}:${editing}:${managingConsents}:${managingAiConsents}`, undefined, !completionEditTarget);
   const [deleteStatsOpen, setDeleteStatsOpen] = useState(false);
   const [deleteStatsText, setDeleteStatsText] = useState("");
   const [deletingStatistics, setDeletingStatistics] = useState(false);

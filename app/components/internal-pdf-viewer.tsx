@@ -1,7 +1,6 @@
 "use client";
 
 import { type FormEvent, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { lockModalScroll } from "../../lib/mobile-viewport";
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import type { OfficialRulesDocument } from "../../lib/rules-documents";
 import { countPdfTextMatches, pdfPixelRatio, withPdfDeadline } from "../../lib/pdf-viewer-utils";
@@ -133,21 +132,16 @@ export function InternalPdfViewer({ document, initialPage = 1, onBack }: { docum
   }, [document.localUrl, document.officialUrl, document.pageCount, document.pageOffset, initialPage, retry]);
 
   useEffect(() => {
-    const release = lockModalScroll();
     const update = () => setWidth(Math.max(220, (container.current?.clientWidth || window.innerWidth) - 28));
     update();
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
     if (container.current) observer?.observe(container.current);
     window.addEventListener("resize", update);
-    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") onBack(); };
-    window.addEventListener("keydown", escape);
     return () => {
-      release();
       observer?.disconnect();
       window.removeEventListener("resize", update);
-      window.removeEventListener("keydown", escape);
     };
-  }, [onBack]);
+  }, []); // ModalCloseButton owns the single modal lock/Escape lifecycle.
 
   const highlightedPages = useMemo(() => new Set(matches.map((match) => match.page)), [matches]);
   const totalMatches = matches.reduce((sum, match) => sum + match.count, 0);

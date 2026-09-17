@@ -116,6 +116,7 @@ import { CourseLibrary } from "./components/course-library";
 import { PersonalHistoryPanel } from "./components/personal-history-panel";
 import { PersonalOpponentResults } from "./components/personal-opponent-results";
 import { useScreenNavigation } from "./components/use-screen-navigation";
+import { useViewScrollReset } from "./components/use-view-scroll-reset";
 import { applyPendingScoreEdits, commitHoleCapture, editCapturedScore, holeCapture, isHoleCaptureComplete, type ScoreRows } from "../lib/score-capture";
 import { foursomePressure, setFoursomePressure } from "../lib/foursome-config";
 import { FoursomeLive } from "./components/foursome-live";
@@ -534,6 +535,8 @@ function GolfBetsApp() {
   const [frequentGroupDraft, setFrequentGroupDraft] = useState<FrequentGroup | null>(null);
   const [frequentGroupDraftIsNew, setFrequentGroupDraftIsNew] = useState(false);
   const [frequentGroupEditorTab, setFrequentGroupEditorTab] = useState<"members" | "bets">("members");
+  const groupEditorRef = useRef<HTMLElement | null>(null);
+  useViewScrollReset(frequentGroupEditorTab, groupEditorRef, Boolean(frequentGroupDraft));
   const [groupRoundSelection, setGroupRoundSelection] = useState<FrequentGroup | null>(null);
   const [frequentGroupEditError, setFrequentGroupEditError] = useState("");
   const [frequentGroupSaving, setFrequentGroupSaving] = useState(false);
@@ -4182,7 +4185,7 @@ function GolfBetsApp() {
 
     {groupRoundSelection && <GroupRoundSelector group={groupRoundSelection} onCancel={() => setGroupRoundSelection(null)} onConfirm={(selectedMemberIds) => confirmFrequentGroupRoundSelection(groupRoundSelection, selectedMemberIds)} />}
 
-    {frequentGroupDraft && <div className="modalBackdrop" role="presentation"><section className="groupEditorDialog" role="dialog" aria-modal="true" aria-labelledby="edit-group-title" aria-describedby="edit-group-description">
+    {frequentGroupDraft && <div className="modalBackdrop" role="presentation"><section ref={groupEditorRef} className="groupEditorDialog" role="dialog" aria-modal="true" aria-labelledby="edit-group-title" aria-describedby="edit-group-description">
       <ModalCloseButton onClose={() => { if (!frequentGroupSaveInFlight.current) resetFrequentGroupEditor(); }} />
       <div className="groupEditorHeader"><h2 id="edit-group-title">{frequentGroupDraftIsNew ? "Crear grupo" : "Editar grupo"}</h2><p id="edit-group-description">Jugadores y apuestas forman una plantilla. Las rondas ya iniciadas o históricas nunca cambian.</p></div>
       <fieldset disabled={frequentGroupSaving} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>

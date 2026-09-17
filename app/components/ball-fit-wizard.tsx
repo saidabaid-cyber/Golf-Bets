@@ -110,6 +110,7 @@ type BallFitWizardProps = {
   defaultHandicap: number | null;
   defaultHandicapSource?: BallFitHandicapSource | null;
   profileDefaults?: BallFitProfileDefaults;
+  savedInput?: BallFitInput | null;
   currentBall: PlayerBall | null;
   catalog: readonly GolfBallCatalog[];
   onCancel: () => void;
@@ -117,8 +118,10 @@ type BallFitWizardProps = {
   onComplete: (result: BallFitResult, input: BallFitInput) => boolean | void;
 };
 
-export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = true, defaultHandicap, defaultHandicapSource, profileDefaults, currentBall, catalog, onCancel, onComplete, onOpenPrivacy }: BallFitWizardProps) {
-  const [input, setInput] = useState<BallFitInput>(() => defaultInput(userId, defaultHandicap, currentBall?.catalogBallId || null, profileDefaults, defaultHandicapSource));
+export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = true, defaultHandicap, defaultHandicapSource, profileDefaults, savedInput, currentBall, catalog, onCancel, onComplete, onOpenPrivacy }: BallFitWizardProps) {
+  const [input, setInput] = useState<BallFitInput>(() => savedInput?.userId === userId
+    ? structuredClone(savedInput)
+    : defaultInput(userId, defaultHandicap, currentBall?.catalogBallId || null, profileDefaults, defaultHandicapSource));
   const [step, setStep] = useState(0);
   const [hydrated, setHydrated] = useState(false);
   const [savedDraft, setSavedDraft] = useState<BallFitDraft | null>(null);

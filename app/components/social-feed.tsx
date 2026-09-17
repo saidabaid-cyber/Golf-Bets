@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import { useViewScrollReset } from "./use-view-scroll-reset";
 import type { PersonalActivity } from "../../lib/golf-insights";
 import type { SocialProfile } from "../../features/social/domain";
 import type { SocialNotificationPage } from "../../lib/social-activity-contract";
@@ -21,6 +22,7 @@ export type SocialFeedProps = {
 export function SocialFeed({ initialView = "activity", targetId, onCloseTarget, identityUserId, accessToken, onOpenGroups, onPrivacy }: SocialFeedProps) {
   const { identity, retryCloudSync } = useBackyardAccount();
   const [view, setView] = useState<SocialView>(initialView), [menu, setMenu] = useState(false), [unread, setUnread] = useState(0), [target, setTarget] = useState(targetId);
+  useViewScrollReset(`${view}:${target ?? ""}`);
   const refreshUnread = useCallback(async (signal?: AbortSignal) => {
     if (!accessToken) return;
     const result = await socialRequest<SocialNotificationPage>("/api/social/notifications", accessToken, { signal });
