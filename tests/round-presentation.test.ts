@@ -147,6 +147,17 @@ test("snapshots legacy sin metadata mantienen la terminología Polla", () => {
   assert.equal(groupNassauPresentation(restored?.presentation).name, "Polla");
 });
 
+test("score-only survives background autosave, reload and history restoration", () => {
+  const presentation = { version: 1 as const, groupNassauTerm: "polla" as const, playMode: "score_only" as const };
+  const restored = normalizeRoundDraft(JSON.parse(JSON.stringify({ course, players, ownerId: "said", bets: initialBets(players.map(p => p.id)), presentation })));
+  assert.equal(restored?.presentation.playMode, "score_only");
+  assert.equal(restoreRoundSnapshot(completedSnapshot(restored?.presentation))?.presentation?.playMode, "score_only");
+  const page = readFileSync("app/page.tsx", "utf8");
+  const backgroundWriter = page.slice(page.indexOf("const revision = localPersistRevision.current;"), page.indexOf("const flush = () => flushLocalState.current?.();"));
+  assert.match(backgroundWriter, /presentation: normalizeRoundPresentation\(roundPresentation\)/, "autosave must not overwrite the explicit save with metadata-free draft");
+  assert.match(backgroundWriter, /roundHandicapBasis, roundPresentation, players/, "mode changes must trigger persistence");
+});
+
 test("‘como la semana pasada’ recupera también la terminología visible, no sólo bets.polla", () => {
   const plan = planRoundSetup("Como la semana pasada.", {
     ...context(),
