@@ -713,7 +713,25 @@
 .editorPage > p { margin: 0; }
 .editorPage > h2 { margin-top: 10px; }
 .editorPage > p { margin-top: 5px; color: var(--muted); font-size: 12px; line-height: 1.5; }
-.editorPage .formActions { bottom: 0; margin-bottom: 0; padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+.editorPage .formActions { position: static; margin: 7px 0 0; padding-inline: 0; padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+
+/* Equipment pickers use the page scroll, not an absolutely positioned list
+   inside another scroller. Every result and the manual fallback stay reachable
+   when Safari's keyboard/browser chrome reduces the available viewport. */
+.editorPage :global(.anchoredSearchResults) {
+  position: static;
+  max-height: none;
+  overflow: visible;
+  margin-top: 6px;
+  box-shadow: none;
+}
+.editorPage { padding-bottom: calc(100px + env(safe-area-inset-bottom)); }
+.editorPage input,
+.editorPage select,
+.editorPage textarea { font-size: 16px; scroll-margin-block: 100px; }
+.handicapChoices { display: grid; gap: 8px; margin-block: 12px; min-width: 0; }
+.handicapChoices button { min-height: 48px; white-space: normal; overflow-wrap: anywhere; }
+.handicapChoices small { display: block; margin-top: 4px; font-weight: 500; }
 
 .pageBack {
   justify-self: start;

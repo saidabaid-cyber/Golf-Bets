@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { restoreEquipmentBallFitSummary, toEquipmentBallFitSummary, type BallFitInput, type BallFitProfileDefaults, type BallFitResult } from "../../lib/ball-fitting";
 import { removeBallFitDraft } from "../../lib/ball-fitting-storage";
+import { BALL_FIT_HANDICAP_LABELS, type BallFitHandicapSource } from "../../lib/ball-fit-handicap";
 import {
   clearLastBallFit,
   removePlayerBall,
@@ -29,14 +30,13 @@ import { BallFitResults, BallFitWizard } from "./ball-fit-wizard";
 import { BallEditor, CLUB_CATEGORY_ICONS, CLUB_CATEGORY_LABELS, ClubDistanceEditor, ClubEditor } from "./equipment-editors";
 import { equipmentStatusLabel, useEquipmentProfile } from "./use-equipment-profile";
 import { useEquipmentCatalogSearch } from "./use-equipment-catalog-search";
-import { useModalDialog } from "./use-modal-dialog";
-import { ModalCloseButton } from "./modal-shell";
 import styles from "./equipment.module.css";
 
 type EquipmentProfilePanelProps = {
   userId: string;
   accessToken: string | null;
   defaultHandicap: number | null;
+  defaultHandicapSource?: BallFitHandicapSource | null;
   ballFitDefaults?: BallFitProfileDefaults;
   onBackToProfile?: () => void;
   onOpenPrivacy?: () => void;
@@ -87,7 +87,7 @@ function savedFitId() {
   return globalThis.crypto?.randomUUID?.() || `fit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, ballFitDefaults, onBackToProfile, onOpenPrivacy }: EquipmentProfilePanelProps) {
+export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, defaultHandicapSource, ballFitDefaults, onBackToProfile, onOpenPrivacy }: EquipmentProfilePanelProps) {
   const { profile, status, message, update, retry, resolveConflict, recoverLocalProfile } = useEquipmentProfile(userId, accessToken);
   const [clubEditor, setClubEditor] = useState<PlayerClub | "new" | null>(null);
   const [ballEditor, setBallEditor] = useState<PlayerBall | "new" | null>(null);
@@ -96,8 +96,6 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, ba
   const [deleteIntent, setDeleteIntent] = useState<EquipmentDeleteIntent | null>(null);
   const [fitOpen, setFitOpen] = useState(false);
   const [savedFitOpen, setSavedFitOpen] = useState(false);
-  const fitDialogRef = useModalDialog(fitOpen, () => setFitOpen(false));
-  const savedFitDialogRef = useModalDialog(savedFitOpen, () => setSavedFitOpen(false));
   const currentClubs = useMemo(() => profile?.clubs.filter((club) => club.isCurrent) || [], [profile]);
   const historicalClubs = useMemo(() => profile?.clubs.filter((club) => !club.isCurrent) || [], [profile]);
   const currentBall = profile?.balls.find((ball) => ball.isCurrent) || null;
@@ -202,6 +200,8 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, ba
     }
   }
 
+  if (fitOpen) return <div className={styles.fullPageFlow} data-equipment-screen="ball-fit"><section className={styles.editorPage}><BallFitWizard userId={userId} accessToken={accessToken} defaultHandicap={defaultHandicap} defaultHandicapSource={defaultHandicapSource} profileDefaults={ballFitDefaults} currentBall={currentBall} catalog={ballCatalog.items} onCancel={() => setFitOpen(false)} onComplete={completeFit} onOpenPrivacy={onOpenPrivacy} /></section></div>;
+  if (savedFitOpen && restoredFit) return <div className={styles.fullPageFlow} data-equipment-screen="saved-ball-fit"><section className={styles.editorPage}><button type="button" className={styles.pageBack} onClick={() => setSavedFitOpen(false)}>← Volver a Mi Bolsa</button><div className={styles.wizardHeader}><div><div className="eyebrow">RESULTADO GUARDADO</div><h2>Tu mejor grupo de bolas</h2><p>{BALL_FIT_HANDICAP_LABELS[restoredFit.input.handicapSource || "UNKNOWN"]}{restoredFit.input.handicap === null ? "" : `: ${restoredFit.input.handicap}`}</p></div></div><BallFitResults result={restoredFit.result} catalog={ballCatalog.items} current={restoredFit.input.currentBallId ? ballCatalog.items.find((ball) => ball.id === restoredFit.input.currentBallId) || null : null} /></section></div>;
   if (clubEditor) return <div className={styles.fullPageFlow} data-equipment-screen="club-editor">
     <ClubEditor userId={userId} catalog={clubCatalog.items} shafts={shaftCatalog.items} existing={clubEditor === "new" ? null : clubEditor} presentation="page" onSelectBall={() => { setClubEditor(null); setBallEditor("new"); }} onCancel={() => setClubEditor(null)} onSave={saveClub} />
   </div>;
@@ -285,8 +285,6 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, ba
       </div>}
     </div>
 
-    {fitOpen && <div className={styles.editorBackdrop} role="presentation"><section ref={fitDialogRef} tabIndex={-1} className={styles.editorSheet} role="dialog" aria-modal="true" aria-label="The Backyard Ball Fit"><ModalCloseButton onClose={() => setFitOpen(false)} /><div className={styles.sheetHandle} /><BallFitWizard userId={userId} accessToken={accessToken} defaultHandicap={defaultHandicap} profileDefaults={ballFitDefaults} currentBall={currentBall} catalog={ballCatalog.items} onCancel={() => setFitOpen(false)} onComplete={completeFit} onOpenPrivacy={onOpenPrivacy} /></section></div>}
-    {savedFitOpen && restoredFit && <div className={styles.editorBackdrop} role="presentation"><section ref={savedFitDialogRef} tabIndex={-1} className={styles.editorSheet} role="dialog" aria-modal="true" aria-label="Resultado guardado de The Backyard Ball Fit"><ModalCloseButton onClose={() => setSavedFitOpen(false)} /><div className={styles.sheetHandle} /><div className={styles.wizardHeader}><div><div className="eyebrow">RESULTADO GUARDADO</div><h2>Tu mejor grupo de bolas</h2></div></div><BallFitResults result={restoredFit.result} catalog={ballCatalog.items} current={restoredFit.input.currentBallId ? ballCatalog.items.find((ball) => ball.id === restoredFit.input.currentBallId) || null : null} /></section></div>}
   </div>;
 }
 

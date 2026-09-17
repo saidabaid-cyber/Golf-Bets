@@ -1,3 +1,5 @@
+import { normalizeBallFitHandicap, normalizeBallFitExperience } from "./ball-fit-handicap";
+
 /**
  * Provider-neutral golf equipment domain.
  *
@@ -287,6 +289,8 @@ export type EquipmentBallFitInputSnapshot = {
   userId: string;
   currentBallId: string | null;
   handicap: number | null;
+  handicapSource?: import("./ball-fit-handicap").BallFitHandicapSource;
+  experience?: import("./ball-fit-handicap").BallFitExperience;
   typicalScore: number | null;
   driverDistanceYards: number | null;
   swingSpeedBand: string;
@@ -920,7 +924,8 @@ function normalizeBallFitInputSnapshot(value: unknown, expectedUserId: string): 
   return {
     userId,
     currentBallId: identifier(source.currentBallId),
-    handicap: nullableNumber(source.handicap, -20, 54),
+    ...normalizeBallFitHandicap(source.handicap, source.handicapSource),
+    experience: normalizeBallFitExperience(source.experience),
     typicalScore: nullableNumber(source.typicalScore, 40, 200),
     driverDistanceYards: nullableNumber(source.driverDistanceYards, 50, 500),
     swingSpeedBand,

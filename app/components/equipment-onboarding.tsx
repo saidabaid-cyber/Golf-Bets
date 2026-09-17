@@ -82,6 +82,7 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, ball
       return inProgress ? upsertPlayerClub(inProgress, club) : null;
     });
     if (saved) setClubEditorOpen(false);
+    return saved;
   }
 
   function finishClubs(statusValue: "COMPLETED" | "SKIPPED") {
@@ -95,6 +96,7 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, ball
       return withBall ? setBallOnboardingStatus(withBall, "COMPLETED") : null;
     });
     if (saved) { setBallEditorOpen(false); setStep("fit-prompt"); }
+    return saved;
   }
 
   function chooseNoFixedBall() {
@@ -133,6 +135,11 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, ball
 
   if (!profile) return <main className={styles.onboardingScreen}><section className={styles.onboardingCard}><BrandLockup compact /><div className={styles.loadingState}>{status === "loading" ? "Preparando tu equipo…" : "No pudimos abrir el perfil opcional de equipo."}</div>{message && <div className={styles.errorState} role="alert">{message}</div>}<div className={styles.onboardingActions}><button type="button" className="primary" onClick={onComplete}>Continuar sin agregar equipo</button></div></section></main>;
 
+  // These flows replace the onboarding page instead of nesting a long sheet
+  // inside it. The document is the only scroll container, including keyboard.
+  if (clubEditorOpen) return <main className={styles.onboardingScreen} data-equipment-screen="onboarding-club-editor"><ClubEditor userId={userId} catalog={clubCatalog.items} shafts={shaftCatalog.items} presentation="page" onCancel={() => setClubEditorOpen(false)} onSave={saveClub} /></main>;
+  if (ballEditorOpen) return <main className={styles.onboardingScreen} data-equipment-screen="onboarding-ball-editor"><BallEditor userId={userId} catalog={ballCatalog.items} existing={null} presentation="page" onCancel={() => setBallEditorOpen(false)} onSave={saveBall} /></main>;
+
   return <main className={styles.onboardingScreen}><section className={styles.onboardingCard}>
     <div className={styles.onboardingTop}><BrandLockup compact /><button type="button" className="textButton" onClick={onSaveAndExit}>Guardar y continuar después</button></div>
     {step === "clubs-prompt" && <>
@@ -169,7 +176,5 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, ball
 
     {step !== "fit" && <div className={styles.onboardingFooter}><button type="button" className="textButton" onClick={previous}>← Anterior</button><button type="button" className={styles.onboardingSkip} onClick={skipEverything}>Saltar por ahora y entrar a The Backyard</button></div>}
     <p className={styles.syncStatus} data-state={status} role="status">{equipmentStatusLabel(status)}{message ? ` · ${message}` : ""}</p>
-    {clubEditorOpen && <ClubEditor userId={userId} catalog={clubCatalog.items} shafts={shaftCatalog.items} onCancel={() => setClubEditorOpen(false)} onSave={saveClub} />}
-    {ballEditorOpen && <BallEditor userId={userId} catalog={ballCatalog.items} existing={null} onCancel={() => setBallEditorOpen(false)} onSave={saveBall} />}
   </section></main>;
 }

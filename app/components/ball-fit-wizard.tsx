@@ -26,6 +26,7 @@ import {
 } from "../../lib/ball-fitting-api";
 import { loadBallFitDraft, removeBallFitDraft, saveBallFitDraft, type BallFitDraft } from "../../lib/ball-fitting-storage";
 import type { GolfBallCatalog, PlayerBall, QualitativeLevel } from "../../lib/golf-equipment";
+import { BALL_FIT_HANDICAP_LABELS, BALL_FIT_EXPERIENCES, normalizeBallFitHandicap, type BallFitHandicapSource } from "../../lib/ball-fit-handicap";
 import { LaunchMonitorCapture } from "./launch-monitor-capture";
 import styles from "./equipment.module.css";
 
@@ -69,11 +70,12 @@ const PRICE_RESULT_LABELS = { ECONOMY: "Económica", MID: "Media", PREMIUM: "Pre
 const DRAFT_SAVE_ERROR = "No pudimos guardar este borrador en el dispositivo. Mantén esta pantalla abierta o libera espacio antes de salir.";
 const FIT_REQUEST_ERROR = "No pudimos evaluar el catálogo completo. Revisa tu conexión e inténtalo de nuevo; no mostramos rankings parciales.";
 
-function defaultInput(userId: string, handicap: number | null, currentBallId: string | null, defaults?: BallFitProfileDefaults): BallFitInput {
+function defaultInput(userId: string, handicap: number | null, currentBallId: string | null, defaults?: BallFitProfileDefaults, handicapSource?: BallFitHandicapSource | null): BallFitInput {
   return {
     userId,
     currentBallId,
-    handicap,
+    ...normalizeBallFitHandicap(handicap, handicapSource),
+    experience: "UNKNOWN",
     typicalScore: defaults?.typicalScore ?? null,
     driverDistanceYards: defaults?.driverDistanceYards ?? null,
     swingSpeedBand: defaults?.swingSpeedBand || "UNKNOWN",
@@ -110,6 +112,7 @@ type BallFitWizardProps = {
   /** Both current entry points are account-only, even during token refresh. */
   requiresRemoteConsent?: boolean;
   defaultHandicap: number | null;
+  defaultHandicapSource?: BallFitHandicapSource | null;
   profileDefaults?: BallFitProfileDefaults;
   currentBall: PlayerBall | null;
   catalog: readonly GolfBallCatalog[];
@@ -118,8 +121,8 @@ type BallFitWizardProps = {
   onComplete: (result: BallFitResult, input: BallFitInput) => boolean | void;
 };
 
-export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = true, defaultHandicap, profileDefaults, currentBall, catalog, onCancel, onComplete, onOpenPrivacy }: BallFitWizardProps) {
-  const [input, setInput] = useState<BallFitInput>(() => defaultInput(userId, defaultHandicap, currentBall?.catalogBallId || null, profileDefaults));
+export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = true, defaultHandicap, defaultHandicapSource, profileDefaults, currentBall, catalog, onCancel, onComplete, onOpenPrivacy }: BallFitWizardProps) {
+  const [input, setInput] = useState<BallFitInput>(() => defaultInput(userId, defaultHandicap, currentBall?.catalogBallId || null, profileDefaults, defaultHandicapSource));
   const [step, setStep] = useState(0);
   const [hydrated, setHydrated] = useState(false);
   const [savedDraft, setSavedDraft] = useState<BallFitDraft | null>(null);
@@ -155,7 +158,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
 
   function resumeSavedDraft() {
     if (!savedDraft) return;
-    setInput({ ...savedDraft.input, handicap: defaultHandicap });
+    setInput(savedDraft.input);
     setStep(Math.min(savedDraft.step, 5));
     setResult(null);
     setResultCatalog([]);
@@ -165,7 +168,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
 
   function startNewFit() {
     removeBallFitDraft(localStorage, userId);
-    setInput(defaultInput(userId, defaultHandicap, currentBall?.catalogBallId || null, profileDefaults));
+    setInput(defaultInput(userId, defaultHandicap, currentBall?.catalogBallId || null, profileDefaults, defaultHandicapSource));
     setStep(0);
     setResult(null);
     setSavedDraft(null);
@@ -177,6 +180,10 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
   }
 
   function next() {
+    if (step === 0 && input.handicapSource === "MANUAL" && input.handicap === null) {
+      setMessage("Captura tu HCP entre -20 y 54, o elige ‘No conozco mi hándicap / Estoy empezando’.");
+      return;
+    }
     setMessage("");
     setStep((current) => Math.min(5, current + 1));
   }
@@ -208,7 +215,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
     setCalculating(true);
     setMessage("");
     try {
-      const transportInput = createBallFitTransportInput({ ...input, handicap: defaultHandicap });
+      const transportInput = createBallFitTransportInput(input);
       if (!transportInput) {
         setMessage(FIT_REQUEST_ERROR);
         return;
@@ -286,8 +293,16 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
 
     {!result && step === 0 && <section className={styles.questionBlock}>
       <h3>Tu juego actual</h3>
-      <p>Usamos tu HCP capturado si existe. No lo interpretamos como un índice oficial.</p>
-      <div className="grid2"><div><span>Índice de tu cuenta</span><p>{defaultHandicap ?? "En progreso"}</p><small>Se obtiene de la fuente elegida en Perfil; no necesitas capturarlo.</small></div><label>Score típico (opcional)<input type="number" inputMode="numeric" min={40} max={200} value={input.typicalScore ?? ""} onChange={(event) => patchInput({ typicalScore: optionalNumber(event.target.value, 40, 200) })} placeholder="86" /></label></div>
+      <p>Elige qué dato usar en este fitting. No modificaremos tu perfil ni sustituiremos un índice guardado.</p>
+      <div className={styles.handicapChoices} aria-label="Fuente del hándicap para Ball Fit">
+        {defaultHandicap !== null && <button type="button" className={`${styles.optionButton} ${input.handicapSource !== "MANUAL" && input.handicapSource !== "UNKNOWN" ? styles.selected : ""}`} onClick={() => patchInput(normalizeBallFitHandicap(defaultHandicap, defaultHandicapSource))}>Usar índice de tu cuenta: {defaultHandicap}<small>{BALL_FIT_HANDICAP_LABELS[normalizeBallFitHandicap(defaultHandicap, defaultHandicapSource).handicapSource]}</small></button>}
+        {defaultHandicap === null && <p className={styles.subtle}>Índice de tu cuenta: todavía no disponible. Puedes continuar sin GHIN.</p>}
+        <button type="button" className={`${styles.optionButton} ${input.handicapSource === "MANUAL" ? styles.selected : ""}`} aria-pressed={input.handicapSource === "MANUAL"} onClick={() => patchInput({ handicapSource: "MANUAL", handicap: input.handicapSource === "MANUAL" ? input.handicap : null })}>Capturar HCP manual</button>
+        <button type="button" className={`${styles.optionButton} ${input.handicapSource === "UNKNOWN" ? styles.selected : ""}`} aria-pressed={input.handicapSource === "UNKNOWN"} onClick={() => patchInput({ handicapSource: "UNKNOWN", handicap: null })}>No conozco mi hándicap / Estoy empezando</button>
+      </div>
+      {input.handicapSource === "MANUAL" && <label>HCP manual (sólo este fitting)<input type="number" inputMode="decimal" min={-20} max={54} step="0.1" value={input.handicap ?? ""} onChange={(event) => patchInput({ handicap: optionalNumber(event.target.value, -20, 54) })} placeholder="Ej. 18" /><small>Declarado por ti; no es GHIN ni Backyard Index.</small></label>}
+      {input.handicapSource === "UNKNOWN" && <><h4>¿Cuánta experiencia tienes?</h4><OptionGrid values={BALL_FIT_EXPERIENCES} labels={{ STARTING: "Estoy empezando", OCCASIONAL: "Juego ocasionalmente", REGULAR: "Juego con regularidad", UNKNOWN: "Prefiero no indicar" }} selected={input.experience || "UNKNOWN"} onSelect={(experience) => patchInput({ experience })} /><p className={styles.subtle}>Esto aporta contexto; no calculamos un hándicap estimado.</p></>}
+      <label>Score típico en 18 hoyos (opcional)<input type="number" inputMode="numeric" min={40} max={200} value={input.typicalScore ?? ""} onChange={(event) => patchInput({ typicalScore: optionalNumber(event.target.value, 40, 200) })} placeholder="Si lo conoces" /></label>
     </section>}
 
     {!result && step === 1 && <section className={styles.questionBlock}>
@@ -328,7 +343,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
       <p className={styles.subtle}>Completitud de respuestas: {completeness}%. El recomendador puede dar una coincidencia parcial, pero necesita al menos dos preferencias comparables.</p>
     </section>}
 
-    {result && <BallFitResults result={result} catalog={displayCatalog} current={currentCatalogBall} catalogScope={catalogScope} />}
+    {result && <><p className={styles.subtle}>{BALL_FIT_HANDICAP_LABELS[input.handicapSource || "UNKNOWN"]}{input.handicap === null ? "" : `: ${input.handicap}`}</p><BallFitResults result={result} catalog={displayCatalog} current={currentCatalogBall} catalogScope={catalogScope} /></>}
     {calculating && <div className={styles.loadingState} role="status">Evaluando el catálogo completo disponible…</div>}
     {message && <div className={styles.formMessage} role="alert">{message}</div>}
     {message === DRAFT_SAVE_ERROR && <button type="button" className="textButton" onClick={exitWithoutSaving}>Salir sin guardar</button>}

@@ -69,7 +69,8 @@ test("bola y Ball Fit exponen el flujo completo sin presentar una verdad oficial
   assert.match(wizard, /Sin dato verificado/);
   assert.match(wizard, /Comparar bolas recomendadas/);
   for (const row of ["Construcción", "Cubierta", "Compresión"]) assert.match(wizard, new RegExp(row));
-  assert.doesNotMatch(wizard, /optionalHandicap|HCP manual/);
+  assert.match(wizard, /Capturar HCP manual/);
+  assert.match(wizard, /No conozco mi hándicap \/ Estoy empezando/);
   assert.match(wizard, /Índice de tu cuenta/);
   assert.match(wizard, /BACKYARD_BALL_FIT_DISCLAIMER/);
   assert.match(fitting, /No es un fitting oficial/);
@@ -78,7 +79,8 @@ test("bola y Ball Fit exponen el flujo completo sin presentar una verdad oficial
 
 test("Ball Fit evalúa el catálogo completo en servidor y falla cerrado antes de rankear una página parcial", () => {
   assert.match(wizard, /fetch\("\/api\/ball-fitting"/);
-  assert.match(wizard, /createBallFitTransportInput\(\{ \.\.\.input, handicap: defaultHandicap \}\)/);
+  assert.match(wizard, /createBallFitTransportInput\(input\)/);
+  assert.doesNotMatch(wizard, /createBallFitTransportInput\(\{ \.\.\.input, handicap: defaultHandicap/);
   assert.match(wizard, /JSON\.stringify\(\{ input: transportInput \}\)/);
   assert.doesNotMatch(wizard, /runBackyardBallFit\(catalog,/);
   assert.match(wizard, /normalizeBallFitApiSuccess/);

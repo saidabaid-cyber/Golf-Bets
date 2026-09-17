@@ -11,6 +11,7 @@ import {
   type LaunchMonitorSummary,
   type QualitativeLevel,
 } from "./golf-equipment";
+import { normalizeBallFitHandicap, normalizeBallFitExperience, type BallFitHandicapSource, type BallFitExperience } from "./ball-fit-handicap";
 
 export const BACKYARD_BALL_FIT_DISCLAIMER =
   "The Backyard Ball Fit es una recomendación orientativa basada en tus preferencias y en datos públicos verificados. No es un fitting oficial de ningún fabricante ni sustituye una prueba profesional.";
@@ -96,6 +97,8 @@ export type BallFitInput = {
   userId: string;
   currentBallId: string | null;
   handicap: number | null;
+  handicapSource?: BallFitHandicapSource;
+  experience?: BallFitExperience;
   typicalScore: number | null;
   driverDistanceYards: number | null;
   swingSpeedBand: SwingSpeedBand;
@@ -235,7 +238,8 @@ export function normalizeBallFitInput(value: unknown): BallFitInput | null {
   return {
     userId,
     currentBallId: text(source.currentBallId),
-    handicap: finiteNumber(source.handicap, -20, 54),
+    ...normalizeBallFitHandicap(source.handicap, source.handicapSource),
+    experience: normalizeBallFitExperience(source.experience),
     typicalScore: finiteNumber(source.typicalScore, 40, 200),
     driverDistanceYards: finiteNumber(source.driverDistanceYards, 50, 500),
     swingSpeedBand: memberOf(source.swingSpeedBand, SWING_SPEED_BANDS, "UNKNOWN"),
@@ -607,6 +611,10 @@ export function runBackyardBallFit(catalogValues: readonly unknown[], inputValue
   }
   if (input.handicap !== null) {
     warnings.push("El HCP sólo ajusta ligeramente el peso de preferencias que elegiste; nunca determina una bola por sí solo.");
+    if (input.handicapSource === "MANUAL") warnings.push("El HCP fue declarado manualmente para este fitting; no es un índice oficial y no modifica tu perfil.");
+    if (input.handicapSource === "BACKYARD") warnings.push("El Backyard Index utilizado es local y no oficial.");
+  } else {
+    warnings.push("Recomendación sin hándicap conocido: usamos tus preferencias, sin estimar un índice desde la experiencia o el score típico.");
   }
   const contextualPriorities = input.priorities.filter((priority) => priority === "DRIVER_DISTANCE" || priority === "STABILITY_CONTROL");
   if (contextualPriorities.length > 0) {
