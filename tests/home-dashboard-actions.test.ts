@@ -56,7 +56,10 @@ test("approved Home has exactly three quick actions and only two More Backyard a
 });
 
 test("Home uses only saved golf data for progress and preserves an elegant empty state", () => {
-  assert.match(source, /insights\.scoredRounds > 0/);
+  assert.match(source, /insights\.scoreSampleRounds > 0/);
+  assert.match(source, /en \{insights\.scoreSampleRounds\} ronda/);
+  assert.match(source, /de \{insights\.scoreScopeHoles\}H/);
+  assert.doesNotMatch(source, /en \{insights\.scoredRounds\} ronda/);
   assert.match(source, /typeof insights\.averageScore === "number"/);
   assert.match(source, /Tips, insights/);
   assert.match(source, /typeof insights\.betBalance === "number"/);

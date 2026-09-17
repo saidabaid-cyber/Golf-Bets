@@ -80,6 +80,19 @@ test("historical insights fail closed instead of throwing on malformed runtime s
   assert.equal(buildGolfInsights(malformed).scoredRounds, 0);
 });
 
+test("mixed 9H/18H history labels the average with its actual comparable sample", () => {
+  const players = [{ id: "owner", name: "Owner", handicap: 0 }];
+  const insights = buildGolfInsights([
+    savedRound({ id: "nine", players, roundHoles: 9 }),
+    savedRound({ id: "eighteen-a", players, roundHoles: 18 }),
+    savedRound({ id: "eighteen-b", players, roundHoles: 18, scores: scoreRows(orderFor(1, 18), players, 5) }),
+  ]);
+  assert.equal(insights.scoredRounds, 3);
+  assert.equal(insights.averageScore, 81);
+  assert.equal(insights.scoreSampleRounds, 2);
+  assert.equal(insights.scoreScopeHoles, 18);
+});
+
 test("only canonical 9/18-hole geometry contributes to scoring", () => {
   assert.ok(scoredRoundInsight(savedRound({ id: "front" })));
   assert.ok(scoredRoundInsight(savedRound({ id: "back", startHole: 10, order: orderFor(10, 9), scores: scoreRows(orderFor(10, 9), [{ id: "owner", name: "Owner", handicap: 0 }]) })));

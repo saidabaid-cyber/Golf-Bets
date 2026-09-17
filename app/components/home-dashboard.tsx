@@ -111,7 +111,7 @@ export function HomeDashboard({
   const heroNameSize = heroNameLength > 16 ? "extended" : heroNameLength > 7 ? "long" : "short";
   const heroNameCompact = heroNameLength > 27;
   const initial = firstName[0]?.toLocaleUpperCase("es-MX") || "G";
-  const hasScoringInsight = insights.scoredRounds > 0 && typeof insights.averageScore === "number" && Number.isFinite(insights.averageScore);
+  const hasScoringInsight = insights.scoreSampleRounds > 0 && typeof insights.averageScore === "number" && Number.isFinite(insights.averageScore);
   const hasBalance = typeof insights.betBalance === "number" && Number.isFinite(insights.betBalance);
   const [roundChoiceOpen, setRoundChoiceOpen] = useState(false);
   const playAction = activeRound ? onContinueRound : onPlayOptions || (() => setRoundChoiceOpen(true));
@@ -174,7 +174,7 @@ export function HomeDashboard({
         <button type="button" className={`${styles.promoCard} ${styles.progressCard}`} onClick={onOpenStats}>
           <Image src="/brand/home-golf-ball.jpg" alt="Pelota de golf sobre el césped" fill sizes="(max-width: 760px) 50vw, 360px" />
           <span className={styles.promoShade} />
-          <div><b>Sigue<br />mejorando</b>{hasScoringInsight ? <p>Promedio {insights.averageScore!.toFixed(1)}<br />en {insights.scoredRounds} ronda{insights.scoredRounds === 1 ? "" : "s"}.</p> : <p>Tips, insights<br />y más golf.</p>}</div>
+          <div><b>Sigue<br />mejorando</b>{hasScoringInsight ? <p>Promedio {insights.averageScore!.toFixed(1)}<br />en {insights.scoreSampleRounds} ronda{insights.scoreSampleRounds === 1 ? "" : "s"} de {insights.scoreScopeHoles}H.</p> : <p>Tips, insights<br />y más golf.</p>}</div>
           <span className={styles.promoChevron}>›</span>
         </button>
       </section>
