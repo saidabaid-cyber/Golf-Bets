@@ -6,6 +6,7 @@
    inherit the global full-width text-input rule. */
 .dialog{width:min(100%,480px);min-width:0;overflow-x:hidden;text-align:left}
 .dialog h2{padding-right:48px;overflow-wrap:anywhere}
+.dialog>p:first-of-type{padding-right:48px}
 .dialog p{font-size:13px;line-height:1.5;overflow-wrap:anywhere}
 .dialog fieldset{margin:16px 0;padding:12px;border:1px solid var(--line);border-radius:12px;width:100%}
 .dialog legend{max-width:100%;padding:0 4px;font-size:14px;overflow-wrap:anywhere}
