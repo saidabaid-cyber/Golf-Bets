@@ -41,3 +41,15 @@ test("un flush fallido bloquea el reemplazo y no crea respaldo falso", () => {
   assert.equal(backupActiveRoundForReplacement(storage, () => false), false);
   assert.equal(storage.getItem(CLOUD_CONFLICTS_KEY), null);
 });
+
+test("discarding an unfinished round never writes or removes finished history", () => {
+  const storage = new MemoryStorage();
+  const history = JSON.stringify([{ id: "finished", scores: { 1: { p1: 4 } } }]);
+  storage.setItem(STORAGE_KEYS.history, history);
+  storage.setItem(STORAGE_KEYS.draft, JSON.stringify({ roundId: "unfinished", startedAt: "2026-09-18T12:00:00.000Z", players: [{ id: "p1", name: "QA" }], scores: {} }));
+  assert.equal(backupActiveRoundForReplacement(storage, () => true), true);
+  assert.equal(storage.getItem(STORAGE_KEYS.history), history);
+  const cancelled = JSON.parse(storage.getItem(CLOUD_CONFLICTS_KEY) || "[]");
+  assert.equal(cancelled[0].roundId, "unfinished");
+  assert.equal(cancelled[0].lifecycleState, "cancelled");
+});

@@ -13,8 +13,8 @@ test("Resultados usa el encabezado seguro Gastos sin interpolar una identidad au
 
 test("Nueva ronda pide confirmación exacta y conserva respaldo antes de reemplazar", () => {
   assert.match(page, /¿Iniciar una nueva ronda\?/);
-  assert.match(page, /Ya tienes una ronda en curso\. Si comienzas una nueva, la ronda actual dejará de ser la ronda activa\./);
-  assert.match(page, /Sí, iniciar nueva ronda/);
+  assert.match(page, /¿Deseas descartarla e iniciar otra\?/);
+  assert.match(page, /Descartar e iniciar nueva/);
   assert.match(page, /backupActiveRoundForReplacement\(localStorage/);
   assert.match(page, /applyNewRoundIntent\(intent, "La ronda anterior quedó respaldada en este dispositivo\."\)/);
 });

@@ -555,6 +555,7 @@ function GolfBetsApp() {
   const [showNewRoundConfirm, setShowNewRoundConfirm] = useState(false);
   const [newRoundBackupError, setNewRoundBackupError] = useState("");
   const [pendingNewRoundIntent, setPendingNewRoundIntent] = useState<NewRoundIntent | null>(null);
+  const replacingRound = useRef(false);
   const [editingFrequentPlayerId, setEditingFrequentPlayerId] = useState<string | null>(null);
   const [frequentPlayerDraft, setFrequentPlayerDraft] = useState<{ name: string; handicap: number | null }>({ name: "", handicap: null });
   const [frequentPlayerToDelete, setFrequentPlayerToDelete] = useState<FrequentPlayer | null>(null);
@@ -2194,6 +2195,7 @@ function GolfBetsApp() {
   }
 
   function requestNewRoundIntent(intent: NewRoundIntent) {
+    replacingRound.current = false;
     if (!roundClosed && hasRoundProgress(roundDraftPayload())) {
       setNewRoundBackupError("");
       setPendingNewRoundIntent(intent);
@@ -2502,6 +2504,8 @@ function GolfBetsApp() {
   }
 
   function confirmNewRound() {
+    if (replacingRound.current) return;
+    replacingRound.current = true;
     setNewRoundBackupError("");
     try {
       const intent = pendingNewRoundIntent;
@@ -2509,6 +2513,7 @@ function GolfBetsApp() {
       if (!backupActiveRoundForReplacement(localStorage, () => Boolean(flushLocalState.current?.()))) throw new Error("backup verification failed");
       applyNewRoundIntent(intent, "La ronda anterior quedó respaldada en este dispositivo.");
     } catch {
+      replacingRound.current = false;
       setNewRoundBackupError("No se pudo comprobar el respaldo de la ronda actual. No se inició otra ronda; vuelve a intentar.");
     }
   }
@@ -3624,7 +3629,7 @@ function GolfBetsApp() {
 
     {feedback && <div className="notice" role="status">{roundSaveNotice(feedback, cloudStatus)}<button className="textButton" aria-label="Cerrar mensaje" onClick={() => setFeedback("")}>×</button></div>}
     {copyFallback && <section className="card"><label>Resumen para copiar<textarea readOnly value={copyFallback} onFocus={event => event.currentTarget.select()} /></label><button onClick={() => setCopyFallback("")}>← Regresar</button></section>}
-    {showNewRoundConfirm && <div className="modalBackdrop"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="new-round-title" aria-describedby="new-round-description"><ModalCloseButton onClose={() => { setShowNewRoundConfirm(false); setNewRoundBackupError(""); setPendingNewRoundIntent(null); }} /><h2 id="new-round-title">¿Iniciar una nueva ronda?</h2><p id="new-round-description">Ya tienes una ronda en curso. Si comienzas una nueva, la ronda actual dejará de ser la ronda activa.</p>{newRoundBackupError && <div className="notice bad" role="alert">{newRoundBackupError}</div>}<div className="dialogActions"><button autoFocus className="secondary" onClick={() => { setShowNewRoundConfirm(false); setNewRoundBackupError(""); setPendingNewRoundIntent(null); }}>Cancelar</button><button className="primary" onClick={confirmNewRound}>Sí, iniciar nueva ronda</button></div></section></div>}
+    {showNewRoundConfirm && <div className="modalBackdrop"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="new-round-title" aria-describedby="new-round-description"><ModalCloseButton onClose={() => { setShowNewRoundConfirm(false); setNewRoundBackupError(""); setPendingNewRoundIntent(null); }} /><h2 id="new-round-title">¿Iniciar una nueva ronda?</h2><p id="new-round-description">Ya tienes una ronda en curso. ¿Deseas descartarla e iniciar otra? No necesitas completar los hoyos pendientes.</p><p>La ronda anterior dejará de estar activa y no se guardará como terminada. Conservaremos un respaldo local de seguridad. Tus rondas del Histórico no se borrarán.</p>{newRoundBackupError && <div className="notice bad" role="alert">{newRoundBackupError}</div>}<div className="dialogActions"><button autoFocus className="secondary" onClick={() => { setShowNewRoundConfirm(false); setNewRoundBackupError(""); setPendingNewRoundIntent(null); }}>Cancelar</button><button className="primary" onClick={confirmNewRound}>Descartar e iniciar nueva</button></div></section></div>}
     {pendingRoundAction && <div className="modalBackdrop"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="round-change-title"><ModalCloseButton onClose={() => setPendingRoundAction(null)} /><h2 id="round-change-title">Confirmar cambios</h2><p>{pendingRoundAction.message}</p><div className="dialogActions"><button autoFocus className="secondary" onClick={() => setPendingRoundAction(null)}>Cancelar</button><button className="primary" onClick={() => { const action = pendingRoundAction; setPendingRoundAction(null); action.run(); }}>Confirmar</button></div></section></div>}
     {showRoundFinishedNotice && <div className="modalBackdrop"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="round-finished-title"><ModalCloseButton onClose={() => setShowRoundFinishedNotice(false)} /><h2 id="round-finished-title">Ronda terminada</h2><p>{ROUND_REVIEW_NOTICE}</p><div className="dialogActions"><button autoFocus className="primary" onClick={() => { setShowRoundFinishedNotice(false); setTab("results"); }}>Revisar resultados</button></div></section></div>}
     {pendingCloudConflict && (() => { const conflict = pendingCloudConflict.conflicts[0]; if (!conflict) return null; const display = describeCloudConflict(conflict, playerName); return <div className="modalBackdrop"><section className="confirmDialog" role="alertdialog" aria-modal="true" aria-labelledby="cloud-conflict-title"><ModalCloseButton onClose={() => setPendingCloudConflict(null)} /><h2 id="cloud-conflict-title">Cambio en dos dispositivos</h2><p>Elige únicamente el dato en conflicto. Los demás cambios compatibles ya se combinaron.</p><div className="cloudConflictField"><b>{display.label}</b><span>Nube: {display.cloudValue}</span><span>Este dispositivo: {display.localValue}</span></div>{pendingCloudConflict.conflicts.length > 1 && <small>Quedan {pendingCloudConflict.conflicts.length} conflictos por revisar.</small>}<div className="dialogActions"><button className="secondary" onClick={() => resolveCloudConflict("cloud")}>Usar nube para este dato</button><button className="primary" onClick={() => resolveCloudConflict("local")}>Usar este dispositivo</button></div></section></div>; })()}
@@ -3909,6 +3914,10 @@ function GolfBetsApp() {
     </>}
 
     {tab === "round" && <>
+      <nav className="roundSessionActions" aria-label="Administrar ronda en curso">
+        <button type="button" className="secondary" onPointerDown={commitFocusedNumericCapture} onClick={() => { flushLocalState.current?.(); setTab("welcome"); }}>Salir y continuar después</button>
+        <button type="button" className="secondary" onPointerDown={commitFocusedNumericCapture} onClick={requestNewRound}>Nueva ronda</button>
+      </nav>
       <RoundCaptureV2
         captureContext={captureContext}
         onCaptureContextChange={(context) => {

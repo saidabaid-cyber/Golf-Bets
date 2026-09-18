@@ -298,4 +298,5 @@ button:disabled{cursor:not-allowed;opacity:.5}.app{padding-top:calc(14px + env(s
 .modalBackdrop{height:var(--visual-viewport-height,100dvh);top:var(--visual-viewport-top,0px);bottom:auto;box-sizing:border-box;overflow:hidden}
 .modalBackdrop>section,.modalBackdrop>[role="dialog"]{min-height:0;max-height:100%;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scroll-padding-top:60px;scroll-padding-bottom:20px}
 html{scroll-padding-bottom:calc(90px + env(safe-area-inset-bottom))}
+.roundSessionActions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-bottom:12px}.roundSessionActions button{min-width:0;min-height:44px;white-space:normal;font-size:12px}
 input,textarea,select{scroll-margin-block:80px calc(100px + env(safe-area-inset-bottom))}

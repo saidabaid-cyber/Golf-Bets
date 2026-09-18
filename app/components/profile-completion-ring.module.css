@@ -1,3 +1,18 @@
 .ring{position:relative;flex-shrink:0;border:0;padding:5px;border-radius:50%;width:80px;height:80px;background:conic-gradient(#b4ce68 var(--progress),#dce4df 0);cursor:pointer}.ring>span{display:grid;place-items:center;width:100%;height:100%;border:3px solid white;border-radius:50%;overflow:hidden;background:#eaf0eb}.ring img,.ring svg{width:100%;height:100%;object-fit:cover}.ring>b{position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);border-radius:20px;padding:3px 8px;background:#073f32;color:white;font-size:12px}.dialog{max-height:calc(100dvh - 32px);overflow-y:auto;padding-bottom:calc(20px + env(safe-area-inset-bottom));overscroll-behavior:contain}.dialog fieldset{display:grid;gap:12px;min-width:0}.dialog label{display:flex;gap:8px;align-items:center;font-size:14px}.dialog input:not([type=checkbox]):not([type=radio]){min-width:0;font-size:16px;width:100%}.row{display:flex;gap:8px;align-items:center;justify-content:space-between;border-bottom:1px solid #dce4df;padding:10px 0}.row button{text-align:left}.row label{flex-shrink:0;font-size:12px}
 .ring{min-width:0;width:100%!important;height:auto!important;aspect-ratio:1;margin-bottom:8px;padding:4px!important}
 .ring>span{aspect-ratio:1;box-sizing:border-box;font-size:22px!important}
+
+/* Isolated from the profile identity grid. Native choice controls must not
+   inherit the global full-width text-input rule. */
+.dialog{width:min(100%,480px);min-width:0;overflow-x:hidden;text-align:left}
+.dialog h2{padding-right:48px;overflow-wrap:anywhere}
+.dialog p{font-size:13px;line-height:1.5;overflow-wrap:anywhere}
+.dialog fieldset{margin:16px 0;padding:12px;border:1px solid var(--line);border-radius:12px;width:100%}
+.dialog legend{max-width:100%;padding:0 4px;font-size:14px;overflow-wrap:anywhere}
+.dialog label{min-width:0;min-height:44px;margin:0;line-height:1.4;white-space:normal;overflow-wrap:anywhere}
+.dialog input[type=checkbox],.dialog input[type=radio]{width:20px;height:20px;min-width:20px;max-width:20px;flex:0 0 20px;margin:0;padding:0;accent-color:var(--green)}
+.dialog label:has(input:not([type=checkbox]):not([type=radio])){display:grid;grid-template-columns:minmax(0,1fr);gap:6px}
+.row{display:grid;grid-template-columns:minmax(0,1fr) 92px;gap:10px}
+.row button{min-width:0;min-height:44px;white-space:normal;overflow-wrap:anywhere;font-size:14px}
+.row label{font-size:12px}
+.dialog>button:last-of-type{min-height:44px}
