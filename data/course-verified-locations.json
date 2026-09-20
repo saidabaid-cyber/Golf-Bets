@@ -1,0 +1,5 @@
+[
+  {"sourceCourseId":"ghin:23232","club":"Club Campestre de Puebla","latitude":19.0131,"longitude":-98.2345,"sourceUrl":"https://clubcampestrepuebla.com/index.php/informes/contacto","authority":"Club Campestre de Puebla · marcador del mapa oficial","verifiedAt":"2026-09-20"},
+  {"sourceCourseId":"ghin:23233","club":"La Vista Country Club","latitude":19.008297,"longitude":-98.254634,"sourceUrl":"https://fullgolf.com/en/golf-club/mexico/puebla/san-andres-cholula/vista-country-club","authority":"FullGolf · ubicación del club, no centro de localidad","verifiedAt":"2026-09-20"},
+  {"sourceCourseId":"ghin:23227","club":"Club Campestre El Cristo","latitude":18.882,"longitude":-98.426,"sourceUrl":"https://18hole.golf/course/club-campestre-el-cristo-atlixco-pue","authority":"18hole.golf · coordenadas de la propiedad","verifiedAt":"2026-09-20"}
+]

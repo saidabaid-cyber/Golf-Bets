@@ -1,0 +1,8 @@
+[
+  {"sourceCourseId":"ghin:23231","club":"Club de Golf La Huerta","latitude":19.05946,"longitude":-98.3307,"sourceUrl":"https://mapcarta.com/34499184","authority":"OpenStreetMap contributors via Mapcarta · way 151530906 · leisure=golf_course · ODbL","verifiedAt":"2026-09-20"},
+  {"sourceCourseId":"ghin:24458","club":"Club de Golf Las Fuentes","latitude":19.08806,"longitude":-98.23316,"sourceUrl":"https://mapcarta.com/34500072","authority":"OpenStreetMap contributors via Mapcarta · way 35074426 · leisure=golf_course · ODbL","verifiedAt":"2026-09-20"},
+  {"sourceCourseId":"ghin:33019","club":"Club de Golf México","latitude":19.278980,"longitude":-99.158499,"sourceUrl":"https://www.where2golf.com/mexico/club-de-golf-mexico/","authority":"Where2Golf · ubicación del campo, no centro de localidad","verifiedAt":"2026-09-20"},
+  {"sourceCourseId":"ghin:23155","club":"Guadalajara Country Club","latitude":20.703354,"longitude":-103.370707,"sourceUrl":"https://www.where2golf.com/mexico/guadalajara-country-club/","authority":"Where2Golf · ubicación del campo, no centro de localidad","verifiedAt":"2026-09-20"},
+  {"sourceCourseId":"ghin:23217","club":"El Río Country Club","latitude":20.747446,"longitude":-103.615065,"sourceUrl":"https://www.where2golf.com/mexico/el-rio-country-club/","authority":"Where2Golf · ubicación del campo, no centro de localidad","verifiedAt":"2026-09-20"},
+  {"sourceCourseId":"ghin:23185","club":"Club de Golf Chapultepec","latitude":19.430483,"longitude":-99.244315,"sourceUrl":"https://www.where2golf.com/mexico/club-de-golf-chapultepec/","authority":"Where2Golf · ubicación del campo, no centro de localidad","verifiedAt":"2026-09-20"}
+]

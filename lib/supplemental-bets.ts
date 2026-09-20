@@ -355,8 +355,8 @@ function calculateDollarStroke(
     const grossA = scores[holeNumber]?.[playerA.id];
     const grossB = scores[holeNumber]?.[playerB.id];
     if (!hole || typeof grossA !== "number" || typeof grossB !== "number") continue;
-    totalA += headToHeadNet(bet, playerA.id, grossA, hole.strokeIndex);
-    totalB += headToHeadNet(bet, playerB.id, grossB, hole.strokeIndex);
+    totalA += headToHeadNet(bet, playerA.id, grossA, (course.playerHoleCards?.[playerA.id]?.find(h => h.number === holeNumber) ?? hole).strokeIndex);
+    totalB += headToHeadNet(bet, playerB.id, grossB, (course.playerHoleCards?.[playerB.id]?.find(h => h.number === holeNumber) ?? hole).strokeIndex);
     grossTotalA += grossA;
     grossTotalB += grossB;
     played += 1;
@@ -403,7 +403,7 @@ function pairNet(
   basis: RoundHandicapBasis,
 ) {
   const hole = uniqueCourseHole(course, holeNumber);
-  return hole ? netScore(gross, player.id, hole.strokeIndex, players, hcpPct, normalizeHandicapMode(decimals), basis) : gross;
+  return hole ? netScore(gross, player.id, (course.playerHoleCards?.[player.id]?.find(h => h.number === holeNumber) ?? hole).strokeIndex, players, hcpPct, normalizeHandicapMode(decimals), basis) : gross;
 }
 
 function calculateIndividualPressures(
@@ -546,7 +546,7 @@ function calculateTeamPressures(
           const holeNumber = segment[index];
           const hole = uniqueCourseHole(course, holeNumber);
           if (!hole || !holeIsComplete(holeNumber)) continue;
-          const adjusted = Object.fromEntries(participants.map((player) => [player.id, netScore(grossFor(holeNumber, player.id) as number, player.id, hole.strokeIndex, participants, bet.hcpPct, normalizeHandicapMode(bet.decimals), basis)])) as Record<string, number>;
+          const adjusted = Object.fromEntries(participants.map((player) => [player.id, netScore(grossFor(holeNumber, player.id) as number, player.id, (course.playerHoleCards?.[player.id]?.find(h => h.number === holeNumber) ?? hole).strokeIndex, participants, bet.hcpPct, normalizeHandicapMode(bet.decimals), basis)])) as Record<string, number>;
           const virtualScore = matchup.virtual === "mudo" ? hole.par : matchup.virtual === "yoyo" ? adjusted[matchup.teamA[0]] : undefined;
           const teamAScores = [...matchup.teamA.map((id) => adjusted[id]), ...(virtualScore === undefined ? [] : [virtualScore])];
           const teamBScores = matchup.teamB.map((id) => adjusted[id]);
@@ -660,7 +660,7 @@ function calculateVegas(bet: VegasBet, players: Player[], course: Course, scores
     const hole = course.holes.find((candidate) => candidate.number === holeNumber);
     const pairing = vegasPairing(bet, participants, index);
     if (!hole || !pairing || !completedHole(holeNumber, scores, participants.map((player) => player.id))) continue;
-    const adjusted = Object.fromEntries(participants.map((player) => [player.id, Math.round(netScore(scores[holeNumber][player.id] as number, player.id, hole.strokeIndex, participants, bet.hcpPct, normalizeHandicapMode(bet.decimals), basis))])) as Record<string, number>;
+    const adjusted = Object.fromEntries(participants.map((player) => [player.id, Math.round(netScore(scores[holeNumber][player.id] as number, player.id, (course.playerHoleCards?.[player.id]?.find(h => h.number === holeNumber) ?? hole).strokeIndex, participants, bet.hcpPct, normalizeHandicapMode(bet.decimals), basis))])) as Record<string, number>;
     const grossLowA = Math.min(...pairing.teamA.map((id) => scores[holeNumber][id] as number));
     const grossLowB = Math.min(...pairing.teamB.map((id) => scores[holeNumber][id] as number));
     const penalizeA = bet.birdiePenalty && grossLowB < hole.par && grossLowA > hole.par;

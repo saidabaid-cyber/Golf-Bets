@@ -22,7 +22,7 @@ export function safeSocialRoundCard(
   const linked = round.players.filter(player => player?.accountUserId === accountUserId);
   if (linked.length !== 1 || !linked[0]?.id) return null;
   const playerId = linked[0].id;
-  const definitions = new Map(round.courseSnapshot.holes.map(hole => [hole.number, hole]));
+  const definitions = new Map((round.courseSnapshot.playerHoleCards?.[playerId] ?? round.courseSnapshot.holes).map(hole => [hole.number, hole]));
   const holes: Array<{ hole: number; par: number; score: number }> = [];
   for (const number of round.order) {
     const definition = definitions.get(number);
@@ -34,7 +34,7 @@ export function safeSocialRoundCard(
   return {
     roundId: source.id, localRoundId: source.local_round_id, date: round.date,
     courseName: includeCourseIdentity ? round.courseName || "Campo no indicado" : "Campo privado",
-    teeName: includeCourseIdentity ? round.teeName || null : null,
+    teeName: includeCourseIdentity ? round.playerTeeAssignments?.find(t=>t.playerId===playerId)?.teeName || round.teeName || null : null,
     holesPlayed: holes.length, ownerScore: holes.reduce((sum, hole) => sum + hole.score, 0),
     coursePar: holes.reduce((sum, hole) => sum + hole.par, 0),
     ...(includeScorecard ? { scorecard: holes } : {}),

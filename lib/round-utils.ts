@@ -253,7 +253,7 @@ export function privateLeaderboard(course: Course, players: Player[], scores: Re
     const roundHandicap = hasValidRoundHandicap(player) ? playingHandicap(player.handicap, 100, "half_up") : null;
     for (const holeNumber of order) {
       const score = scores[holeNumber]?.[player.id];
-      const hole = course.holes.find((candidate) => candidate.number === holeNumber);
+      const hole = (course.playerHoleCards?.[player.id] ?? course.holes).find((candidate) => candidate.number === holeNumber);
       if (typeof score !== "number" || !hole) continue;
       gross += score;
       if (net !== null && roundHandicap !== null) net += score - strokeAllowanceForHole(roundHandicap, hole.strokeIndex, "half_up");

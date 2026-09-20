@@ -23,6 +23,7 @@ export function teeAssignmentSnapshot(
   const indexRatingEvidence = source === "catalog" ? getCuratedIndexRatedTeeEvidenceForCourse(course) : null;
   return {
     playerId,
+    ...(course.catalogReview ? {holes:structuredClone(course.holes),catalogReview:structuredClone(course.catalogReview)} : {}),
     courseId: course.catalogCourseId || course.id,
     ...(course.catalogCourseId ? { layoutId: course.catalogCourseId } : {}),
     teeId: course.catalogTeeId || course.id,
@@ -62,7 +63,7 @@ export function reconcilePlayerTeeAssignments(
       ...(assignment.indexRatingEvidence ? { indexRatingEvidence: { ...assignment.indexRatingEvidence } } : {}),
     });
   }
-  const missingSource = options.allowCuratedNewAssignment && getCuratedIndexRatedTeeEvidenceForCourse(course) ? "catalog" : "legacy";
+  const missingSource = course.catalogReview || (options.allowCuratedNewAssignment && getCuratedIndexRatedTeeEvidenceForCourse(course)) ? "catalog" : "legacy";
   return players.map((player) => byPlayerId.get(player.id) || teeAssignmentSnapshot(player.id, course, capturedAt, missingSource));
 }
 

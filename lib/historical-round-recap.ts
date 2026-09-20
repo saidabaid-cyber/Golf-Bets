@@ -422,7 +422,7 @@ function scoringForPlayer(
   };
   for (const holeNumber of order) {
     const score = scores[holeNumber]?.[playerId];
-    const hole = course.holes.find((candidate) => candidate.number === holeNumber);
+    const hole = (course.playerHoleCards?.[playerId] ?? course.holes).find((candidate) => candidate.number === holeNumber);
     if (typeof score !== "number" || !hole) continue;
     result.scoredHoles += 1;
     const relative = score - hole.par;
@@ -450,14 +450,14 @@ function optionalPlayerStats(
     const fairwaySummary = summarizePlayerAdvancedStats(
       source.advancedStats as RoundSnapshot["advancedStats"],
       player.id,
-      order.filter((holeNumber) => course.holes.find((hole) => hole.number === holeNumber)?.par !== 3),
+      order.filter((holeNumber) => (course.playerHoleCards?.[player.id] ?? course.holes).find((hole) => hole.number === holeNumber)?.par !== 3),
     );
     let derivedGirAttempts = 0;
     let derivedGirHits = 0;
     const puttsSource = record(source.putts);
     for (const holeNumber of order) {
       const puttRow = puttsSource ? record(puttsSource[String(holeNumber)]) : undefined;
-      const hole = course.holes.find((candidate) => candidate.number === holeNumber);
+      const hole = (course.playerHoleCards?.[player.id] ?? course.holes).find((candidate) => candidate.number === holeNumber);
       const gir = hole ? derivedGreenInRegulation(scores[holeNumber]?.[player.id], puttRow?.[player.id] as number | undefined, hole.par) : null;
       if (gir === null) continue;
       derivedGirAttempts += 1;

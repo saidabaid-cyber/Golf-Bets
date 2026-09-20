@@ -122,7 +122,7 @@ function completeHoleAdjustments(round: RoundSnapshot, player: Player, assignmen
   if (!Array.isArray(course.holes) || course.holes.some((hole) => !hole || typeof hole !== "object")) {
     return { reasons: ["MISSING_HOLE_DEFINITIONS"] as BackyardIndexIneligibilityReason[] };
   }
-  const holes = [...course.holes].sort((a, b) => a.number - b.number);
+  const holes = [...(course.playerHoleCards?.[player.id] ?? course.holes)].sort((a, b) => a.number - b.number);
   if (holes.length !== 18 || holes.some((hole, index) =>
     hole.number !== index + 1 || !Number.isInteger(hole.par) || hole.par < 3 || hole.par > 6
     || !Number.isInteger(hole.strokeIndex) || hole.strokeIndex < 1 || hole.strokeIndex > 18)
@@ -309,7 +309,7 @@ function validStoredScore(round: RoundSnapshot, snapshot: BackyardIndexRoundSnap
     ? round.players.find((candidate) => candidate && candidate.id === snapshot.playerId
       && candidate.accountUserId === accountUserId)
     : undefined;
-  const courseHoles = round.courseSnapshot?.holes;
+  const courseHoles = round.courseSnapshot?.playerHoleCards?.[snapshot.playerId] ?? round.courseSnapshot?.holes;
   if (!player || !Array.isArray(courseHoles) || courseHoles.length !== 18
     || !snapshot.adjustmentMethod || !finite(snapshot.grossScore)) return false;
   const assignment = Array.isArray(round.playerTeeAssignments)

@@ -88,6 +88,20 @@ export type LocalRule = {
 // Legacy tee metadata is retained only to open V2.x drafts; V3 treats each entry
 // as one field definition driven by per-hole Par and stroke index.
 export type Course = {
+  /** Round-only frozen cards. Absent on legacy rounds; never changes formulas. */
+  playerHoleCards?: Record<string, Hole[]>;
+  catalogReview?: {
+    ratingCategory: string | null;
+    categoryVerified: boolean;
+    reuseStatus: string;
+    qaStatus: string;
+    issues: string[];
+    limitation: string | null;
+    reportedRating: number | null;
+    reportedSlope: number | null;
+    nineRatings: import('./review-course-catalog').ReviewedNineRating[];
+    sourceObservedAt: string;
+  };
   id: string;
   name: string;
   /** @deprecated Kept only so V2.x saved rounds can still be opened. */
@@ -304,6 +318,10 @@ export type FoursomeSegment = {
 };
 
 export type PlayerTeeAssignmentSnapshot = {
+  manualRatingDeclaration?: { category: string; source: string; declaredAt: string; holes: 18 };
+  /** Exact tee card and independent ratings, frozen when selected. */
+  holes?: Hole[];
+  catalogReview?: Course['catalogReview'];
   playerId: string;
   courseId: string;
   layoutId?: string;

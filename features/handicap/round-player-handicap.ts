@@ -51,7 +51,7 @@ export function applyRoundCourseHandicaps(
       teeName: tee.teeName,
       slope: tee.slope,
       courseRating: tee.rating,
-      par,
+      par: tee.par ?? par,
       effectiveAt: tee.capturedAt,
     }, calculatedAt);
     const appliedHandicap = normalizeBackyardHandicap(snapshot.courseHandicap);

@@ -1,4 +1,5 @@
 import { derivedGreenInRegulation, normalizeAdvancedStats } from "./advanced-stats";
+import { holeForPlayer } from './player-course-card';
 import type { AdvancedStatsByHole, Course, HoleScore, PuttsByHole } from "./types";
 
 export type RoundStatHole = {
@@ -25,7 +26,7 @@ export function buildPlayerRoundStats(input: {
 }) {
   const stats = normalizeAdvancedStats(input.advancedStats);
   const holes: RoundStatHole[] = input.order.flatMap((holeNumber) => {
-    const hole = input.course.holes.find((candidate) => candidate.number === holeNumber);
+    const hole = holeForPlayer(input.course, input.playerId, holeNumber);
     if (!hole) return [];
     const score = input.scores[holeNumber]?.[input.playerId];
     const putts = input.putts?.[holeNumber]?.[input.playerId];

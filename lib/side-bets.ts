@@ -632,7 +632,7 @@ export function calculateLoba(
     if (!lobaTeam.length || !opponents.length) return [];
     const netScores = Object.fromEntries(participants.map(player => {
       const playingHcp = playingHandicap(handicapBases[player.id], hcpPct, "round");
-      const allowance = strokeAllowanceForHole(playingHcp, holeDefinition.strokeIndex, "round");
+      const allowance = strokeAllowanceForHole(playingHcp, (course.playerHoleCards?.[player.id]?.find(h=>h.number===holeNumber) ?? holeDefinition).strokeIndex, "round");
       return [player.id, (scores[holeNumber][player.id] as number) - allowance];
     })) as Record<string, number>;
     const lobaBestNet = Math.min(...lobaTeam.map(id => netScores[id]));
@@ -657,7 +657,7 @@ export function calculateLoba(
     }
     const playerUnits = Object.fromEntries(participants.map(player => {
       const automatic = config.unitsEnabled
-        ? automaticUnitsForScore(scores[holeNumber][player.id] as number, holeDefinition.par)
+        ? automaticUnitsForScore(scores[holeNumber][player.id] as number, (course.playerHoleCards?.[player.id]?.find(h=>h.number===holeNumber) ?? holeDefinition).par)
         : 0;
       const capturedUnits = safeCapture.unitCounts[player.id];
       const manual = config.unitsEnabled && isFiniteNonNegative(capturedUnits) ? Math.trunc(capturedUnits) : 0;

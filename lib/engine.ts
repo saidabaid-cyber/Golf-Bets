@@ -19,6 +19,7 @@ import { handicapBases, isValidRoundHandicapValue, playersMissingRoundHandicap, 
 import { normalizeRabbitMode, normalizeSkinsMode } from "./bet-modes";
 import { isFiniteZeroSum } from "./settlement-integrity";
 import { physicalNineForPlayedHalf, roundHalfForHole, roundHalfHoles } from "./round-half";
+import { holeForPlayer } from './player-course-card';
 
 const EPS = 1e-9;
 
@@ -177,7 +178,7 @@ export function winnerIdsForHole(
   if (playersMissingRoundHandicap(comparisonPlayers).length) return [] as string[];
   const nets = comparisonPlayers.map((p) => ({
     id: p.id,
-    net: netScore(row[p.id] as number, p.id, holeDef.strokeIndex, comparisonPlayers, pct, decimals, basis),
+    net: netScore(row[p.id] as number, p.id, (holeForPlayer(course, p.id, hole) ?? holeDef).strokeIndex, comparisonPlayers, pct, decimals, basis),
   }));
   const best = Math.min(...nets.map((x) => x.net));
   return nets.filter((x) => Math.abs(x.net - best) < EPS).map((x) => x.id);
@@ -418,7 +419,7 @@ export function calculateMonkey(course: Course, scores: Record<number, HoleScore
       const playingHcp = playingHandicap(bases[p.id], hcpPct, "decimal");
       // Preserve Monkey's original whole-stroke SI/SI+18 thresholds. The new
       // percentage changes the HCP fed into those thresholds, not its point rule.
-      const allowance = excelStrokeAllowanceForHole(playingHcp, hole.strokeIndex);
+      const allowance = excelStrokeAllowanceForHole(playingHcp, (holeForPlayer(course, p.id, holeNumber) ?? hole).strokeIndex);
       return [p.id, Number(scores[holeNumber][p.id]) - allowance];
     }));
     const earned=Object.fromEntries(participants.map(p=>[p.id,participants.reduce((sum,rival)=>sum+(rival.id===p.id ? 0 : net[p.id]<net[rival.id] ? 2 : net[p.id]===net[rival.id] ? 1 : 0),0)]));
@@ -509,7 +510,7 @@ export function calculateUnits(
       for (const p of participants) {
         const gross = row[p.id];
         if (typeof gross !== "number" || !Number.isFinite(gross) || gross < 1) continue;
-        const amount = automaticUnitsForScore(gross, hd.par);
+        const amount = automaticUnitsForScore(gross, (holeForPlayer(course, p.id, hole) ?? hd).par);
         if (!amount) continue;
         autoByHole[hole] ??= {};
         autoByHole[hole][p.id] = amount;
@@ -850,8 +851,8 @@ export function calculateFoursomes(
         if (!hd) { complete = false; continue; }
         const row = scores[hole];
         const adjusted = (gross: number, id: string) => cfg.handicapMethod === "excel"
-          ? excelFoursomeNet(gross, id, hd.strokeIndex, matchPlayers, bases)
-          : gross - strokeAllowanceForHole(playingHandicap(bases[id], cfg.hcpPct, cfg.decimals), hd.strokeIndex, cfg.decimals);
+          ? excelFoursomeNet(gross, id, (holeForPlayer(course, id === FOURSOME_GHOST_ID ? ghostPlayerId as string : id, hole) ?? hd).strokeIndex, matchPlayers, bases)
+          : gross - strokeAllowanceForHole(playingHandicap(bases[id], cfg.hcpPct, cfg.decimals), (holeForPlayer(course, id === FOURSOME_GHOST_ID ? ghostPlayerId as string : id, hole) ?? hd).strokeIndex, cfg.decimals);
         const aScores = (basePair as [string, string]).map((id) =>
           adjusted(row[id] as number, id),
         );
@@ -992,13 +993,13 @@ export function calculateBallFriend(
       activePlayers.map((p) => {
         const gross = row[p.id];
         if (typeof gross !== "number") return [p.id, null];
-        const net = gross - strokeAllowanceForHole(playingHandicap(bases[p.id], cfg.hcpPct, cfg.decimals), hd.strokeIndex, cfg.decimals);
+        const net = gross - strokeAllowanceForHole(playingHandicap(bases[p.id], cfg.hcpPct, cfg.decimals), (holeForPlayer(course, p.id, hole) ?? hd).strokeIndex, cfg.decimals);
         return [p.id, Math.min(cfg.maxScore, net)];
       }),
     ) as Record<string, number | null>;
 
-    const birdieOrBetterA = teamA.some((id) => (row[id] as number) < hd.par);
-    const birdieOrBetterB = teamB.some((id) => (row[id] as number) < hd.par);
+    const birdieOrBetterA = teamA.some((id) => (row[id] as number) < (holeForPlayer(course, id, hole) ?? hd).par);
+    const birdieOrBetterB = teamB.some((id) => (row[id] as number) < (holeForPlayer(course, id, hole) ?? hd).par);
 
     // Excel rule: birdie or better by one team flips the two-digit score of the OTHER team.
     const numberA = buildBallFriendNumber(adjusted[teamA[0]] as number, adjusted[teamA[1]] as number, birdieOrBetterB);
@@ -1316,8 +1317,8 @@ export function calculatePersonalBet(
         complete = false;
         continue;
       }
-      const owner = personalAdjustedScore(ownerGross, "owner", hd.strokeIndex, bet);
-      const rival = personalAdjustedScore(rivalRaw, "rival", hd.strokeIndex, bet);
+      const owner = personalAdjustedScore(ownerGross, "owner", (holeForPlayer(course, ownerId, hole) ?? hd).strokeIndex, bet);
+      const rival = personalAdjustedScore(rivalRaw, "rival", (holeForPlayer(course, bet.rivalPlayerId ?? '', hole) ?? hd).strokeIndex, bet);
       ownerNetTotal += owner;
       rivalNetTotal += rival;
       match += owner < rival ? 1 : owner > rival ? -1 : 0;
@@ -1511,7 +1512,7 @@ function calculateMedalComponent(
     if (!hd) continue;
     const row = scores[hole];
     for (const p of participants) {
-      totals[p.id] += netScore(row[p.id] as number, p.id, hd.strokeIndex, participants, hcpPct, decimals, basis);
+      totals[p.id] += netScore(row[p.id] as number, p.id, (holeForPlayer(course, p.id, hole) ?? hd).strokeIndex, participants, hcpPct, decimals, basis);
     }
   }
 

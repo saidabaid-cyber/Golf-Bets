@@ -73,7 +73,7 @@ function comparableScorecard(round: RoundSnapshot, accountUserId: string, holeCo
   const order = round.order;
   if (new Set(order).size !== holeCount || order.some(hole => !Number.isInteger(hole) || hole < 1 || hole > 18)
     || (holeCount === 18 && Array.from({ length: 18 }, (_, index) => index + 1).some(hole => !order.includes(hole)))) return null;
-  const definitions = round.courseSnapshot.holes;
+  const definitions = round.courseSnapshot.playerHoleCards?.[player.id] ?? round.courseSnapshot.holes;
   if (!Array.isArray(definitions) || new Set(definitions.map(hole => hole?.number)).size !== definitions.length) return null;
   const byNumber = new Map(definitions.map(hole => [hole.number, hole]));
   const holes: ScorecardHole[] = [];
