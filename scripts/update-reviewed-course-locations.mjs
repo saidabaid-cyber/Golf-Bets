@@ -2,7 +2,7 @@ import {readFileSync} from 'node:fs';
 import {createClient} from '@supabase/supabase-js';
 const ref='bymeopxkxapfizeeqeyb';
 if(process.env.NEXT_PUBLIC_SUPABASE_URL!==`https://${ref}.supabase.co`||process.env.QA_CONFIRM_ISOLATED_PREVIEW!==ref)throw Error('REF_MISMATCH_ABORT');
-const rows=JSON.parse(readFileSync(new URL('../data/course-additional-locations.json',import.meta.url),'utf8'));
+const rows=['course-additional-locations.json','course-osm-locations.json','course-location-followup.json'].flatMap(file=>JSON.parse(readFileSync(new URL(`../data/${file}`,import.meta.url),'utf8')));
 const db=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL,process.env.SUPABASE_SECRET_KEY,{auth:{persistSession:false}});
 let updated=0,unchanged=0;
 for(const geo of rows){

@@ -4,7 +4,8 @@ import { haversineDistanceKm, type CourseGeographicPoint } from './course-distan
 export type ReviewedNineRating = { id:string; segment:'FRONT'|'BACK'|'UNSPECIFIED'; course_rating:number; slope_rating:number; par:number; rating_category:null; source_url:string; observed_at:string };
 export type ReviewedTeeSource = { id:string; name:string; course_rating:number|null; slope_rating:number|null; yards:number|null; par:number|null;
   rating_category:null; qa_status:string; source_limitation:string|null; holes:{hole_number:number;par:number;stroke_index:number;yards:number|null}[];
-  nineRatings:ReviewedNineRating[]; qa:{status:string;errors:string[];source_limitation?:string|null} };
+  nineRatings:ReviewedNineRating[]; qa:{status:string;errors:string[];source_limitation?:string|null};
+  supplement?:{sourceUrl:string;authority:string;observedAt:string;hash:string} };
 export type ReviewedCatalogCourse = { id:string; clubId:string; name:string; clubName:string; city?:string; stateRegion?:string; aliases:string[];
   latitude?:number; longitude?:number; locationEvidence?:{sourceUrl:string;verifiedAt:string}; sourceUrl:string; observedAt:string; dataVersion:string;
   tees:ReviewedTeeSource[] };
@@ -27,7 +28,7 @@ export function nearestReviewedClubs<T extends Omit<ReviewedCatalogCourse,'tees'
 export function reviewedTeeToCourse(c:ReviewedCatalogCourse,t:ReviewedTeeSource):Course {
   return {id:t.id,name:c.name,teeName:t.name,catalogClubId:c.clubId,catalogCourseId:c.id,catalogTeeId:t.id,clubName:c.clubName,
     city:c.city,stateRegion:c.stateRegion,country:'México',provider:'OWNER_CATALOG_REVIEW',providerExternalId:t.id,
-    sourceUrl:c.sourceUrl,sourceAuthority:'Catálogo aportado por el owner · categoría por verificar',verifiedAt:c.observedAt,dataVersion:c.dataVersion,
+    sourceUrl:t.supplement?.sourceUrl??c.sourceUrl,sourceAuthority:t.supplement?.authority??'Catálogo aportado por el owner · categoría por verificar',verifiedAt:t.supplement?.observedAt??c.observedAt,dataVersion:t.supplement?`${c.dataVersion}:card-${t.supplement.hash.slice(0,12)}`:c.dataVersion,
     ...(t.yards!==null?{totalYards:t.yards}:{}),
     holes:t.holes.map(h=>({number:h.hole_number,par:h.par,strokeIndex:h.stroke_index,...(h.yards!==null?{yards:h.yards}:{})})),
     catalogReview:{ratingCategory:null,categoryVerified:false,reuseStatus:'LEGAL_REVIEW_REQUIRED',qaStatus:t.qa_status,

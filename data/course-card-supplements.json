@@ -1,0 +1,33 @@
+[
+  {
+    "courseId":"review-course-31612",
+    "sourceUrl":"https://www.golfplayamujeres.com/assets/pdf/scorecard.pdf",
+    "authority":"Playa Mujeres Golf Club · tarjeta oficial",
+    "observedAt":"2026-09-20",
+    "physicalHoles":18,
+    "par":[4,5,3,4,5,3,4,4,4,4,3,4,5,4,3,4,5,4],
+    "strokeIndex":[5,13,17,3,11,15,1,7,9,16,10,4,14,2,18,8,12,6],
+    "tees":[
+      {"id":"ghin:31612:tee:38f7a0db59b2","name":"BLACK","yards":[392,550,145,437,553,172,469,434,396,438,197,446,519,463,164,386,597,460],"total":7218,"rating":74.1,"slope":135,"category":null},
+      {"id":"ghin:31612:tee:03d3ac4b2f0f","name":"GOLD","yards":[354,506,138,366,533,158,452,401,375,410,184,418,502,434,156,367,579,442],"total":6775,"rating":71.4,"slope":127,"category":null},
+      {"id":"ghin:31612:tee:4554377245fd","name":"COPPER","yards":[300,448,101,333,489,116,371,335,317,337,144,376,463,394,124,288,543,380],"total":5859,"rating":67.8,"slope":110,"category":null}
+    ],
+    "pending":[{"id":"ghin:31612:tee:4bf712e82e4f","name":"SILVER","reason":"La tarjeta oficial omite las yardas del hoyo 6. No se deduce la cifra restando del total. Categoría del rating sin identificar."}]
+  },
+  {
+    "courseId":"review-course-36036",
+    "sourceUrl":"https://alquerias.com.mx/documents/golf/tarjeta-alquerias-2026.pdf",
+    "authority":"Alquerías · tarjeta oficial 2026 · página 2",
+    "observedAt":"2026-09-20",
+    "physicalHoles":9,
+    "roundLayout":"Dos vueltas de 9 hoyos; la tarjeta oficial enumera explícitamente 1–18 y sus ventajas, no son 18 hoyos físicos diferentes.",
+    "par":[3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3],
+    "strokeIndex":[3,17,7,1,11,13,5,15,9,2,18,10,6,14,12,4,16,8],
+    "tees":[
+      {"id":"ghin:36036:tee:a5be40b61705","name":"AZULES","yards":[201,133,175,173,128,128,175,142,179,201,133,175,173,128,128,175,142,179],"total":2868,"rating":56,"slope":98,"category":"CABALLEROS","nineRatings":[{"segment":"FRONT","rating":28,"slope":98},{"segment":"BACK","rating":28,"slope":98}]},
+      {"id":"ghin:36036:tee:ad652458406f","name":"BLANCAS","yards":[190,126,153,154,111,119,140,125,171,190,126,153,154,111,119,140,125,171],"total":2578,"rating":54.6,"slope":93,"category":"CABALLEROS","nineRatings":[{"segment":"FRONT","rating":27.3,"slope":93},{"segment":"BACK","rating":27.3,"slope":93}]},
+      {"id":"ghin:36036:tee:468e7646a10f","name":"DORADAS","yards":[116,100,114,107,101,107,115,94,107,116,100,114,107,101,107,115,94,107],"total":1922,"rating":52.6,"slope":87,"category":"CABALLEROS","nineRatings":[{"segment":"FRONT","rating":26.3,"slope":87},{"segment":"BACK","rating":26.3,"slope":87}]}
+    ],
+    "pending":[{"id":"ghin:36036:tee:a5f794cf42a8","name":"Azules / Blancas","reason":"La fuente publica rating combinado pero no identifica explícitamente cada salida por hoyo. Rating segunda vuelta oficial 27.0 frente a 27.3 en inventario; conflicto pendiente, no sobrescrito."}]
+  }
+]
