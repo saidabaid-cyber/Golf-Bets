@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "git": {
     "deploymentEnabled": {
-      "phase2/course-catalog-feedback": false
+      "phase2/course-catalog-feedback": true
     }
   }
 }
