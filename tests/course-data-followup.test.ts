@@ -4,6 +4,15 @@ import {readFileSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {reviewedTeeToCourse,type ReviewedCatalogCourse,type ReviewedTeeSource} from '../lib/review-course-catalog';
 const supplements=JSON.parse(readFileSync('data/course-card-supplements.json','utf8')) as {par:number[];strokeIndex:number[];physicalHoles:number;tees:{name:string;yards:number[];total:number}[];pending:{name:string;reason:string}[]}[];
+
+test('location idempotency tolerates only float8 JSON serialization, not a changed location',()=>{
+ const output=execFileSync(process.execPath,['--input-type=module','-e',`import {sameStoredCoordinate as same} from './scripts/lib/reviewed-location-values.mjs'; console.log(JSON.stringify([
+ same(22.0890506663396,22.089050666339638),same(-100.864690605361,-100.86469060536136),
+ same(21.1629224630576,21.162922463057598),same(-101.701527660896,-101.70152766089618),
+ same(19.02,19.02),same(19.02,19.020001),same(-100.864690605361,-100.864690605362),same(null,0),same(NaN,NaN)
+ ]));`],{encoding:'utf8'});
+ assert.deepEqual(JSON.parse(output),[true,true,true,true,true,false,false,false,false]);
+});
 test('six official complete cards: all 18 yards/par/SI present and totals agree',()=>{assert.equal(supplements.flatMap(c=>c.tees).length,6);for(const c of supplements){assert.deepEqual([...c.strokeIndex].sort((a,b)=>a-b),Array.from({length:18},(_,i)=>i+1));assert.equal(c.par.length,18);for(const t of c.tees){assert.equal(t.yards.length,18);assert.equal(t.yards.reduce((s,y)=>s+y,0),t.total);}}});
 test('Silver missing yardage and Alquerias mixed tee remain pending, not inferred',()=>{assert.deepEqual(supplements.flatMap(c=>c.pending.map(t=>t.name)),['SILVER','Azules / Blancas']);assert.equal(supplements[1].physicalHoles,9);});
 test('location evidence exists for each addition; no duplicate source IDs',()=>{const rows=['course-additional-locations','course-osm-locations','course-location-followup'].flatMap(f=>JSON.parse(readFileSync(`data/${f}.json`,'utf8')));assert.equal(new Set(rows.map(r=>r.sourceCourseId)).size,rows.length);for(const r of rows){assert.match(r.sourceUrl,/^https:\/\//);assert.ok(r.verifiedAt&&r.authority);assert.ok(r.latitude>14&&r.latitude<33&&r.longitude<-86&&r.longitude>-118);}});

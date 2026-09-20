@@ -1,5 +1,6 @@
 import {readFileSync} from 'node:fs';
 import {createClient} from '@supabase/supabase-js';
+import {sameStoredCoordinate} from './lib/reviewed-location-values.mjs';
 const ref='bymeopxkxapfizeeqeyb';
 if(process.env.NEXT_PUBLIC_SUPABASE_URL!==`https://${ref}.supabase.co`||process.env.QA_CONFIRM_ISOLATED_PREVIEW!==ref)throw Error('REF_MISMATCH_ABORT');
 const rows=['course-additional-locations.json','course-osm-locations.json','course-location-followup.json'].flatMap(file=>JSON.parse(readFileSync(new URL(`../data/${file}`,import.meta.url),'utf8')));
@@ -11,7 +12,7 @@ for(const geo of rows){
   if(course.error)throw Error('Source course not found');
   const club=await db.from('golf_clubs').select('id,latitude,longitude,catalog_metadata').eq('id',course.data.club_id).eq('provider','OWNER_CATALOG_REVIEW').single();
   if(club.error)throw Error('Review club not found');
-  if(club.data.latitude!==null||club.data.longitude!==null){if(club.data.latitude===geo.latitude&&club.data.longitude===geo.longitude){unchanged++;continue;}throw Error('LOCATION_CONFLICT_REVIEW_REQUIRED');}
+  if(club.data.latitude!==null||club.data.longitude!==null){if(sameStoredCoordinate(club.data.latitude,geo.latitude)&&sameStoredCoordinate(club.data.longitude,geo.longitude)){unchanged++;continue;}throw Error('LOCATION_CONFLICT_REVIEW_REQUIRED');}
   if(process.argv.includes('--apply')){const result=await db.from('golf_clubs').update({latitude:geo.latitude,longitude:geo.longitude,catalog_metadata:{...club.data.catalog_metadata,locationEvidence:geo}}).eq('id',club.data.id).eq('provider','OWNER_CATALOG_REVIEW').is('latitude',null).is('longitude',null).select('id');if(result.error||result.data.length!==1)throw Error('Location update conflict');}
   updated++;
 }
