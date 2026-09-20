@@ -1,0 +1,409 @@
+{
+  "status": "PENDING_LOCATION",
+  "asOf": "2026-09-20",
+  "scope": "69 clubes aún sin punto verificado, además de 75 ubicaciones preparadas que requieren autorización para aplicar a QA.",
+  "clubs": [
+    {
+      "club": "ALTOZANO EL NUEVO COLIMA",
+      "city": "Cuauhtémoc",
+      "state": "Colima",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "ASOCIACION DEPORTIVA TULA",
+      "city": "Tula De Allende",
+      "state": "Hidalgo",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "AZUL TALAVERA COUNTRY CLUB",
+      "city": "Torreón",
+      "state": "Coahuila",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "Baja Country Club",
+      "city": "Ensenada",
+      "state": "Baja California",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "BOSQUES CLUB DE GOLF",
+      "city": "Cdmx",
+      "state": "Ciudad De México",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "Cabo del Sol",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "Cabo Real Golf Course",
+      "city": "San Jose del Cabo",
+      "state": "Baja California Sur",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "CAMPECHE COUNTRY CLUB",
+      "city": "San Fco. De Campeche",
+      "state": "Campeche",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "CAMPO DE GOLF NAVAL",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "CCC COUNTRY CLUB PLAYA PALMAS",
+      "city": "Cd. Del Carmen",
+      "state": "Campeche",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "CENTRO ASTURIANO DE MEXICO",
+      "city": "Atlatlahucan",
+      "state": "Morelos",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "CLUB CAMPESTRE DE AGUASCALIENTES",
+      "city": "Aguascalientes",
+      "state": "Aguascalientes",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "CLUB CAMPESTRE DE DURANGO",
+      "city": "Durango",
+      "state": "Durango",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "CLUB CAMPESTRE DE MORELIA",
+      "city": "Morelia",
+      "state": "Michoacán",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "CLUB CAMPESTRE DE SAN LUIS",
+      "city": "San Luis Potosí",
+      "state": "San Luis Potosí",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "CLUB CAMPESTRE ERANDENI",
+      "city": "Tarímbaro",
+      "state": "Michoacán",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "CLUB CAMPESTRE LOMAS DE COCOYOC",
+      "city": "Atlatlahucan",
+      "state": "Morelos",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "CLUB CAMPESTRE LOURDES",
+      "city": "Saltillo",
+      "state": "Coahuila",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "CLUB CAMPESTRE REAL DEL CATORCE",
+      "city": "Hermosillo",
+      "state": "Sonora",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "CLUB CAMPESTRE RIAMA",
+      "city": "Salamanca",
+      "state": "Guanajuato",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "CLUB CAMPESTRE TUXTLA",
+      "city": "Tuxtla Gutiérrez",
+      "state": "Chiapas",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "CLUB DE GOLF ACAPULCO",
+      "city": "Acapulco",
+      "state": "Guerrero",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "CLUB DE GOLF ALTOZANO EL NUEVO TABASCO",
+      "city": "Villahermosa",
+      "state": "Tabasco",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "CLUB DE GOLF BALVANERA",
+      "city": "Corregidora",
+      "state": "Querétaro",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "CLUB DE GOLF CAÑADA DE SANTA FE",
+      "city": "Cdmx",
+      "state": "Ciudad De México",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "CLUB DE GOLF LA PRIMAVERA",
+      "city": "Culiacan",
+      "state": "Sinaloa",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "CLUB DE GOLF LA VILLA RICA",
+      "city": "Alvarado",
+      "state": "Veracruz",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "CLUB DE GOLF LAGUNAS DE MIRALTA",
+      "city": "Altamira",
+      "state": "Tamaulipas",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "CLUB DE GOLF LOS NARANJOS",
+      "city": "Leon",
+      "state": "Guanajuato",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "CLUB DE GOLF MALINALCO",
+      "city": "Malinalco",
+      "state": "Estado De México",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "CLUB DE GOLF PULGAS PANDAS",
+      "city": "Aguascalientes",
+      "state": "Aguascalientes",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "CLUB DE GOLF SAN GIL",
+      "city": "San Juan Del Río",
+      "state": "Querétaro",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "CLUB DE GOLF YUCATAN",
+      "city": "Mérida",
+      "state": "Yucatán",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "COLA DE LAGARTO CAMPO MÍTICO",
+      "city": "Atlixco",
+      "state": "Puebla",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "Costa Palmas Golf Club",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "COUNTRY CLUB DE CHAPALA",
+      "city": "Chapala",
+      "state": "Jalisco",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "Country Club de Los Mochis",
+      "city": "Los Mochis",
+      "state": "Sinaloa",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "COUNTRY CLUB MANTE",
+      "city": "Mante",
+      "state": "Tamaulipas",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "DANZANTE BAY GOLF CLUB",
+      "city": "Loreto",
+      "state": "Baja California Sur",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "Diamante Cabo San Lucas",
+      "city": "Cabo San Lucas",
+      "state": "Baja California Sur",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "EL CORTES GOLF CLUB",
+      "city": "La Paz",
+      "state": "Baja California Sur",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "El Dorado Golf & Beach Club",
+      "city": "Cabo San Lucas",
+      "state": "Baja California Sur",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "EL MOLINO GOLF CLUB",
+      "city": "León",
+      "state": "Guanajuato",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "Estrella Del Mar Golf Club",
+      "city": "Mazatlán",
+      "state": "Sinaloa",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "GOLF BOSQUE MONARCA",
+      "city": "Morelia",
+      "state": "Michoacán",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "GRAN COYOTE GOLF",
+      "city": "Quintana Roo",
+      "state": "Quintana Roo",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "GRAN RESERVA GOLF RESORT & COUNTRY CLUB",
+      "city": "Ixtapan De La Sal",
+      "state": "Estado De México",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "HIGUERA GOLF CLUB",
+      "city": "-",
+      "state": "-",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "LA ESMERALDA COUNTRY CLUB",
+      "city": "Tecámac",
+      "state": "Estado De México",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "LAS PAROTAS CLUB DE GOLF",
+      "city": "Tangolunda",
+      "state": "Oaxaca",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "Loreto Bay Golf Resort and Spa",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "NAUKA GOLF CLUB",
+      "city": "Compostela",
+      "state": "Nayarit",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "Oleada Golf Links Los Cabos",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "PALMA REAL GOLF & BEACH CLUB",
+      "city": "Ixtapa Zihuatanejo",
+      "state": "Guerrero",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "Palmilla Golf Club",
+      "city": "San Jose del Cabo",
+      "state": "Baja California Sur",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "PARAISO DEL MAR GOLF CLUB",
+      "city": "La Paz",
+      "state": "Baja California Sur",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "PGA RIVIERA MAYA BY BAHIA PRINCIPE GOLF",
+      "city": "Tulum",
+      "state": "Quintana Roo",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "PRINCESS MUNDO IMPERIAL GOLF CLUB",
+      "city": "Acapulco",
+      "state": "Guerrero",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "PROVINCIA GOLF CLUB",
+      "city": "Mérida",
+      "state": "Yucatán",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "Punta Brava Golf & Surf Club",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "PUNTA TIBURON COUNTRY CLUB",
+      "city": "Alvarado",
+      "state": "Veracruz",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "RIO GRANDE COUNTRY CLUB",
+      "city": "Nava",
+      "state": "Coahuila",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "TAJIN CLUB DE GOLF",
+      "city": "Coatzintla",
+      "state": "Veracruz",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "THE SPRINGS GOLF CLUB",
+      "city": "-",
+      "state": "Chihuahua",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "Twin Dolphin Club",
+      "city": "Cabo San Lucas",
+      "state": "Baja California Sur",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "Vidanta Golf Los Cabos",
+      "city": "San Jose Del Cabo",
+      "state": "Baja California Sur",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "Vidanta Golf Puerto Penasco",
+      "city": "Puerto Peñasco",
+      "state": "Sonora",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "VISTA VERDE COUNTRY CLUB",
+      "city": "Tehuacán",
+      "state": "Puebla",
+      "status": "PENDING_LOCATION"
+    },
+    {
+      "club": "YUCATAN COUNTRY CLUB",
+      "city": "Mérida",
+      "state": "Yucatán",
+      "status": "PENDING_LOCATION"
+    }
+  ]
+}
