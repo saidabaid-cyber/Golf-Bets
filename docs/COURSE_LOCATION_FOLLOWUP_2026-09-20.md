@@ -108,3 +108,48 @@ Alquerías documenta categoría **Caballeros** y ratings de nueve independientes
 5. Autorización específica de correo de prueba, si se desea verificar recepción; no está concedida en este corrido. Mailto y UI no demuestran entrega.
 
 Este bloque **no está cerrado por completo**: el fix está publicado, pero faltan aprobación de datos QA, datos de fuente restantes, mailer y prueba física.
+
+## Aplicación controlada autorizada — 20 septiembre 2026
+
+Esta sección actualiza los bloqueos de DB de las secciones anteriores sin borrar su evidencia.
+
+- Autorización explícita recibida: 75 ubicaciones, seis tarjetas, repetición idempotente y rondas sintéticas nuevas en QA. Ninguna migración, cambio de Auth/configuración/secretos, ni edición de históricos existentes.
+- HEAD inicial local/remoto confirmado por fetch: `701c10e360104559bda88e78384598a91c07a92d`, rama `phase2/course-catalog-feedback`.
+- Target comprobado programáticamente en los runners: `https://bymeopxkxapfizeeqeyb.supabase.co`. El bundle del Preview también se verifica antes de enviar credenciales.
+- Primer script de ubicaciones: `updated:75, unchanged:6`. La repetición detectó dos diferencias de serialización float8 de menos de 0.000000000001 grados; se corrigió la comparación de no-op a los 15 dígitos significativos de la representación de la API. No se redondean ni reescriben coordenadas almacenadas. Tests rechazan ubicaciones distintas y valores inválidos.
+- Segunda ejecución completa: `updated:0, unchanged:81`. No sobrescribe fuentes existentes ni modifica tarjetas.
+- Transacción de tarjetas ejecutada dos veces: seis suplementos en ambas ejecuciones, 108 registros de hoyo y 108 pares tee/hoyo distintos. Sin duplicados; originales conservados en metadata. Alquerías Azules/Blancas/Doradas y Playa Mujeres Black/Gold/Copper, con sus fuentes oficiales ya documentadas arriba.
+
+### Readback real
+
+| Entidad | Antes | Después |
+|---|---:|---:|
+| Clubes | 153 | 153 |
+| Recorridos | 176 | 176 |
+| Tees | 769 | 769 |
+| Clubes geolocalizados | 9 | 84 |
+| Tarjetas completas | 752 | 758 |
+| Tarjetas incompletas | 17 | 11 |
+
+Los 79 registros `rounds_cloud` anteriores conservaron el fingerprint agregado `2207175243c7d2ff7832cd816e702d0f` después de ambos scripts. Después del QA API había 88 rondas: nueve nuevas y cero cambios en los fingerprints individuales de las 79 anteriores.
+
+### QA cloud ejecutado
+
+`scripts/qa-course-catalog-live.mjs --write-rounds` utiliza una cuenta sintética **existente**, sin crear usuarios Auth ni enviar correos. No modifica catálogo, perfiles ni preferencias. Crea únicamente nuevos IDs y conserva fixtures.
+
+- Catálogo API autenticado: 176 recorridos / 153 clubes / 84 clubes geolocalizados. Tres clubes distintos ordenados por distancia local para Puebla, CDMX, Monterrey, Guadalajara, Querétaro, León, Cancún, Los Cabos, Puerto Vallarta y Acapulco. La tabla geográfica anterior ahora coincide con datos leídos de QA, sin superponer ubicaciones locales preparadas.
+- México/Mexico: mismos IDs. La Vista: cuatro tarjetas; Campestre Puebla: cinco. Playa Mujeres y Alquerías: tres tarjetas completas y una incompleta cada uno. Rating ambiguo no aplicado automáticamente.
+- Nueve rondas API: modos completo (sin apuestas), score-only y sólo total, cada uno en 9H H1, 9H H10 y 18H H1. POST real 201; reintento del mismo ID 409 sin duplicar. Readback con una nueva sesión autenticada por cada caso.
+- Dos tees distintos por jugador en las seis rondas detalladas, con hoyos/SI/par/yardas/fuente/versiones congelados; comparación completa del snapshot. Modificar el objeto de catálogo en memoria no altera el snapshot persistido. Ninguna actualización artificial del catálogo ni de históricos para demostrarlo.
+- Sólo total conserva `scores:{}`; no se fabrican scores por hoyo. Las rondas detalladas mantienen exactamente 9/18 hoyos y el orden seleccionado.
+- Evidencia: `.qa-artifacts/catalog-applied-cloud-report.json` (sin credenciales). `--verify-created` repite readback sin crear rondas adicionales, para comprobar el Preview final.
+
+### Alcance de UI y pendientes honestos
+
+La cuenta sintética sin histórico elegida para el recorrido visual llegó a un checkpoint de términos obligatorio. El control de seguridad rechazó aceptar legalmente esos checks de forma automática; no se eludió. Los nueve casos anteriores demuestran persistencia real **API → DB → nueva sesión**, no nueve recorridos completos por clicks. El cierre completo desde UI queda `PENDING_INTERACTIVE_QA` para una cuenta con autorizaciones resueltas. La cuenta QA ya habilitada se utiliza para selección móvil de sólo lectura, sin alterar su histórico ni Auth.
+
+Calidad: 2,075/2,075 tests, cero fallos/omitidos; TypeScript, ESLint y Next build correctos. Incluye regresión nueva del fallo real de idempotencia. Safari/iPhone/PWA/teclado físico sigue `PENDING_DEVICE_QA`.
+
+Pendientes de datos: 69 clubes sin ubicación verificada y once tees incompletos (`PENDING_DATA`), con el listado anterior y `data/course-locations-pending.json`. Categorías ambiguas y conflictos originales no se corrigieron por suposición. Mailer sigue `BLOCKED_EXTERNAL`; no se tocaron secretos ni se enviaron correos. Reutilización comercial y aprobación jurídica siguen `LEGAL_REVIEW_REQUIRED`.
+
+El Preview final se genera mediante el push de este cierre a la misma rama; su URL inmutable y SHA se entregan en el mensaje final, comprobados contra metadata Vercel. No se promueve a Production ni se cambian dominios.
