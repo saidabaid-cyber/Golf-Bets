@@ -25,14 +25,15 @@ export function FullScorecard({ course, players, scores, order, scale, onScale }
     <div className="tableWrap scorecardTable" tabIndex={0} aria-label="Tarjeta completa, desliza horizontalmente">
       <table><thead><tr><th>Jugador</th>{front.map(hole => <th key={hole}><span>H{hole}</span><small>SI {byNumber.get(hole)?.strokeIndex ?? "—"}</small></th>)}{front.length > 0 && <th className="scorecardCut">OUT</th>}{back.map(hole => <th key={hole}><span>H{hole}</span><small>SI {byNumber.get(hole)?.strokeIndex ?? "—"}</small></th>)}{back.length > 0 && <th className="scorecardCut">IN</th>}<th>TOTAL</th><th>+/− PAR</th></tr></thead>
       <tbody>{players.map(player => {
+        const playerHoles = new Map((course.playerHoleCards?.[player.id] ?? course.holes).map(h=>[h.number,h]));
         const roundHcp = hasValidRoundHandicap(player) ? playingHandicap(player.handicap, 100, "half_up") : null;
         const allHoles = [...front, ...back];
         const entered = allHoles.filter(hole => typeof scores[hole]?.[player.id] === "number");
         const total = sum(allHoles, player.id);
-        const relative = total === null ? null : total - entered.reduce((par, hole) => par + (byNumber.get(hole)?.par || 0), 0);
+        const relative = total === null ? null : total - entered.reduce((par, hole) => par + (playerHoles.get(hole)?.par || 0), 0);
         const cell = (holeNumber: number) => {
           const gross = scores[holeNumber]?.[player.id];
-          const hole = byNumber.get(holeNumber);
+          const hole = playerHoles.get(holeNumber);
           if (typeof gross !== "number" || !hole) return <td key={holeNumber} aria-label={`${player.name} hoyo ${holeNumber} pendiente`}></td>;
           if (roundHcp === null) return <td key={holeNumber}><b>{gross}</b><small>Completa el HCP<br />Neto —</small></td>;
           const strokes = strokeAllowanceForHole(roundHcp, hole.strokeIndex, "half_up");
@@ -41,7 +42,7 @@ export function FullScorecard({ course, players, scores, order, scale, onScale }
             : strokes < 0
               ? `Da ${Math.abs(strokes)} golpe${strokes === -1 ? "" : "s"}`
               : "Sin ventaja";
-          return <td key={holeNumber}><b>{gross}</b><small>{strokeLabel}<br />Neto {gross - strokes}</small></td>;
+          return <td key={holeNumber}><b>{gross}</b><small>{course.playerHoleCards&&<>Par {hole.par} · SI {hole.strokeIndex}<br /></>}{strokeLabel}<br />Neto {gross - strokes}</small></td>;
         };
         const out = sum(front, player.id);
         const inn = sum(back, player.id);

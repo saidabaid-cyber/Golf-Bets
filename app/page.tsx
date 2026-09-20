@@ -89,6 +89,9 @@ import { resolveRoundDraftCore, resolvedOwnerIdForRoundDraft } from "./draft-res
 import { accountDeletionMarkerKey, ACCOUNT_STORAGE_KEYS, hasCurrentBettingDataConsent, parseLegalAcceptances } from "../lib/account-state";
 import { ProfileAccountPanel } from "./components/profile-account-panel";
 import { RoundCoursePicker } from "./components/round-course-picker";
+import { CatalogCoursePicker } from "./components/catalog-course-picker";
+import { FeedbackDialog,FeedbackLink,requestFeedback } from "./components/feedback-dialog";
+import { CourseReviewNotice } from "./components/course-review-notice";
 import { BrandLockup } from "./components/brand-lockup";
 import { ModalCloseButton } from "./components/modal-shell";
 import { GroupBuilder } from "./components/group-builder";
@@ -233,6 +236,8 @@ import { defaultMaxBaseAppearances, generateAutomaticFoursomes, markFoursomeSegm
 import { advantageFieldsFromSigned, configureCurrentIndexPersonal, configureSlidingPersonal, frequentPersonalSuggestions, slidingAdjustment } from "../lib/personal-modes";
 import { loadEquipmentProfile } from "../lib/golf-equipment";
 import { applyRoundCourseHandicaps } from "../features/handicap/round-player-handicap";
+import { withPlayerCourseCards } from '../lib/player-course-card';
+import { ManualTeeRating } from './components/manual-tee-rating';
 import { canEditGuestHandicap, patchEditablePlayer, playerHandicapSourceLabel } from "../lib/player-handicap-edit";
 import { PlayerHandicapControl } from "./components/player-handicap-control";
 
@@ -448,6 +453,8 @@ function GolfBetsApp() {
   const [pendingRoundAction, setPendingRoundAction] = useState<{ message: string; run: () => void } | null>(null);
   const [pendingCloudConflict, setPendingCloudConflict] = useState<{ local: CloudDataBundle; cloud: CloudDataBundle; conflicts: CloudDataConflict[] } | null>(null);
   const [courses, setCourses] = useState<Course[]>(defaultCourses);
+  const [playCourseChoice,setPlayCourseChoice] = useState<Course|null>(null);
+  useEffect(()=>{setPlayCourseChoice(null);},[identity.userId]);
   const [favoriteCourseIds, setFavoriteCourseIds] = useState<string[]>([]);
   const [recentCourseIds, setRecentCourseIds] = useState<string[]>([]);
   const [course, setCourse] = useState<Course>(laVista);
@@ -738,6 +745,7 @@ function GolfBetsApp() {
   }, [course, courseSelected, players, roundStartedAt, roundReviewPending, editingRound]);
   useEffect(() => {
     if (!courseSelected) return;
+    if (!roundStartedAt && !roundReviewPending) setCourse(current => withPlayerCourseCards(current, playerTeeAssignments));
     setPlayers((current) => applyRoundCourseHandicaps(current, playerTeeAssignments, course, new Date().toISOString(), Boolean(roundStartedAt || roundReviewPending)));
   }, [course, courseSelected, playerTeeAssignments, roundReviewPending, roundStartedAt]);
   useEffect(() => {
@@ -2174,6 +2182,9 @@ function GolfBetsApp() {
       return;
     }
     resetRound(nextFeedback);
+    if ((intent.kind === "blank" || intent.kind === "scoreOnly") && playCourseChoice) {
+      setCourse(structuredClone(playCourseChoice)); setCourseSelected(true); setPendingCourseIdentity(null);
+    }
     if (intent.kind === "blank") return;
     if (intent.kind === "scoreOnly") { setRoundPresentation({ version: 1, groupNassauTerm: "polla", playMode: "score_only" }); return; }
     if (intent.kind === "ai") { setTab("aiSetup"); return; }
@@ -2699,6 +2710,11 @@ function GolfBetsApp() {
 
   function loadFrequentGroup(group: FrequentGroup) {
     setGroupRoundSelection(withStableGroupMemberIds(group));
+  }
+
+  function retainCatalogCards(cards:Course[]) {
+    const usable=cards.filter(card=>card.holes.length===18);
+    setCourses(current=>[...current.filter(card=>!usable.some(next=>next.id===card.id)),...usable]);
   }
 
   async function saveTotalHistory(snapshot: RoundSnapshot) {
@@ -3502,6 +3518,8 @@ function GolfBetsApp() {
   ].filter((item) => item.visible);
 
   return <main className={`app ${highContrast ? "highContrast" : ""} ${tab === "results" ? "compactResults" : ""} ${tab === "welcome" ? "homeApp" : ""}`}>
+    <FeedbackDialog key={identity.userId} token={identity.accessToken} email={identity.email} />
+    {(["welcome","profile","more"] as AppTab[]).includes(tab) && <div className="helpEntry"><FeedbackLink /></div>}
     {tab !== "rules" && tab !== "welcome" && tab !== "round" && <header className="topbar">
       <button className="brandHomeButton" onClick={() => setTab("welcome")} aria-label="Ir a Inicio"><BrandLockup compact /></button>
       <div className="topActions"><span className={`saveIndicator ${saveStatus}`}>{saveStatus === "saving" ? "Guardando…" : saveStatus === "error" ? "Error de guardado" : identity.mode !== "authenticated" || !cloudLinked ? "Guardado en este dispositivo" : cloudStatus === "synced" ? "Guardado en la nube ✓" : cloudStatus === "syncing" ? "Sincronizando…" : cloudStatus === "offline" ? "Sin conexión · pendiente" : cloudStatus === "error" ? "Error de sincronización" : "Pendiente de sincronizar"}</span><button className="contrastButton" onClick={() => changeHighContrast(!highContrast)} aria-pressed={highContrast}>{contrastToggleLabel(highContrast)}</button><ProfileNavigationButton avatarUrl={identity.avatarUrl} displayName={identity.displayName} onClick={openProfileRoot} /></div>
@@ -3537,7 +3555,7 @@ function GolfBetsApp() {
       onOpenFitting={() => { setProfileFocus("equipment"); setTab("profile"); }}
       onOpenGps={() => activeRoundSummary ? continueActiveRound() : setTab("courseLibrary")}
       onOpenRules={openRulesForRound}
-      onOpenHelp={openRulesForRound}
+      onOpenHelp={() => requestFeedback()}
       onOpenSocial={view => { setSocialInitialView(view); setTab("social"); }}
       onOpenPrivacy={() => setTab("account")}
     />}
@@ -3545,6 +3563,7 @@ function GolfBetsApp() {
     {tab === "play" && <PlayHub
       activeRound={activeRoundSummary}
       onContinueRound={continueActiveRound}
+      coursePicker={<CatalogCoursePicker token={identity.accessToken} selectedName={playCourseChoice?`${playCourseChoice.name} · ${playCourseChoice.teeName}`:''} onRequest={()=>requestFeedback('COURSE')} onSelect={(next,cards)=>{retainCatalogCards(cards);setPlayCourseChoice(next);}} />}
       onEditRound={activeRoundSummary ? editActiveRound : undefined}
       onAiRound={requestAiRound}
       onNewRound={requestNewRound}
@@ -3561,7 +3580,7 @@ function GolfBetsApp() {
       onOpenResults={() => setTab("results")}
     />}
 
-    {tab === "totalScore" && (() => { const principal = accountPrimaryRoundPlayer(identity, accountIndex); return principal ? <TotalScoreEntry key={identity.userId} courses={courseOptions} player={principal} onSave={saveTotalHistory} onBack={() => setTab("play")} /> : <section className="card"><p>Inicia sesión para guardar tu tarjeta.</p><button type="button" onClick={() => setTab("play")}>Volver a Jugar</button></section>; })()}
+    {tab === "totalScore" && (() => { const principal = accountPrimaryRoundPlayer(identity, accountIndex); return principal ? <TotalScoreEntry key={identity.userId} courses={courseOptions} initialCourse={playCourseChoice} player={principal} onSave={saveTotalHistory} onBack={() => setTab("play")} /> : <section className="card"><p>Inicia sesión para guardar tu tarjeta.</p><button type="button" onClick={() => setTab("play")}>Volver a Jugar</button></section>; })()}
 
     {tab === "aiSetup" && <AiRoundSetup
       initialDraft={createRoundSetupDraft({
@@ -3678,13 +3697,15 @@ function GolfBetsApp() {
         {!courseSelected && pendingCourseIdentity && <div className="notice" id="round-course-ai-focus" role="status"><b>Campo reconocido: {pendingCourseIdentity.name}</b><br />{pendingCourseCandidates.length ? "Selecciona el campo para continuar." : "No encontré ese campo exacto en el catálogo actual. Selecciona otro o crea uno manual."}</div>}
         <div className="grid2">
           <div><label htmlFor="wizard-round-date">Fecha de la ronda</label><input id="wizard-round-date" aria-label="Fecha de la ronda" type="date" value={roundDate} onChange={(e) => setRoundDate(e.target.value)} /></div>
-          <RoundCoursePicker selectedName={courseSelected ? course.name : ""} selectedId={courseSelected ? (course.catalogCourseId ?? course.id) : ""} pendingName={pendingCourseIdentity?.name} invalid={courseSelectionError} describedBy={[!courseSelected && pendingCourseIdentity ? "round-course-ai-focus" : "", courseSelectionError ? "round-course-error" : ""].filter(Boolean).join(" ") || undefined} onSelect={(selection) => {
+          <details><summary>Campos guardados / proveedor anterior</summary><RoundCoursePicker selectedName={courseSelected ? course.name : ""} selectedId={courseSelected ? (course.catalogCourseId ?? course.id) : ""} pendingName={pendingCourseIdentity?.name} invalid={courseSelectionError} describedBy={[!courseSelected && pendingCourseIdentity ? "round-course-ai-focus" : "", courseSelectionError ? "round-course-error" : ""].filter(Boolean).join(" ") || undefined} onSelect={(selection) => {
             const matchingCourse = courseNameOptions.find((candidate) => candidate.catalogCourseId === selection.courseId)
               ?? courseNameOptions.find((candidate) => candidate.id === selection.id)
               ?? courseNameOptions.find((candidate) => candidate.name === selection.name);
             if (matchingCourse) selectRoundCourse(matchingCourse);
-          }} />
+          }} /></details>
           {courseSelectionError && <span id="round-course-error" className="courseSelectionError" role="alert">Selecciona un campo para continuar.</span>}
+          <CatalogCoursePicker token={identity.accessToken} selectedName={courseSelected?`${course.name} · ${course.teeName}`:''} onRequest={()=>requestFeedback('COURSE')} onSelect={(next,cards)=>{retainCatalogCards(cards);selectRoundCourse(next);}} />
+          {courseSelected && <CourseReviewNotice course={course} roundHoles={roundHoles} startHole={startHole} />}
           <div><label>Inicio de ronda</label><select value={startHole} onChange={(e) => { const next = Number(e.target.value) as 1 | 10; confirmRoundChange("Cambiar la salida cambia el orden Nassau y los segmentos de Foursome.", () => { setStartHole(next); setCurrentIndex(0); }); }}><option value={1}>Hoyo 1</option><option value={10}>Hoyo 10</option></select></div>
           <div><label>Hoyos a jugar</label><select value={roundHoles} onChange={(e) => { const next = Number(e.target.value) as 9 | 18; confirmRoundChange("Cambiar la duración excluye del cálculo los hoyos fuera de la nueva vuelta, sin borrar sus scores.", () => { setRoundHoles(next); setSupplementalBets((current) => supplementalBetsForRoundHoles(current, next)); setCurrentIndex(0); }); }}><option value={18}>18 hoyos</option><option value={9}>9 hoyos</option></select></div>
         </div>
@@ -3700,10 +3721,10 @@ function GolfBetsApp() {
           <div className="playerTeeGrid">{players.map((player) => {
             const assignment = playerTeeAssignments.find((item) => item.playerId === player.id);
             const selectedTee = teeOptions.find((option) => (option.catalogTeeId || option.id) === assignment?.teeId) || course;
-            return <label key={player.id}><span>{player.name || "Jugador"}</span><select aria-label={`Tee de ${player.name || "jugador"}`} value={selectedTee.id} onChange={(event) => {
+            return <div key={player.id}><label><span>{player.name || "Jugador"}</span><select aria-label={`Tee de ${player.name || "jugador"}`} value={selectedTee.id} onChange={(event) => {
               const nextTee = teeOptions.find((option) => option.id === event.target.value);
               if (nextTee) setPlayerTeeAssignments((current) => updatePlayerTeeAssignment(current, player.id, nextTee, new Date().toISOString()));
-            }}>{teeOptions.map((option) => <option key={option.id} value={option.id}>{option.teeName}{typeof option.rating === "number" ? ` · ${option.rating}/${option.slope ?? "—"}` : ""}</option>)}</select></label>;
+            }}>{teeOptions.map((option) => <option key={option.id} value={option.id}>{option.teeName}{option.catalogReview?' · Catálogo en revisión':''}{typeof option.rating === "number" ? ` · ${option.rating}/${option.slope ?? "—"}` : ""}</option>)}</select></label>{assignment&&<ManualTeeRating key={assignment.teeId} assignment={assignment} onSave={value=>setPlayerTeeAssignments(current=>current.map(item=>item.playerId===player.id?value:item))}/>}</div>;
           })}</div>
           <p className="hint">EDITAR POR JUGADOR está siempre disponible. Para una cuenta con Index, el tee calcula y congela su HCP de juego; un invitado conserva captura manual.</p>
           </div>

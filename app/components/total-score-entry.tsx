@@ -3,16 +3,24 @@ import { useRef, useState } from "react";
 import type { Course, Player, RoundSnapshot } from "../../lib/types";
 import { createTotalScoreRound, completeTotalScoreHoles } from "../../lib/total-score-round";
 import { RoundCoursePicker } from "./round-course-picker";
+import { CatalogCoursePicker } from './catalog-course-picker';
+import { CourseReviewNotice } from './course-review-notice';
+import { requestFeedback } from './feedback-dialog';
+import { useBackyardAccount } from './account-provider';
 import styles from "./total-score-entry.module.css";
 const localDateMexico = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
-export function TotalScoreEntry({ courses, player, onSave, onBack }: { courses: Course[]; player: Player; onSave: (round: RoundSnapshot) => Promise<void>; onBack: () => void }) {
+export function TotalScoreEntry({ courses, initialCourse = null, player, onSave, onBack }: { courses: Course[]; initialCourse?: Course | null; player: Player; onSave: (round: RoundSnapshot) => Promise<void>; onBack: () => void }) {
+  const {identity}=useBackyardAccount();
+  const [catalogCards,setCatalogCards]=useState<Course[]>([]);
   const [id] = useState(() => crypto.randomUUID());
-  const [course, setCourse] = useState<Course | null>(null), [date, setDate] = useState(localDateMexico), [holes, setHoles] = useState<9 | 18>(18), [start, setStart] = useState<1 | 10>(1), [total, setTotal] = useState("");
+  const [course, setCourse] = useState<Course | null>(initialCourse), [date, setDate] = useState(localDateMexico), [holes, setHoles] = useState<9 | 18>(18), [start, setStart] = useState<1 | 10>(1), [total, setTotal] = useState("");
   const [busy, setBusy] = useState(false), [error, setError] = useState(""); const lock = useRef(false);
-  const tees = course ? courses.filter(c => course.catalogCourseId ? c.catalogCourseId === course.catalogCourseId : c.name === course.name) : [];
+  const tees = course ? [...catalogCards,...courses.filter(c=>!catalogCards.some(t=>t.id===c.id))].filter(c => course.catalogCourseId ? c.catalogCourseId === course.catalogCourseId : c.name === course.name) : [];
   async function save() { if (lock.current) return; setError(""); if (!course || !total.trim()) { setError("Selecciona campo, tee y total de golpes."); return; } lock.current = true; setBusy(true); try { await onSave(createTotalScoreRound({ id, course, player, date, holes, start, total: Number(total), now: new Date().toISOString() })); } catch(e) { setError(e instanceof Error ? e.message : "No pudimos guardar; reintenta."); lock.current = false; setBusy(false); } }
   return <section className={`card ${styles.screen}`}><button type="button" className="textButton" disabled={busy} onClick={onBack}>← Jugar</button><h1>Subir score total</h1><p>Una ronda terminada. No se inventarán scores por hoyo ni estadísticas.</p><form onSubmit={e => { e.preventDefault(); void save(); }}><fieldset disabled={busy}>
-    <RoundCoursePicker selectedName={course?.name || ""} selectedId={course?.catalogCourseId || course?.id || ""} invalid={false} onSelect={choice => { const found = courses.find(c => (c.catalogCourseId || c.id) === choice.courseId || c.id === choice.id); if (found) { setCourse(found); setError(""); } else setError("Este campo todavía no tiene tees disponibles en el catálogo. Elige uno con datos."); }} />
+    <CatalogCoursePicker token={identity.accessToken} selectedName={course?`${course.name} · ${course.teeName}`:''} onRequest={()=>requestFeedback('COURSE')} onSelect={(next,cards)=>{setCatalogCards(cards.filter(c=>c.holes.length===18));setCourse(next);setError('');}} />
+    <details><summary>Campos guardados / proveedor anterior</summary><RoundCoursePicker selectedName={course?.name || ""} selectedId={course?.catalogCourseId || course?.id || ""} invalid={false} onSelect={choice => { const found = courses.find(c => (c.catalogCourseId || c.id) === choice.courseId || c.id === choice.id); if (found) { setCourse(found); setError(""); } else setError("Este campo todavía no tiene tees disponibles en el catálogo. Elige uno con datos."); }} /></details>
+    {course&&<CourseReviewNotice course={course} roundHoles={holes} startHole={start} />}
     {course && <label>Tee<select value={course.id} onChange={e => setCourse(tees.find(c => c.id === e.target.value) || course)}>{tees.map(c => <option key={c.id} value={c.id}>{c.teeName}</option>)}</select></label>}
     <label>Fecha<input required type="date" value={date} max={localDateMexico()} onChange={e => setDate(e.target.value)} /></label>
     <div className={styles.grid}><label>Hoyos<select value={holes} onChange={e => setHoles(Number(e.target.value) as 9 | 18)}><option value={18}>18 hoyos</option><option value={9}>9 hoyos</option></select></label><label>{holes === 9 ? "Vuelta" : "Salida"}<select value={start} onChange={e => setStart(Number(e.target.value) as 1 | 10)}><option value={1}>{holes === 9 ? "Hoyos 1–9" : "Hoyo 1"}</option><option value={10}>{holes === 9 ? "Hoyos 10–18" : "Hoyo 10"}</option></select></label></div>

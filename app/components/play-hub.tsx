@@ -3,6 +3,7 @@
 import type { ActiveRoundSummary } from "./home-dashboard";
 
 export type PlayHubProps = {
+  coursePicker?: React.ReactNode;
   activeRound?: ActiveRoundSummary | null;
   onContinueRound: () => void;
   onEditRound?: () => void;
@@ -29,13 +30,14 @@ function roundProgress(round: ActiveRoundSummary) {
   return `${current}${progress}`;
 }
 
-export function PlayHub({ activeRound, onContinueRound, onEditRound, onAiRound, onNewRound, onScoreOnly, onTotalScore, onOpenHistory, onOpenBalances, onOpenPersonalHistory, onOpenStats, onOpenCourses, onOpenGroups, onOpenRules, onOpenStandings, onOpenResults }: PlayHubProps) {
+export function PlayHub({ coursePicker, activeRound, onContinueRound, onEditRound, onAiRound, onNewRound, onScoreOnly, onTotalScore, onOpenHistory, onOpenBalances, onOpenPersonalHistory, onOpenStats, onOpenCourses, onOpenGroups, onOpenRules, onOpenStandings, onOpenResults }: PlayHubProps) {
   return <section className="betaPlayHub" aria-labelledby="beta-play-title">
     <section className="hero betaPlayHero">
       <div><span className="eyebrow">THE BACKYARD · JUGAR</span><h1 id="beta-play-title">Tu próxima salida.</h1><p>Empieza rápido o regresa exactamente a la ronda que dejaste abierta.</p></div>
       <div className="betaPlayHeroActions"><button type="button" className="primary big" onClick={onNewRound}>Configurar ronda completa</button><button type="button" className="secondary big" onClick={onScoreOnly}>Ronda sin apuestas</button><button type="button" className="secondary big" onClick={onTotalScore}>Subir score total</button><details><summary>Asistente de configuración</summary><button type="button" className="secondary" onClick={onAiRound}>Configurar con Backyard AI</button></details></div>
     </section>
 
+    {coursePicker && <section className="card">{coursePicker}</section>}
     {activeRound ? <section className="card betaOpenRoundCard">
       <div className="betaOpenRoundHead"><span className={`betaRoundStatus ${activeRound.status}`}>{activeRound.status === "review" ? "POR REVISAR" : activeRound.status === "setup" ? "CONFIGURANDO" : "EN JUEGO"}</span><time dateTime={activeRound.roundDate}>{activeRound.roundDate}</time></div>
       <h2>{activeRound.courseName}</h2>

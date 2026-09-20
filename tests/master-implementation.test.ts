@@ -100,7 +100,8 @@ test("Más concentra herramientas y ayuda sin duplicar Configuración de Perfil"
     assert.match(more, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
   assert.doesNotMatch(more, /title: "Perfil"/);
-  assert.match(page, /onOpenHelp=\{openRulesForRound\}/);
+  assert.match(page, /onOpenHelp=\{\(\)\s*=>\s*requestFeedback\(\)\}/);
+  assert.match(page, /onOpenRules=\{openRulesForRound\}/);
   assert.doesNotMatch(more, /Configuración adicional|onOpenSettings/);
   assert.doesNotMatch(page, /onOpenSettings/);
 });

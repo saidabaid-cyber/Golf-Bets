@@ -29,7 +29,7 @@ import type { RoundCaptureStage } from "../../lib/active-round-navigation";
 type CounterQuantities = Record<CounterBetKind, Record<string, number | undefined>>;
 
 export type RoundCaptureV2Props = {
-  course: Pick<Course, "name" | "teeName" | "latitude" | "longitude">;
+  course: Pick<Course, "name" | "teeName" | "latitude" | "longitude" | "playerHoleCards">;
   hole: Hole;
   order: number[];
   currentIndex: number;
@@ -143,7 +143,7 @@ function PlayerAroundStatistics({ player, stat, onChange }: { player: Player; st
 
 export function RoundCaptureV2(props: RoundCaptureV2Props) {
   const {
-    course, hole, order, currentIndex, completedHoles, players, playerTeeAssignments = [], ownerId, ownerAvatarUrl, mode, bets,
+    course, hole: baseHole, order, currentIndex, completedHoles, players, playerTeeAssignments = [], ownerId, ownerAvatarUrl, mode, bets,
     supplementalBets, scores, putts, advancedStats, unitQuantities, groupNassauLabel, ballFriendLabel, lobaLabel,
   } = props;
   const [gpsState, setGpsState] = useState<"idle" | "loading" | "ready" | "error">("idle");
@@ -158,6 +158,7 @@ export function RoundCaptureV2(props: RoundCaptureV2Props) {
   const [localActivePlayerId, setActivePlayerId] = useState(owner?.id ?? "");
   const activePlayerId = props.captureContext?.playerId ?? localActivePlayerId;
   const activePlayer = players.find((player) => player.id === activePlayerId) || owner;
+  const hole = course.playerHoleCards?.[activePlayer?.id]?.find(h => h.number === baseHole.number) ?? baseHole;
   const quickFields = (playerId: string) => roundCaptureFieldsForPlayer({ mode: "quick", playerId, playedHoleIndex: currentIndex, bets, supplementalBets });
   const teeLabel = (playerId: string) => playerTeeAssignments.find((assignment) => assignment.playerId === playerId)?.teeName || course.teeName;
   const unitParticipates = (playerId: string) => bets.units.enabled && bets.units.participantIds.includes(playerId);

@@ -20,6 +20,7 @@ import { useModalDialog, useWizardStepNavigation } from "./use-modal-dialog";
 import { ModalCloseButton } from "./modal-shell";
 import { AnchoredSearch, AnchoredSearchOption } from "./anchored-search";
 import { CatalogProductMedia } from "./catalog-product-media";
+import { FeedbackLink } from './feedback-dialog';
 
 export const CLUB_CATEGORY_LABELS: Record<ClubCategory, string> = {
   DRIVER: "Driver",
@@ -317,6 +318,8 @@ export function ClubEditor({ userId, catalog, shafts, existing, presentation = "
       {presentation === "sheet" ? <><ModalCloseButton onClose={onCancel} /><div className={styles.sheetHandle} /></> : <button type="button" className={styles.pageBack} onClick={onCancel}>← Volver a Mi Bolsa</button>}
       <h2 id="club-editor-title">{existing ? "Editar bastón" : step === "category" ? "Agregar a mi bolsa" : `Agregar ${CLUB_CATEGORY_LABELS[category]}`}</h2>
       <p>Marca + modelo es suficiente. Las especificaciones son opcionales.</p>
+      <FeedbackLink category="CLUB">¿No encuentras tu equipo? Solicítalo</FeedbackLink>
+      <FeedbackLink category="SHAFT">¿No encuentras tu varilla? Solicítala</FeedbackLink>
       <div className={styles.flowProgress} aria-label="Progreso de selección">
         {(["category", "brand", "model", "specs", "shaft", "finish"] as const).map((item, index) => <span key={item} data-active={item === step} data-complete={index < ["category", "brand", "model", "specs", "shaft", "finish"].indexOf(step)} />)}
       </div>
@@ -483,6 +486,7 @@ export function BallEditor({ userId, catalog, existing, presentation = "sheet", 
     <section ref={dialogRef} tabIndex={-1} className={presentation === "page" ? styles.editorPage : styles.editorSheet} role={presentation === "sheet" ? "dialog" : undefined} aria-modal={presentation === "sheet" ? "true" : undefined} aria-labelledby="ball-editor-title">
       {presentation === "sheet" ? <><ModalCloseButton onClose={onCancel} /><div className={styles.sheetHandle} /></> : <button type="button" className={styles.pageBack} onClick={onCancel}>← Volver a Mi Bolsa</button>}
       <h2 id="ball-editor-title">{existing ? "Cambiar mi bola" : "Elegir mi bola"}</h2>
+      <FeedbackLink category="BALL">¿No encuentras tu bola? Solicítala</FeedbackLink>
       <p>El catálogo conserva la generación y la fuente. El color es opcional.</p>
       <div className={styles.flowProgress}>{(["brand", "model", "details"] as const).map((item, index) => <span key={item} data-active={item === step} data-complete={index < ["brand", "model", "details"].indexOf(step)} />)}</div>
       <form className={styles.formGrid} onSubmit={submit} noValidate>
