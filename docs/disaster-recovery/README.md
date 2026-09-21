@@ -35,10 +35,10 @@ Default output is an ignored `backups/<UTC-time>-<random-id>/` folder. Previous 
 Sources allowed by code are explicitly separate:
 
 - `BACKUP_SOURCE=local`: localhost PostgreSQL only, no remote Storage.
-- `BACKUP_SOURCE=qa` plus `BACKUP_EXPECTED_REF=bymeopxkxapfizeeqeyb`: existing isolated QA source.
+- `BACKUP_SOURCE=qa` plus `BACKUP_EXPECTED_REF=bymeopxkxapfizeeqeyb`: existing isolated QA source, PostgreSQL direct endpoint only.
 - `BACKUP_SOURCE=owner` plus `BACKUP_EXPECTED_REF=zhqmlpljloumldaczcfp`: owner-authorized **read-only backup** of this exact project, not arbitrary Production access.
 
-Owner PostgreSQL is pinned to `db.zhqmlpljloumldaczcfp.supabase.co:5432`, database/user `postgres`; owner Storage is pinned to `https://zhqmlpljloumldaczcfp.supabase.co`. No free-form allowlist override exists. The owner Session Pooler hostname has not been independently verified and is **not enabled**: do not guess a shared pooler cluster or reuse the QA pooler. The verified direct endpoint works where IPv6/direct connectivity is available. Supporting an IPv4-only owner connection requires obtaining the exact Session Pooler hostname from that project's Connect panel and reviewing a pinned allowlist update.
+Owner PostgreSQL permits exactly two host/user tuples on port 5432 with database `postgres`: direct `db.zhqmlpljloumldaczcfp.supabase.co` + `postgres`, or Session Pooler `aws-0-us-east-1.pooler.supabase.com` + `postgres.zhqmlpljloumldaczcfp`. Owner Storage remains pinned to `https://zhqmlpljloumldaczcfp.supabase.co`. No free-form allowlist override or generic pooler pattern exists, and no other source may use a Session Pooler. The direct endpoint remains available where IPv6/direct connectivity works; the exact Session Pooler is the IPv4 alternative.
 
 All PostgreSQL tools receive forced `default_transaction_read_only=on` and `transaction_read_only=on`; `psql -X` must confirm both with SHOW before the database/schema export and again before roles export. Inherited libpq overrides are removed. The SHOW preflight is a separate connection; exporter connections receive the same locked startup options. No restore, source mutation, migration or deployment is performed. This allowlist change does **not** mean a real owner backup has been executed or verified.
 

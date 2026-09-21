@@ -10,6 +10,8 @@ import { encryptionKey, encrypt, decrypt, verifyEncrypted } from './crypto.mjs';
 
 export const QA_REF = 'bymeopxkxapfizeeqeyb';
 export const OWNER_REF = 'zhqmlpljloumldaczcfp';
+export const OWNER_SESSION_POOLER_HOST = 'aws-0-us-east-1.pooler.supabase.com';
+export const OWNER_SESSION_POOLER_USER = `postgres.${OWNER_REF}`;
 export const FORMAT = 1;
 const outside = (rel) => rel === '..' || rel.startsWith('..' + sep) || isAbsolute(rel);
 export class BackupError extends Error { constructor(code, state = 'FAIL') { super(code); this.code = code; this.state = state; } }
@@ -66,11 +68,12 @@ export function databaseEnvironment(env) {
   if (!host || !user || !env.BACKUP_PGPASSWORD) throw new BackupError('SET_BACKUP_PGHOST_PGUSER_PGPASSWORD', 'BLOCKED_EXTERNAL');
   const local = env.BACKUP_SOURCE === 'local' && ['localhost', '127.0.0.1', '::1'].includes(host);
   const qa = env.BACKUP_SOURCE === 'qa' && env.BACKUP_EXPECTED_REF === QA_REF &&
-    ((host === `db.${QA_REF}.supabase.co` && user === 'postgres') || (/^aws-[a-z0-9-]+\.pooler\.supabase\.com$/.test(host) && user === `postgres.${QA_REF}`));
-  // Only the owner's verified direct host is pinned. Do not guess a pooler cluster
-  // or authorize all shared pooler hosts; a pooler needs separately verified metadata.
+    host === `db.${QA_REF}.supabase.co` && user === 'postgres';
+  // The shared pooler hostname alone does not identify a project. Keep each
+  // authorized owner endpoint paired with its exact user and project ref.
   const owner = env.BACKUP_SOURCE === 'owner' && env.BACKUP_EXPECTED_REF === OWNER_REF &&
-    host === `db.${OWNER_REF}.supabase.co` && user === 'postgres';
+    ((host === `db.${OWNER_REF}.supabase.co` && user === 'postgres') ||
+      (host === OWNER_SESSION_POOLER_HOST && user === OWNER_SESSION_POOLER_USER));
   if (!local && !qa && !owner) throw new BackupError('SOURCE_NOT_AUTHORIZED');
   const port = env.BACKUP_PGPORT || '5432', database = env.BACKUP_PGDATABASE || 'postgres';
   if (!/^\d{2,5}$/.test(port) || Number(port) > 65535 || port === '6543' || (!local && port !== '5432')) throw new BackupError('USE_DIRECT_OR_SESSION_POOLER');

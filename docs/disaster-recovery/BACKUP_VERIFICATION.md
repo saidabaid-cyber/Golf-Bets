@@ -30,7 +30,7 @@ Recovery tests cover (the original 20-test execution is preserved below):
 - Real streaming encryption/decryption, wrong key, tampering/truncation, zero-byte Storage content, no overwrite.
 - Separate local/QA/owner DB allowlists, exact Storage origins, process-only credentials and forced read-only PG options.
 - Two mandatory SHOW results: off, missing, malformed or failed checks abort exports, including the separate roles preflight.
-- No libpq routing/connection-string override, no generic Production bypass, no unverified owner pooler host.
+- No libpq routing/connection-string override, no generic Production bypass, and only the exact owner Session Pooler host/user tuple.
 - DB/Storage encryption required before connection; modern secret-key compatibility with the installed Supabase SDK and a synthetic HTTP transport.
 - Storage transport accepts only list/download endpoints and rejects mutations, other origins and redirects.
 - Provider/process error diagnostics are not forwarded as messages.
@@ -43,7 +43,7 @@ Recovery tests cover (the original 20-test execution is preserved below):
 - Empty-only .env.example and inventory/documentation coverage.
 - Gitignore protects private artifacts but not migrations or .env.example.
 
-No Storage mock is claimed as a live remote restoration. Owner allowlist tests do not execute an owner backup or assert that real credentials/direct connectivity are available. The owner project/ref/direct host were verified from project metadata; its Session Pooler host was not, so remains disabled. Real owner backup and restore evidence must come from a separately authorized execution.
+No Storage mock is claimed as a live remote restoration. Owner allowlist tests do not execute an owner backup or assert that real credentials/connectivity are available. The owner project/ref, direct host and exact Session Pooler tuple are pinned in code; every other pooler is rejected. Real owner backup and restore evidence must come from a separately authorized execution.
 
 ## Read-only external evidence — 2026-09-21
 
@@ -100,4 +100,12 @@ Branch: `infra/disaster-recovery-clean`; starting commit: `002a82f28a7d0d4d75cfb
 - `tsc --noEmit`: PASS. `npm run lint`: PASS, no warnings. `npm run build`: PASS (local Next build only).
 - Tracked-text security scan: 884 files, 0 high-confidence findings; no secret values printed. This is not a repeat of the earlier full-history scan.
 - Vercel rules for both infrastructure branches remain false, with no edit to vercel.json. No PR, merge, deployment, migration, source write or real owner backup was run.
-- Tests use synthetic local fixtures/transports. They do not claim live database connectivity or recovery success. Owner Session Pooler support remains blocked pending verification of its exact hostname; direct-host support is enabled without a free-form bypass.
+- Tests use synthetic local fixtures/transports. They do not claim live database connectivity or recovery success. At this earlier commit, owner Session Pooler support remained blocked; the later exact allowlist change is recorded separately below.
+
+## Owner Session Pooler exact allowlist — 2026-09-21
+
+- Owner keeps the exact direct tuple `db.zhqmlpljloumldaczcfp.supabase.co:5432` + `postgres` and now also permits only Session Pooler `aws-0-us-east-1.pooler.supabase.com:5432` + `postgres.zhqmlpljloumldaczcfp`, always with owner source/ref and database `postgres`.
+- QA remains direct-only. Generic pooler matching was removed; alternate pooler hosts, sources, project refs, users and non-session ports fail closed.
+- Full tests: **2,152 application + 30 recovery = 2,182 PASS**, 0 failures, 0 skipped. Recovery coverage exercises both owner endpoint tuples, rejected alternates and the mandatory read-only startup/preflight checks.
+- ESLint PASS. Next route type generation plus `tsc --noEmit` PASS. Next 16.3.3 production build PASS.
+- Test backup fixtures explicitly remove inherited `BACKUP_*` variables. No real backup, database/Storage/Auth write, migration, PR, merge or deployment was executed by this allowlist update.

@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { Readable, Writable } from 'node:stream';
 import { encrypt, decrypt, encryptionKey, verifyEncrypted } from './crypto.mjs';
-import { safeChild, databaseEnvironment, storageConfig, enumerateStorage, backupStorage, runBackup, verifyBackup, command, hashFile, listFiles, jsonFile, QA_REF, OWNER_REF, decryptBackup, backupDatabase, assertDatabaseReadOnly, storageReadOnlyFetch } from './core.mjs';
+import { safeChild, databaseEnvironment, storageConfig, enumerateStorage, backupStorage, runBackup, verifyBackup, command, hashFile, listFiles, jsonFile, QA_REF, OWNER_REF, OWNER_SESSION_POOLER_HOST, OWNER_SESSION_POOLER_USER, decryptBackup, backupDatabase, assertDatabaseReadOnly, storageReadOnlyFetch } from './core.mjs';
 import { secretKinds } from './security-scan.mjs';
 import { environmentInventory } from './inventory.mjs';
 import { verifyDatabaseFile } from './core.mjs';
@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 
 const temp=()=>mkdtemp(join(tmpdir(),'backyard-dr-test-'));
 const keyEnv=()=>({BACKUP_ENCRYPTION_KEY:randomBytes(32).toString('base64')});
+const processEnvWithoutBackup=()=>Object.fromEntries(Object.entries(process.env).filter(([name])=>!name.startsWith('BACKUP_')));
 test('sensitive bytes encrypted, authenticated and recoverable without provider',async()=>{
   const dir=await temp(),env=keyEnv(),key=encryptionKey(env),input=randomBytes(200000),file=join(dir,'data.enc');
   await encrypt(Readable.from([input]),file,key);assert.equal((await readFile(file)).includes(input.subarray(0,40)),false);
@@ -42,25 +43,38 @@ test('QA database remains authorized with forced readonly options and TLS',()=>{
   const pg=databaseEnvironment(env);assert.equal(pg.PGOPTIONS,'-c default_transaction_read_only=on -c transaction_read_only=on');assert.equal(pg.PGSSLMODE,'verify-full');
   assert.equal(pg.PGPASSWORD,env.BACKUP_PGPASSWORD);
   for(const change of [{BACKUP_EXPECTED_REF:'wrong'},{BACKUP_PGHOST:'db.zhqmlpljloumldaczcfp.supabase.co'},{BACKUP_PGHOST:'evil.example'},{BACKUP_PGPORT:'6543'},{BACKUP_SOURCE:'production'}])assert.throws(()=>databaseEnvironment({...env,...change}));
-  assert.ok(databaseEnvironment({...env,BACKUP_PGHOST:'aws-0-us-east-1.pooler.supabase.com',BACKUP_PGUSER:`postgres.${QA_REF}`}));
-  assert.throws(()=>databaseEnvironment({...env,BACKUP_PGHOST:'aws-0-us-east-1.pooler.supabase.com'}));
+  assert.throws(()=>databaseEnvironment({...env,BACKUP_PGHOST:'aws-0-us-east-1.pooler.supabase.com',BACKUP_PGUSER:`postgres.${QA_REF}`}));
 });
 const ownerEnv=()=>({BACKUP_SOURCE:'owner',BACKUP_EXPECTED_REF:OWNER_REF,BACKUP_PGHOST:`db.${OWNER_REF}.supabase.co`,BACKUP_PGUSER:'postgres',BACKUP_PGPASSWORD:'synthetic-only',...keyEnv()});
-test('owner database accepts only the verified direct project identity; no generic production override',()=>{
-  const env=ownerEnv(),pg=databaseEnvironment(env);
-  assert.equal(OWNER_REF,'zhqmlpljloumldaczcfp');assert.equal(pg.PGHOST,`db.${OWNER_REF}.supabase.co`);assert.equal(pg.PGSSLMODE,'verify-full');
+const ownerPoolerEnv=()=>({...ownerEnv(),BACKUP_PGHOST:OWNER_SESSION_POOLER_HOST,BACKUP_PGPORT:'5432',BACKUP_PGUSER:OWNER_SESSION_POOLER_USER});
+test('owner database accepts only the exact direct or Session Pooler identity',()=>{
+  const env=ownerEnv(),direct=databaseEnvironment(env),poolerEnv=ownerPoolerEnv(),pooler=databaseEnvironment(poolerEnv);
+  assert.equal(OWNER_REF,'zhqmlpljloumldaczcfp');
+  assert.equal(OWNER_SESSION_POOLER_HOST,'aws-0-us-east-1.pooler.supabase.com');
+  assert.equal(OWNER_SESSION_POOLER_USER,'postgres.zhqmlpljloumldaczcfp');
+  assert.equal(direct.PGHOST,`db.${OWNER_REF}.supabase.co`);assert.equal(direct.PGUSER,'postgres');assert.equal(direct.PGSSLMODE,'verify-full');
+  assert.equal(pooler.PGHOST,'aws-0-us-east-1.pooler.supabase.com');assert.equal(pooler.PGPORT,'5432');assert.equal(pooler.PGUSER,'postgres.zhqmlpljloumldaczcfp');
+  assert.equal(pooler.PGOPTIONS,'-c default_transaction_read_only=on -c transaction_read_only=on');assert.equal(pooler.PGSSLMODE,'verify-full');
   for(const change of [
     {BACKUP_SOURCE:'production'},{BACKUP_SOURCE:'qa'},{BACKUP_SOURCE:'local'},
     {BACKUP_EXPECTED_REF:QA_REF},{BACKUP_EXPECTED_REF:'another-project'},
     {BACKUP_PGHOST:`db.${QA_REF}.supabase.co`},{BACKUP_PGHOST:'localhost'},{BACKUP_PGHOST:'127.0.0.1'},
     {BACKUP_PGHOST:'db.other.supabase.co',BACKUP_EXPECTED_REF:'other',BACKUP_ALLOW_PRODUCTION:'true'},
     {BACKUP_PGHOST:`db.${OWNER_REF}.supabase.co.evil.invalid`},{BACKUP_PGHOST:`db.${OWNER_REF}.supabase.co,evil.invalid`},
-    {BACKUP_PGHOST:'aws-0-us-east-1.pooler.supabase.com',BACKUP_PGUSER:`postgres.${OWNER_REF}`},
     {BACKUP_PGUSER:`postgres.${QA_REF}`},{BACKUP_PGUSER:'other'},
     {BACKUP_PGPORT:'6543'},{BACKUP_PGPORT:'5433'},
     {BACKUP_PGDATABASE:'host=evil.invalid dbname=postgres'},
     {BACKUP_PGDATABASE:'postgresql://evil.invalid/postgres'}, {BACKUP_PGDATABASE:'another_database'}
   ])assert.throws(()=>databaseEnvironment({...env,...change}),undefined,JSON.stringify(Object.keys(change)));
+  for(const change of [
+    {BACKUP_PGHOST:'aws-1-us-east-1.pooler.supabase.com'},
+    {BACKUP_PGHOST:'aws-0-us-west-1.pooler.supabase.com'},
+    {BACKUP_PGHOST:`${OWNER_SESSION_POOLER_HOST}.evil.invalid`},
+    {BACKUP_PGUSER:'postgres'},{BACKUP_PGUSER:`postgres.${QA_REF}`},{BACKUP_PGUSER:`${OWNER_SESSION_POOLER_USER}.other`},
+    {BACKUP_EXPECTED_REF:QA_REF},{BACKUP_EXPECTED_REF:'another-project'},
+    {BACKUP_SOURCE:'qa'},{BACKUP_SOURCE:'production'},
+    {BACKUP_PGPORT:'6543'},{BACKUP_PGPORT:'5433'}
+  ])assert.throws(()=>databaseEnvironment({...poolerEnv,...change}),undefined,JSON.stringify(Object.keys(change)));
   assert.ok(databaseEnvironment({...env,BACKUP_SOURCE:'local',BACKUP_PGHOST:'127.0.0.1',BACKUP_PGPORT:'54322',BACKUP_PGDATABASE:'test_local'}));
 });
 test('inherited libpq settings and alternate connection strings cannot redirect or disable readonly',()=>{
@@ -82,8 +96,8 @@ function databaseTools(replies=['on\non\n']){
   }};
 }
 test('both SHOW checks are mandatory before schema/full exports; every tool gets readonly startup',async()=>{
-  for(const schemaOnly of [false,true]){
-    const env=ownerEnv(),fixture=databaseTools(),result=await backupDatabase(await temp(),env,schemaOnly,fixture.tools);
+  for(const env of [ownerEnv(),ownerPoolerEnv()])for(const schemaOnly of [false,true]){
+    const fixture=databaseTools(),result=await backupDatabase(await temp(),env,schemaOnly,fixture.tools);
     assert.equal(result.state,'PASS');
     const calls=fixture.calls,checks=calls.filter(c=>c.executable==='psql');assert.equal(checks.length,schemaOnly?1:2);
     for(const c of calls){assert.equal(c.env.PGOPTIONS,'-c default_transaction_read_only=on -c transaction_read_only=on');assert.ok(!c.args.some(a=>a.includes(env.BACKUP_PGPASSWORD)));assert.equal(c.env.BACKUP_ENCRYPTION_KEY,undefined);}
@@ -188,11 +202,11 @@ test('Storage changing during backup and denied listing never become success',as
 });
 async function fixtureRepo(){const repo=await temp();await command('git',['init','-b','infra/dr-test',repo]);await command('git',['config','user.name','Synthetic QA'],{cwd:repo});await command('git',['config','user.email','qa@example.invalid'],{cwd:repo});await writeFile(join(repo,'README.md'),'recoverable source\n');await writeFile(join(repo,'.gitignore'),'backups/\n');await command('git',['add','.'],{cwd:repo});await command('git',['commit','-m','synthetic fixture'],{cwd:repo});return repo;}
 test('master continues with independent Git backup when DB/Storage access missing; repeated runs do not overwrite',async()=>{
-  const repo=await fixtureRepo();const first=await runBackup({repo,env:{...process.env,BACKUP_ROOT:''}});
+  const repo=await fixtureRepo(),env={...processEnvWithoutBackup(),BACKUP_ROOT:''};const first=await runBackup({repo,env});
   assert.equal(first.manifest.components.source.state,'PASS');assert.equal(first.manifest.databaseBackup,false);assert.equal(first.manifest.storageBackup,false);
   assert.equal(first.manifest.components.database.state,'BLOCKED_EXTERNAL');
   const verification=await verifyBackup(first.directory,{});assert.equal(verification.integrity,'PASS');assert.equal(verification.recoveryComplete,false);
-  const second=await runBackup({repo,env:{...process.env,BACKUP_ROOT:''}});assert.notEqual(first.directory,second.directory);
+  const second=await runBackup({repo,env});assert.notEqual(first.directory,second.directory);
   assert.equal(await readFile(join(repo,'README.md'),'utf8'),'recoverable source\n');
   const restored=join(await temp(),'restored');await command('git',['-c','core.autocrlf=false','clone',join(first.directory,'source/repository.bundle'),restored]);await command('git',['fsck','--full'],{cwd:restored});assert.equal(await readFile(join(restored,'README.md'),'utf8'),'recoverable source\n');
   await appendFile(join(first.directory,'source/HEAD.tar'),'corruption');await assert.rejects(verifyBackup(first.directory,{}),/CHECKSUM/);
