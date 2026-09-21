@@ -24,3 +24,6 @@
 .copy small { font-size:12px;line-height:1.5; }
 .icon { background:var(--by-sage);border-radius:50%; }
 .more>section>h2 { font:400 27px/1.2 var(--by-editorial);letter-spacing:-.03em; }
+/* Community actions have text + chevron, not the tool cards' icon column. */
+.communityGrid button { grid-template-columns:minmax(0,1fr) auto; }
+.communityGrid .copy { min-width:0; }

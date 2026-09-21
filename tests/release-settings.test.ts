@@ -108,3 +108,19 @@ test("membership return uses the shared touch control and safe-area instead of a
   const css = readFileSync("app/design-system.css", "utf8");
   assert.match(css, /\.membershipTopbar \{[^}]*env\(safe-area-inset-top\)/);
 });
+
+test("community cards use their text-only layout while retaining all existing destinations", () => {
+  const source = ts.transpileModule(readFileSync("app/components/more-hub.tsx", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+  const exports: Record<string, (props: unknown) => unknown> = {};
+  const jsx = (type: unknown, props: Record<string, unknown>) => ({ type, props });
+  runInNewContext(source, { exports, require: (id: string) => id === "react/jsx-runtime" ? { jsx, jsxs: jsx } : id.endsWith(".css") ? { default: new Proxy({}, { get: (_target, key) => key }) } : {} });
+  const destinations: string[] = [];
+  const tree = elements(exports.MoreHub({ onOpenSocial: (view: string) => destinations.push(view), onOpenPrivacy: () => destinations.push("privacy") }));
+  const community = tree.find(e => e.type === "div" && e.props.className === "grid communityGrid");
+  assert.ok(community);
+  const buttons = elements(community).filter(e => e.type === "button");
+  assert.deepEqual(buttons.map(text), ["Amigos y solicitudes›", "Agregar amigos›", "Mi QR›", "Escanear QR›", "Preferencias de notificaciones›", "Privacidad›"]);
+  buttons.forEach(button => (button.props.onClick as () => void)());
+  assert.deepEqual(destinations, ["friends", "friends", "qr", "scan", "preferences", "privacy"]);
+  assert.equal(tree.filter(e => e.type === "div" && e.props.className === "grid").length, 1);
+});

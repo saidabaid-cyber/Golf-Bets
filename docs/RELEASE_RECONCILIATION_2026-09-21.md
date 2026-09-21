@@ -74,10 +74,11 @@ Six supplements remain: `ghin:31612` GOLD/BLACK/COPPER (6,775/7,218/5,859 yd), `
 2. Existing social-sharing and notification controls were only accessible together under Social. Wire the same server-backed component into **Privacidad** (sharing only) and **Notificaciones** (notice types only), without duplicating state/APIs or changing saved choices.
 3. Account lacked a direct name/username editing entry. Reuse the existing profile editor and return to Account correctly; no new profile, ownership or save path.
 4. Catalog QA report previously printed some expected constants rather than summing the returned API rows. It now derives all totals and asserts them before reporting. Added exhaustive equipment API/source and fresh-session reconciliation runner.
+5. Real 390 px browser inspection found community actions in Más putting text into an absent icon's 44 px grid column. Give only these existing text/chevron cards two columns; preserve all six destinations and the separate icon/tool layout. Regression renders the real component and invokes each existing callback; final browser must verify the actual text width and wrapping.
 
 ## Verification protocol / honest limits
 
-- Local regression at code gate: **2,151/2,151 PASS**, no fail/skipped/cancelled; TypeScript, ESLint, Next distribution build. Final handoff records final execution.
+- Initial regression at code gate: **2,151/2,151 PASS**, no fail/skipped/cancelled; TypeScript, ESLint, Next distribution build. A later browser-discovered layout regression adds one test; repeat all gates and final runtime on the new SHA. Final handoff records final execution.
 - `qa-release-readback.mjs`: private profile/equipment/history and two-user isolation, no mutations.
 - `qa-course-catalog-live.mjs --verify-created`: read existing 9 fixtures, preserve all historical hashes, ten geographic cases, actual catalog totals.
 - `qa-ux-round-onboarding.mjs --verify-browser-lifecycle`: read persisted soft-close fixture, scores/putts/playMode and other-user denial; does not execute its preparation/write path.
