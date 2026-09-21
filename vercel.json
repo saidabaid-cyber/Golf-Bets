@@ -2,7 +2,9 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "git": {
     "deploymentEnabled": {
-      "phase2/course-catalog-feedback": true
+      "phase2/course-catalog-feedback": true,
+      "infra/disaster-recovery": false,
+      "infra/disaster-recovery-clean": false
     }
   }
 }
