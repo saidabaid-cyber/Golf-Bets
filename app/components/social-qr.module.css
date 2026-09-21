@@ -9,7 +9,5 @@
 .identity p { margin:4px 0 0;font-size:13px;color:var(--by-muted); }
 .avatar { width:48px;height:48px; }
 .qr { max-width:310px;border-radius:var(--by-radius);background:#fff;box-shadow:var(--by-shadow-raised);border:1px solid var(--by-line); }
-.linkDetails summary { min-height:44px;align-content:center;font-size:13px;color:var(--by-pine);cursor:pointer; }
-.linkDetails input { margin-top:8px; }
 .panel>h2 { font:400 30px/1.1 var(--by-editorial);color:var(--by-forest); }
 .panel>p { font-size:13px;line-height:1.6;color:var(--by-muted); }

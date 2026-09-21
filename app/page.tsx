@@ -88,6 +88,7 @@ import { CaptureGroupInvitationLink, GroupInviteManager, PendingGroupInvitation 
 import { resolveRoundDraftCore, resolvedOwnerIdForRoundDraft } from "./draft-restoration";
 import { accountDeletionMarkerKey, ACCOUNT_STORAGE_KEYS, hasCurrentBettingDataConsent, parseLegalAcceptances } from "../lib/account-state";
 import { ProfileAccountPanel } from "./components/profile-account-panel";
+import type { AccountSettingsSection } from "../lib/account-settings";
 import { RoundCoursePicker } from "./components/round-course-picker";
 import { CatalogCoursePicker } from "./components/catalog-course-picker";
 import { FeedbackDialog,FeedbackLink,requestFeedback } from "./components/feedback-dialog";
@@ -430,6 +431,8 @@ function GolfBetsApp() {
   const [profileFocus, setProfileFocus] = useState<"profile" | "equipment">("profile");
   const [profileRootRevision, setProfileRootRevision] = useState(0);
   const [openAiPrivacySettings, setOpenAiPrivacySettings] = useState(false);
+  const [accountSection, setAccountSection] = useState<AccountSettingsSection>("account");
+  const openAccountSettings = (section: AccountSettingsSection = "account") => { setAccountSection(section); setTab("account"); };
   const openProfileRoot = () => { setProfileFocus("profile"); setProfileRootRevision((value) => value + 1); setTab("profile"); };
   const [socialInitialView, setSocialInitialView] = useState<SocialView>("activity");
   const [socialTarget, setSocialTarget] = useState<string | null>(null);
@@ -3588,7 +3591,7 @@ function GolfBetsApp() {
       onOpenRules={openRulesForRound}
       onOpenHelp={() => requestFeedback()}
       onOpenSocial={view => { setSocialInitialView(view); setTab("social"); }}
-      onOpenPrivacy={() => setTab("account")}
+      onOpenPrivacy={() => openAccountSettings("privacy")}
     />}
 
     {tab === "play" && <PlayHub
@@ -3688,8 +3691,8 @@ function GolfBetsApp() {
     {tab === "historyDetail" && (() => { const saved = history.find(round => round.id === historyDetailId); return saved?.totalScoreCapture ? <TotalScoreHistory key={saved.id} round={saved} onSave={saveTotalHistory} onBack={() => setTab("history")} /> : saved ? <HistoricalRoundDetail round={saved} priorRounds={history} accountUserId={identity.userId} accessToken={identity.accessToken || undefined} onEdit={() => editHistoricalRound(saved)} onPhoto={() => viewScorecardPhoto(saved)} /> : <div className="empty">La ronda ya no está disponible.</div>; })()}
     {tab === "groups" && <GroupBuilder frequentPlayers={frequentPlayers} frequentGroups={frequentGroups} onBack={() => setTab("welcome")} onPlay={startRoundWithGeneratedGroup} onSaveFrequentGroup={saveGeneratedFrequentGroup} onCreateFrequentGroup={beginCreateFrequentGroup} onStartFrequentGroup={loadFrequentGroup} onEditFrequentGroup={beginEditFrequentGroup} onDeleteFrequentGroup={setFrequentGroupToDelete} onDraftSaved={(saved) => setFrequentGroups(current => [saved, ...current.filter(group => group.id !== saved.id)])} />}
 
-    {tab === "profile" && <ProfileAccountPanel key={identity.userId} view="profile" indexControl={indexControl} rootNavigationKey={profileRootRevision} history={history} focusSection={profileFocus} highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} golfInsights={betaGolfInsights} statisticsResetAt={statisticsResetAt} onStatisticsReset={applyStatisticsReset} onOpenStats={() => setTab("stats")} onOpenAccount={() => setTab("account")} onOpenPrivacy={() => { setOpenAiPrivacySettings(true); setTab("account"); }} onOpenEquipment={() => setProfileFocus("equipment")} onBackToProfile={openProfileRoot} />}
-    {tab === "account" && <ProfileAccountPanel key={identity.userId} view="account" openAiPrivacySettings={openAiPrivacySettings} onAiPrivacyOpened={() => setOpenAiPrivacySettings(false)} indexControl={indexControl} rootNavigationKey={profileRootRevision} highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} golfInsights={betaGolfInsights} statisticsResetAt={statisticsResetAt} onStatisticsReset={applyStatisticsReset} onOpenStats={() => setTab("stats")} onOpenEquipment={() => { setProfileFocus("equipment"); setTab("profile"); }} onBackToProfile={openProfileRoot} />}
+    {tab === "profile" && <ProfileAccountPanel key={identity.userId} view="profile" indexControl={indexControl} rootNavigationKey={profileRootRevision} history={history} focusSection={profileFocus} highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} golfInsights={betaGolfInsights} statisticsResetAt={statisticsResetAt} onStatisticsReset={applyStatisticsReset} onOpenStats={() => setTab("stats")} onOpenAccount={() => openAccountSettings()} onOpenAccountSection={openAccountSettings} onOpenPrivacy={() => { setOpenAiPrivacySettings(true); setTab("account"); }} onOpenEquipment={() => setProfileFocus("equipment")} onBackToProfile={openProfileRoot} />}
+    {tab === "account" && <ProfileAccountPanel key={identity.userId} view="account" initialAccountSection={accountSection} openAiPrivacySettings={openAiPrivacySettings} onAiPrivacyOpened={() => setOpenAiPrivacySettings(false)} indexControl={indexControl} rootNavigationKey={profileRootRevision} highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} golfInsights={betaGolfInsights} statisticsResetAt={statisticsResetAt} onStatisticsReset={applyStatisticsReset} onOpenStats={() => setTab("stats")} onOpenEquipment={() => { setProfileFocus("equipment"); setTab("profile"); }} onBackToProfile={openProfileRoot} />}
 
     {tab === "setup" && <RoundSetupWizard key={`${identity.userId}:${roundId}`} storageKey={`backyard-setup-step-v1:${identity.userId}:${roundId}`} issues={roundSetupPreflight} editing={editingRound} scoreOnly={roundPresentation.playMode === "score_only"}
       onSave={() => flushLocalState.current?.()}

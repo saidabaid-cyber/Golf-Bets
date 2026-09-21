@@ -28,6 +28,7 @@ import { normalizeProfileLocation, validateProfileLocation } from "../../lib/pro
 import { useBackyardAccount } from "./account-provider";
 import { ProfileVisibilitySettings } from "./profile-visibility-settings";
 import { ProfileCompletionRing } from "./profile-completion-ring";
+import { ACCOUNT_SETTINGS, type AccountSettingsSection } from "../../lib/account-settings";
 
 type ProfileAccountPanelProps = {
   view: "profile" | "account";
@@ -46,6 +47,8 @@ type ProfileAccountPanelProps = {
   onStatisticsReset?: (reset: StatisticsResetRecord) => void;
   onOpenStats?: () => void;
   onOpenAccount?: () => void;
+  initialAccountSection?: AccountSettingsSection;
+  onOpenAccountSection?: (section: AccountSettingsSection) => void;
   onOpenPrivacy?: () => void;
   onOpenEquipment: () => void;
   onBackToProfile: () => void;
@@ -69,9 +72,11 @@ function decimal(value: number | undefined) {
   return value === undefined ? "—" : value.toFixed(1);
 }
 
-export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacySettings = false, onAiPrivacyOpened, history = [], indexControl, focusSection = "profile", highContrast, onHighContrastChange, notificationsEnabled, onNotificationsEnabledChange, golfInsights, statisticsResetAt, onStatisticsReset, onOpenStats, onOpenAccount, onOpenPrivacy, onOpenEquipment, onBackToProfile }: ProfileAccountPanelProps) {
+export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacySettings = false, onAiPrivacyOpened, history = [], indexControl, focusSection = "profile", highContrast, onHighContrastChange, notificationsEnabled, onNotificationsEnabledChange, golfInsights, statisticsResetAt, onStatisticsReset, onOpenStats, onOpenAccount, initialAccountSection = "account", onOpenAccountSection, onOpenPrivacy, onOpenEquipment, onBackToProfile }: ProfileAccountPanelProps) {
   const { identity, updateProfile, logout, finishAccountDeletion, openAccess, acceptances, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, requestCloudLink, cloudIssues, retryCloudSync } = useBackyardAccount();
   const [editing, setEditing] = useState(false);
+  const [accountSection, setAccountSection] = useState<AccountSettingsSection>(initialAccountSection);
+  useViewScrollReset(`${view}:${accountSection}`);
   const [completionEquipment, setCompletionEquipment] = useState<"equipment" | "ball" | "fitting">("equipment");
   const [completionEditTarget, setCompletionEditTarget] = useState<string | null>(null);
   useEffect(() => {
@@ -272,23 +277,35 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
       {golfInsights && <section className="card profileCompactCard"><div className="profileCompactHeading"><div><span>ACTIVIDAD</span><h2>Resumen personal</h2></div>{onOpenStats && <button type="button" className="textButton" onClick={onOpenStats}>Ver Stats</button>}</div><div className="profileActivityGrid"><div><span>Rondas</span><b>{golfInsights.rounds}</b></div><div><span>Promedio</span><b>{decimal(golfInsights.averageScore)}</b></div><div><span>Putts</span><b>{decimal(golfInsights.averagePutts)}</b></div></div></section>}
       <nav className="card profileNavigationList" aria-label="Secciones de Mi Perfil">
         <button type="button" className="profileNavigationCard" onClick={onOpenEquipment}><span><b>Mi equipo</b><small>Mi Bolsa, bastones y bola</small></span><strong aria-hidden="true">›</strong></button>
-        <button type="button" className="profileNavigationCard" onClick={onOpenAccount}><span><b>Preferencias</b><small>Privacidad y alto contraste</small></span><strong aria-hidden="true">›</strong></button>
+        <button type="button" className="profileNavigationCard" onClick={() => onOpenAccountSection?.("preferences")}><span><b>Preferencias</b><small>Contraste y experiencia de lectura</small></span><strong aria-hidden="true">›</strong></button>
         <button type="button" className="profileNavigationCard" onClick={onOpenAccount}><span><b>Cuenta y privacidad</b><small>Email, acceso, consentimientos y datos</small></span><strong aria-hidden="true">›</strong></button>
-        <button type="button" className="profileNavigationCard" onClick={onOpenAccount}><span><b>Notificaciones</b><small>Avisos sociales dentro de la app</small></span><strong aria-hidden="true">›</strong></button>
+        <button type="button" className="profileNavigationCard" onClick={() => onOpenAccountSection?.("notifications")}><span><b>Notificaciones</b><small>Avisos sociales dentro de la app</small></span><strong aria-hidden="true">›</strong></button>
+        <button type="button" className="profileNavigationCard" onClick={() => onOpenAccountSection?.("privacy")}><span><b>Privacidad y permisos</b><small>Visibilidad, ubicación y autorizaciones</small></span><strong aria-hidden="true">›</strong></button>
       </nav>{notice}
     </main>}
 
     {view === "account" && identity.mode === "guest" && <section className="card guestAccountCard"><h2>Modo invitado</h2><p>Inicia sesión para administrar datos de una cuenta.</p><div className="accountInlineActions"><button className="primary" onClick={openAccess}>Crear cuenta</button><button className="secondary" onClick={openAccess}>Iniciar sesión</button></div></section>}
     {view === "account" && identity.mode === "authenticated" && <section className="card cloudAccountStatus accountCloudCompact" aria-label="Estado de la cuenta"><div><h2>{cloudIssues.some((issue) => issue.kind === "session_expired") ? "Sesión por renovar" : "Cuenta conectada"}</h2><p role="status">{cloudStatus === "synced" ? "Guardado en la nube ✓" : cloudStatus === "syncing" ? "Sincronizando…" : cloudStatus === "saving" ? "Guardando…" : cloudStatus === "offline" ? "Sin conexión" : cloudStatus === "error" ? "Error de sincronización" : cloudLinked ? "Pendiente de sincronizar" : "Nube sin vincular"}</p></div>{cloudLinked ? <button className="textButton" onClick={() => void retryCloudSync()}>Reintentar</button> : <button className="textButton" onClick={requestCloudLink}>Vincular</button>}</section>}
     {view === "account" && <>
+      <nav className="accountSettingsNav" aria-label="Secciones de configuración">{ACCOUNT_SETTINGS.map(section => <button type="button" className="secondary" key={section.id} aria-current={accountSection === section.id ? "page" : undefined} onClick={() => setAccountSection(section.id)}>{section.label}</button>)}</nav>
+      {accountSection === "account" && <div data-settings-section="account">
       <section className="card accountCompactCard"><h2>Cuenta</h2><div className="accountCompactRows"><div><span>Email</span><b>{identity.email || "Sin email"}</b></div><div><span>Métodos de acceso</span><b>{identity.mode === "authenticated" ? identity.providers.map((provider) => provider === "google" ? "Google" : provider === "email" ? "Correo" : provider).join(" · ") || "Correo" : "Modo invitado"}</b></div></div></section>
+      </div>}
+      {accountSection === "preferences" && <div data-settings-section="preferences">
       <section className="card accountCompactCard"><h2>Preferencias</h2><label className="accountSettingRow"><span><b>Alto contraste</b><small>Tu elección se guarda en la cuenta</small></span><input type="checkbox" checked={highContrast} onChange={event => onHighContrastChange(event.target.checked)} /></label></section>
+      </div>}
+      {accountSection === "notifications" && <div data-settings-section="notifications">
       <section className="card accountCompactCard"><h2>Notificaciones</h2><label className="accountSettingRow"><span>Avisos dentro de la app</span><input type="checkbox" checked={notificationsEnabled} onChange={event => onNotificationsEnabledChange(event.target.checked)} aria-label="Activar avisos dentro de la app" /></label><DevicePermissions kind="notifications" /></section>
+      </div>}
+      {accountSection === "privacy" && <div data-settings-section="privacy">
       <section className="card accountCompactCard"><h2>Privacidad y permisos</h2><ProfileVisibilitySettings userId={identity.userId} accessToken={identity.mode === 'authenticated' ? identity.accessToken : undefined} authenticated={identity.mode === 'authenticated'} /><button type="button" className="accountChevronRow" onClick={() => setManagingAiConsents(true)}><span><b>Privacidad / IA</b><small>Instrucciones Backyard AI y lectura de scorecards</small></span><strong>›</strong></button><DevicePermissions kind="location" /></section>
       <section className="card accountCompactCard"><h2>Legal</h2><div className="documentConsentList compactConsentList"><Link href="/legal/terms?returnTo=account"><span>Términos de Uso</span><b>{accepted("terms")}</b></Link><Link href="/legal/privacy-simplified?returnTo=account"><span>Aviso simplificado</span><b>Ver</b></Link><Link href="/legal/privacy?returnTo=account"><span>Aviso de Privacidad</span><b>{accepted("privacy")}</b></Link></div><button type="button" className="textButton accountConsentButton" onClick={() => setManagingConsents(true)}>Gestionar consentimientos</button></section>
+      </div>}
+      {accountSection === "account" && <>
       {identity.mode === "authenticated" && <section className="card accountDangerZone"><div><span>TUS DATOS</span><h2>Controles de privacidad</h2></div><button type="button" className="dangerOutlineButton" onClick={() => { setDestructiveError(""); setDeleteStatsText(""); statsRequestId.current = undefined; setDeleteStatsOpen(true); }}>Eliminar estadísticas</button><p>Reinicia promedios y rendimiento desde hoy. Tu cuenta, grupos y rondas históricas se conservan.</p>{statisticsResetAt && <small>Último reset: {new Date(statisticsResetAt).toLocaleString("es-MX")}</small>}<button type="button" className="dangerButton" onClick={() => { setDestructiveError(""); setDeleteAccountPolicy(null); setDeleteAccountText(""); setDeleteAccountOpen(true); }}>Eliminar cuenta</button><p>Elimina la cuenta y solicita borrar o anonimizar su información permitida.</p></section>}
       <section className="card accountContactCard"><h2>Ayuda y privacidad</h2><div className="accountContacts"><a href={`mailto:${legalConfig.supportEmail}`}><span>Soporte</span><b>{legalConfig.supportEmail}</b></a><a href={`mailto:${legalConfig.privacyEmail}`}><span>Privacidad y ARCO</span><b>{legalConfig.privacyEmail}</b></a></div></section>
       <section className="card accountSessionCard single"><button className="secondary big" onClick={logout}>{identity.mode === "guest" ? "Salir del modo invitado" : "Cerrar sesión"}</button></section>{notice}
+      </>}
       {deleteStatsOpen && <StatisticsResetDialog confirmation={deleteStatsText} onConfirmation={setDeleteStatsText} busy={deletingStatistics} error={destructiveError} onClose={() => { setDeleteStatsOpen(false); statsRequestId.current = undefined; setDeleteStatsText(""); setDestructiveError(""); }} onConfirm={() => void deleteStatistics()} />}
       {deleteAccountOpen && <AccountDataDialog confirmation={deleteAccountText} onConfirmation={setDeleteAccountText} policy={deleteAccountPolicy} onPolicy={(policy) => { setDeleteAccountPolicy(policy); setDeleteAccountText(""); setDestructiveError(""); accountRequestId.current = undefined; }} busy={deletingAccount} syncBusy={cloudStatus === "syncing" || cloudStatus === "saving"} error={destructiveError} onClose={() => { setDeleteAccountOpen(false); setDeleteAccountText(""); setDeleteAccountPolicy(null); setDestructiveError(""); }} onConfirm={() => void deleteAccount()} />}
     </>}

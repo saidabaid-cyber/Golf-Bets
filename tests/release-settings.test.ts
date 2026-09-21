@@ -1,0 +1,69 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { readFileSync } from "node:fs";
+import { runInNewContext } from "node:vm";
+import ts from "typescript";
+import { ACCOUNT_SETTINGS } from "../lib/account-settings";
+
+type Element = { type: unknown; props: Record<string, unknown> };
+function elements(value: unknown): Element[] {
+  if (Array.isArray(value)) return value.flatMap(elements);
+  if (!value || typeof value !== "object" || !("props" in value)) return [];
+  const element = value as Element;
+  return [element, ...elements(element.props.children)];
+}
+function text(value: unknown): string {
+  if (Array.isArray(value)) return value.map(text).join("");
+  if (value && typeof value === "object" && "props" in value) return text((value as Element).props.children);
+  return typeof value === "string" ? value : "";
+}
+function panel(initialAccountSection = "account", view = "account") {
+  const slots: unknown[] = []; let cursor = 0;
+  const state = (initial: unknown) => { const i = cursor++; if (!(i in slots)) slots[i] = typeof initial === "function" ? initial() : initial;
+    return [slots[i], (next: unknown) => { slots[i] = typeof next === "function" ? next(slots[i]) : next; }]; };
+  const jsx = (type: unknown, props: Record<string, unknown>) => ({ type, props });
+  const opened: string[] = [];
+  const dependencies: Record<string, unknown> = {
+    react: { useState: state, useRef: (initial: unknown) => state({ current: initial })[0], useEffect: () => {}, useLayoutEffect: () => {} },
+    "react/jsx-runtime": { jsx, jsxs: jsx },
+    "../../lib/account-settings": { ACCOUNT_SETTINGS },
+    "../../lib/legal-config": { LEGAL_DOCUMENT_VERSIONS: {}, legalConfig: {} },
+    "../../lib/handicap-source": { selectedHandicapIndex: () => ({ source: "BACKYARD" }) },
+    "./account-provider": { useBackyardAccount: () => ({ identity: { userId: "synthetic", mode: "authenticated", displayName: "QA", providers: ["email"] }, acceptances: [], cloudIssues: [] }) },
+  };
+  const exports: Record<string, (props: unknown) => unknown> = {};
+  const source = ts.transpileModule(readFileSync("app/components/profile-account-panel.tsx", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+  runInNewContext(source, { exports, require: (id: string) => dependencies[id] || new Proxy({}, { get: (_object, name) => name === "__esModule" ? true : () => undefined }) });
+  return { render: () => { cursor = 0; return exports.ProfileAccountPanel({ view, initialAccountSection, indexControl: {}, onOpenAccountSection: (section: string) => opened.push(section) }); }, opened };
+}
+for (const section of ACCOUNT_SETTINGS) test(`settings ${section.id} renders only its own controls`, () => {
+  const h = panel(section.id);
+  const tree = h.render();
+  assert.deepEqual(elements(tree).filter(e => e.props["data-settings-section"]).map(e => e.props["data-settings-section"]), [section.id]);
+  assert.equal(elements(tree).filter(e => e.props["aria-current"] === "page").length, 1);
+  const danger = elements(tree).some(e => e.type === "button" && text(e) === "Eliminar cuenta");
+  assert.equal(danger, section.id === "account");
+});
+test("settings navigation changes the existing panel without duplicating controls", () => {
+  const h = panel();
+  for (const section of [...ACCOUNT_SETTINGS, ...ACCOUNT_SETTINGS].reverse()) {
+    const button = elements(h.render()).find(e => e.type === "button" && text(e) === section.label)!;
+    (button.props.onClick as () => void)();
+    assert.deepEqual(elements(h.render()).filter(e => e.props["data-settings-section"]).map(e => e.props["data-settings-section"]), [section.id]);
+  }
+});
+test("profile preferences, notifications and privacy have distinct destinations", () => {
+  const h = panel("account", "profile");
+  for (const section of ACCOUNT_SETTINGS.filter(s => s.id !== "account")) {
+    const button = elements(h.render()).find(e => e.type === "button" && text(e).startsWith(section.label))!;
+    (button.props.onClick as () => void)();
+  }
+  assert.deepEqual(h.opened, ["preferences", "notifications", "privacy"]);
+});
+test("QR keeps sharing and clipboard but no longer renders a technical Preview URL", () => {
+  const source = readFileSync("app/components/social-qr.tsx", "utf8");
+  assert.doesNotMatch(source, /<input[^>]*value=\{link\}/);
+  assert.match(source, /navigator\.clipboard\.writeText\(link\)/);
+  assert.match(source, /Compartir enlace/);
+  assert.match(source, /Guardar \/ compartir imagen/);
+});

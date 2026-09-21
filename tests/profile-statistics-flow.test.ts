@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import * as statistics from "../lib/statistics-reset";
+import * as accountSettings from "../lib/account-settings";
 
 // Production Profile handlers + production HTTP reset client. The HTTP boundary
 // is synthetic: these tests do not replace isolated Supabase Preview QA.
@@ -41,6 +42,7 @@ function harness() {
       useEffect: effect, useLayoutEffect: effect,
     };
     if (id.endsWith("statistics-reset")) return statistics;
+    if (id.endsWith("account-settings")) return accountSettings;
     if (id.endsWith("account-provider")) return { useBackyardAccount: () => account };
     if (id.endsWith("legal-config")) return { LEGAL_DOCUMENT_VERSIONS: {}, legalConfig: {} };
     if (id.endsWith("profile-geography")) return { normalizeProfileLocation: () => ({}), validateProfileLocation: () => ({ valid: true }) };

@@ -74,10 +74,11 @@ test("V3 product surfaces reuse provenance-aware media without fabricated produc
   assert.match(media, /!item\?\.imageUrl \|\| failed/);
   assert.match(media, /loading="lazy"/);
 });
-test("V3 QR keeps the existing share canvas and identifier; technical URL is progressively disclosed", () => {
+test("V3 QR keeps the share canvas and identifier without displaying a technical URL", () => {
   const qr = source("app/components/social-qr.tsx");
   assert.match(qr, /socialProfileLink\(userId,location.origin\)/);
-  assert.match(qr, /<details className=\{styles.linkDetails\}><summary>Copiar enlace de perfil/);
+  assert.match(qr, /onClick=\{\(\) => void copyLink\(\)\}>Copiar enlace de perfil/);
+  assert.doesNotMatch(qr, /<input[^>]*value=\{link\}/);
   assert.match(qr, /toBlob\(resolve,"image\/png"\)/);
   assert.match(qr, /navigator.canShare/);
 });
