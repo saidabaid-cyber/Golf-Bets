@@ -14,7 +14,7 @@ const preferenceLabels: Array<[keyof Omit<SocialActivityPreferences, "updatedAt"
   ["notifyAttest", "Avisarme de attest"], ["notifyFriendAchievement", "Logros de amigos"], ["notifyEquipment", "Equipo de amigos"],
 ];
 
-export function SocialSharingPreferences({ accessToken }: { accessToken: string }) {
+export function SocialSharingPreferences({ accessToken, section = 'all' }: { accessToken: string; section?: 'all' | 'sharing' | 'notifications' }) {
   const [prefs, setPrefs] = useState<SocialActivityPreferences | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -37,9 +37,10 @@ export function SocialSharingPreferences({ accessToken }: { accessToken: string 
     } catch (error) { if (live.current) setMessage(socialErrorMessage(error)); }
     finally { writing.current = false; if (live.current) setBusy(false); }
   }
-  return <details className={styles.preferences}><summary>Privacidad y avisos de Social</summary>
-    <p>Compartir es opcional. Activa el acceso de tus amigos y elige los tipos de actividad. Un perfil público por sí solo no comparte rondas. No publicamos ubicación en tiempo real.</p>
-    {prefs ? <fieldset disabled={busy}>{preferenceLabels.map(([key, label]) => <label key={key}><input type="checkbox" checked={prefs[key]} onChange={(event) => void change(key, event.target.checked)} /><span>{label}</span></label>)}</fieldset> : !message && <p role="status">Cargando preferencias…</p>}
+  const labels = preferenceLabels.filter(([key]) => section === 'all' || (key.startsWith('notify') ? section === 'notifications' : section === 'sharing'));
+  return <details className={styles.preferences}><summary>{section === 'notifications' ? 'Avisos de Social' : section === 'sharing' ? 'Actividad que comparto' : 'Privacidad y avisos de Social'}</summary>
+    {section !== 'notifications' && <p>Compartir es opcional. Activa el acceso de tus amigos y elige los tipos de actividad. Un perfil público por sí solo no comparte rondas. No publicamos ubicación en tiempo real.</p>}
+    {prefs ? <fieldset disabled={busy}>{labels.map(([key, label]) => <label key={key}><input type="checkbox" checked={prefs[key]} onChange={(event) => void change(key, event.target.checked)} /><span>{label}</span></label>)}</fieldset> : !message && <p role="status">Cargando preferencias…</p>}
     {message && <p role="status">{message}</p>}
   </details>;
 }

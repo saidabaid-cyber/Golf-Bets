@@ -29,7 +29,7 @@ function panel(initialAccountSection = "account", view = "account") {
     "../../lib/account-settings": { ACCOUNT_SETTINGS },
     "../../lib/legal-config": { LEGAL_DOCUMENT_VERSIONS: {}, legalConfig: {} },
     "../../lib/handicap-source": { selectedHandicapIndex: () => ({ source: "BACKYARD" }) },
-    "./account-provider": { useBackyardAccount: () => ({ identity: { userId: "synthetic", mode: "authenticated", displayName: "QA", providers: ["email"] }, acceptances: [], cloudIssues: [] }) },
+    "./account-provider": { useBackyardAccount: () => ({ identity: { userId: "synthetic", mode: "authenticated", displayName: "QA", accessToken: "synthetic-not-a-token", providers: ["email"] }, acceptances: [], cloudIssues: [] }) },
   };
   const exports: Record<string, (props: unknown) => unknown> = {};
   const source = ts.transpileModule(readFileSync("app/components/profile-account-panel.tsx", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
@@ -51,6 +51,34 @@ test("settings navigation changes the existing panel without duplicating control
     (button.props.onClick as () => void)();
     assert.deepEqual(elements(h.render()).filter(e => e.props["data-settings-section"]).map(e => e.props["data-settings-section"]), [section.id]);
   }
+});
+
+test('account edits reuse the existing profile editor instead of another profile',()=>{
+ const h=panel();const edit=elements(h.render()).find(e=>e.type==='button'&&text(e)==='Editar nombre y usuario')!;
+ assert.ok(edit);(edit.props.onClick as ()=>void)();
+ assert.ok(text(h.render()).includes('Guardar perfil'));
+});
+
+test('account notification and privacy destinations wire different scopes of the same server controls',()=>{
+ for(const [section,scope]of [['notifications','notifications'],['privacy','sharing']] as const){
+  const tree=elements(panel(section).render());
+  assert.equal(tree.filter(e=>e.props.section===scope&&e.props.accessToken==='synthetic-not-a-token').length,1);
+  assert.equal(tree.filter(e=>e.props.section===(scope==='sharing'?'notifications':'sharing')).length,0);
+ }
+});
+
+test('scoped social controls hide unrelated settings without changing the persisted API contract',()=>{
+ const source=ts.transpileModule(readFileSync('app/components/cloud-social-activity.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX}}).outputText;
+ for(const section of ['sharing','notifications','all']){
+  let slot=0;const exports:Record<string,(props:unknown)=>unknown>={};
+  const jsx=(type:unknown,props:Record<string,unknown>)=>({type,props});
+  runInNewContext(source,{exports,require:(id:string)=>id==='react'?{useState:(initial:unknown)=>[slot++===0?{}:initial,()=>{}],useRef:()=>({current:false}),useEffect:()=>{}}:id==='react/jsx-runtime'?{jsx,jsxs:jsx}:new Proxy({},{get:()=>()=>{}})});
+  const tree=exports.SocialSharingPreferences({accessToken:'synthetic',section});
+  const labels=elements(tree).filter(e=>e.type==='label').map(e=>text(e));
+  assert.equal(labels.length,section==='all'?10:5);
+  assert.equal(labels.includes('Compartir rondas terminadas'),section!=='notifications');
+  assert.equal(labels.includes('Avisarme de likes'),section!=='sharing');
+ }
 });
 test("profile preferences, notifications and privacy have distinct destinations", () => {
   const h = panel("account", "profile");

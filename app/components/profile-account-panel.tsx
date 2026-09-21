@@ -29,6 +29,7 @@ import { useBackyardAccount } from "./account-provider";
 import { ProfileVisibilitySettings } from "./profile-visibility-settings";
 import { ProfileCompletionRing } from "./profile-completion-ring";
 import { ACCOUNT_SETTINGS, type AccountSettingsSection } from "../../lib/account-settings";
+import { SocialSharingPreferences } from './cloud-social-activity';
 
 type ProfileAccountPanelProps = {
   view: "profile" | "account";
@@ -244,8 +245,8 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
 
   if (view === "profile" && identity.mode === "authenticated" && focusSection === "equipment") return <><header className="profileMobileHeader profileEditHeader"><button type="button" className="textButton" onClick={onBackToProfile}>← Mi Perfil</button><div><span>MI PERFIL</span><h1>Mi Bolsa</h1></div></header><div id="equipment-bag"><EquipmentProfilePanel userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={selectedIndex.value} defaultHandicapSource={selectedIndex.source} ballFitDefaults={ballFitDefaultsFromProfile(identity)} onBackToProfile={onBackToProfile} onOpenPrivacy={onOpenPrivacy} initialSection={completionEquipment} /></div></>;
 
-  if (view === "profile" && identity.mode === "authenticated" && editing) return <>
-    <header className="profileMobileHeader profileEditHeader"><button type="button" className="textButton" onClick={() => setEditing(false)}>← Mi Perfil</button><div><span>MI PERFIL</span><h1>Editar perfil</h1></div></header>
+  if (identity.mode === "authenticated" && editing) return <>
+    <header className="profileMobileHeader profileEditHeader"><button type="button" className="textButton" onClick={() => setEditing(false)}>{view === 'account' ? '← Cuenta' : '← Mi Perfil'}</button><div><span>MI PERFIL</span><h1>Editar perfil</h1></div></header>
     <section id="profile-edit-personal" className="card profileEditCard"><h2>Datos personales</h2><div className="profileEditGrid">
       <label>Nombre visible<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Tu nombre" /></label>
       <label>Nombre(s)<input value={draft.givenName} onChange={(event) => setDraft((current) => ({ ...current, givenName: event.target.value }))} autoComplete="given-name" /></label>
@@ -289,16 +290,18 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
     {view === "account" && <>
       <nav className="accountSettingsNav" aria-label="Secciones de configuración">{ACCOUNT_SETTINGS.map(section => <button type="button" className="secondary" key={section.id} aria-current={accountSection === section.id ? "page" : undefined} onClick={() => setAccountSection(section.id)}>{section.label}</button>)}</nav>
       {accountSection === "account" && <div data-settings-section="account">
-      <section className="card accountCompactCard"><h2>Cuenta</h2><div className="accountCompactRows"><div><span>Email</span><b>{identity.email || "Sin email"}</b></div><div><span>Métodos de acceso</span><b>{identity.mode === "authenticated" ? identity.providers.map((provider) => provider === "google" ? "Google" : provider === "email" ? "Correo" : provider).join(" · ") || "Correo" : "Modo invitado"}</b></div></div></section>
+      <section className="card accountCompactCard"><h2>Cuenta</h2><div className="accountCompactRows"><div><span>Email</span><b>{identity.email || "Sin email"}</b></div><div><span>Métodos de acceso</span><b>{identity.mode === "authenticated" ? identity.providers.map((provider) => provider === "google" ? "Google" : provider === "email" ? "Correo" : provider).join(" · ") || "Correo" : "Modo invitado"}</b></div></div><button type="button" className="textButton" onClick={() => { setCompletionEditTarget('personal'); setEditing(true); }}>Editar nombre y usuario</button></section>
       </div>}
       {accountSection === "preferences" && <div data-settings-section="preferences">
       <section className="card accountCompactCard"><h2>Preferencias</h2><label className="accountSettingRow"><span><b>Alto contraste</b><small>Tu elección se guarda en la cuenta</small></span><input type="checkbox" checked={highContrast} onChange={event => onHighContrastChange(event.target.checked)} /></label></section>
       </div>}
       {accountSection === "notifications" && <div data-settings-section="notifications">
       <section className="card accountCompactCard"><h2>Notificaciones</h2><label className="accountSettingRow"><span>Avisos dentro de la app</span><input type="checkbox" checked={notificationsEnabled} onChange={event => onNotificationsEnabledChange(event.target.checked)} aria-label="Activar avisos dentro de la app" /></label><DevicePermissions kind="notifications" /></section>
+      {identity.accessToken && <section className="card accountCompactCard"><SocialSharingPreferences key={identity.userId} accessToken={identity.accessToken} section="notifications" /></section>}
       </div>}
       {accountSection === "privacy" && <div data-settings-section="privacy">
       <section className="card accountCompactCard"><h2>Privacidad y permisos</h2><ProfileVisibilitySettings userId={identity.userId} accessToken={identity.mode === 'authenticated' ? identity.accessToken : undefined} authenticated={identity.mode === 'authenticated'} /><button type="button" className="accountChevronRow" onClick={() => setManagingAiConsents(true)}><span><b>Privacidad / IA</b><small>Instrucciones Backyard AI y lectura de scorecards</small></span><strong>›</strong></button><DevicePermissions kind="location" /></section>
+      {identity.accessToken && <section className="card accountCompactCard"><SocialSharingPreferences key={identity.userId} accessToken={identity.accessToken} section="sharing" /></section>}
       <section className="card accountCompactCard"><h2>Legal</h2><div className="documentConsentList compactConsentList"><Link href="/legal/terms?returnTo=account"><span>Términos de Uso</span><b>{accepted("terms")}</b></Link><Link href="/legal/privacy-simplified?returnTo=account"><span>Aviso simplificado</span><b>Ver</b></Link><Link href="/legal/privacy?returnTo=account"><span>Aviso de Privacidad</span><b>{accepted("privacy")}</b></Link></div><button type="button" className="textButton accountConsentButton" onClick={() => setManagingConsents(true)}>Gestionar consentimientos</button></section>
       </div>}
       {accountSection === "account" && <>
