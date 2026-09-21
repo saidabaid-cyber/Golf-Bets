@@ -1,6 +1,8 @@
 "use client";
 
 import type { ActiveRoundSummary } from "./home-dashboard";
+import { BackyardIcon } from "./backyard-icon";
+import styles from "./play-hub.module.css";
 
 export type PlayHubProps = {
   coursePicker?: React.ReactNode;
@@ -34,7 +36,12 @@ export function PlayHub({ coursePicker, activeRound, onContinueRound, onEditRoun
   return <section className="betaPlayHub" aria-labelledby="beta-play-title">
     <section className="hero betaPlayHero">
       <div><span className="eyebrow">THE BACKYARD · JUGAR</span><h1 id="beta-play-title">Tu próxima salida.</h1><p>Empieza rápido o regresa exactamente a la ronda que dejaste abierta.</p></div>
-      <div className="betaPlayHeroActions"><button type="button" className="primary big" onClick={onNewRound}>Configurar ronda completa</button><button type="button" className="secondary big" onClick={onScoreOnly}>Ronda sin apuestas</button><button type="button" className="secondary big" onClick={onTotalScore}>Subir score total</button><details><summary>Asistente de configuración</summary><button type="button" className="secondary" onClick={onAiRound}>Configurar con Backyard AI</button></details></div>
+      <div className={`betaPlayHeroActions ${styles.modes}`}>
+        <button type="button" className={styles.mode} onClick={onNewRound}><span className={styles.icon}><BackyardIcon name="players" /></span><span><b>Configurar ronda completa</b><small>Tu campo, tu grupo y tus juegos.</small></span><BackyardIcon name="arrow" size={18} /></button>
+        <button type="button" className={styles.mode} onClick={onScoreOnly}><span className={styles.icon}><BackyardIcon name="flag" /></span><span><b>Ronda sin apuestas</b><small>Sólo golf. Registra cada hoyo.</small></span><BackyardIcon name="arrow" size={18} /></button>
+        <button type="button" className={styles.mode} onClick={onTotalScore}><span className={styles.icon}><BackyardIcon name="score" /></span><span><b>Subir score total</b><small>Guarda una ronda que ya jugaste.</small></span><BackyardIcon name="arrow" size={18} /></button>
+        <details className={styles.assistant}><summary>Asistente de configuración</summary><button type="button" className="secondary" onClick={onAiRound}>Configurar con Backyard AI</button></details>
+      </div>
     </section>
 
     {coursePicker && <section className="card">{coursePicker}</section>}

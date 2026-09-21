@@ -29,6 +29,8 @@ import type { GolfBallCatalog, PlayerBall, QualitativeLevel } from "../../lib/go
 import { BALL_FIT_HANDICAP_LABELS, BALL_FIT_EXPERIENCES, normalizeBallFitHandicap, type BallFitHandicapSource } from "../../lib/ball-fit-handicap";
 import { LaunchMonitorCapture } from "./launch-monitor-capture";
 import { NumericCaptureInput } from "./numeric-capture-input";
+import { CatalogProductMedia } from "./catalog-product-media";
+import { BackyardIcon } from "./backyard-icon";
 import { useViewScrollReset } from "./use-view-scroll-reset";
 import styles from "./equipment.module.css";
 
@@ -372,6 +374,7 @@ export function BallFitResults({ result, catalog, current, catalogScope = null }
     <div className={styles.resultGrid}>{result.recommendations.map((recommendation) => {
       const catalogBall = catalog.find((ball) => ball.id === recommendation.catalogBallId);
       return <article className={styles.recommendation} key={recommendation.catalogBallId}>
+        <div className={styles.recommendationMedia}><CatalogProductMedia item={catalogBall} fallback={<BackyardIcon name="ball" size={56} />} /></div>
         <span className={styles.rank}>#{recommendation.rank}</span>
         <h3>{recommendation.brand} {recommendation.model}</h3>
         {recommendation.generation && <p className={styles.subtle}>{recommendation.generation}</p>}

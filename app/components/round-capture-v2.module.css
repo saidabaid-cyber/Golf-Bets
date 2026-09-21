@@ -8,6 +8,8 @@
   color: #10283f;
 }
 
+
+
 .hero {
   min-height: 94px;
   margin: -10px -10px 0;
@@ -197,3 +199,22 @@
   .situationsGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .captureActions { grid-template-columns: .7fr .85fr 1.55fr; }
 }
+/* Outdoor-first score entry. Do not change score/control behavior. */
+.screen { --capture-green:var(--by-forest);--capture-green-dark:#092f21;--capture-blue:var(--by-pine);gap:12px;color:var(--by-ink); }
+.hero { background:var(--by-forest);padding-bottom:20px;border-radius:0 0 var(--by-radius-lg) var(--by-radius-lg); }
+.holeHeading b { font:400 30px/1 var(--by-editorial);letter-spacing:-.04em; }
+.holeHeading span { font-size:12px;color:#e4ece6; }
+.gameBrand small { font-size:10px;color:#e4ece6; }
+.holeNav { gap:7px;padding-block:4px; }
+.holeNav button { flex-basis:44px;width:44px;min-height:44px;font-size:12px; }
+.toolbar button { min-height:44px;font-size:11px;border-radius:var(--by-radius-sm);color:var(--by-forest); }
+.primaryPlayer { border-radius:var(--by-radius);padding:14px 10px;border-color:var(--line); }
+.playerHeading b { color:var(--ink);font-size:16px;font-weight:650; }
+.playerHeading small { color:var(--muted);font-size:11px; }
+.changePlayer { min-height:44px;color:var(--green);background:var(--green2);font-size:11px; }
+.captureTabs { background:var(--soft);gap:3px;padding:4px;border-radius:var(--by-radius-sm); }
+.captureTabs button { min-height:44px;font-size:10px;color:var(--green); }
+.captureTabs button[data-active=true] { background:var(--by-forest);box-shadow:none; }
+.primaryControl>span,.compactField>span,.clubSelect>span { color:var(--ink);font-size:12px; }
+.primaryControl :global([role=group]) { border-radius:var(--by-radius-sm); }
+.primaryControl :global([role=group]) button { height:52px; }

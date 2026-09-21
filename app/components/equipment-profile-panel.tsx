@@ -28,7 +28,9 @@ import {
   type PlayerClubDistance,
 } from "../../lib/golf-equipment";
 import { BallFitResults, BallFitWizard } from "./ball-fit-wizard";
-import { BallEditor, CLUB_CATEGORY_ICONS, CLUB_CATEGORY_LABELS, ClubDistanceEditor, ClubEditor } from "./equipment-editors";
+import { BackyardIcon } from "./backyard-icon";
+import { CatalogProductMedia } from "./catalog-product-media";
+import { BallEditor, CLUB_CATEGORY_LABELS, ClubDistanceEditor, ClubEditor } from "./equipment-editors";
 import { equipmentStatusLabel, useEquipmentProfile } from "./use-equipment-profile";
 import { useEquipmentCatalogSearch } from "./use-equipment-catalog-search";
 import styles from "./equipment.module.css";
@@ -235,6 +237,7 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
   </section>;
 
   return <div className={styles.stack}>
+    <header className={styles.collectionHero}><span className={styles.collectionMark}><BackyardIcon name="club" size={40} /></span><div><span className={styles.flowEyebrow}>THE BACKYARD · EQUIPMENT</span><h2>Tu juego empieza<br />en tu bolsa.</h2><p>Los bastones, las sensaciones y la bola que haces tuyos.</p></div></header>
     <section className={`card ${styles.section}`}>
       <div className={styles.sectionHeader}><div><div className="eyebrow">EQUIPO</div><h2>Mi bolsa</h2><p>Tus bastones actuales y anteriores. Basta con marca + modelo.</p></div><button type="button" className="primary" onClick={() => setClubEditor("new")}>+ Agregar</button></div>
       <div className={styles.bagSummary}>
@@ -295,7 +298,7 @@ function ClubItem({ club, catalog: catalogItems, shafts, onEdit, onToggle, onDel
   const catalog = catalogClub(club, catalogItems);
   const facts = clubFacts(club, shafts);
   return <article className={`${styles.equipmentItem} ${club.isCurrent ? "" : styles.archived}`}>
-    <div className={styles.itemHeader}><div className={styles.itemIdentity}><span className={styles.categoryIcon}>{CLUB_CATEGORY_ICONS[club.category]}</span><div><h3><button type="button" className={styles.itemTitleButton} onClick={onEdit}>{clubName(club, catalogItems)}</button></h3><p>{catalog?.generation || club.generation || CLUB_CATEGORY_LABELS[club.category]}</p></div></div>{club.isCurrent && <span className={styles.currentBadge}>Actual</span>}</div>
+    <div className={styles.itemHeader}><div className={styles.itemIdentity}><span className={styles.categoryIcon}><CatalogProductMedia item={catalog} fallback={<BackyardIcon name="club" size={32} />} /></span><div><h3><button type="button" className={styles.itemTitleButton} onClick={onEdit}>{clubName(club, catalogItems)}</button></h3><p>{catalog?.generation || club.generation || CLUB_CATEGORY_LABELS[club.category]}</p></div></div>{club.isCurrent && <span className={styles.currentBadge}>Actual</span>}</div>
     <div className={styles.badgeRow}>{facts.map((value) => <span className={styles.badge} key={value}>{value}</span>)}</div>
     {club.notes && <p className={styles.subtle}>{club.notes}</p>}
     <div className={styles.itemActions}><button type="button" className="secondary" onClick={onEdit}>Editar</button><button type="button" className="secondary" onClick={onToggle}>{club.isCurrent ? "Mover a anterior" : "Marcar actual"}</button><button type="button" className={styles.dangerButton} onClick={onDelete}>Eliminar</button></div>

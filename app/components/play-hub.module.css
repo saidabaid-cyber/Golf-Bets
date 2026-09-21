@@ -1,0 +1,10 @@
+.modes { display: grid; gap: 10px; width: 100%; min-width: 0; }
+.mode { display: grid; grid-template-columns: 46px minmax(0,1fr) 18px; gap: 14px; align-items: center; width: 100%; min-height: 96px; border: 1px solid #ffffff42; border-radius: var(--by-radius); padding: 18px; background: #fff; color: var(--by-forest); text-align: left; }
+.mode:first-child { background: var(--by-sage); }
+.mode b { display: block; font-size: 16px; font-weight: 650; letter-spacing: -.025em; }
+.mode small { display: block; margin-top: 6px; color: var(--by-muted); font-size: 12px; line-height: 1.45; font-weight: 400; }
+.icon { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 50%; border: 1px solid #bccbbd; background: #f5f7f0; }
+.assistant { padding: 4px 6px; color: #fff; font-size: 12px; }
+.assistant summary { cursor: pointer; min-height: 44px; align-content: center; }
+.assistant button { width: 100%; }
+@media(max-width: 430px) { .mode { padding: 16px 14px; gap: 10px; } }

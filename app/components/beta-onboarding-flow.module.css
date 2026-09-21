@@ -6,3 +6,24 @@
 @media(max-width:560px){.welcomeHero{grid-template-columns:58px minmax(0,1fr);min-height:112px;padding:16px}.heroFlag{width:56px;height:56px;border-radius:17px;font-size:29px}.heroBall{display:none}.welcomeHero b{font-size:19px}.privacyChoices{grid-template-columns:1fr}}
 .groupIdentity{grid-template-columns:1fr}.groupIdentity label:last-child{grid-column:auto}@media(max-width:560px){.groupIdentity{grid-template-columns:1fr}}
 .header{flex-wrap:wrap}.header>button{min-height:44px;margin-left:auto}.memberList article{grid-template-columns:42px minmax(0,1fr) auto}.memberHandicap{grid-column:2/-1;min-width:0}.hcpList article{display:grid;gap:8px;padding:12px;border:1px solid var(--line);border-radius:15px}.memberHandicap :global(.guestHandicapControl),.hcpList :global(.guestHandicapControl){display:grid;grid-template-columns:minmax(0,1fr) minmax(80px,105px);align-items:center;gap:8px;padding:0;border:0}.memberHandicap input{width:100%;min-width:0;font-size:16px}.memberHandicap :global(.accountHandicapLocked){display:grid;gap:4px;overflow-wrap:anywhere}.readySummary{margin-top:18px;overflow-wrap:anywhere}.readySummary b,.readySummary small{flex-basis:100%}
+
+/* Editorial onboarding, using the existing step/progress/selection state. */
+.screen { background:var(--by-ivory); }
+.card { box-shadow:var(--by-shadow-raised);border-radius:var(--by-radius-lg); }
+.header { padding:22px 24px 16px; }
+.copy { padding-top:30px; }
+.copy h1 { font-weight:400;line-height:1.08; }
+.copy p { font-size:14px;line-height:1.65; }
+.eyebrow { color:var(--by-gold);font-weight:700; }
+.body { padding-top:24px; }
+.actions { background:var(--by-paper);gap:12px; }
+.choice,.choiceActive,.goal,.goalActive { padding:16px;min-height:60px;font-weight:600;border-radius:var(--by-radius-sm); }
+.choiceActive,.goalActive,.entrySelected,.privacySelected { border-color:var(--by-forest);background:var(--by-sage);box-shadow:inset 0 0 0 1px var(--by-forest); }
+.entryChoice,.entrySelected { padding:20px 16px;border-radius:var(--by-radius); }
+.planCard { padding:24px;border-radius:var(--by-radius);gap:12px; }
+.planCard b { font-size:30px;font-weight:400; }
+.planCard p { font-size:13px;line-height:1.6; }
+.welcomeHero { background:var(--by-forest);box-shadow:none;border-radius:var(--by-radius); }
+.welcomeHero b { font-weight:400; }
+.emptyState { border-style:solid; }
+@media(max-width:560px) { .card { border-radius:0; } .header { padding-inline:20px; } .copy,.body,.actions { padding-inline:20px; } }

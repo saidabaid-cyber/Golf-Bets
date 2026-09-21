@@ -9,6 +9,8 @@
   box-shadow: 0 8px 28px rgba(20, 58, 34, .06);
 }
 
+
+
 .heading {
   display: flex;
   min-width: 0;
@@ -294,3 +296,11 @@
   .heading { flex-wrap: wrap; }
   .hero strong { font-size: 38px; }
 }
+.card { border-radius:var(--by-radius);padding:22px;box-shadow:var(--by-shadow); }
+.heading h2 { font-weight:400;font-size:28px;letter-spacing:-.035em; }
+.eyebrow { font-weight:650;font-size:10px; }
+.hero { border-radius:var(--by-radius);background:var(--by-sage); }
+.hero strong { font-family:var(--by-editorial);font-size:58px;font-weight:400; }
+.intro { font-size:14px;line-height:1.6; }
+.activate { min-height:48px;border-radius:var(--by-radius-sm);background:var(--by-forest); }
+@media(max-width:430px) { .heading { flex-wrap:wrap; } }

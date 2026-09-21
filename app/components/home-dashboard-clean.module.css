@@ -331,3 +331,14 @@
 
 @media (prefers-reduced-motion: reduce) { .home *, .home *::before, .home *::after { scroll-behavior: auto !important; transition: none !important; } }
 @media (forced-colors: active) { .heroShade, .promoShade { display: none; } .heroCopy, .header, .friendScript { color: CanvasText; } .quickCard, .moreGrid button, .roundChoices > button { border: 1px solid CanvasText; } }
+
+/* Keep approved hero photography and composition; refine the surrounding UI. */
+.home { background:var(--by-ivory);color:var(--by-forest); }
+.quickCard { border-radius:var(--by-radius);box-shadow:var(--by-shadow); }
+.quickCopy b { font-weight:650;letter-spacing:-.02em; }
+.quickCopy small { color:var(--by-muted); }
+.moreGrid button { border-radius:var(--by-radius-sm); }
+.roundChoiceDialog { border-radius:var(--by-radius-lg);background:var(--by-paper); }
+.roundChoices>button { min-height:88px;border-radius:var(--by-radius);box-shadow:none;padding-block:18px; }
+.roundChoices strong { font-size:14px;font-weight:650;letter-spacing:-.015em; }
+.roundChoices button>small,.manualChoice small { font-size:12px;line-height:1.5; }

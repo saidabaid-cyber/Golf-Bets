@@ -3,6 +3,8 @@
   gap: 13px;
 }
 
+
+
 .hero {
   position: relative;
   overflow: hidden;
@@ -476,3 +478,14 @@
     min-height: 46px;
   }
 }
+/* AI presentation only: no change to provider, consent or deterministic review. */
+.screen { gap:20px; }
+.hero { background:var(--by-forest);border-radius:var(--by-radius-lg); }
+.hero h1 { font-family:var(--by-editorial);font-weight:400;letter-spacing:-.04em; }
+.hero p { font-size:14px;line-height:1.65; }
+.composer { border-radius:var(--by-radius);padding:20px;box-shadow:var(--by-shadow); }
+.composer textarea { min-height:150px;line-height:1.6;font-size:16px; }
+.suggestions button { min-height:44px;font-size:13px;padding-inline:16px; }
+.question { border-radius:var(--by-radius-sm);background:var(--by-sage);border-color:var(--by-pine);padding:18px; }
+.question span { color:var(--by-muted);font-size:13px;line-height:1.5; }
+.reviewHeader h2 { font:400 30px/1.12 var(--by-editorial);letter-spacing:-.04em; }

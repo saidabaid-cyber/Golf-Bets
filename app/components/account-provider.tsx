@@ -5,6 +5,7 @@ import { cloudAccountErrorMessage, ensureCloudProfile, saveCloudProfile } from "
 import { canonicalProfileUsername, normalizeProfileUsername } from "../../lib/profile-username";
 
 import Link from "next/link";
+import Image from "next/image";
 import { Fragment, createContext, useCallback, useContext, useEffect, useRef, useState, type FormEvent } from "react";
 import { emailLoginRecovery } from "../../lib/email-login-recovery";
 import { ModalCloseButton } from "./modal-shell";
@@ -278,6 +279,7 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
   const appleAvailable = Boolean(socialEnabled && providers?.status === "ready" && providers.apple);
   return <main className="accessScreen">
     <section className={`accessCard ${stage === "splash" ? "splashCard" : ""}`}>
+      {stage === "splash" && <div className="accessEditorial"><Image src="/brand/home-swing.jpg" alt="" fill sizes="(max-width: 600px) 100vw, 460px" priority /><span>GOOD GOLF.<br /><em>BETTER FRIENDS.</em></span></div>}
       <BrandLockup />
       <p className="accessTagline">Golf · Friends · More</p>
       <p className="accessPromise">Tu juego, tu grupo habitual y todo lo que pasa después del último putt.</p>
