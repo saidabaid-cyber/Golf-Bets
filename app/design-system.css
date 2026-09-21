@@ -1,0 +1,116 @@
+/* V3 presentation tokens. No derived scores, consent or entitlement state. */
+:root {
+  --by-forest: #103e2d; --by-pine: #235541; --by-sage: #eaf0e7;
+  --by-ivory: #f6f6f0; --by-paper: #fff; --by-ink: #172d23;
+  --by-muted: #55675c; --by-line: #dce3d9; --by-gold: #816830;
+  --by-font: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --by-editorial: Georgia, "Times New Roman", serif;
+  --by-space-1: 4px; --by-space-2: 8px; --by-space-3: 12px;
+  --by-space-4: 16px; --by-space-5: 24px; --by-space-6: 32px;
+  --by-radius-sm: 12px; --by-radius: 20px; --by-radius-lg: 28px;
+  --by-shadow: 0 8px 28px #173f2a08; --by-shadow-raised: 0 16px 44px #173f2a12;
+  --by-touch: 48px;
+  --bg: var(--by-ivory); --card: var(--by-paper); --ink: var(--by-ink);
+  --muted: var(--by-muted); --line: var(--by-line); --green: var(--by-forest);
+  --green2: var(--by-sage); --soft: #f5f7f2;
+}
+.backyardV3 { font-family: var(--by-font); -webkit-font-smoothing: antialiased; }
+.backyardV3 :where(button, a, summary, input, select, textarea):focus-visible { outline: 3px solid var(--by-gold); outline-offset: 3px; }
+.backyardV3 :where(button, a, summary) { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+.backyardV3 .card { border-radius: var(--by-radius); box-shadow: var(--by-shadow); padding: 20px; }
+.backyardV3 .card :where(h2) { font-size: 22px; font-weight: 550; letter-spacing: -.025em; }
+.backyardV3 :where(.hero, .holeHero) { border-radius: var(--by-radius-lg); background: var(--by-forest); padding: 24px; }
+.backyardV3 .hero h1 { font-family: var(--by-editorial); font-weight: 400; font-size: clamp(30px, 7.8vw, 42px); line-height: 1.06; letter-spacing: -.04em; }
+.backyardV3 :where(.eyebrow, .miniLabel) { letter-spacing: .12em; font-weight: 700; }
+.backyardV3 :where(.primary, .secondary) { min-height: var(--by-touch); border-radius: var(--by-radius-sm); font-weight: 650; font-size: 14px; line-height: 1.3; padding: 13px 18px; }
+.backyardV3 .primary { background: var(--green); color: #fff; box-shadow: 0 3px 8px #103e2d12; }
+.backyardV3 .secondary { background: var(--green2); color: var(--green); }
+.backyardV3 :where(.textButton, .chipButton) { min-height: 44px; font-weight: 600; }
+.backyardV3 :where(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]), select, textarea) { border-radius: var(--by-radius-sm); border-color: var(--line); background-color: var(--card); color: var(--ink); }
+.backyardV3 :where(label, .miniLabel) { color: var(--ink); font-size: 12px; line-height: 1.5; }
+.backyardV3 :where(.hint, .muted, .sectionTitle p) { color: var(--muted); font-size: 12px; line-height: 1.55; }
+.backyardV3 :where(.empty, .betaSocialEmpty, .betaStatsEmpty) { border: 1px solid var(--line); background: var(--soft); border-radius: var(--by-radius); padding: 28px 20px; line-height: 1.6; }
+.backyardV3 .bottomNav { background: #fffffff5; border-color: var(--line); box-shadow: 0 -8px 28px #163b2106; }
+.backyardV3 .bottomNav button { font-weight: 550; }
+.backyardV3 .bottomNav button.active { font-weight: 750; }
+.backyardV3 .modalBackdrop { background: #092a1ed1; backdrop-filter: blur(5px); }
+.backyardV3 :where(.modalCloseButton, .modalClose) { width: 44px; height: 44px; flex-shrink: 0; border-radius: 50%; }
+.backyardV3 :where(.stat, .betaStatTiles>div) { border-radius: var(--by-radius); padding: 18px; box-shadow: var(--by-shadow); }
+.backyardV3 :where(.stat b, .betaStatTiles strong) { font-variant-numeric: tabular-nums; font-family: var(--by-editorial); font-weight: 400; font-size: 32px; }
+.backyardV3 :where(.betaStatsHero, .betaCoursesHero, .rulesSearchHero) h1 { font-family: var(--by-editorial); font-weight: 400; letter-spacing: -.04em; }
+.backyardV3 :where(.historyRound, .groupPresetCard, .playerResultCard, .resultAccordion) { border-radius: var(--by-radius); box-shadow: var(--by-shadow); }
+.backyardV3 :where(.historyRound h3, .groupPresetCard h3) { font-size: 20px; letter-spacing: -.025em; }
+.backyardV3 .historyRow { padding-block: 16px; }
+.backyardV3 .historyActions { gap: 8px; }
+.backyardV3 .resultHero { background: var(--by-forest); }
+.backyardV3 .resultHero h1 { font-size: clamp(42px, 11vw, 64px); font-variant-numeric: tabular-nums; }
+.backyardV3 :where(.totalStrip, .roundStatsSummary) { background: var(--by-sage); border-radius: var(--by-radius-sm); }
+.backyardV3 :where(.rulesHubGrid, .betaPlayToolGrid) { gap: 12px; }
+.backyardV3 :where(.rulesHubGrid button, .rulesResourceShortcut, .betaPlayToolGrid>button) { border-radius: var(--by-radius); box-shadow: none; }
+.backyardV3 .rulesSearchHero { padding: 24px; border-radius: var(--by-radius-lg); }
+.backyardV3 .ruleResult { border-radius: var(--by-radius); padding: 20px; }
+.backyardV3 .ruleResult p { line-height: 1.65; }
+.backyardV3 :where(.betaAiInsight, .betaTrendChart, .membershipBenefitList details) { border-radius: var(--by-radius); }
+.backyardV3 .membershipBenefitsPage>h1 { font: 400 38px/1.1 var(--by-editorial); letter-spacing: -.04em; color: var(--green); }
+.backyardV3 .membershipBenefitList summary { padding: 22px 18px; }
+.backyardV3 .internalNotificationItem { border-radius: var(--by-radius-sm); padding: 16px; }
+.backyardV3 .internalNotificationItem.unread { border-color: #73917d; background: var(--green2); }
+.backyardV3 .profileOverviewCard { background: var(--by-forest); color: #fff; border: 0; border-radius: var(--by-radius-lg); padding: 24px; }
+.backyardV3 .profileOverviewCard :where(h2, strong) { color: #fff; }
+.backyardV3 .profileOverviewCard :where(p, small, .muted) { color: #e3ece5; }
+.backyardV3 .profileOverviewCard .secondary { background: #fff; color: var(--by-forest); }
+.backyardV3 .profileOverviewIdentity span { color:#e3ece5; }
+.backyardV3 .profileOverviewIdentity span b { color:#e3ece5; }
+.backyardV3 :where(.profileCompactRows,.accountCompactRows) :where(span,b) { font-size:13px; }
+.backyardV3 .profileNavigationCard b { font-size:16px;font-weight:650; }
+.backyardV3 .profileNavigationCard small { font-size:12px;line-height:1.5; }
+.backyardV3 .profileCompactHeading span { font-size:10px;font-weight:650; }
+.backyardV3 .profileActivityGrid b { font:400 28px/1.15 var(--by-editorial); }
+.backyardV3 .profileActivityGrid span { font-size:11px; }
+.backyardV3 :where(.profileCompactCard, .accountCompactCard, .profileNavigationCard) { border-radius: var(--by-radius); padding: 20px; }
+.backyardV3 :where(.profileNavigationList button, .accountChevronRow) { min-height: 60px; }
+.backyardV3 :where(.accountCompactRows, .profileCompactRows) > * { padding-block: 14px; }
+.backyardV3 .accountDangerZone { border-color: #dec8c4; background: #fffaf7; }
+.backyardV3 :where(.consentScreen, .profileSetupScreen) { background: var(--by-ivory); }
+.backyardV3 :where(.consentCard, .profileSetupCard) { border-radius: var(--by-radius-lg); box-shadow: var(--by-shadow-raised); }
+.backyardV3 :where(.consentCard, .profileSetupCard) h1 { font-family: var(--by-editorial); font-size: 36px; font-weight: 400; letter-spacing: -.04em; color: var(--green); }
+.backyardV3 .oauthButton { min-height: 52px; border-radius: var(--by-radius-sm); font-weight: 600; }
+.backyardV3 .profileEditHeader h2 { font-family: var(--by-editorial); font-size: 30px; font-weight: 400; }
+.backyardV3 :where(.profileEditGrid, .profileSetupForm) { gap: 16px; }
+.backyardV3 .highContrast { --bg:#f7f8f3;--card:#fff;--ink:#102b20;--muted:#354f40;--line:#879a8a;--green:#063d26;--green2:#e4efdf;--soft:#f2f5ee; }
+.backyardV3 .highContrast .primary { outline:0; }
+.backyardV3 .highContrast .primary:focus-visible { outline:3px solid var(--by-gold);outline-offset:3px; }
+.backyardV3 .highContrast :where(button,input,select) { font-weight:650; }
+.backyardV3 .accessScreen { background:var(--by-ivory);padding:24px 16px max(24px,env(safe-area-inset-bottom)); }
+.backyardV3 .accessCard { padding:28px 24px;max-width:460px;border-radius:var(--by-radius-lg);background:var(--by-paper);box-shadow:var(--by-shadow-raised);border:1px solid var(--by-line); }
+.accessEditorial { position:relative;height:205px;margin:-28px -24px 24px;overflow:hidden;border-radius:28px 28px 0 0;background:var(--by-forest); }
+.accessEditorial img { object-fit:cover;object-position:50% 43%; }
+.accessEditorial::after { content:"";position:absolute;inset:0;background:linear-gradient(0deg,#072b21c7,transparent 85%); }
+.accessEditorial>span { position:absolute;z-index:1;left:24px;bottom:24px;color:#fff;font:400 28px/1 var(--by-editorial);letter-spacing:-.03em;text-align:left; }
+.accessEditorial em { font-weight:400; }
+.backyardV3 .splashCard .backyardLogoPicture { max-width:155px;margin-inline:auto; }
+.backyardV3 .splashCard .backyardSlogan,.backyardV3 .splashCard .golfBetsSlogan { display:none; }
+.backyardV3 .accessTagline { color:var(--by-gold);font-size:10px;font-weight:650;letter-spacing:.18em; }
+.backyardV3 .accessPromise { font:400 17px/1.5 var(--by-editorial);color:var(--by-muted);margin:16px 0 22px; }
+.backyardV3 .accessActions { gap:10px; }
+.backyardV3 .accessIntent { margin-block:18px; }
+.backyardV3 .accessCard .consentCheck { text-align:left;padding:12px;background:var(--soft);border-radius:var(--by-radius-sm); }
+.backyardV3 .betaPlayHero { display:grid;gap:24px;background:var(--by-forest); }
+.backyardV3 .betaPlayHeroActions { width:100%;max-width:none; }
+.backyardV3 .betaStatTiles article { border-radius:var(--by-radius);padding:20px 16px; }
+.backyardV3 .betaStatTiles article b { font:400 38px/1.1 var(--by-editorial);font-variant-numeric:tabular-nums; }
+.backyardV3 .betaAiInsight { background:var(--by-sage);border-color:var(--by-line); }
+.backyardV3 .betaAiInsight h2 { font-family:var(--by-editorial);font-size:27px; }
+.backyardV3 .betaAiInsight p { font-size:13px;line-height:1.65; }
+.backyardV3 :where(.betaCourseCard,.savedGroupItem,.groupPresetCard) { border-radius:var(--by-radius);padding:20px; }
+.backyardV3 .betaCourseCardHead h2 { font:400 25px/1.2 var(--by-editorial); }
+@media (max-width: 600px) {
+  .backyardV3 .card { padding: 18px; }
+  .backyardV3 :where(.hero, .holeHero) { padding: 22px; }
+  .backyardV3 :where(.primary, .secondary) { padding-inline: 14px; }
+  .backyardV3 :where(input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]), select, textarea) { font-size: 16px; }
+  .backyardV3 .profileOverviewCard { padding: 22px 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .backyardV3 *, .backyardV3 *::before, .backyardV3 *::after { scroll-behavior: auto !important; transition-duration: 0s !important; animation-duration: 0s !important; }
+}

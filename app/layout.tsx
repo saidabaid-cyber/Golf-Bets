@@ -1,4 +1,5 @@
 import "./globals.css";
+import "./design-system.css";
 import type { Viewport } from "next";
 import { PwaRuntime } from "./components/pwa-runtime";
 import { CaptureSocialProfileLink } from "./components/social-qr";
@@ -30,5 +31,5 @@ export const metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="es"><body><PwaRuntime /><ViewportNavigation /><CaptureSocialProfileLink />{children}</body></html>;
+  return <html lang="es"><body className="backyardV3"><PwaRuntime /><ViewportNavigation /><CaptureSocialProfileLink />{children}</body></html>;
 }
