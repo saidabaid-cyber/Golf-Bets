@@ -1,0 +1,331 @@
+{
+  "auditedAt": "2026-09-21",
+  "sourceRef": "bymeopxkxapfizeeqeyb",
+  "sourceReadOnly": true,
+  "initialCommit": "dbf30b080c8e76d3e56bab5c311a60e7ac65d897",
+  "buckets": [
+    {
+      "id": "scorecard-photos",
+      "mime": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ],
+      "limit": 8000000,
+      "public": false
+    },
+    {
+      "id": "the-backyard-site",
+      "mime": [
+        "text/html",
+        "text/css",
+        "application/javascript",
+        "image/svg+xml",
+        "image/png",
+        "image/jpeg"
+      ],
+      "limit": 5242880,
+      "public": true
+    },
+    {
+      "id": "feedback-private",
+      "mime": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ],
+      "limit": 2097152,
+      "public": false
+    }
+  ],
+  "schemas": [
+    {
+      "tables": 27,
+      "nspname": "auth",
+      "rls_tables": 16
+    },
+    {
+      "tables": 2,
+      "nspname": "equipment_research",
+      "rls_tables": 2
+    },
+    {
+      "tables": 2,
+      "nspname": "net",
+      "rls_tables": 0
+    },
+    {
+      "tables": 4,
+      "nspname": "private",
+      "rls_tables": 3
+    },
+    {
+      "tables": 104,
+      "nspname": "public",
+      "rls_tables": 104
+    },
+    {
+      "tables": 2,
+      "nspname": "realtime",
+      "rls_tables": 0
+    },
+    {
+      "tables": 8,
+      "nspname": "storage",
+      "rls_tables": 8
+    },
+    {
+      "tables": 2,
+      "nspname": "supabase_functions",
+      "rls_tables": 0
+    },
+    {
+      "tables": 1,
+      "nspname": "supabase_migrations",
+      "rls_tables": 0
+    },
+    {
+      "tables": 1,
+      "nspname": "vault",
+      "rls_tables": 0
+    }
+  ],
+  "extensions": [
+    {
+      "name": "plpgsql",
+      "version": "1.0"
+    },
+    {
+      "name": "pg_stat_statements",
+      "version": "1.11"
+    },
+    {
+      "name": "uuid-ossp",
+      "version": "1.1"
+    },
+    {
+      "name": "pgcrypto",
+      "version": "1.3"
+    },
+    {
+      "name": "supabase_vault",
+      "version": "0.3.1"
+    },
+    {
+      "name": "pg_net",
+      "version": "0.20.4"
+    },
+    {
+      "name": "http",
+      "version": "1.6"
+    },
+    {
+      "name": "pg_trgm",
+      "version": "1.6"
+    }
+  ],
+  "publicPolicies": 310,
+  "publicTriggers": 84,
+  "databaseVersion": "PostgreSQL 17.6 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 15.2.0, 64-bit",
+  "publicFunctions": 45,
+  "migrations": [
+    {
+      "version": "20260903085631",
+      "name": "202609010001_golf_bets_v3"
+    },
+    {
+      "version": "20260903085657",
+      "name": "202609010002_backyard_accounts_legal"
+    },
+    {
+      "version": "20260903085750",
+      "name": "202609020001_cloud_sync_polla_hardening"
+    },
+    {
+      "version": "20260903085916",
+      "name": "202609030003_function_privilege_hardening"
+    },
+    {
+      "version": "20260903132304",
+      "name": "function_privileges_repo_reconciliation"
+    },
+    {
+      "version": "20260904112153",
+      "name": "marketing_waitlist"
+    },
+    {
+      "version": "20260904132050",
+      "name": "repair_cloud_profiles_and_permissions"
+    },
+    {
+      "version": "20260904132120",
+      "name": "rules_ai_rate_limit"
+    },
+    {
+      "version": "20260904134101",
+      "name": "temporary_http_extension_for_site_healthcheck"
+    },
+    {
+      "version": "20260904134306",
+      "name": "public_marketing_site_bucket"
+    },
+    {
+      "version": "20260906061613",
+      "name": "allow_users_update_own_legal_acceptances"
+    },
+    {
+      "version": "20260906061910",
+      "name": "allow_specific_legal_consent_types"
+    },
+    {
+      "version": "20260908195537",
+      "name": "legal_evidence_events_append_only"
+    },
+    {
+      "version": "20260916191229",
+      "name": "equipment_ball_fitting"
+    },
+    {
+      "version": "20260916191238",
+      "name": "golf_profile_course_architecture"
+    },
+    {
+      "version": "20260916191245",
+      "name": "ai_processing_consents"
+    },
+    {
+      "version": "20260916191302",
+      "name": "phase2_social_groups_memberships"
+    },
+    {
+      "version": "20260916191308",
+      "name": "phase2_course_handicap_gps"
+    },
+    {
+      "version": "20260916191316",
+      "name": "phase2_live_rounds_notifications"
+    },
+    {
+      "version": "20260916191328",
+      "name": "phase2_shots_analytics"
+    },
+    {
+      "version": "20260916191336",
+      "name": "group_round_presets"
+    },
+    {
+      "version": "20260916191401",
+      "name": "user_statistics_reset"
+    },
+    {
+      "version": "20260916191425",
+      "name": "user_statistics_reset_idempotency"
+    },
+    {
+      "version": "20260916191433",
+      "name": "social_activity_v3"
+    },
+    {
+      "version": "20260916191446",
+      "name": "account_lifecycle_preview"
+    },
+    {
+      "version": "20260916191518",
+      "name": "social_service_privileges"
+    },
+    {
+      "version": "20260916191525",
+      "name": "ai_consent_onboarding_decisions"
+    },
+    {
+      "version": "20260916191532",
+      "name": "profile_visibility_public_friends"
+    },
+    {
+      "version": "20260917070829",
+      "name": "group_owner_returning_read"
+    },
+    {
+      "version": "20260917081443",
+      "name": "group_email_invitations"
+    },
+    {
+      "version": "20260917092620",
+      "name": "profile_progress_social_connections"
+    },
+    {
+      "version": "20260917134241",
+      "name": "confirmed_round_history_read"
+    },
+    {
+      "version": "20260917140234",
+      "name": "confirmed_participant_index_append"
+    },
+    {
+      "version": "20260918122331",
+      "name": "equipment_research_private_staging"
+    },
+    {
+      "version": "20260918122608",
+      "name": "equipment_research_private_ingest"
+    },
+    {
+      "version": "20260920185147",
+      "name": "course_catalog_feedback"
+    },
+    {
+      "version": "20260921002925",
+      "name": "feedback_internal_requests"
+    },
+    {
+      "version": "20260921013129",
+      "name": "feedback_attachment_lifecycle"
+    }
+  ],
+  "repositoryMigrations": [
+    "202609010001_golf_bets_v3.sql",
+    "202609010002_backyard_accounts_legal.sql",
+    "202609020001_cloud_sync_polla_hardening.sql",
+    "202609030001_function_privileges.sql",
+    "20260904013601_repair_cloud_profiles_and_permissions.sql",
+    "20260904104145_rules_ai_rate_limit.sql",
+    "20260905060434_add_express_betting_consent.sql",
+    "20260906193435_equipment_ball_fitting.sql",
+    "20260906211937_golf_profile_course_architecture.sql",
+    "20260908134650_ai_processing_consents.sql",
+    "202609100001_phase2_social_groups_memberships.sql",
+    "202609100002_phase2_course_handicap_gps.sql",
+    "202609100003_phase2_live_rounds_notifications.sql",
+    "202609100004_phase2_shots_analytics.sql",
+    "20260913175810_group_round_presets.sql",
+    "20260913205122_user_statistics_reset.sql",
+    "20260915114707_user_statistics_reset_idempotency.sql",
+    "20260915183026_social_activity_v3.sql",
+    "20260915203125_account_lifecycle_preview.sql",
+    "20260915203550_social_service_privileges.sql",
+    "20260916020557_ai_consent_onboarding_decisions.sql",
+    "20260916084954_profile_visibility_public_friends.sql",
+    "20260917070829_group_owner_returning_read.sql",
+    "20260917081443_group_email_invitations.sql",
+    "20260917092620_profile_progress_social_connections.sql",
+    "20260917134241_confirmed_round_history_read.sql",
+    "20260917140234_confirmed_participant_index_append.sql",
+    "20260920185147_course_catalog_feedback.sql",
+    "20260921002925_feedback_internal_requests.sql",
+    "20260921013129_feedback_attachment_lifecycle.sql"
+  ],
+  "edgeFunctions": [
+    {
+      "slug": "backyard-site",
+      "version": 1,
+      "verifyJWT": false,
+      "sha256": "0055718de4d4ced3e3e59f9efe8fb8679fe048c7d9d8abaab78df9a15d29e754"
+    },
+    {
+      "slug": "publish-backyard-static",
+      "version": 2,
+      "verifyJWT": false,
+      "sha256": "108cea147201ed637634b8eba35557e04abf43f3044c03e803b7902fbe0e7c5c"
+    }
+  ]
+}
