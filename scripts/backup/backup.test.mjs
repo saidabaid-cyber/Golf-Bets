@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { Readable, Writable } from 'node:stream';
 import { encrypt, decrypt, encryptionKey, verifyEncrypted } from './crypto.mjs';
-import { safeChild, databaseEnvironment, storageConfig, enumerateStorage, backupStorage, runBackup, verifyBackup, command, hashFile, listFiles, jsonFile, QA_REF, decryptBackup } from './core.mjs';
+import { safeChild, databaseEnvironment, storageConfig, enumerateStorage, backupStorage, runBackup, verifyBackup, command, hashFile, listFiles, jsonFile, QA_REF, OWNER_REF, decryptBackup, backupDatabase, assertDatabaseReadOnly, storageReadOnlyFetch } from './core.mjs';
 import { secretKinds } from './security-scan.mjs';
 import { environmentInventory } from './inventory.mjs';
 import { verifyDatabaseFile } from './core.mjs';
@@ -37,13 +37,126 @@ test('manifest rejects traversal, Windows drives, streams and absolute paths',()
   const root=resolve('backups');for(const path of ['../private','/root','C:/secret','a\\b','x:stream','a/../b','a//b',''])assert.throws(()=>safeChild(root,path));
   assert.equal(safeChild(root,'storage/object.enc'),resolve(root,'storage/object.enc'));
 });
-test('database credentials only in child environment, readonly source fixed to QA',()=>{
+test('QA database remains authorized with forced readonly options and TLS',()=>{
   const env={BACKUP_SOURCE:'qa',BACKUP_EXPECTED_REF:QA_REF,BACKUP_PGHOST:`db.${QA_REF}.supabase.co`,BACKUP_PGUSER:'postgres',BACKUP_PGPASSWORD:'synthetic-only'};
-  const pg=databaseEnvironment(env);assert.equal(pg.PGOPTIONS,'-c default_transaction_read_only=on');assert.equal(pg.PGSSLMODE,'verify-full');
+  const pg=databaseEnvironment(env);assert.equal(pg.PGOPTIONS,'-c default_transaction_read_only=on -c transaction_read_only=on');assert.equal(pg.PGSSLMODE,'verify-full');
   assert.equal(pg.PGPASSWORD,env.BACKUP_PGPASSWORD);
   for(const change of [{BACKUP_EXPECTED_REF:'wrong'},{BACKUP_PGHOST:'db.zhqmlpljloumldaczcfp.supabase.co'},{BACKUP_PGHOST:'evil.example'},{BACKUP_PGPORT:'6543'},{BACKUP_SOURCE:'production'}])assert.throws(()=>databaseEnvironment({...env,...change}));
   assert.ok(databaseEnvironment({...env,BACKUP_PGHOST:'aws-0-us-east-1.pooler.supabase.com',BACKUP_PGUSER:`postgres.${QA_REF}`}));
   assert.throws(()=>databaseEnvironment({...env,BACKUP_PGHOST:'aws-0-us-east-1.pooler.supabase.com'}));
+});
+const ownerEnv=()=>({BACKUP_SOURCE:'owner',BACKUP_EXPECTED_REF:OWNER_REF,BACKUP_PGHOST:`db.${OWNER_REF}.supabase.co`,BACKUP_PGUSER:'postgres',BACKUP_PGPASSWORD:'synthetic-only',...keyEnv()});
+test('owner database accepts only the verified direct project identity; no generic production override',()=>{
+  const env=ownerEnv(),pg=databaseEnvironment(env);
+  assert.equal(OWNER_REF,'zhqmlpljloumldaczcfp');assert.equal(pg.PGHOST,`db.${OWNER_REF}.supabase.co`);assert.equal(pg.PGSSLMODE,'verify-full');
+  for(const change of [
+    {BACKUP_SOURCE:'production'},{BACKUP_SOURCE:'qa'},{BACKUP_SOURCE:'local'},
+    {BACKUP_EXPECTED_REF:QA_REF},{BACKUP_EXPECTED_REF:'another-project'},
+    {BACKUP_PGHOST:`db.${QA_REF}.supabase.co`},{BACKUP_PGHOST:'localhost'},{BACKUP_PGHOST:'127.0.0.1'},
+    {BACKUP_PGHOST:'db.other.supabase.co',BACKUP_EXPECTED_REF:'other',BACKUP_ALLOW_PRODUCTION:'true'},
+    {BACKUP_PGHOST:`db.${OWNER_REF}.supabase.co.evil.invalid`},{BACKUP_PGHOST:`db.${OWNER_REF}.supabase.co,evil.invalid`},
+    {BACKUP_PGHOST:'aws-0-us-east-1.pooler.supabase.com',BACKUP_PGUSER:`postgres.${OWNER_REF}`},
+    {BACKUP_PGUSER:`postgres.${QA_REF}`},{BACKUP_PGUSER:'other'},
+    {BACKUP_PGPORT:'6543'},{BACKUP_PGPORT:'5433'},
+    {BACKUP_PGDATABASE:'host=evil.invalid dbname=postgres'},
+    {BACKUP_PGDATABASE:'postgresql://evil.invalid/postgres'}, {BACKUP_PGDATABASE:'another_database'}
+  ])assert.throws(()=>databaseEnvironment({...env,...change}),undefined,JSON.stringify(Object.keys(change)));
+  assert.ok(databaseEnvironment({...env,BACKUP_SOURCE:'local',BACKUP_PGHOST:'127.0.0.1',BACKUP_PGPORT:'54322',BACKUP_PGDATABASE:'test_local'}));
+});
+test('inherited libpq settings and alternate connection strings cannot redirect or disable readonly',()=>{
+  const pg=databaseEnvironment({...ownerEnv(),PATH:'test-path',PGHOSTADDR:'203.0.113.10',pghostaddr:'203.0.113.11',PGSERVICE:'untrusted',PGSERVICEFILE:'untrusted',PGDATABASE:'host=untrusted',PGOPTIONS:'-c default_transaction_read_only=off',pgoptions:'-c transaction_read_only=off',PGSSLMODE:'disable',BACKUP_STORAGE_KEY:'synthetic-storage-key'});
+  assert.equal(pg.PATH,'test-path');assert.equal(pg.PGHOSTADDR,undefined);assert.equal(pg.pghostaddr,undefined);assert.equal(pg.pgoptions,undefined);
+  assert.equal(pg.PGSERVICE,'');assert.equal(pg.PGSERVICEFILE,'');assert.equal(pg.PGSSLMODE,'verify-full');assert.equal(pg.PGDATABASE,'postgres');
+  assert.equal(pg.PGOPTIONS,'-c default_transaction_read_only=on -c transaction_read_only=on');
+  assert.ok(!Object.keys(pg).some(k=>k.startsWith('BACKUP_')));
+});
+function databaseTools(replies=['on\non\n']){
+  const calls=[];let checks=0;
+  return{calls,tools:{
+    command:async(executable,args,{env})=>{
+      calls.push({executable,args,env});
+      if(executable==='psql'){const result=replies[Math.min(checks++,replies.length-1)];if(result instanceof Error)throw result;return result;}
+      return 'pg_dump (PostgreSQL) 17.11\n';
+    },
+    encryptedCommand:async(executable,args,file,key,env,input)=>{calls.push({executable,args,file,key,env,input});}
+  }};
+}
+test('both SHOW checks are mandatory before schema/full exports; every tool gets readonly startup',async()=>{
+  for(const schemaOnly of [false,true]){
+    const env=ownerEnv(),fixture=databaseTools(),result=await backupDatabase(await temp(),env,schemaOnly,fixture.tools);
+    assert.equal(result.state,'PASS');
+    const calls=fixture.calls,checks=calls.filter(c=>c.executable==='psql');assert.equal(checks.length,schemaOnly?1:2);
+    for(const c of calls){assert.equal(c.env.PGOPTIONS,'-c default_transaction_read_only=on -c transaction_read_only=on');assert.ok(!c.args.some(a=>a.includes(env.BACKUP_PGPASSWORD)));assert.equal(c.env.BACKUP_ENCRYPTION_KEY,undefined);}
+    for(const c of checks){assert.ok(c.args.includes('-X'));assert.ok(c.args.includes('--no-password'));assert.ok(c.args.includes('--set=ON_ERROR_STOP=1'));assert.deepEqual(c.args.filter(a=>a.startsWith('--command=')),['--command=SHOW default_transaction_read_only;','--command=SHOW transaction_read_only;']);}
+    const exports=calls.filter(c=>c.file);assert.equal(exports.length,schemaOnly?1:4);
+    assert.ok(calls.indexOf(checks[0])<calls.indexOf(exports[0]));
+    if(!schemaOnly){assert.ok(calls.indexOf(checks[1])<calls.indexOf(exports[3]));assert.equal(exports[3].executable,'pg_dumpall');}
+    for(const c of exports){assert.ok(c.file.endsWith('.enc'));assert.equal(c.key.length,32);if(c.executable==='pg_restore'){assert.ok(c.args.includes('--file=-'));assert.ok(c.input.endsWith('.enc'));assert.ok(!c.args.some(a=>a.startsWith('--dbname')));}}
+  }
+});
+test('off, partial, malformed or failed read-only checks abort before any dump or output directory',async()=>{
+  for(const output of ['off\non\n','on\noff\n','off\noff\n','on\n','','on\non\non\n','on\non\nprivate-diagnostic',null,new Error('private-diagnostic')]){
+    for(const schemaOnly of [false,true]){
+      const dir=await temp(),fixture=databaseTools([output]);
+      await assert.rejects(backupDatabase(dir,ownerEnv(),schemaOnly,fixture.tools),e=>/READ_ONLY_/.test(e.message)&&!e.message.includes('private-diagnostic'));
+      assert.equal(fixture.calls.filter(c=>c.file).length,0);assert.deepEqual(await readdir(dir),[]);
+    }
+  }
+  await assertDatabaseReadOnly(databaseEnvironment(ownerEnv()),databaseTools(['on\r\non\r\n']).tools.command);
+});
+test('a changed role-export read-only check aborts instead of running pg_dumpall',async()=>{
+  const fixture=databaseTools(['on\non\n','on\noff\n']);
+  await assert.rejects(backupDatabase(await temp(),ownerEnv(),false,fixture.tools),/READ_ONLY_NOT_CONFIRMED/);
+  assert.equal(fixture.calls.filter(c=>c.file&&c.executable==='pg_dumpall').length,0);
+});
+test('DB and Storage reject missing encryption before connecting or writing local payloads',async()=>{
+  const env=ownerEnv();delete env.BACKUP_ENCRYPTION_KEY;
+  const dir=await temp(),fixture=databaseTools();let storageCreated=false;
+  await assert.rejects(backupDatabase(dir,env,false,fixture.tools),/ENCRYPTION_KEY/);assert.equal(fixture.calls.length,0);
+  await assert.rejects(backupStorage(dir,{...env,BACKUP_STORAGE_URL:`https://${OWNER_REF}.supabase.co`,BACKUP_STORAGE_KEY:'synthetic'},()=>{storageCreated=true;}),/ENCRYPTION_KEY/);
+  assert.equal(storageCreated,false);assert.deepEqual(await readdir(dir),[]);
+});
+test('provider and process diagnostics never appear in thrown errors',async()=>{
+  await assert.rejects(command(process.execPath,['-e',"process.stderr.write('private-diagnostic');process.exit(1)"]),e=>e.message==='COMMAND_FAILED');
+  await assert.rejects(assertDatabaseReadOnly(databaseEnvironment(ownerEnv()),async()=>{throw Error('private-diagnostic');}),e=>e.message==='READ_ONLY_CHECK_FAILED');
+});
+test('Storage binds source/ref and exact HTTPS URL; modern keys pass through only in memory',()=>{
+  for(const [source,ref]of [['owner',OWNER_REF],['qa',QA_REF]]){
+    const env={BACKUP_SOURCE:source,BACKUP_EXPECTED_REF:ref,BACKUP_STORAGE_URL:`https://${ref}.supabase.co`,BACKUP_STORAGE_KEY:'sb_secret_'+'synthetic-fixture'};
+    assert.equal(storageConfig(env).key,env.BACKUP_STORAGE_KEY);
+    for(const change of [{BACKUP_SOURCE:'production'},{BACKUP_EXPECTED_REF:'other'},
+      {BACKUP_STORAGE_URL:`https://${ref===OWNER_REF?QA_REF:OWNER_REF}.supabase.co`},
+      {BACKUP_STORAGE_URL:env.BACKUP_STORAGE_URL+'/'},{BACKUP_STORAGE_URL:env.BACKUP_STORAGE_URL+'.evil.invalid'},
+      {BACKUP_STORAGE_URL:env.BACKUP_STORAGE_URL+'?override=true'},{BACKUP_STORAGE_URL:env.BACKUP_STORAGE_URL.replace('https:','http:')},
+      {BACKUP_STORAGE_URL:'https://other.supabase.co',BACKUP_EXPECTED_REF:'other',BACKUP_ALLOW_PRODUCTION:'true'}
+    ])assert.throws(()=>storageConfig({...env,...change}),/STORAGE_REF_NOT_AUTHORIZED/);
+  }
+});
+test('Storage transport allows only bucket list, object list and download, without redirects',async()=>{
+  const origin=`https://${OWNER_REF}.supabase.co`,calls=[],transport=storageReadOnlyFetch(origin,async(input,init)=>{calls.push({input,init});return new Response('[]');});
+  for(const [path,method]of [['/storage/v1/bucket','GET'],['/storage/v1/object/list/private','POST'],['/storage/v1/object/private/folder/a.png','GET'],['/storage/v1/object/authenticated/private/a.png','GET']])await transport(origin+path,{method});
+  assert.equal(calls.length,4);assert.ok(calls.every(c=>c.init.redirect==='error'&&c.init.signal));
+  for(const [path,method]of [['/storage/v1/bucket','POST'],['/storage/v1/bucket/private','DELETE'],['/storage/v1/object/private/a.png','PUT'],['/storage/v1/object/private/a.png','POST'],['/storage/v1/object/private/a.png','DELETE'],['/storage/v1/object/move','POST'],['/auth/v1/token','POST'],['/rest/v1/feedback','GET']])assert.throws(()=>transport(origin+path,{method}),/STORAGE_OPERATION_NOT_READ_ONLY/);
+  assert.throws(()=>transport(`https://${QA_REF}.supabase.co/storage/v1/bucket`),/CROSS_ORIGIN/);
+  assert.throws(()=>transport(origin.replace('https://','https://synthetic@')+'/storage/v1/bucket'),/CROSS_ORIGIN/);
+  assert.equal(calls.length,4);
+});
+test('actual Supabase SDK with modern secret credential uses read-only Storage routes and encrypted payloads',async(t)=>{
+  const env={...ownerEnv(),BACKUP_STORAGE_URL:`https://${OWNER_REF}.supabase.co`,BACKUP_STORAGE_KEY:'sb_secret_'+'synthetic-fixture'},calls=[];
+  t.mock.method(globalThis,'fetch',async(input,init)=>{
+    const url=new URL(input),headers=new Headers(init.headers);calls.push({path:url.pathname,method:init.method||'GET'});
+    assert.equal(url.origin,env.BACKUP_STORAGE_URL);assert.equal(headers.get('apikey'),env.BACKUP_STORAGE_KEY);
+    assert.equal(init.redirect,'error');
+    if(url.pathname==='/storage/v1/bucket')return Response.json([{id:'private',public:false}]);
+    if(url.pathname==='/storage/v1/object/list/private')return Response.json([{id:'fixture-id',name:'a.png',metadata:{size:3}}]);
+    if(url.pathname==='/storage/v1/object/private/a.png')return new Response('abc');
+    throw Error('unexpected route');
+  });
+  const dir=await temp(),result=await backupStorage(dir,env);assert.equal(result.state,'PASS');assert.equal(result.objects,1);
+  assert.deepEqual(calls.map(c=>c.method),['GET','POST','GET','GET','POST']);
+  assert.ok((await listFiles(dir)).every(f=>f.endsWith('.enc')));
+  const chunks=[];await decrypt(join(dir,'storage/index.json.enc'),new Writable({write(b,_,cb){chunks.push(b);cb();}}),encryptionKey(env));
+  const index=JSON.parse(Buffer.concat(chunks));assert.equal(index.objects[0].name,'a.png');assert.equal(await verifyEncrypted(join(dir,index.objects[0].file),encryptionKey(env)),3);
 });
 test('Storage refuses wrong ref before making any request',()=>{
   assert.throws(()=>storageConfig({BACKUP_SOURCE:'qa',BACKUP_EXPECTED_REF:QA_REF,BACKUP_STORAGE_URL:'https://zhqmlpljloumldaczcfp.supabase.co',BACKUP_STORAGE_KEY:'test'}));

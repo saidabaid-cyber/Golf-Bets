@@ -14,7 +14,9 @@ Do not turn the private buckets public on restore. Bucket configuration alone do
 
 ## Export
 
-Inject BACKUP_SOURCE=qa, exact BACKUP_EXPECTED_REF, BACKUP_STORAGE_URL and a server credential in BACKUP_STORAGE_KEY through the trusted process environment; also provide BACKUP_ENCRYPTION_KEY. No .env autodiscovery or Auth SMTP credential reuse occurs.
+Inject BACKUP_SOURCE=qa or the explicitly authorized owner source, the matching hard-coded BACKUP_EXPECTED_REF, exact BACKUP_STORAGE_URL and a server credential in BACKUP_STORAGE_KEY through the trusted process environment; also provide BACKUP_ENCRYPTION_KEY. Owner is only ref `zhqmlpljloumldaczcfp` at `https://zhqmlpljloumldaczcfp.supabase.co`; another URL/ref is rejected. Prefer a modern Supabase secret API key (`sb_secret_…`); the installed SDK supports it. Legacy authorized service-role credentials remain supported. No .env autodiscovery or Auth SMTP credential reuse occurs.
+
+Transport permits only GET bucket inventory, POST object listing (a read-only API) and GET object download on the pinned origin, with redirects disabled. Upload, bucket creation/edit/deletion, object mutation and Auth routes are rejected before transport. Key compatibility is covered by the real SDK against a synthetic HTTP transport, not a live owner export. All payloads and private inventories require encryption before local writes.
 
 ```sh
 npm run backup:storage

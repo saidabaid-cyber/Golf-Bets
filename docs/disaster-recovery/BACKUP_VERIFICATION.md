@@ -26,9 +26,14 @@ A recognizable header is only structural validation; restore to a disposable tar
 
 ## Automated regressions
 
-20 recovery tests cover:
+Recovery tests cover (the original 20-test execution is preserved below):
 - Real streaming encryption/decryption, wrong key, tampering/truncation, zero-byte Storage content, no overwrite.
-- QA-only DB/Storage guards, process-only credentials and read-only PG option.
+- Separate local/QA/owner DB allowlists, exact Storage origins, process-only credentials and forced read-only PG options.
+- Two mandatory SHOW results: off, missing, malformed or failed checks abort exports, including the separate roles preflight.
+- No libpq routing/connection-string override, no generic Production bypass, no unverified owner pooler host.
+- DB/Storage encryption required before connection; modern secret-key compatibility with the installed Supabase SDK and a synthetic HTTP transport.
+- Storage transport accepts only list/download endpoints and rejects mutations, other origins and redirects.
+- Provider/process error diagnostics are not forwarded as messages.
 - Recursive/paginated Storage listing beyond 1000 objects, encrypted real file bytes with a synthetic transport, stable-list detection.
 - Missing-access continuation, fresh snapshot paths and independent Git clone/fsck.
 - Served-path prevention, false-completeness claims, unlisted/missing artifacts and path traversal.
@@ -38,7 +43,7 @@ A recognizable header is only structural validation; restore to a disposable tar
 - Empty-only .env.example and inventory/documentation coverage.
 - Gitignore protects private artifacts but not migrations or .env.example.
 
-No Storage mock is claimed as a live remote restoration.
+No Storage mock is claimed as a live remote restoration. Owner allowlist tests do not execute an owner backup or assert that real credentials/direct connectivity are available. The owner project/ref/direct host were verified from project metadata; its Session Pooler host was not, so remains disabled. Real owner backup and restore evidence must come from a separately authorized execution.
 
 ## Read-only external evidence — 2026-09-21
 
@@ -85,3 +90,14 @@ Implementation snapshot commit: `9bafd498122981a8c44b51e4f1657adc6f88f7b0`.
 - No live database restore, object download/upload, external backup copy, Auth login or deployment is claimed by these results.
 
 Overall: source recovery demonstrated; full disaster recovery remains **PARTIAL** pending the explicitly listed external custody/access and clean-target drill.
+
+## Owner read-only allowlist change — 2026-09-21
+
+Branch: `infra/disaster-recovery-clean`; starting commit: `002a82f28a7d0d4d75cfb215e17bf43ff10327f4`.
+
+- Project metadata confirms owner ref `zhqmlpljloumldaczcfp`, direct host `db.zhqmlpljloumldaczcfp.supabase.co`, PostgreSQL 17. No application rows, Auth records or Storage objects were read for this change.
+- Full `npm test`: **2,152 application + 30 recovery = 2,182 PASS**, 0 failures, 0 skipped. Recovery adds 10 regressions covering the owner allowlist, libpq override rejection, both SHOW checks, roles recheck, mandatory encryption, diagnostic redaction and read-only SDK Storage transport.
+- `tsc --noEmit`: PASS. `npm run lint`: PASS, no warnings. `npm run build`: PASS (local Next build only).
+- Tracked-text security scan: 884 files, 0 high-confidence findings; no secret values printed. This is not a repeat of the earlier full-history scan.
+- Vercel rules for both infrastructure branches remain false, with no edit to vercel.json. No PR, merge, deployment, migration, source write or real owner backup was run.
+- Tests use synthetic local fixtures/transports. They do not claim live database connectivity or recovery success. Owner Session Pooler support remains blocked pending verification of its exact hostname; direct-host support is enabled without a free-form bypass.

@@ -9,6 +9,7 @@ import { Readable, Writable } from 'node:stream';
 import { encryptionKey, encrypt, decrypt, verifyEncrypted } from './crypto.mjs';
 
 export const QA_REF = 'bymeopxkxapfizeeqeyb';
+export const OWNER_REF = 'zhqmlpljloumldaczcfp';
 export const FORMAT = 1;
 const outside = (rel) => rel === '..' || rel.startsWith('..' + sep) || isAbsolute(rel);
 export class BackupError extends Error { constructor(code, state = 'FAIL') { super(code); this.code = code; this.state = state; } }
@@ -66,17 +67,39 @@ export function databaseEnvironment(env) {
   const local = env.BACKUP_SOURCE === 'local' && ['localhost', '127.0.0.1', '::1'].includes(host);
   const qa = env.BACKUP_SOURCE === 'qa' && env.BACKUP_EXPECTED_REF === QA_REF &&
     ((host === `db.${QA_REF}.supabase.co` && user === 'postgres') || (/^aws-[a-z0-9-]+\.pooler\.supabase\.com$/.test(host) && user === `postgres.${QA_REF}`));
-  if (!local && !qa) throw new BackupError('SOURCE_NOT_AUTHORIZED_QA_OR_LOCAL');
-  if (!/^\d{2,5}$/.test(env.BACKUP_PGPORT || '5432') || Number(env.BACKUP_PGPORT || '5432') > 65535 || env.BACKUP_PGPORT === '6543') throw new BackupError('USE_DIRECT_OR_SESSION_POOLER');
-  return { ...env, PGHOST: host, PGUSER: user, PGPASSWORD: env.BACKUP_PGPASSWORD,
-    PGDATABASE: env.BACKUP_PGDATABASE || 'postgres', PGPORT: env.BACKUP_PGPORT || '5432',
-    PGSERVICE: '', PGSERVICEFILE: '', PGPASSFILE: '', PGOPTIONS: '-c default_transaction_read_only=on',
+  // Only the owner's verified direct host is pinned. Do not guess a pooler cluster
+  // or authorize all shared pooler hosts; a pooler needs separately verified metadata.
+  const owner = env.BACKUP_SOURCE === 'owner' && env.BACKUP_EXPECTED_REF === OWNER_REF &&
+    host === `db.${OWNER_REF}.supabase.co` && user === 'postgres';
+  if (!local && !qa && !owner) throw new BackupError('SOURCE_NOT_AUTHORIZED');
+  const port = env.BACKUP_PGPORT || '5432', database = env.BACKUP_PGDATABASE || 'postgres';
+  if (!/^\d{2,5}$/.test(port) || Number(port) > 65535 || port === '6543' || (!local && port !== '5432')) throw new BackupError('USE_DIRECT_OR_SESSION_POOLER');
+  // libpq expands a dbname containing '=' or a URI into connection parameters.
+  if (!/^[a-zA-Z0-9_][a-zA-Z0-9_$-]{0,62}$/.test(database) || (!local && database !== 'postgres')) throw new BackupError('DATABASE_NAME_NOT_AUTHORIZED');
+  // Remove inherited libpq routing/options (including Windows case variants),
+  // and do not give PostgreSQL tools the Storage credential or encryption key.
+  const processEnv = Object.fromEntries(Object.entries(env).filter(([name]) => !/^(PG|BACKUP_)/i.test(name)));
+  return { ...processEnv, PGHOST: host, PGUSER: user, PGPASSWORD: env.BACKUP_PGPASSWORD,
+    PGDATABASE: database, PGPORT: port, PGSERVICE: '', PGSERVICEFILE: '', PGPASSFILE: '',
+    PGOPTIONS: '-c default_transaction_read_only=on -c transaction_read_only=on',
     PGSSLMODE: local ? 'disable' : 'verify-full', PGSSLROOTCERT: env.BACKUP_PGSSLROOTCERT || 'system', PGCONNECT_TIMEOUT: '15' };
 }
 export function storageConfig(env) {
   if (!env.BACKUP_STORAGE_URL || !env.BACKUP_STORAGE_KEY) throw new BackupError('SET_BACKUP_STORAGE_URL_AND_KEY', 'BLOCKED_EXTERNAL');
-  if (env.BACKUP_SOURCE !== 'qa' || env.BACKUP_EXPECTED_REF !== QA_REF || env.BACKUP_STORAGE_URL !== `https://${QA_REF}.supabase.co`) throw new BackupError('STORAGE_REF_NOT_AUTHORIZED');
+  const ref = env.BACKUP_SOURCE === 'qa' ? QA_REF : env.BACKUP_SOURCE === 'owner' ? OWNER_REF : null;
+  if (!ref || env.BACKUP_EXPECTED_REF !== ref || env.BACKUP_STORAGE_URL !== `https://${ref}.supabase.co`) throw new BackupError('STORAGE_REF_NOT_AUTHORIZED');
   return { url: env.BACKUP_STORAGE_URL, key: env.BACKUP_STORAGE_KEY };
+}
+export async function assertDatabaseReadOnly(pg, execute = command) {
+  let output;
+  try {
+    output = await execute('psql', ['-X', '--no-password', '--tuples-only', '--no-align', '--set=ON_ERROR_STOP=1',
+      '--command=SHOW default_transaction_read_only;', '--command=SHOW transaction_read_only;'], { env: pg });
+  } catch (error) {
+    // Never relay provider diagnostics or output that could contain secrets.
+    throw new BackupError('READ_ONLY_CHECK_FAILED', error instanceof BackupError ? error.state : 'FAIL');
+  }
+  if (typeof output !== 'string' || !/^on\r?\non\r?\n?$/.test(output)) throw new BackupError('READ_ONLY_NOT_CONFIRMED');
 }
 async function encryptedCommand(executable, args, file, key, env, encryptedInput) {
   const child = spawn(executable, args, { env, shell: false, windowsHide: true, stdio: [encryptedInput ? 'pipe' : 'ignore', 'pipe', 'pipe'] });
@@ -86,23 +109,25 @@ async function encryptedCommand(executable, args, file, key, env, encryptedInput
   try { await Promise.all([completed, encrypt(child.stdout, file, key), encryptedInput ? decrypt(encryptedInput, child.stdin, key) : Promise.resolve()]); }
   finally { clearTimeout(timer); if (child.exitCode === null) child.kill(); }
 }
-export async function backupDatabase(dir, env, schemaOnly = false) {
+export async function backupDatabase(dir, env, schemaOnly = false, tools = { command, encryptedCommand }) {
   const pg = databaseEnvironment(env), key = encryptionKey(env);
-  await command('pg_dump', ['--version'], { env: pg });
+  await tools.command('pg_dump', ['--version'], { env: pg });
+  await assertDatabaseReadOnly(pg, tools.command);
   await mkdir(resolve(dir, 'database'), { mode: 0o700 });
   if (schemaOnly) {
-    await encryptedCommand('pg_dump', ['--schema-only', '--no-owner', '--no-password'], resolve(dir, 'database/schema.sql.enc'), key, pg);
+    await tools.encryptedCommand('pg_dump', ['--schema-only', '--no-owner', '--no-password'], resolve(dir, 'database/schema.sql.enc'), key, pg);
     return { state: 'PASS', coverage: 'schema only; not data or Storage bytes' };
   }
-  await command('pg_restore', ['--version'], { env: pg });
-  await command('pg_dumpall', ['--version'], { env: pg });
+  await tools.command('pg_restore', ['--version'], { env: pg });
+  await tools.command('pg_dumpall', ['--version'], { env: pg });
   const archive = resolve(dir, 'database/full.dump.enc');
-  await encryptedCommand('pg_dump', ['--format=custom', '--no-owner', '--no-password'], archive, key, pg);
+  await tools.encryptedCommand('pg_dump', ['--format=custom', '--no-owner', '--no-password'], archive, key, pg);
   // Derive both views from ONE logical snapshot, not two inconsistent pg_dump runs.
-  await encryptedCommand('pg_restore', ['--schema-only', '--no-owner', '--file=-'], resolve(dir, 'database/schema.sql.enc'), key, pg, archive);
-  await encryptedCommand('pg_restore', ['--data-only', '--no-owner', '--file=-'], resolve(dir, 'database/data.sql.enc'), key, pg, archive);
-  await encryptedCommand('pg_dumpall', ['--roles-only', '--no-role-passwords', '--no-password'], resolve(dir, 'database/roles.sql.enc'), key, pg);
-  return { state: 'PASS', coverage: 'one logical PostgreSQL archive; auth/storage schemas included when role permits; files separate', tool: (await command('pg_dump', ['--version'], { env: pg })).trim() };
+  await tools.encryptedCommand('pg_restore', ['--schema-only', '--no-owner', '--file=-'], resolve(dir, 'database/schema.sql.enc'), key, pg, archive);
+  await tools.encryptedCommand('pg_restore', ['--data-only', '--no-owner', '--file=-'], resolve(dir, 'database/data.sql.enc'), key, pg, archive);
+  await assertDatabaseReadOnly(pg, tools.command);
+  await tools.encryptedCommand('pg_dumpall', ['--roles-only', '--no-role-passwords', '--no-password'], resolve(dir, 'database/roles.sql.enc'), key, pg);
+  return { state: 'PASS', readOnlyPreflight: 'PASS', coverage: 'one logical PostgreSQL archive; auth/storage schemas included when role permits; files separate', tool: (await tools.command('pg_dump', ['--version'], { env: pg })).trim() };
 }
 export async function enumerateStorage(client) {
   const { data: buckets, error } = await client.storage.listBuckets();
@@ -131,13 +156,22 @@ export async function enumerateStorage(client) {
   }
   return { buckets, objects: objects.sort((a,b) => `${a.bucket}/${a.name}`.localeCompare(`${b.bucket}/${b.name}`)) };
 }
+export function storageReadOnlyFetch(origin, transport = fetch) {
+  return (input, init) => {
+    const url = new URL(typeof input === 'string' ? input : input.url || input.href);
+    if (url.origin !== origin || url.username || url.password) throw new BackupError('CROSS_ORIGIN_STORAGE_REQUEST');
+    const method = (init?.method || input.method || 'GET').toUpperCase();
+    // Storage's object-list API is POST, but read-only. No other POST is allowed.
+    const allowed = (method === 'GET' && (url.pathname === '/storage/v1/bucket' || /^\/storage\/v1\/object\/(?:authenticated\/)?[^/]+\/.+/.test(url.pathname))) ||
+      (method === 'POST' && /^\/storage\/v1\/object\/list\/[^/]+$/.test(url.pathname));
+    if (!allowed) throw new BackupError('STORAGE_OPERATION_NOT_READ_ONLY');
+    return transport(input, { ...init, redirect: 'error', signal: AbortSignal.timeout(120000) });
+  };
+}
 export async function backupStorage(dir, env, clientFactory) {
   const config = storageConfig(env), key = encryptionKey(env);
   const factory = clientFactory || (await import('@supabase/supabase-js')).createClient;
-  const client = factory(config.url, config.key, { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: (url, init) => {
-    if (new URL(typeof url === 'string' ? url : url.url || url.href).origin !== config.url) throw new BackupError('CROSS_ORIGIN_STORAGE_REQUEST');
-    return fetch(url, { ...init, redirect: 'error', signal: AbortSignal.timeout(120000) });
-  } } });
+  const client = factory(config.url, config.key, { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: storageReadOnlyFetch(config.url) } });
   const before = await enumerateStorage(client);
   await mkdir(resolve(dir, 'storage/objects'), { recursive: true, mode: 0o700 });
   for (const object of before.objects) {
@@ -172,7 +206,7 @@ export async function runBackup({ repo = process.cwd(), env = process.env, only 
   if (await realpath(root) !== root) throw new BackupError('BACKUP_ROOT_SYMLINK_NOT_ALLOWED');
   const dir = resolve(root, new Date().toISOString().replace(/[:.]/g, '-') + '-' + randomUUID().slice(0,8));
   await mkdir(dir, { mode: 0o700 }); await mkdir(resolve(dir, 'metadata'), { mode: 0o700 });
-  const manifest = { formatVersion: FORMAT, project: 'The Backyard', createdAt: new Date().toISOString(), gitCommit: (await command('git', ['rev-parse','HEAD'], { cwd: repo })).trim(), gitBranch: (await command('git', ['branch','--show-current'], { cwd: repo })).trim(), sourceRef: env.BACKUP_SOURCE === 'qa' ? QA_REF : env.BACKUP_SOURCE === 'local' ? 'local' : null, databaseBackup:false, schemaBackup:false, storageBackup:false, encryption:'AES-256-GCM / BYDR1; key NEVER stored here', components:{}, files:[] };
+  const manifest = { formatVersion: FORMAT, project: 'The Backyard', createdAt: new Date().toISOString(), gitCommit: (await command('git', ['rev-parse','HEAD'], { cwd: repo })).trim(), gitBranch: (await command('git', ['branch','--show-current'], { cwd: repo })).trim(), sourceRef: env.BACKUP_SOURCE === 'qa' ? QA_REF : env.BACKUP_SOURCE === 'owner' ? OWNER_REF : env.BACKUP_SOURCE === 'local' ? 'local' : null, databaseBackup:false, schemaBackup:false, storageBackup:false, encryption:'AES-256-GCM / BYDR1; key NEVER stored here', components:{}, files:[] };
   for (const [name, fn] of [['source', () => sourceBackup(dir,repo)], ['database', () => backupDatabase(dir,env,only === 'schema')], ['storage', () => backupStorage(dir,env)]]) {
     if (only && name !== (only === 'schema' ? 'database' : only)) { manifest.components[name] = { state:'BLOCKED_EXTERNAL', reason:'NOT_REQUESTED' }; continue; }
     try { manifest.components[name] = await fn(); }

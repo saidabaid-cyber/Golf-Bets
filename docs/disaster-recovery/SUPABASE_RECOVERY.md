@@ -59,7 +59,9 @@ The migration series contains replacements/privilege changes; not every file is 
 
 ## Generate a backup — no database writes
 
-Install official PostgreSQL 17-compatible clients. Load authorized QA connection information from the Supabase Connect panel into BACKUP_* env vars; use direct or **session** pooler, never transaction pooler. The script forces read-only sessions and verifies the host/ref/user allowlist before connecting.
+Install official PostgreSQL 17-compatible clients. Load the explicitly authorized source's connection information into BACKUP_* env vars. QA supports direct or **session** pooler, never transaction pooler. The owner source is separately pinned to ref `zhqmlpljloumldaczcfp`, direct host `db.zhqmlpljloumldaczcfp.supabase.co`, port 5432 and postgres database/user. Its exact Session Pooler host has not been verified and is not enabled; do not guess it from QA or region alone.
+
+Before connecting, the script validates source/ref/host/user/database/port and removes inherited libpq routing/options. It requires encryption and forces both read-only PostgreSQL startup settings for all commands. Separate psql preflights must return on for SHOW default_transaction_read_only and SHOW transaction_read_only, before the database/schema dump and again before the roles dump; otherwise export aborts. pg_restore only renders the already encrypted archive into encrypted SQL via stdout (`--file=-`), never connects to a restore target. No source DDL, writes, Auth/Storage changes or migrations occur. The new owner allowlist is preparation only, not evidence of a live owner backup.
 
 ```sh
 npm run backup:database

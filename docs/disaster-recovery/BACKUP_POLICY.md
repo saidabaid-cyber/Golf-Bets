@@ -1,6 +1,6 @@
 # Backup policy
 
-This is a proposed owner-operated policy, not a claim that scheduling or an external service is enabled. No new paid service was connected. Current automated code intentionally permits QA/localhost only.
+This is a proposed owner-operated policy, not a claim that scheduling or an external service is enabled. No new paid service was connected. Automated code permits localhost, isolated QA, and the separately authorized exact owner project for read-only encrypted backup; see the pinned identities in README. No arbitrary Production source is accepted.
 
 | Component | Frequency | Suggested retention |
 |---|---|---|
@@ -16,7 +16,7 @@ Retention is guidance only. Scripts never delete old backups. Legal holds, delet
 
 1. On a trusted private machine, fetch authorized code refs/tags and check clean worktree.
 2. Run `npm run backup:security -- --history` before distributing Git history. Investigate any finding; never print matched values.
-3. Inject QA BACKUP_* variables from a password manager. Generate one 32-byte cryptographically random encryption key per chosen rotation policy inside that manager; pass its base64 representation via environment, not shell history. Do not use an application service-role key as the encryption key.
+3. Explicitly choose the authorized source (`qa`, `local` or `owner`) and inject its dedicated BACKUP_* variables from a password manager. Never mix project credentials/refs. Generate one 32-byte cryptographically random encryption key per chosen rotation policy inside that manager; pass its base64 representation via environment, not shell history. Do not use an application service-role key as the encryption key.
 4. Run `npm run backup`. Review every component state; exit 2 needs action.
 5. Run `npm run backup:verify -- <snapshot>` using the same key.
 6. Copy the complete immutable snapshot, including metadata, to owner-approved independent storage; copy back to another machine and verify there.
