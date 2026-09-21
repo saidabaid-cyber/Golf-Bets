@@ -39,7 +39,7 @@ test("el invitado conserva su golf local sin presentar un perfil falso como pers
 test("Perfil separa el golf de la configuración sensible de Cuenta", () => {
   const ghin = readFileSync("app/components/ghin-placeholder.tsx", "utf8");
   assert.match(page, /<ProfileAccountPanel key=\{identity.userId\} view="profile"/);
-  assert.match(page, /<ProfileAccountPanel key=\{identity.userId\} view="account"/);
+  assert.match(page, /<ProfileAccountPanel key=\{`\$\{identity.userId\}:account:\$\{accountSection\}`\} view="account"/);
   assert.match(account, /Cuenta y privacidad/);
   assert.match(account, /view === "account"/);
   assert.match(account, /Gestionar consentimientos/);

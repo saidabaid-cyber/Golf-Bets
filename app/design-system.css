@@ -57,6 +57,8 @@
 .backyardV3 :where(.betaAiInsight, .betaTrendChart, .membershipBenefitList details) { border-radius: var(--by-radius); }
 .backyardV3 .membershipBenefitsPage>h1 { font: 400 38px/1.1 var(--by-editorial); letter-spacing: -.04em; color: var(--green); }
 .backyardV3 .membershipBenefitList summary { padding: 22px 18px; }
+.backyardV3 .membershipTopbar { max-width: 860px; margin-inline: auto; padding: calc(var(--by-space-4) + env(safe-area-inset-top)) var(--by-space-4) 0; }
+.backyardV3 .membershipTopbar a { display: inline-flex; align-items: center; text-decoration: none; }
 .backyardV3 .internalNotificationItem { border-radius: var(--by-radius-sm); padding: 16px; }
 .backyardV3 .internalNotificationItem.unread { border-color: #73917d; background: var(--green2); }
 .backyardV3 .profileOverviewCard { background: var(--by-forest); color: #fff; border: 0; border-radius: var(--by-radius-lg); padding: 24px; }

@@ -71,3 +71,12 @@ test("QR keeps sharing and clipboard but no longer renders a technical Preview U
   assert.match(source, /Compartir enlace/);
   assert.match(source, /Guardar \/ compartir imagen/);
 });
+
+test("membership return uses the shared touch control and safe-area instead of an unstyled legal link", () => {
+  const page = readFileSync("app/membership/page.tsx", "utf8");
+  assert.match(page, /className="membershipTopbar"/);
+  assert.match(page, /className="secondary" href="\/\?view=account"/);
+  assert.doesNotMatch(page, /legalTopbar/);
+  const css = readFileSync("app/design-system.css", "utf8");
+  assert.match(css, /\.membershipTopbar \{[^}]*env\(safe-area-inset-top\)/);
+});
