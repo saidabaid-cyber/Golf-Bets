@@ -60,6 +60,10 @@ test("profile preferences, notifications and privacy have distinct destinations"
   }
   assert.deepEqual(h.opened, ["preferences", "notifications", "privacy"]);
 });
+test("account destination remounts independently of retained profile component state", () => {
+  const page = readFileSync("app/page.tsx", "utf8");
+  assert.match(page, /key=\{\`\$\{identity\.userId\}:account:\$\{accountSection\}\`\}/);
+});
 test("QR keeps sharing and clipboard but no longer renders a technical Preview URL", () => {
   const source = readFileSync("app/components/social-qr.tsx", "utf8");
   assert.doesNotMatch(source, /<input[^>]*value=\{link\}/);
