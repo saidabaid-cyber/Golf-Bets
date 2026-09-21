@@ -85,7 +85,7 @@ test('master continues with independent Git backup when DB/Storage access missin
   await appendFile(join(first.directory,'source/HEAD.tar'),'corruption');await assert.rejects(verifyBackup(first.directory,{}),/CHECKSUM/);
 });
 test('backups never target a served or tracked app directory',async()=>{
-  const repo=await fixtureRepo();for(const path of [repo,join(repo,'public'),join(repo,'.git'),join(repo,'app')])await assert.rejects(runBackup({repo,env:{BACKUP_ROOT:path}}),/BACKUP_ROOT/);
+  const repo=await fixtureRepo();for(const path of [repo,join(repo,'public'),join(repo,'.git'),join(repo,'app'),join(repo,'..not-outside')])await assert.rejects(runBackup({repo,env:{BACKUP_ROOT:path}}),/BACKUP_ROOT/);
 });
 test('verifier refuses false database completeness and undeclared files',async()=>{
   const repo=await fixtureRepo(),b=await runBackup({repo,env:{}}),path=join(b.directory,'metadata/manifest.json');
@@ -139,4 +139,11 @@ test('ignore rules block backups, env and keys without hiding source migrations'
   }
   await assert.rejects(command('git',['check-ignore','.env.example'],{cwd:repo}));
   await assert.rejects(command('git',['check-ignore','supabase/migrations/202609010001_golf_bets_v3.sql'],{cwd:repo}));
+});
+
+test('decryption cannot write sensitive plaintext into the served application',async()=>{
+  const repo=await fixtureRepo(),backup=await runBackup({repo,env:{}});
+  const realRepo=fileURLToPath(new URL('../../',import.meta.url));
+  for(const target of [join(realRepo,'public','private-backup'),join(realRepo,'app','private-backup'),join(realRepo,'..not-outside')])
+    await assert.rejects(decryptBackup(backup.directory,target,{BACKUP_DECRYPT_ACK:'PRIVATE_LOCAL_DIRECTORY'}),/DECRYPT_TARGET_MUST_BE_PRIVATE_NOT_SERVED/);
 });

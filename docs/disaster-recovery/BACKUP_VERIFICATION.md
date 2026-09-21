@@ -26,13 +26,13 @@ A recognizable header is only structural validation; restore to a disposable tar
 
 ## Automated regressions
 
-19 initial recovery tests cover:
+20 recovery tests cover:
 - Real streaming encryption/decryption, wrong key, tampering/truncation, zero-byte Storage content, no overwrite.
 - QA-only DB/Storage guards, process-only credentials and read-only PG option.
 - Recursive/paginated Storage listing beyond 1000 objects, encrypted real file bytes with a synthetic transport, stable-list detection.
 - Missing-access continuation, fresh snapshot paths and independent Git clone/fsck.
 - Served-path prevention, false-completeness claims, unlisted/missing artifacts and path traversal.
-- Explicit local decryption acknowledgment and no overwrites.
+- Explicit local decryption acknowledgment, no overwrites, and rejection of plaintext output inside served/source directories (including misleading dot-prefix paths).
 - Secret pattern classification without matched-value output.
 - SQL/archive signature/definition validation.
 - Empty-only .env.example and inventory/documentation coverage.
@@ -65,3 +65,23 @@ No backups of Production, no migration apply, no Storage writes, no emails or de
 
 Record snapshot ID, commit, source ref, source-data cutoff, component states, verified file count, decrypt/check results, actual restored row/object counts, RLS tests, device checks, copy location and operator. Never include credentials or raw private data in the report. Repeat verification after copying media and after every tooling change. Keep failed snapshots; scripts do not erase them.
 
+
+## Executed repository backup drill — 2026-09-21
+
+Implementation snapshot commit: `9bafd498122981a8c44b51e4f1657adc6f88f7b0`.
+
+- First snapshot: `backups/2026-09-21T14-08-21-969Z-a2466c46`.
+- Second snapshot: `backups/2026-09-21T14-09-08-430Z-e4b2dabe`.
+- Both: source PASS, 55 refs, clean worktree; DB/Storage BLOCKED_EXTERNAL with explicit missing-variable codes. Master and verifier exit **2**, deliberately incomplete.
+- Both source manifests/hash checks and independent empty-repository bundle verification PASS.
+- Actual mirror restored from first bundle into ignored `restore-private/dr-git-first.git`; `git fsck --full` exit 0; recovered branch SHA exactly matches snapshot. No GitHub network used for restore.
+- Second snapshot did not overwrite the first; both remain locally available.
+- Three verified source payloads: HEAD.tar (14,141,440 bytes), refs.txt (4,638), repository.bundle (5,803,183).
+- Bundle SHA-256: `19dbeb05adf15b086d9865d4dccca5cf4ef4239273a974f5c401b3b74c387bd9`.
+- Tracked-file rescan after adding recovery files: 884 relevant text files, 0 findings. Initial reachable-history scan: 3,827, 0 findings. Only categories/paths would be printed on a match.
+- Existing .env.local has no server credential and is NOT bound to the authorized QA ref; it was not used for backup. No approved PostgreSQL connection or encryption key is present. Scripts correctly refuse implicit application-environment credential discovery.
+- Local quality gate: 2,152 application tests + 20 recovery tests; 0 failures / 0 skips. TypeScript noEmit PASS, ESLint PASS (0 warnings after cleanup), Next 16.3.3 production-mode build PASS. Local npm executable was not on PATH; commands were run through the installed npm 11.6.0 CLI with Node 24.19.0, preserving package scripts.
+- Subsequent documentation/security-only commits require a fresh final snapshot; identify its SHA/path from its own manifest, never relabel an older archive as the final commit.
+- No live database restore, object download/upload, external backup copy, Auth login or deployment is claimed by these results.
+
+Overall: source recovery demonstrated; full disaster recovery remains **PARTIAL** pending the explicitly listed external custody/access and clean-target drill.

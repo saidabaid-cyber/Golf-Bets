@@ -72,11 +72,10 @@ Keep the 32-byte encryption key in an independent password manager accessible wi
 node scripts/backup/decrypt-backup.mjs /private/snapshot /private/new-restore-staging
 ```
 
-The explicit BACKUP_DECRYPT_ACK is required. The output directory must not already exist. Decryption creates sensitive plaintext locally, not remote mutations. Protect permissions and do not upload the staging directory.
+The explicit BACKUP_DECRYPT_ACK is required. The output directory must not already exist and must be outside the app repo or inside its ignored restore-private staging area; served/source directories are rejected. Decryption creates sensitive plaintext locally, not remote mutations. Protect permissions and do not upload the staging directory.
 
 ## External configuration not representable as these app variables
 
 Export OAuth client registrations, authorized redirect URLs, Auth email templates/SMTP/signup policies, JWT signing/recovery strategy, Vault/column-encryption keys, Vercel scopes/protection, DNS zone, provider verification records and billing ownership to protected custody. CLI tokens for Supabase/Vercel/Git are tool authentication, not application requirements; use credential helpers/secret injection and their official setup instructions. Do not expose tokens while collecting metadata.
 
 Automated inventory command: `node scripts/backup/inventory.mjs`. It reports names and filenames only. Dynamic future configuration must be reviewed when added; the regression test ensures every currently detected name remains represented.
-
