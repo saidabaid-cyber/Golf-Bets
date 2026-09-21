@@ -14,3 +14,21 @@ tmp/
 
 .vercel
 supabase/.temp/
+
+# Disaster-recovery snapshots and sensitive restore staging are never source.
+backups/
+restore-private/
+*.dump
+*.backup
+*.bundle
+*.sql.enc
+*.dump.enc
+*.key
+*.pem
+*.p12
+*.pfx
+*.pgpass
+schema.sql
+data.sql
+roles.sql
+database.sql
