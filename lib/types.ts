@@ -714,6 +714,10 @@ export type PersonalOpponentResult = {
 };
 
 export type RoundSnapshot = {
+  /** In-progress rounds can be parked in history without entering statistics. */
+  pausedAt?: string;
+  resumeHoleIndex?: number;
+  resumeCourseSelected?: boolean;
   id: string;
   /** A declared gross total is not a per-hole card or adjusted gross score. */
   totalScoreCapture?: { version: 1; grossTotal: number; enteredAt: string; holesCompletedAt?: string };

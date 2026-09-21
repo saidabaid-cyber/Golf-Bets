@@ -44,12 +44,12 @@ export function canResumeActiveRound(input: {
   closed: boolean;
   draftAvailable: boolean;
   draft: { roundId: string; startedAt?: string | null; reviewPending?: boolean; lifecycleState?: string; courseSelected: boolean; ownerId: string; players: readonly { id: string }[]; scores: unknown };
-  history: readonly { id: string }[];
+  history: readonly { id: string; lifecycleState?: string }[];
 }) {
   const { draft } = input;
   if (!input.hydrated || !input.userId || input.workspaceOwnerId !== input.userId || input.closed || !input.draftAvailable) return false;
   if (!draft.roundId || !draft.courseSelected || draft.reviewPending || draft.lifecycleState === "completed" || draft.lifecycleState === "cancelled") return false;
-  if (input.history.some(round => round.id === draft.roundId)) return false;
+  if (input.history.some(round => round.id === draft.roundId && round.lifecycleState !== 'live' && round.lifecycleState !== 'cancelled')) return false;
   if (!draft.players.length || draft.players.length > 5 || !draft.players.some(player => player.id === draft.ownerId)) return false;
   if (new Set(draft.players.map(player => player.id)).size !== draft.players.length) return false;
   return deriveRoundLifecycleState({ ...draft }) === "live";

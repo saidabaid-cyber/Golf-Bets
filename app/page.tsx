@@ -105,6 +105,9 @@ import { readIndexPreference } from "../lib/backyard-index-preferences";
 import { useBackyardIndexPreference } from "./components/use-backyard-index-preference";
 import { selectedHandicapIndex } from "../lib/handicap-source";
 import { HomeDashboard, type ActiveRoundSummary } from "./components/home-dashboard";
+import { ProfileCompletionRing } from './components/profile-completion-ring';
+import { ModalShell } from './components/modal-shell';
+import { roundBetResult } from '../lib/round-betting-boundary';
 import { PlayHub } from "./components/play-hub";
 import { MoreHub } from "./components/more-hub";
 import type { AiRoundSetupTelemetry } from "./components/backyard-ai/ai-round-setup";
@@ -174,7 +177,7 @@ import { isPersonalSupplementalType, setRememberedCategoryEnabled } from "../lib
 import { buildPersonalOpponentResults } from "../lib/personal-opponents";
 import { persistPendingRoundReview, persistRoundDraftCheckpoint, ROUND_REVIEW_NOTICE } from "../lib/round-review";
 import { normalizeHistoricalRoundLifecycle, normalizeRoundStartedAt, withDerivedRoundLifecycle } from "../lib/round-lifecycle";
-import { backupActiveRoundForReplacement } from "../lib/new-round-safety";
+import { preserveUnfinishedRound, unfinishedRoundDraft } from '../lib/unfinished-round';
 import { normalizeAdvancedStats, normalizeScoreCaptureMode, updateAdvancedHoleStat } from "../lib/advanced-stats";
 import { viperQuantityFromPutts } from "../lib/round-capture";
 import { groupNassauPresentation, normalizeRoundPresentation } from "../lib/round-presentation";
@@ -414,6 +417,7 @@ function MoneyInput({ label, value, onChange }: { label: string; value: number; 
 type NewRoundIntent =
   | { kind: "blank" }
   | { kind: "scoreOnly" }
+  | { kind: "resume"; snapshot: RoundSnapshot }
   | { kind: "ai" }
   | { kind: "players"; players: Player[] }
   | { kind: "group"; group: FrequentGroup; selectedMemberIds: string[]; scoreOnly?: boolean };
@@ -720,8 +724,8 @@ function GolfBetsApp() {
   const completedHoles = useMemo(() => new Set(order.filter(number => players.length > 0 && players.every(player => typeof scores[number]?.[player.id] === "number"))), [order, players, scores]);
   const scoreDraft = useMemo(() => holeCapture(scores, scoreEdits, hole, players), [scores, scoreEdits, hole, players]);
   const scoreCaptureComplete = isHoleCaptureComplete(scores, scoreEdits, holeNumber, players);
-  const missingActiveHandicapPlayers = useMemo(() => missingHandicapsForActiveBets(players, bets, supplementalBets), [players, bets, supplementalBets]);
-  const betConfigurationIssues = useMemo(() => collectBetConfigurationIssues({
+  const missingActiveHandicapPlayers = useMemo(() => roundPresentation.playMode === 'score_only' ? [] : missingHandicapsForActiveBets(players, bets, supplementalBets), [roundPresentation.playMode, players, bets, supplementalBets]);
+  const betConfigurationIssues = useMemo(() => roundPresentation.playMode === 'score_only' ? [] : collectBetConfigurationIssues({
     players,
     ownerId,
     bets,
@@ -732,7 +736,7 @@ function GolfBetsApp() {
     roundHoles,
     startHole,
     handicapBasis: roundHandicapBasis,
-  }), [players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, roundHoles, startHole, roundHandicapBasis]);
+  }), [roundPresentation.playMode, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, roundHoles, startHole, roundHandicapBasis]);
   const roundSetupPreflight = useMemo(() => collectRoundSetupPreflightIssues({
     courseSelected,
     players,
@@ -1295,31 +1299,31 @@ function GolfBetsApp() {
 
   useEffect(() => () => { holeSummarySession.current?.dispose(); }, []);
 
-  const rabbits = useMemo(() => calculateRabbits(course, scores, players, bets.rabbits, order, roundHandicapBasis), [course, scores, players, bets.rabbits, order, roundHandicapBasis]);
-  const skins = useMemo(() => calculateSkins(course, scores, players, bets.skins, order, roundHandicapBasis), [course, scores, players, bets.skins, order, roundHandicapBasis]);
-  const units = useMemo(() => calculateUnits(players, unitEvents, bets.units, course, scores, order), [players, unitEvents, bets.units, course, scores, order]);
-  const monkey = useMemo(() => calculateMonkey(course, scores, players, bets.monkey, order, roundHandicapBasis), [course, scores, players, bets.monkey, order, roundHandicapBasis]);
-  const foursomes = useMemo(() => calculateFoursomes(course, scores, players, bets.foursome, segments, order, roundHandicapBasis), [course, scores, players, bets.foursome, segments, order, roundHandicapBasis]);
-  const ballFriend = useMemo(() => calculateBallFriend(course, scores, players, bets.ballFriend, ballFriendSetup, order, roundHandicapBasis), [course, scores, players, bets.ballFriend, ballFriendSetup, order, roundHandicapBasis]);
-  const personals = useMemo(() => calculatePersonalBets(personalBets, ownerId, players, course, scores, order), [personalBets, ownerId, players, course, scores, order]);
+  const rabbits = useMemo(() => roundBetResult(roundPresentation.playMode, 'calculateRabbits', () => calculateRabbits(course, scores, players, bets.rabbits, order, roundHandicapBasis)), [roundPresentation.playMode, course, scores, players, bets.rabbits, order, roundHandicapBasis]);
+  const skins = useMemo(() => roundBetResult(roundPresentation.playMode, 'calculateSkins', () => calculateSkins(course, scores, players, bets.skins, order, roundHandicapBasis)), [roundPresentation.playMode, course, scores, players, bets.skins, order, roundHandicapBasis]);
+  const units = useMemo(() => roundBetResult(roundPresentation.playMode, 'calculateUnits', () => calculateUnits(players, unitEvents, bets.units, course, scores, order)), [roundPresentation.playMode, players, unitEvents, bets.units, course, scores, order]);
+  const monkey = useMemo(() => roundBetResult(roundPresentation.playMode, 'calculateMonkey', () => calculateMonkey(course, scores, players, bets.monkey, order, roundHandicapBasis)), [roundPresentation.playMode, course, scores, players, bets.monkey, order, roundHandicapBasis]);
+  const foursomes = useMemo(() => roundBetResult(roundPresentation.playMode, 'calculateFoursomes', () => calculateFoursomes(course, scores, players, bets.foursome, segments, order, roundHandicapBasis)), [roundPresentation.playMode, course, scores, players, bets.foursome, segments, order, roundHandicapBasis]);
+  const ballFriend = useMemo(() => roundBetResult(roundPresentation.playMode, 'calculateBallFriend', () => calculateBallFriend(course, scores, players, bets.ballFriend, ballFriendSetup, order, roundHandicapBasis)), [roundPresentation.playMode, course, scores, players, bets.ballFriend, ballFriendSetup, order, roundHandicapBasis]);
+  const personals = useMemo(() => roundBetResult(roundPresentation.playMode, 'calculatePersonalBets', () => calculatePersonalBets(personalBets, ownerId, players, course, scores, order)), [roundPresentation.playMode, personalBets, ownerId, players, course, scores, order]);
   const unresolvedExternalPersonalBets = useMemo(
     () => incompleteExternalPersonalBets(personalBets, personals.results),
     [personalBets, personals.results],
   );
-  const polla = useMemo(() => calculatePolla(course, scores, players, bets.polla, order, roundHandicapBasis), [course, scores, players, bets.polla, order, roundHandicapBasis]);
-  const miniPolla = useMemo(() => calculateMiniPolla(course, scores, players, bets.miniPolla, order, roundHandicapBasis), [course, scores, players, bets.miniPolla, order, roundHandicapBasis]);
-  const manual = useMemo(() => calculateManualBets(players, manualBets), [players, manualBets]);
-  const supplemental = useMemo(() => calculateSupplementalBets(supplementalBets, players, course, scores, putts, order, roundHandicapBasis), [supplementalBets, players, course, scores, putts, order, roundHandicapBasis]);
-  const vipers = useMemo(() => calculateCounterBet("vipers", players, bets.vipers, counterBetEvents, counterBetKeepers, order, completedHoles), [players, bets.vipers, counterBetEvents, counterBetKeepers, order, completedHoles]);
-  const camels = useMemo(() => calculateCounterBet("camels", players, bets.camels, counterBetEvents, counterBetKeepers, order, completedHoles), [players, bets.camels, counterBetEvents, counterBetKeepers, order, completedHoles]);
-  const fish = useMemo(() => calculateCounterBet("fish", players, bets.fish, counterBetEvents, counterBetKeepers, order, completedHoles), [players, bets.fish, counterBetEvents, counterBetKeepers, order, completedHoles]);
-  const loba = useMemo(() => calculateLoba(course, scores, players, bets.loba, lobaHoles, order, completedHoles, roundHandicapBasis), [course, scores, players, bets.loba, lobaHoles, order, completedHoles, roundHandicapBasis]);
-  const liveRabbits = useMemo(() => calculateRabbits(course, liveScores, players, bets.rabbits, order, roundHandicapBasis), [course, liveScores, players, bets.rabbits, order, roundHandicapBasis]);
-  const liveSkins = useMemo(() => calculateSkins(course, liveScores, players, bets.skins, order, roundHandicapBasis), [course, liveScores, players, bets.skins, order, roundHandicapBasis]);
-  const liveMonkey = useMemo(() => calculateMonkey(course, liveScores, players, bets.monkey, order, roundHandicapBasis), [course, liveScores, players, bets.monkey, order, roundHandicapBasis]);
-  const liveFoursomes = useMemo(() => calculateFoursomes(course, liveScores, players, bets.foursome, segments, order, roundHandicapBasis), [course, liveScores, players, bets.foursome, segments, order, roundHandicapBasis]);
-  const liveBallFriend = useMemo(() => calculateBallFriend(course, liveScores, players, bets.ballFriend, ballFriendSetup, order, roundHandicapBasis), [course, liveScores, players, bets.ballFriend, ballFriendSetup, order, roundHandicapBasis]);
-  const liveSupplemental = useMemo(() => calculateSupplementalBets(supplementalBets, players, course, liveScores, putts, order, roundHandicapBasis), [supplementalBets, players, course, liveScores, putts, order, roundHandicapBasis]);
+  const polla = useMemo(() => roundBetResult(roundPresentation.playMode, 'calculatePolla', () => calculatePolla(course, scores, players, bets.polla, order, roundHandicapBasis)), [roundPresentation.playMode, course, scores, players, bets.polla, order, roundHandicapBasis]);
+  const miniPolla = useMemo(() => roundBetResult(roundPresentation.playMode, 'calculateMiniPolla', () => calculateMiniPolla(course, scores, players, bets.miniPolla, order, roundHandicapBasis)), [roundPresentation.playMode, course, scores, players, bets.miniPolla, order, roundHandicapBasis]);
+  const manual = useMemo(() => roundBetResult(roundPresentation.playMode, 'calculateManualBets', () => calculateManualBets(players, manualBets)), [roundPresentation.playMode, players, manualBets]);
+  const supplemental = useMemo(() => roundBetResult(roundPresentation.playMode, 'calculateSupplementalBets', () => calculateSupplementalBets(supplementalBets, players, course, scores, putts, order, roundHandicapBasis)), [roundPresentation.playMode, supplementalBets, players, course, scores, putts, order, roundHandicapBasis]);
+  const vipers = useMemo(() => roundBetResult(roundPresentation.playMode, 'calculateCounterBet', () => calculateCounterBet("vipers", players, bets.vipers, counterBetEvents, counterBetKeepers, order, completedHoles)), [roundPresentation.playMode, players, bets.vipers, counterBetEvents, counterBetKeepers, order, completedHoles]);
+  const camels = useMemo(() => roundBetResult(roundPresentation.playMode, 'calculateCounterBet', () => calculateCounterBet("camels", players, bets.camels, counterBetEvents, counterBetKeepers, order, completedHoles)), [roundPresentation.playMode, players, bets.camels, counterBetEvents, counterBetKeepers, order, completedHoles]);
+  const fish = useMemo(() => roundBetResult(roundPresentation.playMode, 'calculateCounterBet', () => calculateCounterBet("fish", players, bets.fish, counterBetEvents, counterBetKeepers, order, completedHoles)), [roundPresentation.playMode, players, bets.fish, counterBetEvents, counterBetKeepers, order, completedHoles]);
+  const loba = useMemo(() => roundBetResult(roundPresentation.playMode, 'calculateLoba', () => calculateLoba(course, scores, players, bets.loba, lobaHoles, order, completedHoles, roundHandicapBasis)), [roundPresentation.playMode, course, scores, players, bets.loba, lobaHoles, order, completedHoles, roundHandicapBasis]);
+  const liveRabbits = useMemo(() => roundBetResult(roundPresentation.playMode, 'calculateRabbits', () => calculateRabbits(course, liveScores, players, bets.rabbits, order, roundHandicapBasis)), [roundPresentation.playMode, course, liveScores, players, bets.rabbits, order, roundHandicapBasis]);
+  const liveSkins = useMemo(() => roundBetResult(roundPresentation.playMode, 'calculateSkins', () => calculateSkins(course, liveScores, players, bets.skins, order, roundHandicapBasis)), [roundPresentation.playMode, course, liveScores, players, bets.skins, order, roundHandicapBasis]);
+  const liveMonkey = useMemo(() => roundBetResult(roundPresentation.playMode, 'calculateMonkey', () => calculateMonkey(course, liveScores, players, bets.monkey, order, roundHandicapBasis)), [roundPresentation.playMode, course, liveScores, players, bets.monkey, order, roundHandicapBasis]);
+  const liveFoursomes = useMemo(() => roundBetResult(roundPresentation.playMode, 'calculateFoursomes', () => calculateFoursomes(course, liveScores, players, bets.foursome, segments, order, roundHandicapBasis)), [roundPresentation.playMode, course, liveScores, players, bets.foursome, segments, order, roundHandicapBasis]);
+  const liveBallFriend = useMemo(() => roundBetResult(roundPresentation.playMode, 'calculateBallFriend', () => calculateBallFriend(course, liveScores, players, bets.ballFriend, ballFriendSetup, order, roundHandicapBasis)), [roundPresentation.playMode, course, liveScores, players, bets.ballFriend, ballFriendSetup, order, roundHandicapBasis]);
+  const liveSupplemental = useMemo(() => roundBetResult(roundPresentation.playMode, 'calculateSupplementalBets', () => calculateSupplementalBets(supplementalBets, players, course, liveScores, putts, order, roundHandicapBasis)), [roundPresentation.playMode, supplementalBets, players, course, liveScores, putts, order, roundHandicapBasis]);
   const personalOpponentResults = useMemo(() => buildPersonalOpponentResults({ ownerId, players, course, scores, putts, order, canonicalResults: personals.results, personalBets, supplementalBets, handicapBasis: roundHandicapBasis }), [ownerId, players, course, scores, putts, order, personals.results, personalBets, supplementalBets, roundHandicapBasis]);
   const livePersonalOpponentResults = useMemo(() => buildPersonalOpponentResults({ ownerId, players, course, scores, putts, order, canonicalResults: personals.results, personalBets, supplementalBets, handicapBasis: roundHandicapBasis }), [ownerId, players, course, scores, putts, order, personals.results, personalBets, supplementalBets, roundHandicapBasis]);
   const supplementalGeneralResults = useMemo(() => supplemental.results.filter((result) => !isPersonalSupplementalType(result.type)), [supplemental.results]);
@@ -1327,10 +1331,10 @@ function GolfBetsApp() {
   const supplementalGeneralBalances = useMemo(() => mergeBalances(players, ...supplementalGeneralResults.map((result) => result.balances)), [players, supplementalGeneralResults]);
   const supplementalPersonalBalances = useMemo(() => mergeBalances(players, ...supplemental.results.filter((result) => isPersonalSupplementalType(result.type)).map((result) => result.balances)), [players, supplemental.results]);
   const personalCombinedBalances = useMemo(() => mergeBalances(players, personals.balances, supplementalPersonalBalances), [players, personals.balances, supplementalPersonalBalances]);
-  const liveLoba = useMemo(() => calculateLoba(course, liveScores, players, bets.loba, lobaHoles, order, liveCompletedHoles, roundHandicapBasis), [course, liveScores, players, bets.loba, lobaHoles, order, liveCompletedHoles, roundHandicapBasis]);
+  const liveLoba = useMemo(() => roundBetResult(roundPresentation.playMode, 'calculateLoba', () => calculateLoba(course, liveScores, players, bets.loba, lobaHoles, order, liveCompletedHoles, roundHandicapBasis)), [roundPresentation.playMode, course, liveScores, players, bets.loba, lobaHoles, order, liveCompletedHoles, roundHandicapBasis]);
   const priorOrder = useMemo(() => order.slice(0, currentIndex), [order, currentIndex]);
-  const priorRabbits = useMemo(() => calculateRabbits(course, scores, players, bets.rabbits, priorOrder, roundHandicapBasis), [course, scores, players, bets.rabbits, priorOrder, roundHandicapBasis]);
-  const priorSkins = useMemo(() => calculateSkins(course, scores, players, bets.skins, priorOrder, roundHandicapBasis), [course, scores, players, bets.skins, priorOrder, roundHandicapBasis]);
+  const priorRabbits = useMemo(() => roundBetResult(roundPresentation.playMode, 'calculateRabbits', () => calculateRabbits(course, scores, players, bets.rabbits, priorOrder, roundHandicapBasis)), [roundPresentation.playMode, course, scores, players, bets.rabbits, priorOrder, roundHandicapBasis]);
+  const priorSkins = useMemo(() => roundBetResult(roundPresentation.playMode, 'calculateSkins', () => calculateSkins(course, scores, players, bets.skins, priorOrder, roundHandicapBasis)), [roundPresentation.playMode, course, scores, players, bets.skins, priorOrder, roundHandicapBasis]);
 
   const rabbitBalances = useMemo(() => payoutWinnerTakesFromAll(playersByIds(players, bets.rabbits.participantIds), rabbits.won, bets.rabbits.value), [players, bets.rabbits, rabbits.won]);
   const skinBalances = useMemo(() => payoutWinnerTakesFromAll(playersByIds(players, bets.skins.participantIds), skins.won, bets.skins.value), [players, bets.skins, skins.won]);
@@ -1528,6 +1532,7 @@ function GolfBetsApp() {
       : { id, name, handicap, handicapSource: "manual", ...(accountUserId ? { accountUserId } : {}) };
     setPlayers((ps) => [...ps, p]);
     if (!players.length) setOwnerId(id);
+    if (roundPresentation.playMode === 'score_only') return;
     setBets((b) => ({
       ...b,
       rabbits: { ...b.rabbits, participantIds: [...b.rabbits.participantIds, id] },
@@ -2177,6 +2182,12 @@ function GolfBetsApp() {
   }
 
   function applyNewRoundIntent(intent: NewRoundIntent, nextFeedback = "") {
+    if (intent.kind === 'resume') {
+      const draft = unfinishedRoundDraft(intent.snapshot);
+      if (!draft) { setFeedback('No se puede reanudar esta ronda.'); return; }
+      applyDraft(draft); setShowNewRoundConfirm(false); setPendingNewRoundIntent(null); setRoundClosed(false); setRoundReviewPending(false); setTab(draft.startedAt && draft.courseSelected ? 'round' : 'setup');
+      return;
+    }
     if (intent.kind === "players" && intent.players.length > MAX_ROUND_PLAYERS) {
       setFeedback(ROUND_PLAYER_LIMIT_MESSAGE);
       return;
@@ -2186,7 +2197,7 @@ function GolfBetsApp() {
       setCourse(structuredClone(playCourseChoice)); setCourseSelected(true); setPendingCourseIdentity(null);
     }
     if (intent.kind === "blank") return;
-    if (intent.kind === "scoreOnly") { setRoundPresentation({ version: 1, groupNassauTerm: "polla", playMode: "score_only" }); return; }
+    if (intent.kind === "scoreOnly") { setBets(initialBets([])); setRoundPresentation({ version: 1, groupNassauTerm: "polla", playMode: "score_only" }); return; }
     if (intent.kind === "ai") { setTab("aiSetup"); return; }
     if (intent.kind === "group") {
       if (intent.scoreOnly) setRoundPresentation({ version: 1, groupNassauTerm: "polla", playMode: "score_only" });
@@ -2200,7 +2211,7 @@ function GolfBetsApp() {
   function applyFrequentGroupToDraft(group: FrequentGroup, selectedMemberIds: string[], scoreOnly = false) {
     const loaded = instantiateGroupGameTemplate(group, makeId, selectedMemberIds);
     setPlayers(loaded.players); setOwnerId(loaded.ownerId); setStartHole(loaded.startHole); setRoundHoles(loaded.roundHoles); setRoundHandicapBasis(loaded.roundHandicapBasis);
-    setBets(scoreOnly ? initialBets(loaded.players.map(p => p.id)) : loaded.bets); setSegments(loaded.segments); setPersonalBets(scoreOnly ? [] : loaded.personalBets); setSupplementalBets(scoreOnly ? [] : loaded.supplementalBets); setManualBets(scoreOnly ? [] : loaded.manualBets);
+    setBets(scoreOnly ? initialBets([]) : loaded.bets); setSegments(loaded.segments); setPersonalBets(scoreOnly ? [] : loaded.personalBets); setSupplementalBets(scoreOnly ? [] : loaded.supplementalBets); setManualBets(scoreOnly ? [] : loaded.manualBets);
     setRoundTemplateOrigin(loaded.origin);
     setUnitEvents([]); setCounterBetEvents([]); setCounterBetKeepers(emptyCounterBetKeepers()); setLobaHoles({}); setBallFriendSetup({}); setPutts({}); setAdvancedStats({}); setShots([]); setScoreEdits({});
   }
@@ -2514,37 +2525,53 @@ function GolfBetsApp() {
     return true;
   }
 
-  function confirmNewRound() {
+  const [roundLifecycleBusy, setRoundLifecycleBusy] = useState(false);
+  async function parkActiveRound(state: 'live' | 'cancelled') {
+    if (!ownsLocalWorkspace(localStorage, identity.userId)) throw new Error('La sesión cambió.');
+    if (!flushLocalState.current?.()) throw new Error('No pudimos guardar el último cambio. Reintenta.');
+    const snapshot = currentSnapshot();
+    if (!snapshot) throw new Error('Selecciona el jugador principal antes de guardar la ronda.');
+    const latest = readStoredJson<Record<string, unknown>>(localStorage, STORAGE_KEYS.draft, {});
+    if (latest.roundId !== roundId) throw new Error('La ronda cambió. Reintenta.');
+    snapshot.resumeCourseSelected = latest.courseSelected === true;
+    if (!snapshot.resumeCourseSelected) { snapshot.courseName = 'Campo por elegir'; snapshot.teeName = ''; }
+    snapshot.scores = applyPendingScoreEdits((latest.scores || scores) as Record<number, HoleScore>, (latest.scoreEdits || {}) as ScoreRows);
+    const saved = await saveRoundHistoryLocalFirst({ storage: localStorage, ownerId: identity.userId,
+      snapshot: preserveUnfinishedRound(snapshot, currentIndex, state, history.find(r => r.id === roundId)),
+      deviceId: offlineDeviceId.current, defaultHandicap: identity.defaultHandicap,
+      hasLocalPreferenceState: hadLocalPreferences.current, queueForCloud: identity.mode === 'authenticated' && cloudLinked,
+    });
+    if (!ownsLocalWorkspace(localStorage, identity.userId)) throw new Error('La sesión cambió.');
+    setHistory(saved.history.map(normalizeHistorySnapshot));
+    flushLocalState.current = null;
+    clearActiveRoundStorage(localStorage);
+    trackLocalCloudEdits(localStorage, null, { highContrast, language: 'es-MX', notificationsEnabled, defaultHandicap: identity.defaultHandicap });
+    requestCloudSync.current?.();
+  }
+  async function confirmNewRound() {
     if (replacingRound.current) return;
     replacingRound.current = true;
+    setRoundLifecycleBusy(true);
     setNewRoundBackupError("");
     try {
       const intent = pendingNewRoundIntent;
       if (!intent) throw new Error("new round intent missing");
-      if (!backupActiveRoundForReplacement(localStorage, () => Boolean(flushLocalState.current?.()))) throw new Error("backup verification failed");
-      applyNewRoundIntent(intent, "La ronda anterior quedó respaldada en este dispositivo.");
-    } catch {
-      replacingRound.current = false;
-      setNewRoundBackupError("No se pudo comprobar el respaldo de la ronda actual. No se inició otra ronda; vuelve a intentar.");
-    }
+      await parkActiveRound('live');
+      applyNewRoundIntent(intent, "La ronda anterior queda pendiente en Histórico. Puedes reanudarla allí.");
+    } catch(error) {
+      setNewRoundBackupError(error instanceof Error ? error.message : "No se pudo guardar la ronda actual. No se inició otra; vuelve a intentar.");
+    } finally { replacingRound.current = false; setRoundLifecycleBusy(false); }
   }
 
-  function deleteActiveRound() {
-    const photosToDelete = [...scorecardPhotoIds];
-    if (photosToDelete.length && ownsLocalWorkspace(localStorage, identity.userId)) {
-      queuePhoto(localStorage, { userId: identity.userId, roundId, photoId: photosToDelete[0], operation: "delete", revision: makeId() });
-      requestCloudSync.current?.();
-    }
-    photosToDelete.forEach((photoId) => { void deleteScorecardPhoto(photoId).catch(() => undefined); });
-    flushLocalState.current = null;
-    trackLocalCloudEdits(localStorage, null, { highContrast, language: "es-MX", notificationsEnabled, defaultHandicap: identity.defaultHandicap });
-    clearActiveRoundStorage(window.localStorage);
-    setRoundTemplateOrigin(null);
-    setRoundPresentation(normalizeRoundPresentation(undefined));
-    setPlayers([]); setPlayerTeeAssignments([]); setOwnerId("");
-    setScores({}); setScoreEdits({}); setScorecardPhotoIds([]); setScorecardScanStartedAt(null); setPutts({}); setScoreCaptureMode("quick"); setAdvancedStats({}); setShots([]); setUnitEvents([]); setCounterBetEvents([]); setCounterBetKeepers(emptyCounterBetKeepers()); setLobaHoles({}); setBallFriendSetup({}); setPersonalBets([]); setSupplementalBets([]); setManualBets([]); setShowFullScorecard(false); setExpenses(emptyExpenses);
-    setBets(initialBets([])); setRoundHandicapBasis("relative"); setSegments(segmentDefinitions(playOrder(startHole).slice(0, roundHoles), 6)); setCourse(laVista); setCourseSelected(false); setPendingCourseIdentity(null); setCourseSelectionError(false);
-    setCurrentIndex(0); setRoundId(makeId()); setRoundDate(localDateMexico()); setRoundStartedAt(null); setRoundClosed(false); setRoundReviewPending(false); setDraftAvailable(false); setHoleSummary([]); setShowDeleteRoundConfirm(false); setShowRoundFinishedNotice(false); undoStack.current = []; setUndoCount(0); setSaveStatus("saved"); setTab("welcome");
+  async function deleteActiveRound() {
+    if (replacingRound.current) return;
+    replacingRound.current = true; setRoundLifecycleBusy(true);
+    try {
+      await parkActiveRound('cancelled');
+      resetRound('Ronda cerrada. Sus datos se conservan en Histórico.');
+      setTab('welcome');
+    } catch(error) { setNewRoundBackupError(error instanceof Error ? error.message : 'No pudimos cerrar la ronda. No se borró nada.'); }
+    finally { replacingRound.current = false; setRoundLifecycleBusy(false); }
   }
 
   function startNewCourse() {
@@ -3313,21 +3340,21 @@ function GolfBetsApp() {
     setBets(savedBets);
     setScores(committed.scores); setScoreEdits(committed.edits);
     const savedScores = committed.scores;
-    const savedRabbits = calculateRabbits(course, savedScores, players, bets.rabbits, order, roundHandicapBasis);
-    const savedSkins = calculateSkins(course, savedScores, players, bets.skins, order, roundHandicapBasis);
-    const savedFoursomes = calculateFoursomes(course, savedScores, players, savedBets.foursome, segments, order, roundHandicapBasis);
-    const savedUnits = calculateUnits(players, unitEvents, bets.units, course, savedScores, order);
-    const savedBallFriend = calculateBallFriend(course, savedScores, players, savedBets.ballFriend, ballFriendSetup, order, roundHandicapBasis);
-    const savedPolla = calculatePolla(course, savedScores, players, bets.polla, order, roundHandicapBasis);
-    const savedMiniPolla = calculateMiniPolla(course, savedScores, players, bets.miniPolla, order, roundHandicapBasis);
-    const savedPersonals = calculatePersonalBets(personalBets, ownerId, players, course, savedScores, order);
-    const savedSupplemental = calculateSupplementalBets(supplementalBets, players, course, savedScores, putts, order, roundHandicapBasis);
-    const savedMonkey = calculateMonkey(course, savedScores, players, bets.monkey, order, roundHandicapBasis);
+    const savedRabbits = roundBetResult(roundPresentation.playMode, 'calculateRabbits', () => calculateRabbits(course, savedScores, players, bets.rabbits, order, roundHandicapBasis));
+    const savedSkins = roundBetResult(roundPresentation.playMode, 'calculateSkins', () => calculateSkins(course, savedScores, players, bets.skins, order, roundHandicapBasis));
+    const savedFoursomes = roundBetResult(roundPresentation.playMode, 'calculateFoursomes', () => calculateFoursomes(course, savedScores, players, savedBets.foursome, segments, order, roundHandicapBasis));
+    const savedUnits = roundBetResult(roundPresentation.playMode, 'calculateUnits', () => calculateUnits(players, unitEvents, bets.units, course, savedScores, order));
+    const savedBallFriend = roundBetResult(roundPresentation.playMode, 'calculateBallFriend', () => calculateBallFriend(course, savedScores, players, savedBets.ballFriend, ballFriendSetup, order, roundHandicapBasis));
+    const savedPolla = roundBetResult(roundPresentation.playMode, 'calculatePolla', () => calculatePolla(course, savedScores, players, bets.polla, order, roundHandicapBasis));
+    const savedMiniPolla = roundBetResult(roundPresentation.playMode, 'calculateMiniPolla', () => calculateMiniPolla(course, savedScores, players, bets.miniPolla, order, roundHandicapBasis));
+    const savedPersonals = roundBetResult(roundPresentation.playMode, 'calculatePersonalBets', () => calculatePersonalBets(personalBets, ownerId, players, course, savedScores, order));
+    const savedSupplemental = roundBetResult(roundPresentation.playMode, 'calculateSupplementalBets', () => calculateSupplementalBets(supplementalBets, players, course, savedScores, putts, order, roundHandicapBasis));
+    const savedMonkey = roundBetResult(roundPresentation.playMode, 'calculateMonkey', () => calculateMonkey(course, savedScores, players, bets.monkey, order, roundHandicapBasis));
     const savedCompletedHoles = new Set([...completedHoles, holeNumber]);
-    const savedVipers = calculateCounterBet("vipers", players, bets.vipers, counterBetEvents, counterBetKeepers, order, savedCompletedHoles);
-    const savedCamels = calculateCounterBet("camels", players, bets.camels, counterBetEvents, counterBetKeepers, order, savedCompletedHoles);
-    const savedFish = calculateCounterBet("fish", players, bets.fish, counterBetEvents, counterBetKeepers, order, savedCompletedHoles);
-    const savedLoba = calculateLoba(course, savedScores, players, bets.loba, lobaHoles, order, savedCompletedHoles, roundHandicapBasis);
+    const savedVipers = roundBetResult(roundPresentation.playMode, 'calculateCounterBet', () => calculateCounterBet("vipers", players, bets.vipers, counterBetEvents, counterBetKeepers, order, savedCompletedHoles));
+    const savedCamels = roundBetResult(roundPresentation.playMode, 'calculateCounterBet', () => calculateCounterBet("camels", players, bets.camels, counterBetEvents, counterBetKeepers, order, savedCompletedHoles));
+    const savedFish = roundBetResult(roundPresentation.playMode, 'calculateCounterBet', () => calculateCounterBet("fish", players, bets.fish, counterBetEvents, counterBetKeepers, order, savedCompletedHoles));
+    const savedLoba = roundBetResult(roundPresentation.playMode, 'calculateLoba', () => calculateLoba(course, savedScores, players, bets.loba, lobaHoles, order, savedCompletedHoles, roundHandicapBasis));
     const extras: string[] = [];
     const rabbit = savedRabbits.events.filter(event => event.hole === holeNumber).at(-1);
     const rabbitBlockWinner = rabbitMode === "three_hole_blocks"
@@ -3444,6 +3471,7 @@ function GolfBetsApp() {
     return {
       courseName: courseSelected ? course.name : pendingCourseIdentity ? `${pendingCourseIdentity.name} · tee por elegir` : "Campo por elegir",
       roundDate,
+      startedAt: roundStartedAt || undefined,
       status,
       totalHoles: roundHoles,
       currentHole: status === "live" ? order[currentIndex] : undefined,
@@ -3528,6 +3556,9 @@ function GolfBetsApp() {
       displayName={identity.displayName}
       username={identity.username}
       avatarUrl={identity.avatarUrl}
+      profileCompletion={identity.mode === 'authenticated' ? <ProfileCompletionRing token={identity.accessToken} avatar={identity.avatarUrl} name={identity.displayName} revision={JSON.stringify(identity)} onOpen={section => { setProfileFocus(section === 'equipment' || section === 'ball' || section === 'fitting' ? 'equipment' : 'profile'); setTab('profile'); }} /> : undefined}
+      onEditActiveRound={() => { setEditingRound(true); setTab('setup'); }}
+      onCancelActiveRound={() => { setNewRoundBackupError(''); setShowDeleteRoundConfirm(true); }}
       activeRound={activeRoundSummary?.status === "setup" ? null : activeRoundSummary}
       insights={{ ...betaGolfInsights, betBalance: historicalGolfInsights.betBalance }}
       groupCount={frequentGroups.length}
@@ -3647,7 +3678,7 @@ function GolfBetsApp() {
 
     {feedback && <div className="notice" role="status">{roundSaveNotice(feedback, cloudStatus)}<button className="textButton" aria-label="Cerrar mensaje" onClick={() => setFeedback("")}>×</button></div>}
     {copyFallback && <section className="card"><label>Resumen para copiar<textarea readOnly value={copyFallback} onFocus={event => event.currentTarget.select()} /></label><button onClick={() => setCopyFallback("")}>← Regresar</button></section>}
-    {showNewRoundConfirm && <div className="modalBackdrop"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="new-round-title" aria-describedby="new-round-description"><ModalCloseButton onClose={() => { setShowNewRoundConfirm(false); setNewRoundBackupError(""); setPendingNewRoundIntent(null); }} /><h2 id="new-round-title">¿Iniciar una nueva ronda?</h2><p id="new-round-description">Ya tienes una ronda en curso. ¿Deseas descartarla e iniciar otra? No necesitas completar los hoyos pendientes.</p><p>La ronda anterior dejará de estar activa y no se guardará como terminada. Conservaremos un respaldo local de seguridad. Tus rondas del Histórico no se borrarán.</p>{newRoundBackupError && <div className="notice bad" role="alert">{newRoundBackupError}</div>}<div className="dialogActions"><button autoFocus className="secondary" onClick={() => { setShowNewRoundConfirm(false); setNewRoundBackupError(""); setPendingNewRoundIntent(null); }}>Cancelar</button><button className="primary" onClick={confirmNewRound}>Descartar e iniciar nueva</button></div></section></div>}
+    <ModalShell className="confirmDialog roundLifecycleDialog" open={showNewRoundConfirm} onClose={() => { if (roundLifecycleBusy) return; setShowNewRoundConfirm(false); setNewRoundBackupError(""); setPendingNewRoundIntent(null); }} closeDisabled={roundLifecycleBusy} labelledBy="new-round-title"><h2 id="new-round-title">Tienes una ronda activa</h2><p>Puedes continuarla o iniciar otra. La anterior quedará pendiente en Histórico, con sus jugadores y scores intactos.</p>{newRoundBackupError && <p role="alert">{newRoundBackupError}</p>}<div className="dialogActions"><button autoFocus className="primary" disabled={roundLifecycleBusy} onClick={() => { setShowNewRoundConfirm(false); setPendingNewRoundIntent(null); continueActiveRound(); }}>Continuar ronda actual</button><button className="secondary" disabled={roundLifecycleBusy} onPointerDown={commitFocusedNumericCapture} onClick={() => void confirmNewRound()}>{roundLifecycleBusy ? 'Guardando…' : 'Iniciar nueva ronda'}</button><button className="textButton" disabled={roundLifecycleBusy} onClick={() => { setShowNewRoundConfirm(false); setPendingNewRoundIntent(null); }}>Cancelar</button></div></ModalShell>
     {pendingRoundAction && <div className="modalBackdrop"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="round-change-title"><ModalCloseButton onClose={() => setPendingRoundAction(null)} /><h2 id="round-change-title">Confirmar cambios</h2><p>{pendingRoundAction.message}</p><div className="dialogActions"><button autoFocus className="secondary" onClick={() => setPendingRoundAction(null)}>Cancelar</button><button className="primary" onClick={() => { const action = pendingRoundAction; setPendingRoundAction(null); action.run(); }}>Confirmar</button></div></section></div>}
     {showRoundFinishedNotice && <div className="modalBackdrop"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="round-finished-title"><ModalCloseButton onClose={() => setShowRoundFinishedNotice(false)} /><h2 id="round-finished-title">Ronda terminada</h2><p>{ROUND_REVIEW_NOTICE}</p><div className="dialogActions"><button autoFocus className="primary" onClick={() => { setShowRoundFinishedNotice(false); setTab("results"); }}>Revisar resultados</button></div></section></div>}
     {pendingCloudConflict && (() => { const conflict = pendingCloudConflict.conflicts[0]; if (!conflict) return null; const display = describeCloudConflict(conflict, playerName); return <div className="modalBackdrop"><section className="confirmDialog" role="alertdialog" aria-modal="true" aria-labelledby="cloud-conflict-title"><ModalCloseButton onClose={() => setPendingCloudConflict(null)} /><h2 id="cloud-conflict-title">Cambio en dos dispositivos</h2><p>Elige únicamente el dato en conflicto. Los demás cambios compatibles ya se combinaron.</p><div className="cloudConflictField"><b>{display.label}</b><span>Nube: {display.cloudValue}</span><span>Este dispositivo: {display.localValue}</span></div>{pendingCloudConflict.conflicts.length > 1 && <small>Quedan {pendingCloudConflict.conflicts.length} conflictos por revisar.</small>}<div className="dialogActions"><button className="secondary" onClick={() => resolveCloudConflict("cloud")}>Usar nube para este dato</button><button className="primary" onClick={() => resolveCloudConflict("local")}>Usar este dispositivo</button></div></section></div>; })()}
@@ -3729,19 +3760,19 @@ function GolfBetsApp() {
           </div>
         </details>}
       <section className="card" id="round-players">
-        <div className="sectionTitle"><div><h2>2. Jugadores</h2><p>Las cuentas usan Index + tee; los invitados conservan HCP manual.</p></div><button className="textButton" disabled={players.length >= MAX_ROUND_PLAYERS} title={players.length >= MAX_ROUND_PLAYERS ? ROUND_PLAYER_LIMIT_MESSAGE : undefined} onClick={addPlayer}>+ Jugador</button></div>
+        <div className="sectionTitle"><div><h2>2. Jugadores</h2><p>{roundPresentation.playMode === 'score_only' ? 'Agrega cuentas, invitados o un grupo. Capturaremos scores y estadísticas, sin apuestas.' : 'Las cuentas usan Index + tee; los invitados conservan HCP manual.'}</p></div><button className="textButton" disabled={players.length >= MAX_ROUND_PLAYERS} title={players.length >= MAX_ROUND_PLAYERS ? ROUND_PLAYER_LIMIT_MESSAGE : undefined} onClick={addPlayer}>+ Jugador</button></div>
         {players.length >= MAX_ROUND_PLAYERS && <div className="hint" role="status">5 / 5 jugadores · máximo por grupo de salida.</div>}
         {!players.length && <div className="empty">Agrega los jugadores de esta ronda.</div>}
         {players.map((p) => <div className="playerEdit" key={p.id}>
           <textarea className="playerNameField" rows={1} aria-label={`Nombre de ${p.name || "jugador"}`} placeholder="Nombre" value={p.name} onKeyDown={(event) => { if (event.key === "Enter") event.preventDefault(); }} onChange={(event) => updatePlayer(p.id, { name: event.target.value.replace(/\s*[\r\n]+\s*/g, " ") })} />
-          {!canEditGuestHandicap(p) ? <details className={`roundHcpField roundPlayingHcp compactPlayingHcp ${typeof p.handicap === "number" && Number.isFinite(p.handicap) ? "" : "isMissing"}`}>
+          {roundPresentation.playMode === 'score_only' ? <span className="hint">{p.accountUserId ? 'Usuario Backyard' : 'Invitado'} · Score bruto</span> : !canEditGuestHandicap(p) ? <details className={`roundHcpField roundPlayingHcp compactPlayingHcp ${typeof p.handicap === "number" && Number.isFinite(p.handicap) ? "" : "isMissing"}`}>
             <summary aria-label={`Ver tee y cálculo de HCP de ${p.name || "jugador"}`}><span>🔒 {playerHandicapSourceLabel(p)}</span><span aria-hidden="true">⌄</span></summary>
             <div className="roundPlayingHcpDetail"><b>HCP DE JUEGO {p.handicap ?? "—"}</b>{p.courseHandicapSnapshot ? <span>{p.courseHandicapSnapshot.teeName} · Rating {p.courseHandicapSnapshot.courseRating} / Slope {p.courseHandicapSnapshot.slope}{p.courseHandicapSnapshot.courseHandicap !== p.courseHandicapSnapshot.appliedHandicap ? ` · cálculo ${p.courseHandicapSnapshot.courseHandicap}, tope Backyard ${p.courseHandicapSnapshot.appliedHandicap}` : ""}</span> : p.handicap === null ? <span>Revisa o activa el Index desde Perfil → Información de golf. No se sustituye por HCP manual.</span> : <span>Para calcularlo desde Index, elige un tee con Rating y Slope en la sección opcional.</span>}</div>
           </details> : <div className={`roundHcpField manualRoundHcp ${typeof p.handicap === "number" && Number.isFinite(p.handicap) ? "" : "isMissing"}`}><span className="roundHcpLabel">HCP · Invitado</span><NumericCaptureInput aria-label={`HCP de ${p.name || "jugador"}`} className="hcpInput" inputMode="decimal" step={0.1} min={-15} max={36} placeholder="—" value={p.handicap} emptyWhenZero={false} aria-invalid={typeof p.handicap !== "number" || !Number.isFinite(p.handicap)} aria-describedby={typeof p.handicap !== "number" || !Number.isFinite(p.handicap) ? `round-hcp-error-${p.id}` : undefined} onValueChange={(handicap) => updatePlayer(p.id, { handicap, handicapSource: "manual", handicapIndex: undefined, courseHandicapSnapshot: undefined })} />{(typeof p.handicap !== "number" || !Number.isFinite(p.handicap)) && <span className="roundHcpError" id={`round-hcp-error-${p.id}`}>Completa el HCP manual</span>}</div>}
           <button className={`ownerDot ${ownerId === p.id ? "active" : ""}`} onClick={() => setOwnerId(p.id)} title="Jugador principal" aria-label={`Marcar a ${p.name || "jugador"} como jugador principal`} aria-pressed={ownerId === p.id}>★</button>
           <button className="remove" aria-label={`Quitar a ${p.name || "jugador"}`} onClick={() => { confirmRoundChange(`Quitar a ${p.name} lo excluye de las apuestas y parejas actuales.`, () => setPlayers((ps) => ps.filter((x) => x.id !== p.id))); }}>×</button>
         </div>)}
-        <RoundHandicapBasisControl value={roundHandicapBasis} onChange={setRoundHandicapBasis} />
+        {roundPresentation.playMode !== 'score_only' && <RoundHandicapBasisControl value={roundHandicapBasis} onChange={setRoundHandicapBasis} />}
         <div className="hint">★ marca al jugador principal para estadísticas y gastos.</div>
         {(frequentGroups.length > 0 || frequentPlayers.length > 0) && <div className="frequentBox">
           {frequentGroups.length > 0 && <details className="frequentDisclosure"><summary><span>Grupos guardados ({frequentGroups.length})<small>Toca aquí para agregar un grupo</small></span></summary><div className="frequentGroupList">{frequentGroups.map((group) => <div className="templateRow groupTemplateRow" key={group.id}>
@@ -3919,7 +3950,7 @@ function GolfBetsApp() {
 
       <RoundSetupStep step={5}>
         <WizardReviewBlock step={1} title="Campo"><p><b>{courseSelected ? course.name : "Falta seleccionar campo"}</b></p><p>{roundHoles} hoyos · salida H{startHole} · {roundDate}</p>{courseSelected && <p>{course.teeName}</p>}</WizardReviewBlock>
-        <WizardReviewBlock step={2} title={`${players.length} jugadores`}><ul>{players.map(player => <li key={player.id}>{player.name || "Sin nombre"}<small>{player.handicapIndex !== undefined ? `Index ${player.handicapIndex} · ` : ""}HCP {player.handicap ?? "—"}{player.id === ownerId ? " · Principal" : ""}</small></li>)}</ul><p className="hint">{roundHandicapBasis === "course" ? "Ventajas sobre el campo" : "Ventajas entre jugadores"}</p></WizardReviewBlock>
+        <WizardReviewBlock step={2} title={`${players.length} jugadores`}><ul>{players.map(player => <li key={player.id}>{player.name || "Sin nombre"}<small>{roundPresentation.playMode !== 'score_only' && <>HCP {player.handicap ?? "—"} · </>}{player.id === ownerId ? "Principal" : ""}</small></li>)}</ul>{roundPresentation.playMode !== 'score_only' && <p className="hint">{roundHandicapBasis === "course" ? "Ventajas sobre el campo" : "Ventajas entre jugadores"}</p>}</WizardReviewBlock>
         {roundPresentation.playMode !== "score_only" && <><WizardReviewBlock step={3} title="Apuestas grupales">{wizardBets.group.some(entry => entry.enabled) ? <ul>{wizardBets.group.filter(entry => entry.enabled).map(entry => <li key={entry.id}><b>{entry.label}</b><small>{entry.summary}</small></li>)}</ul> : <p>Sin apuestas grupales</p>}</WizardReviewBlock>
         <WizardReviewBlock step={4} title="Personales y manuales">{wizardBets.personal.some(entry => entry.enabled) ? <ul>{wizardBets.personal.filter(entry => entry.enabled).map(entry => <li key={entry.id}><b>{entry.label}</b><small>{entry.summary}</small></li>)}</ul> : <p>Sin apuestas personales ni manuales</p>}</WizardReviewBlock></>}
         <section className="card"><details><summary>Guardar configuración</summary><p className="hint">Guarda jugadores y apuestas como grupo frecuente. No incluye scores, resultados ni balances.</p><div className="inlineForm"><input aria-label="Nombre de la configuración" placeholder="Ej. Polla miércoles" value={groupName} onChange={event => setGroupName(event.target.value)} /><button type="button" className="secondary" disabled={!groupName.trim() || !players.length || roundSetupPreflight.length > 0} onClick={saveFrequentGroup}>Guardar configuración</button></div></details></section>
@@ -4193,6 +4224,7 @@ function GolfBetsApp() {
       <section className="card"><div className="sectionTitle"><div><h2>Rondas</h2><p>Más recientes primero. Los campos se guardan como snapshot.</p></div><button className="textButton" onClick={requestNewRound}>+ Nueva</button></div>
         <div className="historyFilters" aria-label="Filtrar rondas por fecha"><label>Año<select value={historyYear} onChange={(event) => setHistoryYear(event.target.value)}><option value="">Todos</option>{availableHistoryYears.map((year) => <option key={year} value={year}>{year}</option>)}</select></label><label>Mes<select value={historyMonth} onChange={(event) => setHistoryMonth(event.target.value)}><option value="">Todos</option>{MONTH_LABELS.map((label, index) => <option key={label} value={String(index + 1).padStart(2, "0")}>{label}</option>)}</select></label></div>
         {!history.length ? <div className="empty">Todavía no has guardado rondas.</div> : !filteredHistory.length ? <div className="empty">No hay rondas en el periodo seleccionado.</div> : filteredHistory.map((r) => {
+          if ((r.lifecycleState === 'live' || r.lifecycleState === 'cancelled') && !r.cloudReadOnly) return <div className="historyRound" key={r.id}><div className="historyRow"><div><b>{r.courseName}</b><span>{r.date} · {r.lifecycleState === 'cancelled' ? 'Cerrada sin finalizar' : 'Pendiente'} · {r.players?.length || 0} jugadores</span></div></div><div className="historyActions"><button className="primary" onClick={() => r.id === roundId && !roundClosed ? continueActiveRound() : requestNewRoundIntent({ kind: 'resume', snapshot: r })}>Reanudar ronda</button></div></div>;
           const recap = buildHistoricalRoundRecap(r);
           const financials = recap.financials;
           const holeLabel = recap.meta.holeCount ? `${recap.meta.holeCount} hoyos` : "hoyos no registrados";
@@ -4254,7 +4286,7 @@ function GolfBetsApp() {
       </fieldset>
     </section></div>}
 
-    {showDeleteRoundConfirm && <div className="modalBackdrop" role="presentation"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="delete-round-title" aria-describedby="delete-round-description"><ModalCloseButton onClose={() => setShowDeleteRoundConfirm(false)} /><h2 id="delete-round-title">¿Eliminar esta ronda?</h2><p id="delete-round-description">Se eliminará la ronda en curso y sus datos capturados. Esta acción no se puede deshacer.</p><div className="dialogActions"><button autoFocus className="secondary" onClick={() => setShowDeleteRoundConfirm(false)}>Cancelar</button><button className="dangerButton" onClick={deleteActiveRound}>Eliminar ronda</button></div></section></div>}
+    <ModalShell className="confirmDialog roundLifecycleDialog" open={showDeleteRoundConfirm} onClose={() => { if (!roundLifecycleBusy) { setShowDeleteRoundConfirm(false); setNewRoundBackupError(''); } }} closeDisabled={roundLifecycleBusy} labelledBy="delete-round-title"><h2 id="delete-round-title">¿Cancelar / cerrar esta ronda?</h2><p>No se marcará como terminada. Conservaremos sus datos en Histórico y podrás retomarla después.</p>{newRoundBackupError && <p role="alert">{newRoundBackupError}</p>}<div className="dialogActions"><button autoFocus className="secondary" disabled={roundLifecycleBusy} onClick={() => setShowDeleteRoundConfirm(false)}>Seguir jugando</button><button className="dangerButton" disabled={roundLifecycleBusy} onPointerDown={commitFocusedNumericCapture} onClick={() => void deleteActiveRound()}>{roundLifecycleBusy ? 'Guardando…' : 'Confirmar cierre'}</button></div></ModalShell>
 
     {historicalRoundToDelete && <div className="modalBackdrop" role="presentation"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="delete-history-round-title" aria-describedby="delete-history-round-description"><ModalCloseButton onClose={() => setHistoricalRoundToDelete(null)} /><h2 id="delete-history-round-title">¿Eliminar esta ronda del histórico?</h2><p id="delete-history-round-description">Esta acción eliminará definitivamente esta ronda guardada y sus resultados.</p><div className="dialogActions"><button autoFocus className="secondary" onClick={() => setHistoricalRoundToDelete(null)}>Cancelar</button><button className="dangerButton" onClick={confirmHistoricalRoundDeletion}>Eliminar</button></div></section></div>}
 

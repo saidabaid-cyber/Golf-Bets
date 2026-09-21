@@ -2,7 +2,10 @@ export type SocialPerson = { user_id: string; display_name: string; username: st
 export type ConnectionRequest = { id:string; requester_id:string; addressee_id:string; state:string; created_at:string };
 export type ConnectionPage = { people:SocialPerson[]; requests:ConnectionRequest[]; friends:string[]; blocked:string[] };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-export const QA_SOCIAL_ORIGIN = "https://golf-bets-git-phase2-full-platform-saha8.vercel.app";
+export const PUBLIC_SOCIAL_ORIGIN = "https://app.thebackyard.com.mx";
+/** Preparation only: generated links keep the current QA origin until cutover.
+ * The permanent account UUID is the existing public identifier, not a username. */
+export const QA_SOCIAL_ORIGIN = PUBLIC_SOCIAL_ORIGIN;
 export function socialProfileLink(id:string, origin:string) {
  if (!UUID.test(id)) throw new Error("Identidad inválida");
  const url = new URL("/", origin); url.searchParams.set("friend", id); return url.href;

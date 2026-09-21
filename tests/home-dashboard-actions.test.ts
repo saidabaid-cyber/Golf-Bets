@@ -77,7 +77,7 @@ test("active round remains inside the approved Home and routes both visible cont
 
 test("Home balance keeps historical settlements while sports metrics honor stats reset", () => {
   const page = readFileSync("app/page.tsx", "utf8");
-  const home = page.match(/<HomeDashboard[\s\S]*?\/>/)?.[0] || "";
+  const home = page.slice(page.indexOf('<HomeDashboard'), page.indexOf('onOpenRules={openRulesForRound}'));
   assert.match(home, /insights=\{\{ \.\.\.betaGolfInsights, betBalance: historicalGolfInsights\.betBalance \}\}/);
   assert.match(page, /buildGolfInsights\(statisticsHistory\)/);
   assert.match(page, /historicalGolfInsights = useMemo\(\(\) => buildGolfInsights\(history\)/);
@@ -85,7 +85,7 @@ test("Home balance keeps historical settlements while sports metrics honor stats
 
 test("an unstarted draft keeps all three Play entries accessible and remains resumable in Play", () => {
   const page = readFileSync("app/page.tsx", "utf8");
-  const home = page.match(/<HomeDashboard[\s\S]*?\/>/)?.[0] || "";
+  const home = page.slice(page.indexOf('<HomeDashboard'), page.indexOf('onOpenRules={openRulesForRound}'));
   const play = page.match(/<PlayHub[\s\S]*?\/>/)?.[0] || "";
   assert.match(home, /activeRound=\{activeRoundSummary\?\.status === "setup" \? null : activeRoundSummary\}/);
   assert.match(home, /onPlayOptions=\{\(\) => setTab\("play"\)\}/);

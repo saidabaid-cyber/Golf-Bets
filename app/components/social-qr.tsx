@@ -1,14 +1,14 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
-import { QA_SOCIAL_ORIGIN, socialIdFromQr, socialProfileLink } from "../../lib/social-connections";
+import { socialIdFromQr, socialProfileLink } from "../../lib/social-connections";
 import { ProfileAvatarMedia } from "./profile-avatar-media";
 import styles from "./social-qr.module.css";
 export const PENDING_SOCIAL_KEY="backyard-pending-social-profile-v1";
 export function CaptureSocialProfileLink(){useEffect(()=>{const id=socialIdFromQr(location.href,location.origin);if(id){try{sessionStorage.setItem(PENDING_SOCIAL_KEY,id);}catch{/* Keep URL available. */}}},[]);return null;}
 export function PersonalQr({userId,name,username,avatar,onClose}:{userId:string;name:string;username:string;avatar:string;onClose:()=>void}){
  const canvas=useRef<HTMLCanvasElement>(null),avatarElement=useRef<HTMLDivElement>(null),[link,setLink]=useState(""),[ready,setReady]=useState(false),[message,setMessage]=useState("");
- useEffect(()=>{let live=true;setReady(false);const origin=location.hostname.endsWith("-saha8.vercel.app")?QA_SOCIAL_ORIGIN:location.origin;const url=socialProfileLink(userId,origin);setLink(url);
+ useEffect(()=>{let live=true;setReady(false);const url=socialProfileLink(userId,location.origin);setLink(url);
  void (async()=>{const qr=document.createElement("canvas");await QRCode.toCanvas(qr,url,{width:420,margin:4,errorCorrectionLevel:"M"});if(!live||!canvas.current)return;const out=canvas.current;out.width=600;out.height=800;const ctx=out.getContext("2d")!;ctx.fillStyle="#fff";ctx.fillRect(0,0,600,800);ctx.fillStyle="#073f32";ctx.font="bold 28px sans-serif";ctx.textAlign="center";ctx.fillText("THE BACKYARD",300,45);ctx.font="24px sans-serif";ctx.fillText(name,300,185,540);ctx.drawImage(qr,90,205);ctx.font="bold 28px sans-serif";ctx.fillText(username?`@${username}`:"Configura tu nombre de usuario",300,685,550);ctx.font="18px sans-serif";ctx.fillText("Escanea para ver mi perfil",300,740);
  ctx.fillStyle="#e5eddf";ctx.beginPath();ctx.arc(300,110,42,0,Math.PI*2);ctx.fill();ctx.fillStyle="#073f32";ctx.font="34px sans-serif";ctx.fillText(avatarElement.current?.textContent?.trim()||name[0]||"J",300,123,75);
  const img=avatarElement.current?.querySelector("img"),svg=avatarElement.current?.querySelector("svg");

@@ -11,12 +11,12 @@ test("Resultados usa el encabezado seguro Gastos sin interpolar una identidad au
   assert.doesNotMatch(page, /Gastos de \$\{owner\?\.name\}/);
 });
 
-test("Nueva ronda pide confirmación exacta y conserva respaldo antes de reemplazar", () => {
-  assert.match(page, /¿Iniciar una nueva ronda\?/);
-  assert.match(page, /¿Deseas descartarla e iniciar otra\?/);
-  assert.match(page, /Descartar e iniciar nueva/);
-  assert.match(page, /backupActiveRoundForReplacement\(localStorage/);
-  assert.match(page, /applyNewRoundIntent\(intent, "La ronda anterior quedó respaldada en este dispositivo\."\)/);
+test("Nueva ronda permite continuar o conservar la anterior en Histórico", () => {
+  assert.match(page, /Tienes una ronda activa/);
+  assert.match(page, /Continuar ronda actual/);
+  assert.match(page, /Iniciar nueva ronda/);
+  assert.match(page, /await parkActiveRound\('live'\)/);
+  assert.doesNotMatch(page, /Descartar e iniciar nueva/);
 });
 
 test("Jugar con un grupo usa el mismo respaldo seguro que Nueva ronda", () => {

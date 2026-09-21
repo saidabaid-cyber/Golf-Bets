@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { GolfInsights } from "../../lib/golf-insights";
 import { ModalShell } from "./modal-shell";
 import { ProfileAvatarMedia } from "./profile-avatar-media";
@@ -10,6 +10,7 @@ import styles from "./home-dashboard-clean.module.css";
 export type ActiveRoundSummary = {
   courseName: string;
   roundDate: string;
+  startedAt?: string;
   status: "setup" | "live" | "review";
   totalHoles: 9 | 18;
   currentHole?: number;
@@ -31,6 +32,9 @@ export type HomeDashboardProps = {
   onNewRound: () => void;
   onPlayOptions?: () => void;
   onOpenProfile: () => void;
+  profileCompletion?: ReactNode;
+  onEditActiveRound?: () => void;
+  onCancelActiveRound?: () => void;
   onOpenNotifications: () => void;
   onOpenHistory: () => void;
   onOpenBalances: () => void;
@@ -104,6 +108,7 @@ export function HomeDashboard({
   displayName, avatarUrl, activeRound, insights, groupCount,
   onContinueRound, onAiRound, onNewRound, onPlayOptions, onOpenProfile, onOpenNotifications,
   onOpenHistory, onOpenBalances, onOpenStats, onOpenGroups, onOpenRules,
+  profileCompletion, onEditActiveRound, onCancelActiveRound,
 }: HomeDashboardProps) {
   const resolvedDisplayName = displayName.trim() || "Golfista";
   const firstName = resolvedDisplayName.split(/\s+/)[0];
@@ -127,10 +132,10 @@ export function HomeDashboard({
       <span className={styles.heroShade} aria-hidden="true" />
 
       <header className={styles.header}>
-        <button type="button" className={styles.identity} onClick={onOpenProfile} aria-label="Abrir mi perfil">
-          <span className={styles.avatar}><ProfileAvatarMedia value={avatarUrl} fallback={initial} alt={`Avatar de ${displayName}`} /></span>
-          <span className={styles.identityCopy}><strong>{resolvedDisplayName}</strong><small>Listo para jugar 💪</small></span>
-        </button>
+        <div className={styles.identity}>
+          <span className={styles.avatar}>{profileCompletion || <button type="button" onClick={onOpenProfile} aria-label="Abrir mi perfil"><ProfileAvatarMedia value={avatarUrl} fallback={initial} alt={`Avatar de ${displayName}`} /></button>}</span>
+          <button type="button" className={styles.identityCopy} onClick={onOpenProfile} aria-label="Abrir mi perfil"><strong>{resolvedDisplayName}</strong><small>Listo para jugar 💪</small></button>
+        </div>
         <div className={styles.headerActions}>
           <button type="button" className={styles.notificationButton} onClick={onOpenNotifications} aria-label="Abrir notificaciones"><Icon name="bell" /><span /></button>
         </div>
@@ -155,6 +160,7 @@ export function HomeDashboard({
     </section>
 
     <div className={styles.content}>
+      {activeRound && <section className="card activeRoundControls" aria-label="Administrar ronda activa"><p>{activeRound.courseName} · {activeRound.roundDate}{activeRound.startedAt ? ` · ${new Date(activeRound.startedAt).toLocaleTimeString('es-MX', {hour:'2-digit',minute:'2-digit'})}` : ''} · {activeRoundLabel(activeRound)}</p><div className="dialogActions"><button className="secondary" onClick={onEditActiveRound}>Editar</button><button className="secondary" onClick={onNewRound}>Nueva ronda</button><button className="textButton" onClick={onCancelActiveRound}>Cancelar / cerrar</button></div></section>}
       <section className={styles.quickSection} aria-labelledby="quick-title">
         <div className={styles.sectionHeading}><h2 id="quick-title">Accesos rápidos</h2><button type="button" onClick={onOpenStats}>Ver todo <span>›</span></button></div>
         <nav className={styles.quickActions} aria-label="Accesos rápidos">

@@ -28,7 +28,7 @@ test("resumen post-hoyo reutiliza Personales guardadas y presenta Match y Medal 
   assert.match(summary, /Match:/);
   assert.match(summary, /Medal:/);
   const page = read("app/page.tsx");
-  assert.match(page, /const savedPersonals = calculatePersonalBets\(personalBets, ownerId, players, course, savedScores, order\)/);
+  assert.match(page, /calculatePersonalBets\(personalBets, ownerId, players, course, savedScores, order\)/);
   assert.match(page, /personalHoleSummary\(result, playerName\(ownerId\), playerName\(result\.rivalId\), holeNumber\)/);
 });
 

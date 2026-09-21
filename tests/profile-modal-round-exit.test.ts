@@ -28,29 +28,30 @@ function replacementHarness(backupSucceeds: boolean) {
   const calls: string[] = [];
   const replacingRound = { current: false };
   const intent = { kind: "blank" };
-  const fn = page.slice(page.indexOf("  function confirmNewRound()"), page.indexOf("  function deleteActiveRound()"));
+  const fn = page.slice(page.indexOf("  async function confirmNewRound()"), page.indexOf("  async function deleteActiveRound()"));
   const confirm = runInNewContext(`${fn}; confirmNewRound`, {
     replacingRound, pendingNewRoundIntent: intent, localStorage: {},
     flushLocalState: { current: () => true },
     setNewRoundBackupError: (error: string) => { if (error) calls.push("error"); },
-    backupActiveRoundForReplacement: () => { calls.push("backup"); return backupSucceeds; },
+    setRoundLifecycleBusy: () => {},
+    parkActiveRound: async () => { calls.push("backup"); if (!backupSucceeds) throw new Error('backup failed'); },
     applyNewRoundIntent: (value: unknown) => { assert.equal(value, intent); calls.push("replace"); },
-  }) as () => void;
+  }) as () => Promise<void>;
   return { calls, confirm, replacingRound };
 }
 
-test("confirmed replacement backs up before replacing and double tap replaces only once", () => {
+test("confirmed replacement saves before replacing and double tap replaces only once", async () => {
   const h = replacementHarness(true);
   assert.deepEqual(h.calls, []);
-  h.confirm(); h.confirm();
+  await Promise.all([h.confirm(), h.confirm()]);
   assert.deepEqual(h.calls, ["backup", "replace"]);
 });
 
-test("failed backup never replaces a round and permits safe retry", () => {
+test("failed backup never replaces a round and permits safe retry", async () => {
   const h = replacementHarness(false);
-  h.confirm();
+  await h.confirm();
   assert.deepEqual(h.calls, ["backup", "error"]);
   assert.equal(h.replacingRound.current, false);
-  h.confirm();
+  await h.confirm();
   assert.deepEqual(h.calls, ["backup", "error", "backup", "error"]);
 });
