@@ -44,23 +44,24 @@ export function CatalogCoursePicker({token,onSelect,selectedName='',onRequest}:{
   }
   const locationError=({denied:'No pudimos obtener tu ubicación: el permiso fue rechazado. Puedes habilitar Ubicación para este sitio en tu navegador o buscar manualmente.',timeout:'No pudimos obtener tu ubicación: se agotó la espera. Puedes reintentar o buscar manualmente.',unavailable:'No pudimos obtener tu ubicación. Comprueba que la ubicación del dispositivo esté disponible, reintenta o busca manualmente.',unsupported:'Este navegador no soporta ubicación. Puedes buscar tu campo manualmente.'} as Record<string,string>)[location.status];
   return <section className={styles.picker} aria-label="Catálogo de campos">
-    <h3>Clubes cerca de ti</h3><p>Usamos tu ubicación sólo para ordenar los 3 clubes más cercanos. No se guarda ni se envía al servidor.</p>
-    <button type="button" className="secondary" disabled={locating||!token} onClick={locate}>{locating?'Buscando ubicación…':'Usar mi ubicación'}</button>
+    <h3>Campo</h3>
+    <button type="button" className={styles.locate} disabled={locating||!token} onClick={locate}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M12 21s7-6 7-12A7 7 0 0 0 5 9c0 6 7 12 7 12ZM15 9a3 3 0 1 1-6 0 3 3 0 0 1 6 0"/></svg>{locating?'Buscando ubicación…':'Campos cercanos'}</button>
+    {location.status==='idle'&&<small>Permite tu ubicación para ver los más cercanos. No la guardamos ni enviamos.</small>}
     {locating&&<><p role="status">Buscando ubicación… Si el navegador lo solicita, permite el acceso.</p><button type="button" className="textButton" onClick={()=>{cancelLocation.current();setLocation({status:'idle'});}}>Cancelar búsqueda</button></>}
     {locationError&&<div role="status"><p>{locationError}</p><button type="button" className="secondary" onClick={locate}>Reintentar</button></div>}
     {location.status==='located'&&<p role="status">{loading?'Ubicación obtenida. Cargando clubes…':error?'Ubicación obtenida. Reintenta cargar el catálogo.':nearby.length?`Encontramos ${nearby.length} campos cercanos · ${nearby.length} clubes distintos.`:'No hay campos con ubicación verificada cerca de ti. La búsqueda manual sigue disponible.'}</p>}
     {nearby.map(c=><button type="button" className={styles.club} key={c.clubId} onClick={()=>selectClub(c)}><b>{c.clubName}</b><span>{[c.city,c.stateRegion].filter(Boolean).join(', ')} · {c.distanceKm.toFixed(1)} km</span></button>)}
-    {nearby.length>0&&<small>Los más cercanos entre los clubes verificados del catálogo. Distancia geográfica aproximada, no de manejo. Algunas ubicaciones provienen de <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors (ODbL)</a>.</small>}
+    {nearby.length>0&&<details className={styles.notes}><summary>Sobre las distancias</summary><small>Distancia geográfica aproximada, no de manejo, entre clubes con ubicación verificada. Algunas ubicaciones: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors (ODbL)</a>.</small></details>}
     <AnchoredSearch label="Buscar otro campo" value={query} onChange={setQuery} placeholder="Nombre, club o nombre alternativo" expanded={Boolean(query.trim())} status={loading?'Cargando catálogo…':query.trim()&&!clubs.length?'Sin coincidencias. Puedes solicitar el campo.':`${entries.length} recorridos disponibles`}>
       {clubs.slice(0,30).map(c=><AnchoredSearchOption key={c.clubId} label={`Seleccionar ${c.clubName}`} onSelect={()=>selectClub(c)}><b>{c.clubName}</b><small>{[c.city,c.stateRegion].filter(Boolean).join(', ')}</small></AnchoredSearchOption>)}
       {clubs.length>30&&<p>Refina el nombre para ver más coincidencias.</p>}
     </AnchoredSearch>
     {error&&<p role="alert">{error} <button type="button" className="textButton" onClick={()=>setRetry(n=>n+1)}>Reintentar</button></p>}
     {!token&&<p>Inicia sesión para consultar el catálogo en revisión.</p>}
-    {club&&<label>Recorrido<select aria-label="Recorrido" value={chosen} onChange={e=>void selectCourse(e.target.value)}><option value="">Selecciona recorrido</option>{entries.filter(c=>c.clubId===club).map(c=><option key={c.id} value={c.id}>{c.name} · {c.completeCards}/{c.teeCount} tarjetas</option>)}</select></label>}
+    {club&&<label>Recorrido<select aria-label="Recorrido" value={chosen} onChange={e=>void selectCourse(e.target.value)}><option value="">Selecciona recorrido</option>{entries.filter(c=>c.clubId===club).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
     {cards.length>0&&<label>Salida / tee inicial<select aria-label="Salida del catálogo" value="" onChange={e=>{const c=cards.find(t=>t.id===e.target.value);if(c)onSelect(c,cards);}}><option value="">Elige una salida</option>{cards.map(c=><option disabled={c.holes.length!==18} key={c.id} value={c.id}>{c.teeName} · {c.holes.length===18?`${c.totalYards??'—'} yd`:'Sin tarjeta disponible'}{c.catalogReview?.issues.length?' · Datos señalados':''}</option>)}</select></label>}
     {selectedName&&<p role="status">Seleccionado: {selectedName}</p>}
-    {cards.length>0&&<p>Categoría de rating por verificar. Los ratings no se aplican automáticamente; puedes registrar datos verificados manualmente. Selecciona 9/18 hoyos y después el tee de cada jugador.</p>}
-    {onRequest&&<button type="button" className="textButton" onClick={onRequest}>¿No encuentras tu campo? Solicítalo</button>}
+    {cards.length>0&&<details className={styles.notes}><summary>Ratings y tees por jugador</summary><p>Categoría de rating por verificar: no se aplica automáticamente. Puedes registrar datos verificados manualmente. Selecciona 9/18 hoyos y después el tee de cada jugador.</p></details>}
+    {onRequest&&<button type="button" className={styles.request} onClick={onRequest}>¿No encuentras tu campo? Solicítalo ↗</button>}
   </section>;
 }

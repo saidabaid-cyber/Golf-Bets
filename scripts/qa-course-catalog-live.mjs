@@ -5,9 +5,9 @@ import {randomUUID,createHash} from 'node:crypto';
 import {readFileSync,writeFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import {createClient} from '@supabase/supabase-js';
-import {profileCloudQaConfig} from './qa-preview-profile-cloud.mjs';
+import {publicPreviewConfig} from './lib/qa-public-preview.mjs';
 import {credentialBoundFetch,verifyPreviewBundleBinding} from './qa-preview-statistics.mjs';
-const config=profileCloudQaConfig(process.env);
+const config=publicPreviewConfig(process.env);
 assert.equal(config.projectRef,'bymeopxkxapfizeeqeyb');
 const request=credentialBoundFetch(config.previewOrigin);
 await verifyPreviewBundleBinding(config,request);
@@ -29,7 +29,7 @@ async function app(path,method='GET',body,expected=200){
 const report={preview:config.previewOrigin,ref:config.projectRef,geographic:[],rounds:[],emailsSent:0,authChanges:0,historicalWrites:0};
 const catalog=await app('/api/courses/catalog');assert.equal(catalog.total,176);
 assert.equal(new Set(catalog.courses.map(c=>c.clubId)).size,153);
-assert.equal(new Set(catalog.courses.filter(c=>c.locationEvidence&&Number.isFinite(c.latitude)).map(c=>c.clubId)).size,84);
+assert.equal(new Set(catalog.courses.filter(c=>c.locationEvidence&&Number.isFinite(c.latitude)).map(c=>c.clubId)).size,91);
 for(const [city,point] of Object.entries({Puebla:[19.02,-98.25],CDMX:[19.4326,-99.1332],Monterrey:[25.67,-100.31],Guadalajara:[20.67,-103.35],Queretaro:[20.59,-100.39],Leon:[21.12,-101.68],Cancun:[21.16,-86.83],LosCabos:[22.9,-109.91],PuertoVallarta:[20.65,-105.23],Acapulco:[16.81,-99.82]})){
  const nearby=nearestReviewedClubs(catalog.courses,{latitude:point[0],longitude:point[1]});assert.equal(nearby.length,3);assert.equal(new Set(nearby.map(c=>c.clubId)).size,3);assert.ok(nearby[0].distanceKm<=nearby[1].distanceKm&&nearby[1].distanceKm<=nearby[2].distanceKm);
  report.geographic.push({city,clubs:nearby.map(c=>({name:c.clubName,km:Math.round(c.distanceKm*10)/10}))});
@@ -83,7 +83,7 @@ if(process.argv.includes('--verify-created')){
  }
  report.rounds=previous.rounds;report.finalDeploymentReadback=true;
 }
-report.existingHistoryPreserved=baseline.size;report.catalogCounts={clubs:153,courses:176,geolocated:84,tees:769,complete:758};
+report.existingHistoryPreserved=baseline.size;report.catalogCounts={clubs:153,courses:176,geolocated:91,tees:769,complete:758};
 writeFileSync('.qa-artifacts/catalog-applied-cloud-report.json',JSON.stringify(report,null,2));
 writeFileSync('.qa-artifacts/catalog-applied-auth.private.json',JSON.stringify({cookies:[],origins:[{origin:config.previewOrigin,localStorage:[{name:`sb-${config.projectRef}-auth-token`,value:JSON.stringify(session)}]}]}));
 console.log(JSON.stringify(report,null,2));

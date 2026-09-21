@@ -1,18 +1,12 @@
 {
   "status": "PENDING_LOCATION",
   "asOf": "2026-09-20",
-  "scope": "69 clubes aún sin punto verificado, además de 75 ubicaciones preparadas que requieren autorización para aplicar a QA.",
+  "scope": "62 clubes sin punto verificable; 91 ubicaciones documentadas para QA. No se usan centroides municipales.",
   "clubs": [
     {
       "club": "ALTOZANO EL NUEVO COLIMA",
       "city": "Cuauhtémoc",
       "state": "Colima",
-      "status": "PENDING_LOCATION"
-    },
-    {
-      "club": "ASOCIACION DEPORTIVA TULA",
-      "city": "Tula De Allende",
-      "state": "Hidalgo",
       "status": "PENDING_LOCATION"
     },
     {
@@ -35,12 +29,6 @@
     },
     {
       "club": "Cabo del Sol",
-      "status": "PENDING_LOCATION"
-    },
-    {
-      "club": "Cabo Real Golf Course",
-      "city": "San Jose del Cabo",
-      "state": "Baja California Sur",
       "status": "PENDING_LOCATION"
     },
     {
@@ -123,12 +111,6 @@
       "club": "CLUB CAMPESTRE TUXTLA",
       "city": "Tuxtla Gutiérrez",
       "state": "Chiapas",
-      "status": "PENDING_LOCATION"
-    },
-    {
-      "club": "CLUB DE GOLF ACAPULCO",
-      "city": "Acapulco",
-      "state": "Guerrero",
       "status": "PENDING_LOCATION"
     },
     {
@@ -250,12 +232,6 @@
       "status": "PENDING_LOCATION"
     },
     {
-      "club": "EL MOLINO GOLF CLUB",
-      "city": "León",
-      "state": "Guanajuato",
-      "status": "PENDING_LOCATION"
-    },
-    {
       "club": "Estrella Del Mar Golf Club",
       "city": "Mazatlán",
       "state": "Sinaloa",
@@ -292,12 +268,6 @@
       "status": "PENDING_LOCATION"
     },
     {
-      "club": "LAS PAROTAS CLUB DE GOLF",
-      "city": "Tangolunda",
-      "state": "Oaxaca",
-      "status": "PENDING_LOCATION"
-    },
-    {
       "club": "Loreto Bay Golf Resort and Spa",
       "status": "PENDING_LOCATION"
     },
@@ -327,12 +297,6 @@
       "club": "PARAISO DEL MAR GOLF CLUB",
       "city": "La Paz",
       "state": "Baja California Sur",
-      "status": "PENDING_LOCATION"
-    },
-    {
-      "club": "PGA RIVIERA MAYA BY BAHIA PRINCIPE GOLF",
-      "city": "Tulum",
-      "state": "Quintana Roo",
       "status": "PENDING_LOCATION"
     },
     {
@@ -391,12 +355,6 @@
       "club": "Vidanta Golf Puerto Penasco",
       "city": "Puerto Peñasco",
       "state": "Sonora",
-      "status": "PENDING_LOCATION"
-    },
-    {
-      "club": "VISTA VERDE COUNTRY CLUB",
-      "city": "Tehuacán",
-      "state": "Puebla",
       "status": "PENDING_LOCATION"
     },
     {
