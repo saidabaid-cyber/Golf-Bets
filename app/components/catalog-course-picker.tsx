@@ -1,6 +1,6 @@
 "use client";
 import { useEffect,useMemo,useRef,useState } from 'react';
-import { nearestReviewedClubs,searchReviewedCourses,type ReviewedCatalogCourse } from '../../lib/review-course-catalog';
+import { nearestReviewedClubs,reviewedClubsLocationSummary,REVIEWED_NEARBY_DISTANCE_KM,searchReviewedCourses,type ReviewedCatalogCourse } from '../../lib/review-course-catalog';
 import { requestCourseLocation,type CourseLocationResult } from '../../lib/browser-course-location';
 import type { Course } from '../../lib/types';
 import { AnchoredSearch,AnchoredSearchOption } from './anchored-search';
@@ -49,8 +49,8 @@ export function CatalogCoursePicker({token,onSelect,onSelectClub,selectedName=''
     {location.status==='idle'&&<small>Permite tu ubicación para ver los más cercanos. No la guardamos ni enviamos.</small>}
     {locating&&<><p role="status">Buscando ubicación… Si el navegador lo solicita, permite el acceso.</p><button type="button" className="textButton" onClick={()=>{cancelLocation.current();setLocation({status:'idle'});}}>Cancelar búsqueda</button></>}
     {locationError&&<div role="status"><p>{locationError}</p><button type="button" className="secondary" onClick={locate}>Reintentar</button></div>}
-    {location.status==='located'&&<p role="status">{loading?'Ubicación obtenida. Cargando clubes…':error?'Ubicación obtenida. Reintenta cargar el catálogo.':nearby.length?`Encontramos ${nearby.length} campos cercanos · ${nearby.length} clubes distintos.`:'No hay campos con ubicación verificada cerca de ti. La búsqueda manual sigue disponible.'}</p>}
-    {nearby.map(c=><button type="button" className={styles.club} key={c.clubId} onClick={()=>selectClub(c)}><b>{c.clubName}</b><span>{[c.city,c.stateRegion].filter(Boolean).join(', ')} · {c.distanceKm.toFixed(1)} km</span></button>)}
+    {location.status==='located'&&<p role="status">{loading?'Ubicación obtenida. Cargando clubes…':error?'Ubicación obtenida. Reintenta cargar el catálogo.':reviewedClubsLocationSummary(nearby)}</p>}
+    {nearby.map(c=><button type="button" className={styles.club} key={c.clubId} onClick={()=>selectClub(c)}><b>{c.clubName}</b><span>{[c.city,c.stateRegion].filter(Boolean).join(', ')} · {c.distanceKm.toFixed(1)} km{c.distanceKm>REVIEWED_NEARBY_DISTANCE_KM?' · Fuera de 100 km':''}</span></button>)}
     {nearby.length>0&&<details className={styles.notes}><summary>Sobre las distancias</summary><small>Distancia geográfica aproximada, no de manejo, entre clubes con ubicación verificada. Algunas ubicaciones: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors (ODbL)</a>.</small></details>}
     <AnchoredSearch inlineResults label="Buscar otro campo" value={query} onChange={setQuery} placeholder="Nombre, club o nombre alternativo" expanded={Boolean(query.trim())} status={loading?'Cargando catálogo…':query.trim()&&!clubs.length?'Sin coincidencias. Puedes solicitar el campo.':`${entries.length} recorridos disponibles`}>
       {clubs.slice(0,30).map(c=><AnchoredSearchOption key={c.clubId} label={`Seleccionar ${c.clubName}`} onSelect={()=>selectClub(c)}><b>{c.clubName}</b><small>{[c.city,c.stateRegion].filter(Boolean).join(', ')}</small></AnchoredSearchOption>)}

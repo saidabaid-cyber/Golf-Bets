@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {nearestReviewedClubs,searchReviewedCourses,reviewedTeeToCourse,type ReviewedCatalogCourse,type ReviewedTeeSource} from '../lib/review-course-catalog';
+import {nearestReviewedClubs,reviewedClubsLocationSummary,searchReviewedCourses,reviewedTeeToCourse,type ReviewedCatalogCourse,type ReviewedTeeSource} from '../lib/review-course-catalog';
 import {teeAssignmentSnapshot,updatePlayerTeeAssignment,reconcilePlayerTeeAssignments} from '../lib/player-tee-assignments';
 import {withPlayerCourseCards,holeForPlayer} from '../lib/player-course-card';
 import {winnerIdsForHole} from '../lib/engine';
@@ -9,6 +9,18 @@ const tee:ReviewedTeeSource={id:'tee-qa',name:'Azules',rating_category:null,cour
 const c:ReviewedCatalogCourse={id:'course-qa',clubId:'club-qa',name:'Recorrido Norte',clubName:'Club México QA',city:'Puebla',stateRegion:'Puebla',aliases:['Campo antiguo QA'],sourceUrl:'https://example.invalid/source',observedAt:'2026-09-20',dataVersion:'qa',tees:[tee]};
 for(const query of ['MEXICO','méxico','campo antiguo','puebla norte'])test(`complete catalog search: ${query}`,()=>assert.equal(searchReviewedCourses([c],query).length,1));
 test('unknown query is empty',()=>assert.equal(searchReviewedCourses([c],'missing').length,0));
+test('remote verified clubs stay selectable but are never described as nearby',()=>{
+ const rows=[0,1,2].map(i=>({...c,id:`c${i}`,clubId:`club${i}`,latitude:19+i*.1,longitude:-98,locationEvidence:{sourceUrl:'https://example.invalid/map',verifiedAt:'2026-09-20'}}));
+ const distant=nearestReviewedClubs(rows,{latitude:40,longitude:-74});
+ assert.equal(distant.length,3);assert.ok(distant.every(club=>club.distanceKm>100));
+ assert.match(reviewedClubsLocationSummary(distant),/más de 100 km/);
+ assert.doesNotMatch(reviewedClubsLocationSummary(distant),/campos cercanos/);
+ assert.match(reviewedClubsLocationSummary([{distanceKm:3},{distanceKm:101}]),/más de 100 km/);
+});
+test('local and empty proximity summaries preserve explicit count and manual fallback',()=>{
+ assert.equal(reviewedClubsLocationSummary([{distanceKm:1},{distanceKm:100}]),'Encontramos 2 campos cercanos · 2 clubes distintos.');
+ assert.match(reviewedClubsLocationSummary([]),/búsqueda manual sigue disponible/);
+});
 test('nearest selects three distinct evidenced clubs, not layouts or city centroids',()=>{
   const rows=[0,1,2,3].map(i=>({...c,id:`c${i}`,clubId:`club${i}`,latitude:19+i*.1,longitude:-98,locationEvidence:{sourceUrl:'https://example.invalid/map',verifiedAt:'2026-09-20'}}));
   const result=nearestReviewedClubs([rows[0],{...rows[0],id:'second-layout'},...rows.slice(1),{...c,clubId:'unknown',latitude:19,longitude:-98}],{latitude:19,longitude:-98});
