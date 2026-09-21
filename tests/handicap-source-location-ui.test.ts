@@ -29,6 +29,8 @@ function setupHarness(location: geo.ProfileLocationValue) {
   const saved: Record<string, unknown>[] = [];
   const renderComponent = component("app/components/account-provider.tsx", "ProfileSetupScreen", {
     normalizeProfileLocation: geo.normalizeProfileLocation, validateProfileLocation: geo.validateProfileLocation,
+    useEffect: (effect: () => void) => effect(),
+    localStorage: { getItem: () => null }, STORAGE_KEYS: { contrast: "qa-contrast" },
     validateProfileDraft, validateProfileAvatarUrl, BrandLockup: "brand", ProfileImagePicker: "avatar", ProfileLocationPicker: "location", HandicapSourceSelector: "source",
   });
   const props = { identity: { ...location, userId: "owner", mode: "authenticated", givenName: "Said", familyName: "Abaid", avatarUrl: "", defaultHandicap: 7 }, onSave: async (value: Record<string, unknown>) => { saved.push(JSON.parse(JSON.stringify(value))); return "cloud"; }, onBack: async () => {} };

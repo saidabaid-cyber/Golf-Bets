@@ -100,3 +100,8 @@ test('full-round boundary returns the identical deterministic result without mod
   const result={events:[],won:{A:2},pending:1};let calls=0;
   assert.equal(roundBetResult('full','calculateRabbits',()=>{calls++;return result;}),result);assert.equal(calls,1);
 });
+test('catalog results occupy layout space instead of falling under onboarding actions',()=>{
+  assert.match(readFileSync('app/components/catalog-course-picker.tsx','utf8'),/<AnchoredSearch inlineResults/);
+  assert.match(readFileSync('app/components/anchored-search.tsx','utf8'),/inlineResults = false/);
+  assert.match(readFileSync('app/globals.css','utf8'),/\.anchoredSearchInline \.anchoredSearchResults\{position:static/);
+});

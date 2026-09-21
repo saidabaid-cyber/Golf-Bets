@@ -13,6 +13,7 @@ export function AnchoredSearch({
   onFocus,
   invalid,
   describedBy,
+  inlineResults = false,
 }: {
   label: string;
   value: string;
@@ -24,10 +25,11 @@ export function AnchoredSearch({
   onFocus?: () => void;
   invalid?: boolean;
   describedBy?: string;
+  inlineResults?: boolean;
 }) {
   const inputId = useId();
   const listId = `${inputId}-results`;
-  return <div className="anchoredSearch">
+  return <div className={`anchoredSearch${inlineResults ? " anchoredSearchInline" : ""}`}>
     <label htmlFor={inputId}>{label}</label>
     <div className="anchoredSearchAnchor">
       <input
