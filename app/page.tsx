@@ -178,6 +178,7 @@ import { buildPersonalOpponentResults } from "../lib/personal-opponents";
 import { persistPendingRoundReview, persistRoundDraftCheckpoint, ROUND_REVIEW_NOTICE } from "../lib/round-review";
 import { normalizeHistoricalRoundLifecycle, normalizeRoundStartedAt, withDerivedRoundLifecycle } from "../lib/round-lifecycle";
 import { preserveUnfinishedRound, unfinishedRoundDraft } from '../lib/unfinished-round';
+import { hasRoundToPreserve } from '../lib/new-round-safety';
 import { normalizeAdvancedStats, normalizeScoreCaptureMode, updateAdvancedHoleStat } from "../lib/advanced-stats";
 import { viperQuantityFromPutts } from "../lib/round-capture";
 import { groupNassauPresentation, normalizeRoundPresentation } from "../lib/round-presentation";
@@ -2217,8 +2218,8 @@ function GolfBetsApp() {
   }
 
   function requestNewRoundIntent(intent: NewRoundIntent) {
-    replacingRound.current = false;
-    if (!roundClosed && hasRoundProgress(roundDraftPayload())) {
+    if (replacingRound.current) return;
+    if (!roundClosed && hasRoundToPreserve(roundDraftPayload(), identity.userId)) {
       setNewRoundBackupError("");
       setPendingNewRoundIntent(intent);
       setShowNewRoundConfirm(true);

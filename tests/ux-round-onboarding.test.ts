@@ -9,6 +9,7 @@ import { onboardingCheckpoint } from '../lib/onboarding-checkpoint';
 import { preserveUnfinishedRound, unfinishedRoundDraft } from '../lib/unfinished-round';
 import { canResumeActiveRound } from '../lib/active-round-navigation';
 import { roundBetResult } from '../lib/round-betting-boundary';
+import { hasRoundToPreserve } from '../lib/new-round-safety';
 import { initialBets } from '../lib/new-round-bets';
 import { buildGolfInsights } from '../lib/golf-insights';
 import { saveRoundHistoryLocalFirst } from '../lib/round-history-save';
@@ -104,4 +105,18 @@ test('catalog results occupy layout space instead of falling under onboarding ac
   assert.match(readFileSync('app/components/catalog-course-picker.tsx','utf8'),/<AnchoredSearch inlineResults/);
   assert.match(readFileSync('app/components/anchored-search.tsx','utf8'),/inlineResults = false/);
   assert.match(readFileSync('app/globals.css','utf8'),/\.anchoredSearchInline \.anchoredSearchResults\{position:static/);
+});
+test('unavailable permission lookup never claims an unrequested permission',()=>{
+  const source=readFileSync('app/components/device-permissions.tsx','utf8');
+  assert.match(source,/catch \{ if \(alive\) setLocation\('unknown'\)/);
+  assert.doesNotMatch(source,/result.status[^;]+: 'prompt'/);
+});
+test('fresh automatic owner is not an active round but real setup edits are preserved',()=>{
+  const owner={id:'account-A',accountUserId:'A',name:'QA'};
+  const fresh={players:[owner],bets:initialBets([owner.id]),scores:{},currentIndex:0,courseSelected:false};
+  assert.equal(hasRoundToPreserve(fresh,'A'),false);
+  assert.equal(hasRoundToPreserve({...fresh,startedAt:'2026-09-21T12:00:00Z'},'A'),true);
+  assert.equal(hasRoundToPreserve({...fresh,players:[owner,{id:'guest',name:'Invitado'}]},'A'),true);
+  assert.equal(hasRoundToPreserve({...fresh,scores:{1:{[owner.id]:5}}},'A'),true);
+  assert.equal(hasRoundToPreserve({...fresh,manualBets:[{id:'manual'}]},'A'),true);
 });
