@@ -28,8 +28,8 @@ A recognizable header is only structural validation; restore to a disposable tar
 
 Recovery tests cover (the original 20-test execution is preserved below):
 - Real streaming encryption/decryption, wrong key, tampering/truncation, zero-byte Storage content, no overwrite.
-- Separate local/QA/owner DB allowlists, exact Storage origins, process-only credentials and forced read-only PG options.
-- Two mandatory SHOW results: off, missing, malformed or failed checks abort exports, including the separate roles preflight.
+- Separate local/QA/owner DB allowlists, exact Storage origins, process-only credentials, inherited libpq option removal and no `PGOPTIONS` injection.
+- Explicit `BEGIN TRANSACTION READ ONLY` preflights in one psql connection: only an exact `transaction_read_only=on` result passes; off, missing, malformed or failed checks abort exports, including the separate roles preflight.
 - No libpq routing/connection-string override, no generic Production bypass, and only the exact owner Session Pooler host/user tuple.
 - DB/Storage encryption required before connection; modern secret-key compatibility with the installed Supabase SDK and a synthetic HTTP transport.
 - Storage transport accepts only list/download endpoints and rejects mutations, other origins and redirects.
@@ -96,7 +96,7 @@ Overall: source recovery demonstrated; full disaster recovery remains **PARTIAL*
 Branch: `infra/disaster-recovery-clean`; starting commit: `002a82f28a7d0d4d75cfb215e17bf43ff10327f4`.
 
 - Project metadata confirms owner ref `zhqmlpljloumldaczcfp`, direct host `db.zhqmlpljloumldaczcfp.supabase.co`, PostgreSQL 17. No application rows, Auth records or Storage objects were read for this change.
-- Full `npm test`: **2,152 application + 30 recovery = 2,182 PASS**, 0 failures, 0 skipped. Recovery adds 10 regressions covering the owner allowlist, libpq override rejection, both SHOW checks, roles recheck, mandatory encryption, diagnostic redaction and read-only SDK Storage transport.
+- Full `npm test`: **2,152 application + 30 recovery = 2,182 PASS**, 0 failures, 0 skipped. At that commit, recovery added 10 regressions covering the owner allowlist, libpq override rejection, the then-current two SHOW checks (later superseded by the explicit transaction preflight below), roles recheck, mandatory encryption, diagnostic redaction and read-only SDK Storage transport.
 - `tsc --noEmit`: PASS. `npm run lint`: PASS, no warnings. `npm run build`: PASS (local Next build only).
 - Tracked-text security scan: 884 files, 0 high-confidence findings; no secret values printed. This is not a repeat of the earlier full-history scan.
 - Vercel rules for both infrastructure branches remain false, with no edit to vercel.json. No PR, merge, deployment, migration, source write or real owner backup was run.
@@ -106,6 +106,6 @@ Branch: `infra/disaster-recovery-clean`; starting commit: `002a82f28a7d0d4d75cfb
 
 - Owner keeps the exact direct tuple `db.zhqmlpljloumldaczcfp.supabase.co:5432` + `postgres` and now also permits only Session Pooler `aws-0-us-east-1.pooler.supabase.com:5432` + `postgres.zhqmlpljloumldaczcfp`, always with owner source/ref and database `postgres`.
 - QA remains direct-only. Generic pooler matching was removed; alternate pooler hosts, sources, project refs, users and non-session ports fail closed.
-- Full tests: **2,152 application + 30 recovery = 2,182 PASS**, 0 failures, 0 skipped. Recovery coverage exercises both owner endpoint tuples, rejected alternates and the mandatory read-only startup/preflight checks.
+- Full tests: **2,152 application + 30 recovery = 2,182 PASS**, 0 failures, 0 skipped. Recovery coverage exercises both owner endpoint tuples, rejected alternates, inherited-option stripping with no `PGOPTIONS`, and the explicit read-only transaction preflight.
 - ESLint PASS. Next route type generation plus `tsc --noEmit` PASS. Next 16.3.3 production build PASS.
 - Test backup fixtures explicitly remove inherited `BACKUP_*` variables. No real backup, database/Storage/Auth write, migration, PR, merge or deployment was executed by this allowlist update.

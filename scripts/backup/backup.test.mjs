@@ -38,9 +38,9 @@ test('manifest rejects traversal, Windows drives, streams and absolute paths',()
   const root=resolve('backups');for(const path of ['../private','/root','C:/secret','a\\b','x:stream','a/../b','a//b',''])assert.throws(()=>safeChild(root,path));
   assert.equal(safeChild(root,'storage/object.enc'),resolve(root,'storage/object.enc'));
 });
-test('QA database remains authorized with forced readonly options and TLS',()=>{
+test('QA database remains authorized with sanitized libpq options and TLS',()=>{
   const env={BACKUP_SOURCE:'qa',BACKUP_EXPECTED_REF:QA_REF,BACKUP_PGHOST:`db.${QA_REF}.supabase.co`,BACKUP_PGUSER:'postgres',BACKUP_PGPASSWORD:'synthetic-only'};
-  const pg=databaseEnvironment(env);assert.equal(pg.PGOPTIONS,'-c default_transaction_read_only=on -c transaction_read_only=on');assert.equal(pg.PGSSLMODE,'verify-full');
+  const pg=databaseEnvironment(env);assert.equal(pg.PGOPTIONS,undefined);assert.equal(pg.PGSSLMODE,'verify-full');
   assert.equal(pg.PGPASSWORD,env.BACKUP_PGPASSWORD);
   for(const change of [{BACKUP_EXPECTED_REF:'wrong'},{BACKUP_PGHOST:'db.zhqmlpljloumldaczcfp.supabase.co'},{BACKUP_PGHOST:'evil.example'},{BACKUP_PGPORT:'6543'},{BACKUP_SOURCE:'production'}])assert.throws(()=>databaseEnvironment({...env,...change}));
   assert.throws(()=>databaseEnvironment({...env,BACKUP_PGHOST:'aws-0-us-east-1.pooler.supabase.com',BACKUP_PGUSER:`postgres.${QA_REF}`}));
@@ -54,7 +54,7 @@ test('owner database accepts only the exact direct or Session Pooler identity',(
   assert.equal(OWNER_SESSION_POOLER_USER,'postgres.zhqmlpljloumldaczcfp');
   assert.equal(direct.PGHOST,`db.${OWNER_REF}.supabase.co`);assert.equal(direct.PGUSER,'postgres');assert.equal(direct.PGSSLMODE,'verify-full');
   assert.equal(pooler.PGHOST,'aws-0-us-east-1.pooler.supabase.com');assert.equal(pooler.PGPORT,'5432');assert.equal(pooler.PGUSER,'postgres.zhqmlpljloumldaczcfp');
-  assert.equal(pooler.PGOPTIONS,'-c default_transaction_read_only=on -c transaction_read_only=on');assert.equal(pooler.PGSSLMODE,'verify-full');
+  assert.equal(pooler.PGOPTIONS,undefined);assert.equal(pooler.PGSSLMODE,'verify-full');
   for(const change of [
     {BACKUP_SOURCE:'production'},{BACKUP_SOURCE:'qa'},{BACKUP_SOURCE:'local'},
     {BACKUP_EXPECTED_REF:QA_REF},{BACKUP_EXPECTED_REF:'another-project'},
@@ -77,14 +77,14 @@ test('owner database accepts only the exact direct or Session Pooler identity',(
   ])assert.throws(()=>databaseEnvironment({...poolerEnv,...change}),undefined,JSON.stringify(Object.keys(change)));
   assert.ok(databaseEnvironment({...env,BACKUP_SOURCE:'local',BACKUP_PGHOST:'127.0.0.1',BACKUP_PGPORT:'54322',BACKUP_PGDATABASE:'test_local'}));
 });
-test('inherited libpq settings and alternate connection strings cannot redirect or disable readonly',()=>{
+test('inherited libpq settings and alternate connection strings cannot redirect or inject startup options',()=>{
   const pg=databaseEnvironment({...ownerEnv(),PATH:'test-path',PGHOSTADDR:'203.0.113.10',pghostaddr:'203.0.113.11',PGSERVICE:'untrusted',PGSERVICEFILE:'untrusted',PGDATABASE:'host=untrusted',PGOPTIONS:'-c default_transaction_read_only=off',pgoptions:'-c transaction_read_only=off',PGSSLMODE:'disable',BACKUP_STORAGE_KEY:'synthetic-storage-key'});
-  assert.equal(pg.PATH,'test-path');assert.equal(pg.PGHOSTADDR,undefined);assert.equal(pg.pghostaddr,undefined);assert.equal(pg.pgoptions,undefined);
+  assert.equal(pg.PATH,'test-path');assert.equal(pg.PGHOSTADDR,undefined);assert.equal(pg.pghostaddr,undefined);
   assert.equal(pg.PGSERVICE,'');assert.equal(pg.PGSERVICEFILE,'');assert.equal(pg.PGSSLMODE,'verify-full');assert.equal(pg.PGDATABASE,'postgres');
-  assert.equal(pg.PGOPTIONS,'-c default_transaction_read_only=on -c transaction_read_only=on');
+  assert.ok(!Object.keys(pg).some(k=>/^PGOPTIONS$/i.test(k)));
   assert.ok(!Object.keys(pg).some(k=>k.startsWith('BACKUP_')));
 });
-function databaseTools(replies=['on\non\n']){
+function databaseTools(replies=['on\n']){
   const calls=[];let checks=0;
   return{calls,tools:{
     command:async(executable,args,{env})=>{
@@ -95,31 +95,31 @@ function databaseTools(replies=['on\non\n']){
     encryptedCommand:async(executable,args,file,key,env,input)=>{calls.push({executable,args,file,key,env,input});}
   }};
 }
-test('both SHOW checks are mandatory before schema/full exports; every tool gets readonly startup',async()=>{
+test('explicit read-only transaction preflight protects direct and Session Pooler exports',async()=>{
   for(const env of [ownerEnv(),ownerPoolerEnv()])for(const schemaOnly of [false,true]){
     const fixture=databaseTools(),result=await backupDatabase(await temp(),env,schemaOnly,fixture.tools);
     assert.equal(result.state,'PASS');
     const calls=fixture.calls,checks=calls.filter(c=>c.executable==='psql');assert.equal(checks.length,schemaOnly?1:2);
-    for(const c of calls){assert.equal(c.env.PGOPTIONS,'-c default_transaction_read_only=on -c transaction_read_only=on');assert.ok(!c.args.some(a=>a.includes(env.BACKUP_PGPASSWORD)));assert.equal(c.env.BACKUP_ENCRYPTION_KEY,undefined);}
-    for(const c of checks){assert.ok(c.args.includes('-X'));assert.ok(c.args.includes('--no-password'));assert.ok(c.args.includes('--set=ON_ERROR_STOP=1'));assert.deepEqual(c.args.filter(a=>a.startsWith('--command=')),['--command=SHOW default_transaction_read_only;','--command=SHOW transaction_read_only;']);}
+    for(const c of calls){assert.ok(!Object.keys(c.env).some(k=>/^PGOPTIONS$/i.test(k)));assert.ok(!c.args.some(a=>a.includes(env.BACKUP_PGPASSWORD)));assert.equal(c.env.BACKUP_ENCRYPTION_KEY,undefined);assert.equal(c.env.PGSSLMODE,'verify-full');}
+    for(const c of checks){assert.ok(c.args.includes('-X'));assert.ok(c.args.includes('--no-password'));assert.ok(c.args.includes('--quiet'));assert.ok(c.args.includes('--tuples-only'));assert.ok(c.args.includes('--no-align'));assert.ok(c.args.includes('--set=ON_ERROR_STOP=1'));assert.deepEqual(c.args.filter(a=>a.startsWith('--command=')),['--command=BEGIN TRANSACTION READ ONLY; SHOW transaction_read_only; ROLLBACK;']);assert.ok(!c.args.some(a=>a.includes('default_transaction_read_only')));}
     const exports=calls.filter(c=>c.file);assert.equal(exports.length,schemaOnly?1:4);
     assert.ok(calls.indexOf(checks[0])<calls.indexOf(exports[0]));
     if(!schemaOnly){assert.ok(calls.indexOf(checks[1])<calls.indexOf(exports[3]));assert.equal(exports[3].executable,'pg_dumpall');}
     for(const c of exports){assert.ok(c.file.endsWith('.enc'));assert.equal(c.key.length,32);if(c.executable==='pg_restore'){assert.ok(c.args.includes('--file=-'));assert.ok(c.input.endsWith('.enc'));assert.ok(!c.args.some(a=>a.startsWith('--dbname')));}}
   }
 });
-test('off, partial, malformed or failed read-only checks abort before any dump or output directory',async()=>{
-  for(const output of ['off\non\n','on\noff\n','off\noff\n','on\n','','on\non\non\n','on\non\nprivate-diagnostic',null,new Error('private-diagnostic')]){
+test('off, malformed or failed explicit read-only checks abort before any dump or output directory',async()=>{
+  for(const output of ['off\n','','on\non\n','BEGIN\non\nROLLBACK\n','on\nprivate-diagnostic',null,new Error('private-diagnostic')]){
     for(const schemaOnly of [false,true]){
       const dir=await temp(),fixture=databaseTools([output]);
       await assert.rejects(backupDatabase(dir,ownerEnv(),schemaOnly,fixture.tools),e=>/READ_ONLY_/.test(e.message)&&!e.message.includes('private-diagnostic'));
       assert.equal(fixture.calls.filter(c=>c.file).length,0);assert.deepEqual(await readdir(dir),[]);
     }
   }
-  await assertDatabaseReadOnly(databaseEnvironment(ownerEnv()),databaseTools(['on\r\non\r\n']).tools.command);
+  await assertDatabaseReadOnly(databaseEnvironment(ownerPoolerEnv()),databaseTools(['on\r\n']).tools.command);
 });
 test('a changed role-export read-only check aborts instead of running pg_dumpall',async()=>{
-  const fixture=databaseTools(['on\non\n','on\noff\n']);
+  const fixture=databaseTools(['on\n','off\n']);
   await assert.rejects(backupDatabase(await temp(),ownerEnv(),false,fixture.tools),/READ_ONLY_NOT_CONFIRMED/);
   assert.equal(fixture.calls.filter(c=>c.file&&c.executable==='pg_dumpall').length,0);
 });

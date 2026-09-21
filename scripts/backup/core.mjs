@@ -81,10 +81,10 @@ export function databaseEnvironment(env) {
   if (!/^[a-zA-Z0-9_][a-zA-Z0-9_$-]{0,62}$/.test(database) || (!local && database !== 'postgres')) throw new BackupError('DATABASE_NAME_NOT_AUTHORIZED');
   // Remove inherited libpq routing/options (including Windows case variants),
   // and do not give PostgreSQL tools the Storage credential or encryption key.
+  // The read-only preflight is explicit SQL, not a session startup override.
   const processEnv = Object.fromEntries(Object.entries(env).filter(([name]) => !/^(PG|BACKUP_)/i.test(name)));
   return { ...processEnv, PGHOST: host, PGUSER: user, PGPASSWORD: env.BACKUP_PGPASSWORD,
     PGDATABASE: database, PGPORT: port, PGSERVICE: '', PGSERVICEFILE: '', PGPASSFILE: '',
-    PGOPTIONS: '-c default_transaction_read_only=on -c transaction_read_only=on',
     PGSSLMODE: local ? 'disable' : 'verify-full', PGSSLROOTCERT: env.BACKUP_PGSSLROOTCERT || 'system', PGCONNECT_TIMEOUT: '15' };
 }
 export function storageConfig(env) {
@@ -96,13 +96,13 @@ export function storageConfig(env) {
 export async function assertDatabaseReadOnly(pg, execute = command) {
   let output;
   try {
-    output = await execute('psql', ['-X', '--no-password', '--tuples-only', '--no-align', '--set=ON_ERROR_STOP=1',
-      '--command=SHOW default_transaction_read_only;', '--command=SHOW transaction_read_only;'], { env: pg });
+    output = await execute('psql', ['-X', '--no-password', '--quiet', '--tuples-only', '--no-align', '--set=ON_ERROR_STOP=1',
+      '--command=BEGIN TRANSACTION READ ONLY; SHOW transaction_read_only; ROLLBACK;'], { env: pg });
   } catch (error) {
     // Never relay provider diagnostics or output that could contain secrets.
     throw new BackupError('READ_ONLY_CHECK_FAILED', error instanceof BackupError ? error.state : 'FAIL');
   }
-  if (typeof output !== 'string' || !/^on\r?\non\r?\n?$/.test(output)) throw new BackupError('READ_ONLY_NOT_CONFIRMED');
+  if (typeof output !== 'string' || !/^on\r?\n?$/.test(output)) throw new BackupError('READ_ONLY_NOT_CONFIRMED');
 }
 async function encryptedCommand(executable, args, file, key, env, encryptedInput) {
   const child = spawn(executable, args, { env, shell: false, windowsHide: true, stdio: [encryptedInput ? 'pipe' : 'ignore', 'pipe', 'pipe'] });
