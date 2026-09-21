@@ -8,8 +8,9 @@ import {credentialBoundFetch,verifyPreviewBundleBinding} from './qa-preview-stat
 const config=publicPreviewConfig(),request=credentialBoundFetch(config.previewOrigin);
 await verifyPreviewBundleBinding(config,request);
 const fixtures=JSON.parse(readFileSync('.qa-artifacts/beta-fixtures.private.json','utf8'));
+fixtures.push({...JSON.parse(readFileSync('.qa-artifacts/catalog-b.private.json','utf8')),label:'CATALOG_B'});
 async function login(label){const fixture=fixtures.find(f=>f.label===label);assert.equal(fixture.ref,config.projectRef);assert.ok(fixture.email.endsWith('@example.invalid'));const db=createClient(config.supabaseOrigin,config.publicKey,{auth:{persistSession:false,autoRefreshToken:false},global:{fetch:credentialBoundFetch(config.supabaseOrigin)}});const r=await db.auth.signInWithPassword({email:fixture.email,password:fixture.password});assert.equal(r.error,null);assert.equal(r.data.user.id,fixture.id);return{db,token:r.data.session.access_token,id:fixture.id};}
-let A=await login('C');const B=await login('A');
+let A=await login('C');const B=await login('CATALOG_B');assert.notEqual(A.id,B.id);
 const idsFile='.qa-artifacts/feedback-live-ids.json';
 const ids=existsSync(idsFile)?JSON.parse(readFileSync(idsFile,'utf8')):Object.fromEntries(['COURSE','BUG','CLUB','BET'].map(c=>[c,randomUUID()]));
 writeFileSync(idsFile,JSON.stringify(ids));
@@ -18,6 +19,8 @@ const base={name:'Solicitud QA sintética — no es un dato de catálogo',descri
 const report={preview:config.previewOrigin,ref:config.projectRef,requests:[],checks:[],newAuthUsers:0,historicalWrites:0};
 async function post(body,user=A,expected=200){const r=await request(config.previewOrigin+'/api/feedback',{method:'POST',headers:{authorization:`Bearer ${user.token}`,'content-type':'application/json'},body:JSON.stringify(body)});const data=await r.json();assert.equal(r.status,expected,`feedback status ${r.status}`);return data;}
 const availability=await(await request(config.previewOrigin+'/api/feedback')).json();assert.equal(availability.internalRequestsAvailable,true);report.mailerConfigured=availability.serverEmailAvailable;
+// No live test email is authorized. Stop before creating anything if enabled.
+assert.equal(availability.serverEmailAvailable,false,'Mailer active: separate owner authorization is required before live requests.');
 for(const category of Object.keys(ids)){
  const body={id:ids[category],input:{...base,category},screen:'qa-feedback-live',contextualCategory:category,...(category==='BUG'?{attachment:{mime:'image/png',data:image}}:{})};
  const [one,two]=await Promise.all([post(body),post(body)]);assert.equal(one.received,true);assert.equal(two.received,true);assert.equal(one.id,two.id);

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect,useRef,useState } from 'react';
 import { createPortal } from 'react-dom';
-import { FEEDBACK_CATEGORIES,FEEDBACK_SHORT_LABELS,validateFeedback,type FeedbackCategory,type FeedbackInput } from '../../lib/feedback';
+import { FEEDBACK_CATEGORIES,FEEDBACK_SHORT_LABELS,FEEDBACK_ATTACHMENT_MAX_BYTES,validateFeedback,type FeedbackCategory,type FeedbackInput } from '../../lib/feedback';
 import { feedbackAttachmentType,type FeedbackAttachment } from '../../lib/feedback-attachment';
 import { ModalShell } from './modal-shell';
 import styles from './feedback-dialog.module.css';
@@ -23,6 +23,7 @@ export function FeedbackDialog({token,email,screen=''}:{token?:string|null;email
   function clearClose(){fileGeneration.current++;setOpen(false);setConfirmClose(false);setAccepted(false);setError('');setAttachment(null);request.current=null;setForm(emptyForm(email));}
   function update(key:keyof FeedbackInput,value:string){setError('');setForm(v=>({...v,[key]:value}));}
   async function chooseFile(file?:File){if(!file)return;const generation=++fileGeneration.current;setReading(true);setError('');try {
+    if(file.size>FEEDBACK_ATTACHMENT_MAX_BYTES)throw Error('La imagen debe pesar como máximo 2 MB.');
     const bytes=new Uint8Array(await file.arrayBuffer());feedbackAttachmentType(file.type,bytes);
     const preview=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result));reader.onerror=()=>reject(Error('No pudimos leer la imagen.'));reader.readAsDataURL(file);});
     if(generation===fileGeneration.current)setAttachment({mime:file.type,data:preview.split(',')[1],preview,name:file.name});

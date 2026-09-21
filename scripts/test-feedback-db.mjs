@@ -27,5 +27,16 @@ await db.exec('reset role;');
 for(let n=1;n<=9;n++)await db.query(call(`44444444-4444-4444-8444-${String(n).padStart(12,'0')}`));
 await assert.rejects(db.query(call('55555555-5555-4555-8555-555555555555')),/RATE_LIMIT/);checks.push('10/day limit');
 assert.equal((await db.query(call())).rows[0].result.created,false);checks.push('idempotent retry allowed after quota');
+await db.exec(`create schema private;
+create table private.account_lifecycle_jobs(request_id uuid,user_id uuid,lease_token uuid,lease_until timestamptz,data_policy text,stage text);
+alter table storage.objects add column owner_id text,add column owner uuid;
+insert into private.account_lifecycle_jobs values('${id}','${A}','${B}',now()+interval '1 hour','delete_golf_data','requested');
+insert into storage.objects values('${B}','${B}/${id}/qa.png','feedback-private',null,null);`);
+await db.exec(readFileSync('supabase/migrations/20260921013129_feedback_attachment_lifecycle.sql','utf8'));
+const manifest=()=>db.query(`select * from public.account_lifecycle_storage('${id}','${B}')`);
+assert.deepEqual((await manifest()).rows,[{bucket_id:'feedback-private',name:`${A}/${id}/qa.png`}]);checks.push('delete manifest includes server-uploaded A attachment, excludes B');
+await assert.rejects(db.query(`select * from public.account_lifecycle_storage('${id}',null)`),/insufficient_privilege/);
+await db.exec("update private.account_lifecycle_jobs set data_policy='retain_golf_history'");
+await assert.rejects(manifest(),/insufficient_privilege/);checks.push('storage cleanup requires valid delete lease, archive cannot delete');
 console.log(JSON.stringify({pass:checks.length,fail:0,checks}));
 }finally{await db.close();}

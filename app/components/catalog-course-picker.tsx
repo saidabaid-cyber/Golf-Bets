@@ -6,7 +6,7 @@ import type { Course } from '../../lib/types';
 import { AnchoredSearch,AnchoredSearchOption } from './anchored-search';
 import styles from './catalog-course-picker.module.css';
 type Entry=Omit<ReviewedCatalogCourse,'tees'> & {teeCount:number;completeCards:number};
-export function CatalogCoursePicker({token,onSelect,selectedName='',onRequest}:{token?:string|null;onSelect:(course:Course,cards:Course[])=>void;selectedName?:string;onRequest?:()=>void}) {
+export function CatalogCoursePicker({token,onSelect,selectedName='',onRequest,showHeading=true}:{token?:string|null;onSelect:(course:Course,cards:Course[])=>void;selectedName?:string;onRequest?:()=>void;showHeading?:boolean}) {
   const [entries,setEntries]=useState<Entry[]>([]),[query,setQuery]=useState(''),[error,setError]=useState(''),[loading,setLoading]=useState(false);
   const [location,setLocation]=useState<CourseLocationResult|{status:'idle'|'loading'}>({status:'idle'});
   const cancelLocation=useRef<()=>void>(()=>{});
@@ -44,7 +44,7 @@ export function CatalogCoursePicker({token,onSelect,selectedName='',onRequest}:{
   }
   const locationError=({denied:'No pudimos obtener tu ubicación: el permiso fue rechazado. Puedes habilitar Ubicación para este sitio en tu navegador o buscar manualmente.',timeout:'No pudimos obtener tu ubicación: se agotó la espera. Puedes reintentar o buscar manualmente.',unavailable:'No pudimos obtener tu ubicación. Comprueba que la ubicación del dispositivo esté disponible, reintenta o busca manualmente.',unsupported:'Este navegador no soporta ubicación. Puedes buscar tu campo manualmente.'} as Record<string,string>)[location.status];
   return <section className={styles.picker} aria-label="Catálogo de campos">
-    <h3>Campo</h3>
+    {showHeading&&<h3>Campo</h3>}
     <button type="button" className={styles.locate} disabled={locating||!token} onClick={locate}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M12 21s7-6 7-12A7 7 0 0 0 5 9c0 6 7 12 7 12ZM15 9a3 3 0 1 1-6 0 3 3 0 0 1 6 0"/></svg>{locating?'Buscando ubicación…':'Campos cercanos'}</button>
     {location.status==='idle'&&<small>Permite tu ubicación para ver los más cercanos. No la guardamos ni enviamos.</small>}
     {locating&&<><p role="status">Buscando ubicación… Si el navegador lo solicita, permite el acceso.</p><button type="button" className="textButton" onClick={()=>{cancelLocation.current();setLocation({status:'idle'});}}>Cancelar búsqueda</button></>}
