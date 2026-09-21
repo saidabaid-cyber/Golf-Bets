@@ -90,3 +90,10 @@ test("V3 Home grows with active-round controls instead of clipping the quick act
   assert.match(content, /overflow: visible/);
   assert.match(content, /96px \+ env\(safe-area-inset-bottom\)/);
 });
+test("V3 keeps product status legible and rules disclosure actions accessible", () => {
+  assert.match(source("app/components/equipment.module.css"), /\.itemHeader > \.currentBadge \{ flex-shrink: 0; white-space: nowrap;/);
+  const rules = source("app/components/rules-panel.tsx");
+  assert.match(rules, /aria-expanded=\{open\} aria-controls=\{id \+ "-body"\} onClick=\{onToggle\}/);
+  assert.match(rules, /<BackyardIcon name=\{icon\}/);
+  assert.match(rules, /title="Preguntar a la IA" icon="spark"/);
+});

@@ -16,10 +16,11 @@ import { speechRecognitionConstructor, createDictationSession, DICTATION_FALLBAC
 import { InternalPdfViewer } from "./internal-pdf-viewer";
 import { useSecondaryView } from "./use-secondary-view";
 import type { LocalRule } from "../../lib/types";
+import { BackyardIcon } from "./backyard-icon";
 
-function RulesDisclosure({ id, title, open, onToggle, children }: { id: string; title: string; open: boolean; onToggle: () => void; children: ReactNode }) {
+function RulesDisclosure({ id, title, icon = "score", open, onToggle, children }: { id: string; title: string; icon?: "spark" | "players" | "score"; open: boolean; onToggle: () => void; children: ReactNode }) {
   return <section className="rulesDisclosure" id={id}>
-    <h2><button className="rulesDisclosureToggle" aria-expanded={open} aria-controls={id + "-body"} onClick={onToggle}>{title}<span aria-hidden="true">{open ? "▲" : "▼"}</span></button></h2>
+    <h2><button className="rulesDisclosureToggle" aria-expanded={open} aria-controls={id + "-body"} onClick={onToggle}><span className="rulesDisclosureLabel"><BackyardIcon name={icon} />{title}</span><span aria-hidden="true">{open ? "▲" : "▼"}</span></button></h2>
     {open && <div id={id + "-body"} className="rulesDisclosureBody">{children}</div>}
   </section>;
 }
@@ -245,7 +246,7 @@ export function RulesPanel({
       <div><span>THE BACKYARD</span><h1>Reglas de Golf</h1></div>
     </header>
 
-    <RulesDisclosure id="preguntar-ia" title="🤖 Preguntar a la IA" open={Boolean(openSections.ai)} onToggle={() => toggleSection("ai")}>
+    <RulesDisclosure id="preguntar-ia" title="Preguntar a la IA" icon="spark" open={Boolean(openSections.ai)} onToggle={() => toggleSection("ai")}>
 <section className="card">
       <div className="sectionTitle"><div><h2>Preguntar a la IA</h2><p>{localRulesApply ? "Consulta fuentes oficiales y las Reglas Locales aplicables." : "Consulta Guía Oficial, Procedimientos y Aclaraciones sin asumir Reglas Locales."}</p></div><span className={`statusPill ${aiState === "ready" ? "ready" : ""}`}>{aiState === "checking" ? "Verificando…" : aiState === "ready" ? "IA activa" : aiState === "disabled" ? "IA no activada" : aiState === "unavailable" ? "Estado no disponible" : "Falta configuración"}</span></div>
       <form onSubmit={ask}>
@@ -260,7 +261,7 @@ export function RulesPanel({
     </section>
     </RulesDisclosure>
 
-    <RulesDisclosure id="reglamento-navegable" title="📖 Reglamento navegable" open={Boolean(openSections.directory)} onToggle={() => toggleSection("directory")}>
+    <RulesDisclosure id="reglamento-navegable" title="Reglamento navegable" open={Boolean(openSections.directory)} onToggle={() => toggleSection("directory")}>
 <section className="rulesSearchHero" id="buscar-regla">
       <label className="srOnly" htmlFor="rules-search">Buscar en las Reglas</label>
       <div className="rulesSearchField">
@@ -321,7 +322,7 @@ export function RulesPanel({
     </section>
     </RulesDisclosure>}
 
-    <RulesDisclosure id="codigo-caballeros" title="🤝 Código de Caballeros" open={Boolean(openSections.gentlemen)} onToggle={() => toggleSection("gentlemen")}>
+    <RulesDisclosure id="codigo-caballeros" title="Código de Caballeros" icon="players" open={Boolean(openSections.gentlemen)} onToggle={() => toggleSection("gentlemen")}>
 <section className="card">
       <div className="sectionTitle"><div><h2>Código de Caballeros</h2><p>Etiqueta y cultura de juego</p></div><span className="statusPill">NO OFICIAL</span></div>
       <div className="gentlemenGrid">{GENTLEMEN_CODE.map((entry) => <article key={entry.id}><h3>{entry.title}</h3><ul>{entry.points.map((point) => <li key={point}>{point}</li>)}</ul></article>)}</div>
@@ -330,7 +331,7 @@ export function RulesPanel({
     </section>
     </RulesDisclosure>
 
-    <RulesDisclosure id="documentos-oficiales" title="📄 Documentos oficiales" open={Boolean(openSections.documents)} onToggle={() => toggleSection("documents")}>
+    <RulesDisclosure id="documentos-oficiales" title="Documentos oficiales" open={Boolean(openSections.documents)} onToggle={() => toggleSection("documents")}>
 <section className="card officialLinks">
       <div className="sectionTitle"><div><h2>Documentos oficiales</h2><p>Fuentes completas usadas por el buscador y Preguntar a IA.</p></div></div>
       <div className="officialDocumentGrid">{OFFICIAL_RULES_DOCUMENTS.slice(0, 1).map((document) => <article key={document.id}>
