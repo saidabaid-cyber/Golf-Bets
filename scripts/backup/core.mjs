@@ -2,13 +2,15 @@ import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, mkdtemp, readFile, writeFile, readdir, lstat, realpath } from 'node:fs/promises';
-import { resolve, relative, dirname, isAbsolute, join } from 'node:path';
+import { resolve, relative, dirname, isAbsolute, join, sep } from 'node:path';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { Readable, Writable } from 'node:stream';
 import { encryptionKey, encrypt, decrypt, verifyEncrypted } from './crypto.mjs';
 
 export const QA_REF = 'bymeopxkxapfizeeqeyb';
 export const FORMAT = 1;
+const outside = (rel) => rel === '..' || rel.startsWith('..' + sep) || isAbsolute(rel);
 export class BackupError extends Error { constructor(code, state = 'FAIL') { super(code); this.code = code; this.state = state; } }
 export function safeChild(root, name) {
   if (!name || name.includes('\\') || name.includes(':') || isAbsolute(name) || name.split('/').some(s => !s || s === '.' || s === '..')) throw new BackupError('UNSAFE_PATH');
@@ -165,7 +167,7 @@ export async function sourceBackup(dir, repo) {
 }
 export async function runBackup({ repo = process.cwd(), env = process.env, only } = {}) {
   const realRepo = await realpath(repo), root = resolve(env.BACKUP_ROOT || resolve(realRepo, 'backups'));
-  if (root !== resolve(realRepo, 'backups') && (!relative(realRepo, root).startsWith('..') && !isAbsolute(relative(realRepo, root)))) throw new BackupError('BACKUP_ROOT_MUST_BE_BACKUPS_OR_OUTSIDE_REPO');
+  if (root !== resolve(realRepo, 'backups') && !outside(relative(realRepo, root))) throw new BackupError('BACKUP_ROOT_MUST_BE_BACKUPS_OR_OUTSIDE_REPO');
   await mkdir(root, { recursive: true, mode: 0o700 });
   if (await realpath(root) !== root) throw new BackupError('BACKUP_ROOT_SYMLINK_NOT_ALLOWED');
   const dir = resolve(root, new Date().toISOString().replace(/[:.]/g, '-') + '-' + randomUUID().slice(0,8));
@@ -228,7 +230,12 @@ export async function verifyBackup(dir, env = process.env) {
 export async function decryptBackup(dir, output, env = process.env) {
   await verifyBackup(dir,env);
   if (env.BACKUP_DECRYPT_ACK !== 'PRIVATE_LOCAL_DIRECTORY') throw new BackupError('DECRYPT_ACK_REQUIRED');
-  const target=resolve(output); await mkdir(target,{mode:0o700}); // must not exist; never overwrite
+  const target=resolve(output), repo=resolve(fileURLToPath(new URL('../../',import.meta.url)));
+  const rel=relative(repo,target), staging=relative(resolve(repo,'restore-private'),target);
+  const outsideRepo=outside(rel);
+  const privateStaging=staging&&!outside(staging);
+  if(!outsideRepo&&!privateStaging)throw new BackupError('DECRYPT_TARGET_MUST_BE_PRIVATE_NOT_SERVED');
+  await mkdir(target,{mode:0o700}); // must not exist; never overwrite
   const manifest=JSON.parse(await readFile(resolve(dir,'metadata/manifest.json'),'utf8'));
   for(const file of manifest.files.filter(f=>f.encrypted)){
     const name=file.path.slice(0,-4), out=safeChild(target,name);await mkdir(dirname(out),{recursive:true,mode:0o700});

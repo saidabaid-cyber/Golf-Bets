@@ -111,4 +111,3 @@ These imports have their own QA-only guards and some are file generators. Inspec
 ## Post-restore evidence
 
 Read back schema/ledger/counts and compare with snapshot metadata; FK validation, sequences, functions, indexes, grants, public+private RLS, auth UUID mapping, private Storage ownership, catalog source IDs and frozen historical snapshots. Then use synthetic two-user API/browser QA on the restored stack. SQL success alone does not prove auth/email/Storage behavior. Actual DB dump + restore remains BLOCKED_EXTERNAL until client utilities and dedicated credential/key injection are available; a fresh target drill needs controlled authorization.
-

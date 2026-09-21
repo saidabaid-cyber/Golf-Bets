@@ -116,4 +116,3 @@ Run browser/API/DB checks against one immutable restored deployment, then indepe
 - [ ] Off-device snapshot re-verified; owner has custody of runbook and decryption key.
 
 Until the live database/Storage/Auth recovery drill passes, the system is **prepared but not certified fully recoverable**. A source-only backup must never be described as complete disaster recovery.
-

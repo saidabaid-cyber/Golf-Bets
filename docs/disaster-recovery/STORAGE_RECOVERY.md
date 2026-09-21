@@ -43,4 +43,3 @@ A practical API integration uses the existing @supabase/supabase-js library: sto
 ## External object stores
 
 For S3/R2-compatible storage keep original keys/metadata/private ACL equivalents and adapt app signed URLs/upload/cleanup services. Do not expose objects publicly to avoid auth integration. Supabase SDK paths are not transparently compatible with another provider. A complete SQL+Storage restore drill remains pending, not PASS because encrypted files exist.
-

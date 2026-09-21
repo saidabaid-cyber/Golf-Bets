@@ -28,4 +28,3 @@ Deno.serve(async () => {
     headers: { "content-type": "application/json", "access-control-allow-origin": "*" }
   });
 });
-
