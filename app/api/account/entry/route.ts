@@ -2,6 +2,7 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import { authenticatedRequest } from "../../../../lib/server-auth";
 import { establishedBackyardAccount } from "../../../../lib/account-entry";
+import { ONBOARDING_CHECKPOINT_KEY, onboardingCheckpoint } from "../../../../lib/onboarding-checkpoint";
 import { BACKYARD_AI_PRIVATE_HEADERS, isCrossSiteRequest } from "../../../../lib/backyard-ai/server/http-security";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +33,7 @@ export async function GET(request: NextRequest) {
       account.client.from("legal_acceptances").select("type").eq("user_id", account.userId).in("type", ["terms", "privacy"]).abortSignal(AbortSignal.timeout(8_000)),
     ]);
     if (profile.error || legal.error) throw new Error("account_mapping_unavailable");
-    return json({ userId: account.userId, profileExists: Boolean(profile.data), existingAccount: establishedBackyardAccount(profile.data, (legal.data || []).map(row => row.type)) });
+    return json({ userId: account.userId, profileExists: Boolean(profile.data), existingAccount: establishedBackyardAccount(profile.data, (legal.data || []).map(row => row.type)), onboardingProgress: onboardingCheckpoint(account.userMetadata?.[ONBOARDING_CHECKPOINT_KEY], account.userId) });
   } catch {
     return json({ error: "No pudimos verificar tu cuenta. Reintenta antes de continuar.", code: "ACCOUNT_MAPPING_UNAVAILABLE" }, 503);
   }

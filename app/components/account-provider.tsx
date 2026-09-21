@@ -1,4 +1,6 @@
 "use client";
+import { saveOnboardingCheckpoint } from '../../lib/onboarding-checkpoint';
+import { STORAGE_KEYS } from '../../lib/round-utils';
 import { cloudAccountErrorMessage, ensureCloudProfile, saveCloudProfile } from "../../lib/cloud-account";
 import { canonicalProfileUsername, normalizeProfileUsername } from "../../lib/profile-username";
 
@@ -189,6 +191,7 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
   const [providers, setProviders] = useState<AuthProviderStatus | null>(null);
   const [rememberSession, setRememberSession] = useState(true);
   const sendGate = useRef(new OtpSendGate());
+  const oauthStarting = useRef(false);
   const [retrySeconds, setRetrySeconds] = useState(0);
   useEffect(() => {
     setRememberSession(authSessionPersistence());
@@ -209,6 +212,7 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
   }, []);
 
   async function social(provider: "google" | "apple") {
+    if (oauthStarting.current) return;
     if (!providers || providers.status === "unavailable") {
       setMessage("No pudimos comprobar el proveedor de acceso. Revisa tu conexión y vuelve a intentar.");
       return;
@@ -222,12 +226,14 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
       setMessage(`Acceso con ${provider === "google" ? "Google" : "Apple"} pendiente de configuración.`);
       return;
     }
+    oauthStarting.current = true;
     setAuthSessionPersistence(rememberSession);
     rememberAccountEntryIntent(sessionStorage, intent);
     setBusy(true); setMessage("");
     try {
       await startSocialOAuth(supabase.auth, provider, authCallbackUrl(window.location.origin));
     } catch (error) {
+      oauthStarting.current = false;
       setMessage(authErrorMessage(error, provider));
       setBusy(false);
     }
@@ -366,6 +372,8 @@ function ProfileSetupScreen({ identity, onSave, onBack }: {
   const [location, setLocation] = useState(() => normalizeProfileLocation(identity.country || identity.countryCode ? identity : { countryCode: "MX" }));
   const [city, setCity] = useState(identity.city || "");
   const [handedness, setHandedness] = useState<"right" | "left">(identity.handedness === "left" ? "left" : "right");
+  const [initialHighContrast, setInitialHighContrast] = useState(true);
+  useEffect(() => { setInitialHighContrast(localStorage.getItem(STORAGE_KEYS.contrast) !== 'false'); }, []);
   const [avatarUrl, setAvatarUrl] = useState(identity.avatarUrl || "");
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -397,7 +405,7 @@ function ProfileSetupScreen({ identity, onSave, onBack }: {
     catch { setMessage("No pudimos completar el perfil. Revisa tu conexión e intenta nuevamente."); }
     finally { setBusy(false); }
   }
-  return <main className="consentScreen profileSetupScreen"><section className="consentCard profileSetupCard">
+  return <main className={`consentScreen profileSetupScreen ${initialHighContrast ? 'highContrast' : ''}`}><section className="consentCard profileSetupCard">
     <BrandLockup compact />
     <div className="eyebrow">GOLF PROFILE</div>
     <h1>Cuéntanos de ti</h1>
@@ -730,7 +738,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         // Durable server mapping wins over old/incomplete local setup markers.
         // New consent versions still pass through AccountConsentCheckpoint.
         setProfileSetupRequired(false);
-        setBetaOnboardingRequired(false);
+        if (mapping.onboardingProgress) persistBetaOnboardingProgress(localStorage, mapping.onboardingProgress);
+        setBetaOnboardingRequired(mapping.onboardingProgress?.status === "in_progress");
         setEquipmentOnboardingRequired(false);
         setExistingAccountNotice(intent === "create");
       }
@@ -782,7 +791,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     const profileRead = pendingProfileAttempt.then(() => ensureCloudProfile(supabase, authenticatedUserId, fallback.profile)
       .then((value) => ({ status: "fulfilled" as const, value }))
       .catch((reason: unknown) => ({ status: "rejected" as const, reason })));
-    const preferencesRead = pendingProfileAttempt.then(() => supabase.from("user_preferences").select("default_handicap,updated_at").eq("user_id", authenticatedUserId).maybeSingle());
+    const preferencesRead = pendingProfileAttempt.then(() => supabase.from("user_preferences").select("default_handicap,high_contrast,updated_at").eq("user_id", authenticatedUserId).maybeSingle());
     const locationRead = pendingProfileAttempt.then(() => readProfileLocationMetadata(supabase, authenticatedUserId)
       .then((value) => ({ status: "fulfilled" as const, value }))
       .catch((reason: unknown) => ({ status: "rejected" as const, reason })));
@@ -794,6 +803,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       locationRead,
     ]).then(([legalResult, profileResult, preferencesResult, pendingResult, locationResult]) => {
       if (!mounted || activeUserId.current !== authenticatedUserId) return;
+      if (!preferencesResult.error && localStorage.getItem(STORAGE_KEYS.contrast) === null && typeof preferencesResult.data?.high_contrast === 'boolean') localStorage.setItem(STORAGE_KEYS.contrast, String(preferencesResult.data.high_contrast));
       if (!legalResult.error && Array.isArray(legalResult.data)) {
         const cloud = parseLegalAcceptances(JSON.stringify(legalResult.data.map((item) => ({ userId: item.user_id, type: item.type, documentVersion: item.version, acceptedAt: item.accepted_at, locale: item.locale, persistenceStatus: "persisted", syncStatus: "synced" }))));
         setAcceptances((current) => {
@@ -1090,7 +1100,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       if (mapping.existingAccount) {
         setAccountEntry(mapping);
         setProfileSetupRequired(false);
-        setBetaOnboardingRequired(false);
+        if (mapping.onboardingProgress) persistBetaOnboardingProgress(localStorage, mapping.onboardingProgress);
+        setBetaOnboardingRequired(mapping.onboardingProgress?.status === 'in_progress');
         setEquipmentOnboardingRequired(false);
         setExistingAccountNotice(true);
         setAccountReloadRevision(value => value + 1);
@@ -1111,6 +1122,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       // onboarding flow.
       const existingProgress = readBetaOnboardingProgress(localStorage, identity.userId);
       const betaProgress = existingProgress || createBetaOnboardingProgress(identity.userId);
+      await saveOnboardingCheckpoint(identity.accessToken || "", betaProgress);
       persistBetaOnboardingProgress(localStorage, betaProgress);
       setBetaOnboardingRequired(true);
       setEquipmentOnboardingRequired(false);

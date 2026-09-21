@@ -4,6 +4,7 @@ import test from "node:test";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import * as entry from "../lib/account-entry";
+import * as checkpoint from '../lib/onboarding-checkpoint';
 import * as security from "../lib/backyard-ai/server/http-security";
 import { ensureCloudProfile } from "../lib/cloud-account";
 
@@ -23,6 +24,7 @@ function routeHarness(options: { completed?: boolean; legal?: string[]; noProfil
     if (name === "server-only") return {};
     if (name === "next/server") return { NextResponse: Response };
     if (name.endsWith("/account-entry")) return entry;
+    if (name.endsWith('/onboarding-checkpoint')) return checkpoint;
     if (name.endsWith("/http-security")) return security;
     if (name.endsWith("/server-auth")) return { authenticatedRequest: async (request: Request) => {
       if (options.authThrows) throw new Error("internal auth service details");
@@ -42,7 +44,7 @@ test("Auth trigger skeletal row is new, never sufficient to skip onboarding", as
 });
 for (const provider of ["Google", "email OTP"]) test(`${provider}: verified existing UUID maps to one existing Backyard profile`, async () => {
   const h = routeHarness({ completed: true }); const response = await h.run();
-  assert.deepEqual(await response.json(), { userId: OWNER, profileExists: true, existingAccount: true });
+  assert.deepEqual(await response.json(), { userId: OWNER, profileExists: true, existingAccount: true, onboardingProgress: null });
   assert.deepEqual(h.filters, [["profiles", "id", OWNER], ["legal_acceptances", "user_id", OWNER]]);
   assert.equal(h.writes(), 0); assert.match(response.headers.get("cache-control") || "", /no-store/);
 });
@@ -51,7 +53,7 @@ test("older explicitly registered account remains existing without new completio
   const incomplete = routeHarness({ legal: ["terms"] }); assert.equal((await (await incomplete.run()).json()).existingAccount, false);
 });
 test("no profile mapping remains new and lookup never creates any row", async () => {
-  const h = routeHarness({ noProfile: true }); assert.deepEqual(await (await h.run()).json(), { userId: OWNER, profileExists: false, existingAccount: false }); assert.equal(h.writes(), 0);
+  const h = routeHarness({ noProfile: true }); assert.deepEqual(await (await h.run()).json(), { userId: OWNER, profileExists: false, existingAccount: false, onboardingProgress: null }); assert.equal(h.writes(), 0);
 });
 test("mapping failures fail closed instead of interpreting an unavailable account as new", async () => {
   const response = await routeHarness({ error: true }).run(); assert.equal(response.status, 503);

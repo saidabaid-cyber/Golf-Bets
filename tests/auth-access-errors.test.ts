@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { finishOAuthOnce } from '../lib/oauth-callback-once';
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { runInNewContext } from "node:vm";
@@ -81,7 +82,8 @@ async function runCallback(search: string, exchangeError?: unknown, hash = "") {
       if (name === "react/jsx-runtime") return { jsx: () => null, jsxs: () => null };
       if (name === "next/link" || name.endsWith("brand-lockup")) return {};
       if (name.endsWith("/account-state")) return { authErrorMessage, authCallbackError };
-      if (name.endsWith("/supabase/client")) return { getSupabaseBrowser: () => ({ auth: { exchangeCodeForSession: async (code: string) => { exchanges.push(code); return { error: exchangeError || null }; } } }) };
+      if (name.endsWith('/oauth-callback-once')) return { finishOAuthOnce };
+      if (name.endsWith("/supabase/client")) return { getSupabaseBrowser: () => ({ auth: { exchangeCodeForSession: async (code: string) => { exchanges.push(code); return { error: exchangeError || null }; }, getSession: async () => { restores++; return { data: { session: { access_token: 'test', refresh_token: 'refresh', expires_at: 9999999999, user: { id: 'verified-user' } } }, error: null }; }, getUser: async () => ({ data: { user: { id: 'verified-user' } }, error: null }) } }) };
       if (name.endsWith("/auth-flow")) return { restoreAuthSession: async () => { restores++; return { user: { id: "verified-user" } }; } };
       throw new Error(`Unexpected dependency ${name}`);
     },

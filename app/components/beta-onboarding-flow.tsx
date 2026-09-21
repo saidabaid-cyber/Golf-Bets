@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useViewScrollReset } from "./use-view-scroll-reset";
+import { CatalogCoursePicker } from './catalog-course-picker';
+import { DevicePermissions } from './device-permissions';
+import { saveOnboardingCheckpoint } from '../../lib/onboarding-checkpoint';
 import {
   GOLF_IMPROVEMENT_GOALS,
   GOLF_PRIMARY_GOALS,
@@ -184,15 +187,17 @@ function activeBetCount(template: GroupGameTemplate) {
 }
 
 function Shell({ progress, eyebrow, title, description, children, actions, onBack, onSaveAndExit }: { progress: BetaOnboardingProgress; eyebrow: string; title: string; description?: string; children: React.ReactNode; actions: React.ReactNode; onBack?: () => void; onSaveAndExit?: () => void }) {
-  const visibleSteps: BetaOnboardingStep[] = ["welcome", "ghin", "equipment", "improvements", "objective", "plan", "group", "players", "handicaps", "bets", "bet_details", "ready"];
+  const visibleSteps: BetaOnboardingStep[] = progress.mode === 'quick' ? ['welcome', 'course', 'ghin', 'permissions'] : ["welcome", "course", "ghin", "equipment", "improvements", "objective", "plan", "group", "players", "handicaps", "bets", "bet_details", "ready", "permissions"];
   const index = Math.max(0, visibleSteps.indexOf(progress.step));
   const titleRef = useRef<HTMLHeadingElement>(null);
   const [confirmExit, setConfirmExit] = useState(false);
+  const [highContrast, setHighContrast] = useState(true);
+  useEffect(() => { setHighContrast(localStorage.getItem(STORAGE_KEYS.contrast) !== 'false'); }, []);
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "auto" });
     titleRef.current?.focus({ preventScroll: true });
   }, [progress.step]);
-  return <main className={styles.screen}><section className={styles.card}>
+  return <main className={`${styles.screen} ${highContrast ? 'highContrast' : ''}`}><section className={styles.card}>
     <header className={styles.header}><BrandLockup compact /><span className={styles.step}>PASO {index + 1} DE {visibleSteps.length}</span>{onSaveAndExit && <button type="button" className="textButton" onClick={() => setConfirmExit(true)}>Guardar y salir</button>}</header>
     <div className={styles.progress}><span style={{ width: `${((index + 1) / visibleSteps.length) * 100}%` }} /></div>
     <div className={styles.copy}><div className={styles.eyebrow}>{eyebrow}</div><h1 ref={titleRef} tabIndex={-1}>{title}</h1>{description && <p>{description}</p>}</div>
@@ -219,11 +224,22 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, bett
   const [entryMode, setEntryMode] = useState<"quick" | "complete" | null>(null);
   const [groupSaving, setGroupSaving] = useState(false);
   const groupSaveInFlight = useRef(false);
+  const initializedUser = useRef('');
+  const checkpointQueue = useRef<Promise<void>>(Promise.resolve());
+  const [finishing, setFinishing] = useState(false);
+  const finishingRef = useRef(false);
+  const checkpoint = (value: BetaOnboardingProgress) => {
+    const write = checkpointQueue.current.catch(() => {}).then(() => saveOnboardingCheckpoint(accessToken || '', value));
+    checkpointQueue.current = write;
+    return write;
+  };
   const liveProfileUserId = useRef(profile.userId);
   useEffect(() => { liveProfileUserId.current = profile.userId; }, [profile.userId]);
   const frequentPlayers = useMemo(() => typeof window === "undefined" ? [] : readStoredJson<FrequentPlayer[]>(localStorage, STORAGE_KEYS.frequentPlayers, []), []);
 
   useEffect(() => {
+    if (initializedUser.current === profile.userId) return;
+    initializedUser.current = profile.userId;
     const existing = readBetaOnboardingProgress(localStorage, profile.userId) || createBetaOnboardingProgress(profile.userId);
     let storedDraft: unknown = null;
     try { storedDraft = JSON.parse(localStorage.getItem(betaOnboardingDraftStorageKey(profile.userId)) || "null"); }
@@ -231,6 +247,7 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, bett
     const nextDraft = safeDraft(storedDraft, profile);
     persistBetaOnboardingProgress(localStorage, existing);
     setProgress(existing);
+    setEntryMode(existing.mode || null);
     setDraft(nextDraft);
   }, [profile]);
 
@@ -247,28 +264,34 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, bett
   if (!progress || !draft) return <main className={styles.screen}><div className={styles.loading}>Preparando tu experiencia…</div></main>;
 
   const advance = (nextStep: BetaOnboardingStep, skipped = false, groupId?: string) => {
-    const next = advanceBetaOnboarding(progress, nextStep, { skipped, groupId });
+    const next = advanceBetaOnboarding({ ...progress, ...(entryMode ? { mode: entryMode } : {}) }, nextStep, { skipped, groupId });
     persistBetaOnboardingProgress(localStorage, next);
+    void checkpoint(next).catch(error => setMessage(error.message));
     setProgress(next);
     setMessage("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
   const finish = (groupId?: string) => {
+    if (progress.step !== 'permissions') { advance('permissions', false, groupId); return; }
+    if (finishingRef.current) return;
+    finishingRef.current = true; setFinishing(true);
     const complete = completeBetaOnboarding(progress, { groupId });
-    persistBetaOnboardingProgress(localStorage, complete);
-    localStorage.removeItem(betaOnboardingDraftStorageKey(profile.userId));
-    setProgress(complete);
-    onComplete();
+    void checkpoint(complete).then(() => {
+      persistBetaOnboardingProgress(localStorage, complete);
+      localStorage.removeItem(betaOnboardingDraftStorageKey(profile.userId));
+      setProgress(complete);
+    }).catch(error => setMessage(error.message)).finally(() => { finishingRef.current = false; setFinishing(false); });
   };
   const goTo = (step: Exclude<BetaOnboardingStep, "complete">) => {
     const next = navigateBetaOnboarding(progress, step);
     persistBetaOnboardingProgress(localStorage, next);
+    void checkpoint(next).catch(error => setMessage(error.message));
     setProgress(next);
     setMessage("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
   const previousByStep: Partial<Record<BetaOnboardingStep, Exclude<BetaOnboardingStep, "complete">>> = {
-    ghin: "welcome", equipment: "ghin", improvements: "equipment", objective: "improvements", plan: "objective",
+    course: "welcome", ghin: "course", equipment: "ghin", improvements: "equipment", objective: "improvements", plan: "objective",
     group: "plan", players: "group", handicaps: "players", bets: "handicaps",
     bet_details: "bets", ready: "bet_details",
   };
@@ -296,7 +319,14 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, bett
     return { ...current, group: { ...current.group, template: typeof action === "function" ? action(prior) : action } };
   });
 
-  if (progress.step === "welcome") return <Shell progress={progress} {...navigationProps} eyebrow="EMPIEZA A TU MANERA" title="Tu Backyard, sin fricción" description="Puedes entrar rápido o completar tu perfil para personalizar mejor rondas, estadísticas, equipo, fitting e IA." actions={<button type="button" className="primary big" disabled={!entryMode} onClick={() => entryMode === "complete" ? advance("ghin") : finish()}>CONTINUAR</button>}>
+  if (progress.step === "course") return <Shell progress={progress} {...navigationProps} eyebrow="TU CAMPO" title="Elige tu Home Club" description="Busca tu club habitual o explora los campos cercanos. No estás iniciando una ronda." actions={<button className="primary big" disabled={!profile.homeClubId} onClick={() => advance('ghin')}>Continuar: Handicap / Índice</button>}>
+    <CatalogCoursePicker token={accessToken} selectedName={profile.homeClub} onSelectClub={club => { void onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: profile.defaultHandicap, homeClub: club.clubName, homeClubId: club.clubId }).catch(error => setMessage(error.message)); }} onSelect={course => { void onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: profile.defaultHandicap, homeClub: profile.homeClub || course.name, homeClubId: course.catalogClubId || course.id, preferredTee: course.teeName }).catch(error => setMessage(error.message)); }} />
+    <p>Este campo queda como tu club habitual. Podrás cambiarlo en Perfil.</p>{message && <p role="alert">{message}</p>}
+  </Shell>;
+  if (progress.step === "permissions") return <Shell progress={progress} eyebrow="A TU MEDIDA" title="Permisos de este dispositivo" description="Tu configuración está lista. Tú decides qué permisos activar." actions={<button type="button" className="primary big" disabled={finishing} onClick={() => finish()}>{finishing ? 'Guardando…' : 'Continuar a The Backyard'}</button>}>
+    <DevicePermissions />{message && <p role="alert">{message}</p>}
+  </Shell>;
+  if (progress.step === "welcome") return <Shell progress={progress} {...navigationProps} eyebrow="EMPIEZA A TU MANERA" title="Tu Backyard, sin fricción" description="En ambas opciones elegirás tu campo e índice. Después puedes completar equipo, objetivos y grupos." actions={<button type="button" className="primary big" disabled={!entryMode} onClick={() => advance("course")}>CONTINUAR</button>}>
     <div className={styles.welcomeHero} aria-hidden="true"><span className={styles.heroFlag}>⛳</span><div><b>Tu golf, en un solo lugar</b><small>Rondas rápidas · amigos · equipo · estadísticas</small></div><span className={styles.heroBall}>●</span></div>
     <div className={styles.entryGrid}>
       <button type="button" className={entryMode === "quick" ? styles.entrySelected : styles.entryChoice} aria-pressed={entryMode === "quick"} onClick={() => setEntryMode("quick")}><span aria-hidden="true">⚡</span><div><b>Rápida</b><p>Entra con el perfil básico que acabas de guardar. Equipo, fitting y grupos quedan disponibles para después.</p></div></button>
@@ -314,9 +344,9 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, bett
     onSaveAndExit={onComplete}
   />;
 
-  if (progress.step === "ghin") return <Shell progress={progress} {...navigationProps} eyebrow="HANDICAP / ÍNDICE" title="Elige tu fuente de índice" description="Puedes activar Backyard Index sin rondas previas. GHIN estará disponible mediante una integración oficial." actions={<button className="primary big" onClick={async () => { await onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: profile.defaultHandicap, ghinLinkStatus: profile.ghinLinkStatus || "SKIPPED" }); advance("equipment", true); }}>Continuar</button>}>
+  if (progress.step === "ghin") return <Shell progress={progress} {...navigationProps} eyebrow="HANDICAP / ÍNDICE" title="Elige tu fuente de índice" description="Puedes activar Backyard Index sin rondas previas. GHIN estará disponible mediante una integración oficial." actions={<button className="primary big" onClick={async () => { try { await onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: profile.defaultHandicap, ghinLinkStatus: profile.ghinLinkStatus || "SKIPPED" }); advance(entryMode === 'quick' ? "permissions" : "equipment", true); } catch(error) { setMessage(error instanceof Error ? error.message : 'No pudimos guardar. Reintenta.'); } }}>Continuar</button>}>
     <HandicapSourceSelector userId={profile.userId} authenticated={Boolean(profile.userId && profile.userId !== "guest")} />
-    <p className={styles.trust}>No usamos scraping, APIs privadas ni simulamos una conexión. La arquitectura ya acepta un HandicapProvider autorizado cuando esté disponible.</p>
+    <p className={styles.trust}>Si todavía no tienes índice puedes continuar. No inventaremos un valor.</p>{message && <p role="alert">{message}</p>}
   </Shell>;
 
   if (progress.step === "improvements") return <Shell progress={progress} {...navigationProps} eyebrow="TU JUEGO" title="¿Qué te gustaría mejorar?" description="Elige todas las áreas que quieras. Usaremos estas señales para personalizar recomendaciones, IA, análisis y ejercicios." actions={<button className="primary big" disabled={!draft.improvementGoals.length} onClick={async () => { await onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: profile.defaultHandicap, improvementGoals: draft.improvementGoals, golfProfileUpdatedAt: new Date().toISOString() }); advance("objective"); }}>Continuar</button>}>

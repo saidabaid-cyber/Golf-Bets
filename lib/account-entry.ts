@@ -1,8 +1,10 @@
+import type { BetaOnboardingProgress } from './beta-onboarding';
 /** Account mapping is read only after Auth verification. No email lookup API. */
 export type AccountEntry = {
   userId: string;
   profileExists: boolean;
   existingAccount: boolean;
+  onboardingProgress?: BetaOnboardingProgress | null;
 };
 
 export function establishedBackyardAccount(profile: { onboarding_completed_at: string | null } | null, legalTypes: string[]) {

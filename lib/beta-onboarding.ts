@@ -2,6 +2,7 @@ export const BETA_ONBOARDING_VERSION = 1 as const;
 
 export const BETA_ONBOARDING_STEPS = [
   "welcome",
+  "course",
   "ghin",
   "equipment",
   "improvements",
@@ -13,6 +14,7 @@ export const BETA_ONBOARDING_STEPS = [
   "bets",
   "bet_details",
   "ready",
+  "permissions",
   "complete",
 ] as const;
 
@@ -30,6 +32,7 @@ export type BetaOnboardingProgress = {
   startedAt: string;
   updatedAt: string;
   completedAt?: string;
+  mode?: "quick" | "complete";
 };
 
 type ReadableStorage = Pick<Storage, "getItem">;
@@ -91,6 +94,7 @@ export function normalizeBetaOnboardingProgress(
     step: status === "complete" ? "complete" : step,
     completedSteps: knownSteps(candidate.completedSteps),
     skippedSteps: knownSteps(candidate.skippedSteps),
+    ...(candidate.mode === "quick" || candidate.mode === "complete" ? { mode: candidate.mode } : {}),
     ...(typeof candidate.groupId === "string" && candidate.groupId.trim() ? { groupId: candidate.groupId.trim().slice(0, 200) } : {}),
     startedAt: timestamp(candidate.startedAt, now),
     updatedAt: timestamp(candidate.updatedAt, now),

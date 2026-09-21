@@ -21,5 +21,5 @@ export async function authenticatedRequest(request: NextRequest, options: { allo
     const accessFailure = await accountAccessFailure(client);
     if (accessFailure) return { ok: false as const, ...accessFailure };
   }
-  return { ok: true as const, userId: data.user.id, token, client };
+  return { ok: true as const, userId: data.user.id, token, client, userMetadata: data.user.user_metadata };
 }

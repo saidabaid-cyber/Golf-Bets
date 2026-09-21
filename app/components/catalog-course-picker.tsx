@@ -6,7 +6,7 @@ import type { Course } from '../../lib/types';
 import { AnchoredSearch,AnchoredSearchOption } from './anchored-search';
 import styles from './catalog-course-picker.module.css';
 type Entry=Omit<ReviewedCatalogCourse,'tees'> & {teeCount:number;completeCards:number};
-export function CatalogCoursePicker({token,onSelect,selectedName='',onRequest,showHeading=true}:{token?:string|null;onSelect:(course:Course,cards:Course[])=>void;selectedName?:string;onRequest?:()=>void;showHeading?:boolean}) {
+export function CatalogCoursePicker({token,onSelect,onSelectClub,selectedName='',onRequest,showHeading=true}:{token?:string|null;onSelect:(course:Course,cards:Course[])=>void;onSelectClub?:(club:{clubId:string;clubName:string})=>void;selectedName?:string;onRequest?:()=>void;showHeading?:boolean}) {
   const [entries,setEntries]=useState<Entry[]>([]),[query,setQuery]=useState(''),[error,setError]=useState(''),[loading,setLoading]=useState(false);
   const [location,setLocation]=useState<CourseLocationResult|{status:'idle'|'loading'}>({status:'idle'});
   const cancelLocation=useRef<()=>void>(()=>{});
@@ -36,7 +36,7 @@ export function CatalogCoursePicker({token,onSelect,selectedName='',onRequest,sh
     } catch(e){if(sequence===loadSequence.current)setError(e instanceof Error?e.message:'No pudimos cargar la tarjeta.');}
     finally {if(sequence===loadSequence.current)setLoading(false);}
   }
-  function selectClub(entry:Entry) {++loadSequence.current;setLoading(false);setClub(entry.clubId);setQuery('');setCards([]);setChosen('');const layouts=entries.filter(c=>c.clubId===entry.clubId);if(layouts.length===1)void selectCourse(layouts[0].id);}
+  function selectClub(entry:Entry) {++loadSequence.current;setLoading(false);setClub(entry.clubId);setQuery('');setCards([]);setChosen('');onSelectClub?.(entry);const layouts=entries.filter(c=>c.clubId===entry.clubId);if(layouts.length===1)void selectCourse(layouts[0].id);}
   function locate() {
     cancelLocation.current();
     setLocation({status:'loading'});

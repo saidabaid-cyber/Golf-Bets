@@ -53,7 +53,8 @@ test("restauración y cierre de sesión no borran los datos locales de The Backy
 });
 
 test("callback intercambia código y siempre ofrece regreso seguro", () => {
-  assert.match(callback, /exchangeCodeForSession/);
+  assert.match(callback, /finishOAuthOnce/);
+  assert.match(readFileSync('lib/oauth-callback-once.ts', 'utf8'), /exchangeCodeForSession/);
   assert.match(callback, /window\.location\.replace\("\/\?auth=complete"\)/);
   assert.match(callback, /Volver a The Backyard/);
 });
