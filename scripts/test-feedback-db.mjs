@@ -1,0 +1,31 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {PGlite} from '@electric-sql/pglite';
+const db=new PGlite(),A='11111111-1111-4111-8111-111111111111',B='22222222-2222-4222-8222-222222222222',id='33333333-3333-4333-8333-333333333333';
+const checks=[];
+try{
+await db.exec(`create role anon;create role authenticated;create role service_role bypassrls;create schema auth;create schema storage;
+create table auth.users(id uuid primary key);create function auth.uid()returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
+create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
+create table storage.objects(id uuid primary key,name text,bucket_id text);alter table storage.objects enable row level security;
+grant usage on schema public,storage,auth to authenticated,service_role;grant select on storage.objects to authenticated;
+create table public.feedback_requests(id uuid primary key,user_id uuid not null references auth.users(id) on delete cascade,category text not null,payload jsonb not null,status text not null,provider_message_id text,error_code text,attempts int not null default 0,created_at timestamptz not null default now(),updated_at timestamptz not null default now());
+alter table public.feedback_requests enable row level security;grant select on public.feedback_requests to authenticated;grant all on public.feedback_requests to service_role;
+create policy owner_read on public.feedback_requests for select to authenticated using(user_id=(select auth.uid()));
+insert into auth.users values('${A}'),('${B}');`);
+await db.exec(readFileSync('supabase/migrations/20260921002925_feedback_internal_requests.sql','utf8'));checks.push('actual additive migration');
+const payload=JSON.stringify({category:'BUG',name:'QA',description:'Synthetic feedback QA',replyEmail:'qa@example.invalid'});
+const call=(requestId=id,hash='c'.repeat(64),owner=A)=>`select public.submit_feedback_v2('${requestId}','${owner}','${'a'.repeat(64)}','${'b'.repeat(64)}','${hash}','${payload}'::jsonb,'{"screen":"more","identity":{}}'::jsonb,'${A}/${id}/qa.png') as result`;
+const first=(await db.query(call())).rows[0].result,second=(await db.query(call())).rows[0].result;
+assert.equal(first.created,true);assert.equal(second.created,false);assert.equal((await db.query('select count(*) from feedback_requests')).rows[0].count,1);checks.push('durable creation + same-ID replay');
+await assert.rejects(db.query(call(id,'d'.repeat(64))),/REQUEST_CONFLICT/);checks.push('modified replay rejected');
+await db.exec(`insert into storage.objects values('${id}','${A}/${id}/qa.png','feedback-private');set role authenticated;set request.jwt.claim.sub='${A}';`);
+assert.equal((await db.query('select id,request_status from feedback_requests')).rows.length,1);assert.equal((await db.query('select id from storage.objects')).rows.length,1);checks.push('owner request + private attachment read');
+await assert.rejects(db.query('select admin_notes from feedback_requests'),/permission denied/);await assert.rejects(db.query("update feedback_requests set request_status='RESOLVED'"),/permission denied/);await assert.rejects(db.query(call()),/permission denied/);checks.push('admin notes + mutation + RPC denied');
+await db.exec(`set request.jwt.claim.sub='${B}';`);assert.equal((await db.query('select id from feedback_requests')).rows.length,0);assert.equal((await db.query('select id from storage.objects')).rows.length,0);checks.push('A/B RLS + storage isolation');
+await db.exec('reset role;');
+for(let n=1;n<=9;n++)await db.query(call(`44444444-4444-4444-8444-${String(n).padStart(12,'0')}`));
+await assert.rejects(db.query(call('55555555-5555-4555-8555-555555555555')),/RATE_LIMIT/);checks.push('10/day limit');
+assert.equal((await db.query(call())).rows[0].result.created,false);checks.push('idempotent retry allowed after quota');
+console.log(JSON.stringify({pass:checks.length,fail:0,checks}));
+}finally{await db.close();}

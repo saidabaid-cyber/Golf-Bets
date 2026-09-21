@@ -48,9 +48,9 @@ test("actual Home and Más markup has no settings control; remaining profile/not
   assert.ok(buttons.every((node) => !/configuraci[oó]n|settings/i.test(String(node.props["aria-label"]) + text(node))));
   for (const label of ["Abrir mi perfil", "Abrir notificaciones"]) (buttons.find((node) => node.props["aria-label"] === label)!.props.onClick as () => void)();
   assert.deepEqual(visited, ["profile", "notifications"]);
-  const more = load("app/components/more-hub.tsx", {});
+  const more = load("app/components/more-hub.tsx", { "./feedback-dialog": { FeedbackLink: ({children}: {children:unknown}) => jsx("button", {children}) } });
   const tools = nodes(more.MoreHub({ hasActiveRound: false })).filter((node) => node.type === "button");
-  assert.equal(tools.length, 7); assert.ok(tools.every((node) => !/Configuración|settings/.test(text(node))));
+  assert.equal(tools.length, 8); assert.ok(tools.every((node) => !/Configuración|settings/.test(text(node))));
   const page = readFileSync("app/page.tsx", "utf8");
   assert.doesNotMatch(page, /onOpenSettings/);
   assert.match(readFileSync("app/components/profile-account-panel.tsx", "utf8"), /onClick=\{onOpenAccount\}><span><b>Cuenta y privacidad<\/b>/);

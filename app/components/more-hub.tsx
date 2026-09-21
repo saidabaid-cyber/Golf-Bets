@@ -2,6 +2,7 @@
 
 import styles from "./more-hub.module.css";
 import type { SocialView } from "./social-feed";
+import { FeedbackLink } from "./feedback-dialog";
 
 type MoreHubProps = {
   hasActiveRound: boolean;
@@ -39,7 +40,6 @@ export function MoreHub({ hasActiveRound, onOpenCourses, onOpenEquipment, onOpen
     { icon: "fit" as const, title: "Fitting", copy: "Ball Fit y Launch Monitor, desde Equipo.", action: onOpenFitting },
     { icon: "gps" as const, title: "GPS / Hole Map", copy: hasActiveRound ? "Abre la ronda activa y consulta el hoyo." : "Disponible durante una ronda cuando hay datos.", action: onOpenGps },
     { icon: "rules" as const, title: "Reglas de golf", copy: "Consulta reglas y criterios del juego.", action: onOpenRules },
-    { icon: "help" as const, title: "Ayuda", copy: "Reglas, respuestas rápidas y soporte.", action: onOpenHelp },
   ];
 
   return <section className={styles.more} aria-labelledby="more-hub-title">
@@ -49,6 +49,10 @@ export function MoreHub({ hasActiveRound, onOpenCourses, onOpenEquipment, onOpen
       <span className={styles.copy}><b>{tool.title}</b><small>{tool.copy}</small></span>
       <strong aria-hidden="true">›</strong>
     </button>)}</div>
+    <section className={styles.support} aria-labelledby="support-title"><h2 id="support-title">Soporte</h2>
+      <button type="button" className={styles.supportCard} onClick={onOpenHelp}><span className={styles.icon}><Icon name="help" /></span><span><b>Ayuda y feedback</b><small>Reporta un problema, solicita algo nuevo o envíanos una sugerencia.</small></span><span aria-hidden="true">↗</span></button>
+      <FeedbackLink category="BUG">Reportar un problema</FeedbackLink>
+    </section>
     {onOpenSocial && <section><h2>Amigos y comunidad</h2><div className={styles.grid}>{([['friends','Amigos y solicitudes'],['friends','Agregar amigos'],['qr','Mi QR'],['scan','Escanear QR'],['preferences','Preferencias de notificaciones']] as const).map(([view,label]) => <button type="button" key={label} onClick={() => onOpenSocial(view)}><span className={styles.copy}><b>{label}</b></span><strong aria-hidden="true">›</strong></button>)}<button type="button" onClick={onOpenPrivacy}><span className={styles.copy}><b>Privacidad</b></span><strong aria-hidden="true">›</strong></button></div></section>}
   </section>;
 }
