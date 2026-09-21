@@ -36,6 +36,9 @@ function wizard(profileIndex: number | null = null, profileSource: handicap.Ball
     if (name === "react") return react;
     if (name === "./use-view-scroll-reset") return { useViewScrollReset() {} };
     if (name === "./numeric-capture-input") return { NumericCaptureInput: (props: Record<string, unknown>) => ({ type: "input", props }) };
+    // Presentation children do not own the fitting state exercised by this harness.
+    if (name === "./catalog-product-media") return { CatalogProductMedia: (props: Record<string, unknown>) => ({ type: "catalog-media", props }) };
+    if (name === "./backyard-icon") return { BackyardIcon: (props: Record<string, unknown>) => ({ type: "svg", props }) };
     if (name === "react/jsx-runtime") return { jsx, jsxs: jsx, Fragment: "fragment" };
     if (name.endsWith("/ball-fitting")) return fitting;
     if (name.endsWith("/ball-fitting-api")) return api;
