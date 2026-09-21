@@ -15,6 +15,8 @@
   --green2: var(--by-sage); --soft: #f5f7f2;
 }
 .backyardV3 { font-family: var(--by-font); -webkit-font-smoothing: antialiased; }
+/* Let the document scroll when active-round controls or larger text add height. */
+.backyardV3 .app.homeApp { height: auto; min-height: 100dvh; overflow: visible; }
 .backyardV3 :where(button, a, summary, input, select, textarea):focus-visible { outline: 3px solid var(--by-gold); outline-offset: 3px; }
 .backyardV3 :where(button, a, summary) { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 .backyardV3 .card { border-radius: var(--by-radius); box-shadow: var(--by-shadow); padding: 20px; }

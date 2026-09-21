@@ -111,8 +111,8 @@ test("bottom navigation is exactly Inicio, Social, Más and Perfil", () => {
   assert.doesNotMatch(bottomNavComponent, /label === "Perfil" \? "Cuenta"/);
   assert.match(globalStyles, /\.bottomNav\.homeBottomNav\{[^}]*bottom:0[^}]*left:0/);
   assert.match(globalStyles, /\.bottomNav\.homeBottomNav\{[^}]*safe-area-inset-bottom/);
-  assert.match(globalStyles, /\.app\.homeApp\{[^}]*height:100dvh[^}]*overflow:hidden/);
-  assert.match(homeStyles, /\.home \{[^}]*height: 100%[^}]*grid-template-rows:/);
+  // Home must grow beyond the viewport when an active round adds its controls.
+  assert.match(homeStyles, /\.home \{[^}]*height: auto[^}]*min-height: 100dvh[^}]*grid-template-rows:/);
   assert.match(homeStyles, /\.content \{[^}]*padding:[^}]*safe-area-inset-bottom/);
 });
 

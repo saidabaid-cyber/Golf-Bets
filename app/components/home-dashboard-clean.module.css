@@ -1,13 +1,13 @@
 .home {
   --home-hero-height: clamp(384px, 47dvh, 438px);
   width: 100%;
-  height: 100%;
-  min-height: 0;
+  height: auto;
+  min-height: 100dvh;
   max-width: 760px;
   display: grid;
-  grid-template-rows: var(--home-hero-height) minmax(0, 1fr);
+  grid-template-rows: var(--home-hero-height) auto;
   margin: 0;
-  overflow: hidden;
+  overflow: visible;
   background: #f7faf7;
   color: #0a2f1b;
 }
@@ -185,7 +185,7 @@
 .aiPlay i { height: 1px; display: block; background: #19492e; }
 .heroFade { position: absolute; z-index: 5; right: 0; bottom: -1px; left: 0; height: 23px; pointer-events: none; background: linear-gradient(180deg, rgba(247, 250, 247, 0), #f7faf7 92%); filter: blur(.3px); }
 
-.content { min-height: 0; display: grid; grid-template-rows: auto minmax(82px, 1fr) auto; gap: clamp(6px, .85dvh, 9px); overflow: hidden; padding: clamp(6px, .8dvh, 9px) 18px calc(70px + env(safe-area-inset-bottom)); background: linear-gradient(180deg, #f7faf7, #f2f6f2); }
+.content { min-height: 0; display: grid; grid-auto-rows: auto; gap: 16px; overflow: visible; padding: 8px 18px calc(96px + env(safe-area-inset-bottom)); background: linear-gradient(180deg, #f7faf7, #f2f6f2); }
 .quickSection { display: grid; gap: 6px; }
 .sectionHeading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .sectionHeading h2, .moreBackyard h2 { margin: 0; color: #0b321d; font-size: 16px; font-weight: 800; letter-spacing: -.35px; }

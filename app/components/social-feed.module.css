@@ -10,3 +10,4 @@
 .actions small { color:#fff; }
 .menu { padding:16px;border-radius:var(--by-radius);box-shadow:var(--by-shadow); }
 .menu button { font-size:13px;border:0; }
+.links button { border:1px solid var(--by-line);font-size:13px;background:var(--by-paper); }
