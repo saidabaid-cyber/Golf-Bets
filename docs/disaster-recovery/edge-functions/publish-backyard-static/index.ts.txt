@@ -1,0 +1,31 @@
+Deno.serve(async () => {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!supabaseUrl || !serviceKey) {
+    return new Response(JSON.stringify({ ok: false, error: "Missing project environment" }), { status: 500, headers: { "content-type": "application/json" } });
+  }
+
+  const source = await fetch(`${supabaseUrl}/functions/v1/backyard-site`);
+  if (!source.ok) {
+    return new Response(JSON.stringify({ ok: false, error: `Source ${source.status}` }), { status: 502, headers: { "content-type": "application/json" } });
+  }
+  const html = await source.text();
+
+  const upload = await fetch(`${supabaseUrl}/storage/v1/object/the-backyard-site/index.html`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${serviceKey}`,
+      "apikey": serviceKey,
+      "Content-Type": "text/html",
+      "x-upsert": "true",
+      "cache-control": "60"
+    },
+    body: html
+  });
+  const responseText = await upload.text();
+  return new Response(JSON.stringify({ ok: upload.ok, status: upload.status, response: responseText, bytes: html.length }), {
+    status: upload.ok ? 200 : 502,
+    headers: { "content-type": "application/json", "access-control-allow-origin": "*" }
+  });
+});
+

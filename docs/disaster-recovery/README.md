@@ -1,0 +1,39 @@
+# The Backyard — disaster recovery
+Audited 2026-09-21. Initial application commit: `dbf30b080c8e76d3e56bab5c311a60e7ac65d897`.
+Work branch: `infra/disaster-recovery`; based on fetched `phase2/course-catalog-feedback`. No deployment or database mutation is part of this work.
+
+## Start here
+
+1. Read [SYSTEM_INVENTORY](SYSTEM_INVENTORY.md), especially the remote-only objects.
+2. For an incident, follow [FULL_RESTORE_FROM_ZERO](FULL_RESTORE_FROM_ZERO.md).
+3. For an ordinary snapshot, follow [BACKUP_POLICY](BACKUP_POLICY.md).
+4. Verify independently using [BACKUP_VERIFICATION](BACKUP_VERIFICATION.md).
+
+## Commands
+
+Run from the repository root with Node 24 and Git available:
+
+```sh
+npm run backup
+npm run backup:source
+npm run backup:schema
+npm run backup:database
+npm run backup:storage
+npm run backup:verify -- /absolute/path/to/snapshot
+npm run backup:security
+npm run backup:security -- --history
+```
+
+The existing dependency lock is **pnpm-lock.yaml**; install with `pnpm install --frozen-lockfile`. npm here is only a script launcher, not an instruction to regenerate dependencies.
+
+No script reads an application .env automatically. Inject the dedicated BACKUP_* variables from a password manager into the process environment; see [ENVIRONMENT_VARIABLES](ENVIRONMENT_VARIABLES.md). A missing credential blocks only that component: Git still runs. Exit codes: 0 all requested/full components successful, 2 incomplete (including deliberately source-only snapshots), 1 failure. Inspect component states, not just file existence.
+
+Default output is an ignored `backups/<UTC-time>-<random-id>/` folder. Previous snapshots are never overwritten or deleted. DB and Storage content (including private filenames) are encrypted with AES-256-GCM before disk writes. Store the encryption key separately in an owner-controlled password manager; losing it makes these backups unrecoverable. Git source/history is NOT encrypted by default and must pass the secret scan before copying externally.
+
+## Scope and limits
+
+Sources allowed by code: isolated QA ref `bymeopxkxapfizeeqeyb`, or localhost PostgreSQL explicitly selected by the operator. Production/shared sources are rejected. This is intentionally not a production backup rollout.
+
+A Git bundle, tests and docs do not prove a database/Auth/Storage restore. The current execution evidence is in [BACKUP_VERIFICATION](BACKUP_VERIFICATION.md). No full recovery certification until a disposable target is restored and the application is exercised against it.
+
+Configuration secrets, OAuth consoles, DNS zone, off-device copies and a recovery drill require owner-controlled access. None are silently considered backed up. No dependency on Codex or OpenAI is needed to read these docs, execute backups or run deterministic golf calculations.
