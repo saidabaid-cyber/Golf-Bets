@@ -19,6 +19,8 @@ const gates = [];
 const steps = [
   ["test-compile", ["node_modules/typescript/bin/tsc", "-p", "tsconfig.test.json"]],
   ["tests", ["--test", ".test-dist/tests/*.test.js"]],
+  ["games-matrix", ["scripts/qa-games-matrix.mjs"]],
+  ["catalog-freshness", ["scripts/qa-catalog-data.mjs", "--check"]],
   ["typescript", ["node_modules/typescript/bin/tsc", "--noEmit"]],
   ["eslint", ["node_modules/eslint/bin/eslint.js", "."]],
   // Webpack is an official Next build mode; external shared dependency junctions
