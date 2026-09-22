@@ -4,6 +4,8 @@ import { validateScorecardExtraction } from "../backyard-ai/scorecard/validator"
 
 export const SCORECARD_VISION_VERSION = 1 as const;
 export type VisionRound = ActiveScorecardRound & {
+  /** Host snapshot revision includes putts, rules, lifecycle and ownership, not only scores. */
+  revision?: string;
   /** Frozen tees selected for this round, never guessed from a color. */
   tees?: Array<{ id: string; name: string }>;
 };
@@ -107,6 +109,18 @@ export function confirmScorecardVision(input: {
   if (!current.ready) return { ok: false, reason: "unresolved_fields" };
   if (input.evidence.provenance === "synthetic_fixture") return { ok: false, reason: "fixture_not_importable" };
   return { ok: true, roundId: input.currentRound.roundId, validation: structuredClone(current.validation), sourceImageIds: [...current.sourceImageIds] };
+}
+
+/** Read the current host state AND callback at the synchronous commit boundary,
+ * after any asynchronous consent. A callback retained before consent is unsafe. */
+export function commitScorecardVision(confirmationKey: string, readCurrent: () => {
+  evidence: VisionEvidence; currentRound: VisionRound; overrides: VisionOverrides;
+  persist: (validation: ScorecardValidationResult) => boolean;
+}) {
+  const current = readCurrent();
+  const command = confirmScorecardVision({ ...current, confirmed: true, confirmationKey });
+  if (!command.ok) return command;
+  return { ok: true as const, persisted: current.persist(command.validation) };
 }
 
 export interface ScorecardVisionProvider {
