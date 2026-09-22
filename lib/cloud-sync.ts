@@ -90,6 +90,8 @@ export function restoreLocalRoundUi(cloudDraft: unknown, localDraft: unknown) {
   if (!localDraft || typeof localDraft !== "object" || Array.isArray(localDraft)) return cloudDraft;
   const local = localDraft as Record<string, unknown>;
   const restored = { ...(cloudDraft as Record<string, unknown>) };
+  // Hole navigation belongs to one round, never to the replacement draft.
+  if (!local.roundId || local.roundId !== restored.roundId) return restored;
   if (Number.isInteger(local.currentIndex)) restored.currentIndex = local.currentIndex;
   return restored;
 }
