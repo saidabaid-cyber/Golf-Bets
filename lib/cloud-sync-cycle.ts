@@ -23,7 +23,7 @@ export async function runCloudSyncCycle(options: CycleOptions) {
   try {
     check(); options.status("syncing");
     const remote = await options.download(); check();
-    const before = options.read();
+    const before = structuredClone(options.read());
     if (options.conflicts?.(before, remote)) {
       options.status("pending");
       return false;

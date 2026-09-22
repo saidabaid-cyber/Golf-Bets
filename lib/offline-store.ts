@@ -11,6 +11,8 @@ const META = "meta";
 const FALLBACK_WORKSPACE_PREFIX = "backyard-offline-workspace-fallback-v1:";
 const FALLBACK_OUTBOX_PREFIX = "backyard-offline-outbox-fallback-v1:";
 const FALLBACK_ACK_PREFIX = "backyard-offline-ack-fallback-v1:";
+const FALLBACK_DEVICE_KEY = "backyard-offline-device-v1";
+let sessionDeviceId: string | undefined;
 
 export type OfflineWorkspace = {
   ownerId: string;
@@ -170,22 +172,47 @@ export function createDeviceId() {
 }
 
 export async function getOfflineDeviceId() {
-  const db = await openOfflineDb();
-  if (!db) return "browser-no-indexeddb";
-  const read = db.transaction(META, "readonly").objectStore(META).get("device-id");
-  const existing = await requestResult<{ key: string; value: string } | undefined>(read);
-  if (existing?.value) return existing.value;
-  const value = createDeviceId();
-  const tx = db.transaction(META, "readwrite");
-  tx.objectStore(META).put({ key: "device-id", value });
-  await transactionDone(tx);
-  return value;
+  let db: IDBDatabase | null = null;
+  try {
+    db = await openOfflineDb();
+    if (db) {
+      // One read/write transaction serializes first-time initialization across
+      // tabs. Separate read and write transactions can each return a new ID.
+      const tx = db.transaction(META, "readwrite");
+      const done = transactionDone(tx);
+      const store = tx.objectStore(META);
+      const existing = await requestResult<{ key: string; value: string } | undefined>(store.get("device-id"));
+      const value = existing?.value || fallbackDeviceId();
+      if (!existing?.value) store.put({ key: "device-id", value });
+      await done;
+      return value;
+    }
+  } catch { /* private mode may reject IndexedDB; retain a browser-local ID */ }
+  finally { db?.close(); }
+  return fallbackDeviceId();
+}
+
+function fallbackDeviceId() {
+  try {
+    const storage = browserStorage();
+    if (storage) {
+      const existing = storage.getItem(FALLBACK_DEVICE_KEY);
+      if (existing) return existing;
+      const value = createDeviceId();
+      storage.setItem(FALLBACK_DEVICE_KEY, value);
+      return storage.getItem(FALLBACK_DEVICE_KEY) || value;
+    }
+  } catch { /* no durable storage: identify this session, never every browser */ }
+  return sessionDeviceId ||= createDeviceId();
 }
 
 /** One durable snapshot and one idempotent outbox item per account. Repeated
  * edits replace the pending snapshot instead of creating duplicate operations. */
 export async function persistOfflineBundle(ownerId: string, bundle: CloudDataBundle, queueForCloud: boolean) {
   if (!accountWriteAllowed(ownerId)) throw new Error("Account deletion in progress");
+  // Freeze the payload together with its fingerprint before awaiting storage.
+  // A caller can otherwise mutate a score while IndexedDB is opening.
+  bundle = structuredClone(bundle);
   const fingerprint = cloudDataFingerprint(bundle);
   const now = nextOfflineTimestamp(ownerId);
   const workspace = { ownerId, bundle, fingerprint, savedAt: now } satisfies OfflineWorkspace;
