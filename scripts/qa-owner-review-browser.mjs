@@ -27,6 +27,7 @@ const sourceFixturePath = path.resolve(process.env.OWNER_QA_SOURCE_FIXTURE_PATH 
 const targetFixturePath = path.resolve(process.env.OWNER_QA_TARGET_FIXTURE_PATH || fixturePath);
 const sourceFixtureLabel = String(process.env.OWNER_QA_SOURCE_FIXTURE_LABEL || "").trim();
 const targetFixtureLabel = String(process.env.OWNER_QA_TARGET_FIXTURE_LABEL || "").trim();
+const browserNoSandbox = process.env.OWNER_QA_CHROME_NO_SANDBOX === "1";
 const preview = new URL(previewArgument || "http://127.0.0.1:3000");
 const origin = preview.origin;
 
@@ -115,6 +116,7 @@ class CdpClient {
     this.ready = new Promise((resolve, reject) => {
       this.socket.addEventListener("open", resolve, { once: true });
       this.socket.addEventListener("error", reject, { once: true });
+      this.socket.addEventListener("close", () => reject(new Error("Chrome DevTools connection closed before opening.")), { once: true });
     });
     this.socket.addEventListener("message", (event) => {
       const message = JSON.parse(String(event.data));
@@ -197,8 +199,9 @@ async function authenticateExistingQaAccounts() {
   assert.ok(source && target && source.id !== target.id, "Two distinct existing QA fixture accounts are required.");
   for (const fixture of [source, target]) {
     assert.equal(fixture.ref, QA_PROJECT_REF, "Fixture project ref does not match isolated QA.");
-    assert.ok(typeof fixture.email === "string" && typeof fixture.password === "string" && typeof fixture.username === "string", "QA fixture is missing required private fields.");
+    assert.ok(typeof fixture.id === "string" && typeof fixture.email === "string" && typeof fixture.password === "string", "QA fixture is missing required private fields.");
   }
+  assert.ok(typeof target.username === "string" && target.username.trim(), "The target QA fixture must include the username used by search evidence.");
   const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
     method: "POST",
     headers: { apikey: publicKey, Authorization: `Bearer ${publicKey}`, "Content-Type": "application/json" },
@@ -255,18 +258,49 @@ function syntheticEquipmentEnvelope(userId, timestamp) {
   return JSON.stringify({ schema: "the-backyard-equipment-profile", version: 1, userId, savedAt: timestamp, profile });
 }
 
-function syntheticFixtureSource({ onboardingStep = null, activeRound = false, iphonePermissions = false, equipment = false } = {}) {
-  const userId = "00000000-0000-4000-8000-000000000022";
+function guestActiveRoundFixtureSource() {
+  const holes = Array.from({ length: 18 }, (_, index) => ({ number: index + 1, par: 4, strokeIndex: index + 1 }));
+  const round = {
+    version: 11,
+    roundId: "qa-owner-active-round",
+    roundDate: "2026-09-11",
+    startedAt: "2026-09-11T15:00:00.000Z",
+    players: [{ id: "qa-owner", name: "Golfista", handicap: 8 }],
+    ownerId: "qa-owner",
+    startHole: 1,
+    roundHoles: 18,
+    course: { id: "qa-course", name: "La Vista", teeName: "Blancas", rating: 72, slope: 113, holes },
+    courseSelected: true,
+    scores: { 1: { "qa-owner": 4 }, 2: { "qa-owner": 5 }, 3: { "qa-owner": 4 } },
+    scoreEdits: { 1: { "qa-owner": 4 }, 2: { "qa-owner": 5 }, 3: { "qa-owner": 4 } },
+    putts: { 1: { "qa-owner": 2 }, 2: { "qa-owner": 2 }, 3: { "qa-owner": 2 } },
+    currentIndex: 2,
+  };
+  return `
+    localStorage.setItem('backyard-account-mode-v1', 'guest');
+    localStorage.setItem('backyard-local-workspace-owner-v1', 'guest');
+    localStorage.setItem('backyard-legal-acceptances-v1', ${JSON.stringify(JSON.stringify(legalAcceptances("guest")))});
+    localStorage.setItem('backyard-betting-consent-prompt-v1:guest:2026-09-08-v3+sha256-5376b615664b10d9:express-betting-data', 'seen');
+    localStorage.setItem('golfbets-draft-v1', ${JSON.stringify(JSON.stringify(round))});
+    localStorage.setItem('golfbets-history', '[]');
+  `;
+}
+
+function syntheticFixtureSource({ onboardingStep = null, activeRound = false, iphonePermissions = false, equipment = false, realAuth = null } = {}) {
+  const userId = realAuth?.source.id || "00000000-0000-4000-8000-000000000022";
   const acceptedAt = "2026-09-21T12:00:00.000Z";
+  const metadata = realAuth?.session?.user?.user_metadata || {};
+  const sourceDisplayName = metadata.full_name || metadata.name || "Cuenta QA";
+  const sourceUsername = realAuth?.source.username || metadata.username || "cuenta_qa";
   const profile = {
     userId,
-    displayName: "Owner QA",
-    email: "owner.qa@example.test",
+    displayName: realAuth ? sourceDisplayName : "Owner QA",
+    email: realAuth?.session?.user?.email || "owner.qa@example.test",
     avatarUrl: "⛳",
     defaultHandicap: 8.4,
     givenName: "Owner",
     familyName: "QA",
-    username: "owner_qa",
+    username: realAuth ? sourceUsername : "owner_qa",
     city: "San Andrés Cholula",
     state: "Puebla",
     country: "México",
@@ -305,19 +339,19 @@ function syntheticFixtureSource({ onboardingStep = null, activeRound = false, ip
     roundId: "qa-owner-active-round",
     roundDate: "2026-09-21",
     startedAt: "2026-09-21T15:00:00.000Z",
-    players: [{ id: userId, accountUserId: userId, name: "Owner QA", handicap: 8 }],
+    players: [{ id: userId, accountUserId: userId, name: realAuth ? sourceDisplayName : "Owner QA", handicap: 8 }],
     ownerId: userId,
     startHole: 1,
     roundHoles: 18,
     course: { id: "qa-course", name: "La Vista", teeName: "Blancas", rating: 72, slope: 113, holes },
     courseSelected: true,
-    scores: { 1: { [userId]: 4 }, 2: { [userId]: 5 } },
-    scoreEdits: { 1: { [userId]: 4 }, 2: { [userId]: 5 } },
-    putts: { 1: { [userId]: 2 }, 2: { [userId]: 2 } },
+    scores: { 1: { [userId]: 4 }, 2: { [userId]: 5 }, 3: { [userId]: 4 } },
+    scoreEdits: { 1: { [userId]: 4 }, 2: { [userId]: 5 }, 3: { [userId]: 4 } },
+    putts: { 1: { [userId]: 2 }, 2: { [userId]: 2 }, 3: { [userId]: 2 } },
     currentIndex: 2,
   } : null;
   return `
-    Object.defineProperty(Navigator.prototype, 'onLine', { configurable: true, get: () => false });
+    ${realAuth ? `localStorage.setItem(${JSON.stringify(realAuth.authStorageKey)}, ${JSON.stringify(JSON.stringify(realAuth.session))});` : "Object.defineProperty(Navigator.prototype, 'onLine', { configurable: true, get: () => false });"}
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async value => { window.__ownerQaClipboard = String(value); } } });
     ${iphonePermissions ? `
       Object.defineProperty(window, 'Notification', { configurable: true, value: undefined });
@@ -329,9 +363,10 @@ function syntheticFixtureSource({ onboardingStep = null, activeRound = false, ip
     localStorage.setItem('backyard-profile-cache-v1:${userId}', ${JSON.stringify(JSON.stringify(profile))});
     localStorage.setItem('backyard-profile-ready-v1:${userId}', 'true');
     localStorage.setItem('the-backyard:equipment-onboarding-ready:v1:${userId}', 'true');
+    localStorage.setItem('golfbets-high-contrast-v1', 'true');
     ${equipment ? `localStorage.setItem('the-backyard:equipment-profile:v1:${encodeURIComponent(userId)}', ${JSON.stringify(syntheticEquipmentEnvelope(userId, acceptedAt))});` : ""}
-    localStorage.setItem('backyard-local-migration-decision-v1:${userId}', 'linked');
-    localStorage.setItem('backyard-legal-acceptances-v1', ${JSON.stringify(JSON.stringify(legalAcceptances(userId)))});
+    localStorage.setItem('backyard-local-migration-decision-v1:${userId}', ${JSON.stringify(realAuth ? "skip" : "linked")});
+    ${realAuth ? "" : `localStorage.setItem('backyard-legal-acceptances-v1', ${JSON.stringify(JSON.stringify(legalAcceptances(userId)))});`}
     localStorage.setItem('backyard-betting-consent-prompt-v1:${userId}:2026-09-08-v3+sha256-5376b615664b10d9:express-betting-data', 'seen');
     localStorage.setItem('golfbets-draft-v1', ${JSON.stringify(round ? JSON.stringify(round) : "null")});
     localStorage.setItem('golfbets-history', '[]');
@@ -341,11 +376,11 @@ function syntheticFixtureSource({ onboardingStep = null, activeRound = false, ip
 
 function realAuthFixtureSource(realAuth) {
   return `
-    Object.defineProperty(Navigator.prototype, 'onLine', { configurable: true, get: () => false });
     localStorage.setItem(${JSON.stringify(realAuth.authStorageKey)}, ${JSON.stringify(JSON.stringify(realAuth.session))});
     localStorage.setItem('backyard-account-mode-v1', 'authenticated');
     localStorage.setItem('backyard-local-workspace-owner-v1', ${JSON.stringify(realAuth.source.id)});
-    localStorage.setItem('backyard-local-migration-decision-v1:${realAuth.source.id}', 'linked');
+    localStorage.setItem('golfbets-high-contrast-v1', 'true');
+    localStorage.setItem('backyard-local-migration-decision-v1:${realAuth.source.id}', 'skip');
   `;
 }
 
@@ -512,20 +547,57 @@ class BrowserSession {
     assert.equal(filled, true, `Missing input labelled: ${label}`);
   }
 
+  async select(label, value) {
+    const selected = await this.evaluate(`(() => {
+      const clean = value => (value || '').replace(/\\s+/g, ' ').trim();
+      const wrapper = [...document.querySelectorAll('label')].find(element => clean(element.textContent).startsWith(${JSON.stringify(label)}));
+      const linked = wrapper?.htmlFor ? document.getElementById(wrapper.htmlFor) : null;
+      const node = linked instanceof HTMLSelectElement ? linked : wrapper?.querySelector('select');
+      if (!node || ![...node.options].some(option => option.value === ${JSON.stringify(value)})) return false;
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(node, ${JSON.stringify(value)});
+      node.dispatchEvent(new Event('input', { bubbles: true }));
+      node.dispatchEvent(new Event('change', { bubbles: true }));
+      node.focus();
+      return true;
+    })()`);
+    assert.equal(selected, true, `Missing option ${value} in select labelled: ${label}`);
+  }
+
+  async waitForUiSettled(label, { privacy = false } = {}) {
+    await this.wait(`(() => {
+      const text = document.body?.innerText || '';
+      if (/\\bGuardando\\b/i.test(text)) return false;
+      return ${privacy ? "!/Consultando privacidad/i.test(text)" : "true"};
+    })()`, `${label} UI settled`);
+  }
+
   async scrollToText(text) {
     const found = await this.evaluate(`(() => {
       const clean = value => (value || '').replace(/\\s+/g, ' ').trim();
       const node = [...document.querySelectorAll('h1,h2,h3,legend,label,button,p')].find(element => clean(element.textContent).includes(${JSON.stringify(text)}));
       if (!node) return false;
-      node.scrollIntoView({ block: 'start', inline: 'nearest', behavior: 'auto' });
+      node.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' });
       return true;
     })()`);
     assert.equal(found, true, `Could not scroll to: ${text}`);
     await delay(200);
   }
 
-  async screenshot(destination) {
-    const result = await this.client.send("Page.captureScreenshot", { format: "png", fromSurface: true }, this.sessionId);
+  async screenshot(destination, { fullPage = false } = {}) {
+    const screenshotOptions = { format: "png", fromSurface: true };
+    if (fullPage) {
+      const metrics = await this.client.send("Page.getLayoutMetrics", {}, this.sessionId);
+      const content = metrics.cssContentSize || metrics.contentSize;
+      screenshotOptions.captureBeyondViewport = true;
+      screenshotOptions.clip = {
+        x: Math.max(0, content.x || 0),
+        y: Math.max(0, content.y || 0),
+        width: Math.ceil(content.width),
+        height: Math.ceil(content.height),
+        scale: 1,
+      };
+    }
+    const result = await this.client.send("Page.captureScreenshot", screenshotOptions, this.sessionId);
     const bytes = Buffer.from(result.data, "base64");
     await writeFile(destination, bytes);
     return createHash("sha256").update(bytes).digest("hex");
@@ -559,8 +631,9 @@ class BrowserSession {
     assert.equal(inspection.width, this.options.viewport.width, `${name}: viewport width mismatch.`);
     assert.equal(inspection.horizontalOverflow, false, `${name}: horizontal overflow (${inspection.scrollWidth} > ${inspection.clientWidth}).`);
     assert.equal(inspection.vercelVisible, false, `${name}: a vercel.app URL is visible in the product UI.`);
-    for (const text of expected) assert.equal(inspection.bodyText.includes(text), true, `${name}: missing expected text “${text}”.`);
-    for (const text of absent) assert.equal(inspection.bodyText.includes(text), false, `${name}: forbidden text “${text}” is visible.`);
+    const comparableBodyText = inspection.bodyText.toLocaleLowerCase("es-MX");
+    for (const text of expected) assert.equal(comparableBodyText.includes(text.toLocaleLowerCase("es-MX")), true, `${name}: missing expected text “${text}”.`);
+    for (const text of absent) assert.equal(comparableBodyText.includes(text.toLocaleLowerCase("es-MX")), false, `${name}: forbidden text “${text}” is visible.`);
     if (options.assertion) assert.equal(await this.evaluate(options.assertion), true, `${name}: custom assertion failed.`);
     if (inspection.hasDialog || options.exitRequired) {
       const canExit = inspection.dialogButtons.some((button) => !button.disabled && (/cerrar|cancelar|volver|anterior|×|^x$/i.test(`${button.text} ${button.aria}`)));
@@ -568,7 +641,7 @@ class BrowserSession {
     }
     const filename = `${String(report.captures.length + 1).padStart(2, "0")}-${safeFilePart(name)}-${inspection.width}x${inspection.height}.png`;
     const destination = path.join(outputDirectory, filename);
-    const sha256 = await this.screenshot(destination);
+    const sha256 = await this.screenshot(destination, { fullPage: options.fullPage === true });
     const newErrors = this.errors.slice(this.errorCursor);
     this.errorCursor = this.errors.length;
     const item = {
@@ -577,6 +650,7 @@ class BrowserSession {
       sha256,
       dataMode: this.options.dataMode || "controlled-local-fixture",
       viewport: { width: inspection.width, height: inspection.height },
+      fullPage: options.fullPage === true,
       scrollHeight: inspection.scrollHeight,
       horizontalOverflow: inspection.horizontalOverflow,
       modalExitVerified: inspection.hasDialog || options.exitRequired ? true : null,
@@ -596,6 +670,7 @@ const report = {
   status: "RUNNING",
   realAuthRequested: useRealAuth,
   realAuthUsed: false,
+  browserNoSandbox,
   expectedEvidence,
   captures: [],
   failures: [],
@@ -607,10 +682,15 @@ const report = {
 async function withSession(client, label, options, task) {
   const session = new BrowserSession(client, options);
   try {
+    process.stderr.write(`[owner-browser] ${label}: opening\n`);
     await session.open();
+    process.stderr.write(`[owner-browser] ${label}: running\n`);
     await task(session);
+    process.stderr.write(`[owner-browser] ${label}: complete\n`);
   } catch (error) {
-    report.failures.push({ suite: label, message: error instanceof Error ? error.message : String(error) });
+    const message = error instanceof Error ? error.message : String(error);
+    report.failures.push({ suite: label, message });
+    process.stderr.write(`[owner-browser] ${label}: failed — ${message}\n`);
   } finally {
     report.consoleErrors.push(...session.errors.map((error) => ({ suite: label, ...error })));
     report.blockedWrites.push(...session.blockedWrites.map((request) => ({ suite: label, ...request })));
@@ -651,31 +731,54 @@ async function onboardingEvidence(client) {
     viewport: viewports.mobile430,
     fixture: syntheticFixtureSource({ onboardingStep: "bets" }),
   }, async (session) => {
-    await session.wait("document.body?.innerText.includes('Elegir apuestas habituales')", "betting preferences onboarding");
+    await session.wait("document.body?.innerText.includes('Elegir apuestas habituales') && Boolean(document.querySelector('#template-general')) && Boolean(document.querySelector('#template-personal'))", "complete betting preferences onboarding");
+    await session.scrollToText("Apuestas de grupo / generales");
     await session.capture("bets-group", {
       expected: ["Selecciona tus apuestas habituales", "Apuestas de grupo / generales", "Unidades positivas y negativas"],
-      absent: ["contra quién", "Participan"],
+      assertion: `(() => {
+        const heading = document.querySelector('#template-general');
+        const section = heading?.closest('section');
+        const rect = heading?.getBoundingClientRect();
+        const text = section?.textContent || '';
+        const participantPrompt = [...(section?.querySelectorAll('label,legend,h4,p') || [])].some(node => /^(participan(?:tes)?|contra qui[eé]n)\b/i.test((node.textContent || '').trim()));
+        return Boolean(rect && rect.bottom > 0 && rect.top < innerHeight)
+          && text.includes('Apuestas de grupo / generales')
+          && text.includes('Unidades positivas y negativas')
+          && !participantPrompt;
+      })()`,
     });
     await session.scrollToText("Individuales / Personales");
     await session.capture("bets-personal", {
-      expected: ["Individuales / Personales", "Nassau", "Dollar a Stroke"],
+      expected: ["Individuales / Personales", "Nassau / Personales", "Dollar a Stroke", "Presiones individuales"],
       absent: ["Unidades / Copas"],
+      assertion: `(() => {
+        const heading = document.querySelector('#template-personal');
+        const section = heading?.closest('section');
+        const rect = heading?.getBoundingClientRect();
+        const text = section?.textContent || '';
+        return Boolean(rect && rect.top >= 0 && rect.bottom <= innerHeight)
+          && text.includes('Nassau / Personales')
+          && text.includes('Dollar a Stroke')
+          && text.includes('Presiones individuales');
+      })()`,
     });
   });
 }
 
-async function appCoreEvidence(client) {
+async function appCoreEvidence(client, realAuth) {
   await withSession(client, "home", {
     viewport: viewports.mobile390,
-    fixture: syntheticFixtureSource(),
+    fixture: syntheticFixtureSource({ realAuth }),
+    dataMode: "existing-qa-session:controlled-local-visual-state",
   }, async (session) => {
     await session.waitHome();
-    await session.capture("home", { expected: ["Buen golf", "Owner QA", "Accesos rápidos", "Más de The Backyard"] });
+    await session.capture("home", { expected: ["Buen golf", "Accesos rápidos", "Más de The Backyard"] });
   });
 
   await withSession(client, "play", {
     viewport: viewports.mobile430,
-    fixture: syntheticFixtureSource(),
+    fixture: syntheticFixtureSource({ realAuth }),
+    dataMode: "existing-qa-session:controlled-local-visual-state",
   }, async (session) => {
     await session.waitHome();
     await session.clickAria("Elegir cómo armar tu ronda");
@@ -685,27 +788,44 @@ async function appCoreEvidence(client) {
 
   await withSession(client, "active-round", {
     viewport: viewports.mobile430,
-    fixture: syntheticFixtureSource({ activeRound: true }),
+    fixture: guestActiveRoundFixtureSource(),
+    dataMode: "controlled-local-guest-round",
   }, async (session) => {
     await session.waitHome();
-    await session.clickAria("Continuar ronda");
+    await session.wait("document.body?.innerText.includes('CONTINUAR RONDA') && document.body?.innerText.includes('La Vista')", "active round home card");
+    await session.click("CONTINUAR RONDA", { selector: '[data-home-version="approved-golf-home-v2"] button' });
     await session.wait("document.querySelector('[data-game-screen=\"approved-compact-v1\"]') !== null", "active round game screen");
-    await session.capture("active-round", { expected: ["Hoyo 3", "Score", "Putts", "Guardar y siguiente"] });
+    await session.capture("active-round", {
+      expected: ["Hoyo 3", "Score", "Putts", "Guardar y siguiente"],
+      assertion: `(() => {
+        const score = document.querySelector('[role="group"][aria-label*="Score"][aria-label*="hoyo 3"]');
+        const putts = document.querySelector('[role="group"][aria-label*="Putts"][aria-label*="hoyo 3"]');
+        return score?.querySelector('[aria-pressed="true"][aria-label$=": 4"]') !== null
+          && putts?.querySelector('[aria-pressed="true"][aria-label$=": 2"]') !== null;
+      })()`,
+    });
   });
 }
 
-async function profileSettingsEvidence(client) {
+async function profileSettingsEvidence(client, realAuth) {
   await withSession(client, "profile-settings", {
     viewport: viewports.desktop,
-    fixture: syntheticFixtureSource({ iphonePermissions: true }),
+    fixture: syntheticFixtureSource({ iphonePermissions: true, realAuth }),
+    dataMode: "existing-qa-session:controlled-local-visual-state",
   }, async (session) => {
     await session.waitHome();
     await session.clickAria("Perfil");
     await session.wait("document.body?.innerText.includes('Mi Perfil')", "profile");
-    await session.capture("profile", { expected: ["Mi Perfil", "Owner QA", "Home Club", "Mi equipo"] });
+    await session.wait(`([...document.querySelectorAll('[aria-label]')].some(node => /^Perfil \\d+% completado$/.test(node.getAttribute('aria-label') || '')))`, "profile completion readback");
+    await session.waitForUiSettled("profile");
+    await session.capture("profile", {
+      expected: ["Mi Perfil", "Home Club", "Mi equipo"],
+      assertion: `([...document.querySelectorAll('[aria-label]')].some(node => /^Perfil \\d+% completado$/.test(node.getAttribute('aria-label') || '')))`,
+    });
 
     await session.click("Preferencias");
     await session.wait("document.querySelector('[data-settings-section=\"preferences\"]') !== null", "preferences settings");
+    await session.waitForUiSettled("preferences");
     await session.capture("preferences", {
       expected: ["Preferencias", "Alto contraste", "Yardas", "Metros", "Inglés — Próximamente"],
       assertion: "document.querySelector('[aria-label=\"Idioma\"] option[value=\"en\"]')?.disabled === true",
@@ -713,6 +833,7 @@ async function profileSettingsEvidence(client) {
 
     await session.click("Notificaciones", { exact: true });
     await session.wait("document.querySelector('[data-settings-section=\"notifications\"]') !== null", "notification settings");
+    await session.waitForUiSettled("notifications");
     await session.capture("notifications", {
       expected: ["Notificaciones", "Social", "Push", "Email", "Rondas", "Recordatorios", "todavía no está activado"],
       absent: ["Administrar notificaciones"],
@@ -720,6 +841,12 @@ async function profileSettingsEvidence(client) {
 
     await session.click("Privacidad y permisos", { exact: true });
     await session.wait("document.querySelector('[data-settings-section=\"privacy\"]') !== null", "privacy settings");
+    await session.wait(`(() => {
+      const section = document.querySelector('[aria-label="Privacidad del perfil"]');
+      return section?.getAttribute('aria-busy') === 'false'
+        && [...section.querySelectorAll('button[aria-pressed="true"]')].some(button => !button.disabled);
+    })()`, "privacy server readback");
+    await session.waitForUiSettled("privacy", { privacy: true });
     await session.capture("privacy", {
       expected: ["Privacidad y permisos", "Privacidad / IA", "Legal"],
       absent: ["Administrar ubicación"],
@@ -727,10 +854,11 @@ async function profileSettingsEvidence(client) {
   });
 }
 
-async function supportAndSocialEvidence(client) {
+async function supportAndSocialEvidence(client, realAuth) {
   await withSession(client, "support-social-rules", {
     viewport: viewports.desktop,
-    fixture: syntheticFixtureSource(),
+    fixture: syntheticFixtureSource({ realAuth }),
+    dataMode: "existing-qa-session:controlled-local-visual-state",
   }, async (session) => {
     await session.waitHome();
     await session.clickAria("Más");
@@ -752,9 +880,12 @@ async function supportAndSocialEvidence(client) {
       expected: ["Mi QR", "Tu tarjeta. Tu comunidad.", "Comparte tu perfil, no tus datos privados", "Enlace copiado"],
       assertion: `(() => {
         const copied = window.__ownerQaClipboard || '';
-        return copied.includes('friend=00000000-0000-4000-8000-000000000022')
-          && !copied.includes('owner_qa')
-          && !copied.includes('.vercel.app');
+        try {
+          const url = new URL(copied);
+          return url.searchParams.get('friend') === ${JSON.stringify(realAuth.source.id)}
+            && !url.searchParams.has('username')
+            && !copied.includes('.vercel.app');
+        } catch { return false; }
       })()`,
     });
 
@@ -768,15 +899,31 @@ async function supportAndSocialEvidence(client) {
 
 async function selectSearchResult(session, label, query, optionText) {
   await session.fill(label, query);
-  await session.wait(`([...document.querySelectorAll('[role="option"]')].some(node => (node.textContent || '').toLocaleLowerCase('en-US').includes(${JSON.stringify(optionText.toLocaleLowerCase("en-US"))})))`, `${optionText} search result`, 30_000);
-  await session.click(optionText, { selector: "[role=option]" });
+  const optionReady = `([...document.querySelectorAll('[role="option"]')].some(node => (node.textContent || '').toLocaleLowerCase('en-US').includes(${JSON.stringify(optionText.toLocaleLowerCase("en-US"))})))`;
+  const selectionApplied = `(() => {
+    const clean = value => (value || '').replace(/\\s+/g, ' ').trim();
+    return ![...document.querySelectorAll('label')].some(node => clean(node.textContent).startsWith(${JSON.stringify(label)}));
+  })()`;
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await session.wait(optionReady, `${optionText} search result`, 30_000);
+    await delay(300);
+    try {
+      await session.click(optionText, { selector: "[role=option]" });
+      await session.wait(selectionApplied, `${optionText} selection`, 2_500);
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError || new Error(`Could not select ${optionText}.`);
 }
 
-async function equipmentEvidence(client) {
+async function equipmentEvidence(client, realAuth) {
   await withSession(client, "equipment", {
     viewport: viewports.mobile430,
-    fixture: syntheticFixtureSource({ equipment: true }),
-    dataMode: "controlled-local-fixture:real-catalog-navigation",
+    fixture: syntheticFixtureSource({ equipment: true, realAuth }),
+    dataMode: "existing-qa-session:controlled-local-equipment:real-catalog-navigation",
   }, async (session) => {
     await session.waitHome();
     await session.clickAria("Más");
@@ -784,7 +931,9 @@ async function equipmentEvidence(client) {
     await session.click("Mi Bolsa");
     await session.wait("document.body?.innerText.includes('Tu juego empieza') && document.body?.innerText.includes('Mi bolsa')", "My Bag");
     await session.capture("my-bag", {
-      expected: ["Mi bolsa", "Driver", "Maderas", "Híbridos", "Hierros", "Wedges", "Putter", "Bola"],
+      expected: ["Mi bolsa", "Driver", "Maderas", "Híbridos", "Hierros", "Wedges", "Putter"],
+      assertion: "(document.body?.innerText || '').toLocaleLowerCase('es-MX').includes('bola')",
+      fullPage: true,
     });
 
     await session.click("+ Agregar", { exact: true });
@@ -795,6 +944,7 @@ async function equipmentEvidence(client) {
         const text = document.body?.innerText || '';
         return text.includes('←') || [...document.querySelectorAll('button')].some(button => /cancelar|cerrar/i.test(button.textContent || ''));
       })()`,
+      fullPage: true,
     });
 
     await session.click("Driver");
@@ -815,14 +965,26 @@ async function equipmentEvidence(client) {
     await session.click("Elegir varilla", { exact: true });
     await session.wait("document.body?.innerText.includes('Selecciona varilla')", "shaft picker");
     await selectSearchResult(session, "Buscar varilla por marca", "Fujikura", "Fujikura");
-    await selectSearchResult(session, "Buscar modelo / peso / flex", "VENTUS Blue", "VENTUS Blue");
+    await session.wait("[...document.querySelectorAll('label')].some(node => (node.textContent || '').includes('Buscar modelo / peso / flex'))", "shaft model search");
+    await selectSearchResult(session, "Buscar modelo / peso / flex", "VENTUS Blue VeloCore+", "2026-CURRENT");
     await session.wait("document.body?.innerText.includes('Revisa y agrega')", "structured shaft options");
+    await session.select("Flex", "S");
+    await session.select("Peso de varilla", "60");
+    await session.wait(`(() => {
+      const labels = [...document.querySelectorAll('label')];
+      const flex = labels.find(label => (label.textContent || '').trim().startsWith('Flex'))?.querySelector('select');
+      const weight = labels.find(label => (label.textContent || '').trim().startsWith('Peso de varilla'))?.querySelector('select');
+      return flex?.value === 'S' && weight?.value === '60';
+    })()`, "visible structured shaft selections");
     await session.capture("shaft-options", {
       expected: ["Revisa y agrega", "Flex", "Peso", "Uso", "Launch", "Spin", "Torque", "Tip", "Butt"],
       assertion: `(() => {
         const text = document.body?.innerText || '';
         const structured = [...document.querySelectorAll('label')].filter(label => /Flex|Peso de varilla/.test(label.textContent || '') && label.querySelector('select'));
-        return structured.length >= 2 && text.includes('Agregar especificación manual') === false;
+        return structured.length >= 2
+          && structured.find(label => (label.textContent || '').trim().startsWith('Flex'))?.querySelector('select')?.value === 'S'
+          && structured.find(label => (label.textContent || '').trim().startsWith('Peso de varilla'))?.querySelector('select')?.value === '60'
+          && text.includes('Agregar especificación manual') === false;
       })()`,
     });
 
@@ -830,17 +992,21 @@ async function equipmentEvidence(client) {
     await session.wait("document.body?.innerText.includes('Mi bolsa') && !document.body?.innerText.includes('Revisa y agrega')", "return to My Bag");
     await session.click("+ Agregar", { exact: true });
     await session.wait("document.body?.innerText.includes('Selecciona categoría')", "new wedge category");
-    await session.click("Wedges");
+    await session.click("Wedges", { exact: true, selector: '[data-equipment-screen="club-editor"] button > b' });
     await session.wait("document.body?.innerText.includes('Selecciona marca')", "wedge brand");
     await selectSearchResult(session, "Buscar marca", "Titleist", "Titleist");
     await session.wait("document.body?.innerText.includes('Selecciona modelo')", "wedge model");
     await selectSearchResult(session, "Buscar modelo", "SM10", "SM10");
     await session.wait("document.body?.innerText.includes('Wedges · especificaciones')", "wedge lofts");
     await session.capture("wedge-degrees", {
-      expected: ["Wedges · especificaciones", "Loft / grados", "Sólo grados disponibles"],
+      expected: ["Wedges · especificaciones", "Loft / grados"],
       assertion: `(() => {
         const label = [...document.querySelectorAll('label')].find(node => (node.textContent || '').includes('Loft / grados'));
-        return Boolean(label?.querySelector('select')) && label.querySelectorAll('option').length > 1;
+        const text = label?.textContent || '';
+        const select = label?.querySelector('select');
+        const manual = label?.querySelector('input[type="number"]');
+        return Boolean(select && select.querySelectorAll('option').length > 1 && text.includes('Sólo grados disponibles'))
+          || Boolean(manual && text.includes('El catálogo no incluye grados verificados'));
       })()`,
     });
   });
@@ -916,9 +1082,12 @@ try {
     try { await access(candidate); chromePath = candidate; break; } catch { /* Try the next installed browser. */ }
   }
   assert.ok(chromePath, "Set CHROME_PATH to a Chrome executable.");
+  const renderArguments = browserNoSandbox
+    ? ["--no-sandbox", "--disable-gpu", "--disable-gpu-compositing"]
+    : ["--disable-gpu-sandbox", "--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"];
   chrome = spawn(chromePath, [
     "--headless=new",
-    "--disable-gpu",
+    ...renderArguments,
     "--disable-breakpad",
     "--disable-crash-reporter",
     "--no-first-run",
@@ -944,10 +1113,12 @@ try {
   });
 
   await onboardingEvidence(client);
-  await appCoreEvidence(client);
-  await profileSettingsEvidence(client);
-  await supportAndSocialEvidence(client);
-  await equipmentEvidence(client);
+  if (realAuth) {
+    await appCoreEvidence(client, realAuth);
+    await profileSettingsEvidence(client, realAuth);
+    await supportAndSocialEvidence(client, realAuth);
+    await equipmentEvidence(client, realAuth);
+  }
   await realAuthEvidence(client, realAuth);
   client.close();
 

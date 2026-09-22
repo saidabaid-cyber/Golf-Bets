@@ -53,7 +53,7 @@ import { CLOUD_LOCAL_META_KEY, type CloudPreferences } from "../../lib/cloud-syn
 import { deleteOfflineAccountData, readAllOfflineAccountRecords } from "../../lib/offline-store";
 import { adoptScorecardPhotos, deleteScorecardPhotos, scorecardPhotoIdsForOwner } from "../../lib/scorecard-photo";
 import { adoptGuestPhotoJobs } from "../../lib/photo-sync-queue";
-import { clearPendingLegalSync, legalSyncErrorMessage, markLegalSyncFailed, queueLegalSync, readPendingLegalSync } from "../../lib/legal-sync-queue";
+import { clearPendingLegalSync, legalSyncErrorMessage, markLegalSyncFailed, prepareLegalSyncBatch, queueLegalSync } from "../../lib/legal-sync-queue";
 import type { AuthProviderStatus } from "../../lib/auth-provider-status";
 import { cloudIssueFromError, cloudIssuePriority, type CloudIssue, type CloudIssueDomain } from "../../lib/cloud-issues";
 import { BrandLockup } from "./brand-lockup";
@@ -926,9 +926,9 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (identity?.mode !== "authenticated" || !identity.accessToken || !currentConsent) return;
     const saved = acceptances.filter((item) => item.userId === identity.userId);
-    const pending = readPendingLegalSync(localStorage, identity.userId);
-    const current = pending?.acceptances.length ? pending.acceptances : saved;
-    queueLegalSync(localStorage, identity.userId, current);
+    const pending = prepareLegalSyncBatch(localStorage, identity.userId, saved);
+    if (!pending) return;
+    const current = pending.acceptances;
     let mounted = true;
     void flushLegalAcceptances(identity.userId, current).then(() => {
       if (!mounted) return;

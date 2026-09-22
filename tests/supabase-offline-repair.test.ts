@@ -9,7 +9,7 @@ import { readCloudBundle, writeCloudBundle } from "../lib/cloud-sync-service";
 import { offlineRetryDelayMs, outboxAcknowledged, writeCloudBundleToStorage } from "../lib/offline-store";
 import { CloudDb } from "./helpers/cloud-db";
 import { ACCOUNT_STORAGE_KEYS, readOfflineAuthenticatedProfile } from "../lib/account-state";
-import { clearPendingLegalSync, legalSyncErrorMessage, markLegalSyncFailed, queueLegalSync, readPendingLegalSync } from "../lib/legal-sync-queue";
+import { clearPendingLegalSync, legalSyncErrorMessage, markLegalSyncFailed, prepareLegalSyncBatch, queueLegalSync, readPendingLegalSync } from "../lib/legal-sync-queue";
 import { STORAGE_KEYS } from "../lib/round-utils";
 
 const at = "2026-09-03T12:00:00.000Z";
@@ -205,6 +205,37 @@ test("aceptaciones pendientes forman una cola idempotente, reintentable y limpia
   assert.match(legalSyncErrorMessage(new TypeError("Failed to fetch"), false), /Sin conexión/);
   assert.match(legalSyncErrorMessage({ code: "42501", message: "permission denied" }, true), /rechazó/);
   assert.match(legalSyncErrorMessage({ code: "23514", message: "check constraint" }, true), /consentimiento específico vigente/);
+});
+
+test("aceptaciones legales sincronizadas no programan escrituras y una cola pendiente sí se reintenta", () => {
+  const values = new Map<string, string>();
+  let storageWrites = 0;
+  const storage = {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => { storageWrites += 1; values.set(key, value); },
+    removeItem: (key: string) => { values.delete(key); },
+  };
+  const synced = {
+    userId: "auth-user-a",
+    type: "terms" as const,
+    documentVersion: "v1",
+    acceptedAt: at,
+    locale: "es-MX",
+    persistenceStatus: "persisted" as const,
+    syncStatus: "synced" as const,
+  };
+
+  assert.equal(prepareLegalSyncBatch(storage as unknown as Storage, "auth-user-a", [synced]), null);
+  assert.equal(storageWrites, 0, "a fully synced account must not create a queue or reach the cloud writer");
+
+  const local = { ...synced, type: "privacy" as const, syncStatus: "pending" as const };
+  const first = prepareLegalSyncBatch(storage as unknown as Storage, "auth-user-a", [synced, local]);
+  assert.deepEqual(first?.acceptances.map((item) => item.type), ["privacy"]);
+  assert.equal(storageWrites, 1);
+
+  const retry = prepareLegalSyncBatch(storage as unknown as Storage, "auth-user-a", [synced]);
+  assert.deepEqual(retry?.acceptances.map((item) => item.type), ["privacy"], "the durable queue remains the source of a retry");
+  assert.equal(storageWrites, 2);
 });
 
 test("UI distingue guardado local, pendiente, offline, nube y error", () => {

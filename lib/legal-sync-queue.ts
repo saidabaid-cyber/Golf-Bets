@@ -31,6 +31,13 @@ export function queueLegalSync(storage: QueueStorage, userId: string, acceptance
   return pending;
 }
 
+export function prepareLegalSyncBatch(storage: QueueStorage, userId: string, acceptances: LegalAcceptance[]) {
+  const pending = readPendingLegalSync(storage, userId);
+  const unsynced = acceptances.filter((item) => item.userId === userId && item.syncStatus !== "synced");
+  if (!pending?.acceptances.length && !unsynced.length) return null;
+  return queueLegalSync(storage, userId, unsynced);
+}
+
 export function markLegalSyncFailed(storage: QueueStorage, userId: string, error: unknown, now = new Date().toISOString()) {
   const pending = readPendingLegalSync(storage, userId);
   if (!pending) return null;

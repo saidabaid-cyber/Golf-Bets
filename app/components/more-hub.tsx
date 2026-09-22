@@ -50,7 +50,7 @@ export function MoreHub({ hasActiveRound, onOpenCourses, onOpenEquipment, onOpen
       <strong aria-hidden="true">›</strong>
     </button>)}</div>
     <section className={styles.support} aria-labelledby="support-title"><h2 id="support-title">Soporte</h2>
-      <button type="button" className={styles.supportCard} onClick={onOpenHelp}><span className={styles.icon}><Icon name="help" /></span><span><b>Ayuda y feedback</b><small>Reporta un problema, solicita algo nuevo o envíanos una sugerencia.</small></span><span aria-hidden="true">↗</span></button>
+      <button type="button" className={styles.supportCard} onClick={onOpenHelp}><span className={styles.icon}><Icon name="help" /></span><span><b>Soporte · Ayuda y feedback</b><small>Reporta un problema, solicita algo nuevo o envíanos una sugerencia.</small></span><span aria-hidden="true">↗</span></button>
       <FeedbackLink category="BUG">Reportar un problema</FeedbackLink>
     </section>
     {onOpenSocial && <section><h2>Amigos y comunidad</h2><div className={`${styles.grid} ${styles.communityGrid}`}>{([['friends','Amigos y solicitudes'],['friends','Agregar amigos'],['qr','Mi QR'],['scan','Escanear QR'],['preferences','Preferencias de notificaciones']] as const).map(([view,label]) => <button type="button" key={label} onClick={() => onOpenSocial(view)}><span className={styles.copy}><b>{label}</b></span><strong aria-hidden="true">›</strong></button>)}<button type="button" onClick={onOpenPrivacy}><span className={styles.copy}><b>Privacidad</b></span><strong aria-hidden="true">›</strong></button></div></section>}
