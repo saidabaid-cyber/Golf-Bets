@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { confirmScorecardVision, detectScorecardVision, reviewScorecardVision, type VisionEvidence, type VisionRound } from "../lib/scorecard-vision/review";
+import { commitScorecardVision, confirmScorecardVision, detectScorecardVision, reviewScorecardVision, type VisionEvidence, type VisionRound } from "../lib/scorecard-vision/review";
+import { runBettingDataActionWithConsent } from "../lib/backyard-ai/runtime/betting-consent-boundary";
 import { resolvePhase2FeatureFlags } from "../features/feature-flags/registry";
 import { normalizeScorecardExtraction } from "../lib/backyard-ai/scorecard/extractor";
 
@@ -145,4 +146,25 @@ test("confirmation returns detached validated import command, no persistence sid
   command.validation.acceptedScores[1]["qa-a"] = 9;
   assert.equal(evidence.extraction.cells[0].value, 4);
   assert.equal(round.digitalScores, undefined);
+});
+test("deferred consent uses latest persistence callback and rejects non-score revision changes", async () => {
+  const { evidence, round } = fixture();
+  evidence.provenance = "provider";
+  round.revision = JSON.stringify({ putts: 2, lifecycle: "live", rules: "original" });
+  let persisted = "none";
+  let current = { evidence, currentRound: round, overrides: {}, persist: () => { persisted = "obsolete"; return true; } };
+  let release!: (accepted: boolean) => void;
+  const wait = () => new Promise<boolean>(resolve => { release = resolve; });
+  const key = reviewScorecardVision(evidence, round).confirmationKey;
+  const pending = runBettingDataActionWithConsent(true, () => commitScorecardVision(key, () => current), wait);
+  current = { ...current, persist: () => { persisted = "latest"; return true; } };
+  release(true);
+  assert.deepEqual(await pending, { status: "APPLIED", value: { ok: true, persisted: true } });
+  assert.equal(persisted, "latest");
+  persisted = "none";
+  const changed = runBettingDataActionWithConsent(true, () => commitScorecardVision(key, () => current), wait);
+  current = { ...current, currentRound: { ...round, revision: JSON.stringify({ putts: 1, lifecycle: "cancelled", rules: "updated" }) } };
+  release(true);
+  assert.deepEqual(await changed, { status: "APPLIED", value: { ok: false, reason: "stale_review" } });
+  assert.equal(persisted, "none");
 });

@@ -2410,7 +2410,7 @@ function GolfBetsApp() {
     overrides: ScorecardValidationOverrides,
     corrections: ScorecardCorrectionEvidence[],
   ) {
-    if (!result.ready) return false;
+    if (!result.ready || roundClosed || sharedReadOnly || !ownsLocalWorkspace(localStorage, identity.userId)) return false;
     const nextScores = applyPendingScoreEdits(scores, scoreEdits);
     for (const cell of result.acceptedCells) {
       nextScores[cell.hole] = { ...(nextScores[cell.hole] || {}), [cell.playerId]: cell.value };
@@ -3664,6 +3664,7 @@ function GolfBetsApp() {
       protectedPhotoIds={protectedScorecardPhotoIds}
       round={{
         roundId,
+        revision: JSON.stringify({ draft: roundDraftPayload(), roundClosed, sharedReadOnly, userId: identity.userId }),
         tees: [...new Map(playerTeeAssignments.map(assignment => [assignment.teeId, { id: assignment.teeId, name: assignment.teeName }])).values()],
         players: players.map((player) => ({ id: player.id, name: player.name })),
         course: {
