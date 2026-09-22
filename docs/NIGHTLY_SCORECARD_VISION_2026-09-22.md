@@ -27,7 +27,13 @@ The provider contract fails with `BLOCKED_EXTERNAL` when unconfigured. Tests
 use explicitly synthetic readings; no test is evidence of real OCR. Synthetic
 provenance is not importable. No OCR/model service was called for this work.
 
-Validation: 22 new contract/fixture tests; 42/42 including existing scorecard
+Validation: 23 new contract/fixture tests; 43/43 including existing scorecard
 validation tests. The full nightly gates are recorded separately after merge.
 Physical capture/provider interaction remains PENDING_DEVICE_QA /
 PENDING_INTERACTIVE_QA until explicitly exercised with a configured provider.
+
+Cross-review reproduced a stale callback hazard during asynchronous betting
+consent. The scanner now reads the latest persistence callback at commit and
+binds confirmation to the full host round revision (including putts, rules,
+ownership and lifecycle). A deferred-consent regression proves that an old
+callback cannot overwrite a newer host snapshot.
