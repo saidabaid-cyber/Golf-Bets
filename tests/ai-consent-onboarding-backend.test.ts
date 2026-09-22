@@ -21,7 +21,7 @@ const row = (scope = TEXT as privacy.BackyardAiProcessingConsentScope, status = 
   revoked_at: status === "revoked" ? WHEN : null, source: "onboarding", decided_at: WHEN,
 });
 
-function harness(options: { rows?: record.AiProcessingConsentRow[]; blocked?: boolean; authMissing?: boolean; authError?: unknown; storeError?: boolean } = {}) {
+function harness(options: { rows?: record.AiProcessingConsentRow[]; blocked?: boolean; authMissing?: boolean; authError?: unknown; storeError?: boolean; adminMissing?: boolean } = {}) {
   const rows = options.rows ?? [];
   const writes: Record<string, unknown>[] = [];
   const ownerFilters: unknown[] = [];
@@ -50,10 +50,13 @@ function harness(options: { rows?: record.AiProcessingConsentRow[]; blocked?: bo
       return { data: rows, error: options.storeError ? { code: "DB_ERROR" } : null };
     },
   };
-  const userClient = { auth: { getUser: async (token: string) => {
-    assert.equal(token, "verified-owner-token");
-    return { data: { user: options.authMissing ? null : { id: OWNER, is_anonymous: false } }, error: options.authError ?? null };
-  } } };
+  const userClient = {
+    from: admin.from,
+    auth: { getUser: async (token: string) => {
+      assert.equal(token, "verified-owner-token");
+      return { data: { user: options.authMissing ? null : { id: OWNER, is_anonymous: false } }, error: options.authError ?? null };
+    } },
+  };
   const load = (path: string) => {
     const compiled = ts.transpileModule(readFileSync(path, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
     const exports: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
@@ -64,7 +67,7 @@ function harness(options: { rows?: record.AiProcessingConsentRow[]; blocked?: bo
         if (id.endsWith("/consent-record")) return record;
         if (id.endsWith("/privacy")) return privacy;
         if (id.endsWith("/http-security")) return security;
-        if (id.endsWith("/supabase/server")) return { getSupabaseAdmin: () => admin, getSupabaseForUser: () => userClient };
+        if (id.endsWith("/supabase/server")) return { getSupabaseAdmin: () => options.adminMissing ? null : admin, getSupabaseForUser: () => userClient };
         if (id.endsWith("/auth-errors")) return { authUserFailure };
         if (id.endsWith("/account-access.server")) return { accountAccessFailure: async () => null };
         if (id.endsWith("/config")) return { aiProcessingConsentLedgerAccess: () => ({ allowed: !options.blocked }) };
@@ -157,6 +160,15 @@ test("failed persistence fails closed; no successful consent result or provider 
   const verification = await fixture.verify();
   assert.equal(verification.ok, false);
   assert.equal(verification.code, "consent_store_unavailable");
+});
+
+test("owner RLS can read consent without service role, while mutations still fail closed", async () => {
+  const fixture = harness({ adminMissing: true, rows: [row(TEXT), row(PHOTO, "declined"), row(LAUNCH, "declined")] });
+  const read = await fixture.run("GET");
+  assert.equal(read.status, 200);
+  assert.equal((await read.json()).resolved, true);
+  assert.equal((await fixture.run("POST", { source: "onboarding", decisions: [{ scope: TEXT, accepted: true }] })).status, 503);
+  assert.equal(fixture.writes.length, 0);
 });
 
 test("authenticated provider denies missing, declined and revoked records; only server acceptance authorizes", async () => {

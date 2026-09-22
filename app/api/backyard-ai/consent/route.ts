@@ -48,22 +48,22 @@ async function account(request: Request) {
   }
   const admin = getSupabaseAdmin();
   const userClient = getSupabaseForUser(token);
-  if (!admin || !userClient) return { ok: false as const, status: 503, code: "missing_config", error: "No pude conectar el registro seguro de autorizaciones." };
+  if (!userClient) return { ok: false as const, status: 503, code: "missing_config", error: "No pude conectar el registro seguro de autorizaciones." };
   const { data, error } = await userClient.auth.getUser(token);
   const failure = authUserFailure(error, !error && Boolean(data.user));
   if (failure) return { ok: false as const, ...failure };
   if (!data.user || data.user.is_anonymous) return { ok: false as const, status: 401, code: "auth_required", error: "La sesión terminó. Vuelve a iniciar sesión." };
   const accessFailure = await accountAccessFailure(userClient);
   if (accessFailure) return { ok: false as const, ...accessFailure };
-  return { ok: true as const, admin, userId: data.user.id };
+  return { ok: true as const, admin, userClient, userId: data.user.id };
 }
 
 async function readLatestConsent(
-  admin: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  client: NonNullable<ReturnType<typeof getSupabaseForUser>>,
   userId: string,
   scope: BackyardAiProcessingConsentScope,
 ) {
-  return admin
+  return client
     .from(AI_PROCESSING_CONSENT_TABLE)
     .select(CONSENT_COLUMNS)
     .eq("user_id", userId)
@@ -75,10 +75,10 @@ async function readLatestConsent(
 }
 
 async function readAllDecisions(
-  admin: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  client: NonNullable<ReturnType<typeof getSupabaseForUser>>,
   userId: string,
 ) {
-  const { data, error } = await admin
+  const { data, error } = await client
     .from(AI_PROCESSING_CONSENT_TABLE)
     .select(CONSENT_COLUMNS)
     .eq("user_id", userId)
@@ -133,13 +133,13 @@ export async function GET(request: NextRequest) {
   const session = await account(request);
   if (!session.ok) return json({ error: session.error, code: session.code }, { status: session.status });
   if (!request.nextUrl.searchParams.has("scope")) {
-    const { data, error } = await readAllDecisions(session.admin, session.userId);
+    const { data, error } = await readAllDecisions(session.userClient, session.userId);
     if (error) return json({ error: "No pude consultar tus preferencias de IA. Inténtalo nuevamente.", code: "consent_store_unavailable" }, { status: 503 });
     return json(allDecisionsResponse(data ?? []));
   }
   const scope = parseAiProcessingConsentScope(request.nextUrl.searchParams.get("scope"));
   if (!scope) return json({ error: "Scope de autorización inválido.", code: "invalid_scope" }, { status: 400 });
-  const { data, error } = await readLatestConsent(session.admin, session.userId, scope);
+  const { data, error } = await readLatestConsent(session.userClient, session.userId, scope);
   if (error) return json({ error: "No pude consultar la autorización de IA.", code: "consent_store_unavailable" }, { status: 503 });
   return json({ ...consentResponse(data), scope });
 }
@@ -176,6 +176,7 @@ async function writeDecisions(request: NextRequest, revoke: boolean) {
   }
   const session = await account(request);
   if (!session.ok) return json({ error: session.error, code: session.code }, { status: session.status });
+  if (!session.admin) return json({ error: "No pude conectar el registro seguro de autorizaciones.", code: "missing_config" }, { status: 503 });
   const { data, error } = await session.admin.rpc(AI_PROCESSING_CONSENT_DECISIONS_RPC, {
     p_user_id: session.userId,
     p_policy_version: BACKYARD_AI_PROVIDER_CONSENT_VERSION,
