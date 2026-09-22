@@ -167,7 +167,11 @@ function resolveLayer(base: BaseCourseDefinition, configuration: CourseConfigura
     resolvedHoles,
     resolvedTees,
     par: resolvedHoles.reduce((sum, hole) => sum + hole.par, 0),
-    warnings: [...(prior?.warnings ?? []), ...warnings],
+    // Each configuration is a complete resolved layer. A competition override
+    // can replace temporary holes from the general Course configuration, so
+    // warnings from the previous layer may describe holes that no longer
+    // exist. Keep only warnings produced by the final resolved layer.
+    warnings,
   };
 }
 

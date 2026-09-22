@@ -95,3 +95,44 @@ test("an invalid temporary hole never invents par or stroke index", () => {
   configuration.holes[3] = { ...configuration.holes[3], parOverride: null };
   assert.throws(() => resolveEffectiveCourse({ base: baseCourse(), configurations: [configuration], at: "2026-09-22T12:00:00Z" }), /INVALID_RESOLVED_HOLE/);
 });
+
+test("competition override drops warnings for Course holes it replaces", () => {
+  const courseConfiguration = temporaryConfiguration();
+  courseConfiguration.teeHoles = [];
+  const competitionConfiguration: CourseConfiguration = {
+    ...temporaryConfiguration(),
+    id: "competition-config-1",
+    competitionId: "competition-1",
+    scopeType: "COMPETITION",
+    revisionHash: "competition-hash-1",
+    holes: baseCourse().holes.map((hole, index) => ({
+      id: `competition-${hole.id}`,
+      sequence: index + 1,
+      runtimeHoleNumber: index + 1,
+      displayLabel: String(hole.holeNumber),
+      sourceBaseHoleId: hole.id,
+      sourceBaseHoleNumber: hole.holeNumber,
+      kind: "BASE",
+      playable: true,
+      parOverride: hole.par,
+      strokeIndexOverride: hole.strokeIndex,
+      notes: null,
+      temporaryGreen: false,
+      temporaryTee: false,
+      dropZoneNote: null,
+      operationalNote: null,
+    })),
+    teeHoles: [],
+  };
+
+  const result = resolveEffectiveCourse({
+    base: baseCourse(),
+    configurations: [courseConfiguration, competitionConfiguration],
+    at: "2026-09-22T12:00:00Z",
+    competitionId: "competition-1",
+  });
+
+  assert.deepEqual(result.configurationIds, ["config-1", "competition-config-1"]);
+  assert.equal(result.resolvedHoles.some((hole) => hole.displayLabel === "4B"), false);
+  assert.equal(result.warnings.some((warning) => warning.includes("4B")), false);
+});
