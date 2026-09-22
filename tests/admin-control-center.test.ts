@@ -93,3 +93,10 @@ test("temporary Course operations list avoids a nonexistent direct tee-hole rela
   assert.match(route, /from\("course_configurations"\)\.select\("id,course_id,name,description,scope_type,competition_id,status/);
   assert.doesNotMatch(route, /course_configurations"\)\.select\("\*,course_configuration_holes\(\*\),course_configuration_tee_holes\(\*\)/);
 });
+
+test("temporary and Competition configuration editors load immutable base holes", () => {
+  const component = readFileSync(join(process.cwd(), "app/components/admin-control-center.tsx"), "utf8");
+  assert.match(component, /view=courses&courseId=/);
+  assert.match(component, /sourceBaseHoleId: hole\.id/);
+  assert.doesNotMatch(component, /api\/courses\/.*\/operations/);
+});

@@ -10,7 +10,7 @@ type View = "dashboard" | "courses" | "course-ops" | "rules" | "equipment" | "im
 type Json = Record<string, unknown>;
 type Revision = Json & { id: string; entity_type: string; entity_id: string; version: number; status: string; provenance_status: string; preview_hash?: string | null };
 type OperationsHole = { id: string; sourceBaseHoleId: string | null; sourceBaseHoleNumber: number | null; displayLabel: string; par: number; strokeIndex: number; playable: boolean; temporaryGreen?: boolean; temporaryTee?: boolean; dropZoneNote?: string | null; operationalNote?: string | null };
-type OperationsResponse = { resolved?: { resolvedHoles?: OperationsHole[]; resolvedTees?: Array<{ id: string; name: string }> } };
+type CourseOperationsBaseResponse = { item?: { holes?: Array<{ id: string; holeNumber: number; par: number; strokeIndex: number }>; tees?: Array<{ id: string; name: string }> } };
 type OperationRow = OperationsHole & { clientKey: string; kind: "BASE" | "TEMPORARY"; yardOverrides: Record<string, string> };
 type OperationRating = { rating: string; slope: string; category: string };
 type TeeDraft = { key: string; id: string; name: string; color: string; category: string; rating: string; slope: string; frontRating: string; backRating: string };
@@ -338,11 +338,29 @@ function CourseOperations({ loading, submit, request, refresh, items }: { loadin
   async function loadCourse() {
     setLoadError("");
     try {
-      const response = await fetch(`/api/courses/${encodeURIComponent(courseId)}/operations`, { cache: "no-store" });
-      const payload = await response.json() as OperationsResponse;
-      if (!response.ok || !payload.resolved?.resolvedHoles) throw new Error("No fue posible cargar el campo publicado.");
-      setRows(payload.resolved.resolvedHoles.map((hole) => ({ ...hole, clientKey: `base-${hole.sourceBaseHoleNumber || hole.id}`, kind: "BASE", yardOverrides: {} })));
-      setTees(payload.resolved.resolvedTees || []);
+      // The editor must start from the immutable published base card. Loading
+      // the player-facing resolved operations would relabel temporary holes as
+      // BASE and make a Competition override reference holes that do not belong
+      // to the official Course.
+      const payload = await request(`/api/admin/control-center?view=courses&courseId=${encodeURIComponent(courseId)}`) as CourseOperationsBaseResponse;
+      if (!payload.item?.holes?.length) throw new Error("No fue posible cargar la tarjeta base publicada.");
+      setRows(payload.item.holes.map((hole) => ({
+        id: hole.id,
+        sourceBaseHoleId: hole.id,
+        sourceBaseHoleNumber: hole.holeNumber,
+        displayLabel: String(hole.holeNumber),
+        par: hole.par,
+        strokeIndex: hole.strokeIndex,
+        playable: true,
+        temporaryGreen: false,
+        temporaryTee: false,
+        dropZoneNote: null,
+        operationalNote: null,
+        clientKey: `base-${hole.id}`,
+        kind: "BASE",
+        yardOverrides: {},
+      })));
+      setTees(payload.item.tees || []);
       setRatings({});
     } catch (error) { setLoadError(error instanceof Error ? error.message : "No fue posible cargar el campo."); }
   }
