@@ -84,7 +84,7 @@ export function databaseEnvironment(env) {
   // The read-only preflight is explicit SQL, not a session startup override.
   const processEnv = Object.fromEntries(Object.entries(env).filter(([name]) => !/^(PG|BACKUP_)/i.test(name)));
   return { ...processEnv, PGHOST: host, PGUSER: user, PGPASSWORD: env.BACKUP_PGPASSWORD,
-    PGDATABASE: database, PGPORT: port, PGSERVICE: '', PGSERVICEFILE: '', PGPASSFILE: '',
+    PGDATABASE: database, PGPORT: port,
     PGSSLMODE: local ? 'disable' : 'verify-full', PGSSLROOTCERT: env.BACKUP_PGSSLROOTCERT || 'system', PGCONNECT_TIMEOUT: '15' };
 }
 export function storageConfig(env) {

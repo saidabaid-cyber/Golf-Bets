@@ -78,9 +78,10 @@ test('owner database accepts only the exact direct or Session Pooler identity',(
   assert.ok(databaseEnvironment({...env,BACKUP_SOURCE:'local',BACKUP_PGHOST:'127.0.0.1',BACKUP_PGPORT:'54322',BACKUP_PGDATABASE:'test_local'}));
 });
 test('inherited libpq settings and alternate connection strings cannot redirect or inject startup options',()=>{
-  const pg=databaseEnvironment({...ownerEnv(),PATH:'test-path',PGHOSTADDR:'203.0.113.10',pghostaddr:'203.0.113.11',PGSERVICE:'untrusted',PGSERVICEFILE:'untrusted',PGDATABASE:'host=untrusted',PGOPTIONS:'-c default_transaction_read_only=off',pgoptions:'-c transaction_read_only=off',PGSSLMODE:'disable',BACKUP_STORAGE_KEY:'synthetic-storage-key'});
+  const pg=databaseEnvironment({...ownerEnv(),PATH:'test-path',PGHOSTADDR:'203.0.113.10',pghostaddr:'203.0.113.11',PGSERVICE:'untrusted',PGSERVICEFILE:'untrusted',PGPASSFILE:'untrusted',PGDATABASE:'host=untrusted',PGOPTIONS:'-c default_transaction_read_only=off',pgoptions:'-c transaction_read_only=off',PGSSLMODE:'disable',BACKUP_STORAGE_KEY:'synthetic-storage-key'});
   assert.equal(pg.PATH,'test-path');assert.equal(pg.PGHOSTADDR,undefined);assert.equal(pg.pghostaddr,undefined);
-  assert.equal(pg.PGSERVICE,'');assert.equal(pg.PGSERVICEFILE,'');assert.equal(pg.PGSSLMODE,'verify-full');assert.equal(pg.PGDATABASE,'postgres');
+  for(const name of ['PGSERVICE','PGSERVICEFILE','PGPASSFILE'])assert.ok(!Object.hasOwn(pg,name));
+  assert.equal(pg.PGSSLMODE,'verify-full');assert.equal(pg.PGDATABASE,'postgres');
   assert.ok(!Object.keys(pg).some(k=>/^PGOPTIONS$/i.test(k)));
   assert.ok(!Object.keys(pg).some(k=>k.startsWith('BACKUP_')));
 });
