@@ -3664,6 +3664,7 @@ function GolfBetsApp() {
       protectedPhotoIds={protectedScorecardPhotoIds}
       round={{
         roundId,
+        tees: [...new Map(playerTeeAssignments.map(assignment => [assignment.teeId, { id: assignment.teeId, name: assignment.teeName }])).values()],
         players: players.map((player) => ({ id: player.id, name: player.name })),
         course: {
           id: course.id,
