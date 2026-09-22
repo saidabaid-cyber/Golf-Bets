@@ -3,7 +3,7 @@
   "git": {
     "deploymentEnabled": {
       "phase2/course-catalog-feedback": true,
-      "phase2/integration-candidate-2026-09-22": false
+      "phase2/integration-candidate-2026-09-22": true
     }
   }
 }
