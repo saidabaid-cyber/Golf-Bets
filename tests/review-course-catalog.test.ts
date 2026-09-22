@@ -6,7 +6,7 @@ import {withPlayerCourseCards,holeForPlayer} from '../lib/player-course-card';
 import {winnerIdsForHole} from '../lib/engine';
 import {buildPlayerRoundStats} from '../lib/round-statistics';
 const tee:ReviewedTeeSource={id:'tee-qa',name:'Azules',rating_category:null,course_rating:72.5,slope_rating:133,yards:6000,par:72,qa_status:'PASS',source_limitation:null,qa:{status:'PASS',errors:[]},holes:Array.from({length:18},(_,i)=>({hole_number:i+1,par:4,stroke_index:i+1,yards:330})),nineRatings:[{id:'front',segment:'FRONT',course_rating:35.1,slope_rating:129,par:36,rating_category:null,source_url:'https://example.invalid/source',observed_at:'2026-09-20'},{id:'back',segment:'BACK',course_rating:37.4,slope_rating:137,par:36,rating_category:null,source_url:'https://example.invalid/source',observed_at:'2026-09-20'}]};
-const c:ReviewedCatalogCourse={id:'course-qa',clubId:'club-qa',name:'Recorrido Norte',clubName:'Club México QA',city:'Puebla',stateRegion:'Puebla',aliases:['Campo antiguo QA'],sourceUrl:'https://example.invalid/source',observedAt:'2026-09-20',dataVersion:'qa',tees:[tee]};
+const c:ReviewedCatalogCourse={id:'course-qa',clubId:'club-qa',name:'Recorrido Norte',clubName:'Club México QA',holes:18,city:'Puebla',stateRegion:'Puebla',aliases:['Campo antiguo QA'],sourceUrl:'https://example.invalid/source',observedAt:'2026-09-20',dataVersion:'qa',tees:[tee]};
 for(const query of ['MEXICO','méxico','campo antiguo','puebla norte'])test(`complete catalog search: ${query}`,()=>assert.equal(searchReviewedCourses([c],query).length,1));
 test('unknown query is empty',()=>assert.equal(searchReviewedCourses([c],'missing').length,0));
 test('remote verified clubs stay selectable but are never described as nearby',()=>{

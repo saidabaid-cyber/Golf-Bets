@@ -29,7 +29,7 @@ function searchable(value: unknown) {
   return String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es-MX").trim();
 }
 
-function catalogProvider(catalog: GolfCourseCatalog, providerId = "backyard-course-catalog", kind: "internal" | "external" = "internal"): CourseCatalogProvider {
+export function createCourseCatalogProvider(catalog: GolfCourseCatalog, providerId = "backyard-course-catalog", kind: "internal" | "external" = "internal"): CourseCatalogProvider {
   const success = <T,>(data: T): ProviderResult<T> => ({ ok: true, data, providerId });
   const missing = (message: string): ProviderResult<never> => ({ ok: false, code: "not_found", message, providerId });
   return {
@@ -38,7 +38,7 @@ function catalogProvider(catalog: GolfCourseCatalog, providerId = "backyard-cour
     async searchClubs(query, limit = 20, cursor) {
       const tokens = searchable(query).split(/\s+/).filter(Boolean);
       const matches = catalog.clubs
-        .filter((club) => club.active && tokens.every((token) => searchable([club.name, club.city, club.stateRegion, club.country].filter(Boolean).join(" ")).includes(token)))
+        .filter((club) => club.active && tokens.every((token) => searchable([club.name, ...(club.aliases || []), club.city, club.stateRegion, club.country].filter(Boolean).join(" ")).includes(token)))
         .sort((left, right) => left.name.localeCompare(right.name, "es-MX") || left.id.localeCompare(right.id));
       const pageSize = Math.max(1, Math.min(50, limit));
       const offset = cursor && /^\d+$/.test(cursor) ? Math.max(0, Number(cursor)) : 0;
@@ -61,7 +61,7 @@ function catalogProvider(catalog: GolfCourseCatalog, providerId = "backyard-cour
   };
 }
 
-export const internalCourseCatalogProvider = catalogProvider(INTERNAL_GOLF_COURSE_CATALOG);
+export const internalCourseCatalogProvider = createCourseCatalogProvider(INTERNAL_GOLF_COURSE_CATALOG);
 
 export type GolfApiTeePayload = {
   id: string;
@@ -131,7 +131,7 @@ export function createGolfApiCourseCatalogProvider(options: { apiKey?: string; l
   const loadProvider = async () => {
     if (!options.apiKey) return null;
     const rows = await options.load(options.apiKey);
-    return catalogProvider(normalizeGolfApiCatalog(rows, options.now?.() || new Date().toISOString()), "golfapi", "external");
+    return createCourseCatalogProvider(normalizeGolfApiCatalog(rows, options.now?.() || new Date().toISOString()), "golfapi", "external");
   };
   return {
     id: "golfapi", kind: "external",

@@ -4,7 +4,8 @@ import {
   EQUIPMENT_CATALOG_KINDS,
   type EquipmentCatalogKind,
 } from "../../../../lib/equipment-catalog-provider";
-import { internalEquipmentCatalogProvider } from "../../../../lib/equipment-catalog-provider.server";
+import { getEquipmentCatalogProvider } from "../../../../lib/equipment-catalog-provider.server";
+import { getSupabaseAdmin } from "../../../../lib/supabase/server";
 import {
   CLUB_CATEGORIES,
   SHAFT_USAGES,
@@ -15,6 +16,9 @@ import {
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  // Preserve the original provider contract while resolving the layered
+  // Admin-published + versioned-seed provider on each request.
+  const internalEquipmentCatalogProvider = await getEquipmentCatalogProvider();
   const typeValue = request.nextUrl.searchParams.get("type")?.toUpperCase();
   if (!typeValue || !(EQUIPMENT_CATALOG_KINDS as readonly string[]).includes(typeValue)) {
     return NextResponse.json({ error: "Tipo de catálogo inválido." }, { status: 400 });
@@ -50,7 +54,7 @@ export async function GET(request: NextRequest) {
       includeArchived: includeArchivedParam !== "false",
     });
     return NextResponse.json({ provider: internalEquipmentCatalogProvider.id, facet: "brands", ...page }, {
-      headers: { "cache-control": "public, max-age=60, stale-while-revalidate=300" },
+      headers: { "cache-control": "public, max-age=5, stale-while-revalidate=30" },
     });
   }
   const page = await internalEquipmentCatalogProvider.search({
@@ -63,7 +67,16 @@ export async function GET(request: NextRequest) {
     includeArchived: includeArchivedParam === "true" || (includeArchivedParam !== "false" && query.trim().length > 0),
     pinnedIds,
   });
-  return NextResponse.json({ provider: internalEquipmentCatalogProvider.id, ...page }, {
-    headers: { "cache-control": "public, max-age=60, stale-while-revalidate=300" },
+  const database = getSupabaseAdmin("cloud");
+  const equipmentType = typeValue === "CLUB" ? "CLUB_EQUIPMENT" : typeValue;
+  const ids = page.items.map((item) => item.id);
+  const images = database && ids.length ? await database.from("equipment_catalog_images").select("equipment_id,document_id").eq("equipment_type", equipmentType).eq("status", "APPROVED").in("equipment_id", ids).order("display_order") : null;
+  const imageByEquipment = new Map((images?.data || []).map((row) => [row.equipment_id, row.document_id]));
+  const items = page.items.map((item) => {
+    const documentId = imageByEquipment.get(item.id);
+    return documentId ? { ...item, imageUrl: `/api/catalog/equipment/media/${documentId}`, imageAlt: `${item.brand} ${item.model}` } : item;
+  });
+  return NextResponse.json({ provider: internalEquipmentCatalogProvider.id, ...page, items }, {
+    headers: { "cache-control": "public, max-age=5, stale-while-revalidate=30" },
   });
 }

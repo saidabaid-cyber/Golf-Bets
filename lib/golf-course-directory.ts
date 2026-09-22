@@ -6,6 +6,7 @@ import type { Course } from "./types";
 export type CourseDataProvenance = {
   provider: string;
   providerExternalId?: string;
+  catalogVersion?: number;
   sourceName?: string;
   sourceUrl?: string;
   verifiedAt?: string;
@@ -19,6 +20,7 @@ export type GeographicPoint = {
 export type GolfClub = CourseDataProvenance & {
   id: string;
   name: string;
+  aliases?: string[];
   country?: string;
   stateRegion?: string;
   city?: string;
@@ -35,6 +37,7 @@ export type GolfCourse = CourseDataProvenance & {
   id: string;
   clubId: string;
   name: string;
+  aliases?: string[];
   holes: 9 | 18;
   latitude?: number;
   longitude?: number;

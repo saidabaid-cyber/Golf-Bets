@@ -3,6 +3,8 @@
   --green:#173f2a; --green2:#e8f3eb; --good:#19713d; --bad:#b52c2c; --soft:#f8faf8;
 }
 
+.courseOperationsNotice{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:10px;padding:10px 12px;border:1px solid #d6dfd4;border-radius:12px;background:#f3f7ef}.courseOperationsNotice>div{display:flex;align-items:center;flex-wrap:wrap;gap:7px}.courseOperationsNotice b{padding:4px 7px;border-radius:999px;background:#1d5d3b;color:#fff;font-size:9px;letter-spacing:.06em}.courseOperationsNotice span{color:var(--muted);font-size:11px}.courseOperationsDialog ul{padding-left:20px}.courseLocalRule{display:grid;gap:4px;margin:8px 0;padding:10px;border-radius:10px;background:var(--soft)}.courseLocalRule span{color:var(--muted);font-size:12px;line-height:1.45}.courseDocumentLink{display:block;margin-top:8px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--green);font-weight:800;text-decoration:none}@media(max-width:430px){.courseOperationsNotice{align-items:stretch;flex-direction:column}.courseOperationsNotice button{width:100%}}
+
 .membershipBenefitsPage { max-width: 860px; margin: 0 auto; padding: 18px 16px calc(32px + env(safe-area-inset-bottom)); }
 .membershipBenefitList { display: grid; gap: 12px; margin-top: 16px; }
 .membershipBenefitList details { padding: 0; overflow: hidden; }

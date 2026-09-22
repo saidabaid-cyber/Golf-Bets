@@ -193,7 +193,20 @@ async function projectRoundSnapshots(client: SupabaseClient, userId: string, his
       ["round_local_rules_snapshots", "local_rules", (round.courseSnapshot as { localRules?: unknown } | undefined)?.localRules || []],
     ] as const;
     for (const [table, column, value] of projections) {
-      const { data: projection, error: projectionError } = await client.from(table).upsert(withDevice({ round_id: roundId, [column]: value }, deviceId, extendedSchema)).select("round_id");
+      const operations = table === "round_course_snapshots" && value && typeof value === "object" && !Array.isArray(value)
+        ? (value as { operationsSnapshot?: { baseCourseId?: string; baseCourseVersion?: number; configurationIds?: string[]; configurationVersions?: number[]; configurationHashes?: string[]; competitionId?: string | null; competitionRuleSetId?: string | null; competitionRuleVersion?: number | null } }).operationsSnapshot
+        : null;
+      const operationColumns = extendedSchema && table === "round_course_snapshots" && operations ? {
+        base_course_id: operations.baseCourseId || null,
+        base_course_version: operations.baseCourseVersion || null,
+        configuration_ids: operations.configurationIds || [],
+        configuration_versions: operations.configurationVersions || [],
+        configuration_hashes: operations.configurationHashes || [],
+        competition_id: operations.competitionId || null,
+        competition_rule_set_id: operations.competitionRuleSetId || null,
+        competition_rule_version: operations.competitionRuleVersion || null,
+      } : {};
+      const { data: projection, error: projectionError } = await client.from(table).upsert(withDevice({ round_id: roundId, [column]: value, ...operationColumns }, deviceId, extendedSchema)).select("round_id");
       if (projectionError || projection?.length !== 1) throw projectionError || new Error("Proyección no confirmada");
     }
   }

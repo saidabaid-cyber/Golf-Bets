@@ -93,6 +93,7 @@ import { RoundCoursePicker } from "./components/round-course-picker";
 import { CatalogCoursePicker } from "./components/catalog-course-picker";
 import { FeedbackDialog,FeedbackLink,requestFeedback } from "./components/feedback-dialog";
 import { CourseReviewNotice } from "./components/course-review-notice";
+import { CourseOperationsNotice } from "./components/course-operations-notice";
 import { BrandLockup } from "./components/brand-lockup";
 import { ModalCloseButton } from "./components/modal-shell";
 import { GroupBuilder } from "./components/group-builder";
@@ -168,6 +169,7 @@ import { acknowledgeOfflineBundle, getOfflineDeviceId, markOfflineAttempt, offli
 import { PRIVATE_POLLA_LINK_KEY, parsePrivatePollaLink, privatePollaScoreChanges } from "../lib/polla-private-link";
 import { enqueuePollaScore } from "../lib/polla-offline";
 import { isLaVistaCourse, withDefaultLaVistaRules } from "../lib/local-rules";
+import { loadCourseOperations } from "../lib/player-course-operations";
 import { DEFAULT_COURSES, DEFAULT_LA_VISTA_COURSE } from "../lib/golf-course-directory";
 import { captureClubChoices } from "../lib/bag-capture";
 import { filterHistory, historyYears, MONTH_LABELS } from "../lib/history-filters";
@@ -2239,7 +2241,8 @@ function GolfBetsApp() {
     requestNewRoundIntent({ kind: "ai" });
   }
 
-  function applyAiDraftToRound(draft: RoundSetupDraft, start: boolean) {
+  async function applyAiDraftToRound(draft: RoundSetupDraft, start: boolean) {
+    const startInstant = start ? new Date().toISOString() : null;
     const manualCourseState = start ? null : resolveManualRoundCourseState({
       currentCourse: course,
       availableCourses: courseOptions,
@@ -2249,7 +2252,8 @@ function GolfBetsApp() {
     });
     const nextCourse = manualCourseState?.course ?? draft.course;
     if (nextCourse) {
-      const normalizedCourse = withDefaultLaVistaRules(nextCourse);
+      const baseCourse = withDefaultLaVistaRules(nextCourse);
+      const normalizedCourse = startInstant ? await loadCourseOperations(baseCourse, startInstant).catch(() => baseCourse) : baseCourse;
       setCourse(normalizedCourse);
       setPlayerTeeAssignments(reconcilePlayerTeeAssignments(draft.playerTeeAssignments, draft.players, normalizedCourse, new Date().toISOString()));
     } else {
@@ -2278,7 +2282,7 @@ function GolfBetsApp() {
     setDraftAvailable(true);
     setCurrentIndex(0);
     if (start) {
-      setRoundStartedAt((current) => current ?? new Date().toISOString());
+      setRoundStartedAt((current) => current ?? startInstant);
       setFeedback("Ronda configurada con Backyard AI. El motor determinista queda a cargo de todos los cálculos.");
       setTab("round");
     } else {
@@ -2336,8 +2340,8 @@ function GolfBetsApp() {
   }
 
   function confirmAiRound(draft: RoundSetupDraft, plan: AiRoundSetupTelemetry["plan"]) {
-    const start = () => {
-      applyAiDraftToRound(draft, true);
+    const start = async () => {
+      await applyAiDraftToRound(draft, true);
       persistConfirmedAiParticipationPreferences(plan, draft);
       const consent = readLearningConsent(localStorage, identity.userId, BACKYARD_AI_MEMORY_POLICY_VERSION).consent;
       if (!consent.personalMemoryEnabled) return;
@@ -2352,7 +2356,7 @@ function GolfBetsApp() {
   }
 
   function editAiRoundManually(draft: RoundSetupDraft) {
-    const edit = () => applyAiDraftToRound(draft, false);
+    const edit = () => { void applyAiDraftToRound(draft, false); };
     runRoundSetupActionWithBettingConsent(draft, edit, runAfterBettingConsent);
   }
 
@@ -3701,7 +3705,11 @@ function GolfBetsApp() {
         if (roundSetupPreflight.length) return false;
         if (hasActiveBettingConfiguration() && !hasPersistedBettingConsent() && !await requestBettingConsent()) return false;
         setShowBetSetupErrors(false);
-        ensureRoundStarted();
+        const startedAt = ensureRoundStarted();
+        if (!roundStartedAt && startedAt && !course.operationsSnapshot) {
+          const resolvedCourse = await loadCourseOperations(course, startedAt).catch(() => course);
+          setCourse(resolvedCourse);
+        }
         setBets(current => freezeRoundHandicapBases(current, players, roundHandicapBasis));
         if (!editingRound) setCurrentIndex(0);
         setEditingRound(false);
@@ -3743,7 +3751,7 @@ function GolfBetsApp() {
           <div><label>Inicio de ronda</label><select value={startHole} onChange={(e) => { const next = Number(e.target.value) as 1 | 10; confirmRoundChange("Cambiar la salida cambia el orden Nassau y los segmentos de Foursome.", () => { setStartHole(next); setCurrentIndex(0); }); }}><option value={1}>Hoyo 1</option><option value={10}>Hoyo 10</option></select></div>
           <div><label>Hoyos a jugar</label><select value={roundHoles} onChange={(e) => { const next = Number(e.target.value) as 9 | 18; confirmRoundChange("Cambiar la duración excluye del cálculo los hoyos fuera de la nueva vuelta, sin borrar sus scores.", () => { setRoundHoles(next); setSupplementalBets((current) => supplementalBetsForRoundHoles(current, next)); setCurrentIndex(0); }); }}><option value={18}>18 hoyos</option><option value={9}>9 hoyos</option></select></div>
         </div>
-        {courseSelected && <div className="courseMeta"><span>{course.holes.length} hoyos configurados</span><span>{teeOptions.length} tee{teeOptions.length === 1 ? "" : "s"} disponible{teeOptions.length === 1 ? "" : "s"}</span>{course.updatedAt && <span>Última actualización: {course.updatedAt}</span>}<button onClick={() => { setCourseEditorSelectOnSave(true); setCourseDraft(withDefaultLaVistaRules(course)); setTab("courses"); }}>{course.name === "La Vista Temporal" ? "Editar campo temporal" : "Editar campo"}</button>{isLaVistaCourse(course.name) && <button onClick={() => { setRulesCourseContext(course.name); setTab("rules"); }}>Ver Reglas Locales</button>}</div>}
+        {courseSelected && <><div className="courseMeta"><span>{course.holes.length} hoyos configurados</span><span>{teeOptions.length} tee{teeOptions.length === 1 ? "" : "s"} disponible{teeOptions.length === 1 ? "" : "s"}</span>{course.updatedAt && <span>Última actualización: {course.updatedAt}</span>}<button onClick={() => { setCourseEditorSelectOnSave(true); setCourseDraft(withDefaultLaVistaRules(course)); setTab("courses"); }}>{course.name === "La Vista Temporal" ? "Editar campo temporal" : "Editar campo"}</button>{isLaVistaCourse(course.name) && <button onClick={() => { setRulesCourseContext(course.name); setTab("rules"); }}>Ver Reglas Locales</button>}</div><CourseOperationsNotice courseId={course.catalogCourseId ?? course.id} frozenAt={roundStartedAt} /></>}
       </section>
       </RoundSetupStep>
 

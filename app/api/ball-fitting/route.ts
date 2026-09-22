@@ -6,13 +6,14 @@ import {
   normalizeBallFitTransportInput,
 } from "../../../lib/ball-fitting-api";
 import { runBackyardBallFit } from "../../../lib/ball-fitting";
-import { internalEquipmentCatalogProvider } from "../../../lib/equipment-catalog-provider.server";
+import { getEquipmentCatalogProvider } from "../../../lib/equipment-catalog-provider.server";
 
 export const dynamic = "force-dynamic";
 
 const MAX_REQUEST_BYTES = 64_000;
 
 export async function POST(request: NextRequest) {
+  const provider = await getEquipmentCatalogProvider();
   const contentLength = Number(request.headers.get("content-length") || "0");
   if (Number.isFinite(contentLength) && contentLength > MAX_REQUEST_BYTES) {
     return NextResponse.json({ error: "Solicitud demasiado grande." }, { status: 413 });
@@ -31,7 +32,7 @@ export async function POST(request: NextRequest) {
   const input = normalizeBallFitTransportInput(source?.input);
   if (!input) return NextResponse.json({ error: "Datos de Ball Fit inválidos." }, { status: 400 });
 
-  const scope = await internalEquipmentCatalogProvider.loadBallFitCatalog({
+  const scope = await provider.loadBallFitCatalog({
     currentBallId: input.currentBallId,
     maximumCandidates: BALL_FIT_CATALOG_MAX_CANDIDATES,
   });
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
   ]);
   const catalog = scope.items.filter((ball) => selectedIds.has(ball.id));
   return NextResponse.json({
-    provider: internalEquipmentCatalogProvider.id,
+    provider: provider.id,
     scope: {
       complete: true,
       activeCandidateCount: scope.activeCandidateCount,

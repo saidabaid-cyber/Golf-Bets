@@ -4,8 +4,16 @@ import { internalCourseDataProvider } from "../../../../lib/golf-providers";
 import { internalCourseCatalogProvider } from "../../../../lib/course-catalog-provider";
 import { serverPhase2FeatureFlags } from "../../../../features/feature-flags/server";
 
-function hasLocalRatedTee(courseId: string) {
-  return DEFAULT_COURSES.some((course) => (course.catalogCourseId ?? course.id) === courseId && course.indexRatingEvidence?.kind === "CURATED_RATED_TEE");
+type LayeredSearch = Awaited<ReturnType<typeof import("../../../../lib/course-catalog-provider.server").searchCourseCards>>;
+
+async function layeredSearch(input: { query: string; limit: number; cursor?: string; latitude?: number; longitude?: number }): Promise<LayeredSearch | null> {
+  try {
+    const { searchCourseCards } = await import("../../../../lib/course-catalog-provider.server");
+    return await searchCourseCards(input);
+  } catch {
+    // The versioned local provider remains a deterministic offline fallback.
+    return null;
+  }
 }
 
 export async function GET(request: NextRequest) {
@@ -17,7 +25,14 @@ export async function GET(request: NextRequest) {
   const requestedLimit = Number(request.nextUrl.searchParams.get("limit") ?? 20);
   const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(50, Math.trunc(requestedLimit))) : 20;
   if (request.nextUrl.searchParams.get("scope") === "clubs") {
-    const result = await internalCourseCatalogProvider.searchClubs(query, limit, cursor);
+    let provider = internalCourseCatalogProvider;
+    try {
+      const catalogModule = await import("../../../../lib/course-catalog-provider.server");
+      provider = await catalogModule.getCourseCatalogProvider();
+    } catch {
+      // Keep the internal reviewed seed available during a temporary DB outage.
+    }
+    const result = await provider.searchClubs(query, limit, cursor);
     if (!result.ok) return NextResponse.json({ error: result.code }, { status: 503, headers: { "cache-control": "no-store" } });
     return NextResponse.json({
       provider: result.providerId,
@@ -37,7 +52,16 @@ export async function GET(request: NextRequest) {
     if (!latitudeInput?.trim() || !longitudeInput?.trim() || !Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
       return NextResponse.json({ error: "invalid_location" }, { status: 400, headers: { "cache-control": "no-store" } });
     }
-    const result = await internalCourseDataProvider.nearbyCourses({ courses: DEFAULT_COURSES, origin: { latitude, longitude }, limit, radiusKm: 250 });
+    const layered = await layeredSearch({ query, limit, cursor, latitude, longitude });
+    if (layered) return NextResponse.json({
+      provider: layered.provider,
+      total: layered.total,
+      courses: layered.cards.slice(0, 3).map(({ card: course, distanceKm }) => ({
+        ...course,
+        distanceKm: distanceKm === null ? null : Math.round(distanceKm * 10) / 10,
+      })),
+    }, { headers: { "cache-control": "private, no-store" } });
+    const result = await internalCourseDataProvider.nearbyCourses({ courses: DEFAULT_COURSES, origin: { latitude, longitude }, limit: Math.min(3, limit), radiusKm: 250 });
     if (!result.ok) return NextResponse.json({ error: result.code }, { status: 503, headers: { "cache-control": "no-store" } });
     return NextResponse.json({
       provider: result.providerId,
@@ -50,11 +74,20 @@ export async function GET(request: NextRequest) {
         clubName: course.clubName,
         city: course.city,
         distanceKm: Math.round(distanceKm * 10) / 10,
-        localIndexTeeAvailable: hasLocalRatedTee(course.catalogCourseId ?? course.id),
+        localIndexTeeAvailable: course.indexRatingEvidence?.kind === "CURATED_RATED_TEE",
         tee: { id: course.catalogTeeId ?? course.id, name: course.teeName, rating: course.rating, slope: course.slope, yards: course.totalYards, localIndexRated: course.indexRatingEvidence?.kind === "CURATED_RATED_TEE" },
       })),
     }, { headers: { "cache-control": "private, no-store" } });
   }
+  const layered = await layeredSearch({ query, limit, cursor });
+  if (layered) return NextResponse.json({
+    provider: layered.provider,
+    query,
+    total: layered.total,
+    hasMore: layered.hasMore,
+    nextCursor: layered.nextCursor,
+    courses: layered.cards.map(({ card }) => card),
+  }, { headers: { "cache-control": "public, s-maxage=300, stale-while-revalidate=1800" } });
   const result = await internalCourseDataProvider.searchCourses({ courses: DEFAULT_COURSES, query, cursor, limit });
   if (!result.ok) return NextResponse.json({ error: result.code }, { status: 503, headers: { "cache-control": "no-store" } });
   return NextResponse.json({
@@ -70,7 +103,7 @@ export async function GET(request: NextRequest) {
       name: course.name,
       clubName: course.clubName,
       city: course.city,
-      localIndexTeeAvailable: hasLocalRatedTee(course.catalogCourseId ?? course.id),
+      localIndexTeeAvailable: course.indexRatingEvidence?.kind === "CURATED_RATED_TEE",
       tee: { id: course.catalogTeeId ?? course.id, name: course.teeName, rating: course.rating, slope: course.slope, yards: course.totalYards, localIndexRated: course.indexRatingEvidence?.kind === "CURATED_RATED_TEE" },
     })),
   }, { headers: { "cache-control": "public, s-maxage=300, stale-while-revalidate=1800" } });

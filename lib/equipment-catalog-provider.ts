@@ -211,9 +211,9 @@ export function createInternalEquipmentCatalogProvider(catalogs: {
   balls: readonly GolfBallCatalog[];
   clubs: readonly GolfClubCatalog[];
   shafts: readonly GolfShaftCatalog[];
-}): EquipmentCatalogProvider {
+}, providerId = "backyard-equipment-seed"): EquipmentCatalogProvider {
   return {
-    id: "backyard-equipment-seed",
+    id: providerId,
     async search(input) {
       if (input.kind === "BALL") return page(catalogs.balls, input);
       if (input.kind === "CLUB") return page(catalogs.clubs, input);

@@ -63,6 +63,8 @@ export type PlayerCourseHandicapSnapshot = {
 
 export type Hole = {
   number: number;
+  /** Player-facing label for temporary layouts such as 4A/4B. Engines use number. */
+  displayLabel?: string;
   par: number;
   strokeIndex: number;
   yards?: number;
@@ -138,6 +140,19 @@ export type Course = {
   indexRatingEvidence?: BackyardIndexRatedTeeEvidence;
   localRules?: LocalRule[];
   localRulesUpdatedAt?: string;
+  /** Frozen Admin resolution captured once when this round starts. */
+  operationsSnapshot?: {
+    baseCourseId: string;
+    baseCourseVersion: number;
+    configurationIds: string[];
+    configurationVersions: number[];
+    configurationHashes: string[];
+    competitionId: string | null;
+    competitionRuleSetId?: string | null;
+    competitionRuleVersion?: number | null;
+    effectiveAt: string;
+    warnings: string[];
+  };
 };
 
 export type ParticipantConfig = {
