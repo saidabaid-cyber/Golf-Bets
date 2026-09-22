@@ -1,10 +1,10 @@
 import "server-only";
 import { createClient } from "@supabase/supabase-js";
 import { cloudServerEnabled, pollaLiveServerEnabled } from "../feature-flags";
-import { isolatedPreviewDatabaseEnabled } from "../preview-database";
+import { previewDatabaseFeaturesAvailable } from "../preview-database";
 
 function databaseBindingAllowed() {
-  return process.env.VERCEL_ENV !== "preview" || isolatedPreviewDatabaseEnabled();
+  return previewDatabaseFeaturesAvailable();
 }
 
 export function getSupabaseAdmin(feature: "cloud" | "polla" = "cloud") {

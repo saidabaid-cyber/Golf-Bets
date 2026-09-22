@@ -98,6 +98,8 @@ test("feature flags de servidor gobiernan nube, Polla y login social", () => {
   assert.match(flags, /process\.env\.POLLA_LIVE_ENABLED/);
   assert.match(flags, /process\.env\.AUTH_SOCIAL_ENABLED/);
   assert.match(route, /authSocialEnabled/);
+  assert.match(route, /previewDatabaseFeaturesAvailable/);
+  assert.match(route, /authSocialEnabled: databaseBindingReady && authSocialServerEnabled/);
   assert.match(pollaPanel, /pollaLiveEnabled/);
 });
 

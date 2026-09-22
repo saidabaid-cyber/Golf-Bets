@@ -15,3 +15,11 @@ export function isolatedPreviewDatabaseEnabled(
     return false;
   }
 }
+
+/** Runtime features may use the normal binding outside Vercel Preview, but a
+ * Preview must prove its isolated database ref before exposing cloud/Auth UI. */
+export function previewDatabaseFeaturesAvailable(
+  env: Record<string, string | undefined> = process.env,
+) {
+  return env.VERCEL_ENV !== "preview" || isolatedPreviewDatabaseEnabled(env);
+}

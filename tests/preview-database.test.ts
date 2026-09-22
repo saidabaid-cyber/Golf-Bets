@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isolatedPreviewDatabaseEnabled } from "../lib/preview-database";
+import { isolatedPreviewDatabaseEnabled, previewDatabaseFeaturesAvailable } from "../lib/preview-database";
 
 const preview = {
   PREVIEW_DB_REF: "abcdefghijklmnopqrst",
@@ -27,4 +27,15 @@ test("isolated Preview rejects credential-bearing, deceptive or non-HTTPS URLs",
     "https://abcdefghijklmnopqrst.supabase.co/path", "https://abcdefghijklmnopqrst.supabase.co?project=shared",
     "https://abcdefghijklmnopqrst.supabase.co#shared", "not-a-url",
   ]) assert.equal(isolatedPreviewDatabaseEnabled({ ...preview, NEXT_PUBLIC_SUPABASE_URL: url }), false);
+});
+
+test("cloud and OAuth features fail closed on a Vercel Preview with a shared or mismatched database", () => {
+  assert.equal(previewDatabaseFeaturesAvailable(preview), true);
+  assert.equal(previewDatabaseFeaturesAvailable({ ...preview, VERCEL_ENV: "production" }), true);
+  assert.equal(previewDatabaseFeaturesAvailable({
+    ...preview,
+    PREVIEW_DB_REF: "bymeopxkxapfizeeqeyb",
+    NEXT_PUBLIC_SUPABASE_URL: "https://zhqmlpljloumldaczcfp.supabase.co",
+  }), false);
+  assert.equal(previewDatabaseFeaturesAvailable({ ...preview, PREVIEW_DB_REF: undefined }), false);
 });

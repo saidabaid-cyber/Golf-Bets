@@ -118,7 +118,8 @@ test("database validates payload again before publication", () => {
 });
 
 test("Preview database clients fail closed unless bound to the isolated QA ref", () => {
-  assert.match(supabaseServer, /VERCEL_ENV !== "preview" \|\| isolatedPreviewDatabaseEnabled\(\)/);
+  assert.match(supabaseServer, /previewDatabaseFeaturesAvailable/);
+  assert.match(supabaseServer, /return previewDatabaseFeaturesAvailable\(\)/);
   assert.match(supabaseServer, /getSupabasePublic/);
 });
 
