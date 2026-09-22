@@ -354,7 +354,7 @@ function calculateDollarStroke(
     const hole = course.holes.find((candidate) => candidate.number === holeNumber);
     const grossA = scores[holeNumber]?.[playerA.id];
     const grossB = scores[holeNumber]?.[playerB.id];
-    if (!hole || typeof grossA !== "number" || typeof grossB !== "number") continue;
+    if (!hole || typeof grossA !== "number" || typeof grossB !== "number" || !completedHole(holeNumber, scores, [playerA.id, playerB.id])) continue;
     totalA += headToHeadNet(bet, playerA.id, grossA, (course.playerHoleCards?.[playerA.id]?.find(h => h.number === holeNumber) ?? hole).strokeIndex);
     totalB += headToHeadNet(bet, playerB.id, grossB, (course.playerHoleCards?.[playerB.id]?.find(h => h.number === holeNumber) ?? hole).strokeIndex);
     grossTotalA += grossA;
@@ -431,7 +431,7 @@ function calculateIndividualPressures(
         if (!uniqueCourseHole(course, holeNumber)) continue;
         const firstGross = scores[holeNumber]?.[first.id];
         const secondGross = scores[holeNumber]?.[second.id];
-        if (typeof firstGross !== "number" || typeof secondGross !== "number") continue;
+        if (typeof firstGross !== "number" || typeof secondGross !== "number" || !completedHole(holeNumber, scores, [first.id, second.id])) continue;
         const comparison: [Player, Player] = [first, second];
         const firstScore = pairNet(comparison, first, firstGross, course, holeNumber, bet.hcpPct, bet.decimals, basis);
         const secondScore = pairNet(comparison, second, secondGross, course, holeNumber, bet.hcpPct, bet.decimals, basis);
@@ -530,7 +530,8 @@ function calculateTeamPressures(
   }
   const grossFor = (holeNumber: number, playerId: string) => {
     const captured = scores[holeNumber]?.[playerId];
-    return typeof captured === "number" ? captured : abandoned.has(playerId) ? Math.max(1, bet.abandonedMaxScore) : undefined;
+    if (typeof captured === "number") return Number.isInteger(captured) && captured >= 1 ? captured : undefined;
+    return abandoned.has(playerId) ? Math.max(1, bet.abandonedMaxScore) : undefined;
   };
   const holeIsComplete = (holeNumber: number) => Boolean(uniqueCourseHole(course, holeNumber)) && participants.every((player) => typeof grossFor(holeNumber, player.id) === "number");
   const matchIsComplete = order.length > 0 && order.every(holeIsComplete);
@@ -602,7 +603,11 @@ function calculateChicago(bet: ChicagoBet, players: Player[], course: Course, sc
     bet.points?.doubleBogeyOrWorse,
   ].every(Number.isFinite);
   const validHcpPct = bet.hcpPct === undefined || validHandicapPercentage(bet.hcpPct);
-  const complete = enabled(bet) && hasCleanSelectedPlayerIds(players, bet.participantIds, 2) && validStake(bet.valuePerPoint) && validPoints && validHcpPct && participants.length >= 2 && !missingHandicapPlayerIds.length && completeForPlayers(order, scores, participants.map((player) => player.id));
+  const validCourse = order.every((holeNumber) => {
+    const hole = uniqueCourseHole(course, holeNumber);
+    return hole && Number.isInteger(hole.par) && hole.par > 0;
+  });
+  const complete = enabled(bet) && hasCleanSelectedPlayerIds(players, bet.participantIds, 2) && validStake(bet.valuePerPoint) && validPoints && validHcpPct && validCourse && participants.length >= 2 && !missingHandicapPlayerIds.length && completeForPlayers(order, scores, participants.map((player) => player.id));
   if (!complete) return { betId: bet.id, type: bet.type, label: SUPPLEMENTAL_BET_LABELS[bet.type], complete: false, balances, lines: [], missingHandicapPlayerIds };
   const hcpPct = bet.hcpPct ?? 100;
   const chicagoBalances = Object.fromEntries(participants.map((player) => {
@@ -683,7 +688,10 @@ function calculateMinimumPutts(bet: MinimumPuttsBet, players: Player[], putts: P
   const participants = selectedPlayers(players, bet.participantIds);
   const validConfiguration = validStake(bet.ante) && (bet.holes === 9 || bet.holes === 18) && bet.holes <= order.length;
   const holes = order.slice(0, Math.min(bet.holes, order.length));
-  const complete = enabled(bet) && hasCleanSelectedPlayerIds(players, bet.participantIds, 2) && validConfiguration && participants.length >= 2 && holes.length === bet.holes && holes.every((hole) => participants.every((player) => typeof putts[hole]?.[player.id] === "number"));
+  const complete = enabled(bet) && hasCleanSelectedPlayerIds(players, bet.participantIds, 2) && validConfiguration && participants.length >= 2 && holes.length === bet.holes && holes.every((hole) => participants.every((player) => {
+    const count = putts[hole]?.[player.id];
+    return typeof count === "number" && Number.isInteger(count) && count >= 0;
+  }));
   if (!complete) return { betId: bet.id, type: bet.type, label: SUPPLEMENTAL_BET_LABELS[bet.type], complete: false, balances, lines: [] };
   const totals = Object.fromEntries(participants.map((player) => [player.id, holes.reduce((total, hole) => total + Number(putts[hole]?.[player.id] ?? 0), 0)])) as Record<string, number>;
   const lowest = Math.min(...Object.values(totals));
