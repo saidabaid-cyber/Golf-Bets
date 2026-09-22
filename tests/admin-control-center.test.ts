@@ -1,5 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import {
   canTransitionPublication,
@@ -84,4 +86,10 @@ test("published catalog overlays seeds without losing archived historical IDs", 
   const published = [{ id: "seed", name: "Admin corrected", active: true }, { id: "historical", name: "Old", active: false }];
   assert.deepEqual(mergePublishedCatalog(seed, published), published);
   assert.equal(resolveCatalogItem("historical", seed, published)?.active, false);
+});
+
+test("temporary Course operations list avoids a nonexistent direct tee-hole relationship", () => {
+  const route = readFileSync(join(process.cwd(), "app/api/admin/control-center/route.ts"), "utf8");
+  assert.match(route, /from\("course_configurations"\)\.select\("id,course_id,name,description,scope_type,competition_id,status/);
+  assert.doesNotMatch(route, /course_configurations"\)\.select\("\*,course_configuration_holes\(\*\),course_configuration_tee_holes\(\*\)/);
 });

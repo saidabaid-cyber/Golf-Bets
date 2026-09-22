@@ -299,7 +299,11 @@ export async function GET(request: NextRequest) {
   }
 
   if (view === "course-ops" || view === "configurations") {
-    const result = await access.client.from("course_configurations").select("*,course_configuration_holes(*),course_configuration_tee_holes(*),course_configuration_ratings(*)").order("updated_at", { ascending: false }).limit(limit);
+    // Tee-hole overrides belong to configuration holes, not directly to the
+    // configuration. This workspace list only renders configuration metadata;
+    // requesting a nonexistent direct relationship makes PostgREST reject the
+    // whole authorized Admin route before the hole editor can load.
+    const result = await access.client.from("course_configurations").select("id,course_id,name,description,scope_type,competition_id,status,effective_from,effective_until,reason,source_description,version,revision_hash,created_at,updated_at").order("updated_at", { ascending: false }).limit(limit);
     if (result.error) return databaseFailure(result.error);
     return json({ items: result.data || [] });
   }
