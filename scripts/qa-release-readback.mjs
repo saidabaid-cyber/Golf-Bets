@@ -32,19 +32,21 @@ report.checks.push('anonymous account/cloud/completion denied','account existenc
 // Existing QA identities only: no account creation, profile edits, friendship
 // changes or email delivery. The target fixture was left PUBLIC by its original
 // controlled QA run, so exact-email lookup is allowed by the directory policy.
-const searcherFixture=socialFixtures.find(fixture=>fixture.label==='A');
+const searcherFixture=A;
 const targetFixture=socialFixtures.find(fixture=>fixture.label==='B');
 assert.ok(searcherFixture&&targetFixture,'Existing social QA fixtures are required.');
-const searcher=await login(searcherFixture);
+const searcher=a;
 const target=await login(targetFixture);
 const targetProfileResult=await target.db.from('social_profiles')
- .select('user_id,username,display_name,privacy,status')
+ .select('user_id,username,display_name,privacy')
  .eq('user_id',targetFixture.id)
  .single();
 assert.equal(targetProfileResult.error,null);
 const targetProfile=targetProfileResult.data;
 assert.equal(targetProfile.privacy,'PUBLIC','Exact-email QA requires an intentionally public QA identity.');
-assert.equal(targetProfile.status,'ACTIVE');
+const targetEntry=await get('/api/account/entry',target);
+assert.equal(targetEntry.userId,targetFixture.id);
+assert.equal(targetEntry.existingAccount,true,'The visible QA target must be an active existing account.');
 const searchMatrix=[
  ['name',targetProfile.display_name],
  ['username',targetProfile.username],
@@ -60,7 +62,7 @@ for(const [label,query] of searchMatrix){
  assert.ok(directory.users.every(user=>Object.keys(user).every(key=>['user_id','username','display_name','avatar_url','is_friend'].includes(key))),`Directory leaked a private field for ${label}.`);
  assert.equal(JSON.stringify(directory.users).includes('@example.invalid'),false,`Directory exposed email for ${label}.`);
 }
-report.userSearch={status:'PASS',actor:'existing-qa-a',target:'existing-public-qa-b',queries:searchMatrix.map(([label])=>label)};
+report.userSearch={status:'PASS',actor:'existing-qa-c',target:'existing-public-qa-b',queries:searchMatrix.map(([label])=>label)};
 report.checks.push('existing QA A finds visible QA B by name/username/@/case/spaces/exact email','directory response omits email and private fields');
 
 const entry=await get('/api/account/entry');assert.equal(entry.userId,A.id);assert.equal(entry.existingAccount,true);

@@ -23,6 +23,10 @@ const outputDirectory = path.resolve(process.argv[3] || path.join(process.cwd(),
 const useRealAuth = process.argv.includes("--real-auth") || process.env.OWNER_QA_USE_REAL_AUTH === "1";
 const expectedSha = String(process.env.OWNER_QA_EXPECTED_SHA || "").trim().toLowerCase();
 const fixturePath = path.resolve(process.env.OWNER_QA_FIXTURE_PATH || path.join(process.cwd(), ".qa-artifacts", "social-play-fixtures.private.json"));
+const sourceFixturePath = path.resolve(process.env.OWNER_QA_SOURCE_FIXTURE_PATH || fixturePath);
+const targetFixturePath = path.resolve(process.env.OWNER_QA_TARGET_FIXTURE_PATH || fixturePath);
+const sourceFixtureLabel = String(process.env.OWNER_QA_SOURCE_FIXTURE_LABEL || "").trim();
+const targetFixtureLabel = String(process.env.OWNER_QA_TARGET_FIXTURE_LABEL || "").trim();
 const preview = new URL(previewArgument || "http://127.0.0.1:3000");
 const origin = preview.origin;
 
@@ -178,9 +182,19 @@ async function authenticateExistingQaAccounts() {
   assert.equal(new URL(supabaseUrl).hostname, `${QA_PROJECT_REF}.supabase.co`, "Real-auth evidence is restricted to the isolated QA Supabase project.");
   assert.equal(confirmedRef, QA_PROJECT_REF, "Set QA_CONFIRM_ISOLATED_PREVIEW to the isolated QA project ref.");
   assert.ok(publicKey && !publicKey.includes("SENSITIVE"), "A matching Preview publishable/anon key is required for real-auth evidence.");
-  const fixtures = JSON.parse(await readFile(fixturePath, "utf8"));
-  assert.ok(Array.isArray(fixtures) && fixtures.length >= 2, "Two existing QA fixture accounts are required.");
-  const [source, target] = fixtures;
+  const sourceFixtures = JSON.parse(await readFile(sourceFixturePath, "utf8"));
+  const targetFixtures = sourceFixturePath === targetFixturePath
+    ? sourceFixtures
+    : JSON.parse(await readFile(targetFixturePath, "utf8"));
+  assert.ok(Array.isArray(sourceFixtures) && sourceFixtures.length >= 1, "An existing source QA fixture account is required.");
+  assert.ok(Array.isArray(targetFixtures) && targetFixtures.length >= 1, "An existing target QA fixture account is required.");
+  const source = sourceFixtureLabel
+    ? sourceFixtures.find((fixture) => fixture.label === sourceFixtureLabel)
+    : sourceFixtures[0];
+  const target = targetFixtureLabel
+    ? targetFixtures.find((fixture) => fixture.label === targetFixtureLabel)
+    : targetFixtures[sourceFixturePath === targetFixturePath ? 1 : 0];
+  assert.ok(source && target && source.id !== target.id, "Two distinct existing QA fixture accounts are required.");
   for (const fixture of [source, target]) {
     assert.equal(fixture.ref, QA_PROJECT_REF, "Fixture project ref does not match isolated QA.");
     assert.ok(typeof fixture.email === "string" && typeof fixture.password === "string" && typeof fixture.username === "string", "QA fixture is missing required private fields.");
