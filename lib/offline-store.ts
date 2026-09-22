@@ -180,6 +180,9 @@ export async function getOfflineDeviceId() {
       // tabs. Separate read and write transactions can each return a new ID.
       const tx = db.transaction(META, "readwrite");
       const done = transactionDone(tx);
+      // A failed request can exit before `await done`. Observe transaction
+      // rejection immediately; awaiting the original promise still fails.
+      void done.catch(() => {});
       const store = tx.objectStore(META);
       const existing = await requestResult<{ key: string; value: string } | undefined>(store.get("device-id"));
       const value = existing?.value || fallbackDeviceId();
