@@ -6,9 +6,9 @@ import type { SocialContext } from "../../../../lib/social-activity.server";
 async function read(ctx: SocialContext) {
  const [profile, user, choices, equipment] = await Promise.all([
   ctx.client.from("profiles").select("display_name,username,avatar_url").eq("id", ctx.userId).single(),
-  ctx.admin.auth.admin.getUserById(ctx.userId),
+  ctx.client.auth.getUser(),
   ctx.client.from("profile_completion_choices").select("handicap_choice,manual_hcp,not_applicable").eq("user_id", ctx.userId).maybeSingle(),
-  ctx.admin.from("player_equipment_profiles").select("snapshot").eq("user_id", ctx.userId).maybeSingle(),
+  ctx.client.from("player_equipment_profiles").select("snapshot").eq("user_id", ctx.userId).maybeSingle(),
  ]);
  if (profile.error || user.error || choices.error || equipment.error) throw new Error("COMPLETION_READ_FAILED");
  const metadata = user.data.user?.user_metadata || {};

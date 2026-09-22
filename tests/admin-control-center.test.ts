@@ -108,3 +108,11 @@ test("authenticated Player catalog uses the layered provider without a service-r
   assert.doesNotMatch(route, /loadReviewedCourseCatalog/);
   assert.doesNotMatch(route, /reviewCatalogQaEnabled/);
 });
+
+test("profile completion reads owner data through authenticated RLS", () => {
+  const route = readFileSync(join(process.cwd(), "app/api/account/completion/route.ts"), "utf8");
+  assert.match(route, /ctx\.client\.auth\.getUser\(\)/);
+  assert.match(route, /ctx\.client\.from\("player_equipment_profiles"\)/);
+  assert.doesNotMatch(route, /ctx\.admin\.auth\.admin\.getUserById/);
+  assert.doesNotMatch(route, /ctx\.admin\.from\("player_equipment_profiles"\)/);
+});
