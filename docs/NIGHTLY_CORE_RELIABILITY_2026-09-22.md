@@ -11,7 +11,7 @@ Base: `8fe4379d4afa034bc1dd6b37fcd058046ed669c3`. Tests use synthetic local fixt
 
 ## Automated matrix
 
-`tests/nightly-core-reliability.test.ts`: 22 tests, 0 skipped.
+`tests/nightly-core-reliability.test.ts`: 24 tests, 0 skipped.
 
 | Requirement | Evidence |
 | --- | --- |
@@ -36,7 +36,9 @@ Paused and reviewed are current workflow/UI concepts, not additional persisted l
 
 - TypeScript test compilation: PASS.
 - ESLint on changed code/tests: PASS.
-- New suite plus existing cloud/sync/offline/lifecycle/account suites: 147/147 PASS, 0 failures, 0 skipped.
+- New suite plus existing cloud/sync/offline/lifecycle/account suites: 149/149 PASS, 0 failures, 0 skipped.
+
+Review follow-up reproduced request-error and transaction-abort failures in isolated Node processes using strict unhandled-rejection behavior: both failed before the fix. Device ID initialization now immediately observes the transaction promise's rejection even when the request fails before it can await transaction completion. The original promise still rejects when awaited, and browser-local fallback recovery remains available.
 
 ## Scope limits
 
