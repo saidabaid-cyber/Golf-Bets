@@ -1,0 +1,89 @@
+name: The Backyard Automated Offsite Backup
+
+on:
+  schedule:
+    - cron: "0 9 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: the-backyard-automated-offsite-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - name: Check out complete repository history
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+
+      - name: Install pinned pnpm
+        run: npm install --global pnpm@10.17.1
+
+      - name: Install repository dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install PostgreSQL 17 client tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          key_file="${RUNNER_TEMP}/postgresql-pgdg.asc"
+          curl --fail --silent --show-error --location https://www.postgresql.org/media/keys/ACCC4CF8.asc --output "${key_file}"
+          fingerprint="$(gpg --show-keys --with-colons "${key_file}" | awk -F: '$1 == "fpr" { print $10; exit }')"
+          test "${fingerprint}" = "B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8"
+          sudo install -d -m 0755 /usr/share/postgresql-common/pgdg
+          sudo install -m 0644 "${key_file}" /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends postgresql-client-17 ca-certificates
+          pg_dump --version | grep -Eq ' 17\.'
+          pg_restore --version | grep -Eq ' 17\.'
+          pg_dumpall --version | grep -Eq ' 17\.'
+          psql --version | grep -Eq ' 17\.'
+
+      - name: Create, verify and publish owner backup
+        id: automated_backup
+        env:
+          BACKUP_SOURCE: owner
+          BACKUP_EXPECTED_REF: zhqmlpljloumldaczcfp
+          BACKUP_PGHOST: aws-0-us-east-1.pooler.supabase.com
+          BACKUP_PGPORT: "5432"
+          BACKUP_PGUSER: postgres.zhqmlpljloumldaczcfp
+          BACKUP_PGDATABASE: postgres
+          BACKUP_PGSSLROOTCERT: system
+          BACKUP_STORAGE_URL: https://zhqmlpljloumldaczcfp.supabase.co
+          BACKUP_PGPASSWORD: ${{ secrets.BACKUP_PGPASSWORD }}
+          BACKUP_STORAGE_KEY: ${{ secrets.BACKUP_STORAGE_KEY }}
+          BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+          BACKUP_ROOT: ${{ runner.temp }}/the-backyard-snapshots
+          GDRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}
+          GDRIVE_BACKUP_ROOT_FOLDER_ID: ${{ vars.GDRIVE_BACKUP_ROOT_FOLDER_ID }}
+          BACKUP_RETENTION_APPLY: ${{ vars.BACKUP_RETENTION_APPLY || 'false' }}
+        run: node scripts/backup/automated-backup.mjs
+
+      - name: Keep a seven-day portable recovery artifact
+        if: ${{ success() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: the-backyard-backup-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ steps.automated_backup.outputs.package_path }}
+            ${{ steps.automated_backup.outputs.checksum_path }}
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+          overwrite: false
+          include-hidden-files: false
