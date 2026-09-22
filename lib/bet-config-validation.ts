@@ -219,7 +219,7 @@ function validateMainBets(input: RoundBetConfiguration, issues: BetConfiguration
   const participantModes = [
     [bets.rabbits, "setup-rabbits", "rabbits-participants", "Conejos"],
     [bets.skins, "setup-skins", "skins-participants", "Skins"],
-    [bets.units, "setup-units", "units-participants", "Unidades / Copas"],
+    [bets.units, "setup-units", "units-participants", "Unidades positivas y negativas"],
     [bets.miniPolla, "setup-mini-polla", "mini-polla-participants", "Mini Polla"],
     [bets.vipers, "setup-vipers", "vipers-participants", "Víboras"],
     [bets.camels, "setup-camels", "camels-participants", "Camellos"],
@@ -279,7 +279,7 @@ function validateMainBets(input: RoundBetConfiguration, issues: BetConfiguration
     }
   }
 
-  stakeIssue(issues, bets.units.enabled, bets.units.copaValue ?? bets.units.value, "units-copa-stake", "setup-units", "Unidades / Copas");
+  stakeIssue(issues, bets.units.enabled, bets.units.copaValue ?? bets.units.value, "units-copa-stake", "setup-units", "Unidades positivas y negativas");
   if (bets.loba.enabled && bets.loba.unitsEnabled) {
     stakeIssue(issues, true, bets.loba.unitValue, "loba-unit-stake", "setup-loba", "Unidades de Loba");
   }
@@ -648,7 +648,7 @@ export function collectBetConfigurationIssues(input: RoundBetConfiguration) {
   for (const [value, code, sectionId, label] of [
     [input.bets.rabbits.enabled, "rabbits-enabled", "setup-rabbits", "Conejos"],
     [input.bets.skins.enabled, "skins-enabled", "setup-skins", "Skins"],
-    [input.bets.units.enabled, "units-enabled", "setup-units", "Unidades / Copas"],
+    [input.bets.units.enabled, "units-enabled", "setup-units", "Unidades positivas y negativas"],
     [input.bets.foursome.enabled, "foursome-enabled", "setup-foursome", "Foursome"],
     [input.bets.ballFriend.enabled, "ball-friend-enabled", "setup-ball-friend", "Bola Amiga"],
     [input.bets.polla.first9.enabled, "polla-first-enabled", "setup-polla-h1-9", "Polla 1ª vuelta"],

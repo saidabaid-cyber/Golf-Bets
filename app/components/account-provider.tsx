@@ -107,7 +107,7 @@ const AccountContext = createContext<AccountContextValue | null>(null);
 function profileCachePayload(profile: BackyardProfile) {
   const {
     userId, displayName, email, avatarUrl, defaultHandicap, givenName, familyName,
-    username, city, state, stateCode, country, countryCode, locationUpdatedAt, homeClub, homeClubId, preferredTee, handedness,
+    username, city, state, stateCode, country, countryCode, locationUpdatedAt, homeClub, homeClubId, homeCourse, homeCourseId, preferredTee, handedness,
     typicalScore, driverDistanceYards, driverSwingSpeedBand, usualTrajectory,
     shotTendency, greenSpeed, gamePriority, priceImportance, golfProfileUpdatedAt,
     improvementGoals, primaryGoals, primaryGoal, targetHandicap, planId, ghinLinkStatus,
@@ -115,7 +115,7 @@ function profileCachePayload(profile: BackyardProfile) {
   } = profile;
   return {
     userId, displayName, email, avatarUrl, defaultHandicap, givenName, familyName,
-    username, city, state, stateCode, country, countryCode, locationUpdatedAt, homeClub, homeClubId, preferredTee, handedness,
+    username, city, state, stateCode, country, countryCode, locationUpdatedAt, homeClub, homeClubId, homeCourse, homeCourseId, preferredTee, handedness,
     typicalScore, driverDistanceYards, driverSwingSpeedBand, usualTrajectory,
     shotTendency, greenSpeed, gamePriority, priceImportance, golfProfileUpdatedAt,
     improvementGoals, primaryGoals, primaryGoal, targetHandicap, planId, ghinLinkStatus,
@@ -143,7 +143,7 @@ function profileFromUser(user: User): BackyardProfile {
     ...emptyBackyardProfileDetails(),
     givenName: typeof user.user_metadata?.given_name === "string" ? user.user_metadata.given_name : "",
     familyName: typeof user.user_metadata?.family_name === "string" ? user.user_metadata.family_name : "",
-    ...((user.user_metadata?.backyard_golf_profile_v1 && typeof user.user_metadata.backyard_golf_profile_v1 === "object") ? Object.fromEntries(["handedness", "homeClub", "homeClubId", "preferredTee"].map(key => [key, typeof user.user_metadata.backyard_golf_profile_v1[key] === "string" ? user.user_metadata.backyard_golf_profile_v1[key] : ""])) : {}),
+    ...((user.user_metadata?.backyard_golf_profile_v1 && typeof user.user_metadata.backyard_golf_profile_v1 === "object") ? Object.fromEntries(["handedness", "homeClub", "homeClubId", "homeCourse", "homeCourseId", "preferredTee"].map(key => [key, typeof user.user_metadata.backyard_golf_profile_v1[key] === "string" ? user.user_metadata.backyard_golf_profile_v1[key] : ""])) : {}),
     ...(location ? { ...normalizeProfileLocation(location), locationUpdatedAt: location.updatedAt } : {}),
     username: String(user.user_metadata?.username || usernameFromEmail(email)),
   };
@@ -326,6 +326,7 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
       {socialEnabled && providers?.status === "ready" && !providers.google && <p className="hint">Google · Pendiente de configuración.</p>}
       {(message || sessionError) && <div className="accessMessage" role="status">{message || sessionError}</div>}
       {loginRecovery && <div className="modalBackdrop" onKeyDown={(event) => { if (event.key === "Escape") setLoginRecovery(false); }}><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="email-login-recovery-title">
+        <ModalCloseButton onClose={() => setLoginRecovery(false)} disabled={busy} />
         <h2 id="email-login-recovery-title">{emailLoginRecovery()}</h2>
         <p>{message}</p>
         <div className="dialogActions"><button autoFocus type="button" className="primary" onClick={() => { setLoginRecovery(false); setIntent("create"); setCodeSent(false); setOtp(""); setMessage("Verifica tu correo para continuar; si ya tienes cuenta, entraremos a ella."); }}>Crear cuenta</button>
@@ -805,7 +806,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       locationRead,
     ]).then(([legalResult, profileResult, preferencesResult, pendingResult, locationResult]) => {
       if (!mounted || activeUserId.current !== authenticatedUserId) return;
-      if (!preferencesResult.error && localStorage.getItem(STORAGE_KEYS.contrast) === null && typeof preferencesResult.data?.high_contrast === 'boolean') localStorage.setItem(STORAGE_KEYS.contrast, String(preferencesResult.data.high_contrast));
+      // A newly-created DB row still carries the legacy false default. New
+      // accounts start ON; only an established account can supply a prior
+      // explicit cloud choice before the app's normal preference sync runs.
+      if (accountEntry.existingAccount && !preferencesResult.error && localStorage.getItem(STORAGE_KEYS.contrast) === null && typeof preferencesResult.data?.high_contrast === 'boolean') localStorage.setItem(STORAGE_KEYS.contrast, String(preferencesResult.data.high_contrast));
       if (!legalResult.error && Array.isArray(legalResult.data)) {
         const cloud = parseLegalAcceptances(JSON.stringify(legalResult.data.map((item) => ({ userId: item.user_id, type: item.type, documentVersion: item.version, acceptedAt: item.accepted_at, locale: item.locale, persistenceStatus: "persisted", syncStatus: "synced" }))));
         setAcceptances((current) => {
@@ -1070,11 +1074,11 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       }
       // Public handle is acknowledged by the canonical profile + Social writes
       // above. Auth metadata is legacy display fallback, not its source of truth.
-      if (["givenName","familyName","handedness","homeClub","homeClubId","preferredTee"].some(key => Object.hasOwn(profile,key))) {
+      if (["givenName","familyName","handedness","homeClub","homeClubId","homeCourse","homeCourseId","preferredTee"].some(key => Object.hasOwn(profile,key))) {
         const metadataWrite = await supabase.auth.updateUser({ data: {
           given_name: next.givenName || null,
           family_name: next.familyName || null,
-          backyard_golf_profile_v1: { handedness: next.handedness || "", homeClub: next.homeClub || "", homeClubId: next.homeClubId || "", preferredTee: next.preferredTee || "" },
+          backyard_golf_profile_v1: { handedness: next.handedness || "", homeClub: next.homeClub || "", homeClubId: next.homeClubId || "", homeCourse: next.homeCourse || "", homeCourseId: next.homeCourseId || "", preferredTee: next.preferredTee || "" },
         } });
         if (metadataWrite.error) {
           issueWithMessage("profile", "Perfil guardado; el usuario se conservará en este dispositivo hasta la próxima sincronización.", "pending");
@@ -1563,7 +1567,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     <BetaOnboardingFlow profile={identity} accessToken={identity.accessToken} onUpdateProfile={updateProfile} bettingConsentGranted={bettingConsentGranted} requestBettingConsent={requestBettingConsent} onComplete={finishBetaOnboarding} />
     {bettingConsentDialog}
   </AccountContext.Provider>;
-  if (identity.mode === "authenticated" && equipmentOnboardingRequired) return <EquipmentOnboarding userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={null} ballFitDefaults={ballFitDefaultsFromProfile(identity)} onComplete={finishEquipmentOnboarding} onBack={finishEquipmentOnboarding} onSaveAndExit={finishEquipmentOnboarding} />;
+  if (identity.mode === "authenticated" && equipmentOnboardingRequired) return <EquipmentOnboarding userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={null} defaultHandedness={identity.handedness} ballFitDefaults={ballFitDefaultsFromProfile(identity)} onComplete={finishEquipmentOnboarding} onBack={finishEquipmentOnboarding} onSaveAndExit={finishEquipmentOnboarding} />;
 
   const app = <AccountContext.Provider value={context!}>
     {existingAccountNotice && <div className="notice" role="status">Ya tienes una cuenta. Vamos a iniciar sesión.<button type="button" className="textButton" aria-label="Cerrar aviso de cuenta existente" onClick={() => setExistingAccountNotice(false)}>Entendido</button></div>}

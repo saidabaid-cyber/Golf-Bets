@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { usernameFromEmail } from "../lib/account-state";
-import { BET_REGISTRY, betAiAliasCatalog, groupTemplateSelectionDefinitions } from "../lib/bets/registry";
+import { BET_REGISTRY, betAiAliasCatalog, groupTemplateSelectionDefinitions, groupTemplateSelectionSections } from "../lib/bets/registry";
 import { captureRequirementsForPlayer } from "../lib/bets/capture-requirements";
 import { createInternalEquipmentCatalogProvider } from "../lib/equipment-catalog-provider";
 import { golfBallCatalog, golfClubCatalog, golfShaftCatalog } from "../lib/golf-equipment-catalog";
@@ -49,8 +49,11 @@ test("registro de apuestas tiene IDs, historia, adaptador y aliases canónicos �
 test("selector de plantilla deriva todas sus modalidades visibles del registry", () => {
   const editor = readFileSync("app/components/group-bet-template-editor.tsx", "utf8");
   assert.doesNotMatch(editor, /CORE_MODES|SUPPLEMENTAL_MODES/);
-  assert.match(editor, /groupTemplateSelectionDefinitions\(\)\.map/);
+  assert.match(editor, /groupTemplateSelectionSections\(\)/);
   assert.equal(groupTemplateSelectionDefinitions().length, BET_REGISTRY.filter((bet) => bet.id !== "individual_nassau").length);
+  const sections = groupTemplateSelectionSections();
+  assert.equal(sections.general.length + sections.personal.length, groupTemplateSelectionDefinitions().length);
+  assert.ok(sections.personal.every((bet) => ["personals", "dollar_stroke", "individual_pressures"].includes(bet.id)));
 });
 
 test("capture requirements sólo obliga score y putts cuando la apuesta los consume", () => {

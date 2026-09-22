@@ -39,6 +39,10 @@ export function AnchoredSearch({
         maxLength={120}
         placeholder={placeholder}
         autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="none"
+        spellCheck={false}
+        inputMode="search"
         role="combobox"
         aria-autocomplete="list"
         aria-expanded={expanded}

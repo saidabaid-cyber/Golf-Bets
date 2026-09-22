@@ -114,7 +114,7 @@ test("Minimum Putts capture stays inside the existing score card and persists in
   assert.match(page, /setSupplementalBets\(normalizeSupplementalBets\(restored\.supplementalBets, restoredRoundHoles\)\); setPutts\(restored\.putts \|\| \{\}\)/);
   assert.match(page, /setSupplementalBets\(\(current\) => supplementalBetsForRoundHoles\(current, next\)\)/);
   assert.match(page, /<SupplementalBetsEditor[^>]+roundHoles=\{roundHoles\}/);
-  assert.match(editor, /createSupplementalBet\(type, players, id, roundHoles\)/);
+  assert.match(editor, /createSupplementalBet\(type, assignmentMode === "template" \? \[\] : players, id, roundHoles\)/);
   assert.match(editor, /Ronda configurada: \{roundHoles\} hoyos\./);
 });
 

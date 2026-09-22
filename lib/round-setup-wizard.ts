@@ -73,7 +73,7 @@ export function buildWizardBetCatalog(input: WizardCatalogInput): { group: Wizar
   const group: WizardBetEntry[] = [
     entry("rabbits", "rabbits", bets.rabbits, details(money(bets.rabbits.value), bets.rabbits.mode === "three_hole_blocks" ? "Bloques de 3" : "Continuo", handicap(bets.rabbits.hcpPct))),
     entry("skins", "skins", bets.skins, details(money(bets.skins.value), bets.skins.mode === "no_carry" ? "Sin acumulado" : "Con acumulado", handicap(bets.skins.hcpPct))),
-    entry("units", "units", bets.units, `${money(bets.units.value)} / unidad · ${money(bets.units.copaValue ?? bets.units.value)} / copa`),
+    entry("units", "units", bets.units, `${money(bets.units.value)} / positiva · ${money(bets.units.copaValue ?? bets.units.value)} / negativa`),
     entry("foursome", "foursome", bets.foursome, details(foursomeMode, foursomePrice, handicap(bets.foursome.hcpPct), multiplier(bets.foursome.pressureMultiplier ?? (bets.foursome.pressSecond9 ? 2 : 1)), bets.foursome.matchPresses?.length ? `${bets.foursome.matchPresses.length} presiones Match` : undefined)),
     entry("ball-friend", "ball_friend", bets.ballFriend, details(`${money(bets.ballFriend.value)} / punto`, handicap(bets.ballFriend.hcpPct))),
     entry("monkey", "monkey", bets.monkey, details(`${money(bets.monkey?.value)} / punto`, handicap(bets.monkey?.hcpPct))),

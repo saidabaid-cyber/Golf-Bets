@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { authenticatedRequest } from "../../../../lib/server-auth";
 import { isolatedPreviewDatabaseEnabled } from "../../../../lib/preview-database";
 import { BACKYARD_AI_PRIVATE_HEADERS, isCrossSiteRequest } from "../../../../lib/backyard-ai/server/http-security";
+import { normalizeSocialDirectoryQuery } from "../../../../features/social/domain";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 20;
@@ -17,7 +18,7 @@ export async function GET(request: NextRequest) {
   const account = await bounded(authenticatedRequest(request));
   if (!account.ok) return NextResponse.json({ error: account.error }, { status: account.status, headers });
   if (!isolatedPreviewDatabaseEnabled()) return NextResponse.json({ error: "Búsqueda no disponible en este entorno." }, { status: 503, headers });
-  const query = request.nextUrl.searchParams.get("q")?.trim() || "";
+  const query = normalizeSocialDirectoryQuery(request.nextUrl.searchParams.get("q"));
   if (query.length < 2 || query.length > 254) return NextResponse.json({ users: [] }, { headers });
   const { data, error } = await bounded(account.client.rpc("search_group_users_v1", { query_text: query }).abortSignal(AbortSignal.timeout(8_000)));
   if (error) return NextResponse.json({ error: "No pudimos buscar usuarios. Intenta nuevamente." }, { status: 503, headers });

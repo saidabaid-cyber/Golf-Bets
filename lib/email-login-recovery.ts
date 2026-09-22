@@ -2,6 +2,6 @@
  * Only an authenticated, verified account mapping can assert account absence. */
 export function emailLoginRecovery(verifiedAccountMissing = false) {
   return verifiedAccountMissing
-    ? "No tienes una cuenta todavía. ¿Quieres crearla?"
-    : "No pudimos iniciar sesión. Si todavía no tienes cuenta, puedes crearla";
+    ? "No tienes cuenta. ¿Quieres crear una?"
+    : "No pudimos iniciar sesión. No tienes cuenta. ¿Quieres crear una?";
 }

@@ -295,6 +295,86 @@ function cleanTemplate(
   };
 }
 
+/** Habitual preferences deliberately do not retain concrete players, rivals or
+ * pairs. Legacy templates remain readable; new/edited templates pass through
+ * this adapter before persistence so historical engine keys stay untouched. */
+export function templateWithoutPlayerAssignments(template: GroupGameTemplate): GroupGameTemplate {
+  const next = clone(template);
+  const clearParticipants = (config: { participantIds: string[] }) => { config.participantIds = []; };
+  clearParticipants(next.betConfig.monkey!);
+  clearParticipants(next.betConfig.rabbits);
+  clearParticipants(next.betConfig.skins);
+  clearParticipants(next.betConfig.units);
+  clearParticipants(next.betConfig.foursome);
+  clearParticipants(next.betConfig.ballFriend);
+  clearParticipants(next.betConfig.polla.first9);
+  clearParticipants(next.betConfig.polla.second9);
+  clearParticipants(next.betConfig.polla.total18);
+  clearParticipants(next.betConfig.miniPolla);
+  clearParticipants(next.betConfig.vipers);
+  clearParticipants(next.betConfig.camels);
+  clearParticipants(next.betConfig.fish);
+  clearParticipants(next.betConfig.loba);
+  next.ownerMemberId = "";
+  next.foursomeSegments = next.foursomeSegments.map((segment) => ({ ...segment, basePair: [] }));
+  next.personalBets = next.personalBets.map((bet) => ({
+    ...bet,
+    rivalPlayerId: undefined,
+    rivalName: "Jugador pendiente",
+    externalScores: {},
+    advantageReceiver: "none",
+    advantageStrokes: 0,
+    ownerIndexSnapshot: undefined,
+    rivalIndexSnapshot: undefined,
+  }));
+  next.supplementalBets = next.supplementalBets.map((bet): SupplementalBet => {
+    if (bet.type === "individual_nassau" || bet.type === "dollar_stroke") return {
+      ...bet, playerAId: "", playerBId: "", advantageReceiverId: undefined, advantageStrokes: 0,
+    };
+    if (bet.type === "team_pressures") return { ...bet, participantIds: [], teamA: [], abandonedPlayerIds: [] };
+    if (bet.type === "vegas") return { ...bet, participantIds: [], teamA: [] };
+    return { ...bet, participantIds: [] };
+  });
+  next.manualBets = next.manualBets.map((bet) => {
+    const cleared = { ...bet, amounts: {} };
+    delete cleared.initialAmounts;
+    return cleared;
+  });
+  return next;
+}
+
+/** Once a round has its selected roster, general modalities default to that
+ * roster. Head-to-head opponents and team pairings intentionally stay pending
+ * for the round setup step. */
+function applyRoundParticipantDefaults(template: GroupGameTemplate, playerIds: string[]) {
+  const next = clone(template);
+  const fill = (config: { enabled?: boolean; participantIds: string[] }, limit = playerIds.length) => {
+    if (config.enabled && config.participantIds.length === 0) config.participantIds = playerIds.slice(0, limit);
+  };
+  fill(next.betConfig.monkey!, 3);
+  fill(next.betConfig.rabbits);
+  fill(next.betConfig.skins);
+  fill(next.betConfig.units);
+  fill(next.betConfig.foursome);
+  fill(next.betConfig.ballFriend);
+  fill(next.betConfig.polla.first9);
+  fill(next.betConfig.polla.second9);
+  fill(next.betConfig.polla.total18);
+  fill(next.betConfig.miniPolla);
+  fill(next.betConfig.vipers);
+  fill(next.betConfig.camels);
+  fill(next.betConfig.fish);
+  fill(next.betConfig.loba);
+  next.supplementalBets = next.supplementalBets.map((bet): SupplementalBet => {
+    if (!bet.enabled || bet.type === "individual_nassau" || bet.type === "dollar_stroke") return bet;
+    if (bet.participantIds.length) return bet;
+    if (bet.type === "team_pressures") return { ...bet, participantIds: playerIds.slice(0, 4), teamA: [], abandonedPlayerIds: [] };
+    if (bet.type === "vegas") return { ...bet, participantIds: playerIds.slice(0, 4), teamA: [] };
+    return { ...bet, participantIds: [...playerIds] };
+  });
+  return next;
+}
+
 export function createGroupGameTemplate(
   source: GroupTemplateDraftSource,
   memberIdByPlayerId: Readonly<Record<string, string>>,
@@ -322,7 +402,7 @@ export function normalizeGroupGameTemplate(value: unknown, members: FrequentGrou
   };
   const mapping = new Map(memberIds.map((id) => [id, id]));
   const ownerMemberId = validId(raw.ownerMemberId) ? raw.ownerMemberId! : memberIds[0];
-  return cleanTemplate({
+  const normalized = cleanTemplate({
     ownerId: ownerMemberId,
     bets: raw.betConfig,
     segments: raw.foursomeSegments,
@@ -330,6 +410,10 @@ export function normalizeGroupGameTemplate(value: unknown, members: FrequentGrou
     supplementalBets: raw.supplementalBets,
     manualBets: raw.manualBets,
   }, mapping, memberIds, roundDefaults);
+  // Empty is the canonical marker for a new player-agnostic habitual template.
+  // Undefined/invalid legacy owners still fall back to the first roster member.
+  if (raw.ownerMemberId === "") normalized.ownerMemberId = "";
+  return normalized;
 }
 
 export function groupTemplatePlayers(group: FrequentGroup): Player[] {
@@ -410,14 +494,14 @@ export function instantiateGroupGameTemplate(group: FrequentGroup, idFactory: ()
   }
   const template = stableGroup.gameTemplate;
   const mapping = new Map(Object.entries(roundPlayerIdByMemberId));
-  const cleaned = cleanTemplate({
+  const cleaned = applyRoundParticipantDefaults(cleanTemplate({
     ownerId: template.ownerMemberId,
     bets: template.betConfig,
     segments: template.foursomeSegments,
     personalBets: template.personalBets,
     supplementalBets: template.supplementalBets,
     manualBets: template.manualBets,
-  }, mapping, players.map((player) => player.id), template.roundDefaults, idFactory);
+  }, mapping, players.map((player) => player.id), template.roundDefaults, idFactory), players.map((player) => player.id));
   return {
     origin,
     ownerId: cleaned.ownerMemberId,
@@ -456,7 +540,7 @@ export function updateGroupTemplateFromRound(
       players: group.players.map((member) => member.memberId && roundPlayerByMemberId.has(member.memberId)
         ? { ...member, handicap: roundPlayerByMemberId.get(member.memberId)!.handicapIndex ?? roundPlayerByMemberId.get(member.memberId)!.handicap }
         : member),
-      gameTemplate: createGroupGameTemplate(source, memberIdByPlayerId),
+      gameTemplate: templateWithoutPlayerAssignments(createGroupGameTemplate(source, memberIdByPlayerId)),
       updatedAt,
     },
   };

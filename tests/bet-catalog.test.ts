@@ -30,7 +30,7 @@ test("Histórico reconoce claves antiguas y modalidades actuales con el catálog
   const legacyLabels: Record<string, string> = {
     Conejos: "🐇 Conejos",
     Skins: "⛳ Skins",
-    Unidades: "🪙 Unidades / Copas",
+    Unidades: "🪙 Unidades positivas y negativas",
     Monkey: "🐒 Monkey",
     Foursome: "🤝 Foursome",
     "Bola Amiga": "⚪🤝 Bola Amiga",

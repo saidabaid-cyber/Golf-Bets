@@ -61,7 +61,7 @@ const definition = (value: BetDefinitionInput): BetDefinition => {
 export const BET_REGISTRY = [
   definition({ id: "rabbits", version: 1, label: "Conejos", description: "Conejo continuo o por bloques", icon: "🐇", category: "group", configPath: "bets.rabbits", configCapabilities: ["money", "participants", "handicap_percentage", "handicap_basis", "carry", "mode"], validation: "canonical", captureRequirements: { requiresScore: true, requiresPutts: "never", optionalFacts: [] }, engineAdapter: "calculateRabbits", resultPresenter: "rabbits", aiAliases: ["conejos", "conejo"], historyVersion: 1 }),
   definition({ id: "skins", version: 1, label: "Skins", description: "Valor por hoyo con carry opcional", icon: "⛳", category: "group", configPath: "bets.skins", configCapabilities: ["money", "participants", "handicap_percentage", "handicap_basis", "carry"], validation: "canonical", captureRequirements: { requiresScore: true, requiresPutts: "never", optionalFacts: [] }, engineAdapter: "calculateSkins", resultPresenter: "skins", aiAliases: ["skins", "skin"], historyVersion: 1 }),
-  definition({ id: "units", version: 1, label: "Unidades / Copas", description: "Unidades firmadas por jugador", icon: "🪙", category: "group", configPath: "bets.units", configCapabilities: ["money", "participants"], validation: "canonical", captureRequirements: { requiresScore: true, requiresPutts: "never", optionalFacts: ["units"] }, engineAdapter: "calculateUnits", resultPresenter: "units", aiAliases: ["unidades", "copas", "copa"], historyVersion: 1 }),
+  definition({ id: "units", version: 1, label: "Unidades positivas y negativas", description: "Unidades firmadas por jugador", icon: "🪙", category: "group", configPath: "bets.units", configCapabilities: ["money", "participants"], validation: "canonical", captureRequirements: { requiresScore: true, requiresPutts: "never", optionalFacts: ["units"] }, engineAdapter: "calculateUnits", resultPresenter: "units", aiAliases: ["unidades", "copas", "copa"], historyVersion: 1 }),
   definition({ id: "foursome", version: 1, label: "Foursome", description: "Parejas por segmentos editables", icon: "🤝", category: "team", configPath: "bets.foursome", configCapabilities: ["money", "participants", "handicap_percentage", "handicap_basis", "pressure", "segments", "teams", "mode"], validation: "canonical", captureRequirements: { requiresScore: true, requiresPutts: "never", optionalFacts: [] }, engineAdapter: "calculateFoursome", resultPresenter: "foursome", aiAliases: ["foursome", "foursomes"], historyVersion: 1 }),
   definition({ id: "ball_friend", version: 1, label: "Bola Amiga", description: "Mejor bola por equipos", icon: "⚪🤝", category: "team", configPath: "bets.ballFriend", configCapabilities: ["money", "participants", "handicap_percentage", "handicap_basis", "teams"], validation: "canonical", captureRequirements: { requiresScore: true, requiresPutts: "never", optionalFacts: [] }, engineAdapter: "calculateBallFriend", resultPresenter: "ball_friend", aiAliases: ["bola amiga", "best ball"], historyVersion: 1 }),
   definition({ id: "monkey", version: 1, label: "Monkey", description: "Juego original de tres participantes", icon: "🐒", category: "group", configPath: "bets.monkey", configCapabilities: ["money", "participants", "handicap_percentage"], validation: "canonical", captureRequirements: { requiresScore: true, requiresPutts: "never", optionalFacts: [] }, engineAdapter: "calculateMonkey", resultPresenter: "monkey", aiAliases: ["monkey", "changuitos"], historyVersion: 1 }),
@@ -98,6 +98,17 @@ export function betAiAliasCatalog() {
 
 export function groupTemplateSelectionDefinitions() {
   return BET_REGISTRY.filter((bet) => bet.templateEditor.selection).toSorted((left, right) => left.templateEditor.sortOrder - right.templateEditor.sortOrder);
+}
+
+/** Product-facing grouping for habitual configuration. The engine category is
+ * intentionally left untouched so historical keys and settlement remain stable. */
+export function groupTemplateSelectionSections() {
+  const definitions = groupTemplateSelectionDefinitions();
+  const personalIds = new Set(["personals", "dollar_stroke", "individual_pressures"]);
+  return {
+    general: definitions.filter((bet) => !personalIds.has(bet.id)),
+    personal: definitions.filter((bet) => personalIds.has(bet.id)),
+  };
 }
 
 export function groupTemplateCoreDefinitions() {

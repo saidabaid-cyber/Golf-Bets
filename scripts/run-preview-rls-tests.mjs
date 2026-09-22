@@ -13,6 +13,8 @@ export const REQUIRED_RLS_TESTS = [
   "phase2_shots_analytics_rls.sql",
   "user_statistics_reset_rls.sql",
   "phase2_multiuser_authorization_rls.sql",
+  "owner_user_search_rls.sql",
+  "group_round_presets_rls.sql",
 ];
 
 export function previewDatabaseEnvironment(source = process.env) {

@@ -12,7 +12,10 @@ function localRequest(request: Request) {
   return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
 }
 
-export async function GET(request: Request, context: RouteContext<"/api/rules/documents/[id]">) {
+export async function GET(
+  request: Request,
+  context: { params: Promise<{ id: string }> },
+) {
   const { id } = await context.params;
   const document = officialRulesDocument(id);
   if (!document) return new Response("Documento no encontrado.", { status: 404 });

@@ -216,8 +216,9 @@ test("group bet templates retain advanced configuration instead of flattened num
   assert.match(editor, /Presión · segunda vuelta/);
   assert.match(editor, /3 hoyos/);
   assert.match(editor, /18 hoyos/);
-  assert.match(editor, /Ventaja desde índices/);
-  assert.match(editor, /Ventaja firmada/);
+  assert.match(editor, /Los jugadores y parejas se eligen al iniciar/);
+  assert.match(editor, /assignmentMode="template"/);
+  assert.doesNotMatch(editor, /Ventaja desde índices|Ventaja firmada/);
   assert.match(editor, /step=\{0\.01\}/);
 });
 

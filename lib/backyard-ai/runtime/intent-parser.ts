@@ -718,7 +718,7 @@ function parserQuestions(normalized: string, parsedActions: ParsedRoundSetupActi
     questions.push({
       code: "unknown_bet",
       field: "bets.oyes",
-      prompt: "“Oyes” no existe como modalidad independiente en el catálogo actual. ¿Se registra como Unidades/Copas o quieres otra modalidad existente?",
+      prompt: "“Oyes” no existe como modalidad independiente en el catálogo actual. ¿Se registra como Unidades positivas y negativas o quieres otra modalidad existente?",
     });
   }
   if (/\bpersonales\b/i.test(normalized)) {

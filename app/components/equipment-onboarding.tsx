@@ -18,6 +18,7 @@ import { BallEditor, CLUB_CATEGORY_ICONS, CLUB_CATEGORY_LABELS, ClubEditor } fro
 import { BrandLockup } from "./brand-lockup";
 import { equipmentStatusLabel, useEquipmentProfile } from "./use-equipment-profile";
 import { useEquipmentCatalogSearch } from "./use-equipment-catalog-search";
+import type { ProfileHandedness } from "../../lib/equipment-editor-selection";
 import styles from "./equipment.module.css";
 
 type Step = "clubs-prompt" | "clubs-build" | "ball-prompt" | "ball-select" | "fit-prompt" | "fit";
@@ -26,6 +27,7 @@ type EquipmentOnboardingProps = {
   userId: string;
   accessToken: string | null;
   defaultHandicap: number | null;
+  defaultHandedness?: ProfileHandedness | null;
   ballFitDefaults?: BallFitProfileDefaults;
   onComplete: () => void;
   onBack: () => void;
@@ -44,7 +46,7 @@ function initialStep(profile: ReturnType<typeof useEquipmentProfile>["profile"])
   return "fit-prompt";
 }
 
-export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, ballFitDefaults, onComplete, onBack, onSaveAndExit }: EquipmentOnboardingProps) {
+export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defaultHandedness, ballFitDefaults, onComplete, onBack, onSaveAndExit }: EquipmentOnboardingProps) {
   const { profile, status, message, update } = useEquipmentProfile(userId, accessToken);
   const [step, setStep] = useState<Step>("clubs-prompt");
   const [initialized, setInitialized] = useState(false);
@@ -139,7 +141,7 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, ball
 
   // These flows replace the onboarding page instead of nesting a long sheet
   // inside it. The document is the only scroll container, including keyboard.
-  if (clubEditorOpen) return <main className={styles.onboardingScreen} data-equipment-screen="onboarding-club-editor"><ClubEditor userId={userId} catalog={clubCatalog.items} shafts={shaftCatalog.items} presentation="page" onCancel={() => setClubEditorOpen(false)} onSave={saveClub} /></main>;
+  if (clubEditorOpen) return <main className={styles.onboardingScreen} data-equipment-screen="onboarding-club-editor"><ClubEditor userId={userId} catalog={clubCatalog.items} shafts={shaftCatalog.items} defaultHandedness={defaultHandedness} presentation="page" onCancel={() => setClubEditorOpen(false)} onSave={saveClub} /></main>;
   if (ballEditorOpen) return <main className={styles.onboardingScreen} data-equipment-screen="onboarding-ball-editor"><BallEditor userId={userId} catalog={ballCatalog.items} existing={null} presentation="page" onCancel={() => setBallEditorOpen(false)} onSave={saveBall} /></main>;
 
   return <main className={styles.onboardingScreen}><section className={styles.onboardingCard}>

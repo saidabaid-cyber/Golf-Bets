@@ -45,6 +45,12 @@ try {
   }
   check("all migrations compile against existing lifecycle/social/group schema");
   await q("insert into auth.users(id,email,email_confirmed_at) values($1,'qa-a@example.invalid',now()),($2,'qa-b@example.invalid',now()),($3,'qa-c@example.invalid',now()),($4,'unverified@example.invalid',null)",[A,B,C,E]);
+  await q("delete from public.social_profiles where user_id=$1",[C]);
+  await q("update public.profiles set username='qa_c',display_name='Persona C',profile_visibility='public' where id=$1",[C]);
+  await asUser(C);assert.equal(await scalar("select public.set_my_profile_visibility('public')"),"public");
+  await asUser(A);assert.equal((await search("  PERSONA   C "))[0].user_id,C);
+  await admin();
+  check("legacy account projection is repaired from canonical profile data and searchable A→B by normalized name");
   await db.exec("update public.social_profiles set privacy='PUBLIC';");
   await q("update public.social_profiles set username='qa_b',display_name='Persona B',privacy='FRIENDS' where user_id=$1",[B]);
   await q("update public.social_profiles set username='qa_c',display_name='Persona C' where user_id=$1",[C]);

@@ -1,9 +1,13 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import type { FrequentGroup, FrequentGroupMember } from "../../lib/types";
 import { invitationStatus, normalizedInvitationEmail, parseGroupInvitationLink, type BackyardGroupUser, type GroupInvitation } from "../../lib/group-invitations";
+import type { SocialPerson } from "../../lib/social-connections";
 import { useBackyardAccount } from "./account-provider";
 import styles from "./group-invitations.module.css";
+
+const SocialQrScanner = dynamic(() => import("./social-qr").then((module) => module.SocialQrScanner), { ssr: false });
 
 async function api(token: string, body?: Record<string, unknown>, signal?: AbortSignal, localGroupId?: string) {
   const response = await fetch(`/api/groups/invitations${localGroupId ? `?localGroupId=${encodeURIComponent(localGroupId)}` : ""}`, { method: body ? "POST" : "GET", cache: "no-store",
@@ -23,6 +27,8 @@ export function GroupInviteManager({ group, accessToken, onAcceptedMembers }: { 
   const [busy, setBusy] = useState(false);
   const [searching, setSearching] = useState(false);
   const [emailAvailable, setEmailAvailable] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [qrUser, setQrUser] = useState<BackyardGroupUser | null>(null);
   const inFlight = useRef(false);
   const acceptedCallback = useRef(onAcceptedMembers);
   useEffect(() => { acceptedCallback.current = onAcceptedMembers; }, [onAcceptedMembers]);
@@ -52,7 +58,7 @@ export function GroupInviteManager({ group, accessToken, onAcceptedMembers }: { 
   }, [query, accessToken]);
   async function send(target: { email?: string; targetUserId?: string; invitationId?: string }) {
     if (!accessToken || inFlight.current) return;
-    if (!target.targetUserId && !emailAvailable) { setMessage("Invitaciones por correo temporalmente no disponibles en esta versión."); return; }
+    if (!target.targetUserId && !emailAvailable) { setMessage("Invitaciones por correo — Próximamente."); return; }
     inFlight.current = true; setBusy(true); setMessage("");
     try {
       let result;
@@ -69,19 +75,33 @@ export function GroupInviteManager({ group, accessToken, onAcceptedMembers }: { 
     } catch (error) { setMessage(error instanceof Error ? error.message : "No se confirmó el envío."); }
     finally { await reload().catch(() => undefined); inFlight.current = false; setBusy(false); }
   }
+  async function resolveQrUser(targetUserId: string) {
+    if (!accessToken) return;
+    setScannerOpen(false); setQrUser(null); setBusy(true); setMessage("Consultando el perfil del QR…");
+    try {
+      const response = await fetch(`/api/social/connections?target=${encodeURIComponent(targetUserId)}`, { headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store", signal: AbortSignal.timeout(25_000) });
+      const data = await response.json() as { person?: SocialPerson; error?: string };
+      if (!response.ok || !data.person) throw new Error(data.error || "No pudimos consultar este perfil.");
+      setQrUser({ ...data.person, is_friend: false });
+      setMessage("Perfil encontrado. Confirma antes de invitarlo al grupo.");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "No pudimos consultar este perfil."); }
+    finally { setBusy(false); }
+  }
   return <section className={styles.panel} aria-label="Usuarios Backyard e invitaciones">
     <h3>Usuario Backyard</h3><p>Busca nombre, @usuario o correo exacto. La invitación llega a Backyard, sin depender del correo. Sólo aparecen identidades permitidas por su privacidad.</p>
     {!accessToken ? <p>Inicia sesión para buscar usuarios y enviar invitaciones.</p> : <>
-      <label>Buscar usuarios<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Nombre, @usuario o correo exacto" autoComplete="off" /></label>
+      <label>Buscar usuarios<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Nombre, @usuario o correo exacto" autoComplete="off" autoCorrect="off" autoCapitalize="none" spellCheck={false} inputMode="search" /></label>
+      <button type="button" className="secondary" disabled={busy} onClick={() => { setScannerOpen(true); setQrUser(null); setMessage(""); }}>Escanear QR</button>
+      {scannerOpen && <SocialQrScanner backLabel="Usuarios Backyard" onFound={(id) => void resolveQrUser(id)} onClose={() => setScannerOpen(false)} />}
+      {qrUser && <ul className={styles.results} aria-label="Usuario encontrado por QR"><li><span><b>{qrUser.display_name}</b><small>@{qrUser.username} · Usuario Backyard</small></span><button type="button" className="secondary" disabled={busy || !group.name.trim()} onClick={() => void send({ targetUserId: qrUser.user_id })}>Invitar</button></li></ul>}
       {searching && <p role="status">Buscando…</p>}
       <ul className={styles.results}>{users.map(user => <li key={user.user_id}><span><b>{user.display_name}</b><small>@{user.username}{user.is_friend ? " · Amigo" : " · Usuario Backyard"}</small></span><button type="button" className="secondary" disabled={busy || !group.name.trim()} onClick={() => void send({ targetUserId: user.user_id })}>Invitar</button></li>)}</ul>
-      <section className={styles.emailPath} aria-label="Persona sin cuenta Backyard"><h3>Persona sin cuenta Backyard</h3>
-        {!emailAvailable && <p role="status">Invitaciones por correo temporalmente no disponibles en esta versión. Puedes seguir invitando a usuarios Backyard arriba.</p>}
-        <form onSubmit={event => { event.preventDefault(); const normalized = normalizedInvitationEmail(email); if (emailAvailable && normalized) void send({ email: normalized }); }}>
+      <section className={styles.emailPath} aria-label="Persona sin cuenta Backyard">{!emailAvailable ? <><h3>Invitaciones por correo — Próximamente</h3><p>Mientras habilitamos el proveedor de correo, busca una cuenta Backyard o usa su QR.</p></> : <><h3>Persona sin cuenta Backyard</h3>
+        <form onSubmit={event => { event.preventDefault(); const normalized = normalizedInvitationEmail(email); if (normalized) void send({ email: normalized }); }}>
           <label>Invitar por correo<input disabled={!emailAvailable || busy} type="email" inputMode="email" autoComplete="off" value={email} onChange={event => setEmail(event.target.value)} placeholder="persona@correo.com" /></label>
           <button type="submit" className="secondary" disabled={!emailAvailable || busy || !normalizedInvitationEmail(email) || !group.name.trim()}>{busy ? "Procesando…" : "Enviar invitación por correo"}</button>
         </form>
-      </section>
+      </>}</section>
       <p>La persona se incorpora al grupo cuando acepta con su cuenta verificada. Invitación no equivale a integrante.</p>
       {invitations.length > 0 && <section aria-label="Estado de invitaciones"><h3>Invitaciones e integrantes</h3><ul className={styles.results}>{invitations.map(invite => <li key={invite.id}><span><b>{invite.recipient_label}</b><small>{invitationStatus(invite)}</small></span>{emailAvailable && invite.state === "PENDING" && ["FAILED", "NOT_SENT"].includes(invite.delivery_status) && <button type="button" className="secondary" disabled={busy} onClick={() => void send({ invitationId: invite.id })}>Reintentar correo</button>}</li>)}</ul></section>}
       <button type="button" className="textButton" disabled={busy} onClick={() => void reload().catch(error => setMessage(error.message))}>Actualizar invitaciones e integrantes</button>

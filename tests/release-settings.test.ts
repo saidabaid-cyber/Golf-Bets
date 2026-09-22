@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import { ACCOUNT_SETTINGS } from "../lib/account-settings";
+import { DEFAULT_ACCOUNT_UI_PREFERENCES, displayDistanceFromStoredYards, readAccountUiPreferences, writeAccountUiPreferences } from "../lib/account-ui-preferences";
 
 type Element = { type: unknown; props: Record<string, unknown> };
 function elements(value: unknown): Element[] {
@@ -27,6 +28,7 @@ function panel(initialAccountSection = "account", view = "account") {
     react: { useState: state, useRef: (initial: unknown) => state({ current: initial })[0], useEffect: () => {}, useLayoutEffect: () => {} },
     "react/jsx-runtime": { jsx, jsxs: jsx },
     "../../lib/account-settings": { ACCOUNT_SETTINGS },
+    "../../lib/account-ui-preferences": { DEFAULT_ACCOUNT_UI_PREFERENCES, displayDistanceFromStoredYards, readAccountUiPreferences, writeAccountUiPreferences },
     "../../lib/legal-config": { LEGAL_DOCUMENT_VERSIONS: {}, legalConfig: {} },
     "../../lib/handicap-source": { selectedHandicapIndex: () => ({ source: "BACKYARD" }) },
     "./account-provider": { useBackyardAccount: () => ({ identity: { userId: "synthetic", mode: "authenticated", displayName: "QA", accessToken: "synthetic-not-a-token", providers: ["email"] }, acceptances: [], cloudIssues: [] }) },

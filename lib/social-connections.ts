@@ -3,7 +3,7 @@ export type ConnectionRequest = { id:string; requester_id:string; addressee_id:s
 export type ConnectionPage = { people:SocialPerson[]; requests:ConnectionRequest[]; friends:string[]; blocked:string[] };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export const PUBLIC_SOCIAL_ORIGIN = "https://app.thebackyard.com.mx";
-/** Preparation only: generated links keep the current QA origin until cutover.
+/** Shared QR links use the stable public origin, never a temporary Preview URL.
  * The permanent account UUID is the existing public identifier, not a username. */
 export const QA_SOCIAL_ORIGIN = PUBLIC_SOCIAL_ORIGIN;
 export function socialProfileLink(id:string, origin:string) {

@@ -45,7 +45,7 @@ test("successful local save leads to add-another, bag and profile destinations; 
   assert.match(editors, /if \(saved === false\) setMessage\("No se confirmó el guardado en este dispositivo/);
   assert.match(persistence, /saveEquipmentProfile\(localStorage, normalized\)/);
   assert.match(persistence, /enqueueSync\(result\.profile, activeScopeRef\.current\)/);
-  assert.match(panel, /className=\{styles\.itemTitleButton\} onClick=\{onEdit\}/);
+  assert.match(panel, /className=\{styles\.bagItemMain\} onClick=\{onEdit\}/);
 });
 
 test("club, ball and manual-distance removal require an in-app confirmation and preserve round snapshots", () => {

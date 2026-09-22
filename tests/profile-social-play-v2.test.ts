@@ -31,17 +31,25 @@ test("completion uses authenticated transport instead of a local-only percentage
 test("completion is seven equally weighted sections; skipped is not complete", () => {
   assert.equal(profileCompletion(empty).percent,0);
   assert.equal(profileCompletion({...empty,username:"golfer"}).percent,14);
-  assert.equal(profileCompletion({...empty,username:"golfer",displayName:"Player",givenName:"QA",familyName:"Golfer"}).percent,29);
+  assert.equal(profileCompletion({...empty,username:"golfer",displayName:"Player",givenName:"QA",familyName:"Golfer"}).percent,14);
+  assert.equal(profileCompletion({...empty,username:"golfer",displayName:"Player",givenName:"QA",familyName:"Golfer",avatarUrl:"avatar:dog"}).percent,29);
 });
 for (const choice of ["UNKNOWN","MANUAL"] as const) test(`100% without GHIN, public privacy, consent or computed index: ${choice}`, () => {
   const choices={handicap_choice:choice, manual_hcp:choice==="MANUAL"?12:null, not_applicable:["golf","equipment","ball","fitting"]};
   assert.equal(validCompletionChoices(choices),true);
-  assert.equal(profileCompletion({...empty,choices,displayName:"QA",givenName:"QA",familyName:"Golfer",username:"qa"}).percent,100);
+  assert.equal(profileCompletion({...empty,choices,displayName:"QA",givenName:"QA",familyName:"Golfer",avatarUrl:"avatar:dog",username:"qa"}).percent,100);
 });
 test("index activation counts before first eligible round; manual blank is not zero", () => {
   assert.equal(profileCompletion({...empty,indexEnabled:true}).sections.find(s=>s.id==="handicap")?.complete,true);
   for(const manual_hcp of [null,"",NaN,55]) assert.equal(validCompletionChoices({handicap_choice:"MANUAL",manual_hcp,not_applicable:[]}),false);
   assert.equal(validCompletionChoices({handicap_choice:"UNKNOWN",manual_hcp:null,not_applicable:["personal"]}),false);
+});
+test("golf completion requires both handedness and Home Club; a preferred tee is not a substitute", () => {
+  const golfComplete = (input: { handedness?: string; homeClub?: string; preferredTee?: string }) =>
+    profileCompletion({ ...empty, ...input }).sections.find(section => section.id === "golf")?.complete;
+  assert.equal(golfComplete({ handedness: "right", preferredTee: "Azules" }), false);
+  assert.equal(golfComplete({ homeClub: "La Vista" }), false);
+  assert.equal(golfComplete({ handedness: "right", homeClub: "La Vista" }), true);
 });
 test("QR uses stable UUID and exact trusted origin, never username/email/token", () => {
   const link=socialProfileLink(owner,QA_SOCIAL_ORIGIN);assert.equal(socialIdFromQr(link,"https://example.test"),owner);
@@ -107,6 +115,6 @@ test("score-only mode persists, legacy/full metadata unchanged", () => {
   assert.deepEqual(normalizeRoundPresentation(undefined),{version:1,groupNassauTerm:"polla"});assert.equal(normalizeRoundPresentation({playMode:"score_only"}).playMode,"score_only");
 });
 test("OTP errors cannot enumerate accounts or assert absence", () => {
-  assert.match(emailLoginRecovery(),/No pudimos/);assert.match(emailLoginRecovery(true),/No tienes una cuenta/);
-  const source=readFileSync("app/components/account-provider.tsx","utf8");assert.match(source,/emailLoginRecovery\(\)/);assert.equal(source.includes('emailLoginRecovery(error'),false);
+  assert.match(emailLoginRecovery(),/No pudimos/);assert.equal(emailLoginRecovery(true),"No tienes cuenta. ¿Quieres crear una?");
+  const source=readFileSync("app/components/account-provider.tsx","utf8");assert.match(source,/emailLoginRecovery\(\)/);assert.match(source,/loginRecovery[\s\S]*ModalCloseButton/);assert.equal(source.includes('emailLoginRecovery(error'),false);
 });

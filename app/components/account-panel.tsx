@@ -61,6 +61,8 @@ function profileDetailsDraft(profile: BackyardProfile): ProfileDetailsDraft {
     locationUpdatedAt: profile.locationUpdatedAt || defaults.locationUpdatedAt,
     homeClub: profile.homeClub || defaults.homeClub,
     homeClubId: profile.homeClubId || defaults.homeClubId,
+    homeCourse: profile.homeCourse || defaults.homeCourse,
+    homeCourseId: profile.homeCourseId || defaults.homeCourseId,
     preferredTee: profile.preferredTee || defaults.preferredTee,
     handedness: profile.handedness || defaults.handedness,
     typicalScore: profile.typicalScore ?? defaults.typicalScore,
@@ -322,8 +324,8 @@ export function AccountPanel({ view, focusSection = "profile", highContrast, onH
         </div>
         <label>Nombre(s)<input value={profileDetails.givenName} onChange={(event) => setProfileDetails((current) => ({ ...current, givenName: event.target.value }))} autoComplete="given-name" /></label>
         <label>Apellidos<input value={profileDetails.familyName} onChange={(event) => setProfileDetails((current) => ({ ...current, familyName: event.target.value }))} autoComplete="family-name" /></label>
-        <label>Usuario<input value={profileDetails.username} onChange={(event) => setProfileDetails((current) => ({ ...current, username: event.target.value }))} placeholder="sin @" autoComplete="username" /></label>
-        <ProfileClubPicker value={profileDetails.homeClub} clubId={profileDetails.homeClubId} onChange={({ name: homeClub, id: homeClubId }) => setProfileDetails((current) => ({ ...current, homeClub, homeClubId }))} />
+        <label>Usuario<input value={profileDetails.username} onChange={(event) => setProfileDetails((current) => ({ ...current, username: event.target.value }))} placeholder="sin @" autoComplete="username" autoCorrect="off" autoCapitalize="none" spellCheck={false} inputMode="text" /></label>
+        <ProfileClubPicker value={profileDetails.homeClub} clubId={profileDetails.homeClubId} onChange={({ name: homeClub, id: homeClubId }) => setProfileDetails((current) => ({ ...current, homeClub, homeClubId, ...(homeClubId !== current.homeClubId ? { homeCourse: "", homeCourseId: "" } : {}) }))} />
         <label>Ciudad<input value={profileDetails.city} onChange={(event) => setProfileDetails((current) => ({ ...current, city: event.target.value }))} autoComplete="address-level2" /></label>
         <ProfileLocationPicker value={profileDetails} onChange={(location) => { setProfileDetails((current) => ({ ...current, ...location })); setMessage(""); }} />
         <label>Tee preferido<input value={profileDetails.preferredTee} onChange={(event) => setProfileDetails((current) => ({ ...current, preferredTee: event.target.value }))} /></label>
@@ -365,7 +367,7 @@ export function AccountPanel({ view, focusSection = "profile", highContrast, onH
 
     {view === "profile" && identity.mode === "authenticated" && message && <div className={messageKind === "error" ? "notice bad" : "notice"} role={messageKind === "error" ? "alert" : "status"}>{message}</div>}
 
-    {view === "profile" && identity.mode === "authenticated" && <div ref={equipmentSectionRef} id="equipment-bag"><EquipmentProfilePanel userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={null} ballFitDefaults={ballFitDefaultsFromProfile(identity)} /></div>}
+    {view === "profile" && identity.mode === "authenticated" && <div ref={equipmentSectionRef} id="equipment-bag"><EquipmentProfilePanel userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={null} defaultHandedness={identity.handedness} ballFitDefaults={ballFitDefaultsFromProfile(identity)} /></div>}
 
     {view === "profile" && golfInsights && <section className="card betaProfileGolfCard">
       <div className="sectionTitle"><div><h2>Mi golf</h2><p>Resumen calculado sólo con tu histórico disponible.</p></div>{onOpenStats && <button type="button" className="textButton" onClick={onOpenStats}>Ver Stats</button>}</div>

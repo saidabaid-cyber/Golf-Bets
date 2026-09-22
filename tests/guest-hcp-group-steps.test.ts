@@ -49,7 +49,9 @@ test("Step 10 only selection, Step 11 uses the same editor and only active regis
   assert.doesNotMatch(step10, /mode="complete"|mode="details"/);
   assert.match(step10, /Continuar: configurar apuestas/);
   const editor = readFileSync("app/components/group-bet-template-editor.tsx", "utf8");
-  assert.match(editor, /groupTemplateSelectionDefinitions\(\).map/);
+  assert.match(editor, /groupTemplateSelectionSections\(\)/);
+  assert.match(editor, /Apuestas de grupo \/ generales/);
+  assert.match(editor, /Individuales \/ Personales/);
   assert.match(editor, /activeGroupTemplateDefinitions\(value\).map/);
   assert.match(editor, /Editar personales/);
   assert.match(editor, /onlyBetId=\{item.id\}/);
@@ -88,7 +90,8 @@ test("save/exit separated from primary navigation and email readiness does not g
   const invite = readFileSync("app/components/group-invitations.tsx", "utf8");
   assert.match(invite, /data.emailDeliveryConfigured === true/);
   assert.match(invite, /!target.targetUserId && !emailAvailable/);
-  assert.match(invite, /disabled=\{!emailAvailable \|\| busy/);
-  assert.match(invite, /Invitaciones por correo temporalmente no disponibles/);
+  assert.match(invite, /Invitaciones por correo — Próximamente/);
+  assert.match(invite, />Escanear QR</);
+  assert.match(invite, /autoCorrect="off" autoCapitalize="none" spellCheck=\{false\}/);
   assert.match(invite, /result.channel === "BACKYARD"/);
 });

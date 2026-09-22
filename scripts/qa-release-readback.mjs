@@ -12,6 +12,7 @@ const request=credentialBoundFetch(config.previewOrigin);
 await verifyPreviewBundleBinding(config,request);
 const A=JSON.parse(readFileSync('.qa-artifacts/beta-fixtures.private.json')).find(f=>f.label==='C');
 const B=JSON.parse(readFileSync('.qa-artifacts/catalog-b.private.json'));
+const socialFixtures=JSON.parse(readFileSync('.qa-artifacts/social-play-fixtures.private.json'));
 async function login(f){
  assert.equal(f.ref,config.projectRef);assert.ok(f.email.endsWith('@example.invalid'));
  const db=createClient(config.supabaseOrigin,config.publicKey,{auth:{persistSession:false,autoRefreshToken:false},global:{fetch:credentialBoundFetch(config.supabaseOrigin)}});
@@ -27,6 +28,41 @@ report.flags=await get('/api/features',null);
 for(const path of ['/api/cloud/rounds','/api/account/completion','/api/account/entry'])await get(path,null,401);
 await get('/api/account/entry?email=qa-enumeration@example.invalid',a,400);
 report.checks.push('anonymous account/cloud/completion denied','account existence query selector rejected');
+
+// Existing QA identities only: no account creation, profile edits, friendship
+// changes or email delivery. The target fixture was left PUBLIC by its original
+// controlled QA run, so exact-email lookup is allowed by the directory policy.
+const searcherFixture=socialFixtures.find(fixture=>fixture.label==='A');
+const targetFixture=socialFixtures.find(fixture=>fixture.label==='B');
+assert.ok(searcherFixture&&targetFixture,'Existing social QA fixtures are required.');
+const searcher=await login(searcherFixture);
+const target=await login(targetFixture);
+const targetProfileResult=await target.db.from('social_profiles')
+ .select('user_id,username,display_name,privacy,status')
+ .eq('user_id',targetFixture.id)
+ .single();
+assert.equal(targetProfileResult.error,null);
+const targetProfile=targetProfileResult.data;
+assert.equal(targetProfile.privacy,'PUBLIC','Exact-email QA requires an intentionally public QA identity.');
+assert.equal(targetProfile.status,'ACTIVE');
+const searchMatrix=[
+ ['name',targetProfile.display_name],
+ ['username',targetProfile.username],
+ ['at-username',`@${targetProfile.username}`],
+ ['case-insensitive',targetProfile.username.toUpperCase()],
+ ['outer-spaces',`  ${targetProfile.username}  `],
+ ['exact-email',targetFixture.email],
+];
+for(const [label,query] of searchMatrix){
+ const directory=await get(`/api/groups/users?q=${encodeURIComponent(query)}`,searcher);
+ const match=directory.users.filter(user=>user.user_id===targetFixture.id);
+ assert.equal(match.length,1,`A must find visible B by ${label}.`);
+ assert.ok(directory.users.every(user=>Object.keys(user).every(key=>['user_id','username','display_name','avatar_url','is_friend'].includes(key))),`Directory leaked a private field for ${label}.`);
+ assert.equal(JSON.stringify(directory.users).includes('@example.invalid'),false,`Directory exposed email for ${label}.`);
+}
+report.userSearch={status:'PASS',actor:'existing-qa-a',target:'existing-public-qa-b',queries:searchMatrix.map(([label])=>label)};
+report.checks.push('existing QA A finds visible QA B by name/username/@/case/spaces/exact email','directory response omits email and private fields');
+
 const entry=await get('/api/account/entry');assert.equal(entry.userId,A.id);assert.equal(entry.existingAccount,true);
 const profile=await a.db.from('profiles').select('id,display_name,username').eq('id',A.id);assert.equal(profile.error,null);assert.equal(profile.data.length,1);
 const completion=await get('/api/account/completion');assert.ok(completion.progress.percent>=0&&completion.progress.percent<=100);

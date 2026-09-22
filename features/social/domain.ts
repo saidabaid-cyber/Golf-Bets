@@ -48,6 +48,22 @@ export function normalizeUsernameSearch(value: unknown) {
     .slice(0, 40);
 }
 
+/** Normalizes the directory input without turning a display-name search into a
+ * username. A leading @ is presentation-only; email remains exact and is never
+ * returned by the directory API. */
+export function normalizeSocialDirectoryQuery(value: unknown) {
+  const normalized = String(value ?? "")
+    .normalize("NFKC")
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase("es-MX");
+  if (!normalized) return "";
+  if (normalized.startsWith("@")) return normalizeUsernameSearch(normalized);
+  if (normalized.includes("@")) return normalized.replace(/\s/g, "").slice(0, 254);
+  return normalized.slice(0, 80);
+}
+
 export function socialProfileVisibleTo(profile: SocialProfile, viewerId: string, friendships: readonly Friendship[]) {
   if (profile.userId === viewerId) return true;
   if (profile.privacy === "PUBLIC") return true;
@@ -62,12 +78,13 @@ export function searchSocialProfiles(
   friendships: readonly Friendship[],
   limit = 20,
 ) {
-  const normalized = normalizeUsernameSearch(query);
-  if (!normalized) return [];
+  const normalized = normalizeSocialDirectoryQuery(query);
+  if (!normalized || (normalized.includes("@") && !String(query ?? "").trim().startsWith("@"))) return [];
   return profiles
     .filter((profile) => profile.userId !== viewerId)
-    .filter((profile) => normalizeUsernameSearch(profile.username).includes(normalized))
-    .filter((profile) => socialProfileVisibleTo(profile, viewerId, friendships) || profile.privacy === "FRIENDS")
+    .filter((profile) => normalizeUsernameSearch(profile.username).startsWith(normalizeUsernameSearch(normalized))
+      || normalizeSocialDirectoryQuery(profile.displayName).startsWith(normalized))
+    .filter((profile) => socialProfileVisibleTo(profile, viewerId, friendships))
     .sort((left, right) => {
       const leftExact = normalizeUsernameSearch(left.username) === normalized ? 0 : 1;
       const rightExact = normalizeUsernameSearch(right.username) === normalized ? 0 : 1;

@@ -27,9 +27,10 @@ test("username search normalizes @, case, accents and never searches email", () 
     { userId: "u3", username: "said_private", displayName: "Private", privacy: "PRIVATE" },
   ];
   const discovery = searchSocialProfiles(profiles, "@SAID_ABA", "u1", []);
-  assert.deepEqual(discovery, [{ userId: "u2", username: "said_aba", displayName: "Said", avatar: null, privacy: "FRIENDS" }]);
-  assert.equal(discovery[0]?.handicap, undefined);
+  assert.deepEqual(discovery, []);
   assert.deepEqual(searchSocialProfiles(profiles, "@SAID_ABA", "u1", [{ id: "f1", userIds: ["u1", "u2"], createdAt: "2026-09-10T00:00:00Z" }]), [profiles[0]]);
+  assert.deepEqual(searchSocialProfiles([{ ...profiles[0], privacy: "PUBLIC" }], "Said", "u1", []).map((profile) => profile.userId), ["u2"]);
+  assert.deepEqual(searchSocialProfiles([{ ...profiles[0], privacy: "PUBLIC" }], "said@example.test", "u1", []), []);
 });
 
 test("friend requests are duplicate-safe and only the addressee can accept", () => {

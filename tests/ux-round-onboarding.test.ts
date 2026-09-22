@@ -51,7 +51,7 @@ test('quick entry cannot bypass course/index and optional device permissions nev
   assert.match(ui,/CatalogCoursePicker/);assert.match(ui,/HandicapSourceSelector/);
   const permission=readFileSync('app/components/device-permissions.tsx','utf8');
   assert.doesNotMatch(permission,/localStorage|fetch\(|acceptConsent/);
-  assert.match(permission,/permission\.onchange = null/);assert.match(permission,/cancel\.current\(\)/);
+  assert.match(permission,/permission\.onchange = null/);assert.match(permission,/cancelLocation\.current\(\)/);
 });
 test('one completion calculation feeds Home and Profile, visual progress disappears at 100',()=>{
   for(const path of ['app/page.tsx','app/components/profile-account-panel.tsx']) assert.match(readFileSync(path,'utf8'),/ProfileCompletionRing/);
@@ -108,7 +108,7 @@ test('catalog results occupy layout space instead of falling under onboarding ac
 });
 test('unavailable permission lookup never claims an unrequested permission',()=>{
   const source=readFileSync('app/components/device-permissions.tsx','utf8');
-  assert.match(source,/catch \{ if \(alive\) setLocation\('unknown'\)/);
+  assert.match(source,/setLocation\("query-unsupported"\)/);
   assert.doesNotMatch(source,/result.status[^;]+: 'prompt'/);
 });
 test('fresh automatic owner is not an active round but real setup edits are preserved',()=>{

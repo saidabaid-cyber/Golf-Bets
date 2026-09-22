@@ -14,10 +14,10 @@ test("el editor de apuestas permite borrar cero, retirar y editar las reglas rel
   assert.match(editor, /Entre jugadores/);
   assert.match(editor, /Sobre campo/);
   assert.match(editor, /Carry al siguiente hoyo/);
-  assert.match(editor, /generateAutomaticFoursomes/);
-  assert.match(editor, /Generada por Backyard/);
-  assert.match(editor, /Índice actual/);
-  assert.match(editor, /Sliding/);
+  assert.match(editor, /Los jugadores y parejas se eligen al iniciar/);
+  assert.match(editor, /assignmentMode="template"/);
+  assert.doesNotMatch(editor, /generateAutomaticFoursomes|Generada por Backyard/);
+  assert.doesNotMatch(editor, /Ventaja desde índices|Ventaja firmada/);
 });
 
 test("onboarding conserva salida, regreso y progreso multiselección", () => {

@@ -6,6 +6,7 @@ import ts from "typescript";
 import * as security from "../lib/backyard-ai/server/http-security";
 import * as invitations from "../lib/group-invitations";
 import * as templates from "../lib/frequent-templates";
+import * as socialDomain from "../features/social/domain";
 
 const OWNER="11111111-1111-4111-8111-111111111111", OTHER="22222222-2222-4222-8222-222222222222", INVITE="33333333-3333-4333-8333-333333333333", GROUP="44444444-4444-4444-8444-444444444444";
 type Options={ authMissing?:boolean; authThrows?:boolean; authNever?:boolean; rpcThrows?:boolean; rpcNever?:boolean; qa?:boolean; providerError?:string; noSend?:boolean; createData?:unknown; finishError?:boolean; rpcError?:{code:string;message:string} };
@@ -39,6 +40,7 @@ function harness(route:"invitations"|"users"="invitations",options:Options={}) {
       if(id.endsWith("/supabase/server"))return{getSupabaseAdmin:()=>({rpc:rpc(true)})};
       if(id.endsWith("/frequent-templates"))return templates;
       if(id.endsWith("/group-invitations"))return invitations;
+      if(id.endsWith("/features/social/domain"))return socialDomain;
       if(id.endsWith("/http-security"))return security;
       if(id.endsWith("/group-invitation-email.server"))return{sendGroupInvitationEmail:async()=>{sendCalls++;return options.providerError?{errorCode:options.providerError}:{messageId:"provider-test-id"};}};
       throw new Error(id);
@@ -66,7 +68,7 @@ test("invitation listing forwards localGroupId without accepting an actor select
 });
 test("directory projects identity fields only, even if an RPC mistakenly returns private columns",async()=>{
   const h=harness("users");const response=await h.run("GET",undefined,"?q=User%40Example.invalid");assert.equal(response.status,200);const body=await response.json();
-  assert.deepEqual(Object.keys(body.users[0]).sort(),["avatar_url","display_name","is_friend","user_id","username"]);assert.doesNotMatch(JSON.stringify(body),/private|email|password/);assert.equal(h.calls[0].args.query_text,"User@Example.invalid");
+  assert.deepEqual(Object.keys(body.users[0]).sort(),["avatar_url","display_name","is_friend","user_id","username"]);assert.doesNotMatch(JSON.stringify(body),/private|email|password/);assert.equal(h.calls[0].args.query_text,"user@example.invalid");
 });
 test("authentication and isolated-Preview gates prevent writes or emails",async()=>{
   for(const options of [{authMissing:true},{qa:false}]){const h=harness("invitations",options);assert.equal((await h.run("POST",{action:"create",groupId:GROUP,email:"valid@example.invalid"})).status,options.authMissing?401:503);assert.equal(h.calls.length,0);assert.equal(h.sendCalls(),0);}

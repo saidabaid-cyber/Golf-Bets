@@ -40,6 +40,8 @@ test("edición ampliada conserva campos, normaliza usuario y no cambia email", (
     country: " México ",
     homeClub: " La Vista ",
     homeClubId: " club-la-vista ",
+    homeCourse: " Recorrido Principal ",
+    homeCourseId: " course-la-vista ",
     preferredTee: " Azules ",
     handedness: "right",
     typicalScore: 82,
@@ -60,6 +62,8 @@ test("edición ampliada conserva campos, normaliza usuario y no cambia email", (
   assert.equal(edited.username, "said.golf");
   assert.equal(edited.homeClub, "La Vista");
   assert.equal(edited.homeClubId, "club-la-vista");
+  assert.equal(edited.homeCourse, "Recorrido Principal");
+  assert.equal(edited.homeCourseId, "course-la-vista");
   assert.equal(edited.typicalScore, 82);
   assert.equal(edited.driverDistanceYards, 245);
   assert.equal(edited.driverSwingSpeedBand, "FROM_95_TO_105");

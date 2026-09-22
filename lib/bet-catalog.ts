@@ -64,7 +64,9 @@ type HistoricalBetPresentation = {
 const HISTORICAL_BET_PRESENTATIONS: readonly HistoricalBetPresentation[] = [
   { ...BET_PRESENTATION.rabbits, aliases: ["Conejos"] },
   { ...BET_PRESENTATION.skins, aliases: ["Skins"] },
-  { ...BET_PRESENTATION.units, aliases: ["Unidades", "Unidades / Copas"] },
+  // The legacy alias remains input-only so historical snapshots keep resolving
+  // to the current presentation label without rewriting persisted data.
+  { ...BET_PRESENTATION.units, aliases: ["Unidades", "Unidades positivas y negativas", "Unidades / Copas"] },
   { ...BET_PRESENTATION.monkey, aliases: ["Monkey"] },
   { ...BET_PRESENTATION.foursome, aliases: ["Foursome"] },
   { ...BET_PRESENTATION.ball_friend, aliases: ["Bola Amiga"] },

@@ -90,6 +90,9 @@ export type BackyardProfileDetails = {
   locationUpdatedAt: string | null;
   homeClub: string;
   homeClubId: string;
+  /** Optional for profiles saved before canonical Home Club layouts existed. */
+  homeCourse?: string;
+  homeCourseId?: string;
   preferredTee: string;
   handedness: "right" | "left" | "ambidextrous" | "";
   typicalScore: number | null;
@@ -127,6 +130,8 @@ const EMPTY_PROFILE_DETAILS: BackyardProfileDetails = {
   locationUpdatedAt: null,
   homeClub: "",
   homeClubId: "",
+  homeCourse: "",
+  homeCourseId: "",
   preferredTee: "",
   handedness: "",
   typicalScore: null,
@@ -238,6 +243,8 @@ function profileDetails(candidate: Partial<BackyardProfile>, fallback?: Backyard
     locationUpdatedAt: profileTimestamp(candidate.locationUpdatedAt, fallback?.locationUpdatedAt),
     homeClub: profileText(candidate.homeClub, fallback?.homeClub, 120),
     homeClubId: profileText(candidate.homeClubId, fallback?.homeClubId, 120),
+    homeCourse: profileText(candidate.homeCourse, fallback?.homeCourse, 120),
+    homeCourseId: profileText(candidate.homeCourseId, fallback?.homeCourseId, 120),
     preferredTee: profileText(candidate.preferredTee, fallback?.preferredTee, 80),
     handedness: candidate.handedness === ""
       ? ""

@@ -72,7 +72,7 @@ function activeBetReviews(draft: RoundSetupDraft) {
   };
   core("rabbits", draft.bets.rabbits.enabled, "Conejos", draft.bets.rabbits.value, draft.bets.rabbits.participantIds, [draft.bets.rabbits.mode === "three_hole_blocks" ? "Bloques de 3" : "Continuo", hcpDetail(draft.bets.rabbits.hcpPct, draft.bets.rabbits.decimals)]);
   core("skins", draft.bets.skins.enabled, "Skins", draft.bets.skins.value, draft.bets.skins.participantIds, [draft.bets.skins.mode === "no_carry" || draft.bets.skins.accumulate === false ? "Sin carry" : "Carry", hcpDetail(draft.bets.skins.hcpPct, draft.bets.skins.decimals)]);
-  core("units", draft.bets.units.enabled, "Unidades", draft.bets.units.value, draft.bets.units.participantIds, [`Copa ${money(draft.bets.units.copaValue ?? draft.bets.units.value)}`]);
+  core("units", draft.bets.units.enabled, "Unidades positivas y negativas", draft.bets.units.value, draft.bets.units.participantIds, [`Negativa ${money(draft.bets.units.copaValue ?? draft.bets.units.value)}`]);
   if (draft.bets.monkey?.enabled) core("monkey", true, "Monkey", draft.bets.monkey.value, draft.bets.monkey.participantIds, [`HCP ${draft.bets.monkey.hcpPct ?? 100}%`]);
   if (draft.bets.foursome.enabled) {
     const mode = draft.bets.foursome.mode === "match" ? `Match · Primera / Segunda / Total ${money(draft.bets.foursome.fixedValue)}` : draft.bets.foursome.mode === "points" ? `Puntos ${money(draft.bets.foursome.pointValue)}` : draft.bets.foursome.mode === "fixed_points" ? `Fijo ${money(draft.bets.foursome.fixedValue)} + puntos ${money(draft.bets.foursome.pointValue)}` : `Fijo ${money(draft.bets.foursome.fixedValue)}`;

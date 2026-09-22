@@ -21,7 +21,7 @@ import { BackyardIndexCard } from "./backyard-index-card";
 import type { BackyardIndexPreferenceController } from "./use-backyard-index-preference";
 import type { RoundSnapshot } from "../../lib/types";
 import { ProfileAvatarMedia } from "./profile-avatar-media";
-import { ProfileClubPicker } from "./profile-club-picker";
+import { CatalogCoursePicker } from "./catalog-course-picker";
 import { ProfileImagePicker } from "./profile-image-picker";
 import { ProfileLocationPicker } from "./profile-location-picker";
 import { normalizeProfileLocation, validateProfileLocation } from "../../lib/profile-geography";
@@ -29,6 +29,7 @@ import { useBackyardAccount } from "./account-provider";
 import { ProfileVisibilitySettings } from "./profile-visibility-settings";
 import { ProfileCompletionRing } from "./profile-completion-ring";
 import { ACCOUNT_SETTINGS, type AccountSettingsSection } from "../../lib/account-settings";
+import { DEFAULT_ACCOUNT_UI_PREFERENCES, displayDistanceFromStoredYards, readAccountUiPreferences, writeAccountUiPreferences, type AccountUiPreferences } from "../../lib/account-ui-preferences";
 import { SocialSharingPreferences } from './cloud-social-activity';
 
 type ProfileAccountPanelProps = {
@@ -55,7 +56,7 @@ type ProfileAccountPanelProps = {
   onBackToProfile: () => void;
 };
 
-type EditDraft = Pick<BackyardProfileDetails, "givenName" | "familyName" | "username" | "homeClub" | "homeClubId" | "preferredTee" | "countryCode" | "country" | "stateCode" | "state">;
+type EditDraft = Pick<BackyardProfileDetails, "givenName" | "familyName" | "username" | "homeClub" | "homeClubId" | "homeCourse" | "homeCourseId" | "preferredTee" | "handedness" | "countryCode" | "country" | "stateCode" | "state">;
 
 function draftFromIdentity(identity: ReturnType<typeof useBackyardAccount>["identity"]): EditDraft {
   return {
@@ -65,7 +66,10 @@ function draftFromIdentity(identity: ReturnType<typeof useBackyardAccount>["iden
     ...normalizeProfileLocation(identity),
     homeClub: identity.homeClub || "",
     homeClubId: identity.homeClubId || "",
+    homeCourse: identity.homeCourse || "",
+    homeCourseId: identity.homeCourseId || "",
     preferredTee: identity.preferredTee || "",
+    handedness: identity.handedness || "",
   };
 }
 
@@ -77,6 +81,8 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
   const { identity, updateProfile, logout, finishAccountDeletion, openAccess, acceptances, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, requestCloudLink, cloudIssues, retryCloudSync } = useBackyardAccount();
   const [editing, setEditing] = useState(false);
   const [accountSection, setAccountSection] = useState<AccountSettingsSection>(initialAccountSection);
+  const [uiPreferences, setUiPreferences] = useState<AccountUiPreferences>(DEFAULT_ACCOUNT_UI_PREFERENCES);
+  const [preferenceMessage, setPreferenceMessage] = useState("");
   useViewScrollReset(`${view}:${accountSection}`);
   const [completionEquipment, setCompletionEquipment] = useState<"equipment" | "ball" | "fitting">("equipment");
   const [completionEditTarget, setCompletionEditTarget] = useState<string | null>(null);
@@ -86,6 +92,7 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
   const [name, setName] = useState(identity.displayName);
   const [avatarUrl, setAvatarUrl] = useState(identity.avatarUrl);
   const [draft, setDraft] = useState<EditDraft>(() => draftFromIdentity(identity));
+  const [homeClubSelectionReady, setHomeClubSelectionReady] = useState(Boolean(identity.homeClubId && identity.homeCourseId));
   const [message, setMessage] = useState("");
   const [messageKind, setMessageKind] = useState<"success" | "error">("success");
   const [saving, setSaving] = useState(false);
@@ -111,6 +118,11 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
   useLayoutEffect(() => { liveOwner.current = identity.userId; }, [identity.userId]);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
+    if (typeof localStorage === "undefined") return;
+    setUiPreferences(readAccountUiPreferences(localStorage, identity.userId));
+    setPreferenceMessage("");
+  }, [identity.userId]);
+  useEffect(() => {
     if (seenRootNavigation.current === rootNavigationKey || saving || deletingStatistics || deletingAccount) return;
     seenRootNavigation.current = rootNavigationKey;
     setEditing(false); setManagingConsents(false); setManagingAiConsents(false); setDeleteStatsOpen(false); setDeleteAccountOpen(false); setDestructiveError("");
@@ -127,14 +139,30 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
     setName(identity.displayName);
     setAvatarUrl(identity.avatarUrl);
     setDraft(draftFromIdentity(identity));
+    setHomeClubSelectionReady(Boolean(identity.homeClubId && identity.homeCourseId));
   }, [editing, identity]);
 
   const notice = message ? <div className={messageKind === "error" ? "notice bad" : "notice"} role={messageKind === "error" ? "alert" : "status"}>{message}</div> : null;
   const selectedIndex = selectedHandicapIndex(indexControl.preference, history, identity.userId);
   const indexLabel = selectedIndex.source === "BACKYARD" ? "BACKYARD INDEX" : selectedIndex.source === "GHIN" ? "GHIN INDEX" : "HANDICAP / ÍNDICE";
+  const homeClubSelectionIncomplete = Boolean((draft.homeClubId || draft.homeCourseId) && (!draft.homeClubId || !draft.homeCourseId || !homeClubSelectionReady));
+
+  function changeUiPreferences(patch: Partial<AccountUiPreferences>) {
+    const next = { ...uiPreferences, ...patch, version: 1 as const };
+    try {
+      writeAccountUiPreferences(localStorage, identity.userId, next);
+      setUiPreferences(next);
+      setPreferenceMessage("Preferencia guardada en este dispositivo.");
+    } catch {
+      setPreferenceMessage("No pudimos guardar esta preferencia en el dispositivo.");
+    }
+  }
 
   async function saveProfile() {
     if (avatarBusy || saving) return;
+    if (homeClubSelectionIncomplete) {
+      setMessageKind("error"); setMessage("Selecciona el recorrido de tu Home Club antes de guardar."); return;
+    }
     const validated = validateProfileDraft(name, "");
     if (!validated.ok) { setMessageKind("error"); setMessage(validated.message); return; }
     const avatar = validateProfileAvatarUrl(avatarUrl);
@@ -243,7 +271,7 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
   </>;
   if (managingConsents) return <LegalConsentManager userId={identity.userId} accessToken={identity.accessToken} authenticated={identity.mode === "authenticated"} acceptances={acceptances} bettingConsentGranted={bettingConsentGranted} requestBettingConsent={requestBettingConsent} onBack={() => setManagingConsents(false)} />;
 
-  if (view === "profile" && identity.mode === "authenticated" && focusSection === "equipment") return <><header className="profileMobileHeader profileEditHeader"><button type="button" className="textButton" onClick={onBackToProfile}>← Mi Perfil</button><div><span>MI PERFIL</span><h1>Mi Bolsa</h1></div></header><div id="equipment-bag"><EquipmentProfilePanel userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={selectedIndex.value} defaultHandicapSource={selectedIndex.source} ballFitDefaults={ballFitDefaultsFromProfile(identity)} onBackToProfile={onBackToProfile} onOpenPrivacy={onOpenPrivacy} initialSection={completionEquipment} /></div></>;
+  if (view === "profile" && identity.mode === "authenticated" && focusSection === "equipment") return <><header className="profileMobileHeader profileEditHeader"><button type="button" className="textButton" onClick={onBackToProfile}>← Mi Perfil</button><div><span>MI PERFIL</span><h1>Mi Bolsa</h1></div></header><div id="equipment-bag"><EquipmentProfilePanel userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={selectedIndex.value} defaultHandicapSource={selectedIndex.source} defaultHandedness={identity.handedness} ballFitDefaults={ballFitDefaultsFromProfile(identity)} onBackToProfile={onBackToProfile} onOpenPrivacy={onOpenPrivacy} initialSection={completionEquipment} /></div></>;
 
   if (identity.mode === "authenticated" && editing) return <>
     <header className="profileMobileHeader profileEditHeader"><button type="button" className="textButton" onClick={() => setEditing(false)}>{view === 'account' ? '← Cuenta' : '← Mi Perfil'}</button><div><span>MI PERFIL</span><h1>Editar perfil</h1></div></header>
@@ -251,7 +279,7 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
       <label>Nombre visible<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Tu nombre" /></label>
       <label>Nombre(s)<input value={draft.givenName} onChange={(event) => setDraft((current) => ({ ...current, givenName: event.target.value }))} autoComplete="given-name" /></label>
       <label>Apellidos<input value={draft.familyName} onChange={(event) => setDraft((current) => ({ ...current, familyName: event.target.value }))} autoComplete="family-name" /></label>
-      <label id="profile-edit-username">Username<input value={draft.username} onChange={(event) => setDraft((current) => ({ ...current, username: event.target.value.replace(/^@+/, "") }))} placeholder="sin @" autoComplete="username" /></label>
+      <label id="profile-edit-username">Username<input value={draft.username} onChange={(event) => setDraft((current) => ({ ...current, username: event.target.value.replace(/^@+/, "") }))} placeholder="sin @" autoComplete="username" autoCorrect="off" autoCapitalize="none" spellCheck={false} inputMode="text" /></label>
       <div id="profile-edit-handicap"><HandicapSourceChoices control={indexControl} authenticated={identity.mode === "authenticated"} /></div>
     </div></section>
     <section className="card profileEditCard"><h2>Foto / Avatar</h2><ProfileImagePicker value={avatarUrl} onChange={setAvatarUrl} onSaveAvatar={async (value) => {
@@ -259,8 +287,8 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
       setMessageKind("success"); setMessage(result === "cloud" ? "Avatar guardado y sincronizado." : "Avatar guardado en este dispositivo. Sincronización pendiente.");
     }} onBusyChange={setAvatarBusy} accessToken={identity.accessToken} userId={identity.userId} /><p className="hint">Quitarla en The Backyard no modifica tu foto de Google.</p></section>
     <section className="card profileEditCard"><h2>País y región</h2><ProfileLocationPicker value={draft} onChange={(location) => { setDraft((current) => ({ ...current, ...location })); setMessage(""); }} /><p className="hint">Estos datos de perfil no se publican automáticamente. No usamos GPS.</p></section>
-    <section id="profile-edit-golf" className="card profileEditCard"><div className="sectionTitle"><div><h2>Información de golf</h2><p>Opcional</p></div></div><div className="profileEditGrid"><ProfileClubPicker value={draft.homeClub} clubId={draft.homeClubId} onChange={({ name: homeClub, id: homeClubId }) => setDraft((current) => ({ ...current, homeClub, homeClubId }))} /><label>Tee habitual<input value={draft.preferredTee} onChange={(event) => setDraft((current) => ({ ...current, preferredTee: event.target.value }))} /></label></div></section>
-    {notice}<div className="profileEditActions"><button type="button" className="secondary" disabled={saving} onClick={() => setEditing(false)}>Cancelar</button><button type="button" className="primary" disabled={saving || avatarBusy} onClick={() => void saveProfile()}>{saving ? "Guardando…" : avatarBusy ? "Preparando imagen…" : "Guardar perfil"}</button></div>
+    <section id="profile-edit-golf" className="card profileEditCard"><div className="sectionTitle"><div><h2>Información de golf</h2><p>Opcional</p></div></div><div className="profileEditGrid"><CatalogCoursePicker purpose="home-club" token={identity.accessToken} selectedName={[draft.homeClub,draft.homeCourse].filter(Boolean).join(" · ")} onSelectionReadyChange={setHomeClubSelectionReady} onSelectClub={({clubId,clubName}) => setDraft((current) => ({ ...current, homeClub:clubName, homeClubId:clubId, homeCourse:"", homeCourseId:"" }))} onSelectHomeCourse={selection => setDraft((current) => ({ ...current, homeClub:selection.clubName, homeClubId:selection.clubId, homeCourse:selection.courseName, homeCourseId:selection.courseId }))} /><label>Tee habitual<input value={draft.preferredTee} onChange={(event) => setDraft((current) => ({ ...current, preferredTee: event.target.value }))} /></label><label>Mano dominante<select value={draft.handedness} onChange={(event) => setDraft((current) => ({ ...current, handedness: event.target.value as BackyardProfileDetails["handedness"] }))}><option value="">Selecciona una</option><option value="right">Derecha</option><option value="left">Izquierda</option><option value="ambidextrous">Ambas</option></select></label></div></section>
+    {notice}<div className="profileEditActions"><button type="button" className="secondary" disabled={saving} onClick={() => setEditing(false)}>Cancelar</button><button type="button" className="primary" disabled={saving || avatarBusy || homeClubSelectionIncomplete} onClick={() => void saveProfile()}>{saving ? "Guardando…" : avatarBusy ? "Preparando imagen…" : "Guardar perfil"}</button></div>
   </>;
 
   const userAcceptances = acceptances.filter((item) => item.userId === identity.userId);
@@ -271,7 +299,7 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
     {view === "profile" && identity.mode === "guest" && <section className="card guestAccountCard"><h2>Tu golf permanece en este dispositivo</h2><p>Crea una cuenta o inicia sesión para tener un perfil persistente.</p><div className="accountInlineActions"><button className="primary" onClick={openAccess}>Crear cuenta</button><button className="secondary" onClick={openAccess}>Iniciar sesión</button></div></section>}
     {view === "profile" && identity.mode === "authenticated" && <main className="profileMobileStack">
       <section className="card profileOverviewCard"><div className="profileOverviewIdentity"><ProfileCompletionRing token={identity.accessToken} avatar={identity.avatarUrl} name={identity.displayName} revision={JSON.stringify([identity, indexControl.preference])} onOpen={section => { if (section === "equipment" || section === "ball" || section === "fitting") { setCompletionEquipment(section); onOpenEquipment(); } else { setCompletionEditTarget(section); setEditing(true); } }} /><div><h2>{identity.displayName}</h2><p>{identity.username ? `@${identity.username}` : "Sin username"}</p><span>{indexLabel} <b>{profileHandicapLabel(selectedIndex.value)}</b></span></div></div><button type="button" className="primary profileEditButton" onClick={() => { setCompletionEditTarget(null); setEditing(true); }}>Editar perfil</button></section>
-      <section className="card profileCompactCard"><div className="profileCompactHeading"><div><span>INFORMACIÓN DE GOLF</span><h2>Tu juego</h2></div><button type="button" className="textButton" onClick={() => setEditing(true)}>Editar</button></div><div className="profileCompactRows"><div><span>{indexLabel}</span><b>{profileHandicapLabel(selectedIndex.value)}</b></div><div><span>Home Club</span><b>{identity.homeClub || "Sin indicar"}</b></div><div><span>Tee habitual</span><b>{identity.preferredTee || "Sin indicar"}</b></div></div><HandicapSourceChoices control={indexControl} authenticated={identity.mode === "authenticated"} /></section>
+      <section className="card profileCompactCard"><div className="profileCompactHeading"><div><span>INFORMACIÓN DE GOLF</span><h2>Tu juego</h2></div><button type="button" className="textButton" onClick={() => setEditing(true)}>Editar</button></div><div className="profileCompactRows"><div><span>{indexLabel}</span><b>{profileHandicapLabel(selectedIndex.value)}</b></div><div><span>Home Club</span><b>{identity.homeClub || "Sin indicar"}</b></div><div><span>Recorrido</span><b>{identity.homeCourse || "Sin indicar"}</b></div><div><span>Tee habitual</span><b>{identity.preferredTee || "Sin indicar"}</b></div></div><HandicapSourceChoices control={indexControl} authenticated={identity.mode === "authenticated"} /></section>
       <BackyardIndexCard history={history} userId={identity.userId} enabled={indexControl.preference?.enabled === true} onEnabledChange={indexControl.change} saving={indexControl.saving || !indexControl.ready} error={indexControl.error} localPccZeroDeclared={Boolean(indexControl.preference?.localPccZeroDeclaredAt)} onDeclareLocalPccZero={indexControl.declareLocalZero} />
       {indexControl.error && <button type="button" className="textButton" onClick={() => void indexControl.retry()}>Reintentar sincronización del Índice</button>}
       <section className="card profileCompactCard"><div className="profileCompactHeading"><div><span>FOTO / AVATAR</span><h2>{identity.avatarUrl ? "Avatar configurado" : "Sin imagen"}</h2></div><button type="button" className="textButton" onClick={() => setEditing(true)}>Cambiar</button></div><div className="profileAvatarSummary"><div className="profileAvatarMini"><ProfileAvatarMedia value={identity.avatarUrl} fallback={(identity.displayName.trim()[0] || "J").toUpperCase()} alt={`Avatar actual de ${identity.displayName}`} /></div><p>Foto, emoji, avatar manual o sin imagen.</p></div></section>
@@ -293,10 +321,24 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
       <section className="card accountCompactCard"><h2>Cuenta</h2><div className="accountCompactRows"><div><span>Email</span><b>{identity.email || "Sin email"}</b></div><div><span>Métodos de acceso</span><b>{identity.mode === "authenticated" ? identity.providers.map((provider) => provider === "google" ? "Google" : provider === "email" ? "Correo" : provider).join(" · ") || "Correo" : "Modo invitado"}</b></div></div><button type="button" className="textButton" onClick={() => { setCompletionEditTarget('personal'); setEditing(true); }}>Editar nombre y usuario</button></section>
       </div>}
       {accountSection === "preferences" && <div data-settings-section="preferences">
-      <section className="card accountCompactCard"><h2>Preferencias</h2><label className="accountSettingRow"><span><b>Alto contraste</b><small>Tu elección se guarda en la cuenta</small></span><input type="checkbox" checked={highContrast} onChange={event => onHighContrastChange(event.target.checked)} /></label></section>
+      <section className="card accountCompactCard"><h2>Preferencias</h2>
+        <h3>Apariencia</h3><label className="accountSettingRow"><span><b>Alto contraste</b><small>Está activo por defecto; si lo cambias, respetaremos tu elección.</small></span><input type="checkbox" checked={highContrast} onChange={event => onHighContrastChange(event.target.checked)} /></label>
+        <label className="accountSettingRow"><span><b>Unidades</b><small>La conversión cambia sólo la presentación; nunca modifica rondas históricas. Ejemplo: {displayDistanceFromStoredYards(100, uiPreferences.distanceUnit)}.</small></span><select aria-label="Unidades de distancia" value={uiPreferences.distanceUnit} onChange={event => changeUiPreferences({ distanceUnit: event.target.value === "meters" ? "meters" : "yards" })}><option value="yards">Yardas</option><option value="meters">Metros</option></select></label>
+        <label className="accountSettingRow"><span><b>Idioma</b><small>La interfaz completa está disponible en español.</small></span><select aria-label="Idioma" value="es-MX" onChange={() => undefined}><option value="es-MX">Español</option><option value="en" disabled>Inglés — Próximamente</option></select></label>
+        <div className="accountSettingRow"><span><b>Preferencias de golf</b><small>Mano dominante: {identity.handedness === "left" ? "Izquierda" : identity.handedness === "right" ? "Derecha" : identity.handedness === "ambidextrous" ? "Ambas" : "Sin indicar"}</small></span><button type="button" className="textButton" onClick={() => { setCompletionEditTarget("golf"); setEditing(true); }}>Editar</button></div>
+        {preferenceMessage && <p role="status">{preferenceMessage}</p>}
+      </section>
       </div>}
       {accountSection === "notifications" && <div data-settings-section="notifications">
-      <section className="card accountCompactCard"><h2>Notificaciones</h2><label className="accountSettingRow"><span>Avisos dentro de la app</span><input type="checkbox" checked={notificationsEnabled} onChange={event => onNotificationsEnabledChange(event.target.checked)} aria-label="Activar avisos dentro de la app" /></label><DevicePermissions kind="notifications" /></section>
+      <section className="card accountCompactCard"><h2>Notificaciones</h2>
+        <p>Estas preferencias son independientes del permiso del dispositivo y del proveedor que realiza el envío.</p>
+        <label className="accountSettingRow"><span><b>Social</b><small>Avisos de actividad nueva dentro de The Backyard.</small></span><input type="checkbox" checked={notificationsEnabled} onChange={event => onNotificationsEnabledChange(event.target.checked)} aria-label="Activar avisos sociales dentro de la app" /></label>
+        <label className="accountSettingRow"><span><b>Push</b><small>Guarda tu preferencia. El envío push de The Backyard todavía no está activado.</small></span><input type="checkbox" checked={uiPreferences.push} onChange={event => changeUiPreferences({ push: event.target.checked })} aria-label="Preferir notificaciones push" /></label>
+        <label className="accountSettingRow"><span><b>Email</b><small>Guarda tu preferencia. El servicio de envío por correo todavía no está activado.</small></span><input type="checkbox" checked={uiPreferences.email} onChange={event => changeUiPreferences({ email: event.target.checked })} aria-label="Preferir notificaciones por email" /></label>
+        <label className="accountSettingRow"><span><b>Rondas</b><small>Avisos relacionados con invitaciones y actividad de rondas.</small></span><input type="checkbox" checked={uiPreferences.rounds} onChange={event => changeUiPreferences({ rounds: event.target.checked })} aria-label="Activar avisos de rondas" /></label>
+        <label className="accountSettingRow"><span><b>Recordatorios</b><small>Recordatorios opcionales de actividad pendiente.</small></span><input type="checkbox" checked={uiPreferences.reminders} onChange={event => changeUiPreferences({ reminders: event.target.checked })} aria-label="Activar recordatorios" /></label>
+        {preferenceMessage && <p role="status">{preferenceMessage}</p>}<DevicePermissions kind="notifications" />
+      </section>
       {identity.accessToken && <section className="card accountCompactCard"><SocialSharingPreferences key={identity.userId} accessToken={identity.accessToken} section="notifications" /></section>}
       </div>}
       {accountSection === "privacy" && <div data-settings-section="privacy">

@@ -97,10 +97,10 @@ export const BET_HELP: Record<BetHelpKind, BetHelpCopy> = {
     example: "H1 y H2 empatan; Jugador A gana H3. Recibe 3 skins en Acumulables o 1 en No acumulables.",
   },
   units: {
-    title: "📏 Unidades / Copas",
+    title: "📏 Unidades positivas y negativas",
     what: "Apuesta individual por eventos positivos y negativos acumulados durante la ronda.",
-    how: ["La app detecta Birdie (+1), Eagle (+2), Albatros o HIO (+3) y suma las unidades manuales.", "Las Copas y otros eventos negativos se restan. Después compara el neto de cada pareja de jugadores."],
-    rules: ["No utiliza HCP: los eventos automáticos se basan en el score bruto contra Par.", "Cada diferencia de unidades se multiplica por su valor; una Copa puede tener un valor distinto."],
+    how: ["La app detecta Birdie (+1), Eagle (+2), Albatros o HIO (+3) y suma las unidades manuales.", "Las unidades negativas y otros eventos negativos se restan. Después compara el neto de cada pareja de jugadores."],
+    rules: ["No utiliza HCP: los eventos automáticos se basan en el score bruto contra Par.", "Cada diferencia se multiplica por su valor; una unidad negativa puede tener un valor distinto al de una positiva."],
     example: "Jugador A tiene 4 positivas y 1 negativa: su neto es +3. Ese neto se compara con el de cada rival.",
   },
   foursome: {
