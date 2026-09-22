@@ -4,3 +4,6 @@ export * from "./clarification";
 export * from "./context-resolver";
 export * from "./intent-parser";
 export * from "./round-setup";
+export * from "./structured-session";
+export * from "./structured-conversation";
+export * from "../schemas/structured-actions";
