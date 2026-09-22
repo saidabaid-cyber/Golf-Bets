@@ -20,6 +20,6 @@ test("los clientes privilegiado y de usuario de Polla comparten el bloqueo serve
 
   assert.match(flags, /POLLA_LIVE_RELEASED = false/);
   assert.match(flags, /pollaLiveServerEnabled = POLLA_LIVE_RELEASED[\s\S]*isExplicitFeatureEnabled\(process\.env\.POLLA_LIVE_ENABLED\)/);
-  assert.equal((server.match(/feature === "polla" && !pollaLiveServerEnabled/g) || []).length, 2);
+  assert.equal((server.match(/feature === "polla" && !pollaLiveServerEnabled/g) || []).length, 3);
   assert.ok(server.indexOf("!pollaLiveServerEnabled") < server.indexOf("SUPABASE_SERVICE_ROLE_KEY"));
 });

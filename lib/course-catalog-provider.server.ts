@@ -15,6 +15,7 @@ import { haversineDistanceKm } from "./course-distance";
 import { loadReviewedCourseCatalog, reviewCatalogQaEnabled } from "./review-course-catalog.server";
 import type { ReviewedCatalogCourse } from "./review-course-catalog";
 import { getSupabaseAdmin } from "./supabase/server";
+import { readPublishedCatalog } from "./admin-published-catalog.server";
 
 type CourseCard = {
   id: string;
@@ -160,11 +161,10 @@ export async function getCourseCatalog() {
       // Fail back to the versioned internal seed; never fabricate catalog rows.
     }
   }
-  if (!database) return base;
-  const result = await database.from("admin_catalog_revisions").select("version,status,payload,effective_from,effective_until").eq("entity_type", "COURSE").eq("status", "PUBLISHED").order("version", { ascending: true }).limit(1000);
-  if (result.error) return base;
+  const published = await readPublishedCatalog(["COURSE"]);
   const now = new Date().toISOString();
-  const overlays = (result.data || []).flatMap((row) => {
+  const overlays = published.flatMap((row) => {
+    if (row.status !== "PUBLISHED") return [];
     if (!publicationIsEffective({ effectiveFrom: row.effective_from, effectiveUntil: row.effective_until }, now)) return [];
     const catalog = publishedCourse(row.payload, row.version); return catalog ? [catalog] : [];
   });

@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { publicationIsEffective } from "../../../../../lib/admin-control-center";
 import { getCourseCatalog } from "../../../../../lib/course-catalog-provider.server";
 import { resolveEffectiveCourse, type CourseConfiguration } from "../../../../../lib/course-configuration-resolver";
-import { getSupabaseAdmin } from "../../../../../lib/supabase/server";
+import { getSupabasePublic } from "../../../../../lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
 function object(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
+
+function list(value: unknown) { return Array.isArray(value) ? value : []; }
 
 export async function GET(request: NextRequest, context: { params: Promise<{ courseId: string }> }) {
   const { courseId: rawCourseId } = await context.params;
@@ -32,78 +33,46 @@ export async function GET(request: NextRequest, context: { params: Promise<{ cou
     yardages: Object.fromEntries(catalog.teeHoleYardages.filter((row) => row.teeId === tee.id).map((row) => [row.holeId, row.yards ?? null])),
   }));
   const base = { id: course.id, name: `${club.name} · ${course.name}`, version: course.catalogVersion || 1, holes: holes.map((hole) => ({ id: hole.id, holeNumber: hole.holeNumber, par: hole.par, strokeIndex: hole.strokeIndex })), tees };
-  const database = getSupabaseAdmin("cloud");
+  const database = getSupabasePublic("cloud");
   if (!database) {
     const resolved = resolveEffectiveCourse({ base, configurations: [], at });
     return NextResponse.json({ resolved, localRules: [], badges: [], competitionId: null, competitionRuleSet: null }, { headers: { "cache-control": "public, s-maxage=5" } });
   }
-
-  let competitionId: string | null = null;
-  let competitionRuleSet: { id: string; version: number } | null = null;
-  if (requestedCompetitionId && /^[0-9a-f-]{36}$/i.test(requestedCompetitionId)) {
-    const competitionRevisions = await database.from("admin_catalog_revisions").select("version,payload,effective_from,effective_until").eq("entity_type", "COMPETITION").eq("entity_id", requestedCompetitionId).eq("status", "PUBLISHED").order("version", { ascending: false }).limit(20);
-    const activeRevision = (competitionRevisions.data || []).find((row) => publicationIsEffective({ effectiveFrom: row.effective_from, effectiveUntil: row.effective_until }, at));
-    const payload = activeRevision?.payload && typeof activeRevision.payload === "object" && !Array.isArray(activeRevision.payload) ? activeRevision.payload as Record<string, unknown> : null;
-    if (!competitionRevisions.error && activeRevision && payload?.courseId === courseId && payload.visibility === "PUBLIC") {
-      competitionId = requestedCompetitionId;
-      const rules = await database.from("competition_rule_sets").select("id,version").eq("competition_id", competitionId).eq("version", activeRevision.version).eq("status", "PUBLISHED").maybeSingle();
-      if (!rules.error && rules.data) competitionRuleSet = rules.data;
-    }
+  const projection = await database.rpc("player_course_operations_v1", {
+    requested_course_id: courseId,
+    effective_at: at,
+    requested_competition_id: requestedCompetitionId && /^[0-9a-f-]{36}$/i.test(requestedCompetitionId) ? requestedCompetitionId : null,
+  });
+  const projected = object(projection.data);
+  if (projection.error || !projected) {
+    const resolved = resolveEffectiveCourse({ base, configurations: [], at });
+    return NextResponse.json({ resolved, localRules: [], badges: [], competitionId: null, competitionRuleSet: null, warning: "No fue posible consultar operaciones temporales." }, { headers: { "cache-control": "private, no-store" } });
   }
-
-  const configurationsResult = await database.from("course_configurations").select("id,course_id,competition_id,scope_type,status,version,revision_hash,effective_from,effective_until").eq("course_id", courseId).in("status", ["SCHEDULED", "PUBLISHED"]).limit(10);
-  const configurationIds = (configurationsResult.data || []).map((row) => row.id);
-  const [configurationHoles, configurationYardages, configurationRatings, localRules, documents] = await Promise.all([
-    configurationIds.length ? database.from("course_configuration_holes").select("*").in("configuration_id", configurationIds).order("sequence") : Promise.resolve({ data: [], error: null }),
-    configurationIds.length ? database.from("course_configuration_tee_holes").select("*,course_configuration_holes!inner(configuration_id)").in("course_configuration_holes.configuration_id", configurationIds) : Promise.resolve({ data: [], error: null }),
-    configurationIds.length ? database.from("course_configuration_ratings").select("*").in("configuration_id", configurationIds) : Promise.resolve({ data: [], error: null }),
-    database.from("admin_catalog_revisions").select("id,version,status,payload,effective_from,effective_until").eq("entity_type", "LOCAL_RULE_SET").eq("scope_type", "COURSE").eq("scope_id", courseId).in("status", ["PUBLISHED", "SCHEDULED"]).order("version", { ascending: false }).limit(20),
-    database.from("admin_documents").select("id,original_name,mime_type,attribution,owner_entity_type").eq("scope_type", "COURSE").eq("scope_id", courseId).eq("rights_status", "APPROVED").eq("visibility", "PLAYER").in("owner_entity_type", ["COURSE", "LOCAL_RULE_SET"]),
-  ]);
-  if (configurationsResult.error || configurationHoles.error || configurationYardages.error || configurationRatings.error || localRules.error || documents.error) {
-    const resolved = resolveEffectiveCourse({ base, configurations: [], at, competitionId });
-    return NextResponse.json({ resolved, localRules: [], badges: [], competitionId, competitionRuleSet, warning: "No fue posible consultar operaciones temporales." }, { headers: { "cache-control": "private, no-store" } });
-  }
-  const configRows: CourseConfiguration[] = (configurationsResult.data || []).map((row) => ({
-    id: row.id,
-    courseId: row.course_id,
-    competitionId: row.competition_id,
-    scopeType: row.scope_type as CourseConfiguration["scopeType"],
+  const competitionId = typeof projected.competitionId === "string" ? projected.competitionId : null;
+  const competitionRule = object(projected.competitionRuleSet);
+  const competitionRuleSet = competitionRule && typeof competitionRule.id === "string" && typeof competitionRule.version === "number"
+    ? { id: competitionRule.id, version: competitionRule.version }
+    : null;
+  const configRows = list(projected.configurations).filter((value): value is Record<string, unknown> => object(value) !== null).map((row) => ({
+    id: String(row.id),
+    courseId: String(row.courseId),
+    competitionId: typeof row.competitionId === "string" ? row.competitionId : null,
+    scopeType: row.scopeType as CourseConfiguration["scopeType"],
     status: row.status as CourseConfiguration["status"],
-    version: row.version,
-    revisionHash: row.revision_hash,
-    effectiveFrom: row.effective_from,
-    effectiveUntil: row.effective_until,
-    holes: (configurationHoles.data || []).filter((hole) => hole.configuration_id === row.id).map((hole) => ({
-      id: hole.id,
-      sequence: hole.sequence,
-      runtimeHoleNumber: hole.runtime_hole_number,
-      displayLabel: hole.display_label,
-      sourceBaseHoleId: hole.source_base_hole_id,
-      sourceBaseHoleNumber: hole.source_base_hole_number,
-      kind: hole.kind,
-      playable: hole.playable,
-      parOverride: hole.par_override,
-      strokeIndexOverride: hole.stroke_index_override,
-      notes: hole.notes,
-      temporaryGreen: hole.temporary_green,
-      temporaryTee: hole.temporary_tee,
-      dropZoneNote: hole.drop_zone_note,
-      operationalNote: hole.operational_note,
-    })),
-    teeHoles: (configurationYardages.data || []).filter((yardage) => {
-      const relation = yardage.course_configuration_holes as unknown;
-      return object(Array.isArray(relation) ? relation[0] : relation)?.configuration_id === row.id;
-    }).map((yardage) => ({ configurationHoleId: yardage.configuration_hole_id, teeId: yardage.tee_id, yardsOverride: yardage.yards_override, source: yardage.source, verifiedAt: yardage.verified_at })),
-    ratings: (configurationRatings.data || []).filter((rating) => rating.configuration_id === row.id).map((rating) => ({ teeId: rating.tee_id, rating: rating.rating, slope: rating.slope, category: rating.category, source: rating.source, verifiedAt: rating.verified_at })),
-  }));
+    version: Number(row.version),
+    revisionHash: String(row.revisionHash || ""),
+    effectiveFrom: typeof row.effectiveFrom === "string" ? row.effectiveFrom : null,
+    effectiveUntil: typeof row.effectiveUntil === "string" ? row.effectiveUntil : null,
+    holes: list(row.holes) as CourseConfiguration["holes"],
+    teeHoles: list(row.teeHoles) as CourseConfiguration["teeHoles"],
+    ratings: list(row.ratings) as CourseConfiguration["ratings"],
+  } satisfies CourseConfiguration));
   try {
     const resolved = resolveEffectiveCourse({ base, configurations: configRows, at, competitionId });
-    const effectiveRuleSet = (localRules.data || []).find((row) => publicationIsEffective({ effectiveFrom: row.effective_from, effectiveUntil: row.effective_until }, at));
-    const rulePayload = effectiveRuleSet?.payload;
-    const rules = object(rulePayload) && Array.isArray(object(rulePayload)?.rules) ? object(rulePayload)?.rules : [];
-    const badges = [...(resolved.configurationIds.length ? ["TEMPORAL"] : []), ...(Array.isArray(rules) && rules.length ? ["Reglas locales"] : []), ...((documents.data || []).length ? ["Documentos"] : [])];
-    const publishedDocuments = (documents.data || []).map((document) => ({ id: document.id, name: document.original_name, mimeType: document.mime_type, attribution: document.attribution, url: `/api/courses/${encodeURIComponent(courseId)}/documents/${document.id}` }));
+    const rules = list(projected.localRules);
+    const documents = list(projected.documents).filter((value): value is Record<string, unknown> => object(value) !== null);
+    const badges = [...(resolved.configurationIds.length ? ["TEMPORAL"] : []), ...(rules.length ? ["Reglas locales"] : []), ...(documents.length ? ["Documentos"] : [])];
+    const publishedDocuments = documents.map((document) => ({ id: String(document.id), name: String(document.name), mimeType: String(document.mimeType), attribution: typeof document.attribution === "string" ? document.attribution : null, url: `/api/courses/${encodeURIComponent(courseId)}/documents/${String(document.id)}` }));
     return NextResponse.json({ resolved, localRules: rules, documents: publishedDocuments, badges, competitionId, competitionRuleSet }, { headers: { "cache-control": "public, s-maxage=5, stale-while-revalidate=30" } });
   } catch {
     const resolved = resolveEffectiveCourse({ base, configurations: [], at, competitionId });

@@ -5,7 +5,7 @@ import { createInternalEquipmentCatalogProvider } from "./equipment-catalog-prov
 import { golfBallCatalog, golfClubCatalog, golfShaftCatalog } from "./golf-equipment-catalog";
 import type { GolfBallCatalog, GolfClubCatalog, GolfShaftCatalog } from "./golf-equipment";
 import { mergePublishedCatalog } from "./layered-catalog";
-import { getSupabaseAdmin } from "./supabase/server";
+import { readPublishedCatalog } from "./admin-published-catalog.server";
 
 /** Server-only seed loader. Client components know only the HTTP contract. */
 export const internalEquipmentCatalogProvider = createInternalEquipmentCatalogProvider({
@@ -120,17 +120,15 @@ function shaft(value: unknown): GolfShaftCatalog | null {
 
 /** Admin Published DB overlays the versioned seed. Drafts never enter this path. */
 export async function loadLayeredEquipmentCatalogs() {
-  const database = getSupabaseAdmin("cloud");
   const seed = { balls: golfBallCatalog, clubs: golfClubCatalog, shafts: golfShaftCatalog };
-  if (!database) return seed;
-  const result = await database.from("admin_catalog_revisions").select("entity_type,entity_id,version,status,payload,effective_from,effective_until").in("entity_type", ["BALL", "CLUB_EQUIPMENT", "SHAFT"]).in("status", ["PUBLISHED", "SUPERSEDED", "ARCHIVED"]).order("version", { ascending: true }).limit(5000);
-  if (result.error) return seed;
+  const published = await readPublishedCatalog(["BALL", "CLUB_EQUIPMENT", "SHAFT"]);
   const balls: GolfBallCatalog[] = [];
   const clubs: GolfClubCatalog[] = [];
   const shafts: GolfShaftCatalog[] = [];
   const now = new Date().toISOString();
-  const byIdentity = new Map<string, (typeof result.data extends (infer T)[] | null ? T : never)[]>();
-  for (const revision of result.data || []) {
+  const byIdentity = new Map<string, PublishedRow[]>();
+  type PublishedRow = (typeof published)[number];
+  for (const revision of published) {
     const key = `${revision.entity_type}:${revision.entity_id}`;
     byIdentity.set(key, [...(byIdentity.get(key) || []), revision]);
   }

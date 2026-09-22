@@ -13,6 +13,8 @@ const configurationQualification = readFileSync(join(process.cwd(), "supabase/mi
 const advisorFollowup = readFileSync(join(process.cwd(), "supabase/migrations/20260922145015_admin_advisor_followup.sql"), "utf8");
 const exportMigration = readFileSync(join(process.cwd(), "supabase/migrations/20260922150533_admin_export_expansion.sql"), "utf8");
 const publicationValidation = readFileSync(join(process.cwd(), "supabase/migrations/20260922151308_admin_publish_payload_validation.sql"), "utf8");
+const playerProjections = readFileSync(join(process.cwd(), "supabase/migrations/20260922163818_admin_player_safe_projections.sql"), "utf8");
+const supabaseServer = readFileSync(join(process.cwd(), "lib/supabase/server.ts"), "utf8");
 
 test("admin roles come from memberships and every admin table enables RLS", () => {
   assert.match(schema, /create table public\.admin_memberships/);
@@ -113,4 +115,20 @@ test("database validates payload again before publication", () => {
   assert.match(publicationValidation, /new\.status='PUBLISHED' then perform private\.admin_validate_revision_payload_v1\(new\)/);
   assert.match(publicationValidation, /INVALID_SHAFT_PAYLOAD/);
   assert.match(publicationValidation, /LOCAL_RULE_SET/);
+});
+
+test("Preview database clients fail closed unless bound to the isolated QA ref", () => {
+  assert.match(supabaseServer, /VERCEL_ENV !== "preview" \|\| isolatedPreviewDatabaseEnabled\(\)/);
+  assert.match(supabaseServer, /getSupabasePublic/);
+});
+
+test("player projections expose only reviewed runtime fields", () => {
+  assert.match(playerProjections, /player_published_catalog_v1/);
+  assert.match(playerProjections, /revision\.status in \('PUBLISHED','SUPERSEDED','ARCHIVED'\)/);
+  assert.match(playerProjections, /requested = any\(array\['COURSE','CLUB_EQUIPMENT','BALL','SHAFT'\]/);
+  assert.match(playerProjections, /player_course_operations_v1/);
+  assert.match(playerProjections, /document\.rights_status = 'APPROVED'/);
+  assert.match(playerProjections, /revision\.payload->>'visibility' = 'PUBLIC'/);
+  assert.match(playerProjections, /player_competition_rules_v1/);
+  assert.doesNotMatch(playerProjections, /internal_notes|created_by|published_by|admin_audit_log/);
 });
