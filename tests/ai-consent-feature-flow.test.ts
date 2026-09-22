@@ -7,6 +7,7 @@ import * as privacy from "../lib/backyard-ai/privacy";
 import * as security from "../lib/backyard-ai/server/http-security";
 import * as photoRequest from "../lib/backyard-ai/server/scorecard-request";
 import * as handicapSource from "../lib/handicap-source";
+import * as featureFlags from "../lib/feature-flags";
 
 type Node = { type: unknown; props: Record<string, unknown> };
 type Handler = (...args: unknown[]) => unknown;
@@ -63,6 +64,7 @@ function featureHarness(file: string, options: { active?: boolean; remoteError?:
     "account-state": { profileHandicapInput: () => "0" },
     "profile-geography": { normalizeProfileLocation: () => ({}) },
     "handicap-source": handicapSource,
+    "feature-flags": featureFlags,
     "./ai-round-review": { AiRoundReview: "Review" },
     "./scorecard-correction": { ScorecardCorrection: "Correction" },
     "./backyard-ai.module.css": { default: {} },
@@ -128,6 +130,7 @@ function featureHarness(file: string, options: { active?: boolean; remoteError?:
   const exports: Record<string, (props: Record<string, unknown>) => Node> = {};
   runInNewContext(compiled, {
     exports, console, Date, Intl, AbortController, DOMException, crypto: { randomUUID: () => "qa-id" },
+    process: { env: { NEXT_PUBLIC_BACKYARD_SCORECARD_VISION_V1: "false" } },
     performance: { now: () => 0 },
     window: { addEventListener: () => undefined, removeEventListener: () => undefined, requestAnimationFrame: () => 0, cancelAnimationFrame: () => undefined },
     URL: { createObjectURL: () => "blob:qa", revokeObjectURL: () => undefined },
