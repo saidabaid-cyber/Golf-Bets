@@ -15,6 +15,7 @@ export const REQUIRED_RLS_TESTS = [
   "phase2_multiuser_authorization_rls.sql",
   "owner_user_search_rls.sql",
   "group_round_presets_rls.sql",
+  "admin_control_center_rls.sql",
 ];
 
 export function previewDatabaseEnvironment(source = process.env) {

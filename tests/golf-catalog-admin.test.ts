@@ -17,6 +17,7 @@ import { createLatestRequestGate } from "../lib/latest-request-gate";
 
 const route = readFileSync("app/api/admin/golf-catalog/route.ts", "utf8");
 const panel = readFileSync("app/components/golf-catalog-admin-panel.tsx", "utf8");
+const controlCenter = readFileSync("app/components/admin-control-center.tsx", "utf8");
 const page = readFileSync("app/admin/page.tsx", "utf8");
 
 test("el contrato administrativo usa una lista cerrada de tablas", () => {
@@ -193,39 +194,37 @@ test("la paginación, ids y búsqueda quedan acotados", () => {
   assert.equal(validGolfAdminId("cdf97d61-d3b3-4c93-9c02-068dc3c7655e", "uuid"), true);
 });
 
-test("la ruta revalida el JWT, no confía en metadata editable y no borra catálogos", () => {
+test("la ruta legacy revalida JWT, usa memberships y exige el workflow versionado", () => {
   assert.match(route, /auth\.getUser\(token\)/);
-  assert.match(route, /hasImmutableAdminRole\(data\.user\.app_metadata\)/);
+  assert.match(route, /from\("admin_memberships"\)/);
+  assert.doesNotMatch(route, /app_metadata|user_metadata/);
   assert.doesNotMatch(route, /user_metadata/);
-  assert.match(route, /getSupabaseAdmin\("cloud"\)/);
+  assert.doesNotMatch(route, /getSupabaseAdmin/);
   assert.doesNotMatch(route, /export async function DELETE/);
   assert.doesNotMatch(route, /\.delete\(\)/);
   assert.match(route, /private, no-store/);
-  assert.match(route, /async function canonicalizeBrand/);
-  assert.match(route, /\.from\(brandTable\)[\s\S]*\.select\("id,name"\)[\s\S]*brand: brand\.name/);
+  assert.match(route, /ADMIN_WORKFLOW_REQUIRED/);
+  assert.doesNotMatch(route, /\.insert\(|\.update\(/);
 });
 
 test("el admin falla cerrado antes de construir clientes con credenciales compartidas", () => {
   const accessFunction = route.slice(route.indexOf("async function requireAdmin"), route.indexOf("async function readJson"));
   const gate = accessFunction.indexOf("if (!equipmentCloudServerEnabled)");
   const userClient = accessFunction.indexOf("getSupabaseForUser(token");
-  const serviceClient = accessFunction.indexOf("getSupabaseAdmin(\"cloud\")");
   assert.ok(gate >= 0);
   assert.ok(userClient > gate);
-  assert.ok(serviceClient > gate);
 });
 
-test("/admin ofrece alta, edición y archivo sin exponer una acción destructiva", () => {
-  assert.match(page, /<AccountProvider><GolfCatalogAdminPanel \/><\/AccountProvider>/);
-  assert.match(panel, /method: editing \? "PATCH" : "POST"/);
-  assert.match(panel, /Registro archivado sin borrarlo/);
-  assert.match(panel, /window\.confirm/);
-  assert.match(panel, /No hay registros para esta búsqueda/);
-  assert.match(panel, /Cargando catálogo/);
-  assert.match(panel, /role="alert"/);
-  assert.match(panel, /name: "brand_id", label: "Marca", kind: "select", required: true/);
-  assert.match(panel, /resource=\$\{brandResource\}&limit=50&includeArchived=true/);
-  assert.doesNotMatch(panel, /method:\s*"DELETE"/);
+test("/admin usa Control Center con Draft/Preview/Confirm y sin DELETE", () => {
+  assert.match(page, /<AccountProvider><AdminControlCenter \/><\/AccountProvider>/);
+  assert.match(controlCenter, /Draft/);
+  assert.match(controlCenter, /Preview/);
+  assert.match(controlCenter, /Confirm/);
+  assert.match(controlCenter, /Publicaciones pendientes/);
+  assert.match(controlCenter, /Configuraciones temporales/);
+  assert.match(controlCenter, /Calidad de datos/);
+  assert.match(controlCenter, /Crear borrador/);
+  assert.doesNotMatch(controlCenter, /method:\s*"DELETE"/);
 });
 
 test("el admin invalida cargas anteriores al cambiar catálogo o búsqueda", () => {

@@ -1,5 +1,5 @@
 import { AccountProvider } from "../components/account-provider";
-import { GolfCatalogAdminPanel } from "../components/golf-catalog-admin-panel";
+import { AdminControlCenter } from "../components/admin-control-center";
 
 export const metadata = {
   title: "Catálogos · The Backyard Admin",
@@ -7,5 +7,5 @@ export const metadata = {
 };
 
 export default function GolfCatalogAdminPage() {
-  return <AccountProvider><GolfCatalogAdminPanel /></AccountProvider>;
+  return <AccountProvider><AdminControlCenter /></AccountProvider>;
 }
