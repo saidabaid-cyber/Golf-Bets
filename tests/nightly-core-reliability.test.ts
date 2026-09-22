@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { spawnSync } from "node:child_process";
+import { resolve } from "node:path";
 import { cloudDataFingerprint, findAmbiguousCloudConflicts, mergeLocalAndCloud, restoreLocalRoundUi, type CloudDataBundle } from "../lib/cloud-sync";
 import { runCloudSyncCycle, type SyncStatus } from "../lib/cloud-sync-cycle";
 import { CloudSyncGate } from "../lib/cloud-sync-gate";
@@ -130,6 +132,45 @@ test("nightly regression: device identity initialization uses one atomic readwri
   assert.deepEqual(modes, ["readwrite", "readwrite"]);
   assert.equal(closes, 2);
 }));
+
+for (const failure of ["request-error", "abort"] as const) {
+  test(`nightly regression: device ID ${failure} returns fallback without unhandled transaction rejection`, () => {
+    // A subprocess with strict rejection handling verifies the asynchronous
+    // failure after fallback returns, without altering this runner's listeners.
+    const child = spawnSync(process.execPath, ["--unhandled-rejections=strict", "-e", `
+      const assert = require('node:assert/strict');
+      const { getOfflineDeviceId } = require(${JSON.stringify(resolve(__dirname, "../lib/offline-store.js"))});
+      const values = new Map(); let closed = 0;
+      global.localStorage = { getItem: k => values.get(k) ?? null, setItem: (k,v) => values.set(k,v) };
+      const database = {
+        close: () => { closed++; },
+        transaction: () => {
+          const tx = { error: new Error('Synthetic transaction failure'), objectStore: () => ({
+            get: () => {
+              const request = { error: new Error('Synthetic request failure') };
+              queueMicrotask(() => {
+                request.onerror();
+                tx[${JSON.stringify(failure === "abort" ? "onabort" : "onerror")}]();
+              });
+              return request;
+            }
+          }) };
+          return tx;
+        }
+      };
+      global.indexedDB = { open: () => {
+        const request = { result: database };
+        queueMicrotask(() => request.onsuccess()); return request;
+      } };
+      getOfflineDeviceId().then(id => {
+        assert.ok(id && id !== 'browser-no-indexeddb'); assert.equal(closed, 1);
+        setImmediate(() => process.stdout.write('fallback recovered'));
+      }).catch(error => { console.error(error); process.exitCode = 1; });
+    `], { encoding: "utf8", timeout: 5_000 });
+    assert.equal(child.status, 0, child.stderr || child.error?.message);
+    assert.equal(child.stdout, "fallback recovered");
+  });
+}
 
 for (const stage of ["download", "upload", "readback", "media"] as const) {
   test(`nightly: logout/reload cancellation at ${stage} never applies stale session data`, async () => {
