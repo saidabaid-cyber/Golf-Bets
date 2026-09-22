@@ -17,6 +17,7 @@ export const PHASE2_FEATURE_FLAG_IDS = [
   "rangefinder_v1",
   "admin_v1",
   "ghin_integration",
+  "scorecard_vision_v1",
 ] as const;
 
 export type Phase2FeatureFlagId = (typeof PHASE2_FEATURE_FLAG_IDS)[number];
@@ -64,6 +65,7 @@ export const PHASE2_FEATURE_FLAGS: readonly FeatureFlagDefinition[] = [
   external("rangefinder_v1", "Integración con rangefinder.", "SDK/API de rangefinder"),
   internal("admin_v1", "Métricas agregadas con autorización explícita."),
   external("ghin_integration", "Vinculación oficial con GHIN.", "Acceso y autorización oficial de GHIN"),
+  external("scorecard_vision_v1", "Revisión y confirmación de lectura de tarjeta.", "Proveedor Vision configurado y consentimiento de imágenes"),
 ] as const;
 
 export type FeatureFlagOverrides = Partial<Record<Phase2FeatureFlagId, boolean>>;

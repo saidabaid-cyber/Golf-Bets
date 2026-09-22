@@ -33,11 +33,16 @@ import { deleteScorecardPhoto, deleteStaleTemporaryScorecardPhotos, markScorecar
 import { AiProcessingConsentPrompt, AiProcessingConsentRequired } from "./ai-processing-consent";
 import { ScorecardCorrection } from "./scorecard-correction";
 import styles from "./backyard-ai.module.css";
+import { isExplicitFeatureEnabled } from "../../../lib/feature-flags";
+import { confirmScorecardVision, reviewScorecardVision, type VisionOverrides, type VisionRound } from "../../../lib/scorecard-vision/review";
+import { ScorecardVisionReview } from "../scorecard-vision-review";
+
+const visionV1Enabled = isExplicitFeatureEnabled(process.env.NEXT_PUBLIC_BACKYARD_SCORECARD_VISION_V1);
 
 type LocalPhoto = { id: string; file: File; previewUrl: string };
 
 export type ScorecardScannerProps = {
-  round: ActiveScorecardRound;
+  round: VisionRound;
   storageOwnerId: string;
   accessToken?: string | null;
   requiresRemoteConsent: boolean;
@@ -75,7 +80,7 @@ export function ScorecardScanner({ round, storageOwnerId, accessToken, requiresR
   const [photoWarning, setPhotoWarning] = useState("");
   const [applyNotice, setApplyNotice] = useState("");
   const [extraction, setExtraction] = useState<ScorecardExtraction | null>(null);
-  const [overrides, setOverrides] = useState<ScorecardValidationOverrides>({});
+  const [overrides, setOverrides] = useState<VisionOverrides>({});
   const [correctionEvidence, setCorrectionEvidence] = useState<Record<string, ScorecardCorrectionEvidence>>({});
   const previewUrls = useRef(new Set<string>());
   const locallySavedPhotoIds = useRef(new Set<string>());
@@ -89,6 +94,10 @@ export function ScorecardScanner({ round, storageOwnerId, accessToken, requiresR
   const applyInFlight = useRef(false);
   const mounted = useRef(true);
   const validation = useMemo(() => extraction ? validateScorecardExtraction(extraction, round, overrides) : null, [extraction, overrides, round]);
+  const visionEvidence = useMemo(() => extraction ? { version: 1 as const, extraction, detectedTee: null, provenance: "provider" as const } : null, [extraction]);
+  const visionReview = useMemo(() => visionV1Enabled && visionEvidence ? reviewScorecardVision(visionEvidence, round, overrides) : null, [visionEvidence, round, overrides]);
+  const currentVision = useRef({ evidence: visionEvidence, round, overrides });
+  useEffect(() => { currentVision.current = { evidence: visionEvidence, round, overrides }; }, [visionEvidence, round, overrides]);
   const reviewHoles = useMemo(() => playedHoleOrder(round), [round]);
   const expectedScoreCount = round.players.length * reviewHoles.length;
   const acceptedScoreMap = useMemo(() => new Map(
@@ -301,7 +310,7 @@ export function ScorecardScanner({ round, storageOwnerId, accessToken, requiresR
     action();
   }
 
-  async function applyValidatedScores(result: ScorecardValidationResult) {
+  async function applyValidatedScores(result: ScorecardValidationResult, confirmationKey?: string) {
     if (applying || applyInFlight.current) return;
     applyInFlight.current = true;
     setApplying(true);
@@ -318,6 +327,16 @@ export function ScorecardScanner({ round, storageOwnerId, accessToken, requiresR
         hasActiveBettingData,
         () => {
           if (!mounted.current) return false;
+          if (visionV1Enabled) {
+            const latest = currentVision.current;
+            if (!latest.evidence || !confirmationKey) return false;
+            const command = confirmScorecardVision({ evidence: latest.evidence, currentRound: latest.round, overrides: latest.overrides, confirmed: true, confirmationKey });
+            if (!command.ok) {
+              setError("La ronda o la lectura cambió. Revisa los valores y confirma nuevamente.");
+              return false;
+            }
+            result = command.validation;
+          }
           const persisted = onApply(result, photoIds, overrides, Object.values(correctionEvidence));
           if (persisted) {
             photoIds.forEach((photoId) => committedPhotoIds.current.add(photoId));
@@ -340,7 +359,7 @@ export function ScorecardScanner({ round, storageOwnerId, accessToken, requiresR
     }
   }
 
-  function changeOverrides(next: ScorecardValidationOverrides) {
+  function changeOverrides(next: VisionOverrides) {
     const previousCells = new Map((overrides.cells || []).map((cell) => [`${cell.playerId}:${cell.hole}`, cell.value]));
     const changed = (next.cells || []).filter((cell) => previousCells.get(`${cell.playerId}:${cell.hole}`) !== cell.value);
     if (changed.length && validation) {
@@ -382,7 +401,9 @@ export function ScorecardScanner({ round, storageOwnerId, accessToken, requiresR
       {busy && <div className={styles.progress} role="status"><b>{progressMessage || "Backyard está leyendo la tarjeta…"}</b></div>}
     </section>
 
-    {!busy && validation?.issues.length ? <ScorecardCorrection
+    {!busy && visionReview && <ScorecardVisionReview review={visionReview} round={round} overrides={overrides} busy={applying} onChange={changeOverrides} onConfirm={key => { void applyValidatedScores(visionReview.validation, key); }} onCancel={() => leave(onCancel)} />}
+
+    {!visionV1Enabled && !busy && validation?.issues.length ? <ScorecardCorrection
       round={round}
       issues={validation.issues}
       overrides={overrides}
@@ -391,7 +412,7 @@ export function ScorecardScanner({ round, storageOwnerId, accessToken, requiresR
       onChange={changeOverrides}
     /> : null}
 
-    {!busy && validation?.ready && <section className="card">
+    {!visionV1Enabled && !busy && validation?.ready && <section className="card">
       <div className="sectionTitle"><div><h2>{validation.acceptedCells.length}/{expectedScoreCount} scores reconocidos</h2><p>Todos los scores esperados pasaron la validación contra la ronda activa.</p></div><span className={styles.confidence}>✓ SIN DUDAS PENDIENTES</span></div>
       <div className={styles.scoreReviewTableWrap} role="region" aria-label="Scores leídos de la tarjeta" tabIndex={0}>
         <table className={styles.scoreReviewTable}>
