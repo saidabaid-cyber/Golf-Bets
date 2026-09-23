@@ -59,6 +59,14 @@ test("Perfil carga y guarda la mano dominante desde la fuente canónica", () => 
   assert.match(profile, /updateProfile\(\{ displayName:[\s\S]*\.\.\.draft \}\)/);
 });
 
+test("Perfil refresca el borrador con la identidad canónica cada vez que abre el editor", () => {
+  assert.match(profile, /function openProfileEditor\(target: string \| null = null\)/);
+  assert.match(profile, /setDraft\(draftFromIdentity\(identity\)\)/);
+  assert.match(profile, /setCompletionEditTarget\(target\);\s*setEditing\(true\)/);
+  assert.match(profile, /onClick=\{\(\) => openProfileEditor\(\)\}>Editar perfil/);
+  assert.doesNotMatch(profile, /onClick=\{\(\) => setEditing\(true\)\}/);
+});
+
 test("Más ofrece Reglas de golf como acceso explícito sin duplicar Perfil", () => {
   assert.match(more, /title: "Reglas de golf"/);
   assert.match(more, /action: onOpenRules/);
