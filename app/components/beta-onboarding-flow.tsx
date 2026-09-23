@@ -42,6 +42,7 @@ import { HandicapSourceSelector } from "./handicap-source-selector";
 import { PlayerHandicapControl } from "./player-handicap-control";
 import { ModalShell } from "./modal-shell";
 import { activeGroupTemplateDefinitions } from "../../lib/group-template-editor";
+import { InitialDevicePermissions } from "./device-permission-settings";
 import styles from "./beta-onboarding-flow.module.css";
 
 const IMPROVEMENT_LABELS: Record<GolfImprovementGoal, string> = {
@@ -184,7 +185,7 @@ function activeBetCount(template: GroupGameTemplate) {
 }
 
 function Shell({ progress, eyebrow, title, description, children, actions, onBack, onSaveAndExit }: { progress: BetaOnboardingProgress; eyebrow: string; title: string; description?: string; children: React.ReactNode; actions: React.ReactNode; onBack?: () => void; onSaveAndExit?: () => void }) {
-  const visibleSteps: BetaOnboardingStep[] = ["welcome", "ghin", "equipment", "improvements", "objective", "plan", "group", "players", "handicaps", "bets", "bet_details", "ready"];
+  const visibleSteps: BetaOnboardingStep[] = ["welcome", "ghin", "equipment", "improvements", "objective", "plan", "permissions", "group", "players", "handicaps", "bets", "bet_details", "ready"];
   const index = Math.max(0, visibleSteps.indexOf(progress.step));
   const titleRef = useRef<HTMLHeadingElement>(null);
   const [confirmExit, setConfirmExit] = useState(false);
@@ -269,7 +270,7 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, bett
   };
   const previousByStep: Partial<Record<BetaOnboardingStep, Exclude<BetaOnboardingStep, "complete">>> = {
     ghin: "welcome", equipment: "ghin", improvements: "equipment", objective: "improvements", plan: "objective",
-    group: "plan", players: "group", handicaps: "players", bets: "handicaps",
+    permissions: "plan", group: "permissions", players: "group", handicaps: "players", bets: "handicaps",
     bet_details: "bets", ready: "bet_details",
   };
   const navigationProps = {
@@ -334,8 +335,12 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, bett
     {message && <div className={styles.error} role="alert">{message}</div>}
   </Shell>;
 
-  if (progress.step === "plan") return <Shell progress={progress} {...navigationProps} eyebrow="MEMBRESÍA BETA" title="Elige tu plan" description="No hay cobros ni precios definitivos en esta Beta. La cuenta inicia en GRATIS." actions={<button className="primary big" onClick={async () => { const planId = selectablePlanId(draft.planId); await onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: profile.defaultHandicap, planId }); advance("group"); }}>Continuar con GRATIS</button>}>
+  if (progress.step === "plan") return <Shell progress={progress} {...navigationProps} eyebrow="MEMBRESÍA BETA" title="Elige tu plan" description="No hay cobros ni precios definitivos en esta Beta. La cuenta inicia en GRATIS." actions={<button className="primary big" onClick={async () => { const planId = selectablePlanId(draft.planId); await onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: profile.defaultHandicap, planId }); advance("permissions"); }}>Continuar con GRATIS</button>}>
     <div className={styles.planGrid}>{PLAN_CATALOG.map((plan) => <button type="button" key={plan.id} disabled={plan.availability !== "available"} className={`${styles.planCard} ${draft.planId === plan.id ? styles.planSelected : ""}`} onClick={() => setDraft((current) => current ? { ...current, planId: plan.id } : current)}><span>{plan.eyebrow}</span><b>{plan.name}</b><p>{plan.description}</p><small>{plan.availability === "available" ? "Incluido en Beta" : "Próximamente · sin cobro"}</small></button>)}</div>
+  </Shell>;
+
+  if (progress.step === "permissions") return <Shell progress={progress} {...navigationProps} eyebrow="PERMISOS OPCIONALES" title="Decide una sola vez" description="Puedes usar The Backyard sin ubicación ni notificaciones. Después podrás revisar o desactivar estos permisos desde Configuración." actions={null}>
+    <InitialDevicePermissions userId={profile.userId} onContinue={() => advance("group")} />
   </Shell>;
 
   if (progress.step === "group") return <Shell progress={progress} {...navigationProps} eyebrow="TU PRIMER GRUPO" title="Configura tu primer grupo" description="Será una plantilla habitual: jugadores, HCP y apuestas listas para reutilizar." actions={<><button className="primary big" disabled={!draft.group.name.trim()} onClick={() => advance("players")}>Crear grupo</button><button className={styles.skip} onClick={() => finish()}>Omitir por ahora</button></>}>

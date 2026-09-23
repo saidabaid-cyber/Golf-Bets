@@ -37,11 +37,11 @@ export function SocialSharingPreferences({ accessToken }: { accessToken: string 
     } catch (error) { if (live.current) setMessage(socialErrorMessage(error)); }
     finally { writing.current = false; if (live.current) setBusy(false); }
   }
-  return <details className={styles.preferences}><summary>Privacidad y avisos de Social</summary>
+  return <section className={styles.preferences}><h3>Privacidad y avisos de Social</h3>
     <p>Compartir es opcional. Activa el acceso de tus amigos y elige los tipos de actividad. Un perfil público por sí solo no comparte rondas. No publicamos ubicación en tiempo real.</p>
     {prefs ? <fieldset disabled={busy}>{preferenceLabels.map(([key, label]) => <label key={key}><input type="checkbox" checked={prefs[key]} onChange={(event) => void change(key, event.target.checked)} /><span>{label}</span></label>)}</fieldset> : !message && <p role="status">Cargando preferencias…</p>}
     {message && <p role="status">{message}</p>}
-  </details>;
+  </section>;
 }
 
 function dateLabel(value: string) {

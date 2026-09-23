@@ -5,15 +5,14 @@ import test from "node:test";
 const courseLibrary = readFileSync("app/components/course-library.tsx", "utf8");
 const page = readFileSync("app/page.tsx", "utf8");
 
-test("la biblioteca pide ubicación únicamente desde la acción Cerca de mí", () => {
-  const handlerStart = courseLibrary.indexOf("function requestNearbyCourses()");
-  const geolocationStart = courseLibrary.indexOf("navigator.geolocation.getCurrentPosition");
-  assert.ok(handlerStart >= 0 && geolocationStart > handlerStart);
-  assert.doesNotMatch(courseLibrary.slice(0, handlerStart), /getCurrentPosition/);
-  assert.match(courseLibrary, /onClick=\{requestNearbyCourses\}>Cerca de mí/);
-  assert.match(courseLibrary, /No compartiste tu ubicación/);
-  assert.match(courseLibrary, /Este dispositivo no ofrece ubicación/);
-  assert.match(courseLibrary, /No pudimos obtener tu ubicación/);
+test("la biblioteca usa el permiso resuelto en onboarding sin disparar otro prompt", () => {
+  const handlerStart = courseLibrary.indexOf("async function requestNearbyCourses()");
+  assert.ok(handlerStart >= 0);
+  assert.doesNotMatch(courseLibrary, /navigator\.geolocation\.getCurrentPosition/);
+  assert.match(courseLibrary, /storedNearbyCoordinates/);
+  assert.match(courseLibrary, /refreshDevicePermissionStateWithoutPrompt/);
+  assert.match(courseLibrary, /Ubicación desactivada/);
+  assert.match(courseLibrary, /radiusKm: 50/);
   assert.match(courseLibrary, /No mostramos distancias inventadas/);
   assert.match(courseLibrary, /Buscar manualmente/);
 });

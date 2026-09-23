@@ -5,6 +5,7 @@ import { buildInternalCourseCatalog } from "../../lib/course-catalog";
 import { internalCourseDataProvider, searchInternalCourses, type CourseSearchData } from "../../lib/golf-providers";
 import type { NearbyCourseMatch } from "../../lib/course-distance";
 import type { Course } from "../../lib/types";
+import { refreshDevicePermissionStateWithoutPrompt, requestInitialLocation, storedNearbyCoordinates } from "../../lib/device-permissions";
 
 type CourseFilter = "all" | "favorites" | "recent" | "nearby" | "mine";
 type SearchState =
@@ -25,6 +26,7 @@ export type CourseLibraryProps = {
   favoriteCourseIds: string[];
   recentCourseIds?: string[];
   selectedCourseId?: string | null;
+  permissionOwnerId: string;
   onToggleFavorite: (courseId: string) => void;
   onSelectCourse: (course: Course) => void;
   onCreateCourse: () => void;
@@ -50,7 +52,7 @@ function groupSelections(courses: Course[]) {
   }));
 }
 
-export function CourseLibrary({ courses, favoriteCourseIds, recentCourseIds = [], selectedCourseId, onToggleFavorite, onSelectCourse, onCreateCourse, onEditCourse }: CourseLibraryProps) {
+export function CourseLibrary({ courses, favoriteCourseIds, recentCourseIds = [], selectedCourseId, permissionOwnerId, onToggleFavorite, onSelectCourse, onCreateCourse, onEditCourse }: CourseLibraryProps) {
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [filter, setFilter] = useState<CourseFilter>("all");
@@ -98,18 +100,22 @@ export function CourseLibrary({ courses, favoriteCourseIds, recentCourseIds = []
     }
   }
 
-  function requestNearbyCourses() {
+  async function requestNearbyCourses() {
     setFilter("nearby");
-    if (!("geolocation" in navigator)) {
-      setNearbyState({ status: "unsupported", message: "Este dispositivo no ofrece ubicación. Puedes buscar el campo manualmente." });
+    setNearbyState({ status: "requesting" });
+    let coordinates = storedNearbyCoordinates(localStorage, permissionOwnerId);
+    const refreshed = await refreshDevicePermissionStateWithoutPrompt(localStorage, permissionOwnerId);
+    if (refreshed.location === "granted" && refreshed.locationEnabled && !coordinates) {
+      coordinates = (await requestInitialLocation(localStorage, permissionOwnerId)).coarseLocation ?? null;
+    }
+    if (!coordinates || !refreshed.locationEnabled) {
+      setNearbyState({ status: refreshed.location === "unavailable" ? "unsupported" : "denied", message: "Ubicación desactivada. Revísala en Configuración → Privacidad y permisos o busca el campo manualmente." });
       return;
     }
-    setNearbyState({ status: "requesting" });
-    navigator.geolocation.getCurrentPosition((position) => {
-      void internalCourseDataProvider.nearbyCourses({
+    void internalCourseDataProvider.nearbyCourses({
         courses,
-        origin: { latitude: position.coords.latitude, longitude: position.coords.longitude },
-        radiusKm: 100,
+        origin: coordinates,
+        radiusKm: 50,
         limit: 100,
       }).then((result) => {
         if (!result.ok) {
@@ -118,13 +124,6 @@ export function CourseLibrary({ courses, favoriteCourseIds, recentCourseIds = []
         }
         setNearbyState(result.data.matches.length ? { status: "ready", matches: result.data.matches } : { status: "empty" });
       }).catch(() => setNearbyState({ status: "error", message: "No pudimos calcular los campos cercanos. Puedes buscarlos manualmente." }));
-    }, (error) => {
-      if (error.code === error.PERMISSION_DENIED) {
-        setNearbyState({ status: "denied", message: "No compartiste tu ubicación. No la necesitas para jugar: busca el campo manualmente." });
-      } else {
-        setNearbyState({ status: "error", message: "No pudimos obtener tu ubicación. Puedes buscar el campo manualmente." });
-      }
-    }, { enableHighAccuracy: false, maximumAge: 300_000, timeout: 8_000 });
   }
 
   const nearbyMatches = nearbyState.status === "ready" ? nearbyState.matches : EMPTY_NEARBY_MATCHES;
@@ -164,13 +163,13 @@ export function CourseLibrary({ courses, favoriteCourseIds, recentCourseIds = []
       <label className="betaSearchLabel" htmlFor="course-library-search">Buscar campo</label>
       <div className="betaSearchInput"><span aria-hidden="true">⌕</span><input id="course-library-search" type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Campo, club, ciudad o tee" autoComplete="off" />{query && <button type="button" onClick={() => setQuery("")} aria-label="Limpiar búsqueda">×</button>}</div>
       <div className="segmented betaCourseFilters" aria-label="Filtrar campos">
-        <button type="button" className={filter === "nearby" ? "active" : ""} aria-pressed={filter === "nearby"} onClick={requestNearbyCourses}>Cerca de mí</button>
+        <button type="button" className={filter === "nearby" ? "active" : ""} aria-pressed={filter === "nearby"} onClick={() => void requestNearbyCourses()}>Cerca de mí</button>
         <button type="button" className={filter === "recent" ? "active" : ""} aria-pressed={filter === "recent"} onClick={() => setFilter("recent")}>Recientes · {recentCourseIds.length}</button>
         <button type="button" className={filter === "favorites" ? "active" : ""} aria-pressed={filter === "favorites"} onClick={() => setFilter("favorites")}>Favoritos · {favoriteCourseIds.length}</button>
         <button type="button" className={filter === "all" ? "active" : ""} aria-pressed={filter === "all"} onClick={() => setFilter("all")}>Buscar · {courses.length}</button>
         <button type="button" className={filter === "mine" ? "active" : ""} aria-pressed={filter === "mine"} onClick={() => setFilter("mine")}>Mis campos · {manualCourseCount}</button>
       </div>
-      <p className="betaLocationNotice">Usamos tu ubicación únicamente al tocar “Cerca de mí”. No necesitas compartirla para jugar.</p>
+      <p className="betaLocationNotice">“Cerca de mí” usa únicamente la ubicación aproximada autorizada durante tu alta. No necesitas compartirla para jugar.</p>
       <p className="srOnly" role="status" aria-live="polite">{searchPending ? "Buscando campos." : `${visibleGroups.length} campo${visibleGroups.length === 1 ? "" : "s"} visible${visibleGroups.length === 1 ? "" : "s"}.`}</p>
     </section>
 

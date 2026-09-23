@@ -7,6 +7,7 @@ export const BETA_ONBOARDING_STEPS = [
   "improvements",
   "objective",
   "plan",
+  "permissions",
   "group",
   "players",
   "handicaps",
