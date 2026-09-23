@@ -92,6 +92,7 @@ function savedFitId() {
 export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, defaultHandicapSource, ballFitDefaults, onBackToProfile, onOpenPrivacy, initialSection }: EquipmentProfilePanelProps) {
   const { profile, status, message, update, retry, resolveConflict, recoverLocalProfile } = useEquipmentProfile(userId, accessToken);
   const [clubEditor, setClubEditor] = useState<PlayerClub | "new" | null>(null);
+  const [clubDetailId, setClubDetailId] = useState<string | null>(null);
   const [ballEditor, setBallEditor] = useState<PlayerBall | "new" | null>(initialSection === "ball" ? "new" : null);
   const [distanceEditor, setDistanceEditor] = useState<{ club: PlayerClub; distance: PlayerClubDistance | null } | null>(null);
   const [flowSuccess, setFlowSuccess] = useState<EquipmentFlowSuccess | null>(null);
@@ -101,6 +102,7 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
   useViewScrollReset(`${Boolean(clubEditor)}:${Boolean(ballEditor)}:${Boolean(distanceEditor)}:${Boolean(flowSuccess)}:${fitOpen}:${savedFitOpen}`);
   const currentClubs = useMemo(() => profile?.clubs.filter((club) => club.isCurrent) || [], [profile]);
   const historicalClubs = useMemo(() => profile?.clubs.filter((club) => !club.isCurrent) || [], [profile]);
+  const selectedClub = clubDetailId ? profile?.clubs.find((club) => club.id === clubDetailId) || null : null;
   const currentBall = profile?.balls.find((ball) => ball.isCurrent) || null;
   const ballHistory = profile?.balls.filter((ball) => !ball.isCurrent) || [];
   const restoredFit = useMemo(() => restoreEquipmentBallFitSummary(profile?.lastBallFit || null), [profile?.lastBallFit]);
@@ -130,6 +132,7 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
     });
     if (saved) {
       setClubEditor(null);
+      setClubDetailId(club.id);
       setFlowSuccess({ kind: "club", name: clubName(club, clubCatalog.items), verb: previous ? "actualizado" : "agregado" });
     }
     return saved;
@@ -181,6 +184,7 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
     });
     if (saved) {
       setFlowSuccess({ kind: "delete", name: deleteIntent.name, verb: deleteIntent.kind === "club" ? "eliminado" : "eliminada" });
+      if (deleteIntent.kind === "club") setClubDetailId(null);
       setDeleteIntent(null);
     }
   }
@@ -215,7 +219,7 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
     <ClubDistanceEditor userId={userId} clubId={distanceEditor.club.id} clubLabel={clubName(distanceEditor.club, clubCatalog.items)} existing={distanceEditor.distance} presentation="page" onCancel={() => setDistanceEditor(null)} onSave={saveDistance} />
   </div>;
   if (deleteIntent) return <section className={styles.flowDecision} data-equipment-screen="delete-confirm" aria-labelledby="equipment-delete-title">
-    <button type="button" className={styles.pageBack} onClick={() => setDeleteIntent(null)}>← Volver a Mi Bolsa</button>
+    <button type="button" className={styles.pageBack} onClick={() => setDeleteIntent(null)}>← Volver</button>
     <span className={styles.flowEyebrow}>MI BOLSA · CONFIRMAR</span>
     <h2 id="equipment-delete-title">¿Eliminar {deleteIntent.name}?</h2>
     <p>Se quitará de tu perfil de equipo. {deleteIntent.kind === "club" && "Sus distancias manuales en Mi Bolsa también se quitarán. "}Las rondas históricas conservan sus propios snapshots y no cambian.</p>
@@ -228,34 +232,51 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
     <h2 id="equipment-success-title">{flowSuccess.name} {flowSuccess.verb}</h2>
     <p>El cambio quedó guardado en este dispositivo. {equipmentStatusLabel(status)}.</p>
     <div className={styles.flowDecisionActions}>
-      <button type="button" className="primary" onClick={() => { setFlowSuccess(null); setClubEditor("new"); }}>Agregar otro</button>
-      <button type="button" className="secondary" onClick={() => setFlowSuccess(null)}>Volver a Mi Bolsa</button>
+      <button type="button" className="primary" onClick={() => { setFlowSuccess(null); setClubDetailId(null); setClubEditor("new"); }}>Agregar otro</button>
+      <button type="button" className="secondary" onClick={() => { setFlowSuccess(null); setClubDetailId(null); }}>Volver a Mi Bolsa</button>
       {onBackToProfile && <button type="button" className="secondary" onClick={onBackToProfile}>Volver a Perfil</button>}
     </div>
   </section>;
 
+  if (selectedClub) {
+    const distance = profile.distances.find((item) => item.playerClubId === selectedClub.id && item.source === "MANUAL") || null;
+    const supportsDistance = selectedClub.category !== "PUTTER";
+    return <section className={styles.clubDetail} data-equipment-screen="club-detail" aria-labelledby="club-detail-title">
+      <button type="button" className={styles.pageBack} onClick={() => setClubDetailId(null)}>← Volver a Mi Bolsa</button>
+      <div className={styles.clubDetailHero}>
+        <span className={styles.categoryIcon} aria-hidden="true">{CLUB_CATEGORY_ICONS[selectedClub.category]}</span>
+        <div><span className={styles.flowEyebrow}>{CLUB_CATEGORY_LABELS[selectedClub.category]}</span><h2 id="club-detail-title">{clubName(selectedClub, clubCatalog.items)}</h2><p>{catalogClub(selectedClub, clubCatalog.items)?.generation || selectedClub.generation || "Sin generación indicada"}</p></div>
+        {selectedClub.isCurrent && <span className={styles.currentBadge}>Actual</span>}
+      </div>
+      <div className={styles.badgeRow}>{clubFacts(selectedClub, shaftCatalog.items).map((value) => <span className={styles.badge} key={value}>{value}</span>)}</div>
+      {selectedClub.notes && <p className={styles.subtle}>{selectedClub.notes}</p>}
+      <button type="button" className="secondary" onClick={() => setClubEditor(selectedClub)}>Editar atributos</button>
+
+      <div className={styles.clubDetailSection}>
+        <div><span className={styles.flowEyebrow}>DISTANCIA</span><h3>{supportsDistance ? "Tu referencia de juego" : "Putter"}</h3></div>
+        {supportsDistance ? <>
+          <p>{distance ? [distance.carryDistance === null ? null : `Carry ${distance.carryDistance} ${distance.unit.toLowerCase()}`, distance.totalDistance === null ? null : `Total ${distance.totalDistance} ${distance.unit.toLowerCase()}`].filter(Boolean).join(" · ") : "Todavía no hay una distancia guardada."}</p>
+          <p className={styles.subtle}>El cálculo automático sólo estará disponible cuando Shot Tracking esté autorizado y tenga historial suficiente. Mientras tanto puedes guardar una referencia manual y editarla después.</p>
+          <div className={styles.inlineActions}><button type="button" className={distance ? "secondary" : "primary"} onClick={() => setDistanceEditor({ club: selectedClub, distance })}>{distance ? "Editar distancia manual" : "Agregar distancia manual"}</button>{distance && <button type="button" className="secondary" onClick={() => deleteDistance(distance, selectedClub)}>Quitar distancia manual</button>}</div>
+        </> : <p>El putter no usa carry, distancia total ni mediciones GPS en Mi Bolsa.</p>}
+      </div>
+
+      {!selectedClub.isCurrent && <button type="button" className="secondary" onClick={() => update((current) => setPlayerClubCurrent(current, selectedClub.id, true))}>Volver a usar este bastón</button>}
+      <div className={styles.clubDangerZone}><p>Esta acción sólo quita el bastón de Mi Bolsa. Las rondas históricas conservan su snapshot.</p><button type="button" className={styles.dangerButton} onClick={() => deleteClub(selectedClub)}>ELIMINAR BASTÓN</button></div>
+    </section>;
+  }
+
   return <div className={styles.stack}>
     <section className={`card ${styles.section}`}>
-      <div className={styles.sectionHeader}><div><div className="eyebrow">EQUIPO</div><h2>Mi bolsa</h2><p>Tus bastones actuales y anteriores. Basta con marca + modelo.</p></div><button type="button" className="primary" onClick={() => setClubEditor("new")}>+ Agregar</button></div>
+      <div className={styles.sectionHeader}><div><div className="eyebrow">EQUIPO</div><h2>Mi bolsa</h2><p>Tus bastones actuales y anteriores. Basta con marca + modelo.</p></div><button type="button" className="primary" onClick={() => { setClubDetailId(null); setClubEditor("new"); }}>+ Agregar</button></div>
       <div className={styles.bagSummary}>
         <span><b>{currentClubs.length}</b><small>actuales</small></span>
         <span><b>{currentClubs.filter((club) => club.category === "WEDGE").length}</b><small>wedges</small></span>
         <span><b>{currentClubs.filter((club) => club.category === "FAIRWAY_WOOD" || club.category === "HYBRID").length}</b><small>maderas / híbridos</small></span>
         <span><b>{historicalClubs.length}</b><small>anteriores</small></span>
       </div>
-      {!currentClubs.length ? <div className={styles.emptyState}><b>Tu bolsa todavía está vacía</b><p>Agrega uno o varios bastones. Shaft, loft y medidas siempre son opcionales.</p><button type="button" className="secondary" onClick={() => setClubEditor("new")}>Agregar mi primer bastón</button></div> : <div className={styles.equipmentList}>{currentClubs.map((club) => <ClubItem key={club.id} club={club} catalog={clubCatalog.items} shafts={shaftCatalog.items} onEdit={() => setClubEditor(club)} onToggle={() => update((current) => setPlayerClubCurrent(current, club.id, false))} onDelete={() => deleteClub(club)} />)}</div>}
-      {historicalClubs.length > 0 && <details><summary className="textButton">Equipo anterior ({historicalClubs.length})</summary><div className={styles.equipmentList}>{historicalClubs.map((club) => <ClubItem key={club.id} club={club} catalog={clubCatalog.items} shafts={shaftCatalog.items} onEdit={() => setClubEditor(club)} onToggle={() => update((current) => setPlayerClubCurrent(current, club.id, true))} onDelete={() => deleteClub(club)} />)}</div></details>}
-    </section>
-
-    <section className={`card ${styles.section}`}>
-      <div className={styles.sectionHeader}><div><div className="eyebrow">REFERENCIAS MANUALES</div><h2>Distancias</h2><p>Guarda carry y distancia total por bastón. No afecta score, HCP ni apuestas.</p></div></div>
-      {!currentClubs.length ? <div className={styles.emptyState}><b>Primero agrega un bastón</b><p>Cuando tu bolsa tenga equipo actual podrás guardar sus distancias.</p><button type="button" className="secondary" onClick={() => setClubEditor("new")}>Agregar bastón</button></div> : <div className={styles.equipmentList}>{currentClubs.map((club) => {
-        const distance = profile.distances.find((item) => item.playerClubId === club.id && item.source === "MANUAL") || null;
-        return <article className={styles.equipmentItem} key={club.id}>
-          <div className={styles.itemHeader}><div><h3>{clubName(club, clubCatalog.items)}</h3><p>{distance ? [distance.carryDistance === null ? null : `Carry ${distance.carryDistance} ${distance.unit.toLowerCase()}`, distance.totalDistance === null ? null : `Total ${distance.totalDistance} ${distance.unit.toLowerCase()}`].filter(Boolean).join(" · ") : "Sin distancia capturada"}</p></div>{distance && <span className={styles.currentBadge}>Manual</span>}</div>
-          <div className={styles.itemActions}><button type="button" className={distance ? "secondary" : "primary"} onClick={() => setDistanceEditor({ club, distance })}>{distance ? "Editar distancia" : "Agregar distancia"}</button>{distance && <button type="button" className={styles.dangerButton} onClick={() => deleteDistance(distance, club)}>Borrar</button>}</div>
-        </article>;
-      })}</div>}
+      {!currentClubs.length ? <div className={styles.emptyState}><b>Tu bolsa todavía está vacía</b><p>Agrega uno o varios bastones. Shaft, loft y medidas siempre son opcionales.</p><button type="button" className="secondary" onClick={() => setClubEditor("new")}>Agregar mi primer bastón</button></div> : <div className={styles.equipmentList}>{currentClubs.map((club) => <ClubItem key={club.id} club={club} catalog={clubCatalog.items} shafts={shaftCatalog.items} onOpen={() => setClubDetailId(club.id)} />)}</div>}
+      {historicalClubs.length > 0 && <details><summary className="textButton">Equipo anterior ({historicalClubs.length})</summary><div className={styles.equipmentList}>{historicalClubs.map((club) => <ClubItem key={club.id} club={club} catalog={clubCatalog.items} shafts={shaftCatalog.items} onOpen={() => setClubDetailId(club.id)} />)}</div></details>}
     </section>
 
     <section className={`card ${styles.section}`}>
@@ -291,14 +312,15 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
   </div>;
 }
 
-function ClubItem({ club, catalog: catalogItems, shafts, onEdit, onToggle, onDelete }: { club: PlayerClub; catalog: readonly GolfClubCatalog[]; shafts: readonly GolfShaftCatalog[]; onEdit: () => void; onToggle: () => void; onDelete: () => void }) {
+function ClubItem({ club, catalog: catalogItems, shafts, onOpen }: { club: PlayerClub; catalog: readonly GolfClubCatalog[]; shafts: readonly GolfShaftCatalog[]; onOpen: () => void }) {
   const catalog = catalogClub(club, catalogItems);
   const facts = clubFacts(club, shafts);
   return <article className={`${styles.equipmentItem} ${club.isCurrent ? "" : styles.archived}`}>
-    <div className={styles.itemHeader}><div className={styles.itemIdentity}><span className={styles.categoryIcon}>{CLUB_CATEGORY_ICONS[club.category]}</span><div><h3><button type="button" className={styles.itemTitleButton} onClick={onEdit}>{clubName(club, catalogItems)}</button></h3><p>{catalog?.generation || club.generation || CLUB_CATEGORY_LABELS[club.category]}</p></div></div>{club.isCurrent && <span className={styles.currentBadge}>Actual</span>}</div>
-    <div className={styles.badgeRow}>{facts.map((value) => <span className={styles.badge} key={value}>{value}</span>)}</div>
-    {club.notes && <p className={styles.subtle}>{club.notes}</p>}
-    <div className={styles.itemActions}><button type="button" className="secondary" onClick={onEdit}>Editar</button><button type="button" className="secondary" onClick={onToggle}>{club.isCurrent ? "Mover a anterior" : "Marcar actual"}</button><button type="button" className={styles.dangerButton} onClick={onDelete}>Eliminar</button></div>
+    <button type="button" className={styles.equipmentItemButton} onClick={onOpen} aria-label={`Abrir detalle de ${clubName(club, catalogItems)}`}>
+      <div className={styles.itemHeader}><div className={styles.itemIdentity}><span className={styles.categoryIcon}>{CLUB_CATEGORY_ICONS[club.category]}</span><div><h3>{clubName(club, catalogItems)}</h3><p>{catalog?.generation || club.generation || CLUB_CATEGORY_LABELS[club.category]}</p></div></div><span className={styles.itemChevron} aria-hidden="true">›</span></div>
+      <div className={styles.badgeRow}>{facts.map((value) => <span className={styles.badge} key={value}>{value}</span>)}</div>
+      {club.notes && <p className={styles.subtle}>{club.notes}</p>}
+    </button>
   </article>;
 }
 

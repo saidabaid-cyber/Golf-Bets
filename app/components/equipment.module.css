@@ -110,6 +110,31 @@
   opacity: .76;
 }
 
+.equipmentItemButton {
+  display: grid;
+  width: 100%;
+  min-height: 52px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.equipmentItemButton:focus-visible {
+  outline: 3px solid #cc9f32;
+  outline-offset: 4px;
+  border-radius: 10px;
+}
+
+.itemChevron {
+  align-self: center;
+  color: var(--green);
+  font-size: 30px;
+  line-height: 1;
+}
+
 .categoryIcon {
   display: grid;
   width: 38px;
@@ -752,6 +777,41 @@
 .successMark { display: grid; width: 62px; height: 62px; place-items: center; border-radius: 50%; background: var(--green2); color: var(--green); font-size: 32px; font-weight: 900; }
 .flowDecisionActions { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 8px; margin-top: 12px; }
 .flowDecisionActions button { min-height: 48px; }
+
+.clubDetail {
+  display: grid;
+  width: min(100%, 720px);
+  min-height: calc(100dvh - 160px);
+  align-content: start;
+  gap: 16px;
+  margin: 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--card);
+  padding: clamp(16px, 4vw, 26px) clamp(16px, 4vw, 26px) calc(96px + env(safe-area-inset-bottom));
+  box-shadow: 0 12px 36px rgba(20, 58, 34, .07);
+}
+
+.clubDetailHero {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.clubDetailHero h2,
+.clubDetailHero p,
+.clubDetailSection h3,
+.clubDetailSection p,
+.clubDangerZone p { margin: 0; }
+
+.clubDetailHero h2 { overflow-wrap: anywhere; font-family: Georgia, "Times New Roman", serif; font-size: clamp(24px, 6vw, 34px); }
+.clubDetailHero p,
+.clubDetailSection p,
+.clubDangerZone p { margin-top: 4px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.clubDetailSection { display: grid; gap: 9px; border: 1px solid var(--line); border-radius: 16px; background: var(--soft); padding: 15px; }
+.clubDangerZone { display: grid; gap: 11px; margin-top: 14px; border-top: 1px solid #efcfcd; padding-top: 18px; }
+.clubDangerZone .dangerButton { min-height: 48px; }
 
 .flowProgress { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; margin-top: 14px; }
 .flowProgress span { height: 4px; border-radius: 999px; background: #dfe6e1; }

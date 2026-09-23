@@ -29,7 +29,7 @@ test("el onboarding de equipo ocurre después del perfil básico y siempre se pu
   assert.doesNotMatch(onboarding, /required=/, "ningún dato opcional de equipo debe bloquear el onboarding");
 });
 
-test("Mi bolsa permite catálogo, captura manual, múltiples categorías, edición e histórico", () => {
+test("Mi bolsa abre una ficha limpia por bastón y reserva el borrado para el detalle", () => {
   for (const label of ["Driver", "Mini Driver", "Maderas", "Híbridos", "Utility / Driving Iron", "Hierros", "Wedges", "Putter"]) assert.match(editors, new RegExp(label.replace("/", "\\/")));
   assert.match(editors, /Mi bastón no aparece/);
   assert.match(editors, /Mi varilla no aparece/);
@@ -37,8 +37,11 @@ test("Mi bolsa permite catálogo, captura manual, múltiples categorías, edici�
   for (const set of ["4–P", "4–AW", "5–P", "5–AW"]) assert.match(editors, new RegExp(set));
   assert.match(editors, /Personalizar set/);
   assert.match(panel, /Mi bolsa/);
-  assert.match(panel, /Editar/);
-  assert.match(panel, /Mover a anterior/);
+  assert.match(panel, /data-equipment-screen="club-detail"/);
+  assert.match(panel, /Editar atributos/);
+  assert.match(panel, /ELIMINAR BASTÓN/);
+  assert.doesNotMatch(panel, /Mover a anterior/);
+  assert.doesNotMatch(panel, />Administrar</);
   assert.match(panel, /Equipo anterior/);
   assert.match(panel, /removePlayerClub/);
   for (const iron of ["1", "2", "UW"]) assert.match(editors, new RegExp(`"${iron}"`));
@@ -49,7 +52,9 @@ test("Mi bolsa permite catálogo, captura manual, múltiples categorías, edici�
 test("Mi juego y las distancias manuales son opcionales y usan el mismo perfil", () => {
   assert.match(accountPanel, /MI JUEGO/);
   for (const field of ["typicalScore", "driverDistanceYards", "driverSwingSpeedBand", "usualTrajectory", "shotTendency", "greenSpeed", "gamePriority", "priceImportance"]) assert.match(accountPanel, new RegExp(field));
-  assert.match(panel, /<h2>Distancias<\/h2>/);
+  assert.match(panel, /Agregar distancia manual/);
+  assert.match(panel, /selectedClub\.category !== "PUTTER"/);
+  assert.match(panel, /El putter no usa carry, distancia total ni mediciones GPS/);
   assert.match(panel, /upsertPlayerClubDistance/);
   assert.match(panel, /removePlayerClubDistance/);
   assert.match(panel, /item\.source === "MANUAL"/);
