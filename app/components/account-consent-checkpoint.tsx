@@ -72,6 +72,19 @@ export function AccountConsentCheckpoint({ userId, accessToken, legalRequired, o
   const canSubmit = Boolean(remote && accessToken && (!legalRequired || (terms && rules && adult)));
   const checkpointState = aiUnavailable ? "ERROR_RECOVERABLE" : remote?.resolved ? "COMPLETE" : remote ? "MISSING_CONSENTS" : "LOADING";
 
+  function selectAllAvailable() {
+    if (legalRequired) {
+      setTerms(true);
+      setRules(true);
+      setAdult(true);
+      setBetting(true);
+    }
+    setChoices((current) => ({
+      ...current,
+      ...Object.fromEntries(missing.map(({ scope }) => [scope, true])),
+    }));
+  }
+
   async function continueWithoutAi() {
     if (submitting.current || (legalRequired && (!terms || !rules || !adult))) return;
     // Do not write declined/accepted records, local flags or synthetic consent.
@@ -128,6 +141,7 @@ export function AccountConsentCheckpoint({ userId, accessToken, legalRequired, o
     {!accessToken && <p role="alert">Necesitas conexión y una sesión vigente para guardar tus preferencias.</p>}
     {(remote || legalRequired) && <fieldset className={styles.checks} disabled={busy}>
       <legend className={styles.legend}>Tus autorizaciones</legend>
+      <button type="button" className={styles.selectAll} onClick={selectAllAvailable}>Seleccionar todo</button>
       {legalRequired && <>
         <label className={styles.check}><input type="checkbox" checked={terms} onChange={(event) => setTerms(event.target.checked)} /><span>Acepto los <Link href="/legal/terms?returnTo=onboarding">Términos y Condiciones</Link> y confirmo haber leído el <Link href="/legal/privacy?returnTo=onboarding">Aviso de Privacidad</Link>.</span></label>
         <label className={styles.check}><input type="checkbox" checked={rules} onChange={(event) => setRules(event.target.checked)} /><span>Entiendo que el Árbitro de Reglas es una referencia acordada entre participantes; en competencias prevalece el Comité o árbitro oficial.</span></label>

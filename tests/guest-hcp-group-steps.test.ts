@@ -42,12 +42,12 @@ test("account missing Index stays locked and actionable, never manual or zero", 
   assert.equal(patchEditablePlayer(player, { handicap: 0 }).handicap, null);
 });
 
-test("Step 10 only selection, Step 11 uses the same editor and only active registry entries", () => {
+test("habitual bets use one expandable selection and details screen", () => {
   const source = readFileSync("app/components/beta-onboarding-flow.tsx", "utf8");
-  const step10 = source.split('if (progress.step === "bets")')[1].split('if (progress.step === "bet_details")')[0];
-  assert.match(step10, /mode="selection"/);
-  assert.doesNotMatch(step10, /mode="complete"|mode="details"/);
-  assert.match(step10, /Continuar: configurar apuestas/);
+  const step10 = source.split('if (progress.step === "bets" || progress.step === "bet_details")')[1].split('if (progress.step === "ready")')[0];
+  assert.match(step10, /mode="complete"/);
+  assert.doesNotMatch(step10, /mode="selection"|mode="details"/);
+  assert.match(step10, /Selecciona tus apuestas habituales y ajusta aquí sus valores y reglas/);
   const editor = readFileSync("app/components/group-bet-template-editor.tsx", "utf8");
   assert.match(editor, /groupTemplateSelectionSections\(\)/);
   assert.match(editor, /Apuestas de grupo \/ generales/);

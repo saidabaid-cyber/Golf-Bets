@@ -82,13 +82,12 @@ test('scoped social controls hide unrelated settings without changing the persis
   assert.equal(labels.includes('Avisarme de likes'),section!=='sharing');
  }
 });
-test("profile preferences, notifications and privacy have distinct destinations", () => {
+test("profile has one configuration destination and its panel retains all sections", () => {
   const h = panel("account", "profile");
-  for (const section of ACCOUNT_SETTINGS.filter(s => s.id !== "account")) {
-    const button = elements(h.render()).find(e => e.type === "button" && text(e).startsWith(section.label))!;
-    (button.props.onClick as () => void)();
-  }
-  assert.deepEqual(h.opened, ["preferences", "notifications", "privacy"]);
+  const button = elements(h.render()).find(e => e.type === "button" && text(e).startsWith("Configuración"))!;
+  (button.props.onClick as () => void)();
+  assert.deepEqual(h.opened, ["preferences"]);
+  assert.deepEqual(ACCOUNT_SETTINGS.map((section) => section.label), ["Preferencias", "Notificaciones", "Cuenta y privacidad", "Privacidad y permisos"]);
 });
 test("account destination remounts independently of retained profile component state", () => {
   const page = readFileSync("app/page.tsx", "utf8");

@@ -1,0 +1,4 @@
+.control{display:grid;gap:7px;min-width:0;color:var(--muted);font-size:.8rem;font-weight:800}
+.control>div{display:grid;grid-template-columns:auto minmax(90px,1fr) auto;align-items:center;gap:7px}
+.control button{min-height:42px;padding:7px 10px;border:1px solid var(--line);border-radius:11px;background:var(--card);color:var(--green);font-weight:900}
+.control input{width:100%;min-width:0;accent-color:var(--green)}

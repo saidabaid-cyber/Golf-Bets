@@ -5,6 +5,7 @@
 .card button { white-space: normal; min-height: 44px; }
 .checks { display: grid; gap: 14px; min-width: 0; margin: 0; padding: 0; border: 0; }
 .legend { margin-bottom: 10px; font-weight: 700; }
+.selectAll { justify-self: start; min-height: 38px !important; margin: -4px 0 2px; padding: 7px 12px; border: 1px solid #b8c8bd; border-radius: 999px; background: #f4f8f4; color: #143d2d; font: inherit; font-weight: 700; }
 .check { display: grid; grid-template-columns: 22px minmax(0, 1fr); align-items: start; gap: 10px; min-height: 44px; font-size: 14px; font-weight: 400; line-height: 1.4; cursor: pointer; }
 .check input { width: 20px; height: 20px; margin: 2px 0; accent-color: #136843; }
 .check span { min-width: 0; overflow-wrap: anywhere; }

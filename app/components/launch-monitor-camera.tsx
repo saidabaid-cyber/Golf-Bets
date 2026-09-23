@@ -203,7 +203,10 @@ export function LaunchMonitorCamera({ userId, accessToken, requiresRemoteConsent
 
   return <section className={styles.cameraCapture} aria-labelledby="launch-camera-title">
     <div className={styles.itemHeader}><div><h3 id="launch-camera-title">Capturar con cámara</h3><p>Sube 2–4 fotos de TrackMan, FlightScope, GCQuad, Garmin, Rapsodo u otra pantalla. Revisas todo antes de guardar.</p></div></div>
-    <label className={styles.photoButton}>📷 Elegir 2–4 fotos<input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" multiple onChange={(event) => { addPhotos(event.target.files); event.currentTarget.value = ""; }} /></label>
+    <div className={styles.inlineActions}>
+      <label className={styles.photoButton}>📷 Tomar fotos ahora<input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" multiple onChange={(event) => { addPhotos(event.target.files); event.currentTarget.value = ""; }} /></label>
+      <label className={styles.photoButton}>🖼 Elegir de Fotos / Galería<input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(event) => { addPhotos(event.target.files); event.currentTarget.value = ""; }} /></label>
+    </div>
     {photos.length > 0 && <div className={styles.launchPhotoGrid}>{photos.map((photo) => <figure key={photo.id}><img src={photo.previewUrl} alt="Pantalla de launch monitor seleccionada" /><button type="button" className="secondary" onClick={() => removePhoto(photo.id)} disabled={busy}>Quitar</button></figure>)}</div>}
     <button type="button" className="primary" onClick={() => void analyze()} disabled={busy || photos.length < 2}>{busy ? "Leyendo mediciones…" : "Analizar fotos"}</button>
     {error && <p className={styles.formMessage} role="alert">{error}</p>}

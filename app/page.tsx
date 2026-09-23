@@ -82,6 +82,7 @@ import {
 import { PollaLivePanel } from "./components/polla-live-panel";
 import { RulesPanel } from "./components/rules-panel";
 import { NumericCaptureInput } from "./components/numeric-capture-input";
+import { HcpPercentageInput } from "./components/hcp-percentage-input";
 import { SignedMoneyInput } from "./components/signed-money-input";
 import { AccountProvider, useBackyardAccount } from "./components/account-provider";
 import { CaptureGroupInvitationLink, GroupInviteManager, PendingGroupInvitation } from "./components/group-invitations";
@@ -350,7 +351,7 @@ function NumberField({ label, value, onChange, step = 1 }: { label: string; valu
 }
 
 function HcpPercentInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  return <div><label>% HCP</label><NumericCaptureInput inputMode="numeric" min={0} max={100} step={5} value={value} emptyWhenZero={false} onValueChange={(next) => onChange(next === null ? 0 : Math.min(100, Math.max(0, next)))} /></div>;
+  return <HcpPercentageInput value={value} onChange={onChange} />;
 }
 
 function TrophyIcon({ tone }: { tone: "silver" | "gold" }) {

@@ -20,18 +20,14 @@ export function nearestReviewedClubs<T extends Omit<ReviewedCatalogCourse,'tees'
   for(const course of courses) if(course.locationEvidence && !clubs.has(course.clubId)) clubs.set(course.clubId,course);
   return [...clubs.values()].flatMap(c=>{
     const distance=haversineDistanceKm(origin,{latitude:c.latitude!,longitude:c.longitude!});
-    return distance===null ? [] : [{...c,distanceKm:distance}];
+    return distance===null || distance>REVIEWED_NEARBY_DISTANCE_KM ? [] : [{...c,distanceKm:distance}];
   }).sort((a,b)=>a.distanceKm-b.distanceKm).slice(0,3);
 }
-/** Presentation threshold only, consistent with the existing nearby search's
- * 100 km default. Do not hide the closest verified club or imply driving time. */
-export const REVIEWED_NEARBY_DISTANCE_KM = 100;
+/** Product radius for verified nearby clubs. Distances are geographic, not driving distance. */
+export const REVIEWED_NEARBY_DISTANCE_KM = 50;
 export function reviewedClubsLocationSummary(clubs: readonly { distanceKm: number }[]) {
   if (!clubs.length) return 'No hay campos con ubicación verificada cerca de ti. La búsqueda manual sigue disponible.';
-  if (clubs.some(club => club.distanceKm > REVIEWED_NEARBY_DISTANCE_KM)) {
-    return `Mostramos los ${clubs.length} clubes verificados más próximos. Algunos están a más de 100 km; revisa las distancias o busca otro campo.`;
-  }
-  return `Encontramos ${clubs.length} campos cercanos · ${clubs.length} clubes distintos.`;
+  return `Encontramos ${clubs.length} campos a 50 km o menos · ${clubs.length} clubes distintos.`;
 }
 /** Ratings are preserved as evidence, never applied until their category is verified.
  * Holes retain the original 18-hole SI even when playing one nine. */

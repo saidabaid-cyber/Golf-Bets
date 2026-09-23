@@ -60,9 +60,11 @@ type EquipmentDeleteIntent =
   | { kind: "distance"; distance: PlayerClubDistance; name: string };
 
 const BAG_CATEGORY_SECTIONS = [
-  { id: "driver", label: "Driver", categories: ["DRIVER", "MINI_DRIVER"] },
+  { id: "driver", label: "Driver", categories: ["DRIVER"] },
+  { id: "mini-driver", label: "Mini Driver", categories: ["MINI_DRIVER"] },
   { id: "woods", label: "Maderas", categories: ["FAIRWAY_WOOD"] },
-  { id: "hybrids", label: "Híbridos", categories: ["HYBRID", "UTILITY_IRON"] },
+  { id: "hybrids", label: "Híbridos", categories: ["HYBRID"] },
+  { id: "utility", label: "Utility / Driving Iron", categories: ["UTILITY_IRON"] },
   { id: "irons", label: "Hierros", categories: ["IRON_SET"] },
   { id: "wedges", label: "Wedges", categories: ["WEDGE"] },
   { id: "putter", label: "Putter", categories: ["PUTTER"] },
@@ -105,6 +107,43 @@ function clubFacts(playerClub: PlayerClub, shafts: readonly GolfShaftCatalog[]) 
 
 function savedFitId() {
   return globalThis.crypto?.randomUUID?.() || `fit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function savedClubLabel(club: PlayerClub) {
+  return [club.customBrand, club.customModel].filter(Boolean).join(" ") || "Modelo guardado";
+}
+
+function savedClubConfiguration(clubs: readonly PlayerClub[], sectionId: string) {
+  if (sectionId === "wedges") {
+    const lofts = clubs.flatMap((club) => club.loft === null ? [] : [club.loft]).sort((left, right) => left - right);
+    return lofts.length ? lofts.map((loft) => `${loft}°`).join("–") : "";
+  }
+  const compositions = clubs.flatMap((club) => club.setComposition);
+  if (compositions.length) return compositions.join("–");
+  const lofts = clubs.flatMap((club) => club.loft === null ? [] : [club.loft]);
+  return lofts.length ? lofts.map((loft) => `${loft}°`).join(", ") : "";
+}
+
+export function EquipmentProfileSummary({ userId, accessToken, onOpen }: { userId: string; accessToken: string | null; onOpen: () => void }) {
+  const { profile, status } = useEquipmentProfile(userId, accessToken);
+  if (status === "loading" || !profile) return null;
+  const current = profile.clubs.filter((club) => club.isCurrent);
+  const ball = profile.balls.find((item) => item.isCurrent) || null;
+  const populated = BAG_CATEGORY_SECTIONS.flatMap((section) => {
+    const clubs = current.filter((club) => section.categories.some((category) => category === club.category));
+    return clubs.length ? [{ ...section, clubs }] : [];
+  });
+  if (!populated.length && !ball) return <section className={`card ${styles.profileBagSummary}`}><div><span>MI BOLSA</span><h2>Tu equipo, en un solo lugar</h2><p>Agrega Driver, maderas, hierros, wedges, putter y bola.</p></div><button type="button" className="secondary" onClick={onOpen}>Agregar</button></section>;
+  return <section className={`card ${styles.profileBagSummary}`} aria-label="Resumen de Mi Bolsa">
+    <header><div><span>MI BOLSA</span><h2>Equipo actual</h2></div><button type="button" className="textButton" onClick={onOpen}>Editar</button></header>
+    <div className={styles.profileBagRows}>
+      {populated.map((section) => {
+        const configuration = savedClubConfiguration(section.clubs, section.id);
+        return <button type="button" key={section.id} onClick={onOpen}><span><small>{section.label}{configuration ? `: ${configuration}` : ""}</small><b>{section.clubs.map(savedClubLabel).join(" · ")}</b></span><strong aria-hidden="true">›</strong></button>;
+      })}
+      {ball && <button type="button" onClick={onOpen}><span><small>Bola</small><b>{ball.ballBrand} {ball.ballModel}</b></span><strong aria-hidden="true">›</strong></button>}
+    </div>
+  </section>;
 }
 
 export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, defaultHandicapSource, defaultHandedness, ballFitDefaults, onBackToProfile, onOpenPrivacy, initialSection }: EquipmentProfilePanelProps) {
@@ -255,7 +294,7 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
   return <div className={styles.stack}>
     <header className={styles.collectionHero}><span className={styles.collectionMark}><BackyardIcon name="club" size={40} /></span><div><span className={styles.flowEyebrow}>THE BACKYARD · EQUIPMENT</span><h2>Tu juego empieza<br />en tu bolsa.</h2><p>Los bastones, las sensaciones y la bola que haces tuyos.</p></div></header>
     <section className={`card ${styles.section}`}>
-      <div className={styles.sectionHeader}><div><div className="eyebrow">EQUIPO</div><h2>Mi bolsa</h2><p>Tus bastones actuales y anteriores. Basta con marca + modelo.</p></div><button type="button" className="primary" onClick={() => setClubEditor("new")}>+ Agregar</button></div>
+      <div className={styles.sectionHeader}><div><div className="eyebrow">EQUIPO</div><h2>¿Qué palos utilizas?</h2><p>Elige una categoría y completa marca, modelo y configuración.</p></div><button type="button" className="primary" onClick={() => setClubEditor("new")}>+ Agregar</button></div>
       <div className={styles.bagSummary}>
         <span><b>{currentClubs.length}</b><small>actuales</small></span>
         <span><b>{currentClubs.filter((club) => club.category === "WEDGE").length}</b><small>wedges</small></span>
@@ -267,7 +306,7 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
           const clubs = currentClubs.filter((club) => section.categories.some((category) => category === club.category));
           const label = section.id === "wedges" ? wedgeLoftSummary(clubs) : section.label;
           return <section className={styles.bagCategory} key={section.id} data-bag-category={section.id}>
-            <header><div><span>{section.label}</span><b>{label}</b></div><small>{clubs.length ? `${clubs.length} en tu bolsa` : "Sin agregar"}</small></header>
+            <header><div><span>{section.label}</span><b>{label}</b></div><small>{clubs.length ? `${clubs.length} en tu bolsa` : "Agregar"}</small></header>
             {clubs.length ? <div className={styles.bagCategoryItems}>{clubs.map((club) => <ClubItem key={club.id} club={club} catalog={clubCatalog.items} shafts={shaftCatalog.items} onEdit={() => setClubEditor(club)} onToggle={() => update((current) => setPlayerClubCurrent(current, club.id, false))} onDelete={() => deleteClub(club)} />)}</div> : <button type="button" className={styles.emptyBagRow} onClick={() => setClubEditor("new")}><span>Agregar {section.label.toLocaleLowerCase("es-MX")}</span><b aria-hidden="true">＋</b></button>}
           </section>;
         })}

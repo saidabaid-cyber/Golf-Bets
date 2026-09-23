@@ -4,7 +4,7 @@ import { authenticatedRequest } from '../../../lib/server-auth';
 import { getSupabaseAdmin } from '../../../lib/supabase/server';
 import { reviewCatalogQaEnabled } from '../../../lib/review-course-catalog.server';
 import { feedbackMailerConfig,sendFeedbackEmail } from '../../../lib/feedback-email.server';
-import { FEEDBACK_ATTACHMENT_MAX_BYTES,feedbackTopicKey,validateFeedback } from '../../../lib/feedback';
+import { FEEDBACK_ATTACHMENT_MAX_BYTES,feedbackPersistenceInput,feedbackTopicKey,validateFeedback } from '../../../lib/feedback';
 import { feedbackAttachmentType } from '../../../lib/feedback-attachment';
 import { receiveFeedback,notifyFeedbackSafely } from '../../../lib/feedback-workflow';
 import { backyardAiClientAddress,isCrossSiteRequest,readJsonBodyWithLimit } from '../../../lib/backyard-ai/server/http-security';
@@ -38,12 +38,12 @@ export async function POST(request:NextRequest) {
       bytes=Buffer.from(attachment.data,'base64');mime=attachment.mime;
       try {extension=feedbackAttachmentType(mime,bytes);} catch(e) {return NextResponse.json({error:e instanceof Error?e.message:'Imagen inválida.'},{status:400,headers});}
     }
-    const id=value.id,input=checked.data,imageHash=bytes?hash(bytes):null;
+    const id=value.id,submittedInput=checked.data,input=feedbackPersistenceInput(submittedInput),imageHash=bytes?hash(bytes):null;
     const actorKey=hash(userId??`guest:${value.guestKey}`);
     // Anonymous anti-abuse key is HMAC, rotated daily; never store raw IP/location.
     const rateKey=userId?actorKey:createHmac('sha256',process.env.SUPABASE_SECRET_KEY||process.env.SUPABASE_SERVICE_ROLE_KEY!).update(`feedback:${new Date().toISOString().slice(0,10)}:${backyardAiClientAddress(request)}`).digest('hex');
     const path=bytes?`${userId??'guest'}/${id}/${imageHash}.${extension}`:null;
-    const context={screen:typeof value.screen==='string'?value.screen.split(/[?#]/)[0].slice(0,160):'',identity,build:process.env.VERCEL_GIT_COMMIT_SHA??'local',category:typeof value.contextualCategory==='string'?value.contextualCategory.slice(0,20):input.category,topic:feedbackTopicKey(input)};
+    const context={screen:typeof value.screen==='string'?value.screen.split(/[?#]/)[0].slice(0,160):'',identity,build:process.env.VERCEL_GIT_COMMIT_SHA??'local',category:typeof value.contextualCategory==='string'?value.contextualCategory.slice(0,20):submittedInput.category,topic:feedbackTopicKey(submittedInput)};
     const outcome=await receiveFeedback({
       persist:async()=>{
         const result=await db.rpc('submit_feedback_v2',{request_id:id,actor_id:userId,actor_key:actorKey,limiter_key:rateKey,request_hash:hash(JSON.stringify({input,imageHash})),request_payload:input,request_context:context,object_path:path}).abortSignal(AbortSignal.timeout(10000));

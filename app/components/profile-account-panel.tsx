@@ -11,7 +11,7 @@ import { accountDeletionPrewriteRejected, accountDeletionRequestBody, accountDel
 import { ballFitDefaultsFromProfile } from "../../lib/ball-fitting";
 import type { GolfInsights } from "../../lib/golf-insights";
 import { isStatisticsDeleteConfirmation, requestStatisticsReset, type StatisticsResetRecord } from "../../lib/statistics-reset";
-import { EquipmentProfilePanel } from "./equipment-profile-panel";
+import { EquipmentProfilePanel, EquipmentProfileSummary } from "./equipment-profile-panel";
 import { HandicapSourceChoices } from "./handicap-source-selector";
 import { selectedHandicapIndex } from "../../lib/handicap-source";
 import { LegalConsentManager } from "./legal-consent-manager";
@@ -302,14 +302,12 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
       <section className="card profileCompactCard"><div className="profileCompactHeading"><div><span>INFORMACIÓN DE GOLF</span><h2>Tu juego</h2></div><button type="button" className="textButton" onClick={() => setEditing(true)}>Editar</button></div><div className="profileCompactRows"><div><span>{indexLabel}</span><b>{profileHandicapLabel(selectedIndex.value)}</b></div><div><span>Home Club</span><b>{identity.homeClub || "Sin indicar"}</b></div><div><span>Recorrido</span><b>{identity.homeCourse || "Sin indicar"}</b></div><div><span>Tee habitual</span><b>{identity.preferredTee || "Sin indicar"}</b></div></div><HandicapSourceChoices control={indexControl} authenticated={identity.mode === "authenticated"} /></section>
       <BackyardIndexCard history={history} userId={identity.userId} enabled={indexControl.preference?.enabled === true} onEnabledChange={indexControl.change} saving={indexControl.saving || !indexControl.ready} error={indexControl.error} localPccZeroDeclared={Boolean(indexControl.preference?.localPccZeroDeclaredAt)} onDeclareLocalPccZero={indexControl.declareLocalZero} />
       {indexControl.error && <button type="button" className="textButton" onClick={() => void indexControl.retry()}>Reintentar sincronización del Índice</button>}
+      <EquipmentProfileSummary userId={identity.userId} accessToken={identity.accessToken} onOpen={onOpenEquipment} />
       <section className="card profileCompactCard"><div className="profileCompactHeading"><div><span>FOTO / AVATAR</span><h2>{identity.avatarUrl ? "Avatar configurado" : "Sin imagen"}</h2></div><button type="button" className="textButton" onClick={() => setEditing(true)}>Cambiar</button></div><div className="profileAvatarSummary"><div className="profileAvatarMini"><ProfileAvatarMedia value={identity.avatarUrl} fallback={(identity.displayName.trim()[0] || "J").toUpperCase()} alt={`Avatar actual de ${identity.displayName}`} /></div><p>Foto, emoji, avatar manual o sin imagen.</p></div></section>
       {golfInsights && <section className="card profileCompactCard"><div className="profileCompactHeading"><div><span>ACTIVIDAD</span><h2>Resumen personal</h2></div>{onOpenStats && <button type="button" className="textButton" onClick={onOpenStats}>Ver Stats</button>}</div><div className="profileActivityGrid"><div><span>Rondas</span><b>{golfInsights.rounds}</b></div><div><span>Promedio</span><b>{decimal(golfInsights.averageScore)}</b></div><div><span>Putts</span><b>{decimal(golfInsights.averagePutts)}</b></div></div></section>}
       <nav className="card profileNavigationList" aria-label="Secciones de Mi Perfil">
         <button type="button" className="profileNavigationCard" onClick={onOpenEquipment}><span><b>Mi equipo</b><small>Mi Bolsa, bastones y bola</small></span><strong aria-hidden="true">›</strong></button>
-        <button type="button" className="profileNavigationCard" onClick={() => onOpenAccountSection?.("preferences")}><span><b>Preferencias</b><small>Contraste y experiencia de lectura</small></span><strong aria-hidden="true">›</strong></button>
-        <button type="button" className="profileNavigationCard" onClick={onOpenAccount}><span><b>Cuenta y privacidad</b><small>Email, acceso, consentimientos y datos</small></span><strong aria-hidden="true">›</strong></button>
-        <button type="button" className="profileNavigationCard" onClick={() => onOpenAccountSection?.("notifications")}><span><b>Notificaciones</b><small>Avisos sociales dentro de la app</small></span><strong aria-hidden="true">›</strong></button>
-        <button type="button" className="profileNavigationCard" onClick={() => onOpenAccountSection?.("privacy")}><span><b>Privacidad y permisos</b><small>Visibilidad, ubicación y autorizaciones</small></span><strong aria-hidden="true">›</strong></button>
+        <button type="button" className="profileNavigationCard" onClick={() => { if (onOpenAccountSection) onOpenAccountSection("preferences"); else onOpenAccount?.(); }}><span><b>Configuración</b><small>Preferencias, cuenta, notificaciones, privacidad y permisos</small></span><strong aria-hidden="true">›</strong></button>
       </nav>{notice}
     </main>}
 

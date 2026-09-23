@@ -32,6 +32,9 @@ import { NumericCaptureInput } from "./numeric-capture-input";
 import { CatalogProductMedia } from "./catalog-product-media";
 import { BackyardIcon } from "./backyard-icon";
 import { useViewScrollReset } from "./use-view-scroll-reset";
+import { AnchoredSearch, AnchoredSearchOption } from "./anchored-search";
+import { FeedbackLink } from "./feedback-dialog";
+import { useEquipmentCatalogSearch } from "./use-equipment-catalog-search";
 import styles from "./equipment.module.css";
 
 const FEEL_LABELS = {
@@ -132,11 +135,12 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
   const [resultCatalog, setResultCatalog] = useState<GolfBallCatalog[]>([]);
   const [catalogScope, setCatalogScope] = useState<BallFitCatalogScope | null>(null);
   const [calculating, setCalculating] = useState(false);
+  const [ballQuery, setBallQuery] = useState("");
   useViewScrollReset(`${step}:${draftChoicePending}:${hydrated}`);
   const [message, setMessage] = useState("");
   const requestRef = useRef<AbortController | null>(null);
-  const displayCatalog = useMemo(() => [...new Map([...catalog, ...resultCatalog].map((ball) => [ball.id, ball])).values()], [catalog, resultCatalog]);
-  const activeBalls = useMemo(() => catalog.filter((ball) => ball.active), [catalog]);
+  const ballSearch = useEquipmentCatalogSearch({ kind: "BALL", query: ballQuery, fallback: catalog, pinnedIds: input.currentBallId ? [input.currentBallId] : [] });
+  const displayCatalog = useMemo(() => [...new Map([...catalog, ...ballSearch.items, ...resultCatalog].map((ball) => [ball.id, ball])).values()], [ballSearch.items, catalog, resultCatalog]);
   const currentCatalogBall = input.currentBallId ? displayCatalog.find((ball) => ball.id === input.currentBallId) || null : null;
 
   useEffect(() => {
@@ -309,9 +313,10 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
 
     {!result && step === 1 && <section className={styles.questionBlock}>
       <h3>Driver</h3><p>La velocidad es opcional. Nunca inferimos una compresión no publicada a partir de este dato.</p>
+      <LaunchMonitorCapture userId={userId} accessToken={accessToken} requiresRemoteConsent={requiresRemoteConsent} value={input.launchMonitorSession} onChange={(launchMonitorSession) => patchInput({ launchMonitorSession })} onOpenPrivacy={onOpenPrivacy} />
+      <p className={styles.subtle}><b>¿No tienes datos de launch monitor?</b> Continúa con fitting manual.</p>
       <label>¿Cuánto pegas aproximadamente con driver? (yardas, opcional)<NumericCaptureInput keyboardMode="numeric" min={50} max={500} value={input.driverDistanceYards} onValueChange={(driverDistanceYards) => patchInput({ driverDistanceYards })} placeholder="Ej. 245" /></label>
       <h4>Velocidad de swing con driver</h4><OptionGrid values={SWING_SPEED_BANDS} labels={SPEED_LABELS} selected={input.swingSpeedBand} onSelect={(value) => patchInput({ swingSpeedBand: value })} />
-      <LaunchMonitorCapture userId={userId} accessToken={accessToken} requiresRemoteConsent={requiresRemoteConsent} value={input.launchMonitorSession} onChange={(launchMonitorSession) => patchInput({ launchMonitorSession })} onOpenPrivacy={onOpenPrivacy} />
     </section>}
 
     {!result && step === 2 && <section className={styles.questionBlock}>
@@ -340,7 +345,13 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
       <h4>Color preferido</h4><OptionGrid values={BALL_COLOR_PREFERENCES} labels={COLOR_LABELS} selected={input.colorPreference} onSelect={(value) => patchInput({ colorPreference: value })} />
       <h4>Comparación opcional</h4>
       {currentBall && <div className={styles.ballHero}><span className={styles.ballGlyph}>●</span><div><h3>{currentBall.ballBrand} {currentBall.ballModel}</h3><p>Bola actual guardada{currentBall.catalogBallId ? " · disponible para comparación verificada" : " · modelo manual"}</p></div></div>}
-      <label>Bola actual para comparar (opcional)<select value={input.currentBallId || ""} onChange={(event) => patchInput({ currentBallId: event.target.value || null })}><option value="">Sin bola fija / no aparece</option>{activeBalls.map((ball) => <option key={ball.id} value={ball.id}>{ball.brand} {ball.model}{ball.generation ? ` · ${ball.generation}` : ""}</option>)}</select></label>
+      <AnchoredSearch label="Bola actual para comparar (opcional)" value={ballQuery} onChange={setBallQuery} placeholder="Escribe marca, modelo, generación o año" expanded status={ballSearch.status === "loading" ? "Buscando bolas…" : ballSearch.items.length ? `${ballSearch.items.length} resultados del catálogo` : "Sin coincidencias en el catálogo"}>
+        <AnchoredSearchOption label="No comparar con una bola" onSelect={() => patchInput({ currentBallId: null })}><b>Sin bola fija</b><small>No afecta las recomendaciones.</small></AnchoredSearchOption>
+        {ballSearch.items.filter((ball) => ball.active).map((ball) => <AnchoredSearchOption key={ball.id} label={`Seleccionar ${ball.brand} ${ball.model}`} onSelect={() => { patchInput({ currentBallId: ball.id }); setBallQuery(`${ball.brand} ${ball.model}`); }}><b>{ball.brand} {ball.model}</b><small>{[ball.generation, ball.year].filter(Boolean).join(" · ") || "Generación sin dato publicado"}</small></AnchoredSearchOption>)}
+      </AnchoredSearch>
+      {ballSearch.hasMore && <button type="button" className="secondary" onClick={() => void ballSearch.loadMore()}>Mostrar más bolas</button>}
+      {currentCatalogBall && <p className={styles.subtle}>Seleccionada: <b>{currentCatalogBall.brand} {currentCatalogBall.model}</b></p>}
+      <FeedbackLink category="BALL">¿No encuentras tu bola? Solicítala</FeedbackLink>
       <p className={styles.subtle}>Primero recomendamos con tus datos de juego. Esta selección sólo agrega una comparación contra tu bola actual.</p>
       <p className={styles.subtle}>Completitud de respuestas: {completeness}%. El recomendador puede dar una coincidencia parcial, pero necesita al menos dos preferencias comparables.</p>
     </section>}

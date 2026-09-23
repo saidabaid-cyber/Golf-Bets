@@ -1060,6 +1060,22 @@
 
 /* Owner review: premium, category-led bag without unlicensed OEM imagery. */
 .premiumBag { display:grid;gap:12px;margin-top:20px; }
+.launchFeature { display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:18px;padding:18px;border-radius:20px;background:linear-gradient(135deg,var(--by-pine,var(--green)),#173e29);color:#fff;box-shadow:0 15px 30px rgba(16,48,28,.18); }
+.launchFeature span { font-size:10px;font-weight:900;letter-spacing:.12em; }
+.launchFeature h3 { margin:5px 0 3px;color:#fff; }
+.launchFeature p { margin:0;color:rgba(255,255,255,.8); }
+@media (max-width:520px) { .launchFeature { grid-template-columns:1fr; } .launchFeature button { width:100%; } }
+.profileBagSummary { display:grid;gap:14px; }
+.profileBagSummary>header { display:flex;align-items:center;justify-content:space-between;gap:14px; }
+.profileBagSummary>div>span,.profileBagSummary>header span { color:var(--by-muted,var(--muted));font-size:10px;font-weight:850;letter-spacing:.08em;text-transform:uppercase; }
+.profileBagSummary h2 { margin:3px 0 0; }
+.profileBagRows { display:grid;border:1px solid var(--by-line,var(--line));border-radius:18px;overflow:hidden; }
+.profileBagRows button { display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:11px 14px;border:0;background:transparent;color:var(--ink);text-align:left;cursor:pointer; }
+.profileBagRows button+button { border-top:1px solid var(--by-line,var(--line)); }
+.profileBagRows button:hover,.profileBagRows button:focus-visible { background:rgba(224,235,215,.55);outline:0; }
+.profileBagRows button span { display:grid;gap:3px;min-width:0; }
+.profileBagRows button small { color:var(--by-muted,var(--muted));font-size:11px;font-weight:750; }
+.profileBagRows button b { overflow-wrap:anywhere;font:500 16px/1.25 var(--by-editorial,Georgia,serif); }
 .bagCategory { overflow:hidden;border:1px solid var(--by-line,var(--line));border-radius:20px;background:linear-gradient(145deg,#f7f9f3,#fff);box-shadow:0 8px 22px rgba(25,55,35,.045); }
 .bagCategory>header { display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid var(--by-line,var(--line));padding:13px 16px;background:rgba(231,238,222,.55); }
 .bagCategory>header div,.bagCategory>header span,.bagCategory>header b,.bagCategory>header small { min-width:0; }

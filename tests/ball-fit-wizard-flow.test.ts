@@ -36,6 +36,12 @@ function wizard(profileIndex: number | null = null, profileSource: handicap.Ball
     if (name === "react") return react;
     if (name === "./use-view-scroll-reset") return { useViewScrollReset() {} };
     if (name === "./numeric-capture-input") return { NumericCaptureInput: (props: Record<string, unknown>) => ({ type: "input", props }) };
+    if (name === "./anchored-search") return {
+      AnchoredSearch: (props: Record<string, unknown>) => ({ type: "div", props }),
+      AnchoredSearchOption: (props: Record<string, unknown>) => ({ type: "button", props }),
+    };
+    if (name === "./feedback-dialog") return { FeedbackLink: (props: Record<string, unknown>) => ({ type: "button", props }) };
+    if (name === "./use-equipment-catalog-search") return { useEquipmentCatalogSearch: () => ({ items: golfBallCatalog, status: "ready", hasMore: false, loadMore: async () => {} }) };
     // Presentation children do not own the fitting state exercised by this harness.
     if (name === "./catalog-product-media") return { CatalogProductMedia: (props: Record<string, unknown>) => ({ type: "catalog-media", props }) };
     if (name === "./backyard-icon") return { BackyardIcon: (props: Record<string, unknown>) => ({ type: "svg", props }) };

@@ -53,7 +53,7 @@ test("actual Home and Más markup has no settings control; remaining profile/not
   assert.equal(tools.length, 8); assert.ok(tools.every((node) => !/Configuración|settings/.test(text(node))));
   const page = readFileSync("app/page.tsx", "utf8");
   assert.doesNotMatch(page, /onOpenSettings/);
-  assert.match(readFileSync("app/components/profile-account-panel.tsx", "utf8"), /onClick=\{onOpenAccount\}><span><b>Cuenta y privacidad<\/b>/);
+  assert.match(readFileSync("app/components/profile-account-panel.tsx", "utf8"), /<b>Configuración<\/b><small>Preferencias, cuenta, notificaciones, privacidad y permisos/);
 });
 
 test("actual bottom navigation retains Continuar Ronda only with the existing resume callback", () => {

@@ -61,8 +61,9 @@ test("habitual config shares inline selection/detail controls, not toggle-only s
   const page = readFileSync("app/page.tsx", "utf8");
   const onboarding = readFileSync("app/components/beta-onboarding-flow.tsx", "utf8");
   assert.match(page, /mode="complete"/);
-  assert.match(onboarding, /mode="selection"/);
-  assert.doesNotMatch(onboarding, /mode="complete"/);
+  assert.match(onboarding, /mode="complete"/);
+  assert.doesNotMatch(onboarding, /mode="selection"/);
+  assert.match(onboarding, /Selecciona tus apuestas habituales y ajusta aquí sus valores y reglas/);
   assert.match(onboarding, /normalizeGroupGameTemplate\(draft.group.template, draft.group.members\) \?\? initialTemplate/);
 });
 

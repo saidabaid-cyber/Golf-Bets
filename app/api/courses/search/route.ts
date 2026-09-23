@@ -52,16 +52,16 @@ export async function GET(request: NextRequest) {
     if (!latitudeInput?.trim() || !longitudeInput?.trim() || !Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
       return NextResponse.json({ error: "invalid_location" }, { status: 400, headers: { "cache-control": "no-store" } });
     }
-    const layered = await layeredSearch({ query, limit, cursor, latitude, longitude });
+    const layered = await layeredSearch({ query, limit: 50, cursor, latitude, longitude });
     if (layered) return NextResponse.json({
       provider: layered.provider,
-      total: layered.total,
-      courses: layered.cards.slice(0, 3).map(({ card: course, distanceKm }) => ({
+      total: layered.cards.filter(({ distanceKm }) => distanceKm !== null && distanceKm <= 50).length,
+      courses: layered.cards.filter(({ distanceKm }) => distanceKm !== null && distanceKm <= 50).slice(0, 3).map(({ card: course, distanceKm }) => ({
         ...course,
         distanceKm: distanceKm === null ? null : Math.round(distanceKm * 10) / 10,
       })),
     }, { headers: { "cache-control": "private, no-store" } });
-    const result = await internalCourseDataProvider.nearbyCourses({ courses: DEFAULT_COURSES, origin: { latitude, longitude }, limit: Math.min(3, limit), radiusKm: 250 });
+    const result = await internalCourseDataProvider.nearbyCourses({ courses: DEFAULT_COURSES, origin: { latitude, longitude }, limit: Math.min(3, limit), radiusKm: 50 });
     if (!result.ok) return NextResponse.json({ error: result.code }, { status: 503, headers: { "cache-control": "no-store" } });
     return NextResponse.json({
       provider: result.providerId,

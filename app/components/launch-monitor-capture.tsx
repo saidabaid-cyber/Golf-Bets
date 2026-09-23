@@ -208,12 +208,12 @@ export function LaunchMonitorCapture({ userId, accessToken, requiresRemoteConsen
     : 12;
 
   return (
-    <details
-      className={styles.launchSection}
-      open={detailsOpen}
-      onToggle={(event) => setDetailsOpen(event.currentTarget.open)}
-    >
-      <summary>Fitting con launch monitor</summary>
+    <section className={styles.launchSection}>
+      <div className={styles.launchFeature}>
+        <div><span>FIT CON LAUNCH MONITOR</span><h3>Analiza tus mediciones reales</h3><p>TrackMan, FlightScope, Garmin, GCQuad, Rapsodo u otro.</p></div>
+        <button type="button" className="primary" onClick={() => setDetailsOpen((current) => !current)} aria-expanded={detailsOpen}>{detailsOpen ? "CERRAR CAPTURA" : session ? "REVISAR LAUNCH MONITOR" : "USAR LAUNCH MONITOR"}</button>
+      </div>
+      {detailsOpen && <>
       <p className={styles.subtle} id="launch-monitor-help">
         Si ya tienes datos de TrackMan, FlightScope, Garmin u otro launch monitor, usa cámara o captura manual. Nada se guarda hasta que revises y confirmes.
       </p>
@@ -413,6 +413,7 @@ export function LaunchMonitorCapture({ userId, accessToken, requiresRemoteConsen
           <p className={styles.disclaimer}>Estos datos complementan The Backyard Ball Fit. No constituyen un fitting oficial de ninguna marca ni sustituyen una sesión profesional.</p>
         </div>
       )}
-    </details>
+      </>}
+    </section>
   );
 }

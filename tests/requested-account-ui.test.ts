@@ -83,7 +83,7 @@ test("Perfil muestra estadísticas reales y deja ausentes como guion", () => {
 });
 
 test("Cuenta permite activar avisos internos sin prometer push del dispositivo", () => {
-  assert.match(account, /Avisos sociales dentro de la app/);
+  assert.match(account, /Avisos de actividad nueva dentro de The Backyard/);
   assert.match(account, /type="checkbox" checked=\{notificationsEnabled\}/);
   assert.match(account, /onNotificationsEnabledChange\(event\.target\.checked\)/);
   assert.doesNotMatch(account, /<span>Notificaciones<\/span><select value="future" disabled>/);

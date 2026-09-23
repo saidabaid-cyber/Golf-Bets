@@ -1,9 +1,10 @@
 "use client";
 import { useEffect,useMemo,useRef,useState } from 'react';
-import { nearestReviewedClubs,reviewedClubsLocationSummary,REVIEWED_NEARBY_DISTANCE_KM,searchReviewedCourses,type ReviewedCatalogCourse } from '../../lib/review-course-catalog';
+import { nearestReviewedClubs,reviewedClubsLocationSummary,searchReviewedCourses,type ReviewedCatalogCourse } from '../../lib/review-course-catalog';
 import { requestCourseLocation,type CourseLocationResult } from '../../lib/browser-course-location';
 import type { Course } from '../../lib/types';
 import { AnchoredSearch,AnchoredSearchOption } from './anchored-search';
+import { FeedbackLink } from './feedback-dialog';
 import styles from './catalog-course-picker.module.css';
 type Entry=Omit<ReviewedCatalogCourse,'tees'> & {teeCount:number;completeCards:number};
 export function CatalogCoursePicker({token,onSelect,onSelectClub,onSelectHomeCourse,selectedName='',onRequest,showHeading=true,purpose='round',onSelectionReadyChange}:{token?:string|null;onSelect?:(course:Course,cards:Course[])=>void;onSelectClub?:(club:{clubId:string;clubName:string})=>void;onSelectHomeCourse?:(selection:{clubId:string;clubName:string;courseId:string;courseName:string})=>void|Promise<void>;selectedName?:string;onRequest?:()=>void;showHeading?:boolean;purpose?:'round'|'home-club';onSelectionReadyChange?:(ready:boolean)=>void}) {
@@ -61,7 +62,7 @@ export function CatalogCoursePicker({token,onSelect,onSelectClub,onSelectHomeCou
     {locating&&<><p role="status">Buscando ubicación… Si el navegador lo solicita, permite el acceso.</p><button type="button" className="textButton" onClick={()=>{cancelLocation.current();setLocation({status:'idle'});}}>Cancelar búsqueda</button></>}
     {locationError&&<div role="status"><p>{locationError}</p><button type="button" className="secondary" onClick={locate}>Reintentar</button></div>}
     {location.status==='located'&&<p role="status">{loading?'Ubicación obtenida. Cargando clubes…':error?'Ubicación obtenida. Reintenta cargar el catálogo.':reviewedClubsLocationSummary(nearby)}</p>}
-    {nearby.map(c=><button type="button" className={styles.club} key={c.clubId} onClick={()=>selectClub(c)}><b>{c.clubName}</b><span>{[c.city,c.stateRegion].filter(Boolean).join(', ')} · {c.distanceKm.toFixed(1)} km{c.distanceKm>REVIEWED_NEARBY_DISTANCE_KM?' · Fuera de 100 km':''}</span></button>)}
+    {nearby.map(c=><button type="button" className={styles.club} key={c.clubId} onClick={()=>selectClub(c)}><b>{c.clubName}</b><span>{[c.city,c.stateRegion].filter(Boolean).join(', ')} · {c.distanceKm.toFixed(1)} km</span></button>)}
     {nearby.length>0&&<details className={styles.notes}><summary>Sobre las distancias</summary><small>Distancia geográfica aproximada, no de manejo, entre clubes con ubicación verificada. Algunas ubicaciones: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors (ODbL)</a>.</small></details>}
     <AnchoredSearch inlineResults label="Buscar otro campo" value={query} onChange={setQuery} placeholder="Nombre, club o nombre alternativo" expanded={Boolean(query.trim())} status={loading?'Cargando catálogo…':query.trim()&&!clubs.length?'Sin coincidencias. Puedes solicitar el campo.':`${entries.length} recorridos disponibles`}>
       {clubs.slice(0,30).map(c=><AnchoredSearchOption key={c.clubId} label={`Seleccionar ${c.clubName}`} onSelect={()=>selectClub(c)}><b>{c.clubName}</b><small>{[c.city,c.stateRegion].filter(Boolean).join(', ')}</small></AnchoredSearchOption>)}
@@ -72,6 +73,7 @@ export function CatalogCoursePicker({token,onSelect,onSelectClub,onSelectHomeCou
     {club&&selectedClubCourses.length>1&&<label>Recorrido<select aria-label="Recorrido" value={chosen} onChange={e=>void selectCourse(e.target.value)}><option value="">Selecciona recorrido</option>{selectedClubCourses.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
     {purpose==='home-club'&&club&&chosen&&<p role="status">Recorrido seleccionado: {selectedClubCourses.find(course=>course.id===chosen)?.name}</p>}
     {purpose==='round'&&cards.length>0&&<label>Salida / tee inicial<select aria-label="Salida del catálogo" value="" onChange={e=>{const c=cards.find(t=>t.id===e.target.value);if(c)onSelect?.(c,cards);}}><option value="">Elige una salida</option>{cards.map(c=><option disabled={c.holes.length!==18} key={c.id} value={c.id}>{c.teeName} · {c.holes.length===18?`${c.totalYards??'—'} yd`:'Sin tarjeta disponible'}{c.catalogReview?.issues.length?' · Datos señalados':''}</option>)}</select></label>}
+    {purpose==='round'&&club&&<FeedbackLink category="TEE">¿Falta un tee? Solicitar tee</FeedbackLink>}
     {selectedName&&(!club||chosen)&&<p role="status">Seleccionado: {selectedName}</p>}
     {purpose==='round'&&cards.length>0&&<details className={styles.notes}><summary>Ratings y tees por jugador</summary><p>Categoría de rating por verificar: no se aplica automáticamente. Puedes registrar datos verificados manualmente. Selecciona 9/18 hoyos y después el tee de cada jugador.</p></details>}
     {onRequest&&<button type="button" className={styles.request} onClick={onRequest}>¿No encuentras tu campo? Solicítalo ↗</button>}

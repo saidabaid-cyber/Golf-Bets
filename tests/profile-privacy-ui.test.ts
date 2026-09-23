@@ -36,9 +36,11 @@ test("Foto, Emoji, Crear avatar y Sin imagen son cuatro opciones 2×2 responsive
   assert.match(pickerCss, /\.profilePreview \{ border-radius: 50%; \}/);
 });
 
-test("Perfil enlaza Mi equipo, Preferencias y Notificaciones a controles existentes", () => {
+test("Perfil enlaza Mi equipo y un único acceso principal a Configuración", () => {
   assert.match(profile, /aria-label="Secciones de Mi Perfil"/);
-  for (const section of ["Mi equipo", "Preferencias", "Cuenta y privacidad", "Notificaciones"]) assert.match(profile, new RegExp(`<b>${section}</b>`));
+  for (const section of ["Mi equipo", "Configuración"]) assert.match(profile, new RegExp(`<b>${section}</b>`));
+  assert.doesNotMatch(profile, /profileNavigationCard"[^>]*><span><b>Preferencias<\/b>/);
+  assert.doesNotMatch(profile, /profileNavigationCard"[^>]*><span><b>Notificaciones<\/b>/);
   assert.match(profile, /onClick=\{onOpenEquipment\}[\s\S]*?<b>Mi equipo<\/b>/);
   assert.match(profile, /onBackToProfile/);
   assert.match(page, /onOpenEquipment=\{\(\) => setProfileFocus\("equipment"\)\}/);

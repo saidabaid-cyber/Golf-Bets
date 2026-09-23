@@ -36,7 +36,7 @@ test("Mi bolsa permite catálogo, captura manual, múltiples categorías, edici�
   for (const field of ["Marca", "Modelo", "Generación", "Loft", "Mano", "Varilla", "Flex", "Peso de varilla", "Longitud", "Lie", "Grip", "Notas"]) assert.match(editors, new RegExp(field));
   for (const set of ["4–P", "4–AW", "5–P", "5–AW"]) assert.match(editors, new RegExp(set));
   assert.match(editors, /Personalizar set/);
-  assert.match(panel, /Mi bolsa/);
+  assert.match(panel, /Mi Bolsa/);
   assert.match(panel, /Editar/);
   assert.match(panel, /Mover a anterior/);
   assert.match(panel, /Equipo anterior/);
