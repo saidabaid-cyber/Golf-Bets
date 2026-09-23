@@ -462,10 +462,29 @@ async function recoverVisibleSources(ctx: SocialContext) {
   }
 }
 
+/**
+ * Legacy activity repair is maintenance, not the source of truth for the feed.
+ * A transient repair failure must never hide already-authorized activity or
+ * turn an otherwise readable feed into a 503.
+ */
+async function recoverVisibleSourcesBestEffort(ctx: SocialContext) {
+  try {
+    await recoverVisibleSources(ctx);
+  } catch (error) {
+    const safe = error && typeof error === "object"
+      ? error as { code?: unknown; status?: unknown }
+      : {};
+    console.warn("backyard_social_recovery_deferred", {
+      code: typeof safe.code === "string" ? safe.code : "UNKNOWN",
+      status: typeof safe.status === "number" ? safe.status : undefined,
+    });
+  }
+}
+
 export async function listActivity(
   ctx: SocialContext, query: { localRoundId?: string; limit?: number; cursor?: string; friendsOnly?: boolean } = {},
 ): Promise<SocialActivityPage> {
-  await recoverVisibleSources(ctx);
+  await recoverVisibleSourcesBestEffort(ctx);
   const limit = Math.min(30, Math.max(1, Math.floor(query.limit || 15)));
   let builder = ctx.client.from("social_activities_v3").select("*")
     .eq("active", true).order("created_at", { ascending: false }).order("id", { ascending: false });
