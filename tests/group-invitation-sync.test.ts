@@ -98,10 +98,6 @@ test("group save handlers own an in-flight latch and show loading; accepted call
   assert.match(page, /if \(frequentGroupSaveInFlight.current\) return/);
   assert.match(page, /await saveExplicitGroupSnapshot/);
   assert.match(page, /disabled=\{frequentGroupSaving\}/);
-  assert.match(beta, /if \(groupSaveInFlight.current\) return/);
-  assert.match(beta, /await saveExplicitGroupSnapshot/);
-  assert.match(beta, /disabled=\{groupSaving\}/);
   assert.match(page, /onAcceptedMembers=\{/);
-  assert.equal((beta.match(/onAcceptedMembers=\{acceptGroupMembers\}/g) || []).length, 2);
-  assert.match(beta, /nextMembers === current.group.members \? current : \{ \.\.\.current, group: \{ \.\.\.current.group, members: nextMembers \} \}/);
+  assert.doesNotMatch(beta, /groupSaveInFlight|GroupInviteManager|onAcceptedMembers/, "group creation is intentionally deferred beyond onboarding");
 });

@@ -98,8 +98,12 @@ export function finishInitialDevicePermissions(storage: ReadableStorage & Writab
 
 export function disableLocationForApp(storage: ReadableStorage & WritableStorage, userId: string) {
   const current = readDevicePermissionPreferences(storage, userId);
-  const { coarseLocation: _coarseLocation, ...rest } = current;
-  return saveDevicePermissionPreferences(storage, { ...rest, locationEnabled: false, updatedAt: now() });
+  return saveDevicePermissionPreferences(storage, {
+    ...current,
+    coarseLocation: undefined,
+    locationEnabled: false,
+    updatedAt: now(),
+  });
 }
 
 export function disableNotificationsForApp(storage: ReadableStorage & WritableStorage, userId: string) {

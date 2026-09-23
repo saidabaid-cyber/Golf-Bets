@@ -32,7 +32,7 @@ test("onboarding conserva salida, regreso y progreso multiselección", () => {
   assert.match(equipment, /← Anterior/);
 });
 
-test("perfil y grupos usan archivos o avatares, nunca placeholders URL", () => {
+test("perfil usa archivos o avatares y onboarding no repite captura de Grupos", () => {
   const picker = read("app/components/profile-image-picker.tsx");
   const provider = read("app/components/account-provider.tsx");
   const group = read("app/components/beta-onboarding-flow.tsx");
@@ -43,7 +43,7 @@ test("perfil y grupos usan archivos o avatares, nunca placeholders URL", () => {
   assert.match(picker, /normalizeProfileEmojiAvatar/);
   assert.doesNotMatch(picker, /Avatares disponibles/);
   assert.match(provider, /<ProfileImagePicker value=\{avatarUrl\}/);
-  assert.match(group, /<ProfileImagePicker[^>]+kind="group"/);
+  assert.doesNotMatch(group, /<ProfileImagePicker[^>]+kind="group"|GroupInviteManager/);
   assert.doesNotMatch(`${provider}\n${group}`, /placeholder="https:\/\//);
 });
 

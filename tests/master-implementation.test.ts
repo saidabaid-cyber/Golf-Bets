@@ -51,18 +51,23 @@ test("Caddie AI es exclusivo de Backyard Black y no inventa contexto faltante", 
   assert.ok(missingCaddieInputs(context).includes("posición de bandera"));
 });
 
-test("setup oculta tees avanzados, muestra campo cercano y preflight sin botón muerto", () => {
+test("setup auto-avanza campo → tee, conserva ajustes avanzados y preflight sin botón muerto", () => {
   const page = readFileSync("app/page.tsx", "utf8");
   const picker = readFileSync("app/components/round-course-picker.tsx", "utf8");
   const route = readFileSync("app/api/courses/search/route.ts", "utf8");
   const wizard = readFileSync("app/components/round-setup-wizard.tsx", "utf8");
   assert.match(page, /<h2>1\. Campo<\/h2>/);
+  assert.match(page, /courseSetupStage === "course"/);
+  assert.match(page, /<RoundTeePicker/);
+  assert.match(page, /onSelect=\{selectRoundTee\}/);
   assert.match(page, /<details className="playerTeeAssignments optionalTeeSetup">/);
   assert.match(wizard, /FALTA COMPLETAR/);
   assert.match(wizard, /document\.getElementById\(issue\.targetId\)/);
   assert.match(picker, /Buscar campos cercanos con mi ubicación/);
-  assert.match(picker, /No diste permiso de ubicación/);
+  assert.match(picker, /Ubicación desactivada/);
+  assert.doesNotMatch(picker, /getCurrentPosition/);
   assert.match(route, /nearbyCourses/);
+  assert.match(route, /radiusKm: 50/);
   assert.match(route, /invalid_location/);
 });
 

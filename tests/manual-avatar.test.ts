@@ -103,7 +103,7 @@ test("colores táctiles y opciones de pelo, barba y accesorios exigidos están d
   assert.match(creator, /className=\{styles.swatch\}/);
 });
 
-test("Home, navegación, ronda y Social consumen el mismo media validado; Grupos conserva su imagen propia", () => {
+test("Home, navegación, ronda y Social consumen el mismo media validado; onboarding no duplica Grupos", () => {
   const media = readFileSync("app/components/profile-avatar-media.tsx", "utf8");
   const home = readFileSync("app/components/home-dashboard.tsx", "utf8");
   const navigation = readFileSync("app/components/profile-navigation-button.tsx", "utf8");
@@ -115,5 +115,5 @@ test("Home, navegación, ronda y Social consumen el mismo media validado; Grupos
   assert.match(navigation, /<ProfileAvatarMedia value=\{avatarUrl\}/);
   assert.match(round, /<ProfileAvatarMedia className=\{styles.avatar\} value=\{activePlayer.id === owner\?\.id \? ownerAvatarUrl : undefined\}/);
   assert.match(social, /<ProfileAvatarMedia value=\{p.avatar_url\}/);
-  assert.match(group, /<ProfileImagePicker kind="group" value=\{draft.group.imageUrl\}/);
+  assert.doesNotMatch(group, /ProfileImagePicker[^>]+kind="group"|GroupInviteManager/);
 });
