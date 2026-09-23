@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, writeFile, appendFile, readdir } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, appendFile, readdir, lstat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { Readable, Writable } from 'node:stream';
 import { encrypt, decrypt, encryptionKey, verifyEncrypted } from './crypto.mjs';
-import { safeChild, databaseEnvironment, storageConfig, enumerateStorage, backupStorage, runBackup, verifyBackup, command, commandEnvironment, hashFile, listFiles, jsonFile, QA_REF, OWNER_REF, OWNER_SESSION_POOLER_HOST, OWNER_SESSION_POOLER_USER, decryptBackup, backupDatabase, assertDatabaseReadOnly, storageReadOnlyFetch } from './core.mjs';
+import { safeChild, databaseEnvironment, storageConfig, enumerateStorage, backupStorage, runBackup, verifyBackup, command, commandEnvironment, hashFile, listFiles, jsonFile, QA_REF, OWNER_REF, OWNER_SESSION_POOLER_HOST, OWNER_SESSION_POOLER_USER, decryptBackup, backupDatabase, assertDatabaseReadOnly, storageReadOnlyFetch, withDecryptedArchive } from './core.mjs';
 import { secretKinds } from './security-scan.mjs';
 import { verifyDatabaseFile } from './core.mjs';
 import { fileURLToPath } from 'node:url';
@@ -25,6 +25,19 @@ test('wrong key, bit flip and truncation cannot verify',async()=>{
   await assert.rejects(verifyEncrypted(file,encryptionKey(keyEnv())));
   const bytes=await readFile(file);bytes[20]^=1;await writeFile(file,bytes);await assert.rejects(verifyEncrypted(file,key));
   await writeFile(file,bytes.subarray(0,10));await assert.rejects(verifyEncrypted(file,key));
+});
+test('pg_restore plaintext staging is private, ephemeral and removed on success or failure',async()=>{
+  const dir=await temp(),encrypted=join(dir,'archive.enc'),key=encryptionKey(keyEnv()),bytes=randomBytes(200000);
+  await encrypt(Readable.from([bytes]),encrypted,key);
+  let successPath;
+  await withDecryptedArchive(encrypted,key,async(path)=>{
+    successPath=path;assert.deepEqual(await readFile(path),bytes);
+    const info=await lstat(path);assert.ok(info.isFile());if(process.platform!=='win32')assert.equal(info.mode&0o777,0o600);
+  });
+  await assert.rejects(lstat(successPath),error=>error.code==='ENOENT');
+  let failurePath;
+  await assert.rejects(withDecryptedArchive(encrypted,key,async(path)=>{failurePath=path;throw new Error('fixture failure');}),/fixture failure/);
+  await assert.rejects(lstat(failurePath),error=>error.code==='ENOENT');
 });
 test('zero byte Storage files are legitimate and encrypted output never overwrites',async()=>{
   const dir=await temp(),file=join(dir,'empty.enc'),key=encryptionKey(keyEnv());await encrypt(Readable.from([]),file,key);assert.equal(await verifyEncrypted(file,key),0);
@@ -77,9 +90,10 @@ test('owner database accepts only the exact direct or Session Pooler identity',(
   assert.ok(databaseEnvironment({...env,BACKUP_SOURCE:'local',BACKUP_PGHOST:'127.0.0.1',BACKUP_PGPORT:'54322',BACKUP_PGDATABASE:'test_local'}));
 });
 test('inherited libpq settings and alternate connection strings cannot redirect or inject startup options',()=>{
-  const pg=databaseEnvironment({...ownerEnv(),PATH:'test-path',PGHOSTADDR:'203.0.113.10',pghostaddr:'203.0.113.11',PGSERVICE:'untrusted',PGSERVICEFILE:'untrusted',PGDATABASE:'host=untrusted',PGOPTIONS:'-c default_transaction_read_only=off',pgoptions:'-c transaction_read_only=off',PGSSLMODE:'disable',BACKUP_STORAGE_KEY:'synthetic-storage-key'});
+  const pg=databaseEnvironment({...ownerEnv(),PATH:'test-path',PGHOSTADDR:'203.0.113.10',pghostaddr:'203.0.113.11',PGSERVICE:'untrusted',PGSERVICEFILE:'untrusted',PGPASSFILE:'untrusted',PGDATABASE:'host=untrusted',PGOPTIONS:'-c default_transaction_read_only=off',pgoptions:'-c transaction_read_only=off',PGSSLMODE:'disable',BACKUP_STORAGE_KEY:'synthetic-storage-key'});
   assert.equal(pg.PATH,'test-path');assert.equal(pg.PGHOSTADDR,undefined);assert.equal(pg.pghostaddr,undefined);
-  assert.equal(pg.PGSERVICE,'');assert.equal(pg.PGSERVICEFILE,'');assert.equal(pg.PGSSLMODE,'verify-full');assert.equal(pg.PGDATABASE,'postgres');
+  for(const name of ['PGSERVICE','PGSERVICEFILE','PGPASSFILE'])assert.ok(!Object.hasOwn(pg,name));
+  assert.equal(pg.PGSSLMODE,'verify-full');assert.equal(pg.PGDATABASE,'postgres');
   assert.ok(!Object.keys(pg).some(k=>/^PGOPTIONS$/i.test(k)));
   assert.ok(!Object.keys(pg).some(k=>k.startsWith('BACKUP_')));
 });
@@ -91,7 +105,8 @@ function databaseTools(replies=['on\n']){
       if(executable==='psql'){const result=replies[Math.min(checks++,replies.length-1)];if(result instanceof Error)throw result;return result;}
       return 'pg_dump (PostgreSQL) 17.11\n';
     },
-    encryptedCommand:async(executable,args,file,key,env,input)=>{calls.push({executable,args,file,key,env,input});}
+    encryptedCommand:async(executable,args,file,key,env,input)=>{calls.push({executable,args,file,key,env,input});},
+    withDecryptedArchive:async(_archive,_key,action)=>action(resolve('fixture-full.dump'))
   }};
 }
 test('explicit read-only transaction preflight protects direct and Session Pooler exports',async()=>{
@@ -104,7 +119,7 @@ test('explicit read-only transaction preflight protects direct and Session Poole
     const exports=calls.filter(c=>c.file);assert.equal(exports.length,schemaOnly?1:4);
     assert.ok(calls.indexOf(checks[0])<calls.indexOf(exports[0]));
     if(!schemaOnly){assert.ok(calls.indexOf(checks[1])<calls.indexOf(exports[3]));assert.equal(exports[3].executable,'pg_dumpall');}
-    for(const c of exports){assert.ok(c.file.endsWith('.enc'));assert.equal(c.key.length,32);if(c.executable==='pg_restore'){assert.ok(c.args.includes('--file=-'));assert.ok(c.input.endsWith('.enc'));assert.ok(!c.args.some(a=>a.startsWith('--dbname')));}}
+    for(const c of exports){assert.ok(c.file.endsWith('.enc'));assert.equal(c.key.length,32);if(c.executable==='pg_restore'){assert.ok(c.args.includes('--file=-'));assert.equal(c.args.at(-1),resolve('fixture-full.dump'));assert.equal(c.input,undefined);assert.ok(!c.args.some(a=>a.startsWith('--dbname')));}}
   }
 });
 test('off, malformed or failed explicit read-only checks abort before any dump or output directory',async()=>{

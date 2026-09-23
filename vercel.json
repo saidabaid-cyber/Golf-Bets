@@ -1,5 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "ignoreCommand": "node scripts/backup/skip-vercel-deploy.mjs",
   "git": {
     "deploymentEnabled": {
       "integration/backyard-current": true,
