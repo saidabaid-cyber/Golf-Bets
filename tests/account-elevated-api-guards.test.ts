@@ -48,6 +48,7 @@ function harness(route: typeof routes[number], options: Options = {}) {
         guardCalls++; return options.accessFailure ?? null;
       } };
       if (id.endsWith("/feature-flags")) return { equipmentCloudServerEnabled: true };
+      if (id.endsWith("/engine")) return { playOrder: () => Array.from({ length: 18 }, (_, index) => index + 1) };
       if (id.endsWith("/golf-catalog-admin-contract")) return { parseAdminBearerToken: () => "still-valid-but-archived-jwt", hasImmutableAdminRole: () => true };
       if (id.endsWith("/backyard-ai/server/config") || id === "./config") return { aiProcessingConsentLedgerAccess: () => ({ allowed: true }) };
       if (["../privacy", "../consent-record"].includes(id)) return {};

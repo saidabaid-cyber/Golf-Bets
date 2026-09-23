@@ -36,16 +36,17 @@ test("category-to-form flow keeps distinct equipment inputs and a manual shaft f
 });
 
 test("successful local save leads to add-another, bag and profile destinations; failed save stays editable", () => {
-  assert.match(panel, /if \(saved\) \{\s*setClubEditor\(null\);\s*setFlowSuccess/);
+  assert.match(panel, /if \(saved\) \{\s*setClubEditor\(null\);\s*setClubDetailId\(club\.id\);\s*setFlowSuccess/);
   assert.match(panel, /if \(saved\) \{\s*setBallEditor\(null\);\s*setFlowSuccess/);
   assert.match(panel, /data-equipment-screen="success"/);
-  assert.match(panel, /setFlowSuccess\(null\); setClubEditor\("new"\); \}\}>Agregar otro/);
+  assert.match(panel, /setFlowSuccess\(null\); setClubDetailId\(null\); setClubEditor\("new"\); \}\}>Agregar otro/);
   assert.match(panel, /Volver a Mi Bolsa/);
   assert.match(panel, /onBackToProfile && <button[^>]*onClick=\{onBackToProfile\}>Volver a Perfil/);
   assert.match(editors, /if \(saved === false\) setMessage\("No se confirmó el guardado en este dispositivo/);
   assert.match(persistence, /saveEquipmentProfile\(localStorage, normalized\)/);
   assert.match(persistence, /enqueueSync\(result\.profile, activeScopeRef\.current\)/);
-  assert.match(panel, /className=\{styles\.itemTitleButton\} onClick=\{onEdit\}/);
+  assert.match(panel, /className=\{styles\.equipmentItemButton\} onClick=\{onOpen\}/);
+  assert.match(panel, /data-equipment-screen="club-detail"/);
 });
 
 test("club, ball and manual-distance removal require an in-app confirmation and preserve round snapshots", () => {

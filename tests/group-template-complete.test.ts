@@ -61,9 +61,7 @@ test("habitual config shares inline selection/detail controls, not toggle-only s
   const page = readFileSync("app/page.tsx", "utf8");
   const onboarding = readFileSync("app/components/beta-onboarding-flow.tsx", "utf8");
   assert.match(page, /mode="complete"/);
-  assert.match(onboarding, /mode="selection"/);
-  assert.doesNotMatch(onboarding, /mode="complete"/);
-  assert.match(onboarding, /normalizeGroupGameTemplate\(draft.group.template, draft.group.members\) \?\? initialTemplate/);
+  assert.doesNotMatch(onboarding, /GroupBetTemplateEditor|mode="selection"|mode="complete"/, "bets are configured contextually after onboarding");
 });
 
 test("future roster/HCP/pairs can remain pending in template but never bypass round preflight", () => {

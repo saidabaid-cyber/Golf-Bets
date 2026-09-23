@@ -182,13 +182,14 @@ test("priority UX keeps searches anchored and avoids loading a round course drop
 
 test("onboarding, groups and account deletion expose explicit safe choices", () => {
   const onboarding = readFileSync("app/components/beta-onboarding-flow.tsx", "utf8");
+  const page = readFileSync("app/page.tsx", "utf8");
   const account = readFileSync("app/components/account-panel.tsx", "utf8");
   const accountDialog = readFileSync("app/components/profile-data-dialogs.tsx", "utf8");
-  assert.match(onboarding, /name: ""/);
-  assert.match(onboarding, /<b>Privado<\/b>/);
-  assert.match(onboarding, /<b>Por invitación<\/b>/);
-  assert.match(onboarding, /<GroupInviteManager/);
-  assert.match(readFileSync("app/page.tsx", "utf8"), /<CaptureGroupInvitationLink \/><AccountProvider><PendingGroupInvitation \/>/);
+  assert.doesNotMatch(onboarding, /GroupInviteManager|Configurar grupos y apuestas/);
+  assert.match(page, /<b>Privado<\/b>/);
+  assert.match(page, /<b>Por invitación<\/b>/);
+  assert.match(page, /<GroupInviteManager/);
+  assert.match(page, /<CaptureGroupInvitationLink \/><AccountProvider><PendingGroupInvitation \/>/);
   const invitations = readFileSync("app/api/groups/invitations/route.ts", "utf8");
   assert.match(invitations, /authenticatedRequest\(request\)/);
   assert.match(invitations, /isolatedPreviewDatabaseEnabled\(\)/);

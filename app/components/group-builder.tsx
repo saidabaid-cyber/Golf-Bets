@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { FrequentGroup, FrequentPlayer, Player } from "../../lib/types";
 import { frequentGroupTemplateDetails, frequentGroupTemplateSummary } from "../../lib/group-game-template";
 import {

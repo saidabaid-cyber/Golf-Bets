@@ -103,6 +103,7 @@ function featureHarness(file: string, options: { active?: boolean; remoteError?:
     "answer-command": { roundSetupAnswerCommand: (_q: unknown, input: string) => input },
     "canonical-command-guard": { validateCanonicalRoundCommand: (_input: string, command: string) => ({ ok: true, command }) },
     "round-setup": { planRoundSetup: () => ({ draft, questions: [], memory: [], configurationIssues: [], canConfirm: true, interpretation: { confidence: 1 } }) },
+    "engine": { playOrder: (startHole: number) => Array.from({ length: 18 }, (_, index) => ((startHole - 1 + index) % 18) + 1) },
     "personal-modes": { frequentPersonalSuggestions: () => [] },
     "speech-dictation": { speechRecognitionConstructor: () => function Recognition() {}, createDictationSession: () => ({ start: () => { microphoneStarts++; }, dispose: () => undefined }) },
     "limits": { MAX_SCORECARD_PHOTOS: 4 },
