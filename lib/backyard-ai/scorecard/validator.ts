@@ -69,7 +69,7 @@ function roundValidationErrors(round: ActiveScorecardRound) {
   const errors: string[] = [];
   if (!round || typeof round !== "object") return ["La ronda activa no existe."];
   if (!round.roundId?.trim()) errors.push("La ronda activa no tiene ID.");
-  if (round.startHole !== 1 && round.startHole !== 10) errors.push("La salida debe ser por el hoyo 1 o 10.");
+  if (!Number.isInteger(round.startHole) || round.startHole < 1 || round.startHole > 18) errors.push("La salida debe ser un hoyo del 1 al 18.");
   if (round.roundHoles !== 9 && round.roundHoles !== 18) errors.push("La ronda debe tener 9 o 18 hoyos.");
   if (!Array.isArray(round.players) || !round.players.length) errors.push("La ronda no tiene jugadores.");
   else {

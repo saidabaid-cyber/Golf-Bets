@@ -1,5 +1,5 @@
 import { collectBetConfigurationIssues, type BetConfigurationIssue, type RoundBetConfiguration } from "../../bet-config-validation";
-import { normalizeFoursomeSegments, playOrder, segmentDefinitions } from "../../engine";
+import { normalizeFoursomeSegments, normalizeRoundStartHole, playOrder, segmentDefinitions } from "../../engine";
 import type { RoundTemplateOrigin } from "../../group-game-template";
 import { restoreBetConfig } from "../../new-round-bets";
 import { personalNassauBetsForRoundHoles } from "../../personal-nassau";
@@ -42,7 +42,7 @@ export type RoundSetupDraft = {
   /** Tee metadata frozen per player so conversational edits cannot collapse a mixed-tee round. */
   playerTeeAssignments: PlayerTeeAssignmentSnapshot[];
   ownerId: string;
-  startHole: 1 | 10;
+  startHole: number;
   roundHoles: 9 | 18;
   handicapBasis: RoundHandicapBasis;
   bets: BetConfig;
@@ -67,7 +67,7 @@ export type CreateRoundSetupDraftInput = {
   players?: Player[];
   playerTeeAssignments?: PlayerTeeAssignmentSnapshot[];
   ownerId?: string;
-  startHole?: 1 | 10;
+  startHole?: number;
   roundHoles?: 9 | 18;
   handicapBasis?: RoundHandicapBasis;
   bets?: Partial<BetConfig> | null;
@@ -100,7 +100,7 @@ function validCourse(course: Course | null | undefined) {
 
 export function createRoundSetupDraft(input: CreateRoundSetupDraftInput): RoundSetupDraft {
   const players = clone(input.players ?? []);
-  const startHole = input.startHole === 10 ? 10 : 1;
+  const startHole = normalizeRoundStartHole(input.startHole);
   const roundHoles = input.roundHoles === 9 ? 9 : 18;
   const handicapBasis = input.handicapBasis === "course" ? "course" : "relative";
   const playerIds = players.map((player) => player.id);

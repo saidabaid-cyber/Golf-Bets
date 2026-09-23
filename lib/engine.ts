@@ -62,10 +62,25 @@ function isValidDecimalMode(value: unknown): value is DecimalMode {
   return typeof value === "string" && DECIMAL_MODES.has(value as DecimalMode);
 }
 
-export function playOrder(startHole: 1 | 10 = 1) {
-  return startHole === 1
-    ? Array.from({ length: 18 }, (_, i) => i + 1)
-    : [...Array.from({ length: 9 }, (_, i) => i + 10), ...Array.from({ length: 9 }, (_, i) => i + 1)];
+export function normalizeRoundStartHole(value: unknown, fallback = 1) {
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 18 ? parsed : fallback;
+}
+
+/** Physical 18-hole order, including shotgun starts and a single wrap at H18. */
+export function playOrder(startHole = 1) {
+  const start = normalizeRoundStartHole(startHole);
+  return Array.from({ length: 18 }, (_, index) => ((start - 1 + index) % 18) + 1);
+}
+
+/** Rotates only holes that actually exist on the selected course. */
+export function playOrderForHoles(holeNumbers: readonly number[], startHole = 1) {
+  const physical = [...new Set(holeNumbers.filter((hole) => Number.isInteger(hole) && hole >= 1 && hole <= 18))].sort((left, right) => left - right);
+  if (!physical.length) return playOrder(startHole);
+  const requested = normalizeRoundStartHole(startHole, physical[0]);
+  const startIndex = physical.indexOf(requested);
+  const index = startIndex >= 0 ? startIndex : 0;
+  return [...physical.slice(index), ...physical.slice(0, index)];
 }
 
 export function playersByIds(players: Player[], ids: string[] | undefined) {

@@ -1,5 +1,5 @@
 import { accountPrimaryPlayerId } from "./account-primary-player";
-import { normalizeFoursomeSegments, playOrder, segmentDefinitions } from "./engine";
+import { normalizeFoursomeSegments, normalizeRoundStartHole, playOrder, segmentDefinitions } from "./engine";
 import { initialBets, restoreBetConfig } from "./new-round-bets";
 import { MAX_ROUND_PLAYERS, ROUND_PLAYER_LIMIT_MESSAGE } from "./round-player-limit";
 import { normalizeSupplementalBets } from "./supplemental-bets";
@@ -20,7 +20,7 @@ import type {
 export type GroupTemplateDraftSource = {
   ownerId: string;
   players: Player[];
-  startHole: 1 | 10;
+  startHole: number;
   roundHoles: 9 | 18;
   roundHandicapBasis: RoundHandicapBasis;
   bets: BetConfig;
@@ -396,7 +396,7 @@ export function normalizeGroupGameTemplate(value: unknown, members: FrequentGrou
   const memberIds = members.map((member) => member.memberId).filter((id): id is string => validId(id));
   if (!memberIds.length || !raw.betConfig || typeof raw.betConfig !== "object") return undefined;
   const roundDefaults = {
-    startHole: raw.roundDefaults?.startHole === 10 ? 10 as const : 1 as const,
+    startHole: normalizeRoundStartHole(raw.roundDefaults?.startHole),
     roundHoles: raw.roundDefaults?.roundHoles === 9 ? 9 as const : 18 as const,
     handicapBasis: raw.roundDefaults?.handicapBasis === "course" ? "course" as const : "relative" as const,
   };

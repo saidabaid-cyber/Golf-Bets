@@ -21,6 +21,8 @@ export type FoursomeMatchPress = {
 export type RabbitMode = "continuous" | "three_hole_blocks";
 export type SkinsMode = "carry" | "no_carry";
 export type RoundLifecycleState = "draft" | "live" | "completed" | "cancelled";
+/** Physical hole where play begins. Runtime validation keeps this in 1..18. */
+export type RoundStartHole = number;
 
 /** Presentation-only terminology for engine-backed round concepts. */
 export type RoundPresentation = {
@@ -756,7 +758,7 @@ export type RoundSnapshot = {
   ownerId?: string;
   snapshotVersion?: 2;
   roundHoles?: 9 | 18;
-  startHole?: 1 | 10;
+  startHole?: RoundStartHole;
   /** Missing on legacy snapshots preserves the previous player-relative behavior. */
   handicapBasis?: RoundHandicapBasis;
   /** Never consumed by the betting engine; preserves the user's terminology. */
@@ -833,7 +835,7 @@ export type GroupGameTemplate = {
   version: 1;
   ownerMemberId: string;
   roundDefaults: {
-    startHole: 1 | 10;
+    startHole: RoundStartHole;
     roundHoles: 9 | 18;
     handicapBasis: RoundHandicapBasis;
   };

@@ -5,7 +5,8 @@ import { FEEDBACK_CATEGORIES,FEEDBACK_SHORT_LABELS,FEEDBACK_ATTACHMENT_MAX_BYTES
 import { feedbackAttachmentType,type FeedbackAttachment } from '../../lib/feedback-attachment';
 import { ModalShell } from './modal-shell';
 import styles from './feedback-dialog.module.css';
-export function requestFeedback(category:FeedbackCategory='GENERAL'){window.dispatchEvent(new CustomEvent('backyard:feedback',{detail:category}));}
+type FeedbackRequestDetail=FeedbackCategory|{category:FeedbackCategory;prefill?:Partial<FeedbackInput>};
+export function requestFeedback(category:FeedbackCategory='GENERAL',prefill?:Partial<FeedbackInput>){const detail:FeedbackRequestDetail=prefill?{category,prefill}:category;window.dispatchEvent(new CustomEvent('backyard:feedback',{detail}));}
 export function FeedbackLink({category='GENERAL',children}:{category?:FeedbackCategory;children?:React.ReactNode}) {return <button type="button" className={styles.contextLink} onClick={()=>requestFeedback(category)}>{children??'Ayuda y feedback'}<span aria-hidden="true"> ↗</span></button>;}
 const emptyForm=(email?:string|null):FeedbackInput=>({category:'GENERAL',name:'',description:'',replyEmail:email??'',city:'',state:'',brand:'',model:'',rules:'',clubType:'',flex:'',players:'',example:'',occurred:'',expected:'',module:''});
 const paths:Record<FeedbackCategory,string>={COURSE:'M5 21V3l13 4-13 5',TEE:'M4 12h16M7 8h10M9 4h6M6 16h12M8 20h8',CLUB:'M16 3 8 18H4v3h7l8-17',BALL:'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0M8 9h.01M13 8h.01M10 14h.01M16 13h.01',SHAFT:'m6 21 11-18M9 21 11-18',BET:'M4 6h16v12H4zM12 9v6M9 12h6',BUG:'M9 3h6M8 7h8v10a4 4 0 0 1-8 0V7ZM4 10h4m8 0h4M4 16h4m8 0h4M12 7v13',GENERAL:'M4 4h16v13H9l-5 4V4ZM8 8h8M8 12h5'};
@@ -16,7 +17,7 @@ export function FeedbackDialog({token,email,screen=''}:{token?:string|null;email
   const lock=useRef(false),request=useRef<{id:string;body:string}|null>(null),guestKey=useRef(''),origin=useRef({screen:'',category:'GENERAL'}),fileGeneration=useRef(0);
   const [requestId,setRequestId]=useState('');
   const dirty=Boolean(attachment||Object.entries(form).some(([key,value])=>!['category','replyEmail'].includes(key)&&Boolean(value))||form.replyEmail!==(email??''));
-  useEffect(()=>{const handler=(e:Event)=>{const category=(e as CustomEvent).detail;if(Object.hasOwn(FEEDBACK_CATEGORIES,category)){if(!open){origin.current={screen:screen||window.location.pathname,category};setForm(v=>({...v,category,replyEmail:v.replyEmail||email||''}));}setOpen(true);}};
+  useEffect(()=>{const handler=(e:Event)=>{const detail=(e as CustomEvent<FeedbackRequestDetail>).detail;const category=typeof detail==='string'?detail:detail?.category;const prefill=typeof detail==='object'&&detail?detail.prefill:undefined;if(typeof category==='string'&&Object.hasOwn(FEEDBACK_CATEGORIES,category)){if(!open){origin.current={screen:screen||window.location.pathname,category};setForm(v=>({...v,...prefill,category,replyEmail:prefill?.replyEmail||v.replyEmail||email||''}));}setOpen(true);}};
     window.addEventListener('backyard:feedback',handler);return()=>window.removeEventListener('backyard:feedback',handler);},[email,screen,open]);
   useEffect(()=>{if(!open||!dirty||accepted)return;const guard=(e:BeforeUnloadEvent)=>{e.preventDefault();};window.addEventListener('beforeunload',guard);return()=>window.removeEventListener('beforeunload',guard);},[open,dirty,accepted]);
   function close(){if(busy||reading)return;if(dirty&&!accepted){setConfirmClose(true);return;}clearClose();}

@@ -4,6 +4,7 @@ import { migratePersonalNassau } from "./personal-nassau";
 import { restoreBetConfig } from "./new-round-bets";
 import { normalizeAdvancedStats, normalizeScoreCaptureMode } from "./advanced-stats";
 import { normalizeRoundPresentation } from "./round-presentation";
+import { normalizeRoundStartHole } from "./engine";
 
 /** Never merge mutable draft objects into an existing historical object. */
 export function upsertRoundSnapshot(history: RoundSnapshot[], next: RoundSnapshot) {
@@ -25,7 +26,7 @@ export function canEditSnapshot(round: RoundSnapshot) {
 export function restoreRoundSnapshot(round: RoundSnapshot) {
   if (!canEditSnapshot(round)) return null;
   const copy = structuredClone(round);
-  const startHole: 1 | 10 = copy.order![0] === 10 ? 10 : copy.order![0] === 1 ? 1 : copy.startHole === 10 ? 10 : 1;
+  const startHole = normalizeRoundStartHole(copy.order![0] ?? copy.startHole);
   const roundHoles: 9 | 18 = copy.order!.length === 9 ? 9 : copy.order!.length === 18 ? 18 : copy.roundHoles === 9 ? 9 : 18;
   const restored = {
     ...copy,

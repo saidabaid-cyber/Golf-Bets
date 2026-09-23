@@ -30,6 +30,7 @@ import type {
 } from "../../../lib/backyard-ai/schemas/scorecard";
 import { runBettingDataActionWithConsent } from "../../../lib/backyard-ai/runtime/betting-consent-boundary";
 import { deleteScorecardPhoto, deleteStaleTemporaryScorecardPhotos, markScorecardPhotosCommitted } from "../../../lib/scorecard-photo";
+import { playOrder } from "../../../lib/engine";
 import { AiProcessingConsentPrompt, AiProcessingConsentRequired } from "./ai-processing-consent";
 import { ScorecardCorrection } from "./scorecard-correction";
 import styles from "./backyard-ai.module.css";
@@ -62,10 +63,7 @@ function makePhotoId(roundId: string) {
 }
 
 function playedHoleOrder(round: ActiveScorecardRound) {
-  if (round.roundHoles === 9) {
-    return Array.from({ length: 9 }, (_, index) => round.startHole === 10 ? index + 10 : index + 1);
-  }
-  return Array.from({ length: 18 }, (_, index) => round.startHole === 10 ? (index + 9) % 18 + 1 : index + 1);
+  return playOrder(round.startHole).slice(0, round.roundHoles);
 }
 
 export function ScorecardScanner({ round, storageOwnerId, accessToken, requiresRemoteConsent, hasActiveBettingData, requestBettingConsent, protectedPhotoIds = [], onApply, onManualFallback, onCancel, onOpenPrivacy }: ScorecardScannerProps) {

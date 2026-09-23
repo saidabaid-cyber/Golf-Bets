@@ -9,6 +9,7 @@ import type {
   SupplementalBet,
 } from "./types";
 import { isFiniteZeroSum } from "./settlement-integrity";
+import { playOrder } from "./engine";
 
 export type BetConfigurationIssue = {
   code: string;
@@ -25,7 +26,7 @@ export type RoundBetConfiguration = {
   supplementalBets: SupplementalBet[];
   manualBets: ManualBet[];
   roundHoles: 9 | 18;
-  startHole: 1 | 10;
+  startHole: number;
   handicapBasis?: RoundHandicapBasis;
 };
 
@@ -367,9 +368,7 @@ function validateMainBets(input: RoundBetConfiguration, issues: BetConfiguration
       if (bets.foursome.mode !== "match" || !Array.isArray(bets.foursome.matchPresses)) {
         issues.push({ code: "foursome-match-presses-mode", sectionId: "setup-foursome", message: "Foursome: las presionadas por hoyo sólo están disponibles en modalidad Match." });
       } else {
-        const order = input.startHole === 10
-          ? [...Array.from({ length: 9 }, (_, index) => index + 10), ...Array.from({ length: 9 }, (_, index) => index + 1)]
-          : Array.from({ length: 18 }, (_, index) => index + 1);
+        const order = playOrder(input.startHole);
         const ids = new Set<string>();
         bets.foursome.matchPresses.forEach((press, index) => {
           const scopeHoles = press?.scope === "first" ? order.slice(0, 9)

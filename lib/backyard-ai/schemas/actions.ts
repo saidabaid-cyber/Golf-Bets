@@ -40,7 +40,7 @@ export type RoundSetupAction =
   | ({ type: "set_player_tees"; assignments: PlayerTeeAssignmentSnapshot[] } & ActionEvidence)
   | ({ type: "identify_course"; courseName: string; catalogCourseId?: string; candidateCourseIds: string[] } & ActionEvidence)
   | ({ type: "select_course"; course: Course } & ActionEvidence)
-  | ({ type: "set_start_hole"; startHole: 1 | 10 } & ActionEvidence)
+  | ({ type: "set_start_hole"; startHole: number } & ActionEvidence)
   | ({ type: "set_round_holes"; roundHoles: 9 | 18 } & ActionEvidence)
   | ({ type: "set_handicap_basis"; handicapBasis: RoundHandicapBasis } & ActionEvidence)
   | ({
@@ -140,7 +140,7 @@ export type ParsedRoundSetupAction =
     }
   | { type: "select_course"; courseName: string; confidence: number; evidence: string }
   | { type: "select_tee"; teeName: string; confidence: number; evidence: string }
-  | { type: "set_start_hole"; startHole: 1 | 10; confidence: number; evidence: string }
+  | { type: "set_start_hole"; startHole: number; confidence: number; evidence: string }
   | { type: "set_round_holes"; roundHoles: 9 | 18; confidence: number; evidence: string }
   | { type: "set_handicap_basis"; handicapBasis: RoundHandicapBasis; confidence: number; evidence: string }
   | {

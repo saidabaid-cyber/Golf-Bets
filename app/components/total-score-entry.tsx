@@ -7,13 +7,14 @@ import { CatalogCoursePicker } from './catalog-course-picker';
 import { CourseReviewNotice } from './course-review-notice';
 import { requestFeedback } from './feedback-dialog';
 import { useBackyardAccount } from './account-provider';
+import { StartHoleSelector } from "./start-hole-selector";
 import styles from "./total-score-entry.module.css";
 const localDateMexico = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Mexico_City", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 export function TotalScoreEntry({ courses, initialCourse = null, player, accessToken, onSave, onBack }: { courses: Course[]; initialCourse?: Course | null; player: Player; accessToken?: string | null; onSave: (round: RoundSnapshot) => Promise<void>; onBack: () => void }) {
   const {identity}=useBackyardAccount();
   const [catalogCards,setCatalogCards]=useState<Course[]>([]);
   const [id] = useState(() => crypto.randomUUID());
-  const [course, setCourse] = useState<Course | null>(initialCourse), [date, setDate] = useState(localDateMexico), [holes, setHoles] = useState<9 | 18>(18), [start, setStart] = useState<1 | 10>(1), [total, setTotal] = useState("");
+  const [course, setCourse] = useState<Course | null>(initialCourse), [date, setDate] = useState(localDateMexico), [holes, setHoles] = useState<9 | 18>(18), [start, setStart] = useState(1), [total, setTotal] = useState("");
   const [busy, setBusy] = useState(false), [error, setError] = useState(""); const lock = useRef(false);
   const tees = course ? [...catalogCards,...courses.filter(c=>!catalogCards.some(t=>t.id===c.id))].filter(c => course.catalogCourseId ? c.catalogCourseId === course.catalogCourseId : c.name === course.name) : [];
   async function save() { if (lock.current) return; setError(""); if (!course || !total.trim()) { setError("Selecciona campo, tee y total de golpes."); return; } lock.current = true; setBusy(true); try { await onSave(createTotalScoreRound({ id, course, player, date, holes, start, total: Number(total), now: new Date().toISOString() })); } catch(e) { setError(e instanceof Error ? e.message : "No pudimos guardar; reintenta."); lock.current = false; setBusy(false); } }
@@ -23,7 +24,7 @@ export function TotalScoreEntry({ courses, initialCourse = null, player, accessT
     {course&&<CourseReviewNotice course={course} roundHoles={holes} startHole={start} />}
     {course && <label>Tee<select value={course.id} onChange={e => setCourse(tees.find(c => c.id === e.target.value) || course)}>{tees.map(c => <option key={c.id} value={c.id}>{c.teeName}</option>)}</select></label>}
     <label>Fecha<input required type="date" value={date} max={localDateMexico()} onChange={e => setDate(e.target.value)} /></label>
-    <div className={styles.grid}><label>Hoyos<select value={holes} onChange={e => setHoles(Number(e.target.value) as 9 | 18)}><option value={18}>18 hoyos</option><option value={9}>9 hoyos</option></select></label><label>{holes === 9 ? "Vuelta" : "Salida"}<select value={start} onChange={e => setStart(Number(e.target.value) as 1 | 10)}><option value={1}>{holes === 9 ? "Hoyos 1–9" : "Hoyo 1"}</option><option value={10}>{holes === 9 ? "Hoyos 10–18" : "Hoyo 10"}</option></select></label></div>
+    <label>Hoyos<select value={holes} onChange={e => setHoles(Number(e.target.value) as 9 | 18)}>{course && course.holes.length >= 18 && <option value={18}>18 hoyos</option>}<option value={9}>9 hoyos</option></select></label>{course && <StartHoleSelector holes={course.holes.map((hole) => hole.number)} value={start} onChange={setStart} />}
     <label>Total de golpes<input required type="number" inputMode="numeric" min={holes} max={holes*30} value={total} onChange={e => setTotal(e.target.value)} /></label><p>{player.name} · No se envía a GHIN. El total solo no cumple la evidencia por hoyo que necesita Backyard Index.</p>
     <button type="submit" className="primary">{busy ? "Guardando…" : "Guardar ronda terminada"}</button></fieldset>{error && <p role="alert">{error}</p>}</form></section>;
 }

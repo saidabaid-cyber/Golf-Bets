@@ -2,7 +2,7 @@ import { playOrder } from "./engine";
 import type { BetConfig, FoursomeMatchPress, FoursomeSegment } from "./types";
 
 /** A Match press has a second leg only in an 18-hole round. */
-export function defaultFoursomeMatchPress(id: string, startHole: 1 | 10, roundHoles: 9 | 18): FoursomeMatchPress | null {
+export function defaultFoursomeMatchPress(id: string, startHole: number, roundHoles: 9 | 18): FoursomeMatchPress | null {
   if (roundHoles !== 18) return null;
   const order = playOrder(startHole);
   return { id, scope: "second", startHole: order[9], multiplier: 2 };

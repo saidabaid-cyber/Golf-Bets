@@ -112,9 +112,9 @@ export function validateRoundSetupAction(action: RoundSetupAction, draft: RoundS
       return { valid: true };
     }
     case "set_start_hole":
-      return action.startHole === 1 || action.startHole === 10
+      return Number.isInteger(action.startHole) && action.startHole >= 1 && action.startHole <= 18
         ? { valid: true }
-        : { valid: false, code: "start-hole", message: "La salida debe ser por el hoyo 1 o 10." };
+        : { valid: false, code: "start-hole", message: "La salida debe ser un hoyo del 1 al 18." };
     case "set_round_holes":
       return action.roundHoles === 9 || action.roundHoles === 18
         ? { valid: true }

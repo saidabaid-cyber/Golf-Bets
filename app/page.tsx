@@ -75,6 +75,8 @@ import {
   opponentPairs,
   payoutWinnerTakesFromAll,
   playOrder,
+  playOrderForHoles,
+  normalizeRoundStartHole,
   playersByIds,
   personalRivalKey,
   segmentDefinitions,
@@ -96,6 +98,8 @@ import { CatalogCoursePicker } from "./components/catalog-course-picker";
 import { FeedbackDialog,FeedbackLink,requestFeedback } from "./components/feedback-dialog";
 import { CourseReviewNotice } from "./components/course-review-notice";
 import { CourseOperationsNotice } from "./components/course-operations-notice";
+import { RoundTeePicker } from "./components/round-tee-picker";
+import { StartHoleSelector } from "./components/start-hole-selector";
 import { BrandLockup } from "./components/brand-lockup";
 import { ModalCloseButton } from "./components/modal-shell";
 import { GroupBuilder } from "./components/group-builder";
@@ -275,6 +279,11 @@ function localDateMexico() {
   }).formatToParts(new Date());
   const values = Object.fromEntries(parts.map((p) => [p.type, p.value]));
   return `${values.year}-${values.month}-${values.day}`;
+}
+
+function playedHoleSpanLabel(holes: readonly number[]) {
+  if (!holes.length) return "—";
+  return holes.length === 1 ? `H${holes[0]}` : `H${holes[0]}–H${holes.at(-1)}`;
 }
 
 function mergeDefaultCourses(saved: Course[] | null | undefined) {
@@ -472,12 +481,13 @@ function GolfBetsApp() {
   const [recentCourseIds, setRecentCourseIds] = useState<string[]>([]);
   const [course, setCourse] = useState<Course>(laVista);
   const [courseSelected, setCourseSelected] = useState(false);
+  const [courseSetupStage, setCourseSetupStage] = useState<"course" | "tee" | "details">("course");
   const [pendingCourseIdentity, setPendingCourseIdentity] = useState<RoundSetupCourseIdentity | null>(null);
   const [courseSelectionError, setCourseSelectionError] = useState(false);
   const [, setShowBetSetupErrors] = useState(false);
   const [courseDraft, setCourseDraft] = useState<Course>(laVista);
   const [courseEditorSelectOnSave, setCourseEditorSelectOnSave] = useState(false);
-  const [startHole, setStartHole] = useState<1 | 10>(1);
+  const [startHole, setStartHole] = useState(1);
   const [roundHoles, setRoundHoles] = useState<9 | 18>(18);
   const [roundHandicapBasis, setRoundHandicapBasis] = useState<RoundHandicapBasis>("relative");
   const [roundPresentation, setRoundPresentation] = useState<RoundPresentation>(() => normalizeRoundPresentation(undefined));
@@ -705,7 +715,7 @@ function GolfBetsApp() {
     return () => { current = false; };
   }, [hydrated, identity.mode, identity.userId, statisticsAccessToken, statisticsRetry]);
 
-  const order = useMemo(() => playOrder(startHole).slice(0, roundHoles), [startHole, roundHoles]);
+  const order = useMemo(() => playOrderForHoles(course.holes.map((hole) => hole.number), startHole).slice(0, roundHoles), [course.holes, startHole, roundHoles]);
   const protectedScorecardPhotoIds = useMemo(() => [...new Set([
     ...scorecardPhotoIds,
     ...history.flatMap(roundScorecardPhotoIds),
@@ -726,7 +736,7 @@ function GolfBetsApp() {
     }
     return [...names.values()];
   }, [courseOptions, identity.preferredTee]);
-  const teeOptions = useMemo(() => courseSelected ? teeOptionsForCourse(course, courseOptions) : [], [course, courseOptions, courseSelected]);
+  const teeOptions = useMemo(() => courseSelected || courseSetupStage === "tee" ? teeOptionsForCourse(course, courseOptions) : [], [course, courseOptions, courseSelected, courseSetupStage]);
   const pendingCourseCandidates = useMemo(
     () => coursesForPendingIdentity(courseOptions, pendingCourseIdentity),
     [courseOptions, pendingCourseIdentity],
@@ -811,12 +821,14 @@ function GolfBetsApp() {
       setPersonalBets([]); setManualBets([]); setSupplementalBets([]); setPutts({}); setScoreCaptureMode("quick"); setAdvancedStats({}); setShots([]); setExpenses(emptyExpenses); setBets(initialBets([]));
       setStartHole(1); setRoundHoles(18); setRoundHandicapBasis("relative"); setSegments(segmentDefinitions(playOrder(1), 6));
       setCourse(laVista); setCourseSelected(false); setPendingCourseIdentity(null); setCourseSelectionError(false);
+      setCourseSetupStage("course");
       if (!options.preserveLocalUi) setCurrentIndex(0);
       setRoundId(makeId()); setRoundDate(localDateMexico()); setRoundStartedAt(null);
     }
     if (draft && draftCore) {
         setCourse(draft.course ? withDefaultLaVistaRules(draft.course) : laVista);
         setCourseSelected(draft.courseSelected === true);
+        setCourseSetupStage(draft.courseSelected === true ? "details" : draft.course && draft.courseIdentity ? "tee" : "course");
         setPendingCourseIdentity(draft.courseSelected === true ? null : normalizeRoundSetupCourseIdentity(draft.courseIdentity));
         setCourseSelectionError(false);
         setStartHole(draftCore.startHole);
@@ -839,7 +851,7 @@ function GolfBetsApp() {
           polla: restored.polla,
         });
         if (draft.segments) {
-          const draftOrder = playOrder(draftCore.startHole).slice(0, draftRoundHoles);
+          const draftOrder = playOrderForHoles((draft.course ?? laVista).holes.map((hole) => hole.number), draftCore.startHole).slice(0, draftRoundHoles);
           const segmentSize = [3, 6, 9, 18].includes(draft.bets?.foursome?.segmentSize) ? draft.bets.foursome.segmentSize : 6;
           setSegments(normalizeFoursomeSegments(draft.segments, draftOrder, segmentSize));
         }
@@ -2158,7 +2170,8 @@ function GolfBetsApp() {
       roundPlayerIdByMemberId: Object.fromEntries(restored.groupOrigin.selectedMembers.map((member) => [member.memberId, member.roundPlayerId])),
     } : null);
     setPlayers(restored.players!); setPlayerTeeAssignments(reconcilePlayerTeeAssignments(restored.playerTeeAssignments, restored.players!, restored.courseSnapshot!, new Date().toISOString())); setOwnerId(restored.ownerId); setScores(restored.scores!); setScoreEdits({}); setScorecardPhotoIds(restored.scorecardPhotoIds || (restored.photoId ? [restored.photoId] : []));
-    setStartHole(restored.startHole || (restored.order![0] === 10 ? 10 : 1)); setRoundHoles(restoredRoundHoles);
+    setStartHole(normalizeRoundStartHole(restored.startHole ?? restored.order![0])); setRoundHoles(restoredRoundHoles);
+    setCourseSetupStage("details");
     setRoundHandicapBasis(normalizeRoundHandicapBasis(restored.handicapBasis));
     setRoundPresentation(normalizeRoundPresentation(restored.presentation));
     setBets(restored.betConfig!); setSegments(normalizeFoursomeSegments(restored.segments, restored.order!, restored.betConfig!.foursome.segmentSize));
@@ -2187,7 +2200,7 @@ function GolfBetsApp() {
     setRoundPresentation(normalizeRoundPresentation(undefined));
     setPlayers(nextPlayers); setPlayerTeeAssignments([]); setOwnerId(principal?.id || "");
     setScores({}); setScoreEdits({}); setScorecardPhotoIds([]); setScorecardScanStartedAt(null); setPutts({}); setScoreCaptureMode("quick"); setAdvancedStats({}); setShots([]); setUnitEvents([]); setCounterBetEvents([]); setCounterBetKeepers(emptyCounterBetKeepers()); setLobaHoles({}); setBallFriendSetup({}); setPersonalBets([]); setSupplementalBets([]); setManualBets([]); setShowFullScorecard(false); setExpenses(emptyExpenses);
-    setBets(initialBets(nextPlayers.map((player) => player.id))); setRoundHandicapBasis("relative"); setSegments(segmentDefinitions(playOrder(startHole).slice(0, roundHoles), 6)); setCourse(laVista); setCourseSelected(false); setPendingCourseIdentity(null); setCourseSelectionError(false);
+    setBets(initialBets(nextPlayers.map((player) => player.id))); setRoundHandicapBasis("relative"); setSegments(segmentDefinitions(playOrder(startHole).slice(0, roundHoles), 6)); setCourse(laVista); setCourseSelected(false); setCourseSetupStage("course"); setPendingCourseIdentity(null); setCourseSelectionError(false);
     setCurrentIndex(0); setRoundId(makeId()); setRoundDate(localDateMexico()); setRoundStartedAt(null); setDraftAvailable(false); setHoleSummary([]); setShowDeleteRoundConfirm(false); setShowNewRoundConfirm(false); setNewRoundBackupError(""); setPendingNewRoundIntent(null); undoStack.current = []; setUndoCount(0); setTab("setup");
     if (nextFeedback) setFeedback(nextFeedback);
   }
@@ -2276,7 +2289,9 @@ function GolfBetsApp() {
     } else {
       setPlayerTeeAssignments([]);
     }
-    setCourseSelected(manualCourseState?.courseSelected ?? draft.courseSelected);
+    const nextCourseSelected = manualCourseState?.courseSelected ?? draft.courseSelected;
+    setCourseSelected(nextCourseSelected);
+    setCourseSetupStage(nextCourseSelected ? "details" : "course");
     setPendingCourseIdentity(manualCourseState?.pendingIdentity ?? null);
     setCourseSelectionError(false);
     setRoundDate(draft.date);
@@ -2611,15 +2626,39 @@ function GolfBetsApp() {
   function selectRoundCourse(nextCourse: Course, returnToSetup = false) {
     const apply = () => {
       setCourse(nextCourse);
-      setPlayerTeeAssignments(assignTeeToEveryPlayer(players, nextCourse, new Date().toISOString()));
-      setCourseSelected(true);
-      setPendingCourseIdentity(null);
+      setPlayerTeeAssignments([]);
+      setCourseSelected(false);
+      setCourseSetupStage("tee");
+      setPendingCourseIdentity({
+        name: nextCourse.name,
+        ...(nextCourse.catalogCourseId ? { catalogCourseId: nextCourse.catalogCourseId } : {}),
+        candidateCourseIds: [nextCourse.id],
+      });
       setCourseSelectionError(false);
       setRecentCourseIds((current) => rememberRecentCourse(current, nextCourse.id));
       if (returnToSetup) setTab("setup");
     };
     if (nextCourse.id === course.id) apply();
     else confirmRoundChange("Cambiar campo modifica el Par/SI aplicado a los scores existentes.", apply);
+  }
+
+  function selectRoundTee(nextTee: Course) {
+    const apply = () => {
+      const playableHoles = [...new Set(nextTee.holes.map((hole) => hole.number).filter((hole) => Number.isInteger(hole) && hole > 0 && hole <= 18))].sort((left, right) => left - right);
+      const nextStartHole = playableHoles.includes(startHole) ? startHole : playableHoles[0] ?? 1;
+      const nextRoundHoles: 9 | 18 = playableHoles.length >= 18 ? roundHoles : 9;
+      setCourse(nextTee);
+      setPlayerTeeAssignments(assignTeeToEveryPlayer(players, nextTee, new Date().toISOString()));
+      setStartHole(nextStartHole);
+      setRoundHoles(nextRoundHoles);
+      setSegments(segmentDefinitions(playOrderForHoles(playableHoles, nextStartHole).slice(0, nextRoundHoles), bets.foursome.segmentSize));
+      setCourseSelected(true);
+      setPendingCourseIdentity(null);
+      setCourseSelectionError(false);
+      setCourseSetupStage("details");
+    };
+    if (nextTee.id === course.id) apply();
+    else confirmRoundChange("Cambiar tee actualiza Rating, Slope, yardaje y HCP de juego para esta ronda.", apply);
   }
 
   function editCourseFromLibrary(nextCourse: Course) {
@@ -2676,6 +2715,7 @@ function GolfBetsApp() {
       if (changesActiveCourse) {
         setCourse(saved);
         setCourseSelected(true);
+        setCourseSetupStage("details");
         setPendingCourseIdentity(null);
         setCourseSelectionError(false);
         setRecentCourseIds((current) => rememberRecentCourse(current, saved.id));
@@ -2721,6 +2761,7 @@ function GolfBetsApp() {
     if (selectedForRound) {
       setCourse(remaining[0] || laVista);
       setCourseSelected(false);
+      setCourseSetupStage("course");
       setPendingCourseIdentity(null);
       setCourseSelectionError(false);
       setTab("setup");
@@ -3115,7 +3156,7 @@ function GolfBetsApp() {
             </> : null}
             <MoneyInput label="Valor base" value={bet.baseValue} onChange={(v) => updatePersonalBet(bet.id, { baseValue: v })} />
             <div><label>Modo de ventaja</label><select value={bet.advantageMode ?? "current_index"} onChange={(event) => setPersonalAdvantageMode(bet, event.target.value as "current_index" | "sliding" | "manual")}><option value="current_index">ÍNDICE ACTUAL</option><option value="sliding">SLIDING</option><option value="manual">Manual avanzada</option></select><small>{(bet.advantageMode ?? "current_index") === "current_index" ? "Usa la fuente canónica vigente; el HCP de perfil se marca provisional." : bet.advantageMode === "sliding" ? "La ventaja cambia un golpe al guardar el resultado de esta Personal." : "Configuración explícita para compatibilidad y casos avanzados."}</small></div>
-            {roundHoles === 18 && <div><label htmlFor={`pressure-${bet.id}`}>Presión · 2ª vuelta jugada</label><select id={`pressure-${bet.id}`} value={bet.pressureMultiplier ?? bet.back9Multiplier ?? 1} onChange={(event) => updatePersonalBet(bet.id, { pressureMultiplier: Number(event.target.value) as 1 | 2 | 3 | 4 | 5, back9Multiplier: 1 })}><option value={1}>Sin presión</option><option value={2}>Sí · 2x</option>{[3,4,5].map((value) => <option key={value} value={value}>{value}x</option>)}</select><small>Aplica a {startHole === 10 ? "H1–9" : "H10–18"}. Total 18 conserva valor base.</small></div>}
+            {roundHoles === 18 && <div><label htmlFor={`pressure-${bet.id}`}>Presión · 2ª vuelta jugada</label><select id={`pressure-${bet.id}`} value={bet.pressureMultiplier ?? bet.back9Multiplier ?? 1} onChange={(event) => updatePersonalBet(bet.id, { pressureMultiplier: Number(event.target.value) as 1 | 2 | 3 | 4 | 5, back9Multiplier: 1 })}><option value={1}>Sin presión</option><option value={2}>Sí · 2x</option>{[3,4,5].map((value) => <option key={value} value={value}>{value}x</option>)}</select><small>Aplica a {playedHoleSpanLabel(order.slice(9))}. Total 18 conserva valor base.</small></div>}
             {roundHoles === 18 && <div><label htmlFor={`carry-${bet.id}`}>Carry</label><select id={`carry-${bet.id}`} value={bet.carryEnabled ? "yes" : "no"} onChange={(event) => updatePersonalBet(bet.id, { carryEnabled: event.target.value === "yes" })}><option value="no">No</option><option value="yes">Sí</option></select><small>Match y Medal independientes. Se suma a la presión.</small></div>}
             {bet.advantageMode === "sliding" ? <div><label>Ventaja Sliding firmada</label><NumericCaptureInput min={-54} max={54} step={1} value={bet.slidingAdvantage ?? 0} emptyWhenZero={false} onValueChange={(value) => updatePersonalBet(bet.id, configureSlidingPersonal(bet, value ?? 0))} /><small>Positivo: {displayRival} recibe. Negativo: {owner?.name} recibe.</small></div> : <>
               <div><label>Quién recibe ventaja</label><select disabled={(bet.advantageMode ?? "current_index") === "current_index"} value={bet.advantageReceiver === "owner" || bet.advantageReceiver === "rival" ? bet.advantageReceiver : ""} onChange={(e) => updatePersonalBet(bet.id, { advantageReceiver: e.target.value as "owner" | "rival" })}><option value="" disabled>Selecciona</option><option value="owner">{owner?.name} recibe</option><option value="rival">{displayRival} recibe</option></select></div>
@@ -3128,7 +3169,7 @@ function GolfBetsApp() {
           {bet.advantageStrokes === 0 && <div className="hint">Sin ventaja.</div>}
           <div className="componentGrid">{(roundHoles === 9
             ? ([["match1","Match 9"],["medal1","Medal 9"]] as [keyof PersonalBet["components"], string][])
-            : ([["match1",`Match 1ª · ${startHole === 10 ? "H10–18" : "H1–9"}`],["medal1",`Medal 1ª · ${startHole === 10 ? "H10–18" : "H1–9"}`],["match2",`Match 2ª · ${startHole === 10 ? "H1–9" : "H10–18"}`],["medal2",`Medal 2ª · ${startHole === 10 ? "H1–9" : "H10–18"}`],["match18","Match Total 18"],["medal18","Medal Total 18"]] as [keyof PersonalBet["components"], string][])
+            : ([["match1",`Match 1ª · ${playedHoleSpanLabel(order.slice(0, 9))}`],["medal1",`Medal 1ª · ${playedHoleSpanLabel(order.slice(0, 9))}`],["match2",`Match 2ª · ${playedHoleSpanLabel(order.slice(9))}`],["medal2",`Medal 2ª · ${playedHoleSpanLabel(order.slice(9))}`],["match18","Match Total 18"],["medal18","Medal Total 18"]] as [keyof PersonalBet["components"], string][])
           ).map(([key, label]) => {
             const selected = Boolean(bet.components?.[key]);
             return <button type="button" key={key} className={`component ${selected ? "selected" : ""}`} onClick={() => updatePersonalBet(bet.id, { components: { ...(bet.components || {}), [key]: !selected } as PersonalBet["components"] })}>{selected ? "✓ " : ""}{label}</button>;
@@ -3756,23 +3797,37 @@ function GolfBetsApp() {
 
       <RoundSetupStep step={1}>
       <section className="card" id="round-course">
-        <div className="sectionTitle"><div><h2>1. Campo</h2><p>Busca por nombre o usa tu ubicación. El tee habitual se resuelve sin estorbar este flujo.</p></div><div className="courseSetupActions"><button className="textButton" onClick={() => setTab("courseLibrary")}>Ver campos</button><button className="textButton" onClick={startNewCourse}>+ Campo</button></div></div>
-        {!courseSelected && pendingCourseIdentity && <div className="notice" id="round-course-ai-focus" role="status"><b>Campo reconocido: {pendingCourseIdentity.name}</b><br />{pendingCourseCandidates.length ? "Selecciona el campo para continuar." : "No encontré ese campo exacto en el catálogo actual. Selecciona otro o crea uno manual."}</div>}
-        <div className="grid2">
-          <div><label htmlFor="wizard-round-date">Fecha de la ronda</label><input id="wizard-round-date" aria-label="Fecha de la ronda" type="date" value={roundDate} onChange={(e) => setRoundDate(e.target.value)} /></div>
-          <details><summary>Mis campos guardados</summary><RoundCoursePicker permissionOwnerId={identity.userId} selectedName={courseSelected ? course.name : ""} selectedId={courseSelected ? (course.catalogCourseId ?? course.id) : ""} accessToken={identity.accessToken} pendingName={pendingCourseIdentity?.name} invalid={courseSelectionError} describedBy={[!courseSelected && pendingCourseIdentity ? "round-course-ai-focus" : "", courseSelectionError ? "round-course-error" : ""].filter(Boolean).join(" ") || undefined} onSelect={(selection) => {
+        <div className="sectionTitle"><div><h2>1. Campo</h2><p>{courseSetupStage === "course" ? "Busca por nombre o usa tu ubicación ya autorizada." : courseSetupStage === "tee" ? "Elige la salida antes de configurar la ronda." : "Revisa el formato y el hoyo donde comienza el grupo."}</p></div>{courseSetupStage === "course" && <div className="courseSetupActions"><button className="textButton" onClick={() => setTab("courseLibrary")}>Ver campos</button><button className="textButton" onClick={startNewCourse}>+ Campo</button></div>}</div>
+        {courseSetupStage === "course" && <>
+          {!courseSelected && pendingCourseIdentity && <div className="notice" id="round-course-ai-focus" role="status"><b>Campo reconocido: {pendingCourseIdentity.name}</b><br />{pendingCourseCandidates.length ? "Selecciona el campo para continuar." : "No encontré ese campo exacto en el catálogo actual. Selecciona otro o crea uno manual."}</div>}
+          <CatalogCoursePicker showHeading={false} token={identity.accessToken} selectedName="" onRequest={() => requestFeedback("COURSE")} onSelect={(next, cards) => { retainCatalogCards(cards); selectRoundCourse(next); }} />
+          <details><summary>Mis campos guardados</summary><RoundCoursePicker permissionOwnerId={identity.userId} selectedName="" selectedId="" accessToken={identity.accessToken} pendingName={pendingCourseIdentity?.name} invalid={courseSelectionError} describedBy={[!courseSelected && pendingCourseIdentity ? "round-course-ai-focus" : "", courseSelectionError ? "round-course-error" : ""].filter(Boolean).join(" ") || undefined} onSelect={(selection) => {
             const matchingCourse = courseNameOptions.find((candidate) => candidate.catalogCourseId === selection.courseId)
               ?? courseNameOptions.find((candidate) => candidate.id === selection.id)
               ?? courseNameOptions.find((candidate) => candidate.name === selection.name);
             if (matchingCourse) selectRoundCourse(matchingCourse);
           }} /></details>
           {courseSelectionError && <span id="round-course-error" className="courseSelectionError" role="alert">Selecciona un campo para continuar.</span>}
-          <CatalogCoursePicker showHeading={false} token={identity.accessToken} selectedName={courseSelected?`${course.name} · ${course.teeName}`:''} onRequest={()=>requestFeedback('COURSE')} onSelect={(next,cards)=>{retainCatalogCards(cards);selectRoundCourse(next);}} />
-          {courseSelected && <CourseReviewNotice course={course} roundHoles={roundHoles} startHole={startHole} />}
-          <div><label>Inicio de ronda</label><select value={startHole} onChange={(e) => { const next = Number(e.target.value) as 1 | 10; confirmRoundChange("Cambiar la salida cambia el orden Nassau y los segmentos de Foursome.", () => { setStartHole(next); setCurrentIndex(0); }); }}><option value={1}>Hoyo 1</option><option value={10}>Hoyo 10</option></select></div>
-          <div><label>Hoyos a jugar</label><select value={roundHoles} onChange={(e) => { const next = Number(e.target.value) as 9 | 18; confirmRoundChange("Cambiar la duración excluye del cálculo los hoyos fuera de la nueva vuelta, sin borrar sus scores.", () => { setRoundHoles(next); setSupplementalBets((current) => supplementalBetsForRoundHoles(current, next)); setCurrentIndex(0); }); }}><option value={18}>18 hoyos</option><option value={9}>9 hoyos</option></select></div>
-        </div>
-        {courseSelected && <><div className="courseMeta"><span>{course.holes.length} hoyos configurados</span><span>{teeOptions.length} tee{teeOptions.length === 1 ? "" : "s"} disponible{teeOptions.length === 1 ? "" : "s"}</span>{course.updatedAt && <span>Última actualización: {course.updatedAt}</span>}<button onClick={() => { setCourseEditorSelectOnSave(true); setCourseDraft(withDefaultLaVistaRules(course)); setTab("courses"); }}>{course.name === "La Vista Temporal" ? "Editar campo temporal" : "Editar campo"}</button>{isLaVistaCourse(course.name) && <button onClick={() => { setRulesCourseContext(course.name); setTab("rules"); }}>Ver Reglas Locales</button>}</div><CourseOperationsNotice courseId={course.catalogCourseId ?? course.id} frozenAt={roundStartedAt} accessToken={identity.accessToken} /></>}
+        </>}
+        {courseSetupStage === "tee" && <RoundTeePicker
+          courseName={course.name}
+          tees={teeOptions}
+          selectedTeeId={course.catalogTeeId || course.id}
+          onSelect={selectRoundTee}
+          onBack={() => { setCourseSelected(false); setPlayerTeeAssignments([]); setCourseSetupStage("course"); }}
+          onMissingTee={() => requestFeedback("TEE", { name: course.name })}
+        />}
+        {courseSelected && courseSetupStage === "details" && <>
+          <div className="roundCourseSelectionSummary" role="status"><div><span>CAMPO Y TEE</span><b>{course.name}</b><small>{course.teeName}{typeof course.totalYards === "number" ? ` · ${course.totalYards.toLocaleString("es-MX")} yd` : ""}</small></div><button type="button" className="textButton" onClick={() => setCourseSetupStage("tee")}>Cambiar tee</button></div>
+          <CourseReviewNotice course={course} roundHoles={roundHoles} startHole={startHole} />
+          <div className="roundCourseDetails">
+            <div><label htmlFor="wizard-round-date">Fecha de la ronda</label><input id="wizard-round-date" aria-label="Fecha de la ronda" type="date" value={roundDate} onChange={(event) => setRoundDate(event.target.value)} /></div>
+            <div><label>Hoyos a jugar</label><select value={roundHoles} onChange={(event) => { const next = Number(event.target.value) as 9 | 18; confirmRoundChange("Cambiar la duración excluye del cálculo los hoyos fuera de la nueva vuelta, sin borrar sus scores.", () => { setRoundHoles(next); setSupplementalBets((current) => supplementalBetsForRoundHoles(current, next)); setCurrentIndex(0); }); }}>{course.holes.length >= 18 && <option value={18}>18 hoyos</option>}<option value={9}>9 hoyos</option></select></div>
+          </div>
+          <StartHoleSelector holes={course.holes.map((hole) => hole.number)} value={startHole} onChange={(next) => confirmRoundChange("Cambiar la salida actualiza el orden jugado, Nassau y los segmentos de Foursome.", () => { setStartHole(next); setSegments(segmentDefinitions(playOrderForHoles(course.holes.map((hole) => hole.number), next).slice(0, roundHoles), bets.foursome.segmentSize)); setCurrentIndex(0); })} />
+          <div className="courseMeta"><span>{course.holes.length} hoyos configurados</span><span>{teeOptions.length} tee{teeOptions.length === 1 ? "" : "s"} disponible{teeOptions.length === 1 ? "" : "s"}</span>{course.updatedAt && <span>Última actualización: {course.updatedAt}</span>}<button onClick={() => { setCourseEditorSelectOnSave(true); setCourseDraft(withDefaultLaVistaRules(course)); setTab("courses"); }}>{course.name === "La Vista Temporal" ? "Editar campo temporal" : "Editar campo"}</button>{isLaVistaCourse(course.name) && <button onClick={() => { setRulesCourseContext(course.name); setTab("rules"); }}>Ver Reglas Locales</button>}</div>
+          <CourseOperationsNotice courseId={course.catalogCourseId ?? course.id} frozenAt={roundStartedAt} accessToken={identity.accessToken} />
+        </>}
       </section>
       </RoundSetupStep>
 

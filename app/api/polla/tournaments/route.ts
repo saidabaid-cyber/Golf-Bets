@@ -2,6 +2,7 @@ import { randomBytes, randomInt } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin, getSupabaseForUser } from "../../../../lib/supabase/server";
 import { normalizePollaHcpPercentage } from "../../../../lib/polla-live";
+import { normalizeRoundStartHole } from "../../../../lib/engine";
 import { accountAccessFailure } from "../../../../lib/account-access.server";
 import { authUserFailure } from "../../../../lib/auth-errors";
 
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
     course_name: body.courseName.trim().slice(0, 160),
     course_snapshot: body.courseSnapshot || [],
     holes: body.holes === 9 ? 9 : 18,
-    start_hole: body.startHole === 10 ? 10 : 1,
+    start_hole: normalizeRoundStartHole(body.startHole),
     format: body.format === "gross" || body.format === "net" ? body.format : "both",
     hcp_pct: normalizePollaHcpPercentage(body.hcpPct),
     handicap_mode: typeof body.handicapMode === "string" ? body.handicapMode : "half_up",
@@ -94,7 +95,7 @@ export async function POST(request: NextRequest) {
     const { data: group, error: groupError } = await admin.from("tournament_groups").insert({
       tournament_id: tournament.id,
       name: groupName,
-      start_hole: first?.startHole === 10 ? 10 : insert.start_hole,
+      start_hole: normalizeRoundStartHole(first?.startHole, insert.start_hole),
       tee_time: typeof first?.teeTime === "string" && first.teeTime ? first.teeTime : null,
     }).select("id").single();
     if (groupError) { await admin.from("tournaments").delete().eq("id", tournament.id); return NextResponse.json({ error: groupError.message }, { status: 400 }); }

@@ -1,7 +1,7 @@
 import type { BetConfig, CounterBetConfig, MedalPollaConfig } from "./types";
 
 export type RestoreBetConfigContext = {
-  startHole: 1 | 10;
+  startHole: number;
   roundHoles: 9 | 18;
 };
 
