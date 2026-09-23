@@ -5,7 +5,7 @@ import {
   type BackyardAiProcessingConsentScope,
 } from "../privacy";
 import { AI_PROCESSING_CONSENT_TABLE } from "../consent-record";
-import { getSupabaseAdmin, getSupabaseForUser } from "../../supabase/server";
+import { getSupabaseForUser } from "../../supabase/server";
 import { accountAccessFailure } from "../../account-access.server";
 import { authUserFailure } from "../../auth-errors";
 import { aiProcessingConsentLedgerAccess } from "./config";
@@ -36,16 +36,15 @@ export async function verifyStoredAiProcessingConsent(
       error: "El registro seguro de autorizaciones no está habilitado para cuentas en este Preview.",
     };
   }
-  const admin = getSupabaseAdmin();
   const userClient = getSupabaseForUser(token);
-  if (!admin || !userClient) return { ok: false, status: 503, code: "missing_config", error: "Backyard AI no está configurado para verificar esta autorización." };
+  if (!userClient) return { ok: false, status: 503, code: "missing_config", error: "Backyard AI no está configurado para verificar esta autorización." };
   const { data: authData, error: authError } = await userClient.auth.getUser(token);
   const failure = authUserFailure(authError, !authError && Boolean(authData.user));
   if (failure) return { ok: false, ...failure };
   if (!authData.user || authData.user.is_anonymous) return { ok: false, status: 401, code: "auth_required", error: "La sesión terminó. Vuelve a iniciar sesión." };
   const accessFailure = await accountAccessFailure(userClient);
   if (accessFailure) return { ok: false, ...accessFailure };
-  const { data, error } = await admin
+  const { data, error } = await userClient
     .from(AI_PROCESSING_CONSENT_TABLE)
     .select("decision_status,accepted_at,revoked_at")
     .eq("user_id", authData.user.id)

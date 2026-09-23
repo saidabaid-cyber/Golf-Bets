@@ -1,3 +1,5 @@
+import { isolatedPreviewDatabaseEnabled } from "../../preview-database";
+
 export const DEFAULT_BACKYARD_AI_MODEL = "gpt-5.4-mini";
 export const DEFAULT_SCORECARD_AI_MODEL = "gpt-5.4-mini";
 
@@ -46,6 +48,15 @@ export function aiProcessingConsentLedgerAccess(
   if (!authenticated) return { allowed: true, reason: "guest" };
   if (env.VERCEL_ENV?.trim().toLocaleLowerCase("en-US") !== "preview") {
     return { allowed: true, reason: "not_preview" };
+  }
+  // PREVIEW_DB_REF is already the canonical, fail-closed binding used by the
+  // rest of the authenticated Preview APIs. Requiring a second URL variable
+  // made the consent ledger unavailable even when the same isolated QA
+  // project had already been proved by ref + exact hostname.
+  if (env.PREVIEW_DB_REF) {
+    return isolatedPreviewDatabaseEnabled(env)
+      ? { allowed: true, reason: "preview_bound" }
+      : { allowed: false, reason: "preview_binding_mismatch" };
   }
   const activeOrigin = normalizedOrigin(env.NEXT_PUBLIC_SUPABASE_URL);
   const expectedPreviewOrigin = normalizedOrigin(env.BACKYARD_AI_CONSENT_PREVIEW_SUPABASE_URL);

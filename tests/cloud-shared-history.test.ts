@@ -188,6 +188,7 @@ test("published rounds route uses participant-aware reader and refuses shared re
     if (name.endsWith("/supabase/server")) return { getSupabaseForUser: () => client };
     if (name.endsWith("/auth-errors")) return { authUserFailure: () => null };
     if (name.endsWith("/social-publication.server")) return { scheduleSocialPublication: () => {} };
+    if (name.endsWith("/social-publication-policy")) return { hasCompletedRoundPublicationCandidate: () => false };
     if (name.endsWith("/cloud-sync-service")) return { readCloudRoundHistory };
     throw new Error(name);
   } });

@@ -51,10 +51,13 @@ function providerBoundary(outcome: LedgerOutcome) {
     };
     return query;
   } };
-  const userClient = { auth: { async getUser(token: string) {
-    assert.equal(token, TOKEN);
-    return { data: { user: { id: OWNER, is_anonymous: false } }, error: null };
-  } } };
+  const userClient = {
+    from: admin.from,
+    auth: { async getUser(token: string) {
+      assert.equal(token, TOKEN);
+      return { data: { user: { id: OWNER, is_anonymous: false } }, error: null };
+    } },
+  };
   let verifier: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
   function load(path: string) {
     const exports: Record<string, (...args: unknown[]) => Promise<unknown>> = {};

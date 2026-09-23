@@ -228,6 +228,7 @@ test("ledger dedicado conserva auditoría, RLS y niega DELETE ordinario", () => 
   assert.doesNotMatch(route, /export async function DELETE/);
   assert.doesNotMatch(route, /\.delete\(/);
   assert.match(verifier, /AI_PROCESSING_CONSENT_TABLE/);
+  assert.doesNotMatch(verifier, /getSupabaseAdmin/);
   assert.match(verifier, /if \(!token\) return \{ ok: true, authenticated: false, userId: null \};[\s\S]*aiProcessingConsentLedgerAccess\(process\.env, true\)/);
   assert.match(verifier, /data\.revoked_at !== null/);
   assert.match(migration, /create table if not exists public\.ai_processing_consents/);

@@ -171,6 +171,12 @@ test("owner RLS can read consent without service role, while mutations still fai
   assert.equal(fixture.writes.length, 0);
 });
 
+test("provider verification also reads the authenticated owner's consent without service role", async () => {
+  const fixture = harness({ adminMissing: true, rows: [row(TEXT)] });
+  assert.equal((await fixture.verify(TEXT)).ok, true);
+  assert.deepEqual(fixture.ownerFilters, [OWNER]);
+});
+
 test("authenticated provider denies missing, declined and revoked records; only server acceptance authorizes", async () => {
   for (const rows of [[], [row(TEXT, "declined")], [row(TEXT, "revoked")]]) {
     const result = await harness({ rows }).verify();

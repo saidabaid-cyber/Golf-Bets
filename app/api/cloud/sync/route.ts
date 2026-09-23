@@ -5,6 +5,7 @@ import type { CloudDataBundle, CloudDataConflict } from "../../../../lib/cloud-s
 import { readCloudBundle, writeCloudBundle } from "../../../../lib/cloud-sync-service";
 import { authUserFailure } from "../../../../lib/auth-errors";
 import { scheduleSocialPublication } from "../../../../lib/social-publication.server";
+import { hasCompletedRoundPublicationCandidate } from "../../../../lib/social-publication-policy";
 
 const MAX_BODY_BYTES = 5_000_000;
 
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
 
 
     const result = await writeCloudBundle(account.client, account.userId, body as { data: CloudDataBundle; fingerprint: string }, { extendedSchema: true });
-    scheduleSocialPublication(account.userId, "round");
+    if (hasCompletedRoundPublicationCandidate(body.data.history)) scheduleSocialPublication(account.userId, "round");
     return NextResponse.json(result, { headers: { "cache-control": "private, no-store" } });
   } catch (error) {
     logFailure("write", error);

@@ -64,6 +64,24 @@ test("el ledger AI autenticado queda fail-closed en Preview y Guest no se rompe"
     { allowed: true, reason: "preview_bound" },
   );
   assert.deepEqual(
+    aiProcessingConsentLedgerAccess({
+      VERCEL_ENV: "preview",
+      PREVIEW_DB_REF: "abcdefghijklmnopqrst",
+      NEXT_PUBLIC_SUPABASE_URL: "https://abcdefghijklmnopqrst.supabase.co",
+    }, true),
+    { allowed: true, reason: "preview_bound" },
+    "el binding QA canónico basta sin una segunda variable redundante",
+  );
+  assert.deepEqual(
+    aiProcessingConsentLedgerAccess({
+      VERCEL_ENV: "preview",
+      PREVIEW_DB_REF: "abcdefghijklmnopqrst",
+      NEXT_PUBLIC_SUPABASE_URL: "https://otro-proyecto.supabase.co",
+      BACKYARD_AI_CONSENT_PREVIEW_SUPABASE_URL: "https://otro-proyecto.supabase.co",
+    }, true),
+    { allowed: false, reason: "preview_binding_mismatch" },
+  );
+  assert.deepEqual(
     aiProcessingConsentLedgerAccess(inheritedProduction, false),
     { allowed: true, reason: "guest" },
     "Guest no consulta ni escribe el ledger server-side",
