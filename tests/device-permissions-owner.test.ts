@@ -51,11 +51,14 @@ test("un contexto sin Notifications API informa indisponibilidad sin instruccion
 
 test("componente dispara APIs nativas sólo desde CTAs explícitos y ofrece salida instructiva", () => {
   const source = readFileSync("app/components/device-permissions.tsx", "utf8");
+  const coursePicker = readFileSync("app/components/catalog-course-picker.tsx", "utf8");
   assert.match(source, /requestCourseLocation\(navigator\.geolocation/);
   assert.match(source, /Notification\.requestPermission\(\)/);
   assert.doesNotMatch(source, /Agregar a pantalla de inicio|Cómo instalar The Backyard/);
   assert.match(source, /Ajustes &gt; Apps &gt; Safari &gt; Ubicación/);
   assert.doesNotMatch(source, /Administrar ubicación|Administrar notificaciones/);
+  assert.match(coursePicker, /Conservamos una posición aproximada sólo durante unos minutos/);
+  assert.doesNotMatch(coursePicker, /No la guardamos ni enviamos/);
 });
 
 test("unidades y preferencias de canales persisten por cuenta sin mutar yardas almacenadas", () => {

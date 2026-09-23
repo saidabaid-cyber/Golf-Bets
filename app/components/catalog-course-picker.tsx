@@ -58,7 +58,7 @@ export function CatalogCoursePicker({token,onSelect,onSelectClub,onSelectHomeCou
   return <section className={styles.picker} aria-label="Catálogo de campos">
     {showHeading&&<h3>Campo</h3>}
     <button type="button" className={styles.locate} disabled={locating||!token} onClick={locate}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M12 21s7-6 7-12A7 7 0 0 0 5 9c0 6 7 12 7 12ZM15 9a3 3 0 1 1-6 0 3 3 0 0 1 6 0"/></svg>{locating?'Buscando ubicación…':'Campos cercanos'}</button>
-    {location.status==='idle'&&<small>Permite tu ubicación para ver los más cercanos. No la guardamos ni enviamos.</small>}
+    {location.status==='idle'&&<small>Permite tu ubicación para ordenar campos cercanos. Conservamos una posición aproximada sólo durante unos minutos.</small>}
     {locating&&<><p role="status">Buscando ubicación… Si el navegador lo solicita, permite el acceso.</p><button type="button" className="textButton" onClick={()=>{cancelLocation.current();setLocation({status:'idle'});}}>Cancelar búsqueda</button></>}
     {locationError&&<div role="status"><p>{locationError}</p><button type="button" className="secondary" onClick={locate}>Reintentar</button></div>}
     {location.status==='located'&&<p role="status">{loading?'Ubicación obtenida. Cargando clubes…':error?'Ubicación obtenida. Reintenta cargar el catálogo.':reviewedClubsLocationSummary(nearby)}</p>}
