@@ -169,7 +169,7 @@ test('recovery artifact is success-gated and contains only package plus checksum
 test('Vercel blocks backup branches and ignores reviewed backup-only merge commits without changing normal app deploys', async () => {
   const configuration = JSON.parse(await readRepo('vercel.json'));
   assert.equal(configuration.git?.deploymentEnabled?.['infra/backup-automation'], false);
-  assert.equal(configuration.git?.deploymentEnabled?.['hotfix/cloud-backup-postgres17'], false);
+  assert.equal(configuration.git?.deploymentEnabled?.['hotfix/cloud-backup-*'], false);
   assert.ok(Object.values(configuration.git.deploymentEnabled).every((enabled) => enabled === false));
   assert.equal(configuration.ignoreCommand, 'node scripts/backup/skip-vercel-deploy.mjs');
 
@@ -239,6 +239,7 @@ test('PostgreSQL preflight is one explicit read-only transaction and only exact 
     '--command=BEGIN TRANSACTION READ ONLY; SHOW transaction_read_only; ROLLBACK;',
   ]);
   assert.equal(calls[0].options.env, pg);
+  assert.equal(typeof calls[0].options.classifyStderr, 'function');
   assert.doesNotMatch(String(assertDatabaseReadOnly), /default_transaction_read_only/);
   await assertDatabaseReadOnly(pg, async () => 'on\r\n');
 
@@ -338,6 +339,19 @@ test('publication gate requires complete PASS states, encryption and independent
   assert.deepEqual(assertPublishable(backup, completeVerification(backup)), {
     source: 'PASS', database: 'PASS', storage: 'PASS', encryption: 'PASS', verification: 'PASS', recoveryComplete: true,
   });
+
+  const categorized = completeBackup();
+  categorized.manifest.components.database = { state: 'FAIL', reason: 'POSTGRES_SSL' };
+  assert.throws(
+    () => assertPublishable(categorized, completeVerification(categorized)),
+    (error) => error.code === 'POSTGRES_SSL' && error.message === 'POSTGRES_SSL',
+  );
+  const unsafe = completeBackup();
+  unsafe.manifest.components.database = { state: 'FAIL', reason: 'provider diagnostic with private details' };
+  assert.throws(
+    () => assertPublishable(unsafe, completeVerification(unsafe)),
+    (error) => error.code === 'DATABASE_NOT_PASS' && !error.message.includes('private'),
+  );
 
   const cases = [
     ['SOURCE_NOT_PASS', (b) => { b.manifest.components.source.state = 'FAIL'; }, () => {}],

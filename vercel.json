@@ -4,7 +4,7 @@
   "git": {
     "deploymentEnabled": {
       "infra/backup-automation": false,
-      "hotfix/cloud-backup-postgres17": false
+      "hotfix/cloud-backup-*": false
     }
   }
 }

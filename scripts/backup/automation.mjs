@@ -76,7 +76,11 @@ export function driveTargetsForDate(value = new Date()) {
 export function assertPublishable(backup, verification) {
   const manifest = backup?.manifest;
   for (const component of ['source', 'database', 'storage']) {
-    if (manifest?.components?.[component]?.state !== 'PASS') throw new AutomationError(`${component.toUpperCase()}_NOT_PASS`);
+    const status = manifest?.components?.[component];
+    if (status?.state !== 'PASS') {
+      const fallback = `${component.toUpperCase()}_NOT_PASS`;
+      throw new AutomationError(SAFE_CODE.test(status?.reason || '') ? status.reason : fallback);
+    }
   }
   if (!manifest.databaseBackup || !manifest.schemaBackup || !manifest.storageBackup) throw new AutomationError('BACKUP_INCOMPLETE');
   if (manifest.encryption !== 'AES-256-GCM / BYDR1; key NEVER stored here') throw new AutomationError('ENCRYPTION_NOT_CONFIRMED');
