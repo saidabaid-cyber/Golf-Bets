@@ -1,4 +1,5 @@
 import { accountPrimaryPlayerId } from "../lib/account-primary-player";
+import { normalizeRoundStartHole } from "../lib/engine";
 import type { Player } from "../lib/types";
 
 type RoundDraftCore = {
@@ -37,7 +38,7 @@ export function resolveRoundDraftCore(draft: RoundDraftCore, userId: string) {
   );
 
   return {
-    startHole: draft.startHole === 10 ? 10 as const : 1 as const,
+    startHole: normalizeRoundStartHole(draft.startHole),
     roundHoles: draft.roundHoles === 9 ? 9 as const : 18 as const,
     players,
     ownerId: savedOwnerId || accountOwner?.id || players[0]?.id || "",

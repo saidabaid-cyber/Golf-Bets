@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "../../../../../lib/supabase/server";
 import { buildPollaLeaderboard, type PollaLeaderboardScope } from "../../../../../lib/polla-live";
+import { normalizeRoundStartHole } from "../../../../../lib/engine";
 import type { HandicapMode } from "../../../../../lib/types";
 
 export async function GET(request: Request, context: { params: Promise<{ publicId: string }> }) {
@@ -40,7 +41,7 @@ export async function GET(request: Request, context: { params: Promise<{ publicI
     scores: (scores || []).map((score) => ({ playerId: score.player_id, hole: score.hole, score: score.score })),
     courseSnapshot: holes,
     tournamentHoles: tournament.holes === 9 ? 9 : 18,
-    startHole: tournament.start_hole === 10 ? 10 : 1,
+    startHole: normalizeRoundStartHole(tournament.start_hole),
     hcpPct: tournament.hcp_pct,
     handicapMode: tournament.handicap_mode as HandicapMode,
     scope,

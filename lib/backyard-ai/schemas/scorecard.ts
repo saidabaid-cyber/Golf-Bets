@@ -104,7 +104,7 @@ export type ActiveScorecardRound = {
   roundId: string;
   players: ActiveScorecardPlayer[];
   course: ActiveScorecardCourse;
-  startHole: 1 | 10;
+  startHole: number;
   roundHoles: 9 | 18;
   /** Already-confirmed digital scores, if the group captured any while playing. */
   digitalScores?: Record<number, HoleScore>;

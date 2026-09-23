@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
     if (!latitudeInput?.trim() || !longitudeInput?.trim() || !Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
       return NextResponse.json({ error: "invalid_location" }, { status: 400, headers: { "cache-control": "no-store" } });
     }
-    const result = await internalCourseDataProvider.nearbyCourses({ courses: DEFAULT_COURSES, origin: { latitude, longitude }, limit, radiusKm: 250 });
+    const result = await internalCourseDataProvider.nearbyCourses({ courses: DEFAULT_COURSES, origin: { latitude, longitude }, limit, radiusKm: 50 });
     if (!result.ok) return NextResponse.json({ error: result.code }, { status: 503, headers: { "cache-control": "no-store" } });
     return NextResponse.json({
       provider: result.providerId,

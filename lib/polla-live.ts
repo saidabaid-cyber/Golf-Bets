@@ -1,6 +1,6 @@
 import type { HandicapMode } from "./types";
 import { groupSizes, type GroupTarget } from "./group-generator";
-import { playingHandicap, strokeAllowanceForHole } from "./engine";
+import { normalizeRoundStartHole, playOrder, playingHandicap, strokeAllowanceForHole } from "./engine";
 
 export type PollaFormat = "gross" | "net" | "both";
 export type PollaStatus = "upcoming" | "live" | "finished";
@@ -11,7 +11,7 @@ export type PollaPlayerInput = {
   name: string;
   handicap: number;
   group?: string;
-  startHole?: 1 | 10;
+  startHole?: number;
   teeTime?: string;
 };
 
@@ -20,7 +20,7 @@ export type PollaTournamentDraft = {
   date: string;
   courseName: string;
   holes: 9 | 18;
-  startHole: 1 | 10;
+  startHole: number;
   format: PollaFormat;
   hcpPct: number;
   handicapMode: HandicapMode;
@@ -65,13 +65,13 @@ export function parsePollaPlayersCsv(csv: string) {
     const startHoleRaw = Number(value("startHole") || 1);
     if (!value("name")) issues.push({ row: index + 2, message: "Nombre vacío." });
     if (!Number.isFinite(handicap) || handicap < -15 || handicap > 54) issues.push({ row: index + 2, message: "HCP inválido." });
-    if (startHoleRaw !== 1 && startHoleRaw !== 10) issues.push({ row: index + 2, message: "startHole debe ser 1 o 10." });
+    if (normalizeRoundStartHole(startHoleRaw, 0) === 0) issues.push({ row: index + 2, message: "startHole debe estar entre 1 y 18." });
     return {
       id: `csv-${index + 1}`,
       name: value("name"),
       handicap: Number.isFinite(handicap) ? handicap : 0,
       group: value("group") || undefined,
-      startHole: startHoleRaw === 10 ? 10 as const : 1 as const,
+      startHole: normalizeRoundStartHole(startHoleRaw),
       teeTime: value("teeTime") || undefined,
     };
   });
@@ -93,11 +93,8 @@ export function autoGroupPollaPlayers(players: PollaPlayerInput[], preferredSize
 
 export type PollaCourseHole = { number: number; par: number };
 
-export function pollaHoleOrder(startHole: 1 | 10, holes: 9 | 18) {
-  const fullOrder = startHole === 10
-    ? [...Array.from({ length: 9 }, (_, index) => index + 10), ...Array.from({ length: 9 }, (_, index) => index + 1)]
-    : Array.from({ length: 18 }, (_, index) => index + 1);
-  return fullOrder.slice(0, holes);
+export function pollaHoleOrder(startHole: number, holes: 9 | 18) {
+  return playOrder(startHole).slice(0, holes);
 }
 
 export function pollaParForHole(courseSnapshot: PollaCourseHole[] | null | undefined, hole: number, fallback = 4) {
@@ -120,7 +117,7 @@ export function initializePollaHoleScores(
   return next;
 }
 
-export function nextPollaHole(currentHole: number, startHole: 1 | 10, holes: 9 | 18) {
+export function nextPollaHole(currentHole: number, startHole: number, holes: 9 | 18) {
   const order = pollaHoleOrder(startHole, holes);
   const index = order.indexOf(currentHole);
   if (index < 0) return order[0] ?? null;
@@ -160,7 +157,7 @@ export function buildPollaLeaderboard(input: {
   scores: PollaLeaderboardScore[];
   courseSnapshot: Array<{ number: number; par: number; strokeIndex?: number }>;
   tournamentHoles: 9 | 18;
-  startHole: 1 | 10;
+  startHole: number;
   hcpPct: number;
   handicapMode: HandicapMode;
   scope?: PollaLeaderboardScope;

@@ -7,7 +7,7 @@ import {
 } from "../../group-game-template";
 import { restoreBetConfig } from "../../new-round-bets";
 import { missingHandicapsForActiveBets } from "../../handicap-base";
-import { playOrder } from "../../engine";
+import { normalizeRoundStartHole, playOrder } from "../../engine";
 import { createSupplementalBet } from "../../supplemental-bets";
 import { teeAssignmentSnapshot } from "../../player-tee-assignments";
 import type {
@@ -291,12 +291,12 @@ function draftFromHistory(snapshot: RoundSnapshot, current: RoundSetupDraft, dat
   const sourcePlayers = snapshot.players ?? [];
   if (!sourcePlayers.length) return null;
   const storedOrder = Array.isArray(snapshot.order) ? snapshot.order : [];
-  const storedStart = storedOrder[0] === 10 ? 10 : storedOrder[0] === 1 ? 1 : undefined;
+  const storedStart = Number.isInteger(storedOrder[0]) && storedOrder[0] >= 1 && storedOrder[0] <= 18 ? storedOrder[0] : undefined;
   const storedLength = storedOrder.length === 9 ? 9 : storedOrder.length === 18 ? 18 : undefined;
   const expectedOrder = storedStart === undefined ? [] : playOrder(storedStart).slice(0, storedLength ?? 0);
   const orderIsValid = storedLength !== undefined
     && storedOrder.every((hole, index) => Number.isInteger(hole) && hole === expectedOrder[index]);
-  const startHole: 1 | 10 = orderIsValid ? storedStart! : snapshot.startHole === 10 ? 10 : 1;
+  const startHole = orderIsValid ? storedStart! : normalizeRoundStartHole(snapshot.startHole);
   const roundHoles: 9 | 18 = orderIsValid ? storedLength : snapshot.roundHoles === 9 ? 9 : 18;
   const memberIdByPlayerId = Object.fromEntries(sourcePlayers.map((player, index) => [player.id, `history-member-${index + 1}`]));
   const source: GroupTemplateDraftSource = {

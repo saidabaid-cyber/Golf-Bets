@@ -9,6 +9,7 @@ import type { Course, Player } from "../../lib/types";
 import { NumericCaptureInput } from "./numeric-capture-input";
 import { normalizeNumericCaptureText, parseNumericCapture } from "../../lib/numeric-input";
 import { useBackyardAccount } from "./account-provider";
+import { normalizeRoundStartHole } from "../../lib/engine";
 
 type Screen = "home" | "create" | "join" | "leaderboard" | "scorecard" | "mine" | "manage";
 type CreatedTournament = { public_id: string; short_code: string; name: string };
@@ -34,7 +35,7 @@ export function PollaLivePanel({ courses = [], privateRound }: { courses?: Cours
   const [qr, setQr] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [draft, setDraft] = useState({ name: "", date: todayMexico(), courseName: "", holes: 18 as 9 | 18, startHole: 1 as 1 | 10, format: "both", hcpPct: 100, handicapMode: "half_up", localRules: "" });
+  const [draft, setDraft] = useState({ name: "", date: todayMexico(), courseName: "", holes: 18 as 9 | 18, startHole: 1, format: "both", hcpPct: 100, handicapMode: "half_up", localRules: "" });
   const [players, setPlayers] = useState<PollaPlayerInput[]>([]);
   const [csv, setCsv] = useState("");
   const [csvIssues, setCsvIssues] = useState<string[]>([]);
@@ -180,7 +181,7 @@ export function PollaLivePanel({ courses = [], privateRound }: { courses?: Cours
       const members = (payload.members || []).map((member: any) => member.tournament_players).filter(Boolean);
       setOyesPlayerId((current) => current || members[0]?.id || "");
       const tournament = Array.isArray(payload.group?.tournaments) ? payload.group.tournaments[0] : payload.group?.tournaments;
-      const start = payload.group?.start_hole === 10 ? 10 : 1;
+      const start = normalizeRoundStartHole(payload.group?.start_hole);
       const holes = tournament?.holes === 9 ? 9 : 18;
       const order = pollaHoleOrder(start, holes);
       const firstIncomplete = order.find((hole) => members.some((player: any) => typeof stored[`${player.id}:${hole}`] !== "number")) ?? order.at(-1) ?? start;
@@ -241,7 +242,7 @@ export function PollaLivePanel({ courses = [], privateRound }: { courses?: Cours
       setPendingCount(pending);
       setConflictCount(conflicts);
       setSyncLabel(conflictDetected || conflicts ? "Conflicto: el admin debe revisar el score" : pending ? `${navigator.onLine ? "" : "Sin conexión · "}${pending} cambio${pending === 1 ? "" : "s"} pendiente${pending === 1 ? "" : "s"}` : "✓ Sincronizado");
-      const start = groupData.group?.start_hole === 10 ? 10 : 1;
+      const start = normalizeRoundStartHole(groupData.group?.start_hole);
       const holes = tournament?.holes === 9 ? 9 : 18;
       const nextHole = nextPollaHole(currentHole, start, holes);
       if (nextHole !== null) {
@@ -339,7 +340,7 @@ export function PollaLivePanel({ courses = [], privateRound }: { courses?: Cours
       if (!response.ok) throw new Error(payload.error || "No fue posible abrir la administración.");
       setAdminData(payload);
       setAdminScores(Object.fromEntries((payload.scores || []).map((score: any) => [`${score.player_id}:${score.hole}`, score.score])));
-      setAdminHole(payload.tournament?.start_hole === 10 ? 10 : 1);
+      setAdminHole(normalizeRoundStartHole(payload.tournament?.start_hole));
       setScreen("manage");
     } catch (requestError) { setError(requestError instanceof Error ? requestError.message : "No fue posible abrir la administración."); }
     finally { setBusy(false); }
@@ -408,7 +409,7 @@ export function PollaLivePanel({ courses = [], privateRound }: { courses?: Cours
           <div><label>Campo</label>{courses.length ? <select required value={draft.courseName} onChange={(event) => setDraft({ ...draft, courseName: event.target.value })}><option value="">Selecciona</option>{Array.from(new Set(courses.map((course) => course.name))).map((name) => <option key={name}>{name}</option>)}</select> : <input required value={draft.courseName} onChange={(event) => setDraft({ ...draft, courseName: event.target.value })} />}</div>
           <div><label>Formato</label><select value={draft.format} onChange={(event) => setDraft({ ...draft, format: event.target.value })}><option value="both">Gross + Neto</option><option value="gross">Medal Gross</option><option value="net">Medal Neto</option></select></div>
           <div><label>Hoyos</label><select value={draft.holes} onChange={(event) => setDraft({ ...draft, holes: Number(event.target.value) as 9 | 18 })}><option value={18}>18</option><option value={9}>9</option></select></div>
-          <div><label>Salida</label><select value={draft.startHole} onChange={(event) => setDraft({ ...draft, startHole: Number(event.target.value) as 1 | 10 })}><option value={1}>H1</option><option value={10}>H10</option></select></div>
+          <div><label>Salida</label><select value={draft.startHole} onChange={(event) => setDraft({ ...draft, startHole: Number(event.target.value) })}>{Array.from({ length: 18 }, (_, index) => index + 1).map((hole) => <option value={hole} key={hole}>H{hole}</option>)}</select></div>
           <div><label>% HCP</label><NumericCaptureInput min={0} max={100} step={5} inputMode="numeric" value={draft.hcpPct} emptyWhenZero={false} onValueChange={(hcpPct) => setDraft({ ...draft, hcpPct: hcpPct ?? 0 })} /></div>
           <div><label>Modo HCP</label><select value={draft.handicapMode} onChange={(event) => setDraft({ ...draft, handicapMode: event.target.value })}><option value="decimal">Décimas</option><option value="half_up">.5 sube</option><option value="half_down">.5 baja</option><option value="six_up">.6 sube</option><option value="four_down">.4 baja</option></select></div>
         </div><label>Comentarios / reglas locales</label><textarea rows={3} value={draft.localRules} onChange={(event) => setDraft({ ...draft, localRules: event.target.value })} /></section>

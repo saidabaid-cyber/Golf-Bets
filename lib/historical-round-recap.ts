@@ -33,7 +33,7 @@ export type HistoricalRoundRecapMeta = {
   ownerName?: string;
   lifecycleState?: RoundLifecycleState;
   holeCount?: 9 | 18;
-  startHole?: 1 | 10;
+  startHole?: number;
 };
 
 export type HistoricalRoundFinancials = {
@@ -73,7 +73,7 @@ export type HistoricalScorecardHole = {
 
 export type HistoricalGolfRecap = {
   holeCount: 9 | 18;
-  startHole: 1 | 10;
+  startHole: number;
   order: number[];
   status: "not_started" | "partial" | "complete";
   leaderboard: HistoricalGolfPlayer[];
@@ -198,11 +198,8 @@ function lifecycleState(value: unknown): RoundLifecycleState | undefined {
     : undefined;
 }
 
-function playedOrder(startHole: 1 | 10, holeCount: 9 | 18) {
-  const full = startHole === 10
-    ? [10, 11, 12, 13, 14, 15, 16, 17, 18, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-    : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
-  return full.slice(0, holeCount);
+function playedOrder(startHole: number, holeCount: 9 | 18) {
+  return Array.from({ length: holeCount }, (_, index) => ((startHole - 1 + index) % 18) + 1);
 }
 
 function equalOrder(left: readonly number[], right: readonly number[]) {
@@ -213,7 +210,7 @@ function roundGeometry(source: RuntimeRecord) {
   const rawHoleCount = source.roundHoles;
   const rawStartHole = source.startHole;
   const explicitHoleCount = rawHoleCount === 9 || rawHoleCount === 18 ? rawHoleCount : undefined;
-  const explicitStartHole = rawStartHole === 1 || rawStartHole === 10 ? rawStartHole : undefined;
+  const explicitStartHole = integerInRange(rawStartHole, 1, 18) ? rawStartHole : undefined;
   if ((rawHoleCount !== undefined && explicitHoleCount === undefined)
     || (rawStartHole !== undefined && explicitStartHole === undefined)) return undefined;
 
@@ -227,8 +224,8 @@ function roundGeometry(source: RuntimeRecord) {
   }
 
   const holeCount: 9 | 18 | undefined = explicitHoleCount ?? (storedOrder?.length as 9 | 18 | undefined);
-  const inferredStartHole: 1 | 10 | undefined = storedOrder?.[0] === 1 ? 1 : storedOrder?.[0] === 10 ? 10 : undefined;
-  const startHole: 1 | 10 | undefined = explicitStartHole ?? inferredStartHole;
+  const inferredStartHole = integerInRange(storedOrder?.[0], 1, 18) ? storedOrder?.[0] : undefined;
+  const startHole = explicitStartHole ?? inferredStartHole;
   if (!holeCount || !startHole) return undefined;
   const expected = playedOrder(startHole, holeCount);
   if (storedOrder && !equalOrder(storedOrder, expected)) return undefined;
@@ -685,7 +682,7 @@ function persistedCategoryBalances(
 
 function safeMeta(source: RuntimeRecord): HistoricalRoundRecapMeta {
   const holeCount = source.roundHoles === 9 || source.roundHoles === 18 ? source.roundHoles : undefined;
-  const startHole = source.startHole === 1 || source.startHole === 10 ? source.startHole : undefined;
+  const startHole = integerInRange(source.startHole, 1, 18) ? source.startHole : undefined;
   const normalizedLifecycle = lifecycleState(source.lifecycleState);
   return {
     ...(stableId(source.id) ? { roundId: source.id } : {}),

@@ -16,11 +16,8 @@ const course: Course = {
   })),
 };
 
-function orderFor(startHole: 1 | 10 = 1, holes: 9 | 18 = 9) {
-  const full = startHole === 10
-    ? [10, 11, 12, 13, 14, 15, 16, 17, 18, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-    : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
-  return full.slice(0, holes);
+function orderFor(startHole = 1, holes: 9 | 18 = 9) {
+  return Array.from({ length: holes }, (_, index) => ((startHole - 1 + index) % 18) + 1);
 }
 
 function scoreRows(order: number[], players: Player[], score = 4): Record<number, HoleScore> {

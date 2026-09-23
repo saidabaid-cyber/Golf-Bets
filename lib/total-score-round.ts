@@ -1,9 +1,10 @@
 import type { Course, Player, RoundSnapshot } from "./types";
 import { initialBets } from "./new-round-bets";
 import { assignTeeToEveryPlayer } from "./player-tee-assignments";
+import { normalizeRoundStartHole, playOrder } from "./engine";
 
-export function totalScoreOrder(holes: 9 | 18, start: 1 | 10) {
-  return Array.from({ length: holes }, (_, i) => ((start - 1 + i) % 18) + 1);
+export function totalScoreOrder(holes: 9 | 18, start: number) {
+  return playOrder(start).slice(0, holes);
 }
 export function validTotalOnly(round: RoundSnapshot, accountUserId: string): boolean {
   const capture = round.totalScoreCapture;
@@ -12,13 +13,13 @@ export function validTotalOnly(round: RoundSnapshot, accountUserId: string): boo
     && capture.grossTotal >= round.roundHoles! && capture.grossTotal <= round.roundHoles! * 30
     && round.players?.length === 1 && round.players[0].id === round.ownerId && round.players[0].accountUserId === accountUserId
     && round.scores && Object.keys(round.scores).length === 0 && round.courseSnapshot
-    && JSON.stringify(round.order) === JSON.stringify(totalScoreOrder(round.roundHoles!, round.startHole === 10 ? 10 : 1)));
+    && JSON.stringify(round.order) === JSON.stringify(totalScoreOrder(round.roundHoles!, normalizeRoundStartHole(round.startHole))));
 }
-export function createTotalScoreRound(input: { id: string; course: Course; player: Player; date: string; holes: 9 | 18; start: 1 | 10; total: number; now: string }): RoundSnapshot {
+export function createTotalScoreRound(input: { id: string; course: Course; player: Player; date: string; holes: 9 | 18; start: number; total: number; now: string }): RoundSnapshot {
   const { id, course, player, date, holes, start, total, now } = input;
   if (!id || !player.accountUserId || !player.name.trim() || !course.name.trim() || !course.teeName.trim()) throw new Error("Selecciona campo, tee y jugador.");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0,10) !== date || date > now.slice(0,10)) throw new Error("Elige una fecha válida, no futura.");
-  if (![9,18].includes(holes) || ![1,10].includes(start) || !Number.isInteger(total) || total < holes || total > holes * 30) throw new Error("Revisa hoyos y total de golpes.");
+  if (![9,18].includes(holes) || normalizeRoundStartHole(start, 0) === 0 || !Number.isInteger(total) || total < holes || total > holes * 30) throw new Error("Revisa hoyos, hoyo inicial y total de golpes.");
   const order = totalScoreOrder(holes, start);
   if (order.some(number => !course.holes.some(h => h.number === number))) throw new Error("El campo no tiene datos para esta vuelta. Selecciona una vuelta disponible.");
   return {

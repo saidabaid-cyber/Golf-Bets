@@ -219,7 +219,7 @@ export function hasRoundProgress(draft: any) {
 
 export function migrateDraftPressures(draft: any) {
   if (!draft || typeof draft !== "object") return draft;
-  const startHole = draft.startHole === 10 ? 10 : 1;
+  const startHole = Number.isInteger(draft.startHole) && draft.startHole >= 1 && draft.startHole <= 18 ? draft.startHole : 1;
   const foursome = draft.bets?.foursome;
   if (foursome) {
     if (foursome.pressureMultiplier === undefined && typeof foursome.pressSecond9 === "boolean") {
