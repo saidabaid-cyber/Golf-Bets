@@ -1,5 +1,4 @@
 "use client";
-import { DevicePermissions } from './device-permissions';
 
 import Link from "next/link";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -32,6 +31,7 @@ import { ACCOUNT_SETTINGS, type AccountSettingsSection } from "../../lib/account
 import { DEFAULT_ACCOUNT_UI_PREFERENCES, displayDistanceFromStoredYards, readAccountUiPreferences, writeAccountUiPreferences, type AccountUiPreferences } from "../../lib/account-ui-preferences";
 import { SocialSharingPreferences } from './cloud-social-activity';
 import { checkProfileUsernameAvailability, normalizeProfileUsername } from "../../lib/profile-username";
+import { DevicePermissionSettings } from "./device-permission-settings";
 
 type ProfileAccountPanelProps = {
   view: "profile" | "account";
@@ -346,12 +346,13 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
         <label className="accountSettingRow"><span><b>Email</b><small>Guarda tu preferencia. El servicio de envío por correo todavía no está activado.</small></span><input type="checkbox" checked={uiPreferences.email} onChange={event => changeUiPreferences({ email: event.target.checked })} aria-label="Preferir notificaciones por email" /></label>
         <label className="accountSettingRow"><span><b>Rondas</b><small>Avisos relacionados con invitaciones y actividad de rondas.</small></span><input type="checkbox" checked={uiPreferences.rounds} onChange={event => changeUiPreferences({ rounds: event.target.checked })} aria-label="Activar avisos de rondas" /></label>
         <label className="accountSettingRow"><span><b>Recordatorios</b><small>Recordatorios opcionales de actividad pendiente.</small></span><input type="checkbox" checked={uiPreferences.reminders} onChange={event => changeUiPreferences({ reminders: event.target.checked })} aria-label="Activar recordatorios" /></label>
-        {preferenceMessage && <p role="status">{preferenceMessage}</p>}<DevicePermissions kind="notifications" />
+        {preferenceMessage && <p role="status">{preferenceMessage}</p>}
       </section>
       {identity.accessToken && <section className="card accountCompactCard"><SocialSharingPreferences key={identity.userId} accessToken={identity.accessToken} section="notifications" /></section>}
       </div>}
       {accountSection === "privacy" && <div data-settings-section="privacy">
-      <section className="card accountCompactCard"><h2>Privacidad y permisos</h2><ProfileVisibilitySettings userId={identity.userId} accessToken={identity.mode === 'authenticated' ? identity.accessToken : undefined} authenticated={identity.mode === 'authenticated'} /><button type="button" className="accountChevronRow" onClick={() => setManagingAiConsents(true)}><span><b>Privacidad / IA</b><small>Instrucciones Backyard AI y lectura de scorecards</small></span><strong>›</strong></button><DevicePermissions kind="location" /></section>
+      <section className="card accountCompactCard"><h2>Privacidad y permisos</h2><ProfileVisibilitySettings userId={identity.userId} accessToken={identity.mode === 'authenticated' ? identity.accessToken : undefined} authenticated={identity.mode === 'authenticated'} /><button type="button" className="accountChevronRow" onClick={() => setManagingAiConsents(true)}><span><b>Privacidad / IA</b><small>Instrucciones Backyard AI y lectura de scorecards</small></span><strong>›</strong></button></section>
+      {identity.mode === "authenticated" && <DevicePermissionSettings userId={identity.userId} />}
       {identity.accessToken && <section className="card accountCompactCard"><SocialSharingPreferences key={identity.userId} accessToken={identity.accessToken} section="sharing" /></section>}
       <section className="card accountCompactCard"><h2>Legal</h2><div className="documentConsentList compactConsentList"><Link href="/legal/terms?returnTo=account"><span>Términos de Uso</span><b>{accepted("terms")}</b></Link><Link href="/legal/privacy-simplified?returnTo=account"><span>Aviso simplificado</span><b>Ver</b></Link><Link href="/legal/privacy?returnTo=account"><span>Aviso de Privacidad</span><b>{accepted("privacy")}</b></Link></div><button type="button" className="textButton accountConsentButton" onClick={() => setManagingConsents(true)}>Gestionar consentimientos</button></section>
       </div>}

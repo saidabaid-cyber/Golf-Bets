@@ -38,11 +38,11 @@ export function SocialSharingPreferences({ accessToken, section = 'all' }: { acc
     finally { writing.current = false; if (live.current) setBusy(false); }
   }
   const labels = preferenceLabels.filter(([key]) => section === 'all' || (key.startsWith('notify') ? section === 'notifications' : section === 'sharing'));
-  return <details className={styles.preferences}><summary>{section === 'notifications' ? 'Avisos de Social' : section === 'sharing' ? 'Actividad que comparto' : 'Privacidad y avisos de Social'}</summary>
+  return <section className={styles.preferences}><h3>{section === 'notifications' ? 'Avisos de Social' : section === 'sharing' ? 'Actividad que comparto' : 'Privacidad y avisos de Social'}</h3>
     {section !== 'notifications' && <p>Compartir es opcional. Activa el acceso de tus amigos y elige los tipos de actividad. Un perfil público por sí solo no comparte rondas. No publicamos ubicación en tiempo real.</p>}
     {prefs ? <fieldset disabled={busy}>{labels.map(([key, label]) => <label key={key}><input type="checkbox" checked={prefs[key]} onChange={(event) => void change(key, event.target.checked)} /><span>{label}</span></label>)}</fieldset> : !message && <p role="status">Cargando preferencias…</p>}
     {message && <p role="status">{message}</p>}
-  </details>;
+  </section>;
 }
 
 function dateLabel(value: string) {

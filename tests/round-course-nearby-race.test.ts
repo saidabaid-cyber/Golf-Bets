@@ -11,8 +11,8 @@ test("buscar cerca suspende la búsqueda por nombre y conserva el orden por dist
   assert.match(picker, /if \(requestId !== nearbyRequestRef\.current\) return;\s*const next = mergeCourseResults\(\[\], page\.courses \?\? \[\]\)/);
 });
 
-test("escribir manualmente o negar ubicación invalida la respuesta cercana anterior", () => {
+test("escribir manualmente o tener ubicación desactivada invalida la respuesta cercana anterior sin pedir permiso", () => {
   assert.match(picker, /onChange=\{\(value\) => \{\s*\+\+nearbyRequestRef\.current;\s*setQuery\(value\);\s*setSelectedCourseId\(""\);\s*setResultMode\("name"\)/);
-  assert.match(picker, /\}, \(error\) => \{\s*if \(requestId !== nearbyRequestRef\.current\) return;\s*setResultMode\("name"\);\s*setNearbyStatus\(error\.code === error\.PERMISSION_DENIED \? "denied" : "error"\)/);
-  assert.match(picker, /if \(!navigator\.geolocation\) \{\s*setResultMode\("name"\);\s*setNearbyStatus\("error"\)/);
+  assert.match(picker, /if \(!coordinates \|\| !permission\.locationEnabled\) \{\s*if \(requestId === nearbyRequestRef\.current\) \{ setResultMode\("name"\); setNearbyStatus\("denied"\); \}/);
+  assert.doesNotMatch(picker, /navigator\.geolocation\.getCurrentPosition/);
 });

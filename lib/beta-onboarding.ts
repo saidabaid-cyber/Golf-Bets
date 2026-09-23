@@ -8,13 +8,13 @@ export const BETA_ONBOARDING_STEPS = [
   "improvements",
   "objective",
   "plan",
+  "permissions",
   "group",
   "players",
   "handicaps",
   "bets",
   "bet_details",
   "ready",
-  "permissions", // Legacy checkpoint: normalized directly to complete; no UI step.
   "complete",
 ] as const;
 
@@ -85,8 +85,7 @@ export function normalizeBetaOnboardingProgress(
   const step = typeof candidate.step === "string" && (BETA_ONBOARDING_STEPS as readonly string[]).includes(candidate.step)
     ? candidate.step as BetaOnboardingStep
     : "welcome";
-  const removedPermissionsCheckpoint = step === "permissions";
-  const status = candidate.status === "complete" || step === "complete" || removedPermissionsCheckpoint ? "complete" : "in_progress";
+  const status = candidate.status === "complete" || step === "complete" ? "complete" : "in_progress";
   const completedAt = status === "complete" ? timestamp(candidate.completedAt, timestamp(candidate.updatedAt, now)) : undefined;
   const completedSteps = knownSteps(candidate.completedSteps);
   return {
@@ -94,7 +93,7 @@ export function normalizeBetaOnboardingProgress(
     userId,
     status,
     step: status === "complete" ? "complete" : step,
-    completedSteps: removedPermissionsCheckpoint ? [...new Set([...completedSteps, "permissions", "complete"] as BetaOnboardingStep[])] : completedSteps,
+    completedSteps,
     skippedSteps: knownSteps(candidate.skippedSteps),
     ...(candidate.mode === "quick" || candidate.mode === "complete" ? { mode: candidate.mode } : {}),
     ...(typeof candidate.groupId === "string" && candidate.groupId.trim() ? { groupId: candidate.groupId.trim().slice(0, 200) } : {}),

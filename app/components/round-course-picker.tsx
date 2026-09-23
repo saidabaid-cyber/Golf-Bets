@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnchoredSearch, AnchoredSearchOption } from "./anchored-search";
+import { refreshDevicePermissionStateWithoutPrompt, requestInitialLocation, storedNearbyCoordinates } from "../../lib/device-permissions";
 
 type CourseResult = {
   id: string;
@@ -56,6 +57,7 @@ export function RoundCoursePicker({
   invalid,
   describedBy,
   accessToken,
+  permissionOwnerId,
   onSelect,
 }: {
   selectedName: string;
@@ -64,6 +66,7 @@ export function RoundCoursePicker({
   invalid: boolean;
   describedBy?: string;
   accessToken?: string | null;
+  permissionOwnerId: string;
   onSelect: (course: CourseResult) => void;
 }) {
   const [query, setQuery] = useState(selectedName);
@@ -121,12 +124,7 @@ export function RoundCoursePicker({
   const visibleResults = useMemo(() => mergeCourseResults([], results), [results]);
   const expanded = !selectedCourseId && (visibleResults.length > 0 || status === "loading" || status === "error");
 
-  function requestNearbyCourses() {
-    if (!navigator.geolocation) {
-      setResultMode("name");
-      setNearbyStatus("error");
-      return;
-    }
+  async function requestNearbyCourses() {
     const requestId = ++nearbyRequestRef.current;
     // Switching modes aborts the pending name search. Otherwise its delayed
     // response could replace the distance-sorted nearby results.
@@ -137,9 +135,17 @@ export function RoundCoursePicker({
     setHasMore(false);
     setNextCursor(null);
     setNearbyStatus("locating");
-    navigator.geolocation.getCurrentPosition((position) => {
-      if (requestId !== nearbyRequestRef.current) return;
-      void loadNearbyCoursePage(position.coords.latitude, position.coords.longitude, accessToken).then((page) => {
+    let permission = await refreshDevicePermissionStateWithoutPrompt(localStorage, permissionOwnerId);
+    let coordinates = storedNearbyCoordinates(localStorage, permissionOwnerId);
+    if (permission.location === "granted" && permission.locationEnabled && !coordinates) {
+      permission = await requestInitialLocation(localStorage, permissionOwnerId);
+      coordinates = storedNearbyCoordinates(localStorage, permissionOwnerId);
+    }
+    if (!coordinates || !permission.locationEnabled) {
+      if (requestId === nearbyRequestRef.current) { setResultMode("name"); setNearbyStatus("denied"); }
+      return;
+    }
+    void loadNearbyCoursePage(coordinates.latitude, coordinates.longitude, accessToken).then((page) => {
         if (requestId !== nearbyRequestRef.current) return;
         const next = mergeCourseResults([], page.courses ?? []);
         setResults(next);
@@ -154,11 +160,6 @@ export function RoundCoursePicker({
         setResultMode("name");
         setNearbyStatus("error");
       });
-    }, (error) => {
-      if (requestId !== nearbyRequestRef.current) return;
-      setResultMode("name");
-      setNearbyStatus(error.code === error.PERMISSION_DENIED ? "denied" : "error");
-    }, { enableHighAccuracy: false, timeout: 8_000, maximumAge: 300_000 });
   }
 
   return <div className={`courseSelectionField ${invalid ? "isMissing" : ""}`}>
@@ -208,8 +209,8 @@ export function RoundCoursePicker({
         }
       }}>Más resultados</button>}
     </AnchoredSearch>
-    <button type="button" className="roundCourseLocation secondary" disabled={nearbyStatus === "locating"} onClick={requestNearbyCourses} aria-label="Buscar campos cercanos con mi ubicación"><span aria-hidden="true">➤</span>{nearbyStatus === "locating" ? "Buscando cerca…" : "Campos cercanos"}</button>
-    {nearbyStatus === "denied" && <p className="roundCourseLocationStatus" role="status">No diste permiso de ubicación. Puedes seguir usando la búsqueda por nombre.</p>}
+    <button type="button" className="roundCourseLocation secondary" disabled={nearbyStatus === "locating"} onClick={() => void requestNearbyCourses()} aria-label="Buscar campos cercanos con mi ubicación ya autorizada"><span aria-hidden="true">➤</span>{nearbyStatus === "locating" ? "Buscando cerca…" : "Campos cercanos"}</button>
+    {nearbyStatus === "denied" && <p className="roundCourseLocationStatus" role="status">Ubicación desactivada. Revísala en Perfil → Configuración → Privacidad y permisos, o busca por nombre.</p>}
     {nearbyStatus === "empty" && <p className="roundCourseLocationStatus" role="status">No hay campos con coordenadas verificadas cerca en el catálogo actual. La búsqueda manual sigue disponible.</p>}
     {nearbyStatus === "error" && <p className="roundCourseLocationStatus" role="status">No pude obtener campos cercanos. La búsqueda por nombre sigue disponible.</p>}
   </div>;

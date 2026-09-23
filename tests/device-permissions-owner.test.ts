@@ -35,11 +35,12 @@ test("matriz de ubicación nunca ofrece un CTA falso de administración", () => 
   }
 });
 
-test("iPhone web normal guía instalación; PWA separa permiso y backend push", () => {
+test("un contexto sin Notifications API informa indisponibilidad sin instrucciones PWA", () => {
   const iphoneWeb = devicePermissionContext({ userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)", notificationApi: false });
-  const install = notificationPermissionPresentation("unavailable", iphoneWeb);
-  assert.match(install.status, /requieren instalar The Backyard/i);
-  assert.equal(install.actionLabel, "Cómo instalar The Backyard");
+  const unavailable = notificationPermissionPresentation("unavailable", iphoneWeb);
+  assert.match(unavailable.status, /no están disponibles/i);
+  assert.equal(unavailable.actionLabel, "Más información");
+  assert.doesNotMatch(`${unavailable.status} ${unavailable.detail} ${unavailable.actionLabel}`, /instalar|pantalla de inicio/i);
 
   const iphonePwa = devicePermissionContext({ userAgent: "iPhone", navigatorStandalone: true, notificationApi: true });
   assert.equal(notificationPermissionPresentation("default", iphonePwa).actionLabel, "Permitir notificaciones");
@@ -52,7 +53,7 @@ test("componente dispara APIs nativas sólo desde CTAs explícitos y ofrece sali
   const source = readFileSync("app/components/device-permissions.tsx", "utf8");
   assert.match(source, /requestCourseLocation\(navigator\.geolocation/);
   assert.match(source, /Notification\.requestPermission\(\)/);
-  assert.match(source, /Agregar a pantalla de inicio/);
+  assert.doesNotMatch(source, /Agregar a pantalla de inicio|Cómo instalar The Backyard/);
   assert.match(source, /Ajustes &gt; Apps &gt; Safari &gt; Ubicación/);
   assert.doesNotMatch(source, /Administrar ubicación|Administrar notificaciones/);
 });

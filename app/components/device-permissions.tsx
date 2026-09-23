@@ -12,7 +12,7 @@ import {
 } from "../../lib/device-permissions";
 import { ModalShell } from "./modal-shell";
 
-type HelpTopic = "location" | "notification" | "install" | null;
+type HelpTopic = "location" | "notification" | null;
 
 const DEFAULT_CONTEXT: DevicePermissionContext = { ios: false, standalone: false, notificationApi: false };
 
@@ -97,13 +97,13 @@ export function DevicePermissions({ kind = "all" }: { kind?: "all" | "location" 
     if (notificationView.action === "request") {
       return <button type="button" className="secondary" onClick={() => void requestNotifications()}>{notificationView.actionLabel}</button>;
     }
-    return <button type="button" className="secondary" onClick={() => setHelpTopic(notificationView.action === "install-help" ? "install" : "notification")}>{notificationView.actionLabel}</button>;
+    return <button type="button" className="secondary" onClick={() => setHelpTopic("notification")}>{notificationView.actionLabel}</button>;
   }
 
   return <div className="devicePermissions">
     {kind !== "notifications" && <section aria-labelledby="device-location-title">
       <h3 id="device-location-title">Ubicación</h3>
-      <p>Se usa sólo cuando pides campos cercanos. No guardamos ni enviamos tus coordenadas.</p>
+      <p>Se usa sólo cuando pides campos cercanos. Conservamos una ubicación aproximada por unos minutos y la enviamos únicamente para ordenar resultados cercanos.</p>
       <p role="status"><b>{locationView.status}</b>{locationView.detail && <><br />{locationView.detail}</>}</p>
       {locationAction()}
     </section>}
@@ -114,11 +114,8 @@ export function DevicePermissions({ kind = "all" }: { kind?: "all" | "location" 
     </section>}
     <small>Estos controles corresponden al dispositivo o navegador. Tus preferencias de avisos se guardan por separado y ningún permiso es obligatorio para jugar.</small>
     <ModalShell open={helpTopic !== null} onClose={() => setHelpTopic(null)} labelledBy="permission-help-title">
-      <h2 id="permission-help-title">{helpTopic === "install" ? "Instalar The Backyard en iPhone" : helpTopic === "location" ? "Cambiar permiso de ubicación" : "Cambiar permiso de notificaciones"}</h2>
-      {helpTopic === "install" ? <>
-        <p>En Safari en iPhone:</p>
-        <ol><li>Toca Compartir.</li><li>Elige Agregar a pantalla de inicio.</li><li>Abre The Backyard desde el nuevo icono.</li><li>Regresa a Permisos y solicita notificaciones.</li></ol>
-      </> : helpTopic === "location" ? <>
+      <h2 id="permission-help-title">{helpTopic === "location" ? "Cambiar permiso de ubicación" : "Cambiar permiso de notificaciones"}</h2>
+      {helpTopic === "location" ? <>
         <p>The Backyard no puede cambiar ni revocar este permiso directamente.</p>
         {context.ios
           ? <p>En Safari, abre los ajustes del sitio desde la barra de dirección. También puedes revisar Ajustes &gt; Apps &gt; Safari &gt; Ubicación, según tu versión de iOS.</p>
@@ -127,7 +124,7 @@ export function DevicePermissions({ kind = "all" }: { kind?: "all" | "location" 
       </> : <>
         <p>The Backyard no puede volver a abrir un aviso bloqueado ni revocar el permiso directamente.</p>
         {context.ios
-          ? <p>Abre The Backyard desde su icono y revisa Ajustes &gt; Notificaciones &gt; The Backyard.</p>
+          ? <p>Revisa Ajustes &gt; Notificaciones &gt; The Backyard.</p>
           : <p>Abre la información o ajustes de este sitio desde la barra de dirección del navegador y busca Notificaciones.</p>}
         <p>El permiso del dispositivo no activa por sí solo el servicio de envío push.</p>
       </>}
