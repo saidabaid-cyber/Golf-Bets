@@ -124,7 +124,7 @@ test("existing canonical profile is not overwritten with blank new-device fallba
   assert.equal(await ensureCloudProfile(client, OWNER, { displayName: "", defaultHandicap: null, avatarUrl: "" }), existing); assert.equal(inserts, 0);
 });
 
-test("provider places mapping before cloud writes and creation UI, retains consent checkpoint", () => {
+test("provider places mapping before cloud writes and sends completed accounts directly to the app", () => {
   const source = readFileSync("app/components/account-provider.tsx", "utf8");
   const hydration = source.indexOf('if (accountEntry?.userId !== authenticatedUserId) return;');
   assert.ok(hydration > 0 && hydration < source.indexOf("const pendingProfileAttempt"));
@@ -135,7 +135,8 @@ test("provider places mapping before cloud writes and creation UI, retains conse
   assert.match(source, /Ya tienes una cuenta\. Vamos a iniciar sesión\./);
   assert.doesNotMatch(source, /if \(identity\.mode === "authenticated" && existingAccountNotice\) return/);
   assert.match(source, /Verifica tu correo para continuar; si ya tienes cuenta, entraremos a ella\./);
-  assert.match(source, /return identity.mode === "authenticated" \? <AccountConsentCheckpoint/);
+  assert.match(source, /const requiresAccountConsent = identity\.mode === "authenticated" && \(!accountEntry\?\.existingAccount \|\| !currentConsent\)/);
+  assert.match(source, /return requiresAccountConsent \? <AccountConsentCheckpoint/);
 });
 
 test("late mapping after logout, account switch, or effect cancellation cannot reopen creation or account UI", async () => {

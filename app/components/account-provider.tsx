@@ -777,7 +777,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       const intent = consumeAccountEntryIntent(sessionStorage);
       if (mapping.existingAccount) {
         // Durable server mapping wins over old/incomplete local setup markers.
-        // New consent versions still pass through AccountConsentCheckpoint.
+        // Established accounts with current legal consent enter the app directly.
+        // Optional AI consent remains available in settings and at feature use.
         setProfileSetupRequired(false);
         if (mapping.onboardingProgress) persistBetaOnboardingProgress(localStorage, mapping.onboardingProgress);
         setBetaOnboardingRequired(mapping.onboardingProgress?.status === "in_progress");
@@ -1615,11 +1616,11 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     {migrationDialog}
     {bettingConsentDialog}
   </AccountContext.Provider>;
-  // Account creation ends here, after profile/personalization and before entry
-  // into the app. Existing accounts resolve only missing server-side choices.
-  // Technical AI-preference failures may defer the prompt, not authorize AI.
-  // No localStorage marker is treated as consent on this or a new device.
-  return identity.mode === "authenticated" ? <AccountConsentCheckpoint
+  // Account creation ends here, after profile/personalization and before entry.
+  // Established accounts with current legal consent do not repeat onboarding;
+  // optional AI consent remains fail-closed and is requested at feature use.
+  const requiresAccountConsent = identity.mode === "authenticated" && (!accountEntry?.existingAccount || !currentConsent);
+  return requiresAccountConsent ? <AccountConsentCheckpoint
     key={identity.userId}
     userId={identity.userId}
     accessToken={identity.accessToken}

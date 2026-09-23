@@ -101,24 +101,27 @@ function checkpointHarness(props: Record<string, unknown>, readError: Error) {
 }
 
 for (const failure of ["network unavailable", "HTTP 500", "42P01 missing consent table", "PGRST202 missing consent RPC"]) {
-  test(`verified existing account reaches provider children after ${failure} without logout or mutation`, async () => {
-    const provider = providerHarness({ existingNotice: true });
-    const checkpoint = provider.render(); assert.equal(checkpoint.type, provider.checkpointMarker);
-    assert.match(text(checkpoint), /Ya tienes una cuenta\. Vamos a iniciar sesión\./);
-    assert.equal(nodes(checkpoint).some(node => node.type === "button" && /CONTINUAR A MI CUENTA/.test(text(node))), false, "verified accounts continue without another access gate");
-    assert.equal(checkpoint.key, OWNER); assert.equal(checkpoint.props.userId, OWNER); assert.equal(checkpoint.props.legalRequired, false);
-    const h = checkpointHarness(checkpoint.props, new Error(failure));
+  test(`standalone consent checkpoint remains recoverable after ${failure} without mutation`, async () => {
+    const child = jsx("application-routes", { children: "HOME · RONDA MANUAL · PERFIL" });
+    const h = checkpointHarness({ userId: OWNER, accessToken: "verified-token", legalRequired: false, onAcceptLegal: async () => {}, onBack: () => {}, children: child }, new Error(failure));
     try {
-      await h.settle(); assert.notEqual(h.tree().type, "account-context"); h.continue(); await h.settle();
-      assert.equal(h.tree().type, "account-context");
-      assert.equal((h.tree().props.value as { identity: unknown }).identity, provider.identity);
-      assert.ok(nodes(h.tree()).includes(provider.child));
+      await h.settle(); assert.notEqual(h.tree(), child); h.continue(); await h.settle();
+      assert.equal(h.tree(), child);
       assert.match(text(h.tree()), /HOME · RONDA MANUAL · PERFIL/);
       assert.equal(h.saves(), 0); assert.equal(h.reads(), 1);
-      h.render(); assert.equal(h.tree().type, "account-context", "ordinary app rerender cannot return user to access loop");
+      h.render(); assert.equal(h.tree(), child, "ordinary app rerender cannot return user to access loop");
     } finally { h.dispose(); }
   });
 }
+
+test("verified existing account with completed onboarding enters the app directly", () => {
+  const provider = providerHarness({ existingNotice: true });
+  const screen = provider.render();
+  assert.equal(screen.type, "account-context");
+  assert.ok(nodes(screen).includes(provider.child));
+  assert.notEqual(screen.type, provider.checkpointMarker);
+  assert.equal(nodes(screen).some(node => typeof node.type === "function" && node.type.name === "ProfileSetupScreen"), false);
+});
 
 test("new authenticated account still enters profile onboarding before the consent checkpoint", () => {
   const provider = providerHarness({ newAccount: true }); const screen = provider.render();
@@ -131,7 +134,7 @@ for (const authProvider of ["google", "email"] as const) {
   test(`${authProvider}: verified existing signup opens the existing app with an informational notice, not a second sign-in gate`, () => {
     const provider = providerHarness({ existingNotice: true, provider: authProvider });
     const screen = provider.render();
-    assert.equal(screen.type, provider.checkpointMarker);
+    assert.equal(screen.type, "account-context");
     assert.ok(nodes(screen).includes(provider.child));
     assert.match(text(screen), /Ya tienes una cuenta\. Vamos a iniciar sesión\./);
     assert.equal(nodes(screen).some(node => typeof node.type === "function" && node.type.name === "ProfileSetupScreen"), false);
