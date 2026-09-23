@@ -13,6 +13,7 @@ import {
   type GolfClubCatalog,
   type GolfShaftCatalog,
 } from "./golf-equipment";
+import { isPublicEquipmentBrand, isPublicEquipmentCatalogItem } from "./equipment-catalog-visibility";
 
 type SeedEnvelope = {
   schemaVersion?: unknown;
@@ -39,8 +40,8 @@ function seedCount(seed: SeedEnvelope) {
 }
 
 function catalogBrands<T extends { brand: string }>(seed: SeedEnvelope, models: readonly T[]) {
-  const declared = normalizedBrands(seed.brands);
-  const discovered = normalizedBrands(models.map((model) => model.brand));
+  const declared = normalizedBrands(seed.brands).filter(isPublicEquipmentBrand);
+  const discovered = normalizedBrands(models.map((model) => model.brand)).filter(isPublicEquipmentBrand);
   return normalizedBrands([...declared, ...discovered]);
 }
 
@@ -348,18 +349,20 @@ export function dedupeGolfShaftCatalog(legacyModels: readonly GolfShaftCatalog[]
 }
 
 export const golfBallCatalog: readonly GolfBallCatalog[] = Object.freeze(
-  dedupeGolfBallCatalog(normalizeGolfBallCatalogEntries(combinedBallSeed).map(canonicalizeBrand)),
+  dedupeGolfBallCatalog(normalizeGolfBallCatalogEntries(combinedBallSeed).map(canonicalizeBrand))
+    .filter(isPublicEquipmentCatalogItem),
 );
 
 export const golfClubCatalog: readonly GolfClubCatalog[] = Object.freeze(
-  dedupeGolfClubCatalog(normalizeGolfClubCatalogEntries(combinedClubSeed).map(canonicalizeBrand)),
+  dedupeGolfClubCatalog(normalizeGolfClubCatalogEntries(combinedClubSeed).map(canonicalizeBrand))
+    .filter(isPublicEquipmentCatalogItem),
 );
 
 export const golfShaftCatalog: readonly GolfShaftCatalog[] = Object.freeze(
   dedupeGolfShaftCatalog(
     normalizeGolfShaftCatalogEntries(legacyCombinedShaftSeed).map(canonicalizeBrand).map(withVerifiedLegacyShaftUsage),
     normalizeGolfShaftCatalogEntries(masterShaftSeed).map(canonicalizeBrand),
-  ),
+  ).filter(isPublicEquipmentCatalogItem),
 );
 
 export const golfBallBrands = Object.freeze(catalogBrands(combinedBallSeed, golfBallCatalog));
