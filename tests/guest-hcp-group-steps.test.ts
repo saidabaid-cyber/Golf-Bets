@@ -42,12 +42,9 @@ test("account missing Index stays locked and actionable, never manual or zero", 
   assert.equal(patchEditablePlayer(player, { handicap: 0 }).handicap, null);
 });
 
-test("habitual bets use one expandable selection and details screen", () => {
+test("el onboarding no captura grupos ni apuestas; el editor completo permanece en Grupos", () => {
   const source = readFileSync("app/components/beta-onboarding-flow.tsx", "utf8");
-  const step10 = source.split('if (progress.step === "bets" || progress.step === "bet_details")')[1].split('if (progress.step === "ready")')[0];
-  assert.match(step10, /mode="complete"/);
-  assert.doesNotMatch(step10, /mode="selection"|mode="details"/);
-  assert.match(step10, /Selecciona tus apuestas habituales y ajusta aquí sus valores y reglas/);
+  assert.doesNotMatch(source, /Configura tu primer grupo|GroupBetTemplateEditor|progress\.step === "bets"/);
   const editor = readFileSync("app/components/group-bet-template-editor.tsx", "utf8");
   assert.match(editor, /groupTemplateSelectionSections\(\)/);
   assert.match(editor, /Apuestas de grupo \/ generales/);
@@ -82,11 +79,7 @@ test("save/exit separated from primary navigation and email readiness does not g
   assert.match(onboarding, /¿Guardar esta configuración y continuar después\?/);
   assert.match(onboarding, /localStorage.setItem\(betaOnboardingDraftStorageKey/);
   const groups = readFileSync("app/components/group-builder.tsx", "utf8");
-  assert.match(groups, /Continuar configuración guardada/);
-  assert.match(groups, /if \(resumeDraft\) return <BetaOnboardingFlow/);
-  assert.match(groups, /onGroupSaved=\{onDraftSaved\}/);
-  assert.match(onboarding, /onGroupSaved\?\.\(saved.group\)/);
-  assert.match(readFileSync("app/page.tsx", "utf8"), /onDraftSaved=\{\(saved\) => setFrequentGroups\(current => \[saved, \.\.\.current.filter/);
+  assert.doesNotMatch(groups, /Continuar configuración guardada|BetaOnboardingFlow|resumeDraft/);
   const invite = readFileSync("app/components/group-invitations.tsx", "utf8");
   assert.match(invite, /data.emailDeliveryConfigured === true/);
   assert.match(invite, /!target.targetUserId && !emailAvailable/);
