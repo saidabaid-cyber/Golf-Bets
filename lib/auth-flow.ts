@@ -66,9 +66,11 @@ export async function verifyEmailOtp(auth: AuthFlowClient, email: string, token:
   return session;
 }
 
-export async function startSocialOAuth(auth: AuthFlowClient, provider: "google" | "apple", redirectTo: string) {
-  const options = provider === "google" ? { redirectTo, queryParams: { prompt: "select_account" } } : { redirectTo };
-  const result = await auth.signInWithOAuth({ provider, options });
+export async function startSocialOAuth(auth: AuthFlowClient, provider: "google" | "apple", redirectTo: string, options: { selectGoogleAccount?: boolean } = {}) {
+  const oauthOptions = provider === "google" && options.selectGoogleAccount
+    ? { redirectTo, queryParams: { prompt: "select_account" } }
+    : { redirectTo };
+  const result = await auth.signInWithOAuth({ provider, options: oauthOptions });
   throwIfError(result.error);
 }
 

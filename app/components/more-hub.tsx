@@ -3,6 +3,7 @@
 import styles from "./more-hub.module.css";
 import type { SocialView } from "./social-feed";
 import { FeedbackLink } from "./feedback-dialog";
+import type { AdminAccess } from "../../lib/admin-access";
 
 type MoreHubProps = {
   hasActiveRound: boolean;
@@ -15,6 +16,7 @@ type MoreHubProps = {
   onOpenHelp: () => void;
   onOpenSocial?: (view: SocialView) => void;
   onOpenPrivacy?: () => void;
+  adminAccess?: AdminAccess;
 };
 
 type ToolIcon = "course" | "bag" | "hcp" | "fit" | "gps" | "rules" | "help";
@@ -32,7 +34,7 @@ function Icon({ name }: { name: ToolIcon }) {
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name]} /></svg>;
 }
 
-export function MoreHub({ hasActiveRound, onOpenCourses, onOpenEquipment, onOpenHandicap, onOpenFitting, onOpenGps, onOpenRules, onOpenHelp, onOpenSocial, onOpenPrivacy }: MoreHubProps) {
+export function MoreHub({ hasActiveRound, onOpenCourses, onOpenEquipment, onOpenHandicap, onOpenFitting, onOpenGps, onOpenRules, onOpenHelp, onOpenSocial, onOpenPrivacy, adminAccess }: MoreHubProps) {
   const tools = [
     { icon: "course" as const, title: "Campos", copy: "Busca campos, tees y datos guardados.", action: onOpenCourses },
     { icon: "bag" as const, title: "Mi Bolsa", copy: "Bastones, varillas y bola actual.", action: onOpenEquipment },
@@ -44,6 +46,11 @@ export function MoreHub({ hasActiveRound, onOpenCourses, onOpenEquipment, onOpen
 
   return <section className={styles.more} aria-labelledby="more-hub-title">
     <header><span>THE BACKYARD</span><h1 id="more-hub-title">Más</h1><p>Tu equipo y herramientas de golf, sin saturar Inicio.</p></header>
+    {adminAccess?.hasAccess && <a className={styles.adminCard} href="/admin" aria-label="Abrir Administración">
+      <span className={styles.adminShield} aria-hidden="true">🛡</span>
+      <span><b>Administración</b><small>Campos, catálogos, reglas y competiciones</small></span>
+      <strong aria-hidden="true">›</strong>
+    </a>}
     <div className={styles.grid}>{tools.map((tool) => <button type="button" key={tool.title} onClick={tool.action}>
       <span className={styles.icon}><Icon name={tool.icon} /></span>
       <span className={styles.copy}><b>{tool.title}</b><small>{tool.copy}</small></span>

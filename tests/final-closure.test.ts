@@ -85,14 +85,15 @@ test("pantalla de perfil usa labels, estado vacío y validación compartida", ()
   assert.match(account, /validateProfileDraft\(name, ""\)/);
 });
 
-test("alta social separa username automático de nombre visible y exige perfil incompleto", () => {
+test("alta social separa username de la identidad OAuth y sólo pide datos incompletos", () => {
   const provider = read("app/components/account-provider.tsx");
   assert.equal(usernameFromEmail("said_aba@hotmail.com"), "said_aba");
   assert.equal(usernameFromEmail("Juan Pérez+golf@gmail.com"), "juan_perez_golf");
   assert.equal(usernameFromEmail("said_aba@hotmail.com", ["said_aba"]), "said_aba_2");
-  assert.match(provider, /displayName: ""/);
+  assert.match(provider, /displayName: oauthIdentity\.displayName/);
   assert.match(provider, /usernameFromEmail\(email\)/);
-  assert.doesNotMatch(provider, /displayName:.*user\.user_metadata\?\.full_name/);
+  assert.match(provider, /oauthIdentityFromMetadata\(user\.user_metadata, user\.email\)/);
+  assert.doesNotMatch(provider, /displayName:.*usernameFromEmail/);
   assert.match(provider, /identity\.mode === "authenticated" && profileSetupRequired/);
   assert.match(provider, /queuePendingProfileWrite\(localStorage, identity\.userId, \{ \.\.\.cloudProfileFields\(next\), username: Object\.hasOwn\(profile, "username"\) \? next\.username : undefined, \.\.\.\(location \? \{ location, locationUpdatedAt \} : \{\}\) \}, updatedAt\)/);
   assert.match(provider, /profileWriteCoordinator\.run\(async \(\) =>/);

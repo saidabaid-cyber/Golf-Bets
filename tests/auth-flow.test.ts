@@ -40,15 +40,17 @@ test("OTP incorrecto/expirado propaga error y permite reintentar sin sesión fal
   assert.equal(attempts, 2);
 });
 
-test("Google y Apple usan OAuth mock con callback, nunca proveedor real", async () => {
+test("Google normal reutiliza sesión y sólo la acción explícita fuerza selección de cuenta", async () => {
   const { auth, calls } = authMock();
   await startSocialOAuth(auth, "google", "https://golf-bets-psi.vercel.app/auth/callback");
+  await startSocialOAuth(auth, "google", "https://golf-bets-psi.vercel.app/auth/callback", { selectGoogleAccount: true });
   await startSocialOAuth(auth, "apple", "https://golf-bets-psi.vercel.app/auth/callback");
-  assert.deepEqual(calls.map((call) => call.method), ["oauth", "oauth"]);
-  assert.deepEqual(calls.map((call) => (call.input as { provider: string }).provider), ["google", "apple"]);
-  assert.deepEqual((calls[0].input as { options: { queryParams: Record<string, string> } }).options.queryParams, { prompt: "select_account" });
+  assert.deepEqual(calls.map((call) => call.method), ["oauth", "oauth", "oauth"]);
+  assert.deepEqual(calls.map((call) => (call.input as { provider: string }).provider), ["google", "google", "apple"]);
+  assert.equal((calls[0].input as { options: { queryParams?: Record<string, string> } }).options.queryParams, undefined);
   assert.equal((calls[0].input as { options: { redirectTo: string } }).options.redirectTo, "https://golf-bets-psi.vercel.app/auth/callback");
-  assert.equal((calls[1].input as { options: { queryParams?: Record<string, string> } }).options.queryParams, undefined);
+  assert.deepEqual((calls[1].input as { options: { queryParams: Record<string, string> } }).options.queryParams, { prompt: "select_account" });
+  assert.equal((calls[2].input as { options: { queryParams?: Record<string, string> } }).options.queryParams, undefined);
 });
 
 test("OAuth conserva exactamente el origen del Preview que inició PKCE", () => {
@@ -248,6 +250,8 @@ test("pantalla OTP tiene captura, regreso y separación explícita de invitado",
   assert.match(ui, /Todavía no has iniciado sesión/);
   assert.match(ui, /Regresar al acceso/);
   assert.match(ui, /disabled=\{busy \|\| !googleAvailable\}/);
+  assert.match(ui, /Usar otra cuenta de Google/);
+  assert.match(ui, /social\("google", true\)/);
   assert.match(ui, /disabled=\{busy \|\| !appleAvailable\}/);
   assert.match(ui, /pendiente de configuración/);
   assert.match(ui, /restoreAuthSession\(supabase.auth\)/);

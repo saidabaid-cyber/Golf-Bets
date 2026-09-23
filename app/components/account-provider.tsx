@@ -72,6 +72,8 @@ import { EquipmentOnboarding } from "./equipment-onboarding";
 import { BetaOnboardingFlow } from "./beta-onboarding-flow";
 import { AccountConsentCheckpoint } from "./account-consent-checkpoint";
 import { betaOnboardingIsActive, createBetaOnboardingProgress, persistBetaOnboardingProgress, readBetaOnboardingProgress } from "../../lib/beta-onboarding";
+import { missingInitialProfileFields, oauthIdentityFromMetadata } from "../../lib/oauth-profile";
+import { NO_ADMIN_ACCESS, readAdminAccess, type AdminAccess } from "../../lib/admin-access";
 
 export type BackyardIdentity = BackyardProfile & {
   mode: Exclude<AccountMode, "undecided">;
@@ -81,6 +83,7 @@ export type BackyardIdentity = BackyardProfile & {
 
 type AccountContextValue = {
   identity: BackyardIdentity;
+  adminAccess: AdminAccess;
   updateProfile: (profile: BackyardProfileUpdate) => Promise<"local" | "cloud">;
   logout: () => Promise<void>;
   finishAccountDeletion: () => Promise<boolean>;
@@ -130,19 +133,18 @@ export function useBackyardAccount() {
 }
 
 function profileFromUser(user: User): BackyardProfile {
-  const email = user.email || "";
+  const oauthIdentity = oauthIdentityFromMetadata(user.user_metadata, user.email);
+  const email = oauthIdentity.email;
   const location = parseStoredProfileLocation(user.user_metadata?.[PROFILE_LOCATION_METADATA_KEY]);
   const base = {
     userId: user.id,
-    // New accounts explicitly capture their golfer name. An email/username is
-    // never silently promoted to the visible name.
-    displayName: "",
+    displayName: oauthIdentity.displayName,
     email,
-    avatarUrl: safeProfileAvatarValue(user.user_metadata?.avatar_url || user.user_metadata?.picture),
+    avatarUrl: oauthIdentity.avatarUrl,
     defaultHandicap: typeof user.user_metadata?.default_handicap === "number" ? clampBackyardHandicap(user.user_metadata.default_handicap) : null,
     ...emptyBackyardProfileDetails(),
-    givenName: typeof user.user_metadata?.given_name === "string" ? user.user_metadata.given_name : "",
-    familyName: typeof user.user_metadata?.family_name === "string" ? user.user_metadata.family_name : "",
+    givenName: oauthIdentity.givenName,
+    familyName: oauthIdentity.familyName,
     ...((user.user_metadata?.backyard_golf_profile_v1 && typeof user.user_metadata.backyard_golf_profile_v1 === "object") ? Object.fromEntries(["handedness", "homeClub", "homeClubId", "homeCourse", "homeCourseId", "preferredTee"].map(key => [key, typeof user.user_metadata.backyard_golf_profile_v1[key] === "string" ? user.user_metadata.backyard_golf_profile_v1[key] : ""])) : {}),
     ...(location ? { ...normalizeProfileLocation(location), locationUpdatedAt: location.updatedAt } : {}),
     username: String(user.user_metadata?.username || usernameFromEmail(email)),
@@ -212,7 +214,7 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
     return () => { active = false; };
   }, []);
 
-  async function social(provider: "google" | "apple") {
+  async function social(provider: "google" | "apple", selectGoogleAccount = false) {
     if (oauthStarting.current) return;
     if (!providers || providers.status === "unavailable") {
       setMessage("No pudimos comprobar el proveedor de acceso. Revisa tu conexión y vuelve a intentar.");
@@ -232,7 +234,7 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
     rememberAccountEntryIntent(sessionStorage, intent);
     setBusy(true); setMessage("");
     try {
-      await startSocialOAuth(supabase.auth, provider, authCallbackUrl(window.location.origin));
+      await startSocialOAuth(supabase.auth, provider, authCallbackUrl(window.location.origin), { selectGoogleAccount });
     } catch (error) {
       oauthStarting.current = false;
       setMessage(authErrorMessage(error, provider));
@@ -296,6 +298,7 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
       <label className="consentCheck"><input type="checkbox" checked={rememberSession} onChange={(event) => { setRememberSession(event.target.checked); setAuthSessionPersistence(event.target.checked); }} /><span>Mantener sesión iniciada en este dispositivo.</span></label>
       {!emailMode ? <div className="accessActions">
         <button className="oauthButton google" disabled={busy || !googleAvailable} onClick={() => social("google")}>{!providers ? "Google · comprobando acceso…" : googleAvailable ? "Continuar con Google" : "Google · pendiente de configuración"}</button>
+        {googleAvailable && <button className="textButton" disabled={busy} onClick={() => social("google", true)}>Usar otra cuenta de Google</button>}
         <button className="oauthButton apple" disabled={busy || !appleAvailable} onClick={() => social("apple")}>{appleAvailable ? "Continuar con Apple" : "Apple · Próximamente"}</button>
         <button className="secondary big" disabled={busy} onClick={() => { setEmailMode(true); setMessage(""); }}>{intent === "create" ? "Registro con email" : "Continuar con correo"}</button>
         <button className="guestButton" disabled={busy} onClick={async () => {
@@ -374,23 +377,27 @@ function ProfileSetupScreen({ identity, onSave, onBack }: {
   const [familyName, setFamilyName] = useState(identity.familyName || "");
   const [location, setLocation] = useState(() => normalizeProfileLocation(identity.country || identity.countryCode ? identity : { countryCode: "MX" }));
   const [city, setCity] = useState(identity.city || "");
-  const [handedness, setHandedness] = useState<"right" | "left">(identity.handedness === "left" ? "left" : "right");
+  const [handedness, setHandedness] = useState<"" | "right" | "left" | "ambidextrous">(identity.handedness || "");
   const [initialHighContrast, setInitialHighContrast] = useState(true);
   useEffect(() => { setInitialHighContrast(localStorage.getItem(STORAGE_KEYS.contrast) !== 'false'); }, []);
   const [avatarUrl, setAvatarUrl] = useState(identity.avatarUrl || "");
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  async function saveProfile(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  const autoSaveAttempted = useRef(false);
+  const missing = missingInitialProfileFields(identity);
+  const missingKey = missing.join(":");
+  const identityAlreadyNamed = !missing.includes("displayName");
+  const saveProfileValues = useCallback(async () => {
     if (avatarBusy) return;
-    const displayName = [givenName.trim(), familyName.trim()].filter(Boolean).join(" ");
+    const displayName = identityAlreadyNamed ? identity.displayName.trim() : [givenName.trim(), familyName.trim()].filter(Boolean).join(" ");
     const validation = validateProfileDraft(displayName, "");
     if (!validation.ok) { setMessage(validation.message); return; }
     const avatarValidation = validateProfileAvatarUrl(avatarUrl);
     if (!avatarValidation.ok) { setMessage(avatarValidation.message); return; }
-    const locationValidation = validateProfileLocation(location);
+    const locationValidation = validateProfileLocation(location, { countryRequired: true, stateRequired: true });
     if (!locationValidation.valid) { setMessage(locationValidation.errors.country || locationValidation.errors.state || "Revisa tu país y región."); return; }
+    if (!handedness) { setMessage("Selecciona tu mano dominante."); return; }
     setBusy(true); setMessage("");
     try { await onSave({
       displayName: validation.displayName,
@@ -407,19 +414,35 @@ function ProfileSetupScreen({ identity, onSave, onBack }: {
     }); }
     catch { setMessage("No pudimos completar el perfil. Revisa tu conexión e intenta nuevamente."); }
     finally { setBusy(false); }
+  }, [avatarBusy, identityAlreadyNamed, identity.displayName, identity.defaultHandicap, givenName, familyName, avatarUrl, location, city, handedness, onSave]);
+  async function saveProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await saveProfileValues();
   }
+
+  useEffect(() => {
+    if (missingKey || autoSaveAttempted.current) return;
+    autoSaveAttempted.current = true;
+    void saveProfileValues();
+  }, [missingKey, saveProfileValues]);
+
+  if (!missing.length) return <main className={`consentScreen profileSetupScreen ${initialHighContrast ? 'highContrast' : ''}`}><section className="consentCard profileSetupCard">
+    <BrandLockup compact />
+    <div className="eyebrow">GOLF PROFILE</div>
+    <h1>Continuando tu alta…</h1>
+    <p>Ya conservamos la identidad y las preferencias que habías guardado.</p>
+    {message && <><div className="accessMessage" role="alert">{message}</div><button type="button" className="primary big" disabled={busy} onClick={() => void saveProfileValues()}>{busy ? "Guardando…" : "Reintentar"}</button></>}
+  </section></main>;
+
   return <main className={`consentScreen profileSetupScreen ${initialHighContrast ? 'highContrast' : ''}`}><section className="consentCard profileSetupCard">
     <BrandLockup compact />
     <div className="eyebrow">GOLF PROFILE</div>
-    <h1>Cuéntanos de ti</h1>
-    <p>Lo esencial para reconocerte en el grupo. La foto y la ciudad son opcionales.</p>
+    <h1>Completa tus datos de golf</h1>
+    <p>Sólo falta la información que Google y tu perfil guardado no conocen.</p>
     <form className="profileSetupForm" onSubmit={saveProfile} noValidate>
-      <div className="grid2"><label htmlFor="profile-setup-given">Nombre<input id="profile-setup-given" autoComplete="given-name" enterKeyHint="next" value={givenName} onChange={(event) => setGivenName(event.target.value)} placeholder="Tu nombre" /></label><label htmlFor="profile-setup-family">Apellidos<input id="profile-setup-family" autoComplete="family-name" enterKeyHint="next" value={familyName} onChange={(event) => setFamilyName(event.target.value)} placeholder="Tus apellidos" /></label></div>
-      <label>Foto / avatar opcional</label>
-      <ProfileImagePicker value={avatarUrl} onChange={setAvatarUrl} onBusyChange={setAvatarBusy} accessToken={identity.accessToken} userId={identity.userId} />
-      <ProfileLocationPicker value={location} onChange={(next) => { setLocation(next); setMessage(""); }} />
-      <label htmlFor="profile-setup-city">Ciudad opcional<input id="profile-setup-city" autoComplete="address-level2" value={city} onChange={(event) => setCity(event.target.value)} placeholder="Puebla" /></label>
-      <fieldset className="handednessChoice"><legend>Mano dominante</legend><label><input type="radio" name="handedness" checked={handedness === "right"} onChange={() => setHandedness("right")} />Derecha</label><label><input type="radio" name="handedness" checked={handedness === "left"} onChange={() => setHandedness("left")} />Izquierda</label></fieldset>
+      {!identityAlreadyNamed && <><div className="grid2"><label htmlFor="profile-setup-given">Nombre<input id="profile-setup-given" autoComplete="given-name" enterKeyHint="next" value={givenName} onChange={(event) => setGivenName(event.target.value)} placeholder="Tu nombre" /></label><label htmlFor="profile-setup-family">Apellidos<input id="profile-setup-family" autoComplete="family-name" enterKeyHint="next" value={familyName} onChange={(event) => setFamilyName(event.target.value)} placeholder="Tus apellidos" /></label></div>{!identity.avatarUrl && <><label>Foto / avatar opcional</label><ProfileImagePicker value={avatarUrl} onChange={setAvatarUrl} onBusyChange={setAvatarBusy} accessToken={identity.accessToken} userId={identity.userId} /></>}</>}
+      {missing.includes("location") && <><ProfileLocationPicker value={location} onChange={(next) => { setLocation(next); setMessage(""); }} /><label htmlFor="profile-setup-city">Ciudad opcional<input id="profile-setup-city" autoComplete="address-level2" value={city} onChange={(event) => setCity(event.target.value)} placeholder="Puebla" /></label></>}
+      {missing.includes("handedness") && <fieldset className="handednessChoice"><legend>Mano dominante</legend><label><input type="radio" name="handedness" checked={handedness === "right"} onChange={() => setHandedness("right")} />Derecha</label><label><input type="radio" name="handedness" checked={handedness === "left"} onChange={() => setHandedness("left")} />Izquierda</label></fieldset>}
       {message && <div className="accessMessage" role="alert">{message}</div>}
       <button type="submit" className="primary big" disabled={busy || avatarBusy}>{busy ? "Guardando…" : avatarBusy ? "Preparando imagen…" : "Guardar y continuar"}</button>
     </form>
@@ -430,6 +453,7 @@ function ProfileSetupScreen({ identity, onSave, onBack }: {
 export function AccountProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [identity, setIdentity] = useState<BackyardIdentity | null>(null);
+  const [adminAccessState, setAdminAccessState] = useState(() => ({ userId: "", access: NO_ADMIN_ACCESS } as { userId: string; access: AdminAccess }));
   const [acceptances, setAcceptances] = useState<LegalAcceptance[]>([]);
   const [bettingConsentOpen, setBettingConsentOpen] = useState(false);
   const [accessRequested, setAccessRequested] = useState(false);
@@ -728,6 +752,20 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
 
   const authenticatedUserId = identity?.mode === "authenticated" ? identity.userId : "";
   const authenticatedAccessToken = identity?.mode === "authenticated" ? identity.accessToken : null;
+
+  useEffect(() => {
+    setAdminAccessState({ userId: "", access: NO_ADMIN_ACCESS });
+    if (!authenticatedUserId || !authenticatedAccessToken) return;
+    const controller = new AbortController();
+    void readAdminAccess(authenticatedAccessToken, controller.signal)
+      .then((access) => {
+        if (!controller.signal.aborted && activeUserId.current === authenticatedUserId) setAdminAccessState({ userId: authenticatedUserId, access });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted && activeUserId.current === authenticatedUserId) setAdminAccessState({ userId: authenticatedUserId, access: NO_ADMIN_ACCESS });
+      });
+    return () => controller.abort();
+  }, [authenticatedUserId, authenticatedAccessToken]);
 
   useEffect(() => {
     if (!authenticatedUserId || !authenticatedAccessToken || accountEntry?.userId === authenticatedUserId) return;
@@ -1493,7 +1531,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const cloudIssues = Object.values(cloudIssuesByDomain).filter((issue): issue is CloudIssue => Boolean(issue)).sort((left, right) => cloudIssuePriority(left) - cloudIssuePriority(right));
   const blockingCloudIssues = cloudIssues.filter((issue) => issue.kind === "session_expired");
   const effectiveCloudStatus: AccountContextValue["cloudStatus"] = cloudIssues.some((issue) => issue.kind === "offline") ? "offline" : cloudIssues.some((issue) => issue.kind === "conflict") ? "pending" : cloudIssues.length ? "error" : cloudStatus;
-  const context = identity ? ({ identity, updateProfile, logout, finishAccountDeletion, openAccess: () => setAccessRequested(true), acceptances, bettingConsentGranted, bettingConsentResolved, requestBettingConsent, cloudLinked, cloudStatus: effectiveCloudStatus, setCloudStatus, lastCloudSync, cloudIssues, applyCloudPreferences,
+  const adminAccess = identity?.mode === "authenticated" && adminAccessState.userId === identity.userId ? adminAccessState.access : NO_ADMIN_ACCESS;
+  const context = identity ? ({ identity, adminAccess, updateProfile, logout, finishAccountDeletion, openAccess: () => setAccessRequested(true), acceptances, bettingConsentGranted, bettingConsentResolved, requestBettingConsent, cloudLinked, cloudStatus: effectiveCloudStatus, setCloudStatus, lastCloudSync, cloudIssues, applyCloudPreferences,
     reportCloudSyncError,
     clearCloudSyncError,
     retryCloudSync: retryAllCloud,

@@ -9,6 +9,7 @@ import { selectedHandicapIndex } from "../lib/handicap-source";
 import { accountPrimaryRoundPlayer } from "../lib/account-primary-player";
 import { BACKYARD_INDEX_METADATA_KEY, saveCloudIndexPreference, readCloudIndexPreference, type BackyardIndexPreference } from "../lib/backyard-index-preferences";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { missingInitialProfileFields } from "../lib/oauth-profile";
 
 type Node = { type: unknown; props: Record<string, unknown> };
 function nodes(value: unknown): Node[] { if (Array.isArray(value)) return value.flatMap(nodes); if (!value || typeof value !== "object" || !("props" in value)) return []; const node = value as Node; return [node, ...nodes(node.props.children)]; }
@@ -30,10 +31,13 @@ function setupHarness(location: geo.ProfileLocationValue) {
   const renderComponent = component("app/components/account-provider.tsx", "ProfileSetupScreen", {
     normalizeProfileLocation: geo.normalizeProfileLocation, validateProfileLocation: geo.validateProfileLocation,
     useEffect: (effect: () => void) => effect(),
+    useCallback: (value: unknown) => value,
+    useRef: (value: unknown) => ({ current: value }),
+    missingInitialProfileFields,
     localStorage: { getItem: () => null }, STORAGE_KEYS: { contrast: "qa-contrast" },
     validateProfileDraft, validateProfileAvatarUrl, BrandLockup: "brand", ProfileImagePicker: "avatar", ProfileLocationPicker: "location", HandicapSourceSelector: "source",
   });
-  const props = { identity: { ...location, userId: "owner", mode: "authenticated", givenName: "Said", familyName: "Abaid", avatarUrl: "", defaultHandicap: 7 }, onSave: async (value: Record<string, unknown>) => { saved.push(JSON.parse(JSON.stringify(value))); return "cloud"; }, onBack: async () => {} };
+  const props = { identity: { ...location, userId: "owner", mode: "authenticated", displayName: "Said Abaid", givenName: "Said", familyName: "Abaid", avatarUrl: "", defaultHandicap: 7, handedness: "right" }, onSave: async (value: Record<string, unknown>) => { saved.push(JSON.parse(JSON.stringify(value))); return "cloud"; }, onBack: async () => {} };
   let tree = renderComponent(props);
   return { saved, render: () => tree = renderComponent(props), nodes: () => nodes(tree), text: () => text(tree),
     changeLocation: (next: geo.ProfileLocationValue) => { (nodes(tree).find((node) => node.type === "location")!.props.onChange as (value: geo.ProfileLocationValue) => void)(next); tree = renderComponent(props); },
@@ -53,7 +57,7 @@ test("Puebla bug: invalid typed region then canonical MX-PUE selection clears st
 
 test("selected Puebla survives profile reload, validates and saves without a manual profile Index", async () => {
   const selected = geo.selectProfileSubdivision(geo.selectProfileCountry("MX"), "MX-PUE");
-  const h = setupHarness(JSON.parse(JSON.stringify(selected))); await h.submit();
+  const h = setupHarness(JSON.parse(JSON.stringify(selected))); await new Promise<void>((resolve) => setImmediate(resolve));
   assert.equal(h.saved.length, 1); assert.equal(h.saved[0].defaultHandicap, 7, "identity-only setup must not erase an existing golf value");
   assert.equal(h.nodes().some((node) => node.type === "input" && String(node.props.id).includes("hcp")), false);
   assert.equal(h.nodes().some((node) => node.type === "source"), false, "source selection belongs to the next golf step only");

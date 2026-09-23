@@ -13,14 +13,14 @@ import { initialBets } from "../lib/new-round-bets";
 import { squareCropRect } from "../lib/profile-image";
 import { buildPlayerRoundStats } from "../lib/round-statistics";
 
-test("perfil genera username sin llenar nombre y recorta fotos al centro", () => {
+test("perfil genera username sin usar email como nombre y recorta fotos al centro", () => {
   assert.equal(usernameFromEmail("said_aba@hotmail.com"), "said_aba");
   assert.equal(usernameFromEmail("Juan Pérez+Golf@gmail.com"), "juan_perez_golf");
   assert.equal(usernameFromEmail("said_aba@hotmail.com", ["SAID_ABA", "said_aba_2"]), "said_aba_3");
   assert.deepEqual(squareCropRect(4032, 3024), { sourceX: 504, sourceY: 0, sourceSize: 3024 });
   assert.deepEqual(squareCropRect(3024, 4032), { sourceX: 0, sourceY: 504, sourceSize: 3024 });
   const provider = readFileSync("app/components/account-provider.tsx", "utf8");
-  assert.match(provider, /displayName: ""/);
+  assert.match(provider, /displayName: oauthIdentity\.displayName/);
   assert.doesNotMatch(provider, /displayName:.*usernameFromEmail/);
 });
 

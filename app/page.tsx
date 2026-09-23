@@ -427,7 +427,7 @@ type NewRoundIntent =
   | { kind: "group"; group: FrequentGroup; selectedMemberIds: string[]; scoreOnly?: boolean };
 
 function GolfBetsApp() {
-  const { identity, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, setCloudStatus, applyCloudPreferences, reportCloudSyncError, clearCloudSyncError, refreshCloudSession } = useBackyardAccount();
+  const { identity, adminAccess, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, setCloudStatus, applyCloudPreferences, reportCloudSyncError, clearCloudSyncError, refreshCloudSession } = useBackyardAccount();
   const indexControl = useBackyardIndexPreference(identity.userId, identity.mode === "authenticated");
   const { tab, setTab, goBack, setNavigationGuard } = useScreenNavigation();
   const [profileFocus, setProfileFocus] = useState<"profile" | "equipment">("profile");
@@ -3586,6 +3586,7 @@ function GolfBetsApp() {
     {!(["welcome", "more", "play", "groups", "social", "profile", "round"] as AppTab[]).includes(tab) && tab !== "rules" && <button className="secondary pageBack" onClick={handlePageBack}>← Regresar</button>}
 
     {tab === "more" && <MoreHub
+      adminAccess={adminAccess}
       hasActiveRound={Boolean(activeRoundSummary)}
       onOpenCourses={() => setTab("courseLibrary")}
       onOpenEquipment={() => { setProfileFocus("equipment"); setTab("profile"); }}
