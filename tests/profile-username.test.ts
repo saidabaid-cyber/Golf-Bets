@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { ensureCloudProfile, saveCloudProfile } from "../lib/cloud-account";
 import { acknowledgePendingProfileWrite, cloudProfileFields, queuePendingProfileWrite, readPendingProfileWrite } from "../lib/profile-sync";
-import { canonicalProfileUsername, normalizeProfileUsername } from "../lib/profile-username";
+import { canonicalProfileUsername, checkProfileUsernameAvailability, normalizeProfileUsername } from "../lib/profile-username";
 import { CloudDb } from "./helpers/cloud-db";
 
 const core = { displayName: "QA", defaultHandicap: null, avatarUrl: "" };
@@ -20,6 +20,43 @@ test("username normalizado coincide con constraint Social; inválido nunca se om
   assert.deepEqual(cloudProfileFields(core), core);
   assert.deepEqual(cloudProfileFields({ ...core, username: "José legacy-name" }), core, "untrusted legacy metadata cannot block login");
   assert.throws(() => queuePendingProfileWrite(storage(), "A", { ...core, username: "José invalid" }), { code: "PROFILE_USERNAME_INVALID" });
+});
+
+test("validación server-side distingue disponible y ocupado sin aceptar otro userId", async () => {
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  const available = await checkProfileUsernameAvailability("jwt", "@Said.QA", (async (url: string | URL | Request, init?: RequestInit) => {
+    calls.push({ url: String(url), init });
+    return new Response(JSON.stringify({ available: true }), { status: 200, headers: { "content-type": "application/json" } });
+  }) as typeof fetch);
+  assert.equal(available, true);
+  assert.match(calls[0].url, /username=said\.qa/);
+  assert.equal(calls[0].init?.headers && (calls[0].init.headers as Record<string, string>).authorization, "Bearer jwt");
+  assert.doesNotMatch(calls[0].url, /userId|email/);
+  assert.equal(await checkProfileUsernameAvailability("jwt", "occupied", (async () => new Response(JSON.stringify({ available: false }), { status: 200 })) as typeof fetch), false);
+});
+
+test("la disponibilidad se resuelve con auth.uid y los índices únicos cierran carreras", () => {
+  const migration = readFileSync("supabase/migrations/202609230001_profile_username_availability.sql", "utf8");
+  const base = readFileSync("supabase/migrations/202609100001_phase2_social_groups_memberships.sql", "utf8");
+  const route = readFileSync("app/api/account/username/route.ts", "utf8");
+  assert.match(migration, /auth\.uid\(\)/);
+  assert.match(migration, /profile\.id <> \(select auth\.uid\(\)\)/);
+  assert.match(migration, /profile\.user_id <> \(select auth\.uid\(\)\)/);
+  assert.match(migration, /grant execute[\s\S]*to authenticated/);
+  assert.match(base, /profiles_username_normalized_uidx/);
+  assert.match(base, /social_profiles_username_uidx/);
+  assert.match(route, /getUser\(token\)/);
+  assert.doesNotMatch(route, /searchParams\.get\("userId"\)|searchParams\.get\("email"\)/);
+});
+
+test("un conflicto concurrente revierte la proyección local y muestra el mensaje exacto", () => {
+  const provider = readFileSync("app/components/account-provider.tsx", "utf8");
+  const panel = readFileSync("app/components/profile-account-panel.tsx", "utf8");
+  assert.match(provider, /cloudError\.code === "23505"/);
+  assert.match(provider, /restorePendingProfileWrite/);
+  assert.match(provider, /Ese nombre de usuario ya está en uso\./);
+  assert.match(panel, /checkProfileUsernameAvailability/);
+  assert.match(panel, /Ese nombre de usuario ya está en uso\./);
 });
 
 test("pending username sobrevive reload y una edición posterior de avatar sin rename", () => {

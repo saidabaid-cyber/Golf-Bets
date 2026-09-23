@@ -36,18 +36,27 @@ test("Foto, Emoji, Crear avatar y Sin imagen son cuatro opciones 2×2 responsive
   assert.match(pickerCss, /\.profilePreview \{ border-radius: 50%; \}/);
 });
 
-test("Perfil enlaza Mi equipo y un único acceso principal a Configuración", () => {
+test("Perfil enlaza Mi Bolsa y un único acceso principal a Configuración", () => {
   assert.match(profile, /aria-label="Secciones de Mi Perfil"/);
-  for (const section of ["Mi equipo", "Configuración"]) assert.match(profile, new RegExp(`<b>${section}</b>`));
+  for (const section of ["Mi Bolsa", "Configuración"]) assert.match(profile, new RegExp(`<b>${section}</b>`));
   assert.doesNotMatch(profile, /profileNavigationCard"[^>]*><span><b>Preferencias<\/b>/);
   assert.doesNotMatch(profile, /profileNavigationCard"[^>]*><span><b>Notificaciones<\/b>/);
-  assert.match(profile, /onClick=\{onOpenEquipment\}[\s\S]*?<b>Mi equipo<\/b>/);
+  assert.match(profile, /onClick=\{onOpenEquipment\}[\s\S]*?<b>Mi Bolsa<\/b>/);
+  assert.doesNotMatch(profile, /<b>Mi equipo<\/b>/);
   assert.match(profile, /onBackToProfile/);
   assert.match(page, /onOpenEquipment=\{\(\) => setProfileFocus\("equipment"\)\}/);
   assert.match(page, /onBackToProfile=\{openProfileRoot\}/);
   assert.match(page, /setProfileRootRevision\(\(value\) => value \+ 1\)/);
   assert.match(profile, /setEditing\(false\); setManagingConsents\(false\)/);
   assert.match(css, /\.profileNavigationList\{display:grid;min-width:0/);
+});
+
+test("Perfil carga y guarda la mano dominante desde la fuente canónica", () => {
+  assert.match(profile, /handedness: identity\.handedness \|\| ""/);
+  assert.match(profile, /select value=\{draft\.handedness\}/);
+  assert.match(profile, /option value="right">Derecha/);
+  assert.match(profile, /option value="left">Izquierda/);
+  assert.match(profile, /updateProfile\(\{ displayName:[\s\S]*\.\.\.draft \}\)/);
 });
 
 test("Más ofrece Reglas de golf como acceso explícito sin duplicar Perfil", () => {

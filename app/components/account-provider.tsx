@@ -65,7 +65,7 @@ import { syncExistingSocialProfileAvatar } from "../../lib/profile-avatar-sync";
 import { consumeAccountEntryIntent, readAccountEntry, readCurrentAccountEntry, rememberAccountEntryIntent, type AccountEntry } from "../../lib/account-entry";
 import { BettingConsentDialog } from "./betting-consent-dialog";
 import { persistBettingDataConsent } from "../../lib/betting-consent";
-import { acknowledgePendingProfileWrite, cloudProfileFields, cloudProfileRevisionIsNewer, cloudProfileRevisionKey, createProfileWriteCoordinator, queuePendingProfileWrite, readPendingProfileWrite, recordCloudProfileRevision, retimePendingProfileWrite, type CloudProfileFields, type ProfileWriteCoordinator } from "../../lib/profile-sync";
+import { acknowledgePendingProfileWrite, cloudProfileFields, cloudProfileRevisionIsNewer, cloudProfileRevisionKey, createProfileWriteCoordinator, queuePendingProfileWrite, readPendingProfileWrite, recordCloudProfileRevision, restorePendingProfileWrite, retimePendingProfileWrite, type CloudProfileFields, type ProfileWriteCoordinator } from "../../lib/profile-sync";
 import { createEmptyEquipmentProfile, loadEquipmentProfile, saveEquipmentProfile } from "../../lib/golf-equipment";
 import { ballFitDefaultsFromProfile } from "../../lib/ball-fitting";
 import { EquipmentOnboarding } from "./equipment-onboarding";
@@ -1073,6 +1073,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     const locationUpdatedAt = new Date(Math.max(Date.parse(updatedAt), (Date.parse(identity.locationUpdatedAt || "") || 0) + 1)).toISOString();
     // An avatar-only edit from an older session must not rename the canonical
     // handle. The queue still preserves an explicit rename already pending.
+    const previousPending = readPendingProfileWrite(localStorage, identity.userId);
     const pending = queuePendingProfileWrite(localStorage, identity.userId, { ...cloudProfileFields(next), username: Object.hasOwn(profile, "username") ? next.username : undefined, ...(location ? { location, locationUpdatedAt } : {}) }, updatedAt);
     if (location) next.locationUpdatedAt = pending.profile.locationUpdatedAt || locationUpdatedAt;
     cloudProfileFallbackRef.current = { userId: identity.userId, profile: pending.profile };
@@ -1119,6 +1120,14 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       setCloudIssue("profile", null);
       return "cloud";
     } catch (error) {
+      const cloudError = error && typeof error === "object" ? error as { code?: unknown; message?: unknown } : {};
+      if (Object.hasOwn(profile, "username") && (cloudError.code === "23505" || /duplicate key|username.*unique/i.test(String(cloudError.message || "")))) {
+        restorePendingProfileWrite(localStorage, identity.userId, previousPending);
+        cloudProfileFallbackRef.current = previousPending ? { userId: identity.userId, profile: previousPending.profile } : null;
+        setIdentity(identity);
+        localStorage.setItem(`backyard-profile-cache-v1:${identity.userId}`, JSON.stringify(profileCachePayload(identity)));
+        throw Object.assign(new Error("Ese nombre de usuario ya está en uso."), { code: "PROFILE_USERNAME_TAKEN" });
+      }
       const rebasedAt = error && typeof error === "object" && "profileUpdatedAt" in error && typeof error.profileUpdatedAt === "string"
         ? error.profileUpdatedAt
         : null;

@@ -40,6 +40,12 @@ export function pendingProfileWriteKey(userId: string) {
   return `${PROFILE_WRITE_PREFIX}${userId}`;
 }
 
+export function restorePendingProfileWrite(storage: Pick<Storage, "setItem" | "removeItem">, userId: string, previous: PendingProfileWrite | null) {
+  const key = pendingProfileWriteKey(userId);
+  if (previous) storage.setItem(key, JSON.stringify(previous));
+  else storage.removeItem(key);
+}
+
 export function cloudProfileRevisionKey(userId: string) {
   return `${PROFILE_CLOUD_REVISION_PREFIX}${userId}`;
 }
