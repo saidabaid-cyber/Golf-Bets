@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { Readable, Writable } from 'node:stream';
 import { encrypt, decrypt, encryptionKey, verifyEncrypted } from './crypto.mjs';
-import { safeChild, databaseEnvironment, storageConfig, enumerateStorage, backupStorage, runBackup, verifyBackup, command, commandEnvironment, hashFile, listFiles, jsonFile, QA_REF, OWNER_REF, OWNER_SESSION_POOLER_HOST, OWNER_SESSION_POOLER_USER, decryptBackup, backupDatabase, assertDatabaseReadOnly, storageReadOnlyFetch, withDecryptedArchive } from './core.mjs';
+import { safeChild, databaseEnvironment, storageConfig, enumerateStorage, backupStorage, runBackup, verifyBackup, command, commandEnvironment, hashFile, listFiles, jsonFile, QA_REF, OWNER_REF, OWNER_SESSION_POOLER_HOST, OWNER_SESSION_POOLER_USER, decryptBackup, backupDatabase, assertDatabaseReadOnly, storageReadOnlyFetch, withDecryptedArchive, classifyPostgresDiagnostic, BackupError } from './core.mjs';
 import { secretKinds } from './security-scan.mjs';
 import { verifyDatabaseFile } from './core.mjs';
 import { fileURLToPath } from 'node:url';
@@ -96,6 +96,28 @@ test('inherited libpq settings and alternate connection strings cannot redirect 
   assert.equal(pg.PGSSLMODE,'verify-full');assert.equal(pg.PGDATABASE,'postgres');
   assert.ok(!Object.keys(pg).some(k=>/^PGOPTIONS$/i.test(k)));
   assert.ok(!Object.keys(pg).some(k=>k.startsWith('BACKUP_')));
+});
+test('PostgreSQL diagnostics collapse to safe categories and raw provider text never escapes',async()=>{
+  const cases=[
+    ['FATAL: Tenant or user not found','POSTGRES_TENANT_OR_USER'],
+    ['password authentication failed for user private-user','POSTGRES_AUTH'],
+    ['server certificate verification failed','POSTGRES_SSL'],
+    ['database private-name does not exist','POSTGRES_DATABASE_NOT_FOUND'],
+    ['connection timed out','POSTGRES_TIMEOUT'],
+    ['could not translate host name private-host','POSTGRES_DNS'],
+    ['connection refused','POSTGRES_CONNECTION_REFUSED'],
+    ['network is unreachable','POSTGRES_NETWORK'],
+    ['unrecognized private provider diagnostic','POSTGRES_CONNECTION_FAILED'],
+  ];
+  for(const [diagnostic,expected] of cases)assert.equal(classifyPostgresDiagnostic(diagnostic),expected);
+  await assert.rejects(
+    assertDatabaseReadOnly(databaseEnvironment(ownerPoolerEnv()),async()=>{throw new BackupError('POSTGRES_SSL');}),
+    error=>error.code==='POSTGRES_SSL'&&!error.message.includes('private'),
+  );
+  await assert.rejects(
+    assertDatabaseReadOnly(databaseEnvironment(ownerPoolerEnv()),async()=>{throw new BackupError('COMMAND_TIMEOUT');}),
+    error=>error.code==='POSTGRES_TIMEOUT',
+  );
 });
 function databaseTools(replies=['on\n']){
   const calls=[];let checks=0;

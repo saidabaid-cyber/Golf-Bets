@@ -29,12 +29,29 @@ export async function command(executable, args, options = {}) {
     // Backup and Drive credentials are available only to the Node orchestrator.
     // Generic local tools (Git, tar and verification helpers) never inherit them.
     const child = spawn(executable, args, { cwd: options.cwd, env: options.env || commandEnvironment(), shell: false, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
-    const output = []; let size = 0;
+    const output = [], diagnostic = []; let size = 0, diagnosticSize = 0;
     const timer = setTimeout(() => { child.kill(); reject(new BackupError('COMMAND_TIMEOUT')); }, options.timeout || 120000);
     child.stdout.on('data', data => { size += data.length; if (size < 8e6) output.push(data); else child.kill(); });
-    child.stderr.resume(); // Never log DB/client diagnostics: they can contain credentials or object names.
+    if (typeof options.classifyStderr === 'function') child.stderr.on('data', data => {
+      // Inspect at most 64 KiB in memory, then retain only a bounded category.
+      // Raw diagnostics are never logged, returned or added to an Error.
+      const remaining = 65536 - diagnosticSize;
+      if (remaining > 0) { const part = data.subarray(0, remaining); diagnostic.push(part); diagnosticSize += part.length; }
+    });
+    else child.stderr.resume(); // Never log DB/client diagnostics: they can contain credentials or object names.
     child.on('error', () => { clearTimeout(timer); reject(new BackupError('TOOL_UNAVAILABLE', 'BLOCKED_EXTERNAL')); });
-    child.on('close', code => { clearTimeout(timer); if (code === 0 && size < 8e6) resolveResult(Buffer.concat(output).toString('utf8')); else reject(new BackupError('COMMAND_FAILED')); });
+    child.on('close', code => {
+      clearTimeout(timer);
+      if (code === 0 && size < 8e6) { resolveResult(Buffer.concat(output).toString('utf8')); return; }
+      let failure = 'COMMAND_FAILED';
+      if (typeof options.classifyStderr === 'function') {
+        try {
+          const classified = options.classifyStderr(Buffer.concat(diagnostic).toString('utf8'));
+          if (/^[A-Z][A-Z0-9_]{2,80}$/.test(classified)) failure = classified;
+        } catch {}
+      }
+      reject(new BackupError(failure));
+    });
   });
 }
 export async function hashFile(path) {
@@ -98,13 +115,28 @@ export function storageConfig(env) {
   if (!ref || env.BACKUP_EXPECTED_REF !== ref || env.BACKUP_STORAGE_URL !== `https://${ref}.supabase.co`) throw new BackupError('STORAGE_REF_NOT_AUTHORIZED');
   return { url: env.BACKUP_STORAGE_URL, key: env.BACKUP_STORAGE_KEY };
 }
+export function classifyPostgresDiagnostic(value) {
+  const diagnostic = typeof value === 'string' ? value : '';
+  if (/tenant or user not found/i.test(diagnostic)) return 'POSTGRES_TENANT_OR_USER';
+  if (/password authentication failed|no password supplied|fe_sendauth/i.test(diagnostic)) return 'POSTGRES_AUTH';
+  if (/certificate|\bssl\b|\btls\b/i.test(diagnostic)) return 'POSTGRES_SSL';
+  if (/database[^\r\n]*does not exist/i.test(diagnostic)) return 'POSTGRES_DATABASE_NOT_FOUND';
+  if (/timeout|timed out/i.test(diagnostic)) return 'POSTGRES_TIMEOUT';
+  if (/could not translate host|name or service not known|temporary failure in name resolution|nodename nor servname/i.test(diagnostic)) return 'POSTGRES_DNS';
+  if (/connection refused/i.test(diagnostic)) return 'POSTGRES_CONNECTION_REFUSED';
+  if (/network is unreachable|no route to host/i.test(diagnostic)) return 'POSTGRES_NETWORK';
+  return 'POSTGRES_CONNECTION_FAILED';
+}
 export async function assertDatabaseReadOnly(pg, execute = command) {
   let output;
   try {
     output = await execute('psql', ['-X', '--no-password', '--quiet', '--tuples-only', '--no-align', '--set=ON_ERROR_STOP=1',
-      '--command=BEGIN TRANSACTION READ ONLY; SHOW transaction_read_only; ROLLBACK;'], { env: pg });
+      '--command=BEGIN TRANSACTION READ ONLY; SHOW transaction_read_only; ROLLBACK;'], { env: pg, classifyStderr: classifyPostgresDiagnostic });
   } catch (error) {
     // Never relay provider diagnostics or output that could contain secrets.
+    if (error instanceof BackupError && /^POSTGRES_[A-Z0-9_]+$/.test(error.code)) throw error;
+    if (error instanceof BackupError && error.code === 'COMMAND_TIMEOUT') throw new BackupError('POSTGRES_TIMEOUT');
+    if (error instanceof BackupError && error.code === 'TOOL_UNAVAILABLE') throw new BackupError('POSTGRES_TOOL_UNAVAILABLE', error.state);
     throw new BackupError('READ_ONLY_CHECK_FAILED', error instanceof BackupError ? error.state : 'FAIL');
   }
   if (typeof output !== 'string' || !/^on\r?\n?$/.test(output)) throw new BackupError('READ_ONLY_NOT_CONFIRMED');
