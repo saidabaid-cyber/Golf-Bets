@@ -13,3 +13,24 @@ tmp/
 
 .vercel
 supabase/.temp/
+
+# Disaster-recovery snapshots, packages, credentials and private restore staging.
+backups/
+restore-private/
+*.dump
+*.backup
+*.bundle
+*.sql.enc
+*.dump.enc
+*.key
+*.pem
+*.p12
+*.pfx
+*.pgpass
+schema.sql
+data.sql
+roles.sql
+database.sql
+The-Backyard-Backup-*.tar.gz
+The-Backyard-Backup-*.tar.gz.sha256
+*service-account*.json
