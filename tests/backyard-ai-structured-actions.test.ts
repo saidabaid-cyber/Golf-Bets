@@ -43,6 +43,8 @@ for (const malformed of [
   { version: 2, requestId: "r", expectedRevision: 0, actions: [{ type: "start_round" }] },
   { ...batch([{ type: "start_round" }]), ownerUserId: "attacker" },
   batch([{ type: "set_round_holes", holes: "9" } as unknown as StructuredAction]),
+  batch([{ type: "set_start_hole", hole: 0 }]),
+  batch([{ type: "set_start_hole", hole: 19 }]),
   batch([{ type: "set_handicap", playerId: "p0", handicap: NaN }]),
   batch([{ type: "set_handicap", playerId: "p0", handicap: 54 }]),
   batch([{ type: "record_score", playerId: "p0", hole: 0, score: 4 }]),
@@ -86,6 +88,13 @@ test("preview is pure, confirm is explicit and caller cannot tamper with propose
   assert.equal(initial.draft.startHole, 1);
   assert.equal(done.state.revision, 1);
   assert.throws(() => session.confirm(preview.token!, confirm));
+});
+
+test("shotgun starts accept any real 18-hole start without weakening the wire boundary", () => {
+  const { initial, host } = fixture();
+  const session = createStructuredActionSession(initial, host);
+  const done = session.confirm(session.preview(batch([{ type: "set_start_hole", hole: 5 }])).token!, confirm);
+  assert.equal(done.state.draft.startHole, 5);
 });
 
 test("same request retries after reload or undo never duplicate execution; key reuse fails", () => {

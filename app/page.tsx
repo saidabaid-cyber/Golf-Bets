@@ -851,7 +851,7 @@ function GolfBetsApp() {
           polla: restored.polla,
         });
         if (draft.segments) {
-          const draftOrder = playOrderForHoles((draft.course ?? laVista).holes.map((hole) => hole.number), draftCore.startHole).slice(0, draftRoundHoles);
+          const draftOrder = playOrderForHoles((draft.course ?? laVista).holes.map((hole: Course["holes"][number]) => hole.number), draftCore.startHole).slice(0, draftRoundHoles);
           const segmentSize = [3, 6, 9, 18].includes(draft.bets?.foursome?.segmentSize) ? draft.bets.foursome.segmentSize : 6;
           setSegments(normalizeFoursomeSegments(draft.segments, draftOrder, segmentSize));
         }

@@ -16,7 +16,7 @@ export type StructuredAction =
   | { type: "select_course"; courseId: string }
   | { type: "select_tee"; teeId: string; playerIds: string[] }
   | { type: "set_round_holes"; holes: 9 | 18 }
-  | { type: "set_start_hole"; hole: 1 | 10 }
+  | { type: "set_start_hole"; hole: number }
   | { type: "set_handicap_source"; playerId: string; source: "manual" | "profile_index" }
   | { type: "set_handicap"; playerId: string; handicap: number }
   | { type: "enable_bet"; bet: StructuredBetKey }
@@ -84,7 +84,7 @@ export function parseStructuredActionBatch(value: unknown): StructuredActionBatc
     if ("bet" in raw && (typeof raw.bet !== "string" || !BETS.has(raw.bet))) throw new Error("UNKNOWN_BET");
     if (type === "find_player" && (typeof raw.query !== "string" || !raw.query.trim() || raw.query.length > 200)) throw new Error("INVALID_QUERY");
     if (type === "set_round_holes" && raw.holes !== 9 && raw.holes !== 18) throw new Error("INVALID_HOLES");
-    if (type === "set_start_hole" && raw.hole !== 1 && raw.hole !== 10) throw new Error("INVALID_START_HOLE");
+    if (type === "set_start_hole" && (typeof raw.hole !== "number" || !Number.isInteger(raw.hole) || raw.hole < 1 || raw.hole > 18)) throw new Error("INVALID_START_HOLE");
     if (type === "set_handicap_source" && raw.source !== "manual" && raw.source !== "profile_index") throw new Error("UNAVAILABLE_HANDICAP_SOURCE");
     if (type === "set_handicap" && (typeof raw.handicap !== "number" || raw.handicap < -15 || raw.handicap > 36)) throw new Error("INVALID_HANDICAP");
     if (["record_score", "correct_score", "record_putts"].includes(type)) {

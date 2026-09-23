@@ -3,7 +3,7 @@
   "status": "PASS",
   "scope": "Versioned normalized runtime catalog; no external fetch or DB mutation",
   "provider": "lib/golf-equipment-catalog.ts",
-  "catalogDigest": "4c61b5deaebd728d09bcb93b19195d566b93ab2d22c43b9b13342e03bc2a3559",
+  "catalogDigest": "642514c2277f9df24f97ec7d468725c4a1c18aee85c144ba102d7d3ef9cf2e4c",
   "definitions": {
     "historical": "active === false, retained for existing references",
     "licensedImage": "imageUrl + imageSourceUrl + imageLicense present; legal permission not independently adjudicated",
@@ -12,16 +12,16 @@
   },
   "summary": {
     "balls": {
-      "total": 310,
-      "active": 84,
+      "total": 314,
+      "active": 88,
       "historical": 226,
-      "bagEligible": 310,
+      "bagEligible": 314,
       "fitEligible": 80,
       "activeFitEligible": 71,
-      "withoutLicensedImage": 310,
-      "specsUnknown": 228,
+      "withoutLicensedImage": 314,
+      "specsUnknown": 229,
       "specsUnverified": 0,
-      "specsPartial": 72,
+      "specsPartial": 75,
       "shaftsWithoutWeight": 0,
       "shaftsWithoutFlex": 0,
       "wedgesWithoutVerifiedLofts": 0
@@ -3376,6 +3376,32 @@
       ]
     },
     {
+      "id": "nitro-ultimate-distance-current",
+      "kind": "balls",
+      "brand": "Nitro",
+      "model": "Ultimate Distance",
+      "active": true,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "coverMaterial",
+        "construction",
+        "constructionPieces",
+        "compression",
+        "flight",
+        "driverSpin",
+        "ironSpin",
+        "shortGameSpin",
+        "feel"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://thenitrogolf.com/nitro-golf-balls/"
+      ]
+    },
+    {
       "id": "oncore-elixr-2018",
       "kind": "balls",
       "brand": "OnCore",
@@ -3503,6 +3529,77 @@
       "datedCatalogProvenance": true,
       "evidence": [
         "https://www.golffitfinder.com/golf-ball-database/"
+      ]
+    },
+    {
+      "id": "pinnacle-distance-current",
+      "kind": "balls",
+      "brand": "Pinnacle",
+      "model": "Distance",
+      "active": true,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_PARTIAL"
+      ],
+      "missingFields": [
+        "construction",
+        "constructionPieces",
+        "compression",
+        "flight",
+        "driverSpin",
+        "ironSpin",
+        "shortGameSpin",
+        "feel"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://www.pinnaclegolf.com/"
+      ]
+    },
+    {
+      "id": "pxg-xtreme-tour-2024",
+      "kind": "balls",
+      "brand": "PXG",
+      "model": "Xtreme Tour",
+      "active": true,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_PARTIAL"
+      ],
+      "missingFields": [
+        "compression",
+        "flight",
+        "driverSpin",
+        "ironSpin",
+        "shortGameSpin",
+        "feel"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://www.pxg.com/products/xtreme-tour-golf-ball"
+      ]
+    },
+    {
+      "id": "pxg-xtreme-tour-x-2024",
+      "kind": "balls",
+      "brand": "PXG",
+      "model": "Xtreme Tour X",
+      "active": true,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_PARTIAL"
+      ],
+      "missingFields": [
+        "compression",
+        "flight",
+        "driverSpin",
+        "ironSpin",
+        "shortGameSpin",
+        "feel"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://www.pxg.com/products/xtreme-tour-x-golf-ball"
       ]
     },
     {
@@ -49770,7 +49867,7 @@
   "sourceFiles": [
     {
       "file": "lib/golf-equipment-catalog.ts",
-      "sha256": "c393acada558c85e70ee3c37871161a6e9e1de87d10da793fdb0881aec2201dc"
+      "sha256": "cd47c6c977142056270e681a29f2d061bc624191b5fb34ca75ccfef1a9fcfa9a"
     },
     {
       "file": "lib/golf-equipment.ts",
@@ -49794,7 +49891,7 @@
     },
     {
       "file": "data/golf-equipment-catalog.expansion.seed.json",
-      "sha256": "5c341c04a753c995c26ff3c2fa068808e870ecd7bef92ed99820391c51ee170a"
+      "sha256": "8befb2b0c7f0eff2c09ac916b67f49ef2ed7e4ab6217088db2a2c909afe47e12"
     },
     {
       "file": "data/forgiving-golf-equipment.snapshot.json",

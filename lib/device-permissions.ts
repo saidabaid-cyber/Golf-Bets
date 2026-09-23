@@ -116,7 +116,7 @@ export async function queryBrowserPermissionState(kind: "geolocation" | "notific
   if (!permissions?.query) return "unavailable";
   try {
     const result = await permissions.query({ name: kind === "geolocation" ? "geolocation" : "notifications" } as PermissionDescriptor);
-    return result.state === "default" ? "prompt" : result.state;
+    return result.state;
   } catch { return "unavailable"; }
 }
 
@@ -132,7 +132,8 @@ export function requestInitialLocation(storage: ReadableStorage & WritableStorag
       const latest = readDevicePermissionPreferences(storage, userId);
       const at = now();
       if (error.code === error.PERMISSION_DENIED) {
-        const { coarseLocation: _coarseLocation, ...rest } = latest;
+        const rest = { ...latest };
+        delete rest.coarseLocation;
         resolve(saveDevicePermissionPreferences(storage, { ...rest, location: "denied", locationEnabled: false, updatedAt: at }));
         return;
       }
@@ -157,7 +158,8 @@ export async function refreshDevicePermissionStateWithoutPrompt(storage: Readabl
   const locationDisabled = nextLocation === "denied";
   const next = { ...current, location: nextLocation, notifications: nextNotifications, locationEnabled: locationDisabled ? false : current.locationEnabled, notificationsEnabled: current.notificationsEnabled && nextNotifications === "granted", updatedAt: now() };
   if (!locationDisabled) return saveDevicePermissionPreferences(storage, next);
-  const { coarseLocation: _coarseLocation, ...withoutCoordinates } = next;
+  const withoutCoordinates = { ...next };
+  delete withoutCoordinates.coarseLocation;
   return saveDevicePermissionPreferences(storage, withoutCoordinates);
 }
 

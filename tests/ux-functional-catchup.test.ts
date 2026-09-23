@@ -75,10 +75,12 @@ test("social search and QR resolve stable identities before duplicate-safe frien
 
 test("habitual bets edit inline with slots, money affordance and five-percent HCP steps", () => {
   const onboarding = source("app/components/beta-onboarding-flow.tsx");
+  const round = source("app/page.tsx");
   const editor = source("app/components/group-bet-template-editor.tsx");
   const hcp = source("app/components/hcp-percentage-input.tsx");
-  assert.match(onboarding, /mode="complete"/);
-  assert.match(onboarding, /Selecciona tus apuestas habituales y ajusta aquí sus valores y reglas/);
+  assert.doesNotMatch(onboarding, /GroupBetTemplateEditor|Configura tu primer grupo/);
+  assert.match(round, /<GroupBetTemplateEditor/);
+  assert.match(round, /mode="complete"/);
   assert.match(editor, /Jugador \{String\.fromCharCode\(65 \+ index\)\} \/ Rival/);
   assert.match(editor, /Match Primera/);
   assert.match(editor, /Medal Total/);

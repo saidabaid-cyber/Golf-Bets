@@ -30,7 +30,7 @@ import {
 import { BallFitResults, BallFitWizard } from "./ball-fit-wizard";
 import { BackyardIcon } from "./backyard-icon";
 import { CatalogProductMedia } from "./catalog-product-media";
-import { BallEditor, CLUB_CATEGORY_LABELS, ClubDistanceEditor, ClubEditor } from "./equipment-editors";
+import { BallEditor, CLUB_CATEGORY_ICONS, CLUB_CATEGORY_LABELS, ClubDistanceEditor, ClubEditor } from "./equipment-editors";
 import { equipmentStatusLabel, useEquipmentProfile } from "./use-equipment-profile";
 import { useEquipmentCatalogSearch } from "./use-equipment-catalog-search";
 import type { ProfileHandedness } from "../../lib/equipment-editor-selection";
