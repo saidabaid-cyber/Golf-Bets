@@ -33,7 +33,7 @@ function createWorkerHarness(respond: (request: Request) => Promise<Response>) {
   };
   const cacheStorage = {
     open: async () => cache,
-    keys: async () => ["the-backyard-shell-v6"],
+    keys: async () => ["the-backyard-shell-v7"],
     delete: async () => {
       hooks.delete?.();
       entries.clear();
