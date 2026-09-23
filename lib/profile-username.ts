@@ -12,3 +12,20 @@ export function normalizeProfileUsername(value: string | undefined): string | un
 export function canonicalProfileUsername(username: unknown, fallback: string | undefined): string {
   return typeof username === "string" && username.trim() ? username.trim() : fallback || "";
 }
+
+export async function checkProfileUsernameAvailability(
+  accessToken: string | null,
+  username: string,
+  fetcher: typeof fetch = fetch,
+) {
+  if (!accessToken) throw new Error("Inicia sesión para cambiar tu nombre de usuario.");
+  const normalized = normalizeProfileUsername(username);
+  if (!normalized) throw new Error("Escribe un nombre de usuario.");
+  const response = await fetcher(`/api/account/username?username=${encodeURIComponent(normalized)}`, {
+    headers: { authorization: `Bearer ${accessToken}` },
+    cache: "no-store",
+  });
+  const result = await response.json().catch(() => null) as { available?: boolean; error?: string } | null;
+  if (!response.ok) throw new Error(result?.error || "No pudimos validar el nombre de usuario. Reintenta.");
+  return result?.available === true;
+}
