@@ -1,0 +1,177 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-23T00:00:00.000Z",
+  "methodology": "Runtime catalog normalized with the production seed provider, compared by stable id and catalog aliases against backyard-equipment-master-2010-2026.snapshot.json. Official manufacturer sources were required for additions; unknown technical facts remain null.",
+  "beforeVerifiedAdditions": {
+    "inAppModels": 310,
+    "inAppCurrent": 84,
+    "inAppHistorical": 226,
+    "inAppBrands": 16
+  },
+  "master": {
+    "models": 285,
+    "brands": 16,
+    "brandNames": [
+      "Bridgestone",
+      "Callaway",
+      "Cut",
+      "Kirkland Signature",
+      "Maxfli",
+      "Mizuno",
+      "Nike",
+      "OnCore",
+      "Seed",
+      "Snell",
+      "Srixon",
+      "TaylorMade",
+      "Titleist",
+      "Vice",
+      "Volvik",
+      "Wilson"
+    ]
+  },
+  "comparisonBeforeImport": {
+    "commonModelsAfterAliasResolution": 285,
+    "missingInApp": [],
+    "masterStableIdsResolvedAsAliases": [
+      "vice-vice-pro-2024",
+      "vice-vice-pro-air-2024",
+      "vice-vice-pro-plus-2024",
+      "vice-vice-tour-2024"
+    ],
+    "missingInMasterCount": 29,
+    "missingInMaster": [
+      "bridgestone-tour-b-x-unversioned",
+      "srixon-z-star-10360111",
+      "wilson-staff-model-x-unversioned",
+      "vice-pro-2024",
+      "maxfli-tour-x-24maxumxfltrxwhtdgbl",
+      "mizuno-pro-x-unversioned",
+      "kirkland-signature-performance-plus-4000201209",
+      "titleist-pro-v1x-left-dash",
+      "bridgestone-tour-b-xs",
+      "bridgestone-tour-b-rx",
+      "bridgestone-e12-contact",
+      "srixon-z-star-xv",
+      "srixon-z-star-diamond",
+      "srixon-q-star-tour",
+      "srixon-soft-feel",
+      "wilson-staff-model",
+      "wilson-triad",
+      "wilson-duo-soft",
+      "vice-pro-plus-2024",
+      "vice-pro-air-2024",
+      "vice-tour-2024",
+      "maxfli-tour",
+      "maxfli-tour-s",
+      "mizuno-pro-s-ball",
+      "snell-prime-40",
+      "kirkland-signature-performance-plus-white",
+      "volvik-vivid",
+      "volvik-vivid-soft",
+      "volvik-crystal"
+    ],
+    "possibleAliases": [
+      { "catalogId": "vice-pro-2024", "masterId": "vice-vice-pro-2024" },
+      { "catalogId": "vice-pro-air-2024", "masterId": "vice-vice-pro-air-2024" },
+      { "catalogId": "vice-pro-plus-2024", "masterId": "vice-vice-pro-plus-2024" },
+      { "catalogId": "vice-tour-2024", "masterId": "vice-vice-tour-2024" }
+    ]
+  },
+  "verifiedAdditions": [
+    {
+      "id": "pxg-xtreme-tour-2024",
+      "source": "https://www.pxg.com/products/xtreme-tour-golf-ball",
+      "fitEligible": false
+    },
+    {
+      "id": "pxg-xtreme-tour-x-2024",
+      "source": "https://www.pxg.com/products/xtreme-tour-x-golf-ball",
+      "fitEligible": false
+    },
+    {
+      "id": "pinnacle-distance-current",
+      "source": "https://www.pinnaclegolf.com/",
+      "fitEligible": false
+    },
+    {
+      "id": "nitro-ultimate-distance-current",
+      "source": "https://thenitrogolf.com/nitro-golf-balls/",
+      "fitEligible": false
+    }
+  ],
+  "afterVerifiedAdditions": {
+    "inAppModels": 314,
+    "inAppCurrent": 88,
+    "inAppHistorical": 226,
+    "inAppBrands": 19,
+    "brandNames": [
+      "Bridgestone",
+      "Callaway",
+      "Cut",
+      "Kirkland Signature",
+      "Maxfli",
+      "Mizuno",
+      "Nike",
+      "Nitro",
+      "OnCore",
+      "Pinnacle",
+      "PXG",
+      "Seed",
+      "Snell",
+      "Srixon",
+      "TaylorMade",
+      "Titleist",
+      "Vice",
+      "Volvik",
+      "Wilson"
+    ]
+  },
+  "requestedSourceReview": [
+    {
+      "brand": "Cut",
+      "models": 8,
+      "active": 4,
+      "sourceStatus": "SECONDARY_TECHNICAL",
+      "action": "Keep existing records; official provenance review remains required before enriching technical facts."
+    },
+    {
+      "brand": "Kirkland Signature",
+      "models": 7,
+      "active": 4,
+      "sourceStatus": "MIXED_OFFICIAL_AND_SECONDARY",
+      "action": "Keep separate verified generations; review unversioned active aliases before any archive/merge."
+    },
+    {
+      "brand": "Nike",
+      "models": 14,
+      "active": 0,
+      "sourceStatus": "SECONDARY_TECHNICAL_HISTORICAL",
+      "action": "Remain historical; no model was promoted to current."
+    },
+    {
+      "brand": "Seed",
+      "models": 6,
+      "active": 6,
+      "sourceStatus": "OEM_OFFICIAL",
+      "action": "Retain as current official-source records."
+    }
+  ],
+  "currentHistoricalReview": {
+    "generationalFamilies": 69,
+    "preExistingActiveIdentityConflicts": 21,
+    "note": "Unversioned active rows coexist with verified year-based generations in several legacy families. They were not auto-archived or merged because that would require provenance review. No new addition duplicates an existing identity."
+  },
+  "notImported": [
+    {
+      "brand": "Top-Flite",
+      "reason": "Discovery sources and the conforming list identify products, but no unambiguous manufacturer product source was accepted for technical catalog publication in this pass."
+    },
+    {
+      "brand": "Amazon Basics",
+      "reason": "No stable official manufacturer catalog page with sufficient product identity/provenance was available in this pass."
+    }
+  ],
+  "qaRecordsFoundInVersionedSources": [],
+  "publicFixturePolicy": "Synthetic, QA, test and fixture identities are rejected by the public seed export and by the provider search, facets, pinned-id and Ball Fit boundaries."
+}

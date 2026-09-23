@@ -6,6 +6,7 @@ import type {
   ShaftUsage,
 } from "./golf-equipment";
 import type { GolfCatalogPage } from "./golf-catalog-domain";
+import { isPublicEquipmentCatalogItem } from "./equipment-catalog-visibility";
 
 export const EQUIPMENT_CATALOG_KINDS = ["BALL", "CLUB", "SHAFT"] as const;
 export type EquipmentCatalogKind = (typeof EQUIPMENT_CATALOG_KINDS)[number];
@@ -126,6 +127,7 @@ function page<T extends EquipmentCatalogItem>(items: readonly T[], input: Equipm
   const query = searchable(input.query || "").slice(0, 120);
   const tokens = query.split(" ").filter(Boolean);
   const candidates = items
+    .filter(isPublicEquipmentCatalogItem)
     .filter((item) => ("bagEligible" in item ? item.bagEligible : true))
     .filter((item) => input.includeArchived || item.active)
     .filter((item) => input.kind !== "CLUB" || !input.category || (item as GolfClubCatalog).category === input.category)
@@ -156,7 +158,7 @@ function page<T extends EquipmentCatalogItem>(items: readonly T[], input: Equipm
   const pinnedIds = safePinnedIds(input.pinnedIds);
   const byId = new Map<string, EquipmentCatalogItem>();
   for (const id of pinnedIds) {
-    const pinned = items.find((item) => item.id === id);
+    const pinned = items.find((item) => item.id === id && isPublicEquipmentCatalogItem(item));
     if (pinned) byId.set(pinned.id, pinned);
   }
   for (const item of selected) byId.set(item.id, item);
@@ -170,6 +172,7 @@ function page<T extends EquipmentCatalogItem>(items: readonly T[], input: Equipm
 function facetPage<T extends EquipmentCatalogItem>(items: readonly T[], input: EquipmentCatalogBrandFacetInput): GolfCatalogPage<EquipmentCatalogBrandFacet> {
   const query = searchable(input.query || "").slice(0, 120);
   const source = items
+    .filter(isPublicEquipmentCatalogItem)
     .filter((item) => ("bagEligible" in item ? item.bagEligible : true))
     .filter((item) => input.includeArchived || item.active)
     .filter((item) => input.kind !== "CLUB" || !input.category || (item as GolfClubCatalog).category === input.category)
@@ -226,7 +229,7 @@ export function createInternalEquipmentCatalogProvider(catalogs: {
     },
     async loadBallFitCatalog(input) {
       const maximumCandidates = safeBallFitMaximum(input.maximumCandidates);
-      const active = catalogs.balls.filter((ball) => ball.active && ball.fitEligible);
+      const active = catalogs.balls.filter((ball) => isPublicEquipmentCatalogItem(ball) && ball.active && ball.fitEligible);
       if (maximumCandidates === 0 || active.length > maximumCandidates) {
         return {
           items: [],
@@ -240,7 +243,7 @@ export function createInternalEquipmentCatalogProvider(catalogs: {
       const byId = new Map(active.map((ball) => [ball.id, ball]));
       const currentBallId = input.currentBallId?.trim() || null;
       if (currentBallId) {
-        const current = catalogs.balls.find((ball) => ball.id === currentBallId);
+        const current = catalogs.balls.find((ball) => ball.id === currentBallId && isPublicEquipmentCatalogItem(ball));
         if (current) byId.set(current.id, current);
       }
       return {
