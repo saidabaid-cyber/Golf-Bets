@@ -33,7 +33,7 @@ function createWorkerHarness(respond: (request: Request) => Promise<Response>) {
   };
   const cacheStorage = {
     open: async () => cache,
-    keys: async () => ["the-backyard-shell-v7"],
+    keys: async () => ["the-backyard-shell-v8"],
     delete: async () => {
       hooks.delete?.();
       entries.clear();
@@ -127,4 +127,30 @@ test("navegaciones privadas nunca se cachean y usan la página offline dedicada"
   assert.equal(harness.entries.has(`${ORIGIN}/auth/callback?code=secret`), false);
   offline = true;
   assert.equal(await (await dispatchNavigation(`${ORIGIN}/polla/private-code`)).text(), "offline-shell");
+});
+
+test("chunks del mismo alias revalidan antes de usar el fallback offline", async () => {
+  let installing = true;
+  let offline = false;
+  const harness = createWorkerHarness(async (request) => {
+    const path = new URL(request.url).pathname;
+    if (offline) throw new Error("offline");
+    if (path === "/_next/static/app.js") return new Response(installing ? "install-shell" : "fresh-shell", { status: 200 });
+    return requiredShellResponse(request);
+  });
+  await runInstall(harness.listeners);
+  installing = false;
+  const dispatchChunk = () => {
+    const captured: { value?: Promise<Response> } = {};
+    harness.listeners.get("fetch")?.({
+      request: new Request(`${ORIGIN}/_next/static/app.js`),
+      respondWith: (value: Promise<Response>) => { captured.value = value; },
+    } as unknown as Record<string, unknown>);
+    assert.ok(captured.value, "static chunk must use respondWith");
+    return captured.value;
+  };
+  assert.equal(await (await dispatchChunk()).text(), "fresh-shell");
+  assert.equal(harness.seen.at(-1)?.cache, "reload");
+  offline = true;
+  assert.equal(await (await dispatchChunk()).text(), "fresh-shell");
 });

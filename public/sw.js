@@ -1,5 +1,5 @@
 // Bump this version whenever the deploy changes the app shell.
-const CACHE = "the-backyard-shell-v7";
+const CACHE = "the-backyard-shell-v8";
 const OPTIONAL_SHELL = ["/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/maskable-192.png", "/icons/maskable-512.png", "/apple-icon.png"];
 
 function shellRequest(path) {
@@ -66,10 +66,15 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (url.pathname.startsWith("/_next/static/")) {
-    event.respondWith(caches.open(CACHE).then(async (cache) => (await cache.match(request)) || fetch(request).then(async (response) => {
-      if (response.ok) await cache.put(request, response.clone());
-      return response;
-    })));
+    event.respondWith(caches.open(CACHE).then(async (cache) => {
+      try {
+        const response = await fetch(new Request(request, { cache: "reload" }));
+        if (response.ok) await cache.put(request, response.clone());
+        return response;
+      } catch {
+        return (await cache.match(request)) || Response.error();
+      }
+    }));
     return;
   }
   if (url.pathname.startsWith("/brand/") || url.pathname.startsWith("/icons/") || url.pathname === "/apple-icon.png" || url.pathname === "/manifest.webmanifest") {
