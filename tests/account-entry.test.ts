@@ -135,8 +135,9 @@ test("provider places mapping before cloud writes and sends completed accounts d
   assert.match(source, /Ya tienes una cuenta\. Vamos a iniciar sesión\./);
   assert.doesNotMatch(source, /if \(identity\.mode === "authenticated" && existingAccountNotice\) return/);
   assert.match(source, /Verifica tu correo para continuar; si ya tienes cuenta, entraremos a ella\./);
-  assert.match(source, /const requiresAccountConsent = identity\.mode === "authenticated" && \(!accountEntry\?\.existingAccount \|\| !currentConsent\)/);
-  assert.match(source, /return requiresAccountConsent \? <AccountConsentCheckpoint/);
+  assert.doesNotMatch(source, /requiresAccountConsent|AccountConsentCheckpoint/);
+  assert.match(source, /<BetaOnboardingFlow[^>]+legalConsentRequired=\{!currentConsent\}/);
+  assert.match(source, /return app;/);
 });
 
 test("late mapping after logout, account switch, or effect cancellation cannot reopen creation or account UI", async () => {

@@ -44,14 +44,21 @@ for(const mode of ['quick','complete'] as const) test(`${mode} onboarding includ
   assert.equal(restored?.step,'ghin');assert.equal(restored?.mode,mode);assert.ok(restored?.completedSteps.includes('course'));
   assert.equal(normalizeBetaOnboardingProgress(progress,'B'),null);
 });
-test('quick entry cannot bypass course/index and optional device permissions never become consent',()=>{
+test('quick entry cannot bypass course/index; consent is initial and device permissions are not an entry gate',()=>{
   const ui=readFileSync('app/components/beta-onboarding-flow.tsx','utf8');
   assert.match(ui,/onClick=\{\(\) => advance\("course"\)\}/);
-  assert.match(ui,/entryMode === 'quick' \? "permissions" : "equipment"/);
+  assert.match(ui,/if \(entryMode === 'quick'\) finish\(\); else advance\("equipment", true\)/);
   assert.match(ui,/CatalogCoursePicker/);assert.match(ui,/HandicapSourceSelector/);
+  assert.match(ui,/InitialOnboardingConsents/);
+  assert.doesNotMatch(ui,/progress\.step === "permissions"|<DevicePermissions/);
   const permission=readFileSync('app/components/device-permissions.tsx','utf8');
   assert.doesNotMatch(permission,/localStorage|fetch\(|acceptConsent/);
   assert.match(permission,/permission\.onchange = null/);assert.match(permission,/cancelLocation\.current\(\)/);
+});
+test('legacy mandatory-permissions checkpoint resumes as complete instead of reopening removed UI',()=>{
+  const legacy={...createBetaOnboardingProgress('A'),status:'in_progress' as const,step:'permissions' as const,completedSteps:['welcome','course','ghin'] as const};
+  const restored=normalizeBetaOnboardingProgress(legacy,'A','2026-09-22T00:00:00.000Z');
+  assert.equal(restored?.status,'complete');assert.equal(restored?.step,'complete');assert.ok(restored?.completedSteps.includes('permissions'));
 });
 test('one completion calculation feeds Home and Profile, visual progress disappears at 100',()=>{
   for(const path of ['app/page.tsx','app/components/profile-account-panel.tsx']) assert.match(readFileSync(path,'utf8'),/ProfileCompletionRing/);

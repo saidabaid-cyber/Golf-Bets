@@ -1,4 +1,5 @@
 import 'server-only';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseAdmin } from './supabase/server';
 import { isolatedPreviewDatabaseEnabled } from './preview-database';
 import type { ReviewedCatalogCourse, ReviewedTeeSource } from './review-course-catalog';
@@ -7,10 +8,12 @@ export function reviewCatalogQaEnabled() {
   return isolatedPreviewDatabaseEnabled() && process.env.PREVIEW_DB_REF==='bymeopxkxapfizeeqeyb';
 }
 let cached:{expires:number;data:ReviewedCatalogCourse[]}|undefined;
-export async function loadReviewedCourseCatalog():Promise<ReviewedCatalogCourse[]> {
+export async function loadReviewedCourseCatalog(database?:SupabaseClient|null):Promise<ReviewedCatalogCourse[]> {
   if(!reviewCatalogQaEnabled()) throw Error('CATALOG_QA_ONLY');
   if(cached && cached.expires>Date.now()) return cached.data;
-  const db=getSupabaseAdmin(); if(!db) throw Error('CATALOG_UNAVAILABLE');
+  // Player reads use their own JWT and the catalog's owner-scoped SELECT
+  // policies. Privileged server callers may still omit the client.
+  const db=database??getSupabaseAdmin(); if(!db) throw Error('CATALOG_UNAVAILABLE');
   const [clubs,courses,tees]=await Promise.all([
     db.from('golf_clubs').select('id,name,city,state_region,latitude,longitude,catalog_metadata').eq('provider','OWNER_CATALOG_REVIEW').eq('active',true).limit(1000).abortSignal(AbortSignal.timeout(12000)),
     db.from('golf_courses').select('id,club_id,name,holes,source_url,verified_at,catalog_metadata').eq('provider','OWNER_CATALOG_REVIEW').eq('active',true).limit(1000).abortSignal(AbortSignal.timeout(12000)),

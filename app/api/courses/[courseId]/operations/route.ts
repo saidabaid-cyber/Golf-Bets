@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCourseCatalog } from "../../../../../lib/course-catalog-provider.server";
 import { resolveEffectiveCourse, type CourseConfiguration } from "../../../../../lib/course-configuration-resolver";
 import { getSupabasePublic } from "../../../../../lib/supabase/server";
+import { authenticatedRequest, bearerToken } from "../../../../../lib/server-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,10 @@ export async function GET(request: NextRequest, context: { params: Promise<{ cou
   const requestedCompetitionId = request.nextUrl.searchParams.get("competitionId")?.slice(0, 60) || null;
   if (!courseId || Number.isNaN(Date.parse(at))) return NextResponse.json({ error: "Solicitud inválida." }, { status: 400 });
 
-  const catalog = await getCourseCatalog();
+  const hasBearer = Boolean(bearerToken(request));
+  const auth = hasBearer ? await authenticatedRequest(request) : null;
+  if (auth && !auth.ok) return NextResponse.json({ error: auth.error, code: auth.code }, { status: auth.status, headers: { "cache-control": "private, no-store" } });
+  const catalog = await getCourseCatalog(auth?.ok ? auth.client : null);
   const course = catalog.courses.find((candidate) => candidate.id === courseId && candidate.active);
   const club = course ? catalog.clubs.find((candidate) => candidate.id === course.clubId) : null;
   if (!course || !club) return NextResponse.json({ error: "Campo no encontrado." }, { status: 404 });
@@ -33,7 +37,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ cou
     yardages: Object.fromEntries(catalog.teeHoleYardages.filter((row) => row.teeId === tee.id).map((row) => [row.holeId, row.yards ?? null])),
   }));
   const base = { id: course.id, name: `${club.name} · ${course.name}`, version: course.catalogVersion || 1, holes: holes.map((hole) => ({ id: hole.id, holeNumber: hole.holeNumber, par: hole.par, strokeIndex: hole.strokeIndex })), tees };
-  const database = getSupabasePublic("cloud");
+  const database = auth?.ok ? auth.client : getSupabasePublic("cloud");
   if (!database) {
     const resolved = resolveEffectiveCourse({ base, configurations: [], at });
     return NextResponse.json({ resolved, localRules: [], badges: [], competitionId: null, competitionRuleSet: null }, { headers: { "cache-control": "public, s-maxage=5" } });

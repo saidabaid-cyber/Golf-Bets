@@ -11,18 +11,18 @@ type Operations = {
   resolved?: { warnings?: string[]; resolvedHoles?: Array<{ id: string; displayLabel: string; par: number; operationalNote?: string | null; dropZoneNote?: string | null }> };
 };
 
-export function CourseOperationsNotice({ courseId, frozenAt }: { courseId: string; frozenAt?: string | null }) {
+export function CourseOperationsNotice({ courseId, frozenAt, accessToken }: { courseId: string; frozenAt?: string | null; accessToken?: string | null }) {
   const [operations, setOperations] = useState<Operations | null>(null);
   const [open, setOpen] = useState(false);
   useEffect(() => {
     const controller = new AbortController();
     const parameters = new URLSearchParams({ at: frozenAt || new Date().toISOString() });
-    void fetch(`/api/courses/${encodeURIComponent(courseId)}/operations?${parameters}`, { cache: "no-store", signal: controller.signal })
+    void fetch(`/api/courses/${encodeURIComponent(courseId)}/operations?${parameters}`, { cache: "no-store", signal: controller.signal, headers: accessToken ? { authorization: `Bearer ${accessToken}` } : undefined })
       .then(async (response) => response.ok ? response.json() as Promise<Operations> : null)
       .then((payload) => { if (payload) setOperations(payload); })
       .catch(() => undefined);
     return () => controller.abort();
-  }, [courseId, frozenAt]);
+  }, [courseId, frozenAt, accessToken]);
   const badges = operations?.badges || [];
   if (!badges.length) return null;
   const temporary = badges.includes("TEMPORAL");

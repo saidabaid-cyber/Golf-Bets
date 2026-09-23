@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useViewScrollReset } from "./use-view-scroll-reset";
 import { CatalogCoursePicker } from './catalog-course-picker';
-import { DevicePermissions } from './device-permissions';
+import { InitialOnboardingConsents } from './account-consent-checkpoint';
 import { saveOnboardingCheckpoint } from '../../lib/onboarding-checkpoint';
 import {
   GOLF_IMPROVEMENT_GOALS,
@@ -187,7 +187,7 @@ function activeBetCount(template: GroupGameTemplate) {
 }
 
 function Shell({ progress, eyebrow, title, description, children, actions, onBack, onSaveAndExit }: { progress: BetaOnboardingProgress; eyebrow: string; title: string; description?: string; children: React.ReactNode; actions: React.ReactNode; onBack?: () => void; onSaveAndExit?: () => void }) {
-  const visibleSteps: BetaOnboardingStep[] = progress.mode === 'quick' ? ['welcome', 'course', 'ghin', 'permissions'] : ["welcome", "course", "ghin", "equipment", "improvements", "objective", "plan", "group", "players", "handicaps", "bets", "ready", "permissions"];
+  const visibleSteps: BetaOnboardingStep[] = progress.mode === 'quick' ? ['welcome', 'course', 'ghin'] : ["welcome", "course", "ghin", "equipment", "improvements", "objective", "plan", "group", "players", "handicaps", "bets", "ready"];
   const displayStep = progress.step === "bet_details" ? "bets" : progress.step;
   const index = Math.max(0, visibleSteps.indexOf(displayStep));
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -206,10 +206,14 @@ function Shell({ progress, eyebrow, title, description, children, actions, onBac
   </section><ModalShell open={confirmExit} onClose={() => setConfirmExit(false)} label="Guardar configuración y salir"><h2>¿Guardar esta configuración y continuar después?</h2><p>Conservaremos el borrador en este dispositivo.</p><div className="dialogActions"><button type="button" className="secondary" onClick={() => setConfirmExit(false)}>Cancelar</button><button type="button" className="primary" onClick={() => { setConfirmExit(false); onSaveAndExit?.(); }}>Guardar y salir</button></div></ModalShell></main>;
 }
 
-export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, bettingConsentGranted, requestBettingConsent, onComplete, onGroupSaved }: {
+const acceptNoInitialConsent = async () => undefined;
+
+export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, legalConsentRequired = false, onAcceptInitialConsents = acceptNoInitialConsent, bettingConsentGranted, requestBettingConsent, onComplete, onGroupSaved }: {
   profile: BackyardProfile;
   accessToken: string | null;
   onUpdateProfile: (profile: BackyardProfileUpdate) => Promise<"local" | "cloud">;
+  legalConsentRequired?: boolean;
+  onAcceptInitialConsents?: (betting: boolean) => Promise<void>;
   bettingConsentGranted: boolean;
   requestBettingConsent: () => Promise<boolean>;
   onComplete: () => void;
@@ -229,6 +233,7 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, bett
   const initializedUser = useRef('');
   const checkpointQueue = useRef<Promise<void>>(Promise.resolve());
   const [finishing, setFinishing] = useState(false);
+  const [initialConsentsReady, setInitialConsentsReady] = useState(false);
   const finishingRef = useRef(false);
   const checkpoint = (value: BetaOnboardingProgress) => {
     const write = checkpointQueue.current.catch(() => {}).then(() => saveOnboardingCheckpoint(accessToken || '', value));
@@ -275,7 +280,6 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, bett
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
   const finish = (groupId?: string) => {
-    if (progress.step !== 'permissions') { advance('permissions', false, groupId); return; }
     if (finishingRef.current) return;
     finishingRef.current = true; setFinishing(true);
     const complete = completeBetaOnboarding(progress, { groupId });
@@ -355,15 +359,13 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, bett
     }} />
     <p>Este campo queda como tu club habitual. Podrás cambiarlo en Perfil.</p>{message && <p role="alert">{message}</p>}
   </Shell>;
-  if (progress.step === "permissions") return <Shell progress={progress} eyebrow="A TU MEDIDA" title="Permisos de este dispositivo" description="Tu configuración está lista. Tú decides qué permisos activar." actions={<button type="button" className="primary big" disabled={finishing} onClick={() => finish()}>{finishing ? 'Guardando…' : 'Continuar a The Backyard'}</button>}>
-    <DevicePermissions />{message && <p role="alert">{message}</p>}
-  </Shell>;
-  if (progress.step === "welcome") return <Shell progress={progress} {...navigationProps} eyebrow="EMPIEZA A TU MANERA" title="Tu Backyard, sin fricción" description="En ambas opciones elegirás tu campo e índice. Después puedes completar equipo, objetivos y grupos." actions={<button type="button" className="primary big" disabled={!entryMode} onClick={() => advance("course")}>CONTINUAR</button>}>
+  if (progress.step === "welcome") return <Shell progress={progress} {...navigationProps} eyebrow="EMPIEZA A TU MANERA" title="Tu Backyard, sin fricción" description="En ambas opciones elegirás tu campo e índice. Después puedes completar equipo, objetivos y grupos." actions={<button type="button" className="primary big" disabled={!entryMode || !initialConsentsReady} onClick={() => advance("course")}>CONTINUAR</button>}>
     <div className={styles.welcomeHero} aria-hidden="true"><span className={styles.heroFlag}>⛳</span><div><b>Tu golf, en un solo lugar</b><small>Rondas rápidas · amigos · equipo · estadísticas</small></div><span className={styles.heroBall}>●</span></div>
     <div className={styles.entryGrid}>
       <button type="button" className={entryMode === "quick" ? styles.entrySelected : styles.entryChoice} aria-pressed={entryMode === "quick"} onClick={() => setEntryMode("quick")}><span aria-hidden="true">⚡</span><div><b>Rápida</b><p>Elige tu Home Club y fuente de índice. Equipo, fitting y grupos quedan disponibles para después.</p></div></button>
       <button type="button" className={entryMode === "complete" ? styles.entrySelected : styles.entryChoice} aria-pressed={entryMode === "complete"} onClick={() => setEntryMode("complete")}><span aria-hidden="true">⛳</span><div><b>Completa</b><p>Configura HCP, bolsa, objetivos y tu primer grupo para recibir una experiencia más personalizada.</p></div></button>
     </div>
+    <InitialOnboardingConsents key={profile.userId} userId={profile.userId} accessToken={accessToken} legalRequired={legalConsentRequired} onAcceptLegal={onAcceptInitialConsents} onReadyChange={setInitialConsentsReady} />
   </Shell>;
 
   if (progress.step === "equipment") return <EquipmentOnboarding
@@ -377,7 +379,7 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, bett
     onSaveAndExit={onComplete}
   />;
 
-  if (progress.step === "ghin") return <Shell progress={progress} {...navigationProps} eyebrow="HANDICAP / ÍNDICE" title="Elige tu fuente de índice" description="Puedes activar Backyard Index sin rondas previas. GHIN estará disponible mediante una integración oficial." actions={<button className="primary big" onClick={async () => { try { await onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: profile.defaultHandicap, ghinLinkStatus: profile.ghinLinkStatus || "SKIPPED" }); advance(entryMode === 'quick' ? "permissions" : "equipment", true); } catch(error) { setMessage(error instanceof Error ? error.message : 'No pudimos guardar. Reintenta.'); } }}>Continuar</button>}>
+  if (progress.step === "ghin") return <Shell progress={progress} {...navigationProps} eyebrow="HANDICAP / ÍNDICE" title="Elige tu fuente de índice" description="Puedes activar Backyard Index sin rondas previas. GHIN estará disponible mediante una integración oficial." actions={<button className="primary big" disabled={finishing} onClick={async () => { try { await onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: profile.defaultHandicap, ghinLinkStatus: profile.ghinLinkStatus || "SKIPPED" }); if (entryMode === 'quick') finish(); else advance("equipment", true); } catch(error) { setMessage(error instanceof Error ? error.message : 'No pudimos guardar. Reintenta.'); } }}>{finishing ? 'Guardando…' : 'Continuar'}</button>}>
     <HandicapSourceSelector userId={profile.userId} authenticated={Boolean(profile.userId && profile.userId !== "guest")} />
     <p className={styles.trust}>Si todavía no tienes índice puedes continuar. No inventaremos un valor.</p>{message && <p role="alert">{message}</p>}
   </Shell>;

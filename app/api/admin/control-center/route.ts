@@ -232,7 +232,7 @@ export async function GET(request: NextRequest) {
   }
 
   if (view === "courses") {
-    const catalog = await getCourseCatalog();
+    const catalog = await getCourseCatalog(access.client);
     const courseId = text(request.nextUrl.searchParams.get("courseId"), 240);
     const clubs = new Map(catalog.clubs.map((club) => [club.id, club]));
     if (courseId) {
@@ -328,7 +328,7 @@ export async function GET(request: NextRequest) {
 
   if (view === "quality") {
     const [catalog, equipmentCatalogs, approvedImages] = await Promise.all([
-      getCourseCatalog(),
+      getCourseCatalog(access.client),
       loadLayeredEquipmentCatalogs(),
       access.client.from("equipment_catalog_images").select("equipment_type,equipment_id").eq("status", "APPROVED"),
     ]);
@@ -412,7 +412,7 @@ export async function POST(request: NextRequest) {
     if (entityType === "COMPETITION") {
       const issues = competitionPayloadIssues(payload, entityId);
       if (issues.length) return json({ error: issues.join(" "), code: "INVALID_COMPETITION_FACTS", issues }, 400);
-      const catalog = await getCourseCatalog();
+      const catalog = await getCourseCatalog(access.client);
       if (!catalog.courses.some((course) => course.id === payload.courseId && course.active)) return json({ error: "El Course de la competición no existe en el catálogo publicado.", code: "COURSE_NOT_FOUND" }, 404);
     }
     if (["CLUB_EQUIPMENT", "BALL", "SHAFT"].includes(entityType)) {
@@ -490,7 +490,7 @@ export async function POST(request: NextRequest) {
     const effectiveFrom = text(payload.effectiveFrom, 50); const effectiveUntil = text(payload.effectiveUntil, 50); const holesInput = Array.isArray(payload.holes) ? payload.holes : [];
     if (!courseId || !["COURSE", "COMPETITION"].includes(scopeType || "") || !sourceDescription || !effectiveFrom || Number.isNaN(Date.parse(effectiveFrom)) || (effectiveUntil && (Number.isNaN(Date.parse(effectiveUntil)) || Date.parse(effectiveUntil) <= Date.parse(effectiveFrom)))) return json({ error: "Campo, alcance, vigencia y fuente operativa son obligatorios.", code: "INVALID_CONFIGURATION" }, 400);
     if (scopeType === "COMPETITION" && !uuid(payload.competitionId)) return json({ error: "El override de competición requiere una Competition válida.", code: "INVALID_COMPETITION_ID" }, 400);
-    const catalog = await getCourseCatalog(); const catalogCourse = catalog.courses.find((course) => course.id === courseId && course.active);
+    const catalog = await getCourseCatalog(access.client); const catalogCourse = catalog.courses.find((course) => course.id === courseId && course.active);
     if (!catalogCourse) return json({ error: "El Course base no existe en el catálogo publicado.", code: "COURSE_NOT_FOUND" }, 404);
     const baseHoleIds = new Set(catalog.holes.filter((hole) => hole.courseId === courseId).map((hole) => hole.id)); const teeIds = new Set(catalog.tees.filter((tee) => tee.courseId === courseId && tee.active).map((tee) => tee.id));
     const playable = holesInput.filter((value) => record(value)?.playable !== false); const runtimes = new Set<number>(); const sequences = new Set<number>(); const clientKeys = new Set<string>();
@@ -550,7 +550,7 @@ export async function POST(request: NextRequest) {
     try { rows = format === "JSON" ? jsonObjects(source) : csvObjects(source); } catch { return json({ error: `No fue posible analizar el ${format || "archivo"}.`, code: "INVALID_IMPORT" }, 400); }
     let diff: Array<{ rowNumber: number; status: string; value: Record<string, unknown> | null; existingId: string | null; issues: string[] }> = [];
     if (kind === "COURSE") {
-      const catalog = await getCourseCatalog();
+      const catalog = await getCourseCatalog(access.client);
       const byId = new Map(catalog.courses.map((item) => [item.id, item]));
       const byName = new Map(catalog.courses.map((item) => [String(item.name).trim().toLocaleLowerCase("es-MX"), item]));
       diff = rows.map((row) => {

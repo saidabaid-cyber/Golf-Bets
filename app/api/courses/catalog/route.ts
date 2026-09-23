@@ -9,7 +9,7 @@ export async function GET(request:NextRequest) {
   try {
     const auth=await authenticatedRequest(request);
     if(!auth.ok) return NextResponse.json({error:auth.error},{status:auth.status,headers});
-    const catalog=await getCourseCatalog();
+    const catalog=await getCourseCatalog(auth.client);
     const clubs=new Map(catalog.clubs.map(club=>[club.id,club]));
     const data=catalog.courses.flatMap(course=>{const club=clubs.get(course.clubId);if(!course.active||!club?.active)return[];const courseTees=catalog.tees.filter(tee=>tee.active&&tee.courseId===course.id);return[{id:course.id,clubId:club.id,name:course.name,clubName:club.name,holes:course.holes,city:club.city,stateRegion:club.stateRegion,aliases:[...(club.aliases||[]),...(course.aliases||[])],latitude:course.latitude??club.latitude,longitude:course.longitude??club.longitude,locationEvidence:club.latitude!==undefined&&club.longitude!==undefined&&club.sourceUrl&&club.verifiedAt?{sourceUrl:club.sourceUrl,verifiedAt:club.verifiedAt}:undefined,sourceUrl:course.sourceUrl||club.sourceUrl||'',observedAt:course.verifiedAt||club.verifiedAt||'',dataVersion:`${course.provider.toLowerCase()}-v${course.catalogVersion||1}`,teeCount:courseTees.length,completeCards:courseTees.filter(tee=>catalog.teeHoleYardages.filter(row=>row.teeId===tee.id&&typeof row.yards==='number').length===course.holes).length}];});
     const id=request.nextUrl.searchParams.get('courseId');

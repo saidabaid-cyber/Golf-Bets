@@ -6,17 +6,18 @@ import { AnchoredSearch, AnchoredSearchOption } from "./anchored-search";
 type ClubResult = { id: string; name: string; city?: string; stateRegion?: string; country?: string };
 type ClubPage = { clubs?: ClubResult[]; hasMore?: boolean; nextCursor?: string | null };
 
-async function loadClubPage(query: string, cursor?: string | null, signal?: AbortSignal): Promise<ClubPage> {
+async function loadClubPage(query: string, accessToken?: string | null, cursor?: string | null, signal?: AbortSignal): Promise<ClubPage> {
   const params = new URLSearchParams({ q: query, limit: "8" });
   if (cursor) params.set("cursor", cursor);
-  const response = await fetch(`/api/courses/search?scope=clubs&${params}`, { signal });
+  const response = await fetch(`/api/courses/search?scope=clubs&${params}`, { signal, cache: "no-store", headers: accessToken ? { authorization: `Bearer ${accessToken}` } : undefined });
   if (!response.ok) throw new Error("club-search-failed");
   return response.json() as Promise<ClubPage>;
 }
 
-export function ProfileClubPicker({ value, clubId, onChange }: {
+export function ProfileClubPicker({ value, clubId, accessToken, onChange }: {
   value: string;
   clubId: string;
+  accessToken?: string | null;
   onChange: (selection: { name: string; id: string }) => void;
 }) {
   const [results, setResults] = useState<ClubResult[]>([]);
@@ -30,7 +31,7 @@ export function ProfileClubPicker({ value, clubId, onChange }: {
     const timer = window.setTimeout(async () => {
       setStatus("loading");
       try {
-        const payload = await loadClubPage(query, null, controller.signal);
+        const payload = await loadClubPage(query, accessToken, null, controller.signal);
         setResults(Array.isArray(payload.clubs) ? payload.clubs : []);
         setHasMore(payload.hasMore === true);
         setNextCursor(typeof payload.nextCursor === "string" ? payload.nextCursor : null);
@@ -40,7 +41,7 @@ export function ProfileClubPicker({ value, clubId, onChange }: {
       }
     }, 250);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [clubId, value]);
+  }, [clubId, value, accessToken]);
   const showResults = results.length > 0 && !clubId;
   return <div className="profileClubPicker">
     <AnchoredSearch
@@ -55,7 +56,7 @@ export function ProfileClubPicker({ value, clubId, onChange }: {
       {hasMore && nextCursor && <button type="button" role="option" aria-selected="false" className="textButton" disabled={status === "loading"} onClick={async () => {
         setStatus("loading");
         try {
-          const payload = await loadClubPage(value.trim(), nextCursor);
+          const payload = await loadClubPage(value.trim(), accessToken, nextCursor);
           setResults((current) => [...new Map([...current, ...(payload.clubs || [])].map((club) => [club.id, club])).values()]);
           setHasMore(payload.hasMore === true);
           setNextCursor(typeof payload.nextCursor === "string" ? payload.nextCursor : null);

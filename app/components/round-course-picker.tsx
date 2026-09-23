@@ -21,17 +21,21 @@ type CoursePage = {
   nextCursor?: string | null;
 };
 
-async function loadCoursePage(query: string, cursor?: string | null, signal?: AbortSignal): Promise<CoursePage> {
+function authorization(accessToken?: string | null) {
+  return accessToken ? { authorization: `Bearer ${accessToken}` } : undefined;
+}
+
+async function loadCoursePage(query: string, accessToken?: string | null, cursor?: string | null, signal?: AbortSignal): Promise<CoursePage> {
   const params = new URLSearchParams({ q: query, limit: "12" });
   if (cursor) params.set("cursor", cursor);
-  const response = await fetch(`/api/courses/search?${params}`, { signal });
+  const response = await fetch(`/api/courses/search?${params}`, { signal, cache: "no-store", headers: authorization(accessToken) });
   if (!response.ok) throw new Error("course-search-failed");
   return response.json() as Promise<CoursePage>;
 }
 
-async function loadNearbyCoursePage(latitude: number, longitude: number, signal?: AbortSignal): Promise<CoursePage> {
+async function loadNearbyCoursePage(latitude: number, longitude: number, accessToken?: string | null, signal?: AbortSignal): Promise<CoursePage> {
   const params = new URLSearchParams({ nearby: "1", lat: String(latitude), lng: String(longitude), limit: "12" });
-  const response = await fetch(`/api/courses/search?${params}`, { signal, cache: "no-store" });
+  const response = await fetch(`/api/courses/search?${params}`, { signal, cache: "no-store", headers: authorization(accessToken) });
   if (!response.ok) throw new Error("nearby-course-search-failed");
   return response.json() as Promise<CoursePage>;
 }
@@ -51,6 +55,7 @@ export function RoundCoursePicker({
   pendingName,
   invalid,
   describedBy,
+  accessToken,
   onSelect,
 }: {
   selectedName: string;
@@ -58,6 +63,7 @@ export function RoundCoursePicker({
   pendingName?: string;
   invalid: boolean;
   describedBy?: string;
+  accessToken?: string | null;
   onSelect: (course: CourseResult) => void;
 }) {
   const [query, setQuery] = useState(selectedName);
@@ -93,7 +99,7 @@ export function RoundCoursePicker({
     const timer = window.setTimeout(async () => {
       setStatus("loading");
       try {
-        const page = await loadCoursePage(normalized, null, controller.signal);
+        const page = await loadCoursePage(normalized, accessToken, null, controller.signal);
         if (controller.signal.aborted) return;
         setResults(mergeCourseResults([], page.courses ?? []));
         setHasMore(page.hasMore === true);
@@ -110,7 +116,7 @@ export function RoundCoursePicker({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [query, selectedCourseId, resultMode]);
+  }, [query, selectedCourseId, resultMode, accessToken]);
 
   const visibleResults = useMemo(() => mergeCourseResults([], results), [results]);
   const expanded = !selectedCourseId && (visibleResults.length > 0 || status === "loading" || status === "error");
@@ -133,7 +139,7 @@ export function RoundCoursePicker({
     setNearbyStatus("locating");
     navigator.geolocation.getCurrentPosition((position) => {
       if (requestId !== nearbyRequestRef.current) return;
-      void loadNearbyCoursePage(position.coords.latitude, position.coords.longitude).then((page) => {
+      void loadNearbyCoursePage(position.coords.latitude, position.coords.longitude, accessToken).then((page) => {
         if (requestId !== nearbyRequestRef.current) return;
         const next = mergeCourseResults([], page.courses ?? []);
         setResults(next);
@@ -192,7 +198,7 @@ export function RoundCoursePicker({
       {hasMore && nextCursor && <button type="button" role="option" aria-selected="false" className="textButton" disabled={status === "loading"} onClick={async () => {
         setStatus("loading");
         try {
-          const page = await loadCoursePage(query.trim(), nextCursor);
+          const page = await loadCoursePage(query.trim(), accessToken, nextCursor);
           setResults((current) => mergeCourseResults(current, page.courses ?? []));
           setHasMore(page.hasMore === true);
           setNextCursor(typeof page.nextCursor === "string" ? page.nextCursor : null);

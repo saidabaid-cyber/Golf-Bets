@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import { readRemoteAiConsentDecisions, saveRemoteAiConsentDecisions, type RemoteAiConsentDecisions } from "../../lib/backyard-ai/consent-client";
 import { AI_IMAGE_PROCESSING_CONSENT, AI_PROVIDER_PROCESSING_CONSENT, AI_LAUNCH_MONITOR_PROCESSING_CONSENT, type BackyardAiProcessingConsentScope } from "../../lib/backyard-ai/privacy";
-import { BrandLockup } from "./brand-lockup";
 import styles from "./account-consent-checkpoint.module.css";
 
 const PURPOSES = [
@@ -13,17 +12,15 @@ const PURPOSES = [
   { scope: AI_LAUNCH_MONITOR_PROCESSING_CONSENT, label: "Autorizo el procesamiento de las fotografías de pantallas de launch monitor que yo decida enviar para leer mis datos de práctica." },
 ] as const;
 
-/** Server-backed AI choices. Technical failure may defer this UI, never grant AI.
- * Mount keyed by account; deferral is not persisted and is not consent. */
-export function AccountConsentCheckpoint({ userId, accessToken, legalRequired, onAcceptLegal, onBack, children }: {
+/** Initial-account consent uses the existing server-backed consent APIs but
+ * lives inside the first onboarding step. It is not a second entry gate. */
+export function InitialOnboardingConsents({ userId, accessToken, legalRequired, onAcceptLegal, onReadyChange }: {
   userId: string;
   accessToken: string | null;
   legalRequired: boolean;
   onAcceptLegal: (betting: boolean) => Promise<void>;
-  onBack: () => Promise<void>;
-  children: ReactNode;
+  onReadyChange: (ready: boolean) => void;
 }) {
-  const [source] = useState<"onboarding" | "account_update">(() => legalRequired ? "onboarding" : "account_update");
   const [remote, setRemote] = useState<RemoteAiConsentDecisions | null>(null);
   const [choices, setChoices] = useState<Partial<Record<BackyardAiProcessingConsentScope, boolean>>>({});
   const [terms, setTerms] = useState(false);
@@ -33,44 +30,52 @@ export function AccountConsentCheckpoint({ userId, accessToken, legalRequired, o
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [aiUnavailable, setAiUnavailable] = useState(false);
-  const [deferred, setDeferred] = useState(false);
+  const [ready, setReady] = useState(false);
   const [retry, setRetry] = useState(0);
   const submitting = useRef(false);
-  const decisionRevision = useRef(0);
   const lifetime = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
     lifetime.current = controller;
+    onReadyChange(false);
     return () => controller.abort();
-  }, []);
+  }, [userId, onReadyChange]);
 
   useEffect(() => {
     const controller = new AbortController();
-    const revision = decisionRevision.current;
-    if (deferred) return () => controller.abort();
     if (!accessToken) {
       setAiUnavailable(true);
-      setError("Tus preferencias de IA no pudieron cargarse. Puedes revisarlas después en Configuración. Las funciones de IA siguen desactivadas hasta verificar tu autorización.");
+      setError("Tus preferencias de IA no pudieron cargarse. Puedes revisarlas después en Configuración; ninguna función de IA queda autorizada.");
       return () => controller.abort();
     }
     void readRemoteAiConsentDecisions(accessToken, controller.signal).then((saved) => {
-      if (controller.signal.aborted || revision !== decisionRevision.current) return;
+      if (controller.signal.aborted) return;
       setRemote(saved);
       setAiUnavailable(false);
       setError("");
+      if (saved.resolved && !legalRequired) {
+        setReady(true);
+        onReadyChange(true);
+      }
     }).catch(() => {
-      if (!controller.signal.aborted && revision === decisionRevision.current) {
+      if (!controller.signal.aborted) {
         setAiUnavailable(true);
-        setError("Tus preferencias de IA no pudieron cargarse. Puedes revisarlas después en Configuración. Las funciones de IA siguen desactivadas hasta verificar tu autorización.");
+        setError("Tus preferencias de IA no pudieron cargarse. Puedes continuar y revisarlas después en Configuración; ninguna función de IA queda autorizada.");
       }
     });
     return () => controller.abort();
-  }, [accessToken, retry, deferred]);
+  }, [accessToken, legalRequired, onReadyChange, retry]);
 
   const missing = remote?.decisions.filter((decision) => decision.status === "missing") || [];
-  const canSubmit = Boolean(remote && accessToken && (!legalRequired || (terms && rules && adult)));
-  const checkpointState = aiUnavailable ? "ERROR_RECOVERABLE" : remote?.resolved ? "COMPLETE" : remote ? "MISSING_CONSENTS" : "LOADING";
+  const requiredAccepted = !legalRequired || (terms && rules && adult);
+  const canSubmit = Boolean(remote && accessToken && requiredAccepted);
+
+  function markReady() {
+    if (lifetime.current?.signal.aborted) return;
+    setReady(true);
+    onReadyChange(true);
+  }
 
   function selectAllAvailable() {
     if (legalRequired) {
@@ -79,51 +84,47 @@ export function AccountConsentCheckpoint({ userId, accessToken, legalRequired, o
       setAdult(true);
       setBetting(true);
     }
-    setChoices((current) => ({
-      ...current,
-      ...Object.fromEntries(missing.map(({ scope }) => [scope, true])),
-    }));
+    setChoices((current) => ({ ...current, ...Object.fromEntries(missing.map(({ scope }) => [scope, true])) }));
   }
 
   async function continueWithoutAi() {
-    if (submitting.current || (legalRequired && (!terms || !rules || !adult))) return;
-    // Do not write declined/accepted records, local flags or synthetic consent.
-    // Every AI feature still performs its own authoritative permission check.
-    decisionRevision.current += 1;
-    if (legalRequired) {
-      submitting.current = true; setBusy(true);
-      try { await onAcceptLegal(betting); }
-      catch { if (!lifetime.current?.signal.aborted) setError("No pudimos guardar la aceptación de los términos. Reintenta; tus autorizaciones de IA no se han cambiado."); return; }
-      finally { submitting.current = false; if (!lifetime.current?.signal.aborted) setBusy(false); }
+    if (submitting.current || !requiredAccepted) return;
+    submitting.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      if (legalRequired) await onAcceptLegal(betting);
+      markReady();
+    } catch {
+      if (!lifetime.current?.signal.aborted) setError("No pudimos guardar la aceptación de los términos. Reintenta; tus autorizaciones de IA no se han cambiado.");
+    } finally {
+      submitting.current = false;
+      if (!lifetime.current?.signal.aborted) setBusy(false);
     }
-    if (!lifetime.current?.signal.aborted) setDeferred(true);
   }
 
   async function submit() {
     if (!canSubmit || submitting.current || !accessToken) return;
     submitting.current = true;
-    decisionRevision.current += 1;
     setBusy(true);
     setError("");
     let aiSaved = false;
     try {
       const saved = missing.length
-        ? await saveRemoteAiConsentDecisions(accessToken, userId, missing.map(({ scope }) => ({ scope, accepted: choices[scope] === true })), source, lifetime.current?.signal)
+        ? await saveRemoteAiConsentDecisions(accessToken, userId, missing.map(({ scope }) => ({ scope, accepted: choices[scope] === true })), "onboarding", lifetime.current?.signal)
         : remote;
       if (lifetime.current?.signal.aborted) return;
       if (!saved?.resolved) throw new Error("Unresolved consent decisions");
       aiSaved = true;
       setRemote(saved);
-      setAiUnavailable(false);
       if (legalRequired) await onAcceptLegal(betting);
-      if (lifetime.current?.signal.aborted) return;
-      setRemote(saved);
+      markReady();
     } catch {
       if (!lifetime.current?.signal.aborted) {
         if (!aiSaved) setAiUnavailable(true);
         setError(aiSaved
           ? "No pudimos guardar la aceptación de los términos. Reintenta; tus preferencias de IA ya están guardadas."
-          : "No pudimos guardar tus preferencias de IA. Puedes continuar y revisarlas después en Configuración. No se autorizó ningún envío a IA.");
+          : "No pudimos guardar tus preferencias de IA. Puedes continuar sin IA y revisarlas después en Configuración.");
       }
     } finally {
       submitting.current = false;
@@ -131,14 +132,11 @@ export function AccountConsentCheckpoint({ userId, accessToken, legalRequired, o
     }
   }
 
-  if ((deferred || (remote?.resolved && !aiUnavailable)) && !legalRequired) return children;
+  if (ready) return <section className={styles.saved} role="status"><b>Autorizaciones guardadas</b><span>Puedes continuar con tu configuración.</span></section>;
 
-  return <main className={styles.screen} data-checkpoint-state={checkpointState} data-consent-status={aiUnavailable ? "CONSENT_STATUS_UNKNOWN" : undefined}><section className={styles.card} aria-labelledby="account-consent-title" aria-busy={busy}>
-    <BrandLockup compact />
-    <h1 id="account-consent-title">{source === "onboarding" ? "ANTES DE EMPEZAR" : "ACTUALIZAMOS TUS PREFERENCIAS"}</h1>
-    <p>{source === "onboarding" ? "Revisa estas autorizaciones para terminar de crear tu cuenta." : "Elige las autorizaciones que faltan en tu cuenta. No asumimos tu consentimiento."}</p>
+  return <section className={styles.embedded} aria-labelledby="initial-consent-title" aria-busy={busy}>
+    <div><h2 id="initial-consent-title">Autorizaciones iniciales</h2><p>Revisa lo necesario para tu cuenta y decide qué funciones opcionales deseas habilitar.</p></div>
     {!remote && !error && <p role="status">Consultando tus preferencias…</p>}
-    {!accessToken && <p role="alert">Necesitas conexión y una sesión vigente para guardar tus preferencias.</p>}
     {(remote || legalRequired) && <fieldset className={styles.checks} disabled={busy}>
       <legend className={styles.legend}>Tus autorizaciones</legend>
       <button type="button" className={styles.selectAll} onClick={selectAllAvailable}>Seleccionar todo</button>
@@ -153,12 +151,10 @@ export function AccountConsentCheckpoint({ userId, accessToken, legalRequired, o
         <span>{label}<small>Opcional. Sin autorización, esta función de IA permanece desactivada.</small></span>
       </label>)}
     </fieldset>}
-    <p className={styles.hint}>Puedes cambiar tus autorizaciones en Perfil → Cuenta y privacidad → Privacidad / IA.</p>
-    <details className={styles.legal}><summary>Sobre estas autorizaciones</summary><p>LEGAL_REVIEW_REQUIRED: texto jurídico definitivo y clasificación de autorizaciones obligatorias u opcionales pendientes de revisión. Por ahora, las autorizaciones de IA son opcionales y no están premarcadas.</p></details>
+    <p className={styles.hint}>Después puedes cambiar estas decisiones en Perfil → Configuración → Privacidad y permisos.</p>
     {error && <p className={styles.error} role="alert">{error}</p>}
-    {aiUnavailable && <button type="button" className="primary big" disabled={busy || (legalRequired && (!terms || !rules || !adult))} onClick={() => void continueWithoutAi()}>CONTINUAR A THE BACKYARD</button>}
-    {(!remote || aiUnavailable) && <button type="button" className="secondary" disabled={busy || !accessToken} onClick={() => { setError(""); setAiUnavailable(false); setRetry((value) => value + 1); }}>Reintentar consulta</button>}
-    {remote && <button type="button" className="primary big" disabled={!canSubmit || busy} onClick={() => void submit()}>{busy ? "Guardando…" : source === "onboarding" ? "CREAR CUENTA Y CONTINUAR" : "GUARDAR Y CONTINUAR"}</button>}
-    <button type="button" className="textButton" disabled={busy} onClick={() => void onBack()}>Volver al acceso</button>
-  </section></main>;
+    {aiUnavailable && <button type="button" className="secondary" disabled={busy || !requiredAccepted} onClick={() => void continueWithoutAi()}>{busy ? "Guardando…" : "Continuar sin IA"}</button>}
+    {(!remote || aiUnavailable) && <button type="button" className="textButton" disabled={busy || !accessToken} onClick={() => { setError(""); setAiUnavailable(false); setRetry((value) => value + 1); }}>Reintentar consulta</button>}
+    {remote && !aiUnavailable && <button type="button" className="secondary" disabled={!canSubmit || busy} onClick={() => void submit()}>{busy ? "Guardando…" : "Guardar autorizaciones"}</button>}
+  </section>;
 }

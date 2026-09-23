@@ -23,6 +23,7 @@ function routeHarness() {
       } };
       if (name.endsWith("course-catalog-provider")) return {};
       if (name.endsWith("feature-flags/server")) return { serverPhase2FeatureFlags: () => ({ course_search: true }) };
+      if (name.endsWith("server-auth")) return { bearerToken: () => "", authenticatedRequest: async () => ({ ok: false, status: 401, code: "AUTH_REQUIRED", error: "auth" }) };
       throw new Error(`Unexpected route dependency: ${name}`);
     },
   });

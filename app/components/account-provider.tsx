@@ -70,7 +70,6 @@ import { createEmptyEquipmentProfile, loadEquipmentProfile, saveEquipmentProfile
 import { ballFitDefaultsFromProfile } from "../../lib/ball-fitting";
 import { EquipmentOnboarding } from "./equipment-onboarding";
 import { BetaOnboardingFlow } from "./beta-onboarding-flow";
-import { AccountConsentCheckpoint } from "./account-consent-checkpoint";
 import { betaOnboardingIsActive, createBetaOnboardingProgress, persistBetaOnboardingProgress, readBetaOnboardingProgress } from "../../lib/beta-onboarding";
 import { missingInitialProfileFields, oauthIdentityFromMetadata } from "../../lib/oauth-profile";
 import { NO_ADMIN_ACCESS, readAdminAccess, type AdminAccess } from "../../lib/admin-access";
@@ -956,13 +955,6 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   }, [identity?.userId, closeBettingConsent]);
 
   useEffect(() => {
-    if (!identity || !currentConsent || !bettingConsentResolved || bettingConsentGranted || showMigration) return;
-    if (identity.mode === "authenticated" && (!profileChecked || profileSetupRequired || equipmentOnboardingRequired || betaOnboardingRequired)) return;
-    if (localStorage.getItem(bettingConsentPromptStorageKey(identity.userId)) === "seen") return;
-    setBettingConsentOpen(true);
-  }, [identity, currentConsent, bettingConsentResolved, bettingConsentGranted, showMigration, profileChecked, profileSetupRequired, equipmentOnboardingRequired, betaOnboardingRequired]);
-
-  useEffect(() => {
     if (identity?.mode !== "authenticated" || !identity.accessToken || !currentConsent) return;
     const saved = acceptances.filter((item) => item.userId === identity.userId);
     const pending = prepareLegalSyncBatch(localStorage, identity.userId, saved);
@@ -1604,7 +1596,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   if (identity.mode === "authenticated" && !profileChecked) return <main className="accessScreen"><div className="accessLoading">Preparando tu perfil…</div></main>;
   if (identity.mode === "authenticated" && profileSetupRequired) return <>{accountCloudError && <div role="alert" className="notice bad">{accountCloudError}</div>}<ProfileSetupScreen identity={identity} onSave={saveInitialProfile} onBack={logout} /></>;
   if (identity.mode === "authenticated" && betaOnboardingRequired) return <AccountContext.Provider value={context!}>
-    <BetaOnboardingFlow profile={identity} accessToken={identity.accessToken} onUpdateProfile={updateProfile} bettingConsentGranted={bettingConsentGranted} requestBettingConsent={requestBettingConsent} onComplete={finishBetaOnboarding} />
+    <BetaOnboardingFlow profile={identity} accessToken={identity.accessToken} onUpdateProfile={updateProfile} legalConsentRequired={!currentConsent} onAcceptInitialConsents={(betting) => acceptConsent(betting, true)} bettingConsentGranted={bettingConsentGranted} requestBettingConsent={requestBettingConsent} onComplete={finishBetaOnboarding} />
     {bettingConsentDialog}
   </AccountContext.Provider>;
   if (identity.mode === "authenticated" && equipmentOnboardingRequired) return <EquipmentOnboarding userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={null} defaultHandedness={identity.handedness} ballFitDefaults={ballFitDefaultsFromProfile(identity)} onComplete={finishEquipmentOnboarding} onBack={finishEquipmentOnboarding} onSaveAndExit={finishEquipmentOnboarding} />;
@@ -1616,16 +1608,5 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     {migrationDialog}
     {bettingConsentDialog}
   </AccountContext.Provider>;
-  // Account creation ends here, after profile/personalization and before entry.
-  // Established accounts with current legal consent do not repeat onboarding;
-  // optional AI consent remains fail-closed and is requested at feature use.
-  const requiresAccountConsent = identity.mode === "authenticated" && (!accountEntry?.existingAccount || !currentConsent);
-  return requiresAccountConsent ? <AccountConsentCheckpoint
-    key={identity.userId}
-    userId={identity.userId}
-    accessToken={identity.accessToken}
-    legalRequired={!currentConsent}
-    onAcceptLegal={(betting) => acceptConsent(betting, true)}
-    onBack={logout}
-  >{app}</AccountConsentCheckpoint> : app;
+  return app;
 }

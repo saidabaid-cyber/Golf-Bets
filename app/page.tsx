@@ -2254,7 +2254,7 @@ function GolfBetsApp() {
     const nextCourse = manualCourseState?.course ?? draft.course;
     if (nextCourse) {
       const baseCourse = withDefaultLaVistaRules(nextCourse);
-      const normalizedCourse = startInstant ? await loadCourseOperations(baseCourse, startInstant).catch(() => baseCourse) : baseCourse;
+      const normalizedCourse = startInstant ? await loadCourseOperations(baseCourse, startInstant, null, identity.accessToken).catch(() => baseCourse) : baseCourse;
       setCourse(normalizedCourse);
       setPlayerTeeAssignments(reconcilePlayerTeeAssignments(draft.playerTeeAssignments, draft.players, normalizedCourse, new Date().toISOString()));
     } else {
@@ -3620,7 +3620,7 @@ function GolfBetsApp() {
       onOpenResults={() => setTab("results")}
     />}
 
-    {tab === "totalScore" && (() => { const principal = accountPrimaryRoundPlayer(identity, accountIndex); return principal ? <TotalScoreEntry key={identity.userId} courses={courseOptions} initialCourse={playCourseChoice} player={principal} onSave={saveTotalHistory} onBack={() => setTab("play")} /> : <section className="card"><p>Inicia sesión para guardar tu tarjeta.</p><button type="button" onClick={() => setTab("play")}>Volver a Jugar</button></section>; })()}
+    {tab === "totalScore" && (() => { const principal = accountPrimaryRoundPlayer(identity, accountIndex); return principal ? <TotalScoreEntry key={identity.userId} courses={courseOptions} initialCourse={playCourseChoice} player={principal} accessToken={identity.accessToken} onSave={saveTotalHistory} onBack={() => setTab("play")} /> : <section className="card"><p>Inicia sesión para guardar tu tarjeta.</p><button type="button" onClick={() => setTab("play")}>Volver a Jugar</button></section>; })()}
 
     {tab === "aiSetup" && <AiRoundSetup
       initialDraft={createRoundSetupDraft({
@@ -3709,7 +3709,7 @@ function GolfBetsApp() {
         setShowBetSetupErrors(false);
         const startedAt = ensureRoundStarted();
         if (!roundStartedAt && startedAt && !course.operationsSnapshot) {
-          const resolvedCourse = await loadCourseOperations(course, startedAt).catch(() => course);
+          const resolvedCourse = await loadCourseOperations(course, startedAt, null, identity.accessToken).catch(() => course);
           setCourse(resolvedCourse);
         }
         setBets(current => freezeRoundHandicapBases(current, players, roundHandicapBasis));
@@ -3741,7 +3741,7 @@ function GolfBetsApp() {
         {!courseSelected && pendingCourseIdentity && <div className="notice" id="round-course-ai-focus" role="status"><b>Campo reconocido: {pendingCourseIdentity.name}</b><br />{pendingCourseCandidates.length ? "Selecciona el campo para continuar." : "No encontré ese campo exacto en el catálogo actual. Selecciona otro o crea uno manual."}</div>}
         <div className="grid2">
           <div><label htmlFor="wizard-round-date">Fecha de la ronda</label><input id="wizard-round-date" aria-label="Fecha de la ronda" type="date" value={roundDate} onChange={(e) => setRoundDate(e.target.value)} /></div>
-          <details><summary>Mis campos guardados</summary><RoundCoursePicker selectedName={courseSelected ? course.name : ""} selectedId={courseSelected ? (course.catalogCourseId ?? course.id) : ""} pendingName={pendingCourseIdentity?.name} invalid={courseSelectionError} describedBy={[!courseSelected && pendingCourseIdentity ? "round-course-ai-focus" : "", courseSelectionError ? "round-course-error" : ""].filter(Boolean).join(" ") || undefined} onSelect={(selection) => {
+          <details><summary>Mis campos guardados</summary><RoundCoursePicker selectedName={courseSelected ? course.name : ""} selectedId={courseSelected ? (course.catalogCourseId ?? course.id) : ""} accessToken={identity.accessToken} pendingName={pendingCourseIdentity?.name} invalid={courseSelectionError} describedBy={[!courseSelected && pendingCourseIdentity ? "round-course-ai-focus" : "", courseSelectionError ? "round-course-error" : ""].filter(Boolean).join(" ") || undefined} onSelect={(selection) => {
             const matchingCourse = courseNameOptions.find((candidate) => candidate.catalogCourseId === selection.courseId)
               ?? courseNameOptions.find((candidate) => candidate.id === selection.id)
               ?? courseNameOptions.find((candidate) => candidate.name === selection.name);
@@ -3753,7 +3753,7 @@ function GolfBetsApp() {
           <div><label>Inicio de ronda</label><select value={startHole} onChange={(e) => { const next = Number(e.target.value) as 1 | 10; confirmRoundChange("Cambiar la salida cambia el orden Nassau y los segmentos de Foursome.", () => { setStartHole(next); setCurrentIndex(0); }); }}><option value={1}>Hoyo 1</option><option value={10}>Hoyo 10</option></select></div>
           <div><label>Hoyos a jugar</label><select value={roundHoles} onChange={(e) => { const next = Number(e.target.value) as 9 | 18; confirmRoundChange("Cambiar la duración excluye del cálculo los hoyos fuera de la nueva vuelta, sin borrar sus scores.", () => { setRoundHoles(next); setSupplementalBets((current) => supplementalBetsForRoundHoles(current, next)); setCurrentIndex(0); }); }}><option value={18}>18 hoyos</option><option value={9}>9 hoyos</option></select></div>
         </div>
-        {courseSelected && <><div className="courseMeta"><span>{course.holes.length} hoyos configurados</span><span>{teeOptions.length} tee{teeOptions.length === 1 ? "" : "s"} disponible{teeOptions.length === 1 ? "" : "s"}</span>{course.updatedAt && <span>Última actualización: {course.updatedAt}</span>}<button onClick={() => { setCourseEditorSelectOnSave(true); setCourseDraft(withDefaultLaVistaRules(course)); setTab("courses"); }}>{course.name === "La Vista Temporal" ? "Editar campo temporal" : "Editar campo"}</button>{isLaVistaCourse(course.name) && <button onClick={() => { setRulesCourseContext(course.name); setTab("rules"); }}>Ver Reglas Locales</button>}</div><CourseOperationsNotice courseId={course.catalogCourseId ?? course.id} frozenAt={roundStartedAt} /></>}
+        {courseSelected && <><div className="courseMeta"><span>{course.holes.length} hoyos configurados</span><span>{teeOptions.length} tee{teeOptions.length === 1 ? "" : "s"} disponible{teeOptions.length === 1 ? "" : "s"}</span>{course.updatedAt && <span>Última actualización: {course.updatedAt}</span>}<button onClick={() => { setCourseEditorSelectOnSave(true); setCourseDraft(withDefaultLaVistaRules(course)); setTab("courses"); }}>{course.name === "La Vista Temporal" ? "Editar campo temporal" : "Editar campo"}</button>{isLaVistaCourse(course.name) && <button onClick={() => { setRulesCourseContext(course.name); setTab("rules"); }}>Ver Reglas Locales</button>}</div><CourseOperationsNotice courseId={course.catalogCourseId ?? course.id} frozenAt={roundStartedAt} accessToken={identity.accessToken} /></>}
       </section>
       </RoundSetupStep>
 

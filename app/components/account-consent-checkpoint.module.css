@@ -1,8 +1,9 @@
-.screen { min-height: 100dvh; padding: max(20px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); background: #f1f5f1; color: #143d2d; }
-.card { display: grid; gap: 16px; width: min(100%, 480px); min-width: 0; margin: 0 auto; padding: 22px 18px; border-radius: 24px; background: #fff; box-sizing: border-box; }
-.card h1 { margin: 0; font-size: clamp(23px, 6vw, 29px); line-height: 1.1; overflow-wrap: anywhere; }
-.card p { margin: 0; line-height: 1.45; }
-.card button { white-space: normal; min-height: 44px; }
+.embedded { display: grid; gap: 14px; min-width: 0; margin-top: 18px; padding: 18px 16px; border: 1px solid #cfdbd2; border-radius: 18px; background: #f8fbf8; box-sizing: border-box; }
+.embedded h2, .embedded p { margin: 0; }
+.embedded h2 { font-size: 18px; line-height: 1.2; }
+.embedded p { line-height: 1.45; }
+.embedded button { white-space: normal; min-height: 44px; }
+.saved { display: flex; flex-wrap: wrap; gap: 6px 10px; margin-top: 18px; padding: 13px 15px; border: 1px solid #bad1c1; border-radius: 16px; background: #edf7f0; color: #143d2d; }
 .checks { display: grid; gap: 14px; min-width: 0; margin: 0; padding: 0; border: 0; }
 .legend { margin-bottom: 10px; font-weight: 700; }
 .selectAll { justify-self: start; min-height: 38px !important; margin: -4px 0 2px; padding: 7px 12px; border: 1px solid #b8c8bd; border-radius: 999px; background: #f4f8f4; color: #143d2d; font: inherit; font-weight: 700; }

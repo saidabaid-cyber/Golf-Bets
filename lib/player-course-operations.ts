@@ -67,11 +67,11 @@ export function courseWithResolvedOperations(course: Course, response: PlayerCou
   };
 }
 
-export async function loadCourseOperations(course: Course, at: string, competitionId: string | null = null, fetcher: typeof fetch = fetch) {
+export async function loadCourseOperations(course: Course, at: string, competitionId: string | null = null, accessToken: string | null = null, fetcher: typeof fetch = fetch) {
   const courseId = course.catalogCourseId ?? course.id;
   const parameters = new URLSearchParams({ at });
   if (competitionId) parameters.set("competitionId", competitionId);
-  const response = await fetcher(`/api/courses/${encodeURIComponent(courseId)}/operations?${parameters}`, { cache: "no-store" });
+  const response = await fetcher(`/api/courses/${encodeURIComponent(courseId)}/operations?${parameters}`, { cache: "no-store", headers: accessToken ? { authorization: `Bearer ${accessToken}` } : undefined });
   if (!response.ok) return course;
   const payload: unknown = await response.json();
   const row = record(payload);

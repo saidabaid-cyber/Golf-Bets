@@ -1,4 +1,5 @@
 import "server-only";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { publicationIsEffective } from "./admin-control-center";
 import { createCourseCatalogProvider, internalCourseCatalogProvider } from "./course-catalog-provider";
@@ -150,12 +151,11 @@ function mergeCatalog(base: GolfCourseCatalog, overlays: readonly GolfCourseCata
   return { schemaVersion: 1, clubs: [...clubs.values()], courses: [...courses.values()], tees: [...tees.values()], holes: [...holes.values()], teeHoleYardages: [...yardages.values()], geoFeatures: base.geoFeatures };
 }
 
-export async function getCourseCatalog() {
-  const database = getSupabaseAdmin("cloud");
+export async function getCourseCatalog(database: SupabaseClient | null = getSupabaseAdmin("cloud")) {
   let base = INTERNAL_GOLF_COURSE_CATALOG;
   if (database && reviewCatalogQaEnabled()) {
     try {
-      const reviewed = await loadReviewedCourseCatalog();
+      const reviewed = await loadReviewedCourseCatalog(database);
       if (reviewed.length) base = reviewedCoursesToCatalog(reviewed);
     } catch {
       // Fail back to the versioned internal seed; never fabricate catalog rows.
@@ -171,8 +171,8 @@ export async function getCourseCatalog() {
   return overlays.length ? mergeCatalog(base, overlays) : base;
 }
 
-export async function getCourseCatalogProvider() {
-  const catalog = await getCourseCatalog();
+export async function getCourseCatalogProvider(database: SupabaseClient | null = getSupabaseAdmin("cloud")) {
+  const catalog = await getCourseCatalog(database);
   return catalog === INTERNAL_GOLF_COURSE_CATALOG ? internalCourseCatalogProvider : createCourseCatalogProvider(catalog, "admin-published+reviewed-seed");
 }
 
@@ -180,8 +180,8 @@ function normalized(value: unknown) {
   return String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es-MX");
 }
 
-export async function searchCourseCards(input: { query: string; limit: number; cursor?: string | null; latitude?: number; longitude?: number }) {
-  const catalog = await getCourseCatalog();
+export async function searchCourseCards(input: { query: string; limit: number; cursor?: string | null; latitude?: number; longitude?: number }, database: SupabaseClient | null = getSupabaseAdmin("cloud")) {
+  const catalog = await getCourseCatalog(database);
   const clubs = new Map(catalog.clubs.map((club) => [club.id, club]));
   const cards: CourseCard[] = catalog.courses.flatMap((course) => {
     const club = clubs.get(course.clubId); if (!club || !course.active || !club.active) return [];
