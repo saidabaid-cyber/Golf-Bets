@@ -1,8 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "ignoreCommand": "node scripts/backup/skip-vercel-deploy.mjs",
   "git": {
     "deploymentEnabled": {
-      "infra/backup-automation": false
+      "infra/backup-automation": false,
+      "hotfix/cloud-backup-postgres17": false
     }
   }
 }

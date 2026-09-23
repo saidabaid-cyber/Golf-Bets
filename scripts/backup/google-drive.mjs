@@ -447,7 +447,9 @@ export async function publishToGoogleDrive({
   const month = date.slice(0, 7), weekday = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Mexico_City', weekday: 'short' }).format(now);
   const createdAt = now.toISOString();
   const dailyFolder = await drive.ensureFolder(tierFolders.daily.id, date);
-  const dailyPair = await verifyPair(drive, await uploadPair(drive, dailyFolder.id, packageInfo, 'daily', createdAt), packageInfo, false);
+  // A daily backup is not publishable until the remote package has been
+  // downloaded and independently hashed, in addition to checking its sidecar.
+  const dailyPair = await verifyPair(drive, await uploadPair(drive, dailyFolder.id, packageInfo, 'daily', createdAt), packageInfo, true);
   let weekly = 'NOT_DUE', monthly = 'NOT_DUE';
   if (weekday === 'Sun') {
     const folder = await drive.ensureFolder(tierFolders.weekly.id, date);

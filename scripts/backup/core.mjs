@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { mkdir, mkdtemp, readFile, writeFile, readdir, lstat, realpath } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile, readdir, lstat, realpath, rm } from 'node:fs/promises';
 import { resolve, relative, dirname, isAbsolute, join, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -89,7 +89,7 @@ export function databaseEnvironment(env) {
   // The read-only preflight is explicit SQL, not a session startup override.
   const processEnv = Object.fromEntries(Object.entries(env).filter(([name]) => !/^(PG|BACKUP_)/i.test(name)));
   return { ...processEnv, PGHOST: host, PGUSER: user, PGPASSWORD: env.BACKUP_PGPASSWORD,
-    PGDATABASE: database, PGPORT: port, PGSERVICE: '', PGSERVICEFILE: '', PGPASSFILE: '',
+    PGDATABASE: database, PGPORT: port,
     PGSSLMODE: local ? 'disable' : 'verify-full', PGSSLROOTCERT: env.BACKUP_PGSSLROOTCERT || 'system', PGCONNECT_TIMEOUT: '15' };
 }
 export function storageConfig(env) {
@@ -117,7 +117,17 @@ async function encryptedCommand(executable, args, file, key, env, encryptedInput
   try { await Promise.all([completed, encrypt(child.stdout, file, key), encryptedInput ? decrypt(encryptedInput, child.stdin, key) : Promise.resolve()]); }
   finally { clearTimeout(timer); if (child.exitCode === null) child.kill(); }
 }
-export async function backupDatabase(dir, env, schemaOnly = false, tools = { command, encryptedCommand }) {
+export async function withDecryptedArchive(encryptedArchive, key, action) {
+  const directory = await mkdtemp(join(tmpdir(), 'backyard-pg-restore-'));
+  const archive = resolve(directory, 'full.dump');
+  try {
+    await decrypt(encryptedArchive, createWriteStream(archive, { flags: 'wx', mode: 0o600 }), key);
+    return await action(archive);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+export async function backupDatabase(dir, env, schemaOnly = false, tools = { command, encryptedCommand, withDecryptedArchive }) {
   const pg = databaseEnvironment(env), key = encryptionKey(env);
   await tools.command('pg_dump', ['--version'], { env: pg });
   await assertDatabaseReadOnly(pg, tools.command);
@@ -131,8 +141,13 @@ export async function backupDatabase(dir, env, schemaOnly = false, tools = { com
   const archive = resolve(dir, 'database/full.dump.enc');
   await tools.encryptedCommand('pg_dump', ['--format=custom', '--no-owner', '--no-password'], archive, key, pg);
   // Derive both views from ONE logical snapshot, not two inconsistent pg_dump runs.
-  await tools.encryptedCommand('pg_restore', ['--schema-only', '--no-owner', '--file=-'], resolve(dir, 'database/schema.sql.enc'), key, pg, archive);
-  await tools.encryptedCommand('pg_restore', ['--data-only', '--no-owner', '--file=-'], resolve(dir, 'database/data.sql.enc'), key, pg, archive);
+  // pg_restore may seek within a custom archive and schema-only can stop reading
+  // stdin early. Materialize it only in an owner-private ephemeral file, then
+  // remove it in finally; every persisted backup artifact remains encrypted.
+  await tools.withDecryptedArchive(archive, key, async (plainArchive) => {
+    await tools.encryptedCommand('pg_restore', ['--schema-only', '--no-owner', '--file=-', plainArchive], resolve(dir, 'database/schema.sql.enc'), key, pg);
+    await tools.encryptedCommand('pg_restore', ['--data-only', '--no-owner', '--file=-', plainArchive], resolve(dir, 'database/data.sql.enc'), key, pg);
+  });
   await assertDatabaseReadOnly(pg, tools.command);
   await tools.encryptedCommand('pg_dumpall', ['--roles-only', '--no-role-passwords', '--no-password'], resolve(dir, 'database/roles.sql.enc'), key, pg);
   return { state: 'PASS', readOnlyPreflight: 'PASS', coverage: 'one logical PostgreSQL archive; auth/storage schemas included when role permits; files separate', tool: (await tools.command('pg_dump', ['--version'], { env: pg })).trim() };
