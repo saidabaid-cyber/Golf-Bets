@@ -8,7 +8,7 @@ import { authUserFailure } from "../lib/auth-errors";
 type HttpModule = typeof import("../lib/social-http.server");
 /** Execute the real HTTP adapter, substituting only network/config boundaries. No live account writes. */
 function harness({ enabled = true, user = { id: "verified-account", is_anonymous: false } as { id: string; is_anonymous: boolean } | null, error = null as unknown,
-  accountFailure = null as { status: number; code: string; error: string } | null } = {}) {
+  accountFailure = null as { status: number; code: string; error: string } | null, adminAvailable = true } = {}) {
   let authCalls = 0;
   const exports: Record<string, unknown> = {};
   const source = readFileSync("lib/social-http.server.ts", "utf8");
@@ -22,7 +22,7 @@ function harness({ enabled = true, user = { id: "verified-account", is_anonymous
       if (id === "./auth-errors") return { authUserFailure };
       if (id === "./account-access.server") return { accountAccessFailure: async () => accountFailure };
       if (id === "./social-preview-gate") return { socialPreviewEnabled: () => enabled };
-      if (id === "./supabase/server") return { getSupabaseForUser: () => client, getSupabaseAdmin: () => admin };
+      if (id === "./supabase/server") return { getSupabaseForUser: () => client, getSupabaseAdmin: () => adminAvailable ? admin : null };
       throw new Error(`Unexpected boundary: ${id}`);
     },
   });
@@ -77,6 +77,20 @@ test("Social HTTP ownership comes from verified session, never arbitrary body us
   assert.equal(response.headers.get("cache-control"), "private, no-store");
   assert.equal((await response.json()).data.owner, "verified-account");
   assert.equal(authCalls(), 1);
+});
+
+test("Social HTTP permits an explicit owner-scoped operation without a service-role client", async () => {
+  const { api } = harness({ adminAvailable: false });
+  const unavailable = await api.socialHttp(request(), async () => ({}));
+  assert.equal(unavailable.status, 503);
+
+  const response = await api.socialHttp(request({ userId: "another-account" }), async context => {
+    assert.equal(context.userId, "verified-account");
+    assert.equal(context.admin, context.client);
+    return { data: { owner: context.userId } };
+  }, { ownerScoped: true });
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).data.owner, "verified-account");
 });
 
 test("Social HTTP validates bounded JSON, identifiers and does not leak service errors", async () => {

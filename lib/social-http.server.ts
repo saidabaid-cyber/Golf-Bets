@@ -29,12 +29,17 @@ export async function socialBody(request: Request): Promise<Record<string, unkno
 }
 
 /** Bearer is verified with Auth, never decoded/trusted from caller-controlled identity. */
-export async function socialHttp(request: Request, operation: (context: SocialContext) => Promise<unknown>): Promise<Response> {
+export async function socialHttp(
+  request: Request,
+  operation: (context: SocialContext) => Promise<unknown>,
+  options: { ownerScoped?: boolean } = {},
+): Promise<Response> {
   try {
     const token = /^Bearer\s+(\S+)$/i.exec(request.headers.get("authorization") || "")?.[1];
     if (!token) return Response.json({ code: "AUTH_REQUIRED", error: "Inicia sesión para usar Social." }, { status: 401, headers });
     if (!socialPreviewEnabled()) return Response.json({ code: "PENDING_CONTROLLED_DB_APPLY", error: "Social no está disponible en este momento. Intenta más tarde." }, { status: 503, headers });
-    const client = getSupabaseForUser(token); const admin = getSupabaseAdmin("cloud");
+    const client = getSupabaseForUser(token);
+    const admin = getSupabaseAdmin("cloud") ?? (options.ownerScoped ? client : null);
     if (!client || !admin) return Response.json({ code: "CLOUD_UNAVAILABLE", error: "La conexión de Social no está configurada." }, { status: 503, headers });
     const { data, error } = await client.auth.getUser(token);
     const failure = authUserFailure(error, !error && Boolean(data.user));

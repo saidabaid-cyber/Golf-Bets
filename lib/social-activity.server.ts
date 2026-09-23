@@ -259,7 +259,7 @@ export async function getPreferences(ctx: SocialContext): Promise<SocialPreferen
   const { data, error } = await ctx.client.from("social_activity_preferences_v3")
     .select("*").eq("user_id", ctx.userId).maybeSingle();
   if (error) dbError(error);
-  return { data: { ...prefsFromRow(data), enabledForFriends: await socialPrivacy(ctx.admin, ctx.userId) } };
+  return { data: { ...prefsFromRow(data), enabledForFriends: await socialPrivacy(ctx.client, ctx.userId) } };
 }
 export async function updatePreferences(ctx: SocialContext, preferences: unknown): Promise<SocialPreferencesResult> {
   const keys: Array<keyof SocialActivityPreferences> = [
@@ -281,7 +281,7 @@ export async function updatePreferences(ctx: SocialContext, preferences: unknown
     if (result.error) dbError(result.error);
     if (result.data.social_privacy !== audience) throw new SocialServiceError("MUTATION_FAILED", 503, "No se confirmó la audiencia.");
   }
-  return { data: { ...prefsFromRow(data), enabledForFriends: await socialPrivacy(ctx.admin, ctx.userId) } };
+  return { data: { ...prefsFromRow(data), enabledForFriends: await socialPrivacy(ctx.client, ctx.userId) } };
 }
 
 async function sourceRound(ctx: SocialContext, row: ActivityRow): Promise<RoundRow | null> {
