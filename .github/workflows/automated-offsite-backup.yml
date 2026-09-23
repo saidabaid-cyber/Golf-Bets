@@ -49,10 +49,18 @@ jobs:
           echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends postgresql-client-17 ca-certificates
-          pg_dump --version | grep -Eq ' 17\.'
-          pg_restore --version | grep -Eq ' 17\.'
-          pg_dumpall --version | grep -Eq ' 17\.'
-          psql --version | grep -Eq ' 17\.'
+          postgresql_bin="/usr/lib/postgresql/17/bin"
+          printf '%s\n' "${postgresql_bin}" >> "${GITHUB_PATH}"
+          export PATH="${postgresql_bin}:${PATH}"
+          hash -r
+          for executable in psql pg_dump pg_restore pg_dumpall; do
+            resolved="$(command -v "${executable}")"
+            printf '%s: %s\n' "${executable}" "${resolved}"
+            test "${resolved}" = "${postgresql_bin}/${executable}"
+            version="$("${resolved}" --version)"
+            printf '%s\n' "${version}"
+            grep -Eq ' 17\.' <<< "${version}"
+          done
 
       - name: Create, verify and publish owner backup
         id: automated_backup

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -125,9 +126,15 @@ test('workflow supply-chain inputs are immutable or explicitly version pinned', 
 test('workflow installs and verifies the complete PostgreSQL 17 client set', async () => {
   const workflow = await readRepo(workflowPath);
   assert.match(workflow, /postgresql-client-17/);
-  for (const executable of ['pg_dump', 'pg_restore', 'pg_dumpall', 'psql']) {
-    assert.match(workflow, new RegExp(`^\\s*${executable} --version \\| grep -Eq ['\"] 17\\\\\\.['\"]\\s*$`, 'm'));
-  }
+  assert.ok(workflow.includes('postgresql_bin="/usr/lib/postgresql/17/bin"'));
+  assert.ok(workflow.includes(`printf '%s\\n' "\${postgresql_bin}" >> "\${GITHUB_PATH}"`));
+  assert.ok(workflow.includes(`export PATH="\${postgresql_bin}:\${PATH}"`));
+  assert.ok(workflow.includes('for executable in psql pg_dump pg_restore pg_dumpall; do'));
+  assert.ok(workflow.includes('resolved="$(command -v "${executable}")"'));
+  assert.ok(workflow.includes('test "${resolved}" = "${postgresql_bin}/${executable}"'));
+  assert.ok(workflow.includes('version="$("${resolved}" --version)"'));
+  assert.ok(workflow.includes(`grep -Eq ' 17\\.' <<< "\${version}"`));
+  assert.doesNotMatch(workflow, /\/usr\/bin\/(?:psql|pg_dump|pg_restore|pg_dumpall)/);
 });
 
 test('workflow pins the authorized owner and keeps retention disabled by default', async () => {
@@ -159,10 +166,27 @@ test('recovery artifact is success-gated and contains only package plus checksum
   assert.doesNotMatch(step, /(?:BACKUP_(?:PGPASSWORD|STORAGE_KEY|ENCRYPTION_KEY|ROOT)|GDRIVE_SERVICE_ACCOUNT_JSON|\.env|snapshot)/);
 });
 
-test('Vercel cannot deploy the backup automation branch', async () => {
+test('Vercel blocks backup branches and ignores reviewed backup-only merge commits without changing normal app deploys', async () => {
   const configuration = JSON.parse(await readRepo('vercel.json'));
   assert.equal(configuration.git?.deploymentEnabled?.['infra/backup-automation'], false);
+  assert.equal(configuration.git?.deploymentEnabled?.['hotfix/cloud-backup-postgres17'], false);
   assert.ok(Object.values(configuration.git.deploymentEnabled).every((enabled) => enabled === false));
+  assert.equal(configuration.ignoreCommand, 'node scripts/backup/skip-vercel-deploy.mjs');
+
+  const script = join(repo, 'scripts/backup/skip-vercel-deploy.mjs');
+  for (const [ref, message, status] of [
+    ['main', 'fix: ordinary application change', 1],
+    ['feature/application-change', 'fix: application [backup-only:no-deploy]', 1],
+    ['main', 'fix: cloud backup [backup-only:no-deploy]', 0],
+  ]) {
+    const result = spawnSync(process.execPath, [script], {
+      env: { ...process.env, VERCEL_GIT_COMMIT_REF: ref, VERCEL_GIT_COMMIT_MESSAGE: message },
+      encoding: 'utf8',
+    });
+    assert.equal(result.status, status, `${ref}: ${message}`);
+    assert.equal(result.stdout, '');
+    assert.equal(result.stderr, '');
+  }
 });
 
 test('automation constants and owner environment are exact and fail closed', () => {
@@ -508,14 +532,14 @@ class MemoryDrive {
   }
 }
 
-test('daily Drive publication verifies its checksum sidecar and dry-run never trashes files', async (t) => {
+test('daily Drive publication re-downloads and hashes the package, verifies its sidecar, and never trashes in dry-run', async (t) => {
   const packageInfo = await packageFixture(t), client = new MemoryDrive(packageInfo);
   const result = await publishToGoogleDrive({
     credentialsJson: '{}', rootFolderId: 'fixture_root_folder_123', packageInfo,
     now: new Date('2026-09-21T12:00:00Z'), retentionApply: false, client,
   });
   assert.deepEqual(result, { daily: 'PASS', weekly: 'NOT_DUE', monthly: 'NOT_DUE', retention: 'DRY_RUN', retentionCandidates: [] });
-  assert.equal(client.hashDownloads.length, 0, 'the scheduled weekly promotion performs the full remote download');
+  assert.equal(client.hashDownloads.length, 1, 'daily publication requires an independent remote package hash');
   assert.deepEqual(client.trashed, []);
 });
 
@@ -529,7 +553,7 @@ test('a locally changed package is rejected before any Drive publication', async
   assert.equal(client.files.size, 0);
 });
 
-test('daily sidecar mismatch and weekly full-package checksum mismatch block Drive PASS', async (t) => {
+test('daily sidecar mismatch and daily full-package checksum mismatch block Drive PASS', async (t) => {
   const dailyPackage = await packageFixture(t), dailyClient = new MemoryDrive(dailyPackage, { corruptSidecar: true });
   await assert.rejects(publishToGoogleDrive({
     credentialsJson: '{}', rootFolderId: 'fixture_root_folder_123', packageInfo: dailyPackage,
