@@ -7,6 +7,7 @@ import { groupTemplateConfigurationIssues } from "../lib/group-template-editor";
 import { mergeAcceptedGroupMembers, saveExplicitGroupSnapshot } from "../lib/group-invitation-sync";
 import { collectRoundSetupPreflightIssues } from "../lib/round-setup-preflight";
 import { buildWizardBetCatalog } from "../lib/round-setup-wizard";
+import type { WizardStep } from "../lib/round-setup-wizard";
 import { RoundSetupWizard, RoundSetupStep, WizardBetCatalog, WizardReviewBlock } from "./components/round-setup-wizard";
 import { TotalScoreEntry, TotalScoreHistory } from "./components/total-score-entry";
 import { MAX_ROUND_PLAYERS, ROUND_PLAYER_LIMIT_MESSAGE } from "../lib/round-player-limit";
@@ -171,6 +172,7 @@ import { isPersonalSupplementalType, setRememberedCategoryEnabled } from "../lib
 import { buildPersonalOpponentResults } from "../lib/personal-opponents";
 import { persistPendingRoundReview, persistRoundDraftCheckpoint, ROUND_REVIEW_NOTICE } from "../lib/round-review";
 import { normalizeHistoricalRoundLifecycle, normalizeRoundStartedAt, withDerivedRoundLifecycle } from "../lib/round-lifecycle";
+import { hasSeenFirstRoundExperience, markFirstRoundExperienceSeen } from "../lib/round-first-experience";
 import { backupActiveRoundForReplacement } from "../lib/new-round-safety";
 import { normalizeAdvancedStats, normalizeScoreCaptureMode, updateAdvancedHoleStat } from "../lib/advanced-stats";
 import { viperQuantityFromPutts } from "../lib/round-capture";
@@ -407,7 +409,7 @@ function MoneyInput({ label, value, onChange }: { label: string; value: number; 
 }
 
 type NewRoundIntent =
-  | { kind: "blank" }
+  | { kind: "blank"; initialStep?: WizardStep }
   | { kind: "scoreOnly" }
   | { kind: "ai" }
   | { kind: "players"; players: Player[] }
@@ -553,6 +555,8 @@ function GolfBetsApp() {
   const [undoCount, setUndoCount] = useState(0);
   const [showDeleteRoundConfirm, setShowDeleteRoundConfirm] = useState(false);
   const [showNewRoundConfirm, setShowNewRoundConfirm] = useState(false);
+  const [showFirstRoundExperience, setShowFirstRoundExperience] = useState(false);
+  const [roundSetupInitialStep, setRoundSetupInitialStep] = useState<WizardStep>(1);
   const [newRoundBackupError, setNewRoundBackupError] = useState("");
   const [pendingNewRoundIntent, setPendingNewRoundIntent] = useState<NewRoundIntent | null>(null);
   const replacingRound = useRef(false);
@@ -2173,6 +2177,7 @@ function GolfBetsApp() {
       setFeedback(ROUND_PLAYER_LIMIT_MESSAGE);
       return;
     }
+    setRoundSetupInitialStep(intent.kind === "blank" ? intent.initialStep ?? 1 : 1);
     resetRound(nextFeedback);
     if (intent.kind === "blank") return;
     if (intent.kind === "scoreOnly") { setRoundPresentation({ version: 1, groupNassauTerm: "polla", playMode: "score_only" }); return; }
@@ -2206,7 +2211,18 @@ function GolfBetsApp() {
   }
 
   function requestNewRound() {
+    if (typeof window !== "undefined" && !hasRoundProgress(roundDraftPayload()) && !hasSeenFirstRoundExperience(localStorage, identity.userId)) {
+      setShowFirstRoundExperience(true);
+      return;
+    }
     requestNewRoundIntent({ kind: "blank" });
+  }
+
+  function completeFirstRoundExperience(destination: "players" | "groups" | "bets" | "continue") {
+    try { markFirstRoundExperienceSeen(localStorage, identity.userId); } catch { /* The round itself remains available even if this optional UI flag cannot persist. */ }
+    setShowFirstRoundExperience(false);
+    if (destination === "groups") { setTab("groups"); return; }
+    requestNewRoundIntent({ kind: "blank", initialStep: destination === "players" ? 2 : destination === "bets" ? 3 : 1 });
   }
 
   function requestAiRound() {
@@ -3629,6 +3645,7 @@ function GolfBetsApp() {
 
     {feedback && <div className="notice" role="status">{roundSaveNotice(feedback, cloudStatus)}<button className="textButton" aria-label="Cerrar mensaje" onClick={() => setFeedback("")}>×</button></div>}
     {copyFallback && <section className="card"><label>Resumen para copiar<textarea readOnly value={copyFallback} onFocus={event => event.currentTarget.select()} /></label><button onClick={() => setCopyFallback("")}>← Regresar</button></section>}
+    {showFirstRoundExperience && <div className="modalBackdrop"><section className="confirmDialog firstRoundExperience" role="dialog" aria-modal="true" aria-labelledby="first-round-title" aria-describedby="first-round-description"><ModalCloseButton onClose={() => { try { markFirstRoundExperienceSeen(localStorage, identity.userId); } catch {} setShowFirstRoundExperience(false); }} /><span className="eyebrow">TU PRIMERA RONDA</span><h2 id="first-round-title">Prepara tu ronda</h2><p id="first-round-description">Puedes empezar por el campo o ir directo a lo que quieres configurar. Nada es obligatorio.</p><div className="firstRoundActions"><button className="secondary" onClick={() => completeFirstRoundExperience("players")}>Agregar jugadores</button><button className="secondary" onClick={() => completeFirstRoundExperience("groups")}>Usar un grupo</button><button className="secondary" onClick={() => completeFirstRoundExperience("bets")}>Configurar apuestas</button><button className="primary" onClick={() => completeFirstRoundExperience("continue")}>Continuar sin configurar</button></div></section></div>}
     {showNewRoundConfirm && <div className="modalBackdrop"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="new-round-title" aria-describedby="new-round-description"><ModalCloseButton onClose={() => { setShowNewRoundConfirm(false); setNewRoundBackupError(""); setPendingNewRoundIntent(null); }} /><h2 id="new-round-title">¿Iniciar una nueva ronda?</h2><p id="new-round-description">Ya tienes una ronda en curso. ¿Deseas descartarla e iniciar otra? No necesitas completar los hoyos pendientes.</p><p>La ronda anterior dejará de estar activa y no se guardará como terminada. Conservaremos un respaldo local de seguridad. Tus rondas del Histórico no se borrarán.</p>{newRoundBackupError && <div className="notice bad" role="alert">{newRoundBackupError}</div>}<div className="dialogActions"><button autoFocus className="secondary" onClick={() => { setShowNewRoundConfirm(false); setNewRoundBackupError(""); setPendingNewRoundIntent(null); }}>Cancelar</button><button className="primary" onClick={confirmNewRound}>Descartar e iniciar nueva</button></div></section></div>}
     {pendingRoundAction && <div className="modalBackdrop"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="round-change-title"><ModalCloseButton onClose={() => setPendingRoundAction(null)} /><h2 id="round-change-title">Confirmar cambios</h2><p>{pendingRoundAction.message}</p><div className="dialogActions"><button autoFocus className="secondary" onClick={() => setPendingRoundAction(null)}>Cancelar</button><button className="primary" onClick={() => { const action = pendingRoundAction; setPendingRoundAction(null); action.run(); }}>Confirmar</button></div></section></div>}
     {showRoundFinishedNotice && <div className="modalBackdrop"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="round-finished-title"><ModalCloseButton onClose={() => setShowRoundFinishedNotice(false)} /><h2 id="round-finished-title">Ronda terminada</h2><p>{ROUND_REVIEW_NOTICE}</p><div className="dialogActions"><button autoFocus className="primary" onClick={() => { setShowRoundFinishedNotice(false); setTab("results"); }}>Revisar resultados</button></div></section></div>}
@@ -3636,12 +3653,12 @@ function GolfBetsApp() {
     {holeValidationErrors.length > 0 && <div className="modalBackdrop" role="presentation"><section className="confirmDialog holeValidationDialog" role="alertdialog" aria-modal="true" aria-labelledby="hole-validation-title" aria-describedby="hole-validation-description"><ModalCloseButton onClose={() => setHoleValidationErrors([])} /><h2 id="hole-validation-title">Falta completar este hoyo</h2><p id="hole-validation-description">Revisa todos estos puntos antes de guardar y avanzar:</p><ul>{holeValidationErrors.map(error => <li key={error}>{error}</li>)}</ul><div className="dialogActions"><button autoFocus className="primary" onClick={() => setHoleValidationErrors([])}>Volver y completar</button></div></section></div>}
     {tab === "personalDetail" && renderPersonalLive("Detalle Personal")}
     {tab === "historyDetail" && (() => { const saved = history.find(round => round.id === historyDetailId); return saved?.totalScoreCapture ? <TotalScoreHistory key={saved.id} round={saved} onSave={saveTotalHistory} onBack={() => setTab("history")} /> : saved ? <HistoricalRoundDetail round={saved} priorRounds={history} accountUserId={identity.userId} accessToken={identity.accessToken || undefined} onEdit={() => editHistoricalRound(saved)} onPhoto={() => viewScorecardPhoto(saved)} /> : <div className="empty">La ronda ya no está disponible.</div>; })()}
-    {tab === "groups" && <GroupBuilder frequentPlayers={frequentPlayers} frequentGroups={frequentGroups} onBack={() => setTab("welcome")} onPlay={startRoundWithGeneratedGroup} onSaveFrequentGroup={saveGeneratedFrequentGroup} onCreateFrequentGroup={beginCreateFrequentGroup} onStartFrequentGroup={loadFrequentGroup} onEditFrequentGroup={beginEditFrequentGroup} onDeleteFrequentGroup={setFrequentGroupToDelete} onDraftSaved={(saved) => setFrequentGroups(current => [saved, ...current.filter(group => group.id !== saved.id)])} />}
+    {tab === "groups" && <GroupBuilder frequentPlayers={frequentPlayers} frequentGroups={frequentGroups} onBack={() => setTab("welcome")} onPlay={startRoundWithGeneratedGroup} onSaveFrequentGroup={saveGeneratedFrequentGroup} onCreateFrequentGroup={beginCreateFrequentGroup} onStartFrequentGroup={loadFrequentGroup} onEditFrequentGroup={beginEditFrequentGroup} onDeleteFrequentGroup={setFrequentGroupToDelete} />}
 
     {tab === "profile" && <ProfileAccountPanel key={identity.userId} view="profile" indexControl={indexControl} rootNavigationKey={profileRootRevision} history={history} focusSection={profileFocus} highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} golfInsights={betaGolfInsights} statisticsResetAt={statisticsResetAt} onStatisticsReset={applyStatisticsReset} onOpenStats={() => setTab("stats")} onOpenAccount={() => setTab("account")} onOpenPrivacy={() => { setOpenAiPrivacySettings(true); setTab("account"); }} onOpenEquipment={() => setProfileFocus("equipment")} onBackToProfile={openProfileRoot} />}
     {tab === "account" && <ProfileAccountPanel key={identity.userId} view="account" openAiPrivacySettings={openAiPrivacySettings} onAiPrivacyOpened={() => setOpenAiPrivacySettings(false)} indexControl={indexControl} rootNavigationKey={profileRootRevision} highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} golfInsights={betaGolfInsights} statisticsResetAt={statisticsResetAt} onStatisticsReset={applyStatisticsReset} onOpenStats={() => setTab("stats")} onOpenEquipment={() => { setProfileFocus("equipment"); setTab("profile"); }} onBackToProfile={openProfileRoot} />}
 
-    {tab === "setup" && <RoundSetupWizard key={`${identity.userId}:${roundId}`} storageKey={`backyard-setup-step-v1:${identity.userId}:${roundId}`} issues={roundSetupPreflight} editing={editingRound} scoreOnly={roundPresentation.playMode === "score_only"}
+    {tab === "setup" && <RoundSetupWizard key={`${identity.userId}:${roundId}`} storageKey={`backyard-setup-step-v1:${identity.userId}:${roundId}`} issues={roundSetupPreflight} editing={editingRound} scoreOnly={roundPresentation.playMode === "score_only"} initialStep={roundSetupInitialStep}
       onSave={() => flushLocalState.current?.()}
       onExit={() => { setEditingRound(false); setFeedback("Tu configuración quedó guardada como borrador."); setTab("welcome"); }}
       onStart={async () => {

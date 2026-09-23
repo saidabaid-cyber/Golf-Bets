@@ -80,7 +80,7 @@ test("onboarding y editor de ronda conservan configuración avanzada de apuestas
   const onboarding = read("app/components/beta-onboarding-flow.tsx");
   const templateEditor = read("app/components/group-bet-template-editor.tsx");
   const round = read("app/page.tsx");
-  assert.match(onboarding, /GroupBetTemplateEditor/);
+  assert.doesNotMatch(onboarding, /GroupBetTemplateEditor|Configura tu primer grupo/);
   for (const contract of ["Mantener decimales", "Fijo + Patada", "Presión · segunda vuelta", "3 hoyos", "18 hoyos", "Índice actual", "Sliding"]) {
     assert.match(templateEditor, new RegExp(contract.replace(/[+]/g, "\\+")));
   }

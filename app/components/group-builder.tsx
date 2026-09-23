@@ -18,8 +18,6 @@ import { NumericCaptureInput } from "./numeric-capture-input";
 import { ModalCloseButton } from "./modal-shell";
 import { GroupInvitationInbox } from "./group-invitations";
 import { useBackyardAccount } from "./account-provider";
-import { BetaOnboardingFlow } from "./beta-onboarding-flow";
-import { betaOnboardingIsActive, readBetaOnboardingProgress } from "../../lib/beta-onboarding";
 
 const id = () => globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2, 10);
 
@@ -30,7 +28,7 @@ function GroupPresetBetSummary({ group }: { group: FrequentGroup }) {
     : <span>{frequentGroupTemplateSummary(group)}</span>}</div>;
 }
 
-export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, onSaveFrequentGroup, onCreateFrequentGroup, onStartFrequentGroup, onEditFrequentGroup, onDeleteFrequentGroup, onDraftSaved }: {
+export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, onSaveFrequentGroup, onCreateFrequentGroup, onStartFrequentGroup, onEditFrequentGroup, onDeleteFrequentGroup }: {
   frequentPlayers: FrequentPlayer[];
   frequentGroups: FrequentGroup[];
   onBack: () => void;
@@ -40,14 +38,8 @@ export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, 
   onStartFrequentGroup: (group: FrequentGroup) => void;
   onEditFrequentGroup: (group: FrequentGroup) => void;
   onDeleteFrequentGroup: (group: FrequentGroup) => void;
-  onDraftSaved?: (group: FrequentGroup) => void;
 }) {
-  const { identity, retryCloudSync, updateProfile, bettingConsentGranted, requestBettingConsent } = useBackyardAccount();
-  const [hasDraft, setHasDraft] = useState(false);
-  const [resumeDraft, setResumeDraft] = useState(false);
-  useEffect(() => {
-    setHasDraft(identity.mode === "authenticated" && betaOnboardingIsActive(readBetaOnboardingProgress(localStorage, identity.userId)));
-  }, [identity.userId, identity.mode, resumeDraft]);
+  const { identity, retryCloudSync } = useBackyardAccount();
   const [players, setPlayers] = useState<GroupPlayer[]>([]);
   const [manualName, setManualName] = useState("");
   const [manualHandicap, setManualHandicap] = useState<number | null>(null);
@@ -154,11 +146,8 @@ export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, 
     setSaveAllOpen(false); setSaveAllNames([]); setMessage("Todos los grupos se guardaron como grupos frecuentes.");
   }
 
-  if (resumeDraft) return <BetaOnboardingFlow profile={identity} accessToken={identity.accessToken} onUpdateProfile={updateProfile} bettingConsentGranted={bettingConsentGranted} requestBettingConsent={requestBettingConsent} onGroupSaved={onDraftSaved} onComplete={() => { setResumeDraft(false); void retryCloudSync(); }} />;
-
   return <>
     <section className="hero groupsHero"><div><div className="eyebrow">THE BACKYARD · GOLF</div><h1>Grupos</h1><p>Guarda jugadores y apuestas habituales; elige hasta 5 para cada salida.</p></div><div className="groupsHeroActions"><button className="secondary" onClick={onBack}>← Inicio</button><button className="primary" onClick={onCreateFrequentGroup}>Crear grupo</button></div></section>
-    {hasDraft && <section className="card"><h2>Configuración guardada</h2><p>Retoma los jugadores y apuestas pendientes de este dispositivo.</p><button type="button" className="primary" onClick={() => setResumeDraft(true)}>Continuar configuración guardada</button></section>}
     <div className="groupsLibraryTabs" role="tablist" aria-label="Secciones de Grupos">
       <button type="button" role="tab" aria-selected={activeSection === "groups"} className={activeSection === "groups" ? "active" : ""} onClick={() => setActiveSection("groups")}>Mis grupos</button>
       <button type="button" role="tab" aria-selected={activeSection === "invitations"} className={activeSection === "invitations" ? "active" : ""} onClick={() => setActiveSection("invitations")}>Invitaciones</button>

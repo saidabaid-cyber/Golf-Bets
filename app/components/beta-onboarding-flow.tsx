@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useViewScrollReset } from "./use-view-scroll-reset";
 import {
   GOLF_IMPROVEMENT_GOALS,
@@ -23,25 +23,12 @@ import {
   type BetaOnboardingProgress,
   type BetaOnboardingStep,
 } from "../../lib/beta-onboarding";
-import { groupTemplateConfigurationIssues } from "../../lib/group-template-editor";
-import { mergeAcceptedGroupMembers, saveExplicitGroupSnapshot } from "../../lib/group-invitation-sync";
-import { addFrequentGroupMember, parseFrequentGroups, serializeFrequentGroups } from "../../lib/frequent-templates";
-import { normalizeGroupGameTemplate } from "../../lib/group-game-template";
-import { initialBets } from "../../lib/new-round-bets";
 import { PLAN_CATALOG, selectablePlanId, type PlanId } from "../../lib/plans";
-import { STORAGE_KEYS, readStoredJson } from "../../lib/round-utils";
-import { playOrder, segmentDefinitions } from "../../lib/engine";
-import type { FrequentGroup, FrequentGroupMember, FrequentPlayer, GroupGameTemplate, Player } from "../../lib/types";
 import { ballFitDefaultsFromProfile } from "../../lib/ball-fitting";
 import { BrandLockup } from "./brand-lockup";
 import { EquipmentOnboarding } from "./equipment-onboarding";
-import { GroupBetTemplateEditor } from "./group-bet-template-editor";
-import { GroupInviteManager } from "./group-invitations";
-import { ProfileImagePicker } from "./profile-image-picker";
 import { HandicapSourceSelector } from "./handicap-source-selector";
-import { PlayerHandicapControl } from "./player-handicap-control";
 import { ModalShell } from "./modal-shell";
-import { activeGroupTemplateDefinitions } from "../../lib/group-template-editor";
 import { InitialDevicePermissions } from "./device-permission-settings";
 import styles from "./beta-onboarding-flow.module.css";
 
@@ -66,36 +53,12 @@ const GOAL_LABELS: Record<Exclude<GolfPrimaryGoal, "">, string> = {
   COMPETE_TOURNAMENTS: "Competir en torneos",
 };
 
-type GroupDraft = {
-  groupId: string;
-  name: string;
-  imageUrl: string;
-  privacy: "private" | "invite_only";
-  members: FrequentGroupMember[];
-  template?: GroupGameTemplate;
-};
-
 type BetaDraft = {
   improvementGoals: GolfImprovementGoal[];
   primaryGoals: Exclude<GolfPrimaryGoal, "">[];
   targetHandicap: string;
   planId: PlanId;
-  group: GroupDraft;
 };
-
-function makeId(prefix: string) {
-  return globalThis.crypto?.randomUUID?.() || `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-}
-
-function ownerMember(profile: BackyardProfile): FrequentGroupMember {
-  return {
-    memberId: `member-${profile.userId}`,
-    kind: "account",
-    name: profile.displayName || "Jugador",
-    handicap: null,
-    accountUserId: profile.userId,
-  };
-}
 
 function freshDraft(profile: BackyardProfile): BetaDraft {
   return {
@@ -103,13 +66,6 @@ function freshDraft(profile: BackyardProfile): BetaDraft {
     primaryGoals: [...(profile.primaryGoals || (profile.primaryGoal ? [profile.primaryGoal] : []))],
     targetHandicap: profileHandicapInput(profile.targetHandicap ?? null),
     planId: selectablePlanId(profile.planId),
-    group: {
-      groupId: makeId("group"),
-      name: "",
-      imageUrl: "",
-      privacy: "private",
-      members: [ownerMember(profile)],
-    },
   };
 }
 
@@ -117,16 +73,6 @@ function safeDraft(value: unknown, profile: BackyardProfile): BetaDraft {
   const fallback = freshDraft(profile);
   if (!value || typeof value !== "object") return fallback;
   const raw = value as Partial<BetaDraft>;
-  const rawGroup = raw.group && typeof raw.group === "object" ? raw.group : fallback.group;
-  const parsedMembers = parseFrequentGroups(JSON.stringify([{
-    id: typeof rawGroup.groupId === "string" ? rawGroup.groupId : fallback.group.groupId,
-    name: typeof rawGroup.name === "string" && rawGroup.name.trim() ? rawGroup.name : fallback.group.name,
-    players: Array.isArray(rawGroup.members) && rawGroup.members.length ? rawGroup.members : fallback.group.members,
-    gameTemplate: rawGroup.template,
-    uses: 0,
-    updatedAt: new Date().toISOString(),
-  }]))[0];
-  const members = parsedMembers?.players.length ? parsedMembers.players : fallback.group.members;
   return {
     improvementGoals: Array.isArray(raw.improvementGoals)
       ? raw.improvementGoals.filter((goal): goal is GolfImprovementGoal => (GOLF_IMPROVEMENT_GOALS as readonly string[]).includes(String(goal)))
@@ -136,56 +82,11 @@ function safeDraft(value: unknown, profile: BackyardProfile): BetaDraft {
       : fallback.primaryGoals,
     targetHandicap: typeof raw.targetHandicap === "string" ? raw.targetHandicap : fallback.targetHandicap,
     planId: selectablePlanId(raw.planId),
-    group: {
-      groupId: parsedMembers?.id || fallback.group.groupId,
-      name: typeof rawGroup.name === "string" ? rawGroup.name.slice(0, 80) : fallback.group.name,
-      imageUrl: typeof rawGroup.imageUrl === "string" ? rawGroup.imageUrl.slice(0, 180_000) : "",
-      privacy: rawGroup.privacy === "invite_only" ? "invite_only" : "private",
-      members,
-      ...(parsedMembers?.gameTemplate ? { template: parsedMembers.gameTemplate } : {}),
-    },
   };
 }
 
-function initialTemplate(members: FrequentGroupMember[]) {
-  const players = members.flatMap((member) => member.memberId ? [{ id: member.memberId, name: member.name, handicap: member.handicap, ...(member.accountUserId ? { accountUserId: member.accountUserId } : {}) }] : []);
-  const ids = players.map((player) => player.id);
-  return {
-    version: 1,
-    ownerMemberId: ids[0] || "",
-    roundDefaults: { startHole: 1, roundHoles: 18, handicapBasis: "relative" },
-    betConfig: initialBets(ids),
-    foursomeSegments: segmentDefinitions(playOrder(1), 6),
-    personalBets: [],
-    supplementalBets: [],
-    manualBets: [],
-  } satisfies GroupGameTemplate;
-}
-
-function groupPlayers(members: FrequentGroupMember[]): Player[] {
-  return members.flatMap((member) => member.memberId ? [{
-    id: member.memberId,
-    name: member.name,
-    handicap: member.handicap,
-    ...(member.accountUserId ? { accountUserId: member.accountUserId } : {}),
-  }] : []);
-}
-
-function activeBetCount(template: GroupGameTemplate) {
-  const core = [
-    template.betConfig.monkey?.enabled, template.betConfig.rabbits.enabled, template.betConfig.skins.enabled,
-    template.betConfig.units.enabled, template.betConfig.foursome.enabled, template.betConfig.ballFriend.enabled,
-    template.betConfig.polla.first9.enabled, template.betConfig.polla.second9.enabled, template.betConfig.polla.total18.enabled,
-    template.betConfig.miniPolla.enabled, template.betConfig.vipers.enabled, template.betConfig.camels.enabled,
-    template.betConfig.fish.enabled, template.betConfig.loba.enabled,
-  ].filter(Boolean).length;
-  return core + template.personalBets.filter((bet) => bet.enabled !== false).length
-    + template.supplementalBets.filter((bet) => bet.enabled).length
-    + template.manualBets.filter((bet) => bet.enabled !== false).length;
-}
-
 function Shell({ progress, eyebrow, title, description, children, actions, onBack, onSaveAndExit }: { progress: BetaOnboardingProgress; eyebrow: string; title: string; description?: string; children: React.ReactNode; actions: React.ReactNode; onBack?: () => void; onSaveAndExit?: () => void }) {
-  const visibleSteps: BetaOnboardingStep[] = ["welcome", "ghin", "equipment", "improvements", "objective", "plan", "permissions", "group", "players", "handicaps", "bets", "bet_details", "ready"];
+  const visibleSteps: BetaOnboardingStep[] = ["welcome", "ghin", "equipment", "improvements", "objective", "plan", "permissions"];
   const index = Math.max(0, visibleSteps.indexOf(progress.step));
   const titleRef = useRef<HTMLHeadingElement>(null);
   const [confirmExit, setConfirmExit] = useState(false);
@@ -201,28 +102,17 @@ function Shell({ progress, eyebrow, title, description, children, actions, onBac
   </section><ModalShell open={confirmExit} onClose={() => setConfirmExit(false)} label="Guardar configuración y salir"><h2>¿Guardar esta configuración y continuar después?</h2><p>Conservaremos el borrador en este dispositivo.</p><div className="dialogActions"><button type="button" className="secondary" onClick={() => setConfirmExit(false)}>Cancelar</button><button type="button" className="primary" onClick={() => { setConfirmExit(false); onSaveAndExit?.(); }}>Guardar y salir</button></div></ModalShell></main>;
 }
 
-export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, bettingConsentGranted, requestBettingConsent, onComplete, onGroupSaved }: {
+export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, onComplete }: {
   profile: BackyardProfile;
   accessToken: string | null;
   onUpdateProfile: (profile: BackyardProfileUpdate) => Promise<"local" | "cloud">;
-  bettingConsentGranted: boolean;
-  requestBettingConsent: () => Promise<boolean>;
   onComplete: () => void;
-  onGroupSaved?: (group: FrequentGroup) => void;
 }) {
   const [progress, setProgress] = useState<BetaOnboardingProgress | null>(null);
   useViewScrollReset(progress?.step ?? null);
   const [draft, setDraft] = useState<BetaDraft | null>(null);
   const [message, setMessage] = useState("");
-  const [playerMode, setPlayerMode] = useState<"local" | "guest" | "backyard">("backyard");
-  const [localPlayerId, setLocalPlayerId] = useState("");
-  const [newPlayer, setNewPlayer] = useState({ name: "", email: "", handicap: "" });
   const [entryMode, setEntryMode] = useState<"quick" | "complete" | null>(null);
-  const [groupSaving, setGroupSaving] = useState(false);
-  const groupSaveInFlight = useRef(false);
-  const liveProfileUserId = useRef(profile.userId);
-  useEffect(() => { liveProfileUserId.current = profile.userId; }, [profile.userId]);
-  const frequentPlayers = useMemo(() => typeof window === "undefined" ? [] : readStoredJson<FrequentPlayer[]>(localStorage, STORAGE_KEYS.frequentPlayers, []), []);
 
   useEffect(() => {
     const existing = readBetaOnboardingProgress(localStorage, profile.userId) || createBetaOnboardingProgress(profile.userId);
@@ -247,15 +137,15 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, bett
 
   if (!progress || !draft) return <main className={styles.screen}><div className={styles.loading}>Preparando tu experiencia…</div></main>;
 
-  const advance = (nextStep: BetaOnboardingStep, skipped = false, groupId?: string) => {
-    const next = advanceBetaOnboarding(progress, nextStep, { skipped, groupId });
+  const advance = (nextStep: BetaOnboardingStep, skipped = false) => {
+    const next = advanceBetaOnboarding(progress, nextStep, { skipped });
     persistBetaOnboardingProgress(localStorage, next);
     setProgress(next);
     setMessage("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
-  const finish = (groupId?: string) => {
-    const complete = completeBetaOnboarding(progress, { groupId });
+  const finish = () => {
+    const complete = completeBetaOnboarding(progress);
     persistBetaOnboardingProgress(localStorage, complete);
     localStorage.removeItem(betaOnboardingDraftStorageKey(profile.userId));
     setProgress(complete);
@@ -270,12 +160,11 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, bett
   };
   const previousByStep: Partial<Record<BetaOnboardingStep, Exclude<BetaOnboardingStep, "complete">>> = {
     ghin: "welcome", equipment: "ghin", improvements: "equipment", objective: "improvements", plan: "objective",
-    permissions: "plan", group: "permissions", players: "group", handicaps: "players", bets: "handicaps",
-    bet_details: "bets", ready: "bet_details",
+    permissions: "plan",
   };
   const navigationProps = {
-    ...(previousByStep[progress.step] && !groupSaving ? { onBack: () => goTo(previousByStep[progress.step]!) } : {}),
-    onSaveAndExit: groupSaving ? undefined : () => {
+    ...(previousByStep[progress.step] ? { onBack: () => goTo(previousByStep[progress.step]!) } : {}),
+    onSaveAndExit: () => {
       try {
         localStorage.setItem(betaOnboardingDraftStorageKey(profile.userId), JSON.stringify(draft));
         persistBetaOnboardingProgress(localStorage, progress);
@@ -283,25 +172,12 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, bett
       } catch { setMessage("No pudimos guardar el borrador. Reintenta antes de salir."); }
     },
   };
-  const updateGroup = (patch: Partial<GroupDraft>) => setDraft((current) => current ? ({ ...current, group: { ...current.group, ...patch } }) : current);
-  const acceptGroupMembers = (members: FrequentGroupMember[]) => setDraft((current) => {
-    if (!current) return current;
-    const nextMembers = mergeAcceptedGroupMembers(current.group.members, members);
-    return nextMembers === current.group.members ? current : { ...current, group: { ...current.group, members: nextMembers } };
-  });
-  const template = draft.group.template || initialTemplate(draft.group.members);
-  const players = groupPlayers(draft.group.members);
-  const setTemplate: React.Dispatch<React.SetStateAction<GroupGameTemplate>> = (action) => setDraft((current) => {
-    if (!current) return current;
-    const prior = current.group.template || initialTemplate(current.group.members);
-    return { ...current, group: { ...current.group, template: typeof action === "function" ? action(prior) : action } };
-  });
 
   if (progress.step === "welcome") return <Shell progress={progress} {...navigationProps} eyebrow="EMPIEZA A TU MANERA" title="Tu Backyard, sin fricción" description="Puedes entrar rápido o completar tu perfil para personalizar mejor rondas, estadísticas, equipo, fitting e IA." actions={<button type="button" className="primary big" disabled={!entryMode} onClick={() => entryMode === "complete" ? advance("ghin") : finish()}>CONTINUAR</button>}>
     <div className={styles.welcomeHero} aria-hidden="true"><span className={styles.heroFlag}>⛳</span><div><b>Tu golf, en un solo lugar</b><small>Rondas rápidas · amigos · equipo · estadísticas</small></div><span className={styles.heroBall}>●</span></div>
     <div className={styles.entryGrid}>
-      <button type="button" className={entryMode === "quick" ? styles.entrySelected : styles.entryChoice} aria-pressed={entryMode === "quick"} onClick={() => setEntryMode("quick")}><span aria-hidden="true">⚡</span><div><b>Rápida</b><p>Entra con el perfil básico que acabas de guardar. Equipo, fitting y grupos quedan disponibles para después.</p></div></button>
-      <button type="button" className={entryMode === "complete" ? styles.entrySelected : styles.entryChoice} aria-pressed={entryMode === "complete"} onClick={() => setEntryMode("complete")}><span aria-hidden="true">⛳</span><div><b>Completa</b><p>Configura HCP, bolsa, objetivos y tu primer grupo para recibir una experiencia más personalizada.</p></div></button>
+      <button type="button" className={entryMode === "quick" ? styles.entrySelected : styles.entryChoice} aria-pressed={entryMode === "quick"} onClick={() => setEntryMode("quick")}><span aria-hidden="true">⚡</span><div><b>Rápida</b><p>Entra con el perfil básico que acabas de guardar. Equipo y fitting quedan disponibles para después.</p></div></button>
+      <button type="button" className={entryMode === "complete" ? styles.entrySelected : styles.entryChoice} aria-pressed={entryMode === "complete"} onClick={() => setEntryMode("complete")}><span aria-hidden="true">⛳</span><div><b>Completa</b><p>Configura HCP, bolsa y objetivos para recibir una experiencia más personalizada.</p></div></button>
     </div>
   </Shell>;
 
@@ -340,81 +216,7 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, bett
   </Shell>;
 
   if (progress.step === "permissions") return <Shell progress={progress} {...navigationProps} eyebrow="PERMISOS OPCIONALES" title="Decide una sola vez" description="Puedes usar The Backyard sin ubicación ni notificaciones. Después podrás revisar o desactivar estos permisos desde Configuración." actions={null}>
-    <InitialDevicePermissions userId={profile.userId} onContinue={() => advance("group")} />
-  </Shell>;
-
-  if (progress.step === "group") return <Shell progress={progress} {...navigationProps} eyebrow="TU PRIMER GRUPO" title="Configura tu primer grupo" description="Será una plantilla habitual: jugadores, HCP y apuestas listas para reutilizar." actions={<><button className="primary big" disabled={!draft.group.name.trim()} onClick={() => advance("players")}>Crear grupo</button><button className={styles.skip} onClick={() => finish()}>Omitir por ahora</button></>}>
-    <div className={styles.groupIdentity}><label>Nombre del grupo<input maxLength={80} value={draft.group.name} onChange={(event) => updateGroup({ name: event.target.value })} placeholder="Ej. Domingos" autoComplete="off" /></label><ProfileImagePicker kind="group" value={draft.group.imageUrl} onChange={(imageUrl) => updateGroup({ imageUrl })} /></div>
-    <fieldset className={styles.privacyChoices}><legend>Privacidad</legend><button type="button" className={draft.group.privacy === "private" ? styles.privacySelected : styles.privacyChoice} aria-pressed={draft.group.privacy === "private"} onClick={() => updateGroup({ privacy: "private" })}><b>Privado</b><span>Sólo los integrantes que agregues pueden ver el grupo.</span></button><button type="button" className={draft.group.privacy === "invite_only" ? styles.privacySelected : styles.privacyChoice} aria-pressed={draft.group.privacy === "invite_only"} onClick={() => updateGroup({ privacy: "invite_only" })}><b>Por invitación</b><span>Permite sumar personas con una invitación segura o un link revocable.</span></button></fieldset>
-    {message && <div className={styles.error} role="alert">{message}</div>}
-  </Shell>;
-
-  if (progress.step === "players") {
-    const addMember = (member: FrequentGroupMember) => {
-      const shell: FrequentGroup = { id: draft.group.groupId, name: draft.group.name, players: draft.group.members, uses: 0, updatedAt: "" };
-      const next = addFrequentGroupMember(shell, member);
-      if (next === shell) { setMessage("Ese jugador, cuenta o correo ya forma parte del grupo."); return; }
-      updateGroup({ members: next.players });
-      setNewPlayer({ name: "", email: "", handicap: "" }); setMessage("");
-    };
-    return <Shell progress={progress} {...navigationProps} eyebrow="INTEGRANTES" title="Agrega o vincula jugadores" description="Usuarios Backyard usa cuentas reales y aceptación. Los jugadores guardados sin cuenta y los invitados siguen disponibles por separado." actions={<button className="primary big" onClick={() => advance("handicaps")}>Revisar HCP</button>}>
-      <div className={styles.memberList}>{draft.group.members.map((member, index) => <article key={member.memberId || index}><span className={styles.memberAvatar}>{member.name.slice(0, 1).toUpperCase()}</span><span><b>{member.name}</b><small>{member.accountUserId ? "Usuario Backyard" : "Invitado"}</small></span>{index > 0 && <button type="button" aria-label={`Quitar ${member.name}`} onClick={() => updateGroup({ members: draft.group.members.filter((_, memberIndex) => memberIndex !== index) })}>×</button>}<div className={styles.memberHandicap}><PlayerHandicapControl player={member} onChange={handicap => updateGroup({ members: draft.group.members.map((item, memberIndex) => memberIndex === index && !item.accountUserId ? { ...item, handicap } : item) })} onResolve={member.accountUserId === profile.userId ? () => goTo("ghin") : undefined} /></div></article>)}</div>
-      <div className={styles.playerTabs}><button className={playerMode === "backyard" ? styles.tabActive : ""} onClick={() => setPlayerMode("backyard")}>Usuarios Backyard</button><button className={playerMode === "local" ? styles.tabActive : ""} onClick={() => setPlayerMode("local")}>Jugadores guardados</button><button className={playerMode === "guest" ? styles.tabActive : ""} onClick={() => setPlayerMode("guest")}>Invitado</button></div>
-      {playerMode === "backyard" && <GroupInviteManager accessToken={accessToken} group={{ id: draft.group.groupId, name: draft.group.name, players: draft.group.members, gameTemplate: template, uses: 0, updatedAt: new Date().toISOString() }} onAcceptedMembers={acceptGroupMembers} />}
-      {playerMode === "local" && <div className={styles.addPlayer}><label>Buscar jugador guardado sin cuenta<select value={localPlayerId} onChange={(event) => setLocalPlayerId(event.target.value)}><option value="">Seleccionar jugador…</option>{frequentPlayers.filter(player => !player.accountUserId).map((player) => <option value={player.id} key={player.id}>{player.name}{player.handicap !== null ? ` · HCP ${player.handicap}` : ""}</option>)}</select></label><button className="secondary" disabled={!localPlayerId} onClick={() => { const saved = frequentPlayers.find((player) => player.id === localPlayerId && !player.accountUserId); if (saved) addMember({ memberId: makeId("member"), kind: "guest", name: saved.name, handicap: saved.handicap }); }}>Agregar</button><p className={styles.trust}>Para cuentas registradas usa Usuarios Backyard. Un jugador guardado no implica una amistad.</p></div>}
-      {playerMode === "guest" && <div className={styles.addPlayer}><label>Nombre<input value={newPlayer.name} onChange={(event) => setNewPlayer((current) => ({ ...current, name: event.target.value }))} placeholder="Nombre del jugador" /></label><label>HCP manual (opcional)<input inputMode="decimal" value={newPlayer.handicap} onChange={(event) => setNewPlayer((current) => ({ ...current, handicap: event.target.value }))} placeholder="Ej. 18.0" /></label><button className="secondary" disabled={!newPlayer.name.trim()} onClick={() => { const parsed = newPlayer.handicap.trim() ? Number(newPlayer.handicap) : null; if (parsed !== null && (!Number.isFinite(parsed) || parsed < -15)) { setMessage("El HCP debe estar entre +15.0 y 36.0."); return; } addMember({ memberId: makeId("member"), kind: "guest", name: newPlayer.name.trim(), handicap: clampBackyardHandicap(parsed) }); }}>Agregar invitado</button></div>}
-      {message && <div className={styles.error} role="alert">{message}</div>}
-    </Shell>;
-  }
-
-  if (progress.step === "handicaps") return <Shell progress={progress} {...navigationProps} eyebrow="HANDICAPS" title="Revisa los handicaps" description="Estos valores serán el HCP habitual del grupo. El máximo de captura es 36; el HCP de juego se calcula después con el tee de cada jugador." actions={<button className="primary big" onClick={() => { updateGroup({ template: normalizeGroupGameTemplate(draft.group.template, draft.group.members) ?? initialTemplate(draft.group.members) }); advance("bets"); }}>Configurar apuestas</button>}>
-    <div className={styles.hcpList}>{draft.group.members.map((member, index) => <article key={member.memberId || index}><b>{member.name}</b><PlayerHandicapControl player={member} onChange={handicap => updateGroup({ members: draft.group.members.map((item, memberIndex) => memberIndex === index && !item.accountUserId ? { ...item, handicap } : item) })} onResolve={member.accountUserId === profile.userId ? () => goTo("ghin") : undefined} /></article>)}</div>
-  </Shell>;
-
-  if (progress.step === "bets") return <Shell progress={progress} {...navigationProps} eyebrow="JUEGO HABITUAL" title="Elegir apuestas habituales" description="¿Qué apuestas juega normalmente este grupo? Activa sólo las que utilizan; en el siguiente paso ajustarás sus reglas." actions={<button className="primary big" onClick={() => advance("bet_details")}>Continuar: configurar apuestas →</button>}>
-    <GroupBetTemplateEditor value={template} players={players} ownerId={template.ownerMemberId} mode="selection" onChange={setTemplate} requestActivation={bettingConsentGranted ? undefined : requestBettingConsent} />
-  </Shell>;
-
-  if (progress.step === "bet_details") {
-    const saveGroup = async () => {
-      if (groupSaveInFlight.current) return;
-      const normalizedTemplate = normalizeGroupGameTemplate(template, draft.group.members);
-      if (!normalizedTemplate) { setMessage("No pudimos preparar la plantilla. Revisa los integrantes."); return; }
-      const issues = groupTemplateConfigurationIssues(normalizedTemplate, players);
-      if (issues.blocking.length) { setMessage(issues.blocking.map((issue) => issue.message).join(" ")); return; }
-      const existing = parseFrequentGroups(localStorage.getItem(STORAGE_KEYS.frequentGroups));
-      if (existing.some((group) => group.id !== draft.group.groupId && group.name.trim().toLocaleLowerCase("es-MX") === draft.group.name.trim().toLocaleLowerCase("es-MX"))) { setMessage("Ya existe un grupo con ese nombre. Regresa y elige otro."); return; }
-      const group: FrequentGroup = { id: draft.group.groupId, name: draft.group.name.trim(), ...(draft.group.imageUrl.trim() ? { imageUrl: draft.group.imageUrl.trim() } : {}), privacy: draft.group.privacy, players: draft.group.members, gameTemplate: normalizedTemplate, uses: 0, updatedAt: new Date().toISOString() };
-      groupSaveInFlight.current = true; setGroupSaving(true); setMessage("");
-      const savingUserId = profile.userId;
-      try {
-        const saved = await saveExplicitGroupSnapshot({ group, accessToken, authenticated: Boolean(profile.userId && profile.userId !== "guest"), online: navigator.onLine });
-        if (liveProfileUserId.current !== savingUserId) return;
-        // Read the latest collection after the request; unrelated groups may
-        // have synchronized while the explicit save was in flight.
-        const latest = parseFrequentGroups(localStorage.getItem(STORAGE_KEYS.frequentGroups));
-        localStorage.setItem(STORAGE_KEYS.frequentGroups, serializeFrequentGroups([saved.group, ...latest.filter((item) => item.id !== group.id)]));
-        // A resumed flow has an already mounted app writer. Update its state
-        // immediately; otherwise its old collection can overwrite this save.
-        onGroupSaved?.(saved.group);
-        updateGroup({ template: normalizedTemplate, members: saved.group.players });
-        advance("ready", false, group.id);
-        setMessage(saved.notice);
-      } catch (error) {
-        if (liveProfileUserId.current === savingUserId) setMessage(error instanceof Error ? error.message : "No pudimos guardar el grupo. Conservamos el borrador.");
-      } finally { groupSaveInFlight.current = false; setGroupSaving(false); }
-    };
-    return <Shell progress={progress} {...navigationProps} eyebrow="DETALLES" title="Configura tus apuestas" description="Ajusta valores, participantes, equipos, HCP y reglas de las apuestas que seleccionaste." actions={<button className="primary big" disabled={groupSaving} onClick={saveGroup}>{groupSaving ? "Guardando…" : "Guardar grupo"}</button>}>
-      {activeBetCount(template) ? <GroupBetTemplateEditor value={template} players={players} ownerId={template.ownerMemberId} mode="details" locked={groupSaving} onChange={setTemplate} requestActivation={bettingConsentGranted ? undefined : requestBettingConsent} /> : <div className={styles.emptyState}><span>⛳</span><b>Grupo básico listo</b><p>La plantilla abrirá con las apuestas desactivadas.</p></div>}
-      <div className={styles.readySummary} aria-label="Resumen de apuestas habituales"><b>{activeGroupTemplateDefinitions(template).length} apuestas seleccionadas</b><span>{activeGroupTemplateDefinitions(template).map(item => item.label).join(" · ") || "Sin apuestas"}</span><small>Los pendientes de participantes, HCP o parejas se completan al crear la ronda.</small></div>
-      {message && <div className={styles.error} role="alert">{message}</div>}
-    </Shell>;
-  }
-
-  if (progress.step === "ready") return <Shell progress={progress} {...navigationProps} eyebrow="GRUPO LISTO" title="¡Listo!" description={`Tu grupo ${draft.group.name.trim()} ha sido creado correctamente.`} actions={<><button className="primary big" onClick={() => finish(progress.groupId)}>Ir al inicio</button><button className="secondary big" onClick={() => { const nextDraft = freshDraft(profile); setDraft(nextDraft); const next = { ...progress, status: "in_progress" as const, step: "group" as const, groupId: undefined, updatedAt: new Date().toISOString() }; persistBetaOnboardingProgress(localStorage, next); setProgress(next); }}>Crear otro grupo</button></>}>
-    <div className={styles.readyMark}>✓</div><div className={styles.readySummary}><span>{draft.group.members.length} jugadores</span><span>{activeBetCount(template)} apuestas habituales</span><span>{draft.group.privacy === "private" ? "Privado" : "Solo invitación"}</span></div>
-    {message && <p role="status">{message}</p>}
-    <GroupInviteManager accessToken={accessToken} group={{ id: draft.group.groupId, name: draft.group.name, players: draft.group.members, gameTemplate: template, uses: 0, updatedAt: new Date().toISOString() }} onAcceptedMembers={acceptGroupMembers} />
+    <InitialDevicePermissions userId={profile.userId} onContinue={finish} />
   </Shell>;
 
   return null;

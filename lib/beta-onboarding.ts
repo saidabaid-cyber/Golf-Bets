@@ -8,14 +8,10 @@ export const BETA_ONBOARDING_STEPS = [
   "objective",
   "plan",
   "permissions",
-  "group",
-  "players",
-  "handicaps",
-  "bets",
-  "bet_details",
-  "ready",
   "complete",
 ] as const;
+
+const LEGACY_GROUP_STEPS = new Set(["group", "players", "handicaps", "bets", "bet_details", "ready"]);
 
 export type BetaOnboardingStep = (typeof BETA_ONBOARDING_STEPS)[number];
 export type BetaOnboardingStatus = "in_progress" | "complete";
@@ -80,7 +76,8 @@ export function normalizeBetaOnboardingProgress(
   if (!value || typeof value !== "object" || !userId) return null;
   const candidate = value as Partial<BetaOnboardingProgress>;
   if (candidate.version !== BETA_ONBOARDING_VERSION || candidate.userId !== userId) return null;
-  const step = typeof candidate.step === "string" && (BETA_ONBOARDING_STEPS as readonly string[]).includes(candidate.step)
+  const legacyGroupStep = typeof candidate.step === "string" && LEGACY_GROUP_STEPS.has(candidate.step);
+  const step = legacyGroupStep ? "complete" : typeof candidate.step === "string" && (BETA_ONBOARDING_STEPS as readonly string[]).includes(candidate.step)
     ? candidate.step as BetaOnboardingStep
     : "welcome";
   const status = candidate.status === "complete" || step === "complete" ? "complete" : "in_progress";

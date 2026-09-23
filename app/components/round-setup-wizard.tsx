@@ -11,7 +11,7 @@ import styles from "./round-setup-wizard.module.css";
 const STEPS = ["Campo", "Jugadores", "Grupales", "Personales"] as const;
 const WizardContext = createContext<{ step: WizardStep; edit: (step: WizardStep) => void; target: { id: string; revision: number } | null }>({ step: 1, edit: () => {}, target: null });
 
-export function RoundSetupWizard({ storageKey, issues, onStart, onSave, onExit, editing = false, scoreOnly = false, children }: {
+export function RoundSetupWizard({ storageKey, issues, onStart, onSave, onExit, editing = false, scoreOnly = false, initialStep = 1, children }: {
   storageKey: string;
   issues: readonly RoundSetupPreflightIssue[];
   onStart: () => Promise<boolean>;
@@ -19,10 +19,15 @@ export function RoundSetupWizard({ storageKey, issues, onStart, onSave, onExit, 
   onExit: () => void;
   editing?: boolean;
   scoreOnly?: boolean;
+  initialStep?: WizardStep;
   children: ReactNode;
 }) {
   const [step, setStep] = useState<WizardStep>(() => {
-    try { const saved = readWizardStep(sessionStorage.getItem(storageKey)); return scoreOnly && (saved === 3 || saved === 4) ? 2 : saved; } catch { return 1; }
+    try {
+      const stored = sessionStorage.getItem(storageKey);
+      const saved = stored === null ? initialStep : readWizardStep(stored);
+      return scoreOnly && (saved === 3 || saved === 4) ? 2 : saved;
+    } catch { return initialStep; }
   });
   const [visitedReview, setVisitedReview] = useState(step === 5);
   const [target, setTarget] = useState<{ id: string; revision: number } | null>(null);

@@ -261,3 +261,4 @@
 .historicalAchievementBadges{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:0;list-style:none}.historicalAchievementBadges li{min-width:0;border:1px solid #c9ddce;border-radius:999px;background:#edf7ee;padding:8px 10px;color:var(--green);font-size:10px;font-weight:850;overflow-wrap:anywhere}
 .historicalAchievementNotice,.historicalAchievementFootnote{margin:0;color:var(--muted);font-size:11px;line-height:1.45}.historicalAchievementFootnote{border-top:1px solid var(--line);padding-top:9px;font-size:10px}
 @media(max-width:330px){.historicalAchievementMetrics{grid-template-columns:minmax(0,1fr)}}
+.firstRoundExperience .eyebrow{color:var(--green);font-size:.7rem;font-weight:900;letter-spacing:.12em}.firstRoundActions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:8px}.firstRoundActions button{min-height:52px;white-space:normal}@media(max-width:520px){.firstRoundActions{grid-template-columns:1fr}}

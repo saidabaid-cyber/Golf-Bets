@@ -88,12 +88,11 @@ test("planes Beta exponen entitlements sin precio ni cobro", () => {
   assert.equal(PLAN_CATALOG.some((plan) => "price" in plan), false);
 });
 
-test("onboarding conserva el grupo creado y solo termina por acción explícita", () => {
+test("onboarding termina después de permisos sin crear grupos ni apuestas", () => {
   const started = createBetaOnboardingProgress("user-1", "2026-09-07T12:00:00.000Z");
-  const ready = advanceBetaOnboarding(started, "ready", { groupId: "group-domingos", now: "2026-09-07T12:05:00.000Z" });
-  assert.equal(ready.status, "in_progress");
-  assert.equal(ready.groupId, "group-domingos");
-  const completed = completeBetaOnboarding(ready, { now: "2026-09-07T12:06:00.000Z" });
+  const permissions = advanceBetaOnboarding(started, "permissions", { now: "2026-09-07T12:05:00.000Z" });
+  assert.equal(permissions.status, "in_progress");
+  const completed = completeBetaOnboarding(permissions, { now: "2026-09-07T12:06:00.000Z" });
   assert.equal(completed.status, "complete");
   assert.equal(completed.step, "complete");
   assert.equal(betaOnboardingIsActive(completed), false);
@@ -107,9 +106,15 @@ test("estado inválido o de otra cuenta no puede completar onboarding", () => {
 
 test("onboarding puede volver y conservar el avance sin marcar pasos inventados", () => {
   const started = createBetaOnboardingProgress("user-1", "2026-09-07T12:00:00.000Z");
-  const players = advanceBetaOnboarding(started, "players", { now: "2026-09-07T12:01:00.000Z" });
-  const group = navigateBetaOnboarding(players, "group", "2026-09-07T12:02:00.000Z");
-  assert.equal(group.step, "group");
-  assert.equal(group.status, "in_progress");
-  assert.deepEqual(group.completedSteps, ["welcome"]);
+  const objective = advanceBetaOnboarding(started, "objective", { now: "2026-09-07T12:01:00.000Z" });
+  const improvements = navigateBetaOnboarding(objective, "improvements", "2026-09-07T12:02:00.000Z");
+  assert.equal(improvements.step, "improvements");
+  assert.equal(improvements.status, "in_progress");
+  assert.deepEqual(improvements.completedSteps, ["welcome"]);
+});
+
+test("un borrador heredado de grupo se cierra sin volver a mostrar esa captura", () => {
+  const legacy = normalizeBetaOnboardingProgress({ version: 1, userId: "user-1", status: "in_progress", step: "bets", completedSteps: ["welcome", "permissions"] }, "user-1");
+  assert.equal(legacy?.status, "complete");
+  assert.equal(legacy?.step, "complete");
 });
