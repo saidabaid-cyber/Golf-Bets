@@ -49,6 +49,14 @@ jobs:
           echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends postgresql-client-17 ca-certificates
+          supabase_ca="${RUNNER_TEMP}/supabase-prod-ca-2021.crt"
+          curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
+            https://supabase-downloads.s3-ap-southeast-1.amazonaws.com/prod/ssl/prod-ca-2021.crt \
+            --output "${supabase_ca}"
+          printf '%s  %s\n' \
+            '700723581420dd1ac98fd7e9ac529f0ef210eadcaf87fc868a3ad7d114c2f3b7' \
+            "${supabase_ca}" | sha256sum --check --strict -
+          chmod 0600 "${supabase_ca}"
           postgresql_bin="/usr/lib/postgresql/17/bin"
           printf '%s\n' "${postgresql_bin}" >> "${GITHUB_PATH}"
           export PATH="${postgresql_bin}:${PATH}"
@@ -71,7 +79,7 @@ jobs:
           BACKUP_PGPORT: "5432"
           BACKUP_PGUSER: postgres.zhqmlpljloumldaczcfp
           BACKUP_PGDATABASE: postgres
-          BACKUP_PGSSLROOTCERT: system
+          BACKUP_PGSSLROOTCERT: ${{ runner.temp }}/supabase-prod-ca-2021.crt
           BACKUP_STORAGE_URL: https://zhqmlpljloumldaczcfp.supabase.co
           BACKUP_PGPASSWORD: ${{ secrets.BACKUP_PGPASSWORD }}
           BACKUP_STORAGE_KEY: ${{ secrets.BACKUP_STORAGE_KEY }}
