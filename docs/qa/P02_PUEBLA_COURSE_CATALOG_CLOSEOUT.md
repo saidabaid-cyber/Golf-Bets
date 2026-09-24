@@ -61,6 +61,7 @@ No se eliminaron ni remapearon IDs. El cambio es de publicación fail-closed, no
 - Cercanos desde coordenadas simuladas de La Vista: clubes distintos, orden geográfico y radio de 50 km; el resultado probado comienza La Vista, Campestre de Puebla y Las Fuentes sin hardcodear el orden.
 - Un recorrido adicional del mismo club no ocupa otro lugar.
 - Un dato desconocido permanece `undefined`/`null`; no se fabrican yardas, Rating ni Slope.
+- El smoke HTTP del Preview detectó y cerró una fuga de presentación: `localIndexRated=false` ya no acompaña números crudos de Rating/Slope en `/api/courses/search`.
 - Recorridos de nueve hoyos siguen siendo nueve; no se fabrican otros nueve.
 - La Vista normal Par 72 y la configuración temporal Par 69 no se sobrescriben.
 - El snapshot de ronda permanece inmutable si cambia después el catálogo.
@@ -83,8 +84,8 @@ No se eliminaron ni remapearon IDs. El cambio es de publicación fail-closed, no
 
 ## Pruebas ejecutadas
 
-- Pruebas P02 y regresiones dirigidas: 32 PASS, 0 FAIL.
-- Suite completa `npm test`: 3,362 PASS, 0 FAIL, 0 skipped, 0 cancelled.
+- Pruebas P02 y regresiones dirigidas finales: 29 PASS, 0 FAIL.
+- Suite completa `npm test`: 3,363 PASS, 0 FAIL, 0 skipped, 0 cancelled.
 - `tsc --noEmit`: PASS.
 - `npm run lint`: PASS.
 - `npm run build`: PASS (34 páginas estáticas y rutas dinámicas generadas).

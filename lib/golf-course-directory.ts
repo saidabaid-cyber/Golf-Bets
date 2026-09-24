@@ -63,6 +63,19 @@ export type GolfCourseTee = {
   dataEnvironment?: "PRODUCTION" | "QA" | "TEST" | "SYNTHETIC";
 };
 
+export function playerVisibleTeeRating(
+  course: Pick<GolfCourse, "sourceUrl" | "verifiedAt">,
+  tee: Pick<GolfCourseTee, "rating" | "slope"> | undefined,
+) {
+  const verified = Boolean(
+    course.sourceUrl
+    && course.verifiedAt
+    && typeof tee?.rating === "number"
+    && typeof tee.slope === "number",
+  );
+  return verified ? { verified: true as const, rating: tee!.rating!, slope: tee!.slope! } : { verified: false as const };
+}
+
 export type GolfHole = {
   id: string;
   courseId: string;
@@ -326,13 +339,12 @@ export function golfCourseSelectionToLegacyCourse(
     : club.latitude !== undefined && club.longitude !== undefined
       ? { latitude: club.latitude, longitude: club.longitude }
       : null;
-  const ratingEvidenceVerified = Boolean(golfCourse.sourceUrl && golfCourse.verifiedAt);
+  const visibleRating = playerVisibleTeeRating(golfCourse, tee);
   return withDefaultLaVistaRules({
     id: tee.legacySelectionId,
     name: golfCourse.name,
     teeName: tee.name,
-    ...(ratingEvidenceVerified && tee.rating !== undefined ? { rating: tee.rating } : {}),
-    ...(ratingEvidenceVerified && tee.slope !== undefined ? { slope: tee.slope } : {}),
+    ...(visibleRating.verified ? { rating: visibleRating.rating, slope: visibleRating.slope } : {}),
     ...(tee.totalYards !== undefined ? { totalYards: tee.totalYards } : {}),
     holes,
     builtIn: true,

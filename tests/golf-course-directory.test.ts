@@ -7,7 +7,17 @@ import {
   DEFAULT_COURSES,
   golfCourseSelectionToLegacyCourse,
   INTERNAL_GOLF_COURSE_CATALOG,
+  playerVisibleTeeRating,
 } from "../lib/golf-course-directory";
+
+test("Rating y Slope sólo se publican juntos con fuente y fecha verificadas", () => {
+  assert.deepEqual(playerVisibleTeeRating({}, { rating: 72.4, slope: 136 }), { verified: false });
+  assert.deepEqual(playerVisibleTeeRating({ sourceUrl: "https://example.test/card", verifiedAt: "2026-09-24" }, { rating: 72.4 }), { verified: false });
+  assert.deepEqual(
+    playerVisibleTeeRating({ sourceUrl: "https://example.test/card", verifiedAt: "2026-09-24" }, { rating: 72.4, slope: 136 }),
+    { verified: true, rating: 72.4, slope: 136 },
+  );
+});
 
 test("el seed separa club, campo, tee, hoyo y yardaje con procedencia explícita", () => {
   const catalog = buildSeedGolfCourseCatalog();

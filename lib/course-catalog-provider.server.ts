@@ -11,6 +11,7 @@ import {
   type GolfCourseTee,
   type GolfHole,
   type TeeHoleYardage,
+  playerVisibleTeeRating,
 } from "./golf-course-directory";
 import { haversineDistanceKm } from "./course-distance";
 import { loadReviewedCourseCatalog, reviewCatalogQaEnabled } from "./review-course-catalog.server";
@@ -194,8 +195,14 @@ export async function searchCourseCards(input: { query: string; limit: number; c
   const cards: CourseCard[] = catalog.courses.flatMap((course) => {
     const club = clubs.get(course.clubId); if (!club || !course.active || !club.active) return [];
     const tee = catalog.tees.find((candidate) => candidate.courseId === course.id && candidate.active);
-    const ratingValid = typeof tee?.rating === "number" && typeof tee.slope === "number" && Boolean(course.verifiedAt && course.sourceUrl);
-    return [{ id: course.id, courseId: course.id, clubId: club.id, name: course.name, clubName: club.name, city: club.city, latitude: course.latitude ?? club.latitude, longitude: course.longitude ?? club.longitude, aliases: [...(club.aliases || []), ...(course.aliases || [])], localIndexTeeAvailable: ratingValid, tee: { id: tee?.id || course.id, name: tee?.name || "Tee por seleccionar", rating: tee?.rating, slope: tee?.slope, yards: tee?.totalYards, localIndexRated: ratingValid } }];
+    const visibleRating = playerVisibleTeeRating(course, tee);
+    return [{ id: course.id, courseId: course.id, clubId: club.id, name: course.name, clubName: club.name, city: club.city, latitude: course.latitude ?? club.latitude, longitude: course.longitude ?? club.longitude, aliases: [...(club.aliases || []), ...(course.aliases || [])], localIndexTeeAvailable: visibleRating.verified, tee: {
+      id: tee?.id || course.id,
+      name: tee?.name || "Tee por seleccionar",
+      ...(visibleRating.verified ? { rating: visibleRating.rating, slope: visibleRating.slope } : {}),
+      yards: tee?.totalYards,
+      localIndexRated: visibleRating.verified,
+    } }];
   });
   const tokens = normalized(input.query).split(/\s+/).filter(Boolean);
   const filtered = cards.filter((card) => tokens.every((token) => normalized(`${card.clubName} ${card.name} ${card.city || ""} ${card.aliases.join(" ")}`).includes(token)));
