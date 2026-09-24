@@ -40,8 +40,8 @@ type DiagnosticStatus =
   | "FAIL"
   | "PARTIAL"
   | "BLOCKED_EXTERNAL"
-  | "PENDING_CONFIGURATION"
-  | "NOT_RUN";
+  | "PENDING_CONTROLLED_DB_APPLY"
+  | "PENDING_INTERACTIVE_QA";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -90,6 +90,9 @@ function externalFailureStatus(error: unknown): DiagnosticStatus {
 }
 
 async function adminContext(request: NextRequest) {
+  if (process.env.VERCEL_ENV !== "preview") {
+    return { ok: false as const, response: json({ error: "Ruta no disponible.", code: "PREVIEW_ONLY" }, 404) };
+  }
   if (isCrossSiteRequest(request)) {
     return { ok: false as const, response: json({ error: "Solicitud no permitida.", code: "CROSS_SITE_REJECTED" }, 403) };
   }
@@ -131,7 +134,9 @@ function selectLaVista(courses: readonly NormalizedGhinCourse[]) {
 function overallStatus(statuses: readonly DiagnosticStatus[]): DiagnosticStatus {
   if (statuses.includes("FAIL")) return "FAIL";
   if (statuses.includes("BLOCKED_EXTERNAL")) return statuses.includes("PASS") ? "PARTIAL" : "BLOCKED_EXTERNAL";
-  if (statuses.includes("PENDING_CONFIGURATION") || statuses.includes("NOT_RUN")) return statuses.includes("PASS") ? "PARTIAL" : "PENDING_CONFIGURATION";
+  if (statuses.includes("PENDING_CONTROLLED_DB_APPLY") || statuses.includes("PENDING_INTERACTIVE_QA")) {
+    return statuses.includes("PASS") ? "PARTIAL" : "PENDING_INTERACTIVE_QA";
+  }
   return statuses.every((status) => status === "PASS") ? "PASS" : "PARTIAL";
 }
 
@@ -140,7 +145,7 @@ export async function GET(request: NextRequest) {
   if (!access.ok) return access.response;
   const configured = resolveGhinRuntime();
   return json({
-    status: configured.ok ? "PENDING_CONFIGURATION" : "BLOCKED_EXTERNAL",
+    status: configured.ok ? "PENDING_INTERACTIVE_QA" : "BLOCKED_EXTERNAL",
     mode: "READ_ONLY",
     environment: process.env.VERCEL_ENV ?? "unknown",
     capabilities: configured.capabilities,
@@ -192,7 +197,7 @@ export async function POST(request: NextRequest) {
   }
   if (!runtimeState.capabilities.golferLookup) {
     return json({
-      status: "PENDING_CONFIGURATION",
+      status: "PENDING_INTERACTIVE_QA",
       mode: "READ_ONLY",
       blocker: "GHIN_GOLFER_LOOKUP_DISABLED",
       capabilities: runtimeState.capabilities,
@@ -214,9 +219,9 @@ export async function POST(request: NextRequest) {
       startedAt,
       completedAt: new Date().toISOString(),
       auth: { status, error: safeFailure(error) },
-      golfer: { status: "NOT_RUN" },
-      scores: { status: "NOT_RUN" },
-      course: { status: "NOT_RUN" },
+      golfer: { status: "BLOCKED_EXTERNAL" },
+      scores: { status: "BLOCKED_EXTERNAL" },
+      course: { status: "BLOCKED_EXTERNAL" },
       trace: client.getTrace(),
       safety: { scorePostingImplemented: false, writesApplied: false, profileAssociationActivated: false },
     }, status === "BLOCKED_EXTERNAL" ? 502 : 500);
@@ -250,8 +255,8 @@ export async function POST(request: NextRequest) {
         completedAt: new Date().toISOString(),
         auth,
         golfer,
-        scores: { status: "NOT_RUN" },
-        course: { status: "NOT_RUN" },
+        scores: { status: "PENDING_INTERACTIVE_QA" },
+        course: { status: "PENDING_INTERACTIVE_QA" },
         trace: client.getTrace(),
         safety: { scorePostingImplemented: false, writesApplied: false, profileAssociationActivated: false },
       }, 409);
@@ -265,8 +270,8 @@ export async function POST(request: NextRequest) {
       completedAt: new Date().toISOString(),
       auth,
       golfer: { status, error: safeFailure(error) },
-      scores: { status: "NOT_RUN" },
-      course: { status: "NOT_RUN" },
+      scores: { status: status === "BLOCKED_EXTERNAL" ? "BLOCKED_EXTERNAL" : "PENDING_INTERACTIVE_QA" },
+      course: { status: status === "BLOCKED_EXTERNAL" ? "BLOCKED_EXTERNAL" : "PENDING_INTERACTIVE_QA" },
       trace: client.getTrace(),
       safety: { scorePostingImplemented: false, writesApplied: false, profileAssociationActivated: false },
     }, status === "BLOCKED_EXTERNAL" ? 502 : 404);
@@ -289,7 +294,7 @@ export async function POST(request: NextRequest) {
 
   let course: JsonRecord;
   if (!runtimeState.capabilities.courseLookup) {
-    course = { status: "PENDING_CONFIGURATION", blocker: "GHIN_COURSE_LOOKUP_DISABLED" };
+    course = { status: "PENDING_INTERACTIVE_QA", blocker: "GHIN_COURSE_LOOKUP_DISABLED" };
   } else {
     try {
       const search = await client.searchCourses(COURSE_QUERY, 20);
@@ -392,7 +397,7 @@ export async function POST(request: NextRequest) {
     course,
     trace: client.getTrace(),
     profileIntegration: {
-      status: "NOT_RUN",
+      status: "PENDING_CONTROLLED_DB_APPLY",
       activated: false,
       reason: "El diagnóstico no modifica perfiles. La activación requiere validar el lookup real y aplicar la migración por separado.",
     },

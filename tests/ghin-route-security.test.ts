@@ -4,6 +4,7 @@ import test from "node:test";
 
 const routePath = "app/api/admin/dev/ghin/route.ts";
 const pagePath = "app/admin/dev/ghin/page.tsx";
+const clientPath = "app/admin/dev/ghin/ghin-diagnostic-client.tsx";
 
 function source(path: string) {
   return readFileSync(path, "utf8");
@@ -18,6 +19,7 @@ test("GHIN diagnostic route stays Preview-only, authenticated and admin-scoped",
   assert.match(runtime, /resolveGhinPreviewCapabilities\(env\)/);
   assert.match(runtime, /!capabilities\.previewOnly/);
   assert.match(config, /env\.VERCEL_ENV\s*===\s*["']preview["']/);
+  assert.match(route, /process\.env\.VERCEL_ENV\s*!==\s*["']preview["'][\s\S]*?PREVIEW_ONLY[\s\S]*?404/);
   assert.match(route, /authenticatedRequest\(request\)/);
   assert.match(route, /isCrossSiteRequest\(request\)/);
   assert.match(
@@ -60,8 +62,13 @@ test("GHIN diagnostic route is pinned to the authorized golfer and La Vista read
   assert.doesNotMatch(route, /fetch\([^)]*scores[^)]*method\s*:\s*["']POST["']/i);
 });
 
-test("GHIN admin page never references server credential environment names", () => {
+test("GHIN admin page is hidden outside Preview and its client never references server credentials", () => {
   const page = source(pagePath);
+  const client = source(clientPath);
+
+  assert.match(page, /process\.env\.VERCEL_ENV\s*!==\s*["']preview["']/);
+  assert.match(page, /await connection\(\)/);
+  assert.match(page, /notFound\(\)/);
 
   for (const secretName of [
     "GHIN_TEST_LOGIN",
@@ -70,6 +77,10 @@ test("GHIN admin page never references server credential environment names", () 
     "GHIN_API_BASE_URL",
   ]) {
     assert.doesNotMatch(page, new RegExp(secretName));
+    assert.doesNotMatch(client, new RegExp(secretName));
   }
-  assert.doesNotMatch(page, /process\.env/);
+  assert.doesNotMatch(client, /process\.env/);
+  assert.doesNotMatch(client, /11103349|Said Abaid Taja|La Vista Country Club/);
+  assert.match(client, /if \(!configuration\)/);
+  assert.doesNotMatch(`${page}\n${client}\n${source(routePath)}`, /PENDING_CONFIGURATION|NOT_RUN/);
 });
