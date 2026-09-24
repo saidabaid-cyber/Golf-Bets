@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, stat, truncate, writeFile } from 'node:fs/promises';
+import { createServer } from 'node:http';
+import { once } from 'node:events';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,17 +16,25 @@ import {
   createPortablePackage,
   driveTargetsForDate,
   executeAutomatedBackup,
+  formatDriveDiagnostic,
   initialReport,
   mexicoDateParts,
   planRetention,
   portableNames,
+  renderStepSummary,
   safeErrorCode,
   validateAutomationEnvironment,
   validatePortableChecksum,
   writeGithubOutputs,
 } from './automation.mjs';
 import { assertDatabaseReadOnly, databaseEnvironment } from './core.mjs';
-import { GoogleDriveClient, googleDriveInternals, publishToGoogleDrive, serviceAccountAccessToken } from './google-drive.mjs';
+import {
+  GoogleDriveClient,
+  googleDriveInternals,
+  publishToGoogleDrive,
+  safeDriveDiagnostic,
+  serviceAccountAccessToken,
+} from './google-drive.mjs';
 
 const repo = fileURLToPath(new URL('../../', import.meta.url));
 const workflowPath = '.github/workflows/automated-offsite-backup.yml';
@@ -597,6 +607,32 @@ test('daily sidecar mismatch and daily full-package checksum mismatch block Driv
   assert.equal(client.hashDownloads.length, 1);
 });
 
+test('Drive exposes a real Node fetch 308 instead of treating resume-incomplete as a redirect failure', async (t) => {
+  const server = createServer((request, response) => {
+    request.resume();
+    request.once('end', () => {
+      response.writeHead(308, { range: 'bytes=0-9', location: '/resume-session' });
+      response.end();
+    });
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => new Promise(resolve => server.close(resolve)));
+  const address = server.address();
+  assert.ok(address && typeof address === 'object');
+  let redirectMode;
+  const client = new GoogleDriveClient('fixture-access-token', async (_input, init) => {
+    redirectMode = init.redirect;
+    return fetch(`http://127.0.0.1:${address.port}/upload`, init);
+  });
+  const response = await client.fetch('https://www.googleapis.com/upload/drive/v3/files?upload_id=fixture', {
+    method: 'PUT', headers: { 'content-length': '10', 'content-range': 'bytes 0-9/20' }, body: Buffer.alloc(10),
+  }, { acceptStatus: status => status === 308, redirect: 'manual' });
+  assert.equal(redirectMode, 'manual');
+  assert.equal(response.status, 308);
+  assert.equal(response.headers.get('range'), 'bytes=0-9');
+});
+
 test('Drive resumable upload recovers from a transient chunk failure without changing the byte ranges', async (t) => {
   const directory = await mkdtemp(join(tmpdir(), 'backyard-drive-resumable-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
@@ -614,6 +650,8 @@ test('Drive resumable upload recovers from a transient chunk failure without cha
     }
     if (url.pathname === '/upload/drive/v3/files' && init.method === 'POST') {
       assert.equal(init.redirect, 'error');
+      assert.equal(url.searchParams.get('uploadType'), 'resumable');
+      assert.equal(url.searchParams.get('supportsAllDrives'), 'true');
       initializedResponse = new Response('discarded initialization body', {
         status: 200, headers: { location: 'https://www.googleapis.com/upload/drive/v3/files?upload_id=fixture' },
       });
@@ -625,12 +663,16 @@ test('Drive resumable upload recovers from a transient chunk failure without cha
     const range = headers.get('content-range');
     if (range === `bytes */${bytes.length}`) {
       statusQueries += 1;
+      assert.equal(headers.get('content-length'), '0');
+      assert.equal(init.body, undefined);
       const response = new Response('discarded status body', { status: 308 });
       discardedResponses.push(response);
       return response;
     }
     assert.ok(Buffer.isBuffer(init.body), 'each upload chunk is a fixed replayable Buffer');
     const uploadedBytes = init.body.length;
+    assert.equal(headers.get('content-length'), String(uploadedBytes));
+    assert.equal('duplex' in init, false, 'Buffer uploads do not require streaming duplex mode');
     ranges.push({ range, uploadedBytes });
     if (range === `bytes 0-${(256 * 1024) - 1}/${bytes.length}` && firstChunkAttempts++ === 0) {
       return new Response(null, { status: 503 });
@@ -664,6 +706,94 @@ test('Drive resumable upload recovers from a transient chunk failure without cha
     `bytes ${256 * 1024}-${(512 * 1024) - 1}/${bytes.length}`,
     `bytes ${512 * 1024}-${bytes.length - 1}/${bytes.length}`,
   ]);
+});
+
+test('Drive resumable upload resumes from a server-confirmed partial chunk after an interrupted request', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'backyard-drive-partial-resume-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const name = 'The-Backyard-Backup-2026-09-21-061000.tar.gz';
+  const path = join(directory, name), bytes = Buffer.allocUnsafe((2 * 256 * 1024) + 19);
+  for (let index = 0; index < bytes.length; index += 1) bytes[index] = index % 251;
+  await writeFile(path, bytes);
+  const ranges = [], diagnostics = [];
+  let interrupted = false, statusQueries = 0;
+  const transport = async (input, init = {}) => {
+    const url = new URL(input), headers = new Headers(init.headers || {});
+    if (url.pathname === '/drive/v3/files' && init.method === 'GET') {
+      return new Response(JSON.stringify({ files: [] }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (url.pathname === '/upload/drive/v3/files' && init.method === 'POST') {
+      return new Response(null, { status: 200, headers: { location: 'https://www.googleapis.com/upload/drive/v3/files?upload_id=partial' } });
+    }
+    const range = headers.get('content-range');
+    if (range === `bytes */${bytes.length}`) {
+      statusQueries += 1;
+      return new Response(null, { status: 308, headers: { range: `bytes=0-${(128 * 1024) - 1}` } });
+    }
+    const match = /^bytes (\d+)-(\d+)\/(\d+)$/.exec(range);
+    assert.ok(match);
+    const start = Number(match[1]), end = Number(match[2]);
+    assert.ok(Buffer.isBuffer(init.body));
+    assert.ok(init.body.equals(bytes.subarray(start, end + 1)));
+    ranges.push(range);
+    if (!interrupted) {
+      interrupted = true;
+      throw new TypeError('synthetic connection interruption');
+    }
+    if (end + 1 < bytes.length) return new Response(null, { status: 308, headers: { range: `bytes=0-${end}` } });
+    return new Response(JSON.stringify({ id: 'partial_resume_123', name, size: String(bytes.length), trashed: false }), {
+      status: 200, headers: { 'content-type': 'application/json' },
+    });
+  };
+  const client = new GoogleDriveClient('fixture-access-token', transport, {
+    uploadChunkBytes: 256 * 1024, uploadMaxRetries: 2, uploadTimeoutMs: 120000,
+    wait: async () => {}, onDiagnostic: diagnostic => diagnostics.push(diagnostic),
+  });
+  const uploaded = await client.uploadFile('parent_12345', path, name, 'application/gzip', { kind: 'package' });
+  assert.equal(uploaded.id, 'partial_resume_123');
+  assert.equal(statusQueries, 1);
+  assert.deepEqual(ranges, [
+    `bytes 0-${(256 * 1024) - 1}/${bytes.length}`,
+    `bytes ${128 * 1024}-${(384 * 1024) - 1}/${bytes.length}`,
+    `bytes ${384 * 1024}-${bytes.length - 1}/${bytes.length}`,
+  ]);
+  assert.ok(diagnostics.some(diagnostic => diagnostic.phase === 'STATUS_QUERY' && diagnostic.httpStatus === 308));
+  assert.equal(diagnostics.at(-1).phase, 'COMPLETE');
+});
+
+test('Drive resumable upload finalizes through a status query after all bytes receive a 308', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'backyard-drive-finalize-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const name = 'The-Backyard-Backup-2026-09-21-062000.tar.gz';
+  const path = join(directory, name), bytes = Buffer.alloc(4096, 61);
+  await writeFile(path, bytes);
+  let statusQueries = 0;
+  const diagnostics = [];
+  const transport = async (input, init = {}) => {
+    const url = new URL(input), headers = new Headers(init.headers || {});
+    if (url.pathname === '/drive/v3/files' && init.method === 'GET') {
+      return new Response(JSON.stringify({ files: [] }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (url.pathname === '/upload/drive/v3/files' && init.method === 'POST') {
+      return new Response(null, { status: 200, headers: { location: 'https://www.googleapis.com/upload/drive/v3/files?upload_id=finalize' } });
+    }
+    if (headers.get('content-range') === `bytes */${bytes.length}`) {
+      statusQueries += 1;
+      return new Response(JSON.stringify({ id: 'finalized_upload_123', name, size: String(bytes.length), trashed: false }), {
+        status: 201, headers: { 'content-type': 'application/json' },
+      });
+    }
+    return new Response(null, { status: 308, headers: { range: `bytes=0-${bytes.length - 1}` } });
+  };
+  const client = new GoogleDriveClient('fixture-access-token', transport, {
+    uploadChunkBytes: 256 * 1024, uploadMaxRetries: 2, uploadTimeoutMs: 120000,
+    wait: async () => {}, onDiagnostic: diagnostic => diagnostics.push(diagnostic),
+  });
+  const uploaded = await client.uploadFile('parent_12345', path, name, 'application/gzip', { kind: 'package' });
+  assert.equal(uploaded.id, 'finalized_upload_123');
+  assert.equal(statusQueries, 1);
+  assert.ok(diagnostics.some(diagnostic => diagnostic.phase === 'FINALIZE' && diagnostic.httpStatus === 201));
+  assert.equal(diagnostics.at(-1).phase, 'COMPLETE');
 });
 
 test('Drive resumable upload preserves the full retry budget when status confirms no progress', async (t) => {
@@ -751,7 +881,7 @@ test('Drive resumable upload exhausts its retry budget without unbounded attempt
     /GDRIVE_PACKAGE_CHUNK_RETRIES_EXHAUSTED/,
   );
   assert.equal(uploadAttempts, 3, 'the initial request plus two configured retries are attempted');
-  assert.equal(statusQueries, 2);
+  assert.equal(statusQueries, 3, 'every uncertain chunk result is reconciled with the server before failing');
   assert.deepEqual(waits, [1000, 2000]);
 });
 
@@ -784,8 +914,128 @@ test('Drive resumable upload rejects a short local read before sending any chunk
   assert.equal(uploadRequests, 0);
 });
 
+test('Drive resumable session creation retries 5xx and validates the returned Location strictly', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'backyard-drive-session-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const name = 'The-Backyard-Backup-2026-09-21-091000.tar.gz';
+  const path = join(directory, name), bytes = Buffer.alloc(4096, 31);
+  await writeFile(path, bytes);
+  let initAttempts = 0;
+  const waits = [];
+  const transport = async (input, init = {}) => {
+    const url = new URL(input);
+    if (url.pathname === '/drive/v3/files') {
+      return new Response(JSON.stringify({ files: [] }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (init.method === 'POST') {
+      initAttempts += 1;
+      if (initAttempts === 1) return new Response(null, { status: 503 });
+      return new Response(null, { status: 200, headers: { location: 'https://www.googleapis.com/upload/drive/v3/files?upload_id=valid-session' } });
+    }
+    return new Response(JSON.stringify({ id: 'session_retry_123', name, size: String(bytes.length), trashed: false }), {
+      status: 200, headers: { 'content-type': 'application/json' },
+    });
+  };
+  const client = new GoogleDriveClient('fixture-access-token', transport, {
+    uploadChunkBytes: 256 * 1024, uploadMaxRetries: 2, uploadTimeoutMs: 120000,
+    wait: async milliseconds => { waits.push(milliseconds); },
+  });
+  const uploaded = await client.uploadFile('parent_12345', path, name, 'application/gzip', { kind: 'package' });
+  assert.equal(uploaded.id, 'session_retry_123');
+  assert.equal(initAttempts, 2);
+  assert.deepEqual(waits, [1000]);
+
+  const invalidLocations = [
+    '/upload/drive/v3/files?upload_id=relative',
+    'https://example.invalid/upload/drive/v3/files?upload_id=cross-origin',
+    'https://www.googleapis.com/upload/drive/v3/wrong?upload_id=wrong-path',
+    'https://user:password@www.googleapis.com/upload/drive/v3/files?upload_id=credentials',
+    'https://www.googleapis.com/upload/drive/v3/files?upload_id=fragment#private-fragment',
+    'https://www.googleapis.com/upload/drive/v3/files?upload_id=one&upload_id=two',
+    'https://www.googleapis.com/upload/drive/v3/files?missing=upload-id',
+  ];
+  for (const location of invalidLocations) {
+    const invalidClient = new GoogleDriveClient('fixture-access-token', async (input, init = {}) => {
+      const url = new URL(input);
+      if (url.pathname === '/drive/v3/files') {
+        return new Response(JSON.stringify({ files: [] }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      assert.equal(init.method, 'POST');
+      return new Response(null, { status: 200, headers: { location } });
+    });
+    await assert.rejects(
+      invalidClient.uploadFile('parent_12345', path, name, 'application/gzip', { kind: 'package' }),
+      /GDRIVE_UPLOAD_SESSION_INVALID/,
+    );
+  }
+});
+
+test('Drive status-query failures and stalled 308 offsets are bounded and phase-specific', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'backyard-drive-status-errors-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const name = 'The-Backyard-Backup-2026-09-21-092000.tar.gz';
+  const path = join(directory, name), bytes = Buffer.alloc(4096, 37);
+  await writeFile(path, bytes);
+  let statusQueries = 0;
+  const statusClient = new GoogleDriveClient('fixture-access-token', async (input, init = {}) => {
+    const url = new URL(input), headers = new Headers(init.headers || {});
+    if (url.pathname === '/drive/v3/files') {
+      return new Response(JSON.stringify({ files: [] }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (init.method === 'POST') {
+      return new Response(null, { status: 200, headers: { location: 'https://www.googleapis.com/upload/drive/v3/files?upload_id=status-failure' } });
+    }
+    if (headers.get('content-range') === `bytes */${bytes.length}`) {
+      statusQueries += 1;
+      return new Response(null, { status: 404 });
+    }
+    throw new TypeError('synthetic lost chunk response');
+  }, { uploadChunkBytes: 256 * 1024, uploadMaxRetries: 2, uploadTimeoutMs: 120000, wait: async () => {} });
+  await assert.rejects(
+    statusClient.uploadFile('parent_12345', path, name, 'application/gzip', { kind: 'package' }),
+    (error) => {
+      assert.equal(error.code, 'GDRIVE_PACKAGE_STATUS_FAILED');
+      assert.equal(error.driveDiagnostic.phase, 'STATUS_QUERY');
+      assert.equal(error.driveDiagnostic.httpStatus, 404);
+      assert.equal(error.driveDiagnostic.offset, 0);
+      assert.equal(error.driveDiagnostic.totalBytes, bytes.length);
+      return true;
+    },
+  );
+  assert.equal(statusQueries, 1);
+
+  const bodies = [], waits = [];
+  const stalledClient = new GoogleDriveClient('fixture-access-token', async (input, init = {}) => {
+    const url = new URL(input);
+    if (url.pathname === '/drive/v3/files') {
+      return new Response(JSON.stringify({ files: [] }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (init.method === 'POST') {
+      return new Response(null, { status: 200, headers: { location: 'https://www.googleapis.com/upload/drive/v3/files?upload_id=stalled' } });
+    }
+    bodies.push(init.body);
+    return new Response(null, { status: 308 });
+  }, {
+    uploadChunkBytes: 256 * 1024, uploadMaxRetries: 2, uploadTimeoutMs: 120000,
+    wait: async milliseconds => { waits.push(milliseconds); },
+  });
+  await assert.rejects(
+    stalledClient.uploadFile('parent_12345', path, name, 'application/gzip', { kind: 'package' }),
+    (error) => {
+      assert.equal(error.code, 'GDRIVE_UPLOAD_OFFSET_STALLED');
+      assert.equal(error.driveDiagnostic.phase, 'CHUNK_UPLOAD');
+      assert.equal(error.driveDiagnostic.httpStatus, 308);
+      assert.equal(error.driveDiagnostic.retryAttempt, 2);
+      return true;
+    },
+  );
+  assert.equal(bodies.length, 3);
+  assert.ok(bodies.every(body => body === bodies[0]));
+  assert.deepEqual(waits, [1000, 2000]);
+});
+
 test('Drive root resolution accepts only the configured Shared Drive and scopes child queries to it', async () => {
-  const rootId = 'shared_drive_root_123', requests = [];
+  const rootId = 'shared_drive_root_123', requests = [], diagnostics = [];
   const client = new GoogleDriveClient('fixture-access-token', async (input, init = {}) => {
     const url = new URL(input); requests.push(url);
     assert.equal(new Headers(init.headers).get('authorization'), 'Bearer fixture-access-token');
@@ -803,7 +1053,7 @@ test('Drive root resolution accepts only the configured Shared Drive and scopes 
     assert.equal(url.searchParams.get('supportsAllDrives'), 'true');
     assert.match(url.searchParams.get('fields'), /incompleteSearch/);
     return new Response(JSON.stringify({ files: [] }), { status: 200, headers: { 'content-type': 'application/json' } });
-  });
+  }, { onDiagnostic: diagnostic => diagnostics.push(diagnostic) });
   const root = await client.getBackupRoot(rootId);
   assert.deepEqual(root, {
     id: rootId, name: googleDriveInternals.ROOT_FOLDER_NAME,
@@ -812,6 +1062,7 @@ test('Drive root resolution accepts only the configured Shared Drive and scopes 
   assert.deepEqual(await client.listChildren(rootId), []);
   assert.equal(requests.length, 2);
   assert.ok(!requests.some(url => url.pathname === '/drive/v3/drives'), 'never enumerates other Shared Drives');
+  assert.ok(diagnostics.some(diagnostic => diagnostic.sharedDriveDetected === 'YES' && diagnostic.canAddChildren === 'YES'));
 });
 
 test('Drive root resolution also supports an exact backup folder inside a Shared Drive', async () => {
@@ -823,6 +1074,7 @@ test('Drive root resolution also supports an exact backup folder inside a Shared
       return new Response(JSON.stringify({
         id: folderId, name: googleDriveInternals.ROOT_FOLDER_NAME,
         mimeType: googleDriveInternals.FOLDER_MIME, driveId, trashed: false,
+        capabilities: { canAddChildren: true, canListChildren: true },
       }), { status: 200, headers: { 'content-type': 'application/json' } });
     }
     assert.equal(url.pathname, '/drive/v3/files');
@@ -863,7 +1115,12 @@ test('Drive root resolution fails closed for a different or read-only Shared Dri
     const client = new GoogleDriveClient('fixture-access-token', async () => new Response(JSON.stringify(drive), {
       status: 200, headers: { 'content-type': 'application/json' },
     }));
-    await assert.rejects(client.getBackupRoot(rootId), /GDRIVE_ROOT_FOLDER_NOT_ACCESSIBLE/);
+    await assert.rejects(client.getBackupRoot(rootId), (error) => {
+      assert.match(error.message, /GDRIVE_ROOT_FOLDER_NOT_ACCESSIBLE/);
+      assert.equal(error.driveDiagnostic.sharedDriveDetected, 'YES');
+      assert.equal(error.driveDiagnostic.canAddChildren, drive.capabilities.canAddChildren ? 'YES' : 'NO');
+      return true;
+    });
   }
 });
 
@@ -930,6 +1187,29 @@ test('failure reporting and executable logs expose only bounded status codes', a
   assert.equal(safeErrorCode(new Error('credential-like provider diagnostic\nsecond line')), 'AUTOMATED_BACKUP_FAILED');
   assert.equal(safeErrorCode({ code: 'SAFE_FAILURE_CODE' }), 'SAFE_FAILURE_CODE');
   assert.equal(safeErrorCode({ code: 'UNSAFE:credential-like-value' }), 'AUTOMATED_BACKUP_FAILED');
+  const diagnostic = safeDriveDiagnostic({
+    phase: 'CHUNK_UPLOAD', httpStatus: 503, retryAttempt: 2, offset: 262144, totalBytes: 1048576,
+    chunkBytes: 262144, sharedDriveDetected: 'YES', canAddChildren: 'YES', fileKind: 'PACKAGE',
+    authorization: 'Bearer should-never-appear', access_token: 'private-token',
+    serviceAccountJson: '{"private_key":"private"}', responseBody: 'private-provider-body',
+    location: 'https://www.googleapis.com/upload/drive/v3/files?upload_id=private-session',
+  });
+  assert.deepEqual(Object.keys(diagnostic), [
+    'phase', 'httpStatus', 'retryAttempt', 'offset', 'totalBytes', 'chunkBytes',
+    'sharedDriveDetected', 'canAddChildren', 'fileKind',
+  ]);
+  const formatted = formatDriveDiagnostic(diagnostic);
+  assert.equal(formatted, 'phase=CHUNK_UPLOAD httpStatus=503 retryAttempt=2 offset=262144 totalBytes=1048576 chunkBytes=262144 sharedDriveDetected=YES canAddChildren=YES fileKind=PACKAGE');
+  assert.doesNotMatch(formatted, /Bearer|private|upload_id|responseBody|access_token|serviceAccount/i);
+  const report = initialReport(new Date('2026-09-21T12:00:00Z'));
+  report.driveDiagnostic = diagnostic;
+  const summary = renderStepSummary(report);
+  for (const expected of [
+    'Drive upload phase: CHUNK_UPLOAD', 'Drive HTTP status: 503', 'Drive retry attempt: 2',
+    'Drive offset: 262144', 'Drive bytes total: 1048576', 'Shared Drive detected: YES',
+    'canAddChildren: YES', 'NEEDS_OWNER_ACTION: NONE',
+  ]) assert.match(summary, new RegExp(expected));
+  assert.doesNotMatch(summary, /Bearer|private-token|upload_id|private-provider-body/);
   const entrypoint = await readRepo('scripts/backup/automated-backup.mjs');
   assert.match(entrypoint, /AUTOMATED_BACKUP_PASS/);
   assert.match(entrypoint, /AUTOMATED_BACKUP_FAIL:\$\{safeErrorCode\(error\)\}/);
