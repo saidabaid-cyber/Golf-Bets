@@ -13,13 +13,17 @@ import type { Course, Player } from "../lib/types";
 
 test("P · Puebla references distinguish verified identity from missing rating evidence", () => {
   const clubs = curatedPueblaCourseProvider.listCourses();
-  assert.equal(clubs.length, 5);
+  assert.equal(clubs.length, 6);
   assert.equal(curatedPueblaCourseProvider.dataVersion, "puebla-primary-2026-09-15.v1");
   const vista = clubs.find((club) => club.courseId === "course-la-vista");
   assert.equal(vista?.holesCount, 18);
   assert.equal(vista?.par, 72);
   assert.match(vista?.source.url || "", /golfsur\.com\.mx\/.*La-Vista\.pdf/);
   assert.equal(clubs.find((club) => club.courseId === "course-las-fuentes")?.holesCount, undefined);
+  const huerta = clubs.find((club) => club.courseId === "review-course-23231");
+  assert.equal(huerta?.holesCount, 9);
+  assert.equal(huerta?.par, 29);
+  assert.match(huerta?.source.url || "", /lahuertagolfhotel\.com\/club/);
   assert.equal(curatedPueblaCourseProvider.getIndexRatedTeeEvidenceById("tee-la-vista-blancas"), null);
   assert.equal(curatedPueblaCourseProvider.getPlayableSelectionByTeeId("tee-la-vista-blancas"), null);
   assert.equal(curatedPueblaCourseProvider.getCourseStatusById("course-la-vista"), "COURSE_REFERENCE_ONLY");

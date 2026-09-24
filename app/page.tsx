@@ -100,7 +100,7 @@ import { CourseReviewNotice } from "./components/course-review-notice";
 import { CourseOperationsNotice } from "./components/course-operations-notice";
 import { RoundTeePicker } from "./components/round-tee-picker";
 import { StartHoleSelector } from "./components/start-hole-selector";
-import { beginRoundCourseSelection, changeRoundCourseSelection, completeRoundTeeSelection, usableRoundCourseCards } from "../lib/round-course-selection";
+import { beginRoundCourseSelection, changeRoundCourseSelection, completeRoundTeeSelection, preferredTeeForCourse, usableRoundCourseCards } from "../lib/round-course-selection";
 import { BrandLockup } from "./components/brand-lockup";
 import { ModalCloseButton } from "./components/modal-shell";
 import { GroupBuilder } from "./components/group-builder";
@@ -735,14 +735,15 @@ function GolfBetsApp() {
     for (const candidate of courseOptions) {
       const key = candidate.name.trim().toLocaleLowerCase("es-MX");
       const current = names.get(key);
-      const preferred = candidate.teeName.localeCompare(identity.preferredTee || "", "es-MX", { sensitivity: "base" }) === 0;
+      const preferred = (candidate.catalogCourseId || candidate.id) === identity.homeCourseId
+        && candidate.teeName.localeCompare(identity.preferredTee || "", "es-MX", { sensitivity: "base" }) === 0;
       const commonWhite = /blanc|white/i.test(candidate.teeName);
       if (!current || preferred || (commonWhite && !/blanc|white/i.test(current.teeName))) names.set(key, candidate);
     }
     return [...names.values()];
-  }, [courseOptions, identity.preferredTee]);
+  }, [courseOptions, identity.homeCourseId, identity.preferredTee]);
   const teeOptions = useMemo(() => courseSelected || courseSetupStage === "tee" ? teeOptionsForCourse(course, courseOptions) : [], [course, courseOptions, courseSelected, courseSetupStage]);
-  const suggestedRoundTee = useMemo(() => teeOptions.find(option => option.teeName.localeCompare(identity.preferredTee || "", "es-MX", { sensitivity: "base" }) === 0), [identity.preferredTee, teeOptions]);
+  const suggestedRoundTee = useMemo(() => preferredTeeForCourse(teeOptions, { homeCourseId: identity.homeCourseId, preferredTee: identity.preferredTee }), [identity.homeCourseId, identity.preferredTee, teeOptions]);
   const selectedRoundTeeId = courseSelected ? course.catalogTeeId || course.id : suggestedRoundTee ? suggestedRoundTee.catalogTeeId || suggestedRoundTee.id : "";
   const pendingCourseCandidates = useMemo(
     () => coursesForPendingIdentity(courseOptions, pendingCourseIdentity),

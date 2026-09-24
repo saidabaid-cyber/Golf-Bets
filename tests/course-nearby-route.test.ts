@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
+import { distinctNearbyClubCards } from "../lib/course-nearby-clubs";
 
 function routeHarness() {
   const origins: Array<{ latitude: number; longitude: number }> = [];
@@ -22,6 +23,7 @@ function routeHarness() {
         },
       } };
       if (name.endsWith("course-catalog-provider")) return {};
+      if (name.endsWith("course-nearby-clubs")) return { distinctNearbyClubCards };
       if (name.endsWith("feature-flags/server")) return { serverPhase2FeatureFlags: () => ({ course_search: true }) };
       if (name.endsWith("server-auth")) return { bearerToken: () => "", authenticatedRequest: async () => ({ ok: false, status: 401, code: "AUTH_REQUIRED", error: "auth" }) };
       throw new Error(`Unexpected route dependency: ${name}`);

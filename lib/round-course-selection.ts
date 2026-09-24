@@ -25,6 +25,25 @@ function teeIdentity(course: Course) {
   return course.catalogTeeId || course.id;
 }
 
+function courseIdentity(course: Course) {
+  return course.catalogCourseId || course.id;
+}
+
+export function preferredTeeForCourse(
+  cards: readonly Course[],
+  preference: { homeCourseId?: string; preferredTee?: string; preferredTeeId?: string },
+) {
+  if (!preference.homeCourseId) return undefined;
+  const compatible = cards.filter((card) => courseIdentity(card) === preference.homeCourseId);
+  if (!compatible.length) return undefined;
+  if (preference.preferredTeeId) {
+    const stable = compatible.find((card) => teeIdentity(card) === preference.preferredTeeId);
+    if (stable) return stable;
+  }
+  if (!preference.preferredTee?.trim()) return undefined;
+  return compatible.find((card) => card.teeName.localeCompare(preference.preferredTee!, "es-MX", { sensitivity: "base" }) === 0);
+}
+
 function hasUsableRealHoles(course: Course) {
   const numbers = course.holes
     .map(hole => Number(hole.number))

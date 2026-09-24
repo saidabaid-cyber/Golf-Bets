@@ -17,6 +17,7 @@ import { loadReviewedCourseCatalog, reviewCatalogQaEnabled } from "./review-cour
 import type { ReviewedCatalogCourse } from "./review-course-catalog";
 import { getSupabaseAdmin } from "./supabase/server";
 import { readPublishedCatalog } from "./admin-published-catalog.server";
+import { reviewedCoursePublicationShape } from "./puebla-course-publication";
 
 type CourseCard = {
   id: string;
@@ -108,6 +109,7 @@ function reviewedCoursesToCatalog(rows: readonly ReviewedCatalogCourse[]): GolfC
   const holes: GolfHole[] = [];
   const teeHoleYardages: TeeHoleYardage[] = [];
   for (const row of rows) {
+    const publication = reviewedCoursePublicationShape(row);
     if (!clubs.has(row.clubId)) clubs.set(row.clubId, {
       id: row.clubId,
       name: row.clubName,
@@ -123,10 +125,10 @@ function reviewedCoursesToCatalog(rows: readonly ReviewedCatalogCourse[]): GolfC
       sourceUrl: row.locationEvidence?.sourceUrl || row.sourceUrl,
       verifiedAt: row.locationEvidence?.verifiedAt || row.observedAt,
     });
-    courses.push({ id: row.id, clubId: row.clubId, name: row.name, aliases: row.aliases, holes: row.holes, active: true, provider: "OWNER_CATALOG_REVIEW", sourceName: "Catálogo revisado por owner", sourceUrl: row.sourceUrl, verifiedAt: row.observedAt });
-    const baseTee = [...row.tees].sort((left, right) => right.holes.length - left.holes.length)[0];
+    courses.push({ id: row.id, clubId: row.clubId, name: row.name, aliases: row.aliases, holes: publication.holes, active: true, provider: "OWNER_CATALOG_REVIEW", sourceName: publication.sourceName, sourceUrl: publication.sourceUrl, verifiedAt: publication.verifiedAt });
+    const baseTee = [...publication.tees].sort((left, right) => right.holes.length - left.holes.length)[0];
     for (const hole of baseTee?.holes || []) holes.push({ id: `${row.id}:hole:${hole.hole_number}`, courseId: row.id, holeNumber: hole.hole_number, par: hole.par, strokeIndex: hole.stroke_index });
-    for (const tee of row.tees) {
+    for (const tee of publication.tees) {
       tees.push({ id: tee.id, courseId: row.id, legacySelectionId: tee.id, name: tee.name, par: tee.par ?? undefined, totalYards: tee.yards ?? undefined, active: true });
       for (const hole of tee.holes) if (hole.yards !== null) teeHoleYardages.push({ teeId: tee.id, holeId: `${row.id}:hole:${hole.hole_number}`, holeNumber: hole.hole_number, yards: hole.yards });
     }
@@ -192,7 +194,7 @@ export async function searchCourseCards(input: { query: string; limit: number; c
   const cards: CourseCard[] = catalog.courses.flatMap((course) => {
     const club = clubs.get(course.clubId); if (!club || !course.active || !club.active) return [];
     const tee = catalog.tees.find((candidate) => candidate.courseId === course.id && candidate.active);
-    const ratingValid = typeof tee?.rating === "number" && typeof tee.slope === "number";
+    const ratingValid = typeof tee?.rating === "number" && typeof tee.slope === "number" && Boolean(course.verifiedAt && course.sourceUrl);
     return [{ id: course.id, courseId: course.id, clubId: club.id, name: course.name, clubName: club.name, city: club.city, latitude: course.latitude ?? club.latitude, longitude: course.longitude ?? club.longitude, aliases: [...(club.aliases || []), ...(course.aliases || [])], localIndexTeeAvailable: ratingValid, tee: { id: tee?.id || course.id, name: tee?.name || "Tee por seleccionar", rating: tee?.rating, slope: tee?.slope, yards: tee?.totalYards, localIndexRated: ratingValid } }];
   });
   const tokens = normalized(input.query).split(/\s+/).filter(Boolean);

@@ -36,6 +36,23 @@
       "notes": "El club confirma 18 hoyos/par 72; falta tarjeta machine-readable por tee y fuente de Rating/Slope autorizada."
     },
     {
+      "id": "review-club-9c0700f229794a278011",
+      "courseId": "review-course-23231",
+      "name": "Club de Golf La Huerta",
+      "countryCode": "MX",
+      "stateCode": "MX-PUE",
+      "city": "San Pedro Cholula",
+      "status": "OFFICIAL_PHYSICAL_LAYOUT_VERIFIED_CAPTURED_CARD_CONFLICT",
+      "holesCount": 9,
+      "par": 29,
+      "source": {
+        "authority": "La Huerta Golf & Hotel",
+        "url": "https://www.lahuertagolfhotel.com/club",
+        "verifiedAt": "2026-09-24"
+      },
+      "notes": "La fuente oficial publica 9 hoyos/par 29. La carga QA anterior representa una vuelta de 18 hoyos/par 62; se conserva como evidencia pero no se publica como tarjeta física hasta reconciliarla con una tarjeta oficial hoyo por hoyo."
+    },
+    {
       "id": "club-el-cristo",
       "courseId": "course-el-cristo",
       "name": "Club Campestre El Cristo",

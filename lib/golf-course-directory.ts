@@ -326,12 +326,13 @@ export function golfCourseSelectionToLegacyCourse(
     : club.latitude !== undefined && club.longitude !== undefined
       ? { latitude: club.latitude, longitude: club.longitude }
       : null;
+  const ratingEvidenceVerified = Boolean(golfCourse.sourceUrl && golfCourse.verifiedAt);
   return withDefaultLaVistaRules({
     id: tee.legacySelectionId,
     name: golfCourse.name,
     teeName: tee.name,
-    ...(tee.rating !== undefined ? { rating: tee.rating } : {}),
-    ...(tee.slope !== undefined ? { slope: tee.slope } : {}),
+    ...(ratingEvidenceVerified && tee.rating !== undefined ? { rating: tee.rating } : {}),
+    ...(ratingEvidenceVerified && tee.slope !== undefined ? { slope: tee.slope } : {}),
     ...(tee.totalYards !== undefined ? { totalYards: tee.totalYards } : {}),
     holes,
     builtIn: true,

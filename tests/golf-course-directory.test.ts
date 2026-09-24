@@ -42,6 +42,8 @@ test("La Vista conserva un único campo y cuatro tees sin duplicar la tarjeta", 
   assert.equal(blue.catalogTeeId, "tee-la-vista-azules");
   assert.equal(blue.teeName, "Azules");
   assert.equal(blue.totalYards, 7_230);
+  assert.equal(blue.rating, undefined, "un rating sin evidencia verificada no se publica");
+  assert.equal(blue.slope, undefined, "un slope sin evidencia verificada no se publica");
   assert.equal(blue.holes[0].yards, 435);
   assert.ok((blue.localRules?.length ?? 0) > 0, "el puente conserva las reglas locales existentes");
 });

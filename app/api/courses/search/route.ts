@@ -5,6 +5,7 @@ import { internalCourseCatalogProvider } from "../../../../lib/course-catalog-pr
 import { serverPhase2FeatureFlags } from "../../../../features/feature-flags/server";
 import { authenticatedRequest, bearerToken } from "../../../../lib/server-auth";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { distinctNearbyClubCards } from "../../../../lib/course-nearby-clubs";
 
 type LayeredSearch = Awaited<ReturnType<typeof import("../../../../lib/course-catalog-provider.server").searchCourseCards>>;
 
@@ -64,30 +65,40 @@ export async function GET(request: NextRequest) {
     if (!latitudeInput?.trim() || !longitudeInput?.trim() || !Number.isFinite(latitude) || latitude < -90 || latitude > 90 || !Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
       return NextResponse.json({ error: "invalid_location" }, { status: 400, headers: { "cache-control": "no-store" } });
     }
-    const layered = await layeredSearch({ query, limit: 50, cursor, latitude, longitude }, database);
-    if (layered) return NextResponse.json({
-      provider: layered.provider,
-      total: layered.cards.filter(({ distanceKm }) => distanceKm !== null && distanceKm <= 50).length,
-      courses: layered.cards.filter(({ distanceKm }) => distanceKm !== null && distanceKm <= 50).slice(0, 3).map(({ card: course, distanceKm }) => ({
-        ...course,
-        distanceKm: distanceKm === null ? null : Math.round(distanceKm * 10) / 10,
-      })),
-    }, { headers: { "cache-control": "private, no-store" } });
-    const result = await internalCourseDataProvider.nearbyCourses({ courses: DEFAULT_COURSES, origin: { latitude, longitude }, limit: Math.min(3, limit), radiusKm: 50 });
+    // Nearby always starts from the closest result; a stale text-search cursor must not skip clubs.
+    const layered = await layeredSearch({ query, limit: 10_000, latitude, longitude }, database);
+    if (layered) {
+      const nearby = distinctNearbyClubCards(layered.cards, { radiusKm: 50, limit: Math.min(3, limit) });
+      return NextResponse.json({
+        provider: layered.provider,
+        total: nearby.total,
+        courses: nearby.matches.map(({ card: course, distanceKm }) => ({
+          ...course,
+          distanceKm: distanceKm === null ? null : Math.round(distanceKm * 10) / 10,
+        })),
+      }, { headers: { "cache-control": "private, no-store" } });
+    }
+    const result = await internalCourseDataProvider.nearbyCourses({ courses: DEFAULT_COURSES, origin: { latitude, longitude }, limit: DEFAULT_COURSES.length, radiusKm: 50 });
     if (!result.ok) return NextResponse.json({ error: result.code }, { status: 503, headers: { "cache-control": "no-store" } });
-    return NextResponse.json({
-      provider: result.providerId,
-      total: result.data.total,
-      courses: result.data.matches.map(({ course, distanceKm }) => ({
+    const nearby = distinctNearbyClubCards(result.data.matches.map(({ course, distanceKm }) => ({
+      card: {
         id: course.id,
         courseId: course.catalogCourseId ?? course.id,
         clubId: course.catalogClubId,
         name: course.name,
         clubName: course.clubName,
         city: course.city,
-        distanceKm: Math.round(distanceKm * 10) / 10,
         localIndexTeeAvailable: course.indexRatingEvidence?.kind === "CURATED_RATED_TEE",
         tee: { id: course.catalogTeeId ?? course.id, name: course.teeName, rating: course.rating, slope: course.slope, yards: course.totalYards, localIndexRated: course.indexRatingEvidence?.kind === "CURATED_RATED_TEE" },
+      },
+      distanceKm,
+    })), { radiusKm: 50, limit: Math.min(3, limit) });
+    return NextResponse.json({
+      provider: result.providerId,
+      total: nearby.total,
+      courses: nearby.matches.map(({ card: course, distanceKm }) => ({
+        ...course,
+        distanceKm: distanceKm === null ? null : Math.round(distanceKm * 10) / 10,
       })),
     }, { headers: { "cache-control": "private, no-store" } });
   }
