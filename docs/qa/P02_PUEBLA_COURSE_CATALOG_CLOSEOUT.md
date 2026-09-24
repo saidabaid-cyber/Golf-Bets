@@ -91,10 +91,21 @@ No se eliminaron ni remapearon IDs. El cambio es de publicación fail-closed, no
 - `npm run build`: PASS (34 páginas estáticas y rutas dinámicas generadas).
 - `git diff --check`: PASS; sólo avisos de normalización LF/CRLF de Git en Windows.
 
+## Preview y smoke autenticado
+
+- Alias único: `https://golf-bets-git-phase2-admin-control-center-2026-09-22-saha8.vercel.app`
+- Vercel Preview: READY; la inspección del alias se hizo contra el deployment creado desde la rama y SHA finales.
+- HTTP raíz: 200, sin redirección a otro hostname.
+- API pública: La Vista, Campestre de Puebla y El Cristo retornaron 200; Rating/Slope no aparecen cuando `localIndexRated=false`.
+- Sesión QA autenticada: `/api/courses/catalog` cargó 176 recorridos en la UI real.
+- UI autenticada: las ocho búsquedas obligatorias encontraron su club canónico.
+- Consola del navegador: 0 errores y 0 warnings durante el recorrido.
+- Vercel runtime logs del deployment: 0 entradas 5xx y 0 entradas de nivel error durante el smoke.
+
 ## Pendientes honestos
 
 - `LEGAL_REVIEW_REQUIRED`: categoría/autoridad de Rating/Slope de los tees revisados; ningún valor fue presentado como oficial.
-- `PENDING_INTERACTIVE_QA`: recorrido autenticado final de búsqueda, tee y creación de ronda en el Preview después del deployment.
+- `PENDING_INTERACTIVE_QA`: selección de tee e inicio de una ronda completa requieren una cuenta QA desechable; la cuenta visible se usó sólo para lectura y no se guardaron cambios.
 - `PENDING_DEVICE_QA`: ubicación real, orden de cercanos y selección en iPhone físico.
 - Datos pendientes: tarjeta oficial por hoyo de La Huerta; coordenada exacta verificable de Cola de Lagarto; confirmación primaria de layout/tarjeta de Las Fuentes y Vista Verde.
 
