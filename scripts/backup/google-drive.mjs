@@ -9,18 +9,47 @@ const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
 const ROOT_FOLDER_NAME = 'The Backyard - Backups';
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
-const FILE_FIELDS = 'id,name,mimeType,size,parents,trashed,appProperties,driveId';
+const FILE_FIELDS = 'id,name,mimeType,size,parents,trashed,appProperties,driveId,capabilities(canAddChildren,canListChildren)';
 const SHARED_DRIVE_FIELDS = 'id,name,kind,hidden,capabilities(canAddChildren,canListChildren)';
 const REQUEST_TIMEOUT_MS = 120000;
 const UPLOAD_TIMEOUT_MS = 10 * 60 * 1000;
 const UPLOAD_CHUNK_GRANULARITY = 256 * 1024;
 const UPLOAD_CHUNK_BYTES = 8 * 1024 * 1024;
+const UPLOAD_MAX_CHUNK_BYTES = 64 * 1024 * 1024;
 const UPLOAD_MAX_RETRIES = 4;
 const MANAGED_PACKAGE_RE = /^The-Backyard-Backup-\d{4}-\d{2}-\d{2}-\d{6}\.tar\.gz$/;
 const SHA256_RE = /^[a-f0-9]{64}$/;
+const DRIVE_DIAGNOSTIC_PHASES = new Set([
+  'NOT_STARTED', 'ROOT_DISCOVERY', 'SESSION_CREATE', 'CHUNK_UPLOAD', 'STATUS_QUERY', 'FINALIZE', 'COMPLETE',
+]);
+const DRIVE_DIAGNOSTIC_HTTP = new Set(['NOT_AVAILABLE', 'NETWORK_ERROR']);
+const DRIVE_DIAGNOSTIC_FLAGS = new Set(['UNKNOWN', 'YES', 'NO']);
+const DRIVE_DIAGNOSTIC_KINDS = new Set(['UNKNOWN', 'PACKAGE', 'CHECKSUM', 'FILE']);
+
+export function safeDriveDiagnostic(value = {}) {
+  const httpStatus = Number.isInteger(value?.httpStatus) && value.httpStatus >= 100 && value.httpStatus <= 599
+    ? value.httpStatus
+    : DRIVE_DIAGNOSTIC_HTTP.has(value?.httpStatus) ? value.httpStatus : 'NOT_AVAILABLE';
+  const safeInteger = (candidate) => Number.isSafeInteger(candidate) && candidate >= 0 ? candidate : 0;
+  return Object.freeze({
+    phase: DRIVE_DIAGNOSTIC_PHASES.has(value?.phase) ? value.phase : 'NOT_STARTED',
+    httpStatus,
+    retryAttempt: safeInteger(value?.retryAttempt),
+    offset: safeInteger(value?.offset),
+    totalBytes: safeInteger(value?.totalBytes),
+    chunkBytes: safeInteger(value?.chunkBytes),
+    sharedDriveDetected: DRIVE_DIAGNOSTIC_FLAGS.has(value?.sharedDriveDetected) ? value.sharedDriveDetected : 'UNKNOWN',
+    canAddChildren: DRIVE_DIAGNOSTIC_FLAGS.has(value?.canAddChildren) ? value.canAddChildren : 'UNKNOWN',
+    fileKind: DRIVE_DIAGNOSTIC_KINDS.has(value?.fileKind) ? value.fileKind : 'UNKNOWN',
+  });
+}
 
 export class DriveError extends Error {
-  constructor(code) { super(code); this.code = code; }
+  constructor(code, driveDiagnostic) {
+    super(code);
+    this.code = code;
+    if (driveDiagnostic) this.driveDiagnostic = safeDriveDiagnostic(driveDiagnostic);
+  }
 }
 
 function base64url(value) { return Buffer.from(value).toString('base64url'); }
@@ -154,22 +183,36 @@ export class GoogleDriveClient {
     uploadMaxRetries = UPLOAD_MAX_RETRIES,
     uploadTimeoutMs = UPLOAD_TIMEOUT_MS,
     wait = sleep,
+    onDiagnostic = () => {},
   } = {}) {
     if (!accessToken) throw new DriveError('GDRIVE_TOKEN_MISSING');
-    if (!Number.isSafeInteger(uploadChunkBytes) || uploadChunkBytes <= 0 || uploadChunkBytes % UPLOAD_CHUNK_GRANULARITY !== 0 ||
+    if (!Number.isSafeInteger(uploadChunkBytes) || uploadChunkBytes <= 0 || uploadChunkBytes > UPLOAD_MAX_CHUNK_BYTES ||
+        uploadChunkBytes % UPLOAD_CHUNK_GRANULARITY !== 0 ||
         !Number.isSafeInteger(uploadMaxRetries) || uploadMaxRetries < 0 || uploadMaxRetries > 10 ||
-        !Number.isSafeInteger(uploadTimeoutMs) || uploadTimeoutMs < REQUEST_TIMEOUT_MS || typeof wait !== 'function') {
+        !Number.isSafeInteger(uploadTimeoutMs) || uploadTimeoutMs < REQUEST_TIMEOUT_MS ||
+        typeof wait !== 'function' || typeof onDiagnostic !== 'function') {
       throw new DriveError('GDRIVE_UPLOAD_OPTIONS_INVALID');
     }
     this.accessToken = accessToken; this.transport = transport;
     this.uploadChunkBytes = uploadChunkBytes; this.uploadMaxRetries = uploadMaxRetries;
-    this.uploadTimeoutMs = uploadTimeoutMs; this.wait = wait; this.sharedDriveId = undefined;
+    this.uploadTimeoutMs = uploadTimeoutMs; this.wait = wait; this.onDiagnostic = onDiagnostic;
+    this.sharedDriveId = undefined; this.driveDiagnostic = safeDriveDiagnostic();
+  }
+
+  recordDiagnostic(next = {}) {
+    this.driveDiagnostic = safeDriveDiagnostic({ ...this.driveDiagnostic, ...next });
+    try { this.onDiagnostic(this.driveDiagnostic); } catch { /* diagnostics must never interrupt backup execution */ }
+    return this.driveDiagnostic;
+  }
+
+  failure(code, next = {}) {
+    return new DriveError(code, this.recordDiagnostic(next));
   }
 
   async fetch(url, init = {}, { acceptStatus, redirect = 'error' } = {}) {
     const parsed = new URL(url);
-    if (parsed.origin !== DRIVE_API) throw new DriveError('GDRIVE_CROSS_ORIGIN_BLOCKED');
-    if (redirect !== 'error' && redirect !== 'manual') throw new DriveError('GDRIVE_REDIRECT_MODE_INVALID');
+    if (parsed.origin !== DRIVE_API) throw this.failure('GDRIVE_CROSS_ORIGIN_BLOCKED');
+    if (redirect !== 'error' && redirect !== 'manual') throw this.failure('GDRIVE_REDIRECT_MODE_INVALID');
     const headers = new Headers(init.headers || {});
     headers.delete('authorization');
     headers.set('authorization', `Bearer ${this.accessToken}`);
@@ -179,16 +222,21 @@ export class GoogleDriveClient {
         ...init, redirect, signal: init.signal || timeoutSignal(), headers,
       });
     } catch {
-      throw new DriveError('GDRIVE_REQUEST_FAILED');
+      throw this.failure('GDRIVE_REQUEST_FAILED', { httpStatus: 'NETWORK_ERROR' });
     }
+    this.recordDiagnostic({ httpStatus: response.status });
     if (!response.ok && !(typeof acceptStatus === 'function' && acceptStatus(response.status))) {
-      throw new DriveError(`GDRIVE_HTTP_${response.status}`);
+      throw this.failure(`GDRIVE_HTTP_${response.status}`, { httpStatus: response.status });
     }
     return response;
   }
 
-  async retryUploadRequest(request, exhaustedCode = 'GDRIVE_UPLOAD_RETRIES_EXHAUSTED') {
+  async retryUploadRequest(request, {
+    exhaustedCode = 'GDRIVE_UPLOAD_RETRIES_EXHAUSTED',
+    phase = 'STATUS_QUERY', offset = 0, totalBytes = 0, chunkBytes = 0, fileKind = 'UNKNOWN',
+  } = {}) {
     for (let attempt = 0; ; attempt += 1) {
+      this.recordDiagnostic({ phase, retryAttempt: attempt, offset, totalBytes, chunkBytes, fileKind });
       let response;
       try { response = await request(); }
       catch (error) {
@@ -196,23 +244,40 @@ export class GoogleDriveClient {
       }
       if (response && !isRetryableStatus(response.status)) return response;
       await discardResponseBody(response);
-      if (attempt >= this.uploadMaxRetries) throw new DriveError(exhaustedCode);
+      if (attempt >= this.uploadMaxRetries) throw this.failure(exhaustedCode, {
+        phase, retryAttempt: attempt, offset, totalBytes, chunkBytes, fileKind,
+        httpStatus: response?.status || 'NETWORK_ERROR',
+      });
       await this.wait(Math.min(1000 * (2 ** attempt), 8000));
     }
   }
 
-  async queryUploadStatus(session, totalBytes, exhaustedCode = 'GDRIVE_UPLOAD_STATUS_RETRIES_EXHAUSTED') {
-    return this.retryUploadRequest(() => this.fetch(session, {
-      method: 'PUT', signal: timeoutSignal(this.uploadTimeoutMs),
-      headers: { 'content-length': '0', 'content-range': `bytes */${totalBytes}` },
-    }, { acceptStatus: acceptsUploadStatus, redirect: 'manual' }), exhaustedCode);
+  async queryUploadStatus(session, totalBytes, {
+    exhaustedCode = 'GDRIVE_UPLOAD_STATUS_RETRIES_EXHAUSTED', phase = 'STATUS_QUERY',
+    offset = 0, fileKind = 'UNKNOWN',
+  } = {}) {
+    try {
+      return await this.retryUploadRequest(() => this.fetch(session, {
+        method: 'PUT', signal: timeoutSignal(this.uploadTimeoutMs),
+        headers: { 'content-length': '0', 'content-range': `bytes */${totalBytes}` },
+      }, { acceptStatus: acceptsUploadStatus, redirect: 'manual' }), {
+        exhaustedCode, phase, offset, totalBytes, chunkBytes: 0, fileKind,
+      });
+    } catch (error) {
+      if (error instanceof DriveError && /^GDRIVE_HTTP_\d{3}$/.test(error.code)) {
+        throw this.failure(`GDRIVE_${fileKind}_STATUS_FAILED`, {
+          phase, httpStatus: error.driveDiagnostic?.httpStatus, offset, totalBytes, fileKind,
+        });
+      }
+      throw error;
+    }
   }
 
   async uploadResult(response, expectedName, expectedBytes) {
     let uploaded;
-    try { uploaded = await response.json(); } catch { throw new DriveError('GDRIVE_UPLOAD_RESPONSE_INVALID'); }
+    try { uploaded = await response.json(); } catch { throw this.failure('GDRIVE_UPLOAD_RESPONSE_INVALID'); }
     if (!validId(uploaded?.id) || uploaded.name !== expectedName || uploaded.trashed !== false || Number(uploaded.size) !== expectedBytes) {
-      throw new DriveError('GDRIVE_UPLOAD_RESPONSE_INVALID');
+      throw this.failure('GDRIVE_UPLOAD_RESPONSE_INVALID');
     }
     return uploaded;
   }
@@ -246,19 +311,26 @@ export class GoogleDriveClient {
   }
 
   async getBackupRoot(id) {
+    this.recordDiagnostic({ phase: 'ROOT_DISCOVERY', httpStatus: 'NOT_AVAILABLE', retryAttempt: 0 });
     const sharedDrive = await this.getSharedDrive(id);
     if (sharedDrive) {
+      const canAddChildren = sharedDrive.capabilities?.canAddChildren === true ? 'YES' : 'NO';
+      this.recordDiagnostic({ sharedDriveDetected: 'YES', canAddChildren });
       if (sharedDrive.id !== id || sharedDrive.name !== ROOT_FOLDER_NAME || sharedDrive.kind !== 'drive#drive' ||
           sharedDrive.capabilities?.canAddChildren !== true || sharedDrive.capabilities?.canListChildren !== true) {
-        throw new DriveError('GDRIVE_ROOT_FOLDER_NOT_ACCESSIBLE');
+        throw this.failure('GDRIVE_ROOT_FOLDER_NOT_ACCESSIBLE');
       }
       this.sharedDriveId = id;
       return { id, name: sharedDrive.name, mimeType: FOLDER_MIME, trashed: false, driveId: id };
     }
     const folder = await this.getFile(id);
+    const sharedDriveDetected = validId(folder?.driveId) ? 'YES' : 'NO';
+    const canAddChildren = folder?.capabilities?.canAddChildren === true ? 'YES' : 'NO';
+    this.recordDiagnostic({ sharedDriveDetected, canAddChildren });
     if (folder.id !== id || folder.name !== ROOT_FOLDER_NAME || folder.mimeType !== FOLDER_MIME || folder.trashed !== false ||
-        (folder.driveId !== undefined && !validId(folder.driveId))) {
-      throw new DriveError('GDRIVE_ROOT_FOLDER_NOT_ACCESSIBLE');
+        (folder.driveId !== undefined && !validId(folder.driveId)) || folder.capabilities?.canAddChildren !== true ||
+        folder.capabilities?.canListChildren !== true) {
+      throw this.failure('GDRIVE_ROOT_FOLDER_NOT_ACCESSIBLE');
     }
     this.sharedDriveId = folder.driveId;
     return folder;
@@ -305,33 +377,107 @@ export class GoogleDriveClient {
     const initUrl = new URL('/upload/drive/v3/files', DRIVE_API);
     initUrl.searchParams.set('uploadType', 'resumable'); initUrl.searchParams.set('supportsAllDrives', 'true'); initUrl.searchParams.set('fields', FILE_FIELDS);
     const diagnosticKind = appProperties?.kind === 'package' ? 'PACKAGE' : appProperties?.kind === 'checksum' ? 'CHECKSUM' : 'FILE';
-    const initialized = await this.retryUploadRequest(() => this.fetch(initUrl, {
-      method: 'POST', headers: {
-        'content-type': 'application/json; charset=UTF-8',
-        'x-upload-content-type': mimeType, 'x-upload-content-length': String(info.size),
-      },
-      body: JSON.stringify({ name, mimeType, parents: [parentId], appProperties }),
-    }, { acceptStatus: status => isRetryableStatus(status) }), `GDRIVE_${diagnosticKind}_INIT_RETRIES_EXHAUSTED`);
+    let initialized;
+    try {
+      initialized = await this.retryUploadRequest(() => this.fetch(initUrl, {
+        method: 'POST', headers: {
+          'content-type': 'application/json; charset=UTF-8',
+          'x-upload-content-type': mimeType, 'x-upload-content-length': String(info.size),
+        },
+        body: JSON.stringify({ name, mimeType, parents: [parentId], appProperties }),
+      }, { acceptStatus: status => isRetryableStatus(status) }), {
+        exhaustedCode: `GDRIVE_${diagnosticKind}_INIT_RETRIES_EXHAUSTED`,
+        phase: 'SESSION_CREATE', totalBytes: info.size, fileKind: diagnosticKind,
+      });
+    } catch (error) {
+      if (error instanceof DriveError && /^GDRIVE_HTTP_\d{3}$/.test(error.code)) {
+        throw this.failure(`GDRIVE_${diagnosticKind}_INIT_FAILED`, {
+          phase: 'SESSION_CREATE', httpStatus: error.driveDiagnostic?.httpStatus,
+          totalBytes: info.size, fileKind: diagnosticKind,
+        });
+      }
+      throw error;
+    }
     const location = initialized.headers.get('location');
     await discardResponseBody(initialized);
-    if (!location) throw new DriveError('GDRIVE_UPLOAD_SESSION_MISSING');
-    const session = new URL(location);
-    if (session.origin !== DRIVE_API || session.pathname !== '/upload/drive/v3/files') throw new DriveError('GDRIVE_UPLOAD_SESSION_INVALID');
+    if (!location) throw this.failure('GDRIVE_UPLOAD_SESSION_MISSING', { phase: 'SESSION_CREATE' });
+    let session;
+    try {
+      if (Buffer.byteLength(location) > 8192) throw new Error('invalid');
+      session = new URL(location);
+    } catch { throw this.failure('GDRIVE_UPLOAD_SESSION_INVALID', { phase: 'SESSION_CREATE' }); }
+    const uploadIds = session.searchParams.getAll('upload_id');
+    if (session.origin !== DRIVE_API || session.pathname !== '/upload/drive/v3/files' ||
+        session.username || session.password || session.hash || uploadIds.length !== 1 ||
+        !uploadIds[0] || uploadIds[0].length > 4096) {
+      throw this.failure('GDRIVE_UPLOAD_SESSION_INVALID', { phase: 'SESSION_CREATE' });
+    }
 
     let offset = 0, failuresAtOffset = 0, chunkOffset = -1, chunkEnd = -1, chunkBody;
-    while (offset < info.size) {
+    const finish = async (response, retryAttempt, chunkBytes = 0) => {
+      const finalRetryAttempt = Math.max(retryAttempt, this.driveDiagnostic.retryAttempt);
+      this.recordDiagnostic({
+        phase: 'FINALIZE', httpStatus: response.status, retryAttempt: finalRetryAttempt,
+        offset: info.size, totalBytes: info.size, chunkBytes, fileKind: diagnosticKind,
+      });
+      const uploaded = await this.uploadResult(response, name, info.size);
+      this.recordDiagnostic({
+        phase: 'COMPLETE', httpStatus: response.status, retryAttempt: finalRetryAttempt,
+        offset: info.size, totalBytes: info.size, chunkBytes: 0, fileKind: diagnosticKind,
+      });
+      return uploaded;
+    };
+    const responseOffset = (response) => {
+      try { return nextUploadOffset(response, info.size); }
+      catch (error) {
+        if (error instanceof DriveError) throw this.failure(error.code);
+        throw error;
+      }
+    };
+
+    while (true) {
+      if (offset === info.size) {
+        for (let finalAttempt = 0; ; finalAttempt += 1) {
+          const completed = await this.queryUploadStatus(session, info.size, {
+            exhaustedCode: `GDRIVE_${diagnosticKind}_STATUS_RETRIES_EXHAUSTED`,
+            phase: 'FINALIZE', offset, fileKind: diagnosticKind,
+          });
+          if (completed.status === 200 || completed.status === 201) return finish(completed, finalAttempt);
+          if (completed.status !== 308) throw this.failure('GDRIVE_UPLOAD_FINALIZE_FAILED', {
+            phase: 'FINALIZE', httpStatus: completed.status, retryAttempt: finalAttempt,
+            offset, totalBytes: info.size, fileKind: diagnosticKind,
+          });
+          const confirmedOffset = responseOffset(completed);
+          await discardResponseBody(completed);
+          if (confirmedOffset !== offset) throw this.failure('GDRIVE_UPLOAD_RANGE_INVALID', {
+            phase: 'FINALIZE', httpStatus: 308, retryAttempt: finalAttempt,
+            offset, totalBytes: info.size, fileKind: diagnosticKind,
+          });
+          if (finalAttempt >= this.uploadMaxRetries) throw this.failure('GDRIVE_UPLOAD_FINALIZE_FAILED', {
+            phase: 'FINALIZE', httpStatus: 308, retryAttempt: finalAttempt,
+            offset, totalBytes: info.size, fileKind: diagnosticKind,
+          });
+          await this.wait(Math.min(1000 * (2 ** finalAttempt), 8000));
+        }
+      }
+
       const end = Math.min(offset + this.uploadChunkBytes, info.size) - 1;
       if (chunkOffset !== offset || chunkEnd !== end) {
         chunkBody = await readUploadChunk(path, offset, end);
         chunkOffset = offset; chunkEnd = end;
       }
-      let response, queriedStatusAfterFailure = false;
+      const chunkBytes = end - offset + 1;
+      this.recordDiagnostic({
+        phase: 'CHUNK_UPLOAD', httpStatus: 'NOT_AVAILABLE', retryAttempt: failuresAtOffset,
+        offset, totalBytes: info.size, chunkBytes, fileKind: diagnosticKind,
+      });
+      let response, failedHttpStatus = 'NETWORK_ERROR';
       try {
         response = await this.fetch(session, {
           method: 'PUT', signal: timeoutSignal(this.uploadTimeoutMs),
           headers: {
             'content-type': mimeType,
-            'content-length': String(end - offset + 1),
+            'content-length': String(chunkBytes),
             'content-range': `bytes ${offset}-${end}/${info.size}`,
           },
           body: chunkBody,
@@ -342,33 +488,60 @@ export class GoogleDriveClient {
       }
 
       if (!response || isRetryableStatus(response.status)) {
+        if (response) failedHttpStatus = response.status;
         await discardResponseBody(response);
-        if (failuresAtOffset >= this.uploadMaxRetries) throw new DriveError(`GDRIVE_${diagnosticKind}_CHUNK_RETRIES_EXHAUSTED`);
-        await this.wait(Math.min(1000 * (2 ** failuresAtOffset), 8000));
         failuresAtOffset += 1;
-        response = await this.queryUploadStatus(session, info.size, `GDRIVE_${diagnosticKind}_STATUS_RETRIES_EXHAUSTED`);
-        queriedStatusAfterFailure = true;
+        if (failuresAtOffset <= this.uploadMaxRetries) {
+          await this.wait(Math.min(1000 * (2 ** (failuresAtOffset - 1)), 8000));
+        }
+        const status = await this.queryUploadStatus(session, info.size, {
+          exhaustedCode: `GDRIVE_${diagnosticKind}_STATUS_RETRIES_EXHAUSTED`,
+          phase: 'STATUS_QUERY', offset, fileKind: diagnosticKind,
+        });
+        if (status.status === 200 || status.status === 201) return finish(status, failuresAtOffset - 1, chunkBytes);
+        if (status.status !== 308) throw this.failure(`GDRIVE_${diagnosticKind}_STATUS_FAILED`, {
+          phase: 'STATUS_QUERY', httpStatus: status.status, retryAttempt: failuresAtOffset - 1,
+          offset, totalBytes: info.size, fileKind: diagnosticKind,
+        });
+        const confirmedOffset = responseOffset(status);
+        await discardResponseBody(status);
+        if (confirmedOffset < offset || confirmedOffset > end + 1) throw this.failure('GDRIVE_UPLOAD_RANGE_INVALID', {
+          phase: 'STATUS_QUERY', httpStatus: 308, retryAttempt: failuresAtOffset - 1,
+          offset, totalBytes: info.size, fileKind: diagnosticKind,
+        });
+        if (confirmedOffset > offset) {
+          offset = confirmedOffset; failuresAtOffset = 0;
+          continue;
+        }
+        if (failuresAtOffset > this.uploadMaxRetries) throw this.failure(`GDRIVE_${diagnosticKind}_CHUNK_RETRIES_EXHAUSTED`, {
+          phase: 'CHUNK_UPLOAD', httpStatus: failedHttpStatus, retryAttempt: failuresAtOffset - 1,
+          offset, totalBytes: info.size, chunkBytes, fileKind: diagnosticKind,
+        });
+        continue;
       }
 
-      if (response.status === 200 || response.status === 201) return this.uploadResult(response, name, info.size);
-      if (response.status !== 308) throw new DriveError(`GDRIVE_HTTP_${response.status}`);
-      const nextOffset = nextUploadOffset(response, info.size);
+      if (response.status === 200 || response.status === 201) return finish(response, failuresAtOffset, chunkBytes);
+      if (response.status !== 308) throw this.failure(`GDRIVE_HTTP_${response.status}`, {
+        phase: 'CHUNK_UPLOAD', httpStatus: response.status, retryAttempt: failuresAtOffset,
+        offset, totalBytes: info.size, chunkBytes, fileKind: diagnosticKind,
+      });
+      const nextOffset = responseOffset(response);
       await discardResponseBody(response);
-      if (nextOffset < offset) throw new DriveError('GDRIVE_UPLOAD_RANGE_INVALID');
+      if (nextOffset < offset || nextOffset > end + 1) throw this.failure('GDRIVE_UPLOAD_RANGE_INVALID', {
+        phase: 'CHUNK_UPLOAD', httpStatus: 308, retryAttempt: failuresAtOffset,
+        offset, totalBytes: info.size, chunkBytes, fileKind: diagnosticKind,
+      });
       if (nextOffset === offset) {
-        if (queriedStatusAfterFailure) continue;
-        if (failuresAtOffset >= this.uploadMaxRetries) throw new DriveError(`GDRIVE_${diagnosticKind}_CHUNK_RETRIES_EXHAUSTED`);
-        await this.wait(Math.min(1000 * (2 ** failuresAtOffset), 8000));
         failuresAtOffset += 1;
+        if (failuresAtOffset > this.uploadMaxRetries) throw this.failure('GDRIVE_UPLOAD_OFFSET_STALLED', {
+          phase: 'CHUNK_UPLOAD', httpStatus: 308, retryAttempt: failuresAtOffset - 1,
+          offset, totalBytes: info.size, chunkBytes, fileKind: diagnosticKind,
+        });
+        await this.wait(Math.min(1000 * (2 ** (failuresAtOffset - 1)), 8000));
       } else {
         offset = nextOffset; failuresAtOffset = 0;
       }
     }
-
-    const completed = await this.queryUploadStatus(session, info.size, `GDRIVE_${diagnosticKind}_STATUS_RETRIES_EXHAUSTED`);
-    if (completed.status === 200 || completed.status === 201) return this.uploadResult(completed, name, info.size);
-    await discardResponseBody(completed);
-    throw new DriveError('GDRIVE_UPLOAD_NOT_FINALIZED');
   }
 
   async copyFile(id, parentId, name, appProperties) {
@@ -508,34 +681,55 @@ async function applyRetention(client, tierFolders, retentionApply) {
 
 export async function publishToGoogleDrive({
   credentialsJson, rootFolderId, packageInfo, now = new Date(), retentionApply = false,
-  transport = fetch, signer, client,
+  transport = fetch, signer, client, onDiagnostic = () => {},
 }) {
   if (!validId(rootFolderId)) throw new DriveError('GDRIVE_ROOT_FOLDER_ID_INVALID');
   await validatePackageInfo(packageInfo);
-  const drive = client || new GoogleDriveClient(await serviceAccountAccessToken(credentialsJson, { transport, signer }), transport);
-  await drive.getBackupRoot(rootFolderId);
-  const tierFolders = {};
-  for (const tier of Object.keys(RETENTION_LIMITS)) tierFolders[tier] = await drive.ensureFolder(rootFolderId, tier);
-  const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
-  const month = date.slice(0, 7), weekday = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Mexico_City', weekday: 'short' }).format(now);
-  const createdAt = now.toISOString();
-  const dailyFolder = await drive.ensureFolder(tierFolders.daily.id, date);
-  // A daily backup is not publishable until the remote package has been
-  // downloaded and independently hashed, in addition to checking its sidecar.
-  const dailyPair = await verifyPair(drive, await uploadPair(drive, dailyFolder.id, packageInfo, 'daily', createdAt), packageInfo, true);
-  let weekly = 'NOT_DUE', monthly = 'NOT_DUE';
-  if (weekday === 'Sun') {
-    const folder = await drive.ensureFolder(tierFolders.weekly.id, date);
-    await verifyPair(drive, await copyPair(drive, dailyPair, folder.id, packageInfo, 'weekly', createdAt), packageInfo, true);
-    weekly = 'PASS';
+  const emitDiagnostic = (diagnostic) => {
+    const safe = safeDriveDiagnostic(diagnostic);
+    try { onDiagnostic(safe); } catch { /* diagnostics must never interrupt backup execution */ }
+    return safe;
+  };
+  let drive;
+  try {
+    drive = client || new GoogleDriveClient(
+      await serviceAccountAccessToken(credentialsJson, { transport, signer }),
+      transport,
+      { onDiagnostic: emitDiagnostic },
+    );
+    await drive.getBackupRoot(rootFolderId);
+    const tierFolders = {};
+    for (const tier of Object.keys(RETENTION_LIMITS)) tierFolders[tier] = await drive.ensureFolder(rootFolderId, tier);
+    const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+    const month = date.slice(0, 7), weekday = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Mexico_City', weekday: 'short' }).format(now);
+    const createdAt = now.toISOString();
+    const dailyFolder = await drive.ensureFolder(tierFolders.daily.id, date);
+    // A daily backup is not publishable until the remote package has been
+    // downloaded and independently hashed, in addition to checking its sidecar.
+    const dailyPair = await verifyPair(drive, await uploadPair(drive, dailyFolder.id, packageInfo, 'daily', createdAt), packageInfo, true);
+    let weekly = 'NOT_DUE', monthly = 'NOT_DUE';
+    if (weekday === 'Sun') {
+      const folder = await drive.ensureFolder(tierFolders.weekly.id, date);
+      await verifyPair(drive, await copyPair(drive, dailyPair, folder.id, packageInfo, 'weekly', createdAt), packageInfo, true);
+      weekly = 'PASS';
+    }
+    if (date.endsWith('-01')) {
+      const folder = await drive.ensureFolder(tierFolders.monthly.id, month);
+      await verifyPair(drive, await copyPair(drive, dailyPair, folder.id, packageInfo, 'monthly', createdAt), packageInfo, false);
+      monthly = 'PASS';
+    }
+    const retentionCandidates = await applyRetention(drive, tierFolders, retentionApply);
+    const result = { daily: 'PASS', weekly, monthly, retention: retentionApply ? 'APPLY' : 'DRY_RUN', retentionCandidates };
+    if (drive.driveDiagnostic) result.driveDiagnostic = emitDiagnostic(drive.driveDiagnostic);
+    return result;
+  } catch (error) {
+    const diagnostic = error?.driveDiagnostic || drive?.driveDiagnostic;
+    if (diagnostic) {
+      const safe = emitDiagnostic(diagnostic);
+      if (error instanceof DriveError) error.driveDiagnostic = safe;
+    }
+    throw error;
   }
-  if (date.endsWith('-01')) {
-    const folder = await drive.ensureFolder(tierFolders.monthly.id, month);
-    await verifyPair(drive, await copyPair(drive, dailyPair, folder.id, packageInfo, 'monthly', createdAt), packageInfo, false);
-    monthly = 'PASS';
-  }
-  const retentionCandidates = await applyRetention(drive, tierFolders, retentionApply);
-  return { daily: 'PASS', weekly, monthly, retention: retentionApply ? 'APPLY' : 'DRY_RUN', retentionCandidates };
 }
 
 export const googleDriveInternals = Object.freeze({ FOLDER_MIME, ROOT_FOLDER_NAME, DRIVE_SCOPE, TOKEN_ENDPOINT, FILE_FIELDS, basename });
