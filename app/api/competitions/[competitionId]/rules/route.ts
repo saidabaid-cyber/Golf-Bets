@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { isOperationalAdminData } from "../../../../../lib/admin-data-environment";
 import { getSupabasePublic } from "../../../../../lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +13,7 @@ export async function GET(_request: Request, context: { params: Promise<{ compet
   const result = await database.rpc("player_competition_rules_v1", { requested_competition_id: competitionId, effective_at: new Date().toISOString() });
   if (result.error) return NextResponse.json({ error: "No fue posible consultar el reglamento." }, { status: 503 });
   const projection = result.data && typeof result.data === "object" && !Array.isArray(result.data) ? result.data as Record<string, unknown> : null;
-  if (!projection) return NextResponse.json({ error: "Competición no encontrada." }, { status: 404 });
+  if (!projection || !isOperationalAdminData({ entityId: competitionId, payload: projection })) return NextResponse.json({ error: "Competición no encontrada." }, { status: 404 });
   const ruleSet = projection.ruleSet && typeof projection.ruleSet === "object" && !Array.isArray(projection.ruleSet) ? projection.ruleSet as Record<string, unknown> : null;
   return NextResponse.json({ ...projection, snapshot: ruleSet ? { competitionId, competitionRuleSetId: ruleSet.id, competitionRuleVersion: ruleSet.version } : null }, { headers: { "cache-control": "public, s-maxage=5, stale-while-revalidate=30" } });
 }

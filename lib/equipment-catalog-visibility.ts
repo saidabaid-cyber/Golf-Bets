@@ -1,9 +1,13 @@
+import { isOperationalAdminData } from "./admin-data-environment";
+
 type PublicCatalogCandidate = {
   id: string;
   brand: string;
   model: string;
   sourceType?: string | null;
   sourceName?: string | null;
+  dataEnvironment?: string | null;
+  data_environment?: string | null;
 };
 
 function normalizedMarker(value: string) {
@@ -25,6 +29,7 @@ const INTERNAL_SOURCE_TYPE = /^(?:INTERNAL_QA|QA_FIXTURE|TEST_FIXTURE|SYNTHETIC)
  * source, but player search, brand facets and fitting never receive them.
  */
 export function isPublicEquipmentCatalogItem(item: PublicCatalogCandidate) {
+  if (!isOperationalAdminData(item)) return false;
   if (INTERNAL_ID_SEGMENT.test(item.id)) return false;
   if (INTERNAL_LABEL.test(normalizedMarker(item.brand))) return false;
   if (INTERNAL_LABEL.test(normalizedMarker(item.model))) return false;

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { isOperationalAdminData } from "./admin-data-environment";
 import { getSupabasePublic } from "./supabase/server";
 
 export type PublishedCatalogRevision = {
@@ -22,6 +23,7 @@ export async function readPublishedCatalog(entityTypes: readonly string[]) {
   return result.data.flatMap((row): PublishedCatalogRevision[] => {
     if (!row || typeof row !== "object") return [];
     const candidate = row as Record<string, unknown>;
+    if (!isOperationalAdminData({ ...candidate, payload: candidate.payload })) return [];
     if (typeof candidate.entity_type !== "string" || typeof candidate.entity_id !== "string" || typeof candidate.version !== "number" || !["PUBLISHED", "SUPERSEDED", "ARCHIVED"].includes(String(candidate.status))) return [];
     return [{
       entity_type: candidate.entity_type,
