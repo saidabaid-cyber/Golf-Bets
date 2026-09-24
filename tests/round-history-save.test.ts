@@ -276,10 +276,13 @@ test("el botón finaliza solo después de persistir local/IndexedDB y nunca pide
   const persist = flow.indexOf("await saveRoundHistoryLocalFirst");
   const clearDraft = flow.indexOf("clearActiveRoundStorage(window.localStorage)");
   const closeRound = flow.indexOf("setRoundClosed(true)");
+  const closeReviewNotice = flow.indexOf("setShowRoundFinishedNotice(false)");
   const queueCloud = flow.indexOf("requestCloudSync.current?.()");
 
   assert.ok(persist >= 0 && persist < clearDraft);
   assert.ok(clearDraft < closeRound);
+  assert.ok(closeRound < closeReviewNotice);
+  assert.ok(closeReviewNotice < queueCloud);
   assert.ok(closeRound < queueCloud);
   assert.doesNotMatch(page.slice(page.indexOf("function saveRound("), saveEnd), /cloudStatus\s*!==\s*["']synced["']/);
 });

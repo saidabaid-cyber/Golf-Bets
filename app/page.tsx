@@ -2118,6 +2118,7 @@ function GolfBetsApp() {
       setHistory(() => saved.history.map(normalizeHistorySnapshot));
       setRoundClosed(true);
       setRoundReviewPending(false);
+      setShowRoundFinishedNotice(false);
       setDraftAvailable(false);
       updateBackyardAiMetrics(localStorage, identity.userId, (current) => recordRoundCompletionMetric(current, true));
       void recordProductEvent({ eventId: `round-complete-${snapshot.id}`, eventName: "round_completed", accessToken: identity.accessToken, occurredAt: snapshot.completedAt, metadata: { source: "history", roundHoles: snapshot.roundHoles || snapshot.order?.length || 18, playerCount: snapshot.players?.length || 0 } });
