@@ -39,12 +39,16 @@ function object(value: unknown): Record<string, unknown> | null {
 function array(value: unknown) { return Array.isArray(value) ? value : []; }
 function optionalString(value: unknown) { return typeof value === "string" && value.trim() ? value.trim() : undefined; }
 function optionalNumber(value: unknown) { return typeof value === "number" && Number.isFinite(value) ? value : undefined; }
+function dataEnvironment(value: unknown): "PRODUCTION" | "QA" | "TEST" | "SYNTHETIC" | undefined {
+  return ["PRODUCTION", "QA", "TEST", "SYNTHETIC"].includes(String(value)) ? value as "PRODUCTION" | "QA" | "TEST" | "SYNTHETIC" : undefined;
+}
 
 function publishedCourse(value: unknown, version: number): GolfCourseCatalog | null {
   const payload = object(value); const clubInput = object(payload?.club); const courseInput = object(payload?.course);
   if (!payload || !clubInput || !courseInput || typeof clubInput.id !== "string" || typeof clubInput.name !== "string" || typeof courseInput.id !== "string" || typeof courseInput.name !== "string") return null;
   const holesCount = courseInput.holes === 9 ? 9 : courseInput.holes === 18 ? 18 : null;
   if (!holesCount) return null;
+  const environment = dataEnvironment(payload.dataEnvironment ?? payload.data_environment);
   const club: GolfClub = {
     id: clubInput.id,
     name: clubInput.name,
@@ -63,6 +67,7 @@ function publishedCourse(value: unknown, version: number): GolfCourseCatalog | n
     sourceName: optionalString(payload.sourceName),
     sourceUrl: optionalString(payload.sourceUrl),
     verifiedAt: optionalString(payload.verifiedAt),
+    dataEnvironment: environment,
   };
   const course: GolfCourse = {
     id: courseInput.id,
@@ -78,10 +83,11 @@ function publishedCourse(value: unknown, version: number): GolfCourseCatalog | n
     sourceName: optionalString(payload.sourceName),
     sourceUrl: optionalString(payload.sourceUrl),
     verifiedAt: optionalString(payload.verifiedAt),
+    dataEnvironment: environment,
   };
   const tees = array(payload.tees).flatMap((value): GolfCourseTee[] => {
     const row = object(value); if (!row || typeof row.id !== "string" || typeof row.name !== "string") return [];
-    return [{ id: row.id, courseId: course.id, legacySelectionId: row.id, name: row.name, color: optionalString(row.color), gender: optionalString(row.category), rating: optionalNumber(row.rating), slope: optionalNumber(row.slope), par: optionalNumber(row.par), totalYards: optionalNumber(row.totalYards), totalMeters: optionalNumber(row.totalMeters), frontNineRating: optionalNumber(row.frontRating), backNineRating: optionalNumber(row.backRating), active: row.active !== false }];
+    return [{ id: row.id, courseId: course.id, legacySelectionId: row.id, name: row.name, color: optionalString(row.color), gender: optionalString(row.category), rating: optionalNumber(row.rating), slope: optionalNumber(row.slope), par: optionalNumber(row.par), totalYards: optionalNumber(row.totalYards), totalMeters: optionalNumber(row.totalMeters), frontNineRating: optionalNumber(row.frontRating), backNineRating: optionalNumber(row.backRating), active: row.active !== false, dataEnvironment: environment }];
   });
   const holes = array(payload.holes).flatMap((value): GolfHole[] => {
     const row = object(value); if (!row || typeof row.id !== "string" || typeof row.holeNumber !== "number" || typeof row.par !== "number" || typeof row.strokeIndex !== "number") return [];

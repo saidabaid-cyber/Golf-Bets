@@ -5,6 +5,11 @@ export type AdminDataClassification = {
   environment: AdminDataEnvironment;
   source: "EXPLICIT" | "LEGACY" | "DEFAULT";
 };
+export type AdminDataVerification = {
+  value: number | null;
+  status: "VERIFIED" | "NOT_VERIFIED";
+  reason: string;
+};
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -123,9 +128,115 @@ export function visibleAdminData<T>(values: readonly T[], includeQa: boolean) {
   return values.filter((value) => includeQa || isOperationalAdminData(value));
 }
 
+/** Filters before pagination so a QA row can never consume an operational slot. */
+export function adminDataPage<T extends UnknownRecord>(values: readonly T[], includeQa: boolean, limit: number) {
+  const visible = visibleAdminData(values, includeQa).map(withAdminDataEnvironment);
+  return {
+    items: visible.slice(0, Math.max(1, Math.trunc(limit))),
+    total: visible.length,
+  };
+}
+
+export function adminPublicationDecision(value: unknown) {
+  const classification = classifyAdminData(value);
+  return classification.environment === "PRODUCTION"
+    ? { allowed: true as const, environment: classification.environment, code: null }
+    : { allowed: false as const, environment: classification.environment, code: "QA_PUBLICATION_BLOCKED" as const };
+}
+
 export function adminEnvironmentCounts(values: readonly unknown[]) {
   return values.reduce<Record<AdminDataEnvironment, number>>((counts, value) => {
     counts[classifyAdminData(value).environment] += 1;
     return counts;
   }, { PRODUCTION: 0, QA: 0, TEST: 0, SYNTHETIC: 0 });
+}
+
+const ENTITY_ID_KEYS = new Set(["id", "entity_id", "entityId"]);
+const REFERENCE_ID_KEYS = new Set([
+  "club_id", "clubId", "course_id", "courseId", "tee_id", "teeId", "hole_id", "holeId",
+  "competition_id", "competitionId", "equipment_id", "equipmentId", "revision_id", "revisionId",
+  "configuration_id", "configurationId", "source_base_hole_id", "sourceBaseHoleId",
+]);
+
+function collectValues(value: unknown, keys: ReadonlySet<string>, output: Set<string>, depth = 0) {
+  if (depth > 5) return;
+  if (Array.isArray(value)) {
+    for (const item of value) collectValues(item, keys, output, depth + 1);
+    return;
+  }
+  const row = object(value);
+  if (!row) return;
+  for (const [key, nested] of Object.entries(row)) {
+    if (keys.has(key) && typeof nested === "string" && nested.trim()) output.add(nested.trim());
+    if (nested && typeof nested === "object") collectValues(nested, keys, output, depth + 1);
+  }
+}
+
+/**
+ * Verifies the in-process operational projections. Historical/user reference
+ * integrity is intentionally a separate nullable metric because it requires a
+ * privileged, controlled database read and must never be inferred as zero.
+ */
+export function analyzeAdminDataSeparation(input: {
+  operationalProjectionRows: readonly unknown[];
+  internalRows: readonly unknown[];
+  historicalReferencesChecked?: boolean;
+  historicalProductionRows?: readonly unknown[];
+}) {
+  const fixtureRows = input.internalRows.filter((row) => !isOperationalAdminData(row));
+  const fixtureIds = new Set<string>();
+  for (const row of fixtureRows) collectValues(row, ENTITY_ID_KEYS, fixtureIds);
+
+  const operationalIds = new Set<string>();
+  let syntheticVisible = 0;
+  for (const row of input.operationalProjectionRows) {
+    const ids = new Set<string>();
+    collectValues(row, ENTITY_ID_KEYS, ids);
+    for (const id of ids) operationalIds.add(id);
+    const hasKnownFixtureId = [...ids].some((id) => fixtureIds.has(id));
+    if (!isOperationalAdminData(row) || hasKnownFixtureId) {
+      syntheticVisible += 1;
+    }
+  }
+  const exposedFixtureRows = fixtureRows.filter((row) => {
+    const ids = new Set<string>();
+    collectValues(row, ENTITY_ID_KEYS, ids);
+    return [...ids].some((id) => operationalIds.has(id));
+  }).length;
+
+  let productionReferenceMetric: AdminDataVerification;
+  if (!input.historicalReferencesChecked) {
+    productionReferenceMetric = {
+      value: null,
+      status: "NOT_VERIFIED",
+      reason: "Requiere lectura referencial controlada después de persistir data_environment; no se infiere un cero.",
+    };
+  } else {
+    let references = 0;
+    for (const row of input.historicalProductionRows || []) {
+      if (!isOperationalAdminData(row)) continue;
+      const ids = new Set<string>();
+      collectValues(row, REFERENCE_ID_KEYS, ids);
+      if ([...ids].some((id) => fixtureIds.has(id))) references += 1;
+    }
+    productionReferenceMetric = {
+      value: references,
+      status: "VERIFIED",
+      reason: "Comprobado contra las referencias históricas/operativas suministradas.",
+    };
+  }
+
+  return {
+    isolatedInternalFixtures: {
+      value: fixtureRows.length - exposedFixtureRows,
+      status: "VERIFIED",
+      reason: "Fixtures internos conservados fuera de las proyecciones operativas cargadas.",
+    } satisfies AdminDataVerification,
+    syntheticVisibleInOperational: {
+      value: syntheticVisible,
+      status: "VERIFIED",
+      reason: "Comprobado contra las proyecciones Course y Equipment que consume el jugador.",
+    } satisfies AdminDataVerification,
+    productionIdsPointingToFixtures: productionReferenceMetric,
+  };
 }

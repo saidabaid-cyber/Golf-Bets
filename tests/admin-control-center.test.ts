@@ -90,7 +90,7 @@ test("published catalog overlays seeds without losing archived historical IDs", 
 
 test("temporary Course operations list avoids a nonexistent direct tee-hole relationship", () => {
   const route = readFileSync(join(process.cwd(), "app/api/admin/control-center/route.ts"), "utf8");
-  assert.match(route, /from\("course_configurations"\)\.select\("id,course_id,name,description,scope_type,competition_id,status/);
+  assert.match(route, /readWithOptionalEnvironment\("id,course_id,name,description,scope_type,competition_id,status/);
   assert.doesNotMatch(route, /course_configurations"\)\.select\("\*,course_configuration_holes\(\*\),course_configuration_tee_holes\(\*\)/);
 });
 

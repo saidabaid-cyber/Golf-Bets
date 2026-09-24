@@ -10,6 +10,7 @@ export type CourseDataProvenance = {
   sourceName?: string;
   sourceUrl?: string;
   verifiedAt?: string;
+  dataEnvironment?: "PRODUCTION" | "QA" | "TEST" | "SYNTHETIC";
 };
 
 export type GeographicPoint = {
@@ -59,6 +60,7 @@ export type GolfCourseTee = {
   frontNineRating?: number;
   backNineRating?: number;
   active: boolean;
+  dataEnvironment?: "PRODUCTION" | "QA" | "TEST" | "SYNTHETIC";
 };
 
 export type GolfHole = {

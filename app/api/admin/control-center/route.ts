@@ -11,10 +11,12 @@ import {
 } from "../../../../lib/admin-control-center";
 import {
   ADMIN_DATA_ENVIRONMENTS,
+  adminDataPage,
+  adminPublicationDecision,
+  analyzeAdminDataSeparation,
   canViewQaAdminData,
   classifyAdminData,
   isOperationalAdminData,
-  visibleAdminData,
   withAdminDataEnvironment,
   type AdminDataEnvironment,
 } from "../../../../lib/admin-data-environment";
@@ -186,6 +188,52 @@ function missingEnvironmentSchema(error: unknown) {
   return ["42703", "PGRST204"].includes(code) && /data_environment/i.test(detail);
 }
 
+type AdminReadResult = { data: unknown; error: unknown };
+
+async function readWithOptionalEnvironment(
+  columns: string,
+  run: (selection: string) => PromiseLike<AdminReadResult>,
+) {
+  const classified = await run(`${columns},data_environment`);
+  if (!classified.error) return { ...classified, classificationPersisted: true };
+  if (!missingEnvironmentSchema(classified.error)) return { ...classified, classificationPersisted: false };
+  const legacy = await run(columns);
+  return { ...legacy, classificationPersisted: false };
+}
+
+function readRows(result: AdminReadResult) {
+  return Array.isArray(result.data) ? result.data.filter((row): row is JsonRecord => record(row) !== null) : [];
+}
+
+function readRecord(result: AdminReadResult) {
+  return record(result.data);
+}
+
+function filteredPage(rows: readonly JsonRecord[], includeQa: boolean, limit: number, sourceComplete = true) {
+  const page = adminDataPage(rows, includeQa, limit);
+  return {
+    ...page,
+    total: sourceComplete ? page.total : null,
+    totalStatus: sourceComplete ? "VERIFIED" : "NOT_VERIFIED",
+    totalReason: sourceComplete ? null : "La fuente alcanzó su límite seguro; el resultado no se presenta como total.",
+  };
+}
+
+function missingFeedbackPageFunction(error: unknown) {
+  return ["42883", "PGRST202"].includes(safeDbCode(error));
+}
+
+async function readFeedbackQueue(
+  runV2: () => PromiseLike<AdminReadResult>,
+  runLegacy: () => PromiseLike<AdminReadResult>,
+) {
+  const current = await runV2();
+  if (!current.error) return { ...current, classificationPersisted: true, serverFiltered: true };
+  if (!missingFeedbackPageFunction(current.error)) return { ...current, classificationPersisted: false, serverFiltered: false };
+  const legacy = await runLegacy();
+  return { ...legacy, classificationPersisted: false, serverFiltered: false };
+}
+
 async function body(request: NextRequest) {
   const declared = Number(request.headers.get("content-length") || 0);
   if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) return null;
@@ -223,10 +271,6 @@ function dataEnvironment(value: unknown): AdminDataEnvironment {
   return explicit && (ADMIN_DATA_ENVIRONMENTS as readonly string[]).includes(explicit) ? explicit as AdminDataEnvironment : "PRODUCTION";
 }
 
-function visibleRows<T extends JsonRecord>(rows: readonly T[], includeQa: boolean) {
-  return visibleAdminData(rows, includeQa).map(withAdminDataEnvironment);
-}
-
 function pageLimit(request: NextRequest) {
   const value = Number(request.nextUrl.searchParams.get("limit") || 50);
   return Number.isFinite(value) ? Math.max(1, Math.min(100, Math.trunc(value))) : 50;
@@ -243,37 +287,53 @@ export async function GET(request: NextRequest) {
 
   if (view === "dashboard") {
     const [revisions, pending, configurations, competitions, imports, requests] = await Promise.all([
-      access.client.from("admin_catalog_revisions").select("id,status,entity_id,source_type,source_name,payload"),
-      access.client.from("admin_catalog_revisions").select("id,status,entity_id,source_type,source_name,payload").in("status", ["DRAFT", "REVIEWED", "VERIFIED"]),
-      access.client.from("course_configurations").select("id,course_id,name,description,reason,source_description"),
-      access.client.from("competition_definitions").select("id,name,description,organizer,settings"),
-      access.client.from("admin_import_jobs").select("id,kind,status,summary,admin_import_rows(normalized_payload)"),
-      access.client.rpc("admin_feedback_queue_v1", { queue_limit: 100 }),
+      readWithOptionalEnvironment("id,status,entity_id,source_type,source_name,payload", (selection) => access.client.from("admin_catalog_revisions").select(selection)),
+      readWithOptionalEnvironment("id,status,entity_id,source_type,source_name,payload", (selection) => access.client.from("admin_catalog_revisions").select(selection).in("status", ["DRAFT", "REVIEWED", "VERIFIED"])),
+      readWithOptionalEnvironment("id,course_id,name,description,reason,source_description", (selection) => access.client.from("course_configurations").select(selection)),
+      readWithOptionalEnvironment("id,name,description,organizer,settings", (selection) => access.client.from("competition_definitions").select(selection)),
+      readWithOptionalEnvironment("id,kind,status,summary,admin_import_rows(normalized_payload)", (selection) => access.client.from("admin_import_jobs").select(selection)),
+      readFeedbackQueue(
+        () => access.client.rpc("admin_feedback_queue_page_v2", { queue_limit: 100, queue_offset: 0, include_non_operational: access.canShowQa }),
+        () => access.client.rpc("admin_feedback_queue_v1", { queue_limit: 100 }),
+      ),
     ]);
     const firstError = [revisions, pending, configurations, competitions, imports, requests].find((result) => result.error)?.error;
     if (firstError) return databaseFailure(firstError);
     const groups = {
-      revisions: (revisions.data || []) as JsonRecord[],
-      pending: (pending.data || []) as JsonRecord[],
-      configurations: (configurations.data || []) as JsonRecord[],
-      competitions: (competitions.data || []) as JsonRecord[],
-      imports: (imports.data || []) as JsonRecord[],
-      requests: (requests.data || []) as JsonRecord[],
+      revisions: readRows(revisions),
+      pending: readRows(pending),
+      configurations: readRows(configurations),
+      competitions: readRows(competitions),
+      imports: readRows(imports),
+      requests: readRows(requests),
     };
-    const counts = Object.fromEntries(Object.entries(groups).map(([key, rows]) => [key, rows.filter(isOperationalAdminData).length]));
-    const qaCounts = Object.fromEntries(Object.entries(groups).map(([key, rows]) => [key, rows.length - rows.filter(isOperationalAdminData).length]));
-    return json({ memberships: access.memberships, canShowQa: access.canShowQa, counts, qaCounts: access.canShowQa ? qaCounts : undefined });
+    const requestSummary = groups.requests[0];
+    const complete = Object.fromEntries(Object.entries(groups).map(([key, rows]) => [key, key !== "requests" || requests.serverFiltered || rows.length < 100]));
+    const counts = Object.fromEntries(Object.entries(groups).map(([key, rows]) => [key,
+      key === "requests" && requests.serverFiltered
+        ? Number(requestSummary?.operational_total || 0)
+        : complete[key] ? rows.filter(isOperationalAdminData).length : null,
+    ]));
+    const qaCounts = Object.fromEntries(Object.entries(groups).map(([key, rows]) => [key,
+      key === "requests" && requests.serverFiltered && requestSummary
+        ? Number(requestSummary.qa_total || 0)
+        : rows.length - rows.filter(isOperationalAdminData).length,
+    ]));
+    return json({ memberships: access.memberships, canShowQa: access.canShowQa, counts, countStatus: complete, qaCounts: access.canShowQa ? qaCounts : undefined });
   }
 
   if (view === "revisions") {
     const status = text(request.nextUrl.searchParams.get("status"), 30);
     const type = text(request.nextUrl.searchParams.get("type"), 50);
-    let query = access.client.from("admin_catalog_revisions").select("id,entity_type,entity_id,scope_type,scope_id,version,status,provenance_status,payload,source_type,source_name,source_url,verified_at,confidence,effective_from,effective_until,preview_hash,revision_hash,created_at,updated_at,published_at").order("updated_at", { ascending: false }).limit(limit);
-    if (status) query = query.eq("status", status);
-    if (type) query = query.eq("entity_type", type);
-    const result = await query;
+    const columns = "id,entity_type,entity_id,scope_type,scope_id,version,status,provenance_status,payload,source_type,source_name,source_url,verified_at,confidence,effective_from,effective_until,preview_hash,revision_hash,created_at,updated_at,published_at";
+    const result = await readWithOptionalEnvironment(columns, (selection) => {
+      let query = access.client.from("admin_catalog_revisions").select(selection).order("updated_at", { ascending: false }).limit(1000);
+      if (status) query = query.eq("status", status);
+      if (type) query = query.eq("entity_type", type);
+      return query;
+    });
     if (result.error) return databaseFailure(result.error);
-    return json({ items: visibleRows((result.data || []) as JsonRecord[], includeQa), memberships: access.memberships, canShowQa: access.canShowQa });
+    return json({ ...filteredPage(readRows(result), includeQa, limit, readRows(result).length < 1000), memberships: access.memberships, canShowQa: access.canShowQa });
   }
 
   if (view === "courses") {
@@ -297,37 +357,37 @@ export async function GET(request: NextRequest) {
         if (!includeQa && !isOperationalAdminData(item)) return json({ error: "No encontramos ese recorrido publicado.", code: "COURSE_NOT_FOUND" }, 404);
         return json({ item: withAdminDataEnvironment(item), canShowQa: access.canShowQa });
       }
-      const revision = await access.client.from("admin_catalog_revisions")
-        .select("payload,version,status")
-        .eq("entity_type", "COURSE").eq("entity_id", courseId)
+      const revision = await readWithOptionalEnvironment("payload,version,status", (selection) => access.client.from("admin_catalog_revisions")
+        .select(selection).eq("entity_type", "COURSE").eq("entity_id", courseId)
         .in("status", ["PUBLISHED", "SUPERSEDED", "ARCHIVED"])
-        .order("version", { ascending: false }).limit(1).maybeSingle();
+        .order("version", { ascending: false }).limit(1).maybeSingle());
       if (revision.error) return databaseFailure(revision.error);
-      if (!revision.data || (!includeQa && !isOperationalAdminData(revision.data))) return json({ error: "No encontramos ese recorrido publicado.", code: "COURSE_NOT_FOUND" }, 404);
-      return json({ item: withAdminDataEnvironment(record(revision.data.payload) || {}), canShowQa: access.canShowQa });
+      const revisionRow = readRecord(revision);
+      if (!revisionRow || (!includeQa && !isOperationalAdminData(revisionRow))) return json({ error: "No encontramos ese recorrido publicado.", code: "COURSE_NOT_FOUND" }, 404);
+      return json({ item: withAdminDataEnvironment({ ...(record(revisionRow.payload) || {}), data_environment: classifyAdminData(revisionRow).environment }), canShowQa: access.canShowQa });
     }
     const query = (text(request.nextUrl.searchParams.get("q"), 160) || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es-MX");
     const matches = catalog.courses.filter((course) => {
       const club = clubs.get(course.clubId); const haystack = `${club?.name || ""} ${club?.aliases?.join(" ") || ""} ${course.name} ${course.aliases?.join(" ") || ""} ${club?.city || ""}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es-MX");
       return course.active && (includeQa || isOperationalAdminData({ ...course, club })) && (!query || query.split(/\s+/).every((token) => haystack.includes(token)));
     }).slice(0, limit);
-    const revisionRows = matches.length ? await access.client.from("admin_catalog_revisions").select("entity_id,version,status,updated_at").eq("entity_type", "COURSE").in("entity_id", matches.map((course) => course.id)).order("version", { ascending: false }) : { data: [], error: null };
+    const revisionRows = matches.length ? await readWithOptionalEnvironment("entity_id,version,status,updated_at", (selection) => access.client.from("admin_catalog_revisions").select(selection).eq("entity_type", "COURSE").in("entity_id", matches.map((course) => course.id)).order("version", { ascending: false })) : { data: [], error: null, classificationPersisted: false };
     if (revisionRows.error) return databaseFailure(revisionRows.error);
     const latest = new Map<string, JsonRecord>();
-    for (const revision of revisionRows.data || []) if (!latest.has(revision.entity_id)) latest.set(revision.entity_id, revision);
+    for (const revision of readRows(revisionRows)) if (!latest.has(String(revision.entity_id))) latest.set(String(revision.entity_id), revision);
     const baseItems = matches.map((course) => withAdminDataEnvironment({ ...course, clubName: clubs.get(course.clubId)?.name || "Club", city: clubs.get(course.clubId)?.city || null, adminRevision: latest.get(course.id) || null }));
     if (!includeQa) return json({ items: baseItems, total: baseItems.length, memberships: access.memberships, canShowQa: access.canShowQa });
-    const qaRevisions = await access.client.from("admin_catalog_revisions").select("entity_id,version,status,payload,updated_at")
-      .eq("entity_type", "COURSE").in("status", ["PUBLISHED", "SUPERSEDED", "ARCHIVED"]).order("version", { ascending: false });
+    const qaRevisions = await readWithOptionalEnvironment("entity_id,version,status,payload,updated_at", (selection) => access.client.from("admin_catalog_revisions").select(selection)
+      .eq("entity_type", "COURSE").in("status", ["PUBLISHED", "SUPERSEDED", "ARCHIVED"]).order("version", { ascending: false }));
     if (qaRevisions.error) return databaseFailure(qaRevisions.error);
     const merged = new Map<string, JsonRecord>(baseItems.map((item) => [String(item.id), item as JsonRecord]));
-    for (const revision of qaRevisions.data || []) {
-      if (isOperationalAdminData(revision) || merged.has(revision.entity_id)) continue;
+    for (const revision of readRows(qaRevisions)) {
+      if (isOperationalAdminData(revision) || merged.has(String(revision.entity_id))) continue;
       const payload = record(revision.payload); const course = record(payload?.course); const club = record(payload?.club);
       if (!payload || !course || !club) continue;
       const haystack = `${club.name || ""} ${course.name || ""} ${club.city || ""}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es-MX");
       if (query && !query.split(/\s+/).every((token) => haystack.includes(token))) continue;
-      merged.set(String(course.id), withAdminDataEnvironment({ ...course, clubName: String(club.name || "Club QA"), city: typeof club.city === "string" ? club.city : null, adminRevision: revision }));
+      merged.set(String(course.id), withAdminDataEnvironment({ ...course, data_environment: classifyAdminData(revision).environment, clubName: String(club.name || "Club QA"), city: typeof club.city === "string" ? club.city : null, adminRevision: revision }));
     }
     const items = [...merged.values()].slice(0, limit);
     return json({ items, total: items.length, memberships: access.memberships, canShowQa: access.canShowQa });
@@ -343,15 +403,15 @@ export async function GET(request: NextRequest) {
       ...catalogs.shafts.map((item) => ({ entityType: "SHAFT", item })),
     ];
     if (includeQa) {
-      const qaRevisions = await access.client.from("admin_catalog_revisions").select("entity_type,entity_id,version,status,payload")
-        .in("entity_type", ["CLUB_EQUIPMENT", "BALL", "SHAFT"]).in("status", ["PUBLISHED", "SUPERSEDED", "ARCHIVED"]).order("version", { ascending: false });
+      const qaRevisions = await readWithOptionalEnvironment("entity_type,entity_id,version,status,payload", (selection) => access.client.from("admin_catalog_revisions").select(selection)
+        .in("entity_type", ["CLUB_EQUIPMENT", "BALL", "SHAFT"]).in("status", ["PUBLISHED", "SUPERSEDED", "ARCHIVED"]).order("version", { ascending: false }));
       if (qaRevisions.error) return databaseFailure(qaRevisions.error);
       const known = new Set(groups.map((row) => `${row.entityType}:${row.item.id}`));
-      for (const revision of qaRevisions.data || []) {
+      for (const revision of readRows(qaRevisions)) {
         const key = `${revision.entity_type}:${revision.entity_id}`;
         if (known.has(key) || isOperationalAdminData(revision)) continue;
         const payload = record(revision.payload); if (!payload) continue;
-        groups.push({ entityType: revision.entity_type, item: payload });
+        groups.push({ entityType: String(revision.entity_type), item: { ...payload, data_environment: classifyAdminData(revision).environment } });
         known.add(key);
       }
     }
@@ -371,15 +431,15 @@ export async function GET(request: NextRequest) {
 
   if (view === "rules") {
     const types = ["LOCAL_RULE_SET"];
-    const result = await access.client.from("admin_catalog_revisions").select("id,entity_type,entity_id,version,status,updated_at,payload,source_name,source_type").in("entity_type", types).order("updated_at", { ascending: false }).limit(limit);
+    const result = await readWithOptionalEnvironment("id,entity_type,entity_id,version,status,updated_at,payload,source_name,source_type", (selection) => access.client.from("admin_catalog_revisions").select(selection).in("entity_type", types).order("updated_at", { ascending: false }).limit(1000));
     if (result.error) return databaseFailure(result.error);
-    return json({ items: visibleRows((result.data || []) as JsonRecord[], includeQa), memberships: access.memberships, canShowQa: access.canShowQa });
+    return json({ ...filteredPage(readRows(result), includeQa, limit, readRows(result).length < 1000), memberships: access.memberships, canShowQa: access.canShowQa });
   }
 
   if (view === "imports") {
-    const result = await access.client.from("admin_import_jobs").select("id,kind,status,source_format,summary,created_at,updated_at,admin_import_rows(row_number,status,existing_entity_id,issues,normalized_payload)").order("updated_at", { ascending: false }).limit(limit);
+    const result = await readWithOptionalEnvironment("id,kind,status,source_format,summary,created_at,updated_at,admin_import_rows(row_number,status,existing_entity_id,issues,normalized_payload)", (selection) => access.client.from("admin_import_jobs").select(selection).order("updated_at", { ascending: false }).limit(1000));
     if (result.error) return databaseFailure(result.error);
-    return json({ items: visibleRows((result.data || []) as JsonRecord[], includeQa), memberships: access.memberships, canShowQa: access.canShowQa });
+    return json({ ...filteredPage(readRows(result), includeQa, limit, readRows(result).length < 1000), memberships: access.memberships, canShowQa: access.canShowQa });
   }
 
   if (view === "course-ops" || view === "configurations") {
@@ -387,21 +447,29 @@ export async function GET(request: NextRequest) {
     // configuration. This workspace list only renders configuration metadata;
     // requesting a nonexistent direct relationship makes PostgREST reject the
     // whole authorized Admin route before the hole editor can load.
-    const result = await access.client.from("course_configurations").select("id,course_id,name,description,scope_type,competition_id,status,effective_from,effective_until,reason,source_description,version,revision_hash,created_at,updated_at").order("updated_at", { ascending: false }).limit(limit);
+    const result = await readWithOptionalEnvironment("id,course_id,name,description,scope_type,competition_id,status,effective_from,effective_until,reason,source_description,version,revision_hash,created_at,updated_at", (selection) => access.client.from("course_configurations").select(selection).order("updated_at", { ascending: false }).limit(1000));
     if (result.error) return databaseFailure(result.error);
-    return json({ items: visibleRows((result.data || []) as JsonRecord[], includeQa), canShowQa: access.canShowQa });
+    return json({ ...filteredPage(readRows(result), includeQa, limit, readRows(result).length < 1000), canShowQa: access.canShowQa });
   }
 
   if (view === "competitions") {
-    const result = await access.client.from("competition_definitions").select("*,competition_rule_sets(*,competition_rules(*))").order("updated_at", { ascending: false }).limit(limit);
+    const result = await access.client.from("competition_definitions").select("*,competition_rule_sets(*,competition_rules(*))").order("updated_at", { ascending: false }).limit(1000);
     if (result.error) return databaseFailure(result.error);
-    return json({ items: visibleRows((result.data || []) as JsonRecord[], includeQa), canShowQa: access.canShowQa });
+    return json({ ...filteredPage((result.data || []) as JsonRecord[], includeQa, limit, (result.data || []).length < 1000), canShowQa: access.canShowQa });
   }
 
   if (view === "requests") {
-    const result = await access.client.rpc("admin_feedback_queue_v1", { queue_limit: limit });
+    const result = await readFeedbackQueue(
+      () => access.client.rpc("admin_feedback_queue_page_v2", { queue_limit: limit, queue_offset: 0, include_non_operational: includeQa }),
+      () => access.client.rpc("admin_feedback_queue_v1", { queue_limit: 100 }),
+    );
     if (result.error) return databaseFailure(result.error);
-    return json({ items: visibleRows((result.data || []) as JsonRecord[], includeQa), canShowQa: access.canShowQa });
+    const rows = (result.data || []) as JsonRecord[];
+    if (result.serverFiltered) {
+      const total = rows.length ? Number(rows[0].total_count || 0) : 0;
+      return json({ items: rows.map(withAdminDataEnvironment), total, totalStatus: "VERIFIED", totalReason: null, canShowQa: access.canShowQa });
+    }
+    return json({ ...filteredPage(rows, includeQa, limit, rows.length < 100), canShowQa: access.canShowQa });
   }
 
   if (view === "audit") {
@@ -456,6 +524,18 @@ export async function GET(request: NextRequest) {
       ...(imports.data || []),
       ...(requests.data || []),
     ] as JsonRecord[];
+    const separationChecks = analyzeAdminDataSeparation({
+      operationalProjectionRows: [
+        ...allCourseRows,
+        ...catalog.clubs,
+        ...allTeeRows,
+        ...allBallRows,
+        ...allClubRows,
+        ...allShaftRows,
+      ],
+      internalRows: adminRows,
+      historicalReferencesChecked: false,
+    });
     return json({
       courses: {
         clubs: operationalClubs.length,
@@ -493,8 +573,9 @@ export async function GET(request: NextRequest) {
         qaEquipmentRecords: allBallRows.length + allClubRows.length + allShaftRows.length - allEquipment.length,
         legacyQaWithoutExplicitFlag: [...allCourseRows, ...allBallRows, ...allClubRows, ...allShaftRows, ...adminRows]
           .filter((row) => classifyAdminData(row).source === "LEGACY").length,
-        syntheticVisibleInOperational: 0,
-        productionIdsPointingToFixtures: 0,
+        isolatedInternalFixtures: separationChecks.isolatedInternalFixtures,
+        syntheticVisibleInOperational: separationChecks.syntheticVisibleInOperational,
+        productionIdsPointingToFixtures: separationChecks.productionIdsPointingToFixtures,
       },
       canShowQa: access.canShowQa,
     });
@@ -538,10 +619,10 @@ export async function POST(request: NextRequest) {
       const issues = equipmentPayloadIssues(normalizedPayload, entityType, entityId);
       if (issues.length) return json({ error: issues.join(" "), code: "INVALID_EQUIPMENT_FACTS", issues }, 400);
       const identity = equipmentIdentityKey({ brand: String(normalizedPayload.brand), model: String(normalizedPayload.model), generation: text(normalizedPayload.generation, 120), year: finiteNumber(normalizedPayload.year), categoryOrUsage: text(normalizedPayload.category ?? normalizedPayload.usage, 80) });
-      const seedMatch = equipmentRows(entityType).find((item) => item.id !== entityId && equipmentIdentityKey({ ...item, categoryOrUsage: "category" in item ? item.category : "usage" in item ? item.usage : null }) === identity);
-      const published = await access.client.from("admin_catalog_revisions").select("entity_id,payload").eq("entity_type", entityType).eq("status", "PUBLISHED").limit(1000);
+      const seedMatch = environment === "PRODUCTION" ? equipmentRows(entityType).find((item) => item.id !== entityId && equipmentIdentityKey({ ...item, categoryOrUsage: "category" in item ? item.category : "usage" in item ? item.usage : null }) === identity) : undefined;
+      const published = await readWithOptionalEnvironment("entity_id,payload", (selection) => access.client.from("admin_catalog_revisions").select(selection).eq("entity_type", entityType).eq("status", "PUBLISHED").limit(1000));
       if (published.error) return databaseFailure(published.error);
-      const publishedMatch = (published.data || []).find((item) => { const row = record(item.payload); return item.entity_id !== entityId && row && typeof row.brand === "string" && typeof row.model === "string" && equipmentIdentityKey({ brand: row.brand, model: row.model, generation: text(row.generation, 120), year: finiteNumber(row.year), categoryOrUsage: text(row.category ?? row.usage, 80) }) === identity; });
+      const publishedMatch = readRows(published).find((item) => { const row = record(item.payload); return classifyAdminData(item).environment === environment && item.entity_id !== entityId && row && typeof row.brand === "string" && typeof row.model === "string" && equipmentIdentityKey({ brand: row.brand, model: row.model, generation: text(row.generation, 120), year: finiteNumber(row.year), categoryOrUsage: text(row.category ?? row.usage, 80) }) === identity; });
       const duplicateId = seedMatch?.id || publishedMatch?.entity_id;
       if (duplicateId) return json({ error: `Posible registro existente: ${duplicateId}. Abre ese registro o usa una generación/año diferente.`, code: "POSSIBLE_DUPLICATE", existingEntityId: duplicateId }, 409);
     }
@@ -597,11 +678,13 @@ export async function POST(request: NextRequest) {
     const reason = text(input.reason, 2000);
     const requestId = uuid(input.requestId) || crypto.randomUUID();
     if (!revisionId || !previewHash || !/^[0-9a-f]{64}$/.test(previewHash) || !reason) return json({ error: "La confirmación de publicación no es válida.", code: "INVALID_PUBLICATION" }, 400);
-    const candidate = await access.client.from("admin_catalog_revisions").select("id,entity_type,entity_id,payload").eq("id", revisionId).maybeSingle();
+    const candidate = await readWithOptionalEnvironment("id,entity_type,entity_id,payload", (selection) => access.client.from("admin_catalog_revisions").select(selection).eq("id", revisionId).maybeSingle());
     if (candidate.error) return databaseFailure(candidate.error);
-    if (!candidate.data) return json({ error: "La revisión no existe.", code: "REVISION_NOT_FOUND" }, 404);
-    if (!isOperationalAdminData(candidate.data)) {
-      console.warn("backyard_admin_qa_publish_blocked", { revisionId, entityType: candidate.data.entity_type, entityId: candidate.data.entity_id, environment: classifyAdminData(candidate.data).environment });
+    const candidateRow = readRecord(candidate);
+    if (!candidateRow) return json({ error: "La revisión no existe.", code: "REVISION_NOT_FOUND" }, 404);
+    const publication = adminPublicationDecision(candidateRow);
+    if (!publication.allowed) {
+      console.warn("backyard_admin_qa_publish_blocked", { revisionId, entityType: candidateRow.entity_type, entityId: candidateRow.entity_id, environment: publication.environment });
       return json({ error: "Los registros QA/Test no pueden publicarse al catálogo operativo.", code: "QA_PUBLICATION_BLOCKED" }, 409);
     }
     const result = await access.client.rpc("admin_publish_revision_v1", { revision_id: revisionId, expected_preview_hash: previewHash, publish_reason: reason, request_id: requestId });
@@ -664,10 +747,11 @@ export async function POST(request: NextRequest) {
     const reason = text(input.reason, 2000);
     const requestId = uuid(input.requestId) || crypto.randomUUID();
     if (!configurationId || !previewHash || !/^[0-9a-f]{64}$/.test(previewHash) || !reason) return json({ error: "Faltan configuración, Preview vigente o motivo.", code: "INVALID_CONFIGURATION_PUBLICATION" }, 400);
-    const candidate = await access.client.from("course_configurations").select("id,course_id,name,description,reason,source_description").eq("id", configurationId).maybeSingle();
+    const candidate = await readWithOptionalEnvironment("id,course_id,name,description,reason,source_description", (selection) => access.client.from("course_configurations").select(selection).eq("id", configurationId).maybeSingle());
     if (candidate.error) return databaseFailure(candidate.error);
-    if (!candidate.data) return json({ error: "La configuración no existe.", code: "CONFIGURATION_NOT_FOUND" }, 404);
-    if (!isOperationalAdminData(candidate.data)) return json({ error: "Las configuraciones QA/Test no pueden publicarse a jugadores.", code: "QA_PUBLICATION_BLOCKED" }, 409);
+    const candidateRow = readRecord(candidate);
+    if (!candidateRow) return json({ error: "La configuración no existe.", code: "CONFIGURATION_NOT_FOUND" }, 404);
+    if (!adminPublicationDecision(candidateRow).allowed) return json({ error: "Las configuraciones QA/Test no pueden publicarse a jugadores.", code: "QA_PUBLICATION_BLOCKED" }, 409);
     const result = await access.client.rpc("admin_publish_course_configuration_v2", { configuration_id: configurationId, expected_preview_hash: previewHash, overlap_resolution: resolution, publish_reason: reason, request_id: requestId });
     if (result.error) return databaseFailure(result.error, "No fue posible publicar la configuración temporal.");
     return json({ item: result.data, requestId });
@@ -751,10 +835,11 @@ export async function POST(request: NextRequest) {
   if (operation === "confirmImport") {
     const importId = uuid(input.importId); const reason = text(input.reason, 2000); const requestId = uuid(input.requestId) || crypto.randomUUID();
     if (!importId || !reason) return json({ error: "Faltan importación o motivo de aprobación.", code: "INVALID_IMPORT_CONFIRMATION" }, 400);
-    const candidate = await access.client.from("admin_import_jobs").select("id,summary,admin_import_rows(normalized_payload)").eq("id", importId).maybeSingle();
+    const candidate = await readWithOptionalEnvironment("id,summary,admin_import_rows(normalized_payload)", (selection) => access.client.from("admin_import_jobs").select(selection).eq("id", importId).maybeSingle());
     if (candidate.error) return databaseFailure(candidate.error);
-    if (!candidate.data) return json({ error: "La importación no existe.", code: "IMPORT_NOT_FOUND" }, 404);
-    if (!isOperationalAdminData(candidate.data)) return json({ error: "Una importación QA/Test no puede crear borradores operativos.", code: "QA_IMPORT_BLOCKED" }, 409);
+    const candidateRow = readRecord(candidate);
+    if (!candidateRow) return json({ error: "La importación no existe.", code: "IMPORT_NOT_FOUND" }, 404);
+    if (!adminPublicationDecision(candidateRow).allowed) return json({ error: "Una importación QA/Test no puede crear borradores operativos.", code: "QA_IMPORT_BLOCKED" }, 409);
     const result = await access.client.rpc("admin_confirm_import_v1", { target_import_id: importId, confirmation_reason: reason, request_id: requestId });
     if (result.error) return databaseFailure(result.error, "No fue posible crear los Drafts aprobados.");
     return json({ result: result.data, requestId });

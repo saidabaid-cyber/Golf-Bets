@@ -4,7 +4,10 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
+  adminDataPage,
   adminEnvironmentCounts,
+  adminPublicationDecision,
+  analyzeAdminDataSeparation,
   canViewQaAdminData,
   classifyAdminData,
   isOperationalAdminData,
@@ -29,6 +32,54 @@ test("dashboard operational counts exclude QA records", () => {
   assert.equal(rows.filter(isOperationalAdminData).length, 1);
   assert.deepEqual(adminEnvironmentCounts(rows), { PRODUCTION: 1, QA: 1, TEST: 1, SYNTHETIC: 0 });
   assert.match(route, /rows\.filter\(isOperationalAdminData\)\.length/);
+});
+
+test("explicit classification is consistent across list, detail, dashboard and publication", () => {
+  const normalNamedQa = { id: "ordinary-name", name: "Club del Valle", data_environment: "QA" };
+  const ambiguousProduction = { id: "real-review", name: "QA review completed for real source", data_environment: "PRODUCTION" };
+  const values = [normalNamedQa, ambiguousProduction];
+
+  assert.deepEqual(adminDataPage(values, false, 20).items.map((row) => row.id), ["real-review"]);
+  assert.equal(withAdminDataEnvironment(normalNamedQa).data_environment, "QA");
+  assert.deepEqual(adminEnvironmentCounts(values), { PRODUCTION: 1, QA: 1, TEST: 0, SYNTHETIC: 0 });
+  assert.deepEqual(adminPublicationDecision(normalNamedQa), { allowed: false, environment: "QA", code: "QA_PUBLICATION_BLOCKED" });
+  assert.deepEqual(adminPublicationDecision(ambiguousProduction), { allowed: true, environment: "PRODUCTION", code: null });
+});
+
+test("operational filtering happens before pagination and totals describe the filtered set", () => {
+  const rows = [
+    { id: "qa-first", data_environment: "QA" },
+    { id: "real-1", data_environment: "PRODUCTION" },
+    { id: "real-2", data_environment: "PRODUCTION" },
+  ];
+  const page = adminDataPage(rows, false, 1);
+  assert.deepEqual(page.items.map((row) => row.id), ["real-1"]);
+  assert.equal(page.total, 2);
+});
+
+test("quality checks distinguish isolated fixtures, operational exposure and unverified references", () => {
+  const fixture = { id: "qa-ball", brand: "Normal looking brand", data_environment: "QA" };
+  const production = { id: "real-ball", brand: "QA review completed", data_environment: "PRODUCTION" };
+  const isolated = analyzeAdminDataSeparation({
+    internalRows: [fixture],
+    operationalProjectionRows: [production],
+    historicalReferencesChecked: false,
+  });
+  assert.equal(isolated.isolatedInternalFixtures.value, 1);
+  assert.equal(isolated.syntheticVisibleInOperational.value, 0);
+  assert.equal(isolated.productionIdsPointingToFixtures.value, null);
+  assert.equal(isolated.productionIdsPointingToFixtures.status, "NOT_VERIFIED");
+
+  const exposed = analyzeAdminDataSeparation({
+    internalRows: [fixture],
+    operationalProjectionRows: [production, fixture],
+    historicalReferencesChecked: true,
+    historicalProductionRows: [{ id: "bag-1", equipmentId: "qa-ball", data_environment: "PRODUCTION" }],
+  });
+  assert.equal(exposed.syntheticVisibleInOperational.value, 1);
+  assert.equal(exposed.productionIdsPointingToFixtures.value, 1);
+  assert.equal(exposed.productionIdsPointingToFixtures.status, "VERIFIED");
+  assert.match(component, /No verificado/);
 });
 
 test("data quality includes legacy Admin records instead of reporting a catalog-only zero", () => {

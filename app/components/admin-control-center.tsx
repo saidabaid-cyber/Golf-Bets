@@ -462,7 +462,14 @@ function RequestRow({ item, loading, onConvert }: { item: Json; loading: boolean
 
 function Quality({ data }: { data: Json | null }) {
   const courses = object(data?.courses) || {}; const equipment = object(data?.equipment) || {}; const separation = object(data?.separation) || {};
-  return <><section className={styles.card}><h2>Calidad · Courses</h2><div className={styles.stats}>{Object.entries(courses).map(([key, value]) => <article className={styles.stat} key={key}><span>{key}</span><b>{String(value)}</b></article>)}</div></section><section className={styles.card}><h2>Calidad · Equipment</h2><div className={styles.stats}>{Object.entries(equipment).map(([key, value]) => <article className={styles.stat} key={key}><span>{key}</span><b>{String(value)}</b></article>)}</div><p className={styles.subtle}>Los huecos se reportan; no se completan por inferencia.</p></section><section className={styles.card}><h2>Calidad · Separación QA</h2><div className={styles.stats}>{Object.entries(separation).map(([key, value]) => <article className={styles.stat} key={key}><span>{key}</span><b>{String(value)}</b></article>)}</div></section></>;
+  return <><section className={styles.card}><h2>Calidad · Courses</h2><div className={styles.stats}>{Object.entries(courses).map(([key, value]) => <article className={styles.stat} key={key}><span>{key}</span><b>{String(value)}</b></article>)}</div></section><section className={styles.card}><h2>Calidad · Equipment</h2><div className={styles.stats}>{Object.entries(equipment).map(([key, value]) => <article className={styles.stat} key={key}><span>{key}</span><b>{String(value)}</b></article>)}</div><p className={styles.subtle}>Los huecos se reportan; no se completan por inferencia.</p></section><section className={styles.card}><h2>Calidad · Separación QA</h2><div className={styles.stats}>{Object.entries(separation).map(([key, value]) => <QualityMetric key={key} label={key} value={value} />)}</div></section></>;
+}
+
+function QualityMetric({ label, value }: { label: string; value: unknown }) {
+  const verification = object(value);
+  if (!verification) return <article className={styles.stat}><span>{label}</span><b>{typeof value === "number" ? value : "No verificado"}</b></article>;
+  const verified = verification.status === "VERIFIED" && typeof verification.value === "number";
+  return <article className={styles.stat} title={typeof verification.reason === "string" ? verification.reason : undefined}><span>{label}</span><b>{verified ? String(verification.value) : "No verificado"}</b>{typeof verification.reason === "string" && <small className={styles.subtle}>{verification.reason}</small>}</article>;
 }
 
 function Audit({ items }: { items: Json[] }) {

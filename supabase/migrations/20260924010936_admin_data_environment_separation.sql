@@ -1,4 +1,6 @@
 begin;
+set local lock_timeout='5s';
+set local statement_timeout='60s';
 
 -- Data remains in place. This additive classification separates operational
 -- records from QA evidence without changing stable IDs or foreign keys.
@@ -52,6 +54,14 @@ where data_environment='PRODUCTION';
 
 update public.feedback_requests
 set data_environment=case
+  -- These immutable pre-v2 fixture IDs have their QA evidence only in private
+  -- columns that the legacy queue RPC does not project. Do not broaden this to
+  -- blank requests: a real blank legacy request must remain PRODUCTION.
+  when id in (
+    '5589dffb-416d-44cd-9d06-90b173bd1271'::uuid,
+    '5e3ebfef-cdcd-4953-a802-bf9f369f4d96'::uuid,
+    'cfdd2187-8783-4efc-9105-7c151a251904'::uuid
+  ) then 'QA'
   when lower(concat_ws(' ',title,description,source_screen,reply_email,payload->>'description')) ~ '(synthetic|sint[eé]tic[oa])' then 'SYNTHETIC'
   when lower(concat_ws(' ',title,description,source_screen,reply_email,payload->>'description')) ~ 'qa reconciliation|qa fixture|fixture qa|prueba qa|qa controlad[oa]|(^|[-_/])qa([-_/]|$)|@example\.invalid' then 'QA'
   when lower(concat_ws(' ',title,description,source_screen,reply_email,payload->>'description')) ~ 'test fixture|fixture test|automated test|prueba automatizada' then 'TEST'
@@ -194,6 +204,58 @@ as $$ select * from private.admin_feedback_queue_impl_v1(queue_limit) $$;
 revoke all on function public.admin_feedback_queue_v1(integer) from public,anon;
 grant execute on function public.admin_feedback_queue_v1(integer) to authenticated,service_role;
 
+-- Versioned page endpoint filters explicit classification before LIMIT/OFFSET
+-- and reports exact totals. The QA switch is defense-in-depth restricted to an
+-- active GLOBAL SUPER_ADMIN even if a caller bypasses the Next route.
+create or replace function public.admin_feedback_queue_page_v2(
+  queue_limit integer default 50,
+  queue_offset integer default 0,
+  include_non_operational boolean default false
+)
+returns table(
+  id uuid,category text,request_status text,title text,description text,
+  source_screen text,attachment_status text,created_at timestamptz,
+  data_environment text,total_count bigint,operational_total bigint,qa_total bigint
+)
+language sql stable security definer set search_path=''
+as $$
+  with authorized as (
+    select request.*
+    from public.feedback_requests request
+    where private.admin_has_scope_v1('REQUEST','GLOBAL',null,'READ')
+  ), visibility as (
+    select request.*
+    from authorized request
+    where request.data_environment='PRODUCTION'
+      or (
+        include_non_operational
+        and exists(
+          select 1 from public.admin_memberships membership
+          where membership.user_id=(select auth.uid())
+            and membership.role='SUPER_ADMIN'
+            and membership.scope_type='GLOBAL'
+            and membership.active
+        )
+      )
+  ), totals as (
+    select
+      (select count(*) from visibility) total_count,
+      count(*) filter(where authorized.data_environment='PRODUCTION') operational_total,
+      count(*) filter(where authorized.data_environment<>'PRODUCTION') qa_total
+    from authorized
+  )
+  select request.id,request.category,request.request_status,request.title,
+    request.description,request.source_screen,request.attachment_status,
+    request.created_at,request.data_environment,totals.total_count,
+    totals.operational_total,totals.qa_total
+  from visibility request cross join totals
+  order by request.created_at desc
+  limit greatest(1,least(queue_limit,100))
+  offset greatest(0,queue_offset);
+$$;
+revoke all on function public.admin_feedback_queue_page_v2(integer,integer,boolean) from public,anon;
+grant execute on function public.admin_feedback_queue_page_v2(integer,integer,boolean) to authenticated,service_role;
+
 -- Defense in depth for callers that bypass the Next route: a QA request may
 -- remain reviewable, but it cannot become an operational draft.
 create or replace function private.admin_create_draft_from_request_impl_v1(
@@ -251,6 +313,7 @@ as $$
   select revision.entity_type,revision.entity_id,revision.version,revision.status,
     case revision.entity_type
       when 'COURSE' then jsonb_strip_nulls(jsonb_build_object(
+        'dataEnvironment',revision.data_environment,
         'sourceName',revision.payload->'sourceName','sourceUrl',revision.payload->'sourceUrl','verifiedAt',revision.payload->'verifiedAt',
         'club',jsonb_strip_nulls(jsonb_build_object(
           'id',revision.payload#>'{club,id}','name',revision.payload#>'{club,name}','aliases',coalesce(revision.payload#>'{club,aliases}','[]'::jsonb),
@@ -267,6 +330,7 @@ as $$
         'teeHoleYardages',coalesce(revision.payload->'teeHoleYardages','[]'::jsonb)
       ))
       else jsonb_strip_nulls(jsonb_build_object(
+        'dataEnvironment',revision.data_environment,
         'id',revision.payload->'id','aliases',coalesce(revision.payload->'aliases','[]'::jsonb),'brand',revision.payload->'brand',
         'model',revision.payload->'model','generation',revision.payload->'generation','year',revision.payload->'year',
         'active',revision.payload->'active','bagEligible',revision.payload->'bagEligible','fitEligible',revision.payload->'fitEligible',
