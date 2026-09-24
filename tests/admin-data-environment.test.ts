@@ -31,6 +31,14 @@ test("dashboard operational counts exclude QA records", () => {
   assert.match(route, /rows\.filter\(isOperationalAdminData\)\.length/);
 });
 
+test("data quality includes legacy Admin records instead of reporting a catalog-only zero", () => {
+  assert.match(route, /adminRows = \[/);
+  assert.match(route, /admin_catalog_revisions/);
+  assert.match(route, /admin_import_jobs/);
+  assert.match(route, /admin_feedback_queue_v1/);
+  assert.match(route, /\.\.\.allShaftRows, \.\.\.adminRows/);
+});
+
 test("requests hide QA by default and expose it only when explicitly included", () => {
   assert.deepEqual(visibleAdminData([operationalRequest, qaRequest], false).map((row) => row.id), ["request-owner"]);
   assert.deepEqual(visibleAdminData([operationalRequest, qaRequest], true).map((row) => row.id), ["request-owner", "request-qa"]);

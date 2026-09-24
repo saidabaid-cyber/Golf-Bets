@@ -411,12 +411,18 @@ export async function GET(request: NextRequest) {
   }
 
   if (view === "quality") {
-    const [catalog, equipmentCatalogs, approvedImages] = await Promise.all([
+    const [catalog, equipmentCatalogs, approvedImages, revisions, configurations, competitions, imports, requests] = await Promise.all([
       getCourseCatalog(access.client),
       loadLayeredEquipmentCatalogs(),
       access.client.from("equipment_catalog_images").select("equipment_type,equipment_id").eq("status", "APPROVED"),
+      access.client.from("admin_catalog_revisions").select("*"),
+      access.client.from("course_configurations").select("*"),
+      access.client.from("competition_definitions").select("*"),
+      access.client.from("admin_import_jobs").select("*,admin_import_rows(normalized_payload)"),
+      access.client.rpc("admin_feedback_queue_v1", { queue_limit: 100 }),
     ]);
-    if (approvedImages.error) return databaseFailure(approvedImages.error);
+    const firstError = [approvedImages, revisions, configurations, competitions, imports, requests].find((result) => result.error)?.error;
+    if (firstError) return databaseFailure(firstError);
     const allShaftRows = [...equipmentCatalogs.shafts];
     const allClubRows = [...equipmentCatalogs.clubs];
     const allBallRows = [...equipmentCatalogs.balls];
@@ -443,6 +449,13 @@ export async function GET(request: NextRequest) {
     const identityCounts = new Map<string, number>();
     for (const row of allEquipment) identityCounts.set(equipmentIdentityKey(row), (identityCounts.get(equipmentIdentityKey(row)) || 0) + 1);
     const incompleteTees = teeRows.filter((tee) => yardageCounts.get(tee.id) !== (catalog.courses.find((course) => course.id === tee.courseId)?.holes || 18));
+    const adminRows = [
+      ...(revisions.data || []),
+      ...(configurations.data || []),
+      ...(competitions.data || []),
+      ...(imports.data || []),
+      ...(requests.data || []),
+    ] as JsonRecord[];
     return json({
       courses: {
         clubs: operationalClubs.length,
@@ -478,7 +491,8 @@ export async function GET(request: NextRequest) {
       separation: {
         qaCourseRecords: allCourseRows.length - courseRows.length,
         qaEquipmentRecords: allBallRows.length + allClubRows.length + allShaftRows.length - allEquipment.length,
-        legacyQaWithoutExplicitFlag: [...allCourseRows, ...allBallRows, ...allClubRows, ...allShaftRows].filter((row) => classifyAdminData(row).source === "LEGACY").length,
+        legacyQaWithoutExplicitFlag: [...allCourseRows, ...allBallRows, ...allClubRows, ...allShaftRows, ...adminRows]
+          .filter((row) => classifyAdminData(row).source === "LEGACY").length,
         syntheticVisibleInOperational: 0,
         productionIdsPointingToFixtures: 0,
       },
