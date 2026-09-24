@@ -166,16 +166,17 @@ export class GoogleDriveClient {
     this.uploadTimeoutMs = uploadTimeoutMs; this.wait = wait; this.sharedDriveId = undefined;
   }
 
-  async fetch(url, init = {}, { acceptStatus } = {}) {
+  async fetch(url, init = {}, { acceptStatus, redirect = 'error' } = {}) {
     const parsed = new URL(url);
     if (parsed.origin !== DRIVE_API) throw new DriveError('GDRIVE_CROSS_ORIGIN_BLOCKED');
+    if (redirect !== 'error' && redirect !== 'manual') throw new DriveError('GDRIVE_REDIRECT_MODE_INVALID');
     const headers = new Headers(init.headers || {});
     headers.delete('authorization');
     headers.set('authorization', `Bearer ${this.accessToken}`);
     let response;
     try {
       response = await this.transport(parsed, {
-        ...init, redirect: 'error', signal: init.signal || timeoutSignal(), headers,
+        ...init, redirect, signal: init.signal || timeoutSignal(), headers,
       });
     } catch {
       throw new DriveError('GDRIVE_REQUEST_FAILED');
@@ -204,7 +205,7 @@ export class GoogleDriveClient {
     return this.retryUploadRequest(() => this.fetch(session, {
       method: 'PUT', signal: timeoutSignal(this.uploadTimeoutMs),
       headers: { 'content-length': '0', 'content-range': `bytes */${totalBytes}` },
-    }, { acceptStatus: acceptsUploadStatus }), exhaustedCode);
+    }, { acceptStatus: acceptsUploadStatus, redirect: 'manual' }), exhaustedCode);
   }
 
   async uploadResult(response, expectedName, expectedBytes) {
@@ -334,7 +335,7 @@ export class GoogleDriveClient {
             'content-range': `bytes ${offset}-${end}/${info.size}`,
           },
           body: chunkBody,
-        }, { acceptStatus: acceptsUploadStatus });
+        }, { acceptStatus: acceptsUploadStatus, redirect: 'manual' });
       } catch (error) {
         if (!(error instanceof DriveError) || error.code !== 'GDRIVE_REQUEST_FAILED') throw error;
         response = undefined;

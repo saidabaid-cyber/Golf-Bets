@@ -609,9 +609,11 @@ test('Drive resumable upload recovers from a transient chunk failure without cha
     const url = new URL(input), headers = new Headers(init.headers || {});
     assert.equal(headers.get('authorization'), 'Bearer fixture-access-token');
     if (url.pathname === '/drive/v3/files' && init.method === 'GET') {
+      assert.equal(init.redirect, 'error');
       return new Response(JSON.stringify({ files: [] }), { status: 200, headers: { 'content-type': 'application/json' } });
     }
     if (url.pathname === '/upload/drive/v3/files' && init.method === 'POST') {
+      assert.equal(init.redirect, 'error');
       initializedResponse = new Response('discarded initialization body', {
         status: 200, headers: { location: 'https://www.googleapis.com/upload/drive/v3/files?upload_id=fixture' },
       });
@@ -619,6 +621,7 @@ test('Drive resumable upload recovers from a transient chunk failure without cha
     }
     assert.equal(url.pathname, '/upload/drive/v3/files');
     assert.equal(init.method, 'PUT');
+    assert.equal(init.redirect, 'manual', 'Drive 308 Resume Incomplete must be returned instead of treated as a redirect error');
     const range = headers.get('content-range');
     if (range === `bytes */${bytes.length}`) {
       statusQueries += 1;
@@ -910,10 +913,17 @@ test('Drive authentication is in-memory, origin restricted and caller headers ca
 
   const client = new GoogleDriveClient(token, async (_url, init) => {
     assert.equal(new Headers(init.headers).get('authorization'), 'Bearer fixture-access-token');
+    assert.equal(init.redirect, 'error');
     return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
   });
-  await client.fetch('https://www.googleapis.com/drive/v3/files', { headers: { authorization: 'Bearer caller-value' } });
+  await client.fetch('https://www.googleapis.com/drive/v3/files', {
+    headers: { authorization: 'Bearer caller-value' }, redirect: 'manual',
+  });
   await assert.rejects(client.fetch('https://example.invalid/drive/v3/files'), /GDRIVE_CROSS_ORIGIN_BLOCKED/);
+  await assert.rejects(
+    client.fetch('https://www.googleapis.com/drive/v3/files', {}, { redirect: 'follow' }),
+    /GDRIVE_REDIRECT_MODE_INVALID/,
+  );
 });
 
 test('failure reporting and executable logs expose only bounded status codes', async () => {
