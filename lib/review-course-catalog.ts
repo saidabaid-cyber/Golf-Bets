@@ -5,7 +5,8 @@ export type ReviewedNineRating = { id:string; segment:'FRONT'|'BACK'|'UNSPECIFIE
 export type ReviewedTeeSource = { id:string; name:string; course_rating:number|null; slope_rating:number|null; yards:number|null; par:number|null;
   rating_category:null; qa_status:string; source_limitation:string|null; holes:{hole_number:number;par:number;stroke_index:number;yards:number|null}[];
   nineRatings:ReviewedNineRating[]; qa:{status:string;errors:string[];source_limitation?:string|null};
-  supplement?:{sourceUrl:string;authority:string;observedAt:string;hash:string} };
+  supplement?:{sourceUrl:string;authority:string;observedAt:string;hash:string;physicalHoles?:9|18;schemaVersion?:1|2;courseId?:string;teeId?:string};
+  supplementOriginal?:ReviewedTeeSource };
 export type ReviewedCatalogCourse = { id:string; clubId:string; name:string; clubName:string; holes:9|18; city?:string; stateRegion?:string; aliases:string[];
   latitude?:number; longitude?:number; locationEvidence?:{sourceUrl:string;verifiedAt:string}; sourceUrl:string; observedAt:string; dataVersion:string;
   tees:ReviewedTeeSource[] };

@@ -1,5 +1,6 @@
 import { curatedPueblaCourseProvider } from "./curated-puebla-course-data";
 import type { ReviewedCatalogCourse } from "./review-course-catalog";
+import { publishableReviewedTee, reviewedPhysicalHoleCount } from "./reviewed-scorecard-publication";
 
 const curatedByCourse = new Map(curatedPueblaCourseProvider.listCourses().map((course) => [course.courseId, course]));
 
@@ -9,13 +10,18 @@ const curatedByCourse = new Map(curatedPueblaCourseProvider.listCourses().map((c
  */
 export function reviewedCoursePublicationShape(row: ReviewedCatalogCourse) {
   const curated = curatedByCourse.get(row.id);
-  const holes = curated?.holesCount === 9 || curated?.holesCount === 18 ? curated.holesCount : row.holes;
+  const curatedHoles = curated?.holesCount === 9 || curated?.holesCount === 18 ? curated.holesCount : row.holes;
+  const holes = reviewedPhysicalHoleCount(row.id, curatedHoles);
+  const tees = row.tees.flatMap((tee) => {
+    const publishable = publishableReviewedTee(row.id, tee, holes);
+    return publishable ? [publishable] : [];
+  });
   return {
     holes,
-    tees: row.tees.filter((tee) => tee.holes.length === holes),
+    tees,
     sourceName: curated?.source.authority || "Catálogo revisado por owner",
     sourceUrl: curated?.source.url || row.sourceUrl,
     verifiedAt: curated?.source.verifiedAt || row.observedAt,
-    capturedLayoutConflict: row.holes !== holes || row.tees.some((tee) => tee.holes.length !== holes),
+    capturedLayoutConflict: row.holes !== holes || row.tees.length !== tees.length || row.tees.some((tee) => tee.holes.length !== holes),
   };
 }

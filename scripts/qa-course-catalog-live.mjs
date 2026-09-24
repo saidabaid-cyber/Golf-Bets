@@ -44,7 +44,14 @@ const mexico=await app('/api/courses/catalog?q=Mexico'),accent=await app('/api/c
 const vista=(await app('/api/courses/catalog?courseId=course-la-vista')).cards;
 const campestre=(await app('/api/courses/catalog?courseId=course-campestre-puebla')).cards;
 assert.equal(vista.length,4);assert.equal(campestre.length,5);
-for(const id of ['review-course-31612','review-course-36036']){const cards=(await app('/api/courses/catalog?courseId='+id)).cards;assert.equal(cards.filter(c=>c.holes.length===18).length,3);assert.equal(cards.filter(c=>c.holes.length===0).length,1);assert.ok(cards.every(c=>c.rating===undefined));}
+{
+ const cards=(await app('/api/courses/catalog?courseId=review-course-31612')).cards;
+ assert.equal(cards.filter(c=>c.holes.length===18).length,3);assert.ok(cards.every(c=>c.rating===undefined));
+}
+{
+ const cards=(await app('/api/courses/catalog?courseId=review-course-36036')).cards;
+ assert.equal(cards.filter(c=>c.holes.length===9).length,3);assert.ok(cards.every(c=>c.rating===undefined));
+}
 const historyBefore=(await app('/api/cloud/rounds')).rounds;
 const hash=r=>createHash('sha256').update(JSON.stringify(r)).digest('hex');
 const baseline=new Map(historyBefore.map(r=>[r.id,hash(r)]));

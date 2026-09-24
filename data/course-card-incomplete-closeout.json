@@ -1,0 +1,246 @@
+{
+  "schemaVersion": 1,
+  "projectRef": "bymeopxkxapfizeeqeyb",
+  "observedAt": "2026-09-24",
+  "before": {
+    "clubs": 153,
+    "courses": 176,
+    "tees": 769,
+    "complete": 758,
+    "incomplete": 11
+  },
+  "courses": [
+    {
+      "courseId": "review-course-23170",
+      "clubName": "LAS PAROTAS CLUB DE GOLF",
+      "courseName": "LAS PAROTAS",
+      "physicalHoles": 18,
+      "operationStatus": "CONFIRMED",
+      "sources": [
+        {
+          "authority": "Las Parotas Golf · sitio oficial",
+          "url": "https://www.lasparotasgolf.com/",
+          "role": "PRIMARY",
+          "finding": "Confirma operación, 18 hoyos, par 72 y ratings actuales, pero no publica tarjeta hoyo por hoyo."
+        },
+        {
+          "authority": "Folleto de Las Parotas alojado por Tomzap",
+          "url": "https://www.tomzap.com/GOLF_LasParotas.pdf",
+          "role": "SECONDARY_CORROBORATION",
+          "finding": "Incluye una tarjeta completa, pero sus yardas y ratings corresponden a una versión que no puede vincularse inequívocamente a los tees capturados."
+        }
+      ],
+      "tees": [
+        {
+          "teeId": "ghin:23170:tee:a5be40b61705",
+          "teeName": "AZULES",
+          "before": "INCOMPLETE",
+          "after": "INCOMPLETE",
+          "status": "SOURCE_CONFLICT",
+          "reason": "La fuente oficial vigente no publica Par/SI/yardas por hoyo y el folleto disponible no coincide con la versión de rating/slope capturada. No se mezclan versiones."
+        },
+        {
+          "teeId": "ghin:23170:tee:ad652458406f",
+          "teeName": "BLANCAS",
+          "before": "INCOMPLETE",
+          "after": "INCOMPLETE",
+          "status": "SOURCE_CONFLICT",
+          "reason": "La fuente oficial vigente no publica Par/SI/yardas por hoyo y el folleto disponible no coincide con la versión de rating/slope capturada. No se mezclan versiones."
+        }
+      ]
+    },
+    {
+      "courseId": "review-course-23195",
+      "clubName": "CLUB CAMPESTRE REAL DEL CATORCE",
+      "courseName": "REAL DEL CATORCE",
+      "physicalHoles": null,
+      "operationStatus": "PENDING_OPERATION_CONFIRMATION",
+      "sources": [
+        {
+          "authority": "Golfify · directorio especializado",
+          "url": "https://www.golfify.io/courses/club-de-golf-real-del-catorce-s-c",
+          "role": "SECONDARY_CORROBORATION",
+          "finding": "Describe nueve hoyos y dos juegos de yardas, sin prueba primaria de operación vigente."
+        },
+        {
+          "authority": "FlyAway Golf · directorio especializado",
+          "url": "https://flyawaygolf.com/es/golfs/club-de-golf-real-del-catorce-s-c",
+          "role": "SECONDARY_CORROBORATION",
+          "finding": "Publica una tarjeta histórica de 18 posiciones para un campo descrito como nueve hoyos; no acredita operación vigente."
+        }
+      ],
+      "tees": [
+        {
+          "teeId": "ghin:23195:tee:ad652458406f",
+          "teeName": "BLANCAS",
+          "before": "INCOMPLETE",
+          "after": "INCOMPLETE",
+          "status": "OPERATION_UNCONFIRMED",
+          "reason": "No se encontró una fuente primaria que confirme operación actual; las fuentes secundarias además difieren en la representación 9/18."
+        }
+      ]
+    },
+    {
+      "courseId": "review-course-31612",
+      "clubName": "PLAYA MUJERES GOLF CLUB",
+      "courseName": "PLAYA MUJERES",
+      "physicalHoles": 18,
+      "operationStatus": "CONFIRMED",
+      "sources": [
+        {
+          "authority": "Playa Mujeres Golf Club · tarjeta oficial",
+          "url": "https://www.golfplayamujeres.com/assets/pdf/scorecard.pdf",
+          "role": "PRIMARY",
+          "finding": "La tarjeta oficial utilizada por el catálogo omite el yardaje SILVER del hoyo 6."
+        },
+        {
+          "authority": "Offcourse · directorio especializado",
+          "url": "https://offcourse.co/courses/scorecard/playa-mujeres-golf-club/",
+          "role": "SECONDARY_CORROBORATION",
+          "finding": "Publica 141 yd en SILVER H6, pero con una secuencia de SI distinta de la tarjeta oficial capturada."
+        },
+        {
+          "authority": "Golfify · directorio especializado",
+          "url": "https://www.golfify.io/courses/playa-mujeres-golf-club",
+          "role": "SECONDARY_CORROBORATION",
+          "finding": "Corrobora 141 yd en SILVER H6 y la misma generación secundaria de SI; no resuelve la identidad de versión con la tarjeta oficial."
+        }
+      ],
+      "tees": [
+        {
+          "teeId": "ghin:31612:tee:4bf712e82e4f",
+          "teeName": "SILVER",
+          "before": "INCOMPLETE",
+          "after": "INCOMPLETE",
+          "status": "SOURCE_CONFLICT",
+          "reason": "No se combina el H6 de una tarjeta secundaria con Par/SI de otra versión; el total tampoco se usa para deducir la cifra faltante."
+        }
+      ]
+    },
+    {
+      "courseId": "review-course-32225",
+      "clubName": "ZIRANDARO GOLF CLUB",
+      "courseName": "ZIRANDARO",
+      "physicalHoles": 9,
+      "operationStatus": "CONFIRMED",
+      "sources": [
+        {
+          "authority": "Zirándaro · sitio oficial",
+          "url": "https://www.zirandaro.com.mx/campodegolf",
+          "role": "PRIMARY",
+          "finding": "Confirma campo físico de nueve hoyos par 3 y operación, pero no publica tarjeta por tee."
+        },
+        {
+          "authority": "Golfify · directorio especializado",
+          "url": "https://www.golfify.io/courses/zirandaro",
+          "role": "SECONDARY_CORROBORATION",
+          "finding": "Publica tarjetas por tee; la tarjeta AZULES contradice otra fuente secundaria en H3 y total."
+        },
+        {
+          "authority": "18Birdies · directorio especializado",
+          "url": "https://18birdies.com/golf-courses/club/e4783900-92b9-11e9-b938-06780482e2ce/zirandaro-golf",
+          "role": "SECONDARY_CORROBORATION",
+          "finding": "Publica AZULES con H3 y total distintos de Golfify."
+        }
+      ],
+      "tees": [
+        {
+          "teeId": "ghin:32225:tee:a5be40b61705",
+          "teeName": "AZULES",
+          "before": "INCOMPLETE",
+          "after": "INCOMPLETE",
+          "status": "SOURCE_CONFLICT",
+          "reason": "Las fuentes secundarias contradicen H3 y el total; la fuente oficial no publica la tarjeta por tee."
+        },
+        {
+          "teeId": "ghin:32225:tee:a8797d9f33d8",
+          "teeName": "AMARILLAS",
+          "before": "INCOMPLETE",
+          "after": "INCOMPLETE",
+          "status": "STILL_INCOMPLETE",
+          "reason": "Sólo existe una tarjeta secundaria; falta fuente primaria o corroboración inequívoca de la misma versión y tee."
+        },
+        {
+          "teeId": "ghin:32225:tee:ad652458406f",
+          "teeName": "BLANCAS",
+          "before": "INCOMPLETE",
+          "after": "INCOMPLETE",
+          "status": "STILL_INCOMPLETE",
+          "reason": "Sólo existe una tarjeta secundaria; falta fuente primaria o corroboración inequívoca de la misma versión y tee."
+        }
+      ]
+    },
+    {
+      "courseId": "review-course-35498",
+      "clubName": "CAMPO DE GOLF NAVAL",
+      "courseName": "NAVAL",
+      "physicalHoles": 9,
+      "operationStatus": "HISTORICAL_EXISTENCE_CONFIRMED",
+      "sources": [
+        {
+          "authority": "SEMAR · Heroica Escuela Naval Militar",
+          "url": "https://www.semar.gob.mx/unhicun/henm.pdf",
+          "role": "PRIMARY",
+          "finding": "Confirma la construcción e inauguración del campo, pero no ofrece tarjeta verificable por tee."
+        },
+        {
+          "authority": "mScorecard · directorio especializado",
+          "url": "https://www.mscorecard.com/mscorecard/showcourse.php?cid=1568271539747922",
+          "role": "SECONDARY_CORROBORATION",
+          "finding": "Muestra nueve hoyos y yardas parciales White/Gold, sin SI y sin yardas Blue; no completa los tres tees capturados."
+        }
+      ],
+      "tees": [
+        {
+          "teeId": "ghin:35498:tee:468e7646a10f",
+          "teeName": "DORADAS",
+          "before": "INCOMPLETE",
+          "after": "INCOMPLETE",
+          "status": "STILL_INCOMPLETE",
+          "reason": "La evidencia secundaria no publica SI y no identifica de forma inequívoca DORADAS frente a Gold."
+        },
+        {
+          "teeId": "ghin:35498:tee:a5be40b61705",
+          "teeName": "AZULES",
+          "before": "INCOMPLETE",
+          "after": "INCOMPLETE",
+          "status": "STILL_INCOMPLETE",
+          "reason": "No hay yardas ni SI verificables para AZULES en la fuente encontrada."
+        },
+        {
+          "teeId": "ghin:35498:tee:ad652458406f",
+          "teeName": "BLANCAS",
+          "before": "INCOMPLETE",
+          "after": "INCOMPLETE",
+          "status": "STILL_INCOMPLETE",
+          "reason": "Hay yardas secundarias, pero no SI publicado ni tarjeta primaria inequívoca de la misma versión."
+        }
+      ]
+    },
+    {
+      "courseId": "review-course-36036",
+      "clubName": "ALQUERIAS DE POZOS",
+      "courseName": "ALQUERIAS",
+      "physicalHoles": 9,
+      "operationStatus": "CONFIRMED",
+      "sources": [
+        {
+          "authority": "Alquerías de Pozos · sitio y tarjeta oficial 2026",
+          "url": "https://alquerias.com.mx/golf/",
+          "role": "PRIMARY",
+          "finding": "Confirma campo físico par 3 de nueve hoyos y tees separados Azules, Blancas, Doradas y Rojas; no publica un tee combinado Azules / Blancas por hoyo."
+        }
+      ],
+      "tees": [
+        {
+          "teeId": "ghin:36036:tee:a5f794cf42a8",
+          "teeName": "Azules / Blancas",
+          "before": "INCOMPLETE",
+          "after": "INCOMPLETE",
+          "status": "STILL_INCOMPLETE",
+          "reason": "La etiqueta combinada no tiene un mapeo oficial por hoyo y no se divide ni se reemplaza por los tees oficiales separados."
+        }
+      ]
+    }
+  ]
+}
