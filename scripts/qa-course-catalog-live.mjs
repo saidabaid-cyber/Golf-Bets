@@ -28,12 +28,14 @@ async function app(path,method='GET',body,expected=200){
 }
 const report={preview:config.previewOrigin,ref:config.projectRef,geographic:[],rounds:[],emailsSent:0,authChanges:0,historicalWrites:0};
 const catalog=await app('/api/courses/catalog');assert.equal(catalog.total,176);
+const expectedCatalog=JSON.parse(readFileSync('data/qa/course-audit-source.json','utf8'));
+const expectedGeolocated=new Set(expectedCatalog.clubs.filter(club=>Number.isFinite(club.latitude)&&Number.isFinite(club.longitude)&&club.locationEvidence).map(club=>club.id)).size;
 const catalogCounts={clubs:new Set(catalog.courses.map(c=>c.clubId)).size,courses:catalog.courses.length,
  geolocated:new Set(catalog.courses.filter(c=>c.locationEvidence&&Number.isFinite(c.latitude)).map(c=>c.clubId)).size,
  tees:catalog.courses.reduce((sum,c)=>sum+c.teeCount,0),complete:catalog.courses.reduce((sum,c)=>sum+c.completeCards,0)};
-assert.deepEqual(catalogCounts,{clubs:153,courses:176,geolocated:91,tees:769,complete:758});
+assert.deepEqual(catalogCounts,{clubs:153,courses:176,geolocated:expectedGeolocated,tees:769,complete:758});
 assert.equal(new Set(catalog.courses.map(c=>c.clubId)).size,153);
-assert.equal(new Set(catalog.courses.filter(c=>c.locationEvidence&&Number.isFinite(c.latitude)).map(c=>c.clubId)).size,91);
+assert.equal(new Set(catalog.courses.filter(c=>c.locationEvidence&&Number.isFinite(c.latitude)).map(c=>c.clubId)).size,expectedGeolocated);
 for(const [city,point] of Object.entries({Puebla:[19.02,-98.25],CDMX:[19.4326,-99.1332],Monterrey:[25.67,-100.31],Guadalajara:[20.67,-103.35],Queretaro:[20.59,-100.39],Leon:[21.12,-101.68],Cancun:[21.16,-86.83],LosCabos:[22.9,-109.91],PuertoVallarta:[20.65,-105.23],Acapulco:[16.81,-99.82]})){
  const nearby=nearestReviewedClubs(catalog.courses,{latitude:point[0],longitude:point[1]});assert.equal(nearby.length,3);assert.equal(new Set(nearby.map(c=>c.clubId)).size,3);assert.ok(nearby[0].distanceKm<=nearby[1].distanceKm&&nearby[1].distanceKm<=nearby[2].distanceKm);
  report.geographic.push({city,clubs:nearby.map(c=>({name:c.clubName,km:Math.round(c.distanceKm*10)/10}))});

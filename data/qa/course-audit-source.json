@@ -1,7 +1,7 @@
 {
   "projectRef": "bymeopxkxapfizeeqeyb",
   "provider": "OWNER_CATALOG_REVIEW",
-  "observedAt": "2026-09-22",
+  "observedAt": "2026-09-24",
   "queryId": "nightly-course-audit-v1",
   "clubs": [
     {
@@ -22,9 +22,20 @@
     {
       "id": "club-cola-de-lagarto",
       "name": "COLA DE LAGARTO CAMPO MÍTICO",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 18.8693355,
+      "longitude": -98.3806388,
+      "locationEvidence": {
+        "club": "COLA DE LAGARTO CAMPO MÍTICO",
+        "latitude": 18.8693355,
+        "longitude": -98.3806388,
+        "authority": "Cola de Lagarto · sitio oficial y ficha de lugar coincidente",
+        "sourceUrl": "http://www.coladelagarto.com/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "club-el-cristo",
@@ -59,9 +70,20 @@
     {
       "id": "review-club-02c9931cf91174b63f32",
       "name": "RIO GRANDE COUNTRY CLUB",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 28.5802268,
+      "longitude": -100.5227355,
+      "locationEvidence": {
+        "club": "RIO GRANDE COUNTRY CLUB",
+        "latitude": 28.5802268,
+        "longitude": -100.5227355,
+        "authority": "Rio Grande Country Club · sitio oficial y ficha de lugar coincidente",
+        "sourceUrl": "https://riograndecountryclub.com/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-02d06ebbe64af495b607",
@@ -101,16 +123,38 @@
     {
       "id": "review-club-0662db8753ef29d63704",
       "name": "CLUB CAMPESTRE TUXTLA",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 16.759653,
+      "longitude": -93.126174,
+      "locationEvidence": {
+        "club": "CLUB CAMPESTRE TUXTLA",
+        "latitude": 16.759653,
+        "longitude": -93.126174,
+        "authority": "FullGolf · ficha del campo y coordenadas publicadas",
+        "sourceUrl": "https://fullgolf.com/en/golf-course/mexico/chiapas/tuxtla-gutierrez/tuxtla",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "SECONDARY_EXACT",
+        "operationalStatus": "OPERATION_REPORTED_SECONDARY",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-0b4bef9000a7acc1e941",
       "name": "Country Club de Los Mochis",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 25.7909698,
+      "longitude": -109.0092163,
+      "locationEvidence": {
+        "club": "Country Club de Los Mochis",
+        "latitude": 25.7909698,
+        "longitude": -109.0092163,
+        "authority": "Country Club de Los Mochis · sitio oficial y ficha de lugar coincidente",
+        "sourceUrl": "http://countrylosmochis.com/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-0caf712e5e582e69d098",
@@ -153,9 +197,20 @@
     {
       "id": "review-club-0db24962f8698c3cefd8",
       "name": "CLUB CAMPESTRE DE AGUASCALIENTES",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 21.9204415,
+      "longitude": -102.3195123,
+      "locationEvidence": {
+        "club": "CLUB CAMPESTRE DE AGUASCALIENTES",
+        "latitude": 21.9204415,
+        "longitude": -102.3195123,
+        "authority": "Club Campestre de Aguascalientes · sitio oficial y ficha de lugar coincidente",
+        "sourceUrl": "http://www.campestreags.com/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-0f3e85e7728a54074ab0",
@@ -198,9 +253,20 @@
     {
       "id": "review-club-10b878d990485cf63f4f",
       "name": "BOSQUES CLUB DE GOLF",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 19.3773933,
+      "longitude": -99.2774582,
+      "locationEvidence": {
+        "club": "BOSQUES CLUB DE GOLF",
+        "latitude": 19.3773933,
+        "longitude": -99.2774582,
+        "authority": "Club de Golf Bosques · sitio oficial y ficha de lugar coincidente",
+        "sourceUrl": "https://www.clubdegolfbosques.com/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-12c2c266c042a5e2e01e",
@@ -224,9 +290,20 @@
     {
       "id": "review-club-1438ffeac62f42aa0b5a",
       "name": "DANZANTE BAY GOLF CLUB",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 25.7153916,
+      "longitude": -111.2290296,
+      "locationEvidence": {
+        "club": "DANZANTE BAY GOLF CLUB",
+        "latitude": 25.7153916,
+        "longitude": -111.2290296,
+        "authority": "TPC Danzante Bay · sitio oficial y ficha de lugar coincidente",
+        "sourceUrl": "https://www.tpc.com/danzantebay/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-191c96c8cfd25395f301",
@@ -303,9 +380,20 @@
     {
       "id": "review-club-1d941f08d63fd95b862a",
       "name": "GRAN RESERVA GOLF RESORT & COUNTRY CLUB",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 18.850645,
+      "longitude": -99.681842,
+      "locationEvidence": {
+        "club": "GRAN RESERVA GOLF RESORT & COUNTRY CLUB",
+        "latitude": 18.850645,
+        "longitude": -99.681842,
+        "authority": "Gran Reserva · sitio oficial y ficha de lugar coincidente",
+        "sourceUrl": "http://www.granreserva.com.mx/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-1ef287a1d88f06cba9dc",
@@ -383,9 +471,20 @@
     {
       "id": "review-club-2bb98e26fbc260309fff",
       "name": "Cabo del Sol",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 22.9218099,
+      "longitude": -109.8439338,
+      "locationEvidence": {
+        "club": "Cabo del Sol",
+        "latitude": 22.9218099,
+        "longitude": -109.8439338,
+        "authority": "Cabo del Sol · sitio oficial y ficha de lugar coincidente",
+        "sourceUrl": "https://www.cabodelsol.com/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-2cb058a0028329261e9b",
@@ -428,9 +527,20 @@
     {
       "id": "review-club-2dbd02b5d643e46b89f2",
       "name": "Loreto Bay Golf Resort and Spa",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 25.9206394,
+      "longitude": -111.3481078,
+      "locationEvidence": {
+        "club": "Loreto Bay Golf Resort and Spa",
+        "latitude": 25.9206394,
+        "longitude": -111.3481078,
+        "authority": "Loreto Bay Golf Resort · sitio oficial y ficha de lugar coincidente",
+        "sourceUrl": "https://www.loretobayresort.com/es/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-2dea74ef7f5f525c5975",
@@ -499,16 +609,38 @@
     {
       "id": "review-club-3270080a94d6a4613fd0",
       "name": "PROVINCIA GOLF CLUB",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 21.1425273,
+      "longitude": -89.6612207,
+      "locationEvidence": {
+        "club": "PROVINCIA GOLF CLUB",
+        "latitude": 21.1425273,
+        "longitude": -89.6612207,
+        "authority": "Google Maps · ficha exacta del club",
+        "sourceUrl": "https://www.google.com/maps/search/?api=1&query=Provincia%20Golf%20Club%20M%C3%A9rida",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "SECONDARY_EXACT",
+        "operationalStatus": "OPERATION_REPORTED_SECONDARY",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-338a344e25e7675c9f34",
       "name": "YUCATAN COUNTRY CLUB",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 21.1205215,
+      "longitude": -89.6001108,
+      "locationEvidence": {
+        "club": "YUCATAN COUNTRY CLUB",
+        "latitude": 21.1205215,
+        "longitude": -89.6001108,
+        "authority": "Inmobilia Yucatán Country · sitio del desarrollador y cartografía OSM coincidente",
+        "sourceUrl": "https://www.inmobilia.mx/yucatancountry",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-3540a913d099f58a1acc",
@@ -529,23 +661,56 @@
     {
       "id": "review-club-35e7d66c9b557c52f20e",
       "name": "CLUB CAMPESTRE LOURDES",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 25.385686,
+      "longitude": -100.997168,
+      "locationEvidence": {
+        "club": "CLUB CAMPESTRE LOURDES",
+        "latitude": 25.385686,
+        "longitude": -100.997168,
+        "authority": "Google Maps · ficha exacta del club",
+        "sourceUrl": "https://www.google.com/maps/search/?api=1&query=Club%20Campestre%20Lourdes%20Saltillo",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "SECONDARY_EXACT",
+        "operationalStatus": "OPERATION_REPORTED_SECONDARY",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-38f5bdbb30eb97a4baee",
       "name": "CLUB CAMPESTRE LOMAS DE COCOYOC",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 18.9146538,
+      "longitude": -98.9418813,
+      "locationEvidence": {
+        "club": "CLUB CAMPESTRE LOMAS DE COCOYOC",
+        "latitude": 18.9146538,
+        "longitude": -98.9418813,
+        "authority": "Club Campestre Lomas de Cocoyoc · sitio oficial y ficha de lugar coincidente",
+        "sourceUrl": "http://campestrecocoyoc.com/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-3b9ee55da9b7da42ef22",
       "name": "COUNTRY CLUB MANTE",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 22.7148804,
+      "longitude": -98.9673205,
+      "locationEvidence": {
+        "club": "COUNTRY CLUB MANTE",
+        "latitude": 22.7148804,
+        "longitude": -98.9673205,
+        "authority": "18Birdies · ficha actual del club y dirección coincidente con registro público",
+        "sourceUrl": "https://18birdies.com/golf-courses/club/7eea03c0-86ac-11e4-8c28-020000005b00/country-club-mante",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "SECONDARY_CORROBORATED",
+        "operationalStatus": "OPERATION_REPORTED_SECONDARY",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-3c882a37c8b365d6f217",
@@ -565,9 +730,20 @@
     {
       "id": "review-club-3e42398fff31e78c24d1",
       "name": "CAMPECHE COUNTRY CLUB",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 19.7877067,
+      "longitude": -90.6279734,
+      "locationEvidence": {
+        "club": "CAMPECHE COUNTRY CLUB",
+        "latitude": 19.7877067,
+        "longitude": -90.6279734,
+        "authority": "Campeche Country Club · sitio oficial y ficha de lugar coincidente",
+        "sourceUrl": "http://campechecountryclub.com.mx/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-3ecc579f38968b524693",
@@ -591,30 +767,74 @@
     {
       "id": "review-club-3ef62ad5bd5086fc6fe5",
       "name": "LA ESMERALDA COUNTRY CLUB",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 19.7257399,
+      "longitude": -98.9325282,
+      "locationEvidence": {
+        "club": "LA ESMERALDA COUNTRY CLUB",
+        "latitude": 19.7257399,
+        "longitude": -98.9325282,
+        "authority": "Golf La Esmeralda · sitio oficial y ficha de lugar coincidente",
+        "sourceUrl": "http://www.golflaesmeralda.com.mx/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-3fe00115357ed76a6872",
       "name": "ALTOZANO EL NUEVO COLIMA",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 19.317636381861938,
+      "longitude": -103.67142338763047,
+      "locationEvidence": {
+        "club": "ALTOZANO EL NUEVO COLIMA",
+        "latitude": 19.317636381861938,
+        "longitude": -103.67142338763047,
+        "authority": "Altozano Club Colima · mapa oficial",
+        "sourceUrl": "https://altozano.com.mx/club-colima/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-405816a231399dfe8054",
       "name": "PARAISO DEL MAR GOLF CLUB",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 24.1663998,
+      "longitude": -110.3371317,
+      "locationEvidence": {
+        "club": "PARAISO DEL MAR GOLF CLUB",
+        "latitude": 24.1663998,
+        "longitude": -110.3371317,
+        "authority": "Paraíso del Mar · sitio oficial y ficha exacta del campo coincidente",
+        "sourceUrl": "https://paraisodelmar.com/es/club-golf/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-4155a8a2133b72e7bf7d",
       "name": "Diamante Cabo San Lucas",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 22.8969766,
+      "longitude": -109.9823445,
+      "locationEvidence": {
+        "club": "Diamante Cabo San Lucas",
+        "latitude": 22.8969766,
+        "longitude": -109.9823445,
+        "authority": "Diamante Cabo San Lucas · sitio oficial y ficha de lugar coincidente",
+        "sourceUrl": "http://www.diamantecabosanlucas.com/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-41d1aa772cc4b48a087e",
@@ -660,16 +880,38 @@
     {
       "id": "review-club-46834c51aa2938f13a23",
       "name": "CLUB DE GOLF BALVANERA",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 20.540511,
+      "longitude": -100.469651,
+      "locationEvidence": {
+        "club": "CLUB DE GOLF BALVANERA",
+        "latitude": 20.540511,
+        "longitude": -100.469651,
+        "authority": "Balvanera · sitio oficial y ficha de lugar coincidente",
+        "sourceUrl": "https://www.balvanera.com.mx/golf.php",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-50a82bcb09e4ab2cd0ec",
       "name": "CLUB CAMPESTRE RIAMA",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 20.5800226,
+      "longitude": -101.1864283,
+      "locationEvidence": {
+        "club": "CLUB CAMPESTRE RIAMA",
+        "latitude": 20.5800226,
+        "longitude": -101.1864283,
+        "authority": "Google Maps · ficha exacta del club",
+        "sourceUrl": "https://www.google.com/maps/search/?api=1&query=Club%20Campestre%20Riama%20Salamanca",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "SECONDARY_EXACT",
+        "operationalStatus": "OPERATION_REPORTED_SECONDARY",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-52ffbbf9b3112f431591",
@@ -731,16 +973,38 @@
     {
       "id": "review-club-53c52adb045d435e357b",
       "name": "NAUKA GOLF CLUB",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 21.0940222,
+      "longitude": -105.2218504,
+      "locationEvidence": {
+        "club": "NAUKA GOLF CLUB",
+        "latitude": 21.0940222,
+        "longitude": -105.2218504,
+        "authority": "Nauka Nayarit · sitio oficial y ficha de lugar coincidente",
+        "sourceUrl": "http://www.naukanayarit.com/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-54f948337a90b2454e55",
       "name": "CCC COUNTRY CLUB PLAYA PALMAS",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 18.6700658,
+      "longitude": -91.7780789,
+      "locationEvidence": {
+        "club": "CCC COUNTRY CLUB PLAYA PALMAS",
+        "latitude": 18.6700658,
+        "longitude": -91.7780789,
+        "authority": "Google Maps · ficha exacta del club",
+        "sourceUrl": "https://www.google.com/maps/search/?api=1&query=CCC%20Country%20Club%20Playa%20Palmas%20Ciudad%20del%20Carmen",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "SECONDARY_EXACT",
+        "operationalStatus": "OPERATION_REPORTED_SECONDARY",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-565c43c91c5e1c8ef218",
@@ -821,23 +1085,56 @@
     {
       "id": "review-club-5eb84d7b20555c698968",
       "name": "EL CORTES GOLF CLUB",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 24.2219271,
+      "longitude": -110.3029533,
+      "locationEvidence": {
+        "club": "EL CORTES GOLF CLUB",
+        "latitude": 24.2219271,
+        "longitude": -110.3029533,
+        "authority": "Puerta Cortés · sitio oficial y ficha de lugar coincidente",
+        "sourceUrl": "https://www.puertacortes.com/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-5f468f64989546a393a3",
       "name": "CLUB CAMPESTRE DE SAN LUIS",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 22.1594704,
+      "longitude": -101.0107316,
+      "locationEvidence": {
+        "club": "CLUB CAMPESTRE DE SAN LUIS",
+        "latitude": 22.1594704,
+        "longitude": -101.0107316,
+        "authority": "Club Campestre San Luis · sitio oficial y ficha de lugar coincidente",
+        "sourceUrl": "https://clubcampestresanluis.com/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-67cfc7cb6cdb9660991d",
       "name": "CLUB DE GOLF SAN GIL",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 20.4493764,
+      "longitude": -100.0705429,
+      "locationEvidence": {
+        "club": "CLUB DE GOLF SAN GIL",
+        "latitude": 20.4493764,
+        "longitude": -100.0705429,
+        "authority": "San Gil · sitio oficial y ficha de lugar coincidente",
+        "sourceUrl": "https://sangil.mx/category/san-gil/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-692d89f9a68d8753f5f4",
@@ -861,9 +1158,20 @@
     {
       "id": "review-club-6b7e5abd5b04e1942da9",
       "name": "CLUB DE GOLF LA PRIMAVERA",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 24.7216206,
+      "longitude": -107.3919989,
+      "locationEvidence": {
+        "club": "CLUB DE GOLF LA PRIMAVERA",
+        "latitude": 24.7216206,
+        "longitude": -107.3919989,
+        "authority": "Ayuntamiento de Culiacán · directorio oficial y ficha de lugar coincidente",
+        "sourceUrl": "https://economia.culiacan.gob.mx/directorio-de-empresas-y-servicios/campos-de-golf/club-de-golf-la-primavera/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "GOVERNMENT_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-6bf31b8e33f9bd800bad",
@@ -887,9 +1195,20 @@
     {
       "id": "review-club-6cf5adf6297605bcec50",
       "name": "HIGUERA GOLF CLUB",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 20.7979513,
+      "longitude": -105.4828852,
+      "locationEvidence": {
+        "club": "HIGUERA GOLF CLUB",
+        "latitude": 20.7979513,
+        "longitude": -105.4828852,
+        "authority": "Higuera Golf Club · sitio oficial y ficha de lugar coincidente",
+        "sourceUrl": "http://www.higueragolfclub.com/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-6d475c252df8917a791b",
@@ -932,9 +1251,20 @@
     {
       "id": "review-club-712b44a3727cf333cdc9",
       "name": "TAJIN CLUB DE GOLF",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 20.4887945,
+      "longitude": -97.4915988,
+      "locationEvidence": {
+        "club": "TAJIN CLUB DE GOLF",
+        "latitude": 20.4887945,
+        "longitude": -97.4915988,
+        "authority": "Google Maps · ficha exacta del club",
+        "sourceUrl": "https://www.google.com/maps/search/?api=1&query=Taj%C3%ADn%20Club%20de%20Golf%20Coatzintla",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "SECONDARY_EXACT",
+        "operationalStatus": "OPERATION_REPORTED_SECONDARY",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-736ff252dbba8f29c7ae",
@@ -991,9 +1321,21 @@
     {
       "id": "review-club-77657699511ea2ad1fe8",
       "name": "PRINCESS MUNDO IMPERIAL GOLF CLUB",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 16.7911269,
+      "longitude": -99.8119711,
+      "locationEvidence": {
+        "club": "PRINCESS MUNDO IMPERIAL GOLF CLUB",
+        "latitude": 16.7911269,
+        "longitude": -99.8119711,
+        "authority": "Mundo Imperial · operación oficial; Tripomatic publica el punto del campo",
+        "sourceUrl": "https://www.mundoimperial.com/princess/disfrutar-relajarse/golf/princess-golf-course",
+        "coordinateEvidenceUrl": "https://tripomatic.com/en/poi/acapulco-princess-golf-course-poi%3A24925",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-777b13cb6593fd6b5bf7",
@@ -1017,9 +1359,20 @@
     {
       "id": "review-club-7be60ae6663a850efb2e",
       "name": "PUNTA TIBURON COUNTRY CLUB",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 19.0649246,
+      "longitude": -96.0955649,
+      "locationEvidence": {
+        "club": "PUNTA TIBURON COUNTRY CLUB",
+        "latitude": 19.0649246,
+        "longitude": -96.0955649,
+        "authority": "Punta Tiburón Country Club · sitio oficial y ficha de lugar coincidente",
+        "sourceUrl": "https://www.puntatiburoncountryclub.com/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-80627c03431e375eb2bd",
@@ -1078,9 +1431,20 @@
     {
       "id": "review-club-8abf3c37764a3b5c1c8b",
       "name": "CLUB CAMPESTRE DE DURANGO",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 23.972209,
+      "longitude": -104.6607268,
+      "locationEvidence": {
+        "club": "CLUB CAMPESTRE DE DURANGO",
+        "latitude": 23.972209,
+        "longitude": -104.6607268,
+        "authority": "Club Campestre de Durango · sitio oficial y cartografía OSM coincidente",
+        "sourceUrl": "https://clubcampestrededurango.com/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-8cb3c6323ab74175d4b4",
@@ -1104,16 +1468,38 @@
     {
       "id": "review-club-8e44261674546285ad4c",
       "name": "THE SPRINGS GOLF CLUB",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 30.0516019,
+      "longitude": -107.5936985,
+      "locationEvidence": {
+        "club": "THE SPRINGS GOLF CLUB",
+        "latitude": 30.0516019,
+        "longitude": -107.5936985,
+        "authority": "Google Maps · ficha exacta del club",
+        "sourceUrl": "https://www.google.com/maps/search/?api=1&query=The%20Springs%20Golf%20Club%20Chihuahua",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "SECONDARY_EXACT",
+        "operationalStatus": "OPERATION_REPORTED_SECONDARY",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-90069c04174ef58c5d92",
       "name": "COUNTRY CLUB DE CHAPALA",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 20.3354909,
+      "longitude": -103.1216892,
+      "locationEvidence": {
+        "club": "COUNTRY CLUB DE CHAPALA",
+        "latitude": 20.3354909,
+        "longitude": -103.1216892,
+        "authority": "Chapala Country Club · sitio oficial y ficha exacta coincidente",
+        "sourceUrl": "http://www.ccchapala.com/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-938a0e48a5e83518615a",
@@ -1188,9 +1574,20 @@
     {
       "id": "review-club-9bfdf5168f84735bc8ff",
       "name": "PALMA REAL GOLF & BEACH CLUB",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 17.6548593,
+      "longitude": -101.5944486,
+      "locationEvidence": {
+        "club": "PALMA REAL GOLF & BEACH CLUB",
+        "latitude": 17.6548593,
+        "longitude": -101.5944486,
+        "authority": "Palma Real Golf · sitio oficial y ficha de lugar coincidente",
+        "sourceUrl": "https://www.golfpalmareal.mx/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-9c0700f229794a278011",
@@ -1226,9 +1623,20 @@
     {
       "id": "review-club-9fdbe49e8634a2e9f253",
       "name": "Twin Dolphin Club",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 22.9352378,
+      "longitude": -109.8270034,
+      "locationEvidence": {
+        "club": "Twin Dolphin Club",
+        "latitude": 22.9352378,
+        "longitude": -109.8270034,
+        "authority": "Twin Dolphin · sitio oficial y cartografía OSM coincidente",
+        "sourceUrl": "https://www.twindolphin.com/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-a21a97eff656d31e288a",
@@ -1271,9 +1679,20 @@
     {
       "id": "review-club-a4cd144d7d5bff1c056c",
       "name": "Costa Palmas Golf Club",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 23.6107602,
+      "longitude": -109.5899556,
+      "locationEvidence": {
+        "club": "Costa Palmas Golf Club",
+        "latitude": 23.6107602,
+        "longitude": -109.5899556,
+        "authority": "Costa Palmas / Four Seasons · página oficial y ficha de lugar coincidente",
+        "sourceUrl": "https://www.fourseasons.com/costapalmas/golf/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-a54e7013527736ad0720",
@@ -1466,16 +1885,38 @@
     {
       "id": "review-club-c21e5a2787fcdec312d9",
       "name": "CLUB CAMPESTRE DE MORELIA",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 19.6816559,
+      "longitude": -101.1585021,
+      "locationEvidence": {
+        "club": "CLUB CAMPESTRE DE MORELIA",
+        "latitude": 19.6816559,
+        "longitude": -101.1585021,
+        "authority": "Club Campestre Morelia · sitio oficial y ficha de lugar coincidente",
+        "sourceUrl": "https://www.clubcampestremorelia.com/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-c285b70e587e927fb068",
       "name": "CLUB DE GOLF LAGUNAS DE MIRALTA",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 22.3510297,
+      "longitude": -97.9007367,
+      "locationEvidence": {
+        "club": "CLUB DE GOLF LAGUNAS DE MIRALTA",
+        "latitude": 22.3510297,
+        "longitude": -97.9007367,
+        "authority": "Google Maps · ficha exacta del club",
+        "sourceUrl": "https://www.google.com/maps/search/?api=1&query=Club%20de%20Golf%20Lagunas%20de%20Miralta%20Altamira",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "SECONDARY_EXACT",
+        "operationalStatus": "OPERATION_REPORTED_SECONDARY",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-c2cf950dd0770b2dc7cc",
@@ -1515,16 +1956,38 @@
     {
       "id": "review-club-c3226ad999191ec1a0e2",
       "name": "Baja Country Club",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 31.7669197,
+      "longitude": -116.5198744,
+      "locationEvidence": {
+        "club": "Baja Country Club",
+        "latitude": 31.7669197,
+        "longitude": -116.5198744,
+        "authority": "Baja Country Club · contacto oficial y ficha de lugar coincidente",
+        "sourceUrl": "https://bajacountryclub.com/contact-us/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-c4cef20cbcf55d1041ac",
       "name": "Vidanta Golf Los Cabos",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 23.0480826,
+      "longitude": -109.7043386,
+      "locationEvidence": {
+        "club": "Vidanta Golf Los Cabos",
+        "latitude": 23.0480826,
+        "longitude": -109.7043386,
+        "authority": "Vidanta Los Cabos · sitio oficial y ficha de lugar coincidente",
+        "sourceUrl": "https://www.vidanta.com/web/los-cabos/golf",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-c5d58d69c26a9278990c",
@@ -1601,23 +2064,56 @@
     {
       "id": "review-club-cb8e880175f27f303391",
       "name": "CLUB DE GOLF CAÑADA DE SANTA FE",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 19.3517868,
+      "longitude": -99.2694116,
+      "locationEvidence": {
+        "club": "CLUB DE GOLF CAÑADA DE SANTA FE",
+        "latitude": 19.3517868,
+        "longitude": -99.2694116,
+        "authority": "Google Maps · ficha exacta del club",
+        "sourceUrl": "https://www.google.com/maps/search/?api=1&query=Club%20de%20Golf%20Ca%C3%B1ada%20de%20Santa%20Fe",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "SECONDARY_EXACT",
+        "operationalStatus": "OPERATION_REPORTED_SECONDARY",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-cc68792ae5a7ba0f7d24",
       "name": "Vidanta Golf Puerto Penasco",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 31.2455856,
+      "longitude": -113.2473992,
+      "locationEvidence": {
+        "club": "Vidanta Golf Puerto Penasco",
+        "latitude": 31.2455856,
+        "longitude": -113.2473992,
+        "authority": "Vidanta Puerto Peñasco · sitio oficial y ficha exacta coincidente",
+        "sourceUrl": "https://vidanta.com/en/web/puerto-penasco/golf",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-cee3702e834da170ca3d",
       "name": "CLUB DE GOLF LOS NARANJOS",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 21.1657401,
+      "longitude": -101.6375247,
+      "locationEvidence": {
+        "club": "CLUB DE GOLF LOS NARANJOS",
+        "latitude": 21.1657401,
+        "longitude": -101.6375247,
+        "authority": "Club Los Naranjos · sitio oficial y ficha de lugar coincidente",
+        "sourceUrl": "http://clublosnaranjos.com.mx/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-d06cf9a1a3ed9962cfb5",
@@ -1660,9 +2156,20 @@
     {
       "id": "review-club-d0ac2c71627f019348ba",
       "name": "CLUB DE GOLF MALINALCO",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 18.9899638,
+      "longitude": -99.4734153,
+      "locationEvidence": {
+        "club": "CLUB DE GOLF MALINALCO",
+        "latitude": 18.9899638,
+        "longitude": -99.4734153,
+        "authority": "OpenStreetMap way 380171661 · campo de golf en Malinalco",
+        "sourceUrl": "https://www.openstreetmap.org/way/380171661",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "OPEN_DATA_EXACT",
+        "operationalStatus": "OPERATION_REPORTED_SECONDARY",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-d146fe8e70001cc350c2",
@@ -1741,16 +2248,38 @@
     {
       "id": "review-club-d545e9bbb02c60f2ae35",
       "name": "CLUB DE GOLF LA VILLA RICA",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 19.0771952,
+      "longitude": -96.1006073,
+      "locationEvidence": {
+        "club": "CLUB DE GOLF LA VILLA RICA",
+        "latitude": 19.0771952,
+        "longitude": -96.1006073,
+        "authority": "Google Maps · ficha exacta del club",
+        "sourceUrl": "https://www.google.com/maps/search/?api=1&query=Club%20de%20Golf%20La%20Villa%20Rica%20Alvarado",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "SECONDARY_EXACT",
+        "operationalStatus": "OPERATION_REPORTED_SECONDARY",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-da0a56739477887c7ef0",
       "name": "Palmilla Golf Club",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 23.0179681,
+      "longitude": -109.732029,
+      "locationEvidence": {
+        "club": "Palmilla Golf Club",
+        "latitude": 23.0179681,
+        "longitude": -109.732029,
+        "authority": "One&Only Palmilla · página oficial y ficha de lugar coincidente",
+        "sourceUrl": "https://www.oneandonlyresorts.com/palmilla/experiences/golf",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-da13e5595ce1460b1c5c",
@@ -1774,37 +2303,92 @@
     {
       "id": "review-club-da7efb0af4a5af4df304",
       "name": "CLUB CAMPESTRE ERANDENI",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 19.7552478,
+      "longitude": -101.1872207,
+      "locationEvidence": {
+        "club": "CLUB CAMPESTRE ERANDENI",
+        "latitude": 19.7552478,
+        "longitude": -101.1872207,
+        "authority": "Club Campestre Erandeni · sitio oficial y ficha de lugar coincidente",
+        "sourceUrl": "https://cluberandeni.mx/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-dafed95400698eb510c0",
       "name": "GOLF BOSQUE MONARCA",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 19.6408903,
+      "longitude": -101.1655097,
+      "locationEvidence": {
+        "club": "GOLF BOSQUE MONARCA",
+        "latitude": 19.6408903,
+        "longitude": -101.1655097,
+        "authority": "Google Maps · ficha exacta del club",
+        "sourceUrl": "https://www.google.com/maps/search/?api=1&query=Golf%20Bosque%20Monarca%20Morelia",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "SECONDARY_EXACT",
+        "operationalStatus": "OPERATION_REPORTED_SECONDARY",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-dc804f566ae795728411",
       "name": "Oleada Golf Links Los Cabos",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 22.9035372,
+      "longitude": -109.9945489,
+      "locationEvidence": {
+        "club": "Oleada Golf Links Los Cabos",
+        "latitude": 22.9035372,
+        "longitude": -109.9945489,
+        "authority": "Oleada Los Cabos · sitio oficial y ficha de lugar coincidente",
+        "sourceUrl": "https://oleadaloscabos.com/oleada-golf-links/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-dfcdc8db173bd48ef375",
       "name": "El Dorado Golf & Beach Club",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 22.990049,
+      "longitude": -109.7466189,
+      "locationEvidence": {
+        "club": "El Dorado Golf & Beach Club",
+        "latitude": 22.990049,
+        "longitude": -109.7466189,
+        "authority": "El Dorado Golf & Beach Club · sitio oficial y ficha de lugar coincidente",
+        "sourceUrl": "https://www.eldoradobeachclub.com/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-e2a342527f9ef2f39d59",
       "name": "CENTRO ASTURIANO DE MEXICO",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 18.9750961,
+      "longitude": -98.8654535,
+      "locationEvidence": {
+        "club": "CENTRO ASTURIANO DE MEXICO",
+        "latitude": 18.9750961,
+        "longitude": -98.8654535,
+        "authority": "Centro Asturiano de México · club campestre ecológico y ficha de lugar coincidente",
+        "sourceUrl": "https://www.centroasturianodemexico.com/club-campestre-ecologico/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-e2b56a1df394fc72bba5",
@@ -1865,9 +2449,20 @@
     {
       "id": "review-club-e6d0cb6070cbbd12b4c7",
       "name": "CLUB DE GOLF ALTOZANO EL NUEVO TABASCO",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 17.952848870687703,
+      "longitude": -92.805491445468,
+      "locationEvidence": {
+        "club": "CLUB DE GOLF ALTOZANO EL NUEVO TABASCO",
+        "latitude": 17.952848870687703,
+        "longitude": -92.805491445468,
+        "authority": "Altozano Club Tabasco · mapa oficial",
+        "sourceUrl": "https://altozano.com.mx/club-tabasco/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-e8f818bfbbb342cd2f11",
@@ -1946,9 +2541,20 @@
     {
       "id": "review-club-f05d9a4bb244912b8f69",
       "name": "CLUB DE GOLF YUCATAN",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 21.0942207,
+      "longitude": -89.6211327,
+      "locationEvidence": {
+        "club": "CLUB DE GOLF YUCATAN",
+        "latitude": 21.0942207,
+        "longitude": -89.6211327,
+        "authority": "Club de Golf Yucatán La Ceiba · sitio oficial y ficha de lugar coincidente",
+        "sourceUrl": "http://www.golfyucatan.com.mx/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-f07ab2752a57b842f0b2",
@@ -1988,9 +2594,20 @@
     {
       "id": "review-club-f2a1ff4442c28bebf711",
       "name": "Estrella Del Mar Golf Club",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 23.1093506,
+      "longitude": -106.3043071,
+      "locationEvidence": {
+        "club": "Estrella Del Mar Golf Club",
+        "latitude": 23.1093506,
+        "longitude": -106.3043071,
+        "authority": "Estrella del Mar · sitio oficial y ficha de lugar coincidente",
+        "sourceUrl": "https://estrelladelmar.com/es/golf",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-f6f28f2bfa1241117c53",
@@ -2065,23 +2682,56 @@
     {
       "id": "review-club-f9ac1e190ed06a105750",
       "name": "CLUB DE GOLF PULGAS PANDAS",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 21.9133151,
+      "longitude": -102.3004841,
+      "locationEvidence": {
+        "club": "CLUB DE GOLF PULGAS PANDAS",
+        "latitude": 21.9133151,
+        "longitude": -102.3004841,
+        "authority": "Club de Golf Pulgas Pandas · sitio oficial y ficha de lugar coincidente",
+        "sourceUrl": "http://www.clubdegolfpulgaspandas.com/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-fd3153a24567df42f137",
       "name": "AZUL TALAVERA COUNTRY CLUB",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 25.5165615,
+      "longitude": -103.3690638,
+      "locationEvidence": {
+        "club": "AZUL TALAVERA COUNTRY CLUB",
+        "latitude": 25.5165615,
+        "longitude": -103.3690638,
+        "authority": "Azul Talavera Country Club · identidad oficial y ficha de lugar coincidente",
+        "sourceUrl": "https://www.azultalaveracountryclub.com/acerca-de-nosotros-historia-torreon/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     },
     {
       "id": "review-club-fe4ad066491ee8f00cdd",
       "name": "GRAN COYOTE GOLF",
-      "latitude": null,
-      "longitude": null,
-      "locationEvidence": null
+      "latitude": 20.663465,
+      "longitude": -87.045708,
+      "locationEvidence": {
+        "club": "GRAN COYOTE GOLF",
+        "latitude": 20.663465,
+        "longitude": -87.045708,
+        "authority": "Gran Coyote Golf · sitio oficial y ficha de lugar coincidente",
+        "sourceUrl": "http://www.grancoyotegolf.com/",
+        "verifiedAt": "2026-09-24",
+        "pointKind": "club_course_property",
+        "confidence": "PRIMARY_SUPPORTED",
+        "operationalStatus": "OPERATION_CONFIRMED",
+        "evidenceVersion": "p03-mexico-geo-2026-09-24"
+      }
     }
   ],
   "courses": [
