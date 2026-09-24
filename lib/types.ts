@@ -95,6 +95,8 @@ export type Course = {
   /** Round-only frozen cards. Absent on legacy rounds; never changes formulas. */
   playerHoleCards?: Record<string, Hole[]>;
   catalogReview?: {
+    /** Versioned evidence remains separate from the physical tee and from runtime handicap selection. */
+    ratingEvidence?: import('./course-rating-evidence').CourseRatingEvidenceBundleV1;
     ratingCategory: string | null;
     categoryVerified: boolean;
     reuseStatus: string;

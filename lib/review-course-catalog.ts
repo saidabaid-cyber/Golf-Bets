@@ -1,10 +1,12 @@
 import type { Course } from './types';
 import { haversineDistanceKm, type CourseGeographicPoint } from './course-distance';
+import { readCourseRatingEvidenceBundle, type CourseRatingEvidenceBundleV1 } from './course-rating-evidence';
 
 export type ReviewedNineRating = { id:string; segment:'FRONT'|'BACK'|'UNSPECIFIED'; course_rating:number; slope_rating:number; par:number; rating_category:null; source_url:string; observed_at:string };
 export type ReviewedTeeSource = { id:string; name:string; course_rating:number|null; slope_rating:number|null; yards:number|null; par:number|null;
   rating_category:null; qa_status:string; source_limitation:string|null; holes:{hole_number:number;par:number;stroke_index:number;yards:number|null}[];
   nineRatings:ReviewedNineRating[]; qa:{status:string;errors:string[];source_limitation?:string|null};
+  ratingEvidenceV1?:CourseRatingEvidenceBundleV1;
   supplement?:{sourceUrl:string;authority:string;observedAt:string;hash:string;physicalHoles?:9|18;schemaVersion?:1|2;courseId?:string;teeId?:string};
   supplementOriginal?:ReviewedTeeSource };
 export type ReviewedCatalogCourse = { id:string; clubId:string; name:string; clubName:string; holes:9|18; city?:string; stateRegion?:string; aliases:string[];
@@ -33,12 +35,13 @@ export function reviewedClubsLocationSummary(clubs: readonly { distanceKm: numbe
 /** Ratings are preserved as evidence, never applied until their category is verified.
  * Holes retain the original 18-hole SI even when playing one nine. */
 export function reviewedTeeToCourse(c:ReviewedCatalogCourse,t:ReviewedTeeSource):Course {
+  const ratingEvidence=readCourseRatingEvidenceBundle(t.ratingEvidenceV1,{courseId:c.id,teeId:t.id});
   return {id:t.id,name:c.name,teeName:t.name,catalogClubId:c.clubId,catalogCourseId:c.id,catalogTeeId:t.id,clubName:c.clubName,
     city:c.city,stateRegion:c.stateRegion,country:'México',provider:'OWNER_CATALOG_REVIEW',providerExternalId:t.id,
     sourceUrl:t.supplement?.sourceUrl??c.sourceUrl,sourceAuthority:t.supplement?.authority??'Catálogo aportado por el owner · categoría por verificar',verifiedAt:t.supplement?.observedAt??c.observedAt,dataVersion:t.supplement?`${c.dataVersion}:card-${t.supplement.hash.slice(0,12)}`:c.dataVersion,
     ...(t.yards!==null?{totalYards:t.yards}:{}),
     holes:t.holes.map(h=>({number:h.hole_number,par:h.par,strokeIndex:h.stroke_index,...(h.yards!==null?{yards:h.yards}:{})})),
-    catalogReview:{ratingCategory:null,categoryVerified:false,reuseStatus:'LEGAL_REVIEW_REQUIRED',qaStatus:t.qa_status,
+    catalogReview:{...(ratingEvidence?{ratingEvidence}:{}),ratingCategory:null,categoryVerified:false,reuseStatus:'LEGAL_REVIEW_REQUIRED',qaStatus:t.qa_status,
       issues:t.qa?.errors??[],limitation:t.source_limitation,reportedRating:t.course_rating,reportedSlope:t.slope_rating,
       nineRatings:structuredClone(t.nineRatings),sourceObservedAt:c.observedAt},
   };

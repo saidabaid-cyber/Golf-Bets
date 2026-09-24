@@ -1,5 +1,6 @@
 import pueblaCatalogJson from "../data/curated-puebla-courses.json";
 import { inspectInternalCourse } from "./course-catalog";
+import { RATING_EVIDENCE_SCHEMA_VERSION, type CourseRatingEvidenceBundleV1 } from "./course-rating-evidence";
 import type { BackyardIndexRatedTeeEvidence, Course, Hole } from "./types";
 
 /** Reviewed primary-source references, not an official WHS/GHIN rating directory. */
@@ -129,37 +130,58 @@ function byTeeId(teeId: string): CuratedTeeLookup | null {
   const tee = catalog.tees.find((row) => row.id === teeId);
   const club = tee && catalog.clubs.find((row) => row.courseId === tee.courseId);
   if (!tee || !club) return null;
-  const issues = validateCuratedPueblaTee(tee, club);
+  const cardIssues = validateCuratedPueblaTee(tee, club);
+  const issues = cardIssues.length ? cardIssues : ["RATING_CATEGORY_UNVERIFIED"];
   const courseAvailable = catalog.tees.some((candidate) => candidate.courseId === club.courseId && validateCuratedPueblaTee(candidate, club).length === 0);
   return {
     tee: cloneTee(tee),
     club: cloneClub(club),
     dataVersion: catalog.dataVersion,
-    eligibleForLocalIndex: issues.length === 0,
+    eligibleForLocalIndex: false,
     eligibleForOfficialGhin: false,
     courseStatus: courseAvailable ? "COURSE_AVAILABLE" : "COURSE_REFERENCE_ONLY",
-    teeStatus: issues.length === 0 ? "TEE_INDEX_ELIGIBLE" : "TEE_UNVERIFIED",
+    teeStatus: "TEE_UNVERIFIED",
     issues,
   };
 }
 
 function evidenceFor(lookup: CuratedTeeLookup): BackyardIndexRatedTeeEvidence | null {
-  if (!lookup.eligibleForLocalIndex) return null;
+  // The club publishes the pair, but not its applicable rating category.
+  // Preserve it as evidence without making it a Backyard Index input.
+  void lookup;
+  return null;
+}
+
+function clubPublishedEvidence(lookup: CuratedTeeLookup): CourseRatingEvidenceBundleV1 {
   return {
-    kind: "CURATED_RATED_TEE",
-    authority: lookup.club.source.authority,
-    sourceUrl: lookup.club.source.url,
-    verifiedAt: lookup.club.source.verifiedAt,
-    dataVersion: lookup.dataVersion,
+    schemaVersion: RATING_EVIDENCE_SCHEMA_VERSION,
     courseId: lookup.club.courseId,
     teeId: lookup.tee.id,
-    courseRating: lookup.tee.clubPublishedRating,
-    slopeRating: lookup.tee.clubPublishedSlope,
+    teeName: lookup.tee.name,
+    records: [{
+      evidenceId: `p05:el-cristo:${lookup.tee.id}:club-published`,
+      courseId: lookup.club.courseId,
+      teeId: lookup.tee.id,
+      teeName: lookup.tee.name,
+      ratingCategory: null,
+      courseRating: lookup.tee.clubPublishedRating,
+      slopeRating: lookup.tee.clubPublishedSlope,
+      par: lookup.club.par ?? null,
+      totalYards: lookup.tee.totalYards,
+      front: null,
+      back: null,
+      sourceAuthority: lookup.club.source.authority,
+      sourceUrl: lookup.club.source.url,
+      observedAt: lookup.club.source.verifiedAt,
+      evidenceStatus: "CLUB_PUBLISHED",
+      evidenceVersion: "p05-2026-09-24.v1",
+      automaticUse: false,
+    }],
   };
 }
 
 function playableSelectionFor(lookup: CuratedTeeLookup): Course | null {
-  if (!lookup.eligibleForLocalIndex) return null;
+  if (validateCuratedPueblaTee(lookup.tee, lookup.club).length) return null;
   const holePars = lookup.club.holePars;
   const holeStrokeIndexes = lookup.club.holeStrokeIndexes;
   if (!holePars || !holeStrokeIndexes) return null;
@@ -169,14 +191,10 @@ function playableSelectionFor(lookup: CuratedTeeLookup): Course | null {
     strokeIndex: holeStrokeIndexes[index],
     yards: lookup.tee.holeYards[index],
   }));
-  const evidence = evidenceFor(lookup);
-  if (!evidence) return null;
   return {
     id: lookup.tee.id,
     name: lookup.club.name,
     teeName: lookup.tee.name,
-    rating: lookup.tee.clubPublishedRating,
-    slope: lookup.tee.clubPublishedSlope,
     totalYards: lookup.tee.totalYards,
     holes,
     builtIn: true,
@@ -193,7 +211,19 @@ function playableSelectionFor(lookup: CuratedTeeLookup): Course | null {
     sourceUrl: lookup.club.source.url,
     verifiedAt: lookup.club.source.verifiedAt,
     dataVersion: lookup.dataVersion,
-    indexRatingEvidence: evidence,
+    catalogReview: {
+      ratingEvidence: clubPublishedEvidence(lookup),
+      ratingCategory: null,
+      categoryVerified: false,
+      reuseStatus: "LEGAL_REVIEW_REQUIRED",
+      qaStatus: "PASS",
+      issues: ["RATING_CATEGORY_UNVERIFIED"],
+      limitation: "El club publica Rating/Slope, pero no identifica una categoría inequívoca ni atesta vigencia FMG/USGA.",
+      reportedRating: lookup.tee.clubPublishedRating,
+      reportedSlope: lookup.tee.clubPublishedSlope,
+      nineRatings: [],
+      sourceObservedAt: lookup.club.source.verifiedAt,
+    },
   };
 }
 
@@ -255,5 +285,5 @@ export function getCuratedIndexRatedTeeEvidenceForCourse(course: Course): Backya
       && hole.strokeIndex === expected.holes[index].strokeIndex
       && hole.yards === expected.holes[index].yards
   ))) return null;
-  return expected.indexRatingEvidence ? { ...expected.indexRatingEvidence } : null;
+  return null;
 }

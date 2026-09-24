@@ -12,11 +12,26 @@ import type { RoundSnapshot } from "../lib/types";
 const preference: BackyardIndexPreference = { version: 1, userId: "qa-owner", enabled: true, updatedAt: "2026-09-15T09:00:00.000Z", localPccZeroDeclaredAt: "2026-09-15T09:00:00.000Z" };
 function completed(id = "qa-round"): RoundSnapshot {
   const course = curatedPueblaCourseProvider.getPlayableSelectionByTeeId("tee-el-cristo-blancas")!;
+  const assignment = teeAssignmentSnapshot("p1", course, "2026-09-15T10:00:00.000Z");
+  // Synthetic engine fixture: P05 deliberately no longer promotes El Cristo's
+  // category-unknown club evidence into this contract.
+  assignment.rating = 68.6;
+  assignment.slope = 125;
+  assignment.indexRatingEvidence = {
+    kind: "OFFICIAL_RATED_TEE",
+    authority: "Synthetic deterministic test authority",
+    sourceUrl: "https://ratings.example.invalid/verified-tee",
+    verifiedAt: "2026-09-15T09:00:00.000Z",
+    courseId: course.catalogCourseId!,
+    teeId: course.catalogTeeId!,
+    courseRating: 68.6,
+    slopeRating: 125,
+  };
   return { id, ownerId: "p1", ownerName: "QA", courseName: course.name, teeName: course.teeName,
     lifecycleState: "completed", date: "2026-09-15", roundHoles: 18,
     startedAt: "2026-09-15T10:00:00.000Z", completedAt: "2026-09-15T15:00:00.000Z", updatedAt: "2026-09-15T15:00:00.000Z",
     players: [{ id: "p1", name: "QA", handicap: 9, accountUserId: preference.userId }],
-    courseSnapshot: course, playerTeeAssignments: [teeAssignmentSnapshot("p1", course, "2026-09-15T10:00:00.000Z")],
+    courseSnapshot: course, playerTeeAssignments: [assignment],
     order: course.holes.map((hole) => hole.number), scores: Object.fromEntries(course.holes.map((hole) => [hole.number, { p1: hole.par + 1 }])),
     betResult: 0, expenseTotal: 0, netResult: 0, expenses: { caddie: 0, food: 0, drinks: 0, greenFee: 0, cartRental: 0, other: 0 }, categoryResults: {},
   } as RoundSnapshot;
@@ -34,7 +49,7 @@ test("activación persistida → cierre → snapshot → outbox/reload → Índi
     assert.equal(snapshot.adjustedGrossScore, 90);
     assert.equal(snapshot.pccEvidence?.kind, "DECLARED_LOCAL_ZERO");
     assert.equal(snapshot.pccEvidence?.value, 0);
-    assert.equal(snapshot.ratedTeeEvidence?.kind, "CURATED_RATED_TEE");
+    assert.equal(snapshot.ratedTeeEvidence?.kind, "OFFICIAL_RATED_TEE");
     assert.equal(snapshot.activation?.localPccZeroDeclaredAt, preference.localPccZeroDeclaredAt);
     const saved = await saveRoundHistoryLocalFirst({ storage, ownerId: preference.userId, snapshot: captured,
       defaultHandicap: 9, deviceId: "qa-device", hasLocalPreferenceState: false, queueForCloud: true,

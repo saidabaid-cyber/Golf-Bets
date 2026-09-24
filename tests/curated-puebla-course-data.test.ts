@@ -30,8 +30,11 @@ test("P · Puebla references distinguish verified identity from missing rating e
   assert.ok(clubs.every((club) => club.source.authority && club.source.url.startsWith("https://") && club.source.verifiedAt));
   const curatedDefault = DEFAULT_COURSES.find((course) => course.id === "tee-el-cristo-blancas");
   assert.ok(curatedDefault);
-  assert.equal(curatedDefault.indexRatingEvidence?.kind, "CURATED_RATED_TEE");
-  assert.deepEqual(getCourseDataStatusForSelection(curatedDefault), { courseStatus: "COURSE_AVAILABLE", teeStatus: "TEE_INDEX_ELIGIBLE" });
+  assert.equal(curatedDefault.indexRatingEvidence, undefined);
+  assert.equal(curatedDefault.rating, undefined);
+  assert.equal(curatedDefault.slope, undefined);
+  assert.equal(curatedDefault.catalogReview?.ratingEvidence?.records[0].evidenceStatus, "CLUB_PUBLISHED");
+  assert.deepEqual(getCourseDataStatusForSelection(curatedDefault), { courseStatus: "COURSE_AVAILABLE", teeStatus: "TEE_UNVERIFIED" });
   assert.deepEqual(getCourseDataStatusForSelection(DEFAULT_COURSES.find((course) => course.id === "el-cristo-general")!), { courseStatus: "COURSE_AVAILABLE", teeStatus: "TEE_UNVERIFIED" });
   assert.deepEqual(getCourseDataStatusForSelection(DEFAULT_COURSES.find((course) => course.id === "lavista-blancas")!), { courseStatus: "COURSE_AVAILABLE", teeStatus: "TEE_UNVERIFIED" });
   assert.deepEqual(teeOptionsForCourse(curatedDefault, DEFAULT_COURSES).map((course) => course.id), [
@@ -41,24 +44,24 @@ test("P · Puebla references distinguish verified identity from missing rating e
   assert.ok(searchInternalCourses({ courses: DEFAULT_COURSES, query: "cristo", limit: 12 }).courses.some((course) => course.id === curatedDefault.id));
 });
 
-test("Q · only source-consistent El Cristo tees qualify for a LOCAL index, never GHIN", () => {
+test("Q · source-consistent El Cristo cards stay playable while unknown rating category fails closed", () => {
   for (const id of ["tee-el-cristo-azules", "tee-el-cristo-blancas"]) {
     const lookup = curatedPueblaCourseProvider.getTeeById(id);
-    assert.equal(lookup?.eligibleForLocalIndex, true);
+    assert.equal(lookup?.eligibleForLocalIndex, false);
     assert.equal(lookup?.eligibleForOfficialGhin, false);
     assert.equal(lookup?.courseStatus, "COURSE_AVAILABLE");
-    assert.equal(lookup?.teeStatus, "TEE_INDEX_ELIGIBLE");
-    assert.deepEqual(lookup?.issues, []);
+    assert.equal(lookup?.teeStatus, "TEE_UNVERIFIED");
+    assert.deepEqual(lookup?.issues, ["RATING_CATEGORY_UNVERIFIED"]);
     const evidence = curatedPueblaCourseProvider.getIndexRatedTeeEvidenceById(id);
-    assert.equal(evidence?.kind, "CURATED_RATED_TEE");
-    assert.equal(evidence?.courseId, "course-el-cristo");
-    assert.equal(evidence?.teeId, id);
-    assert.equal(evidence?.dataVersion, curatedPueblaCourseProvider.dataVersion);
-    assert.match(evidence?.sourceUrl || "", /elcristo\.com\.mx\/campo-golf/);
+    assert.equal(evidence, null);
     const selection = curatedPueblaCourseProvider.getPlayableSelectionByTeeId(id);
     assert.equal(selection?.holes.length, 18);
     assert.equal(selection?.holes.reduce((total, hole) => total + hole.par, 0), 72);
     assert.equal(selection?.holes.reduce((total, hole) => total + (hole.yards || 0), 0), selection?.totalYards);
+    assert.equal(selection?.rating, undefined);
+    assert.equal(selection?.slope, undefined);
+    assert.equal(selection?.catalogReview?.ratingEvidence?.records[0].ratingCategory, null);
+    assert.equal(selection?.catalogReview?.ratingEvidence?.records[0].automaticUse, false);
     assert.deepEqual(getCuratedIndexRatedTeeEvidenceForCourse(selection as Course), evidence);
   }
   for (const id of ["tee-el-cristo-doradas", "tee-el-cristo-rojas"]) {
@@ -74,22 +77,23 @@ test("Q · only source-consistent El Cristo tees qualify for a LOCAL index, neve
   assert.equal(curatedPueblaCourseProvider.getTeeById("no-such-tee"), null);
 });
 
-test("R · tee selection freezes verified evidence; manual, edited or legacy courses fail closed", () => {
+test("R · tee selection freezes captured club evidence without promoting it into Index evidence", () => {
   const course = curatedPueblaCourseProvider.getPlayableSelectionByTeeId("tee-el-cristo-blancas");
   assert.ok(course);
   const capturedAt = "2026-09-15T12:00:00.000Z";
   const selected = teeAssignmentSnapshot("said", course, capturedAt);
   assert.equal(selected.source, "catalog");
   assert.equal(selected.par, 72);
-  assert.equal(selected.indexRatingEvidence?.kind, "CURATED_RATED_TEE");
-  assert.equal(selected.indexRatingEvidence?.courseRating, 68.6);
+  assert.equal(selected.indexRatingEvidence, undefined);
+  assert.equal(selected.rating, undefined);
+  assert.equal(selected.catalogReview?.reportedRating, 68.6);
   assert.equal(selected.sourceUrl, "https://elcristo.com.mx/campo-golf");
   assert.equal(selected.dataVersion, curatedPueblaCourseProvider.dataVersion);
 
   course.rating = 70;
-  course.indexRatingEvidence!.courseRating = 70;
-  assert.equal(selected.rating, 68.6);
-  assert.equal(selected.indexRatingEvidence?.courseRating, 68.6);
+  course.catalogReview!.reportedRating = 70;
+  assert.equal(selected.rating, undefined);
+  assert.equal(selected.catalogReview?.reportedRating, 68.6);
   assert.equal(getCuratedIndexRatedTeeEvidenceForCourse(course), null);
   assert.equal(teeAssignmentSnapshot("juan", course, capturedAt).indexRatingEvidence, undefined);
   assert.equal(teeAssignmentSnapshot("juan", course, capturedAt, "manual").indexRatingEvidence, undefined);
@@ -97,14 +101,14 @@ test("R · tee selection freezes verified evidence; manual, edited or legacy cou
   const players: Player[] = [{ id: "said", name: "Said", handicap: 7 }];
   const reconciled = reconcilePlayerTeeAssignments([selected], players, course, "2026-09-16T12:00:00.000Z");
   assert.deepEqual(reconciled[0].indexRatingEvidence, selected.indexRatingEvidence);
-  assert.notEqual(reconciled[0].indexRatingEvidence, selected.indexRatingEvidence);
+  assert.deepEqual(reconciled[0].catalogReview, selected.catalogReview);
   assert.equal(reconciled[0].capturedAt, capturedAt);
-  assert.equal(reconciled[0].rating, 68.6);
+  assert.equal(reconciled[0].rating, undefined);
 
   const freshCourse = curatedPueblaCourseProvider.getPlayableSelectionByTeeId("tee-el-cristo-blancas")!;
   const newPlayer = reconcilePlayerTeeAssignments([], players, freshCourse, capturedAt, { allowCuratedNewAssignment: true });
   assert.equal(newPlayer[0].source, "catalog");
-  assert.equal(newPlayer[0].indexRatingEvidence?.kind, "CURATED_RATED_TEE");
+  assert.equal(newPlayer[0].indexRatingEvidence, undefined);
   assert.equal(reconcilePlayerTeeAssignments([], players, freshCourse, capturedAt)[0].indexRatingEvidence, undefined);
   const previousLegacy = teeAssignmentSnapshot("said", freshCourse, "2026-09-14T12:00:00.000Z", "legacy");
   const keptLegacy = reconcilePlayerTeeAssignments([previousLegacy], players, freshCourse, capturedAt, { allowCuratedNewAssignment: true });
