@@ -74,7 +74,7 @@ export class SocialServiceError extends Error {
 
 type SocialRecoveryStage = "friendships" | "legacy_candidates" | "round_reconcile" | "equipment_reconcile" | "bounded_batch";
 class SocialRecoveryError extends SocialServiceError {
-  constructor(public stage: SocialRecoveryStage, error: unknown) {
+  constructor(public stage: SocialRecoveryStage, error: unknown, public providerCode?: string) {
     const safe = error && typeof error === "object"
       ? error as { code?: unknown; status?: unknown; message?: unknown }
       : {};
@@ -88,6 +88,11 @@ class SocialRecoveryError extends SocialServiceError {
 async function recoveryStep<T>(stage: SocialRecoveryStage, operation: () => PromiseLike<T>) {
   try { return await operation(); }
   catch (error) { throw new SocialRecoveryError(stage, error); }
+}
+
+function recoveryDbError(stage: SocialRecoveryStage, error: { code?: string; message?: string } | null): never {
+  try { dbError(error); }
+  catch (mapped) { throw new SocialRecoveryError(stage, mapped, error?.code); }
 }
 
 function dbError(error: { code?: string; message?: string } | null, fallback = "MUTATION_FAILED"): never {
@@ -276,7 +281,7 @@ export async function reconcileSocialEquipmentActivity(admin: SupabaseClient, us
 export async function getPreferences(ctx: SocialContext): Promise<SocialPreferencesResult> {
   const { data, error } = await ctx.client.from("social_activity_preferences_v3")
     .select("*").eq("user_id", ctx.userId).maybeSingle();
-  if (error) dbError(error);
+  if (error) recoveryDbError("friendships", error);
   return { data: { ...prefsFromRow(data), enabledForFriends: await socialPrivacy(ctx.client, ctx.userId) } };
 }
 export async function updatePreferences(ctx: SocialContext, preferences: unknown): Promise<SocialPreferencesResult> {
@@ -461,7 +466,7 @@ async function recoverVisibleSources(ctx: SocialContext) {
       .select("author_id,event_kind", { count: "exact" }).in("author_id", authorIds.slice(offset, offset + 50))
       .eq("active", true).like("material_hash", md5Pattern)
       .order("updated_at", { ascending: false }).limit(201));
-    if (candidateError) dbError(candidateError);
+    if (candidateError) recoveryDbError("legacy_candidates", candidateError);
     if ((count ?? 0) > 201) truncated = true;
     for (const event of provisional || []) {
       if (!pending.has(event.author_id)) pending.set(event.author_id, new Set());
@@ -490,12 +495,14 @@ async function recoverVisibleSourcesBestEffort(ctx: SocialContext) {
     await recoverVisibleSources(ctx);
   } catch (error) {
     const safe = error && typeof error === "object"
-      ? error as { code?: unknown; status?: unknown; stage?: unknown }
+      ? error as { code?: unknown; status?: unknown; stage?: unknown; providerCode?: unknown }
       : {};
     console.warn("backyard_social_recovery_deferred", {
       code: typeof safe.code === "string" ? safe.code : "UNKNOWN",
       status: typeof safe.status === "number" ? safe.status : undefined,
       stage: typeof safe.stage === "string" ? safe.stage : "unknown",
+      providerCode: typeof safe.providerCode === "string" && /^[A-Z0-9]{3,20}$/.test(safe.providerCode)
+        ? safe.providerCode : undefined,
     });
   }
 }
