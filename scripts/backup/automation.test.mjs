@@ -137,13 +137,24 @@ test('workflow installs and verifies the complete PostgreSQL 17 client set', asy
   assert.doesNotMatch(workflow, /\/usr\/bin\/(?:psql|pg_dump|pg_restore|pg_dumpall)/);
 });
 
+test('workflow pins the official Supabase root CA for verify-full connections', async () => {
+  const workflow = await readRepo(workflowPath);
+  assert.match(workflow, /https:\/\/supabase-downloads\.s3-ap-southeast-1\.amazonaws\.com\/prod\/ssl\/prod-ca-2021\.crt/);
+  assert.match(workflow, /700723581420dd1ac98fd7e9ac529f0ef210eadcaf87fc868a3ad7d114c2f3b7/);
+  assert.match(workflow, /--proto '=https' --proto-redir '=https'/);
+  assert.match(workflow, /sha256sum --check --strict/);
+  assert.match(workflow, /chmod 0600 "\$\{supabase_ca\}"/);
+  assert.equal(yamlValue(workflow, 'BACKUP_PGSSLROOTCERT'), '${{ runner.temp }}/supabase-prod-ca-2021.crt');
+  assert.doesNotMatch(workflow, /^\s+BACKUP_PGSSLROOTCERT:\s*system\s*$/m);
+});
+
 test('workflow pins the authorized owner and keeps retention disabled by default', async () => {
   const workflow = await readRepo(workflowPath);
   for (const [name, expected] of Object.entries(OWNER_BACKUP_CONFIG)) assert.equal(yamlValue(workflow, name), expected, name);
   for (const name of secretNames) assert.equal(yamlValue(workflow, name), `\${{ secrets.${name} }}`, name);
   assert.equal(yamlValue(workflow, 'GDRIVE_BACKUP_ROOT_FOLDER_ID'), '${{ vars.GDRIVE_BACKUP_ROOT_FOLDER_ID }}');
   assert.equal(yamlValue(workflow, 'BACKUP_RETENTION_APPLY'), "${{ vars.BACKUP_RETENTION_APPLY || 'false' }}");
-  assert.equal(yamlValue(workflow, 'BACKUP_PGSSLROOTCERT'), 'system');
+  assert.equal(yamlValue(workflow, 'BACKUP_PGSSLROOTCERT'), '${{ runner.temp }}/supabase-prod-ca-2021.crt');
   assert.equal(yamlValue(workflow, 'BACKUP_ROOT'), '${{ runner.temp }}/the-backyard-snapshots');
   assert.doesNotMatch(workflow, /secrets\.GDRIVE_BACKUP_ROOT_FOLDER_ID/);
   assert.doesNotMatch(workflow, /^\s+BACKUP_RETENTION_APPLY:\s*(?:true|['"]true['"])\s*$/m);
