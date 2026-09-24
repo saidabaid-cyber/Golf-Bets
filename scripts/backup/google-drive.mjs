@@ -9,7 +9,8 @@ const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
 const FOLDER_MIME = 'application/vnd.google-apps.folder';
 const ROOT_FOLDER_NAME = 'The Backyard - Backups';
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive';
-const FILE_FIELDS = 'id,name,mimeType,size,parents,trashed,appProperties';
+const FILE_FIELDS = 'id,name,mimeType,size,parents,trashed,appProperties,driveId';
+const SHARED_DRIVE_FIELDS = 'id,name,kind,hidden,capabilities(canAddChildren,canListChildren)';
 const REQUEST_TIMEOUT_MS = 120000;
 const UPLOAD_TIMEOUT_MS = 10 * 60 * 1000;
 const UPLOAD_CHUNK_GRANULARITY = 256 * 1024;
@@ -130,7 +131,7 @@ export class GoogleDriveClient {
     }
     this.accessToken = accessToken; this.transport = transport;
     this.uploadChunkBytes = uploadChunkBytes; this.uploadMaxRetries = uploadMaxRetries;
-    this.uploadTimeoutMs = uploadTimeoutMs; this.wait = wait;
+    this.uploadTimeoutMs = uploadTimeoutMs; this.wait = wait; this.sharedDriveId = undefined;
   }
 
   async fetch(url, init = {}, { acceptStatus } = {}) {
@@ -201,6 +202,37 @@ export class GoogleDriveClient {
     return this.json(`/drive/v3/files/${encodeURIComponent(id)}`, { query: { fields: FILE_FIELDS, supportsAllDrives: true } });
   }
 
+  async getSharedDrive(id) {
+    if (!validId(id)) throw new DriveError('GDRIVE_ID_INVALID');
+    const url = new URL(`/drive/v3/drives/${encodeURIComponent(id)}`, DRIVE_API);
+    url.searchParams.set('fields', SHARED_DRIVE_FIELDS);
+    const response = await this.fetch(url, {}, { acceptStatus: status => status === 404 });
+    if (response.status === 404) {
+      try { await response.body?.cancel(); } catch { /* discard provider details */ }
+      return null;
+    }
+    try { return await response.json(); } catch { throw new DriveError('GDRIVE_RESPONSE_INVALID'); }
+  }
+
+  async getBackupRoot(id) {
+    const sharedDrive = await this.getSharedDrive(id);
+    if (sharedDrive) {
+      if (sharedDrive.id !== id || sharedDrive.name !== ROOT_FOLDER_NAME || sharedDrive.kind !== 'drive#drive' ||
+          sharedDrive.capabilities?.canAddChildren !== true || sharedDrive.capabilities?.canListChildren !== true) {
+        throw new DriveError('GDRIVE_ROOT_FOLDER_NOT_ACCESSIBLE');
+      }
+      this.sharedDriveId = id;
+      return { id, name: sharedDrive.name, mimeType: FOLDER_MIME, trashed: false, driveId: id };
+    }
+    const folder = await this.getFile(id);
+    if (folder.id !== id || folder.name !== ROOT_FOLDER_NAME || folder.mimeType !== FOLDER_MIME || folder.trashed !== false ||
+        (folder.driveId !== undefined && !validId(folder.driveId))) {
+      throw new DriveError('GDRIVE_ROOT_FOLDER_NOT_ACCESSIBLE');
+    }
+    this.sharedDriveId = folder.driveId;
+    return folder;
+  }
+
   async listChildren(parentId, name) {
     if (!validId(parentId) || (name !== undefined && !validName(name))) throw new DriveError('GDRIVE_LIST_INPUT_INVALID');
     const files = []; let pageToken;
@@ -209,8 +241,10 @@ export class GoogleDriveClient {
       if (name !== undefined) clauses.push(`name = '${escapeQuery(name)}'`);
       const result = await this.json('/drive/v3/files', { query: {
         q: clauses.join(' and '), spaces: 'drive', pageSize: 1000, pageToken,
-        fields: `nextPageToken,files(${FILE_FIELDS})`, supportsAllDrives: true, includeItemsFromAllDrives: true,
+        fields: `nextPageToken,incompleteSearch,files(${FILE_FIELDS})`, supportsAllDrives: true, includeItemsFromAllDrives: true,
+        ...(this.sharedDriveId ? { corpora: 'drive', driveId: this.sharedDriveId } : {}),
       } });
+      if (result.incompleteSearch === true) throw new DriveError('GDRIVE_INCOMPLETE_SEARCH');
       if (!Array.isArray(result.files)) throw new DriveError('GDRIVE_LIST_RESPONSE_INVALID');
       files.push(...result.files); pageToken = result.nextPageToken;
       if (files.length > 100000) throw new DriveError('GDRIVE_LIST_LIMIT');
@@ -437,10 +471,7 @@ export async function publishToGoogleDrive({
   if (!validId(rootFolderId)) throw new DriveError('GDRIVE_ROOT_FOLDER_ID_INVALID');
   await validatePackageInfo(packageInfo);
   const drive = client || new GoogleDriveClient(await serviceAccountAccessToken(credentialsJson, { transport, signer }), transport);
-  const root = await drive.getFile(rootFolderId);
-  if (root.name !== ROOT_FOLDER_NAME || root.mimeType !== FOLDER_MIME || root.trashed !== false) {
-    throw new DriveError('GDRIVE_ROOT_FOLDER_NOT_ACCESSIBLE');
-  }
+  await drive.getBackupRoot(rootFolderId);
   const tierFolders = {};
   for (const tier of Object.keys(RETENTION_LIMITS)) tierFolders[tier] = await drive.ensureFolder(rootFolderId, tier);
   const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
