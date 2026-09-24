@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import type { Session } from '@supabase/supabase-js';
 import { finishOAuthOnce } from '../lib/oauth-callback-once';
 import type { AuthFlowClient } from '../lib/auth-flow';
-import { createBetaOnboardingProgress, advanceBetaOnboarding, normalizeBetaOnboardingProgress } from '../lib/beta-onboarding';
+import { createBetaOnboardingProgress, advanceBetaOnboarding, completeBetaOnboarding, normalizeBetaOnboardingProgress } from '../lib/beta-onboarding';
 import { onboardingCheckpoint } from '../lib/onboarding-checkpoint';
 import { preserveUnfinishedRound, unfinishedRoundDraft } from '../lib/unfinished-round';
 import { canResumeActiveRound } from '../lib/active-round-navigation';
@@ -38,23 +38,23 @@ test('OAuth failed exchange is shared, never retried silently or replaced by a s
 });
 for(const mode of ['quick','complete'] as const) test(`${mode} onboarding includes Course and Index and survives account readback`,()=>{
   let progress={...createBetaOnboardingProgress('A'),mode};
+  progress=advanceBetaOnboarding(progress,'permissions') as typeof progress;
   progress=advanceBetaOnboarding(progress,'course') as typeof progress;
   progress=advanceBetaOnboarding(progress,'ghin') as typeof progress;
   const restored=onboardingCheckpoint(JSON.parse(JSON.stringify(progress)),'A');
   assert.equal(restored?.step,'ghin');assert.equal(restored?.mode,mode);assert.ok(restored?.completedSteps.includes('course'));
   assert.equal(normalizeBetaOnboardingProgress(progress,'B'),null);
 });
-test('quick entry cannot bypass course/index; consent and optional device decisions stay in initial onboarding',()=>{
-  const ui=readFileSync('app/components/beta-onboarding-flow.tsx','utf8');
-  assert.match(ui,/onClick=\{\(\) => advance\("course"\)\}/);
-  assert.match(ui,/if \(entryMode === 'quick'\) advance\("permissions"\); else advance\("equipment", true\)/);
-  assert.match(ui,/CatalogCoursePicker/);assert.match(ui,/HandicapSourceSelector/);
-  assert.match(ui,/InitialOnboardingConsents/);
-  assert.match(ui,/progress\.step === "permissions"/);
-  assert.match(ui,/<InitialDevicePermissions userId=\{profile\.userId\} onContinue=\{finish\}/);
-  const permission=readFileSync('app/components/device-permissions.tsx','utf8');
-  assert.doesNotMatch(permission,/localStorage|fetch\(|acceptConsent/);
-  assert.match(permission,/permission\.onchange = null/);assert.match(permission,/cancelLocation\.current\(\)/);
+test('quick entry resolves optional device decisions before Course and Index, then completes once',()=>{
+  let progress={...createBetaOnboardingProgress('A'),mode:'quick' as const};
+  progress=advanceBetaOnboarding(progress,'permissions') as typeof progress;
+  assert.equal(progress.step,'permissions');
+  progress=advanceBetaOnboarding(progress,'course') as typeof progress;
+  assert.ok(progress.completedSteps.includes('permissions'));
+  progress=advanceBetaOnboarding(progress,'ghin') as typeof progress;
+  const completed=completeBetaOnboarding(progress);
+  assert.equal(completed.status,'complete');
+  assert.deepEqual(completed.completedSteps.filter(step=>['permissions','course','ghin'].includes(step)),['permissions','course','ghin']);
 });
 test('saved permissions checkpoint resumes at the optional decision instead of silently accepting it',()=>{
   const legacy={...createBetaOnboardingProgress('A'),status:'in_progress' as const,step:'permissions' as const,completedSteps:['welcome','course','ghin'] as const};

@@ -91,8 +91,8 @@ function safeDraft(value: unknown, profile: BackyardProfile): BetaDraft {
 
 function Shell({ progress, eyebrow, title, description, children, actions, onBack, onSaveAndExit }: { progress: BetaOnboardingProgress; eyebrow: string; title: string; description?: string; children: React.ReactNode; actions: React.ReactNode; onBack?: () => void; onSaveAndExit?: () => void }) {
   const visibleSteps: BetaOnboardingStep[] = progress.mode === "quick"
-    ? ["welcome", "course", "ghin", "permissions"]
-    : ["welcome", "course", "ghin", "equipment", "improvements", "objective", "plan", "permissions"];
+    ? ["welcome", "permissions", "course", "ghin"]
+    : ["welcome", "permissions", "course", "ghin", "equipment", "improvements", "objective", "plan"];
   const index = Math.max(0, visibleSteps.indexOf(progress.step));
   const titleRef = useRef<HTMLHeadingElement>(null);
   const [confirmExit, setConfirmExit] = useState(false);
@@ -140,7 +140,10 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, lega
   useEffect(() => {
     if (initializedUser.current === profile.userId) return;
     initializedUser.current = profile.userId;
-    const existing = readBetaOnboardingProgress(localStorage, profile.userId) || createBetaOnboardingProgress(profile.userId);
+    const restored = readBetaOnboardingProgress(localStorage, profile.userId) || createBetaOnboardingProgress(profile.userId);
+    const existing = restored.status === "in_progress" && restored.step !== "welcome" && !restored.completedSteps.includes("permissions")
+      ? navigateBetaOnboarding(restored, "permissions")
+      : restored;
     let storedDraft: unknown = null;
     try { storedDraft = JSON.parse(localStorage.getItem(betaOnboardingDraftStorageKey(profile.userId)) || "null"); }
     catch { /* A corrupt optional draft restarts only this onboarding. */ }
@@ -190,8 +193,7 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, lega
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
   const previousByStep: Partial<Record<BetaOnboardingStep, Exclude<BetaOnboardingStep, "complete">>> = {
-    course: "welcome", ghin: "course", equipment: "ghin", improvements: "equipment", objective: "improvements", plan: "objective",
-    permissions: entryMode === "quick" ? "ghin" : "plan",
+    permissions: "welcome", course: "permissions", ghin: "course", equipment: "ghin", improvements: "equipment", objective: "improvements", plan: "objective",
   };
   const navigationProps = {
     ...(previousByStep[progress.step] ? { onBack: () => goTo(previousByStep[progress.step]!) } : {}),
@@ -205,14 +207,14 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, lega
   };
 
   if (progress.step === "course") return <Shell progress={progress} {...navigationProps} eyebrow="TU CAMPO" title="Elige tu Home Club" description="Busca tu club habitual o explora los campos cercanos. No estás iniciando una ronda." actions={<button className="primary big" disabled={!profile.homeClubId || !profile.homeCourseId || !homeClubSelectionReady} onClick={() => advance('ghin')}>Continuar: Handicap / Índice</button>}>
-    <CatalogCoursePicker purpose="home-club" token={accessToken} selectedName={[profile.homeClub,profile.homeCourse].filter(Boolean).join(' · ')} onSelectionReadyChange={setHomeClubSelectionReady} onSelectHomeCourse={async selection => {
+    <CatalogCoursePicker key={`onboarding-home-${profile.userId}`} purpose="home-club" token={accessToken} permissionOwnerId={profile.userId} selectedName={[profile.homeClub,profile.homeCourse].filter(Boolean).join(' · ')} onSelectionReadyChange={setHomeClubSelectionReady} onSelectHomeCourse={async selection => {
       setMessage('');
       const result=await onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: profile.defaultHandicap, homeClub: selection.clubName, homeClubId: selection.clubId, homeCourse: selection.courseName, homeCourseId: selection.courseId });
       if(result!=='cloud')throw new Error('No pudimos confirmar tu Home Club en la nube. Reintenta para continuar.');
     }} />
     <p>Este campo queda como tu club habitual. Podrás cambiarlo en Perfil.</p>{message && <p role="alert">{message}</p>}
   </Shell>;
-  if (progress.step === "welcome") return <Shell progress={progress} {...navigationProps} eyebrow="EMPIEZA A TU MANERA" title="Tu Backyard, sin fricción" description="En ambas opciones elegirás tu campo e índice. Después puedes completar equipo, objetivos y grupos." actions={<button type="button" className="primary big" disabled={!entryMode || !initialConsentsReady} onClick={() => advance("course")}>CONTINUAR</button>}>
+  if (progress.step === "welcome") return <Shell progress={progress} {...navigationProps} eyebrow="EMPIEZA A TU MANERA" title="Tu Backyard, sin fricción" description="En ambas opciones elegirás tu campo e índice. Después puedes completar equipo y objetivos." actions={<button type="button" className="primary big" disabled={!entryMode || !initialConsentsReady} onClick={() => advance("permissions")}>CONTINUAR</button>}>
     <div className={styles.welcomeHero} aria-hidden="true"><span className={styles.heroFlag}>⛳</span><div><b>Tu golf, en un solo lugar</b><small>Rondas rápidas · amigos · equipo · estadísticas</small></div><span className={styles.heroBall}>●</span></div>
     <div className={styles.entryGrid}>
       <button type="button" className={entryMode === "quick" ? styles.entrySelected : styles.entryChoice} aria-pressed={entryMode === "quick"} onClick={() => setEntryMode("quick")}><span aria-hidden="true">⚡</span><div><b>Rápida</b><p>Elige tu Home Club, fuente de índice y permisos opcionales. Equipo y fitting quedan disponibles para después.</p></div></button>
@@ -232,7 +234,7 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, lega
     onSaveAndExit={onComplete}
   />;
 
-  if (progress.step === "ghin") return <Shell progress={progress} {...navigationProps} eyebrow="HANDICAP / ÍNDICE" title="Elige tu fuente de índice" description="Puedes activar Backyard Index sin rondas previas. GHIN estará disponible mediante una integración oficial." actions={<button className="primary big" disabled={finishing} onClick={async () => { try { await onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: profile.defaultHandicap, ghinLinkStatus: profile.ghinLinkStatus || "SKIPPED" }); if (entryMode === 'quick') advance("permissions"); else advance("equipment", true); } catch(error) { setMessage(error instanceof Error ? error.message : 'No pudimos guardar. Reintenta.'); } }}>{finishing ? 'Guardando…' : 'Continuar'}</button>}>
+  if (progress.step === "ghin") return <Shell progress={progress} {...navigationProps} eyebrow="HANDICAP / ÍNDICE" title="Elige tu fuente de índice" description="Puedes activar Backyard Index sin rondas previas. GHIN estará disponible mediante una integración oficial." actions={<button className="primary big" disabled={finishing} onClick={async () => { try { await onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: profile.defaultHandicap, ghinLinkStatus: profile.ghinLinkStatus || "SKIPPED" }); if (entryMode === 'quick') finish(); else advance("equipment", true); } catch(error) { setMessage(error instanceof Error ? error.message : 'No pudimos guardar. Reintenta.'); } }}>{finishing ? 'Guardando…' : 'Continuar'}</button>}>
     <HandicapSourceSelector userId={profile.userId} authenticated={Boolean(profile.userId && profile.userId !== "guest")} />
     <p className={styles.trust}>Si todavía no tienes índice puedes continuar. No inventaremos un valor.</p>{message && <p role="alert">{message}</p>}
   </Shell>;
@@ -252,12 +254,12 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, lega
     {message && <div className={styles.error} role="alert">{message}</div>}
   </Shell>;
 
-  if (progress.step === "plan") return <Shell progress={progress} {...navigationProps} eyebrow="MEMBRESÍA BETA" title="Elige tu plan" description="No hay cobros ni precios definitivos en esta Beta. La cuenta inicia en GRATIS." actions={<button className="primary big" onClick={async () => { const planId = selectablePlanId(draft.planId); await onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: profile.defaultHandicap, planId }); advance("permissions"); }}>Continuar con GRATIS</button>}>
+  if (progress.step === "plan") return <Shell progress={progress} {...navigationProps} eyebrow="MEMBRESÍA BETA" title="Elige tu plan" description="No hay cobros ni precios definitivos en esta Beta. La cuenta inicia en GRATIS." actions={<button className="primary big" onClick={async () => { const planId = selectablePlanId(draft.planId); await onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: profile.defaultHandicap, planId }); finish(); }}>Continuar con GRATIS</button>}>
     <div className={styles.planGrid}>{PLAN_CATALOG.map((plan) => <button type="button" key={plan.id} disabled={plan.availability !== "available"} className={`${styles.planCard} ${draft.planId === plan.id ? styles.planSelected : ""}`} onClick={() => setDraft((current) => current ? { ...current, planId: plan.id } : current)}><span>{plan.eyebrow}</span><b>{plan.name}</b><p>{plan.description}</p><small>{plan.availability === "available" ? "Incluido en Beta" : "Próximamente · sin cobro"}</small></button>)}</div>
   </Shell>;
 
   if (progress.step === "permissions") return <Shell progress={progress} {...navigationProps} eyebrow="PERMISOS OPCIONALES" title="Decide una sola vez" description="Puedes usar The Backyard sin ubicación ni notificaciones. Después podrás revisar o desactivar estos permisos desde Configuración." actions={null}>
-    <InitialDevicePermissions userId={profile.userId} onContinue={finish} />
+    <InitialDevicePermissions key={`initial-permissions-${profile.userId}`} userId={profile.userId} onContinue={() => advance("course")} />
   </Shell>;
 
   return null;

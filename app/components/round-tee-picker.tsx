@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import type { Course } from "../../lib/types";
 import styles from "./round-tee-picker.module.css";
 
@@ -22,6 +23,16 @@ export function RoundTeePicker({
   onBack: () => void;
   onMissingTee: () => void;
 }) {
+  const [transitioningId, setTransitioningId] = useState<string | null>(null);
+  const releaseTimer = useRef<number | null>(null);
+  useEffect(() => () => { if (releaseTimer.current !== null) window.clearTimeout(releaseTimer.current); }, []);
+  function selectOnce(tee: Course) {
+    if (transitioningId) return;
+    const id = tee.catalogTeeId || tee.id;
+    setTransitioningId(id);
+    onSelect(tee);
+    releaseTimer.current = window.setTimeout(() => setTransitioningId(null), 600);
+  }
   return <section className={styles.panel} aria-labelledby="round-tee-title">
     <button type="button" className={styles.back} onClick={onBack}>← Cambiar campo</button>
     <span className={styles.eyebrow}>CAMPO SELECCIONADO</span>
@@ -36,10 +47,10 @@ export function RoundTeePicker({
           fact(tee.rating) ? `Rating ${fact(tee.rating)}` : null,
           fact(tee.slope) ? `Slope ${fact(tee.slope)}` : null,
         ].filter(Boolean);
-        return <button type="button" className={selected ? styles.selected : ""} aria-pressed={selected} key={id} onClick={() => onSelect(tee)}>
+        return <button type="button" disabled={transitioningId !== null} className={selected ? styles.selected : ""} aria-pressed={selected} key={id} onClick={() => selectOnce(tee)}>
           <span>{tee.teeName || "Tee"}</span>
           <b>{facts.length ? facts.join(" · ") : "Datos de salida no publicados"}</b>
-          <strong>{selected ? "Seleccionado ✓" : "Elegir"}</strong>
+          <strong>{transitioningId === id ? "Abriendo…" : selected ? "Seleccionado ✓" : "Elegir"}</strong>
         </button>;
       })}
     </div>

@@ -100,6 +100,7 @@ import { CourseReviewNotice } from "./components/course-review-notice";
 import { CourseOperationsNotice } from "./components/course-operations-notice";
 import { RoundTeePicker } from "./components/round-tee-picker";
 import { StartHoleSelector } from "./components/start-hole-selector";
+import { beginRoundCourseSelection, changeRoundCourseSelection, completeRoundTeeSelection, usableRoundCourseCards } from "../lib/round-course-selection";
 import { BrandLockup } from "./components/brand-lockup";
 import { ModalCloseButton } from "./components/modal-shell";
 import { GroupBuilder } from "./components/group-builder";
@@ -475,8 +476,6 @@ function GolfBetsApp() {
   const [pendingRoundAction, setPendingRoundAction] = useState<{ message: string; run: () => void } | null>(null);
   const [pendingCloudConflict, setPendingCloudConflict] = useState<{ local: CloudDataBundle; cloud: CloudDataBundle; conflicts: CloudDataConflict[] } | null>(null);
   const [courses, setCourses] = useState<Course[]>(defaultCourses);
-  const [playCourseChoice,setPlayCourseChoice] = useState<Course|null>(null);
-  useEffect(()=>{setPlayCourseChoice(null);},[identity.userId]);
   const [favoriteCourseIds, setFavoriteCourseIds] = useState<string[]>([]);
   const [recentCourseIds, setRecentCourseIds] = useState<string[]>([]);
   const [course, setCourse] = useState<Course>(laVista);
@@ -489,6 +488,12 @@ function GolfBetsApp() {
   const [courseEditorSelectOnSave, setCourseEditorSelectOnSave] = useState(false);
   const [startHole, setStartHole] = useState(1);
   const [roundHoles, setRoundHoles] = useState<9 | 18>(18);
+
+  useEffect(() => {
+    if (tab !== "setup") return;
+    const frame = window.requestAnimationFrame(() => document.getElementById("round-course")?.scrollIntoView({ block: "start", behavior: "auto" }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [courseSetupStage, tab]);
   const [roundHandicapBasis, setRoundHandicapBasis] = useState<RoundHandicapBasis>("relative");
   const [roundPresentation, setRoundPresentation] = useState<RoundPresentation>(() => normalizeRoundPresentation(undefined));
   const groupNassauLabels = useMemo(() => groupNassauPresentation(roundPresentation), [roundPresentation]);
@@ -737,6 +742,8 @@ function GolfBetsApp() {
     return [...names.values()];
   }, [courseOptions, identity.preferredTee]);
   const teeOptions = useMemo(() => courseSelected || courseSetupStage === "tee" ? teeOptionsForCourse(course, courseOptions) : [], [course, courseOptions, courseSelected, courseSetupStage]);
+  const suggestedRoundTee = useMemo(() => teeOptions.find(option => option.teeName.localeCompare(identity.preferredTee || "", "es-MX", { sensitivity: "base" }) === 0), [identity.preferredTee, teeOptions]);
+  const selectedRoundTeeId = courseSelected ? course.catalogTeeId || course.id : suggestedRoundTee ? suggestedRoundTee.catalogTeeId || suggestedRoundTee.id : "";
   const pendingCourseCandidates = useMemo(
     () => coursesForPendingIdentity(courseOptions, pendingCourseIdentity),
     [courseOptions, pendingCourseIdentity],
@@ -2219,9 +2226,6 @@ function GolfBetsApp() {
     }
     setRoundSetupInitialStep(intent.kind === "blank" ? intent.initialStep ?? 1 : 1);
     resetRound(nextFeedback);
-    if ((intent.kind === "blank" || intent.kind === "scoreOnly") && playCourseChoice) {
-      setCourse(structuredClone(playCourseChoice)); setCourseSelected(true); setPendingCourseIdentity(null);
-    }
     if (intent.kind === "blank") return;
     if (intent.kind === "scoreOnly") { setBets(initialBets([])); setRoundPresentation({ version: 1, groupNassauTerm: "polla", playMode: "score_only" }); return; }
     if (intent.kind === "ai") { setTab("aiSetup"); return; }
@@ -2624,32 +2628,45 @@ function GolfBetsApp() {
     setCourseDraft(fresh); setTab("courses");
   }
 
-  function selectRoundCourse(nextCourse: Course, returnToSetup = false) {
+  function selectRoundCourse(nextCourse: Course, returnToSetup = false, suppliedCards?: Course[]) {
+    const cards = usableRoundCourseCards(suppliedCards?.length ? suppliedCards : teeOptionsForCourse(nextCourse, courseOptions));
+    const transition = changeRoundCourseSelection(courseSelected ? course : null, cards);
+    if (!transition.ok) {
+      setCourseSelectionError(true);
+      setFeedback("Este recorrido no tiene una tarjeta utilizable de 9 o 18 hoyos. Puedes solicitar su revisión.");
+      return;
+    }
     const apply = () => {
-      setCourse(nextCourse);
-      setPlayerTeeAssignments([]);
-      setCourseSelected(false);
+      retainCatalogCards(transition.teeOptions);
+      setCourse(transition.course);
+      if (!transition.selectedTeeId) setPlayerTeeAssignments([]);
+      setCourseSelected(Boolean(transition.selectedTeeId));
       setCourseSetupStage("tee");
       setPendingCourseIdentity({
-        name: nextCourse.name,
-        ...(nextCourse.catalogCourseId ? { catalogCourseId: nextCourse.catalogCourseId } : {}),
-        candidateCourseIds: [nextCourse.id],
+        name: transition.course.name,
+        ...(transition.course.catalogCourseId ? { catalogCourseId: transition.course.catalogCourseId } : {}),
+        candidateCourseIds: transition.teeOptions.map(option => option.id),
       });
       setCourseSelectionError(false);
-      setRecentCourseIds((current) => rememberRecentCourse(current, nextCourse.id));
+      setRecentCourseIds((current) => rememberRecentCourse(current, transition.course.id));
       if (returnToSetup) setTab("setup");
     };
-    if (nextCourse.id === course.id) apply();
+    if (transition.course.id === course.id || !courseSelected) apply();
     else confirmRoundChange("Cambiar campo modifica el Par/SI aplicado a los scores existentes.", apply);
   }
 
   function selectRoundTee(nextTee: Course) {
+    const pending = beginRoundCourseSelection(teeOptions);
+    if (!pending.ok) { setCourseSelectionError(true); return; }
+    const completed = completeRoundTeeSelection(pending, nextTee.catalogTeeId || nextTee.id);
+    if (!completed.ok) { setCourseSelectionError(true); return; }
+    const selectedTee = completed.course;
     const apply = () => {
-      const playableHoles = [...new Set(nextTee.holes.map((hole) => hole.number).filter((hole) => Number.isInteger(hole) && hole > 0 && hole <= 18))].sort((left, right) => left - right);
+      const playableHoles = [...new Set(selectedTee.holes.map((hole) => hole.number).filter((hole) => Number.isInteger(hole) && hole > 0 && hole <= 18))].sort((left, right) => left - right);
       const nextStartHole = playableHoles.includes(startHole) ? startHole : playableHoles[0] ?? 1;
       const nextRoundHoles: 9 | 18 = playableHoles.length >= 18 ? roundHoles : 9;
-      setCourse(nextTee);
-      setPlayerTeeAssignments(assignTeeToEveryPlayer(players, nextTee, new Date().toISOString()));
+      setCourse(selectedTee);
+      setPlayerTeeAssignments(assignTeeToEveryPlayer(players, selectedTee, new Date().toISOString()));
       setStartHole(nextStartHole);
       setRoundHoles(nextRoundHoles);
       setSegments(segmentDefinitions(playOrderForHoles(playableHoles, nextStartHole).slice(0, nextRoundHoles), bets.foursome.segmentSize));
@@ -2658,7 +2675,7 @@ function GolfBetsApp() {
       setCourseSelectionError(false);
       setCourseSetupStage("details");
     };
-    if (nextTee.id === course.id) apply();
+    if (selectedTee.id === course.id) apply();
     else confirmRoundChange("Cambiar tee actualiza Rating, Slope, yardaje y HCP de juego para esta ronda.", apply);
   }
 
@@ -2807,7 +2824,7 @@ function GolfBetsApp() {
   }
 
   function retainCatalogCards(cards:Course[]) {
-    const usable=cards.filter(card=>card.holes.length===18);
+    const usable=usableRoundCourseCards(cards);
     setCourses(current=>[...current.filter(card=>!usable.some(next=>next.id===card.id)),...usable]);
   }
 
@@ -3661,7 +3678,6 @@ function GolfBetsApp() {
     {tab === "play" && <PlayHub
       activeRound={activeRoundSummary}
       onContinueRound={continueActiveRound}
-      coursePicker={<CatalogCoursePicker token={identity.accessToken} selectedName={playCourseChoice?`${playCourseChoice.name} · ${playCourseChoice.teeName}`:''} onRequest={()=>requestFeedback('COURSE')} onSelect={(next,cards)=>{retainCatalogCards(cards);setPlayCourseChoice(next);}} />}
       onEditRound={activeRoundSummary ? editActiveRound : undefined}
       onAiRound={requestAiRound}
       onNewRound={requestNewRound}
@@ -3678,7 +3694,7 @@ function GolfBetsApp() {
       onOpenResults={() => setTab("results")}
     />}
 
-    {tab === "totalScore" && (() => { const principal = accountPrimaryRoundPlayer(identity, accountIndex); return principal ? <TotalScoreEntry key={identity.userId} courses={courseOptions} initialCourse={playCourseChoice} player={principal} accessToken={identity.accessToken} onSave={saveTotalHistory} onBack={() => setTab("play")} /> : <section className="card"><p>Inicia sesión para guardar tu tarjeta.</p><button type="button" onClick={() => setTab("play")}>Volver a Jugar</button></section>; })()}
+    {tab === "totalScore" && (() => { const principal = accountPrimaryRoundPlayer(identity, accountIndex); return principal ? <TotalScoreEntry key={identity.userId} courses={courseOptions} player={principal} accessToken={identity.accessToken} onSave={saveTotalHistory} onBack={() => setTab("play")} /> : <section className="card"><p>Inicia sesión para guardar tu tarjeta.</p><button type="button" onClick={() => setTab("play")}>Volver a Jugar</button></section>; })()}
 
     {tab === "aiSetup" && <AiRoundSetup
       initialDraft={createRoundSetupDraft({
@@ -3744,7 +3760,7 @@ function GolfBetsApp() {
     {tab === "social" && <SocialFeed key={`${identity.userId}:${socialInitialView}`} initialView={socialInitialView} targetId={socialTarget} onCloseTarget={() => { setSocialTarget(null); try { sessionStorage.removeItem(PENDING_SOCIAL_KEY); } catch {} const url = new URL(location.href); url.searchParams.delete("friend"); window.history.replaceState(window.history.state, "", url); }} onPrivacy={() => setTab("account")} activity={personalActivity} identityUserId={identity.userId || "guest"} accessToken={identity.accessToken || undefined} knownProfiles={EMPTY_SOCIAL_DIRECTORY} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} onOpenRound={openHistoricalRound} onOpenGroup={() => setTab("groups")} onCreateRound={requestNewRound} onOpenGroups={() => setTab("groups")} />}
     {tab === "balances" && <BalanceLedgerPanel history={history} currentUserId={identity.mode === "authenticated" ? identity.userId : undefined} />}
     {tab === "stats" && (statisticsReady ? <StatsDashboard insights={betaGolfInsights} rounds={statisticsHistory} consentOwnerId={identity.userId || undefined} accessToken={identity.accessToken} requiresRemoteConsent={identity.mode === "authenticated"} onOpenHistory={() => setTab("history")} onOpenRound={openHistoricalRound} /> : <section className="card" role="status"><h1>Estadísticas</h1><p>{statisticsAuthority.state === "unavailable" ? statisticsAuthority.error : "Verificando tus estadísticas…"}</p><p>Tu histórico permanece intacto. No mostramos métricas anteriores hasta verificar la fecha de reinicio.</p><button type="button" className="secondary" onClick={() => setStatisticsRetry((value) => value + 1)}>Reintentar</button><button type="button" className="textButton" onClick={() => setTab("history")}>Ver Histórico</button></section>)}
-    {tab === "courseLibrary" && <CourseLibrary permissionOwnerId={identity.userId} courses={courses} favoriteCourseIds={favoriteCourseIds} recentCourseIds={recentCourseIds} selectedCourseId={courseSelected ? course.id : null} onToggleFavorite={(courseId) => setFavoriteCourseIds((current) => toggleFavoriteCourse(current, courseId))} onSelectCourse={(nextCourse) => selectRoundCourse(nextCourse, true)} onCreateCourse={startNewCourse} onEditCourse={editCourseFromLibrary} />}
+    {tab === "courseLibrary" && <CourseLibrary key={`course-library-${identity.userId}`} permissionOwnerId={identity.userId} courses={courses} favoriteCourseIds={favoriteCourseIds} recentCourseIds={recentCourseIds} selectedCourseId={courseSelected ? course.id : null} onToggleFavorite={(courseId) => setFavoriteCourseIds((current) => toggleFavoriteCourse(current, courseId))} onSelectCourse={(nextCourse) => selectRoundCourse(nextCourse, true)} onCreateCourse={startNewCourse} onEditCourse={editCourseFromLibrary} />}
 
     {feedback && <div className="notice" role="status">{roundSaveNotice(feedback, cloudStatus)}<button className="textButton" aria-label="Cerrar mensaje" onClick={() => setFeedback("")}>×</button></div>}
     {copyFallback && <section className="card"><label>Resumen para copiar<textarea readOnly value={copyFallback} onFocus={event => event.currentTarget.select()} /></label><button onClick={() => setCopyFallback("")}>← Regresar</button></section>}
@@ -3801,21 +3817,21 @@ function GolfBetsApp() {
         <div className="sectionTitle"><div><h2>1. Campo</h2><p>{courseSetupStage === "course" ? "Busca por nombre o usa tu ubicación ya autorizada." : courseSetupStage === "tee" ? "Elige la salida antes de configurar la ronda." : "Revisa el formato y el hoyo donde comienza el grupo."}</p></div>{courseSetupStage === "course" && <div className="courseSetupActions"><button className="textButton" onClick={() => setTab("courseLibrary")}>Ver campos</button><button className="textButton" onClick={startNewCourse}>+ Campo</button></div>}</div>
         {courseSetupStage === "course" && <>
           {!courseSelected && pendingCourseIdentity && <div className="notice" id="round-course-ai-focus" role="status"><b>Campo reconocido: {pendingCourseIdentity.name}</b><br />{pendingCourseCandidates.length ? "Selecciona el campo para continuar." : "No encontré ese campo exacto en el catálogo actual. Selecciona otro o crea uno manual."}</div>}
-          <CatalogCoursePicker showHeading={false} token={identity.accessToken} selectedName="" onRequest={() => requestFeedback("COURSE")} onSelect={(next, cards) => { retainCatalogCards(cards); selectRoundCourse(next); }} />
-          <details><summary>Mis campos guardados</summary><RoundCoursePicker permissionOwnerId={identity.userId} selectedName="" selectedId="" accessToken={identity.accessToken} pendingName={pendingCourseIdentity?.name} invalid={courseSelectionError} describedBy={[!courseSelected && pendingCourseIdentity ? "round-course-ai-focus" : "", courseSelectionError ? "round-course-error" : ""].filter(Boolean).join(" ") || undefined} onSelect={(selection) => {
+          <CatalogCoursePicker key={`round-catalog-${identity.userId}`} showHeading={false} token={identity.accessToken} permissionOwnerId={identity.userId} selectedName="" onRequest={() => requestFeedback("COURSE")} onSelect={(next, cards) => selectRoundCourse(next, false, cards)} />
+          <details><summary>Mis campos guardados</summary><RoundCoursePicker key={`round-saved-${identity.userId}`} permissionOwnerId={identity.userId} selectedName="" selectedId="" accessToken={identity.accessToken} pendingName={pendingCourseIdentity?.name} invalid={courseSelectionError} describedBy={[!courseSelected && pendingCourseIdentity ? "round-course-ai-focus" : "", courseSelectionError ? "round-course-error" : ""].filter(Boolean).join(" ") || undefined} onSelect={(selection) => {
             const matchingCourse = courseNameOptions.find((candidate) => candidate.catalogCourseId === selection.courseId)
               ?? courseNameOptions.find((candidate) => candidate.id === selection.id)
               ?? courseNameOptions.find((candidate) => candidate.name === selection.name);
-            if (matchingCourse) selectRoundCourse(matchingCourse);
+            if (matchingCourse) selectRoundCourse(matchingCourse, false, teeOptionsForCourse(matchingCourse, courseOptions));
           }} /></details>
           {courseSelectionError && <span id="round-course-error" className="courseSelectionError" role="alert">Selecciona un campo para continuar.</span>}
         </>}
         {courseSetupStage === "tee" && <RoundTeePicker
           courseName={course.name}
           tees={teeOptions}
-          selectedTeeId={course.catalogTeeId || course.id}
+          selectedTeeId={selectedRoundTeeId}
           onSelect={selectRoundTee}
-          onBack={() => { setCourseSelected(false); setPlayerTeeAssignments([]); setCourseSetupStage("course"); }}
+          onBack={() => setCourseSetupStage("course")}
           onMissingTee={() => requestFeedback("TEE", { name: course.name })}
         />}
         {courseSelected && courseSetupStage === "details" && <>

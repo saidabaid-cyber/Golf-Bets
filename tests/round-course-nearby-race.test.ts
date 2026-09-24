@@ -8,11 +8,12 @@ test("buscar cerca suspende la búsqueda por nombre y conserva el orden por dist
   assert.match(picker, /const \[resultMode, setResultMode\] = useState<"name" \| "nearby">\("name"\)/);
   assert.match(picker, /if \(resultMode === "nearby"\) return;/);
   assert.match(picker, /setResultMode\("nearby"\);\s*setSelectedCourseId\(""\);\s*setResults\(\[\]\)/);
-  assert.match(picker, /if \(requestId !== nearbyRequestRef\.current\) return;\s*const next = mergeCourseResults\(\[\], page\.courses \?\? \[\]\)/);
+  assert.match(picker, /if \(requestId !== nearbyRequestRef\.current \|\| controller\.signal\.aborted\) return;\s*const next = mergeCourseResults\(\[\], page\.courses \?\? \[\]\)/);
 });
 
 test("escribir manualmente o tener ubicación desactivada invalida la respuesta cercana anterior sin pedir permiso", () => {
   assert.match(picker, /onChange=\{\(value\) => \{\s*\+\+nearbyRequestRef\.current;\s*setQuery\(value\);\s*setSelectedCourseId\(""\);\s*setResultMode\("name"\)/);
-  assert.match(picker, /if \(!coordinates \|\| !permission\.locationEnabled\) \{\s*if \(requestId === nearbyRequestRef\.current\) \{ setResultMode\("name"\); setNearbyStatus\("denied"\); \}/);
+  assert.match(picker, /if \(location\.status !== "located"\) \{\s*setResultMode\("name"\)/);
+  assert.match(picker, /resolveAuthorizedNearbyLocation/);
   assert.doesNotMatch(picker, /navigator\.geolocation\.getCurrentPosition/);
 });

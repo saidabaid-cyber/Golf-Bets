@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { buildInternalCourseCatalog } from "../../lib/course-catalog";
 import { internalCourseDataProvider, searchInternalCourses, type CourseSearchData } from "../../lib/golf-providers";
 import type { NearbyCourseMatch } from "../../lib/course-distance";
 import type { Course } from "../../lib/types";
-import { refreshDevicePermissionStateWithoutPrompt, requestInitialLocation, storedNearbyCoordinates } from "../../lib/device-permissions";
+import { resolveAuthorizedNearbyLocation, type NearbyLocationResolution } from "../../lib/device-permissions";
 
 type CourseFilter = "all" | "favorites" | "recent" | "nearby" | "mine";
 type SearchState =
@@ -17,7 +17,7 @@ type NearbyState =
   | { status: "requesting" }
   | { status: "ready"; matches: NearbyCourseMatch[] }
   | { status: "empty" }
-  | { status: "denied" | "unsupported" | "error"; message: string };
+  | { status: "disabled" | "prompt" | "denied" | "timeout" | "unsupported" | "error"; message: string };
 
 const EMPTY_NEARBY_MATCHES: NearbyCourseMatch[] = [];
 
@@ -59,10 +59,12 @@ export function CourseLibrary({ courses, favoriteCourseIds, recentCourseIds = []
   const [searchRetry, setSearchRetry] = useState(0);
   const [searchState, setSearchState] = useState<SearchState>(() => ({ status: "ready", data: searchInternalCourses({ courses, limit: 40 }) }));
   const [nearbyState, setNearbyState] = useState<NearbyState>({ status: "idle" });
-  const [teeSelections, setTeeSelections] = useState<Record<string, string>>({});
+  const nearbyController = useRef<AbortController | null>(null);
   const favoriteSet = useMemo(() => new Set(favoriteCourseIds), [favoriteCourseIds]);
   const recentRank = useMemo(() => new Map(recentCourseIds.map((id, index) => [id, index])), [recentCourseIds]);
   const manualCourseCount = useMemo(() => courses.filter((course) => course.builtIn !== true).length, [courses]);
+
+  useEffect(() => () => nearbyController.current?.abort(), [permissionOwnerId]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 280);
@@ -101,30 +103,42 @@ export function CourseLibrary({ courses, favoriteCourseIds, recentCourseIds = []
   }
 
   async function requestNearbyCourses() {
+    nearbyController.current?.abort();
+    const controller = new AbortController();
+    nearbyController.current = controller;
     setFilter("nearby");
     setNearbyState({ status: "requesting" });
-    let permission = await refreshDevicePermissionStateWithoutPrompt(localStorage, permissionOwnerId);
-    let coordinates = storedNearbyCoordinates(localStorage, permissionOwnerId);
-    if (permission.location === "granted" && permission.locationEnabled && !coordinates) {
-      permission = await requestInitialLocation(localStorage, permissionOwnerId);
-      coordinates = storedNearbyCoordinates(localStorage, permissionOwnerId);
-    }
-    if (!coordinates || !permission.locationEnabled) {
-      setNearbyState({ status: permission.location === "unavailable" ? "unsupported" : "denied", message: "Ubicación desactivada. Revísala en Configuración → Privacidad y permisos o busca el campo manualmente." });
+    let location: NearbyLocationResolution;
+    try { location = await resolveAuthorizedNearbyLocation(localStorage, permissionOwnerId, navigator, navigator.geolocation, { signal: controller.signal }); }
+    catch { if (!controller.signal.aborted) setNearbyState({ status: "error", message: "No pudimos consultar la ubicación. Puedes buscar el campo manualmente." }); return; }
+    if (controller.signal.aborted || location.status === "cancelled") return;
+    if (location.status !== "located") {
+      const status = location.status === "disabled" || location.status === "prompt" || location.status === "denied" || location.status === "timeout" ? location.status : "unsupported";
+      const message = status === "disabled"
+        ? "Ubicación desactivada en The Backyard. Revísala en Configuración → Privacidad y permisos o busca el campo manualmente."
+        : status === "prompt"
+          ? "La decisión de ubicación está pendiente. Puedes resolverla desde Privacidad y permisos o buscar manualmente."
+          : status === "denied"
+            ? "Ubicación bloqueada en el dispositivo. La búsqueda manual sigue disponible."
+            : status === "timeout"
+              ? "La ubicación agotó el tiempo; no significa que la hayas rechazado. Puedes reintentar o buscar manualmente."
+              : "No podemos consultar la ubicación en este navegador. Puedes buscar el campo manualmente.";
+      setNearbyState({ status, message });
       return;
     }
     void internalCourseDataProvider.nearbyCourses({
         courses,
-        origin: coordinates,
+        origin: location.point,
         radiusKm: 50,
         limit: 100,
       }).then((result) => {
+        if (controller.signal.aborted) return;
         if (!result.ok) {
           setNearbyState({ status: "error", message: "No pudimos calcular los campos cercanos. Puedes buscarlos manualmente." });
           return;
         }
         setNearbyState(result.data.matches.length ? { status: "ready", matches: result.data.matches } : { status: "empty" });
-      }).catch(() => setNearbyState({ status: "error", message: "No pudimos calcular los campos cercanos. Puedes buscarlos manualmente." }));
+      }).catch(() => { if (!controller.signal.aborted) setNearbyState({ status: "error", message: "No pudimos calcular los campos cercanos. Puedes buscarlos manualmente." }); });
   }
 
   const nearbyMatches = nearbyState.status === "ready" ? nearbyState.matches : EMPTY_NEARBY_MATCHES;
@@ -179,18 +193,16 @@ export function CourseLibrary({ courses, favoriteCourseIds, recentCourseIds = []
 
     {nearbyMessage?.status === "requesting" && <section className="card betaCourseState" aria-live="polite"><span className="betaCourseSpinner" aria-hidden="true" /><div><b>Buscando cerca de ti…</b><p>Tu ubicación no se guarda en tu perfil.</p></div></section>}
     {nearbyMessage?.status === "empty" && <section className="card betaCoursesEmpty" aria-live="polite"><span className="betaEmptyFlag" aria-hidden="true">⌖</span><h2>Aún no hay campos con ubicación verificada.</h2><p>Los campos guardados siguen disponibles en búsqueda manual. No mostramos distancias inventadas.</p><button type="button" className="secondary" onClick={() => setFilter("all")}>Buscar manualmente</button></section>}
-    {nearbyMessage && ["denied", "unsupported", "error"].includes(nearbyMessage.status) && <section className="card betaCoursesEmpty" role="status"><span className="betaEmptyFlag" aria-hidden="true">⌖</span><h2>Usa la búsqueda manual</h2><p>{"message" in nearbyMessage ? nearbyMessage.message : "La ubicación no está disponible."}</p><button type="button" className="secondary" onClick={() => setFilter("all")}>Buscar manualmente</button></section>}
+    {nearbyMessage && ["disabled", "prompt", "denied", "timeout", "unsupported", "error"].includes(nearbyMessage.status) && <section className="card betaCoursesEmpty" role="status"><span className="betaEmptyFlag" aria-hidden="true">⌖</span><h2>Usa la búsqueda manual</h2><p>{"message" in nearbyMessage ? nearbyMessage.message : "La ubicación no está disponible."}</p><button type="button" className="secondary" onClick={() => setFilter("all")}>Buscar manualmente</button></section>}
 
     {displayCatalog.rejectedCount > 0 && <div className="notice bad" role="alert">No mostramos {displayCatalog.rejectedCount} registro{displayCatalog.rejectedCount === 1 ? "" : "s"} con datos incompletos o ambiguos. Sus datos siguen guardados y no se usarán en una ronda hasta quedar válidos.</div>}
 
     {!nearbyMessage && visibleGroups.length ? <section className="betaCourseList" aria-label={`${visibleGroups.length} campos`}>
       {visibleGroups.map((group) => {
         const selectedInGroup = group.selections.find((selection) => selection.id === selectedCourseId);
-        const requestedTeeId = teeSelections[group.id];
-        const chosen = group.selections.find((selection) => selection.id === requestedTeeId) || selectedInGroup || group.selections[0];
+        const chosen = selectedInGroup || group.selections[0];
         const entry = catalogEntryBySelection.get(chosen.id);
         if (!entry?.course || !entry.tee) return null;
-        const yardage = entry.tee.totalYardage;
         const updated = updatedLabel(entry.course.updatedAt || entry.course.verifiedAt);
         const favorite = favoriteSet.has(chosen.id);
         const selected = Boolean(selectedInGroup);
@@ -200,10 +212,10 @@ export function CourseLibrary({ courses, favoriteCourseIds, recentCourseIds = []
             <div>{selected && <span className="betaSelectedCourse">SELECCIONADO</span>}<h2>{entry.course.name}</h2><p>{entry.course.clubName || `Tee ${entry.tee.name}`}{entry.course.city ? ` · ${entry.course.city}` : ""}</p></div>
             <button type="button" className={`betaFavoriteCourse ${favorite ? "active" : ""}`} aria-pressed={favorite} aria-label={`${favorite ? "Quitar" : "Agregar"} ${chosen.name} ${favorite ? "de" : "a"} favoritos`} onClick={() => onToggleFavorite(chosen.id)}>{favorite ? "★" : "☆"}</button>
           </div>
-          {group.selections.length > 1 ? <label className="betaCourseTeeSelect">Tee<select value={chosen.id} onChange={(event) => setTeeSelections((current) => ({ ...current, [group.id]: event.target.value }))}>{group.selections.map((selection) => <option key={selection.id} value={selection.id}>{selection.teeName}{selection.totalYards ? ` · ${selection.totalYards.toLocaleString("es-MX")} yd` : ""}</option>)}</select></label> : <div className="betaCourseSingleTee"><span>Tee</span><b>{chosen.teeName}</b></div>}
-          <div className="betaCourseFacts"><span><small>Hoyos</small><b>{entry.course.holesCount}</b></span><span><small>Par</small><b>{entry.course.par}</b></span>{yardage !== undefined && <span><small>Yardas</small><b>{yardage.toLocaleString("es-MX")}</b></span>}{entry.tee.rating !== undefined && <span><small>Rating</small><b>{entry.tee.rating}</b></span>}{entry.tee.slope !== undefined && <span><small>Slope</small><b>{entry.tee.slope}</b></span>}{distanceKm !== undefined && <span className="betaCourseDistance"><small>Distancia</small><b>{distanceKm.toFixed(1)} km</b></span>}</div>
+          <div className="betaCourseSingleTee"><span>Tees disponibles</span><b>{group.selections.length}</b></div>
+          <div className="betaCourseFacts"><span><small>Hoyos</small><b>{entry.course.holesCount}</b></span><span><small>Par</small><b>{entry.course.par}</b></span>{distanceKm !== undefined && <span className="betaCourseDistance"><small>Distancia</small><b>{distanceKm.toFixed(1)} km</b></span>}</div>
           {updated && <p className="betaCourseUpdated">Datos revisados {updated}</p>}
-          <div className="betaCourseActions"><button type="button" className="primary" onClick={() => onSelectCourse(chosen)}>{selected && chosen.id === selectedCourseId ? "Usar este tee" : "Seleccionar campo"}</button>{onEditCourse && <button type="button" className="secondary" onClick={() => onEditCourse(chosen)}>Editar</button>}</div>
+          <div className="betaCourseActions"><button type="button" className="primary" onClick={() => onSelectCourse(chosen)}>Seleccionar campo</button>{onEditCourse && <button type="button" className="secondary" onClick={() => onEditCourse(chosen)}>Editar</button>}</div>
         </article>;
       })}
     </section> : !nearbyMessage && !searchPending && <section className="card betaCoursesEmpty" aria-live="polite">

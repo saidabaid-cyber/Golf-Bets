@@ -17,7 +17,7 @@ test("nearby courses use real browser location and a strict verified 50 km radiu
   const picker = source("app/components/catalog-course-picker.tsx");
   const catalog = source("lib/review-course-catalog.ts");
   const route = source("app/api/courses/search/route.ts");
-  assert.match(picker, /requestCourseLocation\(navigator\.geolocation/);
+  assert.match(picker, /resolveAuthorizedNearbyLocation\(localStorage,permissionOwnerId/);
   assert.match(catalog, /REVIEWED_NEARBY_DISTANCE_KM = 50/);
   assert.match(catalog, /distance>REVIEWED_NEARBY_DISTANCE_KM/);
   assert.match(route, /radiusKm: 50/);
@@ -30,7 +30,7 @@ test("tee requests enter the existing Admin request queue without a destructive 
   assert.equal(persisted.category, "COURSE");
   assert.equal(persisted.name, "Tee faltante · Campo QA");
   assert.match(persisted.description, /Tee solicitado: Doradas/);
-  assert.match(source("app/components/catalog-course-picker.tsx"), /¿Falta un tee\? Solicitar tee/);
+  assert.match(source("app/components/round-tee-picker.tsx"), /¿Falta un tee\? Solicitar tee/);
 });
 
 test("bag, wedges and ball comparison are guided but preserve explicit manual options", () => {

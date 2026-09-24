@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   disableLocationForApp,
   disableNotificationsForApp,
+  enableLocationForApp,
   emptyDevicePermissionPreferences,
   finishInitialDevicePermissions,
   readDevicePermissionPreferences,
@@ -25,11 +26,16 @@ function statusLabel(status: DevicePermissionPreferences["location"]) {
 export function InitialDevicePermissions({ userId, onContinue }: { userId: string; onContinue: () => void }) {
   const [value, setValue] = useState(() => typeof window === "undefined" ? emptyDevicePermissionPreferences(userId) : readDevicePermissionPreferences(localStorage, userId));
   const [busy, setBusy] = useState<"location" | "notifications" | null>(null);
+  const locationController = useRef<AbortController | null>(null);
+  useEffect(() => () => locationController.current?.abort(), [userId]);
 
   async function location() {
+    locationController.current?.abort();
+    const controller = new AbortController();
+    locationController.current = controller;
     setBusy("location");
-    try { setValue(await requestInitialLocation(localStorage, userId)); }
-    finally { setBusy(null); }
+    try { const next = await requestInitialLocation(localStorage, userId, navigator.geolocation, { signal: controller.signal }); if (!controller.signal.aborted) setValue(next); }
+    finally { if (!controller.signal.aborted) setBusy(null); }
   }
   async function notifications() {
     setBusy("notifications");
@@ -47,18 +53,28 @@ export function InitialDevicePermissions({ userId, onContinue }: { userId: strin
 export function DevicePermissionSettings({ userId }: { userId: string }) {
   const [value, setValue] = useState(() => typeof window === "undefined" ? emptyDevicePermissionPreferences(userId) : readDevicePermissionPreferences(localStorage, userId));
   const [busy, setBusy] = useState(false);
+  const locationController = useRef<AbortController | null>(null);
   useEffect(() => { void refreshDevicePermissionStateWithoutPrompt(localStorage, userId).then(setValue).catch(() => undefined); }, [userId]);
+  useEffect(() => () => locationController.current?.abort(), [userId]);
   async function enableLocation() {
+    locationController.current?.abort();
+    const controller = new AbortController();
+    locationController.current = controller;
     setBusy(true);
-    try { setValue(await requestInitialLocation(localStorage, userId)); }
-    finally { setBusy(false); }
+    try {
+      const refreshed = await refreshDevicePermissionStateWithoutPrompt(localStorage, userId);
+      if (controller.signal.aborted) return;
+      if (refreshed.location === "granted") setValue(enableLocationForApp(localStorage, userId));
+      else setValue(await requestInitialLocation(localStorage, userId, navigator.geolocation, { signal: controller.signal }));
+    }
+    finally { if (!controller.signal.aborted) setBusy(false); }
   }
   return <section className="card accountCompactCard"><h2>Permisos del dispositivo</h2>
     <div className="accountCompactRows"><div><span>Ubicación</span><b>{value.locationEnabled ? statusLabel(value.location) : "Desactivada en The Backyard"}</b></div><div><span>Notificaciones</span><b>{value.notificationsEnabled ? statusLabel(value.notifications) : "Desactivadas en The Backyard"}</b></div></div>
     <p className="hint">Aquí revisas o desactivas el uso dentro de The Backyard. Si el sistema bloqueó un permiso, debes cambiarlo desde los permisos de la app o del dispositivo.</p>
     <div className="accountInlineActions">{value.locationEnabled
       ? <button type="button" className="secondary" onClick={() => setValue(disableLocationForApp(localStorage, userId))}>Desactivar ubicación</button>
-      : <button type="button" className="secondary" disabled={busy || value.location === "denied"} onClick={() => void enableLocation()}>{busy ? "Comprobando…" : value.location === "denied" ? "Ubicación bloqueada" : "Volver a permitir ubicación"}</button>}
+      : <button type="button" className="secondary" disabled={busy} onClick={() => void enableLocation()}>{busy ? "Comprobando…" : value.location === "denied" ? "Volver a comprobar ubicación" : "Volver a permitir ubicación"}</button>}
       {value.notificationsEnabled && <button type="button" className="secondary" onClick={() => setValue(disableNotificationsForApp(localStorage, userId))}>Desactivar notificaciones</button>}</div>
   </section>;
 }

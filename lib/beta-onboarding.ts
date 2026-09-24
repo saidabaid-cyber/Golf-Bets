@@ -2,13 +2,13 @@ export const BETA_ONBOARDING_VERSION = 1 as const;
 
 export const BETA_ONBOARDING_STEPS = [
   "welcome",
+  "permissions",
   "course",
   "ghin",
   "equipment",
   "improvements",
   "objective",
   "plan",
-  "permissions",
   "complete",
 ] as const;
 

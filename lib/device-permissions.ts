@@ -19,9 +19,15 @@ export type DevicePermissionPreferences = {
   updatedAt: string;
 };
 
-type PermissionNavigator = Navigator & { permissions?: { query(input: PermissionDescriptor): Promise<PermissionStatus> } };
+type PermissionNavigator = { permissions?: { query?: (input: PermissionDescriptor) => Promise<PermissionStatus> } };
 type ReadableStorage = Pick<Storage, "getItem">;
 type WritableStorage = Pick<Storage, "setItem">;
+
+export type NearbyLocationResolution =
+  | { status: "located"; point: { latitude: number; longitude: number; capturedAt: string }; source: "cache" | "fresh" }
+  | { status: "disabled" | "prompt" | "denied" | "timeout" | "unavailable" | "query-unsupported" | "geolocation-unavailable" | "cancelled" };
+
+const locationRequestEpochs = new Map<string, number>();
 
 function now() { return new Date().toISOString(); }
 function coordinate(value: number) { return Math.round(value * 100) / 100; }
@@ -97,6 +103,7 @@ export function finishInitialDevicePermissions(storage: ReadableStorage & Writab
 }
 
 export function disableLocationForApp(storage: ReadableStorage & WritableStorage, userId: string) {
+  locationRequestEpochs.set(userId, (locationRequestEpochs.get(userId) || 0) + 1);
   const current = readDevicePermissionPreferences(storage, userId);
   return saveDevicePermissionPreferences(storage, {
     ...current,
@@ -106,13 +113,19 @@ export function disableLocationForApp(storage: ReadableStorage & WritableStorage
   });
 }
 
+export function enableLocationForApp(storage: ReadableStorage & WritableStorage, userId: string) {
+  const current = readDevicePermissionPreferences(storage, userId);
+  if (current.location !== "granted") return current;
+  return saveDevicePermissionPreferences(storage, { ...current, locationEnabled: true, updatedAt: now() });
+}
+
 export function disableNotificationsForApp(storage: ReadableStorage & WritableStorage, userId: string) {
   const current = readDevicePermissionPreferences(storage, userId);
   return saveDevicePermissionPreferences(storage, { ...current, notificationsEnabled: false, updatedAt: now() });
 }
 
 export async function queryBrowserPermissionState(kind: "geolocation" | "notifications", navigatorValue: Navigator = navigator): Promise<DevicePermissionStatus> {
-  const permissions = (navigatorValue as PermissionNavigator).permissions;
+  const permissions = (navigatorValue as unknown as PermissionNavigator).permissions;
   if (!permissions?.query) return "unavailable";
   try {
     const result = await permissions.query({ name: kind === "geolocation" ? "geolocation" : "notifications" } as PermissionDescriptor);
@@ -120,24 +133,46 @@ export async function queryBrowserPermissionState(kind: "geolocation" | "notific
   } catch { return "unavailable"; }
 }
 
-export function requestInitialLocation(storage: ReadableStorage & WritableStorage, userId: string, geolocation: Geolocation | undefined = navigator.geolocation): Promise<DevicePermissionPreferences> {
+export function requestInitialLocation(
+  storage: ReadableStorage & WritableStorage,
+  userId: string,
+  geolocation: Geolocation | undefined = navigator.geolocation,
+  options: { signal?: AbortSignal } = {},
+): Promise<DevicePermissionPreferences> {
   const current = readDevicePermissionPreferences(storage, userId);
   if (!geolocation) return Promise.resolve(saveDevicePermissionPreferences(storage, { ...current, location: "unavailable", updatedAt: now() }));
+  if (options.signal?.aborted) return Promise.resolve(current);
+  const requestEpoch = (locationRequestEpochs.get(userId) || 0) + 1;
+  locationRequestEpochs.set(userId, requestEpoch);
   return new Promise(resolve => {
+    let settled = false;
+    const finish = (value: DevicePermissionPreferences) => {
+      if (settled) return;
+      settled = true;
+      options.signal?.removeEventListener("abort", onAbort);
+      resolve(value);
+    };
+    const onAbort = () => {
+      if (locationRequestEpochs.get(userId) === requestEpoch) locationRequestEpochs.set(userId, requestEpoch + 1);
+      finish(readDevicePermissionPreferences(storage, userId));
+    };
+    options.signal?.addEventListener("abort", onAbort, { once: true });
     geolocation.getCurrentPosition(position => {
       const latest = readDevicePermissionPreferences(storage, userId);
+      if (options.signal?.aborted || locationRequestEpochs.get(userId) !== requestEpoch) return finish(latest);
       const capturedAt = now();
-      resolve(saveDevicePermissionPreferences(storage, { ...latest, location: "granted", locationEnabled: true, coarseLocation: { latitude: coordinate(position.coords.latitude), longitude: coordinate(position.coords.longitude), capturedAt }, updatedAt: capturedAt }));
+      finish(saveDevicePermissionPreferences(storage, { ...latest, location: "granted", locationEnabled: true, coarseLocation: { latitude: coordinate(position.coords.latitude), longitude: coordinate(position.coords.longitude), capturedAt }, updatedAt: capturedAt }));
     }, error => {
       const latest = readDevicePermissionPreferences(storage, userId);
+      if (options.signal?.aborted || locationRequestEpochs.get(userId) !== requestEpoch) return finish(latest);
       const at = now();
       if (error.code === error.PERMISSION_DENIED) {
         const rest = { ...latest };
         delete rest.coarseLocation;
-        resolve(saveDevicePermissionPreferences(storage, { ...rest, location: "denied", locationEnabled: false, updatedAt: at }));
+        finish(saveDevicePermissionPreferences(storage, { ...rest, location: "denied", locationEnabled: false, updatedAt: at }));
         return;
       }
-      resolve(saveDevicePermissionPreferences(storage, { ...latest, location: error.code === error.TIMEOUT ? "timeout" : "unavailable", updatedAt: at }));
+      finish(saveDevicePermissionPreferences(storage, { ...latest, location: error.code === error.TIMEOUT ? "timeout" : "unavailable", updatedAt: at }));
     }, { enableHighAccuracy: false, timeout: 8_000, maximumAge: 0 });
   });
 }
@@ -169,4 +204,103 @@ export function storedNearbyCoordinates(storage: ReadableStorage, userId: string
   const capturedAt = Date.parse(current.coarseLocation.capturedAt);
   if (!Number.isFinite(capturedAt) || at - capturedAt > maxAgeMs || capturedAt - at > 60_000) return null;
   return current.coarseLocation;
+}
+
+function currentPosition(geolocation: Geolocation, signal?: AbortSignal) {
+  return new Promise<GeolocationPosition>((resolve, reject) => {
+    if (signal?.aborted) return reject(new DOMException("Cancelled", "AbortError"));
+    const onAbort = () => reject(new DOMException("Cancelled", "AbortError"));
+    signal?.addEventListener("abort", onAbort, { once: true });
+    geolocation.getCurrentPosition(
+      position => {
+        signal?.removeEventListener("abort", onAbort);
+        if (signal?.aborted) reject(new DOMException("Cancelled", "AbortError"));
+        else resolve(position);
+      },
+      error => {
+        signal?.removeEventListener("abort", onAbort);
+        reject(error);
+      },
+      { enableHighAccuracy: false, timeout: 8_000, maximumAge: 0 },
+    );
+  });
+}
+
+/**
+ * Resolves a nearby-course position without opening a browser permission prompt.
+ * The app-level opt-in and the effective browser permission are independent gates.
+ */
+export async function resolveAuthorizedNearbyLocation(
+  storage: ReadableStorage & WritableStorage,
+  userId: string,
+  navigatorValue: Navigator,
+  geolocation: Geolocation | undefined,
+  options: { signal?: AbortSignal; at?: number } = {},
+): Promise<NearbyLocationResolution> {
+  const initial = readDevicePermissionPreferences(storage, userId);
+  if (!initial.locationEnabled) return { status: "disabled" };
+  if (!geolocation) return { status: "geolocation-unavailable" };
+  if (options.signal?.aborted) return { status: "cancelled" };
+
+  const permissions = (navigatorValue as unknown as PermissionNavigator).permissions;
+  let effective: DevicePermissionStatus = initial.location;
+  if (permissions?.query) {
+    effective = await queryBrowserPermissionState("geolocation", navigatorValue);
+    if (options.signal?.aborted) return { status: "cancelled" };
+    if (effective === "denied") {
+      const denied = { ...readDevicePermissionPreferences(storage, userId), location: "denied" as const, locationEnabled: false, updatedAt: now() };
+      delete denied.coarseLocation;
+      saveDevicePermissionPreferences(storage, denied);
+      return { status: "denied" };
+    }
+    if (effective === "prompt") {
+      const current = readDevicePermissionPreferences(storage, userId);
+      saveDevicePermissionPreferences(storage, { ...current, location: "prompt", updatedAt: now() });
+      return { status: "prompt" };
+    }
+  } else if (effective === "unknown" || effective === "unavailable") {
+    return { status: "query-unsupported" };
+  }
+
+  if (effective !== "granted") {
+    if (effective === "denied") return { status: "denied" };
+    if (effective === "prompt") return { status: "prompt" };
+    return { status: "query-unsupported" };
+  }
+
+  const current = readDevicePermissionPreferences(storage, userId);
+  if (!current.locationEnabled) return { status: "disabled" };
+  if (current.location !== "granted") {
+    saveDevicePermissionPreferences(storage, { ...current, location: "granted", updatedAt: now() });
+  }
+  const cached = storedNearbyCoordinates(storage, userId, options.at);
+  if (cached) return { status: "located", point: cached, source: "cache" };
+
+  const requestEpoch = (locationRequestEpochs.get(userId) || 0) + 1;
+  locationRequestEpochs.set(userId, requestEpoch);
+  try {
+    const position = await currentPosition(geolocation, options.signal);
+    if (options.signal?.aborted || locationRequestEpochs.get(userId) !== requestEpoch) return { status: "cancelled" };
+    const latest = readDevicePermissionPreferences(storage, userId);
+    if (!latest.locationEnabled) return { status: "cancelled" };
+    const capturedAt = new Date(options.at ?? Date.now()).toISOString();
+    const point = { latitude: coordinate(position.coords.latitude), longitude: coordinate(position.coords.longitude), capturedAt };
+    saveDevicePermissionPreferences(storage, { ...latest, location: "granted", coarseLocation: point, updatedAt: capturedAt });
+    return { status: "located", point, source: "fresh" };
+  } catch (error) {
+    if (options.signal?.aborted || (error instanceof DOMException && error.name === "AbortError")) return { status: "cancelled" };
+    const positionError = error as GeolocationPositionError;
+    if (positionError.code === positionError.PERMISSION_DENIED) {
+      const latest = { ...readDevicePermissionPreferences(storage, userId), location: "denied" as const, locationEnabled: false, updatedAt: now() };
+      delete latest.coarseLocation;
+      saveDevicePermissionPreferences(storage, latest);
+      return { status: "denied" };
+    }
+    if (positionError.code === positionError.TIMEOUT) {
+      const latest = readDevicePermissionPreferences(storage, userId);
+      saveDevicePermissionPreferences(storage, { ...latest, location: "timeout", updatedAt: now() });
+      return { status: "timeout" };
+    }
+    return { status: "unavailable" };
+  }
 }

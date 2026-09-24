@@ -88,11 +88,13 @@ test("planes Beta exponen entitlements sin precio ni cobro", () => {
   assert.equal(PLAN_CATALOG.some((plan) => "price" in plan), false);
 });
 
-test("onboarding termina después de permisos sin crear grupos ni apuestas", () => {
+test("permisos se resuelven antes del campo y el onboarding termina sin grupos ni apuestas", () => {
   const started = createBetaOnboardingProgress("user-1", "2026-09-07T12:00:00.000Z");
   const permissions = advanceBetaOnboarding(started, "permissions", { now: "2026-09-07T12:05:00.000Z" });
   assert.equal(permissions.status, "in_progress");
-  const completed = completeBetaOnboarding(permissions, { now: "2026-09-07T12:06:00.000Z" });
+  const course = advanceBetaOnboarding(permissions, "course", { now: "2026-09-07T12:05:30.000Z" });
+  assert.ok(course.completedSteps.includes("permissions"));
+  const completed = completeBetaOnboarding(course, { now: "2026-09-07T12:06:00.000Z" });
   assert.equal(completed.status, "complete");
   assert.equal(completed.step, "complete");
   assert.equal(betaOnboardingIsActive(completed), false);

@@ -9,8 +9,8 @@ test("la biblioteca usa el permiso resuelto en onboarding sin disparar otro prom
   const handlerStart = courseLibrary.indexOf("async function requestNearbyCourses()");
   assert.ok(handlerStart >= 0);
   assert.doesNotMatch(courseLibrary, /navigator\.geolocation\.getCurrentPosition/);
-  assert.match(courseLibrary, /storedNearbyCoordinates/);
-  assert.match(courseLibrary, /refreshDevicePermissionStateWithoutPrompt/);
+  assert.match(courseLibrary, /resolveAuthorizedNearbyLocation/);
+  assert.doesNotMatch(courseLibrary, /requestInitialLocation/);
   assert.match(courseLibrary, /Ubicación desactivada/);
   assert.match(courseLibrary, /radiusKm: 50/);
   assert.match(courseLibrary, /No mostramos distancias inventadas/);
@@ -24,7 +24,8 @@ test("la búsqueda usa debounce, estados accesibles y paginación sin cargar el 
   assert.match(courseLibrary, /role="alert"/);
   assert.match(courseLibrary, /Cargar más campos/);
   assert.match(courseLibrary, /groupSelections\(visibleCourses\)/);
-  assert.match(courseLibrary, /className="betaCourseTeeSelect"/);
+  assert.doesNotMatch(courseLibrary, /className="betaCourseTeeSelect"/);
+  assert.match(courseLibrary, /Tees disponibles/);
   assert.match(courseLibrary, /Mis campos · \{manualCourseCount\}/);
   assert.match(courseLibrary, /filter === "mine" && course\.builtIn === true/);
   assert.match(courseLibrary, /Aún no tienes campos propios/);
@@ -40,5 +41,5 @@ test("Nueva Ronda busca Campo de forma paginada y mantiene Tees por jugador", ()
   assert.doesNotMatch(page, /<select id="round-course"/);
   assert.match(page, /<b>TEES<\/b>/);
   assert.match(page, /updatePlayerTeeAssignment/);
-  assert.match(page, /function selectRoundCourse\(nextCourse: Course, returnToSetup = false\)/);
+  assert.match(page, /function selectRoundCourse\(nextCourse: Course, returnToSetup = false, suppliedCards\?: Course\[\]\)/);
 });

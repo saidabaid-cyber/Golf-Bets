@@ -19,6 +19,8 @@ export function StartHoleSelector({
 }) {
   const availableHoles = [...new Set(holes.filter((hole) => Number.isInteger(hole) && hole > 0 && hole <= 18))].sort((left, right) => left - right);
   const choices = availableHoles.length ? availableHoles : DEFAULT_HOLES;
+  const firstHole = choices[0];
+  const lastHole = choices[choices.length - 1];
   return <fieldset className={styles.fieldset} disabled={disabled}>
     <legend>{label}</legend>
     <div className={styles.rail} role="radiogroup" aria-label={label}>
@@ -31,6 +33,6 @@ export function StartHoleSelector({
         onClick={() => onChange(hole)}
       >{hole}</button>)}
     </div>
-    <small>La tarjeta seguirá el orden desde H{value} y hará una sola vuelta después del 18.</small>
+    <small>La tarjeta seguirá el orden desde H{value}; después de H{lastHole} continuará en H{firstHole} una sola vez.</small>
   </fieldset>;
 }

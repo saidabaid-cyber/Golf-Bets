@@ -57,7 +57,7 @@ test("componente dispara APIs nativas sólo desde CTAs explícitos y ofrece sali
   assert.doesNotMatch(source, /Agregar a pantalla de inicio|Cómo instalar The Backyard/);
   assert.match(source, /Ajustes &gt; Apps &gt; Safari &gt; Ubicación/);
   assert.doesNotMatch(source, /Administrar ubicación|Administrar notificaciones/);
-  assert.match(coursePicker, /Conservamos una posición aproximada sólo durante unos minutos/);
+  assert.match(coursePicker, /ubicación aproximada ya autorizada/);
   assert.doesNotMatch(coursePicker, /No la guardamos ni enviamos/);
 });
 
@@ -77,7 +77,7 @@ test("Home Club usa modo de club sin selección de tee ni ratings", () => {
   const onboarding = readFileSync("app/components/beta-onboarding-flow.tsx", "utf8");
   const picker = readFileSync("app/components/catalog-course-picker.tsx", "utf8");
   const profile = readFileSync("app/components/profile-account-panel.tsx", "utf8");
-  assert.match(onboarding, /purpose="home-club"/);
+  assert.match(onboarding, /CatalogCoursePicker[^>]*purpose="home-club"/);
   assert.match(onboarding, /!profile\.homeClubId \|\| !profile\.homeCourseId \|\| !homeClubSelectionReady/);
   assert.match(onboarding, /onSelectHomeCourse=/);
   assert.match(onboarding, /if\(result!==['"]cloud['"]\)throw new Error\(['"]No pudimos confirmar tu Home Club en la nube\. Reintenta para continuar\./);
@@ -89,9 +89,9 @@ test("Home Club usa modo de club sin selección de tee ni ratings", () => {
   const scorecardFetch = picker.indexOf("/api/courses/catalog?courseId", homeSelection);
   assert.ok(homeSelection >= 0 && homeSelection < homePersisted && homePersisted < homeReady && homeReady < scorecardFetch, "Home Club confirma persistencia antes de ready y sale antes del fetch de tees");
   assert.match(picker, /selectedClubCourses\.length>1&&<label>Recorrido/);
-  assert.match(picker, /purpose==='round'&&cards\.length>0&&<label>Salida \/ tee inicial/);
-  assert.match(picker, /purpose==='round'&&cards\.length>0&&<details/);
-  assert.match(profile, /<CatalogCoursePicker purpose="home-club"/);
+  assert.doesNotMatch(picker, /Salida \/ tee inicial/);
+  assert.doesNotMatch(picker, /Ratings y tees por jugador/);
+  assert.match(profile, /<CatalogCoursePicker[^>]*purpose="home-club"/);
   assert.match(profile, /homeClubSelectionIncomplete/);
   assert.doesNotMatch(profile, /<ProfileClubPicker/);
 });
