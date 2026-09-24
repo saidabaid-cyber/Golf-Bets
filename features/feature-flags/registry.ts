@@ -70,6 +70,10 @@ export const PHASE2_FEATURE_FLAGS: readonly FeatureFlagDefinition[] = [
 
 export type FeatureFlagOverrides = Partial<Record<Phase2FeatureFlagId, boolean>>;
 
+const PRODUCTION_LOCKED_FLAGS = new Set<Phase2FeatureFlagId>([
+  "ghin_integration",
+]);
+
 export function featureFlagEnvironment(value: string | undefined): FeatureFlagEnvironment {
   const normalized = String(value ?? "").trim().toLowerCase();
   if (normalized === "production") return "production";
@@ -84,7 +88,10 @@ export function resolvePhase2FeatureFlags(
 ): Readonly<Record<Phase2FeatureFlagId, boolean>> {
   return Object.fromEntries(PHASE2_FEATURE_FLAGS.map((definition) => {
     const fallback = environment === "production" ? definition.productionDefault : definition.previewDefault;
-    return [definition.id, overrides[definition.id] ?? fallback];
+    const override = environment === "production" && PRODUCTION_LOCKED_FLAGS.has(definition.id)
+      ? false
+      : overrides[definition.id];
+    return [definition.id, override ?? fallback];
   })) as Record<Phase2FeatureFlagId, boolean>;
 }
 
