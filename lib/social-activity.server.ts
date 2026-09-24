@@ -449,7 +449,10 @@ async function refreshAuthorizedRow(ctx: SocialContext, row: ActivityRow) {
   return authorizedRow(ctx, row.id);
 }
 async function recoverVisibleSources(ctx: SocialContext) {
-  const { data, error } = await recoveryStep("friendships", () => ctx.admin.from("friendships")
+  // Discovery is viewer-scoped and must use the authenticated client. RLS is
+  // the authority for which friendships and activities this viewer may see;
+  // the elevated client is reserved for repairing an already-authorized source.
+  const { data, error } = await recoveryStep("friendships", () => ctx.client.from("friendships")
     .select("user_a_id,user_b_id")
     .or(`user_a_id.eq.${ctx.userId},user_b_id.eq.${ctx.userId}`).limit(201));
   if (error) recoveryDbError("friendships", error);
@@ -462,7 +465,7 @@ async function recoverVisibleSources(ctx: SocialContext) {
   let truncated = false;
   const md5Pattern = "_".repeat(32); // SQL LIKE: exactly 32 chars, never a definitive SHA-256.
   for (let offset = 0; offset < authorIds.length; offset += 50) {
-    const { data: provisional, count, error: candidateError } = await recoveryStep("legacy_candidates", () => ctx.admin.from("social_activities_v3")
+    const { data: provisional, count, error: candidateError } = await recoveryStep("legacy_candidates", () => ctx.client.from("social_activities_v3")
       .select("author_id,event_kind", { count: "exact" }).in("author_id", authorIds.slice(offset, offset + 50))
       .eq("active", true).like("material_hash", md5Pattern)
       .order("updated_at", { ascending: false }).limit(201));

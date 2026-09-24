@@ -16,3 +16,17 @@ test("feed recovery is best-effort and cannot convert an authorized feed read in
   assert.match(listActivityBlock, /await recoverVisibleSourcesBestEffort\(ctx\);/);
   assert.doesNotMatch(listActivityBlock, /await recoverVisibleSources\(ctx\);/);
 });
+
+test("recovery discovers only viewer-visible sources through user RLS and elevates only the repair", () => {
+  const recoveryBlock = source.slice(
+    source.indexOf("async function recoverVisibleSources(ctx"),
+    source.indexOf("async function recoverVisibleSourcesBestEffort"),
+  );
+
+  assert.match(recoveryBlock, /ctx\.client\.from\("friendships"\)/);
+  assert.match(recoveryBlock, /ctx\.client\.from\("social_activities_v3"\)/);
+  assert.doesNotMatch(recoveryBlock, /ctx\.admin\.from\("friendships"\)/);
+  assert.doesNotMatch(recoveryBlock, /ctx\.admin\.from\("social_activities_v3"\)/);
+  assert.match(recoveryBlock, /reconcileSocialRoundActivities\(ctx\.admin, authorId\)/);
+  assert.match(recoveryBlock, /reconcileSocialEquipmentActivity\(ctx\.admin, authorId\)/);
+});
