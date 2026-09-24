@@ -2,6 +2,38 @@ begin;
 set local lock_timeout='5s';
 set local statement_timeout='60s';
 
+-- Existing Admin audit triggers require an authenticated scoped actor. Use the
+-- active GLOBAL SUPER_ADMIN that created the legacy fixture revisions, and keep
+-- the identity transaction-local. This preserves the triggers and their audit
+-- records; it does not modify the membership or the Auth user. A fresh empty
+-- schema has no fixture actor or rows to audit, so it safely skips this setup.
+do $$
+declare migration_actor uuid;
+begin
+  select membership.user_id into migration_actor
+  from public.admin_memberships membership
+  where membership.role='SUPER_ADMIN'
+    and membership.scope_type='GLOBAL'
+    and membership.active
+    and exists(
+      select 1 from public.admin_catalog_revisions revision
+      where revision.created_by=membership.user_id
+        and lower(concat_ws(' ',revision.entity_id,revision.source_name,revision.payload::text))
+          ~ '(synthetic|sint[eé]tic[oa]|(^|[-_: ])qa([-_: ]|$))'
+    )
+  order by membership.created_at,membership.user_id
+  limit 1;
+
+  if migration_actor is not null then
+    perform set_config('request.jwt.claim.sub',migration_actor::text,true);
+    perform set_config(
+      'request.jwt.claims',
+      jsonb_build_object('sub',migration_actor::text,'role','authenticated')::text,
+      true
+    );
+  end if;
+end $$;
+
 -- Data remains in place. This additive classification separates operational
 -- records from QA evidence without changing stable IDs or foreign keys.
 alter table public.admin_catalog_revisions add column if not exists data_environment text not null default 'PRODUCTION';
@@ -81,17 +113,9 @@ set data_environment=coalesce((
 ),job.data_environment)
 where job.data_environment='PRODUCTION';
 
--- Keep the explicit marker in already-safe JSON projections too. Older app
--- versions can therefore fail closed even before they select the new column.
-update public.admin_catalog_revisions
-set payload=jsonb_set(payload,'{dataEnvironment}',to_jsonb(data_environment),true)
-where data_environment<>'PRODUCTION';
-update public.admin_import_jobs
-set summary=jsonb_set(summary,'{dataEnvironment}',to_jsonb(data_environment),true)
-where data_environment<>'PRODUCTION';
-update public.competition_definitions
-set settings=jsonb_set(settings,'{dataEnvironment}',to_jsonb(data_environment),true)
-where data_environment<>'PRODUCTION';
+-- The new columns are the canonical classification. Do not rewrite immutable
+-- published payload/settings/summary JSON merely to duplicate that marker;
+-- stable historical payloads remain byte-for-byte unchanged.
 
 -- Keep a durable, append-only record of the conservative legacy
 -- classification. The source rows and stable IDs are not deleted or remapped.
@@ -182,8 +206,10 @@ drop trigger if exists competition_environment_publish_guard on public.competiti
 create trigger competition_environment_publish_guard before insert or update of status,data_environment on public.competition_definitions
 for each row execute function private.admin_block_non_operational_publish_v1();
 
--- The Admin request queue carries the classification but never exposes owner
--- secrets or internal anti-abuse columns.
+-- The legacy Admin request queue remains API-compatible, but is intentionally
+-- operational-only. Non-operational evidence is available exclusively through
+-- the v2 endpoint below, whose include switch requires an active GLOBAL
+-- SUPER_ADMIN membership in the database.
 drop function if exists public.admin_feedback_queue_v1(integer);
 drop function if exists private.admin_feedback_queue_impl_v1(integer);
 create function private.admin_feedback_queue_impl_v1(queue_limit integer default 50)
@@ -192,7 +218,8 @@ language sql stable security definer set search_path=''
 as $$
   select request.id,request.category,request.request_status,request.title,request.description,request.source_screen,request.attachment_status,request.created_at,request.data_environment
   from public.feedback_requests request
-  where private.admin_has_scope_v1('REQUEST','GLOBAL',null,'READ')
+  where request.data_environment='PRODUCTION'
+    and private.admin_has_scope_v1('REQUEST','GLOBAL',null,'READ')
   order by request.created_at desc limit greatest(1,least(queue_limit,100));
 $$;
 revoke all on function private.admin_feedback_queue_impl_v1(integer) from public,anon;

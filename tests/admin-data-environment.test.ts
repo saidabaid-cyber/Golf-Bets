@@ -196,6 +196,25 @@ test("QA requests remain evidence and cannot become operational drafts", () => {
   assert.match(migration, /request_row\.data_environment<>'PRODUCTION'/);
 });
 
+test("legacy feedback queue is operational-only and v2 owns the SUPER_ADMIN QA switch", () => {
+  const legacyQueue = migration.match(
+    /create function private\.admin_feedback_queue_impl_v1[\s\S]*?revoke all on function private\.admin_feedback_queue_impl_v1/,
+  )?.[0];
+  const versionedQueue = migration.match(
+    /create or replace function public\.admin_feedback_queue_page_v2[\s\S]*?revoke all on function public\.admin_feedback_queue_page_v2/,
+  )?.[0];
+
+  assert.ok(legacyQueue);
+  assert.match(legacyQueue, /request\.data_environment='PRODUCTION'/);
+  assert.doesNotMatch(legacyQueue, /include_non_operational/);
+
+  assert.ok(versionedQueue);
+  assert.match(versionedQueue, /include_non_operational/);
+  assert.match(versionedQueue, /membership\.role='SUPER_ADMIN'/);
+  assert.match(versionedQueue, /membership\.scope_type='GLOBAL'/);
+  assert.match(versionedQueue, /membership\.active/);
+});
+
 test("classification migration is additive and keeps RLS/audit controls", () => {
   for (const table of ["admin_catalog_revisions", "admin_import_jobs", "course_configurations", "competition_definitions", "feedback_requests"]) {
     assert.match(migration, new RegExp(`alter table public\\.${table} add column if not exists data_environment`));
@@ -203,6 +222,20 @@ test("classification migration is additive and keeps RLS/audit controls", () => 
   assert.doesNotMatch(migration, /drop table|truncate|delete from/i);
   assert.match(schema, /grant select on public\.admin_audit_log to authenticated/);
   assert.match(schema, /admin_audit_log/);
+});
+
+test("migration keeps Admin audit triggers active with a transaction-local scoped actor", () => {
+  assert.match(migration, /membership\.role='SUPER_ADMIN'/);
+  assert.match(migration, /membership\.scope_type='GLOBAL'/);
+  assert.match(migration, /if migration_actor is not null then/);
+  assert.match(migration, /set_config\('request\.jwt\.claim\.sub',migration_actor::text,true\)/);
+  assert.doesNotMatch(migration, /disable trigger|session_replication_role/i);
+});
+
+test("migration preserves immutable published JSON and classifies through columns", () => {
+  assert.doesNotMatch(migration, /set payload=jsonb_set|set settings=jsonb_set|set summary=jsonb_set/i);
+  assert.match(migration, /new\.data_environment<>'PRODUCTION'/);
+  assert.match(migration, /revision\.data_environment='PRODUCTION'/);
 });
 
 test("classification and blocked legacy publications remain auditable", () => {
