@@ -281,7 +281,7 @@ export async function reconcileSocialEquipmentActivity(admin: SupabaseClient, us
 export async function getPreferences(ctx: SocialContext): Promise<SocialPreferencesResult> {
   const { data, error } = await ctx.client.from("social_activity_preferences_v3")
     .select("*").eq("user_id", ctx.userId).maybeSingle();
-  if (error) recoveryDbError("friendships", error);
+  if (error) dbError(error);
   return { data: { ...prefsFromRow(data), enabledForFriends: await socialPrivacy(ctx.client, ctx.userId) } };
 }
 export async function updatePreferences(ctx: SocialContext, preferences: unknown): Promise<SocialPreferencesResult> {
@@ -452,7 +452,7 @@ async function recoverVisibleSources(ctx: SocialContext) {
   const { data, error } = await recoveryStep("friendships", () => ctx.admin.from("friendships")
     .select("user_a_id,user_b_id")
     .or(`user_a_id.eq.${ctx.userId},user_b_id.eq.${ctx.userId}`).limit(201));
-  if (error) dbError(error);
+  if (error) recoveryDbError("friendships", error);
   if ((data || []).length > 200)
     throw new SocialRecoveryError("bounded_batch", new SocialServiceError("MUTATION_FAILED", 503, "El feed tiene demasiadas fuentes para recuperarse en una solicitud."));
   const authorIds = [...new Set([
