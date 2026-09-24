@@ -2,6 +2,20 @@ import { equipmentIdentityKey, type EquipmentIdentity } from "./admin-control-ce
 
 export type ImportRowStatus = "NEW" | "UPDATE" | "POSSIBLE_DUPLICATE" | "INVALID" | "NO_CHANGE";
 export type ImportPreviewRow<T> = { rowNumber: number; status: ImportRowStatus; value: T | null; existingId: string | null; issues: string[] };
+export type AdminImportKind = "COURSE" | "CLUB_EQUIPMENT" | "BALL" | "SHAFT";
+export type AdminImportFormat = "CSV" | "JSON";
+
+const CSV_HEADERS: Record<AdminImportKind, readonly string[]> = {
+  COURSE: ["id", "name", "clubId", "clubName", "holes", "country", "stateRegion", "city", "sourceName", "sourceUrl", "verifiedAt", "sourceType", "confidence"],
+  CLUB_EQUIPMENT: ["id", "brand", "model", "generation", "year", "category", "subCategory", "handedness", "lofts", "standardLength", "lie", "headVolume", "setMakeup", "stockShafts", "stockFlexes", "sourceName", "sourceUrl", "verifiedAt", "sourceType", "confidence", "active", "bagEligible"],
+  BALL: ["id", "brand", "model", "generation", "year", "coverMaterial", "construction", "constructionPieces", "compression", "compressionType", "flight", "driverSpin", "ironSpin", "shortGameSpin", "feel", "colors", "priceTier", "targetProfile", "sourceName", "sourceUrl", "verifiedAt", "sourceType", "confidence", "active", "bagEligible"],
+  SHAFT: ["id", "brand", "model", "generation", "year", "usage", "oemStockOrAftermarket", "weightOptions", "flexOptions", "launch", "spin", "material", "torqueRange", "tipDiameter", "buttDiameter", "sourceName", "sourceUrl", "verifiedAt", "sourceType", "confidence", "active", "bagEligible"],
+};
+
+/** A controlled import starts with schema only; fixture/example rows are never payload. */
+export function controlledImportTemplate(kind: AdminImportKind, format: AdminImportFormat) {
+  return format === "JSON" ? "[]" : CSV_HEADERS[kind].join(",");
+}
 
 export function parseControlledCsv(input: string): string[][] {
   if (new TextEncoder().encode(input).byteLength > 2_000_000) throw new Error("IMPORT_TOO_LARGE");

@@ -10,7 +10,7 @@ import {
   publicationIsEffective,
   validatePublicationEvidence,
 } from "../lib/admin-control-center";
-import { csvObjects, equipmentImportPreview, jsonObjects, parseControlledCsv } from "../lib/admin-imports";
+import { controlledImportTemplate, csvObjects, equipmentImportPreview, jsonObjects, parseControlledCsv } from "../lib/admin-imports";
 import { validateAdminDocument } from "../lib/admin-documents";
 import { mergePublishedCatalog, resolveCatalogItem } from "../lib/layered-catalog";
 
@@ -61,6 +61,23 @@ test("controlled JSON import requires an array of object rows", () => {
   assert.deepEqual(jsonObjects('[{"id":"synthetic-1","sourceName":"QA"}]'), [{ rowNumber: 1, value: { id: "synthetic-1", sourceName: "QA" } }]);
   assert.throws(() => jsonObjects('{"id":"not-an-array"}'), /JSON_ARRAY_REQUIRED/);
   assert.throws(() => jsonObjects('["not-an-object"]'), /INVALID_JSON_ROW_1/);
+});
+
+test("controlled import templates follow the selected catalog and never include fixture rows", () => {
+  const course = controlledImportTemplate("COURSE", "CSV");
+  const club = controlledImportTemplate("CLUB_EQUIPMENT", "CSV");
+  const ball = controlledImportTemplate("BALL", "CSV");
+  const shaft = controlledImportTemplate("SHAFT", "CSV");
+
+  assert.equal(course, "id,name,clubId,clubName,holes,country,stateRegion,city,sourceName,sourceUrl,verifiedAt,sourceType,confidence");
+  assert.match(club, /category,subCategory,handedness,lofts/);
+  assert.match(ball, /coverMaterial,construction,constructionPieces,compression/);
+  assert.match(shaft, /usage,oemStockOrAftermarket,weightOptions,flexOptions/);
+  assert.equal(controlledImportTemplate("COURSE", "JSON"), "[]");
+  for (const template of [course, club, ball, shaft]) {
+    assert.equal(template.split("\n").length, 1);
+    assert.doesNotMatch(template, /synthetic|fixture|test model/i);
+  }
 });
 
 test("equipment import preview reports new, update, duplicate, invalid and no-change", () => {

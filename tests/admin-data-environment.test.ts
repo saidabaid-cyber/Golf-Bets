@@ -171,8 +171,7 @@ test("operational search and filter helpers omit QA records", () => {
 test("new Course and import forms never preload synthetic fixtures", () => {
   assert.doesNotMatch(component, /placeholder="synthetic-(?:club|course)"/);
   assert.match(component, /placeholder="club-estable"/);
-  assert.match(component, /const csvTemplate = "id,brand,model,generation,year,category,usage,sourceName,sourceUrl"/);
-  assert.match(component, /const jsonTemplate = "\[\]"/);
+  assert.match(component, /controlledImportTemplate\("COURSE", "CSV"\)/);
   assert.doesNotMatch(component, /synthetic-test,Synthetic,Test Model/);
 });
 
