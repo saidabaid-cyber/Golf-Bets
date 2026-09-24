@@ -507,8 +507,12 @@ class MemoryDrive {
     return file;
   }
 
-  async getFile(id) {
+  async getBackupRoot(id) {
     if (id === 'fixture_root_folder_123') return { id, name: googleDriveInternals.ROOT_FOLDER_NAME, mimeType: googleDriveInternals.FOLDER_MIME, trashed: false };
+    return undefined;
+  }
+
+  async getFile(id) {
     return this.files.get(id);
   }
 
@@ -645,6 +649,107 @@ test('Drive resumable upload recovers from a transient chunk failure without cha
     `bytes ${256 * 1024}-${(512 * 1024) - 1}/${bytes.length}`,
     `bytes ${512 * 1024}-${bytes.length - 1}/${bytes.length}`,
   ]);
+});
+
+test('Drive root resolution accepts only the configured Shared Drive and scopes child queries to it', async () => {
+  const rootId = 'shared_drive_root_123', requests = [];
+  const client = new GoogleDriveClient('fixture-access-token', async (input, init = {}) => {
+    const url = new URL(input); requests.push(url);
+    assert.equal(new Headers(init.headers).get('authorization'), 'Bearer fixture-access-token');
+    if (url.pathname === `/drive/v3/drives/${rootId}`) {
+      assert.equal(url.searchParams.get('fields'), 'id,name,kind,hidden,capabilities(canAddChildren,canListChildren)');
+      return new Response(JSON.stringify({
+        id: rootId, name: googleDriveInternals.ROOT_FOLDER_NAME, kind: 'drive#drive', hidden: false,
+        capabilities: { canAddChildren: true, canListChildren: true },
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    assert.equal(url.pathname, '/drive/v3/files');
+    assert.equal(url.searchParams.get('corpora'), 'drive');
+    assert.equal(url.searchParams.get('driveId'), rootId);
+    assert.equal(url.searchParams.get('includeItemsFromAllDrives'), 'true');
+    assert.equal(url.searchParams.get('supportsAllDrives'), 'true');
+    assert.match(url.searchParams.get('fields'), /incompleteSearch/);
+    return new Response(JSON.stringify({ files: [] }), { status: 200, headers: { 'content-type': 'application/json' } });
+  });
+  const root = await client.getBackupRoot(rootId);
+  assert.deepEqual(root, {
+    id: rootId, name: googleDriveInternals.ROOT_FOLDER_NAME,
+    mimeType: googleDriveInternals.FOLDER_MIME, trashed: false, driveId: rootId,
+  });
+  assert.deepEqual(await client.listChildren(rootId), []);
+  assert.equal(requests.length, 2);
+  assert.ok(!requests.some(url => url.pathname === '/drive/v3/drives'), 'never enumerates other Shared Drives');
+});
+
+test('Drive root resolution also supports an exact backup folder inside a Shared Drive', async () => {
+  const folderId = 'backup_folder_123', driveId = 'shared_drive_parent_123';
+  const client = new GoogleDriveClient('fixture-access-token', async (input) => {
+    const url = new URL(input);
+    if (url.pathname === `/drive/v3/drives/${folderId}`) return new Response(null, { status: 404 });
+    if (url.pathname === `/drive/v3/files/${folderId}`) {
+      return new Response(JSON.stringify({
+        id: folderId, name: googleDriveInternals.ROOT_FOLDER_NAME,
+        mimeType: googleDriveInternals.FOLDER_MIME, driveId, trashed: false,
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    assert.equal(url.pathname, '/drive/v3/files');
+    assert.equal(url.searchParams.get('corpora'), 'drive');
+    assert.equal(url.searchParams.get('driveId'), driveId);
+    assert.match(url.searchParams.get('q'), new RegExp(`^'${folderId}' in parents`));
+    return new Response(JSON.stringify({ files: [], incompleteSearch: false }), {
+      status: 200, headers: { 'content-type': 'application/json' },
+    });
+  });
+  const root = await client.getBackupRoot(folderId);
+  assert.equal(root.id, folderId);
+  assert.equal(root.driveId, driveId);
+  assert.deepEqual(await client.listChildren(folderId), []);
+});
+
+test('Drive folder root resolution rejects missing or true trashed state', async () => {
+  const folderId = 'backup_folder_123';
+  for (const file of [
+    { id: folderId, name: googleDriveInternals.ROOT_FOLDER_NAME, mimeType: googleDriveInternals.FOLDER_MIME },
+    { id: folderId, name: googleDriveInternals.ROOT_FOLDER_NAME, mimeType: googleDriveInternals.FOLDER_MIME, trashed: true },
+  ]) {
+    const client = new GoogleDriveClient('fixture-access-token', async (input) => {
+      const url = new URL(input);
+      if (url.pathname.startsWith('/drive/v3/drives/')) return new Response(null, { status: 404 });
+      return new Response(JSON.stringify(file), { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    await assert.rejects(client.getBackupRoot(folderId), /GDRIVE_ROOT_FOLDER_NOT_ACCESSIBLE/);
+  }
+});
+
+test('Drive root resolution fails closed for a different or read-only Shared Drive', async () => {
+  const rootId = 'shared_drive_root_123';
+  for (const drive of [
+    { id: rootId, name: 'Another Drive', kind: 'drive#drive', capabilities: { canAddChildren: true, canListChildren: true } },
+    { id: rootId, name: googleDriveInternals.ROOT_FOLDER_NAME, kind: 'drive#drive', capabilities: { canAddChildren: false, canListChildren: true } },
+  ]) {
+    const client = new GoogleDriveClient('fixture-access-token', async () => new Response(JSON.stringify(drive), {
+      status: 200, headers: { 'content-type': 'application/json' },
+    }));
+    await assert.rejects(client.getBackupRoot(rootId), /GDRIVE_ROOT_FOLDER_NOT_ACCESSIBLE/);
+  }
+});
+
+test('Drive child queries fail closed when Google reports an incomplete Shared Drive search', async () => {
+  const rootId = 'shared_drive_root_123';
+  const client = new GoogleDriveClient('fixture-access-token', async (input) => {
+    const url = new URL(input);
+    if (url.pathname.startsWith('/drive/v3/drives/')) {
+      return new Response(JSON.stringify({
+        id: rootId, name: googleDriveInternals.ROOT_FOLDER_NAME, kind: 'drive#drive',
+        capabilities: { canAddChildren: true, canListChildren: true },
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    return new Response(JSON.stringify({ files: [], incompleteSearch: true }), {
+      status: 200, headers: { 'content-type': 'application/json' },
+    });
+  });
+  await client.getBackupRoot(rootId);
+  await assert.rejects(client.listChildren('nested_folder_123'), /GDRIVE_INCOMPLETE_SEARCH/);
 });
 
 test('Drive authentication is in-memory, origin restricted and caller headers cannot replace it', async () => {
