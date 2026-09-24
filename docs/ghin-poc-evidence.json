@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-09-24T20:19:18.8732526Z",
+  "environment": "controlled-local-read-only-probe",
+  "credentials": "deliberately-invalid-sentinel",
+  "results": [
+    {
+      "endpoint": "https://api.ghin.com/api/v1/golfer_login.json",
+      "method": "POST",
+      "httpStatus": 400,
+      "sanitizedResult": "Incorrect Credentials",
+      "conclusion": "Endpoint reachable; authorized authentication not tested because GHIN_TEST_LOGIN/GHIN_TEST_PASSWORD were absent."
+    },
+    {
+      "endpoint": "https://api.ghin.com/api/v1/golfers/search.json",
+      "method": "GET",
+      "httpStatus": 401,
+      "sanitizedResult": "Invalid token",
+      "conclusion": "Endpoint reachable and protected."
+    },
+    {
+      "endpoint": "https://api.ghin.com/api/v1/scores/search.json",
+      "method": "GET",
+      "httpStatus": 401,
+      "sanitizedResult": "Invalid token",
+      "conclusion": "Endpoint reachable and protected."
+    },
+    {
+      "endpoint": "https://api2.ghin.com/api/v1/golfers.json",
+      "method": "GET",
+      "httpStatus": 401,
+      "sanitizedResult": "Invalid token",
+      "conclusion": "Endpoint reachable and protected."
+    },
+    {
+      "endpoint": "https://api2.ghin.com/api/v1/crsCourseMethods.asmx/SearchCourses.json",
+      "method": "GET",
+      "httpStatus": 401,
+      "sanitizedResult": "Invalid token",
+      "conclusion": "Endpoint reachable and protected; this does not prove a golfer token is entitled to Course Data."
+    }
+  ],
+  "safety": {
+    "realUserCredentialsUsed": false,
+    "bearerTokenObtained": false,
+    "scorePosted": false,
+    "productionTouched": false
+  }
+}

@@ -83,6 +83,7 @@ test("feature registry has every required unique flag and external defaults fail
   assert.equal(preview.wearable_v1, false);
   const production = resolvePhase2FeatureFlags("production");
   assert.equal(Object.values(production).some(Boolean), false);
+  assert.equal(resolvePhase2FeatureFlags("production", { ghin_integration: true }).ghin_integration, false);
 });
 
 test("BETA_PRO never blocks while Free allowances are registry-driven", () => {
