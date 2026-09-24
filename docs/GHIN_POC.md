@@ -25,7 +25,8 @@ autorización comercial o técnica para consumir datos GHIN.
 | Course Data/TeeSetRatings real | `BLOCKED_EXTERNAL` | Autenticación y entitlement de Course Data no determinados |
 | Asociación en Perfil | `BLOCKED_EXTERNAL` | No se activa sin lookup real exitoso y revisión humana |
 | Tablas provider-link y perfil proveedor | `PENDING_CONTROLLED_DB_APPLY` | Migración preparada, no aplicada a una DB Preview aislada |
-| Diagnóstico humano en Preview | `PENDING_INTERACTIVE_QA` | Requiere deployment Preview, admin autorizado y credenciales autorizadas |
+| Página de diagnóstico en Preview | `PASS` de despliegue únicamente | La página responde; la API rechaza acceso anónimo. Esto no acredita GHIN live |
+| Ejecución del diagnóstico GHIN live | `PENDING_INTERACTIVE_QA` | Requiere admin autorizado, credenciales autorizadas y los opt-ins de Preview |
 
 ## Evidencia de red realmente obtenida
 
@@ -321,8 +322,9 @@ Production permanece sin tocar:
 - Los guards requieren `VERCEL_ENV=preview`.
 - Los flags Production continúan apagados.
 - No se aplicó la migración GHIN remotamente.
-- No existe evidencia de un deployment Preview activado con credenciales reales;
-  por tanto tampoco existe una URL que pueda presentarse como GHIN live PASS.
+- Existe un deployment Preview verificable y la página de diagnóstico responde,
+  pero no está activado con credenciales reales; su URL no puede presentarse como
+  GHIN live PASS.
 
 ## Criterio de cierre posterior
 
