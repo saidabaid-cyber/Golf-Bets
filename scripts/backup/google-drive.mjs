@@ -288,7 +288,7 @@ export class GoogleDriveClient {
     let offset = 0, failuresAtOffset = 0;
     while (offset < info.size) {
       const end = Math.min(offset + this.uploadChunkBytes, info.size) - 1;
-      let response;
+      let response, queriedStatusAfterFailure = false;
       try {
         response = await this.fetch(session, {
           method: 'PUT', duplex: 'half', signal: timeoutSignal(this.uploadTimeoutMs),
@@ -305,10 +305,14 @@ export class GoogleDriveClient {
       }
 
       if (!response || isRetryableStatus(response.status)) {
+        if (response?.body) {
+          try { await response.body.cancel(); } catch { /* discard retry response without exposing its body */ }
+        }
         if (failuresAtOffset >= this.uploadMaxRetries) throw new DriveError('GDRIVE_UPLOAD_RETRIES_EXHAUSTED');
         await this.wait(Math.min(1000 * (2 ** failuresAtOffset), 8000));
         failuresAtOffset += 1;
         response = await this.queryUploadStatus(session, info.size);
+        queriedStatusAfterFailure = true;
       }
 
       if (response.status === 200 || response.status === 201) return this.uploadResult(response, name, info.size);
@@ -316,6 +320,7 @@ export class GoogleDriveClient {
       const nextOffset = nextUploadOffset(response, info.size);
       if (nextOffset < offset) throw new DriveError('GDRIVE_UPLOAD_RANGE_INVALID');
       if (nextOffset === offset) {
+        if (queriedStatusAfterFailure) continue;
         if (failuresAtOffset >= this.uploadMaxRetries) throw new DriveError('GDRIVE_UPLOAD_RETRIES_EXHAUSTED');
         await this.wait(Math.min(1000 * (2 ** failuresAtOffset), 8000));
         failuresAtOffset += 1;
