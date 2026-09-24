@@ -1,6 +1,6 @@
 import { createHash, createSign } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { readFile, stat } from 'node:fs/promises';
+import { open, readFile, stat } from 'node:fs/promises';
 import { basename } from 'node:path';
 import { RETENTION_LIMITS, planRetention } from './retention.mjs';
 
@@ -73,6 +73,38 @@ function nextUploadOffset(response, totalBytes) {
   const offset = match ? Number(match[1]) + 1 : Number.NaN;
   if (!Number.isSafeInteger(offset) || offset < 0 || offset > totalBytes) throw new DriveError('GDRIVE_UPLOAD_RANGE_INVALID');
   return offset;
+}
+
+async function discardResponseBody(response) {
+  if (!response?.body) return;
+  try { await response.body.cancel(); }
+  catch { throw new DriveError('GDRIVE_RESPONSE_DISCARD_FAILED'); }
+}
+
+async function readUploadChunk(path, start, end) {
+  const length = end - start + 1;
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || length <= 0) {
+    throw new DriveError('GDRIVE_UPLOAD_RANGE_INVALID');
+  }
+  let handle;
+  try {
+    handle = await open(path, 'r');
+    const chunk = Buffer.allocUnsafe(length);
+    let offset = 0;
+    while (offset < length) {
+      const { bytesRead } = await handle.read(chunk, offset, length - offset, start + offset);
+      if (!Number.isSafeInteger(bytesRead) || bytesRead <= 0) throw new DriveError('GDRIVE_UPLOAD_FILE_READ_FAILED');
+      offset += bytesRead;
+    }
+    return chunk;
+  } catch (error) {
+    if (error instanceof DriveError) throw error;
+    throw new DriveError('GDRIVE_UPLOAD_FILE_READ_FAILED');
+  } finally {
+    if (handle) {
+      try { await handle.close(); } catch { /* the upload remains fail-closed through later size and hash verification */ }
+    }
+  }
 }
 
 function parseCredentials(credentialsJson) {
@@ -154,7 +186,7 @@ export class GoogleDriveClient {
     return response;
   }
 
-  async retryUploadRequest(request) {
+  async retryUploadRequest(request, exhaustedCode = 'GDRIVE_UPLOAD_RETRIES_EXHAUSTED') {
     for (let attempt = 0; ; attempt += 1) {
       let response;
       try { response = await request(); }
@@ -162,19 +194,17 @@ export class GoogleDriveClient {
         if (!(error instanceof DriveError) || error.code !== 'GDRIVE_REQUEST_FAILED') throw error;
       }
       if (response && !isRetryableStatus(response.status)) return response;
-      if (response?.body) {
-        try { await response.body.cancel(); } catch { /* discard retry response without exposing its body */ }
-      }
-      if (attempt >= this.uploadMaxRetries) throw new DriveError('GDRIVE_UPLOAD_RETRIES_EXHAUSTED');
+      await discardResponseBody(response);
+      if (attempt >= this.uploadMaxRetries) throw new DriveError(exhaustedCode);
       await this.wait(Math.min(1000 * (2 ** attempt), 8000));
     }
   }
 
-  async queryUploadStatus(session, totalBytes) {
+  async queryUploadStatus(session, totalBytes, exhaustedCode = 'GDRIVE_UPLOAD_STATUS_RETRIES_EXHAUSTED') {
     return this.retryUploadRequest(() => this.fetch(session, {
       method: 'PUT', signal: timeoutSignal(this.uploadTimeoutMs),
       headers: { 'content-length': '0', 'content-range': `bytes */${totalBytes}` },
-    }, { acceptStatus: acceptsUploadStatus }));
+    }, { acceptStatus: acceptsUploadStatus }), exhaustedCode);
   }
 
   async uploadResult(response, expectedName, expectedBytes) {
@@ -273,31 +303,37 @@ export class GoogleDriveClient {
     if (!info.isFile() || !Number.isSafeInteger(info.size) || info.size <= 0) throw new DriveError('GDRIVE_UPLOAD_FILE_INVALID');
     const initUrl = new URL('/upload/drive/v3/files', DRIVE_API);
     initUrl.searchParams.set('uploadType', 'resumable'); initUrl.searchParams.set('supportsAllDrives', 'true'); initUrl.searchParams.set('fields', FILE_FIELDS);
+    const diagnosticKind = appProperties?.kind === 'package' ? 'PACKAGE' : appProperties?.kind === 'checksum' ? 'CHECKSUM' : 'FILE';
     const initialized = await this.retryUploadRequest(() => this.fetch(initUrl, {
       method: 'POST', headers: {
         'content-type': 'application/json; charset=UTF-8',
         'x-upload-content-type': mimeType, 'x-upload-content-length': String(info.size),
       },
       body: JSON.stringify({ name, mimeType, parents: [parentId], appProperties }),
-    }, { acceptStatus: status => isRetryableStatus(status) }));
+    }, { acceptStatus: status => isRetryableStatus(status) }), `GDRIVE_${diagnosticKind}_INIT_RETRIES_EXHAUSTED`);
     const location = initialized.headers.get('location');
+    await discardResponseBody(initialized);
     if (!location) throw new DriveError('GDRIVE_UPLOAD_SESSION_MISSING');
     const session = new URL(location);
     if (session.origin !== DRIVE_API || session.pathname !== '/upload/drive/v3/files') throw new DriveError('GDRIVE_UPLOAD_SESSION_INVALID');
 
-    let offset = 0, failuresAtOffset = 0;
+    let offset = 0, failuresAtOffset = 0, chunkOffset = -1, chunkEnd = -1, chunkBody;
     while (offset < info.size) {
       const end = Math.min(offset + this.uploadChunkBytes, info.size) - 1;
+      if (chunkOffset !== offset || chunkEnd !== end) {
+        chunkBody = await readUploadChunk(path, offset, end);
+        chunkOffset = offset; chunkEnd = end;
+      }
       let response, queriedStatusAfterFailure = false;
       try {
         response = await this.fetch(session, {
-          method: 'PUT', duplex: 'half', signal: timeoutSignal(this.uploadTimeoutMs),
+          method: 'PUT', signal: timeoutSignal(this.uploadTimeoutMs),
           headers: {
             'content-type': mimeType,
             'content-length': String(end - offset + 1),
             'content-range': `bytes ${offset}-${end}/${info.size}`,
           },
-          body: createReadStream(path, { start: offset, end }),
+          body: chunkBody,
         }, { acceptStatus: acceptsUploadStatus });
       } catch (error) {
         if (!(error instanceof DriveError) || error.code !== 'GDRIVE_REQUEST_FAILED') throw error;
@@ -305,23 +341,22 @@ export class GoogleDriveClient {
       }
 
       if (!response || isRetryableStatus(response.status)) {
-        if (response?.body) {
-          try { await response.body.cancel(); } catch { /* discard retry response without exposing its body */ }
-        }
-        if (failuresAtOffset >= this.uploadMaxRetries) throw new DriveError('GDRIVE_UPLOAD_RETRIES_EXHAUSTED');
+        await discardResponseBody(response);
+        if (failuresAtOffset >= this.uploadMaxRetries) throw new DriveError(`GDRIVE_${diagnosticKind}_CHUNK_RETRIES_EXHAUSTED`);
         await this.wait(Math.min(1000 * (2 ** failuresAtOffset), 8000));
         failuresAtOffset += 1;
-        response = await this.queryUploadStatus(session, info.size);
+        response = await this.queryUploadStatus(session, info.size, `GDRIVE_${diagnosticKind}_STATUS_RETRIES_EXHAUSTED`);
         queriedStatusAfterFailure = true;
       }
 
       if (response.status === 200 || response.status === 201) return this.uploadResult(response, name, info.size);
       if (response.status !== 308) throw new DriveError(`GDRIVE_HTTP_${response.status}`);
       const nextOffset = nextUploadOffset(response, info.size);
+      await discardResponseBody(response);
       if (nextOffset < offset) throw new DriveError('GDRIVE_UPLOAD_RANGE_INVALID');
       if (nextOffset === offset) {
         if (queriedStatusAfterFailure) continue;
-        if (failuresAtOffset >= this.uploadMaxRetries) throw new DriveError('GDRIVE_UPLOAD_RETRIES_EXHAUSTED');
+        if (failuresAtOffset >= this.uploadMaxRetries) throw new DriveError(`GDRIVE_${diagnosticKind}_CHUNK_RETRIES_EXHAUSTED`);
         await this.wait(Math.min(1000 * (2 ** failuresAtOffset), 8000));
         failuresAtOffset += 1;
       } else {
@@ -329,8 +364,9 @@ export class GoogleDriveClient {
       }
     }
 
-    const completed = await this.queryUploadStatus(session, info.size);
+    const completed = await this.queryUploadStatus(session, info.size, `GDRIVE_${diagnosticKind}_STATUS_RETRIES_EXHAUSTED`);
     if (completed.status === 200 || completed.status === 201) return this.uploadResult(completed, name, info.size);
+    await discardResponseBody(completed);
     throw new DriveError('GDRIVE_UPLOAD_NOT_FINALIZED');
   }
 
