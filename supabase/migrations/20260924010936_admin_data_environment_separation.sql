@@ -52,9 +52,9 @@ where data_environment='PRODUCTION';
 
 update public.feedback_requests
 set data_environment=case
-  when lower(concat_ws(' ',title,description,source_screen)) ~ '(synthetic|sint[eé]tic[oa])' then 'SYNTHETIC'
-  when lower(concat_ws(' ',title,description,source_screen)) ~ 'qa reconciliation|qa fixture|fixture qa|prueba qa|qa controlad[oa]' then 'QA'
-  when lower(concat_ws(' ',title,description,source_screen)) ~ 'test fixture|fixture test|automated test|prueba automatizada' then 'TEST'
+  when lower(concat_ws(' ',title,description,source_screen,reply_email,payload->>'description')) ~ '(synthetic|sint[eé]tic[oa])' then 'SYNTHETIC'
+  when lower(concat_ws(' ',title,description,source_screen,reply_email,payload->>'description')) ~ 'qa reconciliation|qa fixture|fixture qa|prueba qa|qa controlad[oa]|(^|[-_/])qa([-_/]|$)|@example\.invalid' then 'QA'
+  when lower(concat_ws(' ',title,description,source_screen,reply_email,payload->>'description')) ~ 'test fixture|fixture test|automated test|prueba automatizada' then 'TEST'
   else data_environment end
 where data_environment='PRODUCTION';
 

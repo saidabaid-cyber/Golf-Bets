@@ -15,6 +15,14 @@ const SYNTHETIC_MARKER = /(?:^|\b)(?:synthetic|sintetic[oa]s?)(?:\b|$)/i;
 const QA_MARKER = /(?:^|\b)(?:qa reconciliation|qa fixture|fixture qa|prueba qa|qa controlad[oa]|internal qa)(?:\b|$)/i;
 const TEST_MARKER = /(?:^|\b)(?:test fixture|fixture test|automated test|prueba automatizada)(?:\b|$)/i;
 const QA_METADATA_MARKER = /(?:@example\.invalid$|(?:^|[-_/])qa(?:[-_/]|$))/i;
+// These three pre-v2 fixtures have empty safe queue fields. Their QA evidence is
+// stored only in private payload/reply-email columns, so the pre-migration RPC
+// cannot expose it. Exact immutable IDs avoid treating any real blank request as QA.
+const LEGACY_QA_RECORD_IDS = new Set([
+  "5589dffb-416d-44cd-9d06-90b173bd1271",
+  "5e3ebfef-cdcd-4953-a802-bf9f369f4d96",
+  "cfdd2187-8783-4efc-9105-7c151a251904",
+]);
 
 function object(value: unknown): UnknownRecord | null {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value as UnknownRecord : null;
@@ -82,6 +90,9 @@ export function classifyAdminData(value: unknown): AdminDataClassification {
   if (explicit) return { environment: explicit, source: "EXPLICIT" };
 
   const signals = collectLegacySignals(value);
+  if (signals.identifiers.some((signal) => LEGACY_QA_RECORD_IDS.has(signal))) {
+    return { environment: "QA", source: "LEGACY" };
+  }
   const allSignals = [...signals.identifiers, ...signals.descriptions].map((signal) =>
     signal.normalize("NFD").replace(/[\u0300-\u036f]/g, ""),
   );

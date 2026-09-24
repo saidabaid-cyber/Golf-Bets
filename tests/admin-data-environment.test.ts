@@ -60,6 +60,15 @@ test("legacy Spanish QA requests are classified from accented copy and reserved 
   assert.deepEqual(visibleAdminData(liveFixtures, false), []);
 });
 
+test("known pre-v2 blank QA requests are isolated only by immutable fixture IDs", () => {
+  const knownQa = { id: "5589dffb-416d-44cd-9d06-90b173bd1271", title: "", description: "" };
+  const unknownBlank = { id: "request-user-blank", title: "", description: "" };
+  assert.equal(classifyAdminData(knownQa).environment, "QA");
+  assert.equal(classifyAdminData(unknownBlank).environment, "PRODUCTION");
+  assert.match(migration, /reply_email,payload->>'description'/);
+  assert.match(migration, /@example\\\.invalid/);
+});
+
 test("only active global SUPER_ADMIN memberships can show QA", () => {
   assert.equal(canViewQaAdminData([{ role: "SUPER_ADMIN", scope_type: "GLOBAL", active: true }]), true);
   assert.equal(canViewQaAdminData([{ role: "SUPER_ADMIN", scope_type: "COURSE", active: true }]), false);
