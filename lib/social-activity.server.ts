@@ -72,6 +72,24 @@ export class SocialServiceError extends Error {
   constructor(public code: SocialMutationErrorCode, public status: number, message: string) { super(message); }
 }
 
+type SocialRecoveryStage = "friendships" | "legacy_candidates" | "round_reconcile" | "equipment_reconcile" | "bounded_batch";
+class SocialRecoveryError extends SocialServiceError {
+  constructor(public stage: SocialRecoveryStage, error: unknown) {
+    const safe = error && typeof error === "object"
+      ? error as { code?: unknown; status?: unknown; message?: unknown }
+      : {};
+    const code = typeof safe.code === "string" ? safe.code as SocialMutationErrorCode : "MUTATION_FAILED";
+    const status = typeof safe.status === "number" ? safe.status : 503;
+    const message = typeof safe.message === "string" ? safe.message : "No se pudo recuperar la actividad Social.";
+    super(code, status, message);
+  }
+}
+
+async function recoveryStep<T>(stage: SocialRecoveryStage, operation: () => PromiseLike<T>) {
+  try { return await operation(); }
+  catch (error) { throw new SocialRecoveryError(stage, error); }
+}
+
 function dbError(error: { code?: string; message?: string } | null, fallback = "MUTATION_FAILED"): never {
   const code = error?.code;
   if (code === "42P01" || code === "PGRST204" || code === "PGRST205")
@@ -426,12 +444,12 @@ async function refreshAuthorizedRow(ctx: SocialContext, row: ActivityRow) {
   return authorizedRow(ctx, row.id);
 }
 async function recoverVisibleSources(ctx: SocialContext) {
-  const { data, error } = await ctx.admin.from("friendships")
+  const { data, error } = await recoveryStep("friendships", () => ctx.admin.from("friendships")
     .select("user_a_id,user_b_id")
-    .or(`user_a_id.eq.${ctx.userId},user_b_id.eq.${ctx.userId}`).limit(201);
+    .or(`user_a_id.eq.${ctx.userId},user_b_id.eq.${ctx.userId}`).limit(201));
   if (error) dbError(error);
   if ((data || []).length > 200)
-    throw new SocialServiceError("MUTATION_FAILED", 503, "El feed tiene demasiadas fuentes para recuperarse en una solicitud.");
+    throw new SocialRecoveryError("bounded_batch", new SocialServiceError("MUTATION_FAILED", 503, "El feed tiene demasiadas fuentes para recuperarse en una solicitud."));
   const authorIds = [...new Set([
     ctx.userId, ...(data || []).map(row => row.user_a_id === ctx.userId ? row.user_b_id : row.user_a_id),
   ])];
@@ -439,10 +457,10 @@ async function recoverVisibleSources(ctx: SocialContext) {
   let truncated = false;
   const md5Pattern = "_".repeat(32); // SQL LIKE: exactly 32 chars, never a definitive SHA-256.
   for (let offset = 0; offset < authorIds.length; offset += 50) {
-    const { data: provisional, count, error: candidateError } = await ctx.admin.from("social_activities_v3")
+    const { data: provisional, count, error: candidateError } = await recoveryStep("legacy_candidates", () => ctx.admin.from("social_activities_v3")
       .select("author_id,event_kind", { count: "exact" }).in("author_id", authorIds.slice(offset, offset + 50))
       .eq("active", true).like("material_hash", md5Pattern)
-      .order("updated_at", { ascending: false }).limit(201);
+      .order("updated_at", { ascending: false }).limit(201));
     if (candidateError) dbError(candidateError);
     if ((count ?? 0) > 201) truncated = true;
     for (const event of provisional || []) {
@@ -452,13 +470,13 @@ async function recoverVisibleSources(ctx: SocialContext) {
   }
   const candidates = [...pending.entries()];
   await Promise.all(candidates.slice(0, 5).map(async ([authorId, kinds]) => {
-    if (kinds.has("EQUIPMENT_UPDATED")) await reconcileSocialEquipmentActivity(ctx.admin, authorId);
+    if (kinds.has("EQUIPMENT_UPDATED")) await recoveryStep("equipment_reconcile", () => reconcileSocialEquipmentActivity(ctx.admin, authorId));
     if (kinds.has("ROUND_COMPLETED") || kinds.has("ACHIEVEMENT"))
-      await reconcileSocialRoundActivities(ctx.admin, authorId);
+      await recoveryStep("round_reconcile", () => reconcileSocialRoundActivities(ctx.admin, authorId));
   }));
   if (candidates.length > 5 || truncated) {
-    throw new SocialServiceError("MUTATION_FAILED", 503,
-      "La actividad se está recuperando; vuelve a cargar para continuar.");
+    throw new SocialRecoveryError("bounded_batch", new SocialServiceError("MUTATION_FAILED", 503,
+      "La actividad se está recuperando; vuelve a cargar para continuar."));
   }
 }
 
@@ -472,11 +490,12 @@ async function recoverVisibleSourcesBestEffort(ctx: SocialContext) {
     await recoverVisibleSources(ctx);
   } catch (error) {
     const safe = error && typeof error === "object"
-      ? error as { code?: unknown; status?: unknown }
+      ? error as { code?: unknown; status?: unknown; stage?: unknown }
       : {};
     console.warn("backyard_social_recovery_deferred", {
       code: typeof safe.code === "string" ? safe.code : "UNKNOWN",
       status: typeof safe.status === "number" ? safe.status : undefined,
+      stage: typeof safe.stage === "string" ? safe.stage : "unknown",
     });
   }
 }
