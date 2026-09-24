@@ -37,6 +37,29 @@ test("requests hide QA by default and expose it only when explicitly included", 
   assert.match(component, /Mostrar QA\/Test/);
 });
 
+test("legacy Spanish QA requests are classified from accented copy and reserved metadata", () => {
+  const liveFixtures = [
+    {
+      id: "legacy-request-1",
+      title: "Apuesta sintética QA — no implementar",
+      description: "Solicitud sintética desde browser QA.",
+    },
+    {
+      id: "legacy-request-2",
+      title: "",
+      description: "",
+      payload: { replyEmail: "catalog-qa@example.invalid", description: "Registro QA de feedback sin enviar correo." },
+    },
+    {
+      id: "legacy-request-3",
+      title: "Solicitud controlada",
+      source_screen: "qa-feedback-live",
+    },
+  ];
+  assert.deepEqual(liveFixtures.map((row) => classifyAdminData(row).environment), ["SYNTHETIC", "QA", "QA"]);
+  assert.deepEqual(visibleAdminData(liveFixtures, false), []);
+});
+
 test("only active global SUPER_ADMIN memberships can show QA", () => {
   assert.equal(canViewQaAdminData([{ role: "SUPER_ADMIN", scope_type: "GLOBAL", active: true }]), true);
   assert.equal(canViewQaAdminData([{ role: "SUPER_ADMIN", scope_type: "COURSE", active: true }]), false);

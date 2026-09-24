@@ -14,6 +14,7 @@ const LEGACY_ID_MARKER = /(?:^|[-_:])(synthetic|qa|qa-fixture|test-fixture|fixtu
 const SYNTHETIC_MARKER = /(?:^|\b)(?:synthetic|sintetic[oa]s?)(?:\b|$)/i;
 const QA_MARKER = /(?:^|\b)(?:qa reconciliation|qa fixture|fixture qa|prueba qa|qa controlad[oa]|internal qa)(?:\b|$)/i;
 const TEST_MARKER = /(?:^|\b)(?:test fixture|fixture test|automated test|prueba automatizada)(?:\b|$)/i;
+const QA_METADATA_MARKER = /(?:@example\.invalid$|(?:^|[-_/])qa(?:[-_/]|$))/i;
 
 function object(value: unknown): UnknownRecord | null {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value as UnknownRecord : null;
@@ -50,7 +51,7 @@ function collectLegacySignals(value: unknown, depth = 0): { identifiers: string[
   for (const key of [
     "title", "name",
     "brand", "model", "source_name", "sourceName", "source_description", "sourceDescription",
-    "organizer", "description", "reason", "source_screen", "sourceScreen",
+    "organizer", "description", "reason", "source_screen", "sourceScreen", "reply_email", "replyEmail",
   ]) {
     if (typeof row[key] === "string" && row[key].trim()) descriptions.push(row[key].trim());
   }
@@ -81,10 +82,13 @@ export function classifyAdminData(value: unknown): AdminDataClassification {
   if (explicit) return { environment: explicit, source: "EXPLICIT" };
 
   const signals = collectLegacySignals(value);
-  const allSignals = [...signals.identifiers, ...signals.descriptions];
+  const allSignals = [...signals.identifiers, ...signals.descriptions].map((signal) =>
+    signal.normalize("NFD").replace(/[\u0300-\u036f]/g, ""),
+  );
   if (allSignals.some((signal) => SYNTHETIC_MARKER.test(signal))) return { environment: "SYNTHETIC", source: "LEGACY" };
   if (allSignals.some((signal) => QA_MARKER.test(signal))) return { environment: "QA", source: "LEGACY" };
   if (allSignals.some((signal) => TEST_MARKER.test(signal))) return { environment: "TEST", source: "LEGACY" };
+  if (allSignals.some((signal) => QA_METADATA_MARKER.test(signal))) return { environment: "QA", source: "LEGACY" };
   if (signals.identifiers.some((signal) => LEGACY_ID_MARKER.test(signal))) return { environment: "QA", source: "LEGACY" };
   return { environment: "PRODUCTION", source: "DEFAULT" };
 }
