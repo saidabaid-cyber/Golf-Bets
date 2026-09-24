@@ -3,7 +3,7 @@ import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path
 import { fileURLToPath } from 'node:url';
 import { command, hashFile, runBackup, verifyBackup } from './core.mjs';
 import { scanTracked } from './security-scan.mjs';
-import { publishToGoogleDrive } from './google-drive.mjs';
+import { publishToGoogleDrive, safeDriveDiagnostic } from './google-drive.mjs';
 export { RETENTION_LIMITS, planRetention } from './retention.mjs';
 
 export const AUTOMATION_TIME_ZONE = 'America/Mexico_City';
@@ -29,6 +29,21 @@ export class AutomationError extends Error {
 export function safeErrorCode(error) {
   const code = error?.code || error?.message;
   return typeof code === 'string' && SAFE_CODE.test(code) ? code : 'AUTOMATED_BACKUP_FAILED';
+}
+
+export function formatDriveDiagnostic(value) {
+  const diagnostic = safeDriveDiagnostic(value);
+  return [
+    `phase=${diagnostic.phase}`,
+    `httpStatus=${diagnostic.httpStatus}`,
+    `retryAttempt=${diagnostic.retryAttempt}`,
+    `offset=${diagnostic.offset}`,
+    `totalBytes=${diagnostic.totalBytes}`,
+    `chunkBytes=${diagnostic.chunkBytes}`,
+    `sharedDriveDetected=${diagnostic.sharedDriveDetected}`,
+    `canAddChildren=${diagnostic.canAddChildren}`,
+    `fileKind=${diagnostic.fileKind}`,
+  ].join(' ');
 }
 
 export function validateAutomationEnvironment(env = process.env) {
@@ -132,12 +147,14 @@ export function initialReport(value = new Date()) {
     encryption: 'NOT_RUN', verification: 'NOT_RUN', recoveryComplete: false,
     package: 'NOT_CREATED', packageSize: 0, sha256: 'NOT_GENERATED',
     daily: 'NOT_RUN', weekly: 'NOT_DUE', monthly: 'NOT_DUE', retention: 'DRY_RUN',
-    retentionCandidates: [], durationSeconds: 0, failure: null,
+    retentionCandidates: [], durationSeconds: 0, failure: null, needsOwnerAction: 'NONE',
+    driveDiagnostic: safeDriveDiagnostic(),
   };
 }
 
 export function renderStepSummary(report) {
   const candidates = report.retentionCandidates.length ? report.retentionCandidates.map(name => `- ${name}`).join('\n') : '- None';
+  const driveDiagnostic = safeDriveDiagnostic(report.driveDiagnostic);
   return `# THE BACKYARD — AUTOMATED BACKUP REPORT
 
 Date: ${report.date}
@@ -155,6 +172,16 @@ Drive daily upload: ${report.daily}
 Drive weekly upload: ${report.weekly}
 Drive monthly upload: ${report.monthly}
 Retention mode: ${report.retention}
+NEEDS_OWNER_ACTION: ${report.needsOwnerAction}
+Drive upload phase: ${driveDiagnostic.phase}
+Drive HTTP status: ${driveDiagnostic.httpStatus}
+Drive retry attempt: ${driveDiagnostic.retryAttempt}
+Drive offset: ${driveDiagnostic.offset}
+Drive bytes total: ${driveDiagnostic.totalBytes}
+Drive chunk bytes: ${driveDiagnostic.chunkBytes}
+Drive file kind: ${driveDiagnostic.fileKind}
+Shared Drive detected: ${driveDiagnostic.sharedDriveDetected}
+canAddChildren: ${driveDiagnostic.canAddChildren}
 Duration: ${report.durationSeconds}s
 Failure: ${report.failure || 'NONE'}
 
@@ -201,13 +228,16 @@ export async function executeAutomatedBackup({
       credentialsJson: env.GDRIVE_SERVICE_ACCOUNT_JSON,
       rootFolderId: env.GDRIVE_BACKUP_ROOT_FOLDER_ID,
       packageInfo, now, retentionApply,
+      onDiagnostic: diagnostic => { report.driveDiagnostic = safeDriveDiagnostic(diagnostic); },
     });
+    if (drive.driveDiagnostic) report.driveDiagnostic = safeDriveDiagnostic(drive.driveDiagnostic);
     report.daily = drive.daily; report.weekly = drive.weekly; report.monthly = drive.monthly;
     report.retentionCandidates = drive.retentionCandidates;
     await deps.writeGithubOutputs(packageInfo);
     report.durationSeconds = Math.max(0, Math.round((Date.now() - started) / 1000));
     return { report, backup, verification, packageInfo, drive };
   } catch (error) {
+    if (error?.driveDiagnostic) report.driveDiagnostic = safeDriveDiagnostic(error.driveDiagnostic);
     report.failure = safeErrorCode(error);
     report.durationSeconds = Math.max(0, Math.round((Date.now() - started) / 1000));
     const failure = new AutomationError(report.failure); failure.report = report; throw failure;
