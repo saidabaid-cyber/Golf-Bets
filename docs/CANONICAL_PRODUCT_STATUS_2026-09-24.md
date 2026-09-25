@@ -323,13 +323,14 @@ Estos gates verifican el árbol local y la base QA aislada; no sustituyen el des
 
 ## Pendientes que impiden un cierre global
 
-1. Publicar y enlazar el SHA final de `integration/backyard-current` a `https://dev.thebackyard.com.mx`, sin tocar Production.
-2. Ejecutar Google y OTP reales, browser smoke completo, console/network y validación URL→SHA en ese único deployment.
+1. Publicar el CNAME externo `dev` indicado por Vercel, con proxy desactivado, y confirmar su propagación. El Branch Domain ya está enlazado exclusivamente a `integration/backyard-current` y el Preview de la rama despliega; Production permanece intacto.
+2. Cuando `https://dev.thebackyard.com.mx` resuelva, ejecutar Google y OTP reales, browser smoke autenticado completo, console/network y validación URL→SHA en ese único origen.
 3. Revisar/remediar o justificar los 23 findings de seguridad y 125 de rendimiento del advisor y completar readbacks runtime. El runner RLS canónico ya pasó 17/17 en QA aislada con rollback/0 fixtures fijos; cuatro migraciones fueron aplicadas sólo a QA y quedaron registradas exactamente.
 4. Mantener GHIN live apagado hasta contar con credenciales/entitlement autorizados; autenticación, golfer lookup, Score History y Course Data continúan sin demostración real, y score posting debe permanecer ausente.
 5. Validar interactivamente en Preview el wiring legal ya integrado y verificado localmente; someter textos, finalidades, retención, ARCO y licencias a revisión jurídica.
 6. Completar QA física de iPhone/Safari/PWA, cámara QR, geolocalización, fotos, share/download y ciclo offline/background.
 7. Obtener un manifest autorizado de imágenes de producto. Top-Flite y Amazon Basics permanecen fuera hasta contar con procedencia suficiente.
 8. Verificar la custodia/legibilidad del backup offsite observado y ejecutar un restore drill en un ambiente desechable; un artifact verde no equivale a recuperación operativa.
+9. Implementar el layout temporal La Vista Par 70 sólo si se obtiene una tarjeta/fuente autoritativa, con identidad, hoyos, tees y evidencia propios; hoy está `MISSING_NOT_IMPLEMENTED` y no debe derivarse de los layouts Par 72 o Par 69.
 
 Hasta resolver estos puntos, el documento conserva estados granulares y no convierte build, tests locales, una rama histórica o un Preview anterior en evidencia de cierre total.
