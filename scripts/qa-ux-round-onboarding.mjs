@@ -6,15 +6,15 @@ import {randomUUID} from 'node:crypto';
 import {createRequire} from 'node:module';
 import {createClient} from '@supabase/supabase-js';
 import {publicPreviewConfig} from './lib/qa-public-preview.mjs';
-import {credentialBoundFetch,verifyPreviewBundleBinding} from './qa-preview-statistics.mjs';
+import {credentialBoundFetch,deploymentMutationBoundFetch,verifyPreviewBundleBinding,verifyPreviewDeploymentIdentity} from './qa-preview-statistics.mjs';
 const config=publicPreviewConfig();assert.equal(config.projectRef,'bymeopxkxapfizeeqeyb');
-const request=credentialBoundFetch(config.previewOrigin);await verifyPreviewBundleBinding(config,request);
+const rawRequest=credentialBoundFetch(config.previewOrigin),databaseFetch=credentialBoundFetch(config.supabaseOrigin);await verifyPreviewBundleBinding(config,rawRequest,databaseFetch);const request=deploymentMutationBoundFetch(config,rawRequest);
 const require=createRequire(import.meta.url),{preserveUnfinishedRound,unfinishedRoundDraft}=require('../.test-dist/lib/unfinished-round.js');
 const {initialBets}=require('../.test-dist/lib/new-round-bets.js');
 const {createBetaOnboardingProgress,completeBetaOnboarding}=require('../.test-dist/lib/beta-onboarding.js');
 const A=JSON.parse(readFileSync('.qa-artifacts/beta-fixtures.private.json')).find(f=>f.label==='C');
 const B=JSON.parse(readFileSync('.qa-artifacts/catalog-b.private.json'));
-async function login(f){assert.equal(f.ref,config.projectRef);assert.ok(f.email.endsWith('@example.invalid'));const db=createClient(config.supabaseOrigin,config.publicKey,{auth:{persistSession:false,autoRefreshToken:false},global:{fetch:credentialBoundFetch(config.supabaseOrigin)}});const r=await db.auth.signInWithPassword({email:f.email,password:f.password});assert.equal(r.error,null);assert.equal(r.data.user.id,f.id);return {db,token:r.data.session.access_token,user:r.data.user};}
+async function login(f){assert.equal(f.ref,config.projectRef);assert.ok(f.email.endsWith('@example.invalid'));const db=createClient(config.supabaseOrigin,config.publicKey,{auth:{persistSession:false,autoRefreshToken:false},global:{fetch:databaseFetch}});const r=await db.auth.signInWithPassword({email:f.email,password:f.password});assert.equal(r.error,null);assert.equal(r.data.user.id,f.id);return {db,token:r.data.session.access_token,user:r.data.user};}
 let a=await login(A);const b=await login(B);
 async function app(path,method='GET',body,expected=200,session=a){const r=await request(config.previewOrigin+path,{method,headers:{authorization:`Bearer ${session.token}`,'content-type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});const data=await r.json();assert.equal(r.status,expected,`${path} ${r.status} ${data.code||''}`);return data;}
 const report={preview:config.previewOrigin,ref:config.projectRef,checks:[],emailsSent:0,deletedRows:0};
@@ -51,5 +51,5 @@ a=await login(A);history=(await app('/api/cloud/rounds')).rounds;const saved=his
 const foreign=await b.db.from('rounds_cloud').select('id').eq('owner_id',A.id).eq('local_round_id',id);assert.equal(foreign.error,null);assert.deepEqual(foreign.data,[]);
 report.checks.push('paused round real cloud','new session retains scores/putts/tee/playMode','idempotent ID','B cannot read private A round');
 const completion=await app('/api/account/completion');assert.ok(completion.progress.percent>=0&&completion.progress.percent<=100);report.checks.push('shared completion API real read');
-report.parkedRoundId=id;report.onboardingLeftPending=process.argv.includes('--prepare-onboarding');
+await verifyPreviewDeploymentIdentity(config,rawRequest);report.parkedRoundId=id;report.onboardingLeftPending=process.argv.includes('--prepare-onboarding');
 writeFileSync('.qa-artifacts/ux-round-live-report.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));

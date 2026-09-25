@@ -11,52 +11,32 @@ La aplicación conserva su modo Invitado/local cuando Supabase no está configur
 
 ```dotenv
 NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+NEXT_PUBLIC_APP_ORIGIN=https://dev.thebackyard.com.mx
+SUPABASE_SECRET_KEY=
 CLOUD_ENABLED=true
-POLLA_LIVE_ENABLED=true
+POLLA_LIVE_ENABLED=false
 AUTH_SOCIAL_ENABLED=true
 ```
 
-En Vercel, las tres llaves se configuran como variables de entorno; `SUPABASE_SERVICE_ROLE_KEY` debe permanecer server-side. Reinicia el servidor local después de modificar `.env.local`.
+En Vercel, las claves se configuran como variables de entorno; `SUPABASE_SECRET_KEY` debe permanecer server-side. Los nombres legacy `NEXT_PUBLIC_SUPABASE_ANON_KEY` y `SUPABASE_SERVICE_ROLE_KEY` sólo existen como compatibilidad y no deben duplicar bindings distintos. Reinicia el servidor local después de modificar `.env.local`.
 
-## 2. Aplicar migraciones
+## 2. Migraciones: reconciliación obligatoria
 
-Aplica estos archivos **en orden**:
+La rama QA canónica es `phase2-full-platform-qa` / `bymeopxkxapfizeeqeyb`; Production usa otra ref y permanece fuera de alcance. El repositorio contiene **51** migraciones, pero el ledger QA incluye **58** versiones históricas/remotas que no forman una secuencia uno-a-uno con esos archivos.
 
-1. `supabase/migrations/202609010001_golf_bets_v3.sql`
-2. `supabase/migrations/202609010002_backyard_accounts_legal.sql`
-3. `supabase/migrations/202609020001_cloud_sync_polla_hardening.sql`
-4. `supabase/migrations/202609030001_function_privileges.sql`
-5. `supabase/migrations/20260904013601_repair_cloud_profiles_and_permissions.sql`
-6. `supabase/migrations/20260904104145_rules_ai_rate_limit.sql`
-7. `supabase/migrations/20260905060434_add_express_betting_consent.sql`
-8. `supabase/migrations/20260906193435_equipment_ball_fitting.sql`
-9. `supabase/migrations/20260906211937_golf_profile_course_architecture.sql`
-10. `supabase/migrations/20260908134650_ai_processing_consents.sql`
-
-Opción SQL Editor: pega y ejecuta cada archivo por separado, revisando que termine sin error antes del siguiente.
-
-Opción CLI, solo después de verificar el project ref:
-
-```bash
-supabase login
-supabase link --project-ref TU_PROJECT_REF
-supabase db push --dry-run
-supabase db push
-```
-
-No se ejecutó `db push` durante esta fase: el único proyecto Supabase accesible está compartido con Production y esta entrega prohíbe modificarlo. La migración 10 es requisito para consentimiento AI autenticado en Preview; debe aplicarse únicamente a un proyecto/branch Supabase aislado y después enlazar a él las variables Preview de Vercel.
+No ejecutar `supabase db push`, `--include-all`, `migration repair`, `db pull` ciego ni pegar una lista histórica completa en SQL Editor. La reconciliación canónica quedó cerrada por SQL y objetos; cuatro migraciones se aplicaron individualmente sólo a QA (GHIN, lifecycle Feedback, ingest legal y publicación Polla). La ejecución remota final pasó **17/17** tests RLS con rollback y 0 fixtures fijos del runner. Seguir exclusivamente [CANONICAL_MIGRATION_LEDGER_2026-09-24.md](./CANONICAL_MIGRATION_LEDGER_2026-09-24.md) ante cualquier cambio futuro.
 
 ### Protección del ledger AI en Preview
 
-Vercel define `VERCEL_ENV=preview` automáticamente. En ese entorno, el ledger autenticado queda bloqueado antes de crear un cliente Supabase salvo que se configure, con alcance **Preview** (idealmente restringido a la rama), esta vinculación server-only:
+Vercel define `VERCEL_ENV=preview` automáticamente. En ese entorno, el ledger autenticado queda bloqueado antes de crear un cliente Supabase salvo que se configure, con alcance **Preview** restringido a la rama canónica, esta vinculación server-only:
 
 ```dotenv
-BACKYARD_AI_CONSENT_PREVIEW_SUPABASE_URL=https://TU_PROJECT_REF_AISLADO.supabase.co
+PREVIEW_DB_REF=bymeopxkxapfizeeqeyb
+NEXT_PUBLIC_SUPABASE_URL=https://bymeopxkxapfizeeqeyb.supabase.co
 ```
 
-El valor debe coincidir exactamente con el origen de `NEXT_PUBLIC_SUPABASE_URL` del Preview y sólo debe agregarse después de aplicar y verificar la migración 10 en ese proyecto aislado. No copies aquí la URL compartida con Production. Si falta o no coincide, las cuentas autenticadas reciben `consent_environment_blocked` y no se consulta Auth ni `ai_processing_consents`; Invitado continúa local porque no usa el ledger server-side. Los cambios de variables sólo afectan deployments nuevos, por lo que se debe redesplegar el Preview.
+El servidor acepta únicamente ese ref y ese hostname exactos; otro proyecto Supabase se rechaza aunque su ref y URL coincidan entre sí. El alias histórico `BACKYARD_AI_CONSENT_PREVIEW_SUPABASE_URL` no sustituye este control. No copies aquí la URL compartida con Production. Si falta o no coincide, las cuentas autenticadas reciben `consent_environment_blocked` y no se consulta Auth ni `ai_processing_consents`; Invitado continúa local porque no usa el ledger server-side. Los cambios de variables sólo afectan deployments nuevos, por lo que se debe redesplegar el Preview.
 
 ## 3. Verificar base y RLS
 
@@ -75,7 +55,7 @@ Las APIs de scorer validan el token hash y grupo en servidor. La service role se
 
 ## 4. Realtime
 
-La última migración agrega `tournament_leaderboard_events` a `supabase_realtime`. Es una señal sanitizada por torneo; el cliente recibe el evento y vuelve a consultar el endpoint público. No hay una suscripción por jugador. Verifica en **Database → Publications** que la tabla figure en `supabase_realtime`.
+La última migración de hardening conserva `tournament_leaderboard_events` en `supabase_realtime` y retira las tablas raw `tournament_scores`/`tournament_groups`. Es una señal sanitizada por torneo; el cliente recibe el evento y vuelve a consultar el endpoint autorizado. Verifica en **Database → Publications** que sólo la señal figure entre esas tres tablas.
 
 Si Realtime falla, la UI conserva polling ligero de 15–20 segundos.
 
@@ -87,12 +67,11 @@ La migración crea el bucket privado `scorecard-photos`, máximo 8 MB, JPEG/PNG/
 
 Configura **Authentication → URL Configuration**:
 
-- Conserva el Site URL actual si este proyecto Supabase está compartido con Production. Usa `https://beta.thebackyard.com.mx` como Site URL únicamente en un proyecto o branch Supabase aislado para beta.
+- En la rama QA `bymeopxkxapfizeeqeyb`, el Site URL canónico es `https://dev.thebackyard.com.mx`; ya fue configurado en esta consolidación.
 - Redirect local: `http://localhost:3000/auth/callback`
-- Redirect beta: `https://beta.thebackyard.com.mx/auth/callback`
-- Redirect Preview actual: `https://golf-bets-git-ai-first-phase1-saha8.vercel.app/auth/callback`
-- Wildcard restringido para Preview futuros del proyecto: `https://golf-bets-*-saha8.vercel.app/auth/callback`
-- Redirects futuros, solo cuando los dominios existan: `https://thebackyard.com.mx/auth/callback` y `https://www.thebackyard.com.mx/auth/callback`
+- Redirect Preview canónico: `https://dev.thebackyard.com.mx/auth/callback`
+- Production conserva su propia configuración y callback; no abrir ni modificar ese proyecto para QA.
+- No agregar wildcards ni callbacks de deployments `*.vercel.app`.
 
 Agregar Redirect URLs no requiere ni autoriza cambiar el Site URL de Production.
 

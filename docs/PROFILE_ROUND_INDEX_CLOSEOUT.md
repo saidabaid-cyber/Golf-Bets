@@ -1,5 +1,7 @@
 # Perfil, navegación de ronda e Índice Backyard — 2026-09-15
 
+> **Evidencia histórica; no ejecutar como runbook actual.** Conserva el alcance y los bloqueos observados en `phase2/full-platform`; no sustituye el estado canónico. Consultar [el manifiesto](./CONSOLIDATION_MANIFEST_2026-09-24.md), [el estado del producto](./CANONICAL_PRODUCT_STATUS_2026-09-24.md) y [el ledger de migraciones](./CANONICAL_MIGRATION_LEDGER_2026-09-24.md).
+
 ## Alcance y seguridad
 
 - Rama exclusiva: `phase2/full-platform`.

@@ -1,5 +1,7 @@
 # QA cloud / OTP — codex-dev, 3 septiembre 2026
 
+> **Evidencia histórica; no ejecutar como runbook actual.** `codex-dev` y el host Beta ya no son destinos de owner QA. El único origen canónico desde 2026-09-24 es `https://dev.thebackyard.com.mx` desde `integration/backyard-current`; usar [PREVIEW_CONTROLLED_ACTIVATION.md](./PREVIEW_CONTROLLED_ACTIVATION.md).
+
 ## Alcance y evidencia
 
 Base: e60fa0e70b8819bff4c3a4a6828a638210e42120. Solo codex-dev.
@@ -42,7 +44,7 @@ La comprobación directa desde Node de las tres fuentes oficiales devolvió HTTP
 
 ## Prueba humana pendiente
 
-1. Abrir https://beta.thebackyard.com.mx y usar un correo real autorizado.
+1. Paso histórico retirado: no abrir el antiguo host Beta. La prueba equivalente pendiente debe ejecutarse sólo en `https://dev.thebackyard.com.mx` después de verificar su SHA.
 2. Recibir código, introducirlo, completar consentimientos/perfil y vincular datos.
 3. Confirmar Cuenta → Sincronizado con hora actual. Recargar, cerrar y reabrir; comprobar sesión.
 4. Segundo navegador con la misma cuenta: recuperar draft, scores, históricos, jugadores, grupos, rivales, campos y preferencias.
@@ -52,7 +54,7 @@ La comprobación directa desde Node de las tres fuentes oficiales devolvió HTTP
 8. Safari/PWA iPhone físico: teclado OTP/AutoFill, micrófono con permisos, safe areas y regreso desde PDF.
 
 Si llega solo enlace y no código, comprobar plantilla de Supabase con {{ .Token }}, SMTP y redirect permitido:
-https://beta.thebackyard.com.mx/auth/callback.
+El callback histórico Beta quedó retirado; el callback canónico es `https://dev.thebackyard.com.mx/auth/callback`.
 No se conoce desde esta prueba el plan/SMTP efectivo. Supabase anunció restricciones para personalizar plantillas en proyectos Free nuevos con SMTP predeterminado; verificar esa condición antes de asumir que basta editar la plantilla:
 https://supabase.com/changelog/46599-changes-to-email-template-customisation-on-free-tier
 https://supabase.com/docs/guides/auth/auth-email-passwordless

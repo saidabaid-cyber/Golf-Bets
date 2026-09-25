@@ -18,8 +18,9 @@ la configuración, el botón muestra **Apple · pendiente de configuración** y 
 deshabilitado. Invitado continúa disponible; Email OTP requiere su configuración
 propia descrita en `SETUP_EMAIL_OTP.md`.
 
-Para esta etapa: callback del proveedor
-`https://zhqmlpljloumldaczcfp.supabase.co/auth/v1/callback`; redirect de la app
+Para esta etapa: callback del proveedor QA
+`https://bymeopxkxapfizeeqeyb.supabase.co/auth/v1/callback`; redirect de la app
 permitido por Supabase
-`https://golf-bets-git-codex-dev-saha8.vercel.app/auth/callback`. No modificar
-Production ni dominios. No se han configurado ni inventado credenciales Apple.
+`https://dev.thebackyard.com.mx/auth/callback`. No permitir callbacks aleatorios
+`*.vercel.app` ni modificar
+Production, su callback ni sus dominios. No se han configurado ni inventado credenciales Apple.

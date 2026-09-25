@@ -6,6 +6,7 @@ La app usa Supabase Auth con PKCE y restaura la sesión. Sin Supabase conserva L
 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `NEXT_PUBLIC_APP_ORIGIN` (`https://dev.thebackyard.com.mx` en Preview; localhost se conserva automáticamente)
 - `SUPABASE_SERVICE_ROLE_KEY` únicamente server-side
 
 `SUPABASE_SECRET_KEY` se acepta temporalmente como alias server-side para instalaciones previas, pero la variable canónica documentada es `SUPABASE_SERVICE_ROLE_KEY`. Ninguna de las dos puede usar prefijo `NEXT_PUBLIC_`.
@@ -13,11 +14,10 @@ La app usa Supabase Auth con PKCE y restaura la sesión. Sin Supabase conserva L
 ## Redirects
 
 - Local: `http://localhost:3000/auth/callback`
-- Beta `codex-dev`: `https://beta.thebackyard.com.mx/auth/callback`
-- Preview `ai-first-phase1`: `https://golf-bets-git-ai-first-phase1-saha8.vercel.app/auth/callback`
-- Preview futuros del mismo proyecto: `https://golf-bets-*-saha8.vercel.app/auth/callback`
-- Futuro, todavía no activar: `https://thebackyard.com.mx/auth/callback`
-- Futuro, todavía no activar: `https://www.thebackyard.com.mx/auth/callback`
+- Preview canónico: `https://dev.thebackyard.com.mx/auth/callback`
+- Production existente: `https://app.thebackyard.com.mx/auth/callback` (conservar; no modificar para QA)
+
+No usar wildcards ni callbacks de deployments `*.vercel.app`. Los que aparecen en documentos de cierre antiguos son evidencia histórica, no configuración vigente.
 
 ## Guías
 

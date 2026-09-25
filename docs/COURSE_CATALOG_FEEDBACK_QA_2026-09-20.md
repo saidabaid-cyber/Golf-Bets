@@ -1,5 +1,7 @@
 # Catálogo y feedback — QA 2026-09-20
 
+> **DOCUMENTO HISTÓRICO — NO USAR COMO ESTADO ACTUAL NI RUNBOOK.** Conserva evidencia de `phase2/course-catalog-feedback`; sus ramas, métricas, bloqueos y pasos pendientes corresponden a ese cierre. La fuente operativa es `integration/backyard-current`; consulte el [manifiesto de consolidación](./CONSOLIDATION_MANIFEST_2026-09-24.md), el [estado canónico del producto](./CANONICAL_PRODUCT_STATUS_2026-09-24.md) y el [ledger canónico de migraciones](./CANONICAL_MIGRATION_LEDGER_2026-09-24.md). No ejecute deploys, cambios de entorno ni migraciones a partir de este archivo.
+
 ## Entorno y estado de publicación
 
 - Base inicial obtenida por fetch: `phase2/full-platform`, `97fe6f3c9258c4336a9bd3e65d99694a2f1dbff5`.

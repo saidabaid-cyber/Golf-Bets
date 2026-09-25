@@ -42,7 +42,7 @@ function harness(route:"invitations"|"users"="invitations",options:Options={}) {
       if(id.endsWith("/group-invitations"))return invitations;
       if(id.endsWith("/features/social/domain"))return socialDomain;
       if(id.endsWith("/http-security"))return security;
-      if(id.endsWith("/group-invitation-email.server"))return{sendGroupInvitationEmail:async()=>{sendCalls++;return options.providerError?{errorCode:options.providerError}:{messageId:"provider-test-id"};}};
+      if(id.endsWith("/group-invitation-email.server"))return{groupInvitationEmailConfigured:()=>false,sendGroupInvitationEmail:async()=>{sendCalls++;return options.providerError?{errorCode:options.providerError}:{messageId:"provider-test-id"};}};
       throw new Error(id);
     },
   });

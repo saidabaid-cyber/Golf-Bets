@@ -1,5 +1,7 @@
 # P03 — Mexico course geography closeout
 
+> **DOCUMENTO HISTÓRICO — NO USAR COMO ESTADO ACTUAL NI RUNBOOK.** Este cierre conserva evidencia de la rama original; sus SHA, métricas y afirmaciones de QA no sustituyen el estado canónico. La fuente operativa es `integration/backyard-current`; consulte el [manifiesto de consolidación](../CONSOLIDATION_MANIFEST_2026-09-24.md), el [estado canónico del producto](../CANONICAL_PRODUCT_STATUS_2026-09-24.md) y el [ledger canónico de migraciones](../CANONICAL_MIGRATION_LEDGER_2026-09-24.md). No ejecute deploys, cambios de entorno ni migraciones a partir de este archivo.
+
 Date: 2026-09-24
 
 Branch: `phase2/admin-control-center-2026-09-22`

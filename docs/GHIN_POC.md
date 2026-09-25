@@ -1,5 +1,7 @@
 # GHIN read-only POC
 
+> **DOCUMENTO HISTÓRICO — NO USAR COMO ESTADO CANÓNICO NI RUNBOOK.** Conserva evidencia de `codex/ghin-poc`; el código aceptado se evalúa ahora en `integration/backyard-current`, con GHIN live apagado hasta QA externo. Consulte el [manifiesto de consolidación](./CONSOLIDATION_MANIFEST_2026-09-24.md), el [estado canónico del producto](./CANONICAL_PRODUCT_STATUS_2026-09-24.md) y el [ledger canónico de migraciones](./CANONICAL_MIGRATION_LEDGER_2026-09-24.md). No habilite credenciales, flags, deploys ni migraciones a partir de este archivo.
+
 ## Estado y alcance
 
 - Repositorio: `saidabaid-cyber/Golf-Bets`.

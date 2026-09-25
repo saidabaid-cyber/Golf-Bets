@@ -1,70 +1,29 @@
 # Activación controlada de Preview — cuentas, Stats y Social
 
-## CONTROLLED_DB_ACTION_REQUIRED
+> **Contrato canónico desde 2026-09-24:** la única rama operativa es `integration/backyard-current` y la única URL de QA es `https://dev.thebackyard.com.mx`. Las ramas, deployments `*.vercel.app`, costes y resultados fechados que aparecen en el antecedente del 16 de septiembre son evidencia histórica; no son destinos vigentes ni instrucciones para owner QA. Production permanece fuera de alcance.
 
-**Única autorización del owner pendiente ahora:** confirmar la creación de `phase2-full-platform-qa`, sin datos Production, en la organización Supabase `wrogzsycxchwakaglbpm`, por **US$0.01344/h** de cómputo (aproximadamente **US$9.68/30 días**) más consumo adicional de Supabase. Cotización obtenida el 2026-09-16 mediante `get_cost(type="branch")`; no se aceptó el cargo ni se creó una rama sin esa autorización. La autorización de push ya existe y no debe solicitarse otra vez.
+## Estado actual verificado — no recrear ni aplicar a ciegas
 
-Estado auditado el 2026-09-16: sólo es visible el proyecto compartido Supabase **The Backyard**, ref `zhqmlpljloumldaczcfp`; la lista de branches está vacía. El bundle público del Preview remoto `golf-bets-e941m8ejk-saha8.vercel.app` apunta a esa misma ref; **PREVIEW_DB_ISOLATED no está acreditado**. No se aplicó SQL remoto. No usar ese proyecto para reset, eliminación de cuentas ni fixtures. Las pruebas PostgreSQL locales no acreditan QA en Supabase Preview.
+La rama Supabase aislada ya existe: `phase2-full-platform-qa`, ref `bymeopxkxapfizeeqeyb`, estado `ACTIVE_HEALTHY`, `with_data=false`. Es distinta del proyecto padre/Production `zhqmlpljloumldaczcfp`. No crear una segunda rama ni repetir la cotización histórica.
 
-Destino Vercel existente: proyecto `golf-bets`, ID `prj_Hin0ieF71l1aSyaOcOPCmu7NzNjn`, equipo `team_8pj0WyTTVhVSw78CAZ0qNLEO`. La CLI está instalada pero no autenticada; el intento anterior de acceso por dispositivo expiró. Si el conector Vercel no permite configurar/desplegar, se debe renovar `vercel login` con el owner, no crear tokens ni reutilizar códigos expirados.
+El ledger remoto no coincide linealmente con los **51** archivos canónicos: QA registra **58** migraciones. La reconciliación por SQL/objetos quedó completada el 24 de septiembre. Cuatro migraciones revisadas se aplicaron sólo a QA: GHIN `20260924233419`, guard lifecycle Feedback `20260925010316`, ingest legal transaccional `20260925012322` y hardening Realtime Polla `20260925012920`. La ejecución remota final de RLS pasó **17/17** con rollback y 0 fixtures fijos del runner; preservó las 13 solicitudes Feedback QA/internas ya existentes. No queda un apply canónico pendiente para la QA actual. Production no fue consultado, reparado ni escrito.
 
-Todo lo siguiente queda limitado a Git `phase2/full-platform`, **Vercel Preview de esa rama** y la **nueva ref Supabase**. No modificar main, beta, Production, dominios personalizados ni DB compartida. HOME HERO: NO TOUCH.
+Los asesores de seguridad aún requieren revisión controlada: reportaron 17 `WARN` y 6 `INFO` (tablas fail-closed sin políticas, permisos de ejecución de funciones `SECURITY DEFINER` y protección contra contraseñas filtradas). Por tanto:
 
-### 1. Crear una rama vacía, con identidad verificable
+1. No usar `db push`, `--include-all`, `migration repair`, `db pull` ciego ni SQL Editor por lista histórica.
+2. No aplicar una “secuencia de 15” antigua: quedó superada por el ledger real.
+3. Usar [el ledger canónico](./CANONICAL_MIGRATION_LEDGER_2026-09-24.md) como evidencia de la reconciliación completada; una versión remota distinta no implica ausencia si el SQL/objeto equivalente está demostrado.
+4. Ante una migración futura, preparar un plan de apply explícito sólo para objetos realmente ausentes en `bymeopxkxapfizeeqeyb`, con dependencia, checksum y rollback revisados.
+5. Volver a ejecutar los tests RLS transaccionales y readbacks después de cualquier cambio; GHIN debe continuar apagado.
+6. No consultar, reparar ni escribir Production como parte de esta activación.
 
-Después de confirmar organización y cotización:
+Supabase Auth de QA ya usa `https://dev.thebackyard.com.mx` como Site URL y permite únicamente su callback más localhost. Esto no acredita todavía Google/OTP end-to-end y no autoriza modificar Auth de Production.
 
-1. En el conector Supabase: `get_cost(organization_id="wrogzsycxchwakaglbpm", type="branch")`; mostrar la cotización y sus condiciones al owner. No inventar importe ni asumir que es gratis.
-2. Tras aprobación del importe: `confirm_cost` con importe, recurrencia y tipo devueltos; usar su `confirmation_id` en `create_branch(project_id="zhqmlpljloumldaczcfp", name="phase2-full-platform-qa", confirm_cost_id=...)`.
-3. Alternativa equivalente en Dashboard Supabase: The Backyard → Branches → crear rama de desarrollo/Preview **sin Include data**. No copiar datos/Auth/Storage de producción. La creación copia esquema/migraciones, no debe importar usuarios o rondas.
-4. Registrar el `project_ref` nuevo. Debe ser distinto de `zhqmlpljloumldaczcfp`; URL exactamente `https://<PREVIEW_REF>.supabase.co`. Confirmar que `list_branches` identifica esa ref como la nueva rama y que está lista.
-5. Obtener claves **de esa rama**, no del proyecto padre. Mantener las claves secretas únicamente en servidor y gestor de secretos. No pegarlas en chats, commits, argumentos de comandos ni documentación.
-
-**Riesgos controlados:** cómputo/storage facturables según cotización; una credencial equivocada podría afectar datos compartidos. Toda escritura debe abortar si ref/host no coinciden. `current_database() = postgres` por sí solo **no** demuestra aislamiento.
-
-### 2. Verificar ledger y aplicar exactamente lo que falte
-
-Primero llamar `list_migrations(project_id="<PREVIEW_REF>")`. El ledger antiguo del proyecto padre tiene timestamps distintos a varios archivos históricos locales. **No ejecutar `db push --include-all`, no reparar el ledger a ciegas y no reaplicar las migraciones fundacionales ya heredadas.** La integración Git podría aplicar archivos automáticamente: comparar nombre, definición y dependencias, no sólo timestamp.
-
-Esta es la secuencia aditiva esperada de **15 archivos**. Aplicar cada uno sólo si falta, siempre en la ref nueva:
-
-1. `supabase/migrations/20260906193435_equipment_ball_fitting.sql`
-2. `supabase/migrations/20260906211937_golf_profile_course_architecture.sql`
-3. `supabase/migrations/20260908134650_ai_processing_consents.sql`
-4. `supabase/migrations/202609100001_phase2_social_groups_memberships.sql`
-5. `supabase/migrations/202609100002_phase2_course_handicap_gps.sql`
-6. `supabase/migrations/202609100003_phase2_live_rounds_notifications.sql`
-7. `supabase/migrations/202609100004_phase2_shots_analytics.sql`
-8. `supabase/migrations/20260913175810_group_round_presets.sql`
-9. `supabase/migrations/20260913205122_user_statistics_reset.sql`
-10. `supabase/migrations/20260915114707_user_statistics_reset_idempotency.sql`
-11. `supabase/migrations/20260915183026_social_activity_v3.sql`
-12. `supabase/migrations/20260915203125_account_lifecycle_preview.sql`
-13. `supabase/migrations/20260915203550_social_service_privileges.sql`
-14. `supabase/migrations/20260916020557_ai_consent_onboarding_decisions.sql`
-15. `supabase/migrations/20260916084954_profile_visibility_public_friends.sql`
-
-Acción exacta mediante conector, por archivo: leer el SQL completo del archivo local; ejecutar `apply_migration` con `project_id` igual a la **ref nueva**, `name` igual al nombre descriptivo del archivo sin timestamp/extensión y `query` igual al contenido literal completo. Por ejemplo, el paso 10 usa `name="user_statistics_reset_idempotency"`. Volver a listar el ledger tras cada aplicación y registrar su versión efectiva. No concatenar los 15 archivos en una transacción opaca ni continuar después de un fallo.
-
-El paso 14 habilita las elecciones explícitas de IA al final del onboarding. Antes de publicar el nuevo checkpoint obligatorio, seguir [AI_CONSENT_ONBOARDING.md](AI_CONSENT_ONBOARDING.md), incluyendo `BACKYARD_AI_CONSENT_PREVIEW_SUPABASE_URL` y QA con cuenta nueva/existente. No publicarlo contra el Preview compartido sin migrar.
-
-Antes del paso 12, consultar en la rama:
-
-```sql
-select rolname, rolconfig
-from pg_roles where rolname = 'authenticator';
-
-select version, name
-from supabase_migrations.schema_migrations order by version;
-```
-
-Si ya existe otro `pgrst.db_pre_request`, **no sobrescribirlo**: la migración falla con `existing_pre_request_hook_requires_controlled_composition`. Componer ambos controles mediante una nueva migración revisada en Preview; volver a probar el hook anterior y `account_api_access_guard`. Si el proveedor no permite `ALTER ROLE authenticator`, requiere la acción equivalente del administrador de esa rama, nunca aplicar en el padre.
-
-El paso 12 instala una barrera de cuenta activa en Data API y RLS/Storage; no borra cuentas al aplicarse. La eliminación sólo empieza tras una solicitud autenticada y confirmada. No quitar esa barrera para conseguir un test verde. No exponer el esquema `private` en Data API.
+Destino Vercel: proyecto `golf-bets`, ID `prj_Hin0ieF71l1aSyaOcOPCmu7NzNjn`, equipo `team_8pj0WyTTVhVSw78CAZ0qNLEO`. Toda acción queda limitada a `integration/backyard-current`, el branch domain objetivo `https://dev.thebackyard.com.mx` y la ref QA anterior. No modificar main, beta, `app.thebackyard.com.mx`, DNS de Production ni datos reales.
 
 ### 3. Verificación del esquema antes de habilitar acciones
 
-Consultas de inspección **en la ref nueva**:
+Consultas de inspección **en la ref QA canónica existente `bymeopxkxapfizeeqeyb`**:
 
 ```sql
 select n.nspname as schema, c.relname, c.relrowsecurity
@@ -96,7 +55,7 @@ where policyname = 'account_active_access'
 order by schemaname, tablename, policyname;
 ```
 
-Comprobar también constraints/índices de likes únicos, comentarios de autor y attest por versión. Ejecutar `get_advisors` de seguridad y rendimiento en la ref nueva. Revisar cualquier hallazgo antes de activar. En proyectos nuevos, la [exposición Data API necesita grants explícitos además de RLS](https://supabase.com/changelog/45329-breaking-change-tables-not-exposed-to-data-and-graphql-api-automatically); el paso 13 completa los permisos server-side del reconciliador Social. Comprobar REST real con clientes `anon`, `authenticated` y servidor: ver tablas en Dashboard no acredita acceso correcto.
+Comprobar también constraints/índices de likes únicos, comentarios de autor y attest por versión. Ejecutar `get_advisors` de seguridad y rendimiento en la ref QA canónica existente. Revisar cualquier hallazgo antes de activar. En proyectos nuevos, la [exposición Data API necesita grants explícitos además de RLS](https://supabase.com/changelog/45329-breaking-change-tables-not-exposed-to-data-and-graphql-api-automatically); el paso 13 completa los permisos server-side del reconciliador Social. Comprobar REST real con clientes `anon`, `authenticated` y servidor: ver tablas en Dashboard no acredita acceso correcto.
 
 ### 4. Conectar sólo Vercel Preview de la rama
 
@@ -109,57 +68,60 @@ git status --short
 Get-Content .vercel/project.json
 ```
 
-Branch debe ser `phase2/full-platform`; `.vercel/project.json` debe contener los IDs Vercel indicados arriba. No relink automático a otro proyecto.
+Branch debe ser `integration/backyard-current`; `.vercel/project.json` debe contener los IDs Vercel indicados arriba. No relink automático a otro proyecto.
 
-En esta máquina la CLI comprobada es Vercel 59.16.0. Si no existe el comando global `vercel`, utilizar su instalación auxiliar existente:
+Si `.vercel/project.json` no existe en el worktree, la vía CLI queda bloqueada hasta contar con un vínculo explícito y revisado; no ejecutar `vercel link` implícitamente. Usar Project Settings en la sesión ya autenticada o proporcionar los identificadores explícitos sólo a un comando que lo admita, sin cambiar el proyecto vinculado.
 
-```powershell
-$taskNode = 'C:\Users\said_\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe'
-$env:Path = (Split-Path $taskNode) + ';' + $env:Path
-function vc { & $taskNode '../qa-vercel-tool/node_modules/vercel/dist/vc.js' @args }
-vc login
-vc whoami
-vc env add --help
-vc deploy --help
-```
+El flujo principal es la Git Integration del proyecto: configurar primero los overrides de Preview restringidos a `integration/backyard-current` y después hacer push de esa rama. No usar una instalación auxiliar, una ruta temporal de otra tarea ni relinkear el proyecto para suplir una CLI ausente.
 
-Completar la autenticación normal en el navegador; no aceptar un código expirado. Con CLI global, sustituir `vc` por `vercel`.
-
-Añadir las variables con el prompt seguro, **sin valores secretos en línea de comandos**:
+La configuración puede hacerse en **Project Settings → Environment Variables**, seleccionando `Preview` y la rama `integration/backyard-current`. Si hay una Vercel CLI instalada y autenticada, comprobar su ayuda antes de operar:
 
 ```powershell
-vc env add PREVIEW_DB_REF preview --git-branch phase2/full-platform --project prj_Hin0ieF71l1aSyaOcOPCmu7NzNjn --scope team_8pj0WyTTVhVSw78CAZ0qNLEO
-vc env add NEXT_PUBLIC_SUPABASE_URL preview --git-branch phase2/full-platform --project prj_Hin0ieF71l1aSyaOcOPCmu7NzNjn --scope team_8pj0WyTTVhVSw78CAZ0qNLEO
-vc env add NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY preview --git-branch phase2/full-platform --project prj_Hin0ieF71l1aSyaOcOPCmu7NzNjn --scope team_8pj0WyTTVhVSw78CAZ0qNLEO
-vc env add SUPABASE_SECRET_KEY preview --git-branch phase2/full-platform --sensitive --project prj_Hin0ieF71l1aSyaOcOPCmu7NzNjn --scope team_8pj0WyTTVhVSw78CAZ0qNLEO
-vc env add CLOUD_ENABLED preview --git-branch phase2/full-platform --project prj_Hin0ieF71l1aSyaOcOPCmu7NzNjn --scope team_8pj0WyTTVhVSw78CAZ0qNLEO
-vc env add EQUIPMENT_CLOUD_ENABLED preview --git-branch phase2/full-platform --project prj_Hin0ieF71l1aSyaOcOPCmu7NzNjn --scope team_8pj0WyTTVhVSw78CAZ0qNLEO
-vc env add ACCOUNT_LIFECYCLE_ENABLED preview --git-branch phase2/full-platform --project prj_Hin0ieF71l1aSyaOcOPCmu7NzNjn --scope team_8pj0WyTTVhVSw78CAZ0qNLEO
-vc env add SOCIAL_ACTIVITY_ENABLED preview --git-branch phase2/full-platform --project prj_Hin0ieF71l1aSyaOcOPCmu7NzNjn --scope team_8pj0WyTTVhVSw78CAZ0qNLEO
+vercel login
+vercel whoami
+vercel env add --help
+vercel env ls preview integration/backyard-current --scope team_8pj0WyTTVhVSw78CAZ0qNLEO
 ```
 
-Valores: `PREVIEW_DB_REF=<ref nueva>`; URL `https://<ref nueva>.supabase.co`; claves publicable/secreta de esa misma rama; los cuatro flags `true`. Si existe `SOCIAL_PREVIEW_DB_REF`, actualizar su override de esta rama al mismo ref o retirar sólo ese override redundante. Nunca dejar una ref distinta.
+Completar la autenticación normal en el navegador; no aceptar un código expirado. La sintaxis vigente de `env add` recibe la rama como tercer argumento posicional: `vercel env add <nombre> preview integration/backyard-current`. Los valores se introducen en el prompt seguro; no se incluyen en la línea de comandos ni en historial.
+
+Añadir los overrides de rama necesarios, **sin valores secretos en línea de comandos**:
+
+```powershell
+vercel env add PREVIEW_DB_REF preview integration/backyard-current --scope team_8pj0WyTTVhVSw78CAZ0qNLEO
+vercel env add NEXT_PUBLIC_SUPABASE_URL preview integration/backyard-current --scope team_8pj0WyTTVhVSw78CAZ0qNLEO
+vercel env add NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY preview integration/backyard-current --scope team_8pj0WyTTVhVSw78CAZ0qNLEO
+vercel env add SUPABASE_SECRET_KEY preview integration/backyard-current --sensitive --scope team_8pj0WyTTVhVSw78CAZ0qNLEO
+vercel env add NEXT_PUBLIC_APP_ORIGIN preview integration/backyard-current --scope team_8pj0WyTTVhVSw78CAZ0qNLEO
+vercel env add GROUP_INVITES_APP_URL preview integration/backyard-current --scope team_8pj0WyTTVhVSw78CAZ0qNLEO
+vercel env add CLOUD_ENABLED preview integration/backyard-current --scope team_8pj0WyTTVhVSw78CAZ0qNLEO
+vercel env add EQUIPMENT_CLOUD_ENABLED preview integration/backyard-current --scope team_8pj0WyTTVhVSw78CAZ0qNLEO
+vercel env add ACCOUNT_LIFECYCLE_ENABLED preview integration/backyard-current --scope team_8pj0WyTTVhVSw78CAZ0qNLEO
+vercel env add SOCIAL_ACTIVITY_ENABLED preview integration/backyard-current --scope team_8pj0WyTTVhVSw78CAZ0qNLEO
+```
+
+Valores: `PREVIEW_DB_REF=bymeopxkxapfizeeqeyb`; URL `https://bymeopxkxapfizeeqeyb.supabase.co`; claves publicable/secreta de esa misma rama; `NEXT_PUBLIC_APP_ORIGIN=https://dev.thebackyard.com.mx`; `GROUP_INVITES_APP_URL=https://dev.thebackyard.com.mx`; los cuatro flags `true`. Si existe `SOCIAL_PREVIEW_DB_REF`, actualizar su override de esta rama al mismo ref o retirar sólo ese override redundante. Nunca dejar una ref distinta.
 
 Si una variable ya existe, revisar su target/branch antes de usar `env add ... --force` sobre **ese mismo override Preview**. No quitar/editar variables de Production. Auditar aliases legacy `NEXT_PUBLIC_SUPABASE_ANON_KEY` y `SUPABASE_SERVICE_ROLE_KEY`: ningún valor efectivo debe seleccionar el proyecto compartido; el código prioriza los nombres publicable/secreto anteriores. No marcar secretos como `NEXT_PUBLIC_`. `VERCEL_ENV=preview` lo proporciona Vercel; no falsearlo para saltar guards.
 
 ### 5. Push y nuevo deployment
 
-Después de tests/lint/build y revisión de diff de Home:
+Después de tests/lint/build y revisión de diff de Home, hacer push normal de la rama canónica:
 
 ```powershell
-git push origin HEAD:refs/heads/phase2/full-platform
-vc deploy --target preview --project prj_Hin0ieF71l1aSyaOcOPCmu7NzNjn --scope team_8pj0WyTTVhVSw78CAZ0qNLEO
+git push origin HEAD:refs/heads/integration/backyard-current
 ```
 
-Si el push ya generó Preview Git, inspeccionar ese deployment en vez de crear otro. No usar `--prod`, `promote`, `--temporary`, force push ni dominios personalizados. Verificar que el deployment detectó `phase2/full-platform` y sus variables de branch; esperar `READY`, anotar su SHA y la URL **inmutable exacta** `https://golf-bets-<id>-<scope>.vercel.app`. Un URL anterior o un alias móvil no es evidencia del commit nuevo.
+La Git Integration debe crear el Preview de ese push. Inspeccionar el deployment resultante en Vercel; no crear un deployment CLI paralelo, no usar `--prod`, `promote`, `--temporary`, force push ni tocar dominios de Production. Verificar que detectó `integration/backyard-current`, que el branch domain fijo está asignado a `https://dev.thebackyard.com.mx` y que `/api/health` devuelve el SHA completo exacto esperado. Hasta comprobar esas tres condiciones, registrar `BLOCKED_EXTERNAL` o `PENDING_INTERACTIVE_QA`: este procedimiento **no afirma que el deployment o el dominio ya existan**. Las URLs `*.vercel.app` pueden aparecer como metadata técnica, pero no son URL de QA ni sustituyen el binding SHA.
 
 ### 6. QA real ejecutable, con cuentas desechables
 
 Los runners no cargan automáticamente `.env.local`. Inyectar en la sesión/gestor de secretos las variables Preview anteriores y estas variables de operador:
 
 ```powershell
-$env:PREVIEW_QA_URL = 'https://golf-bets-<ID_DE_DEPLOYMENT>-<SCOPE>.vercel.app'
-$env:PREVIEW_DB_REF = '<REF_PREVIEW_NUEVA>'
+$env:PREVIEW_QA_URL = 'https://dev.thebackyard.com.mx'
+$env:PREVIEW_QA_EXPECTED_SHA = (git rev-parse HEAD).Trim()
+$env:PREVIEW_DB_REF = 'bymeopxkxapfizeeqeyb'
 $env:QA_CONFIRM_ISOLATED_PREVIEW = $env:PREVIEW_DB_REF
 node node_modules/typescript/bin/tsc -p tsconfig.test.json
 node scripts/qa-preview-statistics.mjs --check-config
@@ -170,7 +132,7 @@ node scripts/qa-preview-account-lifecycle.mjs --run
 
 Reemplazar placeholders por valores verificados, no inventados. Requieren también `NEXT_PUBLIC_SUPABASE_URL`, clave publicable/anon y clave secreta/service-role de Preview en esa sesión. No copiar las variables productivas del host. Si deployment protection lo exige, proporcionar `VERCEL_AUTOMATION_BYPASS_SECRET` por gestor de secretos; sólo se envía al origen Preview exacto. No desactivar protección.
 
-Ambos runners rechazan la DB compartida, URLs ambiguas, aliases de branch/Production, keys JWT de otro proyecto y redirecciones con credenciales. Inspeccionan el bundle público para comprobar su URL Supabase antes de crear usuarios. Sólo crean identidades aleatorias `@example.invalid`; no aceptan IDs de usuarios existentes.
+Ambos runners rechazan la DB compartida, Production, Beta, cualquier URL `*.vercel.app`, keys JWT de otro proyecto y redirecciones con credenciales. Antes de crear usuarios validan `/api/health` contra `PREVIEW_QA_EXPECTED_SHA` y después inspeccionan el bundle público para comprobar su URL Supabase. Sólo crean identidades aleatorias `@example.invalid`; no aceptan IDs de usuarios existentes.
 
 - **Stats:** crea dos usuarios; reset con cero stats e idempotencia; ronda capturada → reset → lectura del ledger en la misma DB; nueva sesión sin caché; histórico/balance intactos; ronda anterior excluida y ronda posterior incluida mediante la lógica real compilada. Limpia sólo cuentas creadas por ese run mediante el endpoint de cuentas. Si falla limpieza, reporta IDs exactos; no ampliar el borrado.
 - **Cuentas:** crea tres usuarios; borrar cuenta vacía, borrar organizador de ronda compartida preservando el acceso/datos del compañero, retry con prueba de recuperación, bloqueo Auth/JWT y archive. Conserva **intencionalmente un fixture archivado** con dos rondas para comprobar retención futura; reporta `archivedQaFixtures` con IDs exactos. No borrar ese archivo por Admin para ocultar el resultado.

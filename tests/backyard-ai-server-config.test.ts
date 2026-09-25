@@ -53,7 +53,7 @@ test("el ledger AI autenticado queda fail-closed en Preview y Guest no se rompe"
       ...inheritedProduction,
       BACKYARD_AI_CONSENT_PREVIEW_SUPABASE_URL: "https://isolated-preview.supabase.co",
     }, true),
-    { allowed: false, reason: "preview_binding_mismatch" },
+    { allowed: false, reason: "preview_binding_missing" },
   );
   assert.deepEqual(
     aiProcessingConsentLedgerAccess({
@@ -61,13 +61,13 @@ test("el ledger AI autenticado queda fail-closed en Preview y Guest no se rompe"
       NEXT_PUBLIC_SUPABASE_URL: "https://isolated-preview.supabase.co/",
       BACKYARD_AI_CONSENT_PREVIEW_SUPABASE_URL: "https://isolated-preview.supabase.co",
     }, true),
-    { allowed: true, reason: "preview_bound" },
+    { allowed: false, reason: "preview_binding_missing" },
   );
   assert.deepEqual(
     aiProcessingConsentLedgerAccess({
       VERCEL_ENV: "preview",
-      PREVIEW_DB_REF: "abcdefghijklmnopqrst",
-      NEXT_PUBLIC_SUPABASE_URL: "https://abcdefghijklmnopqrst.supabase.co",
+      PREVIEW_DB_REF: "bymeopxkxapfizeeqeyb",
+      NEXT_PUBLIC_SUPABASE_URL: "https://bymeopxkxapfizeeqeyb.supabase.co",
     }, true),
     { allowed: true, reason: "preview_bound" },
     "el binding QA canónico basta sin una segunda variable redundante",
@@ -75,7 +75,7 @@ test("el ledger AI autenticado queda fail-closed en Preview y Guest no se rompe"
   assert.deepEqual(
     aiProcessingConsentLedgerAccess({
       VERCEL_ENV: "preview",
-      PREVIEW_DB_REF: "abcdefghijklmnopqrst",
+      PREVIEW_DB_REF: "bymeopxkxapfizeeqeyb",
       NEXT_PUBLIC_SUPABASE_URL: "https://otro-proyecto.supabase.co",
       BACKYARD_AI_CONSENT_PREVIEW_SUPABASE_URL: "https://otro-proyecto.supabase.co",
     }, true),

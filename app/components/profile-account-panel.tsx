@@ -79,7 +79,7 @@ function decimal(value: number | undefined) {
 }
 
 export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacySettings = false, onAiPrivacyOpened, history = [], indexControl, focusSection = "profile", highContrast, onHighContrastChange, notificationsEnabled, onNotificationsEnabledChange, golfInsights, statisticsResetAt, onStatisticsReset, onOpenStats, onOpenAccount, initialAccountSection = "account", onOpenAccountSection, onOpenPrivacy, onOpenEquipment, onBackToProfile }: ProfileAccountPanelProps) {
-  const { identity, adminAccess = { hasAccess: false, roles: [], scopes: [] }, updateProfile, logout, finishAccountDeletion, openAccess, acceptances, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, requestCloudLink, cloudIssues, retryCloudSync } = useBackyardAccount();
+  const { identity, adminAccess = { hasAccess: false, roles: [], scopes: [] }, updateProfile, logout, finishAccountDeletion, openAccess, acceptances, legalEvidenceEvents, marketingConsentResolved, bettingConsentGranted, requestBettingConsent, recordLegalChoice, cloudLinked, cloudStatus, requestCloudLink, cloudIssues, retryCloudSync } = useBackyardAccount();
   const [editing, setEditing] = useState(false);
   const [accountSection, setAccountSection] = useState<AccountSettingsSection>(initialAccountSection);
   const [uiPreferences, setUiPreferences] = useState<AccountUiPreferences>(DEFAULT_ACCOUNT_UI_PREFERENCES);
@@ -289,7 +289,7 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
     <button type="button" className="secondary pageBack" onClick={() => setManagingAiConsents(false)}>← Cuenta y privacidad</button>
     <AiProcessingConsentSettings userId={identity.userId} accessToken={identity.accessToken} requiresRemoteConsent={identity.mode === "authenticated"} />
   </>;
-  if (managingConsents) return <LegalConsentManager userId={identity.userId} accessToken={identity.accessToken} authenticated={identity.mode === "authenticated"} acceptances={acceptances} bettingConsentGranted={bettingConsentGranted} requestBettingConsent={requestBettingConsent} onBack={() => setManagingConsents(false)} />;
+  if (managingConsents) return <LegalConsentManager profile={identity} userId={identity.userId} accessToken={identity.accessToken} authenticated={identity.mode === "authenticated"} acceptances={acceptances} legalEvidenceEvents={legalEvidenceEvents} marketingConsentResolved={marketingConsentResolved} bettingConsentGranted={bettingConsentGranted} requestBettingConsent={requestBettingConsent} recordLegalChoice={recordLegalChoice} onBack={() => setManagingConsents(false)} />;
 
   if (view === "profile" && identity.mode === "authenticated" && focusSection === "equipment") return <><header className="profileMobileHeader profileEditHeader"><button type="button" className="textButton" onClick={onBackToProfile}>← Mi Perfil</button><div><span>MI PERFIL</span><h1>Mi Bolsa</h1></div></header><div id="equipment-bag"><EquipmentProfilePanel userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={selectedIndex.value} defaultHandicapSource={selectedIndex.source} defaultHandedness={identity.handedness} ballFitDefaults={ballFitDefaultsFromProfile(identity)} onBackToProfile={onBackToProfile} onOpenPrivacy={onOpenPrivacy} initialSection={completionEquipment} /></div></>;
 

@@ -1,5 +1,7 @@
 # The Backyard — AI-First Phase 1
 
+> **Evidencia histórica; no ejecutar como runbook actual.** Conserva la intención y los resultados de la rama fechada. La fuente vigente es `integration/backyard-current`; consultar [el manifiesto](./CONSOLIDATION_MANIFEST_2026-09-24.md), [el estado del producto](./CANONICAL_PRODUCT_STATUS_2026-09-24.md) y [el ledger de migraciones](./CANONICAL_MIGRATION_LEDGER_2026-09-24.md). Production permanece fuera de alcance.
+
 ## Estado y guardrails
 
 La rama `ai-first-phase1` nació del checkpoint limpio de `beta`:
@@ -154,7 +156,7 @@ La interpretación local y el modo manual no requieren proveedor. Las llamadas r
 | `CLOUD_ENABLED` | No debe estar explícitamente apagado. |
 | `consume_rules_ai_rate_limit` | Debe estar aplicado desde `supabase/migrations/20260904104145_rules_ai_rate_limit.sql` y validado en Beta aislada. |
 | `ai_processing_consents` | Debe crearse con `supabase/migrations/20260908134650_ai_processing_consents.sql` en un Supabase aislado de Production antes de probar cuentas autenticadas. |
-| `BACKYARD_AI_CONSENT_PREVIEW_SUPABASE_URL` | Binding server-only y exclusivo de Preview. Debe coincidir con el origen Supabase aislado; ausente o distinto bloquea el ledger autenticado antes de abrir el cliente. Invitado no usa este ledger. |
+| `PREVIEW_DB_REF=bymeopxkxapfizeeqeyb` | Binding server-only canónico. La URL activa debe ser exactamente la de ese ref; cualquier otro proyecto, incluso con ref válido y URL coincidente, bloquea el ledger autenticado. Invitado no usa este ledger. |
 | `OPENAI_BACKYARD_MODEL` | Override opcional; default `gpt-5.4-mini`. |
 | `OPENAI_SCORECARD_MODEL` | Override visual opcional; hereda el modelo general. |
 

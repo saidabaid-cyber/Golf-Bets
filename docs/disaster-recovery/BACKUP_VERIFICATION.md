@@ -1,8 +1,10 @@
 # Backup verification
 
-**Status: `NOT_ACTIVE_PENDING_OWNER_SETUP`**
+**Status: `BACKUP_OBSERVED_RESTORE_DRILL_PENDING`**
 
 Verification is a publication gate, not proof that a disaster restore has succeeded. A restore exercise is a separate, explicitly authorized operation.
+
+Observed evidence: scheduled run `35979285016` succeeded for SHA `2c15c9a02f36643244a7b0a420aa2ade570f2a10`; GitHub artifact `10798973211` was 24,437,675 bytes with expiry 2026-10-01. The artifact was not restored during consolidation.
 
 ## Required publication result
 
@@ -61,9 +63,9 @@ Every daily upload verifies the remote file size and checksum sidecar before it 
 
 The Drive hierarchy and retention logic may act only on unique, verified package/checksum pairs. Duplicate names or ambiguous folders are failures; files must not be silently overwritten.
 
-## Owner acceptance of the first run
+## Owner acceptance of an authorized run
 
-For the controlled initial `workflow_dispatch`, after the approved change is merged, the owner must select `main`. The workflow job blocks every other ref. The owner must then confirm:
+A scheduled run has already completed successfully. For any later controlled `workflow_dispatch` justified by rotation, repair, or a workflow change, the owner must select the exact authorized `main` SHA. The workflow job blocks every other ref. The owner must then confirm:
 
 - All six publication results above are visible and successful.
 - The package and `.sha256` file exist in the expected daily Drive folder.
@@ -72,4 +74,4 @@ For the controlled initial `workflow_dispatch`, after the approved change is mer
 - Logs, annotations, summaries, and artifact names contain no secret values.
 - No database, source Storage, Auth, migration, restore, or deployment write occurred.
 
-Keep the status `NOT_ACTIVE_PENDING_OWNER_SETUP` until this controlled run and the subsequent scheduled observation have both been reviewed by the owner.
+Keep the status `BACKUP_OBSERVED_RESTORE_DRILL_PENDING` until a disposable end-to-end restore has been reviewed; controlled and scheduled backup evidence is already present.

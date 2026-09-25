@@ -3,6 +3,31 @@
 -- All behavioral fixtures roll back.
 begin;
 
+-- Fixed synthetic identities may remain in long-lived QA databases after an
+-- interrupted historical harness. Remove them only inside this transaction so
+-- the test is repeatable; the final rollback restores any pre-existing rows.
+delete from public.player_handicap_provider_profiles
+where owner_id in (
+  '40000000-0000-4000-8000-000000000001'::uuid,
+  '40000000-0000-4000-8000-000000000002'::uuid
+);
+delete from public.golf_tee_provider_links
+where tee_id in ('provider-test-tee-a', 'provider-test-tee-b')
+   or course_id in ('provider-test-course-a', 'provider-test-course-b');
+delete from public.golf_course_provider_links
+where course_id in ('provider-test-course-a', 'provider-test-course-b');
+delete from public.golf_course_tees
+where id in ('provider-test-tee-a', 'provider-test-tee-b');
+delete from public.golf_courses
+where id in ('provider-test-course-a', 'provider-test-course-b');
+delete from public.golf_clubs
+where id in ('provider-test-club-a', 'provider-test-club-b');
+delete from auth.users
+where id in (
+  '40000000-0000-4000-8000-000000000001'::uuid,
+  '40000000-0000-4000-8000-000000000002'::uuid
+);
+
 do $$
 declare
   table_name text;
@@ -113,7 +138,8 @@ insert into auth.users (
 
 insert into public.profiles(id, name) values
   ('40000000-0000-4000-8000-000000000001', 'Provider Owner A'),
-  ('40000000-0000-4000-8000-000000000002', 'Provider Owner B');
+  ('40000000-0000-4000-8000-000000000002', 'Provider Owner B')
+on conflict(id) do update set name=excluded.name;
 
 insert into public.golf_clubs(id, name, provider, visibility)
 values

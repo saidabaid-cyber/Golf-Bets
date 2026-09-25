@@ -1,5 +1,7 @@
 # Release reconciliation — 2026-09-21
 
+> **Evidencia histórica; no ejecutar como runbook actual.** Conserva la reconciliación de `phase2/course-catalog-feedback` en su fecha; no acredita la rama ni el despliegue vigentes. Consultar [el manifiesto](./CONSOLIDATION_MANIFEST_2026-09-24.md), [el estado del producto](./CANONICAL_PRODUCT_STATUS_2026-09-24.md) y [el ledger de migraciones](./CANONICAL_MIGRATION_LEDGER_2026-09-24.md).
+
 ## Scope and evidence boundary
 
 Repository `saidabaid-cyber/Golf-Bets`; branch `phase2/course-catalog-feedback`.

@@ -1,5 +1,7 @@
 # P05 — Rating / Slope: autoridad, categoría y evidencia por tee
 
+> **DOCUMENTO HISTÓRICO — NO USAR COMO ESTADO ACTUAL NI RUNBOOK.** Este cierre conserva evidencia de la rama original; sus SHA, conteos y observaciones de QA pueden estar superados. La fuente operativa es `integration/backyard-current`; consulte el [manifiesto de consolidación](../CONSOLIDATION_MANIFEST_2026-09-24.md), el [estado canónico del producto](../CANONICAL_PRODUCT_STATUS_2026-09-24.md) y el [ledger canónico de migraciones](../CANONICAL_MIGRATION_LEDGER_2026-09-24.md). No ejecute deploys, cambios de entorno ni migraciones a partir de este archivo.
+
 ## Identidad del cierre
 
 - Rama: `phase2/admin-control-center-2026-09-22`

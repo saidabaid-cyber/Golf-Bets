@@ -131,7 +131,7 @@ function gameProfileChanged(profile: BackyardProfile, draft: ProfileDetailsDraft
 }
 
 export function AccountPanel({ view, focusSection = "profile", highContrast, onHighContrastChange, notificationsEnabled, onNotificationsEnabledChange, golfInsights, onOpenStats, onOpenAccount }: AccountPanelProps) {
-  const { identity, updateProfile, logout, finishAccountDeletion, openAccess, acceptances, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, requestCloudLink, lastCloudSync, cloudIssues, retryCloudSync } = useBackyardAccount();
+  const { identity, updateProfile, logout, finishAccountDeletion, openAccess, acceptances, legalEvidenceEvents, marketingConsentResolved, bettingConsentGranted, requestBettingConsent, recordLegalChoice, cloudLinked, cloudStatus, requestCloudLink, lastCloudSync, cloudIssues, retryCloudSync } = useBackyardAccount();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(identity.displayName);
   const [avatarUrl, setAvatarUrl] = useState(identity.avatarUrl);
@@ -282,12 +282,16 @@ export function AccountPanel({ view, focusSection = "profile", highContrast, onH
   }
 
   if (view === "account" && managingConsents) return <LegalConsentManager
+    profile={identity}
     userId={identity.userId}
     accessToken={identity.accessToken}
     authenticated={identity.mode === "authenticated"}
     acceptances={acceptances}
+    legalEvidenceEvents={legalEvidenceEvents}
+    marketingConsentResolved={marketingConsentResolved}
     bettingConsentGranted={bettingConsentGranted}
     requestBettingConsent={requestBettingConsent}
+    recordLegalChoice={recordLegalChoice}
     onBack={() => setManagingConsents(false)}
   />;
 

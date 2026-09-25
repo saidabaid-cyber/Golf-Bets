@@ -8,21 +8,21 @@ import {publicPreviewConfig} from './lib/qa-public-preview.mjs';
 import {credentialBoundFetch,verifyPreviewBundleBinding} from './qa-preview-statistics.mjs';
 const config=publicPreviewConfig();
 assert.equal(config.projectRef,'bymeopxkxapfizeeqeyb');
-const request=credentialBoundFetch(config.previewOrigin);
-await verifyPreviewBundleBinding(config,request);
+const request=credentialBoundFetch(config.previewOrigin),databaseFetch=credentialBoundFetch(config.supabaseOrigin);
+await verifyPreviewBundleBinding(config,request,databaseFetch);
 const A=JSON.parse(readFileSync('.qa-artifacts/beta-fixtures.private.json')).find(f=>f.label==='C');
 const B=JSON.parse(readFileSync('.qa-artifacts/catalog-b.private.json'));
 const socialFixtures=JSON.parse(readFileSync('.qa-artifacts/social-play-fixtures.private.json'));
 async function login(f){
  assert.equal(f.ref,config.projectRef);assert.ok(f.email.endsWith('@example.invalid'));
- const db=createClient(config.supabaseOrigin,config.publicKey,{auth:{persistSession:false,autoRefreshToken:false},global:{fetch:credentialBoundFetch(config.supabaseOrigin)}});
+ const db=createClient(config.supabaseOrigin,config.publicKey,{auth:{persistSession:false,autoRefreshToken:false},global:{fetch:databaseFetch}});
  const r=await db.auth.signInWithPassword({email:f.email,password:f.password});assert.equal(r.error,null);assert.equal(r.data.user.id,f.id);
  return {db,token:r.data.session.access_token};
 }
 let a=await login(A);const b=await login(B);
 const report={preview:config.previewOrigin,ref:config.projectRef,checks:[],mutations:0,emailsSent:0};
 async function get(path,session=a,status=200){const r=await request(config.previewOrigin+path,{headers:session?{authorization:`Bearer ${session.token}`}:{}});const data=await r.json();assert.equal(r.status,status,`${path}: HTTP ${r.status}`);return data;}
-const settings=await fetch(config.supabaseOrigin+'/auth/v1/settings',{headers:{apikey:config.publicKey}}).then(r=>r.json());
+const settings=await databaseFetch(config.supabaseOrigin+'/auth/v1/settings',{headers:{apikey:config.publicKey}}).then(r=>r.json());
 report.providers={google:settings.external?.google,email:settings.external?.email,apple:settings.external?.apple};
 report.flags=await get('/api/features',null);
 for(const path of ['/api/cloud/rounds','/api/account/completion','/api/account/entry'])await get(path,null,401);

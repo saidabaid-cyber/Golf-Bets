@@ -1,5 +1,7 @@
 # Hard closeout — resultados verificados, 2026-09-16
 
+> **EVIDENCIA HISTÓRICA — NO EJECUTAR COMO RUNBOOK.** Rama, URL, resultados y pasos pertenecen a un corte anterior. Usar [activación canónica](./PREVIEW_CONTROLLED_ACTIVATION.md) y [matriz de producto](./CANONICAL_PRODUCT_STATUS_2026-09-24.md) para el estado actual.
+
 ## Estado de entrega
 
 - Branch único: `phase2/full-platform`.
@@ -8,7 +10,7 @@
 - Implementación de este bloque: `5495b4052875ab4a7b515383eb2d60ef4df6862f`.
 - El commit local anterior `eed282d` contiene consentimientos de onboarding y aún no está publicado.
 - No hubo push, migraciones remotas, fixtures remotos ni modificaciones de Production. No hay nuevo URL Preview de este bloque.
-- Preview anterior inspeccionado: `https://golf-bets-e941m8ejk-saha8.vercel.app`, SHA `146a7be`. No contiene estos cambios.
+- Preview anterior inspeccionado: `https://historical-preview-url-retired.invalid`, SHA `146a7be`. No contiene estos cambios.
 
 ## Implementación
 

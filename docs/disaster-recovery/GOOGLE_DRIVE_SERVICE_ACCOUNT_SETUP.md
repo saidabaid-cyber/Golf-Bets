@@ -1,6 +1,6 @@
 # Configuración del Service Account de Google Drive
 
-**Estado: `NOT_ACTIVE_PENDING_OWNER_SETUP`**
+**Estado: `BACKUP_OBSERVED_RESTORE_DRILL_PENDING`**
 
 Este procedimiento lo ejecuta el propietario. La automatización solicita un scope amplio de Google Drive, por lo que el límite efectivo depende de compartir con el Service Account únicamente la carpeta dedicada.
 
@@ -97,8 +97,8 @@ Cuando Google Workspace lo permita, usa una ubicación dedicada en un Shared Dri
     - Haz clic en **Add variable**.
     - Confirma que aparece bajo **Repository variables** y que apunta a `The Backyard - Backups`.
 
-13. **Probar acceso limitado exclusivamente a esa carpeta.**
-    - Confirma primero que el cambio aprobado ya fue integrado en `main`, que los seis nombres de GitHub están configurados y que `BACKUP_RETENTION_APPLY=false`.
+13. **Revalidar acceso limitado exclusivamente a esa carpeta durante una rotación o rerun autorizado.**
+    - Confirma primero que el workflow autorizado está presente en el SHA exacto de `main`, que los seis nombres de GitHub están configurados y que `BACKUP_RETENTION_APPLY=false`. No ejecutes otro backup sólo para reconfirmar el código: ya existe evidencia de un run programado exitoso.
     - En GitHub abre **Actions > The Backyard Automated Offsite Backup > Run workflow**.
     - En **Use workflow from**, selecciona exactamente `main` y ejecuta el `workflow_dispatch` controlado.
     - El job bloquea refs distintas de `refs/heads/main`; no uses una rama de feature.
@@ -117,6 +117,6 @@ Cuando Google Workspace lo permita, usa una ubicación dedicada en un Shared Dri
 ## Custodia y rotación
 
 - Mantén el JSON únicamente en GitHub Repository secrets y en el gestor seguro aprobado, nunca en el repositorio ni en chat.
-- Para rotar, crea una key nueva, actualiza `GDRIVE_SERVICE_ACCOUNT_JSON`, ejecuta una verificación controlada desde `main` y después elimina la key anterior.
+- Para rotar, crea una key nueva, actualiza `GDRIVE_SERVICE_ACCOUNT_JSON`, ejecuta una verificación controlada desde `main` sólo dentro de la ventana aprobada y después elimina la key anterior.
 - Para suspender publicaciones, deshabilita el workflow y elimina el Service Account de la pantalla **Share** de `The Backyard - Backups`.
 - No cambies `BACKUP_RETENTION_APPLY` a `true` durante este procedimiento.

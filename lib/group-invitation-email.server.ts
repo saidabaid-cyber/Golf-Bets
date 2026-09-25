@@ -1,8 +1,27 @@
 import "server-only";
+import { CANONICAL_QA_APP_ORIGIN, PRODUCTION_APP_ORIGIN } from "./app-origin";
 import { normalizedInvitationEmail } from "./group-invitations";
 
 const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!);
 export type GroupEmailResult = { messageId: string; errorCode?: never } | { errorCode: string; messageId?: never };
+
+export function groupInvitationAppOrigin(env: Record<string, string | undefined>) {
+  const configured = env.GROUP_INVITES_APP_URL?.trim();
+  if (!configured) return null;
+  try {
+    const origin = new URL(configured);
+    if (origin.protocol !== "https:" || origin.username || origin.password || origin.port || origin.pathname !== "/" || origin.search || origin.hash) return null;
+    if (origin.origin !== CANONICAL_QA_APP_ORIGIN && origin.origin !== PRODUCTION_APP_ORIGIN) return null;
+    if (env.VERCEL_ENV === "preview" && origin.origin !== CANONICAL_QA_APP_ORIGIN) return null;
+    if (env.VERCEL_ENV === "production" && origin.origin !== PRODUCTION_APP_ORIGIN) return null;
+    if (!env.VERCEL_ENV && env.NODE_ENV === "production" && origin.origin !== PRODUCTION_APP_ORIGIN) return null;
+    return origin;
+  } catch { return null; }
+}
+
+export function groupInvitationEmailConfigured(env: Record<string, string | undefined>) {
+  return Boolean(env.GROUP_INVITES_RESEND_API_KEY && normalizedInvitationEmail(env.GROUP_INVITES_FROM_EMAIL) && groupInvitationAppOrigin(env));
+}
 
 /** Separate credential: never borrow Supabase Auth's SMTP key. */
 export async function sendGroupInvitationEmail(input: { id: string; token: string; email: string; groupName: string; origin: string },
@@ -13,12 +32,9 @@ export async function sendGroupInvitationEmail(input: { id: string; token: strin
   if (!key || !from) return { errorCode: "GROUP_EMAIL_NOT_CONFIGURED" };
   const to = normalizedInvitationEmail(input.email);
   if (!to) return { errorCode: "INVALID_EMAIL" };
-  let origin: URL;
-  // Vercel's branch alias survives ordinary Preview deployments. No OAuth or
-  // Production domain configuration is changed by this invitation-only URL.
-  try { origin = new URL(env.GROUP_INVITES_APP_URL || (env.VERCEL_ENV === "preview" && env.VERCEL_BRANCH_URL ? `https://${env.VERCEL_BRANCH_URL}` : input.origin)); }
-  catch { return { errorCode: "GROUP_EMAIL_ORIGIN_INVALID" }; }
-  if (origin.protocol !== "https:" || origin.username || origin.password || origin.pathname !== "/") return { errorCode: "GROUP_EMAIL_ORIGIN_INVALID" };
+  if (!env.GROUP_INVITES_APP_URL?.trim()) return { errorCode: "GROUP_EMAIL_NOT_CONFIGURED" };
+  const origin = groupInvitationAppOrigin(env);
+  if (!origin) return { errorCode: "GROUP_EMAIL_ORIGIN_INVALID" };
   const link = `${origin.origin}/#groupInvite=${encodeURIComponent(input.id)}&token=${encodeURIComponent(input.token)}`;
   const group = input.groupName.slice(0, 100);
   try {

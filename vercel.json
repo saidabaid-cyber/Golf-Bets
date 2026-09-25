@@ -3,6 +3,7 @@
   "ignoreCommand": "node scripts/backup/skip-vercel-deploy.mjs",
   "git": {
     "deploymentEnabled": {
+      "*": false,
       "integration/backyard-current": true,
       "infra/backup-automation": false,
       "hotfix/cloud-backup-*": false

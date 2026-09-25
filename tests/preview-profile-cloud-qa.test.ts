@@ -12,9 +12,17 @@ const bootstrap = `
   const ref = 'bymeopxkxapfizeeqeyb';
   const env = { PREVIEW_DB_REF:ref, QA_CONFIRM_ISOLATED_PREVIEW:ref,
     NEXT_PUBLIC_SUPABASE_URL:'https://' + ref + '.supabase.co',
-    PREVIEW_QA_URL:'https://golf-bets-123abc789-qa-team.vercel.app',
+    PREVIEW_QA_URL:'https://dev.thebackyard.com.mx', PREVIEW_QA_EXPECTED_SHA:'a'.repeat(40),
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:'sb_publishable_qa_contract_test_only',
     SUPABASE_SECRET_KEY:'sb_secret_qa_contract_test_only' };
+  const health=()=>Response.json({status:'ok',environment:'preview',buildSha:env.PREVIEW_QA_EXPECTED_SHA});
+  const bindingResponse=input=>{const url=new URL(String(input));
+    if(url.pathname==='/api/health')return health();
+    if(url.origin===env.NEXT_PUBLIC_SUPABASE_URL&&url.pathname==='/auth/v1/settings')return Response.json({external:{email:true}});
+    if(url.origin===env.NEXT_PUBLIC_SUPABASE_URL&&url.pathname==='/auth/v1/admin/users')return Response.json({users:[]});
+    if(url.origin===env.PREVIEW_QA_URL&&url.pathname==='/')return new Response('<script src="/_next/static/qa.js"></script>',{headers:{'content-type':'text/html; charset=utf-8'}});
+    if(url.origin===env.PREVIEW_QA_URL&&url.pathname.endsWith('.js'))return new Response(env.NEXT_PUBLIC_SUPABASE_URL+' '+env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
+    return null;};
 `;
 
 function isolatedScript(body: string) {
@@ -24,7 +32,7 @@ function isolatedScript(body: string) {
   assert.equal(result.status, 0, result.stderr || result.stdout || result.error?.message);
 }
 
-test("profile/cloud QA accepts only the exact authorized ref and immutable Preview before any request", () => {
+test("profile/cloud QA accepts only the exact authorized ref, canonical origin and SHA before any request", () => {
   isolatedScript(`
     assert.equal(profileCloudQaConfig(env).projectRef, ref);
     const otherRef = 'abcdefghijklmnopqrst';
@@ -32,11 +40,12 @@ test("profile/cloud QA accepts only the exact authorized ref and immutable Previ
       {}, {...env, PREVIEW_DB_REF:otherRef, QA_CONFIRM_ISOLATED_PREVIEW:otherRef, NEXT_PUBLIC_SUPABASE_URL:'https://'+otherRef+'.supabase.co'},
       {...env, PREVIEW_DB_REF:'zhqmlpljloumldaczcfp', QA_CONFIRM_ISOLATED_PREVIEW:'zhqmlpljloumldaczcfp', NEXT_PUBLIC_SUPABASE_URL:'https://zhqmlpljloumldaczcfp.supabase.co'},
       {...env, QA_CONFIRM_ISOLATED_PREVIEW:''}, {...env, VERCEL_ENV:'production'},
+      {...env, PREVIEW_QA_EXPECTED_SHA:''},
       {...env, NEXT_PUBLIC_SUPABASE_URL:'https://'+otherRef+'.supabase.co'},
       {...env, PREVIEW_QA_URL:'https://app.thebackyard.com.mx'},
       {...env, PREVIEW_QA_URL:'https://beta.thebackyard.com.mx'},
-      {...env, PREVIEW_QA_URL:'https://golf-bets.vercel.app'},
-      {...env, PREVIEW_QA_URL:'https://golf-bets-git-phase2-full-platform-saha8.vercel.app'},
+      {...env, PREVIEW_QA_URL:'https://synthetic-project-test-only.vercel.app'},
+      {...env, PREVIEW_QA_URL:'https://synthetic-branch-test-only.vercel.app'},
       {...env, PREVIEW_QA_URL:env.PREVIEW_QA_URL+'?redirect=elsewhere'},
       {...env, SUPABASE_SECRET_KEY:'sb_publishable_wrong_role_only'},
     ];
@@ -57,7 +66,7 @@ test("profile/cloud QA inspects the deployed bundle and refuses absent/shared bi
     for(const content of ['<html>No verified binding</html>','https://zhqmlpljloumldaczcfp.supabase.co']) {
       let clients=0;
       await assert.rejects(runPreviewProfileCloudQA(env, {
-        fetcher:async()=>new Response(content),
+        fetcher:async(input)=>new URL(String(input)).pathname==='/api/health'?health():new Response(content),
         clientFactory:()=>{clients++;throw Error('must not create Auth clients');}
       }));
       assert.equal(clients,0);
@@ -65,11 +74,12 @@ test("profile/cloud QA inspects the deployed bundle and refuses absent/shared bi
     let clients=0;
     const mixed=async(input,init)=>{
       assert.equal(init.redirect,'error');
-      return new Response(String(input).endsWith('.js')
-        ? env.NEXT_PUBLIC_SUPABASE_URL+' https://zhqmlpljloumldaczcfp.supabase.co'
-        : '<script src="/_next/static/qa.js"></script>');
+      const url=new URL(String(input));if(url.pathname==='/api/health')return health();
+      return url.pathname.endsWith('.js')
+        ? new Response(env.NEXT_PUBLIC_SUPABASE_URL+' https://zhqmlpljloumldaczcfp.supabase.co')
+        : new Response('<script src="/_next/static/qa.js"></script>',{headers:{'content-type':'text/html; charset=utf-8'}});
     };
-    await assert.rejects(runPreviewProfileCloudQA(env,{fetcher:mixed,clientFactory:()=>{clients++;}}),/shared Supabase/);
+    await assert.rejects(runPreviewProfileCloudQA(env,{fetcher:mixed,clientFactory:()=>{clients++;}}),/does not reference only the isolated QA project/);
     assert.equal(clients,0);
   `);
 });
@@ -90,7 +100,7 @@ test("profile/cloud QA cleanup requires exact ID, email AND run marker (syntheti
       },signInWithPassword:async()=>({data:{},error:{status:400}})}});
       const transport=async(input)=>{
         if(String(input).includes('/api/account/delete'))apiDeletes++;
-        return new Response(String(input).endsWith('.js')?env.NEXT_PUBLIC_SUPABASE_URL:'<script src="/_next/static/qa.js"></script>');
+        return bindingResponse(input)||new Response('unexpected',{status:500});
       };
       await assert.rejects(runPreviewProfileCloudQA(env,{fetcher:transport,clientFactory,log:value=>logs.push(JSON.parse(value))}),/remote QA failed/);
       assert.equal(deleted,0);assert.equal(apiDeletes,0);
@@ -114,11 +124,30 @@ test("profile/cloud QA removes only its proven fresh unused Auth fixture after l
       },
       deleteUser:async(id)=>{assert.equal(id,attempted.id);deleted=true;return {data:{},error:null};}
     },signInWithPassword:async()=>({data:{},error:{status:400}})}});
-    const transport=async(input)=>new Response(String(input).endsWith('.js')?env.NEXT_PUBLIC_SUPABASE_URL:'<script src="/_next/static/qa.js"></script>');
+    const transport=async(input)=>bindingResponse(input)||new Response('unexpected',{status:500});
     await assert.rejects(runPreviewProfileCloudQA(env,{fetcher:transport,clientFactory,log:value=>logs.push(JSON.parse(value))}),/remote QA failed/);
     assert.equal(deleted,true);assert.equal(logs[0].cleanup,'COMPLETE');
     assert.deepEqual(logs[0].retainedQaUserIds,[]);
     assert.equal(logs[0].failedAt,'CREATE_FRESH_QA_ACCOUNTS');
+  `);
+});
+
+test("profile/cloud cleanup refuses a changed alias and uses only exact marker-scoped Admin deletion", () => {
+  isolatedScript(`
+    let attempted,deleted=false,adminDeletes=0,appDeletes=0,healthCalls=0;const logs=[];
+    const clientFactory=()=>({auth:{admin:{
+      createUser:async(input)=>{attempted=input;return {data:{user:input},error:null};},
+      getUserById:async(id)=>deleted?{data:{user:null},error:{status:404,code:'user_not_found'}}:{data:{user:attempted},error:null},
+      deleteUser:async(id)=>{assert.equal(id,attempted.id);adminDeletes++;deleted=true;return {data:{},error:null};}
+    },signInWithPassword:async()=>({data:{},error:{status:400,code:'invalid_credentials'}})}});
+    const transport=async(input)=>{const url=new URL(String(input));
+      if(url.pathname==='/api/health'){healthCalls++;return healthCalls<=2?health():Response.json({status:'ok',environment:'preview',buildSha:'b'.repeat(40)});}
+      if(url.pathname==='/api/account/delete')appDeletes++;
+      return bindingResponse(input)||new Response('unexpected',{status:500});
+    };
+    await assert.rejects(runPreviewProfileCloudQA(env,{fetcher:transport,clientFactory,log:value=>logs.push(JSON.parse(value))}),/remote QA failed/);
+    assert.equal(adminDeletes,1);assert.equal(appDeletes,0);assert.equal(deleted,true);
+    assert.equal(logs[0].cleanup,'COMPLETE');assert.equal(logs[0].cleanupModes[0].mode,'ADMIN_DIRECT_AFTER_ALIAS_REVALIDATION_FAILURE');
   `);
 });
 
@@ -127,7 +156,7 @@ test("profile/cloud QA --check-config is offline and prints no credential", () =
   const result = spawnSync(process.execPath, ["scripts/qa-preview-profile-cloud.mjs", "--check-config"], {
     encoding: "utf8", timeout: 15_000,
     env: { ...process.env, VERCEL: "", VERCEL_ENV: "", PREVIEW_DB_REF: ref, QA_CONFIRM_ISOLATED_PREVIEW: ref,
-      NEXT_PUBLIC_SUPABASE_URL: `https://${ref}.supabase.co`, PREVIEW_QA_URL: "https://golf-bets-123abc789-qa-team.vercel.app",
+      NEXT_PUBLIC_SUPABASE_URL: `https://${ref}.supabase.co`, PREVIEW_QA_URL: "https://dev.thebackyard.com.mx", PREVIEW_QA_EXPECTED_SHA: "a".repeat(40),
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_qa_contract_test_only", SUPABASE_SECRET_KEY: "sb_secret_qa_contract_test_only" },
   });
   assert.equal(result.status, 0, result.stderr);

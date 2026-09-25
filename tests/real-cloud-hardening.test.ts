@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
-import { authIdentityChanged, requireCloudWrites } from "../lib/auth-flow";
+import { authIdentityChanged, requireCloudWrites, sendEmailOtpWhenReady, type AuthFlowClient } from "../lib/auth-flow";
 import { readAuthProviderStatus } from "../lib/auth-provider-status";
+import { CANONICAL_PREVIEW_SUPABASE_ORIGIN, CANONICAL_PRODUCTION_SUPABASE_ORIGIN, resolveBrowserSupabaseOrigin } from "../lib/supabase/client";
 
 test("refrescar token o repetir SIGNED_IN de la misma cuenta no reinicia onboarding", () => {
   assert.equal(authIdentityChanged(null, "a"), true);
@@ -61,6 +62,39 @@ test("Auth distingue no configurado, red fallida y proveedor habilitado", async 
   assert.equal((await readAuthProviderStatus("https://example.test", "public", async () => { throw new Error("offline"); })).status, "unavailable");
   assert.equal((await readAuthProviderStatus("https://example.test", "public", async () => new Response(null, { status: 503 }))).status, "unavailable");
   assert.equal((await readAuthProviderStatus("https://example.test", "public", async () => Response.json({ external: { google: true, apple: true } }))).apple, true);
+});
+
+test("email OTP nunca llama Supabase mientras providers está cargando, no configurado o no disponible", async () => {
+  let sends = 0;
+  const auth = { signInWithOtp: async () => { sends++; return { error: null }; } } as unknown as AuthFlowClient;
+  const unavailable = { status: "unavailable" as const, email: false, google: false, apple: false };
+  const unconfigured = { ...unavailable, status: "unconfigured" as const };
+  await assert.rejects(() => sendEmailOtpWhenReady(auth, null, "owner@example.test", "https://dev.thebackyard.com.mx/auth/callback"), /email_auth_provider_unavailable/);
+  await assert.rejects(() => sendEmailOtpWhenReady(auth, unconfigured, "owner@example.test", "https://dev.thebackyard.com.mx/auth/callback"), /email_auth_provider_unavailable/);
+  await assert.rejects(() => sendEmailOtpWhenReady(auth, unavailable, "owner@example.test", "https://dev.thebackyard.com.mx/auth/callback"), /email_auth_provider_unavailable/);
+  assert.equal(sends, 0);
+  await sendEmailOtpWhenReady(auth, { status: "ready", email: true, google: false, apple: false }, "owner@example.test", "https://dev.thebackyard.com.mx/auth/callback");
+  assert.equal(sends, 1);
+  const provider = readFileSync("app/components/account-provider.tsx", "utf8");
+  assert.ok(provider.indexOf('providers?.status !== "ready"') < provider.indexOf("getSupabaseBrowser()", provider.indexOf("async function sendCode")));
+});
+
+test("el cliente Auth del navegador exige la pareja canónica app-origin y Supabase ref", () => {
+  const dev = { hostname: "dev.thebackyard.com.mx", protocol: "https:" };
+  const production = { hostname: "app.thebackyard.com.mx", protocol: "https:" };
+  const local = { hostname: "localhost", protocol: "http:" };
+  const randomPreview = { hostname: "golf-bets-random.vercel.app", protocol: "https:" };
+  assert.equal(resolveBrowserSupabaseOrigin(CANONICAL_PREVIEW_SUPABASE_ORIGIN, dev), CANONICAL_PREVIEW_SUPABASE_ORIGIN);
+  assert.equal(resolveBrowserSupabaseOrigin(CANONICAL_PRODUCTION_SUPABASE_ORIGIN, dev), null);
+  assert.equal(resolveBrowserSupabaseOrigin(CANONICAL_PRODUCTION_SUPABASE_ORIGIN, production), CANONICAL_PRODUCTION_SUPABASE_ORIGIN);
+  assert.equal(resolveBrowserSupabaseOrigin(CANONICAL_PREVIEW_SUPABASE_ORIGIN, production), null);
+  assert.equal(resolveBrowserSupabaseOrigin(CANONICAL_PREVIEW_SUPABASE_ORIGIN, local), CANONICAL_PREVIEW_SUPABASE_ORIGIN);
+  assert.equal(resolveBrowserSupabaseOrigin("http://127.0.0.1:54321", local), "http://127.0.0.1:54321");
+  assert.equal(resolveBrowserSupabaseOrigin(CANONICAL_PREVIEW_SUPABASE_ORIGIN, randomPreview), null);
+  assert.equal(resolveBrowserSupabaseOrigin(`${CANONICAL_PREVIEW_SUPABASE_ORIGIN}/rest/v1`, dev), null);
+  assert.equal(resolveBrowserSupabaseOrigin(CANONICAL_PREVIEW_SUPABASE_ORIGIN, undefined), null);
+  const client = readFileSync("lib/supabase/client.ts", "utf8");
+  assert.ok(client.indexOf("resolveBrowserSupabaseOrigin(process.env.NEXT_PUBLIC_SUPABASE_URL") < client.indexOf("createClient(url, anonKey"));
 });
 
 test("pgcrypto se resuelve en extensions en instalaciones nuevas y funciones persistidas", () => {

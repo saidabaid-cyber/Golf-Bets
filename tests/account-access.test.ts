@@ -6,8 +6,8 @@ import ts from "typescript";
 import { isolatedPreviewDatabaseEnabled } from "../lib/preview-database";
 
 function harness(data: unknown, error: unknown = null, env: Record<string, string> = {
-  ACCOUNT_LIFECYCLE_ENABLED: "false", PREVIEW_DB_REF: "abcdefghijklmnopqrst",
-  NEXT_PUBLIC_SUPABASE_URL: "https://abcdefghijklmnopqrst.supabase.co", VERCEL_ENV: "preview",
+  ACCOUNT_LIFECYCLE_ENABLED: "false", PREVIEW_DB_REF: "bymeopxkxapfizeeqeyb",
+  NEXT_PUBLIC_SUPABASE_URL: "https://bymeopxkxapfizeeqeyb.supabase.co", VERCEL_ENV: "preview",
 }) {
   const exports: Record<string, unknown> = {}; let calls = 0;
   const compiled = ts.transpileModule(readFileSync("lib/account-access.server.ts", "utf8"), {

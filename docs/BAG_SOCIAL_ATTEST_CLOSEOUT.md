@@ -1,5 +1,7 @@
 # Mi Bolsa V2 / Social / Attest — evidence and deployment gate
 
+> **DOCUMENTO HISTÓRICO — NO USAR COMO ESTADO ACTUAL NI RUNBOOK.** Conserva evidencia de `phase2/full-platform`; sus gates, conteos y pasos de despliegue pueden estar superados. La fuente operativa es `integration/backyard-current`; consulte el [manifiesto de consolidación](./CONSOLIDATION_MANIFEST_2026-09-24.md), el [estado canónico del producto](./CANONICAL_PRODUCT_STATUS_2026-09-24.md) y el [ledger canónico de migraciones](./CANONICAL_MIGRATION_LEDGER_2026-09-24.md). No ejecute deploys, cambios de entorno ni migraciones a partir de este archivo.
+
 Initial branch: `phase2/full-platform`.
 Initial HEAD: `351c32a4e798aeead6c748194ea844ce34aba1b0`.
 Initial worktree clean. Home hero, approved Home CSS and assets remain NO TOUCH.

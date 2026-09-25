@@ -53,6 +53,12 @@ function providerHarness(options: { existingNotice?: boolean; newAccount?: boole
     if (id === "react") return react;
     if (id === "react/jsx-runtime") return { jsx, jsxs: jsx, Fragment: "fragment" };
     if (id.endsWith("account-state")) return new Proxy({ hasCurrentLegalConsent: () => !options.newAccount, hasCurrentBettingDataConsent: () => false }, { get: (target, key) => key in target ? target[key as keyof typeof target] : failUnexpected(String(key)) });
+    if (id.endsWith("legal-evidence-client")) return {
+      GUEST_LEGAL_ACTOR_KEY: "guest-actor",
+      legalClientEnvironment: () => "test",
+      latestLegalEvidence: () => null,
+      hasResolvedFinancialConsent: () => false,
+    };
     return new Proxy({}, { get: (_, key) => failUnexpected(`${id}:${String(key)}`) });
   } });
   const child = jsx("application-routes", { children: "HOME · RONDA MANUAL · PERFIL" });

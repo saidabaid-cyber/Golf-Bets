@@ -1,5 +1,7 @@
 # QA — UX, Foursome y cierre funcional
 
+> **Evidencia histórica; no ejecutar como runbook actual.** Conserva la QA realizada sobre `codex-dev`; esa rama y sus previews no son destinos vigentes. Consultar [el manifiesto canónico](./CONSOLIDATION_MANIFEST_2026-09-24.md) y [el estado canónico del producto](./CANONICAL_PRODUCT_STATUS_2026-09-24.md).
+
 Base verificada, árbol limpio: `codex-dev`, HEAD `c18f992470f53f93043ba414a2e89605eeaf6909`. Sin reset, merge, modificación de main ni agentes paralelos.
 
 ## Cobertura del encargo (21 secciones)

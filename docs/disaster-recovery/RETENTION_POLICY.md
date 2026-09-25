@@ -1,6 +1,6 @@
 # Backup retention policy
 
-**Status: `NOT_ACTIVE_PENDING_OWNER_SETUP`**
+**Status: `BACKUP_OBSERVED_RESTORE_DRILL_PENDING`**
 
 Retention is implemented as a plan-first process. The activation setting is `BACKUP_RETENTION_APPLY=false`, so the workflow reports candidates but does not trash Drive files.
 
@@ -58,4 +58,4 @@ The workflow's GitHub Actions artifact is a separate short-lived convenience cop
 
 ## Policy review
 
-Review this policy after recovery exercises, compliance changes, material data growth, Drive ownership changes, or encryption-key rotation. Until the owner explicitly activates and approves the automation, the status remains `NOT_ACTIVE_PENDING_OWNER_SETUP`.
+Review this policy after recovery exercises, compliance changes, material data growth, Drive ownership changes, or encryption-key rotation. The status remains `BACKUP_OBSERVED_RESTORE_DRILL_PENDING` until a disposable restore drill passes; destructive retention remains separately unapproved.

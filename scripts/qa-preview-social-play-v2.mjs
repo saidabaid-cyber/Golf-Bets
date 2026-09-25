@@ -4,17 +4,19 @@ import { createRequire } from 'node:module';
 import { writeFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 import { profileCloudQaConfig } from './qa-preview-profile-cloud.mjs';
-import { credentialBoundFetch, verifyPreviewBundleBinding } from './qa-preview-statistics.mjs';
+import { credentialBoundFetch, deploymentMutationBoundFetch, verifyPreviewBundleBinding, verifyPreviewDeploymentIdentity } from './qa-preview-statistics.mjs';
 
 // Creates two synthetic QA accounts, retains all fixtures. Never deletes accounts,
 // changes Auth configuration, sends mail, or follows credential-bearing redirects.
 const config = profileCloudQaConfig(process.env);
 assert.equal(config.projectRef, 'bymeopxkxapfizeeqeyb');
-const appFetch = credentialBoundFetch(config.previewOrigin);
-await verifyPreviewBundleBinding(config, appFetch);
+const rawAppFetch = credentialBoundFetch(config.previewOrigin);
+const databaseFetch = credentialBoundFetch(config.supabaseOrigin);
+await verifyPreviewBundleBinding(config, rawAppFetch, databaseFetch);
+const appFetch = deploymentMutationBoundFetch(config, rawAppFetch);
 const require = createRequire(import.meta.url);
 const domain = { ...require('../.test-dist/lib/cloud-account.js'), ...require('../.test-dist/lib/total-score-round.js'), ...require('../.test-dist/lib/backyard-index.js') };
-const options = { auth: { persistSession:false, autoRefreshToken:false, detectSessionInUrl:false }, global:{ fetch:credentialBoundFetch(config.supabaseOrigin) } };
+const options = { auth: { persistSession:false, autoRefreshToken:false, detectSessionInUrl:false }, global:{ fetch:databaseFetch } };
 const admin = createClient(config.supabaseOrigin, config.secretKey, options);
 const runId=randomUUID(), passed=[], accounts=[];
 let stage='CREATE_SYNTHETIC_USERS', failure=null;
@@ -34,6 +36,7 @@ function privateFixtures() { writeFileSync('.qa-artifacts/social-play-fixtures.p
 try {
  for(const label of ['A','B']) {
   const account={id:randomUUID(),email:`qa-social-play-${label}-${runId}@example.invalid`,password:`Qa!${randomBytes(28).toString('hex')}`,label,name:`Synthetic QA ${label}`,username:`qa_${label.toLowerCase()}_${runId.replaceAll('-','').slice(0,16)}`};accounts.push(account);privateFixtures();
+  await verifyPreviewDeploymentIdentity(config, rawAppFetch);
   checked(await admin.auth.admin.createUser({id:account.id,email:account.email,password:account.password,email_confirm:true,app_metadata:{qa_run_id:runId},user_metadata:{display_name:account.name,given_name:'Synthetic',family_name:`QA ${label}`}}),'create QA');
   await login(account);
   await domain.saveCloudProfile(account.client,account.id,{displayName:account.name,username:account.username,defaultHandicap:null,avatarUrl:'',location:{countryCode:'MX',country:'México',stateCode:'MX-PUE',state:'Puebla'},locationUpdatedAt:new Date().toISOString()},new Date().toISOString(),{rebaseOnServerClock:true});
@@ -104,6 +107,7 @@ try {
  assert.deepEqual((await app('/api/social/connections',a)).friends,[]);
  assert.equal((await app('/api/social/activity?friendsOnly=true',b)).data.some(c=>c.author.userId===a.id),false);
  passed.push('RECIPROCAL_BLOCK_PRIVACY');
+ await verifyPreviewDeploymentIdentity(config,rawAppFetch);
 } catch(error) {failure={stage,message:String(error.message).slice(0,400)};}
 const report={runId,preview:config.previewOrigin,ref:config.projectRef,passed,failure,retainedSyntheticUsers:accounts.map(a=>a.id),qualification:'Actual Preview APIs and Supabase authenticated requests with new sessions. No physical iPhone, Google OAuth, SMTP receipt or camera hardware claim. Fixtures retained; no data deleted.'};
 writeFileSync('.qa-artifacts/social-play-v2-cloud.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));if(failure)process.exitCode=1;

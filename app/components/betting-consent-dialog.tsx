@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
-export function BettingConsentDialog({ onAccept, onDismiss }: {
+export function BettingConsentDialog({ onAccept, onReject, onDismiss }: {
   onAccept: () => Promise<void>;
+  onReject: () => Promise<void>;
   onDismiss: () => void;
 }) {
   const [checked, setChecked] = useState(false);
@@ -42,7 +43,12 @@ export function BettingConsentDialog({ onAccept, onDismiss }: {
       </label>
       {error && <p className="notice bad" role="alert">{error}</p>}
       <div className="confirmActions">
-        <button type="button" className="secondary" disabled={busy} onClick={onDismiss}>Ahora no</button>
+        <button type="button" className="secondary" disabled={busy} onClick={async () => {
+          setBusy(true); setError("");
+          try { await onReject(); }
+          catch (rejectError) { setError(rejectError instanceof Error ? rejectError.message : "No se pudo guardar el rechazo en este dispositivo."); }
+          finally { setBusy(false); }
+        }}>No autorizar</button>
         <button type="button" className="primary" disabled={!checked || busy} onClick={async () => {
           setBusy(true); setError("");
           try { await onAccept(); }

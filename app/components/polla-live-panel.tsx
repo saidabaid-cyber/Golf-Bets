@@ -10,6 +10,7 @@ import { NumericCaptureInput } from "./numeric-capture-input";
 import { normalizeNumericCaptureText, parseNumericCapture } from "../../lib/numeric-input";
 import { useBackyardAccount } from "./account-provider";
 import { normalizeRoundStartHole } from "../../lib/engine";
+import { resolveBrowserAppOrigin } from "../../lib/app-origin";
 
 type Screen = "home" | "create" | "join" | "leaderboard" | "scorecard" | "mine" | "manage";
 type CreatedTournament = { public_id: string; short_code: string; name: string };
@@ -137,7 +138,8 @@ export function PollaLivePanel({ courses = [], privateRound }: { courses?: Cours
       if (!response.ok) throw new Error(payload.error || "No fue posible crear la Polla.");
       setCreated(payload.tournament);
       setAccessList(payload.access || []);
-      const link = `${window.location.origin}/polla/${payload.tournament.short_code}`;
+      const appOrigin = resolveBrowserAppOrigin(window.location.origin, process.env.NEXT_PUBLIC_APP_ORIGIN);
+      const link = `${appOrigin}/polla/${payload.tournament.short_code}`;
       const { default: QRCode } = await import("qrcode");
       setQr(await QRCode.toDataURL(link, { width: 240, margin: 1, color: { dark: "#112d25", light: "#ffffff" } }));
     } catch (requestError) {
@@ -268,10 +270,11 @@ export function PollaLivePanel({ courses = [], privateRound }: { courses?: Cours
 
   async function shareCreatedPolla() {
     if (!created) return;
-    const url = `${window.location.origin}/polla/${created.short_code}`;
-    const text = `THE BACKYARD\n${created.name}\n${url}`;
     setShareMessage("");
     try {
+      const appOrigin = resolveBrowserAppOrigin(window.location.origin, process.env.NEXT_PUBLIC_APP_ORIGIN);
+      const url = `${appOrigin}/polla/${created.short_code}`;
+      const text = `THE BACKYARD\n${created.name}\n${url}`;
       if (navigator.share) {
         await navigator.share({ title: created.name, text, url });
         setShareMessage("Invitación compartida.");
@@ -283,7 +286,7 @@ export function PollaLivePanel({ courses = [], privateRound }: { courses?: Cours
       }
     } catch (shareError) {
       if (shareError instanceof DOMException && shareError.name === "AbortError") setShareMessage("Compartir cancelado.");
-      else setShareMessage(`No se pudo compartir. Copia este enlace: ${url}`);
+      else setShareMessage("No se pudo generar un enlace seguro para compartir.");
     }
   }
 

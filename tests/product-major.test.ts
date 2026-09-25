@@ -180,9 +180,9 @@ test("invitado conserva consentimiento local y una cuenta no oculta fallos al si
   assert.match(auth, /migrationDecisionStorageKey\(identity\.userId\)/);
 });
 
-test("configuración documenta redirects exactos local y producción", () => {
+test("configuración documenta redirects exactos local y Preview canónico", () => {
   const setup = read("docs/SETUP_AUTH.md");
   assert.match(setup, /http:\/\/localhost:3000\/auth\/callback/);
-  assert.match(setup, /https:\/\/beta\.thebackyard\.com\.mx\/auth\/callback/);
+  assert.match(setup, /https:\/\/dev\.thebackyard\.com\.mx\/auth\/callback/);
   assert.match(setup, /SUPABASE_SECRET_KEY/);
 });

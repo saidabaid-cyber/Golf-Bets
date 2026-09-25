@@ -1,7 +1,7 @@
-// Final Owner-review browser evidence for an immutable Preview URL.
+// Final Owner-review browser evidence for the canonical stable Preview URL.
 //
 // Usage:
-//   node scripts/qa-owner-review-browser.mjs https://immutable-preview.vercel.app .qa-artifacts/22-sept/screenshots
+//   node scripts/qa-owner-review-browser.mjs https://dev.thebackyard.com.mx .qa-artifacts/22-sept/screenshots
 //   node --env-file=.qa-artifacts/.env.phase2-preview.local scripts/qa-owner-review-browser.mjs <url> <dir> --real-auth
 //
 // The default run uses only isolated browser storage. --real-auth additionally
@@ -14,34 +14,34 @@ import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promise
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
+import { canonicalPreviewCdpHeaders, canonicalPreviewRequestHeaders } from "./lib/canonical-preview-request.mjs";
+import { exactQaBrowserTarget, exactQaSupabaseOrigin, qaCredentialBoundFetch, qaPublicKey } from "./lib/qa-public-preview.mjs";
 
 const QA_PROJECT_REF = "bymeopxkxapfizeeqeyb";
 const FORBIDDEN_HOSTS = new Set(["app.thebackyard.com.mx", "beta.thebackyard.com.mx"]);
-const IMMUTABLE_PREVIEW_HOST = /^golf-bets-[a-z0-9]{9}-saha8\.vercel\.app$/;
+const CANONICAL_QA_ORIGIN = "https://dev.thebackyard.com.mx";
 const previewArgument = process.argv[2] || "";
 const outputDirectory = path.resolve(process.argv[3] || path.join(process.cwd(), ".qa-artifacts", "22-sept", "screenshots"));
 const useRealAuth = process.argv.includes("--real-auth") || process.env.OWNER_QA_USE_REAL_AUTH === "1";
-const expectedSha = String(process.env.OWNER_QA_EXPECTED_SHA || "").trim().toLowerCase();
+const expectedSha = String(process.env.PREVIEW_QA_EXPECTED_SHA || "").trim().toLowerCase();
+const automationBypass = String(process.env.VERCEL_AUTOMATION_BYPASS_SECRET || "").trim();
 const fixturePath = path.resolve(process.env.OWNER_QA_FIXTURE_PATH || path.join(process.cwd(), ".qa-artifacts", "social-play-fixtures.private.json"));
 const sourceFixturePath = path.resolve(process.env.OWNER_QA_SOURCE_FIXTURE_PATH || fixturePath);
 const targetFixturePath = path.resolve(process.env.OWNER_QA_TARGET_FIXTURE_PATH || fixturePath);
 const sourceFixtureLabel = String(process.env.OWNER_QA_SOURCE_FIXTURE_LABEL || "").trim();
 const targetFixtureLabel = String(process.env.OWNER_QA_TARGET_FIXTURE_LABEL || "").trim();
 const browserNoSandbox = process.env.OWNER_QA_CHROME_NO_SANDBOX === "1";
-const preview = new URL(previewArgument || "http://127.0.0.1:3000");
+const preview = exactQaBrowserTarget(previewArgument || "http://127.0.0.1:3000", { allowLocal: true });
 const origin = preview.origin;
 
-assert.ok(["http:", "https:"].includes(preview.protocol), "Preview URL must use http or https.");
-assert.equal(FORBIDDEN_HOSTS.has(preview.hostname), false, `Refusing browser QA against protected host ${preview.hostname}.`);
 const localPreview = preview.hostname === "127.0.0.1" || preview.hostname === "localhost";
 if (!localPreview) {
-  assert.equal(preview.protocol, "https:", "Remote browser QA requires an HTTPS Preview URL.");
-  assert.match(preview.hostname, IMMUTABLE_PREVIEW_HOST, "Remote browser QA requires this project's immutable Vercel deployment hostname.");
-  assert.equal(preview.port, "", "Remote browser QA does not allow a custom port.");
+  assert.equal(FORBIDDEN_HOSTS.has(preview.hostname), false, "Refusing browser QA against a protected host.");
+  assert.equal(preview.origin, CANONICAL_QA_ORIGIN, "Remote browser QA requires the canonical QA origin.");
   assert.equal(useRealAuth, true, "Remote final evidence requires --real-auth with the isolated QA fixtures.");
-  assert.match(expectedSha, /^[0-9a-f]{40}$/, "Remote final evidence requires OWNER_QA_EXPECTED_SHA.");
+  assert.match(expectedSha, /^[0-9a-f]{40}$/, "Remote final evidence requires PREVIEW_QA_EXPECTED_SHA.");
 }
-if (useRealAuth) assert.equal(localPreview, false, "Real QA sessions may run only against an immutable remote Preview.");
+if (useRealAuth) assert.equal(localPreview, false, "Real QA sessions may run only against the canonical remote Preview.");
 const strict = !localPreview || process.argv.includes("--strict");
 
 const chromeCandidates = [
@@ -179,11 +179,10 @@ function safeFilePart(value) {
 async function authenticateExistingQaAccounts() {
   if (!useRealAuth) return null;
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-  const publicKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+  const publicKey = qaPublicKey(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "", QA_PROJECT_REF);
   const confirmedRef = process.env.QA_CONFIRM_ISOLATED_PREVIEW || process.env.PREVIEW_DB_REF || "";
-  assert.equal(new URL(supabaseUrl).hostname, `${QA_PROJECT_REF}.supabase.co`, "Real-auth evidence is restricted to the isolated QA Supabase project.");
+  const supabaseOrigin = exactQaSupabaseOrigin(supabaseUrl, QA_PROJECT_REF);
   assert.equal(confirmedRef, QA_PROJECT_REF, "Set QA_CONFIRM_ISOLATED_PREVIEW to the isolated QA project ref.");
-  assert.ok(publicKey && !publicKey.includes("SENSITIVE"), "A matching Preview publishable/anon key is required for real-auth evidence.");
   const sourceFixtures = JSON.parse(await readFile(sourceFixturePath, "utf8"));
   const targetFixtures = sourceFixturePath === targetFixturePath
     ? sourceFixtures
@@ -202,8 +201,10 @@ async function authenticateExistingQaAccounts() {
     assert.ok(typeof fixture.id === "string" && typeof fixture.email === "string" && typeof fixture.password === "string", "QA fixture is missing required private fields.");
   }
   assert.ok(typeof target.username === "string" && target.username.trim(), "The target QA fixture must include the username used by search evidence.");
-  const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+  const credentialFetch = qaCredentialBoundFetch(supabaseOrigin);
+  const response = await credentialFetch(`${supabaseOrigin}/auth/v1/token?grant_type=password`, {
     method: "POST",
+    redirect: "error",
     headers: { apikey: publicKey, Authorization: `Bearer ${publicKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({ email: source.email, password: source.password }),
     signal: AbortSignal.timeout(30_000),
@@ -448,7 +449,8 @@ class BrowserSession {
         void this.client.send("Fetch.failRequest", { requestId: event.requestId, errorReason: "BlockedByClient" }, sessionId).catch(() => undefined);
         return;
       }
-      void this.client.send("Fetch.continueRequest", { requestId: event.requestId }, sessionId).catch(() => undefined);
+      const headers = canonicalPreviewCdpHeaders(url, CANONICAL_QA_ORIGIN, automationBypass, event.request?.headers || {});
+      void this.client.send("Fetch.continueRequest", { requestId: event.requestId, headers }, sessionId).catch(() => undefined);
     }]);
     const loaded = this.client.once("Page.loadEventFired", sessionId, 45_000);
     await this.client.send("Page.navigate", { url: origin }, sessionId);
@@ -882,7 +884,8 @@ async function supportAndSocialEvidence(client, realAuth) {
         const copied = window.__ownerQaClipboard || '';
         try {
           const url = new URL(copied);
-          return url.searchParams.get('friend') === ${JSON.stringify(realAuth.source.id)}
+          return url.origin === ${JSON.stringify(CANONICAL_QA_ORIGIN)}
+            && url.searchParams.get('friend') === ${JSON.stringify(realAuth.source.id)}
             && !url.searchParams.has('username')
             && !copied.includes('.vercel.app');
         } catch { return false; }
@@ -1069,6 +1072,18 @@ async function realAuthEvidence(client, realAuth) {
 }
 
 let outputAlreadyExists = false;
+if (!localPreview) {
+  const healthUrl = `${origin}/api/health`;
+  // The public health identity is proved before the optional automation bypass
+  // is ever disclosed to the canonical deployment or installed in CDP.
+  const healthResponse = await fetch(healthUrl, { redirect: "error", cache: "no-store", headers: canonicalPreviewRequestHeaders(healthUrl, CANONICAL_QA_ORIGIN), signal: AbortSignal.timeout(30_000) });
+  assert.equal(healthResponse.status, 200, "Canonical QA health endpoint is unavailable.");
+  const healthText = await healthResponse.text();
+  assert.ok(healthText.length <= 100_000, "Canonical QA health response exceeded the inspection limit.");
+  const health = JSON.parse(healthText);
+  assert.equal(health.environment, "preview", "Canonical QA health did not identify a Preview environment.");
+  assert.equal(health.buildSha, expectedSha, "Canonical QA health SHA does not match PREVIEW_QA_EXPECTED_SHA.");
+}
 try { await access(outputDirectory); outputAlreadyExists = true; } catch { /* A new evidence directory is required. */ }
 assert.equal(outputAlreadyExists, false, `Evidence directory already exists; choose a new FINAL_SHA-specific path: ${outputDirectory}`);
 await mkdir(outputDirectory, { recursive: true });

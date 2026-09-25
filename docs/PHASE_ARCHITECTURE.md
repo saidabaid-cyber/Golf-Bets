@@ -1,5 +1,7 @@
 # Phase architecture and release safety
 
+> **Arquitectura histórica.** La fuente de verdad vigente es `integration/backyard-current`; la única URL de owner QA es `https://dev.thebackyard.com.mx`.
+
 ## Immutable Phase 1 baseline
 
 - Final SHA: `5c278d7d27bcf68883108341503eaff6cf95fe24`

@@ -1,5 +1,7 @@
 # The Backyard Beta — arquitectura
 
+> **DOCUMENTO HISTÓRICO — NO USAR COMO RUNBOOK.** Conserva evidencia de la rama `beta` y puede mencionar arquitectura, entornos o decisiones ya superados. La fuente operativa es `integration/backyard-current`; consulte el [manifiesto de consolidación](docs/CONSOLIDATION_MANIFEST_2026-09-24.md), el [estado canónico del producto](docs/CANONICAL_PRODUCT_STATUS_2026-09-24.md) y el [ledger canónico de migraciones](docs/CANONICAL_MIGRATION_LEDGER_2026-09-24.md). No ejecute deploys, cambios de entorno ni migraciones a partir de este archivo.
+
 Estado documentado: 2026-09-06. Rama de trabajo: `beta`.
 
 ## Límites de entorno

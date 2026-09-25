@@ -1,5 +1,7 @@
 # Stats reset — DB Preview aislada y QA pendiente
 
+> **Plan histórico del 2026-09-15; no ejecutar esta secuencia.** La rama QA ya existe como `phase2-full-platform-qa` (`bymeopxkxapfizeeqeyb`) y su ledger real diverge de esta lista. La fuente operativa es [CANONICAL_MIGRATION_LEDGER_2026-09-24.md](./CANONICAL_MIGRATION_LEDGER_2026-09-24.md); no crear otra rama ni aplicar estos diez archivos por lista.
+
 Estado 2026-09-15: `phase2/full-platform` HEAD inicial `5e36754d58911c5db78cadd13c5b1c4c7447fce4`, árbol limpio. El único proyecto visible es `zhqmlpljloumldaczcfp` («The Backyard», compartido); `list_branches` devolvió `[]`. No hay base aislada ni autorización económica final. **No se aplicó SQL remoto.** Los tests locales y PGlite no acreditan persistencia cloud.
 
 ## Barrera de infraestructura
@@ -21,7 +23,7 @@ Estado 2026-09-15: `phase2/full-platform` HEAD inicial `5e36754d58911c5db78cadd1
 9. `20260913205122_user_statistics_reset.sql` — depende del ledger de eventos del paso 7.
 10. `20260915114707_user_statistics_reset_idempotency.sql` — depende del reset del paso 9; revoca escritura REST directa y RPC antiguo, crea reset idempotente.
 
-Aplicar de uno en uno con historial de migración en la **ref nueva**, listar ledger y consultar objetos/RLS/grants tras cada paso. Detenerse si una migración falla; no reparar ni volver a aplicar en el proyecto compartido. Antes de habilitar REST, verificar el cambio de [Data API autoexposure](https://supabase.com/changelog/45329-breaking-change-tables-not-exposed-to-data-and-graphql-api-automatically): RLS y `GRANT` explícito no garantizan por sí solos que la tabla sea alcanzable por PostgREST. Ejecutar advisors y revisar el RPC `SECURITY DEFINER` (dueño, `auth.uid()`, search path fijo, EXECUTE sólo authenticated) antes de habilitar clientes.
+La instrucción histórica de aplicar uno por uno quedó superseded; no se debe ejecutar sobre `bymeopxkxapfizeeqeyb`. Cualquier apply futuro parte del ledger canónico reconciliado, lista objetos/RLS/grants tras cada paso y se detiene ante una divergencia. Nunca reparar ni volver a aplicar en el proyecto compartido. Antes de habilitar REST, verificar el cambio de [Data API autoexposure](https://supabase.com/changelog/45329-breaking-change-tables-not-exposed-to-data-and-graphql-api-automatically): RLS y `GRANT` explícito no garantizan por sí solos que la tabla sea alcanzable por PostgREST. Ejecutar advisors y revisar el RPC `SECURITY DEFINER` (dueño, `auth.uid()`, search path fijo, EXECUTE sólo authenticated) antes de habilitar clientes.
 
 ## Contrato real de 0 Stats
 

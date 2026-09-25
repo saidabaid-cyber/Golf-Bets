@@ -4,18 +4,20 @@ import { createRequire } from 'node:module';
 import { writeFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 import { profileCloudQaConfig } from './qa-preview-profile-cloud.mjs';
-import { credentialBoundFetch, verifyPreviewBundleBinding } from './qa-preview-statistics.mjs';
+import { credentialBoundFetch, deploymentMutationBoundFetch, verifyPreviewBundleBinding, verifyPreviewDeploymentIdentity } from './qa-preview-statistics.mjs';
 const config=profileCloudQaConfig(process.env);
 assert.equal(config.projectRef,'bymeopxkxapfizeeqeyb');
-const appFetch=credentialBoundFetch(config.previewOrigin);
-await verifyPreviewBundleBinding(config,appFetch);
+const rawAppFetch=credentialBoundFetch(config.previewOrigin);
+const databaseFetch=credentialBoundFetch(config.supabaseOrigin);
+await verifyPreviewBundleBinding(config,rawAppFetch,databaseFetch);
+const appFetch=deploymentMutationBoundFetch(config,rawAppFetch);
 const require=createRequire(import.meta.url);
 const {buildGolfInsights}=require('../.test-dist/lib/golf-insights.js');
 const {buildBalanceLedger}=require('../.test-dist/lib/balance-ledger.js');
 const {attributableHistory}=require('../.test-dist/lib/participant-history.js');
 const {calculateBackyardIndex}=require('../.test-dist/lib/backyard-index.js');
 const {roundsEligibleForStatistics}=require('../.test-dist/lib/statistics-reset.js');
-const options={auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},global:{fetch:credentialBoundFetch(config.supabaseOrigin)}};
+const options={auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},global:{fetch:databaseFetch}};
 const admin=createClient(config.supabaseOrigin,config.secretKey,options),runId=randomUUID(),accounts=[],passed=[];
 let stage='IDENTITY',failure=null;
 const deletedSyntheticAccounts=[];
@@ -29,7 +31,7 @@ async function login(a){a.client=createClient(config.supabaseOrigin,config.publi
 try {
  for(const label of ['A','B','C']){
   const a={id:randomUUID(),label,name:`Beta QA ${label}`,email:`qa-beta-${label}-${runId}@example.invalid`,password:`Qa!${randomBytes(24).toString('hex')}`};accounts.push(a);
-  check(await admin.auth.admin.createUser({id:a.id,email:a.email,password:a.password,email_confirm:true,app_metadata:{qa_run_id:runId},user_metadata:{display_name:a.name}}),'create own synthetic');await login(a);
+  await verifyPreviewDeploymentIdentity(config,rawAppFetch);check(await admin.auth.admin.createUser({id:a.id,email:a.email,password:a.password,email_confirm:true,app_metadata:{qa_run_id:runId},user_metadata:{display_name:a.name}}),'create own synthetic');await login(a);
   await app('/api/account/privacy',a,'PATCH',{visibility:'public'});
   await app('/api/social/preferences',a,'PUT',{enabledForFriends:true,shareRounds:true,shareAchievements:true,shareEquipment:false,shareCourses:true,notifyLike:true,notifyComment:true,notifyAttest:true,notifyFriendAchievement:true,notifyEquipment:false});
   check(await a.client.auth.updateUser({data:{backyard_index_preference_v1:{version:1,userId:a.id,enabled:true,handicapSource:'BACKYARD',updatedAt:'2026-09-01T00:00:00.000Z',localPccZeroDeclaredAt:'2026-09-01T00:00:00.000Z'}}}),'index activation');
@@ -103,6 +105,7 @@ try {
  assert.equal(buildGolfInsights([retained]).betBalance,-100);
  assert.equal(calculateBackyardIndex([retained],b.id).records[0].scoreDifferential,18);
  passed.push('OWNER_AUTH_DELETED_OLD_SESSION_DENIED','CONFIRMED_ONLY_SHARED_ROUND_SURVIVES_DELETE','OWNER_ANONYMIZED_PEER_SCORE_BALANCE_INDEX_INTACT');
+ await verifyPreviewDeploymentIdentity(config,rawAppFetch);
 } catch(e){failure={stage,message:String(e.message).slice(0,400)};}
 writeFileSync('.qa-artifacts/beta-fixtures.private.json',JSON.stringify(accounts.map(({id,email,password,label})=>({id,email,password,label,runId,ref:config.projectRef,preview:config.previewOrigin}))));
 const report={runId,preview:config.previewOrigin,ref:config.projectRef,passed,failure,deletedSyntheticAccounts,retainedSyntheticAccounts:accounts.map(a=>a.id).filter(id=>!deletedSyntheticAccounts.includes(id)),scope:'Real Preview/Supabase A/B/C HTTP. Synthetic score/rating fixtures, no claim of physical Safari/SMTP/Google or licensed tee verification.'};

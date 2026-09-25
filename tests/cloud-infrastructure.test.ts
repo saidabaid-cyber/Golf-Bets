@@ -4,6 +4,7 @@ import test from "node:test";
 
 const read = (path: string) => readFileSync(path, "utf8");
 const migration = read("supabase/migrations/202609020001_cloud_sync_polla_hardening.sql");
+const realtimeHardening = read("supabase/migrations/20260924235945_polla_realtime_raw_table_hardening.sql");
 const syncRoute = read("app/api/cloud/sync/route.ts") + read("lib/cloud-sync-service.ts");
 const scoreRoute = read("app/api/polla/scores/route.ts");
 const adminRoute = read("app/api/polla/admin/[tournamentId]/route.ts");
@@ -71,6 +72,9 @@ test("Realtime público solo expone señal y leaderboard sanitizado", () => {
   assert.match(migration, /tournament_leaderboard_events/);
   assert.match(migration, /create policy leaderboard_events_public/);
   assert.match(migration, /alter publication supabase_realtime add table public\.tournament_leaderboard_events/);
+  assert.match(realtimeHardening, /alter publication supabase_realtime drop table public\.tournament_scores/);
+  assert.match(realtimeHardening, /alter publication supabase_realtime drop table public\.tournament_groups/);
+  assert.match(realtimeHardening, /alter publication supabase_realtime add table public\.tournament_leaderboard_events/);
   assert.doesNotMatch(leaderboardRoute, /email|pin_hash|token_hash|personal_bets|manual_bets/);
   assert.match(leaderboardRoute, /buildPollaLeaderboard/);
 });
@@ -88,6 +92,8 @@ test("Polla Live conserva backend y enlaces, pero el acceso principal queda visi
   assert.match(playHub, /<strong>Próximamente<\/strong>/);
   assert.match(pollaPanel, /requestPollaInvite\(invitedId\)/);
   assert.match(pollaPanel, /\/polla\/\$\{created\.short_code\}/);
+  assert.match(pollaPanel, /resolveBrowserAppOrigin\(window\.location\.origin, process\.env\.NEXT_PUBLIC_APP_ORIGIN\)/);
+  assert.doesNotMatch(pollaPanel, /`\$\{window\.location\.origin\}\/polla\//);
   assert.match(pollaPanel, /leaderboard\.tournament\?\.publicId/);
 });
 

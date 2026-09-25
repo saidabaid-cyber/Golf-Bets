@@ -6,11 +6,11 @@ import {readFileSync,writeFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import {createClient} from '@supabase/supabase-js';
 import {publicPreviewConfig} from './lib/qa-public-preview.mjs';
-import {credentialBoundFetch,verifyPreviewBundleBinding} from './qa-preview-statistics.mjs';
+import {credentialBoundFetch,deploymentMutationBoundFetch,verifyPreviewBundleBinding,verifyPreviewDeploymentIdentity} from './qa-preview-statistics.mjs';
 const config=publicPreviewConfig(process.env);
 assert.equal(config.projectRef,'bymeopxkxapfizeeqeyb');
-const request=credentialBoundFetch(config.previewOrigin);
-await verifyPreviewBundleBinding(config,request);
+const rawRequest=credentialBoundFetch(config.previewOrigin),databaseFetch=credentialBoundFetch(config.supabaseOrigin);
+await verifyPreviewBundleBinding(config,rawRequest,databaseFetch);const request=deploymentMutationBoundFetch(config,rawRequest);
 const require=createRequire(import.meta.url);
 const {nearestReviewedClubs}=require('../.test-dist/lib/review-course-catalog.js');
 const {createTotalScoreRound,totalScoreOrder}=require('../.test-dist/lib/total-score-round.js');
@@ -18,7 +18,7 @@ const {teeAssignmentSnapshot}=require('../.test-dist/lib/player-tee-assignments.
 const {initialBets}=require('../.test-dist/lib/new-round-bets.js');
 const fixture=JSON.parse(readFileSync(process.env.CATALOG_QA_FIXTURE||'.qa-artifacts/catalog-b.private.json','utf8'));
 assert.equal(fixture.ref,config.projectRef);assert.ok(fixture.email.endsWith('@example.invalid'));
-const options={auth:{persistSession:false,autoRefreshToken:false},global:{fetch:credentialBoundFetch(config.supabaseOrigin)}};
+const options={auth:{persistSession:false,autoRefreshToken:false},global:{fetch:databaseFetch}};
 let db,session;
 async function login(){db=createClient(config.supabaseOrigin,config.publicKey,options);const r=await db.auth.signInWithPassword({email:fixture.email,password:fixture.password});assert.equal(r.error,null);assert.equal(r.data.user.id,fixture.id);session=r.data.session;}
 await login();
@@ -96,7 +96,7 @@ if(process.argv.includes('--verify-created')){
  }
  report.rounds=previous.rounds;report.finalDeploymentReadback=true;
 }
-report.existingHistoryPreserved=baseline.size;report.catalogCounts=catalogCounts;
+await verifyPreviewDeploymentIdentity(config,rawRequest);report.existingHistoryPreserved=baseline.size;report.catalogCounts=catalogCounts;
 writeFileSync('.qa-artifacts/catalog-applied-cloud-report.json',JSON.stringify(report,null,2));
 writeFileSync('.qa-artifacts/catalog-applied-auth.private.json',JSON.stringify({cookies:[],origins:[{origin:config.previewOrigin,localStorage:[{name:`sb-${config.projectRef}-auth-token`,value:JSON.stringify(session)}]}]}));
 console.log(JSON.stringify(report,null,2));

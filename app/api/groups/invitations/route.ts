@@ -4,7 +4,7 @@ import { isolatedPreviewDatabaseEnabled } from "../../../../lib/preview-database
 import { getSupabaseAdmin } from "../../../../lib/supabase/server";
 import { parseFrequentGroups } from "../../../../lib/frequent-templates";
 import { normalizedInvitationEmail } from "../../../../lib/group-invitations";
-import { sendGroupInvitationEmail } from "../../../../lib/group-invitation-email.server";
+import { groupInvitationEmailConfigured, sendGroupInvitationEmail } from "../../../../lib/group-invitation-email.server";
 import { BACKYARD_AI_PRIVATE_HEADERS, isCrossSiteRequest, readJsonBodyWithLimit } from "../../../../lib/backyard-ai/server/http-security";
 
 export const dynamic = "force-dynamic";
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
   if (localGroupId !== null && (!localGroupId.trim() || localGroupId.length > 200)) return NextResponse.json({ error: "Grupo inválido." }, { status: 400, headers });
   const { data, error } = await bounded(account.client.rpc("group_invitation_action_v1", { action: "list", payload: { ...(groupId ? { groupId } : {}), ...(localGroupId !== null ? { localGroupId } : {}) } }).abortSignal(AbortSignal.timeout(TIMEOUT_MS)));
   return error ? failure(error) : NextResponse.json({ ...data,
-    emailDeliveryConfigured: Boolean(process.env.GROUP_INVITES_RESEND_API_KEY && normalizedInvitationEmail(process.env.GROUP_INVITES_FROM_EMAIL)),
+    emailDeliveryConfigured: groupInvitationEmailConfigured(process.env),
   }, { headers });
   } catch { return failure({ code: "GROUP_LOOKUP_UNAVAILABLE" }); }
 }

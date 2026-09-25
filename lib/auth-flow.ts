@@ -1,5 +1,6 @@
 import type { Session, User } from "@supabase/supabase-js";
 import { isDefinitiveAuthFailure } from "./auth-errors";
+import type { AuthProviderStatus } from "./auth-provider-status";
 
 export type AuthFlowClient = {
   signInWithOtp: (input: { email: string; options: { shouldCreateUser: boolean; emailRedirectTo: string } }) => Promise<{ error: unknown }>;
@@ -47,9 +48,15 @@ export async function sendEmailOtp(auth: AuthFlowClient, email: string, redirect
   throwIfError(result.error);
 }
 
-/** Keeps PKCE on the exact browser origin that initiated access. Supabase must
- * also include this URL (or a deliberately scoped Preview wildcard) in its
- * Redirect URLs allow-list. */
+/** Provider discovery is the authority for whether email Auth may be called.
+ * Loading, unconfigured and unavailable states all fail closed. */
+export async function sendEmailOtpWhenReady(auth: AuthFlowClient, providers: AuthProviderStatus | null, email: string, redirectTo: string, intent: "create" | "login" = "create") {
+  if (providers?.status !== "ready" || providers.email !== true) throw new Error("email_auth_provider_unavailable");
+  return sendEmailOtp(auth, email, redirectTo, intent);
+}
+
+/** Keeps PKCE on the exact origin resolved by the canonical runtime config.
+ * Supabase must include this exact callback in its Redirect URLs allow-list. */
 export function authCallbackUrl(origin: string) {
   const parsed = new URL(origin);
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") throw new Error("invalid_auth_origin");

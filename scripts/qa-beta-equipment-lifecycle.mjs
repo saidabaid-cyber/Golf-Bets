@@ -4,21 +4,31 @@ import { createRequire } from 'node:module';
 import { writeFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 import { profileCloudQaConfig } from './qa-preview-profile-cloud.mjs';
-import { credentialBoundFetch, verifyPreviewBundleBinding } from './qa-preview-statistics.mjs';
+import { credentialBoundFetch, deploymentMutationBoundFetch, verifyPreviewBundleBinding, verifyPreviewDeploymentIdentity } from './qa-preview-statistics.mjs';
 const require=createRequire(import.meta.url),eq=require('../.test-dist/lib/golf-equipment.js'),fit=require('../.test-dist/lib/ball-fitting.js'),transport=require('../.test-dist/lib/ball-fitting-api.js'),capture=require('../.test-dist/lib/bag-capture.js');
-const config=profileCloudQaConfig(process.env);assert.equal(config.projectRef,'bymeopxkxapfizeeqeyb');assert.match(config.previewOrigin,/^https:\/\/golf-bets-[a-z0-9]+-saha8\.vercel\.app$/);
-const appFetch=credentialBoundFetch(config.previewOrigin);await verifyPreviewBundleBinding(config,appFetch);
-const options={auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},global:{fetch:credentialBoundFetch(config.supabaseOrigin)}};
+const config=profileCloudQaConfig(process.env);assert.equal(config.projectRef,'bymeopxkxapfizeeqeyb');assert.equal(config.previewOrigin,'https://dev.thebackyard.com.mx');
+const rawAppFetch=credentialBoundFetch(config.previewOrigin),databaseFetch=credentialBoundFetch(config.supabaseOrigin);await verifyPreviewBundleBinding(config,rawAppFetch,databaseFetch);const appFetch=deploymentMutationBoundFetch(config,rawAppFetch);
+const options={auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},global:{fetch:databaseFetch}};
 const admin=createClient(config.supabaseOrigin,config.secretKey,options),runId=randomUUID(),passed=[];
 const account={id:randomUUID(),email:`qa-fit-${runId}@example.invalid`,password:`Qa!${randomBytes(32).toString('hex')}`,name:'Synthetic QA Fit'};
-let stage='CREATE',failure=null,cleanup='PENDING',record=null,roundId=null,fitCatalogEvidence=null;
-function checked(result,label){if(result.error)throw Error(`${label}:${result.error.code||result.error.status||'unknown'}`);return result.data;}
+let stage='CREATE',failure=null,cleanup='PENDING',cleanupFailure=null,record=null,roundId=null,fitCatalogEvidence=null;
+function safeCode(value,fallback='UNKNOWN'){const code=String(value??'');return /^[A-Za-z0-9_]{1,64}$/.test(code)?code:fallback;}
+function qaError(code,details={}){const error=new Error(code);error.qaDiagnostic={code,...details};return error;}
+function sanitizedFailure(error){return {stage,code:error?.qaDiagnostic?.code|| (error?.name==='AssertionError'?'ASSERTION_FAILED':'QA_STEP_FAILED'),...(error?.qaDiagnostic?.httpStatus?{httpStatus:error.qaDiagnostic.httpStatus}:{}),...(error?.qaDiagnostic?.responseCode?{responseCode:error.qaDiagnostic.responseCode}:{})};}
+function checked(result,label){if(result.error)throw qaError('SUPABASE_OPERATION_FAILED',{operation:safeCode(label.replaceAll(' ','_').toUpperCase()),responseCode:safeCode(result.error.code||result.error.status)});return result.data;}
+async function boundedJson(response,maxBytes=1_000_000){
+ if(!response.body)throw qaError('PREVIEW_EMPTY_BODY',{httpStatus:response.status});
+ const reader=response.body.getReader(),chunks=[];let bytes=0;
+ try{for(;;){const {done,value}=await reader.read();if(done)break;bytes+=value.byteLength;if(bytes>maxBytes)throw qaError('PREVIEW_BODY_TOO_LARGE',{httpStatus:response.status});chunks.push(value);}}
+ finally{await reader.cancel().catch(()=>{});}
+ try{return JSON.parse(Buffer.concat(chunks).toString('utf8'));}catch{throw qaError('PREVIEW_INVALID_JSON',{httpStatus:response.status});}
+}
 async function login(){account.client=createClient(config.supabaseOrigin,config.publicKey,options);const result=checked(await account.client.auth.signInWithPassword({email:account.email,password:account.password}),'login');assert.equal(result.user.id,account.id);account.token=result.session.access_token;}
-async function app(path,method='GET',body,expected=200){const response=await appFetch(config.previewOrigin+path,{method,cache:'no-store',headers:{...(account.token?{authorization:`Bearer ${account.token}`} : {}),'content-type':'application/json',...(config.bypass?{'x-vercel-protection-bypass':config.bypass}:{})},...(body===undefined?{}:{body:JSON.stringify(body)})});const data=await response.json();if(response.status!==expected)throw Error(`${path}:HTTP${response.status}:${data.code||''}`);return data;}
+async function app(path,method='GET',body,expected=200){const response=await appFetch(config.previewOrigin+path,{method,cache:'no-store',headers:{...(account.token?{authorization:`Bearer ${account.token}`} : {}),'content-type':'application/json',...(config.bypass?{'x-vercel-protection-bypass':config.bypass}:{})},...(body===undefined?{}:{body:JSON.stringify(body)})});const data=await boundedJson(response);if(response.status!==expected)throw qaError('PREVIEW_HTTP_MISMATCH',{httpStatus:response.status,responseCode:safeCode(data?.code,'UNEXPECTED_RESPONSE')});return data;}
 async function save(profile){assert.ok(profile);record=(await app('/api/equipment','PUT',{profile,expectedVersion:record?.version??null,mutationId:randomUUID(),deviceId:`qa-fit-${runId}`})).data;assert.deepEqual(record.profile,profile);assert.deepEqual((await app('/api/equipment')).data.profile,profile);return profile;}
 async function close(){assert.equal(config.projectRef,'bymeopxkxapfizeeqeyb');const read=await admin.auth.admin.getUserById(account.id);if(read.error?.status===404||read.error?.code==='user_not_found')return;const user=checked(read,'cleanup identity').user;assert.equal(user.id,account.id);assert.equal(user.email,account.email);assert.equal(user.app_metadata.qa_run_id,runId);if(!account.token)await login();account.operation||={confirmation:'ELIMINAR',dataPolicy:'delete_golf_data',requestId:randomUUID(),recoveryToken:randomBytes(32).toString('hex')};assert.equal((await app('/api/account/delete','DELETE',account.operation)).deleted,true);const gone=await admin.auth.admin.getUserById(account.id);assert.ok(gone.error?.status===404||gone.error?.code==='user_not_found');}
 try{
-  assert.equal(checked(await admin.auth.admin.createUser({id:account.id,email:account.email,password:account.password,email_confirm:true,app_metadata:{qa_run_id:runId},user_metadata:{display_name:account.name}}),'create').user.id,account.id);await login();
+  await verifyPreviewDeploymentIdentity(config,rawAppFetch);assert.equal(checked(await admin.auth.admin.createUser({id:account.id,email:account.email,password:account.password,email_confirm:true,app_metadata:{qa_run_id:runId},user_metadata:{display_name:account.name}}),'create').user.id,account.id);await login();
   let at=new Date().toISOString(),profile=eq.createEmptyEquipmentProfile(account.id,at);const clubId=randomUUID(),ballId=randomUUID(),distanceId=randomUUID();
   stage='BAG_CREATE';
   profile=eq.upsertPlayerClub(profile,{id:clubId,userId:account.id,category:'DRIVER',customBrand:'Synthetic QA manual brand',customModel:'QA Driver',customShaftBrand:'Synthetic QA manual shaft',customShaftModel:'QA Shaft V1',flex:'S',shaftFlexLabel:'S',shaftWeightGrams:60,loft:10.5,lengthInches:45,grip:'QA manual grip',handedness:'RH',isCurrent:true,createdAt:at,updatedAt:at},at);
@@ -53,8 +63,8 @@ try{
   stage='DELETE_FIT';profile=eq.clearLastBallFit(profile);await save(profile);assert.equal(record.profile.lastBallFit,null);assert.equal(record.profile.clubs.length,1);assert.equal(record.profile.balls.length,1);passed.push('BALL_FIT_DELETE_PRESERVES_BAG');
   stage='DELETE_BAG_ITEMS';profile=eq.removePlayerBall(profile,ballId);profile=eq.removePlayerClub(profile,clubId);await save(profile);assert.equal(record.profile.balls.length,0);assert.equal(record.profile.clubs.length,0);assert.equal(record.profile.distances.length,0);
   await account.client.auth.signOut();await login();assert.deepEqual((await app('/api/equipment')).data.profile,profile);assert.deepEqual(checked(await account.client.from('rounds_cloud').select('snapshot').eq('id',roundId).single(),'frozen after delete').snapshot,original);passed.push('BALL_DELETE_FRESH_SESSION','CLUB_SHAFT_DELETE_CASCADES_OWN_DISTANCES','ROUND_SNAPSHOT_PRESERVED_AFTER_EQUIPMENT_DELETE');
-}catch(error){failure={stage,message:String(error.message).slice(0,300)};}
-finally{try{await close();const privateRows=checked(await admin.from('player_equipment_profiles').select('user_id').eq('user_id',account.id),'cleanup equipment');assert.deepEqual(privateRows,[]);if(roundId)assert.equal(checked(await admin.from('rounds_cloud').select('id').eq('id',roundId).maybeSingle(),'cleanup round'),null);cleanup='COMPLETE';}catch(error){cleanup=`PENDING:${String(error.message).slice(0,180)}`;}}
-const report={runId,preview:config.previewOrigin,ref:config.projectRef,passed,failure,cleanup,fitCatalogEvidence,qualification:'Real published HTTP APIs and cloud/fresh Auth; manual bag fixtures are explicitly synthetic, fit recommendations originate from app internal catalog; no UI rendering or launch monitor device/import claim'};
+}catch(error){failure=sanitizedFailure(error);}
+finally{try{stage='CLEANUP';await close();const privateRows=checked(await admin.from('player_equipment_profiles').select('user_id').eq('user_id',account.id),'cleanup equipment');assert.deepEqual(privateRows,[]);if(roundId)assert.equal(checked(await admin.from('rounds_cloud').select('id').eq('id',roundId).maybeSingle(),'cleanup round'),null);await verifyPreviewDeploymentIdentity(config,rawAppFetch);cleanup='COMPLETE';}catch(error){cleanup='PENDING';cleanupFailure=sanitizedFailure(error);}}
+const report={runId,preview:config.previewOrigin,ref:config.projectRef,passed,failure,cleanup,cleanupFailure,fitCatalogEvidence,qualification:'Real published HTTP APIs and cloud/fresh Auth; manual bag fixtures are explicitly synthetic, fit recommendations originate from app internal catalog; no UI rendering or launch monitor device/import claim'};
 writeFileSync('.qa-artifacts/hard-closeout-equipment-fitting-api.json',JSON.stringify(report,null,2)+'\n');
 console.log(JSON.stringify(report,null,2));if(failure||cleanup!=='COMPLETE')process.exitCode=1;

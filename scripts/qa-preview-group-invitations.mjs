@@ -5,23 +5,26 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import { profileCloudQaConfig } from "./qa-preview-profile-cloud.mjs";
-import { credentialBoundFetch,verifyPreviewBundleBinding } from "./qa-preview-statistics.mjs";
+import { credentialBoundFetch,verifyPreviewBundleBinding,verifyPreviewDeploymentIdentity } from "./qa-preview-statistics.mjs";
 
 const require=createRequire(import.meta.url);
 const checked=(result,label)=>{if(result.error)throw new Error(`${label} failed (${String(result.error.code||result.error.status||"UNKNOWN").replace(/[^a-zA-Z0-9_]/g,"").slice(0,40)}).`);return result.data;};
 
 /** Real Preview API + authorized QA DB only. Keeps all synthetic fixtures.
  * NEVER tests delivery to real/invented inboxes. API create/retry is exercised
- * only after this same immutable deployment confirms no delivery credential. */
+ * only after this same canonical origin and exact SHA confirm no delivery credential. */
 export async function runPreviewGroupInvitationsQA(env=process.env,{fetcher=fetch,clientFactory=createClient,log=console.log}={}) {
   const config=profileCloudQaConfig(env);
   const appFetch=credentialBoundFetch(config.previewOrigin,fetcher),databaseFetch=credentialBoundFetch(config.supabaseOrigin,fetcher);
-  await verifyPreviewBundleBinding(config,appFetch);
+  await verifyPreviewBundleBinding(config,appFetch,databaseFetch);
   const domain={...require("../.test-dist/lib/group-game-template.js"),...require("../.test-dist/lib/frequent-templates.js"),...require("../.test-dist/lib/engine.js")};
   const options={auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},global:{fetch:databaseFetch}};
   const admin=clientFactory(config.supabaseOrigin,config.secretKey,options),runId=randomUUID(),accounts=[],passed=[];
+  let firstWriteAuthorized=false;
   let stage="CREATE_QA_FIXTURES",failure=null,diagnostic=null,emailDeliveryConfigured=null,groupId=null;
+  async function authorizeFirstWrite(){if(firstWriteAuthorized){await verifyPreviewDeploymentIdentity(config,appFetch);return;}await verifyPreviewDeploymentIdentity(config,appFetch);firstWriteAuthorized=true;}
   async function app(path,actor,method="GET",body,expected=200) {
+    if(!["GET","HEAD","OPTIONS"].includes(method.toUpperCase()))await verifyPreviewDeploymentIdentity(config,appFetch);
     const response=await appFetch(`${config.previewOrigin}${path}`,{method,cache:"no-store",headers:{"content-type":"application/json",...(actor?.token?{authorization:`Bearer ${actor.token}`} : {}),...(config.bypass?{"x-vercel-protection-bypass":config.bypass}:{})},...(body===undefined?{}:{body:JSON.stringify(body)})});
     const raw=await response.text();assert.ok(raw.length<2_000_000,"bounded QA API result");let data;
     try{data=JSON.parse(raw);}catch{throw new Error("Preview returned non-JSON");}
@@ -35,6 +38,7 @@ export async function runPreviewGroupInvitationsQA(env=process.env,{fetcher=fetc
   }
   async function createAccount(label,email) {
     const account={id:randomUUID(),email:email||`qa-group-${label}-${runId}@example.invalid`,password:`Qa!${randomBytes(30).toString("base64url")}`,name:`Grupo QA ${label} ${runId.slice(0,8)}`,username:`gqa_${label}_${runId.replaceAll("-","").slice(0,16)}`};
+    await authorizeFirstWrite();
     accounts.push(account);
     const created=checked(await admin.auth.admin.createUser({id:account.id,email:account.email,password:account.password,email_confirm:true,app_metadata:{qa_run_id:runId},user_metadata:{display_name:account.name}}),"Create run-owned QA identity");
     assert.equal(created.user.id,account.id);await login(account);
@@ -48,8 +52,10 @@ export async function runPreviewGroupInvitationsQA(env=process.env,{fetcher=fetc
     const a=await createAccount("a"),b=await createAccount("b"),c=await createAccount("c");
     passed.push("PREVIEW_BUNDLE_QA_REF_PROVED_BEFORE_FIXTURES","SYNTHETIC_VERIFIED_AUTH_ONLY");
     stage="VERIFIED_ACCOUNT_MAPPING";
-    await app("/api/account/entry",null,"GET",undefined,401);
-    await app(`/api/account/entry?email=${encodeURIComponent(b.email)}`,a,"GET",undefined,400);
+    assert.deepEqual(await app("/api/account/entry",null,"GET",undefined,401),{error:"Inicia sesión para continuar.",code:"AUTH_REQUIRED"});
+    const bProfileBeforeSelector=checked(await b.client.from("profiles").select("id,display_name,onboarding_completed_at").eq("id",b.id).single(),"Profile before rejected account selector");
+    assert.deepEqual(await app(`/api/account/entry?email=${encodeURIComponent(b.email)}`,a,"GET",undefined,400),{error:"Solicitud no válida."});
+    assert.deepEqual(checked(await b.client.from("profiles").select("id,display_name,onboarding_completed_at").eq("id",b.id).single(),"Profile after rejected account selector"),bProfileBeforeSelector);
     for(let i=0;i<2;i++){
       const entry=await app("/api/account/entry",a);assert.equal(entry.userId,a.id);assert.equal(entry.existingAccount,true);
     }
@@ -94,8 +100,14 @@ export async function runPreviewGroupInvitationsQA(env=process.env,{fetcher=fetc
     stage="INVITATION_CREATE_NO_OUTBOUND_MAIL";
     const inbox=await app(`/api/groups/invitations?localGroupId=${encodeURIComponent(parsed.id)}`,a);
     assert.equal(typeof inbox.emailDeliveryConfigured,"boolean");emailDeliveryConfigured=inbox.emailDeliveryConfigured;
-    await app("/api/groups/invitations",a,"POST",{action:"create",groupId,email:"not-an-email"},400);
-    await app("/api/groups/invitations",c,"POST",{action:"create",groupId,email:b.email},403);
+    assert.deepEqual(await app("/api/groups/invitations",a,"POST",{action:"create",groupId,email:"not-an-email"},400),
+      {error:"Escribe un correo válido o selecciona un usuario Backyard."});
+    assert.deepEqual(await app(`/api/groups/invitations?localGroupId=${encodeURIComponent(parsed.id)}`,a),inbox,"invalid invitation payload must not mutate the group inbox");
+    const cBeforeUnauthorizedCreate=await app("/api/groups/invitations",c);
+    assert.deepEqual(await app("/api/groups/invitations",c,"POST",{action:"create",groupId,email:b.email},403),
+      {error:"Esta invitación no corresponde a tu cuenta o no tienes permiso para el grupo."});
+    assert.deepEqual(await app("/api/groups/invitations",c),cBeforeUnauthorizedCreate,"unauthorized create must not change actor invitation state");
+    assert.deepEqual(await app(`/api/groups/invitations?localGroupId=${encodeURIComponent(parsed.id)}`,a),inbox,"unauthorized create must not change owner group state");
     // Internal account invitations never invoke delivery; synthetic email-only
     // failure is tested separately, only when the provider is not configured.
     const invite=await app("/api/groups/invitations",a,"POST",{action:"create",groupId,targetUserId:b.id});
@@ -107,13 +119,21 @@ export async function runPreviewGroupInvitationsQA(env=process.env,{fetcher=fetc
     passed.push("INTERNAL_INVITE_200_WITHOUT_MAILER","INTERNAL_RETRY_NO_DUPLICATE");
     if(!emailDeliveryConfigured){
       const mail=await app("/api/groups/invitations",a,"POST",{action:"create",groupId,email:`qa-mail-only-${runId}@example.invalid`},503);
-      assert.equal(mail.deliveryStatus,"FAILED");assert.equal(mail.code,"GROUP_EMAIL_NOT_CONFIGURED");
+      assert.deepEqual(Object.keys(mail).sort(),["code","deliveryStatus","error","invitationId"].sort());
+      assert.equal(mail.deliveryStatus,"FAILED");assert.equal(mail.code,"GROUP_EMAIL_NOT_CONFIGURED");assert.equal(typeof mail.invitationId,"string");
+      assert.equal(mail.error,"El envío de invitaciones aún no está configurado. No se envió ningún correo.");
       const retry=await app("/api/groups/invitations",a,"POST",{action:"retry",invitationId:mail.invitationId},503);assert.equal(retry.invitationId,mail.invitationId);assert.equal(retry.deliveryStatus,"FAILED");
+      assert.deepEqual(Object.keys(retry).sort(),["code","deliveryStatus","error","invitationId"].sort());assert.equal(retry.code,"GROUP_EMAIL_NOT_CONFIGURED");
       passed.push("MISSING_PROVIDER_REAL_API_FAILED_NOT_SENT","RETRY_NO_DUPLICATE_INVITATION");
     }
     assert.equal((await rpc(a,"create",{groupId,email:b.email})).invitationId,invite.invitationId);
-    await app("/api/groups/invitations",c,"POST",{action:"accept",invitationId:invite.invitationId},403);
-    await app("/api/groups/invitations",b,"POST",{action:"accept",invitationId:invite.invitationId,token:"0".repeat(64)},403);
+    const bBeforeRejectedAccept=await app("/api/groups/invitations",b),cBeforeRejectedAccept=await app("/api/groups/invitations",c);
+    assert.deepEqual(await app("/api/groups/invitations",c,"POST",{action:"accept",invitationId:invite.invitationId},403),
+      {error:"Esta invitación no corresponde a tu cuenta o no tienes permiso para el grupo."});
+    assert.deepEqual(await app("/api/groups/invitations",b,"POST",{action:"accept",invitationId:invite.invitationId,token:"0".repeat(64)},403),
+      {error:"Esta invitación no corresponde a tu cuenta o no tienes permiso para el grupo."});
+    assert.deepEqual(await app("/api/groups/invitations",b),bBeforeRejectedAccept,"wrong token must leave recipient invitation unchanged");
+    assert.deepEqual(await app("/api/groups/invitations",c),cBeforeRejectedAccept,"wrong recipient must leave actor invitation state unchanged");
     const accepted=await app("/api/groups/invitations",b,"POST",{action:"accept",invitationId:invite.invitationId});assert.equal(accepted.accepted,true);
     assert.equal((await app("/api/groups/invitations",b,"POST",{action:"accept",invitationId:invite.invitationId})).accepted,true);
     assert.equal(checked(await b.client.from("group_memberships_v2").select("id").eq("group_id",groupId).eq("user_id",b.id),"Read accepted membership").length,1);
@@ -140,7 +160,12 @@ export async function runPreviewGroupInvitationsQA(env=process.env,{fetcher=fetc
     stage="BLOCK_PRIVACY";
     checked(await c.client.from("blocked_connections").insert({owner_id:c.id,blocked_user_id:a.id}),"QA reciprocal block");
     assert.equal((await directory(a,c.email)).some(user=>user.user_id===c.id),false);assert.equal((await directory(c,a.email)).some(user=>user.user_id===a.id),false);
-    await app("/api/groups/invitations",a,"POST",{action:"create",groupId,targetUserId:c.id},403);
+    const cBeforeBlockedInvite=await app("/api/groups/invitations",c);
+    const aBeforeBlockedInvite=await app(`/api/groups/invitations?localGroupId=${encodeURIComponent(parsed.id)}`,a);
+    assert.deepEqual(await app("/api/groups/invitations",a,"POST",{action:"create",groupId,targetUserId:c.id},403),
+      {error:"Esta invitación no corresponde a tu cuenta o no tienes permiso para el grupo."});
+    assert.deepEqual(await app("/api/groups/invitations",c),cBeforeBlockedInvite,"blocked invite must not create recipient state");
+    assert.deepEqual(await app(`/api/groups/invitations?localGroupId=${encodeURIComponent(parsed.id)}`,a),aBeforeBlockedInvite,"blocked invite must not change owner group state");
     passed.push("RECIPROCAL_BLOCK_SEARCH_AND_INVITE");
   } catch(error){failure=error;}
   const report={preview:config.previewOrigin,projectRef:config.projectRef,runId,groupId,passed,emailDeliveryConfigured,
@@ -157,7 +182,7 @@ if(process.argv[1]&&resolve(process.argv[1])===resolve(fileURLToPath(import.meta
     const args=process.argv.slice(2);
     if(args.length===1&&args[0]==="--run")await runPreviewGroupInvitationsQA();
     else if(args.length===1&&args[0]==="--check-config"){const config=profileCloudQaConfig();console.log(JSON.stringify({configuration:"VALID",projectRef:config.projectRef,preview:config.previewOrigin,network:"NOT_RUN"}));}
-    else if(!args.length||(args.length===1&&args[0]==="--help"))console.log("Group invitation QA: exact bymeopxkxapfizeeqeyb and immutable Preview only. Compile tsconfig.test.json, then --check-config / --run. Creates synthetic example.invalid accounts and RETAINS fixtures. No outbound email when configured; missing-provider behavior is tested only after API readiness=false. Never claims inbox delivery.");
+    else if(!args.length||(args.length===1&&args[0]==="--help"))console.log("Group invitation QA: exact bymeopxkxapfizeeqeyb plus https://dev.thebackyard.com.mx and PREVIEW_QA_EXPECTED_SHA only. Compile tsconfig.test.json, then --check-config / --run. Creates synthetic example.invalid accounts and RETAINS fixtures. No outbound email when configured; missing-provider behavior is tested only after API readiness=false. Never claims inbox delivery.");
     else throw new Error("Use --help, --check-config or --run. No requests made.");
   }catch(error){console.error(error instanceof Error?error.message:"Group QA failed");process.exitCode=1;}
 }

@@ -1,8 +1,8 @@
 # Configuración de secrets y variables en GitHub
 
-**Estado: `NOT_ACTIVE_PENDING_OWNER_SETUP`**
+**Estado: `BACKUP_OBSERVED_RESTORE_DRILL_PENDING`**
 
-El propietario puede preparar estos Repository secrets y Repository variables en la ventana controlada previa al merge. La primera ejecución manual sí debe ocurrir únicamente después de que el cambio aprobado esté integrado en `main`.
+Este documento sirve para verificar o rotar los Repository secrets y Repository variables del workflow ya activo. Ya existe una ejecución programada exitosa; no recrees valores ni lances otro run sólo para confirmar la implementación. Cualquier cambio debe ocurrir en una ventana controlada y el workflow manual sólo puede ejecutarse desde `main`.
 
 > **Regla absoluta:** NUNCA pegues una contraseña, key, JSON, token, Folder ID ni ningún otro valor en un chat, issue, pull request, comentario, captura, terminal compartida o log. Los valores se pegan únicamente en el campo correspondiente de GitHub. Este documento solo muestra los nombres.
 
@@ -108,20 +108,20 @@ En **Settings > Secrets and variables > Actions**, confirma únicamente los nomb
 
 No uses un workflow de diagnóstico para imprimirlos. No uses `env`, `set`, `printenv`, tracing de shell ni debug HTTP para confirmarlos.
 
-## Primera ejecución manual, solo desde `main`
+## Rerun manual autorizado, solo desde `main`
 
-1. Confirma que el pull request aprobado ya fue integrado en `main` y que el workflow existe en `main`.
+1. Confirma que el workflow autorizado existe en el SHA exacto de `main` y que hay una razón operativa aprobada para repetirlo.
 2. Abre la pestaña **Actions** del repositorio.
 3. En la lista de workflows, abre **The Backyard Automated Offsite Backup**.
-4. Si aparece **Enable workflow**, haz clic en ese botón ahora que la configuración está completa.
+4. Si el workflow fue suspendido deliberadamente durante la rotación, habilítalo sólo después de completar y revisar la configuración.
 5. Haz clic en **Run workflow**.
 6. En **Use workflow from**, selecciona exactamente `main`.
 7. Vuelve a confirmar que la selección muestra `main`; después haz clic en el botón verde **Run workflow**.
-8. No ejecutes el primer `workflow_dispatch` desde una rama de feature. El job contiene un bloqueo para cualquier ref distinta de `refs/heads/main` y quedará omitido.
+8. No ejecutes `workflow_dispatch` desde una rama de feature. El job contiene un bloqueo para cualquier ref distinta de `refs/heads/main` y quedará omitido.
 9. Abre el run y revisa solo estados y códigos seguros. No agregues pasos que impriman variables.
 10. Acepta el run únicamente si Source, Database, Storage, Encryption y Verification están en `PASS`, `recoveryComplete` es `true`, Drive contiene el par esperado y la retención aparece como `DRY_RUN`.
 
-La programación permanece en `0 9 * * *`, pero el estado sigue siendo `NOT_ACTIVE_PENDING_OWNER_SETUP` hasta que el propietario acepte esta ejecución manual y la siguiente ejecución programada.
+La programación permanece en `0 9 * * *`. Ya se observó una ejecución programada exitosa; el estado sigue siendo `BACKUP_OBSERVED_RESTORE_DRILL_PENDING` hasta completar un restore drill desechable, no por falta de otro backup verde.
 
 ## Rotación o revocación
 

@@ -3,9 +3,9 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
-import { previewStatisticsConfig, credentialBoundFetch, verifyPreviewBundleBinding } from "./qa-preview-statistics.mjs";
+import { previewStatisticsConfig, credentialBoundFetch, verifyPreviewBundleBinding, verifyPreviewDeploymentIdentity } from "./qa-preview-statistics.mjs";
 
-/** Same exact-origin, immutable deployment and non-shared DB safety boundary as
+/** Same canonical-origin, exact-SHA and non-shared DB safety boundary as
  * statistics QA. No existing user IDs or emails can be supplied to this runner. */
 export const previewAccountConfig = previewStatisticsConfig;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -53,14 +53,32 @@ function fixtureRound(owner, other, id) {
 export async function runPreviewAccountQA(env = process.env, { fetcher = fetch, clientFactory = createClient, log = console.log } = {}) {
   const config = previewAccountConfig(env);
   const appFetch = credentialBoundFetch(config.previewOrigin, fetcher);
-  await verifyPreviewBundleBinding(config, appFetch);
+  const databaseFetch = credentialBoundFetch(config.supabaseOrigin, fetcher);
+  await verifyPreviewBundleBinding(config, appFetch, databaseFetch);
   const options = { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-    global: { fetch: credentialBoundFetch(config.supabaseOrigin, fetcher) } };
+    global: { fetch: databaseFetch } };
   const admin = clientFactory(config.supabaseOrigin, config.secretKey, options);
   const runId = randomUUID(), attempts = [], passed = [], retainedIds = [], archivedFixtures = [];
+  const cleanupModes = [];
+  let firstWriteAuthorized = false;
   let stage = "EMPTY_ACCOUNT", diagnostic = null, failed = false;
 
+  async function revalidateCanonicalAlias() {
+    await verifyPreviewDeploymentIdentity(config, appFetch);
+  }
+  async function authorizeFirstWrite() {
+    if (firstWriteAuthorized) {
+      await revalidateCanonicalAlias();
+      return;
+    }
+    await revalidateCanonicalAlias();
+    firstWriteAuthorized = true;
+  }
+
   async function app(path, account, method = "GET", body, expected = [200], token = account?.token) {
+    if (!["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase())) {
+      await revalidateCanonicalAlias();
+    }
     const response = await appFetch(`${config.previewOrigin}${path}`, { method, cache: "no-store",
       headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}),
         ...(config.bypass ? { "x-vercel-protection-bypass": config.bypass } : {}) },
@@ -86,6 +104,7 @@ export async function runPreviewAccountQA(env = process.env, { fetcher = fetch, 
     const account = { id: randomUUID(), email: `backyard-qa-account-${label}-${runId}@example.invalid`,
       displayName: `Lifecycle QA ${label}`, password: `Qa!${randomBytes(32).toString("base64url")}`,
       client: null, token: null, operation: null, touched: false, archived: false };
+    await authorizeFirstWrite();
     attempts.push(account); // Also covers an ambiguous Auth-create timeout.
     const created = checked(await admin.auth.admin.createUser({ id: account.id, email: account.email, password: account.password,
       email_confirm: true, app_metadata: { qa_run_id: runId }, user_metadata: { display_name: account.displayName } }), "Create disposable QA Auth user");
@@ -107,10 +126,11 @@ export async function runPreviewAccountQA(env = process.env, { fetcher = fetch, 
     step(result.ok === true && result.deleted === (policy === "delete_golf_data") && result.archived === (policy === "retain_history"), "confirmed lifecycle result");
     return result;
   }
-  async function noLogin(account) {
+  async function noLogin(account, expectedCode) {
     const fresh = clientFactory(config.supabaseOrigin, config.publicKey, options);
     const login = await fresh.auth.signInWithPassword({ email: account.email, password: account.password });
-    step(Boolean(login.error) && !login.data?.session, "closed account cannot login normally");
+    step(Boolean(login.error) && login.error.code === expectedCode && !login.data?.session,
+      "closed account login returns the exact expected Auth denial without a session");
   }
   async function saveRound(account, round) {
     account.touched = true;
@@ -123,19 +143,37 @@ export async function runPreviewAccountQA(env = process.env, { fetcher = fetch, 
   }
   try {
     const empty = await newAccount("empty");
-    await app("/api/account/delete", empty, "DELETE", { confirmation: "eliminar", dataPolicy: "delete_golf_data", requestId: randomUUID() }, [400]);
-    step(await ownedAccount(empty), "invalid confirmation leaves account intact");
-    await app("/api/account/delete", empty, "DELETE", { confirmation: "ELIMINAR", dataPolicy: "delete_golf_data", requestId: randomUUID(), userId: randomUUID() }, [400]);
+    const emptyBeforeNegative = await ownedAccount(empty);
+    assert.deepEqual(await app("/api/account/delete", empty, "DELETE", { confirmation: "eliminar", dataPolicy: "delete_golf_data", requestId: randomUUID() }, [400]), {
+      code: "INVALID_ACCOUNT_DELETE_CHOICE",
+      error: "Confirma escribiendo ELIMINAR y selecciona qué hacer con tus datos de golf.",
+    });
+    const afterInvalidConfirmation = await ownedAccount(empty);
+    step(afterInvalidConfirmation?.id === emptyBeforeNegative?.id && afterInvalidConfirmation?.email === emptyBeforeNegative?.email,
+      "invalid confirmation leaves exact account unchanged");
+    assert.deepEqual(await app("/api/account/delete", empty, "DELETE", { confirmation: "ELIMINAR", dataPolicy: "delete_golf_data", requestId: randomUUID(), userId: randomUUID() }, [400]), {
+      code: "INVALID_ACCOUNT_DELETE_CHOICE",
+      error: "Confirma escribiendo ELIMINAR y selecciona qué hacer con tus datos de golf.",
+    });
+    const afterForeignSelector = await ownedAccount(empty);
+    step(afterForeignSelector?.id === emptyBeforeNegative?.id && afterForeignSelector?.email === emptyBeforeNegative?.email,
+      "arbitrary user selector leaves exact account unchanged");
     await close(empty, "delete_golf_data");
     step((await ownedAccount(empty)) === null, "Auth user really deleted");
-    await noLogin(empty);
-    await app("/api/cloud/rounds", empty, "GET", undefined, [401]);
+    await noLogin(empty, "invalid_credentials");
+    assert.deepEqual(await app("/api/cloud/rounds", empty, "GET", undefined, [401]), {
+      error: "La sesión terminó. Vuelve a iniciar sesión para conectar la nube.", code: "AUTH_REQUIRED",
+    });
+    step((await ownedAccount(empty)) === null, "rejected stale session cannot recreate deleted account");
     passed.push("ACCOUNT_DELETE_EMPTY", "ACCOUNT_DELETE_AUTH", "NO_ARBITRARY_USER_ID");
     passed.push("DELETED_SESSION_REJECTED");
     // Same proof/request succeeds after Auth removal; it does not start a new job.
     const retry = await app("/api/account/delete", empty, "DELETE", empty.operation, [200], null);
     step(retry.deleted === true, "tokenless durable replay completes idempotently");
-    await app("/api/account/delete", empty, "DELETE", { ...empty.operation, recoveryToken: randomBytes(32).toString("hex") }, [401], null);
+    assert.deepEqual(await app("/api/account/delete", empty, "DELETE", { ...empty.operation, recoveryToken: randomBytes(32).toString("hex") }, [401], null), {
+      code: "AUTH_REQUIRED", error: "La sesión terminó. Vuelve a iniciar sesión.",
+    });
+    step((await ownedAccount(empty)) === null, "wrong recovery proof cannot change completed deletion");
     passed.push("ACCOUNT_DELETE_IDEMPOTENT", "RECOVERY_PROOF_REQUIRED");
 
     stage = "SHARED_ROUND";
@@ -186,8 +224,11 @@ export async function runPreviewAccountQA(env = process.env, { fetcher = fetch, 
     peer.archived = true;
     const archivedUser = await ownedAccount(peer);
     step(archivedUser && Date.parse(archivedUser.banned_until || "") > Date.now(), "Auth account retained and banned");
-    await noLogin(peer);
-    await app("/api/equipment", peer, "GET", undefined, [401, 403]);
+    await noLogin(peer, "user_banned");
+    assert.deepEqual(await app("/api/equipment", peer, "GET", undefined, [403]), {
+      error: "Esta cuenta está desactivada o tiene una operación de cierre pendiente. Contacta soporte para recuperarla.",
+      code: "ACCOUNT_ACCESS_RESTRICTED",
+    });
     const blocked = await peer.client.from("rounds_cloud").select("id").eq("id", personalId);
     step(Boolean(blocked.error) && ["42501", "PGRST301", "PGRST303"].includes(blocked.error.code), "stale JWT cannot access archived data");
     assert.deepEqual([await readRound(admin, sharedId), await readRound(admin, personalId)], beforeArchive);
@@ -206,13 +247,22 @@ export async function runPreviewAccountQA(env = process.env, { fetcher = fetch, 
           if (!archivedFixtures.some(item => item.userId === account.id)) retainedIds.push(account.id);
           continue;
         }
-        if (account.token) {
+        let aliasVerified = false;
+        try { await revalidateCanonicalAlias(); aliasVerified = true; }
+        catch { cleanupModes.push({ userId: account.id, mode: "ADMIN_DIRECT_AFTER_ALIAS_REVALIDATION_FAILURE" }); }
+        if (account.token && aliasVerified) {
           await close(account, "delete_golf_data");
           step((await ownedAccount(account)) === null, "cleanup Auth absence");
         } else {
-          step(!account.touched, "no application writes before direct fresh Auth cleanup");
+          if (aliasVerified) step(!account.touched, "no application writes before direct fresh Auth cleanup");
+          // If the stable alias changed after fixtures were created, never send
+          // a bearer/recovery cleanup request to whichever deployment now owns
+          // it. The exact ID + email + qa_run_id proof above authorizes only a
+          // direct Admin removal of this run-owned Auth identity.
+          step(Boolean(await ownedAccount(account)), "direct Admin cleanup marker revalidated immediately before delete");
           checked(await admin.auth.admin.deleteUser(account.id), "Remove unused fresh QA Auth user");
           step((await ownedAccount(account)) === null, "unused QA Auth cleanup verified");
+          if (aliasVerified) cleanupModes.push({ userId: account.id, mode: "ADMIN_DIRECT_UNUSED_AUTH" });
         }
       } catch { retainedIds.push(account.id); }
     }
@@ -220,7 +270,7 @@ export async function runPreviewAccountQA(env = process.env, { fetcher = fetch, 
   log(JSON.stringify({ preview: config.previewOrigin, projectRef: config.projectRef, runId, passed,
     ...(failed ? { failedAt: stage, diagnostic } : {}),
     cleanup: retainedIds.length ? "QA_CLEANUP_PENDING" : archivedFixtures.length ? "ONLY_INTENTIONAL_ARCHIVE_FIXTURE_RETAINED" : "COMPLETE",
-    retainedQaUserIds: retainedIds, archivedQaFixtures: archivedFixtures, legalReview: "LEGAL_REVIEW_REQUIRED",
+    retainedQaUserIds: retainedIds, archivedQaFixtures: archivedFixtures, cleanupModes, legalReview: "LEGAL_REVIEW_REQUIRED",
     coverageExcludes: ["Social API likes/comments/attest", "Storage uploads", "Group ownership", "Browser visual QA"] }));
   if (failed) throw new Error(`Remote account QA failed at ${stage}. Run ID: ${runId}. Provider bodies, credentials and recovery proofs were not logged.`);
   if (retainedIds.length) throw new Error("Account checks completed but exact reported disposable QA accounts still require cleanup.");
@@ -234,7 +284,8 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
       console.log([
         "Isolated Preview account lifecycle QA. Creates three disposable accounts; intentionally retains one archived QA fixture.",
         "Uses the same environment/safety checks as qa-preview-statistics.mjs:",
-        "PREVIEW_QA_URL: exact immutable golf-bets-<9-char-id>-<scope>.vercel.app deployment.",
+        "PREVIEW_QA_URL: exactly https://dev.thebackyard.com.mx; Production, Beta and Vercel URLs are rejected.",
+        "PREVIEW_QA_EXPECTED_SHA: exact 40-character commit verified through /api/health before fixtures.",
         "PREVIEW_DB_REF + QA_CONFIRM_ISOLATED_PREVIEW: same verified isolated project, never shared/Production.",
         "NEXT_PUBLIC_SUPABASE_URL + matching Preview publishable/anon and secret/service-role keys.",
         "Optional VERCEL_AUTOMATION_BYPASS_SECRET; sent only to the exact Preview origin.",

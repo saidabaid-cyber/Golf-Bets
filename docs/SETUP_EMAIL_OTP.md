@@ -22,10 +22,10 @@ Correo → Enviar código → ocho dígitos → Verificar → sesión restaurabl
 
 ## Checklist real pendiente (no lo aplica un push a Vercel)
 
-- Proyecto: `zhqmlpljloumldaczcfp`. No reaplicar migraciones ni usar una service key para configurar Auth.
+- Rama QA aislada: `bymeopxkxapfizeeqeyb`. No reaplicar migraciones ni usar una service key para configurar Auth. El proyecto Production `zhqmlpljloumldaczcfp` permanece fuera de alcance.
 - En Email, conservar la longitud efectiva de OTP hosted en **8** y revisar la expiración. Mantener el límite de reenvío de al menos 60 segundos. La entrega real del proyecto confirmó que `{{ .Token }}` genera ocho dígitos.
 - Aplicar la plantilla anterior en **Magic Link**. Si el proyecto tiene un flujo separado de confirmación de nuevos usuarios, revisar también **Confirm signup** para que no presente un enlace como alternativa al código esperado.
-- Redirect permitido de la beta: `https://beta.thebackyard.com.mx/auth/callback`. Local: `http://localhost:3000/auth/callback`. No modificar Production.
+- Redirect de Preview canónico: `https://dev.thebackyard.com.mx/auth/callback`. Local: `http://localhost:3000/auth/callback`. No usar callbacks `*.vercel.app` ni modificar Production.
 - **Restricción vigente desde 3 de junio de 2026:** los proyectos Free nuevos con SMTP predeterminado no pueden personalizar plantillas. Si el panel bloquea el cambio, hace falta SMTP propio (o una configuración de plan que lo permita). No se ha comprobado aquí el plan/SMTP real del proyecto y no se contratará ningún servicio automáticamente.
 - Con un correo real autorizado: enviar, recibir **ocho dígitos**, verificar, comprobar perfil/onboarding, recargar, salir y volver a entrar. No basta con que `/auth/v1/otp` devuelva HTTP 200.
 - Si llega un enlace, la plantilla remota sigue pendiente; la app mantiene la pantalla OTP y NO simula una sesión ni pasa automáticamente a Invitado.

@@ -90,7 +90,7 @@ import { SignedMoneyInput } from "./components/signed-money-input";
 import { AccountProvider, useBackyardAccount } from "./components/account-provider";
 import { CaptureGroupInvitationLink, GroupInviteManager, PendingGroupInvitation } from "./components/group-invitations";
 import { resolveRoundDraftCore, resolvedOwnerIdForRoundDraft } from "./draft-restoration";
-import { accountDeletionMarkerKey, ACCOUNT_STORAGE_KEYS, hasCurrentBettingDataConsent, parseLegalAcceptances } from "../lib/account-state";
+import { accountDeletionMarkerKey } from "../lib/account-state";
 import { ProfileAccountPanel } from "./components/profile-account-panel";
 import type { AccountSettingsSection } from "../lib/account-settings";
 import { RoundCoursePicker } from "./components/round-course-picker";
@@ -614,10 +614,10 @@ function GolfBetsApp() {
   const latestSaveRound = useRef<(options?: { prepareReview?: boolean }) => void>(() => undefined);
   const roundSaveInFlight = useRef(false);
   const bettingActionPending = useRef(false);
-  const hasPersistedBettingConsent = () => bettingConsentGranted || hasCurrentBettingDataConsent(
-    parseLegalAcceptances(localStorage.getItem(ACCOUNT_STORAGE_KEYS.acceptances)),
-    identity.userId,
-  );
+  // The provider also applies a later explicit rejection/revocation from the
+  // append-only evidence ledger. Reading the legacy positive row directly here
+  // would silently undo that choice.
+  const hasPersistedBettingConsent = () => bettingConsentGranted;
   const runAfterBettingConsent = (action: () => void) => {
     if (hasPersistedBettingConsent()) { action(); return; }
     if (bettingActionPending.current) return;

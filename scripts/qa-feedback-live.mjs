@@ -4,12 +4,12 @@ import {randomUUID} from 'node:crypto';
 import {readFileSync,writeFileSync,existsSync} from 'node:fs';
 import {createClient} from '@supabase/supabase-js';
 import {publicPreviewConfig} from './lib/qa-public-preview.mjs';
-import {credentialBoundFetch,verifyPreviewBundleBinding} from './qa-preview-statistics.mjs';
-const config=publicPreviewConfig(),request=credentialBoundFetch(config.previewOrigin);
-await verifyPreviewBundleBinding(config,request);
+import {credentialBoundFetch,deploymentMutationBoundFetch,verifyPreviewBundleBinding,verifyPreviewDeploymentIdentity} from './qa-preview-statistics.mjs';
+const config=publicPreviewConfig(),rawRequest=credentialBoundFetch(config.previewOrigin),databaseFetch=credentialBoundFetch(config.supabaseOrigin);
+await verifyPreviewBundleBinding(config,rawRequest,databaseFetch);const request=deploymentMutationBoundFetch(config,rawRequest);
 const fixtures=JSON.parse(readFileSync('.qa-artifacts/beta-fixtures.private.json','utf8'));
 fixtures.push({...JSON.parse(readFileSync('.qa-artifacts/catalog-b.private.json','utf8')),label:'CATALOG_B'});
-async function login(label){const fixture=fixtures.find(f=>f.label===label);assert.equal(fixture.ref,config.projectRef);assert.ok(fixture.email.endsWith('@example.invalid'));const db=createClient(config.supabaseOrigin,config.publicKey,{auth:{persistSession:false,autoRefreshToken:false},global:{fetch:credentialBoundFetch(config.supabaseOrigin)}});const r=await db.auth.signInWithPassword({email:fixture.email,password:fixture.password});assert.equal(r.error,null);assert.equal(r.data.user.id,fixture.id);return{db,token:r.data.session.access_token,id:fixture.id};}
+async function login(label){const fixture=fixtures.find(f=>f.label===label);assert.equal(fixture.ref,config.projectRef);assert.ok(fixture.email.endsWith('@example.invalid'));const db=createClient(config.supabaseOrigin,config.publicKey,{auth:{persistSession:false,autoRefreshToken:false},global:{fetch:databaseFetch}});const r=await db.auth.signInWithPassword({email:fixture.email,password:fixture.password});assert.equal(r.error,null);assert.equal(r.data.user.id,fixture.id);return{db,token:r.data.session.access_token,id:fixture.id};}
 let A=await login('C');const B=await login('CATALOG_B');assert.notEqual(A.id,B.id);
 const idsFile='.qa-artifacts/feedback-live-ids.json';
 const ids=existsSync(idsFile)?JSON.parse(readFileSync(idsFile,'utf8')):Object.fromEntries(['COURSE','BUG','CLUB','BET'].map(c=>[c,randomUUID()]));
@@ -41,5 +41,5 @@ const notes=await A.db.from('feedback_requests').select('admin_notes');assert.eq
 await post({id:randomUUID(),input:{...base,category:'BUG'},attachment:{mime:'image/png',data:Buffer.from('<svg>not png</svg>').toString('base64')}},A,400);
 const signout=await A.db.auth.signOut({scope:'local'});assert.equal(signout.error,null);A=await login('C');
 const after=await A.db.from('feedback_requests').select('id,category,request_status').in('id',Object.values(ids));assert.equal(after.error,null);assert.equal(after.data.length,4);
-report.checks.push('four category API creations','concurrent identical requests one row','A/B real authenticated RLS read/write','foreign ID replay rejected','private admin notes denied','spoofed image rejected before persistence','logout/new client login readback four records');
+await verifyPreviewDeploymentIdentity(config,rawRequest);report.checks.push('four category API creations','concurrent identical requests one row','A/B real authenticated RLS read/write','foreign ID replay rejected','private admin notes denied','spoofed image rejected before persistence','logout/new client login readback four records');
 writeFileSync('.qa-artifacts/feedback-live-report.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));

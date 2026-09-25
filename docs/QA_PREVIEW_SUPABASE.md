@@ -1,7 +1,9 @@
 # QA Preview / Supabase — 3 septiembre 2026
 
+> Este documento conserva evidencia histórica del 3 de septiembre. La URL `historical-preview-url-retired.invalid`, la rama `codex-dev` y su deployment ya no son destinos vigentes. Desde 2026-09-24, owner QA usa únicamente `https://dev.thebackyard.com.mx` desde `integration/backyard-current`, con `PREVIEW_QA_EXPECTED_SHA` validado contra `/api/health`.
+
 Rama exclusiva: `codex-dev`. Punto de partida: `15f491b7de68247b4f6864538bf87580b0a437ef`.
-Preview: https://golf-bets-git-codex-dev-saha8.vercel.app
+Preview: https://historical-preview-url-retired.invalid
 Supabase: `zhqmlpljloumldaczcfp`. No cambios en main, dominio ni Production.
 
 ## Evidencia real (no mocks)
@@ -48,7 +50,7 @@ Riesgos a comprobar con dos cuentas/dispositivos: conflictos simultáneos de dra
 
 ## Configuración externa exacta
 
-- Email: permitir `https://golf-bets-git-codex-dev-saha8.vercel.app/auth/callback` en Supabase Authentication → URL Configuration, además de localhost. En Email Templates → Magic Link mostrar `{{ .Token }}`. Verificar plantilla de Confirm Signup si aplica y SMTP/remitente/rate limits. No es necesario cambiar dominio ni Site URL de producción para probar el Preview.
+- Email: permitir `https://dev.thebackyard.com.mx/auth/callback` en Supabase Authentication → URL Configuration, además de localhost. En Email Templates → Magic Link mostrar `{{ .Token }}`. Verificar plantilla de Confirm Signup si aplica y SMTP/remitente/rate limits. No es necesario cambiar dominio ni Site URL de Production para probar el Preview.
 - Google: proveedor deshabilitado. Verificar/completar OAuth Client ID Web y Client Secret en Supabase → Authentication → Providers → Google; callback del proveedor: `https://zhqmlpljloumldaczcfp.supabase.co/auth/v1/callback`. Origin Preview en Google y callback de app en allow list Supabase.
 - Apple: proveedor deshabilitado. Verificar/completar Team ID, Services ID, Key ID y key `.p8`/client-secret generado en Apple Developer/Supabase → Providers → Apple. Return URL `https://zhqmlpljloumldaczcfp.supabase.co/auth/v1/callback`; retorno app al callback Preview permitido. No pegar credenciales en chat/Git.
 - Actualización administrativa comunicada por Said (3 septiembre): el hardening ya fue aplicado como function_privileges_repo_reconciliation. No volver a aplicarlo ni pedir acceso administrativo. Restan únicamente INFO RLS sin policies en polla_join_attempts (sin grants cliente, intencional) y WARN EXECUTE authenticated de is_polla_admin (necesario para RLS delegada). Véase CLOUD_SYNC_HARDENING.md para la continuación de QA; no confundir las limitaciones del bloque anterior con el estado administrativo actual.
@@ -76,6 +78,8 @@ Código validado: `cf3cb20b9d99018554b9f60534d61612795c38fc`, deployment `dpl_5n
 
 ## Repetir comprobaciones públicas
 
-`node scripts/qa-preview-public.mjs https://golf-bets-git-codex-dev-saha8.vercel.app`
+Definir `PREVIEW_QA_EXPECTED_SHA` con el SHA completo publicado y ejecutar:
 
-Si el Preview está protegido, configurar temporalmente `PREVIEW_QA_ACCESS_URL` por mecanismo seguro; nunca guardarlo en Git ni registrar cookies/keys. El script no inicia sesión ni escribe datos. Un PDF 502 debe comprobarse además en navegador (ruta CORS interna), no considerarse éxito de proxy.
+`node scripts/qa-preview-public.mjs https://dev.thebackyard.com.mx`
+
+El script no sigue redirects, no inicia sesión ni escribe datos. Si el origen canónico no es accesible directamente, el QA queda bloqueado; no se sustituye por una URL aleatoria o un share URL. Un PDF 502 debe comprobarse además en navegador (ruta CORS interna), no considerarse éxito de proxy.

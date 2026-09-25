@@ -1,8 +1,8 @@
 # The Backyard disaster recovery
 
-**Status: `NOT_ACTIVE_PENDING_OWNER_SETUP`**
+**Status: `BACKUP_OBSERVED_RESTORE_DRILL_PENDING`**
 
-The repository contains the backup and off-site automation, but it is not considered active until the owner completes the external setup and approves a controlled first run. Nothing in this directory proves that a production backup or restore has already succeeded.
+The automation is active on the repository default branch. Read-only GitHub evidence observed workflow `365582254` and successful scheduled run `35979285016` for source SHA `2c15c9a02f36643244a7b0a420aa2ade570f2a10`. Artifact `10798973211` was 24,437,675 bytes and was scheduled to expire on 2026-10-01. This proves that one guarded backup run produced its workflow artifact; it does **not** prove an independent full restore drill, current Drive custody, or measured RPO/RTO.
 
 ## What is included
 
@@ -24,16 +24,14 @@ The scheduled expression is evaluated by GitHub in UTC. Daily, weekly, and month
 - Database and Storage payloads are encrypted before publication. The outer `tar.gz`, source files, and manifest are not necessarily encrypted, so they must contain no secrets. Secret values must never be committed, printed, placed in summaries, or attached as artifacts.
 - `BACKUP_RETENTION_APPLY` must remain `false` during activation. Any future destructive retention run requires a separate owner review and approval.
 
-## Owner activation sequence
+## Owner verification and restore-drill sequence
 
-1. Review the pinned project identifiers and safety assumptions in the workflow and scripts.
-2. Create a dedicated Google service account and a dedicated Drive root folder with narrowly limited access.
-3. Add the required GitHub Actions secrets and repository variables.
-4. Keep retention in dry-run mode.
-5. Ensure no scheduled run can start before setup is complete.
-6. After the approved change is merged, run one controlled `workflow_dispatch` with `main` selected. The job blocks every other ref.
-7. Accept the run only if all backup gates pass, `recoveryComplete` is `true`, the package and checksum exist in the expected Drive daily folder, and logs contain no secret values.
-8. Observe and approve the next scheduled run before changing the operational status in a separate review.
+1. Revalidate the pinned project identifiers, branch guard, secret scopes and Drive root without exposing values.
+2. Keep retention in dry-run mode unless a separate legal/owner review authorizes destructive retention.
+3. Inspect the successful scheduled run, artifact and expected Drive package/checksum pair; a green workflow alone is not a restore.
+4. Copy an authorized package and decryption key through separate custody channels into a disposable target.
+5. Restore DB/Auth/Storage/application there and run the complete synthetic two-user/browser verification.
+6. Record actual RPO/RTO and destroy the disposable target under an approved retention process.
 
 Detailed instructions are in:
 
@@ -44,6 +42,25 @@ Detailed instructions are in:
 - [Automated backup runbook](./AUTOMATED_BACKUP_RUNBOOK.md)
 - [Environment variables](./ENVIRONMENT_VARIABLES.md)
 - [Backup verification](./BACKUP_VERIFICATION.md)
+
+Provider-independent recovery material recovered from the hardened DR line:
+
+- [Architecture](./ARCHITECTURE.md)
+- [Full restore from zero](./FULL_RESTORE_FROM_ZERO.md)
+- [Supabase recovery](./SUPABASE_RECOVERY.md)
+- [Storage recovery](./STORAGE_RECOVERY.md)
+- [Auth recovery](./AUTH_RECOVERY.md)
+- [Vercel recovery](./VERCEL_RECOVERY.md)
+- [DNS recovery](./DNS_RECOVERY.md)
+- [GitHub recovery](./GITHUB_RECOVERY.md)
+- [Migration to a new provider](./MIGRATION_TO_NEW_PROVIDER.md)
+- [System inventory](./SYSTEM_INVENTORY.md)
+- [Dependencies](./DEPENDENCIES.md)
+- [Backup policy](./BACKUP_POLICY.md)
+
+The recovered QA metadata is historical evidence, not proof that a current
+restore drill has passed. Current activation and restore status must be recorded
+separately after an owner-approved controlled run.
 
 ## Local commands
 

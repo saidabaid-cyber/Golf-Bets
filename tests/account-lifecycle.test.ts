@@ -59,8 +59,9 @@ test("recovery secret permite mismo request sin aceptar owner arbitrario", () =>
   for (const invalid of [{ ...input, recoveryToken: "short" }, { ...input, userId: "other" }, { ...input, confirmation: "eliminar" }]) assert.equal(parseAccountDeletionChoice(invalid), null);
 });
 test("lifecycle nunca se activa en Production ni en proyecto compartido", () => {
-  const env = { ACCOUNT_LIFECYCLE_ENABLED: "true", PREVIEW_DB_REF: "abcdefghijklmnopqrst", NEXT_PUBLIC_SUPABASE_URL: "https://abcdefghijklmnopqrst.supabase.co", VERCEL_ENV: "preview" };
+  const env = { ACCOUNT_LIFECYCLE_ENABLED: "true", PREVIEW_DB_REF: "bymeopxkxapfizeeqeyb", NEXT_PUBLIC_SUPABASE_URL: "https://bymeopxkxapfizeeqeyb.supabase.co", VERCEL_ENV: "preview" };
   assert.equal(accountLifecycleEnabled(env), true);
+  assert.equal(accountLifecycleEnabled({ ...env, PREVIEW_DB_REF: "abcdefghijklmnopqrst", NEXT_PUBLIC_SUPABASE_URL: "https://abcdefghijklmnopqrst.supabase.co" }), false);
   assert.equal(accountLifecycleEnabled({ ...env, VERCEL_ENV: "production" }), false);
   assert.equal(accountLifecycleEnabled({ ...env, ACCOUNT_LIFECYCLE_ENABLED: "false" }), false);
 });

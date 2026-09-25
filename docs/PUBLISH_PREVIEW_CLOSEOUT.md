@@ -1,11 +1,13 @@
 # Publicación de Phase 2 — evidencia de cierre
 
+> **EVIDENCIA HISTÓRICA — NO EJECUTAR COMO RUNBOOK.** No publicar ni revisar las ramas/URLs de este corte. El único flujo vigente está en [activación canónica](./PREVIEW_CONTROLLED_ACTIVATION.md) y la [matriz de producto](./CANONICAL_PRODUCT_STATUS_2026-09-24.md).
+
 Fecha: 2026-09-15. Rama exclusiva: `phase2/full-platform`.
 
 ## Base auditada
 
 - HEAD remoto y local inicial: `9bdba1a564d517f73a7fd3454403fbf134c8c320`; árbol limpio.
-- Preview conocido: `351c32a4e798aeead6c748194ea844ce34aba1b0`, `https://golf-bets-il4k7i3o6-saha8.vercel.app`. **No contiene este cierre y no es una DB aislada validada.**
+- Preview conocido: `351c32a4e798aeead6c748194ea844ce34aba1b0`, `https://historical-preview-url-retired.invalid`. **No contiene este cierre y no es una DB aislada validada.**
 - Los cinco commits Bolsa/Social `84be96f`, `0f864a9`, `5a65c39`, `d43ee7a`, `9bdba1a` ya estaban en remoto; se reutilizaron.
 - Único Supabase visible: `zhqmlpljloumldaczcfp`, The Backyard; sin ramas. No se aplicó SQL ni se crearon/eliminaron cuentas remotas.
 - Vercel CLI sin sesión; el login de dispositivo iniciado caducó sin autorización. Tampoco existe navegador conectado con una sesión disponible.

@@ -51,10 +51,11 @@ test("golf completion requires both handedness and Home Club; a preferred tee is
   assert.equal(golfComplete({ homeClub: "La Vista" }), false);
   assert.equal(golfComplete({ handedness: "right", homeClub: "La Vista" }), true);
 });
-test("QR uses stable UUID and exact trusted origin, never username/email/token", () => {
-  const link=socialProfileLink(owner,QA_SOCIAL_ORIGIN);assert.equal(socialIdFromQr(link,"https://example.test"),owner);
+test("QR uses stable UUID and exact environment origin, never Production in QA or username/email/token", () => {
+  const link=socialProfileLink(owner,QA_SOCIAL_ORIGIN);assert.equal(socialIdFromQr(link,QA_SOCIAL_ORIGIN),owner);
   for(const value of [`https://evil.test/?friend=${owner}`,`${link}&access_token=secret`,`${link}#token`,`${QA_SOCIAL_ORIGIN}/auth/callback?friend=${owner}`,`${QA_SOCIAL_ORIGIN}/?friend=qa-name`,"javascript:alert(1)"]) assert.equal(socialIdFromQr(value,QA_SOCIAL_ORIGIN),null);
   assert.equal(link.includes("@"),false);
+  assert.equal(link.startsWith("https://app.thebackyard.com.mx"),false);
 });
 test("shared QR PNG round-trips through the same local decoder used for gallery/camera", async () => {
   const QRCode = await import("qrcode");

@@ -195,14 +195,15 @@ test("documentos legales regresan al origen y conservan contexto entre documento
   assert.equal(preserveLegalReturn("/legal/privacy#contact", "account"), "/legal/privacy?returnTo=account#contact");
 });
 
-test("Cuenta y acceso presentan Apple solo cuando está disponible y usan el origin real para OAuth", () => {
+test("Cuenta y acceso presentan Apple sólo cuando está disponible y resuelven el origen canónico para OAuth", () => {
   const provider = readFileSync("app/components/account-provider.tsx", "utf8");
   const account = readFileSync("app/components/account-panel.tsx", "utf8");
   assert.match(provider, /const appleAvailable = Boolean\(socialEnabled && providers\?\.status === "ready" && providers\.apple\)/);
   assert.match(provider, /appleAvailable \? "Continuar con Apple" : "Apple · Próximamente"/);
   assert.match(provider, /disabled=\{busy \|\| !appleAvailable\}/);
   assert.doesNotMatch(account, />Apple</);
-  assert.match(provider, /authCallbackUrl\(window\.location\.origin\)/);
+  assert.match(provider, /resolveBrowserAppOrigin\(window\.location\.origin, process\.env\.NEXT_PUBLIC_APP_ORIGIN\)/);
+  assert.match(provider, /authCallbackUrl\(appOrigin\)/);
 });
 
 test("la importación explícita sólo selecciona fotos del workspace activo", () => {

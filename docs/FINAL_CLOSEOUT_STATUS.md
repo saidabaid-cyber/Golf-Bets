@@ -1,6 +1,6 @@
 # Phase 1 + Phase 2 final technical closeout
 
-> Historical checkpoint (2026-09-10), not the current deployment/DB status. The isolated QA branch now exists. See [the evidence-based 2026-09-17 closeout](PHASE2_HARD_CLOSEOUT_2026-09-17.md) for current results, regressions and remaining gaps. Do not execute the old migration plan below without checking the current ledger.
+> Historical checkpoint (2026-09-10), not the current deployment/DB status. The isolated QA branch now exists. Hosts were retired/redacted: do not execute commands or use destinations in this file. See the canonical 2026-09-24 documents for current state.
 
 Last updated: 2026-09-10 (America/Mexico_City)
 
@@ -78,7 +78,7 @@ The shared project currently records 13 migrations through `20260908195537_legal
 | Ball Fit engine/API | PASS | Complete 71-candidate universe evaluated; Top 3 returned; no partial ranking |
 | PWA public assets | PASS | Manifest, service worker, offline page, 192/512 icons and Apple icon returned HTTP 200 |
 | 390/430 px public shell | PASS | No horizontal expansion, browser errors or console errors; semantic interactive snapshot is intact. Physical iPhone remains separately gated. |
-| Vercel code Preview | PASS | GitHub deployment `6379963652`; immutable URL `https://golf-bets-g93tm5rny-saha8.vercel.app`; SHA `1dc3ea1c76d6ce4a8e3d4cc8dd5f410e59b2a2f5`; completed successfully. Branch alias and immutable API response hashes match. |
+| Vercel code Preview | PASS | GitHub deployment `6379963652`; immutable URL `https://historical-preview-url-retired.invalid`; SHA `1dc3ea1c76d6ce4a8e3d4cc8dd5f410e59b2a2f5`; completed successfully. Branch alias and immutable API response hashes match. |
 | Preview AI status | PASS | Round Setup, Card AI, Launch Monitor AI, Insights and Live Question all report `enabled=true`, `configured=true`, `state=ready`; Phase 2 AI flags are enabled. |
 | Card AI real POST | PASS | Synthetic no-PII PNG: HTTP 200, 2 players, 18 cells and 9 pars extracted through vision/Structured Output. |
 | Launch Monitor real POST | PASS | Two synthetic no-PII images: HTTP 200 and 2 structured shots. |
@@ -107,7 +107,7 @@ Supabase → organization `wrogzsycxchwakaglbpm` → project `The Backyard` → 
 
 Then resume at **Migration execution plan, step 1**. Do not promote to Beta or Production. The post-legal-gate product flow and Google OAuth remain human-interactive checks; never accept age, arbitration or data-processing declarations on a user's behalf just to traverse the gate.
 
-For private Vercel log verification: Vercel → Team `saha8` → Project `golf-bets` → Deployment for SHA `1dc3ea1c76d6ce4a8e3d4cc8dd5f410e59b2a2f5` → Runtime Logs, or authenticate the CLI with a project-scoped read token and run `vercel logs https://golf-bets-g93tm5rny-saha8.vercel.app --level error --since 1h`.
+Historical log evidence was associated with deployment SHA `1dc3ea1c76d6ce4a8e3d4cc8dd5f410e59b2a2f5`. The retired host and executable command were removed; this file is not an operative runbook.
 
 ## Priority UX correction — 2026-09-10
 
@@ -124,7 +124,7 @@ Final local gate at code SHA `ecae2d790e67131db4b15788b5cb40dc5fd8cad7`: 1,379/1
 
 Remaining gates are intentionally separate: `PENDING_CONTROLLED_DB_APPLY` for authenticated cloud deletion, group invitations and persistence; `PENDING_INTERACTIVE_QA` for post-consent tap-through; `PENDING_DEVICE_QA` for physical iPhone keyboard/safe-area behavior; `BLOCKED_EXTERNAL` for official GHIN and private Vercel logs. Shared Supabase was not written.
 
-The resulting branch Preview at `https://golf-bets-git-phase2-full-platform-saha8.vercel.app` returned HTTP 200. Its public bundles contain the new playing-HCP, group-privacy and account-deletion behavior; catalog, course and AI readiness endpoints passed. Browser automation on the deployed alias repeated the 390/430 px no-overflow check with no page or console errors. No custom domain was changed.
+The resulting branch Preview at `https://historical-preview-url-retired.invalid` returned HTTP 200. Its public bundles contain the new playing-HCP, group-privacy and account-deletion behavior; catalog, course and AI readiness endpoints passed. Browser automation on the deployed alias repeated the 390/430 px no-overflow check with no page or console errors. No custom domain was changed.
 
 ## Delivered Home and owner pending list — 2026-09-11
 
@@ -141,7 +141,7 @@ The resulting branch Preview at `https://golf-bets-git-phase2-full-platform-saha
 ### Delivered Home Preview evidence
 
 - Preview deployment: GitHub `6388079614`, environment `Preview`, production flag `false`, SHA `8a023491d0624b71329b9c11c98ea75aa8177afb`.
-- Immutable URL: `https://golf-bets-9y6y7g80q-saha8.vercel.app`.
+- Immutable URL: `https://historical-preview-url-retired.invalid`.
 - Browser QA: isolated synthetic guest contexts for new account, active setup and completed history at 390 and 430 CSS px. All six states hydrated, matched their context CTA, had no horizontal overflow and produced no console errors.
 - Runtime contracts: 910D3, Stealth 2 Plus, Nike Vapor Fly, Pro V1 2025, VENTUS Blue VeloCore+ and PING Alta CB searches returned results from `backyard-equipment-seed`; the Driver facet returned 13 brands; La Vista returned five internal course/tee matches; Round Setup and Card AI reported `enabled=true`, `configured=true`, `state=ready`.
 - Reproducible command: `node scripts/qa-home-browser.mjs <immutable-preview-url> <artifact-directory>`.

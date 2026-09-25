@@ -1,5 +1,7 @@
 # The Backyard Beta — Overnight Log
 
+> **DOCUMENTO HISTÓRICO — NO USAR COMO RUNBOOK NI HANDOFF VIGENTE.** Conserva el registro de la rama `beta`; sus SHA, ramas y datos de publicación fueron superados. La fuente operativa es `integration/backyard-current`; consulte el [manifiesto de consolidación](docs/CONSOLIDATION_MANIFEST_2026-09-24.md), el [estado canónico del producto](docs/CANONICAL_PRODUCT_STATUS_2026-09-24.md) y el [ledger canónico de migraciones](docs/CANONICAL_MIGRATION_LEDGER_2026-09-24.md). No ejecute deploys, cambios de entorno ni migraciones a partir de este archivo.
+
 Fecha: 2026-09-06. Hora aproximada de cierre: 01:45, zona `America/Mexico_City` (UTC−06).
 
 ## Estado inicial registrado al cierre del primer bloque (histórico; publicación ya resuelta)
@@ -146,9 +148,9 @@ La publicación se resolvió posteriormente mediante `git push origin beta`, sin
 
 - Push: `b2d10bb..752edb9 beta -> beta`.
 - SHA verificado en `origin/beta`: `752edb9b3c3afca8b63b09624479f799d05130ae`.
-- Preview: `https://golf-bets-idkeq8epx-saha8.vercel.app`.
+- Preview: `https://historical-preview-url-retired.invalid`.
 - Deployment: `dpl_63VyHZRp47wCcE3dui6rWSdUedqh`, estado READY, target Preview, source Git y ref `beta`.
-- Alias de rama: `https://golf-bets-git-beta-saha8.vercel.app`.
+- Alias de rama: `https://historical-preview-url-retired.invalid`.
 - Verificación remota: `/` HTTP 200, manifest HTTP 200 y assets Next publicados. El bundle contiene la navegación Inicio/Jugar/Grupos/Social/Perfil y las acciones principales de Home.
 - QA reproducido en el SHA publicado: lint limpio, TypeScript limpio, 734/734 pruebas y build correcto con 18/18 rutas.
 - QA visual local acumulado: Home a 320/375/390/430 px y Jugar/Campos/Setup/Grupos/Social/Perfil/Stats/Balances a 390 px, sin overflow horizontal ni errores de consola en los pases registrados.
@@ -201,7 +203,7 @@ QA integral después de `26340e4`: ESLint limpio, TypeScript app/tests limpio, 8
 - `0cba731` — `feat(beta): add reliable notification read controls`. Añade leído/no leído por aviso, deduplicación exacta, badge coherente y controles accesibles sin convertir la actividad local en una red compartida.
 - `1c770b8` — `feat(beta): add live net context to scorecard`. Muestra Par/SI/yardaje/tee cuando existen y una vista previa de golpes/neto por jugador; los datos ausentes fallan cerrados y las fórmulas de apuestas permanecen intactas.
 
-QA integral final de código a las 12:12 `America/Mexico_City`: `eslint .` correcto, `tsc --noEmit` correcto, compilación TypeScript de tests correcta, 874/874 pruebas correctas y `next build` correcto con 18/18 rutas. El Preview funcional `https://golf-bets-dmvpg7j61-saha8.vercel.app` está READY para el SHA exacto `1c770b8fc964db1e49a59399174dd759a4a884a0` y responde HTTP 200 con `viewport-fit=cover`.
+QA integral final de código a las 12:12 `America/Mexico_City`: `eslint .` correcto, `tsc --noEmit` correcto, compilación TypeScript de tests correcta, 874/874 pruebas correctas y `next build` correcto con 18/18 rutas. El Preview funcional `https://historical-preview-url-retired.invalid` está READY para el SHA exacto `1c770b8fc964db1e49a59399174dd759a4a884a0` y responde HTTP 200 con `viewport-fit=cover`.
 
 Este pase no creó/aplicó migrations, tablas o policies; no cambió Supabase alojado ni variables de runtime. Los pushes se dirigieron exclusivamente a `origin/beta`. La automatización visual no encontró una superficie de navegador disponible en el host, por lo que no se registra una nueva certificación de dispositivo físico.
 
@@ -251,7 +253,7 @@ Hora aproximada de cierre técnico: 14:56 `America/Mexico_City`. El milestone se
 
 - Commit funcional: `c8b285e5212d568558cc5b1d11bf78d6df34dea2`.
 - Push exclusivo a `origin/beta`: completado (`8023cee..fb2887d` y corrección `fb2887d..76fba0b`).
-- Preview Vercel del código: `https://golf-bets-ipomcf91t-saha8.vercel.app`, deployment `dpl_FSBVHoEiBbRgx6aEu35LTGBvQBhH`, READY para `76fba0b301b58da2effbd14faaaf4af18ca0f637`.
+- Preview Vercel del código: `https://historical-preview-url-retired.invalid`, deployment `dpl_FSBVHoEiBbRgx6aEu35LTGBvQBhH`, READY para `76fba0b301b58da2effbd14faaaf4af18ca0f637`.
 - Aplicación de migration/seed y sync multi-dispositivo: bloqueados hasta disponer de una base Supabase Beta aislada.
 - No se tocó el motor de apuestas, cálculos de ronda, histórico existente, `main`, Production ni `app.thebackyard.com.mx`.
 
@@ -305,5 +307,5 @@ Hora aproximada de cierre técnico: 16:40 `America/Mexico_City`.
 - Cierre posterior a auditoría: limpiar shaft ya no revive el anterior; Ball Fit rankea en `/api/ball-fitting` sobre catálogo exhaustivo o falla cerrado, omite identidad real del transporte; y admin invalida cargas/acciones obsoletas por generación/recurso.
 - Smoke local posterior al build: raíz 200, búsqueda de catálogo 200, Ball Fit 200 con 11 modelos evaluados/Top 3, payload con identidad real rechazado 400 y rutas cloud/admin bloqueadas 503 privado/no-store con los flags seguros.
 - QA visual nuevo bloqueado por superficie: no existe `agent-browser` y Computer Use no expuso Chrome, Edge ni navegador integrado. No se afirma una certificación visual nueva; permanece pendiente el pase en Safari/PWA físico.
-- GitHub reportó el contexto Vercel en `success` para `42bac5f`. `https://golf-bets-git-beta-saha8.vercel.app` respondió 200 y expuso la ruta nueva; el dominio `beta.thebackyard.com.mx` siguió sirviendo un build anterior (la misma ruta dio 404). No se intentó reasociar sin credenciales ni se tocó Production.
+- GitHub reportó el contexto Vercel en `success` para `42bac5f`. `https://historical-preview-url-retired.invalid` respondió 200 y expuso la ruta nueva; el dominio `beta.thebackyard.com.mx` siguió sirviendo un build anterior (la misma ruta dio 404). No se intentó reasociar sin credenciales ni se tocó Production.
 - Pushes realizados sólo como fast-forward a `origin/beta`; ningún merge, `--prod`, variable Production o DDL remoto.

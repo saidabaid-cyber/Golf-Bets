@@ -76,7 +76,8 @@ test("V3 product surfaces reuse provenance-aware media without fabricated produc
 });
 test("V3 QR keeps the share canvas and identifier without displaying a technical URL", () => {
   const qr = source("app/components/social-qr.tsx");
-  assert.match(qr, /socialProfileLink\(userId,PUBLIC_SOCIAL_ORIGIN\)/);
+  assert.match(qr, /socialOriginForBrowser\(location\.origin,process\.env\.NEXT_PUBLIC_APP_ORIGIN\)/);
+  assert.doesNotMatch(qr, /socialProfileLink\(userId,PUBLIC_SOCIAL_ORIGIN\)/);
   assert.doesNotMatch(qr, /socialProfileLink\(userId,location.origin\)/);
   assert.match(qr, /onClick=\{\(\) => void copyLink\(\)\}>Copiar enlace de perfil/);
   assert.doesNotMatch(qr, /<input[^>]*value=\{link\}/);

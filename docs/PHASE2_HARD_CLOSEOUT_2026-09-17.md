@@ -1,5 +1,7 @@
 # Phase 2 — cierre de auditoría real, 17 septiembre 2026
 
+> **EVIDENCIA HISTÓRICA — NO EJECUTAR COMO RUNBOOK.** Rama, URL, resultados y pasos pertenecen a un corte anterior. Usar [activación canónica](./PREVIEW_CONTROLLED_ACTIVATION.md) y [matriz de producto](./CANONICAL_PRODUCT_STATUS_2026-09-24.md) para el estado actual.
+
 ## Dictamen
 
 **Phase 2 no tiene aprobación total.** Los flujos técnicos enumerados como PASS tienen evidencia delimitada abajo. Invitaciones de Grupos siguen incompletas; el historial compartido conservado no alimenta todavía los agregados personales del receptor. Auth físico, integraciones externas y decisiones legales no se convierten en PASS por compilar.
@@ -10,8 +12,8 @@ No se construyeron nuevas funcionalidades ni se rediseñó el producto. Se repro
 
 - Rama exclusiva: `phase2/full-platform`.
 - HEAD inicial local/remoto: `7166d80db7fac9b1471910bfbcef14917e11dbb0`.
-- Preview de las pruebas completas: <https://golf-bets-o7gwd3g39-saha8.vercel.app>, READY, mismo HEAD.
-- Alias QA de rama: <https://golf-bets-git-phase2-full-platform-saha8.vercel.app>.
+- Preview de las pruebas completas: <https://historical-preview-url-retired.invalid>, READY, mismo HEAD.
+- Alias QA de rama: <https://historical-preview-url-retired.invalid>.
 - Supabase: `phase2-full-platform-qa`, ref `bymeopxkxapfizeeqeyb`, `ACTIVE_HEALTHY`.
 - Los runners verificaron ref exacta, rama y bundle desplegado antes de crear usuarios sintéticos o borrar datos.
 - No se utilizaron datos personales de Production. No se operó sobre `zhqmlpljloumldaczcfp`, main, beta ni dominios Production.
@@ -46,7 +48,7 @@ La prueba visual guardó un username nuevo y lo recuperó en Perfil, pero el rea
 La reparación reutiliza el guardado versionado/CAS y la cola existente del perfil para incluir el username. La proyección Social afecta exclusivamente la fila existente del mismo propietario; no crea identidad ni altera privacidad. Un conflicto o fallo de esa proyección no se reconoce como sincronización exitosa. La lectura canónica del perfil prevalece sobre metadata antigua. No requiere migración ni nuevo endpoint.
 
 - Commit: `dccbe584df526c7b4e1691426082d3bca9be1ec3`.
-- Preview de repetición: <https://golf-bets-irnfctrxb-saha8.vercel.app>, READY, ref QA confirmada en bundle y runners.
+- Preview de repetición: <https://historical-preview-url-retired.invalid>, READY, ref QA confirmada en bundle y runners.
 - 14/14 comprobaciones reales: ambas tablas/directorio, nuevo handle y ausencia del antiguo, Auth metadata antigua no revierte la lectura canónica, dos sesiones, retry, duplicado 23505, ownership y privacidad intacta.
 - El primer runner no había optado por visibilidad social para su fixture nuevo y no encontraba el perfil privado. Se corrigió sólo el fixture usando el API de privacidad real; no se relajó RLS ni se ocultó un fallo de aplicación.
 - Se repitieron en este mismo Preview los 7 checks de reset y los 14 de lifecycle: PASS, incluyendo shared history, Auth delete y JWT antiguo rechazado.

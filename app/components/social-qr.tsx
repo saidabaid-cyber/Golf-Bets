@@ -1,14 +1,14 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
-import { PUBLIC_SOCIAL_ORIGIN, socialIdFromQr, socialProfileLink } from "../../lib/social-connections";
+import { socialIdFromQr, socialOriginForBrowser, socialProfileLink } from "../../lib/social-connections";
 import { ProfileAvatarMedia } from "./profile-avatar-media";
 import styles from "./social-qr.module.css";
 export const PENDING_SOCIAL_KEY="backyard-pending-social-profile-v1";
-export function CaptureSocialProfileLink(){useEffect(()=>{const id=socialIdFromQr(location.href,location.origin);if(id){try{sessionStorage.setItem(PENDING_SOCIAL_KEY,id);}catch{/* Keep URL available. */}}},[]);return null;}
+export function CaptureSocialProfileLink(){useEffect(()=>{const id=socialIdFromQr(location.href,location.origin,process.env.NEXT_PUBLIC_APP_ORIGIN);if(id){try{sessionStorage.setItem(PENDING_SOCIAL_KEY,id);}catch{/* Keep URL available. */}}},[]);return null;}
 export function PersonalQr({userId,name,username,avatar,onClose}:{userId:string;name:string;username:string;avatar:string;onClose:()=>void}){
  const canvas=useRef<HTMLCanvasElement>(null),avatarElement=useRef<HTMLDivElement>(null),[link,setLink]=useState(""),[ready,setReady]=useState(false),[message,setMessage]=useState("");
- useEffect(()=>{let live=true;setReady(false);const url=socialProfileLink(userId,PUBLIC_SOCIAL_ORIGIN);setLink(url);
+ useEffect(()=>{let live=true;setReady(false);setMessage("");let url:string;try{url=socialProfileLink(userId,socialOriginForBrowser(location.origin,process.env.NEXT_PUBLIC_APP_ORIGIN));setLink(url);}catch{setLink("");setMessage("No pudimos crear un enlace estable para este entorno.");return()=>{live=false;};}
  void (async()=>{const qr=document.createElement("canvas");await QRCode.toCanvas(qr,url,{width:420,margin:4,errorCorrectionLevel:"M"});if(!live||!canvas.current)return;const out=canvas.current;out.width=600;out.height=800;const ctx=out.getContext("2d")!;ctx.fillStyle="#fff";ctx.fillRect(0,0,600,800);ctx.fillStyle="#073f32";ctx.font="bold 28px sans-serif";ctx.textAlign="center";ctx.fillText("THE BACKYARD",300,45);ctx.font="24px sans-serif";ctx.fillText(name,300,185,540);ctx.drawImage(qr,90,205);ctx.font="bold 28px sans-serif";ctx.fillText(username?`@${username}`:"Configura tu nombre de usuario",300,685,550);ctx.font="18px sans-serif";ctx.fillText("Escanea para ver mi perfil",300,740);
  ctx.fillStyle="#e5eddf";ctx.beginPath();ctx.arc(300,110,42,0,Math.PI*2);ctx.fill();ctx.fillStyle="#073f32";ctx.font="34px sans-serif";ctx.fillText(avatarElement.current?.textContent?.trim()||name[0]||"J",300,123,75);
  const img=avatarElement.current?.querySelector("img"),svg=avatarElement.current?.querySelector("svg");
@@ -24,7 +24,7 @@ export function SocialQrScanner({onFound,onClose,backLabel="Social"}:{onFound:(i
  const [active,setActive]=useState(false),[busy,setBusy]=useState(false),[message,setMessage]=useState("");
  function stop(){generation.current++;if(timer.current)clearTimeout(timer.current);stream.current?.getTracks().forEach(t=>t.stop());stream.current=null;setActive(false);setBusy(false);}
  useEffect(()=>()=>{generation.current++;if(timer.current)clearTimeout(timer.current);stream.current?.getTracks().forEach(t=>t.stop());},[]);
- function found(value:string){const id=socialIdFromQr(value,location.origin);if(!id){setMessage("QR inválido: elige un enlace de perfil de The Backyard.");return false;}stop();onFound(id);return true;}
+ function found(value:string){const id=socialIdFromQr(value,location.origin,process.env.NEXT_PUBLIC_APP_ORIGIN);if(!id){setMessage("QR inválido: elige un enlace de perfil de The Backyard para este entorno.");return false;}stop();onFound(id);return true;}
  async function decode(source:CanvasImageSource,width:number,height:number){const canvas=document.createElement("canvas");const scale=Math.min(1,1600/Math.max(width,height));canvas.width=Math.round(width*scale);canvas.height=Math.round(height*scale);const ctx=canvas.getContext("2d",{willReadFrequently:true})!;ctx.drawImage(source,0,0,canvas.width,canvas.height);const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);const jsQR=(await import("jsqr")).default;return jsQR(pixels.data,pixels.width,pixels.height)?.data;}
  async function camera() {
   stop(); const run = generation.current; setBusy(true); setMessage("");

@@ -10,10 +10,18 @@ const bootstrap = `
   import { randomUUID } from 'node:crypto';
   globalThis.fetch = async()=>{throw new Error('REAL_NETWORK_FORBIDDEN_IN_TEST');};
   const { previewAccountConfig, runPreviewAccountQA } = await import(${JSON.stringify(scriptUrl)});
-  const ref='abcdefghijklmnopqrst';
+  const ref='bymeopxkxapfizeeqeyb';
   const env={PREVIEW_DB_REF:ref,QA_CONFIRM_ISOLATED_PREVIEW:ref,NEXT_PUBLIC_SUPABASE_URL:'https://'+ref+'.supabase.co',
-    PREVIEW_QA_URL:'https://golf-bets-123abc789-qa-team.vercel.app',NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:'sb_publishable_qa_test_only',
+    PREVIEW_QA_URL:'https://dev.thebackyard.com.mx',PREVIEW_QA_EXPECTED_SHA:'a'.repeat(40),NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:'sb_publishable_qa_contract_test_only',
     SUPABASE_SECRET_KEY:'sb_secret_qa_contract_test_only'};
+  const health=()=>Response.json({status:'ok',environment:'preview',buildSha:env.PREVIEW_QA_EXPECTED_SHA});
+  const bindingResponse=input=>{const url=new URL(String(input));
+    if(url.pathname==='/api/health')return health();
+    if(url.origin===env.NEXT_PUBLIC_SUPABASE_URL&&url.pathname==='/auth/v1/settings')return Response.json({external:{email:true}});
+    if(url.origin===env.NEXT_PUBLIC_SUPABASE_URL&&url.pathname==='/auth/v1/admin/users')return Response.json({users:[]});
+    if(url.origin===env.PREVIEW_QA_URL&&url.pathname==='/')return new Response('<script src="/_next/static/main.js"></script>',{headers:{'content-type':'text/html; charset=utf-8'}});
+    if(url.origin===env.PREVIEW_QA_URL&&url.pathname.endsWith('.js'))return new Response(env.NEXT_PUBLIC_SUPABASE_URL+' '+env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);
+    return null;};
 `;
 function isolated(body: string) {
   const result = spawnSync(process.execPath, ["--input-type=module", "--eval", bootstrap + body], { encoding: "utf8", timeout: 30_000 });
@@ -25,12 +33,14 @@ test("account Preview runner reuses exact isolation checks and proves deployment
     assert.equal(previewAccountConfig(env).projectRef,ref);
     let touched=false;const dependencies={fetcher:async()=>{touched=true;return new Response('unverified');},clientFactory:()=>{touched=true;}};
     for(const value of [{...env,QA_CONFIRM_ISOLATED_PREVIEW:''},{...env,PREVIEW_QA_URL:'https://app.thebackyard.com.mx'},
+      {...env,PREVIEW_QA_URL:'https://beta.thebackyard.com.mx'},{...env,PREVIEW_QA_URL:'https://synthetic-preview-test-only.vercel.app'},
       {...env,PREVIEW_DB_REF:'zhqmlpljloumldaczcfp',QA_CONFIRM_ISOLATED_PREVIEW:'zhqmlpljloumldaczcfp'},
+      {...env,PREVIEW_DB_REF:'abcdefghijklmnopqrst',QA_CONFIRM_ISOLATED_PREVIEW:'abcdefghijklmnopqrst',NEXT_PUBLIC_SUPABASE_URL:'https://abcdefghijklmnopqrst.supabase.co'},
       {...env,VERCEL_ENV:'production'},{...env,NEXT_PUBLIC_SUPABASE_URL:env.NEXT_PUBLIC_SUPABASE_URL+'/rest/v1'}]){
       await assert.rejects(runPreviewAccountQA(value,dependencies));assert.equal(touched,false);
     }
     let created=false;
-    await assert.rejects(runPreviewAccountQA(env,{fetcher:async()=>new Response('unverified'),clientFactory:()=>{created=true;}}),/did not prove/);
+    await assert.rejects(runPreviewAccountQA(env,{fetcher:async(input)=>new URL(String(input)).pathname==='/api/health'?health():new Response('unverified'),clientFactory:()=>{created=true;}}),/root did not return HTML/);
     assert.equal(created,false);
   `);
 });
@@ -55,8 +65,9 @@ test("account Preview runner executes delete/shared RLS/stale sync/archive and p
         getUserById:async(id)=>{assert.ok(admin);return users.has(id)?ok({user:structuredClone(users.get(id))}):failure(404,'user_not_found');},
         deleteUser:async()=>{adminDeletes++;throw new Error('Runner must not bypass lifecycle for app-populated or archived accounts');}
       },signInWithPassword:async({email,password})=>{
-        const user=[...users.values()].find(u=>u.email===email&&u.password===password&&!u.banned_until);
-        if(!user)return failure(400,'invalid_credentials');signedIn=user.id;return ok({user,session:{access_token:'qa-token-'+user.id}});
+        const identity=[...users.values()].find(u=>u.email===email&&u.password===password);
+        if(identity?.banned_until)return failure(403,'user_banned');
+        if(!identity)return failure(400,'invalid_credentials');signedIn=identity.id;return ok({user:identity,session:{access_token:'qa-token-'+identity.id}});
       }},from:table=>{
         const filters={};let action='select',payload=null;
         const execute=()=>{
@@ -80,15 +91,14 @@ test("account Preview runner executes delete/shared RLS/stale sync/archive and p
     };
     const transport=async(input,init={})=>{
       assert.equal(init.redirect,'error');const url=new URL(String(input));
-      if(url.pathname==='/')return new Response('<script src="/_next/static/main.js"></script>');
-      if(url.pathname.endsWith('.js'))return new Response(env.NEXT_PUBLIC_SUPABASE_URL);
+      const binding=bindingResponse(input);if(binding)return binding;
       const body=init.body?JSON.parse(init.body):null;const token=init.headers.authorization||'';
       const id=token.startsWith('Bearer qa-token-')?token.slice('Bearer qa-token-'.length):null;
       if(url.pathname==='/api/account/delete'){
-        if(body.confirmation!=='ELIMINAR'||body.userId)return Response.json({code:'INVALID_ACCOUNT_DELETE_CHOICE'},{status:400});
+        if(body.confirmation!=='ELIMINAR'||body.userId)return Response.json({code:'INVALID_ACCOUNT_DELETE_CHOICE',error:'Confirma escribiendo ELIMINAR y selecciona qué hacer con tus datos de golf.'},{status:400});
         const existing=jobs.get(body.requestId);
         if(existing){
-          if(existing.proof!==body.recoveryToken)return Response.json({code:'AUTH_REQUIRED'},{status:401});
+          if(existing.proof!==body.recoveryToken)return Response.json({code:'AUTH_REQUIRED',error:'La sesión terminó. Vuelve a iniciar sesión.'},{status:401});
           return Response.json(existing.response);
         }
         assert.ok(id&&users.has(id));assert.equal(body.recoveryToken.length,64);
@@ -97,8 +107,8 @@ test("account Preview runner executes delete/shared RLS/stale sync/archive and p
         else{deleteCalls++;users.delete(id);deletedIds.add(id);for(const row of rounds.values())scrub(row);}
         const response={ok:true,deleted:!archived,archived};jobs.set(body.requestId,{proof:body.recoveryToken,response});return Response.json(response);
       }
-      if(!id||!users.has(id))return Response.json({code:'AUTH_REQUIRED'},{status:401});
-      if(url.pathname==='/api/equipment')return Response.json({code:'ACCOUNT_ARCHIVED'},{status:403});
+      if(!id||!users.has(id))return Response.json({error:'La sesión terminó. Vuelve a iniciar sesión para conectar la nube.',code:'AUTH_REQUIRED'},{status:401});
+      if(url.pathname==='/api/equipment')return Response.json({error:'Esta cuenta está desactivada o tiene una operación de cierre pendiente. Contacta soporte para recuperarla.',code:'ACCOUNT_ACCESS_RESTRICTED'},{status:403});
       assert.equal(url.pathname,'/api/cloud/rounds');
       if(init.method==='GET')return Response.json({rounds:[...rounds.values()]
         .filter(row=>row.owner_id===id||participants.get(row.id)===id)
@@ -125,19 +135,39 @@ test("account Preview runner never deletes an existing/unproven identity during 
       getUserById:async()=>({data:{user:{...attempted,app_metadata:{qa_run_id:'different-run'}}},error:null}),
       deleteUser:async()=>{deleted++;return {data:{},error:null};}
     },signInWithPassword:async()=>({data:{},error:{status:400}})}});
-    const bundle=async(input)=>new Response(String(input).endsWith('.js')?env.NEXT_PUBLIC_SUPABASE_URL:'<script src="/_next/static/main.js"></script>');
+    const bundle=async(input)=>bindingResponse(input)||new Response('unexpected',{status:500});
     await assert.rejects(runPreviewAccountQA(env,{fetcher:bundle,clientFactory,log:value=>logs.push(JSON.parse(value))}),/Remote account QA failed/);
     assert.equal(deleted,0);assert.equal(logs[0].cleanup,'QA_CLEANUP_PENDING');
     assert.deepEqual(logs[0].retainedQaUserIds,[attempted.id]);assert.ok(!JSON.stringify(logs).includes(attempted.password));
   `);
 });
 
+test("account cleanup never calls a changed alias and directly removes only the exact run-marked Auth identity", () => {
+  isolated(`
+    let attempted,deleted=false,adminDeletes=0,appDeletes=0,healthCalls=0;const logs=[];
+    const clientFactory=()=>({auth:{admin:{
+      createUser:async(input)=>{attempted=input;return {data:{user:input},error:null};},
+      getUserById:async(id)=>deleted?{data:{user:null},error:{status:404,code:'user_not_found'}}:{data:{user:attempted},error:null},
+      deleteUser:async(id)=>{assert.equal(id,attempted.id);adminDeletes++;deleted=true;return {data:{},error:null};}
+    },signInWithPassword:async()=>({data:{},error:{status:400,code:'invalid_credentials'}})}});
+    const transport=async(input)=>{const url=new URL(String(input));
+      if(url.pathname==='/api/health'){healthCalls++;return healthCalls<=2?health():Response.json({status:'ok',environment:'preview',buildSha:'b'.repeat(40)});}
+      if(url.pathname==='/api/account/delete')appDeletes++;
+      return bindingResponse(input)||new Response('unexpected',{status:500});
+    };
+    await assert.rejects(runPreviewAccountQA(env,{fetcher:transport,clientFactory,log:value=>logs.push(JSON.parse(value))}),/Remote account QA failed/);
+    assert.equal(adminDeletes,1);assert.equal(appDeletes,0);assert.equal(deleted,true);
+    assert.equal(logs[0].cleanup,'COMPLETE');
+    assert.equal(logs[0].cleanupModes[0].mode,'ADMIN_DIRECT_AFTER_ALIAS_REVALIDATION_FAILURE');
+  `);
+});
+
 test("account Preview runner default/help/check-config never execute remote writes", () => {
   for (const args of [[], ["--help"], ["--check-config"]]) {
-    const ref = "abcdefghijklmnopqrst";
+    const ref = "bymeopxkxapfizeeqeyb";
     const result = spawnSync(process.execPath, ["scripts/qa-preview-account-lifecycle.mjs", ...args], { encoding: "utf8", timeout: 15_000,
       env: { ...process.env, VERCEL: "", VERCEL_ENV: "", PREVIEW_DB_REF: ref, QA_CONFIRM_ISOLATED_PREVIEW: ref,
-        NEXT_PUBLIC_SUPABASE_URL: `https://${ref}.supabase.co`, PREVIEW_QA_URL: "https://golf-bets-123abc789-qa-team.vercel.app",
+        NEXT_PUBLIC_SUPABASE_URL: `https://${ref}.supabase.co`, PREVIEW_QA_URL: "https://dev.thebackyard.com.mx", PREVIEW_QA_EXPECTED_SHA: "a".repeat(40),
         NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_qa_contract_test_only", SUPABASE_SECRET_KEY: "sb_secret_qa_contract_test_only" } });
     assert.equal(result.status, 0, result.stderr);
     if (args[0] === "--check-config") assert.equal(JSON.parse(result.stdout).network, "NOT_RUN");

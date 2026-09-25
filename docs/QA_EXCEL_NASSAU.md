@@ -1,5 +1,7 @@
 # QA Excel / Nassau — codex-dev
 
+> **Evidencia histórica; no ejecutar como runbook actual.** `codex-dev` y sus previews ya no son destinos de revisión. La fuente vigente es `integration/backyard-current` y el único origen objetivo de owner QA es `https://dev.thebackyard.com.mx`; consultar [el manifiesto](./CONSOLIDATION_MANIFEST_2026-09-24.md) y [el estado del producto](./CANONICAL_PRODUCT_STATUS_2026-09-24.md).
+
 Base comprobada limpia: `3e6da095c798b1b5de6623d0f85da936707ff07c`.
 
 Cambios acotados: referencia técnica del libro, Nassau cronológico con carry independiente y aditivo, bruto/neto auditable, migración de borradores, restauración del snapshot HCP del rival externo, Monkey según fórmulas originales, valor de Copa separado y carry visible correcto en resumen de hoyo.

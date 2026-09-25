@@ -22,19 +22,6 @@ function modelId(value: string | undefined) {
   return clean.length <= 120 && /^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/.test(clean) ? clean : "";
 }
 
-function normalizedOrigin(value: string | undefined) {
-  const clean = value?.trim() || "";
-  if (!clean) return "";
-  try {
-    const url = new URL(clean);
-    if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) return "";
-    if (url.pathname !== "/" && url.pathname !== "") return "";
-    return url.origin;
-  } catch {
-    return "";
-  }
-}
-
 /**
  * Authenticated Preview traffic must deliberately bind the new consent ledger
  * to the isolated Supabase URL configured for that Preview. This prevents an
@@ -53,20 +40,10 @@ export function aiProcessingConsentLedgerAccess(
   // rest of the authenticated Preview APIs. Requiring a second URL variable
   // made the consent ledger unavailable even when the same isolated QA
   // project had already been proved by ref + exact hostname.
-  if (env.PREVIEW_DB_REF) {
-    return isolatedPreviewDatabaseEnabled(env)
-      ? { allowed: true, reason: "preview_bound" }
-      : { allowed: false, reason: "preview_binding_mismatch" };
-  }
-  const activeOrigin = normalizedOrigin(env.NEXT_PUBLIC_SUPABASE_URL);
-  const expectedPreviewOrigin = normalizedOrigin(env.BACKYARD_AI_CONSENT_PREVIEW_SUPABASE_URL);
-  if (!activeOrigin || !expectedPreviewOrigin) {
-    return { allowed: false, reason: "preview_binding_missing" };
-  }
-  if (activeOrigin !== expectedPreviewOrigin) {
-    return { allowed: false, reason: "preview_binding_mismatch" };
-  }
-  return { allowed: true, reason: "preview_bound" };
+  if (!env.PREVIEW_DB_REF) return { allowed: false, reason: "preview_binding_missing" };
+  return isolatedPreviewDatabaseEnabled(env)
+    ? { allowed: true, reason: "preview_bound" }
+    : { allowed: false, reason: "preview_binding_mismatch" };
 }
 
 export function backyardAiConfig(env: BackyardAiEnvironment) {

@@ -1,5 +1,7 @@
-// Read-only reconciliation: existing synthetic identities, final immutable Preview.
-// Does not send email, grant consent, alter Auth or mutate historical snapshots.
+// Product-data read-only reconciliation: existing synthetic identities, canonical fixed Preview and exact SHA.
+// Does not send email, grant consent, create/delete Auth users, edit user metadata or mutate historical snapshots.
+// It creates transient password sessions for existing synthetic fixtures and signs every client out;
+// the Auth provider may therefore update its own last-sign-in/audit timestamps.
 import assert from 'node:assert/strict';
 import {readFileSync,writeFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
@@ -9,23 +11,25 @@ import {publicPreviewConfig} from './lib/qa-public-preview.mjs';
 import {credentialBoundFetch,verifyPreviewBundleBinding} from './qa-preview-statistics.mjs';
 const config=publicPreviewConfig();
 assert.equal(config.projectRef,'bymeopxkxapfizeeqeyb');
-const request=credentialBoundFetch(config.previewOrigin);
-await verifyPreviewBundleBinding(config,request);
+const request=credentialBoundFetch(config.previewOrigin),databaseFetch=credentialBoundFetch(config.supabaseOrigin);
+await verifyPreviewBundleBinding(config,request,databaseFetch);
 const require=createRequire(import.meta.url);
 const catalogs=require('../.test-dist/lib/golf-equipment-catalog.js');
 const {nearestReviewedClubs,reviewedClubsLocationSummary}=require('../.test-dist/lib/review-course-catalog.js');
 const fixtures=[JSON.parse(readFileSync('.qa-artifacts/beta-fixtures.private.json')).find(f=>f.label==='C'),JSON.parse(readFileSync('.qa-artifacts/catalog-b.private.json'))];
-const report={preview:config.previewOrigin,ref:config.projectRef,mutations:0,emails:0,consentWrites:0,checks:[],catalogs:[]};
+const report={preview:config.previewOrigin,ref:config.projectRef,productDataMutations:0,authUserCreatesUpdatesDeletes:0,emails:0,consentWrites:0,checks:[],catalogs:[]};
+const issuedSessions=[];
 const hash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const json=value=>JSON.parse(JSON.stringify(value));
 async function login(f){
  assert.equal(f.ref,config.projectRef);assert.ok(f.email.endsWith('@example.invalid'));
- const db=createClient(config.supabaseOrigin,config.publicKey,{auth:{persistSession:false,autoRefreshToken:false},global:{fetch:credentialBoundFetch(config.supabaseOrigin)}});
+ const db=createClient(config.supabaseOrigin,config.publicKey,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},global:{fetch:databaseFetch}});
  const r=await db.auth.signInWithPassword({email:f.email,password:f.password});assert.equal(r.error,null);assert.equal(r.data.user.id,f.id);
- return{db,token:r.data.session.access_token,user:r.data.user};
+ const issued={db,token:r.data.session.access_token,user:r.data.user};issuedSessions.push(issued);return issued;
 }
+try{
 const sessions=await Promise.all(fixtures.map(login));
-async function get(path,session=sessions[0]){const r=await request(config.previewOrigin+path,{headers:session?{authorization:`Bearer ${session.token}`}:{}});assert.equal(r.status,200,path);return r.json();}
+async function get(path,session=sessions[0]){const r=await request(config.previewOrigin+path,{headers:{...(session?{authorization:`Bearer ${session.token}`}:{}) ,...(config.bypass?{'x-vercel-protection-bypass':config.bypass}:{})}});assert.equal(r.status,200,path);const raw=await r.text();assert.ok(raw.length<=2_000_000,`${path}: bounded response`);return JSON.parse(raw);}
 for(const [kind,key]of [['CLUB','golfClubCatalog'],['BALL','golfBallCatalog'],['SHAFT','golfShaftCatalog']]){
  const expected=catalogs[key].filter(item=>item.bagEligible!==false),items=[],cursors=new Set();let cursor=null;
  do{
@@ -65,10 +69,20 @@ for(const [index,session]of sessions.entries()){
   const r=await next.db.from(table).select(columns).eq(key,fixtures[index].id);assert.equal(r.error,null);assert.equal(hash(r.data),before[table],table);
  }
  assert.deepEqual(await get('/api/social/preferences',next),pref);
- report.checks.push(`synthetic ${index+1}: profile/preferences/index metadata/equipment/consents fresh session equal`,`synthetic ${index+1}: social/groups/notifications runtime available, no private email exposed`);
+ report.checks.push(`synthetic ${index+1}: profile/preferences/index metadata/equipment/consents equal through an independent password-authenticated client`,`synthetic ${index+1}: social/groups/notifications runtime available, no private email exposed`);
 }
 report.feedback=await get('/api/feedback',null);
 report.rules=await get('/api/rules/ask',null);
 report.aiSetup=await get('/api/backyard-ai/round-setup',null);
+}finally{
+ let loggedOut=0;
+ for(const session of issuedSessions){
+  const result=await session.db.auth.signOut({scope:'local'});
+  if(!result.error){const local=await session.db.auth.getSession();if(!local.error&&local.data.session===null)loggedOut++;}
+  session.token='';session.user=null;
+ }
+ report.authSessions={created:issuedSessions.length,loggedOut,serverLogoutScope:'local',credentialPersistence:false,providerAuditTimestampMayChange:true,claim:'Independent password-authenticated API sessions only; no Google OAuth, browser persistence or cross-device session claim.'};
+ assert.equal(loggedOut,issuedSessions.length,'Every transient reconciliation session must be logged out and cleared locally.');
+}
 writeFileSync('.qa-artifacts/reconciliation-runtime-report.json',JSON.stringify(report,null,2));
 console.log(JSON.stringify(report,null,2));

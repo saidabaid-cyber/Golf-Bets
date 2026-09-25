@@ -1,5 +1,7 @@
 # QA final / preparación de release — 2026-09-21
 
+> **EVIDENCIA HISTÓRICA — NO EJECUTAR COMO RUNBOOK.** La rama, URL, estados y pasos de este corte fueron superados. Para el estado vigente usar [activación canónica](./PREVIEW_CONTROLLED_ACTIVATION.md) y [matriz de producto](./CANONICAL_PRODUCT_STATUS_2026-09-24.md); owner QA ocurre únicamente en `https://dev.thebackyard.com.mx` desde `integration/backyard-current`.
+
 ## Decisión
 
 Listo para continuar QA del Product Owner en Preview, **no aprobado para Production**. El corrido automatizado no sustituye Google/OTP humano, Safari/PWA físico ni aprobación jurídica. No se añadieron funcionalidades ni se rediseñaron módulos.
@@ -9,8 +11,8 @@ Listo para continuar QA del Product Owner en Preview, **no aprobado para Product
 - Repositorio: `saidabaid-cyber/Golf-Bets`.
 - Rama: `phase2/course-catalog-feedback`.
 - SHA inicial, local y remoto tras fetch: `18efd5f92a81fa60071b246d66985bdec586413e` (worktree inicialmente limpio).
-- Preview inicial: `https://golf-bets-2yxxgmw49-saha8.vercel.app`.
-- Corrido remoto principal después del fix de estado: `d8d63e75edbbdbb33b6a41c87ef5773dba603d9f`, `https://golf-bets-7tqsm5wmy-saha8.vercel.app`, deployment `dpl_78Kx86VHaP4daSveq7jmXdYL3xL5`, Preview READY.
+- Preview inicial: `https://historical-preview-url-retired.invalid`.
+- Corrido remoto principal después del fix de estado: `d8d63e75edbbdbb33b6a41c87ef5773dba603d9f`, `https://historical-preview-url-retired.invalid`, deployment `dpl_78Kx86VHaP4daSveq7jmXdYL3xL5`, Preview READY.
 - La URL inmutable y SHA publicados después del último ajuste visual se entregan en el handoff; se repiten allí los runners de readback y el smoke. No se presenta la URL anterior como ese deployment final.
 - Supabase exclusivo: `bymeopxkxapfizeeqeyb`. Verificación del bundle efectivo antes de requests autenticados.
 - No se modificaron main, beta, Production, dominios, DNS, secretos, configuración Auth ni motores de apuestas/HCP. Ninguna migración aplicada.

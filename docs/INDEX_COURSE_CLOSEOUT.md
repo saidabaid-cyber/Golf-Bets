@@ -1,5 +1,7 @@
 # Backyard Index / Course Data closeout — 2026-09-15
 
+> **Evidencia histórica; no ejecutar como runbook actual.** Sus estados pendientes reflejan el corte fechado de una rama anterior. La clasificación vigente está en [el manifiesto](./CONSOLIDATION_MANIFEST_2026-09-24.md), [el estado del producto](./CANONICAL_PRODUCT_STATUS_2026-09-24.md) y [el ledger de migraciones](./CANONICAL_MIGRATION_LEDGER_2026-09-24.md).
+
 Branch: `phase2/full-platform`. Initial HEAD: `5e36754d58911c5db78cadd13c5b1c4c7447fce4`.
 Initial worktree was clean. No Production, main, beta, shared DB writes, migration apply, merge or force push.
 

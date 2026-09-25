@@ -42,19 +42,19 @@ test("OTP incorrecto/expirado propaga error y permite reintentar sin sesión fal
 
 test("Google normal reutiliza sesión y sólo la acción explícita fuerza selección de cuenta", async () => {
   const { auth, calls } = authMock();
-  await startSocialOAuth(auth, "google", "https://golf-bets-psi.vercel.app/auth/callback");
-  await startSocialOAuth(auth, "google", "https://golf-bets-psi.vercel.app/auth/callback", { selectGoogleAccount: true });
-  await startSocialOAuth(auth, "apple", "https://golf-bets-psi.vercel.app/auth/callback");
+  await startSocialOAuth(auth, "google", "https://dev.thebackyard.com.mx/auth/callback");
+  await startSocialOAuth(auth, "google", "https://dev.thebackyard.com.mx/auth/callback", { selectGoogleAccount: true });
+  await startSocialOAuth(auth, "apple", "https://dev.thebackyard.com.mx/auth/callback");
   assert.deepEqual(calls.map((call) => call.method), ["oauth", "oauth", "oauth"]);
   assert.deepEqual(calls.map((call) => (call.input as { provider: string }).provider), ["google", "google", "apple"]);
   assert.equal((calls[0].input as { options: { queryParams?: Record<string, string> } }).options.queryParams, undefined);
-  assert.equal((calls[0].input as { options: { redirectTo: string } }).options.redirectTo, "https://golf-bets-psi.vercel.app/auth/callback");
+  assert.equal((calls[0].input as { options: { redirectTo: string } }).options.redirectTo, "https://dev.thebackyard.com.mx/auth/callback");
   assert.deepEqual((calls[1].input as { options: { queryParams: Record<string, string> } }).options.queryParams, { prompt: "select_account" });
   assert.equal((calls[2].input as { options: { queryParams?: Record<string, string> } }).options.queryParams, undefined);
 });
 
-test("OAuth conserva exactamente el origen del Preview que inició PKCE", () => {
-  const preview = "https://golf-bets-git-ai-first-phase1-saha8.vercel.app";
+test("OAuth conserva exactamente el origen canónico que inició PKCE", () => {
+  const preview = "https://dev.thebackyard.com.mx";
   assert.equal(authCallbackUrl(preview), `${preview}/auth/callback`);
   assert.equal(authCallbackUrl("http://localhost:3000"), "http://localhost:3000/auth/callback");
   assert.throws(() => authCallbackUrl("javascript:alert(1)"), /invalid_auth_origin/);

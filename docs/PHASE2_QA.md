@@ -1,5 +1,7 @@
 # Phase 2 quality record
 
+> **Evidencia histórica; no ejecutar como runbook actual.** Conserva resultados de `phase2/full-platform` en la fecha indicada; no acredita el estado canónico actual. Consultar [el manifiesto](./CONSOLIDATION_MANIFEST_2026-09-24.md), [el estado del producto](./CANONICAL_PRODUCT_STATUS_2026-09-24.md) y [el ledger de migraciones](./CANONICAL_MIGRATION_LEDGER_2026-09-24.md).
+
 Date: 2026-09-10 (America/Mexico_City)
 
 ## Automated quality gate
@@ -53,7 +55,7 @@ The application was started with the existing local environment; no environment 
 
 ## Vercel Preview runtime QA
 
-- Branch alias: `https://golf-bets-git-phase2-full-platform-saha8.vercel.app`
+- Branch alias: `https://historical-preview-url-retired.invalid`
 - Deployed commit: `f5726d7ee9c525006b954e0f8ce830bcdee7b640`
 - Deployment state: PASS — Vercel/GitHub deployment completed successfully.
 - Home, Membership, Legal V6/V2, Simplified Privacy, PWA manifest and service worker: HTTP 200.

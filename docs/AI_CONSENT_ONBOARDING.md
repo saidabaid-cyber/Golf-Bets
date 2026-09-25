@@ -26,12 +26,12 @@ Migración nueva: `supabase/migrations/20260916020557_ai_consent_onboarding_deci
 
 Requiere previamente `20260908134650_ai_processing_consents.sql` y las dependencias del control de cuenta ya documentadas en [activación de Preview](PREVIEW_CONTROLLED_ACTIVATION.md). Aplicar únicamente en una ref Preview aislada verificada, nunca `zhqmlpljloumldaczcfp` (base compartida).
 
-Configurar exclusivamente en Vercel Preview de `phase2/full-platform`:
+Configurar exclusivamente en Vercel Preview de `integration/backyard-current`:
 
 1. `NEXT_PUBLIC_SUPABASE_URL` y clave pública correspondientes a esa ref aislada.
 2. `SUPABASE_SECRET_KEY` o `SUPABASE_SERVICE_ROLE_KEY`, sólo servidor, de la misma ref.
-3. `BACKYARD_AI_CONSENT_PREVIEW_SUPABASE_URL` igual exactamente al origen HTTPS aislado.
-4. Los controles de aislamiento/estado de cuenta del runbook existente.
+3. `PREVIEW_DB_REF=bymeopxkxapfizeeqeyb`; `NEXT_PUBLIC_SUPABASE_URL` debe ser exactamente `https://bymeopxkxapfizeeqeyb.supabase.co`.
+4. Los controles de aislamiento/estado de cuenta del runbook existente. El servidor rechaza cualquier otro ref de formato válido; el alias histórico `BACKYARD_AI_CONSENT_PREVIEW_SUPABASE_URL` ya no autoriza acceso.
 
 El checkpoint es obligatorio antes de entrar a la app. **No publicar esta integración contra la base compartida o sin esta migración**: el bloqueo seguro impediría completar el acceso. La prueba local o PostgreSQL WASM no acredita persistencia real en Supabase Preview.
 

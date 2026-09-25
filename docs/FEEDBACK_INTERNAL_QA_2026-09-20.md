@@ -1,12 +1,14 @@
 # Internal support / course follow-up — 20 September 2026
 
+> **EVIDENCIA HISTÓRICA — NO EJECUTAR COMO RUNBOOK.** La rama, el deployment y los runners descritos aquí fueron superados por [activación canónica](./PREVIEW_CONTROLLED_ACTIVATION.md) y [matriz de producto](./CANONICAL_PRODUCT_STATUS_2026-09-24.md). La única owner QA vigente es `integration/backyard-current` en `https://dev.thebackyard.com.mx`.
+
 ## Scope and identity
 
 - Branch: `phase2/course-catalog-feedback`.
 - Initial local and fetched remote SHA: `2c2b544cf7295b16135415f728d4c8a483cedf2b`.
 - QA only: `bymeopxkxapfizeeqeyb`. No shared/Production database, main, beta, custom domains, DNS, Auth configuration or real historical data changed.
 - Implementation commits: `a4d3fed` (internal support), `2766475` (seven verified locations and course UI); this document accompanies the final hardening/QA commit. The handoff gives the immutable deployment of that final commit.
-- Initial remote verification deployment: `https://golf-bets-q2ga9n4gc-saha8.vercel.app`, exact SHA `276647513ee48163e0223aaf6db7d7b1d34ed83d`. Final runners are repeatable against the final immutable Preview; they reject non-QA Supabase configuration.
+- Initial remote verification deployment: `https://historical-preview-url-retired.invalid`, exact SHA `276647513ee48163e0223aaf6db7d7b1d34ed83d`. Final runners are repeatable against the final immutable Preview; they reject non-QA Supabase configuration.
 
 ## Delivered contract
 

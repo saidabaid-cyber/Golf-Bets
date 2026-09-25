@@ -3,7 +3,7 @@
 - Captured at: 2026-09-10 (America/Mexico_City)
 - Source branch: `fix/phase1-final-unblock-beta`
 - Source commit: `5c278d7d27bcf68883108341503eaff6cf95fe24`
-- Phase 1 Preview: `https://golf-bets-git-fix-phase1-final-unblock-beta-saha8.vercel.app`
+- Phase 1 Preview: `https://historical-preview-url-retired.invalid`
 
 ## Verification before Phase 2
 

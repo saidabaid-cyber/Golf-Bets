@@ -4,20 +4,22 @@ import { createRequire } from 'node:module';
 import { writeFileSync } from 'node:fs';
 import { createClient } from '@supabase/supabase-js';
 import { profileCloudQaConfig } from './qa-preview-profile-cloud.mjs';
-import { credentialBoundFetch, verifyPreviewBundleBinding } from './qa-preview-statistics.mjs';
+import { credentialBoundFetch, deploymentMutationBoundFetch, verifyPreviewBundleBinding, verifyPreviewDeploymentIdentity } from './qa-preview-statistics.mjs';
 
 // Run through the QA credential wrapper. This runner creates ONE synthetic
 // account and retains it: no deletion of QA/owner/production data is performed.
 const config = profileCloudQaConfig(process.env);
 assert.equal(config.projectRef, 'bymeopxkxapfizeeqeyb');
 assert.equal(new URL(config.supabaseOrigin).hostname, 'bymeopxkxapfizeeqeyb.supabase.co');
-const appFetch = credentialBoundFetch(config.previewOrigin);
-await verifyPreviewBundleBinding(config, appFetch);
+const rawAppFetch = credentialBoundFetch(config.previewOrigin);
+const databaseFetch = credentialBoundFetch(config.supabaseOrigin);
+await verifyPreviewBundleBinding(config, rawAppFetch, databaseFetch);
+const appFetch = deploymentMutationBoundFetch(config, rawAppFetch);
 const require = createRequire(import.meta.url);
 const eq = require('../.test-dist/lib/golf-equipment.js');
 const fit = require('../.test-dist/lib/ball-fitting.js');
 const transport = require('../.test-dist/lib/ball-fitting-api.js');
-const options = { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }, global: { fetch: credentialBoundFetch(config.supabaseOrigin) } };
+const options = { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }, global: { fetch: databaseFetch } };
 const admin = createClient(config.supabaseOrigin, config.secretKey, options);
 const runId = randomUUID(), passed = [], sources = [];
 const fixture = { id: randomUUID(), email: `qa-bagfit-${runId}@example.invalid`, password: `Qa!${randomBytes(28).toString('hex')}` };
@@ -41,6 +43,7 @@ async function save(profile) {
   assert.deepEqual((await app('/api/equipment')).data.profile, profile);
 }
 try {
+  await verifyPreviewDeploymentIdentity(config, rawAppFetch);
   assert.equal(checked(await admin.auth.admin.createUser({ id: fixture.id, email: fixture.email, password: fixture.password, email_confirm: true, app_metadata: { qa_run_id: runId }, user_metadata: { display_name: 'Synthetic QA Bag Fit', given_name: 'Synthetic QA', family_name: 'Bag Fit' } }), 'create').user.id, fixture.id);
   writeFileSync('.qa-artifacts/equipment-fixes-fixture.private.json', JSON.stringify({ ...fixture, runId, preview: config.previewOrigin, ref: config.projectRef }));
   await login();
@@ -83,6 +86,7 @@ try {
     assert.deepEqual(checked(await client.from('profiles').select('*').eq('id', fixture.id).single(), 'profile after'), canonicalProfileBefore);
     passed.push(`FIT_${source}_REAL_API`, `FIT_${source}_CLOUD_FRESH_SESSION`, `FIT_${source}_NO_PROFILE_OVERWRITE`, `FIT_${source}_SCORE_DISTANCE_UNKNOWN_SPEED_READBACK`);
   }
+  await verifyPreviewDeploymentIdentity(config, rawAppFetch);
 } catch (error) { failure = { stage, message: String(error.message).slice(0, 300) }; }
 const report = { runId, preview: config.previewOrigin, ref: config.projectRef, retainedSyntheticAccountId: fixture.id,
   passed, sources, failure, cleanup: 'RETAINED_NO_DELETE_AUTHORIZATION',

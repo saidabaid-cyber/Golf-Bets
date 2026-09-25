@@ -17,11 +17,31 @@ test("Preview SQL runner rejects a shared Production target and covers every clo
     "phase2_shots_analytics_rls.sql",
     "user_statistics_reset_rls.sql",
     "phase2_multiuser_authorization_rls.sql",
+    "owner_user_search_rls.sql",
+    "group_round_presets_rls.sql",
+    "admin_control_center_rls.sql",
+    "account_entry_rls.sql",
+    "ghin_provider_foundation_rls.sql",
+    "legal_evidence_events_rls.sql",
+    "feedback_requests_rls.sql",
   ]) assert.match(runner, new RegExp(file.replaceAll(".", "\\.")));
   assert.match(runner, /Preview and Production project refs are identical/);
-  assert.match(runner, /connection target does not identify SUPABASE_PREVIEW_PROJECT_REF/);
+  assert.match(runner, /connection host\/user do not exactly identify the Preview project/);
+  assert.match(runner, /sslmode=verify-full/);
+  assert.match(runner, /SUPABASE_PREVIEW_DB_SSLROOTCERT/);
+  assert.match(runner, /SAFE_PROCESS_ENVIRONMENT/);
   assert.doesNotMatch(runner, /console\.log\([^\n]*(?:PASSWORD|DB_URL)/);
   assert.equal(packageJson.scripts["test:rls:preview"], "node scripts/run-preview-rls-tests.mjs");
+});
+
+test("static asset/origin audit covers operational docs, env examples, workflows and relative assets", () => {
+  const audit = readFileSync(`${root}/scripts/audit-static-assets.mjs`, "utf8");
+  assert.match(audit, /"\.github", "app", "data", "docs", "lib", "scripts", "public"/);
+  for (const extension of [".example", ".md", ".yaml", ".yml"]) assert.match(audit, new RegExp(extension.replace(".", "\\.")));
+  assert.match(audit, /unquotedCssAssetPattern/);
+  assert.match(audit, /markdownAssetPattern/);
+  assert.match(audit, /recordReference/);
+  assert.match(audit, /hardcodedVercelUrlPattern/);
 });
 
 test("membership lookup fails closed unless BETA_PRO is explicitly assigned", async () => {

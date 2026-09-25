@@ -1,8 +1,8 @@
 # Automated off-site backups
 
-**Status: `NOT_ACTIVE_PENDING_OWNER_SETUP`**
+**Status: `BACKUP_OBSERVED_RESTORE_DRILL_PENDING`**
 
-The automation is present in the repository, but it is not operationally active until the owner completes external configuration and accepts a controlled manual run.
+The automation is operational on the default branch: scheduled run `35979285016` completed successfully for SHA `2c15c9a02f36643244a7b0a420aa2ade570f2a10` and produced workflow artifact `10798973211`. That evidence proves a published backup run, not a restored system.
 
 ## Trigger and timing
 
@@ -13,7 +13,7 @@ The GitHub Actions workflow supports:
 
 GitHub evaluates the cron expression in UTC and may start scheduled jobs later during high load. The backup code uses the `America/Mexico_City` calendar to decide whether a successful daily backup also belongs in the weekly or monthly tier.
 
-The first run must be a controlled `workflow_dispatch` after the approved change is merged, with `main` selected. The job is guarded by `github.ref == 'refs/heads/main'`, so any other ref is skipped. Do not rely on the schedule until the `main` run is reviewed and accepted.
+Any manual rerun must use `workflow_dispatch` with `main` selected. The job is guarded by `github.ref == 'refs/heads/main'`, so any other ref is skipped. A rerun writes to backup destinations and must have an operational reason; do not launch one merely to reconfirm source code.
 
 ## Pipeline
 
@@ -53,15 +53,15 @@ A successful run is expected to create Drive folders and a package containing en
 
 It must not write to the application database, source Supabase Storage, Auth, migrations, source code, deployments, or restore targets. Retention remains non-mutating while `BACKUP_RETENTION_APPLY` is `false`.
 
-## Activation criteria
+## Acceptance criteria for any later rerun or configuration change
 
-The owner may review a later status change only after:
+The observed scheduled run is recorded above. A later manual rerun is warranted only by an operational change, repair, or rotation and is accepted only when:
 
 1. GitHub secrets and variables are configured without exposing values.
 2. The service account has access only to the dedicated Drive root required for the backup.
-3. After the approved merge, a controlled `workflow_dispatch` from `main` completes and all verification evidence is reviewed.
+3. The exact authorized workflow SHA on `main` is recorded and the single controlled `workflow_dispatch` completes with all verification evidence reviewed.
 4. The package and checksum are visible in the expected destination.
 5. Logs and summaries are confirmed secret-free.
-6. The next scheduled run is observed successfully.
+6. The following scheduled run remains healthy after the change.
 
-Until then, the status remains `NOT_ACTIVE_PENDING_OWNER_SETUP`.
+The status remains `BACKUP_OBSERVED_RESTORE_DRILL_PENDING` until an authorized disposable restore proves the complete recovery path; another green backup alone does not change it.

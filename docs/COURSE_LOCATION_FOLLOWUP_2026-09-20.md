@@ -1,11 +1,13 @@
 # Campos cercanos — seguimiento de QA, 20 septiembre 2026
 
+> **Checkpoint histórico — no ejecutar sus comandos ni configurar sus ramas.** Este documento conserva evidencia de una ejecución anterior en `phase2/course-catalog-feedback`; esa rama y su Preview ya no son destinos operativos. La única activación vigente parte de `integration/backyard-current` y está definida en [PREVIEW_CONTROLLED_ACTIVATION.md](./PREVIEW_CONTROLLED_ACTIVATION.md), con `https://dev.thebackyard.com.mx` como única URL de QA para el owner.
+
 ## Entorno y límites
 
 - Rama: `phase2/course-catalog-feedback`, repo `saidabaid-cyber/Golf-Bets`.
 - HEAD inicial confirmado por fetch: `609c532c0c34bd428be6ad3eca1de568f9ae9d6c`.
 - Aplicación corregida: `b851ec3a37f364e389d060c35145eb90c04f242e`.
-- Preview probado: https://golf-bets-oht0ne1js-saha8.vercel.app — READY, metadata del mismo SHA.
+- Preview probado: https://historical-preview-url-retired.invalid — READY, metadata del mismo SHA.
 - Única DB consultada: `bymeopxkxapfizeeqeyb`. No se aplicaron migraciones ni cambios de datos en esta ejecución.
 - La aplicación de 75 ubicaciones fue rechazada por el control de permisos debido a la autorización anterior que excluía cambios de DB. No se intentó por otra vía. Se solicitó autorización separada para 75 ubicaciones y seis tarjetas.
 - No se modificaron main, beta, Production, secretos, dominios, motores de apuestas, fórmulas ni históricos. Cero correos enviados.

@@ -1,12 +1,14 @@
 # P01 — Course flow closeout
 
+> **DOCUMENTO HISTÓRICO — NO USAR COMO ESTADO ACTUAL NI RUNBOOK.** Este cierre conserva evidencia de la rama original; sus SHA, alias y pasos operativos pueden estar superados. La fuente operativa es `integration/backyard-current`; consulte el [manifiesto de consolidación](../CONSOLIDATION_MANIFEST_2026-09-24.md), el [estado canónico del producto](../CANONICAL_PRODUCT_STATUS_2026-09-24.md) y el [ledger canónico de migraciones](../CANONICAL_MIGRATION_LEDGER_2026-09-24.md). No ejecute deploys, cambios de entorno ni migraciones a partir de este archivo.
+
 ## Version
 
 - Branch: `phase2/admin-control-center-2026-09-22`
 - Base SHA: `eff4a80caf70e4d54709cd49a195b38e193a63be`
 - Recovery deployment before P01: `dpl_CJLohF922ak9qBdf1oAaZUVXHmCk`
 - Final SHA: the Git commit containing this document (the exact immutable SHA is recorded in the owner report and in Vercel deployment metadata after the commit is created).
-- Review alias: `https://golf-bets-git-phase2-admin-control-center-2026-09-22-saha8.vercel.app`
+- Review alias: `https://historical-preview-url-retired.invalid`
 
 The remote branch was fetched immediately before integration and still matched the base SHA. No concurrent commit was overwritten.
 

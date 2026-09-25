@@ -39,7 +39,9 @@ import {
 const repo = fileURLToPath(new URL('../../', import.meta.url));
 const workflowPath = '.github/workflows/automated-offsite-backup.yml';
 const automationDocs = [
+  'docs/disaster-recovery/README.md',
   'docs/disaster-recovery/AUTOMATED_BACKUPS.md',
+  'docs/disaster-recovery/BACKUP_VERIFICATION.md',
   'docs/disaster-recovery/GITHUB_SECRETS_SETUP.md',
   'docs/disaster-recovery/GOOGLE_DRIVE_SERVICE_ACCOUNT_SETUP.md',
   'docs/disaster-recovery/RETENTION_POLICY.md',
@@ -187,11 +189,15 @@ test('recovery artifact is success-gated and contains only package plus checksum
   assert.doesNotMatch(step, /(?:BACKUP_(?:PGPASSWORD|STORAGE_KEY|ENCRYPTION_KEY|ROOT)|GDRIVE_SERVICE_ACCOUNT_JSON|\.env|snapshot)/);
 });
 
-test('Vercel blocks backup branches and ignores reviewed backup-only merge commits without changing normal app deploys', async () => {
+test('Vercel blocks backup branches, keeps the canonical Preview branch enabled, and ignores reviewed backup-only main commits', async () => {
   const configuration = JSON.parse(await readRepo('vercel.json'));
+  assert.equal(configuration.git?.deploymentEnabled?.['*'], false);
+  assert.equal(configuration.git?.deploymentEnabled?.['integration/backyard-current'], true);
   assert.equal(configuration.git?.deploymentEnabled?.['infra/backup-automation'], false);
   assert.equal(configuration.git?.deploymentEnabled?.['hotfix/cloud-backup-*'], false);
-  assert.ok(Object.values(configuration.git.deploymentEnabled).every((enabled) => enabled === false));
+  assert.ok(Object.entries(configuration.git.deploymentEnabled)
+    .filter(([branch]) => branch !== 'integration/backyard-current')
+    .every(([, enabled]) => enabled === false));
   assert.equal(configuration.ignoreCommand, 'node scripts/backup/skip-vercel-deploy.mjs');
 
   const script = join(repo, 'scripts/backup/skip-vercel-deploy.mjs');
@@ -1251,7 +1257,7 @@ test('secret-bearing variables stay empty or secret-backed and automation docs c
 
   const documents = await Promise.all(automationDocs.map(async (path) => ({ path, text: await readRepo(path) })));
   for (const { path, text } of documents) {
-    assert.match(text, /NOT_ACTIVE_PENDING_OWNER_SETUP/, path);
+    assert.match(text, /BACKUP_OBSERVED_RESTORE_DRILL_PENDING/, path);
     for (const name of secretNames) {
       const assignedValue = new RegExp(`${name}\\s*=\\s*(?:["'][^"']+["']|[^\\s\x60|]+)`);
       assert.doesNotMatch(text, assignedValue, `${path} must name ${name} without assigning a value`);
@@ -1263,6 +1269,12 @@ test('secret-bearing variables stay empty or secret-backed and automation docs c
   }
 
   const contract = documents.map(({ text }) => text).join('\n');
+  // This supersedes the pre-activation NOT_ACTIVE status: one bounded historic
+  // run is observed, while restore verification remains explicitly pending.
+  for (const evidence of ['365582254', '35979285016', '2c15c9a02f36643244a7b0a420aa2ade570f2a10', '10798973211', '24,437,675']) {
+    assert.ok(contract.includes(evidence), 'automation docs must retain observed evidence ' + evidence);
+  }
+  assert.match(contract, /does not prove an independent full restore|not restored during consolidation/i);
   for (const token of [
     '0 9 * * *', 'workflow_dispatch', ...secretNames, 'GDRIVE_BACKUP_ROOT_FOLDER_ID',
     'BACKUP_RETENTION_APPLY=false', 'Source', 'Database', 'Storage', 'Encryption', 'Verification', 'recoveryComplete',

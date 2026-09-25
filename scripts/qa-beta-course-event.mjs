@@ -4,15 +4,16 @@ import {randomUUID,randomBytes} from 'node:crypto';
 import {createRequire} from 'node:module';
 import {createClient} from '@supabase/supabase-js';
 import {profileCloudQaConfig} from './qa-preview-profile-cloud.mjs';
-import {credentialBoundFetch,verifyPreviewBundleBinding} from './qa-preview-statistics.mjs';
+import {credentialBoundFetch,deploymentMutationBoundFetch,verifyPreviewBundleBinding,verifyPreviewDeploymentIdentity} from './qa-preview-statistics.mjs';
 const config=profileCloudQaConfig(process.env);assert.equal(config.projectRef,'bymeopxkxapfizeeqeyb');
-const appFetch=credentialBoundFetch(config.previewOrigin);await verifyPreviewBundleBinding(config,appFetch);
+const rawAppFetch=credentialBoundFetch(config.previewOrigin),databaseFetch=credentialBoundFetch(config.supabaseOrigin);await verifyPreviewBundleBinding(config,rawAppFetch,databaseFetch);const appFetch=deploymentMutationBoundFetch(config,rawAppFetch);
 const require=createRequire(import.meta.url),catalog=require('../.test-dist/lib/golf-course-directory.js').INTERNAL_GOLF_COURSE_CATALOG;
 // Independent run-owned fixtures: never reuse the owner deleted by shared-round QA.
-const options={auth:{persistSession:false,autoRefreshToken:false},global:{fetch:credentialBoundFetch(config.supabaseOrigin)}};
+const options={auth:{persistSession:false,autoRefreshToken:false},global:{fetch:databaseFetch}};
 const admin=createClient(config.supabaseOrigin,config.secretKey,options),runId=randomUUID(),people=[];
 for(const label of ['A','B']){
  const a={id:randomUUID(),email:`qa-course-${label}-${runId}@example.invalid`,password:`Qa!${randomBytes(24).toString('hex')}`};
+ await verifyPreviewDeploymentIdentity(config,rawAppFetch);
  assert.equal((await admin.auth.admin.createUser({id:a.id,email:a.email,password:a.password,email_confirm:true,app_metadata:{qa_run_id:runId},user_metadata:{display_name:`Course QA ${label}`}})).error,null);
  a.client=createClient(config.supabaseOrigin,config.publicKey,options);
  const r=await a.client.auth.signInWithPassword({email:a.email,password:a.password});assert.equal(r.error,null);assert.equal(r.data.user.id,a.id);a.token=r.data.session.access_token;people.push(a);
@@ -46,6 +47,7 @@ try {
  assert.equal((await a.client.auth.updateUser({data:{backyard_golf_profile_v1:{...oldGolf,homeClubId:target.clubId}}})).error,null);
  assert.equal((await getCard()).courseEvent,undefined);passed.push('HOME_CLUB_NO_EVENT');
  assert.equal((await a.client.auth.updateUser({data:{backyard_golf_profile_v1:oldGolf}})).error,null);
+ await verifyPreviewDeploymentIdentity(config,rawAppFetch);
 }catch(e){failure=String(e.message).slice(0,350);}
 const report={preview:config.previewOrigin,ref:config.projectRef,runId,passed,failure,retainedSyntheticUsers:people.map(a=>a.id),qualification:'Real Preview API + QA DB; synthetic rounds referencing canonical catalog IDs, not a claim of a real played round.'};
 writeFileSync('.qa-artifacts/beta-course-event.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report));if(failure)process.exitCode=1;

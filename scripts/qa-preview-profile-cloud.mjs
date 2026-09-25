@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
-import { credentialBoundFetch, previewStatisticsConfig, verifyPreviewBundleBinding } from "./qa-preview-statistics.mjs";
+import { credentialBoundFetch, previewStatisticsConfig, verifyPreviewBundleBinding, verifyPreviewDeploymentIdentity } from "./qa-preview-statistics.mjs";
 
 const QA_REF = "bymeopxkxapfizeeqeyb";
 const require = createRequire(import.meta.url);
@@ -54,18 +54,36 @@ export async function runPreviewProfileCloudQA(env = process.env, { fetcher = fe
   const databaseFetch = credentialBoundFetch(config.supabaseOrigin, fetcher);
   const appFetch = credentialBoundFetch(config.previewOrigin, fetcher);
   // No Auth user or mutable fixture exists before this proof.
-  await verifyPreviewBundleBinding(config, appFetch);
+  await verifyPreviewBundleBinding(config, appFetch, databaseFetch);
   const options = { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }, global: { fetch: databaseFetch } };
   const admin = clientFactory(config.supabaseOrigin, config.secretKey, options);
   const runId = randomUUID();
   const accounts = [];
   const passed = [];
   const retained = [];
+  const cleanupModes = [];
+  let firstWriteAuthorized = false;
   let stage = "CREATE_FRESH_QA_ACCOUNTS";
   let diagnostic = null;
   let failure = null;
 
+  async function revalidateCanonicalAlias() {
+    await verifyPreviewDeploymentIdentity(config, appFetch);
+  }
+
+  async function authorizeFirstWrite() {
+    if (firstWriteAuthorized) {
+      await revalidateCanonicalAlias();
+      return;
+    }
+    await revalidateCanonicalAlias();
+    firstWriteAuthorized = true;
+  }
+
   async function app(path, account, method = "GET", body, expected = 200) {
+    if (!["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase())) {
+      await revalidateCanonicalAlias();
+    }
     const response = await appFetch(`${config.previewOrigin}${path}`, { method, cache: "no-store",
       headers: { ...(account?.token ? { authorization: `Bearer ${account.token}` } : {}), "content-type": "application/json",
         ...(config.bypass ? { "x-vercel-protection-bypass": config.bypass } : {}) },
@@ -96,6 +114,7 @@ export async function runPreviewProfileCloudQA(env = process.env, { fetcher = fe
     const account = { id: randomUUID(), email: `backyard-qa-cloud-${label}-${runId}@example.invalid`,
       password: `Qa!${randomBytes(32).toString("base64url")}`, name: `Cloud QA ${label}`, token: null, client: null,
       username: `qa_${label}_${runId.replaceAll("-", "").slice(0, 20)}` };
+    await authorizeFirstWrite();
     accounts.push(account); // Retain ID for ambiguous create failures; cleanup still requires ownership proof.
     const created = checked(await admin.auth.admin.createUser({ id: account.id, email: account.email,
       password: account.password, email_confirm: true, app_metadata: { qa_run_id: runId },
@@ -206,13 +225,24 @@ export async function runPreviewProfileCloudQA(env = process.env, { fetcher = fe
       assert.equal(mapping.userId, account.id);
       assert.equal(mapping.profileExists, true);
       assert.equal(mapping.existingAccount, true);
-      await app(`/api/account/entry?email=${encodeURIComponent(account.email)}`, account, "GET", undefined, 400);
+      assert.deepEqual(await app(`/api/account/entry?email=${encodeURIComponent(account.email)}`, account, "GET", undefined, 400),
+        { error: "Solicitud no válida." });
+      const afterRejectedSelector = checked(await account.client.from("profiles").select("display_name,avatar_url,default_handicap").eq("id", account.id).single(), "Read canonical profile after rejected selector");
+      assert.deepEqual(afterRejectedSelector, original, "rejected account selector must not mutate the owner profile");
     }
-    await app("/api/account/entry", null, "GET", undefined, 401);
+    assert.deepEqual(await app("/api/account/entry", null, "GET", undefined, 401),
+      { error: "Inicia sesión para continuar.", code: "AUTH_REQUIRED" });
     passed.push("AUTHENTICATED_ACCOUNT_MAPPING", "PROFILE_DEDUPE_CONCURRENT_NO_OVERWRITE", "NO_PUBLIC_EMAIL_ENUMERATION");
 
     stage = "BIDIRECTIONAL_AUTHENTICATED_HTTP_RLS";
     for (const [actor, target] of [[a, b], [b, a]]) {
+      const targetBefore = {
+        profile: checked(await target.client.from("profiles").select("id,display_name,avatar_url,default_handicap,profile_visibility").eq("id", target.id).single(), "Target profile before negative probes"),
+        preferences: checked(await target.client.from("user_preferences").select("user_id,high_contrast,locale,default_handicap,notifications_enabled,version").eq("user_id", target.id).maybeSingle(), "Target preferences before negative probes"),
+        equipment: checked(await target.client.from("player_equipment_profiles").select("user_id,snapshot,version").eq("user_id", target.id).maybeSingle(), "Target equipment before negative probes"),
+        consents: checked(await target.client.from("ai_processing_consents").select("scope,policy_version,decision_status,accepted_at,revoked_at,source").eq("user_id", target.id).order("id", { ascending: true }), "Target consents before negative probes"),
+        round: checked(await target.client.from("rounds_cloud").select("id,owner_id,snapshot").eq("id", target.roundDb.id).single(), "Target round before negative probes"),
+      };
       denied(await actor.client.from("profiles").select("*").eq("id", target.id), "Private profile read");
       denied(await actor.client.from("profiles").update({ display_name: "Forbidden QA mutation" }).eq("id", target.id).select("id"), "Private profile update");
       denied(await actor.client.from("user_preferences").select("*").eq("user_id", target.id), "Preferences read");
@@ -223,10 +253,22 @@ export async function runPreviewProfileCloudQA(env = process.env, { fetcher = fe
       denied(await actor.client.from("ai_processing_consents").update({ revoked_at: new Date().toISOString() }).eq("user_id", target.id).select("id"), "Consent update");
       denied(await actor.client.from("rounds_cloud").select("*").eq("id", target.roundDb.id), "Private round read");
       denied(await actor.client.from("rounds_cloud").update({ snapshot: { tampered: true } }).eq("id", target.roundDb.id).select("id"), "Private round update");
-      await app("/api/account/privacy", actor, "PATCH", { visibility: "public", userId: target.id }, 400);
-      await app("/api/backyard-ai/consent", actor, "POST", { scope: domain.AI_IMAGE_PROCESSING_CONSENT, userId: target.id }, 400);
-      await app("/api/account/statistics", actor, "DELETE", { confirmation: "ELIMINAR", requestId: randomUUID(), userId: target.id }, 400);
-      await app("/api/account/delete", actor, "DELETE", { confirmation: "ELIMINAR", dataPolicy: "delete_golf_data", requestId: randomUUID(), userId: target.id }, 400);
+      assert.deepEqual(await app("/api/account/privacy", actor, "PATCH", { visibility: "public", userId: target.id }, 400),
+        { error: "Elige Público o Amigos." });
+      assert.deepEqual(await app("/api/backyard-ai/consent", actor, "POST", { scope: domain.AI_IMAGE_PROCESSING_CONSENT, userId: target.id }, 400),
+        { error: "Autorización inválida.", code: "invalid_request" });
+      assert.deepEqual(await app("/api/account/statistics", actor, "DELETE", { confirmation: "ELIMINAR", requestId: randomUUID(), userId: target.id }, 400),
+        { code: "STRONG_CONFIRMATION_REQUIRED", error: "Escribe ELIMINAR y envía una solicitud válida para confirmar." });
+      assert.deepEqual(await app("/api/account/delete", actor, "DELETE", { confirmation: "ELIMINAR", dataPolicy: "delete_golf_data", requestId: randomUUID(), userId: target.id }, 400),
+        { code: "INVALID_ACCOUNT_DELETE_CHOICE", error: "Confirma escribiendo ELIMINAR y selecciona qué hacer con tus datos de golf." });
+      const targetAfter = {
+        profile: checked(await target.client.from("profiles").select("id,display_name,avatar_url,default_handicap,profile_visibility").eq("id", target.id).single(), "Target profile after negative probes"),
+        preferences: checked(await target.client.from("user_preferences").select("user_id,high_contrast,locale,default_handicap,notifications_enabled,version").eq("user_id", target.id).maybeSingle(), "Target preferences after negative probes"),
+        equipment: checked(await target.client.from("player_equipment_profiles").select("user_id,snapshot,version").eq("user_id", target.id).maybeSingle(), "Target equipment after negative probes"),
+        consents: checked(await target.client.from("ai_processing_consents").select("scope,policy_version,decision_status,accepted_at,revoked_at,source").eq("user_id", target.id).order("id", { ascending: true }), "Target consents after negative probes"),
+        round: checked(await target.client.from("rounds_cloud").select("id,owner_id,snapshot").eq("id", target.roundDb.id).single(), "Target round after negative probes"),
+      };
+      assert.deepEqual(targetAfter, targetBefore, "every rejected cross-account probe must leave target data unchanged");
       await verifyPersisted(target);
     }
     passed.push("RLS_TWO_USERS_REAL_HTTP", "CROSS_ACCOUNT_MUTATIONS_REJECTED");
@@ -268,7 +310,9 @@ export async function runPreviewProfileCloudQA(env = process.env, { fetcher = fe
       denied(await actor.client.from("social_profiles").select("*").eq("user_id", target.id), "Blocked full social row");
       denied(await actor.client.from("profiles").select("*").eq("id", target.id), "Account PII remains owner-only");
     }
-    await app("/api/account/privacy", a, "PATCH", { visibility: "private" }, 400);
+    assert.deepEqual(await app("/api/account/privacy", a, "PATCH", { visibility: "private" }, 400),
+      { error: "Elige Público o Amigos." });
+    assert.equal((await app("/api/account/privacy", a)).visibility, "public", "invalid privacy value must not change persisted visibility");
     passed.push("PUBLIC_FRIENDS_DIRECTORY_MINIMAL_IDENTITY", "FRIENDSHIP_PERMISSIONS", "RECIPROCAL_BLOCK", "ACCOUNT_PII_PRIVATE", "NO_NEW_PRIVATE_SELECTION");
   } catch (error) {
     // Never expose response bodies, password, tokens or raw assertion values.
@@ -283,10 +327,21 @@ export async function runPreviewProfileCloudQA(env = process.env, { fetcher = fe
         assert.equal(user?.id, account.id);
         assert.equal(user?.email, account.email);
         assert.equal(user?.app_metadata?.qa_run_id, runId);
-        if (account.token) {
+        let aliasVerified = false;
+        try { await revalidateCanonicalAlias(); aliasVerified = true; }
+        catch { /* Fall through to exact marker-scoped Admin cleanup only. */ }
+        if (account.token && aliasVerified) {
           const deleted = await app("/api/account/delete", account, "DELETE", { confirmation: "ELIMINAR", dataPolicy: "delete_golf_data", requestId: randomUUID() });
           assert.equal(deleted.deleted, true);
-        } else checked(await admin.auth.admin.deleteUser(account.id), "Cleanup unused run-owned Auth account");
+        } else {
+          const directLookup = await admin.auth.admin.getUserById(account.id);
+          const directUser = checked(directLookup, "Direct cleanup owner proof").user;
+          assert.equal(directUser?.id, account.id);
+          assert.equal(directUser?.email, account.email);
+          assert.equal(directUser?.app_metadata?.qa_run_id, runId);
+          checked(await admin.auth.admin.deleteUser(account.id), "Cleanup exact run-owned Auth account without using changed alias");
+          cleanupModes.push({ userId: account.id, mode: aliasVerified ? "ADMIN_DIRECT_UNUSED_AUTH" : "ADMIN_DIRECT_AFTER_ALIAS_REVALIDATION_FAILURE" });
+        }
         const absence = await admin.auth.admin.getUserById(account.id);
         assert.equal(absence.error?.status === 404 || (!absence.error && !absence.data.user), true);
       } catch { retained.push(account.id); }
@@ -294,7 +349,7 @@ export async function runPreviewProfileCloudQA(env = process.env, { fetcher = fe
   }
   const report = { preview: config.previewOrigin, projectRef: config.projectRef, runId, passed,
     ...(failure ? { failedAt: stage, diagnostic, failureType: failure?.name === "AssertionError" ? "ASSERTION" : "REQUEST_OR_HELPER" } : {}),
-    cleanup: retained.length ? "QA_ACCOUNTS_RETAINED" : "COMPLETE", retainedQaUserIds: retained,
+    cleanup: retained.length ? "QA_ACCOUNTS_RETAINED" : "COMPLETE", retainedQaUserIds: retained, cleanupModes,
     notCovered: ["BROWSER_UI", "PHYSICAL_IPHONE_SAFARI", "GOOGLE_OAUTH", "SMTP_OTP_DELIVERY", "LEGAL_APPROVAL"] };
   log(JSON.stringify(report));
   if (failure) throw new Error(`Profile/cloud remote QA failed at ${stage}. Run ID: ${runId}. No credentials or raw provider bodies logged.`);

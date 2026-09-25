@@ -1,5 +1,7 @@
 # THE BACKYARD — P02 Puebla Course Catalog Closeout
 
+> **DOCUMENTO HISTÓRICO — NO USAR COMO ESTADO ACTUAL NI RUNBOOK.** Este cierre conserva evidencia de la rama original; sus SHA, conteos y pasos operativos pueden estar superados. La fuente operativa es `integration/backyard-current`; consulte el [manifiesto de consolidación](../CONSOLIDATION_MANIFEST_2026-09-24.md), el [estado canónico del producto](../CANONICAL_PRODUCT_STATUS_2026-09-24.md) y el [ledger canónico de migraciones](../CANONICAL_MIGRATION_LEDGER_2026-09-24.md). No ejecute deploys, cambios de entorno ni migraciones a partir de este archivo.
+
 ## Versiones y alcance
 
 - Rama: `phase2/admin-control-center-2026-09-22`
@@ -93,7 +95,7 @@ No se eliminaron ni remapearon IDs. El cambio es de publicación fail-closed, no
 
 ## Preview y smoke autenticado
 
-- Alias único: `https://golf-bets-git-phase2-admin-control-center-2026-09-22-saha8.vercel.app`
+- Alias único: `https://historical-preview-url-retired.invalid`
 - Vercel Preview: READY; la inspección del alias se hizo contra el deployment creado desde la rama y SHA finales.
 - HTTP raíz: 200, sin redirección a otro hostname.
 - API pública: La Vista, Campestre de Puebla y El Cristo retornaron 200; Rating/Slope no aparecen cuando `localIndexRated=false`.

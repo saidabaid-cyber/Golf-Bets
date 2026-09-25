@@ -1,12 +1,12 @@
 # Automated backup owner runbook
 
-**Status: `NOT_ACTIVE_PENDING_OWNER_SETUP`**
+**Status: `BACKUP_OBSERVED_RESTORE_DRILL_PENDING`**
 
-This runbook activates and observes the first automated off-site backup. It does not authorize a restore, deployment, migration, database write, source Storage write, Auth change, or applied retention.
+This runbook governs an authorized rerun, credential rotation, or operational observation of the already-active automated off-site backup. A scheduled run has already completed successfully; do not launch another run merely to reconfirm source code. It does not authorize a restore, deployment, migration, database write, source Storage write, Auth change, or applied retention.
 
-## Phase 1: owner preparation
+## Phase 1: owner preflight for an operational change or rerun
 
-1. Review the workflow and backup scripts in the approved change. Do not run the production workflow from that feature ref.
+1. Review the workflow and backup scripts at the exact `main` SHA currently authorized for the job. Do not run the workflow from a feature ref.
 2. Confirm the pinned source, PostgreSQL, and Storage identifiers correspond to the intended production project without printing credential values.
 3. Confirm `BACKUP_PGPASSWORD` is the exact owner Session Pooler password. Do not describe it as dedicated or read-only; the safety controls are the explicit `BEGIN TRANSACTION READ ONLY` preflight and the dump-only database commands.
 4. Confirm `BACKUP_STORAGE_KEY` is the intended server-side key. Do not promise that the key itself has a narrow provider scope; confirm instead that the backup code allowlists only bucket listing, object listing, and object download.
@@ -14,18 +14,18 @@ This runbook activates and observes the first automated off-site backup. It does
 6. Complete the dedicated Google Drive service-account and root-folder setup.
 7. Add the four GitHub Actions secrets and two Actions variables described in the setup guide.
 8. Confirm `BACKUP_RETENTION_APPLY=false`.
-9. Confirm the cron in the reviewed workflow is `0 9 * * *` and keep the workflow disabled, or complete setup outside its run window, so the schedule cannot start before the controlled manual test.
+9. Confirm the cron in the reviewed workflow is `0 9 * * *`. If rotating credentials or changing configuration, use an approved maintenance window and suspend the schedule only for that change; otherwise do not disturb the active schedule.
 10. Confirm only trusted repository administrators can change Repository secrets, Repository variables, or dispatch Actions. The current workflow does not declare a protected GitHub Environment.
-11. Merge the approved change into `main` only after the external setup is complete, then record the resulting `main` Git SHA.
+11. If a separately approved workflow change exists, merge it through the normal protected process and record the resulting `main` SHA before a rerun. This consolidation does not authorize a merge to `main`.
 
-If any item is incomplete, stop. Keep the status `NOT_ACTIVE_PENDING_OWNER_SETUP` and do not start the workflow.
+If any item is incomplete, stop and do not start another workflow. The existing observed backup does not authorize a rerun or satisfy the pending restore drill.
 
-## Phase 2: controlled `workflow_dispatch`
+## Phase 2: controlled `workflow_dispatch` only when operationally required
 
 1. Choose a maintenance window in which the owner can monitor the complete run.
-2. Confirm the approved merge is present in `main` and recheck the recorded `main` Git SHA.
+2. Confirm the exact authorized workflow is present in `main` and recheck the recorded `main` Git SHA.
 3. Open **Actions** and select **The Backyard Automated Offsite Backup**.
-4. If the workflow was disabled, click **Enable workflow** only now that setup is complete.
+4. If the workflow was intentionally suspended for the approved maintenance, re-enable it only after setup is complete.
 5. Click **Run workflow** and, in **Use workflow from**, select exactly `main`.
 6. Recheck the `main` selection and click the green **Run workflow** button once. The job blocks every ref other than `refs/heads/main`; do not use a feature branch and do not start a second run while it is active.
 7. Watch safe stage names and error codes. Never enable shell tracing, environment dumps, verbose HTTP authentication, or commands that echo secrets.
@@ -53,12 +53,12 @@ Do not download and decrypt backup contents during this activation run. Restore 
 ## Phase 4: scheduled observation
 
 1. Leave `BACKUP_RETENTION_APPLY=false`.
-2. Allow the next `0 9 * * *` scheduled run only after the controlled manual run is accepted.
+2. Keep the `0 9 * * *` schedule active only while secrets, destination access, and dry-run retention remain in their approved state.
 3. Review the same gates, destination pair, artifact, retention dry-run, and secret hygiene.
 4. Account for GitHub schedule delay; evaluate weekly/monthly classification from the recorded Mexico City date, not an assumed local start time.
 5. Record the run URL, reviewed Git SHA, timestamps, safe result codes, counts, and owner approval. Do not record credentials or tokens.
 
-Only after both runs are accepted may the owner propose changing the operational status in a separate reviewed change. This runbook does not itself activate retention apply.
+The observed green backup does not close the restore-drill gate. This runbook does not itself activate retention apply.
 
 ## Failure procedure
 

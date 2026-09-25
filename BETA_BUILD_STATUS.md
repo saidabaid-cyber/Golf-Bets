@@ -1,5 +1,7 @@
 # The Backyard — Beta Major Build
 
+> **DOCUMENTO HISTÓRICO — NO USAR COMO ESTADO ACTUAL.** Conserva evidencia de la rama `beta`; sus ramas, conteos y cierres no sustituyen la auditoría vigente. La fuente operativa es `integration/backyard-current`; consulte el [manifiesto de consolidación](docs/CONSOLIDATION_MANIFEST_2026-09-24.md), el [estado canónico del producto](docs/CANONICAL_PRODUCT_STATUS_2026-09-24.md) y el [ledger canónico de migraciones](docs/CANONICAL_MIGRATION_LEDGER_2026-09-24.md). No ejecute deploys, cambios de entorno ni migraciones a partir de este archivo.
+
 Última actualización: 2026-09-06. Este archivo describe el estado comprobado; una existencia parcial de código no se registra como funcionalidad terminada.
 
 ## DONE — núcleo y milestones verificados localmente
@@ -125,11 +127,11 @@ Pendientes y aislados para un milestone colaborativo:
 
 - Rama objetivo: `beta`.
 - SHA funcional publicado de esta fase: `42bac5f` (cierre de concurrencia/privacidad), precedido por `19c048c` (esquema/RLS/admin), `e60d172` (perfil/equipo/Ball Fit) y `6187d8e` (campos/GPS).
-- El Preview anterior verificado es `https://golf-bets-1ps4i70si-saha8.vercel.app`, deployment `dpl_ByuS4LnsGYXFv8Pn3nsH1TNjh7py`, READY, target Preview, source Git, ref `beta` y SHA exacto `8023cee7928ca47963c296ad5a7e780a0896de4d`.
+- El Preview anterior verificado es `https://historical-preview-url-retired.invalid`, deployment `dpl_ByuS4LnsGYXFv8Pn3nsH1TNjh7py`, READY, target Preview, source Git, ref `beta` y SHA exacto `8023cee7928ca47963c296ad5a7e780a0896de4d`.
 - Commit funcional del milestone: `c8b285e5212d568558cc5b1d11bf78d6df34dea2` — `feat(beta): add equipment profile and Backyard Ball Fit`.
 - Corrección de verificación: `76fba0b301b58da2effbd14faaaf4af18ca0f637` — `fix(beta): enforce Polla Live release lock`. Un valor Preview obsoleto ya no puede sacar Polla Live de “Próximamente”.
-- Preview del código verificado: `https://golf-bets-ipomcf91t-saha8.vercel.app`, deployment `dpl_FSBVHoEiBbRgx6aEu35LTGBvQBhH`, READY, target Preview, ref `beta` y SHA exacto `76fba0b301b58da2effbd14faaaf4af18ca0f637`.
-- Alias Preview de rama: `https://golf-bets-git-beta-saha8.vercel.app`.
+- Preview del código verificado: `https://historical-preview-url-retired.invalid`, deployment `dpl_FSBVHoEiBbRgx6aEu35LTGBvQBhH`, READY, target Preview, ref `beta` y SHA exacto `76fba0b301b58da2effbd14faaaf4af18ca0f637`.
+- Alias Preview de rama: `https://historical-preview-url-retired.invalid`.
 - Verificación de esta fase: GitHub/Vercel marcó `success` para el SHA `42bac5f` (`Deployment has completed`). El alias Preview de rama responde 200, sirve `/api/ball-fitting` y conserva `equipmentCloudEnabled=false`/`pollaLiveEnabled=false`.
 - `https://beta.thebackyard.com.mx` responde 200, pero no contiene la nueva ruta `/api/ball-fitting` (404), por lo que no se presenta como el deployment actual. Reasociarlo a `beta` queda bloqueado por falta de credenciales Vercel; no se tocó DNS ni Production.
 - El HTML remoto responde 200, referencia los assets del build, incluye `viewport-fit=cover` y el bundle publicado contiene Inicio, Jugar, Grupos, Social, Perfil, Nueva ronda, Continuar ronda, Histórico, Stats, Amigos, Reglas y Balances.

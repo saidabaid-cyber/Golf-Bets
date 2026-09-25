@@ -1,5 +1,7 @@
 # Recuperación y revisión funcional — 2 septiembre 2026
 
+> **Reporte histórico; no usar sus ramas, URLs o pasos como instrucciones vigentes.** Owner QA usa únicamente `integration/backyard-current` en `https://dev.thebackyard.com.mx`.
+
 ## Alcance y evidencia
 
 Trabajo secuencial, sin agentes paralelos. Se retomó el estado local conservado después del corte de luz, sin reset, checkout destructivo, eliminación de cambios ni reimplementación de módulos sanos.
@@ -19,7 +21,7 @@ Validación final ejecutada: `npm run lint`, `npm test`, `npm run build`. Result
 7. **SHA final:** se informa en el mensaje de cierre, después de crear y comprobar el último commit. `git rev-parse HEAD` identifica exactamente el cierre de esta rama.
 8. **main:** permanece en `09de83f69ad80116fda83abb4abd1e0a08660ef1`. No se hizo merge ni push a main.
 9. **Producción:** no se solicitó ningún deployment de producción, tag, cambio de configuración, DNS, Cloudflare o dominio. La producción comprobada correspondía al mismo commit `09de83f`.
-10. **Preview:** Vercel crea automáticamente previews de `codex-dev`. La beta estable de revisión es `https://beta.thebackyard.com.mx`. La URL inmutable y el estado del último preview se verifican al cerrar.
+10. **Preview histórico:** Vercel creaba previews de `codex-dev`; el antiguo host Beta quedó retirado como destino de revisión. Desde 2026-09-24 sólo se usa `https://dev.thebackyard.com.mx` con SHA verificado.
 11. **Bugs encontrados:** Par podía no materializarse para todos los jugadores; efectos de saneamiento/regeneración podían vaciar participantes durante la hidratación; Cómo Vamos omitía dinero provisional de Foursome/Personales; Foursome Live no exponía claramente cada match; el histórico personal agrupaba por IDs locales de cada ronda, contaba varias apuestas como varias rondas y no congelaba el HCP del rival externo.
 12. **Correcciones:** inicialización real de Par sin sobrescribir capturas; guardas de hidratación; balances provisionales separados del settlement; detalle Live/Resultados por match; agrupación histórica estable, conteo por ronda, filtros/orden y snapshots de nombre/HCP/configuración/resultado. Al seleccionar un rival nuevo se limpia el HCP de la plantilla anterior.
 13. **Foursome:** pasan las regresiones de rebasing con los cuatro jugadores del match, porcentaje HCP, SI, Low/High, rango -2 a +2, fijo/puntos/combinación, segmentos 3/6/9/18, presión física H1–9/H10–18 y Fantasma. Se conservó la economía existente; no se sustituyeron fórmulas por intuición.

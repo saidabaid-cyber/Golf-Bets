@@ -1,6 +1,12 @@
-# Golf Bets V3
+# The Backyard
 
 Aplicación móvil para registrar rondas privadas, apuestas de golf e histórico local. V3 agrega Reglas de Golf, “Cómo vamos”, exportación y la base segura de Polla Live para torneos grandes.
+
+## Fuente canónica
+
+La única fuente de verdad vigente es la rama `integration/backyard-current`. El único origen previsto para QA de owner es `https://dev.thebackyard.com.mx`; esta mención define el destino estable, pero **no acredita que el deployment o el dominio ya estén activos**. El estado verificado se registra en el [manifiesto de consolidación](docs/CONSOLIDATION_MANIFEST_2026-09-24.md), el [estado canónico del producto](docs/CANONICAL_PRODUCT_STATUS_2026-09-24.md) y el [ledger canónico de migraciones](docs/CANONICAL_MIGRATION_LEDGER_2026-09-24.md).
+
+Las ramas históricas y sus URLs Preview no son destinos de revisión. Production, `main` y `https://app.thebackyard.com.mx` permanecen fuera del alcance de esta línea de trabajo.
 
 ## Desarrollo local
 
@@ -9,12 +15,15 @@ pnpm install
 pnpm dev
 ```
 
-Validación completa:
+Gate local canónico:
 
 ```bash
 pnpm lint
 pnpm test
+pnpm typecheck
 pnpm build
+pnpm run audit:assets
+git diff --check
 ```
 
 La ronda privada funciona sin cuentas, OpenAI ni Supabase. Copia `.env.example` a `.env.local` solo para habilitar módulos opcionales.

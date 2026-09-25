@@ -1,5 +1,7 @@
 # The Backyard — Beta Candidate E2E — 17 septiembre 2026
 
+> Evidencia histórica. Los hosts fueron retirados y redactados; no ejecutar alias, deploys ni comandos descritos aquí. Usar únicamente los documentos canónicos del 2026-09-24.
+
 ## Veredicto: FAIL para una beta completa sin restricciones
 
 **Todavía no está cerrado todo el recorrido solicitado para abrir una beta general.** El núcleo manual tiene evidencia real de funcionamiento en Preview y Supabase QA: captura 9/18H, persistencia, grupos/plantillas, equipo/fitting, histórico compartido, atribución personal, reset y eliminación completa de cuenta. Permanecen el envío de invitaciones de grupos sin proveedor configurado, un rechazo real del proveedor de configuración AI y validaciones interactivas/dispositivo. No se presenta ninguno como PASS.
@@ -12,10 +14,10 @@ No se incorporaron productos nuevos ni se promovió Production. Los cambios son 
 | --- | --- |
 | Rama única | `phase2/full-platform` |
 | HEAD inicial real remoto/local | `a32af85f27496337a4a108d134dcdf331191a27b` — posterior al `5574b002` de referencia; working tree inicial limpio |
-| Preview inicial inmutable | `https://golf-bets-8zlxqr1f3-saha8.vercel.app` — READY, mismo SHA inicial |
+| Preview inicial inmutable | `https://historical-preview-url-retired.invalid` — READY, mismo SHA inicial |
 | HEAD final de aplicación probado | `f7a70d49f5b5716bf575f3fb584cc23542b5a320` |
-| Preview final de aplicación | **https://golf-bets-48oule36w-saha8.vercel.app** — READY, metadato Git igual al SHA anterior |
-| Alias de branch | `https://golf-bets-git-phase2-full-platform-saha8.vercel.app` — mutable, no se usa como evidencia inmutable |
+| Preview final de aplicación | **https://historical-preview-url-retired.invalid** — READY, metadato Git igual al SHA anterior |
+| Alias de branch | `https://historical-preview-url-retired.invalid` — mutable, no se usa como evidencia inmutable |
 | Supabase | `phase2-full-platform-qa`, ref **`bymeopxkxapfizeeqeyb`** |
 | Binding comprobado | Bundle servido: 20 assets; URL QA exacta; clave pública presente; cero secretos detectados. Requests autenticadas y comprobación de issuer JWT también QA. |
 | Prohibidos | Sin operaciones sobre main/beta/Production, DB shared, DNS/custom domains ni variables Production. Sin cambio de secretos. |
@@ -170,7 +172,7 @@ No se pide nuevo permiso para QA branch, migraciones ya aplicadas o push Preview
 7. Build: **PASS**, exit0; Preview de aplicación READY.
 8. Supabase QA: **bymeopxkxapfizeeqeyb**.
 9. Migraciones QA: **20260917134241 y20260917140234**; ledger33.
-10. Preview inmutable auditado: **https://golf-bets-48oule36w-saha8.vercel.app**.
+10. Preview inmutable auditado: **https://historical-preview-url-retired.invalid**.
 11. Runtime errors: **502canonical_integrity**; anteriores **503mailer grupos**. 4xx negativos identificados; no se ocultan.
 12. PASS: núcleo manual, cloud, grupos mecánicos, equipo/fitting, shared/Stats/Index/balance, privacidad/RLS, reset/delete y gates, con alcance indicado.
 13. FAIL: AI setup remoto del escenario especificado; beta completa no aprobada.
@@ -187,7 +189,7 @@ No se pide nuevo permiso para QA branch, migraciones ya aplicadas o push Preview
 
 - Inicio real, después de fetch: `99ee515a0a56cb9e1e4666c4e4dd0abdb50b61fc`, local/remoto iguales, worktree limpio; exclusivamente `phase2/full-platform`.
 - Código final de los fixes: `b1d9a68cf5698e440bf48ac5506d237c10c09565`. El SHA **final incluyendo este reporte** se identifica sin autorreferencia imposible con `git log -1 --format=%H -- docs/BETA_CANDIDATE_E2E_CLOSEOUT_2026-09-17.md` y se entrega literalmente en el cierre del chat.
-- Preview inmutable de comprobación de los fixes: `https://golf-bets-cszg9ohzj-saha8.vercel.app`, `dpl_HJnF9qcaqmuaDRjX5BDEWqS4nqCY`, READY, metadata SHA `b1d9a68…`, target no-Production. No se mezcla su evidencia con los deployments históricos de las secciones anteriores.
+- Preview inmutable de comprobación de los fixes: `https://historical-preview-url-retired.invalid`, `dpl_HJnF9qcaqmuaDRjX5BDEWqS4nqCY`, READY, metadata SHA `b1d9a68…`, target no-Production. No se mezcla su evidencia con los deployments históricos de las secciones anteriores.
 - La publicación documental genera otro Preview; el **OFFICIAL_OWNER_QA_PREVIEW** es únicamente la URL inmutable del SHA final entregada en el chat, después de repetir smoke/contratos contra ese deployment. Identidad reproducible: Vercel API `/v6/deployments?projectId=prj_Hin0ieF71l1aSyaOcOPCmu7NzNjn` → filtrar `meta.githubCommitSha` por el SHA final y confirmar `READY` con `/v13/deployments/<id>`. No usar una URL antigua por conveniencia.
 - Supabase: `bymeopxkxapfizeeqeyb`; URL obtenida del servicio y binding del bundle comprobado por cada runner antes de crear fixtures. Ledger33; últimas `20260917134241` y `20260917140234`. **Cero migraciones nuevas/reaplicadas.** SQL/RLS transaccional con rollback.
 - Sin modificaciones a main/beta/Production/shared, Auth/SMTP/OAuth/secretos, Home, motores, custom domains, DNS ni configuración Production.
@@ -241,9 +243,9 @@ Los archivos `surgical-*-first.jsonl` corresponden sólo al Preview de comprobac
 
 ### Alias Preview stale
 
-Evidencia inicial: alias `golf-bets-git-phase2-full-platform-saha8.vercel.app` resolvía `dpl_HvmHoU41YhNhTeJfxFg7VUHRt5xT`, fuenteCLI, SHA5574b002. Deployment Git99ee tenía `automaticAliases` con ese mismo nombre pero `alias=[]` y no se había movido la asociación efectiva. Es una asociación stale demostrada; metadata no demuestra por sí sola qué operación histórica la fijó.
+Evidencia inicial: alias `historical-preview-url-retired.invalid` resolvía `dpl_HvmHoU41YhNhTeJfxFg7VUHRt5xT`, fuenteCLI, SHA5574b002. Deployment Git99ee tenía `automaticAliases` con ese mismo nombre pero `alias=[]` y no se había movido la asociación efectiva. Es una asociación stale demostrada; metadata no demuestra por sí sola qué operación histórica la fijó.
 
-Corrección acotada: `vercel alias set <Preview inmutable final> golf-bets-git-phase2-full-platform-saha8.vercel.app`, verificando después SHA por la API del alias. No cambia custom domains/DNS/Production. Aunque el alias quede correcto, QA del Owner debe usar **sólo la URL inmutable final entregada**, no asumir que futuros Git deploys reubicarán el alias.
+La corrección histórica reasoció un alias de Preview retirado y verificó su SHA. El host y el comando se eliminaron para impedir su reutilización; no constituye una instrucción actual.
 
 ### Auditoría exacta de divergencia main (sin merge)
 

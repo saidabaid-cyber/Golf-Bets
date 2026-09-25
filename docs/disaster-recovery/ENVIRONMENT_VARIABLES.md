@@ -1,6 +1,6 @@
 # Backup environment variables
 
-**Status: `NOT_ACTIVE_PENDING_OWNER_SETUP`**
+**Status: `BACKUP_OBSERVED_RESTORE_DRILL_PENDING`**
 
 This document lists names and ownership only. Never copy secret values into documentation, commits, logs, workflow summaries, issue comments, or artifacts.
 

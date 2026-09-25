@@ -47,7 +47,7 @@ import {
   type LegalAcceptance,
 } from "../../lib/account-state";
 import { authSessionPersistence, getSupabaseBrowser, setAuthSessionPersistence } from "../../lib/supabase/client";
-import { AuthSessionRecoveryError, authCallbackUrl, authIdentityChanged, clearDeletedAuthSessionForUser, closeAuthSession, isAccountSession, recoverAuthSession, requireCloudWrites, restoreAuthSession, sendEmailOtp, startSocialOAuth, verifyEmailOtp, OtpSendGate, otpRetrySeconds, OTP_COOLDOWN_KEY } from "../../lib/auth-flow";
+import { AuthSessionRecoveryError, authCallbackUrl, authIdentityChanged, clearDeletedAuthSessionForUser, closeAuthSession, isAccountSession, recoverAuthSession, requireCloudWrites, restoreAuthSession, sendEmailOtpWhenReady, startSocialOAuth, verifyEmailOtp, OtpSendGate, otpRetrySeconds, OTP_COOLDOWN_KEY } from "../../lib/auth-flow";
 import { activeWorkspaceScorecardPhotoIds, discardAccountWorkspace, ownsLocalWorkspace, selectAccountScorecardPhotoIds, switchAccountWorkspace, WORKSPACE_OWNER_KEY } from "../../lib/account-workspace";
 import { CLOUD_LOCAL_META_KEY, type CloudPreferences } from "../../lib/cloud-sync";
 import { deleteOfflineAccountData, readAllOfflineAccountRecords } from "../../lib/offline-store";
@@ -73,6 +73,23 @@ import { BetaOnboardingFlow } from "./beta-onboarding-flow";
 import { betaOnboardingIsActive, createBetaOnboardingProgress, persistBetaOnboardingProgress, readBetaOnboardingProgress } from "../../lib/beta-onboarding";
 import { missingInitialProfileFields, oauthIdentityFromMetadata } from "../../lib/oauth-profile";
 import { NO_ADMIN_ACCESS, readAdminAccess, type AdminAccess } from "../../lib/admin-access";
+import { resolveBrowserAppOrigin } from "../../lib/app-origin";
+import { type LegalEvidenceAction, type LegalEvidenceSubject } from "../../lib/legal-evidence";
+import {
+  GUEST_LEGAL_ACTOR_KEY,
+  legalActorForIdentity,
+  legalClientEnvironment,
+  legalEvidenceStateKey,
+  legalEvidenceSyncMessage,
+  LegalEvidenceSyncError,
+  hasResolvedFinancialConsent,
+  readLegalEvidence,
+  recordLocalLegalEvidenceBatch,
+  synchronizeLegalEvidence,
+  type LegalEvidenceEvent,
+  type LegalEvidenceOrigin,
+  type LegalEnvironment,
+} from "../../lib/legal-evidence-client";
 
 export type BackyardIdentity = BackyardProfile & {
   mode: Exclude<AccountMode, "undecided">;
@@ -88,9 +105,13 @@ type AccountContextValue = {
   finishAccountDeletion: () => Promise<boolean>;
   openAccess: () => void;
   acceptances: LegalAcceptance[];
+  legalEvidenceEvents: LegalEvidenceEvent[];
+  legalEvidenceResolved: boolean;
+  marketingConsentResolved: boolean;
   bettingConsentGranted: boolean;
   bettingConsentResolved: boolean;
   requestBettingConsent: () => Promise<boolean>;
+  recordLegalChoice: (subject: LegalEvidenceSubject, action: LegalEvidenceAction, origin?: LegalEvidenceOrigin) => Promise<void>;
   cloudLinked: boolean;
   cloudStatus: "local" | "saving" | "offline" | "syncing" | "synced" | "pending" | "error";
   setCloudStatus: (status: AccountContextValue["cloudStatus"]) => void;
@@ -105,6 +126,14 @@ type AccountContextValue = {
 };
 
 const AccountContext = createContext<AccountContextValue | null>(null);
+
+type LocalLegalEvidenceState = {
+  actorKey: string;
+  environment: LegalEnvironment;
+  events: LegalEvidenceEvent[];
+  resolved: boolean;
+  resolvedSubjects: LegalEvidenceSubject[];
+};
 
 function profileCachePayload(profile: BackyardProfile) {
   const {
@@ -233,7 +262,8 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
     rememberAccountEntryIntent(sessionStorage, intent);
     setBusy(true); setMessage("");
     try {
-      await startSocialOAuth(supabase.auth, provider, authCallbackUrl(window.location.origin), { selectGoogleAccount });
+      const appOrigin = resolveBrowserAppOrigin(window.location.origin, process.env.NEXT_PUBLIC_APP_ORIGIN);
+      await startSocialOAuth(supabase.auth, provider, authCallbackUrl(appOrigin), { selectGoogleAccount });
     } catch (error) {
       oauthStarting.current = false;
       setMessage(authErrorMessage(error, provider));
@@ -243,10 +273,10 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
 
   async function sendCode() {
     if (!isValidEmail(email)) { setMessage("Escribe un correo electrónico válido."); return; }
+    if (providers?.status !== "ready" || providers.email !== true) { setMessage("Acceso con correo pendiente de configuración."); return; }
     setAuthSessionPersistence(rememberSession);
     const supabase = getSupabaseBrowser();
     if (!supabase) { setMessage("Acceso con correo pendiente de configuración."); return; }
-    if (providers?.status === "ready" && !providers.email) { setMessage("Acceso con correo pendiente de configuración."); return; }
     if (!sendGate.current.begin()) return;
     try { sessionStorage.setItem(OTP_COOLDOWN_KEY, String(sendGate.current.nextSendAt)); }
     catch { /* Never prevent OTP capture because optional cooldown persistence failed. */ }
@@ -254,7 +284,8 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
     setBusy(true); setMessage("");
     try {
       rememberAccountEntryIntent(sessionStorage, intent);
-      await sendEmailOtp(supabase.auth, email, authCallbackUrl(window.location.origin), intent);
+      const appOrigin = resolveBrowserAppOrigin(window.location.origin, process.env.NEXT_PUBLIC_APP_ORIGIN);
+      await sendEmailOtpWhenReady(supabase.auth, providers, email, authCallbackUrl(appOrigin), intent);
       setCodeSent(true);
       setMessage("Código enviado. Revisa tu correo.");
     } catch (error) {
@@ -454,6 +485,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const [identity, setIdentity] = useState<BackyardIdentity | null>(null);
   const [adminAccessState, setAdminAccessState] = useState(() => ({ userId: "", access: NO_ADMIN_ACCESS } as { userId: string; access: AdminAccess }));
   const [acceptances, setAcceptances] = useState<LegalAcceptance[]>([]);
+  const [legalEvidenceState, setLegalEvidenceState] = useState<LocalLegalEvidenceState | null>(null);
+  const legalEnvironment = legalClientEnvironment();
   const [bettingConsentOpen, setBettingConsentOpen] = useState(false);
   const [accessRequested, setAccessRequested] = useState(false);
   const [showMigration, setShowMigration] = useState(false);
@@ -734,7 +767,14 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     const restoreWhenOnline = () => {
       if (!supabase) return;
       void restoreAuthSession(supabase.auth).then(session => {
-        if (mounted && session) activateSession(session);
+        if (mounted && session) {
+          activateSession(session);
+          // Retry durable queues even when the refreshed session keeps the
+          // same user and access token value.
+          setLegalRetryRevision((value) => value + 1);
+          setAccountReloadRevision((value) => value + 1);
+          window.setTimeout(() => window.dispatchEvent(new Event("backyard-sync-retry")), 0);
+        }
       }).catch(error => {
         if (!mounted) return;
         const issue = cloudIssueFromError("auth", error instanceof AuthSessionRecoveryError ? error.cause : error, navigator.onLine);
@@ -915,9 +955,28 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     return () => { mounted = false; };
   }, [authenticatedUserId, authenticatedAccessToken, accountEntry, accountReloadRevision, issueWithMessage, profileWriterFor, setCloudIssue]);
 
+  const legalEvidenceEvents = identity && legalEvidenceState?.environment === legalEnvironment
+    && (identity.mode === "authenticated"
+      ? legalEvidenceState.actorKey === `account:${identity.userId}`
+      : legalEvidenceState.actorKey.startsWith("guest-local:"))
+    ? legalEvidenceState.events
+    : [];
+  const legalEvidenceResolved = Boolean(identity && legalEvidenceState?.resolved && legalEvidenceState.environment === legalEnvironment
+    && (identity.mode === "authenticated"
+      ? legalEvidenceState.actorKey === `account:${identity.userId}`
+      : legalEvidenceState.actorKey.startsWith("guest-local:")));
+  const locallyResolvedLegalSubjects = identity && legalEvidenceState?.environment === legalEnvironment
+    && (identity.mode === "authenticated"
+      ? legalEvidenceState.actorKey === `account:${identity.userId}`
+      : legalEvidenceState.actorKey.startsWith("guest-local:"))
+    ? legalEvidenceState.resolvedSubjects
+    : [];
+  const financialConsentResolved = legalEvidenceResolved || locallyResolvedLegalSubjects.includes("financial_data");
+  const marketingConsentResolved = legalEvidenceResolved || locallyResolvedLegalSubjects.includes("marketing");
   const currentConsent = identity ? hasCurrentLegalConsent(acceptances, identity.userId) : false;
-  const bettingConsentGranted = identity ? hasCurrentBettingDataConsent(acceptances, identity.userId) : false;
-  const bettingConsentResolved = Boolean(identity && (identity.mode === "guest" || cloudConsentChecked));
+  const legacyBettingConsent = identity ? hasCurrentBettingDataConsent(acceptances, identity.userId) : false;
+  const bettingConsentGranted = hasResolvedFinancialConsent(legalEvidenceEvents, legacyBettingConsent, financialConsentResolved);
+  const bettingConsentResolved = Boolean(identity && financialConsentResolved && (identity.mode === "guest" || cloudConsentChecked));
 
   const closeBettingConsent = useCallback((accepted: boolean) => {
     const pending = bettingConsentRequest.current;
@@ -933,21 +992,21 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
 
   const requestBettingConsent = useCallback(() => {
     if (!identity) return Promise.resolve(false);
-    if (hasCurrentBettingDataConsent(acceptances, identity.userId)) return Promise.resolve(true);
+    if (bettingConsentGranted) return Promise.resolve(true);
     if (bettingConsentRequest.current?.userId === identity.userId) return bettingConsentRequest.current.promise;
     let resolveRequest!: (accepted: boolean) => void;
     const promise = new Promise<boolean>((resolve) => { resolveRequest = resolve; });
     bettingConsentRequest.current = { userId: identity.userId, promise, resolve: resolveRequest };
     if (identity.mode === "guest" || cloudConsentChecked) setBettingConsentOpen(true);
     return promise;
-  }, [acceptances, identity, cloudConsentChecked]);
+  }, [bettingConsentGranted, identity, cloudConsentChecked]);
 
   useEffect(() => {
     const pending = bettingConsentRequest.current;
     if (!pending || !identity || pending.userId !== identity.userId || (identity.mode === "authenticated" && !cloudConsentChecked)) return;
-    if (hasCurrentBettingDataConsent(acceptances, identity.userId)) closeBettingConsent(true);
+    if (bettingConsentGranted) closeBettingConsent(true);
     else setBettingConsentOpen(true);
-  }, [acceptances, identity, cloudConsentChecked, closeBettingConsent]);
+  }, [bettingConsentGranted, identity, cloudConsentChecked, closeBettingConsent]);
 
   useEffect(() => {
     const pending = bettingConsentRequest.current;
@@ -980,8 +1039,166 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     return () => { mounted = false; };
   }, [identity?.mode, identity?.userId, identity?.accessToken, currentConsent, acceptances, legalRetryRevision, flushLegalAcceptances, issueWithMessage, setCloudIssue]);
 
+  useEffect(() => {
+    if (!identity) {
+      setLegalEvidenceState(null);
+      return;
+    }
+    const owner = { mode: identity.mode, userId: identity.userId } as const;
+    let actorKey = "";
+    try {
+      actorKey = legalActorForIdentity(localStorage, owner).actorKey;
+      const events = readLegalEvidence(localStorage, actorKey, legalEnvironment);
+      setLegalEvidenceState((current) => ({
+        actorKey,
+        environment: legalEnvironment,
+        events,
+        resolved: current?.actorKey === actorKey && current.environment === legalEnvironment ? current.resolved : identity.mode === "guest",
+        resolvedSubjects: current?.actorKey === actorKey && current.environment === legalEnvironment ? current.resolvedSubjects : [],
+      }));
+    } catch (error) {
+      setLegalEvidenceState(null);
+      setCloudIssue("legal", {
+        domain: "legal",
+        kind: "pending",
+        message: error instanceof Error ? error.message : "No pudimos leer la evidencia legal de este dispositivo.",
+        retryable: true,
+      });
+      return;
+    }
+    if (identity.mode !== "authenticated" || !identity.accessToken) return;
+    if (!navigator.onLine) {
+      setCloudIssue("legal", {
+        domain: "legal",
+        kind: "offline",
+        message: legalEvidenceSyncMessage(new Error("offline"), false),
+        retryable: true,
+      });
+      return;
+    }
+    const userId = identity.userId;
+    const accessToken = identity.accessToken;
+    let mounted = true;
+    void synchronizeLegalEvidence({
+      storage: localStorage,
+      userId,
+      accessToken,
+      environment: legalEnvironment,
+      isCurrentIdentity: () => activeUserId.current === userId,
+    }).then((events) => {
+      if (!mounted || activeUserId.current !== userId) return;
+      setLegalEvidenceState({ actorKey: `account:${userId}`, environment: legalEnvironment, events, resolved: true, resolvedSubjects: [] });
+      setCloudIssue("legal", null);
+    }).catch((error) => {
+      if (!mounted || activeUserId.current !== userId) return;
+      const actorKey = `account:${userId}`;
+      setLegalEvidenceState((current) => ({
+        actorKey,
+        environment: legalEnvironment,
+        events: readLegalEvidence(localStorage, actorKey, legalEnvironment),
+        // Initial hydration remains fail-closed. A later retry cannot erase a
+        // resolution or explicit local ceremony that was already established.
+        resolved: current?.actorKey === actorKey && current.environment === legalEnvironment
+          && !(error instanceof LegalEvidenceSyncError && error.resolutionBlocked)
+          ? current.resolved
+          : false,
+        resolvedSubjects: current?.actorKey === actorKey && current.environment === legalEnvironment ? current.resolvedSubjects : [],
+      }));
+      const issue = cloudIssueFromError("legal", error, navigator.onLine);
+      const status = error && typeof error === "object" && "status" in error ? Number((error as { status?: unknown }).status || 0) : 0;
+      setCloudIssue("legal", {
+        ...issue,
+        kind: status === 503 ? "pending" : issue.kind,
+        message: legalEvidenceSyncMessage(error, navigator.onLine),
+      });
+    });
+    return () => { mounted = false; };
+  }, [identity, legalEnvironment, legalRetryRevision, setCloudIssue]);
+
+  useEffect(() => {
+    if (!identity) return;
+    const mode = identity.mode;
+    const userId = identity.userId;
+    const accessToken = identity.accessToken;
+    let actorKey = "";
+    try { actorKey = legalActorForIdentity(localStorage, { mode, userId }).actorKey; }
+    catch { return; }
+    const evidenceKey = legalEvidenceStateKey(actorKey, legalEnvironment);
+    let refreshQueued = false;
+    const requestRemoteResolution = () => {
+      if (mode !== "authenticated" || !accessToken || !navigator.onLine || refreshQueued) return;
+      refreshQueued = true;
+      queueMicrotask(() => {
+        refreshQueued = false;
+        if (activeUserId.current !== userId) return;
+        // A foreground/network transition may hide a revocation made on
+        // another device. Close the financial gate until GET resolves again.
+        setLegalEvidenceState((current) => current?.actorKey === actorKey && current.environment === legalEnvironment
+          ? { ...current, resolved: false }
+          : current);
+        setLegalRetryRevision((value) => value + 1);
+      });
+    };
+    const rehydrateFromAnotherTab = (event: StorageEvent) => {
+      if (event.key !== evidenceKey || (event.storageArea && event.storageArea !== localStorage)) return;
+      const events = readLegalEvidence(localStorage, actorKey, legalEnvironment);
+      // Cross-tab acceptance never opens the gate from an event alone. A
+      // revocation closes it immediately; authenticated acceptance waits for
+      // the owner-scoped server reconciliation below.
+      setLegalEvidenceState({ actorKey, environment: legalEnvironment, events, resolved: mode === "guest", resolvedSubjects: [] });
+      requestRemoteResolution();
+    };
+    const refreshOnFocus = () => requestRemoteResolution();
+    const refreshWhenVisible = () => { if (document.visibilityState === "visible") requestRemoteResolution(); };
+    window.addEventListener("storage", rehydrateFromAnotherTab);
+    window.addEventListener("focus", refreshOnFocus);
+    window.addEventListener("online", refreshOnFocus);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.removeEventListener("storage", rehydrateFromAnotherTab);
+      window.removeEventListener("focus", refreshOnFocus);
+      window.removeEventListener("online", refreshOnFocus);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [identity, legalEnvironment]);
+
+  function recordLegalChoices(
+    choices: Array<{ subject: LegalEvidenceSubject; action: LegalEvidenceAction }>,
+    origin: LegalEvidenceOrigin,
+  ) {
+    if (!identity) throw new Error("No se pudo identificar el contexto de esta elección.");
+    const recorded = recordLocalLegalEvidenceBatch(localStorage, { mode: identity.mode, userId: identity.userId }, {
+      environment: legalEnvironment,
+      choices,
+      origin,
+    });
+    setLegalEvidenceState((current) => ({
+      actorKey: recorded.actorKey,
+      environment: legalEnvironment,
+      events: recorded.events,
+      resolved: identity.mode === "guest" || Boolean(current?.actorKey === recorded.actorKey && current.environment === legalEnvironment && current.resolved),
+      resolvedSubjects: [...new Set([
+        ...(current?.actorKey === recorded.actorKey && current.environment === legalEnvironment ? current.resolvedSubjects : []),
+        ...choices.map((choice) => choice.subject),
+      ])],
+    }));
+    if (identity.mode === "authenticated" && recorded.recorded.length) setLegalRetryRevision((value) => value + 1);
+    return recorded.events;
+  }
+
+  async function recordLegalChoice(subject: LegalEvidenceSubject, action: LegalEvidenceAction, origin: LegalEvidenceOrigin = "account_privacy") {
+    recordLegalChoices([{ subject, action }], origin);
+  }
+
   async function acceptConsent(includeBettingConsent: boolean, requireServerPersistence = false) {
     if (!identity) return;
+    const origin: LegalEvidenceOrigin = acceptances.some((item) => item.userId === identity.userId) ? "existing_user_update" : "onboarding";
+    recordLegalChoices([
+      { subject: "privacy_notice", action: "presented" },
+      { subject: "terms", action: "accepted" },
+      { subject: "age_declaration", action: "accepted" },
+      { subject: "financial_data", action: includeBettingConsent ? "accepted" : "rejected" },
+    ], origin);
     const next = buildLegalAcceptances(identity.userId, new Date().toISOString());
     // Authenticated onboarding cannot finish on a local-only acknowledgement.
     // Publish the legal state only after the existing server ledger confirms it.
@@ -1027,6 +1244,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
 
   async function acceptBettingConsent() {
     if (!identity) throw new Error("No se pudo identificar el contexto de esta aceptación.");
+    recordLegalChoices([{ subject: "financial_data", action: "accepted" }], "financial_gate");
     const persisted = persistBettingDataConsent(
       localStorage,
       identity.userId,
@@ -1052,6 +1270,12 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       }
     }
     closeBettingConsent(true);
+  }
+
+  async function rejectBettingConsent() {
+    if (!identity) throw new Error("No se pudo identificar el contexto de esta elección.");
+    recordLegalChoices([{ subject: "financial_data", action: "rejected" }], "financial_gate");
+    closeBettingConsent(false);
   }
 
   async function updateProfile(profile: BackyardProfileUpdate): Promise<"local" | "cloud"> {
@@ -1271,6 +1495,12 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     try { localStorage.setItem(ACCOUNT_STORAGE_KEYS.acceptances, JSON.stringify(remainingAcceptances)); }
     catch { failedCleanupSteps.push("legal_acceptances"); }
     setAcceptances(remainingAcceptances);
+    try {
+      for (const environment of ["production", "preview", "development", "test"] as const) {
+        localStorage.removeItem(legalEvidenceStateKey(`account:${deletedUserId}`, environment));
+      }
+      if (legalEvidenceState?.actorKey === `account:${deletedUserId}`) setLegalEvidenceState(null);
+    } catch { failedCleanupSteps.push("legal_evidence"); }
     // Local cleanup remains retryable whether server deletion was confirmed or
     // its response was lost. The marker controls the next recovery step.
     if (failedCleanupSteps.length) {
@@ -1522,6 +1752,11 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     if (identity?.mode === "authenticated") {
       try {
         await recoverCloudSession(false);
+        // A manual retry is a queue trigger in its own right; it must not
+        // depend on Supabase rotating the token or emitting an auth event.
+        setLegalRetryRevision(value => value + 1);
+        setAccountReloadRevision(value => value + 1);
+        window.setTimeout(() => window.dispatchEvent(new Event("backyard-sync-retry")), 0);
       } catch { return; }
     } else {
       setLegalRetryRevision(value => value + 1);
@@ -1534,7 +1769,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const blockingCloudIssues = cloudIssues.filter((issue) => issue.kind === "session_expired");
   const effectiveCloudStatus: AccountContextValue["cloudStatus"] = cloudIssues.some((issue) => issue.kind === "offline") ? "offline" : cloudIssues.some((issue) => issue.kind === "conflict") ? "pending" : cloudIssues.length ? "error" : cloudStatus;
   const adminAccess = identity?.mode === "authenticated" && adminAccessState.userId === identity.userId ? adminAccessState.access : NO_ADMIN_ACCESS;
-  const context = identity ? ({ identity, adminAccess, updateProfile, logout, finishAccountDeletion, openAccess: () => setAccessRequested(true), acceptances, bettingConsentGranted, bettingConsentResolved, requestBettingConsent, cloudLinked, cloudStatus: effectiveCloudStatus, setCloudStatus, lastCloudSync, cloudIssues, applyCloudPreferences,
+  const context = identity ? ({ identity, adminAccess, updateProfile, logout, finishAccountDeletion, openAccess: () => setAccessRequested(true), acceptances, legalEvidenceEvents, legalEvidenceResolved, marketingConsentResolved, bettingConsentGranted, bettingConsentResolved, requestBettingConsent, recordLegalChoice, cloudLinked, cloudStatus: effectiveCloudStatus, setCloudStatus, lastCloudSync, cloudIssues, applyCloudPreferences,
     reportCloudSyncError,
     clearCloudSyncError,
     retryCloudSync: retryAllCloud,
@@ -1548,7 +1783,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     <div className="migrationActions"><button className="primary" disabled={migrationBusy} onClick={keepLocalDataForAccount}>{migrationBusy ? "Vinculando…" : "Vincular a mi cuenta"}</button><button className="secondary" disabled={migrationBusy} onClick={() => { if (identity) localStorage.setItem(migrationDecisionStorageKey(identity.userId), "skip"); setCloudLinked(false); setCloudStatus("local"); setShowMigration(false); }}>Ahora no</button></div>
   </section></div>;
   const bettingConsentDialog = bettingConsentOpen
-    ? <BettingConsentDialog onDismiss={() => closeBettingConsent(false)} onAccept={acceptBettingConsent} />
+    ? <BettingConsentDialog onDismiss={() => closeBettingConsent(false)} onReject={rejectBettingConsent} onAccept={acceptBettingConsent} />
     : null;
 
   if (!ready) return <main className="accessScreen"><div className="accessLoading">Cargando The Backyard…</div></main>;
@@ -1584,6 +1819,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     const withoutPreviousGuestConsent = clearLegalAcceptancesForUser(acceptances, "guest");
     localStorage.setItem(ACCOUNT_STORAGE_KEYS.acceptances, JSON.stringify(withoutPreviousGuestConsent));
     setAcceptances(withoutPreviousGuestConsent);
+    // Each explicit guest entry is a fresh local identity. Prior evidence stays
+    // append-only under its old random actor and is never reassigned to a user.
+    localStorage.removeItem(GUEST_LEGAL_ACTOR_KEY);
+    setLegalEvidenceState(null);
     const profile = guestProfile();
     localStorage.setItem(ACCOUNT_STORAGE_KEYS.mode, "guest");
     setIdentity({ ...profile, mode: "guest", providers: [], accessToken: null });
