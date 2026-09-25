@@ -11,13 +11,19 @@ import { deletePersonalAiData, readLearningRecords } from "./backyard-ai/memory/
 import { bettingConsentPromptStorageKey } from "./account-state";
 import { deleteAiProcessingConsents } from "./backyard-ai/processing-consent";
 import { statisticsResetStorageKey } from "./statistics-reset";
+import { accountUiPreferencesKey } from "./account-ui-preferences";
+import { clearDevicePermissionPreferences } from "./device-permissions";
+import { marketingConsentStorageKey } from "./marketing-consent";
+import { firstRoundExperienceKey } from "./round-first-experience";
 
 export const WORKSPACE_OWNER_KEY = "backyard-local-workspace-owner-v1";
 export const CLOUD_CONFLICTS_KEY = "backyard-cloud-conflicts-v1";
 export const CLOUD_DATA_CONFLICTS_KEY = "backyard-cloud-data-conflicts-v1";
 const workspaceKeys = [...Object.values(STORAGE_KEYS), CLOUD_LOCAL_META_KEY, CLOUD_TOMBSTONES_KEY, CLOUD_CONFLICTS_KEY, CLOUD_DATA_CONFLICTS_KEY, PHOTO_QUEUE_KEY];
 type WorkspaceStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+type AccountSessionStorage = Pick<Storage, "key" | "length" | "removeItem">;
 const archiveKey = (owner: string) => `backyard-local-workspace-v1:${owner}`;
+const roundWizardSessionPrefix = (owner: string) => `backyard-setup-step-v1:${owner}:`;
 
 type SerializedWorkspace = Record<string, string | null | undefined>;
 export type AccountOfflinePhotoRecord = { ownerId?: unknown; bundle?: unknown } | null | undefined;
@@ -165,11 +171,27 @@ export function activeWorkspaceScorecardPhotoIds(storage: Pick<Storage, "getItem
   return [...ids].sort();
 }
 
+/** Discard transient wizard navigation only for the deleted identity. Round
+ * drafts themselves remain governed by the owner-scoped workspace cleanup. */
+export function discardAccountSessionState(storage: AccountSessionStorage, userId: string) {
+  if (!userId || userId === "guest") return;
+  const prefix = roundWizardSessionPrefix(userId);
+  for (let index = storage.length - 1; index >= 0; index -= 1) {
+    const key = storage.key(index);
+    if (key?.startsWith(prefix)) storage.removeItem(key);
+  }
+}
+
+export type AccountWorkspaceDiscardResult = {
+  complete: boolean;
+  failedSteps: Array<"ai_memory" | "ai_processing_consents">;
+};
+
 /** Permanently discard only one deleted account's local workspace. Guest data
  * and every other account archive remain untouched. The deletion barrier is
  * intentionally retained so asynchronous writes cannot revive this account. */
 export function discardAccountWorkspace(storage: WorkspaceStorage, userId: string) {
-  if (!userId || userId === "guest") return;
+  if (!userId || userId === "guest") return { complete: true, failedSteps: [] } satisfies AccountWorkspaceDiscardResult;
   if (ownsLocalWorkspace(storage, userId)) switchAccountWorkspace(storage, "guest");
   storage.removeItem(archiveKey(userId));
   storage.removeItem(`backyard-profile-cache-v1:${userId}`);
@@ -196,8 +218,16 @@ export function discardAccountWorkspace(storage: WorkspaceStorage, userId: strin
   storage.removeItem(`the-backyard:equipment-onboarding-ready:v1:${encodeURIComponent(userId)}`);
   storage.removeItem(betaOnboardingStorageKey(userId));
   storage.removeItem(betaOnboardingDraftStorageKey(userId));
-  deletePersonalAiData(storage, userId);
-  deleteAiProcessingConsents(storage, userId);
+  storage.removeItem(accountUiPreferencesKey(userId));
+  clearDevicePermissionPreferences(storage, userId);
+  storage.removeItem(marketingConsentStorageKey(userId));
+  storage.removeItem(firstRoundExperienceKey(userId));
+  const aiMemory = deletePersonalAiData(storage, userId);
+  const aiProcessingConsents = deleteAiProcessingConsents(storage, userId);
+  const failedSteps: AccountWorkspaceDiscardResult["failedSteps"] = [];
+  if (!aiMemory.complete) failedSteps.push("ai_memory");
+  if (!aiProcessingConsents.ok) failedSteps.push("ai_processing_consents");
+  return { complete: failedSteps.length === 0, failedSteps };
 }
 
 export function preserveDraftConflict(storage: Pick<Storage, "getItem" | "setItem">, draft: unknown) {

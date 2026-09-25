@@ -19,7 +19,7 @@ function actualHandler(name: string, bindings: Record<string, unknown>) {
   const js = ts.transpileModule(handler, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
   return new Function(...Object.keys(bindings), `${js}; return ${name};`)(...Object.values(bindings));
 }
-function fixture(failOffline = false) {
+function fixture(failOffline = false, failWorkspace = false, fallbackOwner = "a") {
   const values = new Map<string, string>();
   const storage = { getItem: (key: string) => values.get(key) ?? null,
     setItem: (key: string, value: string) => { values.set(key, value); }, removeItem: (key: string) => { values.delete(key); },
@@ -30,13 +30,15 @@ function fixture(failOffline = false) {
     storage.setItem(legalEvidenceStateKey("account:b", environment), "b-evidence");
   }
   let legalState: { actorKey: string } | null = { actorKey: "account:a" };
+  const cloudProfileFallbackRef = { current: fallbackOwner ? { userId: fallbackOwner, profile: {} } : null };
   let pending = "";
   let authClears = 0;
   const scan = actualHandler("nextPendingLocalDeletionOwner", { ACCOUNT_DELETION_MARKER_PREFIX });
   const noop = () => {};
   const bindings = {
-    localStorage: storage, ACCOUNT_STORAGE_KEYS, accountDeletionMarkerKey,
+    localStorage: storage, sessionStorage: storage, ACCOUNT_STORAGE_KEYS, accountDeletionMarkerKey,
     activeUserId: { current: "a" }, ownsLocalWorkspace: () => true,
+    cloudProfileFallbackRef,
     setPendingLocalDeletionOwner: (id: string) => { pending = id; },
     setIdentity: noop, setEquipmentOnboardingRequired: noop, setBetaOnboardingRequired: noop, setAccessRequested: noop,
     setCloudLinked: noop, setCloudStatus: noop, setLastCloudSync: noop, setCloudIssuesByDomain: noop, setShowMigration: noop,
@@ -44,13 +46,16 @@ function fixture(failOffline = false) {
     profileWriteCoordinators: { current: new Map() }, readAllOfflineAccountRecords: async () => [],
     scorecardPhotoIdsForOwner: async () => [], selectAccountScorecardPhotoIds: () => [], deleteScorecardPhotos: async () => {},
     deleteOfflineAccountData: async () => { if (failOffline) throw Error("temporary offline store error"); },
-    discardAccountWorkspace: noop, clearAccountDeletionIntent: noop, parseLegalAcceptances: () => [],
+    discardAccountWorkspace: () => failWorkspace
+      ? { complete: false, failedSteps: ["ai_memory"] }
+      : { complete: true, failedSteps: [] },
+    discardAccountSessionState: noop, clearAccountDeletionIntent: noop, parseLegalAcceptances: () => [],
     clearLegalAcceptancesForUser: () => [], setAcceptances: noop, nextPendingLocalDeletionOwner: scan,
     legalEvidenceStateKey, legalEvidenceState: legalState, setLegalEvidenceState: (state: { actorKey: string } | null) => { legalState = state; },
     console: { warn: noop },
   };
   const purge = actualHandler("purgeDeletedAccountLocal", bindings) as (id: string, options?: object) => Promise<boolean>;
-  return { storage, purge, scan, bindings, legalEnvironments, legalState: () => legalState, pending: () => pending, authClears: () => authClears };
+  return { storage, purge, scan, bindings, legalEnvironments, legalState: () => legalState, cloudProfileFallback: () => cloudProfileFallbackRef.current, pending: () => pending, authClears: () => authClears };
 }
 
 function assertOwnerScopedLegalCleanup(f: ReturnType<typeof fixture>) {
@@ -84,6 +89,30 @@ test("successful cleanup retains other pending owners; failed cleanup keeps its 
   failed.storage.setItem(accountDeletionMarkerKey("a"), "completed_cleanup_pending");
   assert.equal(await failed.purge("a"), false);
   assert.equal(failed.pending(), "a");
+});
+
+test("AI cleanup failure keeps local purge pending instead of reporting completion", async () => {
+  const f = fixture(false, true);
+  f.storage.setItem(accountDeletionMarkerKey("a"), "completed_cleanup_pending");
+  assert.equal(await f.purge("a"), false);
+  assert.equal(f.pending(), "a");
+});
+
+test("confirmed cleanup forgets only the deleted account profile fallback", async () => {
+  const deleted = fixture(false, false, "a");
+  assert.equal(await deleted.purge("a"), true);
+  assert.equal(deleted.cloudProfileFallback(), null);
+
+  const other = fixture(false, false, "b");
+  assert.equal(await other.purge("a"), true);
+  assert.equal(other.cloudProfileFallback()?.userId, "b");
+});
+
+test("delete dialog exposes exact progress copy while preserving strong confirmation and busy guard", () => {
+  const dialog = readFileSync("app/components/profile-data-dialogs.tsx", "utf8");
+  assert.match(dialog, /Estamos eliminando tu cuenta…/);
+  assert.match(dialog, /props\.confirmation !== "ELIMINAR" \|\| props\.busy \|\| props\.syncBusy/);
+  assert.match(dialog, /disabled=\{props\.busy\}/);
 });
 
 test("retrying a stale completed cleanup screen never downgrades confirmed deletion", async () => {

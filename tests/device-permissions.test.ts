@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  clearDevicePermissionPreferences,
   devicePermissionsStorageKey,
   disableLocationForApp,
   emptyDevicePermissionPreferences,
@@ -18,6 +19,7 @@ function memoryStorage() {
   return {
     getItem(key: string) { return values.get(key) ?? null; },
     setItem(key: string, value: string) { values.set(key, value); },
+    removeItem(key: string) { values.delete(key); },
   };
 }
 
@@ -68,6 +70,30 @@ test("leaving initial permissions ignores a late native location response", asyn
   assert.equal(afterAbort.locationEnabled, false);
   success?.({ coords: { latitude: 20, longitude: -99 } } as GeolocationPosition);
   assert.equal(readDevicePermissionPreferences(storage, "user-a").coarseLocation, undefined);
+});
+
+test("account cleanup invalidates a pending location write and preserves another owner", async () => {
+  const storage = memoryStorage();
+  saveDevicePermissionPreferences(storage, {
+    ...emptyDevicePermissionPreferences("user-b"),
+    location: "granted",
+    locationEnabled: true,
+    coarseLocation: { latitude: 19.04, longitude: -98.2, capturedAt: new Date().toISOString() },
+  });
+  let success: PositionCallback | undefined;
+  const pending = requestInitialLocation(storage, "user-a", {
+    getCurrentPosition(next: PositionCallback) { success = next; },
+  } as unknown as Geolocation);
+
+  clearDevicePermissionPreferences(storage, "user-a");
+  success?.({ coords: { latitude: 20, longitude: -99 } } as GeolocationPosition);
+
+  const result = await pending;
+  assert.equal(result.locationEnabled, false);
+  assert.equal(result.coarseLocation, undefined);
+  assert.equal(storage.getItem(devicePermissionsStorageKey("user-a")), null);
+  assert.ok(storage.getItem(devicePermissionsStorageKey("user-b")));
+  assert.equal(readDevicePermissionPreferences(storage, "user-b").coarseLocation?.latitude, 19.04);
 });
 
 test("nearby coordinates expire instead of following the user indefinitely", async () => {

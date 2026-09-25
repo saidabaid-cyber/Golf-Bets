@@ -5,8 +5,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { parseAccountDeletionChoice } from "../../../../lib/account-deletion";
 import { authenticatedRequest, bearerToken } from "../../../../lib/server-auth";
 import { getSupabaseAdmin } from "../../../../lib/supabase/server";
-import { accountLifecycleEnabled, executeAccountLifecycle } from "../../../../lib/account-lifecycle";
-import { accountLifecycleGateway, recoverAccountLifecycleActor } from "../../../../lib/account-lifecycle.server";
+import {
+  AccountLifecycleStageError,
+  accountLifecycleEnabled,
+  accountLifecycleFailureResponse,
+  accountLifecycleSafeError,
+  executeAccountLifecycle,
+  runAccountLifecycleStage,
+} from "../../../../lib/account-lifecycle";
+import { accountLifecycleGateway, lifecycleRequestReference, recoverAccountLifecycleActor } from "../../../../lib/account-lifecycle.server";
 import { BACKYARD_AI_PRIVATE_HEADERS, isCrossSiteRequest, isJsonRequest, readJsonBodyWithLimit } from "../../../../lib/backyard-ai/server/http-security";
 
 export const dynamic = "force-dynamic";
@@ -30,18 +37,44 @@ export async function DELETE(request: NextRequest) {
   if (!accountLifecycleEnabled()) return json({ code: "CONTROLLED_DB_ACTION_REQUIRED", error: "Esta función no está disponible en este entorno. Contacta soporte.", noDataDeleted: true }, 503);
   const admin = getSupabaseAdmin();
   if (!admin) return json({ code: "CONTROLLED_DB_ACTION_REQUIRED", error: "No pudimos conectar el servicio de cuentas. Intenta más tarde.", noDataDeleted: true }, 503);
+  const reportFailure = (error: unknown, context: { secondary?: boolean; operationCompleted?: boolean } = {}) => {
+    console.error("account_lifecycle", {
+      operation: choice.dataPolicy,
+      requestIdRef: lifecycleRequestReference(choice.requestId),
+      ...accountLifecycleSafeError(error),
+      secondary: context.secondary === true,
+      operationCompleted: context.operationCompleted === true,
+    });
+  };
   try {
-    const account = token ? await authenticatedRequest(request, { allowLifecycleRecovery: true }) : { ok: false as const };
-    const actor = account.ok ? account.userId : await recoverAccountLifecycleActor(admin, choice.requestId, choice.dataPolicy, choice.recoveryToken || token);
-    if (!actor) return json({ code: "AUTH_REQUIRED", error: "La sesión terminó. Vuelve a iniciar sesión." }, 401);
-    const job = await executeAccountLifecycle(accountLifecycleGateway(admin, actor, choice.requestId, choice.dataPolicy, token, choice.recoveryToken));
+    const account = token
+      ? await runAccountLifecycleStage("authenticate", () => authenticatedRequest(request, { allowLifecycleRecovery: true }))
+      : { ok: false as const, status: 401, code: "AUTH_REQUIRED" };
+    let actor = account.ok ? account.userId : null;
+    if (!actor) {
+      actor = await runAccountLifecycleStage("recover", () => recoverAccountLifecycleActor(admin, choice.requestId, choice.dataPolicy, choice.recoveryToken || token));
+      if (!actor) throw new AccountLifecycleStageError(token ? "authenticate" : "recover", {
+        code: account.code,
+        errorClass: "AuthenticationFailure",
+        status: account.status,
+      });
+    }
+    const gateway = accountLifecycleGateway(
+      admin,
+      actor,
+      choice.requestId,
+      choice.dataPolicy,
+      token,
+      choice.recoveryToken,
+      (error, context) => reportFailure(error, context),
+    );
+    const job = await executeAccountLifecycle(gateway);
     const archived = job.data_policy === "retain_history";
     return json({ ok: true, deleted: !archived, archived, accountStatus: archived ? "archived" : "deleted",
       legalReview: "LEGAL_REVIEW_REQUIRED", message: archived ? "Tu cuenta quedó desactivada. Tu historial se conserva según la política aplicable." : "Tu cuenta fue eliminada." });
   } catch (error) {
-    const code = error && typeof error === "object" && "code" in error ? String(error.code) : "ACCOUNT_OPERATION_PENDING";
-    console.error("account_lifecycle", { code });
-    if (code === "23505") return json({ code: "ACCOUNT_REQUEST_CONFLICT", error: "Ya existe una solicitud de cierre. Reanuda esa solicitud para continuar." }, 409);
-    return json({ code: "ACCOUNT_OPERATION_PENDING", pending: true, error: "La operación todavía no se ha confirmado. Reintenta para continuar de forma segura; no inicies otra solicitud." }, 503);
+    reportFailure(error);
+    const failure = accountLifecycleFailureResponse(error);
+    return json(failure.body, failure.status);
   }
 }

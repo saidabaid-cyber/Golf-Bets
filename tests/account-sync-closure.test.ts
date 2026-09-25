@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { executeAccountLifecycle, type AccountLifecycleGateway, type AccountLifecycleJob } from "../lib/account-lifecycle";
-import { activeWorkspaceScorecardPhotoIds, discardAccountWorkspace, switchAccountWorkspace, WORKSPACE_OWNER_KEY } from "../lib/account-workspace";
+import { activeWorkspaceScorecardPhotoIds, discardAccountSessionState, discardAccountWorkspace, switchAccountWorkspace, WORKSPACE_OWNER_KEY } from "../lib/account-workspace";
 import { statisticsResetStorageKey } from "../lib/statistics-reset";
 import { CloudSyncGate, cloudSyncErrorMessage, syncStatusAfterSkip } from "../lib/cloud-sync-gate";
 import { STORAGE_KEYS } from "../lib/round-utils";
@@ -19,9 +19,15 @@ import { backyardAiMetricsStorageKey } from "../lib/backyard-ai/observability/me
 import { acceptAiProcessingConsent, hasActiveAiProcessingConsent } from "../lib/backyard-ai/processing-consent";
 import { AI_PROVIDER_PROCESSING_CONSENT } from "../lib/backyard-ai/privacy";
 import { ACCOUNT_STORAGE_KEYS, accountDeletionMarkerKey, bettingConsentPromptStorageKey } from "../lib/account-state";
+import { accountUiPreferencesKey } from "../lib/account-ui-preferences";
+import { devicePermissionsStorageKey } from "../lib/device-permissions";
+import { marketingConsentStorageKey } from "../lib/marketing-consent";
+import { firstRoundExperienceKey } from "../lib/round-first-experience";
 
 class MemoryStorage {
   data = new Map<string, string>();
+  get length() { return this.data.size; }
+  key(index: number) { return [...this.data.keys()][index] ?? null; }
   getItem(key: string) { return this.data.get(key) ?? null; }
   setItem(key: string, value: string) { this.data.set(key, value); }
   removeItem(key: string) { this.data.delete(key); }
@@ -107,11 +113,20 @@ test("eliminar cuenta local descarta solo A y conserva invitado y B", () => {
   storage.setItem("backyard-index-preference-v1:user-b", "private-index-preference-b");
   storage.setItem(accountDeletionMarkerKey("user-a"), "pending");
   storage.setItem(statisticsResetStorageKey("user-a"), '{"resetAt":"2026-09-13T20:00:00.000Z","strategy":"RESET_FROM_DATE"}');
+  storage.setItem(accountUiPreferencesKey("user-a"), "ui-a");
+  storage.setItem(accountUiPreferencesKey("user-b"), "ui-b");
+  storage.setItem(devicePermissionsStorageKey("user-a"), "device-a");
+  storage.setItem(devicePermissionsStorageKey("user-b"), "device-b");
+  storage.setItem(marketingConsentStorageKey("user-a"), "marketing-a");
+  storage.setItem(marketingConsentStorageKey("user-b"), "marketing-b");
+  storage.setItem(firstRoundExperienceKey("user-a"), "seen");
+  storage.setItem(firstRoundExperienceKey("user-b"), "seen");
   switchAccountWorkspace(storage, "user-b");
   storage.setItem(STORAGE_KEYS.history, "b-history");
   switchAccountWorkspace(storage, "user-a");
 
-  discardAccountWorkspace(storage, "user-a");
+  const cleanup = discardAccountWorkspace(storage, "user-a");
+  assert.deepEqual(cleanup, { complete: true, failedSteps: [] });
   assert.equal(storage.getItem(WORKSPACE_OWNER_KEY), "guest");
   assert.equal(storage.getItem(STORAGE_KEYS.history), "guest-history");
   assert.equal(storage.getItem("backyard-profile-cache-v1:user-a"), null);
@@ -131,6 +146,14 @@ test("eliminar cuenta local descarta solo A y conserva invitado y B", () => {
   assert.equal(storage.getItem("backyard-index-preference-v1:user-a"), null);
   assert.equal(storage.getItem("backyard-index-preference-v1:user-b"), "private-index-preference-b");
   assert.equal(storage.getItem(statisticsResetStorageKey("user-a")), null);
+  assert.equal(storage.getItem(accountUiPreferencesKey("user-a")), null);
+  assert.equal(storage.getItem(devicePermissionsStorageKey("user-a")), null);
+  assert.equal(storage.getItem(marketingConsentStorageKey("user-a")), null);
+  assert.equal(storage.getItem(firstRoundExperienceKey("user-a")), null);
+  assert.equal(storage.getItem(accountUiPreferencesKey("user-b")), "ui-b");
+  assert.equal(storage.getItem(devicePermissionsStorageKey("user-b")), "device-b");
+  assert.equal(storage.getItem(marketingConsentStorageKey("user-b")), "marketing-b");
+  assert.equal(storage.getItem(firstRoundExperienceKey("user-b")), "seen");
   assert.equal(storage.getItem(accountDeletionMarkerKey("user-a")), "pending");
   assert.equal(storage.getItem(internalNotificationStorageKey("user-b")), '{"version":1,"readEventKeys":["round-b"]}');
   switchAccountWorkspace(storage, "user-b");
@@ -145,6 +168,39 @@ test("eliminar cuenta local descarta solo A y conserva invitado y B", () => {
   assert.equal(storage.getItem(ACCOUNT_STORAGE_KEYS.mode), "authenticated");
 });
 
+test("eliminar cuenta limpia sólo los pasos de wizard de esa identidad", () => {
+  const storage = new MemoryStorage();
+  storage.setItem("backyard-setup-step-v1:user-a:round-1", "3");
+  storage.setItem("backyard-setup-step-v1:user-a:round-2", "5");
+  storage.setItem("backyard-setup-step-v1:user-b:round-1", "4");
+  storage.setItem("backyard-setup-step-v1:guest:round-1", "2");
+
+  discardAccountSessionState(storage, "user-a");
+
+  assert.equal(storage.getItem("backyard-setup-step-v1:user-a:round-1"), null);
+  assert.equal(storage.getItem("backyard-setup-step-v1:user-a:round-2"), null);
+  assert.equal(storage.getItem("backyard-setup-step-v1:user-b:round-1"), "4");
+  assert.equal(storage.getItem("backyard-setup-step-v1:guest:round-1"), "2");
+});
+
+test("un fallo de borrado AI queda incompleto y nunca se presenta como purge local exitoso", () => {
+  const storage = new MemoryStorage();
+  const failedKey = backyardAiMetricsStorageKey("user-a")!;
+  storage.setItem(failedKey, "metrics-a");
+  storage.setItem(backyardAiMetricsStorageKey("user-b")!, "metrics-b");
+  const removeItem = storage.removeItem.bind(storage);
+  storage.removeItem = (key: string) => {
+    if (key === failedKey) throw new Error("synthetic_storage_failure");
+    removeItem(key);
+  };
+
+  const result = discardAccountWorkspace(storage, "user-a");
+
+  assert.deepEqual(result, { complete: false, failedSteps: ["ai_memory"] });
+  assert.equal(storage.getItem(failedKey), "metrics-a");
+  assert.equal(storage.getItem(backyardAiMetricsStorageKey("user-b")!), "metrics-b");
+});
+
 function deletionGateway(options: { failStorage?: boolean } = {}) {
   const calls: string[] = [];
   const job: AccountLifecycleJob = { request_id: "request", user_id: "user-a", data_policy: "delete_golf_data", stage: "requested", lease_token: "lease", completed_at: null };
@@ -155,6 +211,7 @@ function deletionGateway(options: { failStorage?: boolean } = {}) {
     removeStorage: async () => { calls.push("storage"); if (options.failStorage) throw new Error("storage unavailable"); hasPhotos = false; },
     prepare: async () => { calls.push("transaction"); return { ...job, stage: "data_prepared" }; },
     revokeAndBan: async () => { calls.push("revoke"); },
+    signOut: async () => { calls.push("signout"); },
     deleteAuth: async () => { calls.push("auth"); },
     complete: async () => { calls.push("complete"); return { ...job, stage: "completed" }; },
     release: async () => { calls.push("release"); },
@@ -166,12 +223,12 @@ test("eliminación server-side usa transacción y Auth antes de confirmar", asyn
   const { gateway, calls } = deletionGateway();
   const result = await executeAccountLifecycle(gateway);
   assert.equal(result.stage, "completed");
-  assert.deepEqual(calls, ["acquire", "storage", "transaction", "revoke", "auth", "complete", "release"]);
+  assert.deepEqual(calls, ["acquire", "storage", "transaction", "revoke", "signout", "auth", "complete", "release"]);
 });
 
 test("un fallo de Storage impide afirmar eliminación o borrar Auth", async () => {
   const { gateway, calls } = deletionGateway({ failStorage: true });
-  await assert.rejects(executeAccountLifecycle(gateway), /storage unavailable/);
+  await assert.rejects(executeAccountLifecycle(gateway), (error: unknown) => error instanceof Error && "stage" in error && error.stage === "removeStorage");
   assert.deepEqual(calls, ["acquire", "storage", "release"]);
 });
 

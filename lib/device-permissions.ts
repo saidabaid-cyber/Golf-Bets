@@ -22,6 +22,7 @@ export type DevicePermissionPreferences = {
 type PermissionNavigator = { permissions?: { query?: (input: PermissionDescriptor) => Promise<PermissionStatus> } };
 type ReadableStorage = Pick<Storage, "getItem">;
 type WritableStorage = Pick<Storage, "setItem">;
+type RemovableStorage = Pick<Storage, "removeItem">;
 
 export type NearbyLocationResolution =
   | { status: "located"; point: { latitude: number; longitude: number; capturedAt: string }; source: "cache" | "fresh" }
@@ -94,6 +95,15 @@ export function readDevicePermissionPreferences(storage: ReadableStorage, userId
 export function saveDevicePermissionPreferences(storage: WritableStorage, preferences: DevicePermissionPreferences) {
   storage.setItem(devicePermissionsStorageKey(preferences.userId), JSON.stringify(preferences));
   return preferences;
+}
+
+/** Remove only one account's app-level permission snapshot. Incrementing the
+ * request epoch first makes every in-flight geolocation callback for that
+ * identity stale, so a late browser response cannot recreate the deleted key. */
+export function clearDevicePermissionPreferences(storage: RemovableStorage, userId: string) {
+  if (!userId || userId === "guest") return;
+  locationRequestEpochs.set(userId, (locationRequestEpochs.get(userId) || 0) + 1);
+  storage.removeItem(devicePermissionsStorageKey(userId));
 }
 
 export function finishInitialDevicePermissions(storage: ReadableStorage & WritableStorage, userId: string) {

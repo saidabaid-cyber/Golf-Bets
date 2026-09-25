@@ -5,6 +5,7 @@ import type { AccountDataPolicy } from "./account-deletion";
 import { validateAccountLifecycleJob, type AccountLifecycleGateway } from "./account-lifecycle";
 
 export const lifecycleProof = (bearer: string) => createHash("sha256").update(bearer).digest("hex");
+export const lifecycleRequestReference = (requestId: string) => createHash("sha256").update(requestId).digest("hex").slice(0, 12);
 function assertResult(result: { error: unknown }) { if (result.error) throw result.error; }
 export async function recoverAccountLifecycleActor(admin: SupabaseClient, requestId: string, dataPolicy: AccountDataPolicy, proof: string) {
   const result = await admin.rpc("account_lifecycle_recover", {
@@ -14,7 +15,15 @@ export async function recoverAccountLifecycleActor(admin: SupabaseClient, reques
   return typeof result.data === "string" ? result.data : null;
 }
 
-export function accountLifecycleGateway(admin: SupabaseClient, actor: string, requestId: string, dataPolicy: AccountDataPolicy, token: string, recoveryToken?: string): AccountLifecycleGateway {
+export function accountLifecycleGateway(
+  admin: SupabaseClient,
+  actor: string,
+  requestId: string,
+  dataPolicy: AccountDataPolicy,
+  token: string,
+  recoveryToken?: string,
+  observeError?: AccountLifecycleGateway["observeError"],
+): AccountLifecycleGateway {
   const lease = randomUUID();
   const rpcJob = async (name: string, values: Record<string, unknown>) => {
     const result = await admin.rpc(name, values).abortSignal(AbortSignal.timeout(15_000));
@@ -37,6 +46,8 @@ export function accountLifecycleGateway(admin: SupabaseClient, actor: string, re
         throw current.error;
       }
       assertResult(await admin.auth.admin.updateUserById(job.user_id, { ban_duration: "876000h" }));
+    },
+    signOut: async () => {
       const result = token ? await admin.auth.admin.signOut(token, "global") : { error: null };
       // A retry may follow a previous sign-out. SQL blocks stale JWTs already.
       if (result.error && ![401, 403, 404].includes(result.error.status || 0)) throw result.error;
@@ -50,5 +61,6 @@ export function accountLifecycleGateway(admin: SupabaseClient, actor: string, re
       const result = await admin.rpc("account_lifecycle_release", { operation_id: requestId, lease: job.lease_token }).abortSignal(AbortSignal.timeout(5_000));
       assertResult(result);
     },
+    observeError,
   };
 }

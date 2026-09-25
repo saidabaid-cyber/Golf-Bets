@@ -53,6 +53,6 @@ export function AccountDataDialog(props: Common & { policy: AccountDataPolicy | 
     {props.policy && <label>Escribe ELIMINAR para confirmar<input aria-label="Confirmación de eliminación de cuenta" value={props.confirmation} disabled={props.busy} onChange={(event) => props.onConfirmation(event.target.value)} placeholder="ELIMINAR" autoComplete="off" /></label>}
     {props.error && <p role="alert" className={styles.error}>{props.error}</p>}
     {props.syncBusy && <p role="status">Espera a que termine la sincronización antes de continuar.</p>}
-    <div className={styles.actions}><button type="button" className="secondary" disabled={props.busy} onClick={props.onClose}>Cancelar</button><button type="button" className="dangerButton" disabled={!props.policy || props.confirmation !== "ELIMINAR" || props.busy || props.syncBusy} onClick={props.onConfirm}>{props.busy ? "Procesando…" : props.policy === "retain_history" ? "Desactivar y conservar" : "Eliminar cuenta"}</button></div>
+    <div className={styles.actions}><button type="button" className="secondary" disabled={props.busy} onClick={props.onClose}>Cancelar</button><button type="button" className="dangerButton" disabled={!props.policy || props.confirmation !== "ELIMINAR" || props.busy || props.syncBusy} onClick={props.onConfirm}>{props.busy ? props.policy === "delete_golf_data" ? "Estamos eliminando tu cuenta…" : "Estamos desactivando tu cuenta…" : props.policy === "retain_history" ? "Desactivar y conservar" : "Eliminar cuenta"}</button></div>
   </Dialog>;
 }

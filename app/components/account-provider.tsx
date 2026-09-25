@@ -48,7 +48,7 @@ import {
 } from "../../lib/account-state";
 import { authSessionPersistence, getSupabaseBrowser, setAuthSessionPersistence } from "../../lib/supabase/client";
 import { AuthSessionRecoveryError, authCallbackUrl, authIdentityChanged, clearDeletedAuthSessionForUser, closeAuthSession, isAccountSession, recoverAuthSession, requireCloudWrites, restoreAuthSession, sendEmailOtpWhenReady, startSocialOAuth, verifyEmailOtp, OtpSendGate, otpRetrySeconds, OTP_COOLDOWN_KEY } from "../../lib/auth-flow";
-import { activeWorkspaceScorecardPhotoIds, discardAccountWorkspace, ownsLocalWorkspace, selectAccountScorecardPhotoIds, switchAccountWorkspace, WORKSPACE_OWNER_KEY } from "../../lib/account-workspace";
+import { activeWorkspaceScorecardPhotoIds, discardAccountSessionState, discardAccountWorkspace, ownsLocalWorkspace, selectAccountScorecardPhotoIds, switchAccountWorkspace, WORKSPACE_OWNER_KEY } from "../../lib/account-workspace";
 import { CLOUD_LOCAL_META_KEY, type CloudPreferences } from "../../lib/cloud-sync";
 import { deleteOfflineAccountData, readAllOfflineAccountRecords } from "../../lib/offline-store";
 import { adoptScorecardPhotos, deleteScorecardPhotos, scorecardPhotoIdsForOwner } from "../../lib/scorecard-photo";
@@ -1444,6 +1444,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   async function purgeDeletedAccountLocal(deletedUserId: string, options: { clearAuth?: boolean; trackPending?: boolean } = {}) {
     const deletesActiveAccount = activeUserId.current === deletedUserId || ownsLocalWorkspace(localStorage, deletedUserId);
     const failedCleanupSteps: string[] = [];
+    if (cloudProfileFallbackRef.current?.userId === deletedUserId) cloudProfileFallbackRef.current = null;
     // If this is the active account, close every app/sync surface before the
     // first asynchronous cleanup step. A concurrent auth event may activate a
     // different account later; no stale flag is allowed to clear that account.
@@ -1486,8 +1487,13 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         if (key?.startsWith(uploadedMarkerPrefix)) localStorage.removeItem(key);
       }
     } catch { failedCleanupSteps.push("upload_markers"); }
-    try { discardAccountWorkspace(localStorage, deletedUserId); }
+    try {
+      const workspaceCleanup = discardAccountWorkspace(localStorage, deletedUserId);
+      if (!workspaceCleanup.complete) failedCleanupSteps.push(...workspaceCleanup.failedSteps.map((step) => `local_${step}`));
+    }
     catch { failedCleanupSteps.push("local_workspace"); }
+    try { discardAccountSessionState(sessionStorage, deletedUserId); }
+    catch { failedCleanupSteps.push("round_wizard_session"); }
     try { clearAccountDeletionIntent(localStorage, deletedUserId); }
     catch { failedCleanupSteps.push("deletion_intent"); }
     const storedAcceptances = parseLegalAcceptances(localStorage.getItem(ACCOUNT_STORAGE_KEYS.acceptances));
