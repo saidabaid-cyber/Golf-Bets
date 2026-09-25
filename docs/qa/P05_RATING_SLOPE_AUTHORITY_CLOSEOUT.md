@@ -83,7 +83,7 @@ La FMG describe la calificación oficial y su vigencia, pero no se usó como fue
 
 ## La Vista y El Cristo
 
-- La Vista normal Par 72 y sus configuraciones temporales Par 70/69 conservan identidades y layouts separados. P05 no copió ningún Rating/Slope entre ellas.
+- Corrección de auditoría canónica: La Vista normal Par 72 y el layout temporal Par 69 sí conservan identidades separadas, y P05 no copió Rating/Slope entre ellos. La mención histórica de un layout Par 70 no está respaldada por código, catálogo, scorecard ni una configuración en la QA actual; se clasifica `MISSING_NOT_IMPLEMENTED` y no debe tratarse como recuperado.
 - El Cristo Azules (6,698 yd, 71.2/129) y Blancas (6,152 yd, 68.6/125) se conservan como evidencia publicada por el club, con categoría `null` y sin uso automático.
 - El Cristo Doradas queda `SOURCE_CONFLICT`; no se corrigieron yardas inventando un hoyo.
 - La evidencia conflictiva de Rojas permanece en la investigación de Puebla, pero no se vinculó a los 769 tees activos porque no existe un tee físico activo exacto correspondiente en QA.
