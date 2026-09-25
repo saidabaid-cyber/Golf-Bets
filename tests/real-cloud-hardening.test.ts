@@ -80,14 +80,23 @@ test("email OTP nunca llama Supabase mientras providers está cargando, no confi
 });
 
 test("el cliente Auth del navegador exige la pareja canónica app-origin y Supabase ref", () => {
-  const dev = { hostname: "dev.thebackyard.com.mx", protocol: "https:" };
-  const production = { hostname: "app.thebackyard.com.mx", protocol: "https:" };
-  const local = { hostname: "localhost", protocol: "http:" };
-  const randomPreview = { hostname: "golf-bets-random.vercel.app", protocol: "https:" };
+  const dev = { hostname: "dev.thebackyard.com.mx", protocol: "https:", origin: "https://dev.thebackyard.com.mx" };
+  const production = { hostname: "app.thebackyard.com.mx", protocol: "https:", origin: "https://app.thebackyard.com.mx" };
+  const local = { hostname: "localhost", protocol: "http:", origin: "http://localhost" };
+  const branchAlias = {
+    hostname: "golf-bets-git-integration-backyard-current-saha8.vercel.app",
+    protocol: "https:",
+    origin: "https://golf-bets-git-integration-backyard-current-saha8.vercel.app",
+  };
+  const insecureBranchAlias = { ...branchAlias, protocol: "http:", origin: "http://golf-bets-git-integration-backyard-current-saha8.vercel.app" };
+  const randomPreview = { hostname: "golf-bets-random.vercel.app", protocol: "https:", origin: "https://golf-bets-random.vercel.app" };
   assert.equal(resolveBrowserSupabaseOrigin(CANONICAL_PREVIEW_SUPABASE_ORIGIN, dev), CANONICAL_PREVIEW_SUPABASE_ORIGIN);
   assert.equal(resolveBrowserSupabaseOrigin(CANONICAL_PRODUCTION_SUPABASE_ORIGIN, dev), null);
   assert.equal(resolveBrowserSupabaseOrigin(CANONICAL_PRODUCTION_SUPABASE_ORIGIN, production), CANONICAL_PRODUCTION_SUPABASE_ORIGIN);
   assert.equal(resolveBrowserSupabaseOrigin(CANONICAL_PREVIEW_SUPABASE_ORIGIN, production), null);
+  assert.equal(resolveBrowserSupabaseOrigin(CANONICAL_PREVIEW_SUPABASE_ORIGIN, branchAlias), CANONICAL_PREVIEW_SUPABASE_ORIGIN);
+  assert.equal(resolveBrowserSupabaseOrigin(CANONICAL_PRODUCTION_SUPABASE_ORIGIN, branchAlias), null);
+  assert.equal(resolveBrowserSupabaseOrigin(CANONICAL_PREVIEW_SUPABASE_ORIGIN, insecureBranchAlias), null);
   assert.equal(resolveBrowserSupabaseOrigin(CANONICAL_PREVIEW_SUPABASE_ORIGIN, local), CANONICAL_PREVIEW_SUPABASE_ORIGIN);
   assert.equal(resolveBrowserSupabaseOrigin("http://127.0.0.1:54321", local), "http://127.0.0.1:54321");
   assert.equal(resolveBrowserSupabaseOrigin(CANONICAL_PREVIEW_SUPABASE_ORIGIN, randomPreview), null);

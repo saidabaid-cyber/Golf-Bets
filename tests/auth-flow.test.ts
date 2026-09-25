@@ -55,7 +55,9 @@ test("Google normal reutiliza sesión y sólo la acción explícita fuerza selec
 
 test("OAuth conserva exactamente el origen canónico que inició PKCE", () => {
   const preview = "https://dev.thebackyard.com.mx";
+  const branchAlias = "https://golf-bets-git-integration-backyard-current-saha8.vercel.app";
   assert.equal(authCallbackUrl(preview), `${preview}/auth/callback`);
+  assert.equal(authCallbackUrl(branchAlias), `${branchAlias}/auth/callback`);
   assert.equal(authCallbackUrl("http://localhost:3000"), "http://localhost:3000/auth/callback");
   assert.throws(() => authCallbackUrl("javascript:alert(1)"), /invalid_auth_origin/);
 });

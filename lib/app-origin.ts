@@ -1,5 +1,6 @@
 export const PRODUCTION_APP_ORIGIN = "https://app.thebackyard.com.mx";
 export const CANONICAL_QA_APP_ORIGIN = "https://dev.thebackyard.com.mx";
+export const CANONICAL_QA_BRANCH_APP_ORIGIN = "https://golf-bets-git-integration-backyard-current-saha8.vercel.app";
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
@@ -29,9 +30,11 @@ export function resolveBrowserAppOrigin(browserOrigin: string, configuredOrigin?
   if (configuredOrigin?.trim()) {
     const configured = exactAppOrigin(configuredOrigin.trim(), "invalid_configured_app_origin");
     if (configured !== CANONICAL_QA_APP_ORIGIN && configured !== PRODUCTION_APP_ORIGIN) throw new Error("unsupported_configured_app_origin");
-    // PKCE state is stored by browser origin. Starting on an immutable Preview
-    // and returning to the stable domain would strand the verifier, so remote
-    // auth/share flows must begin on the exact configured origin.
+    // This exact Vercel branch alias is the temporary canonical QA entrypoint
+    // while the custom QA domain is unavailable. PKCE state is stored by
+    // browser origin, so its callbacks must return to the origin that started
+    // the flow. Production remains bound only to its configured origin.
+    if (configured === CANONICAL_QA_APP_ORIGIN && browser === CANONICAL_QA_BRANCH_APP_ORIGIN) return browser;
     if (browser !== configured) throw new Error("app_origin_environment_mismatch");
     return configured;
   }

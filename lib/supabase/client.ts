@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { CANONICAL_QA_BRANCH_APP_ORIGIN } from "../app-origin";
 import { fetchWithTimeout } from "../network-timeout";
 
 let browserClient: SupabaseClient | null | undefined;
@@ -7,7 +8,7 @@ export const CANONICAL_PREVIEW_SUPABASE_ORIGIN = "https://bymeopxkxapfizeeqeyb.s
 export const CANONICAL_PRODUCTION_SUPABASE_ORIGIN = "https://zhqmlpljloumldaczcfp.supabase.co";
 const authMemory = new Map<string, string>();
 
-type BrowserRuntimeLocation = Pick<Location, "hostname" | "protocol">;
+type BrowserRuntimeLocation = Pick<Location, "hostname" | "protocol"> & Partial<Pick<Location, "origin" | "port">>;
 
 function exactSupabaseOrigin(rawUrl: string) {
   try {
@@ -26,6 +27,12 @@ export function resolveBrowserSupabaseOrigin(rawUrl: string | undefined, locatio
   const hostname = location.hostname.toLowerCase();
   if (hostname === "dev.thebackyard.com.mx") {
     return location.protocol === "https:" && origin === CANONICAL_PREVIEW_SUPABASE_ORIGIN ? origin : null;
+  }
+  if (hostname === new URL(CANONICAL_QA_BRANCH_APP_ORIGIN).hostname) {
+    const exactBrowserOrigin = location.origin ? exactSupabaseOrigin(location.origin) : `${location.protocol}//${hostname}`;
+    return location.protocol === "https:" && !location.port
+      && exactBrowserOrigin === CANONICAL_QA_BRANCH_APP_ORIGIN
+      && origin === CANONICAL_PREVIEW_SUPABASE_ORIGIN ? origin : null;
   }
   if (hostname === "app.thebackyard.com.mx") {
     return location.protocol === "https:" && origin === CANONICAL_PRODUCTION_SUPABASE_ORIGIN ? origin : null;

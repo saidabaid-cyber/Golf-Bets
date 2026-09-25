@@ -2,11 +2,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { CANONICAL_QA_APP_ORIGIN, PRODUCTION_APP_ORIGIN, resolveBrowserAppOrigin } from "../lib/app-origin";
 
+const CANONICAL_QA_BRANCH_ALIAS = "https://golf-bets-git-integration-backyard-current-saha8.vercel.app";
+
 test("configured canonical origin must equal the remote browser origin", () => {
   assert.equal(resolveBrowserAppOrigin(CANONICAL_QA_APP_ORIGIN, `${CANONICAL_QA_APP_ORIGIN}/`), CANONICAL_QA_APP_ORIGIN);
+  assert.equal(resolveBrowserAppOrigin(CANONICAL_QA_BRANCH_ALIAS, CANONICAL_QA_APP_ORIGIN), CANONICAL_QA_BRANCH_ALIAS);
   assert.equal(resolveBrowserAppOrigin(PRODUCTION_APP_ORIGIN, PRODUCTION_APP_ORIGIN), PRODUCTION_APP_ORIGIN);
   assert.throws(() => resolveBrowserAppOrigin(PRODUCTION_APP_ORIGIN, CANONICAL_QA_APP_ORIGIN), /app_origin_environment_mismatch/);
   assert.throws(() => resolveBrowserAppOrigin(CANONICAL_QA_APP_ORIGIN, PRODUCTION_APP_ORIGIN), /app_origin_environment_mismatch/);
+  assert.throws(() => resolveBrowserAppOrigin(CANONICAL_QA_BRANCH_ALIAS, PRODUCTION_APP_ORIGIN), /app_origin_environment_mismatch/);
+  assert.throws(() => resolveBrowserAppOrigin("http://golf-bets-git-integration-backyard-current-saha8.vercel.app", CANONICAL_QA_APP_ORIGIN), /invalid_browser_app_origin/);
   assert.throws(() => resolveBrowserAppOrigin("https://synthetic-preview-test-only.vercel.app", CANONICAL_QA_APP_ORIGIN), /app_origin_environment_mismatch/);
   assert.throws(() => resolveBrowserAppOrigin("https://synthetic-preview-test-only.vercel.app", PRODUCTION_APP_ORIGIN), /app_origin_environment_mismatch/);
   assert.throws(() => resolveBrowserAppOrigin("https://evil.example", "https://evil.example"), /unsupported_configured_app_origin/);
