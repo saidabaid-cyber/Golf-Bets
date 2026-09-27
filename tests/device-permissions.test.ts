@@ -8,8 +8,10 @@ import {
   finishInitialDevicePermissions,
   NEARBY_LOCATION_CACHE_TTL_MS,
   readDevicePermissionPreferences,
+  refreshDevicePermissionStateWithoutPrompt,
   resolveAuthorizedNearbyLocation,
   requestInitialLocation,
+  requestInitialNotifications,
   saveDevicePermissionPreferences,
   storedNearbyCoordinates,
 } from "../lib/device-permissions";
@@ -72,6 +74,57 @@ test("leaving initial permissions ignores a late native location response", asyn
   assert.equal(readDevicePermissionPreferences(storage, "user-a").coarseLocation, undefined);
 });
 
+test("notification permission default requests once and persists the real granted result", async () => {
+  const storage = memoryStorage();
+  let prompts = 0;
+  const saved = await requestInitialNotifications(storage, "user-a", {
+    permission: "default",
+    async requestPermission() { prompts += 1; return "granted"; },
+  });
+  assert.equal(prompts, 1);
+  assert.equal(saved.notifications, "granted");
+  assert.equal(saved.notificationsEnabled, true);
+});
+
+test("notification permission granted or denied is never requested repeatedly", async () => {
+  for (const permission of ["granted", "denied"] as const) {
+    const storage = memoryStorage();
+    let prompts = 0;
+    const saved = await requestInitialNotifications(storage, "user-a", {
+      permission,
+      async requestPermission() { prompts += 1; return permission; },
+    });
+    assert.equal(prompts, 0);
+    assert.equal(saved.notifications, permission);
+    assert.equal(saved.notificationsEnabled, permission === "granted");
+  }
+});
+
+test("notification API unavailable is explicit and never fakes a grant", async () => {
+  const storage = memoryStorage();
+  const saved = await requestInitialNotifications(storage, "user-a", undefined);
+  assert.equal(saved.notifications, "unavailable");
+  assert.equal(saved.notificationsEnabled, false);
+});
+
+test("re-entering permissions refreshes real device state without opening a prompt", async () => {
+  const storage = memoryStorage();
+  saveDevicePermissionPreferences(storage, {
+    ...emptyDevicePermissionPreferences("user-a"),
+    location: "prompt",
+    notifications: "denied",
+  });
+  let prompts = 0;
+  const refreshed = await refreshDevicePermissionStateWithoutPrompt(storage, "user-a", permissionNavigator("granted"), {
+    permission: "granted",
+    async requestPermission() { prompts += 1; return "granted"; },
+  });
+  assert.equal(prompts, 0);
+  assert.equal(refreshed.location, "granted");
+  assert.equal(refreshed.notifications, "granted");
+  assert.equal(readDevicePermissionPreferences(storage, "user-a").notifications, "granted");
+});
+
 test("account cleanup invalidates a pending location write and preserves another owner", async () => {
   const storage = memoryStorage();
   saveDevicePermissionPreferences(storage, {
@@ -109,6 +162,17 @@ test("location timeout remains retryable and is not persisted as a denial", asyn
   const timedOut = await requestInitialLocation(storage, "user-a", { getCurrentPosition(_success: PositionCallback, failure: PositionErrorCallback) { failure({ code: 3, TIMEOUT: 3, PERMISSION_DENIED: 1 } as GeolocationPositionError); } } as Geolocation);
   assert.equal(timedOut.location, "timeout");
   assert.notEqual(timedOut.location, "denied");
+});
+
+test("location denial is persisted as denied without enabling location", async () => {
+  const storage = memoryStorage();
+  const denied = await requestInitialLocation(storage, "user-a", {
+    getCurrentPosition(_success: PositionCallback, failure: PositionErrorCallback) {
+      failure({ code: 1, TIMEOUT: 3, PERMISSION_DENIED: 1 } as GeolocationPositionError);
+    },
+  } as Geolocation);
+  assert.equal(denied.location, "denied");
+  assert.equal(denied.locationEnabled, false);
 });
 
 function permissionNavigator(state: PermissionState) {

@@ -103,12 +103,13 @@ export function DevicePermissions({ kind = "all" }: { kind?: "all" | "location" 
   return <div className="devicePermissions">
     {kind !== "notifications" && <section aria-labelledby="device-location-title">
       <h3 id="device-location-title">Ubicación</h3>
-      <p>Se usa sólo cuando pides campos cercanos. Conservamos una ubicación aproximada por unos minutos y la enviamos únicamente para ordenar resultados cercanos.</p>
+      <p>Usaremos tu ubicación para mostrarte y ordenar campos cercanos, facilitar la selección del campo donde juegas y habilitar funciones basadas en ubicación durante tus rondas cuando correspondan. Es opcional y tú decides cuándo compartirla.</p>
       <p role="status"><b>{locationView.status}</b>{locationView.detail && <><br />{locationView.detail}</>}</p>
       {locationAction()}
     </section>}
     {kind !== "location" && <section aria-labelledby="device-notification-title">
-      <h3 id="device-notification-title">Permiso de notificaciones</h3>
+      <h3 id="device-notification-title">Notificaciones</h3>
+      <p>Actívalas para recibir mensajes de otros jugadores, invitaciones a rondas y grupos, avisos de tus partidas, recordatorios y otras actualizaciones importantes de The Backyard.</p>
       <p role="status"><b>{notificationView.status}</b>{notificationView.detail && <><br />{notificationView.detail}</>}</p>
       {notificationAction()}
     </section>}

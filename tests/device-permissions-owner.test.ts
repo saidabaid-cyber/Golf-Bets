@@ -42,11 +42,29 @@ test("un contexto sin Notifications API informa indisponibilidad sin instruccion
   assert.equal(unavailable.actionLabel, "Más información");
   assert.doesNotMatch(`${unavailable.status} ${unavailable.detail} ${unavailable.actionLabel}`, /instalar|pantalla de inicio/i);
 
+  const iphoneBrowserWithExposedApi = devicePermissionContext({ userAgent: "iPhone", notificationApi: true });
+  assert.equal(iphoneBrowserWithExposedApi.notificationApi, false);
+
   const iphonePwa = devicePermissionContext({ userAgent: "iPhone", navigatorStandalone: true, notificationApi: true });
   assert.equal(notificationPermissionPresentation("default", iphonePwa).actionLabel, "Permitir notificaciones");
-  assert.match(notificationPermissionPresentation("granted", iphonePwa).status, /Permitidas en este dispositivo/);
-  assert.match(notificationPermissionPresentation("granted", iphonePwa).detail || "", /envío push.*todavía no está activado/i);
+  assert.match(notificationPermissionPresentation("granted", iphonePwa).status, /Permitido en este dispositivo/);
+  assert.match(notificationPermissionPresentation("granted", iphonePwa).detail || "", /no registra.*suscripción push/i);
+  assert.match(notificationPermissionPresentation("denied", iphonePwa).status, /No permitido/);
   assert.equal(notificationPermissionPresentation("denied", iphonePwa).actionLabel, "Cómo habilitarlas");
+});
+
+test("onboarding conecta el tap nativo, deja continuar y explica estados reales", () => {
+  const source = readFileSync("app/components/device-permission-settings.tsx", "utf8");
+  assert.match(source, /onClick=\{\(\) => void notifications\(\)\}/);
+  assert.match(source, /requestInitialNotifications\(localStorage, userId, api\)/);
+  assert.match(source, /notificationAvailable && value\.notifications !== "denied"/);
+  assert.match(source, /✓ Permitido en este dispositivo/);
+  assert.match(source, /No permitido/);
+  assert.match(source, /Estarán disponibles cuando uses The Backyard en un navegador o app compatible/);
+  assert.match(source, /mostrarte y ordenar campos cercanos/);
+  assert.match(source, /invitaciones a rondas y grupos/);
+  assert.equal((source.match(/finishInitialDevicePermissions\(localStorage, userId\)/g) || []).length, 2);
+  assert.equal((source.match(/onContinue\(\)/g) || []).length, 2);
 });
 
 test("componente dispara APIs nativas sólo desde CTAs explícitos y ofrece salida instructiva", () => {
