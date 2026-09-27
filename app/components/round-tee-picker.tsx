@@ -50,6 +50,7 @@ export function RoundTeePicker({
         return <button type="button" disabled={transitioningId !== null} className={selected ? styles.selected : ""} aria-pressed={selected} key={id} onClick={() => selectOnce(tee)}>
           <span>{tee.teeName || "Tee"}</span>
           <b>{facts.length ? facts.join(" · ") : "Datos de salida no publicados"}</b>
+          {tee.ghinPostEligible === false && <small>No disponible para publicación GHIN</small>}
           <strong>{transitioningId === id ? "Abriendo…" : selected ? "Seleccionado ✓" : "Elegir"}</strong>
         </button>;
       })}

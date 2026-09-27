@@ -43,6 +43,10 @@ export type GolfCourse = CourseDataProvenance & {
   latitude?: number;
   longitude?: number;
   active: boolean;
+  origin?: "GHIN" | "BACKYARD_PROVISIONAL" | "BACKYARD_ADMIN";
+  isProvisional?: boolean;
+  providerStatus?: string;
+  ghinPostEligible?: boolean;
 };
 
 export type GolfCourseTee = {
@@ -61,6 +65,11 @@ export type GolfCourseTee = {
   backNineRating?: number;
   active: boolean;
   dataEnvironment?: "PRODUCTION" | "QA" | "TEST" | "SYNTHETIC";
+  provider?: string;
+  providerCourseId?: string;
+  providerTeeSetRatingId?: string;
+  providerStatus?: string;
+  ghinPostEligible?: boolean;
 };
 
 export function playerVisibleTeeRating(
@@ -363,6 +372,12 @@ export function golfCourseSelectionToLegacyCourse(
     ...(golfCourse.sourceName ? { sourceName: golfCourse.sourceName } : {}),
     ...(golfCourse.sourceUrl ? { sourceUrl: golfCourse.sourceUrl } : {}),
     ...(golfCourse.verifiedAt ? { verifiedAt: golfCourse.verifiedAt } : {}),
+    ...(golfCourse.origin ? { layoutOrigin: golfCourse.origin } : {}),
+    ...(golfCourse.isProvisional !== undefined ? { isProvisional: golfCourse.isProvisional } : {}),
+    ...(tee.providerCourseId ? { providerCourseId: tee.providerCourseId } : {}),
+    ...(tee.providerTeeSetRatingId ? { providerTeeSetRatingId: tee.providerTeeSetRatingId } : {}),
+    ...(tee.providerStatus ? { providerStatus: tee.providerStatus } : {}),
+    ...(tee.ghinPostEligible !== undefined ? { ghinPostEligible: tee.ghinPostEligible } : {}),
   });
 }
 

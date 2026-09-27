@@ -126,11 +126,13 @@ function reviewedCoursesToCatalog(rows: readonly ReviewedCatalogCourse[]): GolfC
       sourceUrl: row.locationEvidence?.sourceUrl || row.sourceUrl,
       verifiedAt: row.locationEvidence?.verifiedAt || row.observedAt,
     });
-    courses.push({ id: row.id, clubId: row.clubId, name: row.name, aliases: row.aliases, holes: publication.holes, active: true, provider: "OWNER_CATALOG_REVIEW", sourceName: publication.sourceName, sourceUrl: publication.sourceUrl, verifiedAt: publication.verifiedAt });
+    courses.push({ id: row.id, clubId: row.clubId, name: row.name, aliases: row.aliases, holes: publication.holes, active: true, provider: row.origin ?? "OWNER_CATALOG_REVIEW", ...(row.providerCourseId ? { providerExternalId: row.providerCourseId } : {}), sourceName: publication.sourceName, sourceUrl: publication.sourceUrl, verifiedAt: publication.verifiedAt, ...(row.origin ? { origin: row.origin } : {}), ...(row.isProvisional !== undefined ? { isProvisional: row.isProvisional } : {}), ...(row.providerStatus ? { providerStatus: row.providerStatus } : {}) });
     const baseTee = [...publication.tees].sort((left, right) => right.holes.length - left.holes.length)[0];
     for (const hole of baseTee?.holes || []) holes.push({ id: `${row.id}:hole:${hole.hole_number}`, courseId: row.id, holeNumber: hole.hole_number, par: hole.par, strokeIndex: hole.stroke_index });
     for (const tee of publication.tees) {
-      tees.push({ id: tee.id, courseId: row.id, legacySelectionId: tee.id, name: tee.name, par: tee.par ?? undefined, totalYards: tee.yards ?? undefined, active: true });
+      const providerBackedRating = (row.origin === "GHIN" || row.origin === "BACKYARD_PROVISIONAL")
+        && typeof tee.course_rating === "number" && typeof tee.slope_rating === "number";
+      tees.push({ id: tee.id, courseId: row.id, legacySelectionId: tee.id, name: tee.displayName ?? tee.name, ...(tee.gender ? { gender: tee.gender } : {}), ...(providerBackedRating ? { rating: tee.course_rating!, slope: tee.slope_rating! } : {}), par: tee.par ?? undefined, totalYards: tee.yards ?? undefined, active: true, ...(tee.provider ? { provider: tee.provider } : {}), ...(tee.provider_course_id ? { providerCourseId: tee.provider_course_id } : {}), ...(tee.provider_tee_set_rating_id ? { providerTeeSetRatingId: tee.provider_tee_set_rating_id } : {}), ...(tee.provider_status ? { providerStatus: tee.provider_status } : {}), ...(tee.ghin_post_eligible !== undefined ? { ghinPostEligible: tee.ghin_post_eligible } : {}) });
       for (const hole of tee.holes) if (hole.yards !== null) teeHoleYardages.push({ teeId: tee.id, holeId: `${row.id}:hole:${hole.hole_number}`, holeNumber: hole.hole_number, yards: hole.yards });
     }
   }

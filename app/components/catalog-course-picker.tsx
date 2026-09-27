@@ -8,8 +8,9 @@ import { AnchoredSearch,AnchoredSearchOption } from './anchored-search';
 import styles from './catalog-course-picker.module.css';
 type Entry=Omit<ReviewedCatalogCourse,'tees'> & {teeCount:number;completeCards:number};
 type PickerLocationState=NearbyLocationResolution|{status:'idle'|'loading'};
-function layoutSource(entry:Pick<Entry,'name'|'sourceUrl'|'dataVersion'>) {
-  if (/temporary|temporal/i.test(entry.name)) return 'Provisional';
+function layoutSource(entry:Pick<Entry,'name'|'sourceUrl'|'dataVersion'|'origin'|'isProvisional'>) {
+  if (entry.isProvisional||entry.origin==='BACKYARD_PROVISIONAL'||/temporary|temporal/i.test(entry.name)) return 'Provisional';
+  if (entry.origin==='GHIN') return 'GHIN';
   if (/ghin\.com/i.test(entry.sourceUrl)||/^ghin-/i.test(entry.dataVersion)) return 'GHIN';
   return 'Backyard';
 }
@@ -101,7 +102,7 @@ export function CatalogCoursePicker({token,permissionOwnerId,onSelect,onSelectCl
     </AnchoredSearch>
     {error&&<p role="alert">{error} <button type="button" className="textButton" onClick={()=>retryCourseId?void selectCourse(retryCourseId):setRetry(n=>n+1)}>Reintentar</button></p>}
     {!token&&<p>Inicia sesión para consultar el catálogo en revisión.</p>}
-    {club&&selectedClubCourses.length>1&&<label>Layout<select aria-label="Layout" value={chosen} onChange={e=>void selectCourse(e.target.value)}><option value="">Selecciona layout</option>{selectedClubCourses.map(c=><option key={c.id} value={c.id}>{c.name} · {layoutSource(c)}</option>)}</select></label>}
+    {club&&selectedClubCourses.length>1&&<label>Layout<select aria-label="Layout" value={chosen} onChange={e=>void selectCourse(e.target.value)}><option value="">Selecciona layout</option>{selectedClubCourses.map(c=><option key={c.id} value={c.id}>{c.name} · {layoutSource(c)}{c.isProvisional?' · No disponible para publicación GHIN':''}{c.completeCards===0?' · tarjeta pendiente':''}</option>)}</select></label>}
     {purpose==='home-club'&&selectionLabel&&<p role="status">✓ Seleccionado: {selectionLabel}</p>}
     {onRequest&&<button type="button" className={styles.request} onClick={onRequest}>¿No encuentras tu campo? Solicítalo ↗</button>}
   </section>;

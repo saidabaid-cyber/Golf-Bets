@@ -3,7 +3,9 @@ import { haversineDistanceKm, type CourseGeographicPoint } from './course-distan
 import { readCourseRatingEvidenceBundle, type CourseRatingEvidenceBundleV1 } from './course-rating-evidence';
 
 export type ReviewedNineRating = { id:string; segment:'FRONT'|'BACK'|'UNSPECIFIED'; course_rating:number; slope_rating:number; par:number; rating_category:null; source_url:string; observed_at:string };
-export type ReviewedTeeSource = { id:string; name:string; course_rating:number|null; slope_rating:number|null; yards:number|null; par:number|null;
+export type ReviewedTeeSource = { id:string; name:string; displayName?:string|null; gender?:string|null; course_rating:number|null; slope_rating:number|null; yards:number|null; par:number|null;
+  provider?:string; provider_course_id?:string|null; provider_tee_set_rating_id?:string|null; provider_status?:string|null; provider_mapping_status?:string|null;
+  ghin_post_eligible?:boolean; ghin_post_eligibility_code?:string;
   rating_category:null; qa_status:string; source_limitation:string|null; holes:{hole_number:number;par:number;stroke_index:number;yards:number|null}[];
   nineRatings:ReviewedNineRating[]; qa:{status:string;errors:string[];source_limitation?:string|null};
   ratingEvidenceV1?:CourseRatingEvidenceBundleV1;
@@ -11,6 +13,7 @@ export type ReviewedTeeSource = { id:string; name:string; course_rating:number|n
   supplementOriginal?:ReviewedTeeSource };
 export type ReviewedCatalogCourse = { id:string; clubId:string; name:string; clubName:string; holes:9|18; city?:string; stateRegion?:string; aliases:string[];
   latitude?:number; longitude?:number; locationEvidence?:{sourceUrl:string;verifiedAt:string}; sourceUrl:string; observedAt:string; dataVersion:string;
+  origin?:'GHIN'|'BACKYARD_PROVISIONAL'|'BACKYARD_ADMIN'; isProvisional?:boolean; providerCourseId?:string; providerStatus?:string;
   tees:ReviewedTeeSource[] };
 export function normalizeCourseSearch(value:string) { return value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('es-MX').replace(/[^\p{L}\p{N}]+/gu,' ').trim(); }
 export function searchReviewedCourses<T extends Omit<ReviewedCatalogCourse,'tees'>>(courses:T[],query:string) {
@@ -44,10 +47,16 @@ export function reviewedClubsLocationSummary(clubs: readonly { distanceKm: numbe
  * Holes retain the original 18-hole SI even when playing one nine. */
 export function reviewedTeeToCourse(c:ReviewedCatalogCourse,t:ReviewedTeeSource):Course {
   const ratingEvidence=readCourseRatingEvidenceBundle(t.ratingEvidenceV1,{courseId:c.id,teeId:t.id});
-  return {id:t.id,name:c.name,teeName:t.name,catalogClubId:c.clubId,catalogCourseId:c.id,catalogTeeId:t.id,clubName:c.clubName,
-    city:c.city,stateRegion:c.stateRegion,country:'México',provider:'OWNER_CATALOG_REVIEW',providerExternalId:t.id,
+  const providerBackedRating=(c.origin==='GHIN'||c.origin==='BACKYARD_PROVISIONAL')
+    && typeof t.course_rating==='number'&&typeof t.slope_rating==='number';
+  return {id:t.id,name:c.name,teeName:t.displayName??t.name,catalogClubId:c.clubId,catalogCourseId:c.id,catalogTeeId:t.id,clubName:c.clubName,
+    city:c.city,stateRegion:c.stateRegion,country:'México',provider:c.origin??'OWNER_CATALOG_REVIEW',providerExternalId:t.provider_tee_set_rating_id??t.id,
     sourceUrl:t.supplement?.sourceUrl??c.sourceUrl,sourceAuthority:t.supplement?.authority??'Catálogo aportado por el owner · categoría por verificar',verifiedAt:t.supplement?.observedAt??c.observedAt,dataVersion:t.supplement?`${c.dataVersion}:card-${t.supplement.hash.slice(0,12)}`:c.dataVersion,
+    ...(providerBackedRating?{rating:t.course_rating!,slope:t.slope_rating!}:{}),
     ...(t.yards!==null?{totalYards:t.yards}:{}),
+    ...(c.origin?{layoutOrigin:c.origin}:{}),...(c.isProvisional!==undefined?{isProvisional:c.isProvisional}:{}),
+    ...(t.provider_course_id?{providerCourseId:t.provider_course_id}:{}),...(t.provider_tee_set_rating_id?{providerTeeSetRatingId:t.provider_tee_set_rating_id}:{}),
+    ...(t.provider_status?{providerStatus:t.provider_status}:{}),...(t.ghin_post_eligible!==undefined?{ghinPostEligible:t.ghin_post_eligible}:{}),
     holes:t.holes.map(h=>({number:h.hole_number,par:h.par,strokeIndex:h.stroke_index,...(h.yards!==null?{yards:h.yards}:{})})),
     catalogReview:{...(ratingEvidence?{ratingEvidence}:{}),ratingCategory:null,categoryVerified:false,reuseStatus:'LEGAL_REVIEW_REQUIRED',qaStatus:t.qa_status,
       issues:t.qa?.errors??[],limitation:t.source_limitation,reportedRating:t.course_rating,reportedSlope:t.slope_rating,

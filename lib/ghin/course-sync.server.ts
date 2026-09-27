@@ -113,8 +113,6 @@ export async function persistGhinCourseSyncPlan(
     const existingClub = existingClubResult.data as Record<string, unknown> | null;
     const facilityRow = existingClub ? {
       ...plan.facility,
-      provider: existingClub.provider,
-      provider_external_id: existingClub.provider_external_id,
       catalog_metadata: {
         ...((existingClub.catalog_metadata as Record<string, unknown> | null) ?? {}),
         ...((plan.facility.catalog_metadata as Record<string, unknown> | null) ?? {}),
@@ -124,8 +122,6 @@ export async function persistGhinCourseSyncPlan(
 
     const courseRow = existingCourse ? {
       ...plan.course,
-      provider: existingCourse.provider,
-      provider_external_id: existingCourse.provider_external_id,
       catalog_metadata: {
         ...((existingCourse.catalog_metadata as Record<string, unknown> | null) ?? {}),
         ...((plan.course.catalog_metadata as Record<string, unknown> | null) ?? {}),
@@ -135,13 +131,13 @@ export async function persistGhinCourseSyncPlan(
 
     const existingTeesResult = await database
       .from("golf_course_tees")
-      .select("id,name")
+      .select("id,name,gender")
       .eq("course_id", courseId);
     if (existingTeesResult.error) throw new Error("GHIN_TEE_LOOKUP_FAILED");
-    const existingNames = new Map((existingTeesResult.data ?? []).map((tee) => [String(tee.name).toLocaleLowerCase("en-US"), String(tee.id)]));
+    const teeIdentity = (name: unknown, gender: unknown) => `${String(name ?? "").toLocaleLowerCase("en-US")}:${String(gender ?? "")}`;
+    const existingNames = new Map((existingTeesResult.data ?? []).map((tee) => [teeIdentity(tee.name, tee.gender), String(tee.id)]));
     for (const tee of plan.tees) {
-      const name = String(tee.name ?? "").toLocaleLowerCase("en-US");
-      const collision = existingNames.get(name);
+      const collision = existingNames.get(teeIdentity(tee.name, tee.gender));
       if (collision && collision !== rowId(tee, "TEE")) throw new Error("GHIN_TEE_MAPPING_REQUIRED");
     }
 

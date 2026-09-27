@@ -295,9 +295,9 @@ export default function GhinDiagnosticClient() {
     }
   }, [authorizedFetch]);
 
-  const runCourseSync = useCallback(async (courseId: string) => {
+  const runCourseSync = useCallback(async (courseId: string, apply: boolean) => {
     setRunning(true);
-    setMessage("Generando dry-run de sincronización…");
+    setMessage(apply ? "Sincronizando el mapping confirmado en Supabase QA…" : "Generando dry-run de sincronización…");
     try {
       const supabase = getSupabaseBrowser();
       if (!supabase) throw new Error("La conexión de cuenta no está configurada.");
@@ -307,7 +307,9 @@ export default function GhinDiagnosticClient() {
       const response = await fetch("/api/admin/dev/ghin/course-sync", {
         method: "POST",
         headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-        body: JSON.stringify({ operation: "dry_run", courseId }),
+        body: JSON.stringify(apply
+          ? { operation: "apply_confirmed", courseId, confirmation: "APPLY_GHIN_COURSE_SYNC_QA" }
+          : { operation: "dry_run", courseId }),
         cache: "no-store",
       });
       const payload = await response.json().catch(() => null) as JsonRecord | null;
@@ -333,6 +335,9 @@ export default function GhinDiagnosticClient() {
   const reconciliation = records(course?.reconciliation);
   const fixedTargets = record(configuration?.fixedTargets);
   const layouts = courseViews(course, courseData);
+  const confirmedPar72 = reconciliation.some((item) => item.layout === "PAR_72"
+    && item.status === "GHIN_MATCH_CONFIRMED"
+    && item.ghinCourseId === "23233");
   const traces = records(diagnostic?.trace).slice(-MAX_TRACE_ROWS);
 
   if (!configuration) {
@@ -345,7 +350,7 @@ export default function GhinDiagnosticClient() {
         <div>
           <span className="eyebrow">THE BACKYARD · ADMIN · PREVIEW</span>
           <h1>GHIN read-only diagnostic</h1>
-          <p>Vista resumida para el jugador autorizado y La Vista. No publica scores, no aplica mappings y no modifica perfiles.</p>
+          <p>Vista resumida para el jugador autorizado y La Vista. Sólo permite aplicar el mapping Par 72 confirmado en Supabase QA; nunca publica scores.</p>
         </div>
         <Link className="secondary" href="/admin">Volver a Admin</Link>
       </section>
@@ -413,14 +418,17 @@ export default function GhinDiagnosticClient() {
 
       <section className="card">
         <h2>Comparación y mappings propuestos</h2>
-        <p>Resumen únicamente. No se aplica ninguna escritura desde este diagnóstico.</p>
+        <p>El dry-run no escribe. La sincronización sólo se habilita para FacilityId 19886 / CourseId 23233 después de una reconciliación confirmada.</p>
         {typeof comparison?.humanReport === "string" && <pre style={{ maxHeight: "20rem", overflow: "auto", whiteSpace: "pre-wrap" }}>{comparison.humanReport.slice(0, 12_000)}</pre>}
         <ScalarFacts value={comparison?.summary} />
         <p>Mappings propuestos: {records(course?.mappingProposal).length}</p>
         {typeof courseData?.id === "string" && <div className="roundActions">
-          <button className="secondary" type="button" disabled={running} onClick={() => void runCourseSync(courseData.id as string)}>Preparar dry-run de sync</button>
+          <button className="secondary" type="button" disabled={running} onClick={() => void runCourseSync(courseData.id as string, false)}>Preparar dry-run de sync</button>
+          {confirmedPar72 && courseData.id === "23233" && <button className="primary" type="button" disabled={running} onClick={() => void runCourseSync("23233", true)}>Sincronizar Par 72 confirmado en QA</button>}
         </div>}
-        {courseSync && <><StatusChip value={courseSync.status} /><ScalarFacts value={{ mode: courseSync.mode, facilityId: courseSync.facilityId, courseId: courseSync.courseId, completeForPlay: courseSync.completeForPlay, completeForScorePosting: courseSync.completeForScorePosting }} /></>}
+        {courseSync && <><StatusChip value={courseSync.status} /><ScalarFacts value={{ mode: courseSync.mode, facilityId: courseSync.facilityId, courseId: courseSync.courseId, completeForPlay: courseSync.completeForPlay, completeForScorePosting: courseSync.completeForScorePosting }} />
+          {record(courseSync.databaseState) && <p>DB QA: {records(record(courseSync.databaseState)?.layouts).length} layouts · {records(record(courseSync.databaseState)?.tees).length} tees oficiales · {valueText(record(courseSync.databaseState)?.holeCount, "0")} hoyos · {valueText(record(courseSync.databaseState)?.yardageCount, "0")} yardajes.</p>}
+        </>}
       </section>
 
       <section className="card">

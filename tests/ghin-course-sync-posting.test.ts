@@ -3,16 +3,25 @@ import test from "node:test";
 
 import { buildGhinCourseSyncPlan } from "../lib/ghin/course-sync";
 import { parseGhinCourse, parseGhinScorePostingTees, type NormalizedGhinScore } from "../lib/ghin/core";
-import { reconcileLaVistaLayouts } from "../lib/ghin/la-vista-reconciliation";
-import { buildGhinScorePostingDryRun, postGhinScoreExactlyOnce, type GhinScorePostingCandidate } from "../lib/ghin/score-posting";
+import { laVistaTeeTargetMappings, reconcileLaVistaLayouts } from "../lib/ghin/la-vista-reconciliation";
+import { buildGhinScorePostingDryRun, ghinPostEligibility, postGhinScoreExactlyOnce, type GhinScorePostingCandidate } from "../lib/ghin/score-posting";
 
 function laVistaCourse(par = 72) {
+  const holes = (teeId: number) => Array.from({ length: 18 }, (_, index) => ({ HoleId: teeId * 100 + index, Number: index + 1, Par: index < 4 ? 5 : index < 8 ? 3 : 4, Length: 300 + index, Allocation: index + 1 }));
+  const officialTees = [
+    { TeeSetRatingId: 106087, TeeSetRatingName: "BLANCAS", TeeSetStatus: "Active", Gender: "Male", TotalPar: 72, TotalYardage: 6591, Ratings: [{ RatingType: "Total", CourseRating: 70.8, SlopeRating: 128 }], Holes: holes(106087) },
+    { TeeSetRatingId: 106088, TeeSetRatingName: "DORADAS", TeeSetStatus: "Active", Gender: "Male", TotalPar: 72, TotalYardage: 6038, Ratings: [{ RatingType: "Total", CourseRating: 68.4, SlopeRating: 121 }], Holes: holes(106088) },
+    { TeeSetRatingId: 106089, TeeSetRatingName: "BLANCAS", TeeSetStatus: "Active", Gender: "Female", TotalPar: 72, TotalYardage: 6591, Ratings: [{ RatingType: "Total", CourseRating: 77.4, SlopeRating: 153 }], Holes: holes(106089) },
+    { TeeSetRatingId: 106090, TeeSetRatingName: "ROJAS", TeeSetStatus: "Active", Gender: "Female", TotalPar: 72, TotalYardage: 5476, Ratings: [{ RatingType: "Total", CourseRating: 71, SlopeRating: 137 }], Holes: holes(106090) },
+    { TeeSetRatingId: 280984, TeeSetRatingName: "AZULES", TeeSetStatus: "Active", Gender: "Male", TotalPar: 72, TotalYardage: 7122, Ratings: [{ RatingType: "Total", CourseRating: 73.8, SlopeRating: 135 }], Holes: holes(280984) },
+    { TeeSetRatingId: 281493, TeeSetRatingName: "NEGRAS", TeeSetStatus: "Active", Gender: "Male", TotalPar: 72, TotalYardage: 7326, Ratings: [{ RatingType: "Total", CourseRating: 74.3, SlopeRating: 142 }], Holes: holes(281493) },
+  ];
   const course = parseGhinCourse({
     CourseId: par === 72 ? 23233 : 70000 + par,
     CourseName: par === 72 ? "La Vista Country Club" : `La Vista Temporary Par ${par}`,
     CourseStatus: "Active",
-    Facility: { FacilityId: 44, FacilityName: "La Vista Country Club", FacilityStatus: "Active", GolfAssociationId: 9 },
-    TeeSets: [
+    Facility: { FacilityId: 19886, FacilityName: "La Vista Country Club", FacilityStatus: "Active", GolfAssociationId: 9 },
+    TeeSets: par === 72 ? officialTees : [
       {
         TeeSetRatingId: 106087,
         TeeSetRatingName: "Blue",
@@ -32,12 +41,13 @@ function laVistaCourse(par = 72) {
 test("el plan GHIN usa IDs externos, upserts estables y mapping explícito", () => {
   const course = laVistaCourse();
   const posting = parseGhinScorePostingTees([{ TeeSetRatingId: 106087, TeeSetRatingName: "Blue", RatingType: "Total", CourseRating: 73.8, SlopeRating: 135 }]);
+  const mappings = laVistaTeeTargetMappings(course.tees);
   const input = {
     course,
     scorePostingTees: posting,
     targetClubId: "club-la-vista",
     targetCourseId: "course-la-vista",
-    targetTeeIdsByProviderId: { "106087": "tee-la-vista-azules" },
+    targetTeeIdsByProviderId: mappings,
     targetHoleIdsByNumber: { 1: "hole-la-vista-1" },
     targetYardageIdsByTeeAndHoleNumber: { "tee-la-vista-azules:1": "yardage-la-vista-blue-1" },
     confirmMapping: true,
@@ -49,13 +59,18 @@ test("el plan GHIN usa IDs externos, upserts estables y mapping explícito", () 
   assert.deepEqual(second, first);
   assert.equal(first.course.id, "course-la-vista");
   assert.equal(first.course.provider_external_id, "23233");
-  assert.equal(first.tees[0].id, "tee-la-vista-azules");
-  assert.equal(first.tees[0].provider_external_id, "106087");
+  const blue = first.tees.find((tee) => tee.provider_external_id === "280984");
+  const maleWhite = first.tees.find((tee) => tee.provider_external_id === "106087");
+  const femaleWhite = first.tees.find((tee) => tee.provider_external_id === "106089");
+  assert.equal(blue?.id, "tee-la-vista-azules");
+  assert.equal(maleWhite?.id, "tee-la-vista-blancas");
+  assert.equal(femaleWhite?.id, "ghin-tee-106089");
+  assert.equal(new Set(first.tees.map((tee) => tee.id)).size, 6);
   assert.equal(first.holes.length, 18);
   assert.equal(first.holes[0].id, "hole-la-vista-1");
-  assert.equal(first.yardages[0].id, "yardage-la-vista-blue-1");
+  assert.ok(first.yardages.some((row) => row.id === "yardage-la-vista-blue-1"));
   assert.equal(new Set(first.holes.map((hole) => hole.id)).size, 18);
-  assert.equal(new Set(first.yardages.map((row) => row.id)).size, 18);
+  assert.equal(new Set(first.yardages.map((row) => row.id)).size, 108);
   assert.equal(first.courseLink.sync_status, "CONFIRMED");
   assert.equal(first.completeForScorePosting, true);
 });
@@ -70,12 +85,34 @@ test("un mapping candidato nunca habilita score posting", () => {
 test("reconciliación no acepta un temporary sólo por nombre", () => {
   const par72 = laVistaCourse();
   const incompletePar70 = laVistaCourse(70);
-  const result = reconcileLaVistaLayouts([par72, incompletePar70], {
+  const bellaVista = { ...par72, id: "13465", name: "Bella Vista Golf Course", facilityId: "11353", facilityName: "Bella Vista Golf Course" };
+  const result = reconcileLaVistaLayouts([bellaVista, par72, incompletePar70], {
     "23233": parseGhinScorePostingTees([{ TeeSetRatingId: 106087, TeeSetRatingName: "Blue", RatingType: "Total", CourseRating: 73.8, SlopeRating: 135 }]),
   });
-  assert.equal(result.find((row) => row.layout === "PAR_72")?.status, "GHIN_MATCH_CONFIRMED");
+  const official = result.find((row) => row.layout === "PAR_72");
+  assert.equal(official?.status, "GHIN_MATCH_CONFIRMED");
+  assert.equal(official?.ghinCourseId, "23233");
+  assert.deepEqual(official?.diffs.filter((diff) => diff.field === "yardage"), [
+    { tee: "blue", field: "yardage", backyard: 7229, ghin: 7122 },
+    { tee: "white", field: "yardage", backyard: 6590, ghin: 6591 },
+  ]);
   assert.equal(result.find((row) => row.layout === "PAR_70")?.status, "MISSING_DATA");
   assert.equal(result.find((row) => row.layout === "PAR_69")?.status, "BACKYARD_ONLY");
+});
+
+test("mapping La Vista distingue tees con el mismo nombre por género", () => {
+  const mappings = laVistaTeeTargetMappings(laVistaCourse().tees);
+  assert.equal(mappings["106087"], "tee-la-vista-blancas");
+  assert.equal(mappings["106089"], undefined);
+  assert.equal(mappings["106090"], "tee-la-vista-rojas");
+  assert.equal(mappings["280984"], "tee-la-vista-azules");
+});
+
+test("GHIN_POST_ELIGIBLE exige provider, IDs, mapping, status y tee publicable", () => {
+  const official = ghinPostEligibility({ provider: "GHIN", providerCourseId: "23233", providerTeeSetId: "280984", providerStatus: "Active", mappingStatus: "CONFIRMED", sourceIsProvisional: false, scorePostingTeeSetIds: new Set(["280984"]) });
+  assert.deepEqual(official, { eligible: true, code: "GHIN_POST_ELIGIBLE" });
+  assert.equal(ghinPostEligibility({ provider: "GHIN", providerCourseId: "23233", providerTeeSetId: "280984", providerStatus: "Active", mappingStatus: "CONFIRMED", sourceIsProvisional: true }).code, "PROVISIONAL_LAYOUT_NOT_POSTABLE");
+  assert.equal(ghinPostEligibility({ provider: "GHIN", providerCourseId: "23233", providerTeeSetId: "wrong-layout", providerStatus: "Active", mappingStatus: "CONFIRMED", sourceIsProvisional: false, scorePostingTeeSetIds: new Set(["280984"]) }).code, "GHIN_TEE_NOT_SCORE_POSTING_ENABLED");
 });
 
 test("Par 69 no se confirma sin yardajes y tarjeta Backyard reconciliados", () => {

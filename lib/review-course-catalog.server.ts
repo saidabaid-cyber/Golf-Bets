@@ -24,10 +24,15 @@ export async function loadReviewedCourseCatalog(database?:SupabaseClient|null):P
   const byClub=new Map(clubs.map(c=>[c.id,c]));
   const data:ReviewedCatalogCourse[]=courses.flatMap(c=>{
     const club=byClub.get(c.club_id); if(!club) return [];
+    const origin=String(c.catalog_metadata.origin??'');
+    const supportedOrigin=['GHIN','BACKYARD_PROVISIONAL','BACKYARD_ADMIN'].includes(origin)?origin as ReviewedCatalogCourse['origin']:undefined;
     return [{id:c.id,clubId:club.id,name:c.name,clubName:club.name,holes:c.holes===9?9:18,city:club.city??undefined,stateRegion:club.state_region??undefined,
       aliases:Array.isArray(c.catalog_metadata.search_aliases)?c.catalog_metadata.search_aliases.filter((value):value is string=>typeof value==='string'):[],latitude:club.latitude??undefined,longitude:club.longitude??undefined,
       locationEvidence:club.catalog_metadata.locationEvidence as ReviewedCatalogCourse['locationEvidence'],sourceUrl:c.source_url,observedAt:String(c.catalog_metadata.observed_at??c.verified_at??''),
-      dataVersion:String(c.catalog_metadata.dataVersion??''),tees:tees.filter(t=>t.course_id===c.id).map(t=>t.catalog_metadata)}];
+      dataVersion:String(c.catalog_metadata.dataVersion??''),...(supportedOrigin?{origin:supportedOrigin}:{}),isProvisional:supportedOrigin==='BACKYARD_PROVISIONAL',
+      ...(typeof c.catalog_metadata.course_id==='string'?{providerCourseId:c.catalog_metadata.course_id}:{}),
+      ...(typeof c.catalog_metadata.operational_status==='string'?{providerStatus:c.catalog_metadata.operational_status}:{}),
+      tees:tees.filter(t=>t.course_id===c.id).map(t=>({...t.catalog_metadata,id:t.id}))}];
   });
   if(data.length) cached={data,expires:Date.now()+60_000};
   return data;

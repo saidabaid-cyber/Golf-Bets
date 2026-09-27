@@ -140,6 +140,12 @@ export type Course = {
   sourceAuthority?: string;
   verifiedAt?: string;
   dataVersion?: string;
+  layoutOrigin?: "GHIN" | "BACKYARD_PROVISIONAL" | "BACKYARD_ADMIN";
+  isProvisional?: boolean;
+  providerCourseId?: string;
+  providerTeeSetRatingId?: string;
+  providerStatus?: string;
+  ghinPostEligible?: boolean;
   /** Local source evidence is distinct from an official GHIN/WHS rating. */
   indexRatingEvidence?: BackyardIndexRatedTeeEvidence;
   localRules?: LocalRule[];

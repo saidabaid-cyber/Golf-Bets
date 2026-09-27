@@ -5,6 +5,7 @@ import type {
   NormalizedGhinFacility,
   NormalizedGhinTee,
 } from "./core";
+import { ghinPostEligibility } from "./score-posting";
 
 export type GhinCourseSyncOrigin = "GHIN";
 
@@ -61,7 +62,7 @@ function canonicalHoleTemplate(tees: readonly NormalizedGhinTee[]) {
     .find((tee) => tee.holeData.length === 9 || tee.holeData.length === 18)?.holeData ?? [];
 }
 
-function teeMetadata(tee: NormalizedGhinTee) {
+function teeMetadata(tee: NormalizedGhinTee, postingEligibility: ReturnType<typeof ghinPostEligibility>, providerCourseId: string) {
   return {
     id: tee.id,
     name: tee.name,
@@ -73,6 +74,13 @@ function teeMetadata(tee: NormalizedGhinTee) {
     meters: tee.totalMeters,
     par: tee.par,
     gender: tee.gender,
+    provider: "GHIN",
+    provider_course_id: providerCourseId,
+    provider_tee_set_rating_id: tee.id,
+    provider_status: tee.rawStatus,
+    provider_mapping_status: postingEligibility.eligible ? "CONFIRMED" : null,
+    ghin_post_eligible: postingEligibility.eligible,
+    ghin_post_eligibility_code: postingEligibility.code,
     rating_category: null,
     qa_status: "GHIN_LIVE",
     source_limitation: null,
@@ -182,6 +190,8 @@ export function buildGhinCourseSyncPlan(input: {
       origin: "GHIN",
       layout_type: "STANDARD",
       operational_status: course.rawStatus,
+      ghin_post_eligible: input.confirmMapping === true
+        && course.tees.some((tee) => tee.id !== null && livePostingIds.has(tee.id)),
     },
     origin: "GHIN" satisfies GhinCourseSyncOrigin,
     layout_type: "STANDARD",
@@ -218,6 +228,15 @@ export function buildGhinCourseSyncPlan(input: {
   const tees = course.tees.flatMap((tee) => {
     if (!tee.id || !tee.name) return [];
     const internalTeeId = input.targetTeeIdsByProviderId?.[tee.id] ?? `ghin-tee-${safeId(tee.id)}`;
+    const postingEligibility = ghinPostEligibility({
+      provider: "GHIN",
+      providerCourseId: externalCourseId,
+      providerTeeSetId: tee.id,
+      providerStatus: tee.rawStatus,
+      mappingStatus,
+      sourceIsProvisional: false,
+      scorePostingTeeSetIds: livePostingIds,
+    });
     return [{
       id: internalTeeId,
       course_id: courseId,
@@ -236,7 +255,7 @@ export function buildGhinCourseSyncPlan(input: {
       source_url: sourceUrl(externalCourseId),
       verified_at: verifiedAt,
       active: statusActive(tee.status),
-      catalog_metadata: teeMetadata(tee),
+      catalog_metadata: teeMetadata(tee, postingEligibility, externalCourseId),
       origin: "GHIN" satisfies GhinCourseSyncOrigin,
       provider_status: tee.rawStatus,
       bogey_rating: tee.bogeyRating,
@@ -303,8 +322,10 @@ export function buildGhinCourseSyncPlan(input: {
 
   const completeForPlay = canonicalHoles.length > 0 && holes.length === canonicalHoles.length
     && tees.some((tee) => course.tees.find((candidate) => candidate.id === tee.provider_external_id)?.holeData.length === canonicalHoles.length);
-  const completeForScorePosting = input.confirmMapping === true
-    && tees.some((tee) => livePostingIds.has(String(tee.provider_external_id)));
+  const completeForScorePosting = tees.some((tee) => tee.catalog_metadata
+    && typeof tee.catalog_metadata === "object"
+    && "ghin_post_eligible" in tee.catalog_metadata
+    && tee.catalog_metadata.ghin_post_eligible === true);
   if (!completeForScorePosting) warnings.push("No confirmed TeeSetRatingId valid for score posting is attached to this layout.");
 
   return {

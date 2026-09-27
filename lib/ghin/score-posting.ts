@@ -49,6 +49,42 @@ export type GhinScorePostingDryRun = {
   } | null;
 };
 
+export type GhinPostEligibility = {
+  eligible: boolean;
+  code:
+    | "GHIN_POST_ELIGIBLE"
+    | "PROVISIONAL_LAYOUT_NOT_POSTABLE"
+    | "GHIN_PROVIDER_REQUIRED"
+    | "GHIN_MAPPING_NOT_CONFIRMED"
+    | "GHIN_COURSE_ID_REQUIRED"
+    | "GHIN_TEE_SET_ID_REQUIRED"
+    | "GHIN_PROVIDER_STATUS_INVALID"
+    | "GHIN_TEE_NOT_SCORE_POSTING_ENABLED";
+};
+
+export function ghinPostEligibility(input: {
+  provider: string | null;
+  providerCourseId: string | null;
+  providerTeeSetId: string | null;
+  providerStatus: string | null;
+  mappingStatus: string | null;
+  sourceIsProvisional: boolean;
+  scorePostingTeeSetIds?: ReadonlySet<string>;
+}): GhinPostEligibility {
+  if (input.sourceIsProvisional) return { eligible: false, code: "PROVISIONAL_LAYOUT_NOT_POSTABLE" };
+  if (input.provider !== "GHIN") return { eligible: false, code: "GHIN_PROVIDER_REQUIRED" };
+  if (!input.providerCourseId) return { eligible: false, code: "GHIN_COURSE_ID_REQUIRED" };
+  if (!input.providerTeeSetId) return { eligible: false, code: "GHIN_TEE_SET_ID_REQUIRED" };
+  if (input.mappingStatus !== "CONFIRMED") return { eligible: false, code: "GHIN_MAPPING_NOT_CONFIRMED" };
+  if (input.providerStatus?.trim().toLocaleLowerCase("en-US") !== "active") {
+    return { eligible: false, code: "GHIN_PROVIDER_STATUS_INVALID" };
+  }
+  if (input.scorePostingTeeSetIds && !input.scorePostingTeeSetIds.has(input.providerTeeSetId)) {
+    return { eligible: false, code: "GHIN_TEE_NOT_SCORE_POSTING_ENABLED" };
+  }
+  return { eligible: true, code: "GHIN_POST_ELIGIBLE" };
+}
+
 function normalizeName(value: string | null) {
   return (value ?? "")
     .normalize("NFD")

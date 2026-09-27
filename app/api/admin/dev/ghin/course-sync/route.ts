@@ -6,7 +6,8 @@ import { compareGhinCourseDryRun } from "../../../../../../lib/ghin/course-compa
 import { GhinClientError } from "../../../../../../lib/ghin/client";
 import { buildGhinCourseSyncPlan } from "../../../../../../lib/ghin/course-sync";
 import { persistGhinCourseSyncPlan } from "../../../../../../lib/ghin/course-sync.server";
-import { SlidingWindowRateLimiter, type NormalizedGhinTee } from "../../../../../../lib/ghin/core";
+import { laVistaTeeTargetMappings, reconcileLaVistaLayouts } from "../../../../../../lib/ghin/la-vista-reconciliation";
+import { SlidingWindowRateLimiter } from "../../../../../../lib/ghin/core";
 import { resolveGhinRuntime } from "../../../../../../lib/ghin/runtime.server";
 import { INTERNAL_GOLF_COURSE_CATALOG } from "../../../../../../lib/golf-course-directory";
 import { isolatedPreviewDatabaseEnabled } from "../../../../../../lib/preview-database";
@@ -33,22 +34,6 @@ function record(value: unknown): JsonRecord | null {
 
 function normalize(value: string | null) {
   return (value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/gi, " ").trim().toLocaleLowerCase("en-US");
-}
-
-function laVistaTeeMappings(tees: readonly NormalizedGhinTee[]) {
-  const aliases: Array<[string, string[]]> = [
-    ["tee-la-vista-azules", ["blue", "azules"]],
-    ["tee-la-vista-blancas", ["white", "blancas"]],
-    ["tee-la-vista-doradas", ["gold", "golden", "doradas"]],
-    ["tee-la-vista-rojas", ["red", "ladies", "rojas"]],
-    ["tee-la-vista-negras", ["black", "negras"]],
-  ];
-  return Object.fromEntries(tees.flatMap((tee) => {
-    if (!tee.id) return [];
-    const name = normalize(tee.displayName ?? tee.name);
-    const target = aliases.find(([, names]) => names.includes(name));
-    return target ? [[tee.id, target[0]]] : [];
-  }));
 }
 
 async function adminContext(request: NextRequest) {
@@ -113,7 +98,22 @@ export async function POST(request: NextRequest) {
     const postingTees = postingResult.value;
     const facilities = facilityResult.value;
     const isKnownLaVista = courseId === LA_VISTA_COURSE_ID
+      && details.data.facilityId === "19886"
       && normalize(details.data.facilityName) === normalize("La Vista Country Club");
+    const reconciliation = reconcileLaVistaLayouts(
+      [details.data],
+      postingTees ? { [courseId]: postingTees.data } : {},
+    );
+    const confirmedPar72 = reconciliation.some((row) => row.layout === "PAR_72"
+      && row.status === "GHIN_MATCH_CONFIRMED"
+      && row.ghinCourseId === LA_VISTA_COURSE_ID);
+    if (operation === "apply_confirmed" && (!isKnownLaVista || !confirmedPar72)) {
+      return json({
+        error: "El mapping oficial de La Vista Par 72 no está confirmado con la evidencia live actual.",
+        code: "GHIN_LA_VISTA_MAPPING_NOT_CONFIRMED",
+        reconciliation,
+      }, 409);
+    }
     let target: {
       targetClubId?: string;
       targetCourseId?: string;
@@ -136,7 +136,7 @@ export async function POST(request: NextRequest) {
       target = {
         targetClubId: "club-la-vista",
         targetCourseId: "course-la-vista",
-        targetTeeIdsByProviderId: laVistaTeeMappings(details.data.tees),
+        targetTeeIdsByProviderId: laVistaTeeTargetMappings(details.data.tees),
         targetHoleIdsByNumber,
         targetYardageIdsByTeeAndHoleNumber,
       };
@@ -156,7 +156,7 @@ export async function POST(request: NextRequest) {
       facility: facilities?.data.find((facility) => facility.id === details.data.facilityId) ?? null,
       scorePostingTees: postingTees?.data ?? [],
       ...target,
-      confirmMapping: operation === "apply_confirmed",
+      confirmMapping: operation === "apply_confirmed" && confirmedPar72,
       observedAt: details.fetchedAt,
     });
     const persisted = await persistGhinCourseSyncPlan(database, plan, {
@@ -164,6 +164,30 @@ export async function POST(request: NextRequest) {
       actorId: access.userId,
       diffSummary: comparison?.summary ?? {},
     });
+    let databaseState: JsonRecord | null = null;
+    if (persisted.applied) {
+      const [clubRows, courseRows, teeRows, holeRows, yardageRows, courseLinkRows, teeLinkRows] = await Promise.all([
+        database.from("golf_clubs").select("id,provider,provider_external_id,origin,is_provisional,provider_status,last_synced_at").eq("id", "club-la-vista"),
+        database.from("golf_courses").select("id,name,provider,provider_external_id,origin,layout_type,is_provisional,provider_status,total_par,last_synced_at").eq("club_id", "club-la-vista"),
+        database.from("golf_course_tees").select("id,name,gender,provider,provider_external_id,origin,provider_status,total_yards,rating,slope,par,last_synced_at").eq("course_id", "course-la-vista"),
+        database.from("golf_holes").select("id", { count: "exact", head: true }).eq("course_id", "course-la-vista"),
+        database.from("golf_tee_hole_yardages").select("id", { count: "exact", head: true }).eq("course_id", "course-la-vista"),
+        database.from("golf_course_provider_links").select("external_facility_id,external_course_id,sync_status").eq("course_id", "course-la-vista").eq("provider", "GHIN"),
+        database.from("golf_tee_provider_links").select("tee_id,external_tee_set_id,sync_status").eq("course_id", "course-la-vista").eq("provider", "GHIN"),
+      ]);
+      if ([clubRows, courseRows, teeRows, holeRows, yardageRows, courseLinkRows, teeLinkRows].some((result) => result.error)) {
+        throw new Error("GHIN_COURSE_SYNC_VERIFICATION_FAILED");
+      }
+      databaseState = {
+        club: clubRows.data?.[0] ?? null,
+        layouts: courseRows.data ?? [],
+        tees: teeRows.data ?? [],
+        holeCount: holeRows.count ?? 0,
+        yardageCount: yardageRows.count ?? 0,
+        courseProviderLinks: courseLinkRows.data ?? [],
+        teeProviderLinks: teeLinkRows.data ?? [],
+      };
+    }
     return json({
       status: persisted.applied ? "PASS" : persisted.candidateOnly ? "PENDING_REVIEW" : "DRY_RUN_PASS",
       mode: operation === "apply_confirmed" ? "APPLY" : "DRY_RUN",
@@ -186,7 +210,9 @@ export async function POST(request: NextRequest) {
       ],
       facilityLookup: facilities ? { status: "PASS", httpStatus: facilities.httpStatus } : { status: "BLOCKED_EXTERNAL" },
       comparison: comparison?.summary ?? null,
+      reconciliation,
       persisted,
+      databaseState,
       safety: { previewOnly: true, adminOnly: true, scorePostingExecuted: false, secretsStored: false },
     });
   } catch (error) {
