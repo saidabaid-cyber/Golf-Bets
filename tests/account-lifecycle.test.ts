@@ -28,6 +28,7 @@ function gateway(initial: Partial<AccountLifecycleJob> = {}, failure?: string) {
     storageBatch: async () => { step("manifest"); return photos ? [{ bucket_id: "photos", name: "actor/avatar.webp" }] : []; },
     removeStorage: async () => { step("storage"); photos = false; },
     prepare: async current => { step("prepare"); return { ...current, stage: "data_prepared" }; },
+    reconcile: async current => { step("reconcile"); return current; },
     revokeAndBan: async () => { step("revoke"); },
     signOut: async () => { step("signout"); },
     deleteAuth: async () => { step("auth"); },
@@ -45,9 +46,9 @@ test("archivar conserva media y no ejecuta delete Auth", async () => {
 });
 test("delete ejecuta manifest/storage, SQL atómico, revoca, Auth y confirma", async () => {
   const run = gateway(); await executeAccountLifecycle(run.gateway);
-  assert.deepEqual(run.calls, ["acquire", "rehome-manifest", "rehome-copy", "rehome-commit", "rehome-manifest", "manifest", "storage", "manifest", "prepare", "revoke", "signout", "auth", "complete", "release"]);
+  assert.deepEqual(run.calls, ["acquire", "rehome-manifest", "rehome-copy", "rehome-commit", "rehome-manifest", "manifest", "storage", "manifest", "prepare", "reconcile", "revoke", "signout", "auth", "complete", "release"]);
 });
-for (const [failure, stage] of [["rehome-manifest", "storageRehomeBatch"], ["rehome-copy", "copyStorage"], ["rehome-commit", "commitStorageRehome"], ["manifest", "storageBatch"], ["storage", "removeStorage"], ["prepare", "prepare"], ["revoke", "revokeAndBan"], ["signout", "signOut"], ["auth", "deleteAuth"], ["complete", "complete"]] as const) test(`${failure} falla: identifica etapa, no confirma y libera lease`, async () => {
+for (const [failure, stage] of [["rehome-manifest", "storageRehomeBatch"], ["rehome-copy", "copyStorage"], ["rehome-commit", "commitStorageRehome"], ["manifest", "storageBatch"], ["storage", "removeStorage"], ["prepare", "prepare"], ["reconcile", "reconcile"], ["revoke", "revokeAndBan"], ["signout", "signOut"], ["auth", "deleteAuth"], ["complete", "complete"]] as const) test(`${failure} falla: identifica etapa, no confirma y libera lease`, async () => {
   const run = gateway({}, failure);
   let caught: unknown;
   try { await executeAccountLifecycle(run.gateway); } catch (error) { caught = error; }
@@ -57,7 +58,7 @@ for (const [failure, stage] of [["rehome-manifest", "storageRehomeBatch"], ["reh
 });
 test("reintento data_prepared reconcilia Storage y prepare idempotente", async () => {
   const run = gateway({ stage: "data_prepared" }); await executeAccountLifecycle(run.gateway);
-  assert.deepEqual(run.calls, ["acquire", "rehome-manifest", "rehome-copy", "rehome-commit", "rehome-manifest", "manifest", "storage", "manifest", "prepare", "revoke", "signout", "auth", "complete", "release"]);
+  assert.deepEqual(run.calls, ["acquire", "rehome-manifest", "rehome-copy", "rehome-commit", "rehome-manifest", "manifest", "storage", "manifest", "prepare", "reconcile", "revoke", "signout", "auth", "complete", "release"]);
 });
 test("completed idempotente no hace otra operación", async () => {
   const run = gateway({ stage: "completed", lease_token: null }); await executeAccountLifecycle(run.gateway);
@@ -134,6 +135,7 @@ test("contrato HTTP diferencia conflicto, lease, storage, datos, Auth y finaliza
     [new AccountLifecycleStageError("removeStorage", { code: "StorageUnknownError", errorClass: "StorageError" }), 503, "ACCOUNT_STORAGE_PENDING"],
     [new AccountLifecycleStageError("prepare", { code: "23503", errorClass: "PostgrestError" }), 503, "ACCOUNT_DATA_CLEANUP_PENDING"],
     [new AccountLifecycleStageError("prepare", { code: "23505", errorClass: "PostgrestError" }), 503, "ACCOUNT_DATA_CLEANUP_PENDING"],
+    [new AccountLifecycleStageError("reconcile", { code: "23514", errorClass: "PostgrestError" }), 503, "ACCOUNT_DATA_CLEANUP_PENDING"],
     [new AccountLifecycleStageError("revokeAndBan", { code: "unexpected_failure", errorClass: "AuthApiError" }), 503, "ACCOUNT_AUTH_PENDING"],
     [new AccountLifecycleStageError("signOut", { code: "unexpected_failure", errorClass: "AuthApiError" }), 503, "ACCOUNT_AUTH_PENDING"],
     [new AccountLifecycleStageError("deleteAuth", { code: "unexpected_failure", errorClass: "AuthApiError" }), 503, "ACCOUNT_AUTH_PENDING"],

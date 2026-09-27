@@ -6,15 +6,23 @@ import { pg_trgm } from "@electric-sql/pglite/contrib/pg_trgm";
 // PostgreSQL/WASM only; no remote credentials, network or real users.
 const db = new PGlite({ extensions: { pg_trgm } });
 const A="11111111-1111-4111-8111-111111111111", B="22222222-2222-4222-8222-222222222222";
+const LEGACY_OWNER="66666666-6666-4666-8666-666666666666", LEGACY_DELETED="77777777-7777-4777-8777-777777777777";
+const LEGACY_OTHER="55555555-5555-4555-8555-555555555555";
+const A_PLAYER=`qa-player-${A}`;
 const REBORN="33333333-3333-4333-8333-333333333333";
 const OP="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", LEASE="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", HASH="c".repeat(64);
 const q=(sql,values)=>db.query(sql,values);
 const scalar=async(sql,values)=>Object.values((await q(sql,values)).rows[0])[0];
+const deletedPlayerKey=async(roundId,userId,oldKey)=>oldKey.replace(
+  userId,
+  await scalar("select private.account_deleted_identity_token($1,$2)",[`round:${roundId}`,userId]),
+);
 const expectError=async(action,codes)=>{let error;try{await action();}catch(e){error=e;}assert.ok(error,"expected SQL failure");assert.ok(codes.includes(error.code),`${error.code}: ${error.message}`);};
 const admin=()=>db.exec("reset role; reset request.jwt.claim.sub;");
 const asUser=id=>db.exec(`set role authenticated; set request.jwt.claim.sub='${id}';`);
 const acquire=(actor,operation=OP,policy="delete_golf_data",lease=LEASE)=>scalar("select public.account_lifecycle_acquire($1,$2,$3,$4,$5)",[actor,operation,policy,HASH,lease]);
 const prepare=(operation=OP,lease=LEASE)=>scalar("select public.account_lifecycle_prepare($1,$2)",[operation,lease]);
+const reconcile=(operation=OP,lease=LEASE)=>scalar("select public.account_lifecycle_reconcile_identifiers($1,$2)",[operation,lease]);
 const complete=(operation=OP,lease=LEASE)=>scalar("select public.account_lifecycle_complete($1,$2)",[operation,lease]);
 try {
   await db.exec(`
@@ -43,6 +51,81 @@ try {
     const sql=readFileSync(`supabase/migrations/${file}`,"utf8").replace(/create extension if not exists pgcrypto(?: with schema extensions)?;/gi,"");
     try{await db.exec(sql);}catch(error){throw new Error(`Migration ${file}: ${error.code}: ${error.message}`);}
   }
+
+  // Reproduce data written before the tombstone migration existed. The rows
+  // are inserted before lifecycle state marks the identity deleted so the
+  // current stale-write trigger cannot clean them opportunistically. Reapply
+  // the additive migration exactly as QA will and prove its backfill.
+  await q(`insert into auth.users(id,email,email_confirmed_at) values
+    ($1,'qa-legacy-owner@example.invalid',now()),($2,'qa-legacy-deleted@example.invalid',now()),
+    ($3,'qa-legacy-other@example.invalid',now())`,[LEGACY_OWNER,LEGACY_DELETED,LEGACY_OTHER]);
+  const legacyPlayer=`account:${LEGACY_DELETED}`;
+  const legacyRound=await scalar(`insert into public.rounds_cloud(owner_id,local_round_id,local_id,snapshot,version)
+    values($1,'qa-legacy-shared','qa-legacy-shared',$2::jsonb,1) returning id`,[LEGACY_OWNER,JSON.stringify({
+      ownerId:`account:${LEGACY_OWNER}`,players:[{id:legacyPlayer,name:"Legacy private name",avatarUrl:"legacy-private-avatar"}],
+      scores:{1:{[legacyPlayer]:4}},putts:{1:{[legacyPlayer]:2}},
+    })]);
+  const legacyGroup=await scalar(`insert into public.groups_v2(owner_id,name,default_template)
+    values($1,'QA legacy shared group',$2::jsonb) returning id`,[LEGACY_OWNER,JSON.stringify({players:[{id:legacyPlayer,name:"Legacy private name",avatarUrl:"legacy-private-avatar"}]})]);
+  const legacyRoundPlayer=await scalar(`insert into public.round_players_cloud(round_id,local_player_id,name)
+    values($1,$2,'Legacy private name') returning id`,[legacyRound,legacyPlayer]);
+  await q(`insert into public.round_group_snapshots_v2(round_id,source_group_id,source_group_name,source_group_version,selected_player_count)
+    values($1,$2,'QA legacy shared group',1,1)`,[legacyRound,legacyGroup]);
+  await q(`insert into public.round_group_snapshot_players_v2(round_id,round_player_id,display_name_snapshot,position)
+    values($1,$2,'Legacy private name',0)`,[legacyRound,legacyRoundPlayer]);
+  const legacyVersion=await scalar(`insert into public.cloud_record_versions(owner_id,entity_type,local_id,version,previous_snapshot)
+    values($1,'round','qa-legacy-shared',1,$2::jsonb) returning id`,[LEGACY_OWNER,JSON.stringify({players:[{id:legacyPlayer,name:"Legacy private name",avatarUrl:"legacy-private-avatar"}],scores:{1:{[legacyPlayer]:4}},putts:{1:{[legacyPlayer]:2}}})]);
+  const legacyOtherRound=await scalar(`insert into public.rounds_cloud(owner_id,local_round_id,local_id,snapshot,version)
+    values($1,'qa-legacy-shared','qa-legacy-shared',$2::jsonb,1) returning id`,[LEGACY_OTHER,JSON.stringify({ownerId:`account:${LEGACY_OTHER}`,players:[{id:`account:${LEGACY_OTHER}`,accountUserId:LEGACY_OTHER,name:"Other owner"}]})]);
+  await q(`insert into public.round_course_handicap_snapshots(user_id,round_id,player_key,tee_id,tee_name,index_value,index_source,slope,course_rating,course_par,course_handicap,formula_version,effective_at,calculated_at)
+    values($1,'qa-legacy-shared',$2,'qa-tee','QA tee',10,'BACKYARD_MANUAL',113,72,72,10,'qa-v1',now(),now())`,[LEGACY_OTHER,legacyPlayer]);
+  assert.equal((await scalar("select private.account_deleted_identity_token($1,$2)",[`round:${legacyRound}`,LEGACY_DELETED])).length,36,
+    "deleted identity replacement is UUID-sized for bounded relational keys");
+  await db.exec("alter table public.competition_definitions disable trigger competition_definition_audit; alter table public.admin_import_jobs disable trigger import_job_audit; alter table public.admin_catalog_revisions disable trigger admin_catalog_revision_audit;");
+  const legacyCompetition=await scalar(`insert into public.competition_definitions(name,type,status,settings,created_by)
+    values('QA legacy competition','EVENT','DRAFT',$1::jsonb,$2) returning id`,[JSON.stringify({player:{id:legacyPlayer,name:"Legacy private name",avatarUrl:"legacy-private-avatar"}}),LEGACY_OWNER]);
+  const legacyImport=await scalar(`insert into public.admin_import_jobs(kind,scope_type,status,source_format,summary,created_by)
+    values('COURSE','GLOBAL','UPLOADED','CSV',$1::jsonb,$2) returning id`,[JSON.stringify({player:{id:legacyPlayer,name:"Legacy private name",avatarUrl:"legacy-private-avatar"}}),LEGACY_OWNER]);
+  const legacyRevision=await scalar(`insert into public.admin_catalog_revisions(entity_type,entity_id,scope_type,version,payload,preview_hash,revision_hash,created_by)
+    values('COURSE','qa-legacy-revision','GLOBAL',1,$1::jsonb,$2,$2,$3) returning id`,[JSON.stringify({player:{id:legacyPlayer,name:"Legacy private name",avatarUrl:"legacy-private-avatar"}}),HASH,LEGACY_OWNER]);
+  await db.exec("alter table public.competition_definitions enable trigger competition_definition_audit; alter table public.admin_import_jobs enable trigger import_job_audit; alter table public.admin_catalog_revisions enable trigger admin_catalog_revision_audit;");
+  const legacyAudit=await scalar(`insert into public.admin_audit_log(action,entity_type,entity_id,before_state,after_state)
+    values('QA_BACKFILL','QA_SYNTHETIC','qa-legacy',$1::jsonb,$1::jsonb) returning id`,[JSON.stringify({player:{id:legacyPlayer,name:"Legacy private name",avatarUrl:"legacy-private-avatar"}})]);
+  await q(`insert into private.account_lifecycle_state(user_id,account_status,deleted_at) values($1,'deleted',now())`,[LEGACY_DELETED]);
+  await q(`insert into private.account_lifecycle_jobs(request_id,user_id,data_policy,token_hash,stage,completed_at)
+    values('99999999-9999-4999-8999-999999999998',$1,'delete_golf_data',$2,'completed',now())`,[LEGACY_DELETED,HASH]);
+  const tombstoneSql=readFileSync("supabase/migrations/20260927045252_account_delete_round_player_tombstones.sql","utf8");
+  await db.exec(tombstoneSql);
+  const legacyTombstone=await deletedPlayerKey(legacyRound,LEGACY_DELETED,legacyPlayer);
+  const legacyRoundSnapshot=await scalar("select snapshot from public.rounds_cloud where id=$1",[legacyRound]);
+  const legacyGroupTemplate=await scalar("select default_template from public.groups_v2 where id=$1",[legacyGroup]);
+  const legacyVersionSnapshot=await scalar("select previous_snapshot from public.cloud_record_versions where id=$1",[legacyVersion]);
+  const legacyCompetitionSettings=await scalar("select settings from public.competition_definitions where id=$1",[legacyCompetition]);
+  const legacyImportSummary=await scalar("select summary from public.admin_import_jobs where id=$1",[legacyImport]);
+  const legacyRevisionRow=(await q("select payload,preview_hash,revision_hash from public.admin_catalog_revisions where id=$1",[legacyRevision])).rows[0];
+  const legacyAuditStates=(await q("select before_state,after_state from public.admin_audit_log where id=$1",[legacyAudit])).rows[0];
+  for(const value of [legacyRoundSnapshot,legacyGroupTemplate,legacyVersionSnapshot,legacyCompetitionSettings,legacyImportSummary,legacyRevisionRow.payload,...Object.values(legacyAuditStates)]) {
+    assert.ok(!JSON.stringify(value).includes(LEGACY_DELETED),"backfill removes the deleted UUID from historical JSON");
+  }
+  for(const player of [legacyRoundSnapshot.players[0],legacyGroupTemplate.players[0],legacyVersionSnapshot.players[0],legacyCompetitionSettings.player,legacyImportSummary.player,legacyRevisionRow.payload.player,legacyAuditStates.before_state.player,legacyAuditStates.after_state.player]) {
+    assert.equal(player.name,"Jugador eliminado","compound-id-only identity loses its historical name");
+    assert.equal(player.avatarUrl,null,"compound-id-only identity loses its historical avatar");
+    assert.equal(player.identityDeleted,true);
+  }
+  assert.equal(legacyRoundSnapshot.players[0].id,legacyTombstone);
+  assert.equal(legacyRoundSnapshot.scores[1][legacyTombstone],4);
+  assert.equal(legacyRoundSnapshot.putts[1][legacyTombstone],2);
+  assert.equal(legacyVersionSnapshot.players[0].id,legacyTombstone,"round version uses the canonical round tombstone");
+  assert.equal(legacyVersionSnapshot.scores[1][legacyTombstone],4);
+  assert.equal(legacyVersionSnapshot.putts[1][legacyTombstone],2);
+  const legacyOtherTombstone=await deletedPlayerKey(legacyOtherRound,LEGACY_DELETED,legacyPlayer);
+  assert.equal(await scalar("select player_key from public.round_course_handicap_snapshots where user_id=$1 and round_id='qa-legacy-shared'",[LEGACY_OTHER]),legacyOtherTombstone,"same local round id is scoped by proven owner and uses the correct canonical namespace");
+  assert.notEqual(legacyOtherTombstone,legacyTombstone);
+  assert.equal(await scalar("select display_name_snapshot from public.round_group_snapshot_players_v2 where round_id=$1 and round_player_id=$2",[legacyRound,legacyRoundPlayer]),"Jugador eliminado","backfill removes relational frozen player names");
+  const legacyRevisionHash=await scalar("select encode(extensions.digest(convert_to(payload::text,'UTF8'),'sha256'),'hex') from public.admin_catalog_revisions where id=$1",[legacyRevision]);
+  assert.equal(legacyRevisionRow.preview_hash,legacyRevisionHash,"backfill reconciles the revision preview hash");
+  assert.equal(legacyRevisionRow.revision_hash,legacyRevisionHash,"backfill reconciles the published revision hash");
+  assert.equal(await scalar("select bool_and(tgenabled='O') from pg_trigger where tgname in ('competition_definition_audit','import_job_audit','admin_catalog_revision_guard','admin_catalog_revision_audit')"),true,"Admin guard/audit triggers are restored after backfill");
   // Remote QA has this email-consent surface even though it predates the
   // reconstructed local migration ledger. The lifecycle function discovers it
   // dynamically so local and deployed schemas follow the same fresh-start rule.
@@ -51,6 +134,8 @@ try {
   );`);
   assert.equal(await scalar("select has_function_privilege('authenticated','private.account_lifecycle_context_actor()','EXECUTE')"),false,"lease context is not client-callable");
   assert.equal(await scalar("select has_function_privilege('service_role','private.account_lifecycle_context_actor()','EXECUTE')"),true,"trusted lifecycle worker can validate its lease context");
+  assert.equal(await scalar("select has_function_privilege('authenticated','public.account_lifecycle_reconcile_identifiers(uuid,uuid)','EXECUTE')"),false,"reconciliation RPC is not client-callable");
+  assert.equal(await scalar("select has_function_privilege('service_role','public.account_lifecycle_reconcile_identifiers(uuid,uuid)','EXECUTE')"),true,"trusted lifecycle worker can reconcile identifiers");
   await db.exec(`grant usage on schema private to authenticated,service_role;
     insert into auth.users(id,email,email_confirmed_at) values
       ('${A}','qa-a@example.invalid',now()),('${B}','qa-b@example.invalid',now());
@@ -101,15 +186,18 @@ try {
     values('BALL','qa-archive-ball','GLOBAL','qa/account-delete/archive.pdf','application/pdf',42,'archive.pdf',$1) returning id`,[B]);
   await db.exec("reset request.jwt.claim.sub;");
   const round=await scalar(`insert into public.rounds_cloud(owner_id,local_round_id,local_id,snapshot,version)
-    values($1,'shared','shared',$2::jsonb,1) returning id`,[A,JSON.stringify({ownerId:"a",ownerName:"Private Name",lifecycleState:"completed",completedAt:"2026-09-15T12:00:00Z",players:[{id:"a",accountUserId:A,name:"Private Name",avatarUrl:"secret-avatar"},{id:"b",accountUserId:B,name:"Other Player"}],scores:{1:{a:4,b:5}},groupOrigin:{selectedMembers:[{roundPlayerId:"a",name:"Private Name"}]}})]);
+    values($1,'shared','shared',$2::jsonb,1) returning id`,[A,JSON.stringify({ownerId:A_PLAYER,ownerName:"Private Name",lifecycleState:"completed",completedAt:"2026-09-15T12:00:00Z",players:[{id:A_PLAYER,accountUserId:A,name:"Private Name",avatarUrl:"secret-avatar"},{id:"b",accountUserId:B,name:"Other Player"}],scores:{1:{[A_PLAYER]:4,b:5}},putts:{1:{[A_PLAYER]:2,b:2}},groupOrigin:{selectedMembers:[{roundPlayerId:A_PLAYER,name:"Private Name"}]}})]);
+  const roundTombstone=await deletedPlayerKey(round,A,A_PLAYER);
   const guestRound=await scalar(`insert into public.rounds_cloud(owner_id,local_round_id,local_id,snapshot,version) values($1,'private','private','{}',1) returning id`,[A]);
   const staleSnapshot=await scalar("select snapshot from public.rounds_cloud where id=$1",[round]);
   const copy=await scalar(`insert into public.rounds_cloud(owner_id,local_round_id,local_id,snapshot,version) values($1,'copy','copy',$2::jsonb,1) returning id`,[B,JSON.stringify({...staleSnapshot,ownerId:"b",ownerName:"Other Player"})]);
+  const copyTombstone=await deletedPlayerKey(copy,A,A_PLAYER);
   await q("insert into public.user_cloud_state(user_id,active_draft) values($1,$2::jsonb)",[A,JSON.stringify(staleSnapshot)]);
-  await q("insert into public.round_players_cloud(round_id,local_player_id,name) values($1,'a','Private Name'),($1,'b','Other Player')",[round]);
+  await q("insert into public.round_players_cloud(round_id,local_player_id,name) values($1,$2,'Private Name'),($1,'b','Other Player')",[round,A_PLAYER]);
   // No participant/self-confirm rows: the frozen account-linked snapshot alone
   // must prevent deleting the other player's historical card.
-  const group=await scalar(`insert into public.groups_v2(owner_id,name) values($1,'Shared group') returning id`,[A]);
+  const group=await scalar(`insert into public.groups_v2(owner_id,name,default_template)
+    values($1,'Shared group',$2::jsonb) returning id`,[A,JSON.stringify({players:[{id:A_PLAYER,accountUserId:A,name:"Private Name"}]})]);
   await q(`insert into public.group_memberships_v2(group_id,user_id,display_name_snapshot,role) values($1,$2,'A','ADMIN'),($1,$3,'B','MEMBER')`,[group,A,B]);
   const emailInvite=await scalar(`insert into private.group_email_invitations(group_id,inviter_id,recipient_email,recipient_label)
     values($1,$2,'qa-a@example.invalid','Private invitee') returning id`,[group,B]);
@@ -248,9 +336,20 @@ try {
   const kept=(await q("select owner_id,snapshot from public.rounds_cloud where id=$1",[round])).rows[0];
   assert.equal(kept.owner_id,null); assert.equal(kept.snapshot.ownerName,"Jugador eliminado");
   assert.equal(kept.snapshot.players[0].name,"Jugador eliminado"); assert.equal(kept.snapshot.players[0].accountUserId,null);
-  assert.equal(kept.snapshot.players[1].name,"Other Player"); assert.deepEqual(kept.snapshot.scores,{1:{a:4,b:5}});
+  assert.equal(kept.snapshot.players[0].id,roundTombstone); assert.equal(kept.snapshot.ownerId,roundTombstone);
+  assert.equal(JSON.stringify(kept.snapshot).includes(A),false,"shared round JSON contains no deleted Auth UUID");
+  assert.equal(kept.snapshot.players[1].name,"Other Player"); assert.deepEqual(kept.snapshot.scores,{1:{[roundTombstone]:4,b:5}});
+  assert.deepEqual(kept.snapshot.putts,{1:{[roundTombstone]:2,b:2}});
   assert.equal(kept.snapshot.groupOrigin.selectedMembers[0].name,"Jugador eliminado");
+  assert.equal(kept.snapshot.groupOrigin.selectedMembers[0].roundPlayerId,roundTombstone);
+  assert.equal(await scalar("select local_player_id from public.round_players_cloud where round_id=$1 and name='Jugador eliminado'",[round]),roundTombstone);
   assert.equal(Number(await scalar("select count(*) from public.groups_v2 where id=$1",[group])),1);
+  const keptGroup=await scalar("select default_template from public.groups_v2 where id=$1",[group]);
+  assert.equal(JSON.stringify(keptGroup).includes(A),false,"shared group template contains no deleted Auth UUID");
+  assert.equal(keptGroup.players[0].name,"Jugador eliminado");
+  assert.ok((await scalar("select count(*) from public.cloud_record_versions"))>0,"round updates preserve version history");
+  assert.equal(Number(await scalar("select count(*) from public.cloud_record_versions where previous_snapshot::text like '%'||$1::text||'%'",[A])),0,
+    "shared cloud version history contains no deleted Auth UUID");
   assert.equal(Number(await scalar("select count(*) from private.group_email_invitations where id=$1",[emailInvite])),0,"verified-email invitation cannot relink on signup");
   assert.equal(Number(await scalar("select count(*) from public.tournaments where id=$1",[legacyTournament])),0,"private legacy tournament is removed");
   assert.equal(Number(await scalar("select count(*) from public.tournaments where id=$1",[sharedTournament])),1,"another account's tournament is preserved");
@@ -342,19 +441,24 @@ try {
   // A remaining participant's offline device resends a pre-delete snapshot.
   // The DB tombstone scrubs the identity again rather than resurrecting PII.
   await asUser(B);
-  await q("update public.rounds_cloud set snapshot=$2::jsonb where id=$1",[copy,JSON.stringify({...staleSnapshot,ownerId:"b",ownerName:"Other Player"})]);
+  await q("update public.rounds_cloud set snapshot=$2::jsonb where id=$1",[copy,JSON.stringify({...staleSnapshot,
+    ownerId:"b",ownerName:"Other Player",players:[...staleSnapshot.players].reverse()})]);
   const restored=await scalar("select snapshot from public.rounds_cloud where id=$1",[copy]);
-  assert.equal(restored.players[0].name,"Jugador eliminado");
-  assert.equal(restored.players[0].avatarUrl,null);
+  const restoredDeleted=restored.players.find(player=>player.identityDeleted===true);
+  assert.equal(restoredDeleted.name,"Jugador eliminado");
+  assert.equal(restoredDeleted.avatarUrl,null);
+  assert.equal(restoredDeleted.id,copyTombstone);
   assert.equal(restored.ownerName,"Other Player");
-  assert.deepEqual(restored.scores,staleSnapshot.scores);
+  assert.equal(JSON.stringify(restored).includes(A),false,"stale sync cannot restore the deleted Auth UUID");
+  assert.deepEqual(restored.scores,{1:{[copyTombstone]:4,b:5}});
+  assert.deepEqual(restored.putts,{1:{[copyTombstone]:2,b:2}});
   await admin();
   await q("insert into public.round_participants_v2(round_id,user_id,player_key,role) values($1,$2,'b','PLAYER')",[round,B]);
   await asUser(B);
   assert.equal(await scalar("select snapshot->>'ownerName' from public.rounds_cloud where id=$1",[round]),"Jugador eliminado","real participant reads shared history after organizer deletion");
   await admin();
-  await q("update public.round_players_cloud set name='Private Name' where round_id=$1 and local_player_id='a'",[round]);
-  assert.equal(await scalar("select name from public.round_players_cloud where round_id=$1 and local_player_id='a'",[round]),"Jugador eliminado");
+  await q("update public.round_players_cloud set name='Private Name' where round_id=$1 and local_player_id=$2",[round,roundTombstone]);
+  assert.equal(await scalar("select name from public.round_players_cloud where round_id=$1 and local_player_id=$2",[round,roundTombstone]),"Jugador eliminado");
 
   const archiveOp="dddddddd-dddd-4ddd-8ddd-dddddddddddd";
   const before=Number(await scalar("select count(*) from public.rounds_cloud"));
@@ -375,6 +479,149 @@ try {
   await q("delete from auth.users where id=$1",[C]);
   assert.equal((await complete(emptyOp)).stage,"completed","empty account delete succeeds");
   assert.equal((await acquire(C,emptyOp)).stage,"completed","empty account repeat remains idempotent");
-  console.log("PASS: full migration graph, 17 Admin refs, Admin hash reconciliation, feedback unlink, verified-email fresh start, private courses/players deleted, nine-rating leaves removed, cross-owner club fail-closed, shared player/tournament preserved and anonymized, named FK diagnostic, data_prepared retry, shared Storage rehome + private manifest, shared round snapshots, stats/equipment cascade, archive unchanged, stale-JWT RLS. Auth HTTP/Storage real Preview remains separate QA.");
-} catch(error) { console.error(error.code || "ASSERTION", error.message, error.where || ""); process.exitCode=1; }
+  // A normal first attempt remains in requested throughout prepare. Its
+  // validated operation+lease context must activate the compound-ID scrub.
+  const D="88888888-8888-4888-8888-888888888888";
+  const normalOp="12121212-1212-4212-8212-121212121212",normalLease="34343434-3434-4434-8434-343434343434";
+  const D_PLAYER=`account:${D}`;
+  await q("insert into auth.users(id,email) values($1,'qa-requested@example.invalid')",[D]);
+  // Relational projections may outlive the JSON snapshot that originally
+  // carried the account identity. The explicit reconcile stage must find and
+  // tombstone those projections before Auth deletion.
+  const relationalOnlyRound=await scalar(`insert into public.rounds_cloud(owner_id,local_round_id,local_id,snapshot,version)
+    values($1,'requested-relational-only','requested-relational-only',$2::jsonb,1) returning id`,[B,JSON.stringify({
+      ownerId:"b",ownerName:"Other Player",players:[{id:"b",accountUserId:B,name:"Other Player"}],scores:{},putts:{},
+    })]);
+  const relationalOnlyPlayer=await scalar(`insert into public.round_players_cloud(round_id,local_player_id,name)
+    values($1,$2,'Requested private relational') returning id`,[relationalOnlyRound,D_PLAYER]);
+  const survivorTeePreference=await scalar(`insert into public.player_course_tee_preferences(user_id,player_key,course_id,tee_id,source)
+    values($1,$2,'qa-course','qa-tee','PLAYER_COURSE') returning id`,[B,D_PLAYER]);
+  const unmappedHandicap=await scalar(`insert into public.round_course_handicap_snapshots(user_id,round_id,player_key,tee_id,tee_name,index_value,index_source,slope,course_rating,course_par,course_handicap,formula_version,effective_at,calculated_at)
+    values($1,'qa-unmapped',$2,'qa-tee','QA tee',10,'BACKYARD_MANUAL',113,72,72,10,'qa-v1',now(),now()) returning id`,[B,D_PLAYER]);
+  const requestedRound=await scalar(`insert into public.rounds_cloud(owner_id,local_round_id,local_id,snapshot,version)
+    values($1,'requested-shared','requested-shared',$2::jsonb,1) returning id`,[D,JSON.stringify({
+      ownerId:D_PLAYER,ownerName:"Requested private",players:[{id:D_PLAYER,accountUserId:D,name:"Requested private"},{id:"b",accountUserId:B,name:"Other Player"}],
+      scores:{1:{[D_PLAYER]:4,b:5}},putts:{1:{[D_PLAYER]:2,b:2}}
+    })]);
+  const requestedAdminPayload=JSON.stringify({player:{id:D_PLAYER,name:"Requested private",avatarUrl:"requested-private-avatar"}});
+  await db.exec("alter table public.competition_definitions disable trigger competition_definition_audit; alter table public.admin_import_jobs disable trigger import_job_audit; alter table public.admin_catalog_revisions disable trigger admin_catalog_revision_audit;");
+  const requestedCompetition=await scalar(`insert into public.competition_definitions(name,type,status,settings,created_by)
+    values('QA requested competition','EVENT','DRAFT',$1::jsonb,$2) returning id`,[requestedAdminPayload,B]);
+  const requestedImport=await scalar(`insert into public.admin_import_jobs(kind,scope_type,status,source_format,summary,created_by)
+    values('COURSE','GLOBAL','UPLOADED','CSV',$1::jsonb,$2) returning id`,[requestedAdminPayload,B]);
+  const requestedRevision=await scalar(`insert into public.admin_catalog_revisions(entity_type,entity_id,scope_type,version,payload,preview_hash,revision_hash,created_by)
+    values('BALL','qa-requested-revision','GLOBAL',1,$1::jsonb,$2,$2,$3) returning id`,[requestedAdminPayload,HASH,B]);
+  await db.exec("alter table public.competition_definitions enable trigger competition_definition_audit; alter table public.admin_import_jobs enable trigger import_job_audit; alter table public.admin_catalog_revisions enable trigger admin_catalog_revision_audit;");
+  const requestedAudit=await scalar(`insert into public.admin_audit_log(action,entity_type,entity_id,before_state,after_state)
+    values('QA_RUNTIME','QA_SYNTHETIC','qa-requested',$1::jsonb,$1::jsonb) returning id`,[requestedAdminPayload]);
+  assert.equal((await acquire(D,normalOp,"delete_golf_data",normalLease)).stage,"requested");
+  assert.equal((await prepare(normalOp,normalLease)).stage,"data_prepared");
+  await expectError(()=>reconcile(normalOp,normalLease),["23514"]);
+  assert.equal(await scalar("select local_player_id from public.round_players_cloud where id=$1",[relationalOnlyPlayer]),D_PLAYER,
+    "an unmapped handicap fails the whole identifier reconciliation transaction");
+  assert.equal(Number(await scalar("select count(*) from public.player_course_tee_preferences where id=$1",[survivorTeePreference])),1,
+    "an unmapped handicap also rolls back private preference cleanup");
+  await q("delete from public.round_course_handicap_snapshots where id=$1",[unmappedHandicap]);
+  assert.equal((await reconcile(normalOp,normalLease)).stage,"data_prepared");
+  const relationalOnlyTombstone=await deletedPlayerKey(relationalOnlyRound,D,D_PLAYER);
+  assert.deepEqual((await q("select local_player_id,name from public.round_players_cloud where id=$1",[relationalOnlyPlayer])).rows[0],
+    {local_player_id:relationalOnlyTombstone,name:"Jugador eliminado"},"relational-only player is reconciled before Auth deletion");
+  await q("update public.round_players_cloud set name='Requested private restored by name only' where id=$1",[relationalOnlyPlayer]);
+  assert.equal(await scalar("select name from public.round_players_cloud where id=$1",[relationalOnlyPlayer]),"Jugador eliminado",
+    "name-only stale write cannot restore PII for a relational-only tombstone");
+  assert.equal(Number(await scalar("select count(*) from public.player_course_tee_preferences where id=$1",[survivorTeePreference])),0,
+    "survivor-owned private tee preference for the deleted identity is removed");
+  const requestedKept=await scalar("select snapshot from public.rounds_cloud where id=$1",[requestedRound]);
+  const requestedTombstone=await deletedPlayerKey(requestedRound,D,D_PLAYER);
+  assert.equal(JSON.stringify(requestedKept).includes(D),false,"requested prepare removes compound Auth UUIDs");
+  assert.equal(requestedKept.players.find(player=>player.identityDeleted===true).id,requestedTombstone);
+  assert.deepEqual(requestedKept.scores,{1:{[requestedTombstone]:4,b:5}});
+  assert.deepEqual(requestedKept.putts,{1:{[requestedTombstone]:2,b:2}});
+  const requestedAdminValues=[
+    await scalar("select settings from public.competition_definitions where id=$1",[requestedCompetition]),
+    await scalar("select summary from public.admin_import_jobs where id=$1",[requestedImport]),
+    await scalar("select payload from public.admin_catalog_revisions where id=$1",[requestedRevision]),
+    ...Object.values((await q("select before_state,after_state from public.admin_audit_log where id=$1",[requestedAudit])).rows[0]),
+  ];
+  for(const value of requestedAdminValues) {
+    assert.equal(JSON.stringify(value).includes(D),false,"normal requested lifecycle scrubs future Admin compound identifiers");
+    assert.equal(value.player.name,"Jugador eliminado");
+    assert.equal(value.player.avatarUrl,null);
+    assert.equal(value.player.identityDeleted,true);
+  }
+  const requestedRevisionRow=(await q("select payload,preview_hash,revision_hash from public.admin_catalog_revisions where id=$1",[requestedRevision])).rows[0];
+  const requestedRevisionHash=await scalar("select encode(extensions.digest(convert_to(payload::text,'UTF8'),'sha256'),'hex') from public.admin_catalog_revisions where id=$1",[requestedRevision]);
+  assert.equal(requestedRevisionRow.preview_hash,requestedRevisionHash,"normal lifecycle reconciles the revision preview hash");
+  assert.equal(requestedRevisionRow.revision_hash,requestedRevisionHash,"normal lifecycle reconciles the revision hash");
+  await q("delete from auth.users where id=$1",[D]);
+  assert.equal((await complete(normalOp,normalLease)).stage,"completed");
+  await admin();
+  await db.exec(`set request.jwt.claim.sub='${B}';`);
+  await q("update public.admin_catalog_revisions set payload=$1::jsonb where id=$2",[requestedAdminPayload,requestedRevision]);
+  const staleAdminRevision=(await q("select payload,preview_hash,revision_hash from public.admin_catalog_revisions where id=$1",[requestedRevision])).rows[0];
+  assert.equal(JSON.stringify(staleAdminRevision.payload).includes(D),false,"later Admin draft update cannot restore a deleted UUID");
+  assert.equal(staleAdminRevision.payload.player.name,"Jugador eliminado");
+  assert.equal(staleAdminRevision.payload.player.avatarUrl,null);
+  const staleAdminRevisionHash=await scalar("select encode(extensions.digest(convert_to(payload::text,'UTF8'),'sha256'),'hex') from public.admin_catalog_revisions where id=$1",[requestedRevision]);
+  assert.equal(staleAdminRevision.preview_hash,staleAdminRevisionHash);
+  assert.equal(staleAdminRevision.revision_hash,staleAdminRevisionHash);
+  const staleInsertedRevision=await scalar(`insert into public.admin_catalog_revisions(entity_type,entity_id,scope_type,version,payload,preview_hash,created_by)
+    values('BALL','qa-stale-deleted-revision','GLOBAL',1,$1::jsonb,$2,$3) returning id`,[requestedAdminPayload,HASH,B]);
+  const staleInserted=(await q("select payload,preview_hash from public.admin_catalog_revisions where id=$1",[staleInsertedRevision])).rows[0];
+  assert.equal(JSON.stringify(staleInserted.payload).includes(D),false,"later Admin draft insert cannot restore a deleted UUID");
+  assert.equal(staleInserted.payload.player.name,"Jugador eliminado");
+  assert.equal(staleInserted.preview_hash,await scalar("select encode(extensions.digest(convert_to(payload::text,'UTF8'),'sha256'),'hex') from public.admin_catalog_revisions where id=$1",[staleInsertedRevision]));
+
+  const staleRoundPlayer=await scalar(`insert into public.round_players_cloud(round_id,local_player_id,name)
+    values($1,$2,'Requested private restored') returning id`,[requestedRound,D_PLAYER]);
+  assert.deepEqual((await q("select local_player_id,name from public.round_players_cloud where id=$1",[staleRoundPlayer])).rows[0],
+    {local_player_id:requestedTombstone,name:"Jugador eliminado"},"stale relational player insert is tombstoned");
+  await q("update public.round_players_cloud set local_player_id=$1,name='Requested private restored again' where id=$2",[D_PLAYER,staleRoundPlayer]);
+  assert.deepEqual((await q("select local_player_id,name from public.round_players_cloud where id=$1",[staleRoundPlayer])).rows[0],
+    {local_player_id:requestedTombstone,name:"Jugador eliminado"},"stale relational player update is tombstoned");
+  await q(`insert into public.round_participants_v2(round_id,user_id,player_key,role)
+    values($1,$2,$3,'SCOREKEEPER')`,[requestedRound,B,D_PLAYER]);
+  await q(`insert into public.live_round_operations_v2(id,round_id,actor_id,operation_kind,player_key,hole,payload,base_version,resulting_version)
+    values(gen_random_uuid(),$1,$2,'SCORE_SET',$3,1,'{}',0,1)`,[requestedRound,B,D_PLAYER]);
+  await q(`insert into public.round_activity_v2(id,round_id,actor_id,event_type,player_key,hole,visibility)
+    values(gen_random_uuid(),$1,$2,'SCORE_RECORDED',$3,1,'ROUND')`,[requestedRound,B,D_PLAYER]);
+  await q(`insert into public.round_shots_v2(id,round_id,owner_id,player_key,hole,sequence,club_snapshot,source,started_at,operation_id)
+    values(gen_random_uuid(),$1,$2,$3,1,1,'{}','MANUAL',now(),gen_random_uuid())`,[requestedRound,B,D_PLAYER]);
+  await q(`insert into public.round_course_handicap_snapshots(user_id,round_id,player_key,tee_id,tee_name,index_value,index_source,slope,course_rating,course_par,course_handicap,formula_version,effective_at,calculated_at)
+    values($1,'requested-shared',$2,'qa-tee','QA tee',10,'BACKYARD_MANUAL',113,72,72,10,'qa-v1',now(),now())`,[B,D_PLAYER]);
+  for(const [table,column] of [["round_participants_v2","player_key"],["live_round_operations_v2","player_key"],
+    ["round_activity_v2","player_key"],["round_shots_v2","player_key"],["round_course_handicap_snapshots","player_key"]]) {
+    assert.equal(await scalar(`select ${column} from public.${table} where ${column}=$1 limit 1`,[requestedTombstone]),requestedTombstone,
+      `${table} stale key is reconciled to the canonical tombstone`);
+  }
+  await q(`insert into public.round_group_snapshots_v2(round_id,source_group_name,source_group_version,selected_player_count)
+    values($1,'QA stale group',1,1)`,[requestedRound]);
+  await q(`insert into public.round_group_snapshot_players_v2(round_id,round_player_id,display_name_snapshot,position)
+    values($1,$2,'Requested private restored',0)`,[requestedRound,staleRoundPlayer]);
+  assert.equal(await scalar("select display_name_snapshot from public.round_group_snapshot_players_v2 where round_id=$1 and round_player_id=$2",[requestedRound,staleRoundPlayer]),"Jugador eliminado","stale frozen display name is scrubbed");
+  await expectError(()=>q(`insert into public.player_course_tee_preferences(user_id,player_key,course_id,tee_id,source)
+    values($1,$2,'qa-course-after-delete','qa-tee','PLAYER_COURSE')`,[B,D_PLAYER]),["23514"]);
+
+  // A local round id is scoped, not globally unique. When a surviving user can
+  // legitimately map the same id to two canonical rounds, the historical
+  // migration must abort instead of choosing an arbitrary tombstone.
+  const ambiguousLocalId="qa-ambiguous-local-round";
+  const ambiguousRoundOne=await scalar(`insert into public.rounds_cloud(owner_id,local_round_id,local_id,snapshot,version)
+    values($1,$2,$2,$3::jsonb,1) returning id`,[B,ambiguousLocalId,JSON.stringify({ownerId:"b",players:[{id:"b",accountUserId:B,name:"Other Player"}]})]);
+  const ambiguousRoundTwo=await scalar(`insert into public.rounds_cloud(owner_id,local_round_id,local_id,snapshot,version)
+    values($1,$2,$2,$3::jsonb,1) returning id`,[LEGACY_OTHER,ambiguousLocalId,JSON.stringify({ownerId:`account:${LEGACY_OTHER}`,players:[{id:`account:${LEGACY_OTHER}`,accountUserId:LEGACY_OTHER,name:"Legacy Other"}]})]);
+  await q("insert into public.round_participants_v2(round_id,user_id,player_key,role) values($1,$2,'b','SCOREKEEPER')",[ambiguousRoundTwo,B]);
+  await db.exec("alter table public.round_course_handicap_snapshots disable trigger account_scrub_deleted_player_key;");
+  const ambiguousHandicap=await scalar(`insert into public.round_course_handicap_snapshots(user_id,round_id,player_key,tee_id,tee_name,index_value,index_source,slope,course_rating,course_par,course_handicap,formula_version,effective_at,calculated_at)
+    values($1,$2,$3,'qa-tee','QA tee',10,'BACKYARD_MANUAL',113,72,72,10,'qa-v1',now(),now()) returning id`,[B,ambiguousLocalId,D_PLAYER]);
+  await db.exec("alter table public.round_course_handicap_snapshots enable trigger account_scrub_deleted_player_key;");
+  await db.exec("begin");
+  await expectError(()=>db.exec(tombstoneSql),["23514"]);
+  await db.exec("rollback");
+  assert.equal(await scalar("select player_key from public.round_course_handicap_snapshots where id=$1",[ambiguousHandicap]),D_PLAYER,
+    "ambiguous historical mapping fails closed without mutating the player key");
+  assert.notEqual(ambiguousRoundOne,ambiguousRoundTwo);
+  await admin();
+  console.log("PASS: full migration graph, historical UUID backfill, stable shared-player tombstones, scores/putts preservation, relational-only reconciliation, tee-preference cleanup, ambiguous local-round fail-closed, 17 Admin refs, Admin hash reconciliation, feedback unlink, verified-email fresh start, private courses/players deleted, nine-rating leaves removed, cross-owner club fail-closed, shared player/tournament preserved and anonymized, named FK diagnostic, requested/data_prepared retries, shared Storage rehome + private manifest, shared round snapshots, stats/equipment cascade, archive unchanged, stale-JWT RLS. Auth HTTP/Storage real Preview remains separate QA.");
+} catch(error) { console.error(error.code || "ASSERTION", error.message, error.where || "", error.stack || ""); process.exitCode=1; }
 finally { await db.close(); }

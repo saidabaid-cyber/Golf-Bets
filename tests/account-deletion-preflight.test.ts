@@ -27,6 +27,7 @@ test("la saga preserva Storage compartido con copy/commit idempotente antes del 
   assert.match(gateway, /account_lifecycle_storage_rehomes/);
   assert.match(gateway, /\.copy\(rehome\.name, rehome\.replacement_name\)/);
   assert.match(gateway, /account_lifecycle_commit_storage_rehome/);
+  assert.match(gateway, /account_lifecycle_reconcile_identifiers/);
   assert.match(gateway, /result\.error && !storageCopyAlreadyExists\(result\.error\)/);
   assert.match(gateway, /result\.data !== true/);
 });

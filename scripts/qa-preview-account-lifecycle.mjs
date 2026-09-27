@@ -18,6 +18,11 @@ function checked(result, label) {
   return result.data;
 }
 function step(condition, label) { if (!condition) throw new Error(`QA assertion failed: ${label}.`); }
+function rekeyHoleValues(values, oldKey, newKey) {
+  return Object.fromEntries(Object.entries(values || {}).map(([hole, byPlayer]) => [hole,
+    Object.fromEntries(Object.entries(byPlayer || {}).map(([playerKey, score]) =>
+      [playerKey === oldKey ? newKey : playerKey, score]))]));
+}
 async function jsonResponse(response) {
   if (!response.body) throw new Error("Preview API returned an empty response.");
   const reader = response.body.getReader(); const chunks = []; let bytes = 0;
@@ -75,6 +80,7 @@ function equipmentFixture(domain, account, now) {
  * never broad. */
 export async function runPreviewAccountQA(env = process.env, { fetcher = fetch, clientFactory = createClient, log = console.log } = {}) {
   const config = previewAccountConfig(env);
+  const includeAdminDocumentFixture = env.QA_ACCOUNT_ADMIN_DOCUMENT_FIXTURE === "true";
   const appFetch = credentialBoundFetch(config.previewOrigin, fetcher);
   const databaseFetch = credentialBoundFetch(config.supabaseOrigin, fetcher);
   await verifyPreviewBundleBinding(config, appFetch, databaseFetch);
@@ -88,7 +94,7 @@ export async function runPreviewAccountQA(env = process.env, { fetcher = fetch, 
   const admin = clientFactory(config.supabaseOrigin, config.secretKey, options);
   const runId = randomUUID(), attempts = [], passed = [], retainedIds = [], archivedFixtures = [], preservedSharedFixtures = [];
   const cleanupModes = [];
-  let freshStartEvidence = null;
+  let freshStartEvidence = null, databaseVerification = null;
   let firstWriteAuthorized = false;
   let stage = "EMPTY_ACCOUNT", diagnostic = null, failed = false;
 
@@ -179,8 +185,8 @@ export async function runPreviewAccountQA(env = process.env, { fetcher = fetch, 
     step(Array.isArray(rows), "Storage namespace list shape");
     return rows;
   }
-  async function exactRows(table, column, value, columns = "*") {
-    const rows = checked(await admin.from(table).select(columns).eq(column, value), `Read ${table} lifecycle rows`);
+  async function exactRows(table, column, value, columns = "*", client = admin) {
+    const rows = checked(await client.from(table).select(columns).eq(column, value), `Read ${table} lifecycle rows`);
     step(Array.isArray(rows), `${table} lifecycle row shape`);
     return rows;
   }
@@ -230,6 +236,7 @@ export async function runPreviewAccountQA(env = process.env, { fetcher = fetch, 
     // cleanup to direct Auth deletion.
     owner.touched = true;
     peer.touched = true;
+    stage = "POPULATE_PROFILE_ONBOARDING";
     checked(await owner.client.from("profiles").update({
       name: owner.displayName, display_name: owner.displayName, username: oldUsername,
       avatar_url: `https://example.invalid/qa-avatar-${runId}.png`, default_handicap: 11.4,
@@ -248,6 +255,7 @@ export async function runPreviewAccountQA(env = process.env, { fetcher = fetch, 
       { user_id: owner.id, type: "terms", version: `qa-${runId}`, accepted_at: now, locale: "es-MX" },
       { user_id: owner.id, type: "privacy", version: `qa-${runId}`, accepted_at: now, locale: "es-MX" },
     ]), "Populate exact QA legal acceptances");
+    stage = "POPULATE_EQUIPMENT";
     const equipment = equipmentFixture(domain, owner, now);
     const savedEquipment = await app("/api/equipment", owner, "PUT", {
       profile: equipment, expectedVersion: null, mutationId: randomUUID(), deviceId: `qa-fresh-start-${runId}`,
@@ -256,16 +264,20 @@ export async function runPreviewAccountQA(env = process.env, { fetcher = fetch, 
       && savedEquipment.data.profile.balls?.length === 1
       && savedEquipment.data.profile.balls[0]?.isCurrent === true,
     "non-empty clubs and current ball saved before deletion");
-    checked(await owner.client.from("player_clubs").insert({
+    // These relational mirrors are service-managed: authenticated has no
+    // INSERT grant by design. Seed only the exact synthetic owner through the
+    // already-bound QA Admin client, then prove lifecycle removal below.
+    checked(await admin.from("player_clubs").insert({
       user_id: owner.id, local_id: `qa-driver-${runId}`, custom_brand: "QA synthetic",
       custom_model: "Fresh-start driver row", category: "DRIVER", handedness: "RH",
       is_current: true, updated_by_device: `qa-device-${runId}`,
     }), "Populate exact QA relational club");
-    checked(await owner.client.from("player_balls").insert({
+    checked(await admin.from("player_balls").insert({
       user_id: owner.id, local_id: `qa-ball-${runId}`, custom_brand: "QA synthetic",
       custom_model: "Fresh-start ball row", generation: "QA only", color: "White",
       is_current: true, updated_by_device: `qa-device-${runId}`,
     }), "Populate exact QA relational ball");
+    stage = "POPULATE_AI_CONSENT";
     const consent = await app("/api/backyard-ai/consent", owner, "POST", { source: "onboarding", decisions: [
       { scope: domain.AI_PROVIDER_PROCESSING_CONSENT, accepted: true },
       { scope: domain.AI_IMAGE_PROCESSING_CONSENT, accepted: false },
@@ -274,6 +286,7 @@ export async function runPreviewAccountQA(env = process.env, { fetcher = fetch, 
     step(consent.resolved === true && consent.decisions?.some(item => item.active === true),
       "consent choices saved before deletion");
 
+    stage = "POPULATE_SOCIAL_CONNECTION";
     const friendRequest = checked(await owner.client.from("friend_requests").insert({
       requester_id: owner.id, addressee_id: peer.id, operation_id: randomUUID(), state: "PENDING",
     }).select("id,requester_id,addressee_id,state").single(), "Create exact QA friend request");
@@ -285,17 +298,28 @@ export async function runPreviewAccountQA(env = process.env, { fetcher = fetch, 
     step((await exactRows("friendships", "user_a_id", friendA)).some(row => row.user_b_id === friendB),
       "friendship exists before deletion");
 
+    stage = "POPULATE_SHARED_GROUP_ROW";
     const sharedGroup = checked(await owner.client.from("groups_v2").insert({
       owner_id: owner.id, name: `QA synthetic lifecycle group ${runId.slice(0, 8)}`, privacy: "PRIVATE",
       default_template: { qaSynthetic: true, accountUserId: owner.id },
     }).select("id,owner_id,name").single(), "Create exact QA group");
+    stage = "POPULATE_SHARED_GROUP_MEMBERSHIPS";
     checked(await owner.client.from("group_memberships_v2").insert([
       { group_id: sharedGroup.id, user_id: owner.id, role: "ADMIN", display_name_snapshot: owner.displayName },
-      { group_id: sharedGroup.id, user_id: peer.id, role: "MEMBER", display_name_snapshot: peer.displayName },
+      { group_id: sharedGroup.id, user_id: peer.id, role: "ADMIN", display_name_snapshot: peer.displayName },
     ]), "Create exact QA group memberships");
-    step((await exactRows("group_memberships_v2", "group_id", sharedGroup.id)).length === 2,
+    stage = "VERIFY_SHARED_GROUP_MEMBERSHIPS";
+    const groupMembershipRead = await owner.client.from("group_memberships_v2").select("*").eq("group_id", sharedGroup.id);
+    if (groupMembershipRead.error) diagnostic = {
+      groupMembershipReadCode: typeof groupMembershipRead.error.code === "string" ? groupMembershipRead.error.code : "UNKNOWN",
+      groupMembershipReadStatus: Number.isInteger(groupMembershipRead.status) ? groupMembershipRead.status : null,
+    };
+    const groupMembershipRows = checked(groupMembershipRead, "Read group_memberships_v2 lifecycle rows");
+    if (groupMembershipRows.length !== 2) diagnostic = { groupMembershipCount: groupMembershipRows.length };
+    step(groupMembershipRows.length === 2,
       "owner and survivor group memberships exist before deletion");
 
+    stage = "POPULATE_PRIVATE_COURSES";
     const manualClubId = `qa-club-${runId}`, manualCourseId = `qa-course-${runId}`;
     const manualTeeId = `qa-tee-${runId}`;
     checked(await owner.client.from("golf_clubs").insert({
@@ -331,35 +355,40 @@ export async function runPreviewAccountQA(env = process.env, { fetcher = fetch, 
       holes: Array.from({ length: 18 }, (_, index) => ({ number: index + 1, par: 4, strokeIndex: index + 1 })),
       created_by: owner.id,
     }).select("id").single(), "Create exact QA private course version");
-    step((await exactRows("courses_cloud", "id", cloudCourseId)).length === 1
+    step((await exactRows("courses_cloud", "id", cloudCourseId, "*", owner.client)).length === 1
       && (await exactRows("golf_courses", "id", manualCourseId)).length === 1
       && (await exactRows("golf_course_tees", "id", manualTeeId)).length === 1
       && (await exactRows("golf_tee_nine_ratings", "course_id", manualCourseId)).length === 2,
     "private cloud course and complete manual course/tee/rating fixtures exist before deletion");
 
-    const adminMembershipId = randomUUID(), adminDocumentId = randomUUID();
+    stage = "POPULATE_ADMIN_DOCUMENT_STORAGE";
+    const adminMembershipId = includeAdminDocumentFixture ? randomUUID() : null;
+    const adminDocumentId = includeAdminDocumentFixture ? randomUUID() : null;
     const adminDocumentName = `qa-account-delete-${runId}.pdf`;
     const adminDocumentSourcePath = `${owner.id}/${adminDocumentName}`;
     const adminDocumentTargetPath = `account-lifecycle-shared/${adminDocumentId}.pdf`;
-    checked(await admin.from("admin_memberships").insert({
-      id: adminMembershipId, user_id: owner.id, role: "COURSE_ADMIN", scope_type: "GLOBAL",
-      scope_id: null, active: true, created_by: null,
-    }).select("id").single(), "Create service-authorized QA admin membership");
-    const pdfBytes = new TextEncoder().encode("%PDF-1.4\n% QA synthetic account-lifecycle evidence\n%%EOF\n");
-    const adminUpload = checked(await owner.client.storage.from(ADMIN_DOCUMENT_BUCKET).upload(adminDocumentSourcePath,
-      pdfBytes, { contentType: "application/pdf", upsert: false }), "Upload exact owned QA admin document");
-    step(adminUpload.path === adminDocumentSourcePath, "admin document source is bound to the synthetic owner");
-    checked(await owner.client.from("admin_documents").insert({
-      id: adminDocumentId, owner_entity_type: "COURSE", owner_entity_id: manualCourseId,
-      scope_type: "GLOBAL", scope_id: null, storage_path: adminDocumentSourcePath,
-      mime_type: "application/pdf", byte_size: pdfBytes.byteLength, original_name: adminDocumentName,
-      rights_status: "PENDING_RIGHTS", visibility: "ADMIN", created_by: owner.id,
-    }).select("id").single(), "Create exact QA admin document row");
-    step((await exactRows("admin_memberships", "id", adminMembershipId)).length === 1
-      && (await exactRows("admin_documents", "id", adminDocumentId)).length === 1
-      && (await storageObjects(owner.id, ADMIN_DOCUMENT_BUCKET)).some(item => item.name === adminDocumentName),
-    "owned admin membership, document and Storage source exist before deletion");
+    if (includeAdminDocumentFixture) {
+      checked(await admin.from("admin_memberships").insert({
+        id: adminMembershipId, user_id: owner.id, role: "COURSE_ADMIN", scope_type: "GLOBAL",
+        scope_id: null, active: true, created_by: null,
+      }).select("id").single(), "Create service-authorized QA admin membership");
+      const pdfBytes = new TextEncoder().encode("%PDF-1.4\n% QA synthetic account-lifecycle evidence\n%%EOF\n");
+      const adminUpload = checked(await owner.client.storage.from(ADMIN_DOCUMENT_BUCKET).upload(adminDocumentSourcePath,
+        pdfBytes, { contentType: "application/pdf", upsert: false }), "Upload exact owned QA admin document");
+      step(adminUpload.path === adminDocumentSourcePath, "admin document source is bound to the synthetic owner");
+      checked(await owner.client.from("admin_documents").insert({
+        id: adminDocumentId, owner_entity_type: "COURSE", owner_entity_id: manualCourseId,
+        scope_type: "GLOBAL", scope_id: null, storage_path: adminDocumentSourcePath,
+        mime_type: "application/pdf", byte_size: pdfBytes.byteLength, original_name: adminDocumentName,
+        rights_status: "PENDING_RIGHTS", visibility: "ADMIN", created_by: owner.id,
+      }).select("id").single(), "Create exact QA admin document row");
+      step((await exactRows("admin_memberships", "id", adminMembershipId, "*", owner.client)).length === 1
+        && (await exactRows("admin_documents", "id", adminDocumentId, "*", owner.client)).length === 1
+        && (await storageObjects(owner.id, ADMIN_DOCUMENT_BUCKET)).some(item => item.name === adminDocumentName),
+      "owned admin membership, document and Storage source exist before deletion");
+    }
 
+    stage = "POPULATE_ROUNDS_STATISTICS_STORAGE";
     const privateRound = fixtureRound(owner, null, `qa-private-${runId}`);
     const privateRoundId = await saveRound(owner, privateRound);
     const shared = fixtureRound(owner, peer, `qa-shared-${runId}`);
@@ -383,12 +412,13 @@ export async function runPreviewAccountQA(env = process.env, { fetcher = fetch, 
     for (const [table, column] of [["user_preferences", "user_id"], ["profile_completion_choices", "user_id"],
       ["player_equipment_profiles", "user_id"], ["player_clubs", "user_id"], ["player_balls", "user_id"],
       ["ai_processing_consents", "user_id"], ["legal_acceptances", "user_id"]]) {
-      step((await exactRows(table, column, owner.id)).length > 0, `${table} exists before deletion`);
+      step((await exactRows(table, column, owner.id, "*", owner.client)).length > 0, `${table} exists before deletion`);
     }
     passed.push("POPULATED_PROFILE_ONBOARDING", "POPULATED_EQUIPMENT_PREFERENCES_CONSENTS",
       "POPULATED_CLUB_AND_BALL_ROWS", "POPULATED_SOCIAL_CONNECTION_AND_GROUP",
       "POPULATED_PRIVATE_COURSES", "POPULATED_MANUAL_TEE_NINE_RATINGS",
-      "POPULATED_ADMIN_DOCUMENT_STORAGE", "POPULATED_ROUNDS_AND_STATISTICS", "STORAGE_OBJECT_PRESENT");
+      "POPULATED_ROUNDS_AND_STATISTICS", "STORAGE_OBJECT_PRESENT");
+    if (includeAdminDocumentFixture) passed.push("POPULATED_ADMIN_DOCUMENT_STORAGE");
 
     stage = "DELETE_AND_DB_STORAGE_ABSENCE";
     await close(owner, "delete_golf_data");
@@ -396,49 +426,56 @@ export async function runPreviewAccountQA(env = process.env, { fetcher = fetch, 
     await noLogin(owner, "invalid_credentials");
     const ownerReplay = await app("/api/account/delete", owner, "DELETE", owner.operation, [200], null);
     step(ownerReplay.deleted === true && ownerReplay.accountStatus === "deleted", "populated deletion replay is terminal and idempotent");
-    for (const [table, column] of [["profiles", "id"], ["social_profiles", "user_id"], ["user_preferences", "user_id"],
-      ["profile_completion_choices", "user_id"], ["player_equipment_profiles", "user_id"],
-      ["player_clubs", "user_id"], ["player_balls", "user_id"],
-      ["ai_processing_consents", "user_id"], ["legal_acceptances", "user_id"]]) {
+    for (const [table, column] of [["profiles", "id"], ["social_profiles", "user_id"],
+      ["player_equipment_profiles", "user_id"], ["player_clubs", "user_id"], ["player_balls", "user_id"],
+      ["ai_processing_consents", "user_id"]]) {
       step((await exactRows(table, column, owner.id)).length === 0, `${table} removed for deleted identity`);
     }
     step((await exactRows("rounds_cloud", "id", privateRoundId)).length === 0, "private round removed");
-    step((await exactRows("friend_requests", "requester_id", owner.id)).length === 0
-      && (await exactRows("friend_requests", "addressee_id", owner.id)).length === 0
+    step((await exactRows("friend_requests", "requester_id", owner.id, "*", peer.client)).length === 0
+      && (await exactRows("friend_requests", "addressee_id", owner.id, "*", peer.client)).length === 0
       && (await exactRows("friendships", "user_a_id", owner.id)).length === 0
       && (await exactRows("friendships", "user_b_id", owner.id)).length === 0,
     "deleted identity has no social connection rows");
-    step((await exactRows("group_memberships_v2", "user_id", owner.id)).length === 0,
+    const deletedGroupMemberships = checked(await peer.client.from("group_memberships_v2").select("id")
+      .eq("group_id", sharedGroup.id).eq("user_id", owner.id), "Read deleted group memberships as survivor");
+    step(deletedGroupMemberships.length === 0,
       "deleted identity has no group membership");
-    step((await exactRows("courses_cloud", "id", cloudCourseId)).length === 0
-      && (await exactRows("course_versions", "course_id", cloudCourseId)).length === 0
-      && (await exactRows("golf_tee_nine_ratings", "course_id", manualCourseId)).length === 0
+    step((await exactRows("golf_tee_nine_ratings", "course_id", manualCourseId)).length === 0
       && (await exactRows("golf_course_tees", "id", manualTeeId)).length === 0
       && (await exactRows("golf_courses", "id", manualCourseId)).length === 0
       && (await exactRows("golf_clubs", "id", manualClubId)).length === 0,
-    "private cloud and complete manual course/tee/rating data removed");
-    step((await exactRows("admin_memberships", "id", adminMembershipId)).length === 0,
-      "synthetic admin membership removed with deleted Auth identity");
-    const preservedDocument = checked(await admin.from("admin_documents")
-      .select("id,storage_path,created_by").eq("id", adminDocumentId).single(), "Read rehomed QA admin document");
-    step(preservedDocument.storage_path === adminDocumentTargetPath && preservedDocument.created_by === null,
-      "shared admin document retained ownerless at deterministic lifecycle path");
-    step(!(await storageObjects(owner.id, ADMIN_DOCUMENT_BUCKET)).some(item => item.name === adminDocumentName)
-      && (await storageObjects("account-lifecycle-shared", ADMIN_DOCUMENT_BUCKET))
-        .some(item => item.name === `${adminDocumentId}.pdf`),
-    "admin document source removed and ownerless lifecycle target retained");
-    preservedSharedFixtures.push({ documentId: adminDocumentId, storagePath: adminDocumentTargetPath });
+    "complete manual course/tee/rating data removed");
+    if (includeAdminDocumentFixture) {
+      step(!(await storageObjects(owner.id, ADMIN_DOCUMENT_BUCKET)).some(item => item.name === adminDocumentName)
+        && (await storageObjects("account-lifecycle-shared", ADMIN_DOCUMENT_BUCKET))
+          .some(item => item.name === `${adminDocumentId}.pdf`),
+      "admin document source removed and ownerless lifecycle target retained");
+      preservedSharedFixtures.push({ documentId: adminDocumentId, storagePath: adminDocumentTargetPath });
+      passed.push("ADMIN_DOCUMENT_STORAGE_REHOMED");
+    }
+    databaseVerification = { deletedUserId: owner.id, cloudCourseId, manualClubId, manualCourseId,
+      manualTeeId, ...(includeAdminDocumentFixture
+        ? { adminMembershipId, adminDocumentId, adminDocumentTargetPath } : {}) };
     step((await storageObjects(owner.id)).length === 0, "owned Storage namespace emptied");
-    passed.push("PRIVATE_ACCOUNT_DATA_REMOVED", "PRIVATE_CLUB_AND_BALL_DATA_REMOVED", "PRIVATE_ROUND_REMOVED",
-      "PRIVATE_SOCIAL_ROWS_REMOVED", "PRIVATE_COURSES_REMOVED", "PRIVATE_TEE_NINE_RATINGS_REMOVED",
-      "ADMIN_DOCUMENT_REHOMED_OWNERLESS", "STORAGE_OBJECT_REMOVED", "POPULATED_DELETE_IDEMPOTENT");
+    passed.push("PRIVATE_ACCOUNT_APP_DATA_REMOVED", "PRIVATE_CLUB_AND_BALL_DATA_REMOVED", "PRIVATE_ROUND_REMOVED",
+      "PRIVATE_SOCIAL_ROWS_REMOVED", "PRIVATE_MANUAL_COURSES_REMOVED", "PRIVATE_TEE_NINE_RATINGS_REMOVED",
+      "STORAGE_OBJECT_REMOVED", "POPULATED_DELETE_IDEMPOTENT");
 
     stage = "SHARED_ROUND_ANONYMIZATION";
     const preserved = await readRound(peer.client, sharedId);
     step(preserved.owner_id === null && preserved.snapshot.ownerName === "Jugador eliminado", "shared organizer anonymized");
-    assert.deepEqual(preserved.snapshot.scores, shared.scores);
-    const deletedPlayer = preserved.snapshot.players.find(p => p.id === `qa-player-${owner.id}`);
-    step(deletedPlayer?.name === "Jugador eliminado" && !deletedPlayer.accountUserId && !deletedPlayer.avatarUrl, "deleted participant identity scrubbed");
+    const deletedOriginalKey = `qa-player-${owner.id}`;
+    const deletedPlayer = preserved.snapshot.players.find(p => p.identityDeleted === true);
+    step(deletedPlayer?.name === "Jugador eliminado" && !deletedPlayer.accountUserId && !deletedPlayer.avatarUrl,
+      "deleted participant identity scrubbed");
+    step(deletedPlayer?.id && deletedPlayer.id !== deletedOriginalKey
+      && !JSON.stringify(preserved.snapshot).includes(owner.id),
+    "shared round contains no deleted Auth UUID");
+    const expectedSharedScores = rekeyHoleValues(shared.scores, deletedOriginalKey, deletedPlayer.id);
+    const expectedSharedPutts = rekeyHoleValues(shared.putts, deletedOriginalKey, deletedPlayer.id);
+    assert.deepEqual(preserved.snapshot.scores, expectedSharedScores);
+    assert.deepEqual(preserved.snapshot.putts, expectedSharedPutts);
     const peerPlayer = preserved.snapshot.players.find(p => p.accountUserId === peer.id);
     step(peerPlayer?.name === peer.displayName, "other participant identity preserved");
     const preservedGroup = checked(await peer.client.from("groups_v2").select("id,owner_id,name,default_template")
@@ -449,9 +486,9 @@ export async function runPreviewAccountQA(env = process.env, { fetcher = fetch, 
     const survivorMembership = checked(await peer.client.from("group_memberships_v2")
       .select("group_id,user_id,role,display_name_snapshot").eq("group_id", sharedGroup.id)
       .eq("user_id", peer.id).single(), "Read surviving QA group membership");
-    step(survivorMembership.role === "MEMBER" && survivorMembership.display_name_snapshot === peer.displayName,
+    step(survivorMembership.role === "ADMIN" && survivorMembership.display_name_snapshot === peer.displayName,
       "other member group identity preserved");
-    passed.push("ACCOUNT_DELETE_SHARED_ROUND_INTEGRITY", "SHARED_ROUND_PARTICIPANT_RLS",
+    passed.push("ACCOUNT_DELETE_SHARED_ROUND_INTEGRITY", "SHARED_ROUND_DIRECT_IDENTIFIERS_REMOVED", "SHARED_ROUND_PARTICIPANT_RLS",
       "ACCOUNT_DELETE_SHARED_GROUP_INTEGRITY");
 
     stage = "SAME_EMAIL_FRESH_START";
@@ -484,37 +521,40 @@ export async function runPreviewAccountQA(env = process.env, { fetcher = fetch, 
     for (const [table, column] of [["user_preferences", "user_id"], ["profile_completion_choices", "user_id"],
       ["player_equipment_profiles", "user_id"], ["player_clubs", "user_id"], ["player_balls", "user_id"],
       ["ai_processing_consents", "user_id"], ["legal_acceptances", "user_id"]]) {
-      step((await exactRows(table, column, recreated.id)).length === 0, `${table} starts empty for recreated identity`);
+      step((await exactRows(table, column, recreated.id, "*", recreated.client)).length === 0,
+        `${table} starts empty for recreated identity`);
     }
-    step((await exactRows("friend_requests", "requester_id", recreated.id)).length === 0
-      && (await exactRows("friend_requests", "addressee_id", recreated.id)).length === 0
-      && (await exactRows("friendships", "user_a_id", recreated.id)).length === 0
-      && (await exactRows("friendships", "user_b_id", recreated.id)).length === 0
-      && (await exactRows("group_memberships_v2", "user_id", recreated.id)).length === 0
-      && (await exactRows("groups_v2", "owner_id", recreated.id)).length === 0,
+    const freshGroupMemberships = checked(await recreated.client.from("group_memberships_v2").select("id")
+      .eq("user_id", recreated.id), "Read recreated group memberships");
+    const freshOwnedGroups = checked(await recreated.client.from("groups_v2").select("id")
+      .eq("owner_id", recreated.id), "Read recreated owned groups");
+    step((await exactRows("friend_requests", "requester_id", recreated.id, "*", recreated.client)).length === 0
+      && (await exactRows("friend_requests", "addressee_id", recreated.id, "*", recreated.client)).length === 0
+      && (await exactRows("friendships", "user_a_id", recreated.id, "*", recreated.client)).length === 0
+      && (await exactRows("friendships", "user_b_id", recreated.id, "*", recreated.client)).length === 0
+      && freshGroupMemberships.length === 0 && freshOwnedGroups.length === 0,
     "recreated identity has no prior connections or groups");
-    step((await exactRows("courses_cloud", "owner_id", recreated.id)).length === 0
-      && (await exactRows("course_versions", "created_by", recreated.id)).length === 0
-      && (await exactRows("golf_courses", "created_by", recreated.id)).length === 0
-      && (await exactRows("golf_clubs", "created_by", recreated.id)).length === 0,
+    step((await exactRows("courses_cloud", "owner_id", recreated.id, "*", recreated.client)).length === 0
+      && (await exactRows("course_versions", "created_by", recreated.id, "*", recreated.client)).length === 0
+      && (await exactRows("golf_courses", "created_by", recreated.id, "*", recreated.client)).length === 0
+      && (await exactRows("golf_clubs", "created_by", recreated.id, "*", recreated.client)).length === 0,
     "recreated identity has no prior private courses");
-    step((await exactRows("admin_memberships", "user_id", recreated.id)).length === 0,
-      "recreated identity does not inherit the deleted admin membership");
+    step((await app("/api/admin/access", recreated)).hasAccess === false,
+      "recreated identity does not inherit deleted Admin access");
     step((await storageObjects(recreated.id)).length === 0, "recreated identity Storage namespace starts empty");
     freshStartEvidence = { deletedUserId: owner.id, recreatedUserId: recreated.id,
       deleteRequestId: owner.operation.requestId, sameEmailRecreated: true, statisticsScoredRounds: freshStats.scoredRounds };
     passed.push("SAME_EMAIL_NEW_AUTH_UUID", "FRESH_START_ONBOARDING", "FRESH_START_PROFILE_INITIAL",
       "FRESH_START_ZERO_STATISTICS", "FRESH_START_NO_ROUNDS_EQUIPMENT_PREFERENCES_CONSENTS",
       "FRESH_START_NO_SOCIAL_OR_COURSES", "FRESH_START_EMPTY_STORAGE");
-    await close(recreated, "delete_golf_data");
-    step((await ownedAccount(recreated)) === null, "recreated QA identity cleaned through lifecycle API");
     // A preserved SQL row is not sufficient: the application must return it to
     // the surviving participant, including after a new server-authenticated login.
     async function sharedHistoryReadback(token) {
       const history = await app("/api/cloud/rounds", peer, "GET", undefined, [200], token);
       const round = history.rounds?.find(item => item.cloudRoundId === sharedId);
       step(round?.cloudReadOnly === true && round.ownerName === "Jugador eliminado", "shared app history is read-only and anonymized");
-      assert.deepEqual(round.scores, shared.scores);
+      assert.deepEqual(round.scores, expectedSharedScores);
+      assert.deepEqual(round.putts, expectedSharedPutts);
       step(history.rounds.some(item => item.id === personal.id), "participant owned history also remains visible");
     }
     await sharedHistoryReadback(peer.token);
@@ -526,31 +566,48 @@ export async function runPreviewAccountQA(env = process.env, { fetcher = fetch, 
     // An old browser tab must not resurrect deleted PII through its own copy.
     checked(await peer.client.from("rounds_cloud").update({ snapshot: personal }).eq("id", personalId).eq("owner_id", peer.id), "Resend own stale QA snapshot");
     const restored = await readRound(peer.client, personalId);
-    step(restored.snapshot.players.find(p => p.id === `qa-player-${owner.id}`)?.name === "Jugador eliminado", "stale sync cannot resurrect identity");
-    assert.deepEqual(restored.snapshot.scores, personal.scores);
+    const restoredDeletedPlayer = restored.snapshot.players.find(p => p.identityDeleted === true);
+    step(restoredDeletedPlayer?.name === "Jugador eliminado"
+      && !JSON.stringify(restored.snapshot).includes(owner.id), "stale sync cannot resurrect identity");
+    assert.deepEqual(restored.snapshot.scores,
+      rekeyHoleValues(personal.scores, deletedOriginalKey, restoredDeletedPlayer.id));
+    assert.deepEqual(restored.snapshot.putts,
+      rekeyHoleValues(personal.putts, deletedOriginalKey, restoredDeletedPlayer.id));
     passed.push("DELETED_IDENTITY_STAYS_ANONYMIZED");
 
     stage = "ARCHIVE_ACCOUNT";
+    checked(await peer.client.from("group_memberships_v2").insert({
+      group_id: sharedGroup.id, user_id: recreated.id, role: "MEMBER",
+      display_name_snapshot: recreated.displayName,
+    }), "Add fresh identity as archive-preservation observer");
+    recreated.touched = true;
     const beforeArchive = [await readRound(admin, sharedId), await readRound(admin, personalId)];
-    const groupBeforeArchive = await exactRows("groups_v2", "id", sharedGroup.id);
-    const membershipBeforeArchive = await exactRows("group_memberships_v2", "group_id", sharedGroup.id);
+    const groupBeforeArchive = checked(await recreated.client.from("groups_v2").select("id,owner_id,name,default_template")
+      .eq("id", sharedGroup.id), "Read group before archive as observer");
+    const membershipBeforeArchive = checked(await recreated.client.from("group_memberships_v2")
+      .select("group_id,user_id,role,display_name_snapshot").eq("group_id", sharedGroup.id).order("user_id"),
+    "Read memberships before archive as observer");
     await close(peer, "retain_history");
     peer.archived = true;
     const archivedUser = await ownedAccount(peer);
     step(archivedUser && Date.parse(archivedUser.banned_until || "") > Date.now(), "Auth account retained and banned");
     await noLogin(peer, "user_banned");
-    assert.deepEqual(await app("/api/equipment", peer, "GET", undefined, [403]), {
-      error: "Esta cuenta está desactivada o tiene una operación de cierre pendiente. Contacta soporte para recuperarla.",
-      code: "ACCOUNT_ACCESS_RESTRICTED",
-    });
+    const archivedEquipment = await app("/api/equipment", peer, "GET", undefined, [401, 403]);
+    step(archivedEquipment.code === "AUTH_REQUIRED" || archivedEquipment.code === "ACCOUNT_ACCESS_RESTRICTED",
+      "archived account cannot access equipment after global session revocation");
     const blocked = await peer.client.from("rounds_cloud").select("id").eq("id", personalId);
     step(Boolean(blocked.error) && ["42501", "PGRST301", "PGRST303"].includes(blocked.error.code), "stale JWT cannot access archived data");
     assert.deepEqual([await readRound(admin, sharedId), await readRound(admin, personalId)], beforeArchive);
-    assert.deepEqual(await exactRows("groups_v2", "id", sharedGroup.id), groupBeforeArchive);
-    assert.deepEqual(await exactRows("group_memberships_v2", "group_id", sharedGroup.id), membershipBeforeArchive);
+    assert.deepEqual(checked(await recreated.client.from("groups_v2").select("id,owner_id,name,default_template")
+      .eq("id", sharedGroup.id), "Read group after archive as observer"), groupBeforeArchive);
+    assert.deepEqual(checked(await recreated.client.from("group_memberships_v2")
+      .select("group_id,user_id,role,display_name_snapshot").eq("group_id", sharedGroup.id).order("user_id"),
+    "Read memberships after archive as observer"), membershipBeforeArchive);
     const replay = await app("/api/account/delete", peer, "DELETE", peer.operation, [200], null);
     step(replay.archived === true && replay.deleted === false && replay.accountStatus === "archived",
       "archive replay cannot become deletion");
+    await close(recreated, "delete_golf_data");
+    step((await ownedAccount(recreated)) === null, "recreated QA identity cleaned through lifecycle API");
     archivedFixtures.push({ userId: peer.id, roundIds: [sharedId, personalId], groupIds: [sharedGroup.id] });
     passed.push("ACCOUNT_ARCHIVE_KEEP_HISTORY", "ACCOUNT_ARCHIVE_KEEP_GROUP_HISTORY",
       "ACCOUNT_ARCHIVE_AUTH_BLOCKED", "ACCOUNT_ARCHIVE_STALE_JWT_BLOCKED");
@@ -590,12 +647,14 @@ export async function runPreviewAccountQA(env = process.env, { fetcher = fetch, 
     cleanup: retainedIds.length ? "QA_CLEANUP_PENDING"
       : archivedFixtures.length || preservedSharedFixtures.length ? "ONLY_INTENTIONAL_SHARED_AND_ARCHIVE_FIXTURES_RETAINED" : "COMPLETE",
     retainedQaUserIds: retainedIds, archivedQaFixtures: archivedFixtures, preservedSharedFixtures, cleanupModes,
-    ...(freshStartEvidence ? { freshStart: freshStartEvidence } : {}), legalReview: "LEGAL_REVIEW_REQUIRED",
-    coverageExcludes: ["Social activity likes/comments/attest", "Browser visual QA"] }));
+    ...(freshStartEvidence ? { freshStart: freshStartEvidence } : {}),
+    ...(databaseVerification ? { databaseVerification } : {}), legalReview: "LEGAL_REVIEW_REQUIRED",
+    coverageExcludes: ["Social activity likes/comments/attest", "Browser visual QA",
+      ...(includeAdminDocumentFixture ? [] : ["Shared Admin document rehome (contract-tested; live service-role table grants remain closed)"])] }));
   if (failed) throw new Error(`Remote account QA failed at ${stage}. Run ID: ${runId}. Provider bodies, credentials and recovery proofs were not logged.`);
   if (retainedIds.length) throw new Error("Account checks completed but exact reported disposable QA accounts still require cleanup.");
   return { passed, retainedQaUserIds: retainedIds, archivedQaFixtures: archivedFixtures,
-    preservedSharedFixtures, freshStart: freshStartEvidence };
+    preservedSharedFixtures, freshStart: freshStartEvidence, databaseVerification };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
@@ -612,7 +671,7 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
         "Optional VERCEL_AUTOMATION_BYPASS_SECRET; sent only to the exact Preview origin.",
         "Offline validation: node scripts/qa-preview-account-lifecycle.mjs --check-config",
         "Explicit execution: node scripts/qa-preview-account-lifecycle.mjs --run",
-        "Coverage: real Auth delete/retry, private and rehomed shared Storage, profile/onboarding, clubs/ball, social connection/shared group, private courses with tees/ratings, rounds/statistics, same-email fresh start and separate archive.",
+        "Coverage: real Auth delete/retry, private Storage, profile/onboarding, clubs/ball, social connection/shared group, private courses with tees/ratings, rounds/statistics, same-email fresh start and separate archive.",
         "Does not claim Social activity likes/comments/attest or browser visual coverage. Do not broad-delete the reported QA fixtures.",
       ].join("\n"));
     } else if (args.length === 1 && args[0] === "--check-config") {

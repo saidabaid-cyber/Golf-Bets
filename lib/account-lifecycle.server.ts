@@ -79,6 +79,7 @@ export function accountLifecycleGateway(
     },
     removeStorage: async (bucket, names) => { assertResult(await admin.storage.from(bucket).remove(names)); },
     prepare: job => rpcJob("account_lifecycle_prepare", { operation_id: requestId, lease: job.lease_token }),
+    reconcile: job => rpcJob("account_lifecycle_reconcile_identifiers", { operation_id: requestId, lease: job.lease_token }),
     revokeAndBan: async job => {
       const current = await admin.auth.admin.getUserById(job.user_id);
       if (current.error) {

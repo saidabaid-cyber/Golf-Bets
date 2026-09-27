@@ -7,13 +7,13 @@ import test from "node:test";
 const scriptUrl = pathToFileURL(resolve("scripts/qa-preview-account-lifecycle.mjs")).href;
 const bootstrap = `
   import assert from 'node:assert/strict';
-  import { randomUUID } from 'node:crypto';
+  import { createHash, randomUUID } from 'node:crypto';
   globalThis.fetch = async()=>{throw new Error('REAL_NETWORK_FORBIDDEN_IN_TEST');};
   const { previewAccountConfig, runPreviewAccountQA } = await import(${JSON.stringify(scriptUrl)});
   const ref='bymeopxkxapfizeeqeyb';
   const env={PREVIEW_DB_REF:ref,QA_CONFIRM_ISOLATED_PREVIEW:ref,NEXT_PUBLIC_SUPABASE_URL:'https://'+ref+'.supabase.co',
     PREVIEW_QA_URL:'https://dev.thebackyard.com.mx',PREVIEW_QA_EXPECTED_SHA:'a'.repeat(40),NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:'sb_publishable_qa_contract_test_only',
-    SUPABASE_SECRET_KEY:'sb_secret_qa_contract_test_only'};
+    SUPABASE_SECRET_KEY:'sb_secret_qa_contract_test_only',QA_ACCOUNT_ADMIN_DOCUMENT_FIXTURE:'true'};
   const health=()=>Response.json({status:'ok',environment:'preview',buildSha:env.PREVIEW_QA_EXPECTED_SHA});
   const bindingResponse=input=>{const url=new URL(String(input));
     if(url.pathname==='/api/health')return health();
@@ -56,10 +56,20 @@ test("account Preview runner executes delete/shared RLS/stale sync/archive and p
     const adminMemberships=new Map(),adminDocuments=new Map();
     let creates=0,deleteCalls=0,archiveCalls=0,adminDeletes=0,storageUploads=0;
     const ok=data=>({data,error:null});const failure=(status,code)=>({data:null,error:{status,code}});
+    function replaceToken(value,oldToken,newToken){
+      if(Array.isArray(value))return value.map(item=>replaceToken(item,oldToken,newToken));
+      if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([key,nested])=>
+        [key.replaceAll(oldToken,newToken),replaceToken(nested,oldToken,newToken)]));
+      return typeof value==='string'?value.replaceAll(oldToken,newToken):value;
+    }
     function scrub(round){
       for(const id of deletedIds){
-        for(const player of round.snapshot.players)if(player.accountUserId===id){player.name='Jugador eliminado';player.accountUserId=null;player.avatarUrl=null;}
+        for(const player of round.snapshot.players)if(player.accountUserId===id||player.id?.includes(id)){
+          player.name='Jugador eliminado';player.accountUserId=null;player.avatarUrl=null;player.identityDeleted=true;
+        }
         if(round.owner_id===id){round.owner_id=null;round.snapshot.ownerName='Jugador eliminado';round.snapshot.accountUserId=null;}
+        const token='deleted-'+createHash('sha256').update('round:'+round.id+':'+id).digest('hex').slice(0,28);
+        round.snapshot=replaceToken(round.snapshot,id,token);
       }
       return round;
     }
@@ -191,7 +201,8 @@ test("account Preview runner executes delete/shared RLS/stale sync/archive and p
                 assert.equal(value.created_by,signedIn);
                 assert.ok([...adminMemberships.values()].some(membership=>membership.user_id===signedIn&&membership.active));
               }
-              if(table==='group_memberships_v2')assert.equal(groups.get(value.group_id)?.owner_id,signedIn);
+              if(table==='group_memberships_v2')assert.ok(groups.get(value.group_id)?.owner_id===signedIn
+                ||[...groupMemberships.values()].some(member=>member.group_id===value.group_id&&member.user_id===signedIn&&member.role==='ADMIN'));
             }
             if(action==='upsert'){const saved=[];for(const value of values){const current=tableRows(table).find(row=>row[ownerColumn(table)]===value[ownerColumn(table)]);if(current){Object.assign(current,value);saved.push(current);}else saved.push(...storeRows(table,[value]));}rows=saved;}
             else rows=storeRows(table,values);}
@@ -239,6 +250,8 @@ test("account Preview runner executes delete/shared RLS/stale sync/archive and p
         const profile=profiles.get(id),types=(acceptances.get(id)||[]).map(row=>row.type);
         return Response.json({userId:id,profileExists:Boolean(profile),existingAccount:Boolean(profile?.onboarding_completed_at||(types.includes('terms')&&types.includes('privacy'))),onboardingProgress:null});
       }
+      if(url.pathname==='/api/admin/access')return Response.json({hasAccess:[...adminMemberships.values()]
+        .some(membership=>membership.user_id===id&&membership.active)});
       assert.equal(url.pathname,'/api/cloud/rounds');
       if(init.method==='GET')return Response.json({rounds:[...rounds.values()]
         .filter(row=>row.owner_id===id||participants.get(row.id)===id)
@@ -248,8 +261,10 @@ test("account Preview runner executes delete/shared RLS/stale sync/archive and p
     };
     const result=await runPreviewAccountQA(env,{fetcher:transport,clientFactory,log:value=>logs.push(JSON.parse(value))});
     assert.equal(creates,4);assert.equal(deleteCalls,3);assert.equal(archiveCalls,1);assert.equal(adminDeletes,0);assert.equal(storageUploads,2);
-    assert.equal(result.passed.length,42);assert.deepEqual(result.retainedQaUserIds,[]);assert.equal(result.archivedQaFixtures.length,1);
+    assert.equal(result.passed.length,43);assert.deepEqual(result.retainedQaUserIds,[]);assert.equal(result.archivedQaFixtures.length,1);
     assert.equal(result.preservedSharedFixtures.length,1);
+    assert.equal(result.databaseVerification.deletedUserId,result.freshStart.deletedUserId);
+    assert.equal(result.databaseVerification.adminDocumentId,result.preservedSharedFixtures[0].documentId);
     assert.ok(result.freshStart);assert.notEqual(result.freshStart.deletedUserId,result.freshStart.recreatedUserId);
     assert.equal(result.freshStart.sameEmailRecreated,true);assert.equal(result.freshStart.statisticsScoredRounds,0);assert.equal(objects.size,1);
     assert.equal(users.size,2);assert.ok(users.has('existing-user'));

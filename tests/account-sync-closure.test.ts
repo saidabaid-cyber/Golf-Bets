@@ -218,6 +218,7 @@ function deletionGateway(options: { failStorage?: boolean } = {}) {
     storageBatch: async () => hasPhotos ? [{ bucket_id: "scorecard-photos", name: "user-a/round-1/card.jpg" }] : [],
     removeStorage: async () => { calls.push("storage"); if (options.failStorage) throw new Error("storage unavailable"); hasPhotos = false; },
     prepare: async () => { calls.push("transaction"); return { ...job, stage: "data_prepared" }; },
+    reconcile: async current => { calls.push("reconcile"); return current; },
     revokeAndBan: async () => { calls.push("revoke"); },
     signOut: async () => { calls.push("signout"); },
     deleteAuth: async () => { calls.push("auth"); },
@@ -231,7 +232,7 @@ test("eliminación server-side usa transacción y Auth antes de confirmar", asyn
   const { gateway, calls } = deletionGateway();
   const result = await executeAccountLifecycle(gateway);
   assert.equal(result.stage, "completed");
-  assert.deepEqual(calls, ["acquire", "storage", "transaction", "revoke", "signout", "auth", "complete", "release"]);
+  assert.deepEqual(calls, ["acquire", "storage", "transaction", "reconcile", "revoke", "signout", "auth", "complete", "release"]);
 });
 
 test("un fallo de Storage impide afirmar eliminación o borrar Auth", async () => {

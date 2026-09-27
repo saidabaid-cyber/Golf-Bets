@@ -14,7 +14,7 @@ export type AccountLifecycleJob = {
 export const ACCOUNT_LIFECYCLE_STAGES = [
   "authenticate", "recover", "acquire", "storageRehomeBatch", "copyStorage", "commitStorageRehome",
   "storageBatch", "removeStorage",
-  "prepare", "revokeAndBan", "signOut", "deleteAuth", "complete", "release",
+  "prepare", "reconcile", "revokeAndBan", "signOut", "deleteAuth", "complete", "release",
 ] as const;
 export type AccountLifecycleStage = (typeof ACCOUNT_LIFECYCLE_STAGES)[number];
 
@@ -134,6 +134,7 @@ export function accountLifecycleFailureResponse(error: unknown): AccountLifecycl
     storageBatch: { code: "ACCOUNT_STORAGE_PENDING", error: "La limpieza de archivos todavía no termina. Reintenta con la misma solicitud." },
     removeStorage: { code: "ACCOUNT_STORAGE_PENDING", error: "La limpieza de archivos todavía no termina. Reintenta con la misma solicitud." },
     prepare: { code: "ACCOUNT_DATA_CLEANUP_PENDING", error: "La limpieza de datos todavía no termina. Reintenta con la misma solicitud." },
+    reconcile: { code: "ACCOUNT_DATA_CLEANUP_PENDING", error: "La reconciliación de datos todavía no termina. Reintenta con la misma solicitud." },
     revokeAndBan: { code: "ACCOUNT_AUTH_PENDING", error: "El cierre de acceso todavía no termina. Reintenta con la misma solicitud." },
     signOut: { code: "ACCOUNT_AUTH_PENDING", error: "El cierre de sesión todavía no termina. Reintenta con la misma solicitud." },
     deleteAuth: { code: "ACCOUNT_AUTH_PENDING", error: "La eliminación de identidad todavía no termina. Reintenta con la misma solicitud." },
@@ -176,6 +177,7 @@ export type AccountLifecycleGateway = {
   storageBatch: (job: AccountLifecycleJob) => Promise<Array<{ bucket_id: string; name: string }>>;
   removeStorage: (bucket: string, names: string[]) => Promise<void>;
   prepare: (job: AccountLifecycleJob) => Promise<AccountLifecycleJob>;
+  reconcile: (job: AccountLifecycleJob) => Promise<AccountLifecycleJob>;
   revokeAndBan: (job: AccountLifecycleJob) => Promise<void>;
   signOut: (job: AccountLifecycleJob) => Promise<void>;
   deleteAuth: (job: AccountLifecycleJob) => Promise<void>;
@@ -229,6 +231,14 @@ export async function executeAccountLifecycle(gateway: AccountLifecycleGateway) 
         throw new AccountLifecycleStageError("prepare", { code: "INVALID_LIFECYCLE_RESPONSE", errorClass: "LifecycleContractError" });
       }
       job = prepared;
+      releaseJob = job;
+    }
+    if (job.data_policy === "delete_golf_data" && job.stage === "data_prepared") {
+      const reconciled = await runAccountLifecycleStage("reconcile", () => gateway.reconcile(job));
+      if (reconciled.stage !== "data_prepared" || reconciled.lease_token !== job.lease_token) {
+        throw new AccountLifecycleStageError("reconcile", { code: "INVALID_LIFECYCLE_RESPONSE", errorClass: "LifecycleContractError" });
+      }
+      job = reconciled;
       releaseJob = job;
     }
     await runAccountLifecycleStage("revokeAndBan", () => gateway.revokeAndBan(job));
