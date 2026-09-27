@@ -66,8 +66,12 @@ test("setup auto-avanza campo → tee, conserva ajustes avanzados y preflight si
   assert.match(picker, /Buscar campos cercanos con mi ubicación/);
   assert.match(picker, /Ubicación desactivada/);
   assert.doesNotMatch(picker, /getCurrentPosition/);
-  assert.match(route, /nearbyCourses/);
+  assert.match(route, /distinctNearbyClubCards/);
+  assert.match(route, /requireQaReviewedCatalog: true/);
+  assert.match(route, /AUTH_REQUIRED/);
+  assert.match(route, /COURSE_CATALOG_UNAVAILABLE/);
   assert.match(route, /radiusKm: 50/);
+  assert.doesNotMatch(route, /limit:\s*3|slice\(0,\s*3\)/);
   assert.match(route, /invalid_location/);
 });
 

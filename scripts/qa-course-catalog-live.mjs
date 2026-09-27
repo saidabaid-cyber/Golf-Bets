@@ -27,6 +27,30 @@ async function app(path,method='GET',body,expected=200){
  const data=await r.json();assert.equal(r.status,expected,`${path}: ${r.status} ${data.code||''}`);return data;
 }
 const report={preview:config.previewOrigin,ref:config.projectRef,geographic:[],rounds:[],emailsSent:0,authChanges:0,historicalWrites:0};
+for(const [query,expectedId] of [['Cristo','course-el-cristo'],['lagarto','course-cola-de-lagarto']]){
+ const response=await rawRequest(`${config.previewOrigin}/api/courses/search?q=${encodeURIComponent(query)}`,{cache:'no-store'});
+ const body=await response.json();assert.equal(response.status,200);assert.equal(body.total,1);assert.deepEqual(body.courses.map(course=>course.courseId),[expectedId]);
+}
+{
+ const response=await rawRequest(`${config.previewOrigin}/api/courses/search?nearby=1&lat=19.008297&lng=-98.254634`,{cache:'no-store'});
+ const body=await response.json();assert.equal(response.status,401);assert.deepEqual(body,{error:'authentication_required',code:'AUTH_REQUIRED'});
+ report.publicNearby={status:response.status,code:body.code};
+}
+{
+ const nearby=await app('/api/courses/search?nearby=1&lat=19.008297&lng=-98.254634&limit=3');
+ const expected=[
+  ['club-la-vista','LA VISTA COUNTRY CLUB'],
+  ['club-campestre-puebla','CLUB CAMPESTRE DE PUEBLA'],
+  ['review-club-75f6ac3a0e37a69eabd3','CLUB DE GOLF LAS FUENTES'],
+  ['review-club-9c0700f229794a278011','CLUB DE GOLF LA HUERTA'],
+  ['club-cola-de-lagarto','COLA DE LAGARTO CAMPO MÍTICO'],
+  ['club-el-cristo','CLUB CAMPESTRE EL CRISTO'],
+ ];
+ assert.equal(nearby.total,expected.length);assert.deepEqual(nearby.courses.map(course=>[course.clubId,course.clubName]),expected);
+ assert.equal(new Set(nearby.courses.map(course=>course.clubId)).size,expected.length);
+ assert.ok(nearby.courses.every((course,index)=>course.distanceKm<=50&&(index===0||nearby.courses[index-1].distanceKm<=course.distanceKm)));
+ report.nearbyEndpoint={origin:{latitude:19.008297,longitude:-98.254634},radiusKm:50,provider:nearby.provider,courses:nearby.courses.map(course=>({clubId:course.clubId,name:course.clubName,distanceKm:course.distanceKm}))};
+}
 const catalog=await app('/api/courses/catalog');assert.equal(catalog.total,176);
 const expectedCatalog=JSON.parse(readFileSync('data/qa/course-audit-source.json','utf8'));
 const expectedGeolocated=new Set(expectedCatalog.clubs.filter(club=>Number.isFinite(club.latitude)&&Number.isFinite(club.longitude)&&club.locationEvidence).map(club=>club.id)).size;

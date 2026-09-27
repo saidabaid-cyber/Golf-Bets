@@ -120,7 +120,7 @@ test("temporary and Competition configuration editors load immutable base holes"
 
 test("authenticated Player catalog uses the layered provider without a service-role-only read", () => {
   const route = readFileSync(join(process.cwd(), "app/api/courses/catalog/route.ts"), "utf8");
-  assert.match(route, /getCourseCatalog\(auth\.client\)/);
+  assert.match(route, /getCourseCatalog\(auth\.client,\{requireQaReviewedCatalog:true\}\)/);
   assert.doesNotMatch(route, /getCourseCatalog\(\)/);
   assert.match(route, /golfCourseSelectionToLegacyCourse/);
   assert.doesNotMatch(route, /loadReviewedCourseCatalog/);

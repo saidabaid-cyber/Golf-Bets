@@ -160,14 +160,20 @@ function mergeCatalog(base: GolfCourseCatalog, overlays: readonly GolfCourseCata
   return { schemaVersion: 1, clubs: [...clubs.values()], courses: [...courses.values()], tees: [...tees.values()], holes: [...holes.values()], teeHoleYardages: [...yardages.values()], geoFeatures: base.geoFeatures };
 }
 
-export async function getCourseCatalog(database: SupabaseClient | null = getSupabaseAdmin("cloud")) {
+export async function getCourseCatalog(database: SupabaseClient | null = getSupabaseAdmin("cloud"), options: { requireQaReviewedCatalog?: boolean } = {}) {
   let base = INTERNAL_GOLF_COURSE_CATALOG;
-  if (database && reviewCatalogQaEnabled()) {
-    try {
-      const reviewed = await loadReviewedCourseCatalog(database);
-      if (reviewed.length) base = reviewedCoursesToCatalog(reviewed);
-    } catch {
-      // Fail back to the versioned internal seed; never fabricate catalog rows.
+  if (options.requireQaReviewedCatalog && !reviewCatalogQaEnabled()) throw Error("CATALOG_QA_ONLY");
+  if (reviewCatalogQaEnabled()) {
+    if (!database && options.requireQaReviewedCatalog) throw Error("CATALOG_AUTH_REQUIRED");
+    if (database) {
+      try {
+        const reviewed = await loadReviewedCourseCatalog(database);
+        if (reviewed.length) base = reviewedCoursesToCatalog(reviewed);
+        else if (options.requireQaReviewedCatalog) throw Error("CATALOG_UNAVAILABLE");
+      } catch (error) {
+        if (options.requireQaReviewedCatalog) throw error;
+        // Non-critical callers retain the versioned internal seed; never fabricate catalog rows.
+      }
     }
   }
   const published = await readPublishedCatalog(["COURSE"]);
@@ -189,8 +195,8 @@ function normalized(value: unknown) {
   return String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es-MX");
 }
 
-export async function searchCourseCards(input: { query: string; limit: number; cursor?: string | null; latitude?: number; longitude?: number }, database: SupabaseClient | null = getSupabaseAdmin("cloud")) {
-  const catalog = await getCourseCatalog(database);
+export async function searchCourseCards(input: { query: string; limit: number; cursor?: string | null; latitude?: number; longitude?: number; requireQaReviewedCatalog?: boolean }, database: SupabaseClient | null = getSupabaseAdmin("cloud")) {
+  const catalog = await getCourseCatalog(database, { requireQaReviewedCatalog: input.requireQaReviewedCatalog });
   const clubs = new Map(catalog.clubs.map((club) => [club.id, club]));
   const cards: CourseCard[] = catalog.courses.flatMap((course) => {
     const club = clubs.get(course.clubId); if (!club || !course.active || !club.active) return [];

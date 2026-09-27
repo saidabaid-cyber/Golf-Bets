@@ -8,12 +8,13 @@ test("authenticated catalog reads use the player's JWT instead of requiring serv
   const route = source("app/api/courses/catalog/route.ts");
   const reviewed = source("lib/review-course-catalog.server.ts");
   const provider = source("lib/course-catalog-provider.server.ts");
-  assert.match(route, /getCourseCatalog\(auth\.client\)/);
+  assert.match(route, /getCourseCatalog\(auth\.client,\{requireQaReviewedCatalog:true\}\)/);
   assert.match(reviewed, /loadReviewedCourseCatalog\(database\?:SupabaseClient\|null\)/);
   assert.match(reviewed, /const db=database\?\?getSupabaseAdmin\(\)/);
   assert.match(reviewed, /db\.rpc\('read_owner_course_catalog_v1'\)/);
   assert.doesNotMatch(reviewed, /db\.from\('golf_(?:clubs|courses|course_tees)'\)/);
   assert.match(provider, /loadReviewedCourseCatalog\(database\)/);
+  assert.match(provider, /if \(options\.requireQaReviewedCatalog\) throw error/);
   assert.doesNotMatch(route, /getSupabaseAdmin|service_role/i);
 });
 
@@ -25,6 +26,9 @@ test("search and course operations propagate bearer auth and reject an invalid b
   assert.match(route, /const auth = await authenticatedRequest\(request\)/);
   assert.match(route, /status: auth\.status/);
   assert.match(route, /searchCourseCards\(input, database\)/);
+  assert.match(route, /requireQaReviewedCatalog: true/);
+  assert.match(route, /authentication_required[\s\S]+AUTH_REQUIRED/);
+  assert.match(route, /course_catalog_unavailable[\s\S]+COURSE_CATALOG_UNAVAILABLE/);
   assert.match(operations, /getCourseCatalog\(auth\?\.ok \? auth\.client : null\)/);
   assert.match(picker, /authorization: `Bearer \$\{accessToken\}`/);
   assert.match(playerOperations, /authorization: `Bearer \$\{accessToken\}`/);

@@ -8,12 +8,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { distinctNearbyClubCards } from "../../../../lib/course-nearby-clubs";
 
 type LayeredSearch = Awaited<ReturnType<typeof import("../../../../lib/course-catalog-provider.server").searchCourseCards>>;
+type LayeredSearchInput = { query: string; limit: number; cursor?: string; latitude?: number; longitude?: number; requireQaReviewedCatalog?: boolean };
 
-async function layeredSearch(input: { query: string; limit: number; cursor?: string; latitude?: number; longitude?: number }, database: SupabaseClient | null): Promise<LayeredSearch | null> {
+async function layeredSearch(input: LayeredSearchInput, database: SupabaseClient | null, failClosed = false): Promise<LayeredSearch | null> {
   try {
     const { searchCourseCards } = await import("../../../../lib/course-catalog-provider.server");
     return await searchCourseCards(input, database);
-  } catch {
+  } catch (error) {
+    if (failClosed) throw error;
     // The versioned local provider remains a deterministic offline fallback.
     return null;
   }
@@ -57,6 +59,9 @@ export async function GET(request: NextRequest) {
     }, { headers: responseCache });
   }
   if (request.nextUrl.searchParams.get("nearby") === "1") {
+    if (!hasBearer) {
+      return NextResponse.json({ error: "authentication_required", code: "AUTH_REQUIRED" }, { status: 401, headers: { "cache-control": "private, no-store" } });
+    }
     const latitudeInput = request.nextUrl.searchParams.get("lat");
     const longitudeInput = request.nextUrl.searchParams.get("lng");
     const latitude = Number(latitudeInput);
@@ -66,35 +71,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "invalid_location" }, { status: 400, headers: { "cache-control": "no-store" } });
     }
     // Nearby always starts from the closest result; a stale text-search cursor must not skip clubs.
-    const layered = await layeredSearch({ query, limit: 10_000, latitude, longitude }, database);
-    if (layered) {
-      const nearby = distinctNearbyClubCards(layered.cards, { radiusKm: 50 });
-      return NextResponse.json({
-        provider: layered.provider,
-        total: nearby.total,
-        courses: nearby.matches.map(({ card: course, distanceKm }) => ({
-          ...course,
-          distanceKm: distanceKm === null ? null : Math.round(distanceKm * 10) / 10,
-        })),
-      }, { headers: { "cache-control": "private, no-store" } });
+    let layered: LayeredSearch;
+    try {
+      const result = await layeredSearch({ query, limit: 10_000, latitude, longitude, requireQaReviewedCatalog: true }, database, true);
+      if (!result) throw Error("COURSE_CATALOG_UNAVAILABLE");
+      layered = result;
+    } catch {
+      return NextResponse.json({ error: "course_catalog_unavailable", code: "COURSE_CATALOG_UNAVAILABLE" }, { status: 503, headers: { "cache-control": "private, no-store" } });
     }
-    const result = await internalCourseDataProvider.nearbyCourses({ courses: DEFAULT_COURSES, origin: { latitude, longitude }, limit: DEFAULT_COURSES.length, radiusKm: 50 });
-    if (!result.ok) return NextResponse.json({ error: result.code }, { status: 503, headers: { "cache-control": "no-store" } });
-    const nearby = distinctNearbyClubCards(result.data.matches.map(({ course, distanceKm }) => ({
-      card: {
-        id: course.id,
-        courseId: course.catalogCourseId ?? course.id,
-        clubId: course.catalogClubId,
-        name: course.name,
-        clubName: course.clubName,
-        city: course.city,
-        localIndexTeeAvailable: course.indexRatingEvidence?.kind === "CURATED_RATED_TEE",
-        tee: { id: course.catalogTeeId ?? course.id, name: course.teeName, rating: course.rating, slope: course.slope, yards: course.totalYards, localIndexRated: course.indexRatingEvidence?.kind === "CURATED_RATED_TEE" },
-      },
-      distanceKm,
-    })), { radiusKm: 50 });
+    const nearby = distinctNearbyClubCards(layered.cards, { radiusKm: 50 });
     return NextResponse.json({
-      provider: result.providerId,
+      provider: layered.provider,
       total: nearby.total,
       courses: nearby.matches.map(({ card: course, distanceKm }) => ({
         ...course,
