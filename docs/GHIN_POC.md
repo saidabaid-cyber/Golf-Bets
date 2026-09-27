@@ -2,6 +2,32 @@
 
 > **DOCUMENTO HISTÓRICO — NO USAR COMO ESTADO CANÓNICO NI RUNBOOK.** Conserva evidencia de `codex/ghin-poc`; el código aceptado se evalúa ahora en `integration/backyard-current`, con GHIN live apagado hasta QA externo. Consulte el [manifiesto de consolidación](./CONSOLIDATION_MANIFEST_2026-09-24.md), el [estado canónico del producto](./CANONICAL_PRODUCT_STATUS_2026-09-24.md) y el [ledger canónico de migraciones](./CANONICAL_MIGRATION_LEDGER_2026-09-24.md). No habilite credenciales, flags, deploys ni migraciones a partir de este archivo.
 
+## Actualización canónica de autenticación — 2026-09-27 UTC
+
+En `integration/backyard-current` se volvió a ejecutar el login autorizado desde
+el Preview canónico. Los dos valores server-only quedaron como `Secret`, con
+scope exclusivo `Preview (integration/backyard-current)`. El diagnóstico dentro
+del runtime confirmó ambos presentes y no vacíos, sin whitespace inicial/final,
+comillas envolventes, caracteres de control, escapes literales ni BOM; no
+registró ni devolvió sus valores.
+
+El cliente se alineó con el bundle público oficial de GHIN.com observado el
+2026-09-26: host por defecto `api2.ghin.com`, `remember_me` booleano, `source` en
+el body y token RSA fresco. La matriz `api2.ghin.com`/`api.ghin.com` por login
+configurado/GHIN `11103349` terminó sin `golfer_user_token`; las cuatro respuestas
+de login fueron HTTP 400 y el resultado agregado del probe fue HTTP 502
+`BLOCKED_EXTERNAL`. El éxito manual reportado por el propietario impide concluir
+que la contraseña sea inválida: queda documentada una discrepancia entre el
+login web interactivo y el acceso automatizado al endpoint de golfista.
+
+Por fail-closed no se ejecutaron lookup, Score History ni Course Data, no se
+habilitó la asociación de Perfil y `GHIN_COURSE_LOOKUP_ENABLED` /
+`GHIN_COURSE_SYNC_ENABLED` permanecieron apagados. El endpoint y bearer temporal
+del probe se retiraron después de la prueba. No hubo score posting, escritura a
+GHIN, cambio de Production ni aplicación de migraciones. La foundation GHIN ya
+consta aplicada sólo en QA como `20260924233419`, con el run canónico RLS 17/17
+documentado en el ledger; no se reaplicó.
+
 ## Estado y alcance
 
 - Repositorio: `saidabaid-cyber/Golf-Bets`.
