@@ -114,18 +114,13 @@ test("stops after Firebase failure and exposes no secret material", async () => 
   assert.doesNotMatch(JSON.stringify(result), /authorized@example\.invalid|not-a-real-password|rejected/);
 });
 
-test("the temporary probe stays branch-scoped, secret-protected and read-only", () => {
-  const route = readFileSync("app/api/admin/dev/ghin/spicygolf-020-poc/route.ts", "utf8");
+test("the isolated POC has no environment access, logging, or score posting", () => {
   const poc = readFileSync("lib/ghin/spicygolf-020-poc.server.ts", "utf8");
 
-  assert.match(route, /VERCEL_ENV\s*===\s*["']preview["']/);
-  assert.match(route, /VERCEL_GIT_COMMIT_REF\s*===\s*["']integration\/backyard-current["']/);
-  assert.match(route, /process\.env\.GHIN_QA_PROBE_SECRET/);
-  assert.match(route, /timingSafeEqual/);
-  assert.match(route, /Buffer\.byteLength\(rawBody,\s*["']utf8["']\)/);
-  assert.match(route, /private, no-store/);
-  assert.doesNotMatch(route, /NEXT_PUBLIC_[A-Z_]*(?:PASSWORD|SECRET|TOKEN|LOGIN)/);
-  assert.doesNotMatch(`${route}\n${poc}`, /console\.(?:log|info|warn|error)/);
+  assert.match(poc, /firebaseinstallations\.googleapis\.com\/v1\/projects\/ghin-mobile-app\/installations/);
+  assert.match(poc, /api2\.ghin\.com\/api\/v1/);
+  assert.doesNotMatch(poc, /process\.env|NEXT_PUBLIC_/);
+  assert.doesNotMatch(poc, /console\.(?:log|info|warn|error)/);
   assert.doesNotMatch(poc, /scores(?:\/|\.json)[\s\S]{0,300}method:\s*["']POST["']/i);
-  assert.doesNotMatch(route, /export\s+(?:async\s+)?function\s+(?:GET|PUT|PATCH|DELETE)\s*\(/);
+  assert.doesNotMatch(poc, /(?:post|create|update|delete|submit)Score/i);
 });

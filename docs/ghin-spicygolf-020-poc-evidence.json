@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-09-27T13:59:15.913Z",
+  "environment": "Vercel Preview",
+  "branch": "integration/backyard-current",
+  "qaUrl": "https://dev.thebackyard.com.mx",
+  "liveProbeDeploymentId": "dpl_6rheLFK5FuAJe6Rhp6Ehn6orXPAi",
+  "source": {
+    "package": "@spicygolf/ghin",
+    "version": "0.20.0",
+    "gitHead": "07f458391b04d22df9f647b5c3c4d634fba1458a",
+    "file": "src/client/request-client/index.ts"
+  },
+  "results": {
+    "firebaseSession": {
+      "status": "PASS",
+      "httpStatus": 200,
+      "authTokenReceived": true
+    },
+    "golferLogin": {
+      "status": "PASS",
+      "httpStatus": 200,
+      "golferUserTokenReceived": true
+    },
+    "golferLookup": {
+      "status": "PASS",
+      "httpStatus": 200,
+      "matched": true,
+      "name": "Said Abaid Taja",
+      "ghin": "11103349",
+      "club": "LA Vista Country Club",
+      "homeClub": "LA Vista Country Club",
+      "handicapIndex": "7.9",
+      "golferStatus": "Active",
+      "revDate": "2026-09-24"
+    },
+    "scoresReadOnly": {
+      "status": "PASS",
+      "httpStatus": 200,
+      "count": 503,
+      "totalCount": 503,
+      "structuralFields": [
+        "id",
+        "played_at",
+        "posted_at",
+        "course_id",
+        "course_name",
+        "facility_name",
+        "tee_set_id",
+        "tee_name",
+        "adjusted_gross_score",
+        "differential",
+        "course_rating",
+        "slope_rating",
+        "score_type",
+        "score_type_display_full",
+        "number_of_holes",
+        "status"
+      ]
+    }
+  },
+  "gpaApiAccessFlow": {
+    "endpoint": "/users/login.json",
+    "tested": false,
+    "reason": "No authorized GPA/vendor credentials or entitlements were provided."
+  },
+  "safety": {
+    "credentialsReturned": false,
+    "firebaseTokenReturned": false,
+    "golferUserTokenReturned": false,
+    "cookiesUsed": false,
+    "scorePostingCalls": 0,
+    "productionTouched": false
+  }
+}
