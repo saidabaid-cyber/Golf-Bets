@@ -67,6 +67,11 @@ try {
     })]);
   const legacyGroup=await scalar(`insert into public.groups_v2(owner_id,name,default_template)
     values($1,'QA legacy shared group',$2::jsonb) returning id`,[LEGACY_OWNER,JSON.stringify({players:[{id:legacyPlayer,name:"Legacy private name",avatarUrl:"legacy-private-avatar"}]})]);
+  const legacyMarkerGroup=await scalar(`insert into public.groups_v2(owner_id,name,default_template)
+    values($1,'QA legacy marker-only group',$2::jsonb) returning id`,[LEGACY_OWNER,JSON.stringify({players:[{
+      id:"legacy-marker-only",accountUserId:null,identityDeleted:true,name:"LEGACY_MARKER_PII",
+      avatarUrl:"legacy-marker-avatar",updatedBy:LEGACY_OTHER,
+    }]})]);
   const legacyRoundPlayer=await scalar(`insert into public.round_players_cloud(round_id,local_player_id,name)
     values($1,$2,'Legacy private name') returning id`,[legacyRound,legacyPlayer]);
   await q(`insert into public.round_group_snapshots_v2(round_id,source_group_id,source_group_name,source_group_version,selected_player_count)
@@ -88,6 +93,11 @@ try {
     values('COURSE','GLOBAL','UPLOADED','CSV',$1::jsonb,$2) returning id`,[JSON.stringify({player:{id:legacyPlayer,name:"Legacy private name",avatarUrl:"legacy-private-avatar"}}),LEGACY_OWNER]);
   const legacyRevision=await scalar(`insert into public.admin_catalog_revisions(entity_type,entity_id,scope_type,version,payload,preview_hash,revision_hash,created_by)
     values('COURSE','qa-legacy-revision','GLOBAL',1,$1::jsonb,$2,$2,$3) returning id`,[JSON.stringify({player:{id:legacyPlayer,name:"Legacy private name",avatarUrl:"legacy-private-avatar"}}),HASH,LEGACY_OWNER]);
+  const legacyMarkerRevision=await scalar(`insert into public.admin_catalog_revisions(entity_type,entity_id,scope_type,version,payload,preview_hash,revision_hash,created_by)
+    values('COURSE','qa-legacy-marker-revision','GLOBAL',1,$1::jsonb,$2,$2,$3) returning id`,[JSON.stringify({player:{
+      id:"legacy-admin-marker",identityDeleted:true,name:"LEGACY_ADMIN_MARKER_PII",
+      avatarUrl:"legacy-admin-marker-avatar",updatedBy:LEGACY_OTHER,
+    }}),HASH,LEGACY_OWNER]);
   await db.exec("alter table public.competition_definitions enable trigger competition_definition_audit; alter table public.admin_import_jobs enable trigger import_job_audit; alter table public.admin_catalog_revisions enable trigger admin_catalog_revision_audit;");
   const legacyAudit=await scalar(`insert into public.admin_audit_log(action,entity_type,entity_id,before_state,after_state)
     values('QA_BACKFILL','QA_SYNTHETIC','qa-legacy',$1::jsonb,$1::jsonb) returning id`,[JSON.stringify({player:{id:legacyPlayer,name:"Legacy private name",avatarUrl:"legacy-private-avatar"}})]);
@@ -126,6 +136,17 @@ try {
   assert.equal(legacyRevisionRow.preview_hash,legacyRevisionHash,"backfill reconciles the revision preview hash");
   assert.equal(legacyRevisionRow.revision_hash,legacyRevisionHash,"backfill reconciles the published revision hash");
   assert.equal(await scalar("select bool_and(tgenabled='O') from pg_trigger where tgname in ('competition_definition_audit','import_job_audit','admin_catalog_revision_guard','admin_catalog_revision_audit')"),true,"Admin guard/audit triggers are restored after backfill");
+  const legacyMarkerTemplate=await scalar("select default_template from public.groups_v2 where id=$1",[legacyMarkerGroup]);
+  assert.equal(legacyMarkerTemplate.players[0].name,"Jugador eliminado","historical marker-only JSON is scrubbed during backfill");
+  assert.equal(legacyMarkerTemplate.players[0].avatarUrl ?? null,null);
+  assert.equal(legacyMarkerTemplate.players[0].updatedBy,LEGACY_OTHER,"marker-only scrub preserves another actor's attribution");
+  const legacyMarkerRevisionRow=(await q("select payload,preview_hash,revision_hash from public.admin_catalog_revisions where id=$1",[legacyMarkerRevision])).rows[0];
+  assert.equal(legacyMarkerRevisionRow.payload.player.name,"Jugador eliminado","historical marker-only Admin payload is scrubbed");
+  assert.equal(legacyMarkerRevisionRow.payload.player.avatarUrl ?? null,null);
+  assert.equal(legacyMarkerRevisionRow.payload.player.updatedBy,LEGACY_OTHER,"Admin marker scrub preserves survivor attribution");
+  const legacyMarkerRevisionHash=await scalar("select encode(extensions.digest(convert_to(payload::text,'UTF8'),'sha256'),'hex') from public.admin_catalog_revisions where id=$1",[legacyMarkerRevision]);
+  assert.equal(legacyMarkerRevisionRow.preview_hash,legacyMarkerRevisionHash,"marker-only Admin preview hash is reconciled");
+  assert.equal(legacyMarkerRevisionRow.revision_hash,legacyMarkerRevisionHash,"marker-only Admin revision hash is reconciled");
   // Remote QA has this email-consent surface even though it predates the
   // reconstructed local migration ledger. The lifecycle function discovers it
   // dynamically so local and deployed schemas follow the same fresh-start rule.
@@ -452,6 +473,38 @@ try {
   assert.equal(JSON.stringify(restored).includes(A),false,"stale sync cannot restore the deleted Auth UUID");
   assert.deepEqual(restored.scores,{1:{[copyTombstone]:4,b:5}});
   assert.deepEqual(restored.putts,{1:{[copyTombstone]:2,b:2}});
+  const tombstoneOnlySnapshot=structuredClone(restored);
+  const tombstoneOnlyPlayer=tombstoneOnlySnapshot.players.find(player=>player.id===copyTombstone);
+  tombstoneOnlyPlayer.name="RESTORED_PII";
+  tombstoneOnlyPlayer.avatarUrl="restored-private-avatar";
+  await q("update public.rounds_cloud set snapshot=$2::jsonb where id=$1",[copy,JSON.stringify(tombstoneOnlySnapshot)]);
+  const tombstoneOnlyRestored=await scalar("select snapshot from public.rounds_cloud where id=$1",[copy]);
+  const tombstoneOnlyDeleted=tombstoneOnlyRestored.players.find(player=>player.id===copyTombstone);
+  assert.equal(tombstoneOnlyDeleted.name,"Jugador eliminado","tombstone-only stale snapshot cannot restore a deleted name");
+  assert.equal(tombstoneOnlyDeleted.avatarUrl,null,"tombstone-only stale snapshot cannot restore a deleted avatar");
+  assert.deepEqual(tombstoneOnlyRestored.scores,{1:{[copyTombstone]:4,b:5}});
+  assert.deepEqual(tombstoneOnlyRestored.putts,{1:{[copyTombstone]:2,b:2}});
+  const uppercaseIdentityOnly={
+    ownerId:"b",ownerName:"Other Player",
+    players:[{id:"uppercase-identity-only",accountUserId:A.toUpperCase(),name:"UPPERCASE_PII",avatarUrl:"uppercase-private-avatar"},{id:"b",accountUserId:B,name:"Other Player"}],
+    scores:{1:{"uppercase-identity-only":4,b:5}},putts:{1:{"uppercase-identity-only":2,b:2}},
+  };
+  await q("update public.rounds_cloud set snapshot=$2::jsonb where id=$1",[copy,JSON.stringify(uppercaseIdentityOnly)]);
+  const uppercaseRestored=await scalar("select snapshot from public.rounds_cloud where id=$1",[copy]);
+  const uppercaseDeleted=uppercaseRestored.players.find(player=>player.id==="uppercase-identity-only");
+  assert.equal(uppercaseDeleted.name,"Jugador eliminado","uppercase identity-key-only snapshot loses its name");
+  assert.equal(uppercaseDeleted.avatarUrl,null,"uppercase identity-key-only snapshot loses its avatar");
+  assert.equal(uppercaseDeleted.accountUserId ?? null,null,"uppercase identity-key-only snapshot loses its Auth id");
+  assert.equal(uppercaseDeleted.identityDeleted,true);
+  assert.equal(JSON.stringify(uppercaseRestored).toLowerCase().includes(A),false);
+  await admin();
+  await q("update public.groups_v2 set default_template=$2::jsonb where id=$1",[group,JSON.stringify({
+    players:[{id:"marker-only",accountUserId:null,identityDeleted:true,name:"MARKER_ONLY_PII",avatarUrl:"marker-private-avatar",updatedBy:B}],
+  })]);
+  const markerOnly=await scalar("select default_template from public.groups_v2 where id=$1",[group]);
+  assert.equal(markerOnly.players[0].name,"Jugador eliminado","identityDeleted marker enforces redaction without UUID or token");
+  assert.equal(markerOnly.players[0].avatarUrl ?? null,null);
+  assert.equal(markerOnly.players[0].updatedBy,B,"marker-only enforcement preserves survivor attribution");
   await admin();
   await q("insert into public.round_participants_v2(round_id,user_id,player_key,role) values($1,$2,'b','PLAYER')",[round,B]);
   await asUser(B);
@@ -571,6 +624,21 @@ try {
   assert.equal(JSON.stringify(staleInserted.payload).includes(D),false,"later Admin draft insert cannot restore a deleted UUID");
   assert.equal(staleInserted.payload.player.name,"Jugador eliminado");
   assert.equal(staleInserted.preview_hash,await scalar("select encode(extensions.digest(convert_to(payload::text,'UTF8'),'sha256'),'hex') from public.admin_catalog_revisions where id=$1",[staleInsertedRevision]));
+  await q("update public.admin_catalog_revisions set payload=$1::jsonb where id=$2",[JSON.stringify({
+    player:{accountUserId:D.toUpperCase(),name:"UPPERCASE_ADMIN_PII",avatarUrl:"uppercase-admin-avatar"},
+  }),requestedRevision]);
+  const uppercaseAdmin=await scalar("select payload from public.admin_catalog_revisions where id=$1",[requestedRevision]);
+  assert.equal(uppercaseAdmin.player.name,"Jugador eliminado","uppercase Admin identity-key-only update loses its name");
+  assert.equal(uppercaseAdmin.player.avatarUrl,null);
+  assert.equal(uppercaseAdmin.player.accountUserId ?? null,null);
+  assert.equal(uppercaseAdmin.player.identityDeleted,true);
+  const adminTombstone=await scalar("select private.account_deleted_identity_token($1,$2)",[`admin_catalog_revisions:${requestedRevision}`,D]);
+  await q("update public.admin_catalog_revisions set payload=$1::jsonb where id=$2",[JSON.stringify({
+    player:{id:`account:${adminTombstone}`,name:"RESTORED_ADMIN_PII",avatarUrl:"restored-admin-avatar",identityDeleted:true},
+  }),requestedRevision]);
+  const tombstoneOnlyAdmin=await scalar("select payload from public.admin_catalog_revisions where id=$1",[requestedRevision]);
+  assert.equal(tombstoneOnlyAdmin.player.name,"Jugador eliminado","tombstone-only Admin update cannot restore a deleted name");
+  assert.equal(tombstoneOnlyAdmin.player.avatarUrl,null,"tombstone-only Admin update cannot restore a deleted avatar");
 
   const staleRoundPlayer=await scalar(`insert into public.round_players_cloud(round_id,local_player_id,name)
     values($1,$2,'Requested private restored') returning id`,[requestedRound,D_PLAYER]);
@@ -579,6 +647,13 @@ try {
   await q("update public.round_players_cloud set local_player_id=$1,name='Requested private restored again' where id=$2",[D_PLAYER,staleRoundPlayer]);
   assert.deepEqual((await q("select local_player_id,name from public.round_players_cloud where id=$1",[staleRoundPlayer])).rows[0],
     {local_player_id:requestedTombstone,name:"Jugador eliminado"},"stale relational player update is tombstoned");
+  const uppercasePlayerKey=D_PLAYER.toUpperCase();
+  const uppercaseTombstone=await scalar("select private.account_replace_deleted_identity_text($1,$2,$3)",[
+    uppercasePlayerKey,D,`round:${requestedRound}`,
+  ]);
+  await q("update public.round_players_cloud set local_player_id=$1,name='UPPERCASE_RELATIONAL_PII' where id=$2",[uppercasePlayerKey,staleRoundPlayer]);
+  assert.deepEqual((await q("select local_player_id,name from public.round_players_cloud where id=$1",[staleRoundPlayer])).rows[0],
+    {local_player_id:uppercaseTombstone,name:"Jugador eliminado"},"uppercase relational UUID is tombstoned case-insensitively");
   await q(`insert into public.round_participants_v2(round_id,user_id,player_key,role)
     values($1,$2,$3,'SCOREKEEPER')`,[requestedRound,B,D_PLAYER]);
   await q(`insert into public.live_round_operations_v2(id,round_id,actor_id,operation_kind,player_key,hole,payload,base_version,resulting_version)
@@ -601,6 +676,8 @@ try {
   assert.equal(await scalar("select display_name_snapshot from public.round_group_snapshot_players_v2 where round_id=$1 and round_player_id=$2",[requestedRound,staleRoundPlayer]),"Jugador eliminado","stale frozen display name is scrubbed");
   await expectError(()=>q(`insert into public.player_course_tee_preferences(user_id,player_key,course_id,tee_id,source)
     values($1,$2,'qa-course-after-delete','qa-tee','PLAYER_COURSE')`,[B,D_PLAYER]),["23514"]);
+  await expectError(()=>q(`insert into public.player_course_tee_preferences(user_id,player_key,course_id,tee_id,source)
+    values($1,$2,'qa-course-after-delete-uppercase','qa-tee','PLAYER_COURSE')`,[B,D_PLAYER.toUpperCase()]),["23514"]);
 
   // A local round id is scoped, not globally unique. When a surviving user can
   // legitimately map the same id to two canonical rounds, the historical

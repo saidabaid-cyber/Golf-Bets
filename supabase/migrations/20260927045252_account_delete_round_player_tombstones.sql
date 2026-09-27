@@ -28,6 +28,82 @@ as $$
 $$;
 revoke all on function private.account_deleted_identity_token(text,uuid) from public,anon,authenticated;
 
+create or replace function private.account_replace_deleted_identity_text(
+  value text,
+  target_user uuid,
+  container_namespace text
+)
+returns text
+language sql
+immutable
+strict
+set search_path=''
+as $$
+  -- UUID text is semantically case-insensitive. Normalize both a raw UUID and
+  -- a previously emitted tombstone so uppercase/offline copies cannot bypass
+  -- stale-write protections or create a second spelling of the same identity.
+  select regexp_replace(
+    regexp_replace(
+      value,
+      target_user::text,
+      private.account_deleted_identity_token(container_namespace,target_user),
+      'gi'
+    ),
+    private.account_deleted_identity_token(container_namespace,target_user),
+    private.account_deleted_identity_token(container_namespace,target_user),
+    'gi'
+  )
+$$;
+revoke all on function private.account_replace_deleted_identity_text(text,uuid,text) from public,anon,authenticated;
+
+create or replace function private.account_scrub_marked_deleted_json(value jsonb)
+returns jsonb
+language plpgsql
+immutable
+strict
+set search_path=''
+as $$
+declare
+  output jsonb;
+  member record;
+  marked boolean;
+begin
+  if jsonb_typeof(value)='array' then
+    select coalesce(jsonb_agg(private.account_scrub_marked_deleted_json(item) order by ordinal),'[]'::jsonb)
+    into output from jsonb_array_elements(value) with ordinality as element(item,ordinal);
+    return output;
+  elsif jsonb_typeof(value)='object' then
+    marked:=lower(coalesce(value->>'identityDeleted','false'))='true';
+    output:='{}'::jsonb;
+    for member in select key,nested from jsonb_each(value) as item(key,nested)
+    loop
+      -- A marker alone no longer identifies which UUID was deleted. Redact
+      -- visual/contact PII, but never guess that another actor/author field in
+      -- the same object belongs to the deleted account.
+      if marked and member.key in (
+        'name','playerName','opponentName','displayName','display_name',
+        'firstName','lastName','first_name','last_name','username',
+        'recipientLabel','recipient_label','ownerName','owner_name'
+      ) then
+        output:=output||jsonb_build_object(member.key,'Jugador eliminado');
+      elsif marked and member.key in (
+        'email','replyEmail','reply_email','phone','avatar','avatarUrl',
+        'avatar_url','avatarConfig','photoUrl','photo_url','photoDataUrl',
+        'emoji','profilePhoto','profile_photo','ownerAvatar','owner_avatar',
+        'ownerPhoto','owner_photo','ownerPlayerSnapshot','ownerBagSnapshot'
+      ) then
+        output:=output||jsonb_build_object(member.key,null);
+      else
+        output:=output||jsonb_build_object(member.key,private.account_scrub_marked_deleted_json(member.nested));
+      end if;
+    end loop;
+    return output;
+  end if;
+  return value;
+end;
+$$;
+revoke all on function private.account_scrub_marked_deleted_json(jsonb) from public,anon,authenticated;
+
 create or replace function private.account_scrub_json_uuid(
   value jsonb,
   target_user uuid,
@@ -47,6 +123,24 @@ declare
   identity_matched boolean;
   owner_matched boolean;
   member record;
+  identity_keys constant text[]:=array[
+    'accountUserId','profileId','userId','ownerId','actorId','authorId','createdBy','updatedBy',
+    'inviterId','inviteeId','linkedUserId','confirmedBy','enteredBy','reviewedBy','verifiedBy','publishedBy',
+    'account_user_id','profile_id','user_id','owner_id','actor_id','author_id','created_by','updated_by',
+    'inviter_id','invitee_id','linked_user_id','confirmed_by','entered_by','reviewed_by','verified_by','published_by',
+    'requester_id','addressee_id','claimant_id','assigned_by','granted_by','recipient_id','target_user_id',
+    'attester_id','source_equipment_user_id','changed_by',
+    'id','playerId','player_id','roundPlayerId','round_player_id',
+    'opponentId','opponent_id','localPlayerId','local_player_id','playerKey','player_key'
+  ];
+  nullable_identity_keys constant text[]:=array[
+    'accountUserId','profileId','userId','actorId','authorId','createdBy','updatedBy',
+    'inviterId','inviteeId','linkedUserId','confirmedBy','enteredBy','reviewedBy','verifiedBy','publishedBy',
+    'account_user_id','profile_id','user_id','actor_id','author_id','created_by','updated_by',
+    'inviter_id','invitee_id','linked_user_id','confirmed_by','entered_by','reviewed_by','verified_by','published_by',
+    'requester_id','addressee_id','claimant_id','assigned_by','granted_by','recipient_id','target_user_id',
+    'attester_id','source_equipment_user_id','changed_by'
+  ];
 begin
   if jsonb_typeof(value)='array' then
     select coalesce(
@@ -66,16 +160,17 @@ begin
     -- inside `account:<uuid>` (or an equivalent local key).
     select exists(
       select 1 from jsonb_each_text(value) identity
-      where identity.key=any(array[
-        'id','playerId','player_id','roundPlayerId','round_player_id',
-        'opponentId','opponent_id','localPlayerId','local_player_id',
-        'playerKey','player_key'
-      ]) and position(target_text in identity.value)>0
+      where identity.key=any(identity_keys) and (
+        position(target_text in lower(identity.value))>0
+        or position(lower(replacement) in lower(identity.value))>0
+      )
     ) into identity_matched;
-    owner_matched:=position(target_text in coalesce(value->>'ownerId',''))>0
-      or position(target_text in coalesce(value->>'owner_id',''))>0;
+    owner_matched:=position(target_text in lower(coalesce(value->>'ownerId','')))>0
+      or position(target_text in lower(coalesce(value->>'owner_id','')))>0
+      or position(lower(replacement) in lower(coalesce(value->>'ownerId','')))>0
+      or position(lower(replacement) in lower(coalesce(value->>'owner_id','')))>0;
 
-    select count(*)<>count(distinct replace(key,target_text,replacement))
+    select count(*)<>count(distinct private.account_replace_deleted_identity_text(key,target_user,container_namespace))
     into collision
     from jsonb_each(value);
     if collision then
@@ -88,28 +183,37 @@ begin
     output:='{}'::jsonb;
     for member in select key,nested from jsonb_each(value) as item(key,nested)
     loop
-      if identity_matched and member.key in (
+      if identity_matched and member.key=any(nullable_identity_keys)
+        and jsonb_typeof(member.nested)='string'
+        and (
+          position(target_text in lower(member.nested #>> '{}'))>0
+          or position(lower(replacement) in lower(member.nested #>> '{}'))>0
+        ) then
+        output:=output||jsonb_build_object(
+          private.account_replace_deleted_identity_text(member.key,target_user,container_namespace),null
+        );
+      elsif identity_matched and member.key in (
         'name','playerName','opponentName','displayName','display_name',
         'firstName','lastName','first_name','last_name','username',
         'recipientLabel','recipient_label'
       ) then
-        output:=output||jsonb_build_object(replace(member.key,target_text,replacement),'Jugador eliminado');
+        output:=output||jsonb_build_object(private.account_replace_deleted_identity_text(member.key,target_user,container_namespace),'Jugador eliminado');
       elsif identity_matched and member.key in (
         'email','replyEmail','reply_email','phone','avatar','avatarUrl',
         'avatar_url','avatarConfig','photoUrl','photo_url','photoDataUrl',
         'emoji','profilePhoto','profile_photo'
       ) then
-        output:=output||jsonb_build_object(replace(member.key,target_text,replacement),null);
+        output:=output||jsonb_build_object(private.account_replace_deleted_identity_text(member.key,target_user,container_namespace),null);
       elsif owner_matched and member.key in ('ownerName','owner_name') then
-        output:=output||jsonb_build_object(replace(member.key,target_text,replacement),'Jugador eliminado');
+        output:=output||jsonb_build_object(private.account_replace_deleted_identity_text(member.key,target_user,container_namespace),'Jugador eliminado');
       elsif owner_matched and member.key in (
         'ownerAvatar','owner_avatar','ownerPhoto','owner_photo',
         'ownerPlayerSnapshot','ownerBagSnapshot'
       ) then
-        output:=output||jsonb_build_object(replace(member.key,target_text,replacement),null);
+        output:=output||jsonb_build_object(private.account_replace_deleted_identity_text(member.key,target_user,container_namespace),null);
       else
         output:=output||jsonb_build_object(
-          replace(member.key,target_text,replacement),
+          private.account_replace_deleted_identity_text(member.key,target_user,container_namespace),
           private.account_scrub_json_uuid(member.nested,target_user,container_namespace)
         );
       end if;
@@ -117,7 +221,7 @@ begin
     if identity_matched then output:=output||'{"identityDeleted":true}'::jsonb; end if;
     return output;
   elsif jsonb_typeof(value)='string' then
-    return to_jsonb(replace(value #>> '{}',target_text,replacement));
+    return to_jsonb(private.account_replace_deleted_identity_text(value #>> '{}',target_user,container_namespace));
   end if;
 
   return value;
@@ -136,10 +240,12 @@ immutable
 strict
 set search_path=''
 as $$
-  select private.account_scrub_json_uuid(
-    private.anonymize_account_json(value,target_user),
-    target_user,
-    container_namespace
+  select private.account_scrub_marked_deleted_json(
+    private.account_scrub_json_uuid(
+      private.anonymize_account_json(value,target_user),
+      target_user,
+      container_namespace
+    )
   )
 $$;
 revoke all on function private.account_anonymize_json_document(jsonb,uuid,text) from public,anon,authenticated;
@@ -210,9 +316,9 @@ declare
   replacement text:=private.account_deleted_identity_token(namespace,target_user);
 begin
   update public.round_players_cloud
-  set local_player_id=replace(local_player_id,target_text,replacement),
+  set local_player_id=private.account_replace_deleted_identity_text(local_player_id,target_user,namespace),
       name='Jugador eliminado'
-  where round_id=target_round and position(target_text in coalesce(local_player_id,''))>0;
+  where round_id=target_round and position(target_text in lower(coalesce(local_player_id,'')))>0;
 
   update public.round_group_snapshot_players_v2 snapshot_player
   set display_name_snapshot='Jugador eliminado'
@@ -221,24 +327,24 @@ begin
       select 1 from public.round_players_cloud round_player
       where round_player.id=snapshot_player.round_player_id
         and round_player.round_id=target_round
-        and position(replacement in coalesce(round_player.local_player_id,''))>0
+        and position(lower(replacement) in lower(coalesce(round_player.local_player_id,'')))>0
     );
 
-  update public.round_participants_v2 set player_key=replace(player_key,target_text,replacement)
-  where round_id=target_round and position(target_text in coalesce(player_key,''))>0;
-  update public.live_round_operations_v2 set player_key=replace(player_key,target_text,replacement)
-  where round_id=target_round and position(target_text in coalesce(player_key,''))>0;
-  update public.round_activity_v2 set player_key=replace(player_key,target_text,replacement)
-  where round_id=target_round and position(target_text in coalesce(player_key,''))>0;
-  update public.round_shots_v2 set player_key=replace(player_key,target_text,replacement)
-  where round_id=target_round and position(target_text in coalesce(player_key,''))>0;
+  update public.round_participants_v2 set player_key=private.account_replace_deleted_identity_text(player_key,target_user,namespace)
+  where round_id=target_round and position(target_text in lower(coalesce(player_key,'')))>0;
+  update public.live_round_operations_v2 set player_key=private.account_replace_deleted_identity_text(player_key,target_user,namespace)
+  where round_id=target_round and position(target_text in lower(coalesce(player_key,'')))>0;
+  update public.round_activity_v2 set player_key=private.account_replace_deleted_identity_text(player_key,target_user,namespace)
+  where round_id=target_round and position(target_text in lower(coalesce(player_key,'')))>0;
+  update public.round_shots_v2 set player_key=private.account_replace_deleted_identity_text(player_key,target_user,namespace)
+  where round_id=target_round and position(target_text in lower(coalesce(player_key,'')))>0;
   -- social_round_account_links_v3 belongs to the Auth identity and cascades
   -- when that identity is deleted. Re-keying it early would violate its
   -- self/owner confirmation guard while the source snapshot is still OLD.
 
   update public.round_course_handicap_snapshots handicap
-  set player_key=replace(player_key,target_text,replacement)
-  where position(target_text in coalesce(handicap.player_key,''))>0
+  set player_key=private.account_replace_deleted_identity_text(player_key,target_user,namespace)
+  where position(target_text in lower(coalesce(handicap.player_key,'')))>0
     and exists(
       select 1 from public.rounds_cloud round
       where round.id=target_round
@@ -277,7 +383,7 @@ begin
       )
   loop
     execute format(
-      'update public.%I set %I=private.account_anonymize_json_document(%I,$2,$3) where round_id=$1 and %I::text like $4',
+      'update public.%I set %I=private.account_anonymize_json_document(%I,$2,$3) where round_id=$1 and %I::text ilike $4',
       target.table_name,target.column_name,target.column_name,target.column_name
     ) using target_round,target_user,namespace,'%'||target_text||'%';
   end loop;
@@ -320,13 +426,17 @@ begin
   container_namespace:=private.account_json_container_namespace(tg_table_name,document);
   foreach column_name in array tg_argv loop
     if document->column_name is null then continue; end if;
+    document:=jsonb_set(document,array[column_name],private.account_scrub_marked_deleted_json(document->column_name));
     for target in
       select distinct state.user_id
       from private.account_lifecycle_state state
       join private.account_lifecycle_jobs job on job.user_id=state.user_id
       where job.data_policy='delete_golf_data'
         and (job.stage<>'requested' or state.account_status='deleted' or lifecycle_actor=state.user_id)
-        and (document->column_name)::text like '%'||state.user_id::text||'%'
+        and (
+          (document->column_name)::text ilike '%'||state.user_id::text||'%'
+          or (document->column_name)::text ilike '%'||private.account_deleted_identity_token(container_namespace,state.user_id)||'%'
+        )
     loop
       if tg_table_schema='public' and tg_table_name='rounds_cloud' and column_name='snapshot' then
         document:=jsonb_set(document,array[column_name],private.account_reconcile_deleted_round_snapshot(
@@ -385,14 +495,19 @@ declare
   scrubbed jsonb;
   payload_hash text;
 begin
-  scrubbed:=new.payload;
+  scrubbed:=private.account_scrub_marked_deleted_json(new.payload);
   for target in
     select distinct state.user_id
     from private.account_lifecycle_state state
     join private.account_lifecycle_jobs job on job.user_id=state.user_id
     where job.data_policy='delete_golf_data'
       and (job.stage<>'requested' or state.account_status='deleted' or lifecycle_actor=state.user_id)
-      and scrubbed::text like '%'||state.user_id::text||'%'
+      and (
+        scrubbed::text ilike '%'||state.user_id::text||'%'
+        or scrubbed::text ilike '%'||private.account_deleted_identity_token(
+          'admin_catalog_revisions:'||new.id::text,state.user_id
+        )||'%'
+      )
   loop
     scrubbed:=private.account_anonymize_json_document(
       scrubbed,target.user_id,'admin_catalog_revisions:'||new.id::text
@@ -453,10 +568,10 @@ begin
     where job.data_policy='delete_golf_data'
       and (job.stage<>'requested' or state.account_status='deleted' or lifecycle_actor=state.user_id)
       and (
-        position(state.user_id::text in player_key)>0
+        position(state.user_id::text in lower(player_key))>0
         or (
           reference_kind='UUID'
-          and position(private.account_deleted_identity_token(container_namespace,state.user_id) in player_key)>0
+          and position(lower(private.account_deleted_identity_token(container_namespace,state.user_id)) in lower(player_key))>0
         )
       )
   loop
@@ -492,10 +607,7 @@ begin
       end if;
     end if;
     container_namespace:='round:'||canonical_round::text;
-    player_key:=replace(
-      player_key,target.user_id::text,
-      private.account_deleted_identity_token(container_namespace,target.user_id)
-    );
+    player_key:=private.account_replace_deleted_identity_text(player_key,target.user_id,container_namespace);
     if name_column is not null then
       document:=jsonb_set(document,array[name_column],to_jsonb('Jugador eliminado'::text));
     end if;
@@ -571,7 +683,7 @@ begin
     from private.account_lifecycle_state state
     join private.account_lifecycle_jobs job on job.user_id=state.user_id
     where job.data_policy='delete_golf_data'
-      and new.player_key like '%'||state.user_id::text||'%'
+      and new.player_key ilike '%'||state.user_id::text||'%'
   ) then
     raise exception using
       errcode='23514',
@@ -599,7 +711,7 @@ begin
   -- survivor-owned preference for the deleted player rather than preserving a
   -- permanent cross-account identifier.
   delete from public.player_course_tee_preferences preference
-  where preference.player_key like '%'||target_user::text||'%';
+  where preference.player_key ilike '%'||target_user::text||'%';
 
   -- A local round id is not globally unique. Refuse to mutate any historical
   -- handicap row unless its surviving owner/participant maps it to exactly one
@@ -607,7 +719,7 @@ begin
   if exists(
     select 1
     from public.round_course_handicap_snapshots handicap
-    where handicap.player_key like '%'||target_user::text||'%'
+    where handicap.player_key ilike '%'||target_user::text||'%'
       and (
         select count(*)
         from public.rounds_cloud round
@@ -633,16 +745,16 @@ begin
   for target in
     select round.id
     from public.rounds_cloud round
-    where round.snapshot::text like '%'||target_user::text||'%'
-      or exists(select 1 from public.round_players_cloud row where row.round_id=round.id and row.local_player_id like '%'||target_user::text||'%')
-      or exists(select 1 from public.round_participants_v2 row where row.round_id=round.id and row.player_key like '%'||target_user::text||'%')
-      or exists(select 1 from public.live_round_operations_v2 row where row.round_id=round.id and row.player_key like '%'||target_user::text||'%')
-      or exists(select 1 from public.round_activity_v2 row where row.round_id=round.id and row.player_key like '%'||target_user::text||'%')
-      or exists(select 1 from public.round_shots_v2 row where row.round_id=round.id and row.player_key like '%'||target_user::text||'%')
+    where round.snapshot::text ilike '%'||target_user::text||'%'
+      or exists(select 1 from public.round_players_cloud row where row.round_id=round.id and row.local_player_id ilike '%'||target_user::text||'%')
+      or exists(select 1 from public.round_participants_v2 row where row.round_id=round.id and row.player_key ilike '%'||target_user::text||'%')
+      or exists(select 1 from public.live_round_operations_v2 row where row.round_id=round.id and row.player_key ilike '%'||target_user::text||'%')
+      or exists(select 1 from public.round_activity_v2 row where row.round_id=round.id and row.player_key ilike '%'||target_user::text||'%')
+      or exists(select 1 from public.round_shots_v2 row where row.round_id=round.id and row.player_key ilike '%'||target_user::text||'%')
       or exists(
         select 1 from public.round_course_handicap_snapshots handicap
         where handicap.round_id=coalesce(round.local_id,round.local_round_id)
-          and handicap.player_key like '%'||target_user::text||'%'
+          and handicap.player_key ilike '%'||target_user::text||'%'
           and (
             round.owner_id=handicap.user_id
             or exists(select 1 from public.round_participants_v2 participant where participant.round_id=round.id and participant.user_id=handicap.user_id)
@@ -658,12 +770,12 @@ begin
     perform private.account_rekey_round_references(target.id,target_user);
   end loop;
 
-  if exists(select 1 from public.round_players_cloud row where row.local_player_id like '%'||target_user::text||'%')
-    or exists(select 1 from public.round_participants_v2 row where row.player_key like '%'||target_user::text||'%')
-    or exists(select 1 from public.live_round_operations_v2 row where row.player_key like '%'||target_user::text||'%')
-    or exists(select 1 from public.round_activity_v2 row where row.player_key like '%'||target_user::text||'%')
-    or exists(select 1 from public.round_shots_v2 row where row.player_key like '%'||target_user::text||'%')
-    or exists(select 1 from public.round_course_handicap_snapshots row where row.player_key like '%'||target_user::text||'%')
+  if exists(select 1 from public.round_players_cloud row where row.local_player_id ilike '%'||target_user::text||'%')
+    or exists(select 1 from public.round_participants_v2 row where row.player_key ilike '%'||target_user::text||'%')
+    or exists(select 1 from public.live_round_operations_v2 row where row.player_key ilike '%'||target_user::text||'%')
+    or exists(select 1 from public.round_activity_v2 row where row.player_key ilike '%'||target_user::text||'%')
+    or exists(select 1 from public.round_shots_v2 row where row.player_key ilike '%'||target_user::text||'%')
+    or exists(select 1 from public.round_course_handicap_snapshots row where row.player_key ilike '%'||target_user::text||'%')
   then
     raise exception using
       errcode='23514',
@@ -714,7 +826,7 @@ begin
     from public.round_course_handicap_snapshots handicap
     join private.account_lifecycle_state state
       on state.account_status='deleted'
-      and handicap.player_key like '%'||state.user_id::text||'%'
+      and handicap.player_key ilike '%'||state.user_id::text||'%'
     where (
       select count(*)
       from public.rounds_cloud round
@@ -737,6 +849,26 @@ begin
       detail='A historical handicap player key did not map to exactly one canonical round.';
   end if;
 
+  -- Older stale writes could retain identityDeleted=true while reintroducing
+  -- only visual/contact PII, with no UUID left to identify the original actor.
+  -- Scrub those markers independently before the actor-specific pass. Admin
+  -- tables with audit/hash triggers are handled below while those named
+  -- triggers are transactionally disabled.
+  for target in
+    select table_name,column_name from information_schema.columns
+    where table_schema='public' and udt_name='jsonb' and table_name in (
+      'rounds_cloud','round_bet_configs','round_bet_results','personal_bets_cloud','manual_bets_cloud','expenses_cloud',
+      'round_course_handicap_snapshots','user_cloud_state','players','frequent_groups_cloud','personal_rivals_cloud','groups_v2',
+      'group_memories_v2','group_bet_templates_v2','live_round_operations_v2','cloud_record_versions',
+      'admin_import_rows','competition_rules','product_usage_events_v2','admin_audit_log'
+    )
+  loop
+    execute format(
+      'update public.%I set %I=private.account_scrub_marked_deleted_json(%I) where %I::text ilike $1',
+      target.table_name,target.column_name,target.column_name,target.column_name
+    ) using '%"identityDeleted": true%';
+  end loop;
+
   for actor in select state.user_id from private.account_lifecycle_state state where state.account_status='deleted'
   loop
     perform private.account_reconcile_relational_identifiers(actor.user_id);
@@ -751,11 +883,11 @@ begin
       )
     loop
       if target.table_name='rounds_cloud' and target.column_name='snapshot' then
-        execute 'update public.rounds_cloud round set snapshot=private.account_reconcile_deleted_round_snapshot(round.snapshot,round.id,$1) where round.snapshot::text like $2'
+        execute 'update public.rounds_cloud round set snapshot=private.account_reconcile_deleted_round_snapshot(round.snapshot,round.id,$1) where round.snapshot::text ilike $2'
         using actor.user_id,'%'||actor.user_id::text||'%';
       else
         execute format(
-          'update public.%I row set %I=private.account_anonymize_json_document(%I,$1,private.account_json_container_namespace($2,to_jsonb(row))) where %I::text like $3',
+          'update public.%I row set %I=private.account_anonymize_json_document(%I,$1,private.account_json_container_namespace($2,to_jsonb(row))) where %I::text ilike $3',
           target.table_name,target.column_name,target.column_name,target.column_name
         ) using actor.user_id,target.table_name,'%'||actor.user_id::text||'%';
       end if;
@@ -773,6 +905,16 @@ begin
   alter table public.admin_import_jobs disable trigger import_job_audit;
   alter table public.admin_catalog_revisions disable trigger admin_catalog_revision_guard;
   alter table public.admin_catalog_revisions disable trigger admin_catalog_revision_audit;
+  for target in
+    select table_name,column_name from information_schema.columns
+    where table_schema='public' and udt_name='jsonb'
+      and table_name in ('competition_definitions','admin_import_jobs')
+  loop
+    execute format(
+      'update public.%I set %I=private.account_scrub_marked_deleted_json(%I) where %I::text ilike $1',
+      target.table_name,target.column_name,target.column_name,target.column_name
+    ) using '%"identityDeleted": true%';
+  end loop;
   for actor in select state.user_id from private.account_lifecycle_state state where state.account_status='deleted'
   loop
     for target in
@@ -781,7 +923,7 @@ begin
         and table_name in ('competition_definitions','admin_import_jobs')
     loop
       execute format(
-        'update public.%I row set %I=private.account_anonymize_json_document(%I,$1,private.account_json_container_namespace($2,to_jsonb(row))) where %I::text like $3',
+        'update public.%I row set %I=private.account_anonymize_json_document(%I,$1,private.account_json_container_namespace($2,to_jsonb(row))) where %I::text ilike $3',
         target.table_name,target.column_name,target.column_name,target.column_name
       ) using actor.user_id,target.table_name,'%'||actor.user_id::text||'%';
     end loop;
@@ -790,6 +932,16 @@ begin
   -- Revision payload bytes participate in both preview and publication hashes.
   -- Scrub the historical payload and recompute only hashes that already
   -- existed; never invent evidence for an unhashed draft.
+  update public.admin_catalog_revisions revision
+  set payload=private.account_scrub_marked_deleted_json(revision.payload),
+      preview_hash=case when revision.preview_hash is null then null else encode(extensions.digest(
+        convert_to(private.account_scrub_marked_deleted_json(revision.payload)::text,'UTF8'),'sha256'
+      ),'hex') end,
+      revision_hash=case when revision.revision_hash is null then null else encode(extensions.digest(
+        convert_to(private.account_scrub_marked_deleted_json(revision.payload)::text,'UTF8'),'sha256'
+      ),'hex') end
+  where revision.payload::text ilike '%"identityDeleted": true%';
+
   for actor in select state.user_id from private.account_lifecycle_state state where state.account_status='deleted'
   loop
     update public.admin_catalog_revisions revision
@@ -806,32 +958,32 @@ begin
             revision.payload,actor.user_id,'admin_catalog_revisions:'||revision.id::text
           )::text,'UTF8'),'sha256'
         ),'hex') end
-    where revision.payload::text like '%'||actor.user_id::text||'%';
+    where revision.payload::text ilike '%'||actor.user_id::text||'%';
   end loop;
 
   if exists(
     select 1 from private.account_lifecycle_state state
-      join public.round_players_cloud row on row.local_player_id like '%'||state.user_id::text||'%'
+      join public.round_players_cloud row on row.local_player_id ilike '%'||state.user_id::text||'%'
       where state.account_status='deleted'
     union all
     select 1 from private.account_lifecycle_state state
-      join public.round_participants_v2 row on row.player_key like '%'||state.user_id::text||'%'
+      join public.round_participants_v2 row on row.player_key ilike '%'||state.user_id::text||'%'
       where state.account_status='deleted'
     union all
     select 1 from private.account_lifecycle_state state
-      join public.live_round_operations_v2 row on row.player_key like '%'||state.user_id::text||'%'
+      join public.live_round_operations_v2 row on row.player_key ilike '%'||state.user_id::text||'%'
       where state.account_status='deleted'
     union all
     select 1 from private.account_lifecycle_state state
-      join public.round_activity_v2 row on row.player_key like '%'||state.user_id::text||'%'
+      join public.round_activity_v2 row on row.player_key ilike '%'||state.user_id::text||'%'
       where state.account_status='deleted'
     union all
     select 1 from private.account_lifecycle_state state
-      join public.round_shots_v2 row on row.player_key like '%'||state.user_id::text||'%'
+      join public.round_shots_v2 row on row.player_key ilike '%'||state.user_id::text||'%'
       where state.account_status='deleted'
     union all
     select 1 from private.account_lifecycle_state state
-      join public.round_course_handicap_snapshots row on row.player_key like '%'||state.user_id::text||'%'
+      join public.round_course_handicap_snapshots row on row.player_key ilike '%'||state.user_id::text||'%'
       where state.account_status='deleted'
   ) then
     raise exception using
