@@ -36,7 +36,6 @@ export function resolveGhinRuntime(
     capabilities.apiBaseUrl,
     credentials.login,
     credentials.password,
-    credentials.loginBootstrapToken,
   ]);
   if (!singleton || singleton.signature !== signature) {
     singleton = {

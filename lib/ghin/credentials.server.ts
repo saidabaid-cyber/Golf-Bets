@@ -3,7 +3,6 @@ import "server-only";
 export type GhinServerCredentials = {
   login: string;
   password: string;
-  loginBootstrapToken: string;
 };
 
 /** Reads credentials only inside the server graph. Never log or serialize this value. */
@@ -16,6 +15,5 @@ export function readGhinServerCredentials(
   return {
     login,
     password,
-    loginBootstrapToken: env.GHIN_LOGIN_BOOTSTRAP_TOKEN?.trim() || "123",
   };
 }

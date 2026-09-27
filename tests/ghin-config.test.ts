@@ -23,7 +23,7 @@ test("GHIN capabilities require Preview, the master flag and granular server fla
     courseLookup: true,
     courseSyncDryRun: true,
     credentialsConfigured: true,
-    apiBaseUrl: "https://api.ghin.com/api/v1",
+    apiBaseUrl: "https://api2.ghin.com/api/v1",
   });
 
   const production = resolveGhinPreviewCapabilities({
@@ -42,6 +42,8 @@ test("GHIN capabilities require Preview, the master flag and granular server fla
 });
 
 test("GHIN API base URL accepts only exact HTTPS GHIN v1 origins", () => {
+  assert.equal(normalizeGhinApiBaseUrl(undefined), "https://api2.ghin.com/api/v1");
+  assert.equal(normalizeGhinApiBaseUrl(""), "https://api2.ghin.com/api/v1");
   assert.equal(normalizeGhinApiBaseUrl("https://api2.ghin.com/api/v1/"), "https://api2.ghin.com/api/v1");
   assert.equal(normalizeGhinApiBaseUrl("http://api.ghin.com/api/v1"), null);
   assert.equal(normalizeGhinApiBaseUrl("https://example.com/api/v1"), null);

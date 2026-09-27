@@ -66,10 +66,14 @@ Antes de consultar datos reales se requiere:
    Affiliate u otro acuerdo oficial que GHIN/USGA indique para este producto.
 2. Una cuenta de prueba GHIN cuyo titular autorice expresamente el probe.
 3. Confirmar con documentación o soporte autorizado el contrato actual de login.
-   El cliente POC conserva el contrato histórico observado:
-   `user.email_or_ghin`, `password`, `remember_me: "true"` y el campo superior
-   `token`. El probe inválido sólo demostró alcance del endpoint; este contrato
-   aún debe confirmarse con la documentación autorizada vigente.
+   El cliente local reproduce el contrato observado el 2026-09-26 en el bundle
+   público oficial de GHIN.com: `user.password`, `user.email_or_ghin`,
+   `remember_me: false` como booleano, `source: "GHINcom"` en el body y un
+   `token` fresco. Ese token cifra con RSAES-PKCS1-v1_5 el JSON
+   `{"source":"GHINcom","datetime":"<ISO UTC>"}` y codifica el resultado en
+   Base64 usando la llave pública del bundle; no es un secreto configurable ni
+   el sentinel histórico `123`. Esto describe el cliente web, no acredita que
+   The Backyard esté autorizado ni garantiza estabilidad contractual.
 4. Confirmar separadamente si el bearer token de `golfer_login` autoriza Golfer,
    Scores y Course Data, o si Course/Data Services requiere otro entitlement,
    `client_id`/`client_secret`, cuenta u origen.
@@ -101,11 +105,8 @@ GHIN_TEST_LOGIN=<configurar en el gestor de secretos de Preview>
 GHIN_TEST_PASSWORD=<configurar en el gestor de secretos de Preview>
 
 # Opcional; sólo estos dos hosts y exactamente /api/v1 son aceptados.
-GHIN_API_BASE_URL=https://api.ghin.com/api/v1
-
-# Opcional. El POC usa "123" como sentinel histórico no secreto si se omite.
-# Confirmar el contrato vigente; no copiar una API key de terceros.
-GHIN_LOGIN_BOOTSTRAP_TOKEN=
+# Si se omite, el default es api2.ghin.com.
+GHIN_API_BASE_URL=https://api2.ghin.com/api/v1
 ```
 
 Activación escalonada:
@@ -132,16 +133,19 @@ código actual; todavía deben confirmarse contra el servicio autorizado real.
 
 | Operación | Método y path exacto |
 | --- | --- |
-| Login | `POST /golfer_login.json` |
-| Golfer principal | `GET /golfers/search.json?golfer_id=<GHIN>&per_page=10&page=1&sorting_criteria=id&order=ASC` |
+| Login | `POST /golfer_login.json` con JSON y `source=GHINcom` en el body |
+| Golfer principal | `GET /golfers/search.json?golfer_id=<GHIN>&per_page=10&page=1&sorting_criteria=id&order=ASC&source=GHINcom` |
 | Golfer fallback, sólo ante 404/405 | `GET /golfers.json?golfer_id=<GHIN>&source=GHINcom&from_ghin=true&per_page=10&page=1` |
-| Scores principal | `GET /scores/search.json?golfer_id=<GHIN>&per_page=<1..100>&page=1` |
-| Scores fallback, sólo ante 404/405 | `GET /scores.json?golfer_id=<GHIN>&source=GHINcom&per_page=<1..100>&page=1` |
-| Course Search | `GET /crsCourseMethods.asmx/SearchCourses.json?name=<nombre>&source=GHINcom&per_page=<1..100>&page=1` |
-| Course Details | `GET /crsCourseMethods.asmx/GetCourseDetails.json?course_id=<id>&tee_set_status=Active` |
-| TeeSet Rating | `GET /TeeSetRatings/<teeSetRatingId>.json?include_altered_tees=false` |
+| Scores principal | `GET /scores.json?golfer_id=<GHIN>&offset=0&limit=<1..100>&source=GHINcom` |
+| Scores fallback, sólo ante 404/405 | `GET /scores/search.json?golfer_id=<GHIN>&per_page=<1..100>&page=1&source=GHINcom` |
+| Course Search | `GET /crsCourseMethods.asmx/SearchCourses.json?name=<nombre>&country=<opcional>&state=<opcional>&source=GHINcom`; el límite se aplica localmente |
+| Course Search fallback, sólo ante 404/405 | Mismo path con `name`, `per_page`, `page` y `source=GHINcom` |
+| Course Details | `GET /crsCourseMethods.asmx/GetCourseDetails.json?courseId=<id>&include_altered_tees=false&source=GHINcom` |
+| Course Details fallback, sólo ante 404/405 | Mismo path con `course_id`, `tee_set_status=Active` y `source=GHINcom` |
+| TeeSet Rating | `GET /TeeSetRatings/<teeSetRatingId>.json?include_altered_tees=false&source=GHINcom` |
 
-Todas las lecturas usan `Authorization: Bearer <token>`, `cache: no-store`, timeout
+Todas las lecturas agregan `source=GHINcom` como query y usan
+`Authorization: Bearer <token>`, `cache: no-store`, timeout
 de 10 segundos, redirect bloqueado y errores sanitizados. Ante 401/403 el cliente
 descarta la sesión, autentica de nuevo una sola vez y reintenta exactamente una
 vez. El trace conserva sólo método, path sin query, HTTP, duración, timestamp y

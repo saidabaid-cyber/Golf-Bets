@@ -16,7 +16,7 @@ function enabled(value: string | undefined) {
 }
 
 export function normalizeGhinApiBaseUrl(value: string | undefined) {
-  const candidate = value?.trim() || "https://api.ghin.com/api/v1";
+  const candidate = value?.trim() || "https://api2.ghin.com/api/v1";
   try {
     const url = new URL(candidate);
     const path = url.pathname.replace(/\/+$/, "");

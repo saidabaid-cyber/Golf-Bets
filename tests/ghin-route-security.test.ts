@@ -73,7 +73,6 @@ test("GHIN admin page is hidden outside Preview and its client never references 
   for (const secretName of [
     "GHIN_TEST_LOGIN",
     "GHIN_TEST_PASSWORD",
-    "GHIN_LOGIN_BOOTSTRAP_TOKEN",
     "GHIN_API_BASE_URL",
   ]) {
     assert.doesNotMatch(page, new RegExp(secretName));
