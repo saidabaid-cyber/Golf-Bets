@@ -34,6 +34,7 @@ try {
     create function extensions.crypt(text,text) returns text language sql immutable as $$ select md5($1||$2) $$;
     create function extensions.gen_salt(text) returns text language sql immutable as $$ select $1 $$;
     create function extensions.digest(text,text) returns bytea language sql immutable as $$ select decode(md5($1),'hex') $$;
+    create function extensions.digest(bytea,text) returns bytea language sql immutable as $$ select decode(md5(encode($1,'hex')),'hex') $$;
     create function extensions.gen_random_bytes(integer) returns bytea language sql volatile as $$ select substring(decode(replace(gen_random_uuid()::text,'-','')||replace(gen_random_uuid()::text,'-',''),'hex') from 1 for $1) $$;
     grant usage on schema auth,storage,extensions to anon,authenticated,service_role;
   `);
