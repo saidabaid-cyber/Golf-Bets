@@ -120,6 +120,7 @@ test("retrying a stale completed cleanup screen never downgrades confirmed delet
   f.storage.setItem(marker, "completed");
   const retry = actualHandler("retryPendingLocalDeletionCleanup", {
     ...f.bindings, pendingLocalDeletionOwner: "a", deletionRecoveryBusy: false,
+    deletionRecoveryInFlight: { current: false },
     setDeletionRecoveryBusy: () => {}, setDeletionRecoveryError: () => {},
     purgeDeletedAccountLocal: f.purge, pendingDeletionSession: null, pendingDeletionOwner: "",
     setPendingDeletionSession: () => {}, setPendingDeletionOwner: () => {},

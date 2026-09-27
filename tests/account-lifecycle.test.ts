@@ -5,6 +5,7 @@ import {
   accountLifecycleEnabled,
   accountLifecycleFailureResponse,
   accountLifecycleSafeError,
+  accountLifecycleSignOutAlreadyComplete,
   asAccountLifecycleStageError,
   executeAccountLifecycle,
   validateAccountLifecycleJob,
@@ -16,11 +17,14 @@ import { parseAccountDeletionChoice } from "../lib/account-deletion";
 const scope = { actor: "actor", requestId: "request", dataPolicy: "delete_golf_data" as const, lease: "lease" };
 const base: AccountLifecycleJob = { user_id: scope.actor, request_id: scope.requestId, data_policy: scope.dataPolicy, lease_token: scope.lease, stage: "requested", completed_at: null };
 function gateway(initial: Partial<AccountLifecycleJob> = {}, failure?: string) {
-  const calls: string[] = []; const observed: Array<{ error: AccountLifecycleStageError; context: { secondary: boolean; operationCompleted: boolean } }> = []; let photos = true;
+  const calls: string[] = []; const observed: Array<{ error: AccountLifecycleStageError; context: { secondary: boolean; operationCompleted: boolean } }> = []; let photos = true; let sharedDocument = true;
   const job = { ...base, ...initial };
   const step = (name: string) => { calls.push(name); if (failure === name) throw new Error(name); };
   const gateway: AccountLifecycleGateway = {
     acquire: async () => { step("acquire"); return job; },
+    storageRehomeBatch: async () => { step("rehome-manifest"); return sharedDocument ? [{ document_id: "document", bucket_id: "admin-documents-private", name: "actor/evidence.pdf", replacement_name: "account-lifecycle-shared/document.pdf" }] : []; },
+    copyStorage: async () => { step("rehome-copy"); },
+    commitStorageRehome: async () => { step("rehome-commit"); sharedDocument = false; },
     storageBatch: async () => { step("manifest"); return photos ? [{ bucket_id: "photos", name: "actor/avatar.webp" }] : []; },
     removeStorage: async () => { step("storage"); photos = false; },
     prepare: async current => { step("prepare"); return { ...current, stage: "data_prepared" }; },
@@ -41,9 +45,9 @@ test("archivar conserva media y no ejecuta delete Auth", async () => {
 });
 test("delete ejecuta manifest/storage, SQL atómico, revoca, Auth y confirma", async () => {
   const run = gateway(); await executeAccountLifecycle(run.gateway);
-  assert.deepEqual(run.calls, ["acquire", "manifest", "storage", "manifest", "prepare", "revoke", "signout", "auth", "complete", "release"]);
+  assert.deepEqual(run.calls, ["acquire", "rehome-manifest", "rehome-copy", "rehome-commit", "rehome-manifest", "manifest", "storage", "manifest", "prepare", "revoke", "signout", "auth", "complete", "release"]);
 });
-for (const [failure, stage] of [["manifest", "storageBatch"], ["storage", "removeStorage"], ["prepare", "prepare"], ["revoke", "revokeAndBan"], ["signout", "signOut"], ["auth", "deleteAuth"], ["complete", "complete"]] as const) test(`${failure} falla: identifica etapa, no confirma y libera lease`, async () => {
+for (const [failure, stage] of [["rehome-manifest", "storageRehomeBatch"], ["rehome-copy", "copyStorage"], ["rehome-commit", "commitStorageRehome"], ["manifest", "storageBatch"], ["storage", "removeStorage"], ["prepare", "prepare"], ["revoke", "revokeAndBan"], ["signout", "signOut"], ["auth", "deleteAuth"], ["complete", "complete"]] as const) test(`${failure} falla: identifica etapa, no confirma y libera lease`, async () => {
   const run = gateway({}, failure);
   let caught: unknown;
   try { await executeAccountLifecycle(run.gateway); } catch (error) { caught = error; }
@@ -53,7 +57,7 @@ for (const [failure, stage] of [["manifest", "storageBatch"], ["storage", "remov
 });
 test("reintento data_prepared reconcilia Storage y prepare idempotente", async () => {
   const run = gateway({ stage: "data_prepared" }); await executeAccountLifecycle(run.gateway);
-  assert.deepEqual(run.calls, ["acquire", "manifest", "storage", "manifest", "prepare", "revoke", "signout", "auth", "complete", "release"]);
+  assert.deepEqual(run.calls, ["acquire", "rehome-manifest", "rehome-copy", "rehome-commit", "rehome-manifest", "manifest", "storage", "manifest", "prepare", "revoke", "signout", "auth", "complete", "release"]);
 });
 test("completed idempotente no hace otra operación", async () => {
   const run = gateway({ stage: "completed", lease_token: null }); await executeAccountLifecycle(run.gateway);
@@ -63,6 +67,8 @@ test("lease ocupado nunca ejecuta una segunda saga", async () => {
   const run = gateway({ lease_token: null });
   await assert.rejects(executeAccountLifecycle(run.gateway), (error: unknown) => error instanceof AccountLifecycleStageError && error.stage === "acquire" && error.code === "ACCOUNT_OPERATION_BUSY");
   assert.deepEqual(run.calls, ["acquire"]);
+  const response = accountLifecycleFailureResponse(new AccountLifecycleStageError("acquire", { code: "ACCOUNT_OPERATION_BUSY", errorClass: "LifecycleLeaseError", status: 409 }));
+  assert.deepEqual(response, { status: 409, body: { code: "ACCOUNT_OPERATION_BUSY", pending: true, error: "La solicitud ya está en curso. Espera un momento y vuelve a intentarlo con la misma solicitud." } });
 });
 test("fallo de acquire queda tipado y nunca intenta release sin lease", async () => {
   const run = gateway({}, "acquire");
@@ -93,6 +99,17 @@ test("complete sólo acepta una confirmación final explícita", async () => {
   run.gateway.complete = async current => ({ ...current, stage: "data_prepared" });
   await assert.rejects(executeAccountLifecycle(run.gateway), (error: unknown) => error instanceof AccountLifecycleStageError && error.stage === "complete" && error.code === "INVALID_LIFECYCLE_COMPLETION");
 });
+test("complete rechaza terminales sin lease liberado, timestamp o identidad exacta", async () => {
+  for (const terminal of [
+    { ...base, stage: "completed" as const, lease_token: "lease", completed_at: "2026-09-15T12:00:00Z" },
+    { ...base, stage: "completed" as const, lease_token: null, completed_at: null },
+    { ...base, stage: "completed" as const, lease_token: null, completed_at: "2026-09-15T12:00:00Z", user_id: "other" },
+  ]) {
+    const run = gateway();
+    run.gateway.complete = async () => terminal;
+    await assert.rejects(executeAccountLifecycle(run.gateway), (error: unknown) => error instanceof AccountLifecycleStageError && error.stage === "complete" && error.code === "INVALID_LIFECYCLE_COMPLETION");
+  }
+});
 test("diagnóstico sanitiza código/clase/status sin retener mensajes ni PII", () => {
   const raw = Object.assign(new Error("owner@example.com bearer-secret"), { code: "", name: "AuthApiError", status: 503 });
   const failure = asAccountLifecycleStageError("deleteAuth", raw);
@@ -100,13 +117,23 @@ test("diagnóstico sanitiza código/clase/status sin retener mensajes ni PII", (
   const serialized = JSON.stringify(failure);
   assert.doesNotMatch(serialized, /owner@example|bearer-secret/);
 });
+test("signOut sólo considera completa la ausencia exacta de sesión", () => {
+  assert.equal(accountLifecycleSignOutAlreadyComplete({ code: "session_not_found", status: 400 }), true);
+  assert.equal(accountLifecycleSignOutAlreadyComplete({ name: "AuthSessionMissingError", status: 400 }), true);
+  assert.equal(accountLifecycleSignOutAlreadyComplete({ code: "bad_jwt", status: 400 }), false);
+  assert.equal(accountLifecycleSignOutAlreadyComplete({ status: 400 }), false);
+});
 test("contrato HTTP diferencia conflicto, lease, storage, datos, Auth y finalización", () => {
   const cases = [
     [new AccountLifecycleStageError("acquire", { code: "23505", errorClass: "PostgrestError" }), 409, "ACCOUNT_REQUEST_CONFLICT"],
     [new AccountLifecycleStageError("acquire", { code: "ACCOUNT_OPERATION_BUSY", errorClass: "LeaseError" }), 409, "ACCOUNT_OPERATION_BUSY"],
     [new AccountLifecycleStageError("storageBatch", { code: "57014", errorClass: "PostgrestError" }), 503, "ACCOUNT_STORAGE_PENDING"],
+    [new AccountLifecycleStageError("storageRehomeBatch", { code: "57014", errorClass: "PostgrestError" }), 503, "ACCOUNT_STORAGE_PENDING"],
+    [new AccountLifecycleStageError("copyStorage", { code: "409", errorClass: "StorageApiError" }), 503, "ACCOUNT_STORAGE_PENDING"],
+    [new AccountLifecycleStageError("commitStorageRehome", { code: "P0001", errorClass: "PostgrestError" }), 503, "ACCOUNT_STORAGE_PENDING"],
     [new AccountLifecycleStageError("removeStorage", { code: "StorageUnknownError", errorClass: "StorageError" }), 503, "ACCOUNT_STORAGE_PENDING"],
     [new AccountLifecycleStageError("prepare", { code: "23503", errorClass: "PostgrestError" }), 503, "ACCOUNT_DATA_CLEANUP_PENDING"],
+    [new AccountLifecycleStageError("prepare", { code: "23505", errorClass: "PostgrestError" }), 503, "ACCOUNT_DATA_CLEANUP_PENDING"],
     [new AccountLifecycleStageError("revokeAndBan", { code: "unexpected_failure", errorClass: "AuthApiError" }), 503, "ACCOUNT_AUTH_PENDING"],
     [new AccountLifecycleStageError("signOut", { code: "unexpected_failure", errorClass: "AuthApiError" }), 503, "ACCOUNT_AUTH_PENDING"],
     [new AccountLifecycleStageError("deleteAuth", { code: "unexpected_failure", errorClass: "AuthApiError" }), 503, "ACCOUNT_AUTH_PENDING"],
@@ -123,7 +150,9 @@ test("contrato HTTP diferencia conflicto, lease, storage, datos, Auth y finaliza
 });
 test("la respuesta RPC debe pertenecer a actor/policy/request/lease exactos", () => {
   assert.deepEqual(validateAccountLifecycleJob(base, scope), base);
-  for (const invalid of [null, {}, { ...base, user_id: "other" }, { ...base, request_id: "other" }, { ...base, data_policy: "retain_history" }, { ...base, lease_token: "other" }, { ...base, stage: "unknown" }, { ...base, stage: "completed", lease_token: null, completed_at: null }]) {
+  assert.deepEqual(validateAccountLifecycleJob({ ...base, lease_token: null }, scope, { allowBusyLease: true }), { ...base, lease_token: null });
+  assert.throws(() => validateAccountLifecycleJob({ ...base, lease_token: "other" }, scope, { allowBusyLease: true }), /INVALID_LIFECYCLE_RESPONSE/);
+  for (const invalid of [null, {}, { ...base, user_id: "other" }, { ...base, request_id: "other" }, { ...base, data_policy: "retain_history" }, { ...base, lease_token: "other" }, { ...base, lease_token: null }, { ...base, stage: "data_prepared", lease_token: null }, { ...base, stage: "unknown" }, { ...base, stage: "completed", lease_token: null, completed_at: null }]) {
     assert.throws(() => validateAccountLifecycleJob(invalid, scope), /INVALID_LIFECYCLE_RESPONSE/);
   }
 });

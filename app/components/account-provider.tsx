@@ -510,6 +510,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const [deletionRecoveryBusy, setDeletionRecoveryBusy] = useState(false);
   const [deletionRecoveryError, setDeletionRecoveryError] = useState("");
   const [pendingLocalDeletionOwner, setPendingLocalDeletionOwner] = useState("");
+  const deletionRecoveryInFlight = useRef(false);
   const activeUserId = useRef<string | null>(null);
   const sessionRecovery = useRef<{ userId: string; promise: Promise<string> } | null>(null);
   const bettingConsentRequest = useRef<{ userId: string; promise: Promise<boolean>; resolve: (accepted: boolean) => void } | null>(null);
@@ -527,6 +528,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const equipmentOnboardingReadyKey = useCallback((userId: string) => `the-backyard:equipment-onboarding-ready:v1:${encodeURIComponent(userId)}`, []);
+  const accountMutationStillActive = useCallback((userId: string) => activeUserId.current === userId
+    && !localStorage.getItem(accountDeletionMarkerKey(userId)), []);
   const setCloudIssue = useCallback((domain: CloudIssueDomain, issue: CloudIssue | null) => {
     setCloudIssuesByDomain((current) => {
       if (!issue && !current[domain]) return current;
@@ -584,15 +587,15 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     if (confirmation.error) throw confirmation.error;
     const confirmed = new Set((confirmation.data || []).map((item) => `${item.type}:${item.version}`));
     if (current.some((item) => !confirmed.has(`${item.type}:${item.documentVersion}`))) throw new Error("legal_acceptance_not_confirmed");
-    if (activeUserId.current !== userId) throw new Error("Session changed");
-  }, []);
+    if (!accountMutationStillActive(userId)) throw new Error("Session changed");
+  }, [accountMutationStillActive]);
   useEffect(() => {
-    if (identity?.mode === "authenticated") {
+    if (identity?.mode === "authenticated" && accountMutationStillActive(identity.userId)) {
       cloudProfileFallbackRef.current = { userId: identity.userId, profile: cloudProfileFields(identity) };
       try { localStorage.setItem(`backyard-profile-cache-v1:${identity.userId}`, JSON.stringify(profileCachePayload(identity))); }
       catch { issueWithMessage("profile", "No se pudo guardar el perfil local. Libera espacio y reintenta."); }
     }
-  }, [identity, issueWithMessage]);
+  }, [identity, issueWithMessage, accountMutationStillActive]);
 
   const activateSession = useCallback((session: Session, options: { rehydrate?: boolean } = {}) => {
     if (!isAccountSession(session)) throw new Error("account_session_missing");
@@ -1014,15 +1017,18 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   }, [identity?.userId, closeBettingConsent]);
 
   useEffect(() => {
-    if (identity?.mode !== "authenticated" || !identity.accessToken || !currentConsent) return;
-    const saved = acceptances.filter((item) => item.userId === identity.userId);
-    const pending = prepareLegalSyncBatch(localStorage, identity.userId, saved);
+    if (identity?.mode !== "authenticated" || !identity.accessToken || !currentConsent
+      || localStorage.getItem(accountDeletionMarkerKey(identity.userId))) return;
+    const syncingUserId = identity.userId;
+    const saved = acceptances.filter((item) => item.userId === syncingUserId);
+    const pending = prepareLegalSyncBatch(localStorage, syncingUserId, saved);
     if (!pending) return;
     const current = pending.acceptances;
     let mounted = true;
-    void flushLegalAcceptances(identity.userId, current).then(() => {
-      if (!mounted) return;
-      clearPendingLegalSync(localStorage, identity.userId);
+    void flushLegalAcceptances(syncingUserId, current).then(() => {
+      if (!mounted || activeUserId.current !== syncingUserId
+        || localStorage.getItem(accountDeletionMarkerKey(syncingUserId))) return;
+      clearPendingLegalSync(localStorage, syncingUserId);
       setAcceptances((saved) => {
         const synced = markLegalAcceptancesSynced(saved, current);
         if (synced !== saved) localStorage.setItem(ACCOUNT_STORAGE_KEYS.acceptances, JSON.stringify(synced));
@@ -1030,8 +1036,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       });
       setCloudIssue("legal", null);
     }).catch((error) => {
-      markLegalSyncFailed(localStorage, identity.userId, error);
-      if (mounted) setCloudIssue("legal", {
+      if (!mounted || activeUserId.current !== syncingUserId
+        || localStorage.getItem(accountDeletionMarkerKey(syncingUserId))) return;
+      markLegalSyncFailed(localStorage, syncingUserId, error);
+      setCloudIssue("legal", {
         ...cloudIssueFromError("legal", error, navigator.onLine),
         message: legalSyncErrorMessage(error, navigator.onLine),
       });
@@ -1067,6 +1075,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     if (identity.mode !== "authenticated" || !identity.accessToken) return;
+    if (!accountMutationStillActive(identity.userId)) return;
     if (!navigator.onLine) {
       setCloudIssue("legal", {
         domain: "legal",
@@ -1084,13 +1093,13 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       userId,
       accessToken,
       environment: legalEnvironment,
-      isCurrentIdentity: () => activeUserId.current === userId,
+      isCurrentIdentity: () => accountMutationStillActive(userId),
     }).then((events) => {
-      if (!mounted || activeUserId.current !== userId) return;
+      if (!mounted || !accountMutationStillActive(userId)) return;
       setLegalEvidenceState({ actorKey: `account:${userId}`, environment: legalEnvironment, events, resolved: true, resolvedSubjects: [] });
       setCloudIssue("legal", null);
     }).catch((error) => {
-      if (!mounted || activeUserId.current !== userId) return;
+      if (!mounted || !accountMutationStillActive(userId)) return;
       const actorKey = `account:${userId}`;
       setLegalEvidenceState((current) => ({
         actorKey,
@@ -1113,7 +1122,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       });
     });
     return () => { mounted = false; };
-  }, [identity, legalEnvironment, legalRetryRevision, setCloudIssue]);
+  }, [identity, legalEnvironment, legalRetryRevision, setCloudIssue, accountMutationStillActive]);
 
   useEffect(() => {
     if (!identity) return;
@@ -1126,11 +1135,12 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     const evidenceKey = legalEvidenceStateKey(actorKey, legalEnvironment);
     let refreshQueued = false;
     const requestRemoteResolution = () => {
-      if (mode !== "authenticated" || !accessToken || !navigator.onLine || refreshQueued) return;
+      if (mode !== "authenticated" || !accessToken || !navigator.onLine || refreshQueued
+        || !accountMutationStillActive(userId)) return;
       refreshQueued = true;
       queueMicrotask(() => {
         refreshQueued = false;
-        if (activeUserId.current !== userId) return;
+        if (!accountMutationStillActive(userId)) return;
         // A foreground/network transition may hide a revocation made on
         // another device. Close the financial gate until GET resolves again.
         setLegalEvidenceState((current) => current?.actorKey === actorKey && current.environment === legalEnvironment
@@ -1141,6 +1151,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     };
     const rehydrateFromAnotherTab = (event: StorageEvent) => {
       if (event.key !== evidenceKey || (event.storageArea && event.storageArea !== localStorage)) return;
+      if (mode === "authenticated" && !accountMutationStillActive(userId)) return;
       const events = readLegalEvidence(localStorage, actorKey, legalEnvironment);
       // Cross-tab acceptance never opens the gate from an event alone. A
       // revocation closes it immediately; authenticated acceptance waits for
@@ -1160,13 +1171,14 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener("online", refreshOnFocus);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
-  }, [identity, legalEnvironment]);
+  }, [identity, legalEnvironment, accountMutationStillActive]);
 
   function recordLegalChoices(
     choices: Array<{ subject: LegalEvidenceSubject; action: LegalEvidenceAction }>,
     origin: LegalEvidenceOrigin,
   ) {
     if (!identity) throw new Error("No se pudo identificar el contexto de esta elección.");
+    if (identity.mode === "authenticated" && !accountMutationStillActive(identity.userId)) throw new Error("La cuenta está cerrándose; no se guardaron cambios nuevos.");
     const recorded = recordLocalLegalEvidenceBatch(localStorage, { mode: identity.mode, userId: identity.userId }, {
       environment: legalEnvironment,
       choices,
@@ -1205,7 +1217,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     if (requireServerPersistence && identity.mode === "authenticated") {
       if (includeBettingConsent) next.push(buildBettingDataAcceptance(identity.userId, new Date().toISOString(), "pending"));
       await flushLegalAcceptances(identity.userId, next);
-      if (activeUserId.current !== identity.userId) throw new Error("La sesión cambió antes de guardar las autorizaciones.");
+      if (!accountMutationStillActive(identity.userId)) throw new Error("La sesión cambió antes de guardar las autorizaciones.");
       const synced = markLegalAcceptancesSynced(mergeLegalAcceptances(acceptances, next), next);
       localStorage.setItem(ACCOUNT_STORAGE_KEYS.acceptances, JSON.stringify(synced));
       if (!includeBettingConsent) localStorage.setItem(bettingConsentPromptStorageKey(identity.userId), "seen");
@@ -1227,12 +1239,14 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       queueLegalSync(localStorage, identity.userId, accountAcceptances);
       try {
         await flushLegalAcceptances(identity.userId, accountAcceptances);
+        if (!accountMutationStillActive(identity.userId)) return;
         clearPendingLegalSync(localStorage, identity.userId);
         const synced = markLegalAcceptancesSynced(merged, accountAcceptances);
         localStorage.setItem(ACCOUNT_STORAGE_KEYS.acceptances, JSON.stringify(synced));
         setAcceptances(synced);
         setCloudIssue("legal", null);
       } catch (error) {
+        if (!accountMutationStillActive(identity.userId)) return;
         markLegalSyncFailed(localStorage, identity.userId, error);
         setCloudIssue("legal", {
           ...cloudIssueFromError("legal", error, navigator.onLine),
@@ -1256,12 +1270,14 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       const pending = queueLegalSync(localStorage, identity.userId, [persisted.acceptance]);
       try {
         await flushLegalAcceptances(identity.userId, pending.acceptances);
+        if (!accountMutationStillActive(identity.userId)) return;
         clearPendingLegalSync(localStorage, identity.userId);
         const synced = markLegalAcceptancesSynced(persisted.acceptances, pending.acceptances);
         localStorage.setItem(ACCOUNT_STORAGE_KEYS.acceptances, JSON.stringify(synced));
         setAcceptances(synced);
         setCloudIssue("legal", null);
       } catch (error) {
+        if (!accountMutationStillActive(identity.userId)) return;
         markLegalSyncFailed(localStorage, identity.userId, error);
         setCloudIssue("legal", {
           ...cloudIssueFromError("legal", error, navigator.onLine),
@@ -1280,6 +1296,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
 
   async function updateProfile(profile: BackyardProfileUpdate): Promise<"local" | "cloud"> {
     if (!identity) return "local";
+    if (identity.mode === "authenticated" && !accountMutationStillActive(identity.userId)) return "local";
     const includesLocation = ["countryCode", "country", "stateCode", "state"].some((key) => Object.hasOwn(profile, key));
     if (includesLocation && !validateProfileLocation({ ...identity, ...profile }).valid) throw new Error("Selecciona un país y una región válidos antes de guardar.");
     const next = mergeBackyardProfile(identity, profile);
@@ -1314,16 +1331,16 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       const profileWriteCoordinator = profileWriterFor(identity.userId);
       const acknowledged = await profileWriteCoordinator.run(async () => {
         const saved = await saveCloudProfile(supabase, identity.userId, pending.profile, pending.updatedAt, { rebaseOnServerClock: true });
-        if (activeUserId.current !== identity.userId) return false;
+        if (!accountMutationStillActive(identity.userId)) return false;
         // The profile row is canonical; project its public handle/avatar onto
         // the existing Social row, never privacy or a new synthetic identity.
         retimePendingProfileWrite(localStorage, identity.userId, pending.revision, saved.updatedAt);
         await syncExistingSocialProfileAvatar(supabase, identity.userId, pending.profile.avatarUrl, pending.profile.username, pending.profile.displayName);
-        if (activeUserId.current !== identity.userId) return false;
+        if (!accountMutationStillActive(identity.userId)) return false;
         recordCloudProfileRevision(localStorage, identity.userId, saved.updatedAt);
         return acknowledgePendingProfileWrite(localStorage, identity.userId, pending.revision);
       });
-      if (activeUserId.current !== identity.userId) return "local";
+      if (!accountMutationStillActive(identity.userId)) return "local";
       if (!acknowledged) {
         issueWithMessage("profile", "Hay una edición de perfil más reciente pendiente de sincronizar.", "pending");
         return "local";
@@ -1336,6 +1353,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
           family_name: next.familyName || null,
           backyard_golf_profile_v1: { handedness: next.handedness || "", homeClub: next.homeClub || "", homeClubId: next.homeClubId || "", homeCourse: next.homeCourse || "", homeCourseId: next.homeCourseId || "", preferredTee: next.preferredTee || "" },
         } });
+        if (!accountMutationStillActive(identity.userId)) return "local";
         if (metadataWrite.error) {
           issueWithMessage("profile", "Perfil guardado; el usuario se conservará en este dispositivo hasta la próxima sincronización.", "pending");
           return "local";
@@ -1344,6 +1362,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       setCloudIssue("profile", null);
       return "cloud";
     } catch (error) {
+      // Account deletion may have purged the queued write while this request
+      // was in flight. A late rejection must not restore that identity's
+      // profile cache, queue or cloud issue after the purge barrier exists.
+      if (!accountMutationStillActive(identity.userId)) return "local";
       const cloudError = error && typeof error === "object" ? error as { code?: unknown; message?: unknown } : {};
       if (Object.hasOwn(profile, "username") && (cloudError.code === "23505" || /duplicate key|username.*unique/i.test(String(cloudError.message || "")))) {
         restorePendingProfileWrite(localStorage, identity.userId, previousPending);
@@ -1527,12 +1549,13 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   async function retryPendingAccountDeletion() {
     const session = pendingDeletionSession;
     const userId = session?.user.id || pendingDeletionOwner;
-    if (!userId || deletionRecoveryBusy) return;
+    if (!userId || deletionRecoveryBusy || deletionRecoveryInFlight.current) return;
     if (!navigator.onLine) {
       setDeletionRecoveryError("Conéctate a internet para comprobar y terminar la eliminación.");
       return;
     }
     const markerKey = accountDeletionMarkerKey(userId);
+    deletionRecoveryInFlight.current = true;
     setDeletionRecoveryBusy(true);
     setDeletionRecoveryError("");
     setPendingDeletionAccountActive(false);
@@ -1585,13 +1608,14 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       if (serverDeletionConfirmed) setPendingLocalDeletionOwner(userId);
       setDeletionRecoveryError(error instanceof Error ? error.message : "No pudimos confirmar la eliminación. Reintenta.");
     } finally {
+      deletionRecoveryInFlight.current = false;
       setDeletionRecoveryBusy(false);
     }
   }
 
   async function keepAccountAfterFailedDeletion() {
     const session = pendingDeletionSession;
-    if (!session || !pendingDeletionAccountActive || deletionRecoveryBusy) return;
+    if (!session || !pendingDeletionAccountActive || deletionRecoveryBusy || deletionRecoveryInFlight.current) return;
     if (!navigator.onLine) {
       setDeletionRecoveryError("Conéctate a internet para comprobar que tu cuenta sigue activa.");
       return;
@@ -1601,6 +1625,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       setDeletionRecoveryError("No pudimos comprobar el estado de tu cuenta. Reintenta más tarde.");
       return;
     }
+    deletionRecoveryInFlight.current = true;
     setDeletionRecoveryBusy(true);
     setDeletionRecoveryError("");
     try {
@@ -1614,18 +1639,28 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       setDeletionRecoveryError(error instanceof Error ? error.message : "No pudimos comprobar el estado de tu cuenta.");
     } finally {
+      deletionRecoveryInFlight.current = false;
       setDeletionRecoveryBusy(false);
     }
   }
 
   async function closePendingDeletionSession() {
     const session = pendingDeletionSession;
-    if (!session) { setPendingDeletionOwner(""); setDeletionRecoveryError(""); return; }
+    if (!session || deletionRecoveryInFlight.current) {
+      if (!session) { setPendingDeletionOwner(""); setDeletionRecoveryError(""); }
+      return;
+    }
+    deletionRecoveryInFlight.current = true;
+    setDeletionRecoveryBusy(true);
+    setDeletionRecoveryError("");
     const supabase = getSupabaseBrowser();
     try { if (supabase) await clearDeletedAuthSessionForUser(supabase.auth, session.user.id); }
     catch {
       setDeletionRecoveryError("No pudimos cerrar de forma segura la sesión eliminada. Reintenta.");
       return;
+    } finally {
+      deletionRecoveryInFlight.current = false;
+      setDeletionRecoveryBusy(false);
     }
     setPendingDeletionSession(null);
     setPendingDeletionOwner("");
@@ -1634,10 +1669,11 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
 
   async function retryPendingLocalDeletionCleanup() {
     const userId = pendingLocalDeletionOwner;
-    if (!userId || deletionRecoveryBusy) return;
+    if (!userId || deletionRecoveryBusy || deletionRecoveryInFlight.current) return;
     const markerKey = accountDeletionMarkerKey(userId);
     const markerState = localStorage.getItem(markerKey) || "cleanup_pending";
     const serverConfirmed = markerState === "completed_cleanup_pending" || markerState === "completed";
+    deletionRecoveryInFlight.current = true;
     setDeletionRecoveryBusy(true);
     setDeletionRecoveryError("");
     try {
@@ -1661,6 +1697,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       setPendingLocalDeletionOwner(userId);
       setDeletionRecoveryError(error instanceof Error ? error.message : "Todavía no pudimos completar la limpieza local. Reintenta.");
     } finally {
+      deletionRecoveryInFlight.current = false;
       setDeletionRecoveryBusy(false);
     }
   }

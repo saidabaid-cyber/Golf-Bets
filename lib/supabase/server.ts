@@ -1,18 +1,22 @@
 import "server-only";
 import { createClient } from "@supabase/supabase-js";
 import { cloudServerEnabled, pollaLiveServerEnabled } from "../feature-flags";
+import { fetchWithTimeout } from "../network-timeout";
 import { previewDatabaseFeaturesAvailable } from "../preview-database";
 
 function databaseBindingAllowed() {
   return previewDatabaseFeaturesAvailable();
 }
 
-export function getSupabaseAdmin(feature: "cloud" | "polla" = "cloud") {
+export function getSupabaseAdmin(feature: "cloud" | "polla" = "cloud", requestTimeoutMs?: number) {
   if (!cloudServerEnabled || !databaseBindingAllowed() || (feature === "polla" && !pollaLiveServerEnabled)) return null;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceKey) return null;
-  return createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+  return createClient(url, serviceKey, {
+    ...(requestTimeoutMs ? { global: { fetch: (input: RequestInfo | URL, init?: RequestInit) => fetchWithTimeout(input, init, requestTimeoutMs) } } : {}),
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
 }
 
 export function getSupabaseForUser(token: string, feature: "cloud" | "polla" = "cloud") {

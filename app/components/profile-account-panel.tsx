@@ -216,6 +216,12 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
 
   async function deleteAccount() {
     if (accountInFlight.current || identity.mode !== "authenticated" || deleteAccountText !== "ELIMINAR" || !deleteAccountPolicy) return;
+    if (!identity.accessToken) {
+      setMessageKind("error");
+      setMessage("Tu sesión terminó. Vuelve a iniciar sesión antes de eliminar la cuenta.");
+      setDestructiveError("No se inició ninguna eliminación porque falta una sesión autenticada.");
+      return;
+    }
     if (cloudStatus === "syncing" || cloudStatus === "saving") { setMessageKind("error"); setMessage("Espera a que termine el guardado actual."); return; }
     accountInFlight.current = true;
     accountRequestId.current ??= crypto.randomUUID();

@@ -211,6 +211,12 @@ export function AccountPanel({ view, focusSection = "profile", highContrast, onH
 
   async function deleteAccount() {
     if (accountInFlight.current || identity.mode !== "authenticated" || deleteText !== "ELIMINAR" || !deletePolicy) return;
+    if (!identity.accessToken) {
+      setMessageKind("error");
+      setMessage("Tu sesión terminó. Vuelve a iniciar sesión antes de eliminar la cuenta.");
+      setDeleteError("No se inició ninguna eliminación porque falta una sesión autenticada.");
+      return;
+    }
     if (cloudStatus === "syncing" || cloudStatus === "saving") { setMessageKind("error"); setMessage("Espera a que termine el guardado en curso antes de eliminar la cuenta."); return; }
     accountInFlight.current = true;
     accountRequestId.current ??= crypto.randomUUID();

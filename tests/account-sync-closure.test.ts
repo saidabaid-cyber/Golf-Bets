@@ -23,6 +23,7 @@ import { accountUiPreferencesKey } from "../lib/account-ui-preferences";
 import { devicePermissionsStorageKey } from "../lib/device-permissions";
 import { marketingConsentStorageKey } from "../lib/marketing-consent";
 import { firstRoundExperienceKey } from "../lib/round-first-experience";
+import { LEGAL_SYNC_QUEUE_PREFIX } from "../lib/legal-sync-queue";
 
 class MemoryStorage {
   data = new Map<string, string>();
@@ -121,6 +122,8 @@ test("eliminar cuenta local descarta solo A y conserva invitado y B", () => {
   storage.setItem(marketingConsentStorageKey("user-b"), "marketing-b");
   storage.setItem(firstRoundExperienceKey("user-a"), "seen");
   storage.setItem(firstRoundExperienceKey("user-b"), "seen");
+  storage.setItem(`${LEGAL_SYNC_QUEUE_PREFIX}user-a`, "pending-legal-a");
+  storage.setItem(`${LEGAL_SYNC_QUEUE_PREFIX}user-b`, "pending-legal-b");
   switchAccountWorkspace(storage, "user-b");
   storage.setItem(STORAGE_KEYS.history, "b-history");
   switchAccountWorkspace(storage, "user-a");
@@ -150,10 +153,12 @@ test("eliminar cuenta local descarta solo A y conserva invitado y B", () => {
   assert.equal(storage.getItem(devicePermissionsStorageKey("user-a")), null);
   assert.equal(storage.getItem(marketingConsentStorageKey("user-a")), null);
   assert.equal(storage.getItem(firstRoundExperienceKey("user-a")), null);
+  assert.equal(storage.getItem(`${LEGAL_SYNC_QUEUE_PREFIX}user-a`), null);
   assert.equal(storage.getItem(accountUiPreferencesKey("user-b")), "ui-b");
   assert.equal(storage.getItem(devicePermissionsStorageKey("user-b")), "device-b");
   assert.equal(storage.getItem(marketingConsentStorageKey("user-b")), "marketing-b");
   assert.equal(storage.getItem(firstRoundExperienceKey("user-b")), "seen");
+  assert.equal(storage.getItem(`${LEGAL_SYNC_QUEUE_PREFIX}user-b`), "pending-legal-b");
   assert.equal(storage.getItem(accountDeletionMarkerKey("user-a")), "pending");
   assert.equal(storage.getItem(internalNotificationStorageKey("user-b")), '{"version":1,"readEventKeys":["round-b"]}');
   switchAccountWorkspace(storage, "user-b");
@@ -207,13 +212,16 @@ function deletionGateway(options: { failStorage?: boolean } = {}) {
   let hasPhotos = true;
   const gateway: AccountLifecycleGateway = {
     acquire: async () => { calls.push("acquire"); return job; },
+    storageRehomeBatch: async () => [],
+    copyStorage: async () => {},
+    commitStorageRehome: async () => {},
     storageBatch: async () => hasPhotos ? [{ bucket_id: "scorecard-photos", name: "user-a/round-1/card.jpg" }] : [],
     removeStorage: async () => { calls.push("storage"); if (options.failStorage) throw new Error("storage unavailable"); hasPhotos = false; },
     prepare: async () => { calls.push("transaction"); return { ...job, stage: "data_prepared" }; },
     revokeAndBan: async () => { calls.push("revoke"); },
     signOut: async () => { calls.push("signout"); },
     deleteAuth: async () => { calls.push("auth"); },
-    complete: async () => { calls.push("complete"); return { ...job, stage: "completed" }; },
+    complete: async () => { calls.push("complete"); return { ...job, stage: "completed", lease_token: null, completed_at: "2026-09-15T12:00:00Z" }; },
     release: async () => { calls.push("release"); },
   };
   return { gateway, calls };

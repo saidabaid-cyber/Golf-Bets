@@ -190,7 +190,7 @@ test("Conservar mi cuenta sólo aparece tras Auth activo y revalida al pulsar", 
   assert.match(provider, /if \(!intent \|\| \(!session && !intent\.recoveryToken\)\) throw new Error/);
   assert.match(provider, /Contactar soporte/);
   assert.match(provider, /session && accountDeletionPrewriteRejected\(response\.status, result\)[\s\S]*auth\.getUser\(session\.access_token\)[\s\S]*verified\.data\.user\?\.id === session\.user\.id\) setPendingDeletionAccountActive\(true\)/);
-  assert.match(provider, /if \(!session \|\| !pendingDeletionAccountActive \|\| deletionRecoveryBusy\) return/);
+  assert.match(provider, /if \(!session \|\| !pendingDeletionAccountActive \|\| deletionRecoveryBusy \|\| deletionRecoveryInFlight\.current\) return/);
   assert.match(provider, /const verified = await supabase\.auth\.getUser\(session\.access_token\);[\s\S]*verified\.data\.user\?\.id !== session\.user\.id\)[\s\S]*localStorage\.removeItem\(accountDeletionMarkerKey\(session\.user\.id\)\)/);
   assert.match(provider, /\{pendingDeletionAccountActive && <button[\s\S]*Conservar mi cuenta<\/button>\}/);
 });

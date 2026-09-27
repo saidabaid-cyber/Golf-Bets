@@ -20,6 +20,36 @@ test("ambas elecciones usan saga real sólo después de confirmación y aislamie
   assert.doesNotMatch(route, /deleteAccountGraph\(|\.insert\(|\.delete\(|\.remove\(|deleteUser\(/);
 });
 
+test("la saga preserva Storage compartido con copy/commit idempotente antes del borrado", () => {
+  const lifecycle = readFileSync("lib/account-lifecycle.ts", "utf8");
+  const gateway = readFileSync("lib/account-lifecycle.server.ts", "utf8");
+  assert.match(lifecycle, /storageRehomeBatch[\s\S]*copyStorage[\s\S]*commitStorageRehome[\s\S]*storageBatch/);
+  assert.match(gateway, /account_lifecycle_storage_rehomes/);
+  assert.match(gateway, /\.copy\(rehome\.name, rehome\.replacement_name\)/);
+  assert.match(gateway, /account_lifecycle_commit_storage_rehome/);
+  assert.match(gateway, /result\.error && !storageCopyAlreadyExists\(result\.error\)/);
+  assert.match(gateway, /result\.data !== true/);
+});
+
+test("sólo acquire admite lease ocupado y lo deja llegar al contrato 409", () => {
+  const lifecycle = readFileSync("lib/account-lifecycle.ts", "utf8");
+  const gateway = readFileSync("lib/account-lifecycle.server.ts", "utf8");
+  assert.match(gateway, /account_lifecycle_acquire[\s\S]*allowBusyLease: true/);
+  assert.doesNotMatch(gateway.match(/prepare: job =>[^\n]+/)?.[0] || "", /allowBusyLease/);
+  assert.match(lifecycle, /options\.allowBusyLease === true && job\.lease_token === null/);
+  assert.match(lifecycle, /if \(!job\.lease_token\) throw new AccountLifecycleStageError\("acquire", \{ code: "ACCOUNT_OPERATION_BUSY"/);
+});
+
+test("los paneles no escriben intent ni marker sin access token y usan single-flight", () => {
+  for (const path of ["app/components/account-panel.tsx", "app/components/profile-account-panel.tsx"]) {
+    const panel = readFileSync(path, "utf8");
+    const handler = panel.match(/async function deleteAccount\(\)[\s\S]+?(?=\n  (?:if \(|return <|function ))/)?.[0] || "";
+    assert.ok(handler);
+    assert.ok(handler.indexOf("if (!identity.accessToken)") < handler.indexOf("prepareAccountDeletionIntent("));
+    assert.ok(handler.indexOf("accountInFlight.current = true") < handler.indexOf("prepareAccountDeletionIntent("));
+  }
+});
+
 test("elección de cuenta exige ELIMINAR, policy y clave idempotente sin owner payload", () => {
   const value = { confirmation: "ELIMINAR", dataPolicy: "retain_history", requestId: "11111111-1111-4111-8111-111111111111" };
   assert.deepEqual(parseAccountDeletionChoice(value), { dataPolicy: "retain_history", requestId: value.requestId });

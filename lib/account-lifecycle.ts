@@ -12,7 +12,8 @@ export type AccountLifecycleJob = {
 };
 
 export const ACCOUNT_LIFECYCLE_STAGES = [
-  "authenticate", "recover", "acquire", "storageBatch", "removeStorage",
+  "authenticate", "recover", "acquire", "storageRehomeBatch", "copyStorage", "commitStorageRehome",
+  "storageBatch", "removeStorage",
   "prepare", "revokeAndBan", "signOut", "deleteAuth", "complete", "release",
 ] as const;
 export type AccountLifecycleStage = (typeof ACCOUNT_LIFECYCLE_STAGES)[number];
@@ -82,6 +83,15 @@ export function accountLifecycleSafeError(error: unknown) {
   };
 }
 
+/** Supabase Auth reports a replayed global sign-out as HTTP 400. Only the
+ * provider's exact missing-session signals are terminal-success; a generic
+ * 400 must remain visible to the lifecycle retry path. */
+export function accountLifecycleSignOutAlreadyComplete(error: unknown) {
+  if (!error || typeof error !== "object") return false;
+  const candidate = error as { code?: unknown; name?: unknown };
+  return candidate.code === "session_not_found" || candidate.name === "AuthSessionMissingError";
+}
+
 export type AccountLifecycleFailureResponse = {
   status: number;
   body: { code: string; error: string; pending?: true };
@@ -92,7 +102,7 @@ export function accountLifecycleFailureResponse(error: unknown): AccountLifecycl
   const failure = error instanceof AccountLifecycleStageError
     ? error
     : asAccountLifecycleStageError("acquire", error);
-  if (failure.code === "23505") return {
+  if (failure.stage === "acquire" && failure.code === "23505") return {
     status: 409,
     body: { code: "ACCOUNT_REQUEST_CONFLICT", error: "Ya existe una solicitud de cierre. Reanuda esa solicitud para continuar." },
   };
@@ -118,6 +128,9 @@ export function accountLifecycleFailureResponse(error: unknown): AccountLifecycl
   };
   const byStage: Partial<Record<AccountLifecycleStage, { code: string; error: string }>> = {
     acquire: { code: "ACCOUNT_ACQUIRE_PENDING", error: "No pudimos iniciar o reanudar la solicitud. Reintenta con la misma solicitud." },
+    storageRehomeBatch: { code: "ACCOUNT_STORAGE_PENDING", error: "La preservación de archivos compartidos todavía no termina. Reintenta con la misma solicitud." },
+    copyStorage: { code: "ACCOUNT_STORAGE_PENDING", error: "La preservación de archivos compartidos todavía no termina. Reintenta con la misma solicitud." },
+    commitStorageRehome: { code: "ACCOUNT_STORAGE_PENDING", error: "La preservación de archivos compartidos todavía no termina. Reintenta con la misma solicitud." },
     storageBatch: { code: "ACCOUNT_STORAGE_PENDING", error: "La limpieza de archivos todavía no termina. Reintenta con la misma solicitud." },
     removeStorage: { code: "ACCOUNT_STORAGE_PENDING", error: "La limpieza de archivos todavía no termina. Reintenta con la misma solicitud." },
     prepare: { code: "ACCOUNT_DATA_CLEANUP_PENDING", error: "La limpieza de datos todavía no termina. Reintenta con la misma solicitud." },
@@ -133,18 +146,33 @@ export function accountLifecycleFailureResponse(error: unknown): AccountLifecycl
   };
   return { status: 503, body: { ...publicFailure, pending: true } };
 }
-export function validateAccountLifecycleJob(value: unknown, scope: { actor: string; requestId: string; dataPolicy: AccountDataPolicy; lease: string }): AccountLifecycleJob {
+export function validateAccountLifecycleJob(
+  value: unknown,
+  scope: { actor: string; requestId: string; dataPolicy: AccountDataPolicy; lease: string },
+  options: { allowBusyLease?: boolean } = {},
+): AccountLifecycleJob {
   const job = value as Partial<AccountLifecycleJob> | null;
   if (!job || job.request_id !== scope.requestId || job.user_id !== scope.actor || job.data_policy !== scope.dataPolicy ||
     !["requested", "data_prepared", "completed"].includes(job.stage || "") ||
-    (job.lease_token !== null && job.lease_token !== scope.lease) ||
+    (job.stage !== "completed" && job.lease_token !== scope.lease
+      && !(options.allowBusyLease === true && job.lease_token === null)) ||
     (job.stage === "completed" && (job.lease_token !== null || typeof job.completed_at !== "string" || !Number.isFinite(Date.parse(job.completed_at))))) {
     throw new Error("INVALID_LIFECYCLE_RESPONSE");
   }
   return job as AccountLifecycleJob;
 }
+export type AccountLifecycleStorageRehome = {
+  document_id: string;
+  bucket_id: string;
+  name: string;
+  replacement_name: string;
+};
+
 export type AccountLifecycleGateway = {
   acquire: () => Promise<AccountLifecycleJob>;
+  storageRehomeBatch: (job: AccountLifecycleJob) => Promise<AccountLifecycleStorageRehome[]>;
+  copyStorage: (rehome: AccountLifecycleStorageRehome) => Promise<void>;
+  commitStorageRehome: (job: AccountLifecycleJob, rehome: AccountLifecycleStorageRehome) => Promise<void>;
   storageBatch: (job: AccountLifecycleJob) => Promise<Array<{ bucket_id: string; name: string }>>;
   removeStorage: (bucket: string, names: string[]) => Promise<void>;
   prepare: (job: AccountLifecycleJob) => Promise<AccountLifecycleJob>;
@@ -168,6 +196,20 @@ export async function executeAccountLifecycle(gateway: AccountLifecycleGateway) 
   let operationCompleted = false;
   try {
     if (job.data_policy === "delete_golf_data" && (job.stage === "requested" || job.stage === "data_prepared")) {
+      // Shared Admin documents cannot keep an Auth-owned Storage object after
+      // that identity is deleted. Copy each object to its deterministic,
+      // ownerless path and atomically retarget the shared row before the
+      // ordinary owner manifest removes the original. Re-query offset zero so
+      // a retry resumes both a completed copy and a completed DB retarget.
+      for (let batch = 0; batch < 100; batch += 1) {
+        const rehomes = await runAccountLifecycleStage("storageRehomeBatch", () => gateway.storageRehomeBatch(job));
+        if (!rehomes.length) break;
+        for (const rehome of rehomes) {
+          await runAccountLifecycleStage("copyStorage", () => gateway.copyStorage(rehome));
+          await runAccountLifecycleStage("commitStorageRehome", () => gateway.commitStorageRehome(job, rehome));
+        }
+        if (batch === 99) throw new AccountLifecycleStageError("storageRehomeBatch", { code: "ACCOUNT_STORAGE_REHOME_MORE_PENDING", errorClass: "LifecycleBatchLimitError" });
+      }
       // Delete through Storage API, never storage.objects SQL. Re-query offset
       // zero after each batch so deletion cannot skip shifting object offsets.
       for (let batch = 0; batch < 100; batch += 1) {
@@ -182,14 +224,22 @@ export async function executeAccountLifecycle(gateway: AccountLifecycleGateway) 
     // prepare is deliberately idempotent and must be replayed for jobs left in
     // data_prepared so a corrected SQL graph can repair an older partial plan.
     if (job.stage === "requested" || job.stage === "data_prepared") {
-      job = await runAccountLifecycleStage("prepare", () => gateway.prepare(job));
+      const prepared = await runAccountLifecycleStage("prepare", () => gateway.prepare(job));
+      if (prepared.stage !== "data_prepared" || prepared.lease_token !== job.lease_token) {
+        throw new AccountLifecycleStageError("prepare", { code: "INVALID_LIFECYCLE_RESPONSE", errorClass: "LifecycleContractError" });
+      }
+      job = prepared;
       releaseJob = job;
     }
     await runAccountLifecycleStage("revokeAndBan", () => gateway.revokeAndBan(job));
     await runAccountLifecycleStage("signOut", () => gateway.signOut(job));
     if (job.data_policy === "delete_golf_data") await runAccountLifecycleStage("deleteAuth", () => gateway.deleteAuth(job));
     const completed = await runAccountLifecycleStage("complete", () => gateway.complete(job));
-    if (completed.stage !== "completed") throw new AccountLifecycleStageError("complete", { code: "INVALID_LIFECYCLE_COMPLETION", errorClass: "LifecycleContractError" });
+    if (completed.stage !== "completed" || completed.request_id !== job.request_id || completed.user_id !== job.user_id
+      || completed.data_policy !== job.data_policy || completed.lease_token !== null
+      || typeof completed.completed_at !== "string" || !Number.isFinite(Date.parse(completed.completed_at))) {
+      throw new AccountLifecycleStageError("complete", { code: "INVALID_LIFECYCLE_COMPLETION", errorClass: "LifecycleContractError" });
+    }
     operationCompleted = true;
     return completed;
   } catch (error) {

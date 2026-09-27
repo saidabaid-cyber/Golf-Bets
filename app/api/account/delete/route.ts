@@ -18,6 +18,7 @@ import { BACKYARD_AI_PRIVATE_HEADERS, isCrossSiteRequest, isJsonRequest, readJso
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+const ACCOUNT_LIFECYCLE_EXTERNAL_TIMEOUT_MS = 20_000;
 
 function json(body: unknown, status = 200) {
   return NextResponse.json(body, { status, headers: BACKYARD_AI_PRIVATE_HEADERS });
@@ -35,7 +36,9 @@ export async function DELETE(request: NextRequest) {
   const token = bearerToken(request);
   if (!token && !choice.recoveryToken) return json({ code: "AUTH_REQUIRED", error: "Inicia sesión para continuar." }, 401);
   if (!accountLifecycleEnabled()) return json({ code: "CONTROLLED_DB_ACTION_REQUIRED", error: "Esta función no está disponible en este entorno. Contacta soporte.", noDataDeleted: true }, 503);
-  const admin = getSupabaseAdmin();
+  // Auth Admin and Storage do not expose per-call AbortSignals. This scoped
+  // client aborts their HTTP requests before the route/client recovery window.
+  const admin = getSupabaseAdmin("cloud", ACCOUNT_LIFECYCLE_EXTERNAL_TIMEOUT_MS);
   if (!admin) return json({ code: "CONTROLLED_DB_ACTION_REQUIRED", error: "No pudimos conectar el servicio de cuentas. Intenta más tarde.", noDataDeleted: true }, 503);
   const reportFailure = (error: unknown, context: { secondary?: boolean; operationCompleted?: boolean } = {}) => {
     console.error("account_lifecycle", {
