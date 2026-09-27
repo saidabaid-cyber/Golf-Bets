@@ -177,9 +177,9 @@ try {
   const sharedTournamentPlayer=await scalar(`insert into public.tournament_players(tournament_id,player_id,name,handicap,pin_hash,claimed_at)
     values($1,$2,'Private linked player',12.4,'synthetic-pin',now()) returning id`,[sharedTournament,sharedOwnedPlayer]);
   const revision=await scalar(`insert into public.admin_catalog_revisions(entity_type,entity_id,scope_type,version,payload,preview_hash,revision_hash,created_by,reviewed_by,verified_by,published_by)
-    values('COURSE','qa-delete-course','GLOBAL',1,$2::jsonb,$3,$3,$1,$1,$1,$1) returning id`,[A,JSON.stringify({created_by:A,email:"qa-a@example.invalid",name:"Private Admin"}),HASH]);
+    values('COURSE','qa-delete-course','GLOBAL',1,$2::jsonb,$3,$3,$1,$1,$1,$1) returning id`,[A,JSON.stringify({accountUserId:A,created_by:A,email:"qa-a@example.invalid",name:"Private Admin"}),HASH]);
   const publishedRevision=await scalar(`insert into public.admin_catalog_revisions(entity_type,entity_id,scope_type,version,status,payload,preview_hash,revision_hash,created_by,published_by)
-    values('BALL','qa-delete-ball','GLOBAL',1,'PUBLISHED',$2::jsonb,$3,$3,$1,$1) returning id`,[A,JSON.stringify({created_by:A,email:"qa-a@example.invalid",name:"Published private attribution"}),HASH]);
+    values('BALL','qa-delete-ball','GLOBAL',1,'PUBLISHED',$2::jsonb,$3,$3,$1,$1) returning id`,[A,JSON.stringify({accountUserId:A,created_by:A,email:"qa-a@example.invalid",name:"Published private attribution"}),HASH]);
   const configuration=await scalar(`insert into public.course_configurations(course_id,name,scope_type,status,created_by,published_by,version,revision_hash)
     values('qa-delete-course','QA delete configuration','COURSE','DRAFT',$1,$1,1,$2) returning id`,[A,HASH]);
   await q(`update public.course_configurations configuration set revision_hash=encode(extensions.digest(
@@ -624,6 +624,18 @@ try {
   assert.equal(JSON.stringify(staleInserted.payload).includes(D),false,"later Admin draft insert cannot restore a deleted UUID");
   assert.equal(staleInserted.payload.player.name,"Jugador eliminado");
   assert.equal(staleInserted.preview_hash,await scalar("select encode(extensions.digest(convert_to(payload::text,'UTF8'),'sha256'),'hex') from public.admin_catalog_revisions where id=$1",[staleInsertedRevision]));
+  await q("update public.admin_catalog_revisions set payload=$1::jsonb where id=$2",[JSON.stringify({
+    entity:{id:"course-la-vista",name:"La Vista Country Club",createdBy:D,courseRating:72.4},
+    invitation:{id:"invite-1",name:"Weekend Group",inviteeId:D},
+  }),requestedRevision]);
+  const provenanceOnlyAdmin=await scalar("select payload from public.admin_catalog_revisions where id=$1",[requestedRevision]);
+  assert.equal(provenanceOnlyAdmin.entity.createdBy ?? null,null,"deleted Admin provenance is unlinked");
+  assert.equal(provenanceOnlyAdmin.entity.name,"La Vista Country Club","provenance deletion preserves the catalog entity name");
+  assert.equal(provenanceOnlyAdmin.entity.courseRating,72.4,"provenance deletion preserves catalog data");
+  assert.equal(provenanceOnlyAdmin.entity.identityDeleted,undefined,"provenance-only object is not mislabeled as a deleted player");
+  assert.equal(provenanceOnlyAdmin.invitation.inviteeId ?? null,null,"deleted relation endpoint is unlinked");
+  assert.equal(provenanceOnlyAdmin.invitation.name,"Weekend Group","relation endpoint deletion preserves entity name");
+  assert.equal(provenanceOnlyAdmin.invitation.identityDeleted,undefined);
   await q("update public.admin_catalog_revisions set payload=$1::jsonb where id=$2",[JSON.stringify({
     player:{accountUserId:D.toUpperCase(),name:"UPPERCASE_ADMIN_PII",avatarUrl:"uppercase-admin-avatar"},
   }),requestedRevision]);
