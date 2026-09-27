@@ -75,6 +75,10 @@ export function InitialDevicePermissions({ userId, onContinue }: { userId: strin
   }, [userId]);
 
   async function location() {
+    if (value.location === "granted") {
+      setValue(enableLocationForApp(localStorage, userId));
+      return;
+    }
     locationController.current?.abort();
     const controller = new AbortController();
     locationController.current = controller;
@@ -95,7 +99,7 @@ export function InitialDevicePermissions({ userId, onContinue }: { userId: strin
     finally { setBusy(null); }
   }
   return <div className="devicePermissionChoices">
-    <article><div><b>Ubicación</b><span aria-live="polite">{locationStatusLabel(value.location)}</span><small>Usaremos tu ubicación para mostrarte y ordenar campos cercanos, facilitar la selección del campo donde juegas y habilitar funciones basadas en ubicación durante tus rondas cuando correspondan. Es opcional y tú decides cuándo compartirla.</small></div>{value.location === "granted" ? <strong aria-label="Ubicación permitida">✓</strong> : <button type="button" className="secondary" disabled={busy !== null} onClick={() => void location()}>{busy === "location" ? "Solicitando…" : value.location === "denied" ? "Volver a comprobar" : "Permitir ubicación"}</button>}</article>
+    <article><div><b>Ubicación</b><span aria-live="polite">{locationStatusLabel(value.location)}</span><small>Usaremos tu ubicación para mostrarte y ordenar campos cercanos, facilitar la selección del campo donde juegas y habilitar funciones basadas en ubicación durante tus rondas cuando correspondan. Es opcional y tú decides cuándo compartirla.</small></div>{value.location === "granted" && value.locationEnabled ? <strong aria-label="Ubicación permitida">✓</strong> : <button type="button" className="secondary" disabled={busy !== null} onClick={() => void location()}>{busy === "location" ? "Solicitando…" : value.location === "granted" ? "Usar ubicación" : value.location === "denied" ? "Volver a comprobar" : "Permitir ubicación"}</button>}</article>
     <article><div><b>Notificaciones</b><span aria-live="polite">{notificationStatusLabel(value, notificationAvailable)}</span><small>Recibe mensajes de otros jugadores, invitaciones a rondas y grupos, avisos de tus partidas, recordatorios y actualizaciones importantes de The Backyard.</small>{notificationMessage && <small role="status">{notificationMessage}</small>}</div>{value.notifications === "granted" ? <strong aria-label="Notificaciones activadas">✓</strong> : value.notifications === "denied" ? <strong>Notificaciones no activadas</strong> : value.notificationPreference === "enabled" && notificationAvailable === false ? <strong>✓ Solicitud guardada</strong> : <button type="button" className="secondary" disabled={busy !== null} onClick={() => void notifications()}>{busy === "notifications" ? "Activando…" : "ACTIVAR NOTIFICACIONES"}</button>}</article>
     <button type="button" className="primary big" disabled={busy !== null} onClick={() => { setValue(finishInitialDevicePermissions(localStorage, userId)); onContinue(); }}>Continuar</button>
     <button type="button" className="textButton" disabled={busy !== null} onClick={() => { declineInitialNotifications(localStorage, userId); setValue(finishInitialDevicePermissions(localStorage, userId)); onContinue(); }}>AHORA NO</button>
