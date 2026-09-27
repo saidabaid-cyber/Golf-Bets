@@ -5,8 +5,10 @@ import {
   normalizeGhinError,
   parseGhinCourse,
   parseGhinCourses,
+  parseGhinFacilities,
   parseGhinGolfer,
   parseGhinGolfers,
+  parseGhinScorePostingTees,
   parseGhinScores,
   parseGhinTee,
   parseGhinToken,
@@ -15,6 +17,7 @@ import {
   type GhinErrorCode,
   type NormalizedGhinCourse,
   type NormalizedGhinError,
+  type NormalizedGhinFacility,
   type NormalizedGhinGolfer,
   type NormalizedGhinScore,
   type NormalizedGhinTee,
@@ -27,7 +30,6 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 const DEFAULT_TOKEN_TTL_MS = 55 * 60 * 1_000;
 const AUTH_EXPIRY_SKEW_MS = 60_000;
 const MAX_RESPONSE_CHARS = 4_000_000;
-const GHIN_SOURCE = "GHINcom";
 const GHIN_ACCEPT = "application/json, text/plain, */*";
 const FIREBASE_SESSION_URL = "https://firebaseinstallations.googleapis.com/v1/projects/ghin-mobile-app/installations";
 // Public application configuration reproduced from @spicygolf/ghin@0.20.0.
@@ -158,13 +160,6 @@ function query(path: string, params: Record<string, string | number | boolean | 
   return `${path}?${search.toString()}`;
 }
 
-function withGhinSource(path: string) {
-  const [pathname, rawSearch = ""] = path.split("?", 2);
-  const search = new URLSearchParams(rawSearch);
-  search.set("source", GHIN_SOURCE);
-  return `${pathname}?${search.toString()}`;
-}
-
 /**
  * Read-only GHIN transport. It intentionally exposes no score-posting method.
  * Every provider error is converted to a fixed safe message before leaving
@@ -179,9 +174,11 @@ export class GhinReadOnlyClient {
   private readonly timeoutMs: number;
   private readonly golferCache: TtlPromiseCache<string, GhinReadResult<NormalizedGhinGolfer>>;
   private readonly scoresCache: TtlPromiseCache<string, GhinReadResult<NormalizedGhinScore[]>>;
+  private readonly facilitySearchCache: TtlPromiseCache<string, GhinReadResult<NormalizedGhinFacility[]>>;
   private readonly courseSearchCache: TtlPromiseCache<string, GhinReadResult<NormalizedGhinCourse[]>>;
   private readonly courseCache: TtlPromiseCache<string, GhinReadResult<NormalizedGhinCourse>>;
   private readonly teeCache: TtlPromiseCache<string, GhinReadResult<NormalizedGhinTee>>;
+  private readonly scorePostingTeeCache: TtlPromiseCache<string, GhinReadResult<NormalizedGhinTee[]>>;
   #authSession: AuthSession | null = null;
   #authInFlight: Promise<AuthSession> | null = null;
   private traces: GhinClientTrace[] = [];
@@ -198,9 +195,11 @@ export class GhinReadOnlyClient {
     this.golferCache = new TtlPromiseCache({ ttlMs: options.golferTtlMs ?? 5 * 60_000, now: this.clock });
     this.scoresCache = new TtlPromiseCache({ ttlMs: options.scoresTtlMs ?? 5 * 60_000, now: this.clock });
     const courseTtlMs = options.courseTtlMs ?? 30 * 60_000;
+    this.facilitySearchCache = new TtlPromiseCache({ ttlMs: courseTtlMs, now: this.clock });
     this.courseSearchCache = new TtlPromiseCache({ ttlMs: courseTtlMs, now: this.clock });
     this.courseCache = new TtlPromiseCache({ ttlMs: courseTtlMs, now: this.clock });
     this.teeCache = new TtlPromiseCache({ ttlMs: courseTtlMs, now: this.clock });
+    this.scorePostingTeeCache = new TtlPromiseCache({ ttlMs: courseTtlMs, now: this.clock });
   }
 
   getTrace(): readonly GhinClientTrace[] {
@@ -215,9 +214,11 @@ export class GhinReadOnlyClient {
     this.#authSession = null;
     this.golferCache.clear();
     this.scoresCache.clear();
+    this.facilitySearchCache.clear();
     this.courseSearchCache.clear();
     this.courseCache.clear();
     this.teeCache.clear();
+    this.scorePostingTeeCache.clear();
   }
 
   invalidateGolfer(ghinNumber: string) {
@@ -360,12 +361,11 @@ export class GhinReadOnlyClient {
     };
   }
 
-  private async authorizedJson(path: string, addSource = true): Promise<JsonResponse> {
-    const authorizedPath = addSource ? withGhinSource(path) : path;
+  private async authorizedJson(path: string): Promise<JsonResponse> {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const { session } = await this.getSession(attempt === 1);
       try {
-        return await this.fetchJson("GET", authorizedPath, {
+        return await this.fetchJson("GET", path, {
           headers: {
             accept: GHIN_ACCEPT,
             authorization: `Bearer ${session.token.accessToken}`,
@@ -404,7 +404,7 @@ export class GhinReadOnlyClient {
         sorting_criteria: "last_name_first_name",
         order: "asc",
       });
-      const response = await this.authorizedJson(endpoint, false);
+      const response = await this.authorizedJson(endpoint);
       const golfers = parseGhinGolfers(response.payload);
       const matching = golfers.filter((candidate) => candidate.ghinNumber === normalized);
       const home = matching.find((candidate) => candidate.isHomeClub === true) ?? null;
@@ -429,9 +429,44 @@ export class GhinReadOnlyClient {
     }
     const cacheKey = `${normalized}:${safeLimit}`;
     return this.scoresCache.get(cacheKey, async () => {
-      const response = await this.authorizedJson(query("/scores.json", { golfer_id: normalized }), false);
+      const response = await this.authorizedJson(query("/scores.json", { golfer_id: normalized }));
       return {
         data: parseGhinScores(response.payload).slice(0, safeLimit),
+        endpoint: response.endpoint,
+        httpStatus: response.status,
+        fetchedAt: new Date(this.clock()).toISOString(),
+      };
+    });
+  }
+
+  searchFacilities(input: {
+    name?: string;
+    facilityId?: string;
+    country?: string;
+    state?: string;
+  }): Promise<GhinReadResult<NormalizedGhinFacility[]>> {
+    const name = input.name?.trim() || undefined;
+    const facilityId = input.facilityId?.trim() || undefined;
+    const country = input.country?.trim() || undefined;
+    const state = input.state?.trim() || undefined;
+    if (!name && !facilityId && !country && !state) {
+      return Promise.reject(new GhinClientError(normalizeGhinError("not found", 404), "/facilities/search.json"));
+    }
+    if (facilityId && !/^\d+$/.test(facilityId)) {
+      return Promise.reject(new GhinClientError(normalizeGhinError("not found", 404), "/facilities/search.json"));
+    }
+    const cacheKey = [name, facilityId, country, state]
+      .map((value) => String(value ?? "").toLocaleLowerCase("en-US"))
+      .join(":");
+    return this.facilitySearchCache.get(cacheKey, async () => {
+      const response = await this.authorizedJson(query("/facilities/search.json", {
+        name,
+        facility_id: facilityId,
+        country,
+        state,
+      }));
+      return {
+        data: parseGhinFacilities(response.payload),
         endpoint: response.endpoint,
         httpStatus: response.status,
         fetchedAt: new Date(this.clock()).toISOString(),
@@ -482,15 +517,11 @@ export class GhinReadOnlyClient {
       return Promise.reject(new GhinClientError(normalizeGhinError("not found", 404), "/crsCourseMethods.asmx/GetCourseDetails.json"));
     }
     return this.courseCache.get(normalized, async () => {
-      const primary = query("/crsCourseMethods.asmx/GetCourseDetails.json", {
-        courseId: normalized,
-        include_altered_tees: false,
-      });
-      const fallback = query("/crsCourseMethods.asmx/GetCourseDetails.json", {
+      const endpoint = query("/crsCourseMethods.asmx/GetCourseDetails.json", {
         course_id: normalized,
         tee_set_status: "Active",
       });
-      const response = await this.withCompatibilityFallback(primary, fallback);
+      const response = await this.authorizedJson(endpoint);
       const course = parseGhinCourse(response.payload);
       if (!course) throw new GhinClientError(normalizeGhinError("invalid response", response.status), response.endpoint);
       return { data: course, endpoint: response.endpoint, httpStatus: response.status, fetchedAt: new Date(this.clock()).toISOString() };
@@ -510,6 +541,23 @@ export class GhinReadOnlyClient {
       const tee = parseGhinTee(response.payload);
       if (!tee) throw new GhinClientError(normalizeGhinError("invalid response", response.status), response.endpoint);
       return { data: tee, endpoint: response.endpoint, httpStatus: response.status, fetchedAt: new Date(this.clock()).toISOString() };
+    });
+  }
+
+  getScorePostingTees(courseId: string): Promise<GhinReadResult<NormalizedGhinTee[]>> {
+    const normalized = courseId.trim();
+    if (!/^\d+$/.test(normalized)) {
+      return Promise.reject(new GhinClientError(normalizeGhinError("not found", 404), "/Courses/invalid/TeeSetRatingsForScorePosting.json"));
+    }
+    return this.scorePostingTeeCache.get(normalized, async () => {
+      const path = `/Courses/${encodeURIComponent(normalized)}/TeeSetRatingsForScorePosting.json`;
+      const response = await this.authorizedJson(path);
+      return {
+        data: parseGhinScorePostingTees(response.payload),
+        endpoint: response.endpoint,
+        httpStatus: response.status,
+        fetchedAt: new Date(this.clock()).toISOString(),
+      };
     });
   }
 }

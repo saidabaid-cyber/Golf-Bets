@@ -7,7 +7,8 @@ import {
   type GhinTeeMatchRule,
 } from "../../../../../lib/ghin/course-comparison";
 import { GhinClientError } from "../../../../../lib/ghin/client";
-import { SlidingWindowRateLimiter, type NormalizedGhinCourse } from "../../../../../lib/ghin/core";
+import { SlidingWindowRateLimiter, type NormalizedGhinCourse, type NormalizedGhinTee } from "../../../../../lib/ghin/core";
+import { reconcileLaVistaLayouts } from "../../../../../lib/ghin/la-vista-reconciliation";
 import { resolveGhinRuntime } from "../../../../../lib/ghin/runtime.server";
 import { INTERNAL_GOLF_COURSE_CATALOG } from "../../../../../lib/golf-course-directory";
 import {
@@ -33,6 +34,7 @@ const TEE_MATCHES: readonly GhinTeeMatchRule[] = [
   { backyardTeeId: "tee-la-vista-blancas", aliases: ["White"] },
   { backyardTeeId: "tee-la-vista-doradas", aliases: ["Gold", "Golden"] },
   { backyardTeeId: "tee-la-vista-rojas", aliases: ["Red"] },
+  { backyardTeeId: "tee-la-vista-negras", aliases: ["Black"] },
 ];
 
 type DiagnosticStatus =
@@ -122,12 +124,14 @@ async function adminContext(request: NextRequest) {
 }
 
 function selectLaVista(courses: readonly NormalizedGhinCourse[]) {
-  const expectedCourse = normalizeIdentity(COURSE_QUERY);
+  const expectedCourses = new Set([normalizeIdentity(COURSE_QUERY), normalizeIdentity(EXPECTED_CLUB)]);
   const expectedFacility = normalizeIdentity(EXPECTED_CLUB);
   const matches = courses.filter((course) => (
-    normalizeIdentity(course.name) === expectedCourse
-    || normalizeIdentity(course.facilityName) === expectedFacility
+    expectedCourses.has(normalizeIdentity(course.name))
+    && normalizeIdentity(course.facilityName) === expectedFacility
   ));
+  const known = matches.find((course) => course.id === "23233");
+  if (known) return known;
   return matches.length === 1 ? matches[0] : null;
 }
 
@@ -297,11 +301,47 @@ export async function POST(request: NextRequest) {
     course = { status: "PENDING_INTERACTIVE_QA", blocker: "GHIN_COURSE_LOOKUP_DISABLED" };
   } else {
     try {
-      const search = await client.searchCourses(COURSE_QUERY, 20);
-      const selected = selectLaVista(search.data);
+      const [search, facilityResult] = await Promise.all([
+        client.searchCourses(COURSE_QUERY, 20),
+        client.searchFacilities({ name: COURSE_QUERY })
+          .then((value) => ({ value, error: null }))
+          .catch((error: unknown) => ({ value: null, error: safeFailure(error) })),
+      ]);
+      const facilitySearch = facilityResult.value;
+      const related = search.data.filter((candidate) => normalizeIdentity(`${candidate.name ?? ""} ${candidate.facilityName ?? ""}`).includes("la vista"));
+      const courseReads = await Promise.all(related.flatMap((candidate) => candidate.id ? [(async () => {
+        let details;
+        try {
+          details = await client.getCourse(candidate.id!);
+        } catch (error) {
+          return { candidate, details: null, postingTees: null, error: safeFailure(error), postingError: null };
+        }
+        try {
+          const postingTees = await client.getScorePostingTees(candidate.id!);
+          return { candidate, details, postingTees, error: null, postingError: null };
+        } catch (error) {
+          return { candidate, details, postingTees: null, error: null, postingError: safeFailure(error) };
+        }
+      })()] : []));
+      const selected = selectLaVista(courseReads.flatMap((read) => read.details ? [read.details.data] : []));
+      const postingTeesByCourseId: Record<string, readonly NormalizedGhinTee[]> = Object.fromEntries(courseReads.flatMap((read) => (
+        read.details?.data.id && read.postingTees ? [[read.details.data.id, read.postingTees.data] as const] : []
+      )));
+      const reconciliation = reconcileLaVistaLayouts(
+        courseReads.flatMap((read) => read.details ? [read.details.data] : []),
+        postingTeesByCourseId,
+      );
       if (!selected?.id) {
         course = {
           status: "FAIL",
+          facilities: facilitySearch ? {
+            status: "PASS",
+            endpoint: facilitySearch.endpoint,
+            httpStatus: facilitySearch.httpStatus,
+            fetchedAt: facilitySearch.fetchedAt,
+            count: facilitySearch.data.length,
+            items: facilitySearch.data,
+          } : { status: "BLOCKED_EXTERNAL", error: facilityResult.error },
           search: {
             endpoint: search.endpoint,
             httpStatus: search.httpStatus,
@@ -309,16 +349,19 @@ export async function POST(request: NextRequest) {
             count: search.data.length,
             candidates: search.data,
           },
+          relatedLayouts: courseReads,
+          reconciliation,
           error: {
             code: "LA_VISTA_NOT_UNIQUE",
-            message: "La búsqueda no produjo una coincidencia única y exacta para La Vista.",
+            message: "La búsqueda no produjo una coincidencia única para el layout principal de La Vista.",
             httpStatus: null,
             endpoint: search.endpoint,
             retryable: false,
           },
         };
       } else {
-        const details = await client.getCourse(selected.id);
+        const details = courseReads.find((read) => read.details?.data.id === selected.id)?.details;
+        if (!details) throw new Error("LA_VISTA_DETAILS_MISSING");
         const teeReads = await Promise.all(details.data.tees.slice(0, 20).map(async (tee) => {
           if (!tee.id) return { source: tee, detail: null, error: { code: "TEE_ID_MISSING", message: "El tee no reportó TeeSet ID." } };
           try {
@@ -350,6 +393,14 @@ export async function POST(request: NextRequest) {
           && teeFailures === 0;
         course = {
           status: allTeesVerified ? "PASS" : "PARTIAL",
+          facilities: facilitySearch ? {
+            status: "PASS",
+            endpoint: facilitySearch.endpoint,
+            httpStatus: facilitySearch.httpStatus,
+            fetchedAt: facilitySearch.fetchedAt,
+            count: facilitySearch.data.length,
+            items: facilitySearch.data,
+          } : { status: "BLOCKED_EXTERNAL", error: facilityResult.error },
           search: {
             endpoint: search.endpoint,
             httpStatus: search.httpStatus,
@@ -357,6 +408,24 @@ export async function POST(request: NextRequest) {
             count: search.data.length,
             candidates: search.data,
           },
+          relatedLayouts: courseReads.map((read) => ({
+            candidate: read.candidate,
+            details: read.details ? {
+              endpoint: read.details.endpoint,
+              httpStatus: read.details.httpStatus,
+              fetchedAt: read.details.fetchedAt,
+              data: read.details.data,
+            } : null,
+            scorePostingTees: read.postingTees ? {
+              endpoint: read.postingTees.endpoint,
+              httpStatus: read.postingTees.httpStatus,
+              fetchedAt: read.postingTees.fetchedAt,
+              data: read.postingTees.data,
+            } : null,
+            error: read.error,
+            postingError: read.postingError,
+          })),
+          reconciliation,
           details: {
             endpoint: details.endpoint,
             httpStatus: details.httpStatus,

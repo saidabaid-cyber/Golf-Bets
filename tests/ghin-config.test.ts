@@ -14,6 +14,7 @@ test("GHIN capabilities require Preview, the master flag and granular server fla
     GHIN_GOLFER_LOOKUP_ENABLED: "true",
     GHIN_COURSE_LOOKUP_ENABLED: "true",
     GHIN_COURSE_SYNC_ENABLED: "true",
+    GHIN_SCORE_POSTING_ENABLED: "true",
     GHIN_TEST_LOGIN: "11103349",
     GHIN_TEST_PASSWORD: "secret",
   });
@@ -23,7 +24,9 @@ test("GHIN capabilities require Preview, the master flag and granular server fla
     readOnlyEnabled: true,
     golferLookup: true,
     courseLookup: true,
+    courseSyncEnabled: true,
     courseSyncDryRun: true,
+    scorePostingEnabled: true,
     credentialsConfigured: true,
     apiBaseUrl: "https://api2.ghin.com/api/v1",
   });
@@ -35,6 +38,7 @@ test("GHIN capabilities require Preview, the master flag and granular server fla
     GHIN_GOLFER_LOOKUP_ENABLED: "true",
     GHIN_COURSE_LOOKUP_ENABLED: "true",
     GHIN_COURSE_SYNC_ENABLED: "true",
+    GHIN_SCORE_POSTING_ENABLED: "true",
     GHIN_TEST_LOGIN: "11103349",
     GHIN_TEST_PASSWORD: "secret",
   });
@@ -43,6 +47,8 @@ test("GHIN capabilities require Preview, the master flag and granular server fla
   assert.equal(production.golferLookup, false);
   assert.equal(production.courseLookup, false);
   assert.equal(production.courseSyncDryRun, false);
+  assert.equal(production.courseSyncEnabled, false);
+  assert.equal(production.scorePostingEnabled, false);
 });
 
 test("GHIN API base URL accepts only exact HTTPS GHIN v1 origins", () => {

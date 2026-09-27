@@ -7,9 +7,11 @@ import {
   normalizeGhinError,
   parseGhinCourse,
   parseGhinCourses,
+  parseGhinFacilities,
   parseGhinGolfer,
   parseGhinHandicapIndex,
   parseGhinScores,
+  parseGhinScorePostingTees,
   parseGhinToken,
   safeJsonParse,
   SlidingWindowRateLimiter,
@@ -153,7 +155,7 @@ test("normaliza Course/Tee/Hole y ratings segmentados sin inventar datos incompl
   assert.equal(tee.holes, 2);
   assert.equal(tee.par, null, "un hoyo sin par impide inventar un total parcial");
   assert.equal(tee.totalYards, null, "un hoyo sin yardage impide inventar un total parcial");
-  assert.deepEqual(tee.holeData[1], { number: 2, par: null, yardage: null, strokeIndex: null });
+  assert.deepEqual(tee.holeData[1], { id: null, number: 2, par: null, yardage: null, strokeIndex: null });
 
   assert.deepEqual(parseGhinCourse({ CourseID: null, CourseName: null }), null);
   assert.deepEqual(parseGhinCourse({ CourseID: "course-without-tees", CourseName: "Sin salidas" })?.tees, []);
@@ -177,6 +179,38 @@ test("extrae tokens sólo de llaves permitidas y normaliza expiración", () => {
   assert.equal(extractGhinToken({ user: { password: "do-not-treat-as-token" } }), null);
   assert.equal(extractGhinToken({ access_token: null }), null);
   assert.equal(parseGhinToken({ token: "   " }), null);
+});
+
+test("normaliza Facility y TeeSetRatingsForScorePosting sin fabricar faltantes", () => {
+  const facilities = parseGhinFacilities([{
+    FacilityId: 44,
+    FacilityName: "La Vista Country Club",
+    FacilityStatus: "Active",
+    Address1: "Puebla",
+    City: "Puebla",
+    State: "Puebla",
+    Country: "México",
+    GeoLocationLatitude: "19.01",
+    GeoLocationLongitude: "-98.21",
+    UpdatedOn: "2026-09-26",
+    Associations: [{ GolfAssociationId: 9 }],
+    Courses: [{ CourseId: 23233, CourseName: "La Vista", CourseStatus: "Active", NumberOfHoles: 18 }],
+  }]);
+  assert.equal(facilities.length, 1);
+  assert.equal(facilities[0].id, "44");
+  assert.deepEqual(facilities[0].associationIds, ["9"]);
+  assert.equal(facilities[0].courses[0].id, "23233");
+
+  const postingTees = parseGhinScorePostingTees([
+    { TeeSetRatingId: 106087, TeeSetRatingName: "Blue", RatingType: "Total", CourseRating: 73.8, SlopeRating: 135, TotalPar: 72, Holes: [{ Number: 1, HoleId: 8, Par: 4, Length: 420, Allocation: 3 }] },
+    { TeeSetRatingId: 106087, TeeSetRatingName: "Blue", RatingType: "Front", CourseRating: 36.4, SlopeRating: 133 },
+  ]);
+  assert.equal(postingTees.length, 1);
+  assert.equal(postingTees[0].id, "106087");
+  assert.equal(postingTees[0].courseRating, 73.8);
+  assert.equal(postingTees[0].frontRating, 36.4);
+  assert.equal(postingTees[0].holeData[0].id, "8");
+  assert.equal(postingTees[0].backRating, null);
 });
 
 test("parsea únicamente authToken.token de Firebase y su duración", () => {

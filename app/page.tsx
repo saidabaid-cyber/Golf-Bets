@@ -3817,7 +3817,7 @@ function GolfBetsApp() {
 
       <RoundSetupStep step={1}>
       <section className="card" id="round-course">
-        <div className="sectionTitle"><div><h2>1. Campo</h2><p>{courseSetupStage === "course" ? "Busca por nombre o usa tu ubicación ya autorizada." : courseSetupStage === "tee" ? "Elige la salida antes de configurar la ronda." : "Revisa el formato y el hoyo donde comienza el grupo."}</p></div>{courseSetupStage === "course" && <div className="courseSetupActions"><button className="textButton" onClick={() => setTab("courseLibrary")}>Ver campos</button><button className="textButton" onClick={startNewCourse}>+ Campo</button></div>}</div>
+        <div className="sectionTitle"><div><h2>1. Campo → Layout → Tee</h2><p>{courseSetupStage === "course" ? "Busca el club y selecciona su layout." : courseSetupStage === "tee" ? "Elige la salida antes de configurar la ronda." : "Revisa rating, slope, par, yardaje y el hoyo donde comienza el grupo."}</p></div>{courseSetupStage === "course" && <div className="courseSetupActions"><button className="textButton" onClick={() => setTab("courseLibrary")}>Ver campos</button><button className="textButton" onClick={startNewCourse}>+ Campo</button></div>}</div>
         {courseSetupStage === "course" && <>
           {!courseSelected && pendingCourseIdentity && <div className="notice" id="round-course-ai-focus" role="status"><b>Campo reconocido: {pendingCourseIdentity.name}</b><br />{pendingCourseCandidates.length ? "Selecciona el campo para continuar." : "No encontré ese campo exacto en el catálogo actual. Selecciona otro o crea uno manual."}</div>}
           <CatalogCoursePicker key={`round-catalog-${identity.userId}`} showHeading={false} token={identity.accessToken} permissionOwnerId={identity.userId} selectedName="" onRequest={() => requestFeedback("COURSE")} onSelect={(next, cards) => selectRoundCourse(next, false, cards)} />
@@ -3838,7 +3838,7 @@ function GolfBetsApp() {
           onMissingTee={() => requestFeedback("TEE", { name: course.name })}
         />}
         {courseSelected && courseSetupStage === "details" && <>
-          <div className="roundCourseSelectionSummary" role="status"><div><span>CAMPO Y TEE</span><b>{course.name}</b><small>{course.teeName}{typeof course.totalYards === "number" ? ` · ${course.totalYards.toLocaleString("es-MX")} yd` : ""}</small></div><button type="button" className="textButton" onClick={() => setCourseSetupStage("tee")}>Cambiar tee</button></div>
+          <div className="roundCourseSelectionSummary" role="status"><div><span>CAMPO · LAYOUT · TEE</span><b>{course.clubName ? `${course.clubName} → ${course.name}` : course.name}</b><small>{course.teeName}{typeof course.rating === "number" ? ` · Rating ${course.rating}` : ""}{typeof course.slope === "number" ? ` · Slope ${course.slope}` : ""}{typeof course.totalYards === "number" ? ` · ${course.totalYards.toLocaleString("es-MX")} yd` : ""} · Par {course.holes.reduce((sum, hole) => sum + hole.par, 0)}</small></div><button type="button" className="textButton" onClick={() => setCourseSetupStage("tee")}>Cambiar tee</button></div>
           <CourseReviewNotice course={course} roundHoles={roundHoles} startHole={startHole} />
           <div className="roundCourseDetails">
             <div><label htmlFor="wizard-round-date">Fecha de la ronda</label><input id="wizard-round-date" aria-label="Fecha de la ronda" type="date" value={roundDate} onChange={(event) => setRoundDate(event.target.value)} /></div>

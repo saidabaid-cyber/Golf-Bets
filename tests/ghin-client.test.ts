@@ -47,8 +47,8 @@ function isFirebase(url: URL) {
   return url.hostname === "firebaseinstallations.googleapis.com";
 }
 
-function assertSingleGhinSource(url: URL) {
-  assert.deepEqual(url.searchParams.getAll("source"), ["GHINcom"]);
+function assertNoGhinSource(url: URL) {
+  assert.deepEqual(url.searchParams.getAll("source"), []);
 }
 
 test("autentica, deduplica consultas concurrentes y nunca deja secretos en el trace", async () => {
@@ -287,7 +287,7 @@ test("límites no finitos nunca se envían como NaN o Infinity", async () => {
   await client.searchCourses("La Vista", Number.POSITIVE_INFINITY);
   assert.deepEqual(observed.map((url) => url.searchParams.get("limit")), [null, null]);
   assert.equal(observed[0].searchParams.get("source"), null);
-  assertSingleGhinSource(observed[1]);
+  assertNoGhinSource(observed[1]);
 });
 
 test("curso y TeeSet preservan null reales y datos por hoyo sin convertirlos a cero", async () => {
@@ -299,15 +299,15 @@ test("curso y TeeSet preservan null reales y datos por hoyo sin convertirlos a c
       assert.equal(url.searchParams.get("name"), "La Vista");
       assert.equal(url.searchParams.get("country"), "Mexico");
       assert.equal(url.searchParams.get("state"), "Puebla");
-      assertSingleGhinSource(url);
+      assertNoGhinSource(url);
       assert.equal(url.searchParams.get("per_page"), null);
       return jsonResponse(200, { courses: [{ CourseId: 23233, CourseName: "La Vista", Status: "Active" }] });
     }
     if (url.pathname.endsWith("/GetCourseDetails.json")) {
-      assert.equal(url.searchParams.get("courseId"), "23233");
-      assert.equal(url.searchParams.get("include_altered_tees"), "false");
-      assertSingleGhinSource(url);
-      assert.equal(url.searchParams.get("course_id"), null);
+      assert.equal(url.searchParams.get("course_id"), "23233");
+      assert.equal(url.searchParams.get("tee_set_status"), "Active");
+      assertNoGhinSource(url);
+      assert.equal(url.searchParams.get("courseId"), null);
       return jsonResponse(200, {
         CourseId: 23233,
         CourseName: "La Vista",
@@ -315,7 +315,7 @@ test("curso y TeeSet preservan null reales y datos por hoyo sin convertirlos a c
       });
     }
     if (url.pathname.endsWith("/TeeSetRatings/106087.json")) {
-      assertSingleGhinSource(url);
+      assertNoGhinSource(url);
       return jsonResponse(200, {
         TeeSetRatingId: 106087,
         TeeSetName: "Azules",
@@ -339,14 +339,14 @@ test("curso y TeeSet preservan null reales y datos por hoyo sin convertirlos a c
   assert.equal(tee.data.holeData[0].strokeIndex, 5);
 });
 
-test("Course Search y Details conservan fallbacks históricos sólo ante 404/405", async () => {
+test("Course Search conserva fallback 404/405 y Details usa el contrato 0.20.0", async () => {
   const fetchImpl: typeof fetch = async (input) => {
     const url = new URL(String(input));
     if (isFirebase(url)) return firebaseResponse();
     if (url.pathname.endsWith("/golfer_login.json")) {
       return jsonResponse(200, { token: "read-only-token", expires_in: 3_600 });
     }
-    assertSingleGhinSource(url);
+    assertNoGhinSource(url);
     if (url.pathname.endsWith("/SearchCourses.json")) {
       if (url.searchParams.has("country")) return jsonResponse(404, { error: "not found" });
       assert.equal(url.searchParams.get("per_page"), "5");
@@ -354,7 +354,6 @@ test("Course Search y Details conservan fallbacks históricos sólo ante 404/405
       return jsonResponse(200, { courses: [{ CourseId: 23233, CourseName: "La Vista" }] });
     }
     if (url.pathname.endsWith("/GetCourseDetails.json")) {
-      if (url.searchParams.has("courseId")) return jsonResponse(405, { error: "unsupported" });
       assert.equal(url.searchParams.get("course_id"), "23233");
       assert.equal(url.searchParams.get("tee_set_status"), "Active");
       return jsonResponse(200, { CourseId: 23233, CourseName: "La Vista", TeeSets: [] });
@@ -365,4 +364,29 @@ test("Course Search y Details conservan fallbacks históricos sólo ante 404/405
 
   assert.equal((await client.searchCourses("La Vista", 5, "Mexico", "Puebla")).data[0].id, "23233");
   assert.equal((await client.getCourse("23233")).data.id, "23233");
+});
+
+test("Facility Search y TeeSetRatingsForScorePosting usan los endpoints 0.20.0 sin source", async () => {
+  const fetchImpl: typeof fetch = async (input) => {
+    const url = new URL(String(input));
+    if (isFirebase(url)) return firebaseResponse();
+    if (url.pathname.endsWith("/golfer_login.json")) return jsonResponse(200, { token: "read-only-token", expires_in: 3_600 });
+    assertNoGhinSource(url);
+    if (url.pathname.endsWith("/facilities/search.json")) {
+      assert.equal(url.searchParams.get("name"), "La Vista");
+      return jsonResponse(200, [{ FacilityId: 44, FacilityName: "La Vista Country Club", FacilityStatus: "Active", City: "Puebla", State: "Puebla", Country: "México" }]);
+    }
+    if (url.pathname.endsWith("/Courses/23233/TeeSetRatingsForScorePosting.json")) {
+      return jsonResponse(200, [{ TeeSetRatingId: 106087, TeeSetRatingName: "Blue", RatingType: "Total", CourseRating: 73.8, SlopeRating: 135 }]);
+    }
+    throw new Error(`unexpected endpoint ${url.pathname}`);
+  };
+  const client = new GhinReadOnlyClient({ baseUrl: "https://api2.ghin.com/api/v1", credentials, fetchImpl });
+
+  const facilities = await client.searchFacilities({ name: "La Vista" });
+  const postingTees = await client.getScorePostingTees("23233");
+
+  assert.equal(facilities.data[0].id, "44");
+  assert.equal(postingTees.data[0].id, "106087");
+  assert.equal(postingTees.data[0].courseRating, 73.8);
 });

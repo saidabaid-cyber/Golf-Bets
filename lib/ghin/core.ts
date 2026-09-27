@@ -44,26 +44,70 @@ export type NormalizedGhinScore = {
 };
 
 export type NormalizedGhinHole = {
+  id: string | null;
   number: number;
   par: number | null;
   yardage: number | null;
   strokeIndex: number | null;
 };
 
+export type NormalizedGhinRating = {
+  type: "total" | "front" | "back" | "unknown";
+  rawType: string | null;
+  courseRating: number | null;
+  slopeRating: number | null;
+  bogeyRating: number | null;
+};
+
 export type NormalizedGhinTee = {
   id: string | null;
   name: string | null;
+  displayName: string | null;
   gender: string | null;
+  status: NormalizedGhinStatus;
+  rawStatus: string | null;
   holes: number | null;
   par: number | null;
   courseRating: number | null;
   slopeRating: number | null;
+  bogeyRating: number | null;
   totalYards: number | null;
+  totalMeters: number | null;
   frontRating: number | null;
   frontSlope: number | null;
+  frontBogeyRating: number | null;
   backRating: number | null;
   backSlope: number | null;
+  backBogeyRating: number | null;
+  isShorter: boolean | null;
+  strokeAllocation: boolean | null;
+  eligibleSides: string[];
+  ratings: NormalizedGhinRating[];
   holeData: NormalizedGhinHole[];
+};
+
+export type NormalizedGhinFacility = {
+  id: string | null;
+  name: string | null;
+  address1: string | null;
+  address2: string | null;
+  city: string | null;
+  state: string | null;
+  country: string | null;
+  postalCode: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  associationIds: string[];
+  status: NormalizedGhinStatus;
+  rawStatus: string | null;
+  updatedAt: string | null;
+  courses: Array<{
+    id: string | null;
+    name: string | null;
+    holes: number | null;
+    status: NormalizedGhinStatus;
+    rawStatus: string | null;
+  }>;
 };
 
 export type NormalizedGhinCourse = {
@@ -74,9 +118,24 @@ export type NormalizedGhinCourse = {
   city: string | null;
   state: string | null;
   country: string | null;
+  address1: string | null;
+  address2: string | null;
+  postalCode: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  associationId: string | null;
+  courseNumber: string | null;
+  season: {
+    name: string | null;
+    startsOn: string | null;
+    endsOn: string | null;
+    isAllYear: boolean | null;
+  } | null;
   holes: number | null;
+  par: number | null;
   status: NormalizedGhinStatus;
   rawStatus: string | null;
+  updatedAt: string | null;
   tees: NormalizedGhinTee[];
 };
 
@@ -207,7 +266,7 @@ function statusDetails(record: UnknownRecord): {
   rawStatus: string | null;
   isActive: boolean | null;
 } {
-  const rawValue = field(record, ["status", "golfer_status", "membership_status", "course_status", "active_status"]);
+  const rawValue = field(record, ["status", "golfer_status", "membership_status", "course_status", "facility_status", "tee_set_status", "active_status"]);
   const rawStatus = text(rawValue);
   const inactive = boolean(field(record, ["is_inactive", "inactive", "disabled"]));
   const active = boolean(field(record, ["is_active", "active", "enabled"]));
@@ -338,6 +397,7 @@ export function parseGhinHole(payload: unknown): NormalizedGhinHole | null {
   const number = integer(field(record, ["hole_number", "number", "hole_no", "sequence", "hole"]), 1);
   if (number === null) return null;
   return {
+    id: identifier(field(record, ["hole_id", "id"])),
     number,
     par: integer(field(record, ["par"]), 1),
     yardage: integer(field(record, ["yardage", "yards", "length", "distance"]), 0),
@@ -353,6 +413,33 @@ export function parseGhinHoles(payload: unknown): NormalizedGhinHole[] {
 }
 
 type RatingCandidate = { record: UnknownRecord; label: string };
+
+function normalizedRatingType(value: string | null): NormalizedGhinRating["type"] {
+  const normalized = normalizeKey(value ?? "");
+  if (/front|first|out|holes?1to9|9front/.test(normalized)) return "front";
+  if (/back|second|in|holes?10to18|9back/.test(normalized)) return "back";
+  if (/total|overall|full|18hole|all/.test(normalized)) return "total";
+  return "unknown";
+}
+
+function normalizedRatings(candidates: readonly RatingCandidate[]): NormalizedGhinRating[] {
+  return candidates.map(({ record, label }) => ({
+    type: normalizedRatingType(label),
+    rawType: text(field(record, ["rating_type", "type", "name"])) ?? text(label),
+    courseRating: finiteNumber(field(record, ["course_rating", "rating"])),
+    slopeRating: finiteNumber(field(record, ["slope_rating", "slope"])),
+    bogeyRating: finiteNumber(field(record, ["bogey_rating", "bogey"])),
+  }));
+}
+
+function stringList(value: unknown): string[] {
+  if (Array.isArray(value)) return value.flatMap((entry) => {
+    const parsed = text(entry);
+    return parsed ? [parsed] : [];
+  });
+  const parsed = text(value);
+  return parsed ? parsed.split(/[,|/]+/).map((entry) => entry.trim()).filter(Boolean) : [];
+}
 
 function ratingCandidates(record: UnknownRecord): RatingCandidate[] {
   const source = field(record, ["ratings", "tee_set_ratings", "rating_values"]);
@@ -404,30 +491,44 @@ export function parseGhinTee(payload: unknown): NormalizedGhinTee | null {
   const back = segmentedRating(candidates, "back");
   const holeData = parseGhinHoles(record);
   const id = identifier(field(record, ["tee_set_rating_id", "tee_set_id", "tee_id", "rating_id", "id"]));
-  const name = text(field(record, ["tee_set_name", "tee_name", "name", "color"]));
+  const name = text(field(record, ["tee_set_rating_name", "tee_set_name", "tee_name", "name", "color"]));
   const explicitHoles = integer(field(record, ["number_of_holes", "holes_number", "hole_count", "holes"]), 1);
   const explicitPar = integer(field(record, ["par", "total_par"]), 1);
   const explicitYards = integer(field(record, ["total_yardage", "total_yards", "yardage", "yards", "length"]), 0);
+  const status = statusDetails(record);
+  const ratings = normalizedRatings(candidates);
 
   const tee: NormalizedGhinTee = {
     id,
     name,
+    displayName: text(field(record, ["display_name"])),
     gender: text(field(record, ["gender", "gender_code", "tee_gender"])),
+    status: status.status,
+    rawStatus: status.rawStatus,
     holes: explicitHoles ?? (holeData.length ? holeData.length : null),
     par: explicitPar ?? completeSum(holeData.map((hole) => hole.par)),
     courseRating: finiteNumber(field(record, ["course_rating", "rating"]))
       ?? ratingNumber(total, ["course_rating", "rating"]),
     slopeRating: finiteNumber(field(record, ["slope_rating", "slope"]))
       ?? ratingNumber(total, ["slope_rating", "slope"]),
+    bogeyRating: finiteNumber(field(record, ["bogey_rating", "bogey"]))
+      ?? ratingNumber(total, ["bogey_rating", "bogey"]),
     totalYards: explicitYards ?? completeSum(holeData.map((hole) => hole.yardage)),
+    totalMeters: integer(field(record, ["total_meters", "meters"]), 0),
     frontRating: finiteNumber(field(record, ["front_rating", "front_course_rating", "out_rating"]))
       ?? ratingNumber(front, ["course_rating", "rating"]),
     frontSlope: finiteNumber(field(record, ["front_slope", "front_slope_rating", "out_slope"]))
       ?? ratingNumber(front, ["slope_rating", "slope"]),
+    frontBogeyRating: ratingNumber(front, ["bogey_rating", "bogey"]),
     backRating: finiteNumber(field(record, ["back_rating", "back_course_rating", "in_rating"]))
       ?? ratingNumber(back, ["course_rating", "rating"]),
     backSlope: finiteNumber(field(record, ["back_slope", "back_slope_rating", "in_slope"]))
       ?? ratingNumber(back, ["slope_rating", "slope"]),
+    backBogeyRating: ratingNumber(back, ["bogey_rating", "bogey"]),
+    isShorter: boolean(field(record, ["is_shorter"])),
+    strokeAllocation: boolean(field(record, ["stroke_allocation"])),
+    eligibleSides: stringList(field(record, ["eligible_sides"])),
+    ratings,
     holeData,
   };
 
@@ -441,6 +542,81 @@ export function parseGhinTees(payload: unknown): NormalizedGhinTee[] {
     .filter((tee): tee is NormalizedGhinTee => tee !== null);
 }
 
+/** The score-posting endpoint returns one flat row per rating segment. */
+export function parseGhinScorePostingTees(payload: unknown): NormalizedGhinTee[] {
+  const rows = records(payload, ["tee_set_ratings", "ratings"]);
+  const grouped = new Map<string, UnknownRecord[]>();
+  rows.forEach((row, index) => {
+    const id = identifier(field(row, ["tee_set_rating_id", "tee_set_id", "id"])) ?? `missing-${index}`;
+    const current = grouped.get(id) ?? [];
+    current.push(row);
+    grouped.set(id, current);
+  });
+  return [...grouped.values()].flatMap((group) => {
+    const base = group[0];
+    const synthesized: UnknownRecord = {
+      ...base,
+      Ratings: group.map((row) => ({
+        RatingType: field(row, ["rating_type"]),
+        CourseRating: field(row, ["course_rating"]),
+        SlopeRating: field(row, ["slope_rating"]),
+        BogeyRating: field(row, ["bogey_rating"]),
+      })),
+    };
+    const parsed = parseGhinTee(synthesized);
+    return parsed ? [parsed] : [];
+  });
+}
+
+export function parseGhinFacility(payload: unknown): NormalizedGhinFacility | null {
+  const record = entityRecord(payload, ["facility", "facilities"]);
+  if (!record) return null;
+  const id = identifier(field(record, ["facility_id", "id"]));
+  const name = text(field(record, ["facility_name", "name"]));
+  if (!id && !name) return null;
+  const status = statusDetails(record);
+  const associationRows = records(field(record, ["associations"]), ["associations"]);
+  const courseRows = records(field(record, ["courses"]), ["courses"]);
+  return {
+    id,
+    name,
+    address1: text(field(record, ["address1", "address_1"])),
+    address2: text(field(record, ["address2", "address_2"])),
+    city: text(field(record, ["city"])),
+    state: text(field(record, ["state", "state_region", "province"])),
+    country: text(field(record, ["country", "country_code"])),
+    postalCode: text(field(record, ["zip", "postal_code"])),
+    latitude: finiteNumber(field(record, ["geo_location_latitude", "latitude"])),
+    longitude: finiteNumber(field(record, ["geo_location_longitude", "longitude"])),
+    associationIds: associationRows.flatMap((row) => {
+      const associationId = identifier(field(row, ["golf_association_id", "association_id", "id"]));
+      return associationId ? [associationId] : [];
+    }),
+    status: status.status,
+    rawStatus: status.rawStatus,
+    updatedAt: text(field(record, ["updated_on", "updated_at"])),
+    courses: courseRows.flatMap((course) => {
+      const courseId = identifier(field(course, ["course_id", "id"]));
+      const courseName = text(field(course, ["course_name", "name"]));
+      if (!courseId && !courseName) return [];
+      const courseStatus = statusDetails(course);
+      return [{
+        id: courseId,
+        name: courseName,
+        holes: integer(field(course, ["number_of_holes", "holes_number", "holes"]), 1),
+        status: courseStatus.status,
+        rawStatus: courseStatus.rawStatus,
+      }];
+    }),
+  };
+}
+
+export function parseGhinFacilities(payload: unknown): NormalizedGhinFacility[] {
+  return records(payload, ["facilities"])
+    .map((record) => parseGhinFacility(record))
+    .filter((facility): facility is NormalizedGhinFacility => facility !== null);
+}
+
 export function parseGhinCourse(payload: unknown): NormalizedGhinCourse | null {
   const record = entityRecord(payload, ["course", "courses"]);
   if (!record) return null;
@@ -452,8 +628,16 @@ export function parseGhinCourse(payload: unknown): NormalizedGhinCourse | null {
   if (id === null && name === null) return null;
   const status = statusDetails(record);
   const holesValue = field(record, ["number_of_holes", "holes_number", "hole_count", "holes"]);
-  const holes = Array.isArray(holesValue) ? holesValue.length || null : integer(holesValue, 1);
+  const explicitHoles = Array.isArray(holesValue) ? holesValue.length || null : integer(holesValue, 1);
   const teeCollection = findCollection(record, ["tees", "tee_sets", "tee_set_ratings", "ratings_by_tee"]);
+  const tees = teeCollection
+    ? teeCollection.map((tee) => parseGhinTee(tee)).filter((tee): tee is NormalizedGhinTee => tee !== null)
+    : [];
+  const teeHoleCounts = [...new Set(tees.map((tee) => tee.holes).filter((value): value is number => value === 9 || value === 18))];
+  const holes = explicitHoles ?? (teeHoleCounts.length === 1 ? teeHoleCounts[0] : null);
+  const season = childRecord(record, ["season"]);
+  const facilityAddress = facility ? text(field(facility, ["geo_location_formatted_address", "address"])) : null;
+  const teePars = [...new Set(tees.map((tee) => tee.par).filter((value): value is number => value !== null))];
 
   return {
     id,
@@ -467,11 +651,26 @@ export function parseGhinCourse(payload: unknown): NormalizedGhinCourse | null {
       ?? (location ? text(field(location, ["state", "state_region", "province", "region"])) : null),
     country: text(field(record, ["country", "country_name", "country_code"]))
       ?? (location ? text(field(location, ["country", "country_name", "country_code"])) : null),
+    address1: text(field(record, ["address1", "address_1"])) ?? facilityAddress,
+    address2: text(field(record, ["address2", "address_2"])),
+    postalCode: text(field(record, ["zip", "postal_code"])),
+    latitude: finiteNumber(field(record, ["geo_location_latitude", "latitude"]))
+      ?? (facility ? finiteNumber(field(facility, ["geo_location_latitude", "latitude"])) : null),
+    longitude: finiteNumber(field(record, ["geo_location_longitude", "longitude"]))
+      ?? (facility ? finiteNumber(field(facility, ["geo_location_longitude", "longitude"])) : null),
+    associationId: facility ? identifier(field(facility, ["golf_association_id", "association_id"])) : null,
+    courseNumber: identifier(field(record, ["course_number"])),
+    season: season ? {
+      name: text(field(season, ["season_name", "name"])),
+      startsOn: text(field(season, ["season_start_date", "starts_on"])),
+      endsOn: text(field(season, ["season_end_date", "ends_on"])),
+      isAllYear: boolean(field(season, ["is_all_year", "all_year"])),
+    } : null,
     holes,
+    par: integer(field(record, ["par", "total_par"]), 1) ?? (teePars.length === 1 ? teePars[0] : null),
     ...status,
-    tees: teeCollection
-      ? teeCollection.map((tee) => parseGhinTee(tee)).filter((tee): tee is NormalizedGhinTee => tee !== null)
-      : [],
+    updatedAt: text(field(record, ["updated_on", "updated_at"])),
+    tees,
   };
 }
 

@@ -109,7 +109,7 @@ test("Home Club usa modo de club sin selección de tee ni ratings", () => {
   const homeReady = picker.indexOf("onSelectionReadyChange?.(true)", homePersisted);
   const scorecardFetch = picker.indexOf("/api/courses/catalog?courseId", homeSelection);
   assert.ok(homeSelection >= 0 && homeSelection < homePersisted && homePersisted < homeReady && homeReady < scorecardFetch, "Home Club confirma persistencia antes de ready y sale antes del fetch de tees");
-  assert.match(picker, /selectedClubCourses\.length>1&&<label>Recorrido/);
+  assert.match(picker, /selectedClubCourses\.length>1&&<label>Layout/);
   assert.match(picker, /setChoosingHomeCourse\(false\)/);
   assert.match(picker, /!choosingHomeCourse&&selectionLabel&&club&&chosen/);
   assert.match(picker, />Cambiar campo<\/button>/);

@@ -4,7 +4,9 @@ export type GhinPreviewCapabilities = {
   readOnlyEnabled: boolean;
   golferLookup: boolean;
   courseLookup: boolean;
+  courseSyncEnabled: boolean;
   courseSyncDryRun: boolean;
+  scorePostingEnabled: boolean;
   credentialsConfigured: boolean;
   apiBaseUrl: string | null;
 };
@@ -43,13 +45,16 @@ export function resolveGhinPreviewCapabilities(
   const readOnlyEnabled = masterEnabled && enabled(env.GHIN_READ_ONLY_ENABLED);
   const golferLookup = readOnlyEnabled && enabled(env.GHIN_GOLFER_LOOKUP_ENABLED);
   const courseLookup = readOnlyEnabled && enabled(env.GHIN_COURSE_LOOKUP_ENABLED);
+  const courseSyncEnabled = courseLookup && enabled(env.GHIN_COURSE_SYNC_ENABLED);
   return {
     previewOnly,
     masterEnabled,
     readOnlyEnabled,
     golferLookup,
     courseLookup,
-    courseSyncDryRun: courseLookup && enabled(env.GHIN_COURSE_SYNC_ENABLED),
+    courseSyncEnabled,
+    courseSyncDryRun: courseSyncEnabled,
+    scorePostingEnabled: readOnlyEnabled && enabled(env.GHIN_SCORE_POSTING_ENABLED),
     credentialsConfigured: Boolean(env.GHIN_TEST_LOGIN?.trim() && env.GHIN_TEST_PASSWORD),
     apiBaseUrl: normalizeGhinApiBaseUrl(env.GHIN_API_BASE_URL),
   };

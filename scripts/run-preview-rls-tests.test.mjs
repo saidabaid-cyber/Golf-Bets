@@ -23,14 +23,15 @@ const base = {
   PGSSLMODE: "disable",
 };
 
-test("Preview RLS runner includes every 17-file canonical contract exactly once", () => {
+test("Preview RLS runner includes every 18-file canonical contract exactly once", () => {
   const repositoryContracts = readdirSync("supabase/tests")
     .filter((filename) => filename.endsWith("_rls.sql"))
     .sort();
-  assert.equal(REQUIRED_RLS_TESTS.length, 17);
+  assert.equal(REQUIRED_RLS_TESTS.length, 18);
   assert.equal(new Set(REQUIRED_RLS_TESTS).size, REQUIRED_RLS_TESTS.length);
   assert.deepEqual([...REQUIRED_RLS_TESTS].sort(), repositoryContracts);
   assert.ok(REQUIRED_RLS_TESTS.includes("feedback_requests_rls.sql"));
+  assert.ok(REQUIRED_RLS_TESTS.includes("ghin_course_sync_rls.sql"));
   assert.ok(REQUIRED_RLS_TESTS.includes("polla_live_rls.sql"));
   const feedbackContract = readFileSync("supabase/tests/feedback_requests_rls.sql", "utf8");
   assert.match(feedbackContract, /^--[^\n]*\n--[^\n]*\nbegin;/);

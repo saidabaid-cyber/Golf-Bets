@@ -33,6 +33,7 @@ function JsonPanel({ value }: { value: unknown }) {
 export default function GhinDiagnosticClient() {
   const [configuration, setConfiguration] = useState<JsonRecord | null>(null);
   const [diagnostic, setDiagnostic] = useState<JsonRecord | null>(null);
+  const [courseSync, setCourseSync] = useState<JsonRecord | null>(null);
   const [message, setMessage] = useState("Validando acceso administrativo…");
   const [running, setRunning] = useState(false);
 
@@ -87,6 +88,33 @@ export default function GhinDiagnosticClient() {
     }
   }, [authorizedFetch]);
 
+  const runCourseSync = useCallback(async (operation: "dry_run" | "apply_confirmed", courseId: string) => {
+    if (operation === "apply_confirmed" && !window.confirm("Aplicar únicamente el mapping y catálogo GHIN revisados en Supabase QA. No afecta Production ni publica scores. ¿Continuar?")) return;
+    setRunning(true);
+    setMessage(operation === "dry_run" ? "Generando dry-run de sincronización…" : "Aplicando sincronización controlada en QA…");
+    try {
+      const supabase = getSupabaseBrowser();
+      if (!supabase) throw new Error("La conexión de cuenta no está configurada.");
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) throw new Error("Inicia sesión con una cuenta administradora.");
+      const response = await fetch("/api/admin/dev/ghin/course-sync", {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({ operation, courseId, ...(operation === "apply_confirmed" ? { confirmation: "APPLY_GHIN_COURSE_SYNC_QA" } : {}) }),
+        cache: "no-store",
+      });
+      const payload = await response.json().catch(() => null) as JsonRecord | null;
+      if (!payload || !response.ok) throw new Error(valueText(payload?.error, "No fue posible sincronizar."));
+      setCourseSync(payload);
+      setMessage("");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "No fue posible sincronizar.");
+    } finally {
+      setRunning(false);
+    }
+  }, []);
+
   const auth = stage(diagnostic, "auth");
   const golfer = stage(diagnostic, "golfer");
   const golferData = record(golfer?.data);
@@ -95,6 +123,7 @@ export default function GhinDiagnosticClient() {
   const details = record(course?.details);
   const courseData = record(details?.data);
   const comparison = record(course?.comparison);
+  const reconciliation = Array.isArray(course?.reconciliation) ? course?.reconciliation : [];
   const fixedTargets = record(configuration?.fixedTargets);
 
   if (!configuration) {
@@ -159,10 +188,17 @@ export default function GhinDiagnosticClient() {
       </section>
 
       <section className="card">
-        <h2>La Vista: course, tees y hoyos</h2>
+        <h2>La Vista: facility, layouts, tees y hoyos</h2>
         <StatusChip value={course?.status} />
         <p>Facility ID: {valueText(courseData?.facilityId)} · Course ID: {valueText(courseData?.id)}</p>
-        <JsonPanel value={{ course: courseData, teeReads: course?.teeReads, error: course?.error }} />
+        <p>La consulta incluye TeeSetRatingsForScorePosting como verificación read-only; no publica ningún score.</p>
+        <JsonPanel value={{ facilities: course?.facilities, course: courseData, relatedLayouts: course?.relatedLayouts, teeReads: course?.teeReads, error: course?.error }} />
+      </section>
+
+      <section className="card">
+        <h2>Reconciliación La Vista</h2>
+        <p>Par 72, Temporary Par 70 y Temporary Par 69 se evalúan por IDs y firma de datos; nunca sólo por nombre.</p>
+        <JsonPanel value={reconciliation} />
       </section>
 
       <section className="card">
@@ -170,6 +206,11 @@ export default function GhinDiagnosticClient() {
         <p>Dry-run únicamente; cualquier propuesta requiere revisión y una aplicación controlada posterior.</p>
         {typeof comparison?.humanReport === "string" && <pre style={{ overflowX: "auto", whiteSpace: "pre-wrap" }}>{comparison.humanReport}</pre>}
         <JsonPanel value={{ summary: comparison?.summary, mappings: course?.mappingProposal }} />
+        {typeof courseData?.id === "string" && <div className="roundActions">
+          <button className="secondary" type="button" disabled={running} onClick={() => void runCourseSync("dry_run", courseData.id as string)}>Dry-run de sync</button>
+          <button className="primary" type="button" disabled={running} onClick={() => void runCourseSync("apply_confirmed", courseData.id as string)}>Aplicar mapping revisado en QA</button>
+        </div>}
+        {courseSync && <JsonPanel value={courseSync} />}
       </section>
 
       <section className="card">
