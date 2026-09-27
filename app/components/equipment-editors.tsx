@@ -165,7 +165,7 @@ export function ClubEditor({ userId, catalog, shafts, existing, defaultHandednes
   const categoryCatalog = useMemo(() => catalog.filter((club) => club.category === category), [catalog, category]);
   const pinnedClubIds = useMemo(() => catalogClubId ? [catalogClubId] : [], [catalogClubId]);
   const clubSearchQuery = step === "model" && brand ? `${brand} ${catalogQuery}`.trim() : catalogQuery;
-  const catalogSearch = useEquipmentCatalogSearch({ kind: "CLUB", query: clubSearchQuery, category, fallback: categoryCatalog, pinnedIds: pinnedClubIds, includeArchived: true });
+  const catalogSearch = useEquipmentCatalogSearch({ kind: "CLUB", query: clubSearchQuery, category, fallback: categoryCatalog, pinnedIds: pinnedClubIds, includeArchived: clubSearchQuery.trim().length > 0 });
   const clubBrandFacets = useEquipmentBrandFacets({ kind: "CLUB", query: step === "brand" ? catalogQuery : "", category });
   const selectableCatalog = useMemo(() => {
     const byId = new Map(catalogSearch.items.map((club) => [club.id, club]));
@@ -184,7 +184,7 @@ export function ClubEditor({ userId, catalog, shafts, existing, defaultHandednes
   const shaftFallback = useMemo(() => shafts.filter((shaft) => !shaft.usage || shaft.usage === shaftUsage), [shaftUsage, shafts]);
   const pinnedShaftIds = useMemo(() => shaftId ? [shaftId] : [], [shaftId]);
   const shaftSearchQuery = shaftBrand ? `${shaftBrand} ${shaftQuery}`.trim() : shaftQuery;
-  const shaftSearch = useEquipmentCatalogSearch({ kind: "SHAFT", query: shaftSearchQuery, shaftUsage, fallback: shaftFallback, pinnedIds: pinnedShaftIds, includeArchived: true });
+  const shaftSearch = useEquipmentCatalogSearch({ kind: "SHAFT", query: shaftSearchQuery, shaftUsage, fallback: shaftFallback, pinnedIds: pinnedShaftIds, includeArchived: shaftSearchQuery.trim().length > 0 });
   const shaftBrandFacets = useEquipmentBrandFacets({ kind: "SHAFT", query: !shaftBrand ? shaftQuery : "", shaftUsage });
   const activeShafts = useMemo(() => {
     const byId = new Map(shaftSearch.items.map((shaft) => [shaft.id, shaft]));
@@ -475,7 +475,7 @@ export function BallEditor({ userId, catalog, existing, presentation = "sheet", 
   const activeCatalog = useMemo(() => [...catalog], [catalog]);
   const pinnedBallIds = useMemo(() => catalogBallId ? [catalogBallId] : [], [catalogBallId]);
   const ballSearchQuery = step === "model" && brand ? `${brand} ${catalogQuery}`.trim() : catalogQuery;
-  const catalogSearch = useEquipmentCatalogSearch({ kind: "BALL", query: ballSearchQuery, fallback: activeCatalog, pinnedIds: pinnedBallIds, includeArchived: true });
+  const catalogSearch = useEquipmentCatalogSearch({ kind: "BALL", query: ballSearchQuery, fallback: activeCatalog, pinnedIds: pinnedBallIds, includeArchived: ballSearchQuery.trim().length > 0 });
   const ballBrandFacets = useEquipmentBrandFacets({ kind: "BALL", query: step === "brand" ? catalogQuery : "" });
   const selectableCatalog = useMemo(() => {
     const byId = new Map(catalogSearch.items.map((ball) => [ball.id, ball]));

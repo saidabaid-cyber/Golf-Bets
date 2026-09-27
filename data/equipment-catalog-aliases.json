@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "verifiedAt": "2026-09-27T00:00:00.000Z",
+  "brandAliases": [
+    {
+      "kind": "CLUB",
+      "canonical": "Cobra",
+      "aliases": ["Cobra Golf"],
+      "relationship": "naming",
+      "sourceUrl": "https://www.cobragolf.com/"
+    },
+    {
+      "kind": "CLUB",
+      "canonical": "L.A.B. Golf",
+      "aliases": ["LAB Golf", "LAB"],
+      "relationship": "naming",
+      "sourceUrl": "https://labgolf.com/"
+    },
+    {
+      "kind": "BALL",
+      "canonical": "Vice",
+      "aliases": ["Vice Golf"],
+      "relationship": "naming",
+      "sourceUrl": "https://www.vicegolf.com/golf-balls"
+    },
+    {
+      "kind": "CLUB",
+      "canonical": "Cleveland",
+      "aliases": ["Cleveland Golf"],
+      "relationship": "naming",
+      "sourceUrl": "https://us.dunlopsports.com/cleveland-golf/"
+    },
+    {
+      "kind": "BALL",
+      "canonical": "Bridgestone",
+      "aliases": ["Bridgestone Golf"],
+      "relationship": "naming",
+      "sourceUrl": "https://www.bridgestonegolf.com/en-us/balls/"
+    },
+    {
+      "kind": "CLUB",
+      "canonical": "Bridgestone",
+      "aliases": ["Bridgestone Golf"],
+      "relationship": "naming",
+      "sourceUrl": "https://www.bridgestonegolf.com/en-us/clubs/"
+    },
+    {
+      "kind": "SHAFT",
+      "canonical": "Nippon Shaft",
+      "aliases": ["Nippon"],
+      "relationship": "naming",
+      "sourceUrl": "https://nipponshaft.com/"
+    },
+    {
+      "kind": "SHAFT",
+      "canonical": "Kinetixx",
+      "aliases": ["Paderson", "Paderson Kinetixx", "Paderson KINETIXX"],
+      "relationship": "historical-search",
+      "sourceUrl": "https://www.kinetixxgolf.com/"
+    }
+  ],
+  "itemAliases": [
+    {
+      "kind": "BALL",
+      "catalogId": "taylormade-noodle-2014",
+      "aliases": ["Noodle", "TaylorMade Noodle", "Noodle Golf"],
+      "sourceUrl": "https://www.taylormadegolf.com/on/demandware.static/-/Sites-TMaG-Library/default/v1463473265710/docs/productspecs/2014/Golf-Ball-2014.PDF"
+    }
+  ]
+}

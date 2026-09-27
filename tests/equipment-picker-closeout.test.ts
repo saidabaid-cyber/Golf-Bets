@@ -39,11 +39,14 @@ test("una mano sin dato verificado permite RH/LH y una restricción real sí se 
   assert.equal(isClubHandednessAllowed("LH", rightOnly), false);
 });
 
-test("los editores incluyen históricos desde la primera pantalla y usan facetas server-side", () => {
+test("los editores muestran actuales por defecto y habilitan históricos al buscar", () => {
   const editors = readFileSync("app/components/equipment-editors.tsx", "utf8");
   const hook = readFileSync("app/components/use-equipment-catalog-search.ts", "utf8");
   const route = readFileSync("app/api/catalog/equipment/route.ts", "utf8");
-  assert.match(editors, /includeArchived: true/);
+  assert.match(editors, /includeArchived: clubSearchQuery\.trim\(\)\.length > 0/);
+  assert.match(editors, /includeArchived: shaftSearchQuery\.trim\(\)\.length > 0/);
+  assert.match(editors, /includeArchived: ballSearchQuery\.trim\(\)\.length > 0/);
+  assert.match(hook, /includeArchived: String\(input\.query\.trim\(\)\.length > 0\)/);
   assert.match(editors, /useEquipmentBrandFacets/);
   assert.match(hook, /facet: "brands"/);
   assert.match(route, /facet === "brands"/);

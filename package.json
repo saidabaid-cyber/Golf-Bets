@@ -19,6 +19,7 @@
     "test:recovery": "node --test --test-name-pattern=\"manifest|verifier|decrypt|bundle|SQL and custom archive\" scripts/backup/backup.test.mjs",
     "test:automation": "node --test scripts/backup/automation.test.mjs",
     "audit:assets": "node scripts/audit-static-assets.mjs",
+    "audit:equipment-freeze": "node scripts/qa-equipment-catalog-freeze.mjs --check",
     "typecheck": "next typegen && tsc --noEmit",
     "backup": "node scripts/backup/backup.mjs",
     "backup:source": "node scripts/backup/backup.mjs --only=source",

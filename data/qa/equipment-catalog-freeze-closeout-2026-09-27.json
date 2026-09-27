@@ -1,0 +1,692 @@
+{
+  "aliases": {
+    "brandMappings": [
+      {
+        "aliases": [
+          "Cobra Golf"
+        ],
+        "canonical": "Cobra",
+        "kind": "CLUB",
+        "relationship": "naming",
+        "sourceUrl": "https://www.cobragolf.com/"
+      },
+      {
+        "aliases": [
+          "LAB Golf",
+          "LAB"
+        ],
+        "canonical": "L.A.B. Golf",
+        "kind": "CLUB",
+        "relationship": "naming",
+        "sourceUrl": "https://labgolf.com/"
+      },
+      {
+        "aliases": [
+          "Vice Golf"
+        ],
+        "canonical": "Vice",
+        "kind": "BALL",
+        "relationship": "naming",
+        "sourceUrl": "https://www.vicegolf.com/golf-balls"
+      },
+      {
+        "aliases": [
+          "Cleveland Golf"
+        ],
+        "canonical": "Cleveland",
+        "kind": "CLUB",
+        "relationship": "naming",
+        "sourceUrl": "https://us.dunlopsports.com/cleveland-golf/"
+      },
+      {
+        "aliases": [
+          "Bridgestone Golf"
+        ],
+        "canonical": "Bridgestone",
+        "kind": "BALL",
+        "relationship": "naming",
+        "sourceUrl": "https://www.bridgestonegolf.com/en-us/balls/"
+      },
+      {
+        "aliases": [
+          "Bridgestone Golf"
+        ],
+        "canonical": "Bridgestone",
+        "kind": "CLUB",
+        "relationship": "naming",
+        "sourceUrl": "https://www.bridgestonegolf.com/en-us/clubs/"
+      },
+      {
+        "aliases": [
+          "Nippon"
+        ],
+        "canonical": "Nippon Shaft",
+        "kind": "SHAFT",
+        "relationship": "naming",
+        "sourceUrl": "https://nipponshaft.com/"
+      },
+      {
+        "aliases": [
+          "Paderson",
+          "Paderson Kinetixx",
+          "Paderson KINETIXX"
+        ],
+        "canonical": "Kinetixx",
+        "kind": "SHAFT",
+        "relationship": "historical-search",
+        "sourceUrl": "https://www.kinetixxgolf.com/"
+      }
+    ],
+    "itemMappings": [
+      {
+        "aliases": [
+          "Noodle",
+          "TaylorMade Noodle",
+          "Noodle Golf"
+        ],
+        "catalogId": "taylormade-noodle-2014",
+        "kind": "BALL",
+        "sourceUrl": "https://www.taylormadegolf.com/on/demandware.static/-/Sites-TMaG-Library/default/v1463473265710/docs/productspecs/2014/Golf-Ball-2014.PDF"
+      }
+    ],
+    "registryVersion": 1
+  },
+  "baselineCatalogDigest": "642514c2277f9df24f97ec7d468725c4a1c18aee85c144ba102d7d3ef9cf2e4c",
+  "baselineCommit": "a6daa6832ac618246dde68e32c0df4cebc4da873",
+  "catalogs": {
+    "BALL": {
+      "added": [
+        {
+          "active": true,
+          "brand": "Nitro",
+          "id": "nitro-crossfire-current",
+          "model": "Crossfire"
+        },
+        {
+          "active": true,
+          "brand": "Nitro",
+          "id": "nitro-eclipse-current",
+          "model": "Eclipse"
+        },
+        {
+          "active": true,
+          "brand": "Nitro",
+          "id": "nitro-nitroglycerin-current",
+          "model": "Nitroglycerin"
+        },
+        {
+          "active": false,
+          "brand": "TaylorMade",
+          "id": "taylormade-noodle-2014",
+          "model": "Noodle"
+        },
+        {
+          "active": false,
+          "brand": "TaylorMade",
+          "id": "taylormade-noodle-plus-easy-distance-legacy",
+          "model": "Noodle+ Easy Distance"
+        },
+        {
+          "active": false,
+          "brand": "TaylorMade",
+          "id": "taylormade-noodle-plus-long-and-soft-legacy",
+          "model": "Noodle+ Long and Soft"
+        },
+        {
+          "active": true,
+          "brand": "Top-Flite",
+          "id": "top-flite-gamer-current",
+          "model": "Gamer"
+        },
+        {
+          "active": true,
+          "brand": "Top-Flite",
+          "id": "top-flite-xl-control-current",
+          "model": "XL Control"
+        },
+        {
+          "active": true,
+          "brand": "Top-Flite",
+          "id": "top-flite-xl-distance-current",
+          "model": "XL Distance"
+        }
+      ],
+      "after": {
+        "brands": [
+          "Bridgestone",
+          "Callaway",
+          "Cut",
+          "Kirkland Signature",
+          "Maxfli",
+          "Mizuno",
+          "Nike",
+          "Nitro",
+          "OnCore",
+          "PXG",
+          "Pinnacle",
+          "Seed",
+          "Snell",
+          "Srixon",
+          "TaylorMade",
+          "Titleist",
+          "Top-Flite",
+          "Vice",
+          "Volvik",
+          "Wilson"
+        ],
+        "catalogAliasCount": 11,
+        "current": 94,
+        "legacy": 229,
+        "total": 323
+      },
+      "before": {
+        "brands": [
+          "Bridgestone",
+          "Callaway",
+          "Cut",
+          "Kirkland Signature",
+          "Maxfli",
+          "Mizuno",
+          "Nike",
+          "Nitro",
+          "OnCore",
+          "PXG",
+          "Pinnacle",
+          "Seed",
+          "Snell",
+          "Srixon",
+          "TaylorMade",
+          "Titleist",
+          "Vice",
+          "Volvik",
+          "Wilson"
+        ],
+        "current": 88,
+        "legacy": 226,
+        "total": 314
+      },
+      "catalogDigest": "25fc65684e493128113078b2451932cfb9af071ca1ca6cda1bcb563ed56515a4",
+      "duplicateIdentities": [],
+      "duplicateIds": [],
+      "internalRows": [],
+      "provenanceInsufficient": [],
+      "removed": []
+    },
+    "CLUB": {
+      "added": [
+        {
+          "active": true,
+          "brand": "Honma",
+          "id": "honma-beres-10-driver-current",
+          "model": "BERES 10 Driver"
+        },
+        {
+          "active": true,
+          "brand": "Honma",
+          "id": "honma-beres-10-fairway-current",
+          "model": "BERES 10 Fairway Wood"
+        },
+        {
+          "active": true,
+          "brand": "Honma",
+          "id": "honma-beres-10-hybrid-current",
+          "model": "BERES 10 Hybrid"
+        },
+        {
+          "active": true,
+          "brand": "Honma",
+          "id": "honma-beres-10-irons-current",
+          "model": "BERES 10 Irons"
+        },
+        {
+          "active": false,
+          "brand": "Honma",
+          "id": "honma-beres-black-driver-legacy",
+          "model": "BERES Black Driver"
+        },
+        {
+          "active": false,
+          "brand": "Honma",
+          "id": "honma-beres-black-fairway-legacy",
+          "model": "BERES Black Fairway Wood"
+        },
+        {
+          "active": false,
+          "brand": "Honma",
+          "id": "honma-beres-black-hybrid-legacy",
+          "model": "BERES Black Hybrid"
+        },
+        {
+          "active": false,
+          "brand": "Honma",
+          "id": "honma-beres-black-irons-legacy",
+          "model": "BERES Black Irons"
+        },
+        {
+          "active": false,
+          "brand": "Honma",
+          "id": "honma-tw737-450-driver-legacy",
+          "model": "TW737 450 Driver"
+        },
+        {
+          "active": false,
+          "brand": "Honma",
+          "id": "honma-tw737-fairway-legacy",
+          "model": "TW737 FW"
+        },
+        {
+          "active": false,
+          "brand": "Honma",
+          "id": "honma-tw737-ut-legacy",
+          "model": "TW737 UT"
+        },
+        {
+          "active": false,
+          "brand": "Honma",
+          "id": "honma-tw737-v-irons-legacy",
+          "model": "TW737 V Irons"
+        },
+        {
+          "active": true,
+          "brand": "Honma",
+          "id": "honma-tw777-360-ti-driver-current",
+          "model": "TW777 360 Ti Driver"
+        },
+        {
+          "active": true,
+          "brand": "Honma",
+          "id": "honma-tw777-driver-current",
+          "model": "TW777 Driver"
+        },
+        {
+          "active": true,
+          "brand": "Honma",
+          "id": "honma-tw777-fairway-current",
+          "model": "TW777 Fairway Wood"
+        },
+        {
+          "active": true,
+          "brand": "Honma",
+          "id": "honma-tw777-hybrid-current",
+          "model": "TW777 Hybrid"
+        },
+        {
+          "active": true,
+          "brand": "Honma",
+          "id": "honma-tw777-max-driver-current",
+          "model": "TW777 Max Driver"
+        },
+        {
+          "active": true,
+          "brand": "Honma",
+          "id": "honma-tw777-max-fairway-current",
+          "model": "TW777 Max Fairway Wood"
+        },
+        {
+          "active": true,
+          "brand": "Honma",
+          "id": "honma-tw777-pcb-max-irons-current",
+          "model": "TW777 PCB MAX Irons"
+        },
+        {
+          "active": false,
+          "brand": "Takomo",
+          "id": "takomo-ignis-d1-driver-legacy",
+          "model": "Ignis D1 Driver"
+        },
+        {
+          "active": true,
+          "brand": "Takomo",
+          "id": "takomo-ignis-d2-fairway-current",
+          "model": "Ignis D2 Fairway Wood"
+        },
+        {
+          "active": false,
+          "brand": "Takomo",
+          "id": "takomo-iron-101-legacy",
+          "model": "Iron 101"
+        },
+        {
+          "active": true,
+          "brand": "Takomo",
+          "id": "takomo-iron-101-mkii-2026",
+          "model": "Iron 101 MKII"
+        },
+        {
+          "active": true,
+          "brand": "Takomo",
+          "id": "takomo-iron-101u-current",
+          "model": "Iron 101U"
+        },
+        {
+          "active": false,
+          "brand": "Takomo",
+          "id": "takomo-iron-201-legacy",
+          "model": "Iron 201"
+        },
+        {
+          "active": true,
+          "brand": "Takomo",
+          "id": "takomo-iron-201-mkii-2026",
+          "model": "Iron 201 MKII"
+        },
+        {
+          "active": true,
+          "brand": "Takomo",
+          "id": "takomo-iron-201t-mkii-2026",
+          "model": "Iron 201T MKII"
+        },
+        {
+          "active": true,
+          "brand": "Takomo",
+          "id": "takomo-iron-301-cb-current",
+          "model": "Iron 301 CB"
+        },
+        {
+          "active": true,
+          "brand": "Takomo",
+          "id": "takomo-iron-301-combo-current",
+          "model": "Iron 301 Combo"
+        },
+        {
+          "active": true,
+          "brand": "Takomo",
+          "id": "takomo-iron-301-mb-current",
+          "model": "Iron 301 MB"
+        },
+        {
+          "active": true,
+          "brand": "Takomo",
+          "id": "takomo-skyforger-002-wedge-current",
+          "model": "Skyforger 002 Wedge"
+        },
+        {
+          "active": true,
+          "brand": "Takomo",
+          "id": "takomo-skyforger-wedge-current",
+          "model": "Skyforger Wedge"
+        }
+      ],
+      "after": {
+        "brands": [
+          "Adams",
+          "Bettinardi",
+          "Bridgestone",
+          "Callaway",
+          "Cleveland",
+          "Cobra",
+          "Evnroll",
+          "Honma",
+          "L.A.B. Golf",
+          "Miura",
+          "Mizuno",
+          "Nike",
+          "Odyssey",
+          "PING",
+          "PXG",
+          "Scotty Cameron",
+          "Srixon",
+          "Takomo",
+          "TaylorMade",
+          "Titleist",
+          "Tour Edge",
+          "Wilson",
+          "XXIO"
+        ],
+        "catalogAliasCount": 43,
+        "current": 263,
+        "legacy": 1045,
+        "total": 1308
+      },
+      "before": {
+        "brands": [
+          "Adams",
+          "Bettinardi",
+          "Bridgestone",
+          "Callaway",
+          "Cleveland",
+          "Cobra",
+          "Evnroll",
+          "L.A.B. Golf",
+          "Miura",
+          "Mizuno",
+          "Nike",
+          "Odyssey",
+          "PING",
+          "PXG",
+          "Scotty Cameron",
+          "Srixon",
+          "TaylorMade",
+          "Titleist",
+          "Tour Edge",
+          "Wilson",
+          "XXIO"
+        ],
+        "current": 242,
+        "legacy": 1034,
+        "total": 1276
+      },
+      "catalogDigest": "558551919524b65b09667af3748c122f3d99a21c9b178310c169abfc2c5cc9f2",
+      "duplicateIdentities": [],
+      "duplicateIds": [],
+      "internalRows": [],
+      "provenanceInsufficient": [],
+      "removed": []
+    },
+    "SHAFT": {
+      "added": [
+        {
+          "active": false,
+          "brand": "Veylix",
+          "id": "veylix-alpina-573-wood-legacy",
+          "model": "Alpina 573"
+        },
+        {
+          "active": false,
+          "brand": "Veylix",
+          "id": "veylix-alpina-673-wood-legacy",
+          "model": "Alpina 673"
+        },
+        {
+          "active": false,
+          "brand": "Veylix",
+          "id": "veylix-arcane-640t-wood-legacy",
+          "model": "Arcane 640T"
+        },
+        {
+          "active": false,
+          "brand": "Veylix",
+          "id": "veylix-rome-688-wood-legacy",
+          "model": "Rome 688"
+        },
+        {
+          "active": false,
+          "brand": "Veylix",
+          "id": "veylix-rome-7ra-roughneck-wood-legacy",
+          "model": "Rome 7RA Roughneck"
+        },
+        {
+          "active": false,
+          "brand": "Veylix",
+          "id": "veylix-rome-888-wood-legacy",
+          "model": "Rome 888"
+        },
+        {
+          "active": false,
+          "brand": "Veylix",
+          "id": "veylix-rome-988-hybrid-legacy",
+          "model": "Rome 988"
+        }
+      ],
+      "after": {
+        "brands": [
+          "ACCRA",
+          "Aerotech",
+          "Aldila",
+          "Aretera",
+          "AutoFlex",
+          "BGT",
+          "Fujikura",
+          "Graphite Design",
+          "KBS",
+          "Kinetixx",
+          "LA Golf",
+          "Mitsubishi Chemical",
+          "Newton",
+          "Nippon Shaft",
+          "OBAN",
+          "PING",
+          "Project X",
+          "TPT",
+          "True Temper",
+          "UST Mamiya",
+          "VA Composites",
+          "Veylix"
+        ],
+        "catalogAliasCount": 41,
+        "current": 203,
+        "legacy": 278,
+        "total": 481
+      },
+      "before": {
+        "brands": [
+          "ACCRA",
+          "Aerotech",
+          "Aldila",
+          "Aretera",
+          "AutoFlex",
+          "BGT",
+          "Fujikura",
+          "Graphite Design",
+          "KBS",
+          "Kinetixx",
+          "LA Golf",
+          "Mitsubishi Chemical",
+          "Newton",
+          "Nippon Shaft",
+          "OBAN",
+          "PING",
+          "Project X",
+          "TPT",
+          "True Temper",
+          "UST Mamiya",
+          "VA Composites"
+        ],
+        "current": 203,
+        "legacy": 271,
+        "total": 474
+      },
+      "catalogDigest": "337ba8f6e07b6a7c77a94f4029d0e731baa6f17c1ad7f6c46312b0bb8b51d6bd",
+      "duplicateIdentities": [],
+      "duplicateIds": [],
+      "internalRows": [],
+      "provenanceInsufficient": [],
+      "removed": []
+    }
+  },
+  "failures": [],
+  "generatedAt": "2026-09-27T00:00:00.000Z",
+  "provider": "backyard-equipment-seed",
+  "requiredSearches": {
+    "BALL:Noodle": [
+      "taylormade-noodle-2014",
+      "taylormade-noodle-plus-easy-distance-legacy",
+      "taylormade-noodle-plus-long-and-soft-legacy"
+    ],
+    "BALL:Top-Flite": [
+      "top-flite-gamer-current",
+      "top-flite-xl-control-current",
+      "top-flite-xl-distance-current"
+    ],
+    "CLUB:Honma": [
+      "honma-beres-10-driver-current",
+      "honma-beres-10-fairway-current",
+      "honma-beres-10-hybrid-current",
+      "honma-beres-10-irons-current",
+      "honma-beres-black-driver-legacy",
+      "honma-beres-black-fairway-legacy",
+      "honma-beres-black-hybrid-legacy",
+      "honma-beres-black-irons-legacy",
+      "honma-tw737-450-driver-legacy",
+      "honma-tw737-fairway-legacy",
+      "honma-tw737-ut-legacy",
+      "honma-tw737-v-irons-legacy",
+      "honma-tw777-360-ti-driver-current",
+      "honma-tw777-driver-current",
+      "honma-tw777-fairway-current",
+      "honma-tw777-hybrid-current",
+      "honma-tw777-max-driver-current",
+      "honma-tw777-max-fairway-current",
+      "honma-tw777-pcb-max-irons-current"
+    ],
+    "CLUB:Takomo": [
+      "takomo-ignis-d1-driver-legacy",
+      "takomo-ignis-d2-fairway-current",
+      "takomo-iron-101-legacy",
+      "takomo-iron-101-mkii-2026",
+      "takomo-iron-101u-current",
+      "takomo-iron-201-legacy",
+      "takomo-iron-201-mkii-2026",
+      "takomo-iron-201t-mkii-2026",
+      "takomo-iron-301-cb-current",
+      "takomo-iron-301-combo-current",
+      "takomo-iron-301-mb-current",
+      "takomo-skyforger-002-wedge-current",
+      "takomo-skyforger-wedge-current"
+    ],
+    "SHAFT:Paderson": [
+      "kinetixx-ballistic-110-iron-iron-2024",
+      "kinetixx-ballistic-80-iron-iron-2024",
+      "kinetixx-ballistic-95-iron-iron-2024",
+      "kinetixx-ballistic-95-iron-iron-2026-CURRENT",
+      "kinetixx-ballistic-driver-wood-2024",
+      "kinetixx-ballistic-fairway-fairway-2024",
+      "kinetixx-ballistic-hybrid-hybrid-2024",
+      "kinetixx-launch-wood-2019",
+      "kinetixx-trajectory-wood-2020",
+      "kinetixx-velocity-ld-wood-2019"
+    ],
+    "SHAFT:Paderson Kinetixx": [
+      "kinetixx-ballistic-110-iron-iron-2024",
+      "kinetixx-ballistic-80-iron-iron-2024",
+      "kinetixx-ballistic-95-iron-iron-2024",
+      "kinetixx-ballistic-95-iron-iron-2026-CURRENT",
+      "kinetixx-ballistic-driver-wood-2024",
+      "kinetixx-ballistic-fairway-fairway-2024",
+      "kinetixx-ballistic-hybrid-hybrid-2024",
+      "kinetixx-launch-wood-2019",
+      "kinetixx-trajectory-wood-2020",
+      "kinetixx-velocity-ld-wood-2019"
+    ],
+    "SHAFT:Veylix": [
+      "veylix-alpina-573-wood-legacy",
+      "veylix-alpina-673-wood-legacy",
+      "veylix-arcane-640t-wood-legacy",
+      "veylix-rome-688-wood-legacy",
+      "veylix-rome-7ra-roughneck-wood-legacy",
+      "veylix-rome-888-wood-legacy",
+      "veylix-rome-988-hybrid-legacy"
+    ]
+  },
+  "savedReferenceIds": {
+    "checked": [
+      "titleist-pro-v1x-left-dash",
+      "callaway-apex-pro-21-iron-set-2021",
+      "callaway-paradym-triple-diamond-fairway-fairway-2023",
+      "lab-golf-oz1i-putter-2025",
+      "taylormade-milled-grind-4-wedge-2023",
+      "taylormade-qi4d-driver-2026",
+      "titleist-gt2-driver-2024",
+      "titleist-vokey-sm11-wedge-2026",
+      "fujikura-ventus-blue-velocore-plus-unversioned",
+      "graphite-design-tour-ad-f-series-fairway-2015",
+      "nippon-shaft-n-s-pro-modus3-wedge-wedge-2017",
+      "nippon-shaft-n-s-pro-regio-formula-b-plus-wood-2018",
+      "project-x-project-x-ls-iron-2020"
+    ],
+    "source": "Aggregate, non-PII catalog IDs observed in Supabase QA player_equipment_profiles on 2026-09-27",
+    "unresolved": []
+  },
+  "schemaVersion": 1,
+  "status": "PASS"
+}

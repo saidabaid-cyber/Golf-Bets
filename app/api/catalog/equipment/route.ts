@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
       shaftUsage: shaftUsageValue as ShaftUsage | null,
       cursor: request.nextUrl.searchParams.get("cursor"),
       limit: Number.isFinite(limitValue) ? limitValue : 20,
-      includeArchived: includeArchivedParam !== "false",
+      includeArchived: includeArchivedParam === "true" || (includeArchivedParam !== "false" && query.trim().length > 0),
     });
     return NextResponse.json({ provider: internalEquipmentCatalogProvider.id, facet: "brands", ...page }, {
       headers: { "cache-control": "public, max-age=5, stale-while-revalidate=30" },

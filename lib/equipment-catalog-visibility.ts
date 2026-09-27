@@ -19,9 +19,9 @@ function normalizedMarker(value: string) {
     .trim();
 }
 
-const INTERNAL_LABEL = /^(?:synthetic|synthetic qa|qa|qa fixture|test|test fixture|fixture|internal qa)(?:\s|$)/;
-const INTERNAL_ID_SEGMENT = /(?:^|[-_:])(?:synthetic|qa-fixture|test-fixture|fixture)(?:[-_:]|$)/i;
-const INTERNAL_SOURCE_TYPE = /^(?:INTERNAL_QA|QA_FIXTURE|TEST_FIXTURE|SYNTHETIC)$/i;
+const INTERNAL_LABEL = /^(?:synthetic(?:\s+qa)?|qa(?:\s+fixture)?|test(?:\s+(?:fixture|data))?|fixture|internal\s+(?:qa|test)|fake|mock)(?:\s|$)/;
+const INTERNAL_ID_SEGMENT = /(?:^|[-_:])(?:synthetic(?:[-_:]qa)?|qa(?:[-_:]fixture)?|test(?:[-_:](?:fixture|data))?|fixture|internal[-_:](?:qa|test)|fake|mock)(?:[-_:]|$)/i;
+const INTERNAL_SOURCE_TYPE = /^(?:INTERNAL_QA|INTERNAL_TEST|QA_FIXTURE|TEST_FIXTURE|TEST_DATA|SYNTHETIC|FAKE|MOCK)$/i;
 
 /**
  * Public catalog boundaries must reject internal QA identities independently

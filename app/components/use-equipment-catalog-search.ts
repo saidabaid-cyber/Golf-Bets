@@ -217,7 +217,13 @@ async function fetchBrandFacetPage(input: {
   cursor?: string | null;
   signal?: AbortSignal;
 }): Promise<{ items: EquipmentCatalogBrandFacet[]; hasMore: boolean; nextCursor: string | null }> {
-  const params = new URLSearchParams({ type: input.kind, facet: "brands", q: input.query, limit: "50", includeArchived: "true" });
+  const params = new URLSearchParams({
+    type: input.kind,
+    facet: "brands",
+    q: input.query,
+    limit: "50",
+    includeArchived: String(input.query.trim().length > 0),
+  });
   if (input.category) params.set("category", input.category);
   if (input.shaftUsage) params.set("usage", input.shaftUsage);
   if (input.cursor) params.set("cursor", input.cursor);

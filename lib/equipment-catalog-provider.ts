@@ -7,6 +7,7 @@ import type {
 } from "./golf-equipment";
 import type { GolfCatalogPage } from "./golf-catalog-domain";
 import { isPublicEquipmentCatalogItem } from "./equipment-catalog-visibility";
+import { equipmentSearchAliases } from "./equipment-catalog-aliases";
 
 export const EQUIPMENT_CATALOG_KINDS = ["BALL", "CLUB", "SHAFT"] as const;
 export type EquipmentCatalogKind = (typeof EQUIPMENT_CATALOG_KINDS)[number];
@@ -112,15 +113,20 @@ function safeBallFitMaximum(value: number) {
   return Math.max(0, Math.min(5_000, Math.trunc(value)));
 }
 
-function rank(item: EquipmentCatalogItem, query: string) {
+function rank(item: EquipmentCatalogItem, kind: EquipmentCatalogKind, query: string) {
   if (!query) return 0;
   const brand = searchable(item.brand);
   const model = searchable(item.model);
   const combined = `${brand} ${model}`;
   if (model === query || combined === query) return 0;
+  if (equipmentSearchAliases(kind, item).some((alias) => searchable(alias) === query)) return 0;
   if (model.startsWith(query) || combined.startsWith(query)) return 1;
   if (brand.startsWith(query)) return 2;
   return 3;
+}
+
+function resolvesCatalogId(item: EquipmentCatalogItem, id: string) {
+  return item.id === id || item.aliases.includes(id);
 }
 
 function page<T extends EquipmentCatalogItem>(items: readonly T[], input: EquipmentCatalogSearchInput): GolfCatalogPage<EquipmentCatalogItem> {
@@ -135,7 +141,7 @@ function page<T extends EquipmentCatalogItem>(items: readonly T[], input: Equipm
     .filter((item) => {
       if (!tokens.length) return true;
       const generation = "generation" in item ? item.generation : "";
-      const aliases = "aliases" in item && Array.isArray(item.aliases) ? item.aliases.join(" ") : "";
+      const aliases = equipmentSearchAliases(input.kind, item).join(" ");
       const year = "year" in item ? item.year : "";
       const shaftFacts = input.kind === "SHAFT" ? shaftSearchFacts(item as GolfShaftCatalog) : "";
       const haystack = searchable(`${item.brand} ${item.model} ${generation || ""} ${year || ""} ${aliases} ${shaftFacts}`)
@@ -144,7 +150,7 @@ function page<T extends EquipmentCatalogItem>(items: readonly T[], input: Equipm
       const compactTokens = tokens.map((token) => token.replace(/\s+/g, ""));
       return compactTokens.every((token) => haystack.includes(token));
     })
-    .sort((left, right) => rank(left, query) - rank(right, query)
+    .sort((left, right) => rank(left, input.kind, query) - rank(right, input.kind, query)
       || left.brand.localeCompare(right.brand, "es-MX")
       || left.model.localeCompare(right.model, "es-MX")
       || left.id.localeCompare(right.id));
@@ -158,7 +164,7 @@ function page<T extends EquipmentCatalogItem>(items: readonly T[], input: Equipm
   const pinnedIds = safePinnedIds(input.pinnedIds);
   const byId = new Map<string, EquipmentCatalogItem>();
   for (const id of pinnedIds) {
-    const pinned = items.find((item) => item.id === id && isPublicEquipmentCatalogItem(item));
+    const pinned = items.find((item) => resolvesCatalogId(item, id) && isPublicEquipmentCatalogItem(item));
     if (pinned) byId.set(pinned.id, pinned);
   }
   for (const item of selected) byId.set(item.id, item);
@@ -177,7 +183,8 @@ function facetPage<T extends EquipmentCatalogItem>(items: readonly T[], input: E
     .filter((item) => input.includeArchived || item.active)
     .filter((item) => input.kind !== "CLUB" || !input.category || (item as GolfClubCatalog).category === input.category)
     .filter((item) => input.kind !== "SHAFT" || !input.shaftUsage || (item as GolfShaftCatalog).usage === input.shaftUsage)
-    .filter((item) => !query || searchable(item.brand).includes(query));
+    .filter((item) => !query || [item.brand, ...equipmentSearchAliases(input.kind, item)]
+      .some((brand) => searchable(brand).includes(query)));
   const grouped = new Map<string, EquipmentCatalogBrandFacet>();
   for (const item of source) {
     const key = searchable(item.brand);
@@ -243,7 +250,7 @@ export function createInternalEquipmentCatalogProvider(catalogs: {
       const byId = new Map(active.map((ball) => [ball.id, ball]));
       const currentBallId = input.currentBallId?.trim() || null;
       if (currentBallId) {
-        const current = catalogs.balls.find((ball) => ball.id === currentBallId && isPublicEquipmentCatalogItem(ball));
+        const current = catalogs.balls.find((ball) => resolvesCatalogId(ball, currentBallId) && isPublicEquipmentCatalogItem(ball));
         if (current) byId.set(current.id, current);
       }
       return {

@@ -55,13 +55,19 @@ test("only source-verified additions are public and unknown technical facts rema
     ["pxg-xtreme-tour-x-2024", "https://www.pxg.com/products/xtreme-tour-x-golf-ball"],
     ["pinnacle-distance-current", "https://www.pinnaclegolf.com/"],
     ["nitro-ultimate-distance-current", "https://thenitrogolf.com/nitro-golf-balls/"],
+    ["top-flite-gamer-current", "https://www.dickssportinggoods.com/a/top-flite-golf-balls-gamer.html"],
+    ["top-flite-xl-control-current", "https://www.dickssportinggoods.com/a/top-flite-compression-golf-balls.html"],
+    ["top-flite-xl-distance-current", "https://www.dickssportinggoods.com/p/top-flite-2024-xl-distance-golf-balls-24tflu2024tfxldstgbla/24tflu2024tfxldstgbla?color=White"],
+    ["nitro-eclipse-current", "https://thenitrogolf.com/nitro-golf-balls/"],
+    ["nitro-crossfire-current", "https://thenitrogolf.com/nitro-golf-balls/"],
+    ["nitro-nitroglycerin-current", "https://thenitrogolf.com/nitro-golf-balls/"],
   ] as const;
 
   for (const [id, sourceUrl] of expected) {
     const ball = golfBallCatalog.find((candidate) => candidate.id === id);
     assert.ok(ball, id);
     assert.equal(ball.officialUrl, sourceUrl);
-    assert.equal(ball.sourceType, "OEM_OFFICIAL");
+    assert.ok(ball.sourceType === "OEM_OFFICIAL" || ball.sourceType === "AUTHORIZED_RETAILER");
     assert.equal(ball.compression, null);
     assert.equal(ball.fitEligible, false);
   }

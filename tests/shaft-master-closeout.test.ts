@@ -52,11 +52,11 @@ test("el snapshot 2010–2026 conserva el paquete completo y falla cerrado para 
 });
 
 test("merge conserva IDs existentes, agrega alias y no degrada evidencia", () => {
-  assert.equal(golfCatalogDiagnostics.shafts.sourceModels, 515);
+  assert.equal(golfCatalogDiagnostics.shafts.sourceModels, 522);
   assert.equal(golfCatalogDiagnostics.shafts.masterSourceModels, 467);
   assert.equal(golfCatalogDiagnostics.shafts.masterAcceptedModels, 467);
   assert.equal(golfCatalogDiagnostics.shafts.masterRejectedModels, 0);
-  assert.equal(golfCatalogDiagnostics.shafts.usableModels, 474);
+  assert.equal(golfCatalogDiagnostics.shafts.usableModels, 481);
   assert.equal(golfCatalogDiagnostics.shafts.aliases, 41);
   const merged = golfShaftCatalog.find((item) => item.id === "fujikura-ventus-blue-velocore-plus-unversioned");
   assert.ok(merged);

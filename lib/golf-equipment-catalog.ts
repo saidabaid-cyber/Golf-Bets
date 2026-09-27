@@ -13,6 +13,11 @@ import {
   type GolfClubCatalog,
   type GolfShaftCatalog,
 } from "./golf-equipment";
+import {
+  canonicalEquipmentBrand,
+  equipmentItemAliases,
+  type EquipmentAliasKind,
+} from "./equipment-catalog-aliases";
 import { isPublicEquipmentBrand, isPublicEquipmentCatalogItem } from "./equipment-catalog-visibility";
 
 type SeedEnvelope = {
@@ -39,8 +44,8 @@ function seedCount(seed: SeedEnvelope) {
   return Array.isArray(seed.models) ? seed.models.length : 0;
 }
 
-function catalogBrands<T extends { brand: string }>(seed: SeedEnvelope, models: readonly T[]) {
-  const declared = normalizedBrands(seed.brands).filter(isPublicEquipmentBrand);
+function catalogBrands<T extends { brand: string }>(kind: EquipmentAliasKind, seed: SeedEnvelope, models: readonly T[]) {
+  const declared = normalizedBrands(seed.brands).map((brand) => canonicalEquipmentBrand(kind, brand)).filter(isPublicEquipmentBrand);
   const discovered = normalizedBrands(models.map((model) => model.brand)).filter(isPublicEquipmentBrand);
   return normalizedBrands([...declared, ...discovered]);
 }
@@ -139,19 +144,10 @@ function canonicalEquipmentText(value: string) {
     .replace(/\s+/g, "");
 }
 
-const CANONICAL_BRAND_LABELS = new Map([
-  ["cobra", "Cobra"],
-  ["lab", "L.A.B. Golf"],
-  ["nippon", "Nippon Shaft"],
-]);
-
-function canonicalBrandLabel(value: string) {
-  return CANONICAL_BRAND_LABELS.get(canonicalEquipmentText(value)) || value;
-}
-
-function canonicalizeBrand<T extends { brand: string }>(item: T): T {
-  const brand = canonicalBrandLabel(item.brand);
-  return brand === item.brand ? item : { ...item, brand };
+function canonicalizeCatalogItem<T extends { id: string; aliases: string[]; brand: string }>(kind: EquipmentAliasKind, item: T): T {
+  const brand = canonicalEquipmentBrand(kind, item.brand);
+  const aliases = [...new Set([...item.aliases, ...equipmentItemAliases(kind, item.id)])];
+  return brand === item.brand && aliases.length === item.aliases.length ? item : { ...item, brand, aliases };
 }
 
 // These verified legacy rows predate the explicit shaft-usage field. Keeping
@@ -290,11 +286,11 @@ function shaftBaseIdentity(shaft: Pick<GolfShaftCatalog, "brand" | "model">) {
   return `${canonicalEquipmentText(shaft.brand)}:${canonicalShaftModel(shaft.model)}`;
 }
 
-function shaftVariantIdentity(shaft: Pick<GolfShaftCatalog, "usage" | "oemStockOrAftermarket">) {
-  return `${shaft.usage || "unknown"}:${shaft.oemStockOrAftermarket || "unknown"}`;
+function shaftVariantIdentity(shaft: Pick<GolfShaftCatalog, "usage">) {
+  return shaft.usage || "unknown";
 }
 
-export function canonicalShaftIdentity(shaft: Pick<GolfShaftCatalog, "brand" | "model" | "generation" | "year" | "usage" | "oemStockOrAftermarket">) {
+export function canonicalShaftIdentity(shaft: Pick<GolfShaftCatalog, "brand" | "model" | "generation" | "year" | "usage">) {
   return `${shaftBaseIdentity(shaft)}:${shaftVariantIdentity(shaft)}:${generationKey(shaft)}`;
 }
 
@@ -349,25 +345,25 @@ export function dedupeGolfShaftCatalog(legacyModels: readonly GolfShaftCatalog[]
 }
 
 export const golfBallCatalog: readonly GolfBallCatalog[] = Object.freeze(
-  dedupeGolfBallCatalog(normalizeGolfBallCatalogEntries(combinedBallSeed).map(canonicalizeBrand))
+  dedupeGolfBallCatalog(normalizeGolfBallCatalogEntries(combinedBallSeed).map((item) => canonicalizeCatalogItem("BALL", item)))
     .filter(isPublicEquipmentCatalogItem),
 );
 
 export const golfClubCatalog: readonly GolfClubCatalog[] = Object.freeze(
-  dedupeGolfClubCatalog(normalizeGolfClubCatalogEntries(combinedClubSeed).map(canonicalizeBrand))
+  dedupeGolfClubCatalog(normalizeGolfClubCatalogEntries(combinedClubSeed).map((item) => canonicalizeCatalogItem("CLUB", item)))
     .filter(isPublicEquipmentCatalogItem),
 );
 
 export const golfShaftCatalog: readonly GolfShaftCatalog[] = Object.freeze(
   dedupeGolfShaftCatalog(
-    normalizeGolfShaftCatalogEntries(legacyCombinedShaftSeed).map(canonicalizeBrand).map(withVerifiedLegacyShaftUsage),
-    normalizeGolfShaftCatalogEntries(masterShaftSeed).map(canonicalizeBrand),
+    normalizeGolfShaftCatalogEntries(legacyCombinedShaftSeed).map((item) => canonicalizeCatalogItem("SHAFT", item)).map(withVerifiedLegacyShaftUsage),
+    normalizeGolfShaftCatalogEntries(masterShaftSeed).map((item) => canonicalizeCatalogItem("SHAFT", item)),
   ).filter(isPublicEquipmentCatalogItem),
 );
 
-export const golfBallBrands = Object.freeze(catalogBrands(combinedBallSeed, golfBallCatalog));
-export const golfClubBrands = Object.freeze(catalogBrands(combinedClubSeed, golfClubCatalog));
-export const golfShaftBrands = Object.freeze(catalogBrands(combinedShaftSeed, golfShaftCatalog));
+export const golfBallBrands = Object.freeze(catalogBrands("BALL", combinedBallSeed, golfBallCatalog));
+export const golfClubBrands = Object.freeze(catalogBrands("CLUB", combinedClubSeed, golfClubCatalog));
+export const golfShaftBrands = Object.freeze(catalogBrands("SHAFT", combinedShaftSeed, golfShaftCatalog));
 
 export const golfCatalogDiagnostics = Object.freeze({
   schemaVersion: 1,

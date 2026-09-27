@@ -3,7 +3,7 @@
   "status": "PASS",
   "scope": "Versioned normalized runtime catalog; no external fetch or DB mutation",
   "provider": "lib/golf-equipment-catalog.ts",
-  "catalogDigest": "642514c2277f9df24f97ec7d468725c4a1c18aee85c144ba102d7d3ef9cf2e4c",
+  "catalogDigest": "20845167210060d5d5d860255a3784510fb150e8c2266c629d0d005f7ac8be2b",
   "definitions": {
     "historical": "active === false, retained for existing references",
     "licensedImage": "imageUrl + imageSourceUrl + imageLicense present; legal permission not independently adjudicated",
@@ -12,14 +12,14 @@
   },
   "summary": {
     "balls": {
-      "total": 314,
-      "active": 88,
-      "historical": 226,
-      "bagEligible": 314,
+      "total": 323,
+      "active": 94,
+      "historical": 229,
+      "bagEligible": 323,
       "fitEligible": 80,
       "activeFitEligible": 71,
-      "withoutLicensedImage": 314,
-      "specsUnknown": 229,
+      "withoutLicensedImage": 323,
+      "specsUnknown": 238,
       "specsUnverified": 0,
       "specsPartial": 75,
       "shaftsWithoutWeight": 0,
@@ -27,33 +27,33 @@
       "wedgesWithoutVerifiedLofts": 0
     },
     "clubs": {
-      "total": 1276,
-      "active": 242,
-      "historical": 1034,
-      "bagEligible": 1276,
+      "total": 1308,
+      "active": 263,
+      "historical": 1045,
+      "bagEligible": 1308,
       "fitEligible": 0,
       "activeFitEligible": 0,
-      "withoutLicensedImage": 1276,
-      "specsUnknown": 1202,
+      "withoutLicensedImage": 1308,
+      "specsUnknown": 1234,
       "specsUnverified": 0,
       "specsPartial": 74,
       "shaftsWithoutWeight": 0,
       "shaftsWithoutFlex": 0,
-      "wedgesWithoutVerifiedLofts": 84
+      "wedgesWithoutVerifiedLofts": 86
     },
     "shafts": {
-      "total": 474,
+      "total": 481,
       "active": 203,
-      "historical": 271,
-      "bagEligible": 474,
+      "historical": 278,
+      "bagEligible": 481,
       "fitEligible": 80,
       "activeFitEligible": 80,
-      "withoutLicensedImage": 474,
-      "specsUnknown": 0,
+      "withoutLicensedImage": 481,
+      "specsUnknown": 1,
       "specsUnverified": 0,
-      "specsPartial": 474,
-      "shaftsWithoutWeight": 381,
-      "shaftsWithoutFlex": 358,
+      "specsPartial": 480,
+      "shaftsWithoutWeight": 382,
+      "shaftsWithoutFlex": 365,
       "wedgesWithoutVerifiedLofts": 0
     }
   },
@@ -3376,6 +3376,84 @@
       ]
     },
     {
+      "id": "nitro-crossfire-current",
+      "kind": "balls",
+      "brand": "Nitro",
+      "model": "Crossfire",
+      "active": true,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "coverMaterial",
+        "construction",
+        "constructionPieces",
+        "compression",
+        "flight",
+        "driverSpin",
+        "ironSpin",
+        "shortGameSpin",
+        "feel"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://thenitrogolf.com/nitro-golf-balls/"
+      ]
+    },
+    {
+      "id": "nitro-eclipse-current",
+      "kind": "balls",
+      "brand": "Nitro",
+      "model": "Eclipse",
+      "active": true,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "coverMaterial",
+        "construction",
+        "constructionPieces",
+        "compression",
+        "flight",
+        "driverSpin",
+        "ironSpin",
+        "shortGameSpin",
+        "feel"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://thenitrogolf.com/nitro-golf-balls/"
+      ]
+    },
+    {
+      "id": "nitro-nitroglycerin-current",
+      "kind": "balls",
+      "brand": "Nitro",
+      "model": "Nitroglycerin",
+      "active": true,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "coverMaterial",
+        "construction",
+        "constructionPieces",
+        "compression",
+        "flight",
+        "driverSpin",
+        "ironSpin",
+        "shortGameSpin",
+        "feel"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://thenitrogolf.com/nitro-golf-balls/"
+      ]
+    },
+    {
       "id": "nitro-ultimate-distance-current",
       "kind": "balls",
       "brand": "Nitro",
@@ -5061,6 +5139,84 @@
       ]
     },
     {
+      "id": "taylormade-noodle-2014",
+      "kind": "balls",
+      "brand": "TaylorMade",
+      "model": "Noodle",
+      "active": false,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "coverMaterial",
+        "construction",
+        "constructionPieces",
+        "compression",
+        "flight",
+        "driverSpin",
+        "ironSpin",
+        "shortGameSpin",
+        "feel"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://www.taylormadegolf.com/on/demandware.static/-/Sites-TMaG-Library/default/v1463473265710/docs/productspecs/2014/Golf-Ball-2014.PDF"
+      ]
+    },
+    {
+      "id": "taylormade-noodle-plus-easy-distance-legacy",
+      "kind": "balls",
+      "brand": "TaylorMade",
+      "model": "Noodle+ Easy Distance",
+      "active": false,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "coverMaterial",
+        "construction",
+        "constructionPieces",
+        "compression",
+        "flight",
+        "driverSpin",
+        "ironSpin",
+        "shortGameSpin",
+        "feel"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://www.taylormadegolf.com/on/demandware.static/-/Sites-TMaG-Library/default/dw57fcbea9/docs/productspecs/Noodle_Balls.pdf"
+      ]
+    },
+    {
+      "id": "taylormade-noodle-plus-long-and-soft-legacy",
+      "kind": "balls",
+      "brand": "TaylorMade",
+      "model": "Noodle+ Long and Soft",
+      "active": false,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "coverMaterial",
+        "construction",
+        "constructionPieces",
+        "compression",
+        "flight",
+        "driverSpin",
+        "ironSpin",
+        "shortGameSpin",
+        "feel"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://www.taylormadegolf.com/on/demandware.static/-/Sites-TMaG-Library/default/dw57fcbea9/docs/productspecs/Noodle_Balls.pdf"
+      ]
+    },
+    {
       "id": "taylormade-penta-tp-2010",
       "kind": "balls",
       "brand": "TaylorMade",
@@ -6634,6 +6790,84 @@
       "evidence": [
         "https://www.titleist.com/explore-golf-balls/",
         "https://www.titleist.com/golf-balls/"
+      ]
+    },
+    {
+      "id": "top-flite-gamer-current",
+      "kind": "balls",
+      "brand": "Top-Flite",
+      "model": "Gamer",
+      "active": true,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "coverMaterial",
+        "construction",
+        "constructionPieces",
+        "compression",
+        "flight",
+        "driverSpin",
+        "ironSpin",
+        "shortGameSpin",
+        "feel"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://www.dickssportinggoods.com/a/top-flite-golf-balls-gamer.html"
+      ]
+    },
+    {
+      "id": "top-flite-xl-control-current",
+      "kind": "balls",
+      "brand": "Top-Flite",
+      "model": "XL Control",
+      "active": true,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "coverMaterial",
+        "construction",
+        "constructionPieces",
+        "compression",
+        "flight",
+        "driverSpin",
+        "ironSpin",
+        "shortGameSpin",
+        "feel"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://www.dickssportinggoods.com/a/top-flite-compression-golf-balls.html"
+      ]
+    },
+    {
+      "id": "top-flite-xl-distance-current",
+      "kind": "balls",
+      "brand": "Top-Flite",
+      "model": "XL Distance",
+      "active": true,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "coverMaterial",
+        "construction",
+        "constructionPieces",
+        "compression",
+        "flight",
+        "driverSpin",
+        "ironSpin",
+        "shortGameSpin",
+        "feel"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://www.dickssportinggoods.com/p/top-flite-2024-xl-distance-golf-balls-24tflu2024tfxldstgbla/24tflu2024tfxldstgbla?color=White"
       ]
     },
     {
@@ -17817,6 +18051,462 @@
       ]
     },
     {
+      "id": "honma-beres-10-driver-current",
+      "kind": "clubs",
+      "brand": "Honma",
+      "model": "BERES 10 Driver",
+      "active": true,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "lofts",
+        "standardLength",
+        "lie",
+        "headVolume",
+        "setMakeup",
+        "stockShafts",
+        "stockFlexes"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://www.honmagolf.com/tw/product-list?family=beres10&type=clubs"
+      ]
+    },
+    {
+      "id": "honma-beres-10-fairway-current",
+      "kind": "clubs",
+      "brand": "Honma",
+      "model": "BERES 10 Fairway Wood",
+      "active": true,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "lofts",
+        "standardLength",
+        "lie",
+        "headVolume",
+        "setMakeup",
+        "stockShafts",
+        "stockFlexes"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://www.honmagolf.com/tw/product-list?family=beres10&type=clubs"
+      ]
+    },
+    {
+      "id": "honma-beres-10-hybrid-current",
+      "kind": "clubs",
+      "brand": "Honma",
+      "model": "BERES 10 Hybrid",
+      "active": true,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "lofts",
+        "standardLength",
+        "lie",
+        "headVolume",
+        "setMakeup",
+        "stockShafts",
+        "stockFlexes"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://www.honmagolf.com/tw/product-list?family=beres10&type=clubs"
+      ]
+    },
+    {
+      "id": "honma-beres-10-irons-current",
+      "kind": "clubs",
+      "brand": "Honma",
+      "model": "BERES 10 Irons",
+      "active": true,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "lofts",
+        "standardLength",
+        "lie",
+        "headVolume",
+        "setMakeup",
+        "stockShafts",
+        "stockFlexes"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://www.honmagolf.com/tw/product-list?family=beres10&type=clubs"
+      ]
+    },
+    {
+      "id": "honma-beres-black-driver-legacy",
+      "kind": "clubs",
+      "brand": "Honma",
+      "model": "BERES Black Driver",
+      "active": false,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "lofts",
+        "standardLength",
+        "lie",
+        "headVolume",
+        "setMakeup",
+        "stockShafts",
+        "stockFlexes"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://us.honmagolf.com/collections/beres-black"
+      ]
+    },
+    {
+      "id": "honma-beres-black-fairway-legacy",
+      "kind": "clubs",
+      "brand": "Honma",
+      "model": "BERES Black Fairway Wood",
+      "active": false,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "lofts",
+        "standardLength",
+        "lie",
+        "headVolume",
+        "setMakeup",
+        "stockShafts",
+        "stockFlexes"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://us.honmagolf.com/collections/beres-black"
+      ]
+    },
+    {
+      "id": "honma-beres-black-hybrid-legacy",
+      "kind": "clubs",
+      "brand": "Honma",
+      "model": "BERES Black Hybrid",
+      "active": false,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "lofts",
+        "standardLength",
+        "lie",
+        "headVolume",
+        "setMakeup",
+        "stockShafts",
+        "stockFlexes"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://us.honmagolf.com/collections/beres-black"
+      ]
+    },
+    {
+      "id": "honma-beres-black-irons-legacy",
+      "kind": "clubs",
+      "brand": "Honma",
+      "model": "BERES Black Irons",
+      "active": false,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "lofts",
+        "standardLength",
+        "lie",
+        "headVolume",
+        "setMakeup",
+        "stockShafts",
+        "stockFlexes"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://us.honmagolf.com/collections/beres-black"
+      ]
+    },
+    {
+      "id": "honma-tw737-450-driver-legacy",
+      "kind": "clubs",
+      "brand": "Honma",
+      "model": "TW737 450 Driver",
+      "active": false,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "lofts",
+        "standardLength",
+        "lie",
+        "headVolume",
+        "setMakeup",
+        "stockShafts",
+        "stockFlexes"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://mail.honmagolf.com/products/"
+      ]
+    },
+    {
+      "id": "honma-tw737-fairway-legacy",
+      "kind": "clubs",
+      "brand": "Honma",
+      "model": "TW737 FW",
+      "active": false,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "lofts",
+        "standardLength",
+        "lie",
+        "headVolume",
+        "setMakeup",
+        "stockShafts",
+        "stockFlexes"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://mail.honmagolf.com/products/"
+      ]
+    },
+    {
+      "id": "honma-tw737-ut-legacy",
+      "kind": "clubs",
+      "brand": "Honma",
+      "model": "TW737 UT",
+      "active": false,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "lofts",
+        "standardLength",
+        "lie",
+        "headVolume",
+        "setMakeup",
+        "stockShafts",
+        "stockFlexes"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://mail.honmagolf.com/products/"
+      ]
+    },
+    {
+      "id": "honma-tw737-v-irons-legacy",
+      "kind": "clubs",
+      "brand": "Honma",
+      "model": "TW737 V Irons",
+      "active": false,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "lofts",
+        "standardLength",
+        "lie",
+        "headVolume",
+        "setMakeup",
+        "stockShafts",
+        "stockFlexes"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://mail.honmagolf.com/products/"
+      ]
+    },
+    {
+      "id": "honma-tw777-360-ti-driver-current",
+      "kind": "clubs",
+      "brand": "Honma",
+      "model": "TW777 360 Ti Driver",
+      "active": true,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "lofts",
+        "standardLength",
+        "lie",
+        "headVolume",
+        "setMakeup",
+        "stockShafts",
+        "stockFlexes"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://us.honmagolf.com/"
+      ]
+    },
+    {
+      "id": "honma-tw777-driver-current",
+      "kind": "clubs",
+      "brand": "Honma",
+      "model": "TW777 Driver",
+      "active": true,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "lofts",
+        "standardLength",
+        "lie",
+        "headVolume",
+        "setMakeup",
+        "stockShafts",
+        "stockFlexes"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://us.honmagolf.com/"
+      ]
+    },
+    {
+      "id": "honma-tw777-fairway-current",
+      "kind": "clubs",
+      "brand": "Honma",
+      "model": "TW777 Fairway Wood",
+      "active": true,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "lofts",
+        "standardLength",
+        "lie",
+        "headVolume",
+        "setMakeup",
+        "stockShafts",
+        "stockFlexes"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://us.honmagolf.com/"
+      ]
+    },
+    {
+      "id": "honma-tw777-hybrid-current",
+      "kind": "clubs",
+      "brand": "Honma",
+      "model": "TW777 Hybrid",
+      "active": true,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "lofts",
+        "standardLength",
+        "lie",
+        "headVolume",
+        "setMakeup",
+        "stockShafts",
+        "stockFlexes"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://us.honmagolf.com/"
+      ]
+    },
+    {
+      "id": "honma-tw777-max-driver-current",
+      "kind": "clubs",
+      "brand": "Honma",
+      "model": "TW777 Max Driver",
+      "active": true,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "lofts",
+        "standardLength",
+        "lie",
+        "headVolume",
+        "setMakeup",
+        "stockShafts",
+        "stockFlexes"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://us.honmagolf.com/"
+      ]
+    },
+    {
+      "id": "honma-tw777-max-fairway-current",
+      "kind": "clubs",
+      "brand": "Honma",
+      "model": "TW777 Max Fairway Wood",
+      "active": true,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "lofts",
+        "standardLength",
+        "lie",
+        "headVolume",
+        "setMakeup",
+        "stockShafts",
+        "stockFlexes"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://us.honmagolf.com/"
+      ]
+    },
+    {
+      "id": "honma-tw777-pcb-max-irons-current",
+      "kind": "clubs",
+      "brand": "Honma",
+      "model": "TW777 PCB MAX Irons",
+      "active": true,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "lofts",
+        "standardLength",
+        "lie",
+        "headVolume",
+        "setMakeup",
+        "stockShafts",
+        "stockFlexes"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://us.honmagolf.com/"
+      ]
+    },
+    {
       "id": "l-a-b-golf-df3-putter-2024",
       "kind": "clubs",
       "brand": "L.A.B. Golf",
@@ -28031,6 +28721,320 @@
       "datedCatalogProvenance": true,
       "evidence": [
         "https://us.dunlopsports.com/srixon/clubs/irons/zxiu-utility-irons/zxiu-utility-irons/11242043.html"
+      ]
+    },
+    {
+      "id": "takomo-ignis-d1-driver-legacy",
+      "kind": "clubs",
+      "brand": "Takomo",
+      "model": "Ignis D1 Driver",
+      "active": false,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "lofts",
+        "standardLength",
+        "lie",
+        "headVolume",
+        "setMakeup",
+        "stockShafts",
+        "stockFlexes"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://eu.takomogolf.com/collections/all"
+      ]
+    },
+    {
+      "id": "takomo-ignis-d2-fairway-current",
+      "kind": "clubs",
+      "brand": "Takomo",
+      "model": "Ignis D2 Fairway Wood",
+      "active": true,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "lofts",
+        "standardLength",
+        "lie",
+        "headVolume",
+        "setMakeup",
+        "stockShafts",
+        "stockFlexes"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://takomogolf.com/products/"
+      ]
+    },
+    {
+      "id": "takomo-iron-101-legacy",
+      "kind": "clubs",
+      "brand": "Takomo",
+      "model": "Iron 101",
+      "active": false,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "lofts",
+        "standardLength",
+        "lie",
+        "headVolume",
+        "setMakeup",
+        "stockShafts",
+        "stockFlexes"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://takomogolf.com/products/iron-101"
+      ]
+    },
+    {
+      "id": "takomo-iron-101-mkii-2026",
+      "kind": "clubs",
+      "brand": "Takomo",
+      "model": "Iron 101 MKII",
+      "active": true,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "lofts",
+        "standardLength",
+        "lie",
+        "headVolume",
+        "setMakeup",
+        "stockShafts",
+        "stockFlexes"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://takomogolf.com/pages/mkii-irons"
+      ]
+    },
+    {
+      "id": "takomo-iron-101u-current",
+      "kind": "clubs",
+      "brand": "Takomo",
+      "model": "Iron 101U",
+      "active": true,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "lofts",
+        "standardLength",
+        "lie",
+        "headVolume",
+        "setMakeup",
+        "stockShafts",
+        "stockFlexes"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://takomogolf.com/products/"
+      ]
+    },
+    {
+      "id": "takomo-iron-201-legacy",
+      "kind": "clubs",
+      "brand": "Takomo",
+      "model": "Iron 201",
+      "active": false,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "lofts",
+        "standardLength",
+        "lie",
+        "headVolume",
+        "setMakeup",
+        "stockShafts",
+        "stockFlexes"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://takomogolf.com/products/iron-201"
+      ]
+    },
+    {
+      "id": "takomo-iron-201-mkii-2026",
+      "kind": "clubs",
+      "brand": "Takomo",
+      "model": "Iron 201 MKII",
+      "active": true,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "lofts",
+        "standardLength",
+        "lie",
+        "headVolume",
+        "setMakeup",
+        "stockShafts",
+        "stockFlexes"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://takomogolf.com/pages/mkii-irons"
+      ]
+    },
+    {
+      "id": "takomo-iron-201t-mkii-2026",
+      "kind": "clubs",
+      "brand": "Takomo",
+      "model": "Iron 201T MKII",
+      "active": true,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "lofts",
+        "standardLength",
+        "lie",
+        "headVolume",
+        "setMakeup",
+        "stockShafts",
+        "stockFlexes"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://takomogolf.com/pages/mkii-irons"
+      ]
+    },
+    {
+      "id": "takomo-iron-301-cb-current",
+      "kind": "clubs",
+      "brand": "Takomo",
+      "model": "Iron 301 CB",
+      "active": true,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "lofts",
+        "standardLength",
+        "lie",
+        "headVolume",
+        "setMakeup",
+        "stockShafts",
+        "stockFlexes"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://takomogolf.com/collections/irons"
+      ]
+    },
+    {
+      "id": "takomo-iron-301-combo-current",
+      "kind": "clubs",
+      "brand": "Takomo",
+      "model": "Iron 301 Combo",
+      "active": true,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "lofts",
+        "standardLength",
+        "lie",
+        "headVolume",
+        "setMakeup",
+        "stockShafts",
+        "stockFlexes"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://takomogolf.com/collections/irons"
+      ]
+    },
+    {
+      "id": "takomo-iron-301-mb-current",
+      "kind": "clubs",
+      "brand": "Takomo",
+      "model": "Iron 301 MB",
+      "active": true,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN"
+      ],
+      "missingFields": [
+        "lofts",
+        "standardLength",
+        "lie",
+        "headVolume",
+        "setMakeup",
+        "stockShafts",
+        "stockFlexes"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://takomogolf.com/collections/irons"
+      ]
+    },
+    {
+      "id": "takomo-skyforger-002-wedge-current",
+      "kind": "clubs",
+      "brand": "Takomo",
+      "model": "Skyforger 002 Wedge",
+      "active": true,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN",
+        "WEDGE_LOFTS_UNKNOWN"
+      ],
+      "missingFields": [
+        "lofts",
+        "standardLength",
+        "lie",
+        "headVolume",
+        "setMakeup",
+        "stockShafts",
+        "stockFlexes"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://takomogolf.com/collections/wedges"
+      ]
+    },
+    {
+      "id": "takomo-skyforger-wedge-current",
+      "kind": "clubs",
+      "brand": "Takomo",
+      "model": "Skyforger Wedge",
+      "active": true,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN",
+        "WEDGE_LOFTS_UNKNOWN"
+      ],
+      "missingFields": [
+        "lofts",
+        "standardLength",
+        "lie",
+        "headVolume",
+        "setMakeup",
+        "stockShafts",
+        "stockFlexes"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://takomogolf.com/collections/wedges"
       ]
     },
     {
@@ -49862,12 +50866,189 @@
       "evidence": [
         "https://www.golfworks.com/shafts/"
       ]
+    },
+    {
+      "id": "veylix-alpina-573-wood-legacy",
+      "kind": "shafts",
+      "brand": "Veylix",
+      "model": "Alpina 573",
+      "active": false,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_PARTIAL",
+        "SHAFT_FLEX_UNKNOWN"
+      ],
+      "missingFields": [
+        "flexOptions",
+        "launch",
+        "spin",
+        "material",
+        "torqueRange",
+        "tipDiameter",
+        "buttDiameter"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://veylix.com/product/alpina/"
+      ]
+    },
+    {
+      "id": "veylix-alpina-673-wood-legacy",
+      "kind": "shafts",
+      "brand": "Veylix",
+      "model": "Alpina 673",
+      "active": false,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_PARTIAL",
+        "SHAFT_FLEX_UNKNOWN"
+      ],
+      "missingFields": [
+        "flexOptions",
+        "launch",
+        "spin",
+        "material",
+        "torqueRange",
+        "tipDiameter",
+        "buttDiameter"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://veylix.com/product/alpina/"
+      ]
+    },
+    {
+      "id": "veylix-arcane-640t-wood-legacy",
+      "kind": "shafts",
+      "brand": "Veylix",
+      "model": "Arcane 640T",
+      "active": false,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_UNKNOWN",
+        "SHAFT_WEIGHT_UNKNOWN",
+        "SHAFT_FLEX_UNKNOWN"
+      ],
+      "missingFields": [
+        "weightOptions",
+        "flexOptions",
+        "launch",
+        "spin",
+        "material",
+        "torqueRange",
+        "tipDiameter",
+        "buttDiameter"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://veylix.com/product/arcane/"
+      ]
+    },
+    {
+      "id": "veylix-rome-688-wood-legacy",
+      "kind": "shafts",
+      "brand": "Veylix",
+      "model": "Rome 688",
+      "active": false,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_PARTIAL",
+        "SHAFT_FLEX_UNKNOWN"
+      ],
+      "missingFields": [
+        "flexOptions",
+        "launch",
+        "spin",
+        "material",
+        "torqueRange",
+        "tipDiameter",
+        "buttDiameter"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://veylix.com/product/rome/"
+      ]
+    },
+    {
+      "id": "veylix-rome-7ra-roughneck-wood-legacy",
+      "kind": "shafts",
+      "brand": "Veylix",
+      "model": "Rome 7RA Roughneck",
+      "active": false,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_PARTIAL",
+        "SHAFT_FLEX_UNKNOWN"
+      ],
+      "missingFields": [
+        "flexOptions",
+        "launch",
+        "spin",
+        "material",
+        "torqueRange",
+        "tipDiameter",
+        "buttDiameter"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://veylix.com/product/roughneck/"
+      ]
+    },
+    {
+      "id": "veylix-rome-888-wood-legacy",
+      "kind": "shafts",
+      "brand": "Veylix",
+      "model": "Rome 888",
+      "active": false,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_PARTIAL",
+        "SHAFT_FLEX_UNKNOWN"
+      ],
+      "missingFields": [
+        "flexOptions",
+        "launch",
+        "spin",
+        "material",
+        "torqueRange",
+        "tipDiameter",
+        "buttDiameter"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://veylix.com/product/rome/"
+      ]
+    },
+    {
+      "id": "veylix-rome-988-hybrid-legacy",
+      "kind": "shafts",
+      "brand": "Veylix",
+      "model": "Rome 988",
+      "active": false,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_PARTIAL",
+        "SHAFT_FLEX_UNKNOWN"
+      ],
+      "missingFields": [
+        "flexOptions",
+        "launch",
+        "spin",
+        "material",
+        "torqueRange",
+        "tipDiameter",
+        "buttDiameter"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://veylix.com/product/rome/"
+      ]
     }
   ],
   "sourceFiles": [
     {
       "file": "lib/golf-equipment-catalog.ts",
-      "sha256": "cd47c6c977142056270e681a29f2d061bc624191b5fb34ca75ccfef1a9fcfa9a"
+      "sha256": "ed36777bd141d3caf3436ef5d2a14f9660fb5466c7f7e1f24de2731a524d96ff"
     },
     {
       "file": "lib/golf-equipment.ts",
@@ -49876,6 +51057,22 @@
     {
       "file": "lib/ball-fit-handicap.ts",
       "sha256": "9932ae7df2bf8d08681e43c0c53a6cdc9f7f1caafa932fc479ca185e6abd8c40"
+    },
+    {
+      "file": "lib/equipment-catalog-aliases.ts",
+      "sha256": "c61a904319af8f69e3d63651c26bd8891599fcf6acc49713250860edacd832f2"
+    },
+    {
+      "file": "lib/equipment-catalog-visibility.ts",
+      "sha256": "7c25b328e4242459fe40a016b0ddb5ed5fb56bee2e69416203bf988ffad9efbd"
+    },
+    {
+      "file": "lib/equipment-catalog-provider.ts",
+      "sha256": "6296e574072faab562e3ad4fa5e6c70c42e7e44e81fd072c9a4821630d21e060"
+    },
+    {
+      "file": "data/equipment-catalog-aliases.json",
+      "sha256": "2116d78b2dbda5c998e5e9bf800f0e4b69752c8b053d982060c7a7df20f42667"
     },
     {
       "file": "data/golf-ball-catalog.seed.json",
@@ -49891,7 +51088,7 @@
     },
     {
       "file": "data/golf-equipment-catalog.expansion.seed.json",
-      "sha256": "8befb2b0c7f0eff2c09ac916b67f49ef2ed7e4ab6217088db2a2c909afe47e12"
+      "sha256": "6f3afb07f0534d53a10f2b5fd5a194a45f040e3bd89331204ec7a9c40f8c7e5e"
     },
     {
       "file": "data/forgiving-golf-equipment.snapshot.json",

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-23T00:00:00.000Z",
-  "methodology": "Runtime catalog normalized with the production seed provider, compared by stable id and catalog aliases against backyard-equipment-master-2010-2026.snapshot.json. Official manufacturer sources were required for additions; unknown technical facts remain null.",
+  "generatedAt": "2026-09-27T00:00:00.000Z",
+  "methodology": "Runtime catalog normalized with the canonical seed provider, compared by stable id and catalog aliases against backyard-equipment-master-2010-2026.snapshot.json. OEM sources were preferred and the authorized exclusive retailer was accepted for Top-Flite identity only; unknown technical facts remain null.",
   "beforeVerifiedAdditions": {
     "inAppModels": 310,
     "inAppCurrent": 84,
@@ -98,13 +98,58 @@
       "id": "nitro-ultimate-distance-current",
       "source": "https://thenitrogolf.com/nitro-golf-balls/",
       "fitEligible": false
+    },
+    {
+      "id": "top-flite-gamer-current",
+      "source": "https://www.dickssportinggoods.com/a/top-flite-golf-balls-gamer.html",
+      "fitEligible": false
+    },
+    {
+      "id": "top-flite-xl-control-current",
+      "source": "https://www.dickssportinggoods.com/a/top-flite-compression-golf-balls.html",
+      "fitEligible": false
+    },
+    {
+      "id": "top-flite-xl-distance-current",
+      "source": "https://www.dickssportinggoods.com/p/top-flite-2024-xl-distance-golf-balls-24tflu2024tfxldstgbla/24tflu2024tfxldstgbla?color=White",
+      "fitEligible": false
+    },
+    {
+      "id": "taylormade-noodle-2014",
+      "source": "https://www.taylormadegolf.com/on/demandware.static/-/Sites-TMaG-Library/default/v1463473265710/docs/productspecs/2014/Golf-Ball-2014.PDF",
+      "fitEligible": false
+    },
+    {
+      "id": "taylormade-noodle-plus-long-and-soft-legacy",
+      "source": "https://www.taylormadegolf.com/on/demandware.static/-/Sites-TMaG-Library/default/dw57fcbea9/docs/productspecs/Noodle_Balls.pdf",
+      "fitEligible": false
+    },
+    {
+      "id": "taylormade-noodle-plus-easy-distance-legacy",
+      "source": "https://www.taylormadegolf.com/on/demandware.static/-/Sites-TMaG-Library/default/dw57fcbea9/docs/productspecs/Noodle_Balls.pdf",
+      "fitEligible": false
+    },
+    {
+      "id": "nitro-eclipse-current",
+      "source": "https://thenitrogolf.com/nitro-golf-balls/",
+      "fitEligible": false
+    },
+    {
+      "id": "nitro-crossfire-current",
+      "source": "https://thenitrogolf.com/nitro-golf-balls/",
+      "fitEligible": false
+    },
+    {
+      "id": "nitro-nitroglycerin-current",
+      "source": "https://thenitrogolf.com/nitro-golf-balls/",
+      "fitEligible": false
     }
   ],
   "afterVerifiedAdditions": {
-    "inAppModels": 314,
-    "inAppCurrent": 88,
-    "inAppHistorical": 226,
-    "inAppBrands": 19,
+    "inAppModels": 323,
+    "inAppCurrent": 94,
+    "inAppHistorical": 229,
+    "inAppBrands": 20,
     "brandNames": [
       "Bridgestone",
       "Callaway",
@@ -122,6 +167,7 @@
       "Srixon",
       "TaylorMade",
       "Titleist",
+      "Top-Flite",
       "Vice",
       "Volvik",
       "Wilson"
@@ -164,12 +210,8 @@
   },
   "notImported": [
     {
-      "brand": "Top-Flite",
-      "reason": "Discovery sources and the conforming list identify products, but no unambiguous manufacturer product source was accepted for technical catalog publication in this pass."
-    },
-    {
       "brand": "Amazon Basics",
-      "reason": "No stable official manufacturer catalog page with sufficient product identity/provenance was available in this pass."
+      "reason": "No stable official product record with sufficient identity/provenance was found; vague marketplace listings were not accepted."
     }
   ],
   "qaRecordsFoundInVersionedSources": [],
