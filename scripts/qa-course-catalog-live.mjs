@@ -37,7 +37,7 @@ assert.deepEqual(catalogCounts,{clubs:153,courses:176,geolocated:expectedGeoloca
 assert.equal(new Set(catalog.courses.map(c=>c.clubId)).size,153);
 assert.equal(new Set(catalog.courses.filter(c=>c.locationEvidence&&Number.isFinite(c.latitude)).map(c=>c.clubId)).size,expectedGeolocated);
 for(const [city,point] of Object.entries({Puebla:[19.02,-98.25],CDMX:[19.4326,-99.1332],Monterrey:[25.67,-100.31],Guadalajara:[20.67,-103.35],Queretaro:[20.59,-100.39],Leon:[21.12,-101.68],Cancun:[21.16,-86.83],LosCabos:[22.9,-109.91],PuertoVallarta:[20.65,-105.23],Acapulco:[16.81,-99.82]})){
- const nearby=nearestReviewedClubs(catalog.courses,{latitude:point[0],longitude:point[1]});assert.equal(nearby.length,3);assert.equal(new Set(nearby.map(c=>c.clubId)).size,3);assert.ok(nearby[0].distanceKm<=nearby[1].distanceKm&&nearby[1].distanceKm<=nearby[2].distanceKm);
+ const nearby=nearestReviewedClubs(catalog.courses,{latitude:point[0],longitude:point[1]});assert.ok(nearby.length>=3);assert.equal(new Set(nearby.map(c=>c.clubId)).size,nearby.length);assert.ok(nearby.every((club,index)=>index===0||nearby[index-1].distanceKm<=club.distanceKm));assert.ok(nearby.every(club=>club.distanceKm<=50));
  report.geographic.push({city,clubs:nearby.map(c=>({name:c.clubName,km:Math.round(c.distanceKm*10)/10}))});
 }
 const mexico=await app('/api/courses/catalog?q=Mexico'),accent=await app('/api/courses/catalog?q=M%C3%A9xico');assert.deepEqual(mexico.courses.map(c=>c.id),accent.courses.map(c=>c.id));

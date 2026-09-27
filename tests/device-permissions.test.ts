@@ -25,18 +25,21 @@ function memoryStorage() {
   };
 }
 
-test("initial location permission is user-scoped, coarse, and reusable without another prompt", async () => {
+test("initial location permission is user-scoped, keeps device precision, and is reusable without another prompt", async () => {
   const storage = memoryStorage();
   let prompts = 0;
+  let requestedOptions: PositionOptions | undefined;
   const geolocation = {
-    getCurrentPosition(success: PositionCallback) {
+    getCurrentPosition(success: PositionCallback, _failure?: PositionErrorCallback | null, options?: PositionOptions) {
       prompts += 1;
-      success({ coords: { latitude: 19.123456, longitude: -98.987654 } } as GeolocationPosition);
+      requestedOptions = options;
+      success({ coords: { latitude: 19.123456, longitude: -98.987654, accuracy: 18.4 } } as GeolocationPosition);
     },
   } as Geolocation;
   const saved = await requestInitialLocation(storage, "user-a", geolocation);
   assert.equal(prompts, 1);
-  assert.deepEqual(saved.coarseLocation && { latitude: saved.coarseLocation.latitude, longitude: saved.coarseLocation.longitude }, { latitude: 19.12, longitude: -98.99 });
+  assert.deepEqual(saved.coarseLocation && { latitude: saved.coarseLocation.latitude, longitude: saved.coarseLocation.longitude, accuracyMeters: saved.coarseLocation.accuracyMeters }, { latitude: 19.123456, longitude: -98.987654, accuracyMeters: 18 });
+  assert.equal(requestedOptions?.enableHighAccuracy, true);
   assert.deepEqual(storedNearbyCoordinates(storage, "user-a"), saved.coarseLocation);
   assert.equal(storedNearbyCoordinates(storage, "user-b"), null);
   assert.ok(storage.getItem(devicePermissionsStorageKey("user-a")));
@@ -214,13 +217,13 @@ test("expired nearby cache obtains a current position and replaces the stale val
   const result = await resolveAuthorizedNearbyLocation(storage, "user-a", permissionNavigator("granted"), {
     getCurrentPosition(success: PositionCallback) {
       locationCalls += 1;
-      success({ coords: { latitude: 20.123, longitude: -99.456 } } as GeolocationPosition);
+      success({ coords: { latitude: 20.123456, longitude: -99.456789, accuracy: 240 } } as GeolocationPosition);
     },
   } as Geolocation, { at });
   assert.equal(result.status, "located");
   if (result.status === "located") {
     assert.equal(result.source, "fresh");
-    assert.deepEqual({ latitude: result.point.latitude, longitude: result.point.longitude }, { latitude: 20.12, longitude: -99.46 });
+    assert.deepEqual({ latitude: result.point.latitude, longitude: result.point.longitude, accuracyMeters: result.point.accuracyMeters }, { latitude: 20.123456, longitude: -99.456789, accuracyMeters: 240 });
   }
   assert.equal(locationCalls, 1);
 });

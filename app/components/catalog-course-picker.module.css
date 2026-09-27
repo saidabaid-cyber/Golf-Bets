@@ -9,3 +9,4 @@
 .club span { color:var(--by-muted);font-size:12px; }
 .picker select { min-height:52px; }
 .notes summary { min-height:44px;align-content:center; }
+.clubSelected{border-color:var(--by-pine);background:var(--by-sage);box-shadow:0 0 0 2px color-mix(in srgb,var(--by-pine) 18%,transparent),var(--by-shadow)}.clubSelected::after{content:"✓"}.club em{color:var(--by-pine);font-size:12px;font-style:normal;font-weight:700}

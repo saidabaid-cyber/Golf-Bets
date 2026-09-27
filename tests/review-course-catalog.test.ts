@@ -19,10 +19,10 @@ test('local and empty proximity summaries preserve explicit count and manual fal
  assert.equal(reviewedClubsLocationSummary([{distanceKm:1},{distanceKm:50}]),'Encontramos 2 campos a 50 km o menos · 2 clubes distintos.');
  assert.match(reviewedClubsLocationSummary([]),/búsqueda manual sigue disponible/);
 });
-test('nearest selects three distinct evidenced clubs, not layouts or city centroids',()=>{
+test('nearest selects every distinct evidenced club inside 50 km, not layouts or city centroids',()=>{
   const rows=[0,1,2,3].map(i=>({...c,id:`c${i}`,clubId:`club${i}`,latitude:19+i*.1,longitude:-98,locationEvidence:{sourceUrl:'https://example.invalid/map',verifiedAt:'2026-09-20'}}));
   const result=nearestReviewedClubs([rows[0],{...rows[0],id:'second-layout'},...rows.slice(1),{...c,clubId:'unknown',latitude:19,longitude:-98}],{latitude:19,longitude:-98});
-  assert.deepEqual(result.map(x=>x.clubId),['club0','club1','club2']);assert.ok(result[1].distanceKm<result[2].distanceKm);
+  assert.deepEqual(result.map(x=>x.clubId),['club0','club1','club2','club3']);assert.ok(result[1].distanceKm<result[2].distanceKm&&result[2].distanceKm<result[3].distanceKm);
 });
 test('fewer than three returns only known clubs and invalid GPS returns none',()=>{assert.equal(nearestReviewedClubs([c],{latitude:19,longitude:-98}).length,0);assert.equal(nearestReviewedClubs([c],{latitude:NaN,longitude:-98}).length,0);});
 test('unverified rating category is never applied or silently universal',()=>{const card=reviewedTeeToCourse(c,tee);assert.equal(card.rating,undefined);assert.equal(card.slope,undefined);assert.equal(card.catalogReview?.ratingCategory,null);assert.equal(card.catalogReview?.reportedRating,72.5);});

@@ -6,6 +6,8 @@ import { distinctNearbyClubCards } from "../lib/course-nearby-clubs";
 import { DEFAULT_LA_VISTA_COURSE, DEFAULT_LA_VISTA_TEMPORAL_COURSE } from "../lib/golf-course-directory";
 import { reviewedCoursePublicationShape } from "../lib/puebla-course-publication";
 import {
+  courseSelectionLabel,
+  homeCourseSelection,
   nearestReviewedClubs,
   reviewedTeeToCourse,
   searchReviewedCourses,
@@ -28,7 +30,7 @@ const pueblaIdentity = [
   { id: "review-course-23231", clubId: "review-club-9c0700f229794a278011", name: "CLUB DE GOLF LA HUERTA", clubName: "CLUB DE GOLF LA HUERTA", city: "San Pedro Cholula", aliases: ["La Huerta", "Huerta"], latitude: 19.05946, longitude: -98.3307 },
   { id: "course-el-cristo", clubId: "club-el-cristo", name: "CLUB CAMPESTRE EL CRISTO", clubName: "CLUB CAMPESTRE EL CRISTO", city: "Atlixco", aliases: ["El Cristo"], latitude: 18.882, longitude: -98.426 },
   { id: "review-course-24458", clubId: "review-club-75f6ac3a0e37a69eabd3", name: "LAS FUENTES", clubName: "CLUB DE GOLF LAS FUENTES", city: "Puebla", aliases: ["Las Fuentes"], latitude: 19.08806, longitude: -98.23316 },
-  { id: "course-cola-de-lagarto", clubId: "club-cola-de-lagarto", name: "COLA DE LAGARTO", clubName: "COLA DE LAGARTO CAMPO MÍTICO", city: "Atlixco", aliases: ["Cola de Lagarto"] },
+  { id: "course-cola-de-lagarto", clubId: "club-cola-de-lagarto", name: "COLA DE LAGARTO", clubName: "COLA DE LAGARTO CAMPO MÍTICO", city: "Atlixco", aliases: ["Cola de Lagarto"], latitude: 18.8693355, longitude: -98.3806388 },
   { id: "review-course-23167", clubId: "review-club-d146fe8e70001cc350c2", name: "VISTA VERDE", clubName: "VISTA VERDE COUNTRY CLUB", city: "Tehuacán", aliases: ["Vista Verde Country Club"], latitude: 18.487452, longitude: -97.403514 },
 ].map((row) => ({
   ...row,
@@ -66,7 +68,9 @@ for (const [query, expectedClubId] of [
   ["La Vista", "club-la-vista"], ["Vista", "club-la-vista"],
   ["Campestre Puebla", "club-campestre-puebla"], ["Campestre de Puebla", "club-campestre-puebla"],
   ["La Huerta", "review-club-9c0700f229794a278011"], ["Huerta", "review-club-9c0700f229794a278011"],
-  ["El Cristo", "club-el-cristo"], ["Las Fuentes", "review-club-75f6ac3a0e37a69eabd3"],
+  ["El Cristo", "club-el-cristo"], ["Cristo", "club-el-cristo"], ["campestre cristo", "club-el-cristo"],
+  ["Las Fuentes", "review-club-75f6ac3a0e37a69eabd3"], ["lagarto", "club-cola-de-lagarto"], ["cola lagarto", "club-cola-de-lagarto"],
+  ["MItIcO", "club-cola-de-lagarto"],
 ] as const) {
   test(`P02 search is accent/case/alias tolerant: ${query}`, () => {
     const matches = searchReviewedCourses(pueblaIdentity, query);
@@ -75,15 +79,39 @@ for (const [query, expectedClubId] of [
   });
 }
 
-test("P02 Puebla nearby is distance ordered and never spends slots on layouts of one club", () => {
+test("P02 Puebla nearby returns every evidenced club inside 50 km in distance order", () => {
   const withDuplicateLayout = [pueblaIdentity[0], { ...pueblaIdentity[0], id: "la-vista-second-layout", name: "La Vista II" }, ...pueblaIdentity.slice(1)];
   const result = nearestReviewedClubs(withDuplicateLayout, { latitude: 19.008297, longitude: -98.254634 });
-  assert.deepEqual(result.map((row) => row.clubId), ["club-la-vista", "club-campestre-puebla", "review-club-75f6ac3a0e37a69eabd3"]);
-  assert.ok(result[0].distanceKm <= result[1].distanceKm && result[1].distanceKm <= result[2].distanceKm);
+  assert.deepEqual(result.map((row) => row.clubId), ["club-la-vista", "club-campestre-puebla", "review-club-75f6ac3a0e37a69eabd3", "review-club-9c0700f229794a278011", "club-cola-de-lagarto", "club-el-cristo"]);
+  assert.deepEqual(result.map((row) => row.distanceKm), result.map((row) => row.distanceKm).toSorted((left, right) => left - right));
+  assert.ok(result.every((row) => row.distanceKm <= 50));
 
   const routeShape = distinctNearbyClubCards(withDuplicateLayout.map((row) => ({ card: { id: row.id, courseId: row.id, clubId: row.clubId }, distanceKm: result.find((item) => item.clubId === row.clubId)?.distanceKm ?? null })));
-  assert.equal(routeShape.total, 3);
-  assert.equal(new Set(routeShape.matches.map((item) => item.card.clubId)).size, 3);
+  assert.equal(routeShape.total, 6);
+  assert.equal(routeShape.matches.length, routeShape.total);
+  assert.equal(new Set(routeShape.matches.map((item) => item.card.clubId)).size, 6);
+});
+
+test("P02 nearby and search selections produce the same canonical club/course identity", () => {
+  const entry = pueblaIdentity.find((row) => row.clubId === "club-el-cristo")!;
+  const nearbySelection = homeCourseSelection(entry);
+  const searchSelection = homeCourseSelection(searchReviewedCourses(pueblaIdentity, "Cristo")[0]);
+  assert.deepEqual(nearbySelection, searchSelection);
+  assert.deepEqual(nearbySelection, { clubId: "club-el-cristo", clubName: "CLUB CAMPESTRE EL CRISTO", courseId: "course-el-cristo", courseName: "CLUB CAMPESTRE EL CRISTO" });
+  assert.equal(courseSelectionLabel(nearbySelection), "CLUB CAMPESTRE EL CRISTO");
+});
+
+test("P02 onboarding wires nearby and manual results to one selection path and restores canonical ids", () => {
+  const picker = readFileSync("app/components/catalog-course-picker.tsx", "utf8");
+  const onboarding = readFileSync("app/components/beta-onboarding-flow.tsx", "utf8");
+  assert.match(picker, /onClick=\{\(\)=>selectClub\(c\)\}/);
+  assert.match(picker, /onSelect=\{\(\)=>selectClub\(c\)\}/);
+  assert.match(picker, /const course=purpose==='home-club'\?entry/);
+  assert.match(picker, /await onSelectHomeCourse\(homeCourseSelection\(selected\)\)/);
+  assert.match(picker, /aria-pressed=\{club===c\.clubId\}/);
+  assert.doesNotMatch(picker, /Recorrido seleccionado:/);
+  assert.match(onboarding, /selectedClubId=\{profile\.homeClubId\} selectedCourseId=\{profile\.homeCourseId\}/);
+  assert.match(onboarding, /disabled=\{!profile\.homeClubId \|\| !profile\.homeCourseId \|\| !homeClubSelectionReady\}/);
 });
 
 test("P02 source-confirmed nine-hole layout blocks the conflicting captured 18-hole card", () => {

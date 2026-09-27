@@ -15,7 +15,7 @@ export type DevicePermissionPreferences = {
   notifications: DevicePermissionStatus;
   locationEnabled: boolean;
   notificationsEnabled: boolean;
-  coarseLocation?: { latitude: number; longitude: number; capturedAt: string };
+  coarseLocation?: { latitude: number; longitude: number; accuracyMeters?: number; capturedAt: string };
   resolvedAt: string | null;
   updatedAt: string;
 };
@@ -26,13 +26,14 @@ type WritableStorage = Pick<Storage, "setItem">;
 type RemovableStorage = Pick<Storage, "removeItem">;
 
 export type NearbyLocationResolution =
-  | { status: "located"; point: { latitude: number; longitude: number; capturedAt: string }; source: "cache" | "fresh" }
+  | { status: "located"; point: { latitude: number; longitude: number; accuracyMeters?: number; capturedAt: string }; source: "cache" | "fresh" }
   | { status: "disabled" | "prompt" | "denied" | "timeout" | "unavailable" | "query-unsupported" | "geolocation-unavailable" | "cancelled" };
 
 const locationRequestEpochs = new Map<string, number>();
 
 function now() { return new Date().toISOString(); }
-function coordinate(value: number) { return Math.round(value * 100) / 100; }
+function coordinate(value: number) { return Math.round(value * 1_000_000) / 1_000_000; }
+function accuracyMeters(value: number | undefined) { return Number.isFinite(value) && value! >= 0 ? Math.round(value!) : undefined; }
 
 export function devicePermissionContext(input: { userAgent?: string; platform?: string; maxTouchPoints?: number; standaloneDisplayMode?: boolean; navigatorStandalone?: boolean; notificationApi?: boolean }): DevicePermissionContext {
   const ios = /iPad|iPhone|iPod/i.test(input.userAgent || "") || (input.platform === "MacIntel" && (input.maxTouchPoints || 0) > 1);
@@ -74,7 +75,7 @@ export function normalizeDevicePermissionPreferences(value: unknown, userId: str
   const valid = (status: unknown): status is DevicePermissionStatus => ["unknown", "prompt", "granted", "denied", "timeout", "unavailable"].includes(String(status));
   const coarse = candidate.coarseLocation;
   const coarseLocation = coarse && Number.isFinite(coarse.latitude) && Number.isFinite(coarse.longitude) && Math.abs(coarse.latitude) <= 90 && Math.abs(coarse.longitude) <= 180 && typeof coarse.capturedAt === "string" && Number.isFinite(Date.parse(coarse.capturedAt))
-    ? { latitude: coordinate(coarse.latitude), longitude: coordinate(coarse.longitude), capturedAt: coarse.capturedAt }
+    ? { latitude: coordinate(coarse.latitude), longitude: coordinate(coarse.longitude), ...(accuracyMeters(coarse.accuracyMeters) === undefined ? {} : { accuracyMeters: accuracyMeters(coarse.accuracyMeters) }), capturedAt: coarse.capturedAt }
     : undefined;
   return {
     version: DEVICE_PERMISSIONS_VERSION,
@@ -173,7 +174,7 @@ export function requestInitialLocation(
       const latest = readDevicePermissionPreferences(storage, userId);
       if (options.signal?.aborted || locationRequestEpochs.get(userId) !== requestEpoch) return finish(latest);
       const capturedAt = now();
-      finish(saveDevicePermissionPreferences(storage, { ...latest, location: "granted", locationEnabled: true, coarseLocation: { latitude: coordinate(position.coords.latitude), longitude: coordinate(position.coords.longitude), capturedAt }, updatedAt: capturedAt }));
+      finish(saveDevicePermissionPreferences(storage, { ...latest, location: "granted", locationEnabled: true, coarseLocation: { latitude: coordinate(position.coords.latitude), longitude: coordinate(position.coords.longitude), ...(accuracyMeters(position.coords.accuracy) === undefined ? {} : { accuracyMeters: accuracyMeters(position.coords.accuracy) }), capturedAt }, updatedAt: capturedAt }));
     }, error => {
       const latest = readDevicePermissionPreferences(storage, userId);
       if (options.signal?.aborted || locationRequestEpochs.get(userId) !== requestEpoch) return finish(latest);
@@ -185,7 +186,7 @@ export function requestInitialLocation(
         return;
       }
       finish(saveDevicePermissionPreferences(storage, { ...latest, location: error.code === error.TIMEOUT ? "timeout" : "unavailable", updatedAt: at }));
-    }, { enableHighAccuracy: false, timeout: 8_000, maximumAge: 0 });
+    }, { enableHighAccuracy: true, timeout: 8_000, maximumAge: 0 });
   });
 }
 
@@ -241,7 +242,7 @@ function currentPosition(geolocation: Geolocation, signal?: AbortSignal) {
         signal?.removeEventListener("abort", onAbort);
         reject(error);
       },
-      { enableHighAccuracy: false, timeout: 8_000, maximumAge: 0 },
+      { enableHighAccuracy: true, timeout: 8_000, maximumAge: 0 },
     );
   });
 }
@@ -304,7 +305,7 @@ export async function resolveAuthorizedNearbyLocation(
     const latest = readDevicePermissionPreferences(storage, userId);
     if (!latest.locationEnabled) return { status: "cancelled" };
     const capturedAt = new Date(options.at ?? Date.now()).toISOString();
-    const point = { latitude: coordinate(position.coords.latitude), longitude: coordinate(position.coords.longitude), capturedAt };
+    const point = { latitude: coordinate(position.coords.latitude), longitude: coordinate(position.coords.longitude), ...(accuracyMeters(position.coords.accuracy) === undefined ? {} : { accuracyMeters: accuracyMeters(position.coords.accuracy) }), capturedAt };
     saveDevicePermissionPreferences(storage, { ...latest, location: "granted", coarseLocation: point, updatedAt: capturedAt });
     return { status: "located", point, source: "fresh" };
   } catch (error) {

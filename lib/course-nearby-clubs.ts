@@ -15,7 +15,6 @@ export function distinctNearbyClubCards<T extends NearbyCourseCard>(
   options: { radiusKm?: number; limit?: number } = {},
 ) {
   const radiusKm = options.radiusKm ?? 50;
-  const limit = options.limit ?? 3;
   const distinct = new Map<string, NearbyCourseCardMatch<T>>();
 
   for (const match of [...matches].sort((left, right) => (
@@ -27,5 +26,6 @@ export function distinctNearbyClubCards<T extends NearbyCourseCard>(
   }
 
   const all = [...distinct.values()];
-  return { total: all.length, matches: all.slice(0, Math.max(0, limit)) };
+  const visibleMatches = options.limit === undefined ? all : all.slice(0, Math.max(0, options.limit));
+  return { total: all.length, matches: visibleMatches };
 }

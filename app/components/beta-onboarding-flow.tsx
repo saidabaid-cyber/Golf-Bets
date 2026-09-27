@@ -207,7 +207,7 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, lega
   };
 
   if (progress.step === "course") return <Shell progress={progress} {...navigationProps} eyebrow="TU CAMPO" title="Elige tu Home Club" description="Busca tu club habitual o explora los campos cercanos. No estás iniciando una ronda." actions={<button className="primary big" disabled={!profile.homeClubId || !profile.homeCourseId || !homeClubSelectionReady} onClick={() => advance('ghin')}>Continuar: Handicap / Índice</button>}>
-    <CatalogCoursePicker key={`onboarding-home-${profile.userId}`} purpose="home-club" token={accessToken} permissionOwnerId={profile.userId} selectedName={[profile.homeClub,profile.homeCourse].filter(Boolean).join(' · ')} onSelectionReadyChange={setHomeClubSelectionReady} onSelectHomeCourse={async selection => {
+    <CatalogCoursePicker key={`onboarding-home-${profile.userId}`} purpose="home-club" token={accessToken} permissionOwnerId={profile.userId} selectedName={[profile.homeClub,profile.homeCourse].filter(Boolean).join(' · ')} selectedClubId={profile.homeClubId} selectedCourseId={profile.homeCourseId} onSelectionReadyChange={setHomeClubSelectionReady} onSelectHomeCourse={async selection => {
       setMessage('');
       const result=await onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: profile.defaultHandicap, homeClub: selection.clubName, homeClubId: selection.clubId, homeCourse: selection.courseName, homeCourseId: selection.courseId });
       if(result!=='cloud')throw new Error('No pudimos confirmar tu Home Club en la nube. Reintenta para continuar.');

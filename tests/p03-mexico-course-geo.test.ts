@@ -85,7 +85,7 @@ for (const [region, latitude, longitude] of [
 ] as const) {
   test(`P03 nearby derives distinct ordered clubs within 50 km for ${region}`, () => {
     const result = nearestReviewedClubs(nearbyRows(), { latitude, longitude });
-    assert.ok(result.length > 0 && result.length <= 3, `${region}: ${result.length}`);
+    assert.ok(result.length > 0, `${region}: ${result.length}`);
     assert.equal(new Set(result.map((row) => row.clubId)).size, result.length);
     assert.ok(result.every((row) => row.distanceKm <= 50 && Number.isFinite(row.latitude) && Number.isFinite(row.longitude)));
     assert.deepEqual(result.map((row) => row.distanceKm), result.map((row) => row.distanceKm).toSorted((left, right) => left - right));
@@ -94,7 +94,8 @@ for (const [region, latitude, longitude] of [
 
 test("P03 keeps the reconciled Puebla discovery order and adds Cola de Lagarto without duplicates", () => {
   const result = nearestReviewedClubs(nearbyRows(), { latitude: 19.008297, longitude: -98.254634 });
-  assert.deepEqual(result.map((row) => row.clubId), ["club-la-vista", "club-campestre-puebla", "review-club-75f6ac3a0e37a69eabd3"]);
+  assert.deepEqual(result.slice(0, 6).map((row) => row.clubId), ["club-la-vista", "club-campestre-puebla", "review-club-75f6ac3a0e37a69eabd3", "review-club-9c0700f229794a278011", "club-cola-de-lagarto", "club-el-cristo"]);
+  assert.ok(result.every((row) => row.distanceKm <= 50));
   assert.equal(merged.clubs.find((club) => club.id === "club-cola-de-lagarto")?.latitude, 18.8693355);
 });
 

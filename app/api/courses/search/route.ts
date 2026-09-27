@@ -68,7 +68,7 @@ export async function GET(request: NextRequest) {
     // Nearby always starts from the closest result; a stale text-search cursor must not skip clubs.
     const layered = await layeredSearch({ query, limit: 10_000, latitude, longitude }, database);
     if (layered) {
-      const nearby = distinctNearbyClubCards(layered.cards, { radiusKm: 50, limit: Math.min(3, limit) });
+      const nearby = distinctNearbyClubCards(layered.cards, { radiusKm: 50 });
       return NextResponse.json({
         provider: layered.provider,
         total: nearby.total,
@@ -92,7 +92,7 @@ export async function GET(request: NextRequest) {
         tee: { id: course.catalogTeeId ?? course.id, name: course.teeName, rating: course.rating, slope: course.slope, yards: course.totalYards, localIndexRated: course.indexRatingEvidence?.kind === "CURATED_RATED_TEE" },
       },
       distanceKm,
-    })), { radiusKm: 50, limit: Math.min(3, limit) });
+    })), { radiusKm: 50 });
     return NextResponse.json({
       provider: result.providerId,
       total: nearby.total,

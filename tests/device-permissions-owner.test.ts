@@ -75,7 +75,8 @@ test("componente dispara APIs nativas sólo desde CTAs explícitos y ofrece sali
   assert.doesNotMatch(source, /Agregar a pantalla de inicio|Cómo instalar The Backyard/);
   assert.match(source, /Ajustes &gt; Apps &gt; Safari &gt; Ubicación/);
   assert.doesNotMatch(source, /Administrar ubicación|Administrar notificaciones/);
-  assert.match(coursePicker, /ubicación aproximada ya autorizada/);
+  assert.match(coursePicker, /ubicación autorizada/);
+  assert.match(coursePicker, /Precisión informada por el dispositivo/);
   assert.doesNotMatch(coursePicker, /No la guardamos ni enviamos/);
 });
 
