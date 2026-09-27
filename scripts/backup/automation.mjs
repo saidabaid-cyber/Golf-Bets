@@ -31,6 +31,37 @@ export function safeErrorCode(error) {
   return typeof code === 'string' && SAFE_CODE.test(code) ? code : 'AUTOMATED_BACKUP_FAILED';
 }
 
+const MAX_SECURITY_FINDINGS_REPORTED = 20;
+
+function safeSecurityPath(value) {
+  if (typeof value !== 'string') return 'UNKNOWN';
+  const sanitized = value.replaceAll('\\', '/').replace(/[^A-Za-z0-9._/@+-]/g, '_').replace(/\.\.(?=\/|$)/g, '__').slice(0, 240);
+  return sanitized || 'UNKNOWN';
+}
+
+export function safeSecurityScanDiagnostic(scan = {}) {
+  const rawFindings = Array.isArray(scan.findings) ? scan.findings : [];
+  const state = typeof scan.state === 'string' && SAFE_CODE.test(scan.state) ? scan.state : 'NOT_RUN';
+  const total = Number.isSafeInteger(scan.total) && scan.total >= rawFindings.length ? scan.total : rawFindings.length;
+  const findings = rawFindings.slice(0, MAX_SECURITY_FINDINGS_REPORTED).map((finding) => ({
+    kind: typeof finding?.kind === 'string' && SAFE_CODE.test(finding.kind) ? finding.kind : 'UNKNOWN_SECRET',
+    file: safeSecurityPath(finding?.file),
+    object: typeof (finding?.objectId || finding?.object) === 'string' && /^(?:[a-f0-9]{12}|[a-f0-9]{40,64})$/i.test(finding.objectId || finding.object)
+      ? (finding.objectId || finding.object).toLowerCase().slice(0, 12)
+      : 'UNAVAILABLE',
+    location: finding?.location === 'current' || finding?.location === 'history' ? finding.location : 'unknown',
+  }));
+  return { state, total, findings, truncated: scan.truncated === true || total > findings.length };
+}
+
+export function formatSecurityScanDiagnostic(value) {
+  const diagnostic = safeSecurityScanDiagnostic(value);
+  const findings = diagnostic.findings.length
+    ? diagnostic.findings.map(finding => `${finding.kind}@${finding.file}#${finding.object}:${finding.location}`).join(',')
+    : 'NONE';
+  return `state=${diagnostic.state} total=${diagnostic.total} truncated=${diagnostic.truncated ? 'YES' : 'NO'} findings=${findings}`;
+}
+
 export function formatDriveDiagnostic(value) {
   const diagnostic = safeDriveDiagnostic(value);
   return [
@@ -149,16 +180,24 @@ export function initialReport(value = new Date()) {
     daily: 'NOT_RUN', weekly: 'NOT_DUE', monthly: 'NOT_DUE', retention: 'DRY_RUN',
     retentionCandidates: [], durationSeconds: 0, failure: null, needsOwnerAction: 'NONE',
     driveDiagnostic: safeDriveDiagnostic(),
+    securityDiagnostic: safeSecurityScanDiagnostic(),
   };
 }
 
 export function renderStepSummary(report) {
   const candidates = report.retentionCandidates.length ? report.retentionCandidates.map(name => `- ${name}`).join('\n') : '- None';
   const driveDiagnostic = safeDriveDiagnostic(report.driveDiagnostic);
+  const securityDiagnostic = safeSecurityScanDiagnostic(report.securityDiagnostic);
+  const securityFindings = securityDiagnostic.findings.length
+    ? securityDiagnostic.findings.map(finding => `- kind=${finding.kind} file=${finding.file} object=${finding.object} location=${finding.location}`).join('\n')
+    : '- None';
   return `# THE BACKYARD — AUTOMATED BACKUP REPORT
 
 Date: ${report.date}
 Git SHA: ${report.gitSha}
+Security scan: ${securityDiagnostic.state}
+Security findings: ${securityDiagnostic.total}
+Security findings truncated: ${securityDiagnostic.truncated ? 'YES' : 'NO'}
 Source: ${report.source}
 Database: ${report.database}
 Storage: ${report.storage}
@@ -187,6 +226,9 @@ Failure: ${report.failure || 'NONE'}
 
 Retention candidates:
 ${candidates}
+
+Security finding details:
+${securityFindings}
 `;
 }
 
@@ -213,6 +255,7 @@ export async function executeAutomatedBackup({
     const { retentionApply } = validateAutomationEnvironment(env);
     report.retention = retentionApply ? 'APPLY' : 'DRY_RUN';
     const scan = await deps.scanTracked(repo, { history: true });
+    report.securityDiagnostic = safeSecurityScanDiagnostic(scan);
     if (scan.state !== 'PASS') throw new AutomationError('SOURCE_SECURITY_SCAN_NOT_PASS');
     const backup = await deps.runBackup({ repo, env });
     report.gitSha = backup.manifest.gitCommit;

@@ -3,6 +3,25 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { command } from './core.mjs';
 
+// This immutable blob was independently reviewed as a credential-shaped test
+// fixture. The exception is deliberately bound to kind + path + Git blob, so a
+// one-byte change (including a real credential) is scanned normally.
+const REVIEWED_FIXTURE_FINDINGS = new Set([
+  ['DATABASE_PASSWORD_URI', 'scripts/run-preview-rls-tests.test.mjs', '30e63f55a1d38d4832357f2a2b66ac01aac201b3'].join('\0'),
+]);
+
+export function isReviewedFixtureFinding({ file, objectId, kind, location } = {}) {
+  if (location !== 'history' || typeof file !== 'string' || typeof objectId !== 'string' || typeof kind !== 'string') return false;
+  const key = `${kind}\0${file.replaceAll('\\', '/')}\0${objectId.toLowerCase()}`;
+  return REVIEWED_FIXTURE_FINDINGS.has(key);
+}
+
+function recordFinding(findings, finding) {
+  if (isReviewedFixtureFinding(finding)) return true;
+  findings.push(finding);
+  return false;
+}
+
 // High confidence patterns only. Findings never contain matched values.
 export function secretKinds(text) {
   const kinds=[];
@@ -22,17 +41,21 @@ export function secretKinds(text) {
 }
 export async function scanTracked(repo,{history=false}={}) {
   const files=(await command('git',['ls-files','-z'],{cwd:repo})).split('\0').filter(Boolean);
-  const findings=[]; let scanned=0;
+  const findings=[]; let scanned=0, reviewedFixtures=0;
   const relevant=p=>/(?:\.(?:[cm]?[jt]sx?|json|ya?ml|sql|md|toml|txt|sh|ps1|pem|key|env)|(?:^|\/)\.env[^/]*)$/i.test(p);
   for(const path of files.filter(relevant)){
     const text=await readFile(resolve(repo,path),'utf8');scanned++;
-    for(const kind of secretKinds(text))findings.push({file:path,kind,action:'REVIEW_AND_ROTATE_IF_REAL'});
+    const kinds=secretKinds(text);
+    if(kinds.length){
+      const objectId=(await command('git',['hash-object','--no-filters','--',path],{cwd:repo})).trim();
+      for(const kind of kinds)reviewedFixtures+=Number(recordFinding(findings,{file:path,objectId,kind,location:'current',action:'REVIEW_AND_ROTATE_IF_REAL'}));
+    }
   }
   if(history){
     const objects=(await command('git',['rev-list','--objects','--all'],{cwd:repo})).split('\n').map(line=>{const i=line.indexOf(' ');return{id:line.slice(0,i),path:line.slice(i+1)};}).filter(x=>/^[a-f0-9]{40,64}$/.test(x.id)&&relevant(x.path));
-    for(const object of objects){const text=await command('git',['cat-file','blob',object.id],{cwd:repo});scanned++;for(const kind of secretKinds(text))findings.push({file:object.path,objectId:object.id,kind,action:'REVIEW_AND_ROTATE_IF_REAL'});}
+    for(const object of objects){const text=await command('git',['cat-file','blob',object.id],{cwd:repo});scanned++;for(const kind of secretKinds(text))reviewedFixtures+=Number(recordFinding(findings,{file:object.path,objectId:object.id,kind,location:'history',action:'REVIEW_AND_ROTATE_IF_REAL'}));}
   }
-  return {state:findings.length?'POTENTIAL_SECRET_EXPOSURE':'PASS',scope:history?'tracked worktree + all reachable relevant Git blobs':'tracked worktree relevant text files',scanned,findings};
+  return {state:findings.length?'POTENTIAL_SECRET_EXPOSURE':'PASS',scope:history?'tracked worktree + all reachable relevant Git blobs':'tracked worktree relevant text files',scanned,reviewedFixtures,findings};
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   try{const result=await scanTracked(fileURLToPath(new URL('../../',import.meta.url)),{history:process.argv.includes('--history')});console.log(JSON.stringify(result,null,2));process.exitCode=result.findings.length?1:0;}
