@@ -1,4 +1,4 @@
-import { executeAutomatedBackup, formatDriveDiagnostic, initialReport, safeErrorCode, writeStepSummary } from './automation.mjs';
+import { executeAutomatedBackup, formatDriveDiagnostic, formatSecurityScanDiagnostic, initialReport, safeErrorCode, writeStepSummary } from './automation.mjs';
 
 let report = initialReport();
 try {
@@ -12,6 +12,7 @@ try {
 }
 
 console.log(`GDRIVE_DIAGNOSTIC:${formatDriveDiagnostic(report.driveDiagnostic)}`);
+console.log(`SECURITY_SCAN_DIAGNOSTIC:${formatSecurityScanDiagnostic(report.securityDiagnostic)}`);
 
 try { await writeStepSummary(report); }
 catch { console.error('AUTOMATED_BACKUP_SUMMARY_FAILED'); process.exitCode = 1; }

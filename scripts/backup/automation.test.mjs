@@ -17,12 +17,14 @@ import {
   driveTargetsForDate,
   executeAutomatedBackup,
   formatDriveDiagnostic,
+  formatSecurityScanDiagnostic,
   initialReport,
   mexicoDateParts,
   planRetention,
   portableNames,
   renderStepSummary,
   safeErrorCode,
+  safeSecurityScanDiagnostic,
   validateAutomationEnvironment,
   validatePortableChecksum,
   writeGithubOutputs,
@@ -436,6 +438,46 @@ test('orchestrator scans, backs up and verifies before package or Drive publicat
     }));
     assert.equal(packaged, false, `${failure} must block packaging`);
     assert.equal(published, false, `${failure} must block Drive publication`);
+  }
+});
+
+test('security scan failure blocks backup and reports only bounded metadata', async () => {
+  let backupStarted = false;
+  const rawFinding = {
+    kind: 'DATABASE_PASSWORD_URI',
+    file: '../scripts/private\nname.test.mjs',
+    objectId: 'a'.repeat(40),
+    location: 'history',
+    matchedValue: 'must-never-be-reported',
+    context: 'must-never-be-reported',
+  };
+  let captured;
+  await assert.rejects(executeAutomatedBackup({
+    repo: join(tmpdir(), 'fixture-repository'),
+    env: automationEnvironment({ RUNNER_TEMP: tmpdir() }),
+    dependencies: {
+      scanTracked: async () => ({ state: 'POTENTIAL_SECRET_EXPOSURE', findings: [rawFinding] }),
+      runBackup: async () => { backupStarted = true; },
+    },
+  }), (error) => {
+    captured = error.report;
+    return error.code === 'SOURCE_SECURITY_SCAN_NOT_PASS';
+  });
+  assert.equal(backupStarted, false);
+  assert.deepEqual(captured.securityDiagnostic, {
+    state: 'POTENTIAL_SECRET_EXPOSURE',
+    total: 1,
+    truncated: false,
+    findings: [{ kind: 'DATABASE_PASSWORD_URI', file: '__/scripts/private_name.test.mjs', object: 'aaaaaaaaaaaa', location: 'history' }],
+  });
+  const summary = renderStepSummary(captured);
+  const diagnostic = formatSecurityScanDiagnostic(captured.securityDiagnostic);
+  for (const output of [summary, diagnostic]) {
+    assert.match(output, /DATABASE_PASSWORD_URI/);
+    assert.match(output, /__\/scripts\/private_name\.test\.mjs/);
+    assert.match(output, /aaaaaaaaaaaa/);
+    assert.match(output, /history/);
+    assert.doesNotMatch(output, /must-never-be-reported|matchedValue|context/);
   }
 });
 
@@ -1203,11 +1245,16 @@ test('failure reporting and executable logs expose only bounded status codes', a
   assert.doesNotMatch(formatted, /Bearer|private|upload_id|responseBody|access_token|serviceAccount/i);
   const report = initialReport(new Date('2026-09-21T12:00:00Z'));
   report.driveDiagnostic = diagnostic;
+  report.securityDiagnostic = safeSecurityScanDiagnostic({
+    state: 'POTENTIAL_SECRET_EXPOSURE',
+    findings: [{ kind: 'GITHUB_TOKEN', file: 'scripts/fixture.mjs', objectId: 'b'.repeat(40), location: 'current', value: 'private-token' }],
+  });
   const summary = renderStepSummary(report);
   for (const expected of [
     'Drive upload phase: CHUNK_UPLOAD', 'Drive HTTP status: 503', 'Drive retry attempt: 2',
     'Drive offset: 262144', 'Drive bytes total: 1048576', 'Shared Drive detected: YES',
-    'canAddChildren: YES', 'NEEDS_OWNER_ACTION: NONE',
+    'canAddChildren: YES', 'NEEDS_OWNER_ACTION: NONE', 'Security scan: POTENTIAL_SECRET_EXPOSURE',
+    'Security findings: 1', 'kind=GITHUB_TOKEN file=scripts/fixture.mjs object=bbbbbbbbbbbb location=current',
   ]) assert.match(summary, new RegExp(expected));
   assert.doesNotMatch(summary, /Bearer|private-token|upload_id|private-provider-body/);
   const entrypoint = await readRepo('scripts/backup/automated-backup.mjs');
