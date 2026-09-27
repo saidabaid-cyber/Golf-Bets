@@ -38,7 +38,7 @@ export function MoreHub({ hasActiveRound, onOpenCourses, onOpenEquipment, onOpen
   const tools = [
     { icon: "course" as const, title: "Campos", copy: "Busca campos, tees y datos guardados.", action: onOpenCourses },
     { icon: "bag" as const, title: "Mi Bolsa", copy: "Bastones, varillas y bola actual.", action: onOpenEquipment },
-    { icon: "hcp" as const, title: "Handicap / GHIN", copy: "Índice Backyard. GHIN oficial: próximamente.", action: onOpenHandicap },
+    { icon: "hcp" as const, title: "Handicap / GHIN", copy: "Backyard Index y consulta GHIN read-only cuando está autorizada.", action: onOpenHandicap },
     { icon: "fit" as const, title: "Fitting", copy: "Ball Fit y Launch Monitor, desde Equipo.", action: onOpenFitting },
     { icon: "gps" as const, title: "GPS / Hole Map", copy: hasActiveRound ? "Abre la ronda activa y consulta el hoyo." : "Disponible durante una ronda cuando hay datos.", action: onOpenGps },
     { icon: "rules" as const, title: "Reglas de golf", copy: "Consulta reglas y criterios del juego.", action: onOpenRules },

@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   clearDevicePermissionPreferences,
+  declineInitialNotifications,
   devicePermissionsStorageKey,
   disableLocationForApp,
   emptyDevicePermissionPreferences,
   finishInitialDevicePermissions,
   NEARBY_LOCATION_CACHE_TTL_MS,
   readDevicePermissionPreferences,
+  processPendingNotificationIntent,
   refreshDevicePermissionStateWithoutPrompt,
   resolveAuthorizedNearbyLocation,
   requestInitialLocation,
@@ -86,6 +88,8 @@ test("notification permission default requests once and persists the real grante
   });
   assert.equal(prompts, 1);
   assert.equal(saved.notifications, "granted");
+  assert.equal(saved.notificationPreference, "enabled");
+  assert.equal(saved.pushSubscription, "not_registered");
   assert.equal(saved.notificationsEnabled, true);
 });
 
@@ -99,15 +103,46 @@ test("notification permission granted or denied is never requested repeatedly", 
     });
     assert.equal(prompts, 0);
     assert.equal(saved.notifications, permission);
-    assert.equal(saved.notificationsEnabled, permission === "granted");
+    assert.equal(saved.notificationPreference, "enabled");
+    assert.equal(saved.notificationsEnabled, true);
   }
 });
 
-test("notification API unavailable is explicit and never fakes a grant", async () => {
+test("notification API unavailable stores positive intent without faking permission or push registration", async () => {
   const storage = memoryStorage();
   const saved = await requestInitialNotifications(storage, "user-a", undefined);
   assert.equal(saved.notifications, "unavailable");
+  assert.equal(saved.notificationPreference, "enabled");
+  assert.equal(saved.notificationsEnabled, true);
+  assert.equal(saved.notificationPromptAttemptedAt, null);
+  assert.equal(saved.pushSubscription, "not_registered");
+});
+
+test("pending notification intent requests once on the first later compatible surface", async () => {
+  const storage = memoryStorage();
+  await requestInitialNotifications(storage, "user-a", undefined);
+  let prompts = 0;
+  const api = {
+    permission: "default" as NotificationPermission,
+    async requestPermission() { prompts += 1; return "granted" as NotificationPermission; },
+  };
+  const processed = await processPendingNotificationIntent(storage, "user-a", api);
+  assert.equal(prompts, 1);
+  assert.equal(processed.notifications, "granted");
+  assert.ok(processed.notificationPromptAttemptedAt);
+  assert.equal(processed.pushSubscription, "not_registered");
+  await processPendingNotificationIntent(storage, "user-a", api);
+  assert.equal(prompts, 1);
+});
+
+test("Ahora no stores a negative preference without changing device permission", () => {
+  const storage = memoryStorage();
+  saveDevicePermissionPreferences(storage, { ...emptyDevicePermissionPreferences("user-a"), notifications: "prompt" });
+  const saved = declineInitialNotifications(storage, "user-a");
+  assert.equal(saved.notificationPreference, "disabled");
+  assert.equal(saved.notifications, "prompt");
   assert.equal(saved.notificationsEnabled, false);
+  assert.equal(saved.pushSubscription, "not_registered");
 });
 
 test("re-entering permissions refreshes real device state without opening a prompt", async () => {

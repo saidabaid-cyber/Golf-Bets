@@ -223,14 +223,12 @@ test("group bet templates retain advanced configuration instead of flattened num
   assert.match(editor, /step=\{0\.01\}/);
 });
 
-test("GHIN is an explicit disabled external provider foundation", () => {
+test("GHIN keeps a protected read-only provider surface without future placeholder claims", () => {
   const flags = readFileSync("features/feature-flags/registry.ts", "utf8");
   const placeholder = readFileSync("app/components/ghin-placeholder.tsx", "utf8");
   assert.match(flags, /ghin_integration/);
-  assert.match(placeholder, /VINCULAR GHIN/);
-  assert.match(placeholder, /PRÓXIMAMENTE/);
-  assert.match(placeholder, /sin scraping/);
-  assert.match(placeholder, /ModalShell/);
+  assert.match(placeholder, /cuenta QA autorizada/);
+  assert.doesNotMatch(placeholder, /PRÓXIMAMENTE|ModalShell|disabled/);
 });
 
 test("ball editor keeps an explicitly selected generation after its paginated result page changes", () => {

@@ -4,6 +4,8 @@ export const NEARBY_LOCATION_CACHE_TTL_MS = 5 * 60_000;
 export type DevicePermissionStatus = "unknown" | "prompt" | "granted" | "denied" | "timeout" | "unavailable";
 export type LocationPermissionUiState = "checking" | "prompt" | "granted" | "denied" | "query-unsupported" | "geolocation-unavailable" | "requesting" | "timeout" | "unavailable";
 export type NotificationPermissionUiState = "checking" | "default" | "granted" | "denied" | "unavailable" | "requesting";
+export type NotificationPreference = "undecided" | "enabled" | "disabled";
+export type PushSubscriptionState = "not_registered" | "registered";
 
 export type DevicePermissionContext = { ios: boolean; standalone: boolean; notificationApi: boolean };
 export type PermissionPresentation = { status: string; detail?: string; action: "request" | "retry" | "help" | null; actionLabel?: string };
@@ -14,6 +16,12 @@ export type DevicePermissionPreferences = {
   location: DevicePermissionStatus;
   notifications: DevicePermissionStatus;
   locationEnabled: boolean;
+  /** Product preference. It never proves that the OS granted permission. */
+  notificationPreference: NotificationPreference;
+  /** Registration is a separate delivery concern and is never inferred here. */
+  pushSubscription: PushSubscriptionState;
+  notificationPromptAttemptedAt: string | null;
+  /** Backwards-compatible mirror of notificationPreference === "enabled". */
   notificationsEnabled: boolean;
   coarseLocation?: { latitude: number; longitude: number; accuracyMeters?: number; capturedAt: string };
   resolvedAt: string | null;
@@ -54,18 +62,30 @@ export function locationPermissionPresentation(state: LocationPermissionUiState)
 }
 
 export function notificationPermissionPresentation(state: NotificationPermissionUiState, context: DevicePermissionContext, pushBackendConfigured = false): PermissionPresentation {
-  if (!context.notificationApi || state === "unavailable") return { status: "Las notificaciones no están disponibles en este navegador o contexto.", detail: "Estarán disponibles cuando uses The Backyard en un entorno compatible. Puedes continuar sin este permiso.", action: "help", actionLabel: "Más información" };
+  if (!context.notificationApi || state === "unavailable") return { status: "Notificaciones pendientes de activar", detail: "Conservaremos tu elección para la app de The Backyard.", action: null };
   if (state === "checking") return { status: "Consultando permiso…", action: null };
   if (state === "requesting") return { status: "Solicitando permiso…", action: null };
   if (state === "default") return { status: "Las notificaciones todavía no se han solicitado en este dispositivo.", detail: "El sistema mostrará su aviso al tocar el botón.", action: "request", actionLabel: "Permitir notificaciones" };
-  if (state === "granted") return { status: "✓ Permitido en este dispositivo", detail: pushBackendConfigured ? "El permiso está listo; tus preferencias deciden qué avisos recibir." : "Este permiso no registra por sí solo una suscripción push.", action: "help", actionLabel: "Cómo cambiar este permiso" };
+  if (state === "granted") return { status: "✓ Permitido en este dispositivo", detail: pushBackendConfigured ? "Tus preferencias deciden qué avisos recibir." : "Puedes elegir qué avisos recibir desde Configuración.", action: "help", actionLabel: "Cómo cambiar este permiso" };
   return { status: "No permitido", detail: "Puedes cambiarlo después desde los ajustes de The Backyard en tu dispositivo o navegador.", action: "help", actionLabel: "Cómo habilitarlas" };
 }
 
 export function devicePermissionsStorageKey(userId: string) { return `the-backyard:device-permissions:v${DEVICE_PERMISSIONS_VERSION}:${encodeURIComponent(userId)}`; }
 
 export function emptyDevicePermissionPreferences(userId: string, at = now()): DevicePermissionPreferences {
-  return { version: DEVICE_PERMISSIONS_VERSION, userId, location: "unknown", notifications: "unknown", locationEnabled: false, notificationsEnabled: false, resolvedAt: null, updatedAt: at };
+  return {
+    version: DEVICE_PERMISSIONS_VERSION,
+    userId,
+    location: "unknown",
+    notifications: "unknown",
+    locationEnabled: false,
+    notificationPreference: "undecided",
+    pushSubscription: "not_registered",
+    notificationPromptAttemptedAt: null,
+    notificationsEnabled: false,
+    resolvedAt: null,
+    updatedAt: at,
+  };
 }
 
 export function normalizeDevicePermissionPreferences(value: unknown, userId: string): DevicePermissionPreferences {
@@ -73,6 +93,13 @@ export function normalizeDevicePermissionPreferences(value: unknown, userId: str
   if (!value || typeof value !== "object") return fallback;
   const candidate = value as Partial<DevicePermissionPreferences>;
   const valid = (status: unknown): status is DevicePermissionStatus => ["unknown", "prompt", "granted", "denied", "timeout", "unavailable"].includes(String(status));
+  const notificationPreference: NotificationPreference = candidate.notificationPreference === "enabled" || candidate.notificationPreference === "disabled" || candidate.notificationPreference === "undecided"
+    ? candidate.notificationPreference
+    : candidate.notificationsEnabled === true
+      ? "enabled"
+      : candidate.resolvedAt
+        ? "disabled"
+        : "undecided";
   const coarse = candidate.coarseLocation;
   const coarseLocation = coarse && Number.isFinite(coarse.latitude) && Number.isFinite(coarse.longitude) && Math.abs(coarse.latitude) <= 90 && Math.abs(coarse.longitude) <= 180 && typeof coarse.capturedAt === "string" && Number.isFinite(Date.parse(coarse.capturedAt))
     ? { latitude: coordinate(coarse.latitude), longitude: coordinate(coarse.longitude), ...(accuracyMeters(coarse.accuracyMeters) === undefined ? {} : { accuracyMeters: accuracyMeters(coarse.accuracyMeters) }), capturedAt: coarse.capturedAt }
@@ -83,7 +110,10 @@ export function normalizeDevicePermissionPreferences(value: unknown, userId: str
     location: valid(candidate.location) ? candidate.location : "unknown",
     notifications: valid(candidate.notifications) ? candidate.notifications : "unknown",
     locationEnabled: candidate.locationEnabled === true,
-    notificationsEnabled: candidate.notificationsEnabled === true,
+    notificationPreference,
+    pushSubscription: candidate.pushSubscription === "registered" ? "registered" : "not_registered",
+    notificationPromptAttemptedAt: typeof candidate.notificationPromptAttemptedAt === "string" && Number.isFinite(Date.parse(candidate.notificationPromptAttemptedAt)) ? candidate.notificationPromptAttemptedAt : null,
+    notificationsEnabled: notificationPreference === "enabled",
     ...(coarseLocation ? { coarseLocation } : {}),
     resolvedAt: typeof candidate.resolvedAt === "string" && Number.isFinite(Date.parse(candidate.resolvedAt)) ? candidate.resolvedAt : null,
     updatedAt: typeof candidate.updatedAt === "string" && Number.isFinite(Date.parse(candidate.updatedAt)) ? candidate.updatedAt : fallback.updatedAt,
@@ -134,7 +164,17 @@ export function enableLocationForApp(storage: ReadableStorage & WritableStorage,
 
 export function disableNotificationsForApp(storage: ReadableStorage & WritableStorage, userId: string) {
   const current = readDevicePermissionPreferences(storage, userId);
-  return saveDevicePermissionPreferences(storage, { ...current, notificationsEnabled: false, updatedAt: now() });
+  return saveDevicePermissionPreferences(storage, { ...current, notificationPreference: "disabled", notificationsEnabled: false, updatedAt: now() });
+}
+
+export function declineInitialNotifications(storage: ReadableStorage & WritableStorage, userId: string) {
+  const current = readDevicePermissionPreferences(storage, userId);
+  return saveDevicePermissionPreferences(storage, {
+    ...current,
+    notificationPreference: "disabled",
+    notificationsEnabled: false,
+    updatedAt: now(),
+  });
 }
 
 export async function queryBrowserPermissionState(kind: "geolocation" | "notifications", navigatorValue: Navigator = navigator): Promise<DevicePermissionStatus> {
@@ -196,13 +236,45 @@ function availableNotificationApi(): NotificationPermissionApi | undefined {
 
 export async function requestInitialNotifications(storage: ReadableStorage & WritableStorage, userId: string, notificationApi: NotificationPermissionApi | undefined = availableNotificationApi()) {
   const current = readDevicePermissionPreferences(storage, userId);
-  if (!notificationApi || typeof notificationApi.requestPermission !== "function") return saveDevicePermissionPreferences(storage, { ...current, notifications: "unavailable", notificationsEnabled: false, updatedAt: now() });
+  const requestedAt = now();
+  if (!notificationApi || typeof notificationApi.requestPermission !== "function") return saveDevicePermissionPreferences(storage, {
+    ...current,
+    notifications: "unavailable",
+    notificationPreference: "enabled",
+    notificationsEnabled: true,
+    updatedAt: requestedAt,
+  });
   let permission = notificationApi.permission;
   if (permission === "default") {
     try { permission = await notificationApi.requestPermission(); }
-    catch { return saveDevicePermissionPreferences(storage, { ...current, notifications: "unavailable", notificationsEnabled: false, updatedAt: now() }); }
+    catch { return saveDevicePermissionPreferences(storage, {
+      ...current,
+      notifications: "unavailable",
+      notificationPreference: "enabled",
+      notificationPromptAttemptedAt: requestedAt,
+      notificationsEnabled: true,
+      updatedAt: now(),
+    }); }
   }
-  return saveDevicePermissionPreferences(storage, { ...current, notifications: permission === "default" ? "prompt" : permission, notificationsEnabled: permission === "granted", updatedAt: now() });
+  return saveDevicePermissionPreferences(storage, {
+    ...current,
+    notifications: permission === "default" ? "prompt" : permission,
+    notificationPreference: "enabled",
+    notificationPromptAttemptedAt: current.notificationPromptAttemptedAt || (notificationApi.permission === "default" ? requestedAt : null),
+    notificationsEnabled: true,
+    updatedAt: now(),
+  });
+}
+
+/** A positive intent captured on an unsupported web surface is offered to the
+ * first later compatible surface exactly once. Permission and subscription
+ * remain authoritative, independent states. */
+export async function processPendingNotificationIntent(storage: ReadableStorage & WritableStorage, userId: string, notificationApi: NotificationPermissionApi | undefined = availableNotificationApi()) {
+  const current = readDevicePermissionPreferences(storage, userId);
+  if (current.notificationPreference !== "enabled" || current.notificationPromptAttemptedAt
+    || current.notifications === "granted" || current.notifications === "denied"
+    || !notificationApi || typeof notificationApi.requestPermission !== "function") return current;
+  return requestInitialNotifications(storage, userId, notificationApi);
 }
 
 export async function refreshDevicePermissionStateWithoutPrompt(storage: ReadableStorage & WritableStorage, userId: string, navigatorValue: Navigator = navigator, notificationApi: NotificationPermissionApi | undefined = availableNotificationApi()) {
@@ -212,7 +284,7 @@ export async function refreshDevicePermissionStateWithoutPrompt(storage: Readabl
   const nextLocation = location === "unavailable" ? current.location : location;
   const nextNotifications = notificationPermission;
   const locationDisabled = nextLocation === "denied";
-  const next = { ...current, location: nextLocation, notifications: nextNotifications, locationEnabled: locationDisabled ? false : current.locationEnabled, notificationsEnabled: current.notificationsEnabled && nextNotifications === "granted", updatedAt: now() };
+  const next = { ...current, location: nextLocation, notifications: nextNotifications, locationEnabled: locationDisabled ? false : current.locationEnabled, notificationsEnabled: current.notificationPreference === "enabled", updatedAt: now() };
   if (!locationDisabled) return saveDevicePermissionPreferences(storage, next);
   const withoutCoordinates = { ...next };
   delete withoutCoordinates.coarseLocation;

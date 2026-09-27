@@ -81,6 +81,7 @@ test("feature registry has every required unique flag and external defaults fail
   assert.equal(preview.social_v2, true);
   assert.equal(preview.push_notifications, false);
   assert.equal(preview.wearable_v1, false);
+  assert.equal(resolvePhase2FeatureFlags("preview", { ghin_integration: true }).ghin_integration, true);
   const production = resolvePhase2FeatureFlags("production");
   assert.equal(Object.values(production).some(Boolean), false);
   assert.equal(resolvePhase2FeatureFlags("production", { ghin_integration: true }).ghin_integration, false);

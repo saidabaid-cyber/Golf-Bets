@@ -1,6 +1,7 @@
 "use client";
 
 import type { GhinReadOnlyProfileController } from "./use-ghin-read-only-profile";
+import { linkGhinReadOnly } from "../../lib/ghin/profile-link";
 import styles from "./ghin-read-only-panel.module.css";
 
 function value(value: string | number | null) {
@@ -19,19 +20,18 @@ export function GhinReadOnlyPanel({
   const profile = control.profile;
 
   async function link() {
-    const refreshed = await control.refresh();
-    if (refreshed) await onUseGhin();
+    await linkGhinReadOnly(control, onUseGhin);
   }
 
   if (!control.ready && !profile) return <p role="status">Consultando vínculo GHIN…</p>;
   return <div className={styles.root}>
     {!profile ? <>
-      <p className={styles.note}>Acceso read-only limitado a la cuenta QA autorizada.</p>
+      <p className={styles.note}>La consulta disponible es de sólo lectura y está limitada a la cuenta QA autorizada.</p>
       <button type="button" className="secondary" disabled={control.refreshing} onClick={() => void link()}>
-        {control.refreshing ? "VINCULANDO…" : "VINCULAR GHIN QA"}
+        {control.refreshing ? "VINCULANDO…" : "VINCULAR GHIN"}
       </button>
     </> : <>
-      <p className={styles.badge}>{sourceActive ? "GHIN VINCULADO" : "DATOS CONSULTADOS DESDE GHIN"}</p>
+      <p className={styles.badge}>{sourceActive && profile.associationStatus !== "DISCONNECTED" ? "✓ GHIN VINCULADO" : "DATOS CONSULTADOS DESDE GHIN"}</p>
       <dl className={styles.details}>
         <div><dt>GHIN</dt><dd>{profile.ghinNumber}</dd></div>
         <div><dt>Nombre</dt><dd>{profile.playerName}</dd></div>

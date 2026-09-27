@@ -3,11 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import {
   devicePermissionContext,
+  declineInitialNotifications,
   disableLocationForApp,
   disableNotificationsForApp,
   enableLocationForApp,
   emptyDevicePermissionPreferences,
   finishInitialDevicePermissions,
+  processPendingNotificationIntent,
   readDevicePermissionPreferences,
   refreshDevicePermissionStateWithoutPrompt,
   requestInitialLocation,
@@ -25,13 +27,11 @@ function locationStatusLabel(status: DevicePermissionPreferences["location"]) {
   return "Sin configurar";
 }
 
-function notificationStatusLabel(status: DevicePermissionPreferences["notifications"], available: boolean | null) {
-  if (available === null) return "Consultando permiso…";
-  if (!available || status === "unavailable") return "No disponible en este navegador";
-  if (status === "granted") return "✓ Permitido en este dispositivo";
-  if (status === "denied") return "No permitido";
-  if (status === "prompt") return "Todavía no decidido";
-  return "Sin solicitar";
+function notificationStatusLabel(value: DevicePermissionPreferences, available: boolean | null) {
+  if (value.notifications === "granted") return "✓ Notificaciones activadas";
+  if (value.notifications === "denied") return "Notificaciones no activadas";
+  if (value.notificationPreference === "enabled" && available === false) return "Solicitud guardada";
+  return available === null ? "Preparando…" : "Opcionales";
 }
 
 function currentNotificationApi(): NotificationPermissionApi | undefined {
@@ -51,13 +51,17 @@ export function InitialDevicePermissions({ userId, onContinue }: { userId: strin
   const [value, setValue] = useState(() => typeof window === "undefined" ? emptyDevicePermissionPreferences(userId) : readDevicePermissionPreferences(localStorage, userId));
   const [busy, setBusy] = useState<"location" | "notifications" | null>(null);
   const [notificationAvailable, setNotificationAvailable] = useState<boolean | null>(null);
+  const [notificationMessage, setNotificationMessage] = useState("");
   const locationController = useRef<AbortController | null>(null);
   useEffect(() => {
     let active = true;
     const refresh = () => {
       const api = currentNotificationApi();
       setNotificationAvailable(Boolean(api));
-      void refreshDevicePermissionStateWithoutPrompt(localStorage, userId, navigator, api).then((next) => { if (active) setValue(next); }).catch(() => undefined);
+      void refreshDevicePermissionStateWithoutPrompt(localStorage, userId, navigator, api)
+        .then((next) => api ? processPendingNotificationIntent(localStorage, userId, api) : next)
+        .then((next) => { if (active) setValue(next); })
+        .catch(() => undefined);
     };
     refresh();
     window.addEventListener("focus", refresh);
@@ -81,15 +85,20 @@ export function InitialDevicePermissions({ userId, onContinue }: { userId: strin
   async function notifications() {
     const api = currentNotificationApi();
     setNotificationAvailable(Boolean(api));
+    setNotificationMessage("");
     setBusy("notifications");
-    try { setValue(await requestInitialNotifications(localStorage, userId, api)); }
+    try {
+      const next = await requestInitialNotifications(localStorage, userId, api);
+      setValue(next);
+      if (!api) setNotificationMessage("Perfecto. Las activaremos cuando uses la app de The Backyard.");
+    }
     finally { setBusy(null); }
   }
   return <div className="devicePermissionChoices">
     <article><div><b>Ubicación</b><span aria-live="polite">{locationStatusLabel(value.location)}</span><small>Usaremos tu ubicación para mostrarte y ordenar campos cercanos, facilitar la selección del campo donde juegas y habilitar funciones basadas en ubicación durante tus rondas cuando correspondan. Es opcional y tú decides cuándo compartirla.</small></div>{value.location === "granted" ? <strong aria-label="Ubicación permitida">✓</strong> : <button type="button" className="secondary" disabled={busy !== null} onClick={() => void location()}>{busy === "location" ? "Solicitando…" : value.location === "denied" ? "Volver a comprobar" : "Permitir ubicación"}</button>}</article>
-    <article><div><b>Notificaciones</b><span aria-live="polite">{notificationStatusLabel(value.notifications, notificationAvailable)}</span><small>Actívalas para recibir mensajes de otros jugadores, invitaciones a rondas y grupos, avisos de tus partidas, recordatorios y otras actualizaciones importantes de The Backyard.</small><small>El permiso del dispositivo no registra por sí solo una suscripción push ni cambia tus preferencias internas de avisos.</small>{value.notifications === "denied" && <small>Puedes cambiar este permiso después desde los ajustes de The Backyard en tu dispositivo o navegador.</small>}{notificationAvailable === false && <small>Estarán disponibles cuando uses The Backyard en un navegador o app compatible. Puedes continuar normalmente.</small>}</div>{notificationAvailable && value.notifications === "granted" ? <strong aria-label="Notificaciones permitidas">✓</strong> : notificationAvailable && value.notifications !== "denied" ? <button type="button" className="secondary" disabled={busy !== null} onClick={() => void notifications()}>{busy === "notifications" ? "Solicitando…" : "Permitir notificaciones"}</button> : null}</article>
+    <article><div><b>Notificaciones</b><span aria-live="polite">{notificationStatusLabel(value, notificationAvailable)}</span><small>Recibe mensajes de otros jugadores, invitaciones a rondas y grupos, avisos de tus partidas, recordatorios y actualizaciones importantes de The Backyard.</small>{notificationMessage && <small role="status">{notificationMessage}</small>}</div>{value.notifications === "granted" ? <strong aria-label="Notificaciones activadas">✓</strong> : value.notifications === "denied" ? <strong>Notificaciones no activadas</strong> : value.notificationPreference === "enabled" && notificationAvailable === false ? <strong>✓ Solicitud guardada</strong> : <button type="button" className="secondary" disabled={busy !== null} onClick={() => void notifications()}>{busy === "notifications" ? "Activando…" : "ACTIVAR NOTIFICACIONES"}</button>}</article>
     <button type="button" className="primary big" disabled={busy !== null} onClick={() => { setValue(finishInitialDevicePermissions(localStorage, userId)); onContinue(); }}>Continuar</button>
-    <button type="button" className="textButton" disabled={busy !== null} onClick={() => { setValue(finishInitialDevicePermissions(localStorage, userId)); onContinue(); }}>Ahora no</button>
+    <button type="button" className="textButton" disabled={busy !== null} onClick={() => { declineInitialNotifications(localStorage, userId); setValue(finishInitialDevicePermissions(localStorage, userId)); onContinue(); }}>AHORA NO</button>
   </div>;
 }
 
@@ -113,11 +122,11 @@ export function DevicePermissionSettings({ userId }: { userId: string }) {
     finally { if (!controller.signal.aborted) setBusy(false); }
   }
   return <section className="card accountCompactCard"><h2>Permisos del dispositivo</h2>
-    <div className="accountCompactRows"><div><span>Ubicación</span><b>{value.locationEnabled ? locationStatusLabel(value.location) : "Desactivada en The Backyard"}</b></div><div><span>Notificaciones</span><b>{value.notificationsEnabled ? notificationStatusLabel(value.notifications, true) : "Desactivadas en The Backyard"}</b></div></div>
+    <div className="accountCompactRows"><div><span>Ubicación</span><b>{value.locationEnabled ? locationStatusLabel(value.location) : "Desactivada en The Backyard"}</b></div><div><span>Notificaciones</span><b>{value.notificationPreference === "enabled" ? notificationStatusLabel(value, true) : "Desactivadas en The Backyard"}</b></div></div>
     <p className="hint">Aquí revisas o desactivas el uso dentro de The Backyard. Si el sistema bloqueó un permiso, debes cambiarlo desde los permisos de la app o del dispositivo.</p>
     <div className="accountInlineActions">{value.locationEnabled
       ? <button type="button" className="secondary" onClick={() => setValue(disableLocationForApp(localStorage, userId))}>Desactivar ubicación</button>
       : <button type="button" className="secondary" disabled={busy} onClick={() => void enableLocation()}>{busy ? "Comprobando…" : value.location === "denied" ? "Volver a comprobar ubicación" : "Volver a permitir ubicación"}</button>}
-      {value.notificationsEnabled && <button type="button" className="secondary" onClick={() => setValue(disableNotificationsForApp(localStorage, userId))}>Desactivar notificaciones</button>}</div>
+      {value.notificationPreference === "enabled" && <button type="button" className="secondary" onClick={() => setValue(disableNotificationsForApp(localStorage, userId))}>Desactivar notificaciones</button>}</div>
   </section>;
 }

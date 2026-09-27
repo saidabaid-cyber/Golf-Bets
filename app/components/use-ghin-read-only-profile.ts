@@ -131,6 +131,16 @@ export function useGhinReadOnlyProfile(accessToken: string | null, authorized: b
     }
   }, [accessToken, enabled]);
 
-  const { available, ...publicState } = state;
-  return { enabled: enabled && available, ...publicState, refresh, loadScores, retry: load };
+  return {
+    enabled,
+    ready: state.ready,
+    refreshing: state.refreshing,
+    scoresLoading: state.scoresLoading,
+    profile: state.profile,
+    scores: state.scores,
+    error: state.error,
+    refresh,
+    loadScores,
+    retry: load,
+  };
 }

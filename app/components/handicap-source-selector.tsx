@@ -10,7 +10,7 @@ export function HandicapSourceChoices({ control, authenticated, ghinControl }: {
   const activated = control.preference?.enabled === true && control.preference.handicapSource !== "GHIN";
   return <section className={styles.root} aria-label="Handicap / Índice">
     <h3>HANDICAP / ÍNDICE</h3>
-    <div className={styles.choice}><strong>VINCULAR GHIN</strong><p>Usa los datos read-only consultados desde GHIN.</p>{ghinControl?.enabled
+    <div className={styles.choice}><strong>VINCULAR GHIN</strong><p>Conecta tu cuenta GHIN para consultar tu Handicap Index y la información disponible de tu perfil.</p>{ghinControl?.enabled
       ? <GhinReadOnlyPanel control={ghinControl} sourceActive={control.preference?.handicapSource === "GHIN"} onUseGhin={control.selectGhin} />
       : <GhinPlaceholder />}</div>
     <div className={styles.choice}><strong>USAR BACKYARD INDEX</strong><p>Si no tienes GHIN, The Backyard puede calcular tu índice con tus rondas elegibles.</p>
@@ -25,7 +25,7 @@ export function HandicapSourceChoices({ control, authenticated, ghinControl }: {
 
 /** Used before the app's root Index controller mounts; both use one owner-keyed
  * server preference, so onboarding activation survives reload/new devices. */
-export function HandicapSourceSelector({ userId, authenticated }: { userId: string; authenticated: boolean }) {
+export function HandicapSourceSelector({ userId, authenticated, ghinControl }: { userId: string; authenticated: boolean; ghinControl?: GhinReadOnlyProfileController }) {
   const control = useBackyardIndexPreference(userId, authenticated);
-  return <HandicapSourceChoices control={control} authenticated={authenticated} />;
+  return <HandicapSourceChoices control={control} authenticated={authenticated} ghinControl={ghinControl} />;
 }

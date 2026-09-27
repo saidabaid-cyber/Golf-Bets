@@ -35,11 +35,11 @@ test("matriz de ubicación nunca ofrece un CTA falso de administración", () => 
   }
 });
 
-test("un contexto sin Notifications API informa indisponibilidad sin instrucciones PWA", () => {
+test("un contexto sin Notifications API conserva una presentación simple y honesta", () => {
   const iphoneWeb = devicePermissionContext({ userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)", notificationApi: false });
   const unavailable = notificationPermissionPresentation("unavailable", iphoneWeb);
-  assert.match(unavailable.status, /no están disponibles/i);
-  assert.equal(unavailable.actionLabel, "Más información");
+  assert.match(unavailable.status, /pendientes de activar/i);
+  assert.equal(unavailable.actionLabel, undefined);
   assert.doesNotMatch(`${unavailable.status} ${unavailable.detail} ${unavailable.actionLabel}`, /instalar|pantalla de inicio/i);
 
   const iphoneBrowserWithExposedApi = devicePermissionContext({ userAgent: "iPhone", notificationApi: true });
@@ -48,23 +48,25 @@ test("un contexto sin Notifications API informa indisponibilidad sin instruccion
   const iphonePwa = devicePermissionContext({ userAgent: "iPhone", navigatorStandalone: true, notificationApi: true });
   assert.equal(notificationPermissionPresentation("default", iphonePwa).actionLabel, "Permitir notificaciones");
   assert.match(notificationPermissionPresentation("granted", iphonePwa).status, /Permitido en este dispositivo/);
-  assert.match(notificationPermissionPresentation("granted", iphonePwa).detail || "", /no registra.*suscripción push/i);
+  assert.doesNotMatch(notificationPermissionPresentation("granted", iphonePwa).detail || "", /suscripci[oó]n push|Web Push|PWA/i);
   assert.match(notificationPermissionPresentation("denied", iphonePwa).status, /No permitido/);
   assert.equal(notificationPermissionPresentation("denied", iphonePwa).actionLabel, "Cómo habilitarlas");
 });
 
-test("onboarding conecta el tap nativo, deja continuar y explica estados reales", () => {
+test("onboarding conecta el tap nativo, guarda intención y evita texto técnico", () => {
   const source = readFileSync("app/components/device-permission-settings.tsx", "utf8");
   assert.match(source, /onClick=\{\(\) => void notifications\(\)\}/);
   assert.match(source, /requestInitialNotifications\(localStorage, userId, api\)/);
-  assert.match(source, /notificationAvailable && value\.notifications !== "denied"/);
-  assert.match(source, /✓ Permitido en este dispositivo/);
-  assert.match(source, /No permitido/);
-  assert.match(source, /Estarán disponibles cuando uses The Backyard en un navegador o app compatible/);
+  assert.match(source, /ACTIVAR NOTIFICACIONES/);
+  assert.match(source, /Perfecto\. Las activaremos cuando uses la app de The Backyard\./);
+  assert.match(source, /processPendingNotificationIntent/);
+  assert.match(source, /Notificaciones no activadas/);
+  assert.doesNotMatch(source, /Web Push|PWA|suscripci[oó]n push|No disponible en este navegador/);
   assert.match(source, /mostrarte y ordenar campos cercanos/);
   assert.match(source, /invitaciones a rondas y grupos/);
   assert.equal((source.match(/finishInitialDevicePermissions\(localStorage, userId\)/g) || []).length, 2);
   assert.equal((source.match(/onContinue\(\)/g) || []).length, 2);
+  assert.match(source, /declineInitialNotifications\(localStorage, userId\)/);
 });
 
 test("componente dispara APIs nativas sólo desde CTAs explícitos y ofrece salida instructiva", () => {
@@ -108,6 +110,11 @@ test("Home Club usa modo de club sin selección de tee ni ratings", () => {
   const scorecardFetch = picker.indexOf("/api/courses/catalog?courseId", homeSelection);
   assert.ok(homeSelection >= 0 && homeSelection < homePersisted && homePersisted < homeReady && homeReady < scorecardFetch, "Home Club confirma persistencia antes de ready y sale antes del fetch de tees");
   assert.match(picker, /selectedClubCourses\.length>1&&<label>Recorrido/);
+  assert.match(picker, /setChoosingHomeCourse\(false\)/);
+  assert.match(picker, /!choosingHomeCourse&&selectionLabel&&club&&chosen/);
+  assert.match(picker, />Cambiar campo<\/button>/);
+  assert.match(picker, /setChoosingHomeCourse\(true\)/);
+  assert.doesNotMatch(picker, /slice\(0,\s*3\)/);
   assert.doesNotMatch(picker, /Salida \/ tee inicial/);
   assert.doesNotMatch(picker, /Ratings y tees por jugador/);
   assert.match(profile, /<CatalogCoursePicker[^>]*purpose="home-club"/);

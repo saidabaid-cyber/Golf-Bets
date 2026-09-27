@@ -15,8 +15,13 @@ export function CatalogCoursePicker({token,permissionOwnerId,onSelect,onSelectCl
   const nearby=useMemo(()=>location.status==='located'?nearestReviewedClubs(entries,location.point):[],[entries,location]);
   const locating=location.status==='loading';
   const [club,setClub]=useState<string|null>(selectedClubId||null),[chosen,setChosen]=useState(selectedCourseId),[selectingCourseId,setSelectingCourseId]=useState<string|null>(null),[retry,setRetry]=useState(0),[retryCourseId,setRetryCourseId]=useState<string|null>(null);
+  const [choosingHomeCourse,setChoosingHomeCourse]=useState(!(purpose==='home-club'&&selectedClubId&&selectedCourseId));
   const loadSequence=useRef(0);
   useEffect(()=>()=>locationController.current?.abort(),[permissionOwnerId]);
+  useEffect(()=>{
+    if(purpose!=='home-club'||!selectedClubId||!selectedCourseId)return;
+    setClub(selectedClubId);setChosen(selectedCourseId);setChoosingHomeCourse(false);
+  },[purpose,selectedClubId,selectedCourseId]);
   useEffect(()=>{const controller=new AbortController(); if(!token) return; setLoading(true);setError('');
     const timer=window.setTimeout(()=>{controller.abort();setLoading(false);setError('Se agotó la espera del catálogo. Puedes reintentar.');},15000);
     fetch('/api/courses/catalog',{headers:{Authorization:`Bearer ${token}`},signal:controller.signal,cache:'no-store'})
@@ -43,7 +48,7 @@ export function CatalogCoursePicker({token,permissionOwnerId,onSelect,onSelectCl
         const selected=entries.find(entry=>entry.id===id);if(!selected)throw Error('No encontramos ese recorrido en el catálogo.');
         if(!onSelectHomeCourse)throw Error('No pudimos guardar este Home Club. Reintenta.');
         await onSelectHomeCourse(homeCourseSelection(selected));
-        if(sequence===loadSequence.current)onSelectionReadyChange?.(true);
+        if(sequence===loadSequence.current){onSelectionReadyChange?.(true);setChoosingHomeCourse(false);}
         return;
       }
       const response=await fetch(`/api/courses/catalog?courseId=${encodeURIComponent(id)}`,{headers:{Authorization:`Bearer ${token}`},signal:AbortSignal.timeout(15000),cache:'no-store'});
@@ -68,6 +73,14 @@ export function CatalogCoursePicker({token,permissionOwnerId,onSelect,onSelectCl
       .catch(()=>{if(!controller.signal.aborted)setLocation({status:'unavailable'});});
   }
   const locationError=({disabled:'Ubicación desactivada en The Backyard. Puedes revisarla en Configuración → Privacidad y permisos o buscar manualmente.',prompt:'La ubicación todavía no está resuelta en este dispositivo. Revísala desde Privacidad y permisos; la búsqueda manual sigue disponible.',denied:'La ubicación está bloqueada en este dispositivo. Puedes revisar el permiso o buscar manualmente.',timeout:'La ubicación agotó el tiempo. Puedes reintentar o buscar manualmente.',unavailable:'No pudimos obtener la ubicación. La búsqueda manual sigue disponible.', 'query-unsupported':'Este navegador no permite consultar el permiso. Revísalo desde Privacidad y permisos o busca manualmente.','geolocation-unavailable':'Este dispositivo no ofrece ubicación. Puedes buscar manualmente.'} as Record<string,string>)[location.status];
+  const selectedNearbyClub=nearby.find(entry=>entry.clubId===club);
+  const selectedPlace=selectedEntry?[selectedEntry.city,selectedEntry.stateRegion].filter(Boolean).join(', '):selectedNearbyClub?[selectedNearbyClub.city,selectedNearbyClub.stateRegion].filter(Boolean).join(', '):'';
+  const selectedDistance=selectedNearbyClub?` · ${selectedNearbyClub.distanceKm.toFixed(1)} km`:'';
+  if(purpose==='home-club'&&!choosingHomeCourse&&selectionLabel&&club&&chosen)return <section className={styles.picker} aria-label="Catálogo de campos">
+    {showHeading&&<h3>Campo</h3>}
+    <div className={`${styles.club} ${styles.clubSelected}`} role="status"><b>{selectionLabel}</b>{selectedPlace&&<span>{selectedPlace}{selectedDistance}</span>}<em>✓ Seleccionado</em></div>
+    <button type="button" className="textButton" onClick={()=>{setChoosingHomeCourse(true);setError('');}}>Cambiar campo</button>
+  </section>;
   return <section className={styles.picker} aria-label="Catálogo de campos">
     {showHeading&&<h3>Campo</h3>}
     <button type="button" className={styles.locate} disabled={locating||!token} onClick={locate}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M12 21s7-6 7-12A7 7 0 0 0 5 9c0 6 7 12 7 12ZM15 9a3 3 0 1 1-6 0 3 3 0 0 1 6 0"/></svg>{locating?'Buscando ubicación…':'Campos cercanos'}</button>
@@ -84,7 +97,6 @@ export function CatalogCoursePicker({token,permissionOwnerId,onSelect,onSelectCl
     {error&&<p role="alert">{error} <button type="button" className="textButton" onClick={()=>retryCourseId?void selectCourse(retryCourseId):setRetry(n=>n+1)}>Reintentar</button></p>}
     {!token&&<p>Inicia sesión para consultar el catálogo en revisión.</p>}
     {club&&selectedClubCourses.length>1&&<label>Recorrido<select aria-label="Recorrido" value={chosen} onChange={e=>void selectCourse(e.target.value)}><option value="">Selecciona recorrido</option>{selectedClubCourses.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>}
-    {purpose==='home-club'&&selectionLabel&&<p role="status">✓ Seleccionado: {selectionLabel}</p>}
     {onRequest&&<button type="button" className={styles.request} onClick={onRequest}>¿No encuentras tu campo? Solicítalo ↗</button>}
   </section>;
 }

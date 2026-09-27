@@ -75,7 +75,7 @@ export const GOLF_PRIMARY_GOALS = [
 export type GolfPrimaryGoal = (typeof GOLF_PRIMARY_GOALS)[number] | "";
 export const MAX_BACKYARD_HANDICAP = 36;
 
-export const GHIN_LINK_STATUSES = ["NOT_CONNECTED", "SKIPPED", "COMING_SOON"] as const;
+export const GHIN_LINK_STATUSES = ["NOT_CONNECTED", "SKIPPED", "LINKED"] as const;
 export type GhinLinkStatus = (typeof GHIN_LINK_STATUSES)[number];
 
 export type BackyardProfileDetails = {
@@ -264,7 +264,7 @@ function profileDetails(candidate: Partial<BackyardProfile>, fallback?: Backyard
     primaryGoal: profileChoice(candidate.primaryGoal ?? (Array.isArray(candidate.primaryGoals) ? candidate.primaryGoals[0] : undefined), GOLF_PRIMARY_GOALS, fallback?.primaryGoal),
     targetHandicap: optionalProfileNumber(candidate.targetHandicap, fallback?.targetHandicap, -15, MAX_BACKYARD_HANDICAP),
     planId: normalizePlanId(candidate.planId ?? fallback?.planId),
-    ghinLinkStatus: candidate.ghinLinkStatus === "NOT_CONNECTED" || candidate.ghinLinkStatus === "SKIPPED" || candidate.ghinLinkStatus === "COMING_SOON"
+    ghinLinkStatus: candidate.ghinLinkStatus === "NOT_CONNECTED" || candidate.ghinLinkStatus === "SKIPPED" || candidate.ghinLinkStatus === "LINKED"
       ? candidate.ghinLinkStatus
       : fallback?.ghinLinkStatus || "NOT_CONNECTED",
     golfProfileUpdatedAt: profileTimestamp(candidate.golfProfileUpdatedAt, fallback?.golfProfileUpdatedAt),

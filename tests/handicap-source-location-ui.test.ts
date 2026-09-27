@@ -70,7 +70,8 @@ test("initial profile has no duplicated GHIN/Backyard selector and the canonical
   const golf = readFileSync("app/components/beta-onboarding-flow.tsx", "utf8").split('if (progress.step === "ghin")')[1].split('if (progress.step === "improvements")')[0];
   assert.match(golf, /<HandicapSourceSelector/);
   assert.match(golf, /defaultHandicap: profile\.defaultHandicap/);
-  assert.match(golf, /ghinLinkStatus: profile\.ghinLinkStatus \|\| "SKIPPED"/);
+  assert.match(golf, /ghinLinkStatus: linked \? "LINKED"/);
+  assert.match(golf, /ghinControl=\{ghinControl\}/);
 });
 
 test("canonical region selection validates immediately; changing country clears region", () => {
@@ -83,8 +84,8 @@ test("canonical region selection validates immediately; changing country clears 
 
 test("source selector activation handler, no false success after failed/pending cloud save", async () => {
   const changes: boolean[] = [];
-  const render = component("app/components/handicap-source-selector.tsx", "HandicapSourceChoices", { GhinPlaceholder: "ghin", styles: {} });
-  const control = { ready: true, saving: false, error: "", preference: null, change: async (value: boolean) => changes.push(value), retry: async () => {} };
+  const render = component("app/components/handicap-source-selector.tsx", "HandicapSourceChoices", { GhinPlaceholder: "ghin", GhinReadOnlyPanel: "ghin-live", styles: {} });
+  const control = { ready: true, saving: false, error: "", preference: null, change: async (value: boolean) => changes.push(value), selectGhin: async () => {}, retry: async () => {} };
   const tree = render({ authenticated: true, control });
   assert.match(text(tree), /VINCULAR GHIN/); assert.match(text(tree), /ACTIVAR BACKYARD INDEX/);
   await (nodes(tree).find((node) => node.type === "button")!.props.onClick as () => Promise<unknown>)(); assert.deepEqual(changes, [true]);

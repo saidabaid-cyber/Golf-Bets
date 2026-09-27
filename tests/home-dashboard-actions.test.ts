@@ -118,5 +118,5 @@ test("bottom navigation is exactly Inicio, Social, Más and Perfil", () => {
 
 test("Más is a real scalable tool container", () => {
   for (const label of ["Campos", "Mi Bolsa", "Handicap / GHIN", "Fitting", "GPS / Hole Map"]) assert.match(moreHub, new RegExp(label.replace("/", "\\/")));
-  assert.match(moreHub, /GHIN oficial: próximamente/);
+  assert.match(moreHub, /consulta GHIN read-only cuando está autorizada/);
 });

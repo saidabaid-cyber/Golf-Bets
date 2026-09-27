@@ -45,8 +45,8 @@ test("Perfil separa el golf de la configuración sensible de Cuenta", () => {
   assert.match(account, /Gestionar consentimientos/);
   assert.match(account, /managingConsents[\s\S]*LegalConsentManager/);
   assert.match(account, /HandicapSourceChoices/);
-  assert.match(ghin, /VINCULAR GHIN/);
-  assert.match(ghin, /PRÓXIMAMENTE/);
+  assert.match(ghin, /cuenta QA autorizada/);
+  assert.doesNotMatch(ghin, /PRÓXIMAMENTE/);
 });
 
 test("Configuración explica cómo agregar jugadores y grupos guardados", () => {

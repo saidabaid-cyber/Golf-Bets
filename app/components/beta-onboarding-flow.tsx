@@ -34,6 +34,7 @@ import { EquipmentOnboarding } from "./equipment-onboarding";
 import { HandicapSourceSelector } from "./handicap-source-selector";
 import { ModalShell } from "./modal-shell";
 import { InitialDevicePermissions } from "./device-permission-settings";
+import { useGhinReadOnlyProfile } from "./use-ghin-read-only-profile";
 import styles from "./beta-onboarding-flow.module.css";
 
 const IMPROVEMENT_LABELS: Record<GolfImprovementGoal, string> = {
@@ -112,15 +113,17 @@ function Shell({ progress, eyebrow, title, description, children, actions, onBac
 
 const acceptNoInitialConsent = async () => undefined;
 
-export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, legalConsentRequired = false, onAcceptInitialConsents = acceptNoInitialConsent, onComplete }: {
+export function BetaOnboardingFlow({ profile, accessToken, ghinAuthorized = false, onUpdateProfile, legalConsentRequired = false, onAcceptInitialConsents = acceptNoInitialConsent, onComplete }: {
   profile: BackyardProfile;
   accessToken: string | null;
+  ghinAuthorized?: boolean;
   onUpdateProfile: (profile: BackyardProfileUpdate) => Promise<"local" | "cloud">;
   legalConsentRequired?: boolean;
   onAcceptInitialConsents?: (betting: boolean) => Promise<void>;
   onComplete: () => void;
 }) {
   const [progress, setProgress] = useState<BetaOnboardingProgress | null>(null);
+  const ghinControl = useGhinReadOnlyProfile(accessToken, ghinAuthorized);
   useViewScrollReset(progress?.step ?? null);
   const [draft, setDraft] = useState<BetaDraft | null>(null);
   const [message, setMessage] = useState("");
@@ -234,8 +237,8 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, lega
     onSaveAndExit={onComplete}
   />;
 
-  if (progress.step === "ghin") return <Shell progress={progress} {...navigationProps} eyebrow="HANDICAP / ÍNDICE" title="Elige tu fuente de índice" description="Puedes activar Backyard Index sin rondas previas. GHIN estará disponible mediante una integración oficial." actions={<button className="primary big" disabled={finishing} onClick={async () => { try { await onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: profile.defaultHandicap, ghinLinkStatus: profile.ghinLinkStatus || "SKIPPED" }); if (entryMode === 'quick') finish(); else advance("equipment", true); } catch(error) { setMessage(error instanceof Error ? error.message : 'No pudimos guardar. Reintenta.'); } }}>{finishing ? 'Guardando…' : 'Continuar'}</button>}>
-    <HandicapSourceSelector userId={profile.userId} authenticated={Boolean(profile.userId && profile.userId !== "guest")} />
+  if (progress.step === "ghin") return <Shell progress={progress} {...navigationProps} eyebrow="HANDICAP / ÍNDICE" title="Elige tu fuente de índice" description="Puedes vincular la cuenta GHIN autorizada, activar Backyard Index o continuar sin índice." actions={<button className="primary big" disabled={finishing} onClick={async () => { try { const linked=Boolean(ghinControl?.profile&&ghinControl.profile.associationStatus!=="DISCONNECTED"); await onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: profile.defaultHandicap, ghinLinkStatus: linked ? "LINKED" : profile.ghinLinkStatus === "LINKED" ? "LINKED" : "SKIPPED" }); if (entryMode === 'quick') finish(); else advance("equipment", true); } catch(error) { setMessage(error instanceof Error ? error.message : 'No pudimos guardar. Reintenta.'); } }}>{finishing ? 'Guardando…' : 'Continuar'}</button>}>
+    <HandicapSourceSelector userId={profile.userId} authenticated={Boolean(profile.userId && profile.userId !== "guest")} ghinControl={ghinControl} />
     <p className={styles.trust}>Si todavía no tienes índice puedes continuar. No inventaremos un valor.</p>{message && <p role="alert">{message}</p>}
   </Shell>;
 
