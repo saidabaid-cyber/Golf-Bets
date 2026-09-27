@@ -76,10 +76,10 @@ test("profile/cloud QA inspects the deployed bundle and refuses absent/shared bi
       assert.equal(init.redirect,'error');
       const url=new URL(String(input));if(url.pathname==='/api/health')return health();
       return url.pathname.endsWith('.js')
-        ? new Response(env.NEXT_PUBLIC_SUPABASE_URL+' https://zhqmlpljloumldaczcfp.supabase.co')
+        ? new Response(env.NEXT_PUBLIC_SUPABASE_URL+' https://zzzzzzzzzzzzzzzzzzzz.supabase.co')
         : new Response('<script src="/_next/static/qa.js"></script>',{headers:{'content-type':'text/html; charset=utf-8'}});
     };
-    await assert.rejects(runPreviewProfileCloudQA(env,{fetcher:mixed,clientFactory:()=>{clients++;}}),/does not reference only the isolated QA project/);
+    await assert.rejects(runPreviewProfileCloudQA(env,{fetcher:mixed,clientFactory:()=>{clients++;}}),/unauthorized Supabase project/);
     assert.equal(clients,0);
   `);
 });

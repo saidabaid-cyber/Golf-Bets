@@ -98,8 +98,11 @@ test("remote statistics QA proves compiled Preview DB binding before creating an
     await verifyPreviewBundleBinding(config,bundle,db);
     const appWith=extra=>async(input)=>{const url=new URL(String(input));if(url.pathname==='/api/health')return health();if(url.pathname.endsWith('.js'))return new Response(env.NEXT_PUBLIC_SUPABASE_URL+' '+extra);return new Response('<script src="/_next/static/chunks/main.js"></script>',{headers:{'content-type':'text/html'}});};
     await assert.rejects(verifyPreviewBundleBinding(config,appWith('no-public-key'),db),/configured public key set/);
-    await assert.rejects(verifyPreviewBundleBinding(config,appWith('https://zhqmlpljloumldaczcfp.supabase.co'),db),/only the isolated QA project/);
-    await assert.rejects(verifyPreviewBundleBinding(config,appWith('https://ZHQMLPLJLOUMLDACZCFP.supabase.co'),db),/only the isolated QA project/);
+    await verifyPreviewBundleBinding(config,appWith('https://zhqmlpljloumldaczcfp.supabase.co '+env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY),db);
+    await verifyPreviewBundleBinding(config,appWith('https://ZHQMLPLJLOUMLDACZCFP.supabase.co '+env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY),db);
+    const productionOnly=async(input)=>{const url=new URL(String(input));if(url.pathname==='/api/health')return health();if(url.pathname.endsWith('.js'))return new Response('https://zhqmlpljloumldaczcfp.supabase.co '+env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY);return new Response('<script src="/_next/static/chunks/main.js"></script>',{headers:{'content-type':'text/html'}});};
+    await assert.rejects(verifyPreviewBundleBinding(config,productionOnly,db),/unauthorized Supabase project/);
+    await assert.rejects(verifyPreviewBundleBinding(config,appWith('https://zzzzzzzzzzzzzzzzzzzz.supabase.co'),db),/unauthorized Supabase project/);
     await assert.rejects(verifyPreviewBundleBinding(config,appWith('sb_publishable_unconfigured_key_material'),db),/unconfigured public key/);
     await assert.rejects(verifyPreviewBundleBinding(config,appWith('sb_secret_privileged_key_material'),db),/privileged credential/);
     const jwt=claims=>'eyJhbGciOiJIUzI1NiJ9.'+Buffer.from(JSON.stringify(claims)).toString('base64url')+'.synthetic_signature';

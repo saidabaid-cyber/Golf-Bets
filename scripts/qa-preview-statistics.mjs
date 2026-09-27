@@ -9,6 +9,7 @@ import { exactQaBrowserTarget, exactQaSupabaseOrigin } from "./lib/qa-public-pre
 
 const SHARED_PROJECT = "zhqmlpljloumldaczcfp";
 export const CANONICAL_QA_PROJECT = "bymeopxkxapfizeeqeyb";
+const CANONICAL_PRODUCTION_SUPABASE_ORIGIN = `https://${SHARED_PROJECT}.supabase.co`;
 const REF = /^[a-z0-9]{20}$/;
 const FULL_SHA = /^[0-9a-f]{40}$/;
 export const CANONICAL_QA_ORIGIN = "https://dev.thebackyard.com.mx";
@@ -164,7 +165,15 @@ export async function verifyPreviewBundleBinding(config, appFetch, databaseFetch
   }
   if (!inspectedChunks) throw new Error("Canonical QA HTML referenced no inspectable Next.js client chunk. No QA fixture was created.");
   if (evidence.secretCount) throw new Error("Preview client content contains a privileged credential. No QA fixture was created.");
-  if (evidence.supabaseOrigins.size !== 1 || !evidence.supabaseOrigins.has(config.supabaseOrigin)) throw new Error("Preview client content does not reference only the isolated QA project. No QA fixture was created.");
+  // The browser resolver intentionally embeds the exact Production origin as
+  // a fail-closed hostname guard. It is not an active Preview binding: the
+  // only bundled publishable key must still be the configured QA key, and the
+  // same key is authenticated below against the exact QA Auth endpoint.
+  const allowedOrigins = new Set([config.supabaseOrigin, CANONICAL_PRODUCTION_SUPABASE_ORIGIN]);
+  if (!evidence.supabaseOrigins.has(config.supabaseOrigin)
+    || [...evidence.supabaseOrigins].some(origin => !allowedOrigins.has(origin))) {
+    throw new Error("Preview client content references an unauthorized Supabase project. No QA fixture was created.");
+  }
   if (evidence.publicKeys.size < 1 || evidence.publicKeys.size > 8) throw new Error("Preview client content does not expose a bounded configured public key set. No QA fixture was created.");
   for (const key of evidence.publicKeys) {
     if (key !== config.publicKey) throw new Error("Preview client content contains an unconfigured public key. No QA fixture was created.");
