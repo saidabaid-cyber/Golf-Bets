@@ -10,6 +10,7 @@ export type BackyardIndexPreferenceController = {
   saving: boolean;
   error: string;
   change: (enabled: boolean) => Promise<void>;
+  selectGhin: () => Promise<void>;
   declareLocalZero: () => Promise<void>;
   retry: () => Promise<void>;
 };
@@ -72,8 +73,29 @@ export function useBackyardIndexPreference(userId: string, authenticated: boolea
     }
   }, [userId, authenticated, retry]);
 
+  const selectGhin = useCallback(async () => {
+    if (!authenticated || flight.current) return;
+    try {
+      const previous = readIndexPreference(localStorage, userId)?.preference;
+      const now = new Date(Math.max(Date.now(), Date.parse(previous?.updatedAt || "") + 1 || 0)).toISOString();
+      const preference: BackyardIndexPreference = {
+        version: 1,
+        userId,
+        enabled: false,
+        handicapSource: "GHIN",
+        updatedAt: now,
+        localPccZeroDeclaredAt: previous?.localPccZeroDeclaredAt ?? null,
+      };
+      persistIndexPreference(localStorage, { preference, pending: true });
+      setState({ owner: userId, cache: { preference, pending: true }, ready: true, saving: false, error: "" });
+      await retry();
+    } catch (error) {
+      setState((previous) => ({ ...previous, owner: userId, error: error instanceof Error ? error.message : "No se pudo guardar la fuente GHIN." }));
+    }
+  }, [authenticated, retry, userId]);
+
   const visible = state.owner === userId && authenticated;
   return { preference: visible ? state.cache?.preference || null : null,
     ready: !authenticated || (visible && state.ready), saving: visible && state.saving,
-    error: visible ? state.error : "", change, declareLocalZero: () => change(true), retry };
+    error: visible ? state.error : "", change, selectGhin, declareLocalZero: () => change(true), retry };
 }

@@ -62,9 +62,31 @@ flujo corresponde a credenciales/entitlements API o GPA y **no se probó** porqu
 no se proporcionaron credenciales GPA/vendor autorizadas. No se infirieron ni
 inventaron permisos.
 
+## Integración read-only promovida en QA
+
+La implementación server-side de `GhinReadOnlyClient` consolidó el mismo flujo
+demostrado. El bearer vive sólo en memoria, respeta expiración y se renueva una
+sola vez ante 401/403. Las lecturas usan exactamente
+`/golfers/search.json` y `/scores.json`; no existen métodos de score posting.
+
+La activación requiere simultáneamente Preview, el master flag existente,
+`GHIN_READ_ONLY_ENABLED=true` y `GHIN_GOLFER_LOOKUP_ENABLED=true`. Las rutas de
+Perfil requieren además sesión Backyard y una membresía admin activa. Sólo el
+GHIN QA `11103349` está permitido en esta fase.
+
+La proyección persistida usa `player_handicap_provider_profiles`, ya aplicada en
+Supabase QA. Guarda sólo GHIN, nombre, home club, estado, Handicap Index, fecha de
+revisión y timestamps/estado de sync. No guarda password, Firebase token,
+golfer bearer, cookies, Authorization ni respuesta cruda. Un refresh fallido
+conserva el último valor exitoso.
+
+El flujo GPA/vendor `POST /users/login.json` continúa separado y
+`BLOCKED_EXTERNAL`; no se probó ni se infirieron permisos.
+
 ## Controles y cierre
 
-- La POC quedó aislada de `GhinReadOnlyClient`; no cambia la arquitectura activa.
+- La evidencia POC permanece aislada; su flujo demostrado fue consolidado en
+  `GhinReadOnlyClient` sin convertir la librería de referencia en dependencia.
 - La ruta externa de prueba y su bearer efímero se retiraron después del run.
 - `GHIN_TEST_LOGIN` y `GHIN_TEST_PASSWORD` permanecieron server-side; no se
   imprimieron, devolvieron, almacenaron ni incluyeron en commits.

@@ -12,6 +12,8 @@ function golfer(overrides: Partial<NormalizedGhinGolfer> = {}): NormalizedGhinGo
     firstName: "Said",
     lastName: "Abaid Taja",
     clubName: "La Vista Country Club",
+    homeClubName: "La Vista Country Club",
+    isHomeClub: true,
     associationName: null,
     handicapIndex: 7.2,
     status: "active",

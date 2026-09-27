@@ -1,14 +1,18 @@
 "use client";
 
 import { GhinPlaceholder } from "./ghin-placeholder";
+import { GhinReadOnlyPanel } from "./ghin-read-only-panel";
+import type { GhinReadOnlyProfileController } from "./use-ghin-read-only-profile";
 import { useBackyardIndexPreference, type BackyardIndexPreferenceController } from "./use-backyard-index-preference";
 import styles from "./handicap-source-selector.module.css";
 
-export function HandicapSourceChoices({ control, authenticated }: { control: BackyardIndexPreferenceController; authenticated: boolean }) {
+export function HandicapSourceChoices({ control, authenticated, ghinControl }: { control: BackyardIndexPreferenceController; authenticated: boolean; ghinControl?: GhinReadOnlyProfileController }) {
   const activated = control.preference?.enabled === true && control.preference.handicapSource !== "GHIN";
   return <section className={styles.root} aria-label="Handicap / Índice">
     <h3>HANDICAP / ÍNDICE</h3>
-    <div className={styles.choice}><strong>VINCULAR GHIN</strong><p>Usa tu Handicap Index oficial.</p><GhinPlaceholder /></div>
+    <div className={styles.choice}><strong>VINCULAR GHIN</strong><p>Usa los datos read-only consultados desde GHIN.</p>{ghinControl?.enabled
+      ? <GhinReadOnlyPanel control={ghinControl} sourceActive={control.preference?.handicapSource === "GHIN"} onUseGhin={control.selectGhin} />
+      : <GhinPlaceholder />}</div>
     <div className={styles.choice}><strong>USAR BACKYARD INDEX</strong><p>Si no tienes GHIN, The Backyard puede calcular tu índice con tus rondas elegibles.</p>
       {activated && !control.saving && !control.error ? <p role="status"><b>ÍNDICE BACKYARD ACTIVADO</b><br />Empezaremos a calcularlo cuando tengas 3 rondas elegibles.</p>
         : <><p className={styles.note}>Local · no oficial. Al activarlo, declaro PCC 0 cuando no haya PCC publicado, sólo para esta estimación local.</p>

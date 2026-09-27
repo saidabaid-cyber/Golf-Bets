@@ -135,8 +135,8 @@ export default function GhinDiagnosticClient() {
       <section className="card">
         <h2>Autenticación y token</h2>
         <StatusChip value={auth?.status} />
-        <p>Endpoint: {valueText(auth?.endpoint)} · HTTP {valueText(auth?.httpStatus)}</p>
-        <p>Fingerprint: {valueText(auth?.tokenFingerprint)} · Expira: {valueText(auth?.expiresAt)}</p>
+        <p>Firebase Installation HTTP {valueText(auth?.firebaseHttpStatus)} · golfer_login HTTP {valueText(auth?.httpStatus)}</p>
+        <p>Endpoint: {valueText(auth?.endpoint)} · Expira: {valueText(auth?.expiresAt)}</p>
       </section>
 
       <section className="card">

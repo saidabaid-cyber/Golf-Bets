@@ -9,6 +9,7 @@ import { readGhinServerCredentials } from "./credentials.server";
 export type GhinRuntimeBlocker =
   | "PREVIEW_ONLY"
   | "MASTER_FLAG_DISABLED"
+  | "READ_ONLY_FLAG_DISABLED"
   | "CREDENTIALS_NOT_CONFIGURED"
   | "INVALID_API_BASE_URL";
 
@@ -28,6 +29,7 @@ export function resolveGhinRuntime(
   const capabilities = resolveGhinPreviewCapabilities(env);
   if (!capabilities.previewOnly) return { ok: false, blocker: "PREVIEW_ONLY", capabilities };
   if (!capabilities.masterEnabled) return { ok: false, blocker: "MASTER_FLAG_DISABLED", capabilities };
+  if (!capabilities.readOnlyEnabled) return { ok: false, blocker: "READ_ONLY_FLAG_DISABLED", capabilities };
   if (!capabilities.apiBaseUrl) return { ok: false, blocker: "INVALID_API_BASE_URL", capabilities };
   const credentials = readGhinServerCredentials(env);
   if (!credentials) return { ok: false, blocker: "CREDENTIALS_NOT_CONFIGURED", capabilities };

@@ -4,29 +4,23 @@
 
 ## Actualización canónica de autenticación — 2026-09-27 UTC
 
-En `integration/backyard-current` se volvió a ejecutar el login autorizado desde
-el Preview canónico. Los dos valores server-only quedaron como `Secret`, con
-scope exclusivo `Preview (integration/backyard-current)`. El diagnóstico dentro
-del runtime confirmó ambos presentes y no vacíos, sin whitespace inicial/final,
-comillas envolventes, caracteres de control, escapes literales ni BOM; no
-registró ni devolvió sus valores.
+La evidencia canónica actual está en
+[`GHIN_SPICYGOLF_020_QA.md`](./GHIN_SPICYGOLF_020_QA.md) y
+`ghin-spicygolf-020-poc-evidence.json`. La prueba autorizada demostró HTTP 200 en
+Firebase Installation, `golfer_login`, lookup de `11103349` y scores read-only.
+El lookup devolvió Said Abaid Taja, LA Vista Country Club, Handicap Index 7.9 y
+estado Active; scores devolvió 503 filas.
 
-El cliente se alineó con el bundle público oficial de GHIN.com observado el
-2026-09-26: host por defecto `api2.ghin.com`, `remember_me` booleano, `source` en
-el body y token RSA fresco. La matriz `api2.ghin.com`/`api.ghin.com` por login
-configurado/GHIN `11103349` terminó sin `golfer_user_token`; las cuatro respuestas
-de login fueron HTTP 400 y el resultado agregado del probe fue HTTP 502
-`BLOCKED_EXTERNAL`. El éxito manual reportado por el propietario impide concluir
-que la contraseña sea inválida: queda documentada una discrepancia entre el
-login web interactivo y el acceso automatizado al endpoint de golfista.
+El cliente server-side activo reutiliza ahora ese contrato de dos pasos, no el
+contrato RSA histórico descrito más abajo. Tokens y credenciales permanecen en
+el servidor y no se persisten. La integración sigue limitada por
+`GHIN_READ_ONLY_ENABLED` al Preview y a la cuenta admin QA autorizada. Course
+lookup/sync continúan apagados y score posting no existe.
 
-Por fail-closed no se ejecutaron lookup, Score History ni Course Data, no se
-habilitó la asociación de Perfil y `GHIN_COURSE_LOOKUP_ENABLED` /
-`GHIN_COURSE_SYNC_ENABLED` permanecieron apagados. El endpoint y bearer temporal
-del probe se retiraron después de la prueba. No hubo score posting, escritura a
-GHIN, cambio de Production ni aplicación de migraciones. La foundation GHIN ya
-consta aplicada sólo en QA como `20260924233419`, con el run canónico RLS 17/17
-documentado en el ledger; no se reaplicó.
+El posible acceso general GPA/vendor mediante `POST /users/login.json` no se ha
+probado y permanece `BLOCKED_EXTERNAL` hasta contar con credenciales y
+entitlements oficiales. La viabilidad técnica de la cuenta QA no acredita una
+autorización comercial para abrir GHIN a todos los usuarios.
 
 ## Estado y alcance
 
@@ -122,6 +116,7 @@ saltar el guard.
 NEXT_PUBLIC_BACKYARD_GHIN_INTEGRATION=true
 
 # Opt-ins server-side independientes.
+GHIN_READ_ONLY_ENABLED=true
 GHIN_GOLFER_LOOKUP_ENABLED=true
 GHIN_COURSE_LOOKUP_ENABLED=false
 GHIN_COURSE_SYNC_ENABLED=false

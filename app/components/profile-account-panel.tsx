@@ -18,6 +18,7 @@ import { AiProcessingConsentSettings } from "./backyard-ai/ai-processing-consent
 import { AccountDataDialog, StatisticsResetDialog, type AccountDataPolicy } from "./profile-data-dialogs";
 import { BackyardIndexCard } from "./backyard-index-card";
 import type { BackyardIndexPreferenceController } from "./use-backyard-index-preference";
+import type { GhinReadOnlyProfileController } from "./use-ghin-read-only-profile";
 import type { RoundSnapshot } from "../../lib/types";
 import { ProfileAvatarMedia } from "./profile-avatar-media";
 import { CatalogCoursePicker } from "./catalog-course-picker";
@@ -40,6 +41,7 @@ type ProfileAccountPanelProps = {
   onAiPrivacyOpened?: () => void;
   history?: RoundSnapshot[];
   indexControl: BackyardIndexPreferenceController;
+  ghinControl?: GhinReadOnlyProfileController;
   focusSection?: "profile" | "equipment";
   highContrast: boolean;
   onHighContrastChange: (value: boolean) => void;
@@ -78,7 +80,7 @@ function decimal(value: number | undefined) {
   return value === undefined ? "—" : value.toFixed(1);
 }
 
-export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacySettings = false, onAiPrivacyOpened, history = [], indexControl, focusSection = "profile", highContrast, onHighContrastChange, notificationsEnabled, onNotificationsEnabledChange, golfInsights, statisticsResetAt, onStatisticsReset, onOpenStats, onOpenAccount, initialAccountSection = "account", onOpenAccountSection, onOpenPrivacy, onOpenEquipment, onBackToProfile }: ProfileAccountPanelProps) {
+export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacySettings = false, onAiPrivacyOpened, history = [], indexControl, ghinControl, focusSection = "profile", highContrast, onHighContrastChange, notificationsEnabled, onNotificationsEnabledChange, golfInsights, statisticsResetAt, onStatisticsReset, onOpenStats, onOpenAccount, initialAccountSection = "account", onOpenAccountSection, onOpenPrivacy, onOpenEquipment, onBackToProfile }: ProfileAccountPanelProps) {
   const { identity, adminAccess = { hasAccess: false, roles: [], scopes: [] }, updateProfile, logout, finishAccountDeletion, openAccess, acceptances, legalEvidenceEvents, marketingConsentResolved, bettingConsentGranted, requestBettingConsent, recordLegalChoice, cloudLinked, cloudStatus, requestCloudLink, cloudIssues, retryCloudSync } = useBackyardAccount();
   const [editing, setEditing] = useState(false);
   const [accountSection, setAccountSection] = useState<AccountSettingsSection>(initialAccountSection);
@@ -153,7 +155,7 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
   }
 
   const notice = message ? <div className={messageKind === "error" ? "notice bad" : "notice"} role={messageKind === "error" ? "alert" : "status"}>{message}</div> : null;
-  const selectedIndex = selectedHandicapIndex(indexControl.preference, history, identity.userId);
+  const selectedIndex = selectedHandicapIndex(indexControl.preference, history, identity.userId, ghinControl?.profile ?? null);
   const indexLabel = selectedIndex.source === "BACKYARD" ? "BACKYARD INDEX" : selectedIndex.source === "GHIN" ? "GHIN INDEX" : "HANDICAP / ÍNDICE";
   const homeClubSelectionIncomplete = Boolean((draft.homeClubId || draft.homeCourseId) && (!draft.homeClubId || !draft.homeCourseId || !homeClubSelectionReady));
 
@@ -306,7 +308,7 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
       <label>Nombre(s)<input value={draft.givenName} onChange={(event) => setDraft((current) => ({ ...current, givenName: event.target.value }))} autoComplete="given-name" /></label>
       <label>Apellidos<input value={draft.familyName} onChange={(event) => setDraft((current) => ({ ...current, familyName: event.target.value }))} autoComplete="family-name" /></label>
       <label id="profile-edit-username">Username<input value={draft.username} onChange={(event) => setDraft((current) => ({ ...current, username: event.target.value.replace(/^@+/, "") }))} placeholder="sin @" autoComplete="username" autoCorrect="off" autoCapitalize="none" spellCheck={false} inputMode="text" /></label>
-      <div id="profile-edit-handicap"><HandicapSourceChoices control={indexControl} authenticated={identity.mode === "authenticated"} /></div>
+      <div id="profile-edit-handicap"><HandicapSourceChoices control={indexControl} authenticated={identity.mode === "authenticated"} ghinControl={ghinControl} /></div>
     </div></section>
     <section className="card profileEditCard"><h2>Foto / Avatar</h2><ProfileImagePicker value={avatarUrl} onChange={setAvatarUrl} onSaveAvatar={async (value) => {
       const result = await updateProfile({ displayName: identity.displayName, defaultHandicap: identity.defaultHandicap, avatarUrl: value });
@@ -325,7 +327,7 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
     {view === "profile" && identity.mode === "guest" && <section className="card guestAccountCard"><h2>Tu golf permanece en este dispositivo</h2><p>Crea una cuenta o inicia sesión para tener un perfil persistente.</p><div className="accountInlineActions"><button className="primary" onClick={openAccess}>Crear cuenta</button><button className="secondary" onClick={openAccess}>Iniciar sesión</button></div></section>}
     {view === "profile" && identity.mode === "authenticated" && <main className="profileMobileStack">
       <section className="card profileOverviewCard"><div className="profileOverviewIdentity"><ProfileCompletionRing token={identity.accessToken} avatar={identity.avatarUrl} name={identity.displayName} revision={JSON.stringify([identity, indexControl.preference])} onOpen={section => { if (section === "equipment" || section === "ball" || section === "fitting") { setCompletionEquipment(section); onOpenEquipment(); } else { openProfileEditor(section); } }} /><div><h2>{identity.displayName}</h2>{adminAccess.hasAccess && <span className="adminRoleBadge">{adminAccess.roles.includes("SUPER_ADMIN") ? "SUPER ADMIN" : "ADMINISTRADOR"}</span>}<p>{identity.username ? `@${identity.username}` : "Sin username"}</p><span>{indexLabel} <b>{profileHandicapLabel(selectedIndex.value)}</b></span></div></div><button type="button" className="primary profileEditButton" onClick={() => openProfileEditor()}>Editar perfil</button></section>
-      <section className="card profileCompactCard"><div className="profileCompactHeading"><div><span>INFORMACIÓN DE GOLF</span><h2>Tu juego</h2></div><button type="button" className="textButton" onClick={() => openProfileEditor("golf")}>Editar</button></div><div className="profileCompactRows"><div><span>{indexLabel}</span><b>{profileHandicapLabel(selectedIndex.value)}</b></div><div><span>Home Club</span><b>{identity.homeClub || "Sin indicar"}</b></div><div><span>Recorrido</span><b>{identity.homeCourse || "Sin indicar"}</b></div><div><span>Tee habitual</span><b>{identity.preferredTee || "Sin indicar"}</b></div><div><span>Mano dominante</span><b>{identity.handedness === "right" ? "Derecha" : identity.handedness === "left" ? "Izquierda" : identity.handedness === "ambidextrous" ? "Ambas" : "Sin indicar"}</b></div></div><HandicapSourceChoices control={indexControl} authenticated={identity.mode === "authenticated"} /></section>
+      <section className="card profileCompactCard"><div className="profileCompactHeading"><div><span>INFORMACIÓN DE GOLF</span><h2>Tu juego</h2></div><button type="button" className="textButton" onClick={() => openProfileEditor("golf")}>Editar</button></div><div className="profileCompactRows"><div><span>{indexLabel}</span><b>{profileHandicapLabel(selectedIndex.value)}</b></div><div><span>Home Club</span><b>{identity.homeClub || "Sin indicar"}</b></div><div><span>Recorrido</span><b>{identity.homeCourse || "Sin indicar"}</b></div><div><span>Tee habitual</span><b>{identity.preferredTee || "Sin indicar"}</b></div><div><span>Mano dominante</span><b>{identity.handedness === "right" ? "Derecha" : identity.handedness === "left" ? "Izquierda" : identity.handedness === "ambidextrous" ? "Ambas" : "Sin indicar"}</b></div></div><HandicapSourceChoices control={indexControl} authenticated={identity.mode === "authenticated"} ghinControl={ghinControl} /></section>
       <BackyardIndexCard history={history} userId={identity.userId} enabled={indexControl.preference?.enabled === true} onEnabledChange={indexControl.change} saving={indexControl.saving || !indexControl.ready} error={indexControl.error} localPccZeroDeclared={Boolean(indexControl.preference?.localPccZeroDeclaredAt)} onDeclareLocalPccZero={indexControl.declareLocalZero} />
       {indexControl.error && <button type="button" className="textButton" onClick={() => void indexControl.retry()}>Reintentar sincronización del Índice</button>}
       <EquipmentProfileSummary userId={identity.userId} accessToken={identity.accessToken} onOpen={onOpenEquipment} />

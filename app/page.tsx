@@ -112,6 +112,7 @@ import { canResumeActiveRound, normalizeRoundResumeContext, persistRoundResumeCo
 import { captureCompletedRoundIndex } from "../lib/backyard-index-auto-capture";
 import { readIndexPreference } from "../lib/backyard-index-preferences";
 import { useBackyardIndexPreference } from "./components/use-backyard-index-preference";
+import { useGhinReadOnlyProfile } from "./components/use-ghin-read-only-profile";
 import { selectedHandicapIndex } from "../lib/handicap-source";
 import { HomeDashboard, type ActiveRoundSummary } from "./components/home-dashboard";
 import { ProfileCompletionRing } from './components/profile-completion-ring';
@@ -442,6 +443,7 @@ type NewRoundIntent =
 function GolfBetsApp() {
   const { identity, adminAccess, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, setCloudStatus, applyCloudPreferences, reportCloudSyncError, clearCloudSyncError, refreshCloudSession } = useBackyardAccount();
   const indexControl = useBackyardIndexPreference(identity.userId, identity.mode === "authenticated");
+  const ghinControl = useGhinReadOnlyProfile(identity.mode === "authenticated" ? identity.accessToken : null, adminAccess.hasAccess);
   const { tab, setTab, goBack, setNavigationGuard } = useScreenNavigation();
   const [profileFocus, setProfileFocus] = useState<"profile" | "equipment">("profile");
   const [profileRootRevision, setProfileRootRevision] = useState(0);
@@ -529,7 +531,7 @@ function GolfBetsApp() {
   const [roundResumeContext, setRoundResumeContext] = useState<RoundResumeContext | null>(null);
   const [expenses, setExpenses] = useState<Expense>(emptyExpenses);
   const [history, setHistory] = useState<RoundSnapshot[]>([]);
-  const accountIndex = useMemo(() => selectedHandicapIndex(indexControl.preference, history, identity.userId), [indexControl.preference, history, identity.userId]);
+  const accountIndex = useMemo(() => selectedHandicapIndex(indexControl.preference, history, identity.userId, ghinControl.profile), [indexControl.preference, history, identity.userId, ghinControl.profile]);
   const [statisticsBoundary, setStatisticsBoundary] = useState<{ userId: string; resetAt: string | null }>({ userId: "", resetAt: null });
   const statisticsResetAt = statisticsBoundary.userId === identity.userId ? statisticsBoundary.resetAt : null;
   const [statisticsAuthority, setStatisticsAuthority] = useState<{ userId: string; state: "loading" | "ready" | "unavailable"; error?: string }>({ userId: "", state: "loading" });
@@ -3775,8 +3777,8 @@ function GolfBetsApp() {
     {tab === "historyDetail" && (() => { const saved = history.find(round => round.id === historyDetailId); return saved?.totalScoreCapture ? <TotalScoreHistory key={saved.id} round={saved} onSave={saveTotalHistory} onBack={() => setTab("history")} /> : saved ? <HistoricalRoundDetail round={saved} priorRounds={history} accountUserId={identity.userId} accessToken={identity.accessToken || undefined} onEdit={() => editHistoricalRound(saved)} onPhoto={() => viewScorecardPhoto(saved)} /> : <div className="empty">La ronda ya no está disponible.</div>; })()}
     {tab === "groups" && <GroupBuilder frequentPlayers={frequentPlayers} frequentGroups={frequentGroups} onBack={() => setTab("welcome")} onPlay={startRoundWithGeneratedGroup} onSaveFrequentGroup={saveGeneratedFrequentGroup} onCreateFrequentGroup={beginCreateFrequentGroup} onStartFrequentGroup={loadFrequentGroup} onEditFrequentGroup={beginEditFrequentGroup} onDeleteFrequentGroup={setFrequentGroupToDelete} />}
 
-    {tab === "profile" && <ProfileAccountPanel key={identity.userId} view="profile" indexControl={indexControl} rootNavigationKey={profileRootRevision} history={history} focusSection={profileFocus} highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} golfInsights={betaGolfInsights} statisticsResetAt={statisticsResetAt} onStatisticsReset={applyStatisticsReset} onOpenStats={() => setTab("stats")} onOpenAccount={() => openAccountSettings()} onOpenAccountSection={openAccountSettings} onOpenPrivacy={() => { setOpenAiPrivacySettings(true); setTab("account"); }} onOpenEquipment={() => setProfileFocus("equipment")} onBackToProfile={openProfileRoot} />}
-    {tab === "account" && <ProfileAccountPanel key={`${identity.userId}:account:${accountSection}`} view="account" initialAccountSection={accountSection} openAiPrivacySettings={openAiPrivacySettings} onAiPrivacyOpened={() => setOpenAiPrivacySettings(false)} indexControl={indexControl} rootNavigationKey={profileRootRevision} highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} golfInsights={betaGolfInsights} statisticsResetAt={statisticsResetAt} onStatisticsReset={applyStatisticsReset} onOpenStats={() => setTab("stats")} onOpenEquipment={() => { setProfileFocus("equipment"); setTab("profile"); }} onBackToProfile={openProfileRoot} />}
+    {tab === "profile" && <ProfileAccountPanel key={identity.userId} view="profile" indexControl={indexControl} ghinControl={ghinControl} rootNavigationKey={profileRootRevision} history={history} focusSection={profileFocus} highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} golfInsights={betaGolfInsights} statisticsResetAt={statisticsResetAt} onStatisticsReset={applyStatisticsReset} onOpenStats={() => setTab("stats")} onOpenAccount={() => openAccountSettings()} onOpenAccountSection={openAccountSettings} onOpenPrivacy={() => { setOpenAiPrivacySettings(true); setTab("account"); }} onOpenEquipment={() => setProfileFocus("equipment")} onBackToProfile={openProfileRoot} />}
+    {tab === "account" && <ProfileAccountPanel key={`${identity.userId}:account:${accountSection}`} view="account" initialAccountSection={accountSection} openAiPrivacySettings={openAiPrivacySettings} onAiPrivacyOpened={() => setOpenAiPrivacySettings(false)} indexControl={indexControl} ghinControl={ghinControl} rootNavigationKey={profileRootRevision} highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} golfInsights={betaGolfInsights} statisticsResetAt={statisticsResetAt} onStatisticsReset={applyStatisticsReset} onOpenStats={() => setTab("stats")} onOpenEquipment={() => { setProfileFocus("equipment"); setTab("profile"); }} onBackToProfile={openProfileRoot} />}
 
     {tab === "setup" && <RoundSetupWizard key={`${identity.userId}:${roundId}`} storageKey={`backyard-setup-step-v1:${identity.userId}:${roundId}`} issues={roundSetupPreflight} editing={editingRound} scoreOnly={roundPresentation.playMode === "score_only"} initialStep={roundSetupInitialStep}
       onSave={() => flushLocalState.current?.()}

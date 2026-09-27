@@ -10,6 +10,7 @@ test("GHIN capabilities require Preview, the master flag and granular server fla
   const enabled = resolveGhinPreviewCapabilities({
     VERCEL_ENV: "preview",
     NEXT_PUBLIC_BACKYARD_GHIN_INTEGRATION: "true",
+    GHIN_READ_ONLY_ENABLED: "true",
     GHIN_GOLFER_LOOKUP_ENABLED: "true",
     GHIN_COURSE_LOOKUP_ENABLED: "true",
     GHIN_COURSE_SYNC_ENABLED: "true",
@@ -19,6 +20,7 @@ test("GHIN capabilities require Preview, the master flag and granular server fla
   assert.deepEqual(enabled, {
     previewOnly: true,
     masterEnabled: true,
+    readOnlyEnabled: true,
     golferLookup: true,
     courseLookup: true,
     courseSyncDryRun: true,
@@ -29,6 +31,7 @@ test("GHIN capabilities require Preview, the master flag and granular server fla
   const production = resolveGhinPreviewCapabilities({
     VERCEL_ENV: "production",
     NEXT_PUBLIC_BACKYARD_GHIN_INTEGRATION: "true",
+    GHIN_READ_ONLY_ENABLED: "true",
     GHIN_GOLFER_LOOKUP_ENABLED: "true",
     GHIN_COURSE_LOOKUP_ENABLED: "true",
     GHIN_COURSE_SYNC_ENABLED: "true",
@@ -36,6 +39,7 @@ test("GHIN capabilities require Preview, the master flag and granular server fla
     GHIN_TEST_PASSWORD: "secret",
   });
   assert.equal(production.masterEnabled, false);
+  assert.equal(production.readOnlyEnabled, false);
   assert.equal(production.golferLookup, false);
   assert.equal(production.courseLookup, false);
   assert.equal(production.courseSyncDryRun, false);
@@ -57,4 +61,16 @@ test("capabilities report credentials only when both server values exist", () =>
     GHIN_TEST_LOGIN: "11103349",
     GHIN_TEST_PASSWORD: "password",
   }).credentialsConfigured, true);
+});
+
+test("GHIN_READ_ONLY_ENABLED is a separate Preview-only kill switch", () => {
+  const disabled = resolveGhinPreviewCapabilities({
+    VERCEL_ENV: "preview",
+    NEXT_PUBLIC_BACKYARD_GHIN_INTEGRATION: "true",
+    GHIN_GOLFER_LOOKUP_ENABLED: "true",
+    GHIN_COURSE_LOOKUP_ENABLED: "true",
+  });
+  assert.equal(disabled.readOnlyEnabled, false);
+  assert.equal(disabled.golferLookup, false);
+  assert.equal(disabled.courseLookup, false);
 });

@@ -1,7 +1,5 @@
 import "server-only";
 
-import { constants, publicEncrypt } from "node:crypto";
-
 import {
   TtlPromiseCache,
   normalizeGhinError,
@@ -12,6 +10,7 @@ import {
   parseGhinScores,
   parseGhinTee,
   parseGhinToken,
+  parseFirebaseInstallationToken,
   safeJsonParse,
   type GhinErrorCode,
   type NormalizedGhinCourse,
@@ -30,20 +29,17 @@ const AUTH_EXPIRY_SKEW_MS = 60_000;
 const MAX_RESPONSE_CHARS = 4_000_000;
 const GHIN_SOURCE = "GHINcom";
 const GHIN_ACCEPT = "application/json, text/plain, */*";
-/** Public key embedded in the official GHIN.com web client; it is not a credential. */
-const GHIN_LOGIN_PUBLIC_KEY = `-----BEGIN RSA PUBLIC KEY-----
-MIICCgKCAgEA4bj0vrhe3nejC07r9jYt9ieLM1QoqnmgkRcKOJAkCve/PWK/8+SX
-uQumFYAnSvuBhicYwyARGJY8NzIHSMVQU3eOn6HpnVY6f2uWaMnH3OwEYHSV6fXt
-2e/vy4eY/Lf8qhaQ0Jlnntluycvk4UtNdpf/3zM1hv3G0mt0ckVnzjqpUmSZ7SEn
-Tec6lVBnLnQ9NWH2iswaCB5Szr4E6tRu+dN7U2juixaHYC9STLBUTd3VhCbBZrtT
-v+w/ZOo+NZ4mGAf7RMAUNiO0dVQyGLU/MyzUAwOXQQUMp7iqTYoEP6laFojapNkP
-P6sETHRWwJStr/O5tEPZGrnzqttjK3ImyHKnXXVoPtB3GthxLJ4m+hglGxw5WeaK
-WhGX1AR0nVDTBppRqv5+hbfzSIDmlfFkt23nj4fZ5A75uZ/O+Ivs8xMoIoqws1jT
-eDQ8xDSgqyb3D6R/DH6P7yodYF/xwhGPBbenFxyBGPPvXjNODwHMNFMcbrvsj2YS
-9Rcf/OrkDCLxWnXevMU+sS3wY8cH6q7u4HIKCyOgaE+Fm++CaSuHp5OfjQnoaLJt
-YV+1IB3l2XE6T8BEQL19Ov9JCeuvfvpamvV/MUOuIKexIBGqiYpc6kLWTpd25Kmj
-YsplwBjsy1Vogbc3S4G8H8Ixd1ap0vxTqYNmTLLGHlL7d64xbKUU1YsCAwEAAQ==
------END RSA PUBLIC KEY-----`;
+const FIREBASE_SESSION_URL = "https://firebaseinstallations.googleapis.com/v1/projects/ghin-mobile-app/installations";
+// Public application configuration reproduced from @spicygolf/ghin@0.20.0.
+// It does not authenticate a golfer or grant access to GHIN data.
+const FIREBASE_API_KEY = "AIzaSyBxgTOAWxiud0HuaE5tN-5NTlzFnrtyz-I";
+const FIREBASE_INSTALLATION = {
+  appId: "1:884417644529:web:47fb315bc6c70242f72650",
+  authVersion: "FIS_v2",
+  fid: "fg6JfS0U01YmrelthLX9Iz",
+  sdkVersion: "w:0.5.7",
+} as const;
+const GHIN_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36";
 
 export type GhinClientTrace = {
   method: "GET" | "POST";
@@ -58,9 +54,9 @@ export type GhinAuthDiagnostics = {
   authenticated: true;
   endpoint: "/golfer_login.json";
   httpStatus: number;
+  firebaseHttpStatus: number;
   authenticatedAt: string;
   expiresAt: string | null;
-  tokenFingerprint: string;
   reused: boolean;
 };
 
@@ -105,6 +101,7 @@ type AuthSession = {
   authenticatedAt: number;
   effectiveExpiresAt: number;
   httpStatus: number;
+  firebaseHttpStatus: number;
 };
 
 type JsonResponse = {
@@ -119,9 +116,9 @@ function positiveDuration(value: number | undefined, fallback: number, label: st
   return resolved;
 }
 
-function boundedLimit(value: number, fallback = 20) {
+function boundedLimit(value: number, fallback = 20, maximum = 100) {
   if (!Number.isFinite(value)) return fallback;
-  return Math.max(1, Math.min(100, Math.trunc(value)));
+  return Math.max(1, Math.min(maximum, Math.trunc(value)));
 }
 
 function safeEndpoint(input: string) {
@@ -153,15 +150,6 @@ function jwtExpiry(token: string): number | null {
   return typeof exp === "number" && Number.isFinite(exp) && exp >= 0 ? exp * 1_000 : null;
 }
 
-async function tokenFingerprint(token: string) {
-  const bytes = new TextEncoder().encode(token);
-  const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(digest))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("")
-    .slice(0, 12);
-}
-
 function query(path: string, params: Record<string, string | number | boolean | undefined>) {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -175,28 +163,6 @@ function withGhinSource(path: string) {
   const search = new URLSearchParams(rawSearch);
   search.set("source", GHIN_SOURCE);
   return `${pathname}?${search.toString()}`;
-}
-
-export function serializeGhinLoginTokenPayload(timestampMs: number) {
-  const date = new Date(timestampMs);
-  if (!Number.isFinite(date.getTime())) throw new RangeError("GHIN login token timestamp must be finite.");
-  return JSON.stringify({ source: GHIN_SOURCE, datetime: date.toISOString() });
-}
-
-type GhinLoginEncrypt = (
-  options: { key: string; padding: number },
-  buffer: Buffer,
-) => Buffer;
-
-export function createGhinLoginToken(
-  timestampMs = Date.now(),
-  encrypt: GhinLoginEncrypt = publicEncrypt,
-) {
-  const encrypted = encrypt(
-    { key: GHIN_LOGIN_PUBLIC_KEY, padding: constants.RSA_PKCS1_PADDING },
-    Buffer.from(serializeGhinLoginTokenPayload(timestampMs), "utf8"),
-  );
-  return encrypted.toString("base64");
 }
 
 /**
@@ -254,6 +220,15 @@ export class GhinReadOnlyClient {
     this.teeCache.clear();
   }
 
+  invalidateGolfer(ghinNumber: string) {
+    this.golferCache.delete(ghinNumber.trim());
+  }
+
+  invalidateScores(ghinNumber: string) {
+    const prefix = `${ghinNumber.trim()}:`;
+    for (let limit = 1; limit <= 1_000; limit += 1) this.scoresCache.delete(`${prefix}${limit}`);
+  }
+
   private recordTrace(method: "GET" | "POST", endpoint: string, status: number | null, startedAt: number, ok: boolean) {
     this.traces.push({
       method,
@@ -277,7 +252,8 @@ export class GhinReadOnlyClient {
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     let status: number | null = null;
     try {
-      const response = await this.fetchImpl(`${this.baseUrl}${path}`, {
+      const url = /^https:\/\//i.test(path) ? path : `${this.baseUrl}${path}`;
+      const response = await this.fetchImpl(url, {
         ...init,
         method,
         cache: "no-store",
@@ -312,16 +288,30 @@ export class GhinReadOnlyClient {
 
   private async login(): Promise<AuthSession> {
     const authenticatedAt = this.clock();
+    const firebase = await this.fetchJson("POST", FIREBASE_SESSION_URL, {
+      headers: {
+        "content-type": "application/json",
+        "user-agent": GHIN_USER_AGENT,
+        "x-goog-api-key": FIREBASE_API_KEY,
+      },
+      body: JSON.stringify(FIREBASE_INSTALLATION),
+    });
+    const installationToken = parseFirebaseInstallationToken(firebase.payload, authenticatedAt);
+    if (!installationToken) {
+      throw new GhinClientError(normalizeGhinError("invalid response", firebase.status), firebase.endpoint);
+    }
     const response = await this.fetchJson("POST", "/golfer_login.json", {
-      headers: { "content-type": "application/json", accept: GHIN_ACCEPT },
+      headers: {
+        "content-type": "application/json",
+        accept: GHIN_ACCEPT,
+        "user-agent": GHIN_USER_AGENT,
+      },
       body: JSON.stringify({
         user: {
           password: this.#credentials.password,
           email_or_ghin: this.#credentials.login,
-          remember_me: false,
         },
-        token: createGhinLoginToken(authenticatedAt),
-        source: GHIN_SOURCE,
+        token: installationToken.accessToken,
       }),
     });
     const token = parseGhinToken(response.payload, authenticatedAt);
@@ -332,7 +322,13 @@ export class GhinReadOnlyClient {
     if (effectiveExpiresAt <= authenticatedAt + AUTH_EXPIRY_SKEW_MS) {
       throw new GhinClientError(normalizeGhinError("unauthorized", 401), response.endpoint);
     }
-    return { token, authenticatedAt, effectiveExpiresAt, httpStatus: response.status };
+    return {
+      token,
+      authenticatedAt,
+      effectiveExpiresAt,
+      httpStatus: response.status,
+      firebaseHttpStatus: firebase.status,
+    };
   }
 
   private async getSession(force = false): Promise<{ session: AuthSession; reused: boolean }> {
@@ -357,19 +353,19 @@ export class GhinReadOnlyClient {
       authenticated: true,
       endpoint: "/golfer_login.json",
       httpStatus: session.httpStatus,
+      firebaseHttpStatus: session.firebaseHttpStatus,
       authenticatedAt: new Date(session.authenticatedAt).toISOString(),
       expiresAt: Number.isFinite(session.effectiveExpiresAt) ? new Date(session.effectiveExpiresAt).toISOString() : null,
-      tokenFingerprint: await tokenFingerprint(session.token.accessToken),
       reused,
     };
   }
 
-  private async authorizedJson(path: string): Promise<JsonResponse> {
-    const pathWithSource = withGhinSource(path);
+  private async authorizedJson(path: string, addSource = true): Promise<JsonResponse> {
+    const authorizedPath = addSource ? withGhinSource(path) : path;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const { session } = await this.getSession(attempt === 1);
       try {
-        return await this.fetchJson("GET", pathWithSource, {
+        return await this.fetchJson("GET", authorizedPath, {
           headers: {
             accept: GHIN_ACCEPT,
             authorization: `Bearer ${session.token.accessToken}`,
@@ -401,43 +397,41 @@ export class GhinReadOnlyClient {
       return Promise.reject(new GhinClientError(normalizeGhinError("not found", 404), "/golfers/search.json"));
     }
     return this.golferCache.get(normalized, async () => {
-      const primary = query("/golfers/search.json", {
+      const endpoint = query("/golfers/search.json", {
         golfer_id: normalized,
-        per_page: 10,
         page: 1,
-        sorting_criteria: "id",
-        order: "ASC",
+        per_page: 100,
+        sorting_criteria: "last_name_first_name",
+        order: "asc",
       });
-      const fallback = query("/golfers.json", {
-        golfer_id: normalized,
-        from_ghin: "true",
-        per_page: 10,
-        page: 1,
-      });
-      const response = await this.withCompatibilityFallback(primary, fallback);
+      const response = await this.authorizedJson(endpoint, false);
       const golfers = parseGhinGolfers(response.payload);
-      const golfer = golfers.find((candidate) => candidate.ghinNumber === normalized)
+      const matching = golfers.filter((candidate) => candidate.ghinNumber === normalized);
+      const home = matching.find((candidate) => candidate.isHomeClub === true) ?? null;
+      const selected = home ?? matching[0]
         ?? parseGhinGolfer(response.payload);
-      if (!golfer || golfer.ghinNumber !== normalized) {
+      if (!selected || selected.ghinNumber !== normalized) {
         throw new GhinClientError(normalizeGhinError("not found", 404), response.endpoint);
       }
+      const golfer = {
+        ...selected,
+        homeClubName: home?.clubName ?? selected.homeClubName,
+      };
       return { data: golfer, endpoint: response.endpoint, httpStatus: response.status, fetchedAt: new Date(this.clock()).toISOString() };
     });
   }
 
   getScores(ghinNumber: string, limit = 20): Promise<GhinReadResult<NormalizedGhinScore[]>> {
     const normalized = ghinNumber.trim();
-    const safeLimit = boundedLimit(limit);
+    const safeLimit = boundedLimit(limit, 20, 1_000);
     if (!/^\d{5,12}$/.test(normalized)) {
       return Promise.reject(new GhinClientError(normalizeGhinError("not found", 404), "/scores.json"));
     }
     const cacheKey = `${normalized}:${safeLimit}`;
     return this.scoresCache.get(cacheKey, async () => {
-      const primary = query("/scores.json", { golfer_id: normalized, offset: 0, limit: safeLimit });
-      const fallback = query("/scores/search.json", { golfer_id: normalized, per_page: safeLimit, page: 1 });
-      const response = await this.withCompatibilityFallback(primary, fallback);
+      const response = await this.authorizedJson(query("/scores.json", { golfer_id: normalized }), false);
       return {
-        data: parseGhinScores(response.payload),
+        data: parseGhinScores(response.payload).slice(0, safeLimit),
         endpoint: response.endpoint,
         httpStatus: response.status,
         fetchedAt: new Date(this.clock()).toISOString(),

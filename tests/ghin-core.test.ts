@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   extractGhinToken,
+  parseFirebaseInstallationToken,
   normalizeGhinError,
   parseGhinCourse,
   parseGhinCourses,
@@ -176,6 +177,19 @@ test("extrae tokens sólo de llaves permitidas y normaliza expiración", () => {
   assert.equal(extractGhinToken({ user: { password: "do-not-treat-as-token" } }), null);
   assert.equal(extractGhinToken({ access_token: null }), null);
   assert.equal(parseGhinToken({ token: "   " }), null);
+});
+
+test("parsea únicamente authToken.token de Firebase y su duración", () => {
+  assert.deepEqual(parseFirebaseInstallationToken({
+    token: "wrong-level",
+    authToken: { token: "firebase-session", expiresIn: "604800s" },
+  }, 1_000), {
+    accessToken: "firebase-session",
+    tokenType: "Bearer",
+    expiresAt: 604_801_000,
+  });
+  assert.equal(parseFirebaseInstallationToken({ token: "wrong-level" }), null);
+  assert.equal(parseFirebaseInstallationToken({ authToken: { token: "" } }), null);
 });
 
 test("helpers de error nunca devuelven el mensaje o secreto de entrada", () => {

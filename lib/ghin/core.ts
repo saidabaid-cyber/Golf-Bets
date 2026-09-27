@@ -16,6 +16,8 @@ export type NormalizedGhinGolfer = {
   firstName: string | null;
   lastName: string | null;
   clubName: string | null;
+  homeClubName: string | null;
+  isHomeClub: boolean | null;
   associationName: string | null;
   handicapIndex: number | null;
   status: NormalizedGhinStatus;
@@ -271,11 +273,16 @@ export function parseGhinGolfer(payload: unknown): NormalizedGhinGolfer | null {
     lastName,
     clubName: text(field(record, ["club_name", "golf_club_name", "primary_club_name"]))
       ?? (club ? text(field(club, ["name", "club_name"])) : null),
+    homeClubName: boolean(field(record, ["is_home_club", "home_club"])) === true
+      ? text(field(record, ["club_name", "golf_club_name", "primary_club_name"]))
+        ?? (club ? text(field(club, ["name", "club_name"])) : null)
+      : null,
+    isHomeClub: boolean(field(record, ["is_home_club", "home_club"])),
     associationName: text(field(record, ["association_name", "golf_association_name"]))
       ?? (association ? text(field(association, ["name", "association_name"])) : null),
     handicapIndex: parseGhinHandicapIndex(field(record, ["handicap_index", "handicapindex", "current_handicap_index", "hi"])),
     ...status,
-    updatedAt: text(field(record, ["handicap_updated_at", "updated_at", "revision_date", "effective_date", "as_of_date"])),
+    updatedAt: text(field(record, ["handicap_updated_at", "updated_at", "revision_date", "rev_date", "effective_date", "as_of_date"])),
   };
 }
 
@@ -556,6 +563,27 @@ export function parseGhinToken(payload: unknown, now = Date.now()): NormalizedGh
   const expiresIn = finiteNumber(nestedScalar(payload, ["expires_in", "expires_in_seconds", "ttl"]));
   const expiresAt = absoluteExpiry ?? (expiresIn !== null && expiresIn >= 0 ? now + expiresIn * 1_000 : null);
   return { accessToken, tokenType: "Bearer", expiresAt };
+}
+
+/** Exact Firebase Installation authToken parser. It deliberately ignores every
+ * other token-shaped field so this short-lived token cannot be confused with
+ * the GHIN golfer bearer. Firebase uses durations such as `604800s`. */
+export function parseFirebaseInstallationToken(payload: unknown, now = Date.now()): NormalizedGhinToken | null {
+  if (!isRecord(payload)) return null;
+  const authToken = childRecord(payload, ["authToken"]);
+  if (!authToken) return null;
+  const accessToken = tokenText(field(authToken, ["token"]));
+  if (!accessToken) return null;
+  const rawExpiresIn = field(authToken, ["expiresIn"]);
+  const seconds = finiteNumber(rawExpiresIn)
+    ?? (typeof rawExpiresIn === "string" && /^\d+(?:\.\d+)?s$/.test(rawExpiresIn.trim())
+      ? Number(rawExpiresIn.trim().slice(0, -1))
+      : null);
+  return {
+    accessToken,
+    tokenType: "Bearer",
+    expiresAt: seconds !== null && seconds >= 0 ? now + seconds * 1_000 : null,
+  };
 }
 
 /** Parses untrusted response text without throwing. */

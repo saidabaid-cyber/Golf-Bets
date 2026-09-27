@@ -1,6 +1,7 @@
 export type GhinPreviewCapabilities = {
   previewOnly: boolean;
   masterEnabled: boolean;
+  readOnlyEnabled: boolean;
   golferLookup: boolean;
   courseLookup: boolean;
   courseSyncDryRun: boolean;
@@ -39,11 +40,13 @@ export function resolveGhinPreviewCapabilities(
 ): GhinPreviewCapabilities {
   const previewOnly = env.VERCEL_ENV === "preview";
   const masterEnabled = previewOnly && enabled(env.NEXT_PUBLIC_BACKYARD_GHIN_INTEGRATION);
-  const golferLookup = masterEnabled && enabled(env.GHIN_GOLFER_LOOKUP_ENABLED);
-  const courseLookup = masterEnabled && enabled(env.GHIN_COURSE_LOOKUP_ENABLED);
+  const readOnlyEnabled = masterEnabled && enabled(env.GHIN_READ_ONLY_ENABLED);
+  const golferLookup = readOnlyEnabled && enabled(env.GHIN_GOLFER_LOOKUP_ENABLED);
+  const courseLookup = readOnlyEnabled && enabled(env.GHIN_COURSE_LOOKUP_ENABLED);
   return {
     previewOnly,
     masterEnabled,
+    readOnlyEnabled,
     golferLookup,
     courseLookup,
     courseSyncDryRun: courseLookup && enabled(env.GHIN_COURSE_SYNC_ENABLED),

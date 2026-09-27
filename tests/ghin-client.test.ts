@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { constants } from "node:crypto";
 import Module from "node:module";
 import test from "node:test";
 
@@ -26,8 +25,6 @@ try {
 const {
   GhinClientError,
   GhinReadOnlyClient,
-  createGhinLoginToken,
-  serializeGhinLoginTokenPayload,
 } = clientModule;
 
 const credentials = {
@@ -42,6 +39,14 @@ function jsonResponse(status: number, payload: unknown) {
   });
 }
 
+function firebaseResponse() {
+  return jsonResponse(200, { authToken: { token: "firebase-installation-token", expiresIn: "604800s" } });
+}
+
+function isFirebase(url: URL) {
+  return url.hostname === "firebaseinstallations.googleapis.com";
+}
+
 function assertSingleGhinSource(url: URL) {
   assert.deepEqual(url.searchParams.getAll("source"), ["GHINcom"]);
 }
@@ -51,6 +56,18 @@ test("autentica, deduplica consultas concurrentes y nunca deja secretos en el tr
   let golferCalls = 0;
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = new URL(String(input));
+    if (isFirebase(url)) {
+      assert.equal(init?.method, "POST");
+      assert.equal(url.pathname, "/v1/projects/ghin-mobile-app/installations");
+      assert.equal(new Headers(init?.headers).get("x-goog-api-key")?.length, 39);
+      assert.deepEqual(JSON.parse(String(init?.body)), {
+        appId: "1:884417644529:web:47fb315bc6c70242f72650",
+        authVersion: "FIS_v2",
+        fid: "fg6JfS0U01YmrelthLX9Iz",
+        sdkVersion: "w:0.5.7",
+      });
+      return firebaseResponse();
+    }
     if (url.pathname.endsWith("/golfer_login.json")) {
       loginCalls += 1;
       assert.equal(init?.method, "POST");
@@ -58,26 +75,23 @@ test("autentica, deduplica consultas concurrentes y nunca deja secretos en el tr
       assert.equal(init?.headers && new Headers(init.headers).get("accept"), "application/json, text/plain, */*");
       assert.equal(init?.headers && new Headers(init.headers).get("authorization"), null);
       const body = JSON.parse(String(init?.body)) as {
-        user: { password: string; email_or_ghin: string; remember_me: boolean };
+        user: { password: string; email_or_ghin: string };
         token: string;
-        source: string;
       };
       assert.deepEqual(body.user, {
         password: credentials.password,
         email_or_ghin: credentials.login,
-        remember_me: false,
       });
-      assert.equal(body.source, "GHINcom");
-      assert.match(body.token, /^[A-Za-z0-9+/]+={0,2}$/);
-      assert.equal(Buffer.from(body.token, "base64").byteLength, 512);
-      return jsonResponse(200, { golfer_user_token: "provider-secret-token", expires_in: 3_600 });
+      assert.equal(body.token, "firebase-installation-token");
+      return jsonResponse(200, { golfer_user: { golfer_user_token: "provider-secret-token" }, expires_in: 3_600 });
     }
     if (url.pathname.endsWith("/golfers/search.json")) {
       golferCalls += 1;
       assert.equal(init?.headers && new Headers(init.headers).get("authorization"), "Bearer provider-secret-token");
       assert.equal(init?.headers && new Headers(init.headers).get("source"), null);
       assert.equal(url.searchParams.get("golfer_id"), "11103349");
-      assertSingleGhinSource(url);
+      assert.equal(url.searchParams.get("source"), null);
+      assert.equal(url.searchParams.get("per_page"), "100");
       return jsonResponse(200, {
         golfers: [{
           ghin: "11103349",
@@ -113,34 +127,10 @@ test("autentica, deduplica consultas concurrentes y nunca deja secretos en el tr
   assert.doesNotMatch(serializedTrace, /provider-secret-token|unit-test-password|11103349/i);
   assert.doesNotMatch(JSON.stringify(client), /provider-secret-token|unit-test-password|11103349/i);
   assert.deepEqual(client.getTrace().map((entry) => entry.endpoint), [
+    "/v1/projects/ghin-mobile-app/installations",
     "/golfer_login.json",
     "/golfers/search.json",
   ]);
-});
-
-test("genera un token de login RSA PKCS#1 v1.5 fresco sobre el payload GHIN exacto", () => {
-  const timestamp = Date.UTC(2026, 8, 26, 12, 34, 56, 789);
-  const expectedPayload = '{"source":"GHINcom","datetime":"2026-09-26T12:34:56.789Z"}';
-  assert.equal(
-    serializeGhinLoginTokenPayload(timestamp),
-    expectedPayload,
-  );
-  let observedPadding: number | null = null;
-  let observedPlaintext: string | null = null;
-  const injected = createGhinLoginToken(timestamp, (options, buffer) => {
-    observedPadding = options.padding;
-    observedPlaintext = buffer.toString("utf8");
-    return Buffer.from("encrypted-fixture", "utf8");
-  });
-  assert.equal(observedPadding, constants.RSA_PKCS1_PADDING);
-  assert.equal(observedPlaintext, expectedPayload);
-  assert.equal(injected, Buffer.from("encrypted-fixture", "utf8").toString("base64"));
-  const first = createGhinLoginToken(timestamp);
-  const second = createGhinLoginToken(timestamp);
-  assert.match(first, /^[A-Za-z0-9+/]+={0,2}$/);
-  assert.equal(Buffer.from(first, "base64").byteLength, 512);
-  assert.notEqual(first, second);
-  assert.notEqual(first, "123");
 });
 
 test("el transporte queda fuera del grafo cliente", () => {
@@ -152,12 +142,13 @@ test("un 401 invalida sesión, autentica una sola vez más y reintenta exactamen
   let golferCalls = 0;
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = new URL(String(input));
+    if (isFirebase(url)) return firebaseResponse();
     if (url.pathname.endsWith("/golfer_login.json")) {
       loginCalls += 1;
       return jsonResponse(200, { access_token: `token-${loginCalls}`, expires_in: 3_600 });
     }
     golferCalls += 1;
-    assertSingleGhinSource(url);
+    assert.equal(url.searchParams.get("source"), null);
     assert.equal(init?.headers && new Headers(init.headers).get("source"), null);
     if (golferCalls === 1) return jsonResponse(401, { error: "Invalid token" });
     return jsonResponse(200, { golfers: [{ ghin_number: "11103349", handicap_index: "+1.4" }] });
@@ -173,7 +164,7 @@ test("un 401 invalida sesión, autentica una sola vez más y reintenta exactamen
 });
 
 test("credenciales rechazadas producen sólo un error normalizado y sin cuerpo remoto", async () => {
-  const fetchImpl: typeof fetch = async () => jsonResponse(400, {
+  const fetchImpl: typeof fetch = async (input) => isFirebase(new URL(String(input))) ? firebaseResponse() : jsonResponse(400, {
     error: `Incorrect Credentials for ${credentials.login}: ${credentials.password}`,
   });
   const client = new GhinReadOnlyClient({ baseUrl: "https://api2.ghin.com/api/v1", credentials, fetchImpl });
@@ -194,7 +185,7 @@ test("un 400 de contrato no se disfraza como credenciales inválidas", async () 
   const client = new GhinReadOnlyClient({
     baseUrl: "https://api2.ghin.com/api/v1",
     credentials,
-    fetchImpl: async () => jsonResponse(400, { error: "Login token timestamp rejected" }),
+    fetchImpl: async (input) => isFirebase(new URL(String(input))) ? firebaseResponse() : jsonResponse(400, { error: "Login token rejected" }),
   });
   await assert.rejects(
     client.authenticate(),
@@ -209,34 +200,29 @@ test("rechaza tokens ya vencidos y respuestas de token malformadas", async () =>
     baseUrl: "https://api2.ghin.com/api/v1",
     credentials,
     now: () => Date.UTC(2026, 8, 24),
-    fetchImpl: async () => jsonResponse(200, { access_token: "expired-token", expires_in: 0 }),
+    fetchImpl: async (input) => isFirebase(new URL(String(input))) ? firebaseResponse() : jsonResponse(200, { access_token: "expired-token", expires_in: 0 }),
   });
   await assert.rejects(expired.authenticate(), (error: unknown) => error instanceof GhinClientError && error.code === "unauthorized");
 
   const malformed = new GhinReadOnlyClient({
     baseUrl: "https://api2.ghin.com/api/v1",
     credentials,
-    fetchImpl: async () => jsonResponse(200, { golfer_user: { status: "Active" } }),
+    fetchImpl: async (input) => isFirebase(new URL(String(input))) ? firebaseResponse() : jsonResponse(200, { golfer_user: { status: "Active" } }),
   });
   await assert.rejects(malformed.authenticate(), (error: unknown) => error instanceof GhinClientError && error.code === "invalid_response");
 });
 
-test("scores usa el contrato web actual y sólo cae al histórico ante 404/405", async () => {
+test("scores usa exactamente el endpoint read-only demostrado", async () => {
   const endpoints: string[] = [];
   const fetchImpl: typeof fetch = async (input) => {
     const url = new URL(String(input));
     endpoints.push(url.pathname);
+    if (isFirebase(url)) return firebaseResponse();
     if (url.pathname.endsWith("/golfer_login.json")) return jsonResponse(200, { token: "read-only-token", expires_in: 3_600 });
     if (url.pathname.endsWith("/scores.json")) {
-      assert.equal(url.searchParams.get("offset"), "0");
-      assert.equal(url.searchParams.get("limit"), "10");
-      assertSingleGhinSource(url);
-      return jsonResponse(404, { error: "not found" });
-    }
-    if (url.pathname.endsWith("/scores/search.json")) {
-      assertSingleGhinSource(url);
-      assert.equal(url.searchParams.get("per_page"), "10");
-      assert.equal(url.searchParams.get("page"), "1");
+      assert.equal(url.searchParams.get("offset"), null);
+      assert.equal(url.searchParams.get("limit"), null);
+      assert.equal(url.searchParams.get("source"), null);
       return jsonResponse(200, {
         scores: [{ id: 7, played_at: "2026-09-20", adjusted_gross_score: 81, differential: 8.1 }],
       });
@@ -250,37 +236,39 @@ test("scores usa el contrato web actual y sólo cae al histórico ante 404/405",
   assert.equal(scores.data.length, 1);
   assert.equal(scores.data[0].adjustedGrossScore, 81);
   assert.deepEqual(endpoints, [
+    "/v1/projects/ghin-mobile-app/installations",
     "/api/v1/golfer_login.json",
     "/api/v1/scores.json",
-    "/api/v1/scores/search.json",
   ]);
 });
 
-test("lookup cae al endpoint global sólo ante incompatibilidad 404/405 y conserva parámetros actuales", async () => {
+test("lookup usa exactamente el contrato demostrado y selecciona home club", async () => {
   const endpoints: string[] = [];
   const fetchImpl: typeof fetch = async (input) => {
     const url = new URL(String(input));
     endpoints.push(url.pathname);
+    if (isFirebase(url)) return firebaseResponse();
     if (url.pathname.endsWith("/golfer_login.json")) return jsonResponse(200, { token: "read-only-token", expires_in: 3_600 });
     if (url.pathname.endsWith("/golfers/search.json")) {
-      assertSingleGhinSource(url);
-      return jsonResponse(405, { error: "unsupported" });
-    }
-    if (url.pathname.endsWith("/golfers.json")) {
       assert.equal(url.searchParams.get("golfer_id"), "11103349");
-      assert.equal(url.searchParams.get("from_ghin"), "true");
-      assert.equal(url.searchParams.get("source"), "GHINcom");
-      return jsonResponse(200, { golfers: [{ ghin: "11103349", handicap_index: "7.1", status: "Active" }] });
+      assert.equal(url.searchParams.get("per_page"), "100");
+      assert.equal(url.searchParams.get("source"), null);
+      return jsonResponse(200, { golfers: [
+        { ghin: "11103349", handicap_index: "7.1", status: "Active", club_name: "Secondary" },
+        { ghin: "11103349", handicap_index: "7.1", status: "Active", club_name: "La Vista Country Club", is_home_club: true },
+      ] });
     }
     throw new Error("unexpected endpoint");
   };
   const client = new GhinReadOnlyClient({ baseUrl: "https://api2.ghin.com/api/v1", credentials, fetchImpl });
 
-  assert.equal((await client.lookupGolfer("11103349")).data.handicapIndex, 7.1);
+  const golfer = await client.lookupGolfer("11103349");
+  assert.equal(golfer.data.handicapIndex, 7.1);
+  assert.equal(golfer.data.homeClubName, "La Vista Country Club");
   assert.deepEqual(endpoints, [
+    "/v1/projects/ghin-mobile-app/installations",
     "/api/v1/golfer_login.json",
     "/api/v1/golfers/search.json",
-    "/api/v1/golfers.json",
   ]);
 });
 
@@ -288,6 +276,7 @@ test("límites no finitos nunca se envían como NaN o Infinity", async () => {
   const observed: URL[] = [];
   const fetchImpl: typeof fetch = async (input) => {
     const url = new URL(String(input));
+    if (isFirebase(url)) return firebaseResponse();
     if (url.pathname.endsWith("/golfer_login.json")) return jsonResponse(200, { token: "read-only-token", expires_in: 3_600 });
     observed.push(url);
     return jsonResponse(200, url.pathname.endsWith("/scores.json") ? { Scores: [] } : { courses: [] });
@@ -296,13 +285,15 @@ test("límites no finitos nunca se envían como NaN o Infinity", async () => {
 
   await client.getScores("11103349", Number.NaN);
   await client.searchCourses("La Vista", Number.POSITIVE_INFINITY);
-  assert.deepEqual(observed.map((url) => url.searchParams.get("limit")), ["20", null]);
-  observed.forEach(assertSingleGhinSource);
+  assert.deepEqual(observed.map((url) => url.searchParams.get("limit")), [null, null]);
+  assert.equal(observed[0].searchParams.get("source"), null);
+  assertSingleGhinSource(observed[1]);
 });
 
 test("curso y TeeSet preservan null reales y datos por hoyo sin convertirlos a cero", async () => {
   const fetchImpl: typeof fetch = async (input) => {
     const url = new URL(String(input));
+    if (isFirebase(url)) return firebaseResponse();
     if (url.pathname.endsWith("/golfer_login.json")) return jsonResponse(200, { token: "read-only-token", expires_in: 3_600 });
     if (url.pathname.endsWith("/SearchCourses.json")) {
       assert.equal(url.searchParams.get("name"), "La Vista");
@@ -351,6 +342,7 @@ test("curso y TeeSet preservan null reales y datos por hoyo sin convertirlos a c
 test("Course Search y Details conservan fallbacks históricos sólo ante 404/405", async () => {
   const fetchImpl: typeof fetch = async (input) => {
     const url = new URL(String(input));
+    if (isFirebase(url)) return firebaseResponse();
     if (url.pathname.endsWith("/golfer_login.json")) {
       return jsonResponse(200, { token: "read-only-token", expires_in: 3_600 });
     }
