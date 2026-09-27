@@ -83,3 +83,17 @@ test("GHIN admin page is hidden outside Preview and its client never references 
   assert.match(client, /if \(!configuration\)/);
   assert.doesNotMatch(`${page}\n${client}\n${source(routePath)}`, /PENDING_CONFIGURATION|NOT_RUN/);
 });
+
+test("GHIN diagnostic client renders bounded summaries instead of raw provider payloads", () => {
+  const client = source(clientPath);
+
+  assert.doesNotMatch(client, /function\s+JsonPanel/);
+  assert.doesNotMatch(client, /<pre[^>]*>\s*\{JSON\.stringify/);
+  assert.match(client, /MAX_SCORE_ROWS\s*=\s*10/);
+  assert.match(client, /MAX_TRACE_ROWS\s*=\s*30/);
+  assert.match(client, /Ver hoyos/);
+  assert.match(client, /expandedTee\s*===\s*key/);
+  assert.match(client, /TeeSetRatingId/);
+  assert.match(client, /Rating Front/);
+  assert.match(client, /Slope Back/);
+});
