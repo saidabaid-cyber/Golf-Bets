@@ -11,6 +11,11 @@ where owner_id in (
   '40000000-0000-4000-8000-000000000001'::uuid,
   '40000000-0000-4000-8000-000000000002'::uuid
 );
+delete from private.account_lifecycle_state
+where user_id in (
+  '40000000-0000-4000-8000-000000000001'::uuid,
+  '40000000-0000-4000-8000-000000000002'::uuid
+);
 delete from public.golf_tee_provider_links
 where tee_id in ('provider-test-tee-a', 'provider-test-tee-b')
    or course_id in ('provider-test-course-a', 'provider-test-course-b');
@@ -285,8 +290,9 @@ declare
   denied boolean := false;
 begin
   select count(*) into row_count from public.player_handicap_provider_profiles;
-  if row_count <> 1 then raise exception 'owner cannot read its provider profile'; end if;
-  select count(*) into row_count from public.golf_course_provider_links where provider = 'GHIN';
+  if row_count <> 0 then raise exception 'unverified provider lookup was exposed as an active connection'; end if;
+  select count(*) into row_count from public.golf_course_provider_links
+  where provider = 'GHIN' and course_id = 'provider-test-course-a';
   if row_count <> 1 then raise exception 'authenticated account cannot read provider mappings'; end if;
   begin
     update public.player_handicap_provider_profiles

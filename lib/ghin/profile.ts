@@ -57,7 +57,7 @@ export function parseGhinProfileResponse(value: unknown): GhinProfileResponse | 
     || typeof profile.lastSyncedAt !== "string"
     || typeof profile.lastAttemptedAt !== "string"
     || typeof profile.syncStatus !== "string"
-    || !["LOOKUP_FOUND", "SELF_ATTESTED", "VERIFIED", "DISCONNECTED"].includes(String(profile.associationStatus))) return null;
+    || profile.associationStatus !== "VERIFIED") return null;
   const clubName = nullableText(profile.clubName);
   const homeClubName = nullableText(profile.homeClubName);
   const status = nullableText(profile.status);

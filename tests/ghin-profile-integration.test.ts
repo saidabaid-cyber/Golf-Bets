@@ -156,11 +156,16 @@ test("existing migration is owner-readable, service-write-only and contains no s
 
 test("multiuser migration enforces verified identity uniqueness and stores no secrets", () => {
   const migration = readFileSync("supabase/migrations/20260927223000_ghin_multiuser_linking.sql", "utf8");
+  const cleanup = readFileSync("supabase/migrations/20260928031010_migrate_legacy_self_attested_ghin.sql", "utf8");
   assert.match(migration, /association_status in \('LOOKUP_FOUND', 'SELF_ATTESTED', 'VERIFIED', 'DISCONNECTED'\)/);
   assert.match(migration, /create unique index if not exists player_handicap_provider_profiles_provider_player_unique/);
   assert.match(migration, /where association_status = 'VERIFIED'/);
   assert.match(migration, /player_handicap_provider_link_audit/);
   assert.match(migration, /enable row level security/);
   assert.match(migration, /unlink_ghin_profile_v1/);
+  assert.match(cleanup, /delete from public\.player_handicap_provider_profiles[\s\S]*association_status = 'SELF_ATTESTED'/);
+  assert.match(cleanup, /association_status in \('LOOKUP_FOUND', 'VERIFIED', 'DISCONNECTED'\)/);
+  assert.match(cleanup, /association_status = 'VERIFIED'[\s\S]*private\.account_subject_active/);
   assert.doesNotMatch(migration, /\b(password|bearer_token|firebase_token|cookie|authorization_header)\b/i);
+  assert.doesNotMatch(cleanup, /\b(password|bearer_token|firebase_token|cookie|authorization_header|raw_response)\b/i);
 });

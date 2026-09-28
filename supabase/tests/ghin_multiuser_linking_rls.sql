@@ -12,6 +12,11 @@ where owner_id in (
   '41000000-0000-4000-8000-000000000001'::uuid,
   '41000000-0000-4000-8000-000000000002'::uuid
 );
+delete from private.account_lifecycle_state
+where user_id in (
+  '41000000-0000-4000-8000-000000000001'::uuid,
+  '41000000-0000-4000-8000-000000000002'::uuid
+);
 delete from auth.users
 where id in (
   '41000000-0000-4000-8000-000000000001'::uuid,
@@ -22,6 +27,9 @@ do $$
 begin
   if to_regclass('public.player_handicap_provider_link_audit') is null then
     raise exception 'missing GHIN unlink audit';
+  end if;
+  if to_regclass('private.ghin_legacy_self_attested_migrations') is null then
+    raise exception 'missing legacy SELF_ATTESTED migration audit';
   end if;
   if not exists (
     select 1 from pg_class relation
@@ -35,6 +43,12 @@ begin
     or has_table_privilege('authenticated', 'public.player_handicap_provider_link_audit', 'UPDATE')
     or has_table_privilege('authenticated', 'public.player_handicap_provider_link_audit', 'DELETE') then
     raise exception 'authenticated role can access unlink audit';
+  end if;
+  if has_table_privilege('authenticated', 'private.ghin_legacy_self_attested_migrations', 'SELECT')
+    or has_table_privilege('authenticated', 'private.ghin_legacy_self_attested_migrations', 'INSERT')
+    or has_table_privilege('authenticated', 'private.ghin_legacy_self_attested_migrations', 'UPDATE')
+    or has_table_privilege('authenticated', 'private.ghin_legacy_self_attested_migrations', 'DELETE') then
+    raise exception 'authenticated role can access legacy SELF_ATTESTED migration audit';
   end if;
   if not exists (
     select 1 from pg_indexes
@@ -76,33 +90,41 @@ insert into public.player_handicap_provider_profiles(
   'Active', 8.1, now(), now(), 'SUCCESS'
 );
 
--- Legacy Preview rows remain non-active and may coexist until their owner
--- reauthorizes. Promoting a second owner to VERIFIED must still be rejected.
-insert into public.player_handicap_provider_profiles(
-  owner_id, provider, external_player_id, association_status, self_attested_at,
-  provider_player_name, last_successful_sync_at, last_attempted_sync_at, last_attempt_status
-) values (
-  '41000000-0000-4000-8000-000000000002', 'GHIN', '90000001', 'SELF_ATTESTED', now(),
-  'Legacy Synthetic GHIN B', now(), now(), 'SUCCESS'
-);
-
+-- SELF_ATTESTED is retired and cannot be represented in the active table.
 do $$
 declare rejected boolean := false;
 begin
   begin
-    update public.player_handicap_provider_profiles
-    set association_status = 'VERIFIED'
-    where owner_id = '41000000-0000-4000-8000-000000000002'
-      and provider = 'GHIN';
+    insert into public.player_handicap_provider_profiles(
+      owner_id, provider, external_player_id, association_status, self_attested_at,
+      provider_player_name, last_successful_sync_at, last_attempted_sync_at, last_attempt_status
+    ) values (
+      '41000000-0000-4000-8000-000000000002', 'GHIN', '90000001', 'SELF_ATTESTED', now(),
+      'Legacy Synthetic GHIN B', now(), now(), 'SUCCESS'
+    );
+  exception when check_violation then rejected := true;
+  end;
+  if not rejected then raise exception 'SELF_ATTESTED remained representable as an active GHIN connection'; end if;
+end;
+$$;
+
+-- A second verified owner cannot claim the same provider identity.
+do $$
+declare rejected boolean := false;
+begin
+  begin
+    insert into public.player_handicap_provider_profiles(
+      owner_id, provider, external_player_id, association_status, self_attested_at,
+      provider_player_name, last_successful_sync_at, last_attempted_sync_at, last_attempt_status
+    ) values (
+      '41000000-0000-4000-8000-000000000002', 'GHIN', '90000001', 'VERIFIED', now(),
+      'Duplicate Synthetic GHIN B', now(), now(), 'SUCCESS'
+    );
   exception when unique_violation then rejected := true;
   end;
   if not rejected then raise exception 'same GHIN linked to two Backyard owners'; end if;
 end;
 $$;
-
-delete from public.player_handicap_provider_profiles
-where owner_id = '41000000-0000-4000-8000-000000000002'
-  and provider = 'GHIN';
 
 -- The ordinary multiuser case: two Backyard owners, two distinct verified
 -- GHIN identities. Every subsequent read runs as the authenticated owner.
