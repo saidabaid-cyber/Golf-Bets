@@ -5,6 +5,7 @@ import {
   normalizeGhinError,
   parseGhinCourse,
   parseGhinCourses,
+  parseAuthenticatedGhinGolfer,
   parseGhinFacilities,
   parseGhinGolfer,
   parseGhinGolfers,
@@ -60,6 +61,8 @@ export type GhinAuthDiagnostics = {
   authenticatedAt: string;
   expiresAt: string | null;
   reused: boolean;
+  /** Public account identifier from golfer_login; never contains a token. */
+  golferNumber: string | null;
 };
 
 export type GhinReadResult<T> = {
@@ -104,6 +107,7 @@ type AuthSession = {
   effectiveExpiresAt: number;
   httpStatus: number;
   firebaseHttpStatus: number;
+  golferNumber: string | null;
 };
 
 type JsonResponse = {
@@ -168,7 +172,7 @@ function query(path: string, params: Record<string, string | number | boolean | 
  */
 export class GhinReadOnlyClient {
   private readonly baseUrl: string;
-  readonly #credentials: GhinServerCredentials;
+  #credentials: GhinServerCredentials | null;
   private readonly fetchImpl: FetchLike;
   private readonly clock: () => number;
   private readonly timeoutMs: number;
@@ -219,6 +223,16 @@ export class GhinReadOnlyClient {
     this.courseCache.clear();
     this.teeCache.clear();
     this.scorePostingTeeCache.clear();
+  }
+
+  /** Drops the only retained reference to the supplied password. The current
+   * bearer may continue to serve read-only calls until it expires. */
+  discardCredentials() {
+    this.#credentials = null;
+  }
+
+  hasUsableSession() {
+    return this.sessionUsable(this.#authSession);
   }
 
   invalidateGolfer(ghinNumber: string) {
@@ -288,6 +302,10 @@ export class GhinReadOnlyClient {
   }
 
   private async login(): Promise<AuthSession> {
+    const credentials = this.#credentials;
+    if (!credentials) {
+      throw new GhinClientError(normalizeGhinError("unauthorized", 401), "/golfer_login.json");
+    }
     const authenticatedAt = this.clock();
     const firebase = await this.fetchJson("POST", FIREBASE_SESSION_URL, {
       headers: {
@@ -309,8 +327,8 @@ export class GhinReadOnlyClient {
       },
       body: JSON.stringify({
         user: {
-          password: this.#credentials.password,
-          email_or_ghin: this.#credentials.login,
+          password: credentials.password,
+          email_or_ghin: credentials.login,
         },
         token: installationToken.accessToken,
       }),
@@ -329,6 +347,7 @@ export class GhinReadOnlyClient {
       effectiveExpiresAt,
       httpStatus: response.status,
       firebaseHttpStatus: firebase.status,
+      golferNumber: parseAuthenticatedGhinGolfer(response.payload)?.ghinNumber ?? null,
     };
   }
 
@@ -358,6 +377,7 @@ export class GhinReadOnlyClient {
       authenticatedAt: new Date(session.authenticatedAt).toISOString(),
       expiresAt: Number.isFinite(session.effectiveExpiresAt) ? new Date(session.effectiveExpiresAt).toISOString() : null,
       reused,
+      golferNumber: session.golferNumber,
     };
   }
 
@@ -418,6 +438,42 @@ export class GhinReadOnlyClient {
         homeClubName: home?.clubName ?? selected.homeClubName,
       };
       return { data: golfer, endpoint: response.endpoint, httpStatus: response.status, fetchedAt: new Date(this.clock()).toISOString() };
+    });
+  }
+
+  /** Resolves the golfer identity bound to the email that just authenticated.
+   * This is used only when golfer_login omits a GHIN number. A shared email
+   * that resolves to more than one distinct golfer is rejected instead of
+   * guessing which identity to link. */
+  lookupGolferByEmail(email: string): Promise<GhinReadResult<NormalizedGhinGolfer>> {
+    const normalized = email.trim().toLowerCase();
+    if (normalized.length < 5 || normalized.length > 254 || !normalized.includes("@")) {
+      return Promise.reject(new GhinClientError(normalizeGhinError("not found", 404), "/golfers/search.json"));
+    }
+    return this.golferCache.get(`email:${normalized}`, async () => {
+      const endpoint = query("/golfers/search.json", {
+        email: normalized,
+        page: 1,
+        per_page: 100,
+        sorting_criteria: "last_name_first_name",
+        order: "asc",
+      });
+      const response = await this.authorizedJson(endpoint);
+      const golfers = parseGhinGolfers(response.payload);
+      const distinct = [...new Set(golfers.map((golfer) => golfer.ghinNumber))];
+      if (distinct.length !== 1) {
+        throw new GhinClientError(normalizeGhinError("invalid response", 409), response.endpoint);
+      }
+      const matching = golfers.filter((golfer) => golfer.ghinNumber === distinct[0]);
+      const home = matching.find((golfer) => golfer.isHomeClub === true) ?? null;
+      const selected = home ?? matching[0];
+      if (!selected) throw new GhinClientError(normalizeGhinError("not found", 404), response.endpoint);
+      return {
+        data: { ...selected, homeClubName: home?.clubName ?? selected.homeClubName },
+        endpoint: response.endpoint,
+        httpStatus: response.status,
+        fetchedAt: new Date(this.clock()).toISOString(),
+      };
     });
   }
 

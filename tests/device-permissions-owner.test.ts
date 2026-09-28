@@ -97,14 +97,11 @@ test("unidades y preferencias de canales persisten por cuenta sin mutar yardas a
   assert.equal(storedYards, 100);
 });
 
-test("Home Club usa modo de club sin selección de tee ni ratings", () => {
+test("Home Club remains optional in Profile and is absent from Handicap onboarding", () => {
   const onboarding = readFileSync("app/components/beta-onboarding-flow.tsx", "utf8");
   const picker = readFileSync("app/components/catalog-course-picker.tsx", "utf8");
   const profile = readFileSync("app/components/profile-account-panel.tsx", "utf8");
-  assert.match(onboarding, /CatalogCoursePicker[^>]*purpose="home-club"/);
-  assert.match(onboarding, /!profile\.homeClubId \|\| !profile\.homeCourseId \|\| !homeClubSelectionReady/);
-  assert.match(onboarding, /onSelectHomeCourse=/);
-  assert.match(onboarding, /if\(result!==['"]cloud['"]\)throw new Error\(['"]No pudimos confirmar tu Home Club en la nube\. Reintenta para continuar\./);
+  assert.doesNotMatch(onboarding, /CatalogCoursePicker|homeClubSelectionReady|onSelectHomeCourse=/);
   assert.doesNotMatch(onboarding, /onSelectClub=\{club =>/);
   assert.match(picker, /if\(purpose==='home-club'\)\{[\s\S]*await onSelectHomeCourse[\s\S]*return;/);
   const homeSelection = picker.indexOf("if(purpose==='home-club'){");

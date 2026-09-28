@@ -6,6 +6,7 @@ export type GhinProviderProfileRow = {
   association_status: GhinProfileProjection["associationStatus"];
   provider_player_name: string;
   provider_club_name: string | null;
+  provider_home_club_name: string | null;
   provider_player_status: string | null;
   handicap_index: number | null;
   handicap_effective_at: string | null;
@@ -27,7 +28,7 @@ export function providerRowToProfile(row: GhinProviderProfileRow): GhinProfilePr
     ghinNumber: row.external_player_id,
     playerName: row.provider_player_name,
     clubName: row.provider_club_name,
-    homeClubName: row.provider_club_name,
+    homeClubName: row.provider_home_club_name ?? row.provider_club_name,
     handicapIndex: row.handicap_index,
     status: row.provider_player_status,
     revisionDate: row.provider_updated_at ?? row.handicap_effective_at,
@@ -39,16 +40,17 @@ export function providerRowToProfile(row: GhinProviderProfileRow): GhinProfilePr
   };
 }
 
-export function successfulProviderWrite(ownerId: string, golfer: NormalizedGhinGolfer, attemptedAt: string) {
+export function verifiedProviderWrite(ownerId: string, golfer: NormalizedGhinGolfer, attemptedAt: string) {
   const revision = instantOrNull(golfer.updatedAt);
   return {
     owner_id: ownerId,
     provider: "GHIN",
     external_player_id: golfer.ghinNumber,
-    association_status: "SELF_ATTESTED",
+    association_status: "VERIFIED",
     self_attested_at: attemptedAt,
     provider_player_name: golfer.name,
-    provider_club_name: golfer.homeClubName ?? golfer.clubName,
+    provider_club_name: golfer.clubName ?? golfer.homeClubName,
+    provider_home_club_name: golfer.homeClubName ?? golfer.clubName,
     provider_association_name: golfer.associationName,
     provider_player_status: golfer.rawStatus ?? golfer.status,
     handicap_index: golfer.handicapIndex,

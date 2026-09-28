@@ -20,6 +20,9 @@ export function HandicapSourceChoices({ control, authenticated, ghinControl }: {
       {!authenticated && <p className={styles.note}>Inicia sesión para guardar esta preferencia.</p>}
       {control.error && <p role="alert">{control.error}</p>}
     </div>
+    <div className={styles.choice}><strong>CONTINUAR SIN ÍNDICE</strong><p>Puedes jugar y usar The Backyard sin vincular GHIN ni activar Backyard Index.</p>
+      <button type="button" className="secondary" disabled={!authenticated || !control.ready || control.saving} onClick={() => control.change(false)}>CONTINUAR SIN ÍNDICE</button>
+    </div>
   </section>;
 }
 

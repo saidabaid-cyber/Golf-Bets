@@ -163,6 +163,87 @@ test("un 401 invalida sesión, autentica una sola vez más y reintenta exactamen
   assert.equal(client.getTrace().filter((entry) => entry.endpoint.endsWith("/golfers/search.json")).length, 2);
 });
 
+test("normal-user auth exposes only the public GHIN identity and discards credentials after login", async () => {
+  let firebaseCalls = 0;
+  let loginCalls = 0;
+  let golferCalls = 0;
+  const client = new GhinReadOnlyClient({
+    baseUrl: "https://api2.ghin.com/api/v1",
+    credentials,
+    fetchImpl: async (input) => {
+      const url = new URL(String(input));
+      if (isFirebase(url)) { firebaseCalls += 1; return firebaseResponse(); }
+      if (url.pathname.endsWith("/golfer_login.json")) {
+        loginCalls += 1;
+        return jsonResponse(200, {
+          golfer_user: {
+            golfer_user_token: "ephemeral-provider-token",
+            golfers: [{ ghin_number: "11103349", player_name: "Said Abaid Taja", club_name: "La Vista", is_home_club: true }],
+          },
+          expires_in: 3_600,
+        });
+      }
+      golferCalls += 1;
+      if (golferCalls === 1) return jsonResponse(200, { golfers: [{ ghin_number: "11103349", player_name: "Said Abaid Taja" }] });
+      return jsonResponse(401, { error: "Invalid token" });
+    },
+  });
+
+  const auth = await client.authenticate();
+  assert.equal(auth.golferNumber, "11103349");
+  client.discardCredentials();
+  assert.equal(client.hasUsableSession(), true);
+  await client.lookupGolfer("11103349");
+  client.invalidateGolfer("11103349");
+  await assert.rejects(client.lookupGolfer("11103349"), (error: unknown) => error instanceof GhinClientError && error.code === "unauthorized");
+  assert.equal(firebaseCalls, 1, "credentialless 401 must not create another Firebase session");
+  assert.equal(loginCalls, 1, "credentialless 401 must require explicit reauthorization");
+});
+
+test("email-authenticated golfer lookup binds to the same email and rejects ambiguous identities", async () => {
+  const requestedEmails: string[] = [];
+  const client = new GhinReadOnlyClient({
+    baseUrl: "https://api2.ghin.com/api/v1",
+    credentials: { login: "owner@example.test", password: "unit-test-password" },
+    fetchImpl: async (input) => {
+      const url = new URL(String(input));
+      if (isFirebase(url)) return firebaseResponse();
+      if (url.pathname.endsWith("/golfer_login.json")) {
+        return jsonResponse(200, { golfer_user: { golfer_user_token: "email-owner-token" }, expires_in: 3_600 });
+      }
+      requestedEmails.push(url.searchParams.get("email") ?? "");
+      return jsonResponse(200, { golfers: [
+        { ghin_number: "11103349", player_name: "Said Abaid Taja", club_name: "Secondary" },
+        { ghin_number: "11103349", player_name: "Said Abaid Taja", club_name: "La Vista", is_home_club: true },
+      ] });
+    },
+  });
+  await client.authenticate();
+  const golfer = await client.lookupGolferByEmail(" Owner@Example.Test ");
+  assert.equal(golfer.data.ghinNumber, "11103349");
+  assert.equal(golfer.data.homeClubName, "La Vista");
+  assert.deepEqual(requestedEmails, ["owner@example.test"]);
+
+  const ambiguous = new GhinReadOnlyClient({
+    baseUrl: "https://api2.ghin.com/api/v1",
+    credentials: { login: "family@example.test", password: "unit-test-password" },
+    fetchImpl: async (input) => {
+      const url = new URL(String(input));
+      if (isFirebase(url)) return firebaseResponse();
+      if (url.pathname.endsWith("/golfer_login.json")) return jsonResponse(200, { golfer_user: { golfer_user_token: "family-token" }, expires_in: 3_600 });
+      return jsonResponse(200, { golfers: [
+        { ghin_number: "11103349", player_name: "Golfer One" },
+        { ghin_number: "22204450", player_name: "Golfer Two" },
+      ] });
+    },
+  });
+  await ambiguous.authenticate();
+  await assert.rejects(
+    ambiguous.lookupGolferByEmail("family@example.test"),
+    (error: unknown) => error instanceof GhinClientError && error.code === "invalid_response",
+  );
+});
+
 test("credenciales rechazadas producen sólo un error normalizado y sin cuerpo remoto", async () => {
   const fetchImpl: typeof fetch = async (input) => isFirebase(new URL(String(input))) ? firebaseResponse() : jsonResponse(400, {
     error: `Incorrect Credentials for ${credentials.login}: ${credentials.password}`,

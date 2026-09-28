@@ -18,6 +18,7 @@ export const REQUIRED_RLS_TESTS = [
   "admin_control_center_rls.sql",
   "account_entry_rls.sql",
   "ghin_provider_foundation_rls.sql",
+  "ghin_multiuser_linking_rls.sql",
   "ghin_course_sync_rls.sql",
   "legal_evidence_events_rls.sql",
   "feedback_requests_rls.sql",

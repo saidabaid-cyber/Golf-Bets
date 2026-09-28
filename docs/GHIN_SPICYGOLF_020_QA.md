@@ -70,9 +70,11 @@ sola vez ante 401/403. Las lecturas usan exactamente
 `/golfers/search.json` y `/scores.json`; no existen métodos de score posting.
 
 La activación requiere simultáneamente Preview, el master flag existente,
-`GHIN_READ_ONLY_ENABLED=true` y `GHIN_GOLFER_LOOKUP_ENABLED=true`. Las rutas de
-Perfil requieren además sesión Backyard y una membresía admin activa. Sólo el
-GHIN QA `11103349` está permitido en esta fase.
+`GHIN_READ_ONLY_ENABLED=true` y `GHIN_GOLFER_LOOKUP_ENABLED=true`. La evidencia
+de este documento corresponde a la cuenta QA original. El flujo normal de
+Perfil evolucionó después al modelo multiusuario descrito en
+[`GHIN_MULTIUSER_PREVIEW.md`](./GHIN_MULTIUSER_PREVIEW.md); las credenciales QA
+globales quedaron reservadas para diagnóstico admin protegido.
 
 La proyección persistida usa `player_handicap_provider_profiles`, ya aplicada en
 Supabase QA. Guarda sólo GHIN, nombre, home club, estado, Handicap Index, fecha de

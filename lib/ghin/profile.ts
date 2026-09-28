@@ -1,7 +1,5 @@
 import type { NormalizedGhinScore } from "./core";
 
-export const GHIN_QA_NUMBER = "11103349";
-
 export type GhinProfileProjection = {
   ghinNumber: string;
   playerName: string;
@@ -14,7 +12,7 @@ export type GhinProfileProjection = {
   lastAttemptedAt: string;
   syncStatus: string;
   lastErrorCode: string | null;
-  associationStatus: "LOOKUP_FOUND" | "SELF_ATTESTED" | "DISCONNECTED";
+  associationStatus: "LOOKUP_FOUND" | "SELF_ATTESTED" | "VERIFIED" | "DISCONNECTED";
 };
 
 export type GhinProfileResponse = {
@@ -47,12 +45,13 @@ export function parseGhinProfileResponse(value: unknown): GhinProfileResponse | 
   if (root.profile === null) return { available: true, profile: null };
   const profile = record(root.profile);
   if (!profile
-    || profile.ghinNumber !== GHIN_QA_NUMBER
+    || typeof profile.ghinNumber !== "string"
+    || !/^\d{5,12}$/.test(profile.ghinNumber)
     || typeof profile.playerName !== "string"
     || typeof profile.lastSyncedAt !== "string"
     || typeof profile.lastAttemptedAt !== "string"
     || typeof profile.syncStatus !== "string"
-    || !["LOOKUP_FOUND", "SELF_ATTESTED", "DISCONNECTED"].includes(String(profile.associationStatus))) return null;
+    || !["LOOKUP_FOUND", "SELF_ATTESTED", "VERIFIED", "DISCONNECTED"].includes(String(profile.associationStatus))) return null;
   const clubName = nullableText(profile.clubName);
   const homeClubName = nullableText(profile.homeClubName);
   const status = nullableText(profile.status);
@@ -68,7 +67,7 @@ export function parseGhinProfileResponse(value: unknown): GhinProfileResponse | 
   return {
     available: true,
     profile: {
-      ghinNumber: GHIN_QA_NUMBER,
+      ghinNumber: profile.ghinNumber,
       playerName: profile.playerName,
       clubName,
       homeClubName,

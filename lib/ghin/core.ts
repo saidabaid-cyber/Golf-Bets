@@ -351,6 +351,24 @@ export function parseGhinGolfers(payload: unknown): NormalizedGhinGolfer[] {
     .filter((golfer): golfer is NormalizedGhinGolfer => golfer !== null);
 }
 
+/**
+ * The consumer login response nests the authenticated golfer affiliations
+ * below `golfer_user.golfers`. Keep this parser separate from public golfer
+ * search so a successful login can be bound to the account that supplied the
+ * credentials without accepting an arbitrary GHIN number from the browser.
+ */
+export function parseAuthenticatedGhinGolfer(payload: unknown): NormalizedGhinGolfer | null {
+  if (!isRecord(payload)) return null;
+  const golferUser = childRecord(payload, ["golfer_user", "golferUser"]);
+  if (!golferUser) return null;
+  const affiliations = records(golferUser, ["golfers", "players"])
+    .map((candidate) => parseGhinGolfer(candidate))
+    .filter((candidate): candidate is NormalizedGhinGolfer => candidate !== null);
+  return affiliations.find((candidate) => candidate.isHomeClub === true)
+    ?? affiliations[0]
+    ?? parseGhinGolfer(golferUser);
+}
+
 function scoreHoles(record: UnknownRecord): number | null {
   const explicit = integer(field(record, ["holes_played", "number_of_holes", "hole_count"]), 1);
   if (explicit !== null) return explicit;

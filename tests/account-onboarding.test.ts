@@ -161,12 +161,12 @@ test("retrying the same checkpoint is idempotent", async () => {
   assert.deepEqual(h.metadata()[KEY], progress());
 });
 
-test("new Google user checkpoint survives save and becomes the canonical resume state", async () => {
+test("a legacy Course checkpoint survives save and resumes at the canonical GHIN step", async () => {
   const h = routeHarness({ initialMetadata: { email_verified: true, provider: "google" } });
-  const next = progress(OWNER, "course");
-  assert.equal((await h.run(next)).status, 200);
+  const legacy = progress(OWNER, "course");
+  assert.equal((await h.run(legacy)).status, 200);
   assert.equal(h.metadata().provider, "google");
-  assert.deepEqual(checkpoint.onboardingCheckpoint(h.metadata()[KEY], OWNER), next);
+  assert.deepEqual(checkpoint.onboardingCheckpoint(h.metadata()[KEY], OWNER), { ...legacy, step: "ghin" });
 });
 
 test("reload resumes the exact saved next onboarding step", async () => {

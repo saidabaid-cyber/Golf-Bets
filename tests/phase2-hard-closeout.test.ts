@@ -227,7 +227,9 @@ test("GHIN keeps a protected read-only provider surface without future placehold
   const flags = readFileSync("features/feature-flags/registry.ts", "utf8");
   const placeholder = readFileSync("app/components/ghin-placeholder.tsx", "utf8");
   assert.match(flags, /ghin_integration/);
-  assert.match(placeholder, /cuenta QA autorizada/);
+  assert.match(placeholder, /Inicia sesión para vincular tu cuenta GHIN/);
+  assert.match(placeholder, /sólo en dev\/Preview/);
+  assert.doesNotMatch(placeholder, /cuenta QA autorizada/);
   assert.doesNotMatch(placeholder, /PRÓXIMAMENTE|ModalShell|disabled/);
 });
 

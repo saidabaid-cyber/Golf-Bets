@@ -13,3 +13,7 @@
 .scoreList article { display: grid; grid-template-columns: auto 1fr; gap: .15rem .65rem; padding: .55rem; border: 1px solid color-mix(in srgb, currentColor 12%, transparent); border-radius: .6rem; }
 .scoreList article span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scoreList article small { grid-column: 1 / -1; color: var(--muted); }
+.authForm, .confirmIdentity { display: grid; gap: .9rem; min-width: min(28rem, calc(100vw - 3rem)); }
+.authForm h2, .authForm p, .confirmIdentity h2, .confirmIdentity p { margin: 0; }
+.authForm label { display: grid; gap: .35rem; font-weight: 750; }
+.authForm input { width: 100%; min-height: 2.75rem; }

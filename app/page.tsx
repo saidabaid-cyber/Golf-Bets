@@ -443,7 +443,7 @@ type NewRoundIntent =
 function GolfBetsApp() {
   const { identity, adminAccess, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, setCloudStatus, applyCloudPreferences, reportCloudSyncError, clearCloudSyncError, refreshCloudSession } = useBackyardAccount();
   const indexControl = useBackyardIndexPreference(identity.userId, identity.mode === "authenticated");
-  const ghinControl = useGhinReadOnlyProfile(identity.mode === "authenticated" ? identity.accessToken : null, adminAccess.hasAccess);
+  const ghinControl = useGhinReadOnlyProfile(identity.mode === "authenticated" ? identity.accessToken : null);
   const { tab, setTab, goBack, setNavigationGuard } = useScreenNavigation();
   const [profileFocus, setProfileFocus] = useState<"profile" | "equipment">("profile");
   const [profileRootRevision, setProfileRootRevision] = useState(0);

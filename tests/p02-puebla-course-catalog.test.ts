@@ -101,17 +101,22 @@ test("P02 nearby and search selections produce the same canonical club/course id
   assert.equal(courseSelectionLabel(nearbySelection), "CLUB CAMPESTRE EL CRISTO");
 });
 
-test("P02 onboarding wires nearby and manual results to one selection path and restores canonical ids", () => {
+test("P02 picker keeps one canonical selection path while Handicap onboarding omits fields", () => {
   const picker = readFileSync("app/components/catalog-course-picker.tsx", "utf8");
   const onboarding = readFileSync("app/components/beta-onboarding-flow.tsx", "utf8");
+  const profile = readFileSync("app/components/profile-account-panel.tsx", "utf8");
+  const play = readFileSync("app/page.tsx", "utf8");
   assert.match(picker, /onClick=\{\(\)=>selectClub\(c\)\}/);
   assert.match(picker, /onSelect=\{\(\)=>selectClub\(c\)\}/);
   assert.match(picker, /const course=purpose==='home-club'\?entry/);
   assert.match(picker, /await onSelectHomeCourse\(homeCourseSelection\(selected\)\)/);
   assert.match(picker, /aria-pressed=\{club===c\.clubId\}/);
   assert.doesNotMatch(picker, /Recorrido seleccionado:/);
-  assert.match(onboarding, /selectedClubId=\{profile\.homeClubId\} selectedCourseId=\{profile\.homeCourseId\}/);
-  assert.match(onboarding, /disabled=\{!profile\.homeClubId \|\| !profile\.homeCourseId \|\| !homeClubSelectionReady\}/);
+  assert.doesNotMatch(onboarding, /CatalogCoursePicker|selectedClubId=|selectedCourseId=/);
+  assert.match(profile, /selectedClubId=\{draft\.homeClubId\} selectedCourseId=\{draft\.homeCourseId\}/);
+  assert.match(play, /1\. Campo → Layout → Tee/);
+  assert.match(play, /<CatalogCoursePicker/);
+  assert.match(play, /<RoundTeePicker/);
 });
 
 test("P02 source-confirmed nine-hole layout blocks the conflicting captured 18-hole card", () => {

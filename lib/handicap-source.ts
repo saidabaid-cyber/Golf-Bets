@@ -11,7 +11,7 @@ export function selectedHandicapIndex(preference: BackyardIndexPreference | null
   if (!preference || preference.userId !== userId) return { source: null, value: null };
   if (preference.handicapSource === "GHIN") {
     const usable = ghinProfile
-      && ghinProfile.associationStatus !== "DISCONNECTED"
+      && ghinProfile.associationStatus === "VERIFIED"
       && ghinProfile.handicapIndex !== null;
     return { source: "GHIN", value: usable ? ghinProfile.handicapIndex : null };
   }

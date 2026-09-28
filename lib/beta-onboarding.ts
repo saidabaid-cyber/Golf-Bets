@@ -79,9 +79,12 @@ export function normalizeBetaOnboardingProgress(
   const candidate = value as Partial<BetaOnboardingProgress>;
   if (candidate.version !== BETA_ONBOARDING_VERSION || candidate.userId !== userId) return null;
   const legacyGroupStep = typeof candidate.step === "string" && LEGACY_GROUP_STEPS.has(candidate.step);
-  const step = legacyGroupStep ? "complete" : typeof candidate.step === "string" && (BETA_ONBOARDING_STEPS as readonly string[]).includes(candidate.step)
+  const restoredStep = legacyGroupStep ? "complete" : typeof candidate.step === "string" && (BETA_ONBOARDING_STEPS as readonly string[]).includes(candidate.step)
     ? candidate.step as BetaOnboardingStep
     : "welcome";
+  // `course` remains in the v1 parser only so unfinished checkpoints survive
+  // the migration. Field/layout/tee selection now belongs exclusively to Play.
+  const step: BetaOnboardingStep = restoredStep === "course" ? "ghin" : restoredStep;
   const status = candidate.status === "complete" || step === "complete" ? "complete" : "in_progress";
   const completedAt = status === "complete" ? timestamp(candidate.completedAt, timestamp(candidate.updatedAt, now)) : undefined;
   const completedSteps = knownSteps(candidate.completedSteps);
