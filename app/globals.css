@@ -294,22 +294,23 @@ button:disabled{cursor:not-allowed;opacity:.5}.app{padding-top:calc(14px + env(s
 
 /* Keep transaction-specific consent above the live app without unmounting it. */
 .bettingConsentAccess{overflow:auto}.bettingConsentDialog{position:relative;width:min(100%,640px);max-height:calc(100svh - 40px);overflow:auto}
-.modalCloseButton{position:sticky;z-index:30;top:max(8px,env(safe-area-inset-top));display:grid;place-items:center;width:44px;min-width:44px;height:44px;margin:0 0 -44px auto;border:1px solid var(--line);border-radius:50%;background:rgba(255,255,255,.96);color:var(--ink);font-size:26px;line-height:1;box-shadow:0 4px 14px rgba(15,35,23,.12);touch-action:manipulation}.modalCloseButton:focus-visible{outline:3px solid #b9d9c1;outline-offset:2px}.modalCloseButton:disabled{opacity:.45}
 .ghinPlaceholderButton{display:inline-flex;align-items:center;justify-content:space-between;gap:10px;width:100%;margin-top:7px}.ghinPlaceholderButton small{border-radius:999px;background:var(--soft);padding:4px 7px;color:var(--muted);font-size:8px;letter-spacing:.5px}
 .profileGhinAction{padding:2px 0 9px}.profileGhinAction .ghinPlaceholderButton{min-height:44px;margin-top:0}
 
 /* Dialogs use the visible viewport (including the iOS keyboard), not an
    unbounded centered card. The close control remains in the scrolling card. */
 .modalBackdrop{height:var(--visual-viewport-height,100dvh);top:var(--visual-viewport-top,0px);bottom:auto;box-sizing:border-box;overflow:hidden}
-.modalBackdrop>section,.modalBackdrop>[role="dialog"]{min-height:0;max-height:100%;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scroll-padding-top:60px;scroll-padding-bottom:20px}
-.modalBackdrop{width:100%;max-width:100vw;min-width:0;padding-top:calc(12px + env(safe-area-inset-top));padding-right:calc(12px + env(safe-area-inset-right));padding-bottom:calc(12px + env(safe-area-inset-bottom));padding-left:calc(12px + env(safe-area-inset-left))}
+.modalBackdrop>section,.modalBackdrop>[role="dialog"]{position:relative;min-height:0;max-height:100%;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scroll-padding-top:60px;scroll-padding-bottom:20px}
+.modalBackdrop{width:100%;max-width:100vw;min-width:0;padding-top:calc(20px + env(safe-area-inset-top));padding-right:calc(20px + env(safe-area-inset-right));padding-bottom:calc(20px + env(safe-area-inset-bottom));padding-left:calc(20px + env(safe-area-inset-left))}
 .modalBackdrop>section,.modalBackdrop>[role="dialog"]{width:min(100%,430px);max-width:100%;min-width:0;box-sizing:border-box;overflow-x:hidden}
 .modalBackdrop form,.modalBackdrop fieldset,.modalBackdrop label,.modalBackdrop div{min-width:0;max-width:100%;box-sizing:border-box}
 .modalBackdrop input,.modalBackdrop select,.modalBackdrop textarea,.modalBackdrop button{max-width:100%;min-width:0;box-sizing:border-box}
 .modalBackdrop h1,.modalBackdrop h2,.modalBackdrop h3,.modalBackdrop p,.modalBackdrop li{max-width:100%;overflow-wrap:anywhere;word-break:normal}
-.confirmDialog{max-width:100%;min-width:0;box-sizing:border-box;overflow-x:hidden}
+.confirmDialog{position:relative;max-width:100%;min-width:0;box-sizing:border-box;overflow-x:hidden}
+.modalBackdrop button.modalCloseButton{position:absolute;z-index:30;top:14px;right:14px;display:inline-grid;place-items:center;box-sizing:border-box;width:44px;min-width:44px;max-width:44px;height:44px;min-height:44px;max-height:44px;inline-size:44px;min-inline-size:44px;max-inline-size:44px;block-size:44px;min-block-size:44px;max-block-size:44px;flex:0 0 44px;aspect-ratio:1/1;margin:0;padding:0;overflow:hidden;border:1px solid var(--line);border-radius:50%;background:rgba(255,255,255,.96);color:var(--ink);font-size:26px;line-height:1;box-shadow:0 4px 14px rgba(15,35,23,.12);touch-action:manipulation;-webkit-appearance:none;appearance:none}.modalBackdrop button.modalCloseButton:focus-visible{outline:3px solid #b9d9c1;outline-offset:2px}.modalBackdrop button.modalCloseButton:disabled{opacity:.45}
+.modalBackdrop>[role="dialog"]>.modalCloseButton~h2,.modalBackdrop>[role="dialog"]>.modalCloseButton~form>h2,.modalBackdrop>[role="dialog"]>.modalCloseButton~section>h2{min-width:0;padding-right:56px;overflow-wrap:anywhere}
 .confirmDialog .dialogActions button{width:100%;min-width:0;white-space:normal}
-@media(max-width:430px){.modalBackdrop{padding-top:calc(8px + env(safe-area-inset-top));padding-right:calc(8px + env(safe-area-inset-right));padding-bottom:calc(8px + env(safe-area-inset-bottom));padding-left:calc(8px + env(safe-area-inset-left))}.confirmDialog{padding:18px 14px}.confirmDialog .dialogActions{grid-template-columns:1fr}}
+@media(max-width:430px){.modalBackdrop{padding-top:calc(16px + env(safe-area-inset-top));padding-right:calc(16px + env(safe-area-inset-right));padding-bottom:calc(16px + env(safe-area-inset-bottom));padding-left:calc(16px + env(safe-area-inset-left))}.confirmDialog{padding:18px 14px}.modalBackdrop button.modalCloseButton{top:12px;right:12px}.confirmDialog .dialogActions{grid-template-columns:1fr}}
 html{scroll-padding-bottom:calc(90px + env(safe-area-inset-bottom))}
 .roundSessionActions{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-bottom:12px}.roundSessionActions button{min-width:0;min-height:44px;white-space:normal;font-size:12px}
 input,textarea,select{scroll-margin-block:80px calc(100px + env(safe-area-inset-bottom))}

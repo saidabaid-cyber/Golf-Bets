@@ -44,8 +44,8 @@ test("todos los archivos con diálogos interactivos exponen una salida visible",
     }
   }
   const globalStyles = read("app/globals.css");
-  assert.match(globalStyles, /\.modalCloseButton\{[^}]*width:44px[^}]*height:44px/);
-  assert.match(globalStyles, /\.modalCloseButton\{[^}]*safe-area-inset-top/);
+  assert.match(globalStyles, /\.modalBackdrop button\.modalCloseButton\{[^}]*width:44px[^}]*height:44px/);
+  assert.match(globalStyles, /\.modalBackdrop\{[^}]*safe-area-inset-top/);
 });
 
 test("los wizards reinician su propio scroll y conservan el contexto detrás", () => {

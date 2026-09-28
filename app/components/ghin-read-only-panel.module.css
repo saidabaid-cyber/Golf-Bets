@@ -1,11 +1,13 @@
-.root { display: grid; gap: .75rem; }
+.root { display: grid; width: 100%; min-width: 0; max-width: 100%; gap: .75rem; }
 .note { margin: 0; color: var(--muted); }
 .badge { width: fit-content; margin: 0; padding: .25rem .55rem; border: 1px solid color-mix(in srgb, var(--green) 45%, transparent); border-radius: 999px; color: var(--green); font-size: .72rem; font-weight: 800; letter-spacing: .06em; }
-.details { display: grid; gap: .35rem; margin: 0; }
-.details div { display: flex; justify-content: space-between; gap: 1rem; padding-bottom: .3rem; border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent); }
+.details { display: grid; width: 100%; min-width: 0; max-width: 100%; gap: .35rem; margin: 0; }
+.details div { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr); align-items: start; width: 100%; min-width: 0; max-width: 100%; gap: 1rem; padding-bottom: .3rem; border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent); }
+.details dt, .details dd { min-width: 0; max-width: 100%; overflow-wrap: anywhere; word-break: normal; }
 .details dt { color: var(--muted); }
-.details dd { margin: 0; text-align: right; font-weight: 700; }
-.actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.details dd { justify-self: end; margin: 0; text-align: right; font-weight: 700; }
+.actions { display: flex; width: 100%; min-width: 0; max-width: 100%; flex-wrap: wrap; gap: .5rem; }
+.actions button { min-width: 0; max-width: 100%; min-height: 44px; white-space: normal; overflow-wrap: anywhere; }
 .warning { margin: 0; color: var(--bad); }
 .scores { display: grid; gap: .5rem; }
 .scores p { margin: 0; }
@@ -13,7 +15,14 @@
 .scoreList article { display: grid; grid-template-columns: auto 1fr; gap: .15rem .65rem; padding: .55rem; border: 1px solid color-mix(in srgb, currentColor 12%, transparent); border-radius: .6rem; }
 .scoreList article span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scoreList article small { grid-column: 1 / -1; color: var(--muted); }
-.authForm, .confirmIdentity { display: grid; gap: .9rem; min-width: min(28rem, calc(100vw - 3rem)); }
+.authForm, .confirmIdentity { display: grid; width: 100%; min-width: 0; max-width: 100%; gap: .9rem; }
 .authForm h2, .authForm p, .confirmIdentity h2, .confirmIdentity p { margin: 0; }
 .authForm label { display: grid; gap: .35rem; font-weight: 750; }
-.authForm input { width: 100%; min-height: 2.75rem; }
+.authForm input { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; min-height: 2.75rem; }
+
+@media (max-width: 430px) {
+  .details div { grid-template-columns: minmax(0, 1fr); gap: .2rem; }
+  .details dd { justify-self: start; text-align: left; }
+  .actions { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .actions button { width: 100%; }
+}
