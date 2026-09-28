@@ -1,11 +1,19 @@
 import "server-only";
 
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  createHmac,
+  randomBytes,
+  timingSafeEqual,
+} from "node:crypto";
 
 import {
   GhinClientError,
   GhinReadOnlyClient,
   type GhinAuthDiagnostics,
+  type GhinPortableSession,
 } from "./client";
 import { resolveGhinPreviewCapabilities } from "./config";
 import type { NormalizedGhinGolfer } from "./core";
@@ -20,6 +28,10 @@ import {
 const PENDING_TTL_MS = 10 * 60_000;
 const MAX_PENDING = 250;
 const MAX_ACTIVE = 500;
+const MAX_SEALED_SESSION_CHARS = 24_000;
+const GHIN_SESSION_PURPOSE = "backyard-ghin-read-session-v1";
+
+export const GHIN_SESSION_COOKIE_NAME = "__Secure-backyard-ghin-read";
 
 export type GhinAuthorizationCandidate = {
   ghinNumber: string;
@@ -30,14 +42,14 @@ export type GhinAuthorizationCandidate = {
   revisionDate: string | null;
 };
 
-type UserSession = {
+export type GhinUserSession = {
   ownerId: string;
   ghinNumber: string;
   client: GhinReadOnlyClient;
   lastUsedAt: number;
 };
 
-type PendingAuthorization = UserSession & {
+type PendingAuthorization = GhinUserSession & {
   challengeId: string;
   candidate: GhinAuthorizationCandidate;
   golfer: NormalizedGhinGolfer;
@@ -51,8 +63,16 @@ type ConfirmationPayload = {
   golfer: NormalizedGhinGolfer;
 };
 
-const activeSessions = new Map<string, UserSession>();
+const activeSessions = new Map<string, GhinUserSession>();
 const pendingAuthorizations = new Map<string, PendingAuthorization>();
+
+type SealedSessionPayload = {
+  version: 1;
+  ownerId: string;
+  ghinNumber: string;
+  expiresAt: number;
+  session: GhinPortableSession;
+};
 
 function trimOldest<T extends { lastUsedAt: number }>(items: Map<string, T>, maximum: number) {
   if (items.size <= maximum) return;
@@ -88,6 +108,43 @@ function confirmationKey() {
   return createHash("sha256").update("backyard-ghin-confirmation-v1\0").update(serverSecret).digest();
 }
 
+function sessionKey() {
+  const serverSecret = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serverSecret) throw new Error("GHIN_SESSION_KEY_UNAVAILABLE");
+  return createHash("sha256").update(`${GHIN_SESSION_PURPOSE}\0`).update(serverSecret).digest();
+}
+
+function encryptSessionPayload(payload: SealedSessionPayload) {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", sessionKey(), iv);
+  const encrypted = Buffer.concat([cipher.update(JSON.stringify(payload), "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `v1.${iv.toString("base64url")}.${encrypted.toString("base64url")}.${tag.toString("base64url")}`;
+}
+
+function decryptSessionPayload(value: string): SealedSessionPayload | null {
+  if (!value || value.length > MAX_SEALED_SESSION_CHARS) return null;
+  const [version, encodedIv, encodedPayload, encodedTag, ...extra] = value.split(".");
+  if (version !== "v1" || !encodedIv || !encodedPayload || !encodedTag || extra.length) return null;
+  try {
+    const iv = Buffer.from(encodedIv, "base64url");
+    const encrypted = Buffer.from(encodedPayload, "base64url");
+    const tag = Buffer.from(encodedTag, "base64url");
+    if (iv.length !== 12 || tag.length !== 16 || !encrypted.length) return null;
+    const decipher = createDecipheriv("aes-256-gcm", sessionKey(), iv);
+    decipher.setAuthTag(tag);
+    const decoded = JSON.parse(Buffer.concat([decipher.update(encrypted), decipher.final()]).toString("utf8")) as unknown;
+    if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) return null;
+    const payload = decoded as Partial<SealedSessionPayload>;
+    if (payload.version !== 1 || typeof payload.ownerId !== "string" || typeof payload.ghinNumber !== "string"
+      || !/^\d{5,12}$/.test(payload.ghinNumber) || typeof payload.expiresAt !== "number"
+      || payload.expiresAt <= Date.now() || !payload.session || typeof payload.session !== "object") return null;
+    return payload as SealedSessionPayload;
+  } catch {
+    return null;
+  }
+}
+
 function confirmationTicket(ownerId: string, golfer: NormalizedGhinGolfer, expiresAt: number) {
   const payload: ConfirmationPayload = { version: 1, ownerId, expiresAt, golfer };
   const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
@@ -120,6 +177,15 @@ function clientFor(credentials: GhinServerCredentials) {
     throw new Error("GHIN_USER_FLOW_DISABLED");
   }
   return new GhinReadOnlyClient({ baseUrl: capabilities.apiBaseUrl, credentials });
+}
+
+function clientForPortableSession(session: GhinPortableSession) {
+  const capabilities = resolveGhinPreviewCapabilities(process.env);
+  if (!capabilities.previewOnly || !capabilities.readOnlyEnabled || !capabilities.golferLookup
+    || capabilities.scorePostingEnabled || !capabilities.apiBaseUrl) {
+    throw new Error("GHIN_USER_FLOW_DISABLED");
+  }
+  return new GhinReadOnlyClient({ baseUrl: capabilities.apiBaseUrl, session });
 }
 
 async function authenticateIdentity(
@@ -232,6 +298,7 @@ export async function beginGhinAuthorization(ownerId: string, credentials: GhinS
   challengeId: string;
   candidate: GhinAuthorizationCandidate;
   auth: GhinAuthDiagnostics;
+  session: GhinUserSession;
 }> {
   prune();
   const authenticated = await authenticateIdentity(credentials, "authorize");
@@ -240,7 +307,7 @@ export async function beginGhinAuthorization(ownerId: string, credentials: GhinS
   const stateStartedAt = Date.now();
   try {
     const challengeId = confirmationTicket(ownerId, authenticated.golfer, expiresAt);
-    pendingAuthorizations.set(challengeId, {
+    const session: PendingAuthorization = {
       challengeId,
       ownerId,
       ghinNumber: authenticated.golfer.ghinNumber,
@@ -249,7 +316,8 @@ export async function beginGhinAuthorization(ownerId: string, credentials: GhinS
       candidate: candidate(authenticated.golfer),
       expiresAt,
       lastUsedAt: now,
-    });
+    };
+    pendingAuthorizations.set(challengeId, session);
     trimOldest(pendingAuthorizations, MAX_PENDING);
     logGhinProfileStage({
       operation: "authorize",
@@ -260,7 +328,7 @@ export async function beginGhinAuthorization(ownerId: string, credentials: GhinS
       retryable: false,
       durationMs: Date.now() - stateStartedAt,
     });
-    return { challengeId, candidate: candidate(authenticated.golfer), auth: authenticated.auth };
+    return { challengeId, candidate: candidate(authenticated.golfer), auth: authenticated.auth, session };
   } catch (error) {
     logGhinProfileStage({
       operation: "authorize",
@@ -288,24 +356,64 @@ export function cancelGhinAuthorization(ownerId: string, challengeId: string) {
   if (pending?.ownerId === ownerId) pendingAuthorizations.delete(challengeId);
 }
 
-export function activateGhinSession(session: UserSession) {
+export function activateGhinSession(session: GhinUserSession) {
   const activated = { ...session, lastUsedAt: Date.now() };
   activeSessions.set(session.ownerId, activated);
   trimOldest(activeSessions, MAX_ACTIVE);
 }
 
-export function getGhinUserSession(ownerId: string, ghinNumber: string) {
+export function sealGhinUserSession(session: GhinUserSession) {
+  const portable = session.client.exportPortableSession();
+  if (!portable || (portable.golferNumber && portable.golferNumber !== session.ghinNumber)) {
+    throw new Error("GHIN_SESSION_INVALID");
+  }
+  const expiresAt = portable.effectiveExpiresAt;
+  return {
+    value: encryptSessionPayload({
+      version: 1,
+      ownerId: session.ownerId,
+      ghinNumber: session.ghinNumber,
+      expiresAt,
+      session: portable,
+    }),
+    expiresAt,
+  };
+}
+
+export function restoreGhinUserSession(ownerId: string, ghinNumber: string, sealed: string | null | undefined) {
+  const payload = sealed ? decryptSessionPayload(sealed) : null;
+  if (!payload || payload.ownerId !== ownerId || payload.ghinNumber !== ghinNumber
+    || (payload.session.golferNumber && payload.session.golferNumber !== ghinNumber)) return null;
+  try {
+    return {
+      ownerId,
+      ghinNumber,
+      client: clientForPortableSession(payload.session),
+      lastUsedAt: Date.now(),
+    } satisfies GhinUserSession;
+  } catch {
+    return null;
+  }
+}
+
+export function getGhinUserSession(ownerId: string, ghinNumber: string, sealed?: string | null) {
   prune();
   const session = activeSessions.get(ownerId) ?? null;
-  if (!session || session.ghinNumber !== ghinNumber) return null;
-  session.lastUsedAt = Date.now();
-  return session;
+  if (session && session.ghinNumber !== ghinNumber) activeSessions.delete(ownerId);
+  if (session?.ghinNumber === ghinNumber) {
+    session.lastUsedAt = Date.now();
+    return session;
+  }
+  const restored = restoreGhinUserSession(ownerId, ghinNumber, sealed);
+  if (!restored) return null;
+  activateGhinSession(restored);
+  return restored;
 }
 
 export async function reauthorizeGhinSession(ownerId: string, expectedGhinNumber: string, credentials: GhinServerCredentials) {
   prune();
   const authenticated = await authenticateIdentity(credentials, "reauthorize", expectedGhinNumber);
-  const session: UserSession = {
+  const session: GhinUserSession = {
     ownerId,
     ghinNumber: expectedGhinNumber,
     client: authenticated.client,

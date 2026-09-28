@@ -112,9 +112,8 @@ export class GhinClientError extends Error {
 
 type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
-export type GhinClientOptions = {
+type GhinClientCommonOptions = {
   baseUrl: string;
-  credentials: GhinServerCredentials;
   fetchImpl?: FetchLike;
   now?: () => number;
   timeoutMs?: number;
@@ -123,6 +122,22 @@ export type GhinClientOptions = {
   courseTtlMs?: number;
   onAuthDiagnostic?: (diagnostic: GhinAuthStageDiagnostic) => void;
 };
+
+export type GhinPortableSession = {
+  version: 1;
+  accessToken: string;
+  tokenExpiresAt: number | null;
+  authenticatedAt: number;
+  effectiveExpiresAt: number;
+  httpStatus: number;
+  firebaseHttpStatus: number;
+  golferNumber: string | null;
+};
+
+export type GhinClientOptions = GhinClientCommonOptions & (
+  | { credentials: GhinServerCredentials; session?: never }
+  | { credentials?: never; session: GhinPortableSession }
+);
 
 type AuthSession = {
   token: NormalizedGhinToken;
@@ -166,6 +181,25 @@ function positiveDuration(value: number | undefined, fallback: number, label: st
   const resolved = value ?? fallback;
   if (!Number.isFinite(resolved) || resolved <= 0) throw new RangeError(`${label} must be positive and finite.`);
   return resolved;
+}
+
+function portableAuthSession(value: GhinPortableSession, now: number): AuthSession | null {
+  if (value.version !== 1 || typeof value.accessToken !== "string"
+    || value.accessToken.length < 16 || value.accessToken.length > 16_384
+    || (value.tokenExpiresAt !== null && (!Number.isFinite(value.tokenExpiresAt) || value.tokenExpiresAt <= 0))
+    || !Number.isFinite(value.authenticatedAt) || value.authenticatedAt <= 0
+    || !Number.isFinite(value.effectiveExpiresAt) || value.effectiveExpiresAt - AUTH_EXPIRY_SKEW_MS <= now
+    || !Number.isInteger(value.httpStatus) || value.httpStatus < 200 || value.httpStatus > 299
+    || !Number.isInteger(value.firebaseHttpStatus) || value.firebaseHttpStatus < 200 || value.firebaseHttpStatus > 299
+    || (value.golferNumber !== null && !/^\d{5,12}$/.test(value.golferNumber))) return null;
+  return {
+    token: { accessToken: value.accessToken, tokenType: "Bearer", expiresAt: value.tokenExpiresAt },
+    authenticatedAt: value.authenticatedAt,
+    effectiveExpiresAt: value.effectiveExpiresAt,
+    httpStatus: value.httpStatus,
+    firebaseHttpStatus: value.firebaseHttpStatus,
+    golferNumber: value.golferNumber,
+  };
 }
 
 function boundedLimit(value: number, fallback = 20, maximum = 100) {
@@ -237,9 +271,10 @@ export class GhinReadOnlyClient {
   constructor(options: GhinClientOptions) {
     const baseUrl = normalizeGhinApiBaseUrl(options.baseUrl);
     if (!baseUrl) throw new Error("GHIN_API_BASE_URL_NOT_ALLOWED");
-    if (!options.credentials.login.trim() || !options.credentials.password) throw new Error("GHIN_CREDENTIALS_REQUIRED");
+    if ("credentials" in options && options.credentials
+      && (!options.credentials.login.trim() || !options.credentials.password)) throw new Error("GHIN_CREDENTIALS_REQUIRED");
     this.baseUrl = baseUrl;
-    this.#credentials = options.credentials;
+    this.#credentials = "credentials" in options ? options.credentials ?? null : null;
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.clock = options.now ?? Date.now;
     this.timeoutMs = positiveDuration(options.timeoutMs, DEFAULT_TIMEOUT_MS, "timeoutMs");
@@ -252,6 +287,11 @@ export class GhinReadOnlyClient {
     this.courseCache = new TtlPromiseCache({ ttlMs: courseTtlMs, now: this.clock });
     this.teeCache = new TtlPromiseCache({ ttlMs: courseTtlMs, now: this.clock });
     this.scorePostingTeeCache = new TtlPromiseCache({ ttlMs: courseTtlMs, now: this.clock });
+    if ("session" in options && options.session) {
+      const restored = portableAuthSession(options.session, this.clock());
+      if (!restored) throw new Error("GHIN_SESSION_INVALID");
+      this.#authSession = restored;
+    }
   }
 
   getTrace(): readonly GhinClientTrace[] {
@@ -281,6 +321,24 @@ export class GhinReadOnlyClient {
 
   hasUsableSession() {
     return this.sessionUsable(this.#authSession);
+  }
+
+  /** Server-only handoff used to seal the short-lived read session between
+   * stateless function invocations. The caller must encrypt it before it
+   * leaves process memory. */
+  exportPortableSession(): GhinPortableSession | null {
+    const session = this.#authSession;
+    if (!this.sessionUsable(session) || !session) return null;
+    return {
+      version: 1,
+      accessToken: session.token.accessToken,
+      tokenExpiresAt: session.token.expiresAt,
+      authenticatedAt: session.authenticatedAt,
+      effectiveExpiresAt: session.effectiveExpiresAt,
+      httpStatus: session.httpStatus,
+      firebaseHttpStatus: session.firebaseHttpStatus,
+      golferNumber: session.golferNumber,
+    };
   }
 
   invalidateGolfer(ghinNumber: string) {

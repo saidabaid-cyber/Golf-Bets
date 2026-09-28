@@ -18,8 +18,11 @@ import {
   cancelGhinAuthorization,
   clearGhinUserSession,
   consumeGhinAuthorization,
+  GHIN_SESSION_COOKIE_NAME,
   getGhinUserSession,
   reauthorizeGhinSession,
+  sealGhinUserSession,
+  type GhinUserSession,
 } from "../../../../lib/ghin/user-session.server";
 import { getSupabaseAdmin } from "../../../../lib/supabase/server";
 
@@ -27,6 +30,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const MAX_BODY_BYTES = 4_096;
+const GHIN_SESSION_COOKIE_PATH = "/api/profile/ghin";
 const authLimiter = new SlidingWindowRateLimiter<string>({ limit: 5, windowMs: 15 * 60_000 });
 const actionLimiter = new SlidingWindowRateLimiter<string>({ limit: 12, windowMs: 10 * 60_000 });
 const PROFILE_COLUMNS = "external_player_id,association_status,provider_player_name,provider_club_name,provider_home_club_name,provider_player_status,handicap_index,handicap_effective_at,provider_updated_at,last_successful_sync_at,last_attempted_sync_at,last_attempt_status,last_error_code";
@@ -39,6 +43,35 @@ function profilePayload(profile: ReturnType<typeof providerRowToProfile> | null)
     linkState: profile ? "GHIN_LINKED" as const : "GHIN_NOT_LINKED" as const,
     profile,
   };
+}
+
+function withGhinSessionCookie(response: ReturnType<typeof privateGhinJson>, session: GhinUserSession) {
+  const sealed = sealGhinUserSession(session);
+  response.cookies.set({
+    name: GHIN_SESSION_COOKIE_NAME,
+    value: sealed.value,
+    httpOnly: true,
+    secure: true,
+    sameSite: "strict",
+    path: GHIN_SESSION_COOKIE_PATH,
+    maxAge: Math.max(1, Math.floor((sealed.expiresAt - Date.now()) / 1_000)),
+    priority: "high",
+  });
+  return response;
+}
+
+function withoutGhinSessionCookie(response: ReturnType<typeof privateGhinJson>) {
+  response.cookies.set({
+    name: GHIN_SESSION_COOKIE_NAME,
+    value: "",
+    httpOnly: true,
+    secure: true,
+    sameSite: "strict",
+    path: GHIN_SESSION_COOKIE_PATH,
+    maxAge: 0,
+    priority: "high",
+  });
+  return response;
 }
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -214,10 +247,10 @@ export async function POST(request: NextRequest) {
     if (operation === "authorize") {
       try {
         const authorization = await beginGhinAuthorization(context.userId, supplied);
-        return privateGhinJson({
+        return withGhinSessionCookie(privateGhinJson({
           authorization: { challengeId: authorization.challengeId, golfer: authorization.candidate },
           safety: { readOnly: true, scorePostingCalls: 0 },
-        });
+        }), authorization.session);
       } catch (error) {
         const failure = clientError(error);
         return privateGhinJson({ error: safeUpstreamMessage(failure.code), code: failure.code.toUpperCase() }, failure.status);
@@ -244,7 +277,10 @@ export async function POST(request: NextRequest) {
     try {
       const result = await reauthorizeGhinSession(context.userId, linked.ghinNumber, supplied);
       const profile = await persistVerifiedGolfer(context.userId, result.golfer, attemptedAt, "reauthorize");
-      return privateGhinJson({ ...profilePayload(profile), reauthorized: true, safety: { readOnly: true, scorePostingCalls: 0 } });
+      return withGhinSessionCookie(
+        privateGhinJson({ ...profilePayload(profile), reauthorized: true, safety: { readOnly: true, scorePostingCalls: 0 } }),
+        result.session,
+      );
     } catch (error) {
       const failure = clientError(error);
       await recordFailedAttempt(context.userId, attemptedAt, failure.code);
@@ -261,7 +297,7 @@ export async function POST(request: NextRequest) {
     if (!hasOnlyKeys(input, ["operation", "challengeId"])) return privateGhinJson({ error: "Solicitud inválida.", code: "INVALID_REQUEST" }, 400);
     const challenge = challengeId(input);
     if (challenge) cancelGhinAuthorization(context.userId, challenge);
-    return privateGhinJson({ cancelled: true });
+    return withoutGhinSessionCookie(privateGhinJson({ cancelled: true }));
   }
 
   if (operation === "confirm") {
@@ -270,10 +306,24 @@ export async function POST(request: NextRequest) {
     if (!challenge) return privateGhinJson({ error: "Confirmación inválida o vencida.", code: "AUTHORIZATION_EXPIRED" }, 409);
     const pending = consumeGhinAuthorization(context.userId, challenge);
     if (!pending) return privateGhinJson({ error: "La autorización venció. Vuelve a iniciar sesión en GHIN.", code: "AUTHORIZATION_EXPIRED" }, 409);
+    const session = pending.session ?? getGhinUserSession(
+      context.userId,
+      pending.golfer.ghinNumber,
+      request.cookies.get(GHIN_SESSION_COOKIE_NAME)?.value,
+    );
+    if (!session) {
+      return withoutGhinSessionCookie(privateGhinJson({
+        error: "La sesión de autorización venció. Vuelve a iniciar sesión en GHIN.",
+        code: "AUTHORIZATION_EXPIRED",
+      }, 409));
+    }
     try {
       const profile = await persistVerifiedGolfer(context.userId, pending.golfer, new Date().toISOString(), "authorize");
-      if (pending.session) activateGhinSession(pending.session);
-      return privateGhinJson({ ...profilePayload(profile), safety: { readOnly: true, scorePostingCalls: 0 } });
+      activateGhinSession(session);
+      return withGhinSessionCookie(
+        privateGhinJson({ ...profilePayload(profile), safety: { readOnly: true, scorePostingCalls: 0 } }),
+        session,
+      );
     } catch (error) {
       const code = error instanceof Error ? error.message : "PROFILE_WRITE_FAILED";
       if (code === "GHIN_ALREADY_LINKED") {
@@ -295,7 +345,7 @@ export async function POST(request: NextRequest) {
     const removed = await admin.rpc("unlink_ghin_profile_v1", { p_owner_id: context.userId });
     if (removed.error) return privateGhinJson({ error: "No se pudo desvincular GHIN.", code: "UNLINK_FAILED" }, 503);
     clearGhinUserSession(context.userId);
-    return privateGhinJson({ ...profilePayload(null), unlinked: Boolean(removed.data) });
+    return withoutGhinSessionCookie(privateGhinJson({ ...profilePayload(null), unlinked: Boolean(removed.data) }));
   }
 
   if (operation !== "refresh" && operation !== "scores") {
@@ -319,7 +369,11 @@ export async function POST(request: NextRequest) {
     return privateGhinJson({ error: "No fue posible leer el vínculo GHIN.", code: "PROFILE_READ_FAILED" }, 503);
   }
   if (!linked) return privateGhinJson({ error: "Primero vincula una cuenta GHIN.", code: "GHIN_NOT_LINKED" }, 409);
-  const session = getGhinUserSession(context.userId, linked.ghinNumber);
+  const session = getGhinUserSession(
+    context.userId,
+    linked.ghinNumber,
+    request.cookies.get(GHIN_SESSION_COOKIE_NAME)?.value,
+  );
   if (!session) {
     logGhinProfileStage({
       operation: operation as GhinProfileOperation,
@@ -350,7 +404,8 @@ export async function POST(request: NextRequest) {
       const failure = clientError(error);
       if (failure.code === "unauthorized" || failure.code === "forbidden") clearGhinUserSession(context.userId);
       const requiresAuth = failure.code === "unauthorized" || failure.code === "forbidden";
-      return privateGhinJson({ error: requiresAuth ? "Tu sesión GHIN terminó. Reautoriza para continuar." : safeUpstreamMessage(failure.code), code: requiresAuth ? "REAUTH_REQUIRED" : failure.code.toUpperCase() }, requiresAuth ? 409 : failure.status);
+      const response = privateGhinJson({ error: requiresAuth ? "Tu sesión GHIN terminó. Reautoriza para continuar." : safeUpstreamMessage(failure.code), code: requiresAuth ? "REAUTH_REQUIRED" : failure.code.toUpperCase() }, requiresAuth ? 409 : failure.status);
+      return requiresAuth ? withoutGhinSessionCookie(response) : response;
     }
   }
 
@@ -386,6 +441,7 @@ export async function POST(request: NextRequest) {
     await recordFailedAttempt(context.userId, attemptedAt, failure.code);
     if (failure.code === "unauthorized" || failure.code === "forbidden") clearGhinUserSession(context.userId);
     const requiresAuth = failure.code === "unauthorized" || failure.code === "forbidden";
-    return privateGhinJson({ error: requiresAuth ? "Tu sesión GHIN terminó. Reautoriza para continuar." : "No se pudo actualizar GHIN. Conservamos el último índice válido.", code: requiresAuth ? "REAUTH_REQUIRED" : failure.code.toUpperCase() }, requiresAuth ? 409 : failure.status);
+    const response = privateGhinJson({ error: requiresAuth ? "Tu sesión GHIN terminó. Reautoriza para continuar." : "No se pudo actualizar GHIN. Conservamos el último índice válido.", code: requiresAuth ? "REAUTH_REQUIRED" : failure.code.toUpperCase() }, requiresAuth ? 409 : failure.status);
+    return requiresAuth ? withoutGhinSessionCookie(response) : response;
   }
 }

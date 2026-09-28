@@ -201,6 +201,62 @@ test("normal-user auth exposes only the public GHIN identity and discards creden
   assert.equal(loginCalls, 1, "credentialless 401 must require explicit reauthorization");
 });
 
+test("a sealed read session can be restored without retaining or replaying the password", async () => {
+  const now = Date.UTC(2026, 8, 28, 12);
+  let firebaseCalls = 0;
+  let loginCalls = 0;
+  let scoreCalls = 0;
+  const fetchImpl: typeof fetch = async (input, init) => {
+    const url = new URL(String(input));
+    if (isFirebase(url)) {
+      firebaseCalls += 1;
+      return firebaseResponse();
+    }
+    if (url.pathname.endsWith("/golfer_login.json")) {
+      loginCalls += 1;
+      return jsonResponse(200, {
+        golfer_user: {
+          golfer_user_token: "portable-provider-session-token",
+          golfers: [{ ghin_number: "11103349", player_name: "QA Golfer" }],
+        },
+        expires_in: 3_600,
+      });
+    }
+    scoreCalls += 1;
+    assert.equal(new Headers(init?.headers).get("authorization"), "Bearer portable-provider-session-token");
+    return jsonResponse(200, { scores: [{ id: 1, played_at: "2026-09-20", adjusted_gross_score: 79 }] });
+  };
+  const original = new GhinReadOnlyClient({
+    baseUrl: "https://api2.ghin.com/api/v1",
+    credentials,
+    fetchImpl,
+    now: () => now,
+  });
+  await original.authenticate();
+  original.discardCredentials();
+  const portable = original.exportPortableSession();
+  assert.ok(portable);
+
+  const restored = new GhinReadOnlyClient({
+    baseUrl: "https://api2.ghin.com/api/v1",
+    session: portable,
+    fetchImpl,
+    now: () => now + 1_000,
+  });
+  const scores = await restored.getScores("11103349", 20);
+  assert.equal(scores.data[0].adjustedGrossScore, 79);
+  assert.equal(firebaseCalls, 1);
+  assert.equal(loginCalls, 1, "restoration must never replay credentials");
+  assert.equal(scoreCalls, 1);
+
+  assert.throws(() => new GhinReadOnlyClient({
+    baseUrl: "https://api2.ghin.com/api/v1",
+    session: { ...portable, effectiveExpiresAt: now },
+    fetchImpl,
+    now: () => now,
+  }), /GHIN_SESSION_INVALID/);
+});
+
 test("email-authenticated golfer lookup binds to the same email and rejects ambiguous identities", async () => {
   const requestedEmails: string[] = [];
   const client = new GhinReadOnlyClient({
