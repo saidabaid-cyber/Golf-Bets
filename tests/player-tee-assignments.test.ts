@@ -24,6 +24,61 @@ test("todos igual y edición individual no alteran al resto", () => {
   assert.deepEqual(teeOptionsForCourse(white, [white, blue, other]).map((course) => course.id), ["vista-white", "vista-blue"]);
 });
 
+test("un mapping GHIN inequívoco reemplaza las tarjetas legacy sólo en el selector", () => {
+  const officialWhite: Course = {
+    ...white,
+    id: "ghin-white",
+    catalogTeeId: "ghin-white",
+    layoutOrigin: "GHIN",
+    providerCourseId: "23233",
+    providerTeeSetRatingId: "106087",
+    ghinPostEligible: true,
+  };
+  const officialBlue: Course = {
+    ...blue,
+    id: "ghin-blue",
+    catalogTeeId: "ghin-blue",
+    layoutOrigin: "GHIN",
+    providerCourseId: "23233",
+    providerTeeSetRatingId: "280984",
+    ghinPostEligible: true,
+  };
+
+  assert.deepEqual(
+    teeOptionsForCourse(officialWhite, [white, blue, officialWhite, officialBlue, other]).map((course) => course.id),
+    ["ghin-white", "ghin-blue"],
+  );
+  assert.deepEqual(
+    teeOptionsForCourse(white, [white, blue, officialWhite, officialBlue, other]).map((course) => course.id),
+    ["ghin-white", "ghin-blue"],
+  );
+  assert.equal([white, blue].length, 2, "las tarjetas legacy siguen disponibles para snapshots históricos");
+});
+
+test("mappings GHIN ambiguos no ocultan tarjetas existentes", () => {
+  const firstProvider: Course = {
+    ...white,
+    id: "ghin-first",
+    catalogTeeId: "ghin-first",
+    layoutOrigin: "GHIN",
+    providerCourseId: "23233",
+    providerTeeSetRatingId: "106087",
+  };
+  const secondProvider: Course = {
+    ...blue,
+    id: "ghin-second",
+    catalogTeeId: "ghin-second",
+    layoutOrigin: "GHIN",
+    providerCourseId: "99999",
+    providerTeeSetRatingId: "99998",
+  };
+
+  assert.deepEqual(
+    teeOptionsForCourse(white, [white, blue, firstProvider, secondProvider]).map((course) => course.id),
+    ["vista-white", "vista-blue", "ghin-first", "ghin-second"],
+  );
+});
+
 test("draft legacy recibe tee compatible sin perder asignaciones existentes", () => {
   const restored = reconcilePlayerTeeAssignments([teeAssignmentSnapshot("juan", blue, "2026-09-08T12:00:00.000Z")], players, white, "2026-09-08T13:00:00.000Z");
   assert.equal(restored.find((item) => item.playerId === "juan")?.teeName, "Azules");

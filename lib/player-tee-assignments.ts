@@ -7,7 +7,22 @@ function sameLayout(first: Course, second: Course) {
 }
 
 export function teeOptionsForCourse(course: Course, courses: readonly Course[]) {
-  return courses.filter((candidate) => sameLayout(course, candidate));
+  const matchingLayout = courses.filter((candidate) => sameLayout(course, candidate));
+  const ghinOptions = matchingLayout.filter((candidate) => (
+    candidate.layoutOrigin === "GHIN"
+      && Boolean(candidate.providerCourseId)
+      && Boolean(candidate.providerTeeSetRatingId)
+  ));
+  const providerCourseIds = [...new Set(ghinOptions.map((candidate) => candidate.providerCourseId))];
+  const selectedProviderCourseId = course.providerCourseId
+    || (providerCourseIds.length === 1 ? providerCourseIds[0] : undefined);
+
+  if (selectedProviderCourseId) {
+    const officialOptions = ghinOptions.filter((candidate) => candidate.providerCourseId === selectedProviderCourseId);
+    if (officialOptions.length) return officialOptions;
+  }
+
+  return matchingLayout;
 }
 
 export function teeAssignmentSnapshot(
