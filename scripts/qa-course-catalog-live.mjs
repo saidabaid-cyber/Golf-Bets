@@ -46,8 +46,9 @@ for(const [query,expectedId] of [['Cristo','course-el-cristo'],['lagarto','cours
   ['club-cola-de-lagarto','COLA DE LAGARTO CAMPO MÍTICO'],
   ['club-el-cristo','CLUB CAMPESTRE EL CRISTO'],
  ];
- assert.equal(nearby.total,expected.length);assert.deepEqual(nearby.courses.map(course=>[course.clubId,course.clubName]),expected);
- assert.equal(new Set(nearby.courses.map(course=>course.clubId)).size,expected.length);
+ assert.equal(nearby.total,expected.length);assert.deepEqual(nearby.courses.map(course=>[course.clubId,course.clubName]),expected.slice(0,3));
+ assert.equal(nearby.hasMore,true);assert.equal(nearby.nextCursor,'3');
+ assert.equal(new Set(nearby.courses.map(course=>course.clubId)).size,3);
  assert.ok(nearby.courses.every((course,index)=>course.distanceKm<=50&&(index===0||nearby.courses[index-1].distanceKm<=course.distanceKm)));
  report.nearbyEndpoint={origin:{latitude:19.008297,longitude:-98.254634},radiusKm:50,provider:nearby.provider,courses:nearby.courses.map(course=>({clubId:course.clubId,name:course.clubName,distanceKm:course.distanceKm}))};
 }

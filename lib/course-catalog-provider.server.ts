@@ -27,6 +27,8 @@ type CourseCard = {
   name: string;
   clubName: string;
   city?: string;
+  stateRegion?: string;
+  country?: string;
   latitude?: number;
   longitude?: number;
   aliases: string[];
@@ -115,9 +117,11 @@ function reviewedCoursesToCatalog(rows: readonly ReviewedCatalogCourse[]): GolfC
       id: row.clubId,
       name: row.clubName,
       aliases: [],
-      country: "México",
+      country: row.country ?? "México",
       city: row.city,
       stateRegion: row.stateRegion,
+      address: row.address,
+      timezone: row.timezone,
       latitude: row.locationEvidence ? row.latitude : undefined,
       longitude: row.locationEvidence ? row.longitude : undefined,
       active: true,
@@ -126,11 +130,11 @@ function reviewedCoursesToCatalog(rows: readonly ReviewedCatalogCourse[]): GolfC
       sourceUrl: row.locationEvidence?.sourceUrl || row.sourceUrl,
       verifiedAt: row.locationEvidence?.verifiedAt || row.observedAt,
     });
-    courses.push({ id: row.id, clubId: row.clubId, name: row.name, aliases: row.aliases, holes: publication.holes, active: true, provider: row.origin ?? "OWNER_CATALOG_REVIEW", ...(row.providerCourseId ? { providerExternalId: row.providerCourseId } : {}), sourceName: publication.sourceName, sourceUrl: publication.sourceUrl, verifiedAt: publication.verifiedAt, ...(row.origin ? { origin: row.origin } : {}), ...(row.isProvisional !== undefined ? { isProvisional: row.isProvisional } : {}), ...(row.providerStatus ? { providerStatus: row.providerStatus } : {}) });
+    courses.push({ id: row.id, clubId: row.clubId, name: row.name, aliases: row.aliases, holes: publication.holes, active: true, provider: row.provider ?? row.origin ?? "OWNER_CATALOG_REVIEW", ...(row.providerCourseId ? { providerExternalId: row.providerCourseId } : {}), sourceName: publication.sourceName, sourceUrl: publication.sourceUrl, verifiedAt: publication.verifiedAt, ...(row.origin ? { origin: row.origin } : {}), ...(row.isProvisional !== undefined ? { isProvisional: row.isProvisional } : {}), ...(row.providerStatus ? { providerStatus: row.providerStatus } : {}) });
     const baseTee = [...publication.tees].sort((left, right) => right.holes.length - left.holes.length)[0];
     for (const hole of baseTee?.holes || []) holes.push({ id: `${row.id}:hole:${hole.hole_number}`, courseId: row.id, holeNumber: hole.hole_number, par: hole.par, strokeIndex: hole.stroke_index });
     for (const tee of publication.tees) {
-      const providerBackedRating = (row.origin === "GHIN" || row.origin === "BACKYARD_PROVISIONAL")
+      const providerBackedRating = (row.origin === "GHIN" || row.origin === "BACKYARD_PROVISIONAL" || row.ratingReuseStatus === "AUTHORIZED")
         && typeof tee.course_rating === "number" && typeof tee.slope_rating === "number";
       tees.push({ id: tee.id, courseId: row.id, legacySelectionId: tee.id, name: tee.displayName ?? tee.name, ...(tee.gender ? { gender: tee.gender } : {}), ...(providerBackedRating ? { rating: tee.course_rating!, slope: tee.slope_rating! } : {}), par: tee.par ?? undefined, totalYards: tee.yards ?? undefined, active: true, ...(tee.provider ? { provider: tee.provider } : {}), ...(tee.provider_course_id ? { providerCourseId: tee.provider_course_id } : {}), ...(tee.provider_tee_set_rating_id ? { providerTeeSetRatingId: tee.provider_tee_set_rating_id } : {}), ...(tee.provider_status ? { providerStatus: tee.provider_status } : {}), ...(tee.ghin_post_eligible !== undefined ? { ghinPostEligible: tee.ghin_post_eligible } : {}) });
       for (const hole of tee.holes) if (hole.yards !== null) teeHoleYardages.push({ teeId: tee.id, holeId: `${row.id}:hole:${hole.hole_number}`, holeNumber: hole.hole_number, yards: hole.yards });
@@ -204,7 +208,7 @@ export async function searchCourseCards(input: { query: string; limit: number; c
     const club = clubs.get(course.clubId); if (!club || !course.active || !club.active) return [];
     const tee = catalog.tees.find((candidate) => candidate.courseId === course.id && candidate.active);
     const visibleRating = playerVisibleTeeRating(course, tee);
-    return [{ id: course.id, courseId: course.id, clubId: club.id, name: course.name, clubName: club.name, city: club.city, latitude: course.latitude ?? club.latitude, longitude: course.longitude ?? club.longitude, aliases: [...(club.aliases || []), ...(course.aliases || [])], localIndexTeeAvailable: visibleRating.verified, tee: {
+    return [{ id: course.id, courseId: course.id, clubId: club.id, name: course.name, clubName: club.name, city: club.city, stateRegion: club.stateRegion, country: club.country, latitude: course.latitude ?? club.latitude, longitude: course.longitude ?? club.longitude, aliases: [...(club.aliases || []), ...(course.aliases || [])], localIndexTeeAvailable: visibleRating.verified, tee: {
       id: tee?.id || course.id,
       name: tee?.name || "Tee por seleccionar",
       ...(visibleRating.verified ? { rating: visibleRating.rating, slope: visibleRating.slope } : {}),
@@ -213,7 +217,7 @@ export async function searchCourseCards(input: { query: string; limit: number; c
     } }];
   });
   const tokens = normalized(input.query).split(/\s+/).filter(Boolean);
-  const filtered = cards.filter((card) => tokens.every((token) => normalized(`${card.clubName} ${card.name} ${card.city || ""} ${card.aliases.join(" ")}`).includes(token)));
+  const filtered = cards.filter((card) => tokens.every((token) => normalized(`${card.clubName} ${card.name} ${card.city || ""} ${card.stateRegion || ""} ${card.country || ""} ${card.aliases.join(" ")}`).includes(token)));
   const withDistance = filtered.flatMap((card) => {
     if (input.latitude === undefined || input.longitude === undefined || card.latitude === undefined || card.longitude === undefined) return [{ card, distanceKm: null as number | null }];
     const distanceKm = haversineDistanceKm({ latitude: input.latitude, longitude: input.longitude }, { latitude: card.latitude, longitude: card.longitude });

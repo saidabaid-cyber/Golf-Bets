@@ -34,8 +34,9 @@ async function loadCoursePage(query: string, accessToken?: string | null, cursor
   return response.json() as Promise<CoursePage>;
 }
 
-async function loadNearbyCoursePage(latitude: number, longitude: number, accessToken?: string | null, signal?: AbortSignal): Promise<CoursePage> {
-  const params = new URLSearchParams({ nearby: "1", lat: String(latitude), lng: String(longitude), limit: "12" });
+async function loadNearbyCoursePage(latitude: number, longitude: number, accessToken?: string | null, cursor?: string | null, signal?: AbortSignal): Promise<CoursePage> {
+  const params = new URLSearchParams({ nearby: "1", lat: String(latitude), lng: String(longitude), limit: cursor ? "12" : "3" });
+  if (cursor) params.set("cursor", cursor);
   const response = await fetch(`/api/courses/search?${params}`, { signal, cache: "no-store", headers: authorization(accessToken) });
   if (!response.ok) throw new Error("nearby-course-search-failed");
   return response.json() as Promise<CoursePage>;
@@ -79,12 +80,14 @@ export function RoundCoursePicker({
   const [resultMode, setResultMode] = useState<"name" | "nearby">("name");
   const nearbyRequestRef = useRef(0);
   const nearbyControllerRef = useRef<AbortController | null>(null);
+  const nearbyPointRef = useRef<{ latitude: number; longitude: number } | null>(null);
 
   useEffect(() => () => nearbyControllerRef.current?.abort(), [permissionOwnerId]);
 
   useEffect(() => {
     if (selectedId && selectedName) {
       ++nearbyRequestRef.current;
+      nearbyPointRef.current = null;
       setSelectedCourseId(selectedId);
       setQuery(selectedName);
       setResultMode("name");
@@ -135,6 +138,7 @@ export function RoundCoursePicker({
     // Switching modes aborts the pending name search. Otherwise its delayed
     // response could replace the distance-sorted nearby results.
     setResultMode("nearby");
+    nearbyPointRef.current = null;
     setSelectedCourseId("");
     setResults([]);
     setStatus("idle");
@@ -151,12 +155,13 @@ export function RoundCoursePicker({
       else setNearbyStatus("unsupported");
       return;
     }
-    void loadNearbyCoursePage(location.point.latitude, location.point.longitude, accessToken, controller.signal).then((page) => {
+    nearbyPointRef.current = location.point;
+    void loadNearbyCoursePage(location.point.latitude, location.point.longitude, accessToken, null, controller.signal).then((page) => {
         if (requestId !== nearbyRequestRef.current || controller.signal.aborted) return;
         const next = mergeCourseResults([], page.courses ?? []);
         setResults(next);
-        setHasMore(false);
-        setNextCursor(null);
+        setHasMore(page.hasMore === true);
+        setNextCursor(typeof page.nextCursor === "string" ? page.nextCursor : null);
         setStatus("ready");
         setNearbyStatus(next.length ? "idle" : "empty");
       }).catch(() => {
@@ -174,6 +179,7 @@ export function RoundCoursePicker({
       value={query}
       onChange={(value) => {
         ++nearbyRequestRef.current;
+        nearbyPointRef.current = null;
         setQuery(value);
         setSelectedCourseId("");
         setResultMode("name");
@@ -195,6 +201,7 @@ export function RoundCoursePicker({
     >
       {visibleResults.map((course) => <AnchoredSearchOption key={course.courseId} label={`Seleccionar ${course.name}`} onSelect={() => {
         ++nearbyRequestRef.current;
+        nearbyPointRef.current = null;
         setQuery(course.name);
         setSelectedCourseId(course.courseId);
         setResultMode("name");
@@ -205,7 +212,10 @@ export function RoundCoursePicker({
       {hasMore && nextCursor && <button type="button" role="option" aria-selected="false" className="textButton" disabled={status === "loading"} onClick={async () => {
         setStatus("loading");
         try {
-          const page = await loadCoursePage(query.trim(), accessToken, nextCursor);
+          const point = nearbyPointRef.current;
+          const page = resultMode === "nearby" && point
+            ? await loadNearbyCoursePage(point.latitude, point.longitude, accessToken, nextCursor)
+            : await loadCoursePage(query.trim(), accessToken, nextCursor);
           setResults((current) => mergeCourseResults(current, page.courses ?? []));
           setHasMore(page.hasMore === true);
           setNextCursor(typeof page.nextCursor === "string" ? page.nextCursor : null);

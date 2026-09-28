@@ -80,10 +80,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "course_catalog_unavailable", code: "COURSE_CATALOG_UNAVAILABLE" }, { status: 503, headers: { "cache-control": "private, no-store" } });
     }
     const nearby = distinctNearbyClubCards(layered.cards, { radiusKm: 50 });
+    const offset = cursor && /^\d+$/.test(cursor) ? Number(cursor) : 0;
+    const page = nearby.matches.slice(offset, offset + limit);
+    const next = offset + page.length;
     return NextResponse.json({
       provider: layered.provider,
       total: nearby.total,
-      courses: nearby.matches.map(({ card: course, distanceKm }) => ({
+      hasMore: next < nearby.total,
+      nextCursor: next < nearby.total ? String(next) : null,
+      courses: page.map(({ card: course, distanceKm }) => ({
         ...course,
         distanceKm: distanceKm === null ? null : Math.round(distanceKm * 10) / 10,
       })),

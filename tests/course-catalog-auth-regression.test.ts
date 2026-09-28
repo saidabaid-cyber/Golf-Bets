@@ -11,7 +11,9 @@ test("authenticated catalog reads use the player's JWT instead of requiring serv
   assert.match(route, /getCourseCatalog\(auth\.client,\{requireQaReviewedCatalog:true\}\)/);
   assert.match(reviewed, /loadReviewedCourseCatalog\(database\?:SupabaseClient\|null\)/);
   assert.match(reviewed, /const db=database\?\?getSupabaseAdmin\(\)/);
-  assert.match(reviewed, /db\.rpc\('read_owner_course_catalog_v1'\)/);
+  assert.match(reviewed, /db\.rpc\('read_backyard_course_master_v1'\)/);
+  assert.match(reviewed, /\['42883','PGRST202'\]\.includes\(primary\.error\.code\)[\s\S]+db\.rpc\('read_owner_course_catalog_v1'\)/);
+  assert.doesNotMatch(reviewed, /primary\.error\s*\?\s*await db\.rpc\('read_owner_course_catalog_v1'\)/);
   assert.doesNotMatch(reviewed, /db\.from\('golf_(?:clubs|courses|course_tees)'\)/);
   assert.match(provider, /loadReviewedCourseCatalog\(database\)/);
   assert.match(provider, /if \(options\.requireQaReviewedCatalog\) throw error/);

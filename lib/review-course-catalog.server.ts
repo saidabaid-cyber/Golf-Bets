@@ -14,11 +14,17 @@ export async function loadReviewedCourseCatalog(database?:SupabaseClient|null):P
   // Player reads use their own JWT through a narrow, read-only projection.
   // The underlying reviewed rows remain private and protected by RLS.
   const db=database??getSupabaseAdmin(); if(!db) throw Error('CATALOG_UNAVAILABLE');
-  const response=await db.rpc('read_owner_course_catalog_v1').abortSignal(AbortSignal.timeout(12000));
+  const primary=await db.rpc('read_backyard_course_master_v1').abortSignal(AbortSignal.timeout(12000));
+  // Keep Preview usable during the controlled migration window. Only a
+  // genuinely missing RPC may fall back; permission and runtime errors remain
+  // fail-closed and visible to QA.
+  const response=primary.error&&['42883','PGRST202'].includes(primary.error.code)
+    ? await db.rpc('read_owner_course_catalog_v1').abortSignal(AbortSignal.timeout(12000))
+    : primary;
   if(response.error||!response.data||typeof response.data!=='object'||Array.isArray(response.data)) throw Error('CATALOG_READ_FAILED');
   const payload=response.data as {clubs?:unknown;courses?:unknown;tees?:unknown};
   if(!Array.isArray(payload.clubs)||!Array.isArray(payload.courses)||!Array.isArray(payload.tees)) throw Error('CATALOG_READ_FAILED');
-  const clubs=payload.clubs as Array<{id:string;name:string;city:string|null;state_region:string|null;latitude:number|null;longitude:number|null;catalog_metadata:Record<string,unknown>}>;
+  const clubs=payload.clubs as Array<{id:string;name:string;country:string|null;city:string|null;state_region:string|null;address:string|null;timezone:string|null;latitude:number|null;longitude:number|null;source_url:string|null;verified_at:string|null;catalog_metadata:Record<string,unknown>}>;
   const courses=payload.courses as Array<{id:string;club_id:string;name:string;holes:number;source_url:string;verified_at:string|null;catalog_metadata:Record<string,unknown>}>;
   const tees=payload.tees as Array<{id:string;course_id:string;catalog_metadata:ReviewedTeeSource}>;
   const byClub=new Map(clubs.map(c=>[c.id,c]));
@@ -26,10 +32,14 @@ export async function loadReviewedCourseCatalog(database?:SupabaseClient|null):P
     const club=byClub.get(c.club_id); if(!club) return [];
     const origin=String(c.catalog_metadata.origin??'');
     const supportedOrigin=['GHIN','BACKYARD_PROVISIONAL','BACKYARD_ADMIN'].includes(origin)?origin as ReviewedCatalogCourse['origin']:undefined;
-    return [{id:c.id,clubId:club.id,name:c.name,clubName:club.name,holes:c.holes===9?9:18,city:club.city??undefined,stateRegion:club.state_region??undefined,
-      aliases:Array.isArray(c.catalog_metadata.search_aliases)?c.catalog_metadata.search_aliases.filter((value):value is string=>typeof value==='string'):[],latitude:club.latitude??undefined,longitude:club.longitude??undefined,
-      locationEvidence:club.catalog_metadata.locationEvidence as ReviewedCatalogCourse['locationEvidence'],sourceUrl:c.source_url,observedAt:String(c.catalog_metadata.observed_at??c.verified_at??''),
-      dataVersion:String(c.catalog_metadata.dataVersion??''),...(supportedOrigin?{origin:supportedOrigin}:{}),isProvisional:supportedOrigin==='BACKYARD_PROVISIONAL',
+    const ratingReuseStatus=c.catalog_metadata.rating_reuse_status==='AUTHORIZED'?'AUTHORIZED':'LEGAL_REVIEW_REQUIRED';
+    const provider=typeof c.catalog_metadata.provider==='string'?c.catalog_metadata.provider:undefined;
+    const clubAliases=Array.isArray(club.catalog_metadata.search_aliases)?club.catalog_metadata.search_aliases.filter((value):value is string=>typeof value==='string'):[];
+    const courseAliases=Array.isArray(c.catalog_metadata.search_aliases)?c.catalog_metadata.search_aliases.filter((value):value is string=>typeof value==='string'):[];
+    return [{id:c.id,clubId:club.id,name:c.name,clubName:club.name,holes:c.holes===9?9:18,country:club.country??undefined,city:club.city??undefined,stateRegion:club.state_region??undefined,address:club.address??undefined,timezone:club.timezone??undefined,
+      aliases:[...new Set([...clubAliases,...courseAliases])],latitude:club.latitude??undefined,longitude:club.longitude??undefined,
+      locationEvidence:(club.catalog_metadata.locationEvidence as ReviewedCatalogCourse['locationEvidence'])??(club.source_url&&club.verified_at?{sourceUrl:club.source_url,verifiedAt:club.verified_at}:undefined),sourceUrl:c.source_url,observedAt:String(c.catalog_metadata.observed_at??c.verified_at??''),
+      dataVersion:String(c.catalog_metadata.dataVersion??c.catalog_metadata.data_version??''),...(provider?{provider}:{}),ratingReuseStatus,...(supportedOrigin?{origin:supportedOrigin}:{}),isProvisional:supportedOrigin==='BACKYARD_PROVISIONAL',
       ...(typeof c.catalog_metadata.course_id==='string'?{providerCourseId:c.catalog_metadata.course_id}:{}),
       ...(typeof c.catalog_metadata.operational_status==='string'?{providerStatus:c.catalog_metadata.operational_status}:{}),
       tees:tees.filter(t=>t.course_id===c.id).map(t=>({...t.catalog_metadata,id:t.id}))}];

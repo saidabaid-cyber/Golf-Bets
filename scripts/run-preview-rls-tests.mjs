@@ -20,6 +20,7 @@ export const REQUIRED_RLS_TESTS = [
   "ghin_provider_foundation_rls.sql",
   "ghin_multiuser_linking_rls.sql",
   "ghin_course_sync_rls.sql",
+  "course_master_sources_rls.sql",
   "legal_evidence_events_rls.sql",
   "feedback_requests_rls.sql",
   "polla_live_rls.sql",

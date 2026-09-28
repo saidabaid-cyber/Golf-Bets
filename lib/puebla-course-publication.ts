@@ -19,7 +19,7 @@ export function reviewedCoursePublicationShape(row: ReviewedCatalogCourse) {
   return {
     holes,
     tees,
-    sourceName: curated?.source.authority || "Catálogo revisado por owner",
+    sourceName: curated?.source.authority || (row.ratingReuseStatus === "AUTHORIZED" ? `Proveedor autorizado (${row.provider ?? "Course Master"})` : "Catálogo revisado por owner"),
     sourceUrl: curated?.source.url || row.sourceUrl,
     verifiedAt: curated?.source.verifiedAt || row.observedAt,
     capturedLayoutConflict: row.holes !== holes || row.tees.length !== tees.length || row.tees.some((tee) => tee.holes.length !== holes),

@@ -114,22 +114,21 @@ test("nearby rejects an invalid bearer before consulting the catalog", async () 
   assert.equal(route.catalogCalls.length, 0);
 });
 
-test("authenticated nearby returns every canonical QA club inside 50 km ordered by distance", async () => {
+test("authenticated nearby returns the first three canonical QA clubs and exposes a stable next page", async () => {
   const route = routeHarness();
   const response = await route.request(`?nearby=1&lat=${qaOrigin.latitude}&lng=${qaOrigin.longitude}&limit=3`, "valid-qa-token");
   assert.equal(response.status, 200);
-  const body = await response.json() as { provider: string; total: number; courses: Array<{ clubId: string; distanceKm: number }> };
+  const body = await response.json() as { provider: string; total: number; hasMore: boolean; nextCursor: string | null; courses: Array<{ clubId: string; distanceKm: number }> };
   assert.equal(body.provider, "admin-published+reviewed-seed");
   assert.equal(body.total, 6);
   assert.deepEqual(body.courses.map((course) => course.clubId), [
     "club-la-vista",
     "club-campestre-puebla",
     "review-club-75f6ac3a0e37a69eabd3",
-    "review-club-9c0700f229794a278011",
-    "club-cola-de-lagarto",
-    "club-el-cristo",
   ]);
-  assert.equal(new Set(body.courses.map((course) => course.clubId)).size, 6);
+  assert.equal(body.hasMore, true);
+  assert.equal(body.nextCursor, "3");
+  assert.equal(new Set(body.courses.map((course) => course.clubId)).size, 3);
   assert.ok(body.courses.every((course, index) => course.distanceKm <= 50 && (index === 0 || body.courses[index - 1].distanceKm <= course.distanceKm)));
   assert.equal(route.catalogCalls.length, 1);
   assert.equal(route.catalogCalls[0].database, route.authClient);
