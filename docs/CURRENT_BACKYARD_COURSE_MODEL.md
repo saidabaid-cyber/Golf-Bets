@@ -92,6 +92,8 @@ La aplicación lee `read_backyard_course_master_v1()` con el JWT del usuario. La
 - GHIN y provisionales que ya formaban parte del catálogo controlado;
 - cualquier fuente futura que tenga `authorized_for_display = true` en `golf_course_data_sources`.
 
+Las filas proveedor/revisadas permanecen `PRIVATE` en sus tablas base para impedir lecturas directas. Esa bandera no equivale a estado de publicación: la proyección autenticada y el registro de autorización deciden qué entra al catálogo del jugador.
+
 La contraseña, tokens GHIN y payloads crudos nunca forman parte del Course Master. El cálculo local usa `Index × (Slope / 113) + (Course Rating − Par)` y congela sus inputs en la ronda.
 
 ## Importador reproducible

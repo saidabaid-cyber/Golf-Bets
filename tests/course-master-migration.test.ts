@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const migration = readFileSync("supabase/migrations/20260928040000_course_master_sources.sql", "utf8");
+const projectionFix = readFileSync("supabase/migrations/20260928050000_course_master_projection_visibility.sql", "utf8");
 const rls = readFileSync("supabase/tests/course_master_sources_rls.sql", "utf8");
 
 test("Course Master source registry is additive, explicit and blocks unauthorized NCRDB ingestion", () => {
@@ -23,6 +24,14 @@ test("Course Master projection requires auth and only includes display-authorize
   assert.match(migration, /revoke all on function public\.read_backyard_course_master_v1\(\) from public, anon/);
   assert.match(migration, /grant execute on function public\.read_backyard_course_master_v1\(\) to authenticated, service_role/);
   assert.doesNotMatch(migration, /GHIN_TEST_PASSWORD|golfer_user_token|authorization header/i);
+});
+
+test("private storage visibility is not mistaken for player catalog publication", () => {
+  assert.match(projectionFix, /create or replace function public\.read_backyard_course_master_v1\(\)/);
+  assert.match(projectionFix, /course\.provider = 'OWNER_CATALOG_REVIEW'/);
+  assert.match(projectionFix, /source\.authorized_for_display = true/g);
+  assert.doesNotMatch(projectionFix, /(?:course|club)\.visibility\s*=\s*'PUBLIC'/);
+  assert.match(rls, /reader_definition like '%course\.visibility%'/);
 });
 
 test("new Data API table has explicit grants, RLS and executable QA contract", () => {

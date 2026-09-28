@@ -58,6 +58,8 @@ begin
   end if;
   if reader_definition not like '%auth.uid() is null%'
     or reader_definition not like '%authorized_for_display%'
+    or reader_definition like '%course.visibility%'
+    or reader_definition like '%club.visibility%'
     or reader_definition like '%GHIN_TEST_PASSWORD%'
     or reader_definition like '%golfer_user_token%' then
     raise exception 'Course Master reader authentication/source boundary is incomplete';
