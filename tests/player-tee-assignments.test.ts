@@ -79,6 +79,30 @@ test("mappings GHIN ambiguos no ocultan tarjetas existentes", () => {
   );
 });
 
+test("provider GHIN basta para preferir la proyección live aunque metadata opcional no llegue al cliente", () => {
+  const projectedWhite: Course = {
+    ...white,
+    id: "ghin-projected-white",
+    catalogTeeId: "ghin-projected-white",
+    provider: "GHIN",
+    rating: 70.8,
+    slope: 128,
+  };
+  const projectedBlue: Course = {
+    ...blue,
+    id: "ghin-projected-blue",
+    catalogTeeId: "ghin-projected-blue",
+    provider: "GHIN",
+    rating: 73.8,
+    slope: 135,
+  };
+
+  assert.deepEqual(
+    teeOptionsForCourse(white, [white, blue, projectedWhite, projectedBlue]).map((course) => course.id),
+    ["ghin-projected-white", "ghin-projected-blue"],
+  );
+});
+
 test("draft legacy recibe tee compatible sin perder asignaciones existentes", () => {
   const restored = reconcilePlayerTeeAssignments([teeAssignmentSnapshot("juan", blue, "2026-09-08T12:00:00.000Z")], players, white, "2026-09-08T13:00:00.000Z");
   assert.equal(restored.find((item) => item.playerId === "juan")?.teeName, "Azules");

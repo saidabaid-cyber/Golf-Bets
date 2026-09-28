@@ -9,18 +9,19 @@ function sameLayout(first: Course, second: Course) {
 export function teeOptionsForCourse(course: Course, courses: readonly Course[]) {
   const matchingLayout = courses.filter((candidate) => sameLayout(course, candidate));
   const ghinOptions = matchingLayout.filter((candidate) => (
-    candidate.layoutOrigin === "GHIN"
-      && Boolean(candidate.providerCourseId)
-      && Boolean(candidate.providerTeeSetRatingId)
+    candidate.layoutOrigin === "GHIN" || candidate.provider === "GHIN"
   ));
-  const providerCourseIds = [...new Set(ghinOptions.map((candidate) => candidate.providerCourseId))];
-  const selectedProviderCourseId = course.providerCourseId
-    || (providerCourseIds.length === 1 ? providerCourseIds[0] : undefined);
+  const providerCourseIds = [...new Set(ghinOptions.flatMap((candidate) => (
+    candidate.providerCourseId ? [candidate.providerCourseId] : []
+  )))];
+  const selectedProviderCourseId = course.providerCourseId;
 
   if (selectedProviderCourseId) {
     const officialOptions = ghinOptions.filter((candidate) => candidate.providerCourseId === selectedProviderCourseId);
     if (officialOptions.length) return officialOptions;
   }
+
+  if (providerCourseIds.length <= 1 && ghinOptions.length) return ghinOptions;
 
   return matchingLayout;
 }
