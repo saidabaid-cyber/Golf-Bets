@@ -164,6 +164,16 @@ export async function POST(request: NextRequest) {
       actorId: access.userId,
       diffSummary: comparison?.summary ?? {},
     });
+    const postingEligibility = plan.tees.map((tee) => {
+      const metadata = record(tee.catalog_metadata);
+      return {
+        teeSetRatingId: tee.provider_external_id,
+        teeName: tee.name,
+        providerStatus: tee.provider_status,
+        eligible: metadata?.ghin_post_eligible === true,
+        code: metadata?.ghin_post_eligibility_code ?? "GHIN_POST_ELIGIBILITY_UNKNOWN",
+      };
+    });
     let databaseState: JsonRecord | null = null;
     if (persisted.applied) {
       const [clubRows, courseRows, teeRows, holeRows, yardageRows, courseLinkRows, teeLinkRows] = await Promise.all([
@@ -212,6 +222,7 @@ export async function POST(request: NextRequest) {
       } : postingTees ? { status: "PASS", httpStatus: postingTees.httpStatus } : { status: "BLOCKED_EXTERNAL" },
       completeForPlay: plan.completeForPlay,
       completeForScorePosting: plan.completeForScorePosting,
+      postingEligibility,
       warnings: [
         ...plan.warnings,
         ...(postingResult.error ? ["TeeSetRatingsForScorePosting no está disponible para este token; Course Data se conservó."] : []),

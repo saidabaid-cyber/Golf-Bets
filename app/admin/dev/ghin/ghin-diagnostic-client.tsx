@@ -427,6 +427,9 @@ export default function GhinDiagnosticClient() {
           {confirmedPar72 && courseData.id === "23233" && <button className="primary" type="button" disabled={running} onClick={() => void runCourseSync("23233", true)}>Sincronizar Par 72 confirmado en QA</button>}
         </div>}
         {courseSync && <><StatusChip value={courseSync.status} /><ScalarFacts value={{ mode: courseSync.mode, facilityId: courseSync.facilityId, courseId: courseSync.courseId, completeForPlay: courseSync.completeForPlay, completeForScorePosting: courseSync.completeForScorePosting }} />
+          {records(courseSync.postingEligibility).length > 0 && <div style={{ overflowX: "auto" }}><table><thead><tr><th>Tee</th><th>TeeSetRatingId</th><th>Status</th><th>Elegible GHIN</th><th>Código</th></tr></thead><tbody>
+            {records(courseSync.postingEligibility).map((tee, index) => <tr key={`${valueText(tee.teeSetRatingId, "tee")}-${index}`}><td>{valueText(tee.teeName)}</td><td>{valueText(tee.teeSetRatingId)}</td><td>{valueText(tee.providerStatus)}</td><td>{tee.eligible === true ? "Sí" : "No"}</td><td>{valueText(tee.code)}</td></tr>)}
+          </tbody></table></div>}
           {record(courseSync.databaseState) && <p>DB QA: {records(record(courseSync.databaseState)?.layouts).length} layouts · {records(record(courseSync.databaseState)?.tees).length} tees oficiales activos · {records(record(courseSync.databaseState)?.preservedInactiveTees).length} tees históricos inactivos · {valueText(record(courseSync.databaseState)?.holeCount, "0")} hoyos · {valueText(record(courseSync.databaseState)?.yardageCount, "0")} yardajes activos.</p>}
         </>}
       </section>
