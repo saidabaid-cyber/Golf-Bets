@@ -1,6 +1,6 @@
 # Backyard Course Master — estado canónico de dev/QA
 
-Fecha de auditoría: 2026-09-27
+Fecha de auditoría: 2026-09-28
 Entorno auditado: Supabase QA `bymeopxkxapfizeeqeyb`
 Branch: `integration/backyard-current`
 
@@ -51,6 +51,27 @@ Cobertura geográfica demostrada: México. La base contiene 152 filas con etique
 | Tee × Hole | 13,644 | 108 | 0 |
 
 Los layouts La Vista Par 72, Temporary Par 70 y Temporary Par 69 permanecen separados. El Par 72 sincronizado en QA conserva IDs GHIN y scorecard completo. Los temporales siguen siendo Backyard Provisional; esta fase no altera su mapping ni habilita score posting.
+
+## Cobertura México reutilizable hoy
+
+El inventario reproducible está en `docs/course-data/MEXICO_COURSE_COVERAGE.csv`. Excluye el fixture sintético de QA y separa presencia física de datos de autorización para reutilizarlos:
+
+| Métrica | Resultado QA |
+| --- | ---: |
+| Facilities reales inventariados | 153 |
+| Courses/layouts | 178 |
+| Tee sets | 779 |
+| Tees con Rating + Slope reutilizable | 14 (1.80%) |
+| Tees con hole-by-hole físico | 760 (97.56%) |
+| Facilities con coordenadas | 150/153 (98.04%) |
+| Tees con coordenadas de facility | 769/779 (98.72%) |
+| `COMPLETE` | 6 |
+| `MISSING_HOLES` | 8 |
+| `NEEDS_VERIFICATION` | 765 |
+
+Los 14 tees reutilizables pertenecen a un solo facility: 6 tees del layout oficial La Vista Par 72, con scorecard completo, y 8 tees de los layouts provisionales Par 69/70, todavía sin configuración completa de hoyos. Por ello el criterio estricto campo → layout → tee → Course Handicap → ronda completa está demostrado actualmente en **1 facility, 1 layout y 6 tees**. Los dos layouts provisionales permiten selección y cálculo con los valores first-party existentes, pero no se clasifican como completos ni aptos para publicación GHIN.
+
+Los 765 tees `OWNER_CATALOG_REVIEW` conservan evidencia privada para revisión, pero el CSV omite Rating/Slope y la app ya no los promueve por el mero hecho de tener un `origin=GHIN` legacy. La reutilización requiere una fuente autorizada o un mapping GHIN real y confirmado cuyo Course ID corresponda exactamente al Tee Set.
 
 ## Duplicados y conflictos
 

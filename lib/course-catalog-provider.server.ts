@@ -15,7 +15,7 @@ import {
 } from "./golf-course-directory";
 import { haversineDistanceKm } from "./course-distance";
 import { loadReviewedCourseCatalog, reviewCatalogQaEnabled } from "./review-course-catalog.server";
-import type { ReviewedCatalogCourse } from "./review-course-catalog";
+import { reviewedTeeRatingIsAuthorized, type ReviewedCatalogCourse } from "./review-course-catalog";
 import { getSupabaseAdmin } from "./supabase/server";
 import { readPublishedCatalog } from "./admin-published-catalog.server";
 import { reviewedCoursePublicationShape } from "./puebla-course-publication";
@@ -134,7 +134,7 @@ function reviewedCoursesToCatalog(rows: readonly ReviewedCatalogCourse[]): GolfC
     const baseTee = [...publication.tees].sort((left, right) => right.holes.length - left.holes.length)[0];
     for (const hole of baseTee?.holes || []) holes.push({ id: `${row.id}:hole:${hole.hole_number}`, courseId: row.id, holeNumber: hole.hole_number, par: hole.par, strokeIndex: hole.stroke_index });
     for (const tee of publication.tees) {
-      const providerBackedRating = (row.origin === "GHIN" || row.origin === "BACKYARD_PROVISIONAL" || row.ratingReuseStatus === "AUTHORIZED")
+      const providerBackedRating = reviewedTeeRatingIsAuthorized(row, tee)
         && typeof tee.course_rating === "number" && typeof tee.slope_rating === "number";
       tees.push({ id: tee.id, courseId: row.id, legacySelectionId: tee.id, name: tee.displayName ?? tee.name, ...(tee.gender ? { gender: tee.gender } : {}), ...(providerBackedRating ? { rating: tee.course_rating!, slope: tee.slope_rating! } : {}), par: tee.par ?? undefined, totalYards: tee.yards ?? undefined, active: true, ...(tee.provider ? { provider: tee.provider } : {}), ...(tee.provider_course_id ? { providerCourseId: tee.provider_course_id } : {}), ...(tee.provider_tee_set_rating_id ? { providerTeeSetRatingId: tee.provider_tee_set_rating_id } : {}), ...(tee.provider_status ? { providerStatus: tee.provider_status } : {}), ...(tee.ghin_post_eligible !== undefined ? { ghinPostEligible: tee.ghin_post_eligible } : {}) });
       for (const hole of tee.holes) if (hole.yards !== null) teeHoleYardages.push({ teeId: tee.id, holeId: `${row.id}:hole:${hole.hole_number}`, holeNumber: hole.hole_number, yards: hole.yards });

@@ -44,11 +44,18 @@ export function reviewedClubsLocationSummary(clubs: readonly { distanceKm: numbe
   if (!clubs.length) return 'No hay campos con ubicación disponible cerca de ti. La búsqueda manual sigue disponible.';
   return `Encontramos ${clubs.length} campos a 50 km o menos · ${clubs.length} clubes distintos.`;
 }
+export function reviewedTeeRatingIsAuthorized(c:ReviewedCatalogCourse,t:ReviewedTeeSource) {
+  const confirmedGhinRating=c.provider==='GHIN'&&t.provider==='GHIN'
+    &&t.provider_mapping_status==='CONFIRMED'
+    &&Boolean(c.providerCourseId&&t.provider_course_id&&t.provider_tee_set_rating_id)
+    &&c.providerCourseId===t.provider_course_id;
+  return c.ratingReuseStatus==='AUTHORIZED'||confirmedGhinRating;
+}
 /** Ratings are preserved as evidence, never applied until their category is verified.
  * Holes retain the original 18-hole SI even when playing one nine. */
 export function reviewedTeeToCourse(c:ReviewedCatalogCourse,t:ReviewedTeeSource):Course {
   const ratingEvidence=readCourseRatingEvidenceBundle(t.ratingEvidenceV1,{courseId:c.id,teeId:t.id});
-  const providerBackedRating=(c.origin==='GHIN'||c.origin==='BACKYARD_PROVISIONAL'||c.ratingReuseStatus==='AUTHORIZED')
+  const providerBackedRating=reviewedTeeRatingIsAuthorized(c,t)
     && typeof t.course_rating==='number'&&typeof t.slope_rating==='number';
   return {id:t.id,name:c.name,teeName:t.displayName??t.name,catalogClubId:c.clubId,catalogCourseId:c.id,catalogTeeId:t.id,clubName:c.clubName,
     city:c.city,stateRegion:c.stateRegion,country:c.country,provider:t.provider??c.provider??c.origin??'OWNER_CATALOG_REVIEW',providerExternalId:t.provider_tee_set_rating_id??t.id,

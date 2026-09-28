@@ -8,7 +8,7 @@ import { AnchoredSearch,AnchoredSearchOption } from './anchored-search';
 import styles from './catalog-course-picker.module.css';
 type Entry=Omit<ReviewedCatalogCourse,'tees'> & {teeCount:number;completeCards:number};
 type PickerLocationState=NearbyLocationResolution|{status:'idle'|'loading'};
-export function CatalogCoursePicker({token,permissionOwnerId,onSelect,onSelectClub,onSelectHomeCourse,selectedName='',selectedClubId='',selectedCourseId='',onRequest,showHeading=true,purpose='round',onSelectionReadyChange}:{token?:string|null;permissionOwnerId:string;onSelect?:(course:Course,cards:Course[])=>void;onSelectClub?:(club:{clubId:string;clubName:string})=>void;onSelectHomeCourse?:(selection:{clubId:string;clubName:string;courseId:string;courseName:string})=>void|Promise<void>;selectedName?:string;selectedClubId?:string;selectedCourseId?:string;onRequest?:()=>void;showHeading?:boolean;purpose?:'round'|'home-club';onSelectionReadyChange?:(ready:boolean)=>void}) {
+export function CatalogCoursePicker({token,permissionOwnerId,onSelect,onSelectClub,onSelectHomeCourse,selectedName='',selectedClubId='',selectedCourseId='',onRequest,showHeading=true,purpose='round',onSelectionReadyChange}:{token?:string|null;permissionOwnerId:string;onSelect?:(course:Course,cards:Course[])=>void;onSelectClub?:(club:{clubId:string;clubName:string})=>void;onSelectHomeCourse?:(selection:{clubId:string;clubName:string;courseId:string;courseName:string})=>void|Promise<void>;selectedName?:string;selectedClubId?:string;selectedCourseId?:string;onRequest?:(searchedName?:string)=>void;showHeading?:boolean;purpose?:'round'|'home-club';onSelectionReadyChange?:(ready:boolean)=>void}) {
   const [entries,setEntries]=useState<Entry[]>([]),[query,setQuery]=useState(''),[error,setError]=useState(''),[loading,setLoading]=useState(false);
   const [location,setLocation]=useState<PickerLocationState>({status:'idle'});
   const locationController=useRef<AbortController|null>(null);
@@ -102,6 +102,6 @@ export function CatalogCoursePicker({token,permissionOwnerId,onSelect,onSelectCl
     {!token&&<p>Inicia sesión para buscar campos.</p>}
     {club&&selectedClubCourses.length>1&&<label>Layout<select aria-label="Layout" value={chosen} onChange={e=>void selectCourse(e.target.value)}><option value="">Selecciona layout</option>{selectedClubCourses.map(c=><option key={c.id} value={c.id}>{c.name}{c.isProvisional?' · Provisional · No disponible para publicación GHIN':''}{c.completeCards===0?' · tarjeta pendiente':''}</option>)}</select></label>}
     {purpose==='home-club'&&selectionLabel&&<p role="status">✓ Seleccionado: {selectionLabel}</p>}
-    {onRequest&&<button type="button" className={styles.request} onClick={onRequest}>¿No encuentras tu campo? Solicítalo ↗</button>}
+    {onRequest&&<button type="button" className={styles.request} onClick={()=>onRequest(query.trim()||undefined)}>{query.trim()&&!loading&&!clubs.length?'Solicitar este campo':'¿No encuentras tu campo? Solicitar este campo'} ↗</button>}
   </section>;
 }
