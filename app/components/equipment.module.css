@@ -1144,28 +1144,29 @@
 .profileBagRows button span { display:grid;gap:3px;min-width:0; }
 .profileBagRows button small { color:var(--by-muted,var(--muted));font-size:11px;font-weight:750; }
 .profileBagRows button b { overflow-wrap:anywhere;font:500 16px/1.25 var(--by-editorial,Georgia,serif); }
-.bagCategory { overflow:hidden;border:1px solid var(--by-line,var(--line));border-radius:20px;background:linear-gradient(145deg,#f7f9f3,#fff);box-shadow:0 8px 22px rgba(25,55,35,.045); }
-.bagCategory>header { display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid var(--by-line,var(--line));padding:13px 16px;background:rgba(231,238,222,.55); }
+.bagCategory { overflow:hidden;border:1px solid rgba(23,63,42,.12);border-radius:24px;background:rgba(255,255,255,.94);box-shadow:0 13px 29px rgba(20,55,34,.09); }
+.bagCategory>header { display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid var(--by-line,var(--line));padding:13px 18px;background:linear-gradient(90deg,rgba(231,238,222,.72),rgba(247,249,243,.72)); }
 .bagCategory>header div,.bagCategory>header span,.bagCategory>header b,.bagCategory>header small { min-width:0; }
 .bagCategory>header div { display:grid;gap:2px; }
 .bagCategory>header span { color:var(--by-muted,var(--muted));font-size:10px;font-weight:850;letter-spacing:.08em;text-transform:uppercase; }
-.bagCategory>header b { color:var(--by-pine,var(--green));font:500 17px/1.2 var(--by-editorial,Georgia,serif);overflow-wrap:anywhere; }
+.bagCategory>header b { color:var(--by-pine,var(--green));font:500 20px/1.15 var(--by-editorial,Georgia,serif);overflow-wrap:anywhere; }
 .bagCategory>header small { color:var(--by-muted,var(--muted));font-size:11px;text-align:right; }
 .bagCategoryItems { display:grid; }
-.bagCategoryItems>.equipmentItem { border:0;border-radius:0;background:transparent;box-shadow:none; }
+.bagCategoryItems>.equipmentItem { border:0;border-radius:0;background:transparent;padding:10px;box-shadow:none; }
 .bagCategoryItems>.equipmentItem+.equipmentItem { border-top:1px solid var(--by-line,var(--line)); }
 .emptyBagRow,.bagBallRow,.bagItemMain { width:100%;min-width:0;border:0;background:transparent;color:var(--ink);cursor:pointer; }
-.emptyBagRow { display:flex;min-height:58px;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;color:var(--by-pine,var(--green));font-weight:750;text-align:left; }
+.emptyBagRow { min-height:136px;color:var(--by-pine,var(--green));font-weight:750;text-align:left; }
 .emptyBagRow:hover,.emptyBagRow:focus-visible,.bagBallRow:hover,.bagBallRow:focus-visible,.bagItemMain:hover,.bagItemMain:focus-visible { background:rgba(224,235,215,.55);outline:0;box-shadow:inset 0 0 0 2px rgba(45,91,61,.25); }
 .bagBallRow { display:grid;grid-template-columns:54px minmax(0,1fr) 24px;min-height:82px;align-items:center;gap:12px;padding:12px 16px;text-align:left; }
 .bagBallRow>span:nth-child(2) { display:grid;min-width:0;gap:4px; }
 .bagBallRow>span:nth-child(2)>b { overflow-wrap:anywhere;font-size:15px; }
 .bagBallRow>span:nth-child(2)>small { overflow-wrap:anywhere;color:var(--muted);font-size:12px; }
-.bagItemMain { display:grid;grid-template-columns:56px minmax(0,1fr) auto 24px;align-items:center;gap:12px;padding:0;text-align:left; }
+.bagItemMain { display:grid;grid-template-columns:156px minmax(0,1fr) auto 28px;min-height:122px;align-items:center;gap:16px;padding:0;text-align:left; }
+.bagItemMain .categoryIcon { width:156px;height:118px;flex:0 0 156px;border-radius:17px;background:linear-gradient(180deg,rgba(244,248,238,.7),rgba(225,236,219,.96)),url("/brand/backyard-fairway-scene.svg") center bottom / cover no-repeat; }
 .bagItemCopy { display:grid;min-width:0;gap:3px; }
 .bagItemCopy>small { color:var(--by-muted,var(--muted));font-size:10px;font-weight:850;letter-spacing:.06em;text-transform:uppercase; }
-.bagItemCopy>b { overflow-wrap:anywhere;font-size:16px;font-weight:700; }
-.bagItemCopy>span { overflow-wrap:anywhere;color:var(--by-muted,var(--muted));font-size:12px;line-height:1.4; }
+.bagItemCopy>b { overflow-wrap:anywhere;color:#102f23;font:650 22px/1.15 var(--by-editorial,Georgia,serif); }
+.bagItemCopy>span { overflow-wrap:anywhere;color:var(--by-muted,var(--muted));font-size:12px;line-height:1.45; }
 .rowChevron { color:var(--by-pine,var(--green));font:400 30px/1 var(--by-editorial,Georgia,serif); }
 .itemManage { margin-top:10px;border-top:1px solid var(--by-line,var(--line));padding-top:8px; }
 .itemManage>summary,.optionalDetails>summary { min-height:44px;color:var(--by-pine,var(--green));font-size:12px;font-weight:850;cursor:pointer; }
@@ -1179,7 +1180,8 @@
 .optionalDetails[open] { padding-bottom:12px; }
 
 @media(max-width:430px) {
-  .bagItemMain { grid-template-columns:52px minmax(0,1fr) 20px; }
+  .bagItemMain { grid-template-columns:116px minmax(0,1fr) 20px;min-height:108px;gap:10px; }
+  .bagItemMain .categoryIcon { width:116px;height:102px;flex-basis:116px; }
   .bagItemMain>.currentBadge { display:none; }
   .catalogFacts { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
@@ -1199,9 +1201,14 @@
 .visualClubCard>strong,.visualClubSelected>strong { display:grid;width:30px;height:30px;place-items:center;border-radius:50%;background:#fff;color:var(--green);box-shadow:0 5px 14px rgba(18,53,34,.12); }
 .catalogChoiceGrid button>span img { width:32px;height:38px;object-fit:cover;border-radius:7px; }
 .categoryIcon img { width:100%;height:100%;object-fit:cover; }
-.emptyBagRow { display:grid;grid-template-columns:52px minmax(0,1fr) 24px; }
-.emptyBagVisual { display:grid;width:48px;height:54px;place-items:center;overflow:hidden;border-radius:12px;background:var(--by-sage,var(--green2)); }
-.emptyBagVisual img { width:100%;height:100%;object-fit:cover;border-radius:inherit; }
+.emptyBagRow { display:grid;grid-template-columns:156px minmax(0,1fr) 48px;align-items:center;gap:16px;padding:9px 16px 9px 9px; }
+.emptyBagVisual { display:grid;width:156px;height:118px;place-items:center;overflow:hidden;border-radius:17px;background:linear-gradient(180deg,rgba(244,248,238,.7),rgba(225,236,219,.96)),url("/brand/backyard-fairway-scene.svg") center bottom / cover no-repeat; }
+.emptyBagVisual img { width:100%;height:100%;object-fit:contain;border-radius:inherit; }
+.emptyBagCopy { display:grid;min-width:0;gap:4px; }
+.emptyBagCopy>b { color:#102f23;font:500 23px/1.08 var(--by-editorial,Georgia,serif); }
+.emptyBagCopy>small { color:#486052;font-size:12px;font-weight:520;line-height:1.4; }
+.emptyBagCopy>em { width:fit-content;max-width:100%;border-radius:999px;background:#edf2e9;padding:7px 13px;color:#245c3d;font-size:12px;font-style:normal;font-weight:750; }
+.addBagButton { display:grid;width:48px;height:48px;place-items:center;border-radius:50%;background:linear-gradient(180deg,#16804c,#0e5d37);color:#fff;font-size:30px;font-weight:350;box-shadow:0 8px 18px rgba(12,83,49,.22); }
 .ballGlyph img { width:100%;height:100%;object-fit:contain; }
 .emptyBallVisual { display:grid;width:92px;height:92px;margin:0 auto 4px;color:var(--green); }
 .emptyBallVisual img { width:100%;height:100%;object-fit:contain; }
@@ -1223,6 +1230,7 @@
 .visualOption.selected>b { background:#fff;color:var(--green); }
 @media(max-width:640px) { .visualBagGrid { grid-template-columns:1fr; } }
 @media(max-width:540px) { .visualClubCard,.visualClubSelected { grid-template-columns:118px minmax(0,1fr) 28px;min-height:150px;padding:10px; } .visualClubMedia { width:118px;height:128px; } .ballFitHero { grid-template-columns:126px minmax(0,1fr);min-height:156px;gap:12px;padding:13px; } .ballFitOrb { width:126px;height:126px; } .ballFitHero b { font-size:22px; } .fitPillars { grid-template-columns:1fr; } .fitPillars>span { min-height:72px;grid-template-columns:28px minmax(0,1fr);justify-items:start;text-align:left; } .fitPillars small { grid-column:2; } }
+@media(max-width:540px) { .emptyBagRow { grid-template-columns:116px minmax(0,1fr) 42px;min-height:118px;gap:10px;padding:8px 10px 8px 8px; } .emptyBagVisual { width:116px;height:102px;border-radius:15px; } .emptyBagCopy>b { font-size:20px; } .emptyBagCopy>small { font-size:10px; } .emptyBagCopy>em { padding:6px 9px;font-size:10px; } .addBagButton { width:42px;height:42px;font-size:26px; } }
 
 /* Launch-monitor flow: choose the club before any upload, then analyze, then review. */
 .captureFlow { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;padding:6px;border:1px solid var(--by-line,var(--line));border-radius:17px;background:#f4f7f1; }

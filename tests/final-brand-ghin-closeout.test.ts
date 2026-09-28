@@ -30,6 +30,20 @@ test("all owned product visuals layer the exact approved Backyard master mark", 
   }
 });
 
+test("Mi Bolsa keeps the approved product-card hierarchy outside onboarding", () => {
+  const panel = source("app/components/equipment-profile-panel.tsx");
+  const css = source("app/components/equipment.module.css");
+
+  assert.match(panel, /Máxima distancia para tus tiros de salida/);
+  assert.match(panel, /Versatilidad y distancia desde el fairway/);
+  assert.match(panel, /Creatividad alrededor del green/);
+  assert.match(panel, /className=\{styles\.emptyBagCopy\}/);
+  assert.match(panel, /Agregar a mi bolsa/);
+  assert.match(css, /\.emptyBagRow \{ display:grid;grid-template-columns:156px/);
+  assert.match(css, /\.bagItemMain \{ display:grid;grid-template-columns:156px/);
+  assert.match(css, /backyard-fairway-scene\.svg/);
+});
+
 test("GHIN has the official lockup, live action and an unclipped document-level dialog", () => {
   const selector = source("app/components/handicap-source-selector.tsx");
   const panel = source("app/components/ghin-read-only-panel.tsx");

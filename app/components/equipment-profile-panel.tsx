@@ -61,15 +61,15 @@ type EquipmentDeleteIntent =
   | { kind: "distance"; distance: PlayerClubDistance; name: string };
 
 const BAG_CATEGORY_SECTIONS = [
-  { id: "driver", label: "Driver", categories: ["DRIVER"] },
-  { id: "mini-driver", label: "Mini Driver", categories: ["MINI_DRIVER"] },
-  { id: "woods", label: "Maderas", categories: ["FAIRWAY_WOOD"] },
-  { id: "hybrids", label: "Híbridos", categories: ["HYBRID"] },
-  { id: "utility", label: "Utility / Driving Iron", categories: ["UTILITY_IRON"] },
-  { id: "irons", label: "Hierros", categories: ["IRON_SET"] },
-  { id: "wedges", label: "Wedges", categories: ["WEDGE"] },
-  { id: "putter", label: "Putter", categories: ["PUTTER"] },
-] as const satisfies ReadonlyArray<{ id: string; label: string; categories: readonly PlayerClub["category"][] }>;
+  { id: "driver", label: "Driver", description: "Máxima distancia para tus tiros de salida.", categories: ["DRIVER"] },
+  { id: "mini-driver", label: "Mini Driver", description: "Control desde el tee con una cabeza compacta.", categories: ["MINI_DRIVER"] },
+  { id: "woods", label: "Maderas", description: "Versatilidad y distancia desde el fairway.", categories: ["FAIRWAY_WOOD"] },
+  { id: "hybrids", label: "Híbridos", description: "Confianza desde cualquier lie.", categories: ["HYBRID"] },
+  { id: "utility", label: "Utility / Driving Iron", description: "Trayectoria penetrante y control desde el tee.", categories: ["UTILITY_IRON"] },
+  { id: "irons", label: "Hierros", description: "Precisión y control de distancia.", categories: ["IRON_SET"] },
+  { id: "wedges", label: "Wedges", description: "Creatividad alrededor del green.", categories: ["WEDGE"] },
+  { id: "putter", label: "Putter", description: "Decisión en los últimos golpes.", categories: ["PUTTER"] },
+] as const satisfies ReadonlyArray<{ id: string; label: string; description: string; categories: readonly PlayerClub["category"][] }>;
 
 function wedgeLoftSummary(clubs: readonly PlayerClub[]) {
   const lofts = [...new Set(clubs.flatMap((club) => club.loft === null ? [] : [club.loft]))].sort((left, right) => left - right);
@@ -340,7 +340,7 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
           const label = section.id === "wedges" ? wedgeLoftSummary(clubs) : section.label;
           return <section className={styles.bagCategory} key={section.id} data-bag-category={section.id}>
             <header><div><span>{section.label}</span><b>{label}</b></div><small>{clubs.length ? `${clubs.length} en tu bolsa` : "Agregar"}</small></header>
-            {clubs.length ? <div className={styles.bagCategoryItems}>{clubs.map((club) => <ClubItem key={club.id} club={club} catalog={clubCatalog.items} shafts={shaftCatalog.items} onOpen={() => setClubDetailId(club.id)} />)}</div> : <button type="button" className={styles.emptyBagRow} onClick={() => { setClubDetailId(null); setClubEditor("new"); }}><span className={styles.emptyBagVisual}><ClubCategoryVisual category={section.categories[0]} /></span><span>Agregar {section.label.toLocaleLowerCase("es-MX")}</span><b aria-hidden="true">＋</b></button>}
+            {clubs.length ? <div className={styles.bagCategoryItems}>{clubs.map((club) => <ClubItem key={club.id} club={club} catalog={clubCatalog.items} shafts={shaftCatalog.items} onOpen={() => setClubDetailId(club.id)} />)}</div> : <button type="button" className={styles.emptyBagRow} onClick={() => { setClubDetailId(null); setClubEditor("new"); }}><span className={styles.emptyBagVisual}><ClubCategoryVisual category={section.categories[0]} /></span><span className={styles.emptyBagCopy}><b>{section.label}</b><small>{section.description}</small><em>Agregar a mi bolsa</em></span><b className={styles.addBagButton} aria-hidden="true">＋</b></button>}
           </section>;
         })}
         <section className={styles.bagCategory} data-bag-category="ball">
