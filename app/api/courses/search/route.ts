@@ -8,7 +8,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { distinctNearbyClubCards } from "../../../../lib/course-nearby-clubs";
 
 type LayeredSearch = Awaited<ReturnType<typeof import("../../../../lib/course-catalog-provider.server").searchCourseCards>>;
-type LayeredSearchInput = { query: string; limit: number; cursor?: string; latitude?: number; longitude?: number; requireQaReviewedCatalog?: boolean };
+type LayeredSearchInput = { query: string; limit: number; cursor?: string; latitude?: number; longitude?: number; requireQaReviewedCatalog?: boolean; forceFresh?: boolean };
 
 async function layeredSearch(input: LayeredSearchInput, database: SupabaseClient | null, failClosed = false): Promise<LayeredSearch | null> {
   try {
@@ -26,11 +26,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "feature_disabled" }, { status: 404, headers: { "cache-control": "no-store" } });
   }
   let database: SupabaseClient | null = null;
+  let userId: string | null = null;
   const hasBearer = Boolean(bearerToken(request));
   if (hasBearer) {
     const auth = await authenticatedRequest(request);
     if (!auth.ok) return NextResponse.json({ error: auth.error, code: auth.code }, { status: auth.status, headers: { "cache-control": "private, no-store" } });
     database = auth.client;
+    userId = auth.userId;
   }
   const responseCache = hasBearer
     ? { "cache-control": "private, no-store" }
@@ -94,7 +96,17 @@ export async function GET(request: NextRequest) {
       })),
     }, { headers: { "cache-control": "private, no-store" } });
   }
-  const layered = await layeredSearch({ query, limit, cursor }, database);
+  let layered = await layeredSearch({ query, limit, cursor }, database);
+  const shouldResolveMiss = request.nextUrl.searchParams.get("resolve") === "1" && hasBearer && Boolean(userId) && !cursor;
+  let remoteLookup: Record<string, unknown> = { status: "NOT_NEEDED", upstreamCalls: 0, cached: false };
+  if (layered && layered.total === 0 && shouldResolveMiss) {
+    const { importGhinCourseOnMiss } = await import("../../../../lib/course-lazy-import.server");
+    // Authentication determines the audit actor; Course Master writes use the
+    // isolated server binding and never a client-supplied owner/database scope.
+    const imported = await importGhinCourseOnMiss({ query, actorId: userId! });
+    remoteLookup = imported;
+    if (imported.status === "IMPORTED") layered = await layeredSearch({ query, limit, cursor, forceFresh: true }, database);
+  }
   if (layered) return NextResponse.json({
     provider: layered.provider,
     query,
@@ -102,6 +114,8 @@ export async function GET(request: NextRequest) {
     hasMore: layered.hasMore,
     nextCursor: layered.nextCursor,
     courses: layered.cards.map(({ card }) => card),
+    remoteLookup,
+    requestCourseAvailable: layered.total === 0,
   }, { headers: responseCache });
   const result = await internalCourseDataProvider.searchCourses({ courses: DEFAULT_COURSES, query, cursor, limit });
   if (!result.ok) return NextResponse.json({ error: result.code }, { status: 503, headers: { "cache-control": "no-store" } });

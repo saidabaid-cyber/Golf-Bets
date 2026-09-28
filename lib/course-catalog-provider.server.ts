@@ -15,7 +15,7 @@ import {
   playerVisibleTeeRating,
 } from "./golf-course-directory";
 import { haversineDistanceKm } from "./course-distance";
-import { loadReviewedCourseCatalog, reviewCatalogQaEnabled } from "./review-course-catalog.server";
+import { invalidateReviewedCourseCatalogCache, loadReviewedCourseCatalog, reviewCatalogQaEnabled } from "./review-course-catalog.server";
 import { reviewedTeeRatingIsAuthorized, type ReviewedCatalogCourse } from "./review-course-catalog";
 import { getSupabaseAdmin } from "./supabase/server";
 import { readPublishedCatalog } from "./admin-published-catalog.server";
@@ -172,13 +172,14 @@ function mergeCatalog(base: GolfCourseCatalog, overlays: readonly GolfCourseCata
   return { schemaVersion: 1, clubs: [...clubs.values()], courses: [...courses.values()], tees: [...tees.values()], holes: [...holes.values()], teeHoleYardages: [...yardages.values()], geoFeatures: base.geoFeatures, scorecardProfiles: [...scorecardProfiles.values()] };
 }
 
-export async function getCourseCatalog(database: SupabaseClient | null = getSupabaseAdmin("cloud"), options: { requireQaReviewedCatalog?: boolean } = {}) {
+export async function getCourseCatalog(database: SupabaseClient | null = getSupabaseAdmin("cloud"), options: { requireQaReviewedCatalog?: boolean; forceFresh?: boolean } = {}) {
   let base = INTERNAL_GOLF_COURSE_CATALOG;
   if (options.requireQaReviewedCatalog && !reviewCatalogQaEnabled()) throw Error("CATALOG_QA_ONLY");
   if (reviewCatalogQaEnabled()) {
     if (!database && options.requireQaReviewedCatalog) throw Error("CATALOG_AUTH_REQUIRED");
     if (database) {
       try {
+        if (options.forceFresh) invalidateReviewedCourseCatalogCache();
         const reviewed = await loadReviewedCourseCatalog(database);
         if (reviewed.length) base = reviewedCoursesToCatalog(reviewed);
         else if (options.requireQaReviewedCatalog) throw Error("CATALOG_UNAVAILABLE");
@@ -207,8 +208,8 @@ function normalized(value: unknown) {
   return String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es-MX");
 }
 
-export async function searchCourseCards(input: { query: string; limit: number; cursor?: string | null; latitude?: number; longitude?: number; requireQaReviewedCatalog?: boolean }, database: SupabaseClient | null = getSupabaseAdmin("cloud")) {
-  const catalog = await getCourseCatalog(database, { requireQaReviewedCatalog: input.requireQaReviewedCatalog });
+export async function searchCourseCards(input: { query: string; limit: number; cursor?: string | null; latitude?: number; longitude?: number; requireQaReviewedCatalog?: boolean; forceFresh?: boolean }, database: SupabaseClient | null = getSupabaseAdmin("cloud")) {
+  const catalog = await getCourseCatalog(database, { requireQaReviewedCatalog: input.requireQaReviewedCatalog, forceFresh: input.forceFresh });
   const clubs = new Map(catalog.clubs.map((club) => [club.id, club]));
   const cards: CourseCard[] = catalog.courses.flatMap((course) => {
     const club = clubs.get(course.clubId); if (!club || !course.active || !club.active) return [];

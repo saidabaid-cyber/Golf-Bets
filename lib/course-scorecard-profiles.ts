@@ -26,6 +26,32 @@ export function scorecardProfileLabel(profile: Pick<ScorecardProfileOption, "nam
   return profile.name.localeCompare(source, "es-MX", { sensitivity: "base" }) === 0 ? source : `${profile.name} · ${source}`;
 }
 
+function normalizedLabel(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("es-MX").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+}
+
+/** A provider often names its only physical course exactly like the facility.
+ * Keep the facility singular in the picker and describe that sibling layout by
+ * par + scorecard provenance. Named/temporary layouts retain their own name. */
+export function courseConfigurationLabel(input: {
+  courseName: string;
+  clubName: string;
+  totalPar: number | null;
+  profile?: Pick<ScorecardProfileOption, "name" | "provenance">;
+}) {
+  if (normalizedLabel(input.courseName) !== normalizedLabel(input.clubName) || !input.profile) return input.courseName;
+  const prefix = input.totalPar === null ? "Configuración" : `Par ${input.totalPar}`;
+  return `${prefix} — ${scorecardProfileLabel(input.profile)}`;
+}
+
+export function scorecardProvenancePlayPriority(provenance: ScorecardProfileProvenance | undefined) {
+  return provenance === "CLUB_SCORECARD_VERIFIED" ? 0
+    : provenance === "CLUB_OPERATIONAL" ? 1
+      : provenance === "GHIN_OFFICIAL" || provenance === "USGA_OFFICIAL" ? 2
+        : provenance === "CLUB_TEMPORARY" ? 3 : 4;
+}
+
 export function scorecardProfilesForCards(cards: readonly Course[]): ScorecardProfileOption[] {
   const groups = new Map<string, ScorecardProfileOption>();
   for (const card of cards) {

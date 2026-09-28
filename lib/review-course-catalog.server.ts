@@ -9,6 +9,7 @@ export function reviewCatalogQaEnabled() {
   return isolatedPreviewDatabaseEnabled() && process.env.PREVIEW_DB_REF==='bymeopxkxapfizeeqeyb';
 }
 let cached:{expires:number;data:ReviewedCatalogCourse[]}|undefined;
+export function invalidateReviewedCourseCatalogCache(){cached=undefined;}
 export async function loadReviewedCourseCatalog(database?:SupabaseClient|null):Promise<ReviewedCatalogCourse[]> {
   if(!reviewCatalogQaEnabled()) throw Error('CATALOG_QA_ONLY');
   if(cached && cached.expires>Date.now()) return cached.data;

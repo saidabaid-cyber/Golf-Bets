@@ -1,7 +1,7 @@
 "use client";
 import { useEffect,useRef,useState } from 'react';
 import { createPortal } from 'react-dom';
-import { FEEDBACK_CATEGORIES,FEEDBACK_SHORT_LABELS,FEEDBACK_ATTACHMENT_MAX_BYTES,validateFeedback,type FeedbackCategory,type FeedbackInput } from '../../lib/feedback';
+import { COURSE_SCORECARD_REQUIRED_MESSAGE,FEEDBACK_CATEGORIES,FEEDBACK_SHORT_LABELS,FEEDBACK_ATTACHMENT_MAX_BYTES,feedbackAttachmentRequired,validateFeedback,type FeedbackCategory,type FeedbackInput } from '../../lib/feedback';
 import { feedbackAttachmentType,type FeedbackAttachment } from '../../lib/feedback-attachment';
 import { ModalShell } from './modal-shell';
 import styles from './feedback-dialog.module.css';
@@ -29,7 +29,7 @@ export function FeedbackDialog({token,email,screen=''}:{token?:string|null;email
     const preview=await new Promise<string>((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result));reader.onerror=()=>reject(Error('No pudimos leer la imagen.'));reader.readAsDataURL(file);});
     if(generation===fileGeneration.current)setAttachment({mime:file.type,data:preview.split(',')[1],preview,name:file.name});
   }catch(e){if(generation===fileGeneration.current)setError(e instanceof Error?e.message:'No pudimos leer la imagen.');}finally{if(generation===fileGeneration.current)setReading(false);}}
-  async function send(){if(lock.current||reading)return;const checked=validateFeedback(form);if(!checked.ok){setError(checked.error);return;}
+  async function send(){if(lock.current||reading)return;const checked=validateFeedback(form);if(!checked.ok){setError(checked.error);return;}if(feedbackAttachmentRequired(checked.data.category)&&!attachment){setError(COURSE_SCORECARD_REQUIRED_MESSAGE);return;}
     const content={input:checked.data,attachment:attachment?{mime:attachment.mime,data:attachment.data}:null,screen:origin.current.screen,contextualCategory:origin.current.category};
     const body=JSON.stringify(content);if(request.current?.body!==body)request.current={id:crypto.randomUUID(),body};if(!guestKey.current)guestKey.current=crypto.randomUUID();
     setRequestId(request.current.id);lock.current=true;setBusy(true);setError('');
@@ -50,7 +50,7 @@ export function FeedbackDialog({token,email,screen=''}:{token?:string|null;email
       {form.category==='BUG'&&<>{field('occurred','¿Qué ocurrió?')}{field('expected','¿Qué esperabas que ocurriera?')}{field('module','Pantalla o módulo')}</>}
       {form.category==='GENERAL'&&field('name','Título')}
       {field('description','Descripción',true)}{field('replyEmail','Correo de respuesta')}
-      <div className={styles.attachment}><label className={styles.attachButton}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M4 5h16v14H4zM4 16l5-6 5 5 3-3 3 3M16 8h.01"/></svg>{attachment?'Cambiar imagen':'Adjuntar foto o captura'}<input aria-label="Adjuntar foto o captura" type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>{void chooseFile(e.target.files?.[0]);e.target.value='';}}/></label><small>Opcional · JPG, PNG o WEBP · máximo 2 MB. Se adjunta al enviar.</small>
+      <div className={styles.attachment}><label className={styles.attachButton}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M4 5h16v14H4zM4 16l5-6 5 5 3-3 3 3M16 8h.01"/></svg>{attachment?'Cambiar imagen':'Adjuntar foto o captura'}<input aria-label="Adjuntar foto o captura" required={feedbackAttachmentRequired(form.category)} type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>{void chooseFile(e.target.files?.[0]);e.target.value='';}}/></label><small>{feedbackAttachmentRequired(form.category)?`${COURSE_SCORECARD_REQUIRED_MESSAGE} · JPG, PNG o WEBP · máximo 2 MB.`:'Opcional · JPG, PNG o WEBP · máximo 2 MB. Se adjunta al enviar.'}</small>
         {attachment&&<div className={styles.preview}>{/* User-selected local image; never a public Storage URL. */}
           <img src={attachment.preview} alt="Vista previa del adjunto"/><button type="button" onClick={()=>setAttachment(null)}>Quitar imagen</button></div>}
       </div>

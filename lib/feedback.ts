@@ -6,6 +6,8 @@ export const FEEDBACK_ATTACHMENT_TYPES=['image/jpeg','image/png','image/webp'] a
 export const FEEDBACK_SHORT_LABELS:Record<FeedbackCategory,string>={COURSE:'Campo',TEE:'Tee',CLUB:'Bastón',BALL:'Bola',SHAFT:'Varilla',BET:'Apuesta',BUG:'Bug',GENERAL:'Sugerencia'};
 export const FEEDBACK_OPTIONAL_FIELDS=['clubType','flex','players','example','occurred','expected','module'] as const;
 export const FEEDBACK_TO='contacto@thebackyard.com.mx';
+export const COURSE_SCORECARD_REQUIRED_MESSAGE='Adjunta una foto de la tarjeta del club para que podamos dar de alta el campo correctamente.';
+export function feedbackAttachmentRequired(category:FeedbackCategory){return category==='COURSE';}
 export function validateFeedback(value:unknown):{ok:true;data:FeedbackInput}|{ok:false;error:string} {
   if(!value||typeof value!=='object'||Array.isArray(value))return{ok:false,error:'Revisa los datos.'};
   const v=value as Record<string,unknown>;

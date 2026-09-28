@@ -10,6 +10,7 @@ import {
   type GhinProfileOperation,
 } from "../../../../lib/ghin/profile-diagnostics.server";
 import { failedAttemptStatus, providerRowToProfile, verifiedProviderWrite, type GhinProviderProfileRow } from "../../../../lib/ghin/profile-persistence";
+import { ghinProfileRefreshPolicy } from "../../../../lib/ghin/profile-refresh-policy";
 import { privateGhinJson } from "../../../../lib/ghin/qa-access.server";
 import { ghinUserContext } from "../../../../lib/ghin/user-access.server";
 import {
@@ -37,11 +38,12 @@ const PROFILE_COLUMNS = "external_player_id,association_status,provider_player_n
 
 type UserContext = Extract<Awaited<ReturnType<typeof ghinUserContext>>, { ok: true }>;
 
-function profilePayload(profile: ReturnType<typeof providerRowToProfile> | null) {
+function profilePayload(profile: ReturnType<typeof providerRowToProfile> | null, refreshPolicy?: ReturnType<typeof ghinProfileRefreshPolicy>) {
   return {
     available: true,
     linkState: profile ? "GHIN_LINKED" as const : "GHIN_NOT_LINKED" as const,
     profile,
+    ...(refreshPolicy ? { refreshPolicy } : {}),
   };
 }
 
@@ -217,7 +219,16 @@ export async function GET(request: NextRequest) {
   if (!context.ok) return context.response;
   if (request.nextUrl.search) return privateGhinJson({ error: "Solicitud inválida.", code: "SELECTORS_REJECTED" }, 400);
   try {
-    return privateGhinJson(profilePayload(await readProfile(context)));
+    const profile = await readProfile(context);
+    const session = profile ? getGhinUserSession(
+      context.userId,
+      profile.ghinNumber,
+      request.cookies.get(GHIN_SESSION_COOKIE_NAME)?.value,
+    ) : null;
+    return privateGhinJson(profilePayload(profile, ghinProfileRefreshPolicy({
+      lastSuccessfulSyncAt: profile?.lastSyncedAt ?? null,
+      hasUsableSession: Boolean(session),
+    })));
   } catch {
     return privateGhinJson({ error: "No fue posible leer el vínculo GHIN.", code: "PROFILE_READ_FAILED" }, 503);
   }

@@ -4,7 +4,7 @@ import { authenticatedRequest } from '../../../lib/server-auth';
 import { getSupabaseAdmin } from '../../../lib/supabase/server';
 import { reviewCatalogQaEnabled } from '../../../lib/review-course-catalog.server';
 import { feedbackMailerConfig,sendFeedbackEmail } from '../../../lib/feedback-email.server';
-import { FEEDBACK_ATTACHMENT_MAX_BYTES,feedbackPersistenceInput,feedbackTopicKey,validateFeedback } from '../../../lib/feedback';
+import { COURSE_SCORECARD_REQUIRED_MESSAGE,FEEDBACK_ATTACHMENT_MAX_BYTES,feedbackAttachmentRequired,feedbackPersistenceInput,feedbackTopicKey,validateFeedback } from '../../../lib/feedback';
 import { feedbackAttachmentType } from '../../../lib/feedback-attachment';
 import { receiveFeedback,notifyFeedbackSafely } from '../../../lib/feedback-workflow';
 import { backyardAiClientAddress,isCrossSiteRequest,readJsonBodyWithLimit } from '../../../lib/backyard-ai/server/http-security';
@@ -38,6 +38,7 @@ export async function POST(request:NextRequest) {
       bytes=Buffer.from(attachment.data,'base64');mime=attachment.mime;
       try {extension=feedbackAttachmentType(mime,bytes);} catch(e) {return NextResponse.json({error:e instanceof Error?e.message:'Imagen inválida.'},{status:400,headers});}
     }
+    if(feedbackAttachmentRequired(checked.data.category)&&!bytes)return NextResponse.json({error:COURSE_SCORECARD_REQUIRED_MESSAGE,code:'COURSE_SCORECARD_REQUIRED'},{status:400,headers});
     const id=value.id,submittedInput=checked.data,input=feedbackPersistenceInput(submittedInput),imageHash=bytes?hash(bytes):null;
     const actorKey=hash(userId??`guest:${value.guestKey}`);
     // Anonymous anti-abuse key is HMAC, rotated daily; never store raw IP/location.
@@ -75,7 +76,11 @@ export async function POST(request:NextRequest) {
         }catch{console.warn('feedback_notification_unavailable');}
       }),
     });
-    return NextResponse.json({...outcome,...(outcome.attachmentPending?{error:'Tu solicitud está guardada, pero falta adjuntar la imagen. Reintenta sin cambiar el formulario.'}:{})},{status:outcome.attachmentPending?409:200,headers});
+    if(submittedInput.category==='COURSE'&&!outcome.attachmentPending){
+      const queued=await db.from('feedback_requests').update({request_status:'PENDING_REVIEW',updated_at:new Date().toISOString()}).eq('id',id);
+      if(queued.error)throw Error('PERSISTENCE_UNAVAILABLE');
+    }
+    return NextResponse.json({...outcome,...(submittedInput.category==='COURSE'&&!outcome.attachmentPending?{status:'PENDING_REVIEW'}:{}),...(outcome.attachmentPending?{error:'Tu solicitud está guardada, pero falta adjuntar la imagen. Reintenta sin cambiar el formulario.'}:{})},{status:outcome.attachmentPending?409:200,headers});
   }catch(e){
     const code=e instanceof Error?e.message:'';
     const status=code==='RATE_LIMIT'?429:code==='REQUEST_CONFLICT'?409:503;
