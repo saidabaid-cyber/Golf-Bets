@@ -41,6 +41,7 @@ test("Mi Bolsa keeps the approved product-card hierarchy outside onboarding", ()
   assert.match(panel, /Agregar a mi bolsa/);
   assert.match(css, /\.emptyBagRow \{ display:grid;grid-template-columns:156px/);
   assert.match(css, /\.bagItemMain \{ display:grid;grid-template-columns:156px/);
+  assert.match(css, /\.bagBallRow \{ display:grid;grid-template-columns:132px/);
   assert.match(css, /backyard-fairway-scene\.svg/);
 });
 
