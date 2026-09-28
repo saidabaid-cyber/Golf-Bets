@@ -8,6 +8,11 @@ import { command } from './core.mjs';
 // one-byte change (including a real credential) is scanned normally.
 const REVIEWED_FIXTURE_FINDINGS = new Set([
   ['DATABASE_PASSWORD_URI', 'scripts/run-preview-rls-tests.test.mjs', '30e63f55a1d38d4832357f2a2b66ac01aac201b3'].join('\0'),
+  ['DATABASE_PASSWORD_URI', 'scripts/run-preview-rls-tests.test.mjs', 'a77013672a41fbaae97ccb55d950e0f9bdb5b7aa'].join('\0'),
+  ['DATABASE_PASSWORD_URI', 'scripts/run-preview-rls-tests.test.mjs', '85d3e5be045a191476e4ea1fe6c5f7c3c0f7c0b0'].join('\0'),
+  ['DATABASE_PASSWORD_URI', 'scripts/run-preview-rls-tests.test.mjs', '3f1a2b51e2e0f51f8de88ab1a597aa5b951ff968'].join('\0'),
+  ['DATABASE_PASSWORD_URI', 'scripts/run-preview-rls-tests.test.mjs', 'ef02463e05327ff1b81a0d637b997a88f7cd5339'].join('\0'),
+  ['DATABASE_PASSWORD_URI', 'scripts/run-preview-rls-tests.test.mjs', '27af27a50eb495bb96a2497a10afec701ffd0d36'].join('\0'),
 ]);
 
 export function isReviewedFixtureFinding({ file, objectId, kind, location } = {}) {
