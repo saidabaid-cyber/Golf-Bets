@@ -2,7 +2,12 @@ import "server-only";
 
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
-import { GhinClientError, GhinReadOnlyClient, type GhinAuthDiagnostics } from "./client";
+import {
+  GhinClientError,
+  GhinReadOnlyClient,
+  type GhinAuthDiagnostics,
+  type GhinAuthStageDiagnostic,
+} from "./client";
 import { resolveGhinPreviewCapabilities } from "./config";
 import type { NormalizedGhinGolfer } from "./core";
 import type { GhinServerCredentials } from "./credentials.server";
@@ -109,7 +114,16 @@ function clientFor(credentials: GhinServerCredentials) {
     || capabilities.scorePostingEnabled || !capabilities.apiBaseUrl) {
     throw new Error("GHIN_USER_FLOW_DISABLED");
   }
-  return new GhinReadOnlyClient({ baseUrl: capabilities.apiBaseUrl, credentials });
+  return new GhinReadOnlyClient({
+    baseUrl: capabilities.apiBaseUrl,
+    credentials,
+    onAuthDiagnostic: logAuthDiagnostic,
+  });
+}
+
+function logAuthDiagnostic(diagnostic: GhinAuthStageDiagnostic) {
+  if (process.env.VERCEL_ENV !== "preview") return;
+  console.info(JSON.stringify(diagnostic));
 }
 
 async function authenticateIdentity(credentials: GhinServerCredentials, expectedGhinNumber?: string) {

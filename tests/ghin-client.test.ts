@@ -3,6 +3,7 @@ import Module from "node:module";
 import test from "node:test";
 
 type GhinClientModule = typeof import("../lib/ghin/client");
+type GhinAuthStageDiagnostic = import("../lib/ghin/client").GhinAuthStageDiagnostic;
 
 const moduleLoader = Module as unknown as {
   _load(request: string, parent: NodeModule | null, isMain: boolean): unknown;
@@ -260,6 +261,92 @@ test("credenciales rechazadas producen sólo un error normalizado y sin cuerpo r
       return true;
     },
   );
+});
+
+test("diagnóstico seguro distingue éxito y fallo de Firebase sin exponer secretos", async () => {
+  const successful: GhinAuthStageDiagnostic[] = [];
+  const valid = new GhinReadOnlyClient({
+    baseUrl: "https://api2.ghin.com/api/v1",
+    credentials,
+    onAuthDiagnostic: (diagnostic) => successful.push(diagnostic),
+    fetchImpl: async (input) => {
+      const url = new URL(String(input));
+      if (isFirebase(url)) return firebaseResponse();
+      return jsonResponse(200, {
+        golfer_user: {
+          golfer_user_token: "provider-secret-token",
+          golfers: [{ ghin_number: "11103349", player_name: "Said Abaid Taja" }],
+        },
+        expires_in: 3_600,
+      });
+    },
+  });
+  await valid.authenticate();
+  assert.deepEqual(successful.map(({ stage, httpStatus, outcome, tokenParsed }) => ({ stage, httpStatus, outcome, tokenParsed })), [
+    { stage: "firebase_installation", httpStatus: 200, outcome: "PASS", tokenParsed: true },
+    { stage: "golfer_login", httpStatus: 200, outcome: "PASS", tokenParsed: true },
+  ]);
+
+  const failed: GhinAuthStageDiagnostic[] = [];
+  const invalid = new GhinReadOnlyClient({
+    baseUrl: "https://api2.ghin.com/api/v1",
+    credentials,
+    onAuthDiagnostic: (diagnostic) => failed.push(diagnostic),
+    fetchImpl: async () => jsonResponse(503, { error: "firebase unavailable", token: "must-not-leak" }),
+  });
+  await assert.rejects(invalid.authenticate(), (error: unknown) => error instanceof GhinClientError && error.code === "unavailable");
+  assert.deepEqual(failed.map(({ stage, httpStatus, outcome, failureKind, errorCode }) => ({ stage, httpStatus, outcome, failureKind, errorCode })), [{
+    stage: "firebase_installation",
+    httpStatus: 503,
+    outcome: "FAIL",
+    failureKind: "upstream",
+    errorCode: "unavailable",
+  }]);
+
+  const serialized = JSON.stringify([...successful, ...failed]);
+  assert.doesNotMatch(serialized, /unit-test-password|provider-secret-token|must-not-leak|11103349/i);
+  assert.match(serialized, /firebase_installation|golfer_login/);
+});
+
+test("golfer_login 200 compatible y errores 400/401 conservan etapa, status y código", async () => {
+  const compatibleEvents: GhinAuthStageDiagnostic[] = [];
+  const compatible = new GhinReadOnlyClient({
+    baseUrl: "https://api2.ghin.com/api/v1",
+    credentials,
+    onAuthDiagnostic: (diagnostic) => compatibleEvents.push(diagnostic),
+    fetchImpl: async (input) => {
+      const url = new URL(String(input));
+      if (isFirebase(url)) return firebaseResponse();
+      return jsonResponse(200, {
+        response: {
+          session: { access_token: "compatible-provider-token", expires_in: 3_600 },
+          golferUser: { golfers: [{ ghin_number: "11103349", player_name: "Said Abaid Taja" }] },
+        },
+      });
+    },
+  });
+  const auth = await compatible.authenticate();
+  assert.equal(auth.golferNumber, "11103349");
+  assert.equal(compatibleEvents.at(-1)?.stage, "golfer_login");
+  assert.equal(compatibleEvents.at(-1)?.outcome, "PASS");
+  assert.deepEqual(compatibleEvents.at(-1)?.responseKeys, ["response"]);
+
+  for (const status of [400, 401]) {
+    const events: GhinAuthStageDiagnostic[] = [];
+    const client = new GhinReadOnlyClient({
+      baseUrl: "https://api2.ghin.com/api/v1",
+      credentials,
+      onAuthDiagnostic: (diagnostic) => events.push(diagnostic),
+      fetchImpl: async (input) => isFirebase(new URL(String(input)))
+        ? firebaseResponse()
+        : jsonResponse(status, { error: status === 400 ? "Incorrect Credentials" : "Unauthorized" }),
+    });
+    await assert.rejects(client.authenticate(), (error: unknown) => error instanceof GhinClientError && error.httpStatus === status);
+    const login = events.find((event) => event.stage === "golfer_login");
+    assert.equal(login?.httpStatus, status);
+    assert.equal(login?.failureKind, "upstream");
+    assert.equal(login?.outcome, "FAIL");
+  }
 });
 
 test("un 400 de contrato no se disfraza como credenciales inválidas", async () => {

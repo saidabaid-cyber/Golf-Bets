@@ -68,6 +68,20 @@ function safeUpstreamMessage(code: GhinErrorCode | "unknown") {
   return "GHIN no está disponible en este momento.";
 }
 
+function logAuthorizationFailure(operation: "authorize" | "reauthorize", error: unknown) {
+  if (process.env.VERCEL_ENV !== "preview") return;
+  const failure = clientError(error);
+  console.error(JSON.stringify({
+    event: "GHIN_AUTH_FAILURE",
+    operation,
+    endpoint: error instanceof GhinClientError ? error.endpoint : null,
+    upstreamHttpStatus: error instanceof GhinClientError ? error.httpStatus : null,
+    errorCode: failure.code,
+    retryable: error instanceof GhinClientError ? error.retryable : false,
+    errorType: error instanceof GhinClientError ? "GhinClientError" : "UnexpectedError",
+  }));
+}
+
 async function readProfile(context: UserContext) {
   const read = await context.client
     .from("player_handicap_provider_profiles")
@@ -177,6 +191,7 @@ export async function POST(request: NextRequest) {
           safety: { readOnly: true, scorePostingCalls: 0 },
         });
       } catch (error) {
+        logAuthorizationFailure("authorize", error);
         const failure = clientError(error);
         return privateGhinJson({ error: safeUpstreamMessage(failure.code), code: failure.code.toUpperCase() }, failure.status);
       }
@@ -195,6 +210,7 @@ export async function POST(request: NextRequest) {
       const profile = await persistVerifiedGolfer(context.userId, result.golfer, attemptedAt);
       return privateGhinJson({ ...profilePayload(profile), reauthorized: true, safety: { readOnly: true, scorePostingCalls: 0 } });
     } catch (error) {
+      logAuthorizationFailure("reauthorize", error);
       const failure = clientError(error);
       await recordFailedAttempt(context.userId, attemptedAt, failure.code);
       return privateGhinJson({ error: safeUpstreamMessage(failure.code), code: failure.code.toUpperCase() }, failure.status);

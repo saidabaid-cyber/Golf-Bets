@@ -327,7 +327,7 @@ export function parseGhinGolfer(payload: unknown): NormalizedGhinGolfer | null {
   return {
     ghinNumber,
     externalPlayerId: identifier(field(record, ["golfer_id", "player_id", "user_id", "id"])),
-    name: text(field(record, ["name", "full_name", "display_name", "golfer_name"])) ?? joinedName,
+    name: text(field(record, ["name", "full_name", "display_name", "golfer_name", "player_name"])) ?? joinedName,
     firstName,
     lastName,
     clubName: text(field(record, ["club_name", "golf_club_name", "primary_club_name"]))
@@ -358,8 +358,19 @@ export function parseGhinGolfers(payload: unknown): NormalizedGhinGolfer[] {
  * credentials without accepting an arbitrary GHIN number from the browser.
  */
 export function parseAuthenticatedGhinGolfer(payload: unknown): NormalizedGhinGolfer | null {
-  if (!isRecord(payload)) return null;
-  const golferUser = childRecord(payload, ["golfer_user", "golferUser"]);
+  function golferUserRecord(value: unknown, depth = 0): UnknownRecord | null {
+    if (!isRecord(value) || depth > 5) return null;
+    const direct = childRecord(value, ["golfer_user", "golferUser"]);
+    if (direct) return direct;
+    for (const envelope of ENVELOPE_KEYS) {
+      const nested = field(value, [envelope]);
+      const found = golferUserRecord(nested, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  const golferUser = golferUserRecord(payload);
   if (!golferUser) return null;
   const affiliations = records(golferUser, ["golfers", "players"])
     .map((candidate) => parseGhinGolfer(candidate))

@@ -65,6 +65,28 @@ export type GhinAuthDiagnostics = {
   golferNumber: string | null;
 };
 
+export type GhinAuthStage =
+  | "firebase_installation"
+  | "golfer_login"
+  | "golfer_lookup_number"
+  | "golfer_lookup_email";
+
+export type GhinAuthStageDiagnostic = {
+  event: "GHIN_AUTH_STAGE";
+  stage: GhinAuthStage;
+  endpoint: string;
+  method: "GET" | "POST";
+  httpStatus: number | null;
+  durationMs: number;
+  outcome: "PASS" | "FAIL";
+  failureKind: "transport" | "upstream" | "parser" | null;
+  errorCode: GhinErrorCode | null;
+  responseShape: "object" | "array" | "string" | "number" | "boolean" | "null" | "invalid_json" | null;
+  responseKeys: string[];
+  tokenParsed: boolean | null;
+  golferNumberPresent: boolean | null;
+};
+
 export type GhinReadResult<T> = {
   data: T;
   endpoint: string;
@@ -99,6 +121,7 @@ export type GhinClientOptions = {
   golferTtlMs?: number;
   scoresTtlMs?: number;
   courseTtlMs?: number;
+  onAuthDiagnostic?: (diagnostic: GhinAuthStageDiagnostic) => void;
 };
 
 type AuthSession = {
@@ -114,7 +137,30 @@ type JsonResponse = {
   payload: unknown;
   status: number;
   endpoint: string;
+  durationMs: number;
+  responseShape: GhinAuthStageDiagnostic["responseShape"];
+  responseKeys: string[];
 };
+
+function responseMetadata(payload: unknown, rawBody: string): Pick<GhinAuthStageDiagnostic, "responseShape" | "responseKeys"> {
+  if (payload === null) {
+    return { responseShape: rawBody.trim() ? "invalid_json" : "null", responseKeys: [] };
+  }
+  if (Array.isArray(payload)) return { responseShape: "array", responseKeys: [] };
+  if (typeof payload === "object") {
+    return {
+      responseShape: "object",
+      responseKeys: Object.keys(payload as Record<string, unknown>)
+        .filter((key) => key.length <= 80)
+        .sort()
+        .slice(0, 40),
+    };
+  }
+  if (typeof payload === "string") return { responseShape: "string", responseKeys: [] };
+  if (typeof payload === "number") return { responseShape: "number", responseKeys: [] };
+  if (typeof payload === "boolean") return { responseShape: "boolean", responseKeys: [] };
+  return { responseShape: "invalid_json", responseKeys: [] };
+}
 
 function positiveDuration(value: number | undefined, fallback: number, label: string) {
   const resolved = value ?? fallback;
@@ -176,6 +222,7 @@ export class GhinReadOnlyClient {
   private readonly fetchImpl: FetchLike;
   private readonly clock: () => number;
   private readonly timeoutMs: number;
+  private readonly onAuthDiagnostic: ((diagnostic: GhinAuthStageDiagnostic) => void) | null;
   private readonly golferCache: TtlPromiseCache<string, GhinReadResult<NormalizedGhinGolfer>>;
   private readonly scoresCache: TtlPromiseCache<string, GhinReadResult<NormalizedGhinScore[]>>;
   private readonly facilitySearchCache: TtlPromiseCache<string, GhinReadResult<NormalizedGhinFacility[]>>;
@@ -196,6 +243,7 @@ export class GhinReadOnlyClient {
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.clock = options.now ?? Date.now;
     this.timeoutMs = positiveDuration(options.timeoutMs, DEFAULT_TIMEOUT_MS, "timeoutMs");
+    this.onAuthDiagnostic = options.onAuthDiagnostic ?? null;
     this.golferCache = new TtlPromiseCache({ ttlMs: options.golferTtlMs ?? 5 * 60_000, now: this.clock });
     this.scoresCache = new TtlPromiseCache({ ttlMs: options.scoresTtlMs ?? 5 * 60_000, now: this.clock });
     const courseTtlMs = options.courseTtlMs ?? 30 * 60_000;
@@ -256,16 +304,43 @@ export class GhinReadOnlyClient {
     if (this.traces.length > 100) this.traces.splice(0, this.traces.length - 100);
   }
 
+  private authDiagnostic(
+    stage: GhinAuthStage,
+    response: {
+      endpoint: string;
+      status: number | null;
+      durationMs: number;
+      responseShape: GhinAuthStageDiagnostic["responseShape"];
+      responseKeys: string[];
+    },
+    details: Pick<GhinAuthStageDiagnostic, "outcome" | "failureKind" | "errorCode" | "tokenParsed" | "golferNumberPresent">,
+    method: "GET" | "POST",
+  ) {
+    this.onAuthDiagnostic?.({
+      event: "GHIN_AUTH_STAGE",
+      stage,
+      endpoint: response.endpoint,
+      method,
+      httpStatus: response.status,
+      durationMs: response.durationMs,
+      responseShape: response.responseShape,
+      responseKeys: [...response.responseKeys],
+      ...details,
+    });
+  }
+
   private async fetchJson(
     method: "GET" | "POST",
     path: string,
     init: RequestInit = {},
+    authStage?: GhinAuthStage,
   ): Promise<JsonResponse> {
     const endpoint = safeEndpoint(path);
     const startedAt = this.clock();
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     let status: number | null = null;
+    let metadata = responseMetadata(null, "");
     try {
       const url = /^https:\/\//i.test(path) ? path : `${this.baseUrl}${path}`;
       const response = await this.fetchImpl(url, {
@@ -277,20 +352,41 @@ export class GhinReadOnlyClient {
       });
       status = response.status;
       const body = await response.text();
+      const payload = safeJsonParse(body);
+      metadata = responseMetadata(payload, body);
       if (body.length > MAX_RESPONSE_CHARS) {
         throw new GhinClientError(normalizeGhinError("invalid response", response.status), endpoint);
       }
-      const payload = safeJsonParse(body);
       if (!response.ok) throw new GhinClientError(normalizeGhinError(payload, response.status), endpoint);
       if (payload === null) throw new GhinClientError(normalizeGhinError("invalid response", response.status), endpoint);
       this.recordTrace(method, endpoint, status, startedAt, true);
-      return { payload, status: response.status, endpoint };
+      return {
+        payload,
+        status: response.status,
+        endpoint,
+        durationMs: Math.max(0, this.clock() - startedAt),
+        ...metadata,
+      };
     } catch (error) {
       if (!(error instanceof GhinClientError)) {
         const normalized = normalizeGhinError(error, status ?? undefined);
         error = new GhinClientError(normalized, endpoint);
       }
       this.recordTrace(method, endpoint, status, startedAt, false);
+      if (authStage && error instanceof GhinClientError) {
+        this.authDiagnostic(authStage, {
+          endpoint,
+          status,
+          durationMs: Math.max(0, this.clock() - startedAt),
+          ...metadata,
+        }, {
+          outcome: "FAIL",
+          failureKind: status === null ? "transport" : status >= 400 ? "upstream" : "parser",
+          errorCode: error.code,
+          tokenParsed: authStage === "firebase_installation" || authStage === "golfer_login" ? false : null,
+          golferNumberPresent: authStage === "firebase_installation" ? null : false,
+        }, method);
+      }
       throw error;
     } finally {
       clearTimeout(timeout);
@@ -314,8 +410,15 @@ export class GhinReadOnlyClient {
         "x-goog-api-key": FIREBASE_API_KEY,
       },
       body: JSON.stringify(FIREBASE_INSTALLATION),
-    });
+    }, "firebase_installation");
     const installationToken = parseFirebaseInstallationToken(firebase.payload, authenticatedAt);
+    this.authDiagnostic("firebase_installation", firebase, {
+      outcome: installationToken ? "PASS" : "FAIL",
+      failureKind: installationToken ? null : "parser",
+      errorCode: installationToken ? null : "invalid_response",
+      tokenParsed: Boolean(installationToken),
+      golferNumberPresent: null,
+    }, "POST");
     if (!installationToken) {
       throw new GhinClientError(normalizeGhinError("invalid response", firebase.status), firebase.endpoint);
     }
@@ -332,22 +435,44 @@ export class GhinReadOnlyClient {
         },
         token: installationToken.accessToken,
       }),
-    });
+    }, "golfer_login");
     const token = parseGhinToken(response.payload, authenticatedAt);
+    const authenticatedGolfer = parseAuthenticatedGhinGolfer(response.payload);
     if (!token) {
+      this.authDiagnostic("golfer_login", response, {
+        outcome: "FAIL",
+        failureKind: "parser",
+        errorCode: "invalid_response",
+        tokenParsed: false,
+        golferNumberPresent: Boolean(authenticatedGolfer?.ghinNumber),
+      }, "POST");
       throw new GhinClientError(normalizeGhinError("invalid response", response.status), response.endpoint);
     }
     const effectiveExpiresAt = token.expiresAt ?? jwtExpiry(token.accessToken) ?? authenticatedAt + DEFAULT_TOKEN_TTL_MS;
     if (effectiveExpiresAt <= authenticatedAt + AUTH_EXPIRY_SKEW_MS) {
+      this.authDiagnostic("golfer_login", response, {
+        outcome: "FAIL",
+        failureKind: "parser",
+        errorCode: "unauthorized",
+        tokenParsed: true,
+        golferNumberPresent: Boolean(authenticatedGolfer?.ghinNumber),
+      }, "POST");
       throw new GhinClientError(normalizeGhinError("unauthorized", 401), response.endpoint);
     }
+    this.authDiagnostic("golfer_login", response, {
+      outcome: "PASS",
+      failureKind: null,
+      errorCode: null,
+      tokenParsed: true,
+      golferNumberPresent: Boolean(authenticatedGolfer?.ghinNumber),
+    }, "POST");
     return {
       token,
       authenticatedAt,
       effectiveExpiresAt,
       httpStatus: response.status,
       firebaseHttpStatus: firebase.status,
-      golferNumber: parseAuthenticatedGhinGolfer(response.payload)?.ghinNumber ?? null,
+      golferNumber: authenticatedGolfer?.ghinNumber ?? null,
     };
   }
 
@@ -381,7 +506,7 @@ export class GhinReadOnlyClient {
     };
   }
 
-  private async authorizedJson(path: string): Promise<JsonResponse> {
+  private async authorizedJson(path: string, authStage?: GhinAuthStage): Promise<JsonResponse> {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const { session } = await this.getSession(attempt === 1);
       try {
@@ -390,7 +515,7 @@ export class GhinReadOnlyClient {
             accept: GHIN_ACCEPT,
             authorization: `Bearer ${session.token.accessToken}`,
           },
-        });
+        }, authStage);
       } catch (error) {
         const retryAuth = error instanceof GhinClientError
           && (error.httpStatus === 401 || error.httpStatus === 403)
@@ -424,19 +549,33 @@ export class GhinReadOnlyClient {
         sorting_criteria: "last_name_first_name",
         order: "asc",
       });
-      const response = await this.authorizedJson(endpoint);
+      const response = await this.authorizedJson(endpoint, "golfer_lookup_number");
       const golfers = parseGhinGolfers(response.payload);
       const matching = golfers.filter((candidate) => candidate.ghinNumber === normalized);
       const home = matching.find((candidate) => candidate.isHomeClub === true) ?? null;
       const selected = home ?? matching[0]
         ?? parseGhinGolfer(response.payload);
       if (!selected || selected.ghinNumber !== normalized) {
+        this.authDiagnostic("golfer_lookup_number", response, {
+          outcome: "FAIL",
+          failureKind: "parser",
+          errorCode: "not_found",
+          tokenParsed: null,
+          golferNumberPresent: Boolean(selected?.ghinNumber),
+        }, "GET");
         throw new GhinClientError(normalizeGhinError("not found", 404), response.endpoint);
       }
       const golfer = {
         ...selected,
         homeClubName: home?.clubName ?? selected.homeClubName,
       };
+      this.authDiagnostic("golfer_lookup_number", response, {
+        outcome: "PASS",
+        failureKind: null,
+        errorCode: null,
+        tokenParsed: null,
+        golferNumberPresent: true,
+      }, "GET");
       return { data: golfer, endpoint: response.endpoint, httpStatus: response.status, fetchedAt: new Date(this.clock()).toISOString() };
     });
   }
@@ -458,16 +597,39 @@ export class GhinReadOnlyClient {
         sorting_criteria: "last_name_first_name",
         order: "asc",
       });
-      const response = await this.authorizedJson(endpoint);
+      const response = await this.authorizedJson(endpoint, "golfer_lookup_email");
       const golfers = parseGhinGolfers(response.payload);
       const distinct = [...new Set(golfers.map((golfer) => golfer.ghinNumber))];
       if (distinct.length !== 1) {
+        this.authDiagnostic("golfer_lookup_email", response, {
+          outcome: "FAIL",
+          failureKind: "parser",
+          errorCode: "invalid_response",
+          tokenParsed: null,
+          golferNumberPresent: distinct.length > 0,
+        }, "GET");
         throw new GhinClientError(normalizeGhinError("invalid response", 409), response.endpoint);
       }
       const matching = golfers.filter((golfer) => golfer.ghinNumber === distinct[0]);
       const home = matching.find((golfer) => golfer.isHomeClub === true) ?? null;
       const selected = home ?? matching[0];
-      if (!selected) throw new GhinClientError(normalizeGhinError("not found", 404), response.endpoint);
+      if (!selected) {
+        this.authDiagnostic("golfer_lookup_email", response, {
+          outcome: "FAIL",
+          failureKind: "parser",
+          errorCode: "not_found",
+          tokenParsed: null,
+          golferNumberPresent: false,
+        }, "GET");
+        throw new GhinClientError(normalizeGhinError("not found", 404), response.endpoint);
+      }
+      this.authDiagnostic("golfer_lookup_email", response, {
+        outcome: "PASS",
+        failureKind: null,
+        errorCode: null,
+        tokenParsed: null,
+        golferNumberPresent: true,
+      }, "GET");
       return {
         data: { ...selected, homeClubName: home?.clubName ?? selected.homeClubName },
         endpoint: response.endpoint,

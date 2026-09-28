@@ -17,6 +17,10 @@ test("GHIN UI authenticates, asks for identity confirmation, then selects the so
   assert.match(hook, /operation: "confirm"/);
   assert.match(readFileSync("lib/ghin/user-session.server.ts", "utf8"), /lookupGolferByEmail\(loginEmail\)/);
   assert.match(panel, /setPassword\(""\)/);
+  assert.match(panel, /control\.authorizing \? "AUTENTICANDO…" : "CONTINUAR"/);
+  assert.match(panel, /control\.error \? <p role="alert"/);
+  assert.match(panel, /const authorized = await control\.authorize\(login, secret\);[\s\S]*if \(authorized\) setPassword\(""\)/);
+  assert.doesNotMatch(panel, /const secret = password;\s*setPassword\(""\)/);
   assert.doesNotMatch(hook, /localStorage|sessionStorage|document\.cookie/);
 });
 

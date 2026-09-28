@@ -40,16 +40,17 @@ export function GhinReadOnlyPanel({
   async function submitCredentials(event: FormEvent) {
     event.preventDefault();
     const secret = password;
-    setPassword("");
     if (authMode === "reauthorize") {
       const refreshed = await control.reauthorize(login, secret);
       if (refreshed) {
+        setPassword("");
         setLogin("");
         setAuthMode(null);
       }
       return;
     }
-    await control.authorize(login, secret);
+    const authorized = await control.authorize(login, secret);
+    if (authorized) setPassword("");
   }
 
   async function confirmLink() {

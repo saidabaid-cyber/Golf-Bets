@@ -5,6 +5,7 @@ import {
   extractGhinToken,
   parseFirebaseInstallationToken,
   normalizeGhinError,
+  parseAuthenticatedGhinGolfer,
   parseGhinCourse,
   parseGhinCourses,
   parseGhinFacilities,
@@ -179,6 +180,28 @@ test("extrae tokens sólo de llaves permitidas y normaliza expiración", () => {
   assert.equal(extractGhinToken({ user: { password: "do-not-treat-as-token" } }), null);
   assert.equal(extractGhinToken({ access_token: null }), null);
   assert.equal(parseGhinToken({ token: "   " }), null);
+});
+
+test("parsea golfer autenticado en el shape clásico y en envelopes compatibles", () => {
+  const classic = parseAuthenticatedGhinGolfer({
+    golfer_user: {
+      golfers: [{ ghin_number: "11103349", player_name: "Said Abaid Taja", is_home_club: true }],
+    },
+  });
+  assert.equal(classic?.ghinNumber, "11103349");
+  assert.equal(classic?.name, "Said Abaid Taja");
+
+  const enveloped = parseAuthenticatedGhinGolfer({
+    response: {
+      data: {
+        golferUser: {
+          golfers: [{ ghin: 11103349, first_name: "Said", last_name: "Abaid Taja" }],
+        },
+      },
+    },
+  });
+  assert.equal(enveloped?.ghinNumber, "11103349");
+  assert.equal(enveloped?.name, "Said Abaid Taja");
 });
 
 test("normaliza Facility y TeeSetRatingsForScorePosting sin fabricar faltantes", () => {
