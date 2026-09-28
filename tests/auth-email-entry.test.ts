@@ -40,7 +40,7 @@ test("Crear cuenta envía OTP solo después del intent explícito y no hace look
 
 test("la resolución exacta vive en un comando same-origin y su RPC es solo service_role", () => {
   const route = readFileSync("app/api/auth/email-otp/route.ts", "utf8");
-  const migration = readFileSync("supabase/migrations/20260928080621_secure_email_otp_entry.sql", "utf8");
+  const migration = readFileSync("supabase/migrations/20260928083858_secure_email_otp_entry.sql", "utf8");
   assert.match(route, /isCrossSiteRequest/);
   assert.match(route, /SlidingWindowRateLimiter/);
   assert.match(route, /processEmailOtpEntry/);
