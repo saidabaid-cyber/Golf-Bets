@@ -24,7 +24,7 @@ test("login muestra identidad, Google, correo e invitado y mantiene Apple cerrad
 test("correo implementa OTP de ocho dígitos, reenviar y cambiar correo", () => {
   assert.match(authFlow, /signInWithOtp/);
   assert.match(authFlow, /verifyOtp/);
-  assert.match(auth, /sendEmailOtp/);
+  assert.match(auth, /requestEmailOtp/);
   assert.match(auth, /verifyEmailOtp/);
   assert.match(auth, /otp\.length !== 8/);
   assert.match(auth, /maxLength=\{8\}/);
@@ -59,13 +59,13 @@ test("callback intercambia código y siempre ofrece regreso seguro", () => {
   assert.match(callback, /Volver a The Backyard/);
 });
 
-test("consentimiento exige Árbitro y 18+ antes de continuar", () => {
-  assert.match(auth, /checked=\{terms\}/);
-  assert.match(auth, /checked=\{privacy\}/);
-  assert.match(auth, /checked=\{rules\}/);
-  assert.match(auth, /checked=\{age\}/);
-  assert.match(auth, /disabled=\{!terms \|\| !privacy \|\| !rules \|\| !age \|\| busy\}/);
-  assert.match(auth, /no es un árbitro oficial USGA/);
+test("consentimiento agrupa requeridos sin perder Árbitro ni mayoría de edad", () => {
+  const consent = readFileSync("app/components/account-consent-checkpoint.tsx", "utf8");
+  assert.doesNotMatch(consent, /type="checkbox"/);
+  assert.match(consent, /ACEPTAR TODO Y CONTINUAR/);
+  assert.match(consent, /mayoría de edad/);
+  assert.match(consent, /Árbitro de Reglas/);
+  assert.match(consent, /Comité o árbitro oficial tiene la decisión final/);
 });
 
 test("links legales existen tanto en acceso como en consentimiento", () => {

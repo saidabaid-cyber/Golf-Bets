@@ -115,7 +115,8 @@ test("total history uses existing cloud outbox without erasing active draft", as
 test("score-only mode persists, legacy/full metadata unchanged", () => {
   assert.deepEqual(normalizeRoundPresentation(undefined),{version:1,groupNassauTerm:"polla"});assert.equal(normalizeRoundPresentation({playMode:"score_only"}).playMode,"score_only");
 });
-test("OTP errors cannot enumerate accounts or assert absence", () => {
+test("email entry resolves absence only inside the combined server command", () => {
   assert.match(emailLoginRecovery(),/No pudimos/);assert.equal(emailLoginRecovery(true),"No tienes cuenta. ¿Quieres crear una?");
-  const source=readFileSync("app/components/account-provider.tsx","utf8");assert.match(source,/emailLoginRecovery\(\)/);assert.match(source,/loginRecovery[\s\S]*ModalCloseButton/);assert.equal(source.includes('emailLoginRecovery(error'),false);
+  const source=readFileSync("app/components/account-provider.tsx","utf8");assert.match(source,/No encontramos una cuenta con este correo/);assert.match(source,/loginRecovery[\s\S]*ModalCloseButton/);assert.equal(source.includes('emailLoginRecovery('),false);
+  const route=readFileSync("app/api/auth/email-otp/route.ts","utf8");assert.match(route,/account_email_exists_v1/);assert.match(route,/isCrossSiteRequest/);
 });

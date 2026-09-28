@@ -113,13 +113,16 @@ function Shell({ progress, eyebrow, title, description, children, actions, onBac
 }
 
 const acceptNoInitialConsent = async () => undefined;
+const resolveNoInitialBetting = async () => undefined;
 
-export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, legalConsentRequired = false, onAcceptInitialConsents = acceptNoInitialConsent, onComplete }: {
+export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, legalConsentRequired = false, initialBettingDecision = "pending", onAcceptRequiredConsents = acceptNoInitialConsent, onResolveInitialBetting = resolveNoInitialBetting, onComplete }: {
   profile: BackyardProfile;
   accessToken: string | null;
   onUpdateProfile: (profile: BackyardProfileUpdate) => Promise<"local" | "cloud">;
   legalConsentRequired?: boolean;
-  onAcceptInitialConsents?: (betting: boolean) => Promise<void>;
+  initialBettingDecision?: "pending" | "accepted" | "skipped";
+  onAcceptRequiredConsents?: () => Promise<void>;
+  onResolveInitialBetting?: (accepted: boolean) => Promise<void>;
   onComplete: () => void;
 }) {
   const [progress, setProgress] = useState<BetaOnboardingProgress | null>(null);
@@ -133,7 +136,6 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, lega
   const initializedUser = useRef('');
   const checkpointQueue = useRef<Promise<void>>(Promise.resolve());
   const [finishing, setFinishing] = useState(false);
-  const [initialConsentsReady, setInitialConsentsReady] = useState(false);
   const finishingRef = useRef(false);
   const checkpoint = (value: BetaOnboardingProgress) => {
     const write = checkpointQueue.current.catch(() => {}).then(() => saveOnboardingCheckpoint(accessToken || '', value));
@@ -214,13 +216,13 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, lega
   };
 
   if (progress.step === "course") return null;
-  if (progress.step === "welcome") return <Shell progress={progress} {...navigationProps} eyebrow="EMPIEZA A TU MANERA" title="Tu Backyard, sin fricción" description="Elige tu fuente de índice y permisos opcionales. El campo se selecciona al jugar una ronda." actions={<button type="button" className="primary big" disabled={!entryMode || !initialConsentsReady} onClick={() => advance("permissions")}>CONTINUAR</button>}>
+  if (progress.step === "welcome") return <Shell progress={progress} {...navigationProps} eyebrow="EMPIEZA A TU MANERA" title="Tu Backyard, sin fricción" description="Elige tu fuente de índice y permisos opcionales. El campo se selecciona al jugar una ronda." actions={null}>
     <div className={styles.welcomeHero} aria-hidden="true"><span className={styles.heroFlag}>⛳</span><div><b>Tu golf, en un solo lugar</b><small>Rondas rápidas · amigos · equipo · estadísticas</small></div><span className={styles.heroBall}>●</span></div>
     <div className={styles.entryGrid}>
       <button type="button" className={entryMode === "quick" ? styles.entrySelected : styles.entryChoice} aria-pressed={entryMode === "quick"} onClick={() => setEntryMode("quick")}><span aria-hidden="true">⚡</span><div><b>Rápida</b><p>Elige tu fuente de índice y permisos opcionales. Equipo y fitting quedan disponibles para después.</p></div></button>
       <button type="button" className={entryMode === "complete" ? styles.entrySelected : styles.entryChoice} aria-pressed={entryMode === "complete"} onClick={() => setEntryMode("complete")}><span aria-hidden="true">⛳</span><div><b>Completa</b><p>Configura índice, bolsa, objetivos y permisos opcionales.</p></div></button>
     </div>
-    <InitialOnboardingConsents key={profile.userId} userId={profile.userId} accessToken={accessToken} legalRequired={legalConsentRequired} onAcceptLegal={onAcceptInitialConsents} onReadyChange={setInitialConsentsReady} />
+    <InitialOnboardingConsents key={profile.userId} userId={profile.userId} accessToken={accessToken} legalRequired={legalConsentRequired} initialBettingDecision={initialBettingDecision} canContinue={Boolean(entryMode)} onAcceptRequired={onAcceptRequiredConsents} onResolveBetting={onResolveInitialBetting} onContinue={() => advance("permissions")} />
   </Shell>;
 
   if (progress.step === "equipment") return <EquipmentOnboarding

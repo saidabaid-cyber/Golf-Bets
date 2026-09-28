@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { Session } from "@supabase/supabase-js";
 
-import { AuthSessionRecoveryError, authCallbackUrl, clearDeletedAuthSession, clearDeletedAuthSessionForUser, closeAuthSession, isAccountSession, recoverAuthSession, restoreAuthSession, sendEmailOtp, startSocialOAuth, verifyEmailOtp, type AuthFlowClient } from "../lib/auth-flow";
+import { AuthSessionRecoveryError, OtpSendGate, authCallbackUrl, clearDeletedAuthSession, clearDeletedAuthSessionForUser, closeAuthSession, isAccountSession, recoverAuthSession, restoreAuthSession, sendEmailOtp, startSocialOAuth, verifyEmailOtp, type AuthFlowClient } from "../lib/auth-flow";
 import { readFileSync } from "node:fs";
 
 function authMock(overrides: Partial<AuthFlowClient> = {}) {
@@ -267,4 +267,25 @@ test("iniciar sesión por email nunca crea una identidad nueva; alta deja dedup 
   await sendEmailOtp(auth, "new@example.com", "http://localhost:3000/auth/callback", "create");
   assert.equal((calls[0].input as { options: { shouldCreateUser: boolean } }).options.shouldCreateUser, false);
   assert.equal((calls[1].input as { options: { shouldCreateUser: boolean } }).options.shouldCreateUser, true);
+});
+
+test("el cooldown OTP empieza solo después de que el servidor confirma un envío real", () => {
+  const gate = new OtpSendGate();
+  assert.equal(gate.begin(1_000), true);
+  assert.equal(gate.nextSendAt, 0);
+  gate.release();
+  assert.equal(gate.begin(1_001), true, "un intento sin correo no consume cooldown");
+  gate.commit(1_001);
+  assert.equal(gate.nextSendAt, 61_001);
+  assert.equal(gate.begin(2_000), false);
+  assert.equal(gate.begin(61_001), true);
+});
+
+test("la pantalla OTP no expone magic links ni configuración interna de Supabase", () => {
+  const ui = readFileSync("app/components/account-provider.tsx", "utf8");
+  assert.doesNotMatch(ui, /¿Recibiste un enlace en lugar del código\?/);
+  assert.doesNotMatch(ui, /correo de Supabase|magic link/i);
+  assert.match(ui, /No encontramos una cuenta con este correo\./);
+  assert.match(ui, />CREAR CUENTA</);
+  assert.match(ui, />USAR OTRO CORREO</);
 });

@@ -55,6 +55,37 @@ export async function sendEmailOtpWhenReady(auth: AuthFlowClient, providers: Aut
   return sendEmailOtp(auth, email, redirectTo, intent);
 }
 
+export class EmailOtpRequestError extends Error {
+  readonly code: string;
+  readonly status: number;
+  constructor(message: string, code: string, status: number) {
+    super(message);
+    this.name = "EmailOtpRequestError";
+    this.code = code;
+    this.status = status;
+  }
+}
+
+/** Browser command for the server-side account decision + real OTP send. */
+export async function requestEmailOtp(email: string, intent: "create" | "login", signal?: AbortSignal) {
+  const response = await fetch("/api/auth/email-otp", {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: email.trim(), intent }),
+    signal,
+  });
+  const payload = await response.json().catch(() => null) as { sent?: unknown; code?: unknown; error?: unknown } | null;
+  if (!response.ok || payload?.sent !== true) {
+    throw new EmailOtpRequestError(
+      typeof payload?.error === "string" ? payload.error : "No pudimos enviar el código. Intenta nuevamente.",
+      typeof payload?.code === "string" ? payload.code : "OTP_SEND_FAILED",
+      response.status,
+    );
+  }
+}
+
 /** Keeps PKCE on the exact origin resolved by the canonical runtime config.
  * Supabase must include this exact callback in its Redirect URLs allow-list. */
 export function authCallbackUrl(origin: string) {
@@ -207,8 +238,9 @@ export class OtpSendGate {
   begin(now = Date.now()) {
     if (this.pending || otpRetrySeconds(this.nextSendAt, now)) return false;
     this.pending = true;
-    this.nextSendAt = now + 60_000;
     return true;
   }
-  finish() { this.pending = false; }
+  commit(now = Date.now()) { this.nextSendAt = now + 60_000; this.pending = false; }
+  release() { this.pending = false; }
+  finish() { this.release(); }
 }

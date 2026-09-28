@@ -9,6 +9,12 @@ export type BackyardAiProcessingConsentScope =
   | typeof AI_IMAGE_PROCESSING_CONSENT
   | typeof AI_LAUNCH_MONITOR_PROCESSING_CONSENT;
 
+export const AI_PROCESSING_CONSENT_SCOPES: readonly BackyardAiProcessingConsentScope[] = [
+  AI_PROVIDER_PROCESSING_CONSENT,
+  AI_IMAGE_PROCESSING_CONSENT,
+  AI_LAUNCH_MONITOR_PROCESSING_CONSENT,
+];
+
 export type BackyardAiProviderConsent = {
   granted: true;
   version: typeof BACKYARD_AI_PROVIDER_CONSENT_VERSION;

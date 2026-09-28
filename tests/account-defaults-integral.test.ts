@@ -175,7 +175,7 @@ test("onboarding asks all AI/device decisions while Settings only reviews them",
   const consent = readFileSync("app/components/account-consent-checkpoint.tsx", "utf8");
   const onboarding = readFileSync("app/components/beta-onboarding-flow.tsx", "utf8");
   const settings = readFileSync("app/components/device-permission-settings.tsx", "utf8");
-  assert.match(consent, /Autorizaciones de IA/);
+  assert.match(consent, /AUTORIZACIONES DE BACKYARD AI/);
   for (const purpose of ["texto o dictado", "scorecards", "launch monitor"]) assert.match(consent, new RegExp(purpose, "i"));
   assert.match(onboarding, /<InitialDevicePermissions/);
   assert.match(settings, /requestInitialLocation/);

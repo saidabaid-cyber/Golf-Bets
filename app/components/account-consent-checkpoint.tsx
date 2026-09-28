@@ -3,153 +3,139 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { readRemoteAiConsentDecisions, saveRemoteAiConsentDecisions, type RemoteAiConsentDecisions } from "../../lib/backyard-ai/consent-client";
-import { AI_IMAGE_PROCESSING_CONSENT, AI_PROVIDER_PROCESSING_CONSENT, AI_LAUNCH_MONITOR_PROCESSING_CONSENT, type BackyardAiProcessingConsentScope } from "../../lib/backyard-ai/privacy";
+import { AI_PROCESSING_CONSENT_SCOPES } from "../../lib/backyard-ai/privacy";
 import styles from "./account-consent-checkpoint.module.css";
 
-const PURPOSES = [
-  { scope: AI_PROVIDER_PROCESSING_CONSENT, label: "Autorizo el procesamiento del texto o dictado que yo decida enviar a Backyard AI para configurar o asistir mis rondas." },
-  { scope: AI_IMAGE_PROCESSING_CONSENT, label: "Autorizo el procesamiento de las fotografías de scorecards que yo decida enviar para su lectura." },
-  { scope: AI_LAUNCH_MONITOR_PROCESSING_CONSENT, label: "Autorizo el procesamiento de las fotografías de pantallas de launch monitor que yo decida enviar para leer mis datos de práctica." },
-] as const;
+type Decision = "pending" | "accepted" | "skipped";
 
-/** Initial-account consent uses the existing server-backed consent APIs but
- * lives inside the first onboarding step. It is not a second entry gate. */
-export function InitialOnboardingConsents({ userId, accessToken, legalRequired, onAcceptLegal, onReadyChange }: {
+/** One visible decision per category; legal documents and AI scopes remain
+ * individually versioned and persisted by their existing server ledgers. */
+export function InitialOnboardingConsents({
+  userId,
+  accessToken,
+  legalRequired,
+  initialBettingDecision,
+  canContinue,
+  onAcceptRequired,
+  onResolveBetting,
+  onContinue,
+}: {
   userId: string;
   accessToken: string | null;
   legalRequired: boolean;
-  onAcceptLegal: (betting: boolean) => Promise<void>;
-  onReadyChange: (ready: boolean) => void;
+  initialBettingDecision: Decision;
+  canContinue: boolean;
+  onAcceptRequired: () => Promise<void>;
+  onResolveBetting: (accepted: boolean) => Promise<void>;
+  onContinue: () => void;
 }) {
   const [remote, setRemote] = useState<RemoteAiConsentDecisions | null>(null);
-  const [choices, setChoices] = useState<Partial<Record<BackyardAiProcessingConsentScope, boolean>>>({});
-  const [terms, setTerms] = useState(false);
-  const [rules, setRules] = useState(false);
-  const [adult, setAdult] = useState(false);
-  const [betting, setBetting] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [required, setRequired] = useState<Decision>(legalRequired ? "pending" : "accepted");
+  const [betting, setBetting] = useState<Decision>(initialBettingDecision);
+  const [ai, setAi] = useState<Decision>("pending");
+  const [busy, setBusy] = useState<"required" | "betting" | "ai" | "continue" | null>(null);
   const [error, setError] = useState("");
-  const [aiUnavailable, setAiUnavailable] = useState(false);
-  const [ready, setReady] = useState(false);
   const [retry, setRetry] = useState(0);
-  const submitting = useRef(false);
   const lifetime = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
     lifetime.current = controller;
-    onReadyChange(false);
-    return () => controller.abort();
-  }, [userId, onReadyChange]);
-
-  useEffect(() => {
-    const controller = new AbortController();
     if (!accessToken) {
-      setAiUnavailable(true);
-      setError("Tus preferencias de IA no pudieron cargarse. Puedes revisarlas después en Configuración; ninguna función de IA queda autorizada.");
+      setError("No pudimos consultar las autorizaciones de IA. Reintenta para decidir antes de continuar.");
       return () => controller.abort();
     }
     void readRemoteAiConsentDecisions(accessToken, controller.signal).then((saved) => {
       if (controller.signal.aborted) return;
       setRemote(saved);
-      setAiUnavailable(false);
       setError("");
-      if (saved.resolved && !legalRequired) {
-        setReady(true);
-        onReadyChange(true);
+      if (saved.resolved) {
+        setAi(saved.decisions.every((decision) => decision.status === "accepted") ? "accepted" : "skipped");
       }
     }).catch(() => {
-      if (!controller.signal.aborted) {
-        setAiUnavailable(true);
-        setError("Tus preferencias de IA no pudieron cargarse. Puedes continuar y revisarlas después en Configuración; ninguna función de IA queda autorizada.");
-      }
+      if (!controller.signal.aborted) setError("No pudimos consultar las autorizaciones de IA. Reintenta para decidir antes de continuar.");
     });
     return () => controller.abort();
-  }, [accessToken, legalRequired, onReadyChange, retry]);
+  }, [accessToken, retry, userId]);
 
-  const missing = remote?.decisions.filter((decision) => decision.status === "missing") || [];
-  const requiredAccepted = !legalRequired || (terms && rules && adult);
-  const canSubmit = Boolean(remote && accessToken && requiredAccepted);
+  useEffect(() => {
+    if (initialBettingDecision !== "pending") setBetting(initialBettingDecision);
+  }, [initialBettingDecision]);
 
-  function markReady() {
-    if (lifetime.current?.signal.aborted) return;
-    setReady(true);
-    onReadyChange(true);
-  }
+  const resolved = required === "accepted" && betting !== "pending" && ai !== "pending";
 
-  function selectAllAiPurposes() {
-    setChoices((current) => ({ ...current, ...Object.fromEntries(missing.map(({ scope }) => [scope, true])) }));
-  }
-
-  async function continueWithoutAi() {
-    if (submitting.current || !requiredAccepted) return;
-    submitting.current = true;
-    setBusy(true);
-    setError("");
+  async function acceptRequired() {
+    if (busy) return;
+    setBusy("required"); setError("");
     try {
-      if (legalRequired) await onAcceptLegal(betting);
-      markReady();
+      await onAcceptRequired();
+      if (!lifetime.current?.signal.aborted) setRequired("accepted");
     } catch {
-      if (!lifetime.current?.signal.aborted) setError("No pudimos guardar la aceptación de los términos. Reintenta; tus autorizaciones de IA no se han cambiado.");
-    } finally {
-      submitting.current = false;
-      if (!lifetime.current?.signal.aborted) setBusy(false);
-    }
+      if (!lifetime.current?.signal.aborted) setError("No pudimos registrar los consentimientos requeridos. Reintenta antes de continuar.");
+    } finally { if (!lifetime.current?.signal.aborted) setBusy(null); }
   }
 
-  async function submit() {
-    if (!canSubmit || submitting.current || !accessToken) return;
-    submitting.current = true;
-    setBusy(true);
-    setError("");
-    let aiSaved = false;
+  async function resolveBetting(accepted: boolean) {
+    if (busy) return;
+    setBusy("betting"); setError("");
     try {
-      const saved = missing.length
-        ? await saveRemoteAiConsentDecisions(accessToken, userId, missing.map(({ scope }) => ({ scope, accepted: choices[scope] === true })), "onboarding", lifetime.current?.signal)
-        : remote;
-      if (lifetime.current?.signal.aborted) return;
-      if (!saved?.resolved) throw new Error("Unresolved consent decisions");
-      aiSaved = true;
-      setRemote(saved);
-      if (legalRequired) await onAcceptLegal(betting);
-      markReady();
+      await onResolveBetting(accepted);
+      if (!lifetime.current?.signal.aborted) setBetting(accepted ? "accepted" : "skipped");
     } catch {
+      if (!lifetime.current?.signal.aborted) setError("No pudimos guardar tu decisión sobre apuestas. Reintenta antes de continuar.");
+    } finally { if (!lifetime.current?.signal.aborted) setBusy(null); }
+  }
+
+  async function resolveAi(accepted: boolean) {
+    if (busy || !accessToken || !remote) return;
+    setBusy("ai"); setError("");
+    try {
+      const decisions = AI_PROCESSING_CONSENT_SCOPES.map((scope) => ({ scope, accepted }));
+      const saved = await saveRemoteAiConsentDecisions(accessToken, userId, decisions, "onboarding", lifetime.current?.signal);
+      if (!saved.resolved) throw new Error("unresolved_ai_consent");
       if (!lifetime.current?.signal.aborted) {
-        if (!aiSaved) setAiUnavailable(true);
-        setError(aiSaved
-          ? "No pudimos guardar la aceptación de los términos. Reintenta; tus preferencias de IA ya están guardadas."
-          : "No pudimos guardar tus preferencias de IA. Puedes continuar sin IA y revisarlas después en Configuración.");
+        setRemote(saved);
+        setAi(accepted ? "accepted" : "skipped");
       }
-    } finally {
-      submitting.current = false;
-      if (!lifetime.current?.signal.aborted) setBusy(false);
-    }
+    } catch {
+      if (!lifetime.current?.signal.aborted) setError("No pudimos guardar tu decisión de Backyard AI. Reintenta antes de continuar.");
+    } finally { if (!lifetime.current?.signal.aborted) setBusy(null); }
   }
 
-  if (ready) return <section className={styles.saved} role="status"><b>Autorizaciones guardadas</b><span>Puedes continuar con tu configuración.</span></section>;
+  return <section className={styles.embedded} aria-labelledby="initial-consent-title" aria-busy={Boolean(busy)}>
+    <div><h2 id="initial-consent-title">Consentimientos de cuenta</h2><p>Tres decisiones claras. Ninguna autorización opcional se acepta automáticamente.</p></div>
 
-  return <section className={styles.embedded} aria-labelledby="initial-consent-title" aria-busy={busy}>
-    <div><h2 id="initial-consent-title">Consentimientos de cuenta</h2><p>Revisa por separado los consentimientos requeridos de la cuenta y las autorizaciones opcionales de Backyard AI.</p></div>
-    {!remote && !error && <p role="status">Consultando tus preferencias…</p>}
-    {legalRequired && <fieldset className={styles.checks} disabled={busy}>
-      <legend className={styles.legend}>Consentimientos requeridos</legend>
-        <label className={styles.check}><input type="checkbox" checked={terms} onChange={(event) => setTerms(event.target.checked)} /><span>Acepto los <Link href="/legal/terms?returnTo=onboarding">Términos y Condiciones</Link> y confirmo haber leído el <Link href="/legal/privacy?returnTo=onboarding">Aviso de Privacidad</Link>.</span></label>
-        <label className={styles.check}><input type="checkbox" checked={rules} onChange={(event) => setRules(event.target.checked)} /><span>Entiendo que el Árbitro de Reglas es una referencia acordada entre participantes; en competencias prevalece el Comité o árbitro oficial.</span></label>
-        <label className={styles.check}><input type="checkbox" checked={adult} onChange={(event) => setAdult(event.target.checked)} /><span>Confirmo que tengo 18 años o más.</span></label>
-        <label className={styles.check}><input type="checkbox" checked={betting} onChange={(event) => setBetting(event.target.checked)} /><span>Consiento el tratamiento de datos de apuestas, resultados y gastos conforme al Aviso de Privacidad. <small>Opcional para las demás funciones.</small></span></label>
-    </fieldset>}
-    {remote && <fieldset className={styles.checks} disabled={busy}>
-      <legend className={styles.legend}>Autorizaciones de IA</legend>
-      {missing.length > 1 && <button type="button" className={styles.selectAll} onClick={selectAllAiPurposes}>Autorizar las tres funciones de IA</button>}
-      {PURPOSES.filter(({ scope }) => missing.some((decision) => decision.scope === scope)).map(({ scope, label }) => <label className={styles.check} key={scope}>
-        <input type="checkbox" checked={choices[scope] === true} onChange={(event) => setChoices((current) => ({ ...current, [scope]: event.target.checked }))} />
-        <span>{label}<small>Opcional. Sin autorización, esta función de IA permanece desactivada.</small></span>
-      </label>)}
-    </fieldset>}
-    <p className={styles.hint}>Después puedes cambiar estas decisiones en Perfil → Configuración → Privacidad y permisos.</p>
+    <section className={styles.decision} aria-labelledby="required-consents-title">
+      <div><span className={styles.eyebrow}>REQUERIDOS</span><h3 id="required-consents-title">CONSENTIMIENTOS REQUERIDOS</h3></div>
+      <p>Para crear tu cuenta debes aceptar los términos, confirmar la mayoría de edad y reconocer el alcance del Árbitro de Reglas. En competencia, el Comité o árbitro oficial tiene la decisión final.</p>
+      <p className={styles.links}><Link href="/legal/terms?returnTo=onboarding">Términos y Condiciones</Link><Link href="/legal/privacy?returnTo=onboarding">Aviso de Privacidad</Link></p>
+      {required === "accepted" ? <p className={styles.resolved} role="status">✓ Consentimientos requeridos aceptados y registrados.</p> : <div className={styles.actions}>
+        <button type="button" className="primary" disabled={Boolean(busy)} onClick={() => void acceptRequired()}>{busy === "required" ? "REGISTRANDO…" : "ACEPTAR TODO Y CONTINUAR"}</button>
+        <button type="button" className="secondary" disabled={Boolean(busy)} onClick={() => { setRequired("pending"); setError("Para crear una cuenta de The Backyard debes aceptar los consentimientos requeridos."); }}>NO ACEPTO</button>
+      </div>}
+    </section>
+
+    <section className={styles.decision} aria-labelledby="betting-consent-title">
+      <div><span className={styles.eyebrow}>OPCIONAL</span><h3 id="betting-consent-title">FUNCIONES DE APUESTAS</h3></div>
+      <p>Autoriza por separado el tratamiento de datos de apuestas, resultados y gastos. Puedes usar el resto de The Backyard sin activarlas.</p>
+      {betting !== "pending" ? <p className={styles.resolved} role="status">{betting === "accepted" ? "✓ Apuestas activadas." : "Ahora no · puedes activarlas después."}</p> : <div className={styles.actions}>
+        <button type="button" className="primary" disabled={Boolean(busy)} onClick={() => void resolveBetting(true)}>{busy === "betting" ? "GUARDANDO…" : "ACTIVAR APUESTAS"}</button>
+        <button type="button" className="secondary" disabled={Boolean(busy)} onClick={() => void resolveBetting(false)}>AHORA NO</button>
+      </div>}
+    </section>
+
+    <section className={styles.decision} aria-labelledby="ai-consent-title">
+      <div><span className={styles.eyebrow}>OPCIONAL</span><h3 id="ai-consent-title">AUTORIZACIONES DE BACKYARD AI</h3></div>
+      <p>Permite usar Backyard AI para procesar el texto o dictado, imágenes/scorecards y fotos de launch monitor que tú decidas enviar.</p>
+      {!remote && <div className={styles.actions}><button type="button" className="secondary" disabled={Boolean(busy) || !accessToken} onClick={() => { setError(""); setRetry((value) => value + 1); }}>REINTENTAR</button></div>}
+      {remote && ai !== "pending" ? <p className={styles.resolved} role="status">{ai === "accepted" ? "✓ Las tres funciones de IA están autorizadas." : "Ahora no · se pedirá autorización contextual al usar IA."}</p> : remote && <div className={styles.actions}>
+        <button type="button" className="primary" disabled={Boolean(busy)} onClick={() => void resolveAi(true)}>{busy === "ai" ? "GUARDANDO…" : "AUTORIZAR LAS 3 FUNCIONES DE IA"}</button>
+        <button type="button" className="secondary" disabled={Boolean(busy)} onClick={() => void resolveAi(false)}>AHORA NO</button>
+      </div>}
+    </section>
+
+    <p className={styles.hint}>Después puedes revisar o revocar estas decisiones en Perfil → Configuración → Privacidad y permisos.</p>
     {error && <p className={styles.error} role="alert">{error}</p>}
-    {aiUnavailable && <button type="button" className="secondary" disabled={busy || !requiredAccepted} onClick={() => void continueWithoutAi()}>{busy ? "Guardando…" : "Continuar sin IA"}</button>}
-    {(!remote || aiUnavailable) && <button type="button" className="textButton" disabled={busy || !accessToken} onClick={() => { setError(""); setAiUnavailable(false); setRetry((value) => value + 1); }}>Reintentar consulta</button>}
-    {remote && !aiUnavailable && <button type="button" className="secondary" disabled={!canSubmit || busy} onClick={() => void submit()}>{busy ? "Guardando…" : "Guardar autorizaciones"}</button>}
+    <div className={styles.continueBar}><button type="button" className="primary big" disabled={!resolved || !canContinue || Boolean(busy)} onClick={() => { setBusy("continue"); onContinue(); }}>CONTINUAR</button>{!canContinue && <small>Elige antes una configuración Rápida o Completa.</small>}</div>
   </section>;
 }

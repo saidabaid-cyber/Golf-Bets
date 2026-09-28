@@ -10,29 +10,47 @@ test("initial consent is embedded in onboarding instead of gating app entry", ()
   const provider = source("app/components/account-provider.tsx");
   assert.match(consent, /export function InitialOnboardingConsents/);
   assert.match(onboarding, /<InitialOnboardingConsents/);
-  assert.match(onboarding, /disabled=\{!entryMode \|\| !initialConsentsReady\}/);
+  assert.match(onboarding, /canContinue=\{Boolean\(entryMode\)\}/);
+  assert.match(onboarding, /initialBettingDecision=\{initialBettingDecision\}/);
+  assert.match(onboarding, /actions=\{null\}/);
   assert.doesNotMatch(provider, /AccountConsentCheckpoint/);
   assert.doesNotMatch(provider, /requiresAccountConsent/);
   assert.match(provider, /return app;/);
 });
 
-test("required legal and optional betting/AI choices use the existing persistence APIs", () => {
+test("required legal and optional betting/AI choices are grouped without visible checkboxes", () => {
   const consent = source("app/components/account-consent-checkpoint.tsx");
-  for (const copy of ["Términos y Condiciones", "Aviso de Privacidad", "18 años", "apuestas, resultados y gastos", "Consentimientos requeridos", "Autorizaciones de IA"]) assert.match(consent, new RegExp(copy));
-  assert.match(consent, /Autorizar las tres funciones de IA/);
-  assert.doesNotMatch(consent, /setTerms\(true\)|setRules\(true\)|setAdult\(true\)|setBetting\(true\)/);
+  for (const copy of ["Términos y Condiciones", "Aviso de Privacidad", "mayoría de edad", "apuestas, resultados y gastos", "CONSENTIMIENTOS REQUERIDOS", "AUTORIZACIONES DE BACKYARD AI"]) assert.match(consent, new RegExp(copy));
+  assert.match(consent, /AUTORIZAR LAS 3 FUNCIONES DE IA/);
+  assert.match(consent, /ACEPTAR TODO Y CONTINUAR/);
+  assert.match(consent, /NO ACEPTO/);
+  assert.match(consent, /ACTIVAR APUESTAS/);
+  assert.match(consent, /AHORA NO/);
+  assert.doesNotMatch(consent, /type="checkbox"/);
   assert.match(consent, /saveRemoteAiConsentDecisions/);
-  assert.match(consent, /await onAcceptLegal\(betting\)/);
-  assert.match(consent, /accepted: choices\[scope\] === true/);
-  assert.match(consent, /Opcional para las demás funciones/);
+  assert.match(consent, /AI_PROCESSING_CONSENT_SCOPES\.map/);
+  assert.match(consent, /await onAcceptRequired\(\)/);
+  assert.match(consent, /await onResolveBetting\(accepted\)/);
+  assert.match(consent, /initialBettingDecision !== "pending"/);
 });
 
-test("AI outage is fail-closed and does not block the rest of onboarding", () => {
+test("AI outage is fail-closed and Ahora no records all three declined scopes", () => {
   const consent = source("app/components/account-consent-checkpoint.tsx");
-  assert.match(consent, /Continuar sin IA/);
-  assert.match(consent, /ninguna función de IA queda autorizada/);
-  assert.match(consent, /if \(legalRequired\) await onAcceptLegal\(betting\)/);
+  assert.match(consent, /AI_PROCESSING_CONSENT_SCOPES\.map\(\(scope\) => \(\{ scope, accepted \}\)\)/);
+  assert.match(consent, /se pedirá autorización contextual al usar IA/);
+  assert.match(consent, /disabled=\{!resolved \|\| !canContinue/);
   assert.doesNotMatch(consent, /localStorage/);
+});
+
+test("guest onboarding also removes individual legal and betting checkboxes", () => {
+  const provider = source("app/components/account-provider.tsx");
+  const start = provider.indexOf("function ConsentScreen");
+  const end = provider.indexOf("function ProfileSetupScreen", start);
+  const guest = provider.slice(start, end);
+  assert.doesNotMatch(guest, /type="checkbox"/);
+  assert.match(guest, /ACEPTAR TODO Y CONTINUAR/);
+  assert.match(guest, /ACTIVAR APUESTAS/);
+  assert.match(guest, /AHORA NO/);
 });
 
 test("removed full-screen consent copy cannot reappear after onboarding", () => {

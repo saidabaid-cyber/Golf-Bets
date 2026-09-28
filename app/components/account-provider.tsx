@@ -7,7 +7,6 @@ import { canonicalProfileUsername, normalizeProfileUsername } from "../../lib/pr
 import Link from "next/link";
 import Image from "next/image";
 import { Fragment, createContext, useCallback, useContext, useEffect, useRef, useState, type FormEvent } from "react";
-import { emailLoginRecovery } from "../../lib/email-login-recovery";
 import { ModalCloseButton } from "./modal-shell";
 import type { Session, User } from "@supabase/supabase-js";
 import { accountDeletionPrewriteRejected, accountDeletionRecoveryAction, accountDeletionRequestBody, accountDeletionResponseConfirmed, clearAccountDeletionIntent, readAccountDeletionIntent } from "../../lib/account-deletion-client";
@@ -47,7 +46,7 @@ import {
   type LegalAcceptance,
 } from "../../lib/account-state";
 import { authSessionPersistence, getSupabaseBrowser, setAuthSessionPersistence } from "../../lib/supabase/client";
-import { AuthSessionRecoveryError, authCallbackUrl, authIdentityChanged, clearDeletedAuthSessionForUser, closeAuthSession, isAccountSession, recoverAuthSession, requireCloudWrites, restoreAuthSession, sendEmailOtpWhenReady, startSocialOAuth, verifyEmailOtp, OtpSendGate, otpRetrySeconds, OTP_COOLDOWN_KEY } from "../../lib/auth-flow";
+import { AuthSessionRecoveryError, EmailOtpRequestError, authCallbackUrl, authIdentityChanged, clearDeletedAuthSessionForUser, closeAuthSession, isAccountSession, recoverAuthSession, requestEmailOtp, requireCloudWrites, restoreAuthSession, startSocialOAuth, verifyEmailOtp, OtpSendGate, otpRetrySeconds, OTP_COOLDOWN_KEY } from "../../lib/auth-flow";
 import { activeWorkspaceScorecardPhotoIds, discardAccountSessionState, discardAccountWorkspace, ownsLocalWorkspace, selectAccountScorecardPhotoIds, switchAccountWorkspace, WORKSPACE_OWNER_KEY } from "../../lib/account-workspace";
 import { CLOUD_LOCAL_META_KEY, type CloudPreferences } from "../../lib/cloud-sync";
 import { deleteOfflineAccountData, readAllOfflineAccountRecords } from "../../lib/offline-store";
@@ -275,27 +274,30 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
     }
   }
 
-  async function sendCode() {
+  async function sendCode(requestedIntent: "create" | "login" = intent) {
     if (!isValidEmail(email)) { setMessage("Escribe un correo electrónico válido."); return; }
     if (providers?.status !== "ready" || providers.email !== true) { setMessage("Acceso con correo pendiente de configuración."); return; }
     setAuthSessionPersistence(rememberSession);
-    const supabase = getSupabaseBrowser();
-    if (!supabase) { setMessage("Acceso con correo pendiente de configuración."); return; }
     if (!sendGate.current.begin()) return;
-    try { sessionStorage.setItem(OTP_COOLDOWN_KEY, String(sendGate.current.nextSendAt)); }
-    catch { /* Never prevent OTP capture because optional cooldown persistence failed. */ }
-    setRetrySeconds(otpRetrySeconds(sendGate.current.nextSendAt));
     setBusy(true); setMessage("");
     try {
-      rememberAccountEntryIntent(sessionStorage, intent);
-      const appOrigin = resolveBrowserAppOrigin(window.location.origin, process.env.NEXT_PUBLIC_APP_ORIGIN);
-      await sendEmailOtpWhenReady(supabase.auth, providers, email, authCallbackUrl(appOrigin), intent);
+      rememberAccountEntryIntent(sessionStorage, requestedIntent);
+      await requestEmailOtp(email, requestedIntent);
+      sendGate.current.commit();
+      try { sessionStorage.setItem(OTP_COOLDOWN_KEY, String(sendGate.current.nextSendAt)); }
+      catch { /* Never prevent OTP capture because optional cooldown persistence failed. */ }
+      setRetrySeconds(otpRetrySeconds(sendGate.current.nextSendAt));
       setCodeSent(true);
       setMessage("Código enviado. Revisa tu correo.");
     } catch (error) {
-      setMessage(authErrorMessage(error, "email"));
-      if (intent === "login") setLoginRecovery(true);
-    } finally { sendGate.current.finish(); setBusy(false); }
+      sendGate.current.release();
+      if (error instanceof EmailOtpRequestError && error.code === "ACCOUNT_NOT_FOUND" && requestedIntent === "login") {
+        setMessage("No encontramos una cuenta con este correo.");
+        setLoginRecovery(true);
+      } else {
+        setMessage(error instanceof EmailOtpRequestError ? error.message : authErrorMessage(error, "email"));
+      }
+    } finally { setBusy(false); }
   }
 
   async function verifyCode() {
@@ -345,7 +347,7 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
           <label htmlFor="access-email">Correo electrónico</label>
           <input id="access-email" type="email" inputMode="email" autoComplete="email" autoCapitalize="none" spellCheck={false} disabled={busy} value={email} onChange={(event) => setEmail(event.target.value)} placeholder="tu@correo.com" />
           {intent === "create" && <p className="hint">Verifica tu correo para continuar; si ya tienes cuenta, entraremos a ella.</p>}
-          <button className="primary big" disabled={busy || retrySeconds > 0} onClick={sendCode}>{busy ? "Enviando…" : retrySeconds ? `Enviar en ${retrySeconds}s` : "Enviar código"}</button>
+          <button className="primary big" disabled={busy || retrySeconds > 0} onClick={() => void sendCode()}>{busy ? "Enviando…" : retrySeconds ? `Enviar en ${retrySeconds}s` : "Enviar código"}</button>
           <button className="textButton" disabled={busy} onClick={() => setEmailMode(false)}>← Volver</button>
         </> : <>
           <h2>Código de verificación</h2>
@@ -353,9 +355,8 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
           <label htmlFor="access-otp">Introduce los 8 dígitos del correo</label>
           <input id="access-otp" className="otpInput" aria-label="Código de ocho dígitos" inputMode="numeric" autoComplete="one-time-code" maxLength={8} disabled={busy} value={otp} onChange={(event) => setOtp(normalizeOtp(event.target.value))} placeholder="8 dígitos" />
           <p className="hint">Todavía no has iniciado sesión. Tu cuenta se abrirá solo al verificar el código.</p>
-          <details className="hint"><summary>¿Recibiste un enlace en lugar del código?</summary><p>El correo de Supabase necesita la plantilla de código de ocho dígitos. Ese enlace no sustituye esta verificación; puedes regresar y elegir explícitamente el modo invitado.</p></details>
           <button className="primary big" disabled={busy || otp.length !== 8} onClick={verifyCode}>{busy ? "Verificando…" : "Verificar"}</button>
-          <div className="otpLinks"><button className="textButton" disabled={busy || retrySeconds > 0} onClick={sendCode}>{retrySeconds ? `Reenviar en ${retrySeconds}s` : "Reenviar código"}</button><button className="textButton" disabled={busy} onClick={() => { setCodeSent(false); setOtp(""); setMessage(""); }}>Cambiar correo</button></div>
+          <div className="otpLinks"><button className="textButton" disabled={busy || retrySeconds > 0} onClick={() => void sendCode()}>{retrySeconds ? `Reenviar en ${retrySeconds}s` : "Reenviar código"}</button><button className="textButton" disabled={busy} onClick={() => { setCodeSent(false); setOtp(""); setMessage(""); }}>Cambiar correo</button></div>
           <button className="textButton" disabled={busy} onClick={() => { setEmailMode(false); setMessage(""); }}>← Regresar al acceso</button>
         </>}
       </div>}</>}
@@ -364,11 +365,10 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
       {(message || sessionError) && <div className="accessMessage" role="status">{message || sessionError}</div>}
       {loginRecovery && <div className="modalBackdrop" onKeyDown={(event) => { if (event.key === "Escape") setLoginRecovery(false); }}><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="email-login-recovery-title">
         <ModalCloseButton onClose={() => setLoginRecovery(false)} disabled={busy} />
-        <h2 id="email-login-recovery-title">{emailLoginRecovery()}</h2>
-        <p>{message}</p>
-        <div className="dialogActions"><button autoFocus type="button" className="primary" onClick={() => { setLoginRecovery(false); setIntent("create"); setCodeSent(false); setOtp(""); setMessage("Verifica tu correo para continuar; si ya tienes cuenta, entraremos a ella."); }}>Crear cuenta</button>
-          <button type="button" className="secondary" onClick={() => { setLoginRecovery(false); setCodeSent(false); setOtp(""); setMessage(""); requestAnimationFrame(() => document.getElementById("access-email")?.focus()); }}>Cambiar correo</button>
-          <button type="button" className="textButton" onClick={() => setLoginRecovery(false)}>Cancelar</button></div>
+        <h2 id="email-login-recovery-title">No encontramos una cuenta con este correo.</h2>
+        <p>Elige crear una cuenta para recibir el código de alta, o usa otro correo.</p>
+        <div className="dialogActions"><button autoFocus type="button" className="primary" disabled={busy} onClick={() => { setLoginRecovery(false); setIntent("create"); setCodeSent(false); setOtp(""); void sendCode("create"); }}>CREAR CUENTA</button>
+          <button type="button" className="secondary" disabled={busy} onClick={() => { setLoginRecovery(false); setCodeSent(false); setOtp(""); setMessage(""); requestAnimationFrame(() => document.getElementById("access-email")?.focus()); }}>USAR OTRO CORREO</button></div>
       </section></div>}
       <p className="hint">Invitado es un acceso independiente: no inicia sesión ni sincroniza tus datos con una cuenta.</p>
       <p className="legalLead">Consulta el <Link href="/legal/privacy-simplified?returnTo=access">Aviso de Privacidad Simplificado</Link>, el <Link href="/legal/privacy?returnTo=access">Aviso de Privacidad Integral</Link> y los <Link href="/legal/terms?returnTo=access">Términos y Condiciones</Link>. La aceptación explícita ocurre antes de crear el perfil.</p>
@@ -377,27 +377,23 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
 }
 
 function ConsentScreen({ onAccept, onBack }: { onAccept: (includeBettingConsent: boolean) => Promise<void>; onBack: () => Promise<void> }) {
-  const [terms, setTerms] = useState(false);
-  const [privacy, setPrivacy] = useState(false);
-  const [rules, setRules] = useState(false);
-  const [age, setAge] = useState(false);
-  const [betting, setBetting] = useState(false);
+  const [requiredAccepted, setRequiredAccepted] = useState(false);
+  const [betting, setBetting] = useState<"pending" | "accepted" | "skipped">("pending");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   return <main className="consentScreen"><section className="consentCard">
     <BrandLockup compact />
     <div className="eyebrow">PRIMER ACCESO</div>
-    <h1>Antes de la primera controversia</h1>
-    <p>The Backyard incorpora un asistente de reglas basado en las Reglas de Golf, aclaraciones y reglas locales disponibles.</p>
-    <p>Cuando un grupo acuerde utilizar el Árbitro de Reglas de The Backyard como criterio para resolver una situación durante una partida, sus jugadores aceptan aplicar la resolución mostrada salvo que exista una decisión oficial de un Comité, árbitro autorizado o autoridad competente de la competencia.</p>
-    <div className="officialPriority">En una competencia oficial, el Comité o árbitro oficial tiene siempre la decisión final. La IA no es un árbitro oficial USGA.</div>
-    <label className="consentCheck"><input type="checkbox" checked={terms} onChange={(event) => setTerms(event.target.checked)} /><span>Acepto los <Link href="/legal/terms?returnTo=onboarding">Términos de Uso</Link>.</span></label>
-    <label className="consentCheck"><input type="checkbox" checked={privacy} onChange={(event) => setPrivacy(event.target.checked)} /><span>He leído el <Link href="/legal/privacy-simplified?returnTo=onboarding">Aviso de Privacidad Simplificado</Link> y el <Link href="/legal/privacy?returnTo=onboarding">Aviso de Privacidad Integral</Link>.</span></label>
-    <label className="consentCheck"><input type="checkbox" checked={rules} onChange={(event) => setRules(event.target.checked)} /><span>Entiendo el alcance del Árbitro de Reglas y acepto utilizar sus resoluciones como referencia acordada entre los participantes cuando corresponda.</span></label>
-    <label className="consentCheck"><input type="checkbox" checked={age} onChange={(event) => setAge(event.target.checked)} /><span>Confirmo que tengo 18 años o más.</span></label>
-    <label className="consentCheck expressConsentCheck"><input type="checkbox" checked={betting} onChange={(event) => setBetting(event.target.checked)} /><span>Consiento expresamente el tratamiento de los datos relativos a apuestas registradas, resultados y gastos, conforme al <Link href="/legal/privacy?returnTo=onboarding">Aviso de Privacidad</Link>. Esta autorización es específica y opcional para continuar a funciones que no registran esos datos.</span></label>
+    <h1>Consentimientos de cuenta</h1>
+    <section className="consentDecision"><h2>CONSENTIMIENTOS REQUERIDOS</h2><p>Acepta los términos, confirma la mayoría de edad y reconoce el alcance del Árbitro de Reglas. En una competencia oficial, el Comité o árbitro oficial tiene siempre la decisión final.</p>
+      <p><Link href="/legal/terms?returnTo=onboarding">Términos y Condiciones</Link> · <Link href="/legal/privacy?returnTo=onboarding">Aviso de Privacidad</Link></p>
+      {requiredAccepted ? <div className="officialPriority" role="status">✓ Consentimientos requeridos aceptados.</div> : <div className="consentDecisionActions"><button type="button" className="primary" disabled={busy} onClick={() => { setRequiredAccepted(true); setError(""); }}>ACEPTAR TODO Y CONTINUAR</button><button type="button" className="secondary" disabled={busy} onClick={() => setError("Para crear una cuenta de The Backyard debes aceptar los consentimientos requeridos.")}>NO ACEPTO</button></div>}
+    </section>
+    <section className="consentDecision"><h2>FUNCIONES DE APUESTAS</h2><p>El tratamiento de datos de apuestas, resultados y gastos es opcional. Puedes continuar sin activarlo.</p>
+      {betting === "pending" ? <div className="consentDecisionActions"><button type="button" className="primary" disabled={busy} onClick={() => setBetting("accepted")}>ACTIVAR APUESTAS</button><button type="button" className="secondary" disabled={busy} onClick={() => setBetting("skipped")}>AHORA NO</button></div> : <div className="officialPriority" role="status">{betting === "accepted" ? "✓ Apuestas activadas." : "Ahora no · puedes activarlas después."}</div>}
+    </section>
     {error && <p role="alert">{error}</p>}
-    <button className="primary big" disabled={!terms || !privacy || !rules || !age || busy} onClick={async () => { setBusy(true); setError(""); try { await onAccept(betting); } catch { setError("No pudimos guardar tu aceptación en este dispositivo. Libera espacio y vuelve a intentar."); } finally { setBusy(false); } }}>{busy ? "Guardando…" : "Continuar"}</button>
+    <button className="primary big" disabled={!requiredAccepted || betting === "pending" || busy} onClick={async () => { setBusy(true); setError(""); try { await onAccept(betting === "accepted"); } catch { setError("No pudimos guardar tu aceptación en este dispositivo. Libera espacio y vuelve a intentar."); } finally { setBusy(false); } }}>{busy ? "Guardando…" : "CONTINUAR"}</button>
     <button className="textButton consentBack" disabled={busy} onClick={onBack}>← Volver al acceso</button>
   </section></main>;
 }
@@ -1235,37 +1231,20 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     recordLegalChoices([{ subject, action }], origin);
   }
 
-  async function acceptConsent(includeBettingConsent: boolean, requireServerPersistence = false) {
+  async function persistAcceptanceBatch(next: LegalAcceptance[], requireServerPersistence: boolean) {
     if (!identity) return;
-    const origin: LegalEvidenceOrigin = acceptances.some((item) => item.userId === identity.userId) ? "existing_user_update" : "onboarding";
-    recordLegalChoices([
-      { subject: "privacy_notice", action: "presented" },
-      { subject: "terms", action: "accepted" },
-      { subject: "age_declaration", action: "accepted" },
-      { subject: "financial_data", action: includeBettingConsent ? "accepted" : "rejected" },
-    ], origin);
-    const next = buildLegalAcceptances(identity.userId, new Date().toISOString());
-    // Authenticated onboarding cannot finish on a local-only acknowledgement.
-    // Publish the legal state only after the existing server ledger confirms it.
     if (requireServerPersistence && identity.mode === "authenticated") {
-      if (includeBettingConsent) next.push(buildBettingDataAcceptance(identity.userId, new Date().toISOString(), "pending"));
       await flushLegalAcceptances(identity.userId, next);
       if (!accountMutationStillActive(identity.userId)) throw new Error("La sesión cambió antes de guardar las autorizaciones.");
       const synced = markLegalAcceptancesSynced(mergeLegalAcceptances(acceptances, next), next);
       localStorage.setItem(ACCOUNT_STORAGE_KEYS.acceptances, JSON.stringify(synced));
-      if (!includeBettingConsent) localStorage.setItem(bettingConsentPromptStorageKey(identity.userId), "seen");
       clearPendingLegalSync(localStorage, identity.userId);
       setCloudIssue("legal", null);
       setAcceptances(synced);
       return;
     }
-    let merged = mergeLegalAcceptances(acceptances, next);
+    const merged = mergeLegalAcceptances(acceptances, next);
     localStorage.setItem(ACCOUNT_STORAGE_KEYS.acceptances, JSON.stringify(merged));
-    if (includeBettingConsent) {
-      merged = persistBettingDataConsent(localStorage, identity.userId, identity.mode === "authenticated" ? "pending" : "local_only").acceptances;
-    } else {
-      localStorage.setItem(bettingConsentPromptStorageKey(identity.userId), "seen");
-    }
     setAcceptances(merged);
     if (identity.mode === "authenticated") {
       const accountAcceptances = merged.filter((item) => item.userId === identity.userId);
@@ -1287,6 +1266,49 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         });
       }
     }
+  }
+
+  async function acceptRequiredConsents(requireServerPersistence = false) {
+    if (!identity) return;
+    const origin: LegalEvidenceOrigin = acceptances.some((item) => item.userId === identity.userId) ? "existing_user_update" : "onboarding";
+    recordLegalChoices([
+      { subject: "privacy_notice", action: "presented" },
+      { subject: "terms", action: "accepted" },
+      { subject: "age_declaration", action: "accepted" },
+    ], origin);
+    await persistAcceptanceBatch(buildLegalAcceptances(identity.userId, new Date().toISOString()), requireServerPersistence);
+  }
+
+  async function resolveInitialBettingConsent(accepted: boolean, requireServerPersistence = false) {
+    if (!identity) return;
+    const origin: LegalEvidenceOrigin = acceptances.some((item) => item.userId === identity.userId) ? "existing_user_update" : "onboarding";
+    recordLegalChoices([{ subject: "financial_data", action: accepted ? "accepted" : "rejected" }], origin);
+    if (!accepted) {
+      localStorage.setItem(bettingConsentPromptStorageKey(identity.userId), "seen");
+      return;
+    }
+    await persistAcceptanceBatch([
+      buildBettingDataAcceptance(identity.userId, new Date().toISOString(), identity.mode === "authenticated" ? "pending" : "local_only"),
+    ], requireServerPersistence);
+    localStorage.removeItem(bettingConsentPromptStorageKey(identity.userId));
+  }
+
+  async function acceptConsent(includeBettingConsent: boolean, requireServerPersistence = false) {
+    if (!identity) return;
+    const origin: LegalEvidenceOrigin = acceptances.some((item) => item.userId === identity.userId) ? "existing_user_update" : "onboarding";
+    recordLegalChoices([
+      { subject: "privacy_notice", action: "presented" },
+      { subject: "terms", action: "accepted" },
+      { subject: "age_declaration", action: "accepted" },
+      { subject: "financial_data", action: includeBettingConsent ? "accepted" : "rejected" },
+    ], origin);
+    const next = buildLegalAcceptances(identity.userId, new Date().toISOString());
+    if (includeBettingConsent) {
+      next.push(buildBettingDataAcceptance(identity.userId, new Date().toISOString(), identity.mode === "authenticated" ? "pending" : "local_only"));
+    } else {
+      localStorage.setItem(bettingConsentPromptStorageKey(identity.userId), "seen");
+    }
+    await persistAcceptanceBatch(next, requireServerPersistence);
   }
 
   async function acceptBettingConsent() {
@@ -1920,7 +1942,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   if (identity.mode === "authenticated" && !profileChecked) return <main className="accessScreen"><div className="accessLoading">Preparando tu perfil…</div></main>;
   if (identity.mode === "authenticated" && profileSetupRequired) return <>{accountCloudError && <div role="alert" className="notice bad">{accountCloudError}</div>}<ProfileSetupScreen identity={identity} onSave={saveInitialProfile} onBack={logout} /></>;
   if (identity.mode === "authenticated" && betaOnboardingRequired) return <AccountContext.Provider value={context!}>
-    <BetaOnboardingFlow profile={identity} accessToken={identity.accessToken} onUpdateProfile={updateProfile} legalConsentRequired={!currentConsent} onAcceptInitialConsents={(betting) => acceptConsent(betting, true)} onComplete={finishBetaOnboarding} />
+    <BetaOnboardingFlow profile={identity} accessToken={identity.accessToken} onUpdateProfile={updateProfile} legalConsentRequired={!currentConsent} initialBettingDecision={bettingConsentGranted ? "accepted" : bettingConsentResolved ? "skipped" : "pending"} onAcceptRequiredConsents={() => acceptRequiredConsents(true)} onResolveInitialBetting={(accepted) => resolveInitialBettingConsent(accepted, true)} onComplete={finishBetaOnboarding} />
     {bettingConsentDialog}
   </AccountContext.Provider>;
   if (identity.mode === "authenticated" && equipmentOnboardingRequired) return <CanonicalEquipmentOnboarding identity={identity} onComplete={finishEquipmentOnboarding} />;

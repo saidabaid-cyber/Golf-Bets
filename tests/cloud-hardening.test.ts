@@ -289,8 +289,10 @@ test("ronda borrada convierte foto pendiente en limpieza remota recuperable", as
 });
 test("OTP contador/reenvío bloquea doble click, cooldown y envío simultáneo", () => {
   const gate = new OtpSendGate(); assert.equal(gate.begin(100), true);
-  assert.equal(gate.begin(101), false); assert.equal(otpRetrySeconds(gate.nextSendAt, 100), 60);
-  gate.finish(); assert.equal(gate.begin(59_100), false);
+  assert.equal(gate.begin(101), false); assert.equal(otpRetrySeconds(gate.nextSendAt, 100), 0);
+  gate.release(); assert.equal(gate.begin(101), true);
+  gate.commit(100); assert.equal(otpRetrySeconds(gate.nextSendAt, 100), 60);
+  assert.equal(gate.begin(59_100), false);
   assert.equal(gate.begin(60_100), true); assert.equal(gate.begin(999_999), false);
 });
 test("OTP errores Supabase no-Error son humanos: expirado, incorrecto, red y rate limit", () => {
