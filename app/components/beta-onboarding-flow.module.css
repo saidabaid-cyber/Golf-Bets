@@ -31,7 +31,16 @@
 
 /* Visual multi-select: large targets, recognizable line icons and explicit state. */
 .choiceGrid { grid-template-columns:repeat(2,minmax(0,1fr));gap:10px; }
-.choice,.choiceActive { display:grid;grid-template-columns:42px minmax(0,1fr) 24px;min-height:76px;align-items:center;gap:10px;padding:12px;text-align:left; }
-.choiceIcon { display:grid;width:42px;height:42px;place-items:center;border-radius:13px;background:#fff;color:var(--green);box-shadow:inset 0 0 0 1px #dbe5dd; }
-.choice b,.choiceActive b { display:grid;width:24px;height:24px;place-items:center;border-radius:50%;background:#fff;color:var(--green); }
+.choice,.choiceActive { position:relative;display:grid;grid-template-columns:52px minmax(0,1fr) 28px;min-height:104px;align-items:center;gap:12px;overflow:hidden;padding:14px;text-align:left;box-shadow:0 10px 24px rgba(20,58,35,.055); }
+.choice:after,.choiceActive:after { content:"";position:absolute;inset:auto -22px -32px auto;width:90px;height:90px;border:1px solid rgba(31,83,48,.08);border-radius:50%;pointer-events:none; }
+.choiceIcon { display:grid;width:52px;height:58px;place-items:center;border-radius:17px;background:linear-gradient(145deg,#fff,#eaf1e4);color:var(--green);box-shadow:inset 0 0 0 1px #dbe5dd,0 8px 18px rgba(22,65,38,.08); }
+.choiceCopy { display:grid;min-width:0;gap:4px; }
+.choiceCopy b { color:var(--by-forest,#173f2a);font:500 17px/1.15 var(--by-editorial,Georgia,serif); }
+.choiceCopy small { color:var(--by-muted,#5b6c63);font-size:10px;line-height:1.35; }
+.choice>strong,.choiceActive>strong { display:grid;width:28px;height:28px;place-items:center;border-radius:50%;background:#fff;color:var(--green);box-shadow:0 4px 12px rgba(20,58,35,.12); }
+.choiceActive .choiceIcon { background:#fff;color:var(--by-forest,#173f2a); }
+.choiceActive .choiceCopy small { color:#335a3e; }
+.choice[data-focus-area="BUNKER"] .choiceIcon { background:linear-gradient(145deg,#fff9e7,#efe0b7);color:#7d5d1f; }
+.choice[data-focus-area="MENTAL_CONFIDENCE"] .choiceIcon { background:linear-gradient(145deg,#f5f0fb,#e7dff2);color:#5f4779; }
+.choice[data-focus-area="LOWER_HANDICAP"] .choiceIcon { background:linear-gradient(145deg,#eef4e7,#dce9ca); }
 @media(max-width:560px) { .choiceGrid { grid-template-columns:1fr; } }

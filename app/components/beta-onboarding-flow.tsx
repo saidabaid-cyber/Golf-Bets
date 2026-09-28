@@ -53,9 +53,22 @@ const IMPROVEMENT_LABELS: Record<GolfImprovementGoal, string> = {
   LOWER_HANDICAP: "Bajar mi HCP",
 };
 
-const IMPROVEMENT_ICONS: Record<GolfImprovementGoal, "club" | "ball" | "flag" | "score" | "spark" | "arrow"> = {
-  DRIVER: "club", IRONS: "club", APPROACH: "flag", SHORT_GAME: "flag", BUNKER: "flag",
-  PUTTING: "ball", CONSISTENCY: "score", COURSE_STRATEGY: "flag", MENTAL_CONFIDENCE: "spark", LOWER_HANDICAP: "arrow",
+const IMPROVEMENT_ICONS: Record<GolfImprovementGoal, "driver" | "irons" | "approach" | "shortGame" | "bunker" | "putting" | "consistency" | "strategy" | "mental" | "handicap"> = {
+  DRIVER: "driver", IRONS: "irons", APPROACH: "approach", SHORT_GAME: "shortGame", BUNKER: "bunker",
+  PUTTING: "putting", CONSISTENCY: "consistency", COURSE_STRATEGY: "strategy", MENTAL_CONFIDENCE: "mental", LOWER_HANDICAP: "handicap",
+};
+
+const IMPROVEMENT_DESCRIPTIONS: Record<GolfImprovementGoal, string> = {
+  DRIVER: "Salida, velocidad y dispersión",
+  IRONS: "Contacto y control de distancia",
+  APPROACH: "Precisión hacia el green",
+  SHORT_GAME: "Wedges, chips y recuperación",
+  BUNKER: "Salidas de arena con confianza",
+  PUTTING: "Línea, velocidad y lectura",
+  CONSISTENCY: "Repetir tus mejores golpes",
+  COURSE_STRATEGY: "Elegir mejor cada tiro",
+  MENTAL_CONFIDENCE: "Rutina, foco y seguridad",
+  LOWER_HANDICAP: "Convertir progreso en score",
 };
 
 const GOAL_LABELS: Record<Exclude<GolfPrimaryGoal, "">, string> = {
@@ -266,7 +279,7 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, lega
   }
 
   if (progress.step === "improvements") return <Shell progress={progress} {...navigationProps} eyebrow="TU JUEGO" title="¿Qué te gustaría mejorar?" description="Elige todas las áreas que quieras. Usaremos estas señales para personalizar recomendaciones, IA, análisis y ejercicios." actions={<button className="primary big" disabled={!draft.improvementGoals.length} onClick={async () => { await onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: profile.defaultHandicap, improvementGoals: draft.improvementGoals, golfProfileUpdatedAt: new Date().toISOString() }); advance("objective"); }}>Continuar</button>}>
-    <div className={styles.choiceGrid}>{GOLF_IMPROVEMENT_GOALS.map((goal) => { const active = draft.improvementGoals.includes(goal); return <button type="button" key={goal} className={active ? styles.choiceActive : styles.choice} aria-pressed={active} onClick={() => setDraft((current) => current ? { ...current, improvementGoals: active ? current.improvementGoals.filter((item) => item !== goal) : [...current.improvementGoals, goal] } : current)}><span className={styles.choiceIcon}><BackyardIcon name={IMPROVEMENT_ICONS[goal]} size={24} /></span><span>{IMPROVEMENT_LABELS[goal]}</span><b aria-hidden="true">{active ? "✓" : "+"}</b></button>; })}</div>
+    <div className={styles.choiceGrid}>{GOLF_IMPROVEMENT_GOALS.map((goal) => { const active = draft.improvementGoals.includes(goal); return <button type="button" key={goal} data-focus-area={goal} className={active ? styles.choiceActive : styles.choice} aria-pressed={active} onClick={() => setDraft((current) => current ? { ...current, improvementGoals: active ? current.improvementGoals.filter((item) => item !== goal) : [...current.improvementGoals, goal] } : current)}><span className={styles.choiceIcon}><BackyardIcon name={IMPROVEMENT_ICONS[goal]} size={27} /></span><span className={styles.choiceCopy}><b>{IMPROVEMENT_LABELS[goal]}</b><small>{IMPROVEMENT_DESCRIPTIONS[goal]}</small></span><strong aria-hidden="true">{active ? "✓" : "+"}</strong></button>; })}</div>
   </Shell>;
 
   if (progress.step === "objective") return <Shell progress={progress} {...navigationProps} eyebrow="OBJETIVO" title="¿Cuáles son tus objetivos?" description="Elige uno o varios. Los usaremos para personalizar recomendaciones y podrás cambiarlos desde tu perfil." actions={<button className="primary big" disabled={!draft.primaryGoals.length} onClick={async () => {

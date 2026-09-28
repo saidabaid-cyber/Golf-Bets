@@ -390,7 +390,7 @@ function ConsentScreen({ onAccept, onBack }: { onAccept: () => Promise<void>; on
       <p><Link href="/legal/terms?returnTo=onboarding">Términos y Condiciones</Link> · <Link href="/legal/privacy?returnTo=onboarding">Aviso de Privacidad</Link></p>
       {requiredAccepted ? <div className="officialPriority" role="status">✓ Consentimientos requeridos aceptados.</div> : <div className="consentDecisionActions"><button type="button" className="primary" disabled={busy} onClick={() => { setRequiredAccepted(true); setError(""); }}>ACEPTAR TODO Y CONTINUAR</button><button type="button" className="secondary" disabled={busy} onClick={() => setError("Para crear una cuenta de The Backyard debes aceptar los consentimientos requeridos.")}>NO ACEPTO</button></div>}
     </section>
-    <p className="hint">Las funciones opcionales, incluidas las apuestas, pedirán autorización sólo cuando decidas usarlas.</p>
+    <p className="hint">Las funciones opcionales pedirán autorización sólo cuando decidas usarlas.</p>
     {error && <p role="alert">{error}</p>}
     <button className="primary big" disabled={!requiredAccepted || busy} onClick={async () => { setBusy(true); setError(""); try { await onAccept(); } catch { setError("No pudimos guardar tu aceptación en este dispositivo. Libera espacio y vuelve a intentar."); } finally { setBusy(false); } }}>{busy ? "Guardando…" : "CONTINUAR"}</button>
     <button className="textButton consentBack" disabled={busy} onClick={onBack}>← Volver al acceso</button>

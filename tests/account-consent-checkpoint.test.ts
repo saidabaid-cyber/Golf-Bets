@@ -48,7 +48,7 @@ test("guest onboarding also omits betting permission", () => {
   const guest = provider.slice(start, end);
   assert.doesNotMatch(guest, /type="checkbox"/);
   assert.match(guest, /ACEPTAR TODO Y CONTINUAR/);
-  assert.doesNotMatch(guest, /FUNCIONES DE APUESTAS|ACTIVAR APUESTAS|financial/);
+  assert.doesNotMatch(guest, /FUNCIONES DE APUESTAS|ACTIVAR APUESTAS|financial|apuestas/i);
 });
 
 test("removed full-screen consent copy cannot reappear after onboarding", () => {

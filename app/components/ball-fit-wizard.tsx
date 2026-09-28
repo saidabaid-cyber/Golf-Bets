@@ -345,7 +345,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
     </section>}
 
     {!result && step === 1 && <section className={styles.questionBlock}>
-      <h3>Driver</h3><p>La velocidad es opcional. Nunca inferimos una compresión no publicada a partir de este dato.</p>
+      <h3>Mediciones reales</h3><p>Primero elige el palo, después sube las fotos del monitor. La velocidad es opcional y nunca inferimos datos no publicados.</p>
       <LaunchMonitorCapture userId={userId} accessToken={accessToken} requiresRemoteConsent={requiresRemoteConsent} value={input.launchMonitorSession} onChange={(launchMonitorSession) => patchInput({ launchMonitorSession })} onOpenPrivacy={onOpenPrivacy} />
       <p className={styles.subtle}><b>¿No tienes datos de launch monitor?</b> Continúa con fitting manual.</p>
       <label>¿Cuánto pegas aproximadamente con driver? (yardas, opcional)<NumericCaptureInput keyboardMode="numeric" min={50} max={500} value={input.driverDistanceYards} onValueChange={(driverDistanceYards) => patchInput({ driverDistanceYards })} placeholder="Ej. 245" /></label>

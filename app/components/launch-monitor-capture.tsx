@@ -7,12 +7,14 @@ import {
   getLaunchMonitorProtocolProgress,
   summarizeLaunchMonitorSession,
   type LaunchMonitorClub,
+  type ClubCategory,
   type LaunchMonitorMetric,
   type LaunchMonitorSession,
   type LaunchMonitorShot,
 } from "../../lib/golf-equipment";
 import styles from "./equipment.module.css";
 import { LaunchMonitorCamera } from "./launch-monitor-camera";
+import { ClubCategoryVisual } from "./equipment-visuals";
 
 type LaunchMonitorCaptureProps = {
   userId: string;
@@ -40,6 +42,13 @@ const CLUB_LABELS: Record<LaunchMonitorClub, string> = {
   IRON_7: "Hierro 7",
   PITCHING_WEDGE: "Pitching wedge",
   HALF_WEDGE: "Half wedge / approach",
+};
+
+const CLUB_VISUALS: Record<LaunchMonitorClub, ClubCategory> = {
+  DRIVER: "DRIVER",
+  IRON_7: "IRON_SET",
+  PITCHING_WEDGE: "WEDGE",
+  HALF_WEDGE: "WEDGE",
 };
 
 const METRIC_FIELDS: Record<LaunchMonitorMetric, MetricField> = {
@@ -249,7 +258,29 @@ export function LaunchMonitorCapture({ userId, accessToken, requiresRemoteConsen
         Si ya tienes datos de TrackMan, FlightScope, Garmin u otro launch monitor, usa cámara o captura manual. Los datos claros se agregan automáticamente; sólo te pediremos corregir una lectura dudosa.
       </p>
 
-      <LaunchMonitorCamera
+      <div className={styles.captureFlow} aria-label="Flujo de mediciones">
+        <span className={styles.captureFlowActive}><b>1</b> Elige palo</span>
+        <span><b>2</b> Fotos + análisis</span>
+        <span><b>3</b> Resumen</span>
+      </div>
+
+      <section className={styles.clubCaptureSelector} data-capture-order="1" aria-labelledby="club-capture-title">
+        <div><span>PASO 1</span><h3 id="club-capture-title">¿Qué palo vas a subir?</h3><p>Elige primero. Todas las lecturas de este bloque se asignarán a ese palo.</p></div>
+        <div className={styles.clubChoiceGrid} aria-label="Selecciona el palo de las mediciones">
+          {LAUNCH_MONITOR_CLUBS.map((club) => {
+            const count = progress?.counts[club] ?? 0;
+            const excluded = session?.shots.filter((shot) => shot.club === club && shot.excluded).length ?? 0;
+            const selected = activeClub === club;
+            return <button type="button" key={club} className={selected ? styles.clubChoiceSelected : styles.clubChoice} aria-pressed={selected} onClick={() => setActiveClub(club)}>
+              <span className={styles.clubChoiceVisual}><ClubCategoryVisual category={CLUB_VISUALS[club]} /></span>
+              <span><b>{CLUB_LABELS[club]}</b><small>{Math.min(count, 3)}/3 golpes válidos{excluded ? ` · ${excluded} excluido${excluded === 1 ? "" : "s"}` : ""}</small></span>
+              <strong aria-hidden="true">{selected ? "✓" : "›"}</strong>
+            </button>;
+          })}
+        </div>
+      </section>
+
+      <div className={styles.captureStage} data-capture-order="2"><div className={styles.captureStageHeading}><span>PASO 2</span><h3>Sube las fotos de {CLUB_LABELS[activeClub]}</h3></div><LaunchMonitorCamera
         userId={userId}
         accessToken={accessToken}
         requiresRemoteConsent={requiresRemoteConsent}
@@ -264,7 +295,7 @@ export function LaunchMonitorCapture({ userId, accessToken, requiresRemoteConsen
           onChange({ ...current, source: source || current.source, completedAt: sessionCompletedAt(nextShots), shots: nextShots });
           setActiveClub(nextProtocolClub(nextShots, activeClub));
         }}
-      />
+      /></div>
 
       <div className={styles.manualDivider}><span>o captura manualmente</span></div>
 
@@ -300,27 +331,6 @@ export function LaunchMonitorCapture({ userId, accessToken, requiresRemoteConsen
               onChange={(event) => updateSession((current) => ({ ...current, completedAt: null, source: event.target.value.trimStart() || null }))}
             />
           </label>
-
-          <div className={styles.launchGrid} aria-label="Progreso por palo">
-            {LAUNCH_MONITOR_CLUBS.map((club) => {
-              const count = progress?.counts[club] ?? 0;
-              const excluded = session.shots.filter((shot) => shot.club === club && shot.excluded).length;
-              const selected = activeClub === club;
-              return (
-                <button
-                  type="button"
-                  key={club}
-                  className={`${styles.launchCard} ${styles.optionButton} ${selected ? styles.selected : ""}`}
-                  aria-pressed={selected}
-                  onClick={() => setActiveClub(club)}
-                >
-                  <h4>{CLUB_LABELS[club]}</h4>
-                  <p>{Math.min(count, 3)}/3 válidos{count > 3 ? ` · ${count} totales` : ""}</p>
-                  {excluded > 0 && <p>{excluded} excluido{excluded === 1 ? "" : "s"}</p>}
-                </button>
-              );
-            })}
-          </div>
 
           <section className={styles.equipmentItem} aria-labelledby={`capture-${activeClub}`}>
             <div className={styles.itemHeader}>
@@ -428,11 +438,11 @@ export function LaunchMonitorCapture({ userId, accessToken, requiresRemoteConsen
           </section>
 
           {summary && summary.includedShots > 0 && (
-            <section aria-labelledby="launch-summary-title">
+            <section className={styles.captureSummary} data-capture-order="3" aria-labelledby="launch-summary-title">
               <div className={styles.sectionHeader}>
                 <div>
-                  <h2 id="launch-summary-title">Resumen de mediciones</h2>
-                  <p>La mediana y el promedio resistente reducen el efecto de valores extremos. Los golpes excluidos no participan.</p>
+                  <span className={styles.captureSummaryStep}>PASO 3</span><h2 id="launch-summary-title">Resumen por palo</h2>
+                  <p>Tus golpes válidos ya están guardados. La mediana reduce el efecto de valores extremos; los excluidos no participan.</p>
                 </div>
               </div>
               <div className={styles.launchGrid}>

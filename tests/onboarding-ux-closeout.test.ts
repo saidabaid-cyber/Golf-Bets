@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 
@@ -28,6 +28,7 @@ test("betting consent is contextual and score-only stays free of betting UI", ()
   const provider = source("app/components/account-provider.tsx");
   const page = source("app/page.tsx");
   assert.doesNotMatch(consent, /FUNCIONES DE APUESTAS|ACTIVAR APUESTAS|onResolveBetting/);
+  assert.doesNotMatch(consent, /apuestas/i);
   assert.doesNotMatch(provider, /initialBettingDecision=|onResolveBetting=/);
   assert.match(page, /const runAfterBettingConsent/);
   assert.match(page, /roundPresentation\.playMode !== "score_only"/);
@@ -47,18 +48,36 @@ test("profile progress is actionable, optional-aware and removes No aplica", () 
   assert.match(page, /setProfileCompletionTarget\(section\)/);
 });
 
-test("equipment and Ball Fit use neutral category visuals with selected and empty states", () => {
+test("equipment and Ball Fit use owned premium product art with selected and empty states", () => {
   const onboarding = source("app/components/equipment-onboarding.tsx");
   const panel = source("app/components/equipment-profile-panel.tsx");
   const wizard = source("app/components/ball-fit-wizard.tsx");
   const visuals = source("app/components/equipment-visuals.tsx");
   for (const category of ["Driver", "Maderas", "Híbridos", "Hierros", "Wedges", "Putter"]) assert.match(onboarding, new RegExp(category));
   assert.match(onboarding, /ClubCategoryVisual/);
+  assert.match(onboarding, /BACKYARD EQUIPMENT/);
   assert.match(panel, /ClubCategoryVisual/);
   assert.match(wizard, /GolfBallVisual/);
   for (const priority of ["Distancia", "Control", "Sensación"]) assert.match(wizard, new RegExp(priority));
-  assert.match(visuals, /Neutral product silhouettes/);
+  assert.match(visuals, /from "next\/image"/);
+  for (const asset of ["backyard-driver.png", "backyard-fairway.png", "backyard-hybrid.png", "backyard-irons.png", "backyard-wedge.png", "backyard-putter.png", "backyard-ball-premium.png"]) {
+    assert.ok(statSync(join("public", "brand", "equipment", asset)).size > 50_000, `${asset} must contain production artwork`);
+    assert.match(visuals, new RegExp(asset.replace(".", "\\.")));
+  }
   assert.doesNotMatch(visuals, /Titleist|Callaway|TaylorMade|PING/);
+});
+
+test("focus areas are multi-select cards with category-specific iconography", () => {
+  const onboarding = source("app/components/beta-onboarding-flow.tsx");
+  const icons = source("app/components/backyard-icon.tsx");
+  for (const goal of ["DRIVER", "IRONS", "APPROACH", "SHORT_GAME", "BUNKER", "PUTTING", "CONSISTENCY", "COURSE_STRATEGY", "MENTAL_CONFIDENCE", "LOWER_HANDICAP"]) {
+    assert.match(onboarding, new RegExp(`${goal}:`));
+  }
+  assert.match(onboarding, /BUNKER: "bunker"/);
+  assert.match(onboarding, /data-focus-area=\{goal\}/);
+  assert.match(onboarding, /aria-pressed=\{active\}/);
+  assert.match(icons, /bunker:/);
+  assert.match(icons, /mental:/);
 });
 
 test("launch-monitor capture explains the block first and auto-applies clear readings", () => {
@@ -71,6 +90,12 @@ test("launch-monitor capture explains the block first and auto-applies clear rea
   assert.match(camera, /Corrige sólo lo necesario/);
   assert.match(camera, /Editar datos detectados/);
   assert.match(capture, /setActiveClub\(nextProtocolClub/);
+  const chooseClub = capture.indexOf('data-capture-order="1"');
+  const uploadPhotos = capture.indexOf('data-capture-order="2"');
+  const shotSummary = capture.indexOf('data-capture-order="3"');
+  assert.ok(chooseClub >= 0 && chooseClub < uploadPhotos && uploadPhotos < shotSummary);
+  assert.match(capture, /¿Qué palo vas a subir\?/);
+  assert.match(capture, /ClubCategoryVisual/);
   assert.match(capture, /updateShotMetric/);
   assert.match(capture, /Excluir/);
   assert.doesNotMatch(capture, /Guardar golpe|Guardar captura parcial/);
@@ -104,5 +129,6 @@ test("mobile CTAs reserve the iPhone safe area", () => {
   const completionCss = source("app/components/profile-completion-ring.module.css");
   assert.match(equipmentCss, /env\(safe-area-inset-bottom\)/);
   assert.match(equipmentCss, /@media\(max-width:540px\)/);
+  assert.match(equipmentCss, /\.clubChoiceGrid \{ grid-template-columns:1fr; \}/);
   assert.match(completionCss, /env\(safe-area-inset-bottom\)/);
 });

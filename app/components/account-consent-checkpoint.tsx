@@ -105,7 +105,7 @@ export function InitialOnboardingConsents({
       </div>}
     </section>
 
-    <p className={styles.hint}>Las funciones de apuestas pedirán autorización únicamente cuando decidas usarlas. Después puedes revisar o revocar tus permisos en Perfil → Configuración → Privacidad y permisos.</p>
+    <p className={styles.hint}>Las funciones opcionales pedirán autorización únicamente cuando decidas usarlas. Después puedes revisar o revocar tus permisos en Perfil → Configuración → Privacidad y permisos.</p>
     {error && <p className={styles.error} role="alert">{error}</p>}
     <div className={styles.continueBar}><button type="button" className="primary big" disabled={!resolved || !canContinue || Boolean(busy)} onClick={() => { setBusy("continue"); onContinue(); }}>CONTINUAR</button>{!canContinue && <small>Elige antes una configuración Rápida o Completa.</small>}</div>
   </section>;
