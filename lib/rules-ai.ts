@@ -132,6 +132,29 @@ export function buildRulesQuestionContext({
   ].filter(Boolean).join("\n");
 }
 
+function buildRulesRepairContext({
+  question,
+  courseName,
+  evidence,
+}: {
+  question: string;
+  courseName: string;
+  evidence: RulesEvidence[];
+}) {
+  return [
+    buildRulesQuestionContext({ question, courseName, evidence }),
+    "",
+    "REPARACIÓN DE FORMATO Y GROUNDING:",
+    "La respuesta anterior fue rechazada por el validador. Responde otra vez usando solo la evidencia anterior.",
+    "Cada encabezado obligatorio debe ir solo en su propia línea y cada bloque debe incluir su cita [E#].",
+    "En QUÉ PROCEDE y QUÉ DEBO HACER usa términos concretos presentes en el fragmento citado.",
+    "En PENALIDAD escribe únicamente una consecuencia canónica exacta y su cita; no agregues explicación.",
+    "En REGLA escribe únicamente Regla + el identificador exacto respaldado y su cita.",
+    "En FUENTE incluye todos los [E#] usados y el documento correspondiente.",
+    `Si no puedes cumplirlo únicamente con la evidencia, responde exactamente: “${RULES_AI_UNCERTAIN_MESSAGE}”`,
+  ].join("\n");
+}
+
 export function cleanRulesAiAnswer(answer: string) {
   return answer
     .replace(/filecite[^]*/g, "")
@@ -418,12 +441,21 @@ export async function answerRulesWithProvider({
   if (!config.providerReady || provider.name !== config.provider) throw new Error("RULES_AI_NOT_READY");
   const retrieval = retrieveRulesEvidence({ question, courseName, localRules });
   if (!retrieval.sufficient) return { answer: RULES_AI_UNCERTAIN_MESSAGE, evidence: [] };
-  const providerAnswer = await provider.generate({
+  let providerAnswer = await provider.generate({
     model: config.model,
     instructions: buildRulesAiInstructions(),
     prompt: buildRulesQuestionContext({ question, courseName, evidence: retrieval.evidence }),
   });
-  const grounded = groundedRulesAnswer(providerAnswer, retrieval.evidence);
+  let grounded = groundedRulesAnswer(providerAnswer, retrieval.evidence);
+  if (grounded.answer === RULES_AI_UNCERTAIN_MESSAGE
+    && cleanRulesAiAnswer(providerAnswer) !== RULES_AI_UNCERTAIN_MESSAGE) {
+    providerAnswer = await provider.generate({
+      model: config.model,
+      instructions: buildRulesAiInstructions(),
+      prompt: buildRulesRepairContext({ question, courseName, evidence: retrieval.evidence }),
+    });
+    grounded = groundedRulesAnswer(providerAnswer, retrieval.evidence);
+  }
   const references = evidenceReferences(retrieval.evidence);
   return {
     answer: grounded.answer,

@@ -192,6 +192,47 @@ test("Rules AI returns only cited canonical evidence and fails closed on free-fo
   }
 });
 
+test("Rules AI makes one bounded evidence-only repair attempt after grounding rejection", async () => {
+  let calls = 0;
+  let repairPrompt = "";
+  const provider: RulesAiTextProvider = {
+    name: "openai",
+    generate: async input => {
+      calls += 1;
+      if (calls === 1) return "Puedes dropear con un golpe.";
+      repairPrompt = input.prompt;
+      return "QUÉ PROCEDE\nPuedes tomar una opción de alivio. [E1]\n\nPENALIDAD\nUN GOLPE DE PENALIDAD. [E1]\n\nQUÉ DEBO HACER\nElige la opción permitida y usa el punto de referencia correcto. [E1]\n\nREGLA\nRegla 17. [E1]\n\nFUENTE\n[E1] Reglas de Golf.";
+    },
+  };
+  const result = await answerRulesWithProvider({
+    provider,
+    env: { RULES_AI_ENABLED: "true", OPENAI_API_KEY: "secret" },
+    question: "¿Qué pasa si mi bola se va al agua?",
+    courseName: "",
+  });
+  assert.equal(calls, 2);
+  assert.match(repairPrompt, /REPARACIÓN DE FORMATO Y GROUNDING/);
+  assert.match(repairPrompt, /EVIDENCIA RECUPERADA/);
+  assert.equal(result.evidence[0]?.citation, "[E1]");
+  assert.match(result.answer, /Regla 17/);
+
+  calls = 0;
+  const explicitlyUncertain = await answerRulesWithProvider({
+    provider: {
+      name: "openai",
+      generate: async () => {
+        calls += 1;
+        return RULES_AI_UNCERTAIN_MESSAGE;
+      },
+    },
+    env: { RULES_AI_ENABLED: "true", OPENAI_API_KEY: "secret" },
+    question: "¿Qué pasa si mi bola se va al agua?",
+    courseName: "",
+  });
+  assert.equal(calls, 1, "una incertidumbre explícita del proveedor no dispara otro consumo");
+  assert.deepEqual(explicitlyUncertain, { answer: RULES_AI_UNCERTAIN_MESSAGE, evidence: [] });
+});
+
 test("Gemini REST provider keeps its key in a server header and parses the response", async () => {
   let requestedUrl = "";
   let requestedInit: RequestInit | undefined;
