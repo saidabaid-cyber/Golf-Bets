@@ -71,7 +71,8 @@ test("bola y Ball Fit exponen el flujo completo sin presentar una verdad oficial
   assert.match(panel, /Tu grupo recomendado/);
   assert.match(wizard, /Tu mejor grupo de bolas/);
   assert.match(wizard, /Match/);
-  assert.match(wizard, /Sin dato verificado/);
+  assert.match(wizard, /Sin dato/);
+  assert.doesNotMatch(wizard, /Sin dato verificado/);
   assert.match(wizard, /Comparar bolas recomendadas/);
   for (const row of ["Construcción", "Cubierta", "Compresión"]) assert.match(wizard, new RegExp(row));
   assert.match(wizard, /Capturar HCP manual/);
@@ -89,7 +90,7 @@ test("Ball Fit evalúa el catálogo completo en servidor y falla cerrado antes d
   assert.match(wizard, /JSON\.stringify\(\{ input: transportInput \}\)/);
   assert.doesNotMatch(wizard, /runBackyardBallFit\(catalog,/);
   assert.match(wizard, /normalizeBallFitApiSuccess/);
-  assert.match(wizard, /no mostramos rankings parciales/);
+  assert.match(wizard, /No pudimos completar el análisis/);
   assert.match(ballFitRoute, /loadBallFitCatalog/);
   assert.match(ballFitRoute, /normalizeBallFitTransportInput/);
   assert.match(ballFitRoute, /BALL_FIT_CATALOG_MAX_CANDIDATES/);

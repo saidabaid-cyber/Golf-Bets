@@ -40,7 +40,7 @@ export function nearestReviewedClubs<T extends Omit<ReviewedCatalogCourse,'tees'
 /** Product radius for verified nearby clubs. Distances are geographic, not driving distance. */
 export const REVIEWED_NEARBY_DISTANCE_KM = 50;
 export function reviewedClubsLocationSummary(clubs: readonly { distanceKm: number }[]) {
-  if (!clubs.length) return 'No hay campos con ubicación verificada cerca de ti. La búsqueda manual sigue disponible.';
+  if (!clubs.length) return 'No hay campos con ubicación disponible cerca de ti. La búsqueda manual sigue disponible.';
   return `Encontramos ${clubs.length} campos a 50 km o menos · ${clubs.length} clubes distintos.`;
 }
 /** Ratings are preserved as evidence, never applied until their category is verified.

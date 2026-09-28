@@ -160,7 +160,7 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defa
     </>}
 
     {step === "ball-prompt" && <>
-      <div className="eyebrow">TU BOLA</div><h1>¿Qué bola juegas normalmente?</h1><p>Elegirla es opcional. Sirve para guardar tu perfil y comparar recomendaciones verificables.</p>
+      <div className="eyebrow">TU BOLA</div><h1>¿Qué bola juegas normalmente?</h1><p>Elegirla es opcional. Sirve para guardar tu perfil y comparar recomendaciones.</p>
       <div className={styles.onboardingActions}><button type="button" className="primary" onClick={() => { update((current) => setBallOnboardingStatus(current, "IN_PROGRESS")); setStep("ball-select"); }}>Elegir bola</button><button type="button" className="secondary" onClick={chooseNoFixedBall}>No tengo una bola fija</button><button type="button" className={styles.onboardingSkip} onClick={skipBall}>Omitir</button></div>
     </>}
 
@@ -172,7 +172,7 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defa
 
     {step === "fit-prompt" && <>
       <div className="eyebrow">THE BACKYARD BALL FIT</div><h1>Encuentra bolas que se ajusten a tu juego</h1><p>El fitting usa tu HCP, velocidad, vuelo, spin, control y sensación para sugerir un Top 3. Registrar tu bola actual es opcional.</p>
-      <div className={styles.fitIntro}><h3>Tu mejor grupo, no una verdad absoluta</h3><p>Recibirás tres coincidencias con Match Score, motivos, atributos confirmados y una comparación clara. Lo no verificado aparecerá como “sin dato verificado”.</p></div>
+      <div className={styles.fitIntro}><h3>Tu mejor grupo, no una verdad absoluta</h3><p>Recibirás tres coincidencias con Match Score, motivos, atributos disponibles y una comparación clara. Cuando falte información aparecerá como “Sin dato”.</p></div>
       <div className={styles.onboardingActions}><button type="button" className="primary" onClick={() => setStep("fit")}>Hacer Ball Fit</button><button type="button" className="secondary" onClick={() => { update((current) => setBallOnboardingStatus(current, "IN_PROGRESS")); setStep("ball-select"); }}>Registrar mi bola actual</button><button type="button" className={styles.onboardingSkip} onClick={onComplete}>Ahora no</button></div>
     </>}
 

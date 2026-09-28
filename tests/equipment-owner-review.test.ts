@@ -62,5 +62,7 @@ test("la UI final usa bolsa premium, selección guiada y modo manual explícito"
   assert.match(editor, /selectedShaft\.weightOptions\.length/);
   assert.match(editor, /Agregar especificación manual/);
   assert.match(editor, /Medidas y detalles opcionales/);
-  assert.match(editor, /Bounce y grind sólo aparecerán/);
+  assert.match(editor, /aria-label="Ficha de la varilla"/);
+  assert.match(editor, /selectedShaft\?\.material/);
+  for (const fact of ["Uso", "Launch", "Spin", "Torque", "Tip", "Butt"]) assert.match(editor, new RegExp(fact));
 });

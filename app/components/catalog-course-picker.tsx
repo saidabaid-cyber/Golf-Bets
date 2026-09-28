@@ -8,12 +8,6 @@ import { AnchoredSearch,AnchoredSearchOption } from './anchored-search';
 import styles from './catalog-course-picker.module.css';
 type Entry=Omit<ReviewedCatalogCourse,'tees'> & {teeCount:number;completeCards:number};
 type PickerLocationState=NearbyLocationResolution|{status:'idle'|'loading'};
-function layoutSource(entry:Pick<Entry,'name'|'sourceUrl'|'dataVersion'|'origin'|'isProvisional'>) {
-  if (entry.isProvisional||entry.origin==='BACKYARD_PROVISIONAL'||/temporary|temporal/i.test(entry.name)) return 'Provisional';
-  if (entry.origin==='GHIN') return 'GHIN';
-  if (/ghin\.com/i.test(entry.sourceUrl)||/^ghin-/i.test(entry.dataVersion)) return 'GHIN';
-  return 'Backyard';
-}
 export function CatalogCoursePicker({token,permissionOwnerId,onSelect,onSelectClub,onSelectHomeCourse,selectedName='',selectedClubId='',selectedCourseId='',onRequest,showHeading=true,purpose='round',onSelectionReadyChange}:{token?:string|null;permissionOwnerId:string;onSelect?:(course:Course,cards:Course[])=>void;onSelectClub?:(club:{clubId:string;clubName:string})=>void;onSelectHomeCourse?:(selection:{clubId:string;clubName:string;courseId:string;courseName:string})=>void|Promise<void>;selectedName?:string;selectedClubId?:string;selectedCourseId?:string;onRequest?:()=>void;showHeading?:boolean;purpose?:'round'|'home-club';onSelectionReadyChange?:(ready:boolean)=>void}) {
   const [entries,setEntries]=useState<Entry[]>([]),[query,setQuery]=useState(''),[error,setError]=useState(''),[loading,setLoading]=useState(false);
   const [location,setLocation]=useState<PickerLocationState>({status:'idle'});
@@ -95,14 +89,14 @@ export function CatalogCoursePicker({token,permissionOwnerId,onSelect,onSelectCl
     {locationError&&<div role="status"><p>{locationError}</p><button type="button" className="secondary" onClick={locate}>Reintentar</button></div>}
     {location.status==='located'&&<p role="status">{loading?'Ubicación obtenida. Cargando clubes…':error?'Ubicación obtenida. Reintenta cargar el catálogo.':`${reviewedClubsLocationSummary(nearby)}${location.point.accuracyMeters===undefined?'':` Precisión informada por el dispositivo: ±${location.point.accuracyMeters} m.`}`}</p>}
     {nearby.map(c=><button type="button" className={`${styles.club} ${club===c.clubId?styles.clubSelected:''}`} aria-pressed={club===c.clubId} disabled={selectingCourseId!==null} key={c.clubId} onClick={()=>selectClub(c)}><b>{c.clubName}</b><span>{[c.city,c.stateRegion].filter(Boolean).join(', ')} · {c.distanceKm.toFixed(1)} km</span>{club===c.clubId&&<em>✓ {selectingCourseId?'Guardando…':'Seleccionado'}</em>}</button>)}
-    {nearby.length>0&&<details className={styles.notes}><summary>Sobre las distancias</summary><small>Distancia geográfica aproximada, no de manejo, entre clubes con ubicación verificada. Algunas ubicaciones: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors (ODbL)</a>.</small></details>}
+    {nearby.length>0&&<details className={styles.notes}><summary>Sobre las distancias</summary><small>Distancia geográfica aproximada, no de manejo, entre clubes con ubicación disponible. Algunas ubicaciones: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors (ODbL)</a>.</small></details>}
     <AnchoredSearch inlineResults label="Buscar otro campo" value={query} onChange={setQuery} placeholder="Nombre, club o nombre alternativo" expanded={Boolean(query.trim())} status={loading?'Cargando catálogo…':query.trim()&&!clubs.length?'Sin coincidencias. Puedes solicitar el campo.':`${entries.length} recorridos disponibles`}>
       {clubs.slice(0,30).map(c=><AnchoredSearchOption key={c.clubId} label={`Seleccionar ${c.clubName}`} onSelect={()=>selectClub(c)}><b>{c.clubName}</b><small>{[c.city,c.stateRegion].filter(Boolean).join(', ')}</small></AnchoredSearchOption>)}
       {clubs.length>30&&<p>Refina el nombre para ver más coincidencias.</p>}
     </AnchoredSearch>
     {error&&<p role="alert">{error} <button type="button" className="textButton" onClick={()=>retryCourseId?void selectCourse(retryCourseId):setRetry(n=>n+1)}>Reintentar</button></p>}
-    {!token&&<p>Inicia sesión para consultar el catálogo en revisión.</p>}
-    {club&&selectedClubCourses.length>1&&<label>Layout<select aria-label="Layout" value={chosen} onChange={e=>void selectCourse(e.target.value)}><option value="">Selecciona layout</option>{selectedClubCourses.map(c=><option key={c.id} value={c.id}>{c.name} · {layoutSource(c)}{c.isProvisional?' · No disponible para publicación GHIN':''}{c.completeCards===0?' · tarjeta pendiente':''}</option>)}</select></label>}
+    {!token&&<p>Inicia sesión para buscar campos.</p>}
+    {club&&selectedClubCourses.length>1&&<label>Layout<select aria-label="Layout" value={chosen} onChange={e=>void selectCourse(e.target.value)}><option value="">Selecciona layout</option>{selectedClubCourses.map(c=><option key={c.id} value={c.id}>{c.name}{c.isProvisional?' · Provisional · No disponible para publicación GHIN':''}{c.completeCards===0?' · tarjeta pendiente':''}</option>)}</select></label>}
     {purpose==='home-club'&&selectionLabel&&<p role="status">✓ Seleccionado: {selectionLabel}</p>}
     {onRequest&&<button type="button" className={styles.request} onClick={onRequest}>¿No encuentras tu campo? Solicítalo ↗</button>}
   </section>;

@@ -22,7 +22,6 @@ import {
   BALL_FIT_CATALOG_SCOPE_ERROR,
   createBallFitTransportInput,
   normalizeBallFitApiSuccess,
-  type BallFitCatalogScope,
 } from "../../lib/ball-fitting-api";
 import { loadBallFitDraft, removeBallFitDraft, saveBallFitDraft, type BallFitDraft } from "../../lib/ball-fitting-storage";
 import type { GolfBallCatalog, PlayerBall, QualitativeLevel } from "../../lib/golf-equipment";
@@ -75,7 +74,7 @@ const LEVEL_LABELS: Record<QualitativeLevel, string> = {
 
 const PRICE_RESULT_LABELS = { ECONOMY: "Económica", MID: "Media", PREMIUM: "Premium" } as const;
 const DRAFT_SAVE_ERROR = "No pudimos guardar este borrador en el dispositivo. Mantén esta pantalla abierta o libera espacio antes de salir.";
-const FIT_REQUEST_ERROR = "No pudimos evaluar el catálogo completo. Revisa tu conexión e inténtalo de nuevo; no mostramos rankings parciales.";
+const FIT_REQUEST_ERROR = "No pudimos completar el análisis. Revisa tu conexión e inténtalo de nuevo.";
 
 function defaultInput(userId: string, handicap: number | null, currentBallId: string | null, defaults?: BallFitProfileDefaults, handicapSource?: BallFitHandicapSource | null): BallFitInput {
   return {
@@ -133,7 +132,6 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
   const [draftChoicePending, setDraftChoicePending] = useState(false);
   const [result, setResult] = useState<BallFitResult | null>(null);
   const [resultCatalog, setResultCatalog] = useState<GolfBallCatalog[]>([]);
-  const [catalogScope, setCatalogScope] = useState<BallFitCatalogScope | null>(null);
   const [calculating, setCalculating] = useState(false);
   const [ballQuery, setBallQuery] = useState("");
   useViewScrollReset(`${step}:${draftChoicePending}:${hydrated}`);
@@ -168,7 +166,6 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
     setStep(Math.min(savedDraft.step, 5));
     setResult(null);
     setResultCatalog([]);
-    setCatalogScope(null);
     setDraftChoicePending(false);
   }
 
@@ -196,7 +193,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
 
   function previous() {
     setMessage("");
-    if (result) { setResult(null); setResultCatalog([]); setCatalogScope(null); setStep(5); return; }
+    if (result) { setResult(null); setResultCatalog([]); setStep(5); return; }
     setStep((current) => Math.max(0, current - 1));
   }
 
@@ -237,7 +234,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
       if (!response.ok) {
         const errorRecord = payload && typeof payload === "object" && !Array.isArray(payload) ? payload as Record<string, unknown> : null;
         if (errorRecord?.code === BALL_FIT_CATALOG_SCOPE_ERROR) {
-          setMessage("El catálogo creció más allá del alcance seguro de esta versión. No se calculó un ranking parcial.");
+          setMessage("No pudimos completar el análisis en este momento. Inténtalo de nuevo más tarde.");
           return;
         }
         setMessage(FIT_REQUEST_ERROR);
@@ -250,7 +247,6 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
       }
       setResult(fit.result);
       setResultCatalog(fit.catalog);
-      setCatalogScope(fit.scope);
       setStep(6);
       if (!saveBallFitDraft(localStorage, input, 6)) setMessage(DRAFT_SAVE_ERROR);
       else if (fit.result.recommendations.length === 0) setMessage(fit.result.warnings[0] || "Necesitamos más preferencias para comparar bolas.");
@@ -326,17 +322,17 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
     </section>}
 
     {!result && step === 3 && <section className={styles.questionBlock}>
-      <h3>Approach y green</h3><p>Esto ayuda a ponderar control de hierros y juego corto cuando el fabricante sí publica esos atributos.</p>
+      <h3>Approach y green</h3><p>Esto ayuda a ponderar control de hierros y juego corto cuando esos atributos están disponibles.</p>
       <h4>Tus greens normalmente son</h4><OptionGrid values={GREEN_FIRMNESS_OPTIONS} labels={GREEN_LABELS} selected={input.greenFirmness} onSelect={(value) => patchInput({ greenFirmness: value })} />
       <h4>En tiros de aproximación normalmente</h4><OptionGrid values={APPROACH_BEHAVIORS} labels={APPROACH_LABELS} selected={input.approachBehavior} onSelect={(value) => patchInput({ approachBehavior: value })} />
       <h4>¿Quieres más control / spin alrededor del green?</h4><OptionGrid values={YES_NO_UNKNOWN} labels={YES_NO_LABELS} selected={input.wantsGreensideSpin} onSelect={(value) => patchInput({ wantsGreensideSpin: value })} />
     </section>}
 
     {!result && step === 4 && <section className={styles.questionBlock}>
-      <h3>¿Qué quieres mejorar?</h3><p>Selecciona y ordena tus prioridades. Las primeras pesan más, siempre dentro de atributos verificados.</p>
+      <h3>¿Qué quieres mejorar?</h3><p>Selecciona y ordena tus prioridades. Las primeras pesan más según los datos disponibles.</p>
       <div className={styles.optionGrid}>{BALL_FIT_PRIORITIES.map((priority) => <button key={priority} type="button" className={`${styles.optionButton} ${input.priorities.includes(priority) ? styles.selected : ""}`} aria-pressed={input.priorities.includes(priority)} onClick={() => togglePriority(priority)}>{PRIORITY_LABELS[priority]}</button>)}</div>
       {input.priorities.length > 0 && <div className={styles.priorityList} aria-label="Prioridades ordenadas">{input.priorities.map((priority, index) => <div className={styles.priorityItem} key={priority}><span>{index + 1}</span><b>{PRIORITY_LABELS[priority]}</b><div><button type="button" disabled={index === 0} aria-label={`Subir ${PRIORITY_LABELS[priority]}`} onClick={() => movePriority(priority, -1)}>↑</button><button type="button" disabled={index === input.priorities.length - 1} aria-label={`Bajar ${PRIORITY_LABELS[priority]}`} onClick={() => movePriority(priority, 1)}>↓</button></div></div>)}</div>}
-      <p className={styles.subtle}>Distancia con driver y estabilidad se guardan como contexto. No elevan un Match Score por sí solas porque el catálogo no contiene una medición de laboratorio comparable y verificada para esas metas.</p>
+      <p className={styles.subtle}>Distancia con driver y estabilidad se guardan como contexto y no elevan un Match Score por sí solas.</p>
     </section>}
 
     {!result && step === 5 && <section className={styles.questionBlock}>
@@ -344,7 +340,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
       <h4>¿Qué tanto importa el precio?</h4><OptionGrid values={BALL_FIT_PRICE_PREFERENCES} labels={PRICE_LABELS} selected={input.pricePreference} onSelect={(value) => patchInput({ pricePreference: value })} />
       <h4>Color preferido</h4><OptionGrid values={BALL_COLOR_PREFERENCES} labels={COLOR_LABELS} selected={input.colorPreference} onSelect={(value) => patchInput({ colorPreference: value })} />
       <h4>Comparación opcional</h4>
-      {currentBall && <div className={styles.ballHero}><span className={styles.ballGlyph}>●</span><div><h3>{currentBall.ballBrand} {currentBall.ballModel}</h3><p>Bola actual guardada{currentBall.catalogBallId ? " · disponible para comparación verificada" : " · modelo manual"}</p></div></div>}
+      {currentBall && <div className={styles.ballHero}><span className={styles.ballGlyph}>●</span><div><h3>{currentBall.ballBrand} {currentBall.ballModel}</h3><p>Bola actual guardada{currentBall.catalogBallId ? " · disponible para comparación" : " · modelo manual"}</p></div></div>}
       <AnchoredSearch label="Bola actual para comparar (opcional)" value={ballQuery} onChange={setBallQuery} placeholder="Escribe marca, modelo, generación o año" expanded status={ballSearch.status === "loading" ? "Buscando bolas…" : ballSearch.items.length ? `${ballSearch.items.length} resultados del catálogo` : "Sin coincidencias en el catálogo"}>
         <AnchoredSearchOption label="No comparar con una bola" onSelect={() => patchInput({ currentBallId: null })}><b>Sin bola fija</b><small>No afecta las recomendaciones.</small></AnchoredSearchOption>
         {ballSearch.items.filter((ball) => ball.active).map((ball) => <AnchoredSearchOption key={ball.id} label={`Seleccionar ${ball.brand} ${ball.model}`} onSelect={() => { patchInput({ currentBallId: ball.id }); setBallQuery(`${ball.brand} ${ball.model}`); }}><b>{ball.brand} {ball.model}</b><small>{[ball.generation, ball.year].filter(Boolean).join(" · ") || "Generación sin dato publicado"}</small></AnchoredSearchOption>)}
@@ -356,8 +352,8 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
       <p className={styles.subtle}>Completitud de respuestas: {completeness}%. El recomendador puede dar una coincidencia parcial, pero necesita al menos dos preferencias comparables.</p>
     </section>}
 
-    {result && <><p className={styles.subtle}>{BALL_FIT_HANDICAP_LABELS[input.handicapSource || "UNKNOWN"]}{input.handicap === null ? "" : `: ${input.handicap}`}</p><BallFitResults result={result} catalog={displayCatalog} current={currentCatalogBall} catalogScope={catalogScope} /></>}
-    {calculating && <div className={styles.loadingState} role="status">Evaluando el catálogo completo disponible…</div>}
+    {result && <><p className={styles.subtle}>{BALL_FIT_HANDICAP_LABELS[input.handicapSource || "UNKNOWN"]}{input.handicap === null ? "" : `: ${input.handicap}`}</p><BallFitResults result={result} catalog={displayCatalog} current={currentCatalogBall} /></>}
+    {calculating && <div className={styles.loadingState} role="status">Analizando tus preferencias…</div>}
     {message && <div className={styles.formMessage} role="alert">{message}</div>}
     {message === DRAFT_SAVE_ERROR && <button type="button" className="textButton" onClick={exitWithoutSaving}>Salir sin guardar</button>}
     <div className={styles.wizardActions}>
@@ -370,18 +366,17 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
 }
 
 function fact(value: QualitativeLevel | null) {
-  return value ? LEVEL_LABELS[value] : "Sin dato verificado";
+  return value ? LEVEL_LABELS[value] : "Sin dato";
 }
 
 function technicalFact(value: string | number | null | undefined, suffix = "") {
-  return value === null || value === undefined || value === "" ? "Sin dato verificado" : `${value}${suffix}`;
+  return value === null || value === undefined || value === "" ? "Sin dato" : `${value}${suffix}`;
 }
 
-export function BallFitResults({ result, catalog, current, catalogScope = null }: { result: BallFitResult; catalog: readonly GolfBallCatalog[]; current: GolfBallCatalog | null; catalogScope?: BallFitCatalogScope | null }) {
+export function BallFitResults({ result, catalog, current }: { result: BallFitResult; catalog: readonly GolfBallCatalog[]; current: GolfBallCatalog | null }) {
   if (!result.recommendations.length) return <section className={styles.emptyState}><b>Aún no hay una comparación suficiente</b><p>{result.warnings[0] || "Agrega dos preferencias comparables y vuelve a intentar."}</p></section>;
   const recommendationCatalog = result.recommendations.map((item) => catalog.find((ball) => ball.id === item.catalogBallId) || null);
   return <>
-    {catalogScope && <p className={styles.subtle}>Se evaluó el catálogo activo completo disponible: {catalogScope.evaluatedCandidateCount} modelo(s). No se usó una primera página recortada.</p>}
     <div className={styles.resultGrid}>{result.recommendations.map((recommendation) => {
       const catalogBall = catalog.find((ball) => ball.id === recommendation.catalogBallId);
       return <article className={styles.recommendation} key={recommendation.catalogBallId}>
@@ -389,7 +384,7 @@ export function BallFitResults({ result, catalog, current, catalogScope = null }
         <span className={styles.rank}>#{recommendation.rank}</span>
         <h3>{recommendation.brand} {recommendation.model}</h3>
         {recommendation.generation && <p className={styles.subtle}>{recommendation.generation}</p>}
-        <span className={styles.matchBadge}>Match {recommendation.matchScore}% · datos {recommendation.dataCoverage}%</span>
+        <span className={styles.matchBadge}>Match {recommendation.matchScore}%</span>
         <ul className={styles.whyList}>{recommendation.why.map((reason) => <li key={reason}>{reason}</li>)}</ul>
         <div className={styles.verifiedFacts}>
           <span>Vuelo<b>{fact(recommendation.attributes.flight)}</b></span>
@@ -397,13 +392,12 @@ export function BallFitResults({ result, catalog, current, catalogScope = null }
           <span>Spin driver<b>{fact(recommendation.attributes.driverSpin)}</b></span>
           <span>Spin hierros<b>{fact(recommendation.attributes.ironSpin)}</b></span>
           <span>Spin short game<b>{fact(recommendation.attributes.shortGameSpin)}</b></span>
-          <span>Precio<b>{recommendation.attributes.priceTier ? PRICE_RESULT_LABELS[recommendation.attributes.priceTier] : "Sin dato verificado"}</b></span>
+          <span>Precio<b>{recommendation.attributes.priceTier ? PRICE_RESULT_LABELS[recommendation.attributes.priceTier] : "Sin dato"}</b></span>
           <span>Construcción<b>{technicalFact(catalogBall?.construction)}</b></span>
           <span>Cubierta<b>{technicalFact(catalogBall?.coverMaterial)}</b></span>
           <span>Compresión<b>{technicalFact(catalogBall?.compression)}</b></span>
         </div>
         <p className={styles.comparisonNote}><b>Frente a tu bola actual:</b> {recommendation.comparisonToCurrent.join(" ")}</p>
-        {catalogBall?.officialUrl && <a className="textButton" href={catalogBall.officialUrl} target="_blank" rel="noreferrer">Ver ficha oficial ↗</a>}
       </article>;
     })}</div>
 
@@ -412,7 +406,7 @@ export function BallFitResults({ result, catalog, current, catalogScope = null }
       <tr><th>Construcción</th><td>{technicalFact(current?.construction)}</td>{recommendationCatalog.map((ball, index) => <td key={result.recommendations[index].catalogBallId}>{technicalFact(ball?.construction)}</td>)}</tr>
       <tr><th>Cubierta</th><td>{technicalFact(current?.coverMaterial)}</td>{recommendationCatalog.map((ball, index) => <td key={result.recommendations[index].catalogBallId}>{technicalFact(ball?.coverMaterial)}</td>)}</tr>
       <tr><th>Compresión</th><td>{technicalFact(current?.compression)}</td>{recommendationCatalog.map((ball, index) => <td key={result.recommendations[index].catalogBallId}>{technicalFact(ball?.compression)}</td>)}</tr>
-      <tr><th>Precio</th><td>{current?.priceTier ? PRICE_RESULT_LABELS[current.priceTier] : "Sin dato verificado"}</td>{result.recommendations.map((item) => <td key={item.catalogBallId}>{item.attributes.priceTier ? PRICE_RESULT_LABELS[item.attributes.priceTier] : "Sin dato verificado"}</td>)}</tr>
+      <tr><th>Precio</th><td>{current?.priceTier ? PRICE_RESULT_LABELS[current.priceTier] : "Sin dato"}</td>{result.recommendations.map((item) => <td key={item.catalogBallId}>{item.attributes.priceTier ? PRICE_RESULT_LABELS[item.attributes.priceTier] : "Sin dato"}</td>)}</tr>
     </tbody></table></div>
     {result.warnings.map((warning) => <p className={styles.disclaimer} key={warning}>{warning}</p>)}
     <p className={styles.disclaimer}>{BACKYARD_BALL_FIT_DISCLAIMER}</p>

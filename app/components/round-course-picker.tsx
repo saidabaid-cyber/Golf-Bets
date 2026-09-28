@@ -201,7 +201,7 @@ export function RoundCoursePicker({
         setNearbyStatus("idle");
         setResults([]);
         onSelect(course);
-      }}><b>{course.name}</b><small>{[course.clubName && course.clubName !== course.name ? course.clubName : "", course.city, typeof course.distanceKm === "number" ? `${course.distanceKm.toFixed(1)} km` : "", course.localIndexTeeAvailable ? "Tees con Rating/Slope publicados · Index local" : ""].filter(Boolean).join(" · ") || "Catálogo Backyard"}</small></AnchoredSearchOption>)}
+      }}><b>{course.name}</b><small>{[course.clubName && course.clubName !== course.name ? course.clubName : "", course.city, typeof course.distanceKm === "number" ? `${course.distanceKm.toFixed(1)} km` : "", course.localIndexTeeAvailable ? "Tees con Rating/Slope publicados · Index local" : ""].filter(Boolean).join(" · ") || "Campo disponible"}</small></AnchoredSearchOption>)}
       {hasMore && nextCursor && <button type="button" role="option" aria-selected="false" className="textButton" disabled={status === "loading"} onClick={async () => {
         setStatus("loading");
         try {
@@ -221,7 +221,7 @@ export function RoundCoursePicker({
     {nearbyStatus === "denied" && <p className="roundCourseLocationStatus" role="status">Ubicación bloqueada en este dispositivo. La búsqueda por nombre sigue disponible.</p>}
     {nearbyStatus === "timeout" && <p className="roundCourseLocationStatus" role="status">La ubicación agotó el tiempo; no significa que la rechazaste. Reintenta o busca por nombre.</p>}
     {nearbyStatus === "unsupported" && <p className="roundCourseLocationStatus" role="status">No podemos consultar la ubicación en este navegador. La búsqueda por nombre sigue disponible.</p>}
-    {nearbyStatus === "empty" && <p className="roundCourseLocationStatus" role="status">No hay campos con coordenadas verificadas cerca en el catálogo actual. La búsqueda manual sigue disponible.</p>}
+    {nearbyStatus === "empty" && <p className="roundCourseLocationStatus" role="status">No hay campos cercanos con ubicación disponible. La búsqueda manual sigue disponible.</p>}
     {nearbyStatus === "error" && <p className="roundCourseLocationStatus" role="status">No pude obtener campos cercanos. La búsqueda por nombre sigue disponible.</p>}
   </div>;
 }

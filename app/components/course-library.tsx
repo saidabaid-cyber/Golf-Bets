@@ -33,13 +33,6 @@ export type CourseLibraryProps = {
   onEditCourse?: (course: Course) => void;
 };
 
-function updatedLabel(updatedAt: string | undefined) {
-  if (!updatedAt) return null;
-  const date = new Date(updatedAt.length === 10 ? `${updatedAt}T12:00:00-06:00` : updatedAt);
-  if (Number.isNaN(date.getTime())) return updatedAt;
-  return new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short", year: "numeric", timeZone: "America/Mexico_City" }).format(date);
-}
-
 function groupSelections(courses: Course[]) {
   const groups = new Map<string, Course[]>();
   for (const course of courses) {
@@ -192,10 +185,8 @@ export function CourseLibrary({ courses, favoriteCourseIds, recentCourseIds = []
     {searchPending && <section className="card betaCourseState" aria-live="polite"><span className="betaCourseSpinner" aria-hidden="true" /><div><b>Buscando campos…</b><p>Revisando resultados disponibles.</p></div></section>}
 
     {nearbyMessage?.status === "requesting" && <section className="card betaCourseState" aria-live="polite"><span className="betaCourseSpinner" aria-hidden="true" /><div><b>Buscando cerca de ti…</b><p>Tu ubicación no se guarda en tu perfil.</p></div></section>}
-    {nearbyMessage?.status === "empty" && <section className="card betaCoursesEmpty" aria-live="polite"><span className="betaEmptyFlag" aria-hidden="true">⌖</span><h2>Aún no hay campos con ubicación verificada.</h2><p>Los campos guardados siguen disponibles en búsqueda manual. No mostramos distancias inventadas.</p><button type="button" className="secondary" onClick={() => setFilter("all")}>Buscar manualmente</button></section>}
+    {nearbyMessage?.status === "empty" && <section className="card betaCoursesEmpty" aria-live="polite"><span className="betaEmptyFlag" aria-hidden="true">⌖</span><h2>Aún no hay campos con ubicación disponible.</h2><p>Los campos guardados siguen disponibles en búsqueda manual. No mostramos distancias inventadas.</p><button type="button" className="secondary" onClick={() => setFilter("all")}>Buscar manualmente</button></section>}
     {nearbyMessage && ["disabled", "prompt", "denied", "timeout", "unsupported", "error"].includes(nearbyMessage.status) && <section className="card betaCoursesEmpty" role="status"><span className="betaEmptyFlag" aria-hidden="true">⌖</span><h2>Usa la búsqueda manual</h2><p>{"message" in nearbyMessage ? nearbyMessage.message : "La ubicación no está disponible."}</p><button type="button" className="secondary" onClick={() => setFilter("all")}>Buscar manualmente</button></section>}
-
-    {displayCatalog.rejectedCount > 0 && <div className="notice bad" role="alert">No mostramos {displayCatalog.rejectedCount} registro{displayCatalog.rejectedCount === 1 ? "" : "s"} con datos incompletos o ambiguos. Sus datos siguen guardados y no se usarán en una ronda hasta quedar válidos.</div>}
 
     {!nearbyMessage && visibleGroups.length ? <section className="betaCourseList" aria-label={`${visibleGroups.length} campos`}>
       {visibleGroups.map((group) => {
@@ -203,7 +194,6 @@ export function CourseLibrary({ courses, favoriteCourseIds, recentCourseIds = []
         const chosen = selectedInGroup || group.selections[0];
         const entry = catalogEntryBySelection.get(chosen.id);
         if (!entry?.course || !entry.tee) return null;
-        const updated = updatedLabel(entry.course.updatedAt || entry.course.verifiedAt);
         const favorite = favoriteSet.has(chosen.id);
         const selected = Boolean(selectedInGroup);
         const distanceKm = nearbyBySelection.get(chosen.id);
@@ -214,18 +204,16 @@ export function CourseLibrary({ courses, favoriteCourseIds, recentCourseIds = []
           </div>
           <div className="betaCourseSingleTee"><span>Tees disponibles</span><b>{group.selections.length}</b></div>
           <div className="betaCourseFacts"><span><small>Hoyos</small><b>{entry.course.holesCount}</b></span><span><small>Par</small><b>{entry.course.par}</b></span>{distanceKm !== undefined && <span className="betaCourseDistance"><small>Distancia</small><b>{distanceKm.toFixed(1)} km</b></span>}</div>
-          {updated && <p className="betaCourseUpdated">Datos revisados {updated}</p>}
           <div className="betaCourseActions"><button type="button" className="primary" onClick={() => onSelectCourse(chosen)}>Seleccionar campo</button>{onEditCourse && <button type="button" className="secondary" onClick={() => onEditCourse(chosen)}>Editar</button>}</div>
         </article>;
       })}
     </section> : !nearbyMessage && !searchPending && <section className="card betaCoursesEmpty" aria-live="polite">
       <span className="betaEmptyFlag" aria-hidden="true">⌖</span>
       <h2>{filter === "mine" ? "Aún no tienes campos propios." : courses.length ? "No encontramos campos con ese filtro." : "Aún no tienes campos."}</h2>
-      <p>{filter === "mine" ? "Crea un campo manual con su par y stroke index; quedará disponible sin alterar el catálogo interno." : courses.length ? "Prueba otro nombre o vuelve a la búsqueda." : "Crea un campo manual con el par y stroke index de cada hoyo."}</p>
+      <p>{filter === "mine" ? "Crea un campo manual con su par y stroke index y úsalo en tus rondas." : courses.length ? "Prueba otro nombre o vuelve a la búsqueda." : "Crea un campo manual con el par y stroke index de cada hoyo."}</p>
       {filter === "mine" || !courses.length ? <button type="button" className="primary" onClick={onCreateCourse}>{courses.length ? "Crear campo" : "Crear primer campo"}</button> : <button type="button" className="secondary" onClick={() => { setQuery(""); setFilter("all"); }}>Volver a buscar</button>}
     </section>}
 
     {!nearbyMessage && searchState.data.hasMore && <button type="button" className="secondary betaCourseLoadMore" disabled={searchPending} onClick={() => void loadMoreCourses()}>Cargar más campos</button>}
-    <aside className="betaCourseDataNote"><b>Datos de campos</b><span>Esta biblioteca usa campos internos o creados manualmente. Las distancias solo aparecen cuando existen coordenadas con procedencia; no consulta ni copia proveedores externos.</span></aside>
   </section>;
 }

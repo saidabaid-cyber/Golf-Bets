@@ -121,7 +121,7 @@ test("The Backyard Ball Fit devuelve un grupo Top 3, no una verdad única", () =
   assert.equal(result.recommendations[0].matchScore, 98, "el score se limita para no expresar certeza absoluta");
   assert.equal(result.recommendations[0].dataCoverage, 100);
   assert.ok(result.recommendations[0].why.some((reason) => reason.includes("approach") || reason.includes("juego corto")));
-  assert.ok(result.recommendations[0].comparisonToCurrent.some((reason) => reason.includes("verificado")));
+  assert.ok(result.recommendations[0].comparisonToCurrent.some((reason) => reason.includes("dirección que buscas")));
   assert.equal(result.disclaimer, BACKYARD_BALL_FIT_DISCLAIMER);
   assert.match(result.disclaimer, /orientativa/);
   assert.match(result.disclaimer, /No es un fitting oficial/);
@@ -181,7 +181,7 @@ test("el fitting precarga señales conocidas de Mi juego sin fabricar respuestas
   });
 });
 
-test("un fitting corto pero suficiente produce resultado parcial y conserva null sin dato verificado", () => {
+test("un fitting corto pero suficiente produce resultado parcial y conserva null como sin dato", () => {
   const sparseBall = catalogBall({
     id: "sparse-ball",
     model: "Sparse",
@@ -206,7 +206,7 @@ test("un fitting corto pero suficiente produce resultado parcial y conserva null
   assert.equal(result.recommendations[0].attributes.driverSpin, null);
   assert.equal(result.recommendations[0].dataCoverage, 50);
   assert.ok(result.recommendations[0].matchScore < 90, "la falta de cobertura reduce la confianza del Match Score");
-  assert.ok(result.warnings.some((warning) => warning.includes("sin dato verificado")));
+  assert.ok(result.warnings.every((warning) => !/fuente|verificación|cobertura/i.test(warning)));
 });
 
 test("un fitting incompleto no fabrica recomendaciones con una sola señal", () => {
@@ -242,7 +242,7 @@ test("registros inactivos o sin procedencia verificable jamás entran al Top 3",
 
   assert.equal(result.status, "NO_VERIFIED_MATCHES");
   assert.deepEqual(result.recommendations, []);
-  assert.ok(result.warnings[0].includes("fuente y fecha de verificación"));
+  assert.ok(result.warnings[0].includes("No hay bolas activas disponibles"));
 });
 
 test("atributos no confirmados, incluida compresión, no se estiman por HCP o velocidad", () => {
@@ -273,7 +273,7 @@ test("una bola histórica inactiva puede ser referencia, pero nunca candidata nu
   const result = runBackyardBallFit([currentArchived, ...catalog()], completeInput({ currentBallId: "old-current" }));
 
   assert.equal(result.recommendations.some((item) => item.catalogBallId === "old-current"), false);
-  assert.ok(result.recommendations[0].comparisonToCurrent.some((comparison) => comparison.includes("verificado")));
+  assert.ok(result.recommendations[0].comparisonToCurrent.some((comparison) => comparison.includes("dirección que buscas")));
 });
 
 test("el resumen guardable permite persistir y regresar al último Ball Fit", () => {

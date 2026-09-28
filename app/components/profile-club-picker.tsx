@@ -64,7 +64,7 @@ export function ProfileClubPicker({ value, clubId, accessToken, onChange }: {
         } catch { setStatus("error"); }
       }}>Más resultados</button>}
     </AnchoredSearch>
-    {clubId && <small className="hint">Club del catálogo ✓</small>}
+    {clubId && <small className="hint">Club seleccionado ✓</small>}
     {!clubId && value.trim() && <small className="hint">Nombre manual; no se mezcla con campo ni tee.</small>}
   </div>;
 }
