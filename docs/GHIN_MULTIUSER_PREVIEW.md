@@ -27,6 +27,13 @@ Las variables `GHIN_TEST_LOGIN` y `GHIN_TEST_PASSWORD` siguen reservadas para el
 diagnóstico admin protegido en `/admin/dev/ghin`. Las rutas normales de Perfil
 no importan ni resuelven ese runtime global.
 
+La disponibilidad de la UI se resuelve contra la ruta autenticada en runtime,
+no contra un valor público congelado durante `next build`. El servidor conserva
+la autoridad mediante `NEXT_PUBLIC_BACKYARD_GHIN_INTEGRATION`,
+`GHIN_READ_ONLY_ENABLED`, `GHIN_GOLFER_LOOKUP_ENABLED` y la comprobación de que
+el entorno sea Preview. Cuando ese gate está apagado, la ruta devuelve
+`FEATURE_DISABLED` y el flujo no se muestra.
+
 ## Persistencia y ownership
 
 `player_handicap_provider_profiles` mantiene una relación por owner/proveedor y

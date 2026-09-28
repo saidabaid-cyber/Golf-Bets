@@ -46,12 +46,15 @@ test("all active GHIN surfaces use the real controller and contain no future or 
 
 test("GHIN remains Preview/user/read-only and does not expose score posting", () => {
   const access = readFileSync("lib/ghin/user-access.server.ts", "utf8");
+  const hook = readFileSync("app/components/use-ghin-read-only-profile.ts", "utf8");
   const profileRoute = readFileSync("app/api/profile/ghin/route.ts", "utf8");
   const scoreRoute = readFileSync("app/api/profile/ghin/scores/route.ts", "utf8");
   assert.match(access, /capabilities\.previewOnly/);
   assert.match(access, /authenticatedRequest/);
   assert.doesNotMatch(access, /admin_memberships/);
   assert.match(access, /scorePostingEnabled/);
+  assert.match(hook, /failure\.code === "FEATURE_DISABLED"/);
+  assert.doesNotMatch(hook, /process\.env\.NEXT_PUBLIC_BACKYARD_GHIN_INTEGRATION/);
   assert.match(profileRoute, /safety: \{ readOnly: true, scorePostingCalls: 0 \}/);
   assert.match(scoreRoute, /ROUTE_MOVED/);
   assert.doesNotMatch(`${profileRoute}\n${scoreRoute}`, /postScore|submitScore|publishScore/);

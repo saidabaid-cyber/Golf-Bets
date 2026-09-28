@@ -99,11 +99,11 @@ function parseCandidate(value: unknown): { challengeId: string; golfer: GhinAuth
 }
 
 export function useGhinReadOnlyProfile(accessToken: string | null): GhinReadOnlyProfileController {
-  const enabled = process.env.NEXT_PUBLIC_BACKYARD_GHIN_INTEGRATION === "true" && Boolean(accessToken);
   const generation = useRef(0);
   const challenge = useRef<string | null>(null);
   const [state, setState] = useState({
-    ready: !enabled,
+    featureEnabled: false,
+    ready: !accessToken,
     refreshing: false,
     authorizing: false,
     unlinking: false,
@@ -132,9 +132,9 @@ export function useGhinReadOnlyProfile(accessToken: string | null): GhinReadOnly
 
   const load = useCallback(async () => {
     const token = ++generation.current;
-    if (!enabled || !accessToken) {
+    if (!accessToken) {
       challenge.current = null;
-      setState((current) => ({ ...current, ready: true, profile: null, candidate: null, scores: null, error: "" }));
+      setState((current) => ({ ...current, featureEnabled: false, ready: true, profile: null, candidate: null, scores: null, error: "" }));
       return;
     }
     setState((current) => ({ ...current, ready: false, error: "" }));
@@ -149,11 +149,17 @@ export function useGhinReadOnlyProfile(accessToken: string | null): GhinReadOnly
       if (!response.ok) throw apiFailure(body, "No se pudo consultar el vínculo GHIN.");
       const parsed = parseGhinProfileResponse(body);
       if (!parsed) throw new Error("La respuesta GHIN no es válida.");
-      if (generation.current === token) setState((current) => ({ ...current, ready: true, profile: parsed.profile, error: "" }));
+      if (generation.current === token) setState((current) => ({ ...current, featureEnabled: true, ready: true, profile: parsed.profile, error: "" }));
     } catch (error) {
-      if (generation.current === token) setState((current) => ({ ...current, ready: true, error: error instanceof Error ? error.message : "No se pudo consultar el vínculo GHIN." }));
+      const failure = error as ApiFailure;
+      if (generation.current === token) setState((current) => ({
+        ...current,
+        featureEnabled: failure.code === "FEATURE_DISABLED" ? false : true,
+        ready: true,
+        error: failure.code === "FEATURE_DISABLED" ? "" : failure.message || "No se pudo consultar el vínculo GHIN.",
+      }));
     }
-  }, [accessToken, enabled]);
+  }, [accessToken]);
 
   useEffect(() => {
     void load();
@@ -161,7 +167,7 @@ export function useGhinReadOnlyProfile(accessToken: string | null): GhinReadOnly
   }, [load]);
 
   const authorize = useCallback(async (login: string, password: string) => {
-    if (!enabled) return false;
+    if (!state.featureEnabled || !accessToken) return false;
     setState((current) => ({ ...current, authorizing: true, candidate: null, error: "" }));
     challenge.current = null;
     try {
@@ -174,7 +180,7 @@ export function useGhinReadOnlyProfile(accessToken: string | null): GhinReadOnly
       setState((current) => ({ ...current, authorizing: false, error: error instanceof Error ? error.message : "No se pudo autenticar en GHIN." }));
       return false;
     }
-  }, [enabled, post]);
+  }, [accessToken, post, state.featureEnabled]);
 
   const confirm = useCallback(async () => {
     if (!challenge.current) return null;
@@ -202,7 +208,7 @@ export function useGhinReadOnlyProfile(accessToken: string | null): GhinReadOnly
   }, [post]);
 
   const refresh = useCallback(async () => {
-    if (!enabled) return null;
+    if (!state.featureEnabled || !accessToken) return null;
     const token = ++generation.current;
     setState((current) => ({ ...current, refreshing: true, error: "" }));
     try {
@@ -215,10 +221,10 @@ export function useGhinReadOnlyProfile(accessToken: string | null): GhinReadOnly
       if (generation.current === token) setState((current) => ({ ...current, refreshing: false, reauthorizationRequired: failure.code === "REAUTH_REQUIRED", error: failure.message || "No se pudo actualizar GHIN." }));
       return null;
     }
-  }, [enabled, post]);
+  }, [accessToken, post, state.featureEnabled]);
 
   const reauthorize = useCallback(async (login: string, password: string) => {
-    if (!enabled) return null;
+    if (!state.featureEnabled || !accessToken) return null;
     setState((current) => ({ ...current, authorizing: true, error: "" }));
     try {
       const parsed = parseGhinProfileResponse(await post({ operation: "reauthorize", login, password }, 30_000));
@@ -229,10 +235,10 @@ export function useGhinReadOnlyProfile(accessToken: string | null): GhinReadOnly
       setState((current) => ({ ...current, authorizing: false, error: error instanceof Error ? error.message : "No se pudo reautorizar GHIN." }));
       return null;
     }
-  }, [enabled, post]);
+  }, [accessToken, post, state.featureEnabled]);
 
   const unlink = useCallback(async () => {
-    if (!enabled) return false;
+    if (!state.featureEnabled || !accessToken) return false;
     setState((current) => ({ ...current, unlinking: true, error: "" }));
     try {
       await post({ operation: "unlink", confirmed: true });
@@ -243,10 +249,10 @@ export function useGhinReadOnlyProfile(accessToken: string | null): GhinReadOnly
       setState((current) => ({ ...current, unlinking: false, error: error instanceof Error ? error.message : "No se pudo desvincular GHIN." }));
       return false;
     }
-  }, [enabled, post]);
+  }, [accessToken, post, state.featureEnabled]);
 
   const loadScores = useCallback(async () => {
-    if (!enabled) return;
+    if (!state.featureEnabled || !accessToken) return;
     const token = ++generation.current;
     setState((current) => ({ ...current, scoresLoading: true, error: "" }));
     try {
@@ -257,10 +263,10 @@ export function useGhinReadOnlyProfile(accessToken: string | null): GhinReadOnly
       const failure = error as ApiFailure;
       if (generation.current === token) setState((current) => ({ ...current, scoresLoading: false, reauthorizationRequired: failure.code === "REAUTH_REQUIRED", error: failure.message || "No se pudo consultar el scoring record." }));
     }
-  }, [enabled, post]);
+  }, [accessToken, post, state.featureEnabled]);
 
   return {
-    enabled,
+    enabled: state.featureEnabled && Boolean(accessToken),
     ready: state.ready,
     refreshing: state.refreshing,
     authorizing: state.authorizing,
