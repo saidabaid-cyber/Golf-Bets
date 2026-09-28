@@ -80,8 +80,10 @@ test("Home Club selection collapses only after persistence and reopens without c
   assert.ok(persisted >= 0 && collapsed > persisted);
   assert.match(picker, /purpose==='home-club'&&!choosingHomeCourse&&selectionLabel&&club&&chosen/);
   assert.match(picker, /setChoosingHomeCourse\(true\)/);
-  assert.match(picker, /nearby\.map\(c=>/);
+  assert.match(picker, /const visibleNearby=nearby\.slice\(0,nearbyLimit\)/);
+  assert.match(picker, /visibleNearby\.map\(c=>/);
+  assert.match(picker, /Ver más campos cercanos/);
   assert.match(picker, /<AnchoredSearch inlineResults label="Buscar otro campo"/);
   assert.match(picker, /onSelectHomeCourse\(homeCourseSelection\(selected\)\)/);
-  assert.doesNotMatch(picker, /slice\(0,\s*3\)/);
+  assert.doesNotMatch(picker, /nearby\.slice\(0,\s*3\)/);
 });
