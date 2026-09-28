@@ -6,11 +6,16 @@ import {
   GhinClientError,
   GhinReadOnlyClient,
   type GhinAuthDiagnostics,
-  type GhinAuthStageDiagnostic,
 } from "./client";
 import { resolveGhinPreviewCapabilities } from "./config";
 import type { NormalizedGhinGolfer } from "./core";
 import type { GhinServerCredentials } from "./credentials.server";
+import {
+  diagnosticFailure,
+  logAuthenticationTransport,
+  logGhinProfileStage,
+  traceGhinRead,
+} from "./profile-diagnostics.server";
 
 const PENDING_TTL_MS = 10 * 60_000;
 const MAX_PENDING = 250;
@@ -114,41 +119,108 @@ function clientFor(credentials: GhinServerCredentials) {
     || capabilities.scorePostingEnabled || !capabilities.apiBaseUrl) {
     throw new Error("GHIN_USER_FLOW_DISABLED");
   }
-  return new GhinReadOnlyClient({
-    baseUrl: capabilities.apiBaseUrl,
-    credentials,
-    onAuthDiagnostic: logAuthDiagnostic,
-  });
+  return new GhinReadOnlyClient({ baseUrl: capabilities.apiBaseUrl, credentials });
 }
 
-function logAuthDiagnostic(diagnostic: GhinAuthStageDiagnostic) {
-  if (process.env.VERCEL_ENV !== "preview") return;
-  console.info(JSON.stringify(diagnostic));
-}
-
-async function authenticateIdentity(credentials: GhinServerCredentials, expectedGhinNumber?: string) {
-  const client = clientFor(credentials);
+async function authenticateIdentity(
+  credentials: GhinServerCredentials,
+  operation: "authorize" | "reauthorize",
+  expectedGhinNumber?: string,
+) {
+  let client: GhinReadOnlyClient;
   try {
-    const auth = await client.authenticate(true);
+    client = clientFor(credentials);
+  } catch (error) {
+    logGhinProfileStage({
+      operation,
+      stage: "authorization_state",
+      ...diagnosticFailure(error, "/authorization-state", "authorization_state_failed"),
+      durationMs: 0,
+    });
+    throw error;
+  }
+  try {
+    let auth: GhinAuthDiagnostics;
+    try {
+      auth = await client.authenticate(true);
+      logAuthenticationTransport(operation, client.getTrace());
+      logGhinProfileStage({
+        operation,
+        stage: "golfer_token_extraction",
+        endpoint: auth.endpoint,
+        httpStatus: auth.httpStatus,
+        code: null,
+        retryable: false,
+        durationMs: 0,
+      });
+      logGhinProfileStage({
+        operation,
+        stage: "golfer_identity_from_login",
+        endpoint: auth.endpoint,
+        httpStatus: auth.httpStatus,
+        code: auth.golferNumber ? null : "identity_not_present",
+        retryable: false,
+        durationMs: 0,
+      });
+    } catch (error) {
+      logAuthenticationTransport(operation, client.getTrace(), error);
+      throw error;
+    }
     const loginNumber = /^\d{5,12}$/.test(credentials.login.trim()) ? credentials.login.trim() : null;
     const loginEmail = !loginNumber && credentials.login.includes("@") ? credentials.login.trim() : null;
     const authenticatedGolfer = auth.golferNumber
-      ? await client.lookupGolfer(auth.golferNumber)
+      ? await traceGhinRead(operation, "lookup_by_ghin", "/golfers/search.json", () => client.lookupGolfer(auth.golferNumber as string))
       : loginNumber
-        ? await client.lookupGolfer(loginNumber)
+        ? await traceGhinRead(operation, "lookup_by_ghin", "/golfers/search.json", () => client.lookupGolfer(loginNumber))
         : loginEmail
-          ? await client.lookupGolferByEmail(loginEmail)
+          ? await traceGhinRead(operation, "lookup_by_email", "/golfers/search.json", () => client.lookupGolferByEmail(loginEmail))
           : null;
     const ghinNumber = authenticatedGolfer?.data.ghinNumber ?? null;
     if (!authenticatedGolfer || !ghinNumber || (expectedGhinNumber && ghinNumber !== expectedGhinNumber)) {
+      logGhinProfileStage({
+        operation,
+        stage: "identity_validation",
+        endpoint: "/identity",
+        httpStatus: authenticatedGolfer?.httpStatus ?? null,
+        code: "identity_mismatch",
+        retryable: false,
+        durationMs: 0,
+      });
       throw new GhinClientError({ code: "unauthorized", message: "La sesión GHIN no corresponde al vínculo.", httpStatus: 403, retryable: false }, "/golfer_login.json");
     }
     if (authenticatedGolfer.data.ghinNumber !== ghinNumber || (expectedGhinNumber && authenticatedGolfer.data.ghinNumber !== expectedGhinNumber)) {
+      logGhinProfileStage({
+        operation,
+        stage: "identity_validation",
+        endpoint: "/identity",
+        httpStatus: authenticatedGolfer.httpStatus,
+        code: "identity_mismatch",
+        retryable: false,
+        durationMs: 0,
+      });
       throw new GhinClientError({ code: "unauthorized", message: "La sesión GHIN no corresponde al vínculo.", httpStatus: 403, retryable: false }, authenticatedGolfer.endpoint);
     }
     if (!authenticatedGolfer.data.name) {
+      logGhinProfileStage({
+        operation,
+        stage: "identity_validation",
+        endpoint: "/identity",
+        httpStatus: authenticatedGolfer.httpStatus,
+        code: "identity_incomplete",
+        retryable: true,
+        durationMs: 0,
+      });
       throw new GhinClientError({ code: "invalid_response", message: "GHIN devolvió una identidad incompleta.", httpStatus: 502, retryable: true }, authenticatedGolfer.endpoint);
     }
+    logGhinProfileStage({
+      operation,
+      stage: "identity_validation",
+      endpoint: "/identity",
+      httpStatus: authenticatedGolfer.httpStatus,
+      code: null,
+      retryable: false,
+      durationMs: 0,
+    });
     return { client, auth, golfer: authenticatedGolfer.data };
   } finally {
     // A normal-user password is never retained for an automatic relogin.
@@ -162,22 +234,42 @@ export async function beginGhinAuthorization(ownerId: string, credentials: GhinS
   auth: GhinAuthDiagnostics;
 }> {
   prune();
-  const authenticated = await authenticateIdentity(credentials);
+  const authenticated = await authenticateIdentity(credentials, "authorize");
   const now = Date.now();
   const expiresAt = now + PENDING_TTL_MS;
-  const challengeId = confirmationTicket(ownerId, authenticated.golfer, expiresAt);
-  pendingAuthorizations.set(challengeId, {
-    challengeId,
-    ownerId,
-    ghinNumber: authenticated.golfer.ghinNumber,
-    client: authenticated.client,
-    golfer: authenticated.golfer,
-    candidate: candidate(authenticated.golfer),
-    expiresAt,
-    lastUsedAt: now,
-  });
-  trimOldest(pendingAuthorizations, MAX_PENDING);
-  return { challengeId, candidate: candidate(authenticated.golfer), auth: authenticated.auth };
+  const stateStartedAt = Date.now();
+  try {
+    const challengeId = confirmationTicket(ownerId, authenticated.golfer, expiresAt);
+    pendingAuthorizations.set(challengeId, {
+      challengeId,
+      ownerId,
+      ghinNumber: authenticated.golfer.ghinNumber,
+      client: authenticated.client,
+      golfer: authenticated.golfer,
+      candidate: candidate(authenticated.golfer),
+      expiresAt,
+      lastUsedAt: now,
+    });
+    trimOldest(pendingAuthorizations, MAX_PENDING);
+    logGhinProfileStage({
+      operation: "authorize",
+      stage: "authorization_state",
+      endpoint: "/authorization-state",
+      httpStatus: null,
+      code: null,
+      retryable: false,
+      durationMs: Date.now() - stateStartedAt,
+    });
+    return { challengeId, candidate: candidate(authenticated.golfer), auth: authenticated.auth };
+  } catch (error) {
+    logGhinProfileStage({
+      operation: "authorize",
+      stage: "authorization_state",
+      ...diagnosticFailure(error, "/authorization-state", "authorization_state_failed"),
+      durationMs: Date.now() - stateStartedAt,
+    });
+    throw error;
+  }
 }
 
 export function consumeGhinAuthorization(ownerId: string, challengeId: string) {
@@ -212,7 +304,7 @@ export function getGhinUserSession(ownerId: string, ghinNumber: string) {
 
 export async function reauthorizeGhinSession(ownerId: string, expectedGhinNumber: string, credentials: GhinServerCredentials) {
   prune();
-  const authenticated = await authenticateIdentity(credentials, expectedGhinNumber);
+  const authenticated = await authenticateIdentity(credentials, "reauthorize", expectedGhinNumber);
   const session: UserSession = {
     ownerId,
     ghinNumber: expectedGhinNumber,

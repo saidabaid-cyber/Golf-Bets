@@ -3,6 +3,12 @@ import { NextRequest } from "next/server";
 import { hasOnlyKeys, readJsonBodyWithLimit } from "../../../../lib/backyard-ai/server/http-security";
 import { GhinClientError } from "../../../../lib/ghin/client";
 import { SlidingWindowRateLimiter, type GhinErrorCode, type NormalizedGhinGolfer } from "../../../../lib/ghin/core";
+import {
+  diagnosticFailure,
+  logGhinProfileStage,
+  traceGhinRead,
+  type GhinProfileOperation,
+} from "../../../../lib/ghin/profile-diagnostics.server";
 import { failedAttemptStatus, providerRowToProfile, verifiedProviderWrite, type GhinProviderProfileRow } from "../../../../lib/ghin/profile-persistence";
 import { privateGhinJson } from "../../../../lib/ghin/qa-access.server";
 import { ghinUserContext } from "../../../../lib/ghin/user-access.server";
@@ -68,20 +74,6 @@ function safeUpstreamMessage(code: GhinErrorCode | "unknown") {
   return "GHIN no está disponible en este momento.";
 }
 
-function logAuthorizationFailure(operation: "authorize" | "reauthorize", error: unknown) {
-  if (process.env.VERCEL_ENV !== "preview") return;
-  const failure = clientError(error);
-  console.error(JSON.stringify({
-    event: "GHIN_AUTH_FAILURE",
-    operation,
-    endpoint: error instanceof GhinClientError ? error.endpoint : null,
-    upstreamHttpStatus: error instanceof GhinClientError ? error.httpStatus : null,
-    errorCode: failure.code,
-    retryable: error instanceof GhinClientError ? error.retryable : false,
-    errorType: error instanceof GhinClientError ? "GhinClientError" : "UnexpectedError",
-  }));
-}
-
 async function readProfile(context: UserContext) {
   const read = await context.client
     .from("player_handicap_provider_profiles")
@@ -94,40 +86,76 @@ async function readProfile(context: UserContext) {
   return read.data ? providerRowToProfile(read.data as unknown as GhinProviderProfileRow) : null;
 }
 
-async function persistVerifiedGolfer(ownerId: string, golfer: NormalizedGhinGolfer, attemptedAt: string) {
-  const admin = getSupabaseAdmin();
-  if (!admin) throw new Error("CLOUD_UNAVAILABLE");
+function persistenceCode(error: unknown) {
+  if (!(error instanceof Error)) return "unknown";
+  if (error.message === "CLOUD_UNAVAILABLE") return "cloud_unavailable";
+  if (error.message === "PROFILE_READ_FAILED") return "profile_read_failed";
+  if (error.message === "PROFILE_WRITE_FAILED") return "profile_write_failed";
+  if (error.message === "OWNER_ALREADY_LINKED") return "owner_already_linked";
+  if (error.message === "GHIN_ALREADY_LINKED") return "ghin_already_linked";
+  return "unknown";
+}
 
-  const existingOwner = await admin
-    .from("player_handicap_provider_profiles")
-    .select("external_player_id")
-    .eq("owner_id", ownerId)
-    .eq("provider", "GHIN")
-    .maybeSingle();
-  if (existingOwner.error) throw new Error("PROFILE_READ_FAILED");
-  if (existingOwner.data && existingOwner.data.external_player_id !== golfer.ghinNumber) {
-    throw new Error("OWNER_ALREADY_LINKED");
+async function persistVerifiedGolfer(
+  ownerId: string,
+  golfer: NormalizedGhinGolfer,
+  attemptedAt: string,
+  operation: "authorize" | "reauthorize" | "refresh",
+) {
+  const startedAt = Date.now();
+  try {
+    const admin = getSupabaseAdmin();
+    if (!admin) throw new Error("CLOUD_UNAVAILABLE");
+
+    const existingOwner = await admin
+      .from("player_handicap_provider_profiles")
+      .select("external_player_id")
+      .eq("owner_id", ownerId)
+      .eq("provider", "GHIN")
+      .maybeSingle();
+    if (existingOwner.error) throw new Error("PROFILE_READ_FAILED");
+    if (existingOwner.data && existingOwner.data.external_player_id !== golfer.ghinNumber) {
+      throw new Error("OWNER_ALREADY_LINKED");
+    }
+
+    const existingGhin = await admin
+      .from("player_handicap_provider_profiles")
+      .select("owner_id")
+      .eq("provider", "GHIN")
+      .eq("external_player_id", golfer.ghinNumber)
+      .eq("association_status", "VERIFIED")
+      .limit(1);
+    if (existingGhin.error) throw new Error("PROFILE_READ_FAILED");
+    if (existingGhin.data?.some((row) => row.owner_id !== ownerId)) throw new Error("GHIN_ALREADY_LINKED");
+
+    const write = verifiedProviderWrite(ownerId, golfer, attemptedAt);
+    const persisted = await admin
+      .from("player_handicap_provider_profiles")
+      .upsert(write, { onConflict: "owner_id,provider" })
+      .select(PROFILE_COLUMNS)
+      .single();
+    if (persisted.error?.code === "23505") throw new Error("GHIN_ALREADY_LINKED");
+    if (persisted.error || !persisted.data) throw new Error("PROFILE_WRITE_FAILED");
+    const profile = providerRowToProfile(persisted.data as unknown as GhinProviderProfileRow);
+    logGhinProfileStage({
+      operation,
+      stage: "profile_persistence",
+      endpoint: "/db/player_handicap_provider_profiles",
+      httpStatus: null,
+      code: null,
+      retryable: false,
+      durationMs: Date.now() - startedAt,
+    });
+    return profile;
+  } catch (error) {
+    logGhinProfileStage({
+      operation,
+      stage: "profile_persistence",
+      ...diagnosticFailure(error, "/db/player_handicap_provider_profiles", persistenceCode(error)),
+      durationMs: Date.now() - startedAt,
+    });
+    throw error;
   }
-
-  const existingGhin = await admin
-    .from("player_handicap_provider_profiles")
-    .select("owner_id")
-    .eq("provider", "GHIN")
-    .eq("external_player_id", golfer.ghinNumber)
-    .eq("association_status", "VERIFIED")
-    .limit(1);
-  if (existingGhin.error) throw new Error("PROFILE_READ_FAILED");
-  if (existingGhin.data?.some((row) => row.owner_id !== ownerId)) throw new Error("GHIN_ALREADY_LINKED");
-
-  const write = verifiedProviderWrite(ownerId, golfer, attemptedAt);
-  const persisted = await admin
-    .from("player_handicap_provider_profiles")
-    .upsert(write, { onConflict: "owner_id,provider" })
-    .select(PROFILE_COLUMNS)
-    .single();
-  if (persisted.error?.code === "23505") throw new Error("GHIN_ALREADY_LINKED");
-  if (persisted.error || !persisted.data) throw new Error("PROFILE_WRITE_FAILED");
-  return providerRowToProfile(persisted.data as unknown as GhinProviderProfileRow);
 }
 
 async function recordFailedAttempt(ownerId: string, attemptedAt: string, code: GhinErrorCode | "unknown") {
@@ -191,7 +219,6 @@ export async function POST(request: NextRequest) {
           safety: { readOnly: true, scorePostingCalls: 0 },
         });
       } catch (error) {
-        logAuthorizationFailure("authorize", error);
         const failure = clientError(error);
         return privateGhinJson({ error: safeUpstreamMessage(failure.code), code: failure.code.toUpperCase() }, failure.status);
       }
@@ -201,16 +228,24 @@ export async function POST(request: NextRequest) {
     try {
       linked = await readProfile(context);
     } catch {
+      logGhinProfileStage({
+        operation: "reauthorize",
+        stage: "profile_persistence",
+        endpoint: "/db/player_handicap_provider_profiles",
+        httpStatus: null,
+        code: "profile_read_failed",
+        retryable: false,
+        durationMs: 0,
+      });
       return privateGhinJson({ error: "No fue posible leer el vínculo GHIN.", code: "PROFILE_READ_FAILED" }, 503);
     }
     if (!linked) return privateGhinJson({ error: "Primero vincula una cuenta GHIN.", code: "GHIN_NOT_LINKED" }, 409);
     const attemptedAt = new Date().toISOString();
     try {
       const result = await reauthorizeGhinSession(context.userId, linked.ghinNumber, supplied);
-      const profile = await persistVerifiedGolfer(context.userId, result.golfer, attemptedAt);
+      const profile = await persistVerifiedGolfer(context.userId, result.golfer, attemptedAt, "reauthorize");
       return privateGhinJson({ ...profilePayload(profile), reauthorized: true, safety: { readOnly: true, scorePostingCalls: 0 } });
     } catch (error) {
-      logAuthorizationFailure("reauthorize", error);
       const failure = clientError(error);
       await recordFailedAttempt(context.userId, attemptedAt, failure.code);
       return privateGhinJson({ error: safeUpstreamMessage(failure.code), code: failure.code.toUpperCase() }, failure.status);
@@ -236,7 +271,7 @@ export async function POST(request: NextRequest) {
     const pending = consumeGhinAuthorization(context.userId, challenge);
     if (!pending) return privateGhinJson({ error: "La autorización venció. Vuelve a iniciar sesión en GHIN.", code: "AUTHORIZATION_EXPIRED" }, 409);
     try {
-      const profile = await persistVerifiedGolfer(context.userId, pending.golfer, new Date().toISOString());
+      const profile = await persistVerifiedGolfer(context.userId, pending.golfer, new Date().toISOString(), "authorize");
       if (pending.session) activateGhinSession(pending.session);
       return privateGhinJson({ ...profilePayload(profile), safety: { readOnly: true, scorePostingCalls: 0 } });
     } catch (error) {
@@ -272,18 +307,36 @@ export async function POST(request: NextRequest) {
   try {
     linked = await readProfile(context);
   } catch {
+    logGhinProfileStage({
+      operation: operation as GhinProfileOperation,
+      stage: "profile_persistence",
+      endpoint: "/db/player_handicap_provider_profiles",
+      httpStatus: null,
+      code: "profile_read_failed",
+      retryable: false,
+      durationMs: 0,
+    });
     return privateGhinJson({ error: "No fue posible leer el vínculo GHIN.", code: "PROFILE_READ_FAILED" }, 503);
   }
   if (!linked) return privateGhinJson({ error: "Primero vincula una cuenta GHIN.", code: "GHIN_NOT_LINKED" }, 409);
   const session = getGhinUserSession(context.userId, linked.ghinNumber);
   if (!session) {
+    logGhinProfileStage({
+      operation: operation as GhinProfileOperation,
+      stage: operation === "scores" ? "scores" : "lookup_by_ghin",
+      endpoint: operation === "scores" ? "/scores.json" : "/golfers/search.json",
+      httpStatus: null,
+      code: "reauth_required",
+      retryable: false,
+      durationMs: 0,
+    });
     return privateGhinJson({ error: "Tu sesión GHIN terminó. Reautoriza para continuar.", code: "REAUTH_REQUIRED" }, 409);
   }
 
   if (operation === "scores") {
     try {
       session.client.invalidateScores(linked.ghinNumber);
-      const result = await session.client.getScores(linked.ghinNumber, 1_000);
+      const result = await traceGhinRead("scores", "scores", "/scores.json", () => session.client.getScores(linked.ghinNumber, 1_000));
       return privateGhinJson({
         available: true,
         count: result.data.length,
@@ -304,9 +357,29 @@ export async function POST(request: NextRequest) {
   const attemptedAt = new Date().toISOString();
   try {
     session.client.invalidateGolfer(linked.ghinNumber);
-    const lookup = await session.client.lookupGolfer(linked.ghinNumber);
-    if (lookup.data.ghinNumber !== linked.ghinNumber) throw new Error("IDENTITY_MISMATCH");
-    const profile = await persistVerifiedGolfer(context.userId, lookup.data, attemptedAt);
+    const lookup = await traceGhinRead("refresh", "lookup_by_ghin", "/golfers/search.json", () => session.client.lookupGolfer(linked.ghinNumber));
+    if (lookup.data.ghinNumber !== linked.ghinNumber) {
+      logGhinProfileStage({
+        operation: "refresh",
+        stage: "identity_validation",
+        endpoint: "/identity",
+        httpStatus: lookup.httpStatus,
+        code: "identity_mismatch",
+        retryable: false,
+        durationMs: 0,
+      });
+      throw new Error("IDENTITY_MISMATCH");
+    }
+    logGhinProfileStage({
+      operation: "refresh",
+      stage: "identity_validation",
+      endpoint: "/identity",
+      httpStatus: lookup.httpStatus,
+      code: null,
+      retryable: false,
+      durationMs: 0,
+    });
+    const profile = await persistVerifiedGolfer(context.userId, lookup.data, attemptedAt, "refresh");
     return privateGhinJson({ ...profilePayload(profile), safety: { readOnly: true, scorePostingCalls: 0 } });
   } catch (error) {
     const failure = clientError(error);
