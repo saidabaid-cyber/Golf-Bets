@@ -169,7 +169,7 @@ export async function POST(request: NextRequest) {
       const [clubRows, courseRows, teeRows, holeRows, yardageRows, courseLinkRows, teeLinkRows] = await Promise.all([
         database.from("golf_clubs").select("id,provider,provider_external_id,origin,is_provisional,provider_status,last_synced_at").eq("id", "club-la-vista"),
         database.from("golf_courses").select("id,name,provider,provider_external_id,origin,layout_type,is_provisional,provider_status,total_par,last_synced_at").eq("club_id", "club-la-vista"),
-        database.from("golf_course_tees").select("id,name,gender,provider,provider_external_id,origin,provider_status,total_yards,rating,slope,par,last_synced_at").eq("course_id", "course-la-vista"),
+        database.from("golf_course_tees").select("id,name,gender,provider,provider_external_id,origin,provider_status,total_yards,rating,slope,par,active,last_synced_at").eq("course_id", "course-la-vista"),
         database.from("golf_holes").select("id", { count: "exact", head: true }).eq("course_id", "course-la-vista"),
         database.from("golf_tee_hole_yardages").select("id", { count: "exact", head: true }).eq("course_id", "course-la-vista"),
         database.from("golf_course_provider_links").select("external_facility_id,external_course_id,sync_status").eq("course_id", "course-la-vista").eq("provider", "GHIN"),
@@ -178,12 +178,21 @@ export async function POST(request: NextRequest) {
       if ([clubRows, courseRows, teeRows, holeRows, yardageRows, courseLinkRows, teeLinkRows].some((result) => result.error)) {
         throw new Error("GHIN_COURSE_SYNC_VERIFICATION_FAILED");
       }
+      const activeTees = (teeRows.data ?? []).filter((tee) => tee.active !== false);
+      const preservedInactiveTees = (teeRows.data ?? []).filter((tee) => tee.active === false);
+      const activeTeeIds = activeTees.map((tee) => String(tee.id));
+      const activeYardageRows = activeTeeIds.length
+        ? await database.from("golf_tee_hole_yardages").select("id", { count: "exact", head: true }).eq("course_id", "course-la-vista").in("tee_id", activeTeeIds)
+        : { count: 0, error: null };
+      if (activeYardageRows.error) throw new Error("GHIN_COURSE_SYNC_VERIFICATION_FAILED");
       databaseState = {
         club: clubRows.data?.[0] ?? null,
         layouts: courseRows.data ?? [],
-        tees: teeRows.data ?? [],
+        tees: activeTees,
+        preservedInactiveTees,
         holeCount: holeRows.count ?? 0,
-        yardageCount: yardageRows.count ?? 0,
+        yardageCount: activeYardageRows.count ?? 0,
+        preservedYardageCount: Math.max(0, (yardageRows.count ?? 0) - (activeYardageRows.count ?? 0)),
         courseProviderLinks: courseLinkRows.data ?? [],
         teeProviderLinks: teeLinkRows.data ?? [],
       };

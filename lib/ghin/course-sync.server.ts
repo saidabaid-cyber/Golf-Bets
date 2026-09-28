@@ -2,7 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { ghinCourseSyncFingerprint, type GhinCourseSyncPlan } from "./course-sync";
+import { ghinCourseSyncFingerprint, supersededReviewedTeeIds, type GhinCourseSyncPlan } from "./course-sync";
 
 type SyncMode = "DRY_RUN" | "APPLY";
 
@@ -12,7 +12,7 @@ export type PersistGhinCourseSyncResult = {
   courseId: string;
   courseLinkId: string;
   fingerprint: string;
-  counts: { tees: number; holes: number; yardages: number };
+  counts: { tees: number; holes: number; yardages: number; supersededTees: number };
 };
 
 function rowId(row: Record<string, unknown>, label: string) {
@@ -90,10 +90,11 @@ export async function persistGhinCourseSyncPlan(
       courseId,
       courseLinkId,
       fingerprint,
-      counts: { tees: plan.tees.length, holes: plan.holes.length, yardages: plan.yardages.length },
+      counts: { tees: plan.tees.length, holes: plan.holes.length, yardages: plan.yardages.length, supersededTees: 0 },
     };
   }
 
+  let supersededTeeCount = 0;
   try {
     if (existingCourse) {
       const linkResult = await database
@@ -131,7 +132,7 @@ export async function persistGhinCourseSyncPlan(
 
     const existingTeesResult = await database
       .from("golf_course_tees")
-      .select("id,name,gender")
+      .select("id,name,gender,provider,active")
       .eq("course_id", courseId);
     if (existingTeesResult.error) throw new Error("GHIN_TEE_LOOKUP_FAILED");
     const teeIdentity = (name: unknown, gender: unknown) => `${String(name ?? "").toLocaleLowerCase("en-US")}:${String(gender ?? "")}`;
@@ -140,6 +141,17 @@ export async function persistGhinCourseSyncPlan(
       const collision = existingNames.get(teeIdentity(tee.name, tee.gender));
       if (collision && collision !== rowId(tee, "TEE")) throw new Error("GHIN_TEE_MAPPING_REQUIRED");
     }
+    const plannedTeeIds = new Set(plan.tees.map((tee) => rowId(tee, "TEE")));
+    const supersededTeeIds = supersededReviewedTeeIds(
+      (existingTeesResult.data ?? []).map((tee) => ({
+        id: String(tee.id),
+        provider: typeof tee.provider === "string" ? tee.provider : null,
+        active: typeof tee.active === "boolean" ? tee.active : null,
+      })),
+      plannedTeeIds,
+      externalId(plan.course, "COURSE"),
+    );
+    supersededTeeCount = supersededTeeIds.length;
 
     if (plan.holes.length) await throwIfError(database.from("golf_holes").upsert(plan.holes, { onConflict: "id" }), "GHIN_HOLE_UPSERT_FAILED");
     if (plan.tees.length) await throwIfError(database.from("golf_course_tees").upsert(plan.tees, { onConflict: "id" }), "GHIN_TEE_UPSERT_FAILED");
@@ -160,6 +172,12 @@ export async function persistGhinCourseSyncPlan(
         plan.teeLinks.map((link) => ({ ...link, course_provider_link_id: courseLinkId })),
         { onConflict: "tee_id,provider" },
       ), "GHIN_TEE_LINK_UPSERT_FAILED");
+    }
+    if (supersededTeeIds.length) {
+      await throwIfError(database.from("golf_course_tees")
+        .update({ active: false, provider_status: "Superseded", last_synced_at: plan.course.last_synced_at ?? null })
+        .eq("course_id", courseId)
+        .in("id", supersededTeeIds), "GHIN_LEGACY_TEE_SUPERSEDE_FAILED");
     }
     await throwIfError(database.from("golf_provider_sync_runs").insert({
       provider: "GHIN",
@@ -194,6 +212,11 @@ export async function persistGhinCourseSyncPlan(
     courseId,
     courseLinkId,
     fingerprint,
-    counts: { tees: plan.tees.length, holes: plan.holes.length, yardages: plan.yardages.length },
+    counts: {
+      tees: plan.tees.length,
+      holes: plan.holes.length,
+      yardages: plan.yardages.length,
+      supersededTees: supersededTeeCount,
+    },
   };
 }

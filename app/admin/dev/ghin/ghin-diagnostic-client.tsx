@@ -427,7 +427,7 @@ export default function GhinDiagnosticClient() {
           {confirmedPar72 && courseData.id === "23233" && <button className="primary" type="button" disabled={running} onClick={() => void runCourseSync("23233", true)}>Sincronizar Par 72 confirmado en QA</button>}
         </div>}
         {courseSync && <><StatusChip value={courseSync.status} /><ScalarFacts value={{ mode: courseSync.mode, facilityId: courseSync.facilityId, courseId: courseSync.courseId, completeForPlay: courseSync.completeForPlay, completeForScorePosting: courseSync.completeForScorePosting }} />
-          {record(courseSync.databaseState) && <p>DB QA: {records(record(courseSync.databaseState)?.layouts).length} layouts · {records(record(courseSync.databaseState)?.tees).length} tees oficiales · {valueText(record(courseSync.databaseState)?.holeCount, "0")} hoyos · {valueText(record(courseSync.databaseState)?.yardageCount, "0")} yardajes.</p>}
+          {record(courseSync.databaseState) && <p>DB QA: {records(record(courseSync.databaseState)?.layouts).length} layouts · {records(record(courseSync.databaseState)?.tees).length} tees oficiales activos · {records(record(courseSync.databaseState)?.preservedInactiveTees).length} tees históricos inactivos · {valueText(record(courseSync.databaseState)?.holeCount, "0")} hoyos · {valueText(record(courseSync.databaseState)?.yardageCount, "0")} yardajes activos.</p>}
         </>}
       </section>
 

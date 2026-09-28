@@ -24,6 +24,12 @@ export type GhinCourseSyncPlan = {
   warnings: string[];
 };
 
+export type ExistingCourseTeeIdentity = {
+  id: string;
+  provider?: string | null;
+  active?: boolean | null;
+};
+
 function safeId(value: string) {
   return value.trim().replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 120);
 }
@@ -99,6 +105,28 @@ function teeMetadata(tee: NormalizedGhinTee, postingEligibility: ReturnType<type
     })),
     qa: { status: "GHIN_LIVE", errors: [] },
   };
+}
+
+function eligibilityProviderStatus(tee: NormalizedGhinTee) {
+  if (tee.status === "active") return "Active";
+  if (tee.status === "inactive") return "Inactive";
+  return tee.rawStatus;
+}
+
+export function supersededReviewedTeeIds(
+  existingTees: readonly ExistingCourseTeeIdentity[],
+  plannedTeeIds: ReadonlySet<string>,
+  providerCourseId: string,
+) {
+  const importedPrefix = `ghin:${providerCourseId}:tee:`;
+  return existingTees.flatMap((tee) => (
+    tee.active !== false
+    && tee.provider === "OWNER_CATALOG_REVIEW"
+    && tee.id.startsWith(importedPrefix)
+    && !plannedTeeIds.has(tee.id)
+      ? [tee.id]
+      : []
+  ));
 }
 
 export function ghinScorePostingTeeIds(tees: readonly NormalizedGhinTee[]) {
@@ -232,7 +260,7 @@ export function buildGhinCourseSyncPlan(input: {
       provider: "GHIN",
       providerCourseId: externalCourseId,
       providerTeeSetId: tee.id,
-      providerStatus: tee.rawStatus,
+      providerStatus: eligibilityProviderStatus(tee),
       mappingStatus,
       sourceIsProvisional: false,
       scorePostingTeeSetIds: livePostingIds,
@@ -257,7 +285,7 @@ export function buildGhinCourseSyncPlan(input: {
       active: statusActive(tee.status),
       catalog_metadata: teeMetadata(tee, postingEligibility, externalCourseId),
       origin: "GHIN" satisfies GhinCourseSyncOrigin,
-      provider_status: tee.rawStatus,
+      provider_status: tee.rawStatus ?? eligibilityProviderStatus(tee),
       bogey_rating: tee.bogeyRating,
       front_nine_slope: tee.frontSlope,
       back_nine_slope: tee.backSlope,

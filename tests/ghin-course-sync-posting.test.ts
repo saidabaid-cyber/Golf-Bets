@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildGhinCourseSyncPlan } from "../lib/ghin/course-sync";
+import { buildGhinCourseSyncPlan, supersededReviewedTeeIds } from "../lib/ghin/course-sync";
 import { parseGhinCourse, parseGhinScorePostingTees, type NormalizedGhinScore } from "../lib/ghin/core";
 import { laVistaTeeTargetMappings, reconcileLaVistaLayouts } from "../lib/ghin/la-vista-reconciliation";
 import { buildGhinScorePostingDryRun, ghinPostEligibility, postGhinScoreExactlyOnce, type GhinScorePostingCandidate } from "../lib/ghin/score-posting";
@@ -106,6 +106,33 @@ test("mapping La Vista distingue tees con el mismo nombre por género", () => {
   assert.equal(mappings["106089"], undefined);
   assert.equal(mappings["106090"], "tee-la-vista-rojas");
   assert.equal(mappings["280984"], "tee-la-vista-azules");
+});
+
+test("el sync conserva como históricos inactivos los tees reviewed sustituidos", () => {
+  const planned = new Set(["tee-la-vista-azules", "tee-la-vista-blancas", "tee-la-vista-doradas", "tee-la-vista-rojas", "tee-la-vista-negras", "ghin-tee-106089"]);
+  const superseded = supersededReviewedTeeIds([
+    { id: "ghin:23233:tee:a5be40b61705", provider: "OWNER_CATALOG_REVIEW", active: true },
+    { id: "ghin:23233:tee:ad652458406f", provider: "OWNER_CATALOG_REVIEW", active: true },
+    { id: "ghin:23233:tee:already-inactive", provider: "OWNER_CATALOG_REVIEW", active: false },
+    { id: "tee-la-vista-azules", provider: "GHIN", active: true },
+    { id: "ghin:other-course:tee:123", provider: "OWNER_CATALOG_REVIEW", active: true },
+  ], planned, "23233");
+  assert.deepEqual(superseded, ["ghin:23233:tee:a5be40b61705", "ghin:23233:tee:ad652458406f"]);
+});
+
+test("el plan usa status normalizado active para elegibilidad aunque falte rawStatus", () => {
+  const course = laVistaCourse();
+  course.tees = course.tees.map((tee) => ({ ...tee, rawStatus: null, status: "active" }));
+  const plan = buildGhinCourseSyncPlan({
+    course,
+    scorePostingTees: course.tees,
+    targetClubId: "club-la-vista",
+    targetCourseId: "course-la-vista",
+    targetTeeIdsByProviderId: laVistaTeeTargetMappings(course.tees),
+    confirmMapping: true,
+    observedAt: "2026-09-27T20:00:00.000Z",
+  });
+  assert.equal(plan.completeForScorePosting, true);
 });
 
 test("GHIN_POST_ELIGIBLE exige provider, IDs, mapping, status y tee publicable", () => {
