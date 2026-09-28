@@ -135,6 +135,7 @@ test("Auth bootstrap alone applies new-account defaults; generic and legacy path
   const publicBootstrapFix = readFileSync("supabase/migrations/20260928033500_fix_new_account_public_bootstrap.sql", "utf8");
   const cloudProfile = readFileSync("lib/cloud-account.ts", "utf8");
   const accountProvider = readFileSync("app/components/account-provider.tsx", "utf8");
+  const appPage = readFileSync("app/page.tsx", "utf8");
   const socialRuntime = readFileSync("lib/social-activity.server.ts", "utf8");
   assert.match(migration, /alter table public\.profiles\s+alter column profile_visibility set default 'private'/);
   assert.match(migration, /alter table public\.social_profiles\s+alter column privacy set default 'PRIVATE'/);
@@ -149,6 +150,9 @@ test("Auth bootstrap alone applies new-account defaults; generic and legacy path
   assert.match(accountProvider, /select\("default_handicap,high_contrast,notifications_enabled,updated_at"\)/);
   assert.match(accountProvider, /typeof preferencesResult\.data\?\.notifications_enabled === "boolean"/);
   assert.match(accountProvider, /!accountEntry\.existingAccount \|\| localStorage\.getItem\(STORAGE_KEYS\.notifications\) === null/);
+  assert.match(accountProvider, /backyard:account-notifications-hydrated/);
+  assert.match(appPage, /backyard:account-notifications-hydrated/);
+  assert.match(appPage, /setNotificationsEnabled\(detail\.enabled\)/);
   assert.match(migration, /notifications_enabled set default false/);
   assert.match(migration, /insert into public\.user_preferences\([\s\S]*push_notifications_enabled[\s\S]*values \(new\.id, true, true, true, true, true\)/);
   for (const column of ["push_notifications_enabled", "email_notifications_enabled", "round_notifications_enabled", "reminders_enabled"]) {

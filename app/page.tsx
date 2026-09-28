@@ -925,6 +925,16 @@ function GolfBetsApp() {
   }, [identity.userId]);
 
   useEffect(() => {
+    const applyAccountNotificationPreference = (event: Event) => {
+      const detail = (event as CustomEvent<{ userId?: unknown; enabled?: unknown }>).detail;
+      if (detail?.userId !== identity.userId || typeof detail.enabled !== "boolean") return;
+      setNotificationsEnabled(detail.enabled);
+    };
+    window.addEventListener("backyard:account-notifications-hydrated", applyAccountNotificationPreference);
+    return () => window.removeEventListener("backyard:account-notifications-hydrated", applyAccountNotificationPreference);
+  }, [identity.userId]);
+
+  useEffect(() => {
     let cancelled = false;
     setHydrated(false);
     setHydratedWorkspaceOwner(null);

@@ -918,7 +918,11 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       // children hydrate, so their first rendered toggle matches the account.
       // Missing legacy rows/values deliberately leave local absence as OFF.
       if (!preferencesResult.error && (!accountEntry.existingAccount || localStorage.getItem(STORAGE_KEYS.notifications) === null) && typeof preferencesResult.data?.notifications_enabled === "boolean") {
-        localStorage.setItem(STORAGE_KEYS.notifications, String(preferencesResult.data.notifications_enabled));
+        const notificationsEnabled = preferencesResult.data.notifications_enabled;
+        localStorage.setItem(STORAGE_KEYS.notifications, String(notificationsEnabled));
+        window.dispatchEvent(new CustomEvent("backyard:account-notifications-hydrated", {
+          detail: { userId: authenticatedUserId, enabled: notificationsEnabled },
+        }));
       }
       if (!legalResult.error && Array.isArray(legalResult.data)) {
         const cloud = parseLegalAcceptances(JSON.stringify(legalResult.data.map((item) => ({ userId: item.user_id, type: item.type, documentVersion: item.version, acceptedAt: item.accepted_at, locale: item.locale, persistenceStatus: "persisted", syncStatus: "synced" }))));
