@@ -2,6 +2,7 @@ import courseSeedJson from "../data/golf-course-catalog.seed.json";
 import { withDefaultLaVistaRules } from "./local-rules";
 import { curatedPueblaCourseProvider } from "./curated-puebla-course-data";
 import type { Course } from "./types";
+import type { ScorecardProfileProvenance } from "./course-scorecard-profiles";
 
 export type CourseDataProvenance = {
   provider: string;
@@ -70,6 +71,42 @@ export type GolfCourseTee = {
   providerTeeSetRatingId?: string;
   providerStatus?: string;
   ghinPostEligible?: boolean;
+};
+
+export type GolfScorecardProfileTee = {
+  teeId: string;
+  ratingGender: string;
+  par: number | null;
+  courseRating: number | null;
+  bogeyRating: number | null;
+  slopeRating: number | null;
+  frontNineRating: number | null;
+  frontNineSlope: number | null;
+  backNineRating: number | null;
+  backNineSlope: number | null;
+  totalYards: number | null;
+  totalMeters: number | null;
+  sourceExternalId: string | null;
+  providerStatus: string | null;
+};
+
+export type GolfScorecardProfileHole = { holeId: string; holeNumber: number; ratingGender: string; strokeIndex: number };
+export type GolfScorecardProfile = {
+  id: string;
+  courseId: string;
+  name: string;
+  provenance: ScorecardProfileProvenance;
+  sourceProvider: string;
+  sourceExternalId: string | null;
+  verifiedAt: string | null;
+  effectiveFrom: string | null;
+  effectiveTo: string | null;
+  active: boolean;
+  historical: boolean;
+  defaultForPlay: boolean;
+  status: string;
+  tees: GolfScorecardProfileTee[];
+  holes: GolfScorecardProfileHole[];
 };
 
 export function playerVisibleTeeRating(
@@ -141,6 +178,7 @@ export type GolfCourseCatalog = {
   holes: GolfHole[];
   teeHoleYardages: TeeHoleYardage[];
   geoFeatures: GolfHoleGeoFeature[];
+  scorecardProfiles?: GolfScorecardProfile[];
 };
 
 type SeedClub = {
@@ -321,6 +359,8 @@ export const INTERNAL_GOLF_COURSE_CATALOG = buildSeedGolfCourseCatalog();
 export function golfCourseSelectionToLegacyCourse(
   catalog: GolfCourseCatalog,
   teeId: string,
+  scorecardProfileId?: string,
+  ratingGender?: string,
 ): Course | null {
   const tee = catalog.tees.find((candidate) => candidate.id === teeId && candidate.active);
   if (!tee) return null;
@@ -329,13 +369,21 @@ export function golfCourseSelectionToLegacyCourse(
   const club = catalog.clubs.find((candidate) => candidate.id === golfCourse.clubId && candidate.active);
   if (!club) return null;
   const yardages = new Map(catalog.teeHoleYardages.filter((record) => record.teeId === tee.id).map((record) => [record.holeNumber, record.yards]));
+  const profile = scorecardProfileId
+    ? catalog.scorecardProfiles?.find((candidate) => candidate.id === scorecardProfileId && candidate.courseId === golfCourse.id && candidate.active && !candidate.historical)
+    : undefined;
+  const profileTee = profile?.tees.find((candidate) => candidate.teeId === tee.id && (!ratingGender || candidate.ratingGender === ratingGender));
+  const profileStrokeIndexes = new Map((profile?.holes || [])
+    .filter((hole) => !profileTee || hole.ratingGender === profileTee.ratingGender || hole.ratingGender === "UNSPECIFIED")
+    .sort((left, right) => Number(right.ratingGender !== profileTee?.ratingGender) - Number(left.ratingGender !== profileTee?.ratingGender))
+    .map((hole) => [hole.holeNumber, hole.strokeIndex]));
   const holes = catalog.holes
     .filter((hole) => hole.courseId === golfCourse.id)
     .sort((left, right) => left.holeNumber - right.holeNumber)
     .map((hole) => ({
       number: hole.holeNumber,
       par: hole.par,
-      strokeIndex: hole.strokeIndex,
+      strokeIndex: profileStrokeIndexes.get(hole.holeNumber) ?? hole.strokeIndex,
       ...(yardages.get(hole.holeNumber) !== undefined ? { yards: yardages.get(hole.holeNumber) } : {}),
       ...(hole.teeLatitude !== undefined ? { teeLatitude: hole.teeLatitude, teeLongitude: hole.teeLongitude } : {}),
       ...(hole.greenFrontLatitude !== undefined ? { greenFrontLatitude: hole.greenFrontLatitude, greenFrontLongitude: hole.greenFrontLongitude } : {}),
@@ -348,18 +396,33 @@ export function golfCourseSelectionToLegacyCourse(
     : club.latitude !== undefined && club.longitude !== undefined
       ? { latitude: club.latitude, longitude: club.longitude }
       : null;
-  const visibleRating = playerVisibleTeeRating(golfCourse, tee);
+  const profileRating = profileTee && typeof profileTee.courseRating === "number" && typeof profileTee.slopeRating === "number"
+    ? { verified: true as const, rating: profileTee.courseRating, slope: profileTee.slopeRating }
+    : null;
+  const visibleRating = profileRating ?? playerVisibleTeeRating(golfCourse, tee);
+  const selectionId = profile ? `${tee.legacySelectionId}::${profile.id}::${profileTee?.ratingGender || "UNSPECIFIED"}` : tee.legacySelectionId;
   return withDefaultLaVistaRules({
-    id: tee.legacySelectionId,
+    id: selectionId,
     name: golfCourse.name,
     teeName: tee.name,
     ...(visibleRating.verified ? { rating: visibleRating.rating, slope: visibleRating.slope } : {}),
-    ...(tee.totalYards !== undefined ? { totalYards: tee.totalYards } : {}),
+    ...((profileTee?.totalYards ?? tee.totalYards) !== undefined && (profileTee?.totalYards ?? tee.totalYards) !== null ? { totalYards: (profileTee?.totalYards ?? tee.totalYards)! } : {}),
     holes,
     builtIn: true,
     catalogClubId: club.id,
     catalogCourseId: golfCourse.id,
     catalogTeeId: tee.id,
+    roundTeeSelectionId: selectionId,
+    ...(profile ? {
+      scorecardProfileId: profile.id,
+      scorecardProfileName: profile.name,
+      scorecardProfileProvenance: profile.provenance,
+      scorecardProfileDefaultForPlay: profile.defaultForPlay,
+      scorecardProfileHistorical: profile.historical,
+      ...(profile.effectiveFrom ? { scorecardProfileEffectiveFrom: profile.effectiveFrom } : {}),
+      ...(profile.effectiveTo ? { scorecardProfileEffectiveTo: profile.effectiveTo } : {}),
+      ...(profile.verifiedAt ? { scorecardProfileVerifiedAt: profile.verifiedAt } : {}),
+    } : {}),
     clubName: club.name,
     ...(club.city ? { city: club.city } : {}),
     ...(club.stateRegion ? { stateRegion: club.stateRegion } : {}),

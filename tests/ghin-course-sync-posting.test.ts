@@ -73,6 +73,11 @@ test("el plan GHIN usa IDs externos, upserts estables y mapping explícito", () 
   assert.equal(new Set(first.yardages.map((row) => row.id)).size, 108);
   assert.equal(first.courseLink.sync_status, "CONFIRMED");
   assert.equal(first.completeForScorePosting, true);
+  assert.equal(first.scorecardProfile.provenance, "GHIN_OFFICIAL");
+  assert.equal(first.scorecardProfile.course_id, "course-la-vista");
+  assert.equal(first.scorecardProfileTees.length, 6);
+  assert.ok(first.scorecardProfileHoles.length >= 18);
+  assert.equal(first.scorecardProfile.default_for_play, false, "GHIN sync never replaces the club default implicitly");
 });
 
 test("un mapping candidato nunca habilita score posting", () => {

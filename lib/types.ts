@@ -125,6 +125,19 @@ export type Course = {
   catalogClubId?: string;
   catalogCourseId?: string;
   catalogTeeId?: string;
+  /** UI identity is profile-aware; catalogTeeId remains the physical tee ID. */
+  roundTeeSelectionId?: string;
+  /** Scorecard/playing profile selected for this round. */
+  scorecardProfileId?: string;
+  scorecardProfileName?: string;
+  scorecardProfileProvenance?: import('./course-scorecard-profiles').ScorecardProfileProvenance;
+  scorecardProfileDefaultForPlay?: boolean;
+  scorecardProfileHistorical?: boolean;
+  scorecardProfileEffectiveFrom?: string;
+  scorecardProfileEffectiveTo?: string;
+  scorecardProfileVerifiedAt?: string;
+  /** Frozen with the course snapshot; never re-resolved for historical rounds. */
+  scorecardProfileSnapshot?: ReturnType<typeof import('./course-scorecard-profiles').freezeScorecardProfileSelection>;
   clubName?: string;
   city?: string;
   stateRegion?: string;
@@ -352,6 +365,9 @@ export type PlayerTeeAssignmentSnapshot = {
   layoutId?: string;
   teeId: string;
   teeName: string;
+  scorecardProfileId?: string;
+  scorecardProfileName?: string;
+  scorecardProfileProvenance?: import('./course-scorecard-profiles').ScorecardProfileProvenance;
   rating?: number;
   slope?: number;
   yards?: number;

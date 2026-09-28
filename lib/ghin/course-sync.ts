@@ -17,6 +17,9 @@ export type GhinCourseSyncPlan = {
   tees: Array<Record<string, unknown>>;
   holes: Array<Record<string, unknown>>;
   yardages: Array<Record<string, unknown>>;
+  scorecardProfile: Record<string, unknown>;
+  scorecardProfileTees: Array<Record<string, unknown>>;
+  scorecardProfileHoles: Array<Record<string, unknown>>;
   courseLink: Record<string, unknown>;
   teeLinks: Array<Record<string, unknown>>;
   completeForPlay: boolean;
@@ -155,6 +158,7 @@ export function buildGhinCourseSyncPlan(input: {
   const clubId = input.targetClubId ?? `ghin-facility-${safeId(externalFacilityId)}`;
   const courseId = input.targetCourseId ?? `ghin-course-${safeId(externalCourseId)}`;
   const mappingStatus = input.confirmMapping ? "CONFIRMED" : "CANDIDATE";
+  const scorecardProfileId = `scorecard-${createHash("md5").update(`${courseId}:GHIN:baseline`).digest("hex")}`;
   const livePostingIds = ghinScorePostingTeeIds(input.scorePostingTees ?? []);
   const facility = input.facility ?? null;
   const facilityCoordinates = coordinates(facility?.latitude ?? course.latitude, facility?.longitude ?? course.longitude);
@@ -325,6 +329,54 @@ export function buildGhinCourseSyncPlan(input: {
     });
   });
 
+  const scorecardProfile = {
+    id: scorecardProfileId,
+    course_id: courseId,
+    name: "GHIN / Oficial",
+    provenance: "GHIN_OFFICIAL",
+    source_provider: "GHIN",
+    source_external_id: externalCourseId,
+    evidence: [{ kind: "SOURCE", url: sourceUrl(externalCourseId) }],
+    verified_at: verifiedAt,
+    active: statusActive(course.status),
+    historical: false,
+    default_for_play: false,
+    status: "PUBLISHED",
+    notes: "Official GHIN scorecard profile; independent from club and tournament profiles.",
+  };
+  const scorecardProfileTees = tees.map((tee) => ({
+    profile_id: scorecardProfileId,
+    tee_id: tee.id,
+    rating_gender: tee.gender ?? "UNSPECIFIED",
+    par: tee.par,
+    course_rating: tee.rating,
+    bogey_rating: tee.bogey_rating,
+    slope_rating: tee.slope,
+    front_nine_rating: tee.front_nine_rating,
+    front_nine_slope: tee.front_nine_slope,
+    back_nine_rating: tee.back_nine_rating,
+    back_nine_slope: tee.back_nine_slope,
+    total_yards: tee.total_yards,
+    total_meters: tee.total_meters,
+    source_external_id: tee.provider_external_id,
+    provider_status: tee.provider_status,
+    source_updated_at: tee.source_updated_at,
+    active: tee.active,
+  }));
+  const allocationByGender = new Map<string, NormalizedGhinTee>();
+  for (const tee of course.tees) {
+    const category = gender(tee.gender) ?? "UNSPECIFIED";
+    const previous = allocationByGender.get(category);
+    if (!previous || tee.holeData.length > previous.holeData.length) allocationByGender.set(category, tee);
+  }
+  const scorecardProfileHoles = [...allocationByGender].flatMap(([ratingGender, tee]) => tee.holeData.flatMap((hole) => {
+    const canonical = holeByNumber.get(hole.number);
+    if (!canonical || hole.strokeIndex === null) return [];
+    return [{ profile_id: scorecardProfileId, hole_id: canonical.id, rating_gender: ratingGender,
+      hole_number: hole.number, stroke_index: hole.strokeIndex, source_external_id: hole.id,
+      source_updated_at: isoOrNull(course.updatedAt) }];
+  }));
+
   const courseLink = {
     course_id: courseId,
     provider: "GHIN",
@@ -366,6 +418,9 @@ export function buildGhinCourseSyncPlan(input: {
     tees,
     holes,
     yardages,
+    scorecardProfile,
+    scorecardProfileTees,
+    scorecardProfileHoles,
     courseLink,
     teeLinks,
     completeForPlay,

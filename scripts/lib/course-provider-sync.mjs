@@ -280,7 +280,7 @@ function teeKey(row) {
 export function flattenCourseProviderBundle(normalized) {
   const providerName = normalized.source.provider;
   const fetchedAt = normalized.source.fetchedAt;
-  const facilities = [], layouts = [], tees = [], holes = [], yardages = [];
+  const facilities = [], layouts = [], tees = [], holes = [], yardages = [], profiles = [], profileTees = [], profileHoles = [];
   for (const facility of normalized.facilities) {
     facilities.push({
       id: facility.id, name: facility.name, country: facility.country, state_region: facility.stateRegion,
@@ -292,6 +292,20 @@ export function flattenCourseProviderBundle(normalized) {
       last_synced_at: fetchedAt, source_updated_at: facility.sourceUpdatedAt,
     });
     for (const layout of facility.layouts) {
+      const profileId = stableId("scorecard", providerName, layout.externalId);
+      const profileProvenance = providerName === "GHIN" ? "GHIN_OFFICIAL"
+        : providerName === "USGA_NCRDB" ? "USGA_OFFICIAL"
+          : providerName.startsWith("CLUB_") ? "CLUB_SCORECARD_VERIFIED" : "PROVIDER_VERIFIED";
+      profiles.push({
+        id: profileId, course_id: layout.id,
+        name: profileProvenance === "GHIN_OFFICIAL" ? "GHIN / Oficial"
+          : profileProvenance === "USGA_OFFICIAL" ? "USGA / Oficial" : normalized.source.displayName,
+        provenance: profileProvenance, source_provider: providerName, source_external_id: layout.externalId,
+        evidence: [{ kind: "SOURCE", url: normalized.source.sourceUrl }], verified_at: fetchedAt,
+        effective_from: layout.activeFrom, effective_to: layout.activeTo, active: layout.active,
+        historical: false, default_for_play: true, status: "PUBLISHED",
+        notes: "Imported from an authorized provider into an independent scorecard profile.",
+      });
       const completeLayoutHoles = layout.holes.length === layout.holeCount
         && layout.holes.every((hole) => hole.par !== null && hole.strokeIndexMen !== null);
       layouts.push({
@@ -344,6 +358,14 @@ export function flattenCourseProviderBundle(normalized) {
           front_nine_slope: tee.frontNineSlope, back_nine_slope: tee.backNineSlope,
           last_synced_at: fetchedAt, source_updated_at: tee.sourceUpdatedAt,
         });
+        profileTees.push({
+          profile_id: profileId, tee_id: tee.id, rating_gender: tee.gender ?? "UNSPECIFIED",
+          par: tee.par ?? layout.par, course_rating: tee.courseRating, bogey_rating: tee.bogeyRating,
+          slope_rating: tee.slopeRating, front_nine_rating: tee.frontNineRating, front_nine_slope: tee.frontNineSlope,
+          back_nine_rating: tee.backNineRating, back_nine_slope: tee.backNineSlope,
+          total_yards: tee.totalYards, total_meters: tee.totalMeters, source_external_id: tee.externalId,
+          provider_status: tee.status, source_updated_at: tee.sourceUpdatedAt, active: tee.active,
+        });
         for (const hole of teeHoleSource) {
           const canonical = holeByNumber.get(hole.number);
           if (!canonical || (hole.yards === null && hole.meters === null)) continue;
@@ -356,9 +378,19 @@ export function flattenCourseProviderBundle(normalized) {
           });
         }
       }
+      for (const hole of layout.holes) {
+        const canonical = holeByNumber.get(hole.number);
+        if (!canonical || hole.strokeIndexMen === null) continue;
+        profileHoles.push({ profile_id: profileId, hole_id: canonical.id, rating_gender: "MEN",
+          hole_number: hole.number, stroke_index: hole.strokeIndexMen,
+          source_external_id: hole.externalId ?? String(hole.number), source_updated_at: layout.sourceUpdatedAt });
+        if (hole.strokeIndexWomen !== null) profileHoles.push({ profile_id: profileId, hole_id: canonical.id, rating_gender: "WOMEN",
+          hole_number: hole.number, stroke_index: hole.strokeIndexWomen,
+          source_external_id: hole.externalId ?? String(hole.number), source_updated_at: layout.sourceUpdatedAt });
+      }
     }
   }
-  return { facilities, layouts, tees, holes, yardages };
+  return { facilities, layouts, tees, holes, yardages, profiles, profileTees, profileHoles };
 }
 
 function preserveExistingInternalIds(incoming, existing, providerName) {
@@ -375,9 +407,9 @@ function preserveExistingInternalIds(incoming, existing, providerName) {
     }
   };
   remap("facilities", [["layouts", "club_id"]]);
-  remap("layouts", [["tees", "course_id"], ["holes", "course_id"], ["yardages", "course_id"]]);
-  remap("tees", [["yardages", "tee_id"]]);
-  remap("holes", [["yardages", "hole_id"]]);
+  remap("layouts", [["tees", "course_id"], ["holes", "course_id"], ["yardages", "course_id"], ["profiles", "course_id"]]);
+  remap("tees", [["yardages", "tee_id"], ["profileTees", "tee_id"]]);
+  remap("holes", [["yardages", "hole_id"], ["profileHoles", "hole_id"]]);
   remap("yardages");
   return rebound;
 }
@@ -391,9 +423,24 @@ export function buildCourseProviderSyncPlan(bundleInput, current = {}) {
     tees: Array.isArray(current.tees) ? current.tees : [],
     holes: Array.isArray(current.holes) ? current.holes : [],
     yardages: Array.isArray(current.yardages) ? current.yardages : [],
+    profiles: Array.isArray(current.profiles) ? current.profiles : [],
+    profileTees: Array.isArray(current.profileTees) ? current.profileTees : [],
+    profileHoles: Array.isArray(current.profileHoles) ? current.profileHoles : [],
   };
   const providerName = normalized.source.provider;
   const incoming = preserveExistingInternalIds(flattened, existing, providerName);
+  // Importing an official/provider profile must not silently replace a club's
+  // current card. Preserve the current default when the profile already
+  // exists; otherwise make the imported profile the default only when the
+  // physical layout has no active published default yet.
+  for (const profile of incoming.profiles) {
+    const sameProfile = existing.profiles.find((row) => row.id === profile.id);
+    const currentDefault = existing.profiles.find((row) => row.course_id === profile.course_id
+      && row.active === true && row.historical !== true && row.status === "PUBLISHED" && row.default_for_play === true);
+    profile.default_for_play = sameProfile
+      ? sameProfile.default_for_play === true
+      : !currentDefault;
+  }
   const specs = [
     ["FACILITY", "facilities", "provider_external_id", ["name", "country", "state_region", "city", "address", "latitude", "longitude", "timezone", "active", "provider_status"]],
     ["LAYOUT", "layouts", "provider_external_id", ["club_id", "name", "holes", "active", "layout_type", "total_par", "provider_status"]],

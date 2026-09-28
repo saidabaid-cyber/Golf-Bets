@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { freezeScorecardProfileSelection } from "./course-scorecard-profiles";
 import { findAmbiguousCloudConflicts, mergeLocalAndCloud, stableValue, type CloudDataBundle, type CloudEntityType, type CloudTombstone } from "./cloud-sync";
 import { writeVersionedRow } from "./cloud-write";
 import { parseFrequentGroups } from "./frequent-templates";
@@ -206,7 +207,16 @@ async function projectRoundSnapshots(client: SupabaseClient, userId: string, his
         competition_rule_set_id: operations.competitionRuleSetId || null,
         competition_rule_version: operations.competitionRuleVersion || null,
       } : {};
-      const { data: projection, error: projectionError } = await client.from(table).upsert(withDevice({ round_id: roundId, [column]: value, ...operationColumns }, deviceId, extendedSchema)).select("round_id");
+      const scorecardProfile = table === "round_course_snapshots" && value && typeof value === "object" && !Array.isArray(value)
+        ? freezeScorecardProfileSelection(value as import("./types").Course)
+        : undefined;
+      const scorecardProfileColumns = extendedSchema && table === "round_course_snapshots" && scorecardProfile ? {
+        scorecard_profile_id: scorecardProfile.id,
+        scorecard_profile_name: scorecardProfile.name,
+        scorecard_profile_provenance: scorecardProfile.provenance,
+        scorecard_profile_snapshot: scorecardProfile,
+      } : {};
+      const { data: projection, error: projectionError } = await client.from(table).upsert(withDevice({ round_id: roundId, [column]: value, ...operationColumns, ...scorecardProfileColumns }, deviceId, extendedSchema)).select("round_id");
       if (projectionError || projection?.length !== 1) throw projectionError || new Error("Proyección no confirmada");
     }
   }

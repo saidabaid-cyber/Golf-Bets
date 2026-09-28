@@ -156,6 +156,22 @@ export async function persistGhinCourseSyncPlan(
     if (plan.holes.length) await throwIfError(database.from("golf_holes").upsert(plan.holes, { onConflict: "id" }), "GHIN_HOLE_UPSERT_FAILED");
     if (plan.tees.length) await throwIfError(database.from("golf_course_tees").upsert(plan.tees, { onConflict: "id" }), "GHIN_TEE_UPSERT_FAILED");
     if (plan.yardages.length) await throwIfError(database.from("golf_tee_hole_yardages").upsert(plan.yardages, { onConflict: "id" }), "GHIN_YARDAGE_UPSERT_FAILED");
+    const existingDefaultProfile = await database.from("course_scorecard_profiles").select("id,default_for_play")
+      .eq("course_id", courseId).eq("default_for_play", true).eq("active", true).maybeSingle();
+    if (existingDefaultProfile.error) throw new Error("GHIN_SCORECARD_PROFILE_LOOKUP_FAILED");
+    const profileRow = {
+      ...plan.scorecardProfile,
+      default_for_play: existingDefaultProfile.data
+        ? existingDefaultProfile.data.id === plan.scorecardProfile.id
+        : true,
+    };
+    await throwIfError(database.from("course_scorecard_profiles").upsert(profileRow, { onConflict: "id" }), "GHIN_SCORECARD_PROFILE_UPSERT_FAILED");
+    if (plan.scorecardProfileTees.length) await throwIfError(database.from("course_scorecard_profile_tees").upsert(
+      plan.scorecardProfileTees, { onConflict: "profile_id,tee_id,rating_gender" },
+    ), "GHIN_SCORECARD_PROFILE_TEE_UPSERT_FAILED");
+    if (plan.scorecardProfileHoles.length) await throwIfError(database.from("course_scorecard_profile_holes").upsert(
+      plan.scorecardProfileHoles, { onConflict: "profile_id,hole_id,rating_gender" },
+    ), "GHIN_SCORECARD_PROFILE_HOLE_UPSERT_FAILED");
 
     if (!courseLinkId) {
       const linkResult = await database

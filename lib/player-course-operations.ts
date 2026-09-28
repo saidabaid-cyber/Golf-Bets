@@ -41,15 +41,23 @@ export function courseWithResolvedOperations(course: Course, response: PlayerCou
   if ((course.catalogCourseId ?? course.id) !== resolved.sourceCourseId) throw new Error("COURSE_OPERATION_ID_MISMATCH");
   if (![9, 18].includes(resolved.resolvedHoles.length)) throw new Error("INVALID_OPERATION_HOLE_COUNT");
   const selectedTee = resolved.resolvedTees.find((tee) => tee.id === course.catalogTeeId) ?? resolved.resolvedTees[0] ?? null;
+  const profileStrokeIndexes = course.scorecardProfileId
+    ? new Map(course.holes.map((hole) => [hole.number, hole.strokeIndex]))
+    : null;
   const holes = resolved.resolvedHoles.map((hole) => {
     if (!Number.isInteger(hole.runtimeHoleNumber) || hole.runtimeHoleNumber < 1 || hole.runtimeHoleNumber > 18 || hole.par < 3 || hole.par > 6 || hole.strokeIndex < 1 || hole.strokeIndex > 18) throw new Error("INVALID_OPERATION_HOLE");
     const yards = selectedTee?.yardages[hole.id];
-    return { number: hole.runtimeHoleNumber, displayLabel: hole.displayLabel, par: hole.par, strokeIndex: hole.strokeIndex, ...(typeof yards === "number" && yards > 0 ? { yards } : {}) };
+    return { number: hole.runtimeHoleNumber, displayLabel: hole.displayLabel, par: hole.par,
+      strokeIndex: profileStrokeIndexes?.get(hole.runtimeHoleNumber) ?? hole.strokeIndex,
+      ...(typeof yards === "number" && yards > 0 ? { yards } : {}) };
   });
   return {
     ...structuredClone(course),
     holes,
-    ...(selectedTee ? { teeName: selectedTee.name, catalogTeeId: selectedTee.id, rating: selectedTee.rating ?? undefined, slope: selectedTee.slope ?? undefined, totalYards: holes.every((hole) => hole.yards !== undefined) ? holes.reduce((total, hole) => total + (hole.yards || 0), 0) : undefined } : {}),
+    ...(selectedTee ? { teeName: selectedTee.name, catalogTeeId: selectedTee.id,
+      rating: course.scorecardProfileId ? course.rating : selectedTee.rating ?? undefined,
+      slope: course.scorecardProfileId ? course.slope : selectedTee.slope ?? undefined,
+      totalYards: holes.every((hole) => hole.yards !== undefined) ? holes.reduce((total, hole) => total + (hole.yards || 0), 0) : undefined } : {}),
     localRules: localRules(response.localRules),
     localRulesUpdatedAt: resolved.effectiveAt,
     operationsSnapshot: {

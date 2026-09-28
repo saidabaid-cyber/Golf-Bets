@@ -66,6 +66,10 @@ test("authorized input normalizes country, accents and units without inventing m
   assert.equal(nine.total_yards, 3281);
   assert.equal(nine.catalog_metadata.derived_unit, "YARDS_FROM_METERS");
   assert.equal(nine.bogey_rating, null);
+  assert.equal(plan.rows.profiles.length, 2);
+  assert.equal(plan.rows.profileTees.length, 2);
+  assert.equal(plan.rows.profileHoles.length, 27);
+  assert.ok(plan.rows.profiles.every((profile) => profile.provenance === "PROVIDER_VERIFIED"));
 });
 
 test("repeated import is idempotent and preserves stable existing Backyard ids", () => {
@@ -82,6 +86,20 @@ test("repeated import is idempotent and preserves stable existing Backyard ids",
   assert.equal(second.counts.ADDED, 0);
   assert.equal(second.counts.UPDATED, 0);
   assert.ok(second.counts.UNCHANGED > 0);
+});
+
+test("an authorized provider profile never replaces an existing club-current default", () => {
+  const current = {
+    facilities: [], layouts: [], tees: [], holes: [], yardages: [], profileTees: [], profileHoles: [],
+    profiles: [{ id: "club-current", course_id: "course-1", source_provider: "CLUB_SCORECARD", source_external_id: "club-v4",
+      active: true, historical: false, default_for_play: true, status: "PUBLISHED" }],
+  };
+  const first = buildCourseProviderSyncPlan(bundle());
+  const importedCourseId = first.rows.layouts.find((row) => row.provider_external_id === "layout-18").id;
+  current.profiles[0].course_id = importedCourseId;
+  const plan = buildCourseProviderSyncPlan(bundle(), current);
+  assert.equal(plan.rows.profiles.find((row) => row.course_id === importedCourseId).default_for_play, false);
+  assert.equal(current.profiles[0].default_for_play, true);
 });
 
 test("cross-provider name collision is a conflict and distinct layouts are not collapsed", () => {

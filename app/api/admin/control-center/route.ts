@@ -88,6 +88,17 @@ function coursePayloadIssues(payload: JsonRecord, entityId: string) {
   return [...new Set(issues)];
 }
 
+function scorecardProfilePayloadIssues(payload: JsonRecord) {
+  const issues: string[] = [];
+  const provenance = new Set(["GHIN_OFFICIAL", "USGA_OFFICIAL", "CLUB_SCORECARD_VERIFIED", "CLUB_OPERATIONAL", "CLUB_TEMPORARY", "TOURNAMENT", "ADMIN_VERIFIED", "PROVIDER_REVIEWED", "PROVIDER_VERIFIED"]);
+  if (!text(payload.courseId, 240) || !text(payload.name, 200)) issues.push("Course y nombre de tarjeta son obligatorios.");
+  if (!provenance.has(String(payload.provenance || "")) || !text(payload.sourceProvider, 100)) issues.push("Procedencia y proveedor son obligatorios.");
+  if (!Array.isArray(payload.evidence) || !payload.evidence.length) issues.push("La tarjeta requiere evidencia antes de verificarla.");
+  if (!Array.isArray(payload.tees) || !payload.tees.length) issues.push("La tarjeta requiere al menos un tee.");
+  if (!Array.isArray(payload.holes) || !payload.holes.length) issues.push("La tarjeta requiere Stroke Index para sus hoyos.");
+  return issues;
+}
+
 function stringList(value: unknown) {
   return Array.isArray(value) && value.every((item) => typeof item === "string" && item.trim().length > 0) ? value as string[] : null;
 }
@@ -393,6 +404,24 @@ export async function GET(request: NextRequest) {
     return json({ items, total: items.length, memberships: access.memberships, canShowQa: access.canShowQa });
   }
 
+  if (view === "scorecards") {
+    const [profiles, tees, holes] = await Promise.all([
+      access.client.from("course_scorecard_profiles").select("id,course_id,name,provenance,source_provider,source_external_id,verified_at,effective_from,effective_to,active,historical,default_for_play,status,updated_at").order("course_id").order("default_for_play", { ascending: false }).limit(1000),
+      access.client.from("course_scorecard_profile_tees").select("profile_id,tee_id,rating_gender,par,course_rating,slope_rating,total_yards,active").limit(5000),
+      access.client.from("course_scorecard_profile_holes").select("profile_id,hole_id,rating_gender,hole_number,stroke_index").limit(10000),
+    ]);
+    const firstError = [profiles, tees, holes].find((result) => result.error)?.error;
+    if (firstError) return databaseFailure(firstError);
+    const teeRows = (tees.data || []) as JsonRecord[]; const holeRows = (holes.data || []) as JsonRecord[];
+    const items = ((profiles.data || []) as JsonRecord[]).slice(0, limit).map((profile) => ({
+      ...profile,
+      teeCount: teeRows.filter((row) => row.profile_id === profile.id && row.active === true).length,
+      holeCount: new Set(holeRows.filter((row) => row.profile_id === profile.id).map((row) => row.hole_id)).size,
+      ratings: teeRows.filter((row) => row.profile_id === profile.id && row.active === true),
+    }));
+    return json({ items, total: (profiles.data || []).length, canShowQa: access.canShowQa });
+  }
+
   if (view === "equipment") {
     const catalogs = await loadLayeredEquipmentCatalogs();
     const entityType = text(request.nextUrl.searchParams.get("entityType"), 50);
@@ -590,6 +619,27 @@ export async function POST(request: NextRequest) {
   const input = await body(request);
   if (!input) return json({ error: "La solicitud no contiene JSON válido o excede 2 MB.", code: "INVALID_BODY" }, 400);
   const operation = text(input.operation, 80);
+
+  if (operation === "createScorecardProfile") {
+    const payload = record(input.payload);
+    if (!payload) return json({ error: "La tarjeta no contiene datos estructurados.", code: "INVALID_SCORECARD_PROFILE" }, 400);
+    const issues = scorecardProfilePayloadIssues(payload);
+    if (issues.length) return json({ error: issues.join(" "), code: "INVALID_SCORECARD_PROFILE", issues }, 400);
+    const result = await access.client.rpc("admin_create_scorecard_profile_v1", { profile_payload: payload });
+    if (result.error) return databaseFailure(result.error, "No fue posible crear el Draft de tarjeta.");
+    return json({ item: result.data });
+  }
+
+  if (operation === "transitionScorecardProfile") {
+    const profileId = text(input.profileId, 320); const action = text(input.action, 20)?.toUpperCase();
+    if (!profileId || !action || !["VERIFY", "PUBLISH", "ARCHIVE"].includes(action)) return json({ error: "Transición de tarjeta inválida.", code: "INVALID_SCORECARD_TRANSITION" }, 400);
+    const result = await access.client.rpc("admin_transition_scorecard_profile_v1", {
+      target_profile_id: profileId, target_action: action, make_default: input.makeDefault === true,
+      transition_reason: text(input.reason, 2000),
+    });
+    if (result.error) return databaseFailure(result.error, "No fue posible cambiar el estado de la tarjeta.");
+    return json({ item: result.data });
+  }
 
   if (operation === "createRevision") {
     const entityType = text(input.entityType, 50) as AdminEntityType | null;

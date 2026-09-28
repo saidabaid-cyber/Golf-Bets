@@ -247,7 +247,8 @@ import {
 } from "../lib/frequent-templates";
 import { hasDuplicateGroupPlayers } from "../lib/group-generator";
 import { createEmptyGroupGameTemplate, createGroupGameTemplate, createRoundGroupSnapshot, frequentGroupTemplateSummary, groupTemplatePlayers, instantiateGroupGameTemplate, normalizeGroupGameTemplate, normalizeRoundTemplateOrigin, templateWithoutPlayerAssignments, updateGroupTemplateFromRound, withStableGroupMemberIds, type RoundTemplateOrigin } from "../lib/group-game-template";
-import { assignTeeToEveryPlayer, reconcilePlayerTeeAssignments, teeOptionsForCourse, updatePlayerTeeAssignment } from "../lib/player-tee-assignments";
+import { assignTeeToEveryPlayer, reconcilePlayerTeeAssignments, scorecardOptionsForLayout, teeOptionsForCourse, updatePlayerTeeAssignment } from "../lib/player-tee-assignments";
+import { roundTeeSelectionId, scorecardProfileLabel } from "../lib/course-scorecard-profiles";
 import { defaultMaxBaseAppearances, generateAutomaticFoursomes, markFoursomeSegmentEdited } from "../lib/foursome-generator";
 import { advantageFieldsFromSigned, configureCurrentIndexPersonal, configureSlidingPersonal, frequentPersonalSuggestions, slidingAdjustment } from "../lib/personal-modes";
 import { loadEquipmentProfile } from "../lib/golf-equipment";
@@ -744,9 +745,11 @@ function GolfBetsApp() {
     }
     return [...names.values()];
   }, [courseOptions, identity.homeCourseId, identity.preferredTee]);
-  const teeOptions = useMemo(() => courseSelected || courseSetupStage === "tee" ? teeOptionsForCourse(course, courseOptions) : [], [course, courseOptions, courseSelected, courseSetupStage]);
+  const teeOptions = useMemo(() => courseSetupStage === "tee"
+    ? scorecardOptionsForLayout(course, courseOptions)
+    : courseSelected ? teeOptionsForCourse(course, courseOptions) : [], [course, courseOptions, courseSelected, courseSetupStage]);
   const suggestedRoundTee = useMemo(() => preferredTeeForCourse(teeOptions, { homeCourseId: identity.homeCourseId, preferredTee: identity.preferredTee }), [identity.homeCourseId, identity.preferredTee, teeOptions]);
-  const selectedRoundTeeId = courseSelected ? course.catalogTeeId || course.id : suggestedRoundTee ? suggestedRoundTee.catalogTeeId || suggestedRoundTee.id : "";
+  const selectedRoundTeeId = courseSelected ? roundTeeSelectionId(course) : suggestedRoundTee ? roundTeeSelectionId(suggestedRoundTee) : "";
   const pendingCourseCandidates = useMemo(
     () => coursesForPendingIdentity(courseOptions, pendingCourseIdentity),
     [courseOptions, pendingCourseIdentity],
@@ -2661,7 +2664,7 @@ function GolfBetsApp() {
   function selectRoundTee(nextTee: Course) {
     const pending = beginRoundCourseSelection(teeOptions);
     if (!pending.ok) { setCourseSelectionError(true); return; }
-    const completed = completeRoundTeeSelection(pending, nextTee.catalogTeeId || nextTee.id);
+    const completed = completeRoundTeeSelection(pending, roundTeeSelectionId(nextTee));
     if (!completed.ok) { setCourseSelectionError(true); return; }
     const selectedTee = completed.course;
     const apply = () => {
@@ -3817,7 +3820,7 @@ function GolfBetsApp() {
 
       <RoundSetupStep step={1}>
       <section className="card" id="round-course">
-        <div className="sectionTitle"><div><h2>1. Campo → Layout → Tee</h2><p>{courseSetupStage === "course" ? "Busca el club y selecciona su layout." : courseSetupStage === "tee" ? "Elige la salida antes de configurar la ronda." : "Revisa rating, slope, par, yardaje y el hoyo donde comienza el grupo."}</p></div>{courseSetupStage === "course" && <div className="courseSetupActions"><button className="textButton" onClick={() => setTab("courseLibrary")}>Ver campos</button><button className="textButton" onClick={startNewCourse}>+ Campo</button></div>}</div>
+        <div className="sectionTitle"><div><h2>1. Campo → Layout → Tee</h2><p>{courseSetupStage === "course" ? "Busca el club y selecciona su layout físico." : courseSetupStage === "tee" ? "Elige la tarjeta/configuración y la salida antes de configurar la ronda." : "Revisa la configuración elegida: rating, slope, par, yardaje y el hoyo donde comienza el grupo."}</p></div>{courseSetupStage === "course" && <div className="courseSetupActions"><button className="textButton" onClick={() => setTab("courseLibrary")}>Ver campos</button><button className="textButton" onClick={startNewCourse}>+ Campo</button></div>}</div>
         {courseSetupStage === "course" && <>
           {!courseSelected && pendingCourseIdentity && <div className="notice" id="round-course-ai-focus" role="status"><b>Campo reconocido: {pendingCourseIdentity.name}</b><br />{pendingCourseCandidates.length ? "Selecciona el campo para continuar." : "No encontré ese campo exacto en el catálogo actual. Selecciona otro o crea uno manual."}</div>}
           <CatalogCoursePicker key={`round-catalog-${identity.userId}`} showHeading={false} token={identity.accessToken} permissionOwnerId={identity.userId} selectedName="" onRequest={(searchedName) => requestFeedback("COURSE", searchedName ? { name: searchedName } : undefined)} onSelect={(next, cards) => selectRoundCourse(next, false, cards)} />
@@ -3838,7 +3841,7 @@ function GolfBetsApp() {
           onMissingTee={() => requestFeedback("TEE", { name: course.name })}
         />}
         {courseSelected && courseSetupStage === "details" && <>
-          <div className="roundCourseSelectionSummary" role="status"><div><span>CAMPO · LAYOUT · TEE</span><b>{course.clubName ? `${course.clubName} → ${course.name}` : course.name}</b><small>{course.teeName}{typeof course.rating === "number" ? ` · Rating ${course.rating}` : ""}{typeof course.slope === "number" ? ` · Slope ${course.slope}` : ""}{typeof course.totalYards === "number" ? ` · ${course.totalYards.toLocaleString("es-MX")} yd` : ""} · Par {course.holes.reduce((sum, hole) => sum + hole.par, 0)}</small></div><button type="button" className="textButton" onClick={() => setCourseSetupStage("tee")}>Cambiar tee</button></div>
+          <div className="roundCourseSelectionSummary" role="status"><div><span>CAMPO · LAYOUT · CONFIGURACIÓN · TEE</span><b>{course.clubName ? `${course.clubName} → ${course.name}` : course.name}</b><small>{course.scorecardProfileId ? `${scorecardProfileLabel({ name: course.scorecardProfileName || "Tarjeta disponible", provenance: course.scorecardProfileProvenance || "ADMIN_VERIFIED" })} · ` : ""}{course.teeName}{typeof course.rating === "number" ? ` · Rating ${course.rating}` : ""}{typeof course.slope === "number" ? ` · Slope ${course.slope}` : ""}{typeof course.totalYards === "number" ? ` · ${course.totalYards.toLocaleString("es-MX")} yd` : ""} · Par {course.holes.reduce((sum, hole) => sum + hole.par, 0)}</small></div><button type="button" className="textButton" onClick={() => setCourseSetupStage("tee")}>Cambiar configuración / tee</button></div>
           <CourseReviewNotice course={course} roundHoles={roundHoles} startHole={startHole} />
           <div className="roundCourseDetails">
             <div><label htmlFor="wizard-round-date">Fecha de la ronda</label><input id="wizard-round-date" aria-label="Fecha de la ronda" type="date" value={roundDate} onChange={(event) => setRoundDate(event.target.value)} /></div>

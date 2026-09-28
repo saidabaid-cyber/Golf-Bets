@@ -7,7 +7,11 @@ function sameLayout(first: Course, second: Course) {
 }
 
 export function teeOptionsForCourse(course: Course, courses: readonly Course[]) {
-  const matchingLayout = courses.filter((candidate) => sameLayout(course, candidate));
+  const matchingLayout = scorecardOptionsForLayout(course, courses);
+  if (course.scorecardProfileId) {
+    const matchingProfile = matchingLayout.filter((candidate) => candidate.scorecardProfileId === course.scorecardProfileId);
+    if (matchingProfile.length) return matchingProfile;
+  }
   const ghinOptions = matchingLayout.filter((candidate) => (
     candidate.layoutOrigin === "GHIN" || candidate.provider === "GHIN"
   ));
@@ -24,6 +28,10 @@ export function teeOptionsForCourse(course: Course, courses: readonly Course[]) 
   if (providerCourseIds.length <= 1 && ghinOptions.length) return ghinOptions;
 
   return matchingLayout;
+}
+
+export function scorecardOptionsForLayout(course: Course, courses: readonly Course[]) {
+  return courses.filter((candidate) => sameLayout(course, candidate));
 }
 
 export function teeAssignmentSnapshot(
@@ -44,6 +52,9 @@ export function teeAssignmentSnapshot(
     ...(course.catalogCourseId ? { layoutId: course.catalogCourseId } : {}),
     teeId: course.catalogTeeId || course.id,
     teeName: course.teeName,
+    ...(course.scorecardProfileId ? { scorecardProfileId: course.scorecardProfileId } : {}),
+    ...(course.scorecardProfileName ? { scorecardProfileName: course.scorecardProfileName } : {}),
+    ...(course.scorecardProfileProvenance ? { scorecardProfileProvenance: course.scorecardProfileProvenance } : {}),
     ...(typeof course.rating === "number" ? { rating: course.rating } : {}),
     ...(typeof course.slope === "number" ? { slope: course.slope } : {}),
     ...(typeof course.totalYards === "number" ? { yards: course.totalYards } : {}),

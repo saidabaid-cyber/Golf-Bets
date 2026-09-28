@@ -9,6 +9,7 @@ import {
   type GolfCourse,
   type GolfCourseCatalog,
   type GolfCourseTee,
+  type GolfScorecardProfile,
   type GolfHole,
   type TeeHoleYardage,
   playerVisibleTeeRating,
@@ -111,6 +112,7 @@ function reviewedCoursesToCatalog(rows: readonly ReviewedCatalogCourse[]): GolfC
   const tees: GolfCourseTee[] = [];
   const holes: GolfHole[] = [];
   const teeHoleYardages: TeeHoleYardage[] = [];
+  const scorecardProfiles: GolfScorecardProfile[] = [];
   for (const row of rows) {
     const publication = reviewedCoursePublicationShape(row);
     if (!clubs.has(row.clubId)) clubs.set(row.clubId, {
@@ -139,8 +141,9 @@ function reviewedCoursesToCatalog(rows: readonly ReviewedCatalogCourse[]): GolfC
       tees.push({ id: tee.id, courseId: row.id, legacySelectionId: tee.id, name: tee.displayName ?? tee.name, ...(tee.gender ? { gender: tee.gender } : {}), ...(providerBackedRating ? { rating: tee.course_rating!, slope: tee.slope_rating! } : {}), par: tee.par ?? undefined, totalYards: tee.yards ?? undefined, active: true, ...(tee.provider ? { provider: tee.provider } : {}), ...(tee.provider_course_id ? { providerCourseId: tee.provider_course_id } : {}), ...(tee.provider_tee_set_rating_id ? { providerTeeSetRatingId: tee.provider_tee_set_rating_id } : {}), ...(tee.provider_status ? { providerStatus: tee.provider_status } : {}), ...(tee.ghin_post_eligible !== undefined ? { ghinPostEligible: tee.ghin_post_eligible } : {}) });
       for (const hole of tee.holes) if (hole.yards !== null) teeHoleYardages.push({ teeId: tee.id, holeId: `${row.id}:hole:${hole.hole_number}`, holeNumber: hole.hole_number, yards: hole.yards });
     }
+    scorecardProfiles.push(...(row.scorecardProfiles || []).map((profile) => ({ ...profile, tees: profile.tees.map((tee) => ({ ...tee })), holes: profile.holes.map((hole) => ({ ...hole })) })));
   }
-  return { schemaVersion: 1, clubs: [...clubs.values()], courses, tees, holes, teeHoleYardages, geoFeatures: [] };
+  return { schemaVersion: 1, clubs: [...clubs.values()], courses, tees, holes, teeHoleYardages, geoFeatures: [], scorecardProfiles };
 }
 
 function mergeCatalog(base: GolfCourseCatalog, overlays: readonly GolfCourseCatalog[]): GolfCourseCatalog {
@@ -149,6 +152,7 @@ function mergeCatalog(base: GolfCourseCatalog, overlays: readonly GolfCourseCata
   const tees = new Map(base.tees.map((row) => [row.id, row]));
   const holes = new Map(base.holes.map((row) => [row.id, row]));
   const yardages = new Map(base.teeHoleYardages.map((row) => [`${row.teeId}:${row.holeId}`, row]));
+  const scorecardProfiles = new Map((base.scorecardProfiles || []).map((row) => [row.id, row]));
   for (const overlay of overlays) {
     for (const row of overlay.clubs) clubs.set(row.id, row);
     for (const row of overlay.courses) {
@@ -157,13 +161,15 @@ function mergeCatalog(base: GolfCourseCatalog, overlays: readonly GolfCourseCata
       for (const [id, tee] of tees) if (tee.courseId === row.id) tees.delete(id);
       for (const [id, hole] of holes) if (hole.courseId === row.id) holes.delete(id);
       for (const [key, yardage] of yardages) if (priorTeeIds.has(yardage.teeId) || priorHoleIds.has(yardage.holeId)) yardages.delete(key);
+      for (const [id, profile] of scorecardProfiles) if (profile.courseId === row.id) scorecardProfiles.delete(id);
       courses.set(row.id, row);
     }
     for (const row of overlay.tees) tees.set(row.id, row);
     for (const row of overlay.holes) holes.set(row.id, row);
     for (const row of overlay.teeHoleYardages) yardages.set(`${row.teeId}:${row.holeId}`, row);
+    for (const row of overlay.scorecardProfiles || []) scorecardProfiles.set(row.id, row);
   }
-  return { schemaVersion: 1, clubs: [...clubs.values()], courses: [...courses.values()], tees: [...tees.values()], holes: [...holes.values()], teeHoleYardages: [...yardages.values()], geoFeatures: base.geoFeatures };
+  return { schemaVersion: 1, clubs: [...clubs.values()], courses: [...courses.values()], tees: [...tees.values()], holes: [...holes.values()], teeHoleYardages: [...yardages.values()], geoFeatures: base.geoFeatures, scorecardProfiles: [...scorecardProfiles.values()] };
 }
 
 export async function getCourseCatalog(database: SupabaseClient | null = getSupabaseAdmin("cloud"), options: { requireQaReviewedCatalog?: boolean } = {}) {

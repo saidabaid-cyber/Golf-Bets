@@ -1,4 +1,5 @@
 import type { Course } from "./types";
+import { roundTeeSelectionId } from "./course-scorecard-profiles";
 
 export type PendingRoundCourseSelection = {
   ok: true;
@@ -22,7 +23,7 @@ export type InvalidRoundCourseSelection = {
 };
 
 function teeIdentity(course: Course) {
-  return course.catalogTeeId || course.id;
+  return roundTeeSelectionId(course);
 }
 
 function courseIdentity(course: Course) {
@@ -37,7 +38,7 @@ export function preferredTeeForCourse(
   const compatible = cards.filter((card) => courseIdentity(card) === preference.homeCourseId);
   if (!compatible.length) return undefined;
   if (preference.preferredTeeId) {
-    const stable = compatible.find((card) => teeIdentity(card) === preference.preferredTeeId);
+    const stable = compatible.find((card) => teeIdentity(card) === preference.preferredTeeId || card.catalogTeeId === preference.preferredTeeId);
     if (stable) return stable;
   }
   if (!preference.preferredTee?.trim()) return undefined;

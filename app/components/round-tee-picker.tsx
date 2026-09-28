@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Course } from "../../lib/types";
+import { roundTeeSelectionId, scorecardProfileLabel, scorecardProfilesForCards } from "../../lib/course-scorecard-profiles";
 import styles from "./round-tee-picker.module.css";
 
 function fact(value: number | undefined, suffix = "") {
@@ -24,11 +25,16 @@ export function RoundTeePicker({
   onMissingTee: () => void;
 }) {
   const [transitioningId, setTransitioningId] = useState<string | null>(null);
+  const profiles = useMemo(() => scorecardProfilesForCards(tees), [tees]);
+  const selectedProfile = tees.find((tee) => roundTeeSelectionId(tee) === selectedTeeId)?.scorecardProfileId;
+  const [profileId, setProfileId] = useState(selectedProfile || profiles[0]?.id || "");
+  useEffect(() => { setProfileId(selectedProfile || profiles[0]?.id || ""); }, [courseName, profiles, selectedProfile]);
+  const visibleTees = profiles.length > 1 ? profiles.find((profile) => profile.id === profileId)?.cards ?? [] : tees;
   const releaseTimer = useRef<number | null>(null);
   useEffect(() => () => { if (releaseTimer.current !== null) window.clearTimeout(releaseTimer.current); }, []);
   function selectOnce(tee: Course) {
     if (transitioningId) return;
-    const id = tee.catalogTeeId || tee.id;
+    const id = roundTeeSelectionId(tee);
     setTransitioningId(id);
     onSelect(tee);
     releaseTimer.current = window.setTimeout(() => setTransitioningId(null), 600);
@@ -36,11 +42,18 @@ export function RoundTeePicker({
   return <section className={styles.panel} aria-labelledby="round-tee-title">
     <button type="button" className={styles.back} onClick={onBack}>← Cambiar campo</button>
     <span className={styles.eyebrow}>CAMPO SELECCIONADO</span>
-    <h3 id="round-tee-title">Tee de salida</h3>
+    <h3 id="round-tee-title">{profiles.length > 1 ? "Configuración y tee" : "Tee de salida"}</h3>
     <p>{courseName}</p>
+    {profiles.length > 1 && <div className={styles.profiles} role="group" aria-label="Configuración de scorecard">
+      <span>Configuración</span>
+      {profiles.map((profile) => <button type="button" key={profile.id} className={profile.id === profileId ? styles.profileSelected : ""} aria-pressed={profile.id === profileId} onClick={() => setProfileId(profile.id)}>
+        <b>{scorecardProfileLabel(profile)}</b>
+        <small>{profile.defaultForPlay ? "Predeterminada para jugar" : "Alternativa disponible"}</small>
+      </button>)}
+    </div>}
     <div className={styles.grid}>
-      {tees.map((tee) => {
-        const id = tee.catalogTeeId || tee.id;
+      {visibleTees.map((tee) => {
+        const id = roundTeeSelectionId(tee);
         const selected = id === selectedTeeId;
         const facts = [
           fact(tee.totalYards, " yd"),
@@ -55,7 +68,7 @@ export function RoundTeePicker({
         </button>;
       })}
     </div>
-    {!tees.length && <p className={styles.empty} role="status">Este campo todavía no tiene tees publicados.</p>}
+    {!visibleTees.length && <p className={styles.empty} role="status">Esta configuración todavía no tiene tees publicados.</p>}
     <button type="button" className={styles.missing} onClick={onMissingTee}>¿Falta un tee? Solicitar tee</button>
   </section>;
 }

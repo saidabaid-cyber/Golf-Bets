@@ -16,7 +16,11 @@ export async function GET(request:NextRequest) {
     if(id) {
       const course=data.find(c=>c.id===id);
       if(!course) return NextResponse.json({error:'No encontramos ese recorrido.'},{status:404,headers});
-      const cards=catalog.tees.filter(tee=>tee.active&&tee.courseId===id).map(tee=>golfCourseSelectionToLegacyCourse(catalog,tee.id)).filter(Boolean);
+      const profiles=(catalog.scorecardProfiles??[]).filter(profile=>profile.courseId===id&&profile.active&&!profile.historical)
+        .sort((left,right)=>Number(right.defaultForPlay)-Number(left.defaultForPlay)||left.name.localeCompare(right.name,'es-MX'));
+      const cards=profiles.length
+        ? profiles.flatMap(profile=>profile.tees.map(profileTee=>golfCourseSelectionToLegacyCourse(catalog,profileTee.teeId,profile.id,profileTee.ratingGender)).filter(Boolean))
+        : catalog.tees.filter(tee=>tee.active&&tee.courseId===id).map(tee=>golfCourseSelectionToLegacyCourse(catalog,tee.id)).filter(Boolean);
       return NextResponse.json({course,cards},{headers});
     }
     const q=(request.nextUrl.searchParams.get('q')??'').slice(0,160);

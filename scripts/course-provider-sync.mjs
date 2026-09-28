@@ -35,19 +35,22 @@ async function pagedRows(database, table, columns) {
 }
 
 async function loadCurrent(database) {
-  const [facilities, layouts, tees, holes, yardages] = await Promise.all([
+  const [facilities, layouts, tees, holes, yardages, profiles, profileTees, profileHoles] = await Promise.all([
     pagedRows(database, "golf_clubs", "id,name,country,state_region,city,address,latitude,longitude,timezone,active,provider,provider_external_id,provider_status"),
     pagedRows(database, "golf_courses", "id,club_id,name,holes,active,provider,provider_external_id,layout_type,total_par,provider_status"),
     pagedRows(database, "golf_course_tees", "id,course_id,name,display_name,gender,rating,slope,par,total_yards,total_meters,front_nine_rating,front_nine_slope,back_nine_rating,back_nine_slope,active,provider,provider_external_id,provider_status"),
     pagedRows(database, "golf_holes", "id,course_id,hole_number,par,stroke_index,active,provider,provider_external_id,provider_status"),
     pagedRows(database, "golf_tee_hole_yardages", "id,course_id,tee_id,hole_id,yards,meters,tee_par,tee_stroke_index,provider,provider_external_id"),
+    pagedRows(database, "course_scorecard_profiles", "id,course_id,source_provider,source_external_id,active,historical,default_for_play,status"),
+    pagedRows(database, "course_scorecard_profile_tees", "profile_id,tee_id,rating_gender"),
+    pagedRows(database, "course_scorecard_profile_holes", "profile_id,hole_id,rating_gender"),
   ]);
-  return { facilities, layouts, tees, holes, yardages };
+  return { facilities, layouts, tees, holes, yardages, profiles, profileTees, profileHoles };
 }
 
-async function upsertChunks(database, table, rows) {
+async function upsertChunks(database, table, rows, onConflict = "id") {
   for (let offset = 0; offset < rows.length; offset += 250) {
-    const response = await database.from(table).upsert(rows.slice(offset, offset + 250), { onConflict: "id" });
+    const response = await database.from(table).upsert(rows.slice(offset, offset + 250), { onConflict });
     if (response.error) throw Error(`COURSE_MASTER_UPSERT_FAILED:${table}:${response.error.code || "UNKNOWN"}`);
   }
 }
@@ -105,6 +108,9 @@ if (!apply) {
     await upsertChunks(database, "golf_holes", plan.rows.holes);
     await upsertChunks(database, "golf_course_tees", plan.rows.tees);
     await upsertChunks(database, "golf_tee_hole_yardages", plan.rows.yardages);
+    await upsertChunks(database, "course_scorecard_profiles", plan.rows.profiles);
+    await upsertChunks(database, "course_scorecard_profile_tees", plan.rows.profileTees, "profile_id,tee_id,rating_gender");
+    await upsertChunks(database, "course_scorecard_profile_holes", plan.rows.profileHoles, "profile_id,hole_id,rating_gender");
     if (deactivateMissing) {
       const deprecated = (entityType) => plan.changes.filter((change) => change.entityType === entityType && change.status === "DEPRECATED").map((change) => change.internalId);
       // Yardage rows have no active flag and remain as historical provenance;

@@ -15,6 +15,9 @@ The Backyard ya tenía un dominio normalizado de campos. No se creó una segunda
 | Tee Set | `golf_course_tees` | Rating, Slope, par, distancia, género y ratings por lado cuando existen. |
 | Hole | `golf_holes` | Hoyo canónico del layout con par y Stroke Index verificados. |
 | Tee × Hole | `golf_tee_hole_yardages` | Distancia, par y asignación específica del tee cuando existen. |
+| Scorecard / Playing Profile | `course_scorecard_profiles` | Identidad y vigencia de cada tarjeta oficial, del club, torneo o histórica sobre un mismo layout físico. |
+| Rating por profile × tee | `course_scorecard_profile_tees` | Rating/Slope/Bogey/par/longitud propios de la tarjeta seleccionada, sin sobrescribir el tee físico. |
+| Stroke Index por profile × hole | `course_scorecard_profile_holes` | Ventajas por hoyo y género propias de la tarjeta; no se asumen universales para el layout. |
 | Ratings de 9 | `golf_tee_nine_ratings` | Front/Back independientes; nunca se derivan dividiendo el total. |
 | Mapping externo | `golf_course_provider_links`, `golf_tee_provider_links` | IDs de proveedores sin reemplazar las identidades internas. |
 | Auditoría de sync | `golf_provider_sync_runs` | Resumen normalizado y diff; no guarda payload crudo ni secretos. |
@@ -22,6 +25,21 @@ The Backyard ya tenía un dominio normalizado de campos. No se creó una segunda
 | Fuente/licencia | `golf_course_data_sources` | Autoriza o bloquea importación, display y reutilización de Rating/Slope por proveedor. |
 
 `golf_courses` cumple el papel operativo de `course_layouts`. Crear otra tabla de layouts duplicaría identidades y rompería el modelo ya conectado a rondas. Los nombres no son claves: se conservan IDs internos estables y external IDs/provider links.
+
+## Layout físico vs. scorecard profile
+
+El modelo no supone `1 facility = 1 course = 1 tarjeta`. Se separan dos conceptos:
+
+- `golf_courses`, `golf_holes`, `golf_course_tees` y `golf_tee_hole_yardages` describen el recorrido físico: routing, par, tees y distancias.
+- `course_scorecard_profiles` describe cómo se califica o se juega ese recorrido durante una vigencia concreta. Sus tablas hijas guardan Rating/Slope por tee y Stroke Index por hoyo/género.
+
+Un cambio sólo de ventajas o Rating/Slope crea una nueva versión de profile sobre el mismo layout. Un cambio material de par, hoyos, recorrido o yardajes por reparación crea un layout físico temporal independiente. Las procedencias permitidas son `GHIN_OFFICIAL`, `USGA_OFFICIAL`, `CLUB_SCORECARD_VERIFIED`, `CLUB_OPERATIONAL`, `CLUB_TEMPORARY`, `TOURNAMENT`, `ADMIN_VERIFIED`, `PROVIDER_REVIEWED` y `PROVIDER_VERIFIED`. `PROVIDER_REVIEWED` conserva evidencia legacy sin presentarla como oficial o reutilizable.
+
+Puede existir una tarjeta actual predeterminada por layout, pero todas las tarjetas oficiales y del club conservan identidad propia. `historical=true` la retira de la selección normal sin borrarla. La sincronización de un proveedor sólo hace upsert de su propia identidad `source_provider + source_external_id`; si ya hay una tarjeta actual del club, la importada no la desplaza.
+
+Al iniciar una ronda se congela en `round_course_snapshots` el profile elegido, su procedencia, tee, Rating, Slope, par y Stroke Index. Los cambios posteriores del catálogo no recalculan ni reescriben rondas jugadas.
+
+La Vista y Club Campestre de Puebla no tienen ramas especiales en el motor. La Vista se representa mediante sus layouts físicos normal/temporales y profiles disponibles. Campestre queda listo para compartir un mismo layout físico entre `GHIN / USGA — Oficial` y `Tarjeta del club — Actual`; la segunda se publicará sólo cuando exista scorecard/evidencia real, sin inventar valores.
 
 ## Inventario real de QA antes de esta fase
 
@@ -136,9 +154,9 @@ Dry-run es el modo por defecto. `--apply` exige simultáneamente:
 - metadata de licencia del bundle consistente con el registro;
 - cero conflictos de reconciliación.
 
-El bundle V1 contiene `source`, `scope` y `facilities[]`; cada facility contiene `layouts[]`, y cada layout `tees[]`/`holes[]`. Unknown permanece `null`. Cuando sólo una unidad existe, la conversión yardas/metros es determinística y queda marcada como derivada.
+El bundle V1 contiene `source`, `scope` y `facilities[]`; cada facility contiene `layouts[]`, y cada layout `tees[]`/`holes[]`. El importador crea además un scorecard profile independiente para esa fuente. Unknown permanece `null`. Cuando sólo una unidad existe, la conversión yardas/metros es determinística y queda marcada como derivada.
 
-El diff usa `ADDED`, `UPDATED`, `UNCHANGED`, `CONFLICT` y `DEPRECATED`. Ausencias sólo se clasifican como `DEPRECATED` si el bundle declara un scope completo. Desactivar requiere además `--deactivate-missing`; no se borran filas ni snapshots históricos. Los cambios manualmente verificados de otro proveedor no se sobrescriben.
+El diff usa `ADDED`, `UPDATED`, `UNCHANGED`, `CONFLICT` y `DEPRECATED`. Ausencias sólo se clasifican como `DEPRECATED` si el bundle declara un scope completo. Desactivar requiere además `--deactivate-missing`; no se borran filas ni snapshots históricos. Los cambios manualmente verificados de otro proveedor no se sobrescriben. En particular, una tarjeta `CLUB_SCORECARD_VERIFIED` marcada como actual sigue siendo el default cuando llega un profile GHIN/USGA nuevo.
 
 ## Búsqueda, nearby y operación sin GHIN
 

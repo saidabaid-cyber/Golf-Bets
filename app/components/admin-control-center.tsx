@@ -7,7 +7,7 @@ import { controlledImportTemplate, type AdminImportFormat, type AdminImportKind 
 import { useBackyardAccount } from "./account-provider";
 import styles from "../admin/admin.module.css";
 
-type View = "dashboard" | "courses" | "course-ops" | "rules" | "equipment" | "imports" | "quality" | "competitions" | "requests" | "revisions" | "audit";
+type View = "dashboard" | "courses" | "scorecards" | "course-ops" | "rules" | "equipment" | "imports" | "quality" | "competitions" | "requests" | "revisions" | "audit";
 type Json = Record<string, unknown>;
 type Revision = Json & { id: string; entity_type: string; entity_id: string; version: number; status: string; provenance_status: string; preview_hash?: string | null };
 type OperationsHole = { id: string; sourceBaseHoleId: string | null; sourceBaseHoleNumber: number | null; displayLabel: string; par: number; strokeIndex: number; playable: boolean; temporaryGreen?: boolean; temporaryTee?: boolean; dropZoneNote?: string | null; operationalNote?: string | null };
@@ -20,7 +20,7 @@ type WedgeVariantDraft = { key: string; loft: string; bounce: string; grind: str
 
 const NAVIGATION: readonly { group: string; items: readonly { id: View; label: string }[] }[] = [
   { group: "OPERACIÓN", items: [{ id: "dashboard", label: "Dashboard" }, { id: "revisions", label: "Publicaciones pendientes" }, { id: "requests", label: "Solicitudes" }] },
-  { group: "CAMPOS", items: [{ id: "courses", label: "Catálogo" }, { id: "course-ops", label: "Configuraciones temporales" }, { id: "rules", label: "Reglas locales" }] },
+  { group: "CAMPOS", items: [{ id: "courses", label: "Catálogo" }, { id: "scorecards", label: "Tarjetas / perfiles" }, { id: "course-ops", label: "Configuraciones temporales" }, { id: "rules", label: "Reglas locales" }] },
   { group: "CATÁLOGOS", items: [{ id: "equipment", label: "Equipment" }, { id: "imports", label: "Importaciones" }, { id: "quality", label: "Calidad de datos" }] },
   { group: "EVENTOS", items: [{ id: "competitions", label: "Competiciones" }, { id: "audit", label: "Auditoría" }] },
 ] as const;
@@ -122,6 +122,7 @@ export function AdminControlCenter() {
         {success && <div className={styles.success} role="status">{success}</div>}
         {view === "dashboard" && <Dashboard data={data} />}
         {view === "courses" && <CourseWorkspace data={data} loading={loading} request={api} showQa={showQa} submit={(payload) => mutate(payload, "Borrador de campo creado. Falta Review, Verify y Publish.", "revisions")} />}
+        {view === "scorecards" && <ScorecardProfiles data={data} loading={loading} submit={(payload, done) => void mutate(payload, done)} />}
         {view === "equipment" && <><EquipmentWorkspace data={data} loading={loading} request={api} showQa={showQa} submit={(payload) => mutate(payload, "Borrador de equipment creado sin publicarlo.", "revisions")} /><AssetEditor token={token} /></>}
         {view === "rules" && <RuleEditor loading={loading} submit={(payload) => mutate(payload, "Reglas locales guardadas como Draft.", "revisions")} />}
         {view === "competitions" && <CompetitionEditor loading={loading} submit={(payload) => mutate(payload, "Competición y reglamento guardados como Draft.", "revisions")} items={list(data?.items)} />}
@@ -134,6 +135,63 @@ export function AdminControlCenter() {
       </section>
     </div>
   </main>;
+}
+
+function ScorecardProfiles({ data, loading, submit }: { data: Json | null; loading: boolean; submit: (payload: Json, done: string) => void }) {
+  const items = list(data?.items);
+  const [formError, setFormError] = useState("");
+  function parseRows(value: FormDataEntryValue | null, label: string) {
+    try {
+      const parsed: unknown = JSON.parse(typeof value === "string" ? value : "[]");
+      if (!Array.isArray(parsed)) throw new Error();
+      return parsed;
+    } catch { throw new Error(`${label} debe ser un arreglo JSON válido.`); }
+  }
+  function create(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setFormError("");
+    const form = new FormData(event.currentTarget);
+    try {
+      const evidenceUrl = stringValue(form.get("evidenceUrl"));
+      const payload = {
+        courseId: stringValue(form.get("courseId")), name: stringValue(form.get("name")),
+        provenance: stringValue(form.get("provenance")), sourceProvider: stringValue(form.get("sourceProvider")),
+        sourceExternalId: stringValue(form.get("sourceExternalId")) || null,
+        evidence: evidenceUrl ? [{ kind: "SCORECARD", url: evidenceUrl }] : [],
+        verifiedAt: stringValue(form.get("verifiedAt")) ? new Date(stringValue(form.get("verifiedAt"))).toISOString() : null,
+        ...schedule(form), notes: stringValue(form.get("notes")) || null,
+        tees: parseRows(form.get("tees"), "Tees"), holes: parseRows(form.get("holes"), "Hoyos"),
+        reason: "Nueva tarjeta cargada para revisión administrativa; no se publica automáticamente.",
+      };
+      submit({ operation: "createScorecardProfile", payload }, "Tarjeta guardada como Draft; falta verificar y publicar.");
+      event.currentTarget.reset();
+    } catch (error) { setFormError(error instanceof Error ? error.message : "La tarjeta no es válida."); }
+  }
+  function transition(item: Json, action: "VERIFY" | "PUBLISH" | "ARCHIVE", makeDefault = false) {
+    submit({ operation: "transitionScorecardProfile", profileId: item.id, action, makeDefault,
+      reason: action === "PUBLISH" ? "Tarjeta verificada publicada desde Admin." : action === "ARCHIVE" ? "Tarjeta retirada de la selección actual sin borrar su histórico." : "Evidencia de tarjeta verificada por Admin." },
+    action === "VERIFY" ? "Tarjeta verificada; todavía no está publicada." : action === "PUBLISH" ? "Tarjeta publicada sin sobrescribir otros perfiles." : "Tarjeta marcada histórica; no se eliminó.");
+  }
+  return <>
+    <section className={styles.card}><div className={styles.sectionTitle}><div><h2>Tarjetas y perfiles de juego</h2><p>Una tarjeta del club y una oficial pueden compartir el mismo recorrido físico. Rating/Slope y Stroke Index permanecen separados por procedencia y vigencia.</p></div><span className={styles.badge}>NO DESTRUCTIVO</span></div>
+      <div className={styles.list}>{items.map((item) => <article className={styles.item} key={String(item.id)}><div><strong>{String(item.name)}</strong><span>{String(item.course_id)} · {String(item.provenance)} · {String(item.status)}</span><em>{String(item.teeCount || 0)} tees · {String(item.holeCount || 0)} hoyos{item.default_for_play === true ? " · Predeterminada" : ""}{item.historical === true ? " · Histórica" : ""}</em></div><div className={styles.actions}>{item.status === "DRAFT" && <button type="button" onClick={() => transition(item, "VERIFY")}>Verificar</button>}{item.status === "VERIFIED" && <><button type="button" onClick={() => transition(item, "PUBLISH", true)}>Publicar como actual</button><button type="button" onClick={() => transition(item, "PUBLISH")}>Publicar alternativa</button></>}{item.status === "PUBLISHED" && <button type="button" className={styles.danger} onClick={() => transition(item, "ARCHIVE")}>Marcar histórica</button>}</div></article>)}</div>
+    </section>
+    <form className={styles.card} onSubmit={create}><div className={styles.sectionTitle}><div><h2>Cargar scorecard</h2><p>Crea un Draft. Verificar y publicar son acciones separadas; una sincronización GHIN no reemplaza el profile del club.</p></div></div>
+      {formError && <div className={styles.error} role="alert">{formError}</div>}
+      <Field label="Course/Layout ID físico" name="courseId" required />
+      <Field label="Nombre visible" name="name" required placeholder="Tarjeta del club — Actual" />
+      <label>Procedencia<select name="provenance" defaultValue="CLUB_SCORECARD_VERIFIED"><option>CLUB_SCORECARD_VERIFIED</option><option>CLUB_OPERATIONAL</option><option>CLUB_TEMPORARY</option><option>TOURNAMENT</option><option>ADMIN_VERIFIED</option><option>GHIN_OFFICIAL</option><option>USGA_OFFICIAL</option><option>PROVIDER_REVIEWED</option><option>PROVIDER_VERIFIED</option></select></label>
+      <Field label="Proveedor/fuente" name="sourceProvider" required placeholder="CLUB_SCORECARD" />
+      <Field label="ID externo/versionado" name="sourceExternalId" placeholder="campestre-current-2026" />
+      <Field label="URL de evidencia" name="evidenceUrl" type="url" required />
+      <Field label="Fecha verificada" name="verifiedAt" type="datetime-local" />
+      <Field label="Vigente desde" name="effectiveFrom" type="datetime-local" />
+      <Field label="Vigente hasta" name="effectiveUntil" type="datetime-local" />
+      <label>Tees (JSON estructurado)<textarea name="tees" rows={6} required defaultValue={'[{"teeId":"tee-id","ratingGender":"MEN","par":72,"courseRating":71.1,"slopeRating":129,"totalYards":6500}]'} /></label>
+      <label>Stroke Index por hoyo (JSON estructurado)<textarea name="holes" rows={8} required defaultValue={'[{"holeId":"hole-id","ratingGender":"MEN","holeNumber":1,"strokeIndex":5}]'} /></label>
+      <label>Notas / motivo<textarea name="notes" rows={3} /></label>
+      <button type="submit" className={styles.primary} disabled={loading}>Guardar Draft</button>
+    </form>
+  </>;
 }
 
 function Dashboard({ data }: { data: Json | null }) {

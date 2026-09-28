@@ -1,6 +1,7 @@
 import type { Course } from './types';
 import { haversineDistanceKm, type CourseGeographicPoint } from './course-distance';
 import { readCourseRatingEvidenceBundle, type CourseRatingEvidenceBundleV1 } from './course-rating-evidence';
+import type { ScorecardProfileProvenance } from './course-scorecard-profiles';
 
 export type ReviewedNineRating = { id:string; segment:'FRONT'|'BACK'|'UNSPECIFIED'; course_rating:number; slope_rating:number; par:number; rating_category:null; source_url:string; observed_at:string };
 export type ReviewedTeeSource = { id:string; name:string; displayName?:string|null; gender?:string|null; course_rating:number|null; slope_rating:number|null; yards:number|null; par:number|null;
@@ -11,11 +12,23 @@ export type ReviewedTeeSource = { id:string; name:string; displayName?:string|nu
   ratingEvidenceV1?:CourseRatingEvidenceBundleV1;
   supplement?:{sourceUrl:string;authority:string;observedAt:string;hash:string;physicalHoles?:9|18;schemaVersion?:1|2;courseId?:string;teeId?:string};
   supplementOriginal?:ReviewedTeeSource };
+export type ReviewedScorecardProfileTee = {
+  teeId:string; ratingGender:string; par:number|null; courseRating:number|null; bogeyRating:number|null; slopeRating:number|null;
+  frontNineRating:number|null; frontNineSlope:number|null; backNineRating:number|null; backNineSlope:number|null;
+  totalYards:number|null; totalMeters:number|null; sourceExternalId:string|null; providerStatus:string|null;
+};
+export type ReviewedScorecardProfileHole = { holeId:string; holeNumber:number; ratingGender:string; strokeIndex:number };
+export type ReviewedScorecardProfile = {
+  id:string; courseId:string; name:string; provenance:ScorecardProfileProvenance; sourceProvider:string;
+  sourceExternalId:string|null; verifiedAt:string|null; effectiveFrom:string|null; effectiveTo:string|null;
+  active:boolean; historical:boolean; defaultForPlay:boolean; status:string;
+  tees:ReviewedScorecardProfileTee[]; holes:ReviewedScorecardProfileHole[];
+};
 export type ReviewedCatalogCourse = { id:string; clubId:string; name:string; clubName:string; holes:9|18; country?:string; city?:string; stateRegion?:string; address?:string; timezone?:string; aliases:string[];
   latitude?:number; longitude?:number; locationEvidence?:{sourceUrl:string;verifiedAt:string}; sourceUrl:string; observedAt:string; dataVersion:string;
   provider?:string; ratingReuseStatus?:'AUTHORIZED'|'LEGAL_REVIEW_REQUIRED';
   origin?:'GHIN'|'BACKYARD_PROVISIONAL'|'BACKYARD_ADMIN'; isProvisional?:boolean; providerCourseId?:string; providerStatus?:string;
-  tees:ReviewedTeeSource[] };
+  tees:ReviewedTeeSource[]; scorecardProfiles?:ReviewedScorecardProfile[] };
 export function normalizeCourseSearch(value:string) { return value.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLocaleLowerCase('es-MX').replace(/[^\p{L}\p{N}]+/gu,' ').trim(); }
 export function searchReviewedCourses<T extends Omit<ReviewedCatalogCourse,'tees'>>(courses:T[],query:string) {
   const tokens=normalizeCourseSearch(query).split(/\s+/).filter(Boolean);
