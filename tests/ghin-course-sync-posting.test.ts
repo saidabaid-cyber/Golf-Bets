@@ -120,9 +120,9 @@ test("el sync conserva como históricos inactivos los tees reviewed sustituidos"
   assert.deepEqual(superseded, ["ghin:23233:tee:a5be40b61705", "ghin:23233:tee:ad652458406f"]);
 });
 
-test("el plan usa status normalizado active para elegibilidad aunque falte rawStatus", () => {
+test("el plan usa evidencia del endpoint de posting cuando GHIN omite TeeSetStatus", () => {
   const course = laVistaCourse();
-  course.tees = course.tees.map((tee) => ({ ...tee, rawStatus: null, status: "active" }));
+  course.tees = course.tees.map((tee) => ({ ...tee, rawStatus: null, status: "unknown" }));
   const plan = buildGhinCourseSyncPlan({
     course,
     scorePostingTees: course.tees,
@@ -138,6 +138,7 @@ test("el plan usa status normalizado active para elegibilidad aunque falte rawSt
 test("GHIN_POST_ELIGIBLE exige provider, IDs, mapping, status y tee publicable", () => {
   const official = ghinPostEligibility({ provider: "GHIN", providerCourseId: "23233", providerTeeSetId: "280984", providerStatus: "Active", mappingStatus: "CONFIRMED", sourceIsProvisional: false, scorePostingTeeSetIds: new Set(["280984"]) });
   assert.deepEqual(official, { eligible: true, code: "GHIN_POST_ELIGIBLE" });
+  assert.deepEqual(ghinPostEligibility({ provider: "GHIN", providerCourseId: "23233", providerTeeSetId: "280984", providerStatus: null, providerActiveEvidence: true, mappingStatus: "CONFIRMED", sourceIsProvisional: false, scorePostingTeeSetIds: new Set(["280984"]) }), { eligible: true, code: "GHIN_POST_ELIGIBLE" });
   assert.equal(ghinPostEligibility({ provider: "GHIN", providerCourseId: "23233", providerTeeSetId: "280984", providerStatus: "Active", mappingStatus: "CONFIRMED", sourceIsProvisional: true }).code, "PROVISIONAL_LAYOUT_NOT_POSTABLE");
   assert.equal(ghinPostEligibility({ provider: "GHIN", providerCourseId: "23233", providerTeeSetId: "wrong-layout", providerStatus: "Active", mappingStatus: "CONFIRMED", sourceIsProvisional: false, scorePostingTeeSetIds: new Set(["280984"]) }).code, "GHIN_TEE_NOT_SCORE_POSTING_ENABLED");
 });

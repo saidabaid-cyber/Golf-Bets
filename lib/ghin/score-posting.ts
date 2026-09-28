@@ -67,6 +67,7 @@ export function ghinPostEligibility(input: {
   providerCourseId: string | null;
   providerTeeSetId: string | null;
   providerStatus: string | null;
+  providerActiveEvidence?: boolean;
   mappingStatus: string | null;
   sourceIsProvisional: boolean;
   scorePostingTeeSetIds?: ReadonlySet<string>;
@@ -76,7 +77,7 @@ export function ghinPostEligibility(input: {
   if (!input.providerCourseId) return { eligible: false, code: "GHIN_COURSE_ID_REQUIRED" };
   if (!input.providerTeeSetId) return { eligible: false, code: "GHIN_TEE_SET_ID_REQUIRED" };
   if (input.mappingStatus !== "CONFIRMED") return { eligible: false, code: "GHIN_MAPPING_NOT_CONFIRMED" };
-  if (input.providerStatus?.trim().toLocaleLowerCase("en-US") !== "active") {
+  if (input.providerStatus?.trim().toLocaleLowerCase("en-US") !== "active" && input.providerActiveEvidence !== true) {
     return { eligible: false, code: "GHIN_PROVIDER_STATUS_INVALID" };
   }
   if (input.scorePostingTeeSetIds && !input.scorePostingTeeSetIds.has(input.providerTeeSetId)) {

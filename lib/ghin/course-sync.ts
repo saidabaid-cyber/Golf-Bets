@@ -261,6 +261,8 @@ export function buildGhinCourseSyncPlan(input: {
       providerCourseId: externalCourseId,
       providerTeeSetId: tee.id,
       providerStatus: eligibilityProviderStatus(tee),
+      providerActiveEvidence: tee.status === "active"
+        || (course.status === "active" && livePostingIds.has(tee.id)),
       mappingStatus,
       sourceIsProvisional: false,
       scorePostingTeeSetIds: livePostingIds,
