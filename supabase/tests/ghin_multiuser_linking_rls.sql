@@ -104,12 +104,29 @@ delete from public.player_handicap_provider_profiles
 where owner_id = '41000000-0000-4000-8000-000000000002'
   and provider = 'GHIN';
 
+-- The ordinary multiuser case: two Backyard owners, two distinct verified
+-- GHIN identities. Every subsequent read runs as the authenticated owner.
+insert into public.player_handicap_provider_profiles(
+  owner_id, provider, external_player_id, association_status, self_attested_at,
+  provider_player_name, provider_club_name, provider_home_club_name,
+  provider_player_status, handicap_index, last_successful_sync_at,
+  last_attempted_sync_at, last_attempt_status
+) values (
+  '41000000-0000-4000-8000-000000000002', 'GHIN', '90000002', 'VERIFIED', now(),
+  'Synthetic GHIN B', 'Synthetic Club B', 'Synthetic Home Club B',
+  'Active', 12.3, now(), now(), 'SUCCESS'
+);
+
 set local role authenticated;
 select set_config('request.jwt.claim.sub', '41000000-0000-4000-8000-000000000001', true);
 select set_config('request.jwt.claims', '{"sub":"41000000-0000-4000-8000-000000000001","role":"authenticated"}', true);
 do $$ declare row_count integer; begin
   select count(*) into row_count from public.player_handicap_provider_profiles;
   if row_count <> 1 then raise exception 'owner A cannot read its GHIN link'; end if;
+  select count(*) into row_count from public.player_handicap_provider_profiles
+  where owner_id = '41000000-0000-4000-8000-000000000002'
+     or external_player_id = '90000002';
+  if row_count <> 0 then raise exception 'owner A can read owner B through manipulated selectors'; end if;
 end $$;
 
 reset role;
@@ -118,7 +135,11 @@ select set_config('request.jwt.claim.sub', '41000000-0000-4000-8000-000000000002
 select set_config('request.jwt.claims', '{"sub":"41000000-0000-4000-8000-000000000002","role":"authenticated"}', true);
 do $$ declare row_count integer; begin
   select count(*) into row_count from public.player_handicap_provider_profiles;
-  if row_count <> 0 then raise exception 'owner B can read owner A GHIN link'; end if;
+  if row_count <> 1 then raise exception 'owner B cannot read its own GHIN link'; end if;
+  select count(*) into row_count from public.player_handicap_provider_profiles
+  where owner_id = '41000000-0000-4000-8000-000000000001'
+     or external_player_id = '90000001';
+  if row_count <> 0 then raise exception 'owner B can read owner A through manipulated selectors'; end if;
 end $$;
 
 reset role;
@@ -134,17 +155,26 @@ begin
     where owner_id = '41000000-0000-4000-8000-000000000001'
       and provider = 'GHIN' and event = 'UNLINKED'
   ) then raise exception 'unlink audit missing'; end if;
+  if not exists (
+    select 1 from public.player_handicap_provider_profiles
+    where owner_id = '41000000-0000-4000-8000-000000000002'
+      and provider = 'GHIN' and external_player_id = '90000002'
+      and association_status = 'VERIFIED'
+  ) then raise exception 'unlinking owner A affected owner B'; end if;
 end;
 $$;
 
--- Once explicitly unlinked, that provider identity may be linked by another
--- account; the historical audit never exposes or retains a session secret.
+-- A provider identity becomes linkable again only after its prior active link
+-- is explicitly removed. This is an isolated rollback-only fixture.
+delete from public.player_handicap_provider_profiles
+where owner_id = '41000000-0000-4000-8000-000000000002'
+  and provider = 'GHIN';
 insert into public.player_handicap_provider_profiles(
   owner_id, provider, external_player_id, association_status, self_attested_at,
   provider_player_name, last_successful_sync_at, last_attempted_sync_at, last_attempt_status
 ) values (
   '41000000-0000-4000-8000-000000000002', 'GHIN', '90000001', 'VERIFIED', now(),
-  'Synthetic GHIN B', now(), now(), 'SUCCESS'
+  'Synthetic GHIN B relink', now(), now(), 'SUCCESS'
 );
 
 rollback;

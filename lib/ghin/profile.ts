@@ -17,6 +17,7 @@ export type GhinProfileProjection = {
 
 export type GhinProfileResponse = {
   available: true;
+  linkState: "GHIN_LINKED" | "GHIN_NOT_LINKED";
   profile: GhinProfileProjection | null;
 };
 
@@ -42,7 +43,12 @@ function nullableText(value: unknown) {
 export function parseGhinProfileResponse(value: unknown): GhinProfileResponse | null {
   const root = record(value);
   if (!root || root.available !== true) return null;
-  if (root.profile === null) return { available: true, profile: null };
+  if (root.profile === null) {
+    return root.linkState === "GHIN_NOT_LINKED"
+      ? { available: true, linkState: "GHIN_NOT_LINKED", profile: null }
+      : null;
+  }
+  if (root.linkState !== "GHIN_LINKED") return null;
   const profile = record(root.profile);
   if (!profile
     || typeof profile.ghinNumber !== "string"
@@ -66,6 +72,7 @@ export function parseGhinProfileResponse(value: unknown): GhinProfileResponse | 
     || revisionDate === undefined || lastErrorCode === undefined || handicapIndex === undefined) return null;
   return {
     available: true,
+    linkState: "GHIN_LINKED",
     profile: {
       ghinNumber: profile.ghinNumber,
       playerName: profile.playerName,

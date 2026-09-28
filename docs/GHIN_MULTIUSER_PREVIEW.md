@@ -42,6 +42,11 @@ a dos cuentas Backyard. RLS permite a cada usuario leer exclusivamente su fila;
 las escrituras continúan siendo server-managed y siempre se acotan al `userId`
 obtenido de la sesión Backyard verificada.
 
+La lectura sin relación activa devuelve el estado tipado `GHIN_NOT_LINKED` y
+`profile: null`; nunca usa una identidad, fixture o credencial QA como fallback.
+La lectura vinculada devuelve `GHIN_LINKED` y sólo la proyección del owner de la
+sesión autenticada.
+
 Se persisten sólo número GHIN, nombre, club/home club, Handicap Index, status,
 revision date y metadatos sanitizados de sincronización. La desvinculación borra
 la relación activa y escribe un evento mínimo server-only; no toca rondas,

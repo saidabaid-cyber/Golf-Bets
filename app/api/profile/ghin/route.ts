@@ -27,6 +27,14 @@ const PROFILE_COLUMNS = "external_player_id,association_status,provider_player_n
 
 type UserContext = Extract<Awaited<ReturnType<typeof ghinUserContext>>, { ok: true }>;
 
+function profilePayload(profile: ReturnType<typeof providerRowToProfile> | null) {
+  return {
+    available: true,
+    linkState: profile ? "GHIN_LINKED" as const : "GHIN_NOT_LINKED" as const,
+    profile,
+  };
+}
+
 function record(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
@@ -134,7 +142,7 @@ export async function GET(request: NextRequest) {
   if (!context.ok) return context.response;
   if (request.nextUrl.search) return privateGhinJson({ error: "Solicitud inválida.", code: "SELECTORS_REJECTED" }, 400);
   try {
-    return privateGhinJson({ available: true, profile: await readProfile(context) });
+    return privateGhinJson(profilePayload(await readProfile(context)));
   } catch {
     return privateGhinJson({ error: "No fue posible leer el vínculo GHIN.", code: "PROFILE_READ_FAILED" }, 503);
   }
@@ -185,7 +193,7 @@ export async function POST(request: NextRequest) {
     try {
       const result = await reauthorizeGhinSession(context.userId, linked.ghinNumber, supplied);
       const profile = await persistVerifiedGolfer(context.userId, result.golfer, attemptedAt);
-      return privateGhinJson({ available: true, profile, reauthorized: true, safety: { readOnly: true, scorePostingCalls: 0 } });
+      return privateGhinJson({ ...profilePayload(profile), reauthorized: true, safety: { readOnly: true, scorePostingCalls: 0 } });
     } catch (error) {
       const failure = clientError(error);
       await recordFailedAttempt(context.userId, attemptedAt, failure.code);
@@ -214,7 +222,7 @@ export async function POST(request: NextRequest) {
     try {
       const profile = await persistVerifiedGolfer(context.userId, pending.golfer, new Date().toISOString());
       if (pending.session) activateGhinSession(pending.session);
-      return privateGhinJson({ available: true, profile, safety: { readOnly: true, scorePostingCalls: 0 } });
+      return privateGhinJson({ ...profilePayload(profile), safety: { readOnly: true, scorePostingCalls: 0 } });
     } catch (error) {
       const code = error instanceof Error ? error.message : "PROFILE_WRITE_FAILED";
       if (code === "GHIN_ALREADY_LINKED") {
@@ -236,7 +244,7 @@ export async function POST(request: NextRequest) {
     const removed = await admin.rpc("unlink_ghin_profile_v1", { p_owner_id: context.userId });
     if (removed.error) return privateGhinJson({ error: "No se pudo desvincular GHIN.", code: "UNLINK_FAILED" }, 503);
     clearGhinUserSession(context.userId);
-    return privateGhinJson({ available: true, profile: null, unlinked: Boolean(removed.data) });
+    return privateGhinJson({ ...profilePayload(null), unlinked: Boolean(removed.data) });
   }
 
   if (operation !== "refresh" && operation !== "scores") {
@@ -283,7 +291,7 @@ export async function POST(request: NextRequest) {
     const lookup = await session.client.lookupGolfer(linked.ghinNumber);
     if (lookup.data.ghinNumber !== linked.ghinNumber) throw new Error("IDENTITY_MISMATCH");
     const profile = await persistVerifiedGolfer(context.userId, lookup.data, attemptedAt);
-    return privateGhinJson({ available: true, profile, safety: { readOnly: true, scorePostingCalls: 0 } });
+    return privateGhinJson({ ...profilePayload(profile), safety: { readOnly: true, scorePostingCalls: 0 } });
   } catch (error) {
     const failure = clientError(error);
     await recordFailedAttempt(context.userId, attemptedAt, failure.code);
