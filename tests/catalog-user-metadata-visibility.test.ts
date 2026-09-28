@@ -30,7 +30,9 @@ test("las superficies del jugador no presentan metadata interna del catálogo", 
     /Datos revisados/i,
     /Catálogo curado/i,
     /cobertura parcial/i,
+    /señales comparables/i,
     /Sin dato verificado/i,
+    /no tiene suficientes datos disponibles/i,
     /official product specifications/i,
   ];
 

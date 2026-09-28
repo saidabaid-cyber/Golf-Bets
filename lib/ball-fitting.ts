@@ -414,7 +414,7 @@ const COMPARISON_LABELS: Record<ScoredAttribute, string> = {
 };
 
 function compareToCurrent(ball: GolfBallCatalog, current: GolfBallCatalog | null, criteria: readonly Criterion[]): string[] {
-  if (!current) return ["Sin comparación: la bola actual no tiene suficientes datos disponibles."];
+  if (!current) return ["Tu bola actual no tiene una comparación disponible."];
   const comparisons: string[] = [];
   for (const attribute of ["flight", "feel", "driverSpin", "ironSpin", "shortGameSpin"] as const) {
     const recommended = ball[attribute];

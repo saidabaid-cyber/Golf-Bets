@@ -290,7 +290,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
   </div>;
 
   return <div className={styles.wizard}>
-    <div className={styles.wizardHeader}><div><div className="eyebrow">THE BACKYARD BALL FIT</div><h2>{result ? "Tu mejor grupo de bolas" : `Paso ${step + 1} de 6`}</h2><p>{result ? `Afinidad orientativa · señales comparables ${result.inputCompleteness}%` : "2–4 minutos · puedes guardar y regresar"}</p></div><button type="button" className="textButton" onClick={saveAndClose}>Guardar y regresar</button></div>
+    <div className={styles.wizardHeader}><div><div className="eyebrow">THE BACKYARD BALL FIT</div><h2>{result ? "Tu mejor grupo de bolas" : `Paso ${step + 1} de 6`}</h2><p>{result ? "Recomendaciones según tus preferencias" : "2–4 minutos · puedes guardar y regresar"}</p></div><button type="button" className="textButton" onClick={saveAndClose}>Guardar y regresar</button></div>
     <div className={styles.progressTrack} aria-label={`${progress}% del fitting`}><span style={{ width: `${progress}%` }} /></div>
 
     {!result && step === 0 && <section className={styles.questionBlock}>
