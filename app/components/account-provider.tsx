@@ -914,10 +914,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       // accounts start ON; only an established account can supply a prior
       // explicit cloud choice before the app's normal preference sync runs.
       if (accountEntry.existingAccount && !preferencesResult.error && localStorage.getItem(STORAGE_KEYS.contrast) === null && typeof preferencesResult.data?.high_contrast === 'boolean') localStorage.setItem(STORAGE_KEYS.contrast, String(preferencesResult.data.high_contrast));
-      // Persisted cloud state is the only new-account proof. This runs before
-      // children hydrate, so their first rendered toggle matches the account.
-      // Missing legacy rows/values deliberately leave local absence as OFF.
-      if (!preferencesResult.error && (!accountEntry.existingAccount || localStorage.getItem(STORAGE_KEYS.notifications) === null) && typeof preferencesResult.data?.notifications_enabled === "boolean") {
+      // The persisted owner row is canonical for an authenticated account.
+      // Applying it every time prevents guest/another-account workspace data
+      // from repainting the toggle while preserving every explicit server choice.
+      if (!preferencesResult.error && typeof preferencesResult.data?.notifications_enabled === "boolean") {
         const notificationsEnabled = preferencesResult.data.notifications_enabled;
         localStorage.setItem(STORAGE_KEYS.notifications, String(notificationsEnabled));
         window.dispatchEvent(new CustomEvent("backyard:account-notifications-hydrated", {

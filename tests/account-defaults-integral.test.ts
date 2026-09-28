@@ -149,7 +149,7 @@ test("Auth bootstrap alone applies new-account defaults; generic and legacy path
   assert.match(accountProvider, /current\.profileVisibility === profileVisibility/);
   assert.match(accountProvider, /select\("default_handicap,high_contrast,notifications_enabled,updated_at"\)/);
   assert.match(accountProvider, /typeof preferencesResult\.data\?\.notifications_enabled === "boolean"/);
-  assert.match(accountProvider, /!accountEntry\.existingAccount \|\| localStorage\.getItem\(STORAGE_KEYS\.notifications\) === null/);
+  assert.doesNotMatch(accountProvider, /localStorage\.getItem\(STORAGE_KEYS\.notifications\) === null/);
   assert.match(accountProvider, /backyard:account-notifications-hydrated/);
   assert.match(appPage, /backyard:account-notifications-hydrated/);
   assert.match(appPage, /setNotificationsEnabled\(detail\.enabled\)/);
