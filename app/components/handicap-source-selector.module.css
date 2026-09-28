@@ -9,15 +9,17 @@
 .backyardChoice { background:linear-gradient(145deg,rgba(251,252,247,.95),rgba(238,244,232,.92)); }
 .noIndexChoice { background:rgba(255,255,255,.82);box-shadow:0 10px 26px rgba(16,48,28,.07); }
 .activeChoice { border-color:#4e7b5a;box-shadow:0 14px 34px rgba(20,72,40,.13),inset 0 0 0 1px #4e7b5a; }
-.choiceHeading { display:grid;grid-template-columns:142px minmax(0,1fr);align-items:center;gap:20px; }
+.choiceHeading { display:grid;grid-template-columns:142px minmax(0,1fr) 24px;align-items:center;gap:20px; }
 .choiceHeading>div { display:grid;min-width:0;gap:4px; }
 .choiceHeading strong { color:var(--by-forest,#173f2a);font:500 27px/1.04 var(--by-editorial,Georgia,serif);letter-spacing:-.04em;text-transform:none; }
 .ghinMark,.backyardMark,.noIndexMark { display:grid;width:142px;height:92px;place-items:center;align-content:center;border-radius:18px; }
-.ghinMark { position:relative;background:transparent; }
+.ghinMark { position:relative;gap:7px;border:1px solid #dfe6e2;background:rgba(255,255,255,.94);padding:14px 12px 9px;box-shadow:inset 0 -3px #c9363b; }
 .ghinMark img { width:100%;height:auto;object-fit:contain; }
+.ghinMark small { color:#173f2a;font-size:7px;font-weight:850;letter-spacing:.14em; }
 .backyardMark { background:linear-gradient(145deg,#f4f8ee,#e3edd9);box-shadow:inset 0 0 0 1px #d4e1d2; }
-.backyardMark img { width:86px;height:78px;object-fit:contain; }
+.backyardMark svg { width:70px;height:78px; }
 .noIndexMark { width:84px;height:84px;margin-inline:auto;border:1px solid #d8e0da;background:linear-gradient(145deg,#fff,#eef2eb);color:#27563b;font:400 38px/1 var(--by-editorial,Georgia,serif);box-shadow:inset 0 0 0 8px rgba(228,236,224,.75); }
+.sourceChevron { color:#173f2a;font:300 34px/1 var(--by-editorial,Georgia,serif); }
 .recommended,.localBadge,.flexibleBadge { width:max-content;border-radius:999px;padding:4px 7px;font-size:8px;font-weight:900;letter-spacing:.12em; }
 .recommended { background:#e9f2eb;color:#1d6037; }
 .localBadge { background:#e7eddc;color:#476138; }
@@ -35,9 +37,9 @@
 :global([data-onboarding-step="ghin"]) .sourceIntro { display:none; }
 @media(max-width:560px) {
   .choice { padding:17px; }
-  .choiceHeading { grid-template-columns:104px minmax(0,1fr);gap:13px; }
+  .choiceHeading { grid-template-columns:104px minmax(0,1fr) 18px;gap:13px; }
   .ghinMark,.backyardMark { width:104px;height:76px;border-radius:16px; }
-  .backyardMark img { width:70px;height:64px; }
+  .backyardMark svg { width:58px;height:64px; }
   .noIndexMark { width:68px;height:68px; }
   .choiceHeading strong { font-size:22px; }
   .choice>p,.choiceBody>p { font-size:12px; }

@@ -61,7 +61,7 @@ test("equipment and Ball Fit use owned premium product art with selected and emp
   assert.match(wizard, /GolfBallVisual/);
   for (const priority of ["Distancia", "Control", "Sensación"]) assert.match(wizard, new RegExp(priority));
   assert.match(visuals, /from "next\/image"/);
-  for (const asset of ["backyard-driver-card.png", "backyard-fairway-card.png", "backyard-hybrid-card.png", "backyard-irons-card.png", "backyard-wedge-card.png", "backyard-putter-card.png", "backyard-ball-premium.png"]) {
+  for (const asset of ["backyard-driver-clean.png", "backyard-fairway-clean.png", "backyard-hybrid-clean.png", "backyard-irons-clean.png", "backyard-wedge-clean.png", "backyard-putter-clean.png", "backyard-ball-clean.png"]) {
     assert.ok(statSync(join("public", "brand", "equipment", asset)).size > 50_000, `${asset} must contain production artwork`);
     assert.match(visuals, new RegExp(asset.replace(".", "\\.")));
   }
@@ -92,7 +92,7 @@ test("index selection presents GHIN and Backyard as branded product choices", ()
   const css = source("app/components/handicap-source-selector.module.css");
   assert.match(choices, /ghin-logotype\.png/);
   assert.match(choices, /Sincroniza tu Handicap Index/);
-  assert.match(choices, /the-backyard-logo\.svg/);
+  assert.match(choices, /BackyardMark/);
   assert.ok(statSync(join("public", "brand", "ghin-logotype.png")).size > 10_000);
   assert.match(css, /\.ghinMark img/);
   assert.match(css, /data-onboarding-step="ghin"/);

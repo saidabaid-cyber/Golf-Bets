@@ -84,10 +84,10 @@ test("canonical region selection validates immediately; changing country clears 
 
 test("source selector activation handler, no false success after failed/pending cloud save", async () => {
   const changes: boolean[] = [];
-  const render = component("app/components/handicap-source-selector.tsx", "HandicapSourceChoices", { Image: "image", GhinPlaceholder: "ghin", GhinReadOnlyPanel: "ghin-live", verifiedGhinHandicapIndex, styles: {} });
+  const render = component("app/components/handicap-source-selector.tsx", "HandicapSourceChoices", { Image: "image", BackyardIcon: "backyard-icon", BackyardMark: "backyard-mark", GhinPlaceholder: "ghin", GhinReadOnlyPanel: "ghin-live", verifiedGhinHandicapIndex, styles: {} });
   const control = { ready: true, saving: false, error: "", preference: null, change: async (value: boolean) => changes.push(value), selectGhin: async () => {}, retry: async () => {} };
   const tree = render({ authenticated: true, control });
-  assert.match(text(tree), /VINCULAR GHIN/); assert.match(text(tree), /ACTIVAR BACKYARD INDEX/);
+  assert.match(text(tree), /Vincular GHIN/i); assert.match(text(tree), /ACTIVAR BACKYARD INDEX/);
   const loadingGhin = render({ authenticated: true, control, ghinControl: { ready: false, enabled: false } });
   assert.match(text(loadingGhin), /Verificando disponibilidad de GHIN/);
   assert.equal(nodes(loadingGhin).some((node) => node.type === "ghin"), false, "an authenticated account must not see the signed-out placeholder while GHIN loads");

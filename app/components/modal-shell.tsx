@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { isTopModal, registerModal } from "../../lib/mobile-viewport";
 
 export function ModalCloseButton({ onClose, disabled = false, label = "Cerrar" }: {
@@ -38,8 +39,8 @@ export function ModalShell({ open, onClose, label, labelledBy, describedBy, chil
   closeDisabled?: boolean;
 }) {
   if (!open) return null;
-  return <div className="modalBackdrop" role="presentation"><section className={className} role="dialog" aria-modal="true" aria-label={label} aria-labelledby={labelledBy} aria-describedby={describedBy}>
+  return createPortal(<div className="modalBackdrop" role="presentation"><section className={className} role="dialog" aria-modal="true" aria-label={label} aria-labelledby={labelledBy} aria-describedby={describedBy}>
     <ModalCloseButton onClose={onClose} disabled={closeDisabled} />
     {children}
-  </section></div>;
+  </section></div>, document.body);
 }

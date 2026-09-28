@@ -71,8 +71,8 @@ export function GhinReadOnlyPanel({
   return <div className={styles.root}>
     {!profile ? <>
       <p className={styles.note}>Autentícate con tu propia cuenta GHIN. The Backyard no guardará tu contraseña.</p>
-      <button type="button" className="secondary" disabled={control.authorizing} onClick={() => setAuthMode("link")}>
-        VINCULAR GHIN
+      <button type="button" className="primary" disabled={control.authorizing} onClick={() => setAuthMode("link")}>
+        VINCULAR GHIN <span aria-hidden="true">→</span>
       </button>
     </> : <>
       <p className={styles.badge}>{profile.associationStatus === "VERIFIED" ? "✓ GHIN VINCULADO" : "DATOS CONSULTADOS DESDE GHIN"}</p>

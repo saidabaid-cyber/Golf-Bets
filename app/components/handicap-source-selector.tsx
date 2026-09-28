@@ -2,6 +2,8 @@
 
 import Image from "next/image";
 
+import { BackyardIcon } from "./backyard-icon";
+import { BackyardMark } from "./backyard-mark";
 import { GhinPlaceholder } from "./ghin-placeholder";
 import { GhinReadOnlyPanel } from "./ghin-read-only-panel";
 import type { GhinReadOnlyProfileController } from "./use-ghin-read-only-profile";
@@ -13,9 +15,9 @@ export function HandicapSourceChoices({ control, authenticated, ghinControl, onC
   const verifiedGhinActive = verifiedGhinHandicapIndex(ghinControl?.profile) !== null;
   const activated = !verifiedGhinActive && control.preference?.enabled === true && control.preference.handicapSource !== "GHIN";
   return <section className={styles.root} aria-label="Handicap / Índice">
-    <div className={styles.sourceIntro}><span>FUENTE DE JUEGO</span><h3>Tu índice, a tu manera</h3><p>Elige una fuente ahora. Siempre podrás cambiarla desde Perfil.</p></div>
+    <div className={styles.sourceIntro}><span>FUENTE DE JUEGO</span><h3>Elige tu fuente de índice</h3><p>Vincula GHIN, activa Backyard Index o continúa sin índice. Siempre podrás cambiarlo desde Perfil.</p></div>
     <div className={`${styles.choice} ${styles.ghinChoice} ${verifiedGhinActive ? styles.activeChoice : ""}`} data-handicap-source="GHIN">
-      <div className={styles.choiceHeading}><span className={styles.ghinMark}><Image src="/brand/ghin-logotype.png" width={1036} height={297} sizes="(max-width: 560px) 104px, 142px" alt="GHIN — un servicio de USGA" /></span><div><span className={styles.recommended}>OFICIAL</span><strong>VINCULAR GHIN</strong></div></div>
+      <div className={styles.choiceHeading}><span className={styles.ghinMark}><Image src="/brand/ghin-logotype.png" width={1036} height={297} sizes="(max-width: 560px) 104px, 142px" alt="GHIN" /><small>A USGA SERVICE</small></span><div><span className={styles.recommended}>OFICIAL</span><strong>Vincular GHIN</strong></div><span className={styles.sourceChevron} aria-hidden="true">›</span></div>
       <p>Consulta tu Handicap Index verificado y la información disponible de tu perfil GHIN.</p>
       <ul className={styles.benefits}><li>Sincroniza tu Handicap Index</li><li>Mantén tu información actualizada</li><li>Consulta tu scoring record</li></ul>
       <div className={styles.choiceBody}>{ghinControl && !ghinControl.ready
@@ -25,7 +27,7 @@ export function HandicapSourceChoices({ control, authenticated, ghinControl, onC
         : <GhinPlaceholder authenticated={authenticated} />}</div>
     </div>
     <div className={`${styles.choice} ${styles.backyardChoice} ${activated ? styles.activeChoice : ""}`} data-handicap-source="BACKYARD">
-      <div className={styles.choiceHeading}><span className={styles.backyardMark} aria-hidden="true"><Image src="/brand/the-backyard-logo.svg" width={64} height={64} alt="" /></span><div><span className={styles.localBadge}>LOCAL</span><strong>Usar Backyard Index</strong></div></div>
+      <div className={styles.choiceHeading}><span className={styles.backyardMark} aria-hidden="true"><BackyardMark /></span><div><span className={styles.localBadge}>LOCAL</span><strong>Usar Backyard Index</strong></div><span className={styles.sourceChevron} aria-hidden="true">›</span></div>
       <p>Construye una referencia propia con tus rondas elegibles en The Backyard.</p>
       <ul className={styles.benefits}><li>Estimación basada en tus rondas</li><li>Ideal para seguir tu progreso</li><li>Local · no oficial</li></ul>
       {verifiedGhinActive ? <p role="status"><b>GHIN ES TU FUENTE ACTIVA</b><br />Tu Handicap Index verificado tiene prioridad. Si desvinculas GHIN, podrás usar Backyard Index.</p>
@@ -36,7 +38,7 @@ export function HandicapSourceChoices({ control, authenticated, ghinControl, onC
       {control.error && <p role="alert">{control.error}</p>}
     </div>
     <div className={`${styles.choice} ${styles.noIndexChoice}`} data-handicap-source="NONE">
-      <div className={styles.choiceHeading}><span className={styles.noIndexMark} aria-hidden="true"><span>○</span></span><div><span className={styles.flexibleBadge}>FLEXIBLE</span><strong>Continuar sin índice</strong></div></div>
+      <div className={styles.choiceHeading}><span className={styles.noIndexMark} aria-hidden="true"><BackyardIcon name="players" size={32} /></span><div><span className={styles.flexibleBadge}>FLEXIBLE</span><strong>Continuar sin índice</strong></div><span className={styles.sourceChevron} aria-hidden="true">›</span></div>
       <p>Empieza a jugar sin inventar un valor. Esta decisión resuelve el paso y podrás cambiarla después.</p>
       <button type="button" className={styles.noIndexButton} disabled={!authenticated || !control.ready || control.saving} onClick={() => void (onContinueWithoutIndex ? onContinueWithoutIndex() : control.change(false))}>CONTINUAR SIN ÍNDICE <span aria-hidden="true">→</span></button>
     </div>
