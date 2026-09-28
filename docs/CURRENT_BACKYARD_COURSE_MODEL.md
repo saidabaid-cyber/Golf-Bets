@@ -122,7 +122,7 @@ El diff usa `ADDED`, `UPDATED`, `UNCHANGED`, `CONFLICT` y `DEPRECATED`. Ausencia
 ## Búsqueda, nearby y operación sin GHIN
 
 - Búsqueda: nombre de facility/layout, ciudad, estado y aliases; parcial, sin distinguir mayúsculas o acentos.
-- Nearby: usa únicamente ubicación autorizada del dispositivo; ordena facilities distintos y no bloquea búsqueda manual si el permiso falta.
+- Nearby: usa únicamente ubicación autorizada del dispositivo; muestra primero los 3 facilities más cercanos, ofrece “Ver más” y no bloquea búsqueda manual si el permiso falta.
 - La selección de ronda ya es Course/Layout → Tee y muestra yardage, Rating y Slope disponibles.
 - El catálogo está persistido en Supabase QA y tiene fallback local versionado. Una caída de GHIN no impide seleccionar datos ya sincronizados.
 - GHIN no participa en el cálculo de Course Handicap cuando Rating/Slope ya existen localmente.

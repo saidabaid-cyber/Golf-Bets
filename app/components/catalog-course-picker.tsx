@@ -13,6 +13,8 @@ export function CatalogCoursePicker({token,permissionOwnerId,onSelect,onSelectCl
   const [location,setLocation]=useState<PickerLocationState>({status:'idle'});
   const locationController=useRef<AbortController|null>(null);
   const nearby=useMemo(()=>location.status==='located'?nearestReviewedClubs(entries,location.point):[],[entries,location]);
+  const [nearbyLimit,setNearbyLimit]=useState(3);
+  const visibleNearby=nearby.slice(0,nearbyLimit);
   const locating=location.status==='loading';
   const [club,setClub]=useState<string|null>(selectedClubId||null),[chosen,setChosen]=useState(selectedCourseId),[selectingCourseId,setSelectingCourseId]=useState<string|null>(null),[retry,setRetry]=useState(0),[retryCourseId,setRetryCourseId]=useState<string|null>(null);
   const [choosingHomeCourse,setChoosingHomeCourse]=useState(!(purpose==='home-club'&&selectedClubId&&selectedCourseId));
@@ -67,6 +69,7 @@ export function CatalogCoursePicker({token,permissionOwnerId,onSelect,onSelectCl
     locationController.current?.abort();
     const controller=new AbortController();
     locationController.current=controller;
+    setNearbyLimit(3);
     setLocation({status:'loading'});
     void resolveAuthorizedNearbyLocation(localStorage,permissionOwnerId,navigator,navigator.geolocation,{signal:controller.signal})
       .then(result=>{if(!controller.signal.aborted)setLocation(result);})
@@ -88,7 +91,8 @@ export function CatalogCoursePicker({token,permissionOwnerId,onSelect,onSelectCl
     {locating&&<><p role="status">Buscando tu ubicación autorizada…</p><button type="button" className="textButton" onClick={()=>{locationController.current?.abort();setLocation({status:'idle'});}}>Cancelar búsqueda</button></>}
     {locationError&&<div role="status"><p>{locationError}</p><button type="button" className="secondary" onClick={locate}>Reintentar</button></div>}
     {location.status==='located'&&<p role="status">{loading?'Ubicación obtenida. Cargando clubes…':error?'Ubicación obtenida. Reintenta cargar el catálogo.':`${reviewedClubsLocationSummary(nearby)}${location.point.accuracyMeters===undefined?'':` Precisión informada por el dispositivo: ±${location.point.accuracyMeters} m.`}`}</p>}
-    {nearby.map(c=><button type="button" className={`${styles.club} ${club===c.clubId?styles.clubSelected:''}`} aria-pressed={club===c.clubId} disabled={selectingCourseId!==null} key={c.clubId} onClick={()=>selectClub(c)}><b>{c.clubName}</b><span>{[c.city,c.stateRegion].filter(Boolean).join(', ')} · {c.distanceKm.toFixed(1)} km</span>{club===c.clubId&&<em>✓ {selectingCourseId?'Guardando…':'Seleccionado'}</em>}</button>)}
+    {visibleNearby.map(c=><button type="button" className={`${styles.club} ${club===c.clubId?styles.clubSelected:''}`} aria-pressed={club===c.clubId} disabled={selectingCourseId!==null} key={c.clubId} onClick={()=>selectClub(c)}><b>{c.clubName}</b><span>{[c.city,c.stateRegion].filter(Boolean).join(', ')} · {c.distanceKm.toFixed(1)} km</span>{club===c.clubId&&<em>✓ {selectingCourseId?'Guardando…':'Seleccionado'}</em>}</button>)}
+    {nearby.length>visibleNearby.length&&<button type="button" className="textButton" onClick={()=>setNearbyLimit(limit=>Math.min(limit+9,nearby.length))}>Ver más campos cercanos</button>}
     {nearby.length>0&&<details className={styles.notes}><summary>Sobre las distancias</summary><small>Distancia geográfica aproximada, no de manejo, entre clubes con ubicación disponible. Algunas ubicaciones: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors (ODbL)</a>.</small></details>}
     <AnchoredSearch inlineResults label="Buscar otro campo" value={query} onChange={setQuery} placeholder="Nombre, club o nombre alternativo" expanded={Boolean(query.trim())} status={loading?'Cargando catálogo…':query.trim()&&!clubs.length?'Sin coincidencias. Puedes solicitar el campo.':`${entries.length} recorridos disponibles`}>
       {clubs.slice(0,30).map(c=><AnchoredSearchOption key={c.clubId} label={`Seleccionar ${c.clubName}`} onSelect={()=>selectClub(c)}><b>{c.clubName}</b><small>{[c.city,c.stateRegion].filter(Boolean).join(', ')}</small></AnchoredSearchOption>)}
