@@ -154,7 +154,10 @@ test("launch monitor conserva golpes parciales, exclusiones y resumen robusto", 
   assert.match(launch, /Med\./);
   assert.match(launch, /Res\./);
   assert.match(launch, /3 golpes válidos/);
-  assert.match(launch, /Guardar captura parcial/);
+  assert.match(launch, /Agregar y seguir/);
+  assert.match(launch, /Incluido automáticamente/);
+  assert.match(launch, /setActiveClub\(nextProtocolClub/);
+  assert.doesNotMatch(launch, /Guardar golpe|Guardar captura parcial/);
 });
 
 test("Perfil carga el módulo con la misma identidad y la eliminación de cuenta limpia sus datos", () => {

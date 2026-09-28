@@ -12,17 +12,28 @@ import {
   upsertPlayerClub,
   type PlayerBall,
   type PlayerClub,
+  type ClubCategory,
 } from "../../lib/golf-equipment";
 import { BallFitWizard } from "./ball-fit-wizard";
 import type { BallFitHandicapSource } from "../../lib/ball-fit-handicap";
-import { BallEditor, CLUB_CATEGORY_ICONS, CLUB_CATEGORY_LABELS, ClubEditor } from "./equipment-editors";
+import { BallEditor, ClubEditor } from "./equipment-editors";
 import { BrandLockup } from "./brand-lockup";
 import { equipmentStatusLabel, useEquipmentProfile } from "./use-equipment-profile";
 import { useEquipmentCatalogSearch } from "./use-equipment-catalog-search";
 import type { ProfileHandedness } from "../../lib/equipment-editor-selection";
 import styles from "./equipment.module.css";
+import { ClubCategoryVisual, GolfBallVisual } from "./equipment-visuals";
 
 type Step = "clubs-prompt" | "clubs-build" | "ball-prompt" | "ball-select" | "fit-prompt" | "fit";
+
+const ONBOARDING_CLUB_CATEGORIES: ReadonlyArray<{ category: ClubCategory; label: string }> = [
+  { category: "DRIVER", label: "Driver" },
+  { category: "FAIRWAY_WOOD", label: "Maderas" },
+  { category: "HYBRID", label: "Híbridos" },
+  { category: "IRON_SET", label: "Hierros" },
+  { category: "WEDGE", label: "Wedges" },
+  { category: "PUTTER", label: "Putter" },
+];
 
 type EquipmentOnboardingProps = {
   userId: string;
@@ -53,6 +64,7 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defa
   const [step, setStep] = useState<Step>("clubs-prompt");
   const [initialized, setInitialized] = useState(false);
   const [clubEditorOpen, setClubEditorOpen] = useState(false);
+  const [clubEditorCategory, setClubEditorCategory] = useState<ClubCategory | null>(null);
   const [ballEditorOpen, setBallEditorOpen] = useState(false);
   useViewScrollReset(`${step}:${clubEditorOpen}:${ballEditorOpen}`);
   const currentClubs = useMemo(() => profile?.clubs.filter((club) => club.isCurrent) || [], [profile]);
@@ -143,7 +155,7 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defa
 
   // These flows replace the onboarding page instead of nesting a long sheet
   // inside it. The document is the only scroll container, including keyboard.
-  if (clubEditorOpen) return <main className={styles.onboardingScreen} data-equipment-screen="onboarding-club-editor"><ClubEditor userId={userId} catalog={clubCatalog.items} shafts={shaftCatalog.items} defaultHandedness={defaultHandedness} presentation="page" onCancel={() => setClubEditorOpen(false)} onSave={saveClub} /></main>;
+  if (clubEditorOpen) return <main className={styles.onboardingScreen} data-equipment-screen="onboarding-club-editor"><ClubEditor userId={userId} catalog={clubCatalog.items} shafts={shaftCatalog.items} defaultHandedness={defaultHandedness} initialCategory={clubEditorCategory || undefined} presentation="page" onCancel={() => { setClubEditorOpen(false); setClubEditorCategory(null); }} onSave={saveClub} /></main>;
   if (ballEditorOpen) return <main className={styles.onboardingScreen} data-equipment-screen="onboarding-ball-editor"><BallEditor userId={userId} catalog={ballCatalog.items} existing={null} presentation="page" onCancel={() => setBallEditorOpen(false)} onSave={saveBall} /></main>;
 
   return <main className={styles.onboardingScreen}><section className={styles.onboardingCard}>
@@ -156,8 +168,8 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defa
     {step === "clubs-build" && <>
       <div className="eyebrow">TUS BASTONES</div><h1>Construye tu bolsa</h1><p>Agrega sólo lo que quieras. Marca + modelo es suficiente y puedes regresar después desde Perfil.</p>
       <div className={styles.onboardingBuilder}>
-        {!currentClubs.length ? <div className={styles.emptyState}><b>Tu bolsa está lista para empezar</b><p>Driver, maderas, híbridos, utility, hierros, wedges y putter.</p></div> : <div className={styles.equipmentList}>{currentClubs.map((club) => { const catalog = club.catalogClubId ? clubCatalog.items.find((item) => item.id === club.catalogClubId) : null; const savedName = [club.customBrand, club.customModel].filter(Boolean).join(" ") || "Bastón guardado"; return <div className={styles.equipmentItem} key={club.id}><div className={styles.itemIdentity}><span className={styles.categoryIcon}>{CLUB_CATEGORY_ICONS[club.category]}</span><div><h3>{catalog ? `${catalog.brand} ${catalog.model}` : savedName}</h3><p>{CLUB_CATEGORY_LABELS[club.category]}{club.loft === null ? "" : ` · ${club.loft}°`}</p></div></div></div>; })}</div>}
-        <div className={styles.onboardingActions}><button type="button" className="secondary" onClick={() => setClubEditorOpen(true)}>+ Agregar bastón</button><button type="button" className="primary" onClick={() => finishClubs(currentClubs.length ? "COMPLETED" : "SKIPPED")}>{currentClubs.length ? "Continuar con mi bolsa" : "Continuar sin bastones"}</button></div>
+        <div className={styles.visualBagGrid} aria-label="Categorías de Mi Bolsa">{ONBOARDING_CLUB_CATEGORIES.map(({ category, label }) => { const clubs = currentClubs.filter((club) => club.category === category); const first = clubs[0]; const catalog = first?.catalogClubId ? clubCatalog.items.find((item) => item.id === first.catalogClubId) : null; const savedName = first ? catalog ? `${catalog.brand} ${catalog.model}` : [first.customBrand, first.customModel].filter(Boolean).join(" ") || "Configuración guardada" : "Agregar a mi bolsa"; return <button type="button" key={category} className={clubs.length ? styles.visualClubSelected : styles.visualClubCard} onClick={() => { setClubEditorCategory(category); setClubEditorOpen(true); }}><span className={styles.visualClubMedia}><ClubCategoryVisual category={category} /></span><span className={styles.visualClubCopy}><b>{label}</b><small>{savedName}{clubs.length > 1 ? ` · ${clubs.length} guardados` : first?.generation ? ` · ${first.generation}` : ""}</small></span><strong aria-hidden="true">{clubs.length ? "✓" : "+"}</strong></button>; })}</div>
+        <div className={styles.onboardingActions}><button type="button" className="secondary" onClick={() => { setClubEditorCategory(null); setClubEditorOpen(true); }}>Ver todas las categorías</button><button type="button" className="primary" onClick={() => finishClubs(currentClubs.length ? "COMPLETED" : "SKIPPED")}>{currentClubs.length ? "Continuar con mi bolsa" : "Continuar sin bastones"}</button></div>
       </div>
     </>}
 
@@ -168,7 +180,7 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defa
 
     {step === "ball-select" && <>
       <div className="eyebrow">TU BOLA</div><h1>Elige marca y modelo</h1><p>La generación y el color son opcionales. Si no aparece, puedes capturarla manualmente.</p>
-      {currentBall && <div className={styles.ballHero}><span className={styles.ballGlyph}>●</span><div><h3>{currentBall.ballBrand} {currentBall.ballModel}</h3><p>Guardada como tu bola actual</p></div></div>}
+      {currentBall && <div className={styles.ballHero}><span className={styles.ballGlyph}><GolfBallVisual /></span><div><h3>{currentBall.ballBrand} {currentBall.ballModel}</h3><p>{[currentBall.generation, currentBall.year].filter(Boolean).join(" · ") || "Guardada como tu bola actual"}</p></div></div>}
       <div className={styles.onboardingActions}><button type="button" className="primary" onClick={() => setBallEditorOpen(true)}>{currentBall ? "Cambiar bola" : "Abrir selector"}</button>{currentBall && <button type="button" className="secondary" onClick={() => setStep("fit-prompt")}>Continuar</button>}<button type="button" className={styles.onboardingSkip} onClick={skipBall}>Saltar por ahora</button></div>
     </>}
 

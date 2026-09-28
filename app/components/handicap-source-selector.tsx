@@ -7,7 +7,7 @@ import { useBackyardIndexPreference, type BackyardIndexPreferenceController } fr
 import { verifiedGhinHandicapIndex } from "../../lib/handicap-source";
 import styles from "./handicap-source-selector.module.css";
 
-export function HandicapSourceChoices({ control, authenticated, ghinControl }: { control: BackyardIndexPreferenceController; authenticated: boolean; ghinControl?: GhinReadOnlyProfileController }) {
+export function HandicapSourceChoices({ control, authenticated, ghinControl, onContinueWithoutIndex }: { control: BackyardIndexPreferenceController; authenticated: boolean; ghinControl?: GhinReadOnlyProfileController; onContinueWithoutIndex?: () => Promise<void> | void }) {
   const verifiedGhinActive = verifiedGhinHandicapIndex(ghinControl?.profile) !== null;
   const activated = !verifiedGhinActive && control.preference?.enabled === true && control.preference.handicapSource !== "GHIN";
   return <section className={styles.root} aria-label="Handicap / Índice">
@@ -26,7 +26,7 @@ export function HandicapSourceChoices({ control, authenticated, ghinControl }: {
       {control.error && <p role="alert">{control.error}</p>}
     </div>
     <div className={styles.choice}><strong>CONTINUAR SIN ÍNDICE</strong><p>Puedes jugar y usar The Backyard sin vincular GHIN ni activar Backyard Index.</p>
-      <button type="button" className="secondary" disabled={!authenticated || !control.ready || control.saving} onClick={() => control.change(false)}>CONTINUAR SIN ÍNDICE</button>
+      <button type="button" className="secondary" disabled={!authenticated || !control.ready || control.saving} onClick={() => void (onContinueWithoutIndex ? onContinueWithoutIndex() : control.change(false))}>CONTINUAR SIN ÍNDICE</button>
     </div>
   </section>;
 }

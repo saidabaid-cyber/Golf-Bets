@@ -45,6 +45,7 @@ function wizard(profileIndex: number | null = null, profileSource: handicap.Ball
     // Presentation children do not own the fitting state exercised by this harness.
     if (name === "./catalog-product-media") return { CatalogProductMedia: (props: Record<string, unknown>) => ({ type: "catalog-media", props }) };
     if (name === "./backyard-icon") return { BackyardIcon: (props: Record<string, unknown>) => ({ type: "svg", props }) };
+    if (name === "./equipment-visuals") return { GolfBallVisual: (props: Record<string, unknown>) => ({ type: "svg", props }) };
     if (name === "react/jsx-runtime") return { jsx, jsxs: jsx, Fragment: "fragment" };
     if (name.endsWith("/ball-fitting")) return fitting;
     if (name.endsWith("/ball-fitting-api")) return api;

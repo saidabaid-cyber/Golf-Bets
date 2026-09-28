@@ -96,7 +96,9 @@ test("visión de launch monitor conserva evidencia parcial y rechaza rangos inve
   assert.equal(normalizeLaunchMonitorVisionExtraction({ version: 1, source: "x", shots: [{ sourcePhotoId: "photo-1", club: "DRIVER", clubConfidence: 1, metrics: { ...metrics, ballSpeedMph: { value: 999, confidence: 1 } } }] }, ["photo-1"]), null);
   const camera = readFileSync("app/components/launch-monitor-camera.tsx", "utf8");
   assert.match(camera, /accept="image\/jpeg,image\/png,image\/webp"/);
-  assert.match(camera, /Revisa antes de guardar/);
+  assert.match(camera, /Corrige sólo lo necesario/);
+  assert.match(camera, /agregado[^\n]+automáticamente/);
+  assert.match(camera, /detected\.every/);
   assert.match(camera, /normalizeLaunchMonitorVisionExtraction\(extraction/);
 });
 

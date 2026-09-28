@@ -111,6 +111,22 @@ function summaryMetric(value: number, metric: LaunchMonitorMetric) {
   return `${value.toLocaleString("es-MX", { maximumFractionDigits: decimals })} ${field.unit}`;
 }
 
+function nextProtocolClub(shots: LaunchMonitorShot[], currentClub: LaunchMonitorClub) {
+  const currentIndex = LAUNCH_MONITOR_CLUBS.indexOf(currentClub);
+  const orderedClubs = [
+    ...LAUNCH_MONITOR_CLUBS.slice(currentIndex + 1),
+    ...LAUNCH_MONITOR_CLUBS.slice(0, currentIndex + 1),
+  ];
+  return orderedClubs.find((club) => shots.filter((shot) => shot.club === club && !shot.excluded).length < 3) ?? currentClub;
+}
+
+function sessionCompletedAt(shots: LaunchMonitorShot[]) {
+  const complete = LAUNCH_MONITOR_CLUBS.every(
+    (club) => shots.filter((shot) => shot.club === club && !shot.excluded).length >= 3,
+  );
+  return complete ? new Date().toISOString() : null;
+}
+
 export function LaunchMonitorCapture({ userId, accessToken, requiresRemoteConsent = false, value, onChange, onOpenPrivacy }: LaunchMonitorCaptureProps) {
   const session = useMemo(
     () => value?.userId === userId.trim() ? value : null,
@@ -123,6 +139,7 @@ export function LaunchMonitorCapture({ userId, accessToken, requiresRemoteConsen
   const [errors, setErrors] = useState<Partial<Record<LaunchMonitorClub, string>>>({});
   const [confirmClear, setConfirmClear] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(Boolean(session));
+  const [editingShotId, setEditingShotId] = useState<string | null>(null);
 
   function startCapture() {
     const cleanUserId = userId.trim();
@@ -188,16 +205,30 @@ export function LaunchMonitorCapture({ userId, accessToken, requiresRemoteConsen
       note: draft.note.trim() || null,
       ...metrics,
     };
-    onChange({ ...session, completedAt: null, shots: [...session.shots, shot] });
+    const nextShots = [...session.shots, shot];
+    onChange({ ...session, completedAt: sessionCompletedAt(nextShots), shots: nextShots });
     setDrafts((current) => ({ ...current, [club]: emptyDraft() }));
     setErrors((current) => ({ ...current, [club]: undefined }));
+    if (nextShots.filter((candidate) => candidate.club === club && !candidate.excluded).length >= 3) {
+      setActiveClub(nextProtocolClub(nextShots, club));
+    }
   }
 
   function toggleShot(shotId: string) {
+    updateSession((current) => {
+      const nextShots = current.shots.map((shot) => shot.id === shotId ? { ...shot, excluded: !shot.excluded } : shot);
+      return { ...current, completedAt: sessionCompletedAt(nextShots), shots: nextShots };
+    });
+  }
+
+  function updateShotMetric(shotId: string, metric: LaunchMonitorMetric, rawValue: string) {
+    const field = METRIC_FIELDS[metric];
+    const parsed = rawValue.trim() === "" ? null : Number(rawValue.replace(",", "."));
+    if (parsed !== null && (!Number.isFinite(parsed) || parsed < field.minimum || parsed > field.maximum)) return;
     updateSession((current) => ({
       ...current,
-      completedAt: null,
-      shots: current.shots.map((shot) => shot.id === shotId ? { ...shot, excluded: !shot.excluded } : shot),
+      completedAt: current.completedAt,
+      shots: current.shots.map((shot) => shot.id === shotId ? { ...shot, [metric]: parsed } : shot),
     }));
   }
 
@@ -215,7 +246,7 @@ export function LaunchMonitorCapture({ userId, accessToken, requiresRemoteConsen
       </div>
       {detailsOpen && <>
       <p className={styles.subtle} id="launch-monitor-help">
-        Si ya tienes datos de TrackMan, FlightScope, Garmin u otro launch monitor, usa cámara o captura manual. Nada se guarda hasta que revises y confirmes.
+        Si ya tienes datos de TrackMan, FlightScope, Garmin u otro launch monitor, usa cámara o captura manual. Los datos claros se agregan automáticamente; sólo te pediremos corregir una lectura dudosa.
       </p>
 
       <LaunchMonitorCamera
@@ -223,10 +254,15 @@ export function LaunchMonitorCapture({ userId, accessToken, requiresRemoteConsen
         accessToken={accessToken}
         requiresRemoteConsent={requiresRemoteConsent}
         onOpenPrivacy={onOpenPrivacy}
+        targetClub={activeClub}
+        capturedCount={progress?.counts[activeClub] ?? 0}
+        nextClubLabel={CLUB_LABELS[nextProtocolClub(session?.shots ?? [], activeClub)]}
         onConfirm={(source, shots) => {
           const now = new Date().toISOString();
           const current = session || { id: createId("launch-session"), userId: userId.trim(), source: null, startedAt: now, completedAt: null, shots: [] };
-          onChange({ ...current, source: source || current.source, completedAt: null, shots: [...current.shots, ...shots].slice(0, MAX_LAUNCH_MONITOR_SHOTS_PER_CLUB * LAUNCH_MONITOR_CLUBS.length) });
+          const nextShots = [...current.shots, ...shots].slice(0, MAX_LAUNCH_MONITOR_SHOTS_PER_CLUB * LAUNCH_MONITOR_CLUBS.length);
+          onChange({ ...current, source: source || current.source, completedAt: sessionCompletedAt(nextShots), shots: nextShots });
+          setActiveClub(nextProtocolClub(nextShots, activeClub));
         }}
       />
 
@@ -323,7 +359,7 @@ export function LaunchMonitorCapture({ userId, accessToken, requiresRemoteConsen
               </label>
               {errors[activeClub] && <p className={styles.formMessage} role="alert">{errors[activeClub]}</p>}
               <div className={styles.inlineActions}>
-                <button type="button" className="primary" onClick={() => addShot(activeClub)}>Guardar golpe</button>
+                <button type="button" className="primary" onClick={() => addShot(activeClub)}>Agregar y seguir</button>
               </div>
             </div>
 
@@ -334,28 +370,59 @@ export function LaunchMonitorCapture({ userId, accessToken, requiresRemoteConsen
               </div>
             ) : (
               <div className={styles.shotList} aria-label={`Golpes de ${CLUB_LABELS[activeClub]}`}>
-                {activeShots.map((shot, index) => (
-                  <div className={`${styles.shotRow} ${shot.excluded ? styles.archived : ""}`} key={shot.id}>
-                    <div>
-                      <b>Golpe {index + 1}</b>
-                      <p className={styles.subtle}>{shot.excluded ? "Excluido del cálculo" : "Incluido"}</p>
-                    </div>
-                    {SHOT_SUMMARY_METRICS[activeClub].map((metric) => (
-                      <div key={metric}>
-                        <small>{METRIC_FIELDS[metric].shortLabel}</small>
-                        <b>{displayMetric(shot[metric], metric)}</b>
+                {activeShots.map((shot, index) => {
+                  const editing = editingShotId === shot.id;
+                  return (
+                    <article className={styles.shotEntry} key={shot.id}>
+                      <div className={`${styles.shotRow} ${shot.excluded ? styles.archived : ""}`}>
+                        <div>
+                          <b>Golpe {index + 1}</b>
+                          <p className={styles.subtle}>{shot.excluded ? "Excluido del cálculo" : "Incluido automáticamente"}</p>
+                        </div>
+                        {SHOT_SUMMARY_METRICS[activeClub].map((metric) => (
+                          <div key={metric}>
+                            <small>{METRIC_FIELDS[metric].shortLabel}</small>
+                            <b>{displayMetric(shot[metric], metric)}</b>
+                          </div>
+                        ))}
+                        <div className={styles.shotActions}>
+                          <button type="button" className="secondary" aria-expanded={editing} onClick={() => setEditingShotId(editing ? null : shot.id)}>
+                            {editing ? "Listo" : "Editar"}
+                          </button>
+                          <button
+                            type="button"
+                            className={styles.excludeButton}
+                            aria-pressed={shot.excluded}
+                            onClick={() => toggleShot(shot.id)}
+                          >
+                            {shot.excluded ? "Reactivar" : "Excluir"}
+                          </button>
+                        </div>
                       </div>
-                    ))}
-                    <button
-                      type="button"
-                      className="secondary"
-                      aria-pressed={shot.excluded}
-                      onClick={() => toggleShot(shot.id)}
-                    >
-                      {shot.excluded ? "Reactivar" : "Excluir"}
-                    </button>
-                  </div>
-                ))}
+                      {editing && (
+                        <div className={styles.shotEditGrid} aria-label={`Editar golpe ${index + 1}`}>
+                          {CLUB_METRICS[activeClub].map((metric) => {
+                            const field = METRIC_FIELDS[metric];
+                            return (
+                              <label key={metric}>
+                                {field.shortLabel} ({field.unit})
+                                <input
+                                  type="number"
+                                  inputMode="decimal"
+                                  min={field.minimum}
+                                  max={field.maximum}
+                                  step={field.step}
+                                  value={shot[metric] ?? ""}
+                                  onChange={(event) => updateShotMetric(shot.id, metric, event.target.value)}
+                                />
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
               </div>
             )}
           </section>
@@ -393,14 +460,9 @@ export function LaunchMonitorCapture({ userId, accessToken, requiresRemoteConsen
           )}
 
           <div className={styles.wizardActions}>
-            <button
-              type="button"
-              className="secondary"
-              disabled={includedShots === 0}
-              onClick={() => updateSession((current) => ({ ...current, completedAt: new Date().toISOString() }))}
-            >
-              {progress?.complete ? "Terminar captura" : "Guardar captura parcial"}
-            </button>
+            <p className={styles.subtle} role="status">
+              {progress?.complete ? "Mediciones completas y listas para recomendaciones." : "Cada golpe válido ya está agregado; puedes continuar y volver después."}
+            </p>
             {!confirmClear ? (
               <button type="button" className={styles.dangerButton} onClick={() => setConfirmClear(true)}>Quitar captura</button>
             ) : (

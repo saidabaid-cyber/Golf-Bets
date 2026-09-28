@@ -504,7 +504,8 @@ test("provider wires explicit ceremonies and retries queues on online/manual tri
   assert.match(provider, /subject: "privacy_notice", action: "presented"/);
   assert.match(provider, /subject: "terms", action: "accepted"/);
   assert.match(provider, /subject: "age_declaration", action: "accepted"/);
-  assert.match(provider, /subject: "financial_data", action: includeBettingConsent \? "accepted" : "rejected"/);
+  assert.match(provider, /recordLegalChoices\(\[\{ subject: "financial_data", action: "accepted" \}\], "financial_gate"\)/);
+  assert.match(provider, /recordLegalChoices\(\[\{ subject: "financial_data", action: "rejected" \}\], "financial_gate"\)/);
   assert.match(provider, /hasResolvedFinancialConsent\(legalEvidenceEvents, legacyBettingConsent, financialConsentResolved\)/);
   assert.match(provider, /locallyResolvedLegalSubjects\.includes\("financial_data"\)/);
   assert.match(provider, /locallyResolvedLegalSubjects\.includes\("marketing"\)/);

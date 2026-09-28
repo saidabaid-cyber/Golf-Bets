@@ -14,26 +14,21 @@ export function InitialOnboardingConsents({
   userId,
   accessToken,
   legalRequired,
-  initialBettingDecision,
   canContinue,
   onAcceptRequired,
-  onResolveBetting,
   onContinue,
 }: {
   userId: string;
   accessToken: string | null;
   legalRequired: boolean;
-  initialBettingDecision: Decision;
   canContinue: boolean;
   onAcceptRequired: () => Promise<void>;
-  onResolveBetting: (accepted: boolean) => Promise<void>;
   onContinue: () => void;
 }) {
   const [remote, setRemote] = useState<RemoteAiConsentDecisions | null>(null);
   const [required, setRequired] = useState<Decision>(legalRequired ? "pending" : "accepted");
-  const [betting, setBetting] = useState<Decision>(initialBettingDecision);
   const [ai, setAi] = useState<Decision>("pending");
-  const [busy, setBusy] = useState<"required" | "betting" | "ai" | "continue" | null>(null);
+  const [busy, setBusy] = useState<"required" | "ai" | "continue" | null>(null);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
   const lifetime = useRef<AbortController | null>(null);
@@ -58,11 +53,7 @@ export function InitialOnboardingConsents({
     return () => controller.abort();
   }, [accessToken, retry, userId]);
 
-  useEffect(() => {
-    if (initialBettingDecision !== "pending") setBetting(initialBettingDecision);
-  }, [initialBettingDecision]);
-
-  const resolved = required === "accepted" && betting !== "pending" && ai !== "pending";
+  const resolved = required === "accepted" && ai !== "pending";
 
   async function acceptRequired() {
     if (busy) return;
@@ -72,17 +63,6 @@ export function InitialOnboardingConsents({
       if (!lifetime.current?.signal.aborted) setRequired("accepted");
     } catch {
       if (!lifetime.current?.signal.aborted) setError("No pudimos registrar los consentimientos requeridos. Reintenta antes de continuar.");
-    } finally { if (!lifetime.current?.signal.aborted) setBusy(null); }
-  }
-
-  async function resolveBetting(accepted: boolean) {
-    if (busy) return;
-    setBusy("betting"); setError("");
-    try {
-      await onResolveBetting(accepted);
-      if (!lifetime.current?.signal.aborted) setBetting(accepted ? "accepted" : "skipped");
-    } catch {
-      if (!lifetime.current?.signal.aborted) setError("No pudimos guardar tu decisión sobre apuestas. Reintenta antes de continuar.");
     } finally { if (!lifetime.current?.signal.aborted) setBusy(null); }
   }
 
@@ -103,7 +83,7 @@ export function InitialOnboardingConsents({
   }
 
   return <section className={styles.embedded} aria-labelledby="initial-consent-title" aria-busy={Boolean(busy)}>
-    <div><h2 id="initial-consent-title">Consentimientos de cuenta</h2><p>Tres decisiones claras. Ninguna autorización opcional se acepta automáticamente.</p></div>
+    <div><h2 id="initial-consent-title">Consentimientos de cuenta</h2><p>Dos decisiones claras. Ninguna autorización opcional se acepta automáticamente.</p></div>
 
     <section className={styles.decision} aria-labelledby="required-consents-title">
       <div><span className={styles.eyebrow}>REQUERIDOS</span><h3 id="required-consents-title">CONSENTIMIENTOS REQUERIDOS</h3></div>
@@ -112,15 +92,6 @@ export function InitialOnboardingConsents({
       {required === "accepted" ? <p className={styles.resolved} role="status">✓ Consentimientos requeridos aceptados y registrados.</p> : <div className={styles.actions}>
         <button type="button" className="primary" disabled={Boolean(busy)} onClick={() => void acceptRequired()}>{busy === "required" ? "REGISTRANDO…" : "ACEPTAR TODO Y CONTINUAR"}</button>
         <button type="button" className="secondary" disabled={Boolean(busy)} onClick={() => { setRequired("pending"); setError("Para crear una cuenta de The Backyard debes aceptar los consentimientos requeridos."); }}>NO ACEPTO</button>
-      </div>}
-    </section>
-
-    <section className={styles.decision} aria-labelledby="betting-consent-title">
-      <div><span className={styles.eyebrow}>OPCIONAL</span><h3 id="betting-consent-title">FUNCIONES DE APUESTAS</h3></div>
-      <p>Autoriza por separado el tratamiento de datos de apuestas, resultados y gastos. Puedes usar el resto de The Backyard sin activarlas.</p>
-      {betting !== "pending" ? <p className={styles.resolved} role="status">{betting === "accepted" ? "✓ Apuestas activadas." : "Ahora no · puedes activarlas después."}</p> : <div className={styles.actions}>
-        <button type="button" className="primary" disabled={Boolean(busy)} onClick={() => void resolveBetting(true)}>{busy === "betting" ? "GUARDANDO…" : "ACTIVAR APUESTAS"}</button>
-        <button type="button" className="secondary" disabled={Boolean(busy)} onClick={() => void resolveBetting(false)}>AHORA NO</button>
       </div>}
     </section>
 
@@ -134,7 +105,7 @@ export function InitialOnboardingConsents({
       </div>}
     </section>
 
-    <p className={styles.hint}>Después puedes revisar o revocar estas decisiones en Perfil → Configuración → Privacidad y permisos.</p>
+    <p className={styles.hint}>Las funciones de apuestas pedirán autorización únicamente cuando decidas usarlas. Después puedes revisar o revocar tus permisos en Perfil → Configuración → Privacidad y permisos.</p>
     {error && <p className={styles.error} role="alert">{error}</p>}
     <div className={styles.continueBar}><button type="button" className="primary big" disabled={!resolved || !canContinue || Boolean(busy)} onClick={() => { setBusy("continue"); onContinue(); }}>CONTINUAR</button>{!canContinue && <small>Elige antes una configuración Rápida o Completa.</small>}</div>
   </section>;

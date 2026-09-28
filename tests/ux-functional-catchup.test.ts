@@ -11,7 +11,7 @@ test("initial consent separates legal decisions from the optional AI group", () 
   assert.match(consent, /AUTORIZAR LAS 3 FUNCIONES DE IA/);
   assert.match(consent, /CONSENTIMIENTOS REQUERIDOS/);
   assert.doesNotMatch(consent, /type="checkbox"/);
-  assert.match(consent, /resultados y gastos/);
+  assert.doesNotMatch(consent, /FUNCIONES DE APUESTAS|resultados y gastos/);
 });
 
 test("nearby courses use real browser location and a strict verified 50 km radius", () => {
@@ -46,7 +46,7 @@ test("bag, wedges and ball comparison are guided but preserve explicit manual op
   assert.match(fit, /¿No encuentras tu bola\? Solicítala/);
 });
 
-test("launch monitor is featured and camera plus gallery retain human confirmation", () => {
+test("launch monitor is featured and camera plus gallery auto-apply clear readings", () => {
   const capture = source("app/components/launch-monitor-capture.tsx");
   const camera = source("app/components/launch-monitor-camera.tsx");
   assert.match(capture, /FIT CON LAUNCH MONITOR/);
@@ -55,7 +55,9 @@ test("launch monitor is featured and camera plus gallery retain human confirmati
   assert.match(camera, /Tomar fotos ahora/);
   assert.match(camera, /Elegir de Fotos \/ Galería/);
   assert.match(camera, /photos\.length < 2/);
-  assert.match(camera, /Confirmar y guardar sesión/);
+  assert.match(camera, /Corrige sólo lo necesario/);
+  assert.match(camera, /onConfirm\(assigned\.source, detected\)/);
+  assert.doesNotMatch(camera, /Confirmar y guardar sesión/);
 });
 
 test("social search and QR resolve stable identities before duplicate-safe friendship writes", () => {

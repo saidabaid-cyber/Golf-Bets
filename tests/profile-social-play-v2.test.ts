@@ -14,6 +14,7 @@ import { normalizeRoundPresentation } from "../lib/round-presentation";
 import { socialRequest } from "../lib/social-activity-client";
 import { safeSocialRoundCard } from "../lib/social-round-card";
 import { roundMaterialPayload } from "../lib/round-achievements";
+import type { EquipmentProfile } from "../lib/golf-equipment";
 import type { Course, Player } from "../lib/types";
 const owner = "11111111-1111-4111-8111-111111111111", other = "22222222-2222-4222-8222-222222222222";
 const empty = { indexEnabled:false, equipment:null, choices:EMPTY_COMPLETION_CHOICES };
@@ -28,21 +29,36 @@ test("completion uses authenticated transport instead of a local-only percentage
   await socialRequest("/api/groups/users?q=qa", "synthetic-token", { fetcher: async () => Response.json({users:[]}) });
   await assert.rejects(socialRequest("https://untrusted.invalid", "synthetic-token"));
 });
-test("completion is seven equally weighted sections; skipped is not complete", () => {
+test("completion counts six required sections and keeps fitting optional", () => {
   assert.equal(profileCompletion(empty).percent,0);
-  assert.equal(profileCompletion({...empty,username:"golfer"}).percent,14);
-  assert.equal(profileCompletion({...empty,username:"golfer",displayName:"Player",givenName:"QA",familyName:"Golfer"}).percent,14);
-  assert.equal(profileCompletion({...empty,username:"golfer",displayName:"Player",givenName:"QA",familyName:"Golfer",avatarUrl:"avatar:dog"}).percent,29);
+  assert.equal(profileCompletion({...empty,username:"golfer"}).percent,17);
+  assert.equal(profileCompletion({...empty,username:"golfer",displayName:"Player",givenName:"QA",familyName:"Golfer"}).percent,17);
+  assert.equal(profileCompletion({...empty,username:"golfer",displayName:"Player",givenName:"QA",familyName:"Golfer",avatarUrl:"avatar:dog"}).percent,33);
+  assert.equal(profileCompletion(empty).sections.find(section => section.id === "fitting")?.status,"Opcional");
 });
 for (const choice of ["UNKNOWN","MANUAL"] as const) test(`100% without GHIN, public privacy, consent or computed index: ${choice}`, () => {
-  const choices={handicap_choice:choice, manual_hcp:choice==="MANUAL"?12:null, not_applicable:["golf","equipment","ball","fitting"]};
+  const choices={handicap_choice:choice, manual_hcp:choice==="MANUAL"?12:null, not_applicable:[]};
+  const equipment = { clubs: [{}], balls: [], ballPreference: "NO_FIXED_BALL", lastBallFit: null } as unknown as EquipmentProfile;
   assert.equal(validCompletionChoices(choices),true);
-  assert.equal(profileCompletion({...empty,choices,displayName:"QA",givenName:"QA",familyName:"Golfer",avatarUrl:"avatar:dog",username:"qa"}).percent,100);
+  const result = profileCompletion({...empty,equipment,choices,displayName:"QA",givenName:"QA",familyName:"Golfer",avatarUrl:"avatar:dog",username:"qa",handedness:"right",homeClub:"La Vista"});
+  assert.equal(result.percent,100);
+  assert.equal(result.sections.find(section => section.id === "fitting")?.complete,false);
+  assert.equal(result.sections.find(section => section.id === "fitting")?.optional,true);
 });
 test("index activation counts before first eligible round; manual blank is not zero", () => {
   assert.equal(profileCompletion({...empty,indexEnabled:true}).sections.find(s=>s.id==="handicap")?.complete,true);
+  const none = profileCompletion({...empty,indexResolution:"NONE"}).sections.find(s=>s.id==="handicap");
+  assert.equal(none?.complete,true);
+  assert.equal(none?.status,"Sin índice por ahora");
   for(const manual_hcp of [null,"",NaN,55]) assert.equal(validCompletionChoices({handicap_choice:"MANUAL",manual_hcp,not_applicable:[]}),false);
   assert.equal(validCompletionChoices({handicap_choice:"UNKNOWN",manual_hcp:null,not_applicable:["personal"]}),false);
+});
+test("legacy No aplica values cannot complete required sections", () => {
+  const choices={handicap_choice:"UNKNOWN" as const,manual_hcp:null,not_applicable:["golf","equipment","ball","fitting"]};
+  const result=profileCompletion({...empty,choices});
+  assert.equal(result.sections.find(section=>section.id==="golf")?.complete,false);
+  assert.equal(result.sections.find(section=>section.id==="equipment")?.complete,false);
+  assert.equal(result.sections.find(section=>section.id==="ball")?.complete,false);
 });
 test("golf completion requires both handedness and Home Club; a preferred tee is not a substitute", () => {
   const golfComplete = (input: { handedness?: string; homeClub?: string; preferredTee?: string }) =>

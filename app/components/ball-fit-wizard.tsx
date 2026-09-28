@@ -35,6 +35,7 @@ import { AnchoredSearch, AnchoredSearchOption } from "./anchored-search";
 import { FeedbackLink } from "./feedback-dialog";
 import { useEquipmentCatalogSearch } from "./use-equipment-catalog-search";
 import styles from "./equipment.module.css";
+import { GolfBallVisual } from "./equipment-visuals";
 
 const FEEL_LABELS = {
   VERY_SOFT: "Muy suave",
@@ -62,6 +63,11 @@ const PRIORITY_LABELS: Record<BallFitPriority, string> = {
   WEDGE_SPIN: "Spin de wedges",
   GREENSIDE_FEEL: "Sensación alrededor del green",
   PUTTER_FEEL: "Sensación con putter",
+};
+
+const PRIORITY_ICONS: Record<BallFitPriority, "arrow" | "spark" | "club" | "flag" | "ball"> = {
+  DRIVER_DISTANCE: "arrow", LESS_DRIVER_SPIN: "spark", STABILITY_CONTROL: "club", HEIGHT: "arrow",
+  IRON_CONTROL: "club", STOP_ON_GREEN: "flag", WEDGE_SPIN: "spark", GREENSIDE_FEEL: "ball", PUTTER_FEEL: "ball",
 };
 
 const LEVEL_LABELS: Record<QualitativeLevel, string> = {
@@ -318,6 +324,10 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
   return <div className={styles.wizard}>
     <div className={styles.wizardHeader}><div><div className="eyebrow">THE BACKYARD BALL FIT</div><h2>{result ? "Tu mejor grupo de bolas" : `Paso ${step + 1} de 6`}</h2><p>{result ? "Recomendaciones según tus preferencias" : "2–4 minutos · puedes guardar y regresar"}</p></div><button type="button" className="textButton" onClick={saveAndClose}>Guardar y regresar</button></div>
     <div className={styles.progressTrack} aria-label={`${progress}% del fitting`}><span style={{ width: `${progress}%` }} /></div>
+    <div className={styles.ballFitHero}>
+      <span className={styles.ballFitOrb}><GolfBallVisual /></span>
+      <div><small>{currentBall ? "TU BOLA ACTUAL" : "PERFIL DE BOLA"}</small><b>{currentBall ? `${currentBall.ballBrand} ${currentBall.ballModel}` : "Encuentra el balance para tu juego"}</b><p>{currentBall ? [currentBall.generation, currentBall.year].filter(Boolean).join(" · ") || "Modelo guardado" : "Distancia · Control · Sensación"}</p></div>
+    </div>
 
     {!result && step === 0 && <section className={styles.questionBlock}>
       <h3>Tu juego actual</h3>
@@ -344,6 +354,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
 
     {!result && step === 2 && <section className={styles.questionBlock}>
       <h3>Feel y vuelo</h3><p>Elige lo que prefieres sentir y ver; “No sé” también es una respuesta válida.</p>
+      <div className={styles.fitPillars}><span><BackyardIcon name="arrow" size={22} /><b>Distancia</b><small>Vuelo y velocidad</small></span><span><BackyardIcon name="flag" size={22} /><b>Control</b><small>Approach y green</small></span><span><BackyardIcon name="ball" size={22} /><b>Sensación</b><small>Wedges y putter</small></span></div>
       <h4>¿Cómo prefieres sentir la bola?</h4><OptionGrid values={BALL_FEEL_PREFERENCES} labels={FEEL_LABELS} selected={input.feelPreference} onSelect={(value) => patchInput({ feelPreference: value })} />
       <h4>Trayectoria preferida</h4><OptionGrid values={BALL_TRAJECTORY_PREFERENCES} labels={TRAJECTORY_LABELS} selected={input.trajectoryPreference} onSelect={(value) => patchInput({ trajectoryPreference: value })} />
     </section>}
@@ -357,7 +368,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
 
     {!result && step === 4 && <section className={styles.questionBlock}>
       <h3>¿Qué quieres mejorar?</h3><p>Selecciona y ordena tus prioridades. Las primeras pesan más según los datos disponibles.</p>
-      <div className={styles.optionGrid}>{BALL_FIT_PRIORITIES.map((priority) => <button key={priority} type="button" className={`${styles.optionButton} ${input.priorities.includes(priority) ? styles.selected : ""}`} aria-pressed={input.priorities.includes(priority)} onClick={() => togglePriority(priority)}>{PRIORITY_LABELS[priority]}</button>)}</div>
+      <div className={styles.optionGrid}>{BALL_FIT_PRIORITIES.map((priority) => <button key={priority} type="button" className={`${styles.optionButton} ${styles.visualOption} ${input.priorities.includes(priority) ? styles.selected : ""}`} aria-pressed={input.priorities.includes(priority)} onClick={() => togglePriority(priority)}><BackyardIcon name={PRIORITY_ICONS[priority]} size={22} /><span>{PRIORITY_LABELS[priority]}</span><b aria-hidden="true">{input.priorities.includes(priority) ? "✓" : "+"}</b></button>)}</div>
       {input.priorities.length > 0 && <div className={styles.priorityList} aria-label="Prioridades ordenadas">{input.priorities.map((priority, index) => <div className={styles.priorityItem} key={priority}><span>{index + 1}</span><b>{PRIORITY_LABELS[priority]}</b><div><button type="button" disabled={index === 0} aria-label={`Subir ${PRIORITY_LABELS[priority]}`} onClick={() => movePriority(priority, -1)}>↑</button><button type="button" disabled={index === input.priorities.length - 1} aria-label={`Bajar ${PRIORITY_LABELS[priority]}`} onClick={() => movePriority(priority, 1)}>↓</button></div></div>)}</div>}
       <p className={styles.subtle}>Distancia con driver y estabilidad se guardan como contexto y no elevan un Match Score por sí solas.</p>
     </section>}
@@ -367,7 +378,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
       <h4>¿Qué tanto importa el precio?</h4><OptionGrid values={BALL_FIT_PRICE_PREFERENCES} labels={PRICE_LABELS} selected={input.pricePreference} onSelect={(value) => patchInput({ pricePreference: value })} />
       <h4>Color preferido</h4><OptionGrid values={BALL_COLOR_PREFERENCES} labels={COLOR_LABELS} selected={input.colorPreference} onSelect={(value) => patchInput({ colorPreference: value })} />
       <h4>Comparación opcional</h4>
-      {currentBall && <div className={styles.ballHero}><span className={styles.ballGlyph}>●</span><div><h3>{currentBall.ballBrand} {currentBall.ballModel}</h3><p>Bola actual guardada{currentBall.catalogBallId ? " · disponible para comparación" : " · modelo manual"}</p></div></div>}
+      {currentBall && <div className={styles.ballHero}><span className={styles.ballGlyph}><GolfBallVisual /></span><div><h3>{currentBall.ballBrand} {currentBall.ballModel}</h3><p>{[currentBall.generation, currentBall.year, currentBall.catalogBallId ? "Catálogo" : "Modelo manual"].filter(Boolean).join(" · ")}</p></div></div>}
       <AnchoredSearch label="Bola actual para comparar (opcional)" value={ballQuery} onChange={(value) => { setBallQuery(value); setBallSearchOpen(true); }} onFocus={() => setBallSearchOpen(true)} placeholder="Escribe marca, modelo, generación o año" expanded={ballSearchOpen} status={ballSearchOpen ? ballSearch.status === "loading" ? "Buscando bolas…" : ballSearch.items.length ? `${ballSearch.items.length} resultados del catálogo` : "Sin coincidencias en el catálogo" : currentCatalogBall ? `✓ Seleccionada: ${currentCatalogBall.brand} ${currentCatalogBall.model}` : "Sin bola fija"}>
         <AnchoredSearchOption label="No comparar con una bola" selected={input.currentBallId === null} onSelect={() => { patchInput({ currentBallId: null }); setBallQuery(""); setBallSearchOpen(false); }}><b>Sin bola fija</b><small>No afecta las recomendaciones.</small></AnchoredSearchOption>
         {ballSearch.items.filter((ball) => ball.active).map((ball) => <AnchoredSearchOption key={ball.id} selected={input.currentBallId === ball.id} label={`Seleccionar ${ball.brand} ${ball.model}`} onSelect={() => { patchInput({ currentBallId: ball.id }); setBallQuery(`${ball.brand} ${ball.model}`); setBallSearchOpen(false); }}><b>{ball.brand} {ball.model}</b>{catalogEditionLabel(ball) && <small>{catalogEditionLabel(ball)}</small>}</AnchoredSearchOption>)}

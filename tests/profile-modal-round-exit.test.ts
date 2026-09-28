@@ -10,10 +10,12 @@ test("profile completion uses the shared modal outside the profile identity grid
   const css = readFileSync("app/components/profile-completion-ring.module.css", "utf8");
   assert.match(component, /createPortal\(<ModalShell open/);
   assert.match(component, /document\.body/);
-  assert.match(component, /closeDisabled=\{busy\}/);
-  assert.match(css, /input\[type=checkbox\],\.dialog input\[type=radio\]\{width:20px/);
-  assert.match(css, /grid-template-columns:minmax\(0,1fr\) 92px/);
-  assert.match(css, /white-space:normal;overflow-wrap:anywhere/);
+  assert.match(component, /role="progressbar"/);
+  assert.match(component, /onOpen\(section\.id\)/);
+  assert.doesNotMatch(component, /No aplica|type="checkbox"/);
+  assert.match(css, /grid-template-columns: 34px minmax\(0, 1fr\) 20px/);
+  assert.match(css, /overflow-wrap: anywhere/);
+  assert.match(css, /env\(safe-area-inset-bottom\)/);
 });
 
 test("capture offers exit and the same guarded new-round flow without requiring completion", () => {

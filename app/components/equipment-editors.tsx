@@ -31,6 +31,7 @@ import { ModalCloseButton } from "./modal-shell";
 import { AnchoredSearch, AnchoredSearchOption } from "./anchored-search";
 import { CatalogProductMedia } from "./catalog-product-media";
 import { FeedbackLink } from './feedback-dialog';
+import { ClubCategoryVisual, GolfBallVisual } from "./equipment-visuals";
 
 export const CLUB_CATEGORY_LABELS: Record<ClubCategory, string> = {
   DRIVER: "Driver",
@@ -118,16 +119,17 @@ type ClubEditorProps = {
   shafts: readonly GolfShaftCatalog[];
   existing?: PlayerClub | null;
   defaultHandedness?: ProfileHandedness | null;
+  initialCategory?: ClubCategory;
   presentation?: "sheet" | "page";
   onSelectBall?: () => void;
   onCancel: () => void;
   onSave: (club: PlayerClub) => boolean | void;
 };
 
-export function ClubEditor({ userId, catalog, shafts, existing, defaultHandedness, presentation = "sheet", onSelectBall, onCancel, onSave }: ClubEditorProps) {
+export function ClubEditor({ userId, catalog, shafts, existing, defaultHandedness, initialCategory, presentation = "sheet", onSelectBall, onCancel, onSave }: ClubEditorProps) {
   const dialogRef = useModalDialog(presentation === "sheet", onCancel);
   const existingCatalog = existing?.catalogClubId ? catalog.find((club) => club.id === existing.catalogClubId) : null;
-  const [category, setCategory] = useState<ClubCategory>(existing?.category || "DRIVER");
+  const [category, setCategory] = useState<ClubCategory>(existing?.category || initialCategory || "DRIVER");
   const [manual, setManual] = useState(Boolean(existing && !existing.catalogClubId));
   const [brand, setBrand] = useState(existingCatalog?.brand || existing?.customBrand || "");
   const [catalogClubId, setCatalogClubId] = useState(existing?.catalogClubId || existingCatalog?.id || "");
@@ -158,7 +160,7 @@ export function ClubEditor({ userId, catalog, shafts, existing, defaultHandednes
   const [catalogQuery, setCatalogQuery] = useState("");
   const [shaftQuery, setShaftQuery] = useState("");
   const [message, setMessage] = useState("");
-  const [step, setStep] = useState<"category" | "brand" | "model" | "specs" | "shaft" | "finish">(existing ? "finish" : "category");
+  const [step, setStep] = useState<"category" | "brand" | "model" | "specs" | "shaft" | "finish">(existing ? "finish" : initialCategory ? "brand" : "category");
   useWizardStepNavigation(dialogRef, step);
   useLayoutEffect(() => { if (presentation === "page") window.scrollTo(0, 0); }, [presentation, step]);
 
@@ -367,7 +369,7 @@ export function ClubEditor({ userId, catalog, shafts, existing, defaultHandednes
       <form className={styles.formGrid} onSubmit={submit} noValidate>
         {step === "category" && <div className={styles.flowScreen}>
           <h3>Selecciona categoría</h3><p>Elige un tipo de bastón o bola; después marca, modelo y configuración.</p>
-          <div className={styles.catalogChoiceGrid}>{Object.entries(CLUB_CATEGORY_LABELS).map(([value, label]) => <button type="button" key={value} onClick={() => chooseCategory(value as ClubCategory)}><span>{CLUB_CATEGORY_ICONS[value as ClubCategory]}</span><b>{label}</b></button>)}{onSelectBall && <button type="button" onClick={onSelectBall}><span>●</span><b>Bola</b></button>}</div>
+          <div className={styles.catalogChoiceGrid}>{Object.entries(CLUB_CATEGORY_LABELS).map(([value, label]) => <button type="button" key={value} onClick={() => chooseCategory(value as ClubCategory)}><span><ClubCategoryVisual category={value as ClubCategory} /></span><b>{label}</b></button>)}{onSelectBall && <button type="button" onClick={onSelectBall}><span><GolfBallVisual /></span><b>Bola</b></button>}</div>
         </div>}
 
         {step === "brand" && <div className={styles.flowScreen}>

@@ -34,6 +34,7 @@ import { bootstrapAccountNotificationPreferences, requestAccountNotificationPref
 import { SocialSharingPreferences } from './cloud-social-activity';
 import { checkProfileUsernameAvailability, normalizeProfileUsername } from "../../lib/profile-username";
 import { DevicePermissionSettings } from "./device-permission-settings";
+import type { CompletionSection } from "../../lib/profile-completion";
 
 type ProfileAccountPanelProps = {
   view: "profile" | "account";
@@ -44,6 +45,8 @@ type ProfileAccountPanelProps = {
   indexControl: BackyardIndexPreferenceController;
   ghinControl?: GhinReadOnlyProfileController;
   focusSection?: "profile" | "equipment";
+  completionTarget?: CompletionSection | null;
+  onCompletionTargetHandled?: () => void;
   highContrast: boolean;
   onHighContrastChange: (value: boolean) => void;
   notificationsEnabled: boolean;
@@ -81,7 +84,7 @@ function decimal(value: number | undefined) {
   return value === undefined ? "—" : value.toFixed(1);
 }
 
-export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacySettings = false, onAiPrivacyOpened, history = [], indexControl, ghinControl, focusSection = "profile", highContrast, onHighContrastChange, notificationsEnabled, onNotificationsEnabledChange, golfInsights, statisticsResetAt, onStatisticsReset, onOpenStats, onOpenAccount, initialAccountSection = "account", onOpenAccountSection, onOpenPrivacy, onOpenEquipment, onBackToProfile }: ProfileAccountPanelProps) {
+export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacySettings = false, onAiPrivacyOpened, history = [], indexControl, ghinControl, focusSection = "profile", completionTarget, onCompletionTargetHandled, highContrast, onHighContrastChange, notificationsEnabled, onNotificationsEnabledChange, golfInsights, statisticsResetAt, onStatisticsReset, onOpenStats, onOpenAccount, initialAccountSection = "account", onOpenAccountSection, onOpenPrivacy, onOpenEquipment, onBackToProfile }: ProfileAccountPanelProps) {
   const { identity, adminAccess = { hasAccess: false, roles: [], scopes: [] }, updateProfile, logout, finishAccountDeletion, openAccess, acceptances, legalEvidenceEvents, marketingConsentResolved, bettingConsentGranted, requestBettingConsent, recordLegalChoice, cloudLinked, cloudStatus, requestCloudLink, cloudIssues, retryCloudSync } = useBackyardAccount();
   const [editing, setEditing] = useState(false);
   const [accountSection, setAccountSection] = useState<AccountSettingsSection>(initialAccountSection);
@@ -195,6 +198,23 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
     setCompletionEditTarget(target);
     setEditing(true);
   }
+
+  useEffect(() => {
+    if (view !== "profile" || !completionTarget) return;
+    if (completionTarget === "equipment" || completionTarget === "ball" || completionTarget === "fitting") {
+      setCompletionEquipment(completionTarget);
+      onCompletionTargetHandled?.();
+      return;
+    }
+    if (focusSection !== "profile") return;
+    setName(identity.displayName);
+    setAvatarUrl(identity.avatarUrl);
+    setDraft(draftFromIdentity(identity));
+    setHomeClubSelectionReady(Boolean(identity.homeClubId && identity.homeCourseId));
+    setCompletionEditTarget(completionTarget);
+    setEditing(true);
+    onCompletionTargetHandled?.();
+  }, [completionTarget, focusSection, identity, onCompletionTargetHandled, view]);
 
   const notice = message ? <div className={messageKind === "error" ? "notice bad" : "notice"} role={messageKind === "error" ? "alert" : "status"}>{message}</div> : null;
   const selectedIndex = selectedHandicapIndex(indexControl.preference, history, identity.userId, ghinControl?.profile ?? null);
@@ -373,7 +393,7 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
   </>;
   if (managingConsents) return <LegalConsentManager profile={identity} userId={identity.userId} accessToken={identity.accessToken} authenticated={identity.mode === "authenticated"} acceptances={acceptances} legalEvidenceEvents={legalEvidenceEvents} marketingConsentResolved={marketingConsentResolved} bettingConsentGranted={bettingConsentGranted} requestBettingConsent={requestBettingConsent} recordLegalChoice={recordLegalChoice} onBack={() => setManagingConsents(false)} />;
 
-  if (view === "profile" && identity.mode === "authenticated" && focusSection === "equipment") return <><header className="profileMobileHeader profileEditHeader"><button type="button" className="textButton" onClick={onBackToProfile}>← Mi Perfil</button><div><span>MI PERFIL</span><h1>Mi Bolsa</h1></div></header><div id="equipment-bag"><EquipmentProfilePanel userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={selectedIndex.value} defaultHandicapSource={selectedIndex.source} defaultHandedness={identity.handedness} ballFitDefaults={ballFitDefaultsFromProfile(identity)} onBackToProfile={onBackToProfile} onOpenPrivacy={onOpenPrivacy} initialSection={completionEquipment} /></div></>;
+  if (view === "profile" && identity.mode === "authenticated" && focusSection === "equipment") return <><header className="profileMobileHeader profileEditHeader"><button type="button" className="textButton" onClick={onBackToProfile}>← Mi Perfil</button><div><span>MI PERFIL</span><h1>Mi Bolsa</h1></div></header><div id="equipment-bag"><EquipmentProfilePanel userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={selectedIndex.value} defaultHandicapSource={selectedIndex.source} defaultHandedness={identity.handedness} ballFitDefaults={ballFitDefaultsFromProfile(identity)} onBackToProfile={onBackToProfile} onOpenPrivacy={onOpenPrivacy} initialSection={completionTarget === "equipment" || completionTarget === "ball" || completionTarget === "fitting" ? completionTarget : completionEquipment} /></div></>;
 
   if (identity.mode === "authenticated" && editing) return <>
     <header className="profileMobileHeader profileEditHeader"><button type="button" className="textButton" onClick={() => setEditing(false)}>{view === 'account' ? '← Cuenta' : '← Mi Perfil'}</button><div><span>MI PERFIL</span><h1>Editar perfil</h1></div></header>

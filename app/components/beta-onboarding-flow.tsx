@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useViewScrollReset } from "./use-view-scroll-reset";
 import { InitialOnboardingConsents } from './account-consent-checkpoint';
+import { socialRequest } from '../../lib/social-activity-client';
 import { saveOnboardingCheckpoint } from '../../lib/onboarding-checkpoint';
 import {
   GOLF_IMPROVEMENT_GOALS,
@@ -36,6 +37,7 @@ import { ModalShell } from "./modal-shell";
 import { InitialDevicePermissions } from "./device-permission-settings";
 import { useGhinReadOnlyProfile } from "./use-ghin-read-only-profile";
 import { useBackyardIndexPreference } from "./use-backyard-index-preference";
+import { BackyardIcon } from "./backyard-icon";
 import styles from "./beta-onboarding-flow.module.css";
 
 const IMPROVEMENT_LABELS: Record<GolfImprovementGoal, string> = {
@@ -49,6 +51,11 @@ const IMPROVEMENT_LABELS: Record<GolfImprovementGoal, string> = {
   COURSE_STRATEGY: "Estrategia de campo",
   MENTAL_CONFIDENCE: "Mental / confianza",
   LOWER_HANDICAP: "Bajar mi HCP",
+};
+
+const IMPROVEMENT_ICONS: Record<GolfImprovementGoal, "club" | "ball" | "flag" | "score" | "spark" | "arrow"> = {
+  DRIVER: "club", IRONS: "club", APPROACH: "flag", SHORT_GAME: "flag", BUNKER: "flag",
+  PUTTING: "ball", CONSISTENCY: "score", COURSE_STRATEGY: "flag", MENTAL_CONFIDENCE: "spark", LOWER_HANDICAP: "arrow",
 };
 
 const GOAL_LABELS: Record<Exclude<GolfPrimaryGoal, "">, string> = {
@@ -113,16 +120,12 @@ function Shell({ progress, eyebrow, title, description, children, actions, onBac
 }
 
 const acceptNoInitialConsent = async () => undefined;
-const resolveNoInitialBetting = async () => undefined;
-
-export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, legalConsentRequired = false, initialBettingDecision = "pending", onAcceptRequiredConsents = acceptNoInitialConsent, onResolveInitialBetting = resolveNoInitialBetting, onComplete }: {
+export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, legalConsentRequired = false, onAcceptRequiredConsents = acceptNoInitialConsent, onComplete }: {
   profile: BackyardProfile;
   accessToken: string | null;
   onUpdateProfile: (profile: BackyardProfileUpdate) => Promise<"local" | "cloud">;
   legalConsentRequired?: boolean;
-  initialBettingDecision?: "pending" | "accepted" | "skipped";
   onAcceptRequiredConsents?: () => Promise<void>;
-  onResolveInitialBetting?: (accepted: boolean) => Promise<void>;
   onComplete: () => void;
 }) {
   const [progress, setProgress] = useState<BetaOnboardingProgress | null>(null);
@@ -222,7 +225,7 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, lega
       <button type="button" className={entryMode === "quick" ? styles.entrySelected : styles.entryChoice} aria-pressed={entryMode === "quick"} onClick={() => setEntryMode("quick")}><span aria-hidden="true">⚡</span><div><b>Rápida</b><p>Elige tu fuente de índice y permisos opcionales. Equipo y fitting quedan disponibles para después.</p></div></button>
       <button type="button" className={entryMode === "complete" ? styles.entrySelected : styles.entryChoice} aria-pressed={entryMode === "complete"} onClick={() => setEntryMode("complete")}><span aria-hidden="true">⛳</span><div><b>Completa</b><p>Configura índice, bolsa, objetivos y permisos opcionales.</p></div></button>
     </div>
-    <InitialOnboardingConsents key={profile.userId} userId={profile.userId} accessToken={accessToken} legalRequired={legalConsentRequired} initialBettingDecision={initialBettingDecision} canContinue={Boolean(entryMode)} onAcceptRequired={onAcceptRequiredConsents} onResolveBetting={onResolveInitialBetting} onContinue={() => advance("permissions")} />
+    <InitialOnboardingConsents key={profile.userId} userId={profile.userId} accessToken={accessToken} legalRequired={legalConsentRequired} canContinue={Boolean(entryMode)} onAcceptRequired={onAcceptRequiredConsents} onContinue={() => advance("permissions")} />
   </Shell>;
 
   if (progress.step === "equipment") return <EquipmentOnboarding
@@ -237,13 +240,33 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, lega
     onSaveAndExit={onComplete}
   />;
 
-  if (progress.step === "ghin") return <Shell progress={progress} {...navigationProps} eyebrow="HANDICAP / ÍNDICE" title="Elige tu fuente de índice" description="Puedes vincular tu cuenta GHIN, activar Backyard Index o continuar sin índice." actions={<button className="primary big" disabled={finishing} onClick={async () => { try { const linked=ghinControl.profile?.associationStatus==="VERIFIED"; await onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: profile.defaultHandicap, ghinLinkStatus: linked ? "LINKED" : profile.ghinLinkStatus === "LINKED" ? "LINKED" : "SKIPPED" }); if (entryMode === 'quick') finish(); else advance("equipment", true); } catch(error) { setMessage(error instanceof Error ? error.message : 'No pudimos guardar. Reintenta.'); } }}>{finishing ? 'Guardando…' : 'Continuar'}</button>}>
-    <HandicapSourceChoices control={indexControl} authenticated={Boolean(profile.userId && profile.userId !== "guest")} ghinControl={ghinControl} />
+  if (progress.step === "ghin") {
+    const continueFlow = () => {
+      if (entryMode === "quick") {
+        setFinishing(false);
+        finish();
+        return true;
+      }
+      advance("equipment", true);
+      return false;
+    };
+    const saveProfileSource = async (withoutIndex = false) => {
+      const linked=ghinControl.profile?.associationStatus==="VERIFIED";
+      await onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: profile.defaultHandicap, ghinLinkStatus: linked ? "LINKED" : profile.ghinLinkStatus === "LINKED" ? "LINKED" : "SKIPPED" });
+      if (withoutIndex && accessToken) {
+        const current = await socialRequest<{ choices: { handicap_choice: "MANUAL" | "UNKNOWN" | null; manual_hcp: number | null; not_applicable: string[] } }>("/api/account/completion", accessToken);
+        await socialRequest("/api/account/completion", accessToken, { method: "PUT", body: { ...current.choices, handicap_choice: "UNKNOWN", manual_hcp: null } });
+      }
+    };
+    const sourceChosen = accountIndex.source === "GHIN" || accountIndex.source === "BACKYARD";
+    return <Shell progress={progress} {...navigationProps} eyebrow="HANDICAP / ÍNDICE" title="Elige tu fuente de índice" description="Puedes vincular tu cuenta GHIN, activar Backyard Index o continuar sin índice." actions={sourceChosen ? <button className="primary big" disabled={finishing} onClick={async () => { let delegated = false; try { setFinishing(true); await saveProfileSource(); delegated = continueFlow(); } catch(error) { setMessage(error instanceof Error ? error.message : 'No pudimos guardar. Reintenta.'); } finally { if (!delegated) setFinishing(false); } }}>{finishing ? 'Guardando…' : 'Continuar con esta fuente'}</button> : null}>
+    <HandicapSourceChoices control={indexControl} authenticated={Boolean(profile.userId && profile.userId !== "guest")} ghinControl={ghinControl} onContinueWithoutIndex={async () => { if (finishing) return; let delegated = false; setFinishing(true); setMessage(""); try { await indexControl.change(false); await saveProfileSource(true); delegated = continueFlow(); } catch(error) { setMessage(error instanceof Error ? error.message : 'No pudimos guardar tu elección. Reintenta.'); } finally { if (!delegated) setFinishing(false); } }} />
     <p className={styles.trust}>Si todavía no tienes índice puedes continuar. No inventaremos un valor.</p>{message && <p role="alert">{message}</p>}
   </Shell>;
+  }
 
   if (progress.step === "improvements") return <Shell progress={progress} {...navigationProps} eyebrow="TU JUEGO" title="¿Qué te gustaría mejorar?" description="Elige todas las áreas que quieras. Usaremos estas señales para personalizar recomendaciones, IA, análisis y ejercicios." actions={<button className="primary big" disabled={!draft.improvementGoals.length} onClick={async () => { await onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: profile.defaultHandicap, improvementGoals: draft.improvementGoals, golfProfileUpdatedAt: new Date().toISOString() }); advance("objective"); }}>Continuar</button>}>
-    <div className={styles.choiceGrid}>{GOLF_IMPROVEMENT_GOALS.map((goal) => { const active = draft.improvementGoals.includes(goal); return <button type="button" key={goal} className={active ? styles.choiceActive : styles.choice} onClick={() => setDraft((current) => current ? { ...current, improvementGoals: active ? current.improvementGoals.filter((item) => item !== goal) : [...current.improvementGoals, goal] } : current)}>{active ? "✓ " : ""}{IMPROVEMENT_LABELS[goal]}</button>; })}</div>
+    <div className={styles.choiceGrid}>{GOLF_IMPROVEMENT_GOALS.map((goal) => { const active = draft.improvementGoals.includes(goal); return <button type="button" key={goal} className={active ? styles.choiceActive : styles.choice} aria-pressed={active} onClick={() => setDraft((current) => current ? { ...current, improvementGoals: active ? current.improvementGoals.filter((item) => item !== goal) : [...current.improvementGoals, goal] } : current)}><span className={styles.choiceIcon}><BackyardIcon name={IMPROVEMENT_ICONS[goal]} size={24} /></span><span>{IMPROVEMENT_LABELS[goal]}</span><b aria-hidden="true">{active ? "✓" : "+"}</b></button>; })}</div>
   </Shell>;
 
   if (progress.step === "objective") return <Shell progress={progress} {...navigationProps} eyebrow="OBJETIVO" title="¿Cuáles son tus objetivos?" description="Elige uno o varios. Los usaremos para personalizar recomendaciones y podrás cambiarlos desde tu perfil." actions={<button className="primary big" disabled={!draft.primaryGoals.length} onClick={async () => {

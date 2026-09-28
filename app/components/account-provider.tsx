@@ -19,7 +19,6 @@ import {
   authErrorMessage,
   bettingConsentPromptStorageKey,
   buildLegalAcceptances,
-  buildBettingDataAcceptance,
   clampBackyardHandicap,
   clearLegalAcceptancesForUser,
   emptyBackyardProfileDetails,
@@ -379,9 +378,8 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
   </main>;
 }
 
-function ConsentScreen({ onAccept, onBack }: { onAccept: (includeBettingConsent: boolean) => Promise<void>; onBack: () => Promise<void> }) {
+function ConsentScreen({ onAccept, onBack }: { onAccept: () => Promise<void>; onBack: () => Promise<void> }) {
   const [requiredAccepted, setRequiredAccepted] = useState(false);
-  const [betting, setBetting] = useState<"pending" | "accepted" | "skipped">("pending");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   return <main className="consentScreen"><section className="consentCard">
@@ -392,11 +390,9 @@ function ConsentScreen({ onAccept, onBack }: { onAccept: (includeBettingConsent:
       <p><Link href="/legal/terms?returnTo=onboarding">Términos y Condiciones</Link> · <Link href="/legal/privacy?returnTo=onboarding">Aviso de Privacidad</Link></p>
       {requiredAccepted ? <div className="officialPriority" role="status">✓ Consentimientos requeridos aceptados.</div> : <div className="consentDecisionActions"><button type="button" className="primary" disabled={busy} onClick={() => { setRequiredAccepted(true); setError(""); }}>ACEPTAR TODO Y CONTINUAR</button><button type="button" className="secondary" disabled={busy} onClick={() => setError("Para crear una cuenta de The Backyard debes aceptar los consentimientos requeridos.")}>NO ACEPTO</button></div>}
     </section>
-    <section className="consentDecision"><h2>FUNCIONES DE APUESTAS</h2><p>El tratamiento de datos de apuestas, resultados y gastos es opcional. Puedes continuar sin activarlo.</p>
-      {betting === "pending" ? <div className="consentDecisionActions"><button type="button" className="primary" disabled={busy} onClick={() => setBetting("accepted")}>ACTIVAR APUESTAS</button><button type="button" className="secondary" disabled={busy} onClick={() => setBetting("skipped")}>AHORA NO</button></div> : <div className="officialPriority" role="status">{betting === "accepted" ? "✓ Apuestas activadas." : "Ahora no · puedes activarlas después."}</div>}
-    </section>
+    <p className="hint">Las funciones opcionales, incluidas las apuestas, pedirán autorización sólo cuando decidas usarlas.</p>
     {error && <p role="alert">{error}</p>}
-    <button className="primary big" disabled={!requiredAccepted || betting === "pending" || busy} onClick={async () => { setBusy(true); setError(""); try { await onAccept(betting === "accepted"); } catch { setError("No pudimos guardar tu aceptación en este dispositivo. Libera espacio y vuelve a intentar."); } finally { setBusy(false); } }}>{busy ? "Guardando…" : "CONTINUAR"}</button>
+    <button className="primary big" disabled={!requiredAccepted || busy} onClick={async () => { setBusy(true); setError(""); try { await onAccept(); } catch { setError("No pudimos guardar tu aceptación en este dispositivo. Libera espacio y vuelve a intentar."); } finally { setBusy(false); } }}>{busy ? "Guardando…" : "CONTINUAR"}</button>
     <button className="textButton consentBack" disabled={busy} onClick={onBack}>← Volver al acceso</button>
   </section></main>;
 }
@@ -1287,35 +1283,15 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     await persistAcceptanceBatch(buildLegalAcceptances(identity.userId, new Date().toISOString()), requireServerPersistence);
   }
 
-  async function resolveInitialBettingConsent(accepted: boolean, requireServerPersistence = false) {
-    if (!identity) return;
-    const origin: LegalEvidenceOrigin = acceptances.some((item) => item.userId === identity.userId) ? "existing_user_update" : "onboarding";
-    recordLegalChoices([{ subject: "financial_data", action: accepted ? "accepted" : "rejected" }], origin);
-    if (!accepted) {
-      localStorage.setItem(bettingConsentPromptStorageKey(identity.userId), "seen");
-      return;
-    }
-    await persistAcceptanceBatch([
-      buildBettingDataAcceptance(identity.userId, new Date().toISOString(), identity.mode === "authenticated" ? "pending" : "local_only"),
-    ], requireServerPersistence);
-    localStorage.removeItem(bettingConsentPromptStorageKey(identity.userId));
-  }
-
-  async function acceptConsent(includeBettingConsent: boolean, requireServerPersistence = false) {
+  async function acceptConsent(requireServerPersistence = false) {
     if (!identity) return;
     const origin: LegalEvidenceOrigin = acceptances.some((item) => item.userId === identity.userId) ? "existing_user_update" : "onboarding";
     recordLegalChoices([
       { subject: "privacy_notice", action: "presented" },
       { subject: "terms", action: "accepted" },
       { subject: "age_declaration", action: "accepted" },
-      { subject: "financial_data", action: includeBettingConsent ? "accepted" : "rejected" },
     ], origin);
     const next = buildLegalAcceptances(identity.userId, new Date().toISOString());
-    if (includeBettingConsent) {
-      next.push(buildBettingDataAcceptance(identity.userId, new Date().toISOString(), identity.mode === "authenticated" ? "pending" : "local_only"));
-    } else {
-      localStorage.setItem(bettingConsentPromptStorageKey(identity.userId), "seen");
-    }
     await persistAcceptanceBatch(next, requireServerPersistence);
   }
 
@@ -1950,7 +1926,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   if (identity.mode === "authenticated" && !profileChecked) return <main className="accessScreen"><div className="accessLoading">Preparando tu perfil…</div></main>;
   if (identity.mode === "authenticated" && profileSetupRequired) return <>{accountCloudError && <div role="alert" className="notice bad">{accountCloudError}</div>}<ProfileSetupScreen identity={identity} onSave={saveInitialProfile} onBack={logout} /></>;
   if (identity.mode === "authenticated" && betaOnboardingRequired) return <AccountContext.Provider value={context!}>
-    <BetaOnboardingFlow profile={identity} accessToken={identity.accessToken} onUpdateProfile={updateProfile} legalConsentRequired={!currentConsent} initialBettingDecision={bettingConsentGranted ? "accepted" : bettingConsentResolved ? "skipped" : "pending"} onAcceptRequiredConsents={() => acceptRequiredConsents(true)} onResolveInitialBetting={(accepted) => resolveInitialBettingConsent(accepted, true)} onComplete={finishBetaOnboarding} />
+    <BetaOnboardingFlow profile={identity} accessToken={identity.accessToken} onUpdateProfile={updateProfile} legalConsentRequired={!currentConsent} onAcceptRequiredConsents={() => acceptRequiredConsents(true)} onComplete={finishBetaOnboarding} />
     {bettingConsentDialog}
   </AccountContext.Provider>;
   if (identity.mode === "authenticated" && equipmentOnboardingRequired) return <CanonicalEquipmentOnboarding identity={identity} onComplete={finishEquipmentOnboarding} />;

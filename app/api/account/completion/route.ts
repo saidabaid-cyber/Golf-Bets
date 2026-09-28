@@ -14,9 +14,13 @@ async function read(ctx: SocialContext) {
  const metadata = user.data.user?.user_metadata || {};
  const golf = metadata.backyard_golf_profile_v1 || {};
  const decisions = choices.data || EMPTY_COMPLETION_CHOICES;
+ const indexPreference = parseIndexPreference(metadata[BACKYARD_INDEX_METADATA_KEY], ctx.userId);
+ const indexResolution = indexPreference?.handicapSource === "GHIN" ? "GHIN" as const
+  : indexPreference?.enabled ? "BACKYARD" as const
+  : indexPreference ? "NONE" as const : null;
  return { choices: decisions, progress: profileCompletion({ displayName: profile.data.display_name, avatarUrl: profile.data.avatar_url, username: profile.data.username,
   givenName: metadata.given_name, familyName: metadata.family_name, handedness: golf.handedness, homeClub: golf.homeClub, preferredTee: golf.preferredTee,
-  indexEnabled: parseIndexPreference(metadata[BACKYARD_INDEX_METADATA_KEY], ctx.userId)?.enabled === true,
+  indexEnabled: indexPreference?.enabled === true, indexResolution,
   equipment: normalizeEquipmentProfile(equipment.data?.snapshot, ctx.userId), choices: decisions }) };
 }
 export async function GET(request: Request) { return socialHttp(request, read); }

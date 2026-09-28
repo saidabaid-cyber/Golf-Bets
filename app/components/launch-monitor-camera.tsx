@@ -18,7 +18,7 @@ const CLUB_LABELS: Record<LaunchMonitorClub, string> = {
   DRIVER: "Driver",
   IRON_7: "Hierro 7",
   PITCHING_WEDGE: "Pitching wedge",
-  HALF_WEDGE: "Half wedge",
+  HALF_WEDGE: "Half wedge / approach",
 };
 
 const METRIC_LABELS: Record<LaunchMonitorMetric, { label: string; unit: string }> = {
@@ -32,6 +32,13 @@ const METRIC_LABELS: Record<LaunchMonitorMetric, { label: string; unit: string }
   landingAngleDegrees: { label: "Caída", unit: "°" },
 };
 
+const CRITICAL_METRICS: Record<LaunchMonitorClub, LaunchMonitorMetric[]> = {
+  DRIVER: ["ballSpeedMph", "carryYards"],
+  IRON_7: ["carryYards", "spinRpm"],
+  PITCHING_WEDGE: ["carryYards", "spinRpm"],
+  HALF_WEDGE: ["carryYards"],
+};
+
 function id() {
   return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
@@ -41,12 +48,25 @@ function errorMessage(error: unknown) {
   return "No pude leer las pantallas. Revisa las fotos e intenta de nuevo.";
 }
 
-export function LaunchMonitorCamera({ userId, accessToken, requiresRemoteConsent, onConfirm, onOpenPrivacy }: {
+function metricNeedsReview(shot: LaunchMonitorVisionExtraction["shots"][number], metric: LaunchMonitorMetric) {
+  const reading = shot.metrics[metric];
+  if (reading.value !== null && reading.confidence < LAUNCH_MONITOR_VISION_CONFIDENCE) return true;
+  return Boolean(shot.club && CRITICAL_METRICS[shot.club].includes(metric) && reading.value === null);
+}
+
+function clubNeedsReview(shot: LaunchMonitorVisionExtraction["shots"][number], targetClub: LaunchMonitorClub) {
+  return shot.club === null || shot.clubConfidence < LAUNCH_MONITOR_VISION_CONFIDENCE || shot.club !== targetClub;
+}
+
+export function LaunchMonitorCamera({ userId, accessToken, requiresRemoteConsent, onConfirm, onOpenPrivacy, targetClub, capturedCount, nextClubLabel }: {
   userId: string;
   accessToken?: string | null;
   requiresRemoteConsent: boolean;
   onConfirm: (source: string | null, shots: LaunchMonitorShot[]) => void;
   onOpenPrivacy?: () => void;
+  targetClub: LaunchMonitorClub;
+  capturedCount: number;
+  nextClubLabel: string | null;
 }) {
   const [photos, setPhotos] = useState<LocalPhoto[]>([]);
   const [extraction, setExtraction] = useState<LaunchMonitorVisionExtraction | null>(null);
@@ -54,6 +74,8 @@ export function LaunchMonitorCamera({ userId, accessToken, requiresRemoteConsent
   const [error, setError] = useState("");
   const [showConsent, setShowConsent] = useState(false);
   const [accountConsentRequired, setAccountConsentRequired] = useState(false);
+  const [editingShots, setEditingShots] = useState<string[]>([]);
+  const [resultMessage, setResultMessage] = useState("");
   const urls = useRef(new Set<string>());
   const inFlight = useRef(false);
   const mounted = useRef(true);
@@ -69,8 +91,14 @@ export function LaunchMonitorCamera({ userId, accessToken, requiresRemoteConsent
   }, []);
 
   const ambiguousCount = useMemo(() => extraction?.shots.reduce((total, shot) => total
-    + (shot.club === null || shot.clubConfidence < LAUNCH_MONITOR_VISION_CONFIDENCE ? 1 : 0)
-    + LAUNCH_MONITOR_METRICS.filter((metric) => shot.metrics[metric].value !== null && shot.metrics[metric].confidence < LAUNCH_MONITOR_VISION_CONFIDENCE).length, 0) || 0, [extraction]);
+    + (clubNeedsReview(shot, targetClub) ? 1 : 0)
+    + LAUNCH_MONITOR_METRICS.filter((metric) => metricNeedsReview(shot, metric)).length, 0) || 0, [extraction, targetClub]);
+
+  function clearPhotos() {
+    setPhotos([]);
+    urls.current.forEach((url) => URL.revokeObjectURL(url));
+    urls.current.clear();
+  }
 
   function addPhotos(files: FileList | null) {
     if (!files || busy) return;
@@ -84,6 +112,7 @@ export function LaunchMonitorCamera({ userId, accessToken, requiresRemoteConsent
       });
     setPhotos((current) => [...current, ...next]);
     setExtraction(null);
+    setResultMessage("");
     setError(next.length ? "" : "Selecciona fotos JPEG, PNG o WebP.");
   }
 
@@ -158,7 +187,14 @@ export function LaunchMonitorCamera({ userId, accessToken, requiresRemoteConsent
       }, 60_000, accessToken);
       const normalized = normalizeLaunchMonitorVisionExtraction(response.extraction, prepared.map((photo) => photo.id));
       if (!normalized || !normalized.shots.length) throw new Error("No encontré mediciones legibles en estas fotos.");
-      if (mounted.current) setExtraction(normalized);
+      const assigned = { ...normalized, shots: normalized.shots.map((shot) => shot.club === null ? { ...shot, club: targetClub, clubConfidence: 1 } : shot) };
+      const needsReview = assigned.shots.some((shot) => clubNeedsReview(shot, targetClub) || LAUNCH_MONITOR_METRICS.some((metric) => metricNeedsReview(shot, metric)));
+      const detected = assigned.shots.map((shot) => launchMonitorVisionShotToDraft(shot));
+      if (!needsReview && detected.every((shot): shot is LaunchMonitorShot => Boolean(shot))) {
+        onConfirm(assigned.source, detected);
+        clearPhotos();
+        if (mounted.current) setResultMessage(`${detected.length} golpe${detected.length === 1 ? "" : "s"} detectado${detected.length === 1 ? "" : "s"} y agregado${detected.length === 1 ? "" : "s"} automáticamente.`);
+      } else if (mounted.current) setExtraction(assigned);
     } catch (caught) {
       if (mounted.current) setError(errorMessage(caught));
     } finally {
@@ -196,29 +232,33 @@ export function LaunchMonitorCamera({ userId, accessToken, requiresRemoteConsent
     }
     onConfirm(validated.source, shots as LaunchMonitorShot[]);
     setExtraction(null);
-    setPhotos([]);
-    urls.current.forEach((url) => URL.revokeObjectURL(url));
-    urls.current.clear();
+    setEditingShots([]);
+    setResultMessage(`${shots.length} golpe${shots.length === 1 ? "" : "s"} actualizado${shots.length === 1 ? "" : "s"} y agregado${shots.length === 1 ? "" : "s"}.`);
+    clearPhotos();
   }
 
   return <section className={styles.cameraCapture} aria-labelledby="launch-camera-title">
-    <div className={styles.itemHeader}><div><h3 id="launch-camera-title">Capturar con cámara</h3><p>Sube 2–4 fotos de TrackMan, FlightScope, GCQuad, Garmin, Rapsodo u otra pantalla. Revisas todo antes de guardar.</p></div></div>
+    <div className={styles.captureBrief}><span>{Math.min(capturedCount, 3)}/3</span><div><small>CAPTURA ACTUAL</small><h3 id="launch-camera-title">{CLUB_LABELS[targetClub]}</h3><p>Fotografía hasta 3 golpes legibles. {nextClubLabel ? `Después sigue ${nextClubLabel}.` : "Este es el último bloque recomendado."}</p></div></div>
+    <p className={styles.subtle}>Sube 2–4 fotos de TrackMan, FlightScope, GCQuad, Garmin, Rapsodo u otra pantalla. Los datos claros se agregan automáticamente; sólo te pediremos corregir lecturas dudosas.</p>
     <div className={styles.inlineActions}>
       <label className={styles.photoButton}>📷 Tomar fotos ahora<input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" multiple onChange={(event) => { addPhotos(event.target.files); event.currentTarget.value = ""; }} /></label>
       <label className={styles.photoButton}>🖼 Elegir de Fotos / Galería<input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(event) => { addPhotos(event.target.files); event.currentTarget.value = ""; }} /></label>
     </div>
     {photos.length > 0 && <div className={styles.launchPhotoGrid}>{photos.map((photo) => <figure key={photo.id}><img src={photo.previewUrl} alt="Pantalla de launch monitor seleccionada" /><button type="button" className="secondary" onClick={() => removePhoto(photo.id)} disabled={busy}>Quitar</button></figure>)}</div>}
     <button type="button" className="primary" onClick={() => void analyze()} disabled={busy || photos.length < 2}>{busy ? "Leyendo mediciones…" : "Analizar fotos"}</button>
+    {resultMessage && <p className={styles.autoApplied} role="status">✓ {resultMessage}</p>}
     {error && <p className={styles.formMessage} role="alert">{error}</p>}
     {accountConsentRequired && <AiProcessingConsentRequired scope={AI_LAUNCH_MONITOR_PROCESSING_CONSENT} onOpenPrivacy={onOpenPrivacy} />}
     {showConsent && !requiresRemoteConsent && !accessToken && <AiProcessingConsentPrompt userId={userId} accessToken={accessToken} requiresRemoteConsent={requiresRemoteConsent} scope={AI_LAUNCH_MONITOR_PROCESSING_CONSENT} onAccepted={() => void analyzeWithConsent()} onCancel={() => setShowConsent(false)} />}
     {extraction && <div className={styles.launchReview}>
-      <div className={styles.statusRow}><div><h3>Revisa antes de guardar</h3><p>{extraction.shots.length} golpe(s) detectados · {ambiguousCount ? `${ambiguousCount} dato(s) requieren atención` : "lectura clara"}</p></div></div>
-      {extraction.shots.map((shot, index) => <article className={styles.equipmentItem} key={shot.id}>
-        <label>Golpe {index + 1} · Palo<select value={shot.club || ""} className={shot.club === null || shot.clubConfidence < LAUNCH_MONITOR_VISION_CONFIDENCE ? styles.needsReview : ""} onChange={(event) => setClub(shot.id, event.target.value as LaunchMonitorClub)}><option value="">Confirma el palo</option>{LAUNCH_MONITOR_CLUBS.map((club) => <option value={club} key={club}>{CLUB_LABELS[club]}</option>)}</select></label>
-        <div className={styles.formGrid}>{LAUNCH_MONITOR_METRICS.map((metric) => <label key={metric} className={shot.metrics[metric].value !== null && shot.metrics[metric].confidence < LAUNCH_MONITOR_VISION_CONFIDENCE ? styles.needsReview : ""}>{METRIC_LABELS[metric].label} ({METRIC_LABELS[metric].unit})<input type="number" inputMode="decimal" value={shot.metrics[metric].value ?? ""} onChange={(event) => setMetric(shot.id, metric, event.target.value)} /></label>)}</div>
-      </article>)}
-      <div className={styles.wizardActions}><button type="button" className="secondary" onClick={() => setExtraction(null)}>Volver a analizar</button><button type="button" className="primary" onClick={confirm}>Confirmar y guardar sesión</button></div>
+      <div className={styles.statusRow}><div><h3>Corrige sólo lo necesario</h3><p>{extraction.shots.length} golpe(s) detectados · {ambiguousCount} dato(s) requieren atención. El resto ya está aplicado.</p></div></div>
+      {extraction.shots.map((shot, index) => { const editing = editingShots.includes(shot.id); const knownMetrics = LAUNCH_MONITOR_METRICS.filter((metric) => shot.metrics[metric].value !== null && !metricNeedsReview(shot, metric)); const reviewMetrics = LAUNCH_MONITOR_METRICS.filter((metric) => editing || metricNeedsReview(shot, metric)); return <article className={styles.reviewShot} key={shot.id}>
+        <div className={styles.reviewShotHeader}><div><b>Golpe {index + 1}</b><small>{shot.club ? CLUB_LABELS[shot.club] : "Palo pendiente"}</small></div><button type="button" className="textButton" onClick={() => setEditingShots((current) => current.includes(shot.id) ? current.filter((id) => id !== shot.id) : [...current, shot.id])}>{editing ? "Cerrar edición" : "Editar datos detectados"}</button></div>
+        {(editing || clubNeedsReview(shot, targetClub)) && <label className={clubNeedsReview(shot, targetClub) ? styles.needsReview : ""}>Palo<select value={shot.club || ""} onChange={(event) => setClub(shot.id, event.target.value as LaunchMonitorClub)}><option value="">Confirma el palo</option>{LAUNCH_MONITOR_CLUBS.map((club) => <option value={club} key={club}>{CLUB_LABELS[club]}</option>)}</select></label>}
+        {knownMetrics.length > 0 && !editing && <div className={styles.detectedMetrics}>{knownMetrics.map((metric) => <span key={metric}><small>{METRIC_LABELS[metric].label}</small><b>{shot.metrics[metric].value} {METRIC_LABELS[metric].unit}</b></span>)}</div>}
+        {reviewMetrics.length > 0 && <div className={styles.formGrid}>{reviewMetrics.map((metric) => <label key={metric} className={metricNeedsReview(shot, metric) ? styles.needsReview : ""}>{METRIC_LABELS[metric].label} ({METRIC_LABELS[metric].unit})<input type="number" inputMode="decimal" value={shot.metrics[metric].value ?? ""} onChange={(event) => setMetric(shot.id, metric, event.target.value)} /></label>)}</div>}
+      </article>; })}
+      <div className={styles.wizardActions}><button type="button" className="secondary" onClick={() => setExtraction(null)}>Usar otras fotos</button><button type="button" className="primary" onClick={confirm}>Aplicar correcciones y continuar</button></div>
     </div>}
   </section>;
 }

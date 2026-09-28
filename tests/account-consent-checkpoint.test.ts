@@ -11,27 +11,26 @@ test("initial consent is embedded in onboarding instead of gating app entry", ()
   assert.match(consent, /export function InitialOnboardingConsents/);
   assert.match(onboarding, /<InitialOnboardingConsents/);
   assert.match(onboarding, /canContinue=\{Boolean\(entryMode\)\}/);
-  assert.match(onboarding, /initialBettingDecision=\{initialBettingDecision\}/);
+  assert.doesNotMatch(onboarding, /initialBettingDecision|onResolveBetting/);
   assert.match(onboarding, /actions=\{null\}/);
   assert.doesNotMatch(provider, /AccountConsentCheckpoint/);
   assert.doesNotMatch(provider, /requiresAccountConsent/);
   assert.match(provider, /return app;/);
 });
 
-test("required legal and optional betting/AI choices are grouped without visible checkboxes", () => {
+test("required legal and optional AI choices are grouped without asking about bets", () => {
   const consent = source("app/components/account-consent-checkpoint.tsx");
-  for (const copy of ["Términos y Condiciones", "Aviso de Privacidad", "mayoría de edad", "apuestas, resultados y gastos", "CONSENTIMIENTOS REQUERIDOS", "AUTORIZACIONES DE BACKYARD AI"]) assert.match(consent, new RegExp(copy));
+  for (const copy of ["Términos y Condiciones", "Aviso de Privacidad", "mayoría de edad", "CONSENTIMIENTOS REQUERIDOS", "AUTORIZACIONES DE BACKYARD AI"]) assert.match(consent, new RegExp(copy));
   assert.match(consent, /AUTORIZAR LAS 3 FUNCIONES DE IA/);
   assert.match(consent, /ACEPTAR TODO Y CONTINUAR/);
   assert.match(consent, /NO ACEPTO/);
-  assert.match(consent, /ACTIVAR APUESTAS/);
   assert.match(consent, /AHORA NO/);
+  assert.doesNotMatch(consent, /FUNCIONES DE APUESTAS|ACTIVAR APUESTAS|apuestas, resultados y gastos/);
   assert.doesNotMatch(consent, /type="checkbox"/);
   assert.match(consent, /saveRemoteAiConsentDecisions/);
   assert.match(consent, /AI_PROCESSING_CONSENT_SCOPES\.map/);
   assert.match(consent, /await onAcceptRequired\(\)/);
-  assert.match(consent, /await onResolveBetting\(accepted\)/);
-  assert.match(consent, /initialBettingDecision !== "pending"/);
+  assert.doesNotMatch(consent, /onResolveBetting|initialBettingDecision/);
 });
 
 test("AI outage is fail-closed and Ahora no records all three declined scopes", () => {
@@ -42,15 +41,14 @@ test("AI outage is fail-closed and Ahora no records all three declined scopes", 
   assert.doesNotMatch(consent, /localStorage/);
 });
 
-test("guest onboarding also removes individual legal and betting checkboxes", () => {
+test("guest onboarding also omits betting permission", () => {
   const provider = source("app/components/account-provider.tsx");
   const start = provider.indexOf("function ConsentScreen");
   const end = provider.indexOf("function ProfileSetupScreen", start);
   const guest = provider.slice(start, end);
   assert.doesNotMatch(guest, /type="checkbox"/);
   assert.match(guest, /ACEPTAR TODO Y CONTINUAR/);
-  assert.match(guest, /ACTIVAR APUESTAS/);
-  assert.match(guest, /AHORA NO/);
+  assert.doesNotMatch(guest, /FUNCIONES DE APUESTAS|ACTIVAR APUESTAS|financial/);
 });
 
 test("removed full-screen consent copy cannot reappear after onboarding", () => {
@@ -68,9 +66,10 @@ test("betting consent is requested only by a betting action, not automatically a
   assert.match(provider, /bettingConsentRequest\.current/);
 });
 
-test("an empty resolved legal ledger does not silently skip the onboarding betting choice", () => {
+test("betting state remains contextual and is not passed into onboarding", () => {
   const provider = source("app/components/account-provider.tsx");
   assert.match(provider, /hasResolvedFinancialChoice\(legalEvidenceEvents, legacyBettingConsent, legalEvidenceResolved\)/);
   assert.doesNotMatch(provider, /const financialConsentResolved = legalEvidenceResolved \|\|/);
-  assert.match(provider, /initialBettingDecision=\{bettingConsentGranted \? "accepted" : bettingConsentResolved \? "skipped" : "pending"\}/);
+  assert.doesNotMatch(provider, /initialBettingDecision=|onResolveBetting=/);
+  assert.match(provider, /requestBettingConsent/);
 });
