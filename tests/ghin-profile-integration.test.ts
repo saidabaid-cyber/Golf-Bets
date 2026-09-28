@@ -157,6 +157,7 @@ test("existing migration is owner-readable, service-write-only and contains no s
 test("multiuser migration enforces verified identity uniqueness and stores no secrets", () => {
   const migration = readFileSync("supabase/migrations/20260927223000_ghin_multiuser_linking.sql", "utf8");
   const cleanup = readFileSync("supabase/migrations/20260928031010_migrate_legacy_self_attested_ghin.sql", "utf8");
+  const manualProjection = readFileSync("supabase/migrations/20260928033000_preserve_legacy_manual_handicap.sql", "utf8");
   assert.match(migration, /association_status in \('LOOKUP_FOUND', 'SELF_ATTESTED', 'VERIFIED', 'DISCONNECTED'\)/);
   assert.match(migration, /create unique index if not exists player_handicap_provider_profiles_provider_player_unique/);
   assert.match(migration, /where association_status = 'VERIFIED'/);
@@ -168,4 +169,8 @@ test("multiuser migration enforces verified identity uniqueness and stores no se
   assert.match(cleanup, /association_status = 'VERIFIED'[\s\S]*private\.account_subject_active/);
   assert.doesNotMatch(migration, /\b(password|bearer_token|firebase_token|cookie|authorization_header)\b/i);
   assert.doesNotMatch(cleanup, /\b(password|bearer_token|firebase_token|cookie|authorization_header|raw_response)\b/i);
+  assert.match(manualProjection, /profile_completion_choices[\s\S]*handicap_choice = 'MANUAL'/);
+  assert.match(manualProjection, /public\.profiles[\s\S]*default_handicap = audit\.canonical_manual_handicap/);
+  assert.match(manualProjection, /public\.user_preferences[\s\S]*default_handicap = excluded\.default_handicap/);
+  assert.doesNotMatch(manualProjection, /\b(password|bearer_token|firebase_token|cookie|authorization_header|raw_response)\b/i);
 });

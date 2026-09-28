@@ -86,6 +86,7 @@ test("database contract proves two distinct verified owners, uniqueness and unli
 
 test("legacy SELF_ATTESTED migration preserves manual intent and archives before cleanup", () => {
   const cleanup = source("supabase/migrations/20260928031010_migrate_legacy_self_attested_ghin.sql");
+  const manualProjection = source("supabase/migrations/20260928033000_preserve_legacy_manual_handicap.sql");
   const archiveAt = cleanup.indexOf("insert into private.ghin_legacy_self_attested_migrations");
   const manualAt = cleanup.indexOf("insert into public.profile_completion_choices");
   const deleteAt = cleanup.indexOf("delete from public.player_handicap_provider_profiles");
@@ -97,6 +98,11 @@ test("legacy SELF_ATTESTED migration preserves manual intent and archives before
   assert.match(cleanup, /enable row level security/);
   assert.match(cleanup, /revoke all on private\.ghin_legacy_self_attested_migrations[\s\S]*authenticated/);
   assert.doesNotMatch(cleanup, /\b(password|bearer_token|firebase_token|cookie|authorization_header|raw_response)\b/i);
+  assert.match(manualProjection, /choices\.handicap_choice = 'MANUAL'/);
+  assert.match(manualProjection, /profile\.default_handicap is null/);
+  assert.match(manualProjection, /public\.user_preferences\.default_handicap is null/);
+  assert.match(manualProjection, /canonical_manual_handicap/);
+  assert.doesNotMatch(manualProjection, /legacy_handicap_index[\s\S]*set default_handicap/i);
 });
 
 test("QA hardcodes are confined to the protected admin diagnostic and isolated POC", () => {
