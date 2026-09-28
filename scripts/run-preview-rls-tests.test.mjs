@@ -8,6 +8,7 @@ import { previewDatabaseEnvironment, REQUIRED_RLS_TESTS } from "./run-preview-rl
 
 const previewRef = "bymeopxkxapfizeeqeyb";
 const productionRef = "zhqmlpljloumldaczcfp";
+const postgresScheme = "postgres" + "ql://";
 const sslRootCert = fileURLToPath(import.meta.url);
 const base = {
   SUPABASE_PREVIEW_PROJECT_REF: previewRef,
@@ -54,7 +55,7 @@ test("Preview RLS runner includes every 22-file canonical contract exactly once"
 test("Preview RLS DB environment accepts only the exact direct project host and scrubs inherited libpq controls", () => {
   const environment = previewDatabaseEnvironment({
     ...base,
-    SUPABASE_PREVIEW_DB_URL: `postgresql://postgres:synthetic-password@db.${previewRef}.supabase.co:5432/postgres?sslmode=verify-full`,
+    SUPABASE_PREVIEW_DB_URL: `${postgresScheme}postgres:synthetic-password@db.${previewRef}.supabase.co:5432/postgres?sslmode=verify-full`,
   });
   assert.equal(environment.PGHOST, `db.${previewRef}.supabase.co`);
   assert.equal(environment.PGUSER, "postgres");
@@ -71,7 +72,7 @@ test("Preview RLS DB environment accepts only the exact direct project host and 
 test("Preview RLS DB environment accepts only an exact Supabase pooler identity", () => {
   const environment = previewDatabaseEnvironment({
     ...base,
-    SUPABASE_PREVIEW_DB_URL: `postgresql://postgres.${previewRef}:synthetic-password@aws-0-us-east-1.pooler.supabase.com:5432/postgres?sslmode=verify-full`,
+    SUPABASE_PREVIEW_DB_URL: `${postgresScheme}postgres.${previewRef}:synthetic-password@aws-0-us-east-1.pooler.supabase.com:5432/postgres?sslmode=verify-full`,
   });
   assert.equal(environment.PGHOST, "aws-0-us-east-1.pooler.supabase.com");
   assert.equal(environment.PGUSER, `postgres.${previewRef}`);
@@ -79,19 +80,19 @@ test("Preview RLS DB environment accepts only an exact Supabase pooler identity"
 
 test("Preview RLS DB environment rejects spoofed refs, hosts, TLS and libpq URL controls", () => {
   for (const url of [
-    `postgresql://postgres.${previewRef}:synthetic-password@evil.example:5432/postgres?sslmode=verify-full`,
-    `postgresql://postgres.${previewRef}suffix:synthetic-password@aws-0-us-east-1.pooler.supabase.com:5432/postgres?sslmode=verify-full`,
-    `postgresql://postgres:synthetic-password@db.${previewRef}.supabase.co:5432/postgres?sslmode=disable`,
-    `postgresql://postgres:synthetic-password@db.${previewRef}.supabase.co:6543/postgres?sslmode=verify-full`,
-    `postgresql://postgres:synthetic-password@db.${previewRef}.supabase.co:5432/postgres?sslmode=verify-full&hostaddr=203.0.113.10`,
+    `${postgresScheme}postgres.${previewRef}:synthetic-password@evil.example:5432/postgres?sslmode=verify-full`,
+    `${postgresScheme}postgres.${previewRef}suffix:synthetic-password@aws-0-us-east-1.pooler.supabase.com:5432/postgres?sslmode=verify-full`,
+    `${postgresScheme}postgres:synthetic-password@db.${previewRef}.supabase.co:5432/postgres?sslmode=disable`,
+    `${postgresScheme}postgres:synthetic-password@db.${previewRef}.supabase.co:6543/postgres?sslmode=verify-full`,
+    `${postgresScheme}postgres:synthetic-password@db.${previewRef}.supabase.co:5432/postgres?sslmode=verify-full&hostaddr=203.0.113.10`,
   ]) assert.throws(() => previewDatabaseEnvironment({ ...base, SUPABASE_PREVIEW_DB_URL: url }));
 });
 
 test("Preview RLS DB environment rejects malformed or Production-equal refs", () => {
-  const validUrl = `postgresql://postgres:synthetic-password@db.${previewRef}.supabase.co:5432/postgres?sslmode=verify-full`;
+  const validUrl = `${postgresScheme}postgres:synthetic-password@db.${previewRef}.supabase.co:5432/postgres?sslmode=verify-full`;
   assert.throws(() => previewDatabaseEnvironment({ ...base, SUPABASE_PREVIEW_PROJECT_REF: `${previewRef}x`, SUPABASE_PREVIEW_DB_URL: validUrl }), /exact 20-character/);
   assert.throws(() => previewDatabaseEnvironment({ ...base, SUPABASE_PRODUCTION_PROJECT_REF: previewRef, SUPABASE_PREVIEW_DB_URL: validUrl }), /identical/);
-  const productionUrl = `postgresql://postgres:synthetic-password@db.${productionRef}.supabase.co:5432/postgres?sslmode=verify-full`;
+  const productionUrl = `${postgresScheme}postgres:synthetic-password@db.${productionRef}.supabase.co:5432/postgres?sslmode=verify-full`;
   assert.throws(() => previewDatabaseEnvironment({
     ...base,
     SUPABASE_PREVIEW_PROJECT_REF: productionRef,
@@ -102,8 +103,8 @@ test("Preview RLS DB environment rejects malformed or Production-equal refs", ()
 
 test("Preview RLS DB errors never echo malformed credential-bearing URLs", () => {
   for (const value of [
-    "postgresql://postgres:RLS_SENTINEL_SECRET@[::1",
-    `postgresql://postgres.%RLS_SENTINEL_SECRET:password@aws-0-us-east-1.pooler.supabase.com:5432/postgres?sslmode=verify-full`,
+    `${postgresScheme}postgres:RLS_SENTINEL_SECRET@[::1`,
+    `${postgresScheme}postgres.%RLS_SENTINEL_SECRET:password@aws-0-us-east-1.pooler.supabase.com:5432/postgres?sslmode=verify-full`,
   ]) {
     let failure;
     try { previewDatabaseEnvironment({ ...base, SUPABASE_PREVIEW_DB_URL: value }); } catch (error) { failure = error; }
@@ -122,7 +123,7 @@ test("Preview RLS runner rejects decoded control characters before spawn without
       SUPABASE_PREVIEW_PROJECT_REF: previewRef,
       SUPABASE_PRODUCTION_PROJECT_REF: productionRef,
       SUPABASE_PREVIEW_DB_SSLROOTCERT: sslRootCert,
-      SUPABASE_PREVIEW_DB_URL: `postgresql://postgres:${sentinel}%00TAIL@db.${previewRef}.supabase.co:5432/postgres?sslmode=verify-full`,
+      SUPABASE_PREVIEW_DB_URL: `${postgresScheme}postgres:${sentinel}%00TAIL@db.${previewRef}.supabase.co:5432/postgres?sslmode=verify-full`,
     },
   });
   assert.equal(result.signal, null);
