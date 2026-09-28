@@ -62,7 +62,9 @@ function cachedAuthor(ctx: SocialContext, userId: string) {
 const EMPTY_PREFS: SocialActivityPreferences = {
   shareRounds: false, shareAchievements: false, shareEquipment: false, shareCourses: false,
   notifyLike: true, notifyComment: true, notifyAttest: true,
-  notifyFriendAchievement: false, notifyEquipment: false, updatedAt: null,
+  // Preserve historical legacy behavior. New accounts have an explicit row
+  // with every notification preference ON from the Auth bootstrap.
+  notifyFriendAchievement: false, notifyEquipment: false, notifyFriendRequest: true, updatedAt: null,
 };
 const SHA256 = /^[0-9a-f]{64}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -120,6 +122,9 @@ function prefsFromRow(row: Record<string, unknown> | null): SocialActivityPrefer
     notifyLike: row.notify_like !== false, notifyComment: row.notify_comment !== false,
     notifyAttest: row.notify_attest !== false, notifyFriendAchievement: row.notify_friend_achievement === true,
     notifyEquipment: row.notify_equipment === true,
+    // Friend requests were unconditional before this column existed. NULL or
+    // a missing row keeps that exact legacy behavior; false is an owner opt-out.
+    notifyFriendRequest: row.notify_friend_request !== false,
     updatedAt: typeof row.updated_at === "string" ? row.updated_at : null,
   };
 }
@@ -129,6 +134,7 @@ function prefsToRow(userId: string, pref: SocialActivityPreferences) {
     share_equipment: pref.shareEquipment, share_courses: pref.shareCourses,
     notify_like: pref.notifyLike, notify_comment: pref.notifyComment, notify_attest: pref.notifyAttest,
     notify_friend_achievement: pref.notifyFriendAchievement, notify_equipment: pref.notifyEquipment,
+    notify_friend_request: pref.notifyFriendRequest,
     updated_at: new Date().toISOString(),
   };
 }
@@ -287,7 +293,7 @@ export async function getPreferences(ctx: SocialContext): Promise<SocialPreferen
 export async function updatePreferences(ctx: SocialContext, preferences: unknown): Promise<SocialPreferencesResult> {
   const keys: Array<keyof SocialActivityPreferences> = [
     "shareRounds", "shareAchievements", "shareEquipment", "shareCourses", "notifyLike",
-    "notifyComment", "notifyAttest", "notifyFriendAchievement", "notifyEquipment",
+    "notifyComment", "notifyAttest", "notifyFriendAchievement", "notifyEquipment", "notifyFriendRequest",
   ];
   const candidate = preferences && typeof preferences === "object" ? preferences as Record<string, unknown> : null;
   if (!candidate || keys.some(key => typeof candidate[key] !== "boolean") || (Object.hasOwn(candidate, "enabledForFriends") && typeof candidate.enabledForFriends !== "boolean"))
@@ -756,6 +762,7 @@ export async function attestRound(
 }
 
 export async function listNotifications(ctx: SocialContext): Promise<SocialNotificationPage> {
+  const preferences = await cachedPrefs(ctx, ctx.userId);
   const { data, error } = await ctx.client.from("notification_events_v2")
     .select("id,event_type,resource_id,created_at,read_at")
     .eq("recipient_id", ctx.userId).in("event_type", ["like", "comment", "attest", "friend_achievement", "equipment", "friend_request"])
@@ -765,6 +772,7 @@ export async function listNotifications(ctx: SocialContext): Promise<SocialNotif
   for (const event of data || []) {
     if (!UUID.test(event.resource_id)) continue;
     if (event.event_type === "friend_request") {
+      if (!preferences.notifyFriendRequest) continue;
       const request = await ctx.client.from("friend_requests").select("id,state").eq("id", event.resource_id).eq("addressee_id", ctx.userId).maybeSingle();
       if (request.error) dbError(request.error);
       if (request.data?.state === "PENDING") visible.push({ id: event.id, type: "friend_request", activityId: event.resource_id, createdAt: event.created_at, readAt: event.read_at });

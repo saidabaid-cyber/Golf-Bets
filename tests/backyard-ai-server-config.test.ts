@@ -36,6 +36,13 @@ test("Backyard AI model selection supports overrides and a safe default", () => 
   assert.equal(backyardAiConfig({ OPENAI_API_KEY: "x", OPENAI_RULES_MODEL: "rules-model" }).scorecardModel, "rules-model");
   assert.equal(backyardAiConfig({ OPENAI_API_KEY: "x", OPENAI_BACKYARD_MODEL: "round-model", OPENAI_SCORECARD_MODEL: "vision-model" }).scorecardModel, "vision-model");
   assert.equal(backyardAiConfig({ BACKYARD_AI_ENABLED: "false", OPENAI_API_KEY: "x" }).ready, false);
+  assert.equal(backyardAiConfig({
+    ...configuredEnvironment,
+    VERCEL: "1",
+    VERCEL_ENV: "preview",
+    PREVIEW_DB_REF: "bymeopxkxapfizeeqeyb",
+    NEXT_PUBLIC_SUPABASE_URL: "https://shared-production.supabase.co",
+  }).ready, false, "un Preview con binding de base incorrecto no puede anunciar que su limitador está listo");
 });
 
 test("el ledger AI autenticado queda fail-closed en Preview y Guest no se rompe", () => {

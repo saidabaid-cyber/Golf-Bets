@@ -1,6 +1,6 @@
 "use client";
 import { saveOnboardingCheckpoint } from '../../lib/onboarding-checkpoint';
-import { STORAGE_KEYS } from '../../lib/round-utils';
+import { readStoredJson, STORAGE_KEYS } from '../../lib/round-utils';
 import { cloudAccountErrorMessage, ensureCloudProfile, saveCloudProfile } from "../../lib/cloud-account";
 import { canonicalProfileUsername, normalizeProfileUsername } from "../../lib/profile-username";
 
@@ -69,6 +69,10 @@ import { acknowledgePendingProfileWrite, cloudProfileFields, cloudProfileRevisio
 import { createEmptyEquipmentProfile, loadEquipmentProfile, saveEquipmentProfile } from "../../lib/golf-equipment";
 import { ballFitDefaultsFromProfile } from "../../lib/ball-fitting";
 import { EquipmentOnboarding } from "./equipment-onboarding";
+import { useBackyardIndexPreference } from "./use-backyard-index-preference";
+import { useGhinReadOnlyProfile } from "./use-ghin-read-only-profile";
+import { selectedHandicapIndex } from "../../lib/handicap-source";
+import type { RoundSnapshot } from "../../lib/types";
 import { BetaOnboardingFlow } from "./beta-onboarding-flow";
 import { betaOnboardingIsActive, createBetaOnboardingProgress, persistBetaOnboardingProgress, readBetaOnboardingProgress } from "../../lib/beta-onboarding";
 import { missingInitialProfileFields, oauthIdentityFromMetadata } from "../../lib/oauth-profile";
@@ -480,6 +484,26 @@ function ProfileSetupScreen({ identity, onSave, onBack }: {
   </section></main>;
 }
 
+function CanonicalEquipmentOnboarding({ identity, onComplete }: { identity: BackyardIdentity; onComplete: () => void }) {
+  const ghinControl = useGhinReadOnlyProfile(identity.accessToken);
+  const indexControl = useBackyardIndexPreference(identity.userId, Boolean(identity.accessToken));
+  const [history] = useState<RoundSnapshot[]>(() => typeof window === "undefined"
+    ? []
+    : readStoredJson<RoundSnapshot[]>(localStorage, STORAGE_KEYS.history, []));
+  const accountIndex = selectedHandicapIndex(indexControl.preference, history, identity.userId, ghinControl.profile);
+  return <EquipmentOnboarding
+    userId={identity.userId}
+    accessToken={identity.accessToken}
+    defaultHandicap={accountIndex.value}
+    defaultHandicapSource={accountIndex.source}
+    defaultHandedness={identity.handedness}
+    ballFitDefaults={ballFitDefaultsFromProfile(identity)}
+    onComplete={onComplete}
+    onBack={onComplete}
+    onSaveAndExit={onComplete}
+  />;
+}
+
 export function AccountProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [identity, setIdentity] = useState<BackyardIdentity | null>(null);
@@ -875,7 +899,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     const profileRead = pendingProfileAttempt.then(() => ensureCloudProfile(supabase, authenticatedUserId, fallback.profile)
       .then((value) => ({ status: "fulfilled" as const, value }))
       .catch((reason: unknown) => ({ status: "rejected" as const, reason })));
-    const preferencesRead = pendingProfileAttempt.then(() => supabase.from("user_preferences").select("default_handicap,high_contrast,updated_at").eq("user_id", authenticatedUserId).maybeSingle());
+    const preferencesRead = pendingProfileAttempt.then(() => supabase.from("user_preferences").select("default_handicap,high_contrast,notifications_enabled,updated_at").eq("user_id", authenticatedUserId).maybeSingle());
     const locationRead = pendingProfileAttempt.then(() => readProfileLocationMetadata(supabase, authenticatedUserId)
       .then((value) => ({ status: "fulfilled" as const, value }))
       .catch((reason: unknown) => ({ status: "rejected" as const, reason })));
@@ -891,6 +915,12 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       // accounts start ON; only an established account can supply a prior
       // explicit cloud choice before the app's normal preference sync runs.
       if (accountEntry.existingAccount && !preferencesResult.error && localStorage.getItem(STORAGE_KEYS.contrast) === null && typeof preferencesResult.data?.high_contrast === 'boolean') localStorage.setItem(STORAGE_KEYS.contrast, String(preferencesResult.data.high_contrast));
+      // Persisted cloud state is the only new-account proof. This runs before
+      // children hydrate, so their first rendered toggle matches the account.
+      // Missing legacy rows/values deliberately leave local absence as OFF.
+      if (!preferencesResult.error && localStorage.getItem(STORAGE_KEYS.notifications) === null && typeof preferencesResult.data?.notifications_enabled === "boolean") {
+        localStorage.setItem(STORAGE_KEYS.notifications, String(preferencesResult.data.notifications_enabled));
+      }
       if (!legalResult.error && Array.isArray(legalResult.data)) {
         const cloud = parseLegalAcceptances(JSON.stringify(legalResult.data.map((item) => ({ userId: item.user_id, type: item.type, documentVersion: item.version, acceptedAt: item.accepted_at, locale: item.locale, persistenceStatus: "persisted", syncStatus: "synced" }))));
         setAcceptances((current) => {
@@ -919,6 +949,9 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
           const displayName = typeof cloudProfile.display_name === "string" && cloudProfile.display_name.trim() ? cloudProfile.display_name : current.displayName;
           const avatarUrl = safeProfileAvatarValue(cloudProfile.avatar_url, current.avatarUrl);
           const username = canonicalProfileUsername(cloudProfile.username, current.username);
+          const profileVisibility = cloudProfile.profile_visibility === "public" || cloudProfile.profile_visibility === "friends" || cloudProfile.profile_visibility === "private"
+            ? cloudProfile.profile_visibility
+            : current.profileVisibility;
           // Existing preference clocks belong to the full sync merge. Updating
           // just HCP here would masquerade as a local edit on the next autosave.
           const cloudHandicap = preferencesResult.data ? preferencesResult.data.default_handicap : cloudProfile.default_handicap ?? null;
@@ -927,8 +960,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
           const locationPatch = savedLocation && Date.parse(savedLocation.updatedAt) >= (Date.parse(current.locationUpdatedAt || "") || 0)
             ? { ...normalizeProfileLocation(savedLocation), locationUpdatedAt: savedLocation.updatedAt }
             : {};
-          if (current.displayName === displayName && current.username === username && current.avatarUrl === avatarUrl && current.defaultHandicap === defaultHandicap && Object.entries(locationPatch).every(([key, value]) => current[key as keyof BackyardProfile] === value)) return current;
-          return { ...current, displayName, username, avatarUrl, defaultHandicap, ...locationPatch };
+          if (current.displayName === displayName && current.username === username && current.avatarUrl === avatarUrl && current.defaultHandicap === defaultHandicap && current.profileVisibility === profileVisibility && Object.entries(locationPatch).every(([key, value]) => current[key as keyof BackyardProfile] === value)) return current;
+          return { ...current, displayName, username, avatarUrl, defaultHandicap, profileVisibility, ...locationPatch };
         });
         if (!keepLocalProfile) {
           if (completeResponseAt) recordCloudProfileRevision(localStorage, authenticatedUserId, completeResponseAt);
@@ -1890,7 +1923,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     <BetaOnboardingFlow profile={identity} accessToken={identity.accessToken} onUpdateProfile={updateProfile} legalConsentRequired={!currentConsent} onAcceptInitialConsents={(betting) => acceptConsent(betting, true)} onComplete={finishBetaOnboarding} />
     {bettingConsentDialog}
   </AccountContext.Provider>;
-  if (identity.mode === "authenticated" && equipmentOnboardingRequired) return <EquipmentOnboarding userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={null} defaultHandedness={identity.handedness} ballFitDefaults={ballFitDefaultsFromProfile(identity)} onComplete={finishEquipmentOnboarding} onBack={finishEquipmentOnboarding} onSaveAndExit={finishEquipmentOnboarding} />;
+  if (identity.mode === "authenticated" && equipmentOnboardingRequired) return <CanonicalEquipmentOnboarding identity={identity} onComplete={finishEquipmentOnboarding} />;
 
   const app = <AccountContext.Provider value={context!}>
     {existingAccountNotice && <div className="notice" role="status">Ya tienes una cuenta. Vamos a iniciar sesión.<button type="button" className="textButton" aria-label="Cerrar aviso de cuenta existente" onClick={() => setExistingAccountNotice(false)}>Entendido</button></div>}

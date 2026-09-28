@@ -77,9 +77,10 @@ test('scoped social controls hide unrelated settings without changing the persis
   runInNewContext(source,{exports,require:(id:string)=>id==='react'?{useState:(initial:unknown)=>[slot++===0?{}:initial,()=>{}],useRef:()=>({current:false}),useEffect:()=>{}}:id==='react/jsx-runtime'?{jsx,jsxs:jsx}:new Proxy({},{get:()=>()=>{}})});
   const tree=exports.SocialSharingPreferences({accessToken:'synthetic',section});
   const labels=elements(tree).filter(e=>e.type==='label').map(e=>text(e));
-  assert.equal(labels.length,section==='all'?10:5);
+  assert.equal(labels.length,section==='all'?11:section==='notifications'?6:5);
   assert.equal(labels.includes('Compartir rondas terminadas'),section!=='notifications');
   assert.equal(labels.includes('Avisarme de likes'),section!=='sharing');
+  assert.equal(labels.includes('Solicitudes de amistad'),section!=='sharing');
  }
 });
 test("profile has one configuration destination and its panel retains all sections", () => {

@@ -5,11 +5,12 @@ import { feedbackPersistenceInput, type FeedbackInput } from "../lib/feedback";
 
 const source = (file: string) => readFileSync(file, "utf8");
 
-test("initial consent offers select-all and includes betting/results/expenses at signup", () => {
+test("initial consent separates legal decisions from the optional AI group", () => {
   const consent = source("app/components/account-consent-checkpoint.tsx");
-  assert.match(consent, /function selectAllAvailable/);
-  assert.match(consent, /Seleccionar todo/);
-  assert.match(consent, /setBetting\(true\)/);
+  assert.match(consent, /function selectAllAiPurposes/);
+  assert.match(consent, /Autorizar las tres funciones de IA/);
+  assert.match(consent, /Consentimientos requeridos/);
+  assert.doesNotMatch(consent, /setTerms\(true\)|setRules\(true\)|setAdult\(true\)|setBetting\(true\)/);
   assert.match(consent, /resultados y gastos/);
 });
 

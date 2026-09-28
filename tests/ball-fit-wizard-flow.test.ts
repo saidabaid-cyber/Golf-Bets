@@ -37,7 +37,7 @@ function wizard(profileIndex: number | null = null, profileSource: handicap.Ball
     if (name === "./use-view-scroll-reset") return { useViewScrollReset() {} };
     if (name === "./numeric-capture-input") return { NumericCaptureInput: (props: Record<string, unknown>) => ({ type: "input", props }) };
     if (name === "./anchored-search") return {
-      AnchoredSearch: (props: Record<string, unknown>) => ({ type: "div", props }),
+      AnchoredSearch: (props: Record<string, unknown>) => ({ type: "anchored-search", props }),
       AnchoredSearchOption: (props: Record<string, unknown>) => ({ type: "button", props }),
     };
     if (name === "./feedback-dialog") return { FeedbackLink: (props: Record<string, unknown>) => ({ type: "button", props }) };
@@ -54,13 +54,26 @@ function wizard(profileIndex: number | null = null, profileSource: handicap.Ball
     if (name.endsWith(".css")) return { default: new Proxy({}, { get: (_target, key) => key }) };
     throw new Error(name);
   } });
-  const props = { userId: "flow-owner", defaultHandicap: profileIndex, defaultHandicapSource: profileSource, savedInput,
+  let props = { userId: "flow-owner", defaultHandicap: profileIndex, defaultHandicapSource: profileSource, savedInput,
     profileDefaults: { trajectoryPreference: "MID", priorities: ["WEDGE_SPIN"] }, currentBall: null, catalog: golfBallCatalog,
     onCancel() {}, onComplete(_result: fitting.BallFitResult, input: fitting.BallFitInput) { saved.push(input); } };
   let tree: Node;
   function render() { cursor = 0; tree = exports.BallFitWizard(props); effects.splice(0).forEach((effect) => effect()); return tree; }
   render(); render();
-  return { sent, saved, render, text: () => text(tree), async click(label: string) {
+  return { sent, saved, render, text: () => text(tree), search: () => {
+    const search = nodes(tree).find((node) => node.type === "anchored-search"); assert.ok(search); return search.props;
+  }, focusSearch() {
+    const search = nodes(tree).find((node) => node.type === "anchored-search"); assert.ok(search);
+    (search.props.onFocus as () => void)(); render();
+  }, selectCatalogBall(label: string) {
+    const option = nodes(tree).find((node) => node.type === "button" && node.props.label === label); assert.ok(option, label);
+    (option.props.onSelect as () => void)(); render();
+  }, catalogOptionCount(label: string) {
+    return nodes(tree).filter((node) => node.type === "button" && node.props.label === label).length;
+  }, updateAccountIndex(value: number | null, source: handicap.BallFitHandicapSource | null) {
+    props = { ...props, defaultHandicap: value, defaultHandicapSource: source };
+    render();
+  }, async click(label: string) {
     const button = nodes(tree).find((node) => node.type === "button" && text(node.props.children) === label); assert.ok(button, `button ${label}`);
     assert.notEqual(button.props.disabled, true); await (button.props.onClick as () => unknown)(); render();
   }, number(min: number) { return nodes(tree).find((node) => node.type === "input" && node.props.min === min)?.props.value; }, changeNumber(value: string, min = -20) {
@@ -86,7 +99,7 @@ for (const mode of ["MANUAL", "UNKNOWN", "BACKYARD"] as const) test(`wizard actu
 
 test("Actualizar fit restores saved answers, edits them independently, and preserves the saved snapshot", async () => {
   const previous = fitting.normalizeBallFitInput({ userId: "flow-owner", handicap: 18, handicapSource: "MANUAL", typicalScore: 82, driverDistanceYards: 245, swingSpeedBand: "UNKNOWN", feelPreference: "SOFT", trajectoryPreference: "MID", priorities: ["WEDGE_SPIN"] })!;
-  const h = wizard(7.2, "BACKYARD", previous);
+  const h = wizard(null, null, previous);
   assert.equal(h.number(40), 82); assert.equal(h.number(-20), 18);
   h.changeNumber("95", 40); await h.click("Siguiente →");
   assert.equal(h.number(50), 245);
@@ -97,8 +110,68 @@ test("Actualizar fit restores saved answers, edits them independently, and prese
   assert.equal(previous.typicalScore, 82);
 });
 
+test("a newly available canonical GHIN index replaces MANUAL data from a prior completed fit", async () => {
+  const previous = fitting.normalizeBallFitInput({ userId: "flow-owner", handicap: 18, handicapSource: "MANUAL", typicalScore: 82, driverDistanceYards: 245, feelPreference: "SOFT", trajectoryPreference: "MID", priorities: ["WEDGE_SPIN"] })!;
+  const h = wizard(7.9, "GHIN", previous);
+  assert.match(h.text(), /Índice de tu cuenta\s*GHIN · 7\.9/);
+  for (let index = 0; index < 5; index++) await h.click("Siguiente →");
+  await h.click("Ver mi Top 3");
+  assert.equal(h.sent[0].handicapSource, "GHIN");
+  assert.equal(h.sent[0].handicap, 7.9);
+  assert.equal(previous.handicapSource, "MANUAL", "the historical snapshot remains immutable");
+});
+
+test("a manual value typed in the current fitting survives a later canonical-index refresh", async () => {
+  const h = wizard(null, null);
+  await h.click("Capturar HCP manual");
+  h.changeNumber("21.3");
+  h.updateAccountIndex(7.9, "GHIN");
+  assert.equal(h.number(-20), 21.3);
+  for (let index = 0; index < 5; index++) await h.click("Siguiente →");
+  await h.click("Ver mi Top 3");
+  assert.equal(h.sent[0].handicapSource, "MANUAL");
+  assert.equal(h.sent[0].handicap, 21.3);
+});
+
 test("saved fitting from another account cannot seed the editing form", () => {
   const foreign = fitting.normalizeBallFitInput({ userId: "another-owner", typicalScore: 72, driverDistanceYards: 300 })!;
   const h = wizard(null, null, foreign);
   assert.equal(h.number(40), null);
+});
+
+test("verified GHIN and calculated Backyard values enter Ball Fit automatically with their canonical labels", () => {
+  const ghin = wizard(7.9, "GHIN");
+  assert.match(ghin.text(), /Índice de tu cuenta\s*GHIN · 7\.9/);
+  assert.doesNotMatch(ghin.text(), /todavía no disponible|continuar sin GHIN/);
+
+  const backyard = wizard(8.4, "BACKYARD");
+  assert.match(backyard.text(), /Índice de tu cuenta\s*Backyard Index · 8\.4/);
+
+  const pending = wizard(null, "BACKYARD");
+  assert.match(pending.text(), /Tu Backyard Index todavía no está disponible/);
+  assert.match(pending.text(), /Capturar HCP manual/);
+  assert.match(pending.text(), /No conozco mi hándicap \/ Estoy empezando/);
+});
+
+test("selecting a catalog ball saves its canonical id, closes results and keeps one real generation label", async () => {
+  const h = wizard(null, null);
+  for (let index = 0; index < 5; index++) await h.click("Siguiente →");
+  assert.equal(h.search().expanded, false);
+  h.focusSearch();
+  assert.equal(h.search().expanded, true);
+  const label = "Seleccionar Titleist Pro V1x Left Dash";
+  assert.equal(h.catalogOptionCount(label), 1);
+  h.selectCatalogBall(label);
+  assert.equal(h.search().expanded, false);
+  assert.equal(h.search().value, "Titleist Pro V1x Left Dash");
+  assert.match(h.text(), /✓ Seleccionada:\s*Titleist\s+Pro V1x Left Dash/);
+  assert.match(h.text(), /2025/);
+  assert.doesNotMatch(h.text(), /2025 · 2025|Generación sin dato publicado/);
+  h.focusSearch();
+  assert.equal(h.search().expanded, true, "the selected ball can be changed by reopening the search");
+  h.selectCatalogBall(label);
+  await h.click("Ver mi Top 3");
+  const canonical = golfBallCatalog.find((ball) => ball.brand === "Titleist" && ball.model === "Pro V1x Left Dash");
+  assert.ok(canonical);
+  assert.equal(h.sent[0].currentBallId, canonical.id);
 });

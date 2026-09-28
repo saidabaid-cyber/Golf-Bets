@@ -118,7 +118,10 @@ const result = {
 for (const [kind, rows] of Object.entries(catalogs)) {
   const beforeRows = baseline.records[kind];
   const beforeIds = new Set(beforeRows.map((row) => row.id));
-  const afterIds = new Set(rows.map((row) => row.id));
+  // Semantic dedupe may move a legacy stable ID into the canonical row's
+  // aliases. That ID is still resolvable by the runtime provider and must not
+  // be reported as removed from saved bags or historical snapshots.
+  const afterResolvableIds = new Set(rows.flatMap((row) => [row.id, ...row.aliases]));
   const duplicateIds = duplicates(rows, (row) => row.id);
   const duplicateIdentities = duplicates(rows, identity[kind]);
   const internalRows = rows.filter((row) => marker.test([row.id, row.brand, row.model, row.sourceName, row.sourceType].filter(Boolean).join(" ")) || !isPublicEquipmentCatalogItem(row));
@@ -138,7 +141,7 @@ for (const [kind, rows] of Object.entries(catalogs)) {
       catalogAliasCount: rows.reduce((sum, row) => sum + row.aliases.length, 0),
     },
     added: rows.filter((row) => !beforeIds.has(row.id)).map((row) => ({ id: row.id, brand: row.brand, model: row.model, active: row.active })).sort((left, right) => left.id.localeCompare(right.id)),
-    removed: beforeRows.filter((row) => !afterIds.has(row.id)).map((row) => row.id).sort(),
+    removed: beforeRows.filter((row) => !afterResolvableIds.has(row.id)).map((row) => row.id).sort(),
     duplicateIds,
     duplicateIdentities,
     internalRows,

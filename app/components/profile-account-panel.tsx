@@ -30,6 +30,7 @@ import { ProfileVisibilitySettings } from "./profile-visibility-settings";
 import { ProfileCompletionRing } from "./profile-completion-ring";
 import { ACCOUNT_SETTINGS, type AccountSettingsSection } from "../../lib/account-settings";
 import { DEFAULT_ACCOUNT_UI_PREFERENCES, displayDistanceFromStoredYards, readAccountUiPreferences, writeAccountUiPreferences, type AccountUiPreferences } from "../../lib/account-ui-preferences";
+import { bootstrapAccountNotificationPreferences, requestAccountNotificationPreferences, type NotificationDeliveryCapability } from "../../lib/account-notification-preferences";
 import { SocialSharingPreferences } from './cloud-social-activity';
 import { checkProfileUsernameAvailability, normalizeProfileUsername } from "../../lib/profile-username";
 import { DevicePermissionSettings } from "./device-permission-settings";
@@ -86,6 +87,13 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
   const [accountSection, setAccountSection] = useState<AccountSettingsSection>(initialAccountSection);
   const [uiPreferences, setUiPreferences] = useState<AccountUiPreferences>(DEFAULT_ACCOUNT_UI_PREFERENCES);
   const [preferenceMessage, setPreferenceMessage] = useState("");
+  const [notificationPreferenceSaving, setNotificationPreferenceSaving] = useState(false);
+  const [notificationPreferencesReady, setNotificationPreferencesReady] = useState(false);
+  const [notificationDelivery, setNotificationDelivery] = useState<{ push: NotificationDeliveryCapability; email: NotificationDeliveryCapability }>({
+    push: { configured: false, state: "not_configured" },
+    email: { configured: false, state: "not_configured" },
+  });
+  const notificationPreferenceRevision = useRef(0);
   useViewScrollReset(`${view}:${accountSection}`);
   const [completionEquipment, setCompletionEquipment] = useState<"equipment" | "ball" | "fitting">("equipment");
   const [completionEditTarget, setCompletionEditTarget] = useState<string | null>(null);
@@ -122,9 +130,43 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
     if (typeof localStorage === "undefined") return;
-    setUiPreferences(readAccountUiPreferences(localStorage, identity.userId));
+    const local = readAccountUiPreferences(localStorage, identity.userId);
+    setUiPreferences(local);
     setPreferenceMessage("");
-  }, [identity.userId]);
+    if (view !== "account" || identity.mode !== "authenticated" || !identity.accessToken) {
+      setNotificationPreferencesReady(true);
+      return;
+    }
+    setNotificationPreferencesReady(false);
+    const revision = ++notificationPreferenceRevision.current;
+    const controller = new AbortController();
+    void bootstrapAccountNotificationPreferences(identity.accessToken, {
+      push: local.push,
+      email: local.email,
+      rounds: local.rounds,
+      reminders: local.reminders,
+    }, controller.signal)
+      .then((remote) => {
+        if (controller.signal.aborted || revision !== notificationPreferenceRevision.current) return;
+        const confirmed = writeAccountUiPreferences(localStorage, identity.userId, {
+          ...local,
+          push: remote.preferences.push,
+          email: remote.preferences.email,
+          rounds: remote.preferences.rounds,
+          reminders: remote.preferences.reminders,
+        });
+        setUiPreferences(confirmed);
+        setNotificationDelivery(remote.delivery);
+        setNotificationPreferencesReady(true);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted && revision === notificationPreferenceRevision.current) {
+          setPreferenceMessage("No pudimos consultar las preferencias de cuenta. Mostramos la última copia guardada en este dispositivo.");
+          setNotificationPreferencesReady(true);
+        }
+      });
+    return () => { controller.abort(); notificationPreferenceRevision.current = revision + 1; };
+  }, [identity.accessToken, identity.mode, identity.userId, view]);
   useEffect(() => {
     if (seenRootNavigation.current === rootNavigationKey || saving || deletingStatistics || deletingAccount) return;
     seenRootNavigation.current = rootNavigationKey;
@@ -160,11 +202,43 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
   const homeClubSelectionIncomplete = Boolean((draft.homeClubId || draft.homeCourseId) && (!draft.homeClubId || !draft.homeCourseId || !homeClubSelectionReady));
 
   function changeUiPreferences(patch: Partial<AccountUiPreferences>) {
+    if (notificationPreferenceSaving) return;
+    const previous = uiPreferences;
     const next = { ...uiPreferences, ...patch, version: 1 as const };
     try {
       writeAccountUiPreferences(localStorage, identity.userId, next);
       setUiPreferences(next);
-      setPreferenceMessage("Preferencia guardada en este dispositivo.");
+      const accountPreferenceChanged = ["push", "email", "rounds", "reminders"].some((key) => Object.hasOwn(patch, key));
+      if (!accountPreferenceChanged) {
+        setPreferenceMessage("Preferencia guardada en este dispositivo.");
+        return;
+      }
+      if (identity.mode !== "authenticated" || !identity.accessToken) {
+        setPreferenceMessage("Preferencia guardada en este dispositivo. Inicia sesión para sincronizarla con tu cuenta.");
+        return;
+      }
+      const revision = ++notificationPreferenceRevision.current;
+      setNotificationPreferenceSaving(true);
+      setPreferenceMessage("Guardando preferencia de cuenta…");
+      void requestAccountNotificationPreferences(identity.accessToken, {
+        push: next.push,
+        email: next.email,
+        rounds: next.rounds,
+        reminders: next.reminders,
+      }).then((remote) => {
+        if (revision !== notificationPreferenceRevision.current) return;
+        const confirmed = writeAccountUiPreferences(localStorage, identity.userId, { ...next, ...remote.preferences, version: 1 });
+        setUiPreferences(confirmed);
+        setNotificationDelivery(remote.delivery);
+        setPreferenceMessage("Preferencias guardadas en tu cuenta.");
+      }).catch(() => {
+        if (revision !== notificationPreferenceRevision.current) return;
+        writeAccountUiPreferences(localStorage, identity.userId, previous);
+        setUiPreferences(previous);
+        setPreferenceMessage("No pudimos confirmar el cambio. Conservamos tu selección anterior.");
+      }).finally(() => {
+        if (revision === notificationPreferenceRevision.current) setNotificationPreferenceSaving(false);
+      });
     } catch {
       setPreferenceMessage("No pudimos guardar esta preferencia en el dispositivo.");
     }
@@ -359,16 +433,19 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
       <section className="card accountCompactCard"><h2>Notificaciones</h2>
         <p>Estas preferencias son independientes del permiso del dispositivo y del proveedor que realiza el envío.</p>
         <label className="accountSettingRow"><span><b>Social</b><small>Avisos de actividad nueva dentro de The Backyard.</small></span><input type="checkbox" checked={notificationsEnabled} onChange={event => onNotificationsEnabledChange(event.target.checked)} aria-label="Activar avisos sociales dentro de la app" /></label>
-        <label className="accountSettingRow"><span><b>Push</b><small>Guarda tu preferencia. El envío push de The Backyard todavía no está activado.</small></span><input type="checkbox" checked={uiPreferences.push} onChange={event => changeUiPreferences({ push: event.target.checked })} aria-label="Preferir notificaciones push" /></label>
-        <label className="accountSettingRow"><span><b>Email</b><small>Guarda tu preferencia. El servicio de envío por correo todavía no está activado.</small></span><input type="checkbox" checked={uiPreferences.email} onChange={event => changeUiPreferences({ email: event.target.checked })} aria-label="Preferir notificaciones por email" /></label>
-        <label className="accountSettingRow"><span><b>Rondas</b><small>Avisos relacionados con invitaciones y actividad de rondas.</small></span><input type="checkbox" checked={uiPreferences.rounds} onChange={event => changeUiPreferences({ rounds: event.target.checked })} aria-label="Activar avisos de rondas" /></label>
-        <label className="accountSettingRow"><span><b>Recordatorios</b><small>Recordatorios opcionales de actividad pendiente.</small></span><input type="checkbox" checked={uiPreferences.reminders} onChange={event => changeUiPreferences({ reminders: event.target.checked })} aria-label="Activar recordatorios" /></label>
+        {!notificationPreferencesReady && <p role="status">Consultando preferencias de cuenta…</p>}
+        {notificationPreferencesReady && <>
+        <label className="accountSettingRow"><span><b>Push</b><small>Preferencia de cuenta. El permiso del dispositivo se revisa por separado en Privacidad y permisos. Entrega: {notificationDelivery.push.configured ? "proveedor configurado" : "no configurada"}.</small></span><input type="checkbox" checked={uiPreferences.push} disabled={notificationPreferenceSaving} onChange={event => changeUiPreferences({ push: event.target.checked })} aria-label="Preferir notificaciones push" /></label>
+        <label className="accountSettingRow"><span><b>Email</b><small>Preferencia de cuenta. Entrega: {notificationDelivery.email.configured ? "proveedor configurado" : "no configurada"}.</small></span><input type="checkbox" checked={uiPreferences.email} disabled={notificationPreferenceSaving} onChange={event => changeUiPreferences({ email: event.target.checked })} aria-label="Preferir notificaciones por email" /></label>
+        <label className="accountSettingRow"><span><b>Rondas</b><small>Avisos relacionados con invitaciones y actividad de rondas.</small></span><input type="checkbox" checked={uiPreferences.rounds} disabled={notificationPreferenceSaving} onChange={event => changeUiPreferences({ rounds: event.target.checked })} aria-label="Activar avisos de rondas" /></label>
+        <label className="accountSettingRow"><span><b>Recordatorios</b><small>Recordatorios opcionales de actividad pendiente.</small></span><input type="checkbox" checked={uiPreferences.reminders} disabled={notificationPreferenceSaving} onChange={event => changeUiPreferences({ reminders: event.target.checked })} aria-label="Activar recordatorios" /></label>
+        </>}
         {preferenceMessage && <p role="status">{preferenceMessage}</p>}
       </section>
       {identity.accessToken && <section className="card accountCompactCard"><SocialSharingPreferences key={identity.userId} accessToken={identity.accessToken} section="notifications" /></section>}
       </div>}
       {accountSection === "privacy" && <div data-settings-section="privacy">
-      <section className="card accountCompactCard"><h2>Privacidad y permisos</h2><ProfileVisibilitySettings userId={identity.userId} accessToken={identity.mode === 'authenticated' ? identity.accessToken : undefined} authenticated={identity.mode === 'authenticated'} /><button type="button" className="accountChevronRow" onClick={() => setManagingAiConsents(true)}><span><b>Privacidad / IA</b><small>Instrucciones Backyard AI y lectura de scorecards</small></span><strong>›</strong></button></section>
+      <section className="card accountCompactCard"><h2>Privacidad y permisos</h2><ProfileVisibilitySettings userId={identity.userId} accessToken={identity.mode === 'authenticated' ? identity.accessToken : undefined} authenticated={identity.mode === 'authenticated'} /><button type="button" className="accountChevronRow" onClick={() => setManagingAiConsents(true)}><span><b>Autorizaciones de IA</b><small>Texto o dictado, imágenes/scorecards y fotos de launch monitor</small></span><strong>›</strong></button></section>
       {identity.mode === "authenticated" && <DevicePermissionSettings key={`device-permissions-${identity.userId}`} userId={identity.userId} />}
       {identity.accessToken && <section className="card accountCompactCard"><SocialSharingPreferences key={identity.userId} accessToken={identity.accessToken} section="sharing" /></section>}
       <section className="card accountCompactCard"><h2>Legal</h2><div className="documentConsentList compactConsentList"><Link href="/legal/terms?returnTo=account"><span>Términos de Uso</span><b>{accepted("terms")}</b></Link><Link href="/legal/privacy-simplified?returnTo=account"><span>Aviso simplificado</span><b>Ver</b></Link><Link href="/legal/privacy?returnTo=account"><span>Aviso de Privacidad</span><b>{accepted("privacy")}</b></Link></div><button type="button" className="textButton accountConsentButton" onClick={() => setManagingConsents(true)}>Gestionar consentimientos</button></section>

@@ -5,18 +5,31 @@ import type { GhinProfileProjection } from "./ghin/profile";
 
 export type SelectedHandicapIndex = { source: "BACKYARD" | "GHIN" | null; value: number | null };
 
-/** Never promote legacy manual profile values or unverified Auth metadata into
- * an official Index. GHIN needs a future server-verified provider record. */
+function usableIndex(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= -20 && value <= 54;
+}
+
+export function verifiedGhinHandicapIndex(profile: GhinProfileProjection | null | undefined): number | null {
+  return profile?.associationStatus === "VERIFIED" && usableIndex(profile.handicapIndex)
+    ? profile.handicapIndex
+    : null;
+}
+
+/** Canonical account Index resolver shared by Profile, rounds and Ball Fit.
+ * A server-projected VERIFIED GHIN value wins. Otherwise an explicitly
+ * selected Backyard Index is calculated from frozen eligible-round evidence.
+ * Legacy manual profile values, Auth metadata and unverified provider rows are
+ * never promoted into an account Index. */
 export function selectedHandicapIndex(preference: BackyardIndexPreference | null, history: readonly RoundSnapshot[], userId: string, ghinProfile: GhinProfileProjection | null = null): SelectedHandicapIndex {
-  if (!preference || preference.userId !== userId) return { source: null, value: null };
-  if (preference.handicapSource === "GHIN") {
-    const usable = ghinProfile
-      && ghinProfile.associationStatus === "VERIFIED"
-      && ghinProfile.handicapIndex !== null;
-    return { source: "GHIN", value: usable ? ghinProfile.handicapIndex : null };
+  const preferenceOwned = !preference || preference.userId === userId;
+  const ghinIndex = verifiedGhinHandicapIndex(ghinProfile);
+  if (preferenceOwned && userId && userId !== "guest" && ghinIndex !== null) {
+    return { source: "GHIN", value: ghinIndex };
   }
+  if (!preference || preference.userId !== userId) return { source: null, value: null };
   if (preference.enabled && (preference.handicapSource === undefined || preference.handicapSource === "BACKYARD")) {
-    return { source: "BACKYARD", value: calculateBackyardIndex(history, userId).value };
+    const value = calculateBackyardIndex(history, userId).value;
+    return { source: "BACKYARD", value: usableIndex(value) ? value : null };
   }
   return { source: null, value: null };
 }

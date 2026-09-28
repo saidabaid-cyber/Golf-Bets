@@ -14,6 +14,7 @@ export type SocialActivityPreferences = {
   notifyAttest: boolean;
   notifyFriendAchievement: boolean;
   notifyEquipment: boolean;
+  notifyFriendRequest: boolean;
   updatedAt: string | null;
 };
 

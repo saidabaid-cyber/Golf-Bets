@@ -3,7 +3,7 @@
   "status": "PASS",
   "scope": "Versioned normalized runtime catalog; no external fetch or DB mutation",
   "provider": "lib/golf-equipment-catalog.ts",
-  "catalogDigest": "20845167210060d5d5d860255a3784510fb150e8c2266c629d0d005f7ac8be2b",
+  "catalogDigest": "b276351e2cab43cfc53aa2c2bfdc47d962d1d141bad1fc495e86ff1dd41c7ffe",
   "definitions": {
     "historical": "active === false, retained for existing references",
     "licensedImage": "imageUrl + imageSourceUrl + imageLicense present; legal permission not independently adjudicated",
@@ -12,29 +12,29 @@
   },
   "summary": {
     "balls": {
-      "total": 323,
-      "active": 94,
+      "total": 303,
+      "active": 74,
       "historical": 229,
-      "bagEligible": 323,
-      "fitEligible": 80,
-      "activeFitEligible": 71,
-      "withoutLicensedImage": 323,
-      "specsUnknown": 238,
+      "bagEligible": 303,
+      "fitEligible": 63,
+      "activeFitEligible": 54,
+      "withoutLicensedImage": 303,
+      "specsUnknown": 236,
       "specsUnverified": 0,
-      "specsPartial": 75,
+      "specsPartial": 49,
       "shaftsWithoutWeight": 0,
       "shaftsWithoutFlex": 0,
       "wedgesWithoutVerifiedLofts": 0
     },
     "clubs": {
-      "total": 1308,
-      "active": 263,
+      "total": 1297,
+      "active": 252,
       "historical": 1045,
-      "bagEligible": 1308,
+      "bagEligible": 1297,
       "fitEligible": 0,
       "activeFitEligible": 0,
-      "withoutLicensedImage": 1308,
-      "specsUnknown": 1234,
+      "withoutLicensedImage": 1297,
+      "specsUnknown": 1223,
       "specsUnverified": 0,
       "specsPartial": 74,
       "shaftsWithoutWeight": 0,
@@ -80,15 +80,11 @@
         "SPECS_PARTIAL"
       ],
       "missingFields": [
-        "constructionPieces",
-        "compression",
-        "flight",
-        "driverSpin",
-        "ironSpin",
-        "shortGameSpin"
+        "flight"
       ],
       "datedCatalogProvenance": true,
       "evidence": [
+        "https://www.bridgestonegolf.com/en-us/balls",
         "https://www.bridgestonegolf.com/en-us/balls/e-series"
       ]
     },
@@ -138,24 +134,6 @@
         "ironSpin",
         "shortGameSpin",
         "feel"
-      ],
-      "datedCatalogProvenance": true,
-      "evidence": [
-        "https://www.bridgestonegolf.com/en-us/balls"
-      ]
-    },
-    {
-      "id": "bridgestone-e12-contact-2025",
-      "kind": "balls",
-      "brand": "Bridgestone",
-      "model": "e12 Contact",
-      "active": true,
-      "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_PARTIAL"
-      ],
-      "missingFields": [
-        "flight"
       ],
       "datedCatalogProvenance": true,
       "evidence": [
@@ -329,13 +307,11 @@
         "SPECS_PARTIAL"
       ],
       "missingFields": [
-        "constructionPieces",
-        "compression",
-        "flight",
-        "ironSpin"
+        "flight"
       ],
       "datedCatalogProvenance": true,
       "evidence": [
+        "https://www.bridgestonegolf.com/en-us/balls",
         "https://www.bridgestonegolf.com/en-us/balls/tour-series"
       ]
     },
@@ -437,24 +413,6 @@
         "ironSpin",
         "shortGameSpin",
         "feel"
-      ],
-      "datedCatalogProvenance": true,
-      "evidence": [
-        "https://www.bridgestonegolf.com/en-us/balls"
-      ]
-    },
-    {
-      "id": "bridgestone-tour-b-rx-2026",
-      "kind": "balls",
-      "brand": "Bridgestone",
-      "model": "TOUR B RX",
-      "active": true,
-      "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_PARTIAL"
-      ],
-      "missingFields": [
-        "flight"
       ],
       "datedCatalogProvenance": true,
       "evidence": [
@@ -688,7 +646,7 @@
       ]
     },
     {
-      "id": "bridgestone-tour-b-x-2026",
+      "id": "bridgestone-tour-b-x-unversioned",
       "kind": "balls",
       "brand": "Bridgestone",
       "model": "TOUR B X",
@@ -702,28 +660,7 @@
       ],
       "datedCatalogProvenance": true,
       "evidence": [
-        "https://www.bridgestonegolf.com/en-us/balls"
-      ]
-    },
-    {
-      "id": "bridgestone-tour-b-x-unversioned",
-      "kind": "balls",
-      "brand": "Bridgestone",
-      "model": "TOUR B X",
-      "active": true,
-      "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_PARTIAL"
-      ],
-      "missingFields": [
-        "constructionPieces",
-        "compression",
-        "flight",
-        "ironSpin",
-        "feel"
-      ],
-      "datedCatalogProvenance": true,
-      "evidence": [
+        "https://www.bridgestonegolf.com/en-us/balls",
         "https://www.bridgestonegolf.com/en-us/balls/tour-series/tour-bx"
       ]
     },
@@ -738,14 +675,11 @@
         "SPECS_PARTIAL"
       ],
       "missingFields": [
-        "constructionPieces",
-        "compression",
-        "flight",
-        "driverSpin",
-        "ironSpin"
+        "flight"
       ],
       "datedCatalogProvenance": true,
       "evidence": [
+        "https://www.bridgestonegolf.com/en-us/balls",
         "https://www.bridgestonegolf.com/en-us/balls/tour-series"
       ]
     },
@@ -847,24 +781,6 @@
         "ironSpin",
         "shortGameSpin",
         "feel"
-      ],
-      "datedCatalogProvenance": true,
-      "evidence": [
-        "https://www.bridgestonegolf.com/en-us/balls"
-      ]
-    },
-    {
-      "id": "bridgestone-tour-b-xs-2026",
-      "kind": "balls",
-      "brand": "Bridgestone",
-      "model": "TOUR B XS",
-      "active": true,
-      "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_PARTIAL"
-      ],
-      "missingFields": [
-        "flight"
       ],
       "datedCatalogProvenance": true,
       "evidence": [
@@ -2394,32 +2310,6 @@
       ]
     },
     {
-      "id": "kirkland-signature-performance-plus-2026",
-      "kind": "balls",
-      "brand": "Kirkland Signature",
-      "model": "Performance Plus",
-      "active": true,
-      "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_UNKNOWN"
-      ],
-      "missingFields": [
-        "coverMaterial",
-        "construction",
-        "constructionPieces",
-        "compression",
-        "flight",
-        "driverSpin",
-        "ironSpin",
-        "shortGameSpin",
-        "feel"
-      ],
-      "datedCatalogProvenance": true,
-      "evidence": [
-        "https://www.golffitfinder.com/golf-ball-database/"
-      ]
-    },
-    {
       "id": "kirkland-signature-performance-plus-3-piece-2016",
       "kind": "balls",
       "brand": "Kirkland Signature",
@@ -2464,7 +2354,8 @@
       ],
       "datedCatalogProvenance": true,
       "evidence": [
-        "https://www.costco.com/p/-/kirkland-signature-golf-balls-2-dozen-neon-yellow/4000201209"
+        "https://www.costco.com/p/-/kirkland-signature-golf-balls-2-dozen-neon-yellow/4000201209",
+        "https://www.golffitfinder.com/golf-ball-database/"
       ]
     },
     {
@@ -2500,14 +2391,12 @@
         "SPECS_PARTIAL"
       ],
       "missingFields": [
-        "constructionPieces",
-        "compression",
-        "flight",
-        "ironSpin"
+        "flight"
       ],
       "datedCatalogProvenance": true,
       "evidence": [
-        "https://www.dickssportinggoods.com/f/maxfli-golf-balls"
+        "https://www.dickssportinggoods.com/f/maxfli-golf-balls",
+        "https://www.golffitfinder.com/golf-ball-database/"
       ]
     },
     {
@@ -2589,24 +2478,6 @@
       ]
     },
     {
-      "id": "maxfli-tour-2025",
-      "kind": "balls",
-      "brand": "Maxfli",
-      "model": "Tour",
-      "active": true,
-      "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_PARTIAL"
-      ],
-      "missingFields": [
-        "flight"
-      ],
-      "datedCatalogProvenance": true,
-      "evidence": [
-        "https://www.golffitfinder.com/golf-ball-database/"
-      ]
-    },
-    {
       "id": "maxfli-tour-s",
       "kind": "balls",
       "brand": "Maxfli",
@@ -2617,14 +2488,12 @@
         "SPECS_PARTIAL"
       ],
       "missingFields": [
-        "constructionPieces",
-        "compression",
-        "flight",
-        "ironSpin"
+        "flight"
       ],
       "datedCatalogProvenance": true,
       "evidence": [
-        "https://www.dickssportinggoods.com/f/maxfli-golf-balls"
+        "https://www.dickssportinggoods.com/f/maxfli-golf-balls",
+        "https://www.golffitfinder.com/golf-ball-database/"
       ]
     },
     {
@@ -2647,24 +2516,6 @@
         "ironSpin",
         "shortGameSpin",
         "feel"
-      ],
-      "datedCatalogProvenance": true,
-      "evidence": [
-        "https://www.golffitfinder.com/golf-ball-database/"
-      ]
-    },
-    {
-      "id": "maxfli-tour-s-2025",
-      "kind": "balls",
-      "brand": "Maxfli",
-      "model": "Tour S",
-      "active": true,
-      "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_PARTIAL"
-      ],
-      "missingFields": [
-        "flight"
       ],
       "datedCatalogProvenance": true,
       "evidence": [
@@ -2750,24 +2601,6 @@
       ]
     },
     {
-      "id": "maxfli-tour-x-2025",
-      "kind": "balls",
-      "brand": "Maxfli",
-      "model": "Tour X",
-      "active": true,
-      "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_PARTIAL"
-      ],
-      "missingFields": [
-        "flight"
-      ],
-      "datedCatalogProvenance": true,
-      "evidence": [
-        "https://www.golffitfinder.com/golf-ball-database/"
-      ]
-    },
-    {
       "id": "maxfli-tour-x-24maxumxfltrxwhtdgbl",
       "kind": "balls",
       "brand": "Maxfli",
@@ -2778,50 +2611,12 @@
         "SPECS_PARTIAL"
       ],
       "missingFields": [
-        "constructionPieces",
-        "flight",
-        "driverSpin",
-        "ironSpin"
-      ],
-      "datedCatalogProvenance": true,
-      "evidence": [
-        "https://www.dickssportinggoods.com/p/maxfli-tour-x-golf-balls-24maxumxfltrxwhtdgbl/24maxumxfltrxwhtdgbl"
-      ]
-    },
-    {
-      "id": "mizuno-mizuno-pro-s-2024",
-      "kind": "balls",
-      "brand": "Mizuno",
-      "model": "Mizuno Pro S",
-      "active": true,
-      "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_PARTIAL"
-      ],
-      "missingFields": [
         "flight"
       ],
       "datedCatalogProvenance": true,
       "evidence": [
-        "https://mizunogolf.com/us/balls/"
-      ]
-    },
-    {
-      "id": "mizuno-mizuno-pro-x-2024",
-      "kind": "balls",
-      "brand": "Mizuno",
-      "model": "Mizuno Pro X",
-      "active": true,
-      "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_PARTIAL"
-      ],
-      "missingFields": [
-        "flight"
-      ],
-      "datedCatalogProvenance": true,
-      "evidence": [
-        "https://mizunogolf.com/us/balls/"
+        "https://www.dickssportinggoods.com/p/maxfli-tour-x-golf-balls-24maxumxfltrxwhtdgbl/24maxumxfltrxwhtdgbl",
+        "https://www.golffitfinder.com/golf-ball-database/"
       ]
     },
     {
@@ -2835,12 +2630,7 @@
         "SPECS_PARTIAL"
       ],
       "missingFields": [
-        "constructionPieces",
-        "compression",
-        "flight",
-        "driverSpin",
-        "ironSpin",
-        "shortGameSpin"
+        "flight"
       ],
       "datedCatalogProvenance": true,
       "evidence": [
@@ -2858,13 +2648,7 @@
         "SPECS_PARTIAL"
       ],
       "missingFields": [
-        "constructionPieces",
-        "compression",
-        "flight",
-        "driverSpin",
-        "ironSpin",
-        "shortGameSpin",
-        "feel"
+        "flight"
       ],
       "datedCatalogProvenance": true,
       "evidence": [
@@ -4180,13 +3964,9 @@
       "model": "Q-STAR TOUR",
       "active": true,
       "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_PARTIAL"
+        "IMAGE_MISSING"
       ],
-      "missingFields": [
-        "constructionPieces",
-        "ironSpin"
-      ],
+      "missingFields": [],
       "datedCatalogProvenance": true,
       "evidence": [
         "https://us.dunlopsports.com/srixon/balls/"
@@ -4297,38 +4077,15 @@
       ]
     },
     {
-      "id": "srixon-q-star-tour-2025",
-      "kind": "balls",
-      "brand": "Srixon",
-      "model": "Q-STAR TOUR",
-      "active": true,
-      "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_PARTIAL"
-      ],
-      "missingFields": [
-        "flight"
-      ],
-      "datedCatalogProvenance": true,
-      "evidence": [
-        "https://us.dunlopsports.com/srixon/balls/"
-      ]
-    },
-    {
       "id": "srixon-soft-feel",
       "kind": "balls",
       "brand": "Srixon",
       "model": "SOFT FEEL",
       "active": true,
       "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_PARTIAL"
+        "IMAGE_MISSING"
       ],
-      "missingFields": [
-        "constructionPieces",
-        "ironSpin",
-        "shortGameSpin"
-      ],
+      "missingFields": [],
       "datedCatalogProvenance": true,
       "evidence": [
         "https://us.dunlopsports.com/srixon/balls/"
@@ -4517,39 +4274,18 @@
       ]
     },
     {
-      "id": "srixon-soft-feel-2025",
-      "kind": "balls",
-      "brand": "Srixon",
-      "model": "SOFT FEEL",
-      "active": true,
-      "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_PARTIAL"
-      ],
-      "missingFields": [
-        "flight"
-      ],
-      "datedCatalogProvenance": true,
-      "evidence": [
-        "https://us.dunlopsports.com/srixon/balls/"
-      ]
-    },
-    {
       "id": "srixon-z-star-10360111",
       "kind": "balls",
       "brand": "Srixon",
       "model": "Z-STAR",
       "active": true,
       "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_PARTIAL"
+        "IMAGE_MISSING"
       ],
-      "missingFields": [
-        "constructionPieces",
-        "ironSpin"
-      ],
+      "missingFields": [],
       "datedCatalogProvenance": true,
       "evidence": [
+        "https://us.dunlopsports.com/srixon/balls/",
         "https://us.dunlopsports.com/srixon/balls/z-star-series/z-star/z-star-golf-balls/10360111.html"
       ]
     },
@@ -4736,36 +4472,15 @@
       ]
     },
     {
-      "id": "srixon-z-star-2025",
-      "kind": "balls",
-      "brand": "Srixon",
-      "model": "Z-STAR",
-      "active": true,
-      "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_PARTIAL"
-      ],
-      "missingFields": [
-        "flight"
-      ],
-      "datedCatalogProvenance": true,
-      "evidence": [
-        "https://us.dunlopsports.com/srixon/balls/"
-      ]
-    },
-    {
       "id": "srixon-z-star-diamond",
       "kind": "balls",
       "brand": "Srixon",
       "model": "Z-STAR Diamond",
       "active": true,
       "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_PARTIAL"
+        "IMAGE_MISSING"
       ],
-      "missingFields": [
-        "constructionPieces"
-      ],
+      "missingFields": [],
       "datedCatalogProvenance": true,
       "evidence": [
         "https://us.dunlopsports.com/srixon/balls/"
@@ -4824,37 +4539,15 @@
       ]
     },
     {
-      "id": "srixon-z-star-diamond-2025",
-      "kind": "balls",
-      "brand": "Srixon",
-      "model": "Z-STAR DIAMOND",
-      "active": true,
-      "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_PARTIAL"
-      ],
-      "missingFields": [
-        "flight"
-      ],
-      "datedCatalogProvenance": true,
-      "evidence": [
-        "https://us.dunlopsports.com/srixon/balls/"
-      ]
-    },
-    {
       "id": "srixon-z-star-xv",
       "kind": "balls",
       "brand": "Srixon",
       "model": "Z-STAR XV",
       "active": true,
       "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_PARTIAL"
+        "IMAGE_MISSING"
       ],
-      "missingFields": [
-        "constructionPieces",
-        "ironSpin"
-      ],
+      "missingFields": [],
       "datedCatalogProvenance": true,
       "evidence": [
         "https://us.dunlopsports.com/srixon/balls/"
@@ -5036,24 +4729,6 @@
         "ironSpin",
         "shortGameSpin",
         "feel"
-      ],
-      "datedCatalogProvenance": true,
-      "evidence": [
-        "https://us.dunlopsports.com/srixon/balls/"
-      ]
-    },
-    {
-      "id": "srixon-z-star-xv-2025",
-      "kind": "balls",
-      "brand": "Srixon",
-      "model": "Z-STAR XV",
-      "active": true,
-      "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_PARTIAL"
-      ],
-      "missingFields": [
-        "flight"
       ],
       "datedCatalogProvenance": true,
       "evidence": [
@@ -6424,35 +6099,12 @@
       "model": "Pro V1x Left Dash",
       "active": true,
       "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_PARTIAL"
+        "IMAGE_MISSING"
       ],
-      "missingFields": [
-        "construction",
-        "constructionPieces",
-        "compression",
-        "ironSpin"
-      ],
+      "missingFields": [],
       "datedCatalogProvenance": true,
       "evidence": [
-        "https://www.titleist.com/explore-golf-balls/"
-      ]
-    },
-    {
-      "id": "titleist-pro-v1x-left-dash-2025",
-      "kind": "balls",
-      "brand": "Titleist",
-      "model": "Pro V1x Left Dash",
-      "active": true,
-      "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_PARTIAL"
-      ],
-      "missingFields": [
-        "flight"
-      ],
-      "datedCatalogProvenance": true,
-      "evidence": [
+        "https://www.titleist.com/explore-golf-balls/",
         "https://www.titleist.com/golf-balls/"
       ]
     },
@@ -7357,32 +7009,7 @@
       ],
       "datedCatalogProvenance": true,
       "evidence": [
-        "https://volvik.com/collections/golf-balls"
-      ]
-    },
-    {
-      "id": "volvik-vivid-soft-2025",
-      "kind": "balls",
-      "brand": "Volvik",
-      "model": "VIVID SOFT",
-      "active": true,
-      "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_UNKNOWN"
-      ],
-      "missingFields": [
-        "coverMaterial",
-        "construction",
-        "constructionPieces",
-        "compression",
-        "flight",
-        "driverSpin",
-        "ironSpin",
-        "shortGameSpin",
-        "feel"
-      ],
-      "datedCatalogProvenance": true,
-      "evidence": [
+        "https://volvik.com/collections/golf-balls",
         "https://www.golffitfinder.com/golf-ball-database/"
       ]
     },
@@ -7641,16 +7268,12 @@
       "model": "Staff Model",
       "active": true,
       "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_PARTIAL"
+        "IMAGE_MISSING"
       ],
-      "missingFields": [
-        "constructionPieces",
-        "compression",
-        "ironSpin"
-      ],
+      "missingFields": [],
       "datedCatalogProvenance": true,
       "evidence": [
+        "https://www.wilson.com/en-us/golf/balls",
         "https://www.wilson.com/en-us/golf/collections/staff-model/balls"
       ]
     },
@@ -7700,24 +7323,6 @@
         "ironSpin",
         "shortGameSpin",
         "feel"
-      ],
-      "datedCatalogProvenance": true,
-      "evidence": [
-        "https://www.wilson.com/en-us/golf/balls"
-      ]
-    },
-    {
-      "id": "wilson-staff-model-2025",
-      "kind": "balls",
-      "brand": "Wilson",
-      "model": "Staff Model",
-      "active": true,
-      "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_PARTIAL"
-      ],
-      "missingFields": [
-        "flight"
       ],
       "datedCatalogProvenance": true,
       "evidence": [
@@ -7777,40 +7382,18 @@
       ]
     },
     {
-      "id": "wilson-staff-model-x-2025",
-      "kind": "balls",
-      "brand": "Wilson",
-      "model": "Staff Model X",
-      "active": true,
-      "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_PARTIAL"
-      ],
-      "missingFields": [
-        "flight"
-      ],
-      "datedCatalogProvenance": true,
-      "evidence": [
-        "https://www.wilson.com/en-us/golf/balls"
-      ]
-    },
-    {
       "id": "wilson-staff-model-x-unversioned",
       "kind": "balls",
       "brand": "Wilson",
       "model": "Staff Model X",
       "active": true,
       "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_PARTIAL"
+        "IMAGE_MISSING"
       ],
-      "missingFields": [
-        "constructionPieces",
-        "compression",
-        "ironSpin"
-      ],
+      "missingFields": [],
       "datedCatalogProvenance": true,
       "evidence": [
+        "https://www.wilson.com/en-us/golf/balls",
         "https://www.wilson.com/en-us/golf/collections/staff-model/balls"
       ]
     },
@@ -7825,10 +7408,7 @@
         "SPECS_PARTIAL"
       ],
       "missingFields": [
-        "constructionPieces",
-        "compression",
-        "flight",
-        "ironSpin"
+        "flight"
       ],
       "datedCatalogProvenance": true,
       "evidence": [
@@ -7855,24 +7435,6 @@
         "ironSpin",
         "shortGameSpin",
         "feel"
-      ],
-      "datedCatalogProvenance": true,
-      "evidence": [
-        "https://www.wilson.com/en-us/golf/balls"
-      ]
-    },
-    {
-      "id": "wilson-triad-2024",
-      "kind": "balls",
-      "brand": "Wilson",
-      "model": "Triad",
-      "active": true,
-      "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_PARTIAL"
-      ],
-      "missingFields": [
-        "flight"
       ],
       "datedCatalogProvenance": true,
       "evidence": [
@@ -15777,30 +15339,6 @@
       ]
     },
     {
-      "id": "cobra-king-max-iron-set-2026",
-      "kind": "clubs",
-      "brand": "Cobra",
-      "model": "KING MAX",
-      "active": true,
-      "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_UNKNOWN"
-      ],
-      "missingFields": [
-        "lofts",
-        "standardLength",
-        "lie",
-        "headVolume",
-        "setMakeup",
-        "stockShafts",
-        "stockFlexes"
-      ],
-      "datedCatalogProvenance": true,
-      "evidence": [
-        "https://www.hosel.golf/gb/shop/clubs?group_by=model"
-      ]
-    },
-    {
       "id": "cobra-king-mb-iron-set-2023",
       "kind": "clubs",
       "brand": "Cobra",
@@ -17249,7 +16787,8 @@
       ],
       "datedCatalogProvenance": true,
       "evidence": [
-        "https://www.cobragolf.com/products/king-max-irons"
+        "https://www.cobragolf.com/products/king-max-irons",
+        "https://www.hosel.golf/gb/shop/clubs?group_by=model"
       ]
     },
     {
@@ -17408,27 +16947,6 @@
       ]
     },
     {
-      "id": "forgiving-golf-mizuno-jpx925-hot-metal-irons",
-      "kind": "clubs",
-      "brand": "Mizuno",
-      "model": "JPX925 Hot Metal",
-      "active": true,
-      "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_PARTIAL"
-      ],
-      "missingFields": [
-        "lofts",
-        "standardLength",
-        "lie",
-        "headVolume"
-      ],
-      "datedCatalogProvenance": true,
-      "evidence": [
-        "https://usa.mizuno.com/golf-jpx925-hot-metal-7pc"
-      ]
-    },
-    {
       "id": "forgiving-golf-odyssey-ai-dual-7-db-putter",
       "kind": "clubs",
       "brand": "Odyssey",
@@ -17514,6 +17032,7 @@
       ],
       "datedCatalogProvenance": true,
       "evidence": [
+        "https://golfersgist.com/ping-irons-by-year/",
         "https://ping.com/en-us/golf-clubs/irons/g440-hl-iron"
       ]
     },
@@ -17535,6 +17054,7 @@
       ],
       "datedCatalogProvenance": true,
       "evidence": [
+        "https://golfersgist.com/ping-irons-by-year/",
         "https://ping.com/en-us/golf-clubs/drivers/g440-k-driver"
       ]
     },
@@ -17556,6 +17076,7 @@
       ],
       "datedCatalogProvenance": true,
       "evidence": [
+        "https://golfersgist.com/ping-irons-by-year/",
         "https://ping.com/en-us/golf-clubs/fairways/g440-sft-fairway"
       ]
     },
@@ -17577,6 +17098,7 @@
       ],
       "datedCatalogProvenance": true,
       "evidence": [
+        "https://golfersgist.com/ping-irons-by-year/",
         "https://ping.com/en-us/golf-clubs/irons/g740-iron"
       ]
     },
@@ -17600,6 +17122,7 @@
       ],
       "datedCatalogProvenance": true,
       "evidence": [
+        "https://golfersgist.com/ping-irons-by-year/",
         "https://ping.com/en-us/golf-clubs/irons/i540-iron"
       ]
     },
@@ -17709,7 +17232,8 @@
       ],
       "datedCatalogProvenance": true,
       "evidence": [
-        "https://us.dunlopsports.com/srixon/clubs/irons/zxir-irons/zxir-irons/MZXIRIRN.html"
+        "https://us.dunlopsports.com/srixon/clubs/irons/zxir-irons/zxir-irons/MZXIRIRN.html",
+        "https://www.hosel.golf/gb/shop/clubs?group_by=model"
       ]
     },
     {
@@ -17774,6 +17298,7 @@
       ],
       "datedCatalogProvenance": true,
       "evidence": [
+        "https://www.hosel.golf/gb/shop/clubs?group_by=model",
         "https://www.titleist.com/product/t250/561C.html"
       ]
     },
@@ -17796,6 +17321,28 @@
       "datedCatalogProvenance": true,
       "evidence": [
         "https://www.titleist.com/product/t250-launch-spec/562C.html"
+      ]
+    },
+    {
+      "id": "forgiving-golf-titleist-t350-irons",
+      "kind": "clubs",
+      "brand": "Titleist",
+      "model": "T350",
+      "active": true,
+      "gaps": [
+        "IMAGE_MISSING",
+        "SPECS_PARTIAL"
+      ],
+      "missingFields": [
+        "lofts",
+        "standardLength",
+        "lie",
+        "headVolume"
+      ],
+      "datedCatalogProvenance": true,
+      "evidence": [
+        "https://www.hosel.golf/gb/shop/clubs?group_by=model",
+        "https://www.titleist.com/product/t350/563C.html"
       ]
     },
     {
@@ -17858,6 +17405,7 @@
       ],
       "datedCatalogProvenance": true,
       "evidence": [
+        "https://forgiving.golf/data",
         "https://www.touredge.com/products/hot-launch-max-d-fairway"
       ]
     },
@@ -17879,6 +17427,7 @@
       ],
       "datedCatalogProvenance": true,
       "evidence": [
+        "https://forgiving.golf/data",
         "https://www.touredge.com/products/hot-launch-max-d-hybrid"
       ]
     },
@@ -18946,20 +18495,18 @@
       "active": true,
       "gaps": [
         "IMAGE_MISSING",
-        "SPECS_UNKNOWN"
+        "SPECS_PARTIAL"
       ],
       "missingFields": [
         "lofts",
         "standardLength",
         "lie",
-        "headVolume",
-        "setMakeup",
-        "stockShafts",
-        "stockFlexes"
+        "headVolume"
       ],
       "datedCatalogProvenance": true,
       "evidence": [
-        "https://mizunogolf.com/uk/irons-timeline/"
+        "https://mizunogolf.com/uk/irons-timeline/",
+        "https://usa.mizuno.com/golf-jpx925-hot-metal-7pc"
       ]
     },
     {
@@ -23968,30 +23515,6 @@
       ]
     },
     {
-      "id": "ping-g440-hl-iron-set-2025",
-      "kind": "clubs",
-      "brand": "PING",
-      "model": "G440 HL",
-      "active": true,
-      "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_UNKNOWN"
-      ],
-      "missingFields": [
-        "lofts",
-        "standardLength",
-        "lie",
-        "headVolume",
-        "setMakeup",
-        "stockShafts",
-        "stockFlexes"
-      ],
-      "datedCatalogProvenance": true,
-      "evidence": [
-        "https://golfersgist.com/ping-irons-by-year/"
-      ]
-    },
-    {
       "id": "ping-g440-hybrid-2025",
       "kind": "clubs",
       "brand": "PING",
@@ -24035,30 +23558,6 @@
         "https://golfersgist.com/ping-irons-by-year/",
         "https://ping.com/en-us/golf-clubs/irons/g440",
         "https://ping.com/en-us/golf-clubs/irons/g440-iron"
-      ]
-    },
-    {
-      "id": "ping-g440-k-driver-2026",
-      "kind": "clubs",
-      "brand": "PING",
-      "model": "G440 K",
-      "active": true,
-      "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_UNKNOWN"
-      ],
-      "missingFields": [
-        "lofts",
-        "standardLength",
-        "lie",
-        "headVolume",
-        "setMakeup",
-        "stockShafts",
-        "stockFlexes"
-      ],
-      "datedCatalogProvenance": true,
-      "evidence": [
-        "https://golfersgist.com/ping-irons-by-year/"
       ]
     },
     {
@@ -24176,30 +23675,6 @@
       ]
     },
     {
-      "id": "ping-g440-sft-fairway-fairway-2025",
-      "kind": "clubs",
-      "brand": "PING",
-      "model": "G440 SFT Fairway",
-      "active": true,
-      "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_UNKNOWN"
-      ],
-      "missingFields": [
-        "lofts",
-        "standardLength",
-        "lie",
-        "headVolume",
-        "setMakeup",
-        "stockShafts",
-        "stockFlexes"
-      ],
-      "datedCatalogProvenance": true,
-      "evidence": [
-        "https://golfersgist.com/ping-irons-by-year/"
-      ]
-    },
-    {
       "id": "ping-g700-iron-set-2018",
       "kind": "clubs",
       "brand": "PING",
@@ -24253,30 +23728,6 @@
       "brand": "PING",
       "model": "G730",
       "active": false,
-      "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_UNKNOWN"
-      ],
-      "missingFields": [
-        "lofts",
-        "standardLength",
-        "lie",
-        "headVolume",
-        "setMakeup",
-        "stockShafts",
-        "stockFlexes"
-      ],
-      "datedCatalogProvenance": true,
-      "evidence": [
-        "https://golfersgist.com/ping-irons-by-year/"
-      ]
-    },
-    {
-      "id": "ping-g740-iron-set-2026",
-      "kind": "clubs",
-      "brand": "PING",
-      "model": "G740",
-      "active": true,
       "gaps": [
         "IMAGE_MISSING",
         "SPECS_UNKNOWN"
@@ -24786,30 +24237,6 @@
       "brand": "PING",
       "model": "i530",
       "active": false,
-      "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_UNKNOWN"
-      ],
-      "missingFields": [
-        "lofts",
-        "standardLength",
-        "lie",
-        "headVolume",
-        "setMakeup",
-        "stockShafts",
-        "stockFlexes"
-      ],
-      "datedCatalogProvenance": true,
-      "evidence": [
-        "https://golfersgist.com/ping-irons-by-year/"
-      ]
-    },
-    {
-      "id": "ping-i540-iron-set-2026",
-      "kind": "clubs",
-      "brand": "PING",
-      "model": "i540",
-      "active": true,
       "gaps": [
         "IMAGE_MISSING",
         "SPECS_UNKNOWN"
@@ -28673,30 +28100,6 @@
       "datedCatalogProvenance": true,
       "evidence": [
         "https://us.dunlopsports.com/srixon/clubs/irons",
-        "https://www.hosel.golf/gb/shop/clubs?group_by=model"
-      ]
-    },
-    {
-      "id": "srixon-zxir-iron-set-2026",
-      "kind": "clubs",
-      "brand": "Srixon",
-      "model": "ZXiR",
-      "active": true,
-      "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_UNKNOWN"
-      ],
-      "missingFields": [
-        "lofts",
-        "standardLength",
-        "lie",
-        "headVolume",
-        "setMakeup",
-        "stockShafts",
-        "stockFlexes"
-      ],
-      "datedCatalogProvenance": true,
-      "evidence": [
         "https://www.hosel.golf/gb/shop/clubs?group_by=model"
       ]
     },
@@ -35827,30 +35230,6 @@
       ]
     },
     {
-      "id": "titleist-t250-iron-set-2025",
-      "kind": "clubs",
-      "brand": "Titleist",
-      "model": "T250",
-      "active": true,
-      "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_UNKNOWN"
-      ],
-      "missingFields": [
-        "lofts",
-        "standardLength",
-        "lie",
-        "headVolume",
-        "setMakeup",
-        "stockShafts",
-        "stockFlexes"
-      ],
-      "datedCatalogProvenance": true,
-      "evidence": [
-        "https://www.hosel.golf/gb/shop/clubs?group_by=model"
-      ]
-    },
-    {
       "id": "titleist-t300-iron-set-2019",
       "kind": "clubs",
       "brand": "Titleist",
@@ -35906,28 +35285,6 @@
       "active": false,
       "gaps": [
         "IMAGE_MISSING",
-        "SPECS_PARTIAL"
-      ],
-      "missingFields": [
-        "lofts",
-        "standardLength",
-        "lie",
-        "headVolume"
-      ],
-      "datedCatalogProvenance": true,
-      "evidence": [
-        "https://www.titleist.com/previous-models",
-        "https://www.titleist.com/product/t350/563C.html"
-      ]
-    },
-    {
-      "id": "titleist-t350-iron-set-2025",
-      "kind": "clubs",
-      "brand": "Titleist",
-      "model": "T350",
-      "active": true,
-      "gaps": [
-        "IMAGE_MISSING",
         "SPECS_UNKNOWN"
       ],
       "missingFields": [
@@ -35941,7 +35298,7 @@
       ],
       "datedCatalogProvenance": true,
       "evidence": [
-        "https://www.hosel.golf/gb/shop/clubs?group_by=model"
+        "https://www.titleist.com/previous-models"
       ]
     },
     {
@@ -37271,54 +36628,6 @@
       "datedCatalogProvenance": true,
       "evidence": [
         "https://www.hosel.golf/gb/shop/clubs?group_by=model"
-      ]
-    },
-    {
-      "id": "tour-edge-hot-launch-max-d-fairway-2026",
-      "kind": "clubs",
-      "brand": "Tour Edge",
-      "model": "Hot Launch Max D",
-      "active": true,
-      "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_UNKNOWN"
-      ],
-      "missingFields": [
-        "lofts",
-        "standardLength",
-        "lie",
-        "headVolume",
-        "setMakeup",
-        "stockShafts",
-        "stockFlexes"
-      ],
-      "datedCatalogProvenance": true,
-      "evidence": [
-        "https://forgiving.golf/data"
-      ]
-    },
-    {
-      "id": "tour-edge-hot-launch-max-d-hybrid-2026",
-      "kind": "clubs",
-      "brand": "Tour Edge",
-      "model": "Hot Launch Max D",
-      "active": true,
-      "gaps": [
-        "IMAGE_MISSING",
-        "SPECS_UNKNOWN"
-      ],
-      "missingFields": [
-        "lofts",
-        "standardLength",
-        "lie",
-        "headVolume",
-        "setMakeup",
-        "stockShafts",
-        "stockFlexes"
-      ],
-      "datedCatalogProvenance": true,
-      "evidence": [
-        "https://forgiving.golf/data"
       ]
     },
     {
@@ -51048,7 +50357,7 @@
   "sourceFiles": [
     {
       "file": "lib/golf-equipment-catalog.ts",
-      "sha256": "ed36777bd141d3caf3436ef5d2a14f9660fb5466c7f7e1f24de2731a524d96ff"
+      "sha256": "280461454dd2a09f615a5a9ff91fe7a84269015bb49b5a959c4caaea0eb61eff"
     },
     {
       "file": "lib/golf-equipment.ts",

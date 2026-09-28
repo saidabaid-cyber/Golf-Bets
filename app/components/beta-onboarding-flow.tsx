@@ -28,12 +28,14 @@ import {
 import { PLAN_CATALOG, selectablePlanId, type PlanId } from "../../lib/plans";
 import { STORAGE_KEYS } from "../../lib/round-utils";
 import { ballFitDefaultsFromProfile } from "../../lib/ball-fitting";
+import { selectedHandicapIndex } from "../../lib/handicap-source";
 import { BrandLockup } from "./brand-lockup";
 import { EquipmentOnboarding } from "./equipment-onboarding";
-import { HandicapSourceSelector } from "./handicap-source-selector";
+import { HandicapSourceChoices } from "./handicap-source-selector";
 import { ModalShell } from "./modal-shell";
 import { InitialDevicePermissions } from "./device-permission-settings";
 import { useGhinReadOnlyProfile } from "./use-ghin-read-only-profile";
+import { useBackyardIndexPreference } from "./use-backyard-index-preference";
 import styles from "./beta-onboarding-flow.module.css";
 
 const IMPROVEMENT_LABELS: Record<GolfImprovementGoal, string> = {
@@ -122,6 +124,8 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, lega
 }) {
   const [progress, setProgress] = useState<BetaOnboardingProgress | null>(null);
   const ghinControl = useGhinReadOnlyProfile(accessToken);
+  const indexControl = useBackyardIndexPreference(profile.userId, Boolean(accessToken));
+  const accountIndex = selectedHandicapIndex(indexControl.preference, [], profile.userId, ghinControl.profile);
   useViewScrollReset(progress?.step ?? null);
   const [draft, setDraft] = useState<BetaDraft | null>(null);
   const [message, setMessage] = useState("");
@@ -222,7 +226,8 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, lega
   if (progress.step === "equipment") return <EquipmentOnboarding
     userId={profile.userId}
     accessToken={accessToken}
-    defaultHandicap={null}
+    defaultHandicap={accountIndex.value}
+    defaultHandicapSource={accountIndex.source}
     defaultHandedness={profile.handedness}
     ballFitDefaults={ballFitDefaultsFromProfile(profile)}
     onComplete={() => advance("improvements")}
@@ -231,7 +236,7 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, lega
   />;
 
   if (progress.step === "ghin") return <Shell progress={progress} {...navigationProps} eyebrow="HANDICAP / ÍNDICE" title="Elige tu fuente de índice" description="Puedes vincular tu cuenta GHIN, activar Backyard Index o continuar sin índice." actions={<button className="primary big" disabled={finishing} onClick={async () => { try { const linked=ghinControl.profile?.associationStatus==="VERIFIED"; await onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: profile.defaultHandicap, ghinLinkStatus: linked ? "LINKED" : profile.ghinLinkStatus === "LINKED" ? "LINKED" : "SKIPPED" }); if (entryMode === 'quick') finish(); else advance("equipment", true); } catch(error) { setMessage(error instanceof Error ? error.message : 'No pudimos guardar. Reintenta.'); } }}>{finishing ? 'Guardando…' : 'Continuar'}</button>}>
-    <HandicapSourceSelector userId={profile.userId} authenticated={Boolean(profile.userId && profile.userId !== "guest")} ghinControl={ghinControl} />
+    <HandicapSourceChoices control={indexControl} authenticated={Boolean(profile.userId && profile.userId !== "guest")} ghinControl={ghinControl} />
     <p className={styles.trust}>Si todavía no tienes índice puedes continuar. No inventaremos un valor.</p>{message && <p role="alert">{message}</p>}
   </Shell>;
 

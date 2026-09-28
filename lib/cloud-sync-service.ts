@@ -239,7 +239,9 @@ export async function readCloudBundle(client: SupabaseClient, userId: string, ex
       // No cloud row means no preference yet: product default is high contrast.
       highContrast: preferences.data?.high_contrast !== false,
       language: preferences.data?.locale || "es-MX",
-      notificationsEnabled: Boolean(preferences.data?.notifications_enabled),
+      // Only a persisted true proves opt-in. New accounts receive that value
+      // from the Auth bootstrap; a missing legacy row stays safely OFF.
+      notificationsEnabled: preferences.data?.notifications_enabled === true,
       defaultHandicap: preferences.data?.default_handicap === null || preferences.data?.default_handicap === undefined ? null : Number(preferences.data.default_handicap),
       hasLocalState: Boolean(preferences.data),
       updatedAt: preferences.data?.updated_at,

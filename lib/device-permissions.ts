@@ -167,6 +167,13 @@ export function disableNotificationsForApp(storage: ReadableStorage & WritableSt
   return saveDevicePermissionPreferences(storage, { ...current, notificationPreference: "disabled", notificationsEnabled: false, updatedAt: now() });
 }
 
+/** Enables only The Backyard's internal preference. It deliberately does not
+ * call Notification.requestPermission or fabricate an OS grant/subscription. */
+export function enableNotificationsForApp(storage: ReadableStorage & WritableStorage, userId: string) {
+  const current = readDevicePermissionPreferences(storage, userId);
+  return saveDevicePermissionPreferences(storage, { ...current, notificationPreference: "enabled", notificationsEnabled: true, updatedAt: now() });
+}
+
 export function declineInitialNotifications(storage: ReadableStorage & WritableStorage, userId: string) {
   const current = readDevicePermissionPreferences(storage, userId);
   return saveDevicePermissionPreferences(storage, {

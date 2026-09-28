@@ -14,6 +14,7 @@ import {
   type PlayerClub,
 } from "../../lib/golf-equipment";
 import { BallFitWizard } from "./ball-fit-wizard";
+import type { BallFitHandicapSource } from "../../lib/ball-fit-handicap";
 import { BallEditor, CLUB_CATEGORY_ICONS, CLUB_CATEGORY_LABELS, ClubEditor } from "./equipment-editors";
 import { BrandLockup } from "./brand-lockup";
 import { equipmentStatusLabel, useEquipmentProfile } from "./use-equipment-profile";
@@ -27,6 +28,7 @@ type EquipmentOnboardingProps = {
   userId: string;
   accessToken: string | null;
   defaultHandicap: number | null;
+  defaultHandicapSource?: BallFitHandicapSource | null;
   defaultHandedness?: ProfileHandedness | null;
   ballFitDefaults?: BallFitProfileDefaults;
   onComplete: () => void;
@@ -46,7 +48,7 @@ function initialStep(profile: ReturnType<typeof useEquipmentProfile>["profile"])
   return "fit-prompt";
 }
 
-export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defaultHandedness, ballFitDefaults, onComplete, onBack, onSaveAndExit }: EquipmentOnboardingProps) {
+export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defaultHandicapSource, defaultHandedness, ballFitDefaults, onComplete, onBack, onSaveAndExit }: EquipmentOnboardingProps) {
   const { profile, status, message, update } = useEquipmentProfile(userId, accessToken);
   const [step, setStep] = useState<Step>("clubs-prompt");
   const [initialized, setInitialized] = useState(false);
@@ -176,7 +178,7 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defa
       <div className={styles.onboardingActions}><button type="button" className="primary" onClick={() => setStep("fit")}>Hacer Ball Fit</button><button type="button" className="secondary" onClick={() => { update((current) => setBallOnboardingStatus(current, "IN_PROGRESS")); setStep("ball-select"); }}>Registrar mi bola actual</button><button type="button" className={styles.onboardingSkip} onClick={onComplete}>Ahora no</button></div>
     </>}
 
-    {step === "fit" && (ballCatalog.items.length ? <BallFitWizard userId={userId} accessToken={accessToken} defaultHandicap={defaultHandicap} profileDefaults={ballFitDefaults} currentBall={currentBall} catalog={ballCatalog.items} onCancel={() => setStep("fit-prompt")} onComplete={completeFit} /> : <div className={ballCatalog.status === "loading" ? styles.loadingState : styles.errorState} role="status">{ballCatalog.status === "loading" ? "Cargando catálogo de bolas…" : <>No pudimos cargar el catálogo. Puedes continuar y hacer el fitting después. <button type="button" className="textButton" onClick={ballCatalog.retry}>Reintentar</button><button type="button" className="secondary" onClick={onComplete}>Después</button></>}</div>)}
+    {step === "fit" && (ballCatalog.items.length ? <BallFitWizard userId={userId} accessToken={accessToken} defaultHandicap={defaultHandicap} defaultHandicapSource={defaultHandicapSource} profileDefaults={ballFitDefaults} currentBall={currentBall} catalog={ballCatalog.items} onCancel={() => setStep("fit-prompt")} onComplete={completeFit} /> : <div className={ballCatalog.status === "loading" ? styles.loadingState : styles.errorState} role="status">{ballCatalog.status === "loading" ? "Cargando catálogo de bolas…" : <>No pudimos cargar el catálogo. Puedes continuar y hacer el fitting después. <button type="button" className="textButton" onClick={ballCatalog.retry}>Reintentar</button><button type="button" className="secondary" onClick={onComplete}>Después</button></>}</div>)}
 
     {step !== "fit" && <div className={styles.onboardingFooter}><button type="button" className="textButton" onClick={previous}>← Anterior</button><button type="button" className={styles.onboardingSkip} onClick={skipEverything}>Saltar por ahora y entrar a The Backyard</button></div>}
     <p className={styles.syncStatus} data-state={status} role="status">{equipmentStatusLabel(status)}{message ? ` · ${message}` : ""}</p>

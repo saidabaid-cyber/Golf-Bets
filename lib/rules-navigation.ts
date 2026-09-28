@@ -257,6 +257,10 @@ export const NAVIGABLE_GOLF_RULES: NavigableGolfRule[] = [
 const NAVIGATION_ALIASES: Record<string, string> = {
   "cart path": "camino obstruccion inamovible",
   hazard: "area de penalidad",
+  agua: "area de penalidad penalty area",
+  lago: "area de penalidad penalty area",
+  estanque: "area de penalidad penalty area",
+  rio: "area de penalidad penalty area",
   ob: "fuera de limites",
   "out of bounds": "fuera de limites",
   drop: "dropeo dropear area de alivio",
@@ -266,10 +270,18 @@ const NAVIGATION_ALIASES: Record<string, string> = {
 function navigationTerms(query: string) {
   const normalized = normalizeRulesSearch(query);
   const aliases = Object.entries(NAVIGATION_ALIASES)
-    .filter(([alias]) => new RegExp(`(?:^|\\s)${alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:$|\\s)`).test(normalized))
+    .filter(([alias]) => !(alias === "agua" && /(?:^|\s)agua temporal(?:$|\s)/.test(normalized))
+      && new RegExp(`(?:^|\\s)${alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:$|\\s)`).test(normalized))
     .map(([, replacement]) => replacement);
-  const stop = new Set(["de", "del", "la", "el", "los", "las", "en", "un", "una", "por", "para", "con", "que", "se", "regla"]);
-  return normalizeRulesSearch([normalized, ...aliases].join(" ")).split(/\s+/).filter(term => term && !stop.has(term));
+  const stop = new Set([
+    "de", "del", "la", "el", "los", "las", "en", "un", "una", "por", "para", "con", "que", "se", "regla",
+    "si", "mi", "tu", "su", "al", "y", "o", "pasa", "paso", "va", "fue",
+  ]);
+  const ballOnly = normalized === "bola" || normalized === "ball";
+  return normalizeRulesSearch([normalized, ...aliases].join(" ")).split(/\s+/).filter((term) => {
+    if (!ballOnly && (term === "bola" || term === "ball")) return false;
+    return term && !stop.has(term);
+  });
 }
 
 export type NavigableRuleMatch = {

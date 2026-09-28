@@ -20,7 +20,8 @@ const catalogServerLoader = readFileSync("lib/equipment-catalog-provider.server.
 
 test("el onboarding de equipo ocurre después del perfil básico y siempre se puede omitir", () => {
   assert.match(provider, /ProfileSetupScreen[\s\S]*onSave=\{saveInitialProfile\}/);
-  assert.match(provider, /equipmentOnboardingRequired[\s\S]*<EquipmentOnboarding/);
+  assert.match(provider, /equipmentOnboardingRequired[\s\S]*<CanonicalEquipmentOnboarding/);
+  assert.match(provider, /function CanonicalEquipmentOnboarding[\s\S]*<EquipmentOnboarding/);
   assert.match(onboarding, /¿Quieres agregar los bastones que juegas actualmente\?/);
   assert.match(onboarding, /Agregar mis bastones/);
   assert.match(onboarding, /Omitir por ahora/);

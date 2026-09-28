@@ -97,6 +97,19 @@ function defaultInput(userId: string, handicap: number | null, currentBallId: st
   };
 }
 
+function accountIndexLabel(source: BallFitHandicapSource | null | undefined, value: number) {
+  if (source === "GHIN") return `GHIN · ${value}`;
+  if (source === "BACKYARD") return `Backyard Index · ${value}`;
+  return `HCP manual · ${value}`;
+}
+
+function catalogEditionLabel(ball: Pick<GolfBallCatalog, "generation" | "year">) {
+  const generation = ball.generation?.trim() || "";
+  const year = ball.year === null ? "" : String(ball.year);
+  if (generation && year && generation.toLocaleLowerCase("es-MX") === year.toLocaleLowerCase("es-MX")) return generation;
+  return [generation, year].filter(Boolean).join(" · ");
+}
+
 function OptionGrid<T extends string>({ values, labels, selected, onSelect }: {
   values: readonly T[];
   labels: Record<T, string>;
@@ -134,6 +147,8 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
   const [resultCatalog, setResultCatalog] = useState<GolfBallCatalog[]>([]);
   const [calculating, setCalculating] = useState(false);
   const [ballQuery, setBallQuery] = useState("");
+  const [ballSearchOpen, setBallSearchOpen] = useState(false);
+  const handicapChoiceTouched = useRef(false);
   useViewScrollReset(`${step}:${draftChoicePending}:${hydrated}`);
   const [message, setMessage] = useState("");
   const requestRef = useRef<AbortController | null>(null);
@@ -153,6 +168,13 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
   useEffect(() => () => requestRef.current?.abort(), []);
 
   useEffect(() => {
+    if (handicapChoiceTouched.current || defaultHandicap === null) return;
+    const accountHandicap = normalizeBallFitHandicap(defaultHandicap, defaultHandicapSource);
+    if (accountHandicap.handicapSource !== "GHIN" && accountHandicap.handicapSource !== "BACKYARD") return;
+    setInput((current) => ({ ...current, ...accountHandicap, userId }));
+  }, [defaultHandicap, defaultHandicapSource, userId]);
+
+  useEffect(() => {
     if (!hydrated || draftChoicePending) return;
     const saved = saveBallFitDraft(localStorage, input, Math.min(step, 6));
     setMessage((current) => saved
@@ -162,6 +184,9 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
 
   function resumeSavedDraft() {
     if (!savedDraft) return;
+    // Resuming a draft is an explicit choice. Its fitting-only MANUAL/UNKNOWN
+    // value must not be replaced if the account Index refreshes afterward.
+    handicapChoiceTouched.current = true;
     setInput(savedDraft.input);
     setStep(Math.min(savedDraft.step, 5));
     setResult(null);
@@ -171,6 +196,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
 
   function startNewFit() {
     removeBallFitDraft(localStorage, userId);
+    handicapChoiceTouched.current = false;
     setInput(defaultInput(userId, defaultHandicap, currentBall?.catalogBallId || null, profileDefaults, defaultHandicapSource));
     setStep(0);
     setResult(null);
@@ -297,12 +323,13 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
       <h3>Tu juego actual</h3>
       <p>Elige qué dato usar en este fitting. No modificaremos tu perfil ni sustituiremos un índice guardado.</p>
       <div className={styles.handicapChoices} aria-label="Fuente del hándicap para Ball Fit">
-        {defaultHandicap !== null && <button type="button" className={`${styles.optionButton} ${input.handicapSource !== "MANUAL" && input.handicapSource !== "UNKNOWN" ? styles.selected : ""}`} onClick={() => patchInput(normalizeBallFitHandicap(defaultHandicap, defaultHandicapSource))}>Usar índice de tu cuenta: {defaultHandicap}<small>{BALL_FIT_HANDICAP_LABELS[normalizeBallFitHandicap(defaultHandicap, defaultHandicapSource).handicapSource]}</small></button>}
-        {defaultHandicap === null && <p className={styles.subtle}>Índice de tu cuenta: todavía no disponible. Puedes continuar sin GHIN.</p>}
-        <button type="button" className={`${styles.optionButton} ${input.handicapSource === "MANUAL" ? styles.selected : ""}`} aria-pressed={input.handicapSource === "MANUAL"} onClick={() => patchInput({ handicapSource: "MANUAL", handicap: input.handicapSource === "MANUAL" ? input.handicap : null })}>Capturar HCP manual</button>
-        <button type="button" className={`${styles.optionButton} ${input.handicapSource === "UNKNOWN" ? styles.selected : ""}`} aria-pressed={input.handicapSource === "UNKNOWN"} onClick={() => patchInput({ handicapSource: "UNKNOWN", handicap: null })}>No conozco mi hándicap / Estoy empezando</button>
+        {defaultHandicap !== null && <button type="button" className={`${styles.optionButton} ${input.handicapSource === defaultHandicapSource && input.handicap === defaultHandicap ? styles.selected : ""}`} aria-pressed={input.handicapSource === defaultHandicapSource && input.handicap === defaultHandicap} onClick={() => { handicapChoiceTouched.current = true; patchInput(normalizeBallFitHandicap(defaultHandicap, defaultHandicapSource)); }}><span>Índice de tu cuenta</span><b>{accountIndexLabel(defaultHandicapSource, defaultHandicap)}</b></button>}
+        {defaultHandicap === null && defaultHandicapSource === "BACKYARD" && <p className={styles.subtle}>Tu Backyard Index todavía no está disponible.</p>}
+        {defaultHandicap === null && defaultHandicapSource !== "BACKYARD" && <p className={styles.subtle}>Tu cuenta todavía no tiene un índice disponible.</p>}
+        <button type="button" className={`${styles.optionButton} ${input.handicapSource === "MANUAL" ? styles.selected : ""}`} aria-pressed={input.handicapSource === "MANUAL"} onClick={() => { handicapChoiceTouched.current = true; patchInput({ handicapSource: "MANUAL", handicap: input.handicapSource === "MANUAL" ? input.handicap : null }); }}>Capturar HCP manual</button>
+        <button type="button" className={`${styles.optionButton} ${input.handicapSource === "UNKNOWN" ? styles.selected : ""}`} aria-pressed={input.handicapSource === "UNKNOWN"} onClick={() => { handicapChoiceTouched.current = true; patchInput({ handicapSource: "UNKNOWN", handicap: null }); }}>No conozco mi hándicap / Estoy empezando</button>
       </div>
-      {input.handicapSource === "MANUAL" && <label>HCP manual (sólo este fitting)<NumericCaptureInput inputMode="decimal" min={-20} max={54} emptyWhenZero={false} value={input.handicap} onValueChange={(handicap) => patchInput({ handicap })} placeholder="Ej. 18" /><small>Declarado por ti; no es GHIN ni Backyard Index.</small></label>}
+      {input.handicapSource === "MANUAL" && <label>HCP manual (sólo este fitting)<NumericCaptureInput inputMode="decimal" min={-20} max={54} emptyWhenZero={false} value={input.handicap} onValueChange={(handicap) => { handicapChoiceTouched.current = true; patchInput({ handicap }); }} placeholder="Ej. 18" /><small>Declarado por ti; no es GHIN ni Backyard Index.</small></label>}
       {input.handicapSource === "UNKNOWN" && <><h4>¿Cuánta experiencia tienes?</h4><OptionGrid values={BALL_FIT_EXPERIENCES} labels={{ STARTING: "Estoy empezando", OCCASIONAL: "Juego ocasionalmente", REGULAR: "Juego con regularidad", UNKNOWN: "Prefiero no indicar" }} selected={input.experience || "UNKNOWN"} onSelect={(experience) => patchInput({ experience })} /><p className={styles.subtle}>Esto aporta contexto; no calculamos un hándicap estimado.</p></>}
       <label>Score típico en 18 hoyos (opcional)<NumericCaptureInput keyboardMode="numeric" min={40} max={200} value={input.typicalScore} onValueChange={(typicalScore) => patchInput({ typicalScore })} placeholder="Si lo conoces" /></label>
     </section>}
@@ -341,12 +368,12 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
       <h4>Color preferido</h4><OptionGrid values={BALL_COLOR_PREFERENCES} labels={COLOR_LABELS} selected={input.colorPreference} onSelect={(value) => patchInput({ colorPreference: value })} />
       <h4>Comparación opcional</h4>
       {currentBall && <div className={styles.ballHero}><span className={styles.ballGlyph}>●</span><div><h3>{currentBall.ballBrand} {currentBall.ballModel}</h3><p>Bola actual guardada{currentBall.catalogBallId ? " · disponible para comparación" : " · modelo manual"}</p></div></div>}
-      <AnchoredSearch label="Bola actual para comparar (opcional)" value={ballQuery} onChange={setBallQuery} placeholder="Escribe marca, modelo, generación o año" expanded status={ballSearch.status === "loading" ? "Buscando bolas…" : ballSearch.items.length ? `${ballSearch.items.length} resultados del catálogo` : "Sin coincidencias en el catálogo"}>
-        <AnchoredSearchOption label="No comparar con una bola" onSelect={() => patchInput({ currentBallId: null })}><b>Sin bola fija</b><small>No afecta las recomendaciones.</small></AnchoredSearchOption>
-        {ballSearch.items.filter((ball) => ball.active).map((ball) => <AnchoredSearchOption key={ball.id} label={`Seleccionar ${ball.brand} ${ball.model}`} onSelect={() => { patchInput({ currentBallId: ball.id }); setBallQuery(`${ball.brand} ${ball.model}`); }}><b>{ball.brand} {ball.model}</b><small>{[ball.generation, ball.year].filter(Boolean).join(" · ") || "Generación sin dato publicado"}</small></AnchoredSearchOption>)}
+      <AnchoredSearch label="Bola actual para comparar (opcional)" value={ballQuery} onChange={(value) => { setBallQuery(value); setBallSearchOpen(true); }} onFocus={() => setBallSearchOpen(true)} placeholder="Escribe marca, modelo, generación o año" expanded={ballSearchOpen} status={ballSearchOpen ? ballSearch.status === "loading" ? "Buscando bolas…" : ballSearch.items.length ? `${ballSearch.items.length} resultados del catálogo` : "Sin coincidencias en el catálogo" : currentCatalogBall ? `✓ Seleccionada: ${currentCatalogBall.brand} ${currentCatalogBall.model}` : "Sin bola fija"}>
+        <AnchoredSearchOption label="No comparar con una bola" selected={input.currentBallId === null} onSelect={() => { patchInput({ currentBallId: null }); setBallQuery(""); setBallSearchOpen(false); }}><b>Sin bola fija</b><small>No afecta las recomendaciones.</small></AnchoredSearchOption>
+        {ballSearch.items.filter((ball) => ball.active).map((ball) => <AnchoredSearchOption key={ball.id} selected={input.currentBallId === ball.id} label={`Seleccionar ${ball.brand} ${ball.model}`} onSelect={() => { patchInput({ currentBallId: ball.id }); setBallQuery(`${ball.brand} ${ball.model}`); setBallSearchOpen(false); }}><b>{ball.brand} {ball.model}</b>{catalogEditionLabel(ball) && <small>{catalogEditionLabel(ball)}</small>}</AnchoredSearchOption>)}
       </AnchoredSearch>
       {ballSearch.hasMore && <button type="button" className="secondary" onClick={() => void ballSearch.loadMore()}>Mostrar más bolas</button>}
-      {currentCatalogBall && <p className={styles.subtle}>Seleccionada: <b>{currentCatalogBall.brand} {currentCatalogBall.model}</b></p>}
+      {currentCatalogBall && <p className={styles.subtle}>✓ Seleccionada: <b>{currentCatalogBall.brand} {currentCatalogBall.model}</b></p>}
       <FeedbackLink category="BALL">¿No encuentras tu bola? Solicítala</FeedbackLink>
       <p className={styles.subtle}>Primero recomendamos con tus datos de juego. Esta selección sólo agrega una comparación contra tu bola actual.</p>
       <p className={styles.subtle}>Completitud de respuestas: {completeness}%. El recomendador puede dar una coincidencia parcial, pero necesita al menos dos preferencias comparables.</p>

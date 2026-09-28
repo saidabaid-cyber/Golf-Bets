@@ -174,10 +174,10 @@
           "Volvik",
           "Wilson"
         ],
-        "catalogAliasCount": 11,
-        "current": 94,
+        "catalogAliasCount": 31,
+        "current": 74,
         "legacy": 229,
-        "total": 323
+        "total": 303
       },
       "before": {
         "brands": [
@@ -205,7 +205,7 @@
         "legacy": 226,
         "total": 314
       },
-      "catalogDigest": "25fc65684e493128113078b2451932cfb9af071ca1ca6cda1bcb563ed56515a4",
+      "catalogDigest": "cb01e0d142033ac43d6ef7c77f3b78f5bdd310c2f4a15dc42b1f59ac28d9f364",
       "duplicateIdentities": [],
       "duplicateIds": [],
       "internalRows": [],
@@ -214,6 +214,12 @@
     },
     "CLUB": {
       "added": [
+        {
+          "active": true,
+          "brand": "Titleist",
+          "id": "forgiving-golf-titleist-t350-irons",
+          "model": "T350"
+        },
         {
           "active": true,
           "brand": "Honma",
@@ -433,10 +439,10 @@
           "Wilson",
           "XXIO"
         ],
-        "catalogAliasCount": 43,
-        "current": 263,
+        "catalogAliasCount": 54,
+        "current": 252,
         "legacy": 1045,
-        "total": 1308
+        "total": 1297
       },
       "before": {
         "brands": [
@@ -466,7 +472,7 @@
         "legacy": 1034,
         "total": 1276
       },
-      "catalogDigest": "558551919524b65b09667af3748c122f3d99a21c9b178310c169abfc2c5cc9f2",
+      "catalogDigest": "a0e20821d85f71a0ac8548a03bd447b924b34cb4a605e2e0f0f3dc18b71246f1",
       "duplicateIdentities": [],
       "duplicateIds": [],
       "internalRows": [],

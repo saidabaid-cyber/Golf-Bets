@@ -1,6 +1,10 @@
 export const RULES_SEARCH_ALIASES: Record<string, string[]> = {
   bola: ["ball"],
   "agua temporal": ["temporary water"],
+  agua: ["area de penalidad", "penalty area"],
+  lago: ["area de penalidad", "penalty area"],
+  estanque: ["area de penalidad", "penalty area"],
+  rio: ["area de penalidad", "penalty area"],
   "area de penalidad": ["penalty area"],
   "bola perdida": ["lost ball"],
   "bola movida": ["ball moved"],
@@ -31,10 +35,19 @@ export function normalizeRulesSearch(value: string) {
 
 export function expandedRulesSearchTerms(query: string) {
   const normalized = normalizeRulesSearch(query);
+  const temporaryWater = /(?:^|\s)agua temporal(?:$|\s)/.test(normalized);
   const aliases = Object.entries(RULES_SEARCH_ALIASES).flatMap(([key, values]) => {
+    if (key === "agua" && temporaryWater) return [];
     const exactAlias = new RegExp(`(?:^|\\s)${key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:$|\\s)`);
     return exactAlias.test(normalized) ? values : [];
   });
-  const stop = new Set(["de", "del", "la", "el", "los", "las", "en", "un", "una", "por", "para", "con", "que", "se", "regla"]);
-  return [...new Set(normalizeRulesSearch([normalized, ...aliases].join(" ")).split(/\s+/).filter((word) => !stop.has(word) && (word.length > 1 || /^\d+$/.test(word))))];
+  const stop = new Set([
+    "de", "del", "la", "el", "los", "las", "en", "un", "una", "por", "para", "con", "que", "se", "regla",
+    "si", "mi", "tu", "su", "al", "y", "o", "pasa", "paso", "va", "fue",
+  ]);
+  const ballOnly = normalized === "bola" || normalized === "ball";
+  return [...new Set(normalizeRulesSearch([normalized, ...aliases].join(" ")).split(/\s+/).filter((word) => {
+    if (!ballOnly && (word === "bola" || word === "ball")) return false;
+    return !stop.has(word) && (word.length > 1 || /^\d+$/.test(word));
+  }))];
 }

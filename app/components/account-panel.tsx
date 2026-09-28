@@ -17,6 +17,7 @@ import { ProfileAvatarMedia } from "./profile-avatar-media";
 import { ProfileClubPicker } from "./profile-club-picker";
 import { ProfileVisibilitySettings } from "./profile-visibility-settings";
 import { HandicapSourceSelector } from "./handicap-source-selector";
+import { useGhinReadOnlyProfile } from "./use-ghin-read-only-profile";
 import { AccountDataDialog, type AccountDataPolicy } from "./profile-data-dialogs";
 
 type AccountPanelProps = {
@@ -132,6 +133,7 @@ function gameProfileChanged(profile: BackyardProfile, draft: ProfileDetailsDraft
 
 export function AccountPanel({ view, focusSection = "profile", highContrast, onHighContrastChange, notificationsEnabled, onNotificationsEnabledChange, golfInsights, onOpenStats, onOpenAccount }: AccountPanelProps) {
   const { identity, updateProfile, logout, finishAccountDeletion, openAccess, acceptances, legalEvidenceEvents, marketingConsentResolved, bettingConsentGranted, requestBettingConsent, recordLegalChoice, cloudLinked, cloudStatus, requestCloudLink, lastCloudSync, cloudIssues, retryCloudSync } = useBackyardAccount();
+  const ghinControl = useGhinReadOnlyProfile(identity.accessToken);
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(identity.displayName);
   const [avatarUrl, setAvatarUrl] = useState(identity.avatarUrl);
@@ -326,7 +328,7 @@ export function AccountPanel({ view, focusSection = "profile", highContrast, onH
       <div className="sectionTitle"><div className="profileIdentity"><div className="accountAvatar"><ProfileAvatarMedia value={identity.avatarUrl} fallback={(identity.displayName.trim()[0] || "J").toUpperCase()} alt={`Avatar de ${identity.displayName}`} /></div><div><h2>{identity.displayName}</h2><p>{identity.email || "Perfil local en este dispositivo"}</p></div></div><button className="secondary" onClick={() => setEditing((value) => !value)}>{editing ? "Cancelar" : "Editar perfil"}</button></div>
       {editing && <div className="profileForm profileFormExpanded">
         <label>Nombre visible<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Tu nombre" /></label>
-        <HandicapSourceSelector userId={identity.userId} authenticated={identity.mode === "authenticated"} />
+        <HandicapSourceSelector userId={identity.userId} authenticated={identity.mode === "authenticated"} ghinControl={ghinControl} />
         <div className="profileAvatarEditor">
           <label>Foto o avatar</label>
           <ProfileImagePicker value={avatarUrl} onChange={setAvatarUrl} onBusyChange={setAvatarBusy} accessToken={identity.accessToken} userId={identity.userId} />
@@ -355,7 +357,7 @@ export function AccountPanel({ view, focusSection = "profile", highContrast, onH
         <button className="primary profileSaveButton" disabled={savingProfile || avatarBusy} onClick={saveProfile}>{savingProfile ? "Guardando…" : avatarBusy ? "Preparando imagen…" : "Guardar perfil"}</button>
       </div>}
       {!editing && <div className="profileMetaList">
-        <HandicapSourceSelector userId={identity.userId} authenticated={identity.mode === "authenticated"} />
+        <HandicapSourceSelector userId={identity.userId} authenticated={identity.mode === "authenticated"} ghinControl={ghinControl} />
         {identity.username && <div className="profileMeta"><span>Usuario</span><b>@{identity.username}</b></div>}
         {identity.homeClub && <div className="profileMeta"><span>Club</span><b>{identity.homeClub}</b></div>}
         {(identity.city || identity.state || identity.country) && <div className="profileMeta"><span>Ubicación</span><b>{[identity.city, identity.state, identity.country].filter(Boolean).join(", ")}</b></div>}

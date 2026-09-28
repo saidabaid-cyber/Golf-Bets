@@ -132,5 +132,6 @@ test("la búsqueda manual cubre tres fuentes sin llamar OpenAI automáticamente"
   const searchEffect = panel.slice(panel.indexOf("const trimmed = query.trim()"), panel.indexOf("function toggleDictation"));
   assert.match(searchEffect, /\/api\/rules\/search/);
   assert.doesNotMatch(searchEffect, /\/api\/rules\/ask/);
-  assert.match(panel, /method: "POST"/);
+  assert.match(panel, /requestBackyardAi[\s\S]*?\/api\/rules\/ask/);
+  assert.match(readFileSync("lib/backyard-ai/client-api.ts", "utf8"), /method: "POST"/);
 });

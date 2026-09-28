@@ -6,7 +6,9 @@ export type NotificationPreference = { userId: string; type: NotificationEventTy
 export type NotificationEvent = { id: string; recipientId: string; type: NotificationEventType; resourceType: "FRIEND" | "GROUP" | "ROUND" | "SCORECARD"; resourceId: string; createdAt: string; readAt?: string | null };
 
 export function defaultNotificationPreferences(userId: string, updatedAt: string): NotificationPreference[] {
-  return NOTIFICATION_EVENT_TYPES.map((type) => ({ userId, type, inApp: true, push: false, updatedAt }));
+  // Preference defaults ON; provider configuration and device permission are
+  // independent gates enforced by deliveryChannels/the push provider.
+  return NOTIFICATION_EVENT_TYPES.map((type) => ({ userId, type, inApp: true, push: true, updatedAt }));
 }
 
 export function deliveryChannels(event: NotificationEvent, preferences: readonly NotificationPreference[], pushConfigured: boolean): NotificationChannel[] {

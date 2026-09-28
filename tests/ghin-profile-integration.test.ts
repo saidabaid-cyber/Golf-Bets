@@ -5,7 +5,7 @@ import test from "node:test";
 import type { NormalizedGhinGolfer } from "../lib/ghin/core";
 import type { GhinProfileProjection } from "../lib/ghin/profile";
 import { failedAttemptStatus, providerRowToProfile, verifiedProviderWrite } from "../lib/ghin/profile-persistence";
-import { selectedHandicapIndex } from "../lib/handicap-source";
+import { selectedHandicapIndex, verifiedGhinHandicapIndex } from "../lib/handicap-source";
 
 const profile: GhinProfileProjection = {
   ghinNumber: "11103349",
@@ -22,18 +22,26 @@ const profile: GhinProfileProjection = {
   associationStatus: "VERIFIED",
 };
 
-test("a persisted GHIN source supplies the round/profile index while a missing projection stays null", () => {
+test("a verified GHIN projection is the canonical account index and wins over a Backyard preference", () => {
   const preference = {
     version: 1 as const,
     userId: "owner",
-    enabled: false,
-    handicapSource: "GHIN" as const,
+    enabled: true,
+    handicapSource: "BACKYARD" as const,
     localPccZeroDeclaredAt: null,
     updatedAt: "2026-09-27T12:00:00.000Z",
   };
   assert.deepEqual(selectedHandicapIndex(preference, [], "owner", profile), { source: "GHIN", value: 7.9 });
-  assert.deepEqual(selectedHandicapIndex(preference, [], "owner", null), { source: "GHIN", value: null });
+  assert.deepEqual(selectedHandicapIndex(null, [], "owner", profile), { source: "GHIN", value: 7.9 });
+  assert.deepEqual(selectedHandicapIndex({ ...preference, enabled: false, handicapSource: "GHIN" }, [], "owner", null), { source: null, value: null });
+  assert.deepEqual(selectedHandicapIndex(preference, [], "owner", { ...profile, associationStatus: "LOOKUP_FOUND" }), { source: "BACKYARD", value: null });
+  assert.deepEqual(selectedHandicapIndex(preference, [], "owner", { ...profile, handicapIndex: Number.NaN }), { source: "BACKYARD", value: null });
   assert.deepEqual(selectedHandicapIndex(preference, [], "another", profile), { source: null, value: null });
+  assert.equal(verifiedGhinHandicapIndex(profile), 7.9);
+  assert.equal(verifiedGhinHandicapIndex({ ...profile, associationStatus: "LOOKUP_FOUND" }), null);
+  const selector = readFileSync("app/components/handicap-source-selector.tsx", "utf8");
+  assert.match(selector, /verifiedGhinActive/);
+  assert.match(selector, /GHIN ES TU FUENTE ACTIVA/);
 });
 
 test("persistence allowlist contains provider data but no password, Firebase or bearer material", () => {
@@ -112,6 +120,29 @@ test("profile routes are Preview/user guarded, owner-keyed and never fall back t
     assert.doesNotMatch(source, /POST\s+\/scores(?:\.json|\/)/i);
   }
   assert.doesNotMatch(`${profileRoute}\n${scoreRoute}\n${sessions}`, /GHIN_TEST_LOGIN|GHIN_TEST_PASSWORD|resolveGhinRuntime|golfer_user_token|authToken\.token/);
+});
+
+test("onboarding, Profile, Edit Profile and Settings share the live multiuser GHIN controller", () => {
+  const page = readFileSync("app/page.tsx", "utf8");
+  const legacyAccountPanel = readFileSync("app/components/account-panel.tsx", "utf8");
+  const onboarding = readFileSync("app/components/beta-onboarding-flow.tsx", "utf8");
+  const profilePanel = readFileSync("app/components/profile-account-panel.tsx", "utf8");
+  const selector = readFileSync("app/components/handicap-source-selector.tsx", "utf8");
+  const placeholder = readFileSync("app/components/ghin-placeholder.tsx", "utf8");
+
+  assert.match(page, /const ghinControl = useGhinReadOnlyProfile\(/);
+  assert.match(page, /view="profile"[\s\S]*?ghinControl=\{ghinControl\}/);
+  assert.match(page, /view="account"[\s\S]*?ghinControl=\{ghinControl\}/);
+  assert.match(onboarding, /const ghinControl = useGhinReadOnlyProfile\(accessToken\)/);
+  assert.match(onboarding, /<HandicapSourceChoices[\s\S]*?ghinControl=\{ghinControl\}/);
+  assert.match(profilePanel, /id="profile-edit-handicap"[\s\S]*?<HandicapSourceChoices[\s\S]*?ghinControl=\{ghinControl\}/);
+  assert.match(profilePanel, /Preferencias de golf[\s\S]*?openProfileEditor\("golf"\)/);
+  assert.match(profilePanel, /<EquipmentProfilePanel[\s\S]*?defaultHandicapSource=\{selectedIndex\.source\}/);
+  assert.match(selector, /ghinControl\?\.enabled[\s\S]*?<GhinReadOnlyPanel control=\{ghinControl\}/);
+  assert.match(legacyAccountPanel, /const ghinControl = useGhinReadOnlyProfile\(identity\.accessToken\)/);
+  assert.equal((legacyAccountPanel.match(/<HandicapSourceSelector[^>]*ghinControl=\{ghinControl\}/g) || []).length, 2);
+  assert.doesNotMatch(`${onboarding}\n${profilePanel}\n${legacyAccountPanel}\n${selector}\n${placeholder}`, /cuenta QA autorizada|QA owner/i);
+  assert.doesNotMatch(selector, /adminAccess\.hasAccess|admin_memberships/);
 });
 
 test("existing migration is owner-readable, service-write-only and contains no secret columns", () => {

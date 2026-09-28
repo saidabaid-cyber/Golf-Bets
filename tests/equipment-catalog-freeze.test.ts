@@ -9,12 +9,13 @@ import {
   canonicalBallIdentity,
   canonicalClubIdentity,
   canonicalShaftIdentity,
+  dedupeGolfBallCatalog,
   dedupeGolfClubCatalog,
   golfBallCatalog,
   golfClubCatalog,
   golfShaftCatalog,
 } from "../lib/golf-equipment-catalog";
-import type { GolfClubCatalog } from "../lib/golf-equipment";
+import type { GolfBallCatalog, GolfClubCatalog } from "../lib/golf-equipment";
 
 const provider = createInternalEquipmentCatalogProvider({
   balls: golfBallCatalog,
@@ -126,6 +127,50 @@ test("plus variants and real generations remain distinct", () => {
   assert.ok(ventus);
   assert.ok(ventusPlus);
   assert.notEqual(canonicalShaftIdentity(ventus!), canonicalShaftIdentity(ventusPlus!));
+});
+
+test("an undated ball alias collapses into its only real generation without collapsing real generations", () => {
+  const leftDash = golfBallCatalog.filter((ball) => ball.brand === "Titleist" && ball.model === "Pro V1x Left Dash");
+  assert.equal(leftDash.length, 1);
+  assert.equal(leftDash[0].generation, "2025");
+  assert.equal(leftDash[0].year, 2025);
+  assert.ok([leftDash[0].id, ...leftDash[0].aliases].includes("titleist-pro-v1x-left-dash"));
+  assert.ok([leftDash[0].id, ...leftDash[0].aliases].includes("titleist-pro-v1x-left-dash-2025"));
+
+  const proV1xGenerations = golfBallCatalog
+    .filter((ball) => ball.brand === "Titleist" && ball.model === "Pro V1x")
+    .map((ball) => ball.year)
+    .filter((year): year is number => year !== null);
+  assert.ok(proV1xGenerations.length > 1);
+  assert.equal(new Set(proV1xGenerations).size, proV1xGenerations.length);
+});
+
+test("an undated current alias follows the newest current generation while dated generations remain distinct", () => {
+  const template = golfBallCatalog.find((ball) => ball.brand === "Bridgestone" && ball.model === "TOUR B X");
+  assert.ok(template);
+  const row = (id: string, year: number | null, active: boolean): GolfBallCatalog => ({
+    ...template!, id, aliases: [], generation: year === null ? null : String(year), year, active,
+  });
+  const merged = dedupeGolfBallCatalog([
+    row("tour-b-x-undated", null, true),
+    row("tour-b-x-2026", 2026, true),
+    row("tour-b-x-2024", 2024, true),
+    row("tour-b-x-2022", 2022, false),
+  ]);
+  assert.equal(merged.length, 3);
+  const current = merged.find((ball) => ball.year === 2026);
+  assert.equal(current?.year, 2026);
+  assert.ok([current!.id, ...current!.aliases].includes("tour-b-x-undated"));
+  assert.ok([current!.id, ...current!.aliases].includes("tour-b-x-2026"));
+  assert.ok(merged.some((ball) => ball.active && ball.year === 2024));
+  assert.ok(merged.some((ball) => !ball.active && ball.year === 2022));
+
+  const speedSoft = golfBallCatalog.filter((ball) => ball.brand === "TaylorMade" && ball.model === "SpeedSoft" && ball.active);
+  assert.deepEqual(speedSoft.map((ball) => ball.year).sort(), [2024, 2026]);
+  const familyIdentity = (ball: GolfBallCatalog) => canonicalBallIdentity(ball).split(":").slice(0, -1).join(":");
+  const activeUndatedDuplicates = golfBallCatalog.filter((ball) => ball.active && ball.year === null && ball.generation === null
+    && golfBallCatalog.some((candidate) => candidate.active && candidate.year !== null && familyIdentity(candidate) === familyIdentity(ball)));
+  assert.deepEqual(activeUndatedDuplicates, []);
 });
 
 test("published duplicates merge semantically while preserving both resolvable IDs", async () => {

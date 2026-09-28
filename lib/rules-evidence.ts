@@ -1,4 +1,5 @@
 import { activeLocalRules, isLaVistaCourse, LA_VISTA_LOCAL_RULES } from "./local-rules";
+import { findNavigableRule } from "./rules-navigation";
 import { expandedRulesSearchTerms, normalizeRulesSearch, rulesSearchContains } from "./rules-search-normalization";
 import { searchRulesCorpus } from "./rules-search";
 import type { LocalRule } from "./types";
@@ -24,6 +25,21 @@ export function isLaVistaRulesContext(courseName: string, question: string) {
   const activeCourse = courseName.trim();
   if (activeCourse) return isLaVistaCourse(activeCourse);
   return /\bla\s+vista(?:\s+temporal)?\b/i.test(question);
+}
+
+function canonicalEvidenceExcerpt(entry: { rule: string; explanation: string }) {
+  const ruleReference = /^\d{1,2}(?:\.\d+){0,2}[a-z]?(?:\(\d+\))?$/i.test(entry.rule.trim())
+    ? findNavigableRule(entry.rule)
+    : undefined;
+  const fragments = [
+    entry.explanation,
+    ruleReference?.section?.summary ? `PROCEDIMIENTO: ${ruleReference.section.summary}` : undefined,
+    ruleReference?.section?.penalty ? `PENALIDAD: ${ruleReference.section.penalty}` : undefined,
+    ruleReference?.chapter.summary ? `RESUMEN: ${ruleReference.chapter.summary}` : undefined,
+    ruleReference?.chapter.allows ? `PERMITIDO: ${ruleReference.chapter.allows}` : undefined,
+    ruleReference?.chapter.forbids ? `NO PERMITIDO: ${ruleReference.chapter.forbids}` : undefined,
+  ].filter((value): value is string => Boolean(value?.trim()));
+  return fragments.filter((value, index) => fragments.indexOf(value) === index).join(" ");
 }
 
 function localRuleEvidence(question: string, localRules?: LocalRule[]): RulesEvidence[] {
@@ -74,7 +90,11 @@ export function retrieveRulesEvidence({
       id: entry.id,
       rule: entry.rule,
       title: entry.title,
-      excerpt: entry.explanation,
+      // The compact navigation corpus carries canonical procedure/penalty
+      // summaries that are not always repeated in a search-result synopsis.
+      // Include them in the evidence sent to the provider and validator so a
+      // penalty cannot be accepted merely because the chapter number matches.
+      excerpt: canonicalEvidenceExcerpt(entry),
       source: entry.source,
       sourceId: entry.sourceId,
       sourceUrl: entry.sourceUrl,

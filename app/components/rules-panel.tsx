@@ -1,6 +1,10 @@
 "use client";
 
 import { FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { requestBackyardAi } from "../../lib/backyard-ai/client-api";
+import { resolveAuthoritativeAiProcessingConsent } from "../../lib/backyard-ai/consent-client";
+import { browserAiProcessingConsentStorage, hasActiveAiProcessingConsent } from "../../lib/backyard-ai/processing-consent";
+import { AI_PROVIDER_PROCESSING_CONSENT, backyardAiProviderConsent } from "../../lib/backyard-ai/privacy";
 import { GENTLEMEN_CODE, GENTLEMEN_CODE_DISCLAIMER, GENTLEMEN_CODE_FINAL_QUOTE } from "../../lib/gentlemen-code";
 import { activeLocalRules, isLaVistaCourse, LA_VISTA_LOCAL_RULES } from "../../lib/local-rules";
 import {
@@ -12,7 +16,10 @@ import {
 import { OFFICIAL_RULES_DOCUMENTS, type OfficialRulesDocument } from "../../lib/rules-documents";
 import { findNavigableRule, NAVIGABLE_GOLF_RULES, searchNavigableRules, type NavigableGolfRule, type NavigableRuleSection } from "../../lib/rules-navigation";
 import type { RulesDocumentType, RulesSearchResult } from "../../lib/rules-search";
+import type { RulesEvidenceReference } from "../../lib/rules-ai";
 import { speechRecognitionConstructor, createDictationSession, DICTATION_FALLBACK } from "../../lib/speech-dictation";
+import { useBackyardAccount } from "./account-provider";
+import { AiProcessingConsentPrompt, AiProcessingConsentRequired } from "./backyard-ai/ai-processing-consent";
 import { InternalPdfViewer } from "./internal-pdf-viewer";
 import { useSecondaryView } from "./use-secondary-view";
 import type { LocalRule } from "../../lib/types";
@@ -62,6 +69,7 @@ export function RulesPanel({
   onBack: () => void;
   active?: boolean;
 }) {
+  const { identity } = useBackyardAccount();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<RulesSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -69,8 +77,11 @@ export function RulesPanel({
   const [detail, setDetail] = useSecondaryView<RuleDetail>("rulesDetail");
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
+  const [answerEvidence, setAnswerEvidence] = useState<RulesEvidenceReference[]>([]);
   const [error, setError] = useState("");
   const [asking, setAsking] = useState(false);
+  const [showConsent, setShowConsent] = useState(false);
+  const [accountConsentRequired, setAccountConsentRequired] = useState(false);
   const [aiState, setAiState] = useState<"checking" | "ready" | "disabled" | "missing_config" | "unavailable">("checking");
   const [dictationSupported, setDictationSupported] = useState<boolean | null>(null);
   const [listeningTarget, setListeningTarget] = useState<DictationTarget | null>(null);
@@ -80,6 +91,8 @@ export function RulesPanel({
   const [visibleResults, setVisibleResults] = useState(20);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const recognitionRef = useRef<ReturnType<typeof createDictationSession> | null>(null);
+  const askInFlight = useRef(false);
+  const pendingQuestion = useRef("");
   const localRulesApply = isLaVistaCourse(courseName);
   useEffect(() => {
     if (!active) {
@@ -101,7 +114,7 @@ export function RulesPanel({
     let active = true;
     fetch("/api/rules/ask")
       .then((response) => response.json())
-      .then((payload: { enabled?: boolean; state?: "ready" | "disabled" | "missing_config" }) => { if (active) setAiState(payload.enabled ? "ready" : payload.state || "missing_config"); })
+      .then((payload: { enabled?: boolean; state?: "ready" | "disabled" | "missing_config" }) => { if (active) setAiState(payload.state || (payload.enabled ? "ready" : "missing_config")); })
       .catch(() => { if (active) setAiState("unavailable"); });
     return () => { active = false; };
   }, []);
@@ -193,26 +206,62 @@ export function RulesPanel({
     setOpenSections(current => ({ ...current, [key]: !current[key] }));
   }
 
-  async function ask(event: FormEvent) {
-    event.preventDefault();
-    if (question.trim().length < 8) return;
+  async function requestRulesAnswer(nextQuestion = pendingQuestion.current) {
+    if (askInFlight.current || nextQuestion.trim().length < 8) return;
+    askInFlight.current = true;
     setAsking(true);
+    setShowConsent(false);
+    setAccountConsentRequired(false);
     setAnswer("");
+    setAnswerEvidence([]);
     setError("");
     try {
-      const response = await fetch("/api/rules/ask", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ question, courseName, localRules: visibleLocalRules }),
-      });
-      const payload = await response.json() as { answer?: string; error?: string };
-      if (!response.ok) throw new Error(payload.error || "No fue posible consultar.");
+      const payload = await requestBackyardAi<{ answer?: string; evidence?: RulesEvidenceReference[] }>("/api/rules/ask", {
+        question: nextQuestion.trim(),
+        courseName,
+        consent: backyardAiProviderConsent(AI_PROVIDER_PROCESSING_CONSENT),
+      }, 30_000, identity.accessToken);
       setAnswer(payload.answer || "No se encontró una respuesta suficiente.");
+      setAnswerEvidence(Array.isArray(payload.evidence) ? payload.evidence : []);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "No fue posible consultar.");
     } finally {
+      askInFlight.current = false;
       setAsking(false);
     }
+  }
+
+  async function ask(event: FormEvent) {
+    event.preventDefault();
+    const nextQuestion = question.trim();
+    if (nextQuestion.length < 8 || askInFlight.current) return;
+    pendingQuestion.current = nextQuestion;
+    setError("");
+    setAccountConsentRequired(false);
+    try {
+      if (identity.accessToken) {
+        const authority = await resolveAuthoritativeAiProcessingConsent({
+          accessToken: identity.accessToken,
+          storage: browserAiProcessingConsentStorage(),
+          userId: identity.userId,
+          scope: AI_PROVIDER_PROCESSING_CONSENT,
+        });
+        if (authority.discarded || !authority.active || authority.pendingLocalRevocation) {
+          setAccountConsentRequired(true);
+          return;
+        }
+      } else if (identity.mode === "authenticated") {
+        setError("Recupera tu sesión antes de enviar la consulta al proveedor de IA.");
+        return;
+      } else if (!hasActiveAiProcessingConsent(browserAiProcessingConsentStorage(), identity.userId, AI_PROVIDER_PROCESSING_CONSENT)) {
+        setShowConsent(true);
+        return;
+      }
+    } catch {
+      setError("No pude verificar tu autorización de IA. No se envió la consulta.");
+      return;
+    }
+    await requestRulesAnswer(nextQuestion);
   }
 
   if (detail) return <>
@@ -252,11 +301,30 @@ export function RulesPanel({
       <form onSubmit={ask}>
         <label htmlFor="rules-question">Describe qué pasó</label>
         <div className="dictationField"><textarea id="rules-question" rows={4} maxLength={1200} value={question} placeholder="Mi bola está fuera del camino pero mis pies están sobre el camino…" onChange={(event) => setQuestion(event.target.value)} /><button type="button" className={`dictationButton ${listeningTarget === "question" ? "listening" : ""}`} aria-pressed={listeningTarget === "question"} aria-label={listeningTarget === "question" ? "Detener dictado" : "Iniciar dictado"} onClick={() => toggleDictation("question")}>{listeningTarget === "question" ? "🔴 Detener" : "🎙"}</button></div>
-        <button className="primary" type="submit" disabled={asking || question.trim().length < 8}>{asking ? "Consultando…" : "Consultar reglamento"}</button>
+        <button className="primary" type="submit" disabled={asking || aiState !== "ready" || question.trim().length < 8}>{asking ? "Consultando…" : "Consultar reglamento"}</button>
       </form>
       {dictationMessage && <div className="rulesSearchStatus" role="status">{dictationMessage}</div>}
       {error && <div className="notice">{error} La búsqueda manual sigue disponible.</div>}
       {answer && <div className="aiAnswer" aria-live="polite">{answer}</div>}
+      {answerEvidence.length > 0 && <section className="rulesAiEvidence" aria-labelledby="rules-ai-evidence-title">
+        <h3 id="rules-ai-evidence-title">Evidencia citada</h3>
+        <ul>{answerEvidence.map((entry) => <li key={`${entry.citation}:${entry.sourceId}:${entry.page || ""}:${entry.rule}`}>
+          <b>{entry.citation} · {entry.rule || "Referencia oficial"}</b>
+          <span>{entry.title}</span>
+          {entry.sourceUrl
+            ? <a href={entry.sourceUrl} target="_blank" rel="noreferrer">{entry.source}{entry.page ? ` · p. ${entry.page}` : ""} ↗</a>
+            : <small>{entry.source}{entry.page ? ` · p. ${entry.page}` : ""}</small>}
+        </li>)}</ul>
+      </section>}
+      {accountConsentRequired && <AiProcessingConsentRequired scope={AI_PROVIDER_PROCESSING_CONSENT} />}
+      {showConsent && identity.mode !== "authenticated" && <AiProcessingConsentPrompt
+        userId={identity.userId}
+        accessToken={identity.accessToken}
+        requiresRemoteConsent={false}
+        scope={AI_PROVIDER_PROCESSING_CONSENT}
+        onAccepted={() => void requestRulesAnswer()}
+        onCancel={() => setShowConsent(false)}
+      />}
       <div className="hint">La búsqueda del reglamento nunca llama a OpenAI. En competencia, el Comité o árbitro oficial tiene la decisión final.</div>
     </section>
     </RulesDisclosure>

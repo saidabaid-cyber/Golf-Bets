@@ -77,13 +77,7 @@ export function InitialOnboardingConsents({ userId, accessToken, legalRequired, 
     onReadyChange(true);
   }
 
-  function selectAllAvailable() {
-    if (legalRequired) {
-      setTerms(true);
-      setRules(true);
-      setAdult(true);
-      setBetting(true);
-    }
+  function selectAllAiPurposes() {
     setChoices((current) => ({ ...current, ...Object.fromEntries(missing.map(({ scope }) => [scope, true])) }));
   }
 
@@ -135,17 +129,18 @@ export function InitialOnboardingConsents({ userId, accessToken, legalRequired, 
   if (ready) return <section className={styles.saved} role="status"><b>Autorizaciones guardadas</b><span>Puedes continuar con tu configuración.</span></section>;
 
   return <section className={styles.embedded} aria-labelledby="initial-consent-title" aria-busy={busy}>
-    <div><h2 id="initial-consent-title">Autorizaciones iniciales</h2><p>Revisa lo necesario para tu cuenta y decide qué funciones opcionales deseas habilitar.</p></div>
+    <div><h2 id="initial-consent-title">Consentimientos de cuenta</h2><p>Revisa por separado los consentimientos requeridos de la cuenta y las autorizaciones opcionales de Backyard AI.</p></div>
     {!remote && !error && <p role="status">Consultando tus preferencias…</p>}
-    {(remote || legalRequired) && <fieldset className={styles.checks} disabled={busy}>
-      <legend className={styles.legend}>Tus autorizaciones</legend>
-      <button type="button" className={styles.selectAll} onClick={selectAllAvailable}>Seleccionar todo</button>
-      {legalRequired && <>
+    {legalRequired && <fieldset className={styles.checks} disabled={busy}>
+      <legend className={styles.legend}>Consentimientos requeridos</legend>
         <label className={styles.check}><input type="checkbox" checked={terms} onChange={(event) => setTerms(event.target.checked)} /><span>Acepto los <Link href="/legal/terms?returnTo=onboarding">Términos y Condiciones</Link> y confirmo haber leído el <Link href="/legal/privacy?returnTo=onboarding">Aviso de Privacidad</Link>.</span></label>
         <label className={styles.check}><input type="checkbox" checked={rules} onChange={(event) => setRules(event.target.checked)} /><span>Entiendo que el Árbitro de Reglas es una referencia acordada entre participantes; en competencias prevalece el Comité o árbitro oficial.</span></label>
         <label className={styles.check}><input type="checkbox" checked={adult} onChange={(event) => setAdult(event.target.checked)} /><span>Confirmo que tengo 18 años o más.</span></label>
         <label className={styles.check}><input type="checkbox" checked={betting} onChange={(event) => setBetting(event.target.checked)} /><span>Consiento el tratamiento de datos de apuestas, resultados y gastos conforme al Aviso de Privacidad. <small>Opcional para las demás funciones.</small></span></label>
-      </>}
+    </fieldset>}
+    {remote && <fieldset className={styles.checks} disabled={busy}>
+      <legend className={styles.legend}>Autorizaciones de IA</legend>
+      {missing.length > 1 && <button type="button" className={styles.selectAll} onClick={selectAllAiPurposes}>Autorizar las tres funciones de IA</button>}
       {PURPOSES.filter(({ scope }) => missing.some((decision) => decision.scope === scope)).map(({ scope, label }) => <label className={styles.check} key={scope}>
         <input type="checkbox" checked={choices[scope] === true} onChange={(event) => setChoices((current) => ({ ...current, [scope]: event.target.checked }))} />
         <span>{label}<small>Opcional. Sin autorización, esta función de IA permanece desactivada.</small></span>

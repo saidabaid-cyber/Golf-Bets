@@ -53,13 +53,14 @@ test("un contexto sin Notifications API conserva una presentación simple y hone
   assert.equal(notificationPermissionPresentation("denied", iphonePwa).actionLabel, "Cómo habilitarlas");
 });
 
-test("onboarding conecta el tap nativo, guarda intención y evita texto técnico", () => {
+test("onboarding conecta el prompt nativo sólo al tap explícito y evita texto técnico", () => {
   const source = readFileSync("app/components/device-permission-settings.tsx", "utf8");
   assert.match(source, /onClick=\{\(\) => void notifications\(\)\}/);
   assert.match(source, /requestInitialNotifications\(localStorage, userId, api\)/);
   assert.match(source, /ACTIVAR NOTIFICACIONES/);
   assert.match(source, /Perfecto\. Las activaremos cuando uses la app de The Backyard\./);
-  assert.match(source, /processPendingNotificationIntent/);
+  assert.doesNotMatch(source, /processPendingNotificationIntent/);
+  assert.match(source, /refreshDevicePermissionStateWithoutPrompt/);
   assert.match(source, /Notificaciones no activadas/);
   assert.doesNotMatch(source, /Web Push|PWA|suscripci[oó]n push|No disponible en este navegador/);
   assert.match(source, /mostrarte y ordenar campos cercanos/);

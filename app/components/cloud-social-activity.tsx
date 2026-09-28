@@ -12,6 +12,7 @@ const preferenceLabels: Array<[keyof Omit<SocialActivityPreferences, "updatedAt"
   ["shareEquipment", "Compartir cambios de equipo"], ["shareCourses", "Compartir campos después de jugar"],
   ["notifyLike", "Avisarme de likes"], ["notifyComment", "Avisarme de comentarios"],
   ["notifyAttest", "Avisarme de attest"], ["notifyFriendAchievement", "Logros de amigos"], ["notifyEquipment", "Equipo de amigos"],
+  ["notifyFriendRequest", "Solicitudes de amistad"],
 ];
 
 export function SocialSharingPreferences({ accessToken, section = 'all' }: { accessToken: string; section?: 'all' | 'sharing' | 'notifications' }) {

@@ -5,7 +5,7 @@ import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import { validateProfileAvatarUrl, validateProfileDraft } from "../lib/account-state";
 import * as geo from "../lib/profile-geography";
-import { selectedHandicapIndex } from "../lib/handicap-source";
+import { selectedHandicapIndex, verifiedGhinHandicapIndex } from "../lib/handicap-source";
 import { accountPrimaryRoundPlayer } from "../lib/account-primary-player";
 import { BACKYARD_INDEX_METADATA_KEY, saveCloudIndexPreference, readCloudIndexPreference, type BackyardIndexPreference } from "../lib/backyard-index-preferences";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -68,7 +68,7 @@ test("initial profile has no duplicated GHIN/Backyard selector and the canonical
   const setup = readFileSync("app/components/account-provider.tsx", "utf8").split("function ProfileSetupScreen")[1].split("export function AccountProvider")[0];
   assert.doesNotMatch(setup, /HandicapSourceSelector|VINCULAR GHIN|ACTIVAR BACKYARD INDEX/);
   const golf = readFileSync("app/components/beta-onboarding-flow.tsx", "utf8").split('if (progress.step === "ghin")')[1].split('if (progress.step === "improvements")')[0];
-  assert.match(golf, /<HandicapSourceSelector/);
+  assert.match(golf, /<HandicapSourceChoices/);
   assert.match(golf, /defaultHandicap: profile\.defaultHandicap/);
   assert.match(golf, /ghinLinkStatus: linked \? "LINKED"/);
   assert.match(golf, /ghinControl=\{ghinControl\}/);
@@ -84,10 +84,15 @@ test("canonical region selection validates immediately; changing country clears 
 
 test("source selector activation handler, no false success after failed/pending cloud save", async () => {
   const changes: boolean[] = [];
-  const render = component("app/components/handicap-source-selector.tsx", "HandicapSourceChoices", { GhinPlaceholder: "ghin", GhinReadOnlyPanel: "ghin-live", styles: {} });
+  const render = component("app/components/handicap-source-selector.tsx", "HandicapSourceChoices", { GhinPlaceholder: "ghin", GhinReadOnlyPanel: "ghin-live", verifiedGhinHandicapIndex, styles: {} });
   const control = { ready: true, saving: false, error: "", preference: null, change: async (value: boolean) => changes.push(value), selectGhin: async () => {}, retry: async () => {} };
   const tree = render({ authenticated: true, control });
   assert.match(text(tree), /VINCULAR GHIN/); assert.match(text(tree), /ACTIVAR BACKYARD INDEX/);
+  const loadingGhin = render({ authenticated: true, control, ghinControl: { ready: false, enabled: false } });
+  assert.match(text(loadingGhin), /Verificando disponibilidad de GHIN/);
+  assert.equal(nodes(loadingGhin).some((node) => node.type === "ghin"), false, "an authenticated account must not see the signed-out placeholder while GHIN loads");
+  const unavailableGhin = render({ authenticated: true, control, ghinControl: { ready: true, enabled: false } });
+  assert.equal(nodes(unavailableGhin).find((node) => node.type === "ghin")?.props.authenticated, true);
   await (nodes(tree).find((node) => node.type === "button")!.props.onClick as () => Promise<unknown>)(); assert.deepEqual(changes, [true]);
   assert.doesNotMatch(text(render({ authenticated: true, control: { ...control, error: "Falló guardado", preference: { enabled: true } } })), /ÍNDICE BACKYARD ACTIVADO/);
   assert.match(text(render({ authenticated: true, control: { ...control, preference: { enabled: true, handicapSource: "BACKYARD" } } })), /ÍNDICE BACKYARD ACTIVADO/);
@@ -109,9 +114,13 @@ test("legacy manual Index never becomes current profile Index; unverified GHIN m
   assert.equal(accountPrimaryRoundPlayer(profile, { source: "BACKYARD", value: 9.4 })?.handicapIndex, 9.4);
   assert.equal(accountPrimaryRoundPlayer(profile, { source: "BACKYARD", value: 9.4 })?.handicapIndexSource, "BACKYARD_INDEX");
   const preference: BackyardIndexPreference = { version: 1, userId: "owner", enabled: true, handicapSource: "GHIN", updatedAt: "2026-09-16T12:00:00Z", localPccZeroDeclaredAt: null };
-  assert.deepEqual(selectedHandicapIndex(preference, [], "owner"), { source: "GHIN", value: null });
+  assert.deepEqual(selectedHandicapIndex(preference, [], "owner"), { source: null, value: null });
   assert.deepEqual(selectedHandicapIndex(preference, [], "another"), { source: null, value: null });
   const provider = readFileSync("app/components/account-provider.tsx", "utf8");
   assert.doesNotMatch(provider, /defaultHandicap=\{identity\.defaultHandicap\}/);
+  assert.match(provider, /function CanonicalEquipmentOnboarding/);
+  assert.match(provider, /selectedHandicapIndex\(indexControl\.preference, history, identity\.userId, ghinControl\.profile\)/);
+  assert.match(provider, /defaultHandicap=\{accountIndex\.value\}/);
+  assert.match(provider, /defaultHandicapSource=\{accountIndex\.source\}/);
   assert.doesNotMatch(readFileSync("app/components/membership-benefits.tsx", "utf8"), /label: "HCP manual"/);
 });

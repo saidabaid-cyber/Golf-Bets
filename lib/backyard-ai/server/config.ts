@@ -1,4 +1,4 @@
-import { isolatedPreviewDatabaseEnabled } from "../../preview-database";
+import { isolatedPreviewDatabaseEnabled, previewDatabaseFeaturesAvailable } from "../../preview-database";
 
 export const DEFAULT_BACKYARD_AI_MODEL = "gpt-5.4-mini";
 export const DEFAULT_SCORECARD_AI_MODEL = "gpt-5.4-mini";
@@ -50,6 +50,7 @@ export function backyardAiConfig(env: BackyardAiEnvironment) {
   const enabled = enabledFlag(env.BACKYARD_AI_ENABLED);
   const providerConfigured = Boolean(env.OPENAI_API_KEY?.trim());
   const limiterConfigured = enabledByDefault(env.CLOUD_ENABLED)
+    && previewDatabaseFeaturesAvailable(env)
     && Boolean(env.NEXT_PUBLIC_SUPABASE_URL?.trim())
     && Boolean((env.SUPABASE_SECRET_KEY || env.SUPABASE_SERVICE_ROLE_KEY)?.trim());
   const configured = providerConfigured && limiterConfigured;

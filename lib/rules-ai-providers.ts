@@ -13,7 +13,7 @@ export type RulesAiTextProvider = {
 
 export type RulesOpenAiClient = {
   responses: {
-    create: (input: Record<string, unknown>) => Promise<{ output_text?: string }>;
+    create: (input: Record<string, unknown>) => Promise<{ output_text?: string; status?: string; error?: unknown }>;
   };
 };
 
@@ -80,7 +80,16 @@ export function createOpenAiRulesProvider(client: RulesOpenAiClient): RulesAiTex
   return {
     name: "openai",
     async generate({ model, instructions, prompt }) {
-      const response = await client.responses.create({ model, instructions, input: prompt });
+      const response = await client.responses.create({
+        model,
+        instructions,
+        input: prompt,
+        max_output_tokens: 900,
+        store: false,
+      });
+      if (response.status && response.status !== "completed") {
+        throw new RulesAiProviderRequestError("openai", 502, "incomplete_response", "The provider response was incomplete.");
+      }
       return response.output_text?.trim() || "";
     },
   };

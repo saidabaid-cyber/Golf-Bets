@@ -146,8 +146,8 @@
     }
   ],
   "afterVerifiedAdditions": {
-    "inAppModels": 323,
-    "inAppCurrent": 94,
+    "inAppModels": 303,
+    "inAppCurrent": 74,
     "inAppHistorical": 229,
     "inAppBrands": 20,
     "brandNames": [
@@ -183,10 +183,10 @@
     },
     {
       "brand": "Kirkland Signature",
-      "models": 7,
-      "active": 4,
+      "models": 6,
+      "active": 3,
       "sourceStatus": "MIXED_OFFICIAL_AND_SECONDARY",
-      "action": "Keep separate verified generations; review unversioned active aliases before any archive/merge."
+      "action": "Keep dated generations separate; resolve the unversioned current product row as an alias of the newest dated current generation."
     },
     {
       "brand": "Nike",
@@ -204,9 +204,9 @@
     }
   ],
   "currentHistoricalReview": {
-    "generationalFamilies": 69,
-    "preExistingActiveIdentityConflicts": 21,
-    "note": "Unversioned active rows coexist with verified year-based generations in several legacy families. They were not auto-archived or merged because that would require provenance review. No new addition duplicates an existing identity."
+    "generationalFamilies": 64,
+    "preExistingActiveIdentityConflicts": 0,
+    "note": "A current unversioned row resolves to the newest dated current generation and its stable ID remains available as an alias. Dated current and historical generations remain separate. Twenty false active alias rows were consolidated without collapsing a genuine dated generation."
   },
   "notImported": [
     {

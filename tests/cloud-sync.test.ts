@@ -65,6 +65,8 @@ test("un dispositivo sin preferencia inicia alto contraste activado", () => {
 test("la preferencia de avisos internos se detecta y se incluye en el snapshot local", () => {
   const storage = new MemoryStorage();
   assert.equal(hasLocalCloudPreferenceState(storage as unknown as Storage), false);
+  assert.equal(collectLocalCloudData(storage as unknown as Storage).preferences.notificationsEnabled, false,
+    "ausencia local no demuestra que una cuenta legacy eligió ON");
 
   storage.setItem(STORAGE_KEYS.notifications, "true");
   const enabled = collectLocalCloudData(storage as unknown as Storage);

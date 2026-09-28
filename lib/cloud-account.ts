@@ -10,6 +10,7 @@ export type CloudProfileRow = {
   display_name: string | null;
   avatar_url: string | null;
   default_handicap: number | null;
+  profile_visibility: "private" | "friends" | "public" | null;
   onboarding_completed_at: string | null;
   updated_at: string | null;
 };
@@ -47,7 +48,7 @@ export async function ensureCloudProfile(
   userId: string,
   fallback: Pick<BackyardProfile, "displayName" | "defaultHandicap" | "avatarUrl">,
 ): Promise<CloudProfileRow> {
-  const columns = "display_name,avatar_url,default_handicap,onboarding_completed_at,updated_at,username";
+  const columns = "display_name,avatar_url,default_handicap,profile_visibility,onboarding_completed_at,updated_at,username";
   const existing = await client.from("profiles").select(columns).eq("id", userId).maybeSingle();
   if (existing.error) throw existing.error;
   if (existing.data) return existing.data as CloudProfileRow;
@@ -57,6 +58,9 @@ export async function ensureCloudProfile(
     display_name: fallback.displayName || "Jugador",
     avatar_url: fallback.avatarUrl || null,
     default_handicap: fallback.defaultHandicap,
+    // Missing profile is not proof that the auth identity was created after
+    // the new-account bootstrap. Repair legacy identities fail-closed.
+    profile_visibility: "private",
   }).select(columns).maybeSingle();
   if (!created.error && created.data) return created.data as CloudProfileRow;
   // A concurrent tab may have created the same row after our first read.

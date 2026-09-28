@@ -56,6 +56,12 @@ test("aplicar preferencias remotas no se convierte en nueva edición; HCP puede 
   const local = bundle({ preferences: { ...remote.preferences, defaultHandicap: 7, updatedAt: "2026-01-01" } });
   assert.equal(mergeLocalAndCloud(local, remote).preferences.defaultHandicap, null);
 });
+test("lectura cloud no infiere avisos ON cuando falta la fila legacy", async () => {
+  const db = new CloudDb();
+  assert.equal((await readCloudBundle(db.client, "legacy-owner")).preferences.notificationsEnabled, false);
+  db.rows("user_preferences").push({ user_id: "new-owner", notifications_enabled: true });
+  assert.equal((await readCloudBundle(db.client, "new-owner")).preferences.notificationsEnabled, true);
+});
 test("histórico corregido gana sin duplicado y conserva foto/configuración/resultados", () => {
   const merged = mergeLocalAndCloud(bundle({ history: [round()] }), bundle({ history: [round(3, later)] }));
   assert.equal(merged.history.length, 1); assert.deepEqual(merged.history[0], round(3, later));
@@ -190,6 +196,11 @@ test("perfil cloud conserva HCP Index opcional como null", async () => {
   assert.equal(db.rows("profiles")[0].default_handicap, null);
   assert.equal(db.rows("user_preferences")[0].default_handicap, null);
   assert.equal(db.rows("profiles")[0].name, "Said");
+});
+test("reparar un perfil ausente no clasifica una identidad legacy como cuenta nueva pública", async () => {
+  const db = new CloudDb();
+  await ensureCloudProfile(db.client, "legacy-owner", { displayName: "Legacy", defaultHandicap: null, avatarUrl: "" });
+  assert.equal(db.rows("profiles")[0].profile_visibility, "private");
 });
 test("quitar avatar persiste la decisión y no revive el fallback de Google", async () => {
   const db = new CloudDb();

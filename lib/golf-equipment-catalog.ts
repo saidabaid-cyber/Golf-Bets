@@ -242,17 +242,43 @@ function mergeRecords<T extends GolfClubCatalog | GolfBallCatalog>(primary: T, f
 
 function dedupeCatalog<T extends GolfClubCatalog | GolfBallCatalog>(models: readonly T[], identity: (item: T) => string, baseIdentity: (item: T) => string) {
   const unique = new Map<string, T>();
-  const keyByBase = new Map<string, string[]>();
+  const knownVariantsByBase = new Map<string, Set<string>>();
+  const activeKnownVariantsByBase = new Map<string, Map<string, number | null>>();
+  for (const model of models) {
+    if (generationKey(model) === "unknown") continue;
+    const base = baseIdentity(model);
+    const variants = knownVariantsByBase.get(base) || new Set<string>();
+    variants.add(identity(model));
+    knownVariantsByBase.set(base, variants);
+    if (model.active) {
+      const activeVariants = activeKnownVariantsByBase.get(base) || new Map<string, number | null>();
+      const modelIdentity = identity(model);
+      const currentYear = activeVariants.get(modelIdentity);
+      activeVariants.set(modelIdentity, model.year === null ? currentYear ?? null : Math.max(currentYear ?? model.year, model.year));
+      activeKnownVariantsByBase.set(base, activeVariants);
+    }
+  }
   const sorted = [...models].sort((left, right) => sourcePriority(right) - sourcePriority(left));
   for (const model of sorted) {
     const exactKey = identity(model);
     const base = baseIdentity(model);
-    const known = keyByBase.get(base) || [];
-    let key = exactKey;
-    if (!unique.has(key) && generationKey(model) === "unknown" && known.length === 1) key = known[0];
+    const knownVariants = knownVariantsByBase.get(base);
+    const activeKnownVariants = activeKnownVariantsByBase.get(base);
+    // A current undated row follows the newest dated current generation. This
+    // removes a visually identical current alias even when another real dated
+    // generation is still sold, without merging those dated generations.
+    // An archived undated row remains mergeable only when the complete source
+    // set proves exactly one real generation.
+    const activeEntries = activeKnownVariants ? [...activeKnownVariants.entries()] : [];
+    const activeAlias = activeEntries
+      .filter((entry): entry is [string, number] => entry[1] !== null)
+      .sort((left, right) => right[1] - left[1])[0]?.[0]
+      ?? (activeEntries.length === 1 ? activeEntries[0][0] : undefined);
+    const archivedAlias = knownVariants?.size === 1 ? [...knownVariants][0] : undefined;
+    const alias = model.active ? activeAlias : archivedAlias;
+    const key = generationKey(model) === "unknown" && alias ? alias : exactKey;
     const current = unique.get(key);
     unique.set(key, current ? mergeRecords(current, model) : model);
-    if (!current) keyByBase.set(base, [...known, key]);
   }
   // A stable catalog ID is also a hard identity boundary. Two sourced rows can
   // legitimately spell a model/generation differently (for example an OEM

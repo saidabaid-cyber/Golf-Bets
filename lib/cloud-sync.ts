@@ -114,6 +114,8 @@ export function collectLocalCloudData(storage: ReadableStorage, defaultHandicap:
     preferences: {
       highContrast: storage.getItem(STORAGE_KEYS.contrast) !== "false",
       language: "es-MX",
+      // Absence is legacy/unknown, never proof that the owner opted in. The
+      // Auth bootstrap persists ON for new accounts and cloud merge restores it.
       notificationsEnabled: storage.getItem(STORAGE_KEYS.notifications) === "true",
       defaultHandicap,
       hasLocalState: hasLocalPreferenceState,

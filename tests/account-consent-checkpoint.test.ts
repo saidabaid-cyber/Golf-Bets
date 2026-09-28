@@ -18,7 +18,9 @@ test("initial consent is embedded in onboarding instead of gating app entry", ()
 
 test("required legal and optional betting/AI choices use the existing persistence APIs", () => {
   const consent = source("app/components/account-consent-checkpoint.tsx");
-  for (const copy of ["Términos y Condiciones", "Aviso de Privacidad", "18 años", "apuestas, resultados y gastos", "Seleccionar todo"]) assert.match(consent, new RegExp(copy));
+  for (const copy of ["Términos y Condiciones", "Aviso de Privacidad", "18 años", "apuestas, resultados y gastos", "Consentimientos requeridos", "Autorizaciones de IA"]) assert.match(consent, new RegExp(copy));
+  assert.match(consent, /Autorizar las tres funciones de IA/);
+  assert.doesNotMatch(consent, /setTerms\(true\)|setRules\(true\)|setAdult\(true\)|setBetting\(true\)/);
   assert.match(consent, /saveRemoteAiConsentDecisions/);
   assert.match(consent, /await onAcceptLegal\(betting\)/);
   assert.match(consent, /accepted: choices\[scope\] === true/);
