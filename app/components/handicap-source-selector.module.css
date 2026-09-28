@@ -1,34 +1,44 @@
-.root { display:grid;min-width:0;gap:14px; }
+.root { display:grid;min-width:0;gap:18px; }
 .sourceIntro { display:grid;gap:4px;padding:2px 2px 6px; }
 .sourceIntro>span { color:var(--by-gold,#9a741d);font-size:10px;font-weight:900;letter-spacing:.14em; }
 .sourceIntro h3 { margin:0;color:var(--by-forest,#173f2a);font:400 25px/1.08 var(--by-editorial,Georgia,serif);letter-spacing:-.03em; }
 .sourceIntro p { margin:0;color:var(--by-muted,#5b6c63);font-size:13px;line-height:1.5; }
-.choice { position:relative;min-width:0;overflow:hidden;border:1px solid var(--by-line,#dce4df);border-radius:22px;background:var(--by-paper,#fff);padding:20px;box-shadow:0 12px 30px rgba(16,48,28,.07); }
+.choice { position:relative;min-width:0;overflow:hidden;border:1px solid rgba(23,63,42,.13);border-radius:24px;background:rgba(255,255,255,.9);padding:22px;box-shadow:0 14px 34px rgba(16,48,28,.1);backdrop-filter:blur(10px); }
 .choice:after { content:"";position:absolute;inset:0;pointer-events:none;border-radius:inherit;box-shadow:inset 0 1px rgba(255,255,255,.5); }
-.ghinChoice { border-color:#cae1d1;background:linear-gradient(145deg,#f7fbf8 0%,#fff 55%,#eef6f0 100%); }
-.backyardChoice { background:linear-gradient(145deg,#f1f5e9,#fff 68%); }
-.noIndexChoice { border-style:dashed;background:#fbfcfa;box-shadow:none; }
+.ghinChoice { border-color:#c9d9cf;background:linear-gradient(145deg,rgba(255,255,255,.96),rgba(247,250,246,.9)); }
+.backyardChoice { background:linear-gradient(145deg,rgba(251,252,247,.95),rgba(238,244,232,.92)); }
+.noIndexChoice { background:rgba(255,255,255,.82);box-shadow:0 10px 26px rgba(16,48,28,.07); }
 .activeChoice { border-color:#4e7b5a;box-shadow:0 14px 34px rgba(20,72,40,.13),inset 0 0 0 1px #4e7b5a; }
-.choiceHeading { display:grid;grid-template-columns:64px minmax(0,1fr);align-items:center;gap:14px; }
+.choiceHeading { display:grid;grid-template-columns:142px minmax(0,1fr);align-items:center;gap:20px; }
 .choiceHeading>div { display:grid;min-width:0;gap:4px; }
-.choiceHeading strong { color:var(--by-forest,#173f2a);font:500 23px/1.05 var(--by-editorial,Georgia,serif);letter-spacing:-.035em;text-transform:none; }
-.ghinMark,.backyardMark,.noIndexMark { display:grid;width:64px;height:64px;place-items:center;align-content:center;border-radius:18px;box-shadow:0 9px 20px rgba(16,48,28,.11); }
-.ghinMark { background:#fff;border:1px solid #d7e4da;color:#123e2b; }
-.ghinMark b { font:900 19px/1 Arial,sans-serif;letter-spacing:-.08em; }
-.ghinMark small { margin-top:3px;color:#b2262d;font-size:7px;font-weight:900;letter-spacing:.06em; }
-.backyardMark { background:linear-gradient(145deg,#123d29,#2d6843);color:#fff; }
-.backyardMark b { font:800 20px/1 var(--by-editorial,Georgia,serif); }
-.backyardMark small { margin-top:3px;color:#dce9c7;font-size:7px;font-weight:900;letter-spacing:.14em; }
-.noIndexMark { border:1px solid #d8e0da;background:#fff;color:#7b8a81;font:400 28px/1 var(--by-editorial,Georgia,serif);box-shadow:none; }
+.choiceHeading strong { color:var(--by-forest,#173f2a);font:500 27px/1.04 var(--by-editorial,Georgia,serif);letter-spacing:-.04em;text-transform:none; }
+.ghinMark,.backyardMark,.noIndexMark { display:grid;width:142px;height:92px;place-items:center;align-content:center;border-radius:18px; }
+.ghinMark { position:relative;background:transparent; }
+.ghinMark img { width:100%;height:auto;object-fit:contain; }
+.backyardMark { background:linear-gradient(145deg,#f4f8ee,#e3edd9);box-shadow:inset 0 0 0 1px #d4e1d2; }
+.backyardMark img { width:86px;height:78px;object-fit:contain; }
+.noIndexMark { width:84px;height:84px;margin-inline:auto;border:1px solid #d8e0da;background:linear-gradient(145deg,#fff,#eef2eb);color:#27563b;font:400 38px/1 var(--by-editorial,Georgia,serif);box-shadow:inset 0 0 0 8px rgba(228,236,224,.75); }
 .recommended,.localBadge,.flexibleBadge { width:max-content;border-radius:999px;padding:4px 7px;font-size:8px;font-weight:900;letter-spacing:.12em; }
 .recommended { background:#e9f2eb;color:#1d6037; }
 .localBadge { background:#e7eddc;color:#476138; }
 .flexibleBadge { background:#eef1ef;color:#68776f; }
 .choice>p,.choiceBody>p { margin:13px 0 0;color:var(--by-muted,#52675c);font-size:13px;line-height:1.55; }
+.benefits { display:grid;gap:7px;margin:14px 0 2px;padding:0;list-style:none;color:#40584c;font-size:12px; }
+.benefits li { position:relative;padding-left:24px;line-height:1.35; }
+.benefits li:before { content:"✓";position:absolute;left:0;top:-1px;display:grid;width:17px;height:17px;place-items:center;border-radius:50%;background:#5c995e;color:#fff;font-size:10px;font-weight:900; }
 .choiceBody { margin-top:12px; }
-.choice button { width:100%;max-width:100%;min-height:48px;margin-top:10px;white-space:normal; }
+.choice button { width:100%;max-width:100%;min-height:54px;margin-top:14px;border-radius:999px;white-space:normal;letter-spacing:.06em; }
 .choice .note { font-size:11px;color:#64756c; }
-.noIndexButton { display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid #cad7cd;border-radius:14px;background:#fff;padding:12px 14px;color:var(--by-forest,#173f2a);font-weight:850;text-align:left; }
+.noIndexButton { display:flex;align-items:center;justify-content:center;gap:18px;border:1px solid #b9c9bc!important;border-radius:999px!important;background:rgba(255,255,255,.9);padding:12px 18px;color:var(--by-forest,#173f2a);font-weight:850;text-align:center; }
 .noIndexButton span { font-size:20px; }
 .choice:has([role=status]) { border-color:#71926e;background:var(--by-sage,#edf2e2); }
-@media(max-width:430px) { .choice { padding:17px; } .choiceHeading { grid-template-columns:56px minmax(0,1fr);gap:12px; } .ghinMark,.backyardMark,.noIndexMark { width:56px;height:56px;border-radius:16px; } .choiceHeading strong { font-size:21px; } }
+:global([data-onboarding-step="ghin"]) .sourceIntro { display:none; }
+@media(max-width:560px) {
+  .choice { padding:17px; }
+  .choiceHeading { grid-template-columns:104px minmax(0,1fr);gap:13px; }
+  .ghinMark,.backyardMark { width:104px;height:76px;border-radius:16px; }
+  .backyardMark img { width:70px;height:64px; }
+  .noIndexMark { width:68px;height:68px; }
+  .choiceHeading strong { font-size:22px; }
+  .choice>p,.choiceBody>p { font-size:12px; }
+}

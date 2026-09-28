@@ -124,11 +124,12 @@ function Shell({ progress, eyebrow, title, description, children, actions, onBac
     window.scrollTo({ top: 0, behavior: "auto" });
     titleRef.current?.focus({ preventScroll: true });
   }, [progress.step]);
-  return <main className={`${styles.screen} ${highContrast ? 'highContrast' : ''}`}><section className={styles.card}>
-    <header className={styles.header}><BrandLockup compact /><span className={styles.step}>PASO {index + 1} DE {visibleSteps.length}</span>{onSaveAndExit && <button type="button" className="textButton" onClick={() => setConfirmExit(true)}>Guardar y salir</button>}</header>
+  return <main className={`${styles.screen} ${highContrast ? 'highContrast' : ''}`} data-onboarding-step={progress.step}><section className={styles.card}>
+    <header className={styles.header}><BrandLockup compact /><span className={styles.brandPromise} aria-hidden="true">GOLF<br />FOR A<br />BETTER YOU</span><span className={styles.step}>PASO {index + 1} DE {visibleSteps.length}</span>{onSaveAndExit && <button type="button" className="textButton" onClick={() => setConfirmExit(true)}>Guardar y salir</button>}</header>
     <div className={styles.progress}><span style={{ width: `${((index + 1) / visibleSteps.length) * 100}%` }} /></div>
-    <div className={styles.copy}><div className={styles.eyebrow}>{eyebrow}</div><h1 ref={titleRef} tabIndex={-1}>{title}</h1>{description && <p>{description}</p>}</div>
+    <div className={styles.copy}><div className={styles.eyebrow}>{eyebrow}</div><h1 ref={titleRef} tabIndex={-1}>{title}</h1>{description && <p>{description}</p>}<span className={styles.heroScript} aria-hidden="true">More<br />Golf Ahead</span></div>
     <div className={styles.body}>{children}</div><footer className={styles.actions}>{actions}<div className={styles.flowNav}>{onBack && <button type="button" className="textButton" onClick={onBack}>← Anterior</button>}</div></footer>
+    <div className={styles.brandFooter} aria-hidden="true"><span />TU JUEGO. UN MEJOR TÚ.<span /></div>
   </section><ModalShell open={confirmExit} onClose={() => setConfirmExit(false)} label="Guardar configuración y salir"><h2>¿Guardar esta configuración y continuar después?</h2><p>Conservaremos el borrador en este dispositivo.</p><div className="dialogActions"><button type="button" className="secondary" onClick={() => setConfirmExit(false)}>Cancelar</button><button type="button" className="primary" onClick={() => { setConfirmExit(false); onSaveAndExit?.(); }}>Guardar y salir</button></div></ModalShell></main>;
 }
 

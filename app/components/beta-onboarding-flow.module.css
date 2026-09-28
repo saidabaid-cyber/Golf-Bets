@@ -44,3 +44,167 @@
 .choice[data-focus-area="MENTAL_CONFIDENCE"] .choiceIcon { background:linear-gradient(145deg,#f5f0fb,#e7dff2);color:#5f4779; }
 .choice[data-focus-area="LOWER_HANDICAP"] .choiceIcon { background:linear-gradient(145deg,#eef4e7,#dce9ca); }
 @media(max-width:560px) { .choiceGrid { grid-template-columns:1fr; } }
+
+/* Approved visual direction: one editorial golf experience, not a form in a modal. */
+.screen {
+  position: relative;
+  isolation: isolate;
+  align-items: start;
+  overflow: hidden;
+  background: #f5f4ed;
+}
+.screen::before {
+  content: "";
+  position: absolute;
+  z-index: -2;
+  inset: 0 0 auto;
+  height: min(54dvh, 470px);
+  background: url("/brand/onboarding-course-hero.png") center 62% / cover no-repeat;
+}
+.screen::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(250,249,243,.18) 0, rgba(250,249,243,.58) 27%, #f5f4ed 51%, #f5f4ed 100%);
+  pointer-events: none;
+}
+.card {
+  position: relative;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.header {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto;
+  align-items: center;
+  gap: 12px 18px;
+  padding: 24px 28px 12px;
+}
+.brandPromise {
+  color: rgba(26,55,41,.72);
+  font-size: 9px;
+  font-weight: 750;
+  line-height: 1.35;
+  letter-spacing: .24em;
+  text-align: right;
+}
+.step { grid-column: 1; color: #324c3e; }
+.header > button { grid-column: 2; grid-row: 2; justify-self: end; }
+.progress {
+  height: 5px;
+  margin: 0 28px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255,255,255,.7);
+  box-shadow: inset 0 0 0 1px rgba(23,63,42,.08);
+}
+.copy {
+  position: relative;
+  min-height: 250px;
+  padding: 36px 28px 38px;
+}
+.copy h1 {
+  max-width: 560px;
+  margin-top: 9px;
+  color: #0d2f22;
+  font-size: clamp(43px,9vw,64px);
+  line-height: .94;
+  letter-spacing: -.055em;
+  text-wrap: balance;
+}
+.copy p {
+  max-width: 500px;
+  margin-top: 14px;
+  color: #344f43;
+  font-size: 16px;
+  font-weight: 520;
+  line-height: 1.5;
+}
+.eyebrow { color: #334f41; letter-spacing: .22em; }
+.heroScript {
+  position: absolute;
+  right: 30px;
+  bottom: 25px;
+  color: #194f36;
+  font: italic 600 18px/1.05 "Segoe Script", "Bradley Hand", cursive;
+  text-align: center;
+  transform: rotate(-5deg);
+  text-shadow: 0 1px rgba(255,255,255,.7);
+}
+.body {
+  position: relative;
+  padding: 6px 28px 26px;
+}
+.actions {
+  border: 0;
+  background: transparent;
+  padding: 8px 28px calc(18px + env(safe-area-inset-bottom));
+}
+.actions :global(.primary) {
+  min-height: 58px;
+  border-radius: 999px;
+  background: linear-gradient(180deg,#177044,#0c5332);
+  box-shadow: 0 12px 24px rgba(13,69,41,.18);
+  font-size: 14px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.brandFooter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 4px 28px calc(16px + env(safe-area-inset-bottom));
+  color: #76847a;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: .24em;
+}
+.brandFooter span { width: 48px; height: 1px; background: #aab4ac; }
+.choiceGrid { gap: 12px; }
+.choice,.choiceActive {
+  min-height: 118px;
+  border-color: rgba(23,63,42,.13);
+  border-radius: 20px;
+  background: rgba(255,255,255,.86);
+  box-shadow: 0 12px 26px rgba(27,51,37,.085);
+}
+.choiceActive {
+  border-color: #317452;
+  background: rgba(235,244,229,.96);
+  box-shadow: inset 0 0 0 1px #317452,0 13px 28px rgba(27,78,49,.11);
+}
+.choiceIcon {
+  width: 58px;
+  height: 66px;
+  border-radius: 17px;
+  background: linear-gradient(145deg,#f8faf3,#e6eddf);
+}
+.choiceCopy b { font-size: 19px; }
+.choiceCopy small { font-size: 11px; line-height: 1.4; }
+
+@media(max-width:560px) {
+  .screen { padding: 0; }
+  .screen::before { height: 410px; background-position: 61% 58%; }
+  .screen::after { background: linear-gradient(180deg,rgba(250,249,243,.2),rgba(250,249,243,.62) 29%,#f5f4ed 49%,#f5f4ed); }
+  .card { min-height: 100dvh; }
+  .header { padding: max(17px,env(safe-area-inset-top)) 18px 10px; }
+  .progress { margin-inline: 18px; }
+  .copy { min-height: 260px; padding: 31px 18px 32px; }
+  .copy h1 { max-width: 355px; font-size: clamp(43px,13vw,56px); }
+  .copy p { max-width: 330px; font-size: 14px; line-height: 1.45; }
+  .heroScript { right: 20px; bottom: 18px; font-size: 15px; }
+  .body,.actions { padding-inline: 18px; }
+  .choiceGrid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 9px; }
+  .choice,.choiceActive { grid-template-columns: 46px minmax(0,1fr); min-height: 128px; align-content: center; gap: 9px; padding: 11px; }
+  .choiceIcon { width: 46px; height: 54px; border-radius: 14px; }
+  .choiceIcon svg { width: 25px; height: 25px; }
+  .choiceCopy b { font-size: 15px; }
+  .choiceCopy small { font-size: 9px; }
+  .choice > strong,.choiceActive > strong { position: absolute; top: 9px; right: 9px; width: 24px; height: 24px; }
+  .brandFooter { padding-inline: 18px; }
+}

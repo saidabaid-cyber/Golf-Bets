@@ -147,7 +147,7 @@ export function LaunchMonitorCapture({ userId, accessToken, requiresRemoteConsen
   const [drafts, setDrafts] = useState<Record<LaunchMonitorClub, ShotDraft>>(initialDrafts);
   const [errors, setErrors] = useState<Partial<Record<LaunchMonitorClub, string>>>({});
   const [confirmClear, setConfirmClear] = useState(false);
-  const [detailsOpen, setDetailsOpen] = useState(Boolean(session));
+  const [detailsOpen, setDetailsOpen] = useState(true);
   const [editingShotId, setEditingShotId] = useState<string | null>(null);
 
   function startCapture() {

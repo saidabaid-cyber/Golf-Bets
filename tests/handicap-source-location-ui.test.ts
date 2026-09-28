@@ -84,7 +84,7 @@ test("canonical region selection validates immediately; changing country clears 
 
 test("source selector activation handler, no false success after failed/pending cloud save", async () => {
   const changes: boolean[] = [];
-  const render = component("app/components/handicap-source-selector.tsx", "HandicapSourceChoices", { GhinPlaceholder: "ghin", GhinReadOnlyPanel: "ghin-live", verifiedGhinHandicapIndex, styles: {} });
+  const render = component("app/components/handicap-source-selector.tsx", "HandicapSourceChoices", { Image: "image", GhinPlaceholder: "ghin", GhinReadOnlyPanel: "ghin-live", verifiedGhinHandicapIndex, styles: {} });
   const control = { ready: true, saving: false, error: "", preference: null, change: async (value: boolean) => changes.push(value), selectGhin: async () => {}, retry: async () => {} };
   const tree = render({ authenticated: true, control });
   assert.match(text(tree), /VINCULAR GHIN/); assert.match(text(tree), /ACTIVAR BACKYARD INDEX/);

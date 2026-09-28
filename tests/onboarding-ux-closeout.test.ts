@@ -53,23 +53,28 @@ test("equipment and Ball Fit use owned premium product art with selected and emp
   const panel = source("app/components/equipment-profile-panel.tsx");
   const wizard = source("app/components/ball-fit-wizard.tsx");
   const visuals = source("app/components/equipment-visuals.tsx");
+  const equipmentCss = source("app/components/equipment.module.css");
   for (const category of ["Driver", "Maderas", "Híbridos", "Hierros", "Wedges", "Putter"]) assert.match(onboarding, new RegExp(category));
   assert.match(onboarding, /ClubCategoryVisual/);
-  assert.match(onboarding, /BACKYARD EQUIPMENT/);
+  assert.match(onboarding, /Máxima distancia para tus tiros de salida/);
   assert.match(panel, /ClubCategoryVisual/);
   assert.match(wizard, /GolfBallVisual/);
   for (const priority of ["Distancia", "Control", "Sensación"]) assert.match(wizard, new RegExp(priority));
   assert.match(visuals, /from "next\/image"/);
-  for (const asset of ["backyard-driver.png", "backyard-fairway.png", "backyard-hybrid.png", "backyard-irons.png", "backyard-wedge.png", "backyard-putter.png", "backyard-ball-premium.png"]) {
+  for (const asset of ["backyard-driver-card.png", "backyard-fairway-card.png", "backyard-hybrid-card.png", "backyard-irons-card.png", "backyard-wedge-card.png", "backyard-putter-card.png", "backyard-ball-premium.png"]) {
     assert.ok(statSync(join("public", "brand", "equipment", asset)).size > 50_000, `${asset} must contain production artwork`);
     assert.match(visuals, new RegExp(asset.replace(".", "\\.")));
   }
+  assert.ok(statSync(join("public", "brand", "onboarding-course-hero.png")).size > 50_000);
+  assert.match(equipmentCss, /onboarding-course-hero\.png/);
+  assert.match(equipmentCss, /backyard-fairway-scene\.svg/);
   assert.doesNotMatch(visuals, /Titleist|Callaway|TaylorMade|PING/);
 });
 
 test("focus areas are multi-select cards with category-specific iconography", () => {
   const onboarding = source("app/components/beta-onboarding-flow.tsx");
   const icons = source("app/components/backyard-icon.tsx");
+  const css = source("app/components/beta-onboarding-flow.module.css");
   for (const goal of ["DRIVER", "IRONS", "APPROACH", "SHORT_GAME", "BUNKER", "PUTTING", "CONSISTENCY", "COURSE_STRATEGY", "MENTAL_CONFIDENCE", "LOWER_HANDICAP"]) {
     assert.match(onboarding, new RegExp(`${goal}:`));
   }
@@ -78,6 +83,19 @@ test("focus areas are multi-select cards with category-specific iconography", ()
   assert.match(onboarding, /aria-pressed=\{active\}/);
   assert.match(icons, /bunker:/);
   assert.match(icons, /mental:/);
+  assert.match(css, /grid-template-columns:\s*repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(css, /onboarding-course-hero\.png/);
+});
+
+test("index selection presents GHIN and Backyard as branded product choices", () => {
+  const choices = source("app/components/handicap-source-selector.tsx");
+  const css = source("app/components/handicap-source-selector.module.css");
+  assert.match(choices, /ghin-logotype\.png/);
+  assert.match(choices, /Sincroniza tu Handicap Index/);
+  assert.match(choices, /the-backyard-logo\.svg/);
+  assert.ok(statSync(join("public", "brand", "ghin-logotype.png")).size > 10_000);
+  assert.match(css, /\.ghinMark img/);
+  assert.match(css, /data-onboarding-step="ghin"/);
 });
 
 test("launch-monitor capture explains the block first and auto-applies clear readings", () => {
@@ -129,6 +147,6 @@ test("mobile CTAs reserve the iPhone safe area", () => {
   const completionCss = source("app/components/profile-completion-ring.module.css");
   assert.match(equipmentCss, /env\(safe-area-inset-bottom\)/);
   assert.match(equipmentCss, /@media\(max-width:540px\)/);
-  assert.match(equipmentCss, /\.clubChoiceGrid \{ grid-template-columns:1fr; \}/);
+  assert.match(equipmentCss, /\.clubChoiceGrid \{ grid-template-columns:repeat\(2,minmax\(0,1fr\)\); \}/);
   assert.match(completionCss, /env\(safe-area-inset-bottom\)/);
 });

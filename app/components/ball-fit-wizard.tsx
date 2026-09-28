@@ -323,11 +323,13 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
 
   return <div className={styles.wizard}>
     <div className={styles.wizardHeader}><div><div className="eyebrow">THE BACKYARD BALL FIT</div><h2>{result ? "Tu mejor grupo de bolas" : `Paso ${step + 1} de 6`}</h2><p>{result ? "Recomendaciones según tus preferencias" : "2–4 minutos · puedes guardar y regresar"}</p></div><button type="button" className="textButton" onClick={saveAndClose}>Guardar y regresar</button></div>
-    <div className={styles.progressTrack} aria-label={`${progress}% del fitting`}><span style={{ width: `${progress}%` }} /></div>
+    <div className={styles.progressTrack} aria-label={`${progress}% del fitting`}>{[0, 1, 2, 3, 4, 5].map((item) => <span key={item} data-active={result !== null || item <= step} />)}</div>
+    {!result && <div className={styles.ballFitLead}><h3>Encuentra la pelota ideal para tu juego</h3><p>Analizamos tu forma de jugar para recomendarte el tipo de bola que mejor se adapta a ti.</p></div>}
     <div className={styles.ballFitHero}>
       <span className={styles.ballFitOrb}><GolfBallVisual /></span>
-      <div><small>{currentBall ? "TU BOLA ACTUAL" : "PERFIL DE BOLA"}</small><b>{currentBall ? `${currentBall.ballBrand} ${currentBall.ballModel}` : "Encuentra el balance para tu juego"}</b><p>{currentBall ? [currentBall.generation, currentBall.year].filter(Boolean).join(" · ") || "Modelo guardado" : "Distancia · Control · Sensación"}</p></div>
+      <div><small>{currentBall ? "TU BOLA ACTUAL" : "PERFIL DE BOLA"}</small><b>{currentBall ? `${currentBall.ballBrand} ${currentBall.ballModel}` : "Balance en cada golpe"}</b><p>{currentBall ? [currentBall.generation, currentBall.year].filter(Boolean).join(" · ") || "Modelo guardado" : "El equilibrio ideal entre distancia, control y sensación."}</p></div>
     </div>
+    {!result && <div className={styles.fitPillars}><span><BackyardIcon name="arrow" size={22} /><b>Distancia</b><small>Llega más lejos</small></span><span><BackyardIcon name="approach" size={22} /><b>Control</b><small>Juega con precisión</small></span><span><BackyardIcon name="ball" size={22} /><b>Sensación</b><small>Siente la diferencia</small></span></div>}
 
     {!result && step === 0 && <section className={styles.questionBlock}>
       <h3>Tu juego actual</h3>
@@ -345,7 +347,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
     </section>}
 
     {!result && step === 1 && <section className={styles.questionBlock}>
-      <h3>Mediciones reales</h3><p>Primero elige el palo, después sube las fotos del monitor. La velocidad es opcional y nunca inferimos datos no publicados.</p>
+      <h3>Captura y analiza tus golpes</h3><p>Primero elige el palo y después sube las fotos del monitor. Aplicaremos automáticamente cada lectura clara al resumen correcto.</p>
       <LaunchMonitorCapture userId={userId} accessToken={accessToken} requiresRemoteConsent={requiresRemoteConsent} value={input.launchMonitorSession} onChange={(launchMonitorSession) => patchInput({ launchMonitorSession })} onOpenPrivacy={onOpenPrivacy} />
       <p className={styles.subtle}><b>¿No tienes datos de launch monitor?</b> Continúa con fitting manual.</p>
       <label>¿Cuánto pegas aproximadamente con driver? (yardas, opcional)<NumericCaptureInput keyboardMode="numeric" min={50} max={500} value={input.driverDistanceYards} onValueChange={(driverDistanceYards) => patchInput({ driverDistanceYards })} placeholder="Ej. 245" /></label>
@@ -354,7 +356,6 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
 
     {!result && step === 2 && <section className={styles.questionBlock}>
       <h3>Feel y vuelo</h3><p>Elige lo que prefieres sentir y ver; “No sé” también es una respuesta válida.</p>
-      <div className={styles.fitPillars}><span><BackyardIcon name="arrow" size={22} /><b>Distancia</b><small>Vuelo y velocidad</small></span><span><BackyardIcon name="flag" size={22} /><b>Control</b><small>Approach y green</small></span><span><BackyardIcon name="ball" size={22} /><b>Sensación</b><small>Wedges y putter</small></span></div>
       <h4>¿Cómo prefieres sentir la bola?</h4><OptionGrid values={BALL_FEEL_PREFERENCES} labels={FEEL_LABELS} selected={input.feelPreference} onSelect={(value) => patchInput({ feelPreference: value })} />
       <h4>Trayectoria preferida</h4><OptionGrid values={BALL_TRAJECTORY_PREFERENCES} labels={TRAJECTORY_LABELS} selected={input.trajectoryPreference} onSelect={(value) => patchInput({ trajectoryPreference: value })} />
     </section>}

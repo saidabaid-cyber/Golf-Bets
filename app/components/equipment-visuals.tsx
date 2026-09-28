@@ -3,14 +3,14 @@ import Image from "next/image";
 import type { ClubCategory } from "../../lib/golf-equipment";
 
 const CLUB_PRODUCT_IMAGE: Record<ClubCategory, string> = {
-  DRIVER: "/brand/equipment/backyard-driver.png",
-  MINI_DRIVER: "/brand/equipment/backyard-driver.png",
-  FAIRWAY_WOOD: "/brand/equipment/backyard-fairway.png",
-  HYBRID: "/brand/equipment/backyard-hybrid.png",
-  UTILITY_IRON: "/brand/equipment/backyard-irons.png",
-  IRON_SET: "/brand/equipment/backyard-irons.png",
-  WEDGE: "/brand/equipment/backyard-wedge.png",
-  PUTTER: "/brand/equipment/backyard-putter.png",
+  DRIVER: "/brand/equipment/backyard-driver-card.png",
+  MINI_DRIVER: "/brand/equipment/backyard-driver-card.png",
+  FAIRWAY_WOOD: "/brand/equipment/backyard-fairway-card.png",
+  HYBRID: "/brand/equipment/backyard-hybrid-card.png",
+  UTILITY_IRON: "/brand/equipment/backyard-irons-card.png",
+  IRON_SET: "/brand/equipment/backyard-irons-card.png",
+  WEDGE: "/brand/equipment/backyard-wedge-card.png",
+  PUTTER: "/brand/equipment/backyard-putter-card.png",
 };
 
 /** Owned Backyard product art: no third-party marks, models or catalog claims. */
@@ -18,8 +18,8 @@ export function ClubCategoryVisual({ category, className }: { category: ClubCate
   return <Image
     className={className}
     src={CLUB_PRODUCT_IMAGE[category]}
-    width={1024}
-    height={1536}
+    width={1254}
+    height={1254}
     sizes="(max-width: 540px) 34vw, 160px"
     alt=""
     aria-hidden="true"
