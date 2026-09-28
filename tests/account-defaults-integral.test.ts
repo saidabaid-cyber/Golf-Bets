@@ -148,6 +148,7 @@ test("Auth bootstrap alone applies new-account defaults; generic and legacy path
   assert.match(accountProvider, /current\.profileVisibility === profileVisibility/);
   assert.match(accountProvider, /select\("default_handicap,high_contrast,notifications_enabled,updated_at"\)/);
   assert.match(accountProvider, /typeof preferencesResult\.data\?\.notifications_enabled === "boolean"/);
+  assert.match(accountProvider, /!accountEntry\.existingAccount \|\| localStorage\.getItem\(STORAGE_KEYS\.notifications\) === null/);
   assert.match(migration, /notifications_enabled set default false/);
   assert.match(migration, /insert into public\.user_preferences\([\s\S]*push_notifications_enabled[\s\S]*values \(new\.id, true, true, true, true, true\)/);
   for (const column of ["push_notifications_enabled", "email_notifications_enabled", "round_notifications_enabled", "reminders_enabled"]) {

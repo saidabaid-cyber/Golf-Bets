@@ -274,6 +274,15 @@ export function hasCurrentFinancialConsent(events: LegalEvidenceEvent[]) {
   return latestLegalEvidence(events, "financial_data")?.action === "accepted";
 }
 
+/** A completed ledger read only proves that the ledger was read. It does not
+ * turn an absent optional choice into a rejection. Onboarding may skip the
+ * betting decision only when there is explicit current evidence, or when a
+ * resolved legacy acceptance proves that the player already opted in. */
+export function hasResolvedFinancialChoice(events: LegalEvidenceEvent[], legacyAccepted: boolean, ledgerResolved: boolean) {
+  if (!ledgerResolved) return false;
+  return Boolean(latestLegalEvidence(events, "financial_data")) || legacyAccepted;
+}
+
 /** Legacy positive consent remains compatible only after this actor/environment
  * has been resolved. A later rejection or revocation always wins. */
 export function hasResolvedFinancialConsent(events: LegalEvidenceEvent[], legacyAccepted: boolean, resolved: boolean) {

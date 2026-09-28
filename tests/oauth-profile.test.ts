@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { missingInitialProfileFields, oauthIdentityFromMetadata } from "../lib/oauth-profile";
+import { missingInitialProfileFields, oauthIdentityFromMetadata, ownerProfileClaimsFromAuth } from "../lib/oauth-profile";
 
 test("OAuth identity prefers full_name and preserves Google avatar_url", () => {
   assert.deepEqual(oauthIdentityFromMetadata({ full_name: "Said Abaid", name: "Ignored", given_name: "Said", family_name: "Abaid", avatar_url: "https://images.example/said.jpg", picture: "https://images.example/fallback.jpg" }, "contacto@thebackyard.com.mx"), {
@@ -22,6 +22,29 @@ test("OAuth identity falls back to given_name plus family_name and picture", () 
 
 test("email is never promoted to displayName", () => {
   assert.equal(oauthIdentityFromMetadata({ full_name: "golfer@example.com", name: "golfer@example.com" }, "golfer@example.com").displayName, "");
+});
+
+test("durable owner claims override stale profile cache only when Auth supplied them", () => {
+  assert.deepEqual(ownerProfileClaimsFromAuth({
+    given_name: "QA",
+    family_name: "Preview",
+    backyard_golf_profile_v1: {
+      handedness: "right",
+      homeClub: "",
+      preferredTee: "Azules",
+    },
+  }), {
+    givenName: "QA",
+    familyName: "Preview",
+    handedness: "right",
+    homeClub: "",
+    preferredTee: "Azules",
+  });
+  assert.deepEqual(ownerProfileClaimsFromAuth({ backyard_golf_profile_v1: { handedness: "invalid", homeClubId: 42 } }), {
+    handedness: "",
+    homeClubId: "",
+  });
+  assert.deepEqual(ownerProfileClaimsFromAuth({ full_name: "No owner claims" }), {});
 });
 
 test("profile setup asks only facts still missing and can auto-skip saved identity", () => {

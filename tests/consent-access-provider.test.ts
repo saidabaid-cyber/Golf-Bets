@@ -57,6 +57,7 @@ function providerHarness(options: { existingNotice?: boolean; newAccount?: boole
       GUEST_LEGAL_ACTOR_KEY: "guest-actor",
       legalClientEnvironment: () => "test",
       latestLegalEvidence: () => null,
+      hasResolvedFinancialChoice: () => false,
       hasResolvedFinancialConsent: () => false,
     };
     return new Proxy({}, { get: (_, key) => failUnexpected(`${id}:${String(key)}`) });

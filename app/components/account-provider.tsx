@@ -74,7 +74,7 @@ import { selectedHandicapIndex } from "../../lib/handicap-source";
 import type { RoundSnapshot } from "../../lib/types";
 import { BetaOnboardingFlow } from "./beta-onboarding-flow";
 import { betaOnboardingIsActive, createBetaOnboardingProgress, persistBetaOnboardingProgress, readBetaOnboardingProgress } from "../../lib/beta-onboarding";
-import { missingInitialProfileFields, oauthIdentityFromMetadata } from "../../lib/oauth-profile";
+import { missingInitialProfileFields, oauthIdentityFromMetadata, ownerProfileClaimsFromAuth } from "../../lib/oauth-profile";
 import { NO_ADMIN_ACCESS, readAdminAccess, type AdminAccess } from "../../lib/admin-access";
 import { resolveBrowserAppOrigin } from "../../lib/app-origin";
 import { type LegalEvidenceAction, type LegalEvidenceSubject } from "../../lib/legal-evidence";
@@ -85,6 +85,7 @@ import {
   legalEvidenceStateKey,
   legalEvidenceSyncMessage,
   LegalEvidenceSyncError,
+  hasResolvedFinancialChoice,
   hasResolvedFinancialConsent,
   readLegalEvidence,
   recordLocalLegalEvidenceBatch,
@@ -165,6 +166,7 @@ export function useBackyardAccount() {
 
 function profileFromUser(user: User): BackyardProfile {
   const oauthIdentity = oauthIdentityFromMetadata(user.user_metadata, user.email);
+  const ownerClaims = ownerProfileClaimsFromAuth(user.user_metadata);
   const email = oauthIdentity.email;
   const location = parseStoredProfileLocation(user.user_metadata?.[PROFILE_LOCATION_METADATA_KEY]);
   const base = {
@@ -176,17 +178,18 @@ function profileFromUser(user: User): BackyardProfile {
     ...emptyBackyardProfileDetails(),
     givenName: oauthIdentity.givenName,
     familyName: oauthIdentity.familyName,
-    ...((user.user_metadata?.backyard_golf_profile_v1 && typeof user.user_metadata.backyard_golf_profile_v1 === "object") ? Object.fromEntries(["handedness", "homeClub", "homeClubId", "homeCourse", "homeCourseId", "preferredTee"].map(key => [key, typeof user.user_metadata.backyard_golf_profile_v1[key] === "string" ? user.user_metadata.backyard_golf_profile_v1[key] : ""])) : {}),
+    ...ownerClaims,
     ...(location ? { ...normalizeProfileLocation(location), locationUpdatedAt: location.updatedAt } : {}),
     username: String(user.user_metadata?.username || usernameFromEmail(email)),
   };
   try {
     const cached = JSON.parse(localStorage.getItem(`backyard-profile-cache-v1:${user.id}`) || "null");
     const restored = normalizeBackyardProfileCache(cached, base);
+    const canonical = { ...restored, ...ownerClaims };
     if (location && !readPendingProfileWrite(localStorage, user.id)?.profile.location && Date.parse(location.updatedAt) > (Date.parse(restored.locationUpdatedAt || "") || 0)) {
-      return { ...restored, ...normalizeProfileLocation(location), locationUpdatedAt: location.updatedAt };
+      return { ...canonical, ...normalizeProfileLocation(location), locationUpdatedAt: location.updatedAt };
     }
-    return restored;
+    return canonical;
   } catch { return base; }
 }
 
@@ -914,7 +917,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       // Persisted cloud state is the only new-account proof. This runs before
       // children hydrate, so their first rendered toggle matches the account.
       // Missing legacy rows/values deliberately leave local absence as OFF.
-      if (!preferencesResult.error && localStorage.getItem(STORAGE_KEYS.notifications) === null && typeof preferencesResult.data?.notifications_enabled === "boolean") {
+      if (!preferencesResult.error && (!accountEntry.existingAccount || localStorage.getItem(STORAGE_KEYS.notifications) === null) && typeof preferencesResult.data?.notifications_enabled === "boolean") {
         localStorage.setItem(STORAGE_KEYS.notifications, String(preferencesResult.data.notifications_enabled));
       }
       if (!legalResult.error && Array.isArray(legalResult.data)) {
@@ -1003,10 +1006,11 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       : legalEvidenceState.actorKey.startsWith("guest-local:"))
     ? legalEvidenceState.resolvedSubjects
     : [];
-  const financialConsentResolved = legalEvidenceResolved || locallyResolvedLegalSubjects.includes("financial_data");
-  const marketingConsentResolved = legalEvidenceResolved || locallyResolvedLegalSubjects.includes("marketing");
   const currentConsent = identity ? hasCurrentLegalConsent(acceptances, identity.userId) : false;
   const legacyBettingConsent = identity ? hasCurrentBettingDataConsent(acceptances, identity.userId) : false;
+  const financialConsentResolved = hasResolvedFinancialChoice(legalEvidenceEvents, legacyBettingConsent, legalEvidenceResolved)
+    || locallyResolvedLegalSubjects.includes("financial_data");
+  const marketingConsentResolved = legalEvidenceResolved || locallyResolvedLegalSubjects.includes("marketing");
   const bettingConsentGranted = hasResolvedFinancialConsent(legalEvidenceEvents, legacyBettingConsent, financialConsentResolved);
   const bettingConsentResolved = Boolean(identity && financialConsentResolved && (identity.mode === "guest" || cloudConsentChecked));
 

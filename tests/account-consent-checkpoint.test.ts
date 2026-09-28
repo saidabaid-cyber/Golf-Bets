@@ -67,3 +67,10 @@ test("betting consent is requested only by a betting action, not automatically a
   assert.doesNotMatch(provider, /bettingConsentPromptStorageKey\(identity\.userId\)[^\n]+=== "seen"[^\n]+setBettingConsentOpen\(true\)/);
   assert.match(provider, /bettingConsentRequest\.current/);
 });
+
+test("an empty resolved legal ledger does not silently skip the onboarding betting choice", () => {
+  const provider = source("app/components/account-provider.tsx");
+  assert.match(provider, /hasResolvedFinancialChoice\(legalEvidenceEvents, legacyBettingConsent, legalEvidenceResolved\)/);
+  assert.doesNotMatch(provider, /const financialConsentResolved = legalEvidenceResolved \|\|/);
+  assert.match(provider, /initialBettingDecision=\{bettingConsentGranted \? "accepted" : bettingConsentResolved \? "skipped" : "pending"\}/);
+});

@@ -11,6 +11,7 @@ import {
   hasCurrentCoreLegalChoices,
   hasCurrentFinancialConsent,
   hasCurrentMarketingConsent,
+  hasResolvedFinancialChoice,
   hasResolvedFinancialConsent,
   hasResolvedMarketingConsent,
   latestLegalEvidence,
@@ -207,6 +208,8 @@ test("503 keeps the queue pending and a manual retry works without a token chang
 
 test("financial gate has no authorized hydration frame and the latest remote revocation wins", () => {
   assert.equal(hasResolvedFinancialConsent([], true, false), false);
+  assert.equal(hasResolvedFinancialChoice([], false, true), false, "an empty resolved ledger is not an implicit skip");
+  assert.equal(hasResolvedFinancialChoice([], true, true), true, "a resolved legacy opt-in remains a completed choice");
   const accepted = {
     ...buildLegalEvidenceEvent({ actorKey: "account:owner", actorContext: "authenticated", environment: "test", subject: "financial_data", action: "accepted", origin: "financial_gate", syncStatus: "synced", clientOccurredAt: "2026-09-24T12:00:00.000Z", idempotencyKey: ids[0] }),
     serverReceivedAt: "2026-09-24T12:00:01.000Z",
@@ -229,6 +232,8 @@ test("financial gate has no authorized hydration frame and the latest remote rev
     idempotency_key: revoked.idempotencyKey,
   }], "owner", "test");
   assert.equal(latestLegalEvidence(merged, "financial_data")?.action, "revoked");
+  assert.equal(hasResolvedFinancialChoice(merged, false, false), false, "cached evidence waits for the owner-scoped ledger read");
+  assert.equal(hasResolvedFinancialChoice(merged, false, true), true, "an explicit rejection or revocation is a completed choice");
   assert.equal(hasResolvedFinancialConsent(merged, true, true), false);
   assert.equal(hasResolvedFinancialConsent([accepted], false, true), true);
 });
