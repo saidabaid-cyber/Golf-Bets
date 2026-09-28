@@ -132,6 +132,7 @@ test("new-account server row is already initialized and never enters legacy boot
 
 test("Auth bootstrap alone applies new-account defaults; generic and legacy paths stay historical", () => {
   const migration = readFileSync("supabase/migrations/20260928010000_new_account_privacy_notification_defaults.sql", "utf8");
+  const publicBootstrapFix = readFileSync("supabase/migrations/20260928033500_fix_new_account_public_bootstrap.sql", "utf8");
   const cloudProfile = readFileSync("lib/cloud-account.ts", "utf8");
   const accountProvider = readFileSync("app/components/account-provider.tsx", "utf8");
   const socialRuntime = readFileSync("lib/social-activity.server.ts", "utf8");
@@ -139,6 +140,9 @@ test("Auth bootstrap alone applies new-account defaults; generic and legacy path
   assert.match(migration, /alter table public\.social_profiles\s+alter column privacy set default 'PRIVATE'/);
   assert.doesNotMatch(migration, /alter column profile_visibility set default 'public'/);
   assert.match(migration, /insert into public\.profiles\([\s\S]*profile_visibility[\s\S]*'PRIVATE',\s*'public'/);
+  assert.match(migration, /on conflict \(id\) do update set[\s\S]*profile_visibility = 'public'/);
+  assert.match(publicBootstrapFix, /create or replace function public\.handle_phase2_user_bootstrap\(\)[\s\S]*on conflict \(id\) do update set[\s\S]*profile_visibility = 'public'/);
+  assert.doesNotMatch(publicBootstrapFix, /update\s+public\.profiles/i);
   assert.match(migration, /insert into public\.social_profiles[\s\S]*'PUBLIC'[\s\S]*on conflict \(user_id\) do nothing/);
   assert.match(cloudProfile, /profile_visibility:\s*"private"/);
   assert.match(accountProvider, /current\.profileVisibility === profileVisibility/);

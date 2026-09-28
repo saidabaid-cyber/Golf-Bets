@@ -46,7 +46,8 @@ begin
     name = '',
     display_name = '',
     username = coalesce(public.profiles.username, excluded.username),
-    social_privacy = coalesce(public.profiles.social_privacy, 'PRIVATE');
+    social_privacy = coalesce(public.profiles.social_privacy, 'PRIVATE'),
+    profile_visibility = 'public';
 
   insert into public.social_profiles(user_id, username, display_name, avatar_url, privacy)
   values (
