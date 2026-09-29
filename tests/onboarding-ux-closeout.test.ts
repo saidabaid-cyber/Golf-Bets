@@ -64,7 +64,7 @@ test("equipment and Ball Fit use owned premium product art with selected and emp
   assert.match(categoryAssets, /onboarding-ref-b\/driver_ref_b\.png/);
   assert.match(onboarding, /EQUIPMENT_CATEGORY_ASSETS/);
   assert.doesNotMatch(onboarding, /ClubCategoryVisual/);
-  assert.match(onboarding, /Máxima distancia y confianza/);
+  assert.match(onboarding, /Máxima distancia para tus tiros de salida\./);
   assert.match(panel, /ClubCategoryVisual/);
   assert.match(wizard, /GolfBallVisual/);
   for (const priority of ["Distancia", "Control", "Sensación"]) assert.match(wizard, new RegExp(priority));

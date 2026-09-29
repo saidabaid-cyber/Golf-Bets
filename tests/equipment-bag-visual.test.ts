@@ -45,20 +45,22 @@ test("Construye tu bolsa renders exactly the approved six-card hierarchy and cop
     .map((match) => ({ category: match[1], label: match[2], description: match[3] }));
 
   assert.deepEqual(categories, [
-    { category: "DRIVER", label: "Driver", description: "Máxima distancia y confianza" },
-    { category: "FAIRWAY_WOOD", label: "Maderas", description: "Versatilidad en cada golpe" },
-    { category: "HYBRID", label: "Híbridos", description: "Precisión en cualquier terreno" },
-    { category: "IRON_SET", label: "Hierros", description: "Control y consistencia" },
-    { category: "WEDGE", label: "Wedges", description: "Creatividad en cada situación" },
-    { category: "PUTTER", label: "Putter", description: "Confianza en el último golpe" },
+    { category: "DRIVER", label: "Driver", description: "Máxima distancia para tus tiros de salida." },
+    { category: "FAIRWAY_WOOD", label: "Maderas", description: "Versatilidad y distancia en el campo." },
+    { category: "HYBRID", label: "Híbridos", description: "Confianza en cada lie." },
+    { category: "IRON_SET", label: "Hierros", description: "Precisión para un mejor control." },
+    { category: "WEDGE", label: "Wedges", description: "Creatividad alrededor del green." },
+    { category: "PUTTER", label: "Putter", description: "Decisión en los últimos golpes." },
   ]);
 
   assert.match(buildBlock, /Construye tu bolsa/);
-  assert.match(buildBlock, /Selecciona tu equipamiento ideal/);
-  assert.doesNotMatch(buildBlock, /Agregar a mi bolsa/);
+  assert.match(buildBlock, /Agrega sólo lo que quieras\. Marca \+ modelo es suficiente<br \/>y puedes regresar después desde Perfil\./);
+  assert.match(buildBlock, /<BrandLockup compact \/>/);
+  assert.match(buildBlock, /configured \? "✓ En mi bolsa" : "Agregar a mi bolsa"/);
   assert.doesNotMatch(buildBlock, /Ver todas las categorías/);
-  assert.doesNotMatch(buildBlock, /clubs\.length \? "✓" : "\+"/);
-  assert.match(buildBlock, /<strong aria-hidden="true">›<\/strong>/);
+  assert.match(buildBlock, /configured \? "✓" : "\+"/);
+  assert.doesNotMatch(buildBlock, /›/);
+  assert.doesNotMatch(buildBlock, /savedName|catalog\.brand|catalog\.model/);
 });
 
 test("each complete onboarding card opens its matching selector without adding equipment", () => {
@@ -76,21 +78,26 @@ test("configured equipment remains visible and returning preserves onboarding pr
   const onboarding = source("app/components/equipment-onboarding.tsx");
 
   assert.match(onboarding, /const clubs = currentClubs\.filter\(\(club\) => club\.category === category\)/);
-  assert.match(onboarding, /const savedName = first \?/);
-  assert.match(onboarding, /savedName && <span>✓ \{savedName\}/);
-  assert.match(onboarding, /className=\{clubs\.length \? styles\.visualClubSelected : styles\.visualClubCard\}/);
+  assert.match(onboarding, /const configured = clubs\.length > 0/);
+  assert.match(onboarding, /className=\{configured \? styles\.visualClubSelected : styles\.visualClubCard\}/);
+  assert.match(onboarding, /configured \? "✓ En mi bolsa" : "Agregar a mi bolsa"/);
+  assert.doesNotMatch(onboarding, /savedName && <span>✓ \{savedName\}/);
   assert.match(onboarding, /if \(saved\) setClubEditorOpen\(false\)/);
+  assert.match(onboarding, /currentClubs\.length \? "Continuar con mi bolsa" : "Continuar sin bastones"/);
 });
 
-test("mobile REF-B cards keep their source crop and cannot overflow at 390px", () => {
+test("mobile REF-B hero and cards preserve the approved composition without overflowing at 390px", () => {
   const css = source("app/components/equipment.module.css");
 
   assert.match(css, /data-equipment-step="clubs-build"\] \{ overflow-x:clip/);
-  assert.match(css, /@media\(max-width:560px\)[\s\S]*\.visualBagGrid \{ gap:6px/);
-  assert.match(css, /@media\(max-width:560px\)[\s\S]*\.visualClubCard,\.visualClubSelected \{ grid-template-columns:minmax\(0,60%\) minmax\(0,1fr\) 32px;height:90px;min-height:90px/);
+  assert.match(css, /\.bagHero \{[\s\S]*onboarding-course-hero\.png/);
+  assert.match(css, /@media\(max-width:560px\)[\s\S]*\.visualBagGrid \{ gap:8px/);
+  assert.match(css, /@media\(max-width:560px\)[\s\S]*\.visualClubCard,\.visualClubSelected \{ grid-template-columns:minmax\(0,36%\) minmax\(0,1fr\) 40px;height:110px;min-height:110px/);
   assert.match(css, /\.visualClubMedia > \.visualClubImage \{ width:100%;height:100%;object-fit:cover;object-position:center/);
   assert.match(css, /\.visualClubCard,\.visualClubSelected \{[\s\S]*overflow:hidden/);
-  assert.match(css, /\.visualClubCard > strong,\.visualClubSelected > strong \{ display:grid;width:48px;height:48px;[^}]*background:#eef0ee/);
+  assert.match(css, /\.visualClubCopy > \.visualClubAction \{[\s\S]*background:#e9f1e5/);
+  assert.match(css, /\.visualClubCard > strong,\.visualClubSelected > strong \{ display:grid;width:48px;height:48px;[^}]*background:#0d7043;[^}]*color:#fff/);
+  assert.match(css, /data-equipment-step="clubs-build"\] \.syncStatus \{ display:none/);
   assert.doesNotMatch(css, /\.visualClubProduct\[data-club-category=/);
 });
 

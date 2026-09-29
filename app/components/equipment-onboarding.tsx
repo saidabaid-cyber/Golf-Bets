@@ -29,12 +29,12 @@ import { EQUIPMENT_CATEGORY_ASSETS } from "./equipment-category-assets";
 type Step = "clubs-prompt" | "clubs-build" | "ball-prompt" | "ball-select" | "fit-prompt" | "fit";
 
 const ONBOARDING_CLUB_CATEGORIES: ReadonlyArray<{ category: ClubCategory; label: string; description: string }> = [
-  { category: "DRIVER", label: "Driver", description: "Máxima distancia y confianza" },
-  { category: "FAIRWAY_WOOD", label: "Maderas", description: "Versatilidad en cada golpe" },
-  { category: "HYBRID", label: "Híbridos", description: "Precisión en cualquier terreno" },
-  { category: "IRON_SET", label: "Hierros", description: "Control y consistencia" },
-  { category: "WEDGE", label: "Wedges", description: "Creatividad en cada situación" },
-  { category: "PUTTER", label: "Putter", description: "Confianza en el último golpe" },
+  { category: "DRIVER", label: "Driver", description: "Máxima distancia para tus tiros de salida." },
+  { category: "FAIRWAY_WOOD", label: "Maderas", description: "Versatilidad y distancia en el campo." },
+  { category: "HYBRID", label: "Híbridos", description: "Confianza en cada lie." },
+  { category: "IRON_SET", label: "Hierros", description: "Precisión para un mejor control." },
+  { category: "WEDGE", label: "Wedges", description: "Creatividad alrededor del green." },
+  { category: "PUTTER", label: "Putter", description: "Decisión en los últimos golpes." },
 ];
 
 type EquipmentOnboardingProps = {
@@ -168,32 +168,36 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defa
     </>}
 
     {step === "clubs-build" && <>
-      <header className={styles.bagHeader}>
-        <button type="button" className={styles.bagBack} aria-label="Volver" onClick={previous}>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4-8 8 8 8" /></svg>
-        </button>
-        <div className={styles.bagLead}><h1>Construye tu bolsa</h1><p>Selecciona tu equipamiento ideal</p></div>
-        <button type="button" className={styles.bagIcon} aria-label="Guardar y continuar después" onClick={onSaveAndExit}>
-          <svg viewBox="0 0 40 44" aria-hidden="true"><path d="M11 13h18l2 27H9l2-27Z" /><path d="M15 14V9a5 5 0 0 1 10 0v5" /><circle cx="31" cy="12" r="4" /></svg>
-        </button>
+      <header className={styles.bagHero}>
+        <div className={styles.bagHeroTop}>
+          <button type="button" className={styles.bagBack} aria-label="Volver" onClick={previous}>
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4-8 8 8 8" /></svg>
+          </button>
+          <BrandLockup compact />
+          <button type="button" className={styles.bagIcon} aria-label="Guardar y continuar después" onClick={onSaveAndExit}>
+            <svg viewBox="0 0 40 44" aria-hidden="true"><path d="M11 13h18l2 27H9l2-27Z" /><path d="M15 14V9a5 5 0 0 1 10 0v5" /><circle cx="31" cy="12" r="4" /></svg>
+          </button>
+        </div>
+        <div className={styles.bagLead}>
+          <h1>Construye tu bolsa</h1>
+          <p>Agrega sólo lo que quieras. Marca + modelo es suficiente<br />y puedes regresar después desde Perfil.</p>
+        </div>
       </header>
       <div className={styles.onboardingBuilder}>
         <div className={styles.visualBagGrid} aria-label="Categorías de Mi Bolsa">{ONBOARDING_CLUB_CATEGORIES.map(({ category, label, description }, index) => {
           const asset = EQUIPMENT_CATEGORY_ASSETS[category];
           const clubs = currentClubs.filter((club) => club.category === category);
-          const first = clubs[0];
-          const catalog = first?.catalogClubId ? clubCatalog.items.find((item) => item.id === first.catalogClubId) : null;
-          const savedName = first ? catalog ? `${catalog.brand} ${catalog.model}` : [first.customBrand, first.customModel].filter(Boolean).join(" ") || "Configuración guardada" : null;
+          const configured = clubs.length > 0;
           return <button
             type="button"
             key={category}
-            aria-label={savedName ? `${label}. Configurado: ${savedName}` : `${label}. ${description}`}
-            className={clubs.length ? styles.visualClubSelected : styles.visualClubCard}
+            aria-label={`${label}. ${description} ${configured ? "En mi bolsa. Editar categoría" : "Agregar a mi bolsa"}`}
+            className={configured ? styles.visualClubSelected : styles.visualClubCard}
             onClick={() => { setClubEditorCategory(category); setClubEditorOpen(true); }}
           >
-            <span className={styles.visualClubMedia}><Image className={styles.visualClubImage} src={asset.src} width={asset.width} height={asset.height} sizes="(max-width: 560px) 60vw, 430px" alt="" aria-hidden="true" priority={index === 0} unoptimized /></span>
-            <span className={styles.visualClubCopy}><b>{label}</b><small>{description}</small>{savedName && <span>✓ {savedName}{clubs.length > 1 ? ` · ${clubs.length} guardados` : first?.generation ? ` · ${first.generation}` : ""}</span>}</span>
-            <strong aria-hidden="true">›</strong>
+            <span className={styles.visualClubMedia}><Image className={styles.visualClubImage} src={asset.src} width={asset.width} height={asset.height} sizes="(max-width: 560px) 38vw, 270px" alt="" aria-hidden="true" priority={index === 0} unoptimized /></span>
+            <span className={styles.visualClubCopy}><b>{label}</b><small>{description}</small><span className={styles.visualClubAction}>{configured ? "✓ En mi bolsa" : "Agregar a mi bolsa"}</span></span>
+            <strong aria-hidden="true">{configured ? "✓" : "+"}</strong>
           </button>;
         })}</div>
         <div className={styles.onboardingActions}><button type="button" className="primary" onClick={() => finishClubs(currentClubs.length ? "COMPLETED" : "SKIPPED")}>{currentClubs.length ? "Continuar con mi bolsa" : "Continuar sin bastones"}</button></div>
