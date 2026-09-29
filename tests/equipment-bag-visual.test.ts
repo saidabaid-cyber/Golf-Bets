@@ -128,6 +128,7 @@ test("onboarding and Mi Bolsa category selection consume one canonical asset reg
 test("Mi Bolsa keeps distinct Mini Driver and Utility assets and compact navigable rows", () => {
   const assets = source("app/components/equipment-category-assets.ts");
   const editors = source("app/components/equipment-editors.tsx");
+  const profile = source("app/components/equipment-profile-panel.tsx");
   const css = source("app/components/equipment.module.css");
   const mini = readFileSync(join("public", "brand", "equipment", "onboarding-ref-b", "mini-driver_ref_b.png"));
   const utility = readFileSync(join("public", "brand", "equipment", "onboarding-ref-b", "utility-driving-iron_ref_b.png"));
@@ -141,4 +142,11 @@ test("Mi Bolsa keeps distinct Mini Driver and Utility assets and compact navigab
   assert.match(editors, /return <button type="button" key=\{category\} aria-label=\{label\} onClick=\{\(\) => chooseCategory\(category\)\}/);
   assert.match(editors, /<strong aria-hidden="true">›<\/strong>/);
   assert.match(css, /\.catalogChoiceGrid button \{ display: grid; grid-template-columns: 88px minmax\(0, 1fr\) 28px; min-height: 66px/);
+  assert.match(profile, /import \{ EQUIPMENT_CATEGORY_ASSETS \} from "\.\/equipment-category-assets"/);
+  assert.match(profile, /const asset = EQUIPMENT_CATEGORY_ASSETS\[club\.category\]/);
+  assert.match(profile, /const asset = EQUIPMENT_CATEGORY_ASSETS\[category\]/);
+  assert.doesNotMatch(profile, /ClubCategoryVisual/);
+  assert.match(css, /\.profileClubButton \{[^}]*grid-template-columns:132px minmax\(0,1fr\) max-content/);
+  assert.match(css, /@media\(max-width:430px\)[\s\S]*\.profileClubButton \{[^}]*grid-template-columns:112px minmax\(0,1fr\) max-content/);
+  assert.match(css, /\.missingCategoryCard \{[^}]*overflow:hidden/);
 });

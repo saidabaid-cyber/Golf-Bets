@@ -20,15 +20,19 @@ function text(value: unknown): string {
 }
 
 const bagSections = [
-  { id: "driver", label: "Driver", description: "Driver", categories: ["DRIVER"] },
-  { id: "mini-driver", label: "Mini Driver", description: "Mini Driver", categories: ["MINI_DRIVER"] },
-  { id: "woods", label: "Maderas", description: "Maderas", categories: ["FAIRWAY_WOOD"] },
-  { id: "hybrids", label: "Híbridos", description: "Híbridos", categories: ["HYBRID"] },
-  { id: "utility", label: "Utility / Driving Iron", description: "Utility", categories: ["UTILITY_IRON"] },
-  { id: "irons", label: "Hierros", description: "Hierros", categories: ["IRON_SET"] },
-  { id: "wedges", label: "Wedges", description: "Wedges", categories: ["WEDGE"] },
-  { id: "putter", label: "Putter", description: "Putter", categories: ["PUTTER"] },
+  { id: "driver", label: "Driver", description: "Máxima distancia para tus tiros de salida.", categories: ["DRIVER"] },
+  { id: "mini-driver", label: "Mini Driver", description: "Control desde el tee con una cabeza compacta.", categories: ["MINI_DRIVER"] },
+  { id: "woods", label: "Maderas", description: "Versatilidad y distancia desde el fairway.", categories: ["FAIRWAY_WOOD"] },
+  { id: "hybrids", label: "Híbridos", description: "Confianza desde cualquier lie.", categories: ["HYBRID"] },
+  { id: "utility", label: "Utility / Driving Iron", description: "Trayectoria penetrante y control desde el tee.", categories: ["UTILITY_IRON"] },
+  { id: "irons", label: "Hierros", description: "Precisión y control de distancia.", categories: ["IRON_SET"] },
+  { id: "wedges", label: "Wedges", description: "Creatividad alrededor del green.", categories: ["WEDGE"] },
+  { id: "putter", label: "Putter", description: "Decisión en los últimos golpes.", categories: ["PUTTER"] },
 ] as const;
+
+const equipmentAssets = Object.fromEntries(bagSections.flatMap((section) => section.categories.map((category) => [category, {
+  src: `/approved/${category.toLowerCase()}.png`, width: 1006, height: 412,
+}])));
 
 function harness() {
   const slots: unknown[] = [];
@@ -79,6 +83,7 @@ function harness() {
     require(name: string) {
       if (name === "react") return react;
       if (name === "react/jsx-runtime") return { jsx, jsxs: jsx, Fragment: "fragment" };
+      if (name === "next/image") return { default: (props: Record<string, unknown>) => ({ type: "image", props }) };
       if (name === "./use-view-scroll-reset") return { useViewScrollReset() {} };
       if (name.endsWith("/ball-fitting")) return { restoreEquipmentBallFitSummary: () => null, toEquipmentBallFitSummary: () => null };
       if (name.endsWith("/ball-fitting-storage")) return { removeBallFitDraft() {} };
@@ -102,9 +107,9 @@ function harness() {
       };
       if (name === "./use-equipment-catalog-search") return { useEquipmentCatalogSearch: ({ kind }: { kind: string }) => ({ items: kind === "CLUB" ? clubCatalog : kind === "BALL" ? ballCatalog : [] }) };
       if (name === "./equipment-visuals") return {
-        ClubCategoryVisual: (props: Record<string, unknown>) => ({ type: "club-visual", props }),
         GolfBallVisual: (props: Record<string, unknown>) => ({ type: "ball-visual", props }),
       };
+      if (name === "./equipment-category-assets") return { EQUIPMENT_CATEGORY_ASSETS: equipmentAssets };
       if (name.endsWith("/equipment-bag-management")) return {
         BAG_CATEGORY_SECTIONS: bagSections,
         bagCategoryManagement: (clubs: Array<{ category: string }>) => {
@@ -143,6 +148,28 @@ test("a compact missing category opens the club editor with that category presel
   assert.ok(editor);
   assert.equal(editor.props.initialCategory, "WEDGE");
   assert.equal(editor.props.existing, null);
+});
+
+test("Mi Bolsa has compact canonical current equipment and one non-duplicated missing-category add zone", () => {
+  const view = harness();
+  const copy = view.text();
+
+  assert.match(copy, /MI BOLSA\s+Equipo actual\s+Sólo los bastones que juegas actualmente\./);
+  assert.ok(!view.nodes().some((node) => node.type === "button" && text(node.props.children).trim() === "+ Agregar"));
+
+  const currentRow = view.nodes().find((node) => node.type === "button" && node.props["aria-label"] === "Editar Ping G430");
+  assert.ok(currentRow);
+  assert.match(text(currentRow.props.children), /Driver\s+Ping\s+G430\s+Driver\s+·\s+RH\s+Editar/);
+  assert.ok(nodes(currentRow).some((node) => node.type === "image" && node.props.src === "/approved/driver.png"));
+
+  assert.match(copy, /CATEGORÍAS FALTANTES\s+Agrega el resto de tu bolsa\s+Elige una categoría para completar sus datos\./);
+  assert.ok(!view.nodes().some((node) => node.type === "button" && node.props["aria-label"] === "Agregar Driver"));
+  assert.ok(view.nodes().some((node) => node.type === "button" && node.props["aria-label"] === "Agregar Mini Driver"));
+  assert.match(copy, /Control desde el tee con una cabeza compacta\./);
+  assert.match(copy, /Confianza desde cualquier lie\./);
+  assert.match(copy, /Precisión y control de distancia\./);
+  assert.match(copy, /Creatividad alrededor del green\./);
+  assert.match(copy, /Decisión en los últimos golpes\./);
 });
 
 test("club and ball Edit actions open their real editors", () => {

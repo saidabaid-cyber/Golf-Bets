@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useMemo, useState } from "react";
 import { useViewScrollReset } from "./use-view-scroll-reset";
 import { restoreEquipmentBallFitSummary, toEquipmentBallFitSummary, type BallFitInput, type BallFitProfileDefaults, type BallFitResult } from "../../lib/ball-fitting";
@@ -36,7 +37,8 @@ import { equipmentStatusLabel, useEquipmentProfile } from "./use-equipment-profi
 import { useEquipmentCatalogSearch } from "./use-equipment-catalog-search";
 import type { ProfileHandedness } from "../../lib/equipment-editor-selection";
 import styles from "./equipment.module.css";
-import { ClubCategoryVisual, GolfBallVisual } from "./equipment-visuals";
+import { GolfBallVisual } from "./equipment-visuals";
+import { EQUIPMENT_CATEGORY_ASSETS } from "./equipment-category-assets";
 import { BAG_CATEGORY_SECTIONS, bagCategoryManagement } from "../../lib/equipment-bag-management";
 
 type EquipmentProfilePanelProps = {
@@ -61,11 +63,6 @@ type EquipmentDeleteIntent =
   | { kind: "club"; club: PlayerClub; name: string }
   | { kind: "ball"; ball: PlayerBall; name: string }
   | { kind: "distance"; distance: PlayerClubDistance; name: string };
-
-function wedgeLoftSummary(clubs: readonly PlayerClub[]) {
-  const lofts = [...new Set(clubs.flatMap((club) => club.loft === null ? [] : [club.loft]))].sort((left, right) => left - right);
-  return lofts.length ? `Wedges · ${lofts.map((loft) => `${loft}°`).join(" / ")}` : "Wedges";
-}
 
 function catalogClub(playerClub: PlayerClub, catalog: readonly GolfClubCatalog[]) {
   return playerClub.catalogClubId ? catalog.find((club) => club.id === playerClub.catalogClubId) || null : null;
@@ -114,6 +111,14 @@ function savedClubConfiguration(clubs: readonly PlayerClub[], sectionId: string)
   if (compositions.length) return compositions.join("–");
   const lofts = clubs.flatMap((club) => club.loft === null ? [] : [club.loft]);
   return lofts.length ? lofts.map((loft) => `${loft}°`).join(", ") : "";
+}
+
+function clubIdentity(playerClub: PlayerClub, catalog: readonly GolfClubCatalog[]) {
+  const item = catalogClub(playerClub, catalog);
+  return {
+    brand: item?.brand || playerClub.customBrand || "Bastón",
+    model: item?.model || playerClub.customModel || "Configuración guardada",
+  };
 }
 
 function SavedBallFitComparison({ summary, catalog, currentBall }: { summary: EquipmentBallFitSummary; catalog: readonly GolfBallCatalog[]; currentBall: PlayerBall | null }) {
@@ -339,27 +344,26 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
   }
 
   return <div className={styles.stack}>
-    <section className={`card ${styles.section}`}>
-      <div className={styles.sectionHeader}><div><div className="eyebrow">EN MI BOLSA</div><h2>Equipo actual</h2><p>Sólo los bastones que juegas actualmente.</p></div><button type="button" className="secondary" onClick={() => { setClubDetailId(null); setNewClubCategory(null); setClubEditor("new"); }}>+ Agregar</button></div>
-      {currentClubs.length ? <div className={styles.premiumBag}>
-        {bagManagement.populated.map((section) => {
-          const clubs = section.clubs;
-          const label = section.id === "wedges" ? wedgeLoftSummary(clubs) : section.label;
-          return <section className={styles.bagCategory} key={section.id} data-bag-category={section.id}>
-            <header><div><span>{section.label}</span><b>{label}</b></div><small>{clubs.length} en tu bolsa</small></header>
-            <div className={styles.bagCategoryItems}>{clubs.map((club) => <ClubItem key={club.id} club={club} catalog={clubCatalog.items} shafts={shaftCatalog.items} onOpen={() => setClubDetailId(club.id)} />)}</div>
-          </section>;
-        })}
-      </div> : <div className={styles.emptyState}><b>Tu bolsa está vacía</b><p>Agrega una categoría desde la lista compacta de abajo.</p></div>}
-      {historicalClubs.length > 0 && <details><summary className="textButton">Equipo anterior ({historicalClubs.length})</summary><div className={styles.equipmentList}>{historicalClubs.map((club) => <ClubItem key={club.id} club={club} catalog={clubCatalog.items} shafts={shaftCatalog.items} onOpen={() => setClubDetailId(club.id)} />)}</div></details>}
+    <section className={styles.profileEquipmentSection} aria-labelledby="current-equipment-title">
+      <div className={styles.profileEquipmentHeader}><div className="eyebrow">MI BOLSA</div><h2 id="current-equipment-title">Equipo actual</h2><p>Sólo los bastones que juegas actualmente.</p></div>
+      {currentClubs.length ? <div className={styles.currentClubList}>
+        {bagManagement.populated.flatMap((section) => section.clubs).map((club) => <ClubItem key={club.id} club={club} catalog={clubCatalog.items} onOpen={() => setClubDetailId(club.id)} />)}
+      </div> : <div className={styles.emptyState}><b>Tu bolsa está vacía</b><p>Todavía no tienes bastones configurados.</p></div>}
+      {historicalClubs.length > 0 && <details className={styles.previousEquipment}><summary className="textButton">Equipo anterior ({historicalClubs.length})</summary><div className={styles.currentClubList}>{historicalClubs.map((club) => <ClubItem key={club.id} club={club} catalog={clubCatalog.items} onOpen={() => setClubDetailId(club.id)} />)}</div></details>}
     </section>
 
-    {bagManagement.missing.length > 0 && <section className={`card ${styles.section}`}>
-      <div className={styles.sectionHeader}><div><div className="eyebrow">AGREGAR EQUIPO</div><h2>Categorías faltantes</h2><p>Elige una categoría para completar sus datos.</p></div></div>
-      <div className={styles.profileBagRows} aria-label="Categorías disponibles para agregar">
-        {bagManagement.missing.map((section) => <button type="button" key={section.id} onClick={() => { setClubDetailId(null); setNewClubCategory(section.categories[0]); setClubEditor("new"); }}>
-          <span><small>{section.label}</small><b>{section.description}</b></span><strong aria-hidden="true">＋</strong>
-        </button>)}
+    {bagManagement.missing.length > 0 && <section className={`${styles.profileEquipmentSection} ${styles.missingEquipmentSection}`} aria-labelledby="missing-equipment-title">
+      <div className={styles.profileEquipmentHeader}><div className="eyebrow">CATEGORÍAS FALTANTES</div><h2 id="missing-equipment-title">Agrega el resto de tu bolsa</h2><p>Elige una categoría para completar sus datos.</p></div>
+      <div className={styles.missingCategoryList} aria-label="Categorías disponibles para agregar">
+        {bagManagement.missing.map((section) => {
+          const category = section.categories[0];
+          const asset = EQUIPMENT_CATEGORY_ASSETS[category];
+          return <button type="button" className={styles.missingCategoryCard} key={section.id} aria-label={`Agregar ${section.label}`} onClick={() => { setClubDetailId(null); setNewClubCategory(category); setClubEditor("new"); }}>
+            <span className={styles.missingCategoryMedia} aria-hidden="true"><Image src={asset.src} alt="" width={asset.width} height={asset.height} sizes="(max-width: 430px) 104px, 132px" unoptimized /></span>
+            <span className={styles.missingCategoryCopy}><b>{section.label}</b><small>{section.description}</small></span>
+            <strong className={styles.addBagButton} aria-hidden="true">＋</strong>
+          </button>;
+        })}
       </div>
     </section>}
 
@@ -396,13 +400,15 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
   </div>;
 }
 
-function ClubItem({ club, catalog: catalogItems, shafts, onOpen }: { club: PlayerClub; catalog: readonly GolfClubCatalog[]; shafts: readonly GolfShaftCatalog[]; onOpen: () => void }) {
-  const catalog = catalogClub(club, catalogItems);
-  const facts = clubFacts(club, shafts);
-  return <article className={`${styles.equipmentItem} ${club.isCurrent ? "" : styles.archived}`}>
-    <button type="button" className={styles.bagItemMain} onClick={onOpen} aria-label={`Editar ${clubName(club, catalogItems)}`}><span className={styles.categoryIcon}><CatalogProductMedia item={catalog} fallback={<ClubCategoryVisual category={club.category} />} /></span><span className={styles.bagItemCopy}><small>{CLUB_CATEGORY_LABELS[club.category]}</small><b>{clubName(club, catalogItems)}</b><span>{[catalog?.generation || club.generation, club.loft === null ? null : `${club.loft}°`, shaftName(club, shafts)].filter(Boolean).join(" · ") || "Configuración básica"}</span></span><span className="textButton">Editar</span></button>
-      <div className={styles.badgeRow}>{facts.map((value) => <span className={styles.badge} key={value}>{value}</span>)}</div>
-      {club.notes && <p className={styles.subtle}>{club.notes}</p>}
+function ClubItem({ club, catalog: catalogItems, onOpen }: { club: PlayerClub; catalog: readonly GolfClubCatalog[]; onOpen: () => void }) {
+  const identity = clubIdentity(club, catalogItems);
+  const asset = EQUIPMENT_CATEGORY_ASSETS[club.category];
+  return <article className={`${styles.profileClubCard} ${club.isCurrent ? "" : styles.archived}`}>
+    <button type="button" className={styles.profileClubButton} onClick={onOpen} aria-label={`Editar ${clubName(club, catalogItems)}`}>
+      <span className={styles.profileClubMedia} aria-hidden="true"><Image src={asset.src} alt="" width={asset.width} height={asset.height} sizes="(max-width: 430px) 112px, 132px" unoptimized /></span>
+      <span className={styles.profileClubCopy}><small>{CLUB_CATEGORY_LABELS[club.category]}</small><b>{identity.brand}</b><span>{identity.model}</span><em>{CLUB_CATEGORY_LABELS[club.category]} · {club.handedness}</em></span>
+      <span className={styles.profileClubAction}><span>Editar</span><strong aria-hidden="true">›</strong></span>
+    </button>
   </article>;
 }
 

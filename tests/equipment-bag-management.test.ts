@@ -15,11 +15,12 @@ test("Mi Bolsa separates populated equipment from compact missing categories", (
 
 test("permanent Mi Bolsa keeps the A-B-C-D management order and no promotional or empty-card wall", () => {
   const panel = readFileSync("app/components/equipment-profile-panel.tsx", "utf8");
-  const inBag = panel.indexOf("EN MI BOLSA");
-  const add = panel.indexOf("AGREGAR EQUIPO");
+  const inBag = panel.indexOf("MI BOLSA");
+  const add = panel.indexOf("CATEGORÍAS FALTANTES");
   const ball = panel.indexOf("MI BOLA");
   const fit = panel.indexOf("BALL FIT");
   assert.ok(inBag >= 0 && inBag < add && add < ball && ball < fit);
+  assert.doesNotMatch(panel, />\+ Agregar<\/button>/);
   assert.doesNotMatch(panel, /Tu juego empieza<br \/>en tu bolsa/);
   assert.doesNotMatch(panel, /className=\{styles\.emptyBagRow\}/);
   assert.match(panel, /initialCategory=\{clubEditor === "new" \? newClubCategory/);
