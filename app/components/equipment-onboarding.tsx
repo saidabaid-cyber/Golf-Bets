@@ -158,7 +158,7 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defa
   if (clubEditorOpen) return <main className={styles.onboardingScreen} data-equipment-screen="onboarding-club-editor"><ClubEditor userId={userId} catalog={clubCatalog.items} shafts={shaftCatalog.items} defaultHandedness={defaultHandedness} initialCategory={clubEditorCategory || undefined} presentation="page" onCancel={() => { setClubEditorOpen(false); setClubEditorCategory(null); }} onSave={saveClub} /></main>;
   if (ballEditorOpen) return <main className={styles.onboardingScreen} data-equipment-screen="onboarding-ball-editor"><BallEditor userId={userId} catalog={ballCatalog.items} existing={null} presentation="page" onCancel={() => setBallEditorOpen(false)} onSave={saveBall} /></main>;
 
-  return <main className={styles.onboardingScreen}><section className={styles.onboardingCard}>
+  return <main className={styles.onboardingScreen} data-equipment-step={step}><section className={styles.onboardingCard}>
     <div className={styles.onboardingTop}><BrandLockup compact /><span className={styles.brandPromise} aria-hidden="true">GOLF<br />FOR A<br />BETTER YOU</span><button type="button" className="textButton" onClick={onSaveAndExit}>Guardar y continuar después</button></div>
     {step === "clubs-prompt" && <>
       <div className="eyebrow">TUS BASTONES</div><h1>¿Quieres agregar los bastones que juegas actualmente?</h1><p>Esto nos ayudará a personalizar tu perfil y futuras estadísticas.</p>
@@ -166,9 +166,25 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defa
     </>}
 
     {step === "clubs-build" && <>
-      <div className={styles.editorialLead}><div className="eyebrow">TUS BASTONES</div><h1>Construye tu bolsa</h1><p>Agrega sólo lo que quieras. Marca + modelo es suficiente y puedes regresar después desde Perfil.</p><span aria-hidden="true">More<br />Golf Ahead</span></div>
+      <div className={styles.bagLead}><h1>Construye tu bolsa</h1><p>Selecciona tu equipamiento ideal</p></div>
       <div className={styles.onboardingBuilder}>
-        <div className={styles.visualBagGrid} aria-label="Categorías de Mi Bolsa">{ONBOARDING_CLUB_CATEGORIES.map(({ category, label, description }) => { const clubs = currentClubs.filter((club) => club.category === category); const first = clubs[0]; const catalog = first?.catalogClubId ? clubCatalog.items.find((item) => item.id === first.catalogClubId) : null; const savedName = first ? catalog ? `${catalog.brand} ${catalog.model}` : [first.customBrand, first.customModel].filter(Boolean).join(" ") || "Configuración guardada" : "Agregar a mi bolsa"; return <button type="button" key={category} aria-label={`${label}: ${savedName}`} className={clubs.length ? styles.visualClubSelected : styles.visualClubCard} onClick={() => { setClubEditorCategory(category); setClubEditorOpen(true); }}><span className={styles.visualClubMedia}><ClubCategoryVisual category={category} /></span><span className={styles.visualClubCopy}><b>{label}</b><small>{description}</small><span>{savedName}{clubs.length > 1 ? ` · ${clubs.length} guardados` : first?.generation ? ` · ${first.generation}` : ""}</span></span><strong aria-hidden="true">{clubs.length ? "✓" : "+"}</strong></button>; })}</div>
+        <div className={styles.visualBagGrid} aria-label="Categorías de Mi Bolsa">{ONBOARDING_CLUB_CATEGORIES.map(({ category, label, description }) => {
+          const clubs = currentClubs.filter((club) => club.category === category);
+          const first = clubs[0];
+          const catalog = first?.catalogClubId ? clubCatalog.items.find((item) => item.id === first.catalogClubId) : null;
+          const savedName = first ? catalog ? `${catalog.brand} ${catalog.model}` : [first.customBrand, first.customModel].filter(Boolean).join(" ") || "Configuración guardada" : "Agregar a mi bolsa";
+          return <button
+            type="button"
+            key={category}
+            aria-label={`${label}: ${savedName}`}
+            className={clubs.length ? styles.visualClubSelected : styles.visualClubCard}
+            onClick={() => { setClubEditorCategory(category); setClubEditorOpen(true); }}
+          >
+            <span className={styles.visualClubMedia}><ClubCategoryVisual category={category} className={styles.visualClubProduct} useMasterBrand /></span>
+            <span className={styles.visualClubCopy}><b>{label}</b><small>{description}</small><span>{savedName}{clubs.length > 1 ? ` · ${clubs.length} guardados` : first?.generation ? ` · ${first.generation}` : ""}</span></span>
+            <strong aria-hidden="true">{clubs.length ? "✓" : "+"}</strong>
+          </button>;
+        })}</div>
         <div className={styles.onboardingActions}><button type="button" className="secondary" onClick={() => { setClubEditorCategory(null); setClubEditorOpen(true); }}>Ver todas las categorías</button><button type="button" className="primary" onClick={() => finishClubs(currentClubs.length ? "COMPLETED" : "SKIPPED")}>{currentClubs.length ? "Continuar con mi bolsa" : "Continuar sin bastones"}</button></div>
       </div>
     </>}

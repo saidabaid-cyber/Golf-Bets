@@ -3,6 +3,7 @@
 .clubBranding { position:absolute;z-index:2;display:grid;justify-items:center;gap:1px;width:18%;pointer-events:none;transform:translate(-50%,-50%); }
 .clubBrandMark { display:block;width:100%;height:auto;filter:drop-shadow(0 1px 1px rgba(0,0,0,.28)); }
 .clubBranding>span { color:#f7fbf5;font-size:clamp(3px,.72cqi,7px);font-weight:800;letter-spacing:.08em;line-height:1;text-shadow:0 1px 2px rgba(0,0,0,.72);white-space:nowrap; }
+.clubMasterBrand { position:absolute;z-index:2;width:19%;height:auto;pointer-events:none;filter:drop-shadow(0 1px 1px rgba(255,255,255,.28));transform:translate(-50%,-50%); }
 .clubVisual[data-club-category="DRIVER"] .clubBranding { left:51%;top:55%;width:17%; }
 .clubVisual[data-club-category="MINI_DRIVER"] .clubBranding { left:51%;top:55%;width:17%; }
 .clubVisual[data-club-category="FAIRWAY_WOOD"] .clubBranding { left:61%;top:57%;width:17%;transform:translate(-50%,-50%) rotate(2deg); }
@@ -10,6 +11,13 @@
 .clubVisual[data-club-category="UTILITY_IRON"] .clubBranding,.clubVisual[data-club-category="IRON_SET"] .clubBranding { left:49%;top:42%;width:17%; }
 .clubVisual[data-club-category="WEDGE"] .clubBranding { left:20%;top:43%;width:16%;transform:translate(-50%,-50%) rotate(-7deg); }
 .clubVisual[data-club-category="PUTTER"] .clubBranding { left:60%;top:62%;width:16%;transform:translate(-50%,-50%) rotate(4deg); }
+.clubVisual[data-club-category="DRIVER"] .clubMasterBrand { left:51%;top:57%;width:19%; }
+.clubVisual[data-club-category="MINI_DRIVER"] .clubMasterBrand { left:51%;top:57%;width:19%; }
+.clubVisual[data-club-category="FAIRWAY_WOOD"] .clubMasterBrand { left:66%;top:60%;width:19%;transform:translate(-50%,-50%) rotate(2deg); }
+.clubVisual[data-club-category="HYBRID"] .clubMasterBrand { left:68%;top:34%;width:18%;transform:translate(-50%,-50%) rotate(-3deg); }
+.clubVisual[data-club-category="UTILITY_IRON"] .clubMasterBrand,.clubVisual[data-club-category="IRON_SET"] .clubMasterBrand { left:49%;top:40%;width:19%; }
+.clubVisual[data-club-category="WEDGE"] .clubMasterBrand { left:15%;top:41%;width:18%;transform:translate(-50%,-50%) rotate(-7deg); }
+.clubVisual[data-club-category="PUTTER"] .clubMasterBrand { left:62%;top:64%;width:18%;transform:translate(-50%,-50%) rotate(4deg); }
 .clubVisual[data-club-category="UTILITY_IRON"] .clubBranding>span,.clubVisual[data-club-category="IRON_SET"] .clubBranding>span,.clubVisual[data-club-category="WEDGE"] .clubBranding>span { color:#123d2b;text-shadow:0 1px 1px rgba(255,255,255,.65); }
 .ballBranding { position:absolute;z-index:2;left:62%;top:43%;display:grid;width:28%;justify-items:center;gap:2px;pointer-events:none;transform:translate(-50%,-50%); }
 .ballBrandMark { display:block;width:100%;height:auto;filter:drop-shadow(0 1px 1px rgba(0,0,0,.12)); }

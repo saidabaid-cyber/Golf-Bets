@@ -16,7 +16,7 @@ const CLUB_PRODUCT_IMAGE: Record<ClubCategory, string> = {
 };
 
 /** Owned, unbranded product cutouts. The approved master mark is layered in DOM. */
-export function ClubCategoryVisual({ category, className }: { category: ClubCategory; className?: string }) {
+export function ClubCategoryVisual({ category, className, useMasterBrand = false }: { category: ClubCategory; className?: string; useMasterBrand?: boolean }) {
   return <span className={`${styles.clubVisual} ${className || ""}`} data-club-category={category}>
     <Image
       className={styles.productImage}
@@ -27,7 +27,17 @@ export function ClubCategoryVisual({ category, className }: { category: ClubCate
       alt=""
       aria-hidden="true"
     />
-    <span className={styles.clubBranding} aria-hidden="true"><BackyardMark className={styles.clubBrandMark} /><span>THE BACKYARD</span></span>
+    {useMasterBrand
+      ? <Image
+          className={styles.clubMasterBrand}
+          src="/brand/the-backyard-logo.svg"
+          width={763}
+          height={631}
+          sizes="48px"
+          alt=""
+          aria-hidden="true"
+        />
+      : <span className={styles.clubBranding} aria-hidden="true"><BackyardMark className={styles.clubBrandMark} /><span>THE BACKYARD</span></span>}
   </span>;
 }
 
