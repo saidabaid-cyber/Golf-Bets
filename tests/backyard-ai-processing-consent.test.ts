@@ -156,7 +156,7 @@ test("Perfil expone scopes separados, autorización explícita y revocación", (
   assert.match(manager, /AiProcessingConsentSettings/);
   assert.match(settings, /Privacidad \/ IA/);
   assert.match(settings, /Instrucciones Backyard AI/);
-  assert.match(settings, /Lectura de scorecards/);
+  assert.match(settings, /Fotos e imágenes/);
   assert.match(settings, /ACTIVADO/);
   assert.match(settings, /DESACTIVADO/);
   assert.match(settings, /setAuthorizingScope\(scope\)/);

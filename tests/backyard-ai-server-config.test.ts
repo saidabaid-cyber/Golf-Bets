@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   aiProcessingConsentLedgerAccess,
   backyardAiConfig,
+  DEFAULT_AVATAR_IMAGE_MODEL,
   DEFAULT_BACKYARD_AI_MODEL,
   publicBackyardAiStatus,
 } from "../lib/backyard-ai/server/config";
@@ -35,6 +36,9 @@ test("Backyard AI model selection supports overrides and a safe default", () => 
   assert.equal(backyardAiConfig({ OPENAI_API_KEY: "x" }).roundSetupModel, DEFAULT_BACKYARD_AI_MODEL);
   assert.equal(backyardAiConfig({ OPENAI_API_KEY: "x", OPENAI_RULES_MODEL: "rules-model" }).scorecardModel, "rules-model");
   assert.equal(backyardAiConfig({ OPENAI_API_KEY: "x", OPENAI_BACKYARD_MODEL: "round-model", OPENAI_SCORECARD_MODEL: "vision-model" }).scorecardModel, "vision-model");
+  assert.equal(backyardAiConfig({ OPENAI_API_KEY: "x" }).avatarImageModel, DEFAULT_AVATAR_IMAGE_MODEL);
+  assert.equal(backyardAiConfig({ OPENAI_API_KEY: "x", OPENAI_AVATAR_IMAGE_MODEL: "gpt-image-custom" }).avatarImageModel, "gpt-image-custom");
+  assert.equal(backyardAiConfig({ OPENAI_API_KEY: "x", OPENAI_AVATAR_IMAGE_MODEL: "../unsafe" }).avatarImageModel, DEFAULT_AVATAR_IMAGE_MODEL);
   assert.equal(backyardAiConfig({ BACKYARD_AI_ENABLED: "false", OPENAI_API_KEY: "x" }).ready, false);
   assert.equal(backyardAiConfig({
     ...configuredEnvironment,

@@ -2,6 +2,7 @@ import { isolatedPreviewDatabaseEnabled, previewDatabaseFeaturesAvailable } from
 
 export const DEFAULT_BACKYARD_AI_MODEL = "gpt-5.4-mini";
 export const DEFAULT_SCORECARD_AI_MODEL = "gpt-5.4-mini";
+export const DEFAULT_AVATAR_IMAGE_MODEL = "gpt-image-2.5-sunburst";
 
 export type BackyardAiEnvironment = Record<string, string | undefined>;
 
@@ -62,6 +63,7 @@ export function backyardAiConfig(env: BackyardAiEnvironment) {
     ready: enabled && configured,
     roundSetupModel: modelId(env.OPENAI_BACKYARD_MODEL) || modelId(env.OPENAI_RULES_MODEL) || DEFAULT_BACKYARD_AI_MODEL,
     scorecardModel: modelId(env.OPENAI_SCORECARD_MODEL) || modelId(env.OPENAI_BACKYARD_MODEL) || modelId(env.OPENAI_RULES_MODEL) || DEFAULT_SCORECARD_AI_MODEL,
+    avatarImageModel: modelId(env.OPENAI_AVATAR_IMAGE_MODEL) || DEFAULT_AVATAR_IMAGE_MODEL,
   };
 }
 

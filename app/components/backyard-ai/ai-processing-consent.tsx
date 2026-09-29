@@ -42,8 +42,8 @@ const SCOPE_COPY: Record<BackyardAiProcessingConsentScope, { title: string; deta
     detail: "Permite enviar a Backyard AI el texto o dictado que decidas procesar.",
   },
   [AI_IMAGE_PROCESSING_CONSENT]: {
-    title: "Lectura de scorecards",
-    detail: "Permite enviar al proveedor las fotos que elijas para leer una tarjeta.",
+    title: "Fotos e imágenes",
+    detail: "Permite enviar al proveedor únicamente las fotos que elijas para leer una tarjeta o crear un avatar ilustrado.",
   },
   [AI_LAUNCH_MONITOR_PROCESSING_CONSENT]: {
     title: "Lectura de datos de práctica",

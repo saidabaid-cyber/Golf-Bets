@@ -20,13 +20,14 @@ function text(value: unknown): string {
   return typeof value === "string" || typeof value === "number" ? String(value) : "";
 }
 
-function imagePicker(initialValue: string) {
+function imagePicker(initialValue: string, options: { generationError?: boolean; capabilityAvailable?: boolean } = {}) {
   const slots: unknown[] = [];
   let cursor = 0;
   let value = initialValue;
   const changes: string[] = [];
   const busy: boolean[] = [];
   const crops: Array<Record<string, number>> = [];
+  const generationRequests: Array<{ sourceImageDataUrl: string; variant: number; accessToken: string }> = [];
   const exports: Record<string, (props: unknown) => Node> = {};
   const jsx = (type: unknown, props: Record<string, unknown>) => ({ type, props });
   const react = {
@@ -44,27 +45,44 @@ function imagePicker(initialValue: string) {
     useEffect: () => undefined,
   };
   const compiled = ts.transpileModule(readFileSync("app/components/profile-image-picker.tsx", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
-  runInNewContext(compiled, { exports, URL: { createObjectURL: () => "blob:avatar", revokeObjectURL: () => undefined }, require: (name: string) => {
+  runInNewContext(compiled, { exports, AbortController, DOMException, URL: { createObjectURL: () => "blob:avatar", revokeObjectURL: () => undefined }, require: (name: string) => {
     if (name === "react") return react;
     if (name === "react/jsx-runtime") return { jsx, jsxs: jsx, Fragment: "fragment" };
     if (name.endsWith("/profile-avatar")) return avatars;
     if (name.endsWith("/manual-avatar")) return manualAvatar;
     if (name.endsWith("/profile-image")) return {
       profileImageFromFile: async (_file: File, _size: number, crop: Record<string, number>) => { crops.push(crop); return "data:image/webp;base64,optimized"; },
+      profileImageFromDataUrl: async () => `data:image/webp;base64,generated${generationRequests.at(-1)?.variant || 1}`,
       profileImageErrorMessage: () => "No pudimos preparar la imagen.",
       normalizeProfileImageCrop,
       profileImageCropAfterPan,
       profileImagePreviewGeometry,
     };
-    if (name.endsWith("/photo-avatar-generation")) return { PHOTO_AVATAR_GENERATION_CAPABILITY: { available: false, reason: "provider_not_configured" } };
+    if (name.endsWith("/consent-client")) return { resolveAuthoritativeAiProcessingConsent: async () => ({ active: true, discarded: false, pendingLocalRevocation: false }) };
+    if (name.endsWith("/processing-consent")) return { browserAiProcessingConsentStorage: () => ({}) };
+    if (name.endsWith("/privacy")) return { AI_IMAGE_PROCESSING_CONSENT: "AI_IMAGE_PROCESSING_CONSENT" };
+    if (name.endsWith("/photo-avatar-generation")) return {
+      MAX_PHOTO_AVATAR_VARIANTS: 3,
+      PhotoAvatarGenerationError: class PhotoAvatarGenerationError extends Error {
+        code: string; status: number;
+        constructor(status: number, code: string, message: string) { super(message); this.status = status; this.code = code; }
+      },
+      readPhotoAvatarGenerationCapability: async () => ({ available: options.capabilityAvailable !== false, provider: "openai", model: "gpt-image-test" }),
+      requestPhotoAvatarGeneration: async (input: { sourceImageDataUrl: string; variant: number; accessToken: string }) => {
+        generationRequests.push(input);
+        if (options.generationError) throw new Error("provider failed");
+        return { avatarDataUrl: `data:image/webp;base64,provider${input.variant}`, provider: "openai", model: "gpt-image-test", variant: input.variant };
+      },
+    };
     if (name === "./avatar-creation-panel") return { AvatarCreationPanel: "avatar-create" };
+    if (name.endsWith("/backyard-ai/ai-processing-consent")) return { AiProcessingConsentPrompt: "consent-prompt" };
     if (name.endsWith(".css")) return { default: new Proxy({}, { get: (_target, key) => key }) };
     throw new Error(name);
   } });
   let tree: Node;
   const render = () => {
     cursor = 0;
-    tree = exports.ProfileImagePicker({ value, onChange: (next: string) => { value = next; changes.push(next); }, onBusyChange: (next: boolean) => busy.push(next) });
+    tree = exports.ProfileImagePicker({ value, onChange: (next: string) => { value = next; changes.push(next); }, onBusyChange: (next: boolean) => busy.push(next), accessToken: "qa-token", userId: "qa-user" });
     return tree;
   };
   render();
@@ -76,6 +94,7 @@ function imagePicker(initialValue: string) {
     changes,
     busy,
     crops,
+    generationRequests,
     click(label: string) {
       const button = nodes(tree).find((node) => node.type === "button" && (text(node).trim() === label || text(node).includes(label)));
       assert.ok(button, label);
@@ -154,7 +173,7 @@ test("profile avatar supports optimized upload, emoji and created-avatar choices
   assert.match(created.text(), /Avatar listo/);
 });
 
-test("la pantalla muestra cuatro modos pares y declara honestamente generación desde foto no disponible", () => {
+test("la pantalla muestra cuatro modos pares y conecta la caricatura con el endpoint real", () => {
   const source = readFileSync("app/components/profile-image-picker.tsx", "utf8");
   const picker = imagePicker("");
   assert.match(picker.text(), /FOTO \/ AVATAR/);
@@ -162,13 +181,74 @@ test("la pantalla muestra cuatro modos pares y declara honestamente generación 
   assert.match(picker.text(), /EMOJI/);
   assert.match(picker.text(), /AVATAR/);
   assert.match(picker.text(), /FOTO/);
-  assert.match(source, /PHOTO_AVATAR_GENERATION_CAPABILITY\.available/);
+  assert.match(source, /requestPhotoAvatarGeneration/);
+  assert.match(source, /readPhotoAvatarGenerationCapability/);
+  assert.match(source, /resolveAuthoritativeAiProcessingConsent/);
   assert.match(source, /CREAR CARICATURA DESDE MI FOTO/);
-  assert.match(source, /requiere un proveedor real/);
+  assert.match(source, /USAR AVATAR/);
+  assert.match(source, /GENERAR OTRA/);
+  assert.match(source, /VOLVER A FOTO/);
+  assert.doesNotMatch(source, /disabled=\{!PHOTO_AVATAR_GENERATION_CAPABILITY\.available/);
   assert.match(source, /onPointerMove/);
   assert.match(source, /pellizca para ampliar/);
   assert.match(source, /rotation/);
   assert.doesNotMatch(source, /Ajuste fino|Horizontal<input|Vertical<input/);
+});
+
+test("foto recortada genera, compara, selecciona y solicita una variante distinta sin perder el original", async () => {
+  const h = imagePicker("");
+  h.click("Sube tu foto");
+  assert.doesNotMatch(h.text(), /CREAR CARICATURA DESDE MI FOTO/, "sin una foto no se ofrece el envío al proveedor");
+  const file = h.nodes().find((node) => node.type === "input" && node.props["aria-label"] === "Elegir foto de la galería");
+  assert.ok(file);
+  (file.props.onChange as (event: unknown) => void)({ target: { files: [{}] } });
+  h.render();
+  h.click("CREAR CARICATURA DESDE MI FOTO");
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  h.render();
+  assert.match(h.text(), /FOTO ORIGINAL/);
+  assert.match(h.text(), /AVATAR CREADO/);
+  assert.deepEqual(h.generationRequests.map((request) => request.variant), [1]);
+  assert.equal(h.generationRequests[0]?.accessToken, "qa-token");
+  assert.equal(h.generationRequests[0]?.sourceImageDataUrl, "data:image/webp;base64,optimized");
+  assert.equal(h.value(), "");
+  h.click("USAR AVATAR");
+  assert.equal(h.value(), "data:image/webp;base64,generated1");
+  h.click("GENERAR OTRA");
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  h.render();
+  assert.deepEqual(h.generationRequests.map((request) => request.variant), [1, 2]);
+  assert.equal(h.generationRequests[1]?.sourceImageDataUrl, "data:image/webp;base64,optimized");
+  assert.match(h.text(), /FOTO ORIGINAL/);
+  h.click("VOLVER A FOTO");
+  assert.match(h.text(), /USAR ESTA FOTO/);
+  h.click("CREAR CARICATURA DESDE MI FOTO");
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  h.render();
+  assert.deepEqual(h.generationRequests.map((request) => request.variant), [1, 2, 1], "volver al crop inicia una serie nueva desde el encuadre vigente");
+});
+
+test("configuración externa ausente y error del proveedor conservan la foto y permiten reintentar", async () => {
+  for (const options of [{ capabilityAvailable: false }, { generationError: true }]) {
+    const h = imagePicker("", options);
+    h.click("Sube tu foto");
+    const file = h.nodes().find((node) => node.type === "input" && node.props["aria-label"] === "Elegir foto de la galería");
+    assert.ok(file);
+    (file.props.onChange as (event: unknown) => void)({ target: { files: [{}] } });
+    h.render();
+    const action = h.nodes().find((node) => node.type === "button" && text(node).includes("CREAR CARICATURA"));
+    assert.equal(action?.props.disabled, false, "el CTA no queda como placeholder gris");
+    h.click("CREAR CARICATURA DESDE MI FOTO");
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    h.render();
+    assert.ok(h.nodes().some((node) => node.props["aria-label"] === "Editor de recorte. Arrastra para mover y pellizca para ampliar."));
+    assert.match(h.text(), options.capabilityAvailable === false ? /no está configurada en DEV/ : /No pudimos crear el avatar/);
+    assert.equal(h.generationRequests.length, options.capabilityAvailable === false ? 0 : 1);
+  }
 });
 
 test("cambiar entre los cuatro modos no revive la selección anterior", () => {

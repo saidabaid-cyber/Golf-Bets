@@ -1,11 +1,15 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from "react";
-import { normalizeProfileImageCrop, profileImageCropAfterPan, profileImageErrorMessage, profileImageFromFile, profileImagePreviewGeometry, type ProfileImageCrop } from "../../lib/profile-image";
+import { normalizeProfileImageCrop, profileImageCropAfterPan, profileImageErrorMessage, profileImageFromDataUrl, profileImageFromFile, profileImagePreviewGeometry, type ProfileImageCrop } from "../../lib/profile-image";
 import { isProfileEmojiAvatar, normalizeProfileEmojiAvatar, profileAvatarType } from "../../lib/profile-avatar";
 import { parseManualAvatarUrl } from "../../lib/manual-avatar";
-import { PHOTO_AVATAR_GENERATION_CAPABILITY } from "../../lib/photo-avatar-generation";
+import { resolveAuthoritativeAiProcessingConsent } from "../../lib/backyard-ai/consent-client";
+import { browserAiProcessingConsentStorage } from "../../lib/backyard-ai/processing-consent";
+import { AI_IMAGE_PROCESSING_CONSENT } from "../../lib/backyard-ai/privacy";
+import { MAX_PHOTO_AVATAR_VARIANTS, PhotoAvatarGenerationError, readPhotoAvatarGenerationCapability, requestPhotoAvatarGeneration } from "../../lib/photo-avatar-generation";
 import { AvatarCreationPanel } from "./avatar-creation-panel";
+import { AiProcessingConsentPrompt } from "./backyard-ai/ai-processing-consent";
 import styles from "./profile-image-picker.module.css";
 
 type AvatarMode = "none" | "emoji" | "avatar" | "photo";
@@ -40,7 +44,7 @@ function ModeVisual({ mode, value }: { mode: AvatarMode; value: string }) {
   return <svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="17" r="8"/><path d="M10 41c1-10 6-15 14-15s13 5 14 15"/></svg>;
 }
 
-export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyChange, providerPhotoUrl }: {
+export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyChange, providerPhotoUrl, accessToken, userId }: {
   value: string; onChange: (value: string) => void; kind?: "profile" | "group"; onBusyChange?: (busy: boolean) => void;
   providerPhotoUrl?: string; accessToken?: string | null; userId?: string;
 }) {
@@ -49,6 +53,10 @@ export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyCh
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const pendingPhotoRef = useRef<PendingPhoto | null>(null);
   const requestRef = useRef(0);
+  const generationAbortRef = useRef<AbortController | null>(null);
+  const generationInFlightRef = useRef(false);
+  const generationOriginalRef = useRef("");
+  const generationCountRef = useRef(0);
   const cropRef = useRef<Required<ProfileImageCrop>>(EMPTY_CROP);
   const gestureRef = useRef<Gesture>({ pointers: new Map(), startCrop: EMPTY_CROP, startCenter: { x: 0, y: 0 }, startDistance: 0 });
   const [busy, setBusy] = useState(false);
@@ -57,13 +65,29 @@ export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyCh
   const [pendingPhoto, setPendingPhoto] = useState<PendingPhoto | null>(null);
   const [photoDimensions, setPhotoDimensions] = useState<PhotoDimensions | null>(null);
   const [crop, setCrop] = useState<Required<ProfileImageCrop>>(EMPTY_CROP);
+  const [generationOriginal, setGenerationOriginal] = useState("");
+  const [generatedAvatar, setGeneratedAvatar] = useState("");
+  const [generationCount, setGenerationCount] = useState(0);
+  const [showGenerationConsent, setShowGenerationConsent] = useState(false);
   const [emojiInput, setEmojiInput] = useState({ source: value, text: isProfileEmojiAvatar(value) ? value : "" });
   const emojiDraft = emojiInput.source === value ? emojiInput.text : isProfileEmojiAvatar(value) ? value : "";
   const [selection, setSelection] = useState<{ mode: AvatarMode; value: string }>({ mode: modeFromValue(value), value });
   const mode = selection.value === value ? selection.mode : modeFromValue(value);
 
   function setCropState(next: Required<ProfileImageCrop>) { cropRef.current = next; setCrop(next); }
+  function resetPhotoGeneration() {
+    generationAbortRef.current?.abort();
+    generationAbortRef.current = null;
+    generationInFlightRef.current = false;
+    generationOriginalRef.current = "";
+    generationCountRef.current = 0;
+    setGenerationOriginal("");
+    setGeneratedAvatar("");
+    setGenerationCount(0);
+    setShowGenerationConsent(false);
+  }
   function releasePendingPhoto() {
+    resetPhotoGeneration();
     const current = pendingPhotoRef.current;
     if (current) URL.revokeObjectURL(current.objectUrl);
     pendingPhotoRef.current = null;
@@ -73,6 +97,8 @@ export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyCh
   }
   useEffect(() => () => {
     requestRef.current += 1;
+    generationAbortRef.current?.abort();
+    generationInFlightRef.current = false;
     const current = pendingPhotoRef.current;
     if (current) URL.revokeObjectURL(current.objectUrl);
     onBusyChange?.(false);
@@ -130,6 +156,99 @@ export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyCh
       onChange(image); setSelection({ mode: "photo", value: image }); setStatus("Listo. Guarda tu perfil para conservar la foto."); releasePendingPhoto();
     } catch (error) { if (request === requestRef.current) setMessage(profileImageErrorMessage(error)); }
     finally { if (request === requestRef.current) { setBusy(false); onBusyChange?.(false); } }
+  }
+
+  async function createPhotoAvatarVariant(consentAlreadyConfirmed = false) {
+    if (!pendingPhoto || generationInFlightRef.current) return;
+    if (!accessToken || !userId) {
+      setMessage("Tu sesión no está disponible. Vuelve a iniciar sesión antes de enviar la foto.");
+      return;
+    }
+    if (generationCountRef.current >= MAX_PHOTO_AVATAR_VARIANTS) {
+      setMessage("Ya creaste el máximo de variantes para esta foto.");
+      return;
+    }
+    generationInFlightRef.current = true;
+    const request = ++requestRef.current;
+    const controller = new AbortController();
+    generationAbortRef.current?.abort();
+    generationAbortRef.current = controller;
+    setBusy(true); onBusyChange?.(true); setMessage(""); setStatus("Verificando generación de avatar…");
+    try {
+      const capability = await readPhotoAvatarGenerationCapability();
+      if (controller.signal.aborted || request !== requestRef.current) return;
+      if (!capability.available) {
+        setMessage("La generación de avatar todavía no está configurada en DEV. No se envió tu foto.");
+        setStatus("");
+        return;
+      }
+      if (!consentAlreadyConfirmed) {
+        setStatus("Verificando tu autorización de imágenes…");
+        const authority = await resolveAuthoritativeAiProcessingConsent({
+          accessToken,
+          storage: browserAiProcessingConsentStorage(),
+          userId,
+          scope: AI_IMAGE_PROCESSING_CONSENT,
+          signal: controller.signal,
+        });
+        if (controller.signal.aborted || request !== requestRef.current || authority.discarded) return;
+        if (!authority.active || authority.pendingLocalRevocation) {
+          setStatus("");
+          setShowGenerationConsent(true);
+          return;
+        }
+      }
+      setStatus(generationOriginalRef.current ? "Creando otra variante…" : "Preparando imagen…");
+      const original = generationOriginalRef.current || await profileImageFromFile(pendingPhoto.file, 512, cropRef.current);
+      if (controller.signal.aborted || request !== requestRef.current) return;
+      if (!generationOriginalRef.current) {
+        generationOriginalRef.current = original;
+        setGenerationOriginal(original);
+      }
+      const variant = generationCountRef.current + 1;
+      setStatus("Creando avatar…");
+      const result = await requestPhotoAvatarGeneration({
+        sourceImageDataUrl: original,
+        variant,
+        accessToken,
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted || request !== requestRef.current) return;
+      setStatus("Preparando avatar…");
+      const optimized = await profileImageFromDataUrl(result.avatarDataUrl, 512);
+      if (controller.signal.aborted || request !== requestRef.current) return;
+      generationCountRef.current = variant;
+      setGenerationCount(variant);
+      setGeneratedAvatar(optimized);
+      setStatus("Avatar creado. Elige cuál quieres usar.");
+    } catch (error) {
+      if (controller.signal.aborted || request !== requestRef.current || (error instanceof DOMException && error.name === "AbortError")) return;
+      setStatus("");
+      setMessage(error instanceof PhotoAvatarGenerationError && error.code === "rate_limit"
+        ? error.message
+        : "No pudimos crear el avatar. Intenta nuevamente.");
+    } finally {
+      if (generationAbortRef.current === controller) generationAbortRef.current = null;
+      if (request === requestRef.current) {
+        generationInFlightRef.current = false;
+        setBusy(false);
+        onBusyChange?.(false);
+      }
+    }
+  }
+
+  function useGeneratedAvatar() {
+    if (!generatedAvatar || busy) return;
+    onChange(generatedAvatar);
+    setSelection({ mode: "photo", value: generatedAvatar });
+    setMessage("");
+    setStatus("Avatar listo. Guarda tu perfil para conservarlo.");
+  }
+
+  function returnToPhotoCrop() {
+    resetPhotoGeneration();
+    setMessage("");
+    setStatus("Mueve o pellizca la foto para ajustar el encuadre.");
   }
 
   function resetGesture(points: Point[]) {
@@ -213,12 +332,24 @@ export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyCh
           <div className={styles.zoomControls}><button type="button" aria-label="Acercar foto" onPointerDown={(event) => event.stopPropagation()} onClick={() => setCropState({ ...cropRef.current, zoom: clamp(cropRef.current.zoom + .2, 1, 3) })}>＋</button><button type="button" aria-label="Alejar foto" onPointerDown={(event) => event.stopPropagation()} onClick={() => setCropState({ ...cropRef.current, zoom: clamp(cropRef.current.zoom - .2, 1, 3) })}>−</button></div>
           <button type="button" className={styles.rotateButton} onPointerDown={(event) => event.stopPropagation()} onClick={() => setCropState({ ...cropRef.current, rotation: (cropRef.current.rotation + 90) % 360 })}>↻ ROTAR</button>
         </div>
-        <div className={styles.photoActions}>
+        {!generatedAvatar ? <div className={styles.photoActions}>
           <button type="button" className="primary" disabled={busy} onClick={() => void applyPendingPhoto()}>{busy ? "PREPARANDO IMAGEN…" : "USAR ESTA FOTO"}</button>
-          <button type="button" className={styles.caricatureAction} disabled={!PHOTO_AVATAR_GENERATION_CAPABILITY.available || busy} aria-describedby={`${fieldId}-generation-note`}><span aria-hidden="true">✦</span><span><b>CREAR CARICATURA DESDE MI FOTO</b><small>Avatar ilustrado premium desde esta imagen</small></span><span aria-hidden="true">›</span></button>
+          <button type="button" className={styles.caricatureAction} disabled={busy} onClick={() => void createPhotoAvatarVariant()}><span aria-hidden="true">✦</span><span><b>{busy ? "CREANDO AVATAR…" : "CREAR CARICATURA DESDE MI FOTO"}</b><small>Avatar ilustrado premium desde esta imagen</small></span><span aria-hidden="true">›</span></button>
           <button type="button" className="textButton" disabled={busy} onClick={() => galleryInputRef.current?.click()}>ELEGIR OTRA</button>
-        </div>
-        {!PHOTO_AVATAR_GENERATION_CAPABILITY.available && <small id={`${fieldId}-generation-note`} className={styles.unavailable}>La caricatura desde foto requiere un proveedor real de transformación de imágenes. El contrato está preparado, pero este entorno aún no tiene uno configurado y verificado.</small>}
+        </div> : <section className={styles.generationResult} aria-labelledby={`${fieldId}-generation-title`}>
+          <h4 id={`${fieldId}-generation-title`}>Compara el resultado</h4>
+          <div className={styles.generationComparison}>
+            <figure><div><img src={generationOriginal} alt="Foto original recortada" /></div><figcaption>FOTO ORIGINAL</figcaption></figure>
+            <figure data-selected={value === generatedAvatar}><div><img src={generatedAvatar} alt="Avatar ilustrado creado" /></div><figcaption>AVATAR CREADO</figcaption></figure>
+          </div>
+          <div className={styles.generationActions}>
+            <button type="button" className="primary" disabled={busy} onClick={useGeneratedAvatar}>USAR AVATAR</button>
+            <button type="button" className="secondary" disabled={busy || generationCount >= MAX_PHOTO_AVATAR_VARIANTS} onClick={() => void createPhotoAvatarVariant()}>GENERAR OTRA</button>
+            <button type="button" className="secondary" disabled={busy} onClick={() => void applyPendingPhoto()}>USAR FOTO ORIGINAL</button>
+            <button type="button" className="textButton" disabled={busy} onClick={returnToPhotoCrop}>VOLVER A FOTO</button>
+          </div>
+          {generationCount >= MAX_PHOTO_AVATAR_VARIANTS && <small>Máximo de {MAX_PHOTO_AVATAR_VARIANTS} variantes por foto.</small>}
+        </section>}
       </div>}
       <small className={styles.formatNote}>JPEG, PNG, WebP o HEIC/HEIF compatible. Hasta 20 MB; se optimiza sólo al confirmar.</small>
     </section>}
@@ -227,5 +358,20 @@ export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyCh
     {mode === "avatar" && <AvatarCreationPanel initialValue={parseManualAvatarUrl(value) ? value : undefined} staged onBusyChange={onBusyChange} onCancel={() => selectMode(modeFromValue(value))} onUse={(url) => { onChange(url); setSelection({ mode: "avatar", value: url }); setStatus("Avatar listo. Guarda tu perfil para conservarlo."); }} />}
     {mode === "none" && <section className={styles.noneState}><span aria-hidden="true"><ModeVisual mode="none" value="" /></span><div><b>Sin foto</b><p>Se usará el avatar genérico de The Backyard. Tu foto o avatar anterior no volverá a mostrarse después de guardar.</p></div></section>}
     {message && <small className={styles.error} role="alert">{message}</small>}{status && <small className={styles.help} role="status">{status}</small>}
+    {showGenerationConsent && userId && <AiProcessingConsentPrompt
+      userId={userId}
+      accessToken={accessToken}
+      requiresRemoteConsent
+      scope={AI_IMAGE_PROCESSING_CONSENT}
+      onCancel={() => setShowGenerationConsent(false)}
+      onAccepted={(_consent, persistence) => {
+        setShowGenerationConsent(false);
+        if (!persistence.accountPersisted) {
+          setMessage("No pudimos guardar tu autorización. No se envió ninguna foto.");
+          return;
+        }
+        void createPhotoAvatarVariant(true);
+      }}
+    />}
   </div>;
 }

@@ -239,7 +239,7 @@ test("settings load server decisions, render both statuses and offer explicit re
   assert.equal(h.checks(), 3);
   assert.equal(nodes(tree).filter(node => node.type === "b" && node.props.children === "DESACTIVADO").length, 3);
   assert.ok(nodes(tree).some(node => node.props.children === "Instrucciones Backyard AI"));
-  assert.ok(nodes(tree).some(node => node.props.children === "Lectura de scorecards"));
+  assert.ok(nodes(tree).some(node => node.props.children === "Fotos e imágenes"));
   assert.ok(nodes(tree).some(node => node.props.children === "Lectura de datos de práctica"));
   invoke(find(tree, node => node.type === "button" && node.props.children === "Autorizar"), "onClick");
   tree = h.render("AiProcessingConsentSettings");

@@ -267,6 +267,21 @@ export async function profileImageFromFile(file: File, size = 512, cropOptions: 
   }
 }
 
+/** Normalizes a provider-generated image through the same bounded profile
+ * pipeline used for phone uploads before it can enter profile persistence. */
+export async function profileImageFromDataUrl(dataUrl: string, size = 512): Promise<string> {
+  if (
+    dataUrl.length > 4_000_000
+    || !/^data:image\/(?:jpeg|png|webp);base64,[a-z0-9+/]+={0,2}$/i.test(dataUrl)
+  ) throw new Error("image_content");
+  const response = await fetch(dataUrl);
+  if (!response.ok) throw new Error("image_content");
+  const blob = await response.blob();
+  if (blob.size > PROFILE_IMAGE_MAX_BYTES) throw new Error("image_size");
+  const extension = blob.type === "image/jpeg" ? "jpg" : blob.type.split("/", 2)[1] || "img";
+  return profileImageFromFile(new File([blob], `generated-avatar.${extension}`, { type: blob.type }), size);
+}
+
 export function profileImageErrorMessage(error: unknown) {
   const code = error instanceof Error ? error.message : "";
   if (code === "image_size") return "Esta imagen es demasiado grande. Elige una imagen menor a 20 MB.";
