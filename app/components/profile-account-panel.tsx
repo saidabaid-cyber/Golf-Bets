@@ -123,6 +123,7 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
   const [deleteAccountPolicy, setDeleteAccountPolicy] = useState<AccountDataPolicy | null>(null);
   const [deletingAccount, setDeletingAccount] = useState(false);
   const statsInFlight = useRef(false);
+  const profileSaveInFlight = useRef(false);
   const statsRequestId = useRef<string | undefined>(undefined);
   const accountInFlight = useRef(false);
   const accountRequestId = useRef<string | undefined>(undefined);
@@ -266,7 +267,7 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
   }
 
   async function saveProfile() {
-    if (avatarBusy || saving) return;
+    if (avatarBusy || saving || profileSaveInFlight.current) return;
     if (homeClubSelectionIncomplete) {
       setMessageKind("error"); setMessage("Selecciona el recorrido de tu Home Club antes de guardar."); return;
     }
@@ -276,7 +277,7 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
     if (!avatar.ok) { setMessageKind("error"); setMessage(avatar.message); return; }
     const locationValidation = validateProfileLocation(draft);
     if (!locationValidation.valid) { setMessageKind("error"); setMessage(locationValidation.errors.country || locationValidation.errors.state || "Revisa tu país y región."); return; }
-    setSaving(true); setMessage("");
+    profileSaveInFlight.current = true; setSaving(true); setMessage("");
     try {
       const nextUsername = normalizeProfileUsername(draft.username);
       const currentUsername = normalizeProfileUsername(identity.username);
@@ -284,14 +285,16 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
         setMessageKind("error"); setMessage("Ese nombre de usuario ya está en uso."); return;
       }
       const result = await updateProfile({ displayName: validated.displayName, defaultHandicap: validated.defaultHandicap, avatarUrl: avatar.avatarUrl, ...draft });
-      setMessageKind("success"); setMessage(result === "cloud" ? "Perfil guardado y sincronizado." : "Perfil guardado en este dispositivo. Sincronización pendiente."); setEditing(false);
+      setMessageKind("success");
+      setMessage(result === "cloud" ? "Perfil guardado y sincronizado." : result === "cloud_pending" ? "Perfil guardado · sincronizando avatar…" : "Perfil guardado en este dispositivo. Sincronización pendiente.");
+      setEditing(false);
     } catch (error) {
       setMessageKind("error");
       setMessage(error instanceof Error && error.message === "Ese nombre de usuario ya está en uso."
         ? error.message
         : "No se confirmó el guardado. Conservamos lo que escribiste; reintenta.");
     }
-    finally { setSaving(false); }
+    finally { profileSaveInFlight.current = false; setSaving(false); }
   }
 
   async function deleteStatistics() {
@@ -405,10 +408,7 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
       <label id="profile-edit-username">Username<input value={draft.username} onChange={(event) => setDraft((current) => ({ ...current, username: event.target.value.replace(/^@+/, "") }))} placeholder="sin @" autoComplete="username" autoCorrect="off" autoCapitalize="none" spellCheck={false} inputMode="text" /></label>
       <div id="profile-edit-handicap"><HandicapSourceChoices control={indexControl} authenticated={identity.mode === "authenticated"} ghinControl={ghinControl} /></div>
     </div></section>
-    <section className="card profileEditCard"><h2>Foto / Avatar</h2><ProfileImagePicker value={avatarUrl} onChange={setAvatarUrl} onSaveAvatar={async (value) => {
-      const result = await updateProfile({ displayName: identity.displayName, defaultHandicap: identity.defaultHandicap, avatarUrl: value });
-      setMessageKind("success"); setMessage(result === "cloud" ? "Avatar guardado y sincronizado." : "Avatar guardado en este dispositivo. Sincronización pendiente.");
-    }} onBusyChange={setAvatarBusy} accessToken={identity.accessToken} userId={identity.userId} /><p className="hint">Quitarla en The Backyard no modifica tu foto de Google.</p></section>
+    <section className="card profileEditCard"><h2>Foto / Avatar</h2><ProfileImagePicker value={avatarUrl} onChange={setAvatarUrl} onBusyChange={setAvatarBusy} accessToken={identity.accessToken} userId={identity.userId} /><p className="hint">Quitarla en The Backyard no modifica tu foto de Google.</p></section>
     <section className="card profileEditCard"><h2>País y región</h2><ProfileLocationPicker value={draft} onChange={(location) => { setDraft((current) => ({ ...current, ...location })); setMessage(""); }} /><p className="hint">Estos datos de perfil no se publican automáticamente. No usamos GPS.</p></section>
     <section id="profile-edit-golf" className="card profileEditCard"><div className="sectionTitle"><div><h2>Información de golf</h2><p>Opcional</p></div></div><div className="profileEditGrid"><CatalogCoursePicker key={`profile-home-${identity.userId}`} purpose="home-club" token={identity.accessToken} permissionOwnerId={identity.userId} selectedName={[draft.homeClub,draft.homeCourse].filter(Boolean).join(" · ")} selectedClubId={draft.homeClubId} selectedCourseId={draft.homeCourseId} onSelectionReadyChange={setHomeClubSelectionReady} onSelectClub={({clubId,clubName}) => setDraft((current) => ({ ...current, homeClub:clubName, homeClubId:clubId, homeCourse:"", homeCourseId:"" }))} onSelectHomeCourse={selection => setDraft((current) => ({ ...current, homeClub:selection.clubName, homeClubId:selection.clubId, homeCourse:selection.courseName, homeCourseId:selection.courseId }))} onRequest={name => requestFeedback("COURSE", name ? { name } : undefined)} /><label>Tee habitual<input value={draft.preferredTee} onChange={(event) => setDraft((current) => ({ ...current, preferredTee: event.target.value }))} /></label><label>Mano dominante<select value={draft.handedness} onChange={(event) => setDraft((current) => ({ ...current, handedness: event.target.value as BackyardProfileDetails["handedness"] }))}><option value="">Selecciona una</option><option value="right">Derecha</option><option value="left">Izquierda</option><option value="ambidextrous">Ambas</option></select></label></div></section>
     {notice}<div className="profileEditActions"><button type="button" className="secondary" disabled={saving} onClick={() => setEditing(false)}>Cancelar</button><button type="button" className="primary" disabled={saving || avatarBusy || homeClubSelectionIncomplete} onClick={() => void saveProfile()}>{saving ? "Guardando…" : avatarBusy ? "Preparando imagen…" : "Guardar perfil"}</button></div>

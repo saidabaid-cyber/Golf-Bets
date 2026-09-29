@@ -31,6 +31,7 @@ test("validación server-side distingue disponible y ocupado sin aceptar otro us
   assert.equal(available, true);
   assert.match(calls[0].url, /username=said\.qa/);
   assert.equal(calls[0].init?.headers && (calls[0].init.headers as Record<string, string>).authorization, "Bearer jwt");
+  assert.ok(calls[0].init?.signal, "la validación remota tiene timeout/abort explícito");
   assert.doesNotMatch(calls[0].url, /userId|email/);
   assert.equal(await checkProfileUsernameAvailability("jwt", "occupied", (async () => new Response(JSON.stringify({ available: false }), { status: 200 })) as typeof fetch), false);
 });

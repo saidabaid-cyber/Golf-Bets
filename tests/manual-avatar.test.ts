@@ -11,7 +11,7 @@ const owner = "manual-avatar-owner";
 const profile: BackyardProfile = { userId: owner, displayName: "Said", email: "said@example.test", defaultHandicap: 7, avatarUrl: "" };
 
 test("configurador local incluye persona, rostro y todos los rasgos editables versionados", () => {
-  assert.deepEqual(Object.keys(MANUAL_AVATAR_OPTIONS), ["persona", "rostro", "piel", "pelo", "colorPelo", "ojos", "colorOjos", "cejas", "nariz", "boca", "barba", "accesorio"]);
+  assert.deepEqual(Object.keys(MANUAL_AVATAR_OPTIONS), ["persona", "fondo", "rostro", "piel", "pelo", "colorPelo", "ojos", "colorOjos", "cejas", "nariz", "boca", "barba", "accesorio"]);
   for (const [key, choices] of Object.entries(MANUAL_AVATAR_OPTIONS)) {
     assert.ok(choices.length >= 3, key);
     for (const choice of choices) {
@@ -36,6 +36,18 @@ test("SVG canónico contiene sólo capas locales y metadata regenerable", () => 
   assert.doesNotMatch(svg, /<script|<foreignObject|<image|<use|href=|https:\/\//i);
 });
 
+test("avatar manual v1 existente se conserva y se abre como v2 con fondo sage", () => {
+  const currentSvg = manualAvatarSvg(DEFAULT_MANUAL_AVATAR);
+  const legacyFields = Object.fromEntries(Object.entries(DEFAULT_MANUAL_AVATAR).filter(([key]) => key !== "version" && key !== "fondo"));
+  const legacy = { version: 1, ...legacyFields };
+  const legacySvg = currentSvg.replace(
+    /<metadata id="backyard-avatar-config">[A-Za-z0-9+/]+={0,2}<\/metadata>/,
+    `<metadata id="backyard-avatar-config">${btoa(JSON.stringify(legacy))}</metadata>`,
+  );
+  const parsed = parseManualAvatarUrl(`data:image/svg+xml;base64,${btoa(legacySvg)}`);
+  assert.deepEqual(parsed, { ...legacy, version: 2, fondo: "sage" });
+});
+
 test("SVG arbitrario, cambios de config, scripts y recursos externos se rechazan", () => {
   const canonical = manualAvatarUrl(DEFAULT_MANUAL_AVATAR);
   const svg = atob(canonical.split(",")[1]);
@@ -53,7 +65,7 @@ test("SVG arbitrario, cambios de config, scripts y recursos externos se rechazan
     assert.equal(safeProfileAvatarValue(value), "");
   }
   assert.equal(parseManualAvatarConfig({ ...DEFAULT_MANUAL_AVATAR, surprise: "injection" }), null);
-  assert.equal(parseManualAvatarConfig({ ...DEFAULT_MANUAL_AVATAR, version: 2 }), null);
+  assert.equal(parseManualAvatarConfig({ ...DEFAULT_MANUAL_AVATAR, version: 1 }), null);
   assert.equal(parseManualAvatarConfig({ ...DEFAULT_MANUAL_AVATAR, piel: "<script>" }), null);
 });
 
@@ -84,13 +96,15 @@ test("UI creador ya no conecta a servicios externos y avatar recargado no abre e
   const picker = readFileSync("app/components/profile-image-picker.tsx", "utf8");
   assert.doesNotMatch(creator, /fetch\(|avatar-generation|OpenAI|accessToken|userId/);
   assert.match(creator, /ALEATORIO/);
-  assert.match(creator, /GUARDAR AVATAR/);
+  assert.match(creator, /USAR ESTE AVATAR/);
   assert.match(creator, /CANCELAR/);
   assert.match(picker, /type === "custom_avatar" \? "custom" : type/);
   assert.match(picker, /mode === "custom" && <div/);
   assert.match(picker, /mode === "create" && <AvatarCreationPanel/);
-  assert.match(picker, /if \(onSaveAvatar\) await onSaveAvatar\(url\)/);
+  assert.doesNotMatch(picker, /onSaveAvatar/);
   assert.match(picker, /onChange\(url\)/);
+  assert.match(creator, /LOOK DE GOLF/);
+  assert.match(creator, /FONDO/);
 });
 
 test("colores táctiles y opciones de pelo, barba y accesorios exigidos están disponibles", () => {

@@ -60,11 +60,23 @@ test("new Google/email accounts always review editable personal fields while exi
   assert.doesNotMatch(source, /identityAlreadyNamed|Continuando tu alta/);
   assert.match(source, /id="profile-setup-given"/);
   assert.match(source, /id="profile-setup-family"/);
-  assert.match(source, /<ProfileImagePicker value=\{avatarUrl\}/);
+  assert.match(source, /<ProfileImagePicker value=\{avatarUrl\} providerPhotoUrl=\{identity\.avatarUrl \|\| undefined\}/);
   assert.match(source, /const displayName = \[givenName\.trim\(\), familyName\.trim\(\)\]/);
   assert.match(source, /!givenName\.trim\(\) \|\| !familyName\.trim\(\)/);
   assert.match(source, /missing\.includes\("location"\)/);
   assert.match(source, /missing\.includes\("handedness"\)/);
   assert.match(source, /if \(mapping\.existingAccount\)[\s\S]*setProfileSetupRequired\(false\)/);
   assert.match(source, /setBetaOnboardingRequired\(mapping\.onboardingProgress\?\.status === "in_progress"\)/);
+});
+
+test("Google precarga nombre/apellido/foto pero la etapa personal sigue editable; Email usa la misma etapa", () => {
+  const google = oauthIdentityFromMetadata({ given_name: "Ada", family_name: "Lovelace", picture: "https://images.example/ada.png" }, "ada@example.com");
+  const email = oauthIdentityFromMetadata({}, "new@example.com");
+  assert.deepEqual({ givenName: google.givenName, familyName: google.familyName, avatarUrl: google.avatarUrl }, { givenName: "Ada", familyName: "Lovelace", avatarUrl: "https://images.example/ada.png" });
+  assert.deepEqual({ givenName: email.givenName, familyName: email.familyName, avatarUrl: email.avatarUrl }, { givenName: "", familyName: "", avatarUrl: "" });
+  const source = readFileSync("app/components/account-provider.tsx", "utf8");
+  assert.match(source, /<ProfileSetupScreen identity=\{identity\} onSave=\{saveInitialProfile\}/);
+  assert.match(source, /value=\{givenName\} onChange=\{\(event\) => setGivenName/);
+  assert.match(source, /value=\{familyName\} onChange=\{\(event\) => setFamilyName/);
+  assert.match(source, /if \(identity\.mode === "authenticated" && profileSetupRequired\)/);
 });

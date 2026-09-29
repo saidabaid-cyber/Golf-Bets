@@ -38,7 +38,7 @@ test("perfil usa archivos o avatares y onboarding no repite captura de Grupos", 
   const group = read("app/components/beta-onboarding-flow.tsx");
   assert.match(picker, /accept="image\/jpeg,image\/png,image\/webp,image\/heic,image\/heif/);
   assert.match(picker, /\.heic,\.heif"/);
-  assert.match(picker, /Subir foto/);
+  assert.match(picker, /SUBIR UNA IMAGEN/);
   assert.match(picker, /Emoji de avatar/);
   assert.match(picker, /normalizeProfileEmojiAvatar/);
   assert.doesNotMatch(picker, /Avatares disponibles/);

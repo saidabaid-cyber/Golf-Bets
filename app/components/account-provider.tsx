@@ -3,6 +3,7 @@ import { saveOnboardingCheckpoint } from '../../lib/onboarding-checkpoint';
 import { readStoredJson, STORAGE_KEYS } from '../../lib/round-utils';
 import { cloudAccountErrorMessage, ensureCloudProfile, saveCloudProfile } from "../../lib/cloud-account";
 import { canonicalProfileUsername, normalizeProfileUsername } from "../../lib/profile-username";
+import { waitForProfilePrimarySave, type ProfileSaveResult } from "../../lib/profile-save-flow";
 
 import Link from "next/link";
 import Image from "next/image";
@@ -60,7 +61,7 @@ import { ProfileLocationPicker } from "./profile-location-picker";
 import { normalizeProfileLocation, validateProfileLocation } from "../../lib/profile-geography";
 import { parseStoredProfileLocation, readProfileLocationMetadata, PROFILE_LOCATION_METADATA_KEY } from "../../lib/profile-location-sync";
 import { syncExistingSocialProfileAvatar } from "../../lib/profile-avatar-sync";
-import { consumeAccountEntryIntent, readAccountEntry, readCurrentAccountEntry, rememberAccountEntryIntent, type AccountEntry } from "../../lib/account-entry";
+import { consumeAccountEntryIntent, readCurrentAccountEntry, rememberAccountEntryIntent, type AccountEntry } from "../../lib/account-entry";
 import { BettingConsentDialog } from "./betting-consent-dialog";
 import { FeedbackDialog } from "./feedback-dialog";
 import { persistBettingDataConsent } from "../../lib/betting-consent";
@@ -104,7 +105,7 @@ export type BackyardIdentity = BackyardProfile & {
 type AccountContextValue = {
   identity: BackyardIdentity;
   adminAccess: AdminAccess;
-  updateProfile: (profile: BackyardProfileUpdate) => Promise<"local" | "cloud">;
+  updateProfile: (profile: BackyardProfileUpdate) => Promise<ProfileSaveResult>;
   logout: () => Promise<void>;
   finishAccountDeletion: () => Promise<boolean>;
   openAccess: () => void;
@@ -400,7 +401,7 @@ function ConsentScreen({ onAccept, onBack }: { onAccept: () => Promise<void>; on
 
 function ProfileSetupScreen({ identity, onSave, onBack }: {
   identity: BackyardIdentity;
-  onSave: (profile: BackyardProfileUpdate) => Promise<"local" | "cloud">;
+  onSave: (profile: BackyardProfileUpdate) => Promise<ProfileSaveResult>;
   onBack: () => Promise<void>;
 }) {
   const [givenName, setGivenName] = useState(identity.givenName || "");
@@ -413,10 +414,11 @@ function ProfileSetupScreen({ identity, onSave, onBack }: {
   const [avatarUrl, setAvatarUrl] = useState(identity.avatarUrl || "");
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [busy, setBusy] = useState(false);
+  const saveInFlight = useRef(false);
   const [message, setMessage] = useState("");
   const missing = missingInitialProfileFields(identity);
   const saveProfileValues = useCallback(async () => {
-    if (avatarBusy) return;
+    if (avatarBusy || saveInFlight.current) return;
     if (!givenName.trim() || !familyName.trim()) {
       setMessage("Captura tu nombre y apellido(s) para continuar.");
       return;
@@ -429,8 +431,8 @@ function ProfileSetupScreen({ identity, onSave, onBack }: {
     const locationValidation = validateProfileLocation(location, { countryRequired: true, stateRequired: true });
     if (!locationValidation.valid) { setMessage(locationValidation.errors.country || locationValidation.errors.state || "Revisa tu país y región."); return; }
     if (!handedness) { setMessage("Selecciona tu mano dominante."); return; }
-    setBusy(true); setMessage("");
-    try { await onSave({
+    saveInFlight.current = true; setBusy(true); setMessage("");
+    try { const result = await onSave({
       displayName: validation.displayName,
       // This screen edits identity, not the selected index source. Retain any
       // saved golf value while the source selector lives in the next step.
@@ -442,9 +444,12 @@ function ProfileSetupScreen({ identity, onSave, onBack }: {
       city: city.trim(),
       handedness,
       golfProfileUpdatedAt: new Date().toISOString(),
-    }); }
+    });
+      if (result === "cloud_pending") setMessage("Perfil guardado · sincronizando avatar…");
+      else if (result === "local") setMessage("Perfil guardado en este dispositivo · sincronización pendiente.");
+    }
     catch { setMessage("No pudimos completar el perfil. Revisa tu conexión e intenta nuevamente."); }
-    finally { setBusy(false); }
+    finally { saveInFlight.current = false; setBusy(false); }
   }, [avatarBusy, identity.defaultHandicap, givenName, familyName, avatarUrl, location, city, handedness, onSave]);
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -458,7 +463,7 @@ function ProfileSetupScreen({ identity, onSave, onBack }: {
     <p>Confirma o edita tu nombre, apellidos y foto antes de continuar.</p>
     <form className="profileSetupForm" onSubmit={saveProfile} noValidate>
       <div className="grid2"><label htmlFor="profile-setup-given">Nombre<input id="profile-setup-given" required autoComplete="given-name" enterKeyHint="next" value={givenName} onChange={(event) => setGivenName(event.target.value)} placeholder="Tu nombre" /></label><label htmlFor="profile-setup-family">Apellidos<input id="profile-setup-family" required autoComplete="family-name" enterKeyHint="next" value={familyName} onChange={(event) => setFamilyName(event.target.value)} placeholder="Tus apellidos" /></label></div>
-      <label>Foto / avatar opcional</label><ProfileImagePicker value={avatarUrl} onChange={setAvatarUrl} onBusyChange={setAvatarBusy} accessToken={identity.accessToken} userId={identity.userId} />
+      <label>Foto / avatar opcional</label><ProfileImagePicker value={avatarUrl} providerPhotoUrl={identity.avatarUrl || undefined} onChange={setAvatarUrl} onBusyChange={setAvatarBusy} accessToken={identity.accessToken} userId={identity.userId} />
       {missing.includes("location") && <><ProfileLocationPicker value={location} onChange={(next) => { setLocation(next); setMessage(""); }} /><label htmlFor="profile-setup-city">Ciudad opcional<input id="profile-setup-city" autoComplete="address-level2" value={city} onChange={(event) => setCity(event.target.value)} placeholder="Puebla" /></label></>}
       {missing.includes("handedness") && <fieldset className="handednessChoice"><legend>Mano dominante</legend><label><input type="radio" name="handedness" checked={handedness === "right"} onChange={() => setHandedness("right")} />Derecha</label><label><input type="radio" name="handedness" checked={handedness === "left"} onChange={() => setHandedness("left")} />Izquierda</label></fieldset>}
       {message && <div className="accessMessage" role="alert">{message}</div>}
@@ -1322,7 +1327,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     closeBettingConsent(false);
   }
 
-  async function updateProfile(profile: BackyardProfileUpdate): Promise<"local" | "cloud"> {
+  async function updateProfile(profile: BackyardProfileUpdate): Promise<ProfileSaveResult> {
     if (!identity) return "local";
     if (identity.mode === "authenticated" && !accountMutationStillActive(identity.userId)) return "local";
     const includesLocation = ["countryCode", "country", "stateCode", "state"].some((key) => Object.hasOwn(profile, key));
@@ -1355,41 +1360,60 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       issueWithMessage("profile", "Perfil guardado en este dispositivo · sincronización pendiente.", navigator.onLine ? "server" : "offline");
       return "local";
     }
-    try {
-      const profileWriteCoordinator = profileWriterFor(identity.userId);
-      const acknowledged = await profileWriteCoordinator.run(async () => {
+    const profileWriteCoordinator = profileWriterFor(identity.userId);
+    let primarySaved!: () => void;
+    let primaryFailed!: (error: unknown) => void;
+    let primarySettled = false;
+    const primarySave = new Promise<void>((resolve, reject) => { primarySaved = resolve; primaryFailed = reject; });
+    const syncWork = profileWriteCoordinator.run(async (): Promise<{ acknowledged: boolean; metadataPending: boolean }> => {
+      try {
         const saved = await saveCloudProfile(supabase, identity.userId, pending.profile, pending.updatedAt, { rebaseOnServerClock: true });
-        if (!accountMutationStillActive(identity.userId)) return false;
+        primarySettled = true;
+        primarySaved();
+        if (!accountMutationStillActive(identity.userId)) return { acknowledged: false, metadataPending: false };
         // The profile row is canonical; project its public handle/avatar onto
         // the existing Social row, never privacy or a new synthetic identity.
         retimePendingProfileWrite(localStorage, identity.userId, pending.revision, saved.updatedAt);
         await syncExistingSocialProfileAvatar(supabase, identity.userId, pending.profile.avatarUrl, pending.profile.username, pending.profile.displayName);
-        if (!accountMutationStillActive(identity.userId)) return false;
+        if (!accountMutationStillActive(identity.userId)) return { acknowledged: false, metadataPending: false };
         recordCloudProfileRevision(localStorage, identity.userId, saved.updatedAt);
-        return acknowledgePendingProfileWrite(localStorage, identity.userId, pending.revision);
-      });
-      if (!accountMutationStillActive(identity.userId)) return "local";
-      if (!acknowledged) {
-        issueWithMessage("profile", "Hay una edición de perfil más reciente pendiente de sincronizar.", "pending");
-        return "local";
-      }
-      // Public handle is acknowledged by the canonical profile + Social writes
-      // above. Auth metadata is legacy display fallback, not its source of truth.
-      if (["givenName","familyName","handedness","homeClub","homeClubId","homeCourse","homeCourseId","preferredTee"].some(key => Object.hasOwn(profile,key))) {
-        const metadataWrite = await supabase.auth.updateUser({ data: {
-          given_name: next.givenName || null,
-          family_name: next.familyName || null,
-          backyard_golf_profile_v1: { handedness: next.handedness || "", homeClub: next.homeClub || "", homeClubId: next.homeClubId || "", homeCourse: next.homeCourse || "", homeCourseId: next.homeCourseId || "", preferredTee: next.preferredTee || "" },
-        } });
-        if (!accountMutationStillActive(identity.userId)) return "local";
-        if (metadataWrite.error) {
-          issueWithMessage("profile", "Perfil guardado; el usuario se conservará en este dispositivo hasta la próxima sincronización.", "pending");
-          return "local";
+        const acknowledged = acknowledgePendingProfileWrite(localStorage, identity.userId, pending.revision);
+        let metadataPending = false;
+        // Auth metadata is a legacy display fallback. It is secondary to the
+        // canonical profile and must not keep the CTA in “Guardando…”.
+        if (["givenName","familyName","handedness","homeClub","homeClubId","homeCourse","homeCourseId","preferredTee"].some(key => Object.hasOwn(profile,key))) {
+          const metadataWrite = await supabase.auth.updateUser({ data: {
+            given_name: next.givenName || null,
+            family_name: next.familyName || null,
+            backyard_golf_profile_v1: { handedness: next.handedness || "", homeClub: next.homeClub || "", homeClubId: next.homeClubId || "", homeCourse: next.homeCourse || "", homeCourseId: next.homeCourseId || "", preferredTee: next.preferredTee || "" },
+          } });
+          if (!accountMutationStillActive(identity.userId)) return { acknowledged: false, metadataPending: false };
+          metadataPending = Boolean(metadataWrite.error);
         }
+        return { acknowledged, metadataPending };
+      } catch (error) {
+        if (!primarySettled) { primarySettled = true; primaryFailed(error); }
+        throw error;
       }
-      setCloudIssue("profile", null);
-      return "cloud";
-    } catch (error) {
+    });
+    // Attach a rejection observer immediately; a timed-out caller leaves this
+    // work running so the outbox can still finish without an unhandled promise.
+    void syncWork.then(({ acknowledged, metadataPending }) => {
+      if (!accountMutationStillActive(identity.userId)) return;
+      if (!acknowledged) issueWithMessage("profile", "Hay una edición de perfil más reciente pendiente de sincronizar.", "pending");
+      else if (metadataPending) issueWithMessage("profile", "Perfil guardado · sincronización secundaria pendiente.", "pending");
+      else setCloudIssue("profile", null);
+    }).catch((error) => {
+      if (accountMutationStillActive(identity.userId)) setCloudIssue("profile", cloudIssueFromError("profile", error, navigator.onLine));
+    });
+    const primaryOutcome = await waitForProfilePrimarySave(primarySave);
+    if (primaryOutcome.status === "saved") return "cloud_pending";
+    if (primaryOutcome.status === "timeout") {
+      issueWithMessage("profile", "Perfil guardado en este dispositivo · sincronización pendiente.", "pending");
+      return "local";
+    }
+    const error = primaryOutcome.error;
+    {
       // Account deletion may have purged the queued write while this request
       // was in flight. A late rejection must not restore that identity's
       // profile cache, queue or cloud issue after the purge barrier exists.
@@ -1411,11 +1435,13 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  async function saveInitialProfile(profile: BackyardProfileUpdate): Promise<"local" | "cloud"> {
+  async function saveInitialProfile(profile: BackyardProfileUpdate): Promise<ProfileSaveResult> {
     if (identity?.mode === "authenticated") {
       // Another device may have completed registration while this form was
-      // open. Never use the stale creation form to overwrite that profile.
-      const mapping = await readAccountEntry(identity.accessToken || "", identity.userId);
+      // open. The setup screen is only rendered after this mapping is loaded;
+      // do not repeat that network request in the profile CTA.
+      const mapping = accountEntry?.userId === identity.userId ? accountEntry : null;
+      if (!mapping) throw new Error("No pudimos verificar el estado de esta cuenta.");
       if (activeUserId.current !== identity.userId) throw new Error("La sesión cambió.");
       if (mapping.existingAccount) {
         setAccountEntry(mapping);
@@ -1442,8 +1468,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       // onboarding flow.
       const existingProgress = readBetaOnboardingProgress(localStorage, identity.userId);
       const betaProgress = existingProgress || createBetaOnboardingProgress(identity.userId);
-      await saveOnboardingCheckpoint(identity.accessToken || "", betaProgress);
       persistBetaOnboardingProgress(localStorage, betaProgress);
+      void saveOnboardingCheckpoint(identity.accessToken || "", betaProgress).catch(() => {
+        if (accountMutationStillActive(identity.userId)) issueWithMessage("profile", "Perfil guardado · el avance de configuración se sincronizará después.", "pending");
+      });
       setBetaOnboardingRequired(true);
       setEquipmentOnboardingRequired(false);
     }
@@ -1915,7 +1943,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   if (identity.mode === "authenticated" && !profileChecked) return <main className="accessScreen"><div className="accessLoading">Preparando tu perfil…</div></main>;
   if (identity.mode === "authenticated" && profileSetupRequired) return <>{accountCloudError && <div role="alert" className="notice bad">{accountCloudError}</div>}<ProfileSetupScreen identity={identity} onSave={saveInitialProfile} onBack={logout} /></>;
   if (identity.mode === "authenticated" && betaOnboardingRequired) return <AccountContext.Provider value={context!}>
-    <BetaOnboardingFlow profile={identity} accessToken={identity.accessToken} onUpdateProfile={updateProfile} legalConsentRequired={!currentConsent} onAcceptRequiredConsents={() => acceptRequiredConsents(true)} onComplete={finishBetaOnboarding} />
+    <BetaOnboardingFlow profile={identity} accessToken={identity.accessToken} onUpdateProfile={async (profile) => (await updateProfile(profile)) === "local" ? "local" : "cloud"} legalConsentRequired={!currentConsent} onAcceptRequiredConsents={() => acceptRequiredConsents(true)} onComplete={finishBetaOnboarding} />
     {bettingConsentDialog}
     <FeedbackDialog key={`feedback:onboarding:${identity.userId}`} token={identity.accessToken} email={identity.email} screen="onboarding" />
   </AccountContext.Provider>;

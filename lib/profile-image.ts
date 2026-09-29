@@ -3,6 +3,7 @@ export const PROFILE_IMAGE_MAX_BYTES = 20 * 1024 * 1024;
 export const PROFILE_IMAGE_MAX_DATA_URL_LENGTH = 180_000;
 
 export type SquareCropRect = { sourceX: number; sourceY: number; sourceSize: number };
+export type ProfileImageCrop = { zoom?: number; positionX?: number; positionY?: number };
 export type ProfileImageFormat = "jpeg" | "png" | "webp" | "heic" | "heif";
 
 /** Center-crop geometry shared by all supported source formats. */
@@ -13,6 +14,22 @@ export function squareCropRect(width: number, height: number): SquareCropRect {
   return {
     sourceX: Math.max(0, Math.floor((safeWidth - sourceSize) / 2)),
     sourceY: Math.max(0, Math.floor((safeHeight - sourceSize) / 2)),
+    sourceSize,
+  };
+}
+
+/** Adjustable square crop. Positions are normalized from -1 to 1. */
+export function profileImageCropRect(width: number, height: number, crop: ProfileImageCrop = {}): SquareCropRect {
+  const safeWidth = Math.max(1, Math.trunc(width));
+  const safeHeight = Math.max(1, Math.trunc(height));
+  const baseSize = Math.min(safeWidth, safeHeight);
+  const zoom = Math.max(1, Math.min(3, Number.isFinite(crop.zoom) ? crop.zoom! : 1));
+  const sourceSize = Math.max(1, Math.floor(baseSize / zoom));
+  const x = Math.max(-1, Math.min(1, Number.isFinite(crop.positionX) ? crop.positionX! : 0));
+  const y = Math.max(-1, Math.min(1, Number.isFinite(crop.positionY) ? crop.positionY! : 0));
+  return {
+    sourceX: Math.round((safeWidth - sourceSize) * ((x + 1) / 2)),
+    sourceY: Math.round((safeHeight - sourceSize) * ((y + 1) / 2)),
     sourceSize,
   };
 }
@@ -109,7 +126,36 @@ export function compressedProfileImageDataUrl(canvas: Pick<HTMLCanvasElement, "t
   throw new Error("image_encoded_size");
 }
 
-export async function profileImageFromFile(file: File, size = 512): Promise<string> {
+function canvasBlob(canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob | null> {
+  return new Promise((resolve) => canvas.toBlob(resolve, type, quality));
+}
+
+function blobDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("image_encoded_size"));
+    reader.onerror = () => reject(new Error("image_encoded_size"));
+    reader.readAsDataURL(blob);
+  });
+}
+
+/** Prefer asynchronous encoding so large phone photos do not freeze the UI. */
+export async function compressedProfileImageDataUrlAsync(canvas: HTMLCanvasElement): Promise<string> {
+  if (typeof canvas.toBlob !== "function" || typeof FileReader !== "function") return compressedProfileImageDataUrl(canvas);
+  for (const type of ["image/webp", "image/jpeg"] as const) {
+    for (const quality of OUTPUT_QUALITIES) {
+      const blob = await canvasBlob(canvas, type, quality);
+      if (!blob || blob.type !== type) break;
+      // Base64 expands bytes by roughly 4/3; avoid allocating a known-oversize string.
+      if (Math.ceil(blob.size / 3) * 4 + 64 > PROFILE_IMAGE_MAX_DATA_URL_LENGTH) continue;
+      const encoded = await blobDataUrl(blob);
+      if (encoded.length <= PROFILE_IMAGE_MAX_DATA_URL_LENGTH) return encoded;
+    }
+  }
+  throw new Error("image_encoded_size");
+}
+
+export async function profileImageFromFile(file: File, size = 512, cropOptions: ProfileImageCrop = {}): Promise<string> {
   if (file.size > PROFILE_IMAGE_MAX_BYTES) throw new Error("image_size");
   if (file.size === 0) throw new Error("image_content");
   const header = new Uint8Array(await file.slice(0, 64).arrayBuffer());
@@ -120,7 +166,7 @@ export async function profileImageFromFile(file: File, size = 512): Promise<stri
   try {
     image = await decodedProfileImage(file, objectUrl, format);
     if (!Number.isFinite(image.width) || !Number.isFinite(image.height) || image.width < 1 || image.height < 1 || image.width * image.height > 80_000_000) throw new Error("image_dimensions");
-    const crop = squareCropRect(image.width, image.height);
+    const crop = profileImageCropRect(image.width, image.height, cropOptions);
     const outputSize = Number.isFinite(size) ? Math.max(64, Math.min(512, Math.trunc(size))) : 512;
     const canvas = document.createElement("canvas");
     canvas.width = outputSize;
@@ -131,7 +177,7 @@ export async function profileImageFromFile(file: File, size = 512): Promise<stri
     context.fillStyle = "#ffffff";
     context.fillRect(0, 0, outputSize, outputSize);
     context.drawImage(image, crop.sourceX, crop.sourceY, crop.sourceSize, crop.sourceSize, 0, 0, outputSize, outputSize);
-    return compressedProfileImageDataUrl(canvas);
+    return await compressedProfileImageDataUrlAsync(canvas);
   } finally {
     image?.close?.();
     URL.revokeObjectURL(objectUrl);

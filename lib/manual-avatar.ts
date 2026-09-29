@@ -1,7 +1,8 @@
 /** A locally rendered, editable avatar. No network, image provider or user text enters SVG. */
-export const MANUAL_AVATAR_VERSION = 1 as const;
+export const MANUAL_AVATAR_VERSION = 2 as const;
 export const MANUAL_AVATAR_OPTIONS = {
   persona: ["golfista", "clasico", "deportivo"],
+  fondo: ["sage", "cream", "sky", "sand"],
   rostro: ["ovalado", "redondo", "cuadrado"],
   piel: ["clara", "media", "morena", "oscura", "profunda"],
   pelo: ["sinPelo", "rapado", "corto", "medio", "peinado", "ondulado", "rizado", "largo"],
@@ -15,12 +16,12 @@ export const MANUAL_AVATAR_OPTIONS = {
   accesorio: ["ninguno", "lentes", "lentesSol", "visera", "gorra", "gorraGolf", "aretes"],
 } as const;
 
-export type ManualAvatarConfig = { version: 1 } & {
+export type ManualAvatarConfig = { version: 2 } & {
   [K in keyof typeof MANUAL_AVATAR_OPTIONS]: (typeof MANUAL_AVATAR_OPTIONS)[K][number]
 };
 
 export const DEFAULT_MANUAL_AVATAR: ManualAvatarConfig = {
-  version: 1, persona: "golfista", rostro: "ovalado", piel: "media", pelo: "corto", colorPelo: "castano",
+  version: 2, persona: "golfista", fondo: "sage", rostro: "ovalado", piel: "media", pelo: "corto", colorPelo: "castano",
   ojos: "almendrados", colorOjos: "cafe", cejas: "suaves", nariz: "recta", boca: "sonrisa",
   barba: "ninguna", accesorio: "ninguno",
 };
@@ -29,14 +30,15 @@ const KEYS = Object.keys(MANUAL_AVATAR_OPTIONS) as (keyof typeof MANUAL_AVATAR_O
 const SKIN = { clara: "#f5d7bd", media: "#dbaa80", morena: "#ad704d", oscura: "#784935", profunda: "#4e312c" };
 const HAIR = { negro: "#24272b", cafeOscuro: "#342924", cafe: "#704e39", castano: "#533b30", rubio: "#b48a4e", pelirrojo: "#a44d32", gris: "#8d979b", blanco: "#e6e8e3" };
 const IRIS = { cafe: "#533b30", verde: "#416e5c", azul: "#426c93" };
-export const MANUAL_AVATAR_SWATCHES = { piel: SKIN, colorPelo: HAIR, colorOjos: IRIS } as const;
+const BACKGROUND = { sage: "#dcece2", cream: "#f3efe2", sky: "#dceaf0", sand: "#eadfca" };
+export const MANUAL_AVATAR_SWATCHES = { fondo: BACKGROUND, piel: SKIN, colorPelo: HAIR, colorOjos: IRIS } as const;
 
 export function parseManualAvatarConfig(value: unknown): ManualAvatarConfig | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const source = value as Record<string, unknown>;
   if (source.version !== MANUAL_AVATAR_VERSION || Object.keys(source).length !== KEYS.length + 1) return null;
   for (const key of KEYS) if (!(MANUAL_AVATAR_OPTIONS[key] as readonly string[]).includes(source[key] as string)) return null;
-  return { version: 1, ...Object.fromEntries(KEYS.map((key) => [key, source[key]])) } as ManualAvatarConfig;
+  return { version: 2, ...Object.fromEntries(KEYS.map((key) => [key, source[key]])) } as ManualAvatarConfig;
 }
 
 export function randomManualAvatarConfig(random: () => number = Math.random): ManualAvatarConfig {
@@ -46,7 +48,7 @@ export function randomManualAvatarConfig(random: () => number = Math.random): Ma
     const index = Number.isFinite(sample) ? Math.min(values.length - 1, Math.max(0, Math.floor(sample * values.length))) : 0;
     return [key, values[index]];
   }));
-  return { version: 1, ...selection } as ManualAvatarConfig;
+  return { version: 2, ...selection } as ManualAvatarConfig;
 }
 
 function hairSvg(c: ManualAvatarConfig, fill: string) {
@@ -62,7 +64,7 @@ function hairSvg(c: ManualAvatarConfig, fill: string) {
   }
 }
 
-export function manualAvatarSvg(config: ManualAvatarConfig): string {
+function renderManualAvatarSvg(config: ManualAvatarConfig, metadataConfig: ManualAvatarConfig | LegacyManualAvatarConfig): string {
   const c = parseManualAvatarConfig(config);
   if (!c) throw new Error("Configuracion de avatar invalida");
   const skin = SKIN[c.piel], hair = HAIR[c.colorPelo], iris = IRIS[c.colorOjos];
@@ -91,13 +93,38 @@ export function manualAvatarSvg(config: ManualAvatarConfig): string {
     : c.accesorio === "gorra" ? `<path d="M64 94Q74 48 128 50Q182 48 193 94L198 104Q127 89 60 106Z" fill="#1d744e"/><path d="M80 99Q127 88 185 99Q176 118 128 114Q92 115 80 99" fill="#11513b"/>`
       : c.accesorio === "gorraGolf" ? `<path d="M64 94Q74 48 128 50Q182 48 193 94L198 104Q127 89 60 106Z" fill="#f1f0e5"/><path d="M78 96Q128 84 187 96L187 102Q128 91 78 102Z" fill="#176346"/><path d="M80 102Q127 94 185 102Q176 119 128 115Q92 115 80 102" fill="#deded1"/>`
       : c.accesorio === "aretes" ? `<g fill="#e3b55b"><circle cx="69" cy="164" r="5"/><circle cx="187" cy="164" r="5"/></g>` : "";
-  const metadata = btoa(JSON.stringify(c));
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Avatar Backyard"><metadata id="backyard-avatar-config">${metadata}</metadata><defs><clipPath id="circle"><circle cx="128" cy="128" r="128"/></clipPath></defs><g clip-path="url(#circle)"><rect width="256" height="256" fill="#dcece2"/><circle cx="128" cy="106" r="101" fill="#c6dfcf"/><path d="M25 266Q33 223 86 217L128 235L170 217Q223 223 231 266Z" fill="${shirt}"/><path d="M112 202L112 225Q128 244 144 225L144 202Z" fill="${skin}"/>${hairSvg(c, hair)}<path d="${face}" fill="${skin}" stroke="#503d36" stroke-opacity=".18" stroke-width="2"/><ellipse cx="70" cy="151" rx="9" ry="17" fill="${skin}"/><ellipse cx="186" cy="151" rx="9" ry="17" fill="${skin}"/>${hairSvg(c, hair)}<path d="${brows}" fill="none" stroke="${hair}" stroke-width="${c.cejas === "marcadas" ? 5 : 3}" stroke-linecap="round"/>${eyes}<path d="${nose}" fill="none" stroke="#754c3e" stroke-opacity=".52" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>${beard}<path d="${mouth}" fill="none" stroke="#884b48" stroke-width="3" stroke-linecap="round"/>${accessory}<path d="M117 234L128 249L139 234" fill="none" stroke="#fff" stroke-opacity=".65" stroke-width="3"/></g></svg>`;
+  const metadata = btoa(JSON.stringify(metadataConfig));
+  const background = BACKGROUND[c.fondo];
+  const halo = c.fondo === "sage" ? "#c6dfcf" : c.fondo === "cream" ? "#e5dcc4" : c.fondo === "sky" ? "#c7dce5" : "#d9c7a9";
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Avatar Backyard"><metadata id="backyard-avatar-config">${metadata}</metadata><defs><clipPath id="circle"><circle cx="128" cy="128" r="128"/></clipPath></defs><g clip-path="url(#circle)"><rect width="256" height="256" fill="${background}"/><circle cx="128" cy="106" r="101" fill="${halo}"/><path d="M25 266Q33 223 86 217L128 235L170 217Q223 223 231 266Z" fill="${shirt}"/><path d="M112 202L112 225Q128 244 144 225L144 202Z" fill="${skin}"/>${hairSvg(c, hair)}<path d="${face}" fill="${skin}" stroke="#503d36" stroke-opacity=".18" stroke-width="2"/><ellipse cx="70" cy="151" rx="9" ry="17" fill="${skin}"/><ellipse cx="186" cy="151" rx="9" ry="17" fill="${skin}"/>${hairSvg(c, hair)}<path d="${brows}" fill="none" stroke="${hair}" stroke-width="${c.cejas === "marcadas" ? 5 : 3}" stroke-linecap="round"/>${eyes}<path d="${nose}" fill="none" stroke="#754c3e" stroke-opacity=".52" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>${beard}<path d="${mouth}" fill="none" stroke="#884b48" stroke-width="3" stroke-linecap="round"/>${accessory}<path d="M117 234L128 249L139 234" fill="none" stroke="#fff" stroke-opacity=".65" stroke-width="3"/></g></svg>`;
+}
+
+export function manualAvatarSvg(config: ManualAvatarConfig): string {
+  const parsed = parseManualAvatarConfig(config);
+  if (!parsed) throw new Error("Configuracion de avatar invalida");
+  return renderManualAvatarSvg(parsed, parsed);
 }
 
 const PREFIX = "data:image/svg+xml;base64,";
 export function manualAvatarUrl(config: ManualAvatarConfig): string {
   return PREFIX + btoa(manualAvatarSvg(config));
+}
+
+const LEGACY_KEYS = KEYS.filter((key) => key !== "fondo") as Exclude<keyof typeof MANUAL_AVATAR_OPTIONS, "fondo">[];
+type LegacyManualAvatarConfig = { version: 1 } & { [K in (typeof LEGACY_KEYS)[number]]: (typeof MANUAL_AVATAR_OPTIONS)[K][number] };
+
+function parseLegacyManualAvatarConfig(value: unknown): LegacyManualAvatarConfig | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const source = value as Record<string, unknown>;
+  if (source.version !== 1 || Object.keys(source).length !== LEGACY_KEYS.length + 1) return null;
+  for (const key of LEGACY_KEYS) if (!(MANUAL_AVATAR_OPTIONS[key] as readonly string[]).includes(source[key] as string)) return null;
+  return { version: 1, ...Object.fromEntries(LEGACY_KEYS.map((key) => [key, source[key]])) } as LegacyManualAvatarConfig;
+}
+
+function legacyManualAvatarUrl(config: LegacyManualAvatarConfig): string {
+  const upgraded = { ...config, version: 2, fondo: "sage" } as ManualAvatarConfig;
+  // Version 1 used the same sage colors as v2's sage background.
+  return PREFIX + btoa(renderManualAvatarSvg(upgraded, config));
 }
 
 /** Exact canonical re-render is the acceptance gate: arbitrary SVG is never trusted. */
@@ -107,7 +134,12 @@ export function parseManualAvatarUrl(value: unknown): ManualAvatarConfig | null 
     const svg = atob(value.slice(PREFIX.length));
     const match = svg.match(/<metadata id="backyard-avatar-config">([A-Za-z0-9+/]+={0,2})<\/metadata>/);
     if (!match) return null;
-    const config = parseManualAvatarConfig(JSON.parse(atob(match[1])));
-    return config && manualAvatarUrl(config) === value ? config : null;
+    const decoded = JSON.parse(atob(match[1]));
+    const config = parseManualAvatarConfig(decoded);
+    if (config && manualAvatarUrl(config) === value) return config;
+    const legacy = parseLegacyManualAvatarConfig(decoded);
+    return legacy && legacyManualAvatarUrl(legacy) === value
+      ? { ...legacy, version: 2, fondo: "sage" } as ManualAvatarConfig
+      : null;
   } catch { return null; }
 }

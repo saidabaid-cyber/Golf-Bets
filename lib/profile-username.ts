@@ -17,6 +17,7 @@ export async function checkProfileUsernameAvailability(
   accessToken: string | null,
   username: string,
   fetcher: typeof fetch = fetch,
+  timeoutMs = 7_000,
 ) {
   if (!accessToken) throw new Error("Inicia sesión para cambiar tu nombre de usuario.");
   const normalized = normalizeProfileUsername(username);
@@ -24,6 +25,7 @@ export async function checkProfileUsernameAvailability(
   const response = await fetcher(`/api/account/username?username=${encodeURIComponent(normalized)}`, {
     headers: { authorization: `Bearer ${accessToken}` },
     cache: "no-store",
+    signal: AbortSignal.timeout(timeoutMs),
   });
   const result = await response.json().catch(() => null) as { available?: boolean; error?: string } | null;
   if (!response.ok) throw new Error(result?.error || "No pudimos validar el nombre de usuario. Reintenta.");

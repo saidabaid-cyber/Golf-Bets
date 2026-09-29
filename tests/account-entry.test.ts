@@ -131,12 +131,14 @@ test("provider places mapping before cloud writes and sends completed accounts d
   assert.ok(source.indexOf("if (identity.mode === \"authenticated\" && identity.accessToken && accountEntry?.userId !== identity.userId)") < source.indexOf("<ProfileSetupScreen identity="));
   assert.match(source, /readCurrentAccountEntry\(authenticatedAccessToken, authenticatedUserId, \(\) => activeUserId.current, controller.signal\)/);
   assert.match(source, /setProfileSetupRequired\(!accountEntry.existingAccount && !cloudProfile.onboarding_completed_at\)/);
-  assert.match(source, /const mapping = await readAccountEntry\(identity.accessToken \|\| "", identity.userId\)/);
+  assert.match(source, /const mapping = accountEntry\?\.userId === identity.userId \? accountEntry : null/);
+  assert.doesNotMatch(source, /const mapping = await readAccountEntry/);
   assert.match(source, /Ya tienes una cuenta\. Vamos a iniciar sesión\./);
   assert.doesNotMatch(source, /if \(identity\.mode === "authenticated" && existingAccountNotice\) return/);
   assert.match(source, /Verifica tu correo para continuar; si ya tienes cuenta, entraremos a ella\./);
   assert.doesNotMatch(source, /requiresAccountConsent|AccountConsentCheckpoint/);
-  assert.match(source, /<BetaOnboardingFlow[^>]+legalConsentRequired=\{!currentConsent\}/);
+  assert.match(source, /<BetaOnboardingFlow/);
+  assert.match(source, /legalConsentRequired=\{!currentConsent\}/);
   assert.match(source, /return app;/);
 });
 

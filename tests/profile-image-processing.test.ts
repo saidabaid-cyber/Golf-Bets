@@ -11,6 +11,7 @@ import {
   profileImageFormatForFile,
   profileImageFormatFromBytes,
   profileImageFromFile,
+  profileImageCropRect,
 } from "../lib/profile-image";
 
 function bytes(value: number[]) { return new Uint8Array(value); }
@@ -98,6 +99,12 @@ test("MIME y bytes rechazan no-imágenes y formatos suplantados", () => {
   assert.throws(() => profileImageFormatForFile("image/png", bytes([0xff, 0xd8, 0xff])), /image_type/);
   assert.throws(() => profileImageFormatForFile("image/svg+xml", Buffer.from("<svg>", "ascii")), /image_content/);
   assert.equal(profileImageFormatForFile("", bytes([0xff, 0xd8, 0xff])), "jpeg", "MIME vacío exige firma reconocida");
+});
+
+test("encuadre ajustable limita zoom y desplazamiento dentro de la foto", () => {
+  assert.deepEqual(profileImageCropRect(600, 400), { sourceX: 100, sourceY: 0, sourceSize: 400 });
+  assert.deepEqual(profileImageCropRect(600, 400, { zoom: 2, positionX: 1, positionY: -1 }), { sourceX: 400, sourceY: 0, sourceSize: 200 });
+  assert.deepEqual(profileImageCropRect(400, 600, { zoom: 2, positionX: -1, positionY: 1 }), { sourceX: 0, sourceY: 400, sourceSize: 200 });
 });
 
 test("fuente mayor a 20 MB falla antes de crear URL con mensaje exacto", async () => {

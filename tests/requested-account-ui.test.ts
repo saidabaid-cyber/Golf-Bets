@@ -58,15 +58,15 @@ test("Configuración explica cómo agregar jugadores y grupos guardados", () => 
 test("Perfil usa selector de foto o avatar sin pedir URLs manuales", () => {
   const picker = readFileSync("app/components/profile-image-picker.tsx", "utf8");
   assert.match(account, /validateProfileAvatarUrl\(avatarUrl\)/);
-  assert.match(account, /<ProfileImagePicker value=\{avatarUrl\} onChange=\{setAvatarUrl\} onSaveAvatar=\{async \(value\) =>/);
-  assert.match(account, /await updateProfile\(\{ displayName: identity.displayName, defaultHandicap: identity.defaultHandicap, avatarUrl: value \}\)/);
+  assert.match(account, /<ProfileImagePicker value=\{avatarUrl\} onChange=\{setAvatarUrl\} onBusyChange=\{setAvatarBusy\}/);
+  assert.doesNotMatch(account, /onSaveAvatar=/);
   assert.match(account, /onBusyChange=\{setAvatarBusy\} accessToken=\{identity.accessToken\} userId=\{identity.userId\}/);
-  assert.match(account, /if \(avatarBusy \|\| saving\) return/);
+  assert.match(account, /if \(avatarBusy \|\| saving \|\| profileSaveInFlight\.current\) return/);
   assert.doesNotMatch(account, /type="url" inputMode="url"/);
-  assert.match(picker, /type="file" aria-label=\{kind === "profile" \? "Seleccionar foto o imagen de avatar" : "Seleccionar imagen del grupo"\} accept="image\/jpeg,image\/png,image\/webp,image\/heic,image\/heif/);
-  assert.match(picker, /SIN IMAGEN/);
+  assert.match(picker, /aria-label=\{kind === "profile" \? "Elegir foto de la galería" : "Seleccionar imagen del grupo"\}/);
+  assert.match(picker, /Sin imagen/);
   assert.match(account, /no modifica tu foto de Google/);
-  assert.match(picker, /No necesitas pegar enlaces/);
+  assert.match(picker, /Puedes cambiarlo o eliminarlo después/);
 });
 
 test("Perfil y Cuenta anuncian errores como alertas sin disfrazarlos de éxito", () => {

@@ -25,11 +25,10 @@ test("Perfil presenta resumen compacto y mueve los inputs a Editar perfil", () =
   assert.match(css, /\.profileMobileStack\{display:grid/);
 });
 
-test("Foto, Emoji, Crear avatar y Sin imagen son cuatro opciones 2×2 responsive sin solaparse", () => {
-  for (const [mode, label] of [["photo", "FOTO"], ["emoji", "EMOJI"], ["create", "CREAR AVATAR"], ["none", "SIN IMAGEN"]]) {
-    assert.match(picker, new RegExp(`\\["${mode}", "${label}"\\]`));
-  }
-  assert.match(picker, /aria-pressed=\{mode === option \|\| \(mode === "custom" && option === "create"\)\}/);
+test("Crear avatar y Subir imagen son principales; Emoji y Sin imagen quedan secundarios", () => {
+  for (const label of ["CREAR MI AVATAR", "SUBIR UNA IMAGEN", "Emoji", "Sin imagen"]) assert.match(picker, new RegExp(label));
+  assert.match(picker, /className=\{styles.primaryChoices\}/);
+  assert.match(picker, /className=\{styles.secondaryChoices\}/);
   assert.match(pickerCss, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
   assert.match(pickerCss, /@media \(max-width: 430px\)/);
   assert.match(picker, /kind === "profile" \? styles\.profilePreview : ""/);

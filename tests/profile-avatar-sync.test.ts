@@ -222,8 +222,8 @@ test("provider proyecta Social antes del ack y retry usa la revisión pending ac
   assert.match(reload, /syncExistingSocialProfileAvatar\(supabase, authenticatedUserId, currentPending\.profile\.avatarUrl, currentPending\.profile\.username, currentPending\.profile\.displayName\)/);
   assert.ok(reload.indexOf("syncExistingSocialProfileAvatar") < reload.indexOf("acknowledgePendingProfileWrite"));
 
-  const immediateStart = provider.indexOf("const acknowledged = await profileWriteCoordinator.run");
-  const immediateEnd = provider.indexOf("if (activeUserId.current !== identity.userId) return \"local\"", immediateStart);
+  const immediateStart = provider.indexOf("const syncWork = profileWriteCoordinator.run");
+  const immediateEnd = provider.indexOf("const primaryOutcome = await waitForProfilePrimarySave", immediateStart);
   const immediate = provider.slice(immediateStart, immediateEnd);
   assert.match(immediate, /retimePendingProfileWrite\(localStorage, identity\.userId, pending\.revision, saved\.updatedAt\)/);
   assert.match(immediate, /syncExistingSocialProfileAvatar\(supabase, identity\.userId, pending\.profile\.avatarUrl, pending\.profile\.username, pending\.profile\.displayName\)/);

@@ -42,7 +42,7 @@ function imagePicker(initialValue: string) {
     useEffect: () => undefined,
   };
   const compiled = ts.transpileModule(readFileSync("app/components/profile-image-picker.tsx", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
-  runInNewContext(compiled, { exports, require: (name: string) => {
+  runInNewContext(compiled, { exports, URL: { createObjectURL: () => "blob:avatar", revokeObjectURL: () => undefined }, require: (name: string) => {
     if (name === "react") return react;
     if (name === "react/jsx-runtime") return { jsx, jsxs: jsx, Fragment: "fragment" };
     if (name.endsWith("/profile-avatar")) return avatars;
@@ -51,6 +51,7 @@ function imagePicker(initialValue: string) {
       profileImageFromFile: async () => "data:image/webp;base64,optimized",
       profileImageErrorMessage: () => "No pudimos preparar la imagen.",
     };
+    if (name.endsWith("/photo-avatar-generation")) return { PHOTO_AVATAR_GENERATION_CAPABILITY: { available: false, reason: "provider_not_configured" } };
     if (name === "./avatar-creation-panel") return { AvatarCreationPanel: "avatar-create" };
     if (name.endsWith(".css")) return { default: new Proxy({}, { get: (_target, key) => key }) };
     throw new Error(name);
@@ -70,7 +71,7 @@ function imagePicker(initialValue: string) {
     changes,
     busy,
     click(label: string) {
-      const button = nodes(tree).find((node) => node.type === "button" && text(node).trim() === label);
+      const button = nodes(tree).find((node) => node.type === "button" && (text(node).trim() === label || text(node).includes(label)));
       assert.ok(button, label);
       (button.props.onClick as () => void)();
       render();
@@ -83,32 +84,47 @@ test("Google photo is preserved until the person chooses a different avatar mode
   const h = imagePicker(photo);
   assert.equal(h.nodes().find((node) => node.type === "img")?.props.src, photo);
   assert.deepEqual(h.changes, []);
-  h.click("SIN IMAGEN");
+  h.click("Sin imagen");
   assert.equal(h.value(), "");
 });
 
 test("profile avatar supports optimized upload, emoji and created-avatar choices", async () => {
   const upload = imagePicker("https://images.example/google.jpg");
-  const file = upload.nodes().find((node) => node.type === "input" && node.props.type === "file");
+  upload.click("SUBIR UNA IMAGEN");
+  const file = upload.nodes().find((node) => node.type === "input" && node.props["aria-label"] === "Elegir foto de la galería");
   assert.ok(file);
   (file.props.onChange as (event: unknown) => void)({ target: { files: [{}] } });
+  upload.render();
+  assert.match(upload.text(), /USAR ESTA FOTO/);
+  upload.click("USAR ESTA FOTO");
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
   upload.render();
   assert.equal(upload.value(), "data:image/webp;base64,optimized");
-  assert.deepEqual(upload.busy, [true, false]);
+  assert.deepEqual(upload.busy, [false, true, false]);
 
   const emoji = imagePicker("");
-  emoji.click("EMOJI");
+  emoji.click("Emoji");
   emoji.click("🔥");
   emoji.click("USAR EMOJI");
   assert.equal(emoji.value(), "🔥");
 
   const created = imagePicker("");
-  created.click("CREAR AVATAR");
+  created.click("CREAR MI AVATAR");
   const panel = created.nodes().find((node) => node.type === "avatar-create");
   assert.ok(panel);
   await (panel.props.onUse as (url: string) => Promise<void>)("avatar:v1:test");
   created.render();
   assert.equal(created.value(), "avatar:v1:test");
   assert.match(created.text(), /Avatar listo/);
+});
+
+test("la pantalla prioriza crear/subir y declara honestamente generación desde foto no disponible", () => {
+  const source = readFileSync("app/components/profile-image-picker.tsx", "utf8");
+  const picker = imagePicker("");
+  assert.match(picker.text(), /ELIGE TU AVATAR/);
+  assert.match(picker.text(), /CREAR MI AVATAR/);
+  assert.match(picker.text(), /SUBIR UNA IMAGEN/);
+  assert.match(source, /PHOTO_AVATAR_GENERATION_CAPABILITY\.available/);
+  assert.match(source, /CREAR AVATAR DESDE MI FOTO/);
+  assert.match(source, /requiere un proveedor de generación real/);
 });
