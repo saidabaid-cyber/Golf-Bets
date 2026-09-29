@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { useViewScrollReset } from "./use-view-scroll-reset";
 import { CatalogCoursePicker } from "./catalog-course-picker";
 import { InitialOnboardingConsents } from './account-consent-checkpoint';
@@ -88,6 +88,12 @@ type BetaDraft = {
   planId: PlanId;
 };
 
+type OnboardingEntryMode = "quick" | "complete";
+
+export function withBetaOnboardingMode(progress: BetaOnboardingProgress, mode: OnboardingEntryMode, now = new Date().toISOString()): BetaOnboardingProgress {
+  return { ...progress, mode, updatedAt: now };
+}
+
 function freshDraft(profile: BackyardProfile): BetaDraft {
   return {
     improvementGoals: [...(profile.improvementGoals || [])],
@@ -135,6 +141,37 @@ function Shell({ progress, eyebrow, title, description, children, actions, onBac
   </section><ModalShell open={confirmExit} onClose={() => setConfirmExit(false)} label="Guardar configuración y salir"><h2>¿Guardar esta configuración y continuar después?</h2><p>Conservaremos el borrador en este dispositivo.</p><div className="dialogActions"><button type="button" className="secondary" onClick={() => setConfirmExit(false)}>Cancelar</button><button type="button" className="primary" onClick={() => { setConfirmExit(false); onSaveAndExit?.(); }}>Guardar y salir</button></div></ModalShell></main>;
 }
 
+export function OnboardingWelcomeStep({
+  profileUserId,
+  accessToken,
+  legalConsentRequired,
+  entryMode,
+  consentSectionRef,
+  onSelectEntryMode,
+  onAcceptRequiredConsents,
+  onContinue,
+}: {
+  profileUserId: string;
+  accessToken: string | null;
+  legalConsentRequired: boolean;
+  entryMode: OnboardingEntryMode | null;
+  consentSectionRef: RefObject<HTMLDivElement | null>;
+  onSelectEntryMode: (mode: OnboardingEntryMode) => void;
+  onAcceptRequiredConsents: () => Promise<void>;
+  onContinue: () => void;
+}) {
+  return <>
+    <div className={styles.welcomeHero} aria-hidden="true"><span className={styles.heroFlag}>⛳</span><div><b>Tu golf, en un solo lugar</b><small>Rondas rápidas · amigos · equipo · estadísticas</small></div><span className={styles.heroBall}>●</span></div>
+    <div className={styles.entryGrid}>
+      <button type="button" className={entryMode === "quick" ? styles.entrySelected : styles.entryChoice} aria-pressed={entryMode === "quick"} onClick={() => onSelectEntryMode("quick")}><span aria-hidden="true">⚡</span><div><b>Rápida</b><p>Elige tu campo habitual, fuente de índice y permisos opcionales. Equipo y fitting quedan disponibles para después.</p></div></button>
+      <button type="button" className={entryMode === "complete" ? styles.entrySelected : styles.entryChoice} aria-pressed={entryMode === "complete"} onClick={() => onSelectEntryMode("complete")}><span aria-hidden="true">⛳</span><div><b>Completa</b><p>Configura campo habitual, índice, bolsa, objetivos y permisos opcionales.</p></div></button>
+    </div>
+    {entryMode && <div ref={consentSectionRef} data-onboarding-consents-revealed="true">
+      <InitialOnboardingConsents key={profileUserId} userId={profileUserId} accessToken={accessToken} legalRequired={legalConsentRequired} canContinue={Boolean(entryMode)} onAcceptRequired={onAcceptRequiredConsents} onContinue={onContinue} />
+    </div>}
+  </>;
+}
+
 const acceptNoInitialConsent = async () => undefined;
 export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, legalConsentRequired = false, onAcceptRequiredConsents = acceptNoInitialConsent, onComplete }: {
   profile: BackyardProfile;
@@ -154,6 +191,7 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, lega
   const [entryMode, setEntryMode] = useState<"quick" | "complete" | null>(null);
   const [homeClubSelectionReady, setHomeClubSelectionReady] = useState(Boolean(profile.homeClubId && profile.homeCourseId));
   const initializedUser = useRef('');
+  const consentSectionRef = useRef<HTMLDivElement>(null);
   const checkpointQueue = useRef<Promise<void>>(Promise.resolve());
   const [finishing, setFinishing] = useState(false);
   const finishingRef = useRef(false);
@@ -200,6 +238,13 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, lega
     setMessage("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
+  const selectEntryMode = (mode: OnboardingEntryMode) => {
+    setEntryMode(mode);
+    const next = withBetaOnboardingMode(progress, mode);
+    persistBetaOnboardingProgress(localStorage, next);
+    setMessage("");
+    window.requestAnimationFrame(() => consentSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
+  };
   const finish = () => {
     if (finishingRef.current) return;
     finishingRef.current = true; setFinishing(true);
@@ -226,7 +271,7 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, lega
     onSaveAndExit: () => {
       try {
         localStorage.setItem(betaOnboardingDraftStorageKey(profile.userId), JSON.stringify(draft));
-        persistBetaOnboardingProgress(localStorage, progress);
+        persistBetaOnboardingProgress(localStorage, entryMode ? withBetaOnboardingMode(progress, entryMode) : progress);
         onComplete();
       } catch { setMessage("No pudimos guardar el borrador. Reintenta antes de salir."); }
     },
@@ -240,12 +285,7 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, lega
     <p>Este campo queda como tu club habitual. Podrás cambiarlo en Perfil.</p>{message && <p role="alert">{message}</p>}
   </Shell>;
   if (progress.step === "welcome") return <Shell progress={progress} {...navigationProps} eyebrow="EMPIEZA A TU MANERA" title="Tu Backyard, sin fricción" description="En ambas opciones elegirás tu campo habitual, fuente de índice y permisos opcionales." actions={null}>
-    <div className={styles.welcomeHero} aria-hidden="true"><span className={styles.heroFlag}>⛳</span><div><b>Tu golf, en un solo lugar</b><small>Rondas rápidas · amigos · equipo · estadísticas</small></div><span className={styles.heroBall}>●</span></div>
-    <div className={styles.entryGrid}>
-      <button type="button" className={entryMode === "quick" ? styles.entrySelected : styles.entryChoice} aria-pressed={entryMode === "quick"} onClick={() => setEntryMode("quick")}><span aria-hidden="true">⚡</span><div><b>Rápida</b><p>Elige tu campo habitual, fuente de índice y permisos opcionales. Equipo y fitting quedan disponibles para después.</p></div></button>
-      <button type="button" className={entryMode === "complete" ? styles.entrySelected : styles.entryChoice} aria-pressed={entryMode === "complete"} onClick={() => setEntryMode("complete")}><span aria-hidden="true">⛳</span><div><b>Completa</b><p>Configura campo habitual, índice, bolsa, objetivos y permisos opcionales.</p></div></button>
-    </div>
-    <InitialOnboardingConsents key={profile.userId} userId={profile.userId} accessToken={accessToken} legalRequired={legalConsentRequired} canContinue={Boolean(entryMode)} onAcceptRequired={onAcceptRequiredConsents} onContinue={() => advance("permissions")} />
+    <OnboardingWelcomeStep profileUserId={profile.userId} accessToken={accessToken} legalConsentRequired={legalConsentRequired} entryMode={entryMode} consentSectionRef={consentSectionRef} onSelectEntryMode={selectEntryMode} onAcceptRequiredConsents={onAcceptRequiredConsents} onContinue={() => advance("permissions")} />
   </Shell>;
 
   if (progress.step === "equipment") return <EquipmentOnboarding

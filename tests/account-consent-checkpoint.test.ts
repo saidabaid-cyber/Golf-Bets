@@ -10,6 +10,7 @@ test("initial consent is embedded in onboarding instead of gating app entry", ()
   const provider = source("app/components/account-provider.tsx");
   assert.match(consent, /export function InitialOnboardingConsents/);
   assert.match(onboarding, /<InitialOnboardingConsents/);
+  assert.match(onboarding, /\{entryMode && <div ref=\{consentSectionRef\}/);
   assert.match(onboarding, /canContinue=\{Boolean\(entryMode\)\}/);
   assert.doesNotMatch(onboarding, /initialBettingDecision|onResolveBetting/);
   assert.match(onboarding, /actions=\{null\}/);
