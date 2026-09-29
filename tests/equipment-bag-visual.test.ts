@@ -145,8 +145,9 @@ test("Mi Bolsa keeps distinct Mini Driver and Utility assets and compact navigab
   assert.match(editors, /<strong aria-hidden="true">›<\/strong>/);
   assert.match(css, /\.catalogChoiceGrid button \{ display: grid; grid-template-columns: 88px minmax\(0, 1fr\) 28px; min-height: 66px/);
   assert.match(profile, /import \{ EQUIPMENT_CATEGORY_ASSETS \} from "\.\/equipment-category-assets"/);
-  assert.match(profile, /const asset = EQUIPMENT_CATEGORY_ASSETS\[club\.category\]/);
   assert.match(profile, /const asset = EQUIPMENT_CATEGORY_ASSETS\[category\]/);
+  assert.match(profile, /<CanonicalCategoryImage category=\{club\.category\}[^>]*eager=\{club\.isCurrent\}/);
+  assert.match(profile, /<CanonicalCategoryImage category=\{category\}[^>]*sizes="\(max-width: 430px\) 104px, 132px"/);
   assert.doesNotMatch(profile, /ClubCategoryVisual/);
   assert.match(css, /\.profileClubButton \{[^}]*grid-template-columns:132px minmax\(0,1fr\) max-content/);
   assert.match(css, /@media\(max-width:430px\)[\s\S]*\.profileClubButton \{[^}]*grid-template-columns:112px minmax\(0,1fr\) max-content/);

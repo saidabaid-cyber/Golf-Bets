@@ -43,12 +43,19 @@ function harness() {
     customShaft: null, flex: null, shaftFlexLabel: null, shaftWeightGrams: null, lengthInches: null, lieDegrees: null, grip: null,
     notes: null, setComposition: [], isCurrent: true, createdAt: "2026-09-28T10:00:00.000Z", updatedAt: "2026-09-28T10:00:00.000Z",
   };
+  const currentClubs = [
+    currentClub,
+    { ...currentClub, id: "club-woods", category: "FAIRWAY_WOOD", catalogClubId: "catalog-woods", customBrand: "Cleveland", customModel: "Launcher DST" },
+    { ...currentClub, id: "club-hybrid", category: "HYBRID", catalogClubId: "catalog-hybrid", customBrand: "Callaway", customModel: "Quantum Hybrid" },
+    { ...currentClub, id: "club-irons", category: "IRON_SET", catalogClubId: "catalog-irons", customBrand: "Takomo", customModel: "Iron 101", setComposition: ["5", "6", "7", "8", "9", "PW"] },
+    { ...currentClub, id: "club-wedge", category: "WEDGE", catalogClubId: "catalog-wedge", customBrand: "TaylorMade", customModel: "Hi-Toe 4", loft: 58 },
+  ];
   const currentBall = {
     id: "player-ball", userId: "owner", catalogBallId: "ball-current", ballBrand: "Titleist", ballModel: "Pro V1", generation: "2025",
     year: 2025, color: "Blanca", notes: null, isCurrent: true, createdAt: "2026-09-28T10:00:00.000Z", updatedAt: "2026-09-28T10:00:00.000Z",
   };
   const profile = {
-    userId: "owner", clubs: [currentClub], balls: [currentBall], distances: [], ballPreference: "FIXED",
+    userId: "owner", clubs: currentClubs, balls: [currentBall], distances: [], ballPreference: "FIXED",
     lastBallFit: {
       id: "legacy-fit", completedAt: "2026-09-28T12:00:00.000Z", currentBallId: currentBall.catalogBallId, inputCompleteness: 75,
       algorithmVersion: null, status: null, input: null, warnings: [],
@@ -58,7 +65,13 @@ function harness() {
       }],
     },
   };
-  const clubCatalog = [{ id: "catalog-driver", brand: "Ping", model: "G430", generation: "2025" }];
+  const clubCatalog = [
+    { id: "catalog-driver", brand: "Ping", model: "G430", generation: "2025" },
+    { id: "catalog-woods", brand: "Cleveland", model: "Launcher DST", generation: "2013" },
+    { id: "catalog-hybrid", brand: "Callaway", model: "Quantum Hybrid", generation: "2026" },
+    { id: "catalog-irons", brand: "Takomo", model: "Iron 101", generation: "Original" },
+    { id: "catalog-wedge", brand: "TaylorMade", model: "Hi-Toe 4", generation: "2024" },
+  ];
   const ballCatalog = [
     { id: "ball-current", brand: "Titleist", model: "Pro V1", generation: "2025" },
     { id: "ball-tour", brand: "Bridgestone", model: "Tour B X", generation: "2026" },
@@ -143,10 +156,10 @@ function harness() {
 
 test("a compact missing category opens the club editor with that category preselected", () => {
   const view = harness();
-  view.click("Wedges", false);
+  view.click("Utility / Driving Iron", false);
   const editor = view.nodes().find((node) => node.type === "club-editor");
   assert.ok(editor);
-  assert.equal(editor.props.initialCategory, "WEDGE");
+  assert.equal(editor.props.initialCategory, "UTILITY_IRON");
   assert.equal(editor.props.existing, null);
 });
 
@@ -162,13 +175,24 @@ test("Mi Bolsa has compact canonical current equipment and one non-duplicated mi
   assert.match(text(currentRow.props.children), /Driver\s+Ping\s+G430\s+Driver\s+·\s+RH\s+Editar/);
   assert.ok(nodes(currentRow).some((node) => node.type === "image" && node.props.src === "/approved/driver.png"));
 
+  const currentCategories = ["DRIVER", "FAIRWAY_WOOD", "HYBRID", "IRON_SET", "WEDGE"];
+  const currentCards = view.nodes().filter((node) => currentCategories.includes(String(node.props["data-equipment-current-card"])));
+  assert.equal(currentCards.length, currentCategories.length);
+  for (const category of currentCategories) {
+    const card = currentCards.find((node) => node.props["data-equipment-current-card"] === category);
+    assert.ok(card, `${category} current card`);
+    assert.ok(nodes(card).some((node) => node.type === "image"
+      && node.props.src === `/approved/${category.toLowerCase()}.png`
+      && node.props.loading === "eager"));
+  }
+
   assert.match(copy, /CATEGORÍAS FALTANTES\s+Agrega el resto de tu bolsa\s+Elige una categoría para completar sus datos\./);
-  assert.ok(!view.nodes().some((node) => node.type === "button" && node.props["aria-label"] === "Agregar Driver"));
-  assert.ok(view.nodes().some((node) => node.type === "button" && node.props["aria-label"] === "Agregar Mini Driver"));
+  const missingLabels = view.nodes()
+    .filter((node) => node.type === "button" && String(node.props["aria-label"] || "").startsWith("Agregar "))
+    .map((node) => node.props["aria-label"]);
+  assert.deepEqual(missingLabels, ["Agregar Mini Driver", "Agregar Utility / Driving Iron", "Agregar Putter"]);
   assert.match(copy, /Control desde el tee con una cabeza compacta\./);
-  assert.match(copy, /Confianza desde cualquier lie\./);
-  assert.match(copy, /Precisión y control de distancia\./);
-  assert.match(copy, /Creatividad alrededor del green\./);
+  assert.match(copy, /Trayectoria penetrante y control desde el tee\./);
   assert.match(copy, /Decisión en los últimos golpes\./);
 });
 

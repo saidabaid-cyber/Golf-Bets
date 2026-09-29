@@ -357,9 +357,8 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
       <div className={styles.missingCategoryList} aria-label="Categorías disponibles para agregar">
         {bagManagement.missing.map((section) => {
           const category = section.categories[0];
-          const asset = EQUIPMENT_CATEGORY_ASSETS[category];
           return <button type="button" className={styles.missingCategoryCard} key={section.id} aria-label={`Agregar ${section.label}`} onClick={() => { setClubDetailId(null); setNewClubCategory(category); setClubEditor("new"); }}>
-            <span className={styles.missingCategoryMedia} aria-hidden="true"><Image src={asset.src} alt="" width={asset.width} height={asset.height} sizes="(max-width: 430px) 104px, 132px" unoptimized /></span>
+            <span className={styles.missingCategoryMedia} aria-hidden="true"><CanonicalCategoryImage category={category} sizes="(max-width: 430px) 104px, 132px" /></span>
             <span className={styles.missingCategoryCopy}><b>{section.label}</b><small>{section.description}</small></span>
             <strong className={styles.addBagButton} aria-hidden="true">＋</strong>
           </button>;
@@ -400,12 +399,16 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
   </div>;
 }
 
+function CanonicalCategoryImage({ category, sizes, eager = false }: { category: PlayerClub["category"]; sizes: string; eager?: boolean }) {
+  const asset = EQUIPMENT_CATEGORY_ASSETS[category];
+  return <Image data-equipment-category-image={category} src={asset.src} alt="" width={asset.width} height={asset.height} sizes={sizes} loading={eager ? "eager" : "lazy"} unoptimized />;
+}
+
 function ClubItem({ club, catalog: catalogItems, onOpen }: { club: PlayerClub; catalog: readonly GolfClubCatalog[]; onOpen: () => void }) {
   const identity = clubIdentity(club, catalogItems);
-  const asset = EQUIPMENT_CATEGORY_ASSETS[club.category];
-  return <article className={`${styles.profileClubCard} ${club.isCurrent ? "" : styles.archived}`}>
+  return <article className={`${styles.profileClubCard} ${club.isCurrent ? "" : styles.archived}`} data-equipment-current-card={club.category}>
     <button type="button" className={styles.profileClubButton} onClick={onOpen} aria-label={`Editar ${clubName(club, catalogItems)}`}>
-      <span className={styles.profileClubMedia} aria-hidden="true"><Image src={asset.src} alt="" width={asset.width} height={asset.height} sizes="(max-width: 430px) 112px, 132px" unoptimized /></span>
+      <span className={styles.profileClubMedia} aria-hidden="true"><CanonicalCategoryImage category={club.category} sizes="(max-width: 430px) 112px, 132px" eager={club.isCurrent} /></span>
       <span className={styles.profileClubCopy}><small>{CLUB_CATEGORY_LABELS[club.category]}</small><b>{identity.brand}</b><span>{identity.model}</span><em>{CLUB_CATEGORY_LABELS[club.category]} · {club.handedness}</em></span>
       <span className={styles.profileClubAction}><span>Editar</span><strong aria-hidden="true">›</strong></span>
     </button>
