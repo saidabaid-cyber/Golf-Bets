@@ -37,7 +37,8 @@
 .choiceCopy { display:grid;min-width:0;gap:4px; }
 .choiceCopy b { color:var(--by-forest,#173f2a);font:500 17px/1.15 var(--by-editorial,Georgia,serif); }
 .choiceCopy small { color:var(--by-muted,#5b6c63);font-size:10px;line-height:1.35; }
-.choice>strong,.choiceActive>strong { display:grid;width:28px;height:28px;place-items:center;border-radius:50%;background:#fff;color:var(--green);box-shadow:0 4px 12px rgba(20,58,35,.12); }
+.choice>strong,.choiceActive>strong { display:grid;width:28px;height:28px;place-items:center;border:1px solid #9baa9f;border-radius:50%;background:#fff;color:var(--green);box-shadow:0 4px 12px rgba(20,58,35,.08); }
+.choiceActive>strong { border-color:var(--green);background:var(--green);color:#fff; }
 .choiceActive .choiceIcon { background:#fff;color:var(--by-forest,#173f2a); }
 .choiceActive .choiceCopy small { color:#335a3e; }
 .choice[data-focus-area="BUNKER"] .choiceIcon { background:linear-gradient(145deg,#fff9e7,#efe0b7);color:#7d5d1f; }

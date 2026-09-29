@@ -4,13 +4,14 @@ import { normalizeEquipmentProfile } from "../../../../lib/golf-equipment";
 import { BACKYARD_INDEX_METADATA_KEY, parseIndexPreference } from "../../../../lib/backyard-index-preferences";
 import type { SocialContext } from "../../../../lib/social-activity.server";
 async function read(ctx: SocialContext) {
- const [profile, user, choices, equipment] = await Promise.all([
+ const [profile, user, choices, equipment, ghin] = await Promise.all([
   ctx.client.from("profiles").select("display_name,username,avatar_url").eq("id", ctx.userId).single(),
   ctx.client.auth.getUser(),
   ctx.client.from("profile_completion_choices").select("handicap_choice,manual_hcp,not_applicable").eq("user_id", ctx.userId).maybeSingle(),
   ctx.client.from("player_equipment_profiles").select("snapshot").eq("user_id", ctx.userId).maybeSingle(),
+  ctx.client.from("player_handicap_provider_profiles").select("association_status,handicap_index").eq("owner_id", ctx.userId).eq("provider", "GHIN").eq("association_status", "VERIFIED").maybeSingle(),
  ]);
- if (profile.error || user.error || choices.error || equipment.error) throw new Error("COMPLETION_READ_FAILED");
+ if (profile.error || user.error || choices.error || equipment.error || ghin.error) throw new Error("COMPLETION_READ_FAILED");
  const metadata = user.data.user?.user_metadata || {};
  const golf = metadata.backyard_golf_profile_v1 || {};
  const decisions = choices.data || EMPTY_COMPLETION_CHOICES;
@@ -21,6 +22,7 @@ async function read(ctx: SocialContext) {
  return { choices: decisions, progress: profileCompletion({ displayName: profile.data.display_name, avatarUrl: profile.data.avatar_url, username: profile.data.username,
   givenName: metadata.given_name, familyName: metadata.family_name, handedness: golf.handedness, homeClub: golf.homeClub, preferredTee: golf.preferredTee,
   indexEnabled: indexPreference?.enabled === true, indexResolution,
+  indexValue: indexResolution === "GHIN" && typeof ghin.data?.handicap_index === "number" ? ghin.data.handicap_index : null,
   equipment: normalizeEquipmentProfile(equipment.data?.snapshot, ctx.userId), choices: decisions }) };
 }
 export async function GET(request: Request) { return socialHttp(request, read); }

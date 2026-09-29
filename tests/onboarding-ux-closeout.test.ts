@@ -46,6 +46,11 @@ test("profile progress is actionable, optional-aware and removes No aplica", () 
   for (const target of ["equipment", "ball", "fitting"]) assert.match(panel, new RegExp(`completionTarget === "${target}"`));
   assert.match(panel, /setCompletionEditTarget\(completionTarget\)/);
   assert.match(page, /setProfileCompletionTarget\(section\)/);
+  const completion = source("lib/profile-completion.ts");
+  const route = source("app/api/account/completion/route.ts");
+  assert.match(completion, /input\.indexValue/);
+  assert.match(route, /player_handicap_provider_profiles/);
+  assert.match(route, /indexValue:/);
 });
 
 test("equipment and Ball Fit use owned premium product art with selected and empty states", () => {
@@ -81,6 +86,7 @@ test("focus areas are multi-select cards with category-specific iconography", ()
   assert.match(onboarding, /BUNKER: "bunker"/);
   assert.match(onboarding, /data-focus-area=\{goal\}/);
   assert.match(onboarding, /aria-pressed=\{active\}/);
+  assert.match(onboarding, /\{active \? "✓" : ""\}/);
   assert.match(icons, /bunker:/);
   assert.match(icons, /mental:/);
   assert.match(css, /grid-template-columns:\s*repeat\(2,minmax\(0,1fr\)\)/);
@@ -116,6 +122,9 @@ test("launch-monitor capture explains the block first and auto-applies clear rea
   assert.match(capture, /ClubCategoryVisual/);
   assert.match(capture, /updateShotMetric/);
   assert.match(capture, /Excluir/);
+  assert.match(capture, /Capturar datos manualmente/);
+  assert.match(capture, /shotDetailsOpen/);
+  assert.match(capture, /Guardar y continuar/);
   assert.doesNotMatch(capture, /Guardar golpe|Guardar captura parcial/);
   assert.doesNotMatch(camera, /Revisa antes de guardar/);
 });

@@ -49,12 +49,13 @@ test("bag, wedges and ball comparison are guided but preserve explicit manual op
 test("launch monitor is featured and camera plus gallery auto-apply clear readings", () => {
   const capture = source("app/components/launch-monitor-capture.tsx");
   const camera = source("app/components/launch-monitor-camera.tsx");
-  assert.match(capture, /FIT CON LAUNCH MONITOR/);
-  assert.match(capture, /USAR LAUNCH MONITOR/);
+  assert.match(capture, /Capturar datos manualmente/);
+  assert.match(capture, /Guardar y continuar/);
+  assert.match(capture, /const \[manualOpen, setManualOpen\] = useState\(false\)/);
   assert.doesNotMatch(capture, /<details[\s\S]*Fitting con launch monitor/);
   assert.match(camera, /Tomar fotos ahora/);
   assert.match(camera, /Elegir de Fotos \/ Galería/);
-  assert.match(camera, /photos\.length < 2/);
+  assert.match(camera, /photos\.length < 1/);
   assert.match(camera, /Corrige sólo lo necesario/);
   assert.match(camera, /onConfirm\(assigned\.source, detected\)/);
   assert.doesNotMatch(camera, /Confirmar y guardar sesión/);

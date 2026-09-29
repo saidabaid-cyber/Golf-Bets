@@ -16,7 +16,7 @@ export function validCompletionChoices(value: unknown): value is CompletionChoic
  * an optional enhancement but can never prevent a complete profile. Legacy
  * `not_applicable` values remain readable for schema compatibility and are no
  * longer product controls or completion shortcuts. */
-export function profileCompletion(input: { displayName?: string | null; givenName?: string | null; familyName?: string | null; avatarUrl?: string | null; username?: string | null; handedness?: string | null; homeClub?: string | null; preferredTee?: string | null; indexEnabled: boolean; indexResolution?: "GHIN" | "BACKYARD" | "NONE" | null; equipment: EquipmentProfile | null; choices: CompletionChoices }) {
+export function profileCompletion(input: { displayName?: string | null; givenName?: string | null; familyName?: string | null; avatarUrl?: string | null; username?: string | null; handedness?: string | null; homeClub?: string | null; preferredTee?: string | null; indexEnabled: boolean; indexResolution?: "GHIN" | "BACKYARD" | "NONE" | null; indexValue?: number | null; equipment: EquipmentProfile | null; choices: CompletionChoices }) {
  const { choices, equipment } = input;
  const facts: Record<CompletionSection, boolean> = {
   personal: Boolean(input.displayName?.trim() && input.givenName?.trim() && input.familyName?.trim() && input.avatarUrl?.trim()),
@@ -27,7 +27,7 @@ export function profileCompletion(input: { displayName?: string | null; givenNam
   ball: Boolean(equipment?.balls.some(ball => ball.isCurrent) || equipment?.ballPreference === "NO_FIXED_BALL"),
   fitting: Boolean(equipment?.lastBallFit),
  };
- const handicapStatus = input.indexResolution === "GHIN" ? "GHIN vinculado"
+ const handicapStatus = input.indexResolution === "GHIN" ? `GHIN${typeof input.indexValue === "number" && Number.isFinite(input.indexValue) ? ` · ${input.indexValue.toLocaleString("es-MX", { maximumFractionDigits: 1 })}` : " vinculado"}`
   : input.indexResolution === "BACKYARD" || input.indexEnabled ? "Backyard Index activado"
   : input.indexResolution === "NONE" || choices.handicap_choice === "UNKNOWN" ? "Sin índice por ahora"
   : choices.handicap_choice === "MANUAL" ? "HCP manual guardado" : "Falta elegir una fuente";

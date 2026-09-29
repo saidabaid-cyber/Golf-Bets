@@ -24,7 +24,7 @@ import {
   normalizeBallFitApiSuccess,
 } from "../../lib/ball-fitting-api";
 import { loadBallFitDraft, removeBallFitDraft, saveBallFitDraft, type BallFitDraft } from "../../lib/ball-fitting-storage";
-import type { GolfBallCatalog, PlayerBall, QualitativeLevel } from "../../lib/golf-equipment";
+import { summarizeLaunchMonitorSession, type GolfBallCatalog, type PlayerBall, type QualitativeLevel } from "../../lib/golf-equipment";
 import { BALL_FIT_HANDICAP_LABELS, BALL_FIT_EXPERIENCES, normalizeBallFitHandicap, type BallFitHandicapSource } from "../../lib/ball-fit-handicap";
 import { LaunchMonitorCapture } from "./launch-monitor-capture";
 import { NumericCaptureInput } from "./numeric-capture-input";
@@ -104,7 +104,7 @@ function defaultInput(userId: string, handicap: number | null, currentBallId: st
 }
 
 function accountIndexLabel(source: BallFitHandicapSource | null | undefined, value: number) {
-  if (source === "GHIN") return `GHIN · ${value}`;
+  if (source === "GHIN") return `Handicap Index GHIN · ${value}`;
   if (source === "BACKYARD") return `Backyard Index · ${value}`;
   return `HCP manual · ${value}`;
 }
@@ -154,13 +154,22 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
   const [calculating, setCalculating] = useState(false);
   const [ballQuery, setBallQuery] = useState("");
   const [ballSearchOpen, setBallSearchOpen] = useState(false);
+  const [launchOpen, setLaunchOpen] = useState(false);
   const handicapChoiceTouched = useRef(false);
-  useViewScrollReset(`${step}:${draftChoicePending}:${hydrated}`);
+  useViewScrollReset(`${step}:${draftChoicePending}:${hydrated}:${launchOpen}`);
   const [message, setMessage] = useState("");
   const requestRef = useRef<AbortController | null>(null);
   const ballSearch = useEquipmentCatalogSearch({ kind: "BALL", query: ballQuery, fallback: catalog, pinnedIds: input.currentBallId ? [input.currentBallId] : [] });
   const displayCatalog = useMemo(() => [...new Map([...catalog, ...ballSearch.items, ...resultCatalog].map((ball) => [ball.id, ball])).values()], [ballSearch.items, catalog, resultCatalog]);
   const currentCatalogBall = input.currentBallId ? displayCatalog.find((ball) => ball.id === input.currentBallId) || null : null;
+  const launchSummary = useMemo(() => summarizeLaunchMonitorSession(input.launchMonitorSession), [input.launchMonitorSession]);
+  const driverLaunchSummary = launchSummary?.byClub.find((item) => item.club === "DRIVER") ?? null;
+  const detectedDriverCarry = driverLaunchSummary?.metrics.carryYards?.median ?? null;
+  const detectedDriverSpeed = driverLaunchSummary?.metrics.clubSpeedMph?.median ?? null;
+  const hasCanonicalIndex = defaultHandicap !== null
+    && (defaultHandicapSource === "GHIN" || defaultHandicapSource === "BACKYARD")
+    && input.handicapSource === defaultHandicapSource
+    && input.handicap === defaultHandicap;
 
   useEffect(() => {
     const saved = loadBallFitDraft(localStorage, userId);
@@ -321,6 +330,22 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
     <div className={styles.wizardActions}><button type="button" className="secondary" onClick={startNewFit}>Empezar nuevo</button><button type="button" className="primary" onClick={resumeSavedDraft}>Reanudar fitting</button></div>
   </div>;
 
+  if (launchOpen && !result) return <div className={`${styles.wizard} ${styles.launchWizard}`}>
+    <div className={styles.launchWizardHeader}>
+      <button type="button" className="textButton" onClick={() => setLaunchOpen(false)}>← Volver a Ball Fit</button>
+      <div><span>MEDICIONES OPCIONALES</span><h2>Captura y analiza tus golpes</h2><p>Selecciona el palo, agrega fotos y revisa un resumen claro antes de continuar.</p></div>
+    </div>
+    <LaunchMonitorCapture
+      userId={userId}
+      accessToken={accessToken}
+      requiresRemoteConsent={requiresRemoteConsent}
+      value={input.launchMonitorSession}
+      onChange={(launchMonitorSession) => patchInput({ launchMonitorSession })}
+      onOpenPrivacy={onOpenPrivacy}
+      onDone={() => setLaunchOpen(false)}
+    />
+  </div>;
+
   return <div className={styles.wizard}>
     <div className={styles.wizardHeader}><div><div className="eyebrow">THE BACKYARD BALL FIT</div><h2>{result ? "Tu mejor grupo de bolas" : `Paso ${step + 1} de 6`}</h2><p>{result ? "Recomendaciones según tus preferencias" : "2–4 minutos · puedes guardar y regresar"}</p></div><button type="button" className="textButton" onClick={saveAndClose}>Guardar y regresar</button></div>
     <div className={styles.progressTrack} aria-label={`${progress}% del fitting`}>{[0, 1, 2, 3, 4, 5].map((item) => <span key={item} data-active={result !== null || item <= step} />)}</div>
@@ -333,13 +358,13 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
 
     {!result && step === 0 && <section className={styles.questionBlock}>
       <h3>Tu juego actual</h3>
-      <p>Elige qué dato usar en este fitting. No modificaremos tu perfil ni sustituiremos un índice guardado.</p>
+      <p>{hasCanonicalIndex ? "Usaremos tu fuente activa; no necesitas volver a elegirla." : "Elige un dato simple para personalizar el fitting. No modificaremos tu perfil."}</p>
       <div className={styles.handicapChoices} aria-label="Fuente del hándicap para Ball Fit">
-        {defaultHandicap !== null && <button type="button" className={`${styles.optionButton} ${input.handicapSource === defaultHandicapSource && input.handicap === defaultHandicap ? styles.selected : ""}`} aria-pressed={input.handicapSource === defaultHandicapSource && input.handicap === defaultHandicap} onClick={() => { handicapChoiceTouched.current = true; patchInput(normalizeBallFitHandicap(defaultHandicap, defaultHandicapSource)); }}><span>Índice de tu cuenta</span><b>{accountIndexLabel(defaultHandicapSource, defaultHandicap)}</b></button>}
+        {hasCanonicalIndex && <div className={styles.activeIndex}><span aria-hidden="true">✓</span><div><small>FUENTE ACTIVA</small><b>{accountIndexLabel(defaultHandicapSource, defaultHandicap!)}</b></div></div>}
         {defaultHandicap === null && defaultHandicapSource === "BACKYARD" && <p className={styles.subtle}>Tu Backyard Index todavía no está disponible.</p>}
         {defaultHandicap === null && defaultHandicapSource !== "BACKYARD" && <p className={styles.subtle}>Tu cuenta todavía no tiene un índice disponible.</p>}
-        <button type="button" className={`${styles.optionButton} ${input.handicapSource === "MANUAL" ? styles.selected : ""}`} aria-pressed={input.handicapSource === "MANUAL"} onClick={() => { handicapChoiceTouched.current = true; patchInput({ handicapSource: "MANUAL", handicap: input.handicapSource === "MANUAL" ? input.handicap : null }); }}>Capturar HCP manual</button>
-        <button type="button" className={`${styles.optionButton} ${input.handicapSource === "UNKNOWN" ? styles.selected : ""}`} aria-pressed={input.handicapSource === "UNKNOWN"} onClick={() => { handicapChoiceTouched.current = true; patchInput({ handicapSource: "UNKNOWN", handicap: null }); }}>No conozco mi hándicap / Estoy empezando</button>
+        {!hasCanonicalIndex && <button type="button" className={`${styles.optionButton} ${input.handicapSource === "MANUAL" ? styles.selected : ""}`} aria-pressed={input.handicapSource === "MANUAL"} onClick={() => { handicapChoiceTouched.current = true; patchInput({ handicapSource: "MANUAL", handicap: input.handicapSource === "MANUAL" ? input.handicap : null }); }}>Capturar HCP manual</button>}
+        {!hasCanonicalIndex && <button type="button" className={`${styles.optionButton} ${input.handicapSource === "UNKNOWN" ? styles.selected : ""}`} aria-pressed={input.handicapSource === "UNKNOWN"} onClick={() => { handicapChoiceTouched.current = true; patchInput({ handicapSource: "UNKNOWN", handicap: null }); }}>No conozco mi hándicap / Estoy empezando</button>}
       </div>
       {input.handicapSource === "MANUAL" && <label>HCP manual (sólo este fitting)<NumericCaptureInput inputMode="decimal" min={-20} max={54} emptyWhenZero={false} value={input.handicap} onValueChange={(handicap) => { handicapChoiceTouched.current = true; patchInput({ handicap }); }} placeholder="Ej. 18" /><small>Declarado por ti; no es GHIN ni Backyard Index.</small></label>}
       {input.handicapSource === "UNKNOWN" && <><h4>¿Cuánta experiencia tienes?</h4><OptionGrid values={BALL_FIT_EXPERIENCES} labels={{ STARTING: "Estoy empezando", OCCASIONAL: "Juego ocasionalmente", REGULAR: "Juego con regularidad", UNKNOWN: "Prefiero no indicar" }} selected={input.experience || "UNKNOWN"} onSelect={(experience) => patchInput({ experience })} /><p className={styles.subtle}>Esto aporta contexto; no calculamos un hándicap estimado.</p></>}
@@ -347,11 +372,17 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
     </section>}
 
     {!result && step === 1 && <section className={styles.questionBlock}>
-      <h3>Captura y analiza tus golpes</h3><p>Primero elige el palo y después sube las fotos del monitor. Aplicaremos automáticamente cada lectura clara al resumen correcto.</p>
-      <LaunchMonitorCapture userId={userId} accessToken={accessToken} requiresRemoteConsent={requiresRemoteConsent} value={input.launchMonitorSession} onChange={(launchMonitorSession) => patchInput({ launchMonitorSession })} onOpenPrivacy={onOpenPrivacy} />
-      <p className={styles.subtle}><b>¿No tienes datos de launch monitor?</b> Continúa con fitting manual.</p>
-      <label>¿Cuánto pegas aproximadamente con driver? (yardas, opcional)<NumericCaptureInput keyboardMode="numeric" min={50} max={500} value={input.driverDistanceYards} onValueChange={(driverDistanceYards) => patchInput({ driverDistanceYards })} placeholder="Ej. 245" /></label>
-      <h4>Velocidad de swing con driver</h4><OptionGrid values={SWING_SPEED_BANDS} labels={SPEED_LABELS} selected={input.swingSpeedBand} onSelect={(value) => patchInput({ swingSpeedBand: value })} />
+      <h3>Tu juego con driver</h3><p>Continúa con el cuestionario manual. Si tienes mediciones, puedes agregarlas de forma opcional sin repetir datos.</p>
+      {(detectedDriverCarry !== null || detectedDriverSpeed !== null) && <div className={styles.detectedDriverData} aria-label="Datos de launch monitor aplicados">
+        <div><small>DATOS YA APLICADOS</small><b>Driver · {driverLaunchSummary?.includedShots ?? 0} golpes válidos</b></div>
+        {detectedDriverSpeed !== null && <span>Club speed<b>{detectedDriverSpeed.toLocaleString("es-MX", { maximumFractionDigits: 1 })} mph</b></span>}
+        {detectedDriverCarry !== null && <span>Carry<b>{detectedDriverCarry.toLocaleString("es-MX", { maximumFractionDigits: 1 })} yd</b></span>}
+      </div>}
+      {detectedDriverCarry === null && <label>¿Cuánto pegas aproximadamente con driver? (yardas, opcional)<NumericCaptureInput keyboardMode="numeric" min={50} max={500} value={input.driverDistanceYards} onValueChange={(driverDistanceYards) => patchInput({ driverDistanceYards })} placeholder="Ej. 245" /></label>}
+      {detectedDriverSpeed === null && <><h4>Velocidad de swing con driver</h4><OptionGrid values={SWING_SPEED_BANDS} labels={SPEED_LABELS} selected={input.swingSpeedBand} onSelect={(value) => patchInput({ swingSpeedBand: value })} /></>}
+      <button type="button" className={styles.launchEntry} onClick={() => setLaunchOpen(true)}>
+        <span><BackyardIcon name="score" size={25} /></span><span><b>{launchSummary?.includedShots ? "Revisar mediciones de launch monitor" : "Agregar mediciones de launch monitor"}</b><small>Opcional · selecciona palo, agrega fotos y revisa el resumen</small></span><strong aria-hidden="true">›</strong>
+      </button>
     </section>}
 
     {!result && step === 2 && <section className={styles.questionBlock}>

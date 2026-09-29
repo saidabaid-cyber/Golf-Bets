@@ -78,7 +78,7 @@ test("bola y Ball Fit exponen el flujo completo sin presentar una verdad oficial
   for (const row of ["Construcción", "Cubierta", "Compresión"]) assert.match(wizard, new RegExp(row));
   assert.match(wizard, /Capturar HCP manual/);
   assert.match(wizard, /No conozco mi hándicap \/ Estoy empezando/);
-  assert.match(wizard, /Índice de tu cuenta/);
+  assert.match(wizard, /Handicap Index/);
   assert.match(wizard, /BACKYARD_BALL_FIT_DISCLAIMER/);
   assert.match(fitting, /No es un fitting oficial/);
   assert.doesNotMatch(wizard, /fitting oficial de (Titleist|Callaway|Bridgestone)/i);
@@ -140,7 +140,7 @@ test("cerrar el Ball Fit no afirma guardar cuando localStorage falla", () => {
 });
 
 test("las doce señales rápidas y las prioridades ordenables están disponibles", () => {
-  for (const copy of ["Bola actual", "Índice de tu cuenta", "Score típico", "Cuánto pegas", "Velocidad de swing", "Cómo prefieres sentir", "Trayectoria preferida", "Tus greens", "tiros de aproximación", "más control / spin", "Qué tanto importa el precio", "Color preferido"]) assert.match(wizard, new RegExp(copy, "i"));
+  for (const copy of ["Bola actual", "Handicap Index", "Score típico", "Cuánto pegas", "Velocidad de swing", "Cómo prefieres sentir", "Trayectoria preferida", "Tus greens", "tiros de aproximación", "más control / spin", "Qué tanto importa el precio", "Color preferido"]) assert.match(wizard, new RegExp(copy, "i"));
   for (const priority of ["Distancia con driver", "Menos spin con driver", "Mayor estabilidad / control", "Altura", "Control con hierros", "Poder detener la bola en green", "Spin de wedges", "Sensación alrededor del green", "Sensación con putter"]) assert.ok(wizard.includes(priority));
   assert.match(wizard, /movePriority/);
   assert.match(wizard, /Subir/);
@@ -151,10 +151,11 @@ test("launch monitor conserva golpes parciales, exclusiones y resumen robusto", 
   for (const label of ["Driver", "Hierro 7", "Pitching wedge", "Half wedge / approach", "Velocidad del palo", "Velocidad de bola", "Ángulo de lanzamiento", "Spin", "Carry", "Altura máxima", "Ángulo de caída"]) assert.ok(launch.includes(label));
   assert.match(launch, /Excluir/);
   assert.match(launch, /Reactivar/);
-  assert.match(launch, /Med\./);
-  assert.match(launch, /Res\./);
+  assert.match(launch, /Revisa el resumen/);
+  assert.match(launch, /Ver detalles/);
+  assert.match(launch, /shotDetailsOpen/);
   assert.match(launch, /3 golpes válidos/);
-  assert.match(launch, /Agregar y seguir/);
+  assert.match(launch, /Agregar al resumen/);
   assert.match(launch, /Incluido automáticamente/);
   assert.match(launch, /setActiveClub\(nextProtocolClub/);
   assert.doesNotMatch(launch, /Guardar golpe|Guardar captura parcial/);

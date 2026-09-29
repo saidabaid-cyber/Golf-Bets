@@ -138,8 +138,8 @@ export function LaunchMonitorCamera({ userId, accessToken, requiresRemoteConsent
 
   async function analyze() {
     if (inFlight.current) return;
-    if (photos.length < 2 || busy) {
-      setError("Selecciona de 2 a 4 fotos de la pantalla del launch monitor.");
+    if (photos.length < 1 || busy) {
+      setError("Selecciona de 1 a 4 fotos de la pantalla del launch monitor.");
       return;
     }
     setAccountConsentRequired(false);
@@ -239,13 +239,13 @@ export function LaunchMonitorCamera({ userId, accessToken, requiresRemoteConsent
 
   return <section className={styles.cameraCapture} aria-labelledby="launch-camera-title">
     <div className={styles.captureBrief}><span>{Math.min(capturedCount, 3)}/3</span><div><small>CAPTURA ACTUAL</small><h3 id="launch-camera-title">{CLUB_LABELS[targetClub]}</h3><p>Fotografía hasta 3 golpes legibles. {nextClubLabel ? `Después sigue ${nextClubLabel}.` : "Este es el último bloque recomendado."}</p></div></div>
-    <p className={styles.subtle}>Sube 2–4 fotos de TrackMan, FlightScope, GCQuad, Garmin, Rapsodo u otra pantalla. Los datos claros se agregan automáticamente; sólo te pediremos corregir lecturas dudosas.</p>
+    <p className={styles.subtle}>Sube de 1 a 4 fotos de TrackMan, FlightScope, GCQuad, Garmin, Rapsodo u otra pantalla. Los datos claros se agregan automáticamente; sólo te pediremos corregir lecturas dudosas.</p>
     <div className={styles.inlineActions}>
       <label className={styles.photoButton}>📷 Tomar fotos ahora<input type="file" accept="image/jpeg,image/png,image/webp" capture="environment" multiple onChange={(event) => { addPhotos(event.target.files); event.currentTarget.value = ""; }} /></label>
       <label className={styles.photoButton}>🖼 Elegir de Fotos / Galería<input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(event) => { addPhotos(event.target.files); event.currentTarget.value = ""; }} /></label>
     </div>
     {photos.length > 0 && <div className={styles.launchPhotoGrid}>{photos.map((photo) => <figure key={photo.id}><img src={photo.previewUrl} alt="Pantalla de launch monitor seleccionada" /><button type="button" className="secondary" onClick={() => removePhoto(photo.id)} disabled={busy}>Quitar</button></figure>)}</div>}
-    <button type="button" className="primary" onClick={() => void analyze()} disabled={busy || photos.length < 2}>{busy ? "Leyendo mediciones…" : "Analizar fotos"}</button>
+    <button type="button" className="primary" onClick={() => void analyze()} disabled={busy || photos.length < 1}>{busy ? "Leyendo mediciones…" : "Analizar fotos"}</button>
     {resultMessage && <p className={styles.autoApplied} role="status">✓ {resultMessage}</p>}
     {error && <p className={styles.formMessage} role="alert">{error}</p>}
     {accountConsentRequired && <AiProcessingConsentRequired scope={AI_LAUNCH_MONITOR_PROCESSING_CONSENT} onOpenPrivacy={onOpenPrivacy} />}

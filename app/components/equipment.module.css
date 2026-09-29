@@ -1452,3 +1452,79 @@
   .clubChoice,.clubChoiceSelected { min-height:126px; }
   .clubChoiceVisual { width:76px;height:65px; }
 }
+
+/* Ball Fit keeps the manual questionnaire primary; launch data opens as a
+   separate, compact workflow and only expands details on demand. */
+.activeIndex {
+  display:grid;
+  grid-template-columns:42px minmax(0,1fr);
+  align-items:center;
+  gap:12px;
+  border:1px solid #7aa083;
+  border-radius:17px;
+  background:linear-gradient(145deg,#edf5e8,#fff);
+  padding:13px;
+}
+.activeIndex>span { display:grid;width:38px;height:38px;place-items:center;border-radius:50%;background:#155f3a;color:#fff;font-weight:900; }
+.activeIndex>div { display:grid;gap:3px; }
+.activeIndex small { color:#6e7e72;font-size:9px;font-weight:900;letter-spacing:.12em; }
+.activeIndex b { color:#123d29;font-size:16px; }
+.launchEntry {
+  display:grid;
+  grid-template-columns:48px minmax(0,1fr) 24px;
+  width:100%;
+  min-height:78px;
+  align-items:center;
+  gap:11px;
+  margin-top:18px;
+  border:1px solid rgba(23,63,42,.16);
+  border-radius:18px;
+  background:linear-gradient(145deg,#f1f6ec,#fff);
+  padding:11px 14px;
+  color:#173f2a;
+  text-align:left;
+  box-shadow:0 9px 22px rgba(20,55,34,.065);
+}
+.launchEntry>span:first-child { display:grid;width:44px;height:44px;place-items:center;border-radius:14px;background:#dfeada; }
+.launchEntry>span:nth-child(2) { display:grid;gap:3px; }
+.launchEntry b { font-size:13px; }
+.launchEntry small { color:var(--muted);font-size:10px;line-height:1.35; }
+.launchEntry strong { font:400 25px/1 var(--by-editorial,Georgia,serif); }
+.detectedDriverData { display:grid;grid-template-columns:minmax(0,1.5fr) repeat(2,minmax(90px,.7fr));gap:8px;border:1px solid #c7d9c4;border-radius:17px;background:#f3f8ee;padding:12px; }
+.detectedDriverData>div,.detectedDriverData>span { display:grid;align-content:center;gap:3px; }
+.detectedDriverData small { color:#8c6b20;font-size:9px;font-weight:900;letter-spacing:.1em; }
+.detectedDriverData span { border-left:1px solid #d7e2d4;padding-left:10px;color:var(--muted);font-size:10px; }
+.detectedDriverData b { color:#173f2a;font-size:13px; }
+.launchWizard { padding-bottom:calc(22px + env(safe-area-inset-bottom)); }
+.launchWizardHeader { display:grid;gap:14px;margin-bottom:16px; }
+.launchWizardHeader>div { display:grid;gap:6px; }
+.launchWizardHeader span { color:#8c6b20;font-size:10px;font-weight:900;letter-spacing:.14em; }
+.launchWizardHeader h2 { margin:0;color:#102f23;font:500 clamp(38px,7vw,54px)/.98 var(--by-editorial,Georgia,serif);letter-spacing:-.05em; }
+.launchWizardHeader p { max-width:550px;margin:0;color:#52685b;font-size:14px;line-height:1.5; }
+.manualCaptureToggle { display:flex;min-height:58px;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--line);border-radius:16px;background:#fff;padding:11px 14px;color:#173f2a;text-align:left; }
+.manualCaptureToggle>span { display:grid;gap:2px; }
+.manualCaptureToggle small { color:var(--muted);font-size:10px; }
+.manualCaptureToggle strong { display:grid;width:30px;height:30px;place-items:center;border-radius:50%;background:#e7eee2;font-size:20px; }
+.manualCapturePanel { display:grid;gap:12px;border:1px solid var(--line);border-radius:18px;background:#fff;padding:14px; }
+.captureSummary .launchGrid { grid-template-columns:1fr; }
+.captureSummary .launchCard { border:0;border-radius:17px;background:#fff;padding:12px;box-shadow:0 7px 18px rgba(19,54,34,.055); }
+.launchCardTitle { display:grid;grid-template-columns:64px minmax(0,1fr);align-items:center;gap:10px; }
+.launchCardTitle .clubChoiceVisual { width:64px;height:58px; }
+.launchMetricGrid { display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-top:10px; }
+.launchMetricGrid>span { display:grid;min-width:0;gap:3px;border-radius:11px;background:#f4f7f1;padding:9px 6px;text-align:center; }
+.launchMetricGrid small { color:var(--muted);font-size:9px; }
+.launchMetricGrid b { overflow-wrap:anywhere;color:#173f2a;font-size:12px; }
+.detailsToggle { min-height:44px;border:0;background:transparent;color:#155f3a;font-size:12px;font-weight:850; }
+.shotDetails { display:grid;gap:12px;border:1px solid var(--line);border-radius:18px;background:#fff;padding:14px; }
+
+@media(max-width:540px) {
+  .detectedDriverData { grid-template-columns:1fr 1fr; }
+  .detectedDriverData>div { grid-column:1/-1; }
+  .detectedDriverData span:first-of-type { border-left:0;padding-left:0; }
+  .launchWizardHeader h2 { font-size:41px; }
+  .launchMetricGrid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .launchMetricGrid>span:first-child { grid-column:auto; }
+  .launchCard { padding:12px; }
+  .cameraCapture .inlineActions { grid-template-columns:1fr; }
+  .launchSection>.wizardActions { position:sticky;bottom:0;z-index:3;margin:6px -4px 0;background:rgba(245,247,242,.94);padding:10px 4px calc(10px + env(safe-area-inset-bottom));backdrop-filter:blur(12px); }
+}

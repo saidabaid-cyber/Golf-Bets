@@ -7,6 +7,7 @@ import * as fitting from "../lib/ball-fitting";
 import * as handicap from "../lib/ball-fit-handicap";
 import * as api from "../lib/ball-fitting-api";
 import * as draft from "../lib/ball-fitting-storage";
+import { summarizeLaunchMonitorSession } from "../lib/golf-equipment";
 import { golfBallCatalog } from "../lib/golf-equipment-catalog";
 
 type Node = { type: unknown; props: Record<string, unknown> };
@@ -51,6 +52,7 @@ function wizard(profileIndex: number | null = null, profileSource: handicap.Ball
     if (name.endsWith("/ball-fitting-api")) return api;
     if (name.endsWith("/ball-fitting-storage")) return draft;
     if (name.endsWith("/ball-fit-handicap")) return handicap;
+    if (name.endsWith("/golf-equipment")) return { summarizeLaunchMonitorSession };
     if (name.endsWith("/launch-monitor-capture")) return { LaunchMonitorCapture: "launch-capture" };
     if (name.endsWith(".css")) return { default: new Proxy({}, { get: (_target, key) => key }) };
     throw new Error(name);
@@ -75,7 +77,7 @@ function wizard(profileIndex: number | null = null, profileSource: handicap.Ball
     props = { ...props, defaultHandicap: value, defaultHandicapSource: source };
     render();
   }, async click(label: string) {
-    const button = nodes(tree).find((node) => node.type === "button" && text(node.props.children) === label); assert.ok(button, `button ${label}`);
+    const button = nodes(tree).find((node) => node.type === "button" && text(node.props.children).trim().startsWith(label)); assert.ok(button, `button ${label}`);
     assert.notEqual(button.props.disabled, true); await (button.props.onClick as () => unknown)(); render();
   }, number(min: number) { return nodes(tree).find((node) => node.type === "input" && node.props.min === min)?.props.value; }, changeNumber(value: string, min = -20) {
     const field = nodes(tree).find((node) => node.type === "input" && node.props.min === min); assert.ok(field);
@@ -114,7 +116,8 @@ test("Actualizar fit restores saved answers, edits them independently, and prese
 test("a newly available canonical GHIN index replaces MANUAL data from a prior completed fit", async () => {
   const previous = fitting.normalizeBallFitInput({ userId: "flow-owner", handicap: 18, handicapSource: "MANUAL", typicalScore: 82, driverDistanceYards: 245, feelPreference: "SOFT", trajectoryPreference: "MID", priorities: ["WEDGE_SPIN"] })!;
   const h = wizard(7.9, "GHIN", previous);
-  assert.match(h.text(), /Índice de tu cuenta\s*GHIN · 7\.9/);
+  assert.match(h.text(), /Handicap Index\s+GHIN · 7\.9/);
+  assert.doesNotMatch(h.text(), /Capturar HCP manual|No conozco mi hándicap/);
   for (let index = 0; index < 5; index++) await h.click("Siguiente →");
   await h.click("Ver mi Top 3");
   assert.equal(h.sent[0].handicapSource, "GHIN");
@@ -142,16 +145,54 @@ test("saved fitting from another account cannot seed the editing form", () => {
 
 test("verified GHIN and calculated Backyard values enter Ball Fit automatically with their canonical labels", () => {
   const ghin = wizard(7.9, "GHIN");
-  assert.match(ghin.text(), /Índice de tu cuenta\s*GHIN · 7\.9/);
+  assert.match(ghin.text(), /Handicap Index\s+GHIN · 7\.9/);
+  assert.doesNotMatch(ghin.text(), /Capturar HCP manual|No conozco mi hándicap/);
   assert.doesNotMatch(ghin.text(), /todavía no disponible|continuar sin GHIN/);
 
   const backyard = wizard(8.4, "BACKYARD");
-  assert.match(backyard.text(), /Índice de tu cuenta\s*Backyard Index · 8\.4/);
+  assert.match(backyard.text(), /Backyard Index · 8\.4/);
+  assert.doesNotMatch(backyard.text(), /Capturar HCP manual|No conozco mi hándicap/);
 
   const pending = wizard(null, "BACKYARD");
   assert.match(pending.text(), /Tu Backyard Index todavía no está disponible/);
   assert.match(pending.text(), /Capturar HCP manual/);
   assert.match(pending.text(), /No conozco mi hándicap \/ Estoy empezando/);
+});
+
+test("manual questionnaire stays primary and launch monitor opens only on demand", async () => {
+  const h = wizard(null, null);
+  await h.click("No conozco mi hándicap / Estoy empezando");
+  await h.click("Siguiente →");
+  assert.match(h.text(), /Tu juego con driver/);
+  assert.match(h.text(), /Agregar mediciones de launch monitor/);
+  assert.doesNotMatch(h.text(), /Selecciona el palo, agrega fotos/);
+  await h.click("Agregar mediciones de launch monitor");
+  assert.match(h.text(), /Captura y analiza tus golpes/);
+  assert.match(h.text(), /Selecciona el palo, agrega fotos/);
+});
+
+test("known launch-monitor driver metrics are applied instead of requested again", async () => {
+  const savedInput = fitting.normalizeBallFitInput({
+    userId: "flow-owner",
+    handicap: null,
+    handicapSource: "UNKNOWN",
+    launchMonitorSession: {
+      id: "launch-driver",
+      userId: "flow-owner",
+      source: "Launch monitor",
+      startedAt: "2026-09-28T12:00:00.000Z",
+      completedAt: "2026-09-28T12:02:00.000Z",
+      shots: [
+        { id: "shot-1", club: "DRIVER", excluded: false, clubSpeedMph: 101, carryYards: 247 },
+      ],
+    },
+  });
+  assert.ok(savedInput);
+  const h = wizard(null, null, savedInput);
+  await h.click("Siguiente →");
+  assert.match(h.text(), /Club speed\s*101\s*mph/);
+  assert.match(h.text(), /Carry\s*247\s*yd/);
+  assert.doesNotMatch(h.text(), /¿Cuánto pegas aproximadamente con driver\?|Velocidad de swing con driver/);
 });
 
 test("selecting a catalog ball saves its canonical id, closes results and keeps one real generation label", async () => {

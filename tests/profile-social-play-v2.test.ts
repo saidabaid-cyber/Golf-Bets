@@ -53,6 +53,12 @@ test("index activation counts before first eligible round; manual blank is not z
   for(const manual_hcp of [null,"",NaN,55]) assert.equal(validCompletionChoices({handicap_choice:"MANUAL",manual_hcp,not_applicable:[]}),false);
   assert.equal(validCompletionChoices({handicap_choice:"UNKNOWN",manual_hcp:null,not_applicable:["personal"]}),false);
 });
+test("profile progress presents the real active GHIN value without changing completion weight", () => {
+  const result = profileCompletion({...empty,indexResolution:"GHIN",indexValue:7.9});
+  const handicap = result.sections.find(section=>section.id==="handicap");
+  assert.equal(handicap?.complete,true);
+  assert.equal(handicap?.status,"GHIN · 7.9");
+});
 test("legacy No aplica values cannot complete required sections", () => {
   const choices={handicap_choice:"UNKNOWN" as const,manual_hcp:null,not_applicable:["golf","equipment","ball","fitting"]};
   const result=profileCompletion({...empty,choices});
