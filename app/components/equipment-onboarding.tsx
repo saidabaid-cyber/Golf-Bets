@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { useViewScrollReset } from "./use-view-scroll-reset";
 import { toEquipmentBallFitSummary, type BallFitInput, type BallFitProfileDefaults, type BallFitResult } from "../../lib/ball-fitting";
@@ -22,17 +23,17 @@ import { equipmentStatusLabel, useEquipmentProfile } from "./use-equipment-profi
 import { useEquipmentCatalogSearch } from "./use-equipment-catalog-search";
 import type { ProfileHandedness } from "../../lib/equipment-editor-selection";
 import styles from "./equipment.module.css";
-import { ClubCategoryVisual, GolfBallVisual } from "./equipment-visuals";
+import { GolfBallVisual } from "./equipment-visuals";
 
 type Step = "clubs-prompt" | "clubs-build" | "ball-prompt" | "ball-select" | "fit-prompt" | "fit";
 
-const ONBOARDING_CLUB_CATEGORIES: ReadonlyArray<{ category: ClubCategory; label: string; description: string }> = [
-  { category: "DRIVER", label: "Driver", description: "Máxima distancia y confianza." },
-  { category: "FAIRWAY_WOOD", label: "Maderas", description: "Versatilidad en cada golpe." },
-  { category: "HYBRID", label: "Híbridos", description: "Precisión en cualquier terreno." },
-  { category: "IRON_SET", label: "Hierros", description: "Control y consistencia." },
-  { category: "WEDGE", label: "Wedges", description: "Creatividad en cada situación." },
-  { category: "PUTTER", label: "Putter", description: "Confianza en el último golpe." },
+const ONBOARDING_CLUB_CATEGORIES: ReadonlyArray<{ category: ClubCategory; label: string; description: string; image: string; width: number; height: number }> = [
+  { category: "DRIVER", label: "Driver", description: "Máxima distancia y confianza", image: "/brand/equipment/onboarding-ref-b/driver_ref_b.png", width: 1006, height: 396 },
+  { category: "FAIRWAY_WOOD", label: "Maderas", description: "Versatilidad en cada golpe", image: "/brand/equipment/onboarding-ref-b/maderas_ref_b.png", width: 1006, height: 408 },
+  { category: "HYBRID", label: "Híbridos", description: "Precisión en cualquier terreno", image: "/brand/equipment/onboarding-ref-b/hibridos_ref_b.png", width: 1006, height: 410 },
+  { category: "IRON_SET", label: "Hierros", description: "Control y consistencia", image: "/brand/equipment/onboarding-ref-b/hierros_ref_b.png", width: 1006, height: 412 },
+  { category: "WEDGE", label: "Wedges", description: "Creatividad en cada situación", image: "/brand/equipment/onboarding-ref-b/wedges_ref_b.png", width: 1006, height: 412 },
+  { category: "PUTTER", label: "Putter", description: "Confianza en el último golpe", image: "/brand/equipment/onboarding-ref-b/putter_ref_b.png", width: 1006, height: 468 },
 ];
 
 type EquipmentOnboardingProps = {
@@ -159,33 +160,41 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defa
   if (ballEditorOpen) return <main className={styles.onboardingScreen} data-equipment-screen="onboarding-ball-editor"><BallEditor userId={userId} catalog={ballCatalog.items} existing={null} presentation="page" onCancel={() => setBallEditorOpen(false)} onSave={saveBall} /></main>;
 
   return <main className={styles.onboardingScreen} data-equipment-step={step}><section className={styles.onboardingCard}>
-    <div className={styles.onboardingTop}><BrandLockup compact /><span className={styles.brandPromise} aria-hidden="true">GOLF<br />FOR A<br />BETTER YOU</span><button type="button" className="textButton" onClick={onSaveAndExit}>Guardar y continuar después</button></div>
+    {step !== "clubs-build" && <div className={styles.onboardingTop}><BrandLockup compact /><span className={styles.brandPromise} aria-hidden="true">GOLF<br />FOR A<br />BETTER YOU</span><button type="button" className="textButton" onClick={onSaveAndExit}>Guardar y continuar después</button></div>}
     {step === "clubs-prompt" && <>
       <div className="eyebrow">TUS BASTONES</div><h1>¿Quieres agregar los bastones que juegas actualmente?</h1><p>Esto nos ayudará a personalizar tu perfil y futuras estadísticas.</p>
       <div className={styles.onboardingActions}><button type="button" className="primary" onClick={() => { update((current) => setEquipmentOnboardingStatus(current, "IN_PROGRESS")); setStep("clubs-build"); }}>Agregar mis bastones</button><button type="button" className="secondary" onClick={() => finishClubs("SKIPPED")}>Omitir por ahora</button></div>
     </>}
 
     {step === "clubs-build" && <>
-      <div className={styles.bagLead}><h1>Construye tu bolsa</h1><p>Selecciona tu equipamiento ideal</p></div>
+      <header className={styles.bagHeader}>
+        <button type="button" className={styles.bagBack} aria-label="Volver" onClick={previous}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4-8 8 8 8" /></svg>
+        </button>
+        <div className={styles.bagLead}><h1>Construye tu bolsa</h1><p>Selecciona tu equipamiento ideal</p></div>
+        <button type="button" className={styles.bagIcon} aria-label="Guardar y continuar después" onClick={onSaveAndExit}>
+          <svg viewBox="0 0 40 44" aria-hidden="true"><path d="M11 13h18l2 27H9l2-27Z" /><path d="M15 14V9a5 5 0 0 1 10 0v5" /><circle cx="31" cy="12" r="4" /></svg>
+        </button>
+      </header>
       <div className={styles.onboardingBuilder}>
-        <div className={styles.visualBagGrid} aria-label="Categorías de Mi Bolsa">{ONBOARDING_CLUB_CATEGORIES.map(({ category, label, description }) => {
+        <div className={styles.visualBagGrid} aria-label="Categorías de Mi Bolsa">{ONBOARDING_CLUB_CATEGORIES.map(({ category, label, description, image, width, height }, index) => {
           const clubs = currentClubs.filter((club) => club.category === category);
           const first = clubs[0];
           const catalog = first?.catalogClubId ? clubCatalog.items.find((item) => item.id === first.catalogClubId) : null;
-          const savedName = first ? catalog ? `${catalog.brand} ${catalog.model}` : [first.customBrand, first.customModel].filter(Boolean).join(" ") || "Configuración guardada" : "Agregar a mi bolsa";
+          const savedName = first ? catalog ? `${catalog.brand} ${catalog.model}` : [first.customBrand, first.customModel].filter(Boolean).join(" ") || "Configuración guardada" : null;
           return <button
             type="button"
             key={category}
-            aria-label={`${label}: ${savedName}`}
+            aria-label={savedName ? `${label}. Configurado: ${savedName}` : `${label}. ${description}`}
             className={clubs.length ? styles.visualClubSelected : styles.visualClubCard}
             onClick={() => { setClubEditorCategory(category); setClubEditorOpen(true); }}
           >
-            <span className={styles.visualClubMedia}><ClubCategoryVisual category={category} className={styles.visualClubProduct} useMasterBrand /></span>
-            <span className={styles.visualClubCopy}><b>{label}</b><small>{description}</small><span>{savedName}{clubs.length > 1 ? ` · ${clubs.length} guardados` : first?.generation ? ` · ${first.generation}` : ""}</span></span>
-            <strong aria-hidden="true">{clubs.length ? "✓" : "+"}</strong>
+            <span className={styles.visualClubMedia}><Image className={styles.visualClubImage} src={image} width={width} height={height} sizes="(max-width: 560px) 62vw, 430px" alt="" aria-hidden="true" priority={index === 0} unoptimized /></span>
+            <span className={styles.visualClubCopy}><b>{label}</b><small>{description}</small>{savedName && <span>✓ {savedName}{clubs.length > 1 ? ` · ${clubs.length} guardados` : first?.generation ? ` · ${first.generation}` : ""}</span>}</span>
+            <strong aria-hidden="true">›</strong>
           </button>;
         })}</div>
-        <div className={styles.onboardingActions}><button type="button" className="secondary" onClick={() => { setClubEditorCategory(null); setClubEditorOpen(true); }}>Ver todas las categorías</button><button type="button" className="primary" onClick={() => finishClubs(currentClubs.length ? "COMPLETED" : "SKIPPED")}>{currentClubs.length ? "Continuar con mi bolsa" : "Continuar sin bastones"}</button></div>
+        <div className={styles.onboardingActions}><button type="button" className="primary" onClick={() => finishClubs(currentClubs.length ? "COMPLETED" : "SKIPPED")}>{currentClubs.length ? "Continuar con mi bolsa" : "Continuar sin bastones"}</button></div>
       </div>
     </>}
 
@@ -208,7 +217,7 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defa
 
     {step === "fit" && (ballCatalog.items.length ? <BallFitWizard userId={userId} accessToken={accessToken} defaultHandicap={defaultHandicap} defaultHandicapSource={defaultHandicapSource} profileDefaults={ballFitDefaults} currentBall={currentBall} catalog={ballCatalog.items} onCancel={() => setStep("fit-prompt")} onComplete={completeFit} /> : <div className={ballCatalog.status === "loading" ? styles.loadingState : styles.errorState} role="status">{ballCatalog.status === "loading" ? "Cargando catálogo de bolas…" : <>No pudimos cargar el catálogo. Puedes continuar y hacer el fitting después. <button type="button" className="textButton" onClick={ballCatalog.retry}>Reintentar</button><button type="button" className="secondary" onClick={onComplete}>Después</button></>}</div>)}
 
-    {step !== "fit" && <div className={styles.onboardingFooter}><button type="button" className="textButton" onClick={previous}>← Anterior</button><button type="button" className={styles.onboardingSkip} onClick={skipEverything}>Saltar por ahora y entrar a The Backyard</button></div>}
+    {step !== "fit" && step !== "clubs-build" && <div className={styles.onboardingFooter}><button type="button" className="textButton" onClick={previous}>← Anterior</button><button type="button" className={styles.onboardingSkip} onClick={skipEverything}>Saltar por ahora y entrar a The Backyard</button></div>}
     <p className={styles.syncStatus} data-state={status} role="status">{equipmentStatusLabel(status)}{message ? ` · ${message}` : ""}</p>
   </section></main>;
 }
