@@ -56,7 +56,7 @@ test("equipment and Ball Fit use owned premium product art with selected and emp
   const equipmentCss = source("app/components/equipment.module.css");
   for (const category of ["Driver", "Maderas", "Híbridos", "Hierros", "Wedges", "Putter"]) assert.match(onboarding, new RegExp(category));
   assert.match(onboarding, /ClubCategoryVisual/);
-  assert.match(onboarding, /Máxima distancia para tus tiros de salida/);
+  assert.match(onboarding, /Máxima distancia y confianza/);
   assert.match(panel, /ClubCategoryVisual/);
   assert.match(wizard, /GolfBallVisual/);
   for (const priority of ["Distancia", "Control", "Sensación"]) assert.match(wizard, new RegExp(priority));
