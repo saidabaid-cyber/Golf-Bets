@@ -104,7 +104,7 @@ function serverHelper(): ServerHelper {
   return exports as ServerHelper;
 }
 
-test("adaptador OpenAI valida la foto, exige alta fidelidad y devuelve una imagen base64 acotada", async () => {
+test("adaptador OpenAI valida la foto, conserva identidad por prompt y devuelve una imagen base64 acotada", async () => {
   const helper = serverHelper();
   const source = helper.parsePhotoAvatarSourceDataUrl(jpegDataUrl());
   assert.ok(source);
@@ -125,7 +125,7 @@ test("adaptador OpenAI valida la foto, exige alta fidelidad y devuelve una image
   });
   const providerInput = providerInputs[0];
   assert.equal(avatar, `data:image/webp;base64,${encoded}`);
-  assert.equal(providerInput?.input_fidelity, "high");
+  assert.equal("input_fidelity" in providerInput, false, "GPT Image 2.5 rechaza input_fidelity y procesa referencias con su fidelidad nativa");
   assert.equal(providerInput?.output_format, "webp");
   assert.equal(providerInput?.user, "opaque-user");
   assert.equal("apiKey" in providerInput, false);

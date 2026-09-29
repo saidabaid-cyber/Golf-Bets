@@ -82,7 +82,6 @@ export async function generatePremiumGolfAvatar(input: {
     model: input.model,
     image,
     prompt: premiumGolfAvatarPrompt(input.variant),
-    input_fidelity: "high",
     quality: "medium",
     size: "1024x1024",
     background: "opaque",
