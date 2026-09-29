@@ -174,9 +174,11 @@ test("UI creador ya no conecta a servicios externos y avatar recargado no abre e
   assert.match(creator, /USAR ESTE AVATAR/);
   assert.match(creator, /VOLVER/);
   assert.match(picker, /type === "custom_avatar" \? "avatar" : type/);
-  assert.match(picker, /mode === "avatar" && <AvatarCreationPanel/);
+  assert.match(picker, /mode === "avatar" && avatarEditorOpen && <AvatarCreationPanel/);
   assert.doesNotMatch(picker, /onSaveAvatar/);
   assert.match(picker, /onChange\(url\)/);
+  assert.match(picker, /setAvatarEditorOpen\(false\)/);
+  assert.match(picker, /Vista previa del avatar creado/);
   assert.match(creator, /label: "ROPA"/);
   assert.match(creator, /FONDO/);
   assert.match(creator, /REINICIAR/);

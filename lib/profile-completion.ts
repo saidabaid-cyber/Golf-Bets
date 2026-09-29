@@ -17,20 +17,19 @@ export function validCompletionChoices(value: unknown): value is CompletionChoic
  * `not_applicable` values remain readable for schema compatibility and are no
  * longer product controls or completion shortcuts. */
 export function profileCompletion(input: { displayName?: string | null; givenName?: string | null; familyName?: string | null; avatarUrl?: string | null; username?: string | null; handedness?: string | null; homeClub?: string | null; preferredTee?: string | null; indexEnabled: boolean; indexResolution?: "GHIN" | "BACKYARD" | "NONE" | null; indexValue?: number | null; equipment: EquipmentProfile | null; choices: CompletionChoices }) {
- const { choices, equipment } = input;
+ const { equipment } = input;
  const facts: Record<CompletionSection, boolean> = {
   personal: Boolean(input.displayName?.trim() && input.givenName?.trim() && input.familyName?.trim()),
   username: Boolean(input.username?.trim()),
   golf: Boolean(input.handedness && input.homeClub?.trim()),
-  handicap: input.indexEnabled || Boolean(input.indexResolution) || choices.handicap_choice === "UNKNOWN" || (choices.handicap_choice === "MANUAL" && choices.manual_hcp !== null),
+  handicap: input.indexEnabled || input.indexResolution === "GHIN" || input.indexResolution === "BACKYARD",
   equipment: Boolean(equipment?.clubs.length),
   ball: Boolean(equipment?.balls.some(ball => ball.isCurrent) || equipment?.ballPreference === "NO_FIXED_BALL"),
   fitting: Boolean(equipment?.lastBallFit),
  };
  const handicapStatus = input.indexResolution === "GHIN" ? `GHIN${typeof input.indexValue === "number" && Number.isFinite(input.indexValue) ? ` · ${input.indexValue.toLocaleString("es-MX", { maximumFractionDigits: 1 })}` : " vinculado"}`
   : input.indexResolution === "BACKYARD" || input.indexEnabled ? "Backyard Index activado"
-  : input.indexResolution === "NONE" || choices.handicap_choice === "UNKNOWN" ? "Sin índice por ahora"
-  : choices.handicap_choice === "MANUAL" ? "HCP manual guardado" : "Falta elegir una fuente";
+  : "Elige GHIN o Backyard Index";
  const sections = COMPLETION_SECTIONS.map(id => {
   const optional = id === "fitting";
   const complete = facts[id];

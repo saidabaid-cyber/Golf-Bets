@@ -42,20 +42,22 @@ test("optional avatar never penalizes profile completion", () => {
   assert.equal(withoutAvatar.sections.find(section => section.id === "personal")?.complete,true);
   assert.equal(withoutAvatar.percent,withAvatar.percent);
 });
-for (const choice of ["UNKNOWN","MANUAL"] as const) test(`100% without GHIN, public privacy, consent or computed index: ${choice}`, () => {
+for (const choice of ["UNKNOWN","MANUAL"] as const) test(`legacy ${choice} remains readable but requires GHIN or Backyard`, () => {
   const choices={handicap_choice:choice, manual_hcp:choice==="MANUAL"?12:null, not_applicable:[]};
   const equipment = { clubs: [{}], balls: [], ballPreference: "NO_FIXED_BALL", lastBallFit: null } as unknown as EquipmentProfile;
   assert.equal(validCompletionChoices(choices),true);
   const result = profileCompletion({...empty,equipment,choices,displayName:"QA",givenName:"QA",familyName:"Golfer",avatarUrl:"avatar:dog",username:"qa",handedness:"right",homeClub:"La Vista"});
-  assert.equal(result.percent,100);
+  assert.equal(result.percent,83);
+  assert.equal(result.sections.find(section => section.id === "handicap")?.complete,false);
+  assert.equal(result.sections.find(section => section.id === "handicap")?.status,"Elige GHIN o Backyard Index");
   assert.equal(result.sections.find(section => section.id === "fitting")?.complete,false);
   assert.equal(result.sections.find(section => section.id === "fitting")?.optional,true);
 });
 test("index activation counts before first eligible round; manual blank is not zero", () => {
   assert.equal(profileCompletion({...empty,indexEnabled:true}).sections.find(s=>s.id==="handicap")?.complete,true);
   const none = profileCompletion({...empty,indexResolution:"NONE"}).sections.find(s=>s.id==="handicap");
-  assert.equal(none?.complete,true);
-  assert.equal(none?.status,"Sin índice por ahora");
+  assert.equal(none?.complete,false);
+  assert.equal(none?.status,"Elige GHIN o Backyard Index");
   for(const manual_hcp of [null,"",NaN,55]) assert.equal(validCompletionChoices({handicap_choice:"MANUAL",manual_hcp,not_applicable:[]}),false);
   assert.equal(validCompletionChoices({handicap_choice:"UNKNOWN",manual_hcp:null,not_applicable:["personal"]}),false);
 });

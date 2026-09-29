@@ -148,13 +148,18 @@ test("active GHIN is source-locked until unlink", () => {
   assert.equal(nodes(tree).find((node) => node.type === "ghin-live")?.props.sourceActive, true);
 });
 
-test("unlinked states expose choices while any verified GHIN ignores stale Backyard/NONE preferences", () => {
+test("the four source states expose only GHIN or Backyard and GHIN always locks Backyard", () => {
   const render = component("app/components/handicap-source-selector.tsx", "HandicapSourceChoices", { Image: "image", BackyardIcon: "backyard-icon", BackyardMark: "backyard-mark", GhinPlaceholder: "ghin", GhinReadOnlyPanel: "ghin-live", ghinIndexHeading, styles: {} });
   const base = { ready: true, saving: false, error: "", change: async () => {}, selectGhin: async () => {}, retry: async () => {} };
   const unlinked = render({ authenticated: true, control: { ...base, preference: null }, ghinControl: { ready: true, enabled: true, profile: null } });
   assert.match(text(unlinked), /Vincular GHIN/);
   assert.match(text(unlinked), /Usar Backyard Index/);
-  assert.match(text(unlinked), /Continuar sin índice/);
+  assert.doesNotMatch(text(unlinked), /Continuar sin índice|Sin índice por ahora/);
+
+  const backyardOnly = render({ authenticated: true, control: { ...base, preference: { enabled: true, handicapSource: "BACKYARD" } }, ghinControl: { ready: true, enabled: true, profile: null } });
+  assert.match(text(backyardOnly), /ÍNDICE BACKYARD ACTIVADO/);
+  assert.match(text(backyardOnly), /Vincular GHIN/);
+  assert.doesNotMatch(text(backyardOnly), /Continuar sin índice/);
 
   const linkedProfile = { associationStatus: "VERIFIED", handicapIndex: 7.9, homeClubName: "LA Vista Country Club" };
   const backyard = render({ authenticated: true, control: { ...base, preference: { enabled: true, handicapSource: "BACKYARD" } }, ghinControl: { ready: true, enabled: true, profile: linkedProfile } });
@@ -164,6 +169,17 @@ test("unlinked states expose choices while any verified GHIN ignores stale Backy
   const none = render({ authenticated: true, control: { ...base, preference: { enabled: false, handicapSource: null } }, ghinControl: { ready: true, enabled: true, profile: linkedProfile } });
   assert.doesNotMatch(text(none), /Sin índice por ahora|ACTIVAR BACKYARD INDEX/);
   assert.equal(nodes(none).find((node) => node.type === "ghin-live")?.props.sourceActive, true);
+
+  const afterUnlink = render({ authenticated: true, control: { ...base, preference: { enabled: false, handicapSource: "GHIN" } }, ghinControl: { ready: true, enabled: true, profile: null } });
+  assert.match(text(afterUnlink), /Vincular GHIN/);
+  assert.match(text(afterUnlink), /ACTIVAR BACKYARD INDEX/);
+  assert.doesNotMatch(text(afterUnlink), /Continuar sin índice/);
+});
+
+test("Perfil removes the complete Backyard card while a verified GHIN is linked", () => {
+  const profile = readFileSync("app/components/profile-account-panel.tsx", "utf8");
+  assert.match(profile, /const ghinLinked = ghinControl\?\.profile\?\.associationStatus === "VERIFIED"/);
+  assert.match(profile, /\{!ghinLinked && <BackyardIndexCard/);
 });
 
 test("BACKYARD activation persists source and enabled server-side and reload/new device sees it", async () => {

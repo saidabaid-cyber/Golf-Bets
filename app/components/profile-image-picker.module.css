@@ -12,7 +12,7 @@
 .modeVisual img { width: 100%; height: 100%; object-fit: cover; }
 .modeEmoji { font-size: 31px; line-height: 1; font-weight: 500; }
 .check { position: absolute; top: 7px; right: 7px; width: 21px; height: 21px; border-radius: 50%; background: var(--green); color: white; display: grid; place-items: center; font-size: 12px; font-weight: 900; }
-.photoPanel, .emojiInput, .noneState { min-width: 0; padding: 14px; border: 1px solid var(--line); border-radius: 19px; background: var(--soft); box-shadow: 0 5px 20px rgba(20,56,37,.05); }
+.photoPanel, .emojiInput, .noneState, .avatarReady { min-width: 0; padding: 14px; border: 1px solid var(--line); border-radius: 19px; background: var(--soft); box-shadow: 0 5px 20px rgba(20,56,37,.05); }
 .photoPanel { display: grid; gap: 12px; }
 .photoHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .photoHeader h4, .emojiInput h4 { margin: 0; color: var(--ink); font-family: var(--font-serif); font-size: 22px; }
@@ -72,6 +72,12 @@
 .noneState svg { width: 31px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; }
 .noneState b { color: var(--ink); font-size: 13px; }
 .noneState p { margin: 3px 0 0; color: var(--muted); font-size: 10px; line-height: 1.4; }
+.avatarReady { display: grid; grid-template-columns: auto minmax(0,1fr); gap: 12px; align-items: center; }
+.avatarReady > span { width: 70px; height: 70px; overflow: hidden; border: 2px solid white; border-radius: 50%; background: #e5eee7; box-shadow: 0 3px 12px rgba(16,64,40,.14); }
+.avatarReady img { width: 100%; height: 100%; object-fit: cover; }
+.avatarReady b { color: var(--ink); font-size: 13px; }
+.avatarReady p { margin: 3px 0 0; color: var(--muted); font-size: 10px; line-height: 1.4; }
+.avatarReady button { grid-column: 1 / -1; }
 .help, .error { font-size: 10px; }
 .help { color: var(--green); }
 .error { color: #8f281f; }
@@ -85,7 +91,7 @@
   .modeChoices button { min-height: 122px; padding-inline: 3px; }
   .modeChoices small { font-size: 7.5px; }
   .modeVisual { width: 45px; height: 45px; }
-  .photoPanel, .emojiInput, .noneState { padding: 11px; }
+  .photoPanel, .emojiInput, .noneState, .avatarReady { padding: 11px; }
   .cropStage { aspect-ratio: 1; }
   .photoSources, .emojiInput > div { grid-template-columns: minmax(0,1fr); }
 }

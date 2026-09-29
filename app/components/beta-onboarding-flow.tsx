@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { useViewScrollReset } from "./use-view-scroll-reset";
 import { CatalogCoursePicker } from "./catalog-course-picker";
 import { InitialOnboardingConsents } from './account-consent-checkpoint';
-import { socialRequest } from '../../lib/social-activity-client';
 import { saveOnboardingCheckpoint } from '../../lib/onboarding-checkpoint';
 import {
   GOLF_IMPROVEMENT_GOALS,
@@ -272,18 +271,14 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, lega
       advance("equipment", true);
       return false;
     };
-    const saveProfileSource = async (withoutIndex = false) => {
+    const saveProfileSource = async () => {
       const linked=ghinControl.profile?.associationStatus==="VERIFIED";
       await onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: profile.defaultHandicap, ghinLinkStatus: linked ? "LINKED" : profile.ghinLinkStatus === "LINKED" ? "LINKED" : "SKIPPED" });
-      if (withoutIndex && accessToken) {
-        const current = await socialRequest<{ choices: { handicap_choice: "MANUAL" | "UNKNOWN" | null; manual_hcp: number | null; not_applicable: string[] } }>("/api/account/completion", accessToken);
-        await socialRequest("/api/account/completion", accessToken, { method: "PUT", body: { ...current.choices, handicap_choice: "UNKNOWN", manual_hcp: null } });
-      }
     };
     const sourceChosen = accountIndex.source === "GHIN" || accountIndex.source === "BACKYARD";
-    return <Shell progress={progress} {...navigationProps} eyebrow="HANDICAP / ÍNDICE" title={ghinLinked ? ghinIndexHeading(ghinControl.profile?.handicapIndex) : "Elige tu fuente de índice"} description={ghinLinked ? "GHIN está vinculado y activo. Para elegir otra fuente, primero desvincula GHIN." : "Puedes vincular tu cuenta GHIN, activar Backyard Index o continuar sin índice."} actions={sourceChosen ? <button className="primary big" disabled={finishing} onClick={async () => { let delegated = false; try { setFinishing(true); await saveProfileSource(); delegated = continueFlow(); } catch(error) { setMessage(error instanceof Error ? error.message : 'No pudimos guardar. Reintenta.'); } finally { if (!delegated) setFinishing(false); } }}>{finishing ? 'Guardando…' : 'Continuar con esta fuente'}</button> : null}>
-    <HandicapSourceChoices control={indexControl} authenticated={Boolean(profile.userId && profile.userId !== "guest")} ghinControl={ghinControl} onContinueWithoutIndex={async () => { if (finishing) return; let delegated = false; setFinishing(true); setMessage(""); try { await indexControl.change(false); await saveProfileSource(true); delegated = continueFlow(); } catch(error) { setMessage(error instanceof Error ? error.message : 'No pudimos guardar tu elección. Reintenta.'); } finally { if (!delegated) setFinishing(false); } }} />
-    <p className={styles.trust}>Si todavía no tienes índice puedes continuar. No inventaremos un valor.</p>{message && <p role="alert">{message}</p>}
+    return <Shell progress={progress} {...navigationProps} eyebrow="HANDICAP / ÍNDICE" title={ghinLinked ? ghinIndexHeading(ghinControl.profile?.handicapIndex) : "Elige tu fuente de índice"} description={ghinLinked ? "GHIN está vinculado y activo. Para elegir otra fuente, primero desvincula GHIN." : "Vincula GHIN o usa Backyard Index como tu fuente de índice."} actions={sourceChosen ? <button className="primary big" disabled={finishing} onClick={async () => { let delegated = false; try { setFinishing(true); await saveProfileSource(); delegated = continueFlow(); } catch(error) { setMessage(error instanceof Error ? error.message : 'No pudimos guardar. Reintenta.'); } finally { if (!delegated) setFinishing(false); } }}>{finishing ? 'Guardando…' : 'Continuar con esta fuente'}</button> : null}>
+    <HandicapSourceChoices control={indexControl} authenticated={Boolean(profile.userId && profile.userId !== "guest")} ghinControl={ghinControl} />
+    <p className={styles.trust}>Elige GHIN o Backyard Index para continuar.</p>{message && <p role="alert">{message}</p>}
   </Shell>;
   }
 

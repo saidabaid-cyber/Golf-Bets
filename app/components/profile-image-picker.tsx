@@ -72,6 +72,7 @@ export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyCh
   const [emojiInput, setEmojiInput] = useState({ source: value, text: isProfileEmojiAvatar(value) ? value : "" });
   const emojiDraft = emojiInput.source === value ? emojiInput.text : isProfileEmojiAvatar(value) ? value : "";
   const [selection, setSelection] = useState<{ mode: AvatarMode; value: string }>({ mode: modeFromValue(value), value });
+  const [avatarEditorOpen, setAvatarEditorOpen] = useState(false);
   const mode = selection.value === value ? selection.mode : modeFromValue(value);
 
   function setCropState(next: Required<ProfileImageCrop>) { cropRef.current = next; setCrop(next); }
@@ -107,6 +108,7 @@ export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyCh
   function selectMode(next: AvatarMode) {
     requestRef.current += 1; setBusy(false); onBusyChange?.(false);
     if (next !== "photo") releasePendingPhoto();
+    setAvatarEditorOpen(next === "avatar");
     setSelection({ mode: next, value }); setMessage(""); setStatus("");
     if (next === "emoji") setEmojiInput({ source: value, text: isProfileEmojiAvatar(value) ? value : "" });
     if (next === "none") {
@@ -355,7 +357,8 @@ export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyCh
     </section>}
 
     {mode === "emoji" && <section className={styles.emojiInput} aria-labelledby={`${fieldId}-emoji-title`}><div className={styles.emojiHeading}><div><h4 id={`${fieldId}-emoji-title`}>Elige un emoji</h4><p>Selecciona uno o usa el teclado de tu teléfono.</p></div><div className={styles.emojiPreview} aria-label={emojiDraftValue ? `Vista previa ${emojiDraftValue}` : "Vista previa de emoji"}>{emojiDraftValue || "☺"}</div></div><label htmlFor={`${fieldId}-emoji`}>Emoji de avatar</label><div><input id={`${fieldId}-emoji`} type="text" value={emojiDraft} maxLength={64} inputMode="text" autoComplete="off" autoCapitalize="off" spellCheck={false} enterKeyHint="done" placeholder="Usa el teclado" onKeyDown={(event) => { if (event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); applyEmoji(); } }} onChange={(event) => { setEmojiInput({ source: value, text: event.target.value }); setMessage(""); setStatus(""); }} /><button type="button" className="secondary" disabled={!emojiDraftValue || emojiApplied} onClick={applyEmoji}>{emojiApplied ? "EMOJI LISTO ✓" : "USAR EMOJI"}</button></div><div className={styles.quickEmojis} aria-label="Emojis sugeridos">{QUICK_EMOJIS.map((emoji) => <button key={emoji} type="button" aria-label={`Elegir ${emoji}`} aria-pressed={emojiDraft === emoji} onClick={() => { setEmojiInput({ source: value, text: emoji }); setMessage(""); setStatus(""); }}>{emoji}</button>)}</div></section>}
-    {mode === "avatar" && <AvatarCreationPanel initialValue={parseManualAvatarUrl(value) ? value : undefined} staged onBusyChange={onBusyChange} onCancel={() => selectMode(modeFromValue(value))} onUse={(url) => { onChange(url); setSelection({ mode: "avatar", value: url }); setStatus("Avatar listo. Guarda tu perfil para conservarlo."); }} />}
+    {mode === "avatar" && avatarEditorOpen && <AvatarCreationPanel initialValue={parseManualAvatarUrl(value) ? value : undefined} staged onBusyChange={onBusyChange} onCancel={() => { setAvatarEditorOpen(false); setSelection({ mode: modeFromValue(value), value }); setMessage(""); setStatus(""); }} onUse={(url) => { onChange(url); setSelection({ mode: "avatar", value: url }); setAvatarEditorOpen(false); setMessage(""); setStatus("Avatar listo. Guarda tu perfil para conservarlo."); }} />}
+    {mode === "avatar" && !avatarEditorOpen && parseManualAvatarUrl(value) && <section className={styles.avatarReady} aria-label="Avatar manual listo"><span><img src={value} alt="Vista previa del avatar creado" /></span><div><b>Avatar listo</b><p>El avatar está preparado. Guarda tu perfil para conservarlo.</p></div><button type="button" className="secondary" onClick={() => setAvatarEditorOpen(true)}>EDITAR AVATAR</button></section>}
     {mode === "none" && <section className={styles.noneState}><span aria-hidden="true"><ModeVisual mode="none" value="" /></span><div><b>Sin foto</b><p>Se usará el avatar genérico de The Backyard. Tu foto o avatar anterior no volverá a mostrarse después de guardar.</p></div></section>}
     {message && <small className={styles.error} role="alert">{message}</small>}{status && <small className={styles.help} role="status">{status}</small>}
     {showGenerationConsent && userId && <AiProcessingConsentPrompt

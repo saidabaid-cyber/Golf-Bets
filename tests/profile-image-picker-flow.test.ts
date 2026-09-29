@@ -171,6 +171,21 @@ test("profile avatar supports optimized upload, emoji and created-avatar choices
   created.render();
   assert.equal(created.value(), avatar);
   assert.match(created.text(), /Avatar listo/);
+  assert.equal(created.nodes().some((node) => node.type === "avatar-create"), false, "usar el avatar cierra el editor compartido");
+  assert.equal(created.nodes().find((node) => node.type === "button" && text(node).includes("AVATAR"))?.props["aria-pressed"], true);
+  assert.equal(created.nodes().find((node) => node.type === "img" && node.props.alt === "Vista previa del avatar creado")?.props.src, avatar);
+  created.click("EDITAR AVATAR");
+  assert.ok(created.nodes().some((node) => node.type === "avatar-create"));
+});
+
+test("onboarding y Editar perfil comparten el mismo cierre y preview del avatar manual", () => {
+  const onboarding = readFileSync("app/components/account-provider.tsx", "utf8");
+  const profile = readFileSync("app/components/profile-account-panel.tsx", "utf8");
+  const picker = readFileSync("app/components/profile-image-picker.tsx", "utf8");
+  assert.match(onboarding, /<ProfileImagePicker value=\{avatarUrl\}/);
+  assert.match(profile, /<ProfileImagePicker value=\{avatarUrl\}/);
+  assert.match(picker, /setAvatarEditorOpen\(false\); setMessage\(""\); setStatus\("Avatar listo/);
+  assert.match(picker, /aria-label="Avatar manual listo"/);
 });
 
 test("la pantalla muestra cuatro modos pares y conecta la caricatura con el endpoint real", () => {

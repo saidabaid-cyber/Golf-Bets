@@ -12,14 +12,14 @@ function filesBelow(root: string): string[] {
   });
 }
 
-test("continuar sin índice persists an explicit resolution and advances in one action", () => {
+test("onboarding requires one of the two final index sources", () => {
   const onboarding = source("app/components/beta-onboarding-flow.tsx");
   const choices = source("app/components/handicap-source-selector.tsx");
-  assert.match(choices, /onContinueWithoutIndex/);
-  assert.match(onboarding, /await indexControl\.change\(false\)/);
-  assert.match(onboarding, /handicap_choice: "UNKNOWN", manual_hcp: null/);
+  assert.doesNotMatch(choices, /onContinueWithoutIndex|CONTINUAR SIN ÍNDICE|data-handicap-source="NONE"/);
+  assert.doesNotMatch(onboarding, /await indexControl\.change\(false\)|handicap_choice: "UNKNOWN"|continuar sin índice/i);
   assert.match(onboarding, /delegated = continueFlow\(\)/);
   assert.match(onboarding, /sourceChosen \? <button/);
+  assert.match(onboarding, /Elige GHIN o Backyard Index para continuar/);
   assert.doesNotMatch(onboarding, /defaultHandicap:\s*0/);
 });
 

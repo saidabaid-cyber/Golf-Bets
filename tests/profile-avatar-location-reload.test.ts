@@ -102,5 +102,7 @@ test("imagen generada legada sigue como foto, pero no abre editor manual al reca
   assert.equal(profileAvatarType(generatedUrl), "photo");
   const picker = readFileSync("app/components/profile-image-picker.tsx", "utf8");
   assert.match(picker, /function modeFromValue\(value: string\)[\s\S]*?type === "custom_avatar" \? "avatar" : type/);
-  assert.match(picker, /mode === "avatar" && <AvatarCreationPanel/);
+  assert.match(picker, /mode === "avatar" && avatarEditorOpen && <AvatarCreationPanel/);
+  assert.match(picker, /useState\(false\)/);
+  assert.match(picker, /!avatarEditorOpen && parseManualAvatarUrl\(value\)/);
 });

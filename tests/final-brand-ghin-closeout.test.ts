@@ -61,12 +61,11 @@ test("GHIN has the official lockup, live action and an unclipped document-level 
   assert.match(selectorCss, /\.ghinMark small/);
 });
 
-test("no-index remains one action that persists null and advances", () => {
+test("the retired no-index action is absent from future source selection", () => {
   const selector = source("app/components/handicap-source-selector.tsx");
   const onboarding = source("app/components/beta-onboarding-flow.tsx");
-  assert.match(selector, /onContinueWithoutIndex \? onContinueWithoutIndex\(\) : control\.change\(false\)/);
-  assert.match(onboarding, /await indexControl\.change\(false\)/);
-  assert.match(onboarding, /handicap_choice: "UNKNOWN", manual_hcp: null/);
-  assert.match(onboarding, /delegated = continueFlow\(\)/);
+  assert.doesNotMatch(selector, /onContinueWithoutIndex|CONTINUAR SIN ÍNDICE|data-handicap-source="NONE"/);
+  assert.doesNotMatch(onboarding, /await indexControl\.change\(false\)|handicap_choice: "UNKNOWN"|continuar sin índice/i);
+  assert.match(onboarding, /sourceChosen \? <button/);
   assert.doesNotMatch(onboarding, /defaultHandicap:\s*0/);
 });

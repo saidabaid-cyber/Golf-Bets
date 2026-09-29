@@ -73,7 +73,9 @@ test("onboarding quick/full restores Home Course while Play keeps Course → Lay
   assert.match(onboarding, /purpose="home-club"/);
   assert.match(onboarding, /onContinue=\{\(\) => advance\("course"\)\}/);
   assert.match(onboarding, /onRequest=\{\(searchedName\) => requestFeedback\("COURSE"/);
-  assert.match(selector, /CONTINUAR SIN ÍNDICE/);
+  assert.doesNotMatch(selector, /CONTINUAR SIN ÍNDICE|data-handicap-source="NONE"/);
+  assert.match(selector, /Vincular GHIN/);
+  assert.match(selector, /Usar Backyard Index/);
   assert.match(play, /1\. Campo → Layout → Tee/);
   assert.match(play, /<CatalogCoursePicker/);
   assert.match(play, /<RoundTeePicker/);
