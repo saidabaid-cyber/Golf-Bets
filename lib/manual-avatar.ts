@@ -8,7 +8,7 @@ export const MANUAL_AVATAR_OPTIONS = {
   mejillas: ["suaves", "marcadas", "llenas"],
   orejas: ["pequenas", "medias", "grandes"],
   piel: ["porcelana", "clara", "mediaClara", "media", "morena", "oscura", "profunda"],
-  pelo: ["sinPelo", "rapado", "corto", "medio", "peinado", "ondulado", "rizado", "afro", "largo", "coleta", "entradas"],
+  pelo: ["sinPelo", "calvicie", "rapado", "muyCorto", "corto", "lacio", "medio", "peinado", "ondulado", "rizado", "afro", "largo", "coleta", "entradas"],
   colorPelo: ["negro", "cafeOscuro", "cafe", "castano", "rubio", "pelirrojo", "gris", "blanco"],
   cejas: ["finas", "suaves", "marcadas", "arqueadas", "rectas"],
   ojos: ["redondos", "almendrados", "profundos", "sonrientes", "serenos"],
@@ -22,7 +22,7 @@ export const MANUAL_AVATAR_OPTIONS = {
   ropa: ["polo", "playera", "chamarra", "quarterZip"],
   colorRopa: ["backyard", "navy", "marfil", "arcilla", "azul", "salvia"],
   accesorio: ["ninguno", "arete", "aretes", "pañuelo"],
-  fondo: ["neutro", "green", "campo", "backyard"],
+  fondo: ["neutro", "neutroOscuro", "green", "campo", "backyard", "premium"],
 } as const;
 
 export type ManualAvatarConfig = { version: 3 } & { [K in keyof typeof MANUAL_AVATAR_OPTIONS]: (typeof MANUAL_AVATAR_OPTIONS)[K][number] };
@@ -30,7 +30,7 @@ export const DEFAULT_MANUAL_AVATAR: ManualAvatarConfig = {
   version: 3, rostro: "ovalado", mandibula: "definida", mejillas: "suaves", orejas: "medias", piel: "media",
   pelo: "corto", colorPelo: "castano", cejas: "suaves", ojos: "almendrados", colorOjos: "cafe", nariz: "recta", boca: "sonrisa",
   barba: "ninguna", colorBarba: "castano", lentes: "ninguno", sombrero: "ninguno", ropa: "polo", colorRopa: "backyard",
-  accesorio: "ninguno", fondo: "campo",
+  accesorio: "ninguno", fondo: "premium",
 };
 
 const KEYS = Object.keys(MANUAL_AVATAR_OPTIONS) as (keyof typeof MANUAL_AVATAR_OPTIONS)[];
@@ -38,7 +38,7 @@ const SKIN = { porcelana: "#f8dfcb", clara: "#edc7a8", mediaClara: "#dfb18b", me
 const HAIR = { negro: "#1e2224", cafeOscuro: "#332822", cafe: "#654531", castano: "#4f372d", rubio: "#b68b4c", pelirrojo: "#9a4931", gris: "#7d878b", blanco: "#e5e7e1" };
 const IRIS = { cafeOscuro: "#382a25", cafe: "#654435", avellana: "#8a7045", verde: "#3f6e59", azul: "#3f6c91", gris: "#6d7d80" };
 const CLOTHES = { backyard: "#0e5a3b", navy: "#18344a", marfil: "#ece8db", arcilla: "#9b5e4b", azul: "#356986", salvia: "#6e8c78" };
-const BACKGROUND = { neutro: "#e9ece7", green: "#cfe2d3", campo: "#bad0bd", backyard: "#0d5438" };
+const BACKGROUND = { neutro: "#e9ece7", neutroOscuro: "#283833", green: "#cfe2d3", campo: "#bad0bd", backyard: "#0d5438", premium: "#d8e3dc" };
 export const MANUAL_AVATAR_SWATCHES = { piel: SKIN, colorPelo: HAIR, colorBarba: HAIR, colorOjos: IRIS, colorRopa: CLOTHES, fondo: BACKGROUND } as const;
 
 export function parseManualAvatarConfig(value: unknown): ManualAvatarConfig | null {
@@ -61,6 +61,8 @@ export function randomManualAvatarConfig(random: () => number = Math.random, bas
 }
 
 function backgroundSvg(c: ManualAvatarConfig) {
+  if (c.fondo === "premium") return `<rect width="256" height="256" fill="url(#premiumBg)"/><circle cx="47" cy="45" r="72" fill="#fff" opacity=".32"/><circle cx="222" cy="78" r="50" fill="#c5a968" opacity=".14"/><path d="M20 232Q72 198 121 222Q183 185 246 216" fill="none" stroke="#fff" stroke-opacity=".34" stroke-width="2"/>`;
+  if (c.fondo === "neutroOscuro") return `<rect width="256" height="256" fill="url(#darkBg)"/><circle cx="128" cy="103" r="102" fill="#fff" opacity=".035"/><path d="M24 226Q128 194 232 226" fill="none" stroke="#d8bd79" stroke-opacity=".2" stroke-width="2"/>`;
   if (c.fondo === "campo") return `<rect width="256" height="256" fill="url(#sky)"/><g filter="url(#soft)"><path d="M0 112Q56 75 112 107Q172 74 256 110V256H0Z" fill="#789b78"/><path d="M0 151Q71 118 139 150Q196 121 256 142V256H0Z" fill="#4e7d59"/><path d="M91 256Q111 166 166 128Q149 198 151 256Z" fill="#a7c494"/><circle cx="205" cy="78" r="25" fill="#e6e1bd" opacity=".8"/></g>`;
   if (c.fondo === "green") return `<rect width="256" height="256" fill="url(#greenBg)"/><path d="M0 205Q73 167 138 198Q196 167 256 187V256H0Z" fill="#7eaa7c" opacity=".72"/><path d="M216 54V139M216 56l27 13-27 11" fill="none" stroke="#f3f1e6" stroke-width="4"/>`;
   if (c.fondo === "backyard") return `<rect width="256" height="256" fill="url(#backyardBg)"/><circle cx="207" cy="49" r="30" fill="none" stroke="#fff" stroke-opacity=".08" stroke-width="2"/><path d="M183 49h48M207 25v48M190 32q17 17 34 0M190 66q17-17 34 0" fill="none" stroke="#fff" stroke-opacity=".08" stroke-width="2"/>`;
@@ -82,7 +84,10 @@ function facePath(c: ManualAvatarConfig) {
 function hairSvg(c: ManualAvatarConfig, color: string) {
   switch (c.pelo) {
     case "sinPelo": return "";
+    case "calvicie": return `<path d="M70 106Q73 67 103 55Q92 78 96 98Q83 99 70 106ZM186 106Q183 67 153 55Q164 78 160 98Q173 99 186 106Z" fill="${color}"/><path d="M96 64Q128 48 160 64" fill="none" stroke="${color}" stroke-width="5" opacity=".45"/>`;
     case "rapado": return `<path d="M72 104Q71 55 128 55Q185 55 184 104" fill="none" stroke="${color}" stroke-width="10" opacity=".9"/>`;
+    case "muyCorto": return `<path d="M69 105Q66 58 128 51Q190 58 187 105Q170 79 151 77Q108 76 72 101Z" fill="${color}"/><path d="M79 81Q128 59 178 82" fill="none" stroke="#fff" stroke-opacity=".11" stroke-width="4"/>`;
+    case "lacio": return `<path d="M61 112Q55 42 127 41Q201 42 195 112L184 151L173 99Q128 76 80 99L81 151L66 159Z" fill="${color}"/><path d="M102 48Q112 79 105 101M137 45Q141 76 136 91M164 53Q163 78 158 92" fill="none" stroke="#fff" stroke-opacity=".12" stroke-width="4"/>`;
     case "medio": return `<path d="M63 120Q51 48 126 42Q199 42 195 120L187 164L174 154L176 102Q128 81 78 103L81 154L65 164Z" fill="${color}"/>`;
     case "peinado": return `<path d="M65 106Q57 53 105 43Q157 25 193 79L192 111Q172 80 153 82Q108 79 72 103Z" fill="${color}"/><path d="M103 49Q141 33 178 59" fill="none" stroke="#fff" stroke-opacity=".14" stroke-width="6"/>`;
     case "ondulado": return `<path d="M61 112Q48 67 79 55Q91 35 112 47Q137 31 155 47Q184 40 197 83L191 121Q178 99 167 94Q151 85 136 95Q121 80 106 94Q87 79 69 110Z" fill="${color}"/>`;
@@ -124,6 +129,11 @@ export function manualAvatarSvg(config: ManualAvatarConfig): string {
   const c = parseManualAvatarConfig(config);
   if (!c) throw new Error("Configuracion de avatar invalida");
   const skin = SKIN[c.piel], hair = HAIR[c.colorPelo], beard = HAIR[c.colorBarba], iris = IRIS[c.colorOjos], shirt = CLOTHES[c.colorRopa];
+  const premiumFinish = c.fondo === "premium" || c.fondo === "neutroOscuro";
+  const faceFill = premiumFinish ? "url(#skinPremium)" : skin;
+  const hairFill = premiumFinish ? "url(#hairPremium)" : hair;
+  const beardFill = premiumFinish ? "url(#beardPremium)" : beard;
+  const shirtFill = premiumFinish ? "url(#shirtPremium)" : shirt;
   const earRx = c.orejas === "pequenas" ? 7 : c.orejas === "grandes" ? 11 : 9, earRy = c.orejas === "pequenas" ? 13 : c.orejas === "grandes" ? 20 : 17;
   const eyeRy = c.ojos === "redondos" ? 9 : c.ojos === "profundos" ? 5 : 6;
   const eyeY = c.ojos === "serenos" ? 141 : 138;
@@ -136,8 +146,14 @@ export function manualAvatarSvg(config: ManualAvatarConfig): string {
   const shirtShape = c.ropa === "chamarra" ? "M18 266Q23 219 83 211L128 239L173 211Q233 219 238 266Z" : "M22 266Q29 221 84 214L128 237L172 214Q227 221 234 266Z";
   const collar = c.ropa === "polo" ? `<path d="M91 217L128 240L108 254L82 220M165 217L128 240L148 254L174 220" fill="#fff" opacity=".9"/>` : c.ropa === "quarterZip" ? `<path d="M128 222V256" stroke="#e9eee9" stroke-width="5"/><circle cx="128" cy="242" r="3" fill="#173b31"/>` : c.ropa === "chamarra" ? `<path d="M128 222V256M91 218Q105 238 128 242Q151 238 165 218" fill="none" stroke="#d6dfd8" stroke-width="4"/>` : "";
   const accessory = c.accesorio === "arete" ? `<circle cx="188" cy="166" r="5" fill="#d6ac54"/>` : c.accesorio === "aretes" ? `<g fill="#d6ac54"><circle cx="68" cy="166" r="5"/><circle cx="188" cy="166" r="5"/></g>` : c.accesorio === "pañuelo" ? `<path d="M98 219Q128 232 158 219L151 239Q128 248 105 239Z" fill="#d7b15f"/>` : "";
+  const premiumDetails = premiumFinish ? `<path d="M84 92Q103 69 129 67Q105 98 96 153Q92 190 120 212Q83 205 74 166L70 112Z" fill="#fff" opacity=".13"/><path d="M166 86Q187 112 181 163Q177 194 151 210Q174 177 168 126Z" fill="#4b2d25" opacity=".09"/><ellipse cx="107" cy="132" rx="7" ry="3" fill="#fff" opacity=".28"/><ellipse cx="165" cy="132" rx="5" ry="2" fill="#fff" opacity=".18"/>` : "";
   const metadata = btoa(JSON.stringify(c));
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Avatar Backyard"><metadata id="backyard-avatar-config">${metadata}</metadata><defs><clipPath id="portrait"><circle cx="128" cy="128" r="128"/></clipPath><linearGradient id="neutralBg" x2="0" y2="1"><stop stop-color="#f5f4ee"/><stop offset="1" stop-color="#d6ded8"/></linearGradient><linearGradient id="greenBg" x2="1" y2="1"><stop stop-color="#e5f0e7"/><stop offset="1" stop-color="#8eb594"/></linearGradient><linearGradient id="backyardBg" x2="0" y2="1"><stop stop-color="#176447"/><stop offset="1" stop-color="#083b28"/></linearGradient><linearGradient id="sky" x2="0" y2="1"><stop stop-color="#dce8df"/><stop offset="1" stop-color="#a9c3ae"/></linearGradient><filter id="soft"><feGaussianBlur stdDeviation="4"/></filter><filter id="shadow"><feDropShadow dx="0" dy="3" stdDeviation="3" flood-opacity=".2"/></filter></defs><g clip-path="url(#portrait)">${backgroundSvg(c)}<g filter="url(#shadow)"><path d="${shirtShape}" fill="${shirt}"/><path d="M111 199L111 226Q128 244 145 226L145 199Z" fill="${skin}"/>${collar}${c.pelo === "largo" || c.pelo === "coleta" ? hairSvg(c, hair) : ""}<ellipse cx="69" cy="153" rx="${earRx}" ry="${earRy}" fill="${skin}"/><ellipse cx="187" cy="153" rx="${earRx}" ry="${earRy}" fill="${skin}"/><path d="${face}" fill="${skin}" stroke="#503d36" stroke-opacity=".2" stroke-width="${jawWidth}"/>${cheeks}${hairSvg(c, hair)}<path d="${brows}" fill="none" stroke="${hair}" stroke-width="${c.cejas === "marcadas" ? 5 : c.cejas === "finas" ? 2 : 3.5}" stroke-linecap="round"/>${eyes}<path d="${nose}" fill="none" stroke="#754c3e" stroke-opacity=".52" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>${beardSvg(c, beard)}<path d="${mouth}" fill="none" stroke="#8a4c4a" stroke-width="3" stroke-linecap="round"/>${glassesSvg(c)}${accessory}${hatSvg(c)}</g></g></svg>`;
+  const extendedBackgroundDefs = c.fondo === "neutroOscuro"
+    ? `<linearGradient id="darkBg" x2="1" y2="1"><stop stop-color="#40534c"/><stop offset="1" stop-color="#172722"/></linearGradient><linearGradient id="skinPremium" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff"/><stop offset=".16" stop-color="${skin}"/><stop offset=".78" stop-color="${skin}"/><stop offset="1" stop-color="#6e4639"/></linearGradient><linearGradient id="hairPremium" x2="0" y2="1"><stop stop-color="${hair}"/><stop offset="1" stop-color="#111817"/></linearGradient><linearGradient id="beardPremium" x2="1" y2="1"><stop stop-color="${beard}"/><stop offset="1" stop-color="#241d1a"/></linearGradient><linearGradient id="shirtPremium" x2="0" y2="1"><stop stop-color="${shirt}"/><stop offset="1" stop-color="#102d24"/></linearGradient>`
+    : c.fondo === "premium"
+      ? `<linearGradient id="premiumBg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f6f5ef"/><stop offset=".52" stop-color="#dce8df"/><stop offset="1" stop-color="#9eb9a5"/></linearGradient><linearGradient id="skinPremium" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff"/><stop offset=".16" stop-color="${skin}"/><stop offset=".78" stop-color="${skin}"/><stop offset="1" stop-color="#6e4639"/></linearGradient><linearGradient id="hairPremium" x2="0" y2="1"><stop stop-color="${hair}"/><stop offset="1" stop-color="#111817"/></linearGradient><linearGradient id="beardPremium" x2="1" y2="1"><stop stop-color="${beard}"/><stop offset="1" stop-color="#241d1a"/></linearGradient><linearGradient id="shirtPremium" x2="0" y2="1"><stop stop-color="${shirt}"/><stop offset="1" stop-color="#174332"/></linearGradient>`
+      : "";
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Avatar Backyard"><metadata id="backyard-avatar-config">${metadata}</metadata><defs><clipPath id="portrait"><circle cx="128" cy="128" r="128"/></clipPath><linearGradient id="neutralBg" x2="0" y2="1"><stop stop-color="#f5f4ee"/><stop offset="1" stop-color="#d6ded8"/></linearGradient>${extendedBackgroundDefs}<linearGradient id="greenBg" x2="1" y2="1"><stop stop-color="#e5f0e7"/><stop offset="1" stop-color="#8eb594"/></linearGradient><linearGradient id="backyardBg" x2="0" y2="1"><stop stop-color="#176447"/><stop offset="1" stop-color="#083b28"/></linearGradient><linearGradient id="sky" x2="0" y2="1"><stop stop-color="#dce8df"/><stop offset="1" stop-color="#a9c3ae"/></linearGradient><filter id="soft"><feGaussianBlur stdDeviation="4"/></filter><filter id="shadow"><feDropShadow dx="0" dy="3" stdDeviation="3" flood-opacity=".2"/></filter></defs><g clip-path="url(#portrait)">${backgroundSvg(c)}<g filter="url(#shadow)"><path d="${shirtShape}" fill="${shirtFill}"/><path d="M111 199L111 226Q128 244 145 226L145 199Z" fill="${faceFill}"/>${collar}${c.pelo === "largo" || c.pelo === "coleta" ? hairSvg(c, hairFill) : ""}<ellipse cx="69" cy="153" rx="${earRx}" ry="${earRy}" fill="${faceFill}"/><ellipse cx="187" cy="153" rx="${earRx}" ry="${earRy}" fill="${faceFill}"/><path d="${face}" fill="${faceFill}" stroke="#503d36" stroke-opacity=".2" stroke-width="${jawWidth}"/>${premiumDetails}${cheeks}${hairSvg(c, hairFill)}<path d="${brows}" fill="none" stroke="${hairFill}" stroke-width="${c.cejas === "marcadas" ? 5 : c.cejas === "finas" ? 2 : 3.5}" stroke-linecap="round"/>${eyes}<path d="${nose}" fill="none" stroke="#754c3e" stroke-opacity=".52" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>${beardSvg(c, beardFill)}<path d="${mouth}" fill="none" stroke="#8a4c4a" stroke-width="3" stroke-linecap="round"/>${glassesSvg(c)}${accessory}${hatSvg(c)}</g></g></svg>`;
 }
 
 const PREFIX = "data:image/svg+xml;base64,";

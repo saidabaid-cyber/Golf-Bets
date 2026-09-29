@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from "react";
-import { normalizeProfileImageCrop, profileImageErrorMessage, profileImageFromFile, type ProfileImageCrop } from "../../lib/profile-image";
+import { normalizeProfileImageCrop, profileImageCropAfterPan, profileImageErrorMessage, profileImageFromFile, profileImagePreviewGeometry, type ProfileImageCrop } from "../../lib/profile-image";
 import { isProfileEmojiAvatar, normalizeProfileEmojiAvatar, profileAvatarType } from "../../lib/profile-avatar";
 import { parseManualAvatarUrl } from "../../lib/manual-avatar";
 import { PHOTO_AVATAR_GENERATION_CAPABILITY } from "../../lib/photo-avatar-generation";
@@ -12,6 +12,7 @@ type AvatarMode = "none" | "emoji" | "avatar" | "photo";
 type PendingPhoto = { file: File; objectUrl: string };
 type Point = { x: number; y: number };
 type Gesture = { pointers: Map<number, Point>; startCrop: Required<ProfileImageCrop>; startCenter: Point; startDistance: number };
+type PhotoDimensions = { width: number; height: number };
 
 const EMPTY_CROP = normalizeProfileImageCrop();
 const QUICK_EMOJIS = ["😎", "🏌️", "⛳", "🔥", "🤠", "🦁"];
@@ -33,7 +34,7 @@ function midpoint(a: Point, b: Point): Point { return { x: (a.x + b.x) / 2, y: (
 function ModeVisual({ mode, value }: { mode: AvatarMode; value: string }) {
   if (mode === "avatar" && parseManualAvatarUrl(value)) return <img src={value} alt="" />;
   if (mode === "photo" && value && !isProfileEmojiAvatar(value) && !parseManualAvatarUrl(value)) return <img src={value} alt="" referrerPolicy="no-referrer" />;
-  if (mode === "emoji") return <span className={styles.modeEmoji} aria-hidden="true">☺</span>;
+  if (mode === "emoji") return <span className={styles.modeEmoji} aria-hidden="true">{normalizeProfileEmojiAvatar(value) || "☺"}</span>;
   if (mode === "photo") return <svg viewBox="0 0 48 48" aria-hidden="true"><path d="M9 16h7l3-5h10l3 5h7v23H9zM24 34a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z" /></svg>;
   if (mode === "avatar") return <svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="18" r="9"/><path d="M9 42c1-10 7-15 15-15s14 5 15 15"/><path d="M13 13c3-8 19-9 23 1-7-2-15-2-23-1Z"/></svg>;
   return <svg viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="17" r="8"/><path d="M10 41c1-10 6-15 14-15s13 5 14 15"/></svg>;
@@ -54,6 +55,7 @@ export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyCh
   const [message, setMessage] = useState("");
   const [status, setStatus] = useState("");
   const [pendingPhoto, setPendingPhoto] = useState<PendingPhoto | null>(null);
+  const [photoDimensions, setPhotoDimensions] = useState<PhotoDimensions | null>(null);
   const [crop, setCrop] = useState<Required<ProfileImageCrop>>(EMPTY_CROP);
   const [emojiInput, setEmojiInput] = useState({ source: value, text: isProfileEmojiAvatar(value) ? value : "" });
   const emojiDraft = emojiInput.source === value ? emojiInput.text : isProfileEmojiAvatar(value) ? value : "";
@@ -67,6 +69,7 @@ export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyCh
     pendingPhotoRef.current = null;
     gestureRef.current.pointers.clear();
     setPendingPhoto(null);
+    setPhotoDimensions(null);
   }
   useEffect(() => () => {
     requestRef.current += 1;
@@ -89,7 +92,7 @@ export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyCh
     const emoji = normalizeProfileEmojiAvatar(emojiDraft);
     if (!emoji) { setMessage("Elige un solo emoji desde el teclado."); return; }
     onChange(emoji); setSelection({ mode: "emoji", value: emoji }); setEmojiInput({ source: emoji, text: emoji });
-    setMessage(""); setStatus("Emoji seleccionado. Guarda tu perfil para conservarlo.");
+    setMessage(""); setStatus("Emoji listo. Guarda tu perfil para conservarlo.");
   }
 
   async function chooseFile(file: File | undefined) {
@@ -112,6 +115,7 @@ export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyCh
     const objectUrl = URL.createObjectURL(file);
     const next = { file, objectUrl };
     pendingPhotoRef.current = next; setPendingPhoto(next); setCropState(EMPTY_CROP); setMessage("");
+    setPhotoDimensions(null);
     setStatus("Mueve o pellizca la foto para ajustar el encuadre.");
     if (galleryInputRef.current) galleryInputRef.current.value = "";
     if (cameraInputRef.current) cameraInputRef.current.value = "";
@@ -135,6 +139,7 @@ export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyCh
     gestureRef.current.startDistance = points.length > 1 ? Math.max(1, distance(first, second)) : 0;
   }
   function onPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    event.preventDefault?.();
     event.currentTarget.setPointerCapture?.(event.pointerId);
     gestureRef.current.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     resetGesture([...gestureRef.current.pointers.values()]);
@@ -142,15 +147,20 @@ export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyCh
   function onPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
     const gesture = gestureRef.current;
     if (!gesture.pointers.has(event.pointerId)) return;
+    event.preventDefault?.();
     gesture.pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     const points = [...gesture.pointers.values()];
     const center = points.length > 1 ? midpoint(points[0], points[1]) : points[0];
     const rect = event.currentTarget.getBoundingClientRect();
-    const panScale = Math.max(80, Math.min(rect.width, rect.height)) * .48;
+    const stageSize = Math.max(80, Math.min(rect.width, rect.height));
     const nextZoom = points.length > 1 ? clamp(gesture.startCrop.zoom * (distance(points[0], points[1]) / gesture.startDistance), 1, 3) : gesture.startCrop.zoom;
-    setCropState({ ...gesture.startCrop, zoom: nextZoom,
-      positionX: clamp(gesture.startCrop.positionX - ((center.x - gesture.startCenter.x) / panScale), -1, 1),
-      positionY: clamp(gesture.startCrop.positionY - ((center.y - gesture.startCenter.y) / panScale), -1, 1) });
+    const zoomedCrop = normalizeProfileImageCrop({ ...gesture.startCrop, zoom: nextZoom });
+    setCropState(photoDimensions
+      ? profileImageCropAfterPan(photoDimensions.width, photoDimensions.height, stageSize, zoomedCrop, center.x - gesture.startCenter.x, center.y - gesture.startCenter.y)
+      : normalizeProfileImageCrop({ ...zoomedCrop,
+          positionX: gesture.startCrop.positionX - ((center.x - gesture.startCenter.x) / (stageSize * .48)),
+          positionY: gesture.startCrop.positionY - ((center.y - gesture.startCenter.y) / (stageSize * .48)),
+        }));
   }
   function onPointerEnd(event: ReactPointerEvent<HTMLDivElement>) {
     gestureRef.current.pointers.delete(event.pointerId);
@@ -162,6 +172,10 @@ export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyCh
   }
 
   const previewValue = pendingPhoto?.objectUrl || value;
+  const photoGeometry = pendingPhoto && photoDimensions ? profileImagePreviewGeometry(photoDimensions.width, photoDimensions.height, crop) : null;
+  const emojiValue = normalizeProfileEmojiAvatar(value);
+  const emojiDraftValue = normalizeProfileEmojiAvatar(emojiDraft);
+  const emojiApplied = Boolean(emojiValue && emojiDraftValue === emojiValue);
   const hiddenInputs = <>
     <input ref={cameraInputRef} className={styles.file} type="file" aria-label="Tomar foto para el avatar" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif" capture="user" onChange={(event) => void chooseFile(event.target.files?.[0])} />
     <input ref={galleryInputRef} className={styles.file} type="file" aria-label={kind === "profile" ? "Elegir foto de la galería" : "Seleccionar imagen del grupo"} accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif" onChange={(event) => void chooseFile(event.target.files?.[0])} />
@@ -191,16 +205,14 @@ export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyCh
         {providerPhotoUrl && value !== providerPhotoUrl && <button type="button" className={styles.providerPhoto} onClick={() => { onChange(providerPhotoUrl); setSelection({ mode: "photo", value: providerPhotoUrl }); setStatus("Foto de Google seleccionada. Cambiarla aquí no modifica tu cuenta Google."); }}>USAR FOTO DE GOOGLE</button>}
       </div>}
       {pendingPhoto && <div className={styles.cropEditor}>
-        <div className={styles.cropStage} aria-label="Editor de recorte. Arrastra para mover y pellizca para ampliar." onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerEnd} onPointerCancel={onPointerEnd} onWheel={onCropWheel}>
-          <img src={pendingPhoto.objectUrl} alt="Foto que estás ajustando" draggable={false} style={{ transform: `translate(${-crop.positionX * 18}%, ${-crop.positionY * 18}%) rotate(${crop.rotation}deg) scale(${crop.zoom})` }} />
+        <div className={styles.cropStage} aria-label="Editor de recorte. Arrastra para mover y pellizca para ampliar." onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerEnd} onPointerCancel={onPointerEnd} onLostPointerCapture={onPointerEnd} onWheel={onCropWheel}>
+          <div className={styles.cropImageLayer} style={{ transform: `rotate(${crop.rotation}deg)` }}>
+            <img src={pendingPhoto.objectUrl} alt="Foto que estás ajustando" draggable={false} onLoad={(event) => setPhotoDimensions({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })} style={photoGeometry ? { width: `${photoGeometry.imageWidthPercent}%`, height: `${photoGeometry.imageHeightPercent}%`, left: `${photoGeometry.imageLeftPercent}%`, top: `${photoGeometry.imageTopPercent}%` } : undefined} />
+          </div>
           <div className={styles.cropShade} aria-hidden="true" /><div className={styles.moveHint} aria-hidden="true"><span>↕</span>MOVER</div>
           <div className={styles.zoomControls}><button type="button" aria-label="Acercar foto" onPointerDown={(event) => event.stopPropagation()} onClick={() => setCropState({ ...cropRef.current, zoom: clamp(cropRef.current.zoom + .2, 1, 3) })}>＋</button><button type="button" aria-label="Alejar foto" onPointerDown={(event) => event.stopPropagation()} onClick={() => setCropState({ ...cropRef.current, zoom: clamp(cropRef.current.zoom - .2, 1, 3) })}>−</button></div>
           <button type="button" className={styles.rotateButton} onPointerDown={(event) => event.stopPropagation()} onClick={() => setCropState({ ...cropRef.current, rotation: (cropRef.current.rotation + 90) % 360 })}>↻ ROTAR</button>
         </div>
-        <details className={styles.fineTune}><summary>Ajuste fino</summary><div>
-          <label htmlFor={`${fieldId}-horizontal`}>Horizontal<input id={`${fieldId}-horizontal`} type="range" min="-1" max="1" step="0.05" value={crop.positionX} onChange={(event) => setCropState({ ...cropRef.current, positionX: Number(event.target.value) })} /></label>
-          <label htmlFor={`${fieldId}-vertical`}>Vertical<input id={`${fieldId}-vertical`} type="range" min="-1" max="1" step="0.05" value={crop.positionY} onChange={(event) => setCropState({ ...cropRef.current, positionY: Number(event.target.value) })} /></label>
-        </div></details>
         <div className={styles.photoActions}>
           <button type="button" className="primary" disabled={busy} onClick={() => void applyPendingPhoto()}>{busy ? "PREPARANDO IMAGEN…" : "USAR ESTA FOTO"}</button>
           <button type="button" className={styles.caricatureAction} disabled={!PHOTO_AVATAR_GENERATION_CAPABILITY.available || busy} aria-describedby={`${fieldId}-generation-note`}><span aria-hidden="true">✦</span><span><b>CREAR CARICATURA DESDE MI FOTO</b><small>Avatar ilustrado premium desde esta imagen</small></span><span aria-hidden="true">›</span></button>
@@ -211,7 +223,7 @@ export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyCh
       <small className={styles.formatNote}>JPEG, PNG, WebP o HEIC/HEIF compatible. Hasta 20 MB; se optimiza sólo al confirmar.</small>
     </section>}
 
-    {mode === "emoji" && <section className={styles.emojiInput} aria-labelledby={`${fieldId}-emoji-title`}><h4 id={`${fieldId}-emoji-title`}>Elige un emoji</h4><label htmlFor={`${fieldId}-emoji`}>Emoji de avatar</label><div><input id={`${fieldId}-emoji`} type="text" value={emojiDraft} maxLength={64} inputMode="text" autoComplete="off" autoCapitalize="off" spellCheck={false} enterKeyHint="done" placeholder="Usa el teclado" onKeyDown={(event) => { if (event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); applyEmoji(); } }} onChange={(event) => { setEmojiInput({ source: value, text: event.target.value }); setMessage(""); setStatus(""); }} /><button type="button" className="secondary" onClick={applyEmoji}>USAR EMOJI</button></div><div className={styles.quickEmojis} aria-label="Emojis sugeridos">{QUICK_EMOJIS.map((emoji) => <button key={emoji} type="button" aria-label={`Elegir ${emoji}`} aria-pressed={emojiDraft === emoji} onClick={() => { setEmojiInput({ source: value, text: emoji }); setMessage(""); setStatus(""); }}>{emoji}</button>)}</div></section>}
+    {mode === "emoji" && <section className={styles.emojiInput} aria-labelledby={`${fieldId}-emoji-title`}><div className={styles.emojiHeading}><div><h4 id={`${fieldId}-emoji-title`}>Elige un emoji</h4><p>Selecciona uno o usa el teclado de tu teléfono.</p></div><div className={styles.emojiPreview} aria-label={emojiDraftValue ? `Vista previa ${emojiDraftValue}` : "Vista previa de emoji"}>{emojiDraftValue || "☺"}</div></div><label htmlFor={`${fieldId}-emoji`}>Emoji de avatar</label><div><input id={`${fieldId}-emoji`} type="text" value={emojiDraft} maxLength={64} inputMode="text" autoComplete="off" autoCapitalize="off" spellCheck={false} enterKeyHint="done" placeholder="Usa el teclado" onKeyDown={(event) => { if (event.key === "Enter" && !event.nativeEvent.isComposing) { event.preventDefault(); applyEmoji(); } }} onChange={(event) => { setEmojiInput({ source: value, text: event.target.value }); setMessage(""); setStatus(""); }} /><button type="button" className="secondary" disabled={!emojiDraftValue || emojiApplied} onClick={applyEmoji}>{emojiApplied ? "EMOJI LISTO ✓" : "USAR EMOJI"}</button></div><div className={styles.quickEmojis} aria-label="Emojis sugeridos">{QUICK_EMOJIS.map((emoji) => <button key={emoji} type="button" aria-label={`Elegir ${emoji}`} aria-pressed={emojiDraft === emoji} onClick={() => { setEmojiInput({ source: value, text: emoji }); setMessage(""); setStatus(""); }}>{emoji}</button>)}</div></section>}
     {mode === "avatar" && <AvatarCreationPanel initialValue={parseManualAvatarUrl(value) ? value : undefined} staged onBusyChange={onBusyChange} onCancel={() => selectMode(modeFromValue(value))} onUse={(url) => { onChange(url); setSelection({ mode: "avatar", value: url }); setStatus("Avatar listo. Guarda tu perfil para conservarlo."); }} />}
     {mode === "none" && <section className={styles.noneState}><span aria-hidden="true"><ModeVisual mode="none" value="" /></span><div><b>Sin foto</b><p>Se usará el avatar genérico de The Backyard. Tu foto o avatar anterior no volverá a mostrarse después de guardar.</p></div></section>}
     {message && <small className={styles.error} role="alert">{message}</small>}{status && <small className={styles.help} role="status">{status}</small>}

@@ -5,6 +5,7 @@ import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import * as avatars from "../lib/profile-avatar";
 import * as manualAvatar from "../lib/manual-avatar";
+import { normalizeProfileImageCrop, profileImageCropAfterPan, profileImagePreviewGeometry } from "../lib/profile-image";
 
 type Node = { type: unknown; props: Record<string, unknown> };
 function nodes(value: unknown): Node[] {
@@ -51,7 +52,9 @@ function imagePicker(initialValue: string) {
     if (name.endsWith("/profile-image")) return {
       profileImageFromFile: async (_file: File, _size: number, crop: Record<string, number>) => { crops.push(crop); return "data:image/webp;base64,optimized"; },
       profileImageErrorMessage: () => "No pudimos preparar la imagen.",
-      normalizeProfileImageCrop: (crop: Record<string, number> = {}) => ({ zoom: crop.zoom ?? 1, positionX: crop.positionX ?? 0, positionY: crop.positionY ?? 0, rotation: crop.rotation ?? 0 }),
+      normalizeProfileImageCrop,
+      profileImageCropAfterPan,
+      profileImagePreviewGeometry,
     };
     if (name.endsWith("/photo-avatar-generation")) return { PHOTO_AVATAR_GENERATION_CAPABILITY: { available: false, reason: "provider_not_configured" } };
     if (name === "./avatar-creation-panel") return { AvatarCreationPanel: "avatar-create" };
@@ -101,9 +104,17 @@ test("profile avatar supports optimized upload, emoji and created-avatar choices
   assert.match(upload.text(), /USAR ESTA FOTO/);
   const cropStage = upload.nodes().find((node) => node.props["aria-label"] === "Editor de recorte. Arrastra para mover y pellizca para ampliar.");
   assert.ok(cropStage);
+  const cropImage = upload.nodes().find((node) => node.type === "img" && node.props.alt === "Foto que estás ajustando");
+  assert.ok(cropImage);
+  (cropImage.props.onLoad as (event: unknown) => void)({ currentTarget: { naturalWidth: 1200, naturalHeight: 800 } });
+  upload.render();
+  const liveCropStage = upload.nodes().find((node) => node.props["aria-label"] === "Editor de recorte. Arrastra para mover y pellizca para ampliar.")!;
   const surface = { setPointerCapture: () => undefined, getBoundingClientRect: () => ({ width: 320, height: 260 }) };
-  (cropStage.props.onPointerDown as (event: unknown) => void)({ pointerId: 1, clientX: 120, clientY: 120, currentTarget: surface });
-  (cropStage.props.onPointerMove as (event: unknown) => void)({ pointerId: 1, clientX: 150, clientY: 100, currentTarget: surface });
+  const pointer = (pointerId: number, clientX: number, clientY: number) => ({ pointerId, clientX, clientY, currentTarget: surface, preventDefault: () => undefined });
+  (liveCropStage.props.onPointerDown as (event: unknown) => void)(pointer(1, 120, 120));
+  (liveCropStage.props.onPointerMove as (event: unknown) => void)(pointer(1, 150, 100));
+  (liveCropStage.props.onPointerDown as (event: unknown) => void)(pointer(2, 190, 120));
+  (liveCropStage.props.onPointerMove as (event: unknown) => void)(pointer(2, 240, 120));
   upload.render();
   const zoom = upload.nodes().find((node) => node.type === "button" && node.props["aria-label"] === "Acercar foto");
   const rotate = upload.nodes().find((node) => node.type === "button" && text(node).includes("ROTAR"));
@@ -123,8 +134,14 @@ test("profile avatar supports optimized upload, emoji and created-avatar choices
   const emoji = imagePicker("");
   emoji.click("EMOJI");
   emoji.click("🔥");
+  assert.match(emoji.text(), /🔥/);
   emoji.click("USAR EMOJI");
   assert.equal(emoji.value(), "🔥");
+  assert.match(emoji.text(), /Emoji listo/);
+  const emojiVisual = emoji.nodes().find((node) => typeof node.type === "function" && (node.type as { name?: string }).name === "ModeVisual" && node.props.mode === "emoji");
+  assert.equal(emojiVisual?.props.value, "🔥");
+  const emojiReady = emoji.nodes().find((node) => node.type === "button" && text(node).includes("EMOJI LISTO"));
+  assert.equal(emojiReady?.props.disabled, true);
 
   const created = imagePicker("");
   created.click("AVATAR");
@@ -151,4 +168,24 @@ test("la pantalla muestra cuatro modos pares y declara honestamente generación 
   assert.match(source, /onPointerMove/);
   assert.match(source, /pellizca para ampliar/);
   assert.match(source, /rotation/);
+  assert.doesNotMatch(source, /Ajuste fino|Horizontal<input|Vertical<input/);
+});
+
+test("cambiar entre los cuatro modos no revive la selección anterior", () => {
+  const h = imagePicker("https://images.example/photo.jpg");
+  h.click("EMOJI");
+  h.click("⛳");
+  h.click("USAR EMOJI");
+  assert.equal(h.value(), "⛳");
+  h.click("AVATAR");
+  const panel = h.nodes().find((node) => node.type === "avatar-create");
+  assert.ok(panel);
+  const avatar = manualAvatar.manualAvatarUrl({ ...manualAvatar.DEFAULT_MANUAL_AVATAR, pelo: "rizado" });
+  (panel.props.onUse as (url: string) => void)(avatar);
+  h.render();
+  assert.equal(h.value(), avatar);
+  h.click("SIN FOTO");
+  assert.equal(h.value(), "");
+  h.click("FOTO");
+  assert.doesNotMatch(h.text(), /Foto actual/);
 });

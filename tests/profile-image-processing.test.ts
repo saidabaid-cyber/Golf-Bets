@@ -12,6 +12,8 @@ import {
   profileImageFormatFromBytes,
   profileImageFromFile,
   profileImageCropRect,
+  profileImageCropAfterPan,
+  profileImagePreviewGeometry,
   normalizeProfileImageCrop,
 } from "../lib/profile-image";
 
@@ -111,6 +113,34 @@ test("encuadre ajustable limita zoom y desplazamiento dentro de la foto", () => 
 test("estado de recorte normaliza zoom, posición y rotación en cuartos de vuelta", () => {
   assert.deepEqual(normalizeProfileImageCrop({ zoom: 9, positionX: -3, positionY: 2, rotation: 92 }), { zoom: 3, positionX: -1, positionY: 1, rotation: 90 });
   assert.deepEqual(normalizeProfileImageCrop({ rotation: -90 }), { zoom: 1, positionX: 0, positionY: 0, rotation: 270 });
+});
+
+test("preview y encoder comparten exactamente el mismo rectángulo de crop", () => {
+  const crop = { zoom: 1.8, positionX: .35, positionY: -.4, rotation: 90 };
+  const persisted = profileImageCropRect(1200, 800, crop);
+  const preview = profileImagePreviewGeometry(1200, 800, crop);
+  assert.deepEqual({ sourceX: preview.sourceX, sourceY: preview.sourceY, sourceSize: preview.sourceSize }, persisted);
+  assert.ok(preview.imageWidthPercent > 100);
+  assert.ok(preview.imageHeightPercent >= 78);
+  assert.ok(Number.isFinite(preview.imageLeftPercent));
+  assert.ok(Number.isFinite(preview.imageTopPercent));
+});
+
+test("drag directo respeta límites, zoom y rotación sin dejar huecos en la guía", () => {
+  const start = normalizeProfileImageCrop({ zoom: 1.7, positionX: 0, positionY: 0 });
+  const moved = profileImageCropAfterPan(1200, 800, 320, start, 48, -24);
+  assert.ok(moved.positionX < 0, "arrastrar a la derecha mueve la imagen a la derecha");
+  assert.ok(moved.positionY > 0, "arrastrar hacia arriba mueve la imagen hacia arriba");
+  const rect = profileImageCropRect(1200, 800, moved);
+  assert.ok(rect.sourceX >= 0 && rect.sourceX + rect.sourceSize <= 1200);
+  assert.ok(rect.sourceY >= 0 && rect.sourceY + rect.sourceSize <= 800);
+
+  const rotated = profileImageCropAfterPan(1200, 800, 320, { ...start, rotation: 90 }, 48, 0);
+  assert.ok(Math.abs(rotated.positionX) < 1e-12, "a 90° el drag horizontal no desplaza el eje fuente X");
+  assert.ok(rotated.positionY > 0, "a 90° el drag horizontal se convierte en eje fuente Y");
+  const clamped = profileImageCropAfterPan(1200, 800, 320, start, 20_000, -20_000);
+  assert.ok(clamped.positionX >= -1 && clamped.positionX <= 1);
+  assert.ok(clamped.positionY >= -1 && clamped.positionY <= 1);
 });
 
 test("fuente mayor a 20 MB falla antes de crear URL con mensaje exacto", async () => {

@@ -4,8 +4,9 @@
 .panel h3 { margin: 3px 0 0; color: var(--ink); font-family: var(--font-serif); font-size: 24px; }
 .panel header p { margin: 4px 0 0; color: var(--muted); font-size: 10px; }
 .panel header button { flex: 0 0 42px; width: 42px; min-height: 42px; border: 1px solid var(--line); border-radius: 50%; background: var(--card); color: var(--ink); font-size: 22px; }
-.previewShell { position: relative; min-height: 234px; overflow: hidden; border-radius: 17px; background: linear-gradient(145deg,#e9f0e9,#d7e5db); display: grid; place-items: center; }
-.preview { width: 214px; height: 214px; overflow: hidden; border: 5px solid rgba(255,255,255,.95); border-radius: 50%; background: #dcece2; box-shadow: 0 9px 28px rgba(16,64,40,.2); }
+.previewShell { position: relative; min-height: 278px; overflow: hidden; isolation: isolate; border: 1px solid rgba(14,90,59,.12); border-radius: 19px; background: radial-gradient(circle at 50% 23%,rgba(255,255,255,.98),rgba(231,240,233,.92) 45%,rgba(188,211,195,.88)); display: grid; place-items: center; }
+.previewGlow { position: absolute; inset: 12% 18%; z-index: -1; border-radius: 50%; background: rgba(255,255,255,.8); filter: blur(24px); }
+.preview { width: 244px; height: 244px; overflow: hidden; border: 6px solid rgba(255,255,255,.96); border-radius: 50%; background: #dcece2; box-shadow: 0 18px 40px rgba(16,64,40,.24), inset 0 0 0 1px rgba(14,90,59,.08); }
 .preview img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .previewLabel { position: absolute; left: 12px; bottom: 11px; padding: 7px 10px; border-radius: 999px; background: rgba(255,255,255,.9); color: var(--green); font-size: 9px; font-weight: 900; letter-spacing: .07em; }
 .previewLabel span { font-size: 7px; }
@@ -16,13 +17,18 @@
 .options { display: grid; gap: 9px; min-width: 0; }
 .options fieldset { min-width: 0; margin: 0; padding: 10px; border: 1px solid var(--line); border-radius: 13px; background: var(--card); }
 .options legend { padding: 0 5px; color: var(--green); font-size: 11px; font-weight: 900; }
-.options fieldset > div { display: grid; grid-template-columns: repeat(auto-fit,minmax(86px,1fr)); gap: 6px; }
-.options button { min-width: 0; min-height: 44px; padding: 7px 5px; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); color: var(--ink); font-size: 10px; font-weight: 750; overflow-wrap: anywhere; display: flex; justify-content: center; align-items: center; gap: 5px; }
+.options fieldset > div { display: grid; grid-template-columns: repeat(auto-fit,minmax(96px,1fr)); gap: 7px; }
+.options button { min-width: 0; min-height: 48px; padding: 7px 5px; border: 1px solid var(--line); border-radius: 12px; background: var(--soft); color: var(--ink); font-size: 10px; font-weight: 750; overflow-wrap: anywhere; display: flex; justify-content: center; align-items: center; gap: 6px; }
+.options .optionButton:has(.optionPreview) { min-height: 91px; flex-direction: column; }
 .options button[data-active="true"] { border-color: var(--green); background: #dcece2; color: var(--green); box-shadow: inset 0 0 0 1px var(--green); }
-.swatch { flex: 0 0 18px; width: 18px; height: 18px; border: 1px solid rgba(20,40,30,.23); border-radius: 50%; }
-.actions { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,2fr); gap: 8px; }
+.optionPreview { flex: 0 0 57px; width: 57px; height: 57px; overflow: hidden; border: 2px solid rgba(255,255,255,.92); border-radius: 50%; background: #dcece2; box-shadow: 0 3px 10px rgba(16,64,40,.14); }
+.optionPreview img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.swatch { flex: 0 0 28px; width: 28px; height: 28px; border: 2px solid rgba(255,255,255,.9); border-radius: 50%; box-shadow: 0 0 0 1px rgba(20,40,30,.23); }
+.utilityActions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+.actions { display: grid; }
 .actions button, .panel > button { min-width: 0; min-height: 46px; white-space: normal; }
+.utilityActions button { min-width: 0; min-height: 44px; white-space: normal; }
 .panel small { display: block; color: var(--muted); font-size: 9px; line-height: 1.4; }
 .panel .error { color: #8f281f; font-size: 10px; }
 .panel button:disabled { opacity: .6; cursor: wait; }
-@media (max-width:430px) { .panel { padding: 11px; } .previewShell { min-height: 213px; } .preview { width: 194px; height: 194px; } .categories button { flex-basis: 96px; } .options fieldset > div { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+@media (max-width:430px) { .panel { padding: 11px; } .previewShell { min-height: 246px; } .preview { width: 218px; height: 218px; } .categories button { flex-basis: 96px; } .options fieldset > div { grid-template-columns: repeat(2,minmax(0,1fr)); } }

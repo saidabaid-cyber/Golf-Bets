@@ -4,7 +4,15 @@ export const PROFILE_IMAGE_MAX_DATA_URL_LENGTH = 180_000;
 
 export type SquareCropRect = { sourceX: number; sourceY: number; sourceSize: number };
 export type ProfileImageCrop = { zoom?: number; positionX?: number; positionY?: number; rotation?: number };
+export type ProfileImagePreviewGeometry = SquareCropRect & {
+  imageHeightPercent: number;
+  imageLeftPercent: number;
+  imageTopPercent: number;
+  imageWidthPercent: number;
+};
 export type ProfileImageFormat = "jpeg" | "png" | "webp" | "heic" | "heif";
+
+export const PROFILE_IMAGE_GUIDE_RATIO = 0.78;
 
 /** Center-crop geometry shared by all supported source formats. */
 export function squareCropRect(width: number, height: number): SquareCropRect {
@@ -44,6 +52,60 @@ export function normalizeProfileImageCrop(crop: ProfileImageCrop = {}): Required
     positionY: Math.max(-1, Math.min(1, Number.isFinite(crop.positionY) ? crop.positionY! : 0)),
     rotation,
   };
+}
+
+/** Maps the exact persisted crop to the in-editor circular guide. The stage can
+ * show surrounding context, but every pixel inside the guide matches the final
+ * square that is encoded when the person confirms the photo. */
+export function profileImagePreviewGeometry(
+  width: number,
+  height: number,
+  crop: ProfileImageCrop = {},
+  guideRatio = PROFILE_IMAGE_GUIDE_RATIO,
+): ProfileImagePreviewGeometry {
+  const safeWidth = Math.max(1, Math.trunc(width));
+  const safeHeight = Math.max(1, Math.trunc(height));
+  const rect = profileImageCropRect(safeWidth, safeHeight, crop);
+  const safeGuideRatio = Math.max(.5, Math.min(1, guideRatio));
+  const guidePercent = safeGuideRatio * 100;
+  const guideOffset = (100 - guidePercent) / 2;
+  return {
+    ...rect,
+    imageWidthPercent: (safeWidth / rect.sourceSize) * guidePercent,
+    imageHeightPercent: (safeHeight / rect.sourceSize) * guidePercent,
+    imageLeftPercent: guideOffset - (rect.sourceX / rect.sourceSize) * guidePercent,
+    imageTopPercent: guideOffset - (rect.sourceY / rect.sourceSize) * guidePercent,
+  };
+}
+
+/** Converts a direct finger drag into the normalized crop coordinates used by
+ * the encoder. Rotation is inverted first so the image follows the finger in
+ * screen space at every quarter turn. */
+export function profileImageCropAfterPan(
+  width: number,
+  height: number,
+  stageSize: number,
+  crop: ProfileImageCrop,
+  deltaX: number,
+  deltaY: number,
+  guideRatio = PROFILE_IMAGE_GUIDE_RATIO,
+): Required<ProfileImageCrop> {
+  const normalized = normalizeProfileImageCrop(crop);
+  const safeStageSize = Math.max(1, stageSize);
+  const angle = (-normalized.rotation * Math.PI) / 180;
+  const sourceDeltaX = deltaX * Math.cos(angle) - deltaY * Math.sin(angle);
+  const sourceDeltaY = deltaX * Math.sin(angle) + deltaY * Math.cos(angle);
+  const rect = profileImageCropRect(width, height, normalized);
+  const displayedCropSize = safeStageSize * Math.max(.5, Math.min(1, guideRatio));
+  const maxSourceX = Math.max(0, width - rect.sourceSize);
+  const maxSourceY = Math.max(0, height - rect.sourceSize);
+  const nextX = maxSourceX > 0
+    ? normalized.positionX - (2 * sourceDeltaX * rect.sourceSize) / (displayedCropSize * maxSourceX)
+    : 0;
+  const nextY = maxSourceY > 0
+    ? normalized.positionY - (2 * sourceDeltaY * rect.sourceSize) / (displayedCropSize * maxSourceY)
+    : 0;
+  return normalizeProfileImageCrop({ ...normalized, positionX: nextX, positionY: nextY });
 }
 
 function ascii(bytes: Uint8Array, start: number, length: number) {
