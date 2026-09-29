@@ -21,8 +21,10 @@ test("Mi Bolsa opens full-page club, ball and distance editors, not add/edit bot
 
 test("category-to-form flow keeps distinct equipment inputs and a manual shaft fallback", () => {
   assert.match(editors, /step === "category"/);
-  assert.match(editors, /chooseCategory\(value as ClubCategory\)/);
-  assert.match(editors, /onSelectBall && <button type="button" onClick=\{onSelectBall\}><span><GolfBallVisual \/><\/span><b>Bola<\/b>/);
+  assert.match(editors, /const category = value as ClubCategory/);
+  assert.match(editors, /onClick=\{\(\) => chooseCategory\(category\)\}/);
+  assert.match(editors, /onSelectBall && <button type="button" aria-label="Bola" onClick=\{onSelectBall\}>/);
+  assert.match(editors, /<GolfBallVisual \/><\/span><b>Bola<\/b><strong aria-hidden="true">›<\/strong>/);
   assert.match(panel, /onSelectBall=\{\(\) => \{ setClubEditor\(null\); setNewClubCategory\(null\); setBallEditor\("new"\); \}\}/);
   assert.match(editors, /CLUB_CATEGORY_LABELS\[category\]\} · especificaciones/);
   assert.match(editors, /category === "IRON_SET"/);

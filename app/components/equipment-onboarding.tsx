@@ -24,16 +24,17 @@ import { useEquipmentCatalogSearch } from "./use-equipment-catalog-search";
 import type { ProfileHandedness } from "../../lib/equipment-editor-selection";
 import styles from "./equipment.module.css";
 import { GolfBallVisual } from "./equipment-visuals";
+import { EQUIPMENT_CATEGORY_ASSETS } from "./equipment-category-assets";
 
 type Step = "clubs-prompt" | "clubs-build" | "ball-prompt" | "ball-select" | "fit-prompt" | "fit";
 
-const ONBOARDING_CLUB_CATEGORIES: ReadonlyArray<{ category: ClubCategory; label: string; description: string; image: string; width: number; height: number }> = [
-  { category: "DRIVER", label: "Driver", description: "Máxima distancia y confianza", image: "/brand/equipment/onboarding-ref-b/driver_ref_b.png", width: 1006, height: 396 },
-  { category: "FAIRWAY_WOOD", label: "Maderas", description: "Versatilidad en cada golpe", image: "/brand/equipment/onboarding-ref-b/maderas_ref_b.png", width: 1006, height: 408 },
-  { category: "HYBRID", label: "Híbridos", description: "Precisión en cualquier terreno", image: "/brand/equipment/onboarding-ref-b/hibridos_ref_b.png", width: 1006, height: 410 },
-  { category: "IRON_SET", label: "Hierros", description: "Control y consistencia", image: "/brand/equipment/onboarding-ref-b/hierros_ref_b.png", width: 1006, height: 412 },
-  { category: "WEDGE", label: "Wedges", description: "Creatividad en cada situación", image: "/brand/equipment/onboarding-ref-b/wedges_ref_b.png", width: 1006, height: 412 },
-  { category: "PUTTER", label: "Putter", description: "Confianza en el último golpe", image: "/brand/equipment/onboarding-ref-b/putter_ref_b.png", width: 1006, height: 468 },
+const ONBOARDING_CLUB_CATEGORIES: ReadonlyArray<{ category: ClubCategory; label: string; description: string }> = [
+  { category: "DRIVER", label: "Driver", description: "Máxima distancia y confianza" },
+  { category: "FAIRWAY_WOOD", label: "Maderas", description: "Versatilidad en cada golpe" },
+  { category: "HYBRID", label: "Híbridos", description: "Precisión en cualquier terreno" },
+  { category: "IRON_SET", label: "Hierros", description: "Control y consistencia" },
+  { category: "WEDGE", label: "Wedges", description: "Creatividad en cada situación" },
+  { category: "PUTTER", label: "Putter", description: "Confianza en el último golpe" },
 ];
 
 type EquipmentOnboardingProps = {
@@ -177,7 +178,8 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defa
         </button>
       </header>
       <div className={styles.onboardingBuilder}>
-        <div className={styles.visualBagGrid} aria-label="Categorías de Mi Bolsa">{ONBOARDING_CLUB_CATEGORIES.map(({ category, label, description, image, width, height }, index) => {
+        <div className={styles.visualBagGrid} aria-label="Categorías de Mi Bolsa">{ONBOARDING_CLUB_CATEGORIES.map(({ category, label, description }, index) => {
+          const asset = EQUIPMENT_CATEGORY_ASSETS[category];
           const clubs = currentClubs.filter((club) => club.category === category);
           const first = clubs[0];
           const catalog = first?.catalogClubId ? clubCatalog.items.find((item) => item.id === first.catalogClubId) : null;
@@ -189,7 +191,7 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defa
             className={clubs.length ? styles.visualClubSelected : styles.visualClubCard}
             onClick={() => { setClubEditorCategory(category); setClubEditorOpen(true); }}
           >
-            <span className={styles.visualClubMedia}><Image className={styles.visualClubImage} src={image} width={width} height={height} sizes="(max-width: 560px) 62vw, 430px" alt="" aria-hidden="true" priority={index === 0} unoptimized /></span>
+            <span className={styles.visualClubMedia}><Image className={styles.visualClubImage} src={asset.src} width={asset.width} height={asset.height} sizes="(max-width: 560px) 60vw, 430px" alt="" aria-hidden="true" priority={index === 0} unoptimized /></span>
             <span className={styles.visualClubCopy}><b>{label}</b><small>{description}</small>{savedName && <span>✓ {savedName}{clubs.length > 1 ? ` · ${clubs.length} guardados` : first?.generation ? ` · ${first.generation}` : ""}</span>}</span>
             <strong aria-hidden="true">›</strong>
           </button>;

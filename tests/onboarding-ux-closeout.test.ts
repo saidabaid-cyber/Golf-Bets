@@ -55,12 +55,14 @@ test("profile progress is actionable, optional-aware and removes No aplica", () 
 
 test("equipment and Ball Fit use owned premium product art with selected and empty states", () => {
   const onboarding = source("app/components/equipment-onboarding.tsx");
+  const categoryAssets = source("app/components/equipment-category-assets.ts");
   const panel = source("app/components/equipment-profile-panel.tsx");
   const wizard = source("app/components/ball-fit-wizard.tsx");
   const visuals = source("app/components/equipment-visuals.tsx");
   const equipmentCss = source("app/components/equipment.module.css");
   for (const category of ["Driver", "Maderas", "Híbridos", "Hierros", "Wedges", "Putter"]) assert.match(onboarding, new RegExp(category));
-  assert.match(onboarding, /onboarding-ref-b\/driver_ref_b\.png/);
+  assert.match(categoryAssets, /onboarding-ref-b\/driver_ref_b\.png/);
+  assert.match(onboarding, /EQUIPMENT_CATEGORY_ASSETS/);
   assert.doesNotMatch(onboarding, /ClubCategoryVisual/);
   assert.match(onboarding, /Máxima distancia y confianza/);
   assert.match(panel, /ClubCategoryVisual/);

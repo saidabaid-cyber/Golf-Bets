@@ -17,17 +17,19 @@ const APPROVED_ASSETS = [
 
 test("Construye tu bolsa preserves the six approved REF-B images byte for byte", () => {
   const onboarding = source("app/components/equipment-onboarding.tsx");
+  const assets = source("app/components/equipment-category-assets.ts");
 
   for (const asset of APPROVED_ASSETS) {
     const relative = `/brand/equipment/onboarding-ref-b/${asset.file}`;
     const bytes = readFileSync(join("public", "brand", "equipment", "onboarding-ref-b", asset.file));
 
-    assert.match(onboarding, new RegExp(relative.replaceAll("/", "\\/")));
+    assert.match(assets, new RegExp(relative.replaceAll("/", "\\/")));
     assert.equal(createHash("sha256").update(bytes).digest("hex").toUpperCase(), asset.sha256);
     assert.equal(bytes.readUInt32BE(16), asset.width);
     assert.equal(bytes.readUInt32BE(20), asset.height);
   }
 
+  assert.match(onboarding, /EQUIPMENT_CATEGORY_ASSETS\[category\]/);
   assert.match(onboarding, /<Image className=\{styles\.visualClubImage\}/);
   assert.match(onboarding, /<Image className=\{styles\.visualClubImage\}[\s\S]*?unoptimized \/>/);
   assert.doesNotMatch(onboarding, /ClubCategoryVisual/);
@@ -84,9 +86,52 @@ test("mobile REF-B cards keep their source crop and cannot overflow at 390px", (
   const css = source("app/components/equipment.module.css");
 
   assert.match(css, /data-equipment-step="clubs-build"\] \{ overflow-x:clip/);
-  assert.match(css, /@media\(max-width:560px\)[\s\S]*\.visualClubCard,\.visualClubSelected \{ grid-template-columns:minmax\(0,62%\) minmax\(0,1fr\) 34px/);
-  assert.match(css, /\.visualClubMedia > \.visualClubImage \{[^}]*width:100%;height:auto;object-fit:contain/);
+  assert.match(css, /@media\(max-width:560px\)[\s\S]*\.visualBagGrid \{ gap:6px/);
+  assert.match(css, /@media\(max-width:560px\)[\s\S]*\.visualClubCard,\.visualClubSelected \{ grid-template-columns:minmax\(0,60%\) minmax\(0,1fr\) 32px;height:90px;min-height:90px/);
+  assert.match(css, /\.visualClubMedia > \.visualClubImage \{ width:100%;height:100%;object-fit:cover;object-position:center/);
   assert.match(css, /\.visualClubCard,\.visualClubSelected \{[\s\S]*overflow:hidden/);
   assert.match(css, /\.visualClubCard > strong,\.visualClubSelected > strong \{ display:grid;width:48px;height:48px;[^}]*background:#eef0ee/);
   assert.doesNotMatch(css, /\.visualClubProduct\[data-club-category=/);
+});
+
+test("onboarding and Mi Bolsa category selection consume one canonical asset registry", () => {
+  const assets = source("app/components/equipment-category-assets.ts");
+  const onboarding = source("app/components/equipment-onboarding.tsx");
+  const editors = source("app/components/equipment-editors.tsx");
+
+  const expected = {
+    DRIVER: "driver_ref_b.png",
+    FAIRWAY_WOOD: "maderas_ref_b.png",
+    HYBRID: "hibridos_ref_b.png",
+    IRON_SET: "hierros_ref_b.png",
+    WEDGE: "wedges_ref_b.png",
+    PUTTER: "putter_ref_b.png",
+  } as const;
+
+  for (const [category, file] of Object.entries(expected)) {
+    assert.match(assets, new RegExp(`${category}: \\{ src: \"\\/brand\\/equipment\\/onboarding-ref-b\\/${file.replace(".", "\\.")}`));
+  }
+  assert.match(onboarding, /import \{ EQUIPMENT_CATEGORY_ASSETS \} from "\.\/equipment-category-assets"/);
+  assert.match(editors, /import \{ EQUIPMENT_CATEGORY_ASSETS \} from "\.\/equipment-category-assets"/);
+  assert.match(editors, /const asset = EQUIPMENT_CATEGORY_ASSETS\[category\]/);
+  assert.doesNotMatch(editors, /backyard-(driver|fairway|hybrid|irons|wedge|putter)-clean\.png/);
+  assert.doesNotMatch(editors, /ClubCategoryVisual/);
+});
+
+test("Mi Bolsa keeps distinct Mini Driver and Utility assets and compact navigable rows", () => {
+  const assets = source("app/components/equipment-category-assets.ts");
+  const editors = source("app/components/equipment-editors.tsx");
+  const css = source("app/components/equipment.module.css");
+  const mini = readFileSync(join("public", "brand", "equipment", "onboarding-ref-b", "mini-driver_ref_b.png"));
+  const utility = readFileSync(join("public", "brand", "equipment", "onboarding-ref-b", "utility-driving-iron_ref_b.png"));
+  const driver = readFileSync(join("public", "brand", "equipment", "onboarding-ref-b", "driver_ref_b.png"));
+  const irons = readFileSync(join("public", "brand", "equipment", "onboarding-ref-b", "hierros_ref_b.png"));
+
+  assert.match(assets, /MINI_DRIVER: \{ src: "\/brand\/equipment\/onboarding-ref-b\/mini-driver_ref_b\.png"/);
+  assert.match(assets, /UTILITY_IRON: \{ src: "\/brand\/equipment\/onboarding-ref-b\/utility-driving-iron_ref_b\.png"/);
+  assert.notEqual(createHash("sha256").update(mini).digest("hex"), createHash("sha256").update(driver).digest("hex"));
+  assert.notEqual(createHash("sha256").update(utility).digest("hex"), createHash("sha256").update(irons).digest("hex"));
+  assert.match(editors, /return <button type="button" key=\{category\} aria-label=\{label\} onClick=\{\(\) => chooseCategory\(category\)\}/);
+  assert.match(editors, /<strong aria-hidden="true">›<\/strong>/);
+  assert.match(css, /\.catalogChoiceGrid button \{ display: grid; grid-template-columns: 88px minmax\(0, 1fr\) 28px; min-height: 66px/);
 });
