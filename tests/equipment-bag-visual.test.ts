@@ -56,6 +56,8 @@ test("Construye tu bolsa renders exactly the approved six-card hierarchy and cop
   assert.match(buildBlock, /Construye tu bolsa/);
   assert.match(buildBlock, /Agrega sólo lo que quieras\. Marca \+ modelo es suficiente<br \/>y puedes regresar después desde Perfil\./);
   assert.match(buildBlock, /<BrandLockup compact \/>/);
+  assert.match(buildBlock, /className=\{styles\.bagBack\} aria-label="Volver" onClick=\{previous\}/);
+  assert.doesNotMatch(buildBlock, /styles\.bagIcon|aria-label="Guardar y continuar después"/);
   assert.match(buildBlock, /configured \? "✓ En mi bolsa" : "Agregar a mi bolsa"/);
   assert.doesNotMatch(buildBlock, /Ver todas las categorías/);
   assert.match(buildBlock, /configured \? "✓" : "\+"/);

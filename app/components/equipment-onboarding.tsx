@@ -174,9 +174,6 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defa
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4-8 8 8 8" /></svg>
           </button>
           <BrandLockup compact />
-          <button type="button" className={styles.bagIcon} aria-label="Guardar y continuar después" onClick={onSaveAndExit}>
-            <svg viewBox="0 0 40 44" aria-hidden="true"><path d="M11 13h18l2 27H9l2-27Z" /><path d="M15 14V9a5 5 0 0 1 10 0v5" /><circle cx="31" cy="12" r="4" /></svg>
-          </button>
         </div>
         <div className={styles.bagLead}>
           <h1>Construye tu bolsa</h1>
