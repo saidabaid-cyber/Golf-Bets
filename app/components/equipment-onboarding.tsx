@@ -27,12 +27,12 @@ import { ClubCategoryVisual, GolfBallVisual } from "./equipment-visuals";
 type Step = "clubs-prompt" | "clubs-build" | "ball-prompt" | "ball-select" | "fit-prompt" | "fit";
 
 const ONBOARDING_CLUB_CATEGORIES: ReadonlyArray<{ category: ClubCategory; label: string; description: string }> = [
-  { category: "DRIVER", label: "Driver", description: "Máxima distancia para tus tiros de salida." },
-  { category: "FAIRWAY_WOOD", label: "Maderas", description: "Versatilidad y distancia desde el fairway." },
-  { category: "HYBRID", label: "Híbridos", description: "Confianza desde cualquier lie." },
-  { category: "IRON_SET", label: "Hierros", description: "Precisión y control de distancia." },
-  { category: "WEDGE", label: "Wedges", description: "Creatividad alrededor del green." },
-  { category: "PUTTER", label: "Putter", description: "Decisión en los últimos golpes." },
+  { category: "DRIVER", label: "Driver", description: "Máxima distancia y confianza." },
+  { category: "FAIRWAY_WOOD", label: "Maderas", description: "Versatilidad en cada golpe." },
+  { category: "HYBRID", label: "Híbridos", description: "Precisión en cualquier terreno." },
+  { category: "IRON_SET", label: "Hierros", description: "Control y consistencia." },
+  { category: "WEDGE", label: "Wedges", description: "Creatividad en cada situación." },
+  { category: "PUTTER", label: "Putter", description: "Confianza en el último golpe." },
 ];
 
 type EquipmentOnboardingProps = {

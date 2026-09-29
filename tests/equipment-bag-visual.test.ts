@@ -30,6 +30,12 @@ test("Construye tu bolsa keeps the approved six-card hierarchy and real actions"
   }
   assert.match(onboarding, /Construye tu bolsa/);
   assert.match(onboarding, /Selecciona tu equipamiento ideal/);
+  assert.match(onboarding, /Máxima distancia y confianza/);
+  assert.match(onboarding, /Versatilidad en cada golpe/);
+  assert.match(onboarding, /Precisión en cualquier terreno/);
+  assert.match(onboarding, /Control y consistencia/);
+  assert.match(onboarding, /Creatividad en cada situación/);
+  assert.match(onboarding, /Confianza en el último golpe/);
   assert.match(onboarding, /Agregar a mi bolsa/);
   assert.match(onboarding, /setClubEditorCategory\(category\); setClubEditorOpen\(true\)/);
   assert.match(onboarding, /clubs\.length \? "✓" : "\+"/);
