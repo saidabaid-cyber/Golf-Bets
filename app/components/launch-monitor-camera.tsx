@@ -13,12 +13,13 @@ import { AiProcessingConsentPrompt, AiProcessingConsentRequired } from "./backya
 import styles from "./equipment.module.css";
 
 type LocalPhoto = { id: string; file: File; previewUrl: string };
+export type LaunchMonitorAnalysisState = "idle" | "analyzing" | "review" | "applied" | "error";
 
 const CLUB_LABELS: Record<LaunchMonitorClub, string> = {
   DRIVER: "Driver",
   IRON_7: "Hierro 7",
-  PITCHING_WEDGE: "Pitching wedge",
-  HALF_WEDGE: "Half wedge / approach",
+  PITCHING_WEDGE: "Pitching Wedge",
+  HALF_WEDGE: "Half Wedge / Approach",
 };
 
 const METRIC_LABELS: Record<LaunchMonitorMetric, { label: string; unit: string }> = {
@@ -58,12 +59,13 @@ function clubNeedsReview(shot: LaunchMonitorVisionExtraction["shots"][number], t
   return shot.club === null || shot.clubConfidence < LAUNCH_MONITOR_VISION_CONFIDENCE || shot.club !== targetClub;
 }
 
-export function LaunchMonitorCamera({ userId, accessToken, requiresRemoteConsent, onConfirm, onOpenPrivacy, targetClub, capturedCount, nextClubLabel }: {
+export function LaunchMonitorCamera({ userId, accessToken, requiresRemoteConsent, onConfirm, onOpenPrivacy, onAnalysisStateChange, targetClub, capturedCount, nextClubLabel }: {
   userId: string;
   accessToken?: string | null;
   requiresRemoteConsent: boolean;
   onConfirm: (source: string | null, shots: LaunchMonitorShot[]) => void;
   onOpenPrivacy?: () => void;
+  onAnalysisStateChange?: (state: LaunchMonitorAnalysisState) => void;
   targetClub: LaunchMonitorClub;
   capturedCount: number;
   nextClubLabel: string | null;
@@ -114,6 +116,7 @@ export function LaunchMonitorCamera({ userId, accessToken, requiresRemoteConsent
     setExtraction(null);
     setResultMessage("");
     setError(next.length ? "" : "Selecciona fotos JPEG, PNG o WebP.");
+    onAnalysisStateChange?.("idle");
   }
 
   function removePhoto(photoId: string) {
@@ -126,6 +129,7 @@ export function LaunchMonitorCamera({ userId, accessToken, requiresRemoteConsent
       return current.filter((candidate) => candidate.id !== photoId);
     });
     setExtraction(null);
+    onAnalysisStateChange?.("idle");
   }
 
   function hasLocalConsent() {
@@ -178,6 +182,7 @@ export function LaunchMonitorCamera({ userId, accessToken, requiresRemoteConsent
     setShowConsent(false);
     setBusy(true);
     setError("");
+    onAnalysisStateChange?.("analyzing");
     try {
       const prepared = await prepareLaunchMonitorPhotos(photos);
       if (!mounted.current) return;
@@ -194,9 +199,16 @@ export function LaunchMonitorCamera({ userId, accessToken, requiresRemoteConsent
         onConfirm(assigned.source, detected);
         clearPhotos();
         if (mounted.current) setResultMessage(`${detected.length} golpe${detected.length === 1 ? "" : "s"} detectado${detected.length === 1 ? "" : "s"} y agregado${detected.length === 1 ? "" : "s"} automáticamente.`);
-      } else if (mounted.current) setExtraction(assigned);
+        onAnalysisStateChange?.("applied");
+      } else if (mounted.current) {
+        setExtraction(assigned);
+        onAnalysisStateChange?.("review");
+      }
     } catch (caught) {
-      if (mounted.current) setError(errorMessage(caught));
+      if (mounted.current) {
+        setError(errorMessage(caught));
+        onAnalysisStateChange?.("error");
+      }
     } finally {
       inFlight.current = false;
       if (mounted.current) setBusy(false);
@@ -234,6 +246,7 @@ export function LaunchMonitorCamera({ userId, accessToken, requiresRemoteConsent
     setExtraction(null);
     setEditingShots([]);
     setResultMessage(`${shots.length} golpe${shots.length === 1 ? "" : "s"} actualizado${shots.length === 1 ? "" : "s"} y agregado${shots.length === 1 ? "" : "s"}.`);
+    onAnalysisStateChange?.("applied");
     clearPhotos();
   }
 
@@ -258,7 +271,7 @@ export function LaunchMonitorCamera({ userId, accessToken, requiresRemoteConsent
         {knownMetrics.length > 0 && !editing && <div className={styles.detectedMetrics}>{knownMetrics.map((metric) => <span key={metric}><small>{METRIC_LABELS[metric].label}</small><b>{shot.metrics[metric].value} {METRIC_LABELS[metric].unit}</b></span>)}</div>}
         {reviewMetrics.length > 0 && <div className={styles.formGrid}>{reviewMetrics.map((metric) => <label key={metric} className={metricNeedsReview(shot, metric) ? styles.needsReview : ""}>{METRIC_LABELS[metric].label} ({METRIC_LABELS[metric].unit})<input type="number" inputMode="decimal" value={shot.metrics[metric].value ?? ""} onChange={(event) => setMetric(shot.id, metric, event.target.value)} /></label>)}</div>}
       </article>; })}
-      <div className={styles.wizardActions}><button type="button" className="secondary" onClick={() => setExtraction(null)}>Usar otras fotos</button><button type="button" className="primary" onClick={confirm}>Aplicar correcciones y continuar</button></div>
+      <div className={styles.wizardActions}><button type="button" className="secondary" onClick={() => { setExtraction(null); onAnalysisStateChange?.("idle"); }}>Usar otras fotos</button><button type="button" className="primary" onClick={confirm}>Aplicar correcciones y continuar</button></div>
     </div>}
   </section>;
 }

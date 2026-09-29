@@ -23,7 +23,7 @@ test("category-to-form flow keeps distinct equipment inputs and a manual shaft f
   assert.match(editors, /step === "category"/);
   assert.match(editors, /chooseCategory\(value as ClubCategory\)/);
   assert.match(editors, /onSelectBall && <button type="button" onClick=\{onSelectBall\}><span><GolfBallVisual \/><\/span><b>Bola<\/b>/);
-  assert.match(panel, /onSelectBall=\{\(\) => \{ setClubEditor\(null\); setBallEditor\("new"\); \}\}/);
+  assert.match(panel, /onSelectBall=\{\(\) => \{ setClubEditor\(null\); setNewClubCategory\(null\); setBallEditor\("new"\); \}\}/);
   assert.match(editors, /CLUB_CATEGORY_LABELS\[category\]\} · especificaciones/);
   assert.match(editors, /category === "IRON_SET"/);
   assert.match(editors, /category === "WEDGE"/);
@@ -36,15 +36,16 @@ test("category-to-form flow keeps distinct equipment inputs and a manual shaft f
 });
 
 test("successful local save leads to add-another, bag and profile destinations; failed save stays editable", () => {
-  assert.match(panel, /if \(saved\) \{\s*setClubEditor\(null\);\s*setClubDetailId\(club\.id\);\s*setFlowSuccess/);
+  assert.match(panel, /if \(saved\) \{\s*setClubEditor\(null\);\s*setNewClubCategory\(null\);\s*setClubDetailId\(club\.id\);\s*setFlowSuccess/);
   assert.match(panel, /if \(saved\) \{\s*setBallEditor\(null\);\s*setFlowSuccess/);
   assert.match(panel, /data-equipment-screen="success"/);
-  assert.match(panel, /setFlowSuccess\(null\); setClubDetailId\(null\); setClubEditor\("new"\); \}\}>Agregar otro/);
+  assert.match(panel, /setFlowSuccess\(null\); setClubDetailId\(null\); setNewClubCategory\(null\); setClubEditor\("new"\); \}\}>Agregar otro/);
   assert.match(panel, /Volver a Mi Bolsa/);
   assert.match(panel, /onBackToProfile && <button[^>]*onClick=\{onBackToProfile\}>Volver a Perfil/);
   assert.match(editors, /if \(saved === false\) setMessage\("No se confirmó el guardado en este dispositivo/);
   assert.match(persistence, /saveEquipmentProfile\(localStorage, normalized\)/);
-  assert.match(persistence, /enqueueSync\(result\.profile, activeScopeRef\.current\)/);
+  assert.match(persistence, /queueEquipmentSyncOutbox\(localStorage, userId, result\.profile, mutationId\(\)\)/);
+  assert.match(persistence, /if \(cloudEnabledRef\.current\) enqueueSync\(activeScopeRef\.current\)/);
   assert.match(panel, /className=\{styles\.bagItemMain\} onClick=\{onOpen\}/);
   assert.match(panel, /data-equipment-screen="club-detail"/);
 });

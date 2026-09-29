@@ -4,19 +4,28 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   createEmptyEquipmentProfile,
   equipmentProfileFingerprint,
-  equipmentProfileStorageKey,
   equipmentProfileRecoveryStorageKey,
+  equipmentProfileStorageKey,
   loadEquipmentProfile,
   normalizeEquipmentProfile,
   saveEquipmentProfile,
   type EquipmentProfile,
 } from "../../lib/golf-equipment";
 import {
+  acknowledgeEquipmentSyncOutbox,
+  clearEquipmentSyncOutbox,
+  equipmentSyncStateStorageKey,
+  queueEquipmentSyncOutbox,
+  readEquipmentSyncState,
+  recordEquipmentSyncBase,
+} from "../../lib/equipment-offline-store";
+import {
   EquipmentSyncError,
-  chooseEquipmentProfile,
   downloadEquipmentProfile,
+  equipmentProfilesSemanticallyEqual,
   isEquipmentSyncScopeCurrent,
-  shouldQueueEquipmentFingerprint,
+  reconcileEquipmentProfiles,
+  resolveEquipmentProfileConflicts,
   uploadEquipmentProfile,
   type EquipmentCloudRecord,
   type EquipmentSyncScope,
@@ -45,9 +54,18 @@ function deviceId() {
 
 function syncMessage(error: unknown) {
   if (error instanceof EquipmentSyncError && error.status === 401) return "Tu sesión terminó. El equipo sigue guardado en este dispositivo.";
-  if (error instanceof EquipmentSyncError && error.status === 409) return "Otro dispositivo cambió tu equipo. Tu versión local se conservó para que puedas decidir después.";
+  if (error instanceof EquipmentSyncError && error.status === 409) return "Otro dispositivo cambió el mismo dato. Conservamos ambas versiones para que decidas.";
   if (!navigator.onLine) return "Sin conexión. Tu equipo está guardado y se sincronizará al reconectar.";
   return "No se completó la réplica de equipo. Tu copia local se conserva.";
+}
+
+function cloudBase(record: EquipmentCloudRecord) {
+  return {
+    profile: record.profile,
+    version: record.version,
+    lastMutationId: record.lastMutationId,
+    updatedAt: record.updatedAt,
+  };
 }
 
 export function useEquipmentProfile(userId: string, accessToken: string | null) {
@@ -60,70 +78,113 @@ export function useEquipmentProfile(userId: string, accessToken: string | null) 
   const conflictRef = useRef(false);
   const activeScopeRef = useRef<EquipmentSyncScope | null>(null);
   const scopeGenerationRef = useRef(0);
-  const syncQueueRef = useRef<Promise<void>>(Promise.resolve());
-  const lastSyncedFingerprintRef = useRef<string | null>(null);
-  const lastQueuedFingerprintRef = useRef<{ fingerprint: string; sequence: number; generation: number } | null>(null);
-  const queueSequenceRef = useRef(0);
+  const syncQueueRef = useRef<Promise<unknown>>(Promise.resolve());
 
   const applyProfile = useCallback((next: EquipmentProfile) => {
     profileRef.current = next;
     setProfile(next);
   }, []);
 
-  const syncProfile = useCallback(async (scope: EquipmentSyncScope, candidate?: EquipmentProfile | null) => {
-    if (!isEquipmentSyncScopeCurrent(scope, activeScopeRef.current)) return;
-    const local = candidate || profileRef.current;
-    if (!local || !scope.accessToken || !cloudEnabledRef.current || conflictRef.current) return;
-    const fingerprint = equipmentProfileFingerprint(local, scope.userId);
-    if (!fingerprint || (cloudRef.current && lastSyncedFingerprintRef.current === fingerprint)) return;
+  const saveLocal = useCallback((next: EquipmentProfile) => {
+    const saved = saveEquipmentProfile(localStorage, next);
+    if (!saved.ok || !saved.profile) throw new Error("equipment_local_write_failed");
+    applyProfile(saved.profile);
+    return saved.profile;
+  }, [applyProfile]);
+
+  const syncProfile = useCallback(async (scope: EquipmentSyncScope): Promise<boolean> => {
+    if (!isEquipmentSyncScopeCurrent(scope, activeScopeRef.current) || !scope.accessToken
+      || !cloudEnabledRef.current || conflictRef.current) return false;
     if (!navigator.onLine) {
       if (isEquipmentSyncScopeCurrent(scope, activeScopeRef.current)) setStatus("offline");
-      return;
+      return false;
     }
-    if (isEquipmentSyncScopeCurrent(scope, activeScopeRef.current)) { setStatus("saving"); setMessage(""); }
-    try {
-      const uploaded = await uploadEquipmentProfile(local, scope.accessToken, {
-        expectedVersion: cloudRef.current?.version ?? null,
-        mutationId: mutationId(),
-        deviceId: deviceId(),
-      });
-      if (!isEquipmentSyncScopeCurrent(scope, activeScopeRef.current)) return;
-      cloudRef.current = uploaded;
-      lastSyncedFingerprintRef.current = equipmentProfileFingerprint(uploaded.profile, scope.userId);
-      conflictRef.current = false;
-      setStatus("synced");
-    } catch (error) {
-      if (!isEquipmentSyncScopeCurrent(scope, activeScopeRef.current)) return;
-      if (error instanceof EquipmentSyncError && error.status === 409) {
-        conflictRef.current = true;
-        if (error.remote) cloudRef.current = error.remote;
-      }
-      setStatus(error instanceof EquipmentSyncError && error.status === 409 ? "conflict" : navigator.onLine ? "pending" : "offline");
-      setMessage(syncMessage(error));
-    }
-  }, []);
 
-  const enqueueSync = useCallback((candidate?: EquipmentProfile | null, requestedScope?: EquipmentSyncScope | null) => {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (!isEquipmentSyncScopeCurrent(scope, activeScopeRef.current)) return false;
+      const state = readEquipmentSyncState(localStorage, scope.userId);
+      const pending = state.outbox;
+      if (!pending) {
+        setStatus("synced");
+        setMessage("");
+        return true;
+      }
+      setStatus("saving");
+      setMessage("");
+      try {
+        const uploaded = await uploadEquipmentProfile(pending.profile, scope.accessToken, {
+          expectedVersion: state.base?.version ?? cloudRef.current?.version ?? null,
+          mutationId: pending.mutationId,
+          deviceId: deviceId(),
+        });
+        if (!isEquipmentSyncScopeCurrent(scope, activeScopeRef.current)) return false;
+        cloudRef.current = uploaded;
+        recordEquipmentSyncBase(localStorage, scope.userId, cloudBase(uploaded));
+        const acknowledged = acknowledgeEquipmentSyncOutbox(
+          localStorage,
+          scope.userId,
+          pending.fingerprint,
+          pending.mutationId,
+        );
+        const current = readEquipmentSyncState(localStorage, scope.userId);
+        if (!acknowledged || current.outbox) continue;
+        const latestLocal = loadEquipmentProfile(localStorage, scope.userId);
+        if (latestLocal.ok && latestLocal.profile
+          && equipmentProfileFingerprint(latestLocal.profile, scope.userId) === pending.fingerprint) {
+          saveLocal(uploaded.profile);
+        }
+        conflictRef.current = false;
+        setStatus("synced");
+        setMessage("");
+        return true;
+      } catch (error) {
+        if (!isEquipmentSyncScopeCurrent(scope, activeScopeRef.current)) return false;
+        if (!(error instanceof EquipmentSyncError) || error.status !== 409 || !error.remote) {
+          setStatus(navigator.onLine ? "pending" : "offline");
+          setMessage(syncMessage(error));
+          return false;
+        }
+
+        const remote = error.remote;
+        cloudRef.current = remote;
+        const localRead = loadEquipmentProfile(localStorage, scope.userId);
+        if (!localRead.ok || !localRead.profile) {
+          setStatus("error");
+          setMessage("No pudimos leer la copia local; la nube no fue sobrescrita.");
+          return false;
+        }
+        const latestState = readEquipmentSyncState(localStorage, scope.userId);
+        const reconciliation = reconcileEquipmentProfiles(latestState.base?.profile ?? null, localRead.profile, remote.profile);
+        if (reconciliation.conflicts.length) {
+          conflictRef.current = true;
+          setStatus("conflict");
+          setMessage("Este dispositivo y la nube cambiaron el mismo dato. Los demás cambios compatibles ya se conservaron.");
+          return false;
+        }
+        if (!reconciliation.profile) return false;
+        const merged = saveLocal(reconciliation.profile);
+        recordEquipmentSyncBase(localStorage, scope.userId, cloudBase(remote));
+        if (!reconciliation.needsUpload) {
+          clearEquipmentSyncOutbox(localStorage, scope.userId);
+          conflictRef.current = false;
+          setStatus("synced");
+          setMessage("");
+          return true;
+        }
+        queueEquipmentSyncOutbox(localStorage, scope.userId, merged, mutationId());
+      }
+    }
+    setStatus("pending");
+    setMessage("Tus cambios siguen guardados y se reintentará la sincronización.");
+    return false;
+  }, [saveLocal]);
+
+  const enqueueSync = useCallback((requestedScope?: EquipmentSyncScope | null) => {
     const scope = requestedScope || activeScopeRef.current;
     if (!scope || !isEquipmentSyncScopeCurrent(scope, activeScopeRef.current)) return;
-    const local = candidate || profileRef.current;
-    const fingerprint = local ? equipmentProfileFingerprint(local, scope.userId) : null;
-    if (!local || !fingerprint || !shouldQueueEquipmentFingerprint(
-      fingerprint,
-      lastSyncedFingerprintRef.current,
-      lastQueuedFingerprintRef.current?.fingerprint ?? null,
-    )) return;
-    const sequence = queueSequenceRef.current + 1;
-    queueSequenceRef.current = sequence;
-    lastQueuedFingerprintRef.current = { fingerprint, sequence, generation: scope.generation };
     syncQueueRef.current = syncQueueRef.current
-      .then(() => syncProfile(scope, local))
-      .catch(() => undefined)
-      .finally(() => {
-        if (isEquipmentSyncScopeCurrent(scope, activeScopeRef.current)
-          && lastQueuedFingerprintRef.current?.generation === scope.generation
-          && lastQueuedFingerprintRef.current.sequence === sequence) lastQueuedFingerprintRef.current = null;
-      });
+      .then(() => syncProfile(scope))
+      .catch(() => false);
   }, [syncProfile]);
 
   const reconcileCloud = useCallback(async (requestedScope?: EquipmentSyncScope | null) => {
@@ -148,39 +209,48 @@ export function useEquipmentProfile(userId: string, accessToken: string | null) 
       const remote = await downloadEquipmentProfile(scope.accessToken, scope.userId);
       if (!isEquipmentSyncScopeCurrent(scope, activeScopeRef.current) || profileRef.current?.userId !== scope.userId) return;
       cloudRef.current = remote;
-      // Re-read after the network request. This includes a save made while
-      // capability discovery/download was in flight.
       const localRead = loadEquipmentProfile(localStorage, scope.userId);
       if (!localRead.ok) throw new Error("equipment_local_read_failed");
-      const latestLocal = localRead.profile || profileRef.current;
-      const decision = chooseEquipmentProfile(localRead.profile ? latestLocal : null, remote);
-      if (decision === "remote" && remote) {
-        const saved = saveEquipmentProfile(localStorage, remote.profile);
-        if (!saved.ok || !saved.profile) throw new Error("equipment_local_write_failed");
-        applyProfile(saved.profile);
-        lastSyncedFingerprintRef.current = equipmentProfileFingerprint(saved.profile, scope.userId);
-        conflictRef.current = false;
-        setStatus("synced");
-      } else if (decision === "local" && latestLocal) {
-        conflictRef.current = false;
-        enqueueSync(latestLocal, scope);
-      } else if (decision === "conflict") {
+      // The in-memory empty profile is only a rendering fallback for a fresh
+      // device. It is not a local edit and must never outrank a real cloud
+      // profile merely because its creation timestamp is newer.
+      const latestLocal = localRead.profile;
+      const state = readEquipmentSyncState(localStorage, scope.userId);
+      const reconciliation = reconcileEquipmentProfiles(state.base?.profile ?? null, latestLocal, remote?.profile ?? null);
+      if (reconciliation.conflicts.length) {
         conflictRef.current = true;
         setStatus("conflict");
-        setMessage("Este dispositivo y la nube tienen cambios distintos. Conservamos ambas versiones hasta que elijas cuál usar.");
-      } else {
-        lastSyncedFingerprintRef.current = remote
-          ? equipmentProfileFingerprint(remote.profile, scope.userId)
-          : latestLocal ? equipmentProfileFingerprint(latestLocal, scope.userId) : null;
+        setMessage("Este dispositivo y la nube cambiaron el mismo dato. Los cambios compatibles se conservarán al resolverlo.");
+        return;
+      }
+      if (!reconciliation.profile) {
+        conflictRef.current = false;
+        clearEquipmentSyncOutbox(localStorage, scope.userId);
+        setStatus("synced");
+        return;
+      }
+
+      const merged = saveLocal(reconciliation.profile);
+      recordEquipmentSyncBase(localStorage, scope.userId, remote ? cloudBase(remote) : null);
+      if (remote && !reconciliation.needsUpload) {
+        clearEquipmentSyncOutbox(localStorage, scope.userId);
+        if (!equipmentProfilesSemanticallyEqual(merged, remote.profile)) saveLocal(remote.profile);
         conflictRef.current = false;
         setStatus("synced");
+        setMessage("");
+        return;
       }
+
+      queueEquipmentSyncOutbox(localStorage, scope.userId, merged, state.outbox?.mutationId || mutationId());
+      conflictRef.current = false;
+      setStatus("pending");
+      enqueueSync(scope);
     } catch (error) {
       if (!isEquipmentSyncScopeCurrent(scope, activeScopeRef.current) || profileRef.current?.userId !== scope.userId) return;
       setStatus(navigator.onLine ? "pending" : "offline");
       setMessage(syncMessage(error));
     }
-  }, [applyProfile, enqueueSync]);
+  }, [enqueueSync, saveLocal]);
 
   useEffect(() => {
     const scope: EquipmentSyncScope = {
@@ -190,14 +260,10 @@ export function useEquipmentProfile(userId: string, accessToken: string | null) 
     };
     scopeGenerationRef.current = scope.generation;
     activeScopeRef.current = scope;
-    // A replacement token/account gets its own queue immediately. Work still
-    // running in the detached queue is scope-guarded and cannot touch refs/UI.
     syncQueueRef.current = Promise.resolve();
     cloudRef.current = null;
     cloudEnabledRef.current = false;
     conflictRef.current = false;
-    lastSyncedFingerprintRef.current = null;
-    lastQueuedFingerprintRef.current = null;
     const empty = createEmptyEquipmentProfile(userId);
     const localRead = loadEquipmentProfile(localStorage, userId);
     if (!empty) {
@@ -219,11 +285,14 @@ export function useEquipmentProfile(userId: string, accessToken: string | null) 
     setMessage("");
     void reconcileCloud(scope);
 
-    const key = equipmentProfileStorageKey(userId);
+    const profileKey = equipmentProfileStorageKey(userId);
+    const syncKey = equipmentSyncStateStorageKey(userId);
     const onStorage = (event: StorageEvent) => {
-      if (!key || event.key !== key || !event.newValue) return;
-      const read = loadEquipmentProfile(localStorage, userId);
-      if (read.ok && read.profile) applyProfile(read.profile);
+      if (event.key === profileKey && event.newValue) {
+        const read = loadEquipmentProfile(localStorage, userId);
+        if (read.ok && read.profile) applyProfile(read.profile);
+      }
+      if (event.key === profileKey || event.key === syncKey) void reconcileCloud(scope);
     };
     const onOnline = () => { void reconcileCloud(scope); };
     const onOffline = () => {
@@ -236,7 +305,6 @@ export function useEquipmentProfile(userId: string, accessToken: string | null) 
       if (isEquipmentSyncScopeCurrent(scope, activeScopeRef.current)) {
         activeScopeRef.current = null;
         syncQueueRef.current = Promise.resolve();
-        lastQueuedFingerprintRef.current = null;
       }
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("online", onOnline);
@@ -247,22 +315,30 @@ export function useEquipmentProfile(userId: string, accessToken: string | null) 
   const save = useCallback((value: EquipmentProfile) => {
     const normalized = normalizeEquipmentProfile(value, userId);
     if (!normalized) { setStatus("error"); setMessage("No se guardó el cambio porque el perfil de equipo no es válido."); return false; }
-    if (profileRef.current
-      && equipmentProfileFingerprint(profileRef.current, userId) === equipmentProfileFingerprint(normalized, userId)) return true;
+    if (profileRef.current && equipmentProfilesSemanticallyEqual(profileRef.current, normalized)) return true;
     const result = saveEquipmentProfile(localStorage, normalized);
     if (!result.ok) { setStatus("error"); setMessage(result.message); return false; }
     if (!result.profile) { setStatus("error"); setMessage("No se confirmó la copia local del perfil de equipo."); return false; }
     applyProfile(result.profile);
+    if (accessToken) {
+      try {
+        queueEquipmentSyncOutbox(localStorage, userId, result.profile, mutationId());
+      } catch {
+        setStatus("error");
+        setMessage("El cambio quedó guardado, pero no pudimos preparar su sincronización.");
+        return true;
+      }
+    }
     if (conflictRef.current) {
       setStatus("conflict");
-      setMessage("Tu cambio quedó guardado aquí. La nube no se sobrescribirá hasta que elijas qué versión conservar.");
+      setMessage("Tu cambio quedó guardado aquí. Sólo falta resolver los datos editados en ambos lados.");
     } else {
       setStatus(cloudEnabledRef.current ? navigator.onLine ? "pending" : "offline" : "local");
       setMessage("");
-      enqueueSync(result.profile, activeScopeRef.current);
+      if (cloudEnabledRef.current) enqueueSync(activeScopeRef.current);
     }
     return true;
-  }, [applyProfile, enqueueSync, userId]);
+  }, [accessToken, applyProfile, enqueueSync, userId]);
 
   const update = useCallback((updater: (current: EquipmentProfile) => EquipmentProfile | null) => {
     const current = profileRef.current;
@@ -281,18 +357,19 @@ export function useEquipmentProfile(userId: string, accessToken: string | null) 
       if (unreadable) localStorage.setItem(recoveryKey, unreadable);
       const saved = saveEquipmentProfile(localStorage, empty);
       if (!saved.ok || !saved.profile) return false;
-      cloudRef.current = null;
+      if (accessToken) queueEquipmentSyncOutbox(localStorage, userId, saved.profile, mutationId());
       conflictRef.current = false;
       applyProfile(saved.profile);
-      setStatus("local");
+      setStatus(cloudEnabledRef.current ? navigator.onLine ? "pending" : "offline" : "local");
       setMessage("Se creó un perfil opcional nuevo. La copia anterior quedó guardada localmente para recuperación técnica.");
+      if (cloudEnabledRef.current) enqueueSync(activeScopeRef.current);
       return true;
     } catch {
       setStatus("error");
       setMessage("No pudimos crear una copia nueva; no se sobrescribió tu información anterior.");
       return false;
     }
-  }, [applyProfile, userId]);
+  }, [accessToken, applyProfile, enqueueSync, userId]);
 
   const resolveConflict = useCallback(async (choice: EquipmentConflictChoice) => {
     const scope = activeScopeRef.current;
@@ -307,36 +384,34 @@ export function useEquipmentProfile(userId: string, accessToken: string | null) 
     setStatus("saving");
     setMessage("");
     try {
-      // Re-read immediately before resolving so a stale CAS version can never
-      // overwrite a third device that changed the profile in the meantime.
       const remote = await downloadEquipmentProfile(scope.accessToken, scope.userId);
       if (!isEquipmentSyncScopeCurrent(scope, activeScopeRef.current)) return false;
-      cloudRef.current = remote;
-      if (choice === "remote") {
-        if (!remote) {
-          setStatus("conflict");
-          setMessage("La copia de nube ya no existe. Conservamos tu perfil de este dispositivo.");
-          return false;
-        }
-        const saved = saveEquipmentProfile(localStorage, remote.profile);
-        if (!saved.ok || !saved.profile) throw new Error("equipment_local_write_failed");
-        applyProfile(saved.profile);
-        lastSyncedFingerprintRef.current = equipmentProfileFingerprint(saved.profile, scope.userId);
+      if (!remote) {
+        recordEquipmentSyncBase(localStorage, scope.userId, null);
+        queueEquipmentSyncOutbox(localStorage, scope.userId, local, mutationId());
         conflictRef.current = false;
+        return syncProfile(scope);
+      }
+      cloudRef.current = remote;
+      const state = readEquipmentSyncState(localStorage, scope.userId);
+      if (!state.base) {
+        setStatus("pending");
+        setMessage("Falta una base común verificable. Volveremos a comparar ambas copias sin sobrescribirlas.");
+        return false;
+      }
+      const resolved = resolveEquipmentProfileConflicts(state.base.profile, local, remote.profile, choice);
+      const saved = saveLocal(resolved);
+      recordEquipmentSyncBase(localStorage, scope.userId, cloudBase(remote));
+      conflictRef.current = false;
+      if (equipmentProfilesSemanticallyEqual(saved, remote.profile)) {
+        clearEquipmentSyncOutbox(localStorage, scope.userId);
+        saveLocal(remote.profile);
         setStatus("synced");
         return true;
       }
-      const uploaded = await uploadEquipmentProfile(local, scope.accessToken, {
-        expectedVersion: remote?.version ?? null,
-        mutationId: mutationId(),
-        deviceId: deviceId(),
-      });
-      if (!isEquipmentSyncScopeCurrent(scope, activeScopeRef.current)) return false;
-      cloudRef.current = uploaded;
-      lastSyncedFingerprintRef.current = equipmentProfileFingerprint(uploaded.profile, scope.userId);
-      conflictRef.current = false;
-      setStatus("synced");
-      return true;
+      queueEquipmentSyncOutbox(localStorage, scope.userId, saved, mutationId());
+      setStatus("pending");
+      return syncProfile(scope);
     } catch (error) {
       if (!isEquipmentSyncScopeCurrent(scope, activeScopeRef.current)) return false;
       if (error instanceof EquipmentSyncError && error.status === 409) {
@@ -347,7 +422,7 @@ export function useEquipmentProfile(userId: string, accessToken: string | null) 
       setMessage(syncMessage(error));
       return false;
     }
-  }, [applyProfile]);
+  }, [saveLocal, syncProfile]);
 
   const retry = useCallback(() => reconcileCloud(activeScopeRef.current), [reconcileCloud]);
 

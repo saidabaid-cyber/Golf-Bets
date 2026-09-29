@@ -36,9 +36,11 @@ test("tee requests enter the existing Admin request queue without a destructive 
 
 test("bag, wedges and ball comparison are guided but preserve explicit manual options", () => {
   const panel = source("app/components/equipment-profile-panel.tsx");
+  const bagManagement = source("lib/equipment-bag-management.ts");
   const editors = source("app/components/equipment-editors.tsx");
   const fit = source("app/components/ball-fit-wizard.tsx");
-  for (const label of ["Mini Driver", "Utility / Driving Iron", "Wedges", "Bola"]) assert.match(panel, new RegExp(label.replace("/", "\\/")));
+  for (const label of ["Mini Driver", "Utility / Driving Iron", "Wedges"]) assert.match(bagManagement, new RegExp(label.replace("/", "\\/")));
+  assert.match(panel, /MI BOLA/);
   assert.match(panel, /EquipmentProfileSummary/);
   assert.match(editors, /Agregar loft manualmente/);
   assert.match(editors, /manualLoft/);

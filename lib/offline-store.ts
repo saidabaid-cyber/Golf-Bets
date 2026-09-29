@@ -1,4 +1,4 @@
-import { CLOUD_TOMBSTONES_KEY, cloudDataFingerprint, collectLocalCloudData, hasLocalCloudPreferenceState, mergeLocalAndCloud, persistCloudMetadata, restoreLocalRoundUi, type CloudDataBundle } from "./cloud-sync";
+import { CLOUD_TOMBSTONES_KEY, cloudDataFingerprint, collectLocalCloudData, hasLocalCloudPreferenceState, mergeLocalAndCloud, persistCloudMetadata, restoreLocalRoundUi, timestamp, type CloudDataBundle } from "./cloud-sync";
 import { serializeFrequentGroups } from "./frequent-templates";
 import { STORAGE_KEYS } from "./round-utils";
 import { accountDeletionMarkerKey } from "./account-state";
@@ -461,13 +461,34 @@ export function writeCloudBundleToStorage(storage: Pick<Storage, "getItem" | "se
   persistCloudMetadata(storage, bundle);
 }
 
+/** Reconcile IndexedDB with the localStorage read-through cache without
+ * treating an older snapshot from this same installation as a cloud deletion.
+ * A newer IndexedDB draft still participates in the normal three-way merge so
+ * an interrupted offline write remains recoverable. */
+export function reconcileOfflineWorkspace(local: CloudDataBundle, saved: OfflineWorkspace) {
+  const recovered = mergeLocalAndCloud(local, saved.bundle);
+  const sameInstallation = Boolean(local.deviceId && saved.bundle.deviceId && local.deviceId === saved.bundle.deviceId);
+  const localDraftAt = timestamp(local.activeDraftUpdatedAt);
+  const savedDraftAt = timestamp(saved.bundle.activeDraftUpdatedAt);
+  if (!sameInstallation || !localDraftAt || !savedDraftAt || savedDraftAt >= localDraftAt) return recovered;
+  return {
+    ...recovered,
+    activeDraft: structuredClone(local.activeDraft),
+    activeDraftUpdatedAt: local.activeDraftUpdatedAt,
+    baseDraft: structuredClone(local.baseDraft),
+    baseDraftUpdatedAt: local.baseDraftUpdatedAt,
+    baseDraftFingerprint: local.baseDraftFingerprint,
+  };
+}
+
 /** Recover the newest local snapshot before React hydrates. localStorage stays
  * as a compatibility/read-through cache; IndexedDB is the durable source. */
-export async function restoreOfflineWorkspace(ownerId: string, storage: Storage, defaultHandicap: number | null) {
+export async function restoreOfflineWorkspace(ownerId: string, storage: Storage, defaultHandicap: number | null, deviceId: string) {
   const saved = await readOfflineBundle(ownerId);
   if (!saved) return null;
   const local = collectLocalCloudData(storage, defaultHandicap, hasLocalCloudPreferenceState(storage));
-  const recovered = mergeLocalAndCloud(local, saved.bundle);
+  local.deviceId = deviceId;
+  const recovered = reconcileOfflineWorkspace(local, saved);
   writeCloudBundleToStorage(storage, recovered);
   return recovered;
 }

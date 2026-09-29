@@ -7,17 +7,19 @@ import * as fitting from "../lib/ball-fitting";
 import * as handicap from "../lib/ball-fit-handicap";
 import * as api from "../lib/ball-fitting-api";
 import * as draft from "../lib/ball-fitting-storage";
-import { summarizeLaunchMonitorSession } from "../lib/golf-equipment";
+import * as equipment from "../lib/golf-equipment";
+import { summarizeLaunchMonitorSession, type LaunchMonitorSession } from "../lib/golf-equipment";
 import { golfBallCatalog } from "../lib/golf-equipment-catalog";
 
 type Node = { type: unknown; props: Record<string, unknown> };
 function nodes(value: unknown): Node[] { if (Array.isArray(value)) return value.flatMap(nodes); if (!value || typeof value !== "object" || !("props" in value)) return []; const node = value as Node; return [node, ...nodes(node.props.children)]; }
 function text(value: unknown): string { if (Array.isArray(value)) return value.map(text).join(" "); if (value && typeof value === "object") return text((value as Node).props?.children); return typeof value === "string" || typeof value === "number" ? String(value) : ""; }
 
-function wizard(profileIndex: number | null = null, profileSource: handicap.BallFitHandicapSource | null = null, savedInput?: fitting.BallFitInput) {
+function wizard(profileIndex: number | null = null, profileSource: handicap.BallFitHandicapSource | null = null, savedInput?: fitting.BallFitInput, persistedDraft?: { input: fitting.BallFitInput; step: number }) {
   const slots: unknown[] = []; let cursor = 0; const effects: (() => void)[] = [];
   const storageValues = new Map<string, string>();
   const storage = { getItem: (key: string) => storageValues.get(key) ?? null, setItem: (key: string, value: string) => { storageValues.set(key, value); }, removeItem: (key: string) => { storageValues.delete(key); } };
+  if (persistedDraft) draft.saveBallFitDraft(storage, persistedDraft.input, persistedDraft.step, "2026-09-28T12:30:00.000Z");
   const sent: fitting.BallFitInput[] = [], saved: fitting.BallFitInput[] = [];
   const exports: Record<string, (props: unknown) => Node> = {};
   const jsx = (type: unknown, props: Record<string, unknown>) => typeof type === "function" ? type(props) : { type, props };
@@ -63,7 +65,12 @@ function wizard(profileIndex: number | null = null, profileSource: handicap.Ball
   let tree: Node;
   function render() { cursor = 0; tree = exports.BallFitWizard(props); effects.splice(0).forEach((effect) => effect()); return tree; }
   render(); render();
-  return { sent, saved, render, text: () => text(tree), search: () => {
+  return { sent, saved, render, text: () => text(tree), applyLaunchSession(session: LaunchMonitorSession | null) {
+    let capture = nodes(tree).find((node) => node.type === "launch-capture"); assert.ok(capture, "launch capture");
+    (capture.props.onChange as (value: LaunchMonitorSession | null) => void)(session); render();
+    capture = nodes(tree).find((node) => node.type === "launch-capture"); assert.ok(capture, "launch capture after change");
+    (capture.props.onDone as () => void)(); render();
+  }, search: () => {
     const search = nodes(tree).find((node) => node.type === "anchored-search"); assert.ok(search); return search.props;
   }, focusSearch() {
     const search = nodes(tree).find((node) => node.type === "anchored-search"); assert.ok(search);
@@ -159,16 +166,265 @@ test("verified GHIN and calculated Backyard values enter Ball Fit automatically 
   assert.match(pending.text(), /No conozco mi hándicap \/ Estoy empezando/);
 });
 
-test("manual questionnaire stays primary and launch monitor opens only on demand", async () => {
+test("launch monitor choice precedes the manual driver questionnaire", async () => {
   const h = wizard(null, null);
   await h.click("No conozco mi hándicap / Estoy empezando");
   await h.click("Siguiente →");
-  assert.match(h.text(), /Tu juego con driver/);
-  assert.match(h.text(), /Agregar mediciones de launch monitor/);
+  const copy = h.text();
+  const currentGame = copy.indexOf("TU JUEGO ACTUAL");
+  const choice = copy.indexOf("¿Cómo quieres continuar?");
+  const launch = copy.indexOf("Agregar mediciones de launch monitor");
+  const separator = copy.indexOf("O CONTINÚA MANUALMENTE");
+  const manual = copy.indexOf("Tu juego con driver");
+  assert.ok(currentGame >= 0 && currentGame < choice && choice < launch && launch < separator && separator < manual);
+  assert.match(copy, /TrackMan, FlightScope, Garmin, GCQuad, Rapsodo u otro/);
   assert.doesNotMatch(h.text(), /Selecciona el palo, agrega fotos/);
   await h.click("Agregar mediciones de launch monitor");
   assert.match(h.text(), /Captura y analiza tus golpes/);
   assert.match(h.text(), /Selecciona el palo, agrega fotos/);
+});
+
+test("the active GHIN value is shown before choosing launch monitor or manual entry", async () => {
+  const h = wizard(7.9, "GHIN");
+  await h.click("Siguiente →");
+  assert.match(h.text(), /TU JUEGO ACTUAL\s*GHIN INDEX 7\.9/);
+});
+
+function capturedDriverSession(metrics: { carryYards?: number; clubSpeedMph?: number }): LaunchMonitorSession {
+  return {
+    id: `launch-${metrics.carryYards ?? "none"}-${metrics.clubSpeedMph ?? "none"}`,
+    userId: "flow-owner",
+    source: "Launch monitor",
+    startedAt: "2026-09-28T12:00:00.000Z",
+    completedAt: null,
+    shots: [{
+      id: "shot-1",
+      club: "DRIVER",
+      excluded: false,
+      capturedAt: "2026-09-28T12:01:00.000Z",
+      note: null,
+      clubSpeedMph: metrics.clubSpeedMph ?? null,
+      ballSpeedMph: null,
+      launchAngleDegrees: null,
+      spinRpm: null,
+      carryYards: metrics.carryYards ?? null,
+      totalYards: null,
+      peakHeightYards: null,
+      landingAngleDegrees: null,
+    }],
+  };
+}
+
+function capturedIronSession(): LaunchMonitorSession {
+  return {
+    ...capturedDriverSession({}),
+    id: "launch-iron",
+    shots: [{
+      ...capturedDriverSession({}).shots[0],
+      id: "iron-shot-1",
+      club: "IRON_7",
+      carryYards: 165,
+    }],
+  };
+}
+
+test("saving launch metrics advances when carry and club speed are both known", async () => {
+  const h = wizard(null, null);
+  await h.click("No conozco mi hándicap / Estoy empezando");
+  await h.click("Siguiente →");
+  await h.click("Agregar mediciones de launch monitor");
+  h.applyLaunchSession(capturedDriverSession({ carryYards: 330, clubSpeedMph: 121 }));
+  assert.match(h.text(), /Feel y vuelo/);
+  assert.doesNotMatch(h.text(), /¿Cuánto pegas aproximadamente con driver\?|Velocidad de swing con driver/);
+});
+
+test("saving only carry returns to exactly the missing club-speed question", async () => {
+  const h = wizard(null, null);
+  await h.click("No conozco mi hándicap / Estoy empezando");
+  await h.click("Siguiente →");
+  await h.click("Agregar mediciones de launch monitor");
+  h.applyLaunchSession(capturedDriverSession({ carryYards: 330 }));
+  assert.doesNotMatch(h.text(), /¿Cuánto pegas aproximadamente con driver\?/);
+  assert.match(h.text(), /Velocidad de swing con driver/);
+});
+
+test("saving only club speed returns to exactly the missing carry question", async () => {
+  const h = wizard(null, null);
+  await h.click("No conozco mi hándicap / Estoy empezando");
+  await h.click("Siguiente →");
+  await h.click("Agregar mediciones de launch monitor");
+  h.applyLaunchSession(capturedDriverSession({ clubSpeedMph: 121 }));
+  assert.match(h.text(), /¿Cuánto pegas aproximadamente con driver\?/);
+  assert.doesNotMatch(h.text(), /Velocidad de swing con driver/);
+});
+
+test("saving without driver metrics keeps both manual questions available", async () => {
+  const h = wizard(null, null);
+  await h.click("No conozco mi hándicap / Estoy empezando");
+  await h.click("Siguiente →");
+  await h.click("Agregar mediciones de launch monitor");
+  h.applyLaunchSession(capturedDriverSession({}));
+  assert.match(h.text(), /¿Cuánto pegas aproximadamente con driver\?/);
+  assert.match(h.text(), /Velocidad de swing con driver/);
+});
+
+test("known manual driver data is not reasked after a launch capture for another club", async () => {
+  const savedInput = fitting.normalizeBallFitInput({
+    userId: "flow-owner",
+    handicapSource: "UNKNOWN",
+    driverDistanceYards: 245,
+    swingSpeedBand: "FROM_95_TO_105",
+  });
+  assert.ok(savedInput);
+  const h = wizard(null, null, savedInput);
+  await h.click("Siguiente →");
+  await h.click("Agregar mediciones de launch monitor");
+  h.applyLaunchSession(capturedIronSession());
+  assert.match(h.text(), /Feel y vuelo/);
+  assert.doesNotMatch(h.text(), /¿Cuánto pegas aproximadamente con driver\?|Velocidad de swing con driver/);
+});
+
+test("after launch capture only the still-missing manual driver fact is requested", async () => {
+  const savedInput = fitting.normalizeBallFitInput({
+    userId: "flow-owner",
+    handicapSource: "UNKNOWN",
+    driverDistanceYards: 245,
+    swingSpeedBand: "UNKNOWN",
+  });
+  assert.ok(savedInput);
+  const h = wizard(null, null, savedInput);
+  await h.click("Siguiente →");
+  await h.click("Agregar mediciones de launch monitor");
+  h.applyLaunchSession(capturedIronSession());
+  assert.doesNotMatch(h.text(), /¿Cuánto pegas aproximadamente con driver\?/);
+  assert.match(h.text(), /Velocidad de swing con driver/);
+});
+
+test("resuming a saved launch capture still asks only the missing driver fact", async () => {
+  const persistedInput = fitting.normalizeBallFitInput({
+    userId: "flow-owner",
+    handicapSource: "UNKNOWN",
+    driverDistanceYards: 245,
+    swingSpeedBand: "UNKNOWN",
+    launchMonitorSession: capturedIronSession(),
+  });
+  assert.ok(persistedInput);
+  const h = wizard(null, null, undefined, { input: persistedInput, step: 1 });
+  assert.match(h.text(), /Tienes un fitting en progreso/);
+  await h.click("Reanudar fitting");
+  assert.doesNotMatch(h.text(), /¿Cuánto pegas aproximadamente con driver\?/);
+  assert.match(h.text(), /Velocidad de swing con driver/);
+});
+
+function launchCaptureHarness() {
+  const slots: unknown[] = [];
+  let cursor = 0;
+  let session: LaunchMonitorSession | null = null;
+  let done = 0;
+  const exports: Record<string, (props: unknown) => Node> = {};
+  const jsx = (type: unknown, props: Record<string, unknown>, key?: string) => ({ type, props: key === undefined ? props : { ...props, key } });
+  const react = {
+    useMemo(fn: () => unknown) { return fn(); },
+    useState(initial: unknown) {
+      const index = cursor++;
+      if (!(index in slots)) slots[index] = typeof initial === "function" ? initial() : initial;
+      return [slots[index], (next: unknown) => { slots[index] = typeof next === "function" ? next(slots[index]) : next; }];
+    },
+  };
+  const compiled = ts.transpileModule(readFileSync("app/components/launch-monitor-capture.tsx", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
+  runInNewContext(compiled, { exports, require: (name: string) => {
+    if (name === "react") return react;
+    if (name === "react/jsx-runtime") return { jsx, jsxs: jsx, Fragment: "fragment" };
+    if (name.endsWith("/golf-equipment")) return equipment;
+    if (name === "./launch-monitor-camera") return { LaunchMonitorCamera: "launch-camera" };
+    if (name === "./equipment-visuals") return { ClubCategoryVisual: "club-visual" };
+    if (name.endsWith(".css")) return { default: new Proxy({}, { get: (_target, key) => key }) };
+    throw new Error(name);
+  } });
+  let tree: Node;
+  const props = () => ({ userId: "flow-owner", value: session, onChange: (next: LaunchMonitorSession | null) => { session = next; }, onDone: () => { done += 1; } });
+  const render = () => { cursor = 0; tree = exports.LaunchMonitorCapture(props()); return tree; };
+  render();
+  return {
+    render,
+    activeStep: () => text(nodes(tree).find((node) => node.type === "span" && node.props.className === "captureFlowActive")),
+    text: () => text(tree),
+    click(label: string) {
+      const button = nodes(tree).find((node) => node.type === "button" && text(node).trim().startsWith(label));
+      assert.ok(button, label);
+      (button.props.onClick as () => void)();
+      render();
+    },
+    camera() {
+      const camera = nodes(tree).find((node) => node.type === "launch-camera");
+      assert.ok(camera);
+      return camera.props;
+    },
+    focusSave() {
+      const save = nodes(tree).find((node) => node.type === "section" && node.props["data-capture-order"] === "5");
+      assert.ok(save);
+      (save.props.onFocusCapture as () => void)();
+      render();
+    },
+    done: () => done,
+  };
+}
+
+function threeDriverShots() {
+  return [0, 1, 2].map((index) => ({
+    id: `driver-shot-${index + 1}`,
+    club: "DRIVER" as const,
+    excluded: false,
+    capturedAt: `2026-09-28T12:0${index}:00.000Z`,
+    note: null,
+    clubSpeedMph: 101 + index,
+    ballSpeedMph: 149 + index,
+    launchAngleDegrees: 12 + index,
+    spinRpm: 2300 + index * 50,
+    carryYards: 245 + index,
+    totalYards: 260 + index,
+    peakHeightYards: 31 + index,
+    landingAngleDegrees: 39 + index,
+  }));
+}
+
+test("launch capture progresses through all five stages and keeps summary details collapsed until requested", () => {
+  const h = launchCaptureHarness();
+  assert.match(h.activeStep(), /1\s*Palo/);
+  h.click("Driver");
+  assert.match(h.activeStep(), /2\s*Fotos/);
+  if (h.camera().onAnalysisStateChange) (h.camera().onAnalysisStateChange as (state: string) => void)("analyzing");
+  h.render();
+  assert.match(h.activeStep(), /3\s*Análisis/);
+  (h.camera().onConfirm as (source: string, shots: ReturnType<typeof threeDriverShots>) => void)("TrackMan", threeDriverShots());
+  h.render();
+  (h.camera().onAnalysisStateChange as (state: string) => void)("applied");
+  h.render();
+  assert.match(h.activeStep(), /4\s*Resumen/);
+  assert.match(h.text(), /Driver\s*3\s*golpe\s*s\s*válido\s*s/);
+  for (const metric of ["Carry", "Ball speed", "Launch", "Spin"]) assert.match(h.text(), new RegExp(metric, "i"));
+  assert.doesNotMatch(h.text(), /Golpe\s+1/);
+  h.click("Ver detalles");
+  assert.match(h.text(), /Golpe\s+1/);
+  assert.doesNotMatch(h.text(), /Aún no hay golpes de hierro 7/);
+  h.focusSave();
+  assert.match(h.activeStep(), /5\s*Guardar/);
+  h.click("Guardar y continuar");
+  assert.equal(h.done(), 1);
+});
+
+test("changing the selected club remounts the photo capture instead of reusing its files", () => {
+  const h = launchCaptureHarness();
+  h.click("Driver");
+  const driverCamera = h.camera();
+  assert.equal(driverCamera.targetClub, "DRIVER");
+  assert.equal(driverCamera.key, "launch-camera-DRIVER");
+
+  h.click("Hierro 7");
+  const ironCamera = h.camera();
+  assert.equal(ironCamera.targetClub, "IRON_7");
+  assert.equal(ironCamera.key, "launch-camera-IRON_7");
+  assert.notEqual(ironCamera.key, driverCamera.key, "a new key forces React to discard the prior camera photo state");
 });
 
 test("known launch-monitor driver metrics are applied instead of requested again", async () => {

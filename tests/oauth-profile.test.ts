@@ -47,7 +47,7 @@ test("durable owner claims override stale profile cache only when Auth supplied 
   assert.deepEqual(ownerProfileClaimsFromAuth({ full_name: "No owner claims" }), {});
 });
 
-test("profile setup asks only facts still missing and can auto-skip saved identity", () => {
+test("profile setup tracks supplemental golf facts independently from personal review", () => {
   const complete = { displayName: "Said Abaid", country: "México", countryCode: "MX", state: "Puebla", stateCode: "MX-PUE", handedness: "right" as const };
   assert.deepEqual(missingInitialProfileFields(complete), []);
   assert.deepEqual(missingInitialProfileFields({ ...complete, displayName: "" }), ["displayName"]);
@@ -55,12 +55,16 @@ test("profile setup asks only facts still missing and can auto-skip saved identi
   assert.deepEqual(missingInitialProfileFields({ ...complete, handedness: "" }), ["handedness"]);
 });
 
-test("Google profile fields are conditionally omitted and existing accounts resume from server", () => {
+test("new Google/email accounts always review editable personal fields while existing accounts resume", () => {
   const source = readFileSync("app/components/account-provider.tsx", "utf8");
-  assert.match(source, /!identityAlreadyNamed &&/);
+  assert.doesNotMatch(source, /identityAlreadyNamed|Continuando tu alta/);
+  assert.match(source, /id="profile-setup-given"/);
+  assert.match(source, /id="profile-setup-family"/);
+  assert.match(source, /<ProfileImagePicker value=\{avatarUrl\}/);
+  assert.match(source, /const displayName = \[givenName\.trim\(\), familyName\.trim\(\)\]/);
+  assert.match(source, /!givenName\.trim\(\) \|\| !familyName\.trim\(\)/);
   assert.match(source, /missing\.includes\("location"\)/);
   assert.match(source, /missing\.includes\("handedness"\)/);
   assert.match(source, /if \(mapping\.existingAccount\)[\s\S]*setProfileSetupRequired\(false\)/);
   assert.match(source, /setBetaOnboardingRequired\(mapping\.onboardingProgress\?\.status === "in_progress"\)/);
-  assert.match(source, /if \(!missing\.length\)[\s\S]*Continuando tu alta/);
 });

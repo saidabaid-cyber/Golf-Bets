@@ -82,6 +82,9 @@ test("componente dispara APIs nativas sólo desde CTAs explícitos y ofrece sali
   assert.match(source, /Ajustes &gt; Apps &gt; Safari &gt; Ubicación/);
   assert.doesNotMatch(source, /Administrar ubicación|Administrar notificaciones/);
   assert.match(coursePicker, /ubicación autorizada/);
+  assert.match(coursePicker, /readDevicePermissionPreferences\(localStorage,permissionOwnerId\)\.locationEnabled/);
+  assert.match(coursePicker, /resolveAuthorizedNearbyLocation\(localStorage,permissionOwnerId/);
+  assert.doesNotMatch(coursePicker, /requestCourseLocation\(/);
   assert.match(coursePicker, /Precisión informada por el dispositivo/);
   assert.doesNotMatch(coursePicker, /No la guardamos ni enviamos/);
 });
@@ -98,12 +101,15 @@ test("unidades y preferencias de canales persisten por cuenta sin mutar yardas a
   assert.equal(storedYards, 100);
 });
 
-test("Home Club remains optional in Profile and is absent from Handicap onboarding", () => {
+test("Home Club is persisted in onboarding and remains editable in Profile", () => {
   const onboarding = readFileSync("app/components/beta-onboarding-flow.tsx", "utf8");
   const picker = readFileSync("app/components/catalog-course-picker.tsx", "utf8");
   const profile = readFileSync("app/components/profile-account-panel.tsx", "utf8");
-  assert.doesNotMatch(onboarding, /CatalogCoursePicker|homeClubSelectionReady|onSelectHomeCourse=/);
-  assert.doesNotMatch(onboarding, /onSelectClub=\{club =>/);
+  assert.match(onboarding, /CatalogCoursePicker/);
+  assert.match(onboarding, /homeClubSelectionReady/);
+  assert.match(onboarding, /onSelectHomeCourse=/);
+  assert.match(onboarding, /homeClubId: selection\.clubId/);
+  assert.match(onboarding, /homeCourseId: selection\.courseId/);
   assert.match(picker, /if\(purpose==='home-club'\)\{[\s\S]*await onSelectHomeCourse[\s\S]*return;/);
   const homeSelection = picker.indexOf("if(purpose==='home-club'){");
   const homePersisted = picker.indexOf("await onSelectHomeCourse", homeSelection);
@@ -115,7 +121,7 @@ test("Home Club remains optional in Profile and is absent from Handicap onboardi
   assert.match(picker, /!choosingHomeCourse&&selectionLabel&&club&&chosen/);
   assert.match(picker, />Cambiar campo<\/button>/);
   assert.match(picker, /setChoosingHomeCourse\(true\)/);
-  assert.doesNotMatch(picker, /slice\(0,\s*3\)/);
+  assert.match(picker, /Campos relevantes del catálogo/);
   assert.doesNotMatch(picker, /Salida \/ tee inicial/);
   assert.doesNotMatch(picker, /Ratings y tees por jugador/);
   assert.match(profile, /<CatalogCoursePicker[^>]*purpose="home-club"/);

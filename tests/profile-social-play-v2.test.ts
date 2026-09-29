@@ -32,9 +32,15 @@ test("completion uses authenticated transport instead of a local-only percentage
 test("completion counts six required sections and keeps fitting optional", () => {
   assert.equal(profileCompletion(empty).percent,0);
   assert.equal(profileCompletion({...empty,username:"golfer"}).percent,17);
-  assert.equal(profileCompletion({...empty,username:"golfer",displayName:"Player",givenName:"QA",familyName:"Golfer"}).percent,17);
+  assert.equal(profileCompletion({...empty,username:"golfer",displayName:"Player",givenName:"QA",familyName:"Golfer"}).percent,33);
   assert.equal(profileCompletion({...empty,username:"golfer",displayName:"Player",givenName:"QA",familyName:"Golfer",avatarUrl:"avatar:dog"}).percent,33);
   assert.equal(profileCompletion(empty).sections.find(section => section.id === "fitting")?.status,"Opcional");
+});
+test("optional avatar never penalizes profile completion", () => {
+  const withoutAvatar = profileCompletion({...empty,displayName:"QA Player",givenName:"QA",familyName:"Player"});
+  const withAvatar = profileCompletion({...empty,displayName:"QA Player",givenName:"QA",familyName:"Player",avatarUrl:"avatar:dog"});
+  assert.equal(withoutAvatar.sections.find(section => section.id === "personal")?.complete,true);
+  assert.equal(withoutAvatar.percent,withAvatar.percent);
 });
 for (const choice of ["UNKNOWN","MANUAL"] as const) test(`100% without GHIN, public privacy, consent or computed index: ${choice}`, () => {
   const choices={handicap_choice:choice, manual_hcp:choice==="MANUAL"?12:null, not_applicable:[]};

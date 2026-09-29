@@ -29,7 +29,7 @@ import { BALL_FIT_HANDICAP_LABELS, BALL_FIT_EXPERIENCES, normalizeBallFitHandica
 import { LaunchMonitorCapture } from "./launch-monitor-capture";
 import { NumericCaptureInput } from "./numeric-capture-input";
 import { CatalogProductMedia } from "./catalog-product-media";
-import { BackyardIcon } from "./backyard-icon";
+import { BackyardIcon, type BackyardIconName } from "./backyard-icon";
 import { useViewScrollReset } from "./use-view-scroll-reset";
 import { AnchoredSearch, AnchoredSearchOption } from "./anchored-search";
 import { FeedbackLink } from "./feedback-dialog";
@@ -65,9 +65,16 @@ const PRIORITY_LABELS: Record<BallFitPriority, string> = {
   PUTTER_FEEL: "Sensación con putter",
 };
 
-const PRIORITY_ICONS: Record<BallFitPriority, "arrow" | "spark" | "club" | "flag" | "ball"> = {
-  DRIVER_DISTANCE: "arrow", LESS_DRIVER_SPIN: "spark", STABILITY_CONTROL: "club", HEIGHT: "arrow",
-  IRON_CONTROL: "club", STOP_ON_GREEN: "flag", WEDGE_SPIN: "spark", GREENSIDE_FEEL: "ball", PUTTER_FEEL: "ball",
+const PRIORITY_ICONS: Record<BallFitPriority, BackyardIconName> = {
+  DRIVER_DISTANCE: "driverDistance",
+  LESS_DRIVER_SPIN: "lessDriverSpin",
+  STABILITY_CONTROL: "stabilityControl",
+  HEIGHT: "trajectoryHeight",
+  IRON_CONTROL: "ironControl",
+  STOP_ON_GREEN: "stopOnGreen",
+  WEDGE_SPIN: "wedgeSpin",
+  GREENSIDE_FEEL: "greensideFeel",
+  PUTTER_FEEL: "putterFeel",
 };
 
 const LEVEL_LABELS: Record<QualitativeLevel, string> = {
@@ -107,6 +114,14 @@ function accountIndexLabel(source: BallFitHandicapSource | null | undefined, val
   if (source === "GHIN") return `Handicap Index GHIN · ${value}`;
   if (source === "BACKYARD") return `Backyard Index · ${value}`;
   return `HCP manual · ${value}`;
+}
+
+function currentGameIndexLabel(source: BallFitHandicapSource | null | undefined, value: number | null) {
+  const formatted = value?.toLocaleString("es-MX", { maximumFractionDigits: 1 });
+  if (source === "GHIN" && formatted) return `GHIN INDEX ${formatted}`;
+  if (source === "BACKYARD" && formatted) return `BACKYARD INDEX ${formatted}`;
+  if (source === "MANUAL" && formatted) return `HCP MANUAL ${formatted}`;
+  return "SIN ÍNDICE";
 }
 
 function catalogEditionLabel(ball: Pick<GolfBallCatalog, "generation" | "year">) {
@@ -155,6 +170,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
   const [ballQuery, setBallQuery] = useState("");
   const [ballSearchOpen, setBallSearchOpen] = useState(false);
   const [launchOpen, setLaunchOpen] = useState(false);
+  const [launchCaptureCompleted, setLaunchCaptureCompleted] = useState(false);
   const handicapChoiceTouched = useRef(false);
   useViewScrollReset(`${step}:${draftChoicePending}:${hydrated}:${launchOpen}`);
   const [message, setMessage] = useState("");
@@ -166,6 +182,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
   const driverLaunchSummary = launchSummary?.byClub.find((item) => item.club === "DRIVER") ?? null;
   const detectedDriverCarry = driverLaunchSummary?.metrics.carryYards?.median ?? null;
   const detectedDriverSpeed = driverLaunchSummary?.metrics.clubSpeedMph?.median ?? null;
+  const launchCaptureApplied = launchCaptureCompleted || (launchSummary?.includedShots ?? 0) > 0;
   const hasCanonicalIndex = defaultHandicap !== null
     && (defaultHandicapSource === "GHIN" || defaultHandicapSource === "BACKYARD")
     && input.handicapSource === defaultHandicapSource
@@ -221,6 +238,15 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
 
   function patchInput(values: Partial<BallFitInput>) {
     setInput((current) => ({ ...current, ...values, userId }));
+  }
+
+  function finishLaunchCapture() {
+    setLaunchOpen(false);
+    setLaunchCaptureCompleted(true);
+    setMessage("");
+    const driverCarryKnown = detectedDriverCarry !== null || input.driverDistanceYards !== null;
+    const driverSpeedKnown = detectedDriverSpeed !== null || input.swingSpeedBand !== "UNKNOWN";
+    setStep(driverCarryKnown && driverSpeedKnown ? 2 : 1);
   }
 
   function next() {
@@ -342,7 +368,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
       value={input.launchMonitorSession}
       onChange={(launchMonitorSession) => patchInput({ launchMonitorSession })}
       onOpenPrivacy={onOpenPrivacy}
-      onDone={() => setLaunchOpen(false)}
+      onDone={finishLaunchCapture}
     />
   </div>;
 
@@ -372,17 +398,20 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
     </section>}
 
     {!result && step === 1 && <section className={styles.questionBlock}>
-      <h3>Tu juego con driver</h3><p>Continúa con el cuestionario manual. Si tienes mediciones, puedes agregarlas de forma opcional sin repetir datos.</p>
+      <div className={styles.currentGameSource}><small>TU JUEGO ACTUAL</small><b>{currentGameIndexLabel(input.handicapSource, input.handicap)}</b></div>
+      <h3>¿Cómo quieres continuar?</h3>
+      <button type="button" className={styles.launchEntry} onClick={() => setLaunchOpen(true)}>
+        <span><BackyardIcon name="score" size={25} /></span><span><b>Agregar mediciones de launch monitor</b><small>TrackMan, FlightScope, Garmin, GCQuad, Rapsodo u otro.</small></span><strong aria-hidden="true">›</strong>
+      </button>
+      <div className={styles.manualQuestionnaireSeparator}><span>— O CONTINÚA MANUALMENTE —</span></div>
+      <h3>Tu juego con driver</h3>
       {(detectedDriverCarry !== null || detectedDriverSpeed !== null) && <div className={styles.detectedDriverData} aria-label="Datos de launch monitor aplicados">
         <div><small>DATOS YA APLICADOS</small><b>Driver · {driverLaunchSummary?.includedShots ?? 0} golpes válidos</b></div>
         {detectedDriverSpeed !== null && <span>Club speed<b>{detectedDriverSpeed.toLocaleString("es-MX", { maximumFractionDigits: 1 })} mph</b></span>}
         {detectedDriverCarry !== null && <span>Carry<b>{detectedDriverCarry.toLocaleString("es-MX", { maximumFractionDigits: 1 })} yd</b></span>}
       </div>}
-      {detectedDriverCarry === null && <label>¿Cuánto pegas aproximadamente con driver? (yardas, opcional)<NumericCaptureInput keyboardMode="numeric" min={50} max={500} value={input.driverDistanceYards} onValueChange={(driverDistanceYards) => patchInput({ driverDistanceYards })} placeholder="Ej. 245" /></label>}
-      {detectedDriverSpeed === null && <><h4>Velocidad de swing con driver</h4><OptionGrid values={SWING_SPEED_BANDS} labels={SPEED_LABELS} selected={input.swingSpeedBand} onSelect={(value) => patchInput({ swingSpeedBand: value })} /></>}
-      <button type="button" className={styles.launchEntry} onClick={() => setLaunchOpen(true)}>
-        <span><BackyardIcon name="score" size={25} /></span><span><b>{launchSummary?.includedShots ? "Revisar mediciones de launch monitor" : "Agregar mediciones de launch monitor"}</b><small>Opcional · selecciona palo, agrega fotos y revisa el resumen</small></span><strong aria-hidden="true">›</strong>
-      </button>
+      {detectedDriverCarry === null && (!launchCaptureApplied || input.driverDistanceYards === null) && <label>¿Cuánto pegas aproximadamente con driver? (yardas, opcional)<NumericCaptureInput keyboardMode="numeric" min={50} max={500} value={input.driverDistanceYards} onValueChange={(driverDistanceYards) => patchInput({ driverDistanceYards })} placeholder="Ej. 245" /></label>}
+      {detectedDriverSpeed === null && (!launchCaptureApplied || input.swingSpeedBand === "UNKNOWN") && <><h4>Velocidad de swing con driver</h4><OptionGrid values={SWING_SPEED_BANDS} labels={SPEED_LABELS} selected={input.swingSpeedBand} onSelect={(value) => patchInput({ swingSpeedBand: value })} /></>}
     </section>}
 
     {!result && step === 2 && <section className={styles.questionBlock}>

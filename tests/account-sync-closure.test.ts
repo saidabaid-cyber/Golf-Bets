@@ -12,6 +12,7 @@ import { coursePreferenceStorageKey } from "../lib/course-preferences";
 import { cloudProfileRevisionKey, pendingProfileWriteKey } from "../lib/profile-sync";
 import { internalNotificationStorageKey } from "../lib/internal-notifications";
 import { equipmentProfileRecoveryStorageKey, equipmentProfileStorageKey } from "../lib/golf-equipment";
+import { equipmentSyncStateStorageKey } from "../lib/equipment-offline-store";
 import { ballFitDraftStorageKey } from "../lib/ball-fitting-storage";
 import { learningRecordsStorageKey } from "../lib/backyard-ai/memory/learning-events";
 import { userPreferenceStorageKey } from "../lib/backyard-ai/memory/personal-memory";
@@ -104,6 +105,8 @@ test("eliminar cuenta local descarta solo A y conserva invitado y B", () => {
   storage.setItem(internalNotificationStorageKey("user-b"), '{"version":1,"readEventKeys":["round-b"]}');
   storage.setItem(equipmentProfileStorageKey("user-a")!, "equipment");
   storage.setItem(equipmentProfileRecoveryStorageKey("user-a")!, "equipment-recovery");
+  storage.setItem(equipmentSyncStateStorageKey("user-a")!, '{"base":{"version":3},"outbox":{"mutationId":"pending-a"}}');
+  storage.setItem(equipmentSyncStateStorageKey("user-b")!, '{"base":{"version":7},"outbox":{"mutationId":"pending-b"}}');
   storage.setItem(ballFitDraftStorageKey("user-a")!, "fit-draft");
   storage.setItem(learningRecordsStorageKey("user-a")!, "ai-learning");
   storage.setItem(userPreferenceStorageKey("user-a")!, "ai-preferences");
@@ -140,6 +143,8 @@ test("eliminar cuenta local descarta solo A y conserva invitado y B", () => {
   assert.equal(storage.getItem(internalNotificationStorageKey("user-a")), null);
   assert.equal(storage.getItem(equipmentProfileStorageKey("user-a")!), null);
   assert.equal(storage.getItem(equipmentProfileRecoveryStorageKey("user-a")!), null);
+  assert.equal(storage.getItem(equipmentSyncStateStorageKey("user-a")!), null);
+  assert.equal(storage.getItem(equipmentSyncStateStorageKey("user-b")!), '{"base":{"version":7},"outbox":{"mutationId":"pending-b"}}');
   assert.equal(storage.getItem(ballFitDraftStorageKey("user-a")!), null);
   assert.equal(storage.getItem(learningRecordsStorageKey("user-a")!), null);
   assert.equal(storage.getItem(userPreferenceStorageKey("user-a")!), null);

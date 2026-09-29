@@ -49,14 +49,15 @@ test("lofts y opciones de shaft son los valores publicados, no rangos genéricos
 
 test("la UI final usa bolsa premium, selección guiada y modo manual explícito", () => {
   const panel = readFileSync("app/components/equipment-profile-panel.tsx", "utf8");
+  const bagManagement = readFileSync("lib/equipment-bag-management.ts", "utf8");
   const editor = readFileSync("app/components/equipment-editors.tsx", "utf8");
 
   for (const category of ["Driver", "Maderas", "Híbridos", "Hierros", "Wedges", "Putter", "Bola"]) {
-    assert.match(panel, new RegExp(category));
+    assert.match(`${panel}\n${bagManagement}`, new RegExp(category));
   }
   assert.match(panel, /wedgeLoftSummary/);
   assert.match(panel, /styles\.bagItemMain/);
-  assert.match(panel, /styles\.rowChevron/);
+  assert.match(panel, /aria-label=\{`Editar \$\{clubName/);
   assert.match(editor, /generationOptions\.length > 1/);
   assert.match(editor, /selectedShaft\.flexOptions\.length/);
   assert.match(editor, /selectedShaft\.weightOptions\.length/);

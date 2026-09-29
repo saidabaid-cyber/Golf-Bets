@@ -14,6 +14,7 @@ import { missingInitialProfileFields } from "../lib/oauth-profile";
 type Node = { type: unknown; props: Record<string, unknown> };
 function nodes(value: unknown): Node[] { if (Array.isArray(value)) return value.flatMap(nodes); if (!value || typeof value !== "object" || !("props" in value)) return []; const node = value as Node; return [node, ...nodes(node.props.children)]; }
 function text(value: unknown): string { if (Array.isArray(value)) return value.map(text).join(" "); if (value && typeof value === "object") return text((value as Node).props?.children); return typeof value === "string" || typeof value === "number" ? String(value) : ""; }
+const ghinIndexHeading = (value: number | null | undefined) => typeof value === "number" ? `GHIN INDEX ${value}` : "GHIN INDEX";
 function component(file: string, name: string, globals: Record<string, unknown>) {
   const source = ts.createSourceFile(file, readFileSync(file, "utf8"), ts.ScriptTarget.ES2022, true, ts.ScriptKind.TSX);
   const declaration = source.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === name)!;
@@ -26,7 +27,7 @@ function component(file: string, name: string, globals: Record<string, unknown>)
   return (props: unknown) => { cursor = 0; return (exports[name] as (props: unknown) => Node)(props); };
 }
 
-function setupHarness(location: geo.ProfileLocationValue) {
+function setupHarness(location: geo.ProfileLocationValue, identityOverrides: Record<string, unknown> = {}) {
   const saved: Record<string, unknown>[] = [];
   const renderComponent = component("app/components/account-provider.tsx", "ProfileSetupScreen", {
     normalizeProfileLocation: geo.normalizeProfileLocation, validateProfileLocation: geo.validateProfileLocation,
@@ -37,10 +38,11 @@ function setupHarness(location: geo.ProfileLocationValue) {
     localStorage: { getItem: () => null }, STORAGE_KEYS: { contrast: "qa-contrast" },
     validateProfileDraft, validateProfileAvatarUrl, BrandLockup: "brand", ProfileImagePicker: "avatar", ProfileLocationPicker: "location", HandicapSourceSelector: "source",
   });
-  const props = { identity: { ...location, userId: "owner", mode: "authenticated", displayName: "Said Abaid", givenName: "Said", familyName: "Abaid", avatarUrl: "", defaultHandicap: 7, handedness: "right" }, onSave: async (value: Record<string, unknown>) => { saved.push(JSON.parse(JSON.stringify(value))); return "cloud"; }, onBack: async () => {} };
+  const props = { identity: { ...location, userId: "owner", mode: "authenticated", displayName: "Said Abaid", givenName: "Said", familyName: "Abaid", avatarUrl: "", defaultHandicap: 7, handedness: "right", ...identityOverrides }, onSave: async (value: Record<string, unknown>) => { saved.push(JSON.parse(JSON.stringify(value))); return "cloud"; }, onBack: async () => {} };
   let tree = renderComponent(props);
   return { saved, render: () => tree = renderComponent(props), nodes: () => nodes(tree), text: () => text(tree),
     changeLocation: (next: geo.ProfileLocationValue) => { (nodes(tree).find((node) => node.type === "location")!.props.onChange as (value: geo.ProfileLocationValue) => void)(next); tree = renderComponent(props); },
+    changeInput: (id: string, value: string) => { (nodes(tree).find((node) => node.type === "input" && node.props.id === id)!.props.onChange as (event: unknown) => void)({ target: { value } }); tree = renderComponent(props); },
     submit: async () => { await (nodes(tree).find((node) => node.type === "form")!.props.onSubmit as (event: unknown) => Promise<void>)({ preventDefault() {} }); tree = renderComponent(props); },
   };
 }
@@ -57,7 +59,9 @@ test("Puebla bug: invalid typed region then canonical MX-PUE selection clears st
 
 test("selected Puebla survives profile reload, validates and saves without a manual profile Index", async () => {
   const selected = geo.selectProfileSubdivision(geo.selectProfileCountry("MX"), "MX-PUE");
-  const h = setupHarness(JSON.parse(JSON.stringify(selected))); await new Promise<void>((resolve) => setImmediate(resolve));
+  const h = setupHarness(JSON.parse(JSON.stringify(selected)));
+  assert.equal(h.saved.length, 0, "new accounts must review personal data instead of auto-saving");
+  await h.submit();
   assert.equal(h.saved.length, 1); assert.equal(h.saved[0].defaultHandicap, 7, "identity-only setup must not erase an existing golf value");
   assert.equal(h.nodes().some((node) => node.type === "input" && String(node.props.id).includes("hcp")), false);
   assert.equal(h.nodes().some((node) => node.type === "source"), false, "source selection belongs to the next golf step only");
@@ -72,6 +76,8 @@ test("initial profile has no duplicated GHIN/Backyard selector and the canonical
   assert.match(golf, /defaultHandicap: profile\.defaultHandicap/);
   assert.match(golf, /ghinLinkStatus: linked \? "LINKED"/);
   assert.match(golf, /ghinControl=\{ghinControl\}/);
+  assert.match(golf, /title=\{ghinLinked \? ghinIndexHeading\(ghinControl\.profile\?\.handicapIndex\)/);
+  assert.match(golf, /Para elegir otra fuente, primero desvincula GHIN/);
 });
 
 test("canonical region selection validates immediately; changing country clears region", () => {
@@ -84,12 +90,13 @@ test("canonical region selection validates immediately; changing country clears 
 
 test("source selector activation handler, no false success after failed/pending cloud save", async () => {
   const changes: boolean[] = [];
-  const render = component("app/components/handicap-source-selector.tsx", "HandicapSourceChoices", { Image: "image", BackyardIcon: "backyard-icon", BackyardMark: "backyard-mark", GhinPlaceholder: "ghin", GhinReadOnlyPanel: "ghin-live", verifiedGhinHandicapIndex, styles: {} });
+  const render = component("app/components/handicap-source-selector.tsx", "HandicapSourceChoices", { Image: "image", BackyardIcon: "backyard-icon", BackyardMark: "backyard-mark", GhinPlaceholder: "ghin", GhinReadOnlyPanel: "ghin-live", verifiedGhinHandicapIndex, ghinIndexHeading, styles: {} });
   const control = { ready: true, saving: false, error: "", preference: null, change: async (value: boolean) => changes.push(value), selectGhin: async () => {}, retry: async () => {} };
   const tree = render({ authenticated: true, control });
   assert.match(text(tree), /Vincular GHIN/i); assert.match(text(tree), /ACTIVAR BACKYARD INDEX/);
   const loadingGhin = render({ authenticated: true, control, ghinControl: { ready: false, enabled: false } });
   assert.match(text(loadingGhin), /Verificando disponibilidad de GHIN/);
+  assert.doesNotMatch(text(loadingGhin), /ACTIVAR BACKYARD INDEX|Continuar sin índice/);
   assert.equal(nodes(loadingGhin).some((node) => node.type === "ghin"), false, "an authenticated account must not see the signed-out placeholder while GHIN loads");
   const unavailableGhin = render({ authenticated: true, control, ghinControl: { ready: true, enabled: false } });
   assert.equal(nodes(unavailableGhin).find((node) => node.type === "ghin")?.props.authenticated, true);
@@ -98,26 +105,51 @@ test("source selector activation handler, no false success after failed/pending 
   assert.match(text(render({ authenticated: true, control: { ...control, preference: { enabled: true, handicapSource: "BACKYARD" } } })), /ÍNDICE BACKYARD ACTIVADO/);
 });
 
-test("active GHIN is the only open source until the user asks to change it", () => {
-  const render = component("app/components/handicap-source-selector.tsx", "HandicapSourceChoices", { Image: "image", BackyardIcon: "backyard-icon", BackyardMark: "backyard-mark", GhinPlaceholder: "ghin", GhinReadOnlyPanel: "ghin-live", styles: {} });
+test("Google new account prefill remains editable and always exposes the avatar selector", async () => {
+  const selected = geo.selectProfileSubdivision(geo.selectProfileCountry("MX"), "MX-PUE");
+  const h = setupHarness(selected, { givenName: "Said", familyName: "Abaid", avatarUrl: "https://images.example/google.jpg", accessToken: "token" });
+  const avatar = h.nodes().find((node) => node.type === "avatar");
+  assert.equal(avatar?.props.value, "https://images.example/google.jpg");
+  assert.equal(h.nodes().find((node) => node.type === "input" && node.props.id === "profile-setup-given")?.props.value, "Said");
+  h.changeInput("profile-setup-given", "Saíd");
+  h.changeInput("profile-setup-family", "Abaid Taja");
+  await h.submit();
+  assert.equal(h.saved[0].displayName, "Saíd Abaid Taja");
+  assert.equal(h.saved[0].avatarUrl, "https://images.example/google.jpg");
+});
+
+test("Email OTP new account renders the same name, surname and optional avatar controls", () => {
+  const selected = geo.selectProfileSubdivision(geo.selectProfileCountry("MX"), "MX-PUE");
+  const h = setupHarness(selected, { displayName: "", givenName: "", familyName: "", avatarUrl: "" });
+  assert.ok(h.nodes().some((node) => node.type === "input" && node.props.id === "profile-setup-given"));
+  assert.ok(h.nodes().some((node) => node.type === "input" && node.props.id === "profile-setup-family"));
+  assert.ok(h.nodes().some((node) => node.type === "avatar"));
+});
+
+test("Apple new account renders the same editable name, surname and optional avatar controls", () => {
+  const selected = geo.selectProfileSubdivision(geo.selectProfileCountry("MX"), "MX-PUE");
+  const h = setupHarness(selected, { displayName: "", givenName: "", familyName: "", avatarUrl: "", providers: ["apple"] });
+  assert.ok(h.nodes().some((node) => node.type === "input" && node.props.id === "profile-setup-given"));
+  assert.ok(h.nodes().some((node) => node.type === "input" && node.props.id === "profile-setup-family"));
+  assert.ok(h.nodes().some((node) => node.type === "avatar"));
+});
+
+test("active GHIN is source-locked until unlink", () => {
+  const render = component("app/components/handicap-source-selector.tsx", "HandicapSourceChoices", { Image: "image", BackyardIcon: "backyard-icon", BackyardMark: "backyard-mark", GhinPlaceholder: "ghin", GhinReadOnlyPanel: "ghin-live", ghinIndexHeading, styles: {} });
   const profile = { associationStatus: "VERIFIED", handicapIndex: 7.9, homeClubName: "LA Vista Country Club" };
   const control = { ready: true, saving: false, error: "", preference: { enabled: false, handicapSource: "GHIN" }, change: async () => {}, selectGhin: async () => {}, retry: async () => {} };
   const props = { authenticated: true, control, ghinControl: { ready: true, enabled: true, profile } };
-  let tree = render(props);
-  assert.match(text(tree), /GHIN/);
+  const tree = render(props);
+  assert.match(text(tree), /GHIN INDEX 7\.9/);
   assert.doesNotMatch(text(tree), /Usar Backyard Index/);
   assert.doesNotMatch(text(tree), /Continuar sin índice/);
   const changeSource = nodes(tree).find((node) => node.type === "button" && /Cambiar fuente de índice/.test(text(node)));
-  assert.ok(changeSource, "active GHIN must expose one discreet source-change action");
+  assert.equal(changeSource, undefined, "verified GHIN must not expose a direct source change");
   assert.equal(nodes(tree).find((node) => node.type === "ghin-live")?.props.sourceActive, true);
-  (changeSource.props.onClick as () => void)();
-  tree = render(props);
-  assert.match(text(tree), /Usar Backyard Index/);
-  assert.match(text(tree), /Continuar sin índice/);
 });
 
-test("unlinked, Backyard-active and no-index source states render their correct choices", () => {
-  const render = component("app/components/handicap-source-selector.tsx", "HandicapSourceChoices", { Image: "image", BackyardIcon: "backyard-icon", BackyardMark: "backyard-mark", GhinPlaceholder: "ghin", GhinReadOnlyPanel: "ghin-live", styles: {} });
+test("unlinked states expose choices while any verified GHIN ignores stale Backyard/NONE preferences", () => {
+  const render = component("app/components/handicap-source-selector.tsx", "HandicapSourceChoices", { Image: "image", BackyardIcon: "backyard-icon", BackyardMark: "backyard-mark", GhinPlaceholder: "ghin", GhinReadOnlyPanel: "ghin-live", ghinIndexHeading, styles: {} });
   const base = { ready: true, saving: false, error: "", change: async () => {}, selectGhin: async () => {}, retry: async () => {} };
   const unlinked = render({ authenticated: true, control: { ...base, preference: null }, ghinControl: { ready: true, enabled: true, profile: null } });
   assert.match(text(unlinked), /Vincular GHIN/);
@@ -126,14 +158,12 @@ test("unlinked, Backyard-active and no-index source states render their correct 
 
   const linkedProfile = { associationStatus: "VERIFIED", handicapIndex: 7.9, homeClubName: "LA Vista Country Club" };
   const backyard = render({ authenticated: true, control: { ...base, preference: { enabled: true, handicapSource: "BACKYARD" } }, ghinControl: { ready: true, enabled: true, profile: linkedProfile } });
-  assert.match(text(backyard), /ÍNDICE BACKYARD ACTIVADO/);
-  assert.match(text(backyard), /Usar GHIN/);
-  assert.equal(nodes(backyard).find((node) => node.type === "ghin-live")?.props.sourceActive, false);
+  assert.doesNotMatch(text(backyard), /ÍNDICE BACKYARD ACTIVADO|ACTIVAR BACKYARD INDEX|Continuar sin índice/);
+  assert.equal(nodes(backyard).find((node) => node.type === "ghin-live")?.props.sourceActive, true);
 
   const none = render({ authenticated: true, control: { ...base, preference: { enabled: false, handicapSource: null } }, ghinControl: { ready: true, enabled: true, profile: linkedProfile } });
-  assert.match(text(none), /Sin índice por ahora/);
-  assert.match(text(none), /Usar GHIN/);
-  assert.match(text(none), /ACTIVAR BACKYARD INDEX/);
+  assert.doesNotMatch(text(none), /Sin índice por ahora|ACTIVAR BACKYARD INDEX/);
+  assert.equal(nodes(none).find((node) => node.type === "ghin-live")?.props.sourceActive, true);
 });
 
 test("BACKYARD activation persists source and enabled server-side and reload/new device sees it", async () => {

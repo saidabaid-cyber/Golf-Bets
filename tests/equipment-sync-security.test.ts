@@ -177,7 +177,7 @@ test("upload conserva 409/CAS y solo acepta el conflicto de la misma cuenta", as
   );
 });
 
-test("la decisión de merge nunca resuelve silenciosamente empates divergentes", () => {
+test("la decisión de merge ignora relojes y sólo bloquea el mismo campo divergente", () => {
   const base = profile();
   assert.equal(chooseEquipmentProfile(null, null), "equal");
   assert.equal(chooseEquipmentProfile(base, null), "local");
@@ -186,10 +186,18 @@ test("la decisión de merge nunca resuelve silenciosamente empates divergentes",
 
   const newerLocal = { ...base, updatedAt: "2026-09-06T12:02:00.000Z" };
   const newerRemote = cloudRecord({ ...base, updatedAt: "2026-09-06T12:03:00.000Z" }, 2);
-  assert.equal(chooseEquipmentProfile(newerLocal, cloudRecord(base)), "conflict");
-  assert.equal(chooseEquipmentProfile(base, newerRemote), "conflict");
+  assert.equal(chooseEquipmentProfile(newerLocal, cloudRecord(base)), "equal");
+  assert.equal(chooseEquipmentProfile(base, newerRemote), "equal");
   assert.equal(
-    chooseEquipmentProfile({ ...base, ballPreference: "SKIPPED" }, cloudRecord(base)),
+    chooseEquipmentProfile({ ...base, ballPreference: "SKIPPED" }, cloudRecord(base), base),
+    "local",
+  );
+  assert.equal(
+    chooseEquipmentProfile(
+      { ...base, ballPreference: "NO_FIXED_BALL" },
+      cloudRecord({ ...base, ballPreference: "SKIPPED" }),
+      base,
+    ),
     "conflict",
   );
 });

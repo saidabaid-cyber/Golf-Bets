@@ -164,6 +164,25 @@ try {
       values('${A}','SUPER_ADMIN','GLOBAL',true,'${A}'),('${B}','CATALOG_ADMIN','GLOBAL',true,'${A}');
     set request.jwt.claim.sub='${A}';`);
 
+  // Late-schema deletion fixtures. A shared scorecard definition must survive
+  // without creator provenance; the private legacy GHIN audit must not.
+  const sharedScorecardClub="qa-account-delete-scorecard-club";
+  const sharedScorecardCourse="qa-account-delete-scorecard-course";
+  await q(`insert into public.golf_clubs(id,name,provider,visibility)
+    values($1,'QA shared scorecard club','BACKYARD_INTERNAL','PUBLIC')`,[sharedScorecardClub]);
+  await q(`insert into public.golf_courses(id,club_id,name,holes,provider,visibility)
+    values($1,$2,'QA shared scorecard course',18,'BACKYARD_INTERNAL','PUBLIC')`,[sharedScorecardCourse,sharedScorecardClub]);
+  const authoredScorecard=await scalar(`insert into public.course_scorecard_profiles(
+      id,course_id,name,provenance,source_provider,status,created_by
+    ) values('qa-account-delete-scorecard-profile',$1,'QA owner-authored scorecard','ADMIN_VERIFIED','QA_FIXTURE','DRAFT',$2)
+    returning id`,[sharedScorecardCourse,A]);
+  await q(`insert into private.ghin_legacy_self_attested_migrations(
+      owner_id,provider,external_player_id,provider_player_name,last_successful_sync_at,
+      last_attempted_sync_at,last_attempt_status,source_created_at,source_updated_at,migration_outcome
+    ) values($1,'GHIN','qa-old-ghin-id','QA OLD GHIN PRIVATE NAME',now(),now(),'SUCCESS',now(),now(),'NO_MANUAL_VALUE')`,[A]);
+  assert.equal(await scalar("select created_by from public.course_scorecard_profiles where id=$1",[authoredScorecard]),A);
+  assert.equal(Number(await scalar("select count(*) from private.ghin_legacy_self_attested_migrations where owner_id=$1",[A])),1);
+
   // Complete Admin provenance fixture: the 17 Auth references are historical
   // attribution. Shared rows survive with NULL rather than a replacement actor.
   const legacyTournament=await scalar(`insert into public.tournaments(short_code,created_by,name,tournament_date,course_name,course_snapshot,holes,start_hole,format)
@@ -214,6 +233,12 @@ try {
   const copy=await scalar(`insert into public.rounds_cloud(owner_id,local_round_id,local_id,snapshot,version) values($1,'copy','copy',$2::jsonb,1) returning id`,[B,JSON.stringify({...staleSnapshot,ownerId:"b",ownerName:"Other Player"})]);
   const copyTombstone=await deletedPlayerKey(copy,A,A_PLAYER);
   await q("insert into public.user_cloud_state(user_id,active_draft) values($1,$2::jsonb)",[A,JSON.stringify(staleSnapshot)]);
+  await q(`update public.profiles set
+    name='QA OLD PROFILE',display_name='QA OLD PROFILE',given_name='QA OLD GIVEN',family_name='QA OLD FAMILY',
+    avatar_url='https://example.invalid/qa-old-avatar.webp',home_club='QA OLD HOME CLUB',typical_score=87
+    where id=$1`,[A]);
+  await q(`insert into public.profile_completion_choices(user_id,handicap_choice,manual_hcp)
+    values($1,'MANUAL',12.3)`,[A]);
   await q("insert into public.round_players_cloud(round_id,local_player_id,name) values($1,$2,'Private Name'),($1,'b','Other Player')",[round,A_PLAYER]);
   // No participant/self-confirm rows: the frozen account-linked snapshot alone
   // must prevent deleting the other player's historical card.
@@ -252,12 +277,31 @@ try {
   await q(`insert into public.golf_tee_nine_ratings(id,course_id,tee_id,segment,rating,slope,par,source_url,observed_at,source_payload)
     values($1,$2,'qa-manual-tee-delete','FRONT',35.5,113,36,'https://example.invalid/account-delete','2026-09-25',$3::jsonb)`,
     [manualNineRating,manualCourse,JSON.stringify({synthetic:true,ownerId:A})]);
-  await q(`insert into public.player_equipment_profiles(user_id,snapshot,version) values($1::uuid,jsonb_build_object('userId',$1::uuid::text,'schemaVersion',2),1)`,[A]);
+  await q(`insert into public.player_equipment_profiles(user_id,snapshot,version)
+    values($1,$2::jsonb,1)`,[A,JSON.stringify({
+      userId:A,schemaVersion:2,equipmentOnboarding:"COMPLETED",ballOnboarding:"COMPLETED",
+      clubs:[{id:"qa-old-driver",brand:"QA OLD EQUIPMENT"}],
+      ballFitSessions:[{id:"qa-old-fit",recommendations:["QA OLD BALL FIT"]}],
+    })]);
+  await q(`insert into public.player_clubs(user_id,local_id,custom_brand,custom_model,category)
+    values($1,'qa-old-driver','QA OLD EQUIPMENT','QA OLD DRIVER','DRIVER')`,[A]);
+  await q(`insert into public.player_club_distances(user_id,player_club_local_id,carry_distance,source)
+    values($1,'qa-old-driver',250,'MANUAL')`,[A]);
+  await q(`insert into public.player_balls(user_id,local_id,custom_brand,custom_model)
+    values($1,'qa-old-ball','QA OLD BALL','QA OLD MODEL')`,[A]);
+  const oldBallFitSession=await scalar(`insert into public.ball_fit_sessions(
+      user_id,local_id,status,fit_mode,recommendations,completed_at
+    ) values($1,'qa-old-fit','COMPLETED','LAUNCH_MONITOR',$2::jsonb,now()) returning id`,[
+      A,JSON.stringify([{ballId:"qa-old-ball",name:"QA OLD BALL FIT"}]),
+    ]);
+  await q(`insert into public.launch_monitor_shots(session_id,user_id,local_id,club_slot,shot_index,carry_yards)
+    values($1,$2,'qa-old-shot','DRIVER',1,250)`,[oldBallFitSession,A]);
   await q("insert into public.user_statistics_resets(user_id,reset_at) values($1,now())",[A]);
   const storageObject=await scalar(`insert into storage.objects(bucket_id,name,owner,owner_id)
     values('scorecard-photos',$1::uuid::text||'/private.webp',$1,$1::uuid::text) returning id`,[A]);
   await q("update public.profiles set social_privacy='FRIENDS' where id=$1",[B]);
-  await q("insert into public.social_activity_preferences_v3(user_id,share_rounds) values($1,true)",[B]);
+  await q(`insert into public.social_activity_preferences_v3(user_id,share_rounds) values($1,true)
+    on conflict(user_id) do update set share_rounds=excluded.share_rounds`,[B]);
   await q("insert into public.friendships(user_a_id,user_b_id) values($1,$2)",[A,B]);
   await q("update public.social_activities_v3 set material_hash=$2,audience='FRIENDS' where source_round_id=$1",[copy,HASH]);
   const bActivity=await scalar("select id from public.social_activities_v3 where source_round_id=$1 and author_id=$2",[copy,B]);
@@ -444,7 +488,18 @@ try {
   assert.equal((await complete()).stage,"completed");
   assert.equal((await acquire(A)).stage,"completed","same operation is idempotent after Auth removal");
   assert.equal(Number(await scalar("select count(*) from public.rounds_cloud where id=$1",[round])),1);
+  assert.equal(Number(await scalar("select count(*) from public.course_scorecard_profiles where id=$1",[authoredScorecard])),1,"shared scorecard survives creator account deletion");
+  assert.equal(await scalar("select created_by from public.course_scorecard_profiles where id=$1",[authoredScorecard]),null,"shared scorecard creator provenance is anonymized");
+  assert.equal(Number(await scalar("select count(*) from private.ghin_legacy_self_attested_migrations where owner_id=$1",[A])),0,"private legacy GHIN audit cascades with its Auth owner");
+  assert.equal(Number(await scalar("select count(*) from public.profiles where id=$1",[A])),0,"old profile is deleted");
+  assert.equal(Number(await scalar("select count(*) from public.profile_completion_choices where user_id=$1",[A])),0,"profile completion state is deleted");
+  assert.equal(Number(await scalar("select count(*) from public.user_cloud_state where user_id=$1",[A])),0,"cloud sync state is deleted");
   assert.equal(Number(await scalar("select count(*) from public.player_equipment_profiles where user_id=$1",[A])),0);
+  assert.equal(Number(await scalar("select count(*) from public.player_clubs where user_id=$1",[A])),0,"normalized clubs are deleted");
+  assert.equal(Number(await scalar("select count(*) from public.player_club_distances where user_id=$1",[A])),0,"club distances are deleted");
+  assert.equal(Number(await scalar("select count(*) from public.player_balls where user_id=$1",[A])),0,"normalized balls are deleted");
+  assert.equal(Number(await scalar("select count(*) from public.ball_fit_sessions where user_id=$1",[A])),0,"Ball Fit sessions are deleted");
+  assert.equal(Number(await scalar("select count(*) from public.launch_monitor_shots where user_id=$1",[A])),0,"launch-monitor shots are deleted");
   assert.equal(Number(await scalar("select count(*) from public.user_statistics_resets where user_id=$1",[A])),0);
   assert.equal(Number(await scalar("select count(*) from public.social_likes_v3 where user_id=$1",[A])),0);
   assert.equal(Number(await scalar("select count(*) from public.social_comments_v3 where author_id=$1",[A])),0);
@@ -456,8 +511,22 @@ try {
   assert.equal(Number(await scalar("select count(*) from storage.objects where id=$1",[replacementStorage])),1,"ownerless shared Admin document survives Auth deletion");
   assert.equal(await scalar("select public.account_lifecycle_recover($1,$2,$3)",[OP,"delete_golf_data",HASH]),A);
   await q("insert into auth.users(id,email,email_confirmed_at) values($1,'qa-a@example.invalid',now())",[REBORN]);
+  const rebornProfile=(await q(`select name,display_name,given_name,family_name,avatar_url,home_club,typical_score
+    from public.profiles where id=$1`,[REBORN])).rows[0];
+  assert.ok(rebornProfile,"same-email recreation receives a fresh bootstrap profile");
+  assert.equal(rebornProfile.name,"","same-email profile does not recover the previous name");
+  assert.equal(rebornProfile.display_name,"","same-email profile does not recover the previous display name");
+  for(const field of ["given_name","family_name","avatar_url","home_club","typical_score"])
+    assert.equal(rebornProfile[field],null,`same-email profile starts without old ${field}`);
   assert.equal(Number(await scalar("select count(*) from private.group_email_invitations where recipient_email='qa-a@example.invalid'")),0,"same email starts without prior invitations");
   assert.equal(Number(await scalar("select count(*) from public.player_equipment_profiles where user_id=$1",[REBORN])),0,"same email starts without equipment");
+  assert.equal(Number(await scalar("select count(*) from public.player_clubs where user_id=$1",[REBORN])),0,"same email starts without normalized clubs");
+  assert.equal(Number(await scalar("select count(*) from public.player_balls where user_id=$1",[REBORN])),0,"same email starts without the old ball");
+  assert.equal(Number(await scalar("select count(*) from public.ball_fit_sessions where user_id=$1",[REBORN])),0,"same email starts without previous Ball Fit");
+  assert.equal(Number(await scalar("select count(*) from public.launch_monitor_shots where user_id=$1",[REBORN])),0,"same email starts without launch-monitor data");
+  assert.equal(Number(await scalar("select count(*) from public.profile_completion_choices where user_id=$1",[REBORN])),0,"same email starts without profile-completion residue");
+  assert.equal(Number(await scalar("select count(*) from public.user_cloud_state where user_id=$1",[REBORN])),0,"same email starts without prior cloud state or a false conflict base");
+  assert.equal(Number(await scalar("select count(*) from private.ghin_legacy_self_attested_migrations where owner_id=$1",[REBORN])),0,"same email starts without legacy GHIN audit residue");
   assert.equal(Number(await scalar("select count(*) from public.user_statistics_resets where user_id=$1",[REBORN])),0,"same email starts without statistics state");
   // A remaining participant's offline device resends a pre-delete snapshot.
   // The DB tombstone scrubs the identity again rather than resurrecting PII.
@@ -711,6 +780,6 @@ try {
     "ambiguous historical mapping fails closed without mutating the player key");
   assert.notEqual(ambiguousRoundOne,ambiguousRoundTwo);
   await admin();
-  console.log("PASS: full migration graph, historical UUID backfill, stable shared-player tombstones, scores/putts preservation, relational-only reconciliation, tee-preference cleanup, ambiguous local-round fail-closed, 17 Admin refs, Admin hash reconciliation, feedback unlink, verified-email fresh start, private courses/players deleted, nine-rating leaves removed, cross-owner club fail-closed, shared player/tournament preserved and anonymized, named FK diagnostic, requested/data_prepared retries, shared Storage rehome + private manifest, shared round snapshots, stats/equipment cascade, archive unchanged, stale-JWT RLS. Auth HTTP/Storage real Preview remains separate QA.");
+  console.log("PASS: full migration graph, historical UUID backfill, stable shared-player tombstones, scores/putts preservation, relational-only reconciliation, tee-preference cleanup, ambiguous local-round fail-closed, 17 Admin refs, Admin hash reconciliation, feedback unlink, verified-email fresh start, private courses/players deleted, nine-rating leaves removed, cross-owner club fail-closed, shared player/tournament and scorecard preserved/anonymized, private GHIN audit purged, normalized equipment/Ball Fit/profile/cloud state purged, same-email recreation clean, named FK diagnostic, requested/data_prepared retries, shared Storage rehome + private manifest, shared round snapshots, stats/equipment cascade, archive unchanged, stale-JWT RLS. Auth HTTP/Storage real Preview remains separate QA.");
 } catch(error) { console.error(error.code || "ASSERTION", error.message, error.where || "", error.stack || ""); process.exitCode=1; }
 finally { await db.close(); }

@@ -19,7 +19,7 @@ export function validCompletionChoices(value: unknown): value is CompletionChoic
 export function profileCompletion(input: { displayName?: string | null; givenName?: string | null; familyName?: string | null; avatarUrl?: string | null; username?: string | null; handedness?: string | null; homeClub?: string | null; preferredTee?: string | null; indexEnabled: boolean; indexResolution?: "GHIN" | "BACKYARD" | "NONE" | null; indexValue?: number | null; equipment: EquipmentProfile | null; choices: CompletionChoices }) {
  const { choices, equipment } = input;
  const facts: Record<CompletionSection, boolean> = {
-  personal: Boolean(input.displayName?.trim() && input.givenName?.trim() && input.familyName?.trim() && input.avatarUrl?.trim()),
+  personal: Boolean(input.displayName?.trim() && input.givenName?.trim() && input.familyName?.trim()),
   username: Boolean(input.username?.trim()),
   golf: Boolean(input.handedness && input.homeClub?.trim()),
   handicap: input.indexEnabled || Boolean(input.indexResolution) || choices.handicap_choice === "UNKNOWN" || (choices.handicap_choice === "MANUAL" && choices.manual_hcp !== null),

@@ -166,7 +166,7 @@ import type { GroupPreference, UserPreference } from "../lib/backyard-ai/memory/
 import { normalizeMexicanSpanish } from "../lib/backyard-ai/runtime/intent-parser";
 import { roundSetupChangeContainsBettingData, runRoundSetupActionWithBettingConsent } from "../lib/backyard-ai/runtime/betting-consent-boundary";
 import type { CompletionSection } from "../lib/profile-completion";
-import { actionableCloudConflicts, CLOUD_TOMBSTONES_KEY, cloudDataFingerprint, cloudSyncPayloadFingerprint, collectLocalCloudData, downloadCloudData, findActiveDraftOwnershipConflicts, findAmbiguousCloudConflicts, hasLocalCloudPreferenceState, isCloudFieldConflict, mergeLocalFirstActiveDraft, persistCloudMetadata, resolveAmbiguousCloudConflicts, restoreLocalRoundUi, stableValue, trackLocalCloudCheckpoint, trackLocalCloudEdits, type CloudDataBundle, type CloudDataConflict, recordCloudDeletion, uploadCloudData, withCloudAuthRetry } from "../lib/cloud-sync";
+import { actionableCloudConflicts, CLOUD_TOMBSTONES_KEY, cloudDataFingerprint, cloudDraftApplyPlan, cloudSyncPayloadFingerprint, collectLocalCloudData, downloadCloudData, findAmbiguousCloudConflicts, hasLocalCloudPreferenceState, isCloudFieldConflict, mergeLocalAndCloud, persistCloudMetadata, resolveAmbiguousCloudConflicts, restoreLocalRoundUi, stableValue, trackLocalCloudCheckpoint, trackLocalCloudEdits, type CloudDataBundle, type CloudDataConflict, recordCloudDeletion, uploadCloudData, withCloudAuthRetry } from "../lib/cloud-sync";
 import { describeCloudConflict } from "../lib/cloud-conflict-display";
 import { ownsLocalWorkspace, preserveDataConflicts, preserveDraftConflict } from "../lib/account-workspace";
 import { accountPrimaryPlayerId, accountPrimaryRoundPlayer, syncAccountPrimaryFrequentPlayer, syncLinkedRoundPlayerName } from "../lib/account-primary-player";
@@ -944,7 +944,7 @@ function GolfBetsApp() {
       try {
         offlineDeviceId.current = await getOfflineDeviceId();
         if (!cancelled && ownsLocalWorkspace(localStorage, identity.userId)) {
-          await restoreOfflineWorkspace(identity.userId, localStorage, identity.defaultHandicap);
+          await restoreOfflineWorkspace(identity.userId, localStorage, identity.defaultHandicap, offlineDeviceId.current);
         }
       } catch {
         if (!cancelled) setSaveStatus("error");
@@ -1061,12 +1061,15 @@ function GolfBetsApp() {
     // Cloud responses can arrive after a local-first finalization. Reconcile
     // again at the UI boundary so a canonical response captured before the
     // save can never replace a newly confirmed Historical round.
-    const reconciled = mergeLocalFirstActiveDraft(local, data);
+    const reconciled = mergeLocalAndCloud(local, data);
     const changed = (left: unknown, right: unknown) => JSON.stringify(stableValue(left)) !== JSON.stringify(stableValue(right));
-    if (!hasRoundProgress(local.activeDraft) && changed(local.activeDraft, reconciled.activeDraft)) {
-      preserveDraftConflict(localStorage, local.activeDraft);
+    const draftPlan = cloudDraftApplyPlan(local.activeDraft, reconciled.activeDraft);
+    if (draftPlan.changed) {
+      if (draftPlan.preservePrevious) {
+        preserveDraftConflict(localStorage, local.activeDraft);
+        setFeedback("Ronda actualizada desde la nube. La versión local anterior se conservó en este dispositivo.");
+      }
       applyDraft(reconciled.activeDraft, { preserveLocalUi: true });
-      setFeedback("Ronda actualizada desde la nube. La versión local anterior se conservó en este dispositivo.");
     }
     const mergedCourses = mergeDefaultCourses(reconciled.courses);
     if (changed(local.courses, reconciled.courses)) setCourses(mergedCourses);
@@ -1144,13 +1147,12 @@ function GolfBetsApp() {
         let appliedFingerprint = "";
         const completed = await runCloudSyncCycle({
           read, current, status: setCloudStatus,
-          merge: mergeLocalFirstActiveDraft,
+          merge: mergeLocalAndCloud,
           shouldUpload: (_local, remote, merged) => cloudSyncPayloadFingerprint(remote) !== cloudSyncPayloadFingerprint(merged),
           download: () => withCloudAuthRetry(downloadCloudData, liveIdentity.current.accessToken || "", refreshCloudSession),
           upload: data => withCloudAuthRetry(token => uploadCloudData(data, token), liveIdentity.current.accessToken || "", refreshCloudSession),
           conflicts: (local, cloud) => {
-            const ownershipConflicts = findActiveDraftOwnershipConflicts(local, cloud);
-            const conflicts = actionableCloudConflicts(ownershipConflicts.length ? ownershipConflicts : findAmbiguousCloudConflicts(local, cloud));
+            const conflicts = actionableCloudConflicts(findAmbiguousCloudConflicts(local, cloud));
             if (!conflicts.length) return false;
             preserveDataConflicts(localStorage, conflicts);
             setPendingCloudConflict({ local, cloud, conflicts });
@@ -1225,7 +1227,7 @@ function GolfBetsApp() {
             }
             // The write raced with a compatible field. Rebase on the latest
             // canonical copy, keep local navigation, and retry immediately.
-            const rebased = mergeLocalFirstActiveDraft(local, cloud);
+            const rebased = mergeLocalAndCloud(local, cloud);
             applyCloudBundle(rebased, local);
             clearCloudSyncError();
             setCloudStatus("pending");

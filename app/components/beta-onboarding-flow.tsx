@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useViewScrollReset } from "./use-view-scroll-reset";
+import { CatalogCoursePicker } from "./catalog-course-picker";
 import { InitialOnboardingConsents } from './account-consent-checkpoint';
 import { socialRequest } from '../../lib/social-activity-client';
 import { saveOnboardingCheckpoint } from '../../lib/onboarding-checkpoint';
@@ -23,6 +24,7 @@ import {
   navigateBetaOnboarding,
   persistBetaOnboardingProgress,
   readBetaOnboardingProgress,
+  requiredBetaOnboardingResume,
   type BetaOnboardingProgress,
   type BetaOnboardingStep,
 } from "../../lib/beta-onboarding";
@@ -32,12 +34,13 @@ import { ballFitDefaultsFromProfile } from "../../lib/ball-fitting";
 import { selectedHandicapIndex } from "../../lib/handicap-source";
 import { BrandLockup } from "./brand-lockup";
 import { EquipmentOnboarding } from "./equipment-onboarding";
-import { HandicapSourceChoices } from "./handicap-source-selector";
+import { HandicapSourceChoices, ghinIndexHeading } from "./handicap-source-selector";
 import { ModalShell } from "./modal-shell";
 import { InitialDevicePermissions } from "./device-permission-settings";
 import { useGhinReadOnlyProfile } from "./use-ghin-read-only-profile";
 import { useBackyardIndexPreference } from "./use-backyard-index-preference";
 import { BackyardIcon } from "./backyard-icon";
+import { requestFeedback } from "./feedback-dialog";
 import styles from "./beta-onboarding-flow.module.css";
 
 const IMPROVEMENT_LABELS: Record<GolfImprovementGoal, string> = {
@@ -113,8 +116,8 @@ function safeDraft(value: unknown, profile: BackyardProfile): BetaDraft {
 
 function Shell({ progress, eyebrow, title, description, children, actions, onBack, onSaveAndExit }: { progress: BetaOnboardingProgress; eyebrow: string; title: string; description?: string; children: React.ReactNode; actions: React.ReactNode; onBack?: () => void; onSaveAndExit?: () => void }) {
   const visibleSteps: BetaOnboardingStep[] = progress.mode === "quick"
-    ? ["welcome", "permissions", "ghin"]
-    : ["welcome", "permissions", "ghin", "equipment", "improvements", "objective", "plan"];
+    ? ["welcome", "permissions", "course", "ghin"]
+    : ["welcome", "permissions", "course", "ghin", "equipment", "improvements", "objective", "plan"];
   const index = Math.max(0, visibleSteps.indexOf(progress.step));
   const titleRef = useRef<HTMLHeadingElement>(null);
   const [confirmExit, setConfirmExit] = useState(false);
@@ -150,6 +153,7 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, lega
   const [draft, setDraft] = useState<BetaDraft | null>(null);
   const [message, setMessage] = useState("");
   const [entryMode, setEntryMode] = useState<"quick" | "complete" | null>(null);
+  const [homeClubSelectionReady, setHomeClubSelectionReady] = useState(Boolean(profile.homeClubId && profile.homeCourseId));
   const initializedUser = useRef('');
   const checkpointQueue = useRef<Promise<void>>(Promise.resolve());
   const [finishing, setFinishing] = useState(false);
@@ -164,12 +168,9 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, lega
     if (initializedUser.current === profile.userId) return;
     initializedUser.current = profile.userId;
     const restored = readBetaOnboardingProgress(localStorage, profile.userId) || createBetaOnboardingProgress(profile.userId);
-    const permissionSafe = restored.status === "in_progress" && restored.step !== "welcome" && !restored.completedSteps.includes("permissions")
-      ? navigateBetaOnboarding(restored, "permissions")
-      : restored;
-    const existing = permissionSafe.status === "in_progress" && permissionSafe.step === "course"
-      ? navigateBetaOnboarding(permissionSafe, "ghin")
-      : permissionSafe;
+    const existing = requiredBetaOnboardingResume(restored, {
+      homeCourseSelected: Boolean(profile.homeClubId && profile.homeCourseId),
+    });
     let storedDraft: unknown = null;
     try { storedDraft = JSON.parse(localStorage.getItem(betaOnboardingDraftStorageKey(profile.userId)) || "null"); }
     catch { /* A corrupt optional draft restarts only this onboarding. */ }
@@ -219,7 +220,7 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, lega
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
   const previousByStep: Partial<Record<BetaOnboardingStep, Exclude<BetaOnboardingStep, "complete">>> = {
-    permissions: "welcome", course: "permissions", ghin: "permissions", equipment: "ghin", improvements: "equipment", objective: "improvements", plan: "objective",
+    permissions: "welcome", course: "permissions", ghin: "course", equipment: "ghin", improvements: "equipment", objective: "improvements", plan: "objective",
   };
   const navigationProps = {
     ...(previousByStep[progress.step] ? { onBack: () => goTo(previousByStep[progress.step]!) } : {}),
@@ -232,12 +233,18 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, lega
     },
   };
 
-  if (progress.step === "course") return null;
-  if (progress.step === "welcome") return <Shell progress={progress} {...navigationProps} eyebrow="EMPIEZA A TU MANERA" title="Tu Backyard, sin fricción" description="Elige tu fuente de índice y permisos opcionales. El campo se selecciona al jugar una ronda." actions={null}>
+  if (progress.step === "course") return <Shell progress={progress} {...navigationProps} eyebrow="TU CAMPO" title="Elige tu campo habitual" description="Busca tu club habitual, revisa campos relevantes o usa la ubicación que ya autorizaste para ordenar los más cercanos." actions={<button className="primary big" disabled={!profile.homeClubId || !profile.homeCourseId || !homeClubSelectionReady} onClick={() => advance("ghin")}>Continuar: Handicap / Índice</button>}>
+    <CatalogCoursePicker key={`onboarding-home-${profile.userId}`} purpose="home-club" token={accessToken} permissionOwnerId={profile.userId} selectedName={[profile.homeClub, profile.homeCourse].filter(Boolean).join(" · ")} selectedClubId={profile.homeClubId} selectedCourseId={profile.homeCourseId} onSelectionReadyChange={setHomeClubSelectionReady} onRequest={(searchedName) => requestFeedback("COURSE", searchedName ? { name: searchedName } : undefined)} onSelectHomeCourse={async (selection) => {
+      setMessage("");
+      await onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: profile.defaultHandicap, homeClub: selection.clubName, homeClubId: selection.clubId, homeCourse: selection.courseName, homeCourseId: selection.courseId });
+    }} />
+    <p>Este campo queda como tu club habitual. Podrás cambiarlo en Perfil.</p>{message && <p role="alert">{message}</p>}
+  </Shell>;
+  if (progress.step === "welcome") return <Shell progress={progress} {...navigationProps} eyebrow="EMPIEZA A TU MANERA" title="Tu Backyard, sin fricción" description="En ambas opciones elegirás tu campo habitual, fuente de índice y permisos opcionales." actions={null}>
     <div className={styles.welcomeHero} aria-hidden="true"><span className={styles.heroFlag}>⛳</span><div><b>Tu golf, en un solo lugar</b><small>Rondas rápidas · amigos · equipo · estadísticas</small></div><span className={styles.heroBall}>●</span></div>
     <div className={styles.entryGrid}>
-      <button type="button" className={entryMode === "quick" ? styles.entrySelected : styles.entryChoice} aria-pressed={entryMode === "quick"} onClick={() => setEntryMode("quick")}><span aria-hidden="true">⚡</span><div><b>Rápida</b><p>Elige tu fuente de índice y permisos opcionales. Equipo y fitting quedan disponibles para después.</p></div></button>
-      <button type="button" className={entryMode === "complete" ? styles.entrySelected : styles.entryChoice} aria-pressed={entryMode === "complete"} onClick={() => setEntryMode("complete")}><span aria-hidden="true">⛳</span><div><b>Completa</b><p>Configura índice, bolsa, objetivos y permisos opcionales.</p></div></button>
+      <button type="button" className={entryMode === "quick" ? styles.entrySelected : styles.entryChoice} aria-pressed={entryMode === "quick"} onClick={() => setEntryMode("quick")}><span aria-hidden="true">⚡</span><div><b>Rápida</b><p>Elige tu campo habitual, fuente de índice y permisos opcionales. Equipo y fitting quedan disponibles para después.</p></div></button>
+      <button type="button" className={entryMode === "complete" ? styles.entrySelected : styles.entryChoice} aria-pressed={entryMode === "complete"} onClick={() => setEntryMode("complete")}><span aria-hidden="true">⛳</span><div><b>Completa</b><p>Configura campo habitual, índice, bolsa, objetivos y permisos opcionales.</p></div></button>
     </div>
     <InitialOnboardingConsents key={profile.userId} userId={profile.userId} accessToken={accessToken} legalRequired={legalConsentRequired} canContinue={Boolean(entryMode)} onAcceptRequired={onAcceptRequiredConsents} onContinue={() => advance("permissions")} />
   </Shell>;
@@ -255,6 +262,7 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, lega
   />;
 
   if (progress.step === "ghin") {
+    const ghinLinked = ghinControl.profile?.associationStatus === "VERIFIED";
     const continueFlow = () => {
       if (entryMode === "quick") {
         setFinishing(false);
@@ -273,7 +281,7 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, lega
       }
     };
     const sourceChosen = accountIndex.source === "GHIN" || accountIndex.source === "BACKYARD";
-    return <Shell progress={progress} {...navigationProps} eyebrow="HANDICAP / ÍNDICE" title="Elige tu fuente de índice" description="Puedes vincular tu cuenta GHIN, activar Backyard Index o continuar sin índice." actions={sourceChosen ? <button className="primary big" disabled={finishing} onClick={async () => { let delegated = false; try { setFinishing(true); await saveProfileSource(); delegated = continueFlow(); } catch(error) { setMessage(error instanceof Error ? error.message : 'No pudimos guardar. Reintenta.'); } finally { if (!delegated) setFinishing(false); } }}>{finishing ? 'Guardando…' : 'Continuar con esta fuente'}</button> : null}>
+    return <Shell progress={progress} {...navigationProps} eyebrow="HANDICAP / ÍNDICE" title={ghinLinked ? ghinIndexHeading(ghinControl.profile?.handicapIndex) : "Elige tu fuente de índice"} description={ghinLinked ? "GHIN está vinculado y activo. Para elegir otra fuente, primero desvincula GHIN." : "Puedes vincular tu cuenta GHIN, activar Backyard Index o continuar sin índice."} actions={sourceChosen ? <button className="primary big" disabled={finishing} onClick={async () => { let delegated = false; try { setFinishing(true); await saveProfileSource(); delegated = continueFlow(); } catch(error) { setMessage(error instanceof Error ? error.message : 'No pudimos guardar. Reintenta.'); } finally { if (!delegated) setFinishing(false); } }}>{finishing ? 'Guardando…' : 'Continuar con esta fuente'}</button> : null}>
     <HandicapSourceChoices control={indexControl} authenticated={Boolean(profile.userId && profile.userId !== "guest")} ghinControl={ghinControl} onContinueWithoutIndex={async () => { if (finishing) return; let delegated = false; setFinishing(true); setMessage(""); try { await indexControl.change(false); await saveProfileSource(true); delegated = continueFlow(); } catch(error) { setMessage(error instanceof Error ? error.message : 'No pudimos guardar tu elección. Reintenta.'); } finally { if (!delegated) setFinishing(false); } }} />
     <p className={styles.trust}>Si todavía no tienes índice puedes continuar. No inventaremos un valor.</p>{message && <p role="alert">{message}</p>}
   </Shell>;
@@ -299,7 +307,7 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, lega
   </Shell>;
 
   if (progress.step === "permissions") return <Shell progress={progress} {...navigationProps} eyebrow="PERMISOS OPCIONALES" title="Decide una sola vez" description="Puedes usar The Backyard sin ubicación ni notificaciones. Después podrás revisar o desactivar estos permisos desde Configuración." actions={null}>
-    <InitialDevicePermissions key={`initial-permissions-${profile.userId}`} userId={profile.userId} onContinue={() => advance("ghin")} />
+    <InitialDevicePermissions key={`initial-permissions-${profile.userId}`} userId={profile.userId} onContinue={() => advance("course")} />
   </Shell>;
 
   return null;

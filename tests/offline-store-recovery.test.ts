@@ -1,18 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import type { CloudDataBundle } from "../lib/cloud-sync";
+import { CLOUD_LOCAL_META_KEY, type CloudDataBundle } from "../lib/cloud-sync";
 import { accountDeletionMarkerKey } from "../lib/account-state";
 import {
   acknowledgeOfflineBundle,
   persistOfflineBundle,
   readOfflineOutbox,
+  restoreOfflineWorkspace,
   selectNewestOfflineWorkspace,
   selectPendingOfflineOutbox,
   type OfflineAcknowledgement,
   type OfflineOutbox,
   type OfflineWorkspace,
 } from "../lib/offline-store";
+import { STORAGE_KEYS } from "../lib/round-utils";
 
 class MemoryStorage {
   values = new Map<string, string>();
@@ -125,6 +127,58 @@ test("un guardado sólo local actualiza el workspace sin borrar una mutación cl
     await persistOfflineBundle("account-1", bundle("local-workspace-only"), false);
 
     assert.equal((await readOfflineOutbox("account-1"))?.fingerprint, pendingFingerprint);
+  } finally {
+    if (localStorageDescriptor) Object.defineProperty(globalThis, "localStorage", localStorageDescriptor);
+    else delete (globalThis as { localStorage?: unknown }).localStorage;
+    if (indexedDbDescriptor) Object.defineProperty(globalThis, "indexedDB", indexedDbDescriptor);
+    else delete (globalThis as { indexedDB?: unknown }).indexedDB;
+  }
+});
+
+test("reload real elige el draft más nuevo entre localStorage e IndexedDB del mismo dispositivo", async () => {
+  const storage = new MemoryStorage();
+  const localStorageDescriptor = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  const indexedDbDescriptor = Object.getOwnPropertyDescriptor(globalThis, "indexedDB");
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, value: storage });
+  Object.defineProperty(globalThis, "indexedDB", { configurable: true, value: undefined });
+  const deviceId = "iphone-main";
+  const h1 = { roundId: "round-live", scores: { 1: { said: 4 } }, scoreEdits: {} };
+  const h1H2 = { roundId: "round-live", scores: { 1: { said: 4 }, 2: { said: 5 } }, scoreEdits: {} };
+  const h1H2H3 = { roundId: "round-live", scores: { 1: { said: 4 }, 2: { said: 5 }, 3: { said: 3 } }, scoreEdits: {} };
+  const localMetadata = {
+    draftAt: "2026-09-28T12:01:00.000Z",
+    cloudDraftAt: "2026-09-28T12:01:00.000Z",
+    cloudDraftFingerprint: JSON.stringify(h1H2),
+  };
+  try {
+    await persistOfflineBundle("account-stale", {
+      ...bundle("round-live"),
+      deviceId,
+      activeDraft: h1,
+      activeDraftUpdatedAt: "2026-09-28T12:00:00.000Z",
+    }, false);
+    storage.setItem(STORAGE_KEYS.draft, JSON.stringify(h1H2));
+    storage.setItem(CLOUD_LOCAL_META_KEY, JSON.stringify(localMetadata));
+
+    const fromStaleSnapshot = await restoreOfflineWorkspace("account-stale", storage as unknown as Storage, null, deviceId);
+    assert.deepEqual(fromStaleSnapshot?.activeDraft, h1H2);
+    assert.deepEqual(JSON.parse(storage.getItem(STORAGE_KEYS.draft) || "null"), h1H2);
+
+    await persistOfflineBundle("account-newer", {
+      ...bundle("round-live"),
+      deviceId,
+      activeDraft: h1H2H3,
+      activeDraftUpdatedAt: "2026-09-28T12:02:00.000Z",
+      baseDraft: h1H2,
+      baseDraftUpdatedAt: "2026-09-28T12:01:00.000Z",
+      baseDraftFingerprint: JSON.stringify(h1H2),
+    }, false);
+    storage.setItem(STORAGE_KEYS.draft, JSON.stringify(h1H2));
+    storage.setItem(CLOUD_LOCAL_META_KEY, JSON.stringify(localMetadata));
+
+    const fromNewerSnapshot = await restoreOfflineWorkspace("account-newer", storage as unknown as Storage, null, deviceId);
+    assert.deepEqual(fromNewerSnapshot?.activeDraft, h1H2H3);
+    assert.deepEqual(JSON.parse(storage.getItem(STORAGE_KEYS.draft) || "null"), h1H2H3);
   } finally {
     if (localStorageDescriptor) Object.defineProperty(globalThis, "localStorage", localStorageDescriptor);
     else delete (globalThis as { localStorage?: unknown }).localStorage;

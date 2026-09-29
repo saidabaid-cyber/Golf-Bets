@@ -1,7 +1,7 @@
 "use client";
-import { useEffect,useMemo,useRef,useState } from 'react';
-import { courseSelectionLabel,homeCourseSelection,nearestReviewedClubs,reviewedClubsLocationSummary,searchReviewedCourses,type ReviewedCatalogCourse } from '../../lib/review-course-catalog';
-import { resolveAuthorizedNearbyLocation,type NearbyLocationResolution } from '../../lib/device-permissions';
+import { useCallback,useEffect,useMemo,useRef,useState } from 'react';
+import { courseSelectionLabel,homeCourseSelection,nearestReviewedClubs,reviewedClubsLocationSummary,searchReviewedCourses,singleReviewedCourseLayout,type ReviewedCatalogCourse } from '../../lib/review-course-catalog';
+import { readDevicePermissionPreferences,resolveAuthorizedNearbyLocation,type NearbyLocationResolution } from '../../lib/device-permissions';
 import { beginRoundCourseSelection } from '../../lib/round-course-selection';
 import type { Course } from '../../lib/types';
 import { AnchoredSearch,AnchoredSearchOption } from './anchored-search';
@@ -13,6 +13,11 @@ export function CatalogCoursePicker({token,permissionOwnerId,onSelect,onSelectCl
   const [location,setLocation]=useState<PickerLocationState>({status:'idle'});
   const locationController=useRef<AbortController|null>(null);
   const nearby=useMemo(()=>location.status==='located'?nearestReviewedClubs(entries,location.point):[],[entries,location]);
+  const relevant=useMemo(()=>{
+    const clubs=new Map<string,Entry>();
+    for(const entry of entries){const current=clubs.get(entry.clubId);if(!current||entry.completeCards>current.completeCards)clubs.set(entry.clubId,entry);}
+    return [...clubs.values()].sort((a,b)=>Number(b.completeCards>0)-Number(a.completeCards>0)||a.clubName.localeCompare(b.clubName,'es-MX')||a.clubId.localeCompare(b.clubId)).slice(0,3);
+  },[entries]);
   const [nearbyLimit,setNearbyLimit]=useState(3);
   const visibleNearby=nearby.slice(0,nearbyLimit);
   const locating=location.status==='loading';
@@ -79,8 +84,8 @@ export function CatalogCoursePicker({token,permissionOwnerId,onSelect,onSelectCl
     } catch(e){if(sequence===loadSequence.current){setChosen(previousChosen);if(purpose==='home-club'){setRetryCourseId(id);onSelectionReadyChange?.(false);}setError(e instanceof Error?e.message:purpose==='home-club'?'No pudimos guardar este Home Club. Reintenta.':'No pudimos cargar la tarjeta.');}}
     finally {if(sequence===loadSequence.current)setSelectingCourseId(null);}
   }
-  function selectClub(entry:Entry) {++loadSequence.current;setError('');setClub(entry.clubId);setQuery('');setChosen('');setRetryCourseId(null);if(purpose==='home-club')onSelectionReadyChange?.(false);onSelectClub?.(entry);const layouts=entries.filter(c=>c.clubId===entry.clubId);const course=purpose==='home-club'?entry:layouts.length===1?layouts[0]:null;if(course)void selectCourse(course.id);}
-  function locate() {
+  function selectClub(entry:Entry) {++loadSequence.current;setError('');setClub(entry.clubId);setQuery('');setChosen('');setRetryCourseId(null);if(purpose==='home-club')onSelectionReadyChange?.(false);onSelectClub?.(entry);const course=singleReviewedCourseLayout(entries,entry.clubId);if(course)void selectCourse(course.id);}
+  const locate=useCallback(() => {
     locationController.current?.abort();
     const controller=new AbortController();
     locationController.current=controller;
@@ -89,7 +94,11 @@ export function CatalogCoursePicker({token,permissionOwnerId,onSelect,onSelectCl
     void resolveAuthorizedNearbyLocation(localStorage,permissionOwnerId,navigator,navigator.geolocation,{signal:controller.signal})
       .then(result=>{if(!controller.signal.aborted)setLocation(result);})
       .catch(()=>{if(!controller.signal.aborted)setLocation({status:'unavailable'});});
-  }
+  },[permissionOwnerId]);
+  useEffect(()=>{
+    if(!token||(purpose==='home-club'&&!choosingHomeCourse)||!readDevicePermissionPreferences(localStorage,permissionOwnerId).locationEnabled)return;
+    locate();
+  },[choosingHomeCourse,locate,permissionOwnerId,purpose,token]);
   const locationError=({disabled:'Ubicación desactivada en The Backyard. Puedes revisarla en Configuración → Privacidad y permisos o buscar manualmente.',prompt:'La ubicación todavía no está resuelta en este dispositivo. Revísala desde Privacidad y permisos; la búsqueda manual sigue disponible.',denied:'La ubicación está bloqueada en este dispositivo. Puedes revisar el permiso o buscar manualmente.',timeout:'La ubicación agotó el tiempo. Puedes reintentar o buscar manualmente.',unavailable:'No pudimos obtener la ubicación. La búsqueda manual sigue disponible.', 'query-unsupported':'Este navegador no permite consultar el permiso. Revísalo desde Privacidad y permisos o busca manualmente.','geolocation-unavailable':'Este dispositivo no ofrece ubicación. Puedes buscar manualmente.'} as Record<string,string>)[location.status];
   const selectedNearbyClub=nearby.find(entry=>entry.clubId===club);
   const selectedPlace=selectedEntry?[selectedEntry.city,selectedEntry.stateRegion].filter(Boolean).join(', '):selectedNearbyClub?[selectedNearbyClub.city,selectedNearbyClub.stateRegion].filter(Boolean).join(', '):'';
@@ -109,6 +118,7 @@ export function CatalogCoursePicker({token,permissionOwnerId,onSelect,onSelectCl
     {visibleNearby.map(c=><button type="button" className={`${styles.club} ${club===c.clubId?styles.clubSelected:''}`} aria-pressed={club===c.clubId} disabled={selectingCourseId!==null} key={c.clubId} onClick={()=>selectClub(c)}><b>{c.clubName}</b><span>{[c.city,c.stateRegion].filter(Boolean).join(', ')} · {c.distanceKm.toFixed(1)} km</span>{club===c.clubId&&<em>✓ {selectingCourseId?'Guardando…':'Seleccionado'}</em>}</button>)}
     {nearby.length>visibleNearby.length&&<button type="button" className="textButton" onClick={()=>setNearbyLimit(limit=>Math.min(limit+9,nearby.length))}>Ver más campos cercanos</button>}
     {nearby.length>0&&<details className={styles.notes}><summary>Sobre las distancias</summary><small>Distancia geográfica aproximada, no de manejo, entre clubes con ubicación disponible. Algunas ubicaciones: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors (ODbL)</a>.</small></details>}
+    {!query.trim()&&!club&&relevant.length>0&&<div><p><b>Campos relevantes del catálogo</b></p><small>Primero mostramos campos con tarjeta completa; después se ordenan por nombre.</small>{relevant.map(c=><button type="button" className={styles.club} aria-pressed={false} disabled={selectingCourseId!==null} key={`relevant-${c.clubId}`} onClick={()=>selectClub(c)}><b>{c.clubName}</b><span>{[c.city,c.stateRegion].filter(Boolean).join(', ')}</span></button>)}</div>}
     <AnchoredSearch inlineResults label="Buscar otro campo" value={query} onChange={setQuery} placeholder="Nombre, club o nombre alternativo" expanded={Boolean(query.trim())} status={loading?'Cargando catálogo…':query.trim()&&!clubs.length?'Sin coincidencias. Puedes solicitar el campo.':`${entries.length} recorridos disponibles`}>
       {clubs.slice(0,30).map(c=><AnchoredSearchOption key={c.clubId} label={`Seleccionar ${c.clubName}`} onSelect={()=>selectClub(c)}><b>{c.clubName}</b><small>{[c.city,c.stateRegion].filter(Boolean).join(', ')}</small></AnchoredSearchOption>)}
       {clubs.length>30&&<p>Refina el nombre para ver más coincidencias.</p>}

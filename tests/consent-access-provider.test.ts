@@ -24,7 +24,7 @@ function text(value: unknown): string {
 
 // Executes the production provider's render branches with a server-verified
 // identity. Bootstrap effects are intentionally not live OAuth/DB QA.
-function providerHarness(options: { existingNotice?: boolean; newAccount?: boolean; mappingPending?: boolean; provider?: "google" | "email" } = {}) {
+function providerHarness(options: { existingNotice?: boolean; newAccount?: boolean; mappingPending?: boolean; provider?: "google" | "email" | "apple" } = {}) {
   const source = readFileSync("app/components/account-provider.tsx", "utf8");
   const providerBody = source.slice(source.indexOf("export function AccountProvider("));
   const stateNames = [...providerBody.matchAll(/const \[(\w+),[^\]]+\] = useState(?:<[^;]+?>)?\(/g)].map((match) => match[1]);
@@ -82,7 +82,7 @@ test("new authenticated account enters the single profile/onboarding flow before
   assert.ok(!nodes(screen).includes(provider.child));
 });
 
-for (const authProvider of ["google", "email"] as const) {
+for (const authProvider of ["google", "email", "apple"] as const) {
   test(`${authProvider}: verified existing signup opens the app with an informational notice, not a second gate`, () => {
     const provider = providerHarness({ existingNotice: true, provider: authProvider });
     const screen = provider.render();
@@ -90,6 +90,13 @@ for (const authProvider of ["google", "email"] as const) {
     assert.ok(nodes(screen).includes(provider.child));
     assert.match(text(screen), /Ya tienes una cuenta\. Vamos a iniciar sesión\./);
     assert.equal(nodes(screen).some(node => typeof node.type === "function" && node.type.name === "ProfileSetupScreen"), false);
+  });
+
+  test(`${authProvider}: verified new signup enters profile setup before the app`, () => {
+    const provider = providerHarness({ newAccount: true, provider: authProvider });
+    const screen = provider.render();
+    assert.ok(nodes(screen).some((node) => typeof node.type === "function" && node.type.name === "ProfileSetupScreen"));
+    assert.ok(!nodes(screen).includes(provider.child));
   });
 }
 

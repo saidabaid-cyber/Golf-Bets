@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {nearestReviewedClubs,reviewedClubsLocationSummary,searchReviewedCourses,reviewedTeeToCourse,type ReviewedCatalogCourse,type ReviewedTeeSource} from '../lib/review-course-catalog';
+import {nearestReviewedClubs,reviewedClubsLocationSummary,searchReviewedCourses,singleReviewedCourseLayout,reviewedTeeToCourse,type ReviewedCatalogCourse,type ReviewedTeeSource} from '../lib/review-course-catalog';
 import {teeAssignmentSnapshot,updatePlayerTeeAssignment,reconcilePlayerTeeAssignments} from '../lib/player-tee-assignments';
 import {withPlayerCourseCards,holeForPlayer} from '../lib/player-course-card';
 import {winnerIdsForHole} from '../lib/engine';
@@ -9,6 +9,10 @@ const tee:ReviewedTeeSource={id:'tee-qa',name:'Azules',rating_category:null,cour
 const c:ReviewedCatalogCourse={id:'course-qa',clubId:'club-qa',name:'Recorrido Norte',clubName:'Club México QA',holes:18,city:'Puebla',stateRegion:'Puebla',aliases:['Campo antiguo QA'],sourceUrl:'https://example.invalid/source',observedAt:'2026-09-20',dataVersion:'qa',tees:[tee]};
 for(const query of ['MEXICO','méxico','campo antiguo','puebla norte'])test(`complete catalog search: ${query}`,()=>assert.equal(searchReviewedCourses([c],query).length,1));
 test('unknown query is empty',()=>assert.equal(searchReviewedCourses([c],'missing').length,0));
+test('home course auto-selects only a club with one layout',()=>{
+  assert.equal(singleReviewedCourseLayout([c],'club-qa')?.id,'course-qa');
+  assert.equal(singleReviewedCourseLayout([c,{...c,id:'course-south',name:'Recorrido Sur'}],'club-qa'),null);
+});
 test('verified clubs outside 50 km are excluded from nearby without affecting manual search',()=>{
  const rows=[0,1,2].map(i=>({...c,id:`c${i}`,clubId:`club${i}`,latitude:19+i*.1,longitude:-98,locationEvidence:{sourceUrl:'https://example.invalid/map',verifiedAt:'2026-09-20'}}));
  const distant=nearestReviewedClubs(rows,{latitude:40,longitude:-74});

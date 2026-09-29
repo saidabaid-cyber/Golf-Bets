@@ -78,10 +78,11 @@ test("course-only setup persists and restores through existing durable offline f
   try {
     storage.setItem(STORAGE_KEYS.draft, JSON.stringify(courseOnlyDraft()));
     const bundle = collectLocalCloudData(storage);
+    bundle.deviceId = "wizard-device";
     await persistOfflineBundle("wizard-owner-qa", bundle, true);
     assert.ok((await readOfflineOutbox("wizard-owner-qa"))?.bundle.activeDraft);
     storage.removeItem(STORAGE_KEYS.draft);
-    const recovered = await restoreOfflineWorkspace("wizard-owner-qa", storage, null);
+    const recovered = await restoreOfflineWorkspace("wizard-owner-qa", storage, null, "wizard-device");
     assert.ok(recovered?.activeDraft);
     const restored = normalizeRoundDraft(JSON.parse(storage.getItem(STORAGE_KEYS.draft)!))!;
     assert.equal(restored.roundId, "wizard-course-only");

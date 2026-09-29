@@ -16,16 +16,17 @@ export function verifiedGhinHandicapIndex(profile: GhinProfileProjection | null 
 }
 
 /** Canonical account Index resolver shared by Profile, rounds and Ball Fit.
- * An explicit owner preference selects the active source. A verified GHIN
- * projection remains the legacy fallback when no preference has been saved.
+ * A verified GHIN association locks the active source until it is unlinked.
+ * An explicit owner preference selects the source only while GHIN is unlinked.
  * An explicitly selected Backyard Index is calculated from frozen eligible-round evidence.
  * Legacy manual profile values, Auth metadata and unverified provider rows are
  * never promoted into an account Index. */
 export function selectedHandicapIndex(preference: BackyardIndexPreference | null, history: readonly RoundSnapshot[], userId: string, ghinProfile: GhinProfileProjection | null = null): SelectedHandicapIndex {
   const ghinIndex = verifiedGhinHandicapIndex(ghinProfile);
   if (!userId || userId === "guest") return { source: null, value: null };
+  if (ghinProfile?.associationStatus === "VERIFIED") return { source: "GHIN", value: ghinIndex };
   if (!preference) {
-    return ghinIndex !== null ? { source: "GHIN", value: ghinIndex } : { source: null, value: null };
+    return { source: null, value: null };
   }
   if (preference.userId !== userId) return { source: null, value: null };
   if (preference.handicapSource === "GHIN" && ghinIndex !== null) {

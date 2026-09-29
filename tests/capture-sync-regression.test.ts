@@ -3,10 +3,11 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { describeCloudConflict } from "../lib/cloud-conflict-display";
-import { actionableCloudConflicts, cloudSyncPayloadFingerprint, findActiveDraftOwnershipConflicts, findAmbiguousCloudConflicts, mergeLocalAndCloud, mergeLocalFirstActiveDraft, restoreLocalRoundUi, type CloudDataBundle } from "../lib/cloud-sync";
+import { actionableCloudConflicts, cloudDraftApplyPlan, cloudSyncPayloadFingerprint, findAmbiguousCloudConflicts, mergeLocalAndCloud, restoreLocalRoundUi, type CloudDataBundle } from "../lib/cloud-sync";
 import { runCloudSyncCycle } from "../lib/cloud-sync-cycle";
 import { ballFriendScoreResult } from "../lib/hole-bet-display";
 import { finalizeNumericCapture, normalizeNumericCaptureText, parseNumericCapture } from "../lib/numeric-input";
+import { reconcileOfflineWorkspace, type OfflineWorkspace } from "../lib/offline-store";
 
 function bundle(deviceId: string, activeDraft: unknown, baseDraft: unknown): CloudDataBundle {
   return {
@@ -105,6 +106,77 @@ test("una respuesta cloud más nueva en reloj del mismo dispositivo no retrocede
   assert.equal(findAmbiguousCloudConflicts(localBundle, cloudBundle).length, 0);
 });
 
+test("reload conserva H1+H2 cuando IndexedDB del mismo dispositivo todavía contiene sólo H1", () => {
+  const h1 = { roundId: "round-live", scores: { 1: { said: 4 } }, scoreEdits: {} };
+  const h1H2 = { roundId: "round-live", scores: { 1: { said: 4 }, 2: { said: 5 } }, scoreEdits: {} };
+  const local = {
+    ...bundle("iphone-main", h1H2, h1H2),
+    activeDraftUpdatedAt: "2026-09-28T12:01:00.000Z",
+    baseDraftUpdatedAt: "2026-09-28T12:01:00.000Z",
+    baseDraftFingerprint: JSON.stringify(h1H2),
+  };
+  const savedBundle = {
+    ...bundle("iphone-main", h1, undefined),
+    activeDraftUpdatedAt: "2026-09-28T12:00:00.000Z",
+    baseDraft: undefined,
+    baseDraftUpdatedAt: undefined,
+    baseDraftFingerprint: undefined,
+  };
+  const saved: OfflineWorkspace = {
+    ownerId: "account-1",
+    bundle: savedBundle,
+    fingerprint: "stale-h1",
+    savedAt: "2026-09-28T12:00:00.000Z",
+  };
+
+  const recovered = reconcileOfflineWorkspace(local, saved);
+  assert.deepEqual(recovered.activeDraft, h1H2);
+  assert.equal(recovered.activeDraftUpdatedAt, local.activeDraftUpdatedAt);
+  assert.equal(recovered.baseDraftFingerprint, local.baseDraftFingerprint);
+});
+
+test("reload sí recupera H3 cuando el snapshot IndexedDB del mismo dispositivo es más nuevo", () => {
+  const h1H2 = { roundId: "round-live", scores: { 1: { said: 4 }, 2: { said: 5 } }, scoreEdits: {} };
+  const h1H2H3 = { roundId: "round-live", scores: { 1: { said: 4 }, 2: { said: 5 }, 3: { said: 3 } }, scoreEdits: {} };
+  const local = {
+    ...bundle("iphone-main", h1H2, h1H2),
+    activeDraftUpdatedAt: "2026-09-28T12:01:00.000Z",
+    baseDraftUpdatedAt: "2026-09-28T12:01:00.000Z",
+    baseDraftFingerprint: JSON.stringify(h1H2),
+  };
+  const savedBundle = {
+    ...bundle("iphone-main", h1H2H3, h1H2),
+    activeDraftUpdatedAt: "2026-09-28T12:02:00.000Z",
+    baseDraftUpdatedAt: "2026-09-28T12:01:00.000Z",
+    baseDraftFingerprint: JSON.stringify(h1H2),
+  };
+  const saved: OfflineWorkspace = {
+    ownerId: "account-1",
+    bundle: savedBundle,
+    fingerprint: "newer-h3",
+    savedAt: "2026-09-28T12:02:00.000Z",
+  };
+
+  const recovered = reconcileOfflineWorkspace(local, saved);
+  assert.deepEqual(recovered.activeDraft, h1H2H3);
+  assert.equal(recovered.activeDraftUpdatedAt, savedBundle.activeDraftUpdatedAt);
+});
+
+test("un draft reconciliado compatible se aplica a React sin preservar un falso conflicto", () => {
+  const h1 = { roundId: "round-live", scores: { 1: { said: 4 } }, currentIndex: 1 };
+  const h1H2 = { roundId: "round-live", scores: { 1: { said: 4 }, 2: { said: 5 } }, currentIndex: 1 };
+  assert.deepEqual(cloudDraftApplyPlan(h1, h1H2), { changed: true, preservePrevious: false });
+  assert.deepEqual(cloudDraftApplyPlan(null, h1), { changed: true, preservePrevious: true });
+  assert.deepEqual(cloudDraftApplyPlan(h1, { ...h1, currentIndex: 2 }), { changed: false, preservePrevious: false });
+
+  const page = readFileSync("app/page.tsx", "utf8");
+  const start = page.indexOf("const applyCloudBundle");
+  const end = page.indexOf("useEffect(() =>", start);
+  const applyBlock = page.slice(start, end);
+  assert.match(applyBlock, /const draftPlan = cloudDraftApplyPlan\(local\.activeDraft, reconciled\.activeDraft\)/);
+  assert.match(applyBlock, /if \(draftPlan\.changed\) \{[\s\S]*?if \(draftPlan\.preservePrevious\) \{[\s\S]*?preserveDraftConflict[\s\S]*?\}[\s\S]*?applyDraft\(reconciled\.activeDraft, \{ preserveLocalUi: true \}\)/);
+});
+
 test("dos dispositivos sin base común no usan el reloj para ocultar un conflicto real", () => {
   const local = { roundId: "round-live", scores: { 8: { said: 3 } } };
   const cloud = { roundId: "round-live", scores: { 8: { said: 6 } } };
@@ -174,7 +246,7 @@ test("ronda activa local conserva H1 exacto ante nube retrasada y usa un solo ci
     },
     current: () => true,
     status: () => {},
-    merge: mergeLocalFirstActiveDraft,
+    merge: mergeLocalAndCloud,
     shouldUpload: (_before, remote, merged) => cloudSyncPayloadFingerprint(remote) !== cloudSyncPayloadFingerprint(merged),
   });
   assert.equal(complete, true);
@@ -199,7 +271,7 @@ test("veinte ciclos derivados sin edición hacen GET de seguridad pero cero POST
       apply: data => { local = structuredClone(data); },
       current: () => true,
       status: () => {},
-      merge: mergeLocalFirstActiveDraft,
+      merge: mergeLocalAndCloud,
       shouldUpload: (_before, remote, merged) => cloudSyncPayloadFingerprint(remote) !== cloudSyncPayloadFingerprint(merged),
     }), true);
   }
@@ -212,10 +284,39 @@ test("veinte ciclos derivados sin edición hacen GET de seguridad pero cero POST
   assert.doesNotMatch(page, /useEffect\(\(\) => \{\s*requestCloudSync\.current\?\.\(\);\s*\}, \[courses,/);
 });
 
-test("otro dispositivo con una versión distinta detiene sync y conserva el draft local", async () => {
+test("el orquestador real combina campos disjuntos de dos dispositivos y los sube", async () => {
+  const baseDraft = { roundId: "round-live", scores: {}, scoreEdits: {} };
+  const localDraft = { roundId: "round-live", scores: { 1: { said: 4 } }, scoreEdits: {} };
+  const cloudDraft = { roundId: "round-live", scores: { 2: { playerB: 5 } }, scoreEdits: {} };
+  let local = bundle("iphone-a", localDraft, baseDraft);
+  let cloud: CloudDataBundle = { ...bundle("iphone-b", cloudDraft, undefined), baseDraft: undefined, baseDraftFingerprint: undefined };
+  let posts = 0;
+  const complete = await runCloudSyncCycle({
+    read: () => structuredClone(local),
+    download: async () => structuredClone(cloud),
+    upload: async data => { posts += 1; cloud = structuredClone(data); },
+    media: async () => {},
+    apply: data => { local = structuredClone(data); },
+    conflicts: (before, remote) => actionableCloudConflicts(findAmbiguousCloudConflicts(before, remote)).length > 0,
+    current: () => true,
+    status: () => {},
+    merge: mergeLocalAndCloud,
+    shouldUpload: (_before, remote, merged) => cloudSyncPayloadFingerprint(remote) !== cloudSyncPayloadFingerprint(merged),
+  });
+  assert.equal(complete, true);
+  assert.equal(posts, 1);
+  assert.deepEqual((local.activeDraft as typeof localDraft).scores, {
+    1: { said: 4 },
+    2: { playerB: 5 },
+  });
+  assert.deepEqual(local.activeDraft, cloud.activeDraft);
+});
+
+test("el orquestador real detiene sólo un conflicto genuino del mismo campo", async () => {
+  const baseDraft = { roundId: "round-live", scores: { 1: { said: 5 } }, scoreEdits: {} };
   const localDraft = { roundId: "round-live", scores: { 1: { said: 4 } }, scoreEdits: {} };
   const cloudDraft = { roundId: "round-live", scores: { 1: { said: 6 } }, scoreEdits: {} };
-  let local = bundle("iphone-a", localDraft, undefined);
+  let local = bundle("iphone-a", localDraft, baseDraft);
   const cloud = { ...bundle("iphone-b", cloudDraft, undefined), baseDraft: undefined, baseDraftFingerprint: undefined };
   let applied = 0;
   let posts = 0;
@@ -225,10 +326,10 @@ test("otro dispositivo con una versión distinta detiene sync y conserva el draf
     upload: async () => { posts += 1; },
     media: async () => {},
     apply: data => { applied += 1; local = structuredClone(data); },
-    conflicts: (before, remote) => actionableCloudConflicts(findActiveDraftOwnershipConflicts(before, remote)).length > 0,
+    conflicts: (before, remote) => actionableCloudConflicts(findAmbiguousCloudConflicts(before, remote)).length > 0,
     current: () => true,
     status: () => {},
-    merge: mergeLocalFirstActiveDraft,
+    merge: mergeLocalAndCloud,
     shouldUpload: (_before, remote, merged) => cloudSyncPayloadFingerprint(remote) !== cloudSyncPayloadFingerprint(merged),
   });
   assert.equal(complete, false);

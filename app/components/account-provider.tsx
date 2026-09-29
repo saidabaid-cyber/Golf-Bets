@@ -62,6 +62,7 @@ import { parseStoredProfileLocation, readProfileLocationMetadata, PROFILE_LOCATI
 import { syncExistingSocialProfileAvatar } from "../../lib/profile-avatar-sync";
 import { consumeAccountEntryIntent, readAccountEntry, readCurrentAccountEntry, rememberAccountEntryIntent, type AccountEntry } from "../../lib/account-entry";
 import { BettingConsentDialog } from "./betting-consent-dialog";
+import { FeedbackDialog } from "./feedback-dialog";
 import { persistBettingDataConsent } from "../../lib/betting-consent";
 import { acknowledgePendingProfileWrite, cloudProfileFields, cloudProfileRevisionIsNewer, cloudProfileRevisionKey, createProfileWriteCoordinator, queuePendingProfileWrite, readPendingProfileWrite, recordCloudProfileRevision, restorePendingProfileWrite, retimePendingProfileWrite, type CloudProfileFields, type ProfileWriteCoordinator } from "../../lib/profile-sync";
 import { createEmptyEquipmentProfile, loadEquipmentProfile, saveEquipmentProfile } from "../../lib/golf-equipment";
@@ -413,13 +414,14 @@ function ProfileSetupScreen({ identity, onSave, onBack }: {
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const autoSaveAttempted = useRef(false);
   const missing = missingInitialProfileFields(identity);
-  const missingKey = missing.join(":");
-  const identityAlreadyNamed = !missing.includes("displayName");
   const saveProfileValues = useCallback(async () => {
     if (avatarBusy) return;
-    const displayName = identityAlreadyNamed ? identity.displayName.trim() : [givenName.trim(), familyName.trim()].filter(Boolean).join(" ");
+    if (!givenName.trim() || !familyName.trim()) {
+      setMessage("Captura tu nombre y apellido(s) para continuar.");
+      return;
+    }
+    const displayName = [givenName.trim(), familyName.trim()].filter(Boolean).join(" ");
     const validation = validateProfileDraft(displayName, "");
     if (!validation.ok) { setMessage(validation.message); return; }
     const avatarValidation = validateProfileAvatarUrl(avatarUrl);
@@ -443,33 +445,20 @@ function ProfileSetupScreen({ identity, onSave, onBack }: {
     }); }
     catch { setMessage("No pudimos completar el perfil. Revisa tu conexión e intenta nuevamente."); }
     finally { setBusy(false); }
-  }, [avatarBusy, identityAlreadyNamed, identity.displayName, identity.defaultHandicap, givenName, familyName, avatarUrl, location, city, handedness, onSave]);
+  }, [avatarBusy, identity.defaultHandicap, givenName, familyName, avatarUrl, location, city, handedness, onSave]);
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await saveProfileValues();
   }
 
-  useEffect(() => {
-    if (missingKey || autoSaveAttempted.current) return;
-    autoSaveAttempted.current = true;
-    void saveProfileValues();
-  }, [missingKey, saveProfileValues]);
-
-  if (!missing.length) return <main className={`consentScreen profileSetupScreen ${initialHighContrast ? 'highContrast' : ''}`}><section className="consentCard profileSetupCard">
-    <BrandLockup compact />
-    <div className="eyebrow">GOLF PROFILE</div>
-    <h1>Continuando tu alta…</h1>
-    <p>Ya conservamos la identidad y las preferencias que habías guardado.</p>
-    {message && <><div className="accessMessage" role="alert">{message}</div><button type="button" className="primary big" disabled={busy} onClick={() => void saveProfileValues()}>{busy ? "Guardando…" : "Reintentar"}</button></>}
-  </section></main>;
-
   return <main className={`consentScreen profileSetupScreen ${initialHighContrast ? 'highContrast' : ''}`}><section className="consentCard profileSetupCard">
     <BrandLockup compact />
     <div className="eyebrow">GOLF PROFILE</div>
-    <h1>Completa tus datos de golf</h1>
-    <p>Sólo falta la información que Google y tu perfil guardado no conocen.</p>
+    <h1>Revisa tus datos personales</h1>
+    <p>Confirma o edita tu nombre, apellidos y foto antes de continuar.</p>
     <form className="profileSetupForm" onSubmit={saveProfile} noValidate>
-      {!identityAlreadyNamed && <><div className="grid2"><label htmlFor="profile-setup-given">Nombre<input id="profile-setup-given" autoComplete="given-name" enterKeyHint="next" value={givenName} onChange={(event) => setGivenName(event.target.value)} placeholder="Tu nombre" /></label><label htmlFor="profile-setup-family">Apellidos<input id="profile-setup-family" autoComplete="family-name" enterKeyHint="next" value={familyName} onChange={(event) => setFamilyName(event.target.value)} placeholder="Tus apellidos" /></label></div>{!identity.avatarUrl && <><label>Foto / avatar opcional</label><ProfileImagePicker value={avatarUrl} onChange={setAvatarUrl} onBusyChange={setAvatarBusy} accessToken={identity.accessToken} userId={identity.userId} /></>}</>}
+      <div className="grid2"><label htmlFor="profile-setup-given">Nombre<input id="profile-setup-given" required autoComplete="given-name" enterKeyHint="next" value={givenName} onChange={(event) => setGivenName(event.target.value)} placeholder="Tu nombre" /></label><label htmlFor="profile-setup-family">Apellidos<input id="profile-setup-family" required autoComplete="family-name" enterKeyHint="next" value={familyName} onChange={(event) => setFamilyName(event.target.value)} placeholder="Tus apellidos" /></label></div>
+      <label>Foto / avatar opcional</label><ProfileImagePicker value={avatarUrl} onChange={setAvatarUrl} onBusyChange={setAvatarBusy} accessToken={identity.accessToken} userId={identity.userId} />
       {missing.includes("location") && <><ProfileLocationPicker value={location} onChange={(next) => { setLocation(next); setMessage(""); }} /><label htmlFor="profile-setup-city">Ciudad opcional<input id="profile-setup-city" autoComplete="address-level2" value={city} onChange={(event) => setCity(event.target.value)} placeholder="Puebla" /></label></>}
       {missing.includes("handedness") && <fieldset className="handednessChoice"><legend>Mano dominante</legend><label><input type="radio" name="handedness" checked={handedness === "right"} onChange={() => setHandedness("right")} />Derecha</label><label><input type="radio" name="handedness" checked={handedness === "left"} onChange={() => setHandedness("left")} />Izquierda</label></fieldset>}
       {message && <div className="accessMessage" role="alert">{message}</div>}
@@ -1928,8 +1917,9 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   if (identity.mode === "authenticated" && betaOnboardingRequired) return <AccountContext.Provider value={context!}>
     <BetaOnboardingFlow profile={identity} accessToken={identity.accessToken} onUpdateProfile={updateProfile} legalConsentRequired={!currentConsent} onAcceptRequiredConsents={() => acceptRequiredConsents(true)} onComplete={finishBetaOnboarding} />
     {bettingConsentDialog}
+    <FeedbackDialog key={`feedback:onboarding:${identity.userId}`} token={identity.accessToken} email={identity.email} screen="onboarding" />
   </AccountContext.Provider>;
-  if (identity.mode === "authenticated" && equipmentOnboardingRequired) return <CanonicalEquipmentOnboarding identity={identity} onComplete={finishEquipmentOnboarding} />;
+  if (identity.mode === "authenticated" && equipmentOnboardingRequired) return <><CanonicalEquipmentOnboarding identity={identity} onComplete={finishEquipmentOnboarding} /><FeedbackDialog key={`feedback:equipment-onboarding:${identity.userId}`} token={identity.accessToken} email={identity.email} screen="equipment-onboarding" /></>;
 
   const app = <AccountContext.Provider value={context!}>
     {existingAccountNotice && <div className="notice" role="status">Ya tienes una cuenta. Vamos a iniciar sesión.<button type="button" className="textButton" aria-label="Cerrar aviso de cuenta existente" onClick={() => setExistingAccountNotice(false)}>Entendido</button></div>}

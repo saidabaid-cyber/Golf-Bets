@@ -89,8 +89,34 @@ test("focus areas are multi-select cards with category-specific iconography", ()
   assert.match(onboarding, /\{active \? "✓" : ""\}/);
   assert.match(icons, /bunker:/);
   assert.match(icons, /mental:/);
+  for (const icon of ["driver", "irons", "approach", "shortGame", "bunker", "putting", "consistency", "strategy", "mental", "handicap"]) assert.match(icons, new RegExp(`${icon}:`));
+  const mapping = onboarding.match(/const IMPROVEMENT_ICONS[\s\S]*?= \{([\s\S]*?)\};/)?.[1] || "";
+  const assignedIcons = [...mapping.matchAll(/:\s*"([^"]+)"/g)].map((match) => match[1]);
+  assert.equal(assignedIcons.length, 10);
+  assert.equal(new Set(assignedIcons).size, 10, "cada categoría conserva un icono propio");
   assert.match(css, /grid-template-columns:\s*repeat\(2,minmax\(0,1fr\)\)/);
   assert.match(css, /onboarding-course-hero\.png/);
+});
+
+test("Ball Fit priorities use nine literal and non-repeated icons", () => {
+  const wizard = source("app/components/ball-fit-wizard.tsx");
+  const icons = source("app/components/backyard-icon.tsx");
+  const expected = {
+    DRIVER_DISTANCE: "driverDistance",
+    LESS_DRIVER_SPIN: "lessDriverSpin",
+    STABILITY_CONTROL: "stabilityControl",
+    HEIGHT: "trajectoryHeight",
+    IRON_CONTROL: "ironControl",
+    STOP_ON_GREEN: "stopOnGreen",
+    WEDGE_SPIN: "wedgeSpin",
+    GREENSIDE_FEEL: "greensideFeel",
+    PUTTER_FEEL: "putterFeel",
+  } as const;
+  for (const [priority, icon] of Object.entries(expected)) {
+    assert.match(wizard, new RegExp(`${priority}: "${icon}"`));
+    assert.match(icons, new RegExp(`${icon}:`));
+  }
+  assert.equal(new Set(Object.values(expected)).size, 9);
 });
 
 test("index selection presents GHIN and Backyard as branded product choices", () => {
@@ -114,17 +140,22 @@ test("launch-monitor capture explains the block first and auto-applies clear rea
   assert.match(camera, /Corrige sólo lo necesario/);
   assert.match(camera, /Editar datos detectados/);
   assert.match(capture, /setActiveClub\(nextProtocolClub/);
-  const chooseClub = capture.indexOf('data-capture-order="1"');
-  const uploadPhotos = capture.indexOf('data-capture-order="2"');
-  const shotSummary = capture.indexOf('data-capture-order="3"');
-  assert.ok(chooseClub >= 0 && chooseClub < uploadPhotos && uploadPhotos < shotSummary);
-  assert.match(capture, /¿Qué palo vas a subir\?/);
+  const orderedStages = [1, 2, 3, 4, 5].map((step) => capture.indexOf(`data-capture-order="${step}"`));
+  assert.ok(orderedStages.every((position, index) => position >= 0 && (index === 0 || position > orderedStages[index - 1])), "el flujo conserva los cinco pasos en orden");
+  assert.match(capture, /Selecciona tu palo/);
+  assert.match(capture, /Pitching Wedge/);
+  assert.match(capture, /Half Wedge \/ Approach/);
   assert.match(capture, /ClubCategoryVisual/);
+  assert.equal((capture.match(/showBranding=\{false\}/g) || []).length, 2, "selector y resumen usan cutouts limpios");
+  assert.match(capture, /Análisis automático/);
+  assert.match(capture, /Mediciones aplicadas/);
+  assert.match(capture, /\["carryYards", "ballSpeedMph", "launchAngleDegrees", "spinRpm"\]/);
   assert.match(capture, /updateShotMetric/);
   assert.match(capture, /Excluir/);
   assert.match(capture, /Capturar datos manualmente/);
   assert.match(capture, /shotDetailsOpen/);
   assert.match(capture, /Guardar y continuar/);
+  assert.match(capture, /data-capture-order="5"[\s\S]*disabled=\{!onDone \|\| includedShots === 0\}/);
   assert.doesNotMatch(capture, /Guardar golpe|Guardar captura parcial/);
   assert.doesNotMatch(camera, /Revisa antes de guardar/);
 });

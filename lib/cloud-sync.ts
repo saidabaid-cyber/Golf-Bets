@@ -428,7 +428,12 @@ export function mergeActiveDraftGranular(local: CloudDataBundle, cloud: CloudDat
   // triggered it even though its draft payload is older. During active capture,
   // this installation's durable local draft is authoritative and is uploaded on
   // the next acknowledged cycle; never let that response roll scores backward.
-  if (sameInstallation && localHasProgress) return { value: restore(localDraft), conflicts };
+  // Without a common base, an older response from this installation cannot be
+  // separated safely from a newer local edit, so keep the complete local
+  // draft. Once a base exists, the field-level merge is safe and must run:
+  // the acknowledged response may also contain compatible edits imported
+  // from another device, and replacing it wholesale would discard them.
+  if (sameInstallation && localHasProgress && !hasBase) return { value: restore(localDraft), conflicts };
 
   if (!hasBase) {
     if (localDraft === null || cloudDraft === null) {
@@ -496,6 +501,17 @@ export function mergeLocalAndCloud(local: CloudDataBundle, cloud: CloudDataBundl
 
 function sameValue(left: unknown, right: unknown) {
   return JSON.stringify(stableValue(left)) === JSON.stringify(stableValue(right));
+}
+
+/** Describe the UI work required after a conflict-free draft reconciliation.
+ * A compatible cloud edit must reach React state even while a round is active;
+ * writing only localStorage lets the next state-driven autosave erase it. */
+export function cloudDraftApplyPlan(localDraft: unknown, reconciledDraft: unknown) {
+  const changed = !sameValue(stripLocalRoundUi(localDraft), stripLocalRoundUi(reconciledDraft));
+  return {
+    changed,
+    preservePrevious: changed && !hasRoundProgress(localDraft),
+  };
 }
 
 /** During active capture this installation is authoritative for its draft.

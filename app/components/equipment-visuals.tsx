@@ -15,8 +15,8 @@ const CLUB_PRODUCT_IMAGE: Record<ClubCategory, string> = {
   PUTTER: "/brand/equipment/backyard-putter-clean.png",
 };
 
-/** Owned, unbranded product cutouts. The approved master mark is layered in DOM. */
-export function ClubCategoryVisual({ category, className, useMasterBrand = false }: { category: ClubCategory; className?: string; useMasterBrand?: boolean }) {
+/** Owned, unbranded product cutouts. Existing surfaces keep branding unless they explicitly opt out. */
+export function ClubCategoryVisual({ category, className, useMasterBrand = false, showBranding = true }: { category: ClubCategory; className?: string; useMasterBrand?: boolean; showBranding?: boolean }) {
   return <span className={`${styles.clubVisual} ${className || ""}`} data-club-category={category}>
     <Image
       className={styles.productImage}
@@ -27,7 +27,7 @@ export function ClubCategoryVisual({ category, className, useMasterBrand = false
       alt=""
       aria-hidden="true"
     />
-    {useMasterBrand
+    {showBranding && (useMasterBrand
       ? <Image
           className={styles.clubMasterBrand}
           src="/brand/the-backyard-logo.svg"
@@ -37,7 +37,7 @@ export function ClubCategoryVisual({ category, className, useMasterBrand = false
           alt=""
           aria-hidden="true"
         />
-      : <span className={styles.clubBranding} aria-hidden="true"><BackyardMark className={styles.clubBrandMark} /><span>THE BACKYARD</span></span>}
+      : <span className={styles.clubBranding} aria-hidden="true"><BackyardMark className={styles.clubBrandMark} /><span>THE BACKYARD</span></span>)}
   </span>;
 }
 

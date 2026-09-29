@@ -21,6 +21,8 @@ import {
   upsertPlayerBall,
   upsertPlayerClub,
   upsertPlayerClubDistance,
+  type EquipmentBallFitSummary,
+  type GolfBallCatalog,
   type GolfClubCatalog,
   type GolfShaftCatalog,
   type PlayerBall,
@@ -28,7 +30,6 @@ import {
   type PlayerClubDistance,
 } from "../../lib/golf-equipment";
 import { BallFitResults, BallFitWizard } from "./ball-fit-wizard";
-import { BackyardIcon } from "./backyard-icon";
 import { CatalogProductMedia } from "./catalog-product-media";
 import { BallEditor, CLUB_CATEGORY_ICONS, CLUB_CATEGORY_LABELS, ClubDistanceEditor, ClubEditor } from "./equipment-editors";
 import { equipmentStatusLabel, useEquipmentProfile } from "./use-equipment-profile";
@@ -36,6 +37,7 @@ import { useEquipmentCatalogSearch } from "./use-equipment-catalog-search";
 import type { ProfileHandedness } from "../../lib/equipment-editor-selection";
 import styles from "./equipment.module.css";
 import { ClubCategoryVisual, GolfBallVisual } from "./equipment-visuals";
+import { BAG_CATEGORY_SECTIONS, bagCategoryManagement } from "../../lib/equipment-bag-management";
 
 type EquipmentProfilePanelProps = {
   userId: string;
@@ -59,17 +61,6 @@ type EquipmentDeleteIntent =
   | { kind: "club"; club: PlayerClub; name: string }
   | { kind: "ball"; ball: PlayerBall; name: string }
   | { kind: "distance"; distance: PlayerClubDistance; name: string };
-
-const BAG_CATEGORY_SECTIONS = [
-  { id: "driver", label: "Driver", description: "Máxima distancia para tus tiros de salida.", categories: ["DRIVER"] },
-  { id: "mini-driver", label: "Mini Driver", description: "Control desde el tee con una cabeza compacta.", categories: ["MINI_DRIVER"] },
-  { id: "woods", label: "Maderas", description: "Versatilidad y distancia desde el fairway.", categories: ["FAIRWAY_WOOD"] },
-  { id: "hybrids", label: "Híbridos", description: "Confianza desde cualquier lie.", categories: ["HYBRID"] },
-  { id: "utility", label: "Utility / Driving Iron", description: "Trayectoria penetrante y control desde el tee.", categories: ["UTILITY_IRON"] },
-  { id: "irons", label: "Hierros", description: "Precisión y control de distancia.", categories: ["IRON_SET"] },
-  { id: "wedges", label: "Wedges", description: "Creatividad alrededor del green.", categories: ["WEDGE"] },
-  { id: "putter", label: "Putter", description: "Decisión en los últimos golpes.", categories: ["PUTTER"] },
-] as const satisfies ReadonlyArray<{ id: string; label: string; description: string; categories: readonly PlayerClub["category"][] }>;
 
 function wedgeLoftSummary(clubs: readonly PlayerClub[]) {
   const lofts = [...new Set(clubs.flatMap((club) => club.loft === null ? [] : [club.loft]))].sort((left, right) => left - right);
@@ -125,6 +116,25 @@ function savedClubConfiguration(clubs: readonly PlayerClub[], sectionId: string)
   return lofts.length ? lofts.map((loft) => `${loft}°`).join(", ") : "";
 }
 
+function SavedBallFitComparison({ summary, catalog, currentBall }: { summary: EquipmentBallFitSummary; catalog: readonly GolfBallCatalog[]; currentBall: PlayerBall | null }) {
+  const currentBallFacts = currentBall ? [...new Set([currentBall.generation, currentBall.year, currentBall.color].filter(Boolean).map(String))].join(" · ") : "";
+  return <div className={styles.fitIntro} data-ball-fit-comparison="saved-facts">
+    {currentBall && <div><span className={styles.flowEyebrow}>TU BOLA ACTUAL</span><h3>{currentBall.ballBrand} {currentBall.ballModel}</h3>{currentBallFacts && <p>{currentBallFacts}</p>}</div>}
+    <div className={styles.equipmentList} aria-label="Comparación de bolas guardadas">
+      {summary.recommendations.map((recommendation, index) => {
+        const catalogBall = catalog.find((ball) => ball.id === recommendation.catalogBallId) || null;
+        const name = catalogBall ? `${catalogBall.brand} ${catalogBall.model}` : [recommendation.brand, recommendation.model].filter(Boolean).join(" ") || "Recomendación guardada";
+        const generation = catalogBall?.generation || recommendation.generation;
+        return <article className={styles.equipmentItem} key={`${recommendation.catalogBallId}:${index}`}>
+          <div className={styles.itemHeader}><div><span className={styles.flowEyebrow}>#{index + 1}</span><h3>{name}</h3><p>{[generation, `${recommendation.matchScore}% coincidencia`].filter(Boolean).join(" · ")}</p></div></div>
+          {recommendation.comparisonToCurrent.length > 0 && <div><b>Comparación guardada</b><ul>{recommendation.comparisonToCurrent.map((fact, factIndex) => <li key={`${fact}:${factIndex}`}>{fact}</li>)}</ul></div>}
+          {recommendation.why.length > 0 && <details><summary className="textButton">Por qué fue recomendada</summary><ul>{recommendation.why.map((fact, factIndex) => <li key={`${fact}:${factIndex}`}>{fact}</li>)}</ul></details>}
+        </article>;
+      })}
+    </div>
+  </div>;
+}
+
 export function EquipmentProfileSummary({ userId, accessToken, onOpen }: { userId: string; accessToken: string | null; onOpen: () => void }) {
   const { profile, status } = useEquipmentProfile(userId, accessToken);
   if (status === "loading" || !profile) return null;
@@ -150,6 +160,7 @@ export function EquipmentProfileSummary({ userId, accessToken, onOpen }: { userI
 export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, defaultHandicapSource, defaultHandedness, ballFitDefaults, onBackToProfile, onOpenPrivacy, initialSection }: EquipmentProfilePanelProps) {
   const { profile, status, message, update, retry, resolveConflict, recoverLocalProfile } = useEquipmentProfile(userId, accessToken);
   const [clubEditor, setClubEditor] = useState<PlayerClub | "new" | null>(null);
+  const [newClubCategory, setNewClubCategory] = useState<PlayerClub["category"] | null>(null);
   const [clubDetailId, setClubDetailId] = useState<string | null>(null);
   const [ballEditor, setBallEditor] = useState<PlayerBall | "new" | null>(initialSection === "ball" ? "new" : null);
   const [distanceEditor, setDistanceEditor] = useState<{ club: PlayerClub; distance: PlayerClubDistance | null } | null>(null);
@@ -174,6 +185,8 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
   const clubCatalog = useEquipmentCatalogSearch({ kind: "CLUB", query: "", pinnedIds: pinnedClubIds });
   const shaftCatalog = useEquipmentCatalogSearch({ kind: "SHAFT", query: "", pinnedIds: pinnedShaftIds });
   const ballCatalog = useEquipmentCatalogSearch({ kind: "BALL", query: "", pinnedIds: pinnedBallIds });
+  const bagManagement = bagCategoryManagement(currentClubs);
+  const currentBallCatalog = currentBall?.catalogBallId ? ballCatalog.items.find((ball) => ball.id === currentBall.catalogBallId) || null : null;
 
   if (status === "loading" || !profile) return <section className={`card ${styles.section}`} aria-busy={status === "loading"}>
     <div className={status === "loading" ? styles.loadingState : styles.errorState} role={status === "loading" ? "status" : "alert"}>{status === "loading" ? "Cargando tu bolsa…" : message || "No pudimos abrir el perfil opcional de equipo."}</div>
@@ -190,6 +203,7 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
     });
     if (saved) {
       setClubEditor(null);
+      setNewClubCategory(null);
       setClubDetailId(club.id);
       setFlowSuccess({ kind: "club", name: clubName(club, clubCatalog.items), verb: previous ? "actualizado" : "agregado" });
     }
@@ -266,9 +280,9 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
   }
 
   if (fitOpen) return <div className={styles.fullPageFlow} data-equipment-screen="ball-fit"><section className={styles.editorPage}><BallFitWizard userId={userId} accessToken={accessToken} defaultHandicap={defaultHandicap} defaultHandicapSource={defaultHandicapSource} profileDefaults={ballFitDefaults} savedInput={restoredFit?.input} currentBall={currentBall} catalog={ballCatalog.items} onCancel={() => setFitOpen(false)} onComplete={completeFit} onOpenPrivacy={onOpenPrivacy} /></section></div>;
-  if (savedFitOpen && restoredFit) return <div className={styles.fullPageFlow} data-equipment-screen="saved-ball-fit"><section className={styles.editorPage}><button type="button" className={styles.pageBack} onClick={() => setSavedFitOpen(false)}>← Volver a Mi Bolsa</button><div className={styles.wizardHeader}><div><div className="eyebrow">RESULTADO GUARDADO</div><h2>Tu mejor grupo de bolas</h2><p>{BALL_FIT_HANDICAP_LABELS[restoredFit.input.handicapSource || "UNKNOWN"]}{restoredFit.input.handicap === null ? "" : `: ${restoredFit.input.handicap}`}</p></div></div><BallFitResults result={restoredFit.result} catalog={ballCatalog.items} current={restoredFit.input.currentBallId ? ballCatalog.items.find((ball) => ball.id === restoredFit.input.currentBallId) || null : null} /></section></div>;
+  if (savedFitOpen && profile.lastBallFit) return <div className={styles.fullPageFlow} data-equipment-screen="saved-ball-fit"><section className={styles.editorPage}><button type="button" className={styles.pageBack} onClick={() => setSavedFitOpen(false)}>← Volver a Mi Bolsa</button><div className={styles.wizardHeader}><div><div className="eyebrow">RESULTADO GUARDADO</div><h2>Tu mejor grupo de bolas</h2>{restoredFit && <p>{BALL_FIT_HANDICAP_LABELS[restoredFit.input.handicapSource || "UNKNOWN"]}{restoredFit.input.handicap === null ? "" : `: ${restoredFit.input.handicap}`}</p>}</div></div>{restoredFit ? <BallFitResults result={restoredFit.result} catalog={ballCatalog.items} current={restoredFit.input.currentBallId ? ballCatalog.items.find((ball) => ball.id === restoredFit.input.currentBallId) || null : null} /> : <SavedBallFitComparison summary={profile.lastBallFit} catalog={ballCatalog.items} currentBall={currentBall} />}</section></div>;
   if (clubEditor) return <div className={styles.fullPageFlow} data-equipment-screen="club-editor">
-    <ClubEditor userId={userId} catalog={clubCatalog.items} shafts={shaftCatalog.items} existing={clubEditor === "new" ? null : clubEditor} defaultHandedness={defaultHandedness} presentation="page" onSelectBall={() => { setClubEditor(null); setBallEditor("new"); }} onCancel={() => setClubEditor(null)} onSave={saveClub} />
+    <ClubEditor userId={userId} catalog={clubCatalog.items} shafts={shaftCatalog.items} existing={clubEditor === "new" ? null : clubEditor} initialCategory={clubEditor === "new" ? newClubCategory || undefined : undefined} defaultHandedness={defaultHandedness} presentation="page" onSelectBall={() => { setClubEditor(null); setNewClubCategory(null); setBallEditor("new"); }} onCancel={() => { setClubEditor(null); setNewClubCategory(null); }} onSave={saveClub} />
   </div>;
   if (ballEditor) return <div className={styles.fullPageFlow} data-equipment-screen="ball-editor">
     <BallEditor userId={userId} catalog={ballCatalog.items} existing={ballEditor === "new" ? null : ballEditor} presentation="page" onCancel={() => setBallEditor(null)} onSave={saveBall} />
@@ -290,7 +304,7 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
     <h2 id="equipment-success-title">{flowSuccess.name} {flowSuccess.verb}</h2>
     <p>El cambio quedó guardado en este dispositivo. {equipmentStatusLabel(status)}.</p>
     <div className={styles.flowDecisionActions}>
-      <button type="button" className="primary" onClick={() => { setFlowSuccess(null); setClubDetailId(null); setClubEditor("new"); }}>Agregar otro</button>
+      <button type="button" className="primary" onClick={() => { setFlowSuccess(null); setClubDetailId(null); setNewClubCategory(null); setClubEditor("new"); }}>Agregar otro</button>
       <button type="button" className="secondary" onClick={() => { setFlowSuccess(null); setClubDetailId(null); }}>Volver a Mi Bolsa</button>
       {onBackToProfile && <button type="button" className="secondary" onClick={onBackToProfile}>Volver a Perfil</button>}
     </div>
@@ -325,50 +339,48 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
   }
 
   return <div className={styles.stack}>
-    <header className={styles.collectionHero}><span className={styles.collectionMark}><BackyardIcon name="club" size={40} /></span><div><span className={styles.flowEyebrow}>THE BACKYARD · EQUIPMENT</span><h2>Tu juego empieza<br />en tu bolsa.</h2><p>Los bastones, las sensaciones y la bola que haces tuyos.</p></div></header>
     <section className={`card ${styles.section}`}>
-      <div className={styles.sectionHeader}><div><div className="eyebrow">EQUIPO</div><h2>¿Qué palos utilizas?</h2><p>Elige una categoría y completa marca, modelo y configuración.</p></div><button type="button" className="primary" onClick={() => { setClubDetailId(null); setClubEditor("new"); }}>+ Agregar</button></div>
-      <div className={styles.bagSummary}>
-        <span><b>{currentClubs.length}</b><small>actuales</small></span>
-        <span><b>{currentClubs.filter((club) => club.category === "WEDGE").length}</b><small>wedges</small></span>
-        <span><b>{currentClubs.filter((club) => club.category === "FAIRWAY_WOOD" || club.category === "HYBRID").length}</b><small>maderas / híbridos</small></span>
-        <span><b>{historicalClubs.length}</b><small>anteriores</small></span>
-      </div>
-      <div className={styles.premiumBag}>
-        {BAG_CATEGORY_SECTIONS.map((section) => {
-          const clubs = currentClubs.filter((club) => section.categories.some((category) => category === club.category));
+      <div className={styles.sectionHeader}><div><div className="eyebrow">EN MI BOLSA</div><h2>Equipo actual</h2><p>Sólo los bastones que juegas actualmente.</p></div><button type="button" className="secondary" onClick={() => { setClubDetailId(null); setNewClubCategory(null); setClubEditor("new"); }}>+ Agregar</button></div>
+      {currentClubs.length ? <div className={styles.premiumBag}>
+        {bagManagement.populated.map((section) => {
+          const clubs = section.clubs;
           const label = section.id === "wedges" ? wedgeLoftSummary(clubs) : section.label;
           return <section className={styles.bagCategory} key={section.id} data-bag-category={section.id}>
-            <header><div><span>{section.label}</span><b>{label}</b></div><small>{clubs.length ? `${clubs.length} en tu bolsa` : "Agregar"}</small></header>
-            {clubs.length ? <div className={styles.bagCategoryItems}>{clubs.map((club) => <ClubItem key={club.id} club={club} catalog={clubCatalog.items} shafts={shaftCatalog.items} onOpen={() => setClubDetailId(club.id)} />)}</div> : <button type="button" className={styles.emptyBagRow} onClick={() => { setClubDetailId(null); setClubEditor("new"); }}><span className={styles.emptyBagVisual}><ClubCategoryVisual category={section.categories[0]} /></span><span className={styles.emptyBagCopy}><b>{section.label}</b><small>{section.description}</small><em>Agregar a mi bolsa</em></span><b className={styles.addBagButton} aria-hidden="true">＋</b></button>}
+            <header><div><span>{section.label}</span><b>{label}</b></div><small>{clubs.length} en tu bolsa</small></header>
+            <div className={styles.bagCategoryItems}>{clubs.map((club) => <ClubItem key={club.id} club={club} catalog={clubCatalog.items} shafts={shaftCatalog.items} onOpen={() => setClubDetailId(club.id)} />)}</div>
           </section>;
         })}
-        <section className={styles.bagCategory} data-bag-category="ball">
-          <header><div><span>Bola</span><b>Tu bola de juego</b></div><small>{currentBall ? "Actual" : "Sin agregar"}</small></header>
-          <button type="button" className={styles.bagBallRow} onClick={() => setBallEditor(currentBall || "new")}><span className={styles.ballGlyph}><GolfBallVisual /></span><span><b>{currentBall ? `${currentBall.ballBrand} ${currentBall.ballModel}` : "Elegir bola"}</b><small>{currentBall ? [currentBall.generation, currentBall.year, currentBall.color].filter(Boolean).join(" · ") || "Modelo actual" : "Catálogo guiado o captura manual"}</small></span><b className={styles.rowChevron} aria-hidden="true">›</b></button>
-        </section>
-      </div>
+      </div> : <div className={styles.emptyState}><b>Tu bolsa está vacía</b><p>Agrega una categoría desde la lista compacta de abajo.</p></div>}
       {historicalClubs.length > 0 && <details><summary className="textButton">Equipo anterior ({historicalClubs.length})</summary><div className={styles.equipmentList}>{historicalClubs.map((club) => <ClubItem key={club.id} club={club} catalog={clubCatalog.items} shafts={shaftCatalog.items} onOpen={() => setClubDetailId(club.id)} />)}</div></details>}
     </section>
 
+    {bagManagement.missing.length > 0 && <section className={`card ${styles.section}`}>
+      <div className={styles.sectionHeader}><div><div className="eyebrow">AGREGAR EQUIPO</div><h2>Categorías faltantes</h2><p>Elige una categoría para completar sus datos.</p></div></div>
+      <div className={styles.profileBagRows} aria-label="Categorías disponibles para agregar">
+        {bagManagement.missing.map((section) => <button type="button" key={section.id} onClick={() => { setClubDetailId(null); setNewClubCategory(section.categories[0]); setClubEditor("new"); }}>
+          <span><small>{section.label}</small><b>{section.description}</b></span><strong aria-hidden="true">＋</strong>
+        </button>)}
+      </div>
+    </section>}
+
     <section className={`card ${styles.section}`}>
-      <div className={styles.sectionHeader}><div><div className="eyebrow">TU BOLA</div><h2>Mi bola</h2><p>Opcional. Puedes cambiarla o indicar que no juegas una bola fija.</p></div>{currentBall && <button type="button" className="secondary" onClick={() => setBallEditor("new")}>Cambiar bola</button>}</div>
-      {currentBall ? <div className={styles.ballHero}><span className={styles.ballGlyph}><GolfBallVisual /></span><div><h3>{currentBall.ballBrand} {currentBall.ballModel}</h3><p>{[currentBall.generation, currentBall.year, currentBall.color].filter(Boolean).join(" · ") || "Modelo actual"}</p>{currentBall.notes && <p>{currentBall.notes}</p>}</div></div> : <div className={styles.emptyState}><span className={styles.emptyBallVisual}><GolfBallVisual /></span><b>{profile.ballPreference === "NO_FIXED_BALL" ? "No tienes una bola fija" : "No has elegido una bola"}</b><p>Puedes registrarla ahora o seguir usando The Backyard sin hacerlo.</p></div>}
+      <div className={styles.sectionHeader}><div><div className="eyebrow">MI BOLA</div><h2>{currentBall ? `${currentBall.ballBrand} ${currentBall.ballModel}` : "Tu bola de juego"}</h2><p>Opcional. Puedes elegirla o indicar que no juegas una bola fija.</p></div></div>
+      {currentBall ? <div className={styles.ballHero}><span className={styles.ballGlyph}><CatalogProductMedia item={currentBallCatalog} fallback={<GolfBallVisual />} /></span><div><h3>{currentBall.ballBrand} {currentBall.ballModel}</h3><p>{[currentBall.generation, currentBall.year, currentBall.color].filter(Boolean).join(" · ") || "Modelo actual"}</p>{currentBall.notes && <p>{currentBall.notes}</p>}</div></div> : <div className={styles.emptyState}><span className={styles.emptyBallVisual}><GolfBallVisual /></span><b>{profile.ballPreference === "NO_FIXED_BALL" ? "No tienes una bola fija" : "No has elegido una bola"}</b><p>Puedes registrarla ahora o continuar sin una bola fija.</p></div>}
       <div className={styles.inlineActions}>
         {!currentBall && <button type="button" className="primary" onClick={() => setBallEditor("new")}>Elegir bola</button>}
-        {currentBall && <button type="button" className="secondary" onClick={() => setBallEditor(currentBall)}>Editar detalles</button>}
-        <button type="button" className="secondary" onClick={() => update((current) => {
+        {currentBall && <button type="button" className="secondary" onClick={() => setBallEditor(currentBall)}>Editar</button>}
+        {!currentBall && <button type="button" className="secondary" onClick={() => update((current) => {
           const changed = setBallPreference(current, "NO_FIXED_BALL");
           return changed ? setBallOnboardingStatus(changed, "COMPLETED") : null;
-        })}>No tengo una bola fija</button>
+        })}>No tengo una bola fija</button>}
         {currentBall && <button type="button" className={styles.dangerButton} onClick={() => deleteBall(currentBall)}>Eliminar</button>}
       </div>
       {ballHistory.length > 0 && <details><summary className="textButton">Bolas anteriores ({ballHistory.length})</summary><div className={styles.equipmentList}>{ballHistory.map((ball) => <div key={ball.id} className={`${styles.equipmentItem} ${styles.archived}`}><div className={styles.itemHeader}><div><h3>{ball.ballBrand} {ball.ballModel}</h3><p>{[ball.generation, ball.year, ball.color].filter(Boolean).join(" · ") || "Sin detalles adicionales"}</p></div></div><div className={styles.itemActions}><button type="button" className="secondary" onClick={() => update((current) => setCurrentPlayerBall(current, ball.id))}>Usar de nuevo</button><button type="button" className={styles.dangerButton} onClick={() => deleteBall(ball)}>Eliminar</button></div></div>)}</div></details>}
     </section>
 
     <section className={`card ${styles.section}`}>
-      <div className={styles.sectionHeader}><div><div className="eyebrow">RECOMENDADOR ORIENTATIVO</div><h2>The Backyard Ball Fit</h2><p>Top 3 basado en tus preferencias y los datos disponibles.</p></div><button type="button" className="primary" onClick={() => setFitOpen(true)}>{profile.lastBallFit ? "Actualizar fit" : "Hacer Ball Fit"}</button></div>
-      {profile.lastBallFit ? <div className={styles.fitIntro}><h3>Último Ball Fit · {new Date(profile.lastBallFit.completedAt).toLocaleDateString("es-MX")}</h3><p>Tu grupo recomendado y tus respuestas quedaron guardados en este perfil.</p><div className={styles.badgeRow}>{profile.lastBallFit.recommendations.map((recommendation, index) => { const ball = ballCatalog.items.find((item) => item.id === recommendation.catalogBallId); return <span className={styles.currentBadge} key={recommendation.catalogBallId}>#{index + 1} {ball ? `${ball.brand} ${ball.model}` : recommendation.brand && recommendation.model ? `${recommendation.brand} ${recommendation.model}` : "Modelo archivado"} · {recommendation.matchScore}%</span>; })}</div><div className={styles.inlineActions}>{restoredFit && <button type="button" className="secondary" onClick={() => setSavedFitOpen(true)}>Comparar estas bolas</button>}<button type="button" className={styles.dangerButton} onClick={deleteBallFit}>Borrar resultado</button></div></div> : <div className={styles.emptyState}><b>Descubre tu mejor grupo de bolas</b><p>Un cuestionario opcional de 2–4 minutos. No es un fitting oficial de ninguna marca.</p><button type="button" className="textButton" onClick={() => { if (window.confirm("¿Borrar cualquier borrador de Ball Fit guardado en este dispositivo?")) removeBallFitDraft(localStorage, userId); }}>Borrar borrador guardado</button></div>}
+      <div className={styles.sectionHeader}><div><div className="eyebrow">BALL FIT</div><h2>{profile.lastBallFit ? "Último Ball Fit" : "The Backyard Ball Fit"}</h2><p>Top 3 basado en tus preferencias y los datos disponibles.</p></div><button type="button" className="primary" onClick={() => setFitOpen(true)}>{profile.lastBallFit ? "Actualizar fit" : "Hacer Ball Fit"}</button></div>
+      {profile.lastBallFit ? <div className={styles.fitIntro}><h3>{new Date(profile.lastBallFit.completedAt).toLocaleDateString("es-MX")}</h3><p>Tu grupo recomendado y tus respuestas quedaron guardados en este perfil.</p><div className={styles.badgeRow}>{profile.lastBallFit.recommendations.map((recommendation, index) => { const ball = ballCatalog.items.find((item) => item.id === recommendation.catalogBallId); return <span className={styles.currentBadge} key={recommendation.catalogBallId}>#{index + 1} {ball ? `${ball.brand} ${ball.model}` : recommendation.brand && recommendation.model ? `${recommendation.brand} ${recommendation.model}` : "Modelo archivado"} · {recommendation.matchScore}%</span>; })}</div><div className={styles.inlineActions}><button type="button" className="secondary" onClick={() => setSavedFitOpen(true)}>Comparar</button><button type="button" className={styles.dangerButton} onClick={deleteBallFit}>Borrar resultado</button></div></div> : <div className={styles.emptyState}><b>Descubre tu mejor grupo de bolas</b><p>Un cuestionario opcional de 2–4 minutos. No es un fitting oficial de ninguna marca.</p><button type="button" className="textButton" onClick={() => { if (window.confirm("¿Borrar cualquier borrador de Ball Fit guardado en este dispositivo?")) removeBallFitDraft(localStorage, userId); }}>Borrar borrador guardado</button></div>}
       <p className={styles.disclaimer}>La información de equipo y bola es opcional y no se usa para publicidad. Puedes editarla o borrarla cuando quieras.</p>
     </section>
 
@@ -388,7 +400,7 @@ function ClubItem({ club, catalog: catalogItems, shafts, onOpen }: { club: Playe
   const catalog = catalogClub(club, catalogItems);
   const facts = clubFacts(club, shafts);
   return <article className={`${styles.equipmentItem} ${club.isCurrent ? "" : styles.archived}`}>
-    <button type="button" className={styles.bagItemMain} onClick={onOpen} aria-label={`Abrir detalle de ${clubName(club, catalogItems)}`}><span className={styles.categoryIcon}><CatalogProductMedia item={catalog} fallback={<ClubCategoryVisual category={club.category} />} /></span><span className={styles.bagItemCopy}><small>{CLUB_CATEGORY_LABELS[club.category]}</small><b>{clubName(club, catalogItems)}</b><span>{[catalog?.generation || club.generation, club.loft === null ? null : `${club.loft}°`, shaftName(club, shafts)].filter(Boolean).join(" · ") || "Configuración básica"}</span></span>{club.isCurrent && <span className={styles.currentBadge}>Actual</span>}<b className={styles.rowChevron} aria-hidden="true">›</b></button>
+    <button type="button" className={styles.bagItemMain} onClick={onOpen} aria-label={`Editar ${clubName(club, catalogItems)}`}><span className={styles.categoryIcon}><CatalogProductMedia item={catalog} fallback={<ClubCategoryVisual category={club.category} />} /></span><span className={styles.bagItemCopy}><small>{CLUB_CATEGORY_LABELS[club.category]}</small><b>{clubName(club, catalogItems)}</b><span>{[catalog?.generation || club.generation, club.loft === null ? null : `${club.loft}°`, shaftName(club, shafts)].filter(Boolean).join(" · ") || "Configuración básica"}</span></span><span className="textButton">Editar</span></button>
       <div className={styles.badgeRow}>{facts.map((value) => <span className={styles.badge} key={value}>{value}</span>)}</div>
       {club.notes && <p className={styles.subtle}>{club.notes}</p>}
   </article>;

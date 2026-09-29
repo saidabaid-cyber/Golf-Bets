@@ -1162,7 +1162,7 @@
 .bagBallRow>span:nth-child(2) { display:grid;min-width:0;gap:4px; }
 .bagBallRow>span:nth-child(2)>b { overflow-wrap:anywhere;font-size:15px; }
 .bagBallRow>span:nth-child(2)>small { overflow-wrap:anywhere;color:var(--muted);font-size:12px; }
-.bagItemMain { display:grid;grid-template-columns:156px minmax(0,1fr) auto 28px;min-height:122px;align-items:center;gap:16px;padding:0;text-align:left; }
+.bagItemMain { display:grid;grid-template-columns:156px minmax(0,1fr) auto;min-height:122px;align-items:center;gap:16px;padding:0;text-align:left; }
 .bagItemMain .categoryIcon { width:156px;height:118px;flex:0 0 156px;border-radius:17px;background:linear-gradient(180deg,rgba(244,248,238,.7),rgba(225,236,219,.96)),url("/brand/backyard-fairway-scene.svg") center bottom / cover no-repeat; }
 .bagItemCopy { display:grid;min-width:0;gap:3px; }
 .bagItemCopy>small { color:var(--by-muted,var(--muted));font-size:10px;font-weight:850;letter-spacing:.06em;text-transform:uppercase; }
@@ -1181,7 +1181,7 @@
 .optionalDetails[open] { padding-bottom:12px; }
 
 @media(max-width:430px) {
-  .bagItemMain { grid-template-columns:116px minmax(0,1fr) 20px;min-height:108px;gap:10px; }
+  .bagItemMain { grid-template-columns:116px minmax(0,1fr) auto;min-height:108px;gap:10px; }
   .bagItemMain .categoryIcon { width:116px;height:102px;flex-basis:116px; }
   .bagItemMain>.currentBadge { display:none; }
   .catalogFacts { grid-template-columns:repeat(2,minmax(0,1fr)); }
@@ -1233,8 +1233,8 @@
 @media(max-width:540px) { .visualClubCard,.visualClubSelected { grid-template-columns:118px minmax(0,1fr) 28px;min-height:150px;padding:10px; } .visualClubMedia { width:118px;height:128px; } .ballFitHero { grid-template-columns:126px minmax(0,1fr);min-height:156px;gap:12px;padding:13px; } .ballFitOrb { width:126px;height:126px; } .ballFitHero b { font-size:22px; } .fitPillars { grid-template-columns:1fr; } .fitPillars>span { min-height:72px;grid-template-columns:28px minmax(0,1fr);justify-items:start;text-align:left; } .fitPillars small { grid-column:2; } }
 @media(max-width:540px) { .emptyBagRow { grid-template-columns:116px minmax(0,1fr) 42px;min-height:118px;gap:10px;padding:8px 10px 8px 8px; } .emptyBagVisual { width:116px;height:102px;border-radius:15px; } .emptyBagCopy>b { font-size:20px; } .emptyBagCopy>small { font-size:10px; } .emptyBagCopy>em { padding:6px 9px;font-size:10px; } .addBagButton { width:42px;height:42px;font-size:26px; } .bagBallRow { grid-template-columns:100px minmax(0,1fr) 20px;min-height:108px;gap:10px;padding:8px; } .bagBallRow .ballGlyph { width:92px;height:92px; } }
 
-/* Launch-monitor flow: choose the club before any upload, then analyze, then review. */
-.captureFlow { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;padding:6px;border:1px solid var(--by-line,var(--line));border-radius:17px;background:#f4f7f1; }
+/* Launch-monitor flow: club, photos, automatic analysis, compact summary, save. */
+.captureFlow { display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;padding:6px;border:1px solid var(--by-line,var(--line));border-radius:17px;background:#f4f7f1; }
 .captureFlow>span { display:flex;min-width:0;min-height:42px;align-items:center;justify-content:center;gap:7px;border-radius:12px;padding:7px;color:var(--muted);font-size:10px;font-weight:850;text-align:center; }
 .captureFlow>span b { display:grid;width:23px;height:23px;flex:0 0 23px;place-items:center;border-radius:50%;background:#dfe7dc;color:var(--by-forest,var(--green)); }
 .captureFlow .captureFlowActive { background:#fff;color:var(--by-forest,var(--green));box-shadow:0 5px 15px rgba(19,54,34,.08); }
@@ -1259,6 +1259,9 @@
 .captureStageHeading>span { color:#dce9c7; }
 .captureStageHeading h3 { color:#fff; }
 .captureStage .cameraCapture { border-color:rgba(255,255,255,.16);background:#fff; }
+.captureAnalysis,.captureSave { display:grid;gap:9px;border:1px solid #cbd9c8;border-radius:20px;background:#fff;padding:15px; }
+.captureAnalysis p { margin:0;color:var(--muted);font-size:12px;line-height:1.5; }
+.captureSave>.wizardActions { margin-top:0; }
 .captureSummary { overflow:hidden;border:1px solid #c7d7c5;border-radius:22px;background:linear-gradient(145deg,#f3f8ee,#fff);padding:18px; }
 .captureSummary .launchCard { background:#fff;box-shadow:0 8px 20px rgba(19,54,34,.055); }
 
@@ -1294,8 +1297,8 @@
   .shotActions { grid-column:1 / -1;justify-content:stretch; }
   .shotActions button { flex:1; }
   .shotEditGrid { grid-template-columns:1fr; }
-  .captureFlow { grid-template-columns:1fr; }
-  .captureFlow>span { justify-content:flex-start; }
+  .captureFlow { grid-template-columns:repeat(5,minmax(0,1fr));gap:3px; }
+  .captureFlow>span { min-height:54px;flex-direction:column;gap:3px;padding:4px 2px;font-size:8px; }
   .clubChoiceGrid { grid-template-columns:1fr; }
   .clubCaptureSelector,.captureStage,.captureSummary { padding:14px; }
   .wizardActions { align-items:stretch;flex-direction:column;padding-bottom:max(10px,env(safe-area-inset-bottom)); }
@@ -1453,8 +1456,7 @@
   .clubChoiceVisual { width:76px;height:65px; }
 }
 
-/* Ball Fit keeps the manual questionnaire primary; launch data opens as a
-   separate, compact workflow and only expands details on demand. */
+/* Ball Fit offers launch-monitor capture before the manual driver questions. */
 .activeIndex {
   display:grid;
   grid-template-columns:42px minmax(0,1fr);
@@ -1469,6 +1471,9 @@
 .activeIndex>div { display:grid;gap:3px; }
 .activeIndex small { color:#6e7e72;font-size:9px;font-weight:900;letter-spacing:.12em; }
 .activeIndex b { color:#123d29;font-size:16px; }
+.currentGameSource { display:grid;gap:4px;border-left:3px solid #155f3a;padding:4px 0 4px 12px; }
+.currentGameSource small { color:#6e7e72;font-size:9px;font-weight:900;letter-spacing:.12em; }
+.currentGameSource b { color:#123d29;font-size:17px; }
 .launchEntry {
   display:grid;
   grid-template-columns:48px minmax(0,1fr) 24px;
@@ -1490,6 +1495,7 @@
 .launchEntry b { font-size:13px; }
 .launchEntry small { color:var(--muted);font-size:10px;line-height:1.35; }
 .launchEntry strong { font:400 25px/1 var(--by-editorial,Georgia,serif); }
+.manualQuestionnaireSeparator { display:flex;align-items:center;justify-content:center;padding:8px 0;color:#7a887d;font-size:10px;font-weight:850;letter-spacing:.1em;text-align:center; }
 .detectedDriverData { display:grid;grid-template-columns:minmax(0,1.5fr) repeat(2,minmax(90px,.7fr));gap:8px;border:1px solid #c7d9c4;border-radius:17px;background:#f3f8ee;padding:12px; }
 .detectedDriverData>div,.detectedDriverData>span { display:grid;align-content:center;gap:3px; }
 .detectedDriverData small { color:#8c6b20;font-size:9px;font-weight:900;letter-spacing:.1em; }
@@ -1510,7 +1516,7 @@
 .captureSummary .launchCard { border:0;border-radius:17px;background:#fff;padding:12px;box-shadow:0 7px 18px rgba(19,54,34,.055); }
 .launchCardTitle { display:grid;grid-template-columns:64px minmax(0,1fr);align-items:center;gap:10px; }
 .launchCardTitle .clubChoiceVisual { width:64px;height:58px; }
-.launchMetricGrid { display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;margin-top:10px; }
+.launchMetricGrid { display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:10px; }
 .launchMetricGrid>span { display:grid;min-width:0;gap:3px;border-radius:11px;background:#f4f7f1;padding:9px 6px;text-align:center; }
 .launchMetricGrid small { color:var(--muted);font-size:9px; }
 .launchMetricGrid b { overflow-wrap:anywhere;color:#173f2a;font-size:12px; }

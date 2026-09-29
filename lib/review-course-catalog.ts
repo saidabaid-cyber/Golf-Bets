@@ -38,6 +38,10 @@ export function searchReviewedCourses<T extends Omit<ReviewedCatalogCourse,'tees
 export function homeCourseSelection<T extends Pick<ReviewedCatalogCourse,'id'|'clubId'|'name'|'clubName'>>(course:T) {
   return {clubId:course.clubId,clubName:course.clubName,courseId:course.id,courseName:course.name};
 }
+export function singleReviewedCourseLayout<T extends Pick<ReviewedCatalogCourse,'clubId'>>(courses:readonly T[],clubId:string) {
+  const layouts=courses.filter(course=>course.clubId===clubId);
+  return layouts.length===1?layouts[0]:null;
+}
 export function courseSelectionLabel(selection:{clubName:string;courseName:string}) {
   return normalizeCourseSearch(selection.clubName)===normalizeCourseSearch(selection.courseName)
     ? selection.clubName

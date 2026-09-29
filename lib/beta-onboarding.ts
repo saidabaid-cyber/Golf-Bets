@@ -79,12 +79,9 @@ export function normalizeBetaOnboardingProgress(
   const candidate = value as Partial<BetaOnboardingProgress>;
   if (candidate.version !== BETA_ONBOARDING_VERSION || candidate.userId !== userId) return null;
   const legacyGroupStep = typeof candidate.step === "string" && LEGACY_GROUP_STEPS.has(candidate.step);
-  const restoredStep = legacyGroupStep ? "complete" : typeof candidate.step === "string" && (BETA_ONBOARDING_STEPS as readonly string[]).includes(candidate.step)
+  const step = legacyGroupStep ? "complete" : typeof candidate.step === "string" && (BETA_ONBOARDING_STEPS as readonly string[]).includes(candidate.step)
     ? candidate.step as BetaOnboardingStep
     : "welcome";
-  // `course` remains in the v1 parser only so unfinished checkpoints survive
-  // the migration. Field/layout/tee selection now belongs exclusively to Play.
-  const step: BetaOnboardingStep = restoredStep === "course" ? "ghin" : restoredStep;
   const status = candidate.status === "complete" || step === "complete" ? "complete" : "in_progress";
   const completedAt = status === "complete" ? timestamp(candidate.completedAt, timestamp(candidate.updatedAt, now)) : undefined;
   const completedSteps = knownSteps(candidate.completedSteps);
@@ -149,6 +146,27 @@ export function navigateBetaOnboarding(
 ): BetaOnboardingProgress {
   if (progress.status === "complete" || !(BETA_ONBOARDING_STEPS as readonly string[]).includes(nextStep)) return progress;
   return { ...progress, step: nextStep, updatedAt: now };
+}
+
+const STEPS_AFTER_HOME_COURSE = new Set<BetaOnboardingStep>([
+  "ghin", "equipment", "improvements", "objective", "plan",
+]);
+
+/** Repairs only unfinished checkpoints that an older client allowed to skip.
+ * Completed accounts remain completed and can edit Home Course from Profile. */
+export function requiredBetaOnboardingResume(
+  progress: BetaOnboardingProgress,
+  facts: { homeCourseSelected: boolean },
+  now = new Date().toISOString(),
+) {
+  if (progress.status !== "in_progress") return progress;
+  if (progress.step !== "welcome" && !progress.completedSteps.includes("permissions")) {
+    return navigateBetaOnboarding(progress, "permissions", now);
+  }
+  if (!facts.homeCourseSelected && STEPS_AFTER_HOME_COURSE.has(progress.step)) {
+    return navigateBetaOnboarding(progress, "course", now);
+  }
+  return progress;
 }
 
 export function completeBetaOnboarding(

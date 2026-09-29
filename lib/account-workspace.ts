@@ -5,6 +5,7 @@ import { coursePreferenceStorageKey } from "./course-preferences";
 import { cloudProfileRevisionKey, forgetProfileWriteClock, pendingProfileWriteKey } from "./profile-sync";
 import { internalNotificationStorageKey } from "./internal-notifications";
 import { equipmentProfileRecoveryStorageKey, equipmentProfileStorageKey } from "./golf-equipment";
+import { removeEquipmentSyncState } from "./equipment-offline-store";
 import { ballFitDraftStorageKey } from "./ball-fitting-storage";
 import { betaOnboardingDraftStorageKey, betaOnboardingStorageKey } from "./beta-onboarding";
 import { deletePersonalAiData, readLearningRecords } from "./backyard-ai/memory/learning-events";
@@ -215,6 +216,7 @@ export function discardAccountWorkspace(storage: WorkspaceStorage, userId: strin
   const fittingKey = ballFitDraftStorageKey(userId);
   if (equipmentKey) storage.removeItem(equipmentKey);
   if (equipmentRecoveryKey) storage.removeItem(equipmentRecoveryKey);
+  removeEquipmentSyncState(storage, userId);
   if (fittingKey) storage.removeItem(fittingKey);
   storage.removeItem(`the-backyard:equipment-onboarding-ready:v1:${encodeURIComponent(userId)}`);
   storage.removeItem(betaOnboardingStorageKey(userId));

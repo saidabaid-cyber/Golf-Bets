@@ -37,7 +37,8 @@ test("Mi bolsa abre una ficha limpia por bastón y reserva el borrado para el de
   for (const field of ["Marca", "Modelo", "Generación", "Loft", "Mano", "Varilla", "Flex", "Peso de varilla", "Longitud", "Lie", "Grip", "Notas"]) assert.match(editors, new RegExp(field));
   for (const set of ["4–P", "4–AW", "5–P", "5–AW"]) assert.match(editors, new RegExp(set));
   assert.match(editors, /Personalizar set/);
-  assert.match(panel, /¿Qué palos utilizas\?/);
+  assert.match(panel, /EN MI BOLSA/);
+  assert.match(panel, /AGREGAR EQUIPO/);
   assert.match(panel, /data-equipment-screen="club-detail"/);
   assert.match(panel, /Editar atributos/);
   assert.match(panel, /ELIMINAR BASTÓN/);
@@ -145,13 +146,16 @@ test("las doce señales rápidas y las prioridades ordenables están disponibles
   assert.match(wizard, /movePriority/);
   assert.match(wizard, /Subir/);
   assert.match(wizard, /Bajar/);
+  const priorityIcons = ["driverDistance", "lessDriverSpin", "stabilityControl", "trajectoryHeight", "ironControl", "stopOnGreen", "wedgeSpin", "greensideFeel", "putterFeel"];
+  for (const icon of priorityIcons) assert.match(wizard, new RegExp(`: "${icon}"`));
+  assert.equal(new Set(priorityIcons).size, 9);
 });
 
 test("launch monitor conserva golpes parciales, exclusiones y resumen robusto", () => {
-  for (const label of ["Driver", "Hierro 7", "Pitching wedge", "Half wedge / approach", "Velocidad del palo", "Velocidad de bola", "Ángulo de lanzamiento", "Spin", "Carry", "Altura máxima", "Ángulo de caída"]) assert.ok(launch.includes(label));
+  for (const label of ["Driver", "Hierro 7", "Pitching Wedge", "Half Wedge / Approach", "Velocidad del palo", "Velocidad de bola", "Ángulo de lanzamiento", "Spin", "Carry", "Altura máxima", "Ángulo de caída"]) assert.ok(launch.includes(label));
   assert.match(launch, /Excluir/);
   assert.match(launch, /Reactivar/);
-  assert.match(launch, /Revisa el resumen/);
+  assert.match(launch, /Mediciones aplicadas/);
   assert.match(launch, /Ver detalles/);
   assert.match(launch, /shotDetailsOpen/);
   assert.match(launch, /3 golpes válidos/);
@@ -176,6 +180,7 @@ test("el módulo incluye estados de carga, vacío, error, offline y sincronizaci
   assert.match(panel, /status === "offline"/);
   assert.match(panel, /status === "conflict"/);
   assert.match(equipmentProfileHook, /equipmentProfileFingerprint/);
-  assert.match(equipmentProfileHook, /lastQueuedFingerprintRef/);
-  assert.match(equipmentProfileHook, /shouldQueueEquipmentFingerprint/);
+  assert.match(equipmentProfileHook, /queueEquipmentSyncOutbox/);
+  assert.match(equipmentProfileHook, /readEquipmentSyncState/);
+  assert.match(equipmentProfileHook, /acknowledgeEquipmentSyncOutbox/);
 });

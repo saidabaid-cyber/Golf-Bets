@@ -36,23 +36,26 @@ test('OAuth failed exchange is shared, never retried silently or replaced by a s
   const results=await Promise.allSettled([finishOAuthOnce(f.auth,'bad'),finishOAuthOnce(f.auth,'bad')]);
   assert.equal(exchanges,1);assert.equal(reads,0);assert.ok(results.every(r=>r.status==='rejected'));
 });
-for(const mode of ['quick','complete'] as const) test(`${mode} onboarding includes Index, excludes Course, and survives account readback`,()=>{
+for(const mode of ['quick','complete'] as const) test(`${mode} onboarding includes Home Course before Index and survives account readback`,()=>{
   let progress={...createBetaOnboardingProgress('A'),mode};
   progress=advanceBetaOnboarding(progress,'permissions') as typeof progress;
+  progress=advanceBetaOnboarding(progress,'course') as typeof progress;
   progress=advanceBetaOnboarding(progress,'ghin') as typeof progress;
   const restored=onboardingCheckpoint(JSON.parse(JSON.stringify(progress)),'A');
-  assert.equal(restored?.step,'ghin');assert.equal(restored?.mode,mode);assert.equal(restored?.completedSteps.includes('course'),false);
+  assert.equal(restored?.step,'ghin');assert.equal(restored?.mode,mode);assert.equal(restored?.completedSteps.includes('course'),true);
   assert.equal(normalizeBetaOnboardingProgress(progress,'B'),null);
 });
-test('quick entry resolves optional device decisions before Index and leaves Course to Play',()=>{
+test('quick entry resolves optional device decisions, then Home Course, before Index',()=>{
   let progress={...createBetaOnboardingProgress('A'),mode:'quick' as const};
   progress=advanceBetaOnboarding(progress,'permissions') as typeof progress;
   assert.equal(progress.step,'permissions');
+  progress=advanceBetaOnboarding(progress,'course') as typeof progress;
+  assert.equal(progress.step,'course');
   progress=advanceBetaOnboarding(progress,'ghin') as typeof progress;
-  assert.ok(progress.completedSteps.includes('permissions'));
+  assert.ok(progress.completedSteps.includes('permissions'));assert.ok(progress.completedSteps.includes('course'));
   const completed=completeBetaOnboarding(progress);
   assert.equal(completed.status,'complete');
-  assert.deepEqual(completed.completedSteps.filter(step=>['permissions','course','ghin'].includes(step)),['permissions','ghin']);
+  assert.deepEqual(completed.completedSteps.filter(step=>['permissions','course','ghin'].includes(step)),['permissions','course','ghin']);
 });
 test('saved permissions checkpoint resumes at the optional decision instead of silently accepting it',()=>{
   const legacy={...createBetaOnboardingProgress('A'),status:'in_progress' as const,step:'permissions' as const,completedSteps:['welcome','course','ghin'] as const};

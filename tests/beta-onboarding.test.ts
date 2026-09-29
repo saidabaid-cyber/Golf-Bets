@@ -11,6 +11,7 @@ import {
   normalizeBetaOnboardingProgress,
   persistBetaOnboardingProgress,
   readBetaOnboardingProgress,
+  requiredBetaOnboardingResume,
 } from "../lib/beta-onboarding";
 import {
   emptyBackyardProfileDetails,
@@ -88,26 +89,40 @@ test("planes Beta exponen entitlements sin precio ni cobro", () => {
   assert.equal(PLAN_CATALOG.some((plan) => "price" in plan), false);
 });
 
-test("permisos se resuelven antes del índice y el campo queda fuera del onboarding", () => {
+test("configuración rápida y completa conservan Campo habitual entre permisos e índice", () => {
   const started = createBetaOnboardingProgress("user-1", "2026-09-07T12:00:00.000Z");
   const permissions = advanceBetaOnboarding(started, "permissions", { now: "2026-09-07T12:05:00.000Z" });
   assert.equal(permissions.status, "in_progress");
-  const ghin = advanceBetaOnboarding(permissions, "ghin", { now: "2026-09-07T12:05:30.000Z" });
+  const course = advanceBetaOnboarding(permissions, "course", { now: "2026-09-07T12:05:30.000Z" });
+  assert.equal(course.step, "course");
+  const ghin = advanceBetaOnboarding(course, "ghin", { now: "2026-09-07T12:05:45.000Z" });
   assert.ok(ghin.completedSteps.includes("permissions"));
-  assert.equal(ghin.completedSteps.includes("course"), false);
+  assert.equal(ghin.completedSteps.includes("course"), true);
   const completed = completeBetaOnboarding(ghin, { now: "2026-09-07T12:06:00.000Z" });
   assert.equal(completed.status, "complete");
   assert.equal(completed.step, "complete");
   assert.equal(betaOnboardingIsActive(completed), false);
 });
 
-test("un checkpoint heredado en Course reanuda directamente en Handicap", () => {
+test("un checkpoint en Campo reanuda la selección sin saltarla", () => {
   const restored = normalizeBetaOnboardingProgress({
     ...createBetaOnboardingProgress("user-1"),
     step: "course",
     completedSteps: ["welcome", "permissions"],
   }, "user-1");
-  assert.equal(restored?.step, "ghin");
+  assert.equal(restored?.step, "course");
+});
+
+test("un checkpoint de la regresión no puede continuar después de Campo si aún no lo eligió", () => {
+  const restored = normalizeBetaOnboardingProgress({
+    ...createBetaOnboardingProgress("user-1", "2026-09-07T12:00:00.000Z"),
+    step: "ghin",
+    mode: "quick",
+    completedSteps: ["welcome", "permissions"],
+  }, "user-1", "2026-09-07T12:10:00.000Z");
+  assert.ok(restored);
+  assert.equal(requiredBetaOnboardingResume(restored, { homeCourseSelected: false }, "2026-09-07T12:11:00.000Z").step, "course");
+  assert.equal(requiredBetaOnboardingResume(restored, { homeCourseSelected: true }, "2026-09-07T12:11:00.000Z").step, "ghin");
 });
 
 test("estado inválido o de otra cuenta no puede completar onboarding", () => {

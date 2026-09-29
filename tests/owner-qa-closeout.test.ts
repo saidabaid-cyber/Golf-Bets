@@ -36,7 +36,8 @@ test("todos los archivos con diálogos interactivos exponen una salida visible",
       assert.match(source, /data-equipment-screen="ball-fit"[^\n]*onCancel=\{\(\) => setFitOpen\(false\)\}/);
       assert.match(source, /data-equipment-screen="saved-ball-fit"[^\n]*onClick=\{\(\) => setSavedFitOpen\(false\)\}>← Volver a Mi Bolsa/);
       for (const editor of ["club", "ball", "distance"]) {
-        assert.match(source, new RegExp(`onCancel=\\{\\(\\) => set${editor[0].toUpperCase() + editor.slice(1)}Editor\\(null\\)\\}`));
+        if (editor === "club") assert.match(source, /onCancel=\{\(\) => \{ setClubEditor\(null\); setNewClubCategory\(null\); \}\}/);
+        else assert.match(source, new RegExp(`onCancel=\\{\\(\\) => set${editor[0].toUpperCase() + editor.slice(1)}Editor\\(null\\)\\}`));
       }
       assert.match(source, /onClick=\{\(\) => setDeleteIntent\(null\)\}/, "destructive confirmation retains cancel");
     } else {

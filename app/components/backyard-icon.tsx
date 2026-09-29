@@ -12,15 +12,26 @@ const paths = {
   arrow: "M4 12h16m-6-6 6 6-6 6",
   driver: "M16.5 2.5 9 16m0 0c-3-1-6 .3-6 2.3 0 2.5 4.7 3.4 8.7 2.2 3.1-.9 2.4-3.4-1.7-5M16 3l3 1",
   irons: "M7 3l7 14m-7-1-3 2 1.5 3H11l1-3-5-2Zm7-13 5 11m-2-1-2 1 1 2h4l.5-2-3.5-1Z",
-  approach: "M12 21a8 3 0 1 0 0-6 8 3 0 0 0 0 6Zm0-3h.01M12 15V3m0 0 6 2.5L12 8",
+  approach: "M12 21c5 0 9-1.8 9-4s-4-4-9-4-9 1.8-9 4 4 4 9 4Zm0-4h.01M12 13V3m0 0 5 2-5 2M3 8a1.25 1.25 0 1 0 2.5 0A1.25 1.25 0 0 0 3 8Zm2.5 1c2 .5 3.5 1.5 5 3",
   shortGame: "M4 19h7l2-4-6-2-3 6Zm8-14 5 9m2 5a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z",
   bunker: "M3 17c3-4 6-4 9 0s6 4 9 0M4 20h16M16 4l-6 10m4-7 4 2m-9 4 4 2M6 10h.01",
   putting: "M5 4v11m0 0 5-1v3l-5 1v-3Zm10 5v10m-3 0h6m2-7a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z",
-  consistency: "M20 12a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-4 0a4 4 0 1 1-8 0 4 4 0 0 1 8 0Zm-4 0h.01",
+  consistency: "M4 5h16v14H4zM7 9a1 1 0 1 0 2 0 1 1 0 0 0-2 0Zm4-1a1 1 0 1 0 2 0 1 1 0 0 0-2 0Zm4 3a1 1 0 1 0 2 0 1 1 0 0 0-2 0Zm-6 4a1 1 0 1 0 2 0 1 1 0 0 0-2 0Zm5 1a1 1 0 1 0 2 0 1 1 0 0 0-2 0Z",
   strategy: "M4 20V5l5-2 6 2 5-2v15l-5 2-6-2-5 2Zm5-17v15m6-13v15M6.5 9c2 1 3 2 4.5 4s3 2 6 1",
-  mental: "M9 20c-3 0-5-2-5-5 0-1 .4-2 1.2-2.8A4.5 4.5 0 0 1 8 4c1.5 0 2.8.8 4 2 1.2-1.2 2.5-2 4-2a4.5 4.5 0 0 1 2.8 8.2c.8.8 1.2 1.8 1.2 2.8 0 3-2 5-5 5h-2v-6h3m-7 6v-6H6",
-  handicap: "M4 6h5v5m0-5-5 5m16 7h-5v-5m0 5 5-5M4 18l6-6 4 3 6-8",
+  mental: "M15 21H9v-4H6l2-3a7 7 0 1 1 7 7M12 8a3 3 0 1 0 0 6 3 3 0 0 0 0-6Zm0 2v2m-1-1h2",
+  handicap: "M4 4h16v16H4zM7 8h3m-3 4h2m-2 4h2m3-7 3 3 4 4m0 0v-4m0 4h-4",
+  driverDistance: "M16 3 9 15m0 0c-3-1-6 .2-6 2.2 0 2.3 4.2 3.1 7.8 2.1 3-.9 2.4-3.2-1.8-4.3M14 6c3-1 5 0 7 2m0 0-3-.3M21 8l-1.4-2.5",
+  lessDriverSpin: "M13 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0ZM4 7c3-4 9-4 12 0m0 0-3-1m3 1-.5-3M19 5v14m0 0-3-3m3 3 3-3",
+  stabilityControl: "M21 12c0 4-4 7-9 7s-9-3-9-7 4-7 9-7 9 3 9 7ZM8 11a1 1 0 1 0 2 0 1 1 0 0 0-2 0Zm4-2a1 1 0 1 0 2 0 1 1 0 0 0-2 0Zm2 5a1 1 0 1 0 2 0 1 1 0 0 0-2 0Zm-5 2a1 1 0 1 0 2 0 1 1 0 0 0-2 0Z",
+  trajectoryHeight: "M3 20h18M4 17C8 3 16 3 20 17M18.5 16.5a1.5 1.5 0 1 0 3 0 1.5 1.5 0 0 0-3 0Z",
+  ironControl: "M5 3l6 13m0 0-5-2-3 4 2 3h6l2-3-2-2M18 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6Zm0 3h.01",
+  stopOnGreen: "M3 19h18M4 6c5 0 8 4 10 10m-1.5 0a1.5 1.5 0 1 0 3 0 1.5 1.5 0 0 0-3 0ZM18 13v5m3-4v4",
+  wedgeSpin: "M3 19h8l2-4-6-2-4 6Zm8-14 5 9m6 3a3 3 0 1 1-2-2.8m2 2.8-2.5-.5M22 17l-.5-2.5",
+  greensideFeel: "M3 19h7l2-4-6-2-3 6Zm8-14 5 9m1 5c2-3 3-4 5-4M18 18a1.5 1.5 0 1 0 3 0 1.5 1.5 0 0 0-3 0ZM21 15V6m0 0-3 1.5L21 9",
+  putterFeel: "M5 3v14m0 0 6-1v3l-6 1v-3m10 0a2 2 0 1 0 4 0 2 2 0 0 0-4 0Zm5 3h-6M20 7v9m-2 0h4",
 } as const;
-export function BackyardIcon({ name, size = 24, style }: { name: keyof typeof paths; size?: number; style?: CSSProperties }) {
+export type BackyardIconName = keyof typeof paths;
+
+export function BackyardIcon({ name, size = 24, style }: { name: BackyardIconName; size?: number; style?: CSSProperties }) {
   return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={style}><path d={paths[name]} /></svg>;
 }

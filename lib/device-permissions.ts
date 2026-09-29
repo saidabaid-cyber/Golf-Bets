@@ -342,6 +342,7 @@ export async function resolveAuthorizedNearbyLocation(
   if (!geolocation) return { status: "geolocation-unavailable" };
   if (options.signal?.aborted) return { status: "cancelled" };
 
+  const cached = storedNearbyCoordinates(storage, userId, options.at);
   const permissions = (navigatorValue as unknown as PermissionNavigator).permissions;
   let effective: DevicePermissionStatus = initial.location;
   if (permissions?.query) {
@@ -358,13 +359,12 @@ export async function resolveAuthorizedNearbyLocation(
       saveDevicePermissionPreferences(storage, { ...current, location: "prompt", updatedAt: now() });
       return { status: "prompt" };
     }
-  } else if (effective === "unknown" || effective === "unavailable") {
+  } else {
+    if (cached) return { status: "located", point: cached, source: "cache" };
     return { status: "query-unsupported" };
   }
 
   if (effective !== "granted") {
-    if (effective === "denied") return { status: "denied" };
-    if (effective === "prompt") return { status: "prompt" };
     return { status: "query-unsupported" };
   }
 
@@ -373,9 +373,7 @@ export async function resolveAuthorizedNearbyLocation(
   if (current.location !== "granted") {
     saveDevicePermissionPreferences(storage, { ...current, location: "granted", updatedAt: now() });
   }
-  const cached = storedNearbyCoordinates(storage, userId, options.at);
   if (cached) return { status: "located", point: cached, source: "cache" };
-
   const requestEpoch = (locationRequestEpochs.get(userId) || 0) + 1;
   locationRequestEpochs.set(userId, requestEpoch);
   try {

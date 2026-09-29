@@ -239,6 +239,40 @@ test("authorized nearby lookup reuses only a fresh five-minute cache", async () 
   assert.equal(locationCalls, 0);
 });
 
+test("stored app consent never opens a browser location prompt when permission state cannot be queried", async () => {
+  const storage = memoryStorage();
+  const at = Date.parse("2026-09-24T12:00:00.000Z");
+  saveDevicePermissionPreferences(storage, {
+    ...emptyDevicePermissionPreferences("user-a", new Date(at).toISOString()),
+    location: "granted",
+    locationEnabled: true,
+  });
+  let locationCalls = 0;
+  const result = await resolveAuthorizedNearbyLocation(storage, "user-a", {} as Navigator, {
+    getCurrentPosition() { locationCalls += 1; },
+  } as unknown as Geolocation, { at });
+  assert.deepEqual(result, { status: "query-unsupported" });
+  assert.equal(locationCalls, 0, "getCurrentPosition could prompt after the browser permission was reset");
+});
+
+test("fresh authorized coordinates remain usable when the Permissions API is unavailable", async () => {
+  const storage = memoryStorage();
+  const at = Date.parse("2026-09-24T12:00:00.000Z");
+  saveDevicePermissionPreferences(storage, {
+    ...emptyDevicePermissionPreferences("user-a", new Date(at).toISOString()),
+    location: "granted",
+    locationEnabled: true,
+    coarseLocation: { latitude: 19.04, longitude: -98.2, capturedAt: new Date(at - 60_000).toISOString() },
+  });
+  let locationCalls = 0;
+  const result = await resolveAuthorizedNearbyLocation(storage, "user-a", {} as Navigator, {
+    getCurrentPosition() { locationCalls += 1; },
+  } as unknown as Geolocation, { at });
+  assert.equal(result.status, "located");
+  if (result.status === "located") assert.equal(result.source, "cache");
+  assert.equal(locationCalls, 0);
+});
+
 test("expired nearby cache obtains a current position and replaces the stale value", async () => {
   const storage = memoryStorage();
   const at = Date.parse("2026-09-24T12:00:00.000Z");
