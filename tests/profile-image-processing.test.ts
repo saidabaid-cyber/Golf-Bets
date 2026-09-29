@@ -12,6 +12,7 @@ import {
   profileImageFormatFromBytes,
   profileImageFromFile,
   profileImageCropRect,
+  normalizeProfileImageCrop,
 } from "../lib/profile-image";
 
 function bytes(value: number[]) { return new Uint8Array(value); }
@@ -105,6 +106,11 @@ test("encuadre ajustable limita zoom y desplazamiento dentro de la foto", () => 
   assert.deepEqual(profileImageCropRect(600, 400), { sourceX: 100, sourceY: 0, sourceSize: 400 });
   assert.deepEqual(profileImageCropRect(600, 400, { zoom: 2, positionX: 1, positionY: -1 }), { sourceX: 400, sourceY: 0, sourceSize: 200 });
   assert.deepEqual(profileImageCropRect(400, 600, { zoom: 2, positionX: -1, positionY: 1 }), { sourceX: 0, sourceY: 400, sourceSize: 200 });
+});
+
+test("estado de recorte normaliza zoom, posición y rotación en cuartos de vuelta", () => {
+  assert.deepEqual(normalizeProfileImageCrop({ zoom: 9, positionX: -3, positionY: 2, rotation: 92 }), { zoom: 3, positionX: -1, positionY: 1, rotation: 90 });
+  assert.deepEqual(normalizeProfileImageCrop({ rotation: -90 }), { zoom: 1, positionX: 0, positionY: 0, rotation: 270 });
 });
 
 test("fuente mayor a 20 MB falla antes de crear URL con mensaje exacto", async () => {

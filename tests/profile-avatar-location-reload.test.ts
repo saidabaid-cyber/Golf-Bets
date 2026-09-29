@@ -101,6 +101,6 @@ test("imagen generada legada sigue como foto, pero no abre editor manual al reca
   const generatedUrl = "https://mock-avatar-storage.invalid/storage/v1/object/public/mock-avatar/generated-avatar/11111111-1111-4111-8111-111111111111/22222222-2222-4222-8222-222222222222.webp";
   assert.equal(profileAvatarType(generatedUrl), "photo");
   const picker = readFileSync("app/components/profile-image-picker.tsx", "utf8");
-  assert.match(picker, /function modeFromValue\(value: string\)[\s\S]*?type === "custom_avatar" \? "custom" : type/);
-  assert.match(picker, /mode === "create" && <AvatarCreationPanel/);
+  assert.match(picker, /function modeFromValue\(value: string\)[\s\S]*?type === "custom_avatar" \? "avatar" : type/);
+  assert.match(picker, /mode === "avatar" && <AvatarCreationPanel/);
 });

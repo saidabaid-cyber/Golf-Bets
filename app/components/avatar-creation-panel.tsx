@@ -4,55 +4,73 @@ import { useId, useRef, useState } from "react";
 import { DEFAULT_MANUAL_AVATAR, MANUAL_AVATAR_OPTIONS, MANUAL_AVATAR_SWATCHES, manualAvatarUrl, parseManualAvatarUrl, randomManualAvatarConfig, type ManualAvatarConfig } from "../../lib/manual-avatar";
 import styles from "./avatar-creation-panel.module.css";
 
-const LABELS: { [K in keyof typeof MANUAL_AVATAR_OPTIONS]: Record<(typeof MANUAL_AVATAR_OPTIONS)[K][number], string> } = {
-  persona: { golfista: "Polo de golf", clasico: "Clubhouse", deportivo: "Golf deportivo" },
-  fondo: { sage: "Verde suave", cream: "Marfil", sky: "Cielo", sand: "Arena" },
-  rostro: { ovalado: "Ovalado", redondo: "Redondo", cuadrado: "Cuadrado" },
-  piel: { clara: "Clara", media: "Media", morena: "Morena", oscura: "Oscura", profunda: "Profunda" },
-  pelo: { sinPelo: "Sin pelo", rapado: "Rapado", corto: "Corto", medio: "Medio", peinado: "Peinado", ondulado: "Ondulado", rizado: "Rizado", largo: "Largo" },
-  colorPelo: { negro: "Negro", cafeOscuro: "Café oscuro", cafe: "Café", castano: "Castaño", rubio: "Rubio", pelirrojo: "Pelirrojo", gris: "Gris", blanco: "Blanco" },
-  ojos: { redondos: "Redondos", almendrados: "Almendrados", sonrientes: "Sonrientes" },
-  colorOjos: { cafe: "Café", verde: "Verde", azul: "Azul" },
-  cejas: { suaves: "Suaves", marcadas: "Marcadas", arqueadas: "Arqueadas" },
-  nariz: { pequena: "Pequeña", recta: "Recta", ancha: "Ancha" },
-  boca: { sonrisa: "Sonrisa", neutra: "Neutra", amplia: "Amplia" },
-  barba: { ninguna: "Sin barba", sombra: "Sombra", corta: "Corta", media: "Media", completa: "Completa", perilla: "Perilla", bigote: "Bigote", barbaBigote: "Barba + bigote" },
-  accesorio: { ninguno: "Ninguno", lentes: "Lentes", lentesSol: "Lentes de sol", visera: "Visera", gorra: "Gorra", gorraGolf: "Gorra de golf", aretes: "Aretes" },
-};
-const CATEGORIES = [
-  ["persona", "LOOK DE GOLF"], ["fondo", "FONDO"], ["rostro", "ROSTRO"], ["piel", "TONO DE PIEL"], ["pelo", "CABELLO"],
-  ["colorPelo", "COLOR DE PELO"], ["ojos", "OJOS"], ["colorOjos", "COLOR DE OJOS"],
-  ["cejas", "CEJAS"], ["nariz", "NARIZ"], ["boca", "BOCA"],
-  ["barba", "BARBA"], ["accesorio", "ACCESORIOS"],
-] as const satisfies readonly (readonly [keyof typeof MANUAL_AVATAR_OPTIONS, string])[];
+type Field = keyof typeof MANUAL_AVATAR_OPTIONS;
+type CategoryId = "face" | "skin" | "hair" | "brows" | "eyes" | "nose" | "mouth" | "beard" | "glasses" | "hat" | "clothes" | "accessories" | "background";
+const CATEGORIES: ReadonlyArray<{ id: CategoryId; label: string; fields: readonly Field[] }> = [
+  { id: "face", label: "ROSTRO", fields: ["rostro", "mandibula", "mejillas", "orejas"] },
+  { id: "skin", label: "PIEL", fields: ["piel"] },
+  { id: "hair", label: "PELO", fields: ["pelo", "colorPelo"] },
+  { id: "brows", label: "CEJAS", fields: ["cejas"] },
+  { id: "eyes", label: "OJOS", fields: ["ojos", "colorOjos"] },
+  { id: "nose", label: "NARIZ", fields: ["nariz"] },
+  { id: "mouth", label: "BOCA", fields: ["boca"] },
+  { id: "beard", label: "BARBA / BIGOTE", fields: ["barba", "colorBarba"] },
+  { id: "glasses", label: "LENTES", fields: ["lentes"] },
+  { id: "hat", label: "GORRA / SOMBRERO", fields: ["sombrero"] },
+  { id: "clothes", label: "PLAYERA / POLO", fields: ["ropa", "colorRopa"] },
+  { id: "accessories", label: "ACCESORIOS", fields: ["accesorio"] },
+  { id: "background", label: "FONDO", fields: ["fondo"] },
+];
 
-function swatchFor(category: keyof typeof MANUAL_AVATAR_OPTIONS, option: string): string | null {
-  if (category === "fondo" || category === "piel" || category === "colorPelo" || category === "colorOjos") return (MANUAL_AVATAR_SWATCHES[category] as Record<string, string>)[option] || null;
+const FIELD_LABELS: Record<Field, string> = {
+  rostro: "Forma de rostro", mandibula: "Mandíbula", mejillas: "Mejillas", orejas: "Orejas", piel: "Tono de piel",
+  pelo: "Peinado", colorPelo: "Color de pelo", cejas: "Cejas", ojos: "Forma de ojos", colorOjos: "Color de ojos",
+  nariz: "Nariz", boca: "Boca", barba: "Barba o bigote", colorBarba: "Color de barba", lentes: "Lentes",
+  sombrero: "Gorra o sombrero", ropa: "Prenda", colorRopa: "Color de ropa", accesorio: "Accesorio", fondo: "Fondo",
+};
+const LABELS: Record<string, string> = {
+  ovalado: "Ovalado", redondo: "Redondo", cuadrado: "Cuadrado", corazon: "Corazón", alargado: "Alargado", diamante: "Diamante",
+  suave: "Suave", definida: "Definida", angular: "Angular", suaves: "Suaves", marcadas: "Marcadas", llenas: "Llenas",
+  pequenas: "Pequeñas", medias: "Medias", grandes: "Grandes", porcelana: "Porcelana", clara: "Clara", mediaClara: "Media clara", media: "Media", morena: "Morena", oscura: "Oscura", profunda: "Profunda",
+  sinPelo: "Sin pelo", rapado: "Rapado", corto: "Corto", medio: "Medio", peinado: "Peinado", ondulado: "Ondulado", rizado: "Rizado", afro: "Afro", largo: "Largo", coleta: "Coleta", entradas: "Entradas",
+  negro: "Negro", cafeOscuro: "Café oscuro", cafe: "Café", castano: "Castaño", rubio: "Rubio", pelirrojo: "Pelirrojo", gris: "Gris", blanco: "Blanco",
+  finas: "Finas", marcadasCejas: "Marcadas", arqueadas: "Arqueadas", rectas: "Rectas", redondos: "Redondos", almendrados: "Almendrados", profundos: "Profundos", sonrientes: "Sonrientes", serenos: "Serenos", avellana: "Avellana", verde: "Verde", azul: "Azul",
+  pequena: "Pequeña", recta: "Recta", ancha: "Ancha", respingada: "Respingada", "aguileña": "Aguileña", sonrisa: "Sonrisa", neutra: "Neutra", amplia: "Amplia", seria: "Seria",
+  ninguna: "Sin barba", sombra: "Sombra", corta: "Corta", completa: "Completa", candado: "Candado", bigote: "Bigote", barbaBigote: "Barba + bigote",
+  ninguno: "Ninguno", rectangulares: "Rectangulares", aviador: "Aviador", sol: "Lentes de sol", gorra: "Gorra", gorraGolf: "Gorra de golf", visera: "Visera", bucket: "Bucket hat",
+  polo: "Polo", playera: "Playera", chamarra: "Chamarra", quarterZip: "Quarter zip", backyard: "Backyard", navy: "Navy", marfil: "Marfil", arcilla: "Arcilla", salvia: "Salvia",
+  arete: "Un arete", aretes: "Aretes", "pañuelo": "Pañuelo", neutro: "Neutro", green: "Green", campo: "Campo", fondoBackyard: "Backyard sólido",
+};
+
+function optionLabel(field: Field, option: string) {
+  if (option === "marcadas" && field === "cejas") return "Marcadas";
+  if (option === "backyard" && field === "fondo") return "Backyard sólido";
+  if (option === "media" && field === "barba") return "Media";
+  return LABELS[option] || option;
+}
+function swatchFor(field: Field, option: string): string | null {
+  if (field in MANUAL_AVATAR_SWATCHES) return (MANUAL_AVATAR_SWATCHES[field as keyof typeof MANUAL_AVATAR_SWATCHES] as Record<string, string>)[option] || null;
   return null;
 }
 
 export function AvatarCreationPanel({ initialValue, onUse, onCancel, onBusyChange, staged = false }: {
-  initialValue?: string;
-  onUse: (avatarUrl: string) => void | Promise<void>;
-  onCancel: () => void;
-  onBusyChange?: (busy: boolean) => void;
-  staged?: boolean;
+  initialValue?: string; onUse: (avatarUrl: string) => void | Promise<void>; onCancel: () => void;
+  onBusyChange?: (busy: boolean) => void; staged?: boolean;
 }) {
   const id = useId();
   const [config, setConfig] = useState<ManualAvatarConfig>(() => parseManualAvatarUrl(initialValue) || DEFAULT_MANUAL_AVATAR);
-  const [category, setCategory] = useState<keyof typeof MANUAL_AVATAR_OPTIONS>("persona");
+  const [categoryId, setCategoryId] = useState<CategoryId>("face");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
-  const selected = CATEGORIES.find(([key]) => key === category)![1];
+  const selected = CATEGORIES.find((item) => item.id === categoryId) || CATEGORIES[0];
   const preview = manualAvatarUrl(config);
 
-  function update(key: keyof typeof MANUAL_AVATAR_OPTIONS, value: string) {
+  function update(key: Field, value: string) {
     setConfig((current) => ({ ...current, [key]: value }) as ManualAvatarConfig);
     setNotice(""); setError("");
   }
-
   async function save() {
     if (savingRef.current) return;
     savingRef.current = true; setSaving(true); onBusyChange?.(true); setError("");
@@ -62,15 +80,14 @@ export function AvatarCreationPanel({ initialValue, onUse, onCancel, onBusyChang
   }
 
   return <section className={styles.panel} aria-labelledby={`${id}-title`}>
-    <header><div><span>HECHO POR TI · SIN IA</span><h3 id={`${id}-title`}>CREA TU AVATAR</h3></div><button type="button" aria-label="Cerrar editor de avatar" disabled={saving} onClick={onCancel}>×</button></header>
-    <div className={styles.hero}><div className={styles.preview}><img src={preview} alt="Vista previa instantánea de tu avatar" /></div><div><strong>Tu estilo, pieza por pieza.</strong><p>Elige rostro, rasgos y accesorios. Todo se crea aquí en tu dispositivo; no se envía ninguna foto ni descripción a un proveedor.</p></div></div>
-    <small className={styles.categoryHint}>DESLIZA PARA ELEGIR UNA PARTE →</small>
-    <div className={styles.categories} role="group" aria-label="Partes del avatar">{CATEGORIES.map(([key, label]) => <button key={key} type="button" aria-pressed={category === key} data-active={category === key} disabled={saving} onClick={() => setCategory(key)}>{label}</button>)}</div>
-    <fieldset className={styles.options}><legend>{selected}</legend><div>{MANUAL_AVATAR_OPTIONS[category].map((option) => <button key={option} type="button" aria-pressed={config[category] === option} data-active={config[category] === option} disabled={saving} onClick={() => update(category, option)}>{swatchFor(category, option) && <span className={styles.swatch} style={{ backgroundColor: swatchFor(category, option)! }} aria-hidden="true" />}{(LABELS[category] as Record<string, string>)[option]}</button>)}</div></fieldset>
-    <div className={styles.actions}><button type="button" className="secondary" disabled={saving} onClick={() => { setConfig(randomManualAvatarConfig()); setNotice("Nueva combinación lista. Puedes seguir editándola."); setError(""); }}>ALEATORIO</button><button type="button" className="primary" disabled={saving} onClick={() => void save()}>{saving ? "PREPARANDO…" : "USAR ESTE AVATAR"}</button></div>
-    <button type="button" className="textButton" disabled={saving} onClick={onCancel}>CANCELAR</button>
-    {notice && <small role="status">{notice}</small>}
-    {error && <small className={styles.error} role="alert">{error}</small>}
+    <header><div><span>CREADOR DE PERSONAJE</span><h3 id={`${id}-title`}>Crea tu avatar</h3><p>Personaliza cada rasgo y mira el resultado al instante.</p></div><button type="button" aria-label="Cerrar editor de avatar" disabled={saving} onClick={onCancel}>×</button></header>
+    <div className={styles.previewShell}><div className={styles.preview}><img src={preview} alt="Vista previa instantánea de tu avatar" /></div><div className={styles.previewLabel}><span aria-hidden="true">●</span> VISTA PREVIA</div></div>
+    <small className={styles.categoryHint}>DESLIZA PARA ELEGIR UNA CATEGORÍA →</small>
+    <div className={styles.categories} role="tablist" aria-label="Partes del avatar">{CATEGORIES.map((category) => <button key={category.id} type="button" role="tab" aria-selected={categoryId === category.id} data-active={categoryId === category.id} disabled={saving} onClick={() => setCategoryId(category.id)}>{category.label}</button>)}</div>
+    <div className={styles.options} aria-label={selected.label}>{selected.fields.map((field) => <fieldset key={field}><legend>{FIELD_LABELS[field]}</legend><div>{MANUAL_AVATAR_OPTIONS[field].map((option) => <button key={option} type="button" aria-pressed={config[field] === option} data-active={config[field] === option} disabled={saving} onClick={() => update(field, option)}>{swatchFor(field, option) && <span className={styles.swatch} style={{ backgroundColor: swatchFor(field, option)! }} aria-hidden="true" />}{optionLabel(field, option)}</button>)}</div></fieldset>)}</div>
+    <div className={styles.actions}><button type="button" className="secondary" disabled={saving} onClick={() => { setConfig(randomManualAvatarConfig(Math.random, config)); setNotice("Nueva combinación lista. Conservamos tu tono de piel; puedes seguir editando."); setError(""); }}>ALEATORIO</button><button type="button" className="primary" disabled={saving} onClick={() => void save()}>{saving ? "PREPARANDO…" : "USAR ESTE AVATAR"}</button></div>
+    <button type="button" className="textButton" disabled={saving} onClick={onCancel}>VOLVER</button>
+    {notice && <small role="status">{notice}</small>}{error && <small className={styles.error} role="alert">{error}</small>}
     <small>{staged ? "Tu avatar quedará listo y se guardará al completar tu perfil." : "Tu selección queda lista aquí y se guarda al confirmar el perfil."}</small>
   </section>;
 }

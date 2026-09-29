@@ -3,7 +3,7 @@ export const PROFILE_IMAGE_MAX_BYTES = 20 * 1024 * 1024;
 export const PROFILE_IMAGE_MAX_DATA_URL_LENGTH = 180_000;
 
 export type SquareCropRect = { sourceX: number; sourceY: number; sourceSize: number };
-export type ProfileImageCrop = { zoom?: number; positionX?: number; positionY?: number };
+export type ProfileImageCrop = { zoom?: number; positionX?: number; positionY?: number; rotation?: number };
 export type ProfileImageFormat = "jpeg" | "png" | "webp" | "heic" | "heif";
 
 /** Center-crop geometry shared by all supported source formats. */
@@ -31,6 +31,18 @@ export function profileImageCropRect(width: number, height: number, crop: Profil
     sourceX: Math.round((safeWidth - sourceSize) * ((x + 1) / 2)),
     sourceY: Math.round((safeHeight - sourceSize) * ((y + 1) / 2)),
     sourceSize,
+  };
+}
+
+/** Normalized editor state shared by pointer gestures, compact controls and encoding. */
+export function normalizeProfileImageCrop(crop: ProfileImageCrop = {}): Required<ProfileImageCrop> {
+  const rawRotation = Number.isFinite(crop.rotation) ? crop.rotation! : 0;
+  const rotation = ((Math.round(rawRotation / 90) * 90) % 360 + 360) % 360;
+  return {
+    zoom: Math.max(1, Math.min(3, Number.isFinite(crop.zoom) ? crop.zoom! : 1)),
+    positionX: Math.max(-1, Math.min(1, Number.isFinite(crop.positionX) ? crop.positionX! : 0)),
+    positionY: Math.max(-1, Math.min(1, Number.isFinite(crop.positionY) ? crop.positionY! : 0)),
+    rotation,
   };
 }
 
@@ -166,7 +178,8 @@ export async function profileImageFromFile(file: File, size = 512, cropOptions: 
   try {
     image = await decodedProfileImage(file, objectUrl, format);
     if (!Number.isFinite(image.width) || !Number.isFinite(image.height) || image.width < 1 || image.height < 1 || image.width * image.height > 80_000_000) throw new Error("image_dimensions");
-    const crop = profileImageCropRect(image.width, image.height, cropOptions);
+    const normalizedCrop = normalizeProfileImageCrop(cropOptions);
+    const crop = profileImageCropRect(image.width, image.height, normalizedCrop);
     const outputSize = Number.isFinite(size) ? Math.max(64, Math.min(512, Math.trunc(size))) : 512;
     const canvas = document.createElement("canvas");
     canvas.width = outputSize;
@@ -176,7 +189,15 @@ export async function profileImageFromFile(file: File, size = 512, cropOptions: 
     // JPEG fallback needs an opaque background for transparent PNG/WebP.
     context.fillStyle = "#ffffff";
     context.fillRect(0, 0, outputSize, outputSize);
-    context.drawImage(image, crop.sourceX, crop.sourceY, crop.sourceSize, crop.sourceSize, 0, 0, outputSize, outputSize);
+    if (normalizedCrop.rotation === 0) {
+      context.drawImage(image, crop.sourceX, crop.sourceY, crop.sourceSize, crop.sourceSize, 0, 0, outputSize, outputSize);
+    } else {
+      context.save();
+      context.translate(outputSize / 2, outputSize / 2);
+      context.rotate((normalizedCrop.rotation * Math.PI) / 180);
+      context.drawImage(image, crop.sourceX, crop.sourceY, crop.sourceSize, crop.sourceSize, -outputSize / 2, -outputSize / 2, outputSize, outputSize);
+      context.restore();
+    }
     return await compressedProfileImageDataUrlAsync(canvas);
   } finally {
     image?.close?.();

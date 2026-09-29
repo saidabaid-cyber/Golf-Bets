@@ -64,9 +64,9 @@ test("Perfil usa selector de foto o avatar sin pedir URLs manuales", () => {
   assert.match(account, /if \(avatarBusy \|\| saving \|\| profileSaveInFlight\.current\) return/);
   assert.doesNotMatch(account, /type="url" inputMode="url"/);
   assert.match(picker, /aria-label=\{kind === "profile" \? "Elegir foto de la galería" : "Seleccionar imagen del grupo"\}/);
-  assert.match(picker, /Sin imagen/);
+  assert.match(picker, /SIN FOTO/);
   assert.match(account, /no modifica tu foto de Google/);
-  assert.match(picker, /Puedes cambiarlo o eliminarlo después/);
+  assert.match(picker, /Tu foto o avatar anterior no volverá a mostrarse después de guardar/);
 });
 
 test("Perfil y Cuenta anuncian errores como alertas sin disfrazarlos de éxito", () => {

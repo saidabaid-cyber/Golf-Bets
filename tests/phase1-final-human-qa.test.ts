@@ -15,14 +15,14 @@ test("emoji libre usa el teclado nativo, conserva presets existentes y no acepta
   for (const emoji of PROFILE_EMOJI_AVATARS) assert.equal(isProfileEmojiAvatar(emoji), true);
   assert.equal(isProfileEmojiAvatar("https://example.test/avatar.png"), false);
   const picker = readFileSync("app/components/profile-image-picker.tsx", "utf8");
-  assert.match(picker, /SUBIR UNA IMAGEN/);
-  assert.match(picker, />Emoji<\/button>/);
+  assert.match(picker, /CREAR CARICATURA DESDE MI FOTO/);
+  assert.match(picker, /label: "EMOJI"/);
   assert.match(picker, /QUICK_EMOJIS\.map/);
-  assert.match(picker, /aria-pressed=\{mode === "emoji"\}/);
+  assert.match(picker, /aria-pressed=\{mode === choice\.mode\}/);
   assert.doesNotMatch(picker, />Elegir avatar<\/button>/);
   assert.match(picker, /normalizeProfileEmojiAvatar/);
   assert.match(picker, /Emoji de avatar/);
-  assert.match(picker, /Opción secundaria: también puedes usar el teclado de tu teléfono/);
+  assert.match(picker, /placeholder="Usa el teclado"/);
 });
 
 test("club del perfil consume CourseCatalogProvider y conserva captura manual", async () => {

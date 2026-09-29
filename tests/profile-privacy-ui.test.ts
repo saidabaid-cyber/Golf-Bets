@@ -25,14 +25,14 @@ test("Perfil presenta resumen compacto y mueve los inputs a Editar perfil", () =
   assert.match(css, /\.profileMobileStack\{display:grid/);
 });
 
-test("Crear avatar y Subir imagen son principales; Emoji y Sin imagen quedan secundarios", () => {
-  for (const label of ["CREAR MI AVATAR", "SUBIR UNA IMAGEN", "Emoji", "Sin imagen"]) assert.match(picker, new RegExp(label));
-  assert.match(picker, /className=\{styles.primaryChoices\}/);
-  assert.match(picker, /className=\{styles.secondaryChoices\}/);
-  assert.match(pickerCss, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+test("Sin foto, Emoji, Avatar y Foto son opciones principales equivalentes", () => {
+  for (const label of ["SIN FOTO", "EMOJI", "AVATAR", "FOTO"]) assert.match(picker, new RegExp(label));
+  assert.match(picker, /className=\{styles.modeChoices\}/);
+  assert.match(picker, /aria-pressed=\{mode === choice\.mode\}/);
+  assert.match(pickerCss, /grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/);
   assert.match(pickerCss, /@media \(max-width: 430px\)/);
-  assert.match(picker, /kind === "profile" \? styles\.profilePreview : ""/);
-  assert.match(pickerCss, /\.profilePreview \{ border-radius: 50%; \}/);
+  assert.match(picker, /className=\{styles.check\}/);
+  assert.match(pickerCss, /\.modeVisual \{[^}]*border-radius: 50%/);
 });
 
 test("Perfil enlaza Mi Bolsa y un único acceso principal a Configuración", () => {

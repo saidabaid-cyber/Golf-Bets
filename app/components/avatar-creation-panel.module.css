@@ -1,27 +1,28 @@
-.panel { grid-column: 1 / -1; display: grid; gap: 12px; min-width: 0; padding: 14px; border: 1px solid var(--line); border-radius: 18px; background: var(--soft); }
+.panel { display: grid; gap: 12px; min-width: 0; padding: 14px; border: 1px solid var(--line); border-radius: 19px; background: var(--soft); box-shadow: 0 5px 20px rgba(20,56,37,.05); }
 .panel header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-.panel header span { display: block; color: var(--muted); font-size: 10px; font-weight: 900; letter-spacing: .08em; }
-.panel h3 { margin: 3px 0 0; color: var(--green); font-size: 18px; }
-.panel header button { flex: 0 0 44px; width: 44px; min-height: 44px; border: 1px solid var(--line); border-radius: 50%; background: var(--card); font-size: 24px; }
-.hero { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; align-items: center; text-align: center; min-width: 0; }
-.preview { width: 176px; height: 176px; margin: 0 auto; border: 4px solid var(--card); border-radius: 50%; overflow: hidden; background: #dcece2; box-shadow: 0 4px 18px rgba(16,64,40,.12); }
+.panel header span { display: block; color: var(--green); font-size: 9px; font-weight: 900; letter-spacing: .12em; }
+.panel h3 { margin: 3px 0 0; color: var(--ink); font-family: var(--font-serif); font-size: 24px; }
+.panel header p { margin: 4px 0 0; color: var(--muted); font-size: 10px; }
+.panel header button { flex: 0 0 42px; width: 42px; min-height: 42px; border: 1px solid var(--line); border-radius: 50%; background: var(--card); color: var(--ink); font-size: 22px; }
+.previewShell { position: relative; min-height: 234px; overflow: hidden; border-radius: 17px; background: linear-gradient(145deg,#e9f0e9,#d7e5db); display: grid; place-items: center; }
+.preview { width: 214px; height: 214px; overflow: hidden; border: 5px solid rgba(255,255,255,.95); border-radius: 50%; background: #dcece2; box-shadow: 0 9px 28px rgba(16,64,40,.2); }
 .preview img { display: block; width: 100%; height: 100%; object-fit: cover; }
-.hero strong { display: block; color: var(--ink); font-size: 13px; }
-.hero p { margin: 6px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
-.panel .categoryHint { color: var(--green); font-size: 9px; font-weight: 900; letter-spacing: .08em; }
+.previewLabel { position: absolute; left: 12px; bottom: 11px; padding: 7px 10px; border-radius: 999px; background: rgba(255,255,255,.9); color: var(--green); font-size: 9px; font-weight: 900; letter-spacing: .07em; }
+.previewLabel span { font-size: 7px; }
+.categoryHint { color: var(--green); font-size: 8px; font-weight: 900; letter-spacing: .09em; }
 .categories { display: flex; gap: 6px; min-width: 0; max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; scroll-snap-type: x proximity; padding: 2px 1px 7px; scrollbar-width: thin; }
-.categories button { flex: 0 0 104px; min-width: 0; min-height: 44px; padding: 5px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--green); font-size: 10px; font-weight: 800; line-height: 1.2; overflow-wrap: anywhere; scroll-snap-align: start; }
-.categories button[data-active="true"] { border-color: var(--green); background: #dfebe2; box-shadow: inset 0 0 0 1px var(--green); }
-.options { min-width: 0; margin: 0; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
-.options legend { padding: 0 5px; color: var(--green); font-size: 12px; font-weight: 900; }
-.options > div { display: grid; grid-template-columns: repeat(auto-fit, minmax(88px, 1fr)); gap: 6px; }
-.options button { min-width: 0; min-height: 44px; padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); color: var(--ink); font-size: 11px; font-weight: 700; overflow-wrap: anywhere; display: flex; justify-content: center; align-items: center; gap: 6px; }
+.categories button { flex: 0 0 101px; min-width: 0; min-height: 45px; padding: 5px; border: 1px solid var(--line); border-radius: 11px; background: var(--card); color: var(--green); font-size: 9px; font-weight: 850; line-height: 1.15; overflow-wrap: anywhere; scroll-snap-align: start; }
+.categories button[data-active="true"] { border-color: var(--green); background: #e4efe6; box-shadow: inset 0 0 0 1px var(--green); }
+.options { display: grid; gap: 9px; min-width: 0; }
+.options fieldset { min-width: 0; margin: 0; padding: 10px; border: 1px solid var(--line); border-radius: 13px; background: var(--card); }
+.options legend { padding: 0 5px; color: var(--green); font-size: 11px; font-weight: 900; }
+.options fieldset > div { display: grid; grid-template-columns: repeat(auto-fit,minmax(86px,1fr)); gap: 6px; }
+.options button { min-width: 0; min-height: 44px; padding: 7px 5px; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); color: var(--ink); font-size: 10px; font-weight: 750; overflow-wrap: anywhere; display: flex; justify-content: center; align-items: center; gap: 5px; }
+.options button[data-active="true"] { border-color: var(--green); background: #dcece2; color: var(--green); box-shadow: inset 0 0 0 1px var(--green); }
 .swatch { flex: 0 0 18px; width: 18px; height: 18px; border: 1px solid rgba(20,40,30,.23); border-radius: 50%; }
-.options button[data-active="true"] { border-color: var(--green); background: #dcece2; color: var(--green); }
-.actions { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 8px; }
-.actions button { min-width: 0; min-height: 44px; white-space: normal; }
-.panel > button { min-height: 44px; }
-.panel small { display: block; color: var(--muted); font-size: 10px; line-height: 1.4; }
-.panel .error { color: #8f281f; font-size: 11px; }
+.actions { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,2fr); gap: 8px; }
+.actions button, .panel > button { min-width: 0; min-height: 46px; white-space: normal; }
+.panel small { display: block; color: var(--muted); font-size: 9px; line-height: 1.4; }
+.panel .error { color: #8f281f; font-size: 10px; }
 .panel button:disabled { opacity: .6; cursor: wait; }
-@media (max-width: 430px) { .panel { padding: 11px; } .preview { width: 156px; height: 156px; } .categories button { flex-basis: 98px; font-size: 9px; } .options > div { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width:430px) { .panel { padding: 11px; } .previewShell { min-height: 213px; } .preview { width: 194px; height: 194px; } .categories button { flex-basis: 96px; } .options fieldset > div { grid-template-columns: repeat(2,minmax(0,1fr)); } }
