@@ -75,7 +75,7 @@ export function GhinReadOnlyPanel({
         VINCULAR GHIN <span aria-hidden="true">→</span>
       </button>
     </> : <>
-      <p className={styles.badge}>{profile.associationStatus === "VERIFIED" ? "✓ GHIN VINCULADO" : "DATOS CONSULTADOS DESDE GHIN"}</p>
+      <p className={styles.badge}>{profile.associationStatus === "VERIFIED" ? `✓ GHIN VINCULADO${sourceActive ? " · FUENTE ACTIVA" : ""}` : "DATOS CONSULTADOS DESDE GHIN"}</p>
       <dl className={styles.details}>
         <div><dt>Nombre</dt><dd>{profile.playerName}</dd></div>
         <div><dt>GHIN</dt><dd>{profile.ghinNumber}</dd></div>

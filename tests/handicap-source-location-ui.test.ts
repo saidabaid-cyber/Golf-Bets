@@ -98,6 +98,44 @@ test("source selector activation handler, no false success after failed/pending 
   assert.match(text(render({ authenticated: true, control: { ...control, preference: { enabled: true, handicapSource: "BACKYARD" } } })), /ÍNDICE BACKYARD ACTIVADO/);
 });
 
+test("active GHIN is the only open source until the user asks to change it", () => {
+  const render = component("app/components/handicap-source-selector.tsx", "HandicapSourceChoices", { Image: "image", BackyardIcon: "backyard-icon", BackyardMark: "backyard-mark", GhinPlaceholder: "ghin", GhinReadOnlyPanel: "ghin-live", styles: {} });
+  const profile = { associationStatus: "VERIFIED", handicapIndex: 7.9, homeClubName: "LA Vista Country Club" };
+  const control = { ready: true, saving: false, error: "", preference: { enabled: false, handicapSource: "GHIN" }, change: async () => {}, selectGhin: async () => {}, retry: async () => {} };
+  const props = { authenticated: true, control, ghinControl: { ready: true, enabled: true, profile } };
+  let tree = render(props);
+  assert.match(text(tree), /GHIN/);
+  assert.doesNotMatch(text(tree), /Usar Backyard Index/);
+  assert.doesNotMatch(text(tree), /Continuar sin índice/);
+  const changeSource = nodes(tree).find((node) => node.type === "button" && /Cambiar fuente de índice/.test(text(node)));
+  assert.ok(changeSource, "active GHIN must expose one discreet source-change action");
+  assert.equal(nodes(tree).find((node) => node.type === "ghin-live")?.props.sourceActive, true);
+  (changeSource.props.onClick as () => void)();
+  tree = render(props);
+  assert.match(text(tree), /Usar Backyard Index/);
+  assert.match(text(tree), /Continuar sin índice/);
+});
+
+test("unlinked, Backyard-active and no-index source states render their correct choices", () => {
+  const render = component("app/components/handicap-source-selector.tsx", "HandicapSourceChoices", { Image: "image", BackyardIcon: "backyard-icon", BackyardMark: "backyard-mark", GhinPlaceholder: "ghin", GhinReadOnlyPanel: "ghin-live", styles: {} });
+  const base = { ready: true, saving: false, error: "", change: async () => {}, selectGhin: async () => {}, retry: async () => {} };
+  const unlinked = render({ authenticated: true, control: { ...base, preference: null }, ghinControl: { ready: true, enabled: true, profile: null } });
+  assert.match(text(unlinked), /Vincular GHIN/);
+  assert.match(text(unlinked), /Usar Backyard Index/);
+  assert.match(text(unlinked), /Continuar sin índice/);
+
+  const linkedProfile = { associationStatus: "VERIFIED", handicapIndex: 7.9, homeClubName: "LA Vista Country Club" };
+  const backyard = render({ authenticated: true, control: { ...base, preference: { enabled: true, handicapSource: "BACKYARD" } }, ghinControl: { ready: true, enabled: true, profile: linkedProfile } });
+  assert.match(text(backyard), /ÍNDICE BACKYARD ACTIVADO/);
+  assert.match(text(backyard), /Usar GHIN/);
+  assert.equal(nodes(backyard).find((node) => node.type === "ghin-live")?.props.sourceActive, false);
+
+  const none = render({ authenticated: true, control: { ...base, preference: { enabled: false, handicapSource: null } }, ghinControl: { ready: true, enabled: true, profile: linkedProfile } });
+  assert.match(text(none), /Sin índice por ahora/);
+  assert.match(text(none), /Usar GHIN/);
+  assert.match(text(none), /ACTIVAR BACKYARD INDEX/);
+});
+
 test("BACKYARD activation persists source and enabled server-side and reload/new device sees it", async () => {
   let metadata: Record<string, unknown> = {};
   const client = { auth: { getUser: async () => ({ error: null, data: { user: { id: "owner", user_metadata: metadata } } }), updateUser: async ({ data }: { data: Record<string, unknown> }) => { metadata = { ...metadata, ...data }; return { error: null, data: { user: { id: "owner", user_metadata: metadata } } }; } } } as unknown as SupabaseClient;

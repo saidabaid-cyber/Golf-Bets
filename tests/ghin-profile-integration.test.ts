@@ -22,7 +22,7 @@ const profile: GhinProfileProjection = {
   associationStatus: "VERIFIED",
 };
 
-test("a verified GHIN projection is the canonical account index and wins over a Backyard preference", () => {
+test("the saved source selects GHIN, Backyard or no index without discarding a verified GHIN projection", () => {
   const preference = {
     version: 1 as const,
     userId: "owner",
@@ -31,17 +31,26 @@ test("a verified GHIN projection is the canonical account index and wins over a 
     localPccZeroDeclaredAt: null,
     updatedAt: "2026-09-27T12:00:00.000Z",
   };
-  assert.deepEqual(selectedHandicapIndex(preference, [], "owner", profile), { source: "GHIN", value: 7.9 });
+  const originalProfile = structuredClone(profile);
+  const originalPreference = structuredClone(preference);
+  const history = [{ id: "round-1" }] as unknown as Parameters<typeof selectedHandicapIndex>[1];
+  const originalHistory = structuredClone(history);
+  assert.deepEqual(selectedHandicapIndex(preference, history, "owner", profile), { source: "BACKYARD", value: null });
   assert.deepEqual(selectedHandicapIndex(null, [], "owner", profile), { source: "GHIN", value: 7.9 });
+  assert.deepEqual(selectedHandicapIndex({ ...preference, enabled: false, handicapSource: "GHIN" }, [], "owner", profile), { source: "GHIN", value: 7.9 });
+  assert.deepEqual(selectedHandicapIndex({ ...preference, enabled: false, handicapSource: null }, [], "owner", profile), { source: null, value: null });
   assert.deepEqual(selectedHandicapIndex({ ...preference, enabled: false, handicapSource: "GHIN" }, [], "owner", null), { source: null, value: null });
   assert.deepEqual(selectedHandicapIndex(preference, [], "owner", { ...profile, associationStatus: "LOOKUP_FOUND" }), { source: "BACKYARD", value: null });
   assert.deepEqual(selectedHandicapIndex(preference, [], "owner", { ...profile, handicapIndex: Number.NaN }), { source: "BACKYARD", value: null });
   assert.deepEqual(selectedHandicapIndex(preference, [], "another", profile), { source: null, value: null });
   assert.equal(verifiedGhinHandicapIndex(profile), 7.9);
   assert.equal(verifiedGhinHandicapIndex({ ...profile, associationStatus: "LOOKUP_FOUND" }), null);
+  assert.deepEqual(profile, originalProfile, "changing the active source must not mutate the linked GHIN profile");
+  assert.deepEqual(preference, originalPreference, "changing the active source must not mutate the saved Backyard preference");
+  assert.deepEqual(history, originalHistory, "resolving a source must not delete round history");
   const selector = readFileSync("app/components/handicap-source-selector.tsx", "utf8");
-  assert.match(selector, /verifiedGhinActive/);
-  assert.match(selector, /GHIN ES TU FUENTE ACTIVA/);
+  assert.match(selector, /const ghinActive = ghinLinked/);
+  assert.match(selector, /Cambiar fuente de índice/);
 });
 
 test("persistence allowlist contains provider data but no password, Firebase or bearer material", () => {

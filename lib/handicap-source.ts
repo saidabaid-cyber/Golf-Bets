@@ -16,17 +16,21 @@ export function verifiedGhinHandicapIndex(profile: GhinProfileProjection | null 
 }
 
 /** Canonical account Index resolver shared by Profile, rounds and Ball Fit.
- * A server-projected VERIFIED GHIN value wins. Otherwise an explicitly
- * selected Backyard Index is calculated from frozen eligible-round evidence.
+ * An explicit owner preference selects the active source. A verified GHIN
+ * projection remains the legacy fallback when no preference has been saved.
+ * An explicitly selected Backyard Index is calculated from frozen eligible-round evidence.
  * Legacy manual profile values, Auth metadata and unverified provider rows are
  * never promoted into an account Index. */
 export function selectedHandicapIndex(preference: BackyardIndexPreference | null, history: readonly RoundSnapshot[], userId: string, ghinProfile: GhinProfileProjection | null = null): SelectedHandicapIndex {
-  const preferenceOwned = !preference || preference.userId === userId;
   const ghinIndex = verifiedGhinHandicapIndex(ghinProfile);
-  if (preferenceOwned && userId && userId !== "guest" && ghinIndex !== null) {
+  if (!userId || userId === "guest") return { source: null, value: null };
+  if (!preference) {
+    return ghinIndex !== null ? { source: "GHIN", value: ghinIndex } : { source: null, value: null };
+  }
+  if (preference.userId !== userId) return { source: null, value: null };
+  if (preference.handicapSource === "GHIN" && ghinIndex !== null) {
     return { source: "GHIN", value: ghinIndex };
   }
-  if (!preference || preference.userId !== userId) return { source: null, value: null };
   if (preference.enabled && (preference.handicapSource === undefined || preference.handicapSource === "BACKYARD")) {
     const value = calculateBackyardIndex(history, userId).value;
     return { source: "BACKYARD", value: usableIndex(value) ? value : null };

@@ -6,7 +6,7 @@ export type BackyardIndexPreference = {
   version: 1;
   userId: string;
   enabled: boolean;
-  /** Stable source choice; no generic manual profile Index. GHIN remains unlinked. */
+  /** Stable source choice; no generic manual profile Index. */
   handicapSource?: "BACKYARD" | "GHIN" | null;
   localPccZeroDeclaredAt: string | null;
   updatedAt: string;
