@@ -5,7 +5,8 @@ export const FEEDBACK_ATTACHMENT_MAX_BYTES=2*1024*1024;
 export const FEEDBACK_ATTACHMENT_TYPES=['image/jpeg','image/png','image/webp'] as const;
 export const FEEDBACK_SHORT_LABELS:Record<FeedbackCategory,string>={COURSE:'Campo',TEE:'Tee',CLUB:'Bastón',BALL:'Bola',SHAFT:'Varilla',BET:'Apuesta',BUG:'Bug',GENERAL:'Sugerencia'};
 export const FEEDBACK_OPTIONAL_FIELDS=['clubType','flex','players','example','occurred','expected','module'] as const;
-export const FEEDBACK_TO='contacto@thebackyard.com.mx';
+export const FEEDBACK_TO='soporte@thebackyard.com.mx';
+export const FEEDBACK_DEV_CC='contacto@thebackyard.com.mx';
 export const COURSE_SCORECARD_REQUIRED_MESSAGE='Adjunta una foto de la tarjeta del club para que podamos dar de alta el campo correctamente.';
 export function feedbackAttachmentRequired(category:FeedbackCategory){return category==='COURSE';}
 export function validateFeedback(value:unknown):{ok:true;data:FeedbackInput}|{ok:false;error:string} {
@@ -35,7 +36,39 @@ export function feedbackPersistenceInput(value:FeedbackInput):FeedbackInput {
   return {...value,category:'COURSE',name:`Tee faltante · ${value.name}`,description:`${value.description}\nTee solicitado: ${value.model||'No indicado'}`};
 }
 export function feedbackMessage(v:FeedbackInput) {return {subject:`The Backyard · ${FEEDBACK_CATEGORIES[v.category]}${v.name?`: ${v.name.replace(/[\r\n]/g,' ')}`:''}`,
-  text:[`Categoría: ${FEEDBACK_CATEGORIES[v.category]}`,v.name&&`Nombre: ${v.name}`,`Responder a: ${v.replyEmail}`,
-    v.category==='COURSE'&&`Ubicación: ${v.city}, ${v.state}`,['CLUB','BALL','SHAFT'].includes(v.category)&&`Equipo: ${v.brand} ${v.model}`,
-    v.description,v.category==='BET'&&v.rules&&`Reglas / participantes / ejemplo: ${v.rules}`].filter(Boolean).join('\n\n')};}
+  text:[`Categoría: ${FEEDBACK_CATEGORIES[v.category]}`,...feedbackSpecificDetails(v),`Responder a: ${v.replyEmail}`,`Descripción:\n${v.description}`].filter(Boolean).join('\n\n')};}
 export function feedbackMailto(v:FeedbackInput) {const m=feedbackMessage(v);return `mailto:${FEEDBACK_TO}?subject=${encodeURIComponent(m.subject)}&body=${encodeURIComponent(m.text)}`;}
+
+export type FeedbackDeliveryContext={submittedAt?:string|null;screen?:string|null;identity?:Record<string,unknown>|null;attachmentAvailable?:boolean;environment?:string|null};
+const oneLine=(value:unknown)=>typeof value==='string'?value.replace(/[\r\n\t]+/g,' ').replace(/\s+/g,' ').trim():'';
+export function feedbackSpecificDetails(v:FeedbackInput) {
+  const rows:[string,string][]=[
+    ['Nombre / solicitud',v.name],['Ciudad',v.city],['Estado',v.state],['Marca',v.brand],['Modelo',v.model],
+    ['Tipo de bastón',v.clubType??''],['Flex',v.flex??''],['Jugadores',v.players??''],['Módulo',v.module??''],
+    ['Qué ocurrió',v.occurred??''],['Qué esperaba',v.expected??''],['Reglas',v.rules],['Ejemplo',v.example??''],
+  ];
+  return rows.flatMap(([label,value])=>{const normalized=oneLine(value);return normalized?[`${label}: ${normalized}`]:[];});
+}
+export function feedbackDeliveryText(id:string,input:FeedbackInput,context:FeedbackDeliveryContext={}) {
+  const identity=context.identity??{};
+  const user=oneLine(identity.display_name)||oneLine(identity.username)||oneLine(identity.email)||oneLine(identity.user_id)||'No disponible';
+  const accountEmail=oneLine(identity.email);
+  const submittedAt=context.submittedAt&&Number.isFinite(Date.parse(context.submittedAt))?new Date(context.submittedAt).toISOString():'No disponible';
+  const details=feedbackSpecificDetails(input);
+  return [
+    `Referencia: ${id}`,
+    `Categoría: ${FEEDBACK_CATEGORIES[input.category]}`,
+    `Usuario / nombre: ${user}`,
+    accountEmail&&`Correo de cuenta: ${accountEmail}`,
+    `Correo de respuesta: ${input.replyEmail}`,
+    `Fecha: ${submittedAt}`,
+    `Pantalla / origen: ${oneLine(context.screen)||'No indicada'}`,
+    `Entorno: ${oneLine(context.environment)||'No indicado'}`,
+    `Datos específicos de la categoría:\n${details.length?details.join('\n'):'Sin datos adicionales.'}`,
+    `Descripción:\n${input.description}`,
+    context.attachmentAvailable
+      ? 'Adjunto: Sí. Revísalo de forma segura en Admin → Solicitudes; el archivo privado no se incluye ni se publica en este correo.'
+      : 'Adjunto: No.',
+    'La base de datos es el registro oficial de esta solicitud.',
+  ].filter(Boolean).join('\n\n');
+}

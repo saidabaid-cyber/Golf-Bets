@@ -128,7 +128,7 @@ export function AdminControlCenter() {
         {view === "competitions" && <CompetitionEditor loading={loading} submit={(payload) => mutate(payload, "Competición y reglamento guardados como Draft.", "revisions")} items={list(data?.items)} />}
         {view === "course-ops" && <CourseOperations loading={loading} submit={(payload) => mutate(payload, "Configuración temporal creada como Draft.")} request={api} refresh={() => load("course-ops")} items={list(data?.items)} />}
         {view === "imports" && <ImportEditor loading={loading} request={api} />}
-        {view === "requests" && <Requests items={list(data?.items)} loading={loading} onConvert={(id, entityType) => mutate({ operation: "createDraftFromRequest", feedbackId: id, entityType }, "Solicitud convertida en Draft; no fue publicada.")} />}
+        {view === "requests" && <Requests items={list(data?.items)} loading={loading} request={api} onConvert={(id, entityType) => mutate({ operation: "createDraftFromRequest", feedbackId: id, entityType }, "Solicitud convertida en Draft; no fue publicada.")} />}
         {view === "revisions" && <PublicationQueue items={list(data?.items) as Revision[]} loading={loading} mutate={mutate} request={api} />}
         {view === "quality" && <Quality data={data} />}
         {view === "audit" && <Audit items={list(data?.items)} />}
@@ -508,14 +508,49 @@ function PublicationQueue({ items, loading, mutate, request }: { items: Revision
   return <section className={styles.card}><div className={styles.sectionTitle}><div><h2>Publicaciones pendientes</h2><p>La publicación requiere estado VERIFIED y el hash del Preview más reciente.</p></div></div><Workflow />{items.length === 0 ? <div className={styles.empty}>No hay revisiones dentro de tu alcance.</div> : <div className={styles.list}>{items.map((item) => <article className={styles.item} key={item.id}><div><strong>{item.entity_type} · {item.entity_id}</strong><span>v{item.version} · procedencia {item.provenance_status}</span><em>{item.status}</em><QaBadge item={item} /></div><div className={styles.actions}>{item.status === "DRAFT" && <button disabled={loading} onClick={() => void action(item)}>Marcar Reviewed</button>}{item.status === "REVIEWED" && <button disabled={loading} onClick={() => void action(item)}>Verificar</button>}{item.status === "VERIFIED" && <button disabled={loading} onClick={() => void mutate({ operation: "previewRevision", revisionId: item.id }, "Preview generado. Actualiza la cola para confirmar.")}>Generar Preview</button>}{item.status === "VERIFIED" && item.preview_hash && !isQaItem(item) && <button className={styles.primary} disabled={loading} onClick={() => void mutate({ operation: "publishRevision", revisionId: item.id, previewHash: item.preview_hash, reason: "Publicación confirmada desde Admin Control Center." }, "Publicado. Player APIs usarán la nueva versión sin deployment.")}>Confirmar Publish</button>}{item.status === "VERIFIED" && item.preview_hash && isQaItem(item) && <span className={styles.subtle}>Publicación operativa bloqueada</span>}<button disabled={loading} onClick={() => void download(item)}>Exportar JSON</button>{item.status !== "ARCHIVED" && <button disabled={loading} className={styles.danger} onClick={() => void mutate({ operation: "transitionRevision", revisionId: item.id, nextStatus: "ARCHIVED", reason: "Archivado por operador." }, "Revisión archivada sin borrar datos.")}>Archivar</button>}</div></article>)}</div>}</section>;
 }
 
-function Requests({ items, loading, onConvert }: { items: Json[]; loading: boolean; onConvert: (id: string, type: string) => void }) {
-  return <section className={styles.card}><div className={styles.sectionTitle}><div><h2>Solicitudes de usuarios</h2><p>REPORTed no significa VERIFIED. Convertir crea Draft, nunca publica.</p></div></div>{items.length === 0 ? <div className={styles.empty}>No hay solicitudes visibles.</div> : <div className={styles.list}>{items.map((item) => <RequestRow key={String(item.id)} item={item} loading={loading} onConvert={onConvert} />)}</div>}</section>;
+function Requests({ items, loading, request, onConvert }: { items: Json[]; loading: boolean; request: (path: string, options?: RequestInit) => Promise<Json>; onConvert: (id: string, type: string) => void }) {
+  return <section className={styles.card}><div className={styles.sectionTitle}><div><h2>Solicitudes de usuarios</h2><p>La base de datos es el registro oficial. El email sólo notifica; nunca elimina la solicitud.</p></div></div>{items.length === 0 ? <div className={styles.empty}>No hay solicitudes visibles.</div> : <div className={styles.list}>{items.map((item) => <RequestRow key={String(item.id)} item={item} loading={loading} request={request} onConvert={onConvert} />)}</div>}</section>;
 }
 
-function RequestRow({ item, loading, onConvert }: { item: Json; loading: boolean; onConvert: (id: string, type: string) => void }) {
+function RequestRow({ item, loading, request, onConvert }: { item: Json; loading: boolean; request: (path: string, options?: RequestInit) => Promise<Json>; onConvert: (id: string, type: string) => void }) {
   const suggested = ({ COURSE: "COURSE", CLUB: "CLUB_EQUIPMENT", BALL: "BALL", SHAFT: "SHAFT" } as Record<string, string>)[String(item.category)] || "REQUEST";
   const [type, setType] = useState(suggested);
-  return <article className={styles.item}><div><strong>{String(item.title || item.category)}</strong><span>{String(item.description)} · {String(item.request_status)}</span><QaBadge item={item} /></div>{isQaItem(item) ? <span className={styles.subtle}>Evidencia interna; no puede convertirse en borrador operativo.</span> : <div className={styles.actions}><select aria-label={`Tipo de Draft para ${String(item.title || item.category)}`} value={type} onChange={(event) => setType(event.target.value)}><option value="COURSE">Campo</option><option value="CLUB_EQUIPMENT">Bastón</option><option value="BALL">Bola</option><option value="SHAFT">Varilla</option><option value="LOCAL_RULE_SET">Regla local</option><option value="COURSE_CONFIGURATION">Cambio temporal</option><option value="REQUEST">Otro / soporte</option></select><button disabled={loading} onClick={() => onConvert(String(item.id), type)}>Crear borrador</button></div>}</article>;
+  const [attachmentUrl, setAttachmentUrl] = useState("");
+  const [attachmentError, setAttachmentError] = useState("");
+  const [attachmentLoading, setAttachmentLoading] = useState(false);
+  const identity = object(item.identity_snapshot) || {};
+  const payload = object(item.payload) || {};
+  const user = [identity.display_name, identity.username, identity.email, item.user_id].find((value) => typeof value === "string" && value.trim()) || "Invitado / no disponible";
+  const requestStatus = ({ NEW: "NUEVA", PENDING_REVIEW: "NUEVA · PENDIENTE", IN_REVIEW: "EN REVISIÓN", RESOLVED: "RESUELTA", REJECTED: "RECHAZADA", DUPLICATE: "DUPLICADA" } as Record<string, string>)[String(item.request_status)] || String(item.request_status || "—");
+  const notificationStatus = ({ PENDING: "PENDIENTE", SENDING: "ENVIANDO", ACCEPTED_BY_PROVIDER: "ACEPTADA POR RESEND", FAILED: "FALLIDA", UNAVAILABLE: "NO CONFIGURADA", NOT_REQUESTED: "NO SOLICITADA" } as Record<string, string>)[String(item.notification_status)] || String(item.notification_status || "—");
+  const detailRows = [["Nombre", payload.name], ["Ciudad", payload.city], ["Estado", payload.state], ["Marca", payload.brand], ["Modelo", payload.model], ["Tipo de bastón", payload.clubType], ["Flex", payload.flex], ["Jugadores", payload.players], ["Módulo", payload.module], ["Qué ocurrió", payload.occurred], ["Qué esperaba", payload.expected], ["Reglas", payload.rules], ["Ejemplo", payload.example]].filter((entry) => typeof entry[1] === "string" && entry[1].trim());
+  const createdAt = typeof item.created_at === "string" && !Number.isNaN(Date.parse(item.created_at)) ? new Date(item.created_at).toLocaleString("es-MX") : "—";
+  async function prepareAttachment() {
+    setAttachmentLoading(true); setAttachmentError(""); setAttachmentUrl("");
+    try {
+      const result = await request("/api/admin/control-center", { method: "POST", body: JSON.stringify({ operation: "feedbackAttachment", feedbackId: item.id }) });
+      if (typeof result.url !== "string") throw new Error("El adjunto no está disponible.");
+      setAttachmentUrl(result.url);
+    } catch (error) { setAttachmentError(error instanceof Error ? error.message : "No fue posible preparar el adjunto."); }
+    finally { setAttachmentLoading(false); }
+  }
+  return <article className={`${styles.item} ${styles.requestItem}`}><div className={styles.requestItemBody}>
+    <div className={styles.requestHeading}><strong>{String(item.title || item.contextual_category || item.category)}</strong><em>{requestStatus}</em><QaBadge item={item} /></div>
+    <dl className={styles.requestMeta}>
+      <div><dt>Referencia</dt><dd>{String(item.id)}</dd></div><div><dt>Categoría</dt><dd>{String(item.contextual_category || item.category || "—")}</dd></div>
+      <div><dt>Usuario</dt><dd>{String(user)}</dd></div><div><dt>Correo de respuesta</dt><dd>{String(item.reply_email || "—")}</dd></div>
+      <div><dt>Fecha</dt><dd>{createdAt}</dd></div><div><dt>Origen</dt><dd>{String(item.source_screen || "—")}</dd></div>
+      <div><dt>Entorno</dt><dd>{String(item.data_environment || "—")}</dd></div><div><dt>Notificación</dt><dd>{notificationStatus}</dd></div>
+      <div><dt>Adjunto</dt><dd>{String(item.attachment_status || "NONE")}</dd></div>{item.provider_message_id ? <div><dt>ID proveedor</dt><dd>{String(item.provider_message_id)}</dd></div> : null}
+    </dl>
+    <p className={styles.requestDescription}>{String(item.description || "Sin descripción.")}</p>
+    {detailRows.length > 0 && <details className={styles.requestDetails}><summary>Datos específicos de la categoría</summary><dl>{detailRows.map(([label, value]) => <div key={String(label)}><dt>{String(label)}</dt><dd>{String(value)}</dd></div>)}</dl></details>}
+    {attachmentError && <span className={styles.error}>{attachmentError}</span>}
+  </div><div className={styles.requestActions}>
+    {item.attachment_status === "READY" && !attachmentUrl && <button type="button" disabled={attachmentLoading} onClick={() => void prepareAttachment()}>{attachmentLoading ? "Preparando…" : "Preparar adjunto seguro"}</button>}
+    {attachmentUrl && <a className={styles.attachmentLink} href={attachmentUrl} target="_blank" rel="noreferrer">Abrir adjunto · 60 s</a>}
+    {isQaItem(item) ? <span className={styles.subtle}>Evidencia interna; no puede convertirse en borrador operativo.</span> : <div className={styles.actions}><select aria-label={`Tipo de Draft para ${String(item.title || item.category)}`} value={type} onChange={(event) => setType(event.target.value)}><option value="COURSE">Campo</option><option value="CLUB_EQUIPMENT">Bastón</option><option value="BALL">Bola</option><option value="SHAFT">Varilla</option><option value="LOCAL_RULE_SET">Regla local</option><option value="COURSE_CONFIGURATION">Cambio temporal</option><option value="REQUEST">Otro / soporte</option></select><button disabled={loading} onClick={() => onConvert(String(item.id), type)}>Crear borrador</button></div>}
+  </div></article>;
 }
 
 function Quality({ data }: { data: Json | null }) {

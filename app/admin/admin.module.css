@@ -233,6 +233,23 @@
   font-size: 0.75rem;
 }
 
+.requestItem { align-items: flex-start; }
+.requestItemBody { min-width: 0; flex: 1; }
+.requestHeading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.requestHeading em { margin-top: 0; }
+.requestMeta { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; margin: 12px 0; }
+.requestMeta div { min-width: 0; padding: 8px; border-radius: 10px; background: #f0f4ef; }
+.requestMeta dt,.requestDetails dt { color: #68766e; font-size: .65rem; font-weight: 900; letter-spacing: .05em; text-transform: uppercase; }
+.requestMeta dd,.requestDetails dd { overflow-wrap: anywhere; margin: 3px 0 0; font-size: .78rem; }
+.requestDescription { margin: 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.requestDetails { margin-top: 10px; color: #31483a; font-size: .78rem; }
+.requestDetails summary { cursor: pointer; font-weight: 800; }
+.requestDetails dl { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; }
+.requestDetails dl div { padding: 7px; border-radius: 9px; background: #f7f9f6; }
+.requestActions { display: grid; flex: 0 0 min(280px,32%); gap: 8px; }
+.requestActions > span { white-space: normal; }
+.attachmentLink { display: block; border: 1px solid #1f5a3a; border-radius: 12px; padding: 10px 12px; color: #174128; font-size: .78rem; font-weight: 800; text-align: center; }
+
 .empty,
 .error,
 .success {
@@ -446,6 +463,8 @@
   .sidebar strong { grid-column: 1 / -1; }
   .stats,.grid3,.grid2 { grid-template-columns: 1fr; }
   .inlineEditor { grid-template-columns: 1fr; }
+  .requestMeta,.requestDetails dl { grid-template-columns: 1fr; }
+  .requestActions { flex-basis: auto; }
 }
 
 @media (max-width: 360px) {

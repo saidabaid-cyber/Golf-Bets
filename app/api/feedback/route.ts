@@ -44,11 +44,14 @@ export async function POST(request:NextRequest) {
     // Anonymous anti-abuse key is HMAC, rotated daily; never store raw IP/location.
     const rateKey=userId?actorKey:createHmac('sha256',process.env.SUPABASE_SECRET_KEY||process.env.SUPABASE_SERVICE_ROLE_KEY!).update(`feedback:${new Date().toISOString().slice(0,10)}:${backyardAiClientAddress(request)}`).digest('hex');
     const path=bytes?`${userId??'guest'}/${id}/${imageHash}.${extension}`:null;
-    const context={screen:typeof value.screen==='string'?value.screen.split(/[?#]/)[0].slice(0,160):'',identity,build:process.env.VERCEL_GIT_COMMIT_SHA??'local',category:typeof value.contextualCategory==='string'?value.contextualCategory.slice(0,20):submittedInput.category,topic:feedbackTopicKey(submittedInput)};
+    const dataEnvironment=process.env.VERCEL_ENV==='preview'?'QA':process.env.NODE_ENV==='test'?'TEST':'QA';
+    const context={screen:typeof value.screen==='string'?value.screen.split(/[?#]/)[0].slice(0,160):'',identity,build:process.env.VERCEL_GIT_COMMIT_SHA??'local',category:typeof value.contextualCategory==='string'?value.contextualCategory.slice(0,20):submittedInput.category,topic:feedbackTopicKey(submittedInput),environment:dataEnvironment};
     const outcome=await receiveFeedback({
       persist:async()=>{
         const result=await db.rpc('submit_feedback_v2',{request_id:id,actor_id:userId,actor_key:actorKey,limiter_key:rateKey,request_hash:hash(JSON.stringify({input,imageHash})),request_payload:input,request_context:context,object_path:path}).abortSignal(AbortSignal.timeout(10000));
         if(result.error)throw Error(/RATE_LIMIT/.test(result.error.message)?'RATE_LIMIT':/REQUEST_CONFLICT/.test(result.error.message)?'REQUEST_CONFLICT':'PERSISTENCE_UNAVAILABLE');
+        const classified=await db.from('feedback_requests').update({data_environment:dataEnvironment}).eq('id',id);
+        if(classified.error)throw Error('PERSISTENCE_UNAVAILABLE');
         return result.data as {id:string;status:string;created:boolean;attachmentStatus:string};
       },
       attach:async(saved)=>{
@@ -69,7 +72,15 @@ export async function POST(request:NextRequest) {
           const configured=Boolean(feedbackMailerConfig());
           const claimed=await db.from('feedback_requests').update({notification_status:configured?'SENDING':'UNAVAILABLE'}).eq('id',id).eq('notification_status','PENDING').select('id');
           if(claimed.error||!claimed.data?.length||!configured)return;
-          await notifyFeedbackSafely(()=>sendFeedbackEmail(id,input),async(result)=>{
+          const canonical=await db.from('feedback_requests').select('created_at,identity_snapshot,source_screen,attachment_status,data_environment').eq('id',id).maybeSingle();
+          const requestContext={
+            submittedAt:canonical.data?.created_at??new Date().toISOString(),
+            identity:(canonical.data?.identity_snapshot&&typeof canonical.data.identity_snapshot==='object'&&!Array.isArray(canonical.data.identity_snapshot)?canonical.data.identity_snapshot:identity) as Record<string,unknown>,
+            screen:canonical.data?.source_screen??context.screen,
+            attachmentAvailable:canonical.data?.attachment_status==='READY',
+            environment:canonical.data?.data_environment??dataEnvironment,
+          };
+          await notifyFeedbackSafely(()=>sendFeedbackEmail(id,submittedInput,requestContext),async(result)=>{
             const recorded=await db.from('feedback_requests').update({notification_status:result.messageId?'ACCEPTED_BY_PROVIDER':'FAILED',provider_message_id:result.messageId??null,error_code:result.error??null,updated_at:new Date().toISOString()}).eq('id',id);
             if(recorded.error)throw Error('NOTIFICATION_RECORD_FAILED');
           });

@@ -25,6 +25,7 @@ import { getCourseCatalog } from "../../../../lib/course-catalog-provider.server
 import { loadLayeredEquipmentCatalogs } from "../../../../lib/equipment-catalog-provider.server";
 import { golfBallCatalog, golfClubCatalog, golfShaftCatalog } from "../../../../lib/golf-equipment-catalog";
 import { authenticatedRequest } from "../../../../lib/server-auth";
+import { getSupabaseAdmin } from "../../../../lib/supabase/server";
 import { serverPhase2FeatureFlags } from "../../../../features/feature-flags/server";
 
 export const dynamic = "force-dynamic";
@@ -235,9 +236,13 @@ function missingFeedbackPageFunction(error: unknown) {
 }
 
 async function readFeedbackQueue(
+  runV3: () => PromiseLike<AdminReadResult>,
   runV2: () => PromiseLike<AdminReadResult>,
   runLegacy: () => PromiseLike<AdminReadResult>,
 ) {
+  const newest = await runV3();
+  if (!newest.error) return { ...newest, classificationPersisted: true, serverFiltered: true };
+  if (!missingFeedbackPageFunction(newest.error)) return { ...newest, classificationPersisted: false, serverFiltered: false };
   const current = await runV2();
   if (!current.error) return { ...current, classificationPersisted: true, serverFiltered: true };
   if (!missingFeedbackPageFunction(current.error)) return { ...current, classificationPersisted: false, serverFiltered: false };
@@ -304,6 +309,7 @@ export async function GET(request: NextRequest) {
       readWithOptionalEnvironment("id,name,description,organizer,settings", (selection) => access.client.from("competition_definitions").select(selection)),
       readWithOptionalEnvironment("id,kind,status,summary,admin_import_rows(normalized_payload)", (selection) => access.client.from("admin_import_jobs").select(selection)),
       readFeedbackQueue(
+        () => access.client.rpc("admin_feedback_queue_page_v3", { queue_limit: 100, queue_offset: 0, include_non_operational: access.canShowQa }),
         () => access.client.rpc("admin_feedback_queue_page_v2", { queue_limit: 100, queue_offset: 0, include_non_operational: access.canShowQa }),
         () => access.client.rpc("admin_feedback_queue_v1", { queue_limit: 100 }),
       ),
@@ -489,6 +495,7 @@ export async function GET(request: NextRequest) {
 
   if (view === "requests") {
     const result = await readFeedbackQueue(
+      () => access.client.rpc("admin_feedback_queue_page_v3", { queue_limit: limit, queue_offset: 0, include_non_operational: includeQa }),
       () => access.client.rpc("admin_feedback_queue_page_v2", { queue_limit: limit, queue_offset: 0, include_non_operational: includeQa }),
       () => access.client.rpc("admin_feedback_queue_v1", { queue_limit: 100 }),
     );
@@ -893,6 +900,22 @@ export async function POST(request: NextRequest) {
     const result = await access.client.rpc("admin_confirm_import_v1", { target_import_id: importId, confirmation_reason: reason, request_id: requestId });
     if (result.error) return databaseFailure(result.error, "No fue posible crear los Drafts aprobados.");
     return json({ result: result.data, requestId });
+  }
+
+  if (operation === "feedbackAttachment") {
+    const feedbackId = uuid(input.feedbackId);
+    if (!feedbackId) return json({ error: "La solicitud no es válida.", code: "INVALID_FEEDBACK_ATTACHMENT" }, 400);
+    const attachment = await access.client.rpc("admin_feedback_attachment_path_v1", { target_feedback_id: feedbackId, include_non_operational: access.canShowQa });
+    if (attachment.error) {
+      if (safeDbCode(attachment.error) === "P0002") return json({ error: "La solicitud no tiene un adjunto disponible.", code: "ATTACHMENT_NOT_AVAILABLE" }, 404);
+      return databaseFailure(attachment.error, "No fue posible autorizar el adjunto.");
+    }
+    const path = text(attachment.data, 1_000);
+    const database = getSupabaseAdmin("cloud", 8_000);
+    if (!path || !database) return json({ error: "El adjunto no está disponible.", code: "ATTACHMENT_NOT_AVAILABLE" }, 404);
+    const signed = await database.storage.from("feedback-private").createSignedUrl(path, 60);
+    if (signed.error || !signed.data?.signedUrl) return json({ error: "No fue posible preparar el adjunto privado.", code: "ATTACHMENT_SIGN_FAILED" }, 503);
+    return json({ url: signed.data.signedUrl, expiresInSeconds: 60 });
   }
 
   if (operation === "createDraftFromRequest") {
