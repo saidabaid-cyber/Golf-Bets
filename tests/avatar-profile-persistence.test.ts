@@ -36,10 +36,10 @@ function baseProfile(avatarUrl = oauthAvatar): BackyardProfile {
   return { userId, displayName: "Said", email: "said@example.test", defaultHandicap: 7, avatarUrl };
 }
 
-function photoAvatar() {
+function photoAvatar(color = "#195e43") {
   const canvas = createCanvas(16, 16);
   const context = canvas.getContext("2d");
-  context.fillStyle = "#195e43";
+  context.fillStyle = color;
   context.fillRect(0, 0, 16, 16);
   return canvas.toDataURL("image/png");
 }
@@ -145,4 +145,21 @@ test("cloud confirma emoji → foto → none; hydration no resucita avatar OAuth
   }
   assert.equal(db.rows("profiles").length, 1);
   assert.equal(db.calls.filter((call) => call.table === "profiles" && call.op === "insert").length, 1);
+});
+
+test("Guardar perfil persiste y restaura tanto la foto original como el avatar generado elegidos", async () => {
+  const db = new CloudDb();
+  const storage = new MemoryStorage();
+  storage.setItem(ACCOUNT_STORAGE_KEYS.mode, "authenticated");
+  const original = photoAvatar("#195e43");
+  const generated = photoAvatar("#d7a45a");
+
+  for (const [avatarUrl, updatedAt] of [[original, second], [generated, third]] as const) {
+    const pending = mergeBackyardProfile(baseProfile(), { displayName: "Said", defaultHandicap: 7, avatarUrl });
+    saveCache(storage, pending);
+    assert.equal(readOfflineAuthenticatedProfile(storage, userId)?.avatarUrl, avatarUrl);
+    await saveCloudProfile(db.client, userId, { displayName: "Said", defaultHandicap: 7, avatarUrl }, updatedAt);
+    const refreshed = await ensureCloudProfile(db.client, userId, baseProfile());
+    assert.equal(refreshed.avatar_url, avatarUrl);
+  }
 });

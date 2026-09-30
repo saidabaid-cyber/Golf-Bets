@@ -104,6 +104,26 @@ function imagePicker(initialValue: string, options: { generationError?: boolean;
   };
 }
 
+async function generatedImagePicker() {
+  const h = imagePicker("");
+  h.click("Sube tu foto");
+  const file = h.nodes().find((node) => node.type === "input" && node.props["aria-label"] === "Elegir foto de la galería");
+  assert.ok(file);
+  (file.props.onChange as (event: unknown) => void)({ target: { files: [{}] } });
+  h.render();
+  h.click("CREAR CARICATURA DESDE MI FOTO");
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  h.render();
+  return h;
+}
+
+function buttonWithText(h: ReturnType<typeof imagePicker>, label: string) {
+  const button = h.nodes().find((node) => node.type === "button" && text(node).includes(label));
+  assert.ok(button, label);
+  return button;
+}
+
 test("Google photo is preserved until the person chooses a different avatar mode", () => {
   const photo = "https://images.example/google.jpg";
   const h = imagePicker(photo);
@@ -200,9 +220,13 @@ test("la pantalla muestra cuatro modos pares y conecta la caricatura con el endp
   assert.match(source, /readPhotoAvatarGenerationCapability/);
   assert.match(source, /resolveAuthoritativeAiProcessingConsent/);
   assert.match(source, /CREAR CARICATURA DESDE MI FOTO/);
-  assert.match(source, /USAR AVATAR/);
+  assert.match(source, /aria-pressed=\{generationSelection === "original"\}/);
+  assert.match(source, /aria-pressed=\{generationSelection === "avatar"\}/);
+  assert.match(source, /CONTINUAR/);
   assert.match(source, /GENERAR OTRA/);
   assert.match(source, /VOLVER A FOTO/);
+  assert.doesNotMatch(source, />USAR AVATAR</);
+  assert.doesNotMatch(source, />USAR FOTO ORIGINAL</);
   assert.doesNotMatch(source, /disabled=\{!PHOTO_AVATAR_GENERATION_CAPABILITY\.available/);
   assert.match(source, /onPointerMove/);
   assert.match(source, /pellizca para ampliar/);
@@ -210,40 +234,108 @@ test("la pantalla muestra cuatro modos pares y conecta la caricatura con el endp
   assert.doesNotMatch(source, /Ajuste fino|Horizontal<input|Vertical<input/);
 });
 
-test("foto recortada genera, compara, selecciona y solicita una variante distinta sin perder el original", async () => {
-  const h = imagePicker("");
-  h.click("Sube tu foto");
-  assert.doesNotMatch(h.text(), /CREAR CARICATURA DESDE MI FOTO/, "sin una foto no se ofrece el envío al proveedor");
-  const file = h.nodes().find((node) => node.type === "input" && node.props["aria-label"] === "Elegir foto de la galería");
-  assert.ok(file);
-  (file.props.onChange as (event: unknown) => void)({ target: { files: [{}] } });
-  h.render();
-  h.click("CREAR CARICATURA DESDE MI FOTO");
-  await new Promise<void>((resolve) => setTimeout(resolve, 0));
-  await new Promise<void>((resolve) => setTimeout(resolve, 0));
-  h.render();
+test("foto original y avatar creado son botones accesibles con una sola selección pendiente", async () => {
+  const h = await generatedImagePicker();
   assert.match(h.text(), /FOTO ORIGINAL/);
   assert.match(h.text(), /AVATAR CREADO/);
+  assert.match(h.text(), /Selecciona la imagen que quieres usar en tu perfil/);
   assert.deepEqual(h.generationRequests.map((request) => request.variant), [1]);
   assert.equal(h.generationRequests[0]?.accessToken, "qa-token");
   assert.equal(h.generationRequests[0]?.sourceImageDataUrl, "data:image/webp;base64,optimized");
   assert.equal(h.value(), "");
-  h.click("USAR AVATAR");
-  assert.equal(h.value(), "data:image/webp;base64,generated1");
+
+  const selected = () => [buttonWithText(h, "FOTO ORIGINAL"), buttonWithText(h, "AVATAR CREADO")]
+    .filter((button) => button.props["aria-pressed"] === true);
+  assert.equal(buttonWithText(h, "FOTO ORIGINAL").props["aria-pressed"], false);
+  assert.equal(buttonWithText(h, "AVATAR CREADO").props["aria-pressed"], true, "el resultado recién generado inicia seleccionado");
+  assert.equal(selected().length, 1);
+
+  h.click("FOTO ORIGINAL");
+  assert.equal(buttonWithText(h, "FOTO ORIGINAL").props["aria-pressed"], true);
+  assert.equal(buttonWithText(h, "AVATAR CREADO").props["aria-pressed"], false);
+  assert.equal(selected().length, 1);
+  assert.deepEqual(h.changes, [], "seleccionar no guarda ni cambia todavía el perfil");
+
+  h.click("AVATAR CREADO");
+  assert.equal(buttonWithText(h, "FOTO ORIGINAL").props["aria-pressed"], false);
+  assert.equal(buttonWithText(h, "AVATAR CREADO").props["aria-pressed"], true);
+  assert.equal(selected().length, 1);
+  assert.equal(h.nodes().some((node) => node.type === "button" && text(node).trim() === "USAR AVATAR"), false);
+  assert.equal(h.nodes().some((node) => node.type === "button" && text(node).trim() === "USAR FOTO ORIGINAL"), false);
+});
+
+test("Generar otra conserva la foto original, actualiza el avatar y selecciona la nueva variante", async () => {
+  const h = await generatedImagePicker();
+  h.click("FOTO ORIGINAL");
   h.click("GENERAR OTRA");
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
   h.render();
   assert.deepEqual(h.generationRequests.map((request) => request.variant), [1, 2]);
   assert.equal(h.generationRequests[1]?.sourceImageDataUrl, "data:image/webp;base64,optimized");
-  assert.match(h.text(), /FOTO ORIGINAL/);
+  assert.equal(h.nodes().find((node) => node.type === "img" && node.props.alt === "Foto original recortada")?.props.src, "data:image/webp;base64,optimized");
+  assert.equal(h.nodes().find((node) => node.type === "img" && node.props.alt === "Avatar ilustrado creado")?.props.src, "data:image/webp;base64,generated2");
+  assert.equal(buttonWithText(h, "FOTO ORIGINAL").props["aria-pressed"], false);
+  assert.equal(buttonWithText(h, "AVATAR CREADO").props["aria-pressed"], true);
+});
+
+test("Volver a foto conserva el crop para volver a generar desde el mismo encuadre", async () => {
+  const h = imagePicker("");
+  h.click("Sube tu foto");
+  const file = h.nodes().find((node) => node.type === "input" && node.props["aria-label"] === "Elegir foto de la galería");
+  assert.ok(file);
+  (file.props.onChange as (event: unknown) => void)({ target: { files: [{}] } });
+  h.render();
+  (buttonWithText(h, "ROTAR").props.onClick as () => void)();
+  const zoom = h.nodes().find((node) => node.type === "button" && node.props["aria-label"] === "Acercar foto");
+  assert.ok(zoom);
+  (zoom.props.onClick as () => void)();
+  h.render();
+  h.click("CREAR CARICATURA DESDE MI FOTO");
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  h.render();
+  const firstCrop = h.crops[0];
+  assert.equal(firstCrop.rotation, 90);
+  assert.ok(firstCrop.zoom > 1);
   h.click("VOLVER A FOTO");
   assert.match(h.text(), /USAR ESTA FOTO/);
   h.click("CREAR CARICATURA DESDE MI FOTO");
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
   h.render();
-  assert.deepEqual(h.generationRequests.map((request) => request.variant), [1, 2, 1], "volver al crop inicia una serie nueva desde el encuadre vigente");
+  assert.deepEqual(h.generationRequests.map((request) => request.variant), [1, 1], "volver al crop inicia una serie nueva");
+  assert.deepEqual(h.crops[1], firstCrop, "posición, zoom y rotación permanecen intactos");
+});
+
+test("Continuar con foto aplica el original como pendiente y cierra el comparador", async () => {
+  const h = await generatedImagePicker();
+  h.click("FOTO ORIGINAL");
+  h.click("CONTINUAR");
+  assert.equal(h.value(), "data:image/webp;base64,optimized");
+  assert.deepEqual(h.changes, ["data:image/webp;base64,optimized"]);
+  assert.doesNotMatch(h.text(), /Compara el resultado/);
+  assert.equal(h.nodes().find((node) => node.type === "img" && node.props.alt === "Foto actual")?.props.src, "data:image/webp;base64,optimized");
+  const activeMode = h.nodes().find((node) => node.type === "button" && node.props["data-active"] === true);
+  assert.match(text(activeMode).trim(), /^FOTO/);
+});
+
+test("Continuar con avatar aplica el resultado como pendiente y cierra el comparador", async () => {
+  const h = await generatedImagePicker();
+  h.click("CONTINUAR");
+  assert.equal(h.value(), "data:image/webp;base64,generated1");
+  assert.deepEqual(h.changes, ["data:image/webp;base64,generated1"]);
+  assert.doesNotMatch(h.text(), /Compara el resultado/);
+  assert.equal(h.nodes().find((node) => node.type === "img" && node.props.alt === "Foto actual")?.props.src, "data:image/webp;base64,generated1");
+  const activeMode = h.nodes().find((node) => node.type === "button" && node.props["data-active"] === true);
+  assert.match(text(activeMode).trim(), /^FOTO/);
+});
+
+test("Continuar sólo deja la imagen pendiente; Guardar perfil conserva la confirmación final", () => {
+  const profile = readFileSync("app/components/profile-account-panel.tsx", "utf8");
+  assert.match(profile, /<ProfileImagePicker value=\{avatarUrl\} onChange=\{setAvatarUrl\}/);
+  assert.match(profile, /updateProfile\(\{ displayName: validated\.displayName, defaultHandicap: validated\.defaultHandicap, avatarUrl: avatar\.avatarUrl/);
+  assert.match(profile, /"Guardar perfil"/);
 });
 
 test("configuración externa ausente y error del proveedor conservan la foto y permiten reintentar", async () => {

@@ -13,6 +13,7 @@ import { AiProcessingConsentPrompt } from "./backyard-ai/ai-processing-consent";
 import styles from "./profile-image-picker.module.css";
 
 type AvatarMode = "none" | "emoji" | "avatar" | "photo";
+type PhotoAvatarChoice = "original" | "avatar";
 type PendingPhoto = { file: File; objectUrl: string };
 type Point = { x: number; y: number };
 type Gesture = { pointers: Map<number, Point>; startCrop: Required<ProfileImageCrop>; startCenter: Point; startDistance: number };
@@ -67,6 +68,7 @@ export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyCh
   const [crop, setCrop] = useState<Required<ProfileImageCrop>>(EMPTY_CROP);
   const [generationOriginal, setGenerationOriginal] = useState("");
   const [generatedAvatar, setGeneratedAvatar] = useState("");
+  const [generationSelection, setGenerationSelection] = useState<PhotoAvatarChoice>("avatar");
   const [generationCount, setGenerationCount] = useState(0);
   const [showGenerationConsent, setShowGenerationConsent] = useState(false);
   const [emojiInput, setEmojiInput] = useState({ source: value, text: isProfileEmojiAvatar(value) ? value : "" });
@@ -84,6 +86,7 @@ export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyCh
     generationCountRef.current = 0;
     setGenerationOriginal("");
     setGeneratedAvatar("");
+    setGenerationSelection("avatar");
     setGenerationCount(0);
     setShowGenerationConsent(false);
   }
@@ -222,6 +225,7 @@ export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyCh
       generationCountRef.current = variant;
       setGenerationCount(variant);
       setGeneratedAvatar(optimized);
+      setGenerationSelection("avatar");
       setStatus("Avatar creado. Elige cuál quieres usar.");
     } catch (error) {
       if (controller.signal.aborted || request !== requestRef.current || (error instanceof DOMException && error.name === "AbortError")) return;
@@ -239,12 +243,16 @@ export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyCh
     }
   }
 
-  function useGeneratedAvatar() {
-    if (!generatedAvatar || busy) return;
-    onChange(generatedAvatar);
-    setSelection({ mode: "photo", value: generatedAvatar });
+  function continueWithPhotoAvatarChoice() {
+    const selectedImage = generationSelection === "original" ? generationOriginal : generatedAvatar;
+    if (!selectedImage || busy) return;
+    onChange(selectedImage);
+    setSelection({ mode: "photo", value: selectedImage });
     setMessage("");
-    setStatus("Avatar listo. Guarda tu perfil para conservarlo.");
+    setStatus(generationSelection === "original"
+      ? "Foto lista. Guarda tu perfil para conservarla."
+      : "Avatar listo. Guarda tu perfil para conservarlo.");
+    releasePendingPhoto();
   }
 
   function returnToPhotoCrop() {
@@ -340,15 +348,21 @@ export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyCh
           <button type="button" className="textButton" disabled={busy} onClick={() => galleryInputRef.current?.click()}>ELEGIR OTRA</button>
         </div> : <section className={styles.generationResult} aria-labelledby={`${fieldId}-generation-title`}>
           <h4 id={`${fieldId}-generation-title`}>Compara el resultado</h4>
-          <div className={styles.generationComparison}>
-            <figure><div><img src={generationOriginal} alt="Foto original recortada" /></div><figcaption>FOTO ORIGINAL</figcaption></figure>
-            <figure data-selected={value === generatedAvatar}><div><img src={generatedAvatar} alt="Avatar ilustrado creado" /></div><figcaption>AVATAR CREADO</figcaption></figure>
+          <p>Selecciona la imagen que quieres usar en tu perfil.</p>
+          <div className={styles.generationComparison} role="group" aria-label="Imagen para usar en el perfil">
+            <button type="button" className={styles.generationChoice} aria-pressed={generationSelection === "original"} data-selected={generationSelection === "original"} disabled={busy} onClick={() => setGenerationSelection("original")}>
+              <span className={styles.generationChoiceMedia}><img src={generationOriginal} alt="Foto original recortada" />{generationSelection === "original" && <span className={styles.generationChoiceCheck} aria-hidden="true">✓</span>}</span>
+              <span className={styles.generationChoiceLabel}>FOTO ORIGINAL</span>
+            </button>
+            <button type="button" className={styles.generationChoice} aria-pressed={generationSelection === "avatar"} data-selected={generationSelection === "avatar"} disabled={busy} onClick={() => setGenerationSelection("avatar")}>
+              <span className={styles.generationChoiceMedia}><img src={generatedAvatar} alt="Avatar ilustrado creado" />{generationSelection === "avatar" && <span className={styles.generationChoiceCheck} aria-hidden="true">✓</span>}</span>
+              <span className={styles.generationChoiceLabel}>AVATAR CREADO</span>
+            </button>
           </div>
           <div className={styles.generationActions}>
-            <button type="button" className="primary" disabled={busy} onClick={useGeneratedAvatar}>USAR AVATAR</button>
-            <button type="button" className="secondary" disabled={busy || generationCount >= MAX_PHOTO_AVATAR_VARIANTS} onClick={() => void createPhotoAvatarVariant()}>GENERAR OTRA</button>
-            <button type="button" className="secondary" disabled={busy} onClick={() => void applyPendingPhoto()}>USAR FOTO ORIGINAL</button>
-            <button type="button" className="textButton" disabled={busy} onClick={returnToPhotoCrop}>VOLVER A FOTO</button>
+            <button type="button" className="secondary" disabled={busy || generationCount >= MAX_PHOTO_AVATAR_VARIANTS} onClick={() => void createPhotoAvatarVariant()}><span aria-hidden="true">↻</span> GENERAR OTRA</button>
+            <button type="button" className="secondary" disabled={busy} onClick={returnToPhotoCrop}><span aria-hidden="true">←</span> VOLVER A FOTO</button>
+            <button type="button" className={`primary ${styles.generationContinue}`} disabled={busy} onClick={continueWithPhotoAvatarChoice}>CONTINUAR</button>
           </div>
           {generationCount >= MAX_PHOTO_AVATAR_VARIANTS && <small>Máximo de {MAX_PHOTO_AVATAR_VARIANTS} variantes por foto.</small>}
         </section>}
