@@ -35,12 +35,14 @@ test("Sin foto, Emoji, Avatar y Foto son opciones principales equivalentes", () 
   assert.match(pickerCss, /\.modeVisual \{[^}]*border-radius: 50%/);
 });
 
-test("Perfil enlaza Mi Bolsa y un único acceso principal a Configuración", () => {
+test("Perfil deja Equipo actual como único acceso a Mi Bolsa y conserva Configuración", () => {
   assert.match(profile, /aria-label="Secciones de Mi Perfil"/);
-  for (const section of ["Mi Bolsa", "Configuración"]) assert.match(profile, new RegExp(`<b>${section}</b>`));
+  assert.match(profile, /<EquipmentProfileSummary[^>]*onOpen=\{openEquipmentRoot\}/);
+  assert.match(profile, /function openEquipmentRoot\(\) \{\s*setCompletionEquipment\("equipment"\);\s*onOpenEquipment\(\);\s*\}/);
+  assert.doesNotMatch(profile, /<b>Mi Bolsa<\/b>/);
+  assert.match(profile, /<b>Configuración<\/b><small>Preferencias, cuenta, notificaciones, privacidad y permisos<\/small>/);
   assert.doesNotMatch(profile, /profileNavigationCard"[^>]*><span><b>Preferencias<\/b>/);
   assert.doesNotMatch(profile, /profileNavigationCard"[^>]*><span><b>Notificaciones<\/b>/);
-  assert.match(profile, /onClick=\{onOpenEquipment\}[\s\S]*?<b>Mi Bolsa<\/b>/);
   assert.doesNotMatch(profile, /<b>Mi equipo<\/b>/);
   assert.match(profile, /onBackToProfile/);
   assert.match(page, /onOpenEquipment=\{\(\) => setProfileFocus\("equipment"\)\}/);
@@ -48,6 +50,12 @@ test("Perfil enlaza Mi Bolsa y un único acceso principal a Configuración", () 
   assert.match(page, /setProfileRootRevision\(\(value\) => value \+ 1\)/);
   assert.match(profile, /setEditing\(false\); setManagingConsents\(false\)/);
   assert.match(css, /\.profileNavigationList\{display:grid;min-width:0/);
+});
+
+test("Tu juego usa únicamente Editar perfil para modificar datos generales", () => {
+  assert.match(profile, /onClick=\{\(\) => openProfileEditor\(\)\}>Editar perfil<\/button>/);
+  assert.match(profile, /<span>INFORMACIÓN DE GOLF<\/span><h2>Tu juego<\/h2><\/div><\/div><div className="profileCompactRows">/);
+  assert.doesNotMatch(profile, /<span>INFORMACIÓN DE GOLF<\/span><h2>Tu juego<\/h2><\/div><button[^>]*>Editar<\/button>/);
 });
 
 test("Perfil carga y guarda la mano dominante desde la fuente canónica", () => {

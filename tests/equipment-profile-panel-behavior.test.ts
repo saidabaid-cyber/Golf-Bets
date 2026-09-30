@@ -96,9 +96,10 @@ function fitInput(currentBallId = "ball-current"): ballFitting.BallFitInput {
   };
 }
 
-function harness() {
+function harness({ empty = false, fitOnly = false }: { empty?: boolean; fitOnly?: boolean } = {}) {
   const slots: unknown[] = [];
   let cursor = 0;
+  let summaryOpenCount = 0;
   const currentClub: golfEquipment.PlayerClub = {
     id: "club-driver", userId: "owner", category: "DRIVER", catalogClubId: "catalog-driver", customBrand: "Ping", customModel: "G430",
     generation: "2025", year: 2025, loft: 10.5, handedness: "RH", shaftId: null, customShaftBrand: null, customShaftModel: null,
@@ -138,6 +139,8 @@ function harness() {
     createdAt: "2026-09-28T10:00:00.000Z",
     updatedAt: "2026-09-28T12:00:00.000Z",
   };
+  if (empty) profile = { ...profile, clubs: [], balls: [], lastBallFit: null };
+  if (fitOnly) profile = { ...profile, clubs: [], balls: [] };
   const clubCatalog = [
     { id: "catalog-driver", brand: "Ping", model: "G430", generation: "2025" },
     { id: "catalog-woods", brand: "Cleveland", model: "Launcher DST", generation: "2013" },
@@ -248,6 +251,11 @@ function harness() {
   render();
   return {
     render,
+    renderSummary() {
+      cursor = 0;
+      tree = exports.EquipmentProfileSummary({ userId: "owner", accessToken: "token", onOpen() { summaryOpenCount += 1; } });
+      return tree;
+    },
     click,
     nodes: () => nodes(tree),
     text: () => text(tree),
@@ -255,9 +263,42 @@ function harness() {
     currentBall,
     ballCatalog,
     profile: () => profile,
+    summaryOpenCount: () => summaryOpenCount,
     updates,
   };
 }
+
+test("Perfil summarizes only real current equipment and integrates the fitting entry", () => {
+  const view = harness();
+  view.renderSummary();
+  assert.match(view.text(), /MI BOLSA\s+Equipo actual\s+Bastones, bola y fitting\s+Editar/);
+  assert.match(view.text(), /Driver[\s\S]*Ping G430/);
+  assert.match(view.text(), /Bola[\s\S]*Titleist\s+Pro V1/);
+  assert.match(view.text(), /Fitting[\s\S]*Resultado guardado/);
+  view.click("Editar");
+  assert.equal(view.summaryOpenCount(), 1);
+});
+
+test("Perfil shows a compact empty equipment state without fabricated category rows", () => {
+  const view = harness({ empty: true });
+  view.renderSummary();
+  const copy = view.text();
+  assert.match(copy, /MI BOLSA\s+Equipo actual\s+Bastones, bola y fitting\s+Agregar\s+Aún no has agregado equipo\./);
+  assert.doesNotMatch(copy, /Driver|Maderas|Híbridos|Hierros|Wedges|Putter|Bola|Fitting/);
+  assert.ok(!view.nodes().some((node) => node.props.className === "profileBagRows"));
+  view.click("Agregar");
+  assert.equal(view.summaryOpenCount(), 1);
+});
+
+test("Perfil treats a saved fitting as the only real equipment summary row", () => {
+  const view = harness({ fitOnly: true });
+  view.renderSummary();
+  const copy = view.text();
+  assert.match(copy, /MI BOLSA\s+Equipo actual\s+Bastones, bola y fitting\s+Editar/);
+  assert.match(copy, /Fitting\s+Resultado guardado/);
+  assert.doesNotMatch(copy, /Aún no has agregado equipo|Driver|Maderas|Híbridos|Hierros|Wedges|Putter|Bola/);
+  assert.equal(view.nodes().filter((node) => node.type === "button").length, 2);
+});
 
 test("a compact missing category opens the club editor with that category preselected", () => {
   const view = harness();

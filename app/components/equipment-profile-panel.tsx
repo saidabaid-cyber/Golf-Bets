@@ -153,10 +153,10 @@ export function EquipmentProfileSummary({ userId, accessToken, onOpen }: { userI
     const clubs = current.filter((club) => section.categories.some((category) => category === club.category));
     return clubs.length ? [{ ...section, clubs }] : [];
   });
-  if (!populated.length && !ball) return <section className={`card ${styles.profileBagSummary}`}><div><span>MI BOLSA</span><h2>Tu equipo, en un solo lugar</h2><p>Agrega Driver, maderas, hierros, wedges, putter y bola.</p></div><button type="button" className="secondary" onClick={onOpen}>Agregar</button></section>;
+  const hasEquipment = populated.length > 0 || Boolean(ball) || Boolean(profile.lastBallFit);
   return <section className={`card ${styles.profileBagSummary}`} aria-label="Resumen de Mi Bolsa">
-    <header><div><span>MI BOLSA</span><h2>Equipo actual</h2></div><button type="button" className="textButton" onClick={onOpen}>Editar</button></header>
-    <div className={styles.profileBagRows}>
+    <header><div><span>MI BOLSA</span><h2>Equipo actual</h2><p>Bastones, bola y fitting</p></div><button type="button" className="textButton" onClick={onOpen}>{hasEquipment ? "Editar" : "Agregar"}</button></header>
+    {hasEquipment ? <div className={styles.profileBagRows}>
       {populated.map((section) => {
         const configuration = savedClubConfiguration(section.clubs, section.id);
         const description = section.id === "wedges"
@@ -165,7 +165,8 @@ export function EquipmentProfileSummary({ userId, accessToken, onOpen }: { userI
         return <button type="button" key={section.id} onClick={onOpen}><span><small>{section.label}{configuration ? `: ${configuration}` : ""}</small><b>{description}</b></span><strong aria-hidden="true">›</strong></button>;
       })}
       {ball && <button type="button" onClick={onOpen}><span><small>Bola</small><b>{ball.ballBrand} {ball.ballModel}</b></span><strong aria-hidden="true">›</strong></button>}
-    </div>
+      {profile.lastBallFit && <button type="button" onClick={onOpen}><span><small>Fitting</small><b>Resultado guardado</b></span><strong aria-hidden="true">›</strong></button>}
+    </div> : <p className={styles.profileBagEmpty}>Aún no has agregado equipo.</p>}
   </section>;
 }
 

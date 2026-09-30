@@ -51,3 +51,13 @@ test("Index help is an accessible, mobile-tappable dialog with the approved expl
   assert.match(cardStyles, /\.helpButton \{[^}]*width: 44px;[^}]*height: 44px;/);
   assert.match(cardStyles, /\.helpDialog \{[^}]*max-height: min\(80vh, 620px\);/);
 });
+
+test("active Backyard Index keeps its forest hero legible without a disabled appearance", () => {
+  const heroRules = [...cardStyles.matchAll(/\.hero\s*\{([^}]*)\}/g)].map((match) => match[1]);
+  assert.ok(heroRules.some((rule) => /linear-gradient\(135deg, #183e29, #286447\)/.test(rule)));
+  assert.ok(heroRules.every((rule) => !/var\(--by-sage\)/.test(rule)), "the late theme rule must not replace the forest background");
+  assert.ok(heroRules.every((rule) => !/\b(?:opacity|filter)\s*:/.test(rule)), "the active estimate must not look disabled or washed out");
+  assert.match(cardStyles, /\.hero\s*\{[^}]*color:\s*#fff;/);
+  assert.match(cardStyles, /\.heroLabel\s*\{[^}]*color:\s*#dbeee1;/);
+  assert.match(cardStyles, /\.progress span\s*\{[^}]*color:\s*#dbeee1;/);
+});

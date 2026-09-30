@@ -1271,9 +1271,12 @@
 .launchFeature p { margin:0;color:rgba(255,255,255,.8); }
 @media (max-width:520px) { .launchFeature { grid-template-columns:1fr; } .launchFeature button { width:100%; } }
 .profileBagSummary { display:grid;gap:14px; }
-.profileBagSummary>header { display:flex;align-items:center;justify-content:space-between;gap:14px; }
+.profileBagSummary>header { display:flex;align-items:flex-start;justify-content:space-between;gap:14px; }
+.profileBagSummary>header>div { min-width:0; }
 .profileBagSummary>div>span,.profileBagSummary>header span { color:var(--by-muted,var(--muted));font-size:10px;font-weight:850;letter-spacing:.08em;text-transform:uppercase; }
 .profileBagSummary h2 { margin:3px 0 0; }
+.profileBagSummary>header p,.profileBagEmpty { margin:4px 0 0;color:var(--by-muted,var(--muted));font-size:12px;line-height:1.45; }
+.profileBagEmpty { margin:0; }
 .profileBagRows { display:grid;border:1px solid var(--by-line,var(--line));border-radius:18px;overflow:hidden; }
 .profileBagRows button { display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:11px 14px;border:0;background:transparent;color:var(--ink);text-align:left;cursor:pointer; }
 .profileBagRows button+button { border-top:1px solid var(--by-line,var(--line)); }
