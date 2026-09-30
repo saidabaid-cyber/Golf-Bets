@@ -34,7 +34,7 @@ test("tee requests enter the existing Admin request queue without a destructive 
   assert.match(source("app/components/round-tee-picker.tsx"), /¿Falta un tee\? Solicitar tee/);
 });
 
-test("bag, wedges and ball comparison are guided but preserve explicit manual options", () => {
+test("bag, universal wedge lofts and ball comparison remain guided", () => {
   const panel = source("app/components/equipment-profile-panel.tsx");
   const bagManagement = source("lib/equipment-bag-management.ts");
   const editors = source("app/components/equipment-editors.tsx");
@@ -42,8 +42,8 @@ test("bag, wedges and ball comparison are guided but preserve explicit manual op
   for (const label of ["Mini Driver", "Utility / Driving Iron", "Wedges"]) assert.match(bagManagement, new RegExp(label.replace("/", "\\/")));
   assert.match(panel, /MI BOLA/);
   assert.match(panel, /EquipmentProfileSummary/);
-  assert.match(editors, /Agregar loft manualmente/);
-  assert.match(editors, /manualLoft/);
+  assert.match(editors, /UNIVERSAL_WEDGE_LOFTS\.map/);
+  assert.doesNotMatch(editors, /Agregar loft manualmente|manualLoft/);
   assert.match(fit, /AnchoredSearch label="Bola actual para comparar/);
   assert.match(fit, /¿No encuentras tu bola\? Solicítala/);
 });

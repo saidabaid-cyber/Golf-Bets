@@ -52,10 +52,21 @@ export function groupCatalogClubModels(catalog: readonly GolfClubCatalog[]) {
   });
 }
 
-/** No generic wedge degree list: only the selected model's published data. */
+/** Published catalog facts remain model-specific. The Wedge editor uses its
+ * universal selector independently from these optional catalog values. */
 export function catalogClubLofts(club: Pick<GolfClubCatalog, "lofts" | "variants"> | null | undefined): number[] {
   return [...new Set([...(club?.lofts ?? []), ...(club?.variants.map(variant => variant.loft) ?? [])])]
     .filter(value => Number.isFinite(value) && value >= 0 && value <= 90).sort((a, b) => a - b);
+}
+
+export const UNIVERSAL_WEDGE_LOFTS: readonly number[] = Object.freeze(
+  Array.from({ length: 21 }, (_, index) => 48 + index),
+);
+
+export function parseUniversalWedgeLoft(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined || (typeof value === "string" && !value.trim())) return null;
+  const parsed = typeof value === "number" ? value : Number(value);
+  return Number.isInteger(parsed) && UNIVERSAL_WEDGE_LOFTS.includes(parsed) ? parsed : null;
 }
 
 export function isCatalogLoftAllowed(loft: number | null, club: Pick<GolfClubCatalog, "lofts" | "variants"> | null | undefined) {

@@ -19,9 +19,10 @@ import {
   catalogClubLofts,
   clubHandednessFromProfile,
   groupCatalogClubModels,
-  isCatalogLoftAllowed,
   isClubHandednessAllowed,
+  parseUniversalWedgeLoft,
   resolveCatalogShaftSelection,
+  UNIVERSAL_WEDGE_LOFTS,
   verifiedClubHandedness,
   type ProfileHandedness,
 } from "../../lib/equipment-editor-selection";
@@ -140,7 +141,6 @@ export function ClubEditor({ userId, catalog, shafts, existing, defaultHandednes
   const [generation, setGeneration] = useState(existing?.generation || existingCatalog?.generation || "");
   const [year, setYear] = useState(existing?.year ? String(existing.year) : existingCatalog?.year ? String(existingCatalog.year) : "");
   const [loft, setLoft] = useState(existing?.loft === null || existing?.loft === undefined ? "" : String(existing.loft));
-  const [manualLoft, setManualLoft] = useState(Boolean(existing?.category === "WEDGE" && existing.loft !== null && existingCatalog && !catalogClubLofts(existingCatalog).includes(existing.loft)));
   const [handedness, setHandedness] = useState<ClubHandedness>(existing?.handedness || clubHandednessFromProfile(defaultHandedness));
   const existingShaft = existing?.shaftId ? shafts.find((shaft) => shaft.id === existing.shaftId) : null;
   const [selectedShaftSnapshot, setSelectedShaftSnapshot] = useState<GolfShaftCatalog | null>(existingShaft || null);
@@ -198,7 +198,7 @@ export function ClubEditor({ userId, catalog, shafts, existing, defaultHandednes
   const selectedShaft = resolveCatalogShaftSelection(shaftId, activeShafts, selectedShaftSnapshot || existingShaft);
   const shaftBrands = shaftBrandFacets.items;
   const shaftModels = activeShafts.filter((shaft) => sameBrand(shaft.brand, shaftBrand));
-  const selectedVariant = selectedCatalogClub?.variants.find((variant) => Math.abs(variant.loft - Number(loft)) < 0.001) || null;
+  const selectedVariant = category === "WEDGE" ? null : selectedCatalogClub?.variants.find((variant) => Math.abs(variant.loft - Number(loft)) < 0.001) || null;
   const availableHands = verifiedClubHandedness(selectedCatalogClub, selectedVariant) || (["RH", "LH"] as ClubHandedness[]);
   const verifiedLofts = manual ? [] : catalogClubLofts(selectedCatalogClub);
   const generationOptions = catalogClubGenerationOptions(selectedCatalogClub, [...selectableCatalog, ...catalog]);
@@ -212,7 +212,6 @@ export function ClubEditor({ userId, catalog, shafts, existing, defaultHandednes
     setGeneration("");
     setYear("");
     setLoft("");
-    setManualLoft(false);
     setCatalogQuery("");
     setShaftId("");
     setShaftBrand("");
@@ -235,8 +234,7 @@ export function ClubEditor({ userId, catalog, shafts, existing, defaultHandednes
       setGeneration(selected.generation || "");
       setYear(selected.year ? String(selected.year) : "");
       const modelLofts = catalogClubLofts(selected);
-      setLoft(modelLofts.length === 1 ? String(modelLofts[0]) : "");
-      setManualLoft(false);
+      setLoft(category === "WEDGE" ? "" : modelLofts.length === 1 ? String(modelLofts[0]) : "");
       setLength(selected.standardLength === null ? "" : String(selected.standardLength));
       setLie(selected.lie === null ? "" : String(selected.lie));
       const verifiedHands = verifiedClubHandedness(selected);
@@ -256,8 +254,7 @@ export function ClubEditor({ userId, catalog, shafts, existing, defaultHandednes
     setGeneration(selected.generation || "");
     setYear(selected.year ? String(selected.year) : "");
     const modelLofts = catalogClubLofts(selected);
-    setLoft(modelLofts.length === 1 ? String(modelLofts[0]) : "");
-    setManualLoft(false);
+    if (category !== "WEDGE") setLoft(modelLofts.length === 1 ? String(modelLofts[0]) : "");
     setLength(selected.standardLength === null ? "" : String(selected.standardLength));
     setLie(selected.lie === null ? "" : String(selected.lie));
     const verifiedHands = verifiedClubHandedness(selected);
@@ -267,9 +264,15 @@ export function ClubEditor({ userId, catalog, shafts, existing, defaultHandednes
   function changeLoft(value: string) {
     setLoft(value);
     const selected = selectableCatalog.find((club) => club.id === catalogClubId) || catalog.find((club) => club.id === catalogClubId);
-    const variant = selected?.variants.find((item) => Math.abs(item.loft - Number(value)) < 0.001);
+    const variant = category === "WEDGE" ? null : selected?.variants.find((item) => Math.abs(item.loft - Number(value)) < 0.001);
     const verifiedHands = verifiedClubHandedness(selected, variant);
     if (verifiedHands && !verifiedHands.includes(handedness)) setHandedness(verifiedHands[0]);
+  }
+
+  function hasRequiredWedgeLoft() {
+    if (category !== "WEDGE" || parseUniversalWedgeLoft(loft) !== null) return true;
+    setMessage("Selecciona un loft entre 48° y 68° para continuar.");
+    return false;
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -284,7 +287,7 @@ export function ClubEditor({ userId, catalog, shafts, existing, defaultHandednes
       return;
     }
     const parsedYear = yearOrNull(year);
-    const parsedLoft = numberOrNull(loft, 0, 90);
+    const parsedLoft = category === "WEDGE" ? parseUniversalWedgeLoft(loft) : numberOrNull(loft, 0, 90);
     const parsedWeight = numberOrNull(shaftWeight, 1, 300);
     const parsedLength = numberOrNull(length, 10, 60);
     const parsedLie = numberOrNull(lie, 30, 90);
@@ -292,8 +295,8 @@ export function ClubEditor({ userId, catalog, shafts, existing, defaultHandednes
       setMessage("Revisa año, loft, peso, longitud y lie. Puedes dejarlos vacíos si no los conoces.");
       return;
     }
-    if (category === "WEDGE" && !manual && !manualLoft && !isCatalogLoftAllowed(parsedLoft, selectedClub)) {
-      setMessage("Elige un loft disponible para este modelo o usa captura manual para una configuración propia.");
+    if (category === "WEDGE" && parsedLoft === null) {
+      setMessage("Selecciona un loft entre 48° y 68° para guardar este wedge.");
       setStep("specs");
       return;
     }
@@ -301,7 +304,7 @@ export function ClubEditor({ userId, catalog, shafts, existing, defaultHandednes
       setMessage("La mano elegida no está disponible para este modelo. Usa ‘Mi bastón no aparece’ para guardar una configuración manual.");
       return;
     }
-    const verifiedVariant = selectedClub?.variants.find((variant) => parsedLoft !== null && Math.abs(variant.loft - parsedLoft) < 0.001);
+    const verifiedVariant = category === "WEDGE" ? null : selectedClub?.variants.find((variant) => parsedLoft !== null && Math.abs(variant.loft - parsedLoft) < 0.001);
     if (verifiedVariant && !isClubHandednessAllowed(handedness, selectedClub, verifiedVariant)) {
       setMessage(`El loft ${parsedLoft}° no está disponible en mano ${handedness} para este modelo. Puedes elegir otra variante o capturarlo manualmente.`);
       return;
@@ -400,23 +403,21 @@ export function ClubEditor({ userId, catalog, shafts, existing, defaultHandednes
         {step === "specs" && <div className={styles.flowScreen}>
           <button type="button" className={styles.flowBack} onClick={() => { if (manual) setManual(false); setCatalogQuery(""); setStep(manual ? "brand" : "model"); }}>← {manual ? "Catálogo" : "Modelos"}</button>
           <h3>{CLUB_CATEGORY_LABELS[category]} · especificaciones</h3>
-          <p>{category === "IRON_SET" ? "Elige los hierros que juegas: paquete rápido o composición libre, incluidos wedges por grado." : category === "WEDGE" ? "Indica loft en grados si lo conoces; varilla y demás medidas son opcionales." : category === "PUTTER" ? "Mano, longitud, lie y grip pueden guardarse sin inventar especificaciones." : "Loft y mano cuando los conozcas; la varilla se elige después o se omite."}</p>
+          <p>{category === "IRON_SET" ? "Elige los hierros que juegas: paquete rápido o composición libre, incluidos wedges por grado." : category === "WEDGE" ? "Elige el loft en grados; varilla y demás medidas son opcionales." : category === "PUTTER" ? "Mano, longitud, lie y grip pueden guardarse sin inventar especificaciones." : "Loft y mano cuando los conozcas; la varilla se elige después o se omite."}</p>
           <div className={styles.productPreview}><CatalogProductMedia item={selectedCatalogClub} fallback={CLUB_CATEGORY_ICONS[category]} /><div><b>{manual ? [brand, customModel].filter(Boolean).join(" ") || "Bastón manual" : `${selectedCatalogClub?.brand || effectiveBrand} ${selectedCatalogClub?.model || ""}`}</b><small>{selectedCatalogClub ? [selectedCatalogClub.generation, selectedCatalogClub.year, selectedCatalogClub.active ? "Actual" : "Modelo anterior"].filter(Boolean).join(" · ") : "Sin imagen disponible."}</small></div></div>
           {manual && <div className={styles.inlineFields}><label>Marca<input value={brand} maxLength={100} onChange={(event) => setBrand(event.target.value)} placeholder="Marca" /></label><label>Modelo<input value={customModel} maxLength={140} onChange={(event) => setCustomModel(event.target.value)} placeholder="Modelo" /></label></div>}
           {category === "WEDGE" && <label>Loft / grados
-            {verifiedLofts.length && !manualLoft ? <select aria-label="Loft / grados" value={loft} onChange={event => changeLoft(event.target.value)}><option value="">Selecciona los grados…</option>{loft && !verifiedLofts.includes(Number(loft)) && <option value={loft} disabled>{loft}° · valor anterior</option>}{verifiedLofts.map(value => <option key={value} value={value}>{value}°</option>)}</select>
-              : <input aria-label="Loft / grados" type="number" inputMode="decimal" min={0} max={90} step="0.1" placeholder="Ej. 56" value={loft} onChange={event => changeLoft(event.target.value)} />}
-            <small>{manualLoft ? "Loft capturado manualmente." : verifiedLofts.length ? "Opciones disponibles para este modelo." : manual ? "Grados capturados manualmente." : "No hay grados disponibles para este modelo. Puedes agregar los de tu bastón."}</small>
-            {verifiedLofts.length > 0 && <button type="button" className="textButton" onClick={() => { setManualLoft((current) => !current); setLoft(""); }}>{manualLoft ? "Usar loft del catálogo" : "Agregar loft manualmente"}</button>}
-            {!verifiedLofts.length && <span className="textButton" aria-hidden="true">Agregar loft manualmente</span>}
+            <select aria-label="Loft / grados" required value={loft} onChange={event => { setMessage(""); changeLoft(event.target.value); }}><option value="">Selecciona loft</option>{UNIVERSAL_WEDGE_LOFTS.map(value => <option key={value} value={value}>{value}°</option>)}</select>
+            <small>Obligatorio para guardar este wedge.</small>
           </label>}
+          {category === "WEDGE" && message && <div className={styles.formMessage} role="alert">{message}</div>}
           {manual ? <div className={styles.inlineFields}><label>Generación (opcional)<input value={generation} maxLength={100} onChange={(event) => setGeneration(event.target.value)} /></label><label>Año (opcional)<input type="number" inputMode="numeric" min={1900} max={2200} value={year} onChange={(event) => setYear(event.target.value)} /></label></div> : <div className={styles.catalogFacts} aria-label="Generación del modelo">
             {generationOptions.length > 1 ? <label>Generación<select value={catalogClubId} onChange={(event) => chooseGeneration(event.target.value)}>{generationOptions.map((option) => <option key={option.id} value={option.id}>{[option.generation, option.year].filter(Boolean).join(" · ") || "Sin nombre publicado"}</option>)}</select></label> : <span><small>Generación</small><b>{selectedCatalogClub?.generation || selectedCatalogClub?.year || "Sin dato"}</b></span>}
             <span><small>Año</small><b>{selectedCatalogClub?.year || "Sin dato"}</b></span>
           </div>}
           <div className={styles.inlineFields}>{category !== "WEDGE" && <label>Loft ° (opcional){verifiedLofts.length ? <select value={loft} onChange={(event) => changeLoft(event.target.value)}><option value="">No lo sé</option>{verifiedLofts.map((value) => <option key={value} value={value}>{value}°</option>)}</select> : <input type="number" inputMode="decimal" min={0} max={90} step="0.1" value={loft} onChange={(event) => changeLoft(event.target.value)} />}</label>}<label>Mano<select value={handedness} onChange={(event) => setHandedness(event.target.value as ClubHandedness)}>{availableHands.includes("RH") && <option value="RH">Derecha</option>}{availableHands.includes("LH") && <option value="LH">Izquierda</option>}</select><small>Precargada desde tu perfil; cámbiala sólo si este bastón es distinto.</small></label></div>
           {category === "IRON_SET" && <fieldset className={styles.choiceFieldset}><legend>Composición del set</legend><div className={styles.choiceGrid}>{IRON_SET_PACKAGES.map((set) => <button type="button" key={set.label} onClick={() => setComposition([...set.clubs])}>{set.label}</button>)}</div><p className={styles.subtle}>Personalizar set</p><div className={styles.choiceGrid}>{CUSTOM_IRON_COMPOSITION.map((club) => <label key={club}><input type="checkbox" checked={composition.includes(club)} onChange={(event) => setComposition((current) => event.target.checked ? [...current, club] : current.filter((item) => item !== club))} />{club}</label>)}</div></fieldset>}
-          <div className={styles.flowActions}><button type="button" className="secondary" onClick={() => { setShaftManual(false); setShaftId(""); setShaftBrand(""); setSelectedShaftSnapshot(null); setCustomShaftBrand(""); setCustomShaftModel(""); setShaftFlexLabel(""); setShaftWeight(""); setFlex(""); setStep("finish"); }}>Sin varilla / No sé</button><button type="button" className="primary" onClick={() => setStep("shaft")}>Elegir varilla</button></div>
+          <div className={styles.flowActions}><button type="button" className="secondary" onClick={() => { if (!hasRequiredWedgeLoft()) return; setMessage(""); setShaftManual(false); setShaftId(""); setShaftBrand(""); setSelectedShaftSnapshot(null); setCustomShaftBrand(""); setCustomShaftModel(""); setShaftFlexLabel(""); setShaftWeight(""); setFlex(""); setStep("finish"); }}>Sin varilla / No sé</button><button type="button" className="primary" onClick={() => { if (!hasRequiredWedgeLoft()) return; setMessage(""); setStep("shaft"); }}>Elegir varilla</button></div>
         </div>}
 
         {step === "shaft" && <div className={styles.flowScreen}>
