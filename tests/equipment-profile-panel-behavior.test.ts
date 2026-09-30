@@ -190,6 +190,9 @@ function harness() {
         CLUB_CATEGORY_ICONS: { DRIVER: "D" },
         CLUB_CATEGORY_LABELS: { DRIVER: "Driver", MINI_DRIVER: "Mini Driver", FAIRWAY_WOOD: "Maderas", HYBRID: "Híbridos", UTILITY_IRON: "Utility", IRON_SET: "Hierros", WEDGE: "Wedges", PUTTER: "Putter" },
       };
+      if (name === "./wedge-collection-editor") return {
+        WedgeCollectionEditor: (props: Record<string, unknown>) => ({ type: "wedge-collection-editor", props }),
+      };
       if (name === "./use-equipment-profile") return {
         equipmentStatusLabel: () => "Guardado",
         useEquipmentProfile: () => ({
@@ -223,6 +226,8 @@ function harness() {
           const populatedIds = new Set(populated.map((section) => section.id));
           return { populated, missing: bagSections.filter((section) => !populatedIds.has(section.id)) };
         },
+        sortCurrentWedges: (clubs: golfEquipment.PlayerClub[]) => clubs.filter((club) => club.category === "WEDGE" && club.isCurrent).sort((left, right) => (left.loft ?? 999) - (right.loft ?? 999)),
+        wedgeLoftSummary: (clubs: golfEquipment.PlayerClub[]) => clubs.filter((club) => club.category === "WEDGE" && club.isCurrent && club.loft !== null).sort((left, right) => (left.loft ?? 999) - (right.loft ?? 999)).map((club) => `${club.loft}°`).join(" · "),
       };
       if (name.endsWith(".css")) return { default: new Proxy({}, { get: (_target, key) => String(key) }) };
       throw new Error(name);

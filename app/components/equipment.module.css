@@ -840,6 +840,17 @@
   background: radial-gradient(circle at 88% 0, rgba(210, 170, 63, .12), transparent 30%);
 }
 
+.editorEmbeddedShell { min-width: 0; width: 100%; }
+.editorEmbedded { display: grid; min-width: 0; gap: 0; border-top: 1px solid var(--line); padding-top: 20px; }
+.editorEmbedded > h2,
+.editorEmbedded > p { margin: 0; }
+.editorEmbedded > h2 { color: var(--ink); font-family: Georgia, "Times New Roman", serif; font-size: clamp(27px, 6vw, 34px); }
+.editorEmbedded > p { margin-top: 5px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.editorEmbedded :global(.anchoredSearchResults) { position: static; max-height: none; overflow: visible; margin-top: 6px; box-shadow: none; }
+.editorEmbedded input,
+.editorEmbedded select,
+.editorEmbedded textarea { font-size: 16px; scroll-margin-block: 100px; }
+
 .editorPage,
 .flowDecision {
   display: grid;
@@ -963,6 +974,12 @@
 .inlineFields input, .inlineFields select, .inlineFields textarea { width: 100%; min-width: 0; }
 .flowActions { display: grid; grid-template-columns: 1fr 1.2fr; gap: 8px; }
 .flowActions button { min-height: 48px; }
+.similarWedgeNotice { display: grid; gap: 3px; border: 1px solid #d4b875; border-radius: 13px; background: #fff8df; padding: 11px 12px; color: #5d4714; }
+.similarWedgeNotice b,
+.similarWedgeNotice span { overflow-wrap: anywhere; }
+.similarWedgeNotice span { font-size: 11px; line-height: 1.4; }
+.wedgeDeleteAction { display: grid; margin-top: 8px; border-top: 1px solid #efcfcd; padding-top: 15px; }
+.wedgeDeleteAction .dangerButton { min-height: 48px; }
 .ballFacts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
 .ballFacts span { min-width: 0; border: 1px solid var(--line); border-radius: 11px; background: var(--soft); padding: 9px; }
 .ballFacts small, .ballFacts b { display: block; overflow-wrap: anywhere; }

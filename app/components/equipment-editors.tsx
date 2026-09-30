@@ -117,13 +117,20 @@ type ClubEditorProps = {
   existing?: PlayerClub | null;
   defaultHandedness?: ProfileHandedness | null;
   initialCategory?: ClubCategory;
-  presentation?: "sheet" | "page";
+  presentation?: "sheet" | "page" | "embedded";
+  wedgeOrdinal?: number;
+  wedgePeers?: readonly PlayerClub[];
   onSelectBall?: () => void;
+  onSelectWedges?: () => void;
+  onRequestDelete?: () => void;
+  onManageDistance?: () => void;
   onCancel: () => void;
   onSave: (club: PlayerClub) => boolean | void;
 };
 
-export function ClubEditor({ userId, catalog, shafts, existing, defaultHandedness, initialCategory, presentation = "sheet", onSelectBall, onCancel, onSave }: ClubEditorProps) {
+type ClubEditorStep = "category" | "wedge-loft" | "brand" | "model" | "specs" | "shaft" | "finish";
+
+export function ClubEditor({ userId, catalog, shafts, existing, defaultHandedness, initialCategory, presentation = "sheet", wedgeOrdinal = 1, wedgePeers = [], onSelectBall, onSelectWedges, onRequestDelete, onManageDistance, onCancel, onSave }: ClubEditorProps) {
   const dialogRef = useModalDialog(presentation === "sheet", onCancel);
   const existingCatalog = existing?.catalogClubId ? catalog.find((club) => club.id === existing.catalogClubId) : null;
   const [category, setCategory] = useState<ClubCategory>(existing?.category || initialCategory || "DRIVER");
@@ -156,9 +163,12 @@ export function ClubEditor({ userId, catalog, shafts, existing, defaultHandednes
   const [catalogQuery, setCatalogQuery] = useState("");
   const [shaftQuery, setShaftQuery] = useState("");
   const [message, setMessage] = useState("");
-  const [step, setStep] = useState<"category" | "brand" | "model" | "specs" | "shaft" | "finish">(existing ? "finish" : initialCategory ? "brand" : "category");
-  useWizardStepNavigation(dialogRef, step);
-  useLayoutEffect(() => { if (presentation === "page") window.scrollTo(0, 0); }, [presentation, step]);
+  const [step, setStep] = useState<ClubEditorStep>(existing ? "finish" : initialCategory === "WEDGE" ? "wedge-loft" : initialCategory ? "brand" : "category");
+  useWizardStepNavigation(dialogRef, step, presentation === "sheet");
+  useLayoutEffect(() => {
+    if (presentation === "page") window.scrollTo(0, 0);
+    else if (presentation === "embedded") dialogRef.current?.scrollIntoView({ block: "start" });
+  }, [dialogRef, presentation, step]);
 
   const categoryCatalog = useMemo(() => catalog.filter((club) => club.category === category), [catalog, category]);
   const pinnedClubIds = useMemo(() => catalogClubId ? [catalogClubId] : [], [catalogClubId]);
@@ -196,8 +206,29 @@ export function ClubEditor({ userId, catalog, shafts, existing, defaultHandednes
   const availableHands = verifiedClubHandedness(selectedCatalogClub, selectedVariant) || (["RH", "LH"] as ClubHandedness[]);
   const verifiedLofts = manual ? [] : catalogClubLofts(selectedCatalogClub);
   const generationOptions = catalogClubGenerationOptions(selectedCatalogClub, [...selectableCatalog, ...catalog]);
+  const flowSteps: readonly ClubEditorStep[] = category === "WEDGE"
+    ? ["wedge-loft", "brand", "model", "specs", "shaft", "finish"]
+    : ["category", "brand", "model", "specs", "shaft", "finish"];
+  const similarWedge = category === "WEDGE" && parseUniversalWedgeLoft(loft) !== null
+    ? wedgePeers.find((club) => {
+      if (club.id === existing?.id || club.category !== "WEDGE" || !club.isCurrent || club.loft !== Number(loft) || club.handedness !== handedness) return false;
+      const sameClub = manual
+        ? !club.catalogClubId && sameIdentityText(club.customBrand, brand) && sameIdentityText(club.customModel, customModel)
+        : club.catalogClubId === catalogClubId;
+      const sameShaft = (shaftManual
+        ? !club.shaftId && sameIdentityText(club.customShaftBrand, customShaftBrand) && sameIdentityText(club.customShaftModel || club.customShaft, customShaftModel)
+        : club.shaftId === (shaftId || null))
+        && sameIdentityText(club.shaftFlexLabel, shaftFlexLabel)
+        && club.shaftWeightGrams === (shaftWeight ? Number(shaftWeight) : null);
+      return sameClub && sameShaft;
+    }) || null
+    : null;
 
   function chooseCategory(value: ClubCategory) {
+    if (value === "WEDGE" && onSelectWedges) {
+      onSelectWedges();
+      return;
+    }
     setCategory(value);
     setBrand("");
     setCatalogClubId("");
@@ -217,7 +248,7 @@ export function ClubEditor({ userId, catalog, shafts, existing, defaultHandednes
     setLie("");
     if (value !== "IRON_SET") setComposition([]);
     setManual(false);
-    setStep("brand");
+    setStep(value === "WEDGE" ? "wedge-loft" : "brand");
   }
 
   function chooseModel(id: string) {
@@ -228,7 +259,7 @@ export function ClubEditor({ userId, catalog, shafts, existing, defaultHandednes
       setGeneration(selected.generation || "");
       setYear(selected.year ? String(selected.year) : "");
       const modelLofts = catalogClubLofts(selected);
-      setLoft(category === "WEDGE" ? "" : modelLofts.length === 1 ? String(modelLofts[0]) : "");
+      if (category !== "WEDGE") setLoft(modelLofts.length === 1 ? String(modelLofts[0]) : "");
       setLength(selected.standardLength === null ? "" : String(selected.standardLength));
       setLie(selected.lie === null ? "" : String(selected.lie));
       const verifiedHands = verifiedClubHandedness(selected);
@@ -320,8 +351,9 @@ export function ClubEditor({ userId, catalog, shafts, existing, defaultHandednes
       || !sameIdentityText(existing.generation, savedGeneration)
       || existing.year !== savedYear
     ));
+    const replacesPhysicalClub = category !== "WEDGE" && identityChanged;
     const saved = onSave({
-      id: identityChanged ? uid("club") : existing?.id || uid("club"),
+      id: replacesPhysicalClub ? uid("club") : existing?.id || uid("club"),
       userId,
       category,
       catalogClubId: manual ? null : catalogClubId || null,
@@ -347,23 +379,29 @@ export function ClubEditor({ userId, catalog, shafts, existing, defaultHandednes
       notes: notes.trim() || null,
       setComposition: category === "IRON_SET" ? composition : [],
       isCurrent: existing?.isCurrent ?? true,
-      startedUsingAt: identityChanged ? now : existing?.startedUsingAt || (existing?.isCurrent === false ? null : now),
-      stoppedUsingAt: identityChanged ? null : existing?.stoppedUsingAt || null,
-      createdAt: identityChanged ? now : existing?.createdAt || now,
+      startedUsingAt: replacesPhysicalClub ? now : existing?.startedUsingAt || (existing?.isCurrent === false ? null : now),
+      stoppedUsingAt: replacesPhysicalClub ? null : existing?.stoppedUsingAt || null,
+      createdAt: replacesPhysicalClub ? now : existing?.createdAt || now,
       updatedAt: now,
     });
     if (saved === false) setMessage("No se confirmó el guardado en este dispositivo. Vuelve a intentar.");
   }
 
-  return <div className={presentation === "page" ? styles.editorPageShell : styles.editorBackdrop} role={presentation === "sheet" ? "presentation" : undefined}>
-    <section ref={dialogRef} tabIndex={-1} className={presentation === "page" ? styles.editorPage : styles.editorSheet} role={presentation === "sheet" ? "dialog" : undefined} aria-modal={presentation === "sheet" ? "true" : undefined} aria-labelledby="club-editor-title">
-      {presentation === "sheet" ? <><ModalCloseButton onClose={onCancel} /><div className={styles.sheetHandle} /></> : <button type="button" className={styles.pageBack} onClick={onCancel}>← Volver a Mi Bolsa</button>}
-      <h2 id="club-editor-title">{existing ? "Editar bastón" : step === "category" ? "Agregar a mi bolsa" : `Agregar ${CLUB_CATEGORY_LABELS[category]}`}</h2>
-      <p>Marca + modelo es suficiente. Las especificaciones son opcionales.</p>
+  const shellClass = presentation === "page" ? styles.editorPageShell : presentation === "embedded" ? styles.editorEmbeddedShell : styles.editorBackdrop;
+  const panelClass = presentation === "page" ? styles.editorPage : presentation === "embedded" ? styles.editorEmbedded : styles.editorSheet;
+  const editorTitle = category === "WEDGE"
+    ? existing ? "Editar wedge" : "Agregar Wedges"
+    : existing ? "Editar bastón" : step === "category" ? "Agregar a mi bolsa" : `Agregar ${CLUB_CATEGORY_LABELS[category]}`;
+
+  return <div className={shellClass} role={presentation === "sheet" ? "presentation" : undefined}>
+    <section ref={dialogRef} tabIndex={-1} className={panelClass} role={presentation === "sheet" ? "dialog" : undefined} aria-modal={presentation === "sheet" ? "true" : undefined} aria-labelledby="club-editor-title">
+      {presentation === "sheet" ? <><ModalCloseButton onClose={onCancel} /><div className={styles.sheetHandle} /></> : presentation === "page" ? <button type="button" className={styles.pageBack} onClick={onCancel}>← Volver a Mi Bolsa</button> : null}
+      <h2 id="club-editor-title">{editorTitle}</h2>
+      <p>{category === "WEDGE" ? "Cada wedge se guarda por separado. El loft es obligatorio; varilla y demás especificaciones son opcionales." : "Marca + modelo es suficiente. Las especificaciones son opcionales."}</p>
       <FeedbackLink category="CLUB">¿No encuentras tu equipo? Solicítalo</FeedbackLink>
       <FeedbackLink category="SHAFT">¿No encuentras tu varilla? Solicítala</FeedbackLink>
       <div className={styles.flowProgress} aria-label="Progreso de selección">
-        {(["category", "brand", "model", "specs", "shaft", "finish"] as const).map((item, index) => <span key={item} data-active={item === step} data-complete={index < ["category", "brand", "model", "specs", "shaft", "finish"].indexOf(step)} />)}
+        {flowSteps.map((item, index) => <span key={item} data-active={item === step} data-complete={index < flowSteps.indexOf(step)} />)}
       </div>
       <form className={styles.formGrid} onSubmit={submit} noValidate>
         {step === "category" && <div className={styles.flowScreen}>
@@ -376,14 +414,26 @@ export function ClubEditor({ userId, catalog, shafts, existing, defaultHandednes
           })}{onSelectBall && <button type="button" aria-label="Bola" onClick={onSelectBall}><span className={styles.catalogCategoryMedia}><GolfBallVisual /></span><b>Bola</b><strong aria-hidden="true">›</strong></button>}</div>
         </div>}
 
+        {step === "wedge-loft" && <div className={styles.flowScreen}>
+          {!initialCategory && <button type="button" className={styles.flowBack} onClick={() => setStep("category")}>← Categorías</button>}
+          <h3>Selecciona el loft de este wedge</h3>
+          <p>Wedge {wedgeOrdinal} · Elige primero los grados; después seleccionarás su propia marca y modelo.</p>
+          <label>Loft / grados
+            <select aria-label="Loft / grados" required value={loft} onChange={(event) => { setMessage(""); changeLoft(event.target.value); }}><option value="">Selecciona loft</option>{UNIVERSAL_WEDGE_LOFTS.map((value) => <option key={value} value={value}>{value}°</option>)}</select>
+            <small>Obligatorio para guardar este wedge.</small>
+          </label>
+          {message && <div className={styles.formMessage} role="alert">{message}</div>}
+          <div className={styles.flowActions}><button type="button" className="secondary" onClick={onCancel}>Cancelar</button><button type="button" className="primary" onClick={() => { if (!hasRequiredWedgeLoft()) return; setMessage(""); setStep("brand"); }}>Continuar a marca</button></div>
+        </div>}
+
         {step === "brand" && <div className={styles.flowScreen}>
-          <button type="button" className={styles.flowBack} onClick={() => setStep("category")}>← Categorías</button>
-          <h3>Selecciona marca</h3><p>{CLUB_CATEGORY_LABELS[category]} · escribe para filtrar todo el catálogo, incluidos modelos anteriores.</p>
+          <button type="button" className={styles.flowBack} onClick={() => setStep(category === "WEDGE" ? "wedge-loft" : "category")}>← {category === "WEDGE" ? "Loft" : "Categorías"}</button>
+          <h3>{category === "WEDGE" ? "Selecciona marca para este wedge" : "Selecciona marca"}</h3><p>{category === "WEDGE" ? `Wedge ${wedgeOrdinal} · ${loft}° · Elige la marca de tu wedge.` : `${CLUB_CATEGORY_LABELS[category]} · escribe para filtrar todo el catálogo, incluidos modelos anteriores.`}</p>
           <AnchoredSearch label="Buscar marca" value={catalogQuery} onChange={setCatalogQuery} placeholder="Ej. TaylorMade" expanded={brands.length > 0} status={clubBrandFacets.status === "loading" ? "Buscando…" : clubBrandFacets.status === "error" ? "Sin conexión o catálogo no disponible; puedes usar captura manual." : `${brands.length} marcas`}>
             {brands.map((item) => <AnchoredSearchOption key={item.brand} onSelect={() => { setBrand(item.brand); setCatalogQuery(""); setStep("model"); }}><b>{item.brand}</b><small>{item.count} modelos · {item.currentCount} actuales · {item.historicalCount} anteriores</small></AnchoredSearchOption>)}
           </AnchoredSearch>
           {clubBrandFacets.hasMore && <button className="secondary" type="button" onClick={() => void clubBrandFacets.loadMore()}>Más marcas</button>}
-          <button className={styles.manualToggle} type="button" onClick={() => { setManual(true); setCatalogClubId(""); setSelectedClubSnapshot(null); setBrand(""); setCustomModel(""); setGeneration(""); setYear(""); setLoft(""); setLength(""); setLie(""); setStep("specs"); }}>Mi bastón no aparece</button>
+          <button className={styles.manualToggle} type="button" onClick={() => { setManual(true); setCatalogClubId(""); setSelectedClubSnapshot(null); setBrand(""); setCustomModel(""); setGeneration(""); setYear(""); if (category !== "WEDGE") setLoft(""); setLength(""); setLie(""); setStep("specs"); }}>Mi bastón no aparece</button>
         </div>}
 
         {step === "model" && <div className={styles.flowScreen}>
@@ -441,8 +491,11 @@ export function ClubEditor({ userId, catalog, shafts, existing, defaultHandednes
           {selectedShaft && <div className={styles.catalogFacts} aria-label="Ficha de la varilla"><span><small>Uso</small><b>{selectedShaft.usage || "Sin dato"}</b></span><span><small>Launch</small><b>{selectedShaft.launch || "Sin dato"}</b></span><span><small>Spin</small><b>{selectedShaft.spin || "Sin dato"}</b></span><span><small>Torque</small><b>{selectedShaft.torqueRange.length ? `${selectedShaft.torqueRange.join("–")}°` : selectedShaft.torque === null ? "Sin dato" : `${selectedShaft.torque}°`}</b></span><span><small>Tip</small><b>{selectedShaft.tipDiameter === null ? "Sin dato" : `${selectedShaft.tipDiameter} in`}</b></span><span><small>Butt</small><b>{selectedShaft.buttDiameter === null ? "Sin dato" : `${selectedShaft.buttDiameter} in`}</b></span></div>}
           <details className={styles.optionalDetails}><summary>Medidas y detalles opcionales</summary><div className={styles.inlineFields}><label>Longitud in<input type="number" inputMode="decimal" min={10} max={60} step="0.125" value={length} onChange={(event) => setLength(event.target.value)} />{selectedCatalogClub?.standardLength !== null && selectedCatalogClub?.standardLength !== undefined && <small>Estándar del catálogo: {selectedCatalogClub.standardLength} in</small>}</label><label>Lie °<input type="number" inputMode="decimal" min={30} max={90} step="0.1" value={lie} onChange={(event) => setLie(event.target.value)} /></label><label>Grip<input value={grip} maxLength={180} onChange={(event) => setGrip(event.target.value)} /></label><label>Notas<textarea value={notes} maxLength={1000} rows={3} onChange={(event) => setNotes(event.target.value)} /></label></div></details>
           {selectedShaft?.material && <p className={styles.subtle}>{selectedShaft.material}</p>}
+          {similarWedge && <div className={styles.similarWedgeNotice} role="status" aria-live="polite"><b>Ya tienes un wedge muy similar en tu bolsa.</b><span>Puedes guardarlo de todos modos; no fusionaremos ni eliminaremos ninguno.</span></div>}
           {message && <div className={styles.formMessage} role="alert">{message}</div>}
-          <div className={styles.formActions}><button type="button" className="secondary" onClick={onCancel}>Cancelar</button><button type="submit" className="primary">Guardar bastón</button></div>
+          <div className={styles.formActions}><button type="button" className="secondary" onClick={onCancel}>Cancelar</button><button type="submit" className="primary">{category === "WEDGE" ? "Guardar wedge" : "Guardar bastón"}</button></div>
+          {category === "WEDGE" && existing && onManageDistance && <button type="button" className="secondary" onClick={onManageDistance}>Gestionar distancia manual</button>}
+          {category === "WEDGE" && existing && onRequestDelete && <div className={styles.wedgeDeleteAction}><button type="button" className={styles.dangerButton} onClick={onRequestDelete}>Eliminar wedge</button></div>}
         </div>}
       </form>
     </section>

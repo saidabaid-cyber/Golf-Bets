@@ -40,7 +40,9 @@ import type { ProfileHandedness } from "../../lib/equipment-editor-selection";
 import styles from "./equipment.module.css";
 import { GolfBallVisual } from "./equipment-visuals";
 import { EQUIPMENT_CATEGORY_ASSETS } from "./equipment-category-assets";
-import { BAG_CATEGORY_SECTIONS, bagCategoryManagement } from "../../lib/equipment-bag-management";
+import { BAG_CATEGORY_SECTIONS } from "../../lib/equipment-bag-management";
+import { bagCategoryManagement, sortCurrentWedges, wedgeLoftSummary } from "../../lib/equipment-bag-management";
+import { WedgeCollectionEditor } from "./wedge-collection-editor";
 
 type EquipmentProfilePanelProps = {
   userId: string;
@@ -108,10 +110,7 @@ function savedClubLabel(club: PlayerClub) {
 }
 
 function savedClubConfiguration(clubs: readonly PlayerClub[], sectionId: string) {
-  if (sectionId === "wedges") {
-    const lofts = clubs.flatMap((club) => club.loft === null ? [] : [club.loft]).sort((left, right) => left - right);
-    return lofts.length ? lofts.map((loft) => `${loft}°`).join("–") : "";
-  }
+  if (sectionId === "wedges") return wedgeLoftSummary(clubs);
   const compositions = clubs.flatMap((club) => club.setComposition);
   if (compositions.length) return compositions.join("–");
   const lofts = clubs.flatMap((club) => club.loft === null ? [] : [club.loft]);
@@ -160,7 +159,10 @@ export function EquipmentProfileSummary({ userId, accessToken, onOpen }: { userI
     <div className={styles.profileBagRows}>
       {populated.map((section) => {
         const configuration = savedClubConfiguration(section.clubs, section.id);
-        return <button type="button" key={section.id} onClick={onOpen}><span><small>{section.label}{configuration ? `: ${configuration}` : ""}</small><b>{section.clubs.map(savedClubLabel).join(" · ")}</b></span><strong aria-hidden="true">›</strong></button>;
+        const description = section.id === "wedges"
+          ? `${section.clubs.length} ${section.clubs.length === 1 ? "wedge" : "wedges"}`
+          : section.clubs.map(savedClubLabel).join(" · ");
+        return <button type="button" key={section.id} onClick={onOpen}><span><small>{section.label}{configuration ? `: ${configuration}` : ""}</small><b>{description}</b></span><strong aria-hidden="true">›</strong></button>;
       })}
       {ball && <button type="button" onClick={onOpen}><span><small>Bola</small><b>{ball.ballBrand} {ball.ballModel}</b></span><strong aria-hidden="true">›</strong></button>}
     </div>
@@ -171,6 +173,7 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
   const { profile, status, message, update, retry, resolveConflict, recoverLocalProfile } = useEquipmentProfile(userId, accessToken);
   const [clubEditor, setClubEditor] = useState<PlayerClub | "new" | null>(null);
   const [newClubCategory, setNewClubCategory] = useState<PlayerClub["category"] | null>(null);
+  const [wedgeCollectionOpen, setWedgeCollectionOpen] = useState(false);
   const [clubDetailId, setClubDetailId] = useState<string | null>(null);
   const [ballEditor, setBallEditor] = useState<PlayerBall | "new" | null>(initialSection === "ball" ? "new" : null);
   const [distanceEditor, setDistanceEditor] = useState<{ club: PlayerClub; distance: PlayerClubDistance | null } | null>(null);
@@ -178,7 +181,7 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
   const [deleteIntent, setDeleteIntent] = useState<EquipmentDeleteIntent | null>(null);
   const [fitOpen, setFitOpen] = useState(initialSection === "fitting");
   const [savedFitOpen, setSavedFitOpen] = useState(false);
-  useViewScrollReset(`${Boolean(clubEditor)}:${Boolean(ballEditor)}:${Boolean(distanceEditor)}:${Boolean(flowSuccess)}:${fitOpen}:${savedFitOpen}`);
+  useViewScrollReset(`${Boolean(clubEditor)}:${wedgeCollectionOpen}:${Boolean(ballEditor)}:${Boolean(distanceEditor)}:${Boolean(flowSuccess)}:${fitOpen}:${savedFitOpen}`);
   const currentClubs = useMemo(() => profile?.clubs.filter((club) => club.isCurrent) || [], [profile]);
   const historicalClubs = useMemo(() => profile?.clubs.filter((club) => !club.isCurrent) || [], [profile]);
   const selectedClub = clubDetailId ? profile?.clubs.find((club) => club.id === clubDetailId) || null : null;
@@ -196,6 +199,7 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
   const shaftCatalog = useEquipmentCatalogSearch({ kind: "SHAFT", query: "", pinnedIds: pinnedShaftIds });
   const ballCatalog = useEquipmentCatalogSearch({ kind: "BALL", query: "", pinnedIds: pinnedBallIds });
   const bagManagement = bagCategoryManagement(currentClubs);
+  const currentWedges = useMemo(() => sortCurrentWedges(currentClubs), [currentClubs]);
   const currentBallCatalog = currentBall?.catalogBallId ? ballCatalog.items.find((ball) => ball.id === currentBall.catalogBallId) || null : null;
 
   if (status === "loading" || !profile) return <section className={`card ${styles.section}`} aria-busy={status === "loading"}>
@@ -253,6 +257,17 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
     return saved;
   }
 
+  function saveWedge(club: PlayerClub) {
+    return update((current) => {
+      const withWedge = upsertPlayerClub(current, club);
+      return withWedge ? setEquipmentOnboardingStatus(withWedge, "COMPLETED") : null;
+    });
+  }
+
+  function deleteWedge(club: PlayerClub) {
+    return update((current) => removePlayerClub(current, club.id));
+  }
+
   function selectFitCurrentBall(ball: GolfBallCatalog) {
     const now = new Date().toISOString();
     return update((current) => setCatalogBallAsCurrent(current, ball, playerBallId(), now));
@@ -307,8 +322,11 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
 
   if (fitOpen) return <div className={styles.fullPageFlow} data-equipment-screen="ball-fit"><section className={styles.editorPage}><BallFitWizard userId={userId} accessToken={accessToken} defaultHandicap={defaultHandicap} defaultHandicapSource={defaultHandicapSource} profileDefaults={ballFitDefaults} savedInput={restoredFit?.input} currentBall={currentBall} catalog={ballCatalog.items} onCancel={() => setFitOpen(false)} onCurrentBallSelect={selectFitCurrentBall} onComplete={completeFit} onOpenPrivacy={onOpenPrivacy} /></section></div>;
   if (savedFitOpen && profile.lastBallFit) return <div className={styles.fullPageFlow} data-equipment-screen="saved-ball-fit"><section className={styles.editorPage}><button type="button" className={styles.pageBack} onClick={() => setSavedFitOpen(false)}>← Volver a Mi Bolsa</button><div className={styles.wizardHeader}><div><div className="eyebrow">RESULTADO GUARDADO</div><h2>Tu mejor grupo de bolas</h2>{restoredFit && <p>{BALL_FIT_HANDICAP_LABELS[restoredFit.input.handicapSource || "UNKNOWN"]}{restoredFit.input.handicap === null ? "" : `: ${restoredFit.input.handicap}`}</p>}</div></div>{restoredFit ? <BallFitResults result={restoredFit.result} catalog={ballCatalog.items} current={restoredFit.input.currentBallId ? ballCatalog.items.find((ball) => ball.id === restoredFit.input.currentBallId) || null : null} /> : <SavedBallFitComparison summary={profile.lastBallFit} catalog={ballCatalog.items} currentBall={currentBall} />}</section></div>;
+  if (wedgeCollectionOpen) return <div className={styles.fullPageFlow} data-equipment-screen="wedge-collection">
+    <WedgeCollectionEditor userId={userId} catalog={clubCatalog.items} shafts={shaftCatalog.items} wedges={currentWedges} defaultHandedness={defaultHandedness} onBack={() => setWedgeCollectionOpen(false)} onSave={saveWedge} onDelete={deleteWedge} onManageDistance={(club) => { setWedgeCollectionOpen(false); setClubDetailId(club.id); }} />
+  </div>;
   if (clubEditor) return <div className={styles.fullPageFlow} data-equipment-screen="club-editor">
-    <ClubEditor userId={userId} catalog={clubCatalog.items} shafts={shaftCatalog.items} existing={clubEditor === "new" ? null : clubEditor} initialCategory={clubEditor === "new" ? newClubCategory || undefined : undefined} defaultHandedness={defaultHandedness} presentation="page" onSelectBall={() => { setClubEditor(null); setNewClubCategory(null); setBallEditor("new"); }} onCancel={() => { setClubEditor(null); setNewClubCategory(null); }} onSave={saveClub} />
+    <ClubEditor userId={userId} catalog={clubCatalog.items} shafts={shaftCatalog.items} existing={clubEditor === "new" ? null : clubEditor} initialCategory={clubEditor === "new" ? newClubCategory || undefined : undefined} defaultHandedness={defaultHandedness} presentation="page" onSelectBall={() => { setClubEditor(null); setNewClubCategory(null); setBallEditor("new"); }} onSelectWedges={() => { setClubEditor(null); setNewClubCategory(null); setWedgeCollectionOpen(true); }} onCancel={() => { setClubEditor(null); setNewClubCategory(null); }} onSave={saveClub} />
   </div>;
   if (ballEditor) return <div className={styles.fullPageFlow} data-equipment-screen="ball-editor">
     <BallEditor userId={userId} catalog={ballCatalog.items} existing={ballEditor === "new" ? null : ballEditor} presentation="page" onCancel={() => setBallEditor(null)} onSave={saveBall} />
@@ -368,7 +386,9 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
     <section className={styles.profileEquipmentSection} aria-labelledby="current-equipment-title">
       <div className={styles.profileEquipmentHeader}><div className="eyebrow">MI BOLSA</div><h2 id="current-equipment-title">Equipo actual</h2><p>Sólo los bastones que juegas actualmente.</p></div>
       {currentClubs.length ? <div className={styles.currentClubList}>
-        {bagManagement.populated.flatMap((section) => section.clubs).map((club) => <ClubItem key={club.id} club={club} catalog={clubCatalog.items} onOpen={() => setClubDetailId(club.id)} />)}
+        {bagManagement.populated.map((section) => section.id === "wedges"
+          ? <WedgeGroupItem key={section.id} wedges={section.clubs} onOpen={() => setWedgeCollectionOpen(true)} />
+          : section.clubs.map((club) => <ClubItem key={club.id} club={club} catalog={clubCatalog.items} onOpen={() => setClubDetailId(club.id)} />))}
       </div> : <div className={styles.emptyState}><b>Tu bolsa está vacía</b><p>Todavía no tienes bastones configurados.</p></div>}
       {historicalClubs.length > 0 && <details className={styles.previousEquipment}><summary className="textButton">Equipo anterior ({historicalClubs.length})</summary><div className={styles.currentClubList}>{historicalClubs.map((club) => <ClubItem key={club.id} club={club} catalog={clubCatalog.items} onOpen={() => setClubDetailId(club.id)} />)}</div></details>}
     </section>
@@ -378,7 +398,7 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
       <div className={styles.missingCategoryList} aria-label="Categorías disponibles para agregar">
         {bagManagement.missing.map((section) => {
           const category = section.categories[0];
-          return <button type="button" className={styles.missingCategoryCard} key={section.id} aria-label={`Agregar ${section.label}`} onClick={() => { setClubDetailId(null); setNewClubCategory(category); setClubEditor("new"); }}>
+          return <button type="button" className={styles.missingCategoryCard} key={section.id} aria-label={`Agregar ${section.label}`} onClick={() => { setClubDetailId(null); if (category === "WEDGE") { setWedgeCollectionOpen(true); return; } setNewClubCategory(category); setClubEditor("new"); }}>
             <span className={styles.missingCategoryMedia} aria-hidden="true"><CanonicalCategoryImage category={category} sizes="(max-width: 430px) 104px, 132px" /></span>
             <span className={styles.missingCategoryCopy}><b>{section.label}</b><small>{section.description}</small></span>
             <strong className={styles.addBagButton} aria-hidden="true">＋</strong>
@@ -431,6 +451,18 @@ function ClubItem({ club, catalog: catalogItems, onOpen }: { club: PlayerClub; c
     <button type="button" className={styles.profileClubButton} onClick={onOpen} aria-label={`Editar ${clubName(club, catalogItems)}`}>
       <span className={styles.profileClubMedia} aria-hidden="true"><CanonicalCategoryImage category={club.category} sizes="(max-width: 430px) 112px, 132px" eager={club.isCurrent} /></span>
       <span className={styles.profileClubCopy}><small>{CLUB_CATEGORY_LABELS[club.category]}</small><b>{identity.brand}</b><span>{identity.model}</span><em>{CLUB_CATEGORY_LABELS[club.category]} · {club.handedness}</em></span>
+      <span className={styles.profileClubAction}><span>Editar</span><strong aria-hidden="true">›</strong></span>
+    </button>
+  </article>;
+}
+
+function WedgeGroupItem({ wedges, onOpen }: { wedges: readonly PlayerClub[]; onOpen: () => void }) {
+  const summary = wedgeLoftSummary(wedges);
+  const count = wedges.length;
+  return <article className={styles.profileClubCard} data-equipment-current-card="WEDGE">
+    <button type="button" className={styles.profileClubButton} onClick={onOpen} aria-label={`Editar Wedges. ${count} ${count === 1 ? "wedge" : "wedges"}${summary ? `: ${summary}` : ""}`}>
+      <span className={styles.profileClubMedia} aria-hidden="true"><CanonicalCategoryImage category="WEDGE" sizes="(max-width: 430px) 112px, 132px" eager /></span>
+      <span className={styles.profileClubCopy}><small>WEDGES</small><b>{summary || "Loft pendiente"}</b><span>{count} {count === 1 ? "wedge" : "wedges"}</span><em>Cada wedge conserva su propia configuración.</em></span>
       <span className={styles.profileClubAction}><span>Editar</span><strong aria-hidden="true">›</strong></span>
     </button>
   </article>;

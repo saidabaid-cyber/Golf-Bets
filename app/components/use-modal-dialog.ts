@@ -61,6 +61,6 @@ export function useModalDialog(active: boolean, onClose: () => void) {
 
 /** Keeps multi-step sheets at their own top without moving the page behind the
  * modal. The container receives focus without summoning the mobile keyboard. */
-export function useWizardStepNavigation(dialogRef: RefObject<HTMLElement | null>, step: string) {
-  useViewScrollReset(step, dialogRef);
+export function useWizardStepNavigation(dialogRef: RefObject<HTMLElement | null>, step: string, enabled = true) {
+  useViewScrollReset(step, dialogRef, enabled);
 }

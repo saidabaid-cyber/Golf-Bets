@@ -56,7 +56,9 @@ test("los wizards reinician su propio scroll y conservan el contexto detrás", (
   assert.match(modalHook, /dialogRef\.current\.scrollTop = 0/);
   assert.match(modalHook, /focus\(\{ preventScroll: true \}\)/);
   assert.match(modalHook, /priorFocus\.focus\(\{ preventScroll: true \}\)/);
-  assert.equal((equipment.match(/useWizardStepNavigation\(dialogRef, step\)/g) || []).length, 2);
+  assert.equal((equipment.match(/useWizardStepNavigation\(dialogRef, step(?:, presentation === "sheet")?\)/g) || []).length, 2);
+  assert.match(equipment, /useWizardStepNavigation\(dialogRef, step, presentation === "sheet"\)/);
+  assert.match(equipment, /presentation === "embedded"\) dialogRef\.current\?\.scrollIntoView\(\{ block: "start" \}\)/);
   assert.match(onboarding, /window\.scrollTo\(\{ top: 0, behavior: "auto" \}\)/);
   assert.match(onboarding, /titleRef\.current\?\.focus\(\{ preventScroll: true \}\)/);
 });

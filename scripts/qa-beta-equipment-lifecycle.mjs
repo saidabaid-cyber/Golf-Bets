@@ -36,14 +36,29 @@ try{
   profile=eq.upsertPlayerClubDistance(profile,{id:distanceId,userId:account.id,playerClubId:clubId,carryDistance:200,totalDistance:220,unit:'YD',source:'MANUAL',sampleCount:null,confidence:null,updatedAt:at},at);
   await save(profile);passed.push('BALL_MANUAL_CREATE_READBACK','SHAFT_MANUAL_CREATE_READBACK','DISTANCE_MANUAL_CREATE_READBACK');
   stage='WEDGE_LOFT';
-  const wedgeId=randomUUID();
-  profile=eq.upsertPlayerClub(profile,{id:wedgeId,userId:account.id,category:'WEDGE',customBrand:'Synthetic QA manual brand',customModel:'QA Wedge',loft:56,handedness:'RH',isCurrent:true,createdAt:at,updatedAt:at},at);
-  await save(profile);assert.equal(record.profile.clubs.find(club=>club.id===wedgeId).loft,56);
-  await account.client.auth.signOut();await login();assert.equal((await app('/api/equipment')).data.profile.clubs.find(club=>club.id===wedgeId).loft,56);
-  const wedgeChoice=capture.captureClubChoices(profile.clubs.find(club=>club.id===wedgeId))[0];assert.match(wedgeChoice.label,/56°/);
-  profile=eq.upsertPlayerClub(profile,{...profile.clubs.find(club=>club.id===wedgeId),loft:58},new Date().toISOString());await save(profile);
-  assert.equal(record.profile.clubs.find(club=>club.id===wedgeId).loft,58);assert.match(wedgeChoice.label,/56°/);
-  profile=eq.removePlayerClub(profile,wedgeId);await save(profile);passed.push('WEDGE_LOFT_CLOUD_FRESH_SESSION_EDIT_FROZEN_CHOICE');
+  const wedgeFixtures=[
+    {id:randomUUID(),customBrand:'Titleist',customModel:'Synthetic QA Vokey',loft:50},
+    {id:randomUUID(),customBrand:'Cleveland',customModel:'Synthetic QA RTX',loft:54},
+    {id:randomUUID(),customBrand:'Callaway',customModel:'Synthetic QA Opus',loft:58},
+  ];
+  for(const wedge of wedgeFixtures)profile=eq.upsertPlayerClub(profile,{...wedge,userId:account.id,category:'WEDGE',handedness:'RH',isCurrent:true,createdAt:at,updatedAt:at},at);
+  await save(profile);
+  const wedgeSnapshot=record.profile.clubs.filter(club=>club.category==='WEDGE').sort((left,right)=>left.loft-right.loft);
+  assert.deepEqual(wedgeSnapshot.map(club=>[club.id,club.customBrand,club.loft]),wedgeFixtures.map(club=>[club.id,club.customBrand,club.loft]));
+  await account.client.auth.signOut();await login();
+  const freshWedges=(await app('/api/equipment')).data.profile.clubs.filter(club=>club.category==='WEDGE').sort((left,right)=>left.loft-right.loft);
+  assert.deepEqual(freshWedges.map(club=>[club.id,club.customBrand,club.loft]),wedgeFixtures.map(club=>[club.id,club.customBrand,club.loft]));
+  const editedWedge=profile.clubs.find(club=>club.id===wedgeFixtures[1].id),editedAt=new Date().toISOString();
+  const frozenWedgeChoice=capture.captureClubChoices(editedWedge)[0];assert.match(frozenWedgeChoice.label,/54°/);
+  profile=eq.upsertPlayerClub(profile,{...editedWedge,loft:56,updatedAt:editedAt},editedAt);await save(profile);
+  assert.deepEqual(record.profile.clubs.filter(club=>club.category==='WEDGE').sort((left,right)=>left.loft-right.loft).map(club=>[club.id,club.loft]),[[wedgeFixtures[0].id,50],[wedgeFixtures[1].id,56],[wedgeFixtures[2].id,58]]);
+  assert.match(frozenWedgeChoice.label,/54°/);
+  profile=eq.removePlayerClub(profile,wedgeFixtures[0].id);await save(profile);
+  await account.client.auth.signOut();await login();
+  const afterSingleDelete=(await app('/api/equipment')).data.profile.clubs.filter(club=>club.category==='WEDGE').sort((left,right)=>left.loft-right.loft);
+  assert.deepEqual(afterSingleDelete.map(club=>[club.id,club.loft]),[[wedgeFixtures[1].id,56],[wedgeFixtures[2].id,58]]);
+  profile=eq.removePlayerClub(profile,wedgeFixtures[1].id);profile=eq.removePlayerClub(profile,wedgeFixtures[2].id);await save(profile);
+  passed.push('WEDGES_MULTI_BRAND_CLOUD_FRESH_SESSION','WEDGE_EDIT_SINGLE_ID','WEDGE_DELETE_SINGLE_ID','WEDGE_LOFT_FROZEN_CHOICE');
   stage='FITTING_CREATE';
   let input={userId:account.id,currentBallId:null,handicap:null,typicalScore:90,driverDistanceYards:200,swingSpeedBand:'FROM_85_TO_95',feelPreference:'SOFT',trajectoryPreference:'MID',greenFirmness:'FIRM',priorities:['IRON_CONTROL','GREENSIDE_FEEL'],approachBehavior:'ROLLS_TOO_MUCH',wantsGreensideSpin:'YES',pricePreference:'BEST_FIT',colorPreference:'WHITE',launchMonitorSession:null};
   const requestInput=transport.createBallFitTransportInput(input);assert.ok(requestInput);assert.notEqual(requestInput.userId,account.id);

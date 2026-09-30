@@ -1,4 +1,4 @@
-import type { ClubCategory } from "./golf-equipment";
+import type { ClubCategory, PlayerClub } from "./golf-equipment";
 
 export const BAG_CATEGORY_SECTIONS = [
   { id: "driver", label: "Driver", description: "Máxima distancia para tus tiros de salida.", onboardingDescription: "Máxima distancia para tus tiros de salida.", categories: ["DRIVER"] },
@@ -18,4 +18,22 @@ export function bagCategoryManagement<T extends { category: ClubCategory }>(club
   });
   const populatedIds = new Set(populated.map((section) => section.id));
   return { populated, missing: BAG_CATEGORY_SECTIONS.filter((section) => !populatedIds.has(section.id)) };
+}
+
+export function sortCurrentWedges(clubs: readonly PlayerClub[]) {
+  return clubs
+    .filter((club) => club.category === "WEDGE" && club.isCurrent)
+    .sort((left, right) => {
+      const leftLoft = left.loft ?? Number.POSITIVE_INFINITY;
+      const rightLoft = right.loft ?? Number.POSITIVE_INFINITY;
+      return leftLoft - rightLoft
+        || left.createdAt.localeCompare(right.createdAt)
+        || left.id.localeCompare(right.id);
+    });
+}
+
+export function wedgeLoftSummary(clubs: readonly PlayerClub[]) {
+  return sortCurrentWedges(clubs)
+    .flatMap((club) => club.loft === null ? [] : [`${club.loft}°`])
+    .join(" · ");
 }

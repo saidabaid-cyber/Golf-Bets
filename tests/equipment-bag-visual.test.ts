@@ -79,7 +79,8 @@ test("each complete onboarding card opens its matching selector without adding e
   const buildBlock = onboarding.slice(onboarding.indexOf('{step === "clubs-build"'), onboarding.indexOf('{step === "ball-prompt"'));
 
   assert.match(buildBlock, /ONBOARDING_CLUB_CATEGORIES\.map\(\(\{ category,[\s\S]*key=\{category\}/);
-  assert.match(buildBlock, /onClick=\{\(\) => \{ setClubEditorCategory\(category\); setClubEditorOpen\(true\); \}\}/);
+  assert.match(buildBlock, /onClick=\{\(\) => \{ if \(category === "WEDGE"\) \{ setWedgeCollectionOpen\(true\); return; \} setClubEditorCategory\(category\); setClubEditorOpen\(true\); \}\}/);
+  assert.match(onboarding, /if \(wedgeCollectionOpen\)[\s\S]*?<WedgeCollectionEditor[\s\S]*?wedges=\{currentWedges\}/);
   assert.match(onboarding, /initialCategory=\{clubEditorCategory \|\| undefined\}/);
   assert.match(onboarding, /onCancel=\{\(\) => \{ setClubEditorOpen\(false\); setClubEditorCategory\(null\); \}\}/);
   assert.doesNotMatch(buildBlock, /upsertPlayerClub|saveClub\(/);

@@ -10,6 +10,7 @@ import {
   setCatalogBallAsCurrent,
   setEquipmentOnboardingStatus,
   setLastBallFit,
+  removePlayerClub,
   upsertPlayerBall,
   upsertPlayerClub,
   type PlayerBall,
@@ -28,6 +29,8 @@ import styles from "./equipment.module.css";
 import { GolfBallVisual } from "./equipment-visuals";
 import { EQUIPMENT_CATEGORY_ASSETS } from "./equipment-category-assets";
 import { BAG_CATEGORY_SECTIONS } from "../../lib/equipment-bag-management";
+import { sortCurrentWedges } from "../../lib/equipment-bag-management";
+import { WedgeCollectionEditor } from "./wedge-collection-editor";
 
 type Step = "clubs-prompt" | "clubs-build" | "ball-prompt" | "ball-select" | "fit-prompt" | "fit";
 
@@ -71,9 +74,11 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defa
   const [initialized, setInitialized] = useState(false);
   const [clubEditorOpen, setClubEditorOpen] = useState(false);
   const [clubEditorCategory, setClubEditorCategory] = useState<ClubCategory | null>(null);
+  const [wedgeCollectionOpen, setWedgeCollectionOpen] = useState(false);
   const [ballEditorOpen, setBallEditorOpen] = useState(false);
-  useViewScrollReset(`${step}:${clubEditorOpen}:${ballEditorOpen}`);
+  useViewScrollReset(`${step}:${clubEditorOpen}:${wedgeCollectionOpen}:${ballEditorOpen}`);
   const currentClubs = useMemo(() => profile?.clubs.filter((club) => club.isCurrent) || [], [profile]);
+  const currentWedges = useMemo(() => sortCurrentWedges(currentClubs), [currentClubs]);
   const currentBall = profile?.balls.find((ball) => ball.isCurrent) || null;
   const pinnedClubIds = useMemo(() => profile?.clubs.flatMap((club) => club.catalogClubId ? [club.catalogClubId] : []) || [], [profile]);
   const pinnedShaftIds = useMemo(() => profile?.clubs.flatMap((club) => club.shaftId ? [club.shaftId] : []) || [], [profile]);
@@ -121,6 +126,17 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defa
     });
     if (saved) { setBallEditorOpen(false); setStep("fit-prompt"); }
     return saved;
+  }
+
+  function saveWedge(club: PlayerClub) {
+    return update((current) => {
+      const inProgress = setEquipmentOnboardingStatus(current, "IN_PROGRESS");
+      return inProgress ? upsertPlayerClub(inProgress, club) : null;
+    });
+  }
+
+  function deleteWedge(club: PlayerClub) {
+    return update((current) => removePlayerClub(current, club.id));
   }
 
   function selectFitCurrentBall(ball: GolfBallCatalog) {
@@ -177,7 +193,8 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defa
 
   // These flows replace the onboarding page instead of nesting a long sheet
   // inside it. The document is the only scroll container, including keyboard.
-  if (clubEditorOpen) return <main className={styles.onboardingScreen} data-equipment-screen="onboarding-club-editor"><ClubEditor userId={userId} catalog={clubCatalog.items} shafts={shaftCatalog.items} defaultHandedness={defaultHandedness} initialCategory={clubEditorCategory || undefined} presentation="page" onCancel={() => { setClubEditorOpen(false); setClubEditorCategory(null); }} onSave={saveClub} /></main>;
+  if (wedgeCollectionOpen) return <main className={styles.onboardingScreen} data-equipment-screen="onboarding-wedge-collection"><WedgeCollectionEditor userId={userId} catalog={clubCatalog.items} shafts={shaftCatalog.items} wedges={currentWedges} defaultHandedness={defaultHandedness} backLabel="Volver a Construye tu bolsa" onBack={() => setWedgeCollectionOpen(false)} onSave={saveWedge} onDelete={deleteWedge} /></main>;
+  if (clubEditorOpen) return <main className={styles.onboardingScreen} data-equipment-screen="onboarding-club-editor"><ClubEditor userId={userId} catalog={clubCatalog.items} shafts={shaftCatalog.items} defaultHandedness={defaultHandedness} initialCategory={clubEditorCategory || undefined} presentation="page" onSelectWedges={() => { setClubEditorOpen(false); setClubEditorCategory(null); setWedgeCollectionOpen(true); }} onCancel={() => { setClubEditorOpen(false); setClubEditorCategory(null); }} onSave={saveClub} /></main>;
   if (ballEditorOpen) return <main className={styles.onboardingScreen} data-equipment-screen="onboarding-ball-editor"><BallEditor userId={userId} catalog={ballCatalog.items} existing={null} presentation="page" onCancel={() => setBallEditorOpen(false)} onSave={saveBall} /></main>;
 
   return <main className={styles.onboardingScreen} data-equipment-step={step}><section className={styles.onboardingCard}>
@@ -210,10 +227,10 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defa
             key={category}
             aria-label={`${label}. ${description} ${configured ? "En mi bolsa. Editar categoría" : "Agregar a mi bolsa"}`}
             className={configured ? styles.visualClubSelected : styles.visualClubCard}
-            onClick={() => { setClubEditorCategory(category); setClubEditorOpen(true); }}
+            onClick={() => { if (category === "WEDGE") { setWedgeCollectionOpen(true); return; } setClubEditorCategory(category); setClubEditorOpen(true); }}
           >
             <span className={styles.visualClubMedia}><Image className={styles.visualClubImage} src={asset.src} width={asset.width} height={asset.height} sizes="(max-width: 560px) 38vw, 270px" alt="" aria-hidden="true" priority={index === 0} unoptimized /></span>
-            <span className={styles.visualClubCopy}><b>{label}</b><small>{description}</small><span className={styles.visualClubAction}>{configured ? "✓ En mi bolsa" : "Agregar a mi bolsa"}</span></span>
+            <span className={styles.visualClubCopy}><b>{label}</b><small>{description}</small><span className={styles.visualClubAction}>{category === "WEDGE" && clubs.length > 1 ? `✓ ${clubs.length} wedges` : configured ? "✓ En mi bolsa" : "Agregar a mi bolsa"}</span></span>
             <strong aria-hidden="true">{configured ? "✓" : "+"}</strong>
           </button>;
         })}</div>

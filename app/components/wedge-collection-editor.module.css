@@ -1,0 +1,248 @@
+.shell {
+  display: grid;
+  width: min(100%, 720px);
+  min-width: 0;
+  min-height: calc(100dvh - 160px);
+  align-content: start;
+  gap: 18px;
+  margin: 0 auto;
+  border: 1px solid var(--by-line, var(--line));
+  border-radius: 22px;
+  background: var(--by-card, var(--card));
+  padding: clamp(16px, 4vw, 26px) clamp(16px, 4vw, 26px) calc(96px + env(safe-area-inset-bottom));
+  box-shadow: 0 12px 36px rgba(20, 58, 34, .07);
+}
+
+.header,
+.collection,
+.collectionHeading,
+.wedgeCopy,
+.emptyState,
+.deleteConfirmation {
+  display: grid;
+  min-width: 0;
+}
+
+.header { gap: 5px; }
+
+.header h1,
+.header p,
+.collectionHeading h2,
+.collectionHeading p,
+.emptyState p,
+.deleteConfirmation h2,
+.deleteConfirmation p,
+.statusMessage,
+.errorMessage {
+  margin: 0;
+}
+
+.header h1,
+.collectionHeading h2,
+.deleteConfirmation h2 {
+  color: #102f23;
+  font-family: var(--by-editorial, Georgia, "Times New Roman", serif);
+  font-weight: 500;
+  letter-spacing: -.035em;
+  overflow-wrap: anywhere;
+}
+
+.header h1 { margin-top: 7px; font-size: clamp(31px, 7vw, 39px); line-height: 1.02; }
+.header p,
+.collectionHeading p,
+.emptyState p,
+.deleteConfirmation p { color: var(--by-muted, var(--muted)); font-size: 13px; line-height: 1.45; }
+
+.backButton {
+  justify-self: start;
+  min-height: 44px;
+  border: 0;
+  border-radius: 11px;
+  background: var(--by-green-2, var(--green2));
+  padding: 9px 13px;
+  color: var(--by-pine, var(--green));
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.backButton:focus-visible,
+.wedgeButton:focus-visible,
+.addButton:focus-visible,
+.cancelButton:focus-visible,
+.deleteButton:focus-visible {
+  outline: 2px solid #17613e;
+  outline-offset: 2px;
+}
+
+.collection { gap: 10px; }
+.collectionHeading { gap: 4px; }
+.collectionHeading h2 { font-size: clamp(27px, 6vw, 34px); line-height: 1.05; }
+
+.wedgeList {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wedgeList li { min-width: 0; }
+
+.wedgeButton {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  min-height: 72px;
+  grid-template-columns: 72px minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 11px;
+  overflow: hidden;
+  border: 1px solid var(--by-line, var(--line));
+  border-radius: 14px;
+  background: #fff;
+  padding: 6px 11px 6px 6px;
+  color: var(--by-ink, var(--ink));
+  text-align: left;
+  box-shadow: 0 4px 14px rgba(20, 55, 34, .045);
+}
+
+.wedgeButton:hover,
+.wedgeButton[data-active="true"] {
+  border-color: #71926e;
+  background: #f5f8f2;
+  box-shadow: inset 0 0 0 1px rgba(45, 91, 61, .2);
+}
+
+.wedgeMedia {
+  display: grid;
+  width: 72px;
+  height: 58px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 10px;
+  background: #edf2e9;
+}
+
+.wedgeMedia :global(.catalogMediaFallback),
+.wedgeMedia :global(.catalogMediaImage),
+.wedgeMedia :global(.catalogMediaFallback img),
+.wedgeMedia :global(.catalogMediaImage img) {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.wedgeMedia :global(img) { object-fit: cover; object-position: center; }
+
+.wedgeCopy { gap: 3px; }
+.wedgeCopy b,
+.wedgeCopy small { min-width: 0; overflow-wrap: anywhere; }
+.wedgeCopy b { color: #102f23; font-size: 15px; line-height: 1.2; }
+.wedgeCopy small { color: var(--by-muted, var(--muted)); font-size: 12px; line-height: 1.3; }
+.wedgeButton > strong { color: var(--by-pine, var(--green)); font: 500 27px/1 var(--by-editorial, Georgia, serif); }
+
+.addButton {
+  display: flex;
+  min-height: 56px;
+  align-items: center;
+  gap: 11px;
+  border: 1px solid var(--by-line, var(--line));
+  border-radius: 14px;
+  background: #f0f5ec;
+  padding: 8px 14px;
+  color: #163d2a;
+  font-size: 14px;
+  font-weight: 850;
+  text-align: left;
+}
+
+.addButton > span {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  place-items: center;
+  border-radius: 50%;
+  background: #155f3a;
+  color: #fff;
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.addButton:hover,
+.addButton[aria-expanded="true"] { background: #e5eee0; }
+
+.emptyState {
+  gap: 4px;
+  border: 1px dashed #bdcab9;
+  border-radius: 14px;
+  background: #fafbf8;
+  padding: 14px;
+}
+.emptyState b { color: #173f2a; }
+
+.statusMessage,
+.errorMessage { min-height: 0; font-size: 12px; line-height: 1.4; }
+.statusMessage:empty { display: none; }
+.statusMessage { color: #286143; }
+.errorMessage { border-radius: 11px; background: #fff0ef; padding: 10px; color: #8f2924; }
+
+.editorRegion {
+  min-width: 0;
+  border-top: 1px solid var(--by-line, var(--line));
+  padding-top: 18px;
+  outline: none;
+  scroll-margin-top: 16px;
+}
+
+.deleteConfirmation {
+  gap: 11px;
+  border-top: 1px solid #efcfcd;
+  padding-top: 18px;
+  outline: none;
+  scroll-margin-top: 16px;
+}
+.deleteConfirmation > span { color: #8f2924; font-size: 10px; font-weight: 900; letter-spacing: .1em; }
+.deleteConfirmation h2 { font-size: clamp(25px, 6vw, 33px); line-height: 1.08; }
+
+.confirmationActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.cancelButton,
+.deleteButton {
+  min-height: 48px;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-weight: 850;
+}
+.cancelButton { border: 1px solid var(--by-line, var(--line)); background: #f3f6f0; color: #173f2a; }
+.deleteButton { border: 1px solid #c7453e; background: #fff; color: #a42d27; }
+
+@media (max-width: 430px) {
+  .shell {
+    min-height: 100dvh;
+    gap: 16px;
+    border-right: 0;
+    border-left: 0;
+    border-radius: 0;
+    padding: max(15px, env(safe-area-inset-top)) 14px calc(88px + env(safe-area-inset-bottom));
+    box-shadow: none;
+  }
+  .header h1 { font-size: 32px; }
+  .collectionHeading h2 { font-size: 28px; }
+  .wedgeButton { min-height: 68px; grid-template-columns: 64px minmax(0, 1fr) 24px; gap: 9px; padding: 5px 9px 5px 5px; }
+  .wedgeMedia { width: 64px; height: 56px; }
+  .wedgeCopy b { font-size: 14px; }
+  .wedgeCopy small { font-size: 11px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wedgeButton,
+  .addButton { scroll-behavior: auto; }
+}
