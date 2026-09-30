@@ -84,11 +84,10 @@ test("a contextual request event opens the dialog with its category and course n
         COURSE_SCORECARD_REQUIRED_MESSAGE: "Adjunta tarjeta",
         FEEDBACK_CATEGORIES: { COURSE: "COURSE", TEE: "TEE", CLUB: "CLUB", BALL: "BALL", SHAFT: "SHAFT", BET: "BET", BUG: "BUG", GENERAL: "GENERAL" },
         FEEDBACK_SHORT_LABELS: { COURSE: "Campo", TEE: "Tee", CLUB: "Bastón", BALL: "Bola", SHAFT: "Varilla", BET: "Apuesta", BUG: "Error", GENERAL: "General" },
-        FEEDBACK_ATTACHMENT_MAX_BYTES: 2_000_000,
         feedbackAttachmentRequired: (category: string) => category === "COURSE",
         validateFeedback: () => ({ ok: false, error: "not-used" }),
       };
-      if (name.endsWith("/feedback-attachment")) return { feedbackAttachmentType() {} };
+      if (name.endsWith("/feedback-image.client")) return { prepareFeedbackImage: async () => null, feedbackImageErrorMessage: () => "No pudimos preparar la imagen." };
       if (name === "./modal-shell") return { ModalShell: (props: Record<string, unknown>) => ({ type: "modal-shell", props }) };
       if (name.endsWith(".css")) return { default: new Proxy({}, { get: (_target, key) => String(key) }) };
       throw new Error(name);

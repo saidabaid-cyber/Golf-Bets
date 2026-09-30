@@ -1,7 +1,13 @@
 export const FEEDBACK_CATEGORIES={COURSE:'Solicitar un campo',TEE:'Solicitar un tee',CLUB:'Solicitar un bastón',BALL:'Solicitar una bola',SHAFT:'Solicitar una varilla',BET:'Proponer una apuesta o modalidad',BUG:'Reportar un error',GENERAL:'Sugerencia general'} as const;
 export type FeedbackCategory=keyof typeof FEEDBACK_CATEGORIES;
 export type FeedbackInput={category:FeedbackCategory;name:string;description:string;replyEmail:string;city:string;state:string;brand:string;model:string;rules:string;clubType?:string;flex?:string;players?:string;example?:string;occurred?:string;expected?:string;module?:string};
-export const FEEDBACK_ATTACHMENT_MAX_BYTES=2*1024*1024;
+/** The original phone image is decoded only in the browser. The server accepts
+ * the bounded, optimized derivative below, never the multi-megabyte source. */
+export const FEEDBACK_ATTACHMENT_MAX_ORIGINAL_BYTES=20*1024*1024;
+export const FEEDBACK_ATTACHMENT_MAX_BYTES=1_500_000;
+export const FEEDBACK_ATTACHMENT_SOFT_TARGET_BYTES=1_200_000;
+export const FEEDBACK_ATTACHMENT_MAX_DIMENSION=1_920;
+export const FEEDBACK_REQUEST_MAX_BYTES=4_000_000;
 export const FEEDBACK_ATTACHMENT_TYPES=['image/jpeg','image/png','image/webp'] as const;
 export const FEEDBACK_SHORT_LABELS:Record<FeedbackCategory,string>={COURSE:'Campo',TEE:'Tee',CLUB:'Bastón',BALL:'Bola',SHAFT:'Varilla',BET:'Apuesta',BUG:'Bug',GENERAL:'Sugerencia'};
 export const FEEDBACK_OPTIONAL_FIELDS=['clubType','flex','players','example','occurred','expected','module'] as const;
@@ -67,7 +73,7 @@ export function feedbackDeliveryText(id:string,input:FeedbackInput,context:Feedb
     `Datos específicos de la categoría:\n${details.length?details.join('\n'):'Sin datos adicionales.'}`,
     `Descripción:\n${input.description}`,
     context.attachmentAvailable
-      ? 'Adjunto: Sí. Revísalo de forma segura en Admin → Solicitudes; el archivo privado no se incluye ni se publica en este correo.'
+      ? 'Adjunto: Sí. La imagen está incluida en este correo y también permanece disponible de forma privada en Admin → Solicitudes.'
       : 'Adjunto: No.',
     'La base de datos es el registro oficial de esta solicitud.',
   ].filter(Boolean).join('\n\n');

@@ -3,16 +3,16 @@ import { after,NextRequest,NextResponse } from 'next/server';
 import { authenticatedRequest } from '../../../lib/server-auth';
 import { getSupabaseAdmin } from '../../../lib/supabase/server';
 import { reviewCatalogQaEnabled } from '../../../lib/review-course-catalog.server';
-import { feedbackMailerConfig,sendFeedbackEmail } from '../../../lib/feedback-email.server';
-import { COURSE_SCORECARD_REQUIRED_MESSAGE,FEEDBACK_ATTACHMENT_MAX_BYTES,feedbackAttachmentRequired,feedbackPersistenceInput,feedbackTopicKey,validateFeedback } from '../../../lib/feedback';
-import { feedbackAttachmentType } from '../../../lib/feedback-attachment';
+import { feedbackMailerConfig,sendFeedbackEmail,type FeedbackEmailAttachment } from '../../../lib/feedback-email.server';
+import { COURSE_SCORECARD_REQUIRED_MESSAGE,FEEDBACK_ATTACHMENT_MAX_BYTES,FEEDBACK_ATTACHMENT_MAX_DIMENSION,FEEDBACK_ATTACHMENT_MAX_ORIGINAL_BYTES,FEEDBACK_REQUEST_MAX_BYTES,feedbackAttachmentRequired,feedbackPersistenceInput,feedbackTopicKey,validateFeedback } from '../../../lib/feedback';
+import { feedbackAttachmentMimeFromPath,feedbackAttachmentType } from '../../../lib/feedback-attachment';
 import { receiveFeedback,notifyFeedbackSafely } from '../../../lib/feedback-workflow';
 import { backyardAiClientAddress,isCrossSiteRequest,readJsonBodyWithLimit } from '../../../lib/backyard-ai/server/http-security';
 export const dynamic='force-dynamic';
 const headers={'cache-control':'private, no-store'};
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const hash=(value:string|Uint8Array)=>createHash('sha256').update(value).digest('hex');
-export function GET(){return NextResponse.json({internalRequestsAvailable:reviewCatalogQaEnabled(),serverEmailAvailable:reviewCatalogQaEnabled()&&Boolean(feedbackMailerConfig()),maxAttachmentBytes:FEEDBACK_ATTACHMENT_MAX_BYTES},{headers});}
+export function GET(){const emailAvailable=reviewCatalogQaEnabled()&&Boolean(feedbackMailerConfig());return NextResponse.json({internalRequestsAvailable:reviewCatalogQaEnabled(),serverEmailAvailable:emailAvailable,emailAttachmentsAvailable:emailAvailable,maxOriginalAttachmentBytes:FEEDBACK_ATTACHMENT_MAX_ORIGINAL_BYTES,maxAttachmentBytes:FEEDBACK_ATTACHMENT_MAX_BYTES,maxAttachmentDimension:FEEDBACK_ATTACHMENT_MAX_DIMENSION,acceptedAttachmentTypes:['image/jpeg','image/png','image/webp'],heicSupported:false},{headers});}
 export async function POST(request:NextRequest) {
   if(isCrossSiteRequest(request))return NextResponse.json({error:'Solicitud no permitida.'},{status:403,headers});
   if(!reviewCatalogQaEnabled())return NextResponse.json({error:'El soporte no está disponible en este entorno. Tu texto se conserva.'},{status:503,headers});
@@ -26,7 +26,7 @@ export async function POST(request:NextRequest) {
       if(profile.error||user.error)throw Error('IDENTITY_UNAVAILABLE');
       identity={user_id:userId,username:profile.data?.username??null,display_name:profile.data?.display_name??null,email:user.data.user?.email??null};
     }
-    const body=await readJsonBodyWithLimit(request,3_000_000);
+    const body=await readJsonBodyWithLimit(request,FEEDBACK_REQUEST_MAX_BYTES);
     if(!body.ok)return NextResponse.json({error:'El formulario o la imagen exceden el tamaño permitido.'},{status:400,headers});
     const value=body.value as {id?:unknown;input?:unknown;guestKey?:unknown;screen?:unknown;contextualCategory?:unknown;attachment?:{mime?:unknown;data?:unknown}};
     if(!value||typeof value.id!=='string'||!uuid.test(value.id)||(!userId&&(typeof value.guestKey!=='string'||!uuid.test(value.guestKey))))return NextResponse.json({error:'Solicitud inválida.'},{status:400,headers});
@@ -72,7 +72,7 @@ export async function POST(request:NextRequest) {
           const configured=Boolean(feedbackMailerConfig());
           const claimed=await db.from('feedback_requests').update({notification_status:configured?'SENDING':'UNAVAILABLE'}).eq('id',id).eq('notification_status','PENDING').select('id');
           if(claimed.error||!claimed.data?.length||!configured)return;
-          const canonical=await db.from('feedback_requests').select('created_at,identity_snapshot,source_screen,attachment_status,data_environment').eq('id',id).maybeSingle();
+          const canonical=await db.from('feedback_requests').select('created_at,identity_snapshot,source_screen,attachment_status,attachment_path,data_environment').eq('id',id).maybeSingle();
           const requestContext={
             submittedAt:canonical.data?.created_at??new Date().toISOString(),
             identity:(canonical.data?.identity_snapshot&&typeof canonical.data.identity_snapshot==='object'&&!Array.isArray(canonical.data.identity_snapshot)?canonical.data.identity_snapshot:identity) as Record<string,unknown>,
@@ -80,7 +80,25 @@ export async function POST(request:NextRequest) {
             attachmentAvailable:canonical.data?.attachment_status==='READY',
             environment:canonical.data?.data_environment??dataEnvironment,
           };
-          await notifyFeedbackSafely(()=>sendFeedbackEmail(id,submittedInput,requestContext),async(result)=>{
+          let emailAttachment:FeedbackEmailAttachment|undefined,attachmentError:string|undefined;
+          if(canonical.error||!canonical.data)attachmentError='CANONICAL_REQUEST_UNAVAILABLE';
+          else if(requestContext.attachmentAvailable) {
+            const canonicalPath=typeof canonical.data.attachment_path==='string'?canonical.data.attachment_path:'';
+            const storedMime=feedbackAttachmentMimeFromPath(canonicalPath);
+            if(!canonicalPath||!storedMime)attachmentError='ATTACHMENT_UNAVAILABLE';
+            else {
+              try {
+                const downloaded=await db.storage.from('feedback-private').download(canonicalPath);
+                if(downloaded.error||!downloaded.data)throw Error('ATTACHMENT_UNAVAILABLE');
+                const storedBytes=Buffer.from(await downloaded.data.arrayBuffer()),expectedHash=canonicalPath.split('/').pop()?.split('.',1)[0];
+                  feedbackAttachmentType(storedMime,storedBytes);
+                  if(!expectedHash||hash(storedBytes)!==expectedHash)throw Error('ATTACHMENT_HASH_MISMATCH');
+                  const extension=storedMime==='image/jpeg'?'jpg':storedMime.split('/')[1];
+                  emailAttachment={content:storedBytes.toString('base64'),contentType:storedMime,filename:`backyard-feedback-${id.slice(0,8).toUpperCase()}.${extension}`};
+              } catch {attachmentError='ATTACHMENT_UNAVAILABLE';}
+            }
+          }
+          await notifyFeedbackSafely(()=>attachmentError?Promise.resolve({error:attachmentError}):sendFeedbackEmail(id,submittedInput,requestContext,emailAttachment),async(result)=>{
             const recorded=await db.from('feedback_requests').update({notification_status:result.messageId?'ACCEPTED_BY_PROVIDER':'FAILED',provider_message_id:result.messageId??null,error_code:result.error??null,updated_at:new Date().toISOString()}).eq('id',id);
             if(recorded.error)throw Error('NOTIFICATION_RECORD_FAILED');
           });
