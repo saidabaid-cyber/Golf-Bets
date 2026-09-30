@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { useViewScrollReset } from "./use-view-scroll-reset";
 import { CatalogCoursePicker } from "./catalog-course-picker";
@@ -38,7 +39,6 @@ import { ModalShell } from "./modal-shell";
 import { InitialDevicePermissions } from "./device-permission-settings";
 import { useGhinReadOnlyProfile } from "./use-ghin-read-only-profile";
 import { useBackyardIndexPreference } from "./use-backyard-index-preference";
-import { BackyardIcon } from "./backyard-icon";
 import { requestFeedback } from "./feedback-dialog";
 import styles from "./beta-onboarding-flow.module.css";
 
@@ -52,25 +52,33 @@ const IMPROVEMENT_LABELS: Record<GolfImprovementGoal, string> = {
   CONSISTENCY: "Consistencia",
   COURSE_STRATEGY: "Estrategia de campo",
   MENTAL_CONFIDENCE: "Mental / confianza",
-  LOWER_HANDICAP: "Bajar mi HCP",
+  LOWER_HANDICAP: "Bajar mi hándicap",
 };
 
-const IMPROVEMENT_ICONS: Record<GolfImprovementGoal, "driver" | "irons" | "approach" | "shortGame" | "bunker" | "putting" | "consistency" | "strategy" | "mental" | "handicap"> = {
-  DRIVER: "driver", IRONS: "irons", APPROACH: "approach", SHORT_GAME: "shortGame", BUNKER: "bunker",
-  PUTTING: "putting", CONSISTENCY: "consistency", COURSE_STRATEGY: "strategy", MENTAL_CONFIDENCE: "mental", LOWER_HANDICAP: "handicap",
+const IMPROVEMENT_VISUALS: Record<GolfImprovementGoal, string> = {
+  DRIVER: "/brand/equipment/backyard-driver-clean.png",
+  IRONS: "/brand/equipment/backyard-irons-clean.png",
+  APPROACH: "/brand/ball-fit/improvements/approach-target.svg",
+  SHORT_GAME: "/brand/equipment/backyard-wedge-clean.png",
+  BUNKER: "/brand/ball-fit/improvements/bunker.svg",
+  PUTTING: "/brand/equipment/backyard-putter-clean.png",
+  CONSISTENCY: "/brand/ball-fit/improvements/consistency-bars.svg",
+  COURSE_STRATEGY: "/brand/ball-fit/improvements/course-strategy.svg",
+  MENTAL_CONFIDENCE: "/brand/ball-fit/improvements/mental-confidence.svg",
+  LOWER_HANDICAP: "/brand/ball-fit/improvements/lower-handicap.svg",
 };
 
 const IMPROVEMENT_DESCRIPTIONS: Record<GolfImprovementGoal, string> = {
-  DRIVER: "Más distancia y precisión",
-  IRONS: "Control en cada distancia",
-  APPROACH: "Acércate más a bandera",
-  SHORT_GAME: "Chips, pitches y lies",
-  BUNKER: "Más confianza en arena",
-  PUTTING: "Consistencia en el green",
-  CONSISTENCY: "Mantén un nivel estable",
-  COURSE_STRATEGY: "Toma mejores decisiones",
-  MENTAL_CONFIDENCE: "Juega con más confianza",
-  LOWER_HANDICAP: "Progresa hacia tu meta",
+  DRIVER: "Más distancia y precisión.",
+  IRONS: "Mayor control en todas las distancias.",
+  APPROACH: "Acércate más a la bandera.",
+  SHORT_GAME: "Mejora chips, pitches y lies difíciles.",
+  BUNKER: "Más confianza desde la arena.",
+  PUTTING: "Más consistencia en el green.",
+  CONSISTENCY: "Mantén un nivel más estable.",
+  COURSE_STRATEGY: "Toma mejores decisiones.",
+  MENTAL_CONFIDENCE: "Juega con una mente más fuerte.",
+  LOWER_HANDICAP: "Progresa y alcanza tus metas.",
 };
 
 const GOAL_LABELS: Record<Exclude<GolfPrimaryGoal, "">, string> = {
@@ -322,8 +330,25 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, lega
   </Shell>;
   }
 
-  if (progress.step === "improvements") return <Shell progress={progress} {...navigationProps} eyebrow="TU JUEGO" title="¿Qué te gustaría mejorar?" description="Elige todas las áreas que quieras. Usaremos estas señales para personalizar recomendaciones, IA, análisis y ejercicios." actions={<button className="primary big" disabled={!draft.improvementGoals.length} onClick={async () => { await onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: profile.defaultHandicap, improvementGoals: draft.improvementGoals, golfProfileUpdatedAt: new Date().toISOString() }); advance("objective"); }}>Continuar</button>}>
-    <div className={styles.choiceGrid}>{GOLF_IMPROVEMENT_GOALS.map((goal) => { const active = draft.improvementGoals.includes(goal); return <button type="button" key={goal} data-focus-area={goal} className={active ? styles.choiceActive : styles.choice} aria-pressed={active} onClick={() => setDraft((current) => current ? { ...current, improvementGoals: active ? current.improvementGoals.filter((item) => item !== goal) : [...current.improvementGoals, goal] } : current)}><span className={styles.choiceIcon}><BackyardIcon name={IMPROVEMENT_ICONS[goal]} size={27} /></span><span className={styles.choiceCopy}><b>{IMPROVEMENT_LABELS[goal]}</b><small>{IMPROVEMENT_DESCRIPTIONS[goal]}</small></span><strong aria-hidden="true">{active ? "✓" : ""}</strong></button>; })}</div>
+  if (progress.step === "improvements") return <Shell progress={progress} {...navigationProps} eyebrow="TU JUEGO" title="¿Qué te gustaría mejorar?" description="Elige todas las áreas que quieras. Usaremos estas señales para personalizar recomendaciones, IA, análisis y ejercicios." actions={<button className="primary big" disabled={!draft.improvementGoals.length} onClick={async () => { await onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: profile.defaultHandicap, improvementGoals: draft.improvementGoals, golfProfileUpdatedAt: new Date().toISOString() }); advance("objective"); }}>CONTINUAR →</button>}>
+    <div className={styles.choiceGrid}>{GOLF_IMPROVEMENT_GOALS.map((goal) => {
+      const active = draft.improvementGoals.includes(goal);
+      const visual = IMPROVEMENT_VISUALS[goal];
+      return <button
+        type="button"
+        key={goal}
+        data-focus-area={goal}
+        className={active ? styles.choiceActive : styles.choice}
+        aria-pressed={active}
+        onClick={() => setDraft((current) => current ? { ...current, improvementGoals: active ? current.improvementGoals.filter((item) => item !== goal) : [...current.improvementGoals, goal] } : current)}
+      >
+        <span className={styles.choiceIcon} data-improvement-visual={goal} aria-hidden="true">
+          <Image className={styles.choiceVisual} src={visual} alt="" width={72} height={72} sizes="58px" unoptimized={visual.endsWith(".svg")} />
+        </span>
+        <span className={styles.choiceCopy}><b>{IMPROVEMENT_LABELS[goal]}</b><small>{IMPROVEMENT_DESCRIPTIONS[goal]}</small></span>
+        <strong aria-hidden="true">{active ? "✓" : ""}</strong>
+      </button>;
+    })}</div>
   </Shell>;
 
   if (progress.step === "objective") return <Shell progress={progress} {...navigationProps} eyebrow="OBJETIVO" title="¿Cuáles son tus objetivos?" description="Elige uno o varios. Los usaremos para personalizar recomendaciones y podrás cambiarlos desde tu perfil." actions={<button className="primary big" disabled={!draft.primaryGoals.length} onClick={async () => {

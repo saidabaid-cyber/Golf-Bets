@@ -87,25 +87,49 @@ test("equipment and Ball Fit use owned premium product art with selected and emp
   assert.doesNotMatch(visuals, /Titleist|Callaway|TaylorMade|PING/);
 });
 
-test("focus areas are multi-select cards with category-specific iconography", () => {
+test("focus areas match the approved compact grid with literal category visuals", () => {
   const onboarding = source("app/components/beta-onboarding-flow.tsx");
-  const icons = source("app/components/backyard-icon.tsx");
+  const accountState = source("lib/account-state.ts");
   const css = source("app/components/beta-onboarding-flow.module.css");
-  for (const goal of ["DRIVER", "IRONS", "APPROACH", "SHORT_GAME", "BUNKER", "PUTTING", "CONSISTENCY", "COURSE_STRATEGY", "MENTAL_CONFIDENCE", "LOWER_HANDICAP"]) {
+  const orderedGoals = ["DRIVER", "IRONS", "APPROACH", "SHORT_GAME", "BUNKER", "PUTTING", "CONSISTENCY", "COURSE_STRATEGY", "MENTAL_CONFIDENCE", "LOWER_HANDICAP"];
+  const catalog = accountState.match(/GOLF_IMPROVEMENT_GOALS = \[([\s\S]*?)\] as const/)?.[1] || "";
+  const catalogOrder = [...catalog.matchAll(/"([A-Z_]+)"/g)].map((match) => match[1]);
+  assert.deepEqual(catalogOrder, orderedGoals);
+  for (const goal of orderedGoals) {
     assert.match(onboarding, new RegExp(`${goal}:`));
   }
-  assert.match(onboarding, /BUNKER: "bunker"/);
+  const copies = [
+    "Más distancia y precisión.",
+    "Mayor control en todas las distancias.",
+    "Acércate más a la bandera.",
+    "Mejora chips, pitches y lies difíciles.",
+    "Más confianza desde la arena.",
+    "Más consistencia en el green.",
+    "Mantén un nivel más estable.",
+    "Toma mejores decisiones.",
+    "Juega con una mente más fuerte.",
+    "Progresa y alcanza tus metas.",
+  ];
+  for (const copy of copies) assert.ok(onboarding.includes(copy), `missing approved copy: ${copy}`);
+  assert.match(onboarding, /LOWER_HANDICAP: "Bajar mi hándicap"/);
+  assert.match(onboarding, /from "next\/image"/);
+  assert.match(onboarding, /const IMPROVEMENT_VISUALS/);
   assert.match(onboarding, /data-focus-area=\{goal\}/);
+  assert.match(onboarding, /data-improvement-visual=\{goal\}/);
   assert.match(onboarding, /aria-pressed=\{active\}/);
   assert.match(onboarding, /\{active \? "✓" : ""\}/);
-  assert.match(icons, /bunker:/);
-  assert.match(icons, /mental:/);
-  for (const icon of ["driver", "irons", "approach", "shortGame", "bunker", "putting", "consistency", "strategy", "mental", "handicap"]) assert.match(icons, new RegExp(`${icon}:`));
-  const mapping = onboarding.match(/const IMPROVEMENT_ICONS[\s\S]*?= \{([\s\S]*?)\};/)?.[1] || "";
-  const assignedIcons = [...mapping.matchAll(/:\s*"([^"]+)"/g)].map((match) => match[1]);
-  assert.equal(assignedIcons.length, 10);
-  assert.equal(new Set(assignedIcons).size, 10, "cada categoría conserva un icono propio");
-  assert.match(css, /grid-template-columns:\s*repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(onboarding, /active \? current\.improvementGoals\.filter/);
+  assert.match(onboarding, /\[\.\.\.current\.improvementGoals, goal\]/);
+  assert.match(onboarding, />CONTINUAR →<\/button>/);
+  const mapping = onboarding.match(/const IMPROVEMENT_VISUALS[\s\S]*?= \{([\s\S]*?)\};/)?.[1] || "";
+  const assets = [...mapping.matchAll(/:\s*"([^"]+\.(?:png|svg))"/g)].map((match) => match[1]);
+  assert.equal(assets.length, 10);
+  assert.equal(new Set(assets).size, 10, "cada categoría conserva un visual propio");
+  for (const asset of assets) assert.ok(statSync(join("public", asset.replace(/^\//, ""))).size > 300, `${asset} must exist`);
+  assert.match(css, /data-onboarding-step="improvements"[\s\S]*grid-template-columns:\s*repeat\(2,minmax\(0,1fr\)\)/);
+  assert.match(css, /data-onboarding-step="improvements"[\s\S]*min-height:\s*94px/);
+  assert.match(css, /data-onboarding-step="improvements"[\s\S]*min-width:\s*0/);
+  assert.match(css, /data-improvement-visual="PUTTING"[\s\S]*radial-gradient/);
   assert.match(css, /onboarding-course-hero\.png/);
 });
 

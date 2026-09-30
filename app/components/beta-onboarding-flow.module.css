@@ -209,3 +209,216 @@
   .choice > strong,.choiceActive > strong { position: absolute; top: 9px; right: 9px; width: 24px; height: 24px; }
   .brandFooter { padding-inline: 18px; }
 }
+
+/* REF-A: compact, image-led improvement choices. Scoped so no other onboarding step changes. */
+.screen[data-onboarding-step="improvements"] .copy {
+  min-height: 226px;
+  padding-top: 25px;
+  padding-bottom: 28px;
+}
+.screen[data-onboarding-step="improvements"] .eyebrow {
+  display: none;
+}
+.screen[data-onboarding-step="improvements"] .copy h1 {
+  max-width: 520px;
+  margin-top: 0;
+}
+.screen[data-onboarding-step="improvements"] .copy p {
+  max-width: 515px;
+}
+.screen[data-onboarding-step="improvements"] .body {
+  padding-top: 0;
+  padding-bottom: 18px;
+}
+.screen[data-onboarding-step="improvements"] .choiceGrid {
+  width: 100%;
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  gap: 10px;
+}
+.screen[data-onboarding-step="improvements"] .choice,
+.screen[data-onboarding-step="improvements"] .choiceActive {
+  display: grid;
+  grid-template-columns: 62px minmax(0,1fr);
+  min-width: 0;
+  min-height: 102px;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 34px 10px 10px;
+  border: 1px solid rgba(23,63,42,.13);
+  border-radius: 18px;
+  background: rgba(255,255,255,.9);
+  box-shadow: 0 8px 20px rgba(27,51,37,.075);
+}
+.screen[data-onboarding-step="improvements"] .choiceActive {
+  border-color: #236947;
+  background: rgba(235,244,229,.97);
+  box-shadow: inset 0 0 0 1px #236947,0 8px 20px rgba(27,78,49,.1);
+}
+.screen[data-onboarding-step="improvements"] .choice::after,
+.screen[data-onboarding-step="improvements"] .choiceActive::after {
+  display: none;
+}
+.screen[data-onboarding-step="improvements"] .choiceIcon {
+  position: relative;
+  display: grid;
+  width: 62px;
+  height: 70px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 16px;
+  background: linear-gradient(145deg,#fbfcf7,#e8efe2);
+  box-shadow: inset 0 0 0 1px rgba(42,85,54,.09),0 5px 12px rgba(22,65,38,.07);
+}
+.screen[data-onboarding-step="improvements"] .choiceIcon[data-improvement-visual="BUNKER"] {
+  background: linear-gradient(145deg,#fffaf0,#efe5c8);
+}
+.screen[data-onboarding-step="improvements"] .choiceIcon[data-improvement-visual="MENTAL_CONFIDENCE"] {
+  background: linear-gradient(145deg,#faf9f3,#e9eee5);
+}
+.screen[data-onboarding-step="improvements"] .choiceVisual {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 3px;
+}
+.screen[data-onboarding-step="improvements"] .choiceIcon[data-improvement-visual="APPROACH"] .choiceVisual,
+.screen[data-onboarding-step="improvements"] .choiceIcon[data-improvement-visual="BUNKER"] .choiceVisual,
+.screen[data-onboarding-step="improvements"] .choiceIcon[data-improvement-visual="CONSISTENCY"] .choiceVisual,
+.screen[data-onboarding-step="improvements"] .choiceIcon[data-improvement-visual="COURSE_STRATEGY"] .choiceVisual,
+.screen[data-onboarding-step="improvements"] .choiceIcon[data-improvement-visual="MENTAL_CONFIDENCE"] .choiceVisual,
+.screen[data-onboarding-step="improvements"] .choiceIcon[data-improvement-visual="LOWER_HANDICAP"] .choiceVisual {
+  padding: 7px;
+}
+.screen[data-onboarding-step="improvements"] .choiceIcon[data-improvement-visual="PUTTING"]::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  width: 12px;
+  height: 12px;
+  border: 1px solid #c7cfc8;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%,#fff 0 45%,#e3e6e1 78%,#c8cec9 100%);
+  box-shadow: 0 2px 4px rgba(23,63,42,.18);
+}
+.screen[data-onboarding-step="improvements"] .choiceCopy {
+  align-content: center;
+  gap: 5px;
+}
+.screen[data-onboarding-step="improvements"] .choiceCopy b {
+  color: #173f2a;
+  font: 500 17px/1.08 var(--by-editorial,Georgia,serif);
+}
+.screen[data-onboarding-step="improvements"] .choiceCopy small {
+  color: #56685d;
+  font-size: 11px;
+  font-weight: 540;
+  line-height: 1.3;
+}
+.screen[data-onboarding-step="improvements"] .choice > strong,
+.screen[data-onboarding-step="improvements"] .choiceActive > strong {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  z-index: 1;
+  width: 25px;
+  height: 25px;
+  border-color: #9aa69e;
+  box-shadow: none;
+  font-size: 15px;
+}
+.screen[data-onboarding-step="improvements"] .choiceActive > strong {
+  border-color: #17623f;
+  background: #17623f;
+  color: #fff;
+}
+.screen[data-onboarding-step="improvements"] .actions {
+  padding-top: 6px;
+}
+
+@media(max-width:560px) {
+  .screen[data-onboarding-step="improvements"]::before {
+    height: 370px;
+  }
+  .screen[data-onboarding-step="improvements"] .copy {
+    min-height: 218px;
+    padding: 22px 18px 25px;
+  }
+  .screen[data-onboarding-step="improvements"] .copy h1 {
+    max-width: 350px;
+    font-size: clamp(43px,12.4vw,50px);
+  }
+  .screen[data-onboarding-step="improvements"] .copy p {
+    max-width: 340px;
+    margin-top: 12px;
+    font-size: 13px;
+    line-height: 1.42;
+  }
+  .screen[data-onboarding-step="improvements"] .heroScript {
+    right: 19px;
+    bottom: 15px;
+  }
+  .screen[data-onboarding-step="improvements"] .body {
+    padding-inline: 18px;
+    padding-bottom: 16px;
+  }
+  .screen[data-onboarding-step="improvements"] .choiceGrid {
+    grid-template-columns: repeat(2,minmax(0,1fr));
+    gap: 8px;
+  }
+  .screen[data-onboarding-step="improvements"] .choice,
+  .screen[data-onboarding-step="improvements"] .choiceActive {
+    grid-template-columns: 52px minmax(0,1fr);
+    min-height: 94px;
+    align-content: center;
+    gap: 8px;
+    padding: 8px 25px 8px 8px;
+    border-radius: 16px;
+  }
+  .screen[data-onboarding-step="improvements"] .choiceIcon {
+    width: 52px;
+    height: 60px;
+    border-radius: 14px;
+  }
+  .screen[data-onboarding-step="improvements"] .choiceCopy {
+    gap: 4px;
+  }
+  .screen[data-onboarding-step="improvements"] .choiceCopy b {
+    font-size: 14.5px;
+    line-height: 1.07;
+  }
+  .screen[data-onboarding-step="improvements"] .choiceCopy small {
+    font-size: 9.8px;
+    line-height: 1.25;
+  }
+  .screen[data-onboarding-step="improvements"] .choice > strong,
+  .screen[data-onboarding-step="improvements"] .choiceActive > strong {
+    top: 7px;
+    right: 7px;
+    width: 22px;
+    height: 22px;
+    font-size: 13px;
+  }
+  .screen[data-onboarding-step="improvements"] .actions {
+    padding-inline: 18px;
+  }
+}
+
+@media(max-width:360px) {
+  .screen[data-onboarding-step="improvements"] .choice,
+  .screen[data-onboarding-step="improvements"] .choiceActive {
+    grid-template-columns: 46px minmax(0,1fr);
+    gap: 6px;
+    padding-left: 7px;
+  }
+  .screen[data-onboarding-step="improvements"] .choiceIcon {
+    width: 46px;
+    height: 55px;
+  }
+  .screen[data-onboarding-step="improvements"] .choiceCopy b {
+    font-size: 13.5px;
+  }
+  .screen[data-onboarding-step="improvements"] .choiceCopy small {
+    font-size: 9px;
+  }
+}

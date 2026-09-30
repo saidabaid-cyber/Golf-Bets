@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-labelledby="title">
+  <title id="title">Bunker de arena</title>
+  <defs>
+    <linearGradient id="turf" x1="13" y1="12" x2="79" y2="84" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#79a861"/>
+      <stop offset="1" stop-color="#366f4b"/>
+    </linearGradient>
+    <linearGradient id="sand" x1="30" y1="31" x2="69" y2="69" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f5e3ad"/>
+      <stop offset="1" stop-color="#d7bb78"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#173f2a" flood-opacity=".2"/>
+    </filter>
+  </defs>
+  <ellipse cx="48" cy="50" rx="40" ry="33" fill="url(#turf)" filter="url(#shadow)"/>
+  <path d="M23 50c4-15 17-24 33-22 13 1 23 8 21 17-2 8-12 9-13 17-2 9-11 15-23 12-16-3-23-11-18-24Z" fill="url(#sand)" stroke="#fff8de" stroke-width="2.5"/>
+  <g fill="#b99855" opacity=".75">
+    <circle cx="35" cy="43" r="1.5"/><circle cx="46" cy="36" r="1.2"/><circle cx="58" cy="44" r="1.3"/>
+    <circle cx="42" cy="55" r="1.2"/><circle cx="53" cy="62" r="1.5"/><circle cx="31" cy="62" r="1.1"/>
+    <circle cx="65" cy="52" r="1"/>
+  </g>
+  <path d="M30 69c10-5 20-6 31-5" fill="none" stroke="#b99855" stroke-width="1.7" stroke-linecap="round" opacity=".65"/>
+</svg>

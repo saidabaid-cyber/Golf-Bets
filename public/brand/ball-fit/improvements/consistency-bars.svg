@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-labelledby="title">
+  <title id="title">Rendimiento estable en gráfico de barras</title>
+  <defs>
+    <linearGradient id="bar" x1="20" y1="22" x2="72" y2="76" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#34845b"/>
+      <stop offset="1" stop-color="#0b5132"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#173f2a" flood-opacity=".18"/>
+    </filter>
+  </defs>
+  <path d="M16 75h65" stroke="#b9cabd" stroke-width="3" stroke-linecap="round"/>
+  <g fill="url(#bar)" filter="url(#shadow)">
+    <rect x="20" y="40" width="9" height="34" rx="3"/>
+    <rect x="33" y="34" width="9" height="40" rx="3"/>
+    <rect x="46" y="37" width="9" height="37" rx="3"/>
+    <rect x="59" y="32" width="9" height="42" rx="3"/>
+    <rect x="72" y="35" width="9" height="39" rx="3"/>
+  </g>
+  <path d="M18 31c16 2 34 1 65 0" fill="none" stroke="#75a47f" stroke-width="3" stroke-linecap="round" stroke-dasharray="4 5"/>
+  <circle cx="75" cy="31" r="4" fill="#d6a442"/>
+</svg>
