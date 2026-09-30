@@ -4,18 +4,22 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 
+import { BAG_CATEGORY_SECTIONS } from "../lib/equipment-bag-management";
+
 const source = (path: string) => readFileSync(path, "utf8");
 
 const APPROVED_ASSETS = [
   { file: "driver_ref_b.png", width: 1006, height: 396, sha256: "FE1773758BC305334A0A7D7DCF80A69DA84F2E938A414EE8F01E4B2278937324" },
+  { file: "mini-driver_ref_b.png", width: 1996, height: 788, sha256: "505BA78AE484B44858E46B77C05A1BBC9D0CA80D57F80B254205071B57BE26A9" },
   { file: "maderas_ref_b.png", width: 1006, height: 408, sha256: "EE1C3350EC046D0D5DE2653254512E6012F541707A18D09006F7B5456205790D" },
   { file: "hibridos_ref_b.png", width: 1006, height: 410, sha256: "6AE007F531177914236EB09EBE1FC7DEADFE7FA9E4861717CEB1A8CCCA662782" },
+  { file: "utility-driving-iron_ref_b.png", width: 1959, height: 803, sha256: "ABFBD0C5BF5AAEFE18DF75C58E590AAAD3EDFE9A780FF1F2992984B2916149B0" },
   { file: "hierros_ref_b.png", width: 1006, height: 412, sha256: "B5A3093D63035BC130CD3FB087FB3E287343573C1E55C405A812966C101A9DEE" },
   { file: "wedges_ref_b.png", width: 1006, height: 412, sha256: "31C3986E305FD124117AC800A160D2BC31201C7C7088E49812A0C6A0E928C925" },
   { file: "putter_ref_b.png", width: 1006, height: 468, sha256: "C013D116BC94F3BACDF3F93E9C29BED1AD76CA78F989E0DF5D49F1E76DCF24B5" },
 ] as const;
 
-test("Construye tu bolsa preserves the six approved REF-B images byte for byte", () => {
+test("Construye tu bolsa preserves the eight canonical category images byte for byte", () => {
   const onboarding = source("app/components/equipment-onboarding.tsx");
   const assets = source("app/components/equipment-category-assets.ts");
 
@@ -36,24 +40,29 @@ test("Construye tu bolsa preserves the six approved REF-B images byte for byte",
   assert.doesNotMatch(onboarding, /useMasterBrand/);
 });
 
-test("Construye tu bolsa renders exactly the approved six-card hierarchy and copy", () => {
+test("Construye tu bolsa renders exactly the canonical eight-card hierarchy and approved copy", () => {
   const onboarding = source("app/components/equipment-onboarding.tsx");
-  const categoryBlock = onboarding.slice(onboarding.indexOf("const ONBOARDING_CLUB_CATEGORIES"), onboarding.indexOf("type EquipmentOnboardingProps"));
   const buildBlock = onboarding.slice(onboarding.indexOf('{step === "clubs-build"'), onboarding.indexOf('{step === "ball-prompt"'));
 
-  const categories = [...categoryBlock.matchAll(/category: "([A-Z_]+)", label: "([^"]+)", description: "([^"]+)"/g)]
-    .map((match) => ({ category: match[1], label: match[2], description: match[3] }));
+  const categories = BAG_CATEGORY_SECTIONS.map((section) => ({
+    category: section.categories[0],
+    label: section.label,
+    description: section.onboardingDescription,
+  }));
 
   assert.deepEqual(categories, [
     { category: "DRIVER", label: "Driver", description: "Máxima distancia para tus tiros de salida." },
+    { category: "MINI_DRIVER", label: "Mini Driver", description: "Control desde el tee con una cabeza compacta." },
     { category: "FAIRWAY_WOOD", label: "Maderas", description: "Versatilidad y distancia en el campo." },
     { category: "HYBRID", label: "Híbridos", description: "Confianza en cada lie." },
+    { category: "UTILITY_IRON", label: "Utility / Driving Iron", description: "Trayectoria penetrante y control desde el tee." },
     { category: "IRON_SET", label: "Hierros", description: "Precisión para un mejor control." },
     { category: "WEDGE", label: "Wedges", description: "Creatividad alrededor del green." },
     { category: "PUTTER", label: "Putter", description: "Decisión en los últimos golpes." },
   ]);
 
   assert.match(buildBlock, /Construye tu bolsa/);
+  assert.match(onboarding, /BAG_CATEGORY_SECTIONS\.map/);
   assert.match(buildBlock, /Agrega sólo lo que quieras\. Marca \+ modelo es suficiente<br \/>y puedes regresar después desde Perfil\./);
   assert.match(buildBlock, /<BrandLockup compact \/>/);
   assert.match(buildBlock, /className=\{styles\.bagBack\} aria-label="Volver" onClick=\{previous\}/);
@@ -110,8 +119,10 @@ test("onboarding and Mi Bolsa category selection consume one canonical asset reg
 
   const expected = {
     DRIVER: "driver_ref_b.png",
+    MINI_DRIVER: "mini-driver_ref_b.png",
     FAIRWAY_WOOD: "maderas_ref_b.png",
     HYBRID: "hibridos_ref_b.png",
+    UTILITY_IRON: "utility-driving-iron_ref_b.png",
     IRON_SET: "hierros_ref_b.png",
     WEDGE: "wedges_ref_b.png",
     PUTTER: "putter_ref_b.png",

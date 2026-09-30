@@ -25,17 +25,15 @@ import type { ProfileHandedness } from "../../lib/equipment-editor-selection";
 import styles from "./equipment.module.css";
 import { GolfBallVisual } from "./equipment-visuals";
 import { EQUIPMENT_CATEGORY_ASSETS } from "./equipment-category-assets";
+import { BAG_CATEGORY_SECTIONS } from "../../lib/equipment-bag-management";
 
 type Step = "clubs-prompt" | "clubs-build" | "ball-prompt" | "ball-select" | "fit-prompt" | "fit";
 
-const ONBOARDING_CLUB_CATEGORIES: ReadonlyArray<{ category: ClubCategory; label: string; description: string }> = [
-  { category: "DRIVER", label: "Driver", description: "Máxima distancia para tus tiros de salida." },
-  { category: "FAIRWAY_WOOD", label: "Maderas", description: "Versatilidad y distancia en el campo." },
-  { category: "HYBRID", label: "Híbridos", description: "Confianza en cada lie." },
-  { category: "IRON_SET", label: "Hierros", description: "Precisión para un mejor control." },
-  { category: "WEDGE", label: "Wedges", description: "Creatividad alrededor del green." },
-  { category: "PUTTER", label: "Putter", description: "Decisión en los últimos golpes." },
-];
+const ONBOARDING_CLUB_CATEGORIES = BAG_CATEGORY_SECTIONS.map((section) => ({
+  category: section.categories[0],
+  label: section.label,
+  description: section.onboardingDescription,
+}));
 
 type EquipmentOnboardingProps = {
   userId: string;

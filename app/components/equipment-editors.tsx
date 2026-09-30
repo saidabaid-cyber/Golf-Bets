@@ -35,17 +35,11 @@ import { CatalogProductMedia } from "./catalog-product-media";
 import { FeedbackLink } from './feedback-dialog';
 import { GolfBallVisual } from "./equipment-visuals";
 import { EQUIPMENT_CATEGORY_ASSETS } from "./equipment-category-assets";
+import { BAG_CATEGORY_SECTIONS } from "../../lib/equipment-bag-management";
 
-export const CLUB_CATEGORY_LABELS: Record<ClubCategory, string> = {
-  DRIVER: "Driver",
-  MINI_DRIVER: "Mini Driver",
-  FAIRWAY_WOOD: "Maderas",
-  HYBRID: "Híbridos",
-  UTILITY_IRON: "Utility / Driving Iron",
-  IRON_SET: "Hierros",
-  WEDGE: "Wedges",
-  PUTTER: "Putter",
-};
+export const CLUB_CATEGORY_LABELS = Object.fromEntries(
+  BAG_CATEGORY_SECTIONS.map((section) => [section.categories[0], section.label]),
+) as Record<ClubCategory, string>;
 
 export const CLUB_CATEGORY_ICONS: Record<ClubCategory, string> = {
   DRIVER: "D",
@@ -374,8 +368,9 @@ export function ClubEditor({ userId, catalog, shafts, existing, defaultHandednes
       <form className={styles.formGrid} onSubmit={submit} noValidate>
         {step === "category" && <div className={styles.flowScreen}>
           <h3>Selecciona categoría</h3><p>Elige un tipo de bastón o bola; después marca, modelo y configuración.</p>
-          <div className={styles.catalogChoiceGrid}>{Object.entries(CLUB_CATEGORY_LABELS).map(([value, label]) => {
-            const category = value as ClubCategory;
+          <div className={styles.catalogChoiceGrid}>{BAG_CATEGORY_SECTIONS.map((section) => {
+            const category = section.categories[0];
+            const label = section.label;
             const asset = EQUIPMENT_CATEGORY_ASSETS[category];
             return <button type="button" key={category} aria-label={label} onClick={() => chooseCategory(category)}><span className={styles.catalogCategoryMedia}><Image src={asset.src} width={asset.width} height={asset.height} sizes="88px" alt="" aria-hidden="true" /></span><b>{label}</b><strong aria-hidden="true">›</strong></button>;
           })}{onSelectBall && <button type="button" aria-label="Bola" onClick={onSelectBall}><span className={styles.catalogCategoryMedia}><GolfBallVisual /></span><b>Bola</b><strong aria-hidden="true">›</strong></button>}</div>

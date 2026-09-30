@@ -6,6 +6,7 @@ const provider = readFileSync("app/components/account-provider.tsx", "utf8");
 const onboarding = readFileSync("app/components/equipment-onboarding.tsx", "utf8");
 const panel = readFileSync("app/components/equipment-profile-panel.tsx", "utf8");
 const editors = readFileSync("app/components/equipment-editors.tsx", "utf8");
+const equipmentCategories = readFileSync("lib/equipment-bag-management.ts", "utf8");
 const wizard = readFileSync("app/components/ball-fit-wizard.tsx", "utf8");
 const fitting = readFileSync("lib/ball-fitting.ts", "utf8");
 const launch = readFileSync("app/components/launch-monitor-capture.tsx", "utf8");
@@ -31,7 +32,8 @@ test("el onboarding de equipo ocurre después del perfil básico y siempre se pu
 });
 
 test("Mi bolsa abre una ficha limpia por bastón y reserva el borrado para el detalle", () => {
-  for (const label of ["Driver", "Mini Driver", "Maderas", "Híbridos", "Utility / Driving Iron", "Hierros", "Wedges", "Putter"]) assert.match(editors, new RegExp(label.replace("/", "\\/")));
+  for (const label of ["Driver", "Mini Driver", "Maderas", "Híbridos", "Utility / Driving Iron", "Hierros", "Wedges", "Putter"]) assert.match(equipmentCategories, new RegExp(label.replace("/", "\\/")));
+  assert.match(editors, /BAG_CATEGORY_SECTIONS\.map/);
   assert.match(editors, /Mi bastón no aparece/);
   assert.match(editors, /Mi varilla no aparece/);
   for (const field of ["Marca", "Modelo", "Generación", "Loft", "Mano", "Varilla", "Flex", "Peso de varilla", "Longitud", "Lie", "Grip", "Notas"]) assert.match(editors, new RegExp(field));
