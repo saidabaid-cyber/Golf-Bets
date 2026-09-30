@@ -1486,8 +1486,13 @@ export function saveEquipmentProfile(storage: EquipmentStorageLike, profile: Equ
   const serialized = encodeEquipmentProfile(profile, savedAt);
   if (!key || !serialized) return { ok: false, code: "INVALID_PROFILE", message: "El perfil de equipo no es válido." };
   try {
+    const intended = decodeEquipmentProfile(serialized, profile.userId);
     storage.setItem(key, serialized);
-    return { ok: true, profile: normalizeEquipmentProfile(profile, profile.userId) };
+    const confirmed = storage.getItem(key);
+    const persisted = confirmed === null ? null : decodeEquipmentProfile(confirmed, profile.userId);
+    return intended && persisted && sameEquipmentProfile(intended, persisted)
+      ? { ok: true, profile: persisted }
+      : { ok: false, code: "WRITE_FAILED", message: "No pudimos confirmar el perfil de equipo guardado en este dispositivo." };
   } catch {
     return { ok: false, code: "WRITE_FAILED", message: "No pudimos guardar el perfil de equipo en este dispositivo." };
   }

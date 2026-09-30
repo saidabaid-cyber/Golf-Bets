@@ -164,6 +164,7 @@ function harness({ empty = false, fitOnly = false }: { empty?: boolean; fitOnly?
       return [slots[index], (next: unknown) => { slots[index] = typeof next === "function" ? (next as (value: unknown) => unknown)(slots[index]) : next; }];
     },
     useMemo(fn: () => unknown) { return fn(); },
+    useEffect(fn: () => void) { fn(); },
   };
   const component = ts.transpileModule(readFileSync("app/components/equipment-profile-panel.tsx", "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
@@ -209,6 +210,13 @@ function harness({ empty = false, fitOnly = false }: { empty?: boolean; fitOnly?
             updates.push(next);
             return true;
           },
+          updateConfirmed: (mutation: (current: golfEquipment.EquipmentProfile) => golfEquipment.EquipmentProfile | null) => {
+            const next = mutation(profile);
+            if (!next) return null;
+            profile = next;
+            updates.push(next);
+            return profile;
+          },
           retry() {},
           resolveConflict() {},
           recoverLocalProfile() {},
@@ -231,6 +239,9 @@ function harness({ empty = false, fitOnly = false }: { empty?: boolean; fitOnly?
         },
         sortCurrentWedges: (clubs: golfEquipment.PlayerClub[]) => clubs.filter((club) => club.category === "WEDGE" && club.isCurrent).sort((left, right) => (left.loft ?? 999) - (right.loft ?? 999)),
         wedgeLoftSummary: (clubs: golfEquipment.PlayerClub[]) => clubs.filter((club) => club.category === "WEDGE" && club.isCurrent && club.loft !== null).sort((left, right) => (left.loft ?? 999) - (right.loft ?? 999)).map((club) => `${club.loft}°`).join(" · "),
+      };
+      if (name.endsWith("/ball-fit-session")) return {
+        mergeBallFitSessionCatalog: (current: golfEquipment.GolfBallCatalog[], incoming: golfEquipment.GolfBallCatalog[]) => [...new Map([...current, ...incoming].map((ball) => [ball.id, ball])).values()],
       };
       if (name.endsWith(".css")) return { default: new Proxy({}, { get: (_target, key) => String(key) }) };
       throw new Error(name);
@@ -383,9 +394,9 @@ test("Ball Fit current-ball selection persists immediately through the profile p
 
   const selected = view.ballCatalog.find((ball) => ball.id === "ball-tour");
   assert.ok(selected);
-  const saved = (wizard.props.onCurrentBallSelect as (ball: golfEquipment.GolfBallCatalog) => boolean)(selected);
+  const saved = (wizard.props.onCurrentBallSelect as (ball: golfEquipment.GolfBallCatalog) => golfEquipment.PlayerBall | null)(selected);
 
-  assert.equal(saved, true);
+  assert.equal(saved?.catalogBallId, selected.id);
   assert.equal(view.updates.length, 1);
   assert.equal(view.profile().ballPreference, "FIXED");
   assert.equal(view.profile().ballOnboarding, "COMPLETED");

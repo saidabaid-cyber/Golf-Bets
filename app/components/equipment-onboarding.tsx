@@ -31,6 +31,7 @@ import { EQUIPMENT_CATEGORY_ASSETS } from "./equipment-category-assets";
 import { BAG_CATEGORY_SECTIONS } from "../../lib/equipment-bag-management";
 import { sortCurrentWedges } from "../../lib/equipment-bag-management";
 import { WedgeCollectionEditor } from "./wedge-collection-editor";
+import { mergeBallFitSessionCatalog } from "../../lib/ball-fit-session";
 
 type Step = "clubs-prompt" | "clubs-build" | "ball-prompt" | "ball-select" | "fit-prompt" | "fit";
 
@@ -74,7 +75,7 @@ function initialStep(profile: ReturnType<typeof useEquipmentProfile>["profile"])
 }
 
 export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defaultHandicapSource, defaultHandedness, ballFitDefaults, onComplete, onBack, onSaveAndExit }: EquipmentOnboardingProps) {
-  const { profile, status, message, update } = useEquipmentProfile(userId, accessToken);
+  const { profile, status, message, update, updateConfirmed } = useEquipmentProfile(userId, accessToken);
   const [step, setStep] = useState<Step>("clubs-prompt");
   const [initialized, setInitialized] = useState(false);
   const [clubEditorOpen, setClubEditorOpen] = useState(false);
@@ -101,7 +102,7 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defa
   useEffect(() => {
     if (!ballCatalog.items.length) return;
     setActiveFitSession((current) => current
-      ? { ...current, catalog: [...ballCatalog.items] }
+      ? { ...current, catalog: mergeBallFitSessionCatalog(current.catalog, ballCatalog.items) }
       : current);
   }, [ballCatalog.items]);
 
@@ -159,7 +160,9 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defa
 
   function selectFitCurrentBall(ball: GolfBallCatalog) {
     const now = new Date().toISOString();
-    return update((current) => setCatalogBallAsCurrent(current, ball, playerBallId(), now));
+    const confirmed = updateConfirmed((current) => setCatalogBallAsCurrent(current, ball, playerBallId(), now));
+    if (!confirmed || confirmed.ballPreference !== "FIXED" || confirmed.ballOnboarding !== "COMPLETED") return null;
+    return confirmed.balls.find((candidate) => candidate.catalogBallId === ball.id && candidate.isCurrent) || null;
   }
 
   function chooseNoFixedBall() {
@@ -182,14 +185,14 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defa
     const now = new Date().toISOString();
     const saved = update((current) => {
       const currentAtFit = current.balls.find((ball) => ball.isCurrent) || null;
-      const selection = choice ? {
+      const selection = {
         selectionAction: choice.action,
         selectedCatalogBallId: choice.action === "RECOMMENDATION" ? choice.ball.id : currentAtFit?.catalogBallId || null,
         currentBallAtFitId: currentAtFit?.id || null,
-      } as const : null;
+      } as const;
       const summary = toEquipmentBallFitSummary(result, fitId(), now, input, selection);
       if (!summary) return null;
-      const withChoice = choice?.action === "RECOMMENDATION"
+      const withChoice = choice.action === "RECOMMENDATION"
         ? setCatalogBallAsCurrent(current, choice.ball, playerBallId(), now)
         : current;
       return withChoice ? setLastBallFit(withChoice, summary, now) : null;

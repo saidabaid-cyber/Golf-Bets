@@ -735,13 +735,6 @@
   font: 500 22px/1.08 var(--by-editorial, Georgia, serif);
 }
 
-.recommendation:first-child:not(.resultSelected),
-.recommendationChoice:first-child .recommendation:not(.resultSelected) {
-  border-color: #cfb65d;
-  background: linear-gradient(145deg, #fff9e9, #fff 52%);
-  box-shadow: 0 8px 24px rgba(102, 78, 16, .08);
-}
-
 .rank {
   color: #937019;
   font-size: 12px;
@@ -1250,8 +1243,6 @@
 .progressTrack span { background:var(--by-forest); }
 .wizardHeader h2 { font:400 28px/1.1 var(--by-editorial);letter-spacing:-.03em; }
 .recommendation { border-radius:var(--by-radius);padding:22px; }
-.recommendation:first-child:not(.resultSelected),
-.recommendationChoice:first-child .recommendation:not(.resultSelected) { border-color:#a4b691;background:linear-gradient(145deg,#edf2e2,#fff 70%);box-shadow:var(--by-shadow-raised); }
 .recommendation h3 { font-size:27px;font-weight:400; }
 .matchBadge { padding:9px 14px;font-size:15px; }
 .fitIntro { border-color:var(--by-line);background:var(--by-sage);padding:20px; }

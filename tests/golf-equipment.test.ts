@@ -496,6 +496,39 @@ test("guardar, cerrar y reabrir usa un envelope versionado y aislado por userId"
   assert.equal(storage.values.has(key), false);
 });
 
+test("guardar equipo exige readback válido antes de confirmar persistencia local", () => {
+  const storage: EquipmentStorageLike = {
+    getItem: () => null,
+    setItem() {},
+    removeItem() {},
+  };
+  const saved = saveEquipmentProfile(storage, emptyProfile(), "2026-09-06T12:05:00.000Z");
+  assert.equal(saved.ok, false);
+  assert.equal("profile" in saved, false);
+  assert.match(saved.message, /confirmar el perfil de equipo guardado/);
+});
+
+test("guardar equipo rechaza un readback válido pero anterior", () => {
+  const staleProfile = emptyProfile();
+  const staleEnvelope = required(encodeEquipmentProfile(staleProfile, "2026-09-06T12:00:00.000Z"));
+  const storage: EquipmentStorageLike = {
+    getItem: () => staleEnvelope,
+    setItem() {},
+    removeItem() {},
+  };
+  const intended = required(setCatalogBallAsCurrent(
+    staleProfile,
+    ballCatalog(),
+    "stale-readback-ball",
+    "2026-09-06T12:05:00.000Z",
+  ));
+
+  const saved = saveEquipmentProfile(storage, intended, "2026-09-06T12:05:00.000Z");
+  assert.equal(saved.ok, false);
+  assert.equal("profile" in saved, false);
+  assert.match(saved.message, /confirmar el perfil de equipo guardado/);
+});
+
 test("un modelo de proveedor conserva snapshots de club y shaft al reabrir sin catálogo cliente", () => {
   const profile = required(upsertPlayerClub(emptyProfile(), manualClub({
     catalogClubId: "db-only-club",

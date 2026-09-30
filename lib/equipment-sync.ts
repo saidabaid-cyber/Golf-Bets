@@ -1,4 +1,10 @@
-import { equipmentProfileFingerprint, normalizeEquipmentProfile, type EquipmentProfile } from "./golf-equipment";
+import {
+  equipmentProfileFingerprint,
+  normalizeEquipmentProfile,
+  setBallOnboardingStatus,
+  upsertPlayerBall,
+  type EquipmentProfile,
+} from "./golf-equipment";
 
 export type EquipmentCloudRecord = {
   profile: EquipmentProfile;
@@ -311,10 +317,28 @@ export function bootstrapEquipmentProfiles(localValue: EquipmentProfile, remoteV
   return profile;
 }
 
+function protectPendingLocalCurrentBall(profile: EquipmentProfile, local: EquipmentProfile) {
+  const localCurrent = local.ballPreference === "FIXED"
+    ? local.balls.find((ball) => ball.isCurrent) || null
+    : null;
+  if (!localCurrent || local.ballOnboarding !== "COMPLETED") return profile;
+  const timestampValue = latestTimestamp(profile.updatedAt, local.updatedAt, localCurrent.updatedAt) || profile.updatedAt;
+  const restored = upsertPlayerBall(profile, localCurrent, timestampValue);
+  return restored ? setBallOnboardingStatus(restored, "COMPLETED", timestampValue) || profile : profile;
+}
+
+type EquipmentReconciliationOptions = {
+  /** A matching local outbox proves this exact snapshot is an unacknowledged
+   * local edit. During first bootstrap it must not lose its current-ball tuple
+   * merely because an unrelated remote field has a later profile timestamp. */
+  protectPendingLocalCurrent?: boolean;
+};
+
 export function reconcileEquipmentProfiles(
   base: EquipmentProfile | null,
   local: EquipmentProfile | null,
   remote: EquipmentProfile | null,
+  options: EquipmentReconciliationOptions = {},
 ): EquipmentReconciliation {
   if (!local && !remote) return { profile: null, conflicts: [], needsUpload: false, needsLocalWrite: false };
   if (!local && remote) return { profile: remote, conflicts: [], needsUpload: false, needsLocalWrite: true };
@@ -325,11 +349,14 @@ export function reconcileEquipmentProfiles(
   const result = base
     ? mergeEquipmentProfiles(base, local!, remote!)
     : { profile: bootstrapEquipmentProfiles(local!, remote!), conflicts: [] };
+  const profile = !base && options.protectPendingLocalCurrent
+    ? protectPendingLocalCurrentBall(result.profile, local!)
+    : result.profile;
   return {
-    profile: result.profile,
+    profile,
     conflicts: result.conflicts,
-    needsUpload: !result.conflicts.length && !equipmentProfilesSemanticallyEqual(result.profile, remote),
-    needsLocalWrite: !equipmentProfilesSemanticallyEqual(result.profile, local),
+    needsUpload: !result.conflicts.length && !equipmentProfilesSemanticallyEqual(profile, remote),
+    needsLocalWrite: !equipmentProfilesSemanticallyEqual(profile, local),
   };
 }
 

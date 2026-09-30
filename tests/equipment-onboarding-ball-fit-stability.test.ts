@@ -104,6 +104,12 @@ test("Equipment onboarding keeps Ball Fit mounted while pinned-ball catalog refr
             profile = next;
             return true;
           },
+          updateConfirmed(mutation: (current: golfEquipment.EquipmentProfile) => golfEquipment.EquipmentProfile | null) {
+            const next = mutation(profile);
+            if (!next) return null;
+            profile = next;
+            return profile;
+          },
         }),
       };
       if (name === "./use-equipment-catalog-search") return {
@@ -122,6 +128,9 @@ test("Equipment onboarding keeps Ball Fit mounted while pinned-ball catalog refr
         sortCurrentWedges: () => [],
       };
       if (name.endsWith("/ball-fit-handicap")) return {};
+      if (name.endsWith("/ball-fit-session")) return {
+        mergeBallFitSessionCatalog: (current: golfEquipment.GolfBallCatalog[], incoming: golfEquipment.GolfBallCatalog[]) => [...new Map([...current, ...incoming].map((ball) => [ball.id, ball])).values()],
+      };
       if (name.endsWith(".css")) return { default: new Proxy({}, { get: (_target, key) => String(key) }) };
       throw new Error(`unexpected_require:${name}`);
     },
@@ -158,8 +167,8 @@ test("Equipment onboarding keeps Ball Fit mounted while pinned-ball catalog refr
   assert.ok(initialCatalog.length > 0);
   assert.equal(initialSessionId, "selected-player-ball");
 
-  const persisted = (wizard.props.onCurrentBallSelect as (ball: golfEquipment.GolfBallCatalog) => boolean)(selected);
-  assert.equal(persisted, true);
+  const persisted = (wizard.props.onCurrentBallSelect as (ball: golfEquipment.GolfBallCatalog) => golfEquipment.PlayerBall | null)(selected);
+  assert.equal(persisted?.catalogBallId, selected.id);
   assert.equal(profile.balls.find((ball) => ball.isCurrent)?.catalogBallId, selected.id);
 
   // Saving the current ball changes pinnedIds. Model the old hook behavior's
@@ -174,4 +183,14 @@ test("Equipment onboarding keeps Ball Fit mounted while pinned-ball catalog refr
   assert.equal(wizard.props.sessionId, initialSessionId, "the active fitting session remains the same during refresh");
   assert.deepEqual((wizard.props.catalog as golfEquipment.GolfBallCatalog[]).map((ball) => ball.id), initialCatalog.map((ball) => ball.id));
   assert.ok(pinnedBallSnapshots.at(-1)?.includes(selected.id), "the refresh was caused by the newly pinned current ball");
+
+  const refreshedBall = golfBallCatalog.find((ball) => !initialCatalog.some((current) => current.id === ball.id));
+  assert.ok(refreshedBall);
+  ballCatalogItems = [refreshedBall];
+  ballCatalogStatus = "success";
+  render(); render();
+  wizard = nodes(tree).find((node) => node.type === "ball-fit-wizard");
+  const refreshedIds = (wizard?.props.catalog as golfEquipment.GolfBallCatalog[]).map((ball) => ball.id);
+  assert.ok(initialCatalog.every((ball) => refreshedIds.includes(ball.id)), "a partial refresh retains every last-successful item");
+  assert.ok(refreshedIds.includes(refreshedBall.id), "new catalog rows merge into the active session");
 });

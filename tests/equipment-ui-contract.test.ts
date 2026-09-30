@@ -89,7 +89,7 @@ test("bola y Ball Fit exponen el flujo completo sin presentar una verdad oficial
 
 test("Ball Fit evalúa el catálogo completo en servidor y falla cerrado antes de rankear una página parcial", () => {
   assert.match(wizard, /fetch\("\/api\/ball-fitting"/);
-  assert.match(wizard, /createBallFitTransportInput\(input\)/);
+  assert.match(wizard, /createBallFitTransportInput\(targetInput\)/);
   assert.doesNotMatch(wizard, /createBallFitTransportInput\(\{ \.\.\.input, handicap: defaultHandicap/);
   assert.match(wizard, /JSON\.stringify\(\{ input: transportInput \}\)/);
   assert.doesNotMatch(wizard, /runBackyardBallFit\(catalog,/);

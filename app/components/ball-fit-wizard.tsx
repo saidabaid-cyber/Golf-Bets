@@ -166,14 +166,13 @@ type BallFitWizardProps = {
   sessionId?: string | null;
   onCancel: () => void;
   onOpenPrivacy?: () => void;
-  onCurrentBallSelect: (ball: GolfBallCatalog) => boolean | void;
+  onCurrentBallSelect: (ball: GolfBallCatalog) => PlayerBall | null;
   onComplete: (result: BallFitResult, input: BallFitInput, choice: BallFitCompletionChoice) => boolean | void;
 };
 
 export type BallFitCompletionChoice =
   | { action: "KEEP_CURRENT" }
-  | { action: "RECOMMENDATION"; ball: GolfBallCatalog }
-  | null;
+  | { action: "RECOMMENDATION"; ball: GolfBallCatalog };
 
 type BallFitResultChoice =
   | { action: "KEEP_CURRENT" }
@@ -192,6 +191,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
   const [resultCatalog, setResultCatalog] = useState<GolfBallCatalog[]>([]);
   const [resultChoice, setResultChoice] = useState<BallFitResultChoice>(null);
   const [explicitCurrentBall, setExplicitCurrentBall] = useState<GolfBallCatalog | null>(null);
+  const [confirmedCurrentBall, setConfirmedCurrentBall] = useState<PlayerBall | null>(null);
   const [calculating, setCalculating] = useState(false);
   const [ballQuery, setBallQuery] = useState("");
   const [ballSearchOpen, setBallSearchOpen] = useState(false);
@@ -207,8 +207,9 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
   const ballSearch = useEquipmentCatalogSearch({ kind: "BALL", query: ballQuery, fallback: catalog, pinnedIds: pinnedBallIds });
   const displayCatalog = useMemo(() => [...new Map([...catalog, ...ballSearch.items, ...resultCatalog].map((ball) => [ball.id, ball])).values()], [ballSearch.items, catalog, resultCatalog]);
   const currentCatalogBall = input.currentBallId ? displayCatalog.find((ball) => ball.id === input.currentBallId) || null : null;
+  const storedCurrentBall = confirmedCurrentBall || currentBall;
   const storedCurrentCatalogBall = explicitCurrentBall
-    || (currentBall?.catalogBallId ? displayCatalog.find((ball) => ball.id === currentBall.catalogBallId) || null : null);
+    || (storedCurrentBall?.catalogBallId ? displayCatalog.find((ball) => ball.id === storedCurrentBall.catalogBallId) || null : null);
   const launchSummary = useMemo(() => summarizeLaunchMonitorSession(input.launchMonitorSession), [input.launchMonitorSession]);
   const driverLaunchSummary = launchSummary?.byClub.find((item) => item.club === "DRIVER") ?? null;
   const detectedDriverCarry = driverLaunchSummary?.metrics.carryYards?.median ?? null;
@@ -278,11 +279,12 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
     }
     if (draftBall && currentBall?.catalogBallId !== draftBall.id) {
       const saved = onCurrentBallSelect(draftBall);
-      if (saved === false) {
-        setMessage("No se confirmó la bola actual en este dispositivo. Vuelve a intentar.");
+      if (!saved) {
+        setMessage("No pudimos guardar tu bola actual. Vuelve a intentar.");
         return;
       }
       setExplicitCurrentBall(draftBall);
+      setConfirmedCurrentBall(saved);
     }
     // Resuming a draft is an explicit choice. Its fitting-only MANUAL/UNKNOWN
     // value must not be replaced if the account Index refreshes afterward.
@@ -304,6 +306,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
     setResult(null);
     setResultChoice(null);
     setExplicitCurrentBall(null);
+    setConfirmedCurrentBall(null);
     setSavedDraft(null);
     setDraftChoicePending(false);
   }
@@ -312,17 +315,20 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
     setInput((current) => ({ ...current, ...values, userId }));
   }
 
-  function selectCurrentBall(ball: GolfBallCatalog) {
+  async function selectCurrentBall(ball: GolfBallCatalog) {
     const saved = onCurrentBallSelect(ball);
-    if (saved === false) {
-      setMessage("No se confirmó la bola actual en este dispositivo. Vuelve a intentar.");
+    if (!saved) {
+      setMessage("No pudimos guardar tu bola actual. Vuelve a intentar.");
       return;
     }
+    const nextInput = { ...input, currentBallId: ball.id, userId };
     setMessage("");
     setExplicitCurrentBall(ball);
-    patchInput({ currentBallId: ball.id });
+    setConfirmedCurrentBall(saved);
+    setInput(nextInput);
     setBallQuery(`${ball.brand} ${ball.model}`);
     setBallSearchOpen(false);
+    await calculate(nextInput);
   }
 
   function finishLaunchCapture() {
@@ -362,7 +368,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
     patchInput({ priorities });
   }
 
-  async function calculate() {
+  async function calculate(targetInput: BallFitInput = input) {
     if (calculating) return;
     requestRef.current?.abort();
     const controller = new AbortController();
@@ -370,7 +376,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
     setCalculating(true);
     setMessage("");
     try {
-      const transportInput = createBallFitTransportInput(input);
+      const transportInput = createBallFitTransportInput(targetInput);
       if (!transportInput) {
         setMessage(FIT_REQUEST_ERROR);
         return;
@@ -401,7 +407,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
       setResultCatalog(fit.catalog);
       setResultChoice(null);
       setStep(6);
-      if (!saveBallFitDraft(localStorage, input, 6, new Date().toISOString(), sessionId)) setMessage(DRAFT_SAVE_ERROR);
+      if (!saveBallFitDraft(localStorage, targetInput, 6, new Date().toISOString(), sessionId)) setMessage(DRAFT_SAVE_ERROR);
       else if (fit.result.recommendations.length === 0) setMessage(fit.result.warnings[0] || "Necesitamos más preferencias para comparar bolas.");
     } catch (error) {
       if (controller.signal.aborted) return;
@@ -431,12 +437,16 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
       setMessage("Elige una recomendación o conserva tu bola actual para terminar.");
       return;
     }
-    const selectedRecommendation = resultChoice?.action === "RECOMMENDATION"
+    const selectedRecommendation = resultChoice.action === "RECOMMENDATION"
       ? displayCatalog.find((ball) => ball.id === resultChoice.catalogBallId) || null
       : null;
+    if (resultChoice.action === "RECOMMENDATION" && !selectedRecommendation) {
+      setMessage("No pudimos confirmar esa recomendación. Elige otra opción e intenta de nuevo.");
+      return;
+    }
     const choice: BallFitCompletionChoice = resultChoice?.action === "KEEP_CURRENT"
       ? { action: "KEEP_CURRENT" }
-      : selectedRecommendation ? { action: "RECOMMENDATION", ball: selectedRecommendation } : null;
+      : { action: "RECOMMENDATION", ball: selectedRecommendation! };
     const completed = onComplete(result, input, choice);
     if (completed !== false) removeBallFitDraft(localStorage, userId);
   }
@@ -557,9 +567,9 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
         selectedCatalogBallId={resultChoice?.action === "RECOMMENDATION" ? resultChoice.catalogBallId : null}
         currentBallCatalogId={storedCurrentCatalogBall?.id || currentBall?.catalogBallId || null}
         onSelect={(catalogBallId) => { setMessage(""); setResultChoice({ action: "RECOMMENDATION", catalogBallId }); }}
-        keepCurrent={currentBall || explicitCurrentBall ? {
-          brand: explicitCurrentBall?.brand || currentBall!.ballBrand,
-          model: explicitCurrentBall?.model || currentBall!.ballModel,
+        keepCurrent={storedCurrentBall ? {
+          brand: explicitCurrentBall?.brand || storedCurrentBall.ballBrand,
+          model: explicitCurrentBall?.model || storedCurrentBall.ballModel,
           catalogBall: storedCurrentCatalogBall,
           selected: resultChoice?.action === "KEEP_CURRENT",
           onSelect: () => { setMessage(""); setResultChoice({ action: "KEEP_CURRENT" }); },
@@ -572,7 +582,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
     <div className={styles.wizardActions}>
       <button type="button" className="secondary" onClick={previous} disabled={calculating || (!result && step === 0)}>← Anterior</button>
       {!result && step < 5 && <button type="button" className="primary" onClick={next} disabled={calculating}>Siguiente →</button>}
-      {!result && step === 5 && <button type="button" className="primary" onClick={calculate} disabled={calculating}>{calculating ? "Evaluando…" : "Ver mi Top 3"}</button>}
+      {!result && step === 5 && <button type="button" className="primary" onClick={() => calculate()} disabled={calculating}>{calculating ? "Evaluando…" : "Ver mi Top 3"}</button>}
       {result && result.recommendations.length > 0 && <button type="button" className="primary" onClick={finish} disabled={!resultChoice}>Guardar elección y terminar</button>}
     </div>
   </div>;

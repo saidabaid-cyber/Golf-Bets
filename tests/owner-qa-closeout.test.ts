@@ -33,7 +33,7 @@ test("todos los archivos con diálogos interactivos exponen una salida visible",
       // Equipment is now full-page throughout: verify real exits instead of
       // requiring a modal close icon on a screen which no longer is a modal.
       assert.doesNotMatch(source, /role="dialog"|styles\.editorBackdrop/);
-      assert.match(source, /data-equipment-screen="ball-fit"[^\n]*onCancel=\{\(\) => setFitOpen\(false\)\}/);
+      assert.match(source, /data-equipment-screen="ball-fit"[^\n]*onCancel=\{\(\) => \{[^\n]*setFitOpen\(false\);[^\n]*\}\}/);
       assert.match(source, /data-equipment-screen="saved-ball-fit"[^\n]*onClick=\{\(\) => setSavedFitOpen\(false\)\}>← Volver a Mi Bolsa/);
       for (const editor of ["club", "ball", "distance"]) {
         if (editor === "club") assert.match(source, /onCancel=\{\(\) => \{ setClubEditor\(null\); setNewClubCategory\(null\); \}\}/);

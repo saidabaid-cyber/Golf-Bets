@@ -64,7 +64,7 @@ test("manual choice survives draft resume without replacing it with current prof
   const wizard = readFileSync("app/components/ball-fit-wizard.tsx", "utf8");
   assert.match(wizard, /setInput\(savedDraft\.input\)/);
   assert.doesNotMatch(wizard, /\.\.\.savedDraft\.input, handicap: defaultHandicap/);
-  assert.match(wizard, /createBallFitTransportInput\(input\)/);
+  assert.match(wizard, /createBallFitTransportInput\(targetInput\)/);
   assert.doesNotMatch(wizard, /updateProfile|saveCloudAccountProfile|updateUser/);
 });
 

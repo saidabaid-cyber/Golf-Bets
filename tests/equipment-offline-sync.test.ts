@@ -16,10 +16,12 @@ import {
 } from "../lib/equipment-sync";
 import {
   createEmptyEquipmentProfile,
+  setCatalogBallAsCurrent,
   upsertPlayerClub,
   type EquipmentProfile,
   type PlayerClub,
 } from "../lib/golf-equipment";
+import { golfBallCatalog } from "../lib/golf-equipment-catalog";
 
 const USER_ID = "equipment-offline-user";
 const BASE_AT = "2026-09-28T12:00:00.000Z";
@@ -99,18 +101,59 @@ test("cambios unilaterales suben o bajan sin pedir elección manual", () => {
 });
 
 test("un dispositivo nuevo sin copia persistida descarga la nube sin inventar un empty local", () => {
-  const remote = {
-    ...baseProfile(),
-    equipmentOnboarding: "COMPLETED" as const,
-    ballOnboarding: "COMPLETED" as const,
-    updatedAt: "2026-09-28T12:02:00.000Z",
-  };
+  const selected = golfBallCatalog.find((ball) => ball.active);
+  assert.ok(selected);
+  const remoteWithBall = setCatalogBallAsCurrent(baseProfile(), selected, "remote-current-ball", "2026-09-28T12:02:00.000Z");
+  assert.ok(remoteWithBall);
+  const remote = { ...remoteWithBall, equipmentOnboarding: "COMPLETED" as const };
   const result = reconcileEquipmentProfiles(null, null, remote);
   assert.deepEqual(result.conflicts, []);
   assert.equal(result.needsUpload, false);
   assert.equal(result.needsLocalWrite, true);
   assert.equal(result.profile?.equipmentOnboarding, "COMPLETED");
   assert.equal(result.profile?.ballOnboarding, "COMPLETED");
+  assert.equal(result.profile?.ballPreference, "FIXED");
+  assert.equal(result.profile?.balls.find((ball) => ball.isCurrent)?.catalogBallId, selected.id);
+});
+
+test("un current ball local pendiente permanece atómico frente a un bootstrap remoto más reciente", () => {
+  const selected = golfBallCatalog.find((ball) => ball.active);
+  assert.ok(selected);
+  const local = setCatalogBallAsCurrent(baseProfile(), selected, "pending-current-ball", "2026-09-28T12:01:00.000Z");
+  assert.ok(local);
+  const remote = {
+    ...baseProfile(),
+    equipmentOnboarding: "COMPLETED" as const,
+    updatedAt: "2026-09-28T13:00:00.000Z",
+  };
+
+  const unprotected = reconcileEquipmentProfiles(null, local, remote);
+  assert.equal(unprotected.profile?.balls.filter((ball) => ball.isCurrent).length, 0, "documents the former bootstrap loss");
+
+  const protectedResult = reconcileEquipmentProfiles(null, local, remote, { protectPendingLocalCurrent: true });
+  assert.equal(protectedResult.profile?.balls.filter((ball) => ball.isCurrent).length, 1);
+  assert.equal(protectedResult.profile?.balls.find((ball) => ball.isCurrent)?.catalogBallId, selected.id);
+  assert.equal(protectedResult.profile?.ballPreference, "FIXED");
+  assert.equal(protectedResult.profile?.ballOnboarding, "COMPLETED");
+  assert.equal(protectedResult.needsUpload, true);
+});
+
+test("la protección local restaura el snapshot de la bola y no sólo un id compartido", () => {
+  const catalog = golfBallCatalog.filter((ball) => ball.active);
+  assert.ok(catalog.length >= 2);
+  const local = setCatalogBallAsCurrent(baseProfile(), catalog[0], "shared-player-ball", "2026-09-28T12:01:00.000Z");
+  const remote = setCatalogBallAsCurrent(baseProfile(), catalog[1], "shared-player-ball", "2026-09-28T13:00:00.000Z");
+  assert.ok(local && remote);
+
+  const protectedResult = reconcileEquipmentProfiles(null, local, remote, { protectPendingLocalCurrent: true });
+  const restored = protectedResult.profile?.balls.find((ball) => ball.isCurrent) || null;
+  assert.equal(restored?.id, "shared-player-ball");
+  assert.equal(restored?.catalogBallId, catalog[0].id);
+  assert.equal(restored?.ballBrand, catalog[0].brand);
+  assert.equal(restored?.ballModel, catalog[0].model);
+  assert.equal(protectedResult.profile?.ballPreference, "FIXED");
+  assert.equal(protectedResult.profile?.ballOnboarding, "COMPLETED");
+  assert.equal(protectedResult.needsUpload, true);
 });
 
 test("ediciones disjuntas se combinan por campo y por id de equipo", () => {

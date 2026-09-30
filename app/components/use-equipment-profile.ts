@@ -156,7 +156,13 @@ export function useEquipmentProfile(userId: string, accessToken: string | null) 
           return false;
         }
         const latestState = readEquipmentSyncState(localStorage, scope.userId);
-        const reconciliation = reconcileEquipmentProfiles(latestState.base?.profile ?? null, localRead.profile, remote.profile);
+        const localFingerprint = equipmentProfileFingerprint(localRead.profile, scope.userId);
+        const reconciliation = reconcileEquipmentProfiles(
+          latestState.base?.profile ?? null,
+          localRead.profile,
+          remote.profile,
+          { protectPendingLocalCurrent: Boolean(!latestState.base && latestState.outbox?.fingerprint === localFingerprint) },
+        );
         if (reconciliation.conflicts.length) {
           conflictRef.current = true;
           setStatus("conflict");
@@ -218,7 +224,13 @@ export function useEquipmentProfile(userId: string, accessToken: string | null) 
       // profile merely because its creation timestamp is newer.
       const latestLocal = localRead.profile;
       const state = readEquipmentSyncState(localStorage, scope.userId);
-      const reconciliation = reconcileEquipmentProfiles(state.base?.profile ?? null, latestLocal, remote?.profile ?? null);
+      const localFingerprint = latestLocal ? equipmentProfileFingerprint(latestLocal, scope.userId) : null;
+      const reconciliation = reconcileEquipmentProfiles(
+        state.base?.profile ?? null,
+        latestLocal,
+        remote?.profile ?? null,
+        { protectPendingLocalCurrent: Boolean(!state.base && state.outbox?.fingerprint === localFingerprint) },
+      );
       if (reconciliation.conflicts.length) {
         conflictRef.current = true;
         setStatus("conflict");
@@ -351,6 +363,14 @@ export function useEquipmentProfile(userId: string, accessToken: string | null) 
     return next ? save(next) : false;
   }, [save]);
 
+  const updateConfirmed = useCallback((updater: (current: EquipmentProfile) => EquipmentProfile | null) => {
+    const current = profileRef.current;
+    if (!current) return null;
+    const next = updater(current);
+    if (!next || !save(next)) return null;
+    return profileRef.current;
+  }, [save]);
+
   const recoverLocalProfile = useCallback(() => {
     const empty = createEmptyEquipmentProfile(userId);
     const key = equipmentProfileStorageKey(userId);
@@ -431,7 +451,7 @@ export function useEquipmentProfile(userId: string, accessToken: string | null) 
 
   const retry = useCallback(() => reconcileCloud(activeScopeRef.current), [reconcileCloud]);
 
-  return { profile, status, message, save, update, retry, resolveConflict, recoverLocalProfile };
+  return { profile, status, message, save, update, updateConfirmed, retry, resolveConflict, recoverLocalProfile };
 }
 
 export function equipmentStatusLabel(status: EquipmentPersistenceStatus) {

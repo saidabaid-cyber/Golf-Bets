@@ -15,7 +15,12 @@ type Node = { type: unknown; props: Record<string, unknown> };
 function nodes(value: unknown): Node[] { if (Array.isArray(value)) return value.flatMap(nodes); if (!value || typeof value !== "object" || !("props" in value)) return []; const node = value as Node; return [node, ...nodes(node.props.children)]; }
 function text(value: unknown): string { if (Array.isArray(value)) return value.map(text).join(" "); if (value && typeof value === "object") return text((value as Node).props?.children); return typeof value === "string" || typeof value === "number" ? String(value) : ""; }
 
-function wizard(profileIndex: number | null = null, profileSource: handicap.BallFitHandicapSource | null = null, savedInput?: fitting.BallFitInput, persistedDraft?: { input: fitting.BallFitInput; step: number; sessionId?: string | null }, currentBall: equipment.PlayerBall | null = null, sessionId: string | null = null) {
+type WizardHarnessOptions = {
+  currentBallSave?: "success" | "failure";
+  deferFetch?: boolean;
+};
+
+function wizard(profileIndex: number | null = null, profileSource: handicap.BallFitHandicapSource | null = null, savedInput?: fitting.BallFitInput, persistedDraft?: { input: fitting.BallFitInput; step: number; sessionId?: string | null }, currentBall: equipment.PlayerBall | null = null, sessionId: string | null = null, options: WizardHarnessOptions = {}) {
   const slots: unknown[] = []; let cursor = 0; const effects: (() => void)[] = [];
   const scrollResetKeys: string[] = [];
   const storageValues = new Map<string, string>();
@@ -25,6 +30,8 @@ function wizard(profileIndex: number | null = null, profileSource: handicap.Ball
   const sent: fitting.BallFitInput[] = [], saved: fitting.BallFitInput[] = [];
   const currentSelections: equipment.GolfBallCatalog[] = [];
   const savedChoices: unknown[] = [];
+  let releaseFetch: (() => void) | null = null;
+  const fetchGate = options.deferFetch ? new Promise<void>((resolve) => { releaseFetch = resolve; }) : null;
   let cancelCount = 0;
   const exports: Record<string, (props: unknown) => Node> = {};
   const jsx = (type: unknown, props: Record<string, unknown>) => typeof type === "function" ? type(props) : { type, props };
@@ -37,6 +44,7 @@ function wizard(profileIndex: number | null = null, profileSource: handicap.Ball
   const compiled = ts.transpileModule(readFileSync("app/components/ball-fit-wizard.tsx", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   runInNewContext(compiled, { exports, AbortController, structuredClone, localStorage: storage, fetch: async (_url: string, init: { body: string }) => {
     const input = api.normalizeBallFitTransportInput(JSON.parse(init.body).input); assert.ok(input); sent.push(input);
+    if (fetchGate) await fetchGate;
     const result = fitting.runBackyardBallFit(golfBallCatalog, input);
     const catalog = golfBallCatalog.filter((ball) => result.recommendations.some((item) => item.catalogBallId === ball.id));
     return { ok: true, json: async () => ({ provider: "internal-fixture", scope: { complete: true, activeCandidateCount: 1, evaluatedCandidateCount: 1, maximumCandidates: 2000 }, result, catalog }) };
@@ -66,7 +74,17 @@ function wizard(profileIndex: number | null = null, profileSource: handicap.Ball
   } });
   let props = { userId: "flow-owner", defaultHandicap: profileIndex, defaultHandicapSource: profileSource, savedInput,
     profileDefaults: { trajectoryPreference: "MID", priorities: ["WEDGE_SPIN"] }, currentBall, catalog: golfBallCatalog, sessionId,
-    onCancel() { cancelCount += 1; }, onCurrentBallSelect(ball: equipment.GolfBallCatalog) { currentSelections.push(ball); }, onComplete(_result: fitting.BallFitResult, input: fitting.BallFitInput, choice: unknown) { saved.push(input); savedChoices.push(choice); } };
+    onCancel() { cancelCount += 1; }, onCurrentBallSelect(ball: equipment.GolfBallCatalog) {
+      currentSelections.push(ball);
+      if (options.currentBallSave === "failure") return null;
+      return {
+        id: `saved-${ball.id}`, userId: "flow-owner", catalogBallId: ball.id,
+        ballBrand: ball.brand, ballModel: ball.model, generation: ball.generation,
+        year: ball.year, color: null, notes: null, isCurrent: true,
+        startedUsingAt: "2026-09-30T12:00:00.000Z", stoppedUsingAt: null,
+        createdAt: "2026-09-30T12:00:00.000Z", updatedAt: "2026-09-30T12:00:00.000Z",
+      } satisfies equipment.PlayerBall;
+    }, onComplete(_result: fitting.BallFitResult, input: fitting.BallFitInput, choice: unknown) { saved.push(input); savedChoices.push(choice); } };
   let tree: Node;
   function render() { cursor = 0; tree = exports.BallFitWizard(props); effects.splice(0).forEach((effect) => effect()); return tree; }
   render(); render();
@@ -99,7 +117,8 @@ function wizard(profileIndex: number | null = null, profileSource: handicap.Ball
     (search.props.onFocus as () => void)(); render();
   }, selectCatalogBall(label: string) {
     const option = nodes(tree).find((node) => node.type === "button" && node.props.label === label); assert.ok(option, label);
-    (option.props.onSelect as () => void)(); render();
+    const pending = (option.props.onSelect as () => unknown)(); render();
+    return Promise.resolve(pending).then(() => { render(); });
   }, catalogOptionCount(label: string) {
     return nodes(tree).filter((node) => node.type === "button" && node.props.label === label).length;
   }, updateAccountIndex(value: number | null, source: handicap.BallFitHandicapSource | null) {
@@ -112,7 +131,7 @@ function wizard(profileIndex: number | null = null, profileSource: handicap.Ball
     return nodes(tree).filter((node) => node.type === "input" && node.props.type === "radio" && node.props.checked === true).map((node) => node.props["aria-label"]);
   }, radioLabels() {
     return nodes(tree).filter((node) => node.type === "input" && node.props.type === "radio").map((node) => String(node.props["aria-label"]));
-  }, async click(label: string) {
+  }, releaseFetch() { assert.ok(releaseFetch, "deferred fetch resolver"); releaseFetch(); }, async click(label: string) {
     const button = nodes(tree).find((node) => node.type === "button" && text(node.props.children).trim().startsWith(label)); assert.ok(button, `button ${label}`);
     assert.notEqual(button.props.disabled, true); await (button.props.onClick as () => unknown)(); render();
   }, number(min: number) { return nodes(tree).find((node) => node.type === "input" && node.props.min === min)?.props.value; }, changeNumber(value: string, min = -20) {
@@ -693,51 +712,65 @@ test("known launch-monitor driver metrics are applied instead of requested again
   assert.doesNotMatch(h.text(), /¿Cuánto pegas aproximadamente con driver\?|Velocidad de swing con driver/);
 });
 
-test("selecting a catalog ball saves its canonical id, closes results and keeps one real generation label", async () => {
-  const h = wizard(null, null);
+test("selecting a catalog ball confirms local persistence and opens Top 3 automatically", async () => {
+  const h = wizard(null, null, undefined, undefined, null, "active-selection-session", { deferFetch: true });
   for (let index = 0; index < 5; index++) await h.click("Siguiente →");
   assert.equal(h.search().expanded, false);
   h.focusSearch();
   assert.equal(h.search().expanded, true);
   const label = "Seleccionar Titleist Pro V1x Left Dash";
   assert.equal(h.catalogOptionCount(label), 1);
-  h.selectCatalogBall(label);
+  const selection = h.selectCatalogBall(label);
   assert.equal(h.currentSelections.length, 1);
   assert.equal(h.currentSelections[0].id, golfBallCatalog.find((ball) => ball.brand === "Titleist" && ball.model === "Pro V1x Left Dash")?.id);
   assert.equal(h.search().expanded, false);
   assert.equal(h.search().value, "Titleist Pro V1x Left Dash");
   assert.match(String(h.search().status), /✓ Seleccionada:\s*Titleist\s+Pro V1x Left Dash/);
   assert.equal(String(h.search().status).match(/✓ Seleccionada:\s*Titleist\s+Pro V1x Left Dash/g)?.length, 1, "the selected-ball confirmation must render once");
-  assert.match(h.text(), /Paso 6 de 6[\s\S]*Precio y color/);
+  assert.match(h.text(), /Analizando tus preferencias/);
   assert.doesNotMatch(h.text(), /Tienes un fitting en progreso/);
-  assert.notEqual(h.buttonProps("Ver mi Top 3").disabled, true);
-  assert.equal(h.lastDraftWrite()?.input.currentBallId, h.currentSelections[0].id, "the current fitting autosave owns the selected ball");
-  h.render();
-  h.render();
-  assert.match(h.text(), /Paso 6 de 6[\s\S]*Ver mi Top 3/);
+  h.releaseFetch();
+  await selection;
+  assert.match(h.text(), /Tu mejor grupo de bolas/);
+  assert.equal(h.sent.length, 1);
+  assert.equal(h.sent[0].currentBallId, h.currentSelections[0].id);
+  assert.equal(h.radioLabels().length, 4, "Top 3 plus the confirmed current ball are exactly four choices");
+  assert.deepEqual(h.checkedRadios(), []);
+  assert.equal(h.buttonProps("Guardar elección y terminar").disabled, true);
+  assert.equal(h.lastDraftWrite()?.input.currentBallId, h.currentSelections[0].id, "the active-session autosave owns the confirmed ball");
+  h.render(); h.render();
   assert.doesNotMatch(h.text(), /Tienes un fitting en progreso/, "same-session rerenders must not reinterpret autosave as an older draft");
   assert.match(h.text(), /2025/);
   assert.doesNotMatch(h.text(), /2025 · 2025|Generación sin dato publicado/);
-  h.focusSearch();
-  assert.equal(h.search().expanded, true, "the selected ball can be changed by reopening the search");
-  h.selectCatalogBall(label);
-  await h.click("Ver mi Top 3");
-  const canonical = golfBallCatalog.find((ball) => ball.brand === "Titleist" && ball.model === "Pro V1x Left Dash");
-  assert.ok(canonical);
-  assert.equal(h.sent[0].currentBallId, canonical.id);
 });
 
 test("No comparar changes only fitting input and never clears the saved current ball", async () => {
-  const h = wizard(null, null);
+  const catalogBall = golfBallCatalog.find((ball) => ball.active)!;
+  const savedCurrent: equipment.PlayerBall = {
+    id: "saved-current", userId: "flow-owner", catalogBallId: catalogBall.id,
+    ballBrand: catalogBall.brand, ballModel: catalogBall.model, generation: catalogBall.generation,
+    year: catalogBall.year, color: null, notes: null, isCurrent: true,
+    startedUsingAt: "2026-09-30T12:00:00.000Z", stoppedUsingAt: null,
+    createdAt: "2026-09-30T12:00:00.000Z", updatedAt: "2026-09-30T12:00:00.000Z",
+  };
+  const h = wizard(null, null, undefined, undefined, savedCurrent);
   for (let index = 0; index < 5; index++) await h.click("Siguiente →");
   h.focusSearch();
-  h.selectCatalogBall("Seleccionar Titleist Pro V1x Left Dash");
-  assert.equal(h.currentSelections.length, 1);
-  h.focusSearch();
-  h.selectCatalogBall("No comparar con una bola");
-  assert.equal(h.currentSelections.length, 1, "No comparar must not call profile persistence");
+  await h.selectCatalogBall("No comparar con una bola");
+  assert.equal(h.currentSelections.length, 0, "No comparar must not call profile persistence");
   await h.click("Ver mi Top 3");
   assert.equal(h.sent[0].currentBallId, null);
+  assert.match(h.text(), /Conservar mi bola actual/, "the saved profile ball is still available after opting out of comparison");
+});
+
+test("a failed local current-ball confirmation stays on Step 6 and never requests Top 3", async () => {
+  const h = wizard(null, null, undefined, undefined, null, "failed-save-session", { currentBallSave: "failure" });
+  for (let index = 0; index < 5; index++) await h.click("Siguiente →");
+  h.focusSearch();
+  await h.selectCatalogBall("Seleccionar Titleist Pro V1x Left Dash");
+  assert.match(h.text(), /Paso 6 de 6[\s\S]*No pudimos guardar tu bola actual\. Vuelve a intentar\./);
+  assert.equal(h.sent.length, 0);
+  assert.doesNotMatch(h.text(), /Tu mejor grupo de bolas|Tienes un fitting en progreso/);
 });
 
 test("Top 3 requires one explicit accessible choice among three recommendations and the current ball", async () => {
