@@ -180,6 +180,7 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
   const [flowSuccess, setFlowSuccess] = useState<EquipmentFlowSuccess | null>(null);
   const [deleteIntent, setDeleteIntent] = useState<EquipmentDeleteIntent | null>(null);
   const [fitOpen, setFitOpen] = useState(initialSection === "fitting");
+  const [fitSessionId, setFitSessionId] = useState<string | null>(() => initialSection === "fitting" ? savedFitId() : null);
   const [savedFitOpen, setSavedFitOpen] = useState(false);
   useViewScrollReset(`${Boolean(clubEditor)}:${wedgeCollectionOpen}:${Boolean(ballEditor)}:${Boolean(distanceEditor)}:${Boolean(flowSuccess)}:${fitOpen}:${savedFitOpen}`);
   const currentClubs = useMemo(() => profile?.clubs.filter((club) => club.isCurrent) || [], [profile]);
@@ -307,7 +308,10 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
         : current;
       return withChoice ? setLastBallFit(withChoice, summary, now) : null;
     });
-    if (saved) setFitOpen(false);
+    if (saved) {
+      setFitSessionId(null);
+      setFitOpen(false);
+    }
     return saved;
   }
 
@@ -320,7 +324,7 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
     }
   }
 
-  if (fitOpen) return <div className={styles.fullPageFlow} data-equipment-screen="ball-fit"><section className={styles.editorPage}><BallFitWizard userId={userId} accessToken={accessToken} defaultHandicap={defaultHandicap} defaultHandicapSource={defaultHandicapSource} profileDefaults={ballFitDefaults} savedInput={restoredFit?.input} currentBall={currentBall} catalog={ballCatalog.items} onCancel={() => setFitOpen(false)} onCurrentBallSelect={selectFitCurrentBall} onComplete={completeFit} onOpenPrivacy={onOpenPrivacy} /></section></div>;
+  if (fitOpen) return <div className={styles.fullPageFlow} data-equipment-screen="ball-fit"><section className={styles.editorPage}><BallFitWizard userId={userId} accessToken={accessToken} defaultHandicap={defaultHandicap} defaultHandicapSource={defaultHandicapSource} profileDefaults={ballFitDefaults} savedInput={restoredFit?.input} currentBall={currentBall} catalog={ballCatalog.items} sessionId={fitSessionId} onCancel={() => setFitOpen(false)} onCurrentBallSelect={selectFitCurrentBall} onComplete={completeFit} onOpenPrivacy={onOpenPrivacy} /></section></div>;
   if (savedFitOpen && profile.lastBallFit) return <div className={styles.fullPageFlow} data-equipment-screen="saved-ball-fit"><section className={styles.editorPage}><button type="button" className={styles.pageBack} onClick={() => setSavedFitOpen(false)}>← Volver a Mi Bolsa</button><div className={styles.wizardHeader}><div><div className="eyebrow">RESULTADO GUARDADO</div><h2>Tu mejor grupo de bolas</h2>{restoredFit && <p>{BALL_FIT_HANDICAP_LABELS[restoredFit.input.handicapSource || "UNKNOWN"]}{restoredFit.input.handicap === null ? "" : `: ${restoredFit.input.handicap}`}</p>}</div></div>{restoredFit ? <BallFitResults result={restoredFit.result} catalog={ballCatalog.items} current={restoredFit.input.currentBallId ? ballCatalog.items.find((ball) => ball.id === restoredFit.input.currentBallId) || null : null} /> : <SavedBallFitComparison summary={profile.lastBallFit} catalog={ballCatalog.items} currentBall={currentBall} />}</section></div>;
   if (wedgeCollectionOpen) return <div className={styles.fullPageFlow} data-equipment-screen="wedge-collection">
     <WedgeCollectionEditor userId={userId} catalog={clubCatalog.items} shafts={shaftCatalog.items} wedges={currentWedges} defaultHandedness={defaultHandedness} onBack={() => setWedgeCollectionOpen(false)} onSave={saveWedge} onDelete={deleteWedge} onManageDistance={(club) => { setWedgeCollectionOpen(false); setClubDetailId(club.id); }} />
@@ -423,7 +427,7 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
     </section>
 
     <section className={`card ${styles.section}`}>
-      <div className={styles.sectionHeader}><div><div className="eyebrow">BALL FIT</div><h2>{profile.lastBallFit ? "Último Ball Fit" : "The Backyard Ball Fit"}</h2><p>Top 3 basado en tus preferencias y los datos disponibles.</p></div><button type="button" className="primary" onClick={() => setFitOpen(true)}>{profile.lastBallFit ? "Actualizar fit" : "Hacer Ball Fit"}</button></div>
+      <div className={styles.sectionHeader}><div><div className="eyebrow">BALL FIT</div><h2>{profile.lastBallFit ? "Último Ball Fit" : "The Backyard Ball Fit"}</h2><p>Top 3 basado en tus preferencias y los datos disponibles.</p></div><button type="button" className="primary" onClick={() => { setFitSessionId(savedFitId()); setFitOpen(true); }}>{profile.lastBallFit ? "Actualizar fit" : "Hacer Ball Fit"}</button></div>
       {profile.lastBallFit ? <div className={styles.fitIntro}><h3>{new Date(profile.lastBallFit.completedAt).toLocaleDateString("es-MX")}</h3><p>Tu grupo recomendado y tus respuestas quedaron guardados en este perfil.</p><div className={styles.badgeRow}>{profile.lastBallFit.recommendations.map((recommendation, index) => { const ball = ballCatalog.items.find((item) => item.id === recommendation.catalogBallId); return <span className={styles.currentBadge} key={recommendation.catalogBallId}>#{index + 1} {ball ? `${ball.brand} ${ball.model}` : recommendation.brand && recommendation.model ? `${recommendation.brand} ${recommendation.model}` : "Modelo archivado"} · {recommendation.matchScore}%</span>; })}</div><div className={styles.inlineActions}><button type="button" className="secondary" onClick={() => setSavedFitOpen(true)}>Comparar</button><button type="button" className={styles.dangerButton} onClick={deleteBallFit}>Borrar resultado</button></div></div> : <div className={styles.emptyState}><b>Descubre tu mejor grupo de bolas</b><p>Un cuestionario opcional de 2–4 minutos. No es un fitting oficial de ninguna marca.</p><button type="button" className="textButton" onClick={() => { if (window.confirm("¿Borrar cualquier borrador de Ball Fit guardado en este dispositivo?")) removeBallFitDraft(localStorage, userId); }}>Borrar borrador guardado</button></div>}
       <p className={styles.disclaimer}>La información de equipo y bola es opcional y no se usa para publicidad. Puedes editarla o borrarla cuando quieras.</p>
     </section>

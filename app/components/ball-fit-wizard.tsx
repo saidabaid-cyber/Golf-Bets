@@ -124,7 +124,8 @@ function currentGameIndexLabel(source: BallFitHandicapSource | null | undefined,
   return "SIN ÍNDICE";
 }
 
-function catalogEditionLabel(ball: Pick<GolfBallCatalog, "generation" | "year">) {
+function catalogEditionLabel(ball: Pick<GolfBallCatalog, "generation" | "year"> | null | undefined) {
+  if (!ball) return "";
   const generation = ball.generation?.trim() || "";
   const year = ball.year === null ? "" : String(ball.year);
   if (generation && year && generation.toLocaleLowerCase("es-MX") === year.toLocaleLowerCase("es-MX")) return generation;
@@ -162,6 +163,7 @@ type BallFitWizardProps = {
   savedInput?: BallFitInput | null;
   currentBall: PlayerBall | null;
   catalog: readonly GolfBallCatalog[];
+  sessionId?: string | null;
   onCancel: () => void;
   onOpenPrivacy?: () => void;
   onCurrentBallSelect: (ball: GolfBallCatalog) => boolean | void;
@@ -178,7 +180,7 @@ type BallFitResultChoice =
   | { action: "RECOMMENDATION"; catalogBallId: string }
   | null;
 
-export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = true, defaultHandicap, defaultHandicapSource, profileDefaults, savedInput, currentBall, catalog, onCancel, onCurrentBallSelect, onComplete, onOpenPrivacy }: BallFitWizardProps) {
+export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = true, defaultHandicap, defaultHandicapSource, profileDefaults, savedInput, currentBall, catalog, sessionId = null, onCancel, onCurrentBallSelect, onComplete, onOpenPrivacy }: BallFitWizardProps) {
   const [input, setInput] = useState<BallFitInput>(() => savedInput?.userId === userId
     ? structuredClone(savedInput)
     : defaultInput(userId, defaultHandicap, currentBall?.catalogBallId || null, profileDefaults, defaultHandicapSource));
@@ -199,6 +201,8 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
   useViewScrollReset(`${step}:${draftChoicePending}:${hydrated}:${launchOpen}`);
   const [message, setMessage] = useState("");
   const requestRef = useRef<AbortController | null>(null);
+  const draftEntryInitializedRef = useRef<string | null>(null);
+  const draftEntryKey = `${userId}\u0000${sessionId || "external-entry"}`;
   const pinnedBallIds = useMemo(() => [...new Set([input.currentBallId, savedDraft?.input.currentBallId].filter((id): id is string => Boolean(id)))], [input.currentBallId, savedDraft?.input.currentBallId]);
   const ballSearch = useEquipmentCatalogSearch({ kind: "BALL", query: ballQuery, fallback: catalog, pinnedIds: pinnedBallIds });
   const displayCatalog = useMemo(() => [...new Map([...catalog, ...ballSearch.items, ...resultCatalog].map((ball) => [ball.id, ball])).values()], [ballSearch.items, catalog, resultCatalog]);
@@ -216,13 +220,31 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
     && input.handicap === defaultHandicap;
 
   useEffect(() => {
+    if (draftEntryInitializedRef.current === draftEntryKey) return;
+    draftEntryInitializedRef.current = draftEntryKey;
     const saved = loadBallFitDraft(localStorage, userId);
     if (saved) {
       setSavedDraft(saved);
-      setDraftChoicePending(true);
+      if (sessionId && saved.sessionId === sessionId) {
+        const selectedBall = saved.input.currentBallId
+          ? catalog.find((ball) => ball.id === saved.input.currentBallId) || null
+          : null;
+        setInput(saved.input);
+        setStep(Math.min(saved.step, 5));
+        setDraftChoicePending(false);
+        if (selectedBall) {
+          setExplicitCurrentBall(selectedBall);
+          setBallQuery(`${selectedBall.brand} ${selectedBall.model}`);
+        }
+      } else {
+        setDraftChoicePending(true);
+      }
+    } else {
+      setSavedDraft(null);
+      setDraftChoicePending(false);
     }
     setHydrated(true);
-  }, [userId]);
+  }, [catalog, draftEntryKey, sessionId, userId]);
 
   useEffect(() => () => requestRef.current?.abort(), []);
 
@@ -235,11 +257,11 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
 
   useEffect(() => {
     if (!hydrated || draftChoicePending) return;
-    const saved = saveBallFitDraft(localStorage, input, Math.min(step, 6));
+    const saved = saveBallFitDraft(localStorage, input, Math.min(step, 6), new Date().toISOString(), sessionId);
     setMessage((current) => saved
       ? current === DRAFT_SAVE_ERROR ? "" : current
       : DRAFT_SAVE_ERROR);
-  }, [draftChoicePending, hydrated, input, step]);
+  }, [draftChoicePending, hydrated, input, sessionId, step]);
 
   function resumeSavedDraft() {
     if (!savedDraft) return;
@@ -377,9 +399,9 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
       }
       setResult(fit.result);
       setResultCatalog(fit.catalog);
-      setResultChoice(currentBall || explicitCurrentBall ? { action: "KEEP_CURRENT" } : null);
+      setResultChoice(null);
       setStep(6);
-      if (!saveBallFitDraft(localStorage, input, 6)) setMessage(DRAFT_SAVE_ERROR);
+      if (!saveBallFitDraft(localStorage, input, 6, new Date().toISOString(), sessionId)) setMessage(DRAFT_SAVE_ERROR);
       else if (fit.result.recommendations.length === 0) setMessage(fit.result.warnings[0] || "Necesitamos más preferencias para comparar bolas.");
     } catch (error) {
       if (controller.signal.aborted) return;
@@ -392,7 +414,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
   }
 
   function saveAndClose() {
-    if (!saveBallFitDraft(localStorage, input, Math.min(step, 6))) {
+    if (!saveBallFitDraft(localStorage, input, Math.min(step, 6), new Date().toISOString(), sessionId)) {
       setMessage(DRAFT_SAVE_ERROR);
       return;
     }
@@ -405,6 +427,10 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
 
   function finish() {
     if (!result?.recommendations.length) return;
+    if (!resultChoice) {
+      setMessage("Elige una recomendación o conserva tu bola actual para terminar.");
+      return;
+    }
     const selectedRecommendation = resultChoice?.action === "RECOMMENDATION"
       ? displayCatalog.find((ball) => ball.id === resultChoice.catalogBallId) || null
       : null;
@@ -530,13 +556,13 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
         current={currentCatalogBall}
         selectedCatalogBallId={resultChoice?.action === "RECOMMENDATION" ? resultChoice.catalogBallId : null}
         currentBallCatalogId={storedCurrentCatalogBall?.id || currentBall?.catalogBallId || null}
-        onSelect={(catalogBallId) => setResultChoice({ action: "RECOMMENDATION", catalogBallId })}
+        onSelect={(catalogBallId) => { setMessage(""); setResultChoice({ action: "RECOMMENDATION", catalogBallId }); }}
         keepCurrent={currentBall || explicitCurrentBall ? {
           brand: explicitCurrentBall?.brand || currentBall!.ballBrand,
           model: explicitCurrentBall?.model || currentBall!.ballModel,
           catalogBall: storedCurrentCatalogBall,
           selected: resultChoice?.action === "KEEP_CURRENT",
-          onSelect: () => setResultChoice({ action: "KEEP_CURRENT" }),
+          onSelect: () => { setMessage(""); setResultChoice({ action: "KEEP_CURRENT" }); },
         } : undefined}
       />
     </div>}
@@ -547,7 +573,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
       <button type="button" className="secondary" onClick={previous} disabled={calculating || (!result && step === 0)}>← Anterior</button>
       {!result && step < 5 && <button type="button" className="primary" onClick={next} disabled={calculating}>Siguiente →</button>}
       {!result && step === 5 && <button type="button" className="primary" onClick={calculate} disabled={calculating}>{calculating ? "Evaluando…" : "Ver mi Top 3"}</button>}
-      {result && result.recommendations.length > 0 && <button type="button" className="primary" onClick={finish}>Guardar elección y terminar</button>}
+      {result && result.recommendations.length > 0 && <button type="button" className="primary" onClick={finish} disabled={!resultChoice}>Guardar elección y terminar</button>}
     </div>
   </div>;
 }
@@ -613,7 +639,7 @@ export function BallFitResults({ result, catalog, current, selectedCatalogBallId
       <input type="radio" name="ball-fit-result-choice" aria-label="Conservar mi bola actual" checked={keepCurrent.selected} onChange={keepCurrent.onSelect} />
       <span className={styles.resultSelectionIndicator} aria-hidden="true">{keepCurrent.selected ? "✓" : "○"}</span>
       <div className={styles.currentBallChoiceMedia}><CatalogProductMedia item={keepCurrent.catalogBall} fallback={<BallFitBallVisual />} /></div>
-      <div><small>TU BOLA ACTUAL</small><h3>{keepCurrent.brand} {keepCurrent.model}</h3><b>{keepCurrent.selected ? "✓ Conservar mi bola actual" : "Conservar mi bola actual"}</b></div>
+      <div><small>TU BOLA ACTUAL</small><h3>{keepCurrent.brand} {keepCurrent.model}</h3>{catalogEditionLabel(keepCurrent.catalogBall) && <p className={styles.subtle}>{catalogEditionLabel(keepCurrent.catalogBall)}</p>}<b>{keepCurrent.selected ? "✓ Conservar mi bola actual" : "Conservar mi bola actual"}</b></div>
     </div>}
 
     <div className={styles.comparisonTable} aria-label="Comparar bolas recomendadas"><table><thead><tr><th>Atributo</th><th>Actual</th>{result.recommendations.map((item) => <th key={item.catalogBallId}>{item.brand} {item.model}</th>)}</tr></thead><tbody>

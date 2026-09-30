@@ -34,6 +34,11 @@ import { WedgeCollectionEditor } from "./wedge-collection-editor";
 
 type Step = "clubs-prompt" | "clubs-build" | "ball-prompt" | "ball-select" | "fit-prompt" | "fit";
 
+type ActiveFitSession = {
+  id: string;
+  catalog: GolfBallCatalog[];
+};
+
 const ONBOARDING_CLUB_CATEGORIES = BAG_CATEGORY_SECTIONS.map((section) => ({
   category: section.categories[0],
   label: section.label,
@@ -76,6 +81,7 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defa
   const [clubEditorCategory, setClubEditorCategory] = useState<ClubCategory | null>(null);
   const [wedgeCollectionOpen, setWedgeCollectionOpen] = useState(false);
   const [ballEditorOpen, setBallEditorOpen] = useState(false);
+  const [activeFitSession, setActiveFitSession] = useState<ActiveFitSession | null>(null);
   useViewScrollReset(`${step}:${clubEditorOpen}:${wedgeCollectionOpen}:${ballEditorOpen}`);
   const currentClubs = useMemo(() => profile?.clubs.filter((club) => club.isCurrent) || [], [profile]);
   const currentWedges = useMemo(() => sortCurrentWedges(currentClubs), [currentClubs]);
@@ -86,6 +92,18 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defa
   const clubCatalog = useEquipmentCatalogSearch({ kind: "CLUB", query: "", pinnedIds: pinnedClubIds });
   const shaftCatalog = useEquipmentCatalogSearch({ kind: "SHAFT", query: "", pinnedIds: pinnedShaftIds });
   const ballCatalog = useEquipmentCatalogSearch({ kind: "BALL", query: "", pinnedIds: pinnedBallIds });
+
+  useEffect(() => {
+    if (step !== "fit" || activeFitSession || !ballCatalog.items.length) return;
+    setActiveFitSession({ id: fitId(), catalog: [...ballCatalog.items] });
+  }, [activeFitSession, ballCatalog.items, step]);
+
+  useEffect(() => {
+    if (!ballCatalog.items.length) return;
+    setActiveFitSession((current) => current
+      ? { ...current, catalog: [...ballCatalog.items] }
+      : current);
+  }, [ballCatalog.items]);
 
   useEffect(() => {
     if (!profile || initialized) return;
@@ -176,7 +194,11 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defa
         : current;
       return withChoice ? setLastBallFit(withChoice, summary, now) : null;
     });
-    if (saved) onComplete();
+    if (saved) {
+      setActiveFitSession(null);
+      setStep("fit-prompt");
+      onComplete();
+    }
     return saved;
   }
 
@@ -185,7 +207,7 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defa
     if (step === "clubs-build") { setStep("clubs-prompt"); return; }
     if (step === "ball-prompt") { setStep("fit-prompt"); return; }
     if (step === "ball-select") { setStep("fit-prompt"); return; }
-    if (step === "fit") { setStep("fit-prompt"); return; }
+    if (step === "fit") { setActiveFitSession(null); setStep("fit-prompt"); return; }
     setStep("clubs-build");
   }
 
@@ -252,10 +274,10 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defa
     {step === "fit-prompt" && <>
       <div className="eyebrow">THE BACKYARD BALL FIT</div><h1>Encuentra bolas que se ajusten a tu juego</h1><p>El fitting usa tu HCP, velocidad, vuelo, spin, control y sensación para sugerir un Top 3. Registrar tu bola actual es opcional.</p>
       <div className={styles.fitIntro}><h3>Tu mejor grupo, no una verdad absoluta</h3><p>Recibirás tres coincidencias con Match Score, motivos, atributos disponibles y una comparación clara. Cuando falte información aparecerá como “Sin dato”.</p></div>
-      <div className={styles.onboardingActions}><button type="button" className="primary" onClick={() => setStep("fit")}>Hacer Ball Fit</button><button type="button" className="secondary" onClick={() => { update((current) => setBallOnboardingStatus(current, "IN_PROGRESS")); setStep("ball-select"); }}>Registrar mi bola actual</button><button type="button" className={styles.onboardingSkip} onClick={onComplete}>Ahora no</button></div>
+      <div className={styles.onboardingActions}><button type="button" className="primary" onClick={() => { setActiveFitSession(ballCatalog.items.length ? { id: fitId(), catalog: [...ballCatalog.items] } : null); setStep("fit"); }}>Hacer Ball Fit</button><button type="button" className="secondary" onClick={() => { update((current) => setBallOnboardingStatus(current, "IN_PROGRESS")); setStep("ball-select"); }}>Registrar mi bola actual</button><button type="button" className={styles.onboardingSkip} onClick={onComplete}>Ahora no</button></div>
     </>}
 
-    {step === "fit" && (ballCatalog.items.length ? <BallFitWizard userId={userId} accessToken={accessToken} defaultHandicap={defaultHandicap} defaultHandicapSource={defaultHandicapSource} profileDefaults={ballFitDefaults} currentBall={currentBall} catalog={ballCatalog.items} onCancel={() => setStep("fit-prompt")} onCurrentBallSelect={selectFitCurrentBall} onComplete={completeFit} /> : <div className={ballCatalog.status === "loading" ? styles.loadingState : styles.errorState} role="status">{ballCatalog.status === "loading" ? "Cargando catálogo de bolas…" : <>No pudimos cargar el catálogo. Puedes continuar y hacer el fitting después. <button type="button" className="textButton" onClick={ballCatalog.retry}>Reintentar</button><button type="button" className="secondary" onClick={onComplete}>Después</button></>}</div>)}
+    {step === "fit" && (activeFitSession ? <BallFitWizard userId={userId} accessToken={accessToken} defaultHandicap={defaultHandicap} defaultHandicapSource={defaultHandicapSource} profileDefaults={ballFitDefaults} currentBall={currentBall} catalog={activeFitSession.catalog} sessionId={activeFitSession.id} onCancel={() => { setActiveFitSession(null); setStep("fit-prompt"); }} onCurrentBallSelect={selectFitCurrentBall} onComplete={completeFit} /> : <div className={ballCatalog.status === "loading" ? styles.loadingState : styles.errorState} role="status">{ballCatalog.status === "loading" ? "Cargando catálogo de bolas…" : <>No pudimos cargar el catálogo. Puedes continuar y hacer el fitting después. <button type="button" className="textButton" onClick={ballCatalog.retry}>Reintentar</button><button type="button" className="secondary" onClick={onComplete}>Después</button></>}</div>)}
 
     {step !== "fit" && step !== "clubs-build" && <div className={styles.onboardingFooter}><button type="button" className="textButton" onClick={previous}>← Anterior</button><button type="button" className={styles.onboardingSkip} onClick={skipEverything}>Saltar por ahora y entrar a The Backyard</button></div>}
     <p className={styles.syncStatus} data-state={status} role="status">{equipmentStatusLabel(status)}{message ? ` · ${message}` : ""}</p>

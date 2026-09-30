@@ -337,6 +337,8 @@ test("Ball Fit current-ball selection persists immediately through the profile p
   view.click("Actualizar fit");
   const wizard = view.nodes().find((node) => node.type === "ball-fit-wizard");
   assert.ok(wizard);
+  const sessionId = wizard.props.sessionId;
+  assert.equal(typeof sessionId, "string");
 
   const selected = view.ballCatalog.find((ball) => ball.id === "ball-tour");
   assert.ok(selected);
@@ -349,6 +351,10 @@ test("Ball Fit current-ball selection persists immediately through the profile p
   assert.equal(view.profile().balls.length, 2);
   assert.equal(view.profile().balls.find((ball) => ball.isCurrent)?.catalogBallId, "ball-tour");
   assert.equal(view.profile().balls.find((ball) => ball.id === view.currentBall.id)?.isCurrent, false);
+  view.render();
+  const stableWizard = view.nodes().find((node) => node.type === "ball-fit-wizard");
+  assert.ok(stableWizard, "profile keeps the active wizard mounted after current-ball persistence");
+  assert.equal(stableWizard.props.sessionId, sessionId, "profile preserves the active fitting session across equipment updates");
 });
 
 test("Ball Fit KEEP_CURRENT stores the fit and selection metadata without changing the current ball", () => {

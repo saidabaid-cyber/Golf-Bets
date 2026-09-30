@@ -45,8 +45,26 @@ test("el Ball Fit se guarda a mitad del flujo y reaparece tras cerrar la PWA", (
   const reopened = loadBallFitDraft(storage, "fit-owner");
   assert.ok(reopened);
   assert.equal(reopened.step, 4);
+  assert.equal(reopened.sessionId, null);
   assert.deepEqual(reopened.input.priorities, ["STOP_ON_GREEN", "LESS_DRIVER_SPIN"]);
   assert.equal(reopened.input.handicap, 8.4);
+});
+
+test("la sesión distingue el autosave actual de un borrador de una entrada anterior", () => {
+  const storage = new MemoryStorage();
+  const saved = saveBallFitDraft(storage, input, 5, "2026-09-30T14:00:00.000Z", "fit-session-current");
+  assert.ok(saved);
+  assert.equal(loadBallFitDraft(storage, "fit-owner")?.sessionId, "fit-session-current");
+
+  const legacy = normalizeBallFitDraft({
+    schemaVersion: BALL_FIT_DRAFT_VERSION,
+    userId: "fit-owner",
+    step: 5,
+    input,
+    updatedAt: "2026-09-30T13:00:00.000Z",
+  }, "fit-owner");
+  assert.ok(legacy);
+  assert.equal(legacy.sessionId, null, "drafts previos siguen siendo válidos y se tratan como otra entrada");
 });
 
 test("un borrador de fitting nunca cruza entre cuentas", () => {

@@ -7,6 +7,7 @@ export type BallFitDraft = {
   userId: string;
   step: number;
   input: BallFitInput;
+  sessionId: string | null;
   updatedAt: string;
 };
 
@@ -18,6 +19,10 @@ function userId(value: unknown) {
 
 function validDate(value: unknown) {
   return typeof value === "string" && !Number.isNaN(Date.parse(value)) ? value : null;
+}
+
+function sessionId(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim().slice(0, 240) : null;
 }
 
 export function ballFitDraftStorageKey(value: string): string | null {
@@ -34,7 +39,7 @@ export function normalizeBallFitDraft(value: unknown, expectedUserId: string): B
   const updatedAt = validDate(source.updatedAt);
   const step = typeof source.step === "number" && Number.isInteger(source.step) && source.step >= 0 && source.step <= 6 ? source.step : null;
   if (source.schemaVersion !== BALL_FIT_DRAFT_VERSION || !expected || owner !== expected || input?.userId !== expected || !updatedAt || step === null) return null;
-  return { schemaVersion: BALL_FIT_DRAFT_VERSION, userId: expected, step, input, updatedAt };
+  return { schemaVersion: BALL_FIT_DRAFT_VERSION, userId: expected, step, input, sessionId: sessionId(source.sessionId), updatedAt };
 }
 
 export function loadBallFitDraft(storage: StorageLike, expectedUserId: string): BallFitDraft | null {
@@ -48,13 +53,13 @@ export function loadBallFitDraft(storage: StorageLike, expectedUserId: string): 
   }
 }
 
-export function saveBallFitDraft(storage: StorageLike, inputValue: unknown, step: number, now = new Date().toISOString()): BallFitDraft | null {
+export function saveBallFitDraft(storage: StorageLike, inputValue: unknown, step: number, now = new Date().toISOString(), sessionIdValue?: string | null): BallFitDraft | null {
   const input = normalizeBallFitInput(inputValue);
   const key = input ? ballFitDraftStorageKey(input.userId) : null;
   const updatedAt = validDate(now);
   const normalizedStep = Number.isInteger(step) ? Math.max(0, Math.min(6, step)) : null;
   if (!input || !key || !updatedAt || normalizedStep === null) return null;
-  const draft: BallFitDraft = { schemaVersion: BALL_FIT_DRAFT_VERSION, userId: input.userId, step: normalizedStep, input, updatedAt };
+  const draft: BallFitDraft = { schemaVersion: BALL_FIT_DRAFT_VERSION, userId: input.userId, step: normalizedStep, input, sessionId: sessionId(sessionIdValue), updatedAt };
   try {
     storage.setItem(key, JSON.stringify(draft));
     return draft;

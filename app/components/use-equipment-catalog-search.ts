@@ -45,6 +45,10 @@ function normalizeResponseItems(kind: EquipmentCatalogKind, value: unknown): Cat
   return normalizeGolfShaftCatalogEntries(value);
 }
 
+function mergeCatalogItems(current: readonly CatalogItem[], incoming: readonly CatalogItem[]) {
+  return [...new Map([...current, ...incoming].map((item) => [item.id, item])).values()];
+}
+
 type CatalogPage = {
   items: CatalogItem[];
   hasMore: boolean;
@@ -138,15 +142,21 @@ export function useEquipmentCatalogSearch({
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
   const requestGenerationRef = useRef(0);
+  const requestScopeRef = useRef<string | null>(null);
   const loadMoreControllerRef = useRef<AbortController | null>(null);
+  const requestScope = `${kind}\u0000${query}\u0000${category || ""}\u0000${shaftUsage || ""}\u0000${includeArchived === undefined ? "default" : String(includeArchived)}`;
 
   useEffect(() => {
+    const preserveCurrentItems = requestScopeRef.current === requestScope;
+    requestScopeRef.current = requestScope;
     const generation = requestGenerationRef.current + 1;
     requestGenerationRef.current = generation;
     loadMoreControllerRef.current?.abort();
     loadMoreControllerRef.current = null;
     const controller = new AbortController();
-    setItems(local);
+    setItems((current) => preserveCurrentItems && current.length
+      ? mergeCatalogItems(current, local)
+      : local);
     setHasMore(false);
     setNextCursor(null);
     const timer = window.setTimeout(async () => {
@@ -154,14 +164,18 @@ export function useEquipmentCatalogSearch({
       try {
         const page = await fetchCatalogPage({ kind, query, category, shaftUsage, pinnedKey, includeArchived, signal: controller.signal });
         if (controller.signal.aborted || requestGenerationRef.current !== generation) return;
-        setItems(page.items);
+        setItems((current) => preserveCurrentItems
+          ? mergeCatalogItems(current, page.items)
+          : page.items);
         setHasMore(page.hasMore);
         setNextCursor(page.nextCursor);
         setStatus("success");
       } catch (error) {
         if (controller.signal.aborted || requestGenerationRef.current !== generation) return;
         void error;
-        setItems(local);
+        setItems((current) => preserveCurrentItems && current.length
+          ? mergeCatalogItems(current, local)
+          : local);
         setStatus("error");
       }
     }, 250);
@@ -172,7 +186,7 @@ export function useEquipmentCatalogSearch({
       loadMoreControllerRef.current = null;
       if (requestGenerationRef.current === generation) requestGenerationRef.current += 1;
     };
-  }, [category, includeArchived, kind, local, pinnedKey, query, revision, shaftUsage]);
+  }, [category, includeArchived, kind, local, pinnedKey, query, requestScope, revision, shaftUsage]);
 
   const loadMore = useCallback(async () => {
     if (!hasMore || !nextCursor || status === "loading") return;
@@ -184,7 +198,7 @@ export function useEquipmentCatalogSearch({
     try {
       const page = await fetchCatalogPage({ kind, query, category, shaftUsage, pinnedKey, includeArchived, cursor: nextCursor, signal: controller.signal });
       if (controller.signal.aborted || requestGenerationRef.current !== generation) return;
-      setItems((current) => [...new Map([...current, ...page.items].map((item) => [item.id, item])).values()]);
+      setItems((current) => mergeCatalogItems(current, page.items));
       setHasMore(page.hasMore);
       setNextCursor(page.nextCursor);
       setStatus("success");
