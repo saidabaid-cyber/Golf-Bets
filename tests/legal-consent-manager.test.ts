@@ -30,3 +30,9 @@ test("Legal y privacidad usa una pantalla secundaria y mantiene finalidades sepa
   assert.match(manager, /globalLearningEnabled/);
   assert.match(manager, /personalMemoryEnabled/);
 });
+
+test("Legal y privacidad uses the same exit at the top and after its long content", () => {
+  const manager = readFileSync("app/components/legal-consent-manager.tsx", "utf8");
+  assert.match(manager, /<button type="button" className="secondary pageBack" onClick=\{onBack\}>\u2190 Legal y privacidad<\/button>/);
+  assert.match(manager, /<BottomBackAction label="\u2190 Legal y privacidad" onBack=\{onBack\} \/>/);
+});

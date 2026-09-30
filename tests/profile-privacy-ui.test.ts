@@ -20,9 +20,22 @@ test("Perfil presenta resumen compacto y mueve los inputs a Editar perfil", () =
   assert.match(profile, /Nombre\(s\)/);
   assert.match(profile, /Apellidos/);
   assert.match(profile, /Username/);
-  assert.match(profile, /HandicapSourceChoices/);
+  assert.equal((profile.match(/<HandicapSourceChoices\b/g) || []).length, 1);
+  assert.match(profile, /id="profile-index-source"><HandicapSourceChoices control=\{indexControl\}/);
+  assert.doesNotMatch(profile, /id="profile-edit-handicap"/);
+  assert.match(profile, /<ProfileImagePicker value=\{avatarUrl\} onChange=\{setAvatarUrl\}/);
   assert.doesNotMatch(profile, /value=\{handicap\}/);
   assert.match(css, /\.profileMobileStack\{display:grid/);
+});
+
+test("Perfil raíz elimina la tarjeta Avatar independiente sin quitar el editor de foto", () => {
+  assert.doesNotMatch(profile, /profileAvatarSummary|profileAvatarMini/);
+  assert.doesNotMatch(profile, /<span>FOTO \/ AVATAR<\/span>/);
+  assert.doesNotMatch(css, /\.profileAvatar(?:Summary|Mini)/);
+  assert.match(
+    profile,
+    /<section className="card profileEditCard"><h2>Foto \/ Avatar<\/h2><ProfileImagePicker value=\{avatarUrl\} onChange=\{setAvatarUrl\}/,
+  );
 });
 
 test("Sin foto, Emoji, Avatar y Foto son opciones principales equivalentes", () => {
@@ -38,7 +51,7 @@ test("Sin foto, Emoji, Avatar y Foto son opciones principales equivalentes", () 
 test("Perfil deja Equipo actual como único acceso a Mi Bolsa y conserva Configuración", () => {
   assert.match(profile, /aria-label="Secciones de Mi Perfil"/);
   assert.match(profile, /<EquipmentProfileSummary[^>]*onOpen=\{openEquipmentRoot\}/);
-  assert.match(profile, /function openEquipmentRoot\(\) \{\s*setCompletionEquipment\("equipment"\);\s*onOpenEquipment\(\);\s*\}/);
+  assert.match(profile, /function openEquipmentRoot\(\) \{\s*setCompletionEquipment\("equipment"\);\s*setEquipmentFlowNested\(false\);\s*onOpenEquipment\(\);\s*\}/);
   assert.doesNotMatch(profile, /<b>Mi Bolsa<\/b>/);
   assert.match(profile, /<b>Configuración<\/b><small>Preferencias, cuenta, notificaciones, privacidad y permisos<\/small>/);
   assert.doesNotMatch(profile, /profileNavigationCard"[^>]*><span><b>Preferencias<\/b>/);

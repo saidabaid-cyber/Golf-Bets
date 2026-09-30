@@ -96,7 +96,7 @@ function fitInput(currentBallId = "ball-current"): ballFitting.BallFitInput {
   };
 }
 
-function harness({ empty = false, fitOnly = false }: { empty?: boolean; fitOnly?: boolean } = {}) {
+function harness({ empty = false, fitOnly = false, flowDepthChanges }: { empty?: boolean; fitOnly?: boolean; flowDepthChanges?: boolean[] } = {}) {
   const slots: unknown[] = [];
   let cursor = 0;
   let summaryOpenCount = 0;
@@ -227,6 +227,9 @@ function harness({ empty = false, fitOnly = false }: { empty?: boolean; fitOnly?
         GolfBallVisual: (props: Record<string, unknown>) => ({ type: "ball-visual", props }),
       };
       if (name === "./equipment-category-assets") return { EQUIPMENT_CATEGORY_ASSETS: equipmentAssets };
+      if (name === "./bottom-back-action") return {
+        BottomBackAction: (props: Record<string, unknown>) => ({ type: "bottom-back-action", props }),
+      };
       if (name.endsWith("/equipment-bag-management")) return {
         BAG_CATEGORY_SECTIONS: bagSections,
         bagCategoryManagement: (clubs: Array<{ category: string }>) => {
@@ -250,7 +253,12 @@ function harness({ empty = false, fitOnly = false }: { empty?: boolean; fitOnly?
   let tree: Node;
   function render() {
     cursor = 0;
-    tree = exports.EquipmentProfilePanel({ userId: "owner", accessToken: "token", defaultHandicap: null });
+    tree = exports.EquipmentProfilePanel({
+      userId: "owner",
+      accessToken: "token",
+      defaultHandicap: null,
+      onFlowDepthChange: (nested: boolean) => flowDepthChanges?.push(nested),
+    });
     return tree;
   }
   function click(label: string, exact = true) {
@@ -382,6 +390,52 @@ test("Actualizar fit opens the wizard and a legacy saved fit always has a useful
   assert.match(compareView.text(), /91% coincidencia/);
   assert.match(compareView.text(), /Trayectoria más baja guardada/);
   assert.match(compareView.text(), /Menor spin guardado/);
+});
+
+test("saved fit and club detail bottom exits reuse their top handler and return to Mi Bolsa", () => {
+  const savedFit = harness();
+  savedFit.click("Comparar");
+  let top = savedFit.nodes().find((node) => node.type === "button" && text(node.props.children).trim() === "← Volver a Mi Bolsa");
+  let bottom = savedFit.nodes().find((node) => node.type === "bottom-back-action");
+  assert.ok(top); assert.ok(bottom);
+  assert.equal(bottom.props.label, "← Volver a Mi Bolsa");
+  assert.equal(top.props.onClick, bottom.props.onBack);
+  (bottom.props.onBack as () => void)();
+  savedFit.render();
+  assert.ok(!savedFit.nodes().some((node) => node.props["data-equipment-screen"] === "saved-ball-fit"));
+  assert.match(savedFit.text(), /MI BOLSA\s+Equipo actual/);
+
+  const clubDetail = harness();
+  const club = clubDetail.nodes().find((node) => node.type === "button" && node.props["aria-label"] === "Editar Ping G430");
+  assert.ok(club);
+  (club.props.onClick as () => void)();
+  clubDetail.render();
+  top = clubDetail.nodes().find((node) => node.type === "button" && text(node.props.children).trim() === "← Volver a Mi Bolsa");
+  bottom = clubDetail.nodes().find((node) => node.type === "bottom-back-action");
+  assert.ok(top); assert.ok(bottom);
+  assert.equal(top.props.onClick, bottom.props.onBack);
+  (bottom.props.onBack as () => void)();
+  clubDetail.render();
+  assert.ok(!clubDetail.nodes().some((node) => node.props["data-equipment-screen"] === "club-detail"));
+  assert.match(clubDetail.text(), /MI BOLSA\s+Equipo actual/);
+});
+
+test("Mi Bolsa reports nested flow depth while a detail is open and clears it on return", () => {
+  const flowDepthChanges: boolean[] = [];
+  const view = harness({ flowDepthChanges });
+  assert.equal(flowDepthChanges.at(-1), false);
+
+  const club = view.nodes().find((node) => node.type === "button" && node.props["aria-label"] === "Editar Ping G430");
+  assert.ok(club);
+  (club.props.onClick as () => void)();
+  view.render();
+  assert.equal(flowDepthChanges.at(-1), true);
+
+  const bottom = view.nodes().find((node) => node.type === "bottom-back-action");
+  assert.ok(bottom);
+  (bottom.props.onBack as () => void)();
+  view.render();
+  assert.equal(flowDepthChanges.at(-1), false);
 });
 
 test("Ball Fit current-ball selection persists immediately through the profile parent", () => {

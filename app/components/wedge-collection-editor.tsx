@@ -12,6 +12,7 @@ import type { ProfileHandedness } from "../../lib/equipment-editor-selection";
 import { CatalogProductMedia } from "./catalog-product-media";
 import { EQUIPMENT_CATEGORY_ASSETS } from "./equipment-category-assets";
 import { ClubEditor } from "./equipment-editors";
+import { BottomBackAction } from "./bottom-back-action";
 import styles from "./wedge-collection-editor.module.css";
 
 type WedgeCollectionEditorProps = {
@@ -61,6 +62,7 @@ export function WedgeCollectionEditor({
   const [deleteTarget, setDeleteTarget] = useState<PlayerClub | null>(null);
   const [statusMessage, setStatusMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [editorDirty, setEditorDirty] = useState(false);
   const editorRegionRef = useRef<HTMLElement>(null);
   const deleteRegionRef = useRef<HTMLElement>(null);
   const addButtonRef = useRef<HTMLButtonElement>(null);
@@ -101,7 +103,17 @@ export function WedgeCollectionEditor({
     setErrorMessage("");
     setStatusMessage("");
     setDeleteTarget(null);
+    setEditorDirty(false);
     setSelection(next);
+  }
+
+  function handleBack() {
+    if ((selection || deleteTarget) && editorDirty && !window.confirm("Tienes cambios sin guardar. ¿Salir sin guardarlos?")) return;
+    if (selection || deleteTarget) {
+      chooseEditor(null);
+      return;
+    }
+    onBack();
   }
 
   function saveWedge(club: PlayerClub) {
@@ -112,6 +124,7 @@ export function WedgeCollectionEditor({
     }
     setErrorMessage("");
     setStatusMessage(`${wedgeName(club, catalogById)} guardado.`);
+    setEditorDirty(false);
     setSelection(null);
     return saved;
   }
@@ -130,14 +143,16 @@ export function WedgeCollectionEditor({
     setSelection(null);
   }
 
+  const returnLabel = `← ${selection || deleteTarget ? "Volver a tus wedges" : backLabel}`;
+
   return <section className={styles.shell} aria-labelledby={titleId}>
     <header className={styles.header}>
       <button
         type="button"
         className={styles.backButton}
-        onClick={selection || deleteTarget ? () => chooseEditor(null) : onBack}
+        onClick={handleBack}
       >
-        ← {selection || deleteTarget ? "Volver a tus wedges" : backLabel}
+        {returnLabel}
       </button>
       <h1 id={titleId}>Agregar Wedges</h1>
       <p>Marca + modelo es suficiente. Las especificaciones son opcionales.</p>
@@ -236,7 +251,9 @@ export function WedgeCollectionEditor({
         onSave={saveWedge}
         onRequestDelete={selection === "new" ? undefined : () => setDeleteTarget(selection)}
         onManageDistance={selection === "new" || !onManageDistance ? undefined : () => onManageDistance(selection)}
+        onDirtyChange={setEditorDirty}
       />
     </section>}
+    <BottomBackAction label={returnLabel} onBack={handleBack} />
   </section>;
 }

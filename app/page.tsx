@@ -108,6 +108,7 @@ import { GroupBetTemplateEditor } from "./components/group-bet-template-editor";
 import { GroupRoundSelector } from "./components/group-round-selector";
 import { AppBottomNav } from "./components/app-bottom-nav";
 import { ProfileNavigationButton } from "./components/profile-navigation-button";
+import { BottomBackAction } from "./components/bottom-back-action";
 import { canResumeActiveRound, normalizeRoundResumeContext, persistRoundResumeContext, readRoundResumeContext, type RoundResumeContext } from "../lib/active-round-navigation";
 import { captureCompletedRoundIndex } from "../lib/backyard-index-auto-capture";
 import { readIndexPreference } from "../lib/backyard-index-preferences";
@@ -292,6 +293,15 @@ function playedHoleSpanLabel(holes: readonly number[]) {
 
 function mergeDefaultCourses(saved: Course[] | null | undefined) {
   return mergeCoursesPreservingEdits(defaultCourses, saved).map(withDefaultLaVistaRules);
+}
+
+function courseEditorFingerprint(course: Course) {
+  return JSON.stringify({
+    id: course.id,
+    name: course.name,
+    builtIn: course.builtIn,
+    holes: course.holes.map(({ number, par, strokeIndex }) => ({ number, par, strokeIndex })),
+  });
 }
 
 const emptyExpenses: Expense = { caddie: 0, food: 0, drinks: 0, greenFee: 0, cartRental: 0, other: 0 };
@@ -490,6 +500,7 @@ function GolfBetsApp() {
   const [courseSelectionError, setCourseSelectionError] = useState(false);
   const [, setShowBetSetupErrors] = useState(false);
   const [courseDraft, setCourseDraft] = useState<Course>(laVista);
+  const [courseEditorInitialFingerprint, setCourseEditorInitialFingerprint] = useState(() => courseEditorFingerprint(laVista));
   const [courseEditorSelectOnSave, setCourseEditorSelectOnSave] = useState(false);
   const [startHole, setStartHole] = useState(1);
   const [roundHoles, setRoundHoles] = useState<9 | 18>(18);
@@ -2639,13 +2650,20 @@ function GolfBetsApp() {
     finally { replacingRound.current = false; setRoundLifecycleBusy(false); }
   }
 
+  function openCourseEditor(nextCourse: Course, selectOnSave: boolean) {
+    const draft = structuredClone(nextCourse);
+    setCourseEditorSelectOnSave(selectOnSave);
+    setCourseDraft(draft);
+    setCourseEditorInitialFingerprint(courseEditorFingerprint(draft));
+    setTab("courses");
+  }
+
   function startNewCourse() {
     const fresh: Course = {
       id: makeId(), name: "Campo nuevo", teeName: "General", builtIn: false,
       holes: Array.from({ length: 18 }, (_, i) => ({ number: i + 1, par: 4, strokeIndex: i + 1 })),
     };
-    setCourseEditorSelectOnSave(tab === "setup");
-    setCourseDraft(fresh); setTab("courses");
+    openCourseEditor(fresh, tab === "setup");
   }
 
   function selectRoundCourse(nextCourse: Course, returnToSetup = false, suppliedCards?: Course[]) {
@@ -2700,9 +2718,7 @@ function GolfBetsApp() {
   }
 
   function editCourseFromLibrary(nextCourse: Course) {
-    setCourseEditorSelectOnSave(false);
-    setCourseDraft(structuredClone(nextCourse));
-    setTab("courses");
+    openCourseEditor(nextCourse, false);
   }
 
   function parse18Numbers(text: string) {
@@ -2811,6 +2827,7 @@ function GolfBetsApp() {
     if (!original || !window.confirm("¿Restablecer la configuración original? Se perderán las ediciones actuales del campo, no las rondas históricas.")) return;
     const restored = structuredClone(original);
     setCourseDraft(restored);
+    setCourseEditorInitialFingerprint(courseEditorFingerprint(restored));
     setCourses((current) => [restored, ...current.filter((candidate) => candidate.id !== restored.id)]);
     if (courseEditorSelectOnSave) setCourse(restored);
   }
@@ -3612,6 +3629,8 @@ function GolfBetsApp() {
     else setTab(target);
   };
   const handlePageBack = () => {
+    if (tab === "courses" && courseEditorFingerprint(courseDraft) !== courseEditorInitialFingerprint
+      && !window.confirm("Tienes cambios sin guardar. ¿Salir sin guardarlos?")) return;
     if (tab === "setup" && editingRound && betConfigurationIssues.length) {
       setEditingRound(false);
       setShowBetSetupErrors(true);
@@ -3621,6 +3640,7 @@ function GolfBetsApp() {
     }
     goBack();
   };
+  const showPageBack = !(["welcome", "more", "play", "groups", "social", "profile", "account", "round"] as AppTab[]).includes(tab) && tab !== "rules";
   const availableHistoryYears = useMemo(() => historyYears(history), [history]);
   const filteredHistory = useMemo(() => filterHistory(history, historyYear, historyMonth), [history, historyYear, historyMonth]);
   const personalModesActive = personalBets.some((bet) => bet.enabled !== false)
@@ -3679,7 +3699,7 @@ function GolfBetsApp() {
       onOpenRules={openRulesForRound}
     />}
 
-    {!(["welcome", "more", "play", "groups", "social", "profile", "round"] as AppTab[]).includes(tab) && tab !== "rules" && <button className="secondary pageBack" onClick={handlePageBack}>← Regresar</button>}
+    {showPageBack && <button className="secondary pageBack" onClick={handlePageBack}>← Regresar</button>}
 
     {tab === "more" && <MoreHub
       adminAccess={adminAccess}
@@ -3795,7 +3815,7 @@ function GolfBetsApp() {
     {tab === "groups" && <GroupBuilder frequentPlayers={frequentPlayers} frequentGroups={frequentGroups} onBack={() => setTab("welcome")} onPlay={startRoundWithGeneratedGroup} onSaveFrequentGroup={saveGeneratedFrequentGroup} onCreateFrequentGroup={beginCreateFrequentGroup} onStartFrequentGroup={loadFrequentGroup} onEditFrequentGroup={beginEditFrequentGroup} onDeleteFrequentGroup={setFrequentGroupToDelete} />}
 
     {tab === "profile" && <ProfileAccountPanel key={`profile:${identity.userId}`} view="profile" indexControl={indexControl} ghinControl={ghinControl} rootNavigationKey={profileRootRevision} history={history} focusSection={profileFocus} completionTarget={profileCompletionTarget} onCompletionTargetHandled={() => setProfileCompletionTarget(null)} highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} golfInsights={betaGolfInsights} statisticsResetAt={statisticsResetAt} onStatisticsReset={applyStatisticsReset} onOpenStats={() => setTab("stats")} onOpenAccount={() => openAccountSettings()} onOpenAccountSection={openAccountSettings} onOpenPrivacy={() => { setOpenAiPrivacySettings(true); setTab("account"); }} onOpenEquipment={() => setProfileFocus("equipment")} onBackToProfile={openProfileRoot} />}
-    {tab === "account" && <ProfileAccountPanel key={`${identity.userId}:account:${accountSection}`} view="account" initialAccountSection={accountSection} openAiPrivacySettings={openAiPrivacySettings} onAiPrivacyOpened={() => setOpenAiPrivacySettings(false)} indexControl={indexControl} ghinControl={ghinControl} rootNavigationKey={profileRootRevision} highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} golfInsights={betaGolfInsights} statisticsResetAt={statisticsResetAt} onStatisticsReset={applyStatisticsReset} onOpenStats={() => setTab("stats")} onOpenEquipment={() => { setProfileFocus("equipment"); setTab("profile"); }} onBackToProfile={openProfileRoot} />}
+    {tab === "account" && <ProfileAccountPanel key={`${identity.userId}:account:${accountSection}`} view="account" initialAccountSection={accountSection} openAiPrivacySettings={openAiPrivacySettings} onAiPrivacyOpened={() => setOpenAiPrivacySettings(false)} indexControl={indexControl} ghinControl={ghinControl} rootNavigationKey={profileRootRevision} highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} golfInsights={betaGolfInsights} statisticsResetAt={statisticsResetAt} onStatisticsReset={applyStatisticsReset} onOpenStats={() => setTab("stats")} onOpenEquipment={() => { setProfileFocus("equipment"); setTab("profile"); }} onBackToProfile={openProfileRoot} onPageBack={handlePageBack} />}
 
     {tab === "setup" && <RoundSetupWizard key={`${identity.userId}:${roundId}`} storageKey={`backyard-setup-step-v1:${identity.userId}:${roundId}`} issues={roundSetupPreflight} editing={editingRound} scoreOnly={roundPresentation.playMode === "score_only"} initialStep={roundSetupInitialStep}
       onSave={() => flushLocalState.current?.()}
@@ -3862,7 +3882,7 @@ function GolfBetsApp() {
             <div><label>Hoyos a jugar</label><select value={roundHoles} onChange={(event) => { const next = Number(event.target.value) as 9 | 18; confirmRoundChange("Cambiar la duración excluye del cálculo los hoyos fuera de la nueva vuelta, sin borrar sus scores.", () => { setRoundHoles(next); setSupplementalBets((current) => supplementalBetsForRoundHoles(current, next)); setCurrentIndex(0); }); }}>{course.holes.length >= 18 && <option value={18}>18 hoyos</option>}<option value={9}>9 hoyos</option></select></div>
           </div>
           <StartHoleSelector holes={course.holes.map((hole) => hole.number)} value={startHole} onChange={(next) => confirmRoundChange("Cambiar la salida actualiza el orden jugado, Nassau y los segmentos de Foursome.", () => { setStartHole(next); setSegments(segmentDefinitions(playOrderForHoles(course.holes.map((hole) => hole.number), next).slice(0, roundHoles), bets.foursome.segmentSize)); setCurrentIndex(0); })} />
-          <div className="courseMeta"><span>{course.holes.length} hoyos configurados</span><span>{teeOptions.length} tee{teeOptions.length === 1 ? "" : "s"} disponible{teeOptions.length === 1 ? "" : "s"}</span>{course.updatedAt && <span>Última actualización: {course.updatedAt}</span>}<button onClick={() => { setCourseEditorSelectOnSave(true); setCourseDraft(withDefaultLaVistaRules(course)); setTab("courses"); }}>{course.name === "La Vista Temporal" ? "Editar campo temporal" : "Editar campo"}</button>{isLaVistaCourse(course.name) && <button onClick={() => { setRulesCourseContext(course.name); setTab("rules"); }}>Ver Reglas Locales</button>}</div>
+          <div className="courseMeta"><span>{course.holes.length} hoyos configurados</span><span>{teeOptions.length} tee{teeOptions.length === 1 ? "" : "s"} disponible{teeOptions.length === 1 ? "" : "s"}</span>{course.updatedAt && <span>Última actualización: {course.updatedAt}</span>}<button onClick={() => openCourseEditor(withDefaultLaVistaRules(course), true)}>{course.name === "La Vista Temporal" ? "Editar campo temporal" : "Editar campo"}</button>{isLaVistaCourse(course.name) && <button onClick={() => { setRulesCourseContext(course.name); setTab("rules"); }}>Ver Reglas Locales</button>}</div>
           <CourseOperationsNotice courseId={course.catalogCourseId ?? course.id} frozenAt={roundStartedAt} accessToken={identity.accessToken} />
         </>}
       </section>
@@ -4366,11 +4386,12 @@ function GolfBetsApp() {
       <section className="card"><div className="sectionTitle"><div><h2>Carga rápida</h2><p>Pega 18 ventajas/SI. Par es opcional si ya está correcto en la tabla.</p></div><button className="textButton" onClick={applyQuickCourseData}>Aplicar</button></div><div className="grid2"><div><label>Ventaja / SI (18 números)</label><textarea rows={3} placeholder="5, 17, 7, 1..." value={quickStroke} onChange={(e) => setQuickStroke(e.target.value)} /></div><div><label>Par (opcional, 18 números)</label><textarea rows={3} placeholder="4, 3, 4, 5..." value={quickPars} onChange={(e) => setQuickPars(e.target.value)} /></div></div></section>
       <section className="card"><div className="courseGrid simpleCourseGrid"><div className="courseGridHead">Hoyo</div><div className="courseGridHead">Par</div><div className="courseGridHead">Ventaja</div>{courseDraft.holes.map((h) => <div className="courseGridRow" key={h.number}><b>{h.number}</b><NumericCaptureInput min={3} max={6} value={h.par} emptyWhenZero={false} onValueChange={(par) => setCourseDraft({ ...courseDraft, holes: courseDraft.holes.map((x) => x.number === h.number ? { ...x, par: par ?? h.par } : x) })} /><NumericCaptureInput min={1} max={18} value={h.strokeIndex} emptyWhenZero={false} onValueChange={(strokeIndex) => setCourseDraft({ ...courseDraft, holes: courseDraft.holes.map((x) => x.number === h.number ? { ...x, strokeIndex: strokeIndex ?? h.strokeIndex } : x) })} /></div>)}</div></section>
       <div className="courseDanger">{courseDraft.name === "La Vista Temporal" && <button className="secondary" onClick={restoreOriginalCourse}>Restablecer configuración original</button>}{!courseDraft.builtIn && <button className="removeCourse" onClick={deleteCourseDraft}>Eliminar campo personalizado</button>}</div>
-      <div className="roundActions"><button className="secondary big" onClick={goBack}>← Regresar</button><button className="primary big" onClick={saveCourseDraft}>Guardar campo</button></div>
+      <div className="roundActions"><button className="secondary big" onClick={handlePageBack}>← Regresar</button><button className="primary big" onClick={saveCourseDraft}>Guardar campo</button></div>
     </>}
 
     {(rulesVisited || tab === "rules") && <div hidden={tab !== "rules"}><RulesPanel active={tab === "rules"} courseName={rulesCourseContext} localRules={isLaVistaCourse(rulesCourseContext) ? course.localRules : undefined} localRulesUpdatedAt={isLaVistaCourse(rulesCourseContext) ? course.localRulesUpdatedAt : undefined} onBack={goBack} /></div>}
     {tab === "pollaLive" && <PollaLivePanel courses={courses} privateRound={{ active: draftAvailable && players.length > 0, players }} />}
+    {showPageBack && tab !== "courses" && <BottomBackAction label="← Regresar" onBack={handlePageBack} />}
 
     {groupRoundSelection && <GroupRoundSelector group={groupRoundSelection} onCancel={() => setGroupRoundSelection(null)} onConfirm={(selectedMemberIds) => confirmFrequentGroupRoundSelection(groupRoundSelection, selectedMemberIds)} />}
 

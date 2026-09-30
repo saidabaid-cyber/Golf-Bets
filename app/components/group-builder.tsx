@@ -14,6 +14,7 @@ import {
   type GroupPlayer,
   type GroupTarget,
 } from "../../lib/group-generator";
+import { BottomBackAction } from "./bottom-back-action";
 import { NumericCaptureInput } from "./numeric-capture-input";
 import { ModalCloseButton } from "./modal-shell";
 import { GroupInvitationInbox } from "./group-invitations";
@@ -131,6 +132,11 @@ export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, 
     setMessage("");
   }
 
+  function closeSaveAll() {
+    setSaveAllOpen(false);
+    setSaveAllNames([]);
+  }
+
   function saveAllGroups() {
     const cleaned = saveAllNames.map((name) => name.trim());
     if (cleaned.length !== groups.length || cleaned.some((name) => !name)) {
@@ -184,12 +190,14 @@ export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, 
       <div className="groupResultActions"><button className="secondary" onClick={() => setEditing((value) => !value)}>{editing ? "Terminar edición" : "Editar manualmente"}</button><button className="secondary" onClick={openSaveAll}>Guardar grupos</button><button className="secondary" onClick={copySummary}>Copiar texto</button><button className="primary" onClick={share}>Compartir</button></div>
     </section>}
 
+    <BottomBackAction label="← Inicio" onBack={onBack} />
+
     {saveAllOpen && <div className="modalBackdrop"><section className="confirmDialog saveGroupsDialog" role="dialog" aria-modal="true" aria-labelledby="save-groups-title">
-      <ModalCloseButton onClose={() => { setSaveAllOpen(false); setSaveAllNames([]); }} />
+      <ModalCloseButton onClose={closeSaveAll} />
       <h2 id="save-groups-title">Guardar grupos frecuentes</h2>
       <p>Asigna un nombre distinto a cada grupo. Esto no inicia ni modifica una ronda.</p>
       <div className="saveAllGroupNames">{groups.map((group, index) => <label key={`save-${index}`}>Grupo {index + 1} · {group.length} jugadores<input value={saveAllNames[index] || ""} onChange={(event) => setSaveAllNames((current) => current.map((name, itemIndex) => itemIndex === index ? event.target.value : name))} placeholder={`Nombre del Grupo ${index + 1}`} /></label>)}</div>
-      <div className="dialogActions"><button className="secondary" onClick={() => { setSaveAllOpen(false); setSaveAllNames([]); }}>Cancelar</button><button className="primary" onClick={saveAllGroups}>Guardar todos</button></div>
+      <div className="dialogActions"><button className="secondary" onClick={closeSaveAll}>Cancelar</button><button className="primary" onClick={saveAllGroups}>Guardar todos</button></div>
     </section></div>}
     </div>
   </>;

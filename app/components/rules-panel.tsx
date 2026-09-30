@@ -24,6 +24,7 @@ import { InternalPdfViewer } from "./internal-pdf-viewer";
 import { useSecondaryView } from "./use-secondary-view";
 import type { LocalRule } from "../../lib/types";
 import { BackyardIcon } from "./backyard-icon";
+import { BottomBackAction } from "./bottom-back-action";
 
 function RulesDisclosure({ id, title, icon = "score", open, onToggle, children }: { id: string; title: string; icon?: "spark" | "players" | "score"; open: boolean; onToggle: () => void; children: ReactNode }) {
   return <section className="rulesDisclosure" id={id}>
@@ -264,9 +265,13 @@ export function RulesPanel({
     await requestRulesAnswer(nextQuestion);
   }
 
+  function closeRuleDetail() {
+    setDetail(null);
+  }
+
   if (detail) return <>
     <header className="rulesPageHeader">
-      <button className="rulesBackButton" onClick={() => setDetail(null)}>← Regresar a Regla {detail.chapter.number}</button>
+      <button className="rulesBackButton" onClick={closeRuleDetail}>← Regresar a Regla {detail.chapter.number}</button>
       <div><span>THE BACKYARD</span><h1>Reglas de Golf</h1></div>
     </header>
     <section className="card ruleDetail" aria-labelledby="rule-detail-title">
@@ -286,6 +291,7 @@ export function RulesPanel({
         <a className="secondary" href={detail.chapter.sourceUrl} target="_blank" rel="noreferrer">Ver fuente oficial ↗</a>
       </div>
       <div className="notice">Resumen práctico de THE BACKYARD. En competencia, el Comité o árbitro oficial tiene la decisión final.</div>
+      <BottomBackAction label={`← Regresar a Regla ${detail.chapter.number}`} onBack={closeRuleDetail} />
     </section>
   </>;
 
@@ -418,6 +424,8 @@ export function RulesPanel({
       <div className="videoFrame"><iframe src={OFFICIAL_RULES_VIDEOS_EMBED_URL} title="Playlist Videos de Reglas" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen /></div>
       <a className="primary big" href={OFFICIAL_RULES_VIDEOS_URL} target="_blank" rel="noreferrer">Ver videos de Reglas ↗</a>
     </section>
+
+    <BottomBackAction label="← Regresar" onBack={onBack} />
 
     {selectedDocument && <InternalPdfViewer document={selectedDocument} initialPage={documentPage} onBack={() => { setSelectedDocument(null); setDocumentPage(1); }} />}
   </>;

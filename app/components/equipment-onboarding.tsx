@@ -32,6 +32,7 @@ import { BAG_CATEGORY_SECTIONS } from "../../lib/equipment-bag-management";
 import { sortCurrentWedges } from "../../lib/equipment-bag-management";
 import { WedgeCollectionEditor } from "./wedge-collection-editor";
 import { mergeBallFitSessionCatalog } from "../../lib/ball-fit-session";
+import { BottomBackAction } from "./bottom-back-action";
 
 type Step = "clubs-prompt" | "clubs-build" | "ball-prompt" | "ball-select" | "fit-prompt" | "fit";
 
@@ -260,6 +261,7 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defa
           </button>;
         })}</div>
         <div className={styles.onboardingActions}><button type="button" className="primary" onClick={() => finishClubs(currentClubs.length ? "COMPLETED" : "SKIPPED")}>{currentClubs.length ? "Continuar con mi bolsa" : "Continuar sin bastones"}</button></div>
+        <BottomBackAction label="← Volver" onBack={previous} />
       </div>
     </>}
 
@@ -282,7 +284,7 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defa
 
     {step === "fit" && (activeFitSession ? <BallFitWizard userId={userId} accessToken={accessToken} defaultHandicap={defaultHandicap} defaultHandicapSource={defaultHandicapSource} profileDefaults={ballFitDefaults} currentBall={currentBall} catalog={activeFitSession.catalog} sessionId={activeFitSession.id} onCancel={() => { setActiveFitSession(null); setStep("fit-prompt"); }} onCurrentBallSelect={selectFitCurrentBall} onComplete={completeFit} /> : <div className={ballCatalog.status === "loading" ? styles.loadingState : styles.errorState} role="status">{ballCatalog.status === "loading" ? "Cargando catálogo de bolas…" : <>No pudimos cargar el catálogo. Puedes continuar y hacer el fitting después. <button type="button" className="textButton" onClick={ballCatalog.retry}>Reintentar</button><button type="button" className="secondary" onClick={onComplete}>Después</button></>}</div>)}
 
-    {step !== "fit" && step !== "clubs-build" && <div className={styles.onboardingFooter}><button type="button" className="textButton" onClick={previous}>← Anterior</button><button type="button" className={styles.onboardingSkip} onClick={skipEverything}>Saltar por ahora y entrar a The Backyard</button></div>}
+    {step !== "fit" && step !== "clubs-build" && <><div className={styles.onboardingFooter}><button type="button" className="textButton" onClick={previous}>← Anterior</button><button type="button" className={styles.onboardingSkip} onClick={skipEverything}>Saltar por ahora y entrar a The Backyard</button></div><BottomBackAction label="Guardar y continuar después" onBack={onSaveAndExit} /></>}
     <p className={styles.syncStatus} data-state={status} role="status">{equipmentStatusLabel(status)}{message ? ` · ${message}` : ""}</p>
   </section></main>;
 }

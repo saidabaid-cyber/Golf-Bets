@@ -1,0 +1,15 @@
+.container {
+  display: grid;
+  min-width: 0;
+  margin: 20px 0 4px;
+  border-top: 1px solid var(--line);
+  padding: 16px 0 max(8px, env(safe-area-inset-bottom));
+}
+
+.button {
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  justify-self: stretch;
+  overflow-wrap: anywhere;
+}

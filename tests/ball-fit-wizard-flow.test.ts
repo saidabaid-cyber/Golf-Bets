@@ -61,6 +61,7 @@ function wizard(profileIndex: number | null = null, profileSource: handicap.Ball
     // Presentation children do not own the fitting state exercised by this harness.
     if (name === "./catalog-product-media") return { CatalogProductMedia: (props: Record<string, unknown>) => ({ type: "catalog-media", props }) };
     if (name === "./backyard-icon") return { BackyardIcon: (props: Record<string, unknown>) => ({ type: "svg", props }) };
+    if (name === "./bottom-back-action") return { BottomBackAction: (props: Record<string, unknown>) => ({ type: "bottom-back-action", props }) };
     if (name === "./equipment-visuals") return { BallFitBallVisual: (props: Record<string, unknown>) => ({ type: "ball-fit-ball", props }) };
     if (name === "react/jsx-runtime") return { jsx, jsxs: jsx, Fragment: "fragment" };
     if (name.endsWith("/ball-fitting")) return fitting;
@@ -98,6 +99,11 @@ function wizard(profileIndex: number | null = null, profileSource: handicap.Ball
     buttonProps(label: string) {
       const button = nodes(tree).find((node) => node.type === "button" && text(node.props.children).trim().startsWith(label)); assert.ok(button, `button ${label}`);
       return button.props;
+    },
+    bottomBackProps() {
+      const actions = nodes(tree).filter((node) => node.type === "bottom-back-action");
+      assert.equal(actions.length, 1, "one bottom back action");
+      return actions[0].props;
     },
     clearStorageWrites() { storageWrites.length = 0; },
     lastDraftWrite() {
@@ -220,7 +226,11 @@ test("Ball Fit keeps save-and-return and resets scroll only when the displayed s
   assert.equal(h.scrollResetKeys.at(-1), "3:false:true:false");
 
   h.clearStorageWrites();
-  await h.click("Guardar y regresar");
+  const topExit = h.buttonProps("Guardar y regresar");
+  const bottomExit = h.bottomBackProps();
+  assert.equal(topExit.onClick, bottomExit.onBack);
+  (bottomExit.onBack as () => void)();
+  h.render();
   assert.equal(h.cancelCount(), 1);
   assert.equal(h.draftStep(), 3);
   assert.equal(h.lastDraftWrite()?.step, 3);
@@ -232,6 +242,7 @@ test("a persisted result sentinel resumes at compact Step 6 instead of showing S
   assert.ok(input);
   const h = wizard(null, null, undefined, { input, step: 6 });
   assert.match(h.text(), /Tienes un fitting en progreso/);
+  assert.equal(h.buttonProps("Cerrar").onClick, h.bottomBackProps().onBack);
   await h.click("Reanudar fitting");
   assert.match(h.text(), /Paso 6 de 6[\s\S]*Precio y color/);
   assert.doesNotMatch(h.text(), /Paso 7 de 6/);
@@ -379,6 +390,7 @@ test("launch monitor choice precedes the manual driver questionnaire", async () 
   await h.click("Agregar mediciones de launch monitor");
   assert.match(h.text(), /Captura y analiza tus golpes/);
   assert.match(h.text(), /Sube fotos de tu monitor de lanzamiento/);
+  assert.equal(h.buttonProps("Guardar y regresar").onClick, h.bottomBackProps().onBack);
 });
 
 test("the active GHIN value is shown before choosing launch monitor or manual entry", async () => {

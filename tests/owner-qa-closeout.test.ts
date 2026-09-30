@@ -34,12 +34,14 @@ test("todos los archivos con diálogos interactivos exponen una salida visible",
       // requiring a modal close icon on a screen which no longer is a modal.
       assert.doesNotMatch(source, /role="dialog"|styles\.editorBackdrop/);
       assert.match(source, /data-equipment-screen="ball-fit"[^\n]*onCancel=\{\(\) => \{[^\n]*setFitOpen\(false\);[^\n]*\}\}/);
-      assert.match(source, /data-equipment-screen="saved-ball-fit"[^\n]*onClick=\{\(\) => setSavedFitOpen\(false\)\}>← Volver a Mi Bolsa/);
+      assert.match(source, /function closeSavedFit\(\) \{\s*setSavedFitOpen\(false\);\s*\}/);
+      assert.match(source, /data-equipment-screen="saved-ball-fit"[^\n]*onClick=\{closeSavedFit\}>← Volver a Mi Bolsa/);
       for (const editor of ["club", "ball", "distance"]) {
         if (editor === "club") assert.match(source, /onCancel=\{\(\) => \{ setClubEditor\(null\); setNewClubCategory\(null\); \}\}/);
         else assert.match(source, new RegExp(`onCancel=\\{\\(\\) => set${editor[0].toUpperCase() + editor.slice(1)}Editor\\(null\\)\\}`));
       }
-      assert.match(source, /onClick=\{\(\) => setDeleteIntent\(null\)\}/, "destructive confirmation retains cancel");
+      assert.match(source, /function cancelDeleteIntent\(\) \{\s*setDeleteIntent\(null\);\s*\}/);
+      assert.match(source, /onClick=\{cancelDeleteIntent\}/, "destructive confirmation retains cancel");
     } else {
       assert.match(source, /ModalCloseButton|modalClose|helpClose|holeSummaryClose/, `${file} no expone cierre`);
     }

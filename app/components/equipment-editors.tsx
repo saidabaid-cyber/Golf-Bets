@@ -36,6 +36,9 @@ import { FeedbackLink } from './feedback-dialog';
 import { GolfBallVisual } from "./equipment-visuals";
 import { EQUIPMENT_CATEGORY_ASSETS } from "./equipment-category-assets";
 import { BAG_CATEGORY_SECTIONS } from "../../lib/equipment-bag-management";
+import { BottomBackAction } from "./bottom-back-action";
+
+const UNSAVED_EQUIPMENT_MESSAGE = "Tienes cambios sin guardar. ¿Salir sin guardarlos?";
 
 export const CLUB_CATEGORY_LABELS = Object.fromEntries(
   BAG_CATEGORY_SECTIONS.map((section) => [section.categories[0], section.label]),
@@ -124,14 +127,14 @@ type ClubEditorProps = {
   onSelectWedges?: () => void;
   onRequestDelete?: () => void;
   onManageDistance?: () => void;
+  onDirtyChange?: (dirty: boolean) => void;
   onCancel: () => void;
   onSave: (club: PlayerClub) => boolean | void;
 };
 
 type ClubEditorStep = "category" | "wedge-loft" | "brand" | "model" | "specs" | "shaft" | "finish";
 
-export function ClubEditor({ userId, catalog, shafts, existing, defaultHandedness, initialCategory, presentation = "sheet", wedgeOrdinal = 1, wedgePeers = [], onSelectBall, onSelectWedges, onRequestDelete, onManageDistance, onCancel, onSave }: ClubEditorProps) {
-  const dialogRef = useModalDialog(presentation === "sheet", onCancel);
+export function ClubEditor({ userId, catalog, shafts, existing, defaultHandedness, initialCategory, presentation = "sheet", wedgeOrdinal = 1, wedgePeers = [], onSelectBall, onSelectWedges, onRequestDelete, onManageDistance, onDirtyChange, onCancel, onSave }: ClubEditorProps) {
   const existingCatalog = existing?.catalogClubId ? catalog.find((club) => club.id === existing.catalogClubId) : null;
   const [category, setCategory] = useState<ClubCategory>(existing?.category || initialCategory || "DRIVER");
   const [manual, setManual] = useState(Boolean(existing && !existing.catalogClubId));
@@ -164,7 +167,37 @@ export function ClubEditor({ userId, catalog, shafts, existing, defaultHandednes
   const [shaftQuery, setShaftQuery] = useState("");
   const [message, setMessage] = useState("");
   const [step, setStep] = useState<ClubEditorStep>(existing ? "finish" : initialCategory === "WEDGE" ? "wedge-loft" : initialCategory ? "brand" : "category");
+  const initialFingerprint = useState(() => JSON.stringify({
+    category: existing?.category || initialCategory || "DRIVER",
+    manual: Boolean(existing && !existing.catalogClubId),
+    brand: existingCatalog?.brand || existing?.customBrand || "",
+    catalogClubId: existing?.catalogClubId || existingCatalog?.id || "",
+    customModel: existing?.customModel || "",
+    generation: existing?.generation || existingCatalog?.generation || "",
+    year: existing?.year ? String(existing.year) : existingCatalog?.year ? String(existingCatalog.year) : "",
+    loft: existing?.loft === null || existing?.loft === undefined ? "" : String(existing.loft),
+    handedness: existing?.handedness || clubHandednessFromProfile(defaultHandedness),
+    shaftManual: Boolean(existing && !existing.shaftId && (existing.customShaftBrand || existing.customShaftModel || existing.customShaft)),
+    shaftId: existing?.shaftId || existingShaft?.id || "",
+    customShaftBrand: existing?.customShaftBrand || "",
+    customShaftModel: existing?.customShaftModel || existing?.customShaft || "",
+    flex: existing?.flex || "",
+    shaftFlexLabel: existing?.shaftFlexLabel || (existing?.flex ? LEGACY_FLEX_TO_LABEL[existing.flex] || "" : ""),
+    shaftWeight: existing?.shaftWeightGrams === null || existing?.shaftWeightGrams === undefined ? "" : String(existing.shaftWeightGrams),
+    length: existing?.lengthInches === null || existing?.lengthInches === undefined ? "" : String(existing.lengthInches),
+    lie: existing?.lieDegrees === null || existing?.lieDegrees === undefined ? "" : String(existing.lieDegrees),
+    grip: existing?.grip || "",
+    notes: existing?.notes || "",
+    composition: existing?.setComposition || [],
+  }))[0];
+  const currentFingerprint = JSON.stringify({ category, manual, brand, catalogClubId, customModel, generation, year, loft, handedness, shaftManual, shaftId, customShaftBrand, customShaftModel, flex, shaftFlexLabel, shaftWeight, length, lie, grip, notes, composition });
+  const dirty = currentFingerprint !== initialFingerprint;
+  const dialogRef = useModalDialog(presentation === "sheet", handleExit);
   useWizardStepNavigation(dialogRef, step, presentation === "sheet");
+  useLayoutEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
+  useLayoutEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
   useLayoutEffect(() => {
     if (presentation === "page") window.scrollTo(0, 0);
     else if (presentation === "embedded") dialogRef.current?.scrollIntoView({ block: "start" });
@@ -223,6 +256,39 @@ export function ClubEditor({ userId, catalog, shafts, existing, defaultHandednes
       return sameClub && sameShaft;
     }) || null
     : null;
+
+  function handleExit() {
+    if (dirty && !window.confirm(UNSAVED_EQUIPMENT_MESSAGE)) return;
+    onCancel();
+  }
+
+  function backFromWedgeLoft() {
+    setStep("category");
+  }
+
+  function backFromBrand() {
+    setStep(category === "WEDGE" ? "wedge-loft" : "category");
+  }
+
+  function backFromModel() {
+    setBrand("");
+    setCatalogQuery("");
+    setStep("brand");
+  }
+
+  function backFromSpecs() {
+    if (manual) setManual(false);
+    setCatalogQuery("");
+    setStep(manual ? "brand" : "model");
+  }
+
+  function backFromShaft() {
+    setStep("specs");
+  }
+
+  function backFromFinish() {
+    setStep("shaft");
+  }
 
   function chooseCategory(value: ClubCategory) {
     if (value === "WEDGE" && onSelectWedges) {
@@ -395,7 +461,7 @@ export function ClubEditor({ userId, catalog, shafts, existing, defaultHandednes
 
   return <div className={shellClass} role={presentation === "sheet" ? "presentation" : undefined}>
     <section ref={dialogRef} tabIndex={-1} className={panelClass} role={presentation === "sheet" ? "dialog" : undefined} aria-modal={presentation === "sheet" ? "true" : undefined} aria-labelledby="club-editor-title">
-      {presentation === "sheet" ? <><ModalCloseButton onClose={onCancel} /><div className={styles.sheetHandle} /></> : presentation === "page" ? <button type="button" className={styles.pageBack} onClick={onCancel}>← Volver a Mi Bolsa</button> : null}
+      {presentation === "sheet" ? <><ModalCloseButton onClose={handleExit} /><div className={styles.sheetHandle} /></> : presentation === "page" ? <button type="button" className={styles.pageBack} onClick={handleExit}>← Volver a Mi Bolsa</button> : null}
       <h2 id="club-editor-title">{editorTitle}</h2>
       <p>{category === "WEDGE" ? "Cada wedge se guarda por separado. El loft es obligatorio; varilla y demás especificaciones son opcionales." : "Marca + modelo es suficiente. Las especificaciones son opcionales."}</p>
       <FeedbackLink category="CLUB">¿No encuentras tu equipo? Solicítalo</FeedbackLink>
@@ -415,7 +481,7 @@ export function ClubEditor({ userId, catalog, shafts, existing, defaultHandednes
         </div>}
 
         {step === "wedge-loft" && <div className={styles.flowScreen}>
-          {!initialCategory && <button type="button" className={styles.flowBack} onClick={() => setStep("category")}>← Categorías</button>}
+          {!initialCategory && <button type="button" className={styles.flowBack} onClick={backFromWedgeLoft}>← Categorías</button>}
           <h3>Selecciona el loft de este wedge</h3>
           <p>Wedge {wedgeOrdinal} · Elige primero los grados; después seleccionarás su propia marca y modelo.</p>
           <label>Loft / grados
@@ -423,30 +489,33 @@ export function ClubEditor({ userId, catalog, shafts, existing, defaultHandednes
             <small>Obligatorio para guardar este wedge.</small>
           </label>
           {message && <div className={styles.formMessage} role="alert">{message}</div>}
-          <div className={styles.flowActions}><button type="button" className="secondary" onClick={onCancel}>Cancelar</button><button type="button" className="primary" onClick={() => { if (!hasRequiredWedgeLoft()) return; setMessage(""); setStep("brand"); }}>Continuar a marca</button></div>
+          <div className={styles.flowActions}><button type="button" className="secondary" onClick={handleExit}>Cancelar</button><button type="button" className="primary" onClick={() => { if (!hasRequiredWedgeLoft()) return; setMessage(""); setStep("brand"); }}>Continuar a marca</button></div>
+          {presentation !== "sheet" && !initialCategory && <BottomBackAction label="← Categorías" onBack={backFromWedgeLoft} />}
         </div>}
 
         {step === "brand" && <div className={styles.flowScreen}>
-          <button type="button" className={styles.flowBack} onClick={() => setStep(category === "WEDGE" ? "wedge-loft" : "category")}>← {category === "WEDGE" ? "Loft" : "Categorías"}</button>
+          <button type="button" className={styles.flowBack} onClick={backFromBrand}>← {category === "WEDGE" ? "Loft" : "Categorías"}</button>
           <h3>{category === "WEDGE" ? "Selecciona marca para este wedge" : "Selecciona marca"}</h3><p>{category === "WEDGE" ? `Wedge ${wedgeOrdinal} · ${loft}° · Elige la marca de tu wedge.` : `${CLUB_CATEGORY_LABELS[category]} · escribe para filtrar todo el catálogo, incluidos modelos anteriores.`}</p>
           <AnchoredSearch label="Buscar marca" value={catalogQuery} onChange={setCatalogQuery} placeholder="Ej. TaylorMade" expanded={brands.length > 0} status={clubBrandFacets.status === "loading" ? "Buscando…" : clubBrandFacets.status === "error" ? "Sin conexión o catálogo no disponible; puedes usar captura manual." : `${brands.length} marcas`}>
             {brands.map((item) => <AnchoredSearchOption key={item.brand} onSelect={() => { setBrand(item.brand); setCatalogQuery(""); setStep("model"); }}><b>{item.brand}</b><small>{item.count} modelos · {item.currentCount} actuales · {item.historicalCount} anteriores</small></AnchoredSearchOption>)}
           </AnchoredSearch>
           {clubBrandFacets.hasMore && <button className="secondary" type="button" onClick={() => void clubBrandFacets.loadMore()}>Más marcas</button>}
           <button className={styles.manualToggle} type="button" onClick={() => { setManual(true); setCatalogClubId(""); setSelectedClubSnapshot(null); setBrand(""); setCustomModel(""); setGeneration(""); setYear(""); if (category !== "WEDGE") setLoft(""); setLength(""); setLie(""); setStep("specs"); }}>Mi bastón no aparece</button>
+          {presentation !== "sheet" && <BottomBackAction label={`← ${category === "WEDGE" ? "Loft" : "Categorías"}`} onBack={backFromBrand} />}
         </div>}
 
         {step === "model" && <div className={styles.flowScreen}>
-          <button type="button" className={styles.flowBack} onClick={() => { setBrand(""); setCatalogQuery(""); setStep("brand"); }}>← Marcas</button>
+          <button type="button" className={styles.flowBack} onClick={backFromModel}>← Marcas</button>
           <h3>Selecciona modelo</h3><p>{effectiveBrand} · actuales y anteriores se conservan en Mi Bolsa.</p>
           <AnchoredSearch label="Buscar modelo" value={catalogQuery} onChange={setCatalogQuery} placeholder="Ej. Stealth 2 Plus" expanded={models.length > 0} status={catalogSearch.status === "loading" ? "Buscando…" : catalogSearch.status === "error" ? "Sin conexión o catálogo no disponible." : `${models.length} modelos encontrados`}>
             {modelFamilies.map(({ key, representative, generations }) => <AnchoredSearchOption key={key} onSelect={() => chooseModel(representative.id)}><b>{representative.model}</b><small>{generations.length > 1 ? `${generations.length} generaciones reales` : [representative.generation, representative.year].filter(Boolean).join(" · ") || "Generación sin dato"}{representative.subCategory ? ` · ${representative.subCategory}` : ""}</small></AnchoredSearchOption>)}
           </AnchoredSearch>
           {catalogSearch.hasMore && <button className="secondary" type="button" onClick={() => void catalogSearch.loadMore()}>Cargar más modelos</button>}
+          {presentation !== "sheet" && <BottomBackAction label="← Marcas" onBack={backFromModel} />}
         </div>}
 
         {step === "specs" && <div className={styles.flowScreen}>
-          <button type="button" className={styles.flowBack} onClick={() => { if (manual) setManual(false); setCatalogQuery(""); setStep(manual ? "brand" : "model"); }}>← {manual ? "Catálogo" : "Modelos"}</button>
+          <button type="button" className={styles.flowBack} onClick={backFromSpecs}>← {manual ? "Catálogo" : "Modelos"}</button>
           <h3>{CLUB_CATEGORY_LABELS[category]} · especificaciones</h3>
           <p>{category === "IRON_SET" ? "Elige los hierros que juegas: paquete rápido o composición libre, incluidos wedges por grado." : category === "WEDGE" ? "Elige el loft en grados; varilla y demás medidas son opcionales." : category === "PUTTER" ? "Mano, longitud, lie y grip pueden guardarse sin inventar especificaciones." : "Loft y mano cuando los conozcas; la varilla se elige después o se omite."}</p>
           <div className={styles.productPreview}><CatalogProductMedia item={selectedCatalogClub} fallback={CLUB_CATEGORY_ICONS[category]} /><div><b>{manual ? [brand, customModel].filter(Boolean).join(" ") || "Bastón manual" : `${selectedCatalogClub?.brand || effectiveBrand} ${selectedCatalogClub?.model || ""}`}</b><small>{selectedCatalogClub ? [selectedCatalogClub.generation, selectedCatalogClub.year, selectedCatalogClub.active ? "Actual" : "Modelo anterior"].filter(Boolean).join(" · ") : "Sin imagen disponible."}</small></div></div>
@@ -463,10 +532,11 @@ export function ClubEditor({ userId, catalog, shafts, existing, defaultHandednes
           <div className={styles.inlineFields}>{category !== "WEDGE" && <label>Loft ° (opcional){verifiedLofts.length ? <select value={loft} onChange={(event) => changeLoft(event.target.value)}><option value="">No lo sé</option>{verifiedLofts.map((value) => <option key={value} value={value}>{value}°</option>)}</select> : <input type="number" inputMode="decimal" min={0} max={90} step="0.1" value={loft} onChange={(event) => changeLoft(event.target.value)} />}</label>}<label>Mano<select value={handedness} onChange={(event) => setHandedness(event.target.value as ClubHandedness)}>{availableHands.includes("RH") && <option value="RH">Derecha</option>}{availableHands.includes("LH") && <option value="LH">Izquierda</option>}</select><small>Precargada desde tu perfil; cámbiala sólo si este bastón es distinto.</small></label></div>
           {category === "IRON_SET" && <fieldset className={styles.choiceFieldset}><legend>Composición del set</legend><div className={styles.choiceGrid}>{IRON_SET_PACKAGES.map((set) => <button type="button" key={set.label} onClick={() => setComposition([...set.clubs])}>{set.label}</button>)}</div><p className={styles.subtle}>Personalizar set</p><div className={styles.choiceGrid}>{CUSTOM_IRON_COMPOSITION.map((club) => <label key={club}><input type="checkbox" checked={composition.includes(club)} onChange={(event) => setComposition((current) => event.target.checked ? [...current, club] : current.filter((item) => item !== club))} />{club}</label>)}</div></fieldset>}
           <div className={styles.flowActions}><button type="button" className="secondary" onClick={() => { if (!hasRequiredWedgeLoft()) return; setMessage(""); setShaftManual(false); setShaftId(""); setShaftBrand(""); setSelectedShaftSnapshot(null); setCustomShaftBrand(""); setCustomShaftModel(""); setShaftFlexLabel(""); setShaftWeight(""); setFlex(""); setStep("finish"); }}>Sin varilla / No sé</button><button type="button" className="primary" onClick={() => { if (!hasRequiredWedgeLoft()) return; setMessage(""); setStep("shaft"); }}>Elegir varilla</button></div>
+          {presentation !== "sheet" && <BottomBackAction label={`← ${manual ? "Catálogo" : "Modelos"}`} onBack={backFromSpecs} />}
         </div>}
 
         {step === "shaft" && <div className={styles.flowScreen}>
-          <button type="button" className={styles.flowBack} onClick={() => setStep("specs")}>← Especificaciones</button>
+          <button type="button" className={styles.flowBack} onClick={backFromShaft}>← Especificaciones</button>
           <h3>Selecciona varilla</h3><p>Busca por marca, modelo, peso o flex. Las varillas anteriores siguen disponibles.</p>
           {!shaftManual && !shaftBrand && <><AnchoredSearch label="Buscar varilla por marca" value={shaftQuery} onChange={setShaftQuery} placeholder="Ej. Fujikura" expanded={shaftBrands.length > 0} status={shaftBrandFacets.status === "loading" ? "Buscando…" : shaftBrandFacets.status === "error" ? "Sin conexión o catálogo no disponible. Puedes reintentar o capturar manualmente." : `${shaftBrands.length} marcas`}>
             {shaftBrands.map((item) => <AnchoredSearchOption key={item.brand} onSelect={() => { setShaftBrand(item.brand); setShaftQuery(""); }}><b>{item.brand}</b><small>{item.count} familias · {item.historicalCount} anteriores</small></AnchoredSearchOption>)}
@@ -476,10 +546,11 @@ export function ClubEditor({ userId, catalog, shafts, existing, defaultHandednes
           </AnchoredSearch>{shaftSearch.hasMore && <button className="secondary" type="button" onClick={() => void shaftSearch.loadMore()}>Cargar más varillas</button>}{shaftSearch.status === "error" && <button type="button" className="secondary" onClick={shaftSearch.retry}>Reintentar búsqueda de varillas</button>}</>}
           {shaftManual && <div className={styles.inlineFields}><label>Marca<input value={customShaftBrand} maxLength={100} onChange={(event) => setCustomShaftBrand(event.target.value)} /></label><label>Modelo<input value={customShaftModel} maxLength={140} onChange={(event) => setCustomShaftModel(event.target.value)} /></label><button type="button" className="primary" onClick={() => setStep("finish")}>Continuar</button></div>}
           <button type="button" className={styles.manualToggle} onClick={() => { setShaftManual((value) => !value); setShaftId(""); setShaftBrand(""); setShaftQuery(""); setShaftFlexLabel(""); setShaftWeight(""); setFlex(""); }}>{shaftManual ? "Volver al catálogo" : "Mi varilla no aparece · Agregar especificación manual"}</button>
+          {presentation !== "sheet" && <BottomBackAction label="← Especificaciones" onBack={backFromShaft} />}
         </div>}
 
         {step === "finish" && <div className={styles.flowScreen}>
-          <button type="button" className={styles.flowBack} onClick={() => setStep("shaft")}>← Varilla</button>
+          <button type="button" className={styles.flowBack} onClick={backFromFinish}>← Varilla</button>
           <h3>Revisa y agrega</h3>
           {category === "WEDGE" && <div><b>Loft / grados: {loft ? `${loft}°` : "Sin indicar"}</b><button type="button" className="secondary" onClick={() => setStep("specs")}>Editar loft / grados</button></div>}
           <div className={styles.productPreview}><CatalogProductMedia item={selectedCatalogClub} fallback={CLUB_CATEGORY_ICONS[category]} /><div><b>{[effectiveBrand, selectedCatalogClub?.model || customModel].filter(Boolean).join(" ")}</b><small>{selectedShaft ? `${selectedShaft.brand} ${selectedShaft.model}` : shaftManual ? [customShaftBrand, customShaftModel].filter(Boolean).join(" ") || "Varilla manual" : "Sin varilla indicada"}</small></div></div>
@@ -493,11 +564,13 @@ export function ClubEditor({ userId, catalog, shafts, existing, defaultHandednes
           {selectedShaft?.material && <p className={styles.subtle}>{selectedShaft.material}</p>}
           {similarWedge && <div className={styles.similarWedgeNotice} role="status" aria-live="polite"><b>Ya tienes un wedge muy similar en tu bolsa.</b><span>Puedes guardarlo de todos modos; no fusionaremos ni eliminaremos ninguno.</span></div>}
           {message && <div className={styles.formMessage} role="alert">{message}</div>}
-          <div className={styles.formActions}><button type="button" className="secondary" onClick={onCancel}>Cancelar</button><button type="submit" className="primary">{category === "WEDGE" ? "Guardar wedge" : "Guardar bastón"}</button></div>
+          <div className={styles.formActions}><button type="button" className="secondary" onClick={handleExit}>Cancelar</button><button type="submit" className="primary">{category === "WEDGE" ? "Guardar wedge" : "Guardar bastón"}</button></div>
           {category === "WEDGE" && existing && onManageDistance && <button type="button" className="secondary" onClick={onManageDistance}>Gestionar distancia manual</button>}
           {category === "WEDGE" && existing && onRequestDelete && <div className={styles.wedgeDeleteAction}><button type="button" className={styles.dangerButton} onClick={onRequestDelete}>Eliminar wedge</button></div>}
+          {presentation !== "sheet" && <BottomBackAction label="← Varilla" onBack={backFromFinish} />}
         </div>}
       </form>
+      {presentation === "page" && <BottomBackAction label="← Volver a Mi Bolsa" onBack={handleExit} />}
     </section>
   </div>;
 }
@@ -512,7 +585,6 @@ type BallEditorProps = {
 };
 
 export function BallEditor({ userId, catalog, existing, presentation = "sheet", onCancel, onSave }: BallEditorProps) {
-  const dialogRef = useModalDialog(presentation === "sheet", onCancel);
   const existingCatalog = existing?.catalogBallId ? catalog.find((ball) => ball.id === existing.catalogBallId) : null;
   const [manual, setManual] = useState(Boolean(existing && !existing.catalogBallId));
   const [brand, setBrand] = useState(existingCatalog?.brand || existing?.ballBrand || "");
@@ -526,6 +598,19 @@ export function BallEditor({ userId, catalog, existing, presentation = "sheet", 
   const [catalogQuery, setCatalogQuery] = useState("");
   const [message, setMessage] = useState("");
   const [step, setStep] = useState<"brand" | "model" | "details">(existing ? "details" : "brand");
+  const initialFingerprint = useState(() => JSON.stringify({
+    manual: Boolean(existing && !existing.catalogBallId),
+    brand: existingCatalog?.brand || existing?.ballBrand || "",
+    catalogBallId: existing?.catalogBallId || existingCatalog?.id || "",
+    customModel: existing?.ballModel || "",
+    generation: existing?.generation || existingCatalog?.generation || "",
+    year: existing?.year ? String(existing.year) : existingCatalog?.year ? String(existingCatalog.year) : "",
+    color: existing?.color || "",
+    notes: existing?.notes || "",
+  }))[0];
+  const currentFingerprint = JSON.stringify({ manual, brand, catalogBallId, customModel, generation, year, color, notes });
+  const dirty = currentFingerprint !== initialFingerprint;
+  const dialogRef = useModalDialog(presentation === "sheet", handleExit);
   useWizardStepNavigation(dialogRef, step);
   useLayoutEffect(() => { if (presentation === "page") window.scrollTo(0, 0); }, [presentation, step]);
   const activeCatalog = useMemo(() => [...catalog], [catalog]);
@@ -556,6 +641,23 @@ export function BallEditor({ userId, catalog, existing, presentation = "sheet", 
       || (right.year ?? -1) - (left.year ?? -1)
       || left.id.localeCompare(right.id));
   })();
+
+  function handleExit() {
+    if (dirty && !window.confirm(UNSAVED_EQUIPMENT_MESSAGE)) return;
+    onCancel();
+  }
+
+  function backFromBallModel() {
+    setBrand("");
+    setCatalogQuery("");
+    setStep("brand");
+  }
+
+  function backFromBallDetails() {
+    if (manual) setManual(false);
+    setCatalogQuery("");
+    setStep(manual ? "brand" : "model");
+  }
 
   function chooseBallGeneration(id: string) {
     const ball = ballGenerationOptions.find((candidate) => candidate.id === id);
@@ -614,7 +716,7 @@ export function BallEditor({ userId, catalog, existing, presentation = "sheet", 
 
   return <div className={presentation === "page" ? styles.editorPageShell : styles.editorBackdrop} role={presentation === "sheet" ? "presentation" : undefined}>
     <section ref={dialogRef} tabIndex={-1} className={presentation === "page" ? styles.editorPage : styles.editorSheet} role={presentation === "sheet" ? "dialog" : undefined} aria-modal={presentation === "sheet" ? "true" : undefined} aria-labelledby="ball-editor-title">
-      {presentation === "sheet" ? <><ModalCloseButton onClose={onCancel} /><div className={styles.sheetHandle} /></> : <button type="button" className={styles.pageBack} onClick={onCancel}>← Volver a Mi Bolsa</button>}
+      {presentation === "sheet" ? <><ModalCloseButton onClose={handleExit} /><div className={styles.sheetHandle} /></> : <button type="button" className={styles.pageBack} onClick={handleExit}>← Volver a Mi Bolsa</button>}
       <h2 id="ball-editor-title">{existing ? "Cambiar mi bola" : "Elegir mi bola"}</h2>
       <FeedbackLink category="BALL">¿No encuentras tu bola? Solicítala</FeedbackLink>
       <p>El catálogo conserva las generaciones actuales y anteriores. El color es opcional.</p>
@@ -623,17 +725,19 @@ export function BallEditor({ userId, catalog, existing, presentation = "sheet", 
         {step === "brand" && <div className={styles.flowScreen}><h3>Selecciona marca</h3><p>Busca dentro de todas las generaciones actuales y anteriores.</p><AnchoredSearch label="Buscar bola por marca" value={catalogQuery} onChange={setCatalogQuery} placeholder="Ej. Titleist" expanded={brands.length > 0} status={ballBrandFacets.status === "loading" ? "Buscando…" : ballBrandFacets.status === "error" ? "Sin conexión o catálogo no disponible." : `${brands.length} marcas`}>
           {brands.map((item) => <AnchoredSearchOption key={item.brand} onSelect={() => { setBrand(item.brand); setCatalogQuery(""); setStep("model"); }}><b>{item.brand}</b><small>{item.count} modelos · {item.historicalCount} anteriores</small></AnchoredSearchOption>)}
         </AnchoredSearch>{ballBrandFacets.hasMore && <button type="button" className="secondary" onClick={() => void ballBrandFacets.loadMore()}>Más marcas</button>}<button type="button" className={styles.manualToggle} onClick={() => { setManual(true); setCatalogBallId(""); setSelectedBallSnapshot(null); setBrand(""); setCustomModel(""); setGeneration(""); setYear(""); setColor(""); setStep("details"); }}>Mi bola no aparece</button></div>}
-        {step === "model" && <div className={styles.flowScreen}><button type="button" className={styles.flowBack} onClick={() => { setBrand(""); setCatalogQuery(""); setStep("brand"); }}>← Marcas</button><h3>Selecciona modelo</h3><p>{effectiveBrand} · la generación elegida queda guardada.</p><AnchoredSearch label="Buscar modelo" value={catalogQuery} onChange={setCatalogQuery} placeholder="Ej. Pro V1 2025" expanded={models.length > 0} status={catalogSearch.status === "loading" ? "Buscando…" : `${models.length} modelos encontrados`}>
+        {step === "model" && <div className={styles.flowScreen}><button type="button" className={styles.flowBack} onClick={backFromBallModel}>← Marcas</button><h3>Selecciona modelo</h3><p>{effectiveBrand} · la generación elegida queda guardada.</p><AnchoredSearch label="Buscar modelo" value={catalogQuery} onChange={setCatalogQuery} placeholder="Ej. Pro V1 2025" expanded={models.length > 0} status={catalogSearch.status === "loading" ? "Buscando…" : `${models.length} modelos encontrados`}>
           {models.map((ball) => <AnchoredSearchOption key={ball.id} onSelect={() => { setCatalogBallId(ball.id); setSelectedBallSnapshot(ball); setBrand(ball.brand); setCustomModel(ball.model); setGeneration(ball.generation || ""); setYear(ball.year ? String(ball.year) : ""); setColor(""); setCatalogQuery(`${ball.brand} ${ball.model}`); setStep("details"); }}><b>{ball.model}</b><small>{[ball.generation, ball.year, ball.active ? "Actual" : "Modelo anterior", ball.fitEligible ? "Apta para Ball Fit" : "Sólo Mi Bola"].filter(Boolean).join(" · ")}</small></AnchoredSearchOption>)}
-        </AnchoredSearch>{catalogSearch.hasMore && <button type="button" className="secondary" onClick={() => void catalogSearch.loadMore()}>Cargar más modelos</button>}</div>}
-        {step === "details" && <div className={styles.flowScreen}><button type="button" className={styles.flowBack} onClick={() => { if (manual) setManual(false); setCatalogQuery(""); setStep(manual ? "brand" : "model"); }}>← {manual ? "Catálogo" : "Modelos"}</button><h3>Variante final</h3><div className={`${styles.productPreview} ${styles.ballProductPreview}`}><CatalogProductMedia item={selected} fallback="●" /><div><b>{[selected?.brand || brand, selected?.model || customModel].filter(Boolean).join(" ") || "Bola manual"}</b><small>{[generation || selected?.generation, year || selected?.year, selected && (selected.active ? "Actual" : "Modelo anterior")].filter(Boolean).join(" · ") || "Completa sólo lo que conozcas"}</small></div></div>
+        </AnchoredSearch>{catalogSearch.hasMore && <button type="button" className="secondary" onClick={() => void catalogSearch.loadMore()}>Cargar más modelos</button>}{presentation === "page" && <BottomBackAction label="← Marcas" onBack={backFromBallModel} />}</div>}
+        {step === "details" && <div className={styles.flowScreen}><button type="button" className={styles.flowBack} onClick={backFromBallDetails}>← {manual ? "Catálogo" : "Modelos"}</button><h3>Variante final</h3><div className={`${styles.productPreview} ${styles.ballProductPreview}`}><CatalogProductMedia item={selected} fallback="●" /><div><b>{[selected?.brand || brand, selected?.model || customModel].filter(Boolean).join(" ") || "Bola manual"}</b><small>{[generation || selected?.generation, year || selected?.year, selected && (selected.active ? "Actual" : "Modelo anterior")].filter(Boolean).join(" · ") || "Completa sólo lo que conozcas"}</small></div></div>
           {manual && <div className={styles.inlineFields}><label>Marca<input value={brand} maxLength={100} onChange={(event) => setBrand(event.target.value)} /></label><label>Modelo<input value={customModel} maxLength={140} onChange={(event) => setCustomModel(event.target.value)} /></label></div>}
           {manual ? <div className={styles.inlineFields}><label>Generación (opcional)<input value={generation} maxLength={100} onChange={(event) => setGeneration(event.target.value)} /></label><label>Año (opcional)<input type="number" inputMode="numeric" min={1900} max={2200} value={year} onChange={(event) => setYear(event.target.value)} /></label></div> : <div className={styles.catalogFacts} aria-label="Generación de la bola">{ballGenerationOptions.length > 1 ? <label>Generación<select value={catalogBallId} onChange={(event) => chooseBallGeneration(event.target.value)}>{ballGenerationOptions.map((option) => <option key={option.id} value={option.id}>{[option.generation, option.year].filter(Boolean).join(" · ") || "Sin nombre publicado"}</option>)}</select></label> : <span><small>Generación</small><b>{selected?.generation || selected?.year || "Sin dato"}</b></span>}<span><small>Año</small><b>{selected?.year || "Sin dato"}</b></span></div>}
           <div className={styles.inlineFields}>{colorOptions.length ? <label>Color (opcional)<select value={color} onChange={(event) => setColor(event.target.value)}><option value="">Sin indicar</option>{colorOptions.map((value) => <option key={value} value={value}>{value}</option>)}</select></label> : manual ? <label>Color (opcional)<input value={color} maxLength={80} onChange={(event) => setColor(event.target.value)} /></label> : <span className={styles.unavailableFact}><small>Color</small><b>Sin dato</b></span>}<label>Notas (opcional)<textarea value={notes} maxLength={1000} rows={3} onChange={(event) => setNotes(event.target.value)} /></label></div>
           {selected && <div className={styles.ballFacts}>{[["Vuelo", selected.flight], ["Driver spin", selected.driverSpin], ["Greenside", selected.shortGameSpin], ["Sensación", selected.feel], ["Construcción", selected.construction], ["Compresión", selected.compression]].map(([label, value]) => <span key={label}><small>{label}</small><b>{value ?? "Sin dato"}</b></span>)}</div>}
-          {message && <div className={styles.formMessage} role="alert">{message}</div>}<div className={styles.formActions}><button type="button" className="secondary" onClick={onCancel}>Cancelar</button><button type="submit" className="primary">Guardar como actual</button></div>
+          {message && <div className={styles.formMessage} role="alert">{message}</div>}<div className={styles.formActions}><button type="button" className="secondary" onClick={handleExit}>Cancelar</button><button type="submit" className="primary">Guardar como actual</button></div>
+          {presentation === "page" && <BottomBackAction label={`← ${manual ? "Catálogo" : "Modelos"}`} onBack={backFromBallDetails} />}
         </div>}
       </form>
+      {presentation === "page" && <BottomBackAction label="← Volver a Mi Bolsa" onBack={handleExit} />}
     </section>
   </div>;
 }
@@ -649,12 +753,23 @@ type ClubDistanceEditorProps = {
 };
 
 export function ClubDistanceEditor({ userId, clubId, clubLabel, existing, presentation = "sheet", onCancel, onSave }: ClubDistanceEditorProps) {
-  const dialogRef = useModalDialog(presentation === "sheet", onCancel);
-  useLayoutEffect(() => { if (presentation === "page") window.scrollTo(0, 0); }, [presentation]);
   const [carry, setCarry] = useState(existing?.carryDistance === null || existing?.carryDistance === undefined ? "" : String(existing.carryDistance));
   const [total, setTotal] = useState(existing?.totalDistance === null || existing?.totalDistance === undefined ? "" : String(existing.totalDistance));
   const [unit, setUnit] = useState<"YD" | "M">(existing?.unit || "YD");
   const [message, setMessage] = useState("");
+  const initialFingerprint = useState(() => JSON.stringify({
+    carry: existing?.carryDistance === null || existing?.carryDistance === undefined ? "" : String(existing.carryDistance),
+    total: existing?.totalDistance === null || existing?.totalDistance === undefined ? "" : String(existing.totalDistance),
+    unit: existing?.unit || "YD",
+  }))[0];
+  const dirty = JSON.stringify({ carry, total, unit }) !== initialFingerprint;
+  const dialogRef = useModalDialog(presentation === "sheet", handleExit);
+  useLayoutEffect(() => { if (presentation === "page") window.scrollTo(0, 0); }, [presentation]);
+
+  function handleExit() {
+    if (dirty && !window.confirm(UNSAVED_EQUIPMENT_MESSAGE)) return;
+    onCancel();
+  }
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -691,7 +806,7 @@ export function ClubDistanceEditor({ userId, clubId, clubLabel, existing, presen
 
   return <div className={presentation === "page" ? styles.editorPageShell : styles.editorBackdrop} role={presentation === "sheet" ? "presentation" : undefined}>
     <section ref={dialogRef} tabIndex={-1} className={presentation === "page" ? styles.editorPage : styles.editorSheet} role={presentation === "sheet" ? "dialog" : undefined} aria-modal={presentation === "sheet" ? "true" : undefined} aria-labelledby="distance-editor-title">
-      {presentation === "sheet" ? <><ModalCloseButton onClose={onCancel} /><div className={styles.sheetHandle} /></> : <button type="button" className={styles.pageBack} onClick={onCancel}>← Volver a Mi Bolsa</button>}
+      {presentation === "sheet" ? <><ModalCloseButton onClose={handleExit} /><div className={styles.sheetHandle} /></> : <button type="button" className={styles.pageBack} onClick={handleExit}>← Volver a Mi Bolsa</button>}
       <h2 id="distance-editor-title">Distancia de {clubLabel}</h2>
       <p>Captura lo que conoces. Es una referencia manual y podrás corregirla cuando quieras.</p>
       <form className={styles.formGrid} onSubmit={submit} noValidate>
@@ -708,8 +823,9 @@ export function ClubDistanceEditor({ userId, clubId, clubLabel, existing, presen
           </select>
         </label>
         {message && <div className={styles.formMessage} role="alert">{message}</div>}
-        <div className={styles.formActions}><button type="button" className="secondary" onClick={onCancel}>Cancelar</button><button type="submit" className="primary">Guardar distancia</button></div>
+        <div className={styles.formActions}><button type="button" className="secondary" onClick={handleExit}>Cancelar</button><button type="submit" className="primary">Guardar distancia</button></div>
       </form>
+      {presentation === "page" && <BottomBackAction label="← Volver a Mi Bolsa" onBack={handleExit} />}
     </section>
   </div>;
 }

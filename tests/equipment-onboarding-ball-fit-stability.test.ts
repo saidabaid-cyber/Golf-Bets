@@ -79,6 +79,7 @@ test("Equipment onboarding keeps Ball Fit mounted while pinned-ball catalog refr
       if (name === "react/jsx-runtime") return { jsx, jsxs: jsx, Fragment: "fragment" };
       if (name === "next/image") return { default: (props: Record<string, unknown>) => ({ type: "image", props }) };
       if (name === "./use-view-scroll-reset") return { useViewScrollReset() {} };
+      if (name === "./bottom-back-action") return { BottomBackAction: (props: Record<string, unknown>) => ({ type: "bottom-back-action", props }) };
       if (name.endsWith("/ball-fitting")) return ballFitting;
       if (name.endsWith("/golf-equipment")) return golfEquipment;
       if (name === "./ball-fit-wizard") return {

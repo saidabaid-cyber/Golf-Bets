@@ -44,6 +44,7 @@ import { BAG_CATEGORY_SECTIONS } from "../../lib/equipment-bag-management";
 import { bagCategoryManagement, sortCurrentWedges, wedgeLoftSummary } from "../../lib/equipment-bag-management";
 import { WedgeCollectionEditor } from "./wedge-collection-editor";
 import { mergeBallFitSessionCatalog } from "../../lib/ball-fit-session";
+import { BottomBackAction } from "./bottom-back-action";
 
 type EquipmentProfilePanelProps = {
   userId: string;
@@ -54,6 +55,7 @@ type EquipmentProfilePanelProps = {
   ballFitDefaults?: BallFitProfileDefaults;
   onBackToProfile?: () => void;
   onOpenPrivacy?: () => void;
+  onFlowDepthChange?: (nested: boolean) => void;
   initialSection?: "equipment" | "ball" | "fitting";
 };
 
@@ -171,7 +173,7 @@ export function EquipmentProfileSummary({ userId, accessToken, onOpen }: { userI
   </section>;
 }
 
-export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, defaultHandicapSource, defaultHandedness, ballFitDefaults, onBackToProfile, onOpenPrivacy, initialSection }: EquipmentProfilePanelProps) {
+export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, defaultHandicapSource, defaultHandedness, ballFitDefaults, onBackToProfile, onOpenPrivacy, onFlowDepthChange, initialSection }: EquipmentProfilePanelProps) {
   const { profile, status, message, update, updateConfirmed, retry, resolveConflict, recoverLocalProfile } = useEquipmentProfile(userId, accessToken);
   const [clubEditor, setClubEditor] = useState<PlayerClub | "new" | null>(null);
   const [newClubCategory, setNewClubCategory] = useState<PlayerClub["category"] | null>(null);
@@ -205,6 +207,10 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
   const bagManagement = bagCategoryManagement(currentClubs);
   const currentWedges = useMemo(() => sortCurrentWedges(currentClubs), [currentClubs]);
   const currentBallCatalog = currentBall?.catalogBallId ? ballCatalog.items.find((ball) => ball.id === currentBall.catalogBallId) || null : null;
+  const nestedFlow = Boolean(fitOpen || savedFitOpen || wedgeCollectionOpen || clubEditor || ballEditor || distanceEditor || deleteIntent || selectedClub);
+
+  useEffect(() => onFlowDepthChange?.(nestedFlow), [nestedFlow, onFlowDepthChange]);
+  useEffect(() => () => onFlowDepthChange?.(false), [onFlowDepthChange]);
 
   useEffect(() => {
     if (!fitOpen || !ballCatalog.items.length) return;
@@ -335,8 +341,20 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
     }
   }
 
+  function closeSavedFit() {
+    setSavedFitOpen(false);
+  }
+
+  function closeClubDetail() {
+    setClubDetailId(null);
+  }
+
+  function cancelDeleteIntent() {
+    setDeleteIntent(null);
+  }
+
   if (fitOpen) return <div className={styles.fullPageFlow} data-equipment-screen="ball-fit"><section className={styles.editorPage}><BallFitWizard userId={userId} accessToken={accessToken} defaultHandicap={defaultHandicap} defaultHandicapSource={defaultHandicapSource} profileDefaults={ballFitDefaults} savedInput={restoredFit?.input} currentBall={currentBall} catalog={fitSessionCatalog.length ? fitSessionCatalog : ballCatalog.items} sessionId={fitSessionId} onCancel={() => { setFitSessionCatalog([]); setFitSessionId(null); setFitOpen(false); }} onCurrentBallSelect={selectFitCurrentBall} onComplete={completeFit} onOpenPrivacy={onOpenPrivacy} /></section></div>;
-  if (savedFitOpen && profile.lastBallFit) return <div className={styles.fullPageFlow} data-equipment-screen="saved-ball-fit"><section className={styles.editorPage}><button type="button" className={styles.pageBack} onClick={() => setSavedFitOpen(false)}>← Volver a Mi Bolsa</button><div className={styles.wizardHeader}><div><div className="eyebrow">RESULTADO GUARDADO</div><h2>Tu mejor grupo de bolas</h2>{restoredFit && <p>{BALL_FIT_HANDICAP_LABELS[restoredFit.input.handicapSource || "UNKNOWN"]}{restoredFit.input.handicap === null ? "" : `: ${restoredFit.input.handicap}`}</p>}</div></div>{restoredFit ? <BallFitResults result={restoredFit.result} catalog={ballCatalog.items} current={restoredFit.input.currentBallId ? ballCatalog.items.find((ball) => ball.id === restoredFit.input.currentBallId) || null : null} /> : <SavedBallFitComparison summary={profile.lastBallFit} catalog={ballCatalog.items} currentBall={currentBall} />}</section></div>;
+  if (savedFitOpen && profile.lastBallFit) return <div className={styles.fullPageFlow} data-equipment-screen="saved-ball-fit"><section className={styles.editorPage}><button type="button" className={styles.pageBack} onClick={closeSavedFit}>← Volver a Mi Bolsa</button><div className={styles.wizardHeader}><div><div className="eyebrow">RESULTADO GUARDADO</div><h2>Tu mejor grupo de bolas</h2>{restoredFit && <p>{BALL_FIT_HANDICAP_LABELS[restoredFit.input.handicapSource || "UNKNOWN"]}{restoredFit.input.handicap === null ? "" : `: ${restoredFit.input.handicap}`}</p>}</div></div>{restoredFit ? <BallFitResults result={restoredFit.result} catalog={ballCatalog.items} current={restoredFit.input.currentBallId ? ballCatalog.items.find((ball) => ball.id === restoredFit.input.currentBallId) || null : null} /> : <SavedBallFitComparison summary={profile.lastBallFit} catalog={ballCatalog.items} currentBall={currentBall} />}<BottomBackAction label="← Volver a Mi Bolsa" onBack={closeSavedFit} /></section></div>;
   if (wedgeCollectionOpen) return <div className={styles.fullPageFlow} data-equipment-screen="wedge-collection">
     <WedgeCollectionEditor userId={userId} catalog={clubCatalog.items} shafts={shaftCatalog.items} wedges={currentWedges} defaultHandedness={defaultHandedness} onBack={() => setWedgeCollectionOpen(false)} onSave={saveWedge} onDelete={deleteWedge} onManageDistance={(club) => { setWedgeCollectionOpen(false); setClubDetailId(club.id); }} />
   </div>;
@@ -350,11 +368,11 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
     <ClubDistanceEditor userId={userId} clubId={distanceEditor.club.id} clubLabel={clubName(distanceEditor.club, clubCatalog.items)} existing={distanceEditor.distance} presentation="page" onCancel={() => setDistanceEditor(null)} onSave={saveDistance} />
   </div>;
   if (deleteIntent) return <section className={styles.flowDecision} data-equipment-screen="delete-confirm" aria-labelledby="equipment-delete-title">
-    <button type="button" className={styles.pageBack} onClick={() => setDeleteIntent(null)}>← Volver</button>
+    <button type="button" className={styles.pageBack} onClick={cancelDeleteIntent}>← Volver</button>
     <span className={styles.flowEyebrow}>MI BOLSA · CONFIRMAR</span>
     <h2 id="equipment-delete-title">¿Eliminar {deleteIntent.name}?</h2>
     <p>Se quitará de tu perfil de equipo. {deleteIntent.kind === "club" && "Sus distancias manuales en Mi Bolsa también se quitarán. "}Las rondas históricas conservan sus propios snapshots y no cambian.</p>
-    <div className={styles.flowDecisionActions}><button type="button" className="secondary" onClick={() => setDeleteIntent(null)}>Cancelar</button><button type="button" className={styles.dangerButton} onClick={confirmDelete}>Eliminar de Mi Bolsa</button></div>
+    <div className={styles.flowDecisionActions}><button type="button" className="secondary" onClick={cancelDeleteIntent}>Cancelar</button><button type="button" className={styles.dangerButton} onClick={confirmDelete}>Eliminar de Mi Bolsa</button></div>
     {status === "error" && <p role="alert" className={styles.errorState}>{message || "No se confirmó el borrado."}</p>}
   </section>;
   if (flowSuccess) return <section className={styles.flowDecision} data-equipment-screen="success" aria-labelledby="equipment-success-title">
@@ -373,7 +391,7 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
     const distance = profile.distances.find((item) => item.playerClubId === selectedClub.id && item.source === "MANUAL") || null;
     const supportsDistance = selectedClub.category !== "PUTTER";
     return <section className={styles.clubDetail} data-equipment-screen="club-detail" aria-labelledby="club-detail-title">
-      <button type="button" className={styles.pageBack} onClick={() => setClubDetailId(null)}>← Volver a Mi Bolsa</button>
+      <button type="button" className={styles.pageBack} onClick={closeClubDetail}>← Volver a Mi Bolsa</button>
       <div className={styles.clubDetailHero}>
         <span className={styles.categoryIcon} aria-hidden="true">{CLUB_CATEGORY_ICONS[selectedClub.category]}</span>
         <div><span className={styles.flowEyebrow}>{CLUB_CATEGORY_LABELS[selectedClub.category]}</span><h2 id="club-detail-title">{clubName(selectedClub, clubCatalog.items)}</h2><p>{catalogClub(selectedClub, clubCatalog.items)?.generation || selectedClub.generation || "Sin generación indicada"}</p></div>
@@ -394,6 +412,7 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
 
       {!selectedClub.isCurrent && <button type="button" className="secondary" onClick={() => update((current) => setPlayerClubCurrent(current, selectedClub.id, true))}>Volver a usar este bastón</button>}
       <div className={styles.clubDangerZone}><p>Esta acción sólo quita el bastón de Mi Bolsa. Las rondas históricas conservan su snapshot.</p><button type="button" className={styles.dangerButton} onClick={() => deleteClub(selectedClub)}>ELIMINAR BASTÓN</button></div>
+      <BottomBackAction label="← Volver a Mi Bolsa" onBack={closeClubDetail} />
     </section>;
   }
 

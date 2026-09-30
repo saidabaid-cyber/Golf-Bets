@@ -154,7 +154,8 @@ test("club search, onboarding, capture and modal safety expose the hard-closeout
   assert.match(controls, /data-pending=\{!confirmed\}/);
   assert.match(controls, /onClick=\{\(\) => onChange\(current\)\}/);
   assert.match(equipmentPanel, /data-equipment-screen="ball-fit"[^\n]*onCancel=\{\(\) => \{[^\n]*setFitOpen\(false\);[^\n]*\}\}/);
-  assert.match(equipmentPanel, /data-equipment-screen="saved-ball-fit"[^\n]*onClick=\{\(\) => setSavedFitOpen\(false\)\}/);
+  assert.match(equipmentPanel, /function closeSavedFit\(\) \{\s*setSavedFitOpen\(false\);\s*\}/);
+  assert.match(equipmentPanel, /data-equipment-screen="saved-ball-fit"[^\n]*onClick=\{closeSavedFit\}/);
   assert.doesNotMatch(equipmentPanel, /role="dialog"|styles\.editorBackdrop/, "equipment and fitting no longer nest full flows in sheets");
   assert.match(modalShell, /aria-label=\{label\}/);
   assert.match(modalShell, /event\.key !== "Escape"/);

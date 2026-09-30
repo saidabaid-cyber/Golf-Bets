@@ -18,12 +18,15 @@ function text(value: unknown): string {
   if (value && typeof value === "object" && "props" in value) return text((value as Element).props.children);
   return typeof value === "string" ? value : "";
 }
-function panel(initialAccountSection = "account", view = "account") {
+function panel(initialAccountSection = "account", view = "account", focusSection: "profile" | "equipment" = "profile") {
   const slots: unknown[] = []; let cursor = 0;
   const state = (initial: unknown) => { const i = cursor++; if (!(i in slots)) slots[i] = typeof initial === "function" ? initial() : initial;
     return [slots[i], (next: unknown) => { slots[i] = typeof next === "function" ? next(slots[i]) : next; }]; };
   const jsx = (type: unknown, props: Record<string, unknown>) => ({ type, props });
   const opened: string[] = [];
+  let pageBackCalls = 0;
+  const confirmations: string[] = [];
+  let confirmResult = false;
   const dependencies: Record<string, unknown> = {
     react: { useState: state, useRef: (initial: unknown) => state({ current: initial })[0], useEffect: () => {}, useLayoutEffect: () => {} },
     "react/jsx-runtime": { jsx, jsxs: jsx },
@@ -32,11 +35,39 @@ function panel(initialAccountSection = "account", view = "account") {
     "../../lib/legal-config": { LEGAL_DOCUMENT_VERSIONS: {}, legalConfig: {} },
     "../../lib/handicap-source": { selectedHandicapIndex: () => ({ source: "BACKYARD" }) },
     "./account-provider": { useBackyardAccount: () => ({ identity: { userId: "synthetic", mode: "authenticated", displayName: "QA", accessToken: "synthetic-not-a-token", providers: ["email"] }, acceptances: [], cloudIssues: [] }) },
+    "./bottom-back-action": { BottomBackAction: "bottom-back-action" },
   };
   const exports: Record<string, (props: unknown) => unknown> = {};
   const source = ts.transpileModule(readFileSync("app/components/profile-account-panel.tsx", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
-  runInNewContext(source, { exports, require: (id: string) => dependencies[id] || new Proxy({}, { get: (_object, name) => name === "__esModule" ? true : () => undefined }) });
-  return { render: () => { cursor = 0; return exports.ProfileAccountPanel({ view, initialAccountSection, indexControl: {}, onOpenAccountSection: (section: string) => opened.push(section) }); }, opened };
+  runInNewContext(source, {
+    exports,
+    window: { confirm: (message: string) => { confirmations.push(message); return confirmResult; }, requestAnimationFrame: (callback: () => void) => callback() },
+    document: { getElementById: () => null },
+    require: (id: string) => dependencies[id] || new Proxy({}, { get: (_object, name) => name === "__esModule" ? true : () => undefined }),
+  });
+  return {
+    render: () => {
+      cursor = 0;
+      return exports.ProfileAccountPanel({
+        view,
+        focusSection,
+        initialAccountSection,
+        indexControl: {},
+        highContrast: false,
+        onHighContrastChange() {},
+        notificationsEnabled: false,
+        onNotificationsEnabledChange() {},
+        onOpenAccountSection: (section: string) => opened.push(section),
+        onOpenEquipment() {},
+        onBackToProfile() {},
+        onPageBack: () => { pageBackCalls += 1; },
+      });
+    },
+    opened,
+    confirmations,
+    allowExit: () => { confirmResult = true; },
+    pageBackCalls: () => pageBackCalls,
+  };
 }
 for (const section of ACCOUNT_SETTINGS) test(`settings ${section.id} renders only its own controls`, () => {
   const h = panel(section.id);
@@ -59,6 +90,121 @@ test('account edits reuse the existing profile editor instead of another profile
  const h=panel();const edit=elements(h.render()).find(e=>e.type==='button'&&text(e)==='Editar nombre y usuario')!;
  assert.ok(edit);(edit.props.onClick as ()=>void)();
  assert.ok(text(h.render()).includes('Guardar perfil'));
+});
+
+test("Profile stays a root while Account owns one matching top and bottom page exit", () => {
+  const profile = panel("account", "profile");
+  assert.equal(elements(profile.render()).filter((element) => element.type === "bottom-back-action").length, 0);
+
+  const account = panel();
+  const tree = elements(account.render());
+  const top = tree.find((element) => element.type === "button" && text(element) === "← Regresar");
+  const bottoms = tree.filter((element) => element.type === "bottom-back-action");
+  assert.ok(top);
+  assert.equal(bottoms.length, 1);
+  assert.equal(bottoms[0].props.label, "← Regresar");
+  assert.equal(top.props.onClick, bottoms[0].props.onBack);
+  (top.props.onClick as () => void)();
+  (bottoms[0].props.onBack as () => void)();
+  assert.equal(account.pageBackCalls(), 2);
+});
+
+test("nested Account screens do not inherit the generic Regresar pair", () => {
+  const h = panel("privacy");
+  let tree = h.render();
+  const openAi = elements(tree).find((element) => element.type === "button" && text(element).includes("Autorizaciones de IA"));
+  assert.ok(openAi);
+  (openAi.props.onClick as () => void)();
+  tree = h.render();
+  const nested = elements(tree);
+  assert.equal(nested.filter((element) => element.type === "button" && text(element) === "← Regresar").length, 0);
+  const top = nested.find((element) => element.type === "button" && text(element) === "← Cuenta y privacidad");
+  const bottoms = nested.filter((element) => element.type === "bottom-back-action");
+  assert.ok(top);
+  assert.equal(bottoms.length, 1);
+  assert.equal(bottoms[0].props.label, "← Cuenta y privacidad");
+  assert.equal(top.props.onClick, bottoms[0].props.onBack);
+
+  (bottoms[0].props.onBack as () => void)();
+  tree = h.render();
+  assert.ok(elements(tree).some((element) => element.type === "button" && text(element).includes("Autorizaciones de IA")));
+  assert.ok(elements(tree).some((element) => element.type === "button" && text(element) === "← Regresar"));
+});
+
+test("nested Equipment hides both parent Mi Perfil exits until the child reports root depth", () => {
+  const h = panel("account", "profile", "equipment");
+  let tree = elements(h.render());
+  const parentTop = tree.find((element) => element.type === "button" && text(element) === "← Mi Perfil");
+  const parentBottom = tree.find((element) => element.type === "bottom-back-action");
+  const equipment = tree.find((element) => typeof element.props.onFlowDepthChange === "function");
+  assert.ok(parentTop); assert.ok(parentBottom); assert.ok(equipment);
+  assert.equal(parentTop.props.onClick, parentBottom.props.onBack);
+
+  (equipment.props.onFlowDepthChange as (nested: boolean) => void)(true);
+  tree = elements(h.render());
+  assert.equal(tree.filter((element) => element.type === "button" && text(element) === "← Mi Perfil").length, 0);
+  assert.equal(tree.filter((element) => element.type === "bottom-back-action").length, 0);
+
+  const nestedEquipment = tree.find((element) => typeof element.props.onFlowDepthChange === "function");
+  assert.ok(nestedEquipment);
+  (nestedEquipment.props.onFlowDepthChange as (nested: boolean) => void)(false);
+  tree = elements(h.render());
+  const restoredTop = tree.find((element) => element.type === "button" && text(element) === "← Mi Perfil");
+  const restoredBottom = tree.find((element) => element.type === "bottom-back-action");
+  assert.ok(restoredTop); assert.ok(restoredBottom);
+  assert.equal(restoredTop.props.onClick, restoredBottom.props.onBack);
+});
+
+test("profile editor top, cancel and bottom exits share one unsaved-change guard", () => {
+  const h = panel();
+  let tree = h.render();
+  const edit = elements(tree).find((element) => element.type === "button" && text(element) === "Editar nombre y usuario");
+  assert.ok(edit);
+  (edit.props.onClick as () => void)();
+
+  tree = h.render();
+  let editor = elements(tree);
+  const top = editor.find((element) => element.type === "button" && text(element) === "← Cuenta");
+  const cancel = editor.find((element) => element.type === "button" && text(element) === "Cancelar");
+  const bottom = editor.find((element) => element.type === "bottom-back-action");
+  assert.ok(top); assert.ok(cancel); assert.ok(bottom);
+  assert.equal(top.props.onClick, cancel.props.onClick);
+  assert.equal(top.props.onClick, bottom.props.onBack);
+
+  const displayName = editor.find((element) => element.type === "input" && element.props.placeholder === "Tu nombre");
+  assert.ok(displayName);
+  (displayName.props.onChange as (event: { target: { value: string } }) => void)({ target: { value: "QA editado" } });
+
+  tree = h.render();
+  editor = elements(tree);
+  const guardedTop = editor.find((element) => element.type === "button" && text(element) === "← Cuenta");
+  assert.ok(guardedTop);
+  (guardedTop.props.onClick as () => void)();
+  assert.equal(h.confirmations.length, 1);
+  assert.match(h.confirmations[0], /cambios sin guardar/i);
+  assert.ok(text(h.render()).includes("Guardar perfil"), "rejecting the prompt keeps the editor open");
+
+  h.allowExit();
+  tree = h.render();
+  const guardedBottom = elements(tree).find((element) => element.type === "bottom-back-action");
+  assert.ok(guardedBottom);
+  (guardedBottom.props.onBack as () => void)();
+  assert.equal(h.confirmations.length, 2);
+  assert.ok(!text(h.render()).includes("Guardar perfil"), "accepting the prompt returns to Account");
+});
+
+test("a clean profile editor exit does not ask for confirmation", () => {
+  const h = panel();
+  let tree = h.render();
+  const edit = elements(tree).find((element) => element.type === "button" && text(element) === "Editar nombre y usuario");
+  assert.ok(edit);
+  (edit.props.onClick as () => void)();
+  tree = h.render();
+  const bottom = elements(tree).find((element) => element.type === "bottom-back-action");
+  assert.ok(bottom);
+  (bottom.props.onBack as () => void)();
+  assert.equal(h.confirmations.length, 0);
+  assert.ok(!text(h.render()).includes("Guardar perfil"));
 });
 
 test('account notification and privacy destinations wire different scopes of the same server controls',()=>{
@@ -93,6 +239,11 @@ test("profile has one configuration destination and its panel retains all sectio
 test("account destination remounts independently of retained profile component state", () => {
   const page = readFileSync("app/page.tsx", "utf8");
   assert.match(page, /key=\{\`\$\{identity\.userId\}:account:\$\{accountSection\}\`\}/);
+});
+test("Account owns its Regresar pair instead of inheriting the generic app-shell button", () => {
+  const page = readFileSync("app/page.tsx", "utf8");
+  assert.match(page, /\["welcome", "more", "play", "groups", "social", "profile", "account", "round"\]/);
+  assert.match(page, /view="account"[\s\S]{0,1800}onPageBack=\{handlePageBack\}/);
 });
 test("QR keeps sharing and clipboard but no longer renders a technical Preview URL", () => {
   const source = readFileSync("app/components/social-qr.tsx", "utf8");

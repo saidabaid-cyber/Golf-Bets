@@ -4,6 +4,7 @@ import { type FormEvent, type RefObject, useCallback, useEffect, useMemo, useRef
 import type { PDFDocumentProxy, RenderTask } from "pdfjs-dist";
 import type { OfficialRulesDocument } from "../../lib/rules-documents";
 import { countPdfTextMatches, pdfPixelRatio, withPdfDeadline } from "../../lib/pdf-viewer-utils";
+import { BottomBackAction } from "./bottom-back-action";
 import { ModalCloseButton } from "./modal-shell";
 
 type SearchMatch = { page: number; count: number; excerpt?: string };
@@ -218,5 +219,6 @@ export function InternalPdfViewer({ document, initialPage = 1, onBack }: { docum
     <div className="pdfPages" ref={container}>
       {pdf && !error && Array.from({ length: logicalPageCount }, (_, index) => <PdfPage key={index + 1} pdf={pdf} pageNumber={index + 1} pdfPageNumber={pageOffset + index + 1} width={width} zoom={zoom} title={document.title} scrollRoot={container} highlighted={highlightedPages.has(index + 1)} onVisible={markVisible} />)}
     </div>
+    <BottomBackAction label="← Regresar a Reglas" onBack={onBack} />
   </section>;
 }

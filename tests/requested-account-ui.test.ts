@@ -44,7 +44,9 @@ test("Perfil separa el golf de la configuración sensible de Cuenta", () => {
   assert.match(account, /view === "account"/);
   assert.match(account, /Gestionar consentimientos/);
   assert.match(account, /managingConsents[\s\S]*LegalConsentManager/);
-  assert.match(account, /HandicapSourceChoices/);
+  assert.equal((account.match(/<HandicapSourceChoices\b/g) || []).length, 1);
+  assert.match(account, /id="profile-index-source"><HandicapSourceChoices control=\{indexControl\}/);
+  assert.doesNotMatch(account, /id="profile-edit-handicap"/);
   assert.match(ghin, /Inicia sesión para vincular tu cuenta GHIN/);
   assert.doesNotMatch(ghin, /cuenta QA autorizada/);
   assert.doesNotMatch(ghin, /PRÓXIMAMENTE/);

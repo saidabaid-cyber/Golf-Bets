@@ -11,6 +11,7 @@ import type { LearningConsent } from "../../lib/backyard-ai/memory/types";
 import { LEGAL_EVIDENCE_DEFINITIONS, type LegalEvidenceAction, type LegalEvidenceSubject } from "../../lib/legal-evidence";
 import { hasResolvedMarketingConsent, latestLegalEvidence, legalClientEnvironment, type LegalEvidenceEvent } from "../../lib/legal-evidence-client";
 import { AiProcessingConsentSettings } from "./backyard-ai/ai-processing-consent";
+import { BottomBackAction } from "./bottom-back-action";
 
 export function LegalConsentManager({ profile, userId, accessToken, authenticated, acceptances, legalEvidenceEvents, marketingConsentResolved, bettingConsentGranted, requestBettingConsent, recordLegalChoice, onBack }: {
   profile: BackyardProfile;
@@ -144,5 +145,6 @@ export function LegalConsentManager({ profile, userId, accessToken, authenticate
     <section className="card"><h2>Marketing opcional</h2><label className="preferenceRow"><span><b>Recibir comunicaciones de marketing</b><small className="preferenceDescription">Opcional, apagado por defecto y sin activar campañas desde esta pantalla.</small></span><input type="checkbox" checked={marketing} onChange={(event) => void changeMarketing(event.target.checked)} /></label><p className="hint">Versión {MARKETING_CONSENT_VERSION} · {evidenceLabel("marketing")}.</p></section>
     <section className="card"><h2>Copia de datos</h2><p>Descarga una copia acotada del workspace activo: perfil, historial y borrador de ronda, plantillas propias de jugadores, grupos y oponentes, campos, preferencias y evidencia legal local. Si tu sesión está activa también intenta incluir la copia limitada de las fuentes de Preview enumeradas en el archivo.</p><p className="hint">No incluye tokens, secretos, workspaces de otras cuentas, rondas compartidas de terceros ni archivos binarios. Cada sección declara su alcance y omisiones; la copia local sigue disponible sin conexión o sin sesión de nube.</p><button type="button" className="secondary" disabled={exporting} onClick={() => void exportLimitedAccountData()}>{exporting ? "Preparando…" : authenticated ? "Descargar copia limitada" : "Descargar copia local"}</button><p className="hint">Esta herramienta no sustituye una respuesta formal de derechos ARCO ni afirma ser una exportación completa. Para una solicitud ARCO escribe a <a href={`mailto:${legalConfig.privacyEmail}`}>{legalConfig.privacyEmail}</a>.</p></section>
     {message && <div className="notice" role="status">{message}</div>}
+    <BottomBackAction label="← Legal y privacidad" onBack={onBack} />
   </>;
 }

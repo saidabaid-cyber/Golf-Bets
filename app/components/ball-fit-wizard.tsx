@@ -36,6 +36,7 @@ import { FeedbackLink } from "./feedback-dialog";
 import { useEquipmentCatalogSearch } from "./use-equipment-catalog-search";
 import styles from "./equipment.module.css";
 import { BallFitBallVisual } from "./equipment-visuals";
+import { BottomBackAction } from "./bottom-back-action";
 
 const FEEL_LABELS = {
   VERY_SOFT: "Muy suave",
@@ -466,11 +467,13 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
     {message && <div className={styles.formMessage} role="alert">{message}</div>}
     {unresolvedDraftBall && ballSearch.status === "error" && <button type="button" className="textButton" onClick={ballSearch.retry}>Reintentar catálogo</button>}
     <div className={styles.wizardActions}><button type="button" className="secondary" onClick={startNewFit}>Empezar nuevo</button><button type="button" className="primary" onClick={resumeSavedDraft} disabled={resolvingDraftBall}>Reanudar fitting</button></div>
+    <BottomBackAction label="Cerrar" onBack={onCancel} />
   </div>;
 
   if (launchOpen && !result) return <div className={`${styles.wizard} ${styles.launchWizard}`}>
     <div className={styles.launchWizardHeader}>
       <div><span>MEDICIONES OPCIONALES</span><h2>Captura y analiza tus golpes</h2><p>Sube fotos de tu monitor de lanzamiento y obtén tus datos automáticamente.</p></div>
+      <button type="button" className="textButton" onClick={saveAndClose}>Guardar y regresar</button>
     </div>
     <LaunchMonitorCapture
       userId={userId}
@@ -481,6 +484,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
       onOpenPrivacy={onOpenPrivacy}
       onDone={finishLaunchCapture}
     />
+    <BottomBackAction label="Guardar y regresar" onBack={saveAndClose} />
   </div>;
 
   return <div className={styles.wizard}>
@@ -585,6 +589,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
       {!result && step === 5 && <button type="button" className="primary" onClick={() => calculate()} disabled={calculating}>{calculating ? "Evaluando…" : "Ver mi Top 3"}</button>}
       {result && result.recommendations.length > 0 && <button type="button" className="primary" onClick={finish} disabled={!resultChoice}>Guardar elección y terminar</button>}
     </div>
+    <BottomBackAction label="Guardar y regresar" onBack={saveAndClose} />
   </div>;
 }
 

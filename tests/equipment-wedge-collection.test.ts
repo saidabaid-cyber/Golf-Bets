@@ -91,6 +91,7 @@ function wedgeManagerHarness(initialWedges: PlayerClub[]) {
   const deleteCalls: PlayerClub[] = [];
   const saveCalls: PlayerClub[] = [];
   const distanceCalls: PlayerClub[] = [];
+  let backCalls = 0;
   const componentExports: Record<string, (props: Record<string, unknown>) => RenderNode> = {};
   const jsx = (type: unknown, props: Record<string, unknown>) => (
     typeof type === "function" ? type(props) : { type, props }
@@ -140,6 +141,9 @@ function wedgeManagerHarness(initialWedges: PlayerClub[]) {
       if (name === "./equipment-editors") return {
         ClubEditor: (props: Record<string, unknown>) => ({ type: "club-editor", props }),
       };
+      if (name === "./bottom-back-action") return {
+        BottomBackAction: (props: Record<string, unknown>) => ({ type: "bottom-back-action", props }),
+      };
       if (name.endsWith("/equipment-bag-management")) return { sortCurrentWedges };
       if (name.endsWith(".css")) return { default: new Proxy({}, { get: (_target, key) => String(key) }) };
       throw new Error(`unexpected_require:${name}`);
@@ -154,7 +158,7 @@ function wedgeManagerHarness(initialWedges: PlayerClub[]) {
       shafts: [],
       wedges,
       defaultHandedness: "right",
-      onBack() {},
+      onBack() { backCalls += 1; },
       onSave(club: PlayerClub) {
         saveCalls.push(club);
         wedges = [...wedges.filter((candidate) => candidate.id !== club.id), club];
@@ -189,6 +193,7 @@ function wedgeManagerHarness(initialWedges: PlayerClub[]) {
     saveCalls,
     deleteCalls,
     distanceCalls,
+    backCalls: () => backCalls,
     wedges: () => wedges,
   };
 }
@@ -347,6 +352,28 @@ test("the real WedgeCollectionEditor orders three cards and edits the exact seco
   assert.ok(editor);
   assert.equal((editor.props.existing as PlayerClub).id, CLEVELAND_54.id);
   assert.equal(editor.props.wedgeOrdinal, 2);
+});
+
+test("wedge collection top and bottom exits share the active level handler and label", () => {
+  const view = wedgeManagerHarness([CALLAWAY_58, TITLEIST_50, CLEVELAND_54]);
+  let top = view.nodes().find((node) => node.type === "button" && renderedText(node.props.children).trim() === "← Volver a Mi Bolsa");
+  let bottom = view.nodes().find((node) => node.type === "bottom-back-action");
+  assert.ok(top); assert.ok(bottom);
+  assert.equal(bottom.props.label, "← Volver a Mi Bolsa");
+  assert.equal(top.props.onClick, bottom.props.onBack);
+  (bottom.props.onBack as () => void)();
+  assert.equal(view.backCalls(), 1);
+
+  view.clickButton((node) => renderedText(node.props.children).includes("Agregar otro wedge"));
+  top = view.nodes().find((node) => node.type === "button" && renderedText(node.props.children).trim() === "← Volver a tus wedges");
+  bottom = view.nodes().find((node) => node.type === "bottom-back-action");
+  assert.ok(top); assert.ok(bottom);
+  assert.equal(bottom.props.label, "← Volver a tus wedges");
+  assert.equal(top.props.onClick, bottom.props.onBack);
+  (bottom.props.onBack as () => void)();
+  view.render();
+  assert.equal(view.nodes().some((node) => node.type === "club-editor"), false);
+  assert.equal(view.backCalls(), 1, "nested back returns to the wedge list instead of leaving Mi Bolsa");
 });
 
 test("adding another wedge mounts a fourth embedded editor and a successful save returns to the list", () => {
