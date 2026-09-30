@@ -96,7 +96,13 @@ function fitInput(currentBallId = "ball-current"): ballFitting.BallFitInput {
   };
 }
 
-function harness({ empty = false, fitOnly = false, flowDepthChanges }: { empty?: boolean; fitOnly?: boolean; flowDepthChanges?: boolean[] } = {}) {
+function harness({ empty = false, fitOnly = false, flowDepthChanges, currentBallCatalog = "available", currentBallImageUrl }: {
+  empty?: boolean;
+  fitOnly?: boolean;
+  flowDepthChanges?: boolean[];
+  currentBallCatalog?: "available" | "missing";
+  currentBallImageUrl?: string;
+} = {}) {
   const slots: unknown[] = [];
   let cursor = 0;
   let summaryOpenCount = 0;
@@ -148,12 +154,14 @@ function harness({ empty = false, fitOnly = false, flowDepthChanges }: { empty?:
     { id: "catalog-irons", brand: "Takomo", model: "Iron 101", generation: "Original" },
     { id: "catalog-wedge", brand: "TaylorMade", model: "Hi-Toe 4", generation: "2024" },
   ];
-  const ballCatalog = [
+  let ballCatalog = [
     catalogBall("ball-current", "Titleist", "Pro V1"),
     catalogBall("ball-tour", "Bridgestone", "Tour B X"),
     catalogBall("ball-soft", "Srixon", "Z-Star"),
     catalogBall("ball-flight", "TaylorMade", "TP5"),
   ];
+  if (currentBallCatalog === "missing") ballCatalog = ballCatalog.filter((ball) => ball.id !== "ball-current");
+  else if (currentBallImageUrl) ballCatalog[0] = { ...ballCatalog[0], imageUrl: currentBallImageUrl };
   const updates: golfEquipment.EquipmentProfile[] = [];
   const exports: Record<string, (props: Record<string, unknown>) => Node> = {};
   const jsx = (type: unknown, props: Record<string, unknown>) => typeof type === "function" ? type(props) : { type, props };
@@ -224,7 +232,7 @@ function harness({ empty = false, fitOnly = false, flowDepthChanges }: { empty?:
       };
       if (name === "./use-equipment-catalog-search") return { useEquipmentCatalogSearch: ({ kind }: { kind: string }) => ({ items: kind === "CLUB" ? clubCatalog : kind === "BALL" ? ballCatalog : [] }) };
       if (name === "./equipment-visuals") return {
-        GolfBallVisual: (props: Record<string, unknown>) => ({ type: "ball-visual", props }),
+        BallFitBallVisual: (props: Record<string, unknown>) => ({ type: "approved-profile-ball", props }),
       };
       if (name === "./equipment-category-assets") return { EQUIPMENT_CATEGORY_ASSETS: equipmentAssets };
       if (name === "./bottom-back-action") return {
@@ -373,6 +381,41 @@ test("club and ball Edit actions open their real editors", () => {
   const ballView = harness();
   ballView.click("Editar");
   assert.equal(ballView.nodes().find((node) => node.type === "ball-editor")?.props.existing, ballView.currentBall);
+});
+
+test("Mi Bola renders the approved Backyard ball in empty, selected, catalog-missing, and OEM-media states", () => {
+  const cases = [
+    harness({ empty: true }),
+    harness(),
+    harness({ currentBallCatalog: "missing" }),
+    harness({ currentBallImageUrl: "https://catalog.example.test/oem-ball.png" }),
+  ];
+  assert.equal(cases[0].nodes().find((node) => node.props["data-mi-bola-state"] === "empty")?.type, "section");
+  for (const view of cases) {
+    assert.equal(view.nodes().filter((node) => node.type === "approved-profile-ball").length, 1);
+    assert.equal(view.nodes().filter((node) => node.props["data-profile-ball-visual"] === "approved").length, 1);
+    assert.equal(view.nodes().some((node) => node.type === "catalog-media"), false);
+  }
+  assert.match(cases[1].text(), /Titleist\s+Pro V1/);
+});
+
+test("Mi Bola visual-only change preserves choose, no-fixed-ball, edit, and delete handlers", () => {
+  const choose = harness({ empty: true });
+  choose.click("Elegir bola");
+  assert.equal(choose.nodes().find((node) => node.type === "ball-editor")?.props.existing, null);
+
+  const noFixed = harness({ empty: true });
+  noFixed.click("No tengo una bola fija");
+  assert.equal(noFixed.profile().ballPreference, "NO_FIXED_BALL");
+  assert.equal(noFixed.profile().ballOnboarding, "COMPLETED");
+
+  const edit = harness();
+  edit.click("Editar");
+  assert.equal(edit.nodes().find((node) => node.type === "ball-editor")?.props.existing, edit.currentBall);
+
+  const remove = harness();
+  remove.click("Eliminar");
+  assert.ok(remove.nodes().some((node) => node.props["data-equipment-screen"] === "delete-confirm"));
 });
 
 test("Actualizar fit opens the wizard and a legacy saved fit always has a useful Compare action", () => {

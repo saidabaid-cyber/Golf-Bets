@@ -25,7 +25,23 @@ test("permanent Mi Bolsa keeps the A-B-C-D management order and no promotional o
   assert.doesNotMatch(panel, /className=\{styles\.emptyBagRow\}/);
   assert.match(panel, /initialCategory=\{clubEditor === "new" \? newClubCategory/);
   assert.match(panel, /aria-label=\{`Editar \$\{clubName/);
-  assert.match(panel, /<CatalogProductMedia item=\{currentBallCatalog\}/);
+  assert.match(panel, /BallFitBallVisual as ProfileBallVisual/);
+  assert.equal((panel.match(/<ProfileBallVisual \/>/g) || []).length, 2);
+  assert.doesNotMatch(panel, /currentBallCatalog|CatalogProductMedia/);
   assert.match(panel, /"Actualizar fit"/);
   assert.match(panel, />Comparar</);
+});
+
+test("Mi Bola keeps its approved visual and actions inside a 390px-safe grid", () => {
+  const panel = readFileSync("app/components/equipment-profile-panel.tsx", "utf8");
+  const css = readFileSync("app/components/equipment.module.css", "utf8");
+  const visuals = readFileSync("app/components/equipment-visuals.tsx", "utf8");
+  assert.match(panel, /data-mi-bola-state=\{currentBall \? "selected" : "empty"\}/);
+  assert.match(panel, /data-profile-ball-visual="approved"/);
+  assert.match(visuals, /src="\/brand\/equipment\/backyard-ball-clean\.png"/);
+  assert.match(visuals, /data-ball-fit-ball="approved"/);
+  assert.match(css, /\.ballEmptyVisual\s*\{[^}]*width:\s*clamp\(108px,\s*30vw,\s*124px\)/);
+  assert.match(css, /\.ballActions\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/);
+  assert.match(css, /@media\s*\(max-width:\s*430px\)[\s\S]*\.profileBallHero\s*\{[^}]*grid-template-columns:\s*88px\s+minmax\(0,\s*1fr\)/);
+  assert.match(css, /\.ballActions button\s*\{[^}]*min-width:\s*0;[^}]*min-height:\s*48px;/);
 });

@@ -32,13 +32,12 @@ import {
   type PlayerClubDistance,
 } from "../../lib/golf-equipment";
 import { BallFitResults, BallFitWizard, type BallFitCompletionChoice } from "./ball-fit-wizard";
-import { CatalogProductMedia } from "./catalog-product-media";
 import { BallEditor, CLUB_CATEGORY_ICONS, CLUB_CATEGORY_LABELS, ClubDistanceEditor, ClubEditor } from "./equipment-editors";
 import { equipmentStatusLabel, useEquipmentProfile } from "./use-equipment-profile";
 import { useEquipmentCatalogSearch } from "./use-equipment-catalog-search";
 import type { ProfileHandedness } from "../../lib/equipment-editor-selection";
 import styles from "./equipment.module.css";
-import { GolfBallVisual } from "./equipment-visuals";
+import { BallFitBallVisual as ProfileBallVisual } from "./equipment-visuals";
 import { EQUIPMENT_CATEGORY_ASSETS } from "./equipment-category-assets";
 import { BAG_CATEGORY_SECTIONS } from "../../lib/equipment-bag-management";
 import { bagCategoryManagement, sortCurrentWedges, wedgeLoftSummary } from "../../lib/equipment-bag-management";
@@ -206,7 +205,6 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
   const ballCatalog = useEquipmentCatalogSearch({ kind: "BALL", query: "", pinnedIds: pinnedBallIds });
   const bagManagement = bagCategoryManagement(currentClubs);
   const currentWedges = useMemo(() => sortCurrentWedges(currentClubs), [currentClubs]);
-  const currentBallCatalog = currentBall?.catalogBallId ? ballCatalog.items.find((ball) => ball.id === currentBall.catalogBallId) || null : null;
   const nestedFlow = Boolean(fitOpen || savedFitOpen || wedgeCollectionOpen || clubEditor || ballEditor || distanceEditor || deleteIntent || selectedClub);
 
   useEffect(() => onFlowDepthChange?.(nestedFlow), [nestedFlow, onFlowDepthChange]);
@@ -441,10 +439,10 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
       </div>
     </section>}
 
-    <section className={`card ${styles.section}`}>
+    <section className={`card ${styles.section}`} data-mi-bola-state={currentBall ? "selected" : "empty"}>
       <div className={styles.sectionHeader}><div><div className="eyebrow">MI BOLA</div><h2>{currentBall ? `${currentBall.ballBrand} ${currentBall.ballModel}` : "Tu bola de juego"}</h2><p>Opcional. Puedes elegirla o indicar que no juegas una bola fija.</p></div></div>
-      {currentBall ? <div className={styles.ballHero}><span className={styles.ballGlyph}><CatalogProductMedia item={currentBallCatalog} fallback={<GolfBallVisual />} /></span><div><h3>{currentBall.ballBrand} {currentBall.ballModel}</h3><p>{[currentBall.generation, currentBall.year, currentBall.color].filter(Boolean).join(" · ") || "Modelo actual"}</p>{currentBall.notes && <p>{currentBall.notes}</p>}</div></div> : <div className={styles.emptyState}><span className={styles.emptyBallVisual}><GolfBallVisual /></span><b>{profile.ballPreference === "NO_FIXED_BALL" ? "No tienes una bola fija" : "No has elegido una bola"}</b><p>Puedes registrarla ahora o continuar sin una bola fija.</p></div>}
-      <div className={styles.inlineActions}>
+      {currentBall ? <div className={styles.profileBallHero}><span className={styles.profileBallVisual} data-profile-ball-visual="approved"><ProfileBallVisual /></span><div><h3>{currentBall.ballBrand} {currentBall.ballModel}</h3><p>{[currentBall.generation, currentBall.year, currentBall.color].filter(Boolean).join(" · ") || "Modelo actual"}</p>{currentBall.notes && <p>{currentBall.notes}</p>}</div></div> : <div className={styles.ballEmptyState}><span className={styles.ballEmptyVisual} data-profile-ball-visual="approved"><ProfileBallVisual /></span><b>{profile.ballPreference === "NO_FIXED_BALL" ? "No tienes una bola fija" : "No has elegido una bola"}</b><p>Puedes registrarla ahora o continuar sin una bola fija.</p></div>}
+      <div className={`${styles.inlineActions} ${styles.ballActions}`}>
         {!currentBall && <button type="button" className="primary" onClick={() => setBallEditor("new")}>Elegir bola</button>}
         {currentBall && <button type="button" className="secondary" onClick={() => setBallEditor(currentBall)}>Editar</button>}
         {!currentBall && <button type="button" className="secondary" onClick={() => update((current) => {

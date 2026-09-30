@@ -67,8 +67,11 @@ test("V3 uses shared tokens, safe text controls and reduced-motion without exter
   assert.match(css, /\.highContrast/);
   assert.doesNotMatch(css, /fonts\.googleapis|https:\/\//);
 });
-test("V3 product surfaces reuse provenance-aware media without fabricated product imagery", () => {
-  assert.match(source("app/components/equipment-profile-panel.tsx"), /CatalogProductMedia item=\{catalog\}/);
+test("V3 product surfaces keep catalog media where required and the approved institutional visual for Mi Bola", () => {
+  const profile = source("app/components/equipment-profile-panel.tsx");
+  assert.match(profile, /BallFitBallVisual as ProfileBallVisual/);
+  assert.equal((profile.match(/<ProfileBallVisual \/>/g) || []).length, 2);
+  assert.doesNotMatch(profile, /CatalogProductMedia|currentBallCatalog/);
   assert.match(source("app/components/ball-fit-wizard.tsx"), /CatalogProductMedia item=\{catalogBall\}/);
   const media = source("app/components/catalog-product-media.tsx");
   assert.match(media, /!item\?\.imageUrl \|\| failed/);
